@@ -79,11 +79,7 @@ where
 	//
 	// Refactor add_to_stempool and add_to_txpool as they duplicate a lot of code.
 	//
-	pub fn add_to_stempool(
-		&mut self,
-		src: TxSource,
-		tx: Transaction,
-	) -> Result<(), PoolError> {
+	pub fn add_to_stempool(&mut self, src: TxSource, tx: Transaction) -> Result<(), PoolError> {
 		debug!(LOGGER, "pool: add_to_stempool {}, {:?}", tx.hash(), src);
 
 		// Do we have the capacity to accept this transaction?
@@ -101,7 +97,8 @@ where
 		};
 
 		// Now add tx to stempool (passing in all txs from txpool to validate against).
-		self.stempool.add_to_pool(entry, self.txpool.all_transactions())?;
+		self.stempool
+			.add_to_pool(entry, self.txpool.all_transactions())?;
 
 		//
 		// TODO - random step here to potentially fluff everything in the stempool
@@ -121,11 +118,7 @@ where
 	/// Add a new transaction to the pool.
 	/// Validation of the tx (and all txs in the pool) is done via a readonly
 	/// txhashset extension.
-	pub fn add_to_txpool(
-		&mut self,
-		src: TxSource,
-		tx: Transaction,
-	) -> Result<(), PoolError> {
+	pub fn add_to_txpool(&mut self, src: TxSource, tx: Transaction) -> Result<(), PoolError> {
 		debug!(LOGGER, "pool: add_to_txpool {}, {:?}", tx.hash(), src);
 
 		// Do we have the capacity to accept this transaction?

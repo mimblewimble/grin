@@ -21,14 +21,14 @@
 //! Notably, OutputDiff has been left off, and the question of how to handle
 //! abstract return types has been deferred.
 
-use std::collections::HashMap;
 use std::clone::Clone;
+use std::collections::HashMap;
 use std::sync::RwLock;
 
-use core::core::{block, hash, transaction};
-use core::core::{Input, OutputFeatures, OutputIdentifier};
-use core::global;
 use core::core::hash::Hashed;
+use core::core::{Input, OutputFeatures, OutputIdentifier};
+use core::core::{block, hash, transaction};
+use core::global;
 use types::{BlockChain, PoolError};
 use util::secp::pedersen::Commitment;
 

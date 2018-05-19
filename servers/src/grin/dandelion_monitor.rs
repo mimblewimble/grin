@@ -59,10 +59,10 @@ pub fn monitor_transactions<T>(
 							identifier: "?.?.?.?".to_string(),
 						};
 						let stem_transaction = stem_transactions.get(tx_hash).unwrap();
-						let res = tx_pool.write().unwrap().add_to_txpool(
-							source,
-							stem_transaction.clone(),
-						);
+						let res = tx_pool
+							.write()
+							.unwrap()
+							.add_to_txpool(source, stem_transaction.clone());
 
 						match res {
 							Ok(()) => {

@@ -15,17 +15,18 @@
 //! Adapters connecting new block, new transaction, and accepted transaction
 //! events to consumers of those events.
 
+use rand;
+use rand::Rng;
 use std::fs::File;
 use std::net::SocketAddr;
 use std::ops::Deref;
-use std::sync::{Arc, RwLock, Weak};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 use std::time::Instant;
-use rand;
-use rand::Rng;
 
 use chain::{self, ChainAdapter, Options, Tip};
+use common::types::{ChainValidationMode, ServerConfig};
 use core::core;
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
@@ -33,10 +34,9 @@ use core::core::target::Difficulty;
 use core::core::transaction::Transaction;
 use p2p;
 use pool;
-use util::OneTime;
 use store;
-use common::types::{ChainValidationMode, ServerConfig};
 use util::LOGGER;
+use util::OneTime;
 
 // All adapters use `Weak` references instead of `Arc` to avoid cycles that
 // can never be destroyed. These 2 functions are simple helpers to reduce the
@@ -629,8 +629,8 @@ impl ChainToPoolAndNetAdapter {
 		}
 	}
 
-	/// Initialize a ChainToPoolAndNetAdapter instance with hanlde to a Peers object.
-	/// Should only be called once.
+	/// Initialize a ChainToPoolAndNetAdapter instance with hanlde to a Peers
+	/// object. Should only be called once.
 	pub fn init(&self, peers: Weak<p2p::Peers>) {
 		self.peers.init(peers);
 	}
