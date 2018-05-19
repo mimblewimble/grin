@@ -88,8 +88,8 @@ impl AppendOnlyFile {
 	/// Note: we do not currently support a rewind() that
 	/// crosses the buffer boundary.
 	pub fn rewind(&mut self, file_pos: u64) {
-		println!("********* rewind!!!!!!!!! {}, {}", file_pos, self.buffer.len());
 		if self.buffer.is_empty() {
+			// rewinding from clean state, no buffer, not already rewound anything
 			self.buffer_start_bak = self.buffer_start;
 			self.buffer_start = file_pos as usize;
 		} else {
@@ -100,14 +100,7 @@ impl AppendOnlyFile {
 				let buffer_len = file_pos - self.buffer_start as u64;
 				self.buffer.truncate(buffer_len as usize);
 			}
-
 		}
-
-		// if self.buffer_start_bak > 0 || self.buffer.len() > 0 {
-		// 	panic!("Can't rewind on a dirty state.");
-		// }
-		// self.buffer_start_bak = self.buffer_start;
-		// self.buffer_start = pos as usize;
 	}
 
 	/// Syncs all writes (fsync), reallocating the memory map to make the newly

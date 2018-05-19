@@ -430,16 +430,19 @@ impl<'a> Extension<'a> {
 		// TODO - need to have checked coinbase maturity before this (height is
 		// synthetic so we cannot use this...)
 
-		for ref input in &tx.inputs {
-			if let Err(e) = self.apply_input(input, height) {
-				println!("*** input went bad - {:?}, {:?}", input.commitment(), e);
+		// TODO - We are doing outputs here first so pruning works as expected.
+		// When applying blocks we can apply the coinbase output first
+		// but we cannot do this here, so doing all outputs first.
+		// TODO - Is this a bad idea? What if tx spends its own outputs?
+		for ref output in &tx.outputs {
+			if let Err(e) = self.apply_output(output) {
 				self.rewind_to_pos(output_pos, kernel_pos, height)?;
 				return Err(e);
 			}
 		}
 
-		for ref output in &tx.outputs {
-			if let Err(e) = self.apply_output(output) {
+		for ref input in &tx.inputs {
+			if let Err(e) = self.apply_input(input, height) {
 				self.rewind_to_pos(output_pos, kernel_pos, height)?;
 				return Err(e);
 			}
@@ -511,12 +514,9 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	// Store all new output pos in the index.
+	// Also store any new block_markers.
 	fn save_indexes(&self) -> Result<(), Error> {
-		println!(
-			"***** save_indexes: {:?}, {:?}",
-			self.new_output_commits, self.new_block_markers
-		);
-		// store all new output pos in the index
 		for (commit, pos) in &self.new_output_commits {
 			self.commit_index.save_output_pos(commit, *pos)?;
 		}

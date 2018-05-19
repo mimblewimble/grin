@@ -49,25 +49,23 @@ fn test_some_raw_txs() {
 	let key_id3 = keychain.derive_key_id(3).unwrap();
 	let key_id4 = keychain.derive_key_id(4).unwrap();
 	let key_id5 = keychain.derive_key_id(5).unwrap();
+	let key_id6 = keychain.derive_key_id(6).unwrap();
 
-	// // Create a simple block with a single coinbase output so we have something
-	// to spend.
+	// Create a simple block with a single coinbase output
+	// so we have something to spend.
 	let prev_header = BlockHeader::default();
-	let reward_out1 = reward::output(&keychain, &key_id1, 0, prev_header.height).unwrap();
-	let block1 = Block::new(&prev_header, vec![], Difficulty::one(), reward_out1).unwrap();
-	let reward_out2 = reward::output(&keychain, &key_id2, 0, block1.header.height).unwrap();
-	let block2 = Block::new(&block1.header, vec![], Difficulty::one(), reward_out2).unwrap();
+	let reward_out = reward::output(&keychain, &key_id1, 0, prev_header.height).unwrap();
+	let block = Block::new(&prev_header, vec![], Difficulty::one(), reward_out).unwrap();
 
-	// Apply a couple of blocks to the txhashset to give us a non-empty starting point.
-	txhashset::extending(&mut txhashset, |extension| extension.apply_block(&block1)).unwrap();
-	txhashset::extending(&mut txhashset, |extension| extension.apply_block(&block2)).unwrap();
+	// Now apply this initial block to the (currently empty) MMRs.
+	// Note: this results in an output MMR with a single leaf node.
+	// We need to be careful with pruning while processing the txs below
+	// as we cannot prune a tree with a single node in it (no sibling or parent).
+	txhashset::extending(&mut txhashset, |extension| extension.apply_block(&block)).unwrap();
 
 	// Make sure we setup the head in the store based on block we just accepted.
-	let head = Tip::from_block(&block2.header);
+	let head = Tip::from_block(&block.header);
 	store.save_head(&head).unwrap();
-
-	// We will use the "next" block height when applying the raw tx to the txhashset
-	let mut height = block2.header.height + 1;
 
 	let coinbase_reward = 60_000_000_000;
 
@@ -76,11 +74,12 @@ fn test_some_raw_txs() {
 		vec![
 			build::coinbase_input(
 				coinbase_reward,
-				block1.hash(),
+				block.hash(),
 				MerkleProof::default(),
 				key_id1.clone(),
 			),
-			build::output(100, key_id3.clone()),
+			build::output(100, key_id2.clone()),
+			build::output(150, key_id3.clone()),
 		],
 		&keychain,
 	).unwrap();
@@ -91,7 +90,7 @@ fn test_some_raw_txs() {
 		vec![
 			build::coinbase_input(
 				coinbase_reward,
-				block1.hash(),
+				block.hash(),
 				MerkleProof::default(),
 				key_id1.clone(),
 			),
@@ -100,29 +99,36 @@ fn test_some_raw_txs() {
 		&keychain,
 	).unwrap();
 
-	// tx3 spends the output from tx1
+	// tx3 spends one output from tx1
 	let tx3 = build::transaction_with_offset(
 		vec![
-			build::input(100, key_id3.clone()),
-			build::output(98, key_id5.clone()),
+			build::input(100, key_id2.clone()),
+			build::output(90, key_id5.clone()),
 		],
 		&keychain,
 	).unwrap();
 
-	// tx1 is valid
-	// tx2 should be invalid (based on conflict with tx1)
-	// tx3 should also be valid
-	let txs = vec![tx1, tx2, tx3];
+	// tx4 spends the other output from tx1 and the output from tx3
+	let tx4 = build::transaction_with_offset(
+		vec![
+			build::input(150, key_id3.clone()),
+			build::input(90, key_id5.clone()),
+			build::output(220, key_id6.clone()),
+		],
+		&keychain,
+	).unwrap();
 
-	// Now validate the txs against the txhashset (via a readonly extension)
-	txhashset::extending_readonly(&mut txhashset, |extension| {
-		for tx in txs {
-			height += 1;
-			let res = extension.apply_raw_tx(&tx, height);
-			println!("***** raw_tx in the loop {:?}", res);
-		}
+	// Now validate the txs against the txhashset (via a readonly extension).
+	// Note: we use a single txhashset extension and we can continue to
+	// apply txs successfully after a failure.
+	let _ = txhashset::extending_readonly(&mut txhashset, |extension| {
+		// Note: we pass in an increasing "height" here so we can rollback
+		// each tx individually as necessary, while maintaining a long lived
+		// txhashset extension.
+		assert!(extension.apply_raw_tx(&tx1, 3).is_ok());
+		assert!(extension.apply_raw_tx(&tx2, 4).is_err());
+		assert!(extension.apply_raw_tx(&tx3, 5).is_ok());
+		assert!(extension.apply_raw_tx(&tx4, 6).is_ok());
 		Ok(())
-	}).unwrap();
-
-	panic!("...");
+	});
 }
