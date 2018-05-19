@@ -455,7 +455,6 @@ where
 				break;
 			}
 		}
-
 		self.backend.remove(to_prune, index)?;
 		Ok(true)
 	}

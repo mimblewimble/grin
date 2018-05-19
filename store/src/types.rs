@@ -84,15 +84,23 @@ impl AppendOnlyFile {
 	/// to be the one of the first byte the next time data is appended.
 	/// Supports two scenarios currently -
 	///   * rewind from a clean state (rewinding to handle a forked block)
-	///   * rewind within the buffer itself (raw_tx fails to validate successfully)
-	/// Note: we do not currently support a rewind() that crosses the buffer boundary.
-	pub fn rewind(&mut self, pos: u64) {
-		println!("********* rewind!!!!!!!!! {}, {}", pos, self.buffer.len());
+	///   * rewind within the buffer itself (raw_tx fails to validate)
+	/// Note: we do not currently support a rewind() that
+	/// crosses the buffer boundary.
+	pub fn rewind(&mut self, file_pos: u64) {
+		println!("********* rewind!!!!!!!!! {}, {}", file_pos, self.buffer.len());
 		if self.buffer.is_empty() {
 			self.buffer_start_bak = self.buffer_start;
-			self.buffer_start = pos as usize;
+			self.buffer_start = file_pos as usize;
 		} else {
-			panic!("oh my god");
+			// rewinding (within) the buffer
+			if self.buffer_start as u64 > file_pos {
+				panic!("cannot rewind buffer beyond buffer_start");
+			} else {
+				let buffer_len = file_pos - self.buffer_start as u64;
+				self.buffer.truncate(buffer_len as usize);
+			}
+
 		}
 
 		// if self.buffer_start_bak > 0 || self.buffer.len() > 0 {
@@ -252,7 +260,7 @@ pub struct RemoveLog {
 	/// Ordered vector of MMR positions that should get eventually removed.
 	pub removed: Vec<(u64, u32)>,
 	// Holds positions temporarily until flush is called.
-	removed_tmp: Vec<(u64, u32)>,
+	pub removed_tmp: Vec<(u64, u32)>,
 	// Holds truncated removed temporarily until discarded or committed
 	removed_bak: Vec<(u64, u32)>,
 }

@@ -20,22 +20,20 @@ extern crate grin_wallet as wallet;
 use std::fs;
 use std::sync::Arc;
 
+use chain::ChainStore;
+use chain::store::ChainKVStore;
 use chain::txhashset;
 use chain::txhashset::TxHashSet;
 use chain::types::Tip;
-use chain::ChainStore;
-use chain::store::ChainKVStore;
-use core::core::{Block, BlockHeader};
-use core::core::target::Difficulty;
 use core::core::pmmr::MerkleProof;
+use core::core::target::Difficulty;
+use core::core::{Block, BlockHeader};
 use keychain::{Identifier, Keychain};
 use wallet::libwallet::{build, reward};
-
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
 }
-
 
 #[test]
 fn test_some_raw_txs() {
@@ -50,52 +48,66 @@ fn test_some_raw_txs() {
 	let key_id2 = keychain.derive_key_id(2).unwrap();
 	let key_id3 = keychain.derive_key_id(3).unwrap();
 	let key_id4 = keychain.derive_key_id(4).unwrap();
+	let key_id5 = keychain.derive_key_id(5).unwrap();
 
-	// // Create a simple block with a single coinbase output so we have something to spend.
+	// // Create a simple block with a single coinbase output so we have something
+	// to spend.
 	let prev_header = BlockHeader::default();
-	let reward_output = reward::output(&keychain, &key_id1, 0, prev_header.height).unwrap();
-	let block = Block::new(&prev_header, vec![], Difficulty::one(), reward_output).unwrap();
+	let reward_out1 = reward::output(&keychain, &key_id1, 0, prev_header.height).unwrap();
+	let block1 = Block::new(&prev_header, vec![], Difficulty::one(), reward_out1).unwrap();
+	let reward_out2 = reward::output(&keychain, &key_id2, 0, block1.header.height).unwrap();
+	let block2 = Block::new(&block1.header, vec![], Difficulty::one(), reward_out2).unwrap();
 
-	// Apply this block to the txhashset to give us a non-empty starting point.
-	txhashset::extending(&mut txhashset, |extension| {
-		extension.apply_block(&block)
-	}).unwrap();
+	// Apply a couple of blocks to the txhashset to give us a non-empty starting point.
+	txhashset::extending(&mut txhashset, |extension| extension.apply_block(&block1)).unwrap();
+	txhashset::extending(&mut txhashset, |extension| extension.apply_block(&block2)).unwrap();
 
 	// Make sure we setup the head in the store based on block we just accepted.
-	let head = Tip::from_block(&block.header);
+	let head = Tip::from_block(&block2.header);
 	store.save_head(&head).unwrap();
 
 	// We will use the "next" block height when applying the raw tx to the txhashset
-	let mut height = block.header.height + 1;
+	let mut height = block2.header.height + 1;
 
 	let coinbase_reward = 60_000_000_000;
 
 	// tx1 spends the original coinbase output from the block
 	let tx1 = build::transaction_with_offset(
-			vec![
-				build::coinbase_input(coinbase_reward, block.hash(), MerkleProof::default(), key_id1.clone()),
-				build::output(100, key_id2.clone()),
-			],
-			&keychain,
-		).unwrap();
+		vec![
+			build::coinbase_input(
+				coinbase_reward,
+				block1.hash(),
+				MerkleProof::default(),
+				key_id1.clone(),
+			),
+			build::output(100, key_id3.clone()),
+		],
+		&keychain,
+	).unwrap();
 
-	// tx2 attempts to "double spend" the coinbase output from the block (conflicts with tx1)
+	// tx2 attempts to "double spend" the coinbase output from the block (conflicts
+	// with tx1)
 	let tx2 = build::transaction_with_offset(
-			vec![
-				build::coinbase_input(coinbase_reward, block.hash(), MerkleProof::default(), key_id1.clone()),
-				build::output(100, key_id3.clone()),
-			],
-			&keychain,
-		).unwrap();
+		vec![
+			build::coinbase_input(
+				coinbase_reward,
+				block1.hash(),
+				MerkleProof::default(),
+				key_id1.clone(),
+			),
+			build::output(100, key_id4.clone()),
+		],
+		&keychain,
+	).unwrap();
 
 	// tx3 spends the output from tx1
 	let tx3 = build::transaction_with_offset(
-			vec![
-				build::input(100, key_id2.clone()),
-				build::output(98, key_id4.clone()),
-			],
-			&keychain,
-		).unwrap();
+		vec![
+			build::input(100, key_id3.clone()),
+			build::output(98, key_id5.clone()),
+		],
+		&keychain,
+	).unwrap();
 
 	// tx1 is valid
 	// tx2 should be invalid (based on conflict with tx1)

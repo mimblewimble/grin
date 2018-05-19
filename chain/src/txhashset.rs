@@ -427,7 +427,8 @@ impl<'a> Extension<'a> {
 			height,
 		);
 
-		// TODO - need to have checked coinbase maturity before this (height is synthetic so we cannot use this...)
+		// TODO - need to have checked coinbase maturity before this (height is
+		// synthetic so we cannot use this...)
 
 		for ref input in &tx.inputs {
 			if let Err(e) = self.apply_input(input, height) {
@@ -458,7 +459,6 @@ impl<'a> Extension<'a> {
 	/// applied in order of the provided Vec. If pruning is enabled, inputs also
 	/// prune MMR data.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
-
 		//
 		// TODO - does this live here? Or can we do this outside the txhashset?
 		//
@@ -512,7 +512,10 @@ impl<'a> Extension<'a> {
 	}
 
 	fn save_indexes(&self) -> Result<(), Error> {
-		println!("***** save_indexes: {:?}, {:?}", self.new_output_commits, self.new_block_markers);
+		println!(
+			"***** save_indexes: {:?}, {:?}",
+			self.new_output_commits, self.new_block_markers
+		);
 		// store all new output pos in the index
 		for (commit, pos) in &self.new_output_commits {
 			self.commit_index.save_output_pos(commit, *pos)?;
