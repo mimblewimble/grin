@@ -147,9 +147,9 @@ impl Slate {
 		keychain: &Keychain,
 		context_manager: &mut aggsig::ContextManager,
 		participant_id: usize,
-		generate_offset: bool,
 	) -> Result<(), Error> {
-		if generate_offset {
+		// Whoever does this first generates the offset
+		if self.tx.offset == BlindingFactor::zero() {
 			self.generate_offset(keychain, context_manager)?;
 		}
 		self.add_participant_info(keychain, context_manager, participant_id, None)?;
@@ -198,6 +198,15 @@ impl Slate {
 			.map(|p| &p.public_nonce)
 			.collect();
 		PublicKey::from_combination(secp, pub_nonces).unwrap()
+	}
+
+	/// Return the sum of public blinding factors
+	fn pub_blind_sum(&self, secp: &secp::Secp256k1) -> PublicKey {
+		let pub_blinds = self.participant_data
+			.iter()
+			.map(|p| &p.public_blind_excess)
+			.collect();
+		PublicKey::from_combination(secp, pub_blinds).unwrap()
 	}
 
 	/// Adds participants public keys to the slate data
@@ -334,26 +343,20 @@ impl Slate {
 		// about who's who
 		let context = context_manager.get_context(&self.id);
 		let other_sig_part = self.participant_data[0].part_sig.unwrap().clone();
-		let other_pub_nonce = self.participant_data[0].public_nonce;
-		let other_pub_blinding = self.participant_data[0].public_blind_excess;
 		let our_sig_part = self.participant_data[1].part_sig.unwrap().clone();
 
 		self.verify_part_sigs(keychain.secp())?;
-
-		// And the final signature
-		let final_sig = context
-			.calculate_final_sig(
-				&keychain.secp(),
-				&other_sig_part,
-				&our_sig_part,
-				&other_pub_nonce,
-			)
-			.unwrap();
+		let pub_nonce_sum = self.pub_nonce_sum(keychain.secp());
+		// get the final signature
+		let final_sig = secp::aggsig::add_signatures_single(
+			&keychain.secp(),
+			&our_sig_part,
+			&other_sig_part,
+			&pub_nonce_sum,
+		).unwrap();
 
 		// Calculate the final public key (for our own sanity check)
-		let final_pubkey = context
-			.calculate_final_pubkey(&keychain.secp(), &other_pub_blinding)
-			.unwrap();
+		let final_pubkey = self.pub_blind_sum(keychain.secp());
 
 		// Check our final sig verifies
 		let res = context.verify_final_sig_build_msg(

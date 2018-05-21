@@ -105,7 +105,7 @@ fn build_transaction_2() {
 	// the offset in the slate's transaction kernel, and adds our public key
 	// information to the slate
 	let _ = slate
-		.fill_round_1(&wallet1.1, &mut sender_context_manager, 0, true)
+		.fill_round_1(&wallet1.1, &mut sender_context_manager, 0)
 		.unwrap();
 
 	debug!(LOGGER, "Transaction Slate after step 1: sender initiation");
@@ -127,7 +127,7 @@ fn build_transaction_2() {
 	).unwrap();
 
 	let _ = slate
-		.fill_round_1(&wallet2.1, &mut recipient_context_manager, 1, false)
+		.fill_round_1(&wallet2.1, &mut recipient_context_manager, 1)
 		.unwrap();
 
 	// recipient can proceed to round 2 now
