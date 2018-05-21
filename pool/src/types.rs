@@ -75,7 +75,7 @@ fn default_dandelion_embargo() -> i64 {
 #[derive(Clone, Debug)]
 pub struct PoolEntry {
 	pub src: TxSource,
-	pub timer: i64,
+	pub tx_at: i64,
 	pub tx: Transaction,
 }
 

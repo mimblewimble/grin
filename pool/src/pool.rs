@@ -14,13 +14,14 @@
 
 //! A minimal (EXPERIMENTAL) transaction pool implementation
 
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+
 use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
-use core::core::{Block, Committed, CompactBlock, Transaction};
+use core::core::{Block, Committed, CompactBlock, Transaction, TxKernel};
 use keychain::BlindingFactor;
-use std::collections::HashMap;
-use std::sync::Arc;
 use types::*;
 use util::LOGGER;
 use util::secp::pedersen::Commitment;
@@ -172,6 +173,24 @@ where
 			.filter(|x| !x.tx.inputs.iter().any(|y| block.inputs.contains(y)))
 			.map(|x| x.tx.clone())
 			.collect()
+	}
+
+	pub fn find_matching_transactions(&self, kernels: Vec<TxKernel>) -> Vec<Transaction> {
+		// While the inputs outputs can be cut-through the kernel will stay intact
+		// In order to deaggregate tx we look for tx with the same kernel
+		let mut found_txs = vec![];
+
+		// Gather all the kernels of the multi-kernel transaction in one set
+		let kernel_set = kernels.into_iter().collect::<HashSet<_>>();
+
+		// Check each transaction in the pool
+		for entry in &self.entries {
+			let entry_kernel_set = entry.tx.kernels.iter().cloned().collect::<HashSet<_>>();
+			if kernel_set.is_subset(&entry_kernel_set) {
+				found_txs.push(entry.tx.clone());
+			}
+		}
+		found_txs
 	}
 
 	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {

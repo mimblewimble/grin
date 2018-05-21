@@ -46,32 +46,22 @@ pub fn monitor_transactions<T>(
 		.spawn(move || {
 			loop {
 				let tx_pool = tx_pool.clone();
-				let stem_transactions = tx_pool.read().unwrap().stem_transactions.clone();
-				let time_stem_transactions = tx_pool.read().unwrap().time_stem_transactions.clone();
 
-				for tx_hash in stem_transactions.keys() {
-					let time_transaction = time_stem_transactions.get(tx_hash).unwrap();
-					let interval = now_utc().to_timespec().sec - time_transaction;
+				//
+				// TODO - do we also want the patience timer to run here?
+				//
 
-					if interval >= config.dandelion_embargo {
-						let source = TxSource {
-							debug_name: "dandelion-monitor".to_string(),
-							identifier: "?.?.?.?".to_string(),
-						};
-						let stem_transaction = stem_transactions.get(tx_hash).unwrap();
-						let res = tx_pool
+				for entry in tx_pool.read().unwrap().stempool.entries.clone() {
+					let interval = now_utc().to_timespec().sec - entry.tx_at;
+					if interval > config.dandelion_embargo {
+						match tx_pool
 							.write()
 							.unwrap()
-							.add_to_txpool(source, stem_transaction.clone());
-
-						match res {
-							Ok(()) => {
-								info!(LOGGER, "Fluffing transaction after embargo timer expired.")
-							}
+							.add_to_pool(entry.src, entry.tx, false)
+						{
+							Ok(()) => info!(LOGGER, "Fluffing tx after embargo timer expired."),
 							Err(e) => debug!(LOGGER, "error - {:?}", e),
 						};
-						// Remove from tx pool
-						tx_pool.write().unwrap().remove_from_stempool(tx_hash);
 					}
 				}
 

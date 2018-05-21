@@ -14,14 +14,15 @@
 
 //! A minimal (EXPERIMENTAL) transaction pool implementation
 
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+
 use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
 use core::core::{Block, Committed, CompactBlock, Transaction};
 use keychain::BlindingFactor;
 use pool::Pool;
-use std::collections::HashMap;
-use std::sync::Arc;
 use types::*;
 use util::LOGGER;
 use util::secp::pedersen::Commitment;
@@ -34,17 +35,13 @@ pub struct TransactionPool<T> {
 
 	/// Our transaction pool.
 	pub txpool: Pool<T>,
-	/// TODO - Our stem transaction pool (just another instance of a pool?)
+	/// Our Dandelion "stempool".
 	pub stempool: Pool<T>,
 
 	/// The blockchain
 	pub blockchain: Arc<T>,
 	/// The pool adapter
 	pub adapter: Arc<PoolAdapter>,
-
-	// TODO - only needed to get dandelion monitor to compile right now...
-	pub stem_transactions: HashMap<Hash, Transaction>,
-	pub time_stem_transactions: HashMap<Hash, i64>,
 }
 
 impl<T> TransactionPool<T>
@@ -59,67 +56,62 @@ where
 			stempool: Pool::new(chain.clone(), format!("stempool")),
 			blockchain: chain,
 			adapter: adapter,
-
-			stem_transactions: HashMap::new(),
-			time_stem_transactions: HashMap::new(),
 		}
 	}
 
-	//
-	// TODO - implement this...
-	//
-	pub fn deaggregate_and_add_to_txpool(
-		&mut self,
-		source: TxSource,
-		tx: Transaction,
-	) -> Result<(), PoolError> {
-		panic!("not yet implemented");
-	}
-
-	//
-	// Refactor add_to_stempool and add_to_txpool as they duplicate a lot of code.
-	//
-	pub fn add_to_stempool(&mut self, src: TxSource, tx: Transaction) -> Result<(), PoolError> {
-		debug!(LOGGER, "pool: add_to_stempool: {}, {:?}", tx.hash(), src);
-
-		// Do we have the capacity to accept this transaction?
-		self.is_acceptable(&tx)?;
-
-		// Make sure the transaction is valid before anything else.
-		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
-
-		// Attempt to add to the pool (validating against chain state).
-		let entry = PoolEntry {
-			src,
-			// TODO - not using the time yet (for stempool)
-			timer: 0,
-			tx: tx.clone(),
-		};
-
-		// Now add tx to stempool (passing in all txs from txpool to validate against).
+	fn add_to_stempool(&mut self, entry: PoolEntry) -> Result<(), PoolError> {
+		// Add tx to stempool (passing in all txs from txpool to validate against).
 		self.stempool
-			.add_to_pool(entry, self.txpool.all_transactions())?;
+			.add_to_pool(entry.clone(), self.txpool.all_transactions())?;
 
 		//
-		// TODO - random step here to potentially fluff everything in the stempool
+		// TODO - random step here to potentially fluff contents of the stempool
 		//
 		let fluff = false;
 
 		if fluff {
 			panic!("not yet implemented");
 		} else {
-			// Notify other parts of the system that we added the tx successfull.
-			self.adapter.stem_tx_accepted(&tx);
+			self.adapter.stem_tx_accepted(&entry.tx);
 		}
-
 		Ok(())
 	}
 
-	/// Add a new transaction to the pool.
-	/// Validation of the tx (and all txs in the pool) is done via a readonly
-	/// txhashset extension.
-	pub fn add_to_txpool(&mut self, src: TxSource, tx: Transaction) -> Result<(), PoolError> {
-		debug!(LOGGER, "pool: add_to_txpool: {}, {:?}", tx.hash(), src);
+	fn add_to_txpool(&mut self, mut entry: PoolEntry) -> Result<(), PoolError> {
+		// First deaggregate the tx based on current txpool txs.
+		if entry.tx.kernels.len() > 1 {
+			let txs = self.txpool
+				.find_matching_transactions(entry.tx.kernels.clone());
+			if !txs.is_empty() {
+				entry.tx = transaction::deaggregate(entry.tx, txs)?;
+				entry.src.debug_name = "deagg".to_string();
+			}
+		}
+
+		self.txpool.add_to_pool(entry.clone(), vec![])?;
+
+		// We now need to reconcile the stempool based on the new state of the txpool.
+		// Some stempool txs may no longer be valid and we need to evict them.
+		let txpool_tx = self.txpool.aggregate_transaction()?;
+		self.stempool.reconcile(Some(&txpool_tx))?;
+
+		self.adapter.tx_accepted(&entry.tx);
+		Ok(())
+	}
+
+	pub fn add_to_pool(
+		&mut self,
+		src: TxSource,
+		tx: Transaction,
+		stem: bool,
+	) -> Result<(), PoolError> {
+		debug!(
+			LOGGER,
+			"pool: add_to_pool: {}, {:?}, stem? {}",
+			tx.hash(),
+			src,
+			stem
+		);
 
 		// Do we have the capacity to accept this transaction?
 		self.is_acceptable(&tx)?;
@@ -127,24 +119,17 @@ where
 		// Make sure the transaction is valid before anything else.
 		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
-		// Attempt to add to the pool (validating against chain state).
 		let entry = PoolEntry {
 			src,
-			timer: 0,
+			tx_at: 0,
 			tx: tx.clone(),
 		};
-		self.txpool.add_to_pool(entry, vec![])?;
 
-		// We now need to reconcile the stempool based on the new state of the txpool.
-		// Some stempool txs may no longer be valid and we need to evict them.
-		{
-			let txpool_tx = self.txpool.aggregate_transaction()?;
-			self.stempool.reconcile(Some(&txpool_tx))?;
+		if stem {
+			self.add_to_stempool(entry)?;
+		} else {
+			self.add_to_txpool(entry)?;
 		}
-
-		// Notify other parts of the system that we added the tx successfull.
-		self.adapter.tx_accepted(&tx);
-
 		Ok(())
 	}
 
@@ -153,17 +138,12 @@ where
 		self.txpool.reconcile_block(block)?;
 		self.txpool.reconcile(None)?;
 
-		// Then reconcile the stempool, accounting for the txpool txs
+		// Then reconcile the stempool, accounting for the txpool txs.
 		let txpool_tx = self.txpool.aggregate_transaction()?;
 		self.stempool.reconcile_block(block)?;
 		self.stempool.reconcile(Some(&txpool_tx))?;
 
 		Ok(())
-	}
-
-	/// TODO - not yet implemented
-	pub fn remove_from_stempool(&mut self, tx_hash: &Hash) {
-		// TODO - not yet implemented
 	}
 
 	pub fn retrieve_transactions(&self, cb: &CompactBlock) -> Vec<Transaction> {
