@@ -52,14 +52,6 @@ where
 	/// Note: does not validate that we return the full set of required txs.
 	/// The caller will need to validate that themselves.
 	pub fn retrieve_transactions(&self, cb: &CompactBlock) -> Vec<Transaction> {
-		debug!(
-			LOGGER,
-			"pool [{}]: retrieve_transactions: kern_ids - {:?}, txs - {}",
-			self.name,
-			cb.kern_ids,
-			self.entries.len(),
-		);
-
 		let mut txs = vec![];
 
 		for x in &self.entries {
@@ -74,13 +66,6 @@ where
 				}
 			}
 		}
-
-		debug!(
-			LOGGER,
-			"pool [{}]: retrieve_transactions: matching txs from pool - {}",
-			self.name,
-			txs.len(),
-		);
 
 		txs
 	}
@@ -138,25 +123,12 @@ where
 		Ok(())
 	}
 
-	pub fn reconcile(
-		&mut self,
-		extra_tx: Option<&Transaction>,
-	) -> Result<Vec<Transaction>, PoolError> {
+	pub fn reconcile(&mut self, extra_tx: Option<&Transaction>) -> Result<(), PoolError> {
 		let candidate_txs = self.all_transactions();
-
-		debug!(
-			LOGGER,
-			"pool [{}]: reconcile: current pool txs {}",
-			self.name,
-			candidate_txs.len(),
-		);
+		let existing_len = candidate_txs.len();
 
 		if candidate_txs.is_empty() {
-			debug!(
-				LOGGER,
-				"pool [{}]: reconcile_block: pool empty! Done.", self.name
-			);
-			return Ok(vec![]);
+			return Ok(());
 		}
 
 		// Go through the candidate txs and keep everything that validates incrementally
@@ -164,8 +136,15 @@ where
 		let valid_txs = self.blockchain.validate_raw_txs(candidate_txs, extra_tx)?;
 		self.entries.retain(|x| valid_txs.contains(&x.tx));
 
-		// TODO - need to return the evicted txs (not yet used anywhere though)
-		Ok(vec![])
+		debug!(
+			LOGGER,
+			"pool [{}]: reconcile: existing txs {}, retained txs {}",
+			self.name,
+			existing_len,
+			self.entries.len(),
+		);
+
+		Ok(())
 	}
 
 	// Filter txs in the pool based on the latest block.

@@ -614,11 +614,8 @@ where
 		let pool_arc = w(&self.tx_pool);
 		let pool = pool_arc.read().unwrap();
 
-		// TODO - what to do here?
 		json_response(&PoolInfo {
-			pool_size: 0,
-			orphans_size: 0,
-			total_size: pool.total_size(),
+			pool_size: pool.total_size(),
 		})
 	}
 }
@@ -629,10 +626,8 @@ struct TxWrapper {
 	tx_hex: String,
 }
 
-// Push new transactions to our stem transaction pool, that should broadcast it
-// to the network if valid.
+// Push new transaction to our local transaction pool.
 struct PoolPushHandler<T> {
-	peers: Weak<p2p::Peers>,
 	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
 }
 
@@ -668,7 +663,7 @@ where
 			}
 		}
 
-		//  Push into the pool or stempool
+		//  Push to tx pool.
 		let res = {
 			let pool_arc = w(&self.tx_pool);
 			let mut tx_pool = pool_arc.write().unwrap();
@@ -756,7 +751,6 @@ pub fn start_rest_apis<T>(
 				tx_pool: tx_pool.clone(),
 			};
 			let pool_push_handler = PoolPushHandler {
-				peers: peers.clone(),
 				tx_pool: tx_pool.clone(),
 			};
 			let peers_all_handler = PeersAllHandler {

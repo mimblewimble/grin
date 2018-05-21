@@ -14,23 +14,23 @@
 
 use std::sync::Arc;
 
-use core::{core, ser};
+use chain;
 use core::core::hash::Hashed;
 use core::core::pmmr::MerkleProof;
-use chain;
+use core::{core, ser};
 use p2p;
+use serde;
+use serde::de::MapAccess;
+use serde::ser::SerializeStruct;
+use std::fmt;
 use util;
 use util::secp::pedersen;
-use serde;
-use serde::ser::SerializeStruct;
-use serde::de::MapAccess;
-use std::fmt;
 
 macro_rules! no_dup {
-	($field: ident) => {
+	($field:ident) => {
 		if $field.is_some() {
 			return Err(serde::de::Error::duplicate_field("$field"));
-		}
+			}
 	};
 }
 
@@ -616,10 +616,6 @@ pub struct OutputListing {
 pub struct PoolInfo {
 	/// Size of the pool
 	pub pool_size: usize,
-	/// Size of orphans
-	pub orphans_size: usize,
-	/// Total size of pool + orphans
-	pub total_size: usize,
 }
 
 #[cfg(test)]

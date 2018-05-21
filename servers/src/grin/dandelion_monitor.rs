@@ -14,7 +14,6 @@
 
 use rand;
 use rand::Rng;
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -49,11 +48,7 @@ pub fn monitor_transactions<T>(
 			loop {
 				let tx_pool = tx_pool.clone();
 
-				//
-				// TODO - do we also want the patience timer to run here?
-				// i.e. We do not immediately notify stem peer of new stempool tx,
-				// we wait n secs before doing so?
-				//
+				let now = now_utc().to_timespec().sec;
 
 				let mut fresh_entries = vec![];
 				let mut fluff_stempool = false;
@@ -61,19 +56,22 @@ pub fn monitor_transactions<T>(
 					let mut tx_pool = tx_pool.write().unwrap();
 					let mut rng = rand::thread_rng();
 
-					// TODO - also check the patience timer here for each tx.
 					for mut entry in tx_pool.stempool.entries.iter_mut() {
-						if entry.fresh {
+						//
+						// TODO patience timer config
+						//
+						let cutoff = now - 10;
+
+						if entry.fresh && entry.tx_at.sec < cutoff {
 							entry.fresh = false;
 							let random = rng.gen_range(0, 101);
 							if random <= config.dandelion_probability {
-								info!(
+								debug!(
 									LOGGER,
-									"Not fluffing stempool, will propagate to Dandelion relay."
+									"dand_mon: Not fluffing stempool, will propagate to Dandelion relay."
 								);
 								fresh_entries.push(entry.clone());
 							} else {
-								info!(LOGGER, "Attempting to fluff stempool.");
 								fluff_stempool = true;
 								break;
 							}
@@ -89,9 +87,9 @@ pub fn monitor_transactions<T>(
 							identifier: "?.?.?.?".to_string(),
 						};
 						match tx_pool.add_to_pool(src, agg_tx, false) {
-							Ok(()) => info!(
+							Ok(()) => debug!(
 								LOGGER,
-								"Aggregated stempool, adding aggregated tx to local txpool."
+								"dand_mon: Aggregated stempool, adding aggregated tx to local txpool."
 							),
 							Err(e) => debug!(LOGGER, "Error - {:?}", e),
 						};
@@ -105,8 +103,11 @@ pub fn monitor_transactions<T>(
 						// conditionally propagate or aggregate and fluff here?
 						let res = tx_pool.adapter.stem_tx_accepted(&x.tx);
 						if res.is_err() {
-							// We failed to propagate the
-							info!(LOGGER, "Adapter failed on accepting stem tx, fluffing.");
+							// We failed to propagate the tx via relay, fluff the stempool
+							debug!(
+								LOGGER,
+								"dand_mon: Adapter failed on accepting stem tx, fluffing."
+							);
 							if let Ok(agg_tx) = tx_pool.stempool.aggregate_transaction() {
 								let src = TxSource {
 									debug_name: "fluff".to_string(),
@@ -122,7 +123,6 @@ pub fn monitor_transactions<T>(
 
 				// Randomize the cutoff time based on Dandelion embargo cofiguration.
 				// Anything older than this gets "fluffed" as a fallback.
-				let now = now_utc().to_timespec().sec;
 				let embargo_sec = config.dandelion_embargo + rand::thread_rng().gen_range(0, 31);
 				let cutoff = now - embargo_sec;
 
@@ -135,7 +135,7 @@ pub fn monitor_transactions<T>(
 						.iter()
 						.filter(|x| x.tx_at.sec < cutoff)
 					{
-						info!(LOGGER, "Fluffing tx after embargo timer expired.");
+						debug!(LOGGER, "dand_mon: Fluffing tx after embargo timer expired.");
 						expired_entries.push(entry.clone());
 					}
 				}
@@ -144,7 +144,7 @@ pub fn monitor_transactions<T>(
 					let mut tx_pool = tx_pool.write().unwrap();
 					for entry in expired_entries {
 						match tx_pool.add_to_pool(entry.src, entry.tx, false) {
-							Ok(()) => info!(LOGGER, "Fluffed tx successfully."),
+							Ok(()) => debug!(LOGGER, "Fluffed tx successfully."),
 							Err(e) => debug!(LOGGER, "error - {:?}", e),
 						};
 					}

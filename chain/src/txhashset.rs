@@ -266,9 +266,10 @@ where
 		sizes = extension.sizes();
 	}
 
-	debug!(
+	trace!(
 		LOGGER,
-		"Rollbacking txhashset (readonly) extension. sizes {:?}", sizes
+		"Rollbacking txhashset (readonly) extension. sizes {:?}",
+		sizes
 	);
 
 	trees.output_pmmr_h.backend.discard();
@@ -319,12 +320,12 @@ where
 		}
 		Ok(r) => {
 			if rollback {
-				debug!(LOGGER, "Rollbacking txhashset extension. sizes {:?}", sizes);
+				trace!(LOGGER, "Rollbacking txhashset extension. sizes {:?}", sizes);
 				trees.output_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
 			} else {
-				debug!(LOGGER, "Committing txhashset extension. sizes {:?}", sizes);
+				trace!(LOGGER, "Committing txhashset extension. sizes {:?}", sizes);
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
@@ -419,14 +420,6 @@ impl<'a> Extension<'a> {
 		let output_pos = self.output_pmmr.unpruned_size();
 		let kernel_pos = self.kernel_pmmr.unpruned_size();
 
-		debug!(
-			LOGGER,
-			"txhashset: apply_raw_tx: output_pos {}, kernel_pos {}, height {}",
-			output_pos,
-			kernel_pos,
-			height,
-		);
-
 		// TODO - need to have checked coinbase maturity before this (height is
 		// synthetic so we cannot use this...)
 
@@ -462,21 +455,6 @@ impl<'a> Extension<'a> {
 	/// applied in order of the provided Vec. If pruning is enabled, inputs also
 	/// prune MMR data.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
-		//
-		// TODO - does this live here? Or can we do this outside the txhashset?
-		//
-		// Initial check to make sure all coinbase being spent are sufficiently matured.
-		for input in &b.inputs {
-			// check coinbase maturity with the Merkle Proof on the input
-			if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-				let header = self.commit_index.get_block_header(&input.block_hash())?;
-				let commit = input.commitment();
-				let pos = self.get_output_pos(&commit)?;
-				let out_hash = self.output_pmmr.get_hash(pos).unwrap_or(Hash::default());
-				input.verify_maturity(out_hash, &header, b.header.height)?;
-			}
-		}
-
 		// first applying coinbase outputs. due to the construction of PMMRs the
 		// last element, when its a leaf, can never be pruned as it has no parent
 		// yet and it will be needed to calculate that hash. to work around this,
@@ -535,16 +513,19 @@ impl<'a> Extension<'a> {
 				// check hash from pmmr matches hash from input (or corresponding output)
 				// if not then the input is not being honest about
 				// what it is attempting to spend...
-
 				let read_elem = self.output_pmmr.get_data(pos);
-
-				if output_id_hash != read_hash
-					|| output_id_hash
-						!= read_elem
-							.expect("no output at position")
-							.hash_with_index(pos - 1)
-				{
+				let read_elem_hash = read_elem
+					.expect("no output at pos")
+					.hash_with_index(pos - 1);
+				if output_id_hash != read_hash || output_id_hash != read_elem_hash {
 					return Err(Error::TxHashSetErr(format!("output pmmr hash mismatch")));
+				}
+
+				// check coinbase maturity with the Merkle Proof on the input
+				if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+					let header = self.commit_index.get_block_header(&input.block_hash())?;
+					let pos = self.get_output_pos(&commit)?;
+					input.verify_maturity(read_hash, &header, height)?;
 				}
 			}
 
@@ -657,9 +638,12 @@ impl<'a> Extension<'a> {
 		kernel_pos: u64,
 		height: u64,
 	) -> Result<(), Error> {
-		debug!(
+		trace!(
 			LOGGER,
-			"Rewind txhashset to output {}, kernel {}, height {}", output_pos, kernel_pos, height
+			"Rewind txhashset to output {}, kernel {}, height {}",
+			output_pos,
+			kernel_pos,
+			height
 		);
 
 		self.output_pmmr
