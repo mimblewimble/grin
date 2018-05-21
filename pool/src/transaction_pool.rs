@@ -104,6 +104,9 @@ where
 		// Make sure the transaction is valid before anything else.
 		tx.validate().map_err(|e| PoolError::TransactionError(e))?;
 
+		// TODO - Check tx maturity here (tx maturity, not just coinbase output
+		// maturity)?
+
 		// Check coinbase maturity before we go any further.
 		self.blockchain.verify_coinbase_maturity(&tx)?;
 

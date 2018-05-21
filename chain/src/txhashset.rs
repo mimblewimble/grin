@@ -451,7 +451,11 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	pub fn verify_coinbase_maturity(&mut self, inputs: &Vec<Input>, height: u64) -> Result<(), Error> {
+	pub fn verify_coinbase_maturity(
+		&mut self,
+		inputs: &Vec<Input>,
+		height: u64,
+	) -> Result<(), Error> {
 		for x in inputs {
 			if x.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 				let header = self.commit_index.get_block_header(&x.block_hash())?;
@@ -467,7 +471,6 @@ impl<'a> Extension<'a> {
 	/// applied in order of the provided Vec. If pruning is enabled, inputs also
 	/// prune MMR data.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
-
 		// check coinbase maturity with the Merkle Proof on the input
 		self.verify_coinbase_maturity(&b.inputs, b.header.height)?;
 

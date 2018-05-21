@@ -23,7 +23,8 @@ use std::time::{Duration, Instant};
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
-use core::core::{Block, BlockHeader, Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
+use core::core::{Block, BlockHeader, Output, OutputFeatures, OutputIdentifier, Transaction,
+                 TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;
 use pipe;
