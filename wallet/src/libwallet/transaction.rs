@@ -84,8 +84,6 @@ impl ParticipantData {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Slate {
-	/// The phase the slate is in (how much data has been filled out)
-	pub phase: SlatePhase,
 	/// The number of participants intended to take part in this transaction
 	pub num_participants: usize,
 	/// Unique transaction ID, selected by sender
@@ -111,7 +109,6 @@ impl Slate {
 	/// Create a new slate
 	pub fn blank(num_participants: usize) -> Slate {
 		Slate {
-			phase: SlatePhase::SenderInitiation,
 			num_participants: num_participants,
 			id: Uuid::new_v4(),
 			tx: Transaction::empty(),
