@@ -24,6 +24,7 @@ use std::path::Path;
 use std::path::MAIN_SEPARATOR;
 use std::collections::HashMap;
 use std::cmp::min;
+use libwallet::aggsig;
 
 use serde;
 use serde_json;
@@ -275,7 +276,7 @@ impl<'de> serde::de::Visitor<'de> for MerkleProofWrapperVisitor {
 }
 
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
-pub struct BlockIdentifier(Hash);
+pub struct BlockIdentifier(pub Hash);
 
 impl BlockIdentifier {
 	pub fn hash(&self) -> Hash {
@@ -766,6 +767,7 @@ pub struct PartialTx {
 	pub phase: PartialTxPhase,
 	pub id: Uuid,
 	pub amount: u64,
+	pub lock_height: u64,
 	pub public_blind_excess: String,
 	pub public_nonce: String,
 	pub kernel_offset: String,
@@ -777,14 +779,15 @@ pub struct PartialTx {
 /// aggsig_tx_context should contain the private key/nonce pair
 /// the resulting partial tx will contain the corresponding public keys
 pub fn build_partial_tx(
-	transaction_id: &Uuid,
+	context: &aggsig::Context,
 	keychain: &keychain::Keychain,
 	receive_amount: u64,
+	lock_height: u64,
 	kernel_offset: BlindingFactor,
 	part_sig: Option<secp::Signature>,
 	tx: Transaction,
 ) -> PartialTx {
-	let (pub_excess, pub_nonce) = keychain.aggsig_get_public_keys(transaction_id);
+	let (pub_excess, pub_nonce) = context.get_public_keys(keychain.secp());
 	let mut pub_excess = pub_excess.serialize_vec(keychain.secp(), true).clone();
 	let len = pub_excess.clone().len();
 	let pub_excess: Vec<_> = pub_excess.drain(0..len).collect();
@@ -795,8 +798,9 @@ pub fn build_partial_tx(
 
 	PartialTx {
 		phase: PartialTxPhase::SenderInitiation,
-		id: transaction_id.clone(),
+		id: context.transaction_id,
 		amount: receive_amount,
+		lock_height: lock_height,
 		public_blind_excess: util::to_hex(pub_excess),
 		public_nonce: util::to_hex(pub_nonce),
 		kernel_offset: kernel_offset.to_hex(),
@@ -815,6 +819,7 @@ pub fn read_partial_tx(
 	partial_tx: &PartialTx,
 ) -> Result<
 	(
+		u64,
 		u64,
 		PublicKey,
 		PublicKey,
@@ -849,7 +854,15 @@ pub fn read_partial_tx(
 	let tx = ser::deserialize(&mut &tx_bin[..]).context(ErrorKind::GenericError(
 		"Could not deserialize transaction, invalid format.",
 	))?;
-	Ok((partial_tx.amount, blinding, nonce, kernel_offset, sig, tx))
+	Ok((
+		partial_tx.amount,
+		partial_tx.lock_height,
+		blinding,
+		nonce,
+		kernel_offset,
+		sig,
+		tx,
+	))
 }
 
 /// Amount in request to build a coinbase output.

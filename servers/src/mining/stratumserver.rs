@@ -149,6 +149,7 @@ fn accept_workers(
 
 pub struct Worker {
 	id: String,
+	login: Option<String>,
 	stream: BufStream<TcpStream>,
 	error: bool,
 	authenticated: bool,
@@ -159,6 +160,7 @@ impl Worker {
 	pub fn new(id: String, stream: BufStream<TcpStream>) -> Worker {
 		Worker {
 			id: id,
+			login: None,
 			stream: stream,
 			error: false,
 			authenticated: false,
@@ -299,15 +301,12 @@ impl StratumServer {
 					// Call the handler function for requested method
 					let (response, err) = match request.method.as_str() {
 						"login" => {
-							let (response, err) = self.handle_login(request.params);
-							// XXX TODO Future? - Validate username and password
-							if err == false {
-								workers_l[num].authenticated = true;
-							}
+							let (response, err) = self.handle_login(request.params, &mut workers_l[num]);
 							(response, err)
 						}
 						"submit" => self.handle_submit(
 							request.params,
+							&mut workers_l[num],
 							&mut stratum_stats.worker_stats[worker_stats_id],
 						),
 						"keepalive" => self.handle_keepalive(),
@@ -392,19 +391,22 @@ impl StratumServer {
 	}
 
 	// Handle LOGIN message
-	fn handle_login(&self, params: Option<String>) -> (String, bool) {
+	fn handle_login(&self, params: Option<String>, worker: &mut Worker) -> (String, bool) {
 		// Extract the params string into a LoginParams struct
 		let params_str = match params {
 			Some(val) => val,
 			None => String::from("{}"),
 		};
-		let _login_params: LoginParams = match serde_json::from_str(&params_str) {
+		let login_params: LoginParams = match serde_json::from_str(&params_str) {
 			Ok(val) => val,
 			Err(_e) => {
 				let r = r#"{"code": -32600, "message": "Invalid Request"}"#;
 				return (String::from(r), true);
 			}
 		};
+		worker.login = Some(login_params.login);
+		// XXX TODO Future? - Validate login and password
+		worker.authenticated = true;
 		return (String::from("ok"), false);
 	}
 
@@ -414,6 +416,7 @@ impl StratumServer {
 	fn handle_submit(
 		&self,
 		params: Option<String>,
+		worker: &mut Worker,
 		worker_stats: &mut WorkerStats,
 	) -> (String, bool) {
 		// Extract the params string into a SubmitParams struct
@@ -436,13 +439,6 @@ impl StratumServer {
 			b.header.nonce = submit_params.nonce;
 			b.header.pow.proof_size = submit_params.pow.len();
 			b.header.pow.nonces = submit_params.pow;
-			info!(
-				LOGGER,
-				"(Server ID: {}) Found proof of work, adding block {}",
-				self.id,
-				b.hash()
-			);
-			// Submit the block to grin server (known here as "self.miner")
 			let res = self.chain.process_block(b.clone(), chain::Options::MINE);
 			if let Err(e) = res {
 				error!(
@@ -466,12 +462,25 @@ impl StratumServer {
 			let err = e.to_string();
 			return (err, true);
 		}
+		let submitted_by = match worker.login.clone() {
+			None => worker.id.to_string(),
+			Some(login) => login.clone()
+		};
+		info!(
+			LOGGER,
+			"(Server ID: {}) Found POW for block with hash {} at height {} using nonce {} submitted by worker {}",
+			self.id,
+			b.hash(),
+			b.header.height,
+			b.header.nonce,
+			submitted_by,
+		);
 		worker_stats.num_accepted += 1;
 		return (String::from("ok"), false);
 	} // handle submit a solution
 
 	// Purge dead/sick workers - remove all workers marked in error state
-	fn clean_workers(&mut self, stratum_stats: &mut Arc<RwLock<StratumStats>>) {
+	fn clean_workers(&mut self, stratum_stats: &mut Arc<RwLock<StratumStats>>) -> usize {
 		let mut start = 0;
 		let mut workers_l = self.workers.lock().unwrap();
 		loop {
@@ -500,7 +509,7 @@ impl StratumServer {
 			if start >= workers_l.len() {
 				let mut stratum_stats = stratum_stats.write().unwrap();
 				stratum_stats.num_workers = workers_l.len();
-				return;
+				return stratum_stats.num_workers;
 			}
 		}
 	}
@@ -563,6 +572,7 @@ impl StratumServer {
 		// nothing has changed. We only want to create a key_id for each new block,
 		// and reuse it when we rebuild the current block to add new tx.
 		let mut key_id = None;
+		let mut num_workers: usize;
 		let mut head = self.chain.head().unwrap();
 		let mut current_hash = head.prev_block_h;
 		let mut latest_hash;
@@ -596,7 +606,7 @@ impl StratumServer {
 			let mining_stopped = self.currently_syncing.load(Ordering::Relaxed);
 
 			// Remove workers with failed connections
-			self.clean_workers(&mut stratum_stats.clone());
+			num_workers = self.clean_workers(&mut stratum_stats.clone());
 
 			// get the latest chain state
 			head = self.chain.head().unwrap();
@@ -606,7 +616,10 @@ impl StratumServer {
 			//    There is a new block on the chain
 			// or We are rebuilding the current one to include new transactions
 			// and we're not synching
-			if current_hash != latest_hash || time::get_time().sec >= deadline && !mining_stopped {
+			// and there is at least one worker connected
+			if (current_hash != latest_hash || time::get_time().sec >= deadline) && !mining_stopped
+				&& num_workers > 0
+			{
 				if current_hash != latest_hash {
 					// A brand new block, so we will generate a new key_id
 					key_id = None;

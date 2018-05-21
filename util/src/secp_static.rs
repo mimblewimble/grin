@@ -32,3 +32,11 @@ pub fn static_secp_instance() -> Arc<Mutex<secp::Secp256k1>> {
 	secp_inst.randomize(&mut thread_rng());
 	SECP256K1.clone()
 }
+
+// TODO - Can we generate this once and memoize it for subsequent use?
+// Even if we clone it each time it will likely be faster than this.
+pub fn commit_to_zero_value() -> secp::pedersen::Commitment {
+	let secp = static_secp_instance();
+	let secp = secp.lock().unwrap();
+	secp.commit_value(0).unwrap()
+}

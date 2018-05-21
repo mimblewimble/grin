@@ -92,11 +92,25 @@ pub struct TxSource {
 /// This enum describes the parent for a given input of a transaction.
 #[derive(Clone)]
 pub enum Parent {
+	/// Unknown
 	Unknown,
+	/// Block Transaction
 	BlockTransaction,
-	PoolTransaction { tx_ref: hash::Hash },
-	StemPoolTransaction { tx_ref: hash::Hash },
-	AlreadySpent { other_tx: hash::Hash },
+	/// Pool Transaction
+	PoolTransaction {
+		/// Transaction reference
+		tx_ref: hash::Hash,
+	},
+	/// StemPool Transaction
+	StemPoolTransaction {
+		/// Transaction reference
+		tx_ref: hash::Hash,
+	},
+	/// AlreadySpent
+	AlreadySpent {
+		/// Other transaction reference
+		other_tx: hash::Hash,
+	},
 }
 
 impl fmt::Debug for Parent {
@@ -244,6 +258,7 @@ pub struct Pool {
 }
 
 impl Pool {
+	/// Return an empty pool
 	pub fn empty() -> Pool {
 		Pool {
 			graph: graph::DirectedGraph::empty(),
@@ -263,18 +278,22 @@ impl Pool {
 			.map(|x| x.destination_hash().unwrap())
 	}
 
+	/// Length of roots
 	pub fn len_roots(&self) -> usize {
 		self.graph.len_roots()
 	}
 
+	/// Length of vertices
 	pub fn len_vertices(&self) -> usize {
 		self.graph.len_vertices()
 	}
 
+	/// Consumed outputs
 	pub fn get_blockchain_spent(&self, c: &Commitment) -> Option<&graph::Edge> {
 		self.consumed_blockchain_outputs.get(c)
 	}
 
+	/// Add transaction
 	pub fn add_pool_transaction(
 		&mut self,
 		pool_entry: graph::PoolEntry,
@@ -309,9 +328,9 @@ impl Pool {
 		}
 	}
 
-	// More relax way for stempool transaction in order to accept scenario such as:
-	// Parent is in mempool, child is allowed in stempool
-	//
+	/// More relax way for stempool transaction in order to accept scenario such as:
+	/// Parent is in mempool, child is allowed in stempool
+	///
 	pub fn add_stempool_transaction(
 		&mut self,
 		pool_entry: graph::PoolEntry,
@@ -342,10 +361,12 @@ impl Pool {
 		}
 	}
 
+	/// Update roots
 	pub fn update_roots(&mut self) {
 		self.graph.update_roots()
 	}
 
+	/// Remove transaction
 	pub fn remove_pool_transaction(
 		&mut self,
 		tx: &transaction::Transaction,
@@ -429,6 +450,7 @@ pub struct Orphans {
 }
 
 impl Orphans {
+	/// empty set
 	pub fn empty() -> Orphans {
 		Orphans {
 			graph: graph::DirectedGraph::empty(),
@@ -450,6 +472,7 @@ impl Orphans {
 			.map(|x| x.destination_hash().unwrap())
 	}
 
+	/// unknown output
 	pub fn get_unknown_output(&self, output: &Commitment) -> Option<&graph::Edge> {
 		self.missing_outputs.get(output)
 	}
@@ -571,14 +594,17 @@ pub trait TransactionGraphContainer {
 		self.get_internal_spent_output(c)
 	}
 
+	/// number of root transactions
 	fn num_root_transactions(&self) -> usize {
 		self.get_graph().len_roots()
 	}
 
+	/// number of transactions
 	fn num_transactions(&self) -> usize {
 		self.get_graph().len_vertices()
 	}
 
+	/// number of output edges
 	fn num_output_edges(&self) -> usize {
 		self.get_graph().len_edges()
 	}

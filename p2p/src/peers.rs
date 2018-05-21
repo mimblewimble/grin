@@ -536,12 +536,15 @@ impl ChainAdapter for Peers {
 	fn total_difficulty(&self) -> Difficulty {
 		self.adapter.total_difficulty()
 	}
+
 	fn total_height(&self) -> u64 {
 		self.adapter.total_height()
 	}
+
 	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
 		self.adapter.transaction_received(tx, stem)
 	}
+
 	fn block_received(&self, b: core::Block, peer_addr: SocketAddr) -> bool {
 		let hash = b.hash();
 		if !self.adapter.block_received(b, peer_addr) {
@@ -557,6 +560,7 @@ impl ChainAdapter for Peers {
 			true
 		}
 	}
+
 	fn compact_block_received(&self, cb: core::CompactBlock, peer_addr: SocketAddr) -> bool {
 		let hash = cb.hash();
 		if !self.adapter.compact_block_received(cb, peer_addr) {
@@ -574,6 +578,7 @@ impl ChainAdapter for Peers {
 			true
 		}
 	}
+
 	fn header_received(&self, bh: core::BlockHeader, peer_addr: SocketAddr) -> bool {
 		if !self.adapter.header_received(bh, peer_addr) {
 			// if the peer sent us a block header that's intrinsically bad
@@ -584,18 +589,23 @@ impl ChainAdapter for Peers {
 			true
 		}
 	}
+
 	fn headers_received(&self, headers: Vec<core::BlockHeader>, peer_addr: SocketAddr) {
 		self.adapter.headers_received(headers, peer_addr)
 	}
+
 	fn locate_headers(&self, hs: Vec<Hash>) -> Vec<core::BlockHeader> {
 		self.adapter.locate_headers(hs)
 	}
+
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
 	}
+
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {
 		self.adapter.txhashset_read(h)
 	}
+
 	fn txhashset_write(
 		&self,
 		h: Hash,

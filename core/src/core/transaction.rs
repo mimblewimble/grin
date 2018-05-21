@@ -30,7 +30,7 @@ use core::BlockHeader;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
 use keychain;
-use keychain::{BlindingFactor, Keychain};
+use keychain::BlindingFactor;
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};
 use util;
@@ -38,6 +38,7 @@ use util::LOGGER;
 
 bitflags! {
 	/// Options for a kernel's structure or use
+	#[derive(Serialize, Deserialize)]
 	pub struct KernelFeatures: u8 {
 		/// No flags
 		const DEFAULT_KERNEL = 0b00000000;
@@ -114,7 +115,7 @@ impl From<keychain::Error> for Error {
 /// amount to zero.
 /// The signature signs the fee and the lock_height, which are retained for
 /// signature validation.
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
@@ -173,6 +174,11 @@ impl Readable for TxKernel {
 }
 
 impl TxKernel {
+	/// Return the excess commitment for this tx_kernel.
+	pub fn excess(&self) -> Commitment {
+		self.excess
+	}
+
 	/// Verify the transaction proof validity. Entails handling the commitment
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
@@ -181,7 +187,15 @@ impl TxKernel {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = &self.excess_sig;
-		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &self.excess);
+		// Verify aggsig directly in libsecp
+		let pubkeys = &self.excess.to_two_pubkeys(&secp);
+		let mut valid = false;
+		for i in 0..pubkeys.len() {
+			valid = secp::aggsig::verify_single(&secp, &sig, &msg, None, &pubkeys[i], false);
+			if valid {
+				break;
+			}
+		}
 		if !valid {
 			return Err(secp::Error::IncorrectSignature);
 		}
@@ -221,7 +235,7 @@ impl PMMRable for TxKernel {
 }
 
 /// A transaction
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Transaction {
 	/// List of inputs spent by the transaction.
 	pub inputs: Vec<Input>,
@@ -298,14 +312,16 @@ impl Readable for Transaction {
 }
 
 impl Committed for Transaction {
-	fn inputs_committed(&self) -> &Vec<Input> {
-		&self.inputs
+	fn inputs_committed(&self) -> Vec<Commitment> {
+		self.inputs.iter().map(|x| x.commitment()).collect()
 	}
-	fn outputs_committed(&self) -> &Vec<Output> {
-		&self.outputs
+
+	fn outputs_committed(&self) -> Vec<Commitment> {
+		self.outputs.iter().map(|x| x.commitment()).collect()
 	}
-	fn overage(&self) -> i64 {
-		self.fee() as i64
+
+	fn kernels_committed(&self) -> Vec<Commitment> {
+		self.kernels.iter().map(|x| x.excess()).collect()
 	}
 }
 
@@ -387,35 +403,29 @@ impl Transaction {
 	///  * sum of input/output commitments matches sum of kernel commitments after applying offset
 	///  * each kernel sig is valid (i.e. tx commitments sum to zero, given above is true)
 	fn verify_kernels(&self) -> Result<(), Error> {
-		// sum all input and output commitments
-		let io_sum = self.sum_commitments()?;
+		// Verify all the output rangeproofs.
+		// Note: this is expensive.
+		for x in &self.outputs {
+			x.verify_proof()?;
+		}
 
-		// sum all kernels commitments
-		let kernel_sum = {
-			let mut kernel_commits = self.kernels.iter().map(|x| x.excess).collect::<Vec<_>>();
+		// Verify the kernel signatures.
+		// Note: this is expensive.
+		for x in &self.kernels {
+			x.verify()?;
+		}
 
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
+		// Sum all input|output|overage commitments.
+		let overage = self.fee() as i64;
+		let io_sum = self.sum_commitments(overage, None)?;
 
-			// add the offset in as necessary (unless offset is zero)
-			if self.offset != BlindingFactor::zero() {
-				let skey = self.offset.secret_key(&secp)?;
-				let offset_commit = secp.commit(0, skey)?;
-				kernel_commits.push(offset_commit);
-			}
-
-			secp.commit_sum(kernel_commits, vec![])?
-		};
+		// Sum the kernel excesses accounting for the kernel offset.
+		let (_, kernel_sum) = self.sum_kernel_excesses(&self.offset, None)?;
 
 		// sum of kernel commitments (including the offset) must match
 		// the sum of input/output commitments (minus fee)
-		if kernel_sum != io_sum {
+		if io_sum != kernel_sum {
 			return Err(Error::KernelSumMismatch);
-		}
-
-		// verify all signatures with the commitment as pk
-		for kernel in &self.kernels {
-			kernel.verify()?;
 		}
 
 		Ok(())
@@ -683,7 +693,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 /// A transaction input.
 ///
 /// Primarily a reference to an output being spent by the transaction.
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Input {
 	/// The features of the output being spent.
 	/// We will check maturity for coinbase output.
@@ -939,7 +949,7 @@ impl Output {
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		match Keychain::verify_range_proof(&secp, self.commit, self.proof, None) {
+		match secp.verify_bullet_proof(self.commit, self.proof, None) {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
 		}
@@ -1186,29 +1196,6 @@ mod test {
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
 		assert_eq!(kernel2.fee, 10);
-	}
-
-	#[test]
-	fn test_output_ser_deser() {
-		let keychain = Keychain::from_random_seed().unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
-		let commit = keychain.commit(5, &key_id).unwrap();
-		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(5, &key_id, commit, None, msg).unwrap();
-
-		let out = Output {
-			features: OutputFeatures::DEFAULT_OUTPUT,
-			commit: commit,
-			proof: proof,
-		};
-
-		let mut vec = vec![];
-		ser::serialize(&mut vec, &out).expect("serialized failed");
-		let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
-
-		assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
-		assert_eq!(dout.commit, out.commit);
-		assert_eq!(dout.proof, out.proof);
 	}
 
 	#[test]

@@ -187,9 +187,32 @@ impl Chain {
 						);
 
 						extension.rewind(&header)?;
+
 						extension.validate_roots(&header)?;
+
+						// now check we have the "block sums" for the block in question
+						// if we have no sums (migrating an existing node) we need to go
+						// back to the txhashset and sum the outputs and kernels
+						if header.height > 0 && store.get_block_sums(&header.hash()).is_err() {
+							debug!(
+								LOGGER,
+								"chain: init: building (missing) block sums for {} @ {}",
+								header.height,
+								header.hash()
+							);
+							let (output_sum, kernel_sum) = extension.validate_sums(&header)?;
+							store.save_block_sums(
+								&header.hash(),
+								&BlockSums {
+									output_sum,
+									kernel_sum,
+								},
+							)?;
+						}
+
 						Ok(())
 					});
+
 					if res.is_ok() {
 						break;
 					} else {
@@ -453,7 +476,8 @@ impl Chain {
 		// consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.rewind(&header)?;
-			extension.validate(&header, skip_rproofs)
+			extension.validate(&header, skip_rproofs)?;
+			Ok(())
 		})
 	}
 
@@ -574,7 +598,8 @@ impl Chain {
 		// Note: we are validating against a writeable extension.
 		txhashset::extending(&mut txhashset, |extension| {
 			extension.rewind(&header)?;
-			extension.validate(&header, false)?;
+			let (output_sum, kernel_sum) = extension.validate(&header, false)?;
+			extension.save_latest_block_sums(&header, output_sum, kernel_sum)?;
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
@@ -611,12 +636,8 @@ impl Chain {
 	/// Meanwhile, the chain will not be able to accept new blocks. It should
 	/// therefore be called judiciously.
 	pub fn compact(&self) -> Result<(), Error> {
-		// First check we can successfully validate the full chain state.
-		// If we cannot then do not attempt to compact.
-		// This should not be required long term - but doing this for debug purposes.
-		self.validate(true)?;
-
-		// Now compact the txhashset via the extension.
+		debug!(LOGGER, "Starting blockchain compaction.");
+		// Compact the txhashset via the extension.
 		{
 			let mut txhashes = self.txhashset.write().unwrap();
 			txhashes.compact()?;
@@ -629,7 +650,8 @@ impl Chain {
 		}
 
 		// Now check we can still successfully validate the chain state after
-		// compacting.
+		// compacting, shouldn't be necessary once all of this is well-oiled
+		debug!(LOGGER, "Validating state after compaction.");
 		self.validate(true)?;
 
 		// we need to be careful here in testing as 20 blocks is not that long
@@ -641,12 +663,20 @@ impl Chain {
 			return Ok(());
 		}
 
+		debug!(
+			LOGGER,
+			"Compaction remove blocks older than {}.",
+			head.height - horizon
+		);
+		let mut count = 0;
 		let mut current = self.store.get_header_by_height(head.height - horizon - 1)?;
 		loop {
 			match self.store.get_block(&current.hash()) {
 				Ok(b) => {
+					count += 1;
 					self.store.delete_block(&b.hash())?;
 					self.store.delete_block_marker(&b.hash())?;
+					self.store.delete_block_sums(&b.hash())?;
 				}
 				Err(NotFoundErr) => {
 					break;
@@ -662,6 +692,7 @@ impl Chain {
 				Err(e) => return Err(From::from(e)),
 			}
 		}
+		debug!(LOGGER, "Compaction removed {} blocks, done.", count);
 		Ok(())
 	}
 
@@ -762,6 +793,13 @@ impl Chain {
 		self.store
 			.get_block_marker(bh)
 			.map_err(|e| Error::StoreErr(e, "chain get block marker".to_owned()))
+	}
+
+	/// Get the blocks sums for the specified block hash.
+	pub fn get_block_sums(&self, bh: &Hash) -> Result<BlockSums, Error> {
+		self.store
+			.get_block_sums(bh)
+			.map_err(|e| Error::StoreErr(e, "chain get block sums".to_owned()))
 	}
 
 	/// Gets the block header at the provided height

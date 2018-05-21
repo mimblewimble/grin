@@ -22,11 +22,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-use util::static_secp_instance;
 use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::consensus::REWARD;
-use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
+use core::core::{Block, BlockHeader, Committed, Input, Output, OutputFeatures, OutputIdentifier,
+                 TxKernel};
 use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::global;
 use core::core::hash::{Hash, Hashed};
@@ -35,9 +35,8 @@ use core::ser::{PMMRIndexHashable, PMMRable};
 use grin_store;
 use grin_store::pmmr::PMMRBackend;
 use grin_store::types::prune_noop;
-use keychain::BlindingFactor;
-use types::{BlockMarker, ChainStore, Error, TxHashSetRoots};
-use util::{zip, LOGGER};
+use types::{BlockMarker, BlockSums, ChainStore, Error, TxHashSetRoots};
+use util::{secp_static, zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
 const OUTPUT_SUBDIR: &'static str = "output";
@@ -349,6 +348,36 @@ pub struct Extension<'a> {
 	rollback: bool,
 }
 
+impl<'a> Committed for Extension<'a> {
+	fn inputs_committed(&self) -> Vec<Commitment> {
+		vec![]
+	}
+
+	fn outputs_committed(&self) -> Vec<Commitment> {
+		let mut commitments = vec![];
+		for n in 1..self.output_pmmr.unpruned_size() + 1 {
+			if pmmr::is_leaf(n) {
+				if let Some(out) = self.output_pmmr.get_data(n) {
+					commitments.push(out.commit);
+				}
+			}
+		}
+		commitments
+	}
+
+	fn kernels_committed(&self) -> Vec<Commitment> {
+		let mut commitments = vec![];
+		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
+			if pmmr::is_leaf(n) {
+				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
+					commitments.push(kernel.excess);
+				}
+			}
+		}
+		commitments
+	}
+}
+
 impl<'a> Extension<'a> {
 	// constructor
 	fn new(trees: &'a mut TxHashSet, commit_index: Arc<ChainStore>) -> Extension<'a> {
@@ -607,8 +636,9 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	/// Validate the txhashset state against the provided block header.
-	pub fn validate(&mut self, header: &BlockHeader, skip_rproofs: bool) -> Result<(), Error> {
+	fn validate_mmrs(&self) -> Result<(), Error> {
+		let now = Instant::now();
+
 		// validate all hashes and sums within the trees
 		if let Err(e) = self.output_pmmr.validate() {
 			return Err(Error::InvalidTxHashSet(e));
@@ -620,40 +650,87 @@ impl<'a> Extension<'a> {
 			return Err(Error::InvalidTxHashSet(e));
 		}
 
+		debug!(
+			LOGGER,
+			"txhashset: validated the output|rproof|kernel mmrs, took {}s",
+			now.elapsed().as_secs(),
+		);
+
+		Ok(())
+	}
+
+	/// The real magicking: the sum of all kernel excess should equal the sum
+	/// of all output commitments, minus the total supply.
+	pub fn validate_sums(&self, header: &BlockHeader) -> Result<((Commitment, Commitment)), Error> {
+		let now = Instant::now();
+
+		// Treat the total "supply" as one huge overage that needs to be accounted for.
+		// If we have a supply of 6,000 grin then we should
+		// have a corresponding 6,000 grin in unspent outputs.
+		let supply = ((header.height * REWARD) as i64).checked_neg().unwrap_or(0);
+		let output_sum = self.sum_commitments(supply, None)?;
+
+		let (kernel_sum, kernel_sum_plus_offset) =
+			self.sum_kernel_excesses(&header.total_kernel_offset, None)?;
+
+		if output_sum != kernel_sum_plus_offset {
+			return Err(Error::InvalidTxHashSet(
+				"Differing Output commitment and kernel excess sums.".to_owned(),
+			));
+		}
+
+		debug!(
+			LOGGER,
+			"txhashset: validated sums, took (total) {}s",
+			now.elapsed().as_secs(),
+		);
+
+		Ok((output_sum, kernel_sum))
+	}
+
+	/// Validate the txhashset state against the provided block header.
+	pub fn validate(
+		&mut self,
+		header: &BlockHeader,
+		skip_rproofs: bool,
+	) -> Result<((Commitment, Commitment)), Error> {
+		self.validate_mmrs()?;
 		self.validate_roots(header)?;
 
 		if header.height == 0 {
-			return Ok(());
+			let zero_commit = secp_static::commit_to_zero_value();
+			return Ok((zero_commit.clone(), zero_commit.clone()));
 		}
 
-		// the real magicking: the sum of all kernel excess should equal the sum
-		// of all Output commitments, minus the total supply
-		let kernel_offset = self.sum_kernel_offsets(&header)?;
-		let kernel_sum = self.sum_kernels(kernel_offset)?;
-		let output_sum = self.sum_outputs()?;
+		let (output_sum, kernel_sum) = self.validate_sums(header)?;
 
-		// supply is the sum of the coinbase outputs from all the block headers
-		let supply = header.height * REWARD;
+		// this is a relatively expensive verification step
+		self.verify_kernel_signatures()?;
 
-		{
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-
-			let over_commit = secp.commit_value(supply)?;
-			let adjusted_sum_output = secp.commit_sum(vec![output_sum], vec![over_commit])?;
-			if adjusted_sum_output != kernel_sum {
-				return Err(Error::InvalidTxHashSet(
-					"Differing Output commitment and kernel excess sums.".to_owned(),
-				));
-			}
-		}
-
-		// now verify the rangeproof for each output in the sum above
+		// verify the rangeproof for each output in the sum above
 		// this is an expensive operation (only verified if requested)
 		if !skip_rproofs {
 			self.verify_rangeproofs()?;
 		}
 
+		Ok((output_sum, kernel_sum))
+	}
+
+	/// Save blocks sums (the output_sum and kernel_sum) for the given block
+	/// header.
+	pub fn save_latest_block_sums(
+		&self,
+		header: &BlockHeader,
+		output_sum: Commitment,
+		kernel_sum: Commitment,
+	) -> Result<(), Error> {
+		self.commit_index.save_block_sums(
+			&header.hash(),
+			&BlockSums {
+				output_sum,
+				kernel_sum,
+			},
+		)?;
 		Ok(())
 	}
 
@@ -709,53 +786,28 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	// We maintain the total accumulated kernel offset in each block header.
-	// So "summing" is just a case of taking the total kernel offset
-	// directly from the current block header.
-	fn sum_kernel_offsets(&self, header: &BlockHeader) -> Result<Option<Commitment>, Error> {
-		let offset = if header.total_kernel_offset == BlindingFactor::zero() {
-			None
-		} else {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			let skey = header.total_kernel_offset.secret_key(&secp)?;
-			Some(secp.commit(0, skey)?)
-		};
-		Ok(offset)
-	}
-
-	/// Sums the excess of all our kernels, validating their signatures on the
-	/// way
-	fn sum_kernels(&self, kernel_offset: Option<Commitment>) -> Result<Commitment, Error> {
+	fn verify_kernel_signatures(&self) -> Result<(), Error> {
 		let now = Instant::now();
 
-		let mut commitments = vec![];
-		if let Some(offset) = kernel_offset {
-			commitments.push(offset);
-		}
-
+		let mut kern_count = 0;
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
 				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
 					kernel.verify()?;
-					commitments.push(kernel.excess);
+					kern_count += 1;
 				}
 			}
 		}
 
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
-		let kern_count = commitments.len();
-		let sum_kernel = secp.commit_sum(commitments, vec![])?;
-
 		debug!(
 			LOGGER,
-			"Validated, summed (and offset) {} kernels, pmmr size {}, took {}s",
+			"txhashset: verified {} kernel signatures, pmmr size {}, took {}s",
 			kern_count,
 			self.kernel_pmmr.unpruned_size(),
 			now.elapsed().as_secs(),
 		);
-		Ok(sum_kernel)
+
+		Ok(())
 	}
 
 	fn verify_rangeproofs(&self) -> Result<(), Error> {
@@ -784,41 +836,12 @@ impl<'a> Extension<'a> {
 		}
 		debug!(
 			LOGGER,
-			"Verified {} Rangeproofs, pmmr size {}, took {}s",
+			"txhashset: verified {} rangeproofs, pmmr size {}, took {}s",
 			proof_count,
 			self.rproof_pmmr.unpruned_size(),
 			now.elapsed().as_secs(),
 		);
 		Ok(())
-	}
-
-	/// Sums all our Output commitments, checking range proofs at the same time
-	fn sum_outputs(&self) -> Result<Commitment, Error> {
-		let now = Instant::now();
-
-		let mut commitments = vec![];
-		for n in 1..self.output_pmmr.unpruned_size() + 1 {
-			if pmmr::is_leaf(n) {
-				if let Some(out) = self.output_pmmr.get_data(n) {
-					commitments.push(out.commit);
-				}
-			}
-		}
-
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
-		let commit_count = commitments.len();
-		let sum_output = secp.commit_sum(commitments, vec![])?;
-
-		debug!(
-			LOGGER,
-			"Summed {} Outputs, pmmr size {}, took {}s",
-			commit_count,
-			self.output_pmmr.unpruned_size(),
-			now.elapsed().as_secs(),
-		);
-
-		Ok(sum_output)
 	}
 }
 

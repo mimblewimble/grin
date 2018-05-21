@@ -30,8 +30,6 @@ extern crate memmap;
 extern crate rocksdb;
 extern crate serde;
 #[macro_use]
-extern crate serde_derive;
-#[macro_use]
 extern crate slog;
 
 pub mod pmmr;

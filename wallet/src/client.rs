@@ -21,6 +21,7 @@ use tokio_core::reactor;
 use serde_json;
 
 use types::*;
+use core::core::Transaction;
 use util::LOGGER;
 use std::io;
 
@@ -40,14 +41,6 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 }
 
 pub fn send_partial_tx(url: &str, partial_tx: &PartialTx, fluff: bool) -> Result<PartialTx, Error> {
-	single_send_partial_tx(url, partial_tx, fluff)
-}
-
-fn single_send_partial_tx(
-	url: &str,
-	partial_tx: &PartialTx,
-	fluff: bool,
-) -> Result<PartialTx, Error> {
 	let mut core = reactor::Core::new().context(ErrorKind::Hyper)?;
 	let client = hyper::Client::new(&core.handle());
 
@@ -67,15 +60,49 @@ fn single_send_partial_tx(
 
 	let work = client.request(req).and_then(|res| {
 		res.body().concat2().and_then(move |body| {
-			let partial_tx: PartialTx =
+			let tx: PartialTx =
 				serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-			Ok(partial_tx)
+			Ok(tx)
 		})
 	});
 	let res = core.run(work).context(ErrorKind::Hyper)?;
 	Ok(res)
 }
 
+///TODO: Factor this out with above later, this version just returns a Transaction instead
+///of a partial TX
+pub fn send_partial_tx_final(
+	url: &str,
+	partial_tx: &PartialTx,
+	fluff: bool,
+) -> Result<Transaction, Error> {
+	let mut core = reactor::Core::new().context(ErrorKind::Hyper)?;
+	let client = hyper::Client::new(&core.handle());
+
+	// In case we want to do an express send
+	let mut url_pool = url.to_owned();
+	if fluff {
+		url_pool = format!("{}{}", url, "?fluff");
+	}
+
+	let mut req = Request::new(
+		Method::Post,
+		url_pool.parse::<hyper::Uri>().context(ErrorKind::Hyper)?,
+	);
+	req.headers_mut().set(ContentType::json());
+	let json = serde_json::to_string(&partial_tx).context(ErrorKind::Hyper)?;
+	req.set_body(json);
+
+	let work = client.request(req).and_then(|res| {
+		res.body().concat2().and_then(move |body| {
+			let tx: Transaction =
+				serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+			Ok(tx)
+		})
+	});
+	let res = core.run(work).context(ErrorKind::Hyper)?;
+	Ok(res)
+}
 /// Makes a single request to the wallet API to create a new coinbase output.
 fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
 	let mut core =
