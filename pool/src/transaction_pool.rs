@@ -16,6 +16,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use time;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortIdentifiable;
@@ -121,7 +122,7 @@ where
 
 		let entry = PoolEntry {
 			src,
-			tx_at: 0,
+			tx_at: time::now_utc().to_timespec(),
 			tx: tx.clone(),
 		};
 

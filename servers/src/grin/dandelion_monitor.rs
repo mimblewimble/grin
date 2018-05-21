@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use rand;
+use rand::Rng;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
@@ -49,15 +51,27 @@ pub fn monitor_transactions<T>(
 
 				//
 				// TODO - do we also want the patience timer to run here?
+				// i.e. We do not immediately notify stem peer of new stempool tx,
+				// we wait n secs before doing so?
 				//
 
+				// Randomize the cutoff time based on Dandelion embargo cofiguration.
+				// Anything older than this gets "fluffed" as a fallback.
+				let now = now_utc().to_timespec().sec;
+				let embargo_sec = config.dandelion_embargo + rand::thread_rng().gen_range(0, 31);
+				let cutoff = now - embargo_sec;
+
+				let mut expired_entries = vec![];
 				for entry in tx_pool.read().unwrap().stempool.entries.clone() {
-					let interval = now_utc().to_timespec().sec - entry.tx_at;
-					if interval > config.dandelion_embargo {
-						match tx_pool
-							.write()
-							.unwrap()
-							.add_to_pool(entry.src, entry.tx, false)
+					if entry.tx_at.sec < cutoff {
+						expired_entries.push(entry);
+					}
+				}
+
+				if expired_entries.len() > 0 {
+					let mut tx_pool = tx_pool.write().unwrap();
+					for entry in expired_entries {
+						match tx_pool.add_to_pool(entry.src, entry.tx, false)
 						{
 							Ok(()) => info!(LOGGER, "Fluffing tx after embargo timer expired."),
 							Err(e) => debug!(LOGGER, "error - {:?}", e),
@@ -65,7 +79,7 @@ pub fn monitor_transactions<T>(
 					}
 				}
 
-				thread::sleep(Duration::from_secs(1));
+				thread::sleep(Duration::from_secs(10));
 
 				if stop.load(Ordering::Relaxed) {
 					break;

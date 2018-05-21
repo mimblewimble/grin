@@ -235,24 +235,15 @@ impl Peer {
 		}
 	}
 
-	/// Sends the provided stem transaction to the remote peer. The request may be
-	/// dropped if the remote peer is known to already have the stem transaction.
+	/// Sends the provided stem transaction to the remote peer.
+	/// Note: tracking adapter is ignored for stem transactions.
 	pub fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
-		if !self.tracking_adapter.has(tx.hash()) {
-			debug!(LOGGER, "Send tx {} to {}", tx.hash(), self.info.addr);
-			self.connection
-				.as_ref()
-				.unwrap()
-				.send(tx, msg::Type::StemTransaction)
-		} else {
-			debug!(
-				LOGGER,
-				"Not sending tx {} to {} (already seen)",
-				tx.hash(),
-				self.info.addr
-			);
-			Ok(())
-		}
+		debug!(LOGGER, "Send (stem) tx {} to {}", tx.hash(), self.info.addr);
+		self.connection
+			.as_ref()
+			.unwrap()
+			.send(tx, msg::Type::StemTransaction)?;
+		Ok(())
 	}
 
 	/// Sends a request for block headers from the provided block locator
@@ -377,7 +368,11 @@ impl ChainAdapter for TrackingAdapter {
 	}
 
 	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
-		self.push(tx.hash());
+		// Do not track the tx hash for stem txs.
+		// Otherwise we fail to handle the subsequent fluff or embargo expiration correctly.
+		if !stem {
+			self.push(tx.hash());
+		}
 		self.adapter.transaction_received(tx, stem)
 	}
 

@@ -21,11 +21,6 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-pub mod types;
-mod pool;
-pub mod blockchain;
-pub mod transaction_pool;
-
 extern crate blake2_rfc as blake2;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
@@ -38,6 +33,11 @@ extern crate serde_derive;
 #[macro_use]
 extern crate slog;
 extern crate time;
+
+pub mod types;
+mod pool;
+pub mod blockchain;
+pub mod transaction_pool;
 
 pub use transaction_pool::TransactionPool;
 pub use types::{BlockChain, PoolAdapter, PoolConfig, PoolError, TxSource};

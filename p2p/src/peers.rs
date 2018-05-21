@@ -95,10 +95,10 @@ impl Peers {
 			None => debug!(LOGGER, "Could not update dandelion relay"),
 		};
 	}
+
 	// Get the dandelion relay
 	pub fn get_dandelion_relay(&self) -> HashMap<i64, Arc<RwLock<Peer>>> {
-		let res = self.dandelion_relay.read().unwrap().clone();
-		res
+		self.dandelion_relay.read().unwrap().clone()
 	}
 
 	pub fn is_known(&self, addr: &SocketAddr) -> bool {

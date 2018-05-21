@@ -468,15 +468,8 @@ impl Chain {
 		let bh = self.head_header()?;
 		let mut height = bh.height;
 
-		debug!(
-			LOGGER,
-			"chain: validate_raw_txs: started (how slow is this?) txs {}, current height {}",
-			txs.len(),
-			bh.height,
-		);
-
 		let mut txhashset = self.txhashset.write().unwrap();
-		let res = txhashset::extending_readonly(&mut txhashset, |extension| {
+		txhashset::extending_readonly(&mut txhashset, |extension| {
 			let mut valid_txs = vec![];
 			if let Some(tx) = pre_tx {
 				height += 1;
@@ -489,13 +482,7 @@ impl Chain {
 				}
 			}
 			Ok(valid_txs)
-		})?;
-		debug!(
-			LOGGER,
-			"chain: validate_raw_txs: success (how slow?) {}",
-			res.len()
-		);
-		Ok(res)
+		})
 	}
 
 	/// Validate the current chain state.
