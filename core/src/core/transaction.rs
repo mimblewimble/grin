@@ -13,20 +13,20 @@
 // limitations under the License.
 
 //! Transactions
+use std::cmp::Ordering;
+use std::cmp::max;
+use std::collections::HashSet;
+use std::io::Cursor;
+use std::{error, fmt};
+use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
-use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
-use std::collections::HashSet;
-use std::cmp::max;
-use std::cmp::Ordering;
-use std::{error, fmt};
-use std::io::Cursor;
 
 use consensus;
 use consensus::VerifySortOrder;
+use core::BlockHeader;
 use core::Committed;
 use core::global;
-use core::BlockHeader;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
 use keychain;
@@ -188,15 +188,8 @@ impl TxKernel {
 		let secp = secp.lock().unwrap();
 		let sig = &self.excess_sig;
 		// Verify aggsig directly in libsecp
-		let pubkeys = &self.excess.to_two_pubkeys(&secp);
-		let mut valid = false;
-		for i in 0..pubkeys.len() {
-			valid = secp::aggsig::verify_single(&secp, &sig, &msg, None, &pubkeys[i], false);
-			if valid {
-				break;
-			}
-		}
-		if !valid {
+		let pubkey = &self.excess.to_pubkey(&secp)?;
+		if !secp::aggsig::verify_single(&secp, &sig, &msg, None, &pubkey, false) {
 			return Err(secp::Error::IncorrectSignature);
 		}
 		Ok(())
@@ -400,8 +393,9 @@ impl Transaction {
 
 	/// To verify transaction kernels we check that -
 	///  * all kernels have an even fee
-	///  * sum of input/output commitments matches sum of kernel commitments after applying offset
-	///  * each kernel sig is valid (i.e. tx commitments sum to zero, given above is true)
+	/// * sum of input/output commitments matches sum of kernel commitments
+	/// after applying offset * each kernel sig is valid (i.e. tx commitments
+	/// sum to zero, given above is true)
 	fn verify_kernels(&self) -> Result<(), Error> {
 		// Verify all the output rangeproofs.
 		// Note: this is expensive.
@@ -480,10 +474,11 @@ impl Transaction {
 	}
 
 	/// We can verify the Merkle proof (for coinbase inputs) here in isolation.
-	/// But we cannot check the following as we need data from the index and the PMMR.
-	/// So we must be sure to check these at the appropriate point during block validation.
-	///   * node is in the correct pos in the PMMR
-	///   * block is the correct one (based on output_root from block_header via the index)
+	/// But we cannot check the following as we need data from the index and
+	/// the PMMR. So we must be sure to check these at the appropriate point
+	/// during block validation.   * node is in the correct pos in the PMMR
+	/// * block is the correct one (based on output_root from block_header
+	/// via the index)
 	fn verify_inputs(&self) -> Result<(), Error> {
 		let coinbase_inputs = self.inputs
 			.iter()
@@ -704,7 +699,8 @@ pub struct Input {
 	/// Currently we only care about this for coinbase outputs.
 	pub block_hash: Option<Hash>,
 	/// The Merkle Proof that shows the output being spent by this input
-	/// existed and was unspent at the time of this block (proof of inclusion in output_root)
+	/// existed and was unspent at the time of this block (proof of inclusion
+	/// in output_root)
 	pub merkle_proof: Option<MerkleProof>,
 }
 
@@ -761,9 +757,9 @@ impl Readable for Input {
 }
 
 /// The input for a transaction, which spends a pre-existing unspent output.
-/// The input commitment is a reproduction of the commitment of the output being spent.
-/// Input must also provide the original output features and the hash of the block
-/// the output originated from.
+/// The input commitment is a reproduction of the commitment of the output
+/// being spent. Input must also provide the original output features and the
+/// hash of the block the output originated from.
 impl Input {
 	/// Build a new input from the data required to identify and verify an
 	/// output being spent.
@@ -781,9 +777,10 @@ impl Input {
 		}
 	}
 
-	/// The input commitment which _partially_ identifies the output being spent.
-	/// In the presence of a fork we need additional info to uniquely identify the output.
-	/// Specifically the block hash (to correctly calculate lock_height for coinbase outputs).
+	/// The input commitment which _partially_ identifies the output being
+	/// spent. In the presence of a fork we need additional info to uniquely
+	/// identify the output. Specifically the block hash (to correctly
+	/// calculate lock_height for coinbase outputs).
 	pub fn commitment(&self) -> Commitment {
 		self.commit.clone()
 	}
@@ -795,29 +792,33 @@ impl Input {
 		block_hash.unwrap_or(Hash::default())
 	}
 
-	/// Convenience function to return the (optional) merkle_proof for this input.
-	/// Will return the "empty" Merkle proof if we do not have one.
-	/// We currently only care about the Merkle proof for inputs spending coinbase outputs.
+	/// Convenience function to return the (optional) merkle_proof for this
+	/// input. Will return the "empty" Merkle proof if we do not have one.
+	/// We currently only care about the Merkle proof for inputs spending
+	/// coinbase outputs.
 	pub fn merkle_proof(&self) -> MerkleProof {
 		let merkle_proof = self.merkle_proof.clone();
 		merkle_proof.unwrap_or(MerkleProof::empty())
 	}
 
 	/// Verify the maturity of an output being spent by an input.
-	/// Only relevant for spending coinbase outputs currently (locked for 1,000 confirmations).
+	/// Only relevant for spending coinbase outputs currently (locked for 1,000
+	/// confirmations).
 	///
-	/// The proof associates the output with the root by its hash (and pos) in the MMR.
-	/// The proof shows the output existed and was unspent at the time the output_root was built.
-	/// The root associates the proof with a specific block header with that output_root.
-	/// So the proof shows the output was unspent at the time of the block
-	/// and is at least as old as that block (may be older).
+	/// The proof associates the output with the root by its hash (and pos) in
+	/// the MMR. The proof shows the output existed and was unspent at the
+	/// time the output_root was built. The root associates the proof with a
+	/// specific block header with that output_root. So the proof shows the
+	/// output was unspent at the time of the block and is at least as old as
+	/// that block (may be older).
 	///
 	/// We can verify maturity of the output being spent by -
 	///
-	/// * verifying the Merkle Proof produces the correct root for the given hash (from MMR)
-	/// * verifying the root matches the output_root in the block_header
-	/// * verifying the hash matches the node hash in the Merkle Proof
-	/// * finally verify maturity rules based on height of the block header
+	/// * verifying the Merkle Proof produces the correct root for the given
+	/// hash (from MMR) * verifying the root matches the output_root in the
+	/// block_header * verifying the hash matches the node hash in the Merkle
+	/// Proof * finally verify maturity rules based on height of the block
+	/// header
 	///
 	pub fn verify_maturity(
 		&self,
@@ -962,7 +963,8 @@ impl Output {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct OutputIdentifier {
 	/// Output features (coinbase vs. regular transaction output)
-	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
+	/// We need to include this when hashing to ensure coinbase maturity can be
+	/// enforced.
 	pub features: OutputFeatures,
 	/// Output commitment
 	pub commit: Commitment,
@@ -1121,8 +1123,8 @@ impl ProofMessageElements {
 		true
 	}
 
-	/// Whether our remainder is zero (as it should be if the BF and nonce used to unwind
-	/// are correct
+	/// Whether our remainder is zero (as it should be if the BF and nonce used
+	/// to unwind are correct
 	pub fn zeroes_correct(&self) -> bool {
 		for i in 0..self.zeroes.len() {
 			if self.zeroes[i] != 0 {

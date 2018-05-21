@@ -131,6 +131,8 @@ fn build_transaction_2() {
 		.unwrap();
 
 	// recipient can proceed to round 2 now
+	let _ = receiver_create_fn();
+
 	let _ = slate
 		.fill_round_2(&wallet2.1, &mut recipient_context_manager, 1)
 		.unwrap();
@@ -151,22 +153,19 @@ fn build_transaction_2() {
 	debug!(LOGGER, "--------------------------------------------");
 	debug!(LOGGER, "{:?}", slate);
 
-	// TODO: Final transaction can be built by anyone at this stage
-	// Just need to fix the finalize function to allow it
-
-	let res = slate.finalize(&wallet2.1, &mut recipient_context_manager, &key_id);
+	// Final transaction can be built by anyone at this stage
+	let res = slate.finalize(&wallet1.1, &key_id);
 
 	if let Err(e) = res {
 		panic!("Error creating final tx: {:?}", e);
 	}
 
-	debug!(LOGGER, "Recipient calculates final transaction as:");
+	debug!(LOGGER, "Final transaction is:");
 	debug!(LOGGER, "--------------------------------------------");
 	debug!(LOGGER, "{:?}", slate.tx);
 
-	// All okay, lock sender's outputs and create recipient's outputs
+	// All okay, lock sender's outputs
 	let _ = sender_lock_fn();
-	let _ = receiver_create_fn();
 
 	// Insert this transaction into a new block, then mine till confirmation
 	common::award_block_to_wallet(&chain, vec![&slate.tx], &wallet1);

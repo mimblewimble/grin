@@ -20,11 +20,11 @@ extern crate grin_wallet as wallet;
 extern crate rand;
 extern crate uuid;
 
-use uuid::Uuid;
-use util::{kernel_sig_msg, secp};
-use util::secp::key::SecretKey;
-use util::secp::pedersen::ProofMessage;
 use keychain::{BlindSum, BlindingFactor, Keychain};
+use util::secp::key::{PublicKey, SecretKey};
+use util::secp::pedersen::ProofMessage;
+use util::{kernel_sig_msg, secp};
+use uuid::Uuid;
 use wallet::libwallet::{aggsig, proof};
 
 use rand::thread_rng;
@@ -151,12 +151,16 @@ fn aggsig_sender_receiver_interaction() {
 		let our_sig_part = cx.calculate_partial_sig(&keychain.secp(), &sender_pub_nonce, 0, 0)
 			.unwrap();
 
+		let combined_nonces = PublicKey::from_combination(
+			keychain.secp(),
+			vec![&sender_pub_nonce, &cx.get_public_keys(keychain.secp()).1],
+		).unwrap();
+
 		// Receiver now generates final signature from the two parts
 		let final_sig = cx.calculate_final_sig(
 			&keychain.secp(),
-			&sender_sig_part,
-			&our_sig_part,
-			&sender_pub_nonce,
+			vec![&sender_sig_part, &our_sig_part],
+			&combined_nonces,
 		).unwrap();
 
 		// Receiver calculates the final public key (to verify sig later)
@@ -322,12 +326,16 @@ fn aggsig_sender_receiver_interaction_offset() {
 		let our_sig_part = cx.calculate_partial_sig(&keychain.secp(), &sender_pub_nonce, 0, 0)
 			.unwrap();
 
+		let combined_nonces = PublicKey::from_combination(
+			keychain.secp(),
+			vec![&sender_pub_nonce, &cx.get_public_keys(keychain.secp()).1],
+		).unwrap();
+
 		// Receiver now generates final signature from the two parts
 		let final_sig = cx.calculate_final_sig(
 			&keychain.secp(),
-			&sender_sig_part,
-			&our_sig_part,
-			&sender_pub_nonce,
+			vec![&sender_sig_part, &our_sig_part],
+			&combined_nonces,
 		).unwrap();
 
 		// Receiver calculates the final public key (to verify sig later)

@@ -228,15 +228,11 @@ impl Context {
 	pub fn calculate_final_sig(
 		&self,
 		secp: &Secp256k1,
-		their_sig: &Signature,
-		our_sig: &Signature,
-		their_pub_nonce: &PublicKey,
+		part_sigs: Vec<&Signature>,
+		nonce_sum: &PublicKey,
 	) -> Result<Signature, Error> {
 		// Add public nonces kR*G + kS*G
-		let (_, sec_nonce) = self.get_private_keys();
-		let mut nonce_sum = their_pub_nonce.clone();
-		let _ = nonce_sum.add_exp_assign(secp, &sec_nonce);
-		let sig = aggsig::add_signatures_single(&secp, their_sig, our_sig, &nonce_sum)?;
+		let sig = aggsig::add_signatures_single(&secp, part_sigs, &nonce_sum)?;
 		Ok(sig)
 	}
 
@@ -288,16 +284,21 @@ pub fn verify_single_from_commit(
 	commit: &Commitment,
 ) -> bool {
 	// Extract the pubkey, unfortunately we need this hack for now, (we just hope
-	// one is valid) TODO: Create better secp256k1 API to do this
-	let pubkeys = commit.to_two_pubkeys(secp);
-	let mut valid = false;
-	for i in 0..pubkeys.len() {
-		valid = aggsig::verify_single(secp, &sig, &msg, None, &pubkeys[i], false);
-		if valid {
-			break;
-		}
-	}
-	valid
+	// one is valid)
+	let pubkey = commit.to_pubkey(secp).unwrap();
+	aggsig::verify_single(secp, &sig, &msg, None, &pubkey, false)
+}
+
+/// Verify a sig, with built message
+pub fn verify_sig_build_msg(
+	secp: &Secp256k1,
+	sig: &Signature,
+	pubkey: &PublicKey,
+	fee: u64,
+	lock_height: u64,
+) -> bool {
+	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height)).unwrap();
+	verify_single(secp, sig, &msg, None, pubkey, true)
 }
 
 //Verifies an aggsig signature
@@ -310,6 +311,17 @@ pub fn verify_single(
 	is_partial: bool,
 ) -> bool {
 	aggsig::verify_single(secp, sig, msg, pubnonce, pubkey, is_partial)
+}
+
+/// Adds signatures
+pub fn add_signatures(
+	secp: &Secp256k1,
+	part_sigs: Vec<&Signature>,
+	nonce_sum: &PublicKey,
+) -> Result<Signature, Error> {
+	// Add public nonces kR*G + kS*G
+	let sig = aggsig::add_signatures_single(&secp, part_sigs, &nonce_sum)?;
+	Ok(sig)
 }
 
 /// Just a simple sig, creates its own nonce, etc

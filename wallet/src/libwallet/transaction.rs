@@ -184,10 +184,9 @@ impl Slate {
 	pub fn finalize(
 		&mut self,
 		keychain: &Keychain,
-		context_manager: &mut aggsig::ContextManager,
 		output_key_id: &Identifier,
 	) -> Result<(), Error> {
-		let final_sig = self.finalize_signature(keychain, context_manager)?;
+		let final_sig = self.finalize_signature(keychain)?;
 		self.finalize_transaction(keychain, &final_sig, output_key_id)
 	}
 
@@ -207,6 +206,14 @@ impl Slate {
 			.map(|p| &p.public_blind_excess)
 			.collect();
 		PublicKey::from_combination(secp, pub_blinds).unwrap()
+	}
+
+	/// Return vector of all partial sigs
+	fn part_sigs(&self) -> Vec<&Signature> {
+		self.participant_data
+			.iter()
+			.map(|p| p.part_sig.as_ref().unwrap())
+			.collect()
 	}
 
 	/// Adds participants public keys to the slate data
@@ -333,33 +340,20 @@ impl Slate {
 	///
 	/// Returns completed transaction ready for posting to the chain
 
-	fn finalize_signature(
-		&mut self,
-		keychain: &Keychain,
-		context_manager: &mut aggsig::ContextManager,
-	) -> Result<Signature, Error> {
-		// TODO: Have this just verify all sigs and create the final sig
-		// with the available info in the slate rather than make assumptions
-		// about who's who
-		let context = context_manager.get_context(&self.id);
-		let other_sig_part = self.participant_data[0].part_sig.unwrap().clone();
-		let our_sig_part = self.participant_data[1].part_sig.unwrap().clone();
-
+	fn finalize_signature(&mut self, keychain: &Keychain) -> Result<Signature, Error> {
 		self.verify_part_sigs(keychain.secp())?;
+
+		let part_sigs = self.part_sigs();
 		let pub_nonce_sum = self.pub_nonce_sum(keychain.secp());
+		let final_pubkey = self.pub_blind_sum(keychain.secp());
 		// get the final signature
-		let final_sig = secp::aggsig::add_signatures_single(
-			&keychain.secp(),
-			&our_sig_part,
-			&other_sig_part,
-			&pub_nonce_sum,
-		).unwrap();
+		let final_sig =
+			aggsig::add_signatures(&keychain.secp(), part_sigs, &pub_nonce_sum).unwrap();
 
 		// Calculate the final public key (for our own sanity check)
-		let final_pubkey = self.pub_blind_sum(keychain.secp());
 
 		// Check our final sig verifies
-		let res = context.verify_final_sig_build_msg(
+		let res = aggsig::verify_sig_build_msg(
 			&keychain.secp(),
 			&final_sig,
 			&final_pubkey,
@@ -725,13 +719,9 @@ fn create_final_signature(
 		.unwrap();
 
 	// And the final signature
+	let sig_vec = vec![other_sig_part, &our_sig_part];
 	let final_sig = context
-		.calculate_final_sig(
-			&keychain.secp(),
-			&other_sig_part,
-			&our_sig_part,
-			&other_pub_nonce,
-		)
+		.calculate_final_sig(&keychain.secp(), sig_vec, &other_pub_nonce)
 		.unwrap();
 
 	// Calculate the final public key (for our own sanity check)
