@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
-use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
+use core::core::{Block, BlockHeader, Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;
 use pipe;
@@ -482,6 +482,16 @@ impl Chain {
 				}
 			}
 			Ok(valid_txs)
+		})
+	}
+
+	pub fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), Error> {
+		let bh = self.head_header()?;
+		let height = bh.height + 1;
+		let mut txhashset = self.txhashset.write().unwrap();
+		txhashset::extending_readonly(&mut txhashset, |extension| {
+			extension.verify_coinbase_maturity(&tx.inputs, height)?;
+			Ok(())
 		})
 	}
 

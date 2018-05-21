@@ -133,6 +133,7 @@ pub enum PoolError {
 		/// The lock height of the invalid transaction
 		lock_height: u64,
 	},
+	ImmatureCoinbase,
 	/// An orphan successfully added to the orphans set
 	OrphanTransaction,
 	/// Problem propagating a stem tx to the next Dandelion relay node.
@@ -184,6 +185,8 @@ pub trait BlockChain {
 		txs: Vec<transaction::Transaction>,
 		pre_tx: Option<&transaction::Transaction>,
 	) -> Result<Vec<transaction::Transaction>, PoolError>;
+
+	fn verify_coinbase_maturity(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
 }
 
 /// Bridge between the transaction pool and the rest of the system. Handles

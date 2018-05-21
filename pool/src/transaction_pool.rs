@@ -102,7 +102,10 @@ where
 		self.is_acceptable(&tx)?;
 
 		// Make sure the transaction is valid before anything else.
-		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
+		tx.validate().map_err(|e| PoolError::TransactionError(e))?;
+
+		// Check coinbase maturity before we go any further.
+		self.blockchain.verify_coinbase_maturity(&tx)?;
 
 		let entry = PoolEntry {
 			fresh: true,

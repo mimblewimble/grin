@@ -700,4 +700,10 @@ impl pool::BlockChain for PoolToChainAdapter {
 			.validate_raw_txs(txs, pre_tx)
 			.map_err(|_| pool::PoolError::GenericPoolError)
 	}
+
+	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
+		wo(&self.chain)
+			.verify_coinbase_maturity(tx)
+			.map_err(|_| pool::PoolError::ImmatureCoinbase)
+	}
 }

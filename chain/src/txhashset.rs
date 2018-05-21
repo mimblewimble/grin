@@ -451,10 +451,26 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	pub fn verify_coinbase_maturity(&mut self, inputs: &Vec<Input>, height: u64) -> Result<(), Error> {
+		for x in inputs {
+			if x.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+				let header = self.commit_index.get_block_header(&x.block_hash())?;
+				let pos = self.get_output_pos(&x.commitment())?;
+				let out_hash = self.output_pmmr.get_hash(pos).unwrap_or(Hash::default());
+				x.verify_maturity(out_hash, &header, height)?;
+			}
+		}
+		Ok(())
+	}
+
 	/// Apply a new set of blocks on top the existing sum trees. Blocks are
 	/// applied in order of the provided Vec. If pruning is enabled, inputs also
 	/// prune MMR data.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
+
+		// check coinbase maturity with the Merkle Proof on the input
+		self.verify_coinbase_maturity(&b.inputs, b.header.height)?;
+
 		// first applying coinbase outputs. due to the construction of PMMRs the
 		// last element, when its a leaf, can never be pruned as it has no parent
 		// yet and it will be needed to calculate that hash. to work around this,
@@ -519,13 +535,6 @@ impl<'a> Extension<'a> {
 					.hash_with_index(pos - 1);
 				if output_id_hash != read_hash || output_id_hash != read_elem_hash {
 					return Err(Error::TxHashSetErr(format!("output pmmr hash mismatch")));
-				}
-
-				// check coinbase maturity with the Merkle Proof on the input
-				if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-					let header = self.commit_index.get_block_header(&input.block_hash())?;
-					let pos = self.get_output_pos(&commit)?;
-					input.verify_maturity(read_hash, &header, height)?;
 				}
 			}
 

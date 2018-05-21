@@ -142,6 +142,10 @@ impl BlockChain for DummyChainImpl {
 	) -> Result<Vec<transaction::Transaction>, PoolError> {
 		panic!("not yet implemented");
 	}
+
+	fn verify_coinbase_maturity(&self, tx: &transaction::Transaction) -> Result<(), PoolError> {
+		panic!("not yet implemented");
+	}
 }
 
 impl DummyChain for DummyChainImpl {
