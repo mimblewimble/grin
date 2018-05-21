@@ -101,10 +101,21 @@ pub fn monitor_transactions<T>(
 				} else {
 					let mut tx_pool = tx_pool.write().unwrap();
 					for x in fresh_entries {
+						// TODO - maybe adapter needs a has_dandelion_relay() so we can
+						// conditionally propagate or aggregate and fluff here?
 						let res = tx_pool.adapter.stem_tx_accepted(&x.tx);
 						if res.is_err() {
+							// We failed to propagate the
 							info!(LOGGER, "Adapter failed on accepting stem tx, fluffing.");
-							let _ = tx_pool.add_to_pool(x.src, x.tx, false);
+							if let Ok(agg_tx) = tx_pool.stempool.aggregate_transaction() {
+								let src = TxSource {
+									debug_name: "fluff".to_string(),
+									identifier: "?.?.?.?".to_string(),
+								};
+								let _ = tx_pool.add_to_pool(src, agg_tx, false);
+							} else {
+								error!(LOGGER, "Failed to aggregate stempool.");
+							}
 						}
 					}
 				}
