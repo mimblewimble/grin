@@ -26,10 +26,10 @@ use std::sync::Arc;
 
 use chain::Chain;
 use chain::types::*;
-use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
+use core::consensus;
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
-use core::consensus;
+use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
 use core::global;
 use core::global::ChainTypes;
 use wallet::libwallet::{self, build};
@@ -416,7 +416,7 @@ fn prepare_block_nosum(
 	let reward = libwallet::reward::output(&kc, &key_id, fees, prev.height).unwrap();
 	let mut b = match core::core::Block::new(
 		prev,
-		txs.into_iter().cloned().collect(), 
+		txs.into_iter().cloned().collect(),
 		Difficulty::from_num(diff),
 		reward,
 	) {

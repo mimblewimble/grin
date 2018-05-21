@@ -14,9 +14,9 @@
 
 //! Transactions
 
-use std::collections::HashSet;
-use std::cmp::max;
 use std::cmp::Ordering;
+use std::cmp::max;
+use std::collections::HashSet;
 use std::io::Cursor;
 use std::{error, fmt};
 

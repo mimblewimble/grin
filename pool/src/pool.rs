@@ -112,7 +112,13 @@ where
 		entry: PoolEntry,
 		extra_txs: Vec<Transaction>,
 	) -> Result<(), PoolError> {
-		debug!(LOGGER, "pool [{}]: add_to_pool: {}, {:?}", self.name, entry.tx.hash(), entry.src);
+		debug!(
+			LOGGER,
+			"pool [{}]: add_to_pool: {}, {:?}",
+			self.name,
+			entry.tx.hash(),
+			entry.src
+		);
 
 		// Combine all the txs from the pool, the new pool entry and any extra txs
 		// provided.

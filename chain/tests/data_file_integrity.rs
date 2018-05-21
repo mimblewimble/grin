@@ -26,11 +26,11 @@ use std::sync::Arc;
 
 use chain::Chain;
 use chain::types::*;
-use core::core::{Block, BlockHeader, Transaction};
 use core::core::target::Difficulty;
-use core::{consensus, genesis};
+use core::core::{Block, BlockHeader, Transaction};
 use core::global;
 use core::global::ChainTypes;
+use core::{consensus, genesis};
 
 use keychain::Keychain;
 use wallet::libwallet;
@@ -163,7 +163,7 @@ fn _prepare_block_nosum(
 	let mut b = match core::core::Block::new(
 		prev,
 		txs.into_iter().cloned().collect(),
-		Difficulty::from_num(diff), 
+		Difficulty::from_num(diff),
 		reward,
 	) {
 		Err(e) => panic!("{:?}", e),

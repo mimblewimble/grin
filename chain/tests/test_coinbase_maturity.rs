@@ -24,13 +24,13 @@ use std::fs;
 use std::sync::Arc;
 
 use chain::types::*;
-use wallet::libwallet::build;
+use core::consensus;
+use core::core::OutputIdentifier;
 use core::core::target::Difficulty;
 use core::core::transaction;
-use core::core::OutputIdentifier;
-use core::consensus;
 use core::global;
 use core::global::ChainTypes;
+use wallet::libwallet::build;
 
 use keychain::Keychain;
 use wallet::libwallet;
@@ -176,8 +176,7 @@ fn test_coinbase_maturity() {
 	let txs = vec![coinbase_txn];
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward = libwallet::reward::output(&keychain, &key_id4, fees, prev.height).unwrap();
-	let mut block =
-		core::core::Block::new(&prev, txs, Difficulty::one(), reward).unwrap();
+	let mut block = core::core::Block::new(&prev, txs, Difficulty::one(), reward).unwrap();
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 

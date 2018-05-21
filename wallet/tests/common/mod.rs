@@ -126,7 +126,7 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: (Out
 	let mut b = core::core::Block::new(
 		&prev,
 		txs.into_iter().cloned().collect(),
-		difficulty.clone(), 
+		difficulty.clone(),
 		reward,
 	).unwrap();
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
