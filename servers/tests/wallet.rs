@@ -35,6 +35,7 @@ use util::LOGGER;
 
 /// Start 1 node mining and two wallets, then send a few
 /// transactions from one to the other
+#[ignore]
 #[test]
 fn basic_wallet_transactions() {
 	let test_name_dir = "test_servers";
