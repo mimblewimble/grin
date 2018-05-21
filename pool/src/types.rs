@@ -135,6 +135,8 @@ pub enum PoolError {
 	},
 	/// An orphan successfully added to the orphans set
 	OrphanTransaction,
+	/// Problem propagating a stem tx to the next Dandelion relay node.
+	DandelionError,
 	/// TODO - wip, just getting imports working, remove this and use more
 	/// specific errors
 	GenericPoolError,
@@ -192,8 +194,9 @@ pub trait PoolAdapter: Send + Sync {
 	/// it to its internal cache.
 	fn tx_accepted(&self, tx: &transaction::Transaction);
 	/// The stem transaction pool has accepted this transactions as valid and
-	/// added it to its internal cache.
-	fn stem_tx_accepted(&self, tx: &transaction::Transaction);
+	/// added it to its internal cache, we have waited for the "patience" timer
+	/// to fire and we now want to propagate the tx to the next Dandelion relay.
+	fn stem_tx_accepted(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
 }
 
 /// Dummy adapter used as a placeholder for real implementations
@@ -203,5 +206,8 @@ pub struct NoopAdapter {}
 
 impl PoolAdapter for NoopAdapter {
 	fn tx_accepted(&self, _: &transaction::Transaction) {}
-	fn stem_tx_accepted(&self, _: &transaction::Transaction) {}
+
+	fn stem_tx_accepted(&self, _: &transaction::Transaction) -> Result<(), PoolError> {
+		Ok(())
+	}
 }

@@ -99,9 +99,13 @@ pub fn monitor_transactions<T>(
 						error!(LOGGER, "Failed to aggregate stempool.");
 					}
 				} else {
-					let tx_pool = tx_pool.read().unwrap();
+					let mut tx_pool = tx_pool.write().unwrap();
 					for x in fresh_entries {
-						tx_pool.adapter.stem_tx_accepted(&x.tx);
+						let res = tx_pool.adapter.stem_tx_accepted(&x.tx);
+						if res.is_err() {
+							info!(LOGGER, "Adapter failed on accepting stem tx, fluffing.");
+							let _ = tx_pool.add_to_pool(x.src, x.tx, false);
+						}
 					}
 				}
 

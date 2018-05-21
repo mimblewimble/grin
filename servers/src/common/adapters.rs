@@ -637,8 +637,11 @@ pub struct PoolToNetAdapter {
 }
 
 impl pool::PoolAdapter for PoolToNetAdapter {
-	fn stem_tx_accepted(&self, tx: &core::Transaction) {
-		wo(&self.peers).broadcast_stem_transaction(tx);
+	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
+		wo(&self.peers)
+			.broadcast_stem_transaction(tx)
+			.map_err(|_| pool::PoolError::DandelionError)?;
+		Ok(())
 	}
 	fn tx_accepted(&self, tx: &core::Transaction) {
 		wo(&self.peers).broadcast_transaction(tx);

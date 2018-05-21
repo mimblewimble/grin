@@ -376,7 +376,7 @@ impl Peers {
 	}
 
 	/// Broadcasts the provided stem transaction to our peer relay.
-	pub fn broadcast_stem_transaction(&self, tx: &core::Transaction) {
+	pub fn broadcast_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		let dandelion_relay = self.get_dandelion_relay();
 		if dandelion_relay.is_empty() {
 			debug!(LOGGER, "No dandelion relay, updating.");
@@ -391,9 +391,7 @@ impl Peers {
 			// Also - we would want to add the tx to our local txpool here
 			// and not just broadcast it.
 
-			// self.broadcast_transaction(tx);
-
-			debug!(LOGGER, "No dandelion relay, not propagating the stem tx.");
+			return Err(Error::NoDandelionRelay);
 		}
 		for relay in dandelion_relay.values() {
 			let relay = relay.read().unwrap();
@@ -406,6 +404,7 @@ impl Peers {
 				}
 			}
 		}
+		Ok(())
 	}
 
 	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our

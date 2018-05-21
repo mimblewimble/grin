@@ -60,6 +60,7 @@ pub enum Error {
 	Timeout,
 	Store(grin_store::Error),
 	PeerWithSelf,
+	NoDandelionRelay,
 	ProtocolMismatch {
 		us: u32,
 		peer: u32,
