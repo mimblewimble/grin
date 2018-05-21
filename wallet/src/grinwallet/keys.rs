@@ -17,13 +17,23 @@ use rand::thread_rng;
 use uuid::Uuid;
 
 use core::core::{amount_to_hr_string, Committed, Transaction};
-use libwallet::{aggsig, build};
-use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
-use types::*;
-use util::{secp, LOGGER};
-use util::secp::key::{PublicKey, SecretKey};
-use util::secp::Signature;
 use failure::ResultExt;
+use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
+use libwallet::{aggsig, build};
+use types::*;
+use util::secp::Signature;
+use util::secp::key::{PublicKey, SecretKey};
+use util::{secp, LOGGER};
+
+/// Get our next available key
+pub fn new_output_key(
+	config: &WalletConfig,
+	keychain: &Keychain,
+) -> Result<(Identifier, u32), Error> {
+	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		next_available_key(&wallet_data, keychain)
+	})
+}
 
 /// Get next available key in the wallet
 pub fn next_available_key(wallet_data: &WalletData, keychain: &Keychain) -> (Identifier, u32) {

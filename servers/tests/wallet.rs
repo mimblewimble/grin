@@ -27,15 +27,15 @@ extern crate grin_wallet as wallet;
 
 mod framework;
 
-use std::{thread, time};
-use std::sync::{Arc, Mutex};
 use framework::{LocalServerContainer, LocalServerContainerConfig};
+use std::sync::{Arc, Mutex};
+use std::{thread, time};
 
 use util::LOGGER;
 
 /// Start 1 node mining and two wallets, then send a few
 /// transactions from one to the other
-//#[test]
+#[test]
 fn basic_wallet_transactions() {
 	let test_name_dir = "test_servers";
 	core::global::set_mining_mode(core::global::ChainTypes::AutomatedTesting);

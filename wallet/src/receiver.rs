@@ -25,15 +25,14 @@ use std::sync::{Arc, RwLock};
 
 use api;
 use core::consensus::reward;
-use core::core::{Output, Transaction, TxKernel};
-use libwallet::{aggsig, reward, transaction};
-use grinwallet::keys;
-use core::{global, ser};
-use failure::{Fail, ResultExt};
+use core::core::{Output, TxKernel};
+use core::global;
+use failure::Fail;
+use grinwallet::{keys, selection};
 use keychain::Keychain;
+use libwallet::{aggsig, reward, transaction};
 use types::*;
-use urlencoded::UrlEncodedQuery;
-use util::{to_hex, LOGGER};
+use util::LOGGER;
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
@@ -47,99 +46,27 @@ lazy_static! {
 		= Arc::new(RwLock::new(aggsig::ContextManager::new()));
 }
 
-fn handle_sender_initiation(
+fn handle_send(
 	config: &WalletConfig,
-	context_manager: &mut aggsig::ContextManager,
 	keychain: &Keychain,
-	partial_tx: &PartialTx,
-) -> Result<PartialTx, Error> {
-	// Create a potential output for this transaction
-	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		keys::next_available_key(&wallet_data, keychain)
-	})?;
-
-	let partial_tx =
-		transaction::recipient_initiation(keychain, context_manager, partial_tx, &key_id)?;
-	let mut context = context_manager.get_context(&partial_tx.id);
-	context.add_output(&key_id);
-
-	// Add the output to our wallet
-	let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		wallet_data.add_output(OutputData {
-			root_key_id: keychain.root_key_id(),
-			key_id: key_id.clone(),
-			n_child: derivation,
-			value: partial_tx.amount - context.fee,
-			status: OutputStatus::Unconfirmed,
-			height: 0,
-			lock_height: 0,
-			is_coinbase: false,
-			block: None,
-			merkle_proof: None,
-		});
-	})?;
-
-	context_manager.save_context(context);
-	Ok(partial_tx)
-}
-
-fn handle_sender_confirmation(
-	config: &WalletConfig,
 	context_manager: &mut aggsig::ContextManager,
-	keychain: &Keychain,
-	partial_tx: &PartialTx,
-	fluff: bool,
-) -> Result<Transaction, Error> {
-	let context = context_manager.get_context(&partial_tx.id);
-	// Get output we created in earlier step
-	// TODO: will just be one for now, support multiple later
-	let output_vec = context.get_outputs();
+	slate: &mut transaction::Slate,
+) -> Result<(), Error> {
+	// create an output using the amount in the slate
+	let (_, receiver_create_fn) =
+		selection::build_recipient_output_with_slate(config, keychain, context_manager, slate)
+			.unwrap();
 
-	let root_key_id = keychain.root_key_id();
-	// operate within a lock on wallet data
-	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-		let (key_id, derivation) = keys::retrieve_existing_key(&wallet_data, output_vec[0].clone());
+	// fill public keys
+	let _ = slate.fill_round_1(&keychain, context_manager, 1)?;
 
-		wallet_data.add_output(OutputData {
-			root_key_id: root_key_id.clone(),
-			key_id: key_id.clone(),
-			n_child: derivation,
-			value: partial_tx.amount - context.fee,
-			status: OutputStatus::Unconfirmed,
-			height: 0,
-			lock_height: 0,
-			is_coinbase: false,
-			block: None,
-			merkle_proof: None,
-		});
+	// perform partial sig
+	let _ = slate.fill_round_2(&keychain, context_manager, 1)?;
 
-		(key_id, derivation)
-	})?;
+	// Save output in wallet
+	let _ = receiver_create_fn();
 
-	// In this case partial_tx contains other party's pubkey info
-	let final_tx = transaction::finalize_transaction(
-		keychain,
-		context_manager,
-		partial_tx,
-		partial_tx,
-		&key_id,
-		derivation,
-	)?;
-
-	let tx_hex = to_hex(ser::ser_vec(&final_tx).unwrap());
-
-	let url;
-	if fluff {
-		url = format!(
-			"{}/v1/pool/push?fluff",
-			config.check_node_api_http_addr.as_str()
-		);
-	} else {
-		url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
-	}
-	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
-
-	Ok(final_tx)
+	Ok(())
 }
 
 /// Component used to receive coins, implements all the receiving end of the
@@ -152,56 +79,23 @@ pub struct WalletReceiver {
 
 impl Handler for WalletReceiver {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let struct_body = req.get::<bodyparser::Struct<PartialTx>>();
+		let struct_body = req.get::<bodyparser::Struct<transaction::Slate>>();
 
-		let mut fluff = false;
-		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
-			if let Some(_) = params.get("fluff") {
-				fluff = true;
-			}
-		}
-
-		if let Ok(Some(partial_tx)) = struct_body {
+		if let Ok(Some(mut slate)) = struct_body {
 			let mut acm = AGGSIG_CONTEXT_MANAGER.write().unwrap();
-			match partial_tx.phase {
-				PartialTxPhase::SenderInitiation => {
-					let resp_tx = handle_sender_initiation(
-						&self.config,
-						&mut acm,
-						&self.keychain,
-						&partial_tx,
-					).map_err(|e| {
-						error!(LOGGER, "Phase 1 Sender Initiation -> Problematic partial tx, looks like this: {:?}", partial_tx);
-						e.context(api::ErrorKind::Internal(
-							"Error processing partial transaction".to_owned(),
-						))
-					})
-						.unwrap();
-					let json = serde_json::to_string(&resp_tx).unwrap();
-					Ok(Response::with((status::Ok, json)))
-				}
-				PartialTxPhase::SenderConfirmation => {
-					let resp_tx = handle_sender_confirmation(
-						&self.config,
-						&mut acm,
-						&self.keychain,
-						&partial_tx,
-						fluff,
-					).map_err(|e| {
-						error!(LOGGER, "Phase 3 Sender Confirmation -> Problematic partial tx, looks like this: {:?}", partial_tx);
-						e.context(api::ErrorKind::Internal(
-							"Error processing partial transaction".to_owned(),
-						))
-					})
-						.unwrap();
-					let json = serde_json::to_string(&resp_tx).unwrap();
-					Ok(Response::with((status::Ok, json)))
-				}
-				_ => {
-					error!(LOGGER, "Unhandled Phase: {:?}", partial_tx);
-					Ok(Response::with((status::BadRequest, "Unhandled Phase")))
-				}
-			}
+			let _ = handle_send(&self.config, &self.keychain, &mut acm, &mut slate)
+				.map_err(|e| {
+					error!(
+						LOGGER,
+						"Handling send -> Problematic slate, looks like this: {:?}", slate
+					);
+					e.context(api::ErrorKind::Internal(
+						"Error processing partial transaction".to_owned(),
+					))
+				})
+				.unwrap();
+			let json = serde_json::to_string(&slate).unwrap();
+			Ok(Response::with((status::Ok, json)))
 		} else {
 			Ok(Response::with((status::BadRequest, "")))
 		}

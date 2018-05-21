@@ -14,17 +14,15 @@
 
 use blake2;
 use rand::{thread_rng, Rng};
+use std::cmp::min;
+use std::collections::HashMap;
+use std::convert::From;
 use std::fmt;
 use std::fmt::Display;
-use uuid::Uuid;
-use std::convert::From;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::Path;
 use std::path::MAIN_SEPARATOR;
-use std::collections::HashMap;
-use std::cmp::min;
-use libwallet::aggsig;
+use std::path::Path;
 
 use serde;
 use serde_json;
@@ -38,13 +36,8 @@ use core::consensus;
 use core::core::Transaction;
 use core::core::hash::Hash;
 use core::core::pmmr::MerkleProof;
-use core::ser;
 use keychain;
-use keychain::BlindingFactor;
 use util;
-use util::secp;
-use util::secp::Signature;
-use util::secp::key::PublicKey;
 use util::LOGGER;
 
 const DAT_FILE: &'static str = "wallet.dat";
@@ -644,9 +637,10 @@ impl WalletData {
 	}
 
 	/// Select spendable coins from the wallet.
-	/// Default strategy is to spend the maximum number of outputs (up to max_outputs).
-	/// Alternative strategy is to spend smallest outputs first but only as many as necessary.
-	/// When we introduce additional strategies we should pass something other than a bool in.
+	/// Default strategy is to spend the maximum number of outputs (up to
+	/// max_outputs). Alternative strategy is to spend smallest outputs first
+	/// but only as many as necessary. When we introduce additional strategies
+	/// we should pass something other than a bool in.
 	pub fn select_coins(
 		&self,
 		root_key_id: keychain::Identifier,
@@ -749,120 +743,6 @@ impl WalletData {
 		}
 		max_n + 1
 	}
-}
-
-/// Define the stages of a transaction
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum PartialTxPhase {
-	SenderInitiation,
-	ReceiverInitiation,
-	SenderConfirmation,
-	ReceiverConfirmation,
-}
-
-/// Helper in serializing the information required during an interactive aggsig
-/// transaction
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PartialTx {
-	pub phase: PartialTxPhase,
-	pub id: Uuid,
-	pub amount: u64,
-	pub lock_height: u64,
-	pub public_blind_excess: String,
-	pub public_nonce: String,
-	pub kernel_offset: String,
-	pub part_sig: String,
-	pub tx: String,
-}
-
-/// Builds a PartialTx
-/// aggsig_tx_context should contain the private key/nonce pair
-/// the resulting partial tx will contain the corresponding public keys
-pub fn build_partial_tx(
-	context: &aggsig::Context,
-	keychain: &keychain::Keychain,
-	receive_amount: u64,
-	lock_height: u64,
-	kernel_offset: BlindingFactor,
-	part_sig: Option<secp::Signature>,
-	tx: Transaction,
-) -> PartialTx {
-	let (pub_excess, pub_nonce) = context.get_public_keys(keychain.secp());
-	let mut pub_excess = pub_excess.serialize_vec(keychain.secp(), true).clone();
-	let len = pub_excess.clone().len();
-	let pub_excess: Vec<_> = pub_excess.drain(0..len).collect();
-
-	let mut pub_nonce = pub_nonce.serialize_vec(keychain.secp(), true);
-	let len = pub_nonce.clone().len();
-	let pub_nonce: Vec<_> = pub_nonce.drain(0..len).collect();
-
-	PartialTx {
-		phase: PartialTxPhase::SenderInitiation,
-		id: context.transaction_id,
-		amount: receive_amount,
-		lock_height: lock_height,
-		public_blind_excess: util::to_hex(pub_excess),
-		public_nonce: util::to_hex(pub_nonce),
-		kernel_offset: kernel_offset.to_hex(),
-		part_sig: match part_sig {
-			None => String::from("00"),
-			Some(p) => util::to_hex(p.serialize_der(&keychain.secp())),
-		},
-		tx: util::to_hex(ser::ser_vec(&tx).unwrap()),
-	}
-}
-
-/// Reads a partial transaction into the amount, sum of blinding
-/// factors and the transaction itself.
-pub fn read_partial_tx(
-	keychain: &keychain::Keychain,
-	partial_tx: &PartialTx,
-) -> Result<
-	(
-		u64,
-		u64,
-		PublicKey,
-		PublicKey,
-		BlindingFactor,
-		Option<Signature>,
-		Transaction,
-	),
-	Error,
-> {
-	let blind_bin = util::from_hex(partial_tx.public_blind_excess.clone())
-		.context(ErrorKind::GenericError("Could not decode HEX"))?;
-	let blinding = PublicKey::from_slice(keychain.secp(), &blind_bin[..])
-		.context(ErrorKind::GenericError("Could not construct public key"))?;
-
-	let nonce_bin = util::from_hex(partial_tx.public_nonce.clone())
-		.context(ErrorKind::GenericError("Could not decode HEX"))?;
-	let nonce = PublicKey::from_slice(keychain.secp(), &nonce_bin[..])
-		.context(ErrorKind::GenericError("Could not construct public key"))?;
-
-	let kernel_offset = BlindingFactor::from_hex(&partial_tx.kernel_offset.clone())
-		.context(ErrorKind::GenericError("Could not decode HEX"))?;
-
-	let sig_bin = util::from_hex(partial_tx.part_sig.clone())
-		.context(ErrorKind::GenericError("Could not decode HEX"))?;
-	let sig = match sig_bin.len() {
-		1 => None,
-		_ => Some(Signature::from_der(keychain.secp(), &sig_bin[..])
-			.context(ErrorKind::GenericError("Could not create signature"))?),
-	};
-	let tx_bin = util::from_hex(partial_tx.tx.clone())
-		.context(ErrorKind::GenericError("Could not decode HEX"))?;
-	let tx = ser::deserialize(&mut &tx_bin[..]).context(ErrorKind::GenericError(
-		"Could not deserialize transaction, invalid format.",
-	))?;
-	Ok((
-		partial_tx.amount,
-		partial_tx.lock_height,
-		blinding,
-		nonce,
-		kernel_offset,
-		sig,
-		tx,
-	))
 }
 
 /// Amount in request to build a coinbase output.

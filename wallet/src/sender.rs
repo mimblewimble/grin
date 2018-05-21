@@ -12,26 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use uuid::Uuid;
-
 use api;
-use client;
 use checker;
+use client;
 use core::core::amount_to_hr_string;
-use libwallet::{aggsig, build, transaction};
-use grinwallet::selection;
 use core::ser;
+use failure::ResultExt;
+use grinwallet::selection;
 use keychain::{Identifier, Keychain};
+use libwallet::{aggsig, build};
 use receiver::TxWrapper;
 use types::*;
-use util::LOGGER;
 use util;
-use failure::ResultExt;
+use util::LOGGER;
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
-/// Outputs. The destination can be "stdout" (for command line) (currently disabled) or a URL to the
-/// recipients wallet receiver (to be implemented).
+/// Outputs. The destination can be "stdout" (for command line) (currently
+/// disabled) or a URL to the recipients wallet receiver (to be implemented).
 pub fn issue_send_tx(
 	config: &WalletConfig,
 	keychain: &Keychain,
@@ -42,11 +40,18 @@ pub fn issue_send_tx(
 	selection_strategy_is_use_all: bool,
 	fluff: bool,
 ) -> Result<(), Error> {
+	// TODO: Stdout option, probably in a separate implementation
+	if &dest[..4] != "http" {
+		panic!(
+			"dest formatted as {} but send -d expected stdout or http://IP:port",
+			dest
+		);
+	}
+
 	checker::refresh_outputs(config, keychain)?;
 
 	// Create a new aggsig context
 	let mut context_manager = aggsig::ContextManager::new();
-	let tx_id = Uuid::new_v4();
 
 	// Get lock height
 	let chain_tip = checker::get_tip_from_node(config)?;
@@ -56,125 +61,77 @@ pub fn issue_send_tx(
 
 	let lock_height = current_height;
 
-	let tx_data = selection::build_send_tx(
+	// Sender selects outputs into a new slate and save our corresponding IDs in
+	// their transaction context. The secret key in our transaction context will be
+	// randomly selected. This returns the public slate, and a closure that locks
+	// our inputs and outputs once we're convinced the transaction exchange went
+	// according to plan
+	// This function is just a big helper to do all of that, in theory
+	// this process can be split up in any way
+	let (mut slate, sender_lock_fn) = selection::build_send_tx_slate(
 		config,
 		keychain,
+		&mut context_manager,
+		2,
 		amount,
 		current_height,
 		minimum_confirmations,
 		lock_height,
 		max_outputs,
 		selection_strategy_is_use_all,
-	)?;
+	).unwrap();
 
-	let partial_tx = transaction::sender_initiation(
-		keychain,
-		&tx_id,
-		&mut context_manager,
-		current_height,
-		tx_data,
-	)?;
-
-	let context = context_manager.get_context(&tx_id);
-
-	// Closure to acquire wallet lock and lock the coins being spent
-	// so we avoid accidental double spend attempt.
-	let update_wallet = || {
-		WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-			for id in context.get_outputs().clone() {
-				let coin = wallet_data.get_output(&id).unwrap().clone();
-				wallet_data.lock_output(&coin);
-			}
-		})
-	};
-
-	// Closure to acquire wallet lock and delete the change output in case of tx
-	// failure.
-	let rollback_wallet = || {
-		WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-			match context.change_key.clone() {
-				Some(change) => {
-					info!(LOGGER, "cleaning up unused change output from wallet");
-					wallet_data.delete_output(&change);
-				}
-				None => info!(LOGGER, "No change output to clean from wallet"),
-			}
-		})
-	};
-
-	// TODO: stdout option removed for now, as it won't work very will with this
-	// version of aggsig exchange
-
-	/*if dest == "stdout" {
-		let json_tx = serde_json::to_string_pretty(&partial_tx).unwrap();
-		update_wallet()?;
-		println!("{}", json_tx);
-	} else */
-
-	if &dest[..4] != "http" {
-		WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
-			match context.change_key.clone() {
-				Some(change) => {
-					info!(LOGGER, "cleaning up unused change output from wallet");
-					wallet_data.delete_output(&change);
-				}
-				None => info!(LOGGER, "No change output to clean from wallet"),
-			}
-		}).unwrap();
-		panic!(
-			"dest formatted as {} but send -d expected stdout or http://IP:port",
-			dest
-		);
-	}
+	// Generate a kernel offset and subtract from our context's secret key. Store
+	// the offset in the slate's transaction kernel, and adds our public key
+	// information to the slate
+	let _ = slate
+		.fill_round_1(keychain, &mut context_manager, 0)
+		.unwrap();
 
 	let url = format!("{}/v1/receive/transaction", &dest);
 	debug!(LOGGER, "Posting partial transaction to {}", url);
-	let res = client::send_partial_tx(&url, &partial_tx, fluff);
-	if let Err(e) = res {
-		match e.kind() {
-			ErrorKind::FeeExceedsAmount {
-				sender_amount,
-				recipient_fee,
-			} => error!(
+	let mut slate = match client::send_slate(&url, &slate, fluff) {
+		Ok(s) => s,
+		Err(e) => {
+			match e.kind() {
+				ErrorKind::FeeExceedsAmount {
+					sender_amount,
+					recipient_fee,
+				} => error!(
+						LOGGER,
+						"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
+						amount_to_hr_string(recipient_fee),
+						amount_to_hr_string(sender_amount)
+					),
+				_ => error!(
 					LOGGER,
-					"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
-					amount_to_hr_string(recipient_fee),
-					amount_to_hr_string(sender_amount)
+					"Communication with receiver failed on SenderInitiation send. Aborting transaction"
 				),
-			_ => error!(
-				LOGGER,
-				"Communication with receiver failed on SenderInitiation send. Aborting transaction"
-			),
+			}
+			return Err(e);
 		}
-		rollback_wallet()?;
-		return Err(e);
+	};
+
+	let _ = slate.fill_round_2(keychain, &mut context_manager, 0)?;
+
+	// Final transaction can be built by anyone at this stage
+	slate.finalize(keychain)?;
+
+	// So let's post it
+	let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
+	let url;
+	if fluff {
+		url = format!(
+			"{}/v1/pool/push?fluff",
+			config.check_node_api_http_addr.as_str()
+		);
+	} else {
+		url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
 	}
+	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
 
-	let partial_tx =
-		transaction::sender_confirmation(keychain, &mut context_manager, res.unwrap())?;
-
-	// And send again, expecting completed transaction as result this time
-	let res = client::send_partial_tx_final(&url, &partial_tx, fluff);
-	if let Err(e) = res {
-		match e.kind() {
-			ErrorKind::FeeExceedsAmount {sender_amount, recipient_fee} =>
-				error!(
-					LOGGER,
-					"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
-					amount_to_hr_string(recipient_fee),
-					amount_to_hr_string(sender_amount)
-				),
-			_ => error!(LOGGER, "Communication with receiver failed on SenderConfirmation send. Aborting transaction"),
-		}
-		rollback_wallet()?;
-		return Err(e);
-	}
-
-	// Not really necessary here
-	context_manager.save_context(context.clone());
-
-	// All good so
-	update_wallet()?;
+	// All good so, lock our outputs
+	sender_lock_fn()?;
 	Ok(())
 }
 
@@ -227,8 +184,8 @@ pub fn issue_burn_tx(
 
 #[cfg(test)]
 mod test {
-	use libwallet::build;
 	use keychain::Keychain;
+	use libwallet::build;
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment
