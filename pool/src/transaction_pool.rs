@@ -65,16 +65,8 @@ where
 		self.stempool
 			.add_to_pool(entry.clone(), self.txpool.all_transactions())?;
 
-		//
-		// TODO - random step here to potentially fluff contents of the stempool
-		//
-		let fluff = false;
-
-		if fluff {
-			panic!("not yet implemented");
-		} else {
-			self.adapter.stem_tx_accepted(&entry.tx);
-		}
+		// Note: we do not notify the adapter here,
+		// we let the dandelion monitor handle this.
 		Ok(())
 	}
 
@@ -121,6 +113,7 @@ where
 		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
 		let entry = PoolEntry {
+			fresh: true,
 			src,
 			tx_at: time::now_utc().to_timespec(),
 			tx: tx.clone(),

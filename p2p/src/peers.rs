@@ -379,12 +379,21 @@ impl Peers {
 	pub fn broadcast_stem_transaction(&self, tx: &core::Transaction) {
 		let dandelion_relay = self.get_dandelion_relay();
 		if dandelion_relay.is_empty() {
-			debug!(LOGGER, "No dandelion relay updating");
+			debug!(LOGGER, "No dandelion relay, updating.");
 			self.update_dandelion_relay();
 		}
 		// If still empty broadcast then broadcast transaction normally
 		if dandelion_relay.is_empty() {
-			self.broadcast_transaction(tx);
+			// TODO - what should we do in this case?
+			// We have the embargo timer, so just wait for this for now.
+			// Local testing is *really* hard as we hit a peer
+			// with no dandelion relay every time...
+			// Also - we would want to add the tx to our local txpool here
+			// and not just broadcast it.
+
+			// self.broadcast_transaction(tx);
+
+			debug!(LOGGER, "No dandelion relay, not propagating the stem tx.");
 		}
 		for relay in dandelion_relay.values() {
 			let relay = relay.read().unwrap();

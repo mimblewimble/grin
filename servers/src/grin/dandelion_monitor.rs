@@ -55,6 +55,56 @@ pub fn monitor_transactions<T>(
 				// we wait n secs before doing so?
 				//
 
+				let mut fresh_entries = vec![];
+				let mut fluff_stempool = false;
+				{
+					let mut tx_pool = tx_pool.write().unwrap();
+					let mut rng = rand::thread_rng();
+
+					// TODO - also check the patience timer here for each tx.
+					for mut entry in tx_pool.stempool.entries.iter_mut() {
+						if entry.fresh {
+							entry.fresh = false;
+							let random = rng.gen_range(0, 101);
+							if random <= config.dandelion_probability {
+								info!(
+									LOGGER,
+									"Not fluffing stempool, will propagate to Dandelion relay."
+								);
+								fresh_entries.push(entry.clone());
+							} else {
+								info!(LOGGER, "Attempting to fluff stempool.");
+								fluff_stempool = true;
+								break;
+							}
+						}
+					}
+				}
+
+				if fluff_stempool {
+					let mut tx_pool = tx_pool.write().unwrap();
+					if let Ok(agg_tx) = tx_pool.stempool.aggregate_transaction() {
+						let src = TxSource {
+							debug_name: "fluff".to_string(),
+							identifier: "?.?.?.?".to_string(),
+						};
+						match tx_pool.add_to_pool(src, agg_tx, false) {
+							Ok(()) => info!(
+								LOGGER,
+								"Aggregated stempool, adding aggregated tx to local txpool."
+							),
+							Err(e) => debug!(LOGGER, "Error - {:?}", e),
+						};
+					} else {
+						error!(LOGGER, "Failed to aggregate stempool.");
+					}
+				} else {
+					let tx_pool = tx_pool.read().unwrap();
+					for x in fresh_entries {
+						tx_pool.adapter.stem_tx_accepted(&x.tx);
+					}
+				}
+
 				// Randomize the cutoff time based on Dandelion embargo cofiguration.
 				// Anything older than this gets "fluffed" as a fallback.
 				let now = now_utc().to_timespec().sec;
@@ -62,17 +112,24 @@ pub fn monitor_transactions<T>(
 				let cutoff = now - embargo_sec;
 
 				let mut expired_entries = vec![];
-				for entry in tx_pool.read().unwrap().stempool.entries.clone() {
-					if entry.tx_at.sec < cutoff {
-						expired_entries.push(entry);
+				{
+					let tx_pool = tx_pool.read().unwrap();
+					for entry in tx_pool
+						.stempool
+						.entries
+						.iter()
+						.filter(|x| x.tx_at.sec < cutoff)
+					{
+						info!(LOGGER, "Fluffing tx after embargo timer expired.");
+						expired_entries.push(entry.clone());
 					}
 				}
 
-				if expired_entries.len() > 0 {
+				{
 					let mut tx_pool = tx_pool.write().unwrap();
 					for entry in expired_entries {
 						match tx_pool.add_to_pool(entry.src, entry.tx, false) {
-							Ok(()) => info!(LOGGER, "Fluffing tx after embargo timer expired."),
+							Ok(()) => info!(LOGGER, "Fluffed tx successfully."),
 							Err(e) => debug!(LOGGER, "error - {:?}", e),
 						};
 					}

@@ -668,15 +668,6 @@ where
 			}
 		}
 
-		// Will not do a stem transaction if our dandelion peer relay is empty
-		if !fluff && w(&self.peers).get_dandelion_relay().is_empty() {
-			debug!(
-				LOGGER,
-				"Missing Dandelion relay: will push stem transaction normally"
-			);
-			fluff = true;
-		}
-
 		//  Push into the pool or stempool
 		let res = {
 			let pool_arc = w(&self.tx_pool);
