@@ -22,8 +22,8 @@ use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use handshake::Handshake;
 use msg;
-use protocol::Protocol;
 use msg::*;
+use protocol::Protocol;
 use types::*;
 use util::LOGGER;
 
@@ -369,7 +369,8 @@ impl ChainAdapter for TrackingAdapter {
 
 	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
 		// Do not track the tx hash for stem txs.
-		// Otherwise we fail to handle the subsequent fluff or embargo expiration correctly.
+		// Otherwise we fail to handle the subsequent fluff or embargo expiration
+		// correctly.
 		if !stem {
 			self.push(tx.hash());
 		}

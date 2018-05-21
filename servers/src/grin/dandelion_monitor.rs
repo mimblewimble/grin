@@ -71,8 +71,7 @@ pub fn monitor_transactions<T>(
 				if expired_entries.len() > 0 {
 					let mut tx_pool = tx_pool.write().unwrap();
 					for entry in expired_entries {
-						match tx_pool.add_to_pool(entry.src, entry.tx, false)
-						{
+						match tx_pool.add_to_pool(entry.src, entry.tx, false) {
 							Ok(()) => info!(LOGGER, "Fluffing tx after embargo timer expired."),
 							Err(e) => debug!(LOGGER, "error - {:?}", e),
 						};

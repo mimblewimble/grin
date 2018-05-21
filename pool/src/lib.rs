@@ -34,10 +34,10 @@ extern crate serde_derive;
 extern crate slog;
 extern crate time;
 
-pub mod types;
-mod pool;
 pub mod blockchain;
+mod pool;
 pub mod transaction_pool;
+pub mod types;
 
 pub use transaction_pool::TransactionPool;
 pub use types::{BlockChain, PoolAdapter, PoolConfig, PoolError, TxSource};
