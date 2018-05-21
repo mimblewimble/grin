@@ -45,9 +45,27 @@ pub struct Context {
 	pub fee: u64,
 }
 
+/*impl Context {
+	/// Create a new context with defaults
+	pub fn new(
+		secp: &secp::Secp256k1,
+		sec_key: SecretKey,
+	) -> Context {
+		Context {
+			sec_key: sec_key,
+			sec_nonce: aggsig::export_secnonce_single(secp).unwrap(),
+			change_key: None,
+			input_ids: vec![],
+			output_ids: vec![],
+			fee: 0,
+		},
+}*/
+
 #[derive(Clone, Debug)]
 /// Holds many contexts, to support multiple transactions hitting a wallet
 /// receiver at once
+/// TODO: Remove context manager in favour of context.. keeping multiple
+/// transactions separate is a wallet-specific concern
 pub struct ContextManager {
 	contexts: HashMap<Uuid, Context>,
 }

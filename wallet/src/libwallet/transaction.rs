@@ -30,22 +30,6 @@ use util::{secp, LOGGER};
 
 use failure::ResultExt;
 
-/// Define the stage that a slate can be in.. for now
-/// follows the exchange workflow, but could be made
-/// more piecemeal
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum SlatePhase {
-	/// Sender has initiated
-	SenderInitiation,
-	/// Receiver has sender's public data, has filled their public data and
-	/// part-signed
-	ReceiverInitiation,
-	/// Sender has all public data, has filled it and signed
-	SenderConfirmation,
-	/// Reciever has all data, and has signed with their output
-	ReceiverConfirmation,
-}
 /// Public data for each participant in the slate
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
