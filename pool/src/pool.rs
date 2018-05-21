@@ -100,7 +100,7 @@ where
 
 	pub fn aggregate_transaction(&self) -> Result<Transaction, PoolError> {
 		let txs = self.all_transactions();
-		let tx = transaction::aggregate_with_cut_through(txs)?;
+		let tx = transaction::aggregate(txs)?;
 		Ok(tx)
 	}
 
@@ -112,7 +112,7 @@ where
 		entry: PoolEntry,
 		extra_txs: Vec<Transaction>,
 	) -> Result<(), PoolError> {
-		debug!(LOGGER, "pool [{}]: add_to_pool", self.name);
+		debug!(LOGGER, "pool [{}]: add_to_pool: {}, {:?}", self.name, entry.tx.hash(), entry.src);
 
 		// Combine all the txs from the pool, the new pool entry and any extra txs
 		// provided.
@@ -121,7 +121,7 @@ where
 		txs.extend(extra_txs);
 
 		// Create a single aggregated tx from all of them.
-		let agg_tx = transaction::aggregate_with_cut_through(txs)?;
+		let agg_tx = transaction::aggregate(txs)?;
 
 		// Validate aggregated tx against the chain txhashset extension.
 		self.blockchain.validate_raw_txs(vec![], Some(&agg_tx))?;

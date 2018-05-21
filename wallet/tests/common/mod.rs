@@ -123,7 +123,12 @@ fn get_output_local(
 pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: (Output, TxKernel)) {
 	let prev = chain.head_header().unwrap();
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
-	let mut b = core::core::Block::new(&prev, txs, difficulty.clone(), reward).unwrap();
+	let mut b = core::core::Block::new(
+		&prev,
+		txs.into_iter().cloned().collect(),
+		difficulty.clone(), 
+		reward,
+	).unwrap();
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 	chain.set_txhashset_roots(&mut b, false).unwrap();
 	pow::pow_size(

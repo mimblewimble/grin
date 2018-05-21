@@ -501,7 +501,7 @@ impl Transaction {
 
 /// Aggregate a vec of transactions into a multi-kernel transaction with
 /// cut_through
-pub fn aggregate_with_cut_through(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
+pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
@@ -585,7 +585,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	// transaction
 	let mut kernel_offsets = vec![];
 
-	let tx = aggregate_with_cut_through(txs).unwrap();
+	let tx = aggregate(txs).unwrap();
 
 	for mk_input in mk_tx.clone().inputs {
 		if !tx.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {

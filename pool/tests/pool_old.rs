@@ -146,7 +146,7 @@ fn test_multikernel_pool_add() {
 	let child_transaction = test_transaction(vec![11, 3], vec![12]);
 
 	let txs = vec![parent_transaction, child_transaction];
-	let multi_kernel_transaction = transaction::aggregate_with_cut_through(txs).unwrap();
+	let multi_kernel_transaction = transaction::aggregate(txs).unwrap();
 
 	dummy_chain.update_output_set(new_output);
 

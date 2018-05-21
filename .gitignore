@@ -7,3 +7,4 @@ Cargo.lock
 *.iml
 grin.log
 wallet.seed
+test_output

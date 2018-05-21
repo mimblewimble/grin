@@ -414,7 +414,12 @@ fn prepare_block_nosum(
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward = libwallet::reward::output(&kc, &key_id, fees, prev.height).unwrap();
-	let mut b = match core::core::Block::new(prev, txs, Difficulty::from_num(diff), reward) {
+	let mut b = match core::core::Block::new(
+		prev,
+		txs.into_iter().cloned().collect(), 
+		Difficulty::from_num(diff),
+		reward,
+	) {
 		Err(e) => panic!("{:?}", e),
 		Ok(b) => b,
 	};

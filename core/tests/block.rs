@@ -54,12 +54,12 @@ fn too_large_block() {
 
 	let now = Instant::now();
 	parts.append(&mut vec![input(500000, pks.pop().unwrap()), with_fee(2)]);
-	let mut tx = build::transaction(parts, &keychain).unwrap();
+	let tx = build::transaction(parts, &keychain).unwrap();
 	println!("Build tx: {}", now.elapsed().as_secs());
 
 	let prev = BlockHeader::default();
 	let key_id = keychain.derive_key_id(1).unwrap();
-	let b = new_block(vec![&mut tx], &keychain, &prev, &key_id);
+	let b = new_block(vec![&tx], &keychain, &prev, &key_id);
 	assert!(b.validate(&zero_commit, &zero_commit).is_err());
 }
 

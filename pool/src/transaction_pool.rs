@@ -98,14 +98,6 @@ where
 		tx: Transaction,
 		stem: bool,
 	) -> Result<(), PoolError> {
-		debug!(
-			LOGGER,
-			"pool: add_to_pool: {}, {:?}, stem? {}",
-			tx.hash(),
-			src,
-			stem
-		);
-
 		// Do we have the capacity to accept this transaction?
 		self.is_acceptable(&tx)?;
 

@@ -116,7 +116,7 @@ fn test_coinbase_maturity() {
 		&keychain,
 	).unwrap();
 
-	let txs = vec![&coinbase_txn];
+	let txs = vec![coinbase_txn];
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward = libwallet::reward::output(&keychain, &key_id3, fees, prev.height).unwrap();
 	let mut block = core::core::Block::new(&prev, txs, Difficulty::one(), reward).unwrap();
@@ -173,11 +173,11 @@ fn test_coinbase_maturity() {
 		&keychain,
 	).unwrap();
 
-	let txs = vec![&coinbase_txn];
+	let txs = vec![coinbase_txn];
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward = libwallet::reward::output(&keychain, &key_id4, fees, prev.height).unwrap();
 	let mut block =
-		core::core::Block::new(&prev, vec![&coinbase_txn], Difficulty::one(), reward).unwrap();
+		core::core::Block::new(&prev, txs, Difficulty::one(), reward).unwrap();
 
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
