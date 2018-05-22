@@ -13,25 +13,25 @@
 // limitations under the License.
 
 //! Mining Stratum Server
+use bufstream::BufStream;
+use serde_json;
+use std::error::Error;
+use std::io::BufRead;
+use std::io::{ErrorKind, Write};
+use std::net::{TcpListener, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
-use std::net::{TcpListener, TcpStream};
-use std::io::{ErrorKind, Write};
-use std::error::Error;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::SystemTime;
 use time;
 use util::LOGGER;
-use std::io::BufRead;
-use bufstream::BufStream;
-use std::sync::{Arc, Mutex, RwLock};
-use serde_json;
-use std::time::SystemTime;
 
+use chain;
 use common::adapters::PoolToChainAdapter;
 use common::stats::{StratumStats, WorkerStats};
 use common::types::StratumServerConfig;
 use core::core::{Block, BlockHeader};
-use chain;
 use keychain;
 use mining::mine_block;
 use pool;
@@ -304,18 +304,20 @@ impl StratumServer {
 					// Call the handler function for requested method
 					let (response, err) = match request.method.as_str() {
 						"login" => {
-							let (response, err) = self.handle_login(request.params, &mut workers_l[num]);
+							let (response, err) =
+								self.handle_login(request.params, &mut workers_l[num]);
 							(response, err)
 						}
 						"submit" => {
 							let res = self.handle_submit(
 								request.params,
 								&mut workers_l[num],
-								&mut stratum_stats.worker_stats[worker_stats_id]);
+								&mut stratum_stats.worker_stats[worker_stats_id],
+							);
 							// this key_id has been used now, reset
 							self.current_key_id = None;
 							res
-						},
+						}
 						"keepalive" => self.handle_keepalive(),
 						"getjobtemplate" => {
 							if self.currently_syncing.load(Ordering::Relaxed) {
@@ -471,7 +473,7 @@ impl StratumServer {
 		}
 		let submitted_by = match worker.login.clone() {
 			None => worker.id.to_string(),
-			Some(login) => login.clone()
+			Some(login) => login.clone(),
 		};
 		info!(
 			LOGGER,
@@ -549,9 +551,10 @@ impl StratumServer {
 		}
 	}
 
-	/// "main()" - Starts the stratum-server.  Creates a thread to Listens for a connection, then
-	/// enters a loop, building a new block on top of the existing chain anytime required and
-	/// sending that to the connected stratum miner, proxy, or pool, and accepts full solutions to
+	/// "main()" - Starts the stratum-server.  Creates a thread to Listens for
+	/// a connection, then enters a loop, building a new block on top of the
+	/// existing chain anytime required and sending that to the connected
+	/// stratum miner, proxy, or pool, and accepts full solutions to
 	/// be submitted.
 	pub fn run_loop(
 		&mut self,
