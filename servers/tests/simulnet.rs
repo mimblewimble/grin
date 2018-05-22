@@ -309,3 +309,74 @@ fn simulate_fast_sync_double() {
 	s1.stop();
 	s2.stop();
 }
+
+//#[test]
+fn simulate_fast_sync_long_fork() {
+	util::init_test_logger();
+
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+
+	let test_name = "grin-fast-long-fork";
+	framework::clean_all_output(test_name);
+
+	let addr_s1: std::net::SocketAddr = "127.0.0.1:12000".parse().unwrap();
+	let addr_s2: std::net::SocketAddr = "127.0.0.1:12001".parse().unwrap();
+	let addr_s3: std::net::SocketAddr = "127.0.0.1:12002".parse().unwrap();
+
+	let s1 = servers::Server::new(framework::config(2000, test_name, 2000)).unwrap();
+	// mine a few blocks on server 1
+	s1.start_test_miner(None);
+	thread::sleep(time::Duration::from_millis(2000));
+	{
+		let s2 = servers::Server::new(config(2001, test_name, 2000)).unwrap();
+		// mine a few blocks on server 2
+		s2.start_test_miner(None);
+		thread::sleep(time::Duration::from_millis(10000));
+
+		// disconnect servers 1 & 2
+		s1.p2p.peers.ban_peer(&addr_s2);
+		s2.p2p.peers.ban_peer(&addr_s1);
+
+		// create a local fork
+		thread::sleep(time::Duration::from_millis(12000));
+
+		let mut head_height = s2.head().height;
+
+		let mut conf = config(2002, "grin-fast-long-fork", 2001);
+		// enable fast sync
+		conf.archive_mode = Some(false);
+		conf.p2p_config.peers_deny = Some(vec!["127.0.0.1:12000".to_owned()]);
+		let s3 = servers::Server::new(conf).unwrap();
+
+		// fast sync works with s2
+		while s3.head().height != s3.header_head().height || s3.head().height < head_height {
+			thread::sleep(time::Duration::from_millis(1000));
+		}
+
+		s2.stop();
+		s3.stop();
+	}
+
+	thread::sleep(time::Duration::from_millis(2000));
+	std::fs::remove_file("target/tmp/grin-fast-long-fork/grin-sync-2002/chain/LOCK").unwrap();
+	std::fs::remove_file("target/tmp/grin-fast-long-fork/grin-sync-2002/peers/LOCK").unwrap();
+	// allow server 1 mine the longest chain
+	thread::sleep(time::Duration::from_millis(12000));
+
+	let head_height = s1.head().height;
+
+	let mut conf = config(2002, "grin-fast-long-fork", 2000);
+	// enable fast sync
+	conf.archive_mode = Some(false);
+	conf.p2p_config.peers_deny = Some(vec!["127.0.0.1:12001".to_owned()]);
+	let s3 = servers::Server::new(conf).unwrap();
+
+	let mut head_height = s1.head().height;
+	// fast sync works with s2
+	while s3.head().height != s3.header_head().height || s3.head().height < head_height {
+		thread::sleep(time::Duration::from_millis(1000));
+	}
+	thread::sleep(time::Duration::from_millis(4000));
+	s1.stop();
+	s3.stop();
+}

@@ -105,6 +105,8 @@ pub enum Error {
 	GenesisBlockRequired,
 	/// Error from underlying tx handling
 	Transaction(transaction::Error),
+	/// Forked block is beyond the horizon (fast sync)
+	ForkBeyondHorizon(u64, Hash),
 	/// Anything else
 	Other(String),
 }

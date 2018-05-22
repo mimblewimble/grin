@@ -27,6 +27,7 @@ use rand::Rng;
 
 use chain::{self, ChainAdapter, Options, Tip};
 use core::core;
+use core::global;
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
@@ -417,6 +418,7 @@ impl NetToChainAdapter {
 	fn process_block(&self, b: core::Block, addr: SocketAddr) -> bool {
 		let prev_hash = b.header.previous;
 		let bhash = b.hash();
+		let height = b.header.height;
 		let chain = w(&self.chain);
 		match chain.process_block(b, self.chain_opts()) {
 			Ok((tip, _)) => {
@@ -426,9 +428,23 @@ impl NetToChainAdapter {
 			}
 			Err(chain::Error::Orphan) => {
 				// make sure we did not miss the parent block
-				if !chain.is_orphan(&prev_hash) && !self.currently_syncing.load(Ordering::Relaxed) {
-					debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
+				if !chain.is_orphan(&prev_hash) && !self.currently_syncing.load(Ordering::Relaxed)
+					&& chain.head().unwrap().height.saturating_sub(height)
+						< global::cut_through_horizon() as u64
+				{
+					debug!(LOGGER, "adapter: process_block: received an orphan block at height {}, checking the parent: {:}", height, prev_hash);
 					self.request_block_by_hash(prev_hash, &addr)
+				}
+				true
+			}
+			Err(chain::Error::ForkBeyondHorizon(height, hash)) => {
+				let fast_sync = match self.config.archive_mode {
+					None => true,
+					Some(v) => !v,
+				};
+				if !self.currently_syncing.load(Ordering::Relaxed) && fast_sync {
+					debug!(LOGGER, "block {} is in fork which goes beyond the horizon, asking txhashet @ height: {}", hash, height);
+					self.request_txhashset(&addr, height, hash);
 				}
 				true
 			}
@@ -516,40 +532,61 @@ impl NetToChainAdapter {
 	}
 
 	fn request_block_by_hash(&self, h: Hash, addr: &SocketAddr) {
-		self.send_block_request_to_peer(h, addr, |peer, h| peer.send_block_request(h))
+		self.send_block_request_to_peer(h, addr, |peer| peer.send_block_request(h))
 	}
 
 	// After we have received a block header in "header first" propagation
 	// we need to go request the block (compact representation) from the
 	// same peer that gave us the header (unless we have already accepted the block)
 	fn request_compact_block(&self, bh: &BlockHeader, addr: &SocketAddr) {
-		self.send_block_request_to_peer(bh.hash(), addr, |peer, h| {
-			peer.send_compact_block_request(h)
+		self.send_block_request_to_peer(bh.hash(), addr, |peer| {
+			peer.send_compact_block_request(bh.hash())
 		})
+	}
+
+	fn request_txhashset(&self, addr: &SocketAddr, height: u64, hash: Hash) {
+		self.send_request_to_peer(addr, |peer| peer.send_txhashset_request(height, hash))
+	}
+
+	fn send_request_to_peer<F>(&self, addr: &SocketAddr, f: F)
+	where
+		F: FnOnce(&p2p::Peer) -> Result<(), p2p::Error>,
+	{
+		match wo(&self.peers).get_connected_peer(addr) {
+			None => debug!(
+				LOGGER,
+				"send_request_to_peer: can't send request to peer {:?}, not connected", addr
+			),
+			Some(peer) => match peer.read() {
+				Err(e) => debug!(
+					LOGGER,
+					"send_request_to_peer: can't send request to peer {:?}, read fails: {:?}",
+					addr,
+					e
+				),
+				Ok(p) => {
+					if let Err(e) = f(&p) {
+						error!(LOGGER, "send_request_to_peer: failed: {:?}", e)
+					}
+				}
+			},
+		}
 	}
 
 	fn send_block_request_to_peer<F>(&self, h: Hash, addr: &SocketAddr, f: F)
 	where
-		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
+		F: FnOnce(&p2p::Peer) -> Result<(), p2p::Error>,
 	{
 		match w(&self.chain).block_exists(h) {
-			Ok(false) => {
-				match  wo(&self.peers).get_connected_peer(addr) {
-					None => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, not connected", addr),
-					Some(peer) => {
-						match peer.read() {
-							Err(e) => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, read fails: {:?}", addr, e),
-							Ok(p) => {
-								if let Err(e) =  f(&p, h) {
-									error!(LOGGER, "send_block_request_to_peer: failed: {:?}", e)
-								}
-							}
-						}
-					}
-				}
-			}
-			Ok(true) => debug!(LOGGER, "send_block_request_to_peer: block {} already known", h),
-			Err(e) => error!(LOGGER, "send_block_request_to_peer: failed to check block exists: {:?}", e)
+			Ok(false) => self.send_request_to_peer(addr, f),
+			Ok(true) => debug!(
+				LOGGER,
+				"send_block_request_to_peer: block {} already known", h
+			),
+			Err(e) => error!(
+				LOGGER,
+				"send_block_request_to_peer: failed to check block exists: {:?}", e
+			),
 		}
 	}
 

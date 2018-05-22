@@ -114,9 +114,11 @@ pub fn run_sync(
 						header_sync(peers.clone(), chain.clone());
 					}
 
+					// run fast sync if applicable
 					if fast_sync_enabled {
-						// run fast sync if applicable, every 5 min
-						if header_head.height == si.highest_height && si.fast_sync_due() {
+						if fast_sync_enabled && header_head.height == si.highest_height
+							&& si.fast_sync_due()
+						{
 							fast_sync(peers.clone(), chain.clone(), &header_head);
 						}
 					} else {
