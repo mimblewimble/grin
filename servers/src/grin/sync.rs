@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{cmp, thread};
+use std::{thread, cmp};
 use std::time::Duration;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -139,6 +139,7 @@ pub fn run_sync(
 }
 
 fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
+	let horizon = global::cut_through_horizon() as u64;
 	let body_head: chain::Tip = chain.head().unwrap();
 	let header_head: chain::Tip = chain.get_header_head().unwrap();
 	let sync_head: chain::Tip = chain.get_sync_head().unwrap();
@@ -155,17 +156,19 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 	);
 
 	let mut hashes = vec![];
+	let mut oldest_height = 0;
 
 	if header_head.total_difficulty > body_head.total_difficulty {
 		let mut current = chain.get_block_header(&header_head.last_block_h);
 		while let Ok(header) = current {
 			// break out of the while loop when we find a header common
-			// between the this chain and the current chain
+			// between the header chain and the current body chain
 			if let Ok(_) = chain.is_on_current_chain(&header) {
 				break;
 			}
 
 			hashes.push(header.hash());
+			oldest_height = header.height;
 			current = chain.get_block_header(&header.previous);
 		}
 	}
@@ -173,13 +176,10 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 
 	// if we have 5 peers to sync from then ask for 50 blocks total (peer_count *
 	// 10) max will be 80 if all 8 peers are advertising more work
-	let peer_count = cmp::min(peers.more_work_peers().len(), 10);
-	let mut block_count = peer_count * 10;
-
-	// if the chain is already saturated with orphans, throttle
-	// still asking for at least 1 unknown block to avoid getting stuck
-	block_count = cmp::min(
-		block_count,
+	// also if the chain is already saturated with orphans, throttle
+	let peer_count = peers.more_work_peers().len();
+	let block_count = cmp::min(
+		cmp::min(100, peer_count * 10),
 		chain::MAX_ORPHAN_SIZE.saturating_sub(chain.orphans_len()) + 1,
 	);
 
@@ -191,7 +191,6 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 			!chain.get_block(x).is_ok() && !chain.is_orphan(x)
 		})
 		.take(block_count)
-		.cloned()
 		.collect::<Vec<_>>();
 
 	if hashes_to_get.len() > 0 {
@@ -205,14 +204,15 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 		);
 
 		for hash in hashes_to_get.clone() {
-			// TODO - Is there a threshold where we sync from most_work_peer
-			// (not more_work_peer)?
-			// TODO - right now we *only* sync blocks from a full archival node
-			// even if we are requesting recent blocks (i.e. during a fast sync)
-			let peer = peers.more_work_archival_peer();
+			// only archival  peers can be expected to have blocks older than horizon
+			let peer = if oldest_height < header_head.height.saturating_sub(horizon) {
+				peers.more_work_archival_peer()
+			} else {
+				peers.more_work_peer()
+			};
 			if let Some(peer) = peer {
 				if let Ok(peer) = peer.try_read() {
-					if let Err(e) = peer.send_block_request(hash) {
+					if let Err(e) = peer.send_block_request(*hash) {
 						debug!(LOGGER, "Skipped request to {}: {:?}", peer.info.addr, e);
 					}
 				}
