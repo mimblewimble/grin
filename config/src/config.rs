@@ -105,15 +105,10 @@ impl GlobalConfig {
 		}
 
 		// Config file path is given but not valid
-		if !return_value.config_file_path.as_mut().unwrap().exists() {
+		let config_file = return_value.config_file_path.clone().unwrap();
+		if !config_file.exists() {
 			return Err(ConfigError::FileNotFoundError(String::from(
-				return_value
-					.config_file_path
-					.as_mut()
-					.unwrap()
-					.to_str()
-					.unwrap()
-					.clone(),
+						config_file.to_str().unwrap()
 			)));
 		}
 
