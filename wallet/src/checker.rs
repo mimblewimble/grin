@@ -26,26 +26,6 @@ use util::secp::pedersen;
 use util;
 use util::LOGGER;
 
-// Transitions a local wallet output from Unconfirmed -> Unspent.
-fn mark_unspent_output(out: &mut OutputData) {
-	match out.status {
-		OutputStatus::Unconfirmed => out.status = OutputStatus::Unspent,
-		_ => (),
-	}
-}
-
-// Transitions a local wallet output (based on it not being in the node output
-// set) -
-// Unspent -> Spent
-// Locked -> Spent
-fn mark_spent_output(out: &mut OutputData) {
-	match out.status {
-		OutputStatus::Unspent => out.status = OutputStatus::Spent,
-		OutputStatus::Locked => out.status = OutputStatus::Spent,
-		_ => (),
-	}
-}
-
 pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
 	refresh_output_state(config, keychain)?;
 	refresh_missing_block_hashes(config, keychain)?;
@@ -211,8 +191,8 @@ pub fn apply_api_outputs(
 			let id = wallet_outputs.get(&commit).unwrap();
 			if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
 				match api_outputs.get(&commit) {
-					Some(_) => mark_unspent_output(&mut output.get_mut()),
-					None => mark_spent_output(&mut output.get_mut()),
+					Some(_) => output.get_mut().mark_unspent(),
+					None => output.get_mut().mark_spent(),
 				};
 			}
 		}

@@ -394,6 +394,22 @@ impl OutputData {
 			return false;
 		}
 	}
+
+	/// Marks this output as unspent if it was previously unconfirmed
+	pub fn mark_unspent(&mut self) {
+		match self.status {
+			OutputStatus::Unconfirmed => self.status = OutputStatus::Unspent,
+			_ => (),
+		}
+	}
+
+	pub fn mark_spent(&mut self) {
+		match self.status {
+			OutputStatus::Unspent => self.status = OutputStatus::Spent,
+			OutputStatus::Locked => self.status = OutputStatus::Spent,
+			_ => (),
+		}
+	}
 }
 
 #[derive(Clone, PartialEq)]
