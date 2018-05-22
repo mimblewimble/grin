@@ -89,10 +89,8 @@ impl GlobalConfig {
 		Err(ConfigError::FileNotFoundError(String::from("")))
 	}
 
-	/// Takes the path to a config file, or if NONE, tries
-	/// to determine a config file based on rules in
-	/// derive_config_location
-
+	/// Takes the path to a config file, or if NONE, tries to determine a config
+	/// file based on rules in derive_config_location
 	pub fn new(file_path: Option<&str>) -> Result<GlobalConfig, ConfigError> {
 		let mut return_value = GlobalConfig::default();
 		if let Some(fp) = file_path {
@@ -119,14 +117,13 @@ impl GlobalConfig {
 			)));
 		}
 
-		// Try to parse the config file if it exists
-		// explode if it does exist but something's wrong
-		// with it
+		// Try to parse the config file if it exists explode if it does exist but
+		// something's wrong with it
 		return_value.read_config()
 	}
 
 	/// Read config
-	pub fn read_config(mut self) -> Result<GlobalConfig, ConfigError> {
+	fn read_config(mut self) -> Result<GlobalConfig, ConfigError> {
 		let mut file = File::open(self.config_file_path.as_mut().unwrap())?;
 		let mut contents = String::new();
 		file.read_to_string(&mut contents)?;
