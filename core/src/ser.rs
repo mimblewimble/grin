@@ -19,18 +19,18 @@
 //! To use it simply implement `Writeable` or `Readable` and then use the
 //! `serialize` or `deserialize` functions on them as appropriate.
 
-use std::{cmp, error, fmt, mem};
-use std::io::{self, Read, Write};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use consensus;
 use consensus::VerifySortOrder;
 use core::hash::{Hash, Hashed};
-use util::secp::pedersen::Commitment;
-use util::secp::pedersen::RangeProof;
+use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
+use std::io::{self, Read, Write};
+use std::{cmp, error, fmt, mem};
 use util::secp::Signature;
 use util::secp::constants::{AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE,
                             SECRET_KEY_SIZE};
+use util::secp::pedersen::Commitment;
+use util::secp::pedersen::RangeProof;
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
@@ -429,19 +429,19 @@ impl<'a> Writer for BinWriter<'a> {
 }
 
 macro_rules! impl_int {
-    ($int: ty, $w_fn: ident, $r_fn: ident) => {
-        impl Writeable for $int {
-            fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-                writer.$w_fn(*self)
-            }
-        }
+	($int:ty, $w_fn:ident, $r_fn:ident) => {
+		impl Writeable for $int {
+			fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+				writer.$w_fn(*self)
+			}
+		}
 
-        impl Readable for $int {
-            fn read(reader: &mut Reader) -> Result<$int, Error> {
-                reader.$r_fn()
-            }
-        }
-    }
+		impl Readable for $int {
+			fn read(reader: &mut Reader) -> Result<$int, Error> {
+				reader.$r_fn()
+			}
+		}
+	};
 }
 
 impl_int!(u8, write_u8, read_u8);
