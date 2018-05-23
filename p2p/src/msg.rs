@@ -56,6 +56,7 @@ enum_from_primitive! {
 		Shake,
 		Ping,
 		Pong,
+		BanReason,
 		GetPeerAddrs,
 		PeerAddrs,
 		GetHeaders,
@@ -675,6 +676,36 @@ impl Readable for Pong {
 		})
 	}
 }
+
+#[derive(Debug)]
+pub struct BanReason {
+	/// the reason for the ban
+	pub ban_reason: ReasonForBan,
+}
+
+impl Writeable for BanReason {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		let ban_reason_i32 = self.ban_reason as i32;
+		ban_reason_i32.write(writer).unwrap();
+		Ok(())
+	}
+}
+
+impl Readable for BanReason {
+	fn read(reader: &mut Reader) -> Result<BanReason, ser::Error> {
+		let ban_reason_i32 = match reader.read_i32() {
+			Ok(h) => h,
+			Err(_) => 0,
+		};
+
+		let ban_reason = ReasonForBan::from_i32(ban_reason_i32).ok_or(ser::Error::CorruptedData)?;
+
+		Ok(BanReason {
+			ban_reason,
+		})
+	}
+}
+
 
 /// Request to get an archive of the full txhashset store, required to sync
 /// a new node.

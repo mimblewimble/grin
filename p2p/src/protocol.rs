@@ -74,6 +74,12 @@ impl MessageHandler for Protocol {
 				Ok(None)
 			}
 
+			Type::BanReason => {
+				let ban_reason: BanReason = msg.body()?;
+				error!(LOGGER, "handle_payload: BanReason {:?}", ban_reason);
+				Ok(None)
+			}
+
 			Type::Transaction => {
 				let tx: core::Transaction = msg.body()?;
 				adapter.transaction_received(tx, false);

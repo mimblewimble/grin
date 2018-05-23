@@ -157,6 +157,18 @@ impl Peer {
 			.send(ping_msg, msg::Type::Ping)
 	}
 
+	/// Send the ban reason before banning
+	pub fn send_ban_reason(&self, ban_reason: ReasonForBan) {
+		let ban_reason_msg = BanReason { ban_reason };
+		match self.connection
+			.as_ref()
+			.unwrap()
+			.send(ban_reason_msg, msg::Type::BanReason) {
+				Ok(_) => debug!(LOGGER, "Sent ban reason {:?} to {}", ban_reason, self.info.addr),
+				Err(e) => error!(LOGGER, "Could not send ban reason {:?} to {}", ban_reason, self.info.addr),
+			};
+	}
+
 	/// Sends the provided block to the remote peer. The request may be dropped
 	/// if the remote peer is known to already have the block.
 	pub fn send_block(&self, b: &core::Block) -> Result<(), Error> {
@@ -316,6 +328,7 @@ impl Peer {
 	fn check_connection(&self) -> bool {
 		match self.connection.as_ref().unwrap().error_channel.try_recv() {
 			Ok(Error::Serialization(e)) => {
+				self.send_ban_reason(ReasonForBan::ClientCorrupted);
 				let mut state = self.state.write().unwrap();
 				*state = State::Banned;
 				info!(
