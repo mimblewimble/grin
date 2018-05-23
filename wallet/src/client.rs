@@ -12,17 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use futures::{Future, Stream};
 use failure::ResultExt;
+use futures::{Future, Stream};
 use hyper;
-use hyper::{Method, Request};
 use hyper::header::ContentType;
-use tokio_core::reactor;
+use hyper::{Method, Request};
+use libwallet::transaction::Slate;
 use serde_json;
+use tokio_core::reactor;
 
+use std::io;
 use types::*;
 use util::LOGGER;
-use std::io;
 
 /// Call the wallet API to create a coinbase output for the given block_fees.
 /// Will retry based on default "retry forever with backoff" behavior.
@@ -39,15 +40,7 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 	}
 }
 
-pub fn send_partial_tx(url: &str, partial_tx: &PartialTx, fluff: bool) -> Result<PartialTx, Error> {
-	single_send_partial_tx(url, partial_tx, fluff)
-}
-
-fn single_send_partial_tx(
-	url: &str,
-	partial_tx: &PartialTx,
-	fluff: bool,
-) -> Result<PartialTx, Error> {
+pub fn send_slate(url: &str, slate: &Slate, fluff: bool) -> Result<Slate, Error> {
 	let mut core = reactor::Core::new().context(ErrorKind::Hyper)?;
 	let client = hyper::Client::new(&core.handle());
 
@@ -62,14 +55,14 @@ fn single_send_partial_tx(
 		url_pool.parse::<hyper::Uri>().context(ErrorKind::Hyper)?,
 	);
 	req.headers_mut().set(ContentType::json());
-	let json = serde_json::to_string(&partial_tx).context(ErrorKind::Hyper)?;
+	let json = serde_json::to_string(&slate).context(ErrorKind::Hyper)?;
 	req.set_body(json);
 
 	let work = client.request(req).and_then(|res| {
 		res.body().concat2().and_then(move |body| {
-			let partial_tx: PartialTx =
+			let slate: Slate =
 				serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-			Ok(partial_tx)
+			Ok(slate)
 		})
 	});
 	let res = core.run(work).context(ErrorKind::Hyper)?;

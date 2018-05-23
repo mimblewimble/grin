@@ -64,7 +64,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 
 	validate_header(&b.header, &mut ctx)?;
 
-	// valid header, now check we actually have the previous block in the store
+	// now check we actually have the previous block in the store
 	// not just the header but the block itself
 	// short circuit the test first both for performance (in-mem vs db access)
 	// but also for the specific case of the first fast sync full block
@@ -83,8 +83,12 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		}
 	}
 
-	// valid header and we have a previous block, time to take the lock on the sum
-	// trees
+	// validate the block itself
+	// we can do this now before interact with the txhashset
+	validate_block(b, &mut ctx)?;
+
+	// header and block both valid, and we have a previous block
+	// so take the lock on the txhashset
 	let local_txhashset = ctx.txhashset.clone();
 	let mut txhashset = local_txhashset.write().unwrap();
 
@@ -96,7 +100,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 	// start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
 	let result = txhashset::extending(&mut txhashset, |mut extension| {
-		validate_block(b, &mut ctx, &mut extension)?;
+		validate_block_via_txhashset(b, &mut ctx, &mut extension)?;
 		trace!(
 			LOGGER,
 			"pipe: process_block: {} at {} is valid, save and append.",
@@ -295,18 +299,38 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	Ok(())
 }
 
-/// Fully validate the block content.
-fn validate_block(
+fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+	// If this is the first block then we have no previous block sums stored.
+	let block_sums = if b.header.height == 1 {
+		BlockSums::default()
+	} else {
+		ctx.store.get_block_sums(&b.header.previous)?
+	};
+
+	let (new_output_sum, new_kernel_sum) =
+		b.validate(&block_sums.output_sum, &block_sums.kernel_sum)
+			.map_err(&Error::InvalidBlockProof)?;
+
+	ctx.store.save_block_sums(
+		&b.hash(),
+		&BlockSums {
+			output_sum: new_output_sum,
+			kernel_sum: new_kernel_sum,
+		},
+	)?;
+
+	Ok(())
+}
+
+/// Fully validate the block by applying it to the txhashset extension
+/// and checking the roots.
+/// Rewind and reapply forked blocks if necessary to put the txhashset extension
+/// in the correct state to accept the block.
+fn validate_block_via_txhashset(
 	b: &Block,
 	ctx: &mut BlockContext,
 	ext: &mut txhashset::Extension,
 ) -> Result<(), Error> {
-	let prev_header = ctx.store.get_block_header(&b.header.previous)?;
-
-	// main isolated block validation
-	// checks all commitment sums and sigs
-	b.validate(&prev_header).map_err(&Error::InvalidBlockProof)?;
-
 	if b.header.previous != ctx.head.last_block_h {
 		rewind_and_apply_fork(b, ctx.store.clone(), ext)?;
 	}
@@ -322,17 +346,21 @@ fn validate_block(
 
 		debug!(
 			LOGGER,
-			"validate_block: output roots - {:?}, {:?}", roots.output_root, b.header.output_root,
+			"validate_block_via_txhashset: output roots - {:?}, {:?}",
+			roots.output_root,
+			b.header.output_root,
 		);
 		debug!(
 			LOGGER,
-			"validate_block: rproof roots - {:?}, {:?}",
+			"validate_block_via_txhashset: rproof roots - {:?}, {:?}",
 			roots.rproof_root,
 			b.header.range_proof_root,
 		);
 		debug!(
 			LOGGER,
-			"validate_block: kernel roots - {:?}, {:?}", roots.kernel_root, b.header.kernel_root,
+			"validate_block_via_txhashset: kernel roots - {:?}, {:?}",
+			roots.kernel_root,
+			b.header.kernel_root,
 		);
 
 		return Err(Error::InvalidRoot);

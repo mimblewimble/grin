@@ -23,16 +23,14 @@ After checking out grin, building and using, these are the folders you'll have:
   All core types: Hash, Block, Input, Output, and how to serialize them. Core mining algorith, and more.
 - doc
   All documentation.
-- grin
-  Code for the `grin` binary. Many parts (adapters, lib, miner, seed, server, sync, types) that the `grin` binary needs.
+- servers
+  Many parts (adapters, lib, miner, seed, server, sync, types) that the `grin` server needs, including mining server.
 - keychain
   Code for working safely with keys and doing blinding.
 - p2p
   All peer to peer connection and protocol-related logic (handshake, block propagation, etc.).
 - pool
   Code for the transaction pool implementation.
-- pow
-  The Proof-of-Work algorithm. Testnet1 uses algo Cuckoo16. Mainnet uses Cuckoo32, the best known choice for GPU mining on 4GB cards.
 - server
   A folder you're [supposed to create](build.md#running-a-node), before starting your server: cd to project root; mkdir server; cd server; grin server start (or run) and it will create a subfolder .grin
   - .grin
@@ -49,7 +47,7 @@ After checking out grin, building and using, these are the folders you'll have:
 - util
   Low-level rust utilities.
 - wallet
-  A folder you're [supposed to create](build.md), before creating your wallet: cd to project root; mkdir wallet; cd wallet; grin wallet init
+	Simple command line wallet implementation. Will generate:
   - wallet.dat - your "outputs", that once confirmed and matured, can be spent with the [`grin wallet send`](wallet.md) command. (locally created, _not_ in git)
   - wallet.seed - your secret wallet seed. (locally created, _not_ in git)
 

@@ -13,24 +13,24 @@
 // limitations under the License.
 
 //! Transactions
+use std::cmp::Ordering;
+use std::cmp::max;
+use std::collections::HashSet;
+use std::io::Cursor;
+use std::{error, fmt};
+use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
-use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
-use std::collections::HashSet;
-use std::cmp::max;
-use std::cmp::Ordering;
-use std::{error, fmt};
-use std::io::Cursor;
 
 use consensus;
 use consensus::VerifySortOrder;
+use core::BlockHeader;
 use core::Committed;
 use core::global;
-use core::BlockHeader;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
 use keychain;
-use keychain::{BlindingFactor, Keychain};
+use keychain::BlindingFactor;
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};
 use util;
@@ -38,6 +38,7 @@ use util::LOGGER;
 
 bitflags! {
 	/// Options for a kernel's structure or use
+	#[derive(Serialize, Deserialize)]
 	pub struct KernelFeatures: u8 {
 		/// No flags
 		const DEFAULT_KERNEL = 0b00000000;
@@ -114,7 +115,7 @@ impl From<keychain::Error> for Error {
 /// amount to zero.
 /// The signature signs the fee and the lock_height, which are retained for
 /// signature validation.
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TxKernel {
 	/// Options for a kernel's structure or use
 	pub features: KernelFeatures,
@@ -173,6 +174,11 @@ impl Readable for TxKernel {
 }
 
 impl TxKernel {
+	/// Return the excess commitment for this tx_kernel.
+	pub fn excess(&self) -> Commitment {
+		self.excess
+	}
+
 	/// Verify the transaction proof validity. Entails handling the commitment
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
@@ -181,8 +187,9 @@ impl TxKernel {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = &self.excess_sig;
-		let valid = Keychain::aggsig_verify_single_from_commit(&secp, &sig, &msg, &self.excess);
-		if !valid {
+		// Verify aggsig directly in libsecp
+		let pubkey = &self.excess.to_pubkey(&secp)?;
+		if !secp::aggsig::verify_single(&secp, &sig, &msg, None, &pubkey, false) {
 			return Err(secp::Error::IncorrectSignature);
 		}
 		Ok(())
@@ -221,7 +228,7 @@ impl PMMRable for TxKernel {
 }
 
 /// A transaction
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Transaction {
 	/// List of inputs spent by the transaction.
 	pub inputs: Vec<Input>,
@@ -298,14 +305,16 @@ impl Readable for Transaction {
 }
 
 impl Committed for Transaction {
-	fn inputs_committed(&self) -> &Vec<Input> {
-		&self.inputs
+	fn inputs_committed(&self) -> Vec<Commitment> {
+		self.inputs.iter().map(|x| x.commitment()).collect()
 	}
-	fn outputs_committed(&self) -> &Vec<Output> {
-		&self.outputs
+
+	fn outputs_committed(&self) -> Vec<Commitment> {
+		self.outputs.iter().map(|x| x.commitment()).collect()
 	}
-	fn overage(&self) -> i64 {
-		self.fee() as i64
+
+	fn kernels_committed(&self) -> Vec<Commitment> {
+		self.kernels.iter().map(|x| x.excess()).collect()
 	}
 }
 
@@ -384,38 +393,33 @@ impl Transaction {
 
 	/// To verify transaction kernels we check that -
 	///  * all kernels have an even fee
-	///  * sum of input/output commitments matches sum of kernel commitments after applying offset
-	///  * each kernel sig is valid (i.e. tx commitments sum to zero, given above is true)
+	/// * sum of input/output commitments matches sum of kernel commitments
+	/// after applying offset * each kernel sig is valid (i.e. tx commitments
+	/// sum to zero, given above is true)
 	fn verify_kernels(&self) -> Result<(), Error> {
-		// sum all input and output commitments
-		let io_sum = self.sum_commitments()?;
+		// Verify all the output rangeproofs.
+		// Note: this is expensive.
+		for x in &self.outputs {
+			x.verify_proof()?;
+		}
 
-		// sum all kernels commitments
-		let kernel_sum = {
-			let mut kernel_commits = self.kernels.iter().map(|x| x.excess).collect::<Vec<_>>();
+		// Verify the kernel signatures.
+		// Note: this is expensive.
+		for x in &self.kernels {
+			x.verify()?;
+		}
 
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
+		// Sum all input|output|overage commitments.
+		let overage = self.fee() as i64;
+		let io_sum = self.sum_commitments(overage, None)?;
 
-			// add the offset in as necessary (unless offset is zero)
-			if self.offset != BlindingFactor::zero() {
-				let skey = self.offset.secret_key(&secp)?;
-				let offset_commit = secp.commit(0, skey)?;
-				kernel_commits.push(offset_commit);
-			}
-
-			secp.commit_sum(kernel_commits, vec![])?
-		};
+		// Sum the kernel excesses accounting for the kernel offset.
+		let (_, kernel_sum) = self.sum_kernel_excesses(&self.offset, None)?;
 
 		// sum of kernel commitments (including the offset) must match
 		// the sum of input/output commitments (minus fee)
-		if kernel_sum != io_sum {
+		if io_sum != kernel_sum {
 			return Err(Error::KernelSumMismatch);
-		}
-
-		// verify all signatures with the commitment as pk
-		for kernel in &self.kernels {
-			kernel.verify()?;
 		}
 
 		Ok(())
@@ -470,10 +474,11 @@ impl Transaction {
 	}
 
 	/// We can verify the Merkle proof (for coinbase inputs) here in isolation.
-	/// But we cannot check the following as we need data from the index and the PMMR.
-	/// So we must be sure to check these at the appropriate point during block validation.
-	///   * node is in the correct pos in the PMMR
-	///   * block is the correct one (based on output_root from block_header via the index)
+	/// But we cannot check the following as we need data from the index and
+	/// the PMMR. So we must be sure to check these at the appropriate point
+	/// during block validation.   * node is in the correct pos in the PMMR
+	/// * block is the correct one (based on output_root from block_header
+	/// via the index)
 	fn verify_inputs(&self) -> Result<(), Error> {
 		let coinbase_inputs = self.inputs
 			.iter()
@@ -683,7 +688,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 /// A transaction input.
 ///
 /// Primarily a reference to an output being spent by the transaction.
-#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Input {
 	/// The features of the output being spent.
 	/// We will check maturity for coinbase output.
@@ -694,7 +699,8 @@ pub struct Input {
 	/// Currently we only care about this for coinbase outputs.
 	pub block_hash: Option<Hash>,
 	/// The Merkle Proof that shows the output being spent by this input
-	/// existed and was unspent at the time of this block (proof of inclusion in output_root)
+	/// existed and was unspent at the time of this block (proof of inclusion
+	/// in output_root)
 	pub merkle_proof: Option<MerkleProof>,
 }
 
@@ -751,9 +757,9 @@ impl Readable for Input {
 }
 
 /// The input for a transaction, which spends a pre-existing unspent output.
-/// The input commitment is a reproduction of the commitment of the output being spent.
-/// Input must also provide the original output features and the hash of the block
-/// the output originated from.
+/// The input commitment is a reproduction of the commitment of the output
+/// being spent. Input must also provide the original output features and the
+/// hash of the block the output originated from.
 impl Input {
 	/// Build a new input from the data required to identify and verify an
 	/// output being spent.
@@ -771,9 +777,10 @@ impl Input {
 		}
 	}
 
-	/// The input commitment which _partially_ identifies the output being spent.
-	/// In the presence of a fork we need additional info to uniquely identify the output.
-	/// Specifically the block hash (to correctly calculate lock_height for coinbase outputs).
+	/// The input commitment which _partially_ identifies the output being
+	/// spent. In the presence of a fork we need additional info to uniquely
+	/// identify the output. Specifically the block hash (to correctly
+	/// calculate lock_height for coinbase outputs).
 	pub fn commitment(&self) -> Commitment {
 		self.commit.clone()
 	}
@@ -785,29 +792,33 @@ impl Input {
 		block_hash.unwrap_or(Hash::default())
 	}
 
-	/// Convenience function to return the (optional) merkle_proof for this input.
-	/// Will return the "empty" Merkle proof if we do not have one.
-	/// We currently only care about the Merkle proof for inputs spending coinbase outputs.
+	/// Convenience function to return the (optional) merkle_proof for this
+	/// input. Will return the "empty" Merkle proof if we do not have one.
+	/// We currently only care about the Merkle proof for inputs spending
+	/// coinbase outputs.
 	pub fn merkle_proof(&self) -> MerkleProof {
 		let merkle_proof = self.merkle_proof.clone();
 		merkle_proof.unwrap_or(MerkleProof::empty())
 	}
 
 	/// Verify the maturity of an output being spent by an input.
-	/// Only relevant for spending coinbase outputs currently (locked for 1,000 confirmations).
+	/// Only relevant for spending coinbase outputs currently (locked for 1,000
+	/// confirmations).
 	///
-	/// The proof associates the output with the root by its hash (and pos) in the MMR.
-	/// The proof shows the output existed and was unspent at the time the output_root was built.
-	/// The root associates the proof with a specific block header with that output_root.
-	/// So the proof shows the output was unspent at the time of the block
-	/// and is at least as old as that block (may be older).
+	/// The proof associates the output with the root by its hash (and pos) in
+	/// the MMR. The proof shows the output existed and was unspent at the
+	/// time the output_root was built. The root associates the proof with a
+	/// specific block header with that output_root. So the proof shows the
+	/// output was unspent at the time of the block and is at least as old as
+	/// that block (may be older).
 	///
 	/// We can verify maturity of the output being spent by -
 	///
-	/// * verifying the Merkle Proof produces the correct root for the given hash (from MMR)
-	/// * verifying the root matches the output_root in the block_header
-	/// * verifying the hash matches the node hash in the Merkle Proof
-	/// * finally verify maturity rules based on height of the block header
+	/// * verifying the Merkle Proof produces the correct root for the given
+	/// hash (from MMR) * verifying the root matches the output_root in the
+	/// block_header * verifying the hash matches the node hash in the Merkle
+	/// Proof * finally verify maturity rules based on height of the block
+	/// header
 	///
 	pub fn verify_maturity(
 		&self,
@@ -939,7 +950,7 @@ impl Output {
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
-		match Keychain::verify_range_proof(&secp, self.commit, self.proof, None) {
+		match secp.verify_bullet_proof(self.commit, self.proof, None) {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
 		}
@@ -952,7 +963,8 @@ impl Output {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct OutputIdentifier {
 	/// Output features (coinbase vs. regular transaction output)
-	/// We need to include this when hashing to ensure coinbase maturity can be enforced.
+	/// We need to include this when hashing to ensure coinbase maturity can be
+	/// enforced.
 	pub features: OutputFeatures,
 	/// Output commitment
 	pub commit: Commitment,
@@ -1111,8 +1123,8 @@ impl ProofMessageElements {
 		true
 	}
 
-	/// Whether our remainder is zero (as it should be if the BF and nonce used to unwind
-	/// are correct
+	/// Whether our remainder is zero (as it should be if the BF and nonce used
+	/// to unwind are correct
 	pub fn zeroes_correct(&self) -> bool {
 		for i in 0..self.zeroes.len() {
 			if self.zeroes[i] != 0 {
@@ -1186,29 +1198,6 @@ mod test {
 		assert_eq!(kernel2.excess, commit);
 		assert_eq!(kernel2.excess_sig, sig.clone());
 		assert_eq!(kernel2.fee, 10);
-	}
-
-	#[test]
-	fn test_output_ser_deser() {
-		let keychain = Keychain::from_random_seed().unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
-		let commit = keychain.commit(5, &key_id).unwrap();
-		let msg = secp::pedersen::ProofMessage::empty();
-		let proof = keychain.range_proof(5, &key_id, commit, None, msg).unwrap();
-
-		let out = Output {
-			features: OutputFeatures::DEFAULT_OUTPUT,
-			commit: commit,
-			proof: proof,
-		};
-
-		let mut vec = vec![];
-		ser::serialize(&mut vec, &out).expect("serialized failed");
-		let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
-
-		assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
-		assert_eq!(dout.commit, out.commit);
-		assert_eq!(dout.proof, out.proof);
 	}
 
 	#[test]

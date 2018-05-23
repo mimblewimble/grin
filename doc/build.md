@@ -31,8 +31,10 @@ you can start mining by building and runing grin-miner against your running Grin
 ```sh
 git clone https://github.com/mimblewimble/grin.git
 cd grin
-cargo build
+cargo build --release
 ```
+
+Grin can also be built in debug mode (without the `--release` flag) but this will render fast sync prohibitively slow due to the large overhead of cryptographic operations.
 
 
 ### Cross-platform builds
@@ -51,8 +53,7 @@ See [Troubleshooting](https://github.com/mimblewimble/docs/wiki/Troubleshooting)
 A successful build gets you:
 
  - `target/debug/grin` - the main grin binary
- - `target/debug/plugins/*` - mining plugins (optional)
-
+ 
 Grin is still sensitive to the directory from which it's run. Make sure you
 always run it within a directory that contains a `grin.toml` configuration and
 stay consistent as to where it's run from.

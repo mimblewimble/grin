@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Adapters connecting new block, new transaction, and accepted transaction
+//! events to consumers of those events.
+
 use std::fs::File;
 use std::net::SocketAddr;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock, Weak};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread;
 use std::time::Instant;
 use rand;
 use rand::Rng;
 
-use chain::{self, ChainAdapter, Options};
+use chain::{self, ChainAdapter, Options, Tip};
 use core::core;
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
@@ -50,6 +54,7 @@ fn wo<T>(weak_one: &OneTime<Weak<T>>) -> Arc<T> {
 /// implementations.
 pub struct NetToChainAdapter {
 	currently_syncing: Arc<AtomicBool>,
+	archive_mode: bool,
 	chain: Weak<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	peers: OneTime<Weak<p2p::Peers>>,
@@ -149,8 +154,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				.upgrade()
 				.expect("failed to upgrade weak ref to chain");
 
-			if let Ok(prev_header) = chain.get_block_header(&cb.header.previous) {
-				if let Ok(()) = block.validate(&prev_header) {
+			if let Ok(sums) = chain.get_block_sums(&cb.header.previous) {
+				if block.validate(&sums.output_sum, &sums.kernel_sum).is_ok() {
 					debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
 					self.process_block(block, addr)
 				} else {
@@ -348,21 +353,26 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 }
 
 impl NetToChainAdapter {
+	/// Construct a new NetToChainAdapter instance
 	pub fn new(
 		currently_syncing: Arc<AtomicBool>,
+		archive_mode: bool,
 		chain_ref: Weak<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 		config: ServerConfig,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
-			currently_syncing: currently_syncing,
+			currently_syncing,
+			archive_mode,
 			chain: chain_ref,
-			tx_pool: tx_pool,
+			tx_pool,
 			peers: OneTime::new(),
-			config: config,
+			config,
 		}
 	}
 
+	/// Initialize a NetToChainAdaptor with reference to a Peers object.
+	/// Should only be called once.
 	pub fn init(&self, peers: Weak<p2p::Peers>) {
 		self.peers.init(peers);
 	}
@@ -409,8 +419,9 @@ impl NetToChainAdapter {
 		let bhash = b.hash();
 		let chain = w(&self.chain);
 		match chain.process_block(b, self.chain_opts()) {
-			Ok(_) => {
+			Ok((tip, _)) => {
 				self.validate_chain(bhash);
+				self.check_compact(tip);
 				true
 			}
 			Err(chain::Error::Orphan) => {
@@ -471,6 +482,28 @@ impl NetToChainAdapter {
 				"adapter: process_block: ***** done validating full chain state, took {}s",
 				now.elapsed().as_secs(),
 			);
+		}
+	}
+
+	fn check_compact(&self, tip_res: Option<Tip>) {
+		// no compaction during sync or if we're in historical mode
+		if self.archive_mode || self.currently_syncing.load(Ordering::Relaxed) {
+			return;
+		}
+
+		if let Some(tip) = tip_res {
+			// trigger compaction every 2000 blocks, uses a different thread to avoid
+			// blocking the caller thread (likely a peer)
+			if tip.height % 2000 == 0 {
+				let chain = w(&self.chain);
+				let _ = thread::Builder::new()
+					.name("compactor".to_string())
+					.spawn(move || {
+						if let Err(e) = chain.compact() {
+							error!(LOGGER, "Could not compact chain: {:?}", e);
+						}
+					});
+			}
 		}
 	}
 
@@ -592,6 +625,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 }
 
 impl ChainToPoolAndNetAdapter {
+	/// Construct a ChainToPoolAndNetAdaper instance.
 	pub fn new(
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	) -> ChainToPoolAndNetAdapter {
@@ -600,6 +634,9 @@ impl ChainToPoolAndNetAdapter {
 			peers: OneTime::new(),
 		}
 	}
+
+	/// Initialize a ChainToPoolAndNetAdapter instance with hanlde to a Peers object.
+	/// Should only be called once.
 	pub fn init(&self, peers: Weak<p2p::Peers>) {
 		self.peers.init(peers);
 	}
@@ -650,6 +687,7 @@ impl PoolToChainAdapter {
 		}
 	}
 
+	/// Set the pool adapter's chain. Should only be called once.
 	pub fn set_chain(&self, chain_ref: Weak<chain::Chain>) {
 		self.chain.init(chain_ref);
 	}
