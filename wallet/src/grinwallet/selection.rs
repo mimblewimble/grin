@@ -14,19 +14,146 @@
 
 //! Selection of inputs for building transactions
 
-use core::core::{amount_to_hr_string, Committed, Transaction};
-use libwallet::{aggsig, build};
-use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
-use types::*;
-use util::{secp, LOGGER};
-use util::secp::key::{PublicKey, SecretKey};
-use util::secp::Signature;
 use failure::ResultExt;
+use grinwallet::keys;
+use keychain::{Identifier, Keychain};
+use libwallet::{aggsig, build, transaction};
+use types::*;
+
+/// Initialise a transaction on the sender side, returns a corresponding
+/// libwallet transaction slate with the appropriate inputs selected,
+/// and saves the private wallet identifiers of our selected outputs
+/// into our transaction context
+
+pub fn build_send_tx_slate(
+	config: &WalletConfig,
+	keychain: &Keychain,
+	context_manager: &mut aggsig::ContextManager,
+	num_participants: usize,
+	amount: u64,
+	current_height: u64,
+	minimum_confirmations: u64,
+	lock_height: u64,
+	max_outputs: usize,
+	selection_strategy_is_use_all: bool,
+) -> Result<(transaction::Slate, impl FnOnce() -> Result<(), Error>), Error> {
+	let (elems, inputs, change_id, amount, fee) = select_send_tx(
+		config,
+		keychain,
+		amount,
+		current_height,
+		minimum_confirmations,
+		lock_height,
+		max_outputs,
+		selection_strategy_is_use_all,
+	)?;
+
+	// Create public slate
+	let mut slate = transaction::Slate::blank(num_participants);
+	slate.amount = amount;
+	slate.height = current_height;
+	slate.lock_height = lock_height;
+	slate.fee = fee;
+
+	let blinding = slate.add_transaction_elements(keychain, elems)?;
+	// Create our own private context
+	let mut context = context_manager.create_context(
+		keychain.secp(),
+		&slate.id,
+		blinding.secret_key(keychain.secp()).unwrap(),
+	);
+
+	// Store our private identifiers for each input
+	for input in inputs {
+		context.add_input(&input.key_id);
+	}
+
+	// Store change output
+	if change_id.is_some() {
+		context.add_output(&change_id.unwrap());
+	}
+
+	let lock_inputs = context.get_inputs().clone();
+	let _lock_outputs = context.get_outputs().clone();
+	let data_file_dir = config.data_file_dir.clone();
+
+	// Return a closure to acquire wallet lock and lock the coins being spent
+	// so we avoid accidental double spend attempt.
+	let update_sender_wallet_fn = move || {
+		WalletData::with_wallet(&data_file_dir, |wallet_data| {
+			for id in lock_inputs {
+				let coin = wallet_data.get_output(&id).unwrap().clone();
+				wallet_data.lock_output(&coin);
+			}
+			// probably just want to leave as unconfirmed for now
+			// or create a new status
+			/*for id in lock_outputs {
+				let coin = wallet_data.get_output(&id).unwrap().clone();
+				wallet_data.lock_output(&coin);
+			}*/		})
+	};
+
+	context_manager.save_context(context);
+
+	Ok((slate, update_sender_wallet_fn))
+}
+
+/// Creates a new output in the wallet for the recipient,
+/// returning the key of the fresh output and a closure
+/// that actually performs the addition of the output to the
+/// wallet
+pub fn build_recipient_output_with_slate(
+	config: &WalletConfig,
+	keychain: &Keychain,
+	context_manager: &mut aggsig::ContextManager,
+	slate: &mut transaction::Slate,
+) -> Result<(Identifier, impl FnOnce() -> Result<(), Error>), Error> {
+	// Create a potential output for this transaction
+	let (key_id, derivation) = keys::new_output_key(config, keychain)?;
+
+	let data_file_dir = config.data_file_dir.clone();
+	let root_key_id = keychain.root_key_id();
+	let key_id_inner = key_id.clone();
+	let amount = slate.amount;
+
+	let blinding =
+		slate.add_transaction_elements(keychain, vec![build::output(amount, key_id.clone())])?;
+
+	// Add blinding sum to our context
+	let mut context = context_manager.create_context(
+		keychain.secp(),
+		&slate.id,
+		blinding.secret_key(keychain.secp()).unwrap(),
+	);
+
+	context.add_output(&key_id);
+
+	// Create closure that adds the output to recipient's wallet
+	// (up to the caller to decide when to do)
+	let wallet_add_fn = move || {
+		WalletData::with_wallet(&data_file_dir, |wallet_data| {
+			wallet_data.add_output(OutputData {
+				root_key_id: root_key_id,
+				key_id: key_id_inner,
+				n_child: derivation,
+				value: amount,
+				status: OutputStatus::Unconfirmed,
+				height: 0,
+				lock_height: 0,
+				is_coinbase: false,
+				block: None,
+				merkle_proof: None,
+			});
+		})
+	};
+	context_manager.save_context(context);
+	Ok((key_id, wallet_add_fn))
+}
 
 /// Builds a transaction to send to someone from the HD seed associated with the
 /// wallet and the amount to send. Handles reading through the wallet data file,
 /// selecting outputs to spend and building the change.
-pub fn build_send_tx(
+pub fn select_send_tx(
 	config: &WalletConfig,
 	keychain: &Keychain,
 	amount: u64,
@@ -37,11 +164,11 @@ pub fn build_send_tx(
 	selection_strategy_is_use_all: bool,
 ) -> Result<
 	(
-		Transaction,
-		BlindingFactor,
+		Vec<Box<build::Append>>,
 		Vec<OutputData>,
 		Option<Identifier>,
-		u64,
+		u64, // amount
+		u64, // fee
 	),
 	Error,
 > {
@@ -121,9 +248,7 @@ pub fn build_send_tx(
 	// on tx being sent (based on current chain height via api).
 	parts.push(build::with_lock_height(lock_height));
 
-	let (tx, blind) = build::partial_transaction(parts, &keychain).context(ErrorKind::Keychain)?;
-
-	Ok((tx, blind, coins, change_key, amount_with_fee))
+	Ok((parts, coins, change_key, amount, fee))
 }
 
 /// coins proof count

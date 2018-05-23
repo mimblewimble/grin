@@ -13,8 +13,8 @@
 // limitations under the License.
 
 //! Common functions to facilitate wallet, walletlib and transaction testing
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
@@ -24,18 +24,18 @@ extern crate grin_wallet as wallet;
 extern crate time;
 
 use chain::Chain;
-use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::core::hash::Hashed;
+use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::{consensus, global, pow};
+use keychain::Keychain;
 use wallet::types::{BlockIdentifier, Error, ErrorKind, MerkleProofWrapper, OutputStatus,
                     WalletConfig, WalletData};
 use wallet::{checker, BlockFees};
-use keychain::Keychain;
 
 use util::secp::pedersen;
 
-/// Mostly for testing, refreshes output state against a local chain instance instead of
-/// via an http API call
+/// Mostly for testing, refreshes output state against a local chain instance
+/// instead of via an http API call
 pub fn refresh_output_state_local(
 	config: &WalletConfig,
 	keychain: &Keychain,
@@ -58,8 +58,9 @@ pub fn refresh_output_state_local(
 }
 
 /// Return the spendable wallet balance from the local chain
-/// (0:total, 1:amount_awaiting_confirmation, 2:confirmed but locked, 3:currently_spendable,
-/// 4:locked total) TODO: Should be a wallet lib function with nicer return values
+/// (0:total, 1:amount_awaiting_confirmation, 2:confirmed but locked,
+/// 3:currently_spendable, 4:locked total) TODO: Should be a wallet lib
+/// function with nicer return values
 pub fn get_wallet_balances(
 	config: &WalletConfig,
 	keychain: &Keychain,
@@ -135,8 +136,8 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: (Out
 	chain.validate(false).unwrap();
 }
 
-/// adds a reward output to a wallet, includes that reward in a block, mines the block
-/// and adds it to the chain, with option transactions included.
+/// adds a reward output to a wallet, includes that reward in a block, mines
+/// the block and adds it to the chain, with option transactions included.
 /// Helpful for building up precise wallet balances for testing.
 pub fn award_block_to_wallet(
 	chain: &Chain,

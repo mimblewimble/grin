@@ -20,6 +20,6 @@ zip = "0.2"
 
 [dependencies.secp256k1zkp]
 git = "https://github.com/mimblewimble/rust-secp256k1-zkp"
-tag = "grin_integration_16"
+tag = "grin_integration_19"
 #path = "../../rust-secp256k1-zkp"
 features = ["bullet-proof-sizing"]
