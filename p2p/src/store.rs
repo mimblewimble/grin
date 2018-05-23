@@ -14,14 +14,14 @@
 
 //! Storage implementation for peer data.
 
-use std::net::SocketAddr;
 use num::FromPrimitive;
 use rand::{thread_rng, Rng};
+use std::net::SocketAddr;
 
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store::{self, option_to_not_found, to_key, Error};
 use msg::SockAddr;
-use types::{ReasonForBan, Capabilities};
+use types::{Capabilities, ReasonForBan};
 use util::LOGGER;
 
 const STORE_SUBPATH: &'static str = "peers";
@@ -54,7 +54,6 @@ pub struct PeerData {
 	pub last_banned: i64,
 	/// The reason for the ban
 	pub ban_reason: ReasonForBan,
-
 }
 
 impl Writeable for PeerData {
@@ -75,7 +74,8 @@ impl Writeable for PeerData {
 impl Readable for PeerData {
 	fn read(reader: &mut Reader) -> Result<PeerData, ser::Error> {
 		let addr = SockAddr::read(reader)?;
-		let (capab, ua, fl, lb, br) = ser_multiread!(reader, read_u32, read_vec, read_u8, read_i64, read_i32);
+		let (capab, ua, fl, lb, br) =
+			ser_multiread!(reader, read_u32, read_vec, read_u8, read_i64, read_i32);
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
 		let last_banned = lb;

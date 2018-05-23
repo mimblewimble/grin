@@ -22,8 +22,8 @@ use rand::{thread_rng, Rng};
 use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use util::LOGGER;
 use time;
+use util::LOGGER;
 
 use peer::Peer;
 use store::{PeerData, PeerStore, State};
@@ -206,8 +206,8 @@ impl Peers {
 		}
 	}
 
-	/// Return vec of connected peers that currently have the most worked branch,
-	/// showing the highest total difficulty.
+	/// Return vec of connected peers that currently have the most worked
+	/// branch, showing the highest total difficulty.
 	pub fn most_work_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
 		let peers = self.connected_peers();
 		if peers.len() == 0 {
@@ -236,8 +236,8 @@ impl Peers {
 		max_peers
 	}
 
-	/// Returns single random peer with the most worked branch, showing the highest total
-	/// difficulty.
+	/// Returns single random peer with the most worked branch, showing the
+	/// highest total difficulty.
 	pub fn most_work_peer(&self) -> Option<Arc<RwLock<Peer>>> {
 		match self.most_work_peers().first() {
 			Some(x) => Some(x.clone()),
@@ -401,8 +401,8 @@ impl Peers {
 		}
 	}
 
-	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our peers.
-	/// We may be connected to PEER_MAX_COUNT peers so we only
+	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our
+	/// peers. We may be connected to PEER_MAX_COUNT peers so we only
 	/// want to broadcast to a random subset of peers.
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the transaction.
@@ -418,8 +418,8 @@ impl Peers {
 		}
 	}
 
-	/// Ping all our connected peers. Always automatically expects a pong back or
-	/// disconnects. This acts as a liveness test.
+	/// Ping all our connected peers. Always automatically expects a pong back
+	/// or disconnects. This acts as a liveness test.
 	pub fn check_all(&self, total_difficulty: Difficulty, height: u64) {
 		let peers_map = self.peers.read().unwrap();
 		for p in peers_map.values() {

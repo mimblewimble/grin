@@ -14,11 +14,11 @@
 
 //! Message types that transit over the network and related serialization code.
 
+use num::FromPrimitive;
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
 use std::thread;
 use std::time;
-use num::FromPrimitive;
 
 use core::consensus::{MAX_MSG_LEN, MAX_TX_INPUTS, MAX_TX_KERNELS, MAX_TX_OUTPUTS};
 use core::core::BlockHeader;
@@ -700,12 +700,9 @@ impl Readable for BanReason {
 
 		let ban_reason = ReasonForBan::from_i32(ban_reason_i32).ok_or(ser::Error::CorruptedData)?;
 
-		Ok(BanReason {
-			ban_reason,
-		})
+		Ok(BanReason { ban_reason })
 	}
 }
-
 
 /// Request to get an archive of the full txhashset store, required to sync
 /// a new node.

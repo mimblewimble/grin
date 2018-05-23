@@ -17,9 +17,9 @@ use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use conn::*;
 use core::core;
 use core::core::hash::{Hash, Hashed};
-use conn::*;
 use msg::*;
 use rand;
 use rand::Rng;
