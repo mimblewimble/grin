@@ -714,6 +714,7 @@ name = "grin_pool"
 version = "0.2.0"
 dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
+ "grin_chain 0.2.0",
  "grin_core 0.2.0",
  "grin_keychain 0.2.0",
  "grin_util 0.2.0",

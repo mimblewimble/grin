@@ -149,6 +149,7 @@ pub enum PoolError {
 	OverCapacity,
 	/// Transaction fee is too low given its weight
 	LowFeeTransaction(u64),
+	Other(String),
 }
 
 impl From<transaction::Error> for PoolError {
@@ -175,9 +176,6 @@ impl fmt::Display for PoolError {
 
 /// Interface that the pool requires from a blockchain implementation.
 pub trait BlockChain {
-	/// Get the block header at the head
-	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;
-
 	/// Validate a vec of txs against the current chain state after applying the
 	/// pre_tx to the chain state.
 	fn validate_raw_txs(
@@ -203,7 +201,6 @@ pub trait PoolAdapter: Send + Sync {
 }
 
 /// Dummy adapter used as a placeholder for real implementations
-// TODO: do we need this dummy, if it's never used?
 #[allow(dead_code)]
 pub struct NoopAdapter {}
 

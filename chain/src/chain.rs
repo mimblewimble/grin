@@ -467,21 +467,9 @@ impl Chain {
 		pre_tx: Option<&Transaction>,
 	) -> Result<Vec<Transaction>, Error> {
 		let bh = self.head_header()?;
-		let mut height = bh.height;
-
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset::extending_readonly(&mut txhashset, |extension| {
-			let mut valid_txs = vec![];
-			if let Some(tx) = pre_tx {
-				height += 1;
-				extension.apply_raw_tx(tx, height)?;
-			}
-			for tx in txs {
-				height += 1;
-				if extension.apply_raw_tx(&tx, height).is_ok() {
-					valid_txs.push(tx);
-				}
-			}
+			let valid_txs = extension.validate_raw_txs(txs, pre_tx, bh.height)?;
 			Ok(valid_txs)
 		})
 	}

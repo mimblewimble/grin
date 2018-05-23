@@ -81,20 +81,8 @@ pub fn monitor_transactions<T>(
 
 				if fluff_stempool {
 					let mut tx_pool = tx_pool.write().unwrap();
-					if let Ok(agg_tx) = tx_pool.stempool.aggregate_transaction() {
-						let src = TxSource {
-							debug_name: "fluff".to_string(),
-							identifier: "?.?.?.?".to_string(),
-						};
-						match tx_pool.add_to_pool(src, agg_tx, false) {
-							Ok(()) => debug!(
-								LOGGER,
-								"dand_mon: Aggregated stempool, adding aggregated tx to local txpool."
-							),
-							Err(e) => debug!(LOGGER, "Error - {:?}", e),
-						};
-					} else {
-						error!(LOGGER, "Failed to aggregate stempool.");
+					if tx_pool.fluff_stempool().is_err() {
+						error!(LOGGER, "Failed to fluff stempool.");
 					}
 				} else {
 					let mut tx_pool = tx_pool.write().unwrap();
@@ -103,19 +91,9 @@ pub fn monitor_transactions<T>(
 						// conditionally propagate or aggregate and fluff here?
 						let res = tx_pool.adapter.stem_tx_accepted(&x.tx);
 						if res.is_err() {
-							// We failed to propagate the tx via relay, fluff the stempool
-							debug!(
-								LOGGER,
-								"dand_mon: Adapter failed on accepting stem tx, fluffing."
-							);
-							if let Ok(agg_tx) = tx_pool.stempool.aggregate_transaction() {
-								let src = TxSource {
-									debug_name: "fluff".to_string(),
-									identifier: "?.?.?.?".to_string(),
-								};
-								let _ = tx_pool.add_to_pool(src, agg_tx, false);
-							} else {
-								error!(LOGGER, "Failed to aggregate stempool.");
+							debug!(LOGGER, "Could not propagate stem tx, fluffing stempool.");
+							if tx_pool.fluff_stempool().is_err() {
+								error!(LOGGER, "Failed to fluff stempool.");
 							}
 						}
 					}

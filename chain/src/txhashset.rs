@@ -113,9 +113,6 @@ impl TxHashSet {
 		})
 	}
 
-	///
-	/// TODO Some duplication here - both in txhashset and in the extension.
-	///
 	/// Check if an output is unspent.
 	/// We look in the index to find the output MMR pos.
 	/// Then we check the entry in the output MMR and confirm the hash matches.
@@ -451,6 +448,27 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	pub fn validate_raw_txs(
+		&mut self,
+		txs: Vec<Transaction>,
+		pre_tx: Option<&Transaction>,
+		height: u64,
+	) -> Result<Vec<Transaction>, Error> {
+		let mut height = height;
+		let mut valid_txs = vec![];
+		if let Some(tx) = pre_tx {
+			height += 1;
+			self.apply_raw_tx(tx, height)?;
+		}
+		for tx in txs {
+			height += 1;
+			if self.apply_raw_tx(&tx, height).is_ok() {
+				valid_txs.push(tx);
+			}
+		}
+		Ok(valid_txs)
+	}
+
 	pub fn verify_coinbase_maturity(
 		&mut self,
 		inputs: &Vec<Input>,
@@ -514,6 +532,7 @@ impl<'a> Extension<'a> {
 	// Store all new output pos in the index.
 	// Also store any new block_markers.
 	fn save_indexes(&self) -> Result<(), Error> {
+		println!("*** saving indexes");
 		for (commit, pos) in &self.new_output_commits {
 			self.commit_index.save_output_pos(commit, *pos)?;
 		}

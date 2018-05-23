@@ -34,7 +34,6 @@ extern crate serde_derive;
 extern crate slog;
 extern crate time;
 
-pub mod blockchain;
 mod pool;
 pub mod transaction_pool;
 pub mod types;

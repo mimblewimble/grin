@@ -685,12 +685,6 @@ impl PoolToChainAdapter {
 }
 
 impl pool::BlockChain for PoolToChainAdapter {
-	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {
-		wo(&self.chain)
-			.head_header()
-			.map_err(|_| pool::PoolError::GenericPoolError)
-	}
-
 	fn validate_raw_txs(
 		&self,
 		txs: Vec<Transaction>,

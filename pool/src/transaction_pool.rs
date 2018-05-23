@@ -142,6 +142,16 @@ where
 		self.txpool.retrieve_transactions(cb)
 	}
 
+	pub fn fluff_stempool(&mut self) -> Result<(), PoolError> {
+		let src = TxSource {
+			debug_name: "fluff".to_string(),
+			identifier: "?.?.?.?".to_string(),
+		};
+		let agg_tx = self.stempool.aggregate_transaction()?;
+		self.add_to_pool(src, agg_tx, false)?;
+		Ok(())
+	}
+
 	/// Whether the transaction is acceptable to the pool, given both how
 	/// full the pool is and the transaction weight.
 	fn is_acceptable(&self, tx: &Transaction) -> Result<(), PoolError> {
@@ -162,6 +172,7 @@ where
 		Ok(())
 	}
 
+	/// TODO - do we actually want to expose this? Not sure we do...
 	/// Get the total size of the pool (regular pool + stem pool).
 	pub fn total_size(&self) -> usize {
 		self.txpool.size() + self.stempool.size()
