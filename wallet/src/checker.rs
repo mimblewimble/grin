@@ -15,16 +15,16 @@
 //! Utilities to check the status of all the outputs we have stored in
 //! the wallet storage and update them.
 
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
 use failure::ResultExt;
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use api;
-use types::*;
 use keychain::{Identifier, Keychain};
-use util::secp::pedersen;
+use types::*;
 use util;
 use util::LOGGER;
+use util::secp::pedersen;
 
 pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
 	let tip = get_tip_from_node(config)?;
@@ -35,7 +35,11 @@ pub fn refresh_outputs(config: &WalletConfig, keychain: &Keychain) -> Result<(),
 
 // TODO - this might be slow if we have really old outputs that have never been
 // refreshed
-fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain, tip: &api::Tip) -> Result<(), Error> {
+fn refresh_missing_block_hashes(
+	config: &WalletConfig,
+	keychain: &Keychain,
+	tip: &api::Tip,
+) -> Result<(), Error> {
 	// build a local map of wallet outputs keyed by commit
 	// and a list of outputs we want to query the node for
 	let wallet_outputs = map_wallet_outputs_missing_block(config, keychain)?;
@@ -63,7 +67,6 @@ fn refresh_missing_block_hashes(config: &WalletConfig, keychain: &Keychain, tip:
 
 	// Split up into separate requests, to avoid hitting http limits
 	for mut query_chunk in id_params.chunks(1000) {
-
 		let url = format!(
 			"{}/v1/chain/outputs/byheight?{}",
 			config.check_node_api_http_addr,
@@ -115,19 +118,19 @@ pub fn map_wallet_outputs(
 	keychain: &Keychain,
 ) -> Result<HashMap<pedersen::Commitment, Identifier>, Error> {
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
-	let _ =
-		WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-			let unspents = wallet_data.outputs.values().filter(|x| {
-				x.root_key_id == keychain.root_key_id() && x.status != OutputStatus::Spent
-			});
-			for out in unspents {
-				let commit = keychain
-					.commit_with_key_index(out.value, out.n_child)
-					.context(ErrorKind::Keychain)?;
-				wallet_outputs.insert(commit, out.key_id.clone());
-			}
-			Ok(())
-		});
+	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+		let unspents = wallet_data
+			.outputs
+			.values()
+			.filter(|x| x.root_key_id == keychain.root_key_id() && x.status != OutputStatus::Spent);
+		for out in unspents {
+			let commit = keychain
+				.commit_with_key_index(out.value, out.n_child)
+				.context(ErrorKind::Keychain)?;
+			wallet_outputs.insert(commit, out.key_id.clone());
+		}
+		Ok(())
+	});
 	Ok(wallet_outputs)
 }
 
@@ -177,7 +180,11 @@ pub fn apply_api_outputs(
 
 /// Builds a single api query to retrieve the latest output data from the node.
 /// So we can refresh the local wallet outputs.
-fn refresh_output_state(config: &WalletConfig, keychain: &Keychain, tip: &api::Tip) -> Result<(), Error> {
+fn refresh_output_state(
+	config: &WalletConfig,
+	keychain: &Keychain,
+	tip: &api::Tip,
+) -> Result<(), Error> {
 	debug!(LOGGER, "Refreshing wallet outputs");
 
 	// build a local map of wallet outputs keyed by commit
@@ -188,17 +195,17 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain, tip: &api::T
 	// ?id=xxx&id=yyy&id=zzz
 	let query_params: Vec<String> = wallet_outputs
 		.keys()
-		.map(|commit| format!("id={}", util::to_hex(commit.as_ref().to_vec())) )
+		.map(|commit| format!("id={}", util::to_hex(commit.as_ref().to_vec())))
 		.collect();
 
 	// build a map of api outputs by commit so we can look them up efficiently
 	let mut api_outputs: HashMap<pedersen::Commitment, api::Output> = HashMap::new();
 
 	for query_chunk in query_params.chunks(1000) {
-
 		let url = format!(
 			"{}/v1/chain/outputs/byids?{}",
-			config.check_node_api_http_addr, query_chunk.join("&"),
+			config.check_node_api_http_addr,
+			query_chunk.join("&"),
 		);
 
 		match api::client::get::<Vec<api::Output>>(url.as_str()) {
@@ -221,7 +228,8 @@ fn refresh_output_state(config: &WalletConfig, keychain: &Keychain, tip: &api::T
 fn clean_old_unconfirmed(config: &WalletConfig, tip: &api::Tip) -> Result<(), Error> {
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		wallet_data.outputs.retain(|_, ref mut out| {
-			!(out.status == OutputStatus::Unconfirmed && out.height > 0 && out.height < tip.height - 500)
+			!(out.status == OutputStatus::Unconfirmed && out.height > 0
+				&& out.height < tip.height - 500)
 		});
 	})
 }
