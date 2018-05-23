@@ -171,7 +171,7 @@ impl Peer {
 			),
 			Err(e) => error!(
 				LOGGER,
-				"Could not send ban reason {:?} to {}", ban_reason, self.info.addr
+				"Could not send ban reason {:?} to {}: {:?}", ban_reason, self.info.addr, e
 			),
 		};
 	}
