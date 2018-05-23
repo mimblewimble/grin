@@ -13,27 +13,28 @@
 // limitations under the License.
 
 //! Mining Stratum Server
+use bufstream::BufStream;
+use serde_json;
+use std::error::Error;
+use std::io::BufRead;
+use std::io::{ErrorKind, Write};
+use std::net::{TcpListener, TcpStream};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
-use std::net::{TcpListener, TcpStream};
-use std::io::{ErrorKind, Write};
-use std::error::Error;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::SystemTime;
 use time;
 use util::LOGGER;
-use std::io::BufRead;
-use bufstream::BufStream;
-use std::sync::{Arc, Mutex, RwLock};
-use serde_json;
-use std::time::SystemTime;
 
-use common::adapters::PoolToChainAdapter;
-use core::core::{Block, BlockHeader};
-use common::types::StratumServerConfig;
-use mining::mine_block;
 use chain;
-use pool;
+use common::adapters::PoolToChainAdapter;
 use common::stats::{StratumStats, WorkerStats};
+use common::types::StratumServerConfig;
+use core::core::{Block, BlockHeader};
+use keychain;
+use mining::mine_block;
+use pool;
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
@@ -230,6 +231,7 @@ pub struct StratumServer {
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	current_block: Block,
 	current_difficulty: u64,
+	current_key_id: Option<keychain::Identifier>,
 	workers: Arc<Mutex<Vec<Worker>>>,
 	currently_syncing: Arc<AtomicBool>,
 }
@@ -248,6 +250,7 @@ impl StratumServer {
 			tx_pool: tx_pool,
 			current_block: Block::default(),
 			current_difficulty: <u64>::max_value(),
+			current_key_id: None,
 			workers: Arc::new(Mutex::new(Vec::new())),
 			currently_syncing: Arc::new(AtomicBool::new(false)),
 		}
@@ -301,14 +304,20 @@ impl StratumServer {
 					// Call the handler function for requested method
 					let (response, err) = match request.method.as_str() {
 						"login" => {
-							let (response, err) = self.handle_login(request.params, &mut workers_l[num]);
+							let (response, err) =
+								self.handle_login(request.params, &mut workers_l[num]);
 							(response, err)
 						}
-						"submit" => self.handle_submit(
-							request.params,
-							&mut workers_l[num],
-							&mut stratum_stats.worker_stats[worker_stats_id],
-						),
+						"submit" => {
+							let res = self.handle_submit(
+								request.params,
+								&mut workers_l[num],
+								&mut stratum_stats.worker_stats[worker_stats_id],
+							);
+							// this key_id has been used now, reset
+							self.current_key_id = None;
+							res
+						}
 						"keepalive" => self.handle_keepalive(),
 						"getjobtemplate" => {
 							if self.currently_syncing.load(Ordering::Relaxed) {
@@ -464,7 +473,7 @@ impl StratumServer {
 		}
 		let submitted_by = match worker.login.clone() {
 			None => worker.id.to_string(),
-			Some(login) => login.clone()
+			Some(login) => login.clone(),
 		};
 		info!(
 			LOGGER,
@@ -542,9 +551,10 @@ impl StratumServer {
 		}
 	}
 
-	/// "main()" - Starts the stratum-server.  Creates a thread to Listens for a connection, then
-	/// enters a loop, building a new block on top of the existing chain anytime required and
-	/// sending that to the connected stratum miner, proxy, or pool, and accepts full solutions to
+	/// "main()" - Starts the stratum-server.  Creates a thread to Listens for
+	/// a connection, then enters a loop, building a new block on top of the
+	/// existing chain anytime required and sending that to the connected
+	/// stratum miner, proxy, or pool, and accepts full solutions to
 	/// be submitted.
 	pub fn run_loop(
 		&mut self,
@@ -571,7 +581,6 @@ impl StratumServer {
 		// iteration, we keep the returned derivation to provide it back when
 		// nothing has changed. We only want to create a key_id for each new block,
 		// and reuse it when we rebuild the current block to add new tx.
-		let mut key_id = None;
 		let mut num_workers: usize;
 		let mut head = self.chain.head().unwrap();
 		let mut current_hash = head.prev_block_h;
@@ -620,10 +629,6 @@ impl StratumServer {
 			if (current_hash != latest_hash || time::get_time().sec >= deadline) && !mining_stopped
 				&& num_workers > 0
 			{
-				if current_hash != latest_hash {
-					// A brand new block, so we will generate a new key_id
-					key_id = None;
-				}
 				let mut wallet_listener_url: Option<String> = None;
 				if !self.config.burn_reward {
 					wallet_listener_url = Some(self.config.wallet_listener_url.clone());
@@ -632,7 +637,7 @@ impl StratumServer {
 				let (new_block, block_fees) = mine_block::get_block(
 					&self.chain,
 					&self.tx_pool,
-					key_id.clone(),
+					self.current_key_id.clone(),
 					MAX_TX.clone(),
 					wallet_listener_url,
 				);
@@ -640,7 +645,7 @@ impl StratumServer {
 				self.current_difficulty = (self.current_block.header.total_difficulty.clone()
 					- head.total_difficulty.clone())
 					.into_num();
-				key_id = block_fees.key_id();
+				self.current_key_id = block_fees.key_id();
 				current_hash = latest_hash;
 				// set a new deadline for rebuilding with fresh transactions
 				deadline = time::get_time().sec + attempt_time_per_block as i64;
@@ -659,7 +664,7 @@ impl StratumServer {
 			self.handle_rpc_requests(&mut stratum_stats.clone());
 
 			// sleep before restarting loop
-			thread::sleep(Duration::from_millis(500));
+			thread::sleep(Duration::from_millis(50));
 		} // Main Loop
 	} // fn run_loop()
 } // StratumServer
