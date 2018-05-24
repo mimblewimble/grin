@@ -20,7 +20,7 @@ use core::ser;
 use failure::ResultExt;
 use grinwallet::selection;
 use keychain::{Identifier, Keychain};
-use libwallet::build;
+use libwallet::{build, transaction};
 use receiver::TxWrapper;
 use types::*;
 use util;
@@ -161,7 +161,7 @@ pub fn issue_burn_tx(
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
-	let fee = tx_fee(coins.len(), 2, selection::coins_proof_count(&coins), None);
+	let fee = transaction::tx_fee(coins.len(), 2, selection::coins_proof_count(&coins), None);
 	let (mut parts, _) = selection::inputs_and_change(&coins, config, keychain, amount, fee)?;
 
 	// add burn output and fees

@@ -210,7 +210,7 @@ pub fn select_send_tx(
 	// sender
 	let mut fee;
 	// First attempt to spend without change
-	fee = tx_fee(coins.len(), 1, coins_proof_count(&coins), None);
+	fee = transaction::tx_fee(coins.len(), 1, coins_proof_count(&coins), None);
 	let mut total: u64 = coins.iter().map(|c| c.value).sum();
 	let mut amount_with_fee = amount + fee;
 
@@ -220,7 +220,7 @@ pub fn select_send_tx(
 
 	// Check if we need to use a change address
 	if total > amount_with_fee {
-		fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
+		fee = transaction::tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
 		amount_with_fee = amount + fee;
 
 		// Here check if we have enough outputs for the amount including fee otherwise
@@ -242,7 +242,7 @@ pub fn select_send_tx(
 					selection_strategy_is_use_all,
 				))
 			})?;
-			fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
+			fee = transaction::tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
 			total = coins.iter().map(|c| c.value).sum();
 			amount_with_fee = amount + fee;
 		}

@@ -17,17 +17,20 @@
 use rand::thread_rng;
 use uuid::Uuid;
 
+use core::consensus;
 use core::core::{amount_to_hr_string, Committed, Transaction};
 use keychain::{BlindSum, BlindingFactor, Keychain};
 use libwallet::{aggsig, build};
 //TODO: Remove these from here, replace with libwallet error
-use types::{tx_fee, Error, ErrorKind};
+use types::{Error, ErrorKind};
 
 use util::secp::Signature;
 use util::secp::key::{PublicKey, SecretKey};
 use util::{secp, LOGGER};
 
 use failure::ResultExt;
+
+const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
 
 /// Public data for each participant in the slate
 
@@ -400,4 +403,14 @@ impl Slate {
 		self.tx = final_tx;
 		Ok(())
 	}
+}
+
+/// Transaction fee calculation
+pub fn tx_fee(input_len: usize, output_len: usize, proof_len: usize, base_fee: Option<u64>) -> u64 {
+	let use_base_fee = match base_fee {
+		Some(bf) => bf,
+		None => DEFAULT_BASE_FEE,
+	};
+
+	(Transaction::weight(input_len, output_len, proof_len) as u64) * use_base_fee
 }

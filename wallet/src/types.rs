@@ -33,7 +33,6 @@ use tokio_retry::strategy::FibonacciBackoff;
 use failure::{Backtrace, Context, Fail, ResultExt};
 
 use core::consensus;
-use core::core::Transaction;
 use core::core::hash::Hash;
 use core::core::pmmr::MerkleProof;
 use keychain;
@@ -46,16 +45,6 @@ const LOCK_FILE: &'static str = "wallet.lock";
 const SEED_FILE: &'static str = "wallet.seed";
 
 const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
-
-/// Transaction fee calculation
-pub fn tx_fee(input_len: usize, output_len: usize, proof_len: usize, base_fee: Option<u64>) -> u64 {
-	let use_base_fee = match base_fee {
-		Some(bf) => bf,
-		None => DEFAULT_BASE_FEE,
-	};
-
-	(Transaction::weight(input_len, output_len, proof_len) as u64) * use_base_fee
-}
 
 #[derive(Debug)]
 pub struct Error {
