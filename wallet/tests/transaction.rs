@@ -67,6 +67,7 @@ fn build_transaction() {
 	// Get lock height
 	let chain_tip = chain.head().unwrap();
 	let amount = 300_000_000_000;
+	let min_confirmations = 3;
 
 	// ensure outputs we're selecting are up to date
 	let res = common::refresh_output_state_local(&wallet1.0, &wallet1.1, &chain);
@@ -89,7 +90,7 @@ fn build_transaction() {
 		2,
 		amount,
 		chain_tip.height,
-		3,
+		min_confirmations,
 		chain_tip.height,
 		1000,
 		true,
@@ -176,7 +177,7 @@ fn build_transaction() {
 
 	// Insert this transaction into a new block, then mine till confirmation
 	common::award_block_to_wallet(&chain, vec![&slate.tx], &wallet1);
-	common::award_blocks_to_wallet(&chain, &wallet1, 3);
+	common::award_blocks_to_wallet(&chain, &wallet1, 5);
 
 	// Refresh wallets
 	let res = common::refresh_output_state_local(&wallet2.0, &wallet2.1, &chain);
@@ -184,8 +185,23 @@ fn build_transaction() {
 		panic!("Error refreshing output state for wallet: {:?}", e);
 	}
 
+	// check recipient wallet
 	let chain_tip = chain.head().unwrap();
 	let balances = common::get_wallet_balances(&wallet2.0, &wallet2.1, chain_tip.height).unwrap();
 
 	assert_eq!(balances.3, 300_000_000_000);
+
+	// check sender wallet
+	let res = common::refresh_output_state_local(&wallet1.0, &wallet1.1, &chain);
+	if let Err(e) = res {
+		panic!("Error refreshing output state for wallet: {:?}", e);
+	}
+	let balances = common::get_wallet_balances(&wallet1.0, &wallet1.1, chain_tip.height).unwrap();
+	println!("tip height: {:?}", chain_tip.height);
+	println!("Sender balances: {:?}", balances);
+	// num blocks * grins per block, and wallet1 mined the fee
+	assert_eq!(
+		balances.3,
+		(chain_tip.height - min_confirmations) * 60_000_000_000 - amount
+	);
 }

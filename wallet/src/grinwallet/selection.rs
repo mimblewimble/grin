@@ -126,6 +126,7 @@ pub fn build_recipient_output_with_slate(
 	let root_key_id = keychain.root_key_id();
 	let key_id_inner = key_id.clone();
 	let amount = slate.amount;
+	let height = slate.height;
 
 	let blinding = slate
 		.add_transaction_elements(keychain, vec![build::output(amount, key_id.clone())])
@@ -149,7 +150,7 @@ pub fn build_recipient_output_with_slate(
 				n_child: derivation,
 				value: amount,
 				status: OutputStatus::Unconfirmed,
-				height: 0,
+				height: height,
 				lock_height: 0,
 				is_coinbase: false,
 				block: None,
@@ -252,7 +253,8 @@ pub fn select_send_tx(
 	}
 
 	// build transaction skeleton with inputs and change
-	let (mut parts, change_key) = inputs_and_change(&coins, config, keychain, amount, fee)?;
+	let (mut parts, change_key) =
+		inputs_and_change(&coins, config, keychain, current_height, amount, fee)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
@@ -271,6 +273,7 @@ pub fn inputs_and_change(
 	coins: &Vec<OutputData>,
 	config: &WalletConfig,
 	keychain: &Keychain,
+	height: u64,
 	amount: u64,
 	fee: u64,
 ) -> Result<(Vec<Box<build::Append>>, Option<Identifier>), Error> {
@@ -320,7 +323,7 @@ pub fn inputs_and_change(
 				n_child: change_derivation,
 				value: change as u64,
 				status: OutputStatus::Unconfirmed,
-				height: 0,
+				height: height,
 				lock_height: 0,
 				is_coinbase: false,
 				block: None,
