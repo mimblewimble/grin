@@ -15,9 +15,9 @@
 //! Selection of inputs for building transactions
 
 use failure::ResultExt;
-use grinwallet::keys;
+use grinwallet::{keys, sigcontext};
 use keychain::{Identifier, Keychain};
-use libwallet::{aggsig, build, transaction};
+use libwallet::{build, transaction};
 use types::*;
 
 /// Initialise a transaction on the sender side, returns a corresponding
@@ -28,7 +28,6 @@ use types::*;
 pub fn build_send_tx_slate(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	context_manager: &mut aggsig::ContextManager,
 	num_participants: usize,
 	amount: u64,
 	current_height: u64,
@@ -36,7 +35,14 @@ pub fn build_send_tx_slate(
 	lock_height: u64,
 	max_outputs: usize,
 	selection_strategy_is_use_all: bool,
-) -> Result<(transaction::Slate, impl FnOnce() -> Result<(), Error>), Error> {
+) -> Result<
+	(
+		transaction::Slate,
+		sigcontext::Context,
+		impl FnOnce() -> Result<(), Error>,
+	),
+	Error,
+> {
 	let (elems, inputs, change_id, amount, fee) = select_send_tx(
 		config,
 		keychain,
@@ -57,9 +63,8 @@ pub fn build_send_tx_slate(
 
 	let blinding = slate.add_transaction_elements(keychain, elems)?;
 	// Create our own private context
-	let mut context = context_manager.create_context(
+	let mut context = sigcontext::Context::new(
 		keychain.secp(),
-		&slate.id,
 		blinding.secret_key(keychain.secp()).unwrap(),
 	);
 
@@ -93,9 +98,7 @@ pub fn build_send_tx_slate(
 			}*/		})
 	};
 
-	context_manager.save_context(context);
-
-	Ok((slate, update_sender_wallet_fn))
+	Ok((slate, context, update_sender_wallet_fn))
 }
 
 /// Creates a new output in the wallet for the recipient,
@@ -105,9 +108,15 @@ pub fn build_send_tx_slate(
 pub fn build_recipient_output_with_slate(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	context_manager: &mut aggsig::ContextManager,
 	slate: &mut transaction::Slate,
-) -> Result<(Identifier, impl FnOnce() -> Result<(), Error>), Error> {
+) -> Result<
+	(
+		Identifier,
+		sigcontext::Context,
+		impl FnOnce() -> Result<(), Error>,
+	),
+	Error,
+> {
 	// Create a potential output for this transaction
 	let (key_id, derivation) = keys::new_output_key(config, keychain)?;
 
@@ -120,9 +129,8 @@ pub fn build_recipient_output_with_slate(
 		slate.add_transaction_elements(keychain, vec![build::output(amount, key_id.clone())])?;
 
 	// Add blinding sum to our context
-	let mut context = context_manager.create_context(
+	let mut context = sigcontext::Context::new(
 		keychain.secp(),
-		&slate.id,
 		blinding.secret_key(keychain.secp()).unwrap(),
 	);
 
@@ -146,8 +154,7 @@ pub fn build_recipient_output_with_slate(
 			});
 		})
 	};
-	context_manager.save_context(context);
-	Ok((key_id, wallet_add_fn))
+	Ok((key_id, context, wallet_add_fn))
 }
 
 /// Builds a transaction to send to someone from the HD seed associated with the

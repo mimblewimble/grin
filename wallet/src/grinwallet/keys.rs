@@ -13,17 +13,8 @@
 // limitations under the License.
 
 //! Grin Wallet specific key management functions
-use rand::thread_rng;
-use uuid::Uuid;
-
-use core::core::{amount_to_hr_string, Committed, Transaction};
-use failure::ResultExt;
-use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
-use libwallet::{aggsig, build};
+use keychain::{Identifier, Keychain};
 use types::*;
-use util::secp::Signature;
-use util::secp::key::{PublicKey, SecretKey};
-use util::{secp, LOGGER};
 
 /// Get our next available key
 pub fn new_output_key(

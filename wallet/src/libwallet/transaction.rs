@@ -125,14 +125,15 @@ impl Slate {
 	pub fn fill_round_1(
 		&mut self,
 		keychain: &Keychain,
-		context_manager: &mut aggsig::ContextManager,
+		sec_key: &mut SecretKey,
+		sec_nonce: &SecretKey,
 		participant_id: usize,
 	) -> Result<(), Error> {
 		// Whoever does this first generates the offset
 		if self.tx.offset == BlindingFactor::zero() {
-			self.generate_offset(keychain, context_manager)?;
+			self.generate_offset(keychain, sec_key)?;
 		}
-		self.add_participant_info(keychain, context_manager, participant_id, None)?;
+		self.add_participant_info(keychain, &sec_key, &sec_nonce, participant_id, None)?;
 		Ok(())
 	}
 
@@ -140,20 +141,20 @@ impl Slate {
 	pub fn fill_round_2(
 		&mut self,
 		keychain: &Keychain,
-		context_manager: &mut aggsig::ContextManager,
+		sec_key: &SecretKey,
+		sec_nonce: &SecretKey,
 		participant_id: usize,
 	) -> Result<(), Error> {
 		self.check_fees()?;
 		self.verify_part_sigs(keychain.secp())?;
-		let context = context_manager.get_context(&self.id);
-		let sig_part = context
-			.calculate_partial_sig_with_nonce_sum(
-				keychain.secp(),
-				&self.pub_nonce_sum(keychain.secp()),
-				self.fee,
-				self.lock_height,
-			)
-			.unwrap();
+		let sig_part = aggsig::calculate_partial_sig(
+			keychain.secp(),
+			sec_key,
+			sec_nonce,
+			&self.pub_nonce_sum(keychain.secp()),
+			self.fee,
+			self.lock_height,
+		).unwrap();
 		self.participant_data[participant_id].part_sig = Some(sig_part);
 		Ok(())
 	}
@@ -199,14 +200,16 @@ impl Slate {
 	fn add_participant_info(
 		&mut self,
 		keychain: &Keychain,
-		context_manager: &aggsig::ContextManager,
+		sec_key: &SecretKey,
+		sec_nonce: &SecretKey,
 		id: usize,
 		part_sig: Option<Signature>,
 	) -> Result<(), Error> {
-		let context = context_manager.get_context(&self.id);
-
 		// Add our public key and nonce to the slate
-		let (pub_key, pub_nonce) = context.get_public_keys(keychain.secp());
+		let pub_key =
+			PublicKey::from_secret_key(keychain.secp(), &sec_key).context(ErrorKind::Keychain)?;
+		let pub_nonce =
+			PublicKey::from_secret_key(keychain.secp(), &sec_nonce).context(ErrorKind::Keychain)?;
 		self.participant_data.push(ParticipantData {
 			id: id as u64,
 			public_blind_excess: pub_key,
@@ -219,27 +222,26 @@ impl Slate {
 
 	/// Somebody involved needs to generate an offset with their private key
 	/// For now, we'll have the transaction initiator be responsible for it
-	/// Return offset private key
+	/// Return offset private key for the participant to use later in the
+	/// transaction
 	fn generate_offset(
 		&mut self,
 		keychain: &Keychain,
-		context_manager: &mut aggsig::ContextManager,
+		sec_key: &mut SecretKey,
 	) -> Result<(), Error> {
 		// Generate a random kernel offset here
 		// and subtract it from the blind_sum so we create
 		// the aggsig context with the "split" key
-		let mut context = context_manager.get_context(&self.id);
 		self.tx.offset =
 			BlindingFactor::from_secret_key(SecretKey::new(&keychain.secp(), &mut thread_rng()));
 		let blind_offset = keychain
 			.blind_sum(&BlindSum::new()
-				.add_blinding_factor(BlindingFactor::from_secret_key(context.sec_key))
+				.add_blinding_factor(BlindingFactor::from_secret_key(sec_key.clone()))
 				.sub_blinding_factor(self.tx.offset))
 			.unwrap();
-		context.sec_key = blind_offset
+		*sec_key = blind_offset
 			.secret_key(&keychain.secp())
 			.context(ErrorKind::Keychain)?;
-		context_manager.save_context(context);
 		Ok(())
 	}
 

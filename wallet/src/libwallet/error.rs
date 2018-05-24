@@ -14,15 +14,20 @@
 
 //! Wallet lib errors
 
-use util::secp;
 use keychain::{self, extkey};
+use util::secp;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Error {
+	/// SECP error
 	Secp(secp::Error),
+	/// Keychain error
 	Keychain(keychain::Error),
+	/// Extended key error
 	ExtendedKey(extkey::Error),
+	/// Transaction error
 	Transaction(String),
+	/// Rangeproof error
 	RangeProof(String),
 }
 
