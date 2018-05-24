@@ -9,7 +9,7 @@ Grin是一个实现MimbleWimble区块链的开源软件项目，并填补了（M
 
 Grin 项目的主要目的和特性如下:
 
-* 隐私保护的缺省特性. 这使它具备了完全可替代性，且保留了按需选择性披露信息的能力。
+* 隐私保护的缺省特性。 这使它具备了完全可替代性，且保留了按需选择性披露信息的能力。
 * 区块大小与交易量相适配，历史交易仅保留约100字节的核（_transaction kernel_）, 相比其它区块链节省了大量空间。
 * 强大且经过验证的密码学。 MimbleWimble只采用椭圆曲线密码，该密码技术已经过了数十年的尝试和测试。
 * 简单的设计使得随着时间的推移审计和维护变得容易。
@@ -17,12 +17,12 @@ Grin 项目的主要目的和特性如下:
 
 # Tongue Tying for Everyone
 
-本文针对的读者需要已经了解过区块链和一些基本的密码学知识. 我们尝试解释MimbleWimble的技术构建，以及它如何应用于。我们的目的是鼓励你对Grin产生兴趣，并以任何可能的方式对其做出贡献。
+本文针对的读者需要已经了解过区块链和一些基本的密码学知识。我们尝试解释MimbleWimble的技术构建，以及它如何应用于。我们的目的是鼓励你对Grin产生兴趣，并以任何可能的方式对其做出贡献。
 
 为了实现这个目标，我们将介绍一个主要概念：Grin是一个MimbleWimble实现。 我们将从椭圆曲线密码（ECC）的简短描述开始，这是Grin的重要基础。然后描述MimbleWimble区块链交易和区块的所有关键要素。
 
 
-## Tiny Bits of Elliptic Curves
+## 椭圆曲线简介
 
 我们首先简要介绍一下椭圆曲线密码学，回顾一下理解MimbleWimble如何工作所必需的属性，并不深入研究ECC的错综复杂性。 对于想要更深入地了解的读者，可以参考这个介绍：
 [了解更多](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
@@ -37,7 +37,7 @@ Grin 项目的主要目的和特性如下:
 先前的公式`（k + j）* H = k * H + j * H`中， _k_ 和 _j_ 都是私钥，演示了从两个私钥的加和获取公钥`（k + j）* H`，等价于每个私钥的对应公钥加和（`k * H + j * H`）。在比特币区块链中，分层
 确定性钱包严重依赖于这个原则。 MimbleWimble和Grin也是如此。
 
-## Transacting with MimbleWimble
+## MimbleWimble 交易
 
 交易的结构（设计）显示了MimbleWimble的一个关键原则：强大的隐私和保密性保证。
 
@@ -48,7 +48,7 @@ MimbleWimble的交易确认依赖于两个基本属性:
 
 下面介绍账户余额、所有权、变更和证明，（并借此说明）上面的这两个基本属性是如何得以实现的。
 
-### Balance
+### （等式）平衡
 
 基于上面描述的ECC的属性，可以在交易数据中掩盖实际交易值。
 
@@ -91,7 +91,7 @@ MimbleWimble的交易确认依赖于两个基本属性:
 
 补充最后一点说明，这个想法实际上派生自Greg Maxwell的[机密交易](https://www.elementsproject.org/elements/confidential-transactions/)，机密交易本身是从Adam Back提出的用于比特币的同态值提议中发展而来。
 
-### Ownership
+### 所有权
 
 在前面的章节中，我们介绍了一个私钥作为致盲因子来掩盖实际交易值。MimbleWimble的第二个见解就是这个私钥可以用来证明值的所有权。
 
@@ -132,11 +132,11 @@ _X_, 上述加法的输出值，是对所有人可见的。 但是值3只有你�
 
 因此，对什么签名不重要（它甚至可以只是一个空字符串“”）。该签名附加在每笔交易上，并附加一些额外数据（如采矿费用），称为_transaction kernel_。
 
-### Some Finer Points
+### 一些更深入的细节
 
 本节阐述创建交易，通过讨论交易的找零机制和范围证明的要求以便所有值都被证明为非负。 这些都不是了解MimbleWimble和Grin的必需内容，所以如果你想快速了解，随时可以直接跳过本节内容，直接到[Putting It All Together](#transaction-conclusion).
 
-#### Change
+#### 找零
 
 在上面的例子中，你必须分享你的私人密钥（致盲因子）给Carol。 一般来说，即使私钥永远不会被重用，这也不是一个十分可取的方法。 实际上，这不是问题，因为交易包括找零输出。
 
@@ -154,7 +154,7 @@ _X_, 上述加法的输出值，是对所有人可见的。 但是值3只有你�
 
 如前所述，Carol使用`28 * G`作为公钥生成一个签名，以证明值为零，并证明她被给予致盲因子的总和，（以获得）交易输入和找零。 签名包含在_transaction kernel_中，这将由所有交易验证人检查。
 
-#### Range Proofs
+#### 范围证明（Range Proofs）
 
 In all the above calculations, we rely on the transaction values to always be positive. The
 introduction of negative amounts would be extremely problematic as one could
@@ -170,7 +170,7 @@ create new funds in every transaction.
 同样重要的是要注意，为了从上面的示例中创建有效的范围证明，必须知道在创建和签署excess value时使用的值113和28。 其原因以及范围证明的更详细描述在[range proof primer](rangeproofs.md)中进一步详述。
 
 <a name="transaction-conclusion"></a>
-### Putting It All Together
+### 小结
 
 MimbleWimble交易包括以下内容：
 
@@ -181,7 +181,7 @@ MimbleWimble交易包括以下内容：
 * 明确的交易费用。
 * 一个签名，通过采取excess value（所有输出加费用之和减去输入）并将其用作私钥来计算。
 
-## Blocks and Chain State
+## 区块状态和链状态
 
 我们已经在上面解释了MimbleWimble交易如何在保持有效区块链所需的属性的同时提供强大的匿名性保证，即交易不会创建货币，并且通过私钥建立所有权证明。
 
@@ -236,15 +236,15 @@ MimbleWimble区块格式通过引入一个附加概念来构建：_cut-through_�
 
 然而，区块仍然可验证！
 
-### Cut-through All The Way
+### 尽可能多地Cut-through
 
 回到前面的示例块，I1和I2花费的输出x1和x2必须先前出现在区块链中。因此，在添加此区块后，这些输出以及I1和I2也可以从整体链中移除，因为它们不会影响整体总和。
 
 总而言之，我们得出结论：任何时间点的链状态（不包括区块头）都可以通过这些信息来概括：
 
 1. 链中采矿产生的硬币总量。
-2. 未花费输出的完整集合。The complete set of unspent outputs. 
-3. 每笔交易的交易内核。The transactions kernels for each transaction.
+2. 未花费输出(UTXO)的完整集合。
+3. 每笔交易的交易内核。
 
 第一条信息可以使用块高度（与起始块的距离）推导出来。未使用的输出和交易内核都非常紧凑。这有两个重要的后果：
 
@@ -255,7 +255,8 @@ In addition, the complete set of unspent outputs cannot be tampered with, even
 only by adding or removing an output. Doing so would cause the summation of all
 blinding factors in the transaction kernels to differ from the summation of blinding
 factors in the outputs.
-另外，即使仅通过添加或删除输出，也不能篡改未使用的输出组成的完整集。这样做会导致交易内核中所有致盲因因子的总和与输出中致盲因素的总和不同。
+
+另外，即使仅通过添加或删除输出，也不能篡改未使用的输出组成的完整集。这样做会导致交易内核中所有致盲因因子的总和与输出中致盲因素的总和不同。(备注：该段未理解透，恐丢失原意，暂保留原英文)
 
 ## 结论
 
