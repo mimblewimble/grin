@@ -532,7 +532,6 @@ impl<'a> Extension<'a> {
 	// Store all new output pos in the index.
 	// Also store any new block_markers.
 	fn save_indexes(&self) -> Result<(), Error> {
-		println!("*** saving indexes");
 		for (commit, pos) in &self.new_output_commits {
 			self.commit_index.save_output_pos(commit, *pos)?;
 		}

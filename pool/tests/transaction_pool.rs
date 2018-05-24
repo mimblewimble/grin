@@ -268,11 +268,4 @@ fn test_basic_pool_add() {
 			.unwrap();
 		assert_eq!(write_pool.total_size(), 3);
 	}
-
-	// Now fluff the stempool.
-	{
-		let mut write_pool = pool.write().unwrap();
-		write_pool.fluff_stempool().unwrap();
-		assert_eq!(write_pool.total_size(), 2);
-	}
 }

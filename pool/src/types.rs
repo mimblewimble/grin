@@ -76,10 +76,19 @@ fn default_dandelion_embargo() -> i64 {
 
 #[derive(Clone, Debug)]
 pub struct PoolEntry {
-	pub fresh: bool,
+	pub state: PoolEntryState,
 	pub src: TxSource,
 	pub tx_at: Timespec,
 	pub tx: Transaction,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum PoolEntryState {
+	Fresh,
+	ToStem,
+	Stemmed,
+	ToFluff,
+	Fluffed,
 }
 
 /// Placeholder: the data representing where we heard about a tx from.

@@ -89,6 +89,30 @@ where
 		Ok(tx)
 	}
 
+	pub fn select_valid_transactions(
+		&mut self,
+		from_state: PoolEntryState,
+		to_state: PoolEntryState,
+		extra_tx: Option<&Transaction>,
+	) -> Result<Vec<Transaction>, PoolError> {
+		let entries = &mut self.entries
+			.iter_mut()
+			.filter(|x| x.state == from_state)
+			.collect::<Vec<_>>();
+
+		let candidate_txs = entries.iter().map(|x| x.tx.clone()).collect();
+		let valid_txs = self.blockchain.validate_raw_txs(candidate_txs, extra_tx)?;
+
+		// Update state on all entries included in final vec of valid txs.
+		for x in &mut entries.iter_mut() {
+			if valid_txs.contains(&x.tx) {
+				x.state = to_state.clone();
+			}
+		}
+
+		Ok(valid_txs)
+	}
+
 	// Aggregate this new tx with all existing txs in the pool.
 	// If we can validate the aggregated tx against the current chain state
 	// then we can safely add the tx to the pool.

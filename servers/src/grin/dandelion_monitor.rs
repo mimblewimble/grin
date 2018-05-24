@@ -19,12 +19,11 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 use time::now_utc;
-use util::LOGGER;
 
-use pool::BlockChain;
-use pool::PoolConfig;
-use pool::TransactionPool;
-use pool::TxSource;
+use core::core::hash::Hashed;
+use core::core::transaction;
+use pool::{BlockChain, PoolConfig, PoolEntryState, TransactionPool, TxSource};
+use util::LOGGER;
 
 /// A process to monitor transactions in the stempool.
 /// With Dandelion, transaction can be broadcasted in stem or fluff phase.
@@ -41,94 +40,186 @@ pub fn monitor_transactions<T>(
 ) where
 	T: BlockChain + Send + Sync + 'static,
 {
-	debug!(LOGGER, "Started Dandelion transaction monitor");
+	debug!(LOGGER, "Started Dandelion transaction monitor.");
+
 	let _ = thread::Builder::new()
 		.name("dandelion".to_string())
 		.spawn(move || {
 			loop {
+				// this is the patience timer, we loop every n secs.
+				let patience_secs = 10;
+				thread::sleep(Duration::from_secs(patience_secs));
+
 				let tx_pool = tx_pool.clone();
 
-				let now = now_utc().to_timespec().sec;
+				// Step 1: find all "ToStem" entries in stempool from last run.
+				// Aggregate them up to give a single (valid) aggregated tx and propagate it
+				// to the next Dandelion relay along the stem.
+				{
+					let mut tx_pool = tx_pool.write().unwrap();
 
-				let mut fresh_entries = vec![];
-				let mut fluff_stempool = false;
+					let txpool_tx = tx_pool
+						.txpool
+						.aggregate_transaction()
+						.expect("Failed to aggregate txpool txs.");
+					let stem_txs = tx_pool
+						.stempool
+						.select_valid_transactions(
+							PoolEntryState::ToStem,
+							PoolEntryState::Stemmed,
+							Some(&txpool_tx),
+						)
+						.expect("Failed to select some valid txs.");
+
+					if stem_txs.len() > 0 {
+						debug!(
+							LOGGER,
+							"dand_mon: Found {} txs for stemming.",
+							stem_txs.len()
+						);
+
+						let agg_tx = transaction::aggregate(stem_txs)
+							.expect("Failed to aggregate stempool txs.");
+
+						let res = tx_pool.adapter.stem_tx_accepted(&agg_tx);
+						if res.is_err() {
+							debug!(
+								LOGGER,
+								"Unable to propagate stem tx. No relay? Fluffing instead."
+							);
+
+							let src = TxSource {
+								debug_name: "fluff".to_string(),
+								identifier: "?.?.?.?".to_string(),
+							};
+
+							let res = tx_pool.add_to_pool(src, agg_tx, false);
+							if res.is_err() {
+								error!(LOGGER, "Failed to add fluffed tx to txpool.");
+							}
+						}
+					}
+				}
+
+				// Step 2: find all "ToFluff" entries in stempool from last run.
+				// Aggregate them up to give a single (valid) aggregated tx and (re)add it
+				// to our pool with stem=false (which will then broadcast it).
+				{
+					let mut tx_pool = tx_pool.write().unwrap();
+
+					let txpool_tx = tx_pool
+						.txpool
+						.aggregate_transaction()
+						.expect("Failed to aggregate txpool txs.");
+					let stem_txs = tx_pool
+						.stempool
+						.select_valid_transactions(
+							PoolEntryState::ToFluff,
+							PoolEntryState::Fluffed,
+							Some(&txpool_tx),
+						)
+						.expect("Failed to select some valid txs.");
+
+					if stem_txs.len() > 0 {
+						debug!(
+							LOGGER,
+							"dand_mon: Found {} txs for fluffing.",
+							stem_txs.len()
+						);
+
+						let agg_tx = transaction::aggregate(stem_txs)
+							.expect("Failed to aggregate stempool txs.");
+
+						let src = TxSource {
+							debug_name: "fluff".to_string(),
+							identifier: "?.?.?.?".to_string(),
+						};
+
+						let res = tx_pool.add_to_pool(src, agg_tx, false);
+						if res.is_err() {
+							error!(LOGGER, "Failed to add fluffed tx to txpool.");
+						}
+					}
+				}
+
+				// Step 3: now find all "Fresh" entries in stempool since last run.
+				// Coin flip for each (90/10) and label them as either "ToStem" or "ToFluff".
+				// We will process these in the next run (waiting patience secs).
 				{
 					let mut tx_pool = tx_pool.write().unwrap();
 					let mut rng = rand::thread_rng();
 
-					for mut entry in tx_pool.stempool.entries.iter_mut() {
-						//
-						// TODO patience timer config
-						//
-						let cutoff = now - 10;
-
-						if entry.fresh && entry.tx_at.sec < cutoff {
-							entry.fresh = false;
-							let random = rng.gen_range(0, 101);
-							if random <= config.dandelion_probability {
-								debug!(
-									LOGGER,
-									"dand_mon: Not fluffing stempool, will propagate to Dandelion relay."
-								);
-								fresh_entries.push(entry.clone());
-							} else {
-								fluff_stempool = true;
-								break;
-							}
-						}
-					}
-				}
-
-				if fluff_stempool {
-					let mut tx_pool = tx_pool.write().unwrap();
-					if tx_pool.fluff_stempool().is_err() {
-						error!(LOGGER, "Failed to fluff stempool.");
-					}
-				} else {
-					let mut tx_pool = tx_pool.write().unwrap();
-					for x in fresh_entries {
-						// TODO - maybe adapter needs a has_dandelion_relay() so we can
-						// conditionally propagate or aggregate and fluff here?
-						let res = tx_pool.adapter.stem_tx_accepted(&x.tx);
-						if res.is_err() {
-							debug!(LOGGER, "Could not propagate stem tx, fluffing stempool.");
-							if tx_pool.fluff_stempool().is_err() {
-								error!(LOGGER, "Failed to fluff stempool.");
-							}
-						}
-					}
-				}
-
-				// Randomize the cutoff time based on Dandelion embargo cofiguration.
-				// Anything older than this gets "fluffed" as a fallback.
-				let embargo_sec = config.dandelion_embargo + rand::thread_rng().gen_range(0, 31);
-				let cutoff = now - embargo_sec;
-
-				let mut expired_entries = vec![];
-				{
-					let tx_pool = tx_pool.read().unwrap();
-					for entry in tx_pool
+					let fresh_entries = &mut tx_pool
 						.stempool
 						.entries
-						.iter()
-						.filter(|x| x.tx_at.sec < cutoff)
-					{
-						debug!(LOGGER, "dand_mon: Fluffing tx after embargo timer expired.");
-						expired_entries.push(entry.clone());
+						.iter_mut()
+						.filter(|x| x.state == PoolEntryState::Fresh)
+						.collect::<Vec<_>>();
+
+					if fresh_entries.len() > 0 {
+						debug!(
+							LOGGER,
+							"dand_mon: Found {} fresh entries in stempool.",
+							fresh_entries.len()
+						);
+
+						for x in &mut fresh_entries.iter_mut() {
+							let random = rng.gen_range(0, 101);
+							if random <= config.dandelion_probability {
+								x.state = PoolEntryState::ToStem;
+							} else {
+								x.state = PoolEntryState::ToFluff;
+							}
+						}
 					}
 				}
 
+				// Step 4: now find all expired entries based on embargo timer.
 				{
-					let mut tx_pool = tx_pool.write().unwrap();
-					for entry in expired_entries {
-						match tx_pool.add_to_pool(entry.src, entry.tx, false) {
-							Ok(()) => debug!(LOGGER, "Fluffed tx successfully."),
-							Err(e) => debug!(LOGGER, "error - {:?}", e),
-						};
+					let now = now_utc().to_timespec().sec;
+					let embargo_sec =
+						config.dandelion_embargo + rand::thread_rng().gen_range(0, 31);
+					let cutoff = now - embargo_sec;
+
+					let mut expired_entries = vec![];
+
+					{
+						let tx_pool = tx_pool.read().unwrap();
+						for entry in tx_pool
+							.stempool
+							.entries
+							.iter()
+							.filter(|x| x.tx_at.sec < cutoff)
+						{
+							debug!(
+								LOGGER,
+								"dand_mon: Embargo timer expired for {:?}",
+								entry.tx.hash()
+							);
+							expired_entries.push(entry.clone());
+						}
+					}
+
+					if expired_entries.len() > 0 {
+						debug!(
+							LOGGER,
+							"dand_mon: Found {} expired txs.",
+							expired_entries.len()
+						);
+
+						{
+							let mut tx_pool = tx_pool.write().unwrap();
+							for entry in expired_entries {
+								match tx_pool.add_to_pool(entry.src, entry.tx, false) {
+									Ok(_) => {
+										debug!(LOGGER, "dand_mon: Fluffed expired tx successfully.")
+									}
+									Err(e) => debug!(LOGGER, "error - {:?}", e),
+								};
+							}
+						}
 					}
 				}
-
-				thread::sleep(Duration::from_secs(10));
 
 				if stop.load(Ordering::Relaxed) {
 					break;

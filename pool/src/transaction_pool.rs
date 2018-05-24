@@ -111,7 +111,7 @@ where
 		self.blockchain.verify_coinbase_maturity(&tx)?;
 
 		let entry = PoolEntry {
-			fresh: true,
+			state: PoolEntryState::Fresh,
 			src,
 			tx_at: time::now_utc().to_timespec(),
 			tx: tx.clone(),
@@ -140,16 +140,6 @@ where
 
 	pub fn retrieve_transactions(&self, cb: &CompactBlock) -> Vec<Transaction> {
 		self.txpool.retrieve_transactions(cb)
-	}
-
-	pub fn fluff_stempool(&mut self) -> Result<(), PoolError> {
-		let src = TxSource {
-			debug_name: "fluff".to_string(),
-			identifier: "?.?.?.?".to_string(),
-		};
-		let agg_tx = self.stempool.aggregate_transaction()?;
-		self.add_to_pool(src, agg_tx, false)?;
-		Ok(())
 	}
 
 	/// Whether the transaction is acceptable to the pool, given both how
