@@ -226,6 +226,9 @@ fn refresh_output_state(
 }
 
 fn clean_old_unconfirmed(config: &WalletConfig, tip: &api::Tip) -> Result<(), Error> {
+	if tip.height < 500 {
+		return Ok(());
+	}
 	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
 		wallet_data.outputs.retain(|_, ref mut out| {
 			!(out.status == OutputStatus::Unconfirmed && out.height > 0

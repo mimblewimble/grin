@@ -11,18 +11,18 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use api;
+use byteorder::{BigEndian, ByteOrder};
+use core::core::transaction::ProofMessageElements;
+use core::global;
 use failure::{Fail, ResultExt};
 use keychain::{Identifier, Keychain};
+use libwallet::proof;
+use types::{Error, ErrorKind, MerkleProofWrapper, OutputData, OutputStatus, WalletConfig,
+            WalletData};
 use util;
 use util::LOGGER;
 use util::secp::pedersen;
-use api;
-use core::global;
-use core::core::transaction::ProofMessageElements;
-use types::{Error, ErrorKind, MerkleProofWrapper, OutputData, OutputStatus, WalletConfig,
-            WalletData};
-use byteorder::{BigEndian, ByteOrder};
-use libwallet::proof;
 
 pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 	let url = format!("{}/v1/chain", config.check_node_api_http_addr);
@@ -105,8 +105,17 @@ fn find_outputs_with_key(
 	keychain: &Keychain,
 	outputs: Vec<api::OutputPrintable>,
 	found_key_index: &mut Vec<u32>,
-) -> Vec<
-	(
+) -> Vec<(
+	pedersen::Commitment,
+	Identifier,
+	u32,
+	u64,
+	u64,
+	u64,
+	bool,
+	Option<MerkleProofWrapper>,
+)> {
+	let mut wallet_outputs: Vec<(
 		pedersen::Commitment,
 		Identifier,
 		u32,
@@ -115,20 +124,7 @@ fn find_outputs_with_key(
 		u64,
 		bool,
 		Option<MerkleProofWrapper>,
-	),
-> {
-	let mut wallet_outputs: Vec<
-		(
-			pedersen::Commitment,
-			Identifier,
-			u32,
-			u64,
-			u64,
-			u64,
-			bool,
-			Option<MerkleProofWrapper>,
-		),
-	> = Vec::new();
+	)> = Vec::new();
 
 	let max_derivations = 1_000_000;
 

@@ -21,16 +21,16 @@ use iron::Handler;
 use iron::prelude::*;
 use iron::status;
 use serde_json;
-use std::sync::{Arc, RwLock};
 
 use api;
 use core::consensus::reward;
 use core::core::{Output, TxKernel};
 use core::global;
 use failure::Fail;
+use failure::ResultExt;
 use grinwallet::{keys, selection};
 use keychain::Keychain;
-use libwallet::{aggsig, reward, transaction};
+use libwallet::{reward, transaction};
 use types::*;
 use util::LOGGER;
 
@@ -40,28 +40,24 @@ pub struct TxWrapper {
 	pub tx_hex: String,
 }
 
-lazy_static! {
-	/// Static reference to aggsig context (temporary while wallet is being refactored)
-	pub static ref AGGSIG_CONTEXT_MANAGER:Arc<RwLock<aggsig::ContextManager>>
-		= Arc::new(RwLock::new(aggsig::ContextManager::new()));
-}
-
 fn handle_send(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	context_manager: &mut aggsig::ContextManager,
 	slate: &mut transaction::Slate,
 ) -> Result<(), Error> {
 	// create an output using the amount in the slate
-	let (_, receiver_create_fn) =
-		selection::build_recipient_output_with_slate(config, keychain, context_manager, slate)
-			.unwrap();
+	let (_, mut context, receiver_create_fn) =
+		selection::build_recipient_output_with_slate(config, keychain, slate).unwrap();
 
 	// fill public keys
-	let _ = slate.fill_round_1(&keychain, context_manager, 1)?;
+	let _ = slate
+		.fill_round_1(&keychain, &mut context.sec_key, &context.sec_nonce, 1)
+		.context(ErrorKind::LibWalletError)?;
 
 	// perform partial sig
-	let _ = slate.fill_round_2(&keychain, context_manager, 1)?;
+	let _ = slate
+		.fill_round_2(&keychain, &context.sec_key, &context.sec_nonce, 1)
+		.context(ErrorKind::LibWalletError)?;
 
 	// Save output in wallet
 	let _ = receiver_create_fn();
@@ -82,8 +78,7 @@ impl Handler for WalletReceiver {
 		let struct_body = req.get::<bodyparser::Struct<transaction::Slate>>();
 
 		if let Ok(Some(mut slate)) = struct_body {
-			let mut acm = AGGSIG_CONTEXT_MANAGER.write().unwrap();
-			let _ = handle_send(&self.config, &self.keychain, &mut acm, &mut slate)
+			let _ = handle_send(&self.config, &self.keychain, &mut slate)
 				.map_err(|e| {
 					error!(
 						LOGGER,

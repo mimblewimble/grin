@@ -20,7 +20,7 @@ use core::ser;
 use failure::ResultExt;
 use grinwallet::selection;
 use keychain::{Identifier, Keychain};
-use libwallet::{aggsig, build};
+use libwallet::{build, transaction};
 use receiver::TxWrapper;
 use types::*;
 use util;
@@ -50,9 +50,6 @@ pub fn issue_send_tx(
 
 	checker::refresh_outputs(config, keychain)?;
 
-	// Create a new aggsig context
-	let mut context_manager = aggsig::ContextManager::new();
-
 	// Get lock height
 	let chain_tip = checker::get_tip_from_node(config)?;
 	let current_height = chain_tip.height;
@@ -61,17 +58,16 @@ pub fn issue_send_tx(
 
 	let lock_height = current_height;
 
-	// Sender selects outputs into a new slate and save our corresponding IDs in
-	// their transaction context. The secret key in our transaction context will be
+	// Sender selects outputs into a new slate and save our corresponding keyss in
+	// a transaction context. The secret key in our transaction context will be
 	// randomly selected. This returns the public slate, and a closure that locks
 	// our inputs and outputs once we're convinced the transaction exchange went
 	// according to plan
 	// This function is just a big helper to do all of that, in theory
 	// this process can be split up in any way
-	let (mut slate, sender_lock_fn) = selection::build_send_tx_slate(
+	let (mut slate, mut context, sender_lock_fn) = selection::build_send_tx_slate(
 		config,
 		keychain,
-		&mut context_manager,
 		2,
 		amount,
 		current_height,
@@ -85,7 +81,7 @@ pub fn issue_send_tx(
 	// the offset in the slate's transaction kernel, and adds our public key
 	// information to the slate
 	let _ = slate
-		.fill_round_1(keychain, &mut context_manager, 0)
+		.fill_round_1(keychain, &mut context.sec_key, &context.sec_nonce, 0)
 		.unwrap();
 
 	let url = format!("{}/v1/receive/transaction", &dest);
@@ -112,10 +108,12 @@ pub fn issue_send_tx(
 		}
 	};
 
-	let _ = slate.fill_round_2(keychain, &mut context_manager, 0)?;
+	let _ = slate
+		.fill_round_2(keychain, &context.sec_key, &context.sec_nonce, 0)
+		.context(ErrorKind::LibWalletError)?;
 
 	// Final transaction can be built by anyone at this stage
-	slate.finalize(keychain)?;
+	slate.finalize(keychain).context(ErrorKind::LibWalletError)?;
 
 	// So let's post it
 	let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
@@ -130,7 +128,7 @@ pub fn issue_send_tx(
 	}
 	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
 
-	// All good so, lock our outputs
+	// All good so, lock our inputs
 	sender_lock_fn()?;
 	Ok(())
 }
@@ -165,8 +163,9 @@ pub fn issue_burn_tx(
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
-	let fee = tx_fee(coins.len(), 2, selection::coins_proof_count(&coins), None);
-	let (mut parts, _) = selection::inputs_and_change(&coins, config, keychain, amount, fee)?;
+	let fee = transaction::tx_fee(coins.len(), 2, selection::coins_proof_count(&coins), None);
+	let (mut parts, _) =
+		selection::inputs_and_change(&coins, config, keychain, current_height, amount, fee)?;
 
 	// add burn output and fees
 	parts.push(build::output(amount - fee, Identifier::zero()));

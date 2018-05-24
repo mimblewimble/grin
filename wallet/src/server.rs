@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use api::ApiServer;
-use keychain::Keychain;
 use handlers::CoinbaseHandler;
+use keychain::Keychain;
 use receiver::WalletReceiver;
 use types::WalletConfig;
 use util::LOGGER;

@@ -42,16 +42,21 @@ pub fn refresh_output_state_local(
 	chain: &chain::Chain,
 ) -> Result<(), Error> {
 	let wallet_outputs = checker::map_wallet_outputs(config, keychain)?;
-	let chain_outputs: Vec<api::Output> = wallet_outputs
+	let chain_outputs: Vec<Option<api::Output>> = wallet_outputs
 		.keys()
 		.map(|k| match get_output_local(chain, &k) {
-			Err(e) => panic!(e),
-			Ok(k) => k,
+			Err(_) => None,
+			Ok(k) => Some(k),
 		})
 		.collect();
 	let mut api_outputs: HashMap<pedersen::Commitment, api::Output> = HashMap::new();
 	for out in chain_outputs {
-		api_outputs.insert(out.commit.commit(), out);
+		match out {
+			Some(o) => {
+				api_outputs.insert(o.commit.commit(), o);
+			}
+			None => {}
+		}
 	}
 	checker::apply_api_outputs(config, &wallet_outputs, &api_outputs)?;
 	Ok(())
