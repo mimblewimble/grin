@@ -27,6 +27,7 @@ use core::consensus::reward;
 use core::core::{Output, TxKernel};
 use core::global;
 use failure::Fail;
+use failure::ResultExt;
 use grinwallet::{keys, selection};
 use keychain::Keychain;
 use libwallet::{reward, transaction};
@@ -49,10 +50,14 @@ fn handle_send(
 		selection::build_recipient_output_with_slate(config, keychain, slate).unwrap();
 
 	// fill public keys
-	let _ = slate.fill_round_1(&keychain, &mut context.sec_key, &context.sec_nonce, 1)?;
+	let _ = slate
+		.fill_round_1(&keychain, &mut context.sec_key, &context.sec_nonce, 1)
+		.context(ErrorKind::LibWalletError)?;
 
 	// perform partial sig
-	let _ = slate.fill_round_2(&keychain, &context.sec_key, &context.sec_nonce, 1)?;
+	let _ = slate
+		.fill_round_2(&keychain, &context.sec_key, &context.sec_nonce, 1)
+		.context(ErrorKind::LibWalletError)?;
 
 	// Save output in wallet
 	let _ = receiver_create_fn();

@@ -20,15 +20,12 @@ use uuid::Uuid;
 use core::consensus;
 use core::core::{amount_to_hr_string, Committed, Transaction};
 use keychain::{BlindSum, BlindingFactor, Keychain};
+use libwallet::error::Error;
 use libwallet::{aggsig, build};
-//TODO: Remove these from here, replace with libwallet error
-use types::{Error, ErrorKind};
 
 use util::secp::Signature;
 use util::secp::key::{PublicKey, SecretKey};
 use util::{secp, LOGGER};
-
-use failure::ResultExt;
 
 const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
 
@@ -117,8 +114,7 @@ impl Slate {
 		if self.tx.kernels.len() != 0 {
 			elems.insert(0, build::initial_tx(self.tx.clone()));
 		}
-		let (tx, blind) =
-			build::partial_transaction(elems, &keychain).context(ErrorKind::Keychain)?;
+		let (tx, blind) = build::partial_transaction(elems, &keychain)?;
 		self.tx = tx;
 		Ok(blind)
 	}
@@ -154,10 +150,10 @@ impl Slate {
 			keychain.secp(),
 			sec_key,
 			sec_nonce,
-			&self.pub_nonce_sum(keychain.secp()),
+			&self.pub_nonce_sum(keychain.secp())?,
 			self.fee,
 			self.lock_height,
-		).unwrap();
+		)?;
 		self.participant_data[participant_id].part_sig = Some(sig_part);
 		Ok(())
 	}
@@ -171,21 +167,27 @@ impl Slate {
 	}
 
 	/// Return the sum of public nonces
-	fn pub_nonce_sum(&self, secp: &secp::Secp256k1) -> PublicKey {
+	fn pub_nonce_sum(&self, secp: &secp::Secp256k1) -> Result<PublicKey, Error> {
 		let pub_nonces = self.participant_data
 			.iter()
 			.map(|p| &p.public_nonce)
 			.collect();
-		PublicKey::from_combination(secp, pub_nonces).unwrap()
+		match PublicKey::from_combination(secp, pub_nonces) {
+			Ok(k) => Ok(k),
+			Err(e) => Err(Error::Secp(e)),
+		}
 	}
 
 	/// Return the sum of public blinding factors
-	fn pub_blind_sum(&self, secp: &secp::Secp256k1) -> PublicKey {
+	fn pub_blind_sum(&self, secp: &secp::Secp256k1) -> Result<PublicKey, Error> {
 		let pub_blinds = self.participant_data
 			.iter()
 			.map(|p| &p.public_blind_excess)
 			.collect();
-		PublicKey::from_combination(secp, pub_blinds).unwrap()
+		match PublicKey::from_combination(secp, pub_blinds) {
+			Ok(k) => Ok(k),
+			Err(e) => Err(Error::Secp(e)),
+		}
 	}
 
 	/// Return vector of all partial sigs
@@ -209,10 +211,8 @@ impl Slate {
 		part_sig: Option<Signature>,
 	) -> Result<(), Error> {
 		// Add our public key and nonce to the slate
-		let pub_key =
-			PublicKey::from_secret_key(keychain.secp(), &sec_key).context(ErrorKind::Keychain)?;
-		let pub_nonce =
-			PublicKey::from_secret_key(keychain.secp(), &sec_nonce).context(ErrorKind::Keychain)?;
+		let pub_key = PublicKey::from_secret_key(keychain.secp(), &sec_key)?;
+		let pub_nonce = PublicKey::from_secret_key(keychain.secp(), &sec_nonce)?;
 		self.participant_data.push(ParticipantData {
 			id: id as u64,
 			public_blind_excess: pub_key,
@@ -242,9 +242,7 @@ impl Slate {
 				.add_blinding_factor(BlindingFactor::from_secret_key(sec_key.clone()))
 				.sub_blinding_factor(self.tx.offset))
 			.unwrap();
-		*sec_key = blind_offset
-			.secret_key(&keychain.secp())
-			.context(ErrorKind::Keychain)?;
+		*sec_key = blind_offset.secret_key(&keychain.secp())?;
 		Ok(())
 	}
 
@@ -260,23 +258,19 @@ impl Slate {
 			None,
 		);
 		if fee > self.tx.fee() {
-			return Err(ErrorKind::FeeDispute {
-				sender_fee: self.tx.fee(),
-				recipient_fee: fee,
-			})?;
+			return Err(Error::Fee(
+				format!("Fee Dispute Error: {}, {}", self.tx.fee(), fee,).to_string(),
+			));
 		}
 
 		if fee > self.amount + self.fee {
-			info!(
-				LOGGER,
+			let reason = format!(
 				"Rejected the transfer because transaction fee ({}) exceeds received amount ({}).",
 				amount_to_hr_string(fee),
 				amount_to_hr_string(self.amount + self.fee)
 			);
-			return Err(ErrorKind::FeeExceedsAmount {
-				sender_amount: self.amount + self.fee,
-				recipient_fee: fee,
-			})?;
+			info!(LOGGER, "{}", reason);
+			return Err(Error::Fee(reason.to_string()));
 		}
 
 		Ok(())
@@ -287,18 +281,14 @@ impl Slate {
 		// collect public nonces
 		for p in self.participant_data.iter() {
 			if p.is_complete() {
-				if aggsig::verify_partial_sig(
+				aggsig::verify_partial_sig(
 					secp,
 					p.part_sig.as_ref().unwrap(),
-					&self.pub_nonce_sum(secp),
+					&self.pub_nonce_sum(secp)?,
 					&p.public_blind_excess,
 					self.fee,
 					self.lock_height,
-				) == false
-				{
-					error!(LOGGER, "Partial Sig invalid.");
-					return Err(ErrorKind::Signature("Partial Sig invalid."))?;
-				}
+				)?;
 			}
 		}
 		Ok(())
@@ -325,27 +315,21 @@ impl Slate {
 		self.verify_part_sigs(keychain.secp())?;
 
 		let part_sigs = self.part_sigs();
-		let pub_nonce_sum = self.pub_nonce_sum(keychain.secp());
-		let final_pubkey = self.pub_blind_sum(keychain.secp());
+		let pub_nonce_sum = self.pub_nonce_sum(keychain.secp())?;
+		let final_pubkey = self.pub_blind_sum(keychain.secp())?;
 		// get the final signature
-		let final_sig =
-			aggsig::add_signatures(&keychain.secp(), part_sigs, &pub_nonce_sum).unwrap();
+		let final_sig = aggsig::add_signatures(&keychain.secp(), part_sigs, &pub_nonce_sum)?;
 
 		// Calculate the final public key (for our own sanity check)
 
 		// Check our final sig verifies
-		let res = aggsig::verify_sig_build_msg(
+		aggsig::verify_sig_build_msg(
 			&keychain.secp(),
 			&final_sig,
 			&final_pubkey,
 			self.fee,
 			self.lock_height,
-		);
-
-		if !res {
-			error!(LOGGER, "Final aggregated signature invalid.");
-			return Err(ErrorKind::Signature("Final aggregated signature invalid."))?;
-		}
+		)?;
 
 		Ok(final_sig)
 	}
@@ -366,14 +350,12 @@ impl Slate {
 		let final_excess = {
 			// TODO - do we need to verify rangeproofs here?
 			for x in &final_tx.outputs {
-				x.verify_proof().context(ErrorKind::Transaction)?;
+				x.verify_proof()?;
 			}
 
 			// sum the input/output commitments on the final tx
 			let overage = final_tx.fee() as i64;
-			let tx_excess = final_tx
-				.sum_commitments(overage, None)
-				.context(ErrorKind::Transaction)?;
+			let tx_excess = final_tx.sum_commitments(overage, None)?;
 
 			// subtract the kernel_excess (built from kernel_offset)
 			let offset_excess = keychain
@@ -382,8 +364,7 @@ impl Slate {
 				.unwrap();
 			keychain
 				.secp()
-				.commit_sum(vec![tx_excess], vec![offset_excess])
-				.context(ErrorKind::Transaction)?
+				.commit_sum(vec![tx_excess], vec![offset_excess])?
 		};
 
 		// update the tx kernel to reflect the offset excess and sig
@@ -393,12 +374,10 @@ impl Slate {
 
 		// confirm the kernel verifies successfully before proceeding
 		debug!(LOGGER, "Validating final transaction");
-		final_tx.kernels[0]
-			.verify()
-			.context(ErrorKind::Transaction)?;
+		final_tx.kernels[0].verify()?;
 
 		// confirm the overall transaction is valid (including the updated kernel)
-		let _ = final_tx.validate().context(ErrorKind::Transaction)?;
+		let _ = final_tx.validate()?;
 
 		self.tx = final_tx;
 		Ok(())

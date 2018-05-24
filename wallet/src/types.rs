@@ -32,7 +32,6 @@ use tokio_retry::strategy::FibonacciBackoff;
 
 use failure::{Backtrace, Context, Fail, ResultExt};
 
-use core::consensus;
 use core::core::hash::Hash;
 use core::core::pmmr::MerkleProof;
 use keychain;
@@ -43,8 +42,6 @@ const DAT_FILE: &'static str = "wallet.dat";
 const BCK_FILE: &'static str = "wallet.bck";
 const LOCK_FILE: &'static str = "wallet.lock";
 const SEED_FILE: &'static str = "wallet.seed";
-
-const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
 
 #[derive(Debug)]
 pub struct Error {
@@ -75,6 +72,9 @@ pub enum ErrorKind {
 
 	#[fail(display = "Secp error")]
 	Secp,
+
+	#[fail(display = "LibWallet error")]
+	LibWalletError,
 
 	#[fail(display = "Wallet data error: {}", _0)]
 	WalletData(&'static str),

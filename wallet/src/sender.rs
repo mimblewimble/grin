@@ -108,10 +108,12 @@ pub fn issue_send_tx(
 		}
 	};
 
-	let _ = slate.fill_round_2(keychain, &context.sec_key, &context.sec_nonce, 0)?;
+	let _ = slate
+		.fill_round_2(keychain, &context.sec_key, &context.sec_nonce, 0)
+		.context(ErrorKind::LibWalletError)?;
 
 	// Final transaction can be built by anyone at this stage
-	slate.finalize(keychain)?;
+	slate.finalize(keychain).context(ErrorKind::LibWalletError)?;
 
 	// So let's post it
 	let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());

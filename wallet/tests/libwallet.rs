@@ -125,7 +125,7 @@ fn aggsig_sender_receiver_interaction() {
 			0,
 			0,
 		);
-		assert!(sig_verifies);
+		assert!(!sig_verifies.is_err());
 	}
 
 	// now sender signs with their key
@@ -154,7 +154,7 @@ fn aggsig_sender_receiver_interaction() {
 			0,
 			0,
 		);
-		assert!(sig_verifies);
+		assert!(!sig_verifies.is_err());
 	}
 
 	// Receiver now builds final signature from sender and receiver parts
@@ -196,7 +196,7 @@ fn aggsig_sender_receiver_interaction() {
 		// Receiver check the final signature verifies
 		let sig_verifies =
 			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, 0, 0);
-		assert!(sig_verifies);
+		assert!(!sig_verifies.is_err());
 	}
 
 	// Check we can verify the sig using the kernel excess
@@ -208,7 +208,7 @@ fn aggsig_sender_receiver_interaction() {
 		let sig_verifies =
 			aggsig::verify_single_from_commit(&keychain.secp(), &final_sig, &msg, &kernel_excess);
 
-		assert!(sig_verifies);
+		assert!(!sig_verifies.is_err());
 	}
 }
 
@@ -318,7 +318,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			0,
 			0,
 		);
-		assert!(sig_verifies);
+		assert!(!sig_verifies.is_err());
 	}
 
 	// now sender signs with their key
@@ -347,7 +347,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			0,
 			0,
 		);
-		assert!(sig_verifies);
+		assert!(!sig_verifies.is_err());
 	}
 
 	// Receiver now builds final signature from sender and receiver parts
@@ -388,7 +388,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 		// Receiver check the final signature verifies
 		let sig_verifies =
 			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, 0, 0);
-		assert!(sig_verifies);
+		assert!(!sig_verifies.is_err());
 	}
 
 	// Check we can verify the sig using the kernel excess
@@ -400,7 +400,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 		let sig_verifies =
 			aggsig::verify_single_from_commit(&keychain.secp(), &final_sig, &msg, &kernel_excess);
 
-		assert!(sig_verifies);
+		assert!(!sig_verifies.is_err());
 	}
 }
 

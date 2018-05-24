@@ -61,7 +61,9 @@ pub fn build_send_tx_slate(
 	slate.lock_height = lock_height;
 	slate.fee = fee;
 
-	let blinding = slate.add_transaction_elements(keychain, elems)?;
+	let blinding = slate
+		.add_transaction_elements(keychain, elems)
+		.context(ErrorKind::LibWalletError)?;
 	// Create our own private context
 	let mut context = sigcontext::Context::new(
 		keychain.secp(),
@@ -125,8 +127,9 @@ pub fn build_recipient_output_with_slate(
 	let key_id_inner = key_id.clone();
 	let amount = slate.amount;
 
-	let blinding =
-		slate.add_transaction_elements(keychain, vec![build::output(amount, key_id.clone())])?;
+	let blinding = slate
+		.add_transaction_elements(keychain, vec![build::output(amount, key_id.clone())])
+		.context(ErrorKind::LibWalletError)?;
 
 	// Add blinding sum to our context
 	let mut context = sigcontext::Context::new(

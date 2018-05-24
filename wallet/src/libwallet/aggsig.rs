@@ -61,9 +61,12 @@ pub fn verify_partial_sig(
 	pubkey: &PublicKey,
 	fee: u64,
 	lock_height: u64,
-) -> bool {
-	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height)).unwrap();
-	verify_single(secp, sig, &msg, Some(&pub_nonce_sum), pubkey, true)
+) -> Result<(), Error> {
+	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
+	if !verify_single(secp, sig, &msg, Some(&pub_nonce_sum), pubkey, true) {
+		return Err(Error::Signature("Signature validation error".to_string()));
+	}
+	Ok(())
 }
 
 /// Just a simple sig, creates its own nonce, etc
@@ -84,11 +87,14 @@ pub fn verify_single_from_commit(
 	sig: &Signature,
 	msg: &Message,
 	commit: &Commitment,
-) -> bool {
+) -> Result<(), Error> {
 	// Extract the pubkey, unfortunately we need this hack for now, (we just hope
 	// one is valid)
-	let pubkey = commit.to_pubkey(secp).unwrap();
-	aggsig::verify_single(secp, &sig, &msg, None, &pubkey, false)
+	let pubkey = commit.to_pubkey(secp)?;
+	if !verify_single(secp, sig, &msg, None, &pubkey, false) {
+		return Err(Error::Signature("Signature validation error".to_string()));
+	}
+	Ok(())
 }
 
 /// Verify a sig, with built message
@@ -98,9 +104,12 @@ pub fn verify_sig_build_msg(
 	pubkey: &PublicKey,
 	fee: u64,
 	lock_height: u64,
-) -> bool {
-	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height)).unwrap();
-	verify_single(secp, sig, &msg, None, pubkey, true)
+) -> Result<(), Error> {
+	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
+	if !verify_single(secp, sig, &msg, None, pubkey, true) {
+		return Err(Error::Signature("Signature validation error".to_string()));
+	}
+	Ok(())
 }
 
 /// Verifies an aggsig signature
