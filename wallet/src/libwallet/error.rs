@@ -18,6 +18,7 @@ use keychain::{self, extkey};
 use util::secp;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
+/// Libwallet error types
 pub enum Error {
 	/// SECP error
 	Secp(secp::Error),

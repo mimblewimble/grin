@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-/// Signature context holder (may be removed or replaced eventually)
+//! Signature context holder helper (may be removed or replaced eventually)
 use keychain::extkey::Identifier;
 use libwallet::aggsig;
 use util::secp::key::{PublicKey, SecretKey};

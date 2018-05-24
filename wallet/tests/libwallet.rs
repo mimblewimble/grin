@@ -83,7 +83,7 @@ fn aggsig_sender_receiver_interaction() {
 
 	let pub_nonce_sum;
 	// receiver receives partial tx
-	let (receiver_pub_excess, _receiver_pub_nonce, sig_part) = {
+	let (receiver_pub_excess, _receiver_pub_nonce, rx_sig_part) = {
 		let keychain = receiver_keychain.clone();
 		let key_id = keychain.derive_key_id(1).unwrap();
 
@@ -119,7 +119,7 @@ fn aggsig_sender_receiver_interaction() {
 		let keychain = sender_keychain.clone();
 		let sig_verifies = aggsig::verify_partial_sig(
 			&keychain.secp(),
-			&sig_part,
+			&rx_sig_part,
 			&pub_nonce_sum,
 			&receiver_pub_excess,
 			0,

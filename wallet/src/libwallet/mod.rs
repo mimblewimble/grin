@@ -21,10 +21,9 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-pub mod error;
 pub mod aggsig;
-pub mod blind;
+pub mod build;
+pub mod error;
 pub mod proof;
 pub mod reward;
-pub mod build;
 pub mod transaction;

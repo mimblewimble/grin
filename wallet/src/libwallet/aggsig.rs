@@ -11,8 +11,8 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-/// Aggsig helper functions used in transaction creation.. should be only
-/// interface into the underlying secp library
+//! Aggsig helper functions used in transaction creation.. should be only
+//! interface into the underlying secp library
 use keychain::Keychain;
 use keychain::blind::BlindingFactor;
 use keychain::extkey::Identifier;
@@ -40,7 +40,6 @@ pub fn calculate_partial_sig(
 ) -> Result<Signature, Error> {
 	// Add public nonces kR*G + kS*G
 	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
-	let pub_nonce = PublicKey::from_secret_key(secp, &sec_nonce)?;
 
 	//Now calculate signature using message M=fee, nonce in e=nonce_sum
 	let sig = aggsig::sign_single(
@@ -48,7 +47,7 @@ pub fn calculate_partial_sig(
 		&msg,
 		sec_key,
 		Some(sec_nonce),
-		Some(&pub_nonce),
+		Some(nonce_sum),
 		Some(nonce_sum),
 	)?;
 	Ok(sig)
@@ -104,7 +103,7 @@ pub fn verify_sig_build_msg(
 	verify_single(secp, sig, &msg, None, pubkey, true)
 }
 
-//Verifies an aggsig signature
+/// Verifies an aggsig signature
 pub fn verify_single(
 	secp: &Secp256k1,
 	sig: &Signature,

@@ -12,16 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Builds the blinded output and related signature proof for the block
-/// reward.
-
+//! Builds the blinded output and related signature proof for the block
+//! reward.
 use keychain;
 
-use core::core::{Output, OutputFeatures, ProofMessageElements, TxKernel};
 use core::consensus::reward;
-use libwallet::{aggsig, proof};
-use libwallet::error::Error;
 use core::core::KernelFeatures;
+use core::core::{Output, OutputFeatures, ProofMessageElements, TxKernel};
+use libwallet::error::Error;
+use libwallet::{aggsig, proof};
 use util::{kernel_sig_msg, secp, static_secp_instance, LOGGER};
 
 /// output a reward output

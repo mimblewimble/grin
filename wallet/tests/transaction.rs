@@ -56,7 +56,7 @@ fn setup(test_dir: &str, chain_dir: &str) -> Chain {
 
 /// Build and test new version of sending API
 #[test]
-fn build_transaction_2() {
+fn build_transaction() {
 	let chain = setup("test_output", "build_transaction_2/.grin");
 	let wallet1 = common::create_wallet("test_output/build_transaction_2/wallet1");
 	let wallet2 = common::create_wallet("test_output/build_transaction_2/wallet2");

@@ -14,16 +14,16 @@
 
 //! Rangeproof library functions
 
+use blake2;
 use keychain::Keychain;
-use util::secp::pedersen::{Commitment, ProofInfo, ProofMessage, RangeProof};
-use util::secp::key::SecretKey;
-use util::secp::{self, Secp256k1};
-use util::logger::LOGGER;
 use keychain::extkey::Identifier;
 use libwallet::error::Error;
-use blake2;
+use util::logger::LOGGER;
+use util::secp::key::SecretKey;
+use util::secp::pedersen::{Commitment, ProofInfo, ProofMessage, RangeProof};
+use util::secp::{self, Secp256k1};
 
-pub fn create_nonce(k: &Keychain, commit: &Commitment) -> SecretKey {
+fn create_nonce(k: &Keychain, commit: &Commitment) -> SecretKey {
 	// hash(commit|masterkey) as nonce
 	let root_key = k.root_key_id().to_bytes();
 	let res = blake2::blake2b::blake2b(32, &commit.0, &root_key);
@@ -63,6 +63,7 @@ pub fn create(
 		.bullet_proof(amount, skey, nonce, extra_data, Some(msg)));
 }
 
+/// Verify a proof
 pub fn verify(
 	secp: &Secp256k1,
 	commit: Commitment,
@@ -76,6 +77,7 @@ pub fn verify(
 	}
 }
 
+/// Rewind a rangeproof to retrieve the amount
 pub fn rewind(
 	k: &Keychain,
 	key_id: &Identifier,
