@@ -76,6 +76,9 @@ pub enum Error {
 	/// Returns if the value hidden within the a RangeProof message isn't
 	/// repeated 3 times, indicating it's incorrect
 	InvalidProofMessage,
+	/// Error when sums do not verify correctly during tx aggregation.
+	/// Likely a "double spend" across two unconfirmed txs.
+	AggregationError,
 }
 
 impl error::Error for Error {
@@ -393,26 +396,30 @@ impl Transaction {
 			.fold(0, |acc, ref x| max(acc, x.lock_height))
 	}
 
-	/// To verify transaction kernels we check that -
-	///  * all kernels have an even fee
-	/// * sum of input/output commitments matches sum of kernel commitments
-	/// after applying offset * each kernel sig is valid (i.e. tx commitments
-	/// sum to zero, given above is true)
-	fn verify_kernels(&self) -> Result<(), Error> {
-		// Verify all the output rangeproofs.
-		// Note: this is expensive.
-		for x in &self.outputs {
-			x.verify_proof()?;
-		}
-
+	fn verify_kernel_signatures(&self) -> Result<(), Error> {
 		// Verify the kernel signatures.
 		// Note: this is expensive.
 		for x in &self.kernels {
 			x.verify()?;
 		}
+		Ok(())
+	}
 
-		// TODO - determine when we need this validation?
+	fn verify_rangeproofs(&self) -> Result<(), Error> {
+		// Verify all the output rangeproofs.
+		// Note: this is expensive.
+		for x in &self.outputs {
+			x.verify_proof()?;
+		}
+		Ok(())
+	}
 
+	/// To verify transaction kernels we check that -
+	///  * all kernels have an even fee
+	/// * sum of input/output commitments matches sum of kernel commitments
+	/// after applying offset * each kernel sig is valid (i.e. tx commitments
+	/// sum to zero, given above is true)
+	fn verify_kernel_sums(&self) -> Result<(), Error> {
 		// Sum all input|output|overage commitments.
 		let overage = self.fee() as i64;
 		let io_sum = self.sum_commitments(overage, None)?;
@@ -437,7 +444,9 @@ impl Transaction {
 			return Err(Error::TooManyInputs);
 		}
 		self.verify_sorted()?;
-		self.verify_kernels()?;
+		self.verify_kernel_sums()?;
+		self.verify_rangeproofs()?;
+		self.verify_kernel_signatures()?;
 
 		Ok(())
 	}
@@ -547,9 +556,14 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	new_outputs.sort();
 	kernels.sort();
 
-	let tx = Transaction::new(new_inputs, new_outputs, kernels);
+	let tx = Transaction::new(new_inputs, new_outputs, kernels).with_offset(total_kernel_offset);
 
-	Ok(tx.with_offset(total_kernel_offset))
+	// We need to check sums here as aggregation/cut-through may have created an
+	// invalid tx.
+	tx.verify_kernel_sums()
+		.map_err(|_| Error::AggregationError)?;
+
+	Ok(tx)
 }
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple

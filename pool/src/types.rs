@@ -113,7 +113,6 @@ pub struct TxSource {
 pub enum PoolError {
 	/// An invalid pool entry caused by underlying tx validation error
 	InvalidTx(transaction::Error),
-	TransactionError(transaction::Error),
 	/// An entry already in the pool
 	AlreadyInPool,
 	/// An entry already in the stempool
@@ -163,7 +162,7 @@ pub enum PoolError {
 
 impl From<transaction::Error> for PoolError {
 	fn from(e: transaction::Error) -> PoolError {
-		PoolError::TransactionError(e)
+		PoolError::InvalidTx(e)
 	}
 }
 

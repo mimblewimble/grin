@@ -80,7 +80,6 @@ where
 				entry.src.debug_name = "deagg".to_string();
 			}
 		}
-
 		self.txpool.add_to_pool(entry.clone(), vec![])?;
 
 		// We now need to reconcile the stempool based on the new state of the txpool.
@@ -102,7 +101,7 @@ where
 		self.is_acceptable(&tx)?;
 
 		// Make sure the transaction is valid before anything else.
-		tx.validate().map_err(|e| PoolError::TransactionError(e))?;
+		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
 		// TODO - Check tx maturity here (tx maturity, not just coinbase output
 		// maturity)?

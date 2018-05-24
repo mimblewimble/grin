@@ -196,7 +196,7 @@ where
 		// Check each transaction in the pool
 		for entry in &self.entries {
 			let entry_kernel_set = entry.tx.kernels.iter().cloned().collect::<HashSet<_>>();
-			if kernel_set.is_subset(&entry_kernel_set) {
+			if entry_kernel_set.is_subset(&kernel_set) {
 				found_txs.push(entry.tx.clone());
 			}
 		}

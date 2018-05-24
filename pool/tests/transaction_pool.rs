@@ -38,6 +38,7 @@ use core::core::Proof;
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
+use core::core::transaction;
 use core::global;
 use core::global::ChainTypes;
 use pool::*;
@@ -54,7 +55,6 @@ use pool::types::*;
 #[derive(Clone)]
 struct ChainAdapter {
 	pub txhashset: Arc<RwLock<TxHashSet>>,
-	// pub store: Arc<ChainStore>,
 }
 
 impl ChainAdapter {
@@ -68,7 +68,6 @@ impl ChainAdapter {
 
 		Ok(ChainAdapter {
 			txhashset: Arc::new(RwLock::new(txhashset)),
-			// store: store.clone(),
 		})
 	}
 }
@@ -203,12 +202,11 @@ fn clean_output_dir(db_root: String) {
 
 /// Test we can add some txs to the pool (both stempool and txpool).
 #[test]
-fn test_basic_pool_add() {
+fn test_the_transaction_pool() {
 	let keychain = Keychain::from_random_seed().unwrap();
 
 	let db_root = ".grin_basic_pool_add".to_string();
 	clean_output_dir(db_root.clone());
-
 	let chain = ChainAdapter::init(db_root.clone()).unwrap();
 
 	// Initialize the chain/txhashset with a few blocks,
@@ -232,7 +230,12 @@ fn test_basic_pool_add() {
 	// with.
 	let initial_tx = {
 		let mut txhashset = chain.txhashset.write().unwrap();
-		test_transaction_spending_coinbase(&keychain, &header, vec![5, 6, 7, 8], &mut txhashset)
+		test_transaction_spending_coinbase(
+			&keychain,
+			&header,
+			vec![500, 600, 700, 800, 900, 1000, 1100, 1200],
+			&mut txhashset,
+		)
 	};
 
 	// Add this tx to the pool (stem=false, direct to txpool).
@@ -244,28 +247,68 @@ fn test_basic_pool_add() {
 		assert_eq!(write_pool.total_size(), 1);
 	}
 
-	let parent_transaction = test_transaction(&keychain, vec![5, 6], vec![9]);
+	// tx1 spends some outputs from the initial test tx.
+	let tx1 = test_transaction(&keychain, vec![500, 600], vec![499, 599]);
+	// tx2 spends some outputs from both tx1 and the initial test tx.
+	let tx2 = test_transaction(&keychain, vec![499, 700], vec![498]);
 
-	// Prepare a second transaction, connected to both previous txs.
-	let child_transaction = test_transaction(&keychain, vec![7, 8, 9], vec![12]);
-
-	// Take a write lock and add a couple of entries to the pool.
+	// Take a write lock and add a couple of tx entries to the pool.
 	{
 		let mut write_pool = pool.write().unwrap();
 
 		// Check we have a single initial tx in the pool.
 		assert_eq!(write_pool.total_size(), 1);
 
-		// First, add the transaction spending outputs from the initial tx.
+		// First, add a simple tx to the pool in "stem" mode.
 		write_pool
-			.add_to_pool(test_source(), parent_transaction, true)
+			.add_to_pool(test_source(), tx1.clone(), true)
 			.unwrap();
 		assert_eq!(write_pool.total_size(), 2);
 
-		// Now, add another tx spending outputs from the previous tx.
+		// Add another tx spending outputs from the previous tx.
 		write_pool
-			.add_to_pool(test_source(), child_transaction, true)
+			.add_to_pool(test_source(), tx2.clone(), true)
 			.unwrap();
 		assert_eq!(write_pool.total_size(), 3);
+	}
+
+	// Confirm the tx pool correctly identifies an invalid tx (already spent).
+	{
+		let mut write_pool = pool.write().unwrap();
+		let tx3 = test_transaction(&keychain, vec![500], vec![497]);
+		assert!(write_pool.add_to_pool(test_source(), tx3, true).is_err());
+		assert_eq!(write_pool.total_size(), 3);
+	}
+
+	// Check we can take some entries from the stempool and "fluff" them into the
+	// txpool. This also exercises multi-kernel txs.
+	{
+		let mut write_pool = pool.write().unwrap();
+		let agg_tx = write_pool.stempool.aggregate_transaction().unwrap();
+		assert_eq!(agg_tx.kernels.len(), 2);
+		write_pool
+			.add_to_pool(test_source(), agg_tx, false)
+			.unwrap();
+		assert_eq!(write_pool.total_size(), 2);
+	}
+
+	// Now check we can correctly deaggregate a multi-kernel tx based on current
+	// contents of the txpool.
+	// We will do this be adding a new tx to the pool
+	// that is a superset of a tx already in the pool.
+	{
+		let mut write_pool = pool.write().unwrap();
+
+		let tx4 = test_transaction(&keychain, vec![800], vec![799]);
+		// tx1 and tx2 are already in the txpool (in aggregated form)
+		// tx4 is the "new" part of this aggregated tx that we care about
+		let agg_tx = transaction::aggregate(vec![tx1.clone(), tx2.clone(), tx4]).unwrap();
+		write_pool
+			.add_to_pool(test_source(), agg_tx, false)
+			.unwrap();
+		assert_eq!(write_pool.total_size(), 3);
+		let entry = write_pool.txpool.entries.last().unwrap();
+		assert_eq!(entry.tx.kernels.len(), 1);
+		assert_eq!(entry.src.debug_name, "deagg");
 	}
 }
