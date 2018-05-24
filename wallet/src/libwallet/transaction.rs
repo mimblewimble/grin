@@ -237,11 +237,9 @@ impl Slate {
 		// the aggsig context with the "split" key
 		self.tx.offset =
 			BlindingFactor::from_secret_key(SecretKey::new(&keychain.secp(), &mut thread_rng()));
-		let blind_offset = keychain
-			.blind_sum(&BlindSum::new()
-				.add_blinding_factor(BlindingFactor::from_secret_key(sec_key.clone()))
-				.sub_blinding_factor(self.tx.offset))
-			.unwrap();
+		let blind_offset = keychain.blind_sum(&BlindSum::new()
+			.add_blinding_factor(BlindingFactor::from_secret_key(sec_key.clone()))
+			.sub_blinding_factor(self.tx.offset))?;
 		*sec_key = blind_offset.secret_key(&keychain.secp())?;
 		Ok(())
 	}
@@ -360,8 +358,7 @@ impl Slate {
 			// subtract the kernel_excess (built from kernel_offset)
 			let offset_excess = keychain
 				.secp()
-				.commit(0, kernel_offset.secret_key(&keychain.secp()).unwrap())
-				.unwrap();
+				.commit(0, kernel_offset.secret_key(&keychain.secp())?)?;
 			keychain
 				.secp()
 				.commit_sum(vec![tx_excess], vec![offset_excess])?
