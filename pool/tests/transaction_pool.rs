@@ -23,31 +23,22 @@ extern crate grin_wallet as wallet;
 extern crate rand;
 extern crate time;
 
-use std::collections::HashMap;
 use std::fs;
 use std::sync::{Arc, RwLock};
 
-use core::core::{Block, BlockHeader, Output, OutputFeatures, OutputIdentifier,
-                 ProofMessageElements, Transaction};
+use core::core::{Block, BlockHeader, Transaction};
 
-use chain::ChainStore;
 use chain::store::ChainKVStore;
 use chain::txhashset;
 use chain::txhashset::TxHashSet;
-use core::core::Proof;
-use core::core::hash::{Hash, Hashed};
+use core::core::hash::Hashed;
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
 use core::core::transaction;
-use core::global;
-use core::global::ChainTypes;
 use pool::*;
-use types::PoolError::InvalidTx;
 
-use keychain::{BlindingFactor, Keychain};
-use util::secp::pedersen::Commitment;
+use keychain::Keychain;
 use wallet::libwallet;
-use wallet::libwallet::{build, proof, reward};
 
 use pool::TransactionPool;
 use pool::types::*;
@@ -83,7 +74,7 @@ impl BlockChain for ChainAdapter {
 		let res = txhashset::extending_readonly(&mut txhashset, |extension| {
 			let valid_txs = extension.validate_raw_txs(txs, pre_tx, height)?;
 			Ok(valid_txs)
-		}).map_err(|e| PoolError::Other(format!("Error: {:?}", e)))?;
+		}).map_err(|e| PoolError::Other(format!("Error: test chain adapter: {:?}", e)))?;
 
 		Ok(res)
 	}
@@ -108,31 +99,10 @@ fn test_setup(chain: &Arc<ChainAdapter>) -> TransactionPool<ChainAdapter> {
 	)
 }
 
-/// Deterministically generate an output defined by our test scheme
-fn test_output(keychain: &Keychain, value: u64) -> Output {
-	let key_id = keychain.derive_key_id(value as u32).unwrap();
-	let msg = ProofMessageElements::new(value, &key_id);
-	let commit = keychain.commit(value, &key_id).unwrap();
-	let proof = proof::create(
-		&keychain,
-		value,
-		&key_id,
-		commit,
-		None,
-		msg.to_proof_message(),
-	).unwrap();
-	Output {
-		features: OutputFeatures::DEFAULT_OUTPUT,
-		commit: commit,
-		proof: proof,
-	}
-}
-
 fn test_transaction_spending_coinbase(
 	keychain: &Keychain,
 	header: &BlockHeader,
 	output_values: Vec<u64>,
-	txhashset: &mut TxHashSet,
 ) -> Transaction {
 	let output_sum = output_values.iter().sum::<u64>() as i64;
 
@@ -144,7 +114,7 @@ fn test_transaction_spending_coinbase(
 	// single input spending a single coinbase (deterministic key_id aka height)
 	{
 		let key_id = keychain.derive_key_id(header.height as u32).unwrap();
-		tx_elements.push(build::coinbase_input(
+		tx_elements.push(libwallet::build::coinbase_input(
 			60_000_000_000,
 			header.hash(),
 			MerkleProof::default(),
@@ -154,12 +124,12 @@ fn test_transaction_spending_coinbase(
 
 	for output_value in output_values {
 		let key_id = keychain.derive_key_id(output_value as u32).unwrap();
-		tx_elements.push(build::output(output_value, key_id));
+		tx_elements.push(libwallet::build::output(output_value, key_id));
 	}
 
-	tx_elements.push(build::with_fee(fees as u64));
+	tx_elements.push(libwallet::build::with_fee(fees as u64));
 
-	build::transaction(tx_elements, &keychain).unwrap()
+	libwallet::build::transaction(tx_elements, &keychain).unwrap()
 }
 
 fn test_transaction(
@@ -177,16 +147,16 @@ fn test_transaction(
 
 	for input_value in input_values {
 		let key_id = keychain.derive_key_id(input_value as u32).unwrap();
-		tx_elements.push(build::input(input_value, key_id));
+		tx_elements.push(libwallet::build::input(input_value, key_id));
 	}
 
 	for output_value in output_values {
 		let key_id = keychain.derive_key_id(output_value as u32).unwrap();
-		tx_elements.push(build::output(output_value, key_id));
+		tx_elements.push(libwallet::build::output(output_value, key_id));
 	}
-	tx_elements.push(build::with_fee(fees as u64));
+	tx_elements.push(libwallet::build::with_fee(fees as u64));
 
-	build::transaction(tx_elements, &keychain).unwrap()
+	libwallet::build::transaction(tx_elements, &keychain).unwrap()
 }
 
 fn test_source() -> TxSource {
@@ -229,12 +199,10 @@ fn test_the_transaction_pool() {
 	// Now create tx to spend a coinbase, giving us some useful outputs for testing
 	// with.
 	let initial_tx = {
-		let mut txhashset = chain.txhashset.write().unwrap();
 		test_transaction_spending_coinbase(
 			&keychain,
 			&header,
-			vec![500, 600, 700, 800, 900, 1000, 1100, 1200],
-			&mut txhashset,
+			vec![500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1400],
 		)
 	};
 
@@ -263,13 +231,52 @@ fn test_the_transaction_pool() {
 		write_pool
 			.add_to_pool(test_source(), tx1.clone(), true)
 			.unwrap();
-		assert_eq!(write_pool.total_size(), 2);
+		assert_eq!(write_pool.total_size(), 1);
+		assert_eq!(write_pool.stempool.size(), 1);
 
 		// Add another tx spending outputs from the previous tx.
 		write_pool
 			.add_to_pool(test_source(), tx2.clone(), true)
 			.unwrap();
-		assert_eq!(write_pool.total_size(), 3);
+		assert_eq!(write_pool.total_size(), 1);
+		assert_eq!(write_pool.stempool.size(), 2);
+	}
+
+	// Test adding the exact same tx multiple times (same kernel signature).
+	// This will fail during tx aggregation due to duplicate outputs and duplicate
+	// kernels.
+	{
+		let mut write_pool = pool.write().unwrap();
+		assert!(
+			write_pool
+				.add_to_pool(test_source(), tx1.clone(), true)
+				.is_err()
+		);
+	}
+
+	// Test adding a duplicate tx with the same input and outputs (not the *same*
+	// tx).
+	{
+		let tx1a = test_transaction(&keychain, vec![500, 600], vec![499, 599]);
+		let mut write_pool = pool.write().unwrap();
+		assert!(write_pool.add_to_pool(test_source(), tx1a, true).is_err());
+	}
+
+	// Test adding a tx attempting to spend a non-existent output.
+	{
+		let bad_tx = test_transaction(&keychain, vec![10_001], vec![10_000]);
+		let mut write_pool = pool.write().unwrap();
+		assert!(write_pool.add_to_pool(test_source(), bad_tx, true).is_err());
+	}
+
+	// Test adding a tx that would result in a duplicate output (conflicts with
+	// output from tx2). For reasons of security all outputs in the UTXO set must
+	// be unique. Otherwise spending one will almost certainly cause the other
+	// to be immediately stolen via a "replay" tx.
+	{
+		let tx = test_transaction(&keychain, vec![900], vec![498]);
+		let mut write_pool = pool.write().unwrap();
+		assert!(write_pool.add_to_pool(test_source(), tx, true).is_err());
 	}
 
 	// Confirm the tx pool correctly identifies an invalid tx (already spent).
@@ -277,7 +284,8 @@ fn test_the_transaction_pool() {
 		let mut write_pool = pool.write().unwrap();
 		let tx3 = test_transaction(&keychain, vec![500], vec![497]);
 		assert!(write_pool.add_to_pool(test_source(), tx3, true).is_err());
-		assert_eq!(write_pool.total_size(), 3);
+		assert_eq!(write_pool.total_size(), 1);
+		assert_eq!(write_pool.stempool.size(), 2);
 	}
 
 	// Check we can take some entries from the stempool and "fluff" them into the
@@ -310,5 +318,28 @@ fn test_the_transaction_pool() {
 		let entry = write_pool.txpool.entries.last().unwrap();
 		assert_eq!(entry.tx.kernels.len(), 1);
 		assert_eq!(entry.src.debug_name, "deagg");
+	}
+
+	// Check we cannot "double spend" an output spent in a previous block.
+	// We use the initial coinbase output here for convenience.
+	{
+		let mut write_pool = pool.write().unwrap();
+
+		let double_spend_tx =
+			{ test_transaction_spending_coinbase(&keychain, &header, vec![1000]) };
+
+		// check we cannot add a double spend to the stempool
+		assert!(
+			write_pool
+				.add_to_pool(test_source(), double_spend_tx.clone(), true)
+				.is_err()
+		);
+
+		// check we cannot add a double spend to the txpool
+		assert!(
+			write_pool
+				.add_to_pool(test_source(), double_spend_tx.clone(), false)
+				.is_err()
+		);
 	}
 }

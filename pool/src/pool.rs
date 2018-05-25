@@ -14,18 +14,15 @@
 
 //! A minimal (EXPERIMENTAL) transaction pool implementation
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 
-use core::core::hash::{Hash, Hashed};
+use core::core::hash::Hashed;
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
-use core::core::{Block, Committed, CompactBlock, Transaction, TxKernel};
-use keychain::BlindingFactor;
+use core::core::{Block, CompactBlock, Transaction, TxKernel};
 use types::*;
 use util::LOGGER;
-use util::secp::pedersen::Commitment;
-use util::{secp_static, static_secp_instance};
 
 pub struct Pool<T> {
 	/// Entries in the pool (tx + info + timer) in simple insertion order.
@@ -203,6 +200,8 @@ where
 		found_txs
 	}
 
+	/// Quick reconciliation step - we can evict any txs in the pool where
+	/// inputs or kernels intersect with the block.
 	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
 		let candidate_txs = self.remaining_transactions(block);
 		self.entries.retain(|x| candidate_txs.contains(&x.tx));

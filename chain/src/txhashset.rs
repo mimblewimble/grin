@@ -587,10 +587,9 @@ impl<'a> Extension<'a> {
 			// note that this doesn't show the commitment *never* existed, just
 			// that this is not an existing unspent commitment right now
 			if let Some(hash) = self.output_pmmr.get_hash(pos) {
-				// processing a new fork so we may get a position on the old
-				// fork that exists but matches a different node
-				// filtering that case out
-				if hash == OutputIdentifier::from_output(out).hash() {
+				// Note: check the hash here, possible we are on a fork and
+				// the pos no longer corresponds to the same output.
+				if hash == OutputIdentifier::from_output(out).hash_with_index(pos - 1) {
 					return Err(Error::DuplicateCommitment(commit));
 				}
 			}

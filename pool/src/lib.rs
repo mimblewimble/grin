@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The transaction pool, keeping a view of currently-valid transactions that
+//! The transaction pool, keeping a view of currently valid transactions that
 //! may be confirmed soon.
 
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
 #![deny(non_snake_case)]
 #![deny(unused_mut)]
-#![warn(missing_docs)]
 
 extern crate blake2_rfc as blake2;
 extern crate grin_core as core;

@@ -14,20 +14,13 @@
 
 //! A minimal (EXPERIMENTAL) transaction pool implementation
 
-use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use time;
 
-use core::core::hash::{Hash, Hashed};
-use core::core::id::ShortIdentifiable;
 use core::core::transaction;
-use core::core::{Block, Committed, CompactBlock, Transaction};
-use keychain::BlindingFactor;
+use core::core::{Block, CompactBlock, Transaction};
 use pool::Pool;
 use types::*;
-use util::LOGGER;
-use util::secp::pedersen::Commitment;
-use util::{secp_static, static_secp_instance};
 
 /// A minimal (EXPERIMENTAL) transaction pool implementation
 pub struct TransactionPool<T> {
@@ -91,6 +84,8 @@ where
 		Ok(())
 	}
 
+	/// Add the given tx to the pool, directing it to either the stempool or
+	/// txpool based on stem flag provided.
 	pub fn add_to_pool(
 		&mut self,
 		src: TxSource,
@@ -124,6 +119,8 @@ where
 		Ok(())
 	}
 
+	/// Reconcile the transaction pool (both txpool and stempool) against the
+	/// provided block.
 	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
 		// First reconcile the txpool.
 		self.txpool.reconcile_block(block)?;
@@ -137,6 +134,9 @@ where
 		Ok(())
 	}
 
+	/// Retrieve all transactions matching the provided "compact block"
+	/// based on the kernel set.
+	/// Note: we only look in the txpool for this (stempool is under embargo).
 	pub fn retrieve_transactions(&self, cb: &CompactBlock) -> Vec<Transaction> {
 		self.txpool.retrieve_transactions(cb)
 	}
@@ -161,12 +161,14 @@ where
 		Ok(())
 	}
 
-	/// TODO - do we actually want to expose this? Not sure we do...
-	/// Get the total size of the pool (regular pool + stem pool).
+	/// Get the total size of the pool.
+	/// Note: we only consider the txpool here as stempool is under embargo.
 	pub fn total_size(&self) -> usize {
-		self.txpool.size() + self.stempool.size()
+		self.txpool.size()
 	}
 
+	/// Returns a vector of transactions from the txpool so we can build a
+	/// block from them.
 	pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<Transaction> {
 		self.txpool.prepare_mineable_transactions(num_to_fetch)
 	}

@@ -15,18 +15,12 @@
 //! The primary module containing the implementations of the transaction pool
 //! and its top-level members.
 
-use std::collections::{HashMap, HashSet};
-use std::iter::Iterator;
-use std::vec::Vec;
 use std::{error, fmt};
-use time;
 use time::Timespec;
 
-use util::secp::pedersen::Commitment;
-
 use core::consensus;
-use core::core::transaction::{Input, OutputIdentifier, Transaction};
-use core::core::{block, hash, transaction};
+use core::core::transaction;
+use core::core::transaction::Transaction;
 
 /// Transaction pool configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -74,20 +68,32 @@ fn default_dandelion_embargo() -> i64 {
 	30
 }
 
+/// Represents a single entry in the pool.
+/// A single (possibly aggregated) transaction.
 #[derive(Clone, Debug)]
 pub struct PoolEntry {
+	/// The state of the pool entry.
 	pub state: PoolEntryState,
+	/// Info on where this tx originated from.
 	pub src: TxSource,
+	/// Timestamp of when this tx was originally added to the pool.
 	pub tx_at: Timespec,
+	/// The transaction itself.
 	pub tx: Transaction,
 }
 
+/// The possible states a pool entry can be in.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PoolEntryState {
+	/// A new entry, not yet processed.
 	Fresh,
+	/// Tx to be included in the next "stem" run.
 	ToStem,
+	/// Tx previously "stemmed" and propagated.
 	Stemmed,
+	/// Tx to be included in the next "fluff" run.
 	ToFluff,
+	/// Tx previously "fluffed" and broadcast.
 	Fluffed,
 }
 
@@ -107,56 +113,23 @@ pub struct TxSource {
 	pub identifier: String,
 }
 
-// TODO document this enum more accurately
-/// Enum of errors
+/// Possible errors when interacting with the transaction pool.
 #[derive(Debug)]
 pub enum PoolError {
 	/// An invalid pool entry caused by underlying tx validation error
 	InvalidTx(transaction::Error),
-	/// An entry already in the pool
-	AlreadyInPool,
-	/// An entry already in the stempool
-	AlreadyInStempool,
-	/// A duplicate output
-	DuplicateOutput {
-		/// The other transaction
-		other_tx: Option<hash::Hash>,
-		/// Is in chain?
-		in_chain: bool,
-		/// The output
-		output: Commitment,
-	},
-	/// A double spend
-	DoubleSpend {
-		/// The other transaction
-		other_tx: hash::Hash,
-		/// The spent output
-		spent_output: Commitment,
-	},
-	/// A failed deaggregation error
-	FailedDeaggregation,
 	/// Attempt to add a transaction to the pool with lock_height
 	/// greater than height of current block
-	ImmatureTransaction {
-		/// The lock height of the invalid transaction
-		lock_height: u64,
-	},
+	ImmatureTransaction,
+	/// Attempt to spend a coinbase output before it has sufficiently matured.
 	ImmatureCoinbase,
-	/// An orphan successfully added to the orphans set
-	OrphanTransaction,
 	/// Problem propagating a stem tx to the next Dandelion relay node.
 	DandelionError,
-	/// TODO - wip, just getting imports working, remove this and use more
-	/// specific errors
-	GenericPoolError,
-	/// TODO - is this the right level of abstraction for pool errors?
-	OutputNotFound,
-	/// TODO - is this the right level of abstraction for pool errors?
-	OutputSpent,
 	/// Transaction pool is over capacity, can't accept more transactions
 	OverCapacity,
 	/// Transaction fee is too low given its weight
 	LowFeeTransaction(u64),
+	/// Other kinds of error (not yet pulled out into meaningful errors).
 	Other(String),
 }
 
@@ -192,6 +165,8 @@ pub trait BlockChain {
 		pre_tx: Option<&transaction::Transaction>,
 	) -> Result<Vec<transaction::Transaction>, PoolError>;
 
+	/// Verify any and all coinbase outputs being spent have matured
+	/// sufficiently.
 	fn verify_coinbase_maturity(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
 }
 
