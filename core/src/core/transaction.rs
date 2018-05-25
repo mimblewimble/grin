@@ -789,6 +789,10 @@ impl Input {
 
 			// Is the root the correct root for the given block header?
 			if merkle_proof.root != header.output_root {
+				println!(
+					"***** {:?}, {:?}, {}",
+					merkle_proof.root, header.output_root, header.height
+				);
 				return Err(Error::MerkleProof);
 			}
 
@@ -799,6 +803,7 @@ impl Input {
 
 			// Finally has the output matured sufficiently now we know the block?
 			let lock_height = header.height + global::coinbase_maturity();
+			println!("*** {}, {}", lock_height, height);
 			if lock_height > height {
 				return Err(Error::ImmatureCoinbase);
 			}

@@ -23,159 +23,29 @@ extern crate grin_wallet as wallet;
 extern crate rand;
 extern crate time;
 
-use std::fs;
+pub mod common;
+
 use std::sync::{Arc, RwLock};
 
-use core::core::{Block, BlockHeader, Transaction};
+use core::core::{Block, BlockHeader};
 
-use chain::store::ChainKVStore;
+use chain::ChainStore;
 use chain::txhashset;
-use chain::txhashset::TxHashSet;
-use core::core::hash::Hashed;
-use core::core::pmmr::MerkleProof;
+use chain::types::Tip;
 use core::core::target::Difficulty;
 use core::core::transaction;
-use pool::*;
 
 use keychain::Keychain;
 use wallet::libwallet;
 
-use pool::TransactionPool;
-use pool::types::*;
-
-#[derive(Clone)]
-struct ChainAdapter {
-	pub txhashset: Arc<RwLock<TxHashSet>>,
-}
-
-impl ChainAdapter {
-	fn init(db_root: String) -> Result<ChainAdapter, String> {
-		let target_dir = format!("target/{}", db_root);
-		let chain_store = ChainKVStore::new(target_dir.clone())
-			.map_err(|e| format!("failed to init chain_store, {}", e))?;
-		let store = Arc::new(chain_store);
-		let txhashset = TxHashSet::open(target_dir.clone(), store.clone())
-			.map_err(|e| format!("failed to init txhashset, {}", e))?;
-
-		Ok(ChainAdapter {
-			txhashset: Arc::new(RwLock::new(txhashset)),
-		})
-	}
-}
-
-impl BlockChain for ChainAdapter {
-	fn validate_raw_txs(
-		&self,
-		txs: Vec<Transaction>,
-		pre_tx: Option<&Transaction>,
-	) -> Result<Vec<Transaction>, PoolError> {
-		let height = 1;
-		let mut txhashset = self.txhashset.write().unwrap();
-		let res = txhashset::extending_readonly(&mut txhashset, |extension| {
-			let valid_txs = extension.validate_raw_txs(txs, pre_tx, height)?;
-			Ok(valid_txs)
-		}).map_err(|e| PoolError::Other(format!("Error: test chain adapter: {:?}", e)))?;
-
-		Ok(res)
-	}
-
-	// For these tests we just assume coinbase spends have matured sufficiently.
-	// We will test the Merkle proof verification logic elsewhere.
-	fn verify_coinbase_maturity(&self, _tx: &Transaction) -> Result<(), PoolError> {
-		Ok(())
-	}
-}
-
-fn test_setup(chain: &Arc<ChainAdapter>) -> TransactionPool<ChainAdapter> {
-	TransactionPool::new(
-		PoolConfig {
-			accept_fee_base: 0,
-			max_pool_size: 50,
-			dandelion_probability: 90,
-			dandelion_embargo: 30,
-		},
-		chain.clone(),
-		Arc::new(NoopAdapter {}),
-	)
-}
-
-fn test_transaction_spending_coinbase(
-	keychain: &Keychain,
-	header: &BlockHeader,
-	output_values: Vec<u64>,
-) -> Transaction {
-	let output_sum = output_values.iter().sum::<u64>() as i64;
-
-	let fees: i64 = 60_000_000_000 - output_sum;
-	assert!(fees >= 0);
-
-	let mut tx_elements = Vec::new();
-
-	// single input spending a single coinbase (deterministic key_id aka height)
-	{
-		let key_id = keychain.derive_key_id(header.height as u32).unwrap();
-		tx_elements.push(libwallet::build::coinbase_input(
-			60_000_000_000,
-			header.hash(),
-			MerkleProof::default(),
-			key_id,
-		));
-	}
-
-	for output_value in output_values {
-		let key_id = keychain.derive_key_id(output_value as u32).unwrap();
-		tx_elements.push(libwallet::build::output(output_value, key_id));
-	}
-
-	tx_elements.push(libwallet::build::with_fee(fees as u64));
-
-	libwallet::build::transaction(tx_elements, &keychain).unwrap()
-}
-
-fn test_transaction(
-	keychain: &Keychain,
-	input_values: Vec<u64>,
-	output_values: Vec<u64>,
-) -> Transaction {
-	let input_sum = input_values.iter().sum::<u64>() as i64;
-	let output_sum = output_values.iter().sum::<u64>() as i64;
-
-	let fees: i64 = input_sum - output_sum;
-	assert!(fees >= 0);
-
-	let mut tx_elements = Vec::new();
-
-	for input_value in input_values {
-		let key_id = keychain.derive_key_id(input_value as u32).unwrap();
-		tx_elements.push(libwallet::build::input(input_value, key_id));
-	}
-
-	for output_value in output_values {
-		let key_id = keychain.derive_key_id(output_value as u32).unwrap();
-		tx_elements.push(libwallet::build::output(output_value, key_id));
-	}
-	tx_elements.push(libwallet::build::with_fee(fees as u64));
-
-	libwallet::build::transaction(tx_elements, &keychain).unwrap()
-}
-
-fn test_source() -> TxSource {
-	TxSource {
-		debug_name: format!("test"),
-		identifier: format!("127.0.0.1"),
-	}
-}
-
-fn clean_output_dir(db_root: String) {
-	let _ = fs::remove_dir_all(format!("target/{}", db_root));
-}
+use common::*;
 
 /// Test we can add some txs to the pool (both stempool and txpool).
 #[test]
 fn test_the_transaction_pool() {
 	let keychain = Keychain::from_random_seed().unwrap();
 
-	let db_root = ".grin_basic_pool_add".to_string();
+	let db_root = ".grin_transaction_pool".to_string();
 	clean_output_dir(db_root.clone());
 	let chain = ChainAdapter::init(db_root.clone()).unwrap();
 
@@ -189,6 +59,10 @@ fn test_the_transaction_pool() {
 
 		let mut txhashset = chain.txhashset.write().unwrap();
 		txhashset::extending(&mut txhashset, |extension| extension.apply_block(&block)).unwrap();
+
+		let tip = Tip::from_block(&block.header);
+		chain.store.save_block_header(&block.header).unwrap();
+		chain.store.save_head(&tip).unwrap();
 
 		block.header
 	};

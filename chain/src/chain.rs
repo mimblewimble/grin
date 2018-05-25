@@ -517,6 +517,11 @@ impl Chain {
 			if is_fork {
 				pipe::rewind_and_apply_fork(b, store, extension)?;
 			}
+
+			// First check we are not attempting to spend any coinbase outputs
+			// before they have matured sufficiently.
+			extension.verify_coinbase_maturity(&b.inputs, b.header.height)?;
+
 			extension.apply_block(b)?;
 			Ok(extension.roots())
 		})?;

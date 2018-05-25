@@ -20,13 +20,13 @@ use time;
 
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
-use core::core::{Block, BlockHeader};
 use core::core::target::Difficulty;
+use core::core::{Block, BlockHeader};
+use core::global;
 use grin_store;
-use types::*;
 use store;
 use txhashset;
-use core::global;
+use types::*;
 use util::LOGGER;
 
 /// Contextual information required to process a new block and either reject or
@@ -143,8 +143,9 @@ pub fn sync_block_header(
 }
 
 /// Process block header as part of "header first" block propagation.
-/// We validate the header but we do not store it or update header head based on this.
-/// We will update these once we get the block back after requesting it.
+/// We validate the header but we do not store it or update header head based
+/// on this. We will update these once we get the block back after requesting
+/// it.
 pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<(), Error> {
 	debug!(
 		LOGGER,
@@ -331,6 +332,10 @@ fn validate_block_via_txhashset(
 	ctx: &mut BlockContext,
 	ext: &mut txhashset::Extension,
 ) -> Result<(), Error> {
+	// First check we are not attempting to spend any coinbase outputs
+	// before they have matured sufficiently.
+	ext.verify_coinbase_maturity(&b.inputs, b.header.height)?;
+
 	if b.header.previous != ctx.head.last_block_h {
 		rewind_and_apply_fork(b, ctx.store.clone(), ext)?;
 	}
