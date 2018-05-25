@@ -111,11 +111,11 @@ where
 		if res.is_err() {
 			debug!(
 				LOGGER,
-				"dand_mon: Unable to propagate stem tx. No relay? Fluffing instead."
+				"dand_mon: Unable to propagate stem tx. No relay, fluffing instead."
 			);
 
 			let src = TxSource {
-				debug_name: "fluff".to_string(),
+				debug_name: "no_relay".to_string(),
 				identifier: "?.?.?.?".to_string(),
 			};
 
@@ -233,8 +233,15 @@ where
 		{
 			let mut tx_pool = tx_pool.write().unwrap();
 			for entry in expired_entries {
-				match tx_pool.add_to_pool(entry.src, entry.tx, false) {
-					Ok(_) => debug!(LOGGER, "dand_mon: Fluffed expired tx successfully."),
+				let src = TxSource {
+					debug_name: "embargo_expired".to_string(),
+					identifier: "?.?.?.?".to_string(),
+				};
+				match tx_pool.add_to_pool(src, entry.tx, false) {
+					Ok(_) => debug!(
+						LOGGER,
+						"dand_mon: embargo expired, fluffed tx successfully."
+					),
 					Err(e) => debug!(LOGGER, "dand_mon: Failed to fluff expired tx - {:?}", e),
 				};
 			}

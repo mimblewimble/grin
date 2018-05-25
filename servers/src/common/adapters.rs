@@ -690,9 +690,9 @@ impl pool::BlockChain for PoolToChainAdapter {
 		txs: Vec<Transaction>,
 		pre_tx: Option<&Transaction>,
 	) -> Result<(Vec<Transaction>), pool::PoolError> {
-		wo(&self.chain)
-			.validate_raw_txs(txs, pre_tx)
-			.map_err(|_| pool::PoolError::GenericPoolError)
+		wo(&self.chain).validate_raw_txs(txs, pre_tx).map_err(|_| {
+			pool::PoolError::Other("Chain adapter failed to validate_raw_txs.".to_string())
+		})
 	}
 
 	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
