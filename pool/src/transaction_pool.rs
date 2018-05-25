@@ -98,8 +98,8 @@ where
 		// Make sure the transaction is valid before anything else.
 		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
-		// TODO - Check tx maturity here (tx maturity, not just coinbase output
-		// maturity)?
+		// Check the tx lock_time is valid based on current chain state.
+		self.blockchain.verify_tx_lock_height(&tx)?;
 
 		// Check coinbase maturity before we go any further.
 		self.blockchain.verify_coinbase_maturity(&tx)?;

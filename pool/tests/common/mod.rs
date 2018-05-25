@@ -82,9 +82,14 @@ impl BlockChain for ChainAdapter {
 		Ok(res)
 	}
 
-	// For these tests we just assume coinbase spends have matured sufficiently.
+	// Mocking this check out for these tests.
 	// We will test the Merkle proof verification logic elsewhere.
 	fn verify_coinbase_maturity(&self, _tx: &Transaction) -> Result<(), PoolError> {
+		Ok(())
+	}
+
+	// Mocking this out for these tests.
+	fn verify_tx_lock_height(&self, _tx: &Transaction) -> Result<(), PoolError> {
 		Ok(())
 	}
 }

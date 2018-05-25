@@ -17,8 +17,8 @@
 use std::{error, fmt, io};
 
 use util::secp;
-use util::secp_static;
 use util::secp::pedersen::Commitment;
+use util::secp_static;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
@@ -101,6 +101,8 @@ pub enum Error {
 	SerErr(ser::Error),
 	/// Error with the txhashset
 	TxHashSetErr(String),
+	/// Tx not valid based on lock_height.
+	TxLockHeight,
 	/// No chain exists and genesis block is required
 	GenesisBlockRequired,
 	/// Error from underlying tx handling

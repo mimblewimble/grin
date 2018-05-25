@@ -700,4 +700,10 @@ impl pool::BlockChain for PoolToChainAdapter {
 			.verify_coinbase_maturity(tx)
 			.map_err(|_| pool::PoolError::ImmatureCoinbase)
 	}
+
+	fn verify_tx_lock_height(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
+		wo(&self.chain)
+			.verify_tx_lock_height(tx)
+			.map_err(|_| pool::PoolError::ImmatureTransaction)
+	}
 }

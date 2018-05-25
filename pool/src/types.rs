@@ -165,9 +165,13 @@ pub trait BlockChain {
 		pre_tx: Option<&transaction::Transaction>,
 	) -> Result<Vec<transaction::Transaction>, PoolError>;
 
-	/// Verify any and all coinbase outputs being spent have matured
-	/// sufficiently.
+	/// Verify any coinbase outputs being spent
+	/// have matured sufficiently.
 	fn verify_coinbase_maturity(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
+
+	/// Verify any coinbase outputs being spent
+	/// have matured sufficiently.
+	fn verify_tx_lock_height(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
 }
 
 /// Bridge between the transaction pool and the rest of the system. Handles

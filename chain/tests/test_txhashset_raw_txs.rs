@@ -28,7 +28,7 @@ use chain::types::Tip;
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
-use keychain::{Identifier, Keychain};
+use keychain::Keychain;
 use wallet::libwallet::{build, reward};
 
 fn clean_output_dir(dir_name: &str) {

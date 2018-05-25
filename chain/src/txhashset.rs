@@ -417,13 +417,10 @@ impl<'a> Extension<'a> {
 		let output_pos = self.output_pmmr.unpruned_size();
 		let kernel_pos = self.kernel_pmmr.unpruned_size();
 
-		// TODO - need to have checked coinbase maturity before this (height is
-		// synthetic so we cannot use this...)
-
-		// TODO - We are doing outputs here first so pruning works as expected.
 		// When applying blocks we can apply the coinbase output first
-		// but we cannot do this here, so doing all outputs first.
-		// TODO - Is this a bad idea? What if tx spends its own outputs?
+		// but we cannot do this here, so we need to apply outputs first.
+		// TODO - Is this a bad idea? What if tx spends its own outputs (is this even
+		// possible)?
 		for ref output in &tx.outputs {
 			if let Err(e) = self.apply_output(output) {
 				self.rewind_to_pos(output_pos, kernel_pos, height)?;
@@ -469,6 +466,8 @@ impl<'a> Extension<'a> {
 		Ok(valid_txs)
 	}
 
+	/// Verify we are not attempting to spend any coinbase outputs
+	/// that have not sufficiently matured.
 	pub fn verify_coinbase_maturity(
 		&mut self,
 		inputs: &Vec<Input>,

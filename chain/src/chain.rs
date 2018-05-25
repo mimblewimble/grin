@@ -23,8 +23,7 @@ use std::time::{Duration, Instant};
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
-use core::core::{Block, BlockHeader, Output, OutputFeatures, OutputIdentifier, Transaction,
-                 TxKernel};
+use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;
 use pipe;
@@ -461,6 +460,7 @@ impl Chain {
 		txhashset.is_unspent(output_ref)
 	}
 
+	/// Validate a vector of "raw" transactions against the current chain state.
 	pub fn validate_raw_txs(
 		&self,
 		txs: Vec<Transaction>,
@@ -482,6 +482,16 @@ impl Chain {
 			extension.verify_coinbase_maturity(&tx.inputs, height)?;
 			Ok(())
 		})
+	}
+
+	pub fn verify_tx_lock_height(&self, tx: &Transaction) -> Result<(), Error> {
+		let bh = self.head_header()?;
+		let height = bh.height + 1;
+		if tx.lock_height() <= height {
+			Ok(())
+		} else {
+			Err(Error::TxLockHeight)
+		}
 	}
 
 	/// Validate the current chain state.
