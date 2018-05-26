@@ -100,7 +100,14 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 	// start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
 	let result = txhashset::extending(&mut txhashset, |mut extension| {
-		validate_block_via_txhashset(b, &mut ctx, &mut extension)?;
+		// First we rewind the txhashset extension if necessary
+		// to put it into a consistent state for validating the block.
+		// We can skip this step if the previous header is the latest header we saw.
+		if b.header.previous != ctx.head.last_block_h {
+			rewind_and_apply_fork(b, ctx.store.clone(), extension)?;
+		}
+		validate_block_via_txhashset(b, &mut extension)?;
+
 		trace!(
 			LOGGER,
 			"pipe: process_block: {} at {} is valid, save and append.",
@@ -327,18 +334,10 @@ fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 /// and checking the roots.
 /// Rewind and reapply forked blocks if necessary to put the txhashset extension
 /// in the correct state to accept the block.
-fn validate_block_via_txhashset(
-	b: &Block,
-	ctx: &mut BlockContext,
-	ext: &mut txhashset::Extension,
-) -> Result<(), Error> {
+fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
 	// First check we are not attempting to spend any coinbase outputs
 	// before they have matured sufficiently.
 	ext.verify_coinbase_maturity(&b.inputs, b.header.height)?;
-
-	if b.header.previous != ctx.head.last_block_h {
-		rewind_and_apply_fork(b, ctx.store.clone(), ext)?;
-	}
 
 	// apply the new block to the MMR trees and check the new root hashes
 	ext.apply_block(&b)?;
@@ -520,7 +519,7 @@ pub fn rewind_and_apply_fork(
 
 	let forked_block = store.get_block_header(&current)?;
 
-	debug!(
+	trace!(
 		LOGGER,
 		"rewind_and_apply_fork @ {} [{}], was @ {} [{}]",
 		forked_block.height,
@@ -532,9 +531,10 @@ pub fn rewind_and_apply_fork(
 	// rewind the sum trees up to the forking block
 	ext.rewind(&forked_block)?;
 
-	debug!(
+	trace!(
 		LOGGER,
-		"rewind_and_apply_fork: blocks on fork: {:?}", hashes
+		"rewind_and_apply_fork: blocks on fork: {:?}",
+		hashes,
 	);
 
 	// apply all forked blocks, including this new one

@@ -445,6 +445,7 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	/// Validate a vector of "raw" transactions against the current chain state.
 	pub fn validate_raw_txs(
 		&mut self,
 		txs: Vec<Transaction>,
@@ -477,7 +478,7 @@ impl<'a> Extension<'a> {
 			if x.features.contains(OutputFeatures::COINBASE_OUTPUT) {
 				let header = self.commit_index.get_block_header(&x.block_hash())?;
 				let pos = self.get_output_pos(&x.commitment())?;
-				let out_hash = self.output_pmmr.get_hash(pos).unwrap_or(Hash::default());
+				let out_hash = self.output_pmmr.get_hash(pos).ok_or(Error::OutputNotFound)?;
 				x.verify_maturity(out_hash, &header, height)?;
 			}
 		}
@@ -645,12 +646,13 @@ impl<'a> Extension<'a> {
 	pub fn rewind(&mut self, block_header: &BlockHeader) -> Result<(), Error> {
 		let hash = block_header.hash();
 		let height = block_header.height;
-		debug!(LOGGER, "Rewind to header {} @ {}", height, hash);
+		trace!(LOGGER, "Rewind to header {} @ {}", height, hash);
 
 		// rewind our MMRs to the appropriate pos
 		// based on block height and block marker
 		let marker = self.commit_index.get_block_marker(&hash)?;
 		self.rewind_to_pos(marker.output_pos, marker.kernel_pos, height)?;
+
 		Ok(())
 	}
 

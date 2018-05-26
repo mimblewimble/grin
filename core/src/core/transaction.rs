@@ -22,7 +22,7 @@ use std::{error, fmt};
 
 use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use util::secp::{self, Message, Signature};
-use util::{kernel_sig_msg, secp_static, static_secp_instance};
+use util::{kernel_sig_msg, static_secp_instance};
 
 use consensus;
 use consensus::VerifySortOrder;
@@ -36,7 +36,6 @@ use keychain::BlindingFactor;
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};
 use util;
-use util::LOGGER;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -789,10 +788,6 @@ impl Input {
 
 			// Is the root the correct root for the given block header?
 			if merkle_proof.root != header.output_root {
-				println!(
-					"***** {:?}, {:?}, {}",
-					merkle_proof.root, header.output_root, header.height
-				);
 				return Err(Error::MerkleProof);
 			}
 
@@ -803,7 +798,6 @@ impl Input {
 
 			// Finally has the output matured sufficiently now we know the block?
 			let lock_height = header.height + global::coinbase_maturity();
-			println!("*** {}, {}", lock_height, height);
 			if lock_height > height {
 				return Err(Error::ImmatureCoinbase);
 			}
@@ -1153,11 +1147,9 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let commit = keychain.commit(1003, &key_id).unwrap();
-		println!("commit: {:?}", commit);
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let commit_2 = keychain.commit(1003, &key_id).unwrap();
-		println!("commit2 : {:?}", commit_2);
 
 		assert!(commit == commit_2);
 	}

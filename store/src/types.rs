@@ -253,7 +253,7 @@ pub struct RemoveLog {
 	/// Ordered vector of MMR positions that should get eventually removed.
 	pub removed: Vec<(u64, u32)>,
 	// Holds positions temporarily until flush is called.
-	pub removed_tmp: Vec<(u64, u32)>,
+	removed_tmp: Vec<(u64, u32)>,
 	// Holds truncated removed temporarily until discarded or committed
 	removed_bak: Vec<(u64, u32)>,
 }

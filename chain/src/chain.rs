@@ -474,6 +474,8 @@ impl Chain {
 		})
 	}
 
+	/// Verify we are not attempting to spend a coinbase output
+	/// that has not yet sufficiently matured.
 	pub fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), Error> {
 		let bh = self.head_header()?;
 		let height = bh.height + 1;
@@ -484,6 +486,8 @@ impl Chain {
 		})
 	}
 
+	/// Verify that the tx has a lock_height that is less than or equal to
+	/// the height of the next block.
 	pub fn verify_tx_lock_height(&self, tx: &Transaction) -> Result<(), Error> {
 		let bh = self.head_header()?;
 		let height = bh.height + 1;
@@ -523,15 +527,9 @@ impl Chain {
 		let store = self.store.clone();
 
 		let roots = txhashset::extending_readonly(&mut txhashset, |extension| {
-			// apply the block on the txhashset and check the resulting root
 			if is_fork {
 				pipe::rewind_and_apply_fork(b, store, extension)?;
 			}
-
-			// First check we are not attempting to spend any coinbase outputs
-			// before they have matured sufficiently.
-			extension.verify_coinbase_maturity(&b.inputs, b.header.height)?;
-
 			extension.apply_block(b)?;
 			Ok(extension.roots())
 		})?;

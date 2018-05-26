@@ -31,7 +31,7 @@ use keychain;
 use keychain::BlindingFactor;
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util::LOGGER;
-use util::{secp, secp_static, static_secp_instance};
+use util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
