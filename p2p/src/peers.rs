@@ -382,15 +382,9 @@ impl Peers {
 			debug!(LOGGER, "No dandelion relay, updating.");
 			self.update_dandelion_relay();
 		}
-		// If still empty broadcast then broadcast transaction normally
+		// If still return an error, let the caller handle this as they see fit.
+		// The caller will "fluff" at this point as the stem phase is finished.
 		if dandelion_relay.is_empty() {
-			// TODO - what should we do in this case?
-			// We have the embargo timer, so just wait for this for now.
-			// Local testing is *really* hard as we hit a peer
-			// with no dandelion relay every time...
-			// Also - we would want to add the tx to our local txpool here
-			// and not just broadcast it.
-
 			return Err(Error::NoDandelionRelay);
 		}
 		for relay in dandelion_relay.values() {
