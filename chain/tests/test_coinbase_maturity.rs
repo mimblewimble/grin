@@ -116,7 +116,7 @@ fn test_coinbase_maturity() {
 		&keychain,
 	).unwrap();
 
-	let txs = vec![coinbase_txn];
+	let txs = vec![coinbase_txn.clone()];
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward = libwallet::reward::output(&keychain, &key_id3, fees, prev.height).unwrap();
 	let mut block = core::core::Block::new(&prev, txs, Difficulty::one(), reward).unwrap();
@@ -124,9 +124,13 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
-	match chain.set_txhashset_roots(&mut block, false) {
-		Err(Error::Transaction(transaction::Error::ImmatureCoinbase)) => (),
-		_ => panic!("expected ImmatureCoinbase error here"),
+	chain.set_txhashset_roots(&mut block, false).unwrap();
+
+	// Confirm the tx attempting to spend the coinbase output
+	// is not valid at the current block height given the current chain state.
+	match chain.verify_coinbase_maturity(&coinbase_txn) {
+		Err(Error::Transaction(transaction::Error::ImmatureCoinbase)) => {}
+		_ => panic!("Expected transaction error with immature coinbase."),
 	}
 
 	pow::pow_size(
@@ -164,14 +168,9 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-	let coinbase_txn = build::transaction(
-		vec![
-			build::coinbase_input(amount, block_hash, merkle_proof.clone(), key_id1.clone()),
-			build::output(amount - 2, key_id2.clone()),
-			build::with_fee(2),
-		],
-		&keychain,
-	).unwrap();
+	// Confirm the tx spending the coinbase output is now valid.
+	// The coinbase output has matured sufficiently based on current chain state.
+	chain.verify_coinbase_maturity(&coinbase_txn).unwrap();
 
 	let txs = vec![coinbase_txn];
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
