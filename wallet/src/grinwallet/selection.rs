@@ -15,9 +15,9 @@
 //! Selection of inputs for building transactions
 
 use failure::ResultExt;
-use grinwallet::keys;
+use grinwallet::{keys, sigcontext};
 use keychain::{Identifier, Keychain};
-use libwallet::{aggsig, build, transaction};
+use libwallet::{build, transaction};
 use types::*;
 
 /// Initialise a transaction on the sender side, returns a corresponding
@@ -28,7 +28,6 @@ use types::*;
 pub fn build_send_tx_slate(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	context_manager: &mut aggsig::ContextManager,
 	num_participants: usize,
 	amount: u64,
 	current_height: u64,
@@ -36,7 +35,14 @@ pub fn build_send_tx_slate(
 	lock_height: u64,
 	max_outputs: usize,
 	selection_strategy_is_use_all: bool,
-) -> Result<(transaction::Slate, impl FnOnce() -> Result<(), Error>), Error> {
+) -> Result<
+	(
+		transaction::Slate,
+		sigcontext::Context,
+		impl FnOnce() -> Result<(), Error>,
+	),
+	Error,
+> {
 	let (elems, inputs, change_id, amount, fee) = select_send_tx(
 		config,
 		keychain,
@@ -55,11 +61,12 @@ pub fn build_send_tx_slate(
 	slate.lock_height = lock_height;
 	slate.fee = fee;
 
-	let blinding = slate.add_transaction_elements(keychain, elems)?;
+	let blinding = slate
+		.add_transaction_elements(keychain, elems)
+		.context(ErrorKind::LibWalletError)?;
 	// Create our own private context
-	let mut context = context_manager.create_context(
+	let mut context = sigcontext::Context::new(
 		keychain.secp(),
-		&slate.id,
 		blinding.secret_key(keychain.secp()).unwrap(),
 	);
 
@@ -93,9 +100,7 @@ pub fn build_send_tx_slate(
 			}*/		})
 	};
 
-	context_manager.save_context(context);
-
-	Ok((slate, update_sender_wallet_fn))
+	Ok((slate, context, update_sender_wallet_fn))
 }
 
 /// Creates a new output in the wallet for the recipient,
@@ -105,9 +110,15 @@ pub fn build_send_tx_slate(
 pub fn build_recipient_output_with_slate(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	context_manager: &mut aggsig::ContextManager,
 	slate: &mut transaction::Slate,
-) -> Result<(Identifier, impl FnOnce() -> Result<(), Error>), Error> {
+) -> Result<
+	(
+		Identifier,
+		sigcontext::Context,
+		impl FnOnce() -> Result<(), Error>,
+	),
+	Error,
+> {
 	// Create a potential output for this transaction
 	let (key_id, derivation) = keys::new_output_key(config, keychain)?;
 
@@ -115,14 +126,15 @@ pub fn build_recipient_output_with_slate(
 	let root_key_id = keychain.root_key_id();
 	let key_id_inner = key_id.clone();
 	let amount = slate.amount;
+	let height = slate.height;
 
-	let blinding =
-		slate.add_transaction_elements(keychain, vec![build::output(amount, key_id.clone())])?;
+	let blinding = slate
+		.add_transaction_elements(keychain, vec![build::output(amount, key_id.clone())])
+		.context(ErrorKind::LibWalletError)?;
 
 	// Add blinding sum to our context
-	let mut context = context_manager.create_context(
+	let mut context = sigcontext::Context::new(
 		keychain.secp(),
-		&slate.id,
 		blinding.secret_key(keychain.secp()).unwrap(),
 	);
 
@@ -138,7 +150,7 @@ pub fn build_recipient_output_with_slate(
 				n_child: derivation,
 				value: amount,
 				status: OutputStatus::Unconfirmed,
-				height: 0,
+				height: height,
 				lock_height: 0,
 				is_coinbase: false,
 				block: None,
@@ -146,8 +158,7 @@ pub fn build_recipient_output_with_slate(
 			});
 		})
 	};
-	context_manager.save_context(context);
-	Ok((key_id, wallet_add_fn))
+	Ok((key_id, context, wallet_add_fn))
 }
 
 /// Builds a transaction to send to someone from the HD seed associated with the
@@ -203,7 +214,7 @@ pub fn select_send_tx(
 	// sender
 	let mut fee;
 	// First attempt to spend without change
-	fee = tx_fee(coins.len(), 1, coins_proof_count(&coins), None);
+	fee = transaction::tx_fee(coins.len(), 1, coins_proof_count(&coins), None);
 	let mut total: u64 = coins.iter().map(|c| c.value).sum();
 	let mut amount_with_fee = amount + fee;
 
@@ -213,7 +224,7 @@ pub fn select_send_tx(
 
 	// Check if we need to use a change address
 	if total > amount_with_fee {
-		fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
+		fee = transaction::tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
 		amount_with_fee = amount + fee;
 
 		// Here check if we have enough outputs for the amount including fee otherwise
@@ -235,14 +246,15 @@ pub fn select_send_tx(
 					selection_strategy_is_use_all,
 				))
 			})?;
-			fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
+			fee = transaction::tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
 			total = coins.iter().map(|c| c.value).sum();
 			amount_with_fee = amount + fee;
 		}
 	}
 
 	// build transaction skeleton with inputs and change
-	let (mut parts, change_key) = inputs_and_change(&coins, config, keychain, amount, fee)?;
+	let (mut parts, change_key) =
+		inputs_and_change(&coins, config, keychain, current_height, amount, fee)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
@@ -261,6 +273,7 @@ pub fn inputs_and_change(
 	coins: &Vec<OutputData>,
 	config: &WalletConfig,
 	keychain: &Keychain,
+	height: u64,
 	amount: u64,
 	fee: u64,
 ) -> Result<(Vec<Box<build::Append>>, Option<Identifier>), Error> {
@@ -310,7 +323,7 @@ pub fn inputs_and_change(
 				n_child: change_derivation,
 				value: change as u64,
 				status: OutputStatus::Unconfirmed,
-				height: 0,
+				height: height,
 				lock_height: 0,
 				is_coinbase: false,
 				block: None,

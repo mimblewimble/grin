@@ -13,12 +13,12 @@
 // limitations under the License.
 
 use checker;
-use keychain::Keychain;
 use core::core;
-use types::{OutputStatus, WalletConfig, WalletData};
+use keychain::Keychain;
 use prettytable;
-use term;
 use std::io::prelude::*;
+use term;
+use types::{OutputStatus, WalletConfig, WalletData};
 
 pub fn show_outputs(config: &WalletConfig, keychain: &Keychain, show_spent: bool) {
 	let root_key_id = keychain.root_key_id();

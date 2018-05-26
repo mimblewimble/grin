@@ -14,16 +14,34 @@
 
 //! Wallet lib errors
 
-use util::secp;
+use core::core::transaction;
 use keychain::{self, extkey};
+use util::secp;
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(Fail, PartialEq, Clone, Debug)]
+/// Libwallet error types
 pub enum Error {
+	/// SECP error
+	#[fail(display = "Secp Error")]
 	Secp(secp::Error),
+	/// Keychain error
+	#[fail(display = "Keychain Error")]
 	Keychain(keychain::Error),
+	/// Extended key error
+	#[fail(display = "Extended Key Error")]
 	ExtendedKey(extkey::Error),
-	Transaction(String),
+	/// Transaction error
+	#[fail(display = "Transaction Error")]
+	Transaction(transaction::Error),
+	/// Signature error
+	#[fail(display = "Signature Error")]
+	Signature(String),
+	/// Rangeproof error
+	#[fail(display = "Rangeproof Error")]
 	RangeProof(String),
+	/// Fee error
+	#[fail(display = "Fee Error")]
+	Fee(String),
 }
 
 impl From<secp::Error> for Error {
@@ -43,18 +61,9 @@ impl From<keychain::Error> for Error {
 		Error::Keychain(e)
 	}
 }
-/*impl error::Error for Error {
-	fn description(&self) -> &str {
-		match *self {
-			_ => "some kind of wallet lib error",
-		}
+
+impl From<transaction::Error> for Error {
+	fn from(e: transaction::Error) -> Error {
+		Error::Transaction(e)
 	}
 }
-
-impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match *self {
-			_ => write!(f, "some kind of wallet lib error"),
-		}
-	}
-}*/

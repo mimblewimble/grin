@@ -27,12 +27,12 @@
 
 use util::{kernel_sig_msg, secp};
 
-use core::core::{Input, Output, OutputFeatures, ProofMessageElements, Transaction, TxKernel};
 use core::core::hash::Hash;
 use core::core::pmmr::MerkleProof;
-use libwallet::{aggsig, proof};
+use core::core::{Input, Output, OutputFeatures, ProofMessageElements, Transaction, TxKernel};
 use keychain;
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
+use libwallet::{aggsig, proof};
 use util::LOGGER;
 
 /// Context information available to transaction combinators.
@@ -167,7 +167,8 @@ pub fn with_offset(offset: BlindingFactor) -> Box<Append> {
 }
 
 /// Sets an initial transaction to add to when building a new transaction.
-/// We currently only support building a tx with a single kernel with build::transaction()
+/// We currently only support building a tx with a single kernel with
+/// build::transaction()
 pub fn initial_tx(mut tx: Transaction) -> Box<Append> {
 	assert_eq!(tx.kernels.len(), 1);
 	let kern = tx.kernels.remove(0);

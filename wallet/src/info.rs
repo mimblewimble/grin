@@ -13,10 +13,10 @@
 // limitations under the License.
 
 use checker;
-use keychain::Keychain;
 use core::core::amount_to_hr_string;
-use types::{OutputStatus, WalletConfig, WalletData, WalletInfo};
+use keychain::Keychain;
 use prettytable;
+use types::{OutputStatus, WalletConfig, WalletData, WalletInfo};
 
 pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	let wallet_info = retrieve_info(config, keychain);

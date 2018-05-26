@@ -25,5 +25,6 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-pub mod selection;
 pub mod keys;
+pub mod selection;
+pub mod sigcontext;

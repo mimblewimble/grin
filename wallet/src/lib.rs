@@ -41,31 +41,28 @@ extern crate router;
 extern crate tokio_core;
 extern crate tokio_retry;
 
-#[macro_use]
-extern crate lazy_static;
-
 extern crate grin_api as api;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 
 pub mod checker;
-mod handlers;
-mod outputs;
-mod info;
-pub mod receiver;
-mod sender;
-pub mod types;
-mod restore;
 pub mod client;
-pub mod server;
-pub mod libwallet;
 pub mod grinwallet;
+mod handlers;
+mod info;
+pub mod libwallet;
+mod outputs;
+pub mod receiver;
+mod restore;
+mod sender;
+pub mod server;
+pub mod types;
 
-pub use outputs::show_outputs;
 pub use info::{retrieve_info, show_info};
+pub use outputs::show_outputs;
 pub use receiver::WalletReceiver;
+pub use restore::restore;
 pub use sender::{issue_burn_tx, issue_send_tx};
 pub use types::{BlockFees, CbData, Error, ErrorKind, WalletConfig, WalletInfo,
                 WalletReceiveRequest, WalletSeed};
-pub use restore::restore;
