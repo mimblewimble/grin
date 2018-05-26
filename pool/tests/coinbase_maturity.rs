@@ -63,7 +63,7 @@ impl BlockChain for CoinbaseMaturityErrorChainAdapter {
 	fn validate_raw_txs(
 		&self,
 		_txs: Vec<Transaction>,
-		_pre_tx: Option<&Transaction>,
+		_pre_tx: Option<Transaction>,
 	) -> Result<Vec<Transaction>, PoolError> {
 		Err(PoolError::Other(
 			"not implemented, not a real chain adapter...".to_string(),

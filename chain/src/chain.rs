@@ -464,7 +464,7 @@ impl Chain {
 	pub fn validate_raw_txs(
 		&self,
 		txs: Vec<Transaction>,
-		pre_tx: Option<&Transaction>,
+		pre_tx: Option<Transaction>,
 	) -> Result<Vec<Transaction>, Error> {
 		let bh = self.head_header()?;
 		let mut txhashset = self.txhashset.write().unwrap();

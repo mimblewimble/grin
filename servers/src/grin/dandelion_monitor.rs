@@ -95,7 +95,7 @@ where
 	let stem_txs = tx_pool.stempool.select_valid_transactions(
 		PoolEntryState::ToStem,
 		PoolEntryState::Stemmed,
-		Some(&txpool_tx),
+		txpool_tx,
 	)?;
 
 	if stem_txs.len() > 0 {
@@ -135,7 +135,7 @@ where
 	let stem_txs = tx_pool.stempool.select_valid_transactions(
 		PoolEntryState::ToFluff,
 		PoolEntryState::Fluffed,
-		Some(&txpool_tx),
+		txpool_tx,
 	)?;
 
 	if stem_txs.len() > 0 {

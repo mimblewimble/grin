@@ -70,7 +70,7 @@ impl BlockChain for ChainAdapter {
 	fn validate_raw_txs(
 		&self,
 		txs: Vec<Transaction>,
-		pre_tx: Option<&Transaction>,
+		pre_tx: Option<Transaction>,
 	) -> Result<Vec<Transaction>, PoolError> {
 		let header = self.store.head_header().unwrap();
 		let mut txhashset = self.txhashset.write().unwrap();

@@ -166,7 +166,11 @@ fn test_the_transaction_pool() {
 	// txpool. This also exercises multi-kernel txs.
 	{
 		let mut write_pool = pool.write().unwrap();
-		let agg_tx = write_pool.stempool.aggregate_transaction().unwrap();
+		let agg_tx = write_pool
+			.stempool
+			.aggregate_transaction()
+			.unwrap()
+			.unwrap();
 		assert_eq!(agg_tx.kernels.len(), 2);
 		write_pool
 			.add_to_pool(test_source(), agg_tx, false)

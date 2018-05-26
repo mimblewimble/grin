@@ -78,7 +78,7 @@ where
 		// We now need to reconcile the stempool based on the new state of the txpool.
 		// Some stempool txs may no longer be valid and we need to evict them.
 		let txpool_tx = self.txpool.aggregate_transaction()?;
-		self.stempool.reconcile(Some(&txpool_tx))?;
+		self.stempool.reconcile(txpool_tx)?;
 
 		self.adapter.tx_accepted(&entry.tx);
 		Ok(())
@@ -129,7 +129,7 @@ where
 		// Then reconcile the stempool, accounting for the txpool txs.
 		let txpool_tx = self.txpool.aggregate_transaction()?;
 		self.stempool.reconcile_block(block)?;
-		self.stempool.reconcile(Some(&txpool_tx))?;
+		self.stempool.reconcile(txpool_tx)?;
 
 		Ok(())
 	}

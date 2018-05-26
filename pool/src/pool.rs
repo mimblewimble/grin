@@ -80,17 +80,21 @@ where
 		self.entries.iter().map(|x| x.tx.clone()).collect()
 	}
 
-	pub fn aggregate_transaction(&self) -> Result<Transaction, PoolError> {
+	pub fn aggregate_transaction(&self) -> Result<Option<Transaction>, PoolError> {
 		let txs = self.all_transactions();
+		if txs.is_empty() {
+			return Ok(None);
+		}
+
 		let tx = transaction::aggregate(txs)?;
-		Ok(tx)
+		Ok(Some(tx))
 	}
 
 	pub fn select_valid_transactions(
 		&mut self,
 		from_state: PoolEntryState,
 		to_state: PoolEntryState,
-		extra_tx: Option<&Transaction>,
+		extra_tx: Option<Transaction>,
 	) -> Result<Vec<Transaction>, PoolError> {
 		let entries = &mut self.entries
 			.iter_mut()
@@ -137,7 +141,7 @@ where
 		let agg_tx = transaction::aggregate(txs)?;
 
 		// Validate aggregated tx against the chain txhashset extension.
-		self.blockchain.validate_raw_txs(vec![], Some(&agg_tx))?;
+		self.blockchain.validate_raw_txs(vec![], Some(agg_tx))?;
 
 		// If we get here successfully then we can safely add the entry to the pool.
 		self.entries.push(entry);
@@ -145,7 +149,7 @@ where
 		Ok(())
 	}
 
-	pub fn reconcile(&mut self, extra_tx: Option<&Transaction>) -> Result<(), PoolError> {
+	pub fn reconcile(&mut self, extra_tx: Option<Transaction>) -> Result<(), PoolError> {
 		let candidate_txs = self.all_transactions();
 		let existing_len = candidate_txs.len();
 

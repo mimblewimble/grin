@@ -688,7 +688,7 @@ impl pool::BlockChain for PoolToChainAdapter {
 	fn validate_raw_txs(
 		&self,
 		txs: Vec<Transaction>,
-		pre_tx: Option<&Transaction>,
+		pre_tx: Option<Transaction>,
 	) -> Result<(Vec<Transaction>), pool::PoolError> {
 		wo(&self.chain).validate_raw_txs(txs, pre_tx).map_err(|_| {
 			pool::PoolError::Other("Chain adapter failed to validate_raw_txs.".to_string())

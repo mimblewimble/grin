@@ -162,7 +162,7 @@ pub trait BlockChain {
 	fn validate_raw_txs(
 		&self,
 		txs: Vec<transaction::Transaction>,
-		pre_tx: Option<&transaction::Transaction>,
+		pre_tx: Option<transaction::Transaction>,
 	) -> Result<Vec<transaction::Transaction>, PoolError>;
 
 	/// Verify any coinbase outputs being spent

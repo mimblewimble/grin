@@ -449,14 +449,14 @@ impl<'a> Extension<'a> {
 	pub fn validate_raw_txs(
 		&mut self,
 		txs: Vec<Transaction>,
-		pre_tx: Option<&Transaction>,
+		pre_tx: Option<Transaction>,
 		height: u64,
 	) -> Result<Vec<Transaction>, Error> {
 		let mut height = height;
 		let mut valid_txs = vec![];
 		if let Some(tx) = pre_tx {
 			height += 1;
-			self.apply_raw_tx(tx, height)?;
+			self.apply_raw_tx(&tx, height)?;
 		}
 		for tx in txs {
 			height += 1;
