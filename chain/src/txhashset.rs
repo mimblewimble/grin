@@ -24,17 +24,17 @@ use std::time::Instant;
 use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::consensus::REWARD;
+use core::core::hash::{Hash, Hashed};
+use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::core::{Block, BlockHeader, Committed, Input, Output, OutputFeatures, OutputIdentifier,
                  TxKernel};
-use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::global;
-use core::core::hash::{Hash, Hashed};
 use core::ser::{PMMRIndexHashable, PMMRable};
 
 use grin_store;
 use grin_store::pmmr::PMMRBackend;
 use grin_store::types::prune_noop;
-use store::{ChainStore, Batch};
+use store::{Batch, ChainStore};
 use types::{BlockMarker, BlockSums, Error, TxHashSetRoots};
 use util::{secp_static, zip, LOGGER};
 
@@ -138,7 +138,8 @@ impl TxHashSet {
 
 	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
 	/// nodes at level 0
-	/// TODO: These need to return the actual data from the flat-files instead of hashes now
+	/// TODO: These need to return the actual data from the flat-files instead
+	/// of hashes now
 	pub fn last_n_output(&mut self, distance: u64) -> Vec<(Hash, OutputIdentifier)> {
 		let output_pmmr: PMMR<OutputIdentifier, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
@@ -159,8 +160,8 @@ impl TxHashSet {
 		kernel_pmmr.get_last_n_insertions(distance)
 	}
 
-	/// returns outputs from the given insertion (leaf) index up to the specified
-	/// limit. Also returns the last index actually populated
+	/// returns outputs from the given insertion (leaf) index up to the
+	/// specified limit. Also returns the last index actually populated
 	pub fn outputs_by_insertion_index(
 		&mut self,
 		start_index: u64,
@@ -221,27 +222,28 @@ impl TxHashSet {
 		let horizon = (current_height as u32).saturating_sub(global::cut_through_horizon());
 
 		let batch = self.commit_index.batch()?;
-		let clean_output_index = |commit: &[u8]| {
-			// failures just mean little less space gain
-			let _ = batch.delete_output_pos(commit);
-		};
+		{
+			let clean_output_index = |commit: &[u8]| {
+				// failures just mean little less space gain
+				let _ = batch.delete_output_pos(commit);
+			};
+			let min_rm = (horizon / 10) as usize;
+
+			self.output_pmmr_h
+				.backend
+				.check_compact(min_rm, horizon, clean_output_index)?;
+			self.rproof_pmmr_h
+				.backend
+				.check_compact(min_rm, horizon, &prune_noop)?;
+		}
 		batch.commit()?;
 
-		let min_rm = (horizon / 10) as usize;
-
-		self.output_pmmr_h
-			.backend
-			.check_compact(min_rm, horizon, clean_output_index)?;
-
-		self.rproof_pmmr_h
-			.backend
-			.check_compact(min_rm, horizon, &prune_noop)?;
 		Ok(())
 	}
 }
 
-/// Starts a new unit of work to extend (or rewind) the chain with additional blocks.
-/// Accepts a closure that will operate within that unit of work.
+/// Starts a new unit of work to extend (or rewind) the chain with additional
+/// blocks. Accepts a closure that will operate within that unit of work.
 /// The closure has access to an Extension object that allows the addition
 /// of blocks to the txhashset and the checking of the current tree roots.
 ///
@@ -253,12 +255,12 @@ where
 	let res: Result<T, Error>;
 	{
 		let commit_index = trees.commit_index.clone();
+		let commit_index2 = trees.commit_index.clone();
 		let batch = commit_index.batch()?;
 
 		trace!(LOGGER, "Starting new txhashset (readonly) extension.");
-		let mut extension = Extension::new(trees, &batch, commit_index);
+		let mut extension = Extension::new(trees, &batch, commit_index2);
 		res = inner(&mut extension);
-
 	}
 
 	trees.output_pmmr_h.backend.discard();
@@ -277,7 +279,7 @@ where
 ///
 /// If the closure returns an error, modifications are canceled and the unit
 /// of work is abandoned. Otherwise, the unit of work is permanently applied.
-pub fn extending<'a, F, T>(trees: &'a mut TxHashSet, batch: &'a Batch, inner: F) -> Result<T, Error>
+pub fn extending<'a, F, T>(trees: &'a mut TxHashSet, batch: &'a mut Batch, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&mut Extension) -> Result<T, Error>,
 {
@@ -324,7 +326,6 @@ where
 				trees.kernel_pmmr_h.last_pos = sizes.2;
 			}
 
-
 			trace!(LOGGER, "TxHashSet extension done.");
 			Ok(r)
 		}
@@ -341,7 +342,10 @@ pub struct Extension<'a> {
 
 	commit_index: Arc<ChainStore>,
 	rollback: bool,
-	batch: &'a Batch<'a>,
+
+	/// Batch in which the extension occurs, public so it can be used within
+	/// and `extending` closure.
+	pub batch: &'a Batch<'a>,
 }
 
 impl<'a> Committed for Extension<'a> {
@@ -376,7 +380,11 @@ impl<'a> Committed for Extension<'a> {
 
 impl<'a> Extension<'a> {
 	// constructor
-	fn new(trees: &'a mut TxHashSet, batch: &'a Batch, commit_index: Arc<ChainStore>) -> Extension<'a> {
+	fn new(
+		trees: &'a mut TxHashSet,
+		batch: &'a Batch,
+		commit_index: Arc<ChainStore>,
+	) -> Extension<'a> {
 		Extension {
 			output_pmmr: PMMR::at(
 				&mut trees.output_pmmr_h.backend,
@@ -711,8 +719,8 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	/// Rebuild the index of MMR positions to the corresponding Output and kernel
-	/// by iterating over the whole MMR data. This is a costly operation
+	/// Rebuild the index of MMR positions to the corresponding Output and
+	/// kernel by iterating over the whole MMR data. This is a costly operation
 	/// performed only when we receive a full new chain state.
 	pub fn rebuild_index(&self) -> Result<(), Error> {
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {

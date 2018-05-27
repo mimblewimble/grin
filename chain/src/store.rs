@@ -17,16 +17,17 @@
 use std::sync::{Arc, RwLock};
 
 use lru_cache::LruCache;
+use lmdb;
 
 use util::secp::pedersen::Commitment;
 
-use types::*;
-use core::core::hash::{Hash, Hashed};
-use core::core::{Block, BlockHeader};
 use core::consensus::TargetError;
+use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
+use core::core::{Block, BlockHeader};
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, Error, u64_to_key};
+use types::*;
 
 const STORE_SUBPATH: &'static str = "chain";
 
@@ -48,9 +49,8 @@ pub struct ChainStore {
 
 impl ChainStore {
 	/// Create new chain store
-	pub fn new(root_path: String) -> Result<ChainStore, Error> {
-		let env = store::new_env(root_path);
-		let db = store::Store::open(Arc::new(env), STORE_SUBPATH);
+	pub fn new(db_env: Arc<lmdb::Environment>) -> Result<ChainStore, Error> {
+		let db = store::Store::open(db_env, STORE_SUBPATH);
 		Ok(ChainStore {
 			db,
 			header_cache: Arc::new(RwLock::new(LruCache::new(100))),
@@ -58,6 +58,7 @@ impl ChainStore {
 	}
 }
 
+#[allow(missing_docs)]
 impl ChainStore {
 	pub fn head(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]))
@@ -157,15 +158,21 @@ impl ChainStore {
 
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch, Error> {
-		Ok(Batch { store: self, db: self.db.batch()? })
+		Ok(Batch {
+			store: self,
+			db: self.db.batch()?,
+		})
 	}
 }
 
+/// An atomic batch in which all changes can be committed all at once or
+/// discarded on error.
 pub struct Batch<'a> {
 	store: &'a ChainStore,
 	db: store::Batch<'a>,
 }
 
+#[allow(missing_docs)]
 impl<'a> Batch<'a> {
 	pub fn save_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&vec![HEAD_PREFIX], t)?;
@@ -202,11 +209,12 @@ impl<'a> Batch<'a> {
 
 	/// Save the block and its header
 	pub fn save_block(&self, b: &Block) -> Result<(), Error> {
-		self.db.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?;
+		self.db
+			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?;
 		self.db.put_ser(
-				&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
-				&b.header,
-			)
+			&to_key(BLOCK_HEADER_PREFIX, &mut b.hash().to_vec())[..],
+			&b.header,
+		)
 	}
 
 	/// Delete a full block. Does not delete any record associated with a block
@@ -326,10 +334,12 @@ impl<'a> Batch<'a> {
 	/// Creates a child of this batch. It will be merged with its parent on
 	/// commit, abandoned otherwise.
 	pub fn child(&mut self) -> Result<Batch, Error> {
-		Ok(Batch { store: self.store, db: self.db.child()? })
+		Ok(Batch {
+			store: self.store,
+			db: self.db.child()?,
+		})
 	}
 }
-
 
 /// An iterator on blocks, from latest to earliest, specialized to return
 /// information pertaining to block difficulty calculation (timestamp and

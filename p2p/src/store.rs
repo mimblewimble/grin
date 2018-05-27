@@ -14,9 +14,12 @@
 
 //! Storage implementation for peer data.
 
+use std::sync::Arc;
 use std::net::SocketAddr;
 use num::FromPrimitive;
 use rand::{thread_rng, Rng};
+
+use lmdb;
 
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store::{self, option_to_not_found, to_key, Error};
@@ -95,15 +98,17 @@ pub struct PeerStore {
 
 impl PeerStore {
 	/// Instantiates a new peer store under the provided root path.
-	pub fn new(root_path: String) -> Result<PeerStore, Error> {
-		let db = grin_store::Store::open(format!("{}/{}", root_path, STORE_SUBPATH).as_str())?;
+	pub fn new(db_env: Arc<lmdb::Environment>) -> Result<PeerStore, Error> {
+		let db = grin_store::Store::open(db_env, STORE_SUBPATH);
 		Ok(PeerStore { db: db })
 	}
 
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
 		debug!(LOGGER, "save_peer: {:?} marked {:?}", p.addr, p.flags);
 
-		self.db.put_ser(&peer_key(p.addr)[..], p)
+		let batch = self.db.batch()?;
+		batch.put_ser(&peer_key(p.addr)[..], p)?;
+		batch.commit()
 	}
 
 	pub fn get_peer(&self, peer_addr: SocketAddr) -> Result<PeerData, Error> {
@@ -117,12 +122,14 @@ impl PeerStore {
 	/// TODO - allow below added to avoid github issue reports
 	#[allow(dead_code)]
 	pub fn delete_peer(&self, peer_addr: SocketAddr) -> Result<(), Error> {
-		self.db.delete(&peer_key(peer_addr)[..])
+		let batch = self.db.batch()?;
+		batch.delete(&peer_key(peer_addr)[..])?;
+		batch.commit()
 	}
 
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
 		let mut peers = self.db
-			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))
+			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes())).unwrap()
 			.filter(|p| p.flags == state && p.capabilities.contains(cap))
 			.collect::<Vec<_>>();
 		thread_rng().shuffle(&mut peers[..]);
@@ -132,9 +139,8 @@ impl PeerStore {
 	/// List all known peers
 	/// Used for /v1/peers/all api endpoint
 	pub fn all_peers(&self) -> Vec<PeerData> {
-		self.db
-			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))
-			.collect::<Vec<_>>()
+		let key = to_key(PEER_PREFIX, &mut "".to_string().into_bytes());
+		self.db.iter::<PeerData>(&key).unwrap().collect::<Vec<_>>()
 	}
 
 	/// Convenience method to load a peer data, update its status and save it

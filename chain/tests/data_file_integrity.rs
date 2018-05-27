@@ -26,11 +26,11 @@ use std::sync::Arc;
 
 use chain::Chain;
 use chain::types::*;
-use core::core::{Block, BlockHeader, Transaction};
 use core::core::target::Difficulty;
-use core::{consensus, genesis};
+use core::core::{Block, BlockHeader, Transaction};
 use core::global;
 use core::global::ChainTypes;
+use core::{consensus, genesis};
 
 use keychain::Keychain;
 use wallet::libwallet;

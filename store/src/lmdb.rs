@@ -14,10 +14,12 @@
 
 //! Storage of core types using LMDB.
 
+use std::marker;
 use std::sync::Arc;
 
 use lmdb_zero as lmdb;
 use lmdb_zero::LmdbResultExt;
+use lmdb_zero::traits::CreateCursor;
 
 use core::ser;
 
@@ -55,7 +57,9 @@ pub fn new_env(path: String) -> lmdb::Environment {
 		let mut env_builder = lmdb::EnvBuilder::new().unwrap();
 		env_builder.set_maxdbs(8).unwrap();
 
-		env_builder.open(&path, lmdb::open::WRITEMAP, 0o600).unwrap()
+		env_builder
+			.open(&path, lmdb::open::WRITEMAP, 0o600)
+			.unwrap()
 	}
 }
 
@@ -63,16 +67,19 @@ pub fn new_env(path: String) -> lmdb::Environment {
 /// are done through a Batch abstraction providing atomicity.
 pub struct Store {
 	env: Arc<lmdb::Environment>,
-	db: lmdb::Database<'static>,
+	db: Arc<lmdb::Database<'static>>,
 }
 
 impl Store {
 	/// Creates a new store with the provided name under the specified
 	/// environment
 	pub fn open(env: Arc<lmdb::Environment>, name: &str) -> Store {
-		let db = lmdb::Database::open(env.clone(), Some(name),
-			&lmdb::DatabaseOptions::new(lmdb::db::CREATE)).unwrap();
-		Store {env, db}
+		let db = Arc::new(lmdb::Database::open(
+			env.clone(),
+			Some(name),
+			&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
+		).unwrap());
+		Store { env, db }
 	}
 
 	/// Gets a value from the db, provided its key
@@ -80,7 +87,9 @@ impl Store {
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
 		let res = access.get(&self.db, key);
-		res.map(|res: &[u8]| res.to_vec()).to_opt().map_err(From::from)
+		res.map(|res: &[u8]| res.to_vec())
+			.to_opt()
+			.map_err(From::from)
 	}
 
 	/// Gets a `Readable` value from the db, provided its key. Encapsulates
@@ -91,15 +100,17 @@ impl Store {
 		self.get_ser_access(key, &access)
 	}
 
-	fn get_ser_access<T: ser::Readable>(&self, key: &[u8], access: &lmdb::ConstAccessor) -> Result<Option<T>, Error> {
+	fn get_ser_access<T: ser::Readable>(
+		&self,
+		key: &[u8],
+		access: &lmdb::ConstAccessor,
+	) -> Result<Option<T>, Error> {
 		let res: lmdb::error::Result<&[u8]> = access.get(&self.db, key);
 		match res.to_opt() {
-			Ok(Some(mut res)) => {
-				match ser::deserialize(&mut res).map_err(Error::SerErr) {
-					Ok(res) => Ok(Some(res)),
-					Err(e) => Err(From::from(e)),
-				}
-			}
+			Ok(Some(mut res)) => match ser::deserialize(&mut res).map_err(Error::SerErr) {
+				Ok(res) => Ok(Some(res)),
+				Err(e) => Err(From::from(e)),
+			},
 			Ok(None) => Ok(None),
 			Err(e) => Err(From::from(e)),
 		}
@@ -113,10 +124,27 @@ impl Store {
 		res.to_opt().map(|r| r.is_some()).map_err(From::from)
 	}
 
+	/// Produces an iterator of `Readable` types moving forward from the
+	/// provided key.
+	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<SerIterator<T>, Error> {
+		let txn = Arc::new(lmdb::ReadTransaction::new(self.env.clone())?);
+		let cursor = Arc::new(txn.cursor(self.db.clone()).unwrap());
+		Ok(SerIterator {
+			tx: txn,
+			cursor: cursor,
+			seek: false,
+			prefix: from.to_vec(),
+			_marker: marker::PhantomData,
+		})
+	}
+
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch, Error> {
 		let txn = lmdb::WriteTransaction::new(self.env.clone())?;
-		Ok(Batch { store: self, tx: txn })
+		Ok(Batch {
+			store: self,
+			tx: txn,
+		})
 	}
 }
 
@@ -127,10 +155,11 @@ pub struct Batch<'a> {
 }
 
 impl<'a> Batch<'a> {
-
 	/// Writes a single key/value pair to the db
 	pub fn put(&self, key: &[u8], value: Vec<u8>) -> Result<(), Error> {
-		self.tx.access().put(&self.store.db, key, &value, lmdb::put::Flags::empty())?;
+		self.tx
+			.access()
+			.put(&self.store.db, key, &value, lmdb::put::Flags::empty())?;
 		Ok(())
 	}
 
@@ -144,8 +173,8 @@ impl<'a> Batch<'a> {
 		}
 	}
 
-	/// Gets a `Readable` value from the db, provided its key, taking the content
-	/// of the current batch into account.
+	/// Gets a `Readable` value from the db, provided its key, taking the
+	/// content of the current batch into account.
 	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
 		let access = self.tx.access();
 		self.store.get_ser_access(key, &access)
@@ -166,6 +195,49 @@ impl<'a> Batch<'a> {
 	/// Creates a child of this batch. It will be merged with its parent on
 	/// commit, abandoned otherwise.
 	pub fn child(&mut self) -> Result<Batch, Error> {
-		Ok(Batch { store: self.store, tx: self.tx.child_tx()? })
+		Ok(Batch {
+			store: self.store,
+			tx: self.tx.child_tx()?,
+		})
+	}
+}
+
+/// An iterator thad produces Readable instances back. Wraps the lower level
+/// DBIterator and deserializes the returned values.
+pub struct SerIterator<T> where T: ser::Readable,
+{
+	tx: Arc<lmdb::ReadTransaction<'static>>,
+	cursor: Arc<lmdb::Cursor<'static, 'static>>,
+	seek: bool,
+	prefix: Vec<u8>,
+	_marker: marker::PhantomData<T>,
+}
+
+impl<T> Iterator for SerIterator<T> where T: ser::Readable {
+	type Item = T;
+
+	fn next(&mut self) -> Option<T> {
+		let access = self.tx.access();
+		let kv = if self.seek {
+			Arc::get_mut(&mut self.cursor).unwrap().next(&access)
+		} else {
+			self.seek = true;
+			Arc::get_mut(&mut self.cursor).unwrap().seek_range_k(&access, &self.prefix[..])
+		};
+		self.deser_if_prefix_match(kv)
+	}
+}
+
+impl<T> SerIterator<T> where T: ser::Readable {
+	fn deser_if_prefix_match(&self, kv: Result<(&[u8], &[u8]), lmdb::Error>) -> Option<T> {
+		match kv {
+			Ok((k, v)) =>
+				if k[0..self.prefix.len()] == self.prefix[..] {
+					ser::deserialize(&mut &v[..]).ok()
+				} else {
+					None
+				},
+			Err(_) => None,
+		}
 	}
 }

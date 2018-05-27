@@ -17,8 +17,8 @@
 use std::{error, fmt, io};
 
 use util::secp;
-use util::secp_static;
 use util::secp::pedersen::Commitment;
+use util::secp_static;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;

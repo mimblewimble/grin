@@ -25,6 +25,7 @@ extern crate bitflags;
 extern crate bytes;
 #[macro_use]
 extern crate enum_primitive;
+extern crate lmdb_zero as lmdb;
 
 #[macro_use]
 extern crate grin_core as core;

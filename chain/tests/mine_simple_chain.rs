@@ -26,10 +26,10 @@ use std::sync::Arc;
 
 use chain::Chain;
 use chain::types::*;
-use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
+use core::consensus;
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
-use core::consensus;
+use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
 use core::global;
 use core::global::ChainTypes;
 use wallet::libwallet::{self, build};

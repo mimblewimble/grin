@@ -23,8 +23,8 @@
 extern crate byteorder;
 extern crate env_logger;
 extern crate libc;
-extern crate memmap;
 extern crate lmdb_zero;
+extern crate memmap;
 extern crate serde;
 #[macro_use]
 extern crate slog;
@@ -52,13 +52,13 @@ pub use lmdb::*;
 // 	iter: DBIterator,
 // 	_marker: marker::PhantomData<T>,
 // }
-// 
+//
 // impl<T> Iterator for SerIterator<T>
 // where
 // 	T: ser::Readable,
 // {
 // 	type Item = T;
-// 
+//
 // 	fn next(&mut self) -> Option<T> {
 // 		let next = self.iter.next();
 // 		next.and_then(|r| {
