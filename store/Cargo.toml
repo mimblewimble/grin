@@ -9,8 +9,8 @@ publish = false
 byteorder = "1"
 env_logger = "0.3"
 libc = "0.2"
+lmdb-zero = "0.4.4"
 memmap = { git = "https://github.com/danburkert/memmap-rs", tag = "0.6.0" }
-rocksdb = "0.8"
 serde = "1"
 serde_derive = "1"
 slog = { version = "~2.1", features = ["max_level_trace", "release_max_level_trace"] }

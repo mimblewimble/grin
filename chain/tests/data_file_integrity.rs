@@ -79,7 +79,7 @@ fn data_files() {
 			let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
 			b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
-			chain.set_txhashset_roots(&mut b, false).unwrap();
+			chain.set_block_roots(&mut b, false).unwrap();
 
 			pow::pow_size(
 				&mut b.header,
@@ -116,7 +116,7 @@ fn data_files() {
 
 fn _prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_txhashset_roots(&mut b, false).unwrap();
+	chain.set_block_roots(&mut b, false).unwrap();
 	b
 }
 
@@ -128,13 +128,13 @@ fn _prepare_block_tx(
 	txs: Vec<&Transaction>,
 ) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_txhashset_roots(&mut b, false).unwrap();
+	chain.set_block_roots(&mut b, false).unwrap();
 	b
 }
 
 fn _prepare_fork_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_txhashset_roots(&mut b, true).unwrap();
+	chain.set_block_roots(&mut b, true).unwrap();
 	b
 }
 
@@ -146,7 +146,7 @@ fn _prepare_fork_block_tx(
 	txs: Vec<&Transaction>,
 ) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_txhashset_roots(&mut b, true).unwrap();
+	chain.set_block_roots(&mut b, true).unwrap();
 	b
 }
 

@@ -70,7 +70,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
-	chain.set_txhashset_roots(&mut block, false).unwrap();
+	chain.set_block_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
 		&mut block.header,
@@ -124,7 +124,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
-	match chain.set_txhashset_roots(&mut block, false) {
+	match chain.set_block_roots(&mut block, false) {
 		Err(Error::Transaction(transaction::Error::ImmatureCoinbase)) => (),
 		_ => panic!("expected ImmatureCoinbase error here"),
 	}
@@ -150,7 +150,7 @@ fn test_coinbase_maturity() {
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
-		chain.set_txhashset_roots(&mut block, false).unwrap();
+		chain.set_block_roots(&mut block, false).unwrap();
 
 		pow::pow_size(
 			&mut block.header,
@@ -183,7 +183,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
-	chain.set_txhashset_roots(&mut block, false).unwrap();
+	chain.set_block_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
 		&mut block.header,

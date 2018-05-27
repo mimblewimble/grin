@@ -195,7 +195,7 @@ fn build_block(
 		b.header.clone().total_difficulty.clone().into_num(),
 	);
 
-	let roots_result = chain.set_txhashset_roots(&mut b, false);
+	let roots_result = chain.set_block_roots(&mut b, false);
 
 	match roots_result {
 		Ok(_) => Ok((b, block_fees)),
