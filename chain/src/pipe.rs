@@ -47,7 +47,11 @@ pub struct BlockContext {
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain. Returns the new chain head if
 /// updated.
-pub fn process_block(b: &Block, mut ctx: &mut BlockContext, batch: &mut store::Batch) -> Result<Option<Tip>, Error> {
+pub fn process_block(
+	b: &Block,
+	mut ctx: &mut BlockContext,
+	batch: &mut store::Batch,
+) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
@@ -140,7 +144,7 @@ pub fn sync_block_header(
 	// now update the header_head (if new header with most work) and the sync_head
 	// (always)
 	update_header_head(bh, header_ctx, batch)?;
-	update_sync_head(bh, sync_ctx, batch) 
+	update_sync_head(bh, sync_ctx, batch)
 }
 
 /// Process block header as part of "header first" block propagation.
@@ -388,7 +392,11 @@ fn add_block_header(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Er
 /// Directly updates the head if we've just appended a new block to it or handle
 /// the situation where we've just added enough work to have a fork with more
 /// work than the head.
-fn update_head(b: &Block, ctx: &mut BlockContext, batch: &store::Batch) -> Result<Option<Tip>, Error> {
+fn update_head(
+	b: &Block,
+	ctx: &mut BlockContext,
+	batch: &store::Batch,
+) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
 	// when extending the head), update it
 	let tip = Tip::from_block(&b.header);
@@ -435,7 +443,11 @@ fn update_head(b: &Block, ctx: &mut BlockContext, batch: &store::Batch) -> Resul
 }
 
 /// Update the sync head so we can keep syncing from where we left off.
-fn update_sync_head(bh: &BlockHeader, ctx: &mut BlockContext, batch: &mut store::Batch) -> Result<Option<Tip>, Error> {
+fn update_sync_head(
+	bh: &BlockHeader,
+	ctx: &mut BlockContext,
+	batch: &mut store::Batch,
+) -> Result<Option<Tip>, Error> {
 	let tip = Tip::from_block(bh);
 	batch
 		.save_sync_head(&tip)
@@ -461,7 +473,11 @@ fn update_sync_head(bh: &BlockHeader, ctx: &mut BlockContext, batch: &mut store:
 	Ok(Some(tip))
 }
 
-fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext, batch: &mut store::Batch) -> Result<Option<Tip>, Error> {
+fn update_header_head(
+	bh: &BlockHeader,
+	ctx: &mut BlockContext,
+	batch: &mut store::Batch,
+) -> Result<Option<Tip>, Error> {
 	let tip = Tip::from_block(bh);
 	if tip.total_difficulty > ctx.head.total_difficulty {
 		batch

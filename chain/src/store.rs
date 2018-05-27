@@ -16,8 +16,8 @@
 
 use std::sync::{Arc, RwLock};
 
-use lru_cache::LruCache;
 use lmdb;
+use lru_cache::LruCache;
 
 use util::secp::pedersen::Commitment;
 
@@ -191,12 +191,15 @@ impl<'a> Batch<'a> {
 		self.db.put_ser(&vec![SYNC_HEAD_PREFIX], t)
 	}
 
-	pub fn init_head(&self) -> Result<(), Error> {
-		if self.store.get_header_head().is_err() {
-			let tip = self.store.head()?;
-			self.save_header_head(&tip)?;
-		}
-		let header_tip = self.store.get_header_head()?;
+	pub fn init_sync_head(&self, t: &Tip) -> Result<(), Error> {
+		let header_tip = match self.store.get_header_head() {
+			Ok(hh) => hh,
+			Err(store::Error::NotFoundErr) => {
+				self.save_header_head(t)?;
+				t.clone()
+			}
+			Err(e) => return Err(e),
+		};
 		self.save_sync_head(&header_tip)
 	}
 

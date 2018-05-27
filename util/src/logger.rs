@@ -110,7 +110,6 @@ pub fn init_test_logger() {
 	let mut config_ref = LOGGING_CONFIG.lock().unwrap();
 	*config_ref = LoggingConfig::default();
 	*was_init_ref = true;
-	send_panic_to_log();
 }
 
 /// hook to send panics to logs as well as stderr

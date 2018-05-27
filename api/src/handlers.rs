@@ -515,8 +515,8 @@ impl Handler for ChainCompactHandler {
 /// GET /v1/blocks/<hash>
 /// GET /v1/blocks/<height>
 ///
-/// Optionally return results as "compact blocks" by passing "?compact" query param
-/// GET /v1/blocks/<hash>?compact
+/// Optionally return results as "compact blocks" by passing "?compact" query
+/// param GET /v1/blocks/<hash>?compact
 pub struct BlockHandler {
 	pub chain: Weak<chain::Chain>,
 }

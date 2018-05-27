@@ -14,6 +14,7 @@
 
 //! Storage of core types using LMDB.
 
+use std::fs;
 use std::marker;
 use std::sync::Arc;
 
@@ -53,12 +54,14 @@ pub fn option_to_not_found<T>(res: Result<Option<T>, Error>) -> Result<T, Error>
 /// Create a new LMDB env under the provided directory to spawn various
 /// databases from.
 pub fn new_env(path: String) -> lmdb::Environment {
+	let full_path = path + "/lmdb";
+	fs::create_dir_all(&full_path).unwrap();
 	unsafe {
 		let mut env_builder = lmdb::EnvBuilder::new().unwrap();
 		env_builder.set_maxdbs(8).unwrap();
 
 		env_builder
-			.open(&path, lmdb::open::WRITEMAP, 0o600)
+			.open(&full_path, lmdb::open::Flags::empty(), 0o600)
 			.unwrap()
 	}
 }
@@ -74,11 +77,13 @@ impl Store {
 	/// Creates a new store with the provided name under the specified
 	/// environment
 	pub fn open(env: Arc<lmdb::Environment>, name: &str) -> Store {
-		let db = Arc::new(lmdb::Database::open(
-			env.clone(),
-			Some(name),
-			&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
-		).unwrap());
+		let db = Arc::new(
+			lmdb::Database::open(
+				env.clone(),
+				Some(name),
+				&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
+			).unwrap(),
+		);
 		Store { env, db }
 	}
 
@@ -194,7 +199,7 @@ impl<'a> Batch<'a> {
 
 	/// Creates a child of this batch. It will be merged with its parent on
 	/// commit, abandoned otherwise.
-	pub fn child(&mut self) -> Result<Batch, Error> {
+	pub fn child(&mut self) -> Result<Batch, Error> {	
 		Ok(Batch {
 			store: self.store,
 			tx: self.tx.child_tx()?,
@@ -204,7 +209,9 @@ impl<'a> Batch<'a> {
 
 /// An iterator thad produces Readable instances back. Wraps the lower level
 /// DBIterator and deserializes the returned values.
-pub struct SerIterator<T> where T: ser::Readable,
+pub struct SerIterator<T>
+where
+	T: ser::Readable,
 {
 	tx: Arc<lmdb::ReadTransaction<'static>>,
 	cursor: Arc<lmdb::Cursor<'static, 'static>>,
@@ -213,7 +220,10 @@ pub struct SerIterator<T> where T: ser::Readable,
 	_marker: marker::PhantomData<T>,
 }
 
-impl<T> Iterator for SerIterator<T> where T: ser::Readable {
+impl<T> Iterator for SerIterator<T>
+where
+	T: ser::Readable,
+{
 	type Item = T;
 
 	fn next(&mut self) -> Option<T> {
@@ -222,21 +232,25 @@ impl<T> Iterator for SerIterator<T> where T: ser::Readable {
 			Arc::get_mut(&mut self.cursor).unwrap().next(&access)
 		} else {
 			self.seek = true;
-			Arc::get_mut(&mut self.cursor).unwrap().seek_range_k(&access, &self.prefix[..])
+			Arc::get_mut(&mut self.cursor)
+				.unwrap()
+				.seek_range_k(&access, &self.prefix[..])
 		};
 		self.deser_if_prefix_match(kv)
 	}
 }
 
-impl<T> SerIterator<T> where T: ser::Readable {
+impl<T> SerIterator<T>
+where
+	T: ser::Readable,
+{
 	fn deser_if_prefix_match(&self, kv: Result<(&[u8], &[u8]), lmdb::Error>) -> Option<T> {
 		match kv {
-			Ok((k, v)) =>
-				if k[0..self.prefix.len()] == self.prefix[..] {
-					ser::deserialize(&mut &v[..]).ok()
-				} else {
-					None
-				},
+			Ok((k, v)) => if k[0..self.prefix.len()] == self.prefix[..] {
+				ser::deserialize(&mut &v[..]).ok()
+			} else {
+				None
+			},
 			Err(_) => None,
 		}
 	}

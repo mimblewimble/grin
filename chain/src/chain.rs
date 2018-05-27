@@ -774,12 +774,14 @@ fn setup_head(
 	store: Arc<store::ChainStore>,
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
+
 	// check if we have a head in store, otherwise the genesis block is it
-	let head = store.head();
+	let head_res = store.head();
 	let mut batch = store.batch()?;
-	match head {
-		Ok(head) => {
-			let mut head = head;
+	let mut head: Tip;
+	match head_res {
+		Ok(h) => {
+			head = h;
 			loop {
 				// Use current chain tip if we have one.
 				// Note: We are rewinding and validating against a writeable extension.
@@ -787,37 +789,16 @@ fn setup_head(
 				// to match the provided block header.
 				let header = store.get_block_header(&head.last_block_h)?;
 
-				let res = txhashset::extending(txhashset, &mut batch, |extension| {
-					debug!(
-						LOGGER,
-						"chain: init: rewinding and validating before we start... {} at {}",
-						header.hash(),
-						header.height,
-					);
+				debug!(
+					LOGGER,
+					"chain: init: rewinding and validating before we start... {} at {}",
+					header.hash(),
+					header.height,
+				);
 
+				let res = txhashset::extending(txhashset, &mut batch, |extension| {
 					extension.rewind(&header)?;
 					extension.validate_roots(&header)?;
-
-					// now check we have the "block sums" for the block in question
-					// if we have no sums (migrating an existing node) we need to go
-					// back to the txhashset and sum the outputs and kernels
-					if header.height > 0 && store.get_block_sums(&header.hash()).is_err() {
-						debug!(
-							LOGGER,
-							"chain: init: building (missing) block sums for {} @ {}",
-							header.height,
-							header.hash()
-						);
-						let (output_sum, kernel_sum) = extension.validate_sums(&header)?;
-						extension.batch.save_block_sums(
-							&header.hash(),
-							&BlockSums {
-								output_sum,
-								kernel_sum,
-							},
-						)?;
-					}
-
 					Ok(())
 				});
 
@@ -846,19 +827,14 @@ fn setup_head(
 
 			// saving a new tip based on genesis
 			batch.save_head(&tip)?;
-			info!(
-				LOGGER,
-				"chain: init: saved genesis block: {:?}, nonce: {:?}, pow: {:?}",
-				genesis.hash(),
-				genesis.header.nonce,
-				genesis.header.pow,
-			);
+			head = tip;
+			info!(LOGGER, "chain: init: saved genesis: {:?}", genesis.hash());
 		}
 		Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
 	};
 
 	// Initialize header_head and sync_head as necessary for chain init.
-	batch.init_head()?;
+	batch.init_sync_head(&head)?;
 	batch.commit()?;
 
 	Ok(())

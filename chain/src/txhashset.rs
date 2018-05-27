@@ -279,7 +279,11 @@ where
 ///
 /// If the closure returns an error, modifications are canceled and the unit
 /// of work is abandoned. Otherwise, the unit of work is permanently applied.
-pub fn extending<'a, F, T>(trees: &'a mut TxHashSet, batch: &'a mut Batch, inner: F) -> Result<T, Error>
+pub fn extending<'a, F, T>(
+	trees: &'a mut TxHashSet,
+	batch: &'a mut Batch,
+	inner: F,
+) -> Result<T, Error>
 where
 	F: FnOnce(&mut Extension) -> Result<T, Error>,
 {

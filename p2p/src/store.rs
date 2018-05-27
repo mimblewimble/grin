@@ -14,10 +14,10 @@
 
 //! Storage implementation for peer data.
 
-use std::sync::Arc;
-use std::net::SocketAddr;
 use num::FromPrimitive;
 use rand::{thread_rng, Rng};
+use std::net::SocketAddr;
+use std::sync::Arc;
 
 use lmdb;
 
@@ -129,7 +129,8 @@ impl PeerStore {
 
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
 		let mut peers = self.db
-			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes())).unwrap()
+			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))
+			.unwrap()
 			.filter(|p| p.flags == state && p.capabilities.contains(cap))
 			.collect::<Vec<_>>();
 		thread_rng().shuffle(&mut peers[..]);
