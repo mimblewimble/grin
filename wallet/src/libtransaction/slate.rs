@@ -26,7 +26,6 @@ use util::secp::Signature;
 use util::secp::key::{PublicKey, SecretKey};
 use util::{secp, LOGGER};
 
-
 /// Public data for each participant in the slate
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -378,5 +377,3 @@ impl Slate {
 		Ok(())
 	}
 }
-
-

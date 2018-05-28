@@ -39,11 +39,7 @@ pub struct TxWrapper {
 	pub tx_hex: String,
 }
 
-fn handle_send(
-	config: &WalletConfig,
-	keychain: &Keychain,
-	slate: &mut Slate,
-) -> Result<(), Error> {
+fn handle_send(config: &WalletConfig, keychain: &Keychain, slate: &mut Slate) -> Result<(), Error> {
 	// create an output using the amount in the slate
 	let (_, mut context, receiver_create_fn) =
 		selection::build_recipient_output_with_slate(config, keychain, slate).unwrap();
