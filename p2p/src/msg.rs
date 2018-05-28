@@ -73,12 +73,13 @@ enum_from_primitive! {
 	}
 }
 
-const MAX_MSG_SIZES: [u64; 18] = [
+const MAX_MSG_SIZES: [u64; 19] = [
 	0,                                                                  // Error
 	128,                                                                // Hand
 	88,                                                                 // Shake
 	16,                                                                 // Ping
 	16,                                                                 // Pong
+	64,                                                                // BanReason
 	4,                                                                  // GetPeerAddrs
 	4 + (1 + 16 + 2) * MAX_PEER_ADDRS as u64,                           // PeerAddrs, with all IPv6
 	1 + 32 * MAX_LOCATORS as u64,                                       // GetHeaders locators
