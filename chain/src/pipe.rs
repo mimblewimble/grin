@@ -412,7 +412,12 @@ fn update_head(
 				.map_err(|e| Error::StoreErr(e, "pipe save head".to_owned()))?;
 		}
 		ctx.head = tip.clone();
-		debug!(LOGGER, "pipe: chain head {} @ {}", b.hash(), b.header.height);
+		debug!(
+			LOGGER,
+			"pipe: chain head {} @ {}",
+			b.hash(),
+			b.header.height
+		);
 		Ok(Some(tip))
 	} else {
 		Ok(None)

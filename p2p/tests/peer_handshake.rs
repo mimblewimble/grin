@@ -23,8 +23,8 @@ use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time;
 
-use core::core::target::Difficulty;
 use core::core::hash::Hash;
+use core::core::target::Difficulty;
 use p2p::Peer;
 
 fn open_port() -> u16 {
