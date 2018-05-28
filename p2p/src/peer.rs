@@ -336,7 +336,6 @@ impl Peer {
 	fn check_connection(&self) -> bool {
 		match self.connection.as_ref().unwrap().error_channel.try_recv() {
 			Ok(Error::Serialization(e)) => {
-				self.send_ban_reason(ReasonForBan::ClientCorrupted);
 				let mut state = self.state.write().unwrap();
 				*state = State::Banned;
 				info!(

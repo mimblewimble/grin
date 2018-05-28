@@ -203,12 +203,11 @@ enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 	pub enum ReasonForBan {
 		None = 0,
-		ClientCorrupted = 1,
-		BadBlock = 2,
-		BadCompactBlock = 3,
-		BadBlockHeader = 4,
-		BadTxHashSet = 5,
-		ManualBan = 6,
+		BadBlock = 1,
+		BadCompactBlock = 2,
+		BadBlockHeader = 3,
+		BadTxHashSet = 4,
+		ManualBan = 5,
 	}
 }
 
