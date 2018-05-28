@@ -714,6 +714,7 @@ dependencies = [
  "grin_chain 0.2.0",
  "grin_core 0.2.0",
  "grin_keychain 0.2.0",
+ "grin_store 0.2.0",
  "grin_util 0.2.0",
  "hyper 0.11.24 (registry+https://github.com/rust-lang/crates.io-index)",
  "iron 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
