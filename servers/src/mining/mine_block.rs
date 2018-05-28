@@ -225,9 +225,12 @@ fn burn_reward(block_fees: BlockFees) -> Result<(core::Output, core::TxKernel, B
 	warn!(LOGGER, "Burning block fees: {:?}", block_fees);
 	let keychain = Keychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
-	let (out, kernel) =
-		wallet::libtransaction::reward::output(&keychain, &key_id, block_fees.fees, block_fees.height)
-			.unwrap();
+	let (out, kernel) = wallet::libtransaction::reward::output(
+		&keychain,
+		&key_id,
+		block_fees.fees,
+		block_fees.height,
+	).unwrap();
 	Ok((out, kernel, block_fees))
 }
 

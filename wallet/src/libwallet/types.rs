@@ -25,7 +25,7 @@ use core::core::pmmr::MerkleProof;
 
 use keychain::{Identifier, Keychain};
 
-/// TODO: 
+/// TODO:
 pub trait WalletBackend {
 	/// Allows for reading wallet data (without needing to acquire the write
 	/// lock).
@@ -56,7 +56,7 @@ pub trait WalletBackend {
 #[derive(Debug, Clone)]
 pub struct Wallet<'a, T: 'a>
 where
-	T: WalletBackend
+	T: WalletBackend,
 {
 	/// All wallets need access to a unique instantiated keychain
 	pub keychain: &'a Keychain,
@@ -276,7 +276,6 @@ impl<'de> serde::de::Visitor<'de> for BlockIdentifierVisitor {
 	}
 }
 
-
 #[derive(Debug)]
 pub struct Error {
 	inner: Context<ErrorKind>,
@@ -386,6 +385,3 @@ impl From<Context<ErrorKind>> for Error {
 		Error { inner: inner }
 	}
 }
-
-
-

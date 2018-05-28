@@ -26,11 +26,10 @@ use api;
 use core::consensus::reward;
 use core::core::{Output, TxKernel};
 use core::global;
-use failure::Fail;
-use failure::ResultExt;
-use libwallet::{keys, selection};
+use failure::{Fail, ResultExt};
 use keychain::Keychain;
-use libtransaction::{reward, transaction};
+use libtransaction::{reward, slate::Slate};
+use libwallet::{keys, selection};
 use types::*;
 use util::LOGGER;
 
@@ -43,7 +42,7 @@ pub struct TxWrapper {
 fn handle_send(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	slate: &mut transaction::Slate,
+	slate: &mut Slate,
 ) -> Result<(), Error> {
 	// create an output using the amount in the slate
 	let (_, mut context, receiver_create_fn) =
@@ -75,7 +74,7 @@ pub struct WalletReceiver {
 
 impl Handler for WalletReceiver {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let struct_body = req.get::<bodyparser::Struct<transaction::Slate>>();
+		let struct_body = req.get::<bodyparser::Struct<Slate>>();
 
 		if let Ok(Some(mut slate)) = struct_body {
 			let _ = handle_send(&self.config, &self.keychain, &mut slate)

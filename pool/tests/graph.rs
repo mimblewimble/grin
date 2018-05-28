@@ -21,9 +21,9 @@ extern crate grin_wallet as wallet;
 
 extern crate rand;
 
-use keychain::Keychain;
 use core::core::OutputFeatures;
 use core::core::transaction::ProofMessageElements;
+use keychain::Keychain;
 use wallet::libtransaction::proof;
 
 #[test]

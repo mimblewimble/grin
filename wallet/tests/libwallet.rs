@@ -24,8 +24,8 @@ use keychain::{BlindSum, BlindingFactor, Keychain};
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::ProofMessage;
 use util::{kernel_sig_msg, secp};
-use wallet::libwallet::sigcontext;
 use wallet::libtransaction::{aggsig, proof};
+use wallet::libwallet::sigcontext;
 
 use rand::thread_rng;
 

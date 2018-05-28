@@ -15,9 +15,9 @@
 //! Selection of inputs for building transactions
 
 use failure::ResultExt;
-use libwallet::{keys, sigcontext};
 use keychain::{Identifier, Keychain};
-use libtransaction::{build, transaction};
+use libtransaction::{build, tx_fee, slate::Slate};
+use libwallet::{keys, sigcontext};
 use types::*;
 
 /// Initialise a transaction on the sender side, returns a corresponding
@@ -37,7 +37,7 @@ pub fn build_send_tx_slate(
 	selection_strategy_is_use_all: bool,
 ) -> Result<
 	(
-		transaction::Slate,
+		Slate,
 		sigcontext::Context,
 		impl FnOnce() -> Result<(), Error>,
 	),
@@ -55,7 +55,7 @@ pub fn build_send_tx_slate(
 	)?;
 
 	// Create public slate
-	let mut slate = transaction::Slate::blank(num_participants);
+	let mut slate = Slate::blank(num_participants);
 	slate.amount = amount;
 	slate.height = current_height;
 	slate.lock_height = lock_height;
@@ -110,7 +110,7 @@ pub fn build_send_tx_slate(
 pub fn build_recipient_output_with_slate(
 	config: &WalletConfig,
 	keychain: &Keychain,
-	slate: &mut transaction::Slate,
+	slate: &mut Slate,
 ) -> Result<
 	(
 		Identifier,
@@ -214,7 +214,7 @@ pub fn select_send_tx(
 	// sender
 	let mut fee;
 	// First attempt to spend without change
-	fee = transaction::tx_fee(coins.len(), 1, coins_proof_count(&coins), None);
+	fee = tx_fee(coins.len(), 1, coins_proof_count(&coins), None);
 	let mut total: u64 = coins.iter().map(|c| c.value).sum();
 	let mut amount_with_fee = amount + fee;
 
@@ -224,7 +224,7 @@ pub fn select_send_tx(
 
 	// Check if we need to use a change address
 	if total > amount_with_fee {
-		fee = transaction::tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
+		fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
 		amount_with_fee = amount + fee;
 
 		// Here check if we have enough outputs for the amount including fee otherwise
@@ -246,7 +246,7 @@ pub fn select_send_tx(
 					selection_strategy_is_use_all,
 				))
 			})?;
-			fee = transaction::tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
+			fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
 			total = coins.iter().map(|c| c.value).sum();
 			amount_with_fee = amount + fee;
 		}
