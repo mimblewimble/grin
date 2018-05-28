@@ -59,6 +59,9 @@ pub fn new_env(path: String) -> lmdb::Environment {
 	unsafe {
 		let mut env_builder = lmdb::EnvBuilder::new().unwrap();
 		env_builder.set_maxdbs(8).unwrap();
+		// half a TB should give us plenty room, will be an issue on 32 bits
+		// (which we don't support anyway)
+		env_builder.set_mapsize(549755813888);
 
 		env_builder
 			.open(&full_path, lmdb::open::Flags::empty(), 0o600)
