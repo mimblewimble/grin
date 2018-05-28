@@ -15,8 +15,8 @@
 //! Utility structs to handle the 3 hashtrees (output, range proof, kernel) more
 //! conveniently and transactionally.
 
-use std::fs;
 use std::collections::HashMap;
+use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -25,11 +25,11 @@ use std::time::Instant;
 use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::consensus::REWARD;
+use core::core::hash::{Hash, Hashed};
+use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::core::{Block, BlockHeader, Committed, Input, Output, OutputFeatures, OutputIdentifier,
                  TxKernel};
-use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::global;
-use core::core::hash::{Hash, Hashed};
 use core::ser::{PMMRIndexHashable, PMMRable};
 
 use grin_store;
@@ -138,7 +138,8 @@ impl TxHashSet {
 
 	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
 	/// nodes at level 0
-	/// TODO: These need to return the actual data from the flat-files instead of hashes now
+	/// TODO: These need to return the actual data from the flat-files instead
+	/// of hashes now
 	pub fn last_n_output(&mut self, distance: u64) -> Vec<(Hash, OutputIdentifier)> {
 		let output_pmmr: PMMR<OutputIdentifier, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
@@ -159,8 +160,8 @@ impl TxHashSet {
 		kernel_pmmr.get_last_n_insertions(distance)
 	}
 
-	/// returns outputs from the given insertion (leaf) index up to the specified
-	/// limit. Also returns the last index actually populated
+	/// returns outputs from the given insertion (leaf) index up to the
+	/// specified limit. Also returns the last index actually populated
 	pub fn outputs_by_insertion_index(
 		&mut self,
 		start_index: u64,
@@ -239,8 +240,8 @@ impl TxHashSet {
 	}
 }
 
-/// Starts a new unit of work to extend (or rewind) the chain with additional blocks.
-/// Accepts a closure that will operate within that unit of work.
+/// Starts a new unit of work to extend (or rewind) the chain with additional
+/// blocks. Accepts a closure that will operate within that unit of work.
 /// The closure has access to an Extension object that allows the addition
 /// of blocks to the txhashset and the checking of the current tree roots.
 ///
@@ -512,7 +513,7 @@ impl<'a> Extension<'a> {
 				// processing a new fork so we may get a position on the old
 				// fork that exists but matches a different node
 				// filtering that case out
-				if hash == OutputIdentifier::from_output(out).hash() {
+				if hash == OutputIdentifier::from_output(out).hash_with_index(pos - 1) {
 					return Err(Error::DuplicateCommitment(commit));
 				}
 			}
@@ -734,8 +735,8 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	/// Rebuild the index of MMR positions to the corresponding Output and kernel
-	/// by iterating over the whole MMR data. This is a costly operation
+	/// Rebuild the index of MMR positions to the corresponding Output and
+	/// kernel by iterating over the whole MMR data. This is a costly operation
 	/// performed only when we receive a full new chain state.
 	pub fn rebuild_index(&self) -> Result<(), Error> {
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
