@@ -31,7 +31,7 @@ use core::global;
 use core::global::ChainTypes;
 use core::pow;
 
-use wallet::libwallet;
+use wallet::libtransaction;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -56,7 +56,7 @@ fn test_various_store_indices() {
 		.setup_height(&genesis.header, &Tip::new(genesis.hash()))
 		.unwrap();
 
-	let reward = libwallet::reward::output(&keychain, &key_id, 0, 1).unwrap();
+	let reward = libtransaction::reward::output(&keychain, &key_id, 0, 1).unwrap();
 
 	let block = Block::new(&genesis.header, vec![], Difficulty::one(), reward).unwrap();
 	let block_hash = block.hash();

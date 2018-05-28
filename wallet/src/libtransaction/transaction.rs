@@ -20,8 +20,8 @@ use uuid::Uuid;
 use core::consensus;
 use core::core::{amount_to_hr_string, Committed, Transaction};
 use keychain::{BlindSum, BlindingFactor, Keychain};
-use libwallet::error::Error;
-use libwallet::{aggsig, build};
+use libtransaction::error::Error;
+use libtransaction::{aggsig, build};
 
 use util::secp::Signature;
 use util::secp::key::{PublicKey, SecretKey};

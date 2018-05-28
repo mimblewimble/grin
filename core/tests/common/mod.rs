@@ -23,8 +23,8 @@ use grin_core::core::block::{Block, BlockHeader};
 use grin_core::core::target::Difficulty;
 use grin_core::core::Transaction;
 use keychain::{Identifier, Keychain};
-use wallet::libwallet::build::{self, input, output, with_fee};
-use wallet::libwallet::reward;
+use wallet::libtransaction::build::{self, input, output, with_fee};
+use wallet::libtransaction::reward;
 
 // utility producing a transaction with 2 inputs and a single outputs
 pub fn tx2i1o() -> Transaction {

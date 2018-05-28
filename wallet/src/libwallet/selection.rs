@@ -15,9 +15,9 @@
 //! Selection of inputs for building transactions
 
 use failure::ResultExt;
-use grinwallet::{keys, sigcontext};
+use libwallet::{keys, sigcontext};
 use keychain::{Identifier, Keychain};
-use libwallet::{build, transaction};
+use libtransaction::{build, transaction};
 use types::*;
 
 /// Initialise a transaction on the sender side, returns a corresponding

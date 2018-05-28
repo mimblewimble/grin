@@ -18,9 +18,9 @@ use client;
 use core::core::amount_to_hr_string;
 use core::ser;
 use failure::ResultExt;
-use grinwallet::selection;
+use libwallet::selection;
 use keychain::{Identifier, Keychain};
-use libwallet::{build, transaction};
+use libtransaction::{build, transaction};
 use receiver::TxWrapper;
 use types::*;
 use util;
@@ -184,7 +184,7 @@ pub fn issue_burn_tx(
 #[cfg(test)]
 mod test {
 	use keychain::Keychain;
-	use libwallet::build;
+	use libtransaction::build;
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment

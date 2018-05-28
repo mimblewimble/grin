@@ -28,9 +28,9 @@ use core::core::{Output, TxKernel};
 use core::global;
 use failure::Fail;
 use failure::ResultExt;
-use grinwallet::{keys, selection};
+use libwallet::{keys, selection};
 use keychain::Keychain;
-use libwallet::{reward, transaction};
+use libtransaction::{reward, transaction};
 use types::*;
 use util::LOGGER;
 

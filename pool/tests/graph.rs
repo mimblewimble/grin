@@ -24,7 +24,7 @@ extern crate rand;
 use keychain::Keychain;
 use core::core::OutputFeatures;
 use core::core::transaction::ProofMessageElements;
-use wallet::libwallet::proof;
+use wallet::libtransaction::proof;
 
 #[test]
 fn test_add_entry() {

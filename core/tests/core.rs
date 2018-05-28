@@ -24,7 +24,7 @@ use grin_core::core::hash::{Hashed, ZERO_HASH};
 use grin_core::core::block::BlockHeader;
 use grin_core::core::{aggregate, aggregate_with_cut_through, deaggregate, KernelFeatures, Output,
                       Transaction};
-use wallet::libwallet::build::{self, initial_tx, input, output, with_excess, with_fee,
+use wallet::libtransaction::build::{self, initial_tx, input, output, with_excess, with_fee,
                                with_lock_height};
 use grin_core::core::block::Error::KernelLockHeight;
 use grin_core::ser;

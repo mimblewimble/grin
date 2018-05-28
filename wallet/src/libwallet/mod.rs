@@ -12,8 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Wallet lib... should be used by clients to build wallets and
-//! encapsulate all functions needed to build transactions and operate a wallet
+//! Library specific to the Grin wallet implementation, as distinct from
+//! libwallet, which should build transactions without any knowledge of the
+//! wallet implementation.
+
+// TODO: Once this is working, extract a set of traits that wallet
+// implementations would need to provide
 
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
@@ -21,9 +25,7 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-pub mod aggsig;
-pub mod build;
-pub mod error;
-pub mod proof;
-pub mod reward;
-pub mod transaction;
+pub mod keys;
+pub mod selection;
+pub mod sigcontext;
+pub mod types;

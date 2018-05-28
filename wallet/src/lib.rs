@@ -48,10 +48,10 @@ extern crate grin_util as util;
 
 pub mod checker;
 pub mod client;
-pub mod grinwallet;
+pub mod libwallet;
 mod handlers;
 mod info;
-pub mod libwallet;
+pub mod libtransaction;
 mod outputs;
 pub mod receiver;
 mod restore;
