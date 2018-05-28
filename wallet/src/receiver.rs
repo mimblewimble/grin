@@ -29,9 +29,9 @@ use core::global;
 use failure::{Fail, ResultExt};
 use keychain::Keychain;
 use libtransaction::{reward, slate::Slate};
+use libwallet::types::*;
 use libwallet::{keys, selection};
 use types::*;
-use libwallet::types::*;
 use util::LOGGER;
 
 /// Dummy wrapper for the hex-encoded serialized transaction.

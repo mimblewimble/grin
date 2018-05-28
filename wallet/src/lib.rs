@@ -60,10 +60,9 @@ pub mod server;
 pub mod types;
 
 pub use info::{retrieve_info, show_info};
+pub use libwallet::types::{Error, ErrorKind};
 pub use outputs::show_outputs;
 pub use receiver::WalletReceiver;
 pub use restore::restore;
 pub use sender::{issue_burn_tx, issue_send_tx};
-pub use types::{BlockFees, CbData, WalletConfig, WalletInfo,
-                WalletReceiveRequest, WalletSeed};
-pub use libwallet::types::{Error, ErrorKind};
+pub use types::{BlockFees, CbData, WalletConfig, WalletInfo, WalletReceiveRequest, WalletSeed};

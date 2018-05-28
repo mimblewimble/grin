@@ -21,9 +21,9 @@ use serde_json;
 use core::ser;
 use failure::{Fail, ResultExt};
 use keychain::Keychain;
+use libwallet::types::*;
 use receiver::receive_coinbase;
 use types::*;
-use libwallet::types::*;
 use util;
 
 pub struct CoinbaseHandler {

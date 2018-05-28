@@ -21,9 +21,9 @@ use libtransaction::slate::Slate;
 use serde_json;
 use tokio_core::reactor;
 
+use libwallet::types::*;
 use std::io;
 use types::*;
-use libwallet::types::*;
 use util::LOGGER;
 
 /// Call the wallet API to create a coinbase output for the given block_fees.

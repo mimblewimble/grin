@@ -21,9 +21,9 @@ use failure::ResultExt;
 use keychain::{Identifier, Keychain};
 use libtransaction::{build, tx_fee};
 use libwallet::selection;
+use libwallet::types::*;
 use receiver::TxWrapper;
 use types::*;
-use libwallet::types::*;
 use util;
 use util::LOGGER;
 

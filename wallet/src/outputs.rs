@@ -15,11 +15,11 @@
 use checker;
 use core::core;
 use keychain::Keychain;
+use libwallet::types::*;
 use prettytable;
 use std::io::prelude::*;
 use term;
 use types::*;
-use libwallet::types::*;
 
 pub fn show_outputs(config: &WalletConfig, keychain: &Keychain, show_spent: bool) {
 	let root_key_id = keychain.root_key_id();
