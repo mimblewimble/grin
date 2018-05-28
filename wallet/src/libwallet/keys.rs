@@ -14,6 +14,7 @@
 
 //! Grin Wallet specific key management functions
 use keychain::{Identifier, Keychain};
+use libwallet::types::*;
 use types::*;
 
 /// Get our next available key

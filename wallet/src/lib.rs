@@ -64,5 +64,6 @@ pub use outputs::show_outputs;
 pub use receiver::WalletReceiver;
 pub use restore::restore;
 pub use sender::{issue_burn_tx, issue_send_tx};
-pub use types::{BlockFees, CbData, Error, ErrorKind, WalletConfig, WalletInfo,
+pub use types::{BlockFees, CbData, WalletConfig, WalletInfo,
                 WalletReceiveRequest, WalletSeed};
+pub use libwallet::types::{Error, ErrorKind};

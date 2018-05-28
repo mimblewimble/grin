@@ -16,7 +16,8 @@ use checker;
 use core::core::amount_to_hr_string;
 use keychain::Keychain;
 use prettytable;
-use types::{OutputStatus, WalletConfig, WalletData, WalletInfo};
+use types::*;
+use libwallet::types::*;
 
 pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	let wallet_info = retrieve_info(config, keychain);

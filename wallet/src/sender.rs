@@ -23,6 +23,7 @@ use libtransaction::{build, tx_fee};
 use libwallet::selection;
 use receiver::TxWrapper;
 use types::*;
+use libwallet::types::*;
 use util;
 use util::LOGGER;
 

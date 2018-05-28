@@ -93,7 +93,7 @@ pub struct OutputData {
 
 impl OutputData {
 	/// Lock a given output to avoid conflicting use
-	fn lock(&mut self) {
+	pub fn lock(&mut self) {
 		self.status = OutputStatus::Locked;
 	}
 

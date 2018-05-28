@@ -23,6 +23,7 @@ use failure::{Fail, ResultExt};
 use keychain::Keychain;
 use receiver::receive_coinbase;
 use types::*;
+use libwallet::types::*;
 use util;
 
 pub struct CoinbaseHandler {

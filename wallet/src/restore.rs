@@ -18,8 +18,8 @@ use core::global;
 use failure::{Fail, ResultExt};
 use keychain::{Identifier, Keychain};
 use libtransaction::proof;
-use types::{Error, ErrorKind, MerkleProofWrapper, OutputData, OutputStatus, WalletConfig,
-            WalletData};
+use types::*;
+use libwallet::types::*;
 use util;
 use util::LOGGER;
 use util::secp::pedersen;
