@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Utility structs to handle the 3 hashtrees (output, range proof, kernel) more
-//! conveniently and transactionally.
+//! Utility structs to handle the 3 hashtrees (output, range proof,
+//! kernel) more conveniently and transactionally.
 
 use std::fs;
 use std::fs::File;
@@ -510,7 +510,7 @@ impl<'a> Extension<'a> {
 				// processing a new fork so we may get a position on the old
 				// fork that exists but matches a different node
 				// filtering that case out
-				if hash == OutputIdentifier::from_output(out).hash() {
+				if hash == OutputIdentifier::from_output(out).hash_with_index(pos - 1) {
 					return Err(Error::DuplicateCommitment(commit));
 				}
 			}
