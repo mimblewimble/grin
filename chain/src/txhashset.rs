@@ -348,7 +348,8 @@ pub struct Extension<'a> {
 	rollback: bool,
 
 	/// Batch in which the extension occurs, public so it can be used within
-	/// and `extending` closure.
+	/// and `extending` closure. Just be careful using it that way as it will
+	/// get rolled back with the extension (i.e on a losing fork).
 	pub batch: &'a Batch<'a>,
 }
 

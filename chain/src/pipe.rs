@@ -103,24 +103,17 @@ pub fn process_block(
 
 	// start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
-	let result = txhashset::extending(&mut txhashset, batch, |mut extension| {
+	txhashset::extending(&mut txhashset, batch, |mut extension| {
 		validate_block_via_txhashset(b, &mut ctx, &mut extension)?;
-		trace!(
-			LOGGER,
-			"pipe: process_block: {} at {} is valid, save and append.",
-			b.hash(),
-			b.header.height,
-		);
 
-		add_block(b, extension.batch)?;
-		let h = update_head(b, &mut ctx, extension.batch)?;
-		if h.is_none() {
+		if !block_has_more_work(b, &ctx.head) {
 			extension.force_rollback();
 		}
-		Ok(h)
-	});
+		Ok(())
+	})?;
 
-	result
+	add_block(b, batch)?;
+	update_head(b, &mut ctx, batch)
 }
 
 /// Process the block header.
@@ -399,8 +392,7 @@ fn update_head(
 ) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
 	// when extending the head), update it
-	let tip = Tip::from_block(&b.header);
-	if tip.total_difficulty > ctx.head.total_difficulty {
+	if block_has_more_work(b, &ctx.head) {
 		// update the block height index
 		batch
 			.setup_height(&b.header, &ctx.head)
@@ -409,6 +401,7 @@ fn update_head(
 		// in sync mode, only update the "body chain", otherwise update both the
 		// "header chain" and "body chain", updating the header chain in sync resets
 		// all additional "future" headers we've received
+		let tip = Tip::from_block(&b.header);
 		if ctx.opts.contains(Options::SYNC) {
 			batch
 				.save_body_head(&tip)
@@ -419,27 +412,17 @@ fn update_head(
 				.map_err(|e| Error::StoreErr(e, "pipe save head".to_owned()))?;
 		}
 		ctx.head = tip.clone();
-		if b.header.height % 100 == 0 {
-			info!(
-				LOGGER,
-				"pipe: chain head reached {} @ {} [{}]",
-				b.header.height,
-				b.header.total_difficulty,
-				b.hash()
-			);
-		} else {
-			debug!(
-				LOGGER,
-				"pipe: chain head reached {} @ {} [{}]",
-				b.header.height,
-				b.header.total_difficulty,
-				b.hash()
-			);
-		}
+		debug!(LOGGER, "pipe: chain head {} @ {}", b.hash(), b.header.height);
 		Ok(Some(tip))
 	} else {
 		Ok(None)
 	}
+}
+
+// Whether the provided block totals more work than the chain tip
+fn block_has_more_work(b: &Block, tip: &Tip) -> bool {
+	let block_tip = Tip::from_block(&b.header);
+	block_tip.total_difficulty > tip.total_difficulty
 }
 
 /// Update the sync head so we can keep syncing from where we left off.
@@ -453,23 +436,7 @@ fn update_sync_head(
 		.save_sync_head(&tip)
 		.map_err(|e| Error::StoreErr(e, "pipe save sync head".to_owned()))?;
 	ctx.head = tip.clone();
-	if bh.height % 100 == 0 {
-		info!(
-			LOGGER,
-			"sync head {} @ {} [{}]",
-			bh.total_difficulty,
-			bh.height,
-			bh.hash()
-		);
-	} else {
-		debug!(
-			LOGGER,
-			"sync head {} @ {} [{}]",
-			bh.total_difficulty,
-			bh.height,
-			bh.hash()
-		);
-	}
+	debug!(LOGGER, "sync head {} @ {}", bh.hash(), bh.height);
 	Ok(Some(tip))
 }
 
@@ -484,23 +451,7 @@ fn update_header_head(
 			.save_header_head(&tip)
 			.map_err(|e| Error::StoreErr(e, "pipe save header head".to_owned()))?;
 		ctx.head = tip.clone();
-		if bh.height % 100 == 0 {
-			info!(
-				LOGGER,
-				"header head {} @ {} [{}]",
-				bh.total_difficulty,
-				bh.height,
-				bh.hash()
-			);
-		} else {
-			debug!(
-				LOGGER,
-				"header head {} @ {} [{}]",
-				bh.total_difficulty,
-				bh.height,
-				bh.hash()
-			);
-		}
+		debug!(LOGGER, "header head {} @ {}", bh.hash(), bh.height);
 		Ok(Some(tip))
 	} else {
 		Ok(None)

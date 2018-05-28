@@ -12,12 +12,12 @@
 // limitations under the License.
 
 //! Logging wrapper to be used throughout all crates in the workspace
-use std::fs::OpenOptions;
-use std::sync::Mutex;
-use std::ops::Deref;
 use slog::{Discard, Drain, Duplicate, Level, LevelFilter, Logger};
-use slog_term;
 use slog_async;
+use slog_term;
+use std::fs::OpenOptions;
+use std::ops::Deref;
+use std::sync::Mutex;
 
 use backtrace::Backtrace;
 use std::{panic, thread};

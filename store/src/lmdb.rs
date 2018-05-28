@@ -199,7 +199,7 @@ impl<'a> Batch<'a> {
 
 	/// Creates a child of this batch. It will be merged with its parent on
 	/// commit, abandoned otherwise.
-	pub fn child(&mut self) -> Result<Batch, Error> {	
+	pub fn child(&mut self) -> Result<Batch, Error> {
 		Ok(Batch {
 			store: self.store,
 			tx: self.tx.child_tx()?,

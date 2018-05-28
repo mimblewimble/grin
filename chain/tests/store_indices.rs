@@ -20,18 +20,18 @@ extern crate grin_store as store;
 extern crate grin_wallet as wallet;
 extern crate rand;
 
-use std::sync::Arc;
 use std::fs;
+use std::sync::Arc;
 
 use chain::Tip;
-use core::core::hash::Hashed;
 use core::core::Block;
 use core::core::BlockHeader;
+use core::core::hash::Hashed;
 use core::core::target::Difficulty;
-use keychain::Keychain;
 use core::global;
 use core::global::ChainTypes;
 use core::pow;
+use keychain::Keychain;
 
 use wallet::libwallet;
 
@@ -47,7 +47,7 @@ fn test_various_store_indices() {
 
 	let keychain = Keychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
-	let db_env = Arc::new(store::new_env(".grin".to_string()));
+	let db_env = Arc::new(store::new_env(chain_dir.to_string()));
 
 	let chain_store = chain::store::ChainStore::new(db_env).unwrap();
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
@@ -59,12 +59,14 @@ fn test_various_store_indices() {
 
 	{
 		let batch = chain_store.batch().unwrap();
-
 		batch.save_block(&genesis).unwrap();
 		batch
 			.setup_height(&genesis.header, &Tip::new(genesis.hash()))
 			.unwrap();
-
+		batch.commit().unwrap();
+	}
+	{
+		let batch = chain_store.batch().unwrap();
 		batch.save_block(&block).unwrap();
 		batch
 			.setup_height(&block.header, &Tip::from_block(&block.header))
@@ -86,7 +88,7 @@ fn test_store_header_height() {
 	let chain_dir = ".grin_idx_2";
 	clean_output_dir(chain_dir);
 
-	let db_env = Arc::new(store::new_env(".grin".to_string()));
+	let db_env = Arc::new(store::new_env(chain_dir.to_string()));
 	let chain_store = chain::store::ChainStore::new(db_env).unwrap();
 
 	let mut block_header = BlockHeader::default();

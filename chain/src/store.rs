@@ -93,7 +93,6 @@ impl ChainStore {
 				return Ok(header.clone());
 			}
 		}
-
 		let header: Result<BlockHeader, Error> = option_to_not_found(
 			self.db
 				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
