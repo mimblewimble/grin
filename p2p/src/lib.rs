@@ -53,5 +53,5 @@ pub use peer::Peer;
 pub use peers::Peers;
 pub use serv::{DummyAdapter, Server};
 pub use store::{PeerData, State};
-pub use types::{Capabilities, ChainAdapter, DandelionConfig, Error, P2PConfig, PeerInfo,
+pub use types::{Capabilities, ChainAdapter, DandelionConfig, Error, P2PConfig, PeerInfo, ReasonForBan,
                 TxHashSetRead, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};

@@ -17,9 +17,9 @@ use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use conn::*;
 use core::core;
 use core::core::hash::{Hash, Hashed};
-use conn::*;
 use msg::*;
 use rand;
 use rand::Rng;
@@ -71,6 +71,12 @@ impl MessageHandler for Protocol {
 			Type::Pong => {
 				let pong: Pong = msg.body()?;
 				adapter.peer_difficulty(self.addr, pong.total_difficulty, pong.height);
+				Ok(None)
+			}
+
+			Type::BanReason => {
+				let ban_reason: BanReason = msg.body()?;
+				error!(LOGGER, "handle_payload: BanReason {:?}", ban_reason);
 				Ok(None)
 			}
 
