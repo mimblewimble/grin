@@ -14,11 +14,11 @@
 
 //! Message types that transit over the network and related serialization code.
 
+use num::FromPrimitive;
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
 use std::thread;
 use std::time;
-use num::FromPrimitive;
 
 use core::consensus::{MAX_MSG_LEN, MAX_TX_INPUTS, MAX_TX_KERNELS, MAX_TX_OUTPUTS};
 use core::core::BlockHeader;
@@ -56,6 +56,7 @@ enum_from_primitive! {
 		Shake,
 		Ping,
 		Pong,
+		BanReason,
 		GetPeerAddrs,
 		PeerAddrs,
 		GetHeaders,
@@ -72,12 +73,13 @@ enum_from_primitive! {
 	}
 }
 
-const MAX_MSG_SIZES: [u64; 18] = [
+const MAX_MSG_SIZES: [u64; 19] = [
 	0,                                                                  // Error
 	128,                                                                // Hand
 	88,                                                                 // Shake
 	16,                                                                 // Ping
 	16,                                                                 // Pong
+	64,                                                                 // BanReason
 	4,                                                                  // GetPeerAddrs
 	4 + (1 + 16 + 2) * MAX_PEER_ADDRS as u64,                           // PeerAddrs, with all IPv6
 	1 + 32 * MAX_LOCATORS as u64,                                       // GetHeaders locators
@@ -673,6 +675,33 @@ impl Readable for Pong {
 			total_difficulty,
 			height,
 		})
+	}
+}
+
+#[derive(Debug)]
+pub struct BanReason {
+	/// the reason for the ban
+	pub ban_reason: ReasonForBan,
+}
+
+impl Writeable for BanReason {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		let ban_reason_i32 = self.ban_reason as i32;
+		ban_reason_i32.write(writer).unwrap();
+		Ok(())
+	}
+}
+
+impl Readable for BanReason {
+	fn read(reader: &mut Reader) -> Result<BanReason, ser::Error> {
+		let ban_reason_i32 = match reader.read_i32() {
+			Ok(h) => h,
+			Err(_) => 0,
+		};
+
+		let ban_reason = ReasonForBan::from_i32(ban_reason_i32).ok_or(ser::Error::CorruptedData)?;
+
+		Ok(BanReason { ban_reason })
 	}
 }
 

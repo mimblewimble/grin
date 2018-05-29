@@ -198,6 +198,19 @@ enum_from_primitive! {
 	}
 }
 
+/// Ban reason
+enum_from_primitive! {
+	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+	pub enum ReasonForBan {
+		None = 0,
+		BadBlock = 1,
+		BadCompactBlock = 2,
+		BadBlockHeader = 3,
+		BadTxHashSet = 4,
+		ManualBan = 5,
+	}
+}
+
 /// General information about a connected peer that's useful to other modules.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PeerInfo {

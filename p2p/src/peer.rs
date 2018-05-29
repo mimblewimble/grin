@@ -22,8 +22,8 @@ use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use handshake::Handshake;
 use msg;
-use protocol::Protocol;
 use msg::*;
+use protocol::Protocol;
 use types::*;
 use util::LOGGER;
 
@@ -157,6 +157,25 @@ impl Peer {
 			.send(ping_msg, msg::Type::Ping)
 	}
 
+	/// Send the ban reason before banning
+	pub fn send_ban_reason(&self, ban_reason: ReasonForBan) {
+		let ban_reason_msg = BanReason { ban_reason };
+		match self.connection
+			.as_ref()
+			.unwrap()
+			.send(ban_reason_msg, msg::Type::BanReason)
+		{
+			Ok(_) => debug!(
+				LOGGER,
+				"Sent ban reason {:?} to {}", ban_reason, self.info.addr
+			),
+			Err(e) => error!(
+				LOGGER,
+				"Could not send ban reason {:?} to {}: {:?}", ban_reason, self.info.addr, e
+			),
+		};
+	}
+
 	/// Sends the provided block to the remote peer. The request may be dropped
 	/// if the remote peer is known to already have the block.
 	pub fn send_block(&self, b: &core::Block) -> Result<(), Error> {
@@ -235,8 +254,9 @@ impl Peer {
 		}
 	}
 
-	/// Sends the provided stem transaction to the remote peer. The request may be
-	/// dropped if the remote peer is known to already have the stem transaction.
+	/// Sends the provided stem transaction to the remote peer. The request may
+	/// be dropped if the remote peer is known to already have the stem
+	/// transaction.
 	pub fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		if !self.tracking_adapter.has(tx.hash()) {
 			debug!(LOGGER, "Send tx {} to {}", tx.hash(), self.info.addr);

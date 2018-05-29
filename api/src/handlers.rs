@@ -29,6 +29,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::ser;
 use p2p;
+use p2p::types::ReasonForBan;
 use pool;
 use regex::Regex;
 use rest::*;
@@ -403,7 +404,7 @@ impl Handler for PeerPostHandler {
 			"ban" => {
 				path_elems.pop();
 				if let Ok(addr) = path_elems.last().unwrap().parse() {
-					w(&self.peers).ban_peer(&addr);
+					w(&self.peers).ban_peer(&addr, ReasonForBan::ManualBan);
 					Ok(Response::with((status::Ok, "")))
 				} else {
 					Ok(Response::with((status::BadRequest, "")))
@@ -530,8 +531,8 @@ impl Handler for ChainCompactHandler {
 /// GET /v1/blocks/<hash>
 /// GET /v1/blocks/<height>
 ///
-/// Optionally return results as "compact blocks" by passing "?compact" query param
-/// GET /v1/blocks/<hash>?compact
+/// Optionally return results as "compact blocks" by passing "?compact" query
+/// param GET /v1/blocks/<hash>?compact
 pub struct BlockHandler {
 	pub chain: Weak<chain::Chain>,
 }
