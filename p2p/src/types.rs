@@ -193,8 +193,8 @@ bitflags! {
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 	pub enum Direction {
-		Inbound,
-		Outbound,
+		Inbound = 0,
+		Outbound = 1,
 	}
 }
 
