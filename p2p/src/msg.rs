@@ -41,59 +41,58 @@ const MAGIC: [u8; 2] = [0x1e, 0xc5];
 /// Size in bytes of a message header
 pub const HEADER_LEN: u64 = 11;
 
-/// Codes for each error that can be produced reading a message.
-#[allow(dead_code)]
-pub enum ErrCodes {
-	UnsupportedVersion = 100,
-}
-
-/// Types of messages
+/// Types of messages.
+/// Note: Values here are *important* so we should only add new values at the
+/// end.
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq)]
 	pub enum Type {
-		Error,
-		Hand,
-		Shake,
-		Ping,
-		Pong,
-		BanReason,
-		GetPeerAddrs,
-		PeerAddrs,
-		GetHeaders,
-		Header,
-		Headers,
-		GetBlock,
-		Block,
-		GetCompactBlock,
-		CompactBlock,
-		StemTransaction,
-		Transaction,
-		TxHashSetRequest,
-		TxHashSetArchive,
+		Error = 0,
+		Hand = 1,
+		Shake = 2,
+		Ping = 3,
+		Pong = 4,
+		GetPeerAddrs = 5,
+		PeerAddrs = 6,
+		GetHeaders = 7,
+		Header = 8,
+		Headers = 9,
+		GetBlock = 10,
+		Block = 11,
+		GetCompactBlock = 12,
+		CompactBlock = 13,
+		StemTransaction = 14,
+		Transaction = 15,
+		TxHashSetRequest = 16,
+		TxHashSetArchive = 17,
+		BanReason = 18,
 	}
 }
 
-const MAX_MSG_SIZES: [u64; 19] = [
-	0,                                                                  // Error
-	128,                                                                // Hand
-	88,                                                                 // Shake
-	16,                                                                 // Ping
-	16,                                                                 // Pong
-	64,                                                                 // BanReason
-	4,                                                                  // GetPeerAddrs
-	4 + (1 + 16 + 2) * MAX_PEER_ADDRS as u64,                           // PeerAddrs, with all IPv6
-	1 + 32 * MAX_LOCATORS as u64,                                       // GetHeaders locators
-	365,                                                                // Header
-	2 + 365 * MAX_BLOCK_HEADERS as u64,                                 // Headers
-	32,                                                                 // GetBlock
-	MAX_MSG_LEN,                                                        // Block
-	32,                                                                 // GetCompactBlock
-	MAX_MSG_LEN / 10,                                                   // CompactBlock
-	1000 * MAX_TX_INPUTS + 710 * MAX_TX_OUTPUTS + 114 * MAX_TX_KERNELS, // StemTransaction,
-	1000 * MAX_TX_INPUTS + 710 * MAX_TX_OUTPUTS + 114 * MAX_TX_KERNELS, // Transaction,
-	40,                                                                 // TxHashSetRequest
-	64,                                                                 // TxHashSetArchive
-];
+// Max msg size for each msg type.
+fn max_msg_size(msg_type: Type) -> u64 {
+	match msg_type {
+		Type::Error => 0,
+		Type::Hand => 128,
+		Type::Shake => 88,
+		Type::Ping => 16,
+		Type::Pong => 16,
+		Type::GetPeerAddrs => 4,
+		Type::PeerAddrs => 4 + (1 + 16 + 2) * MAX_PEER_ADDRS as u64,
+		Type::GetHeaders => 1 + 32 * MAX_LOCATORS as u64,
+		Type::Header => 365,
+		Type::Headers => 2 + 365 * MAX_BLOCK_HEADERS as u64,
+		Type::GetBlock => 32,
+		Type::Block => MAX_MSG_LEN,
+		Type::GetCompactBlock => 32,
+		Type::CompactBlock => MAX_MSG_LEN / 10,
+		Type::StemTransaction => 1000 * MAX_TX_INPUTS + 710 * MAX_TX_OUTPUTS + 114 * MAX_TX_KERNELS,
+		Type::Transaction => 1000 * MAX_TX_INPUTS + 710 * MAX_TX_OUTPUTS + 114 * MAX_TX_KERNELS,
+		Type::TxHashSetRequest => 40,
+		Type::TxHashSetArchive => 64,
+		Type::BanReason => 64,
+	}
+}
 
 /// The default implementation of read_exact is useless with async TcpStream as
 /// it will return as soon as something has been read, regardless of
@@ -190,7 +189,7 @@ pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
 	let mut head = vec![0u8; HEADER_LEN as usize];
 	read_exact(conn, &mut head, 10000, false)?;
 	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
-	let max_len = MAX_MSG_SIZES[header.msg_type as usize];
+	let max_len = max_msg_size(header.msg_type);
 	// TODO 4x the limits for now to leave ourselves space to change things
 	if header.msg_len > max_len * 4 {
 		error!(
