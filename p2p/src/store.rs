@@ -32,9 +32,9 @@ const PEER_PREFIX: u8 = 'p' as u8;
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 	pub enum State {
-		Healthy,
-		Banned,
-		Defunct,
+		Healthy = 0,
+		Banned = 1,
+		Defunct = 2,
 	}
 }
 
