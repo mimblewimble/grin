@@ -14,8 +14,8 @@
 
 //! Types and traits that should be provided by a wallet
 //! implementation
-use std::fmt::{self, Display};
 use std::collections::HashMap;
+use std::fmt::{self, Display};
 
 use serde;
 
@@ -31,7 +31,6 @@ use keychain::{Identifier, Keychain};
 /// here expect that the wallet instance has instantiated itself or stored
 /// whatever credentials it needs
 pub trait WalletBackend {
-
 	/// Return the keychain being used
 	fn keychain(&self) -> &mut Keychain;
 
@@ -78,7 +77,6 @@ pub trait WalletBackend {
 		max_outputs: usize,
 		select_all: bool,
 	) -> Vec<OutputData>;
-
 }
 
 /// Information about an output that's being tracked by the wallet. Must be

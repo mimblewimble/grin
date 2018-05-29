@@ -162,8 +162,7 @@ impl WalletSeed {
 /// Wallet information tracking all our outputs. Based on HD derivation and
 /// avoids storing any key data, only storing output amounts and child index.
 #[derive(Debug, Clone)]
-pub struct FileWallet
-{
+pub struct FileWallet {
 	/// Keychain
 	pub keychain: Keychain,
 	/// Configuration
@@ -172,8 +171,7 @@ pub struct FileWallet
 	pub outputs: HashMap<String, OutputData>,
 }
 
-impl WalletBackend for FileWallet
-{
+impl WalletBackend for FileWallet {
 	/// Return the keychain being used
 	fn keychain(&self) -> &mut Keychain {
 		&mut self.keychain
@@ -185,7 +183,7 @@ impl WalletBackend for FileWallet
 	}
 
 	/// Return the outputs directly
-	fn outputs(&self) -> &mut HashMap<String, OutputData>{
+	fn outputs(&self) -> &mut HashMap<String, OutputData> {
 		&mut self.outputs
 	}
 
@@ -196,7 +194,10 @@ impl WalletBackend for FileWallet
 		F: FnOnce(&Self) -> Result<T, Error>,
 	{
 		// open the wallet readonly and do what needs to be done with it
-		let data_file_path = &format!("{}{}{}", self.config.data_file_dir, MAIN_SEPARATOR, DAT_FILE);
+		let data_file_path = &format!(
+			"{}{}{}",
+			self.config.data_file_dir, MAIN_SEPARATOR, DAT_FILE
+		);
 		self.read_or_create_paths()?;
 		f(self)
 	}
@@ -216,9 +217,18 @@ impl WalletBackend for FileWallet
 			info!(LOGGER, "! {:?}", why.kind());
 		});
 
-		let data_file_path = &format!("{}{}{}", self.config.data_file_dir, MAIN_SEPARATOR, DAT_FILE);
-		let backup_file_path = &format!("{}{}{}", self.config.data_file_dir, MAIN_SEPARATOR, BCK_FILE);
-		let lock_file_path = &format!("{}{}{}", self.config.data_file_dir, MAIN_SEPARATOR, LOCK_FILE);
+		let data_file_path = &format!(
+			"{}{}{}",
+			self.config.data_file_dir, MAIN_SEPARATOR, DAT_FILE
+		);
+		let backup_file_path = &format!(
+			"{}{}{}",
+			self.config.data_file_dir, MAIN_SEPARATOR, BCK_FILE
+		);
+		let lock_file_path = &format!(
+			"{}{}{}",
+			self.config.data_file_dir, MAIN_SEPARATOR, LOCK_FILE
+		);
 
 		info!(LOGGER, "Acquiring wallet lock ...");
 
@@ -366,11 +376,9 @@ impl WalletBackend for FileWallet
 		eligible.reverse();
 		eligible.iter().take(max_outputs).cloned().collect()
 	}
-
 }
 
-impl FileWallet
-{
+impl FileWallet {
 	/// Create a new FileWallet instance
 	pub fn new(config: WalletConfig, keychain: Keychain) -> Result<Self, Error> {
 		Ok(FileWallet {
@@ -423,7 +431,6 @@ impl FileWallet
 			.map_err(|e| e.into())
 	}
 
-
 	// Select the full list of outputs if we are using the select_all strategy.
 	// Otherwise select just enough outputs to cover the desired amount.
 	fn select_from(
@@ -454,5 +461,4 @@ impl FileWallet
 			None
 		}
 	}
-
 }

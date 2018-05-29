@@ -21,9 +21,7 @@ use util::LOGGER;
 
 pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 	let backend = FileWallet::new(wallet_config)
-		.unwrap_or_else(|e| {
-				panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
-			});
+		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
 
 	info!(
 		LOGGER,

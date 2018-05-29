@@ -19,7 +19,7 @@ use prettytable;
 
 pub fn show_info<T>(wallet: &mut T)
 where
-	T: WalletBackend 
+	T: WalletBackend,
 {
 	let wallet_info = retrieve_info(wallet);
 	println!(
@@ -47,9 +47,9 @@ where
 	}
 }
 
-pub fn retrieve_info<T>(wallet: &mut T) -> WalletInfo 
+pub fn retrieve_info<T>(wallet: &mut T) -> WalletInfo
 where
-	T: WalletBackend
+	T: WalletBackend,
 {
 	let result = checker::refresh_outputs(wallet);
 

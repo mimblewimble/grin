@@ -17,19 +17,17 @@ use keychain::Identifier;
 use libwallet::types::{Error, WalletBackend};
 
 /// Get our next available key
-pub fn new_output_key<T, R>(
-	wallet: &T
-) -> Result<(Identifier, u32), Error>
-where T: WalletBackend
+pub fn new_output_key<T, R>(wallet: &T) -> Result<(Identifier, u32), Error>
+where
+	T: WalletBackend,
 {
-	wallet.with_wallet(|wallet_data| {
-		next_available_key(wallet_data)
-	})
+	wallet.with_wallet(|wallet_data| next_available_key(wallet_data))
 }
 
 /// Get next available key in the wallet
-pub fn next_available_key<T>(wallet: &mut T) -> (Identifier, u32) 
-where T: WalletBackend
+pub fn next_available_key<T>(wallet: &mut T) -> (Identifier, u32)
+where
+	T: WalletBackend,
 {
 	let root_key_id = wallet.keychain().root_key_id();
 	let derivation = wallet.next_child(root_key_id.clone());
@@ -39,7 +37,8 @@ where T: WalletBackend
 
 /// Retrieve an existing key from a wallet
 pub fn retrieve_existing_key<T>(wallet: &T, key_id: Identifier) -> (Identifier, u32)
-where T: WalletBackend
+where
+	T: WalletBackend,
 {
 	if let Some(existing) = wallet.get_output(&key_id) {
 		let key_id = existing.key_id.clone();

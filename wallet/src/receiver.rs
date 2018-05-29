@@ -40,7 +40,7 @@ pub struct TxWrapper {
 
 fn handle_send<T>(wallet: &T, slate: &mut Slate) -> Result<(), Error>
 where
-	T: WalletBackend
+	T: WalletBackend,
 {
 	// create an output using the amount in the slate
 	let (_, mut context, receiver_create_fn) =
@@ -48,7 +48,12 @@ where
 
 	// fill public keys
 	let _ = slate
-		.fill_round_1(wallet.keychain(), &mut context.sec_key, &context.sec_nonce, 1)
+		.fill_round_1(
+			wallet.keychain(),
+			&mut context.sec_key,
+			&context.sec_nonce,
+			1,
+		)
 		.context(ErrorKind::LibWalletError)?;
 
 	// perform partial sig
@@ -72,9 +77,9 @@ where
 	pub wallet: T,
 }
 
-impl <T> Handler for WalletReceiver<T>
-where 
-	T: WalletBackend + Send + Sync + 'static
+impl<T> Handler for WalletReceiver<T>
+where
+	T: WalletBackend + Send + Sync + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let struct_body = req.get::<bodyparser::Struct<Slate>>();
@@ -104,9 +109,9 @@ where
 pub fn receive_coinbase<T>(
 	wallet: &mut T,
 	block_fees: &BlockFees,
-) -> Result<(Output, TxKernel, BlockFees), Error> 
+) -> Result<(Output, TxKernel, BlockFees), Error>
 where
-T: WalletBackend 
+	T: WalletBackend,
 {
 	let root_key_id = wallet.keychain().root_key_id();
 
@@ -150,8 +155,12 @@ T: WalletBackend
 
 	debug!(LOGGER, "receive_coinbase: {:?}", block_fees);
 
-	let (out, kern) =
-		reward::output(&wallet.keychain(), &key_id, block_fees.fees, block_fees.height).unwrap();
+	let (out, kern) = reward::output(
+		&wallet.keychain(),
+		&key_id,
+		block_fees.fees,
+		block_fees.height,
+	).unwrap();
 	/* .context(ErrorKind::Keychain)?; */
 	Ok((out, kern, block_fees))
 }

@@ -41,9 +41,9 @@ pub fn build_send_tx_slate<T>(
 		impl FnOnce() -> Result<(), Error>,
 	),
 	Error,
-> 
+>
 where
-	T: WalletBackend 
+	T: WalletBackend,
 {
 	let (elems, inputs, change_id, amount, fee) = select_send_tx(
 		wallet,
@@ -117,8 +117,9 @@ pub fn build_recipient_output_with_slate<'a, T>(
 		impl FnOnce() -> Result<(), Error>,
 	),
 	Error,
-> 
-where T: WalletBackend
+>
+where
+	T: WalletBackend,
 {
 	// Create a potential output for this transaction
 	let (key_id, derivation) = keys::new_output_key(wallet)?;
@@ -129,7 +130,10 @@ where T: WalletBackend
 	let height = slate.height;
 
 	let blinding = slate
-		.add_transaction_elements(wallet.keychain(), vec![build::output(amount, key_id.clone())])
+		.add_transaction_elements(
+			wallet.keychain(),
+			vec![build::output(amount, key_id.clone())],
+		)
 		.context(ErrorKind::LibWalletError)?;
 
 	// Add blinding sum to our context
@@ -181,9 +185,9 @@ pub fn select_send_tx<T>(
 		u64, // fee
 	),
 	Error,
-> 
+>
 where
-	T: WalletBackend
+	T: WalletBackend,
 {
 	let key_id = wallet.keychain().clone().root_key_id();
 
@@ -200,16 +204,18 @@ where
 	})?;
 
 	// Get the maximum number of outputs in the wallet
-	let max_outputs = wallet.read_wallet(|wallet_data| {
-		Ok(wallet_data.select_coins(
-			key_id.clone(),
-			amount,
-			current_height,
-			minimum_confirmations,
-			max_outputs,
-			true,
-		))
-	})?.len();
+	let max_outputs = wallet
+		.read_wallet(|wallet_data| {
+			Ok(wallet_data.select_coins(
+				key_id.clone(),
+				amount,
+				current_height,
+				minimum_confirmations,
+				max_outputs,
+				true,
+			))
+		})?
+		.len();
 
 	// sender is responsible for setting the fee on the partial tx
 	// recipient should double check the fee calculation and not blindly trust the
@@ -255,8 +261,7 @@ where
 	}
 
 	// build transaction skeleton with inputs and change
-	let (mut parts, change_key) =
-		inputs_and_change(&coins, wallet, current_height, amount, fee)?;
+	let (mut parts, change_key) = inputs_and_change(&coins, wallet, current_height, amount, fee)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
@@ -277,9 +282,9 @@ pub fn inputs_and_change<T>(
 	height: u64,
 	amount: u64,
 	fee: u64,
-) -> Result<(Vec<Box<build::Append>>, Option<Identifier>), Error> 
+) -> Result<(Vec<Box<build::Append>>, Option<Identifier>), Error>
 where
-	T: WalletBackend
+	T: WalletBackend,
 {
 	let mut parts = vec![];
 
@@ -295,7 +300,8 @@ where
 
 	// build inputs using the appropriate derived key_ids
 	for coin in coins {
-		let key_id = wallet.keychain()
+		let key_id = wallet
+			.keychain()
 			.derive_key_id(coin.n_child)
 			.context(ErrorKind::Keychain)?;
 		if coin.is_coinbase {

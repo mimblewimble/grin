@@ -26,14 +26,14 @@ use util;
 
 pub struct CoinbaseHandler<T>
 where
-	T:WalletBackend 
+	T: WalletBackend,
 {
 	pub wallet: T,
 }
 
-impl <T>CoinbaseHandler<T>
+impl<T> CoinbaseHandler<T>
 where
-	T: WalletBackend 
+	T: WalletBackend,
 {
 	fn build_coinbase(&self, block_fees: &BlockFees) -> Result<CbData, Error> {
 		let (out, kern, block_fees) =
@@ -58,9 +58,10 @@ where
 
 // TODO - error handling - what to return if we fail to get the wallet lock for
 // some reason...
-impl <T> Handler for CoinbaseHandler<T>
+impl<T> Handler for CoinbaseHandler<T>
 where
-	T: WalletBackend + Send + Sync + 'static {
+	T: WalletBackend + Send + Sync + 'static,
+{
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let struct_body = req.get::<bodyparser::Struct<BlockFees>>();
 
