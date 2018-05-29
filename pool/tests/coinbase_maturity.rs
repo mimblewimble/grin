@@ -42,8 +42,6 @@ pub fn test_setup(
 		PoolConfig {
 			accept_fee_base: 0,
 			max_pool_size: 50,
-			dandelion_probability: 90,
-			dandelion_embargo: 30,
 		},
 		chain.clone(),
 		Arc::new(NoopAdapter {}),
