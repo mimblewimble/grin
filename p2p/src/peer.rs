@@ -255,7 +255,8 @@ impl Peer {
 	}
 
 	/// Sends the provided stem transaction to the remote peer.
-	/// Note: tracking adapter is ignored for stem transactions (while under embargo).
+	/// Note: tracking adapter is ignored for stem transactions (while under
+	/// embargo).
 	pub fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		debug!(LOGGER, "Send (stem) tx {} to {}", tx.hash(), self.info.addr);
 		self.connection
