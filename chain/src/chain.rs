@@ -533,6 +533,7 @@ impl Chain {
 			batch.save_header_height(&header)?;
 			batch.build_by_height_index(&header, true)?;
 		}
+		batch.commit()?;
 
 		self.check_orphans(header.height + 1);
 
