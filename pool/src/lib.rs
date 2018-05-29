@@ -38,4 +38,4 @@ pub mod transaction_pool;
 pub mod types;
 
 pub use transaction_pool::TransactionPool;
-pub use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntryState, PoolError, TxSource};
+pub use types::{BlockChain, DandelionConfig, PoolAdapter, PoolConfig, PoolEntryState, PoolError, TxSource};

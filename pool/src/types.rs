@@ -22,6 +22,22 @@ use core::consensus;
 use core::core::transaction;
 use core::core::transaction::Transaction;
 
+/// Configuration for "Dandelion".
+/// Note: shared between p2p and pool.
+/// Look in top-level server config for info on configuring these parameters.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DandelionConfig {
+	/// Choose new Dandelion relay peer every n secs.
+	pub relay_secs: u64,
+	/// Dandelion embargo, fluff and broadcast tx if not seen on network before embargo expires.
+	pub embargo_secs: u64,
+	/// Dandelion patience timer, fluff/stem processing runs every n secs.
+	/// Tx aggregation happens on stem txs received within this window.
+	pub patience_secs: u64,
+	/// Dandelion stem probability (stem 90% of the time, fluff 10% etc.)
+	pub stem_probability: usize,
+}
+
 /// Transaction pool configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PoolConfig {
@@ -34,14 +50,6 @@ pub struct PoolConfig {
 	/// Maximum capacity of the pool in number of transactions
 	#[serde = "default_max_pool_size"]
 	pub max_pool_size: usize,
-
-	/// Maximum capacity of the pool in number of transactions
-	#[serde = "default_dandelion_probability"]
-	pub dandelion_probability: usize,
-
-	/// Default embargo for Dandelion transaction
-	#[serde = "default_dandelion_embargo"]
-	pub dandelion_embargo: i64,
 }
 
 impl Default for PoolConfig {
@@ -49,8 +57,6 @@ impl Default for PoolConfig {
 		PoolConfig {
 			accept_fee_base: default_accept_fee_base(),
 			max_pool_size: default_max_pool_size(),
-			dandelion_probability: default_dandelion_probability(),
-			dandelion_embargo: default_dandelion_embargo(),
 		}
 	}
 }
@@ -60,12 +66,6 @@ fn default_accept_fee_base() -> u64 {
 }
 fn default_max_pool_size() -> usize {
 	50_000
-}
-fn default_dandelion_probability() -> usize {
-	90
-}
-fn default_dandelion_embargo() -> i64 {
-	30
 }
 
 /// Represents a single entry in the pool.

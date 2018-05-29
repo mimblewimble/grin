@@ -22,7 +22,8 @@ use time::now_utc;
 
 use core::core::hash::Hashed;
 use core::core::transaction;
-use pool::{BlockChain, PoolConfig, PoolEntryState, PoolError, TransactionPool, TxSource};
+use p2p::DandelionConfig;
+use pool::{BlockChain, PoolEntryState, PoolError, TransactionPool, TxSource};
 use util::LOGGER;
 
 /// A process to monitor transactions in the stempool.
@@ -34,7 +35,7 @@ use util::LOGGER;
 /// the transaction will be sent in fluff phase (to multiple peers) instead of
 /// sending only to the peer relay.
 pub fn monitor_transactions<T>(
-	config: PoolConfig,
+	dandelion_config: DandelionConfig,
 	tx_pool: Arc<RwLock<TransactionPool<T>>>,
 	stop: Arc<AtomicBool>,
 ) where
@@ -50,8 +51,8 @@ pub fn monitor_transactions<T>(
 					break;
 				}
 
-				// this is the patience timer, we loop every n secs.
-				let patience_secs = 10;
+				// This is the patience timer, we loop every n secs.
+				let patience_secs = dandelion_config.patience_secs;
 				thread::sleep(Duration::from_secs(patience_secs));
 
 				let tx_pool = tx_pool.clone();
@@ -73,12 +74,12 @@ pub fn monitor_transactions<T>(
 				// Step 3: now find all "Fresh" entries in stempool since last run.
 				// Coin flip for each (90/10) and label them as either "ToStem" or "ToFluff".
 				// We will process these in the next run (waiting patience secs).
-				if process_fresh_entries(config.clone(), tx_pool.clone()).is_err() {
+				if process_fresh_entries(dandelion_config.clone(), tx_pool.clone()).is_err() {
 					error!(LOGGER, "dand_mon: Problem processing fresh pool entries.");
 				}
 
 				// Step 4: now find all expired entries based on embargo timer.
-				if process_expired_entries(config.clone(), tx_pool.clone()).is_err() {
+				if process_expired_entries(dandelion_config.clone(), tx_pool.clone()).is_err() {
 					error!(LOGGER, "dand_mon: Problem processing fresh pool entries.");
 				}
 			}
@@ -158,7 +159,7 @@ where
 }
 
 fn process_fresh_entries<T>(
-	config: PoolConfig,
+	dandelion_config: DandelionConfig,
 	tx_pool: Arc<RwLock<TransactionPool<T>>>,
 ) -> Result<(), PoolError>
 where
@@ -184,7 +185,7 @@ where
 
 		for x in &mut fresh_entries.iter_mut() {
 			let random = rng.gen_range(0, 101);
-			if random <= config.dandelion_probability {
+			if random <= dandelion_config.stem_probability {
 				x.state = PoolEntryState::ToStem;
 			} else {
 				x.state = PoolEntryState::ToFluff;
@@ -195,15 +196,15 @@ where
 }
 
 fn process_expired_entries<T>(
-	config: PoolConfig,
+	dandelion_config: DandelionConfig,
 	tx_pool: Arc<RwLock<TransactionPool<T>>>,
 ) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
 {
 	let now = now_utc().to_timespec().sec;
-	let embargo_sec = config.dandelion_embargo + rand::thread_rng().gen_range(0, 31);
-	let cutoff = now - embargo_sec;
+	let embargo_sec = dandelion_config.embargo_secs + rand::thread_rng().gen_range(0, 31);
+	let cutoff = now - embargo_sec as i64;
 
 	let mut expired_entries = vec![];
 	{
