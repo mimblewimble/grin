@@ -27,8 +27,6 @@ use core::consensus::reward;
 use core::core::{Output, TxKernel};
 use core::global;
 use failure::{Fail, ResultExt};
-use file_wallet::*;
-use keychain::Keychain;
 use libtx::{reward, slate::Slate};
 use libwallet::types::*;
 use libwallet::{keys, selection};
@@ -40,19 +38,22 @@ pub struct TxWrapper {
 	pub tx_hex: String,
 }
 
-fn handle_send(config: &WalletConfig, keychain: &Keychain, slate: &mut Slate) -> Result<(), Error> {
+fn handle_send<T>(wallet: &T, slate: &mut Slate) -> Result<(), Error>
+where
+	T: WalletBackend
+{
 	// create an output using the amount in the slate
 	let (_, mut context, receiver_create_fn) =
-		selection::build_recipient_output_with_slate(config, keychain, slate).unwrap();
+		selection::build_recipient_output_with_slate(wallet, slate).unwrap();
 
 	// fill public keys
 	let _ = slate
-		.fill_round_1(&keychain, &mut context.sec_key, &context.sec_nonce, 1)
+		.fill_round_1(wallet.keychain(), &mut context.sec_key, &context.sec_nonce, 1)
 		.context(ErrorKind::LibWalletError)?;
 
 	// perform partial sig
 	let _ = slate
-		.fill_round_2(&keychain, &context.sec_key, &context.sec_nonce, 1)
+		.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)
 		.context(ErrorKind::LibWalletError)?;
 
 	// Save output in wallet
@@ -64,17 +65,22 @@ fn handle_send(config: &WalletConfig, keychain: &Keychain, slate: &mut Slate) ->
 /// Component used to receive coins, implements all the receiving end of the
 /// wallet REST API as well as some of the command-line operations.
 #[derive(Clone)]
-pub struct WalletReceiver {
-	pub keychain: Keychain,
-	pub config: WalletConfig,
+pub struct WalletReceiver<T>
+where
+	T: WalletBackend,
+{
+	pub wallet: T,
 }
 
-impl Handler for WalletReceiver {
+impl <T> Handler for WalletReceiver<T>
+where 
+	T: WalletBackend + Send + Sync + 'static
+{
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let struct_body = req.get::<bodyparser::Struct<Slate>>();
 
 		if let Ok(Some(mut slate)) = struct_body {
-			let _ = handle_send(&self.config, &self.keychain, &mut slate)
+			let _ = handle_send(&self.wallet, &mut slate)
 				.map_err(|e| {
 					error!(
 						LOGGER,
@@ -95,22 +101,24 @@ impl Handler for WalletReceiver {
 
 //TODO: Split up the output creation and the wallet insertion
 /// Build a coinbase output and the corresponding kernel
-pub fn receive_coinbase(
-	config: &WalletConfig,
-	keychain: &Keychain,
+pub fn receive_coinbase<T>(
+	wallet: &mut T,
 	block_fees: &BlockFees,
-) -> Result<(Output, TxKernel, BlockFees), Error> {
-	let root_key_id = keychain.root_key_id();
+) -> Result<(Output, TxKernel, BlockFees), Error> 
+where
+T: WalletBackend 
+{
+	let root_key_id = wallet.keychain().root_key_id();
 
 	let height = block_fees.height;
 	let lock_height = height + global::coinbase_maturity();
 
 	// Now acquire the wallet lock and write the new output.
-	let (key_id, derivation) = FileWallet::with_wallet(&config.data_file_dir, |wallet_data| {
+	let (key_id, derivation) = wallet.with_wallet(|&mut wallet_data| {
 		let key_id = block_fees.key_id();
 		let (key_id, derivation) = match key_id {
 			Some(key_id) => keys::retrieve_existing_key(&wallet_data, key_id),
-			None => keys::next_available_key(&wallet_data, keychain),
+			None => keys::next_available_key(&mut wallet_data),
 		};
 
 		// track the new output and return the stuff needed for reward
@@ -143,7 +151,7 @@ pub fn receive_coinbase(
 	debug!(LOGGER, "receive_coinbase: {:?}", block_fees);
 
 	let (out, kern) =
-		reward::output(&keychain, &key_id, block_fees.fees, block_fees.height).unwrap();
+		reward::output(&wallet.keychain(), &key_id, block_fees.fees, block_fees.height).unwrap();
 	/* .context(ErrorKind::Keychain)?; */
 	Ok((out, kern, block_fees))
 }

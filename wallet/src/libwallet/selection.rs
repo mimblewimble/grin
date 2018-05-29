@@ -15,21 +15,18 @@
 //! Selection of inputs for building transactions
 
 use failure::ResultExt;
-use keychain::{Identifier, Keychain};
+use keychain::Identifier;
 use libtx::{build, tx_fee, slate::Slate};
 use libwallet::types::*;
 use libwallet::{keys, sigcontext};
-//TODO: This should go
-use file_wallet::*;
 
 /// Initialise a transaction on the sender side, returns a corresponding
 /// libwallet transaction slate with the appropriate inputs selected,
 /// and saves the private wallet identifiers of our selected outputs
 /// into our transaction context
 
-pub fn build_send_tx_slate(
-	config: &WalletConfig,
-	keychain: &Keychain,
+pub fn build_send_tx_slate<T>(
+	wallet: &T,
 	num_participants: usize,
 	amount: u64,
 	current_height: u64,
@@ -44,10 +41,12 @@ pub fn build_send_tx_slate(
 		impl FnOnce() -> Result<(), Error>,
 	),
 	Error,
-> {
+> 
+where
+	T: WalletBackend 
+{
 	let (elems, inputs, change_id, amount, fee) = select_send_tx(
-		config,
-		keychain,
+		wallet,
 		amount,
 		current_height,
 		minimum_confirmations,
@@ -64,12 +63,12 @@ pub fn build_send_tx_slate(
 	slate.fee = fee;
 
 	let blinding = slate
-		.add_transaction_elements(keychain, elems)
+		.add_transaction_elements(wallet.keychain(), elems)
 		.context(ErrorKind::LibWalletError)?;
 	// Create our own private context
 	let mut context = sigcontext::Context::new(
-		keychain.secp(),
-		blinding.secret_key(keychain.secp()).unwrap(),
+		wallet.keychain().secp(),
+		blinding.secret_key(wallet.keychain().secp()).unwrap(),
 	);
 
 	// Store our private identifiers for each input
@@ -84,12 +83,11 @@ pub fn build_send_tx_slate(
 
 	let lock_inputs = context.get_inputs().clone();
 	let _lock_outputs = context.get_outputs().clone();
-	let data_file_dir = config.data_file_dir.clone();
 
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
 	let update_sender_wallet_fn = move || {
-		FileWallet::with_wallet(&data_file_dir, |wallet_data| {
+		wallet.with_wallet(|wallet_data| {
 			for id in lock_inputs {
 				let coin = wallet_data.get_output(&id).unwrap().clone();
 				wallet_data.lock_output(&coin);
@@ -109,9 +107,8 @@ pub fn build_send_tx_slate(
 /// returning the key of the fresh output and a closure
 /// that actually performs the addition of the output to the
 /// wallet
-pub fn build_recipient_output_with_slate(
-	config: &WalletConfig,
-	keychain: &Keychain,
+pub fn build_recipient_output_with_slate<'a, T>(
+	wallet: &T,
 	slate: &mut Slate,
 ) -> Result<
 	(
@@ -120,24 +117,25 @@ pub fn build_recipient_output_with_slate(
 		impl FnOnce() -> Result<(), Error>,
 	),
 	Error,
-> {
+> 
+where T: WalletBackend
+{
 	// Create a potential output for this transaction
-	let (key_id, derivation) = keys::new_output_key(config, keychain)?;
+	let (key_id, derivation) = keys::new_output_key(wallet)?;
 
-	let data_file_dir = config.data_file_dir.clone();
-	let root_key_id = keychain.root_key_id();
+	let root_key_id = wallet.keychain().root_key_id();
 	let key_id_inner = key_id.clone();
 	let amount = slate.amount;
 	let height = slate.height;
 
 	let blinding = slate
-		.add_transaction_elements(keychain, vec![build::output(amount, key_id.clone())])
+		.add_transaction_elements(wallet.keychain(), vec![build::output(amount, key_id.clone())])
 		.context(ErrorKind::LibWalletError)?;
 
 	// Add blinding sum to our context
 	let mut context = sigcontext::Context::new(
-		keychain.secp(),
-		blinding.secret_key(keychain.secp()).unwrap(),
+		wallet.keychain().secp(),
+		blinding.secret_key(wallet.keychain().secp()).unwrap(),
 	);
 
 	context.add_output(&key_id);
@@ -145,7 +143,7 @@ pub fn build_recipient_output_with_slate(
 	// Create closure that adds the output to recipient's wallet
 	// (up to the caller to decide when to do)
 	let wallet_add_fn = move || {
-		FileWallet::with_wallet(&data_file_dir, |wallet_data| {
+		wallet.with_wallet(|wallet_data| {
 			wallet_data.add_output(OutputData {
 				root_key_id: root_key_id,
 				key_id: key_id_inner,
@@ -166,9 +164,8 @@ pub fn build_recipient_output_with_slate(
 /// Builds a transaction to send to someone from the HD seed associated with the
 /// wallet and the amount to send. Handles reading through the wallet data file,
 /// selecting outputs to spend and building the change.
-pub fn select_send_tx(
-	config: &WalletConfig,
-	keychain: &Keychain,
+pub fn select_send_tx<T>(
+	wallet: &T,
 	amount: u64,
 	current_height: u64,
 	minimum_confirmations: u64,
@@ -184,11 +181,14 @@ pub fn select_send_tx(
 		u64, // fee
 	),
 	Error,
-> {
-	let key_id = keychain.clone().root_key_id();
+> 
+where
+	T: WalletBackend
+{
+	let key_id = wallet.keychain().clone().root_key_id();
 
 	// select some spendable coins from the wallet
-	let mut coins = FileWallet::read_wallet(&config.data_file_dir, |wallet_data| {
+	let mut coins = wallet.read_wallet(|wallet_data| {
 		Ok(wallet_data.select_coins(
 			key_id.clone(),
 			amount,
@@ -200,7 +200,7 @@ pub fn select_send_tx(
 	})?;
 
 	// Get the maximum number of outputs in the wallet
-	let max_outputs = FileWallet::read_wallet(&config.data_file_dir, |wallet_data| {
+	let max_outputs = wallet.read_wallet(|wallet_data| {
 		Ok(wallet_data.select_coins(
 			key_id.clone(),
 			amount,
@@ -238,7 +238,7 @@ pub fn select_send_tx(
 			}
 
 			// select some spendable coins from the wallet
-			coins = FileWallet::read_wallet(&config.data_file_dir, |wallet_data| {
+			coins = wallet.read_wallet(|wallet_data| {
 				Ok(wallet_data.select_coins(
 					key_id.clone(),
 					amount_with_fee,
@@ -256,7 +256,7 @@ pub fn select_send_tx(
 
 	// build transaction skeleton with inputs and change
 	let (mut parts, change_key) =
-		inputs_and_change(&coins, config, keychain, current_height, amount, fee)?;
+		inputs_and_change(&coins, wallet, current_height, amount, fee)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
@@ -271,14 +271,16 @@ pub fn coins_proof_count(coins: &Vec<OutputData>) -> usize {
 }
 
 /// Selects inputs and change for a transaction
-pub fn inputs_and_change(
+pub fn inputs_and_change<T>(
 	coins: &Vec<OutputData>,
-	config: &WalletConfig,
-	keychain: &Keychain,
+	wallet: &T,
 	height: u64,
 	amount: u64,
 	fee: u64,
-) -> Result<(Vec<Box<build::Append>>, Option<Identifier>), Error> {
+) -> Result<(Vec<Box<build::Append>>, Option<Identifier>), Error> 
+where
+	T: WalletBackend
+{
 	let mut parts = vec![];
 
 	// calculate the total across all inputs, and how much is left
@@ -293,7 +295,7 @@ pub fn inputs_and_change(
 
 	// build inputs using the appropriate derived key_ids
 	for coin in coins {
-		let key_id = keychain
+		let key_id = wallet.keychain()
 			.derive_key_id(coin.n_child)
 			.context(ErrorKind::Keychain)?;
 		if coin.is_coinbase {
@@ -314,10 +316,10 @@ pub fn inputs_and_change(
 	let change_key;
 	if change != 0 {
 		// track the output representing our change
-		change_key = FileWallet::with_wallet(&config.data_file_dir, |wallet_data| {
-			let root_key_id = keychain.root_key_id();
+		change_key = wallet.with_wallet(|wallet_data| {
+			let root_key_id = wallet.keychain().root_key_id();
 			let change_derivation = wallet_data.next_child(root_key_id.clone());
-			let change_key = keychain.derive_key_id(change_derivation).unwrap();
+			let change_key = wallet.keychain().derive_key_id(change_derivation).unwrap();
 
 			wallet_data.add_output(OutputData {
 				root_key_id: root_key_id.clone(),

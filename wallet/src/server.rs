@@ -13,13 +13,18 @@
 // limitations under the License.
 
 use api::ApiServer;
-use file_wallet::WalletConfig;
+use file_wallet::{FileWallet, WalletConfig};
 use handlers::CoinbaseHandler;
 use keychain::Keychain;
 use receiver::WalletReceiver;
 use util::LOGGER;
 
 pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
+	let backend = FileWallet::new(wallet_config)
+		.unwrap_or_else(|e| {
+				panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+			});
+
 	info!(
 		LOGGER,
 		"Starting the Grin wallet receiving daemon at {}...",

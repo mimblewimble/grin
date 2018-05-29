@@ -20,21 +20,24 @@ use serde_json;
 
 use core::ser;
 use failure::{Fail, ResultExt};
-use file_wallet::*;
-use keychain::Keychain;
 use libwallet::types::*;
 use receiver::receive_coinbase;
 use util;
 
-pub struct CoinbaseHandler {
-	pub config: WalletConfig,
-	pub keychain: Keychain,
+pub struct CoinbaseHandler<T>
+where
+	T:WalletBackend 
+{
+	pub wallet: T,
 }
 
-impl CoinbaseHandler {
+impl <T>CoinbaseHandler<T>
+where
+	T: WalletBackend 
+{
 	fn build_coinbase(&self, block_fees: &BlockFees) -> Result<CbData, Error> {
 		let (out, kern, block_fees) =
-			receive_coinbase(&self.config, &self.keychain, block_fees).context(ErrorKind::Node)?;
+			receive_coinbase(&mut self.wallet, block_fees).context(ErrorKind::Node)?;
 
 		let out_bin = ser::ser_vec(&out).context(ErrorKind::Node)?;
 
@@ -55,7 +58,9 @@ impl CoinbaseHandler {
 
 // TODO - error handling - what to return if we fail to get the wallet lock for
 // some reason...
-impl Handler for CoinbaseHandler {
+impl <T> Handler for CoinbaseHandler<T>
+where
+	T: WalletBackend + Send + Sync + 'static {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let struct_body = req.get::<bodyparser::Struct<BlockFees>>();
 

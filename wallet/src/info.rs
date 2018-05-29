@@ -14,13 +14,14 @@
 
 use checker;
 use core::core::amount_to_hr_string;
-use file_wallet::*;
-use keychain::Keychain;
 use libwallet::types::*;
 use prettytable;
 
-pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
-	let wallet_info = retrieve_info(config, keychain);
+pub fn show_info<T>(wallet: &mut T)
+where
+	T: WalletBackend 
+{
+	let wallet_info = retrieve_info(wallet);
 	println!(
 		"\n____ Wallet Summary Info at {} ({}) ____\n",
 		wallet_info.current_height, wallet_info.data_confirmed_from
@@ -46,13 +47,16 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	}
 }
 
-pub fn retrieve_info(config: &WalletConfig, keychain: &Keychain) -> WalletInfo {
-	let result = checker::refresh_outputs(&config, &keychain);
+pub fn retrieve_info<T>(wallet: &mut T) -> WalletInfo 
+where
+	T: WalletBackend
+{
+	let result = checker::refresh_outputs(wallet);
 
-	let ret_val = FileWallet::read_wallet(&config.data_file_dir, |wallet_data| {
-		let (current_height, from) = match checker::get_tip_from_node(config) {
+	let ret_val = wallet.read_wallet(|wallet_data| {
+		let (current_height, from) = match checker::get_tip_from_node(&wallet.node_url()) {
 			Ok(tip) => (tip.height, "from server node"),
-			Err(_) => match wallet_data.outputs.values().map(|out| out.height).max() {
+			Err(_) => match wallet_data.outputs().values().map(|out| out.height).max() {
 				Some(height) => (height, "from wallet"),
 				None => (0, "node/wallet unavailable"),
 			},
@@ -62,9 +66,9 @@ pub fn retrieve_info(config: &WalletConfig, keychain: &Keychain) -> WalletInfo {
 		let mut unconfirmed_total = 0;
 		let mut locked_total = 0;
 		for out in wallet_data
-			.outputs
+			.outputs()
 			.values()
-			.filter(|out| out.root_key_id == keychain.root_key_id())
+			.filter(|out| out.root_key_id == wallet_data.keychain().root_key_id())
 		{
 			if out.status == OutputStatus::Unspent {
 				unspent_total += out.value;

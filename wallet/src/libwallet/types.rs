@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Experimental - Types and traits that should be provided by a wallet
+//! Types and traits that should be provided by a wallet
 //! implementation
 use std::fmt::{self, Display};
+use std::collections::HashMap;
 
 use serde;
 
@@ -26,42 +27,58 @@ use core::core::pmmr::MerkleProof;
 use keychain::{Identifier, Keychain};
 
 /// TODO:
+/// Wallets should implement this backend for their storage. All functions
+/// here expect that the wallet instance has instantiated itself or stored
+/// whatever credentials it needs
 pub trait WalletBackend {
-	/// Allows for reading wallet data (without needing to acquire the write
-	/// lock).
-	fn read_wallet<T, F>(f: F) -> Result<T, Error>
+
+	/// Return the keychain being used
+	fn keychain(&self) -> &mut Keychain;
+
+	/// Return the URL of the check node
+	fn node_url(&self) -> &str;
+
+	/// Return the outputs directly
+	fn outputs(&self) -> &mut HashMap<String, OutputData>;
+
+	/// Allows for reading wallet data (read-only)
+	fn read_wallet<T, F>(&self, f: F) -> Result<T, Error>
 	where
-		F: FnOnce(&WalletBackend) -> Result<T, Error>;
+		F: FnOnce(&Self) -> Result<T, Error>;
 
 	/// Get all outputs from a wallet impl (probably with some sort
-	/// of query param)
-	fn with_wallet<T, F>(f: F) -> Result<T, Error>
+	/// of query param), read+write. Implementor should save
+	/// any changes to its data and perform any locking needed
+	fn with_wallet<T, F>(&mut self, f: F) -> Result<T, Error>
 	where
-		F: FnOnce(&mut WalletBackend) -> T;
+		F: FnOnce(&mut Self) -> T;
 
 	/// Add an output
 	fn add_output(&mut self, out: OutputData);
 
 	/// Delete an output
-	fn delete_output(&mut self, id: &Identifier) -> Option<&OutputData>;
+	fn delete_output(&mut self, id: &Identifier);
 
 	/// Lock an output
 	fn lock_output(&mut self, out: &OutputData);
 
 	/// get a single output
 	fn get_output(&self, key_id: &Identifier) -> Option<&OutputData>;
-}
 
-/// TODO:
-#[derive(Debug, Clone)]
-pub struct Wallet<'a, T: 'a>
-where
-	T: WalletBackend,
-{
-	/// All wallets need access to a unique instantiated keychain
-	pub keychain: &'a Keychain,
-	/// Wallet backend
-	pub backend: &'a T,
+	/// Next child ID when we want to create a new output
+	fn next_child(&self, root_key_id: Identifier) -> u32;
+
+	/// Select spendable coins from the wallet
+	fn select_coins(
+		&self,
+		root_key_id: Identifier,
+		amount: u64,
+		current_height: u64,
+		minimum_confirmations: u64,
+		max_outputs: usize,
+		select_all: bool,
+	) -> Vec<OutputData>;
+
 }
 
 /// Information about an output that's being tracked by the wallet. Must be
