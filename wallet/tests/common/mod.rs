@@ -29,7 +29,7 @@ use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel
 use core::{consensus, global, pow};
 use keychain::Keychain;
 use wallet::libwallet::types::*;
-use wallet::types::*;
+use wallet::file_wallet::*;
 use wallet::{checker, BlockFees};
 
 use util::secp::pedersen;

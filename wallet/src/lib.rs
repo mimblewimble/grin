@@ -57,12 +57,12 @@ pub mod receiver;
 mod restore;
 mod sender;
 pub mod server;
-pub mod types;
+pub mod file_wallet;
 
 pub use info::{retrieve_info, show_info};
-pub use libwallet::types::{Error, ErrorKind};
+pub use libwallet::types::{Error, ErrorKind, BlockFees, CbData, WalletInfo, WalletReceiveRequest};
 pub use outputs::show_outputs;
 pub use receiver::WalletReceiver;
 pub use restore::restore;
 pub use sender::{issue_burn_tx, issue_send_tx};
-pub use types::{BlockFees, CbData, WalletConfig, WalletInfo, WalletReceiveRequest, WalletSeed};
+pub use file_wallet::{WalletConfig, WalletSeed};

@@ -19,7 +19,7 @@ use libwallet::types::*;
 use prettytable;
 use std::io::prelude::*;
 use term;
-use types::*;
+use file_wallet::*;
 
 pub fn show_outputs(config: &WalletConfig, keychain: &Keychain, show_spent: bool) {
 	let root_key_id = keychain.root_key_id();

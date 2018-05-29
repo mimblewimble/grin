@@ -15,7 +15,8 @@
 //! Grin Wallet specific key management functions
 use keychain::{Identifier, Keychain};
 use libwallet::types::*;
-use types::*;
+//TODO: This should go
+use file_wallet::*;
 
 /// Get our next available key
 pub fn new_output_key(

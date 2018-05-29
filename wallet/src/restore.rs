@@ -19,7 +19,7 @@ use failure::{Fail, ResultExt};
 use keychain::{Identifier, Keychain};
 use libtx::proof;
 use libwallet::types::*;
-use types::*;
+use file_wallet::*;
 use util;
 use util::LOGGER;
 use util::secp::pedersen;

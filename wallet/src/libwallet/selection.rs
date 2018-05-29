@@ -19,7 +19,8 @@ use keychain::{Identifier, Keychain};
 use libtx::{build, tx_fee, slate::Slate};
 use libwallet::types::*;
 use libwallet::{keys, sigcontext};
-use types::*;
+//TODO: This should go
+use file_wallet::*;
 
 /// Initialise a transaction on the sender side, returns a corresponding
 /// libwallet transaction slate with the appropriate inputs selected,
