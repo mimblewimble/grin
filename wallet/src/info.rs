@@ -14,10 +14,10 @@
 
 use checker;
 use core::core::amount_to_hr_string;
+use file_wallet::*;
 use keychain::Keychain;
 use libwallet::types::*;
 use prettytable;
-use file_wallet::*;
 
 pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 	let wallet_info = retrieve_info(config, keychain);

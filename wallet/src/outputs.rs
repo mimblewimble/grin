@@ -14,12 +14,12 @@
 
 use checker;
 use core::core;
+use file_wallet::*;
 use keychain::Keychain;
 use libwallet::types::*;
 use prettytable;
 use std::io::prelude::*;
 use term;
-use file_wallet::*;
 
 pub fn show_outputs(config: &WalletConfig, keychain: &Keychain, show_spent: bool) {
 	let root_key_id = keychain.root_key_id();

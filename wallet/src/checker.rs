@@ -20,9 +20,9 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
 use api;
+use file_wallet::*;
 use keychain::{Identifier, Keychain};
 use libwallet::types::*;
-use file_wallet::*;
 use util;
 use util::LOGGER;
 use util::secp::pedersen;

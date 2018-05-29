@@ -18,12 +18,12 @@ use client;
 use core::core::amount_to_hr_string;
 use core::ser;
 use failure::ResultExt;
+use file_wallet::*;
 use keychain::{Identifier, Keychain};
 use libtx::{build, tx_fee};
 use libwallet::selection;
 use libwallet::types::*;
 use receiver::TxWrapper;
-use file_wallet::*;
 use util;
 use util::LOGGER;
 

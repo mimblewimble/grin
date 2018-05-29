@@ -20,10 +20,10 @@ use serde_json;
 
 use core::ser;
 use failure::{Fail, ResultExt};
+use file_wallet::*;
 use keychain::Keychain;
 use libwallet::types::*;
 use receiver::receive_coinbase;
-use file_wallet::*;
 use util;
 
 pub struct CoinbaseHandler {

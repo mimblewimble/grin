@@ -27,11 +27,11 @@ use core::consensus::reward;
 use core::core::{Output, TxKernel};
 use core::global;
 use failure::{Fail, ResultExt};
+use file_wallet::*;
 use keychain::Keychain;
 use libtx::{reward, slate::Slate};
 use libwallet::types::*;
 use libwallet::{keys, selection};
-use file_wallet::*;
 use util::LOGGER;
 
 /// Dummy wrapper for the hex-encoded serialized transaction.

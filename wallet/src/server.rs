@@ -13,10 +13,10 @@
 // limitations under the License.
 
 use api::ApiServer;
+use file_wallet::WalletConfig;
 use handlers::CoinbaseHandler;
 use keychain::Keychain;
 use receiver::WalletReceiver;
-use file_wallet::WalletConfig;
 use util::LOGGER;
 
 pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
