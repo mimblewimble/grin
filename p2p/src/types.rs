@@ -97,7 +97,8 @@ impl<T> From<mpsc::TrySendError<T>> for Error {
 pub struct DandelionConfig {
 	/// Choose new Dandelion relay peer every n secs.
 	pub relay_secs: u64,
-	/// Dandelion embargo, fluff and broadcast tx if not seen on network before embargo expires.
+	/// Dandelion embargo, fluff and broadcast tx if not seen on network before
+	/// embargo expires.
 	pub embargo_secs: u64,
 	/// Dandelion patience timer, fluff/stem processing runs every n secs.
 	/// Tx aggregation happens on stem txs received within this window.

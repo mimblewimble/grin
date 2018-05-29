@@ -20,10 +20,10 @@ use std::io::Read;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
 use std::str;
-use std::sync::{mpsc, Arc};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::sync::{mpsc, Arc};
 use std::thread;
+use std::time::Duration;
 use time::{self, now_utc};
 
 use hyper;

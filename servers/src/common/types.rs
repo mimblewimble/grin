@@ -19,13 +19,12 @@ use std::convert::From;
 use api;
 use chain;
 use core::core;
+use core::global::ChainTypes;
+use core::pow;
 use p2p;
 use pool;
 use store;
 use wallet;
-use core::global::ChainTypes;
-use core::pow;
-
 
 /// Dandelion relay timer
 const DANDELION_RELAY_SECS: u64 = 600;
@@ -159,7 +158,8 @@ pub struct DandelionConfig {
 	/// Choose new Dandelion relay peer every n secs.
 	#[serde = "default_dandelion_relay_secs"]
 	pub relay_secs: u64,
-	/// Dandelion embargo, fluff and broadcast tx if not seen on network before embargo expires.
+	/// Dandelion embargo, fluff and broadcast tx if not seen on network before
+	/// embargo expires.
 	#[serde = "default_dandelion_embargo_secs"]
 	pub embargo_secs: u64,
 	/// Dandelion patience timer, fluff/stem processing runs every n secs.
