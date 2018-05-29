@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! tests for transactions building within libtransaction
+//! tests for transactions building within libtx
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
@@ -62,7 +62,7 @@ fn build_transaction() {
 	let wallet2 = common::create_wallet("test_output/build_transaction_2/wallet2");
 	common::award_blocks_to_wallet(&chain, &wallet1, 10);
 	// Wallet 1 has 600 Grins, wallet 2 has 0. Create a transaction that sends
-	// 300 Grins from wallet 1 to wallet 2, using libtransaction
+	// 300 Grins from wallet 1 to wallet 2, using libtx
 
 	// Get lock height
 	let chain_tip = chain.head().unwrap();

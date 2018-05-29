@@ -42,7 +42,7 @@ use std::sync::{Arc, RwLock};
 use types::PoolError::InvalidTx;
 
 use keychain::Keychain;
-use wallet::libtransaction::{build, proof, reward};
+use wallet::libtx::{build, proof, reward};
 
 use pool::types::*;
 

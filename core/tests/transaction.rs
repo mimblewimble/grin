@@ -24,7 +24,7 @@ use grin_core::core::{Output, OutputFeatures};
 use grin_core::ser;
 use keychain::Keychain;
 use util::secp;
-use wallet::libtransaction::proof;
+use wallet::libtx::proof;
 
 #[test]
 fn test_output_ser_deser() {

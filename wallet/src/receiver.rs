@@ -28,7 +28,7 @@ use core::core::{Output, TxKernel};
 use core::global;
 use failure::{Fail, ResultExt};
 use keychain::Keychain;
-use libtransaction::{reward, slate::Slate};
+use libtx::{reward, slate::Slate};
 use libwallet::types::*;
 use libwallet::{keys, selection};
 use types::*;

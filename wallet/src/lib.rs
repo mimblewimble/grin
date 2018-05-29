@@ -50,7 +50,7 @@ pub mod checker;
 pub mod client;
 mod handlers;
 mod info;
-pub mod libtransaction;
+pub mod libtx;
 pub mod libwallet;
 mod outputs;
 pub mod receiver;

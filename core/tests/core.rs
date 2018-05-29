@@ -29,7 +29,7 @@ use grin_core::core::{aggregate, aggregate_with_cut_through, deaggregate, Kernel
 use grin_core::ser;
 use keychain::Keychain;
 use util::{secp_static, static_secp_instance};
-use wallet::libtransaction::build::{self, initial_tx, input, output, with_excess, with_fee,
+use wallet::libtx::build::{self, initial_tx, input, output, with_excess, with_fee,
                                     with_lock_height};
 
 #[test]

@@ -19,8 +19,8 @@ use keychain;
 use core::consensus::reward;
 use core::core::KernelFeatures;
 use core::core::{Output, OutputFeatures, ProofMessageElements, TxKernel};
-use libtransaction::error::Error;
-use libtransaction::{aggsig, proof};
+use libtx::error::Error;
+use libtx::{aggsig, proof};
 use util::{kernel_sig_msg, secp, static_secp_instance, LOGGER};
 
 /// output a reward output

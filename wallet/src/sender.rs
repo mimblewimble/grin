@@ -19,7 +19,7 @@ use core::core::amount_to_hr_string;
 use core::ser;
 use failure::ResultExt;
 use keychain::{Identifier, Keychain};
-use libtransaction::{build, tx_fee};
+use libtx::{build, tx_fee};
 use libwallet::selection;
 use libwallet::types::*;
 use receiver::TxWrapper;
@@ -185,7 +185,7 @@ pub fn issue_burn_tx(
 #[cfg(test)]
 mod test {
 	use keychain::Keychain;
-	use libtransaction::build;
+	use libtx::build;
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment

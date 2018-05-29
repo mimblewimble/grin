@@ -29,7 +29,7 @@ use grin_core::global;
 use grin_core::ser;
 use keychain::Keychain;
 use std::time::Instant;
-use wallet::libtransaction::build::{self, input, output, with_fee};
+use wallet::libtx::build::{self, input, output, with_fee};
 
 use util::{secp, secp_static};
 

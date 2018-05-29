@@ -17,7 +17,7 @@ use futures::{Future, Stream};
 use hyper;
 use hyper::header::ContentType;
 use hyper::{Method, Request};
-use libtransaction::slate::Slate;
+use libtx::slate::Slate;
 use serde_json;
 use tokio_core::reactor;
 

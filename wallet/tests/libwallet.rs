@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! libtransaction specific tests
+//! libtx specific tests
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
@@ -24,7 +24,7 @@ use keychain::{BlindSum, BlindingFactor, Keychain};
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::ProofMessage;
 use util::{kernel_sig_msg, secp};
-use wallet::libtransaction::{aggsig, proof};
+use wallet::libtx::{aggsig, proof};
 use wallet::libwallet::sigcontext;
 
 use rand::thread_rng;
