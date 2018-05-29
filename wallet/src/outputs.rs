@@ -26,7 +26,7 @@ pub fn show_outputs(config: &WalletConfig, keychain: &Keychain, show_spent: bool
 	let result = checker::refresh_outputs(&config, &keychain);
 
 	// just read the wallet here, no need for a write lock
-	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let _ = FileWallet::read_wallet(&config.data_file_dir, |wallet_data| {
 		// get the current height via the api
 		// if we cannot get the current height use the max height known to the wallet
 		let current_height = match checker::get_tip_from_node(config) {

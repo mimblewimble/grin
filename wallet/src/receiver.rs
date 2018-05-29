@@ -106,7 +106,7 @@ pub fn receive_coinbase(
 	let lock_height = height + global::coinbase_maturity();
 
 	// Now acquire the wallet lock and write the new output.
-	let (key_id, derivation) = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+	let (key_id, derivation) = FileWallet::with_wallet(&config.data_file_dir, |wallet_data| {
 		let key_id = block_fees.key_id();
 		let (key_id, derivation) = match key_id {
 			Some(key_id) => keys::retrieve_existing_key(&wallet_data, key_id),

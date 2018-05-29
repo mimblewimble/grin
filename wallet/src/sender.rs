@@ -151,7 +151,7 @@ pub fn issue_burn_tx(
 	let key_id = keychain.root_key_id();
 
 	// select some spendable coins from the wallet
-	let coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let coins = FileWallet::read_wallet(&config.data_file_dir, |wallet_data| {
 		Ok(wallet_data.select_coins(
 			key_id.clone(),
 			amount,

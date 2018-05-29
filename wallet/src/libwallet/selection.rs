@@ -89,7 +89,7 @@ pub fn build_send_tx_slate(
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
 	let update_sender_wallet_fn = move || {
-		WalletData::with_wallet(&data_file_dir, |wallet_data| {
+		FileWallet::with_wallet(&data_file_dir, |wallet_data| {
 			for id in lock_inputs {
 				let coin = wallet_data.get_output(&id).unwrap().clone();
 				wallet_data.lock_output(&coin);
@@ -145,7 +145,7 @@ pub fn build_recipient_output_with_slate(
 	// Create closure that adds the output to recipient's wallet
 	// (up to the caller to decide when to do)
 	let wallet_add_fn = move || {
-		WalletData::with_wallet(&data_file_dir, |wallet_data| {
+		FileWallet::with_wallet(&data_file_dir, |wallet_data| {
 			wallet_data.add_output(OutputData {
 				root_key_id: root_key_id,
 				key_id: key_id_inner,
@@ -188,7 +188,7 @@ pub fn select_send_tx(
 	let key_id = keychain.clone().root_key_id();
 
 	// select some spendable coins from the wallet
-	let mut coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let mut coins = FileWallet::read_wallet(&config.data_file_dir, |wallet_data| {
 		Ok(wallet_data.select_coins(
 			key_id.clone(),
 			amount,
@@ -200,7 +200,7 @@ pub fn select_send_tx(
 	})?;
 
 	// Get the maximum number of outputs in the wallet
-	let max_outputs = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let max_outputs = FileWallet::read_wallet(&config.data_file_dir, |wallet_data| {
 		Ok(wallet_data.select_coins(
 			key_id.clone(),
 			amount,
@@ -238,7 +238,7 @@ pub fn select_send_tx(
 			}
 
 			// select some spendable coins from the wallet
-			coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+			coins = FileWallet::read_wallet(&config.data_file_dir, |wallet_data| {
 				Ok(wallet_data.select_coins(
 					key_id.clone(),
 					amount_with_fee,
@@ -314,7 +314,7 @@ pub fn inputs_and_change(
 	let change_key;
 	if change != 0 {
 		// track the output representing our change
-		change_key = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		change_key = FileWallet::with_wallet(&config.data_file_dir, |wallet_data| {
 			let root_key_id = keychain.root_key_id();
 			let change_derivation = wallet_data.next_child(root_key_id.clone());
 			let change_key = keychain.derive_key_id(change_derivation).unwrap();

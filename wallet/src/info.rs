@@ -49,7 +49,7 @@ pub fn show_info(config: &WalletConfig, keychain: &Keychain) {
 pub fn retrieve_info(config: &WalletConfig, keychain: &Keychain) -> WalletInfo {
 	let result = checker::refresh_outputs(&config, &keychain);
 
-	let ret_val = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let ret_val = FileWallet::read_wallet(&config.data_file_dir, |wallet_data| {
 		let (current_height, from) = match checker::get_tip_from_node(config) {
 			Ok(tip) => (tip.height, "from server node"),
 			Err(_) => match wallet_data.outputs.values().map(|out| out.height).max() {

@@ -23,13 +23,13 @@ pub fn new_output_key(
 	config: &WalletConfig,
 	keychain: &Keychain,
 ) -> Result<(Identifier, u32), Error> {
-	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+	FileWallet::with_wallet(&config.data_file_dir, |wallet_data| {
 		next_available_key(&wallet_data, keychain)
 	})
 }
 
 /// Get next available key in the wallet
-pub fn next_available_key(wallet_data: &WalletData, keychain: &Keychain) -> (Identifier, u32) {
+pub fn next_available_key(wallet_data: &FileWallet, keychain: &Keychain) -> (Identifier, u32) {
 	let root_key_id = keychain.root_key_id();
 	let derivation = wallet_data.next_child(root_key_id.clone());
 	let key_id = keychain.derive_key_id(derivation).unwrap();
@@ -37,7 +37,7 @@ pub fn next_available_key(wallet_data: &WalletData, keychain: &Keychain) -> (Ide
 }
 
 /// Retrieve an existing key from a wallet
-pub fn retrieve_existing_key(wallet_data: &WalletData, key_id: Identifier) -> (Identifier, u32) {
+pub fn retrieve_existing_key(wallet_data: &FileWallet, key_id: Identifier) -> (Identifier, u32) {
 	if let Some(existing) = wallet_data.get_output(&key_id) {
 		let key_id = existing.key_id.clone();
 		let derivation = existing.n_child;

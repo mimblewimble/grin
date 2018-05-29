@@ -250,9 +250,9 @@ fn find_outputs_with_key(
 
 pub fn restore(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
 	// Don't proceed if wallet.dat has anything in it
-	let is_empty = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let is_empty = FileWallet::read_wallet(&config.data_file_dir, |wallet_data| {
 		Ok(wallet_data.outputs.len() == 0)
-	}).context(ErrorKind::WalletData("could not read wallet"))?;
+	}).context(ErrorKind::FileWallet("could not read wallet"))?;
 	if !is_empty {
 		error!(
 			LOGGER,
@@ -280,7 +280,7 @@ pub fn restore(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> 
 			output_listing.highest_index
 		);
 
-		let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		let _ = FileWallet::with_wallet(&config.data_file_dir, |wallet_data| {
 			let result_vec = find_outputs_with_key(
 				config,
 				keychain,

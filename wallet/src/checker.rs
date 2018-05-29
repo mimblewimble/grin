@@ -95,7 +95,7 @@ fn refresh_missing_block_hashes(
 	// the corresponding api output (if it exists)
 	// and refresh it in-place in the wallet.
 	// Note: minimizing the time we spend holding the wallet lock.
-	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+	FileWallet::with_wallet(&config.data_file_dir, |wallet_data| {
 		for commit in wallet_outputs.keys() {
 			let id = wallet_outputs.get(&commit).unwrap();
 			if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
@@ -119,7 +119,7 @@ pub fn map_wallet_outputs(
 	keychain: &Keychain,
 ) -> Result<HashMap<pedersen::Commitment, Identifier>, Error> {
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
-	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let _ = FileWallet::read_wallet(&config.data_file_dir, |wallet_data| {
 		let unspents = wallet_data
 			.outputs
 			.values()
@@ -142,7 +142,7 @@ pub fn map_wallet_outputs_missing_block(
 	keychain: &Keychain,
 ) -> Result<HashMap<pedersen::Commitment, Identifier>, Error> {
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
-	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let _ = FileWallet::read_wallet(&config.data_file_dir, |wallet_data| {
 		for out in wallet_data.outputs.values().filter(|x| {
 			x.root_key_id == keychain.root_key_id() && x.block.is_none()
 				&& x.status == OutputStatus::Unspent
@@ -166,7 +166,7 @@ pub fn apply_api_outputs(
 	// now for each commit, find the output in the wallet and the corresponding
 	// api output (if it exists) and refresh it in-place in the wallet.
 	// Note: minimizing the time we spend holding the wallet lock.
-	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+	FileWallet::with_wallet(&config.data_file_dir, |wallet_data| {
 		for commit in wallet_outputs.keys() {
 			let id = wallet_outputs.get(&commit).unwrap();
 			if let Entry::Occupied(mut output) = wallet_data.outputs.entry(id.to_hex()) {
@@ -230,7 +230,7 @@ fn clean_old_unconfirmed(config: &WalletConfig, tip: &api::Tip) -> Result<(), Er
 	if tip.height < 500 {
 		return Ok(());
 	}
-	WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+	FileWallet::with_wallet(&config.data_file_dir, |wallet_data| {
 		wallet_data.outputs.retain(|_, ref mut out| {
 			!(out.status == OutputStatus::Unconfirmed && out.height > 0
 				&& out.height < tip.height - 500)

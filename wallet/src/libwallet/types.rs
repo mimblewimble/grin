@@ -362,7 +362,7 @@ pub enum ErrorKind {
 	LibWalletError,
 
 	#[fail(display = "Wallet data error: {}", _0)]
-	WalletData(&'static str),
+	FileWallet(&'static str),
 
 	/// An error in the format of the JSON structures exchanged by the wallet
 	#[fail(display = "JSON format error")]

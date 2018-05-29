@@ -162,32 +162,32 @@ impl WalletSeed {
 /// Wallet information tracking all our outputs. Based on HD derivation and
 /// avoids storing any key data, only storing output amounts and child index.
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct WalletData {
+pub struct FileWallet {
 	pub outputs: HashMap<String, OutputData>,
 }
 
-impl WalletData {
+impl FileWallet {
 	/// Allows for reading wallet data (without needing to acquire the write
 	/// lock).
 	pub fn read_wallet<T, F>(data_file_dir: &str, f: F) -> Result<T, Error>
 	where
-		F: FnOnce(&WalletData) -> Result<T, Error>,
+		F: FnOnce(&FileWallet) -> Result<T, Error>,
 	{
 		// open the wallet readonly and do what needs to be done with it
 		let data_file_path = &format!("{}{}{}", data_file_dir, MAIN_SEPARATOR, DAT_FILE);
-		let wdat = WalletData::read_or_create(data_file_path)?;
+		let wdat = FileWallet::read_or_create(data_file_path)?;
 		f(&wdat)
 	}
 
 	/// Allows the reading and writing of the wallet data within a file lock.
-	/// Just provide a closure taking a mutable WalletData. The lock should
+	/// Just provide a closure taking a mutable FileWallet. The lock should
 	/// be held for as short a period as possible to avoid contention.
 	/// Note that due to the impossibility to do an actual file lock easily
 	/// across operating systems, this just creates a lock file with a "should
 	/// not exist" option.
 	pub fn with_wallet<T, F>(data_file_dir: &str, f: F) -> Result<T, Error>
 	where
-		F: FnOnce(&mut WalletData) -> T,
+		F: FnOnce(&mut FileWallet) -> T,
 	{
 		// create directory if it doesn't exist
 		fs::create_dir_all(data_file_dir).unwrap_or_else(|why| {
@@ -219,20 +219,20 @@ impl WalletData {
 					"Failed to acquire wallet lock file (multiple retries)",
 				);
 				return Err(
-					e.context(ErrorKind::WalletData("Failed to acquire lock file"))
+					e.context(ErrorKind::FileWallet("Failed to acquire lock file"))
 						.into(),
 				);
 			}
 		}
 
 		// We successfully acquired the lock - so do what needs to be done.
-		let mut wdat = WalletData::read_or_create(data_file_path)?;
+		let mut wdat = FileWallet::read_or_create(data_file_path)?;
 		wdat.write(backup_file_path)?;
 		let res = f(&mut wdat);
 		wdat.write(data_file_path)?;
 
 		// delete the lock file
-		fs::remove_dir(lock_file_path).context(ErrorKind::WalletData(
+		fs::remove_dir(lock_file_path).context(ErrorKind::FileWallet(
 			"Could not remove wallet lock file. Maybe insufficient rights?",
 		))?;
 
@@ -242,12 +242,12 @@ impl WalletData {
 	}
 
 	/// Read the wallet data or created a brand new one if it doesn't exist yet
-	fn read_or_create(data_file_path: &str) -> Result<WalletData, Error> {
+	fn read_or_create(data_file_path: &str) -> Result<FileWallet, Error> {
 		if Path::new(data_file_path).exists() {
-			WalletData::read(data_file_path)
+			FileWallet::read(data_file_path)
 		} else {
 			// just create a new instance, it will get written afterward
-			Ok(WalletData {
+			Ok(FileWallet {
 				outputs: HashMap::new(),
 			})
 		}
@@ -256,17 +256,17 @@ impl WalletData {
 	/// Read output_data vec from disk.
 	fn read_outputs(data_file_path: &str) -> Result<Vec<OutputData>, Error> {
 		let data_file = File::open(data_file_path)
-			.context(ErrorKind::WalletData(&"Could not open wallet file"))?;
+			.context(ErrorKind::FileWallet(&"Could not open wallet file"))?;
 		serde_json::from_reader(data_file).map_err(|e| {
-			e.context(ErrorKind::WalletData(&"Error reading wallet file "))
+			e.context(ErrorKind::FileWallet(&"Error reading wallet file "))
 				.into()
 		})
 	}
 
 	/// Populate wallet_data with output_data from disk.
-	fn read(data_file_path: &str) -> Result<WalletData, Error> {
-		let outputs = WalletData::read_outputs(data_file_path)?;
-		let mut wallet_data = WalletData {
+	fn read(data_file_path: &str) -> Result<FileWallet, Error> {
+		let outputs = FileWallet::read_outputs(data_file_path)?;
+		let mut wallet_data = FileWallet {
 			outputs: HashMap::new(),
 		};
 		for out in outputs {
@@ -278,14 +278,14 @@ impl WalletData {
 	/// Write the wallet data to disk.
 	fn write(&self, data_file_path: &str) -> Result<(), Error> {
 		let mut data_file = File::create(data_file_path)
-			.map_err(|e| e.context(ErrorKind::WalletData(&"Could not create ")))?;
+			.map_err(|e| e.context(ErrorKind::FileWallet(&"Could not create ")))?;
 		let mut outputs = self.outputs.values().collect::<Vec<_>>();
 		outputs.sort();
 		let res_json = serde_json::to_vec_pretty(&outputs)
-			.map_err(|e| e.context(ErrorKind::WalletData("Error serializing wallet data")))?;
+			.map_err(|e| e.context(ErrorKind::FileWallet("Error serializing wallet data")))?;
 		data_file
 			.write_all(res_json.as_slice())
-			.context(ErrorKind::WalletData(&"Error writing wallet file"))
+			.context(ErrorKind::FileWallet(&"Error writing wallet file"))
 			.map_err(|e| e.into())
 	}
 

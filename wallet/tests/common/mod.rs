@@ -71,7 +71,7 @@ pub fn get_wallet_balances(
 	keychain: &Keychain,
 	height: u64,
 ) -> Result<(u64, u64, u64, u64, u64), Error> {
-	let ret_val = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let ret_val = FileWallet::read_wallet(&config.data_file_dir, |wallet_data| {
 		let mut unspent_total = 0;
 		let mut unspent_but_locked_total = 0;
 		let mut unconfirmed_total = 0;
@@ -168,7 +168,7 @@ pub fn award_block_to_wallet(
 	let output_id = OutputIdentifier::from_output(&coinbase_tx.0.clone());
 	let m_proof = chain.get_merkle_proof(&output_id, &chain.head_header().unwrap());
 	let block_id = Some(BlockIdentifier(chain.head_header().unwrap().hash()));
-	let _ = WalletData::with_wallet(&wallet.0.data_file_dir, |wallet_data| {
+	let _ = FileWallet::with_wallet(&wallet.0.data_file_dir, |wallet_data| {
 		if let Entry::Occupied(mut output) = wallet_data
 			.outputs
 			.entry(fees.key_id.as_ref().unwrap().to_hex())
