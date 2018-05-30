@@ -160,11 +160,11 @@ impl Server {
 			Err(_) => None,
 		};
 
-		let p2p_config = config.p2p_config.clone();
 		let p2p_server = Arc::new(p2p::Server::new(
 			db_env,
 			config.capabilities,
-			p2p_config,
+			config.p2p_config.clone(),
+			config.p2p_dandelion_config(),
 			net_adapter.clone(),
 			genesis.hash(),
 			stop.clone(),
@@ -235,7 +235,7 @@ impl Server {
 			"Starting dandelion monitor: {}", &config.api_http_addr
 		);
 		dandelion_monitor::monitor_transactions(
-			config.pool_config.clone(),
+			config.p2p_dandelion_config(),
 			tx_pool.clone(),
 			stop.clone(),
 		);

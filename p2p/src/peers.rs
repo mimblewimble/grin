@@ -22,8 +22,8 @@ use rand::{thread_rng, Rng};
 use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use util::LOGGER;
 use time;
+use util::LOGGER;
 
 use peer::Peer;
 use store::{PeerData, PeerStore, State};
@@ -59,6 +59,7 @@ impl Peers {
 			user_agent: p.info.user_agent.clone(),
 			flags: State::Healthy,
 			last_banned: 0,
+			ban_reason: ReasonForBan::None,
 		};
 		if let Err(e) = self.save_peer(&peer_data) {
 			error!(LOGGER, "Could not save connected peer: {:?}", e);
@@ -95,10 +96,10 @@ impl Peers {
 			None => debug!(LOGGER, "Could not update dandelion relay"),
 		};
 	}
+
 	// Get the dandelion relay
 	pub fn get_dandelion_relay(&self) -> HashMap<i64, Arc<RwLock<Peer>>> {
-		let res = self.dandelion_relay.read().unwrap().clone();
-		res
+		self.dandelion_relay.read().unwrap().clone()
 	}
 
 	pub fn is_known(&self, addr: &SocketAddr) -> bool {
@@ -205,8 +206,8 @@ impl Peers {
 		}
 	}
 
-	/// Return vec of connected peers that currently have the most worked branch,
-	/// showing the highest total difficulty.
+	/// Return vec of connected peers that currently have the most worked
+	/// branch, showing the highest total difficulty.
 	pub fn most_work_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
 		let peers = self.connected_peers();
 		if peers.len() == 0 {
@@ -235,8 +236,8 @@ impl Peers {
 		max_peers
 	}
 
-	/// Returns single random peer with the most worked branch, showing the highest total
-	/// difficulty.
+	/// Returns single random peer with the most worked branch, showing the
+	/// highest total difficulty.
 	pub fn most_work_peer(&self) -> Option<Arc<RwLock<Peer>>> {
 		match self.most_work_peers().first() {
 			Some(x) => Some(x.clone()),
@@ -253,8 +254,8 @@ impl Peers {
 		false
 	}
 
-	/// Bans a peer, disconnecting it if we're currently connected
-	pub fn ban_peer(&self, peer_addr: &SocketAddr) {
+	/// Ban a peer, disconnecting it if we're currently connected
+	pub fn ban_peer(&self, peer_addr: &SocketAddr, ban_reason: ReasonForBan) {
 		if let Err(e) = self.update_state(peer_addr.clone(), State::Banned) {
 			error!(LOGGER, "Couldn't ban {}: {:?}", peer_addr, e);
 		}
@@ -272,6 +273,7 @@ impl Peers {
 			debug!(LOGGER, "Banning peer {}", peer_addr);
 			// setting peer status will get it removed at the next clean_peer
 			let peer = peer.write().unwrap();
+			peer.send_ban_reason(ban_reason);
 			peer.set_banned();
 			peer.stop();
 		}
@@ -376,15 +378,16 @@ impl Peers {
 	}
 
 	/// Broadcasts the provided stem transaction to our peer relay.
-	pub fn broadcast_stem_transaction(&self, tx: &core::Transaction) {
+	pub fn broadcast_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		let dandelion_relay = self.get_dandelion_relay();
 		if dandelion_relay.is_empty() {
-			debug!(LOGGER, "No dandelion relay updating");
+			debug!(LOGGER, "No dandelion relay, updating.");
 			self.update_dandelion_relay();
 		}
-		// If still empty broadcast then broadcast transaction normally
+		// If still return an error, let the caller handle this as they see fit.
+		// The caller will "fluff" at this point as the stem phase is finished.
 		if dandelion_relay.is_empty() {
-			self.broadcast_transaction(tx);
+			return Err(Error::NoDandelionRelay);
 		}
 		for relay in dandelion_relay.values() {
 			let relay = relay.read().unwrap();
@@ -397,10 +400,11 @@ impl Peers {
 				}
 			}
 		}
+		Ok(())
 	}
 
-	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our peers.
-	/// We may be connected to PEER_MAX_COUNT peers so we only
+	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our
+	/// peers. We may be connected to PEER_MAX_COUNT peers so we only
 	/// want to broadcast to a random subset of peers.
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the transaction.
@@ -416,8 +420,8 @@ impl Peers {
 		}
 	}
 
-	/// Ping all our connected peers. Always automatically expects a pong back or
-	/// disconnects. This acts as a liveness test.
+	/// Ping all our connected peers. Always automatically expects a pong back
+	/// or disconnects. This acts as a liveness test.
 	pub fn check_all(&self, total_difficulty: Difficulty, height: u64) {
 		let peers_map = self.peers.read().unwrap();
 		for p in peers_map.values() {
@@ -554,7 +558,7 @@ impl ChainAdapter for Peers {
 				LOGGER,
 				"Received a bad block {} from  {}, the peer will be banned", hash, peer_addr
 			);
-			self.ban_peer(&peer_addr);
+			self.ban_peer(&peer_addr, ReasonForBan::BadBlock);
 			false
 		} else {
 			true
@@ -572,7 +576,7 @@ impl ChainAdapter for Peers {
 				hash,
 				&peer_addr
 			);
-			self.ban_peer(&peer_addr);
+			self.ban_peer(&peer_addr, ReasonForBan::BadCompactBlock);
 			false
 		} else {
 			true
@@ -583,7 +587,7 @@ impl ChainAdapter for Peers {
 		if !self.adapter.header_received(bh, peer_addr) {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or manevolent, both of which require a ban
-			self.ban_peer(&peer_addr);
+			self.ban_peer(&peer_addr, ReasonForBan::BadBlockHeader);
 			false
 		} else {
 			true
@@ -625,7 +629,7 @@ impl ChainAdapter for Peers {
 				LOGGER,
 				"Received a bad txhashset data from {}, the peer will be banned", &peer_addr
 			);
-			self.ban_peer(&peer_addr);
+			self.ban_peer(&peer_addr, ReasonForBan::BadTxHashSet);
 			false
 		} else {
 			true
@@ -661,6 +665,7 @@ impl NetAdapter for Peers {
 				user_agent: "".to_string(),
 				flags: State::Healthy,
 				last_banned: 0,
+				ban_reason: ReasonForBan::None,
 			};
 			if let Err(e) = self.save_peer(&peer) {
 				error!(LOGGER, "Could not save received peer address: {:?}", e);

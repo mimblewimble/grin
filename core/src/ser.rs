@@ -19,18 +19,18 @@
 //! To use it simply implement `Writeable` or `Readable` and then use the
 //! `serialize` or `deserialize` functions on them as appropriate.
 
-use std::{cmp, error, fmt, mem};
-use std::io::{self, Read, Write};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use consensus;
 use consensus::VerifySortOrder;
 use core::hash::{Hash, Hashed};
-use util::secp::pedersen::Commitment;
-use util::secp::pedersen::RangeProof;
+use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
+use std::io::{self, Read, Write};
+use std::{cmp, error, fmt, mem};
 use util::secp::Signature;
 use util::secp::constants::{AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE,
                             SECRET_KEY_SIZE};
+use util::secp::pedersen::Commitment;
+use util::secp::pedersen::RangeProof;
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]
@@ -139,6 +139,13 @@ pub trait Writer {
 		self.write_fixed_bytes(&bytes)
 	}
 
+	/// Writes a u32 as bytes
+	fn write_i32(&mut self, n: i32) -> Result<(), Error> {
+		let mut bytes = [0; 4];
+		BigEndian::write_i32(&mut bytes, n);
+		self.write_fixed_bytes(&bytes)
+	}
+
 	/// Writes a u64 as bytes
 	fn write_u64(&mut self, n: u64) -> Result<(), Error> {
 		let mut bytes = [0; 8];
@@ -177,6 +184,8 @@ pub trait Reader {
 	/// Read a u64 from the underlying Read
 	fn read_u64(&mut self) -> Result<u64, Error>;
 	/// Read a i32 from the underlying Read
+	fn read_i32(&mut self) -> Result<i32, Error>;
+	/// Read a i64 from the underlying Read
 	fn read_i64(&mut self) -> Result<i64, Error>;
 	/// first before the data bytes.
 	fn read_vec(&mut self) -> Result<Vec<u8>, Error>;
@@ -269,6 +278,9 @@ impl<'a> Reader for BinReader<'a> {
 	}
 	fn read_u32(&mut self) -> Result<u32, Error> {
 		self.source.read_u32::<BigEndian>().map_err(Error::IOErr)
+	}
+	fn read_i32(&mut self) -> Result<i32, Error> {
+		self.source.read_i32::<BigEndian>().map_err(Error::IOErr)
 	}
 	fn read_u64(&mut self) -> Result<u64, Error> {
 		self.source.read_u64::<BigEndian>().map_err(Error::IOErr)
@@ -417,24 +429,25 @@ impl<'a> Writer for BinWriter<'a> {
 }
 
 macro_rules! impl_int {
-    ($int: ty, $w_fn: ident, $r_fn: ident) => {
-        impl Writeable for $int {
-            fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-                writer.$w_fn(*self)
-            }
-        }
+	($int:ty, $w_fn:ident, $r_fn:ident) => {
+		impl Writeable for $int {
+			fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+				writer.$w_fn(*self)
+			}
+		}
 
-        impl Readable for $int {
-            fn read(reader: &mut Reader) -> Result<$int, Error> {
-                reader.$r_fn()
-            }
-        }
-    }
+		impl Readable for $int {
+			fn read(reader: &mut Reader) -> Result<$int, Error> {
+				reader.$r_fn()
+			}
+		}
+	};
 }
 
 impl_int!(u8, write_u8, read_u8);
 impl_int!(u16, write_u16, read_u16);
 impl_int!(u32, write_u32, read_u32);
+impl_int!(i32, write_i32, read_i32);
 impl_int!(u64, write_u64, read_u64);
 impl_int!(i64, write_i64, read_i64);
 

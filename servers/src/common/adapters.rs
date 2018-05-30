@@ -15,28 +15,28 @@
 //! Adapters connecting new block, new transaction, and accepted transaction
 //! events to consumers of those events.
 
+use rand;
+use rand::Rng;
 use std::fs::File;
 use std::net::SocketAddr;
 use std::ops::Deref;
-use std::sync::{Arc, RwLock, Weak};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 use std::time::Instant;
-use rand;
-use rand::Rng;
 
 use chain::{self, ChainAdapter, Options, Tip};
+use common::types::{ChainValidationMode, ServerConfig};
 use core::core;
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use core::core::transaction::{Input, OutputIdentifier};
+use core::core::transaction::Transaction;
 use p2p;
 use pool;
-use util::OneTime;
 use store;
-use common::types::{ChainValidationMode, ServerConfig};
 use util::LOGGER;
+use util::OneTime;
 
 // All adapters use `Weak` references instead of `Arc` to avoid cycles that
 // can never be destroyed. These 2 functions are simple helpers to reduce the
@@ -75,35 +75,23 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			debug_name: "p2p".to_string(),
 			identifier: "?.?.?.?".to_string(),
 		};
+
 		debug!(
 			LOGGER,
-			"Received tx {} from {}, going to process.",
+			"Received tx {} from {:?}, going to process.",
 			tx.hash(),
-			source.identifier,
+			source,
 		);
 
 		let h = tx.hash();
 
-		if !stem && tx.kernels.len() != 1 {
-			debug!(
-				LOGGER,
-				"Received regular multi-kernel transaction will attempt to deaggregate"
-			);
-			if let Err(e) = self.tx_pool
-				.write()
-				.unwrap()
-				.deaggregate_and_add_to_memory_pool(source, tx, stem)
-			{
-				debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
-			}
-		} else {
-			if let Err(e) = self.tx_pool
-				.write()
-				.unwrap()
-				.add_to_memory_pool(source, tx, stem)
-			{
-				debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
-			}
+		let res = {
+			let mut tx_pool = self.tx_pool.write().unwrap();
+			tx_pool.add_to_pool(source, tx, stem)
+		};
+
+		if let Err(e) = res {
+			debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
 		}
 	}
 
@@ -635,8 +623,8 @@ impl ChainToPoolAndNetAdapter {
 		}
 	}
 
-	/// Initialize a ChainToPoolAndNetAdapter instance with hanlde to a Peers object.
-	/// Should only be called once.
+	/// Initialize a ChainToPoolAndNetAdapter instance with hanlde to a Peers
+	/// object. Should only be called once.
 	pub fn init(&self, peers: Weak<p2p::Peers>) {
 		self.peers.init(peers);
 	}
@@ -649,8 +637,11 @@ pub struct PoolToNetAdapter {
 }
 
 impl pool::PoolAdapter for PoolToNetAdapter {
-	fn stem_tx_accepted(&self, tx: &core::Transaction) {
-		wo(&self.peers).broadcast_stem_transaction(tx);
+	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
+		wo(&self.peers)
+			.broadcast_stem_transaction(tx)
+			.map_err(|_| pool::PoolError::DandelionError)?;
+		Ok(())
 	}
 	fn tx_accepted(&self, tx: &core::Transaction) {
 		wo(&self.peers).broadcast_transaction(tx);
@@ -694,26 +685,25 @@ impl PoolToChainAdapter {
 }
 
 impl pool::BlockChain for PoolToChainAdapter {
-	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Hash, pool::PoolError> {
-		wo(&self.chain).is_unspent(output_ref).map_err(|e| match e {
-			chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
-			chain::types::Error::OutputSpent => pool::PoolError::OutputSpent,
-			_ => pool::PoolError::GenericPoolError,
+	fn validate_raw_txs(
+		&self,
+		txs: Vec<Transaction>,
+		pre_tx: Option<Transaction>,
+	) -> Result<(Vec<Transaction>), pool::PoolError> {
+		wo(&self.chain).validate_raw_txs(txs, pre_tx).map_err(|_| {
+			pool::PoolError::Other("Chain adapter failed to validate_raw_txs.".to_string())
 		})
 	}
 
-	fn is_matured(&self, input: &Input, height: u64) -> Result<(), pool::PoolError> {
+	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
 		wo(&self.chain)
-			.is_matured(input, height)
-			.map_err(|e| match e {
-				chain::types::Error::OutputNotFound => pool::PoolError::OutputNotFound,
-				_ => pool::PoolError::GenericPoolError,
-			})
+			.verify_coinbase_maturity(tx)
+			.map_err(|_| pool::PoolError::ImmatureCoinbase)
 	}
 
-	fn head_header(&self) -> Result<BlockHeader, pool::PoolError> {
+	fn verify_tx_lock_height(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
 		wo(&self.chain)
-			.head_header()
-			.map_err(|_| pool::PoolError::GenericPoolError)
+			.verify_tx_lock_height(tx)
+			.map_err(|_| pool::PoolError::ImmatureTransaction)
 	}
 }

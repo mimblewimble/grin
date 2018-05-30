@@ -29,7 +29,7 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time;
 
-use wallet::WalletConfig;
+use wallet::{FileWallet, WalletConfig};
 
 /// Just removes all results from previous runs
 pub fn clean_all_output(test_name_dir: &str) {
@@ -275,7 +275,14 @@ impl LocalServerContainer {
 			.derive_keychain("grin_test")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 
-		wallet::server::start_rest_apis(self.wallet_config.clone(), keychain);
+		let wallet = FileWallet::new(self.wallet_config.clone(), keychain).unwrap_or_else(|e| {
+			panic!(
+				"Error creating wallet: {:?} Config: {:?}",
+				e, self.wallet_config
+			)
+		});
+
+		wallet::server::start_rest_apis(wallet, &self.wallet_config.api_listen_addr());
 		self.wallet_is_running = true;
 	}
 
@@ -294,8 +301,9 @@ impl LocalServerContainer {
 		let keychain = wallet_seed
 			.derive_keychain("grin_test")
 			.expect("Failed to derive keychain from seed file and passphrase.");
-
-		wallet::retrieve_info(config, &keychain)
+		let mut wallet = FileWallet::new(config.clone(), keychain)
+			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
+		wallet::retrieve_info(&mut wallet)
 	}
 
 	pub fn send_amount_to(
@@ -312,13 +320,14 @@ impl LocalServerContainer {
 		let wallet_seed =
 			wallet::WalletSeed::from_file(config).expect("Failed to read wallet seed file.");
 
-		let mut keychain = wallet_seed
+		let keychain = wallet_seed
 			.derive_keychain("grin_test")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let max_outputs = 500;
+		let mut wallet = FileWallet::new(config.clone(), keychain)
+			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		let result = wallet::issue_send_tx(
-			config,
-			&mut keychain,
+			&mut wallet,
 			amount,
 			minimum_confirmations,
 			dest.to_string(),

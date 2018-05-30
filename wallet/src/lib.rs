@@ -48,21 +48,21 @@ extern crate grin_util as util;
 
 pub mod checker;
 pub mod client;
-pub mod grinwallet;
+pub mod file_wallet;
 mod handlers;
 mod info;
+pub mod libtx;
 pub mod libwallet;
 mod outputs;
 pub mod receiver;
 mod restore;
 mod sender;
 pub mod server;
-pub mod types;
 
+pub use file_wallet::{FileWallet, WalletConfig, WalletSeed};
 pub use info::{retrieve_info, show_info};
+pub use libwallet::types::{BlockFees, CbData, Error, ErrorKind, WalletInfo, WalletReceiveRequest};
 pub use outputs::show_outputs;
 pub use receiver::WalletReceiver;
 pub use restore::restore;
 pub use sender::{issue_burn_tx, issue_send_tx};
-pub use types::{BlockFees, CbData, Error, ErrorKind, WalletConfig, WalletInfo,
-                WalletReceiveRequest, WalletSeed};

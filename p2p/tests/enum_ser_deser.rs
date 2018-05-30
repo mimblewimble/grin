@@ -12,20 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Library specific to the Grin wallet implementation, as distinct from
-//! libwallet, which should build transactions without any knowledge of the
-//! wallet implementation.
+extern crate grin_p2p as p2p;
 
-// TODO: Once this is working, extract a set of traits that wallet
-// implementations would need to provide
+extern crate enum_primitive;
+extern crate num;
 
-#![deny(non_upper_case_globals)]
-#![deny(non_camel_case_types)]
-#![deny(non_snake_case)]
-#![deny(unused_mut)]
-#![warn(missing_docs)]
+use num::FromPrimitive;
 
-pub mod keys;
-pub mod selection;
-pub mod sigcontext;
-pub mod types;
+// Test that Healthy == 0.
+#[test]
+fn test_store_state_enum() {
+	assert_eq!(p2p::State::from_i32(0), Some(p2p::State::Healthy));
+}
+
+#[test]
+fn test_direction_enum() {
+	assert_eq!(p2p::Direction::from_i32(0), Some(p2p::Direction::Inbound));
+}
+
+#[test]
+fn test_reason_for_ban_enum() {
+	assert_eq!(
+		p2p::types::ReasonForBan::from_i32(0),
+		Some(p2p::types::ReasonForBan::None)
+	);
+}
+
+#[test]
+fn test_type_enum() {
+	assert_eq!(p2p::msg::Type::from_i32(0), Some(p2p::msg::Type::Error));
+}

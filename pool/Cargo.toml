@@ -19,3 +19,4 @@ grin_util = { path = "../util" }
 
 [dev-dependencies]
 grin_wallet = { path = "../wallet" }
+grin_chain = { path = "../chain" }

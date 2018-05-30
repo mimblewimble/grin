@@ -24,7 +24,7 @@ use lmdb;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store::{self, option_to_not_found, to_key, Error};
 use msg::SockAddr;
-use types::Capabilities;
+use types::{Capabilities, ReasonForBan};
 use util::LOGGER;
 
 const STORE_SUBPATH: &'static str = "peers";
@@ -35,9 +35,9 @@ const PEER_PREFIX: u8 = 'p' as u8;
 enum_from_primitive! {
 	#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 	pub enum State {
-		Healthy,
-		Banned,
-		Defunct,
+		Healthy = 0,
+		Banned = 1,
+		Defunct = 2,
 	}
 }
 
@@ -55,6 +55,8 @@ pub struct PeerData {
 	pub flags: State,
 	/// The time the peer was last banned
 	pub last_banned: i64,
+	/// The reason for the ban
+	pub ban_reason: ReasonForBan,
 }
 
 impl Writeable for PeerData {
@@ -65,7 +67,8 @@ impl Writeable for PeerData {
 			[write_u32, self.capabilities.bits()],
 			[write_bytes, &self.user_agent],
 			[write_u8, self.flags as u8],
-			[write_i64, self.last_banned]
+			[write_i64, self.last_banned],
+			[write_i32, self.ban_reason as i32]
 		);
 		Ok(())
 	}
@@ -74,10 +77,12 @@ impl Writeable for PeerData {
 impl Readable for PeerData {
 	fn read(reader: &mut Reader) -> Result<PeerData, ser::Error> {
 		let addr = SockAddr::read(reader)?;
-		let (capab, ua, fl, lb) = ser_multiread!(reader, read_u32, read_vec, read_u8, read_i64);
+		let (capab, ua, fl, lb, br) =
+			ser_multiread!(reader, read_u32, read_vec, read_u8, read_i64, read_i32);
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
 		let last_banned = lb;
+		let ban_reason = ReasonForBan::from_i32(br).ok_or(ser::Error::CorruptedData)?;
 		match State::from_u8(fl) {
 			Some(flags) => Ok(PeerData {
 				addr: addr.0,
@@ -85,6 +90,7 @@ impl Readable for PeerData {
 				user_agent: user_agent,
 				flags: flags,
 				last_banned: last_banned,
+				ban_reason: ban_reason,
 			}),
 			None => Err(ser::Error::CorruptedData),
 		}

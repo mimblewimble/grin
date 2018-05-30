@@ -46,4 +46,5 @@ pub mod types;
 // Re-export the base interface
 
 pub use chain::{Chain, MAX_ORPHAN_SIZE};
-pub use types::{ChainAdapter, Error, Options, Tip};
+pub use store::ChainStore;
+pub use types::{BlockSums, ChainAdapter, Error, Options, Tip};

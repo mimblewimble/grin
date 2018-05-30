@@ -65,7 +65,7 @@ run_tui = true
 #Whether to run the wallet listener with the server by default
 run_wallet_listener = true
 
-#Whether to run a test miner. This is only for developer testing (chaintype 
+#Whether to run a test miner. This is only for developer testing (chaintype
 #usertesting) at cuckoo 16, and will only mine into the default wallet port.
 #real mining should use the standalone grin-miner
 run_test_miner = false
@@ -73,10 +73,23 @@ run_test_miner = false
 #test miner wallet URL (burns if this doesn't exist)
 #test_miner_wallet_url = "http://127.0.0.1:13415"
 
+[server.dandelion_config]
+#dandelion relay time (choose new relay peer every n secs)
+#relay_secs = 600
+
+#fluff and broadcast after embargo expires if tx not seen on network
+#embargo_secs = 300
+
+#run dandelion stem/fluff processing every n secs (stem tx aggregation in this window)
+#patience_secs = 30
+
+#dandelion stem probability (stem 90% of the time, fluff 10% of the time)
+#stem_probability = 90
+
 #The P2P server details (i.e. the server that communicates with other
 #grin server nodes
-
 [server.p2p_config]
+
 host = "0.0.0.0"
 port = 13414
 
@@ -85,9 +98,6 @@ port = 13414
 #peers_allow = ["192.168.0.1:13414", "192.168.0.2:13414"]
 #will *never* connect to peers in deny list
 #peers_deny = ["192.168.0.3:13414", "192.168.0.4:13414"]
-
-#dandelion relay time
-#dandelion_relay_time = 600
 
 #how long a banned peer should stay banned
 #ban_window = 10800

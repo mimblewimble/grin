@@ -36,6 +36,7 @@ use util::LOGGER;
 /// peers, receiving connections from other peers and keep track of all of them.
 pub struct Server {
 	pub config: P2PConfig,
+	pub dandelion_config: DandelionConfig,
 	capabilities: Capabilities,
 	handshake: Arc<Handshake>,
 	pub peers: Arc<Peers>,
@@ -52,6 +53,7 @@ impl Server {
 		db_env: Arc<lmdb::Environment>,
 		mut capab: Capabilities,
 		config: P2PConfig,
+		dandelion_config: DandelionConfig,
 		adapter: Arc<ChainAdapter>,
 		genesis: Hash,
 		stop: Arc<AtomicBool>,
@@ -81,6 +83,7 @@ impl Server {
 		}
 		Ok(Server {
 			config: config.clone(),
+			dandelion_config: dandelion_config.clone(),
 			capabilities: capab,
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
 			peers: Arc::new(Peers::new(PeerStore::new(db_env)?, adapter, config)),

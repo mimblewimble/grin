@@ -25,7 +25,7 @@ use lmdb;
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
-use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
+use core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, OutputFeatures, Transaction, TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;
 use pipe;
@@ -140,6 +140,7 @@ unsafe impl Sync for Chain {}
 unsafe impl Send for Chain {}
 
 impl Chain {
+
 	/// Initializes the blockchain and returns a new Chain instance. Does a
 	/// check on the current chain head to make sure it exists and creates one
 	/// based on the genesis block if necessary.
@@ -374,6 +375,47 @@ impl Chain {
 		txhashset.is_unspent(output_ref)
 	}
 
+	/// Validate a vector of "raw" transactions against the current chain state.
+	pub fn validate_raw_txs(
+		&self,
+		txs: Vec<Transaction>,
+		pre_tx: Option<Transaction>,
+	) -> Result<Vec<Transaction>, Error> {
+		let bh = self.head_header()?;
+		let mut txhashset = self.txhashset.write().unwrap();
+		txhashset::extending_readonly(&mut txhashset, |extension| {
+			let valid_txs = extension.validate_raw_txs(txs, pre_tx, bh.height)?;
+			Ok(valid_txs)
+		})
+	}
+
+	fn next_block_height(&self) -> Result<u64, Error> {
+		let bh = self.head_header()?;
+		Ok(bh.height + 1)
+	}
+
+	/// Verify we are not attempting to spend a coinbase output
+	/// that has not yet sufficiently matured.
+	pub fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), Error> {
+		let height = self.next_block_height()?;
+		let mut txhashset = self.txhashset.write().unwrap();
+		txhashset::extending_readonly(&mut txhashset, |extension| {
+			extension.verify_coinbase_maturity(&tx.inputs, height)?;
+			Ok(())
+		})
+	}
+
+	/// Verify that the tx has a lock_height that is less than or equal to
+	/// the height of the next block.
+	pub fn verify_tx_lock_height(&self, tx: &Transaction) -> Result<(), Error> {
+		let height = self.next_block_height()?;
+		if tx.lock_height() <= height {
+			Ok(())
+		} else {
+			Err(Error::TxLockHeight)
+		}
+	}
+
 	/// Validate the current chain state.
 	pub fn validate(&self, skip_rproofs: bool) -> Result<(), Error> {
 		let header = self.store.head_header()?;
@@ -416,7 +458,6 @@ impl Chain {
 		let store = self.store.clone();
 
 		let roots = txhashset::extending_readonly(&mut txhashset, |extension| {
-			// apply the block on the txhashset and check the resulting root
 			if is_fork {
 				pipe::rewind_and_apply_fork(b, store, extension)?;
 			}

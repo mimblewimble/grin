@@ -19,17 +19,17 @@ extern crate grin_wallet as wallet;
 
 pub mod common;
 
-use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
-use grin_core::core::hash::Hashed;
-use grin_core::core::block::Error;
-use grin_core::core::id::{ShortId, ShortIdentifiable};
-use wallet::libwallet::build::{self, input, output, with_fee};
 use common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
-use keychain::Keychain;
 use grin_core::consensus::{BLOCK_OUTPUT_WEIGHT, MAX_BLOCK_WEIGHT};
-use grin_core::ser;
+use grin_core::core::block::Error;
+use grin_core::core::hash::Hashed;
+use grin_core::core::id::{ShortId, ShortIdentifiable};
+use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
 use grin_core::global;
+use grin_core::ser;
+use keychain::Keychain;
 use std::time::Instant;
+use wallet::libtx::build::{self, input, output, with_fee};
 
 use util::{secp, secp_static};
 
@@ -54,12 +54,12 @@ fn too_large_block() {
 
 	let now = Instant::now();
 	parts.append(&mut vec![input(500000, pks.pop().unwrap()), with_fee(2)]);
-	let mut tx = build::transaction(parts, &keychain).unwrap();
+	let tx = build::transaction(parts, &keychain).unwrap();
 	println!("Build tx: {}", now.elapsed().as_secs());
 
 	let prev = BlockHeader::default();
 	let key_id = keychain.derive_key_id(1).unwrap();
-	let b = new_block(vec![&mut tx], &keychain, &prev, &key_id);
+	let b = new_block(vec![&tx], &keychain, &prev, &key_id);
 	assert!(b.validate(&zero_commit, &zero_commit).is_err());
 }
 

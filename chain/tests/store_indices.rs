@@ -23,17 +23,17 @@ extern crate rand;
 use std::fs;
 use std::sync::Arc;
 
-use chain::Tip;
-use core::core::Block;
-use core::core::BlockHeader;
+use chain::{ChainStore, Tip};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
+use core::core::Block;
+use core::core::BlockHeader;
 use core::global;
 use core::global::ChainTypes;
 use core::pow;
 use keychain::Keychain;
 
-use wallet::libwallet;
+use wallet::libtx;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -52,7 +52,7 @@ fn test_various_store_indices() {
 	let chain_store = chain::store::ChainStore::new(db_env).unwrap();
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis = pow::mine_genesis_block().unwrap();
-	let reward = libwallet::reward::output(&keychain, &key_id, 0, 1).unwrap();
+	let reward = libtx::reward::output(&keychain, &key_id, 0, 1).unwrap();
 
 	let block = Block::new(&genesis.header, vec![], Difficulty::one(), reward).unwrap();
 	let block_hash = block.hash();
