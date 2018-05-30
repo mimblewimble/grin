@@ -20,8 +20,8 @@ use keychain::Identifier;
 use libtx::proof;
 use libwallet::types::*;
 use util;
-use util::LOGGER;
 use util::secp::pedersen;
+use util::LOGGER;
 
 pub fn get_chain_height(node_addr: &str) -> Result<u64, Error> {
 	let url = format!("{}/v1/chain", node_addr);

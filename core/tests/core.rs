@@ -24,8 +24,7 @@ use common::{new_block, tx1i1o, tx1i2o, tx2i1o};
 use grin_core::core::block::BlockHeader;
 use grin_core::core::block::Error::KernelLockHeight;
 use grin_core::core::hash::{Hashed, ZERO_HASH};
-use grin_core::core::{aggregate, aggregate_with_cut_through, deaggregate, KernelFeatures, Output,
-                      Transaction};
+use grin_core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction};
 use grin_core::ser;
 use keychain::Keychain;
 use util::{secp_static, static_secp_instance};
@@ -128,7 +127,7 @@ fn transaction_cut_through() {
 	assert!(tx2.validate().is_ok());
 
 	// now build a "cut_through" tx from tx1 and tx2
-	let tx3 = aggregate_with_cut_through(vec![tx1, tx2]).unwrap();
+	let tx3 = aggregate(vec![tx1, tx2]).unwrap();
 
 	assert!(tx3.validate().is_ok());
 }

@@ -19,9 +19,9 @@ extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-use grin_core::core::Transaction;
 use grin_core::core::block::{Block, BlockHeader};
 use grin_core::core::target::Difficulty;
+use grin_core::core::Transaction;
 use keychain::{Identifier, Keychain};
 use wallet::libtx::build::{self, input, output, with_fee};
 use wallet::libtx::reward;
@@ -86,7 +86,12 @@ pub fn new_block(
 ) -> Block {
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward_output = reward::output(keychain, &key_id, fees, previous_header.height).unwrap();
-	Block::new(&previous_header, txs, Difficulty::one(), reward_output).unwrap()
+	Block::new(
+		&previous_header,
+		txs.into_iter().cloned().collect(),
+		Difficulty::one(),
+		reward_output,
+	).unwrap()
 }
 
 // utility producing a transaction that spends an output with the provided

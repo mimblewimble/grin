@@ -28,7 +28,6 @@ use common::adapters::PoolToChainAdapter;
 use common::types::Error;
 use core::consensus;
 use core::core;
-use core::core::Transaction;
 use core::core::hash::Hashed;
 use core::ser;
 use core::ser::AsFixedBytes;
@@ -162,8 +161,6 @@ fn build_block(
 		.read()
 		.unwrap()
 		.prepare_mineable_transactions(max_tx);
-
-	let txs: Vec<&Transaction> = txs.iter().collect();
 
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();

@@ -35,12 +35,12 @@
 //! The underlying Hashes are stored in a Backend implementation that can
 //! either be a simple Vec or a database.
 
-use std::clone::Clone;
-use std::marker;
 use core::hash::Hash;
 use ser;
-use ser::{Readable, Reader, Writeable, Writer};
 use ser::{PMMRIndexHashable, PMMRable};
+use ser::{Readable, Reader, Writeable, Writer};
+use std::clone::Clone;
+use std::marker;
 use util;
 use util::LOGGER;
 
@@ -52,9 +52,10 @@ pub trait Backend<T>
 where
 	T: PMMRable,
 {
-	/// Append the provided Hashes to the backend storage, and optionally an associated
-	/// data element to flatfile storage (for leaf nodes only). The position of the
-	/// first element of the Vec in the MMR is provided to help the implementation.
+	/// Append the provided Hashes to the backend storage, and optionally an
+	/// associated data element to flatfile storage (for leaf nodes only). The
+	/// position of the first element of the Vec in the MMR is provided to
+	/// help the implementation.
 	fn append(&mut self, position: u64, data: Vec<(Hash, Option<T>)>) -> Result<(), String>;
 
 	/// Rewind the backend state to a previous position, as if all append
@@ -102,8 +103,8 @@ pub const MAX_PATH: u64 = 100;
 /// Proves inclusion of an output (node) in the output MMR.
 /// We can use this to prove an output was unspent at the time of a given block
 /// as the root will match the output_root of the block header.
-/// The path and left_right can be used to reconstruct the peak hash for a given tree
-/// in the MMR.
+/// The path and left_right can be used to reconstruct the peak hash for a
+/// given tree in the MMR.
 /// The root is the result of hashing all the peaks together.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct MerkleProof {
@@ -207,8 +208,9 @@ impl MerkleProof {
 
 	/// Verify the Merkle proof.
 	/// We do this by verifying the folloiwing -
-	///  * inclusion of the node beneath a peak (via the Merkle path/branch of siblings)
-	///  * inclusion of the peak in the "bag of peaks" beneath the root
+	/// * inclusion of the node beneath a peak (via the Merkle path/branch of
+	/// siblings) * inclusion of the peak in the "bag of peaks" beneath the
+	/// root
 	pub fn verify(&self) -> bool {
 		// if we have no further elements in the path
 		// then this proof verifies successfully if our node is
@@ -455,7 +457,6 @@ where
 				break;
 			}
 		}
-
 		self.backend.remove(to_prune, index)?;
 		Ok(true)
 	}
@@ -937,8 +938,9 @@ pub fn bintree_postorder_height(num: u64) -> u64 {
 }
 
 /// Is this position a leaf in the MMR?
-/// We know the positions of all leaves based on the postorder height of an MMR of any size
-/// (somewhat unintuitively but this is how the PMMR is "append only").
+/// We know the positions of all leaves based on the postorder height of an MMR
+/// of any size (somewhat unintuitively but this is how the PMMR is "append
+/// only").
 pub fn is_leaf(pos: u64) -> bool {
 	bintree_postorder_height(pos) == 0
 }
@@ -1037,9 +1039,9 @@ fn most_significant_pos(num: u64) -> u64 {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use ser::{Error, Readable, Writeable};
-	use core::{Reader, Writer};
 	use core::hash::Hash;
+	use core::{Reader, Writer};
+	use ser::{Error, Readable, Writeable};
 	use ser::{PMMRIndexHashable, PMMRable};
 
 	/// Simple MMR backend implementation based on a Vector. Pruning does not

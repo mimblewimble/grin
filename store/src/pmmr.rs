@@ -17,8 +17,8 @@ use std::fs;
 use std::io;
 use std::marker;
 
-use core::core::pmmr::{self, family, Backend};
 use core::core::hash::Hash;
+use core::core::pmmr::{self, family, Backend};
 use core::ser;
 use core::ser::PMMRable;
 use types::*;
@@ -271,15 +271,6 @@ where
 	pub fn data_file_path(&self) -> String {
 		self.get_data_file_path()
 	}
-
-	/// Return last written buffer positions for the hash file and the data file
-	// pub fn last_file_positions(&self) -> PMMRFileMetadata {
-	// 	PMMRFileMetadata {
-	// 		block_height: 0,
-	// 		last_hash_file_pos: self.hash_file.last_buffer_pos() as u64,
-	// 		last_data_file_pos: self.data_file.last_buffer_pos() as u64,
-	// 	}
-	// }
 
 	/// Checks the length of the remove log to see if it should get compacted.
 	/// If so, the remove log is flushed into the pruned list, which itself gets

@@ -17,27 +17,27 @@
 //! as a facade.
 
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time;
 
-use common::adapters::*;
 use api;
 use chain;
-use core::{consensus, genesis, global, pow};
-use core::core::target::Difficulty;
+use common::adapters::*;
+use common::stats::*;
+use common::types::*;
 use core::core::hash::Hashed;
+use core::core::target::Difficulty;
+use core::{consensus, genesis, global, pow};
 use grin::dandelion_monitor;
-use mining::stratumserver;
-use p2p;
-use pool;
 use grin::seed;
 use grin::sync;
-use common::types::*;
-use common::stats::*;
-use util::LOGGER;
+use mining::stratumserver;
 use mining::test_miner::Miner;
+use p2p;
+use pool;
+use util::LOGGER;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -157,11 +157,11 @@ impl Server {
 			Err(_) => None,
 		};
 
-		let p2p_config = config.p2p_config.clone();
 		let p2p_server = Arc::new(p2p::Server::new(
 			config.db_root.clone(),
 			config.capabilities,
-			p2p_config,
+			config.p2p_config.clone(),
+			config.p2p_dandelion_config(),
 			net_adapter.clone(),
 			genesis.hash(),
 			stop.clone(),
@@ -232,7 +232,7 @@ impl Server {
 			"Starting dandelion monitor: {}", &config.api_http_addr
 		);
 		dandelion_monitor::monitor_transactions(
-			config.pool_config.clone(),
+			config.p2p_dandelion_config(),
 			tx_pool.clone(),
 			stop.clone(),
 		);
@@ -288,9 +288,9 @@ impl Server {
 			});
 	}
 
-	/// Start mining for blocks internally on a separate thread. Relies on internal miner,
-	/// and should only be used for automated testing. Burns reward if wallet_listener_url
-	/// is 'None'
+	/// Start mining for blocks internally on a separate thread. Relies on
+	/// internal miner, and should only be used for automated testing. Burns
+	/// reward if wallet_listener_url is 'None'
 	pub fn start_test_miner(&self, wallet_listener_url: Option<String>) {
 		let currently_syncing = self.currently_syncing.clone();
 		let config_wallet_url = match wallet_listener_url.clone() {

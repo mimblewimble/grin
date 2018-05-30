@@ -15,8 +15,8 @@
 //! Rangeproof library functions
 
 use blake2;
-use keychain::Keychain;
 use keychain::extkey::Identifier;
+use keychain::Keychain;
 use libtx::error::Error;
 use util::logger::LOGGER;
 use util::secp::key::SecretKey;

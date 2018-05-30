@@ -22,8 +22,8 @@ use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time;
 
-use core::core::target::Difficulty;
 use core::core::hash::Hash;
+use core::core::target::Difficulty;
 use p2p::Peer;
 
 fn open_port() -> u16 {
@@ -40,19 +40,26 @@ fn open_port() -> u16 {
 fn peer_handshake() {
 	util::init_test_logger();
 
-	let p2p_conf = p2p::P2PConfig {
+	let p2p_config = p2p::P2PConfig {
 		host: "0.0.0.0".parse().unwrap(),
 		port: open_port(),
 		peers_allow: None,
 		peers_deny: None,
 		..p2p::P2PConfig::default()
 	};
+	let dandelion_config = p2p::DandelionConfig {
+		relay_secs: 600,
+		embargo_secs: 30,
+		patience_secs: 10,
+		stem_probability: 90,
+	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
 	let server = Arc::new(
 		p2p::Server::new(
 			".grin".to_owned(),
 			p2p::Capabilities::UNKNOWN,
-			p2p_conf.clone(),
+			p2p_config.clone(),
+			dandelion_config.clone(),
 			net_adapter.clone(),
 			Hash::from_vec(vec![]),
 			Arc::new(AtomicBool::new(false)),
@@ -66,7 +73,7 @@ fn peer_handshake() {
 
 	thread::sleep(time::Duration::from_secs(1));
 
-	let addr = SocketAddr::new(p2p_conf.host, p2p_conf.port);
+	let addr = SocketAddr::new(p2p_config.host, p2p_config.port);
 	let mut socket = TcpStream::connect_timeout(&addr, time::Duration::from_secs(10)).unwrap();
 
 	let my_addr = "127.0.0.1:5000".parse().unwrap();
@@ -75,7 +82,7 @@ fn peer_handshake() {
 		p2p::Capabilities::UNKNOWN,
 		Difficulty::one(),
 		my_addr,
-		&p2p::handshake::Handshake::new(Hash::from_vec(vec![]), p2p_conf.clone()),
+		&p2p::handshake::Handshake::new(Hash::from_vec(vec![]), p2p_config.clone()),
 		net_adapter,
 	).unwrap();
 

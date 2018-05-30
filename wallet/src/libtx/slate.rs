@@ -22,8 +22,8 @@ use keychain::{BlindSum, BlindingFactor, Keychain};
 use libtx::error::Error;
 use libtx::{aggsig, build, tx_fee};
 
-use util::secp::Signature;
 use util::secp::key::{PublicKey, SecretKey};
+use util::secp::Signature;
 use util::{secp, LOGGER};
 
 /// Public data for each participant in the slate

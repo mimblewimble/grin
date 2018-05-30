@@ -15,18 +15,29 @@
 //! The primary module containing the implementations of the transaction pool
 //! and its top-level members.
 
-use std::collections::{HashMap, HashSet};
-use std::iter::Iterator;
-use std::vec::Vec;
 use std::{error, fmt};
-
-use util::secp::pedersen::Commitment;
-
-pub use graph;
+use time::Timespec;
 
 use core::consensus;
-use core::core::transaction::{Input, OutputIdentifier};
-use core::core::{block, hash, transaction};
+use core::core::transaction;
+use core::core::transaction::Transaction;
+
+/// Configuration for "Dandelion".
+/// Note: shared between p2p and pool.
+/// Look in top-level server config for info on configuring these parameters.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DandelionConfig {
+	/// Choose new Dandelion relay peer every n secs.
+	pub relay_secs: u64,
+	/// Dandelion embargo, fluff and broadcast tx if not seen on network before
+	/// embargo expires.
+	pub embargo_secs: u64,
+	/// Dandelion patience timer, fluff/stem processing runs every n secs.
+	/// Tx aggregation happens on stem txs received within this window.
+	pub patience_secs: u64,
+	/// Dandelion stem probability (stem 90% of the time, fluff 10% etc.)
+	pub stem_probability: usize,
+}
 
 /// Transaction pool configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -40,14 +51,6 @@ pub struct PoolConfig {
 	/// Maximum capacity of the pool in number of transactions
 	#[serde = "default_max_pool_size"]
 	pub max_pool_size: usize,
-
-	/// Maximum capacity of the pool in number of transactions
-	#[serde = "default_dandelion_probability"]
-	pub dandelion_probability: usize,
-
-	/// Default embargo for Dandelion transaction
-	#[serde = "default_dandelion_embargo"]
-	pub dandelion_embargo: i64,
 }
 
 impl Default for PoolConfig {
@@ -55,8 +58,6 @@ impl Default for PoolConfig {
 		PoolConfig {
 			accept_fee_base: default_accept_fee_base(),
 			max_pool_size: default_max_pool_size(),
-			dandelion_probability: default_dandelion_probability(),
-			dandelion_embargo: default_dandelion_embargo(),
 		}
 	}
 }
@@ -67,11 +68,34 @@ fn default_accept_fee_base() -> u64 {
 fn default_max_pool_size() -> usize {
 	50_000
 }
-fn default_dandelion_probability() -> usize {
-	90
+
+/// Represents a single entry in the pool.
+/// A single (possibly aggregated) transaction.
+#[derive(Clone, Debug)]
+pub struct PoolEntry {
+	/// The state of the pool entry.
+	pub state: PoolEntryState,
+	/// Info on where this tx originated from.
+	pub src: TxSource,
+	/// Timestamp of when this tx was originally added to the pool.
+	pub tx_at: Timespec,
+	/// The transaction itself.
+	pub tx: Transaction,
 }
-fn default_dandelion_embargo() -> i64 {
-	30
+
+/// The possible states a pool entry can be in.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PoolEntryState {
+	/// A new entry, not yet processed.
+	Fresh,
+	/// Tx to be included in the next "stem" run.
+	ToStem,
+	/// Tx previously "stemmed" and propagated.
+	Stemmed,
+	/// Tx to be included in the next "fluff" run.
+	ToFluff,
+	/// Tx previously "fluffed" and broadcast.
+	Fluffed,
 }
 
 /// Placeholder: the data representing where we heard about a tx from.
@@ -82,6 +106,7 @@ fn default_dandelion_embargo() -> i64 {
 ///
 /// Most likely this will evolve to contain some sort of network identifier,
 /// once we get a better sense of what transaction building might look like.
+#[derive(Clone, Debug)]
 pub struct TxSource {
 	/// Human-readable name used for logging and errors.
 	pub debug_name: String,
@@ -89,93 +114,32 @@ pub struct TxSource {
 	pub identifier: String,
 }
 
-/// This enum describes the parent for a given input of a transaction.
-#[derive(Clone)]
-pub enum Parent {
-	/// Unknown
-	Unknown,
-	/// Block Transaction
-	BlockTransaction,
-	/// Pool Transaction
-	PoolTransaction {
-		/// Transaction reference
-		tx_ref: hash::Hash,
-	},
-	/// StemPool Transaction
-	StemPoolTransaction {
-		/// Transaction reference
-		tx_ref: hash::Hash,
-	},
-	/// AlreadySpent
-	AlreadySpent {
-		/// Other transaction reference
-		other_tx: hash::Hash,
-	},
-}
-
-impl fmt::Debug for Parent {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match self {
-			&Parent::Unknown => write!(f, "Parent: Unknown"),
-			&Parent::BlockTransaction => write!(f, "Parent: Block Transaction"),
-			&Parent::PoolTransaction { tx_ref: x } => {
-				write!(f, "Parent: Pool Transaction ({:?})", x)
-			}
-			&Parent::StemPoolTransaction { tx_ref: x } => {
-				write!(f, "Parent: Stempool Transaction ({:?})", x)
-			}
-			&Parent::AlreadySpent { other_tx: x } => write!(f, "Parent: Already Spent By {:?}", x),
-		}
-	}
-}
-
-// TODO document this enum more accurately
-/// Enum of errors
+/// Possible errors when interacting with the transaction pool.
 #[derive(Debug)]
 pub enum PoolError {
 	/// An invalid pool entry caused by underlying tx validation error
 	InvalidTx(transaction::Error),
-	/// An entry already in the pool
-	AlreadyInPool,
-	/// An entry already in the stempool
-	AlreadyInStempool,
-	/// A duplicate output
-	DuplicateOutput {
-		/// The other transaction
-		other_tx: Option<hash::Hash>,
-		/// Is in chain?
-		in_chain: bool,
-		/// The output
-		output: Commitment,
-	},
-	/// A double spend
-	DoubleSpend {
-		/// The other transaction
-		other_tx: hash::Hash,
-		/// The spent output
-		spent_output: Commitment,
-	},
-	/// A failed deaggregation error
-	FailedDeaggregation,
 	/// Attempt to add a transaction to the pool with lock_height
 	/// greater than height of current block
-	ImmatureTransaction {
-		/// The lock height of the invalid transaction
-		lock_height: u64,
-	},
-	/// An orphan successfully added to the orphans set
-	OrphanTransaction,
-	/// TODO - wip, just getting imports working, remove this and use more
-	/// specific errors
-	GenericPoolError,
-	/// TODO - is this the right level of abstraction for pool errors?
-	OutputNotFound,
-	/// TODO - is this the right level of abstraction for pool errors?
-	OutputSpent,
+	ImmatureTransaction,
+	/// Attempt to spend a coinbase output before it has sufficiently matured.
+	ImmatureCoinbase,
+	/// Problem propagating a stem tx to the next Dandelion relay node.
+	DandelionError,
 	/// Transaction pool is over capacity, can't accept more transactions
 	OverCapacity,
 	/// Transaction fee is too low given its weight
 	LowFeeTransaction(u64),
+	/// Attempt to add a duplicate output to the pool.
+	DuplicateCommitment,
+	/// Other kinds of error (not yet pulled out into meaningful errors).
+	Other(String),
+}
+
+impl From<transaction::Error> for PoolError {
+	fn from(e: transaction::Error) -> PoolError {
+		PoolError::InvalidTx(e)
+	}
 }
 
 impl error::Error for PoolError {
@@ -196,21 +160,21 @@ impl fmt::Display for PoolError {
 
 /// Interface that the pool requires from a blockchain implementation.
 pub trait BlockChain {
-	/// Get an unspent output by its commitment. Will return an error if the
-	/// output is spent or if it doesn't exist. The blockchain is expected to
-	/// produce a result with its current view of the most worked chain,
-	/// ignoring orphans, etc.
-	/// We do not maintain outputs themselves. The only information we have is
-	/// the hash from the output MMR.
-	fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<hash::Hash, PoolError>;
+	/// Validate a vec of txs against the current chain state after applying the
+	/// pre_tx to the chain state.
+	fn validate_raw_txs(
+		&self,
+		txs: Vec<transaction::Transaction>,
+		pre_tx: Option<transaction::Transaction>,
+	) -> Result<Vec<transaction::Transaction>, PoolError>;
 
-	/// Check if an output being spent by the input has sufficiently matured.
-	/// This is only applicable for coinbase outputs (1,000 blocks).
-	/// Non-coinbase outputs will always pass this check.
-	fn is_matured(&self, input: &Input, height: u64) -> Result<(), PoolError>;
+	/// Verify any coinbase outputs being spent
+	/// have matured sufficiently.
+	fn verify_coinbase_maturity(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
 
-	/// Get the block header at the head
-	fn head_header(&self) -> Result<block::BlockHeader, PoolError>;
+	/// Verify any coinbase outputs being spent
+	/// have matured sufficiently.
+	fn verify_tx_lock_height(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
 }
 
 /// Bridge between the transaction pool and the rest of the system. Handles
@@ -221,391 +185,19 @@ pub trait PoolAdapter: Send + Sync {
 	/// it to its internal cache.
 	fn tx_accepted(&self, tx: &transaction::Transaction);
 	/// The stem transaction pool has accepted this transactions as valid and
-	/// added it to its internal cache.
-	fn stem_tx_accepted(&self, tx: &transaction::Transaction);
+	/// added it to its internal cache, we have waited for the "patience" timer
+	/// to fire and we now want to propagate the tx to the next Dandelion relay.
+	fn stem_tx_accepted(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
 }
 
 /// Dummy adapter used as a placeholder for real implementations
-// TODO: do we need this dummy, if it's never used?
 #[allow(dead_code)]
 pub struct NoopAdapter {}
+
 impl PoolAdapter for NoopAdapter {
 	fn tx_accepted(&self, _: &transaction::Transaction) {}
-	fn stem_tx_accepted(&self, _: &transaction::Transaction) {}
-}
 
-/// Pool contains the elements of the graph that are connected, in full, to
-/// the blockchain.
-/// Reservations of outputs by orphan transactions (not fully connected) are
-/// not respected.
-/// Spending references (input -> output) exist in two structures: internal
-/// graph references are contained in the pool edge sets, while references
-/// sourced from the blockchain's Output set are contained in the
-/// blockchain_connections set.
-/// Spent by references (output-> input) exist in two structures: pool-pool
-/// connections are in the pool edge set, while unspent (dangling) references
-/// exist in the available_outputs set.
-pub struct Pool {
-	graph: graph::DirectedGraph,
-
-	// available_outputs are unspent outputs of the current pool set,
-	// maintained as edges with empty destinations, keyed by the
-	// output's hash.
-	available_outputs: HashMap<Commitment, graph::Edge>,
-
-	// Consumed blockchain output's are kept in a separate map.
-	consumed_blockchain_outputs: HashMap<Commitment, graph::Edge>,
-}
-
-impl Pool {
-	/// Return an empty pool
-	pub fn empty() -> Pool {
-		Pool {
-			graph: graph::DirectedGraph::empty(),
-			available_outputs: HashMap::new(),
-			consumed_blockchain_outputs: HashMap::new(),
-		}
-	}
-
-	/// Given an output, check if a spending reference (input -> output)
-	/// already exists in the pool.
-	/// Returns the transaction (kernel) hash corresponding to the conflicting
-	/// transaction
-	pub fn check_double_spend(&self, o: &transaction::Output) -> Option<hash::Hash> {
-		self.graph
-			.get_edge_by_commitment(&o.commitment())
-			.or(self.consumed_blockchain_outputs.get(&o.commitment()))
-			.map(|x| x.destination_hash().unwrap())
-	}
-
-	/// Length of roots
-	pub fn len_roots(&self) -> usize {
-		self.graph.len_roots()
-	}
-
-	/// Length of vertices
-	pub fn len_vertices(&self) -> usize {
-		self.graph.len_vertices()
-	}
-
-	/// Consumed outputs
-	pub fn get_blockchain_spent(&self, c: &Commitment) -> Option<&graph::Edge> {
-		self.consumed_blockchain_outputs.get(c)
-	}
-
-	/// Add transaction
-	pub fn add_pool_transaction(
-		&mut self,
-		pool_entry: graph::PoolEntry,
-		mut blockchain_refs: Vec<graph::Edge>,
-		pool_refs: Vec<graph::Edge>,
-		mut new_unspents: Vec<graph::Edge>,
-	) {
-		// Removing consumed available_outputs
-		for new_edge in &pool_refs {
-			// All of these should correspond to an existing unspent
-			assert!(
-				self.available_outputs
-					.remove(&new_edge.output_commitment())
-					.is_some()
-			);
-		}
-
-		// Accounting for consumed blockchain outputs
-		for new_blockchain_edge in blockchain_refs.drain(..) {
-			self.consumed_blockchain_outputs
-				.insert(new_blockchain_edge.output_commitment(), new_blockchain_edge);
-		}
-
-		// Adding the transaction to the vertices list along with internal
-		// pool edges
-		self.graph.add_entry(pool_entry, pool_refs);
-
-		// Adding the new unspents to the unspent map
-		for unspent_output in new_unspents.drain(..) {
-			self.available_outputs
-				.insert(unspent_output.output_commitment(), unspent_output);
-		}
-	}
-
-	/// More relax way for stempool transaction in order to accept scenario such as:
-	/// Parent is in mempool, child is allowed in stempool
-	///
-	pub fn add_stempool_transaction(
-		&mut self,
-		pool_entry: graph::PoolEntry,
-		mut blockchain_refs: Vec<graph::Edge>,
-		pool_refs: Vec<graph::Edge>,
-		mut new_unspents: Vec<graph::Edge>,
-	) {
-		// Removing consumed available_outputs
-		for new_edge in &pool_refs {
-			// All of these *can* correspond to an existing unspent
-			self.available_outputs.remove(&new_edge.output_commitment());
-		}
-
-		// Accounting for consumed blockchain outputs
-		for new_blockchain_edge in blockchain_refs.drain(..) {
-			self.consumed_blockchain_outputs
-				.insert(new_blockchain_edge.output_commitment(), new_blockchain_edge);
-		}
-
-		// Adding the transaction to the vertices list along with internal
-		// pool edges
-		self.graph.add_entry(pool_entry, pool_refs);
-
-		// Adding the new unspents to the unspent map
-		for unspent_output in new_unspents.drain(..) {
-			self.available_outputs
-				.insert(unspent_output.output_commitment(), unspent_output);
-		}
-	}
-
-	/// Update roots
-	pub fn update_roots(&mut self) {
-		self.graph.update_roots()
-	}
-
-	/// Remove transaction
-	pub fn remove_pool_transaction(
-		&mut self,
-		tx: &transaction::Transaction,
-		marked_txs: &HashSet<hash::Hash>,
-	) {
-		self.graph.remove_vertex(graph::transaction_identifier(tx));
-
-		for input in tx.inputs.iter().map(|x| x.commitment()) {
-			match self.graph.remove_edge_by_commitment(&input) {
-				Some(x) => if !marked_txs.contains(&x.source_hash().unwrap()) {
-					self.available_outputs
-						.insert(x.output_commitment(), x.with_destination(None));
-				},
-				None => {
-					self.consumed_blockchain_outputs.remove(&input);
-				}
-			};
-		}
-
-		for output in tx.outputs.iter().map(|x| x.commitment()) {
-			match self.graph.remove_edge_by_commitment(&output) {
-				Some(x) => if !marked_txs.contains(&x.destination_hash().unwrap()) {
-					self.consumed_blockchain_outputs
-						.insert(x.output_commitment(), x.with_source(None));
-				},
-				None => {
-					self.available_outputs.remove(&output);
-				}
-			};
-		}
-	}
-
-	/// Currently a single rule for miner preference -
-	/// return all txs if less than num_to_fetch txs in the entire pool
-	/// otherwise return num_to_fetch of just the roots
-	pub fn get_mineable_transactions(&self, num_to_fetch: u32) -> Vec<hash::Hash> {
-		if self.graph.len_vertices() <= num_to_fetch as usize {
-			self.graph.get_vertices()
-		} else {
-			let mut roots = self.graph.get_roots();
-			roots.truncate(num_to_fetch as usize);
-			roots
-		}
-	}
-}
-
-impl TransactionGraphContainer for Pool {
-	fn get_graph(&self) -> &graph::DirectedGraph {
-		&self.graph
-	}
-	fn get_available_output(&self, output: &Commitment) -> Option<&graph::Edge> {
-		self.available_outputs.get(output)
-	}
-	fn get_external_spent_output(&self, output: &Commitment) -> Option<&graph::Edge> {
-		self.consumed_blockchain_outputs.get(output)
-	}
-	fn get_internal_spent_output(&self, output: &Commitment) -> Option<&graph::Edge> {
-		self.graph.get_edge_by_commitment(output)
-	}
-}
-
-/// Orphans contains the elements of the transaction graph that have not been
-/// connected in full to the blockchain.
-pub struct Orphans {
-	graph: graph::DirectedGraph,
-
-	// available_outputs are unspent outputs of the current orphan set,
-	// maintained as edges with empty destinations.
-	available_outputs: HashMap<Commitment, graph::Edge>,
-
-	// missing_outputs are spending references (inputs) with missing
-	// corresponding outputs, maintained as edges with empty sources.
-	missing_outputs: HashMap<Commitment, graph::Edge>,
-
-	// pool_connections are bidirectional edges which connect to the pool
-	// graph. They should map one-to-one to pool graph available_outputs.
-	// pool_connections should not be viewed authoritatively, they are
-	// merely informational until the transaction is officially connected to
-	// the pool.
-	pool_connections: HashMap<Commitment, graph::Edge>,
-}
-
-impl Orphans {
-	/// empty set
-	pub fn empty() -> Orphans {
-		Orphans {
-			graph: graph::DirectedGraph::empty(),
-			available_outputs: HashMap::new(),
-			missing_outputs: HashMap::new(),
-			pool_connections: HashMap::new(),
-		}
-	}
-
-	/// Checks for a double spent output, given the hash of the output,
-	/// ONLY in the data maintained by the orphans set. This includes links
-	/// to the pool as well as links internal to orphan transactions.
-	/// Returns the transaction hash corresponding to the conflicting
-	/// transaction.
-	pub fn check_double_spend(&self, o: transaction::Output) -> Option<hash::Hash> {
-		self.graph
-			.get_edge_by_commitment(&o.commitment())
-			.or(self.pool_connections.get(&o.commitment()))
-			.map(|x| x.destination_hash().unwrap())
-	}
-
-	/// unknown output
-	pub fn get_unknown_output(&self, output: &Commitment) -> Option<&graph::Edge> {
-		self.missing_outputs.get(output)
-	}
-
-	/// Add an orphan transaction to the orphans set.
-	///
-	/// This method adds a given transaction (represented by the PoolEntry at
-	/// orphan_entry) to the orphans set.
-	///
-	/// This method has no failure modes. All checks should be passed before
-	/// entry.
-	///
-	/// Expects a HashMap at is_missing describing the indices of orphan_refs
-	/// which correspond to missing (vs orphan-to-orphan) links.
-	pub fn add_orphan_transaction(
-		&mut self,
-		orphan_entry: graph::PoolEntry,
-		mut pool_refs: Vec<graph::Edge>,
-		mut orphan_refs: Vec<graph::Edge>,
-		is_missing: HashMap<usize, ()>,
-		mut new_unspents: Vec<graph::Edge>,
-	) {
-		// Removing consumed available_outputs
-		for (i, new_edge) in orphan_refs.drain(..).enumerate() {
-			if is_missing.contains_key(&i) {
-				self.missing_outputs
-					.insert(new_edge.output_commitment(), new_edge);
-			} else {
-				assert!(
-					self.available_outputs
-						.remove(&new_edge.output_commitment())
-						.is_some()
-				);
-				self.graph.add_edge_only(new_edge);
-			}
-		}
-
-		// Accounting for consumed blockchain and pool outputs
-		for external_edge in pool_refs.drain(..) {
-			self.pool_connections
-				.insert(external_edge.output_commitment(), external_edge);
-		}
-
-		// if missing_refs is the same length as orphan_refs, we have
-		// no orphan-orphan links for this transaction and it is a
-		// root transaction of the orphans set
-		self.graph
-			.add_vertex_only(orphan_entry, is_missing.len() == orphan_refs.len());
-
-		// Adding the new unspents to the unspent map
-		for unspent_output in new_unspents.drain(..) {
-			self.available_outputs
-				.insert(unspent_output.output_commitment(), unspent_output);
-		}
-	}
-}
-
-impl TransactionGraphContainer for Orphans {
-	fn get_graph(&self) -> &graph::DirectedGraph {
-		&self.graph
-	}
-	fn get_available_output(&self, output: &Commitment) -> Option<&graph::Edge> {
-		self.available_outputs.get(output)
-	}
-	fn get_external_spent_output(&self, output: &Commitment) -> Option<&graph::Edge> {
-		self.pool_connections.get(output)
-	}
-	fn get_internal_spent_output(&self, output: &Commitment) -> Option<&graph::Edge> {
-		self.graph.get_edge_by_commitment(output)
-	}
-}
-
-/// Trait for types that embed a graph and connect to external state.
-///
-/// The types implementing this trait consist of a graph with nodes and edges
-/// representing transactions and outputs, respectively. Outputs fall into one
-/// of three categories:
-/// 1) External spent: An output sourced externally consumed by a transaction
-///     in this graph,
-/// 2) Internal spent: An output produced by a transaction in this graph and
-///     consumed by another transaction in this graph,
-/// 3) [External] Unspent: An output produced by a transaction in this graph
-///     that is not yet spent.
-///
-/// There is no concept of an external "spent by" reference (output produced by
-/// a transaction in the graph spent by a transaction in another source), as
-/// these references are expected to be maintained by descendent graph. Outputs
-/// follow a heirarchy (Blockchain -> Pool -> Orphans) where each descendent
-/// exists at a lower priority than their parent. An output consumed by a
-/// child graph is marked as unspent in the parent graph and an external spent
-/// in the child. This ensures that no descendent set must modify state in a
-/// set of higher priority.
-pub trait TransactionGraphContainer {
-	/// Accessor for graph object
-	fn get_graph(&self) -> &graph::DirectedGraph;
-	/// Accessor for internal spents
-	fn get_internal_spent_output(&self, output: &Commitment) -> Option<&graph::Edge>;
-	/// Accessor for external unspents
-	fn get_available_output(&self, output: &Commitment) -> Option<&graph::Edge>;
-	/// Accessor for external spents
-	fn get_external_spent_output(&self, output: &Commitment) -> Option<&graph::Edge>;
-
-	/// Checks if the available_output set has the output at the given
-	/// commitment
-	fn has_available_output(&self, c: &Commitment) -> bool {
-		self.get_available_output(c).is_some()
-	}
-
-	/// Checks if the pool has anything by this output already, between
-	/// available outputs and internal ones.
-	fn find_output(&self, c: &Commitment) -> Option<hash::Hash> {
-		self.get_available_output(c)
-			.or(self.get_internal_spent_output(c))
-			.map(|x| x.source_hash().unwrap())
-	}
-
-	/// Search for a spent reference internal to the graph
-	fn get_internal_spent(&self, c: &Commitment) -> Option<&graph::Edge> {
-		self.get_internal_spent_output(c)
-	}
-
-	/// number of root transactions
-	fn num_root_transactions(&self) -> usize {
-		self.get_graph().len_roots()
-	}
-
-	/// number of transactions
-	fn num_transactions(&self) -> usize {
-		self.get_graph().len_vertices()
-	}
-
-	/// number of output edges
-	fn num_output_edges(&self) -> usize {
-		self.get_graph().len_edges()
+	fn stem_tx_accepted(&self, _: &transaction::Transaction) -> Result<(), PoolError> {
+		Ok(())
 	}
 }

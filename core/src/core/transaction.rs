@@ -13,11 +13,13 @@
 // limitations under the License.
 
 //! Transactions
+
 use std::cmp::Ordering;
 use std::cmp::max;
 use std::collections::HashSet;
 use std::io::Cursor;
 use std::{error, fmt};
+
 use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
@@ -34,7 +36,6 @@ use keychain::BlindingFactor;
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};
 use util;
-use util::LOGGER;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -74,6 +75,9 @@ pub enum Error {
 	/// Returns if the value hidden within the a RangeProof message isn't
 	/// repeated 3 times, indicating it's incorrect
 	InvalidProofMessage,
+	/// Error when sums do not verify correctly during tx aggregation.
+	/// Likely a "double spend" across two unconfirmed txs.
+	AggregationError,
 }
 
 impl error::Error for Error {
@@ -391,24 +395,30 @@ impl Transaction {
 			.fold(0, |acc, ref x| max(acc, x.lock_height))
 	}
 
-	/// To verify transaction kernels we check that -
-	///  * all kernels have an even fee
-	/// * sum of input/output commitments matches sum of kernel commitments
-	/// after applying offset * each kernel sig is valid (i.e. tx commitments
-	/// sum to zero, given above is true)
-	fn verify_kernels(&self) -> Result<(), Error> {
-		// Verify all the output rangeproofs.
-		// Note: this is expensive.
-		for x in &self.outputs {
-			x.verify_proof()?;
-		}
-
+	fn verify_kernel_signatures(&self) -> Result<(), Error> {
 		// Verify the kernel signatures.
 		// Note: this is expensive.
 		for x in &self.kernels {
 			x.verify()?;
 		}
+		Ok(())
+	}
 
+	fn verify_rangeproofs(&self) -> Result<(), Error> {
+		// Verify all the output rangeproofs.
+		// Note: this is expensive.
+		for x in &self.outputs {
+			x.verify_proof()?;
+		}
+		Ok(())
+	}
+
+	/// To verify transaction kernels we check that -
+	///  * all kernels have an even fee
+	/// * sum of input/output commitments matches sum of kernel commitments
+	/// after applying offset * each kernel sig is valid (i.e. tx commitments
+	/// sum to zero, given above is true)
+	fn verify_kernel_sums(&self) -> Result<(), Error> {
 		// Sum all input|output|overage commitments.
 		let overage = self.fee() as i64;
 		let io_sum = self.sum_commitments(overage, None)?;
@@ -433,8 +443,9 @@ impl Transaction {
 			return Err(Error::TooManyInputs);
 		}
 		self.verify_sorted()?;
-		self.verify_inputs()?;
-		self.verify_kernels()?;
+		self.verify_kernel_sums()?;
+		self.verify_rangeproofs()?;
+		self.verify_kernel_signatures()?;
 
 		Ok(())
 	}
@@ -472,32 +483,11 @@ impl Transaction {
 		self.kernels.verify_sort_order()?;
 		Ok(())
 	}
-
-	/// We can verify the Merkle proof (for coinbase inputs) here in isolation.
-	/// But we cannot check the following as we need data from the index and
-	/// the PMMR. So we must be sure to check these at the appropriate point
-	/// during block validation.   * node is in the correct pos in the PMMR
-	/// * block is the correct one (based on output_root from block_header
-	/// via the index)
-	fn verify_inputs(&self) -> Result<(), Error> {
-		let coinbase_inputs = self.inputs
-			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT));
-
-		for input in coinbase_inputs {
-			let merkle_proof = input.merkle_proof();
-			if !merkle_proof.verify() {
-				return Err(Error::MerkleProof);
-			}
-		}
-
-		Ok(())
-	}
 }
 
 /// Aggregate a vec of transactions into a multi-kernel transaction with
 /// cut_through
-pub fn aggregate_with_cut_through(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
+pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
@@ -565,58 +555,14 @@ pub fn aggregate_with_cut_through(transactions: Vec<Transaction>) -> Result<Tran
 	new_outputs.sort();
 	kernels.sort();
 
-	let tx = Transaction::new(new_inputs, new_outputs, kernels);
+	let tx = Transaction::new(new_inputs, new_outputs, kernels).with_offset(total_kernel_offset);
 
-	Ok(tx.with_offset(total_kernel_offset))
-}
+	// We need to check sums here as aggregation/cut-through may have created an
+	// invalid tx.
+	tx.verify_kernel_sums()
+		.map_err(|_| Error::AggregationError)?;
 
-/// Aggregate a vec of transactions into a multi-kernel transaction
-pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
-	let mut inputs: Vec<Input> = vec![];
-	let mut outputs: Vec<Output> = vec![];
-	let mut kernels: Vec<TxKernel> = vec![];
-
-	// we will sum these together at the end to give us the overall offset for the
-	// transaction
-	let mut kernel_offsets = vec![];
-
-	for mut transaction in transactions {
-		// we will summ these later to give a single aggregate offset
-		kernel_offsets.push(transaction.offset);
-
-		inputs.append(&mut transaction.inputs);
-		outputs.append(&mut transaction.outputs);
-		kernels.append(&mut transaction.kernels);
-	}
-
-	// now sum the kernel_offsets up to give us an aggregate offset for the
-	// transaction
-	let total_kernel_offset = {
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
-		let mut keys = kernel_offsets
-			.iter()
-			.cloned()
-			.filter(|x| *x != BlindingFactor::zero())
-			.filter_map(|x| x.secret_key(&secp).ok())
-			.collect::<Vec<_>>();
-
-		if keys.is_empty() {
-			BlindingFactor::zero()
-		} else {
-			let sum = secp.blind_sum(keys, vec![])?;
-			BlindingFactor::from_secret_key(sum)
-		}
-	};
-
-	// sort them lexicographically
-	inputs.sort();
-	outputs.sort();
-	kernels.sort();
-
-	let tx = Transaction::new(inputs, outputs, kernels);
-
-	Ok(tx.with_offset(total_kernel_offset))
+	Ok(tx)
 }
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
@@ -855,11 +801,6 @@ impl Input {
 			if lock_height > height {
 				return Err(Error::ImmatureCoinbase);
 			}
-
-			debug!(
-				LOGGER,
-				"input: verify_maturity: success via Merkle proof: {} vs {}", lock_height, height,
-			);
 		}
 		Ok(())
 	}
@@ -1206,11 +1147,9 @@ mod test {
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let commit = keychain.commit(1003, &key_id).unwrap();
-		println!("commit: {:?}", commit);
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let commit_2 = keychain.commit(1003, &key_id).unwrap();
-		println!("commit2 : {:?}", commit_2);
 
 		assert!(commit == commit_2);
 	}

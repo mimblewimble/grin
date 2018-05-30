@@ -37,9 +37,6 @@ pub const MAX_PEER_ADDRS: u32 = 256;
 /// Maximum number of block header hashes to send as part of a locator
 pub const MAX_LOCATORS: u32 = 20;
 
-/// Dandelion relay time
-const DANDELION_RELAY_TIME: i64 = 600;
-
 /// How long a banned peer should be banned for
 const BAN_WINDOW: i64 = 10800;
 
@@ -60,6 +57,7 @@ pub enum Error {
 	Timeout,
 	Store(grin_store::Error),
 	PeerWithSelf,
+	NoDandelionRelay,
 	ProtocolMismatch {
 		us: u32,
 		peer: u32,
@@ -91,11 +89,23 @@ impl<T> From<mpsc::TrySendError<T>> for Error {
 		Error::Send(e.to_string())
 	}
 }
-// impl From<TimerError> for Error {
-// 	fn from(_: TimerError) -> Error {
-// 		Error::Timeout
-// 	}
-// }
+
+/// Configuration for "Dandelion".
+/// Note: shared between p2p and pool.
+/// Look in top-level server config for info on configuring these parameters.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DandelionConfig {
+	/// Choose new Dandelion relay peer every n secs.
+	pub relay_secs: u64,
+	/// Dandelion embargo, fluff and broadcast tx if not seen on network before
+	/// embargo expires.
+	pub embargo_secs: u64,
+	/// Dandelion patience timer, fluff/stem processing runs every n secs.
+	/// Tx aggregation happens on stem txs received within this window.
+	pub patience_secs: u64,
+	/// Dandelion stem probability (stem 90% of the time, fluff 10% etc.)
+	pub stem_probability: usize,
+}
 
 /// Configuration for the peer-to-peer server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,8 +116,6 @@ pub struct P2PConfig {
 	pub peers_allow: Option<Vec<String>>,
 
 	pub peers_deny: Option<Vec<String>>,
-
-	pub dandelion_relay_time: Option<i64>,
 
 	pub ban_window: Option<i64>,
 
@@ -125,7 +133,6 @@ impl Default for P2PConfig {
 			port: 13414,
 			peers_allow: None,
 			peers_deny: None,
-			dandelion_relay_time: Some(DANDELION_RELAY_TIME),
 			ban_window: Some(BAN_WINDOW),
 			peer_max_count: Some(PEER_MAX_COUNT),
 			peer_min_preferred_count: Some(PEER_MIN_PREFERRED_COUNT),
@@ -136,14 +143,6 @@ impl Default for P2PConfig {
 /// Note certain fields are options just so they don't have to be
 /// included in grin.toml, but we don't want them to ever return none
 impl P2PConfig {
-	/// return dandelion_relay_time
-	pub fn dandelion_relay_time(&self) -> i64 {
-		match self.dandelion_relay_time {
-			Some(n) => n,
-			None => DANDELION_RELAY_TIME,
-		}
-	}
-
 	/// return ban window
 	pub fn ban_window(&self) -> i64 {
 		match self.ban_window {

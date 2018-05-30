@@ -21,9 +21,9 @@ use std::thread;
 use std::time;
 
 use core::consensus::{MAX_MSG_LEN, MAX_TX_INPUTS, MAX_TX_KERNELS, MAX_TX_OUTPUTS};
-use core::core::BlockHeader;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
+use core::core::BlockHeader;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::*;

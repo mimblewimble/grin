@@ -28,7 +28,7 @@ use core::consensus::REWARD;
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::{self, MerkleProof, PMMR};
 use core::core::{Block, BlockHeader, Committed, Input, Output, OutputFeatures, OutputIdentifier,
-                 TxKernel};
+                 Transaction, TxKernel};
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
 
@@ -257,14 +257,16 @@ where
 
 		trace!(LOGGER, "Starting new txhashset (readonly) extension.");
 		let mut extension = Extension::new(trees, commit_index);
+		extension.force_rollback();
 		res = inner(&mut extension);
 
 		sizes = extension.sizes();
 	}
 
-	debug!(
+	trace!(
 		LOGGER,
-		"Rollbacking txhashset (readonly) extension. sizes {:?}", sizes
+		"Rollbacking txhashset (readonly) extension. sizes {:?}",
+		sizes
 	);
 
 	trees.output_pmmr_h.backend.discard();
@@ -315,12 +317,12 @@ where
 		}
 		Ok(r) => {
 			if rollback {
-				debug!(LOGGER, "Rollbacking txhashset extension. sizes {:?}", sizes);
+				trace!(LOGGER, "Rollbacking txhashset extension. sizes {:?}", sizes);
 				trees.output_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
 			} else {
-				debug!(LOGGER, "Committing txhashset extension. sizes {:?}", sizes);
+				trace!(LOGGER, "Committing txhashset extension. sizes {:?}", sizes);
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
@@ -402,6 +404,106 @@ impl<'a> Extension<'a> {
 		}
 	}
 
+	/// Apply a "raw" transaction to the txhashset.
+	/// We will never commit a txhashset extension that includes raw txs.
+	/// But we can use this when validating txs in the tx pool.
+	/// If we can add a tx to the tx pool and then successfully add the
+	/// aggregated tx from the tx pool to the current chain state (via a
+	/// txhashset extension) then we know the tx pool is valid (including the
+	/// new tx).
+	pub fn apply_raw_tx(&mut self, tx: &Transaction, height: u64) -> Result<(), Error> {
+		// This should *never* be called on a writeable extension...
+		if !self.rollback {
+			panic!("attempted to apply a raw tx to a writeable txhashset extension");
+		}
+
+		// Checkpoint the MMR positions before we apply the new tx,
+		// anything goes wrong we will rewind to these positions.
+		let output_pos = self.output_pmmr.unpruned_size();
+		let kernel_pos = self.kernel_pmmr.unpruned_size();
+
+		// When applying blocks we can apply the coinbase output first
+		// but we cannot do this here, so we need to apply outputs first.
+		for ref output in &tx.outputs {
+			if let Err(e) = self.apply_output(output) {
+				self.rewind_to_pos(output_pos, kernel_pos, height)?;
+				return Err(e);
+			}
+		}
+
+		for ref input in &tx.inputs {
+			if let Err(e) = self.apply_input(input, height) {
+				self.rewind_to_pos(output_pos, kernel_pos, height)?;
+				return Err(e);
+			}
+		}
+
+		for ref kernel in &tx.kernels {
+			if let Err(e) = self.apply_kernel(kernel) {
+				self.rewind_to_pos(output_pos, kernel_pos, height)?;
+				return Err(e);
+			}
+		}
+
+		Ok(())
+	}
+
+	/// Validate a vector of "raw" transactions against the current chain state.
+	/// We support rewind on a "dirty" txhashset - so we can apply each tx in
+	/// turn, rewinding if any particular tx is not valid and continuing
+	/// through the vec of txs provided. This allows us to efficiently apply
+	/// all the txs, filtering out those that are not valid and returning the
+	/// final vec of txs that were successfully validated against the txhashset.
+	///
+	/// Note: We also pass in a "pre_tx". This tx is applied to and validated
+	/// before we start applying the vec of txs. We use this when validating
+	/// txs in the stempool as we need to account for txs in the txpool as
+	/// well (new_tx + stempool + txpool + txhashset). So we aggregate the
+	/// contents of the txpool into a single aggregated tx and pass it in here
+	/// as the "pre_tx" so we apply it to the txhashset before we start
+	/// validating the stempool txs.
+	/// This is optional and we pass in None when validating the txpool txs
+	/// themselves.
+	///
+	pub fn validate_raw_txs(
+		&mut self,
+		txs: Vec<Transaction>,
+		pre_tx: Option<Transaction>,
+		height: u64,
+	) -> Result<Vec<Transaction>, Error> {
+		let mut height = height;
+		let mut valid_txs = vec![];
+		if let Some(tx) = pre_tx {
+			height += 1;
+			self.apply_raw_tx(&tx, height)?;
+		}
+		for tx in txs {
+			height += 1;
+			if self.apply_raw_tx(&tx, height).is_ok() {
+				valid_txs.push(tx);
+			}
+		}
+		Ok(valid_txs)
+	}
+
+	/// Verify we are not attempting to spend any coinbase outputs
+	/// that have not sufficiently matured.
+	pub fn verify_coinbase_maturity(
+		&mut self,
+		inputs: &Vec<Input>,
+		height: u64,
+	) -> Result<(), Error> {
+		for x in inputs {
+			if x.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+				let header = self.commit_index.get_block_header(&x.block_hash())?;
+				let pos = self.get_output_pos(&x.commitment())?;
+				let out_hash = self.output_pmmr.get_hash(pos).ok_or(Error::OutputNotFound)?;
+				x.verify_maturity(out_hash, &header, height)?;
+			}
+		}
+		Ok(())
+	}
+
 	/// Apply a new set of blocks on top the existing sum trees. Blocks are
 	/// applied in order of the provided Vec. If pruning is enabled, inputs also
 	/// prune MMR data.
@@ -443,8 +545,9 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	// Store all new output pos in the index.
+	// Also store any new block_markers.
 	fn save_indexes(&self) -> Result<(), Error> {
-		// store all new output pos in the index
 		for (commit, pos) in &self.new_output_commits {
 			self.commit_index.save_output_pos(commit, *pos)?;
 		}
@@ -463,22 +566,12 @@ impl<'a> Extension<'a> {
 				// check hash from pmmr matches hash from input (or corresponding output)
 				// if not then the input is not being honest about
 				// what it is attempting to spend...
-
 				let read_elem = self.output_pmmr.get_data(pos);
-
-				if output_id_hash != read_hash
-					|| output_id_hash
-						!= read_elem
-							.expect("no output at position")
-							.hash_with_index(pos - 1)
-				{
+				let read_elem_hash = read_elem
+					.expect("no output at pos")
+					.hash_with_index(pos - 1);
+				if output_id_hash != read_hash || output_id_hash != read_elem_hash {
 					return Err(Error::TxHashSetErr(format!("output pmmr hash mismatch")));
-				}
-
-				// check coinbase maturity with the Merkle Proof on the input
-				if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-					let header = self.commit_index.get_block_header(&input.block_hash())?;
-					input.verify_maturity(read_hash, &header, height)?;
 				}
 			}
 
@@ -502,7 +595,6 @@ impl<'a> Extension<'a> {
 
 	fn apply_output(&mut self, out: &Output) -> Result<(), Error> {
 		let commit = out.commitment();
-
 		if let Ok(pos) = self.get_output_pos(&commit) {
 			// we need to check whether the commitment is in the current MMR view
 			// as well as the index doesn't support rewind and is non-authoritative
@@ -581,28 +673,40 @@ impl<'a> Extension<'a> {
 	pub fn rewind(&mut self, block_header: &BlockHeader) -> Result<(), Error> {
 		let hash = block_header.hash();
 		let height = block_header.height;
-		debug!(LOGGER, "Rewind to header {} @ {}", height, hash);
+		trace!(LOGGER, "Rewind to header {} @ {}", height, hash);
 
 		// rewind our MMRs to the appropriate pos
 		// based on block height and block marker
 		let marker = self.commit_index.get_block_marker(&hash)?;
-		self.rewind_to_marker(height, &marker)?;
+		self.rewind_to_pos(marker.output_pos, marker.kernel_pos, height)?;
+
 		Ok(())
 	}
 
 	/// Rewinds the MMRs to the provided positions, given the output and
 	/// kernel we want to rewind to.
-	fn rewind_to_marker(&mut self, height: u64, marker: &BlockMarker) -> Result<(), Error> {
-		debug!(LOGGER, "Rewind txhashset to {}, {:?}", height, marker);
+	fn rewind_to_pos(
+		&mut self,
+		output_pos: u64,
+		kernel_pos: u64,
+		height: u64,
+	) -> Result<(), Error> {
+		trace!(
+			LOGGER,
+			"Rewind txhashset to output {}, kernel {}, height {}",
+			output_pos,
+			kernel_pos,
+			height
+		);
 
 		self.output_pmmr
-			.rewind(marker.output_pos, height as u32)
+			.rewind(output_pos, height as u32)
 			.map_err(&Error::TxHashSetErr)?;
 		self.rproof_pmmr
-			.rewind(marker.output_pos, height as u32)
+			.rewind(output_pos, height as u32)
 			.map_err(&Error::TxHashSetErr)?;
 		self.kernel_pmmr
-			.rewind(marker.kernel_pos, height as u32)
+			.rewind(kernel_pos, height as u32)
 			.map_err(&Error::TxHashSetErr)?;
 
 		Ok(())

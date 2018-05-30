@@ -24,8 +24,8 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
-use chain::Chain;
 use chain::types::*;
+use chain::Chain;
 use core::consensus;
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
@@ -248,8 +248,6 @@ fn spend_in_fork_and_compact() {
 
 	let merkle_proof = chain.get_merkle_proof(&out_id, &b.header).unwrap();
 
-	println!("First block");
-
 	// now mine three further blocks
 	for n in 3..6 {
 		let b = prepare_block(&kc, &fork_head, &chain, n);
@@ -257,10 +255,8 @@ fn spend_in_fork_and_compact() {
 		chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 	}
 
-	let lock_height = 1 + global::coinbase_maturity();
-	assert_eq!(lock_height, 4);
-
-	println!("3 Further Blocks: should have 4 blocks or 264 bytes in file ");
+	// Check the height of the "fork block".
+	assert_eq!(fork_head.height, 4);
 
 	let tx1 = build::transaction(
 		vec![
@@ -276,16 +272,12 @@ fn spend_in_fork_and_compact() {
 		&kc,
 	).unwrap();
 
-	println!("Built coinbase input and output");
-
 	let next = prepare_block_tx(&kc, &fork_head, &chain, 7, vec![&tx1]);
 	let prev_main = next.header.clone();
 	chain
 		.process_block(next.clone(), chain::Options::SKIP_POW)
 		.unwrap();
 	chain.validate(false).unwrap();
-
-	println!("tx 1 processed, should have 6 outputs or 396 bytes in file, first skipped");
 
 	let tx2 = build::transaction(
 		vec![
@@ -299,10 +291,9 @@ fn spend_in_fork_and_compact() {
 	let next = prepare_block_tx(&kc, &prev_main, &chain, 9, vec![&tx2]);
 	let prev_main = next.header.clone();
 	chain.process_block(next, chain::Options::SKIP_POW).unwrap();
-	chain.validate(false).unwrap();
 
-	println!("tx 2 processed");
-	/* panic!("Stop"); */
+	// Full chain validation for completeness.
+	chain.validate(false).unwrap();
 
 	// mine 2 forked blocks from the first
 	let fork = prepare_fork_block_tx(&kc, &fork_head, &chain, 6, vec![&tx1]);
@@ -314,6 +305,7 @@ fn spend_in_fork_and_compact() {
 	chain
 		.process_block(fork_next, chain::Options::SKIP_POW)
 		.unwrap();
+
 	chain.validate(false).unwrap();
 
 	// check state
@@ -414,7 +406,12 @@ fn prepare_block_nosum(
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward = libtx::reward::output(&kc, &key_id, fees, prev.height).unwrap();
-	let mut b = match core::core::Block::new(prev, txs, Difficulty::from_num(diff), reward) {
+	let mut b = match core::core::Block::new(
+		prev,
+		txs.into_iter().cloned().collect(),
+		Difficulty::from_num(diff),
+		reward,
+	) {
 		Err(e) => panic!("{:?}", e),
 		Ok(b) => b,
 	};

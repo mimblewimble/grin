@@ -16,15 +16,15 @@ use memmap;
 
 use std::cmp;
 use std::fs::{self, File, OpenOptions};
+use std::io::Read;
 use std::io::{self, BufRead, BufReader, BufWriter, ErrorKind, Write};
 use std::os::unix::io::AsRawFd;
-use std::io::Read;
 use std::path::Path;
 
-#[cfg(any(target_os = "linux"))]
-use libc::{ftruncate64, off64_t};
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use libc::{ftruncate as ftruncate64, off_t as off64_t};
+#[cfg(any(target_os = "linux"))]
+use libc::{ftruncate64, off64_t};
 
 use core::ser;
 
@@ -82,12 +82,25 @@ impl AppendOnlyFile {
 
 	/// Rewinds the data file back to a lower position. The new position needs
 	/// to be the one of the first byte the next time data is appended.
-	pub fn rewind(&mut self, pos: u64) {
-		if self.buffer_start_bak > 0 || self.buffer.len() > 0 {
-			panic!("Can't rewind on a dirty state.");
+	/// Supports two scenarios currently -
+	///   * rewind from a clean state (rewinding to handle a forked block)
+	///   * rewind within the buffer itself (raw_tx fails to validate)
+	/// Note: we do not currently support a rewind() that
+	/// crosses the buffer boundary.
+	pub fn rewind(&mut self, file_pos: u64) {
+		if self.buffer.is_empty() {
+			// rewinding from clean state, no buffer, not already rewound anything
+			self.buffer_start_bak = self.buffer_start;
+			self.buffer_start = file_pos as usize;
+		} else {
+			// rewinding (within) the buffer
+			if self.buffer_start as u64 > file_pos {
+				panic!("cannot rewind buffer beyond buffer_start");
+			} else {
+				let buffer_len = file_pos - self.buffer_start as u64;
+				self.buffer.truncate(buffer_len as usize);
+			}
 		}
-		self.buffer_start_bak = self.buffer_start;
-		self.buffer_start = pos as usize;
 	}
 
 	/// Syncs all writes (fsync), reallocating the memory map to make the newly
@@ -263,16 +276,18 @@ impl RemoveLog {
 	/// In practice the index is a block height, so we rewind back to that block
 	/// keeping everything in the rm_log up to and including that block.
 	pub fn rewind(&mut self, idx: u32) -> io::Result<()> {
-		// simplifying assumption: we always remove older than what's in tmp
-		self.removed_tmp = vec![];
-		// backing it up before truncating
-		self.removed_bak = self.removed.clone();
+		// backing it up before truncating (unless we already have a backup)
+		if self.removed_bak.is_empty() {
+			self.removed_bak = self.removed.clone();
+		}
 
 		if idx == 0 {
 			self.removed = vec![];
+			self.removed_tmp = vec![];
 		} else {
 			// retain rm_log entries up to and including those at the provided index
 			self.removed.retain(|&(_, x)| x <= idx);
+			self.removed_tmp.retain(|&(_, x)| x <= idx);
 		}
 		Ok(())
 	}

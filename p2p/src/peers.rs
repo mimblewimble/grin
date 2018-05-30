@@ -96,10 +96,10 @@ impl Peers {
 			None => debug!(LOGGER, "Could not update dandelion relay"),
 		};
 	}
+
 	// Get the dandelion relay
 	pub fn get_dandelion_relay(&self) -> HashMap<i64, Arc<RwLock<Peer>>> {
-		let res = self.dandelion_relay.read().unwrap().clone();
-		res
+		self.dandelion_relay.read().unwrap().clone()
 	}
 
 	pub fn is_known(&self, addr: &SocketAddr) -> bool {
@@ -378,15 +378,16 @@ impl Peers {
 	}
 
 	/// Broadcasts the provided stem transaction to our peer relay.
-	pub fn broadcast_stem_transaction(&self, tx: &core::Transaction) {
+	pub fn broadcast_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		let dandelion_relay = self.get_dandelion_relay();
 		if dandelion_relay.is_empty() {
-			debug!(LOGGER, "No dandelion relay updating");
+			debug!(LOGGER, "No dandelion relay, updating.");
 			self.update_dandelion_relay();
 		}
-		// If still empty broadcast then broadcast transaction normally
+		// If still return an error, let the caller handle this as they see fit.
+		// The caller will "fluff" at this point as the stem phase is finished.
 		if dandelion_relay.is_empty() {
-			self.broadcast_transaction(tx);
+			return Err(Error::NoDandelionRelay);
 		}
 		for relay in dandelion_relay.values() {
 			let relay = relay.read().unwrap();
@@ -399,6 +400,7 @@ impl Peers {
 				}
 			}
 		}
+		Ok(())
 	}
 
 	/// Broadcasts the provided transaction to PEER_PREFERRED_COUNT of our
