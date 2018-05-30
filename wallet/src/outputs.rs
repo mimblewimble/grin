@@ -14,30 +14,29 @@
 
 use checker;
 use core::core;
-use keychain::Keychain;
+use libwallet::types::*;
 use prettytable;
 use std::io::prelude::*;
 use term;
-use types::{OutputStatus, WalletConfig, WalletData};
 
-pub fn show_outputs(config: &WalletConfig, keychain: &Keychain, show_spent: bool) {
-	let root_key_id = keychain.root_key_id();
-	let result = checker::refresh_outputs(&config, &keychain);
+pub fn show_outputs<T: WalletBackend>(wallet: &mut T, show_spent: bool) {
+	let root_key_id = wallet.keychain().clone().root_key_id();
+	let result = checker::refresh_outputs(wallet);
 
 	// just read the wallet here, no need for a write lock
-	let _ = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let _ = wallet.read_wallet(|wallet_data| {
 		// get the current height via the api
 		// if we cannot get the current height use the max height known to the wallet
-		let current_height = match checker::get_tip_from_node(config) {
+		let current_height = match checker::get_tip_from_node(wallet_data.node_url()) {
 			Ok(tip) => tip.height,
-			Err(_) => match wallet_data.outputs.values().map(|out| out.height).max() {
+			Err(_) => match wallet_data.outputs().values().map(|out| out.height).max() {
 				Some(height) => height,
 				None => 0,
 			},
 		};
 
 		let mut outputs = wallet_data
-			.outputs
+			.outputs()
 			.values()
 			.filter(|out| out.root_key_id == root_key_id)
 			.filter(|out| {

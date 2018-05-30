@@ -16,7 +16,7 @@
 use keychain::Keychain;
 use keychain::blind::BlindingFactor;
 use keychain::extkey::Identifier;
-use libwallet::error::Error;
+use libtx::error::Error;
 use util::kernel_sig_msg;
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::Commitment;

@@ -24,16 +24,16 @@ use std::fs;
 use std::sync::Arc;
 
 use chain::types::*;
-use wallet::libwallet::build;
+use core::consensus;
+use core::core::OutputIdentifier;
 use core::core::target::Difficulty;
 use core::core::transaction;
-use core::core::OutputIdentifier;
-use core::consensus;
 use core::global;
 use core::global::ChainTypes;
+use wallet::libtx::build;
 
 use keychain::Keychain;
-use wallet::libwallet;
+use wallet::libtx;
 
 use core::pow;
 
@@ -64,7 +64,7 @@ fn test_coinbase_maturity() {
 	let key_id3 = keychain.derive_key_id(3).unwrap();
 	let key_id4 = keychain.derive_key_id(4).unwrap();
 
-	let reward = libwallet::reward::output(&keychain, &key_id1, 0, prev.height).unwrap();
+	let reward = libtx::reward::output(&keychain, &key_id1, 0, prev.height).unwrap();
 	let mut block = core::core::Block::new(&prev, vec![], Difficulty::one(), reward).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
@@ -118,7 +118,7 @@ fn test_coinbase_maturity() {
 
 	let txs = vec![&coinbase_txn];
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward = libwallet::reward::output(&keychain, &key_id3, fees, prev.height).unwrap();
+	let reward = libtx::reward::output(&keychain, &key_id3, fees, prev.height).unwrap();
 	let mut block = core::core::Block::new(&prev, txs, Difficulty::one(), reward).unwrap();
 	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
@@ -144,7 +144,7 @@ fn test_coinbase_maturity() {
 		let keychain = Keychain::from_random_seed().unwrap();
 		let pk = keychain.derive_key_id(1).unwrap();
 
-		let reward = libwallet::reward::output(&keychain, &pk, 0, prev.height).unwrap();
+		let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
 		let mut block = core::core::Block::new(&prev, vec![], Difficulty::one(), reward).unwrap();
 		block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
@@ -175,7 +175,7 @@ fn test_coinbase_maturity() {
 
 	let txs = vec![&coinbase_txn];
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward = libwallet::reward::output(&keychain, &key_id4, fees, prev.height).unwrap();
+	let reward = libtx::reward::output(&keychain, &key_id4, fees, prev.height).unwrap();
 	let mut block =
 		core::core::Block::new(&prev, vec![&coinbase_txn], Difficulty::one(), reward).unwrap();
 

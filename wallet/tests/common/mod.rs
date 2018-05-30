@@ -27,21 +27,19 @@ use chain::Chain;
 use core::core::hash::Hashed;
 use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::{consensus, global, pow};
-use keychain::Keychain;
-use wallet::types::{BlockIdentifier, Error, ErrorKind, MerkleProofWrapper, OutputStatus,
-                    WalletConfig, WalletData};
+use wallet::file_wallet::*;
+use wallet::libwallet::types::*;
 use wallet::{checker, BlockFees};
 
 use util::secp::pedersen;
 
 /// Mostly for testing, refreshes output state against a local chain instance
 /// instead of via an http API call
-pub fn refresh_output_state_local(
-	config: &WalletConfig,
-	keychain: &Keychain,
+pub fn refresh_output_state_local<T: WalletBackend>(
+	wallet: &mut T,
 	chain: &chain::Chain,
 ) -> Result<(), Error> {
-	let wallet_outputs = checker::map_wallet_outputs(config, keychain)?;
+	let wallet_outputs = checker::map_wallet_outputs(wallet)?;
 	let chain_outputs: Vec<Option<api::Output>> = wallet_outputs
 		.keys()
 		.map(|k| match get_output_local(chain, &k) {
@@ -58,7 +56,7 @@ pub fn refresh_output_state_local(
 			None => {}
 		}
 	}
-	checker::apply_api_outputs(config, &wallet_outputs, &api_outputs)?;
+	checker::apply_api_outputs(wallet, &wallet_outputs, &api_outputs)?;
 	Ok(())
 }
 
@@ -66,18 +64,18 @@ pub fn refresh_output_state_local(
 /// (0:total, 1:amount_awaiting_confirmation, 2:confirmed but locked,
 /// 3:currently_spendable, 4:locked total) TODO: Should be a wallet lib
 /// function with nicer return values
-pub fn get_wallet_balances(
-	config: &WalletConfig,
-	keychain: &Keychain,
+pub fn get_wallet_balances<T: WalletBackend>(
+	wallet: &mut T,
 	height: u64,
 ) -> Result<(u64, u64, u64, u64, u64), Error> {
-	let ret_val = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let ret_val = wallet.read_wallet(|wallet_data| {
 		let mut unspent_total = 0;
 		let mut unspent_but_locked_total = 0;
 		let mut unconfirmed_total = 0;
 		let mut locked_total = 0;
+		let keychain = wallet_data.keychain().clone();
 		for out in wallet_data
-			.outputs
+			.outputs()
 			.values()
 			.filter(|out| out.root_key_id == keychain.root_key_id())
 		{
@@ -144,10 +142,10 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: (Out
 /// adds a reward output to a wallet, includes that reward in a block, mines
 /// the block and adds it to the chain, with option transactions included.
 /// Helpful for building up precise wallet balances for testing.
-pub fn award_block_to_wallet(
+pub fn award_block_to_wallet<T: WalletBackend>(
 	chain: &Chain,
 	txs: Vec<&Transaction>,
-	wallet: &(WalletConfig, Keychain),
+	wallet: &mut T,
 ) {
 	let prev = chain.head_header().unwrap();
 	let fee_amt = txs.iter().map(|tx| tx.fee()).sum();
@@ -156,7 +154,7 @@ pub fn award_block_to_wallet(
 		key_id: None,
 		height: prev.height + 1,
 	};
-	let coinbase_tx = wallet::receiver::receive_coinbase(&wallet.0, &wallet.1, &fees);
+	let coinbase_tx = wallet::receiver::receive_coinbase(wallet, &fees);
 	let (coinbase_tx, fees) = match coinbase_tx {
 		Ok(t) => ((t.0, t.1), t.2),
 		Err(e) => {
@@ -168,9 +166,9 @@ pub fn award_block_to_wallet(
 	let output_id = OutputIdentifier::from_output(&coinbase_tx.0.clone());
 	let m_proof = chain.get_merkle_proof(&output_id, &chain.head_header().unwrap());
 	let block_id = Some(BlockIdentifier(chain.head_header().unwrap().hash()));
-	let _ = WalletData::with_wallet(&wallet.0.data_file_dir, |wallet_data| {
+	let _ = wallet.with_wallet(|wallet_data| {
 		if let Entry::Occupied(mut output) = wallet_data
-			.outputs
+			.outputs()
 			.entry(fees.key_id.as_ref().unwrap().to_hex())
 		{
 			let output = output.get_mut();
@@ -181,23 +179,20 @@ pub fn award_block_to_wallet(
 }
 
 /// adds many block rewards to a wallet, no transactions
-pub fn award_blocks_to_wallet(
-	chain: &Chain,
-	wallet: &(WalletConfig, Keychain),
-	num_rewards: usize,
-) {
+pub fn award_blocks_to_wallet<T: WalletBackend>(chain: &Chain, wallet: &mut T, num_rewards: usize) {
 	for _ in 0..num_rewards {
 		award_block_to_wallet(chain, vec![], wallet);
 	}
 }
 
 /// Create a new wallet in a particular directory
-pub fn create_wallet(dir: &str) -> (WalletConfig, Keychain) {
+pub fn create_wallet(dir: &str) -> FileWallet {
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
 	let wallet_seed = wallet::WalletSeed::init_file(&wallet_config).unwrap();
 	let keychain = wallet_seed
 		.derive_keychain("")
 		.expect("Failed to derive keychain from seed file and passphrase.");
-	(wallet_config, keychain)
+	FileWallet::new(wallet_config.clone(), keychain)
+		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config))
 }

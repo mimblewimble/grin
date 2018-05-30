@@ -20,17 +20,17 @@ extern crate grin_wallet as wallet;
 
 pub mod common;
 
-use grin_core::core::hash::{Hashed, ZERO_HASH};
+use common::{new_block, tx1i1o, tx1i2o, tx2i1o};
 use grin_core::core::block::BlockHeader;
+use grin_core::core::block::Error::KernelLockHeight;
+use grin_core::core::hash::{Hashed, ZERO_HASH};
 use grin_core::core::{aggregate, aggregate_with_cut_through, deaggregate, KernelFeatures, Output,
                       Transaction};
-use wallet::libwallet::build::{self, initial_tx, input, output, with_excess, with_fee,
-                               with_lock_height};
-use grin_core::core::block::Error::KernelLockHeight;
 use grin_core::ser;
 use keychain::Keychain;
 use util::{secp_static, static_secp_instance};
-use common::{new_block, tx1i1o, tx1i2o, tx2i1o};
+use wallet::libtx::build::{self, initial_tx, input, output, with_excess, with_fee,
+                           with_lock_height};
 
 #[test]
 fn simple_tx_ser() {

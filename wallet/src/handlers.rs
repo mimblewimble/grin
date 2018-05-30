@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+use std::sync::{Arc, RwLock};
 
 use bodyparser;
 use iron::Handler;
@@ -20,20 +21,24 @@ use serde_json;
 
 use core::ser;
 use failure::{Fail, ResultExt};
-use keychain::Keychain;
+use libwallet::types::*;
 use receiver::receive_coinbase;
-use types::*;
 use util;
 
-pub struct CoinbaseHandler {
-	pub config: WalletConfig,
-	pub keychain: Keychain,
+pub struct CoinbaseHandler<T>
+where
+	T: WalletBackend,
+{
+	pub wallet: Arc<RwLock<T>>,
 }
 
-impl CoinbaseHandler {
-	fn build_coinbase(&self, block_fees: &BlockFees) -> Result<CbData, Error> {
+impl<T> CoinbaseHandler<T>
+where
+	T: WalletBackend,
+{
+	fn build_coinbase(&self, wallet: &mut T, block_fees: &BlockFees) -> Result<CbData, Error> {
 		let (out, kern, block_fees) =
-			receive_coinbase(&self.config, &self.keychain, block_fees).context(ErrorKind::Node)?;
+			receive_coinbase(wallet, block_fees).context(ErrorKind::Node)?;
 
 		let out_bin = ser::ser_vec(&out).context(ErrorKind::Node)?;
 
@@ -54,12 +59,15 @@ impl CoinbaseHandler {
 
 // TODO - error handling - what to return if we fail to get the wallet lock for
 // some reason...
-impl Handler for CoinbaseHandler {
+impl<T> Handler for CoinbaseHandler<T>
+where
+	T: WalletBackend + Send + Sync + 'static,
+{
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let struct_body = req.get::<bodyparser::Struct<BlockFees>>();
-
+		let mut wallet = self.wallet.write().unwrap();
 		if let Ok(Some(block_fees)) = struct_body {
-			let coinbase = self.build_coinbase(&block_fees)
+			let coinbase = self.build_coinbase(&mut wallet, &block_fees)
 				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
 			if let Ok(json) = serde_json::to_string(&coinbase) {
 				Ok(Response::with((status::Ok, json)))

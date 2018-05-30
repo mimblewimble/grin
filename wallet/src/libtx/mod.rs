@@ -12,12 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Library specific to the Grin wallet implementation, as distinct from
-//! libwallet, which should build transactions without any knowledge of the
-//! wallet implementation.
-
-// TODO: Once this is working, extract a set of traits that wallet
-// implementations would need to provide
+//! Wallet lib... should be used by clients to build wallets and
+//! encapsulate all functions needed to build transactions and operate a wallet
 
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
@@ -25,6 +21,24 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-pub mod keys;
-pub mod selection;
-pub mod sigcontext;
+pub mod aggsig;
+pub mod build;
+pub mod error;
+pub mod proof;
+pub mod reward;
+pub mod slate;
+
+use core::consensus;
+use core::core::Transaction;
+
+const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
+
+/// Transaction fee calculation
+pub fn tx_fee(input_len: usize, output_len: usize, proof_len: usize, base_fee: Option<u64>) -> u64 {
+	let use_base_fee = match base_fee {
+		Some(bf) => bf,
+		None => DEFAULT_BASE_FEE,
+	};
+
+	(Transaction::weight(input_len, output_len, proof_len) as u64) * use_base_fee
+}

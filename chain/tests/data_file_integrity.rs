@@ -26,14 +26,14 @@ use std::sync::Arc;
 
 use chain::Chain;
 use chain::types::*;
-use core::core::{Block, BlockHeader, Transaction};
 use core::core::target::Difficulty;
-use core::{consensus, genesis};
+use core::core::{Block, BlockHeader, Transaction};
 use core::global;
 use core::global::ChainTypes;
+use core::{consensus, genesis};
 
 use keychain::Keychain;
-use wallet::libwallet;
+use wallet::libtx;
 
 use core::pow;
 
@@ -75,7 +75,7 @@ fn data_files() {
 			let prev = chain.head_header().unwrap();
 			let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 			let pk = keychain.derive_key_id(n as u32).unwrap();
-			let reward = libwallet::reward::output(&keychain, &pk, 0, prev.height).unwrap();
+			let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
 			let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
 			b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
@@ -159,7 +159,7 @@ fn _prepare_block_nosum(
 	let key_id = kc.derive_key_id(diff as u32).unwrap();
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward = libwallet::reward::output(&kc, &key_id, fees, prev.height).unwrap();
+	let reward = libtx::reward::output(&kc, &key_id, fees, prev.height).unwrap();
 	let mut b = match core::core::Block::new(prev, txs, Difficulty::from_num(diff), reward) {
 		Err(e) => panic!("{:?}", e),
 		Ok(b) => b,

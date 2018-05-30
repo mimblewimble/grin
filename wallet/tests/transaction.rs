@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! tests for transactions building within libwallet
+//! tests for transactions building within libtx
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
@@ -34,7 +34,7 @@ use chain::types::*;
 use core::global::ChainTypes;
 use core::{global, pow};
 use util::LOGGER;
-use wallet::grinwallet::selection;
+use wallet::libwallet::selection;
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -58,11 +58,11 @@ fn setup(test_dir: &str, chain_dir: &str) -> Chain {
 #[test]
 fn build_transaction() {
 	let chain = setup("test_output", "build_transaction_2/.grin");
-	let wallet1 = common::create_wallet("test_output/build_transaction_2/wallet1");
-	let wallet2 = common::create_wallet("test_output/build_transaction_2/wallet2");
-	common::award_blocks_to_wallet(&chain, &wallet1, 10);
+	let mut wallet1 = common::create_wallet("test_output/build_transaction_2/wallet1");
+	let mut wallet2 = common::create_wallet("test_output/build_transaction_2/wallet2");
+	common::award_blocks_to_wallet(&chain, &mut wallet1, 10);
 	// Wallet 1 has 600 Grins, wallet 2 has 0. Create a transaction that sends
-	// 300 Grins from wallet 1 to wallet 2, using libwallet
+	// 300 Grins from wallet 1 to wallet 2, using libtx
 
 	// Get lock height
 	let chain_tip = chain.head().unwrap();
@@ -70,7 +70,7 @@ fn build_transaction() {
 	let min_confirmations = 3;
 
 	// ensure outputs we're selecting are up to date
-	let res = common::refresh_output_state_local(&wallet1.0, &wallet1.1, &chain);
+	let res = common::refresh_output_state_local(&mut wallet1, &chain);
 
 	if let Err(e) = res {
 		panic!("Unable to refresh sender wallet outputs: {}", e);
@@ -85,8 +85,7 @@ fn build_transaction() {
 	// This function is just a big helper to do all of that, in theory
 	// this process can be split up in any way
 	let (mut slate, mut sender_context, sender_lock_fn) = selection::build_send_tx_slate(
-		&wallet1.0,
-		&wallet1.1,
+		&mut wallet1,
 		2,
 		amount,
 		chain_tip.height,
@@ -101,7 +100,7 @@ fn build_transaction() {
 	// information to the slate
 	let _ = slate
 		.fill_round_1(
-			&wallet1.1,
+			&wallet1.keychain,
 			&mut sender_context.sec_key,
 			&sender_context.sec_nonce,
 			0,
@@ -117,11 +116,11 @@ fn build_transaction() {
 	// Identifier Again, this is a helper to do that, which returns a closure that
 	// creates the output when we're satisified the process was successful
 	let (_, mut recp_context, receiver_create_fn) =
-		selection::build_recipient_output_with_slate(&wallet2.0, &wallet2.1, &mut slate).unwrap();
+		selection::build_recipient_output_with_slate(&mut wallet2, &mut slate).unwrap();
 
 	let _ = slate
 		.fill_round_1(
-			&wallet2.1,
+			&wallet2.keychain,
 			&mut recp_context.sec_key,
 			&recp_context.sec_nonce,
 			1,
@@ -129,11 +128,11 @@ fn build_transaction() {
 		.unwrap();
 
 	// recipient can proceed to round 2 now
-	let _ = receiver_create_fn();
+	let _ = receiver_create_fn(&mut wallet2);
 
 	let _ = slate
 		.fill_round_2(
-			&wallet2.1,
+			&wallet1.keychain,
 			&recp_context.sec_key,
 			&recp_context.sec_nonce,
 			1,
@@ -150,7 +149,7 @@ fn build_transaction() {
 	// SENDER Part 3: Sender confirmation
 	let _ = slate
 		.fill_round_2(
-			&wallet1.1,
+			&wallet1.keychain,
 			&sender_context.sec_key,
 			&sender_context.sec_nonce,
 			0,
@@ -162,7 +161,7 @@ fn build_transaction() {
 	debug!(LOGGER, "{:?}", slate);
 
 	// Final transaction can be built by anyone at this stage
-	let res = slate.finalize(&wallet1.1);
+	let res = slate.finalize(&wallet1.keychain);
 
 	if let Err(e) = res {
 		panic!("Error creating final tx: {:?}", e);
@@ -173,30 +172,30 @@ fn build_transaction() {
 	debug!(LOGGER, "{:?}", slate.tx);
 
 	// All okay, lock sender's outputs
-	let _ = sender_lock_fn();
+	let _ = sender_lock_fn(&mut wallet1);
 
 	// Insert this transaction into a new block, then mine till confirmation
-	common::award_block_to_wallet(&chain, vec![&slate.tx], &wallet1);
-	common::award_blocks_to_wallet(&chain, &wallet1, 5);
+	common::award_block_to_wallet(&chain, vec![&slate.tx], &mut wallet1);
+	common::award_blocks_to_wallet(&chain, &mut wallet1, 5);
 
 	// Refresh wallets
-	let res = common::refresh_output_state_local(&wallet2.0, &wallet2.1, &chain);
+	let res = common::refresh_output_state_local(&mut wallet2, &chain);
 	if let Err(e) = res {
 		panic!("Error refreshing output state for wallet: {:?}", e);
 	}
 
 	// check recipient wallet
 	let chain_tip = chain.head().unwrap();
-	let balances = common::get_wallet_balances(&wallet2.0, &wallet2.1, chain_tip.height).unwrap();
+	let balances = common::get_wallet_balances(&mut wallet2, chain_tip.height).unwrap();
 
 	assert_eq!(balances.3, 300_000_000_000);
 
 	// check sender wallet
-	let res = common::refresh_output_state_local(&wallet1.0, &wallet1.1, &chain);
+	let res = common::refresh_output_state_local(&mut wallet1, &chain);
 	if let Err(e) = res {
 		panic!("Error refreshing output state for wallet: {:?}", e);
 	}
-	let balances = common::get_wallet_balances(&wallet1.0, &wallet1.1, chain_tip.height).unwrap();
+	let balances = common::get_wallet_balances(&mut wallet1, chain_tip.height).unwrap();
 	println!("tip height: {:?}", chain_tip.height);
 	println!("Sender balances: {:?}", balances);
 	// num blocks * grins per block, and wallet1 mined the fee
