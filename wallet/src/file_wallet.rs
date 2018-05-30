@@ -391,7 +391,7 @@ impl FileWallet {
 			fs::create_dir_all(&self.config.data_file_dir.clone()).unwrap_or_else(|why| {
 				info!(LOGGER, "! {:?}", why.kind());
 			});
-		} 
+		}
 		if Path::new(&self.data_file_path.clone()).exists() {
 			self.read()?;
 		}
