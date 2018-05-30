@@ -17,8 +17,8 @@
 use std::{error, fmt, io};
 
 use util::secp;
-use util::secp_static;
 use util::secp::pedersen::Commitment;
+use util::secp_static;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
@@ -75,8 +75,6 @@ pub enum Error {
 	InvalidBlockHeight,
 	/// One of the root hashes in the block is invalid
 	InvalidRoot,
-	/// Something does not look right with the switch commitment
-	InvalidSwitchCommit,
 	/// Error from underlying keychain impl
 	Keychain(keychain::Error),
 	/// Error from underlying secp lib
