@@ -32,7 +32,7 @@ use core::core::pmmr::MerkleProof;
 use core::core::{Input, Output, OutputFeatures, ProofMessageElements, Transaction, TxKernel};
 use keychain;
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
-use libwallet::{aggsig, proof};
+use libtx::{aggsig, proof};
 use util::LOGGER;
 
 /// Context information available to transaction combinators.

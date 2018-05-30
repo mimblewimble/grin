@@ -17,12 +17,12 @@ use futures::{Future, Stream};
 use hyper;
 use hyper::header::ContentType;
 use hyper::{Method, Request};
-use libwallet::transaction::Slate;
+use libtx::slate::Slate;
 use serde_json;
 use tokio_core::reactor;
 
+use libwallet::types::*;
 use std::io;
-use types::*;
 use util::LOGGER;
 
 /// Call the wallet API to create a coinbase output for the given block_fees.

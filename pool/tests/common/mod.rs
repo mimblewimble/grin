@@ -39,7 +39,7 @@ use core::core::pmmr::MerkleProof;
 use pool::*;
 
 use keychain::Keychain;
-use wallet::libwallet;
+use wallet::libtx;
 
 use pool::types::*;
 use pool::TransactionPool;
@@ -122,7 +122,7 @@ pub fn test_transaction_spending_coinbase(
 	// single input spending a single coinbase (deterministic key_id aka height)
 	{
 		let key_id = keychain.derive_key_id(header.height as u32).unwrap();
-		tx_elements.push(libwallet::build::coinbase_input(
+		tx_elements.push(libtx::build::coinbase_input(
 			coinbase_reward,
 			header.hash(),
 			MerkleProof::default(),
@@ -132,12 +132,12 @@ pub fn test_transaction_spending_coinbase(
 
 	for output_value in output_values {
 		let key_id = keychain.derive_key_id(output_value as u32).unwrap();
-		tx_elements.push(libwallet::build::output(output_value, key_id));
+		tx_elements.push(libtx::build::output(output_value, key_id));
 	}
 
-	tx_elements.push(libwallet::build::with_fee(fees as u64));
+	tx_elements.push(libtx::build::with_fee(fees as u64));
 
-	libwallet::build::transaction(tx_elements, &keychain).unwrap()
+	libtx::build::transaction(tx_elements, &keychain).unwrap()
 }
 
 pub fn test_transaction(
@@ -155,16 +155,16 @@ pub fn test_transaction(
 
 	for input_value in input_values {
 		let key_id = keychain.derive_key_id(input_value as u32).unwrap();
-		tx_elements.push(libwallet::build::input(input_value, key_id));
+		tx_elements.push(libtx::build::input(input_value, key_id));
 	}
 
 	for output_value in output_values {
 		let key_id = keychain.derive_key_id(output_value as u32).unwrap();
-		tx_elements.push(libwallet::build::output(output_value, key_id));
+		tx_elements.push(libtx::build::output(output_value, key_id));
 	}
-	tx_elements.push(libwallet::build::with_fee(fees as u64));
+	tx_elements.push(libtx::build::with_fee(fees as u64));
 
-	libwallet::build::transaction(tx_elements, &keychain).unwrap()
+	libtx::build::transaction(tx_elements, &keychain).unwrap()
 }
 
 pub fn test_source() -> TxSource {

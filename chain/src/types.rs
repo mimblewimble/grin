@@ -75,8 +75,6 @@ pub enum Error {
 	InvalidBlockHeight,
 	/// One of the root hashes in the block is invalid
 	InvalidRoot,
-	/// Something does not look right with the switch commitment
-	InvalidSwitchCommit,
 	/// Error from underlying keychain impl
 	Keychain(keychain::Error),
 	/// Error from underlying secp lib

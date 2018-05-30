@@ -36,7 +36,7 @@ use core::core::target::Difficulty;
 use core::core::transaction;
 
 use keychain::Keychain;
-use wallet::libwallet;
+use wallet::libtx;
 
 use common::*;
 
@@ -54,7 +54,7 @@ fn test_the_transaction_pool() {
 	let header = {
 		let height = 1;
 		let key_id = keychain.derive_key_id(height as u32).unwrap();
-		let reward = libwallet::reward::output(&keychain, &key_id, 0, height).unwrap();
+		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
 		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
 
 		let mut txhashset = chain.txhashset.write().unwrap();

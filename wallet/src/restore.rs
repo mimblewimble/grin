@@ -16,16 +16,15 @@ use byteorder::{BigEndian, ByteOrder};
 use core::core::transaction::ProofMessageElements;
 use core::global;
 use failure::{Fail, ResultExt};
-use keychain::{Identifier, Keychain};
-use libwallet::proof;
-use types::{Error, ErrorKind, MerkleProofWrapper, OutputData, OutputStatus, WalletConfig,
-            WalletData};
+use keychain::Identifier;
+use libtx::proof;
+use libwallet::types::*;
 use util;
 use util::LOGGER;
 use util::secp::pedersen;
 
-pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
-	let url = format!("{}/v1/chain", config.check_node_api_http_addr);
+pub fn get_chain_height(node_addr: &str) -> Result<u64, Error> {
+	let url = format!("{}/v1/chain", node_addr);
 
 	match api::client::get::<api::Tip>(url.as_str()) {
 		Ok(tip) => Ok(tip.height),
@@ -34,7 +33,7 @@ pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 			error!(
 				LOGGER,
 				"get_chain_height: Restore failed... unable to contact API {}. Error: {}",
-				config.check_node_api_http_addr,
+				node_addr,
 				e
 			);
 			Err(e.context(ErrorKind::Node).into())
@@ -43,13 +42,10 @@ pub fn get_chain_height(config: &WalletConfig) -> Result<u64, Error> {
 }
 
 pub fn get_merkle_proof_for_commit(
-	config: &WalletConfig,
+	node_addr: &str,
 	commit: &str,
 ) -> Result<MerkleProofWrapper, Error> {
-	let url = format!(
-		"{}/v1/txhashset/merkleproof?id={}",
-		config.check_node_api_http_addr, commit
-	);
+	let url = format!("{}/v1/txhashset/merkleproof?id={}", node_addr, commit);
 
 	match api::client::get::<api::OutputPrintable>(url.as_str()) {
 		Ok(output) => Ok(MerkleProofWrapper(output.merkle_proof.unwrap())),
@@ -72,17 +68,17 @@ fn coinbase_status(output: &api::OutputPrintable) -> bool {
 	}
 }
 
-pub fn outputs_batch(
-	config: &WalletConfig,
+pub fn outputs_batch<T>(
+	wallet: &T,
 	start_height: u64,
 	max: u64,
-) -> Result<api::OutputListing, Error> {
+) -> Result<api::OutputListing, Error>
+where
+	T: WalletBackend,
+{
 	let query_param = format!("start_index={}&max={}", start_height, max);
 
-	let url = format!(
-		"{}/v1/txhashset/outputs?{}",
-		config.check_node_api_http_addr, query_param,
-	);
+	let url = format!("{}/v1/txhashset/outputs?{}", wallet.node_url(), query_param,);
 
 	match api::client::get::<api::OutputListing>(url.as_str()) {
 		Ok(o) => Ok(o),
@@ -91,7 +87,7 @@ pub fn outputs_batch(
 			error!(
 				LOGGER,
 				"outputs_batch: Restore failed... unable to contact API {}. Error: {}",
-				config.check_node_api_http_addr,
+				wallet.node_url(),
 				e
 			);
 			Err(e.context(ErrorKind::Node))?
@@ -100,9 +96,8 @@ pub fn outputs_batch(
 }
 
 // TODO - wrap the many return values in a struct
-fn find_outputs_with_key(
-	config: &WalletConfig,
-	keychain: &Keychain,
+fn find_outputs_with_key<T: WalletBackend>(
+	wallet: &mut T,
 	outputs: Vec<api::OutputPrintable>,
 	found_key_index: &mut Vec<u32>,
 ) -> Vec<(
@@ -129,10 +124,10 @@ fn find_outputs_with_key(
 	let max_derivations = 1_000_000;
 
 	info!(LOGGER, "Scanning {} outputs", outputs.len(),);
-	let current_chain_height = get_chain_height(config).unwrap();
+	let current_chain_height = get_chain_height(wallet.node_url()).unwrap();
 
 	// skey doesn't matter in this case
-	let skey = keychain.derive_key_id(1).unwrap();
+	let skey = wallet.keychain().derive_key_id(1).unwrap();
 	for output in outputs.iter().filter(|x| !x.spent) {
 		// attempt to unwind message from the RP and get a value.. note
 		// this will only return okay if the value is included in the
@@ -140,7 +135,7 @@ fn find_outputs_with_key(
 		// to unwind in this case will be meaningless. With only the nonce known
 		// only the first 32 bytes of the recovered message will be accurate
 		let info = proof::rewind(
-			keychain,
+			wallet.keychain(),
 			&skey,
 			output.commit,
 			None,
@@ -171,14 +166,14 @@ fn find_outputs_with_key(
 			/*if found_key_index.contains(&(i as u32)) {
 				continue;
 			}*/
-			let key_id = &keychain.derive_key_id(i as u32).unwrap();
+			let key_id = &wallet.keychain().derive_key_id(i as u32).unwrap();
 			if !message.compare_bf_first_8(key_id) {
 				continue;
 			}
 			found = true;
 			// we have a partial match, let's just confirm
 			let info = proof::rewind(
-				keychain,
+				wallet.keychain(),
 				key_id,
 				output.commit,
 				None,
@@ -202,7 +197,8 @@ fn find_outputs_with_key(
 
 			info!(LOGGER, "Amount: {}", value);
 
-			let commit = keychain
+			let commit = wallet
+				.keychain()
 				.commit_with_key_index(BigEndian::read_u64(&commit_id), i as u32)
 				.expect("commit with key index");
 
@@ -210,7 +206,8 @@ fn find_outputs_with_key(
 			let commit_str = util::to_hex(output.commit.as_ref().to_vec());
 
 			if is_coinbase {
-				merkle_proof = Some(get_merkle_proof_for_commit(config, &commit_str).unwrap());
+				merkle_proof =
+					Some(get_merkle_proof_for_commit(wallet.node_url(), &commit_str).unwrap());
 			}
 
 			let height = current_chain_height;
@@ -248,11 +245,11 @@ fn find_outputs_with_key(
 	wallet_outputs
 }
 
-pub fn restore(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> {
+pub fn restore<T: WalletBackend>(wallet: &mut T) -> Result<(), Error> {
 	// Don't proceed if wallet.dat has anything in it
-	let is_empty = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
-		Ok(wallet_data.outputs.len() == 0)
-	}).context(ErrorKind::WalletData("could not read wallet"))?;
+	let is_empty = wallet
+		.read_wallet(|wallet_data| Ok(wallet_data.outputs().len() == 0))
+		.context(ErrorKind::FileWallet("could not read wallet"))?;
 	if !is_empty {
 		error!(
 			LOGGER,
@@ -271,7 +268,7 @@ pub fn restore(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> 
 	// this will start here, then lower as outputs are found, moving backwards on
 	// the chain
 	loop {
-		let output_listing = outputs_batch(config, start_index, batch_size)?;
+		let output_listing = outputs_batch(wallet, start_index, batch_size)?;
 		info!(
 			LOGGER,
 			"Retrieved {} outputs, up to index {}. (Highest index: {})",
@@ -280,10 +277,10 @@ pub fn restore(config: &WalletConfig, keychain: &Keychain) -> Result<(), Error> 
 			output_listing.highest_index
 		);
 
-		let _ = WalletData::with_wallet(&config.data_file_dir, |wallet_data| {
+		let _ = wallet.with_wallet(|wallet_data| {
+			let keychain = wallet_data.keychain().clone();
 			let result_vec = find_outputs_with_key(
-				config,
-				keychain,
+				wallet_data,
 				output_listing.outputs.clone(),
 				&mut found_key_index,
 			);

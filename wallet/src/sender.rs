@@ -18,11 +18,11 @@ use client;
 use core::core::amount_to_hr_string;
 use core::ser;
 use failure::ResultExt;
-use grinwallet::selection;
 use keychain::{Identifier, Keychain};
-use libwallet::{build, transaction};
+use libtx::{build, tx_fee};
+use libwallet::selection;
+use libwallet::types::*;
 use receiver::TxWrapper;
-use types::*;
 use util;
 use util::LOGGER;
 
@@ -30,9 +30,8 @@ use util::LOGGER;
 /// wallet
 /// Outputs. The destination can be "stdout" (for command line) (currently
 /// disabled) or a URL to the recipients wallet receiver (to be implemented).
-pub fn issue_send_tx(
-	config: &WalletConfig,
-	keychain: &Keychain,
+pub fn issue_send_tx<T: WalletBackend>(
+	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
 	dest: String,
@@ -48,13 +47,13 @@ pub fn issue_send_tx(
 		);
 	}
 
-	checker::refresh_outputs(config, keychain)?;
+	checker::refresh_outputs(wallet)?;
 
 	// Get lock height
-	let chain_tip = checker::get_tip_from_node(config)?;
+	let chain_tip = checker::get_tip_from_node(wallet.node_url())?;
 	let current_height = chain_tip.height;
 	// ensure outputs we're selecting are up to date
-	checker::refresh_outputs(config, keychain)?;
+	checker::refresh_outputs(wallet)?;
 
 	let lock_height = current_height;
 
@@ -66,8 +65,7 @@ pub fn issue_send_tx(
 	// This function is just a big helper to do all of that, in theory
 	// this process can be split up in any way
 	let (mut slate, mut context, sender_lock_fn) = selection::build_send_tx_slate(
-		config,
-		keychain,
+		wallet,
 		2,
 		amount,
 		current_height,
@@ -81,7 +79,12 @@ pub fn issue_send_tx(
 	// the offset in the slate's transaction kernel, and adds our public key
 	// information to the slate
 	let _ = slate
-		.fill_round_1(keychain, &mut context.sec_key, &context.sec_nonce, 0)
+		.fill_round_1(
+			wallet.keychain(),
+			&mut context.sec_key,
+			&context.sec_nonce,
+			0,
+		)
 		.unwrap();
 
 	let url = format!("{}/v1/receive/transaction", &dest);
@@ -109,48 +112,46 @@ pub fn issue_send_tx(
 	};
 
 	let _ = slate
-		.fill_round_2(keychain, &context.sec_key, &context.sec_nonce, 0)
+		.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 0)
 		.context(ErrorKind::LibWalletError)?;
 
 	// Final transaction can be built by anyone at this stage
-	slate.finalize(keychain).context(ErrorKind::LibWalletError)?;
+	slate
+		.finalize(wallet.keychain())
+		.context(ErrorKind::LibWalletError)?;
 
 	// So let's post it
 	let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
 	let url;
 	if fluff {
-		url = format!(
-			"{}/v1/pool/push?fluff",
-			config.check_node_api_http_addr.as_str()
-		);
+		url = format!("{}/v1/pool/push?fluff", wallet.node_url(),);
 	} else {
-		url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
+		url = format!("{}/v1/pool/push", wallet.node_url());
 	}
 	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
 
 	// All good so, lock our inputs
-	sender_lock_fn()?;
+	sender_lock_fn(wallet)?;
 	Ok(())
 }
 
-pub fn issue_burn_tx(
-	config: &WalletConfig,
-	keychain: &Keychain,
+pub fn issue_burn_tx<T: WalletBackend>(
+	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
 	max_outputs: usize,
 ) -> Result<(), Error> {
-	let keychain = &Keychain::burn_enabled(keychain, &Identifier::zero());
+	let keychain = &Keychain::burn_enabled(wallet.keychain(), &Identifier::zero());
 
-	let chain_tip = checker::get_tip_from_node(config)?;
+	let chain_tip = checker::get_tip_from_node(wallet.node_url())?;
 	let current_height = chain_tip.height;
 
-	let _ = checker::refresh_outputs(config, keychain);
+	let _ = checker::refresh_outputs(wallet);
 
 	let key_id = keychain.root_key_id();
 
 	// select some spendable coins from the wallet
-	let coins = WalletData::read_wallet(&config.data_file_dir, |wallet_data| {
+	let coins = wallet.read_wallet(|wallet_data| {
 		Ok(wallet_data.select_coins(
 			key_id.clone(),
 			amount,
@@ -163,9 +164,8 @@ pub fn issue_burn_tx(
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
-	let fee = transaction::tx_fee(coins.len(), 2, selection::coins_proof_count(&coins), None);
-	let (mut parts, _) =
-		selection::inputs_and_change(&coins, config, keychain, current_height, amount, fee)?;
+	let fee = tx_fee(coins.len(), 2, selection::coins_proof_count(&coins), None);
+	let (mut parts, _) = selection::inputs_and_change(&coins, wallet, current_height, amount, fee)?;
 
 	// add burn output and fees
 	parts.push(build::output(amount - fee, Identifier::zero()));
@@ -175,7 +175,7 @@ pub fn issue_burn_tx(
 	tx_burn.validate().context(ErrorKind::Transaction)?;
 
 	let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
-	let url = format!("{}/v1/pool/push", config.check_node_api_http_addr.as_str());
+	let url = format!("{}/v1/pool/push", wallet.node_url());
 	let _: () =
 		api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
 	Ok(())
@@ -184,7 +184,7 @@ pub fn issue_burn_tx(
 #[cfg(test)]
 mod test {
 	use keychain::Keychain;
-	use libwallet::build;
+	use libtx::build;
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment

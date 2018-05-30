@@ -35,7 +35,7 @@ use chain::ChainStore;
 use core::core::target::Difficulty;
 
 use keychain::Keychain;
-use wallet::libwallet;
+use wallet::libtx;
 
 use common::*;
 
@@ -52,7 +52,7 @@ fn test_transaction_pool_block_reconciliation() {
 	let header = {
 		let height = 1;
 		let key_id = keychain.derive_key_id(height as u32).unwrap();
-		let reward = libwallet::reward::output(&keychain, &key_id, 0, height).unwrap();
+		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
 		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
 
 		let mut txhashset = chain.txhashset.write().unwrap();
@@ -75,7 +75,7 @@ fn test_transaction_pool_block_reconciliation() {
 	let header = {
 		let key_id = keychain.derive_key_id(2).unwrap();
 		let fees = initial_tx.fee();
-		let reward = libwallet::reward::output(&keychain, &key_id, fees, 0).unwrap();
+		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
 		let block = Block::new(&header, vec![initial_tx], Difficulty::one(), reward).unwrap();
 
 		{
@@ -172,7 +172,7 @@ fn test_transaction_pool_block_reconciliation() {
 	let block = {
 		let key_id = keychain.derive_key_id(3).unwrap();
 		let fees = block_txs.iter().map(|tx| tx.fee()).sum();
-		let reward = libwallet::reward::output(&keychain, &key_id, fees, 0).unwrap();
+		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
 		let block = Block::new(&header, block_txs, Difficulty::one(), reward).unwrap();
 
 		{

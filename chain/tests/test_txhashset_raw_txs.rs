@@ -29,7 +29,7 @@ use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
 use keychain::Keychain;
-use wallet::libwallet::{build, reward};
+use wallet::libtx::{build, reward};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);

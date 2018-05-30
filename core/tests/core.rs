@@ -28,8 +28,8 @@ use grin_core::core::{aggregate, deaggregate, KernelFeatures, Output, Transactio
 use grin_core::ser;
 use keychain::Keychain;
 use util::{secp_static, static_secp_instance};
-use wallet::libwallet::build::{self, initial_tx, input, output, with_excess, with_fee,
-                               with_lock_height};
+use wallet::libtx::build::{self, initial_tx, input, output, with_excess, with_fee,
+                              with_lock_height};
 
 #[test]
 fn simple_tx_ser() {
