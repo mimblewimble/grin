@@ -30,8 +30,8 @@ use pipe;
 use store;
 use txhashset;
 use types::*;
-use util::LOGGER;
 use util::secp::pedersen::{Commitment, RangeProof};
+use util::LOGGER;
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -474,11 +474,15 @@ impl Chain {
 		})
 	}
 
+	fn next_block_height(&self) -> Result<u64, Error> {
+		let bh = self.head_header()?;
+		Ok(bh.height + 1)
+	}
+
 	/// Verify we are not attempting to spend a coinbase output
 	/// that has not yet sufficiently matured.
 	pub fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), Error> {
-		let bh = self.head_header()?;
-		let height = bh.height + 1;
+		let height = self.next_block_height()?;
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.verify_coinbase_maturity(&tx.inputs, height)?;
@@ -489,8 +493,7 @@ impl Chain {
 	/// Verify that the tx has a lock_height that is less than or equal to
 	/// the height of the next block.
 	pub fn verify_tx_lock_height(&self, tx: &Transaction) -> Result<(), Error> {
-		let bh = self.head_header()?;
-		let height = bh.height + 1;
+		let height = self.next_block_height()?;
 		if tx.lock_height() <= height {
 			Ok(())
 		} else {

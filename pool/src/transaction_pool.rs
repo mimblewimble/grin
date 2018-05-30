@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! A minimal (EXPERIMENTAL) transaction pool implementation
+//! Transaction pool implementation leveraging txhashset for chain state
+//! validation. It is a valid operation to add a tx to the tx pool if the
+//! resulting tx pool can be added to the current chain state to produce a
+//! valid chain state.
 
 use std::sync::Arc;
 use time;
@@ -22,7 +25,7 @@ use core::core::{Block, CompactBlock, Transaction};
 use pool::Pool;
 use types::*;
 
-/// A minimal (EXPERIMENTAL) transaction pool implementation
+/// Transaction pool implementation.
 pub struct TransactionPool<T> {
 	/// Pool Config
 	pub config: PoolConfig,

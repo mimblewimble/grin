@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! A minimal (EXPERIMENTAL) transaction pool implementation
+//! Transaction pool implementation.
+//! Used for both the txpool and stempool layers in the pool.
 
 use std::collections::HashSet;
 use std::sync::Arc;

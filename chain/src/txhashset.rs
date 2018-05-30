@@ -404,10 +404,15 @@ impl<'a> Extension<'a> {
 		}
 	}
 
-	///
-	/// Experimental - this should *never* be called on a writeable extension...
-	///
+	/// Apply a "raw" transaction to the txhashset.
+	/// We will never commit a txhashset extension that includes raw txs.
+	/// But we can use this when validating txs in the tx pool.
+	/// If we can add a tx to the tx pool and then successfully add the
+	/// aggregated tx from the tx pool to the current chain state (via a
+	/// txhashset extension) then we know the tx pool is valid (including the
+	/// new tx).
 	pub fn apply_raw_tx(&mut self, tx: &Transaction, height: u64) -> Result<(), Error> {
+		// This should *never* be called on a writeable extension...
 		if !self.rollback {
 			panic!("attempted to apply a raw tx to a writeable txhashset extension");
 		}
@@ -419,8 +424,6 @@ impl<'a> Extension<'a> {
 
 		// When applying blocks we can apply the coinbase output first
 		// but we cannot do this here, so we need to apply outputs first.
-		// TODO - Is this a bad idea? What if tx spends its own outputs (is this even
-		// possible)?
 		for ref output in &tx.outputs {
 			if let Err(e) = self.apply_output(output) {
 				self.rewind_to_pos(output_pos, kernel_pos, height)?;
