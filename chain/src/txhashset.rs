@@ -449,6 +449,19 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Validate a vector of "raw" transactions against the current chain state.
+	/// We support rewind on a "dirty" txhashset - so we can apply each tx in turn, rewinding
+	/// if any particular tx is not valid and continuing through the vec of txs provided.
+	/// This allows us to efficiently apply all the txs, filtering out those that are not valid
+	/// and returning the final vec of txs that were successfully validated against the txhashset.
+	///
+	/// Note: We also pass in a "pre_tx". This tx is applied to and validated before we start
+	/// applying the vec of txs. We use this when validating txs in the stempool as we need to
+	/// account for txs in the txpool as well (new_tx + stempool + txpool + txhashset).
+	/// So we aggregate the contents of the txpool into a single aggregated tx and pass it in
+	/// here as the "pre_tx" so we apply it to the txhashset before we start validating the
+	/// stempool txs.
+	/// This is optional and we pass in None when validating the txpool txs themselves.
+	///
 	pub fn validate_raw_txs(
 		&mut self,
 		txs: Vec<Transaction>,
