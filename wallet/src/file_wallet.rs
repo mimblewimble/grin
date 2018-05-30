@@ -169,6 +169,12 @@ pub struct FileWallet {
 	pub config: WalletConfig,
 	/// List of outputs
 	pub outputs: HashMap<String, OutputData>,
+	/// Data file path
+	pub data_file_path: String,
+	/// Backup file path
+	pub backup_file_path: String,
+	/// lock file path
+	pub lock_file_path: String,
 }
 
 impl WalletBackend for FileWallet {
@@ -212,24 +218,12 @@ impl WalletBackend for FileWallet {
 			info!(LOGGER, "! {:?}", why.kind());
 		});
 
-		let data_file_path = &format!(
-			"{}{}{}",
-			self.config.data_file_dir, MAIN_SEPARATOR, DAT_FILE
-		);
-		let backup_file_path = &format!(
-			"{}{}{}",
-			self.config.data_file_dir, MAIN_SEPARATOR, BCK_FILE
-		);
-		let lock_file_path = &format!(
-			"{}{}{}",
-			self.config.data_file_dir, MAIN_SEPARATOR, LOCK_FILE
-		);
-
 		info!(LOGGER, "Acquiring wallet lock ...");
 
+		let lock_file_path = self.lock_file_path.clone();
 		let action = || {
 			trace!(LOGGER, "making lock file for wallet lock");
-			fs::create_dir(lock_file_path)
+			fs::create_dir(&lock_file_path)
 		};
 
 		// use tokio_retry to cleanly define some retry logic
@@ -254,12 +248,12 @@ impl WalletBackend for FileWallet {
 
 		// We successfully acquired the lock - so do what needs to be done.
 		self.read_or_create_paths()?;
-		self.write(backup_file_path)?;
+		self.write(&self.backup_file_path)?;
 		let res = f(self);
-		self.write(data_file_path)?;
+		self.write(&self.data_file_path)?;
 
 		// delete the lock file
-		fs::remove_dir(lock_file_path).context(ErrorKind::FileWallet(
+		fs::remove_dir(&self.lock_file_path).context(ErrorKind::FileWallet(
 			"Could not remove wallet lock file. Maybe insufficient rights?",
 		))?;
 
@@ -376,25 +370,37 @@ impl WalletBackend for FileWallet {
 impl FileWallet {
 	/// Create a new FileWallet instance
 	pub fn new(config: WalletConfig, keychain: Keychain) -> Result<Self, Error> {
-		Ok(FileWallet {
+		let mut retval = FileWallet {
 			keychain: keychain,
-			config: config,
+			config: config.clone(),
 			outputs: HashMap::new(),
-		})
+			data_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, DAT_FILE),
+			backup_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, BCK_FILE),
+			lock_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, LOCK_FILE),
+		};
+		match retval.read_or_create_paths() {
+			Ok(_) => Ok(retval),
+			Err(e) => Err(e),
+		}
 	}
 
 	/// Read the wallet data or create brand files if the data
 	/// files don't yet exist
 	fn read_or_create_paths(&mut self) -> Result<(), Error> {
-		if Path::new(&self.config.data_file_dir.clone()).exists() {
-			self.read();
+		if !Path::new(&self.config.data_file_dir.clone()).exists() {
+			fs::create_dir_all(&self.config.data_file_dir.clone()).unwrap_or_else(|why| {
+				info!(LOGGER, "! {:?}", why.kind());
+			});
+		} 
+		if Path::new(&self.data_file_path.clone()).exists() {
+			self.read()?;
 		}
 		Ok(())
 	}
 
 	/// Read output_data vec from disk.
 	fn read_outputs(&self) -> Result<Vec<OutputData>, Error> {
-		let data_file = File::open(self.config.data_file_dir.clone())
+		let data_file = File::open(self.data_file_path.clone())
 			.context(ErrorKind::FileWallet(&"Could not open wallet file"))?;
 		serde_json::from_reader(data_file).map_err(|e| {
 			e.context(ErrorKind::FileWallet(&"Error reading wallet file "))
