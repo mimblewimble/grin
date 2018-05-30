@@ -130,6 +130,8 @@ pub enum PoolError {
 	OverCapacity,
 	/// Transaction fee is too low given its weight
 	LowFeeTransaction(u64),
+	/// Attempt to add a duplicate output to the pool.
+	DuplicateCommitment,
 	/// Other kinds of error (not yet pulled out into meaningful errors).
 	Other(String),
 }

@@ -30,10 +30,10 @@ use std::sync::{Arc, RwLock};
 
 use core::core::{BlockHeader, Transaction};
 
-use chain::ChainStore;
 use chain::store::ChainKVStore;
 use chain::txhashset;
 use chain::txhashset::TxHashSet;
+use chain::ChainStore;
 use core::core::hash::Hashed;
 use core::core::pmmr::MerkleProof;
 use pool::*;
@@ -41,8 +41,8 @@ use pool::*;
 use keychain::Keychain;
 use wallet::libwallet;
 
-use pool::TransactionPool;
 use pool::types::*;
+use pool::TransactionPool;
 
 #[derive(Clone)]
 pub struct ChainAdapter {
@@ -175,5 +175,7 @@ pub fn test_source() -> TxSource {
 }
 
 pub fn clean_output_dir(db_root: String) {
-	let _ = fs::remove_dir_all(format!("target/{}", db_root));
+	if let Err(e) = fs::remove_dir_all(format!("target/{}", db_root)) {
+		println!("cleaning output dir failed - {:?}", e)
+	}
 }

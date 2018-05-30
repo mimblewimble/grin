@@ -583,9 +583,17 @@ impl<'a> Extension<'a> {
 			// note that this doesn't show the commitment *never* existed, just
 			// that this is not an existing unspent commitment right now
 			if let Some(hash) = self.output_pmmr.get_hash(pos) {
-				// Note: check the hash here, possible we are on a fork and
-				// the pos no longer corresponds to the same output.
-				if hash == OutputIdentifier::from_output(out).hash_with_index(pos - 1) {
+				// processing a new fork so we may get a position on the old
+				// fork that exists but matches a different node
+				// filtering that case out
+				//
+				// TODO - the following call to hash() is *INCORRECT*
+				// TODO - we should be calling hash_with_index(pos - 1)
+				// TODO - but we cannot safely make this change in testnet2
+				// TODO - with this incorrect behavior we never get a match, so duplicates are
+				// allowed
+				//
+				if hash == OutputIdentifier::from_output(out).hash() {
 					return Err(Error::DuplicateCommitment(commit));
 				}
 			}

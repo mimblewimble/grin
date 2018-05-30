@@ -131,16 +131,32 @@ where
 			extra_txs.len(),
 		);
 
-		// Combine all the txs from the pool, the new pool entry and any extra txs
-		// provided.
+		// Combine all the txs from the pool with any extra txs provided.
 		let mut txs = self.all_transactions();
-		txs.push(entry.tx.clone());
 		txs.extend(extra_txs);
 
-		// Create a single aggregated tx from all of them.
-		let agg_tx = transaction::aggregate(txs)?;
+		let agg_tx = if txs.is_empty() {
+			// If we have nothing to aggregate then simply return the tx itself.
+			entry.tx.clone()
+		} else {
+			// Create a single aggregated tx from the existing pool txs (to check pool is
+			// valid).
+			let agg_tx = transaction::aggregate(txs)?;
 
-		// Validate aggregated tx against the chain txhashset extension.
+			// Then check new tx would not introduce a duplicate output in the pool.
+			for x in &entry.tx.outputs {
+				if agg_tx.outputs.contains(&x) {
+					return Err(PoolError::DuplicateCommitment);
+				}
+			}
+
+			// Finally aggregate the new tx with everything in the pool (with any extra
+			// txs).
+			transaction::aggregate(vec![agg_tx, entry.tx.clone()])?
+		};
+
+		// Validate aggregated tx against the current chain state (via txhashset
+		// extension).
 		self.blockchain.validate_raw_txs(vec![], Some(agg_tx))?;
 
 		// If we get here successfully then we can safely add the entry to the pool.
