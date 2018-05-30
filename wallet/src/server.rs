@@ -13,29 +13,32 @@
 // limitations under the License.
 
 use api::ApiServer;
-use file_wallet::{FileWallet, WalletConfig};
+use std::sync::{Arc, RwLock};
+use libwallet::types::WalletBackend;
+use iron::Handler;
 use handlers::CoinbaseHandler;
-use keychain::Keychain;
 use receiver::WalletReceiver;
 use util::LOGGER;
 
-pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
-	let backend = FileWallet::new(wallet_config)
-		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
-
+pub fn start_rest_apis<T>(in_wallet: T, api_listen_addr: &str) 
+where
+	T: WalletBackend,
+	CoinbaseHandler<T>: Handler,
+	WalletReceiver<T>: Handler,
+{
 	info!(
 		LOGGER,
 		"Starting the Grin wallet receiving daemon at {}...",
-		wallet_config.api_listen_addr()
+		api_listen_addr
 	);
 
+	let wallet = Arc::new(RwLock::new(in_wallet));
+
 	let receive_tx_handler = WalletReceiver {
-		config: wallet_config.clone(),
-		keychain: keychain.clone(),
+		wallet: wallet.clone(),
 	};
 	let coinbase_handler = CoinbaseHandler {
-		config: wallet_config.clone(),
-		keychain: keychain.clone(),
+		wallet: wallet.clone(),
 	};
 
 	let router = router!(
@@ -45,7 +48,7 @@ pub fn start_rest_apis(wallet_config: WalletConfig, keychain: Keychain) {
 
 	let mut apis = ApiServer::new("/v1".to_string());
 	apis.register_handler(router);
-	match apis.start(wallet_config.api_listen_addr()) {
+	match apis.start(api_listen_addr) {
 		Err(e) => error!(LOGGER, "Failed to start Grin wallet listener: {}.", e),
 		Ok(_) => info!(LOGGER, "Wallet listener started"),
 	};

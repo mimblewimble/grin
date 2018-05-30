@@ -17,7 +17,7 @@ use keychain::Identifier;
 use libwallet::types::{Error, WalletBackend};
 
 /// Get our next available key
-pub fn new_output_key<T, R>(wallet: &T) -> Result<(Identifier, u32), Error>
+pub fn new_output_key<T>(wallet: &mut T) -> Result<(Identifier, u32), Error>
 where
 	T: WalletBackend,
 {

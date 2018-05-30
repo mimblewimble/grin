@@ -54,7 +54,7 @@ where
 	let result = checker::refresh_outputs(wallet);
 
 	let ret_val = wallet.read_wallet(|wallet_data| {
-		let (current_height, from) = match checker::get_tip_from_node(&wallet.node_url()) {
+		let (current_height, from) = match checker::get_tip_from_node(&wallet_data.node_url()) {
 			Ok(tip) => (tip.height, "from server node"),
 			Err(_) => match wallet_data.outputs().values().map(|out| out.height).max() {
 				Some(height) => (height, "from wallet"),
@@ -67,6 +67,7 @@ where
 		let mut locked_total = 0;
 		for out in wallet_data
 			.outputs()
+			.clone()
 			.values()
 			.filter(|out| out.root_key_id == wallet_data.keychain().root_key_id())
 		{

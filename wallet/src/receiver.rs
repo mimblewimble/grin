@@ -16,6 +16,8 @@
 //! receiving money in MimbleWimble requires an interactive exchange, a
 //! wallet server that's running at all time is required in many cases.
 
+use std::sync::{Arc, RwLock};
+
 use bodyparser;
 use iron::Handler;
 use iron::prelude::*;
@@ -38,35 +40,6 @@ pub struct TxWrapper {
 	pub tx_hex: String,
 }
 
-fn handle_send<T>(wallet: &T, slate: &mut Slate) -> Result<(), Error>
-where
-	T: WalletBackend,
-{
-	// create an output using the amount in the slate
-	let (_, mut context, receiver_create_fn) =
-		selection::build_recipient_output_with_slate(wallet, slate).unwrap();
-
-	// fill public keys
-	let _ = slate
-		.fill_round_1(
-			wallet.keychain(),
-			&mut context.sec_key,
-			&context.sec_nonce,
-			1,
-		)
-		.context(ErrorKind::LibWalletError)?;
-
-	// perform partial sig
-	let _ = slate
-		.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)
-		.context(ErrorKind::LibWalletError)?;
-
-	// Save output in wallet
-	let _ = receiver_create_fn();
-
-	Ok(())
-}
-
 /// Component used to receive coins, implements all the receiving end of the
 /// wallet REST API as well as some of the command-line operations.
 #[derive(Clone)]
@@ -74,7 +47,38 @@ pub struct WalletReceiver<T>
 where
 	T: WalletBackend,
 {
-	pub wallet: T,
+	pub wallet: Arc<RwLock<T>>,
+}
+
+impl<T> WalletReceiver<T>
+where
+	T: WalletBackend,
+{
+	fn handle_send(&self, wallet: &mut T, slate: &mut Slate) -> Result<(), Error> {
+		// create an output using the amount in the slate
+		let (_, mut context, receiver_create_fn) =
+			selection::build_recipient_output_with_slate(wallet, slate).unwrap();
+
+		// fill public keys
+		let _ = slate
+			.fill_round_1(
+				wallet.keychain(),
+				&mut context.sec_key,
+				&context.sec_nonce,
+				1,
+			)
+			.context(ErrorKind::LibWalletError)?;
+
+		// perform partial sig
+		let _ = slate
+			.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)
+			.context(ErrorKind::LibWalletError)?;
+
+		// Save output in wallet
+		let _ = receiver_create_fn(wallet);
+
+		Ok(())
+	}
 }
 
 impl<T> Handler for WalletReceiver<T>
@@ -83,9 +87,10 @@ where
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let struct_body = req.get::<bodyparser::Struct<Slate>>();
+		let mut wallet = self.wallet.write().unwrap();
 
 		if let Ok(Some(mut slate)) = struct_body {
-			let _ = handle_send(&self.wallet, &mut slate)
+			let _ = self.handle_send(&mut wallet, &mut slate)
 				.map_err(|e| {
 					error!(
 						LOGGER,
@@ -119,11 +124,11 @@ where
 	let lock_height = height + global::coinbase_maturity();
 
 	// Now acquire the wallet lock and write the new output.
-	let (key_id, derivation) = wallet.with_wallet(|&mut wallet_data| {
+	let (key_id, derivation) = wallet.with_wallet(|wallet_data| {
 		let key_id = block_fees.key_id();
 		let (key_id, derivation) = match key_id {
-			Some(key_id) => keys::retrieve_existing_key(&wallet_data, key_id),
-			None => keys::next_available_key(&mut wallet_data),
+			Some(key_id) => keys::retrieve_existing_key(wallet_data, key_id),
+			None => keys::next_available_key(wallet_data),
 		};
 
 		// track the new output and return the stuff needed for reward

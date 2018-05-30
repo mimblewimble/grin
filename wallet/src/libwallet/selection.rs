@@ -26,7 +26,7 @@ use libwallet::{keys, sigcontext};
 /// into our transaction context
 
 pub fn build_send_tx_slate<T>(
-	wallet: &T,
+	wallet: &mut T,
 	num_participants: usize,
 	amount: u64,
 	current_height: u64,
@@ -38,7 +38,7 @@ pub fn build_send_tx_slate<T>(
 	(
 		Slate,
 		sigcontext::Context,
-		impl FnOnce() -> Result<(), Error>,
+		impl FnOnce(&mut T) -> Result<(), Error>,
 	),
 	Error,
 >
@@ -62,13 +62,15 @@ where
 	slate.lock_height = lock_height;
 	slate.fee = fee;
 
+	let keychain = wallet.keychain().clone();
+
 	let blinding = slate
-		.add_transaction_elements(wallet.keychain(), elems)
+		.add_transaction_elements(&keychain, elems)
 		.context(ErrorKind::LibWalletError)?;
 	// Create our own private context
 	let mut context = sigcontext::Context::new(
 		wallet.keychain().secp(),
-		blinding.secret_key(wallet.keychain().secp()).unwrap(),
+		blinding.secret_key(&keychain.secp()).unwrap(),
 	);
 
 	// Store our private identifiers for each input
@@ -86,7 +88,7 @@ where
 
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
-	let update_sender_wallet_fn = move || {
+	let update_sender_wallet_fn = move |wallet:&mut T| {
 		wallet.with_wallet(|wallet_data| {
 			for id in lock_inputs {
 				let coin = wallet_data.get_output(&id).unwrap().clone();
@@ -107,14 +109,14 @@ where
 /// returning the key of the fresh output and a closure
 /// that actually performs the addition of the output to the
 /// wallet
-pub fn build_recipient_output_with_slate<'a, T>(
-	wallet: &T,
+pub fn build_recipient_output_with_slate<T>(
+	wallet: &mut T,
 	slate: &mut Slate,
 ) -> Result<
 	(
 		Identifier,
 		sigcontext::Context,
-		impl FnOnce() -> Result<(), Error>,
+		impl FnOnce(&mut T) -> Result<(), Error>,
 	),
 	Error,
 >
@@ -129,16 +131,18 @@ where
 	let amount = slate.amount;
 	let height = slate.height;
 
+	let keychain = wallet.keychain().clone();
+
 	let blinding = slate
 		.add_transaction_elements(
-			wallet.keychain(),
+			&keychain,
 			vec![build::output(amount, key_id.clone())],
 		)
 		.context(ErrorKind::LibWalletError)?;
 
 	// Add blinding sum to our context
 	let mut context = sigcontext::Context::new(
-		wallet.keychain().secp(),
+		keychain.secp(),
 		blinding.secret_key(wallet.keychain().secp()).unwrap(),
 	);
 
@@ -146,7 +150,7 @@ where
 
 	// Create closure that adds the output to recipient's wallet
 	// (up to the caller to decide when to do)
-	let wallet_add_fn = move || {
+	let wallet_add_fn = move |wallet:&mut T| {
 		wallet.with_wallet(|wallet_data| {
 			wallet_data.add_output(OutputData {
 				root_key_id: root_key_id,
@@ -169,7 +173,7 @@ where
 /// wallet and the amount to send. Handles reading through the wallet data file,
 /// selecting outputs to spend and building the change.
 pub fn select_send_tx<T>(
-	wallet: &T,
+	wallet: &mut T,
 	amount: u64,
 	current_height: u64,
 	minimum_confirmations: u64,
@@ -278,7 +282,7 @@ pub fn coins_proof_count(coins: &Vec<OutputData>) -> usize {
 /// Selects inputs and change for a transaction
 pub fn inputs_and_change<T>(
 	coins: &Vec<OutputData>,
-	wallet: &T,
+	wallet: &mut T,
 	height: u64,
 	amount: u64,
 	fee: u64,
@@ -323,9 +327,10 @@ where
 	if change != 0 {
 		// track the output representing our change
 		change_key = wallet.with_wallet(|wallet_data| {
-			let root_key_id = wallet.keychain().root_key_id();
+			let keychain = wallet_data.keychain().clone();
+			let root_key_id = keychain.root_key_id();
 			let change_derivation = wallet_data.next_child(root_key_id.clone());
-			let change_key = wallet.keychain().derive_key_id(change_derivation).unwrap();
+			let change_key = keychain.derive_key_id(change_derivation).unwrap();
 
 			wallet_data.add_output(OutputData {
 				root_key_id: root_key_id.clone(),

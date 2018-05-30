@@ -59,7 +59,7 @@ mod restore;
 mod sender;
 pub mod server;
 
-pub use file_wallet::{WalletConfig, WalletSeed};
+pub use file_wallet::{FileWallet, WalletConfig, WalletSeed};
 pub use info::{retrieve_info, show_info};
 pub use libwallet::types::{BlockFees, CbData, Error, ErrorKind, WalletInfo, WalletReceiveRequest};
 pub use outputs::show_outputs;

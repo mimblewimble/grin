@@ -173,7 +173,7 @@ pub struct FileWallet {
 
 impl WalletBackend for FileWallet {
 	/// Return the keychain being used
-	fn keychain(&self) -> &mut Keychain {
+	fn keychain(&mut self) -> &mut Keychain {
 		&mut self.keychain
 	}
 
@@ -183,21 +183,16 @@ impl WalletBackend for FileWallet {
 	}
 
 	/// Return the outputs directly
-	fn outputs(&self) -> &mut HashMap<String, OutputData> {
+	fn outputs(&mut self) -> &mut HashMap<String, OutputData> {
 		&mut self.outputs
 	}
 
 	/// Allows for reading wallet data (without needing to acquire the write
 	/// lock).
-	fn read_wallet<T, F>(&self, f: F) -> Result<T, Error>
+	fn read_wallet<T, F>(&mut self, f: F) -> Result<T, Error>
 	where
-		F: FnOnce(&Self) -> Result<T, Error>,
+		F: FnOnce(&mut Self) -> Result<T, Error>,
 	{
-		// open the wallet readonly and do what needs to be done with it
-		let data_file_path = &format!(
-			"{}{}{}",
-			self.config.data_file_dir, MAIN_SEPARATOR, DAT_FILE
-		);
 		self.read_or_create_paths()?;
 		f(self)
 	}
@@ -213,7 +208,7 @@ impl WalletBackend for FileWallet {
 		F: FnOnce(&mut Self) -> T,
 	{
 		// create directory if it doesn't exist
-		fs::create_dir_all(self.config.data_file_dir).unwrap_or_else(|why| {
+		fs::create_dir_all(self.config.data_file_dir.clone()).unwrap_or_else(|why| {
 			info!(LOGGER, "! {:?}", why.kind());
 		});
 
@@ -390,8 +385,8 @@ impl FileWallet {
 
 	/// Read the wallet data or create brand files if the data
 	/// files don't yet exist
-	fn read_or_create_paths(&self) -> Result<(), Error> {
-		if Path::new(&self.config.data_file_dir).exists() {
+	fn read_or_create_paths(&mut self) -> Result<(), Error> {
+		if Path::new(&self.config.data_file_dir.clone()).exists() {
 			self.read();
 		}
 		Ok(())
@@ -399,7 +394,7 @@ impl FileWallet {
 
 	/// Read output_data vec from disk.
 	fn read_outputs(&self) -> Result<Vec<OutputData>, Error> {
-		let data_file = File::open(self.config.data_file_dir)
+		let data_file = File::open(self.config.data_file_dir.clone())
 			.context(ErrorKind::FileWallet(&"Could not open wallet file"))?;
 		serde_json::from_reader(data_file).map_err(|e| {
 			e.context(ErrorKind::FileWallet(&"Error reading wallet file "))

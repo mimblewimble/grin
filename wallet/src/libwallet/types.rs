@@ -32,18 +32,18 @@ use keychain::{Identifier, Keychain};
 /// whatever credentials it needs
 pub trait WalletBackend {
 	/// Return the keychain being used
-	fn keychain(&self) -> &mut Keychain;
+	fn keychain(&mut self) -> &mut Keychain;
 
 	/// Return the URL of the check node
 	fn node_url(&self) -> &str;
 
 	/// Return the outputs directly
-	fn outputs(&self) -> &mut HashMap<String, OutputData>;
+	fn outputs(&mut self) -> &mut HashMap<String, OutputData>;
 
 	/// Allows for reading wallet data (read-only)
-	fn read_wallet<T, F>(&self, f: F) -> Result<T, Error>
+	fn read_wallet<T, F>(&mut self, f: F) -> Result<T, Error>
 	where
-		F: FnOnce(&Self) -> Result<T, Error>;
+		F: FnOnce(&mut Self) -> Result<T, Error>;
 
 	/// Get all outputs from a wallet impl (probably with some sort
 	/// of query param), read+write. Implementor should save

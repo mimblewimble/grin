@@ -96,7 +96,7 @@ where
 	// the corresponding api output (if it exists)
 	// and refresh it in-place in the wallet.
 	// Note: minimizing the time we spend holding the wallet lock.
-	wallet.with_wallet(|&mut wallet_data| {
+	wallet.with_wallet(|wallet_data| {
 		for commit in wallet_outputs.keys() {
 			let id = wallet_outputs.get(&commit).unwrap();
 			if let Entry::Occupied(mut output) = wallet_data.outputs().entry(id.to_hex()) {
@@ -115,18 +115,19 @@ where
 
 /// build a local map of wallet outputs keyed by commit
 /// and a list of outputs we want to query the node for
-pub fn map_wallet_outputs<T>(wallet: &T) -> Result<HashMap<pedersen::Commitment, Identifier>, Error>
+pub fn map_wallet_outputs<T>(wallet: &mut T) -> Result<HashMap<pedersen::Commitment, Identifier>, Error>
 where
 	T: WalletBackend,
 {
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
-	let _ = wallet.read_wallet(|&wallet_data| {
+	let _ = wallet.read_wallet(|wallet_data| {
+		let keychain = wallet_data.keychain().clone();
+		let root_key_id = keychain.root_key_id().clone();
 		let unspents = wallet_data.outputs().values().filter(|x| {
-			x.root_key_id == wallet.keychain().root_key_id() && x.status != OutputStatus::Spent
+			x.root_key_id == root_key_id && x.status != OutputStatus::Spent
 		});
 		for out in unspents {
-			let commit = wallet
-				.keychain()
+			let commit = keychain
 				.commit_with_key_index(out.value, out.n_child)
 				.context(ErrorKind::Keychain)?;
 			wallet_outputs.insert(commit, out.key_id.clone());
@@ -139,19 +140,19 @@ where
 /// As above, but only return unspent outputs with missing block hashes
 /// and a list of outputs we want to query the node for
 pub fn map_wallet_outputs_missing_block<T>(
-	wallet: &T,
+	wallet: &mut T,
 ) -> Result<HashMap<pedersen::Commitment, Identifier>, Error>
 where
 	T: WalletBackend,
 {
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
 	let _ = wallet.read_wallet(|wallet_data| {
-		for out in wallet_data.outputs().values().filter(|x| {
+		let keychain = wallet_data.keychain().clone();
+		for out in wallet_data.outputs().clone().values().filter(|x| {
 			x.root_key_id == wallet_data.keychain().root_key_id() && x.block.is_none()
 				&& x.status == OutputStatus::Unspent
 		}) {
-			let commit = wallet_data
-				.keychain()
+			let commit = keychain
 				.commit_with_key_index(out.value, out.n_child)
 				.context(ErrorKind::Keychain)?;
 			wallet_outputs.insert(commit, out.key_id.clone());
@@ -232,14 +233,14 @@ where
 	Ok(())
 }
 
-fn clean_old_unconfirmed<T>(wallet: &T, tip: &api::Tip) -> Result<(), Error>
+fn clean_old_unconfirmed<T>(wallet: &mut T, tip: &api::Tip) -> Result<(), Error>
 where
 	T: WalletBackend,
 {
 	if tip.height < 500 {
 		return Ok(());
 	}
-	wallet.with_wallet(|&mut wallet_data| {
+	wallet.with_wallet(|wallet_data| {
 		wallet_data.outputs().retain(|_, ref mut out| {
 			!(out.status == OutputStatus::Unconfirmed && out.height > 0
 				&& out.height < tip.height - 500)
