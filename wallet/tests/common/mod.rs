@@ -13,8 +13,8 @@
 // limitations under the License.
 
 //! Common functions to facilitate wallet, walletlib and transaction testing
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;

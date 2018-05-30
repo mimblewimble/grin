@@ -18,13 +18,13 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::MAIN_SEPARATOR;
 use std::path::Path;
+use std::path::MAIN_SEPARATOR;
 
 use serde_json;
 use tokio_core::reactor;
-use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;
+use tokio_retry::Retry;
 
 use failure::{Fail, ResultExt};
 

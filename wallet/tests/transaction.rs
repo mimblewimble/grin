@@ -29,8 +29,8 @@ mod common;
 use std::fs;
 use std::sync::Arc;
 
-use chain::Chain;
 use chain::types::*;
+use chain::Chain;
 use core::global::ChainTypes;
 use core::{global, pow};
 use util::LOGGER;

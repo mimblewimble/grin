@@ -16,7 +16,7 @@
 
 use failure::ResultExt;
 use keychain::Identifier;
-use libtx::{build, tx_fee, slate::Slate};
+use libtx::{build, slate::Slate, tx_fee};
 use libwallet::types::*;
 use libwallet::{keys, sigcontext};
 

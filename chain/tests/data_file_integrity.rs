@@ -24,8 +24,8 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
-use chain::Chain;
 use chain::types::*;
+use chain::Chain;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};
 use core::global;

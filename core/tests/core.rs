@@ -29,7 +29,7 @@ use grin_core::ser;
 use keychain::Keychain;
 use util::{secp_static, static_secp_instance};
 use wallet::libtx::build::{self, initial_tx, input, output, with_excess, with_fee,
-                              with_lock_height};
+                           with_lock_height};
 
 #[test]
 fn simple_tx_ser() {

@@ -357,8 +357,11 @@ pub enum ErrorKind {
 	#[fail(display = "Fee dispute: sender fee {}, recipient fee {}", sender_fee, recipient_fee)]
 	FeeDispute { sender_fee: u64, recipient_fee: u64 },
 
-	#[fail(display = "Fee exceeds amount: sender amount {}, recipient fee {}", sender_amount,
-	       recipient_fee)]
+	#[fail(
+		display = "Fee exceeds amount: sender amount {}, recipient fee {}",
+		sender_amount,
+		recipient_fee
+	)]
 	FeeExceedsAmount {
 		sender_amount: u64,
 		recipient_fee: u64,

@@ -13,9 +13,9 @@
 // limitations under the License.
 //! Aggsig helper functions used in transaction creation.. should be only
 //! interface into the underlying secp library
-use keychain::Keychain;
 use keychain::blind::BlindingFactor;
 use keychain::extkey::Identifier;
+use keychain::Keychain;
 use libtx::error::Error;
 use util::kernel_sig_msg;
 use util::secp::key::{PublicKey, SecretKey};

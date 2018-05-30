@@ -24,8 +24,8 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
-use chain::Chain;
 use chain::types::*;
+use chain::Chain;
 use core::consensus;
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
@@ -408,7 +408,7 @@ fn prepare_block_nosum(
 	let reward = libtx::reward::output(&kc, &key_id, fees, prev.height).unwrap();
 	let mut b = match core::core::Block::new(
 		prev,
-		txs.into_iter().cloned().collect(), 
+		txs.into_iter().cloned().collect(),
 		Difficulty::from_num(diff),
 		reward,
 	) {
