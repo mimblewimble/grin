@@ -13,14 +13,14 @@
 // limitations under the License.
 
 use api::ApiServer;
-use std::sync::{Arc, RwLock};
-use libwallet::types::WalletBackend;
-use iron::Handler;
 use handlers::CoinbaseHandler;
+use iron::Handler;
+use libwallet::types::WalletBackend;
 use receiver::WalletReceiver;
+use std::sync::{Arc, RwLock};
 use util::LOGGER;
 
-pub fn start_rest_apis<T>(in_wallet: T, api_listen_addr: &str) 
+pub fn start_rest_apis<T>(in_wallet: T, api_listen_addr: &str)
 where
 	T: WalletBackend,
 	CoinbaseHandler<T>: Handler,
@@ -28,8 +28,7 @@ where
 {
 	info!(
 		LOGGER,
-		"Starting the Grin wallet receiving daemon at {}...",
-		api_listen_addr
+		"Starting the Grin wallet receiving daemon at {}...", api_listen_addr
 	);
 
 	let wallet = Arc::new(RwLock::new(in_wallet));

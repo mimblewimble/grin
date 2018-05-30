@@ -79,7 +79,12 @@ pub fn issue_send_tx<T: WalletBackend>(
 	// the offset in the slate's transaction kernel, and adds our public key
 	// information to the slate
 	let _ = slate
-		.fill_round_1(wallet.keychain(), &mut context.sec_key, &context.sec_nonce, 0)
+		.fill_round_1(
+			wallet.keychain(),
+			&mut context.sec_key,
+			&context.sec_nonce,
+			0,
+		)
 		.unwrap();
 
 	let url = format!("{}/v1/receive/transaction", &dest);
@@ -111,16 +116,15 @@ pub fn issue_send_tx<T: WalletBackend>(
 		.context(ErrorKind::LibWalletError)?;
 
 	// Final transaction can be built by anyone at this stage
-	slate.finalize(wallet.keychain()).context(ErrorKind::LibWalletError)?;
+	slate
+		.finalize(wallet.keychain())
+		.context(ErrorKind::LibWalletError)?;
 
 	// So let's post it
 	let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
 	let url;
 	if fluff {
-		url = format!(
-			"{}/v1/pool/push?fluff",
-			wallet.node_url(),
-		);
+		url = format!("{}/v1/pool/push?fluff", wallet.node_url(),);
 	} else {
 		url = format!("{}/v1/pool/push", wallet.node_url());
 	}
@@ -161,8 +165,7 @@ pub fn issue_burn_tx<T: WalletBackend>(
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
 	let fee = tx_fee(coins.len(), 2, selection::coins_proof_count(&coins), None);
-	let (mut parts, _) =
-		selection::inputs_and_change(&coins, wallet, current_height, amount, fee)?;
+	let (mut parts, _) = selection::inputs_and_change(&coins, wallet, current_height, amount, fee)?;
 
 	// add burn output and fees
 	parts.push(build::output(amount - fee, Identifier::zero()));

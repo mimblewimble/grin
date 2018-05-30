@@ -45,10 +45,7 @@ pub fn get_merkle_proof_for_commit(
 	node_addr: &str,
 	commit: &str,
 ) -> Result<MerkleProofWrapper, Error> {
-	let url = format!(
-		"{}/v1/txhashset/merkleproof?id={}",
-		node_addr, commit
-	);
+	let url = format!("{}/v1/txhashset/merkleproof?id={}", node_addr, commit);
 
 	match api::client::get::<api::OutputPrintable>(url.as_str()) {
 		Ok(output) => Ok(MerkleProofWrapper(output.merkle_proof.unwrap())),
@@ -77,14 +74,11 @@ pub fn outputs_batch<T>(
 	max: u64,
 ) -> Result<api::OutputListing, Error>
 where
-	T: WalletBackend
+	T: WalletBackend,
 {
 	let query_param = format!("start_index={}&max={}", start_height, max);
 
-	let url = format!(
-		"{}/v1/txhashset/outputs?{}",
-		wallet.node_url(), query_param,
-	);
+	let url = format!("{}/v1/txhashset/outputs?{}", wallet.node_url(), query_param,);
 
 	match api::client::get::<api::OutputListing>(url.as_str()) {
 		Ok(o) => Ok(o),
@@ -203,7 +197,8 @@ fn find_outputs_with_key<T: WalletBackend>(
 
 			info!(LOGGER, "Amount: {}", value);
 
-			let commit = wallet.keychain()
+			let commit = wallet
+				.keychain()
 				.commit_with_key_index(BigEndian::read_u64(&commit_id), i as u32)
 				.expect("commit with key index");
 
@@ -211,7 +206,8 @@ fn find_outputs_with_key<T: WalletBackend>(
 			let commit_str = util::to_hex(output.commit.as_ref().to_vec());
 
 			if is_coinbase {
-				merkle_proof = Some(get_merkle_proof_for_commit(wallet.node_url(), &commit_str).unwrap());
+				merkle_proof =
+					Some(get_merkle_proof_for_commit(wallet.node_url(), &commit_str).unwrap());
 			}
 
 			let height = current_chain_height;
@@ -249,11 +245,11 @@ fn find_outputs_with_key<T: WalletBackend>(
 	wallet_outputs
 }
 
-pub fn restore<T: WalletBackend>(wallet:&mut T) -> Result<(), Error> {
+pub fn restore<T: WalletBackend>(wallet: &mut T) -> Result<(), Error> {
 	// Don't proceed if wallet.dat has anything in it
-	let is_empty = wallet.read_wallet(|wallet_data| {
-		Ok(wallet_data.outputs().len() == 0)
-	}).context(ErrorKind::FileWallet("could not read wallet"))?;
+	let is_empty = wallet
+		.read_wallet(|wallet_data| Ok(wallet_data.outputs().len() == 0))
+		.context(ErrorKind::FileWallet("could not read wallet"))?;
 	if !is_empty {
 		error!(
 			LOGGER,

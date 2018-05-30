@@ -115,7 +115,9 @@ where
 
 /// build a local map of wallet outputs keyed by commit
 /// and a list of outputs we want to query the node for
-pub fn map_wallet_outputs<T>(wallet: &mut T) -> Result<HashMap<pedersen::Commitment, Identifier>, Error>
+pub fn map_wallet_outputs<T>(
+	wallet: &mut T,
+) -> Result<HashMap<pedersen::Commitment, Identifier>, Error>
 where
 	T: WalletBackend,
 {
@@ -123,9 +125,10 @@ where
 	let _ = wallet.read_wallet(|wallet_data| {
 		let keychain = wallet_data.keychain().clone();
 		let root_key_id = keychain.root_key_id().clone();
-		let unspents = wallet_data.outputs().values().filter(|x| {
-			x.root_key_id == root_key_id && x.status != OutputStatus::Spent
-		});
+		let unspents = wallet_data
+			.outputs()
+			.values()
+			.filter(|x| x.root_key_id == root_key_id && x.status != OutputStatus::Spent);
 		for out in unspents {
 			let commit = keychain
 				.commit_with_key_index(out.value, out.n_child)

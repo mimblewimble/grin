@@ -275,8 +275,12 @@ impl LocalServerContainer {
 			.derive_keychain("grin_test")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 
-		let wallet = FileWallet::new(self.wallet_config.clone(), keychain)
-			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, self.wallet_config));
+		let wallet = FileWallet::new(self.wallet_config.clone(), keychain).unwrap_or_else(|e| {
+			panic!(
+				"Error creating wallet: {:?} Config: {:?}",
+				e, self.wallet_config
+			)
+		});
 
 		wallet::server::start_rest_apis(wallet, &self.wallet_config.api_listen_addr());
 		self.wallet_is_running = true;
@@ -298,7 +302,7 @@ impl LocalServerContainer {
 			.derive_keychain("grin_test")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let mut wallet = FileWallet::new(config.clone(), keychain)
-		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
+			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet::retrieve_info(&mut wallet)
 	}
 
@@ -321,7 +325,7 @@ impl LocalServerContainer {
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let max_outputs = 500;
 		let mut wallet = FileWallet::new(config.clone(), keychain)
-		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
+			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		let result = wallet::issue_send_tx(
 			&mut wallet,
 			amount,

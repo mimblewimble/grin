@@ -37,20 +37,20 @@ extern crate grin_wallet as wallet;
 mod client;
 pub mod tui;
 
-use std::thread;
-use std::sync::Arc;
-use std::time::Duration;
 use std::env::current_dir;
 use std::process::exit;
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 use daemonize::Daemonize;
 
 use config::GlobalConfig;
-use core::global;
 use core::core::amount_to_hr_string;
-use util::{init_logger, LoggingConfig, LOGGER};
+use core::global;
 use tui::ui;
+use util::{init_logger, LoggingConfig, LOGGER};
 use wallet::FileWallet;
 
 // include build information
@@ -423,8 +423,9 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 		let _ = thread::Builder::new()
 			.name("wallet_listener".to_string())
 			.spawn(move || {
-				let wallet = FileWallet::new(wallet_config.clone(), keychain)
-					.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
+				let wallet = FileWallet::new(wallet_config.clone(), keychain).unwrap_or_else(|e| {
+					panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+				});
 				wallet::server::start_rest_apis(wallet, &wallet_config.api_listen_addr());
 			});
 	}
@@ -568,7 +569,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				fluff = true;
 			}
 			let max_outputs = 500;
- 			let result = wallet::issue_send_tx(
+			let result = wallet::issue_send_tx(
 				&mut wallet,
 				amount,
 				minimum_confirmations,
@@ -622,12 +623,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				.parse()
 				.expect("Could not parse minimum_confirmations as a whole number.");
 			let max_outputs = 500;
-			wallet::issue_burn_tx(
-				&mut wallet,
-				amount,
-				minimum_confirmations,
-				max_outputs,
-			).unwrap();
+			wallet::issue_burn_tx(&mut wallet, amount, minimum_confirmations, max_outputs).unwrap();
 		}
 		("info", Some(_)) => {
 			wallet::show_info(&mut wallet);

@@ -145,7 +145,7 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: (Out
 pub fn award_block_to_wallet<T: WalletBackend>(
 	chain: &Chain,
 	txs: Vec<&Transaction>,
-	wallet: &mut T
+	wallet: &mut T,
 ) {
 	let prev = chain.head_header().unwrap();
 	let fee_amt = txs.iter().map(|tx| tx.fee()).sum();
@@ -179,11 +179,7 @@ pub fn award_block_to_wallet<T: WalletBackend>(
 }
 
 /// adds many block rewards to a wallet, no transactions
-pub fn award_blocks_to_wallet<T: WalletBackend>(
-	chain: &Chain,
-	wallet: &mut T,
-	num_rewards: usize,
-) {
+pub fn award_blocks_to_wallet<T: WalletBackend>(chain: &Chain, wallet: &mut T, num_rewards: usize) {
 	for _ in 0..num_rewards {
 		award_block_to_wallet(chain, vec![], wallet);
 	}

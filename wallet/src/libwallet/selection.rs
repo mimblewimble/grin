@@ -88,7 +88,7 @@ where
 
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
-	let update_sender_wallet_fn = move |wallet:&mut T| {
+	let update_sender_wallet_fn = move |wallet: &mut T| {
 		wallet.with_wallet(|wallet_data| {
 			for id in lock_inputs {
 				let coin = wallet_data.get_output(&id).unwrap().clone();
@@ -134,10 +134,7 @@ where
 	let keychain = wallet.keychain().clone();
 
 	let blinding = slate
-		.add_transaction_elements(
-			&keychain,
-			vec![build::output(amount, key_id.clone())],
-		)
+		.add_transaction_elements(&keychain, vec![build::output(amount, key_id.clone())])
 		.context(ErrorKind::LibWalletError)?;
 
 	// Add blinding sum to our context
@@ -150,7 +147,7 @@ where
 
 	// Create closure that adds the output to recipient's wallet
 	// (up to the caller to decide when to do)
-	let wallet_add_fn = move |wallet:&mut T| {
+	let wallet_add_fn = move |wallet: &mut T| {
 		wallet.with_wallet(|wallet_data| {
 			wallet_data.add_output(OutputData {
 				root_key_id: root_key_id,
