@@ -30,10 +30,10 @@ use std::sync::{Arc, RwLock};
 
 use core::core::{BlockHeader, Transaction};
 
+use chain::ChainStore;
 use chain::store::ChainKVStore;
 use chain::txhashset;
 use chain::txhashset::TxHashSet;
-use chain::ChainStore;
 use core::core::hash::Hashed;
 use core::core::pmmr::MerkleProof;
 use pool::*;
@@ -41,8 +41,8 @@ use pool::*;
 use keychain::Keychain;
 use wallet::libtx;
 
-use pool::types::*;
 use pool::TransactionPool;
+use pool::types::*;
 
 #[derive(Clone)]
 pub struct ChainAdapter {

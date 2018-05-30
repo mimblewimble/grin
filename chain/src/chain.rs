@@ -25,7 +25,8 @@ use lmdb;
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
-use core::core::{Block, BlockHeader, Input, Output, OutputIdentifier, OutputFeatures, Transaction, TxKernel};
+use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, Transaction,
+                 TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;
 use pipe;
@@ -140,7 +141,6 @@ unsafe impl Sync for Chain {}
 unsafe impl Send for Chain {}
 
 impl Chain {
-
 	/// Initializes the blockchain and returns a new Chain instance. Does a
 	/// check on the current chain head to make sure it exists and creates one
 	/// based on the genesis block if necessary.
