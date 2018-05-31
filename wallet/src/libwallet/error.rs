@@ -13,9 +13,9 @@
 // limitations under the License.
 
 //! Error types for libwallet
-use std::fmt::{self, Display};
-use libtx;
 use keychain;
+use libtx;
+use std::fmt::{self, Display};
 
 use core::core::transaction;
 use failure::{Backtrace, Context, Fail};

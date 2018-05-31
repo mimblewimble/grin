@@ -23,7 +23,7 @@ use util::secp;
 /// Lib tx error definition
 #[derive(Debug)]
 pub struct Error {
-	inner: Context<ErrorKind>
+	inner: Context<ErrorKind>,
 }
 
 #[derive(Clone, Debug, Eq, Fail, PartialEq)]

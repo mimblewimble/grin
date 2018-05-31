@@ -133,8 +133,7 @@ where
 			.values()
 			.filter(|x| x.root_key_id == root_key_id && x.status != OutputStatus::Spent);
 		for out in unspents {
-			let commit = keychain
-				.commit_with_key_index(out.value, out.n_child)?;
+			let commit = keychain.commit_with_key_index(out.value, out.n_child)?;
 			wallet_outputs.insert(commit, out.key_id.clone());
 		}
 		Ok(())
@@ -157,8 +156,7 @@ where
 			x.root_key_id == wallet_data.keychain().root_key_id() && x.block.is_none()
 				&& x.status == OutputStatus::Unspent
 		}) {
-			let commit = keychain
-				.commit_with_key_index(out.value, out.n_child)?;
+			let commit = keychain.commit_with_key_index(out.value, out.n_child)?;
 			wallet_outputs.insert(commit, out.key_id.clone());
 		}
 		Ok(())

@@ -302,9 +302,7 @@ where
 
 	// build inputs using the appropriate derived key_ids
 	for coin in coins {
-		let key_id = wallet
-			.keychain()
-			.derive_key_id(coin.n_child)?;
+		let key_id = wallet.keychain().derive_key_id(coin.n_child)?;
 		if coin.is_coinbase {
 			let block = coin.block.clone();
 			let merkle_proof = coin.merkle_proof.clone();
