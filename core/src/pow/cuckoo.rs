@@ -17,8 +17,8 @@
 //! simple miner is included, mostly for testing purposes. John Tromp's Tomato
 //! miner will be much faster in almost every environment.
 
-use std::collections::HashSet;
 use std::cmp;
+use std::collections::HashSet;
 
 use blake2;
 
@@ -93,9 +93,9 @@ impl Cuckoo {
 	pub fn verify(&self, proof: Proof, ease: u64) -> bool {
 		let easiness = ease * (self.size as u64) / 100;
 		let nonces = proof.to_u64s();
-		let mut us = vec![0; proof.proof_size];
-		let mut vs = vec![0; proof.proof_size];
-		for n in 0..proof.proof_size {
+		let mut us = vec![0; proof.proof_size()];
+		let mut vs = vec![0; proof.proof_size()];
+		for n in 0..proof.proof_size() {
 			if nonces[n] >= easiness || (n != 0 && nonces[n] <= nonces[n - 1]) {
 				return false;
 			}
@@ -103,10 +103,10 @@ impl Cuckoo {
 			vs[n] = self.new_node(nonces[n], 1);
 		}
 		let mut i = 0;
-		let mut count = proof.proof_size;
+		let mut count = proof.proof_size();
 		loop {
 			let mut j = i;
-			for k in 0..proof.proof_size {
+			for k in 0..proof.proof_size() {
 				// find unique other j with same vs[j]
 				if k != i && vs[k] == vs[i] {
 					if j != i {
@@ -119,7 +119,7 @@ impl Cuckoo {
 				return false;
 			}
 			i = j;
-			for k in 0..proof.proof_size {
+			for k in 0..proof.proof_size() {
 				// find unique other i with same us[i]
 				if k != j && us[k] == us[j] {
 					if i != j {
@@ -361,8 +361,8 @@ mod test {
 		assert!(Cuckoo::new(&[51], 20).verify(Proof::new(V3.to_vec().clone()), 70));
 	}
 
-	/// Just going to disable this for now, as it's painful to try and get a valid
-	/// cuckoo28 vector (TBD: 30 is more relevant now anyhow)
+	/// Just going to disable this for now, as it's painful to try and get a
+	/// valid cuckoo28 vector (TBD: 30 is more relevant now anyhow)
 	#[test]
 	#[ignore]
 	fn validate28_vectors() {

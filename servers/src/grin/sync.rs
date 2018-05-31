@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{thread, cmp};
-use std::time::Duration;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+use std::{cmp, thread};
 use time;
 
 use chain;
@@ -296,7 +296,7 @@ fn needs_syncing(
 					info!(
 						LOGGER,
 						"synchronised at {} @ {} [{}]",
-						local_diff.into_num(),
+						local_diff.to_num(),
 						ch.height,
 						ch.last_block_h
 					);
@@ -338,8 +338,8 @@ fn needs_syncing(
 }
 
 /// We build a locator based on sync_head.
-/// Even if sync_head is significantly out of date we will "reset" it once we start getting
-/// headers back from a peer.
+/// Even if sync_head is significantly out of date we will "reset" it once we
+/// start getting headers back from a peer.
 ///
 /// TODO - this gets *expensive* with a large header chain to iterate over
 /// as we need to get each block header from the db

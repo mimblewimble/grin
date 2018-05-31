@@ -277,7 +277,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 		let target_difficulty = header.total_difficulty.clone() - prev.total_difficulty.clone();
 
-		if header.pow.clone().to_difficulty() < target_difficulty {
+		if header.pow.to_difficulty() < target_difficulty {
 			return Err(Error::DifficultyTooLow);
 		}
 
@@ -297,8 +297,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			error!(
 				LOGGER,
 				"validate_header: BANNABLE OFFENCE: header cumulative difficulty {} != {}",
-				target_difficulty.into_num(),
-				prev.total_difficulty.into_num() + network_difficulty.into_num()
+				target_difficulty.to_num(),
+				prev.total_difficulty.to_num() + network_difficulty.to_num()
 			);
 			return Err(Error::WrongTotalDifficulty);
 		}

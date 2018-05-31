@@ -17,11 +17,11 @@
 //! Primary hash function used in the protocol
 //!
 
+use byteorder::{BigEndian, ByteOrder};
 use std::cmp::min;
-use std::{fmt, ops};
 use std::convert::AsRef;
 use std::ops::Add;
-use byteorder::{BigEndian, ByteOrder};
+use std::{fmt, ops};
 
 use blake2::blake2b::Blake2b;
 
@@ -39,8 +39,8 @@ pub struct Hash(pub [u8; 32]);
 
 impl fmt::Debug for Hash {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		for i in self.0[..4].iter().cloned() {
-			try!(write!(f, "{:02x}", i));
+		for i in self.0[..4].iter() {
+			write!(f, "{:02x}", i)?;
 		}
 		Ok(())
 	}
@@ -55,11 +55,10 @@ impl fmt::Display for Hash {
 impl Hash {
 	/// Builds a Hash from a byte vector. If the vector is too short, it will be
 	/// completed by zeroes. If it's too long, it will be truncated.
-	pub fn from_vec(v: Vec<u8>) -> Hash {
+	pub fn from_vec(v: &[u8]) -> Hash {
 		let mut h = [0; 32];
-		for i in 0..min(v.len(), 32) {
-			h[i] = v[i];
-		}
+		let copy_size = min(v.len(), 32);
+		h[..copy_size].copy_from_slice(&v[..copy_size]);
 		Hash(h)
 	}
 
@@ -75,8 +74,9 @@ impl Hash {
 
 	/// Convert hex string back to hash.
 	pub fn from_hex(hex: &str) -> Result<Hash, Error> {
-		let bytes = util::from_hex(hex.to_string()).unwrap();
-		Ok(Hash::from_vec(bytes))
+		let bytes = util::from_hex(hex.to_string())
+			.map_err(|_| Error::HexError(format!("failed to decode {}", hex)))?;
+		Ok(Hash::from_vec(&bytes))
 	}
 
 	/// Most significant 64 bits
@@ -133,11 +133,9 @@ impl AsRef<[u8]> for Hash {
 
 impl Readable for Hash {
 	fn read(reader: &mut Reader) -> Result<Hash, ser::Error> {
-		let v = try!(reader.read_fixed_bytes(32));
+		let v = reader.read_fixed_bytes(32)?;
 		let mut a = [0; 32];
-		for i in 0..a.len() {
-			a[i] = v[i];
-		}
+		a.copy_from_slice(&v[..]);
 		Ok(Hash(a))
 	}
 }
@@ -177,7 +175,7 @@ impl HashWriter {
 	/// current state
 	pub fn into_hash(self) -> Hash {
 		let mut res = [0; 32];
-		(&mut res).copy_from_slice(self.state.finalize().as_bytes());
+		res.copy_from_slice(self.state.finalize().as_bytes());
 		Hash(res)
 	}
 }
@@ -230,14 +228,15 @@ impl<W: ser::Writeable> Hashed for W {
 
 impl<T: Writeable> consensus::VerifySortOrder<T> for Vec<T> {
 	fn verify_sort_order(&self) -> Result<(), consensus::Error> {
-		match self.iter()
+		if self.iter()
 			.map(|item| item.hash())
 			.collect::<Vec<_>>()
 			.windows(2)
 			.any(|pair| pair[0] > pair[1])
 		{
-			true => Err(consensus::Error::SortError),
-			false => Ok(()),
+			Err(consensus::Error::SortError)
+		} else {
+			Ok(())
 		}
 	}
 }

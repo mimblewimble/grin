@@ -930,7 +930,7 @@ impl<'a> Extension<'a> {
 			if pmmr::is_leaf(n) {
 				if let Some(out) = self.output_pmmr.get_data(n) {
 					if let Some(rp) = self.rproof_pmmr.get_data(n) {
-						out.to_output(rp).verify_proof()?;
+						out.into_output(rp).verify_proof()?;
 					} else {
 						// TODO - rangeproof not found
 						return Err(Error::OutputNotFound);

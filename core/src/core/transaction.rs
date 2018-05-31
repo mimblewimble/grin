@@ -271,9 +271,9 @@ impl Writeable for Transaction {
 		let mut outputs = self.outputs.clone();
 		let mut kernels = self.kernels.clone();
 
-		try!(inputs.write_sorted(writer));
-		try!(outputs.write_sorted(writer));
-		try!(kernels.write_sorted(writer));
+		inputs.write_sorted(writer)?;
+		outputs.write_sorted(writer)?;
+		kernels.write_sorted(writer)?;
 
 		Ok(())
 	}
@@ -303,7 +303,6 @@ impl Readable for Transaction {
 			inputs,
 			outputs,
 			kernels,
-			..Default::default()
 		})
 	}
 }
@@ -494,7 +493,7 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 
 	// we will sum these together at the end to give us the overall offset for the
 	// transaction
-	let mut kernel_offsets = vec![];
+	let mut kernel_offsets: Vec<BlindingFactor> = vec![];
 
 	for mut transaction in transactions {
 		// we will summ these later to give a single aggregate offset
@@ -511,8 +510,7 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let mut keys = kernel_offsets
-			.iter()
-			.cloned()
+			.into_iter()
 			.filter(|x| *x != BlindingFactor::zero())
 			.filter_map(|x| x.secret_key(&secp).ok())
 			.collect::<Vec<_>>();
@@ -539,15 +537,13 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
 
 	let mut new_inputs = inputs
-		.iter()
+		.into_iter()
 		.filter(|inp| !to_cut_through.contains(&inp.commitment()))
-		.cloned()
 		.collect::<Vec<_>>();
 
 	let mut new_outputs = outputs
-		.iter()
+		.into_iter()
 		.filter(|out| !to_cut_through.contains(&out.commitment()))
-		.cloned()
 		.collect::<Vec<_>>();
 
 	// sort them lexicographically
@@ -576,19 +572,19 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	// transaction
 	let mut kernel_offsets = vec![];
 
-	let tx = aggregate(txs).unwrap();
+	let tx = aggregate(txs)?;
 
-	for mk_input in mk_tx.clone().inputs {
+	for mk_input in mk_tx.inputs {
 		if !tx.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
 			inputs.push(mk_input);
 		}
 	}
-	for mk_output in mk_tx.clone().outputs {
+	for mk_output in mk_tx.outputs {
 		if !tx.outputs.contains(&mk_output) && !outputs.contains(&mk_output) {
 			outputs.push(mk_output);
 		}
 	}
-	for mk_kernel in mk_tx.clone().kernels {
+	for mk_kernel in mk_tx.kernels {
 		if !tx.kernels.contains(&mk_kernel) && !kernels.contains(&mk_kernel) {
 			kernels.push(mk_kernel);
 		}
@@ -601,14 +597,12 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let mut positive_key = vec![mk_tx.offset]
-			.iter()
-			.cloned()
+			.into_iter()
 			.filter(|x| *x != BlindingFactor::zero())
 			.filter_map(|x| x.secret_key(&secp).ok())
 			.collect::<Vec<_>>();
 		let mut negative_keys = kernel_offsets
-			.iter()
-			.cloned()
+			.into_iter()
 			.filter(|x| *x != BlindingFactor::zero())
 			.filter_map(|x| x.secret_key(&secp).ok())
 			.collect::<Vec<_>>();
@@ -626,9 +620,10 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	outputs.sort();
 	kernels.sort();
 
-	let tx = Transaction::new(inputs, outputs, kernels);
+	let mut tx = Transaction::new(inputs, outputs, kernels);
+	tx.offset = total_kernel_offset;
 
-	Ok(tx.with_offset(total_kernel_offset))
+	Ok(tx)
 }
 
 /// A transaction input.
@@ -728,14 +723,13 @@ impl Input {
 	/// identify the output. Specifically the block hash (to correctly
 	/// calculate lock_height for coinbase outputs).
 	pub fn commitment(&self) -> Commitment {
-		self.commit.clone()
+		self.commit
 	}
 
 	/// Convenience functon to return the (optional) block_hash for this input.
 	/// Will return the default hash if we do not have one.
 	pub fn block_hash(&self) -> Hash {
-		let block_hash = self.block_hash.clone();
-		block_hash.unwrap_or(Hash::default())
+		self.block_hash.unwrap_or_else(Hash::default)
 	}
 
 	/// Convenience function to return the (optional) merkle_proof for this
@@ -744,7 +738,7 @@ impl Input {
 	/// coinbase outputs.
 	pub fn merkle_proof(&self) -> MerkleProof {
 		let merkle_proof = self.merkle_proof.clone();
-		merkle_proof.unwrap_or(MerkleProof::empty())
+		merkle_proof.unwrap_or_else(MerkleProof::empty)
 	}
 
 	/// Verify the maturity of an output being spent by an input.
@@ -915,7 +909,7 @@ impl OutputIdentifier {
 	/// Build a new output_identifier.
 	pub fn new(features: OutputFeatures, commit: &Commitment) -> OutputIdentifier {
 		OutputIdentifier {
-			features: features.clone(),
+			features: features,
 			commit: commit.clone(),
 		}
 	}
@@ -929,7 +923,7 @@ impl OutputIdentifier {
 	}
 
 	/// Converts this identifier to a full output, provided a RangeProof
-	pub fn to_output(self, proof: RangeProof) -> Output {
+	pub fn into_output(self, proof: RangeProof) -> Output {
 		Output {
 			features: self.features,
 			commit: self.commit,
@@ -1082,7 +1076,7 @@ impl ProofMessageElements {
 
 	/// Deserialise and return the message elements
 	pub fn from_proof_message(
-		proof_message: ProofMessage,
+		proof_message: &ProofMessage,
 	) -> Result<ProofMessageElements, ser::Error> {
 		let mut c = Cursor::new(proof_message.as_bytes());
 		ser::deserialize::<ProofMessageElements>(&mut c)
