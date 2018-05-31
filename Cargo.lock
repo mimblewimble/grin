@@ -698,6 +698,7 @@ dependencies = [
  "bytes 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "enum_primitive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "grin_core 0.2.0",
+ "grin_pool 0.2.0",
  "grin_store 0.2.0",
  "grin_util 0.2.0",
  "net2 0.2.32 (registry+https://github.com/rust-lang/crates.io-index)",
