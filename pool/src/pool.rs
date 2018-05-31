@@ -125,11 +125,10 @@ where
 	) -> Result<(), PoolError> {
 		debug!(
 			LOGGER,
-			"pool [{}]: add_to_pool: {}, {:?}, {}",
+			"pool [{}]: add_to_pool: {}, {:?}",
 			self.name,
 			entry.tx.hash(),
 			entry.src,
-			extra_txs.len(),
 		);
 
 		// Combine all the txs from the pool with any extra txs provided.
