@@ -17,6 +17,7 @@ use std::fmt::{self, Display};
 
 use failure::{Backtrace, Context, Fail};
 
+/// Error definition
 #[derive(Debug)]
 pub struct Error {
 	inner: Context<ErrorKind>,
@@ -25,31 +26,46 @@ pub struct Error {
 /// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorKind {
+	/// Not enough funds
 	#[fail(display = "Not enough funds")]
 	NotEnoughFunds(u64),
 
+	/// Fee dispute
 	#[fail(display = "Fee dispute: sender fee {}, recipient fee {}", sender_fee, recipient_fee)]
-	FeeDispute { sender_fee: u64, recipient_fee: u64 },
-
-	#[fail(display = "Fee exceeds amount: sender amount {}, recipient fee {}", sender_amount,
-	       recipient_fee)]
-	FeeExceedsAmount {
-		sender_amount: u64,
+	FeeDispute {
+		/// sender fee
+		sender_fee: u64,
+		/// recipient fee
 		recipient_fee: u64,
 	},
 
+	/// Fee Exceeds amount
+	#[fail(display = "Fee exceeds amount: sender amount {}, recipient fee {}", sender_amount,
+	       recipient_fee)]
+	FeeExceedsAmount {
+		/// sender amount
+		sender_amount: u64,
+		/// recipient fee
+		recipient_fee: u64,
+	},
+
+	/// Keychain error
 	#[fail(display = "Keychain error")]
 	Keychain,
 
+	/// Transaction Error
 	#[fail(display = "Transaction error")]
 	Transaction,
 
+	/// Secp Error
 	#[fail(display = "Secp error")]
 	Secp,
 
+	/// Libwallet error TODO: Remove
 	#[fail(display = "LibWallet error")]
 	LibWalletError,
 
+	/// Filewallet error (TODO, get this out of here)
 	#[fail(display = "Wallet data error: {}", _0)]
 	FileWallet(&'static str),
 
@@ -57,6 +73,7 @@ pub enum ErrorKind {
 	#[fail(display = "JSON format error")]
 	Format,
 
+	/// IO Error
 	#[fail(display = "I/O error")]
 	IO,
 
@@ -72,6 +89,7 @@ pub enum ErrorKind {
 	#[fail(display = "Uri parsing error")]
 	Uri,
 
+	/// Signature error
 	#[fail(display = "Signature error")]
 	Signature(&'static str),
 
@@ -87,6 +105,7 @@ pub enum ErrorKind {
 	#[fail(display = "Wallet seed doesn't exist error")]
 	WalletSeedDoesntExist,
 
+	/// Other
 	#[fail(display = "Generic error: {}", _0)]
 	GenericError(&'static str),
 }
@@ -108,6 +127,7 @@ impl Display for Error {
 }
 
 impl Error {
+	/// get kind
 	pub fn kind(&self) -> ErrorKind {
 		*self.inner.get_context()
 	}
