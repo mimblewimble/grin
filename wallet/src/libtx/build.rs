@@ -28,8 +28,9 @@
 use util::{kernel_sig_msg, secp};
 
 use core::core::hash::Hash;
-use core::core::pmmr::MerkleProof;
-use core::core::{Input, Output, OutputFeatures, ProofMessageElements, Transaction, TxKernel};
+use core::core::merkle_proof::MerkleProof;
+use core::core::{Input, Output, OutputFeatures, ProofMessageElements, Transaction,
+                 TxKernel};
 use keychain;
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use libtx::{aggsig, proof};

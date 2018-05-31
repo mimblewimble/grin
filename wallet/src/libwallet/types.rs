@@ -22,7 +22,7 @@ use serde;
 use failure::ResultExt;
 
 use core::core::hash::Hash;
-use core::core::pmmr::MerkleProof;
+use core::core::merkle_proof::MerkleProof;
 
 use keychain::{Identifier, Keychain};
 

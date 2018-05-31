@@ -20,10 +20,10 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use core::core::hash::{Hash, Hashed};
-use core::core::pmmr::MerkleProof;
-use core::core::target::Difficulty;
 use core::core::Committed;
+use core::core::hash::{Hash, Hashed};
+use core::core::merkle_proof::MerkleProof;
+use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;

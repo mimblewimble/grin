@@ -35,7 +35,7 @@ use chain::txhashset;
 use chain::txhashset::TxHashSet;
 use chain::ChainStore;
 use core::core::hash::Hashed;
-use core::core::pmmr::MerkleProof;
+use core::core::MerkleProof;
 use pool::*;
 
 use keychain::Keychain;
