@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Wallet lib errors
+//! libtx specific errors
 
 use core::core::transaction;
 use keychain::{self, extkey};

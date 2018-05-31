@@ -46,7 +46,6 @@ extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 
-pub mod checker;
 pub mod client;
 pub mod file_wallet;
 mod handlers;

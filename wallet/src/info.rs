@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use checker;
 use core::core::amount_to_hr_string;
-use libwallet::types::*;
+use libwallet::types::{OutputStatus, WalletBackend, WalletInfo};
+use libwallet::updater;
 use prettytable;
 
 pub fn show_info<T>(wallet: &mut T)
@@ -51,10 +51,10 @@ pub fn retrieve_info<T>(wallet: &mut T) -> WalletInfo
 where
 	T: WalletBackend,
 {
-	let result = checker::refresh_outputs(wallet);
+	let result = updater::refresh_outputs(wallet);
 
 	let ret_val = wallet.read_wallet(|wallet_data| {
-		let (current_height, from) = match checker::get_tip_from_node(&wallet_data.node_url()) {
+		let (current_height, from) = match updater::get_tip_from_node(&wallet_data.node_url()) {
 			Ok(tip) => (tip.height, "from server node"),
 			Err(_) => match wallet_data.outputs().values().map(|out| out.height).max() {
 				Some(height) => (height, "from wallet"),

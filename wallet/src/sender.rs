@@ -13,15 +13,14 @@
 // limitations under the License.
 
 use api;
-use checker;
 use client;
 use core::core::amount_to_hr_string;
 use core::ser;
 use failure::ResultExt;
 use keychain::{Identifier, Keychain};
 use libtx::{build, tx_fee};
-use libwallet::selection;
-use libwallet::types::*;
+use libwallet::{selection, updater};
+use libwallet::types::{Error, ErrorKind, WalletBackend};
 use receiver::TxWrapper;
 use util;
 use util::LOGGER;
@@ -47,13 +46,13 @@ pub fn issue_send_tx<T: WalletBackend>(
 		);
 	}
 
-	checker::refresh_outputs(wallet)?;
+	updater::refresh_outputs(wallet)?;
 
 	// Get lock height
-	let chain_tip = checker::get_tip_from_node(wallet.node_url())?;
+	let chain_tip = updater::get_tip_from_node(wallet.node_url())?;
 	let current_height = chain_tip.height;
 	// ensure outputs we're selecting are up to date
-	checker::refresh_outputs(wallet)?;
+	updater::refresh_outputs(wallet)?;
 
 	let lock_height = current_height;
 
@@ -143,10 +142,10 @@ pub fn issue_burn_tx<T: WalletBackend>(
 ) -> Result<(), Error> {
 	let keychain = &Keychain::burn_enabled(wallet.keychain(), &Identifier::zero());
 
-	let chain_tip = checker::get_tip_from_node(wallet.node_url())?;
+	let chain_tip = updater::get_tip_from_node(wallet.node_url())?;
 	let current_height = chain_tip.height;
 
-	let _ = checker::refresh_outputs(wallet);
+	let _ = updater::refresh_outputs(wallet);
 
 	let key_id = keychain.root_key_id();
 

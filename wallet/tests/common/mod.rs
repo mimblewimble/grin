@@ -29,7 +29,7 @@ use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel
 use core::{consensus, global, pow};
 use wallet::file_wallet::*;
 use wallet::libwallet::types::*;
-use wallet::{checker, BlockFees};
+use wallet::libwallet::updater;
 
 use util::secp::pedersen;
 
@@ -39,7 +39,7 @@ pub fn refresh_output_state_local<T: WalletBackend>(
 	wallet: &mut T,
 	chain: &chain::Chain,
 ) -> Result<(), Error> {
-	let wallet_outputs = checker::map_wallet_outputs(wallet)?;
+	let wallet_outputs = updater::map_wallet_outputs(wallet)?;
 	let chain_outputs: Vec<Option<api::Output>> = wallet_outputs
 		.keys()
 		.map(|k| match get_output_local(chain, &k) {
@@ -56,7 +56,7 @@ pub fn refresh_output_state_local<T: WalletBackend>(
 			None => {}
 		}
 	}
-	checker::apply_api_outputs(wallet, &wallet_outputs, &api_outputs)?;
+	updater::apply_api_outputs(wallet, &wallet_outputs, &api_outputs)?;
 	Ok(())
 }
 

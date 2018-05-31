@@ -28,4 +28,5 @@
 pub mod keys;
 pub mod selection;
 pub mod sigcontext;
+pub mod updater;
 pub mod types;
