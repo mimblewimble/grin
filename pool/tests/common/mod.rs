@@ -54,8 +54,8 @@ impl ChainAdapter {
 	pub fn init(db_root: String) -> Result<ChainAdapter, String> {
 		let target_dir = format!("target/{}", db_root);
 		let db_env = Arc::new(store::new_env(target_dir.clone()));
-		let chain_store = ChainStore::new(db_env)
-			.map_err(|e| format!("failed to init chain_store, {:?}", e))?;
+		let chain_store =
+			ChainStore::new(db_env).map_err(|e| format!("failed to init chain_store, {:?}", e))?;
 		let store = Arc::new(chain_store);
 		let txhashset = TxHashSet::open(target_dir.clone(), store.clone())
 			.map_err(|e| format!("failed to init txhashset, {}", e))?;

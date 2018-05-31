@@ -63,7 +63,9 @@ fn test_some_raw_txs() {
 	// We need to be careful with pruning while processing the txs below
 	// as we cannot prune a tree with a single node in it (no sibling or parent).
 	let mut batch = store.batch().unwrap();
-	txhashset::extending(&mut txhashset, &mut batch, |extension| extension.apply_block(&block)).unwrap();
+	txhashset::extending(&mut txhashset, &mut batch, |extension| {
+		extension.apply_block(&block)
+	}).unwrap();
 
 	// Make sure we setup the head in the store based on block we just accepted.
 	let head = Tip::from_block(&block.header);

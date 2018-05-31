@@ -57,7 +57,9 @@ fn test_transaction_pool_block_reconciliation() {
 
 		let mut batch = chain.store.batch().unwrap();
 		let mut txhashset = chain.txhashset.write().unwrap();
-		txhashset::extending(&mut txhashset, &mut batch, |extension| extension.apply_block(&block)).unwrap();
+		txhashset::extending(&mut txhashset, &mut batch, |extension| {
+			extension.apply_block(&block)
+		}).unwrap();
 
 		let tip = Tip::from_block(&block.header);
 		batch.save_block_header(&block.header).unwrap();
