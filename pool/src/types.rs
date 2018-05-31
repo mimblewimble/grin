@@ -27,18 +27,18 @@ use core::core::transaction::Transaction;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DandelionConfig {
 	/// Choose new Dandelion relay peer every n secs.
-	#[serde = "default_relay_secs"]
+	#[serde = "default_dandelion_relay_secs"]
 	pub relay_secs: u64,
 	/// Dandelion embargo, fluff and broadcast tx if not seen on network before
 	/// embargo expires.
-	#[serde = "default_embargo_secs"]
+	#[serde = "default_dandelion_embargo_secs"]
 	pub embargo_secs: u64,
 	/// Dandelion patience timer, fluff/stem processing runs every n secs.
 	/// Tx aggregation happens on stem txs received within this window.
-	#[serde = "default_patience_secs"]
+	#[serde = "default_dandelion_patience_secs"]
 	pub patience_secs: u64,
 	/// Dandelion stem probability (stem 90% of the time, fluff 10% etc.)
-	#[serde = "default_stem_probability"]
+	#[serde = "default_dandelion_stem_probability"]
 	pub stem_probability: usize,
 }
 
