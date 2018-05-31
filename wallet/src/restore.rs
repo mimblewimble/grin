@@ -18,7 +18,7 @@ use core::global;
 use failure::{Fail, ResultExt};
 use keychain::Identifier;
 use libtx::proof;
-use libwallet::error::{Error, ErrorKind};
+use error::{Error, ErrorKind};
 use libwallet::types::*;
 use util;
 use util::LOGGER;

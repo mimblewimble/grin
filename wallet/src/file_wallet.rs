@@ -32,7 +32,8 @@ use keychain::{self, Keychain};
 use util;
 use util::LOGGER;
 
-use libwallet::error::{Error, ErrorKind};
+use error::{Error, ErrorKind};
+use libwallet;
 use libwallet::types::*;
 
 const DAT_FILE: &'static str = "wallet.dat";
@@ -196,9 +197,9 @@ impl WalletBackend for FileWallet {
 
 	/// Allows for reading wallet data (without needing to acquire the write
 	/// lock).
-	fn read_wallet<T, F>(&mut self, f: F) -> Result<T, Error>
+	fn read_wallet<T, F>(&mut self, f: F) -> Result<T, libwallet::Error>
 	where
-		F: FnOnce(&mut Self) -> Result<T, Error>,
+		F: FnOnce(&mut Self) -> Result<T, libwallet::Error>,
 	{
 		self.read_or_create_paths()?;
 		f(self)
@@ -210,7 +211,7 @@ impl WalletBackend for FileWallet {
 	/// Note that due to the impossibility to do an actual file lock easily
 	/// across operating systems, this just creates a lock file with a "should
 	/// not exist" option.
-	fn with_wallet<T, F>(&mut self, f: F) -> Result<T, Error>
+	fn with_wallet<T, F>(&mut self, f: F) -> Result<T, libwallet::Error>
 	where
 		F: FnOnce(&mut Self) -> T,
 	{
@@ -242,7 +243,7 @@ impl WalletBackend for FileWallet {
 				);
 				return Err(
 					e.context(ErrorKind::FileWallet("Failed to acquire lock file"))
-						.into(),
+						.into()?,
 				);
 			}
 		}

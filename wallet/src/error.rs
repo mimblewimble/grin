@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Error types for libwallet
+//! Implementation specific error types
 use keychain;
 use libtx;
+use libwallet;
 use std::fmt::{self, Display};
 
 use core::core::transaction;
-use failure::Context;
+use failure::{Backtrace, Context, Fail};
 
 /// Error definition
-#[derive(Debug, Fail)]
+#[derive(Debug)]
 pub struct Error {
 	inner: Context<ErrorKind>,
 }
@@ -29,33 +30,14 @@ pub struct Error {
 /// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorKind {
-	/// Not enough funds
-	#[fail(display = "Not enough funds")]
-	NotEnoughFunds(u64),
-
-	/// Fee dispute
-	#[fail(display = "Fee dispute: sender fee {}, recipient fee {}", sender_fee, recipient_fee)]
-	FeeDispute {
-		/// sender fee
-		sender_fee: u64,
-		/// recipient fee
-		recipient_fee: u64,
-	},
-
-	/// Fee Exceeds amount
-	#[fail(display = "Fee exceeds amount: sender amount {}, recipient fee {}", sender_amount,
-	       recipient_fee)]
-	FeeExceedsAmount {
-		/// sender amount
-		sender_amount: u64,
-		/// recipient fee
-		recipient_fee: u64,
-	},
-
 
 	/// LibTX Error
 	#[fail(display = "LibTx Error")]
 	LibTX(libtx::ErrorKind),
+
+	/// LibWallet Error
+	#[fail(display = "LibWallet Error")]
+	LibWallet(libwallet::ErrorKind),
 
 	/// Keychain error
 	#[fail(display = "Keychain error")]
@@ -68,15 +50,6 @@ pub enum ErrorKind {
 	/// Secp Error
 	#[fail(display = "Secp error")]
 	Secp,
-
-	/// Error thrown by an implementor
-	#[fail(display = "Implementor error")]
-	Implementor(&'static str),
-	
-
-	/// Libwallet error TODO: Remove
-	#[fail(display = "LibWallet error")]
-	LibWalletError,
 
 	/// Filewallet error (TODO, get this out of here)
 	#[fail(display = "Wallet data error: {}", _0)]
@@ -102,10 +75,6 @@ pub enum ErrorKind {
 	#[fail(display = "Uri parsing error")]
 	Uri,
 
-	/// Signature error
-	#[fail(display = "Signature error")]
-	Signature(&'static str),
-
 	/// Attempt to use duplicate transaction id in separate transactions
 	#[fail(display = "Duplicate transaction ID error")]
 	DuplicateTransactionId,
@@ -123,6 +92,16 @@ pub enum ErrorKind {
 	GenericError(&'static str),
 }
 
+impl Fail for Error {
+	fn cause(&self) -> Option<&Fail> {
+		self.inner.cause()
+	}
+
+	fn backtrace(&self) -> Option<&Backtrace> {
+		self.inner.backtrace()
+	}
+}
+
 impl Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		Display::fmt(&self.inner, f)
@@ -133,6 +112,14 @@ impl Error {
 	/// get kind
 	pub fn kind(&self) -> ErrorKind {
 		self.inner.get_context().clone()
+	}
+	/// get cause
+	pub fn cause(&self) -> Option<&Fail> {
+		self.inner.cause()
+	}
+	/// get backtrace
+	pub fn backtrace(&self) -> Option<&Backtrace> {
+		self.inner.backtrace()
 	}
 }
 
@@ -162,6 +149,41 @@ impl From<transaction::Error> for Error {
 	fn from(error: transaction::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::Transaction(error)),
+		}
+	}
+}
+
+impl From<libwallet::Error> for Error {
+	fn from(error: libwallet::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::LibWallet(error.kind())),
+		}
+	}
+}
+
+impl From<libtx::Error> for Error {
+	fn from(error: libtx::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::LibTX(error.kind())),
+		}
+	}
+}
+
+/// Define a means for libwallet trait functions to convert
+/// implementation specific errors
+impl From<Error> for libwallet::Error {
+	fn from(error: Error) -> libwallet::Error {
+		let mut cause_str = "";
+		if error.cause().is_some(){
+			cause_str = &format!("{}", error.cause().unwrap());
+		}
+		let mut backtrace_str = "";
+		if error.backtrace().is_some(){
+			backtrace_str = &format!("{}", error.backtrace().unwrap());
+		}
+		let error_detail = &format!("{}{}", cause_str, backtrace_str);
+		libwallet::Error {
+			inner: Context::new(libwallet::ErrorKind::Implementor(error_detail)),
 		}
 	}
 }

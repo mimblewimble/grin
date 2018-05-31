@@ -21,7 +21,7 @@ use libtx::slate::Slate;
 use serde_json;
 use tokio_core::reactor;
 
-use libwallet::error::{Error, ErrorKind};
+use error::{Error, ErrorKind};
 use libwallet::types::*;
 use std::io;
 use util::LOGGER;

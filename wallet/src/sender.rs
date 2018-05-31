@@ -19,9 +19,9 @@ use core::ser;
 use failure::ResultExt;
 use keychain::{Identifier, Keychain};
 use libtx::{build, tx_fee};
-use libwallet::error::{Error, ErrorKind};
+use error::{Error, ErrorKind};
 use libwallet::types::WalletBackend;
-use libwallet::{selection, updater};
+use libwallet::{self, selection, updater};
 use receiver::TxWrapper;
 use util;
 use util::LOGGER;
@@ -93,7 +93,7 @@ pub fn issue_send_tx<T: WalletBackend>(
 		Ok(s) => s,
 		Err(e) => {
 			match e.kind() {
-				ErrorKind::FeeExceedsAmount {
+				libwallet::ErrorKind::FeeExceedsAmount {
 					sender_amount,
 					recipient_fee,
 				} => error!(
@@ -112,13 +112,11 @@ pub fn issue_send_tx<T: WalletBackend>(
 	};
 
 	let _ = slate
-		.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 0)
-		.context(ErrorKind::LibWalletError)?;
+		.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 0)?;
 
 	// Final transaction can be built by anyone at this stage
 	slate
-		.finalize(wallet.keychain())
-		.context(ErrorKind::LibWalletError)?;
+		.finalize(wallet.keychain())?;
 
 	// So let's post it
 	let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());

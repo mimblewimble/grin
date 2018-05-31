@@ -48,6 +48,7 @@ extern crate grin_util as util;
 
 pub mod client;
 pub mod file_wallet;
+mod error;
 mod handlers;
 mod info;
 pub mod libtx;
@@ -60,7 +61,7 @@ pub mod server;
 
 pub use file_wallet::{FileWallet, WalletConfig, WalletSeed};
 pub use info::{retrieve_info, show_info};
-pub use libwallet::error::{Error, ErrorKind};
+pub use error::{Error, ErrorKind};
 pub use libwallet::types::{BlockFees, CbData, WalletInfo, WalletReceiveRequest};
 pub use outputs::show_outputs;
 pub use receiver::WalletReceiver;
