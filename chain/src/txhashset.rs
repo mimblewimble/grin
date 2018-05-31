@@ -509,7 +509,8 @@ impl<'a> Extension<'a> {
 	/// prune MMR data.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
 		// A block is not valid if it has not been fully cut-through.
-		// So we can safely apply outputs first (we will not spend these in the same block).
+		// So we can safely apply outputs first (we will not spend these in the same
+		// block).
 		for out in &b.outputs {
 			self.apply_output(out)?;
 		}
