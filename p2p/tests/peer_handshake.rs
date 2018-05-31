@@ -17,7 +17,6 @@ extern crate grin_p2p as p2p;
 extern crate grin_pool as pool;
 extern crate grin_util as util;
 
-
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
