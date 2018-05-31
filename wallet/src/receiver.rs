@@ -28,9 +28,9 @@ use api;
 use core::consensus::reward;
 use core::core::{Output, TxKernel};
 use core::global;
+use error::Error;
 use failure::Fail;
 use libtx::{reward, slate::Slate};
-use error::Error;
 use libwallet::types::*;
 use libwallet::{keys, selection};
 use util::LOGGER;
@@ -61,17 +61,15 @@ where
 			selection::build_recipient_output_with_slate(wallet, slate).unwrap();
 
 		// fill public keys
-		let _ = slate
-			.fill_round_1(
-				wallet.keychain(),
-				&mut context.sec_key,
-				&context.sec_nonce,
-				1,
-			)?;
+		let _ = slate.fill_round_1(
+			wallet.keychain(),
+			&mut context.sec_key,
+			&context.sec_nonce,
+			1,
+		)?;
 
 		// perform partial sig
-		let _ = slate
-			.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)?;
+		let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)?;
 
 		// Save output in wallet
 		let _ = receiver_create_fn(wallet);

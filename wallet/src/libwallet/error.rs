@@ -52,7 +52,6 @@ pub enum ErrorKind {
 		recipient_fee: u64,
 	},
 
-
 	/// LibTX Error
 	#[fail(display = "LibTx Error")]
 	LibTX(libtx::ErrorKind),
@@ -72,7 +71,6 @@ pub enum ErrorKind {
 	/// Error thrown by an implementor
 	#[fail(display = "Implementor error")]
 	Implementor(&'static str),
-	
 
 	/// Libwallet error TODO: Remove
 	#[fail(display = "LibWallet error")]

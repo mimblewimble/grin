@@ -16,10 +16,10 @@ use api;
 use client;
 use core::core::amount_to_hr_string;
 use core::ser;
+use error::{Error, ErrorKind};
 use failure::ResultExt;
 use keychain::{Identifier, Keychain};
 use libtx::{build, tx_fee};
-use error::{Error, ErrorKind};
 use libwallet::types::WalletBackend;
 use libwallet::{self, selection, updater};
 use receiver::TxWrapper;
@@ -111,12 +111,10 @@ pub fn issue_send_tx<T: WalletBackend>(
 		}
 	};
 
-	let _ = slate
-		.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 0)?;
+	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 0)?;
 
 	// Final transaction can be built by anyone at this stage
-	slate
-		.finalize(wallet.keychain())?;
+	slate.finalize(wallet.keychain())?;
 
 	// So let's post it
 	let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());

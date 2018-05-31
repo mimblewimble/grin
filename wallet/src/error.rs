@@ -30,7 +30,6 @@ pub struct Error {
 /// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorKind {
-
 	/// LibTX Error
 	#[fail(display = "LibTx Error")]
 	LibTX(libtx::ErrorKind),
@@ -174,11 +173,11 @@ impl From<libtx::Error> for Error {
 impl From<Error> for libwallet::Error {
 	fn from(error: Error) -> libwallet::Error {
 		let mut cause_str = "";
-		if error.cause().is_some(){
+		if error.cause().is_some() {
 			cause_str = &format!("{}", error.cause().unwrap());
 		}
 		let mut backtrace_str = "";
-		if error.backtrace().is_some(){
+		if error.backtrace().is_some() {
 			backtrace_str = &format!("{}", error.backtrace().unwrap());
 		}
 		let error_detail = &format!("{}{}", cause_str, backtrace_str);

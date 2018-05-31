@@ -47,8 +47,8 @@ extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 
 pub mod client;
-pub mod file_wallet;
 mod error;
+pub mod file_wallet;
 mod handlers;
 mod info;
 pub mod libtx;
@@ -59,9 +59,9 @@ mod restore;
 mod sender;
 pub mod server;
 
+pub use error::{Error, ErrorKind};
 pub use file_wallet::{FileWallet, WalletConfig, WalletSeed};
 pub use info::{retrieve_info, show_info};
-pub use error::{Error, ErrorKind};
 pub use libwallet::types::{BlockFees, CbData, WalletInfo, WalletReceiveRequest};
 pub use outputs::show_outputs;
 pub use receiver::WalletReceiver;
