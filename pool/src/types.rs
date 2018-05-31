@@ -22,6 +22,18 @@ use core::consensus;
 use core::core::transaction;
 use core::core::transaction::Transaction;
 
+/// Dandelion relay timer
+const DANDELION_RELAY_SECS: u64 = 600;
+
+/// Dandelion emabargo timer
+const DANDELION_EMBARGO_SECS: u64 = 180;
+
+/// Dandelion patience timer
+const DANDELION_PATIENCE_SECS: u64 = 10;
+
+/// Dandelion stem probability (stem 90% of the time, fluff 10%).
+const DANDELION_STEM_PROBABILITY: usize = 90;
+
 /// Configuration for "Dandelion".
 /// Note: shared between p2p and pool.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -54,19 +66,19 @@ impl Default for DandelionConfig {
 }
 
 fn default_dandelion_relay_secs() -> u64 {
-	600
+	DANDELION_RELAY_SECS
 }
 
 fn default_dandelion_embargo_secs() -> u64 {
-	180
+	DANDELION_EMBARGO_SECS
 }
 
 fn default_dandelion_patience_secs() -> u64 {
-	10
+	DANDELION_PATIENCE_SECS
 }
 
 fn default_dandelion_stem_probability() -> usize {
-	90
+	DANDELION_STEM_PROBABILITY
 }
 
 /// Transaction pool configuration
