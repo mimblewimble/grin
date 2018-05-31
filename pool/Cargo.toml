@@ -15,6 +15,7 @@ time = "0.1"
 
 grin_core = { path = "../core" }
 grin_keychain = { path = "../keychain" }
+grin_store = { path = "../store" }
 grin_util = { path = "../util" }
 
 [dev-dependencies]

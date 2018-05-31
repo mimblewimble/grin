@@ -628,6 +628,7 @@ dependencies = [
  "grin_chain 0.2.0",
  "grin_core 0.2.0",
  "grin_keychain 0.2.0",
+ "grin_store 0.2.0",
  "grin_util 0.2.0",
  "grin_wallet 0.2.0",
  "rand 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",

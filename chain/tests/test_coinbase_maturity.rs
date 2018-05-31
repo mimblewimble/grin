@@ -127,10 +127,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
-	match chain.set_block_roots(&mut block, false) {
-		Err(Error::Transaction(transaction::Error::ImmatureCoinbase)) => (),
-		_ => panic!("expected ImmatureCoinbase error here"),
-	}
+	chain.set_block_roots(&mut block, false).unwrap();
 
 	// Confirm the tx attempting to spend the coinbase output
 	// is not valid at the current block height given the current chain state.

@@ -24,6 +24,7 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
+use chain::Chain;
 use chain::types::*;
 use core::consensus;
 use core::core::hash::Hashed;
