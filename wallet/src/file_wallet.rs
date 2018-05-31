@@ -18,13 +18,13 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::Path;
 use std::path::MAIN_SEPARATOR;
+use std::path::Path;
 
 use serde_json;
 use tokio_core::reactor;
-use tokio_retry::strategy::FibonacciBackoff;
 use tokio_retry::Retry;
+use tokio_retry::strategy::FibonacciBackoff;
 
 use failure::{Fail, ResultExt};
 
@@ -32,8 +32,8 @@ use keychain::{self, Keychain};
 use util;
 use util::LOGGER;
 
-use libwallet::types::*;
 use libwallet::error::{Error, ErrorKind};
+use libwallet::types::*;
 
 const DAT_FILE: &'static str = "wallet.dat";
 const BCK_FILE: &'static str = "wallet.bck";

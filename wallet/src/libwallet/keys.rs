@@ -14,8 +14,8 @@
 
 //! Wallet key management functions
 use keychain::Identifier;
-use libwallet::types::WalletBackend;
 use libwallet::error::Error;
+use libwallet::types::WalletBackend;
 
 /// Get our next available key
 pub fn new_output_key<T>(wallet: &mut T) -> Result<(Identifier, u32), Error>

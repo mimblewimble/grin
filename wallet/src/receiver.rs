@@ -19,9 +19,9 @@
 use std::sync::{Arc, RwLock};
 
 use bodyparser;
+use iron::Handler;
 use iron::prelude::*;
 use iron::status;
-use iron::Handler;
 use serde_json;
 
 use api;
@@ -30,9 +30,9 @@ use core::core::{Output, TxKernel};
 use core::global;
 use failure::{Fail, ResultExt};
 use libtx::{reward, slate::Slate};
+use libwallet::error::{Error, ErrorKind};
 use libwallet::types::*;
 use libwallet::{keys, selection};
-use libwallet::error::{Error, ErrorKind};
 use util::LOGGER;
 
 /// Dummy wrapper for the hex-encoded serialized transaction.

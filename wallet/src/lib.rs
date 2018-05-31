@@ -60,8 +60,8 @@ pub mod server;
 
 pub use file_wallet::{FileWallet, WalletConfig, WalletSeed};
 pub use info::{retrieve_info, show_info};
-pub use libwallet::types::{BlockFees, CbData, WalletInfo, WalletReceiveRequest};
 pub use libwallet::error::{Error, ErrorKind};
+pub use libwallet::types::{BlockFees, CbData, WalletInfo, WalletReceiveRequest};
 pub use outputs::show_outputs;
 pub use receiver::WalletReceiver;
 pub use restore::restore;

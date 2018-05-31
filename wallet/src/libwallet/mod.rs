@@ -25,9 +25,9 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
+pub mod error;
 pub mod keys;
 pub mod selection;
 pub mod sigcontext;
 pub mod types;
-pub mod error;
 pub mod updater;

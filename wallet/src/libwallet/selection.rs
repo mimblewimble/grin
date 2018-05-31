@@ -16,9 +16,9 @@
 
 use failure::ResultExt;
 use keychain::Identifier;
-use libtx::{build, slate::Slate, tx_fee};
-use libwallet::types::*;
+use libtx::{build, tx_fee, slate::Slate};
 use libwallet::error::{Error, ErrorKind};
+use libwallet::types::*;
 use libwallet::{keys, sigcontext};
 
 /// Initialise a transaction on the sender side, returns a corresponding
