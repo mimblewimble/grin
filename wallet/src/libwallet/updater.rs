@@ -22,6 +22,7 @@ use std::collections::hash_map::Entry;
 use api;
 use keychain::Identifier;
 use libwallet::types::*;
+use libwallet::error::{Error, ErrorKind};
 use util;
 use util::LOGGER;
 use util::secp::pedersen;

@@ -22,6 +22,7 @@ use serde_json;
 use core::ser;
 use failure::{Fail, ResultExt};
 use libwallet::types::*;
+use libwallet::error::{Error, ErrorKind};
 use receiver::receive_coinbase;
 use util;
 

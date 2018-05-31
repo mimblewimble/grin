@@ -33,6 +33,7 @@ use util;
 use util::LOGGER;
 
 use libwallet::types::*;
+use libwallet::error::{Error, ErrorKind};
 
 const DAT_FILE: &'static str = "wallet.dat";
 const BCK_FILE: &'static str = "wallet.bck";

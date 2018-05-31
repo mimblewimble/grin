@@ -32,6 +32,7 @@ use failure::{Fail, ResultExt};
 use libtx::{reward, slate::Slate};
 use libwallet::types::*;
 use libwallet::{keys, selection};
+use libwallet::error::{Error, ErrorKind};
 use util::LOGGER;
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
