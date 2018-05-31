@@ -16,15 +16,15 @@
 //! the wallet storage and update them.
 
 use failure::ResultExt;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use api;
 use keychain::Identifier;
 use libwallet::types::*;
 use util;
-use util::secp::pedersen;
 use util::LOGGER;
+use util::secp::pedersen;
 
 pub fn refresh_outputs<T>(wallet: &mut T) -> Result<(), Error>
 where
