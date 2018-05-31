@@ -65,12 +65,9 @@ fn default_dandelion_patience_secs() -> u64 {
 	10
 }
 
-
 fn default_dandelion_stem_probability() -> usize {
 	90
 }
-
-
 
 /// Transaction pool configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
