@@ -18,8 +18,8 @@
 //! enough, consensus-relevant constants and short functions should be kept
 //! here.
 
-use std::fmt;
 use std::cmp::max;
+use std::fmt;
 
 use core::target::Difficulty;
 use global;
