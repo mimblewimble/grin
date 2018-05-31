@@ -22,7 +22,7 @@ use time::now_utc;
 
 use core::core::hash::Hashed;
 use core::core::transaction;
-use p2p::DandelionConfig;
+use pool::DandelionConfig;
 use pool::{BlockChain, PoolEntryState, PoolError, TransactionPool, TxSource};
 use util::LOGGER;
 

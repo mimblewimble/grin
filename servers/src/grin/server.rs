@@ -161,7 +161,6 @@ impl Server {
 			config.db_root.clone(),
 			config.capabilities,
 			config.p2p_config.clone(),
-			config.p2p_dandelion_config(),
 			net_adapter.clone(),
 			genesis.hash(),
 			stop.clone(),
@@ -189,6 +188,7 @@ impl Server {
 			seed::connect_and_monitor(
 				p2p_server.clone(),
 				config.capabilities,
+				config.dandelion_config.clone(),
 				seeder,
 				stop.clone(),
 			);
@@ -232,7 +232,7 @@ impl Server {
 			"Starting dandelion monitor: {}", &config.api_http_addr
 		);
 		dandelion_monitor::monitor_transactions(
-			config.p2p_dandelion_config(),
+			config.dandelion_config.clone(),
 			tx_pool.clone(),
 			stop.clone(),
 		);

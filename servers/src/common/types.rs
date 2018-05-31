@@ -26,18 +26,6 @@ use pool;
 use store;
 use wallet;
 
-/// Dandelion relay timer
-const DANDELION_RELAY_SECS: u64 = 600;
-
-/// Dandelion emabargo timer
-const DANDELION_EMBARGO_SECS: u64 = 180;
-
-/// Dandelion patience timer
-const DANDELION_PATIENCE_SECS: u64 = 10;
-
-/// Dandelion stem probability (stem 90% of the time, fluff 10%).
-const DANDELION_STEM_PROBABILITY: usize = 90;
-
 /// Error type wrapping underlying module errors.
 #[derive(Debug)]
 pub enum Error {
@@ -135,54 +123,6 @@ impl Default for Seeding {
 	}
 }
 
-fn default_dandelion_stem_probability() -> usize {
-	DANDELION_STEM_PROBABILITY
-}
-
-fn default_dandelion_relay_secs() -> u64 {
-	DANDELION_RELAY_SECS
-}
-
-fn default_dandelion_embargo_secs() -> u64 {
-	DANDELION_EMBARGO_SECS
-}
-
-fn default_dandelion_patience_secs() -> u64 {
-	DANDELION_PATIENCE_SECS
-}
-
-/// Dandelion config.
-/// Note: Used by both p2p and pool components.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DandelionConfig {
-	/// Choose new Dandelion relay peer every n secs.
-	#[serde = "default_dandelion_relay_secs"]
-	pub relay_secs: u64,
-	/// Dandelion embargo, fluff and broadcast tx if not seen on network before
-	/// embargo expires.
-	#[serde = "default_dandelion_embargo_secs"]
-	pub embargo_secs: u64,
-	/// Dandelion patience timer, fluff/stem processing runs every n secs.
-	/// Tx aggregation happens on stem txs received within this window.
-	#[serde = "default_dandelion_patience_secs"]
-	pub patience_secs: u64,
-	/// Dandelion stem probability.
-	#[serde = "default_dandelion_stem_probability"]
-	pub stem_probability: usize,
-}
-
-/// Default address for peer-to-peer connections.
-impl Default for DandelionConfig {
-	fn default() -> DandelionConfig {
-		DandelionConfig {
-			relay_secs: default_dandelion_relay_secs(),
-			embargo_secs: default_dandelion_embargo_secs(),
-			patience_secs: default_dandelion_patience_secs(),
-			stem_probability: default_dandelion_stem_probability(),
-		}
-	}
-}
-
 /// Full server configuration, aggregating configurations required for the
 /// different components.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -229,7 +169,7 @@ pub struct ServerConfig {
 
 	/// Dandelion configuration
 	#[serde(default)]
-	pub dandelion_config: DandelionConfig,
+	pub dandelion_config: pool::DandelionConfig,
 
 	/// Whether to skip the sync timeout on startup
 	/// (To assist testing on solo chains)
@@ -249,28 +189,6 @@ pub struct ServerConfig {
 	pub test_miner_wallet_url: Option<String>,
 }
 
-impl ServerConfig {
-	/// Adapter for configuring Dandelion on the pool component.
-	pub fn pool_dandelion_config(&self) -> pool::DandelionConfig {
-		pool::DandelionConfig {
-			relay_secs: self.dandelion_config.relay_secs,
-			embargo_secs: self.dandelion_config.embargo_secs,
-			patience_secs: self.dandelion_config.patience_secs,
-			stem_probability: self.dandelion_config.stem_probability,
-		}
-	}
-
-	/// Adapter for configuring Dandelion on the p2p component.
-	pub fn p2p_dandelion_config(&self) -> p2p::DandelionConfig {
-		p2p::DandelionConfig {
-			relay_secs: self.dandelion_config.relay_secs,
-			embargo_secs: self.dandelion_config.embargo_secs,
-			patience_secs: self.dandelion_config.patience_secs,
-			stem_probability: self.dandelion_config.stem_probability,
-		}
-	}
-}
-
 impl Default for ServerConfig {
 	fn default() -> ServerConfig {
 		ServerConfig {
@@ -280,7 +198,7 @@ impl Default for ServerConfig {
 			seeding_type: Seeding::default(),
 			seeds: None,
 			p2p_config: p2p::P2PConfig::default(),
-			dandelion_config: DandelionConfig::default(),
+			dandelion_config: pool::DandelionConfig::default(),
 			stratum_mining_config: Some(StratumServerConfig::default()),
 			chain_type: ChainTypes::default(),
 			archive_mode: None,

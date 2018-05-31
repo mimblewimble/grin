@@ -24,20 +24,53 @@ use core::core::transaction::Transaction;
 
 /// Configuration for "Dandelion".
 /// Note: shared between p2p and pool.
-/// Look in top-level server config for info on configuring these parameters.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DandelionConfig {
 	/// Choose new Dandelion relay peer every n secs.
+	#[serde = "default_relay_secs"]
 	pub relay_secs: u64,
 	/// Dandelion embargo, fluff and broadcast tx if not seen on network before
 	/// embargo expires.
+	#[serde = "default_embargo_secs"]
 	pub embargo_secs: u64,
 	/// Dandelion patience timer, fluff/stem processing runs every n secs.
 	/// Tx aggregation happens on stem txs received within this window.
+	#[serde = "default_patience_secs"]
 	pub patience_secs: u64,
 	/// Dandelion stem probability (stem 90% of the time, fluff 10% etc.)
+	#[serde = "default_stem_probability"]
 	pub stem_probability: usize,
 }
+
+impl Default for DandelionConfig {
+	fn default() -> DandelionConfig {
+		DandelionConfig {
+			relay_secs: default_dandelion_relay_secs(),
+			embargo_secs: default_dandelion_embargo_secs(),
+			patience_secs: default_dandelion_patience_secs(),
+			stem_probability: default_dandelion_stem_probability(),
+		}
+	}
+}
+
+fn default_dandelion_relay_secs() -> u64 {
+	600
+}
+
+fn default_dandelion_embargo_secs() -> u64 {
+	180
+}
+
+fn default_dandelion_patience_secs() -> u64 {
+	10
+}
+
+
+fn default_dandelion_stem_probability() -> usize {
+	90
+}
+
+
 
 /// Transaction pool configuration
 #[derive(Clone, Debug, Serialize, Deserialize)]
