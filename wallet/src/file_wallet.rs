@@ -100,7 +100,7 @@ impl WalletSeed {
 
 	pub fn derive_keychain(&self, password: &str) -> Result<keychain::Keychain, Error> {
 		let seed = blake2::blake2b::blake2b(64, &password.as_bytes(), &self.0);
-		let result = keychain::Keychain::from_seed(seed.as_bytes()).context(ErrorKind::Keychain)?;
+		let result = keychain::Keychain::from_seed(seed.as_bytes())?;
 		Ok(result)
 	}
 

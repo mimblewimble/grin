@@ -49,7 +49,7 @@ bitflags! {
 }
 
 /// Errors thrown by Block validation
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Eq, Debug, PartialEq)]
 pub enum Error {
 	/// Underlying Secp256k1 error (signature validation or invalid public key
 	/// typically)

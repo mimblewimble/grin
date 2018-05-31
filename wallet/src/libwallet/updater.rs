@@ -27,6 +27,8 @@ use util;
 use util::LOGGER;
 use util::secp::pedersen;
 
+/// Refreshes the outputs in a wallet with the latest information
+/// from a node
 pub fn refresh_outputs<T>(wallet: &mut T) -> Result<(), Error>
 where
 	T: WalletBackend,
@@ -132,8 +134,7 @@ where
 			.filter(|x| x.root_key_id == root_key_id && x.status != OutputStatus::Spent);
 		for out in unspents {
 			let commit = keychain
-				.commit_with_key_index(out.value, out.n_child)
-				.context(ErrorKind::Keychain)?;
+				.commit_with_key_index(out.value, out.n_child)?;
 			wallet_outputs.insert(commit, out.key_id.clone());
 		}
 		Ok(())
@@ -157,8 +158,7 @@ where
 				&& x.status == OutputStatus::Unspent
 		}) {
 			let commit = keychain
-				.commit_with_key_index(out.value, out.n_child)
-				.context(ErrorKind::Keychain)?;
+				.commit_with_key_index(out.value, out.n_child)?;
 			wallet_outputs.insert(commit, out.key_id.clone());
 		}
 		Ok(())

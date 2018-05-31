@@ -23,13 +23,15 @@
 
 pub mod aggsig;
 pub mod build;
-pub mod error;
+mod error;
 pub mod proof;
 pub mod reward;
 pub mod slate;
 
 use core::consensus;
 use core::core::Transaction;
+
+pub use libtx::error::{Error, ErrorKind};
 
 const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
 

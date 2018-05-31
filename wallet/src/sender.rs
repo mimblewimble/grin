@@ -171,8 +171,8 @@ pub fn issue_burn_tx<T: WalletBackend>(
 	parts.push(build::output(amount - fee, Identifier::zero()));
 
 	// finalize the burn transaction and send
-	let tx_burn = build::transaction(parts, &keychain).context(ErrorKind::Keychain)?;
-	tx_burn.validate().context(ErrorKind::Transaction)?;
+	let tx_burn = build::transaction(parts, &keychain)?;
+	tx_burn.validate()?;
 
 	let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
 	let url = format!("{}/v1/pool/push", wallet.node_url());

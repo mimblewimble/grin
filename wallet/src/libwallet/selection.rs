@@ -304,8 +304,7 @@ where
 	for coin in coins {
 		let key_id = wallet
 			.keychain()
-			.derive_key_id(coin.n_child)
-			.context(ErrorKind::Keychain)?;
+			.derive_key_id(coin.n_child)?;
 		if coin.is_coinbase {
 			let block = coin.block.clone();
 			let merkle_proof = coin.merkle_proof.clone();

@@ -14,7 +14,10 @@
 
 //! Error types for libwallet
 use std::fmt::{self, Display};
+use libtx;
+use keychain;
 
+use core::core::transaction;
 use failure::{Backtrace, Context, Fail};
 
 /// Error definition
@@ -24,7 +27,7 @@ pub struct Error {
 }
 
 /// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
+#[derive(Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorKind {
 	/// Not enough funds
 	#[fail(display = "Not enough funds")]
@@ -49,13 +52,17 @@ pub enum ErrorKind {
 		recipient_fee: u64,
 	},
 
+	/// LibTX Error
+	#[fail(display = "LibTx Error")]
+	LibTX(libtx::ErrorKind),
+
 	/// Keychain error
 	#[fail(display = "Keychain error")]
-	Keychain,
+	Keychain(keychain::Error),
 
 	/// Transaction Error
 	#[fail(display = "Transaction error")]
-	Transaction,
+	Transaction(transaction::Error),
 
 	/// Secp Error
 	#[fail(display = "Secp error")]
@@ -129,7 +136,7 @@ impl Display for Error {
 impl Error {
 	/// get kind
 	pub fn kind(&self) -> ErrorKind {
-		*self.inner.get_context()
+		self.inner.get_context().clone()
 	}
 }
 
@@ -144,5 +151,21 @@ impl From<ErrorKind> for Error {
 impl From<Context<ErrorKind>> for Error {
 	fn from(inner: Context<ErrorKind>) -> Error {
 		Error { inner: inner }
+	}
+}
+
+impl From<keychain::Error> for Error {
+	fn from(error: keychain::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::Keychain(error)),
+		}
+	}
+}
+
+impl From<transaction::Error> for Error {
+	fn from(error: transaction::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::Transaction(error)),
+		}
 	}
 }
