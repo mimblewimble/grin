@@ -77,13 +77,12 @@ pub fn issue_send_tx<T: WalletBackend>(
 	// Generate a kernel offset and subtract from our context's secret key. Store
 	// the offset in the slate's transaction kernel, and adds our public key
 	// information to the slate
-	let _ = slate
-		.fill_round_1(
-			wallet.keychain(),
-			&mut context.sec_key,
-			&context.sec_nonce,
-			0,
-		)?;
+	let _ = slate.fill_round_1(
+		wallet.keychain(),
+		&mut context.sec_key,
+		&context.sec_nonce,
+		0,
+	)?;
 
 	let url = format!("{}/v1/receive/transaction", &dest);
 	debug!(LOGGER, "Posting partial transaction to {}", url);

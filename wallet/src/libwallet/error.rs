@@ -31,7 +31,7 @@ pub struct Error {
 pub enum ErrorKind {
 	/// Not enough funds
 	#[fail(display = "Not enough funds. Required: {}, Available: {}", needed, available)]
-	NotEnoughFunds{
+	NotEnoughFunds {
 		/// available funds
 		available: u64,
 		/// Needed funds
@@ -144,7 +144,8 @@ impl Error {
 	/// get backtrace
 	pub fn backtrace(&self) -> Option<&Backtrace> {
 		self.inner.backtrace()
-	}}
+	}
+}
 
 impl From<ErrorKind> for Error {
 	fn from(kind: ErrorKind) -> Error {
