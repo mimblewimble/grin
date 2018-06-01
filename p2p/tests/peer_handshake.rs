@@ -50,10 +50,10 @@ fn peer_handshake() {
 		..p2p::P2PConfig::default()
 	};
 	let dandelion_config = pool::DandelionConfig {
-		relay_secs: 600,
-		embargo_secs: 30,
-		patience_secs: 10,
-		stem_probability: 90,
+		relay_secs: Some(600),
+		embargo_secs: Some(30),
+		patience_secs: Some(10),
+		stem_probability: Some(90),
 	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
 	let server = Arc::new(
