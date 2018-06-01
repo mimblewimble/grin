@@ -15,9 +15,9 @@
 //! Rangeproof library functions
 
 use blake2;
-use keychain::extkey::Identifier;
 use keychain::Keychain;
-use libtx::error::Error;
+use keychain::extkey::Identifier;
+use libtx::error::{Error, ErrorKind};
 use util::logger::LOGGER;
 use util::secp::key::SecretKey;
 use util::secp::pedersen::{Commitment, ProofInfo, ProofMessage, RangeProof};
@@ -34,9 +34,9 @@ fn create_nonce(k: &Keychain, commit: &Commitment) -> Result<SecretKey, Error> {
 	}
 	match SecretKey::from_slice(k.secp(), &ret_val) {
 		Ok(sk) => Ok(sk),
-		Err(e) => Err(Error::RangeProof(
+		Err(e) => Err(ErrorKind::RangeProof(
 			format!("Unable to create nonce: {:?}", e).to_string(),
-		)),
+		))?,
 	}
 }
 
@@ -59,9 +59,9 @@ pub fn create(
 	} else {
 		if msg.len() != 64 {
 			error!(LOGGER, "Bullet proof message must be 64 bytes.");
-			return Err(Error::RangeProof(
+			return Err(ErrorKind::RangeProof(
 				"Bullet proof message must be 64 bytes".to_string(),
-			));
+			))?;
 		}
 	}
 	return Ok(k.secp()

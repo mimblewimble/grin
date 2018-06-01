@@ -14,9 +14,9 @@
 
 //! Selection of inputs for building transactions
 
-use failure::ResultExt;
 use keychain::Identifier;
-use libtx::{build, slate::Slate, tx_fee};
+use libtx::{build, tx_fee, slate::Slate};
+use libwallet::error::{Error, ErrorKind};
 use libwallet::types::*;
 use libwallet::{keys, sigcontext};
 
@@ -64,9 +64,7 @@ where
 
 	let keychain = wallet.keychain().clone();
 
-	let blinding = slate
-		.add_transaction_elements(&keychain, elems)
-		.context(ErrorKind::LibWalletError)?;
+	let blinding = slate.add_transaction_elements(&keychain, elems)?;
 	// Create our own private context
 	let mut context = sigcontext::Context::new(
 		wallet.keychain().secp(),
@@ -133,9 +131,8 @@ where
 
 	let keychain = wallet.keychain().clone();
 
-	let blinding = slate
-		.add_transaction_elements(&keychain, vec![build::output(amount, key_id.clone())])
-		.context(ErrorKind::LibWalletError)?;
+	let blinding =
+		slate.add_transaction_elements(&keychain, vec![build::output(amount, key_id.clone())])?;
 
 	// Add blinding sum to our context
 	let mut context = sigcontext::Context::new(
@@ -228,7 +225,10 @@ where
 	let mut amount_with_fee = amount + fee;
 
 	if total == 0 {
-		return Err(ErrorKind::NotEnoughFunds(total as u64))?;
+		return Err(ErrorKind::NotEnoughFunds {
+			available: 0,
+			needed: amount_with_fee as u64,
+		})?;
 	}
 
 	// Check if we need to use a change address
@@ -241,7 +241,10 @@ where
 		while total < amount_with_fee {
 			// End the loop if we have selected all the outputs and still not enough funds
 			if coins.len() == max_outputs {
-				return Err(ErrorKind::NotEnoughFunds(total as u64))?;
+				return Err(ErrorKind::NotEnoughFunds {
+					available: total as u64,
+					needed: amount_with_fee as u64,
+				})?;
 			}
 
 			// select some spendable coins from the wallet
@@ -301,10 +304,7 @@ where
 
 	// build inputs using the appropriate derived key_ids
 	for coin in coins {
-		let key_id = wallet
-			.keychain()
-			.derive_key_id(coin.n_child)
-			.context(ErrorKind::Keychain)?;
+		let key_id = wallet.keychain().derive_key_id(coin.n_child)?;
 		if coin.is_coinbase {
 			let block = coin.block.clone();
 			let merkle_proof = coin.merkle_proof.clone();

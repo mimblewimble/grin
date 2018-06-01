@@ -14,12 +14,13 @@
 use std::sync::{Arc, RwLock};
 
 use bodyparser;
+use iron::Handler;
 use iron::prelude::*;
 use iron::status;
-use iron::Handler;
 use serde_json;
 
 use core::ser;
+use error::{Error, ErrorKind};
 use failure::{Fail, ResultExt};
 use libwallet::types::*;
 use receiver::receive_coinbase;

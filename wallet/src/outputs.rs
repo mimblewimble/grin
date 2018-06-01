@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use checker;
 use core::core;
-use libwallet::types::*;
+use libwallet::types::{OutputStatus, WalletBackend};
+use libwallet::updater;
 use prettytable;
 use std::io::prelude::*;
 use term;
 
 pub fn show_outputs<T: WalletBackend>(wallet: &mut T, show_spent: bool) {
 	let root_key_id = wallet.keychain().clone().root_key_id();
-	let result = checker::refresh_outputs(wallet);
+	let result = updater::refresh_outputs(wallet);
 
 	// just read the wallet here, no need for a write lock
 	let _ = wallet.read_wallet(|wallet_data| {
 		// get the current height via the api
 		// if we cannot get the current height use the max height known to the wallet
-		let current_height = match checker::get_tip_from_node(wallet_data.node_url()) {
+		let current_height = match updater::get_tip_from_node(wallet_data.node_url()) {
 			Ok(tip) => tip.height,
 			Err(_) => match wallet_data.outputs().values().map(|out| out.height).max() {
 				Some(height) => height,

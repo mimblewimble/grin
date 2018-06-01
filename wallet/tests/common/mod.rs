@@ -13,8 +13,8 @@
 // limitations under the License.
 
 //! Common functions to facilitate wallet, walletlib and transaction testing
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
@@ -29,7 +29,8 @@ use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel
 use core::{consensus, global, pow};
 use wallet::file_wallet::*;
 use wallet::libwallet::types::*;
-use wallet::{checker, BlockFees};
+use wallet::libwallet::updater;
+use wallet::libwallet::{Error, ErrorKind};
 
 use util::secp::pedersen;
 
@@ -39,7 +40,7 @@ pub fn refresh_output_state_local<T: WalletBackend>(
 	wallet: &mut T,
 	chain: &chain::Chain,
 ) -> Result<(), Error> {
-	let wallet_outputs = checker::map_wallet_outputs(wallet)?;
+	let wallet_outputs = updater::map_wallet_outputs(wallet)?;
 	let chain_outputs: Vec<Option<api::Output>> = wallet_outputs
 		.keys()
 		.map(|k| match get_output_local(chain, &k) {
@@ -56,7 +57,7 @@ pub fn refresh_output_state_local<T: WalletBackend>(
 			None => {}
 		}
 	}
-	checker::apply_api_outputs(wallet, &wallet_outputs, &api_outputs)?;
+	updater::apply_api_outputs(wallet, &wallet_outputs, &api_outputs)?;
 	Ok(())
 }
 
@@ -119,7 +120,9 @@ fn get_output_local(
 			return Ok(api::Output::new(&commit));
 		}
 	}
-	Err(ErrorKind::Transaction)?
+	Err(ErrorKind::GenericError(
+		"Can't get output from local instance of chain",
+	))?
 }
 
 /// Adds a block with a given reward to the chain and mines it

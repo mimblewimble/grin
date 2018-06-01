@@ -13,10 +13,10 @@
 // limitations under the License.
 //! Aggsig helper functions used in transaction creation.. should be only
 //! interface into the underlying secp library
+use keychain::Keychain;
 use keychain::blind::BlindingFactor;
 use keychain::extkey::Identifier;
-use keychain::Keychain;
-use libtx::error::Error;
+use libtx::error::{Error, ErrorKind};
 use util::kernel_sig_msg;
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::Commitment;
@@ -64,7 +64,9 @@ pub fn verify_partial_sig(
 ) -> Result<(), Error> {
 	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
 	if !verify_single(secp, sig, &msg, Some(&pub_nonce_sum), pubkey, true) {
-		return Err(Error::Signature("Signature validation error".to_string()));
+		Err(ErrorKind::Signature(
+			"Signature validation error".to_string(),
+		))?
 	}
 	Ok(())
 }
@@ -92,7 +94,9 @@ pub fn verify_single_from_commit(
 	// one is valid)
 	let pubkey = commit.to_pubkey(secp)?;
 	if !verify_single(secp, sig, &msg, None, &pubkey, false) {
-		return Err(Error::Signature("Signature validation error".to_string()));
+		Err(ErrorKind::Signature(
+			"Signature validation error".to_string(),
+		))?
 	}
 	Ok(())
 }
@@ -107,7 +111,9 @@ pub fn verify_sig_build_msg(
 ) -> Result<(), Error> {
 	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
 	if !verify_single(secp, sig, &msg, None, pubkey, true) {
-		return Err(Error::Signature("Signature validation error".to_string()));
+		Err(ErrorKind::Signature(
+			"Signature validation error".to_string(),
+		))?
 	}
 	Ok(())
 }

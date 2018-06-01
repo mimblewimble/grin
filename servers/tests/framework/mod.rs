@@ -303,7 +303,7 @@ impl LocalServerContainer {
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let mut wallet = FileWallet::new(config.clone(), keychain)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
-		wallet::retrieve_info(&mut wallet)
+		wallet::libwallet::updater::retrieve_info(&mut wallet).unwrap()
 	}
 
 	pub fn send_amount_to(
@@ -342,17 +342,9 @@ impl LocalServerContainer {
 				dest,
 				selection_strategy,
 			),
-			Err(e) => match e.kind() {
-				wallet::ErrorKind::NotEnoughFunds(available) => {
-					println!(
-						"Tx not sent: insufficient funds (max: {})",
-						core::core::amount_to_hr_string(available),
-					);
-				}
-				_ => {
-					println!("Tx not sent to {}: {:?}", dest, e);
-				}
-			},
+			Err(e) => {
+				println!("Tx not sent to {}: {:?}", dest, e);
+			}
 		};
 	}
 

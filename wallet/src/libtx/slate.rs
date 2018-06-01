@@ -19,11 +19,11 @@ use uuid::Uuid;
 
 use core::core::{amount_to_hr_string, Committed, Transaction};
 use keychain::{BlindSum, BlindingFactor, Keychain};
-use libtx::error::Error;
+use libtx::error::{Error, ErrorKind};
 use libtx::{aggsig, build, tx_fee};
 
-use util::secp::key::{PublicKey, SecretKey};
 use util::secp::Signature;
+use util::secp::key::{PublicKey, SecretKey};
 use util::{secp, LOGGER};
 
 /// Public data for each participant in the slate
@@ -171,7 +171,7 @@ impl Slate {
 			.collect();
 		match PublicKey::from_combination(secp, pub_nonces) {
 			Ok(k) => Ok(k),
-			Err(e) => Err(Error::Secp(e)),
+			Err(e) => Err(ErrorKind::Secp(e))?,
 		}
 	}
 
@@ -183,7 +183,7 @@ impl Slate {
 			.collect();
 		match PublicKey::from_combination(secp, pub_blinds) {
 			Ok(k) => Ok(k),
-			Err(e) => Err(Error::Secp(e)),
+			Err(e) => Err(ErrorKind::Secp(e))?,
 		}
 	}
 
@@ -253,9 +253,9 @@ impl Slate {
 			None,
 		);
 		if fee > self.tx.fee() {
-			return Err(Error::Fee(
+			return Err(ErrorKind::Fee(
 				format!("Fee Dispute Error: {}, {}", self.tx.fee(), fee,).to_string(),
-			));
+			))?;
 		}
 
 		if fee > self.amount + self.fee {
@@ -265,7 +265,7 @@ impl Slate {
 				amount_to_hr_string(self.amount + self.fee)
 			);
 			info!(LOGGER, "{}", reason);
-			return Err(Error::Fee(reason.to_string()));
+			return Err(ErrorKind::Fee(reason.to_string()))?;
 		}
 
 		Ok(())

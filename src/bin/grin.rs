@@ -51,7 +51,7 @@ use core::core::amount_to_hr_string;
 use core::global;
 use tui::ui;
 use util::{init_logger, LoggingConfig, LOGGER};
-use wallet::FileWallet;
+use wallet::{libwallet, FileWallet};
 
 // include build information
 pub mod built_info {
@@ -586,30 +586,25 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					dest,
 					selection_strategy,
 				),
-				Err(e) => match e.kind() {
-					wallet::ErrorKind::NotEnoughFunds(available) => {
-						error!(
-							LOGGER,
-							"Tx not sent: insufficient funds (max: {})",
-							amount_to_hr_string(available),
-						);
-					}
-					wallet::ErrorKind::FeeExceedsAmount {
-						sender_amount,
-						recipient_fee,
-					} => {
-						error!(
-								LOGGER,
-								"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
-								amount_to_hr_string(recipient_fee),
-								amount_to_hr_string(sender_amount)
-							);
-					}
-					_ => {
-						error!(LOGGER, "Tx not sent: {:?}", e);
-					}
-				},
-			};
+				Err(e) => {
+					error!(LOGGER, "Tx not sent: {}", e.cause());
+					match e.downcast::<libwallet::Error>() {
+						Ok(le) => {
+							match le.kind() {
+								// user errors, don't backtrace
+								libwallet::ErrorKind::NotEnoughFunds { .. } => {}
+								libwallet::ErrorKind::FeeDispute { .. } => {}
+								libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
+								_ => {
+									// otherwise give full dump
+									error!(LOGGER, "Backtrace: {}", le.backtrace().unwrap());
+								}
+							};
+						}
+						_ => {}
+					};
+				}
+			}
 		}
 		("burn", Some(send_args)) => {
 			let amount = send_args
@@ -626,13 +621,19 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			wallet::issue_burn_tx(&mut wallet, amount, minimum_confirmations, max_outputs).unwrap();
 		}
 		("info", Some(_)) => {
-			wallet::show_info(&mut wallet);
+			let res = wallet::show_info(&mut wallet);
+			if let Err(e) = res {
+				println!("Could not get wallet info: {}", e);
+			}
 		}
 		("outputs", Some(_)) => {
 			wallet::show_outputs(&mut wallet, show_spent);
 		}
 		("restore", Some(_)) => {
-			let _ = wallet::restore(&mut wallet);
+			let res = wallet.restore();
+			if let Err(e) = res {
+				println!("Could not restore wallet: {}", e);
+			}
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}

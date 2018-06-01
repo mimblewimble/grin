@@ -13,15 +13,14 @@
 // limitations under the License.
 
 use api;
-use checker;
 use client;
-use core::core::amount_to_hr_string;
 use core::ser;
-use failure::ResultExt;
+use error::{Error, ErrorKind};
+use failure::{self, ResultExt};
 use keychain::{Identifier, Keychain};
 use libtx::{build, tx_fee};
-use libwallet::selection;
-use libwallet::types::*;
+use libwallet::types::WalletBackend;
+use libwallet::{selection, updater};
 use receiver::TxWrapper;
 use util;
 use util::LOGGER;
@@ -38,7 +37,7 @@ pub fn issue_send_tx<T: WalletBackend>(
 	max_outputs: usize,
 	selection_strategy_is_use_all: bool,
 	fluff: bool,
-) -> Result<(), Error> {
+) -> Result<(), failure::Error> {
 	// TODO: Stdout option, probably in a separate implementation
 	if &dest[..4] != "http" {
 		panic!(
@@ -47,13 +46,13 @@ pub fn issue_send_tx<T: WalletBackend>(
 		);
 	}
 
-	checker::refresh_outputs(wallet)?;
+	updater::refresh_outputs(wallet)?;
 
 	// Get lock height
-	let chain_tip = checker::get_tip_from_node(wallet.node_url())?;
+	let chain_tip = updater::get_tip_from_node(wallet.node_url())?;
 	let current_height = chain_tip.height;
 	// ensure outputs we're selecting are up to date
-	checker::refresh_outputs(wallet)?;
+	updater::refresh_outputs(wallet)?;
 
 	let lock_height = current_height;
 
@@ -73,52 +72,35 @@ pub fn issue_send_tx<T: WalletBackend>(
 		lock_height,
 		max_outputs,
 		selection_strategy_is_use_all,
-	).unwrap();
+	)?;
 
 	// Generate a kernel offset and subtract from our context's secret key. Store
 	// the offset in the slate's transaction kernel, and adds our public key
 	// information to the slate
-	let _ = slate
-		.fill_round_1(
-			wallet.keychain(),
-			&mut context.sec_key,
-			&context.sec_nonce,
-			0,
-		)
-		.unwrap();
+	let _ = slate.fill_round_1(
+		wallet.keychain(),
+		&mut context.sec_key,
+		&context.sec_nonce,
+		0,
+	)?;
 
 	let url = format!("{}/v1/receive/transaction", &dest);
 	debug!(LOGGER, "Posting partial transaction to {}", url);
 	let mut slate = match client::send_slate(&url, &slate, fluff) {
 		Ok(s) => s,
 		Err(e) => {
-			match e.kind() {
-				ErrorKind::FeeExceedsAmount {
-					sender_amount,
-					recipient_fee,
-				} => error!(
-						LOGGER,
-						"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
-						amount_to_hr_string(recipient_fee),
-						amount_to_hr_string(sender_amount)
-					),
-				_ => error!(
-					LOGGER,
-					"Communication with receiver failed on SenderInitiation send. Aborting transaction"
-				),
-			}
-			return Err(e);
+			error!(
+				LOGGER,
+				"Communication with receiver failed on SenderInitiation send. Aborting transaction"
+			);
+			return Err(e)?;
 		}
 	};
 
-	let _ = slate
-		.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 0)
-		.context(ErrorKind::LibWalletError)?;
+	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 0)?;
 
 	// Final transaction can be built by anyone at this stage
-	slate
-		.finalize(wallet.keychain())
-		.context(ErrorKind::LibWalletError)?;
+	slate.finalize(wallet.keychain())?;
 
 	// So let's post it
 	let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
@@ -143,10 +125,10 @@ pub fn issue_burn_tx<T: WalletBackend>(
 ) -> Result<(), Error> {
 	let keychain = &Keychain::burn_enabled(wallet.keychain(), &Identifier::zero());
 
-	let chain_tip = checker::get_tip_from_node(wallet.node_url())?;
+	let chain_tip = updater::get_tip_from_node(wallet.node_url())?;
 	let current_height = chain_tip.height;
 
-	let _ = checker::refresh_outputs(wallet);
+	let _ = updater::refresh_outputs(wallet);
 
 	let key_id = keychain.root_key_id();
 
@@ -171,8 +153,8 @@ pub fn issue_burn_tx<T: WalletBackend>(
 	parts.push(build::output(amount - fee, Identifier::zero()));
 
 	// finalize the burn transaction and send
-	let tx_burn = build::transaction(parts, &keychain).context(ErrorKind::Keychain)?;
-	tx_burn.validate().context(ErrorKind::Transaction)?;
+	let tx_burn = build::transaction(parts, &keychain)?;
+	tx_burn.validate()?;
 
 	let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
 	let url = format!("{}/v1/pool/push", wallet.node_url());
