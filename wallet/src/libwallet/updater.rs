@@ -257,3 +257,60 @@ pub fn get_tip_from_node(addr: &str) -> Result<api::Tip, Error> {
 		.context(ErrorKind::Node)
 		.map_err(|e| e.into())
 }
+
+/// Retrieve summar info about the wallet
+pub fn retrieve_info<T>(wallet: &mut T) -> Result<WalletInfo, Error>
+where
+	T: WalletBackend,
+{
+	let result = refresh_outputs(wallet);
+
+	let ret_val = wallet.read_wallet(|wallet_data| {
+		let (current_height, from) = match get_tip_from_node(&wallet_data.node_url()) {
+			Ok(tip) => (tip.height, "from server node"),
+			Err(_) => match wallet_data.outputs().values().map(|out| out.height).max() {
+				Some(height) => (height, "from wallet"),
+				None => (0, "node/wallet unavailable"),
+			},
+		};
+		let mut unspent_total = 0;
+		let mut unspent_but_locked_total = 0;
+		let mut unconfirmed_total = 0;
+		let mut locked_total = 0;
+		for out in wallet_data
+			.outputs()
+			.clone()
+			.values()
+			.filter(|out| out.root_key_id == wallet_data.keychain().root_key_id())
+		{
+			if out.status == OutputStatus::Unspent {
+				unspent_total += out.value;
+				if out.lock_height > current_height {
+					unspent_but_locked_total += out.value;
+				}
+			}
+			if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
+				unconfirmed_total += out.value;
+			}
+			if out.status == OutputStatus::Locked {
+				locked_total += out.value;
+			}
+		}
+
+		let mut data_confirmed = true;
+		if let Err(_) = result {
+			data_confirmed = false;
+		}
+		Ok(WalletInfo {
+			current_height: current_height,
+			total: unspent_total + unconfirmed_total,
+			amount_awaiting_confirmation: unconfirmed_total,
+			amount_confirmed_but_locked: unspent_but_locked_total,
+			amount_currently_spendable: unspent_total - unspent_but_locked_total,
+			amount_locked: locked_total,
+			data_confirmed: data_confirmed,
+			data_confirmed_from: String::from(from),
+		})
+	});
+	ret_val
+}

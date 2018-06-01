@@ -303,7 +303,7 @@ impl LocalServerContainer {
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let mut wallet = FileWallet::new(config.clone(), keychain)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
-		wallet::retrieve_info(&mut wallet)
+		wallet::libwallet::updater::retrieve_info(&mut wallet).unwrap()
 	}
 
 	pub fn send_amount_to(

@@ -26,7 +26,7 @@ use tokio_core::reactor;
 use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;
 
-use failure::ResultExt;
+use failure::{self, ResultExt};
 
 use keychain::{self, Keychain};
 use util;
@@ -388,6 +388,12 @@ impl FileWallet {
 			Ok(_) => Ok(retval),
 			Err(e) => Err(e),
 		}
+	}
+
+	/// Restore wallet contents
+	pub fn restore(&mut self) -> Result<(), failure::Error> {
+		libwallet::restore::restore(self).context(libwallet::ErrorKind::Restore)?;
+		Ok(())
 	}
 
 	/// Read the wallet data or create brand files if the data

@@ -621,13 +621,19 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			wallet::issue_burn_tx(&mut wallet, amount, minimum_confirmations, max_outputs).unwrap();
 		}
 		("info", Some(_)) => {
-			wallet::show_info(&mut wallet);
+			let res = wallet::show_info(&mut wallet);
+			if let Err(e) = res {
+				println!("Could not get wallet info: {}", e);
+			}
 		}
 		("outputs", Some(_)) => {
 			wallet::show_outputs(&mut wallet, show_spent);
 		}
 		("restore", Some(_)) => {
-			let _ = wallet::restore(&mut wallet);
+			let res = wallet.restore();
+			if let Err(e) = res {
+				println!("Could not restore wallet: {}", e);
+			}
 		}
 		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 	}

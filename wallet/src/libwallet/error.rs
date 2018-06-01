@@ -77,6 +77,10 @@ pub enum ErrorKind {
 	#[fail(display = "Callback Implementation error")]
 	CallbackImpl(&'static str),
 
+/// Callback implementation error conversion
+	#[fail(display = "Restore Error")]
+	Restore,
+
 	/// An error in the format of the JSON structures exchanged by the wallet
 	#[fail(display = "JSON format error")]
 	Format,
