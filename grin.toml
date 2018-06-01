@@ -73,7 +73,7 @@ run_test_miner = false
 #test miner wallet URL (burns if this doesn't exist)
 #test_miner_wallet_url = "http://127.0.0.1:13415"
 
-#[server.dandelion_config]
+[server.dandelion_config]
 #dandelion relay time (choose new relay peer every n secs)
 #relay_secs = 600
 

@@ -40,18 +40,18 @@ const DANDELION_STEM_PROBABILITY: usize = 90;
 pub struct DandelionConfig {
 	/// Choose new Dandelion relay peer every n secs.
 	#[serde = "default_dandelion_relay_secs"]
-	pub relay_secs: u64,
+	pub relay_secs: Option<u64>,
 	/// Dandelion embargo, fluff and broadcast tx if not seen on network before
 	/// embargo expires.
 	#[serde = "default_dandelion_embargo_secs"]
-	pub embargo_secs: u64,
+	pub embargo_secs: Option<u64>,
 	/// Dandelion patience timer, fluff/stem processing runs every n secs.
 	/// Tx aggregation happens on stem txs received within this window.
 	#[serde = "default_dandelion_patience_secs"]
-	pub patience_secs: u64,
+	pub patience_secs: Option<u64>,
 	/// Dandelion stem probability (stem 90% of the time, fluff 10% etc.)
 	#[serde = "default_dandelion_stem_probability"]
-	pub stem_probability: usize,
+	pub stem_probability: Option<usize>,
 }
 
 impl Default for DandelionConfig {
@@ -65,20 +65,20 @@ impl Default for DandelionConfig {
 	}
 }
 
-fn default_dandelion_relay_secs() -> u64 {
-	DANDELION_RELAY_SECS
+fn default_dandelion_relay_secs() -> Option<u64> {
+	Some(DANDELION_RELAY_SECS)
 }
 
-fn default_dandelion_embargo_secs() -> u64 {
-	DANDELION_EMBARGO_SECS
+fn default_dandelion_embargo_secs() -> Option<u64> {
+	Some(DANDELION_EMBARGO_SECS)
 }
 
-fn default_dandelion_patience_secs() -> u64 {
-	DANDELION_PATIENCE_SECS
+fn default_dandelion_patience_secs() -> Option<u64> {
+	Some(DANDELION_PATIENCE_SECS)
 }
 
-fn default_dandelion_stem_probability() -> usize {
-	DANDELION_STEM_PROBABILITY
+fn default_dandelion_stem_probability() -> Option<usize> {
+	Some(DANDELION_STEM_PROBABILITY)
 }
 
 /// Transaction pool configuration

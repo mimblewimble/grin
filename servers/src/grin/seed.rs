@@ -170,7 +170,7 @@ fn update_dandelion_relay(peers: Arc<p2p::Peers>, dandelion_config: DandelionCon
 	} else {
 		for last_added in dandelion_relay.keys() {
 			let dandelion_interval = now_utc().to_timespec().sec - last_added;
-			if dandelion_interval >= dandelion_config.relay_secs as i64 {
+			if dandelion_interval >= dandelion_config.relay_secs.unwrap() as i64 {
 				debug!(LOGGER, "monitor_peers: updating expired dandelion relay");
 				peers.update_dandelion_relay();
 			}
