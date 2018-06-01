@@ -148,11 +148,8 @@ impl AppendOnlyFile {
 	/// Leverages the memory map.
 	pub fn read(&self, offset: usize, length: usize) -> Vec<u8> {
 		if offset >= self.buffer_start {
-			if self.buffer.is_empty() {
-				return vec![];
-			}
-			let offset = offset - self.buffer_start;
-			return self.buffer[offset..(offset + length)].to_vec();
+			let buffer_offset = offset - self.buffer_start;
+			return self.read_from_buffer(buffer_offset, length);
 		}
 		if let None = self.mmap {
 			return vec![];
@@ -164,6 +161,17 @@ impl AppendOnlyFile {
 		}
 
 		(&mmap[offset..(offset + length)]).to_vec()
+	}
+
+	// Read length bytes from the buffer, from offset.
+	// Return empty vec if we do not have enough bytes in the buffer to read a full
+	// vec.
+	fn read_from_buffer(&self, offset: usize, length: usize) -> Vec<u8> {
+		if self.buffer.len() < (offset + length) {
+			vec![]
+		} else {
+			self.buffer[offset..(offset + length)].to_vec()
+		}
 	}
 
 	/// Truncates the underlying file to the provided offset
