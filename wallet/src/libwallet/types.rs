@@ -105,6 +105,7 @@ pub struct OutputData {
 	pub is_coinbase: bool,
 	/// Hash of the block this output originated from.
 	pub block: Option<BlockIdentifier>,
+	/// Merkle proof
 	pub merkle_proof: Option<MerkleProofWrapper>,
 }
 
@@ -167,6 +168,7 @@ impl OutputData {
 		}
 	}
 
+	/// Mark an output as spent
 	pub fn mark_spent(&mut self) {
 		match self.status {
 			OutputStatus::Unspent => self.status = OutputStatus::Spent,
@@ -181,9 +183,13 @@ impl OutputData {
 /// broadcasted or mined).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub enum OutputStatus {
+	/// Unconfirmed
 	Unconfirmed,
+	/// Unspend
 	Unspent,
+	/// Locked
 	Locked,
+	/// Spent
 	Spent,
 }
 
@@ -198,10 +204,12 @@ impl fmt::Display for OutputStatus {
 	}
 }
 
+/// Wrapper for a merkle proof
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct MerkleProofWrapper(pub MerkleProof);
 
 impl MerkleProofWrapper {
+	/// Create
 	pub fn merkle_proof(&self) -> MerkleProof {
 		self.0.clone()
 	}
@@ -243,14 +251,17 @@ impl<'de> serde::de::Visitor<'de> for MerkleProofWrapperVisitor {
 	}
 }
 
+/// Block Identifier
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct BlockIdentifier(pub Hash);
 
-impl BlockIdentifier {
+impl BlockIdentifier  {
+	/// return hash
 	pub fn hash(&self) -> Hash {
 		self.0
 	}
 
+	/// convert to hex string
 	pub fn from_hex(hex: &str) -> Result<BlockIdentifier, Error> {
 		let hash = Hash::from_hex(hex).context(ErrorKind::GenericError("Invalid hex"))?;
 		Ok(BlockIdentifier(hash))
@@ -293,23 +304,19 @@ impl<'de> serde::de::Visitor<'de> for BlockIdentifierVisitor {
 	}
 }
 
-/// Amount in request to build a coinbase output.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum WalletReceiveRequest {
-	Coinbase(BlockFees),
-	PartialTransaction(String),
-	Finalize(String),
-}
-
 /// Fees in block to use for coinbase amount calculation
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlockFees {
+	/// fees
 	pub fees: u64,
+	/// height
 	pub height: u64,
+	/// key id
 	pub key_id: Option<Identifier>,
 }
 
 impl BlockFees {
+	/// return key id
 	pub fn key_id(&self) -> Option<Identifier> {
 		self.key_id.clone()
 	}
@@ -318,8 +325,11 @@ impl BlockFees {
 /// Response to build a coinbase output.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CbData {
+	/// Output
 	pub output: String,
+	/// Kernel
 	pub kernel: String,
+	/// Key Id
 	pub key_id: String,
 }
 
@@ -327,20 +337,20 @@ pub struct CbData {
 /// can add more fields here over time as needed
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WalletInfo {
-	// height from which info was taken
+	/// height from which info was taken
 	pub current_height: u64,
-	// total amount in the wallet
+	/// total amount in the wallet
 	pub total: u64,
-	// amount awaiting confirmation
+	/// amount awaiting confirmation
 	pub amount_awaiting_confirmation: u64,
-	// confirmed but locked
+	/// confirmed but locked
 	pub amount_confirmed_but_locked: u64,
-	// amount currently spendable
+	/// amount currently spendable
 	pub amount_currently_spendable: u64,
-	// amount locked by previous transactions
+	/// amount locked by previous transactions
 	pub amount_locked: u64,
-	// whether the data was confirmed against a live node
+	/// whether the data was confirmed against a live node
 	pub data_confirmed: bool,
-	// node confirming the data
+	/// node confirming the data
 	pub data_confirmed_from: String,
 }

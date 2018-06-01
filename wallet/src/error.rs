@@ -19,7 +19,7 @@ use libwallet;
 use std::fmt::{self, Display};
 
 use core::core::transaction;
-use failure::{self, Backtrace, Context, Fail};
+use failure::{Backtrace, Context, Fail};
 
 /// Error definition
 #[derive(Debug)]
@@ -46,15 +46,11 @@ pub enum ErrorKind {
 	#[fail(display = "Transaction error")]
 	Transaction(transaction::Error),
 
-	/// Transaction Error
-	#[fail(display = "Callback Implementation error")]
-	CBImpl,
-
 	/// Secp Error
 	#[fail(display = "Secp error")]
 	Secp,
 
-	/// Filewallet error (TODO, get this out of here)
+	/// Filewallet error
 	#[fail(display = "Wallet data error: {}", _0)]
 	FileWallet(&'static str),
 
@@ -171,30 +167,3 @@ impl From<libtx::Error> for Error {
 		}
 	}
 }
-
-impl From<failure::Error> for Error {
-	fn from(error: failure::Error) -> Error {
-		Error {
-			inner: error.context(ErrorKind::CBImpl),
-		}
-	}
-}
-
-/*/// Define a means for libwallet trait functions to convert
-/// implementation specific errors
-impl From<Error> for libwallet::Error {
-	fn from(error: Error) -> libwallet::Error {
-		let mut cause_str = "";
-		if error.cause().is_some() {
-			cause_str = &format!("{}", error.cause().unwrap());
-		}
-		let mut backtrace_str = "";
-		if error.backtrace().is_some() {
-			backtrace_str = &format!("{}", error.backtrace().unwrap());
-		}
-		let error_detail = &format!("{}{}", cause_str, backtrace_str);
-		libwallet::Error {
-			inner: Context::new(libwallet::ErrorKind::Implementor(error_detail)),
-		}
-	}
-}*/

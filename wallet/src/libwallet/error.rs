@@ -77,14 +77,6 @@ pub enum ErrorKind {
 	#[fail(display = "Callback Implementation error")]
 	CallbackImpl(&'static str),
 
-	/// Libwallet error TODO: Remove
-	#[fail(display = "LibWallet error")]
-	LibWalletError,
-
-	/// Filewallet error (TODO, get this out of here)
-	#[fail(display = "Wallet data error: {}", _0)]
-	FileWallet(&'static str),
-
 	/// An error in the format of the JSON structures exchanged by the wallet
 	#[fail(display = "JSON format error")]
 	Format,
@@ -165,6 +157,14 @@ impl From<keychain::Error> for Error {
 	fn from(error: keychain::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::Keychain(error)),
+		}
+	}
+}
+
+impl From<libtx::Error> for Error {
+	fn from(error: libtx::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::LibTX(error.kind())),
 		}
 	}
 }

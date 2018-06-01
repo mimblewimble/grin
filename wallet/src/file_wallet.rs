@@ -259,7 +259,7 @@ impl WalletBackend for FileWallet {
 			.context(libwallet::ErrorKind::CallbackImpl("Write Error"))?;
 
 		// delete the lock file
-		fs::remove_dir(&self.lock_file_path).context(libwallet::ErrorKind::FileWallet(
+		fs::remove_dir(&self.lock_file_path).context(libwallet::ErrorKind::CallbackImpl(
 			&"Could not remove wallet lock file. Maybe insufficient rights? ",
 		))?;
 

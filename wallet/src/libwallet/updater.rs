@@ -250,6 +250,7 @@ where
 	})
 }
 
+/// Return the chain tip from a given node
 pub fn get_tip_from_node(addr: &str) -> Result<api::Tip, Error> {
 	let url = format!("{}/v1/chain", addr);
 	api::client::get::<api::Tip>(url.as_str())

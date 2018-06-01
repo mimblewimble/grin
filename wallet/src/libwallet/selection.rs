@@ -14,7 +14,6 @@
 
 //! Selection of inputs for building transactions
 
-use failure::ResultExt;
 use keychain::Identifier;
 use libtx::{build, tx_fee, slate::Slate};
 use libwallet::error::{Error, ErrorKind};
@@ -66,8 +65,7 @@ where
 	let keychain = wallet.keychain().clone();
 
 	let blinding = slate
-		.add_transaction_elements(&keychain, elems)
-		.context(ErrorKind::LibWalletError)?;
+		.add_transaction_elements(&keychain, elems)?;
 	// Create our own private context
 	let mut context = sigcontext::Context::new(
 		wallet.keychain().secp(),
@@ -135,8 +133,7 @@ where
 	let keychain = wallet.keychain().clone();
 
 	let blinding = slate
-		.add_transaction_elements(&keychain, vec![build::output(amount, key_id.clone())])
-		.context(ErrorKind::LibWalletError)?;
+		.add_transaction_elements(&keychain, vec![build::output(amount, key_id.clone())])?;
 
 	// Add blinding sum to our context
 	let mut context = sigcontext::Context::new(
