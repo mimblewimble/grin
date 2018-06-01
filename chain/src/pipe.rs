@@ -47,10 +47,7 @@ pub struct BlockContext {
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain. Returns the new chain head if
 /// updated.
-pub fn process_block(
-	b: &Block,
-	ctx: &mut BlockContext,
-) -> Result<Option<Tip>, Error> {
+pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
@@ -388,11 +385,7 @@ fn add_block_header(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Er
 /// Directly updates the head if we've just appended a new block to it or handle
 /// the situation where we've just added enough work to have a fork with more
 /// work than the head.
-fn update_head(
-	b: &Block,
-	ctx: &BlockContext,
-	batch: &store::Batch,
-) -> Result<Option<Tip>, Error> {
+fn update_head(b: &Block, ctx: &BlockContext, batch: &store::Batch) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
 	// when extending the head), update it
 	if block_has_more_work(b, &ctx.head) {

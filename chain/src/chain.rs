@@ -545,14 +545,15 @@ impl Chain {
 
 		// validate the new hashset
 		let mut txhashset = txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone())?;
-		let (output_sum, kernel_sum) = txhashset::extending_readonly(&mut txhashset, |extension| {
-			debug!(
-				LOGGER,
-				"Going to validate new txhashset, might take some time..."
-			);
-			extension.rewind(&header)?;
-			extension.validate(&header, false)
-		})?;
+		let (output_sum, kernel_sum) =
+			txhashset::extending_readonly(&mut txhashset, |extension| {
+				debug!(
+					LOGGER,
+					"Going to validate new txhashset, might take some time..."
+				);
+				extension.rewind(&header)?;
+				extension.validate(&header, false)
+			})?;
 
 		// all good, prepare a new batch and update all the required records
 		let mut batch = self.store.batch()?;
