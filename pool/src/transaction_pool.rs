@@ -20,10 +20,12 @@
 use std::sync::Arc;
 use time;
 
+use core::core::hash::Hashed;
 use core::core::transaction;
 use core::core::{Block, CompactBlock, Transaction};
 use pool::Pool;
 use types::*;
+use util::LOGGER;
 
 /// Transaction pool implementation.
 pub struct TransactionPool<T> {
@@ -95,6 +97,14 @@ where
 		tx: Transaction,
 		stem: bool,
 	) -> Result<(), PoolError> {
+		debug!(
+			LOGGER,
+			"pool: add_to_pool: {:?}, kernels - {}, stem? {}",
+			tx.hash(),
+			tx.kernels.len(),
+			stem,
+		);
+
 		// Do we have the capacity to accept this transaction?
 		self.is_acceptable(&tx)?;
 
