@@ -77,7 +77,7 @@ pub enum ErrorKind {
 	#[fail(display = "Callback Implementation error")]
 	CallbackImpl(&'static str),
 
-/// Callback implementation error conversion
+	/// Callback implementation error conversion
 	#[fail(display = "Restore Error")]
 	Restore,
 

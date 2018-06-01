@@ -60,7 +60,7 @@ pub mod server;
 
 pub use error::{Error, ErrorKind};
 pub use file_wallet::{FileWallet, WalletConfig, WalletSeed};
-pub use info::{show_info};
+pub use info::show_info;
 pub use libwallet::types::{BlockFees, CbData, WalletInfo};
 pub use outputs::show_outputs;
 pub use receiver::WalletReceiver;

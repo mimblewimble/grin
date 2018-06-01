@@ -44,10 +44,7 @@ fn get_chain_height(node_addr: &str) -> Result<u64, Error> {
 	}
 }
 
-fn get_merkle_proof_for_commit(
-	node_addr: &str,
-	commit: &str,
-) -> Result<MerkleProofWrapper, Error> {
+fn get_merkle_proof_for_commit(node_addr: &str, commit: &str) -> Result<MerkleProofWrapper, Error> {
 	let url = format!("{}/v1/txhashset/merkleproof?id={}", node_addr, commit);
 
 	match api::client::get::<api::OutputPrintable>(url.as_str()) {
@@ -71,11 +68,7 @@ fn coinbase_status(output: &api::OutputPrintable) -> bool {
 	}
 }
 
-fn outputs_batch<T>(
-	wallet: &T,
-	start_height: u64,
-	max: u64,
-) -> Result<api::OutputListing, Error>
+fn outputs_batch<T>(wallet: &T, start_height: u64, max: u64) -> Result<api::OutputListing, Error>
 where
 	T: WalletBackend,
 {
