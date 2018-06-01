@@ -183,6 +183,10 @@ fn test_transaction_pool_block_reconciliation() {
 			}).unwrap();
 		}
 
+		let tip = Tip::from_block(&block.header);
+		chain.store.save_block_header(&block.header).unwrap();
+		chain.store.save_head(&tip).unwrap();
+
 		block
 	};
 
@@ -191,9 +195,9 @@ fn test_transaction_pool_block_reconciliation() {
 		let mut write_pool = pool.write().unwrap();
 		write_pool.reconcile_block(&block).unwrap();
 
-		assert_eq!(write_pool.total_size(), 4);
-		assert_eq!(write_pool.txpool.entries[0].tx, valid_transaction);
 		// TODO - this is the "correct" behavior (see below)
+		// assert_eq!(write_pool.total_size(), 4);
+		// assert_eq!(write_pool.txpool.entries[0].tx, valid_transaction);
 		// assert_eq!(write_pool.txpool.entries[1].tx, pool_child);
 		// assert_eq!(write_pool.txpool.entries[2].tx, conflict_valid_child);
 		// assert_eq!(write_pool.txpool.entries[3].tx, valid_child_valid);
@@ -205,6 +209,8 @@ fn test_transaction_pool_block_reconciliation() {
 		//
 		// TODO - wtf is with these name permutations...
 		//
+		assert_eq!(write_pool.total_size(), 4);
+		assert_eq!(write_pool.txpool.entries[0].tx, valid_transaction);
 		assert_eq!(write_pool.txpool.entries[1].tx, conflict_valid_child);
 		assert_eq!(write_pool.txpool.entries[2].tx, valid_child_conflict);
 		assert_eq!(write_pool.txpool.entries[3].tx, valid_child_valid);
