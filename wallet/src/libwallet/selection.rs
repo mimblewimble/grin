@@ -64,8 +64,7 @@ where
 
 	let keychain = wallet.keychain().clone();
 
-	let blinding = slate
-		.add_transaction_elements(&keychain, elems)?;
+	let blinding = slate.add_transaction_elements(&keychain, elems)?;
 	// Create our own private context
 	let mut context = sigcontext::Context::new(
 		wallet.keychain().secp(),
@@ -132,8 +131,8 @@ where
 
 	let keychain = wallet.keychain().clone();
 
-	let blinding = slate
-		.add_transaction_elements(&keychain, vec![build::output(amount, key_id.clone())])?;
+	let blinding =
+		slate.add_transaction_elements(&keychain, vec![build::output(amount, key_id.clone())])?;
 
 	// Add blinding sum to our context
 	let mut context = sigcontext::Context::new(

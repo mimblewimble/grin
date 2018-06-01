@@ -255,7 +255,7 @@ impl<'de> serde::de::Visitor<'de> for MerkleProofWrapperVisitor {
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct BlockIdentifier(pub Hash);
 
-impl BlockIdentifier  {
+impl BlockIdentifier {
 	/// return hash
 	pub fn hash(&self) -> Hash {
 		self.0
