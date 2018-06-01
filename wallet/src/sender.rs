@@ -16,7 +16,7 @@ use api;
 use client;
 use core::ser;
 use error::{Error, ErrorKind};
-use failure::ResultExt;
+use failure::{self, ResultExt};
 use keychain::{Identifier, Keychain};
 use libtx::{build, tx_fee};
 use libwallet::types::WalletBackend;
@@ -37,7 +37,7 @@ pub fn issue_send_tx<T: WalletBackend>(
 	max_outputs: usize,
 	selection_strategy_is_use_all: bool,
 	fluff: bool,
-) -> Result<(), Error> {
+) -> Result<(), failure::Error> {
 	// TODO: Stdout option, probably in a separate implementation
 	if &dest[..4] != "http" {
 		panic!(
@@ -72,7 +72,7 @@ pub fn issue_send_tx<T: WalletBackend>(
 		lock_height,
 		max_outputs,
 		selection_strategy_is_use_all,
-	).unwrap();
+	)?;
 
 	// Generate a kernel offset and subtract from our context's secret key. Store
 	// the offset in the slate's transaction kernel, and adds our public key
@@ -83,8 +83,7 @@ pub fn issue_send_tx<T: WalletBackend>(
 			&mut context.sec_key,
 			&context.sec_nonce,
 			0,
-		)
-		.unwrap();
+		)?;
 
 	let url = format!("{}/v1/receive/transaction", &dest);
 	debug!(LOGGER, "Posting partial transaction to {}", url);
@@ -95,7 +94,7 @@ pub fn issue_send_tx<T: WalletBackend>(
 				LOGGER,
 				"Communication with receiver failed on SenderInitiation send. Aborting transaction"
 			);
-			return Err(e);
+			return Err(e)?;
 		}
 	};
 

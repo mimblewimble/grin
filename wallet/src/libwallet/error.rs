@@ -18,7 +18,7 @@ use libtx;
 use std::fmt::{self, Display};
 
 use core::core::transaction;
-use failure::Context;
+use failure::{Backtrace, Context, Fail};
 
 /// Error definition
 #[derive(Debug, Fail)]
@@ -30,8 +30,13 @@ pub struct Error {
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorKind {
 	/// Not enough funds
-	#[fail(display = "Not enough funds")]
-	NotEnoughFunds(u64),
+	#[fail(display = "Not enough funds. Required: {}, Available: {}", needed, available)]
+	NotEnoughFunds{
+		/// available funds
+		available: u64,
+		/// Needed funds
+		needed: u64,
+	},
 
 	/// Fee dispute
 	#[fail(display = "Fee dispute: sender fee {}, recipient fee {}", sender_fee, recipient_fee)]
@@ -132,7 +137,14 @@ impl Error {
 	pub fn kind(&self) -> ErrorKind {
 		self.inner.get_context().clone()
 	}
-}
+	/// get cause
+	pub fn cause(&self) -> Option<&Fail> {
+		self.inner.cause()
+	}
+	/// get backtrace
+	pub fn backtrace(&self) -> Option<&Backtrace> {
+		self.inner.backtrace()
+	}}
 
 impl From<ErrorKind> for Error {
 	fn from(kind: ErrorKind) -> Error {
@@ -163,11 +175,3 @@ impl From<transaction::Error> for Error {
 		}
 	}
 }
-
-/*impl From<Box<Fail>> for Error {
-	fn from(error: Box<Fail>) -> Error {
-		Error {
-			inner: error.context(),
-		}
-	}
-}*/

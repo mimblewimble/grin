@@ -51,7 +51,7 @@ use core::core::amount_to_hr_string;
 use core::global;
 use tui::ui;
 use util::{init_logger, LoggingConfig, LOGGER};
-use wallet::FileWallet;
+use wallet::{libwallet, FileWallet};
 
 // include build information
 pub mod built_info {
@@ -587,9 +587,24 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					selection_strategy,
 				),
 				Err(e) => {
-					error!(LOGGER, "Tx not sent: {:?}", e);
+					error!(LOGGER, "Tx not sent: {}", e.cause());
+					match e.downcast::<libwallet::Error>() {
+						Ok(le) => {
+							match le.kind() {
+								// user errors, don't backtrace
+								libwallet::ErrorKind::NotEnoughFunds { .. } => {}
+								libwallet::ErrorKind::FeeDispute { .. } => {}
+								libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
+								_ => {
+									// otherwise give full dump
+									error!(LOGGER, "Backtrace: {}", le.backtrace().unwrap());
+								}
+							};
+						}
+						_ => {}
+					};
 				}
-			};
+			}
 		}
 		("burn", Some(send_args)) => {
 			let amount = send_args

@@ -229,7 +229,10 @@ where
 	let mut amount_with_fee = amount + fee;
 
 	if total == 0 {
-		return Err(ErrorKind::NotEnoughFunds(total as u64))?;
+		return Err(ErrorKind::NotEnoughFunds{
+			available: 0,
+			needed: amount_with_fee as u64
+		})?;
 	}
 
 	// Check if we need to use a change address
@@ -242,7 +245,10 @@ where
 		while total < amount_with_fee {
 			// End the loop if we have selected all the outputs and still not enough funds
 			if coins.len() == max_outputs {
-				return Err(ErrorKind::NotEnoughFunds(total as u64))?;
+				return Err(ErrorKind::NotEnoughFunds{
+					available: total as u64, 
+					needed: amount_with_fee as u64
+				})?;
 			}
 
 			// select some spendable coins from the wallet
