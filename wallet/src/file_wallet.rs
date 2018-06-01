@@ -26,7 +26,7 @@ use tokio_core::reactor;
 use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;
 
-use failure::{Fail, ResultExt};
+use failure::ResultExt;
 
 use keychain::{self, Keychain};
 use util;
@@ -201,7 +201,7 @@ impl WalletBackend for FileWallet {
 	where
 		F: FnOnce(&mut Self) -> Result<T, libwallet::Error>,
 	{
-		self.read_or_create_paths()?;
+		self.read_or_create_paths().context(libwallet::ErrorKind::CallbackImpl("Error reading wallet"))?;
 		f(self)
 	}
 
@@ -232,7 +232,9 @@ impl WalletBackend for FileWallet {
 		let mut core = reactor::Core::new().unwrap();
 		let retry_strategy = FibonacciBackoff::from_millis(1000).take(10);
 		let retry_future = Retry::spawn(core.handle(), retry_strategy, action);
-		let retry_result = core.run(retry_future);
+		let retry_result = core.run(retry_future).context(
+			libwallet::ErrorKind::CallbackImpl("Failed to acquire lock file")
+		);
 
 		match retry_result {
 			Ok(_) => {}
@@ -241,23 +243,21 @@ impl WalletBackend for FileWallet {
 					LOGGER,
 					"Failed to acquire wallet lock file (multiple retries)",
 				);
-				return Err(
-					e.context(ErrorKind::FileWallet("Failed to acquire lock file"))
-						.into()?,
-				);
+				return Err(e.into());
 			}
 		}
 
 		// We successfully acquired the lock - so do what needs to be done.
-		self.read_or_create_paths()?;
-		self.write(&self.backup_file_path)?;
+		self.read_or_create_paths().context(libwallet::ErrorKind::CallbackImpl("Lock Error"))?;
+		self.write(&self.backup_file_path).context(libwallet::ErrorKind::CallbackImpl("Write Error"))?;
 		let res = f(self);
-		self.write(&self.data_file_path)?;
+		self.write(&self.data_file_path).context(libwallet::ErrorKind::CallbackImpl("Write Error"))?;
 
 		// delete the lock file
-		fs::remove_dir(&self.lock_file_path).context(ErrorKind::FileWallet(
-			"Could not remove wallet lock file. Maybe insufficient rights?",
-		))?;
+		fs::remove_dir(&self.lock_file_path)
+			.context(
+					libwallet::ErrorKind::FileWallet(&"Could not remove wallet lock file. Maybe insufficient rights? ")
+			)?;
 
 		info!(LOGGER, "... released wallet lock");
 
@@ -404,10 +404,10 @@ impl FileWallet {
 	fn read_outputs(&self) -> Result<Vec<OutputData>, Error> {
 		let data_file = File::open(self.data_file_path.clone())
 			.context(ErrorKind::FileWallet(&"Could not open wallet file"))?;
-		serde_json::from_reader(data_file).map_err(|e| {
-			e.context(ErrorKind::FileWallet(&"Error reading wallet file "))
-				.into()
-		})
+		serde_json::from_reader(data_file).context(
+			ErrorKind::Format
+		)
+		.map_err(|e| e.into())
 	}
 
 	/// Populate wallet_data with output_data from disk.
@@ -423,11 +423,11 @@ impl FileWallet {
 	/// Write the wallet data to disk.
 	fn write(&self, data_file_path: &str) -> Result<(), Error> {
 		let mut data_file = File::create(data_file_path)
-			.map_err(|e| e.context(ErrorKind::FileWallet(&"Could not create ")))?;
+			.context(ErrorKind::FileWallet(&"Could not create "))?;
 		let mut outputs = self.outputs.values().collect::<Vec<_>>();
 		outputs.sort();
 		let res_json = serde_json::to_vec_pretty(&outputs)
-			.map_err(|e| e.context(ErrorKind::FileWallet("Error serializing wallet data")))?;
+			.context(ErrorKind::FileWallet("Error serializing wallet data"))?;
 		data_file
 			.write_all(res_json.as_slice())
 			.context(ErrorKind::FileWallet(&"Error writing wallet file"))

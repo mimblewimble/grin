@@ -68,9 +68,9 @@ pub enum ErrorKind {
 	#[fail(display = "Secp error")]
 	Secp,
 
-	/// Error thrown by an implementor
-	#[fail(display = "Implementor error")]
-	Implementor(&'static str),
+	/// Callback implementation error conversion
+	#[fail(display = "Callback Implementation error")]
+	CallbackImpl(&'static str),
 
 	/// Libwallet error TODO: Remove
 	#[fail(display = "LibWallet error")]
@@ -163,3 +163,11 @@ impl From<transaction::Error> for Error {
 		}
 	}
 }
+
+/*impl From<Box<Fail>> for Error {
+	fn from(error: Box<Fail>) -> Error {
+		Error {
+			inner: error.context(),
+		}
+	}
+}*/

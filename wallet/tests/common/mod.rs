@@ -28,7 +28,7 @@ use core::core::hash::Hashed;
 use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::{consensus, global, pow};
 use wallet::file_wallet::*;
-use wallet::libwallet::error::*;
+use wallet::libwallet::{Error, ErrorKind};
 use wallet::libwallet::types::*;
 use wallet::libwallet::updater;
 
@@ -120,7 +120,7 @@ fn get_output_local(
 			return Ok(api::Output::new(&commit));
 		}
 	}
-	Err(ErrorKind::Transaction)?
+	Err(ErrorKind::GenericError("Can't get output from local instance of chain"))?
 }
 
 /// Adds a block with a given reward to the chain and mines it

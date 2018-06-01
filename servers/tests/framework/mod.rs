@@ -342,16 +342,8 @@ impl LocalServerContainer {
 				dest,
 				selection_strategy,
 			),
-			Err(e) => match e.kind() {
-				wallet::ErrorKind::NotEnoughFunds(available) => {
-					println!(
-						"Tx not sent: insufficient funds (max: {})",
-						core::core::amount_to_hr_string(available),
-					);
-				}
-				_ => {
-					println!("Tx not sent to {}: {:?}", dest, e);
-				}
+			Err(e) => {
+				println!("Tx not sent to {}: {:?}", dest, e);
 			},
 		};
 	}

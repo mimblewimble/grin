@@ -14,14 +14,13 @@
 
 use api;
 use client;
-use core::core::amount_to_hr_string;
 use core::ser;
 use error::{Error, ErrorKind};
 use failure::ResultExt;
 use keychain::{Identifier, Keychain};
 use libtx::{build, tx_fee};
 use libwallet::types::WalletBackend;
-use libwallet::{self, selection, updater};
+use libwallet::{selection, updater};
 use receiver::TxWrapper;
 use util;
 use util::LOGGER;
@@ -92,21 +91,10 @@ pub fn issue_send_tx<T: WalletBackend>(
 	let mut slate = match client::send_slate(&url, &slate, fluff) {
 		Ok(s) => s,
 		Err(e) => {
-			match e.kind() {
-				libwallet::ErrorKind::FeeExceedsAmount {
-					sender_amount,
-					recipient_fee,
-				} => error!(
-						LOGGER,
-						"Recipient rejected the transfer because transaction fee ({}) exceeded amount ({}).",
-						amount_to_hr_string(recipient_fee),
-						amount_to_hr_string(sender_amount)
-					),
-				_ => error!(
+			error!(
 					LOGGER,
 					"Communication with receiver failed on SenderInitiation send. Aborting transaction"
-				),
-			}
+				);
 			return Err(e);
 		}
 	};
