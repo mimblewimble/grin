@@ -344,7 +344,7 @@ impl LocalServerContainer {
 			),
 			Err(e) => {
 				println!("Tx not sent to {}: {:?}", dest, e);
-			},
+			}
 		};
 	}
 

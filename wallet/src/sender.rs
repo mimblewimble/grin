@@ -92,9 +92,9 @@ pub fn issue_send_tx<T: WalletBackend>(
 		Ok(s) => s,
 		Err(e) => {
 			error!(
-					LOGGER,
-					"Communication with receiver failed on SenderInitiation send. Aborting transaction"
-				);
+				LOGGER,
+				"Communication with receiver failed on SenderInitiation send. Aborting transaction"
+			);
 			return Err(e);
 		}
 	};

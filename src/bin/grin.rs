@@ -588,7 +588,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				),
 				Err(e) => {
 					error!(LOGGER, "Tx not sent: {:?}", e);
-				},
+				}
 			};
 		}
 		("burn", Some(send_args)) => {

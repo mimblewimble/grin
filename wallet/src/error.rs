@@ -65,7 +65,7 @@ pub enum ErrorKind {
 	/// Error when formatting json
 	#[fail(display = "Serde JSON error")]
 	Format,
-	
+
 	/// Error when contacting a node through its API
 	#[fail(display = "Node API error")]
 	Node,
@@ -175,7 +175,7 @@ impl From<libtx::Error> for Error {
 impl From<failure::Error> for Error {
 	fn from(error: failure::Error) -> Error {
 		Error {
-			inner: error.context(ErrorKind::CBImpl)
+			inner: error.context(ErrorKind::CBImpl),
 		}
 	}
 }
