@@ -75,16 +75,16 @@ run_test_miner = false
 
 [server.dandelion_config]
 #dandelion relay time (choose new relay peer every n secs)
-#relay_secs = 600
+relay_secs = 600
 
 #fluff and broadcast after embargo expires if tx not seen on network
-#embargo_secs = 180
+embargo_secs = 180
 
 #run dandelion stem/fluff processing every n secs (stem tx aggregation in this window)
-#patience_secs = 10
+patience_secs = 10
 
 #dandelion stem probability (stem 90% of the time, fluff 10% of the time)
-#stem_probability = 90
+stem_probability = 90
 
 #The P2P server details (i.e. the server that communicates with other
 #grin server nodes

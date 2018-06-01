@@ -166,7 +166,7 @@ impl Chain {
 		debug!(
 			LOGGER,
 			"Chain init: {} @ {} [{}]",
-			head.total_difficulty.into_num(),
+			head.total_difficulty.to_num(),
 			head.height,
 			head.last_block_h,
 		);

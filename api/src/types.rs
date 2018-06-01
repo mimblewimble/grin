@@ -53,7 +53,7 @@ impl Tip {
 			height: tip.height,
 			last_block_pushed: util::to_hex(tip.last_block_h.to_vec()),
 			prev_block_to_last: util::to_hex(tip.prev_block_h.to_vec()),
-			total_difficulty: tip.total_difficulty.into_num(),
+			total_difficulty: tip.total_difficulty.to_num(),
 		}
 	}
 }
@@ -497,7 +497,7 @@ impl BlockHeaderPrintable {
 			range_proof_root: util::to_hex(h.range_proof_root.to_vec()),
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),
 			nonce: h.nonce,
-			total_difficulty: h.total_difficulty.into_num(),
+			total_difficulty: h.total_difficulty.to_num(),
 			total_kernel_offset: h.total_kernel_offset.to_hex(),
 		}
 	}

@@ -20,25 +20,24 @@ pub mod id;
 pub mod pmmr;
 pub mod target;
 pub mod transaction;
+use consensus::GRIN_BASE;
 #[allow(dead_code)]
-
 use rand::{thread_rng, Rng};
-use std::{fmt, iter};
 use std::cmp::Ordering;
 use std::num::ParseFloatError;
-use consensus::GRIN_BASE;
+use std::{fmt, iter};
 
-use util::{secp, secp_static, static_secp_instance};
 use util::secp::pedersen::*;
+use util::{secp, secp_static, static_secp_instance};
 
 pub use self::block::*;
-pub use self::transaction::*;
 pub use self::id::ShortId;
+pub use self::transaction::*;
 use core::hash::Hashed;
-use ser::{Error, Readable, Reader, Writeable, Writer};
 use global;
 use keychain;
 use keychain::BlindingFactor;
+use ser::{Error, Readable, Reader, Writeable, Writer};
 
 /// Implemented by types that hold inputs and outputs (and kernels)
 /// containing Pedersen commitments.
@@ -141,63 +140,36 @@ pub trait Committed {
 }
 
 /// Proof of work
+#[derive(Clone, PartialOrd, PartialEq)]
 pub struct Proof {
 	/// The nonces
 	pub nonces: Vec<u32>,
-
-	/// The proof size
-	pub proof_size: usize,
 }
 
 impl fmt::Debug for Proof {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		try!(write!(f, "Cuckoo("));
+		write!(f, "Cuckoo(")?;
 		for (i, val) in self.nonces[..].iter().enumerate() {
-			try!(write!(f, "{:x}", val));
+			write!(f, "{:x}", val)?;
 			if i < self.nonces.len() - 1 {
-				try!(write!(f, " "));
+				write!(f, " ")?;
 			}
 		}
 		write!(f, ")")
 	}
 }
-impl PartialOrd for Proof {
-	fn partial_cmp(&self, other: &Proof) -> Option<Ordering> {
-		self.nonces.partial_cmp(&other.nonces)
-	}
-}
-impl PartialEq for Proof {
-	fn eq(&self, other: &Proof) -> bool {
-		self.nonces[..] == other.nonces[..]
-	}
-}
+
 impl Eq for Proof {}
-impl Clone for Proof {
-	fn clone(&self) -> Proof {
-		let mut out_nonces = Vec::new();
-		for n in self.nonces.iter() {
-			out_nonces.push(*n as u32);
-		}
-		Proof {
-			proof_size: out_nonces.len(),
-			nonces: out_nonces,
-		}
-	}
-}
 
 impl Proof {
 	/// Builds a proof with all bytes zeroed out
 	pub fn new(in_nonces: Vec<u32>) -> Proof {
-		Proof {
-			proof_size: in_nonces.len(),
-			nonces: in_nonces,
-		}
+		Proof { nonces: in_nonces }
 	}
 
 	/// Builds a proof with all bytes zeroed out
 	pub fn zero(proof_size: usize) -> Proof {
 		Proof {
-			proof_size: proof_size,
 			nonces: vec![0; proof_size],
 		}
 	}
@@ -211,16 +183,13 @@ impl Proof {
 			.map(|()| rng.gen())
 			.take(proof_size)
 			.collect();
-		Proof {
-			proof_size: proof_size,
-			nonces: v,
-		}
+		Proof { nonces: v }
 	}
 
 	/// Converts the proof to a vector of u64s
 	pub fn to_u64s(&self) -> Vec<u64> {
-		let mut out_nonces = Vec::with_capacity(self.proof_size);
-		for n in self.nonces.iter() {
+		let mut out_nonces = Vec::with_capacity(self.proof_size());
+		for n in &self.nonces {
 			out_nonces.push(*n as u64);
 		}
 		out_nonces
@@ -233,8 +202,13 @@ impl Proof {
 
 	/// Converts the proof to a proof-of-work Target so they can be compared.
 	/// Hashes the Cuckoo Proof data.
-	pub fn to_difficulty(self) -> target::Difficulty {
+	pub fn to_difficulty(&self) -> target::Difficulty {
 		target::Difficulty::from_hash(&self.hash())
+	}
+
+	/// Returns the proof size
+	pub fn proof_size(&self) -> usize {
+		self.nonces.len()
 	}
 }
 
@@ -243,7 +217,7 @@ impl Readable for Proof {
 		let proof_size = global::proofsize();
 		let mut pow = vec![0u32; proof_size];
 		for n in 0..proof_size {
-			pow[n] = try!(reader.read_u32());
+			pow[n] = reader.read_u32()?;
 		}
 		Ok(Proof::new(pow))
 	}
@@ -251,8 +225,8 @@ impl Readable for Proof {
 
 impl Writeable for Proof {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		for n in 0..self.proof_size {
-			try!(writer.write_u32(self.nonces[n]));
+		for n in 0..self.proof_size() {
+			writer.write_u32(self.nonces[n])?;
 		}
 		Ok(())
 	}
@@ -271,7 +245,7 @@ pub fn amount_from_hr_string(amount: &str) -> Result<u64, ParseFloatError> {
 pub fn amount_to_hr_string(amount: u64) -> String {
 	let amount = (amount as f64 / GRIN_BASE as f64) as f64;
 	let places = (GRIN_BASE as f64).log(10.0) as usize + 1;
-	String::from(format!("{:.*}", places, amount))
+	format!("{:.*}", places, amount)
 }
 
 #[cfg(test)]

@@ -15,8 +15,8 @@
 //! Server stat collection types, to be used by tests, logging or GUI/TUI
 //! to collect information about server status
 
-use std::sync::{Arc, RwLock};
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
 use chain;
@@ -165,7 +165,7 @@ impl PeerStats {
 			state: state.to_string(),
 			addr: addr,
 			version: peer.info.version,
-			total_difficulty: peer.info.total_difficulty.into_num(),
+			total_difficulty: peer.info.total_difficulty.to_num(),
 			height: peer.info.height,
 			direction: direction.to_string(),
 		}

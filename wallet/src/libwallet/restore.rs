@@ -11,10 +11,13 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+//! Functions to restore a wallet's outputs from just the master seed
+
 use api;
 use byteorder::{BigEndian, ByteOrder};
 use core::core::transaction::ProofMessageElements;
 use core::global;
+use error::{Error, ErrorKind};
 use failure::{Fail, ResultExt};
 use keychain::Identifier;
 use libtx::proof;
@@ -23,7 +26,7 @@ use util;
 use util::LOGGER;
 use util::secp::pedersen;
 
-pub fn get_chain_height(node_addr: &str) -> Result<u64, Error> {
+fn get_chain_height(node_addr: &str) -> Result<u64, Error> {
 	let url = format!("{}/v1/chain", node_addr);
 
 	match api::client::get::<api::Tip>(url.as_str()) {
@@ -41,10 +44,7 @@ pub fn get_chain_height(node_addr: &str) -> Result<u64, Error> {
 	}
 }
 
-pub fn get_merkle_proof_for_commit(
-	node_addr: &str,
-	commit: &str,
-) -> Result<MerkleProofWrapper, Error> {
+fn get_merkle_proof_for_commit(node_addr: &str, commit: &str) -> Result<MerkleProofWrapper, Error> {
 	let url = format!("{}/v1/txhashset/merkleproof?id={}", node_addr, commit);
 
 	match api::client::get::<api::OutputPrintable>(url.as_str()) {
@@ -68,11 +68,7 @@ fn coinbase_status(output: &api::OutputPrintable) -> bool {
 	}
 }
 
-pub fn outputs_batch<T>(
-	wallet: &T,
-	start_height: u64,
-	max: u64,
-) -> Result<api::OutputListing, Error>
+fn outputs_batch<T>(wallet: &T, start_height: u64, max: u64) -> Result<api::OutputListing, Error>
 where
 	T: WalletBackend,
 {
@@ -141,7 +137,7 @@ fn find_outputs_with_key<T: WalletBackend>(
 			None,
 			output.range_proof().unwrap(),
 		).unwrap();
-		let message = ProofMessageElements::from_proof_message(info.message).unwrap();
+		let message = ProofMessageElements::from_proof_message(&info.message).unwrap();
 		let value = message.value();
 		if value.is_err() {
 			continue;
@@ -179,7 +175,7 @@ fn find_outputs_with_key<T: WalletBackend>(
 				None,
 				output.range_proof().unwrap(),
 			).unwrap();
-			let message = ProofMessageElements::from_proof_message(info.message).unwrap();
+			let message = ProofMessageElements::from_proof_message(&info.message).unwrap();
 			let value = message.value();
 			if value.is_err() || !message.zeroes_correct() {
 				continue;
@@ -245,6 +241,7 @@ fn find_outputs_with_key<T: WalletBackend>(
 	wallet_outputs
 }
 
+/// Restore a wallet
 pub fn restore<T: WalletBackend>(wallet: &mut T) -> Result<(), Error> {
 	// Don't proceed if wallet.dat has anything in it
 	let is_empty = wallet

@@ -18,8 +18,8 @@
 //! enough, consensus-relevant constants and short functions should be kept
 //! here.
 
-use std::fmt;
 use std::cmp::max;
+use std::fmt;
 
 use core::target::Difficulty;
 use global;
@@ -155,7 +155,7 @@ pub const DAMP_FACTOR: u64 = 3;
 pub const INITIAL_DIFFICULTY: u64 = 1_000_000;
 
 /// Consensus errors
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
 	/// Inputs/outputs/kernels must be sorted lexicographically.
 	SortError,
@@ -221,7 +221,7 @@ where
 	let diff_sum = diff_data
 		.iter()
 		.skip(MEDIAN_TIME_WINDOW as usize)
-		.fold(0, |sum, d| sum + d.clone().unwrap().1.into_num());
+		.fold(0, |sum, d| sum + d.clone().unwrap().1.to_num());
 
 	// Apply dampening except when difficulty is near 1
 	let ts_damp = if diff_sum < DAMP_FACTOR * DIFFICULTY_ADJUST_WINDOW {

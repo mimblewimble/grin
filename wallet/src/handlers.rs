@@ -20,6 +20,7 @@ use iron::status;
 use serde_json;
 
 use core::ser;
+use error::{Error, ErrorKind};
 use failure::{Fail, ResultExt};
 use libwallet::types::*;
 use receiver::receive_coinbase;

@@ -553,7 +553,7 @@ impl BlockHandler {
 			))?;
 		}
 		let vec = util::from_hex(input).unwrap();
-		Ok(Hash::from_vec(vec))
+		Ok(Hash::from_vec(&vec))
 	}
 }
 

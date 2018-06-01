@@ -63,7 +63,7 @@ fn peer_handshake() {
 			p2p_config.clone(),
 			dandelion_config.clone(),
 			net_adapter.clone(),
-			Hash::from_vec(vec![]),
+			Hash::from_vec(&vec![]),
 			Arc::new(AtomicBool::new(false)),
 			false,
 			None,
@@ -84,7 +84,7 @@ fn peer_handshake() {
 		p2p::Capabilities::UNKNOWN,
 		Difficulty::one(),
 		my_addr,
-		&p2p::handshake::Handshake::new(Hash::from_vec(vec![]), p2p_config.clone()),
+		&p2p::handshake::Handshake::new(Hash::from_vec(&vec![]), p2p_config.clone()),
 		net_adapter,
 	).unwrap();
 

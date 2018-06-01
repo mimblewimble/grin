@@ -132,8 +132,8 @@ impl Writeable for MerkleProof {
 			[write_u64, self.path.len() as u64]
 		);
 
-		try!(self.peaks.write(writer));
-		try!(self.path.write(writer));
+		self.peaks.write(writer)?;
+		self.path.write(writer)?;
 
 		Ok(())
 	}
@@ -202,7 +202,7 @@ impl MerkleProof {
 	pub fn from_hex(hex: &str) -> Result<MerkleProof, String> {
 		let bytes = util::from_hex(hex.to_string()).unwrap();
 		let res = ser::deserialize(&mut &bytes[..])
-			.map_err(|_| format!("failed to deserialize a Merkle Proof"))?;
+			.map_err(|_| "failed to deserialize a Merkle Proof".to_string())?;
 		Ok(res)
 	}
 
@@ -346,15 +346,12 @@ where
 
 		let path = family_branch
 			.iter()
-			.map(|x| (self.get_from_file(x.1).unwrap_or(Hash::default()), x.1))
+			.map(|x| (self.get_from_file(x.1).unwrap_or_default(), x.1))
 			.collect::<Vec<_>>();
 
 		let peaks = peaks(self.last_pos)
 			.iter()
-			.filter_map(|&x| {
-				let res = self.get_from_file(x);
-				res
-			})
+			.filter_map(|&x| self.get_from_file(x))
 			.collect::<Vec<_>>();
 
 		let proof = MerkleProof {
@@ -394,7 +391,7 @@ where
 
 			current_hash = (left_hash, current_hash).hash_with_index(pos - 1);
 
-			to_append.push((current_hash.clone(), None));
+			to_append.push((current_hash, None));
 		}
 
 		// append all the new nodes and update the MMR index
@@ -425,7 +422,7 @@ where
 	/// to keep an index of elements to positions in the tree. Prunes parent
 	/// nodes as well when they become childless.
 	pub fn prune(&mut self, position: u64, index: u32) -> Result<bool, String> {
-		if let None = self.backend.get_hash(position) {
+		if self.backend.get_hash(position).is_none() {
 			return Ok(false);
 		}
 		let prunable_height = bintree_postorder_height(position);
@@ -451,7 +448,7 @@ where
 
 			// if we have a pruned sibling, we can continue up the tree
 			// otherwise we're done
-			if let None = self.backend.get_hash(sibling) {
+			if self.backend.get_hash(sibling).is_none() {
 				current = parent;
 			} else {
 				break;
@@ -554,7 +551,8 @@ where
 			if bintree_postorder_height(n) > 0 {
 				if let Some(hash) = self.get_hash(n) {
 					// take the left and right children, if they exist
-					let left_pos = bintree_move_down_left(n).ok_or(format!("left_pos not found"))?;
+					let left_pos =
+						bintree_move_down_left(n).ok_or("left_pos not found".to_string())?;
 					let right_pos = bintree_jump_right_sibling(left_pos);
 
 					// using get_from_file here for the children (they may have been "removed")
@@ -663,6 +661,7 @@ where
 /// but positions of a node within the PMMR will not match positions in the
 /// backend storage anymore. The PruneList accounts for that mismatch and does
 /// the position translation.
+#[derive(Default)]
 pub struct PruneList {
 	/// Vector of pruned nodes positions
 	pub pruned_nodes: Vec<u64>,
@@ -718,28 +717,24 @@ impl PruneList {
 		let pruned_idx = self.next_pruned_idx(pos);
 		let next_idx = self.pruned_nodes.binary_search(&pos).map(|x| x + 1).ok();
 
-		match pruned_idx.or(next_idx) {
-			None => None,
-			Some(idx) => {
-				Some(
-					// skip by the number of leaf nodes pruned in the preceeding subtrees
-					// which just 2^height
-					// except in the case of height==0
-					// (where we want to treat the pruned tree as 0 leaves)
-					self.pruned_nodes[0..(idx as usize)]
-						.iter()
-						.map(|n| {
-							let height = bintree_postorder_height(*n);
-							if height == 0 {
-								0
-							} else {
-								(1 << height)
-							}
-						})
-						.sum(),
-				)
-			}
-		}
+		let idx = pruned_idx.or(next_idx)?;
+		Some(
+			// skip by the number of leaf nodes pruned in the preceeding subtrees
+			// which just 2^height
+			// except in the case of height==0
+			// (where we want to treat the pruned tree as 0 leaves)
+			self.pruned_nodes[0..(idx as usize)]
+				.iter()
+				.map(|n| {
+					let height = bintree_postorder_height(*n);
+					if height == 0 {
+						0
+					} else {
+						(1 << height)
+					}
+				})
+				.sum(),
+		)
 	}
 
 	/// Push the node at the provided position in the prune list. Compacts the
@@ -814,7 +809,7 @@ pub fn peaks(num: u64) -> Vec<u64> {
 	// have for index a binary values with all 1s (i.e. 11, 111, 1111, etc.)
 	let mut top = 1;
 	while (top - 1) <= num {
-		top = top << 1;
+		top <<= 1;
 	}
 	top = (top >> 1) - 1;
 	if top == 0 {
@@ -859,7 +854,7 @@ pub fn n_leaves(mut sz: u64) -> u64 {
 /// Returns the pmmr index of the nth inserted element
 pub fn insertion_to_pmmr_index(mut sz: u64) -> u64 {
 	//1 based pmmrs
-	sz = sz - 1;
+	sz -= 1;
 	2 * sz - sz.count_ones() as u64 + 1
 }
 

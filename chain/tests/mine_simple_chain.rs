@@ -451,7 +451,7 @@ fn actual_diff_iter_output() {
 		println!(
 			"next_difficulty time: {}, diff: {}, duration: {} ",
 			elem.0,
-			elem.1.into_num(),
+			elem.1.to_num(),
 			last_time - elem.0
 		);
 		last_time = elem.0;
