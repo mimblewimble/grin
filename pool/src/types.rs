@@ -22,21 +22,63 @@ use core::consensus;
 use core::core::transaction;
 use core::core::transaction::Transaction;
 
+/// Dandelion relay timer
+const DANDELION_RELAY_SECS: u64 = 600;
+
+/// Dandelion emabargo timer
+const DANDELION_EMBARGO_SECS: u64 = 180;
+
+/// Dandelion patience timer
+const DANDELION_PATIENCE_SECS: u64 = 10;
+
+/// Dandelion stem probability (stem 90% of the time, fluff 10%).
+const DANDELION_STEM_PROBABILITY: usize = 90;
+
 /// Configuration for "Dandelion".
 /// Note: shared between p2p and pool.
-/// Look in top-level server config for info on configuring these parameters.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DandelionConfig {
 	/// Choose new Dandelion relay peer every n secs.
-	pub relay_secs: u64,
+	#[serde = "default_dandelion_relay_secs"]
+	pub relay_secs: Option<u64>,
 	/// Dandelion embargo, fluff and broadcast tx if not seen on network before
 	/// embargo expires.
-	pub embargo_secs: u64,
+	#[serde = "default_dandelion_embargo_secs"]
+	pub embargo_secs: Option<u64>,
 	/// Dandelion patience timer, fluff/stem processing runs every n secs.
 	/// Tx aggregation happens on stem txs received within this window.
-	pub patience_secs: u64,
+	#[serde = "default_dandelion_patience_secs"]
+	pub patience_secs: Option<u64>,
 	/// Dandelion stem probability (stem 90% of the time, fluff 10% etc.)
-	pub stem_probability: usize,
+	#[serde = "default_dandelion_stem_probability"]
+	pub stem_probability: Option<usize>,
+}
+
+impl Default for DandelionConfig {
+	fn default() -> DandelionConfig {
+		DandelionConfig {
+			relay_secs: default_dandelion_relay_secs(),
+			embargo_secs: default_dandelion_embargo_secs(),
+			patience_secs: default_dandelion_patience_secs(),
+			stem_probability: default_dandelion_stem_probability(),
+		}
+	}
+}
+
+fn default_dandelion_relay_secs() -> Option<u64> {
+	Some(DANDELION_RELAY_SECS)
+}
+
+fn default_dandelion_embargo_secs() -> Option<u64> {
+	Some(DANDELION_EMBARGO_SECS)
+}
+
+fn default_dandelion_patience_secs() -> Option<u64> {
+	Some(DANDELION_PATIENCE_SECS)
+}
+
+fn default_dandelion_stem_probability() -> Option<usize> {
+	Some(DANDELION_STEM_PROBABILITY)
 }
 
 /// Transaction pool configuration

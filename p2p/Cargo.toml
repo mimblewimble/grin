@@ -20,3 +20,6 @@ time = "0.1"
 grin_core = { path = "../core" }
 grin_store = { path = "../store" }
 grin_util = { path = "../util" }
+
+[dev-dependencies]
+grin_pool = { path = "../pool" }
