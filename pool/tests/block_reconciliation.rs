@@ -192,8 +192,10 @@ fn test_transaction_pool_block_reconciliation() {
 		}
 
 		let tip = Tip::from_block(&block.header);
-		chain.store.save_block_header(&block.header).unwrap();
-		chain.store.save_head(&tip).unwrap();
+		let batch = chain.store.batch().unwrap();
+		batch.save_block_header(&block.header).unwrap();
+		batch.save_head(&tip).unwrap();
+		batch.commit().unwrap();
 
 		block
 	};
