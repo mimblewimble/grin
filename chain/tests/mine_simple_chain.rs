@@ -24,8 +24,8 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
-use chain::types::*;
 use chain::Chain;
+use chain::types::*;
 use core::consensus;
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
@@ -444,7 +444,7 @@ fn actual_diff_iter_output() {
 		println!(
 			"next_difficulty time: {}, diff: {}, duration: {} ",
 			elem.0,
-			elem.1.into_num(),
+			elem.1.to_num(),
 			last_time - elem.0
 		);
 		last_time = elem.0;

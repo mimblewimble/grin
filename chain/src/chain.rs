@@ -30,8 +30,8 @@ use pipe;
 use store;
 use txhashset;
 use types::*;
-use util::secp::pedersen::{Commitment, RangeProof};
 use util::LOGGER;
+use util::secp::pedersen::{Commitment, RangeProof};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -260,7 +260,7 @@ impl Chain {
 		debug!(
 			LOGGER,
 			"Chain init: {} @ {} [{}]",
-			head.total_difficulty.into_num(),
+			head.total_difficulty.to_num(),
 			head.height,
 			head.last_block_h,
 		);

@@ -446,7 +446,6 @@ impl StratumServer {
 			// Reconstruct the block header with this nonce and pow added
 			b = self.current_block.clone();
 			b.header.nonce = submit_params.nonce;
-			b.header.pow.proof_size = submit_params.pow.len();
 			b.header.pow.nonces = submit_params.pow;
 			let res = self.chain.process_block(b.clone(), chain::Options::MINE);
 			if let Err(e) = res {
@@ -644,7 +643,7 @@ impl StratumServer {
 				self.current_block = new_block;
 				self.current_difficulty = (self.current_block.header.total_difficulty.clone()
 					- head.total_difficulty.clone())
-					.into_num();
+					.to_num();
 				self.current_key_id = block_fees.key_id();
 				current_hash = latest_hash;
 				// set a new deadline for rebuilding with fresh transactions

@@ -19,8 +19,8 @@ use std::sync::{Arc, RwLock};
 use rand::Rng;
 use rand::os::OsRng;
 
-use core::core::target::Difficulty;
 use core::core::hash::Hash;
+use core::core::target::Difficulty;
 use msg::*;
 use peer::Peer;
 use types::*;
@@ -35,7 +35,8 @@ pub struct Handshake {
 	/// a node id.
 	nonces: Arc<RwLock<VecDeque<u64>>>,
 	/// The genesis block header of the chain seen by this node.
-	/// We only want to connect to other nodes seeing the same chain (forks are ok).
+	/// We only want to connect to other nodes seeing the same chain (forks are
+	/// ok).
 	genesis: Hash,
 	config: P2PConfig,
 }
@@ -111,7 +112,7 @@ impl Handshake {
 		debug!(
 			LOGGER,
 			"Connected! Cumulative {} offered from {:?} {:?} {:?}",
-			peer_info.total_difficulty.into_num(),
+			peer_info.total_difficulty.to_num(),
 			peer_info.addr,
 			peer_info.user_agent,
 			peer_info.capabilities

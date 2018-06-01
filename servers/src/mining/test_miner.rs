@@ -17,23 +17,23 @@
 //! header with its proof-of-work.  Any valid mined blocks are submitted to the
 //! network.
 
-use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 use time;
 
 use common::adapters::PoolToChainAdapter;
+use common::types::StratumServerConfig;
 use core::consensus;
 use core::core::Proof;
-use core::core::{Block, BlockHeader};
 use core::core::hash::{Hash, Hashed};
+use core::core::{Block, BlockHeader};
 use core::pow::cuckoo;
-use common::types::StratumServerConfig;
 use util::LOGGER;
 
 use chain;
-use pool;
-use mining::mine_block;
 use core::global;
+use mining::mine_block;
+use pool;
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
@@ -108,7 +108,7 @@ impl Miner {
 				global::sizeshift(),
 			).mine()
 			{
-				let proof_diff = proof.clone().to_difficulty();
+				let proof_diff = proof.to_difficulty();
 				if proof_diff >= (b.header.total_difficulty.clone() - head.total_difficulty.clone())
 				{
 					sol = Some(proof);

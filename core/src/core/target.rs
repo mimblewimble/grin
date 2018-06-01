@@ -29,7 +29,7 @@ use core::hash::Hash;
 use ser::{self, Readable, Reader, Writeable, Writer};
 
 /// The difficulty is defined as the maximum target divided by the block hash.
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Difficulty {
 	num: u64,
 }
@@ -63,7 +63,7 @@ impl Difficulty {
 	}
 
 	/// Converts the difficulty into a u64
-	pub fn into_num(&self) -> u64 {
+	pub fn to_num(&self) -> u64 {
 		self.num
 	}
 }
@@ -118,7 +118,7 @@ impl Writeable for Difficulty {
 
 impl Readable for Difficulty {
 	fn read(reader: &mut Reader) -> Result<Difficulty, ser::Error> {
-		let data = try!(reader.read_u64());
+		let data = reader.read_u64()?;
 		Ok(Difficulty { num: data })
 	}
 }
@@ -155,7 +155,7 @@ impl<'de> de::Visitor<'de> for DiffVisitor {
 		E: de::Error,
 	{
 		let num_in = s.parse::<u64>();
-		if let Err(_) = num_in {
+		if num_in.is_err() {
 			return Err(de::Error::invalid_value(
 				de::Unexpected::Str(s),
 				&"a value number",

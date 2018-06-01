@@ -686,7 +686,7 @@ impl NetAdapter for Peers {
 			);
 		}
 
-		if diff.into_num() > 0 {
+		if diff.to_num() > 0 {
 			if let Some(peer) = self.get_connected_peer(&addr) {
 				let mut peer = peer.write().unwrap();
 				peer.info.total_difficulty = diff;

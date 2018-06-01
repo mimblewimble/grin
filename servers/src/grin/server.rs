@@ -376,7 +376,7 @@ impl Server {
 					last_time = time;
 					DiffBlock {
 						block_number: height,
-						difficulty: diff.into_num(),
+						difficulty: diff.to_num(),
 						time: time,
 						duration: dur,
 					}

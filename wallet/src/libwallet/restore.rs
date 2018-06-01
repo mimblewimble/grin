@@ -137,7 +137,7 @@ fn find_outputs_with_key<T: WalletBackend>(
 			None,
 			output.range_proof().unwrap(),
 		).unwrap();
-		let message = ProofMessageElements::from_proof_message(info.message).unwrap();
+		let message = ProofMessageElements::from_proof_message(&info.message).unwrap();
 		let value = message.value();
 		if value.is_err() {
 			continue;
@@ -175,7 +175,7 @@ fn find_outputs_with_key<T: WalletBackend>(
 				None,
 				output.range_proof().unwrap(),
 			).unwrap();
-			let message = ProofMessageElements::from_proof_message(info.message).unwrap();
+			let message = ProofMessageElements::from_proof_message(&info.message).unwrap();
 			let value = message.value();
 			if value.is_err() || !message.zeroes_correct() {
 				continue;

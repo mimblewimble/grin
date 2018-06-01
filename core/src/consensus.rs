@@ -221,7 +221,7 @@ where
 	let diff_sum = diff_data
 		.iter()
 		.skip(MEDIAN_TIME_WINDOW as usize)
-		.fold(0, |sum, d| sum + d.clone().unwrap().1.into_num());
+		.fold(0, |sum, d| sum + d.clone().unwrap().1.to_num());
 
 	// Apply dampening except when difficulty is near 1
 	let ts_damp = if diff_sum < DAMP_FACTOR * DIFFICULTY_ADJUST_WINDOW {

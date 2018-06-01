@@ -181,15 +181,14 @@ fn build_block(
 	b.header.nonce = rng.gen();
 	b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
 
-	let b_difficulty =
-		(b.header.total_difficulty.clone() - head.total_difficulty.clone()).into_num();
+	let b_difficulty = (b.header.total_difficulty.clone() - head.total_difficulty.clone()).to_num();
 	debug!(
 		LOGGER,
 		"Built new block with {} inputs and {} outputs, network difficulty: {}, cumulative difficulty {}",
 		b.inputs.len(),
 		b.outputs.len(),
 		b_difficulty,
-		b.header.clone().total_difficulty.clone().into_num(),
+		b.header.clone().total_difficulty.to_num(),
 	);
 
 	let roots_result = chain.set_txhashset_roots(&mut b, false);
