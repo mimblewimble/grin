@@ -216,11 +216,7 @@ impl Chain {
 			.map_err(|e| Error::StoreErr(e, "chain load head".to_owned()))?;
 		let mut ctx = self.ctx_from_head(head, opts)?;
 
-		let mut batch = self.store.batch()?;
-		let res = pipe::process_block(&b, &mut ctx, &mut batch);
-		if res.is_ok() {
-			batch.commit()?;
-		}
+		let res = pipe::process_block(&b, &mut ctx);
 
 		match res {
 			Ok(Some(ref tip)) => {
@@ -535,26 +531,33 @@ impl Chain {
 		let header = self.store.get_block_header(&h)?;
 		txhashset::zip_write(self.db_root.clone(), txhashset_data)?;
 
-		let mut batch = self.store.batch()?;
-		// write the block marker so we can safely rewind to
-		// the pos for that block when we validate the extension below
-		let marker = BlockMarker {
-			output_pos: rewind_to_output,
-			kernel_pos: rewind_to_kernel,
-		};
-		batch.save_block_marker(&h, &marker)?;
+		{
+			// write the block marker so we can safely rewind to
+			// the pos for that block when we validate the extension below
+			let batch = self.store.batch()?;
+			let marker = BlockMarker {
+				output_pos: rewind_to_output,
+				kernel_pos: rewind_to_kernel,
+			};
+			batch.save_block_marker(&h, &marker)?;
+			batch.commit()?;
+		}
 
-		debug!(
-			LOGGER,
-			"Going to validate new txhashset, might take some time..."
-		);
-
+		// validate the new hashset
 		let mut txhashset = txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone())?;
+		let (output_sum, kernel_sum) = txhashset::extending_readonly(&mut txhashset, |extension| {
+			debug!(
+				LOGGER,
+				"Going to validate new txhashset, might take some time..."
+			);
+			extension.rewind(&header)?;
+			extension.validate(&header, false)
+		})?;
 
-		// Note: we are validating against a writeable extension.
+		// all good, prepare a new batch and update all the required records
+		let mut batch = self.store.batch()?;
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			extension.rewind(&header)?;
-			let (output_sum, kernel_sum) = extension.validate(&header, false)?;
 			extension.save_latest_block_sums(&header, output_sum, kernel_sum)?;
 			extension.rebuild_index()?;
 			Ok(())
@@ -565,19 +568,17 @@ impl Chain {
 			let mut txhashset_ref = self.txhashset.write().unwrap();
 			*txhashset_ref = txhashset;
 		}
-
 		// setup new head
 		{
 			let mut head = self.head.lock().unwrap();
 			*head = Tip::from_block(&header);
-			let _ = batch.save_body_head(&head);
+			batch.save_body_head(&head)?;
 			batch.save_header_height(&header)?;
 			batch.build_by_height_index(&header, true)?;
 		}
 		batch.commit()?;
 
 		self.check_orphans(header.height + 1);
-
 		Ok(())
 	}
 

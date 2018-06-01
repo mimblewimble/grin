@@ -49,8 +49,7 @@ pub struct BlockContext {
 /// updated.
 pub fn process_block(
 	b: &Block,
-	mut ctx: &mut BlockContext,
-	batch: &mut store::Batch,
+	ctx: &mut BlockContext,
 ) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
@@ -88,8 +87,8 @@ pub fn process_block(
 	}
 
 	// validate the block itself
-	// we can do this now before interact with the txhashset
-	validate_block(b, batch)?;
+	// we can do this now before interacting with the txhashset
+	let sums = validate_block(b, ctx)?;
 
 	// header and block both valid, and we have a previous block
 	// so take the lock on the txhashset
@@ -101,9 +100,11 @@ pub fn process_block(
 		.head()
 		.map_err(|e| Error::StoreErr(e, "pipe reload head".to_owned()))?;
 
+	let mut batch = ctx.store.batch()?;
+
 	// start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
-	txhashset::extending(&mut txhashset, batch, |mut extension| {
+	txhashset::extending(&mut txhashset, &mut batch, |mut extension| {
 		// First we rewind the txhashset extension if necessary
 		// to put it into a consistent state for validating the block.
 		// We can skip this step if the previous header is the latest header we saw.
@@ -118,8 +119,13 @@ pub fn process_block(
 		Ok(())
 	})?;
 
-	add_block(b, batch)?;
-	update_head(b, &mut ctx, batch)
+	batch.save_block_sums(&b.hash(), &sums)?;
+	add_block(b, &mut batch)?;
+	let res = update_head(b, &ctx, &mut batch);
+	if res.is_ok() {
+		batch.commit()?;
+	}
+	res
 }
 
 /// Process the block header.
@@ -304,27 +310,22 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	Ok(())
 }
 
-fn validate_block(b: &Block, batch: &mut store::Batch) -> Result<(), Error> {
+fn validate_block(b: &Block, ctx: &BlockContext) -> Result<BlockSums, Error> {
 	// If this is the first block then we have no previous block sums stored.
 	let block_sums = if b.header.height == 1 {
 		BlockSums::default()
 	} else {
-		batch.get_block_sums(&b.header.previous)?
+		ctx.store.get_block_sums(&b.header.previous)?
 	};
 
 	let (new_output_sum, new_kernel_sum) =
 		b.validate(&block_sums.output_sum, &block_sums.kernel_sum)
 			.map_err(&Error::InvalidBlockProof)?;
 
-	batch.save_block_sums(
-		&b.hash(),
-		&BlockSums {
-			output_sum: new_output_sum,
-			kernel_sum: new_kernel_sum,
-		},
-	)?;
-
-	Ok(())
+	Ok(BlockSums {
+		output_sum: new_output_sum,
+		kernel_sum: new_kernel_sum,
+	})
 }
 
 /// Fully validate the block by applying it to the txhashset extension
@@ -389,7 +390,7 @@ fn add_block_header(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Er
 /// work than the head.
 fn update_head(
 	b: &Block,
-	ctx: &mut BlockContext,
+	ctx: &BlockContext,
 	batch: &store::Batch,
 ) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
@@ -413,7 +414,6 @@ fn update_head(
 				.save_head(&tip)
 				.map_err(|e| Error::StoreErr(e, "pipe save head".to_owned()))?;
 		}
-		ctx.head = tip.clone();
 		debug!(
 			LOGGER,
 			"pipe: chain head {} @ {}",
