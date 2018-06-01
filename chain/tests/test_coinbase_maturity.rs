@@ -16,6 +16,7 @@ extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_store as store;
 extern crate grin_wallet as wallet;
 extern crate rand;
 extern crate time;
@@ -25,9 +26,9 @@ use std::sync::Arc;
 
 use chain::types::*;
 use core::consensus;
+use core::core::OutputIdentifier;
 use core::core::target::Difficulty;
 use core::core::transaction;
-use core::core::OutputIdentifier;
 use core::global;
 use core::global::ChainTypes;
 use wallet::libtx::build;
@@ -49,8 +50,10 @@ fn test_coinbase_maturity() {
 
 	let genesis_block = pow::mine_genesis_block().unwrap();
 
+	let db_env = Arc::new(store::new_env(".grin".to_string()));
 	let chain = chain::Chain::init(
 		".grin".to_string(),
+		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,
@@ -70,7 +73,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
-	chain.set_txhashset_roots(&mut block, false).unwrap();
+	chain.set_block_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
 		&mut block.header,
@@ -124,7 +127,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
-	chain.set_txhashset_roots(&mut block, false).unwrap();
+	chain.set_block_roots(&mut block, false).unwrap();
 
 	// Confirm the tx attempting to spend the coinbase output
 	// is not valid at the current block height given the current chain state.
@@ -154,7 +157,7 @@ fn test_coinbase_maturity() {
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
-		chain.set_txhashset_roots(&mut block, false).unwrap();
+		chain.set_block_roots(&mut block, false).unwrap();
 
 		pow::pow_size(
 			&mut block.header,
@@ -181,7 +184,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
-	chain.set_txhashset_roots(&mut block, false).unwrap();
+	chain.set_block_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
 		&mut block.header,

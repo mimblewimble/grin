@@ -29,9 +29,9 @@ use std::sync::{Arc, RwLock};
 
 use core::core::{Block, BlockHeader};
 
+use chain::ChainStore;
 use chain::txhashset;
 use chain::types::Tip;
-use chain::ChainStore;
 use core::core::target::Difficulty;
 use core::core::transaction;
 
@@ -58,11 +58,15 @@ fn test_the_transaction_pool() {
 		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
 
 		let mut txhashset = chain.txhashset.write().unwrap();
-		txhashset::extending(&mut txhashset, |extension| extension.apply_block(&block)).unwrap();
+		let mut batch = chain.store.batch().unwrap();
+		txhashset::extending(&mut txhashset, &mut batch, |extension| {
+			extension.apply_block(&block)
+		}).unwrap();
 
 		let tip = Tip::from_block(&block.header);
-		chain.store.save_block_header(&block.header).unwrap();
-		chain.store.save_head(&tip).unwrap();
+		batch.save_block_header(&block.header).unwrap();
+		batch.save_head(&tip).unwrap();
+		batch.commit().unwrap();
 
 		block.header
 	};

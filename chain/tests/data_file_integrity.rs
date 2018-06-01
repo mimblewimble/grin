@@ -16,6 +16,7 @@ extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
@@ -24,8 +25,8 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
-use chain::types::*;
 use chain::Chain;
+use chain::types::*;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};
 use core::global;
@@ -46,8 +47,10 @@ fn setup(dir_name: &str) -> Chain {
 	clean_output_dir(dir_name);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();
+	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
+		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,
@@ -55,8 +58,10 @@ fn setup(dir_name: &str) -> Chain {
 }
 
 fn reload_chain(dir_name: &str) -> Chain {
+	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
+		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis::genesis_dev(),
 		pow::verify_size,
@@ -79,7 +84,7 @@ fn data_files() {
 			let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
 			b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
-			chain.set_txhashset_roots(&mut b, false).unwrap();
+			chain.set_block_roots(&mut b, false).unwrap();
 
 			pow::pow_size(
 				&mut b.header,
@@ -116,7 +121,7 @@ fn data_files() {
 
 fn _prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_txhashset_roots(&mut b, false).unwrap();
+	chain.set_block_roots(&mut b, false).unwrap();
 	b
 }
 
@@ -128,13 +133,13 @@ fn _prepare_block_tx(
 	txs: Vec<&Transaction>,
 ) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_txhashset_roots(&mut b, false).unwrap();
+	chain.set_block_roots(&mut b, false).unwrap();
 	b
 }
 
 fn _prepare_fork_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_txhashset_roots(&mut b, true).unwrap();
+	chain.set_block_roots(&mut b, true).unwrap();
 	b
 }
 
@@ -146,7 +151,7 @@ fn _prepare_fork_block_tx(
 	txs: Vec<&Transaction>,
 ) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_txhashset_roots(&mut b, true).unwrap();
+	chain.set_block_roots(&mut b, true).unwrap();
 	b
 }
 

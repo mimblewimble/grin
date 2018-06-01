@@ -23,6 +23,7 @@
 #[macro_use]
 extern crate bitflags;
 extern crate byteorder;
+extern crate lmdb_zero as lmdb;
 extern crate lru_cache;
 extern crate serde;
 #[macro_use]
@@ -45,4 +46,5 @@ pub mod types;
 // Re-export the base interface
 
 pub use chain::{Chain, MAX_ORPHAN_SIZE};
-pub use types::{BlockSums, ChainAdapter, ChainStore, Error, Options, Tip};
+pub use store::ChainStore;
+pub use types::{BlockSums, ChainAdapter, Error, Options, Tip};
