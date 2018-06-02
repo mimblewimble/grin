@@ -396,7 +396,8 @@ impl Block {
 	/// transactions and the private key that will receive the reward. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
 	///
-	/// Only used in tests (to be confirmed, may be wrong here).
+	/// TODO - Move this somewhere where only tests will use it.
+	/// *** Only used in tests. ***
 	///
 	pub fn new(
 		prev: &BlockHeader,
@@ -404,7 +405,16 @@ impl Block {
 		difficulty: Difficulty,
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
-		Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)
+		let mut block =
+			Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
+
+		// Now set the pow on the header so block hashing works as expected.
+		{
+			let proof_size = global::proofsize();
+			block.header.pow = Proof::random(proof_size);
+		}
+
+		Ok(block)
 	}
 
 	/// Hydrate a block from a compact block.
