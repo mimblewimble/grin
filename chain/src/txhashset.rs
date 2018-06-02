@@ -422,25 +422,27 @@ impl<'a> Extension<'a> {
 		let output_pos = self.output_pmmr.unpruned_size();
 		let kernel_pos = self.kernel_pmmr.unpruned_size();
 
+		let rewind_to_height = height - 1;
+
 		// When applying blocks we can apply the coinbase output first
 		// but we cannot do this here, so we need to apply outputs first.
 		for ref output in &tx.outputs {
 			if let Err(e) = self.apply_output(output) {
-				self.rewind_to_pos(output_pos, kernel_pos, height)?;
+				self.rewind_to_pos(output_pos, kernel_pos, rewind_to_height)?;
 				return Err(e);
 			}
 		}
 
 		for ref input in &tx.inputs {
 			if let Err(e) = self.apply_input(input, height) {
-				self.rewind_to_pos(output_pos, kernel_pos, height)?;
+				self.rewind_to_pos(output_pos, kernel_pos, rewind_to_height)?;
 				return Err(e);
 			}
 		}
 
 		for ref kernel in &tx.kernels {
 			if let Err(e) = self.apply_kernel(kernel) {
-				self.rewind_to_pos(output_pos, kernel_pos, height)?;
+				self.rewind_to_pos(output_pos, kernel_pos, rewind_to_height)?;
 				return Err(e);
 			}
 		}
@@ -474,13 +476,13 @@ impl<'a> Extension<'a> {
 		let mut height = height;
 		let mut valid_txs = vec![];
 		if let Some(tx) = pre_tx {
-			height += 1;
 			self.apply_raw_tx(&tx, height)?;
+			height += 1;
 		}
 		for tx in txs {
-			height += 1;
 			if self.apply_raw_tx(&tx, height).is_ok() {
 				valid_txs.push(tx);
+				height += 1;
 			}
 		}
 		Ok(valid_txs)
