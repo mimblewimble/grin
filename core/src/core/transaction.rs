@@ -14,8 +14,8 @@
 
 //! Transactions
 
-use std::cmp::Ordering;
 use std::cmp::max;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::io::Cursor;
 use std::{error, fmt};
@@ -26,12 +26,12 @@ use util::{kernel_sig_msg, static_secp_instance};
 
 use consensus;
 use consensus::VerifySortOrder;
-use core::BlockHeader;
 use core::committed;
-use core::committed::Committed;
 use core::global;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
+use core::BlockHeader;
+use core::Committed;
 use keychain;
 use keychain::BlindingFactor;
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
@@ -78,6 +78,12 @@ pub enum Error {
 	InvalidProofMessage,
 	/// Error when verifying kernel sums via committed trait.
 	Committed(committed::Error),
+	/// Error when sums do not verify correctly during tx aggregation.
+	/// Likely a "double spend" across two unconfirmed txs.
+	AggregationError,
+	/// Validation error relating to cut-through (tx is spending its own
+	/// output).
+	CutThrough,
 }
 
 impl error::Error for Error {
@@ -430,6 +436,7 @@ impl Transaction {
 			return Err(Error::TooManyInputs);
 		}
 		self.verify_sorted()?;
+		self.verify_cut_through()?;
 		self.verify_kernel_sums(self.overage(), self.offset, None, None)?;
 		self.verify_rangeproofs()?;
 		self.verify_kernel_signatures()?;
@@ -464,10 +471,24 @@ impl Transaction {
 		tx_weight as u32
 	}
 
+	// Verify that inputs|outputs|kernels are all sorted in lexicographical order.
 	fn verify_sorted(&self) -> Result<(), Error> {
 		self.inputs.verify_sort_order()?;
 		self.outputs.verify_sort_order()?;
 		self.kernels.verify_sort_order()?;
+		Ok(())
+	}
+
+	// Verify that no input is spending an ouput from the same block.
+	fn verify_cut_through(&self) -> Result<(), Error> {
+		for inp in &self.inputs {
+			if self.outputs
+				.iter()
+				.any(|out| out.commitment() == inp.commitment())
+			{
+				return Err(Error::CutThrough);
+			}
+		}
 		Ok(())
 	}
 }
