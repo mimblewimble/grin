@@ -17,13 +17,15 @@
 use rand::thread_rng;
 use uuid::Uuid;
 
-use core::core::{amount_to_hr_string, Committed, Transaction};
+use core::core::committed;
+use core::core::committed::Committed;
+use core::core::{amount_to_hr_string, Transaction};
 use keychain::{BlindSum, BlindingFactor, Keychain};
 use libtx::error::{Error, ErrorKind};
 use libtx::{aggsig, build, tx_fee};
 
-use util::secp::Signature;
 use util::secp::key::{PublicKey, SecretKey};
+use util::secp::Signature;
 use util::{secp, LOGGER};
 
 /// Public data for each participant in the slate

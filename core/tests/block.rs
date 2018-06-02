@@ -24,6 +24,7 @@ use grin_core::consensus::{BLOCK_OUTPUT_WEIGHT, MAX_BLOCK_WEIGHT};
 use grin_core::core::block::Error;
 use grin_core::core::hash::Hashed;
 use grin_core::core::id::{ShortId, ShortIdentifiable};
+use grin_core::core::Committed;
 use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
 use grin_core::global;
 use grin_core::ser;
@@ -167,7 +168,12 @@ fn remove_coinbase_output_flag() {
 		.remove(OutputFeatures::COINBASE_OUTPUT);
 
 	assert_eq!(b.verify_coinbase(), Err(Error::CoinbaseSumMismatch));
-	assert!(b.verify_sums(&zero_commit, &zero_commit).is_ok());
+	assert!(b.verify_kernel_sums(
+		b.header.overage(),
+		b.header.total_kernel_offset(),
+		None,
+		None
+	).is_ok());
 	assert_eq!(
 		b.validate(&zero_commit, &zero_commit),
 		Err(Error::CoinbaseSumMismatch)

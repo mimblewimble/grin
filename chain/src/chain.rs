@@ -23,6 +23,7 @@ use std::time::{Duration, Instant};
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
+use core::core::Committed;
 use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;
@@ -200,7 +201,14 @@ impl Chain {
 								header.height,
 								header.hash()
 							);
-							let (output_sum, kernel_sum) = extension.validate_sums(&header)?;
+
+							let (output_sum, kernel_sum) = extension.verify_kernel_sums(
+								header.total_overage(),
+								header.total_kernel_offset(),
+								None,
+								None,
+							)?;
+
 							store.save_block_sums(
 								&header.hash(),
 								&BlockSums {

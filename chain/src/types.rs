@@ -20,6 +20,7 @@ use util::secp;
 use util::secp::pedersen::Commitment;
 use util::secp_static;
 
+use core::core::committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::{block, transaction, Block, BlockHeader};
@@ -107,6 +108,8 @@ pub enum Error {
 	Transaction(transaction::Error),
 	/// Anything else
 	Other(String),
+	/// Error from summing and verifying kernel sums via committed trait.
+	Committed(committed::Error),
 }
 
 impl error::Error for Error {
@@ -152,6 +155,12 @@ impl From<keychain::Error> for Error {
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
 		Error::Secp(e)
+	}
+}
+
+impl From<committed::Error> for Error {
+	fn from(e: committed::Error) -> Error {
+		Error::Committed(e)
 	}
 }
 

@@ -16,6 +16,7 @@
 use failure::{Backtrace, Context, Fail};
 use std::fmt::{self, Display};
 
+use core::core::committed;
 use core::core::transaction;
 use keychain::{self, extkey};
 use util::secp;
@@ -50,6 +51,9 @@ pub enum ErrorKind {
 	/// Fee error
 	#[fail(display = "Fee Error")]
 	Fee(String),
+	/// Error from summing commitments via committed trait.
+	#[fail(display = "Committed Error")]
+	Committed(committed::Error),
 }
 
 impl Fail for Error {
@@ -93,6 +97,14 @@ impl From<secp::Error> for Error {
 	fn from(error: secp::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::Secp(error)),
+		}
+	}
+}
+
+impl From<committed::Error> for Error {
+	fn from(error: committed::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::Committed(error)),
 		}
 	}
 }
