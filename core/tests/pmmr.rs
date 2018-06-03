@@ -82,10 +82,8 @@ where
 		}
 	}
 
-	fn remove(&mut self, positions: Vec<u64>, _index: u32) -> Result<(), String> {
-		for n in positions {
-			self.remove_list.push(n)
-		}
+	fn remove(&mut self, position: u64, _index: u32) -> Result<(), String> {
+		self.remove_list.push(position);
 		Ok(())
 	}
 
@@ -591,13 +589,18 @@ fn pmmr_prune() {
 		sz = pmmr.unpruned_size();
 	}
 
+	// First check the initial numbers of elements.
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 0);
+
 	// pruning a leaf with no parent should do nothing
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(16, 0).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.used_size(), 16);
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 1);
 
 	// pruning leaves with no shared parent just removes 1 element
 	{
@@ -605,14 +608,16 @@ fn pmmr_prune() {
 		pmmr.prune(2, 0).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.used_size(), 15);
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 2);
 
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(4, 0).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.used_size(), 14);
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 3);
 
 	// pruning a non-leaf node has no effect
 	{
@@ -620,23 +625,27 @@ fn pmmr_prune() {
 		pmmr.prune(3, 0).unwrap_err();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.used_size(), 14);
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 3);
 
-	// pruning sibling removes subtree
+	// TODO - no longer true (leaves only now) - pruning sibling removes subtree
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(5, 0).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.used_size(), 12);
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 4);
 
-	// pruning all leaves under level >1 removes all subtree
+	// TODO - no longeer true (leaves only now) - pruning all leaves under level >1
+	// removes all subtree
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(1, 0).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.used_size(), 9);
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 5);
 
 	// pruning everything should only leave us with a single peak
 	{
@@ -646,7 +655,8 @@ fn pmmr_prune() {
 		}
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.used_size(), 1);
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 9);
 }
 
 #[test]

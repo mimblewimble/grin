@@ -300,15 +300,12 @@ impl RemoveLog {
 		Ok(())
 	}
 
-	/// Append a set of new positions to the remove log. Both adds those
-	/// positions the ordered in-memory set and to the file.
-	pub fn append(&mut self, elmts: Vec<u64>, index: u32) -> io::Result<()> {
-		for elmt in elmts {
-			match self.removed_tmp.binary_search(&(elmt, index)) {
-				Ok(_) => continue,
-				Err(idx) => {
-					self.removed_tmp.insert(idx, (elmt, index));
-				}
+	/// Append a new position to the remove log.
+	pub fn append(&mut self, elmt: u64, index: u32) -> io::Result<()> {
+		match self.removed_tmp.binary_search(&(elmt, index)) {
+			Ok(_) => {}
+			Err(idx) => {
+				self.removed_tmp.insert(idx, (elmt, index));
 			}
 		}
 		Ok(())
