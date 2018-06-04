@@ -279,7 +279,6 @@ impl Server {
 			.name("stratum_server".to_string())
 			.spawn(move || {
 				stratum_server.run_loop(
-					config.clone(),
 					stratum_stats,
 					cuckoo_size as u32,
 					proof_size,
@@ -304,6 +303,7 @@ impl Server {
 			enable_stratum_server: None,
 			stratum_server_addr: None,
 			wallet_listener_url: config_wallet_url,
+			minimum_share_difficulty: 1,
 		};
 
 		let mut miner = Miner::new(
