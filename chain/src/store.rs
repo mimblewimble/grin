@@ -20,12 +20,12 @@ use lru_cache::LruCache;
 
 use util::secp::pedersen::Commitment;
 
-use types::*;
-use core::core::hash::{Hash, Hashed};
-use core::core::{Block, BlockHeader};
 use core::consensus::TargetError;
+use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
+use core::core::{Block, BlockHeader};
 use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
+use types::*;
 
 const STORE_SUBPATH: &'static str = "chain";
 
@@ -63,7 +63,7 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn head_header(&self) -> Result<BlockHeader, Error> {
-		self.get_block_header(&try!(self.head()).last_block_h)
+		self.get_block_header(&self.head()?.last_block_h)
 	}
 
 	fn save_head(&self, t: &Tip) -> Result<(), Error> {

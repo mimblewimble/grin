@@ -21,9 +21,9 @@ use std::thread;
 use std::time;
 
 use core::consensus::{MAX_MSG_LEN, MAX_TX_INPUTS, MAX_TX_KERNELS, MAX_TX_OUTPUTS};
+use core::core::BlockHeader;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
-use core::core::BlockHeader;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::*;
@@ -291,8 +291,8 @@ impl Writeable for MsgHeader {
 
 impl Readable for MsgHeader {
 	fn read(reader: &mut Reader) -> Result<MsgHeader, ser::Error> {
-		try!(reader.expect_u8(MAGIC[0]));
-		try!(reader.expect_u8(MAGIC[1]));
+		reader.expect_u8(MAGIC[0])?;
+		reader.expect_u8(MAGIC[1])?;
 		let (t, len) = ser_multiread!(reader, read_u8, read_u64);
 		match Type::from_u8(t) {
 			Some(ty) => Ok(MsgHeader {
@@ -347,13 +347,13 @@ impl Writeable for Hand {
 impl Readable for Hand {
 	fn read(reader: &mut Reader) -> Result<Hand, ser::Error> {
 		let (version, capab, nonce) = ser_multiread!(reader, read_u32, read_u32, read_u64);
-		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData,));
-		let total_diff = try!(Difficulty::read(reader));
-		let sender_addr = try!(SockAddr::read(reader));
-		let receiver_addr = try!(SockAddr::read(reader));
-		let ua = try!(reader.read_vec());
-		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
-		let genesis = try!(Hash::read(reader));
+		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
+		let total_diff = Difficulty::read(reader)?;
+		let sender_addr = SockAddr::read(reader)?;
+		let receiver_addr = SockAddr::read(reader)?;
+		let ua = reader.read_vec()?;
+		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
+		let genesis = Hash::read(reader)?;
 		Ok(Hand {
 			version: version,
 			capabilities: capabilities,
@@ -400,11 +400,11 @@ impl Writeable for Shake {
 impl Readable for Shake {
 	fn read(reader: &mut Reader) -> Result<Shake, ser::Error> {
 		let (version, capab) = ser_multiread!(reader, read_u32, read_u32);
-		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData,));
-		let total_diff = try!(Difficulty::read(reader));
-		let ua = try!(reader.read_vec());
-		let user_agent = try!(String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData));
-		let genesis = try!(Hash::read(reader));
+		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
+		let total_diff = Difficulty::read(reader)?;
+		let ua = reader.read_vec()?;
+		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
+		let genesis = Hash::read(reader)?;
 		Ok(Shake {
 			version: version,
 			capabilities: capabilities,
@@ -429,8 +429,8 @@ impl Writeable for GetPeerAddrs {
 
 impl Readable for GetPeerAddrs {
 	fn read(reader: &mut Reader) -> Result<GetPeerAddrs, ser::Error> {
-		let capab = try!(reader.read_u32());
-		let capabilities = try!(Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData,));
+		let capab = reader.read_u32()?;
+		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
 		Ok(GetPeerAddrs {
 			capabilities: capabilities,
 		})
@@ -446,7 +446,7 @@ pub struct PeerAddrs {
 
 impl Writeable for PeerAddrs {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		try!(writer.write_u32(self.peers.len() as u32));
+		writer.write_u32(self.peers.len() as u32)?;
 		for p in &self.peers {
 			p.write(writer).unwrap();
 		}
@@ -456,7 +456,7 @@ impl Writeable for PeerAddrs {
 
 impl Readable for PeerAddrs {
 	fn read(reader: &mut Reader) -> Result<PeerAddrs, ser::Error> {
-		let peer_count = try!(reader.read_u32());
+		let peer_count = reader.read_u32()?;
 		if peer_count > MAX_PEER_ADDRS {
 			return Err(ser::Error::TooLargeReadErr);
 		} else if peer_count == 0 {
@@ -490,7 +490,7 @@ impl Writeable for PeerError {
 impl Readable for PeerError {
 	fn read(reader: &mut Reader) -> Result<PeerError, ser::Error> {
 		let (code, msg) = ser_multiread!(reader, read_u32, read_vec);
-		let message = try!(String::from_utf8(msg).map_err(|_| ser::Error::CorruptedData,));
+		let message = String::from_utf8(msg).map_err(|_| ser::Error::CorruptedData)?;
 		Ok(PeerError {
 			code: code,
 			message: message,
@@ -516,11 +516,11 @@ impl Writeable for SockAddr {
 				);
 			}
 			SocketAddr::V6(sav6) => {
-				try!(writer.write_u8(1));
+				writer.write_u8(1)?;
 				for seg in &sav6.ip().segments() {
-					try!(writer.write_u16(*seg));
+					writer.write_u16(*seg)?;
 				}
-				try!(writer.write_u16(sav6.port()));
+				writer.write_u16(sav6.port())?;
 			}
 		}
 		Ok(())
@@ -529,17 +529,17 @@ impl Writeable for SockAddr {
 
 impl Readable for SockAddr {
 	fn read(reader: &mut Reader) -> Result<SockAddr, ser::Error> {
-		let v4_or_v6 = try!(reader.read_u8());
+		let v4_or_v6 = reader.read_u8()?;
 		if v4_or_v6 == 0 {
-			let ip = try!(reader.read_fixed_bytes(4));
-			let port = try!(reader.read_u16());
+			let ip = reader.read_fixed_bytes(4)?;
+			let port = reader.read_u16()?;
 			Ok(SockAddr(SocketAddr::V4(SocketAddrV4::new(
 				Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]),
 				port,
 			))))
 		} else {
 			let ip = try_map_vec!([0..8], |_| reader.read_u16());
-			let port = try!(reader.read_u16());
+			let port = reader.read_u16()?;
 			Ok(SockAddr(SocketAddr::V6(SocketAddrV6::new(
 				Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]),
 				port,

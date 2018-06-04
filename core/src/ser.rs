@@ -163,7 +163,7 @@ pub trait Writer {
 	/// Writes a variable number of bytes. The length is encoded as a 64-bit
 	/// prefix.
 	fn write_bytes<T: AsFixedBytes>(&mut self, bytes: &T) -> Result<(), Error> {
-		try!(self.write_u64(bytes.as_ref().len() as u64));
+		self.write_u64(bytes.as_ref().len() as u64)?;
 		self.write_fixed_bytes(bytes)
 	}
 
@@ -258,7 +258,7 @@ pub fn serialize<W: Writeable>(sink: &mut Write, thing: &W) -> Result<(), Error>
 /// Vec<u8>.
 pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
 	let mut vec = Vec::new();
-	try!(serialize(&mut vec, thing));
+	serialize(&mut vec, thing)?;
 	Ok(vec)
 }
 
@@ -290,13 +290,13 @@ impl<'a> Reader for BinReader<'a> {
 	}
 	/// Read a variable size vector from the underlying Read. Expects a usize
 	fn read_vec(&mut self) -> Result<Vec<u8>, Error> {
-		let len = try!(self.read_u64());
+		let len = self.read_u64()?;
 		self.read_fixed_bytes(len as usize)
 	}
 	/// Read limited variable size vector from the underlying Read. Expects a
 	/// usize
 	fn read_limited_vec(&mut self, max: usize) -> Result<Vec<u8>, Error> {
-		let len = cmp::min(max, try!(self.read_u64()) as usize);
+		let len = cmp::min(max, self.read_u64()? as usize);
 		self.read_fixed_bytes(len as usize)
 	}
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error> {
@@ -312,7 +312,7 @@ impl<'a> Reader for BinReader<'a> {
 	}
 
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error> {
-		let b = try!(self.read_u8());
+		let b = self.read_u8()?;
 		if b == val {
 			Ok(b)
 		} else {
@@ -326,7 +326,7 @@ impl<'a> Reader for BinReader<'a> {
 
 impl Readable for Commitment {
 	fn read(reader: &mut Reader) -> Result<Commitment, Error> {
-		let a = try!(reader.read_fixed_bytes(PEDERSEN_COMMITMENT_SIZE));
+		let a = reader.read_fixed_bytes(PEDERSEN_COMMITMENT_SIZE)?;
 		let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
 		for i in 0..PEDERSEN_COMMITMENT_SIZE {
 			c[i] = a[i];
@@ -395,7 +395,7 @@ impl PMMRable for RangeProof {
 
 impl Readable for Signature {
 	fn read(reader: &mut Reader) -> Result<Signature, Error> {
-		let a = try!(reader.read_fixed_bytes(AGG_SIGNATURE_SIZE));
+		let a = reader.read_fixed_bytes(AGG_SIGNATURE_SIZE)?;
 		let mut c = [0; AGG_SIGNATURE_SIZE];
 		for i in 0..AGG_SIGNATURE_SIZE {
 			c[i] = a[i];
@@ -423,7 +423,7 @@ impl<'a> Writer for BinWriter<'a> {
 
 	fn write_fixed_bytes<T: AsFixedBytes>(&mut self, fixed: &T) -> Result<(), Error> {
 		let bs = fixed.as_ref();
-		try!(self.sink.write_all(bs));
+		self.sink.write_all(bs)?;
 		Ok(())
 	}
 }
@@ -504,30 +504,30 @@ impl<'a, A: Writeable> Writeable for &'a A {
 
 impl<A: Writeable, B: Writeable> Writeable for (A, B) {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		try!(Writeable::write(&self.0, writer));
+		Writeable::write(&self.0, writer)?;
 		Writeable::write(&self.1, writer)
 	}
 }
 
 impl<A: Readable, B: Readable> Readable for (A, B) {
 	fn read(reader: &mut Reader) -> Result<(A, B), Error> {
-		Ok((try!(Readable::read(reader)), try!(Readable::read(reader))))
+		Ok((Readable::read(reader)?, Readable::read(reader)?))
 	}
 }
 
 impl<A: Writeable, B: Writeable, C: Writeable> Writeable for (A, B, C) {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		try!(Writeable::write(&self.0, writer));
-		try!(Writeable::write(&self.1, writer));
+		Writeable::write(&self.0, writer)?;
+		Writeable::write(&self.1, writer)?;
 		Writeable::write(&self.2, writer)
 	}
 }
 
 impl<A: Writeable, B: Writeable, C: Writeable, D: Writeable> Writeable for (A, B, C, D) {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		try!(Writeable::write(&self.0, writer));
-		try!(Writeable::write(&self.1, writer));
-		try!(Writeable::write(&self.2, writer));
+		Writeable::write(&self.0, writer)?;
+		Writeable::write(&self.1, writer)?;
+		Writeable::write(&self.2, writer)?;
 		Writeable::write(&self.3, writer)
 	}
 }
@@ -535,9 +535,9 @@ impl<A: Writeable, B: Writeable, C: Writeable, D: Writeable> Writeable for (A, B
 impl<A: Readable, B: Readable, C: Readable> Readable for (A, B, C) {
 	fn read(reader: &mut Reader) -> Result<(A, B, C), Error> {
 		Ok((
-			try!(Readable::read(reader)),
-			try!(Readable::read(reader)),
-			try!(Readable::read(reader)),
+			Readable::read(reader)?,
+			Readable::read(reader)?,
+			Readable::read(reader)?,
 		))
 	}
 }
@@ -545,10 +545,10 @@ impl<A: Readable, B: Readable, C: Readable> Readable for (A, B, C) {
 impl<A: Readable, B: Readable, C: Readable, D: Readable> Readable for (A, B, C, D) {
 	fn read(reader: &mut Reader) -> Result<(A, B, C, D), Error> {
 		Ok((
-			try!(Readable::read(reader)),
-			try!(Readable::read(reader)),
-			try!(Readable::read(reader)),
-			try!(Readable::read(reader)),
+			Readable::read(reader)?,
+			Readable::read(reader)?,
+			Readable::read(reader)?,
+			Readable::read(reader)?,
 		))
 	}
 }

@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{error, fmt, num};
 use std::cmp::min;
+use std::{error, fmt, num};
 
 use serde::{de, ser};
 
-use byteorder::{BigEndian, ByteOrder};
 use blake2::blake2b::blake2b;
+use byteorder::{BigEndian, ByteOrder};
+use util;
 use util::secp;
 use util::secp::Secp256k1;
 use util::secp::key::{PublicKey, SecretKey};
-use util;
 
 // Size of an identifier in bytes
 pub const IDENTIFIER_SIZE: usize = 10;
@@ -162,8 +162,8 @@ impl AsRef<[u8]> for Identifier {
 
 impl ::std::fmt::Debug for Identifier {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-		try!(write!(f, "{}(", stringify!(Identifier)));
-		try!(write!(f, "{}", self.to_hex()));
+		write!(f, "{}(", stringify!(Identifier))?;
+		write!(f, "{}", self.to_hex())?;
 		write!(f, ")")
 	}
 }
@@ -269,10 +269,10 @@ impl ExtendedKey {
 mod test {
 	use serde_json;
 
-	use util::secp::Secp256k1;
-	use util::secp::key::SecretKey;
 	use super::{ExtendedKey, Identifier};
 	use util;
+	use util::secp::Secp256k1;
+	use util::secp::key::SecretKey;
 
 	fn from_hex(hex_str: &str) -> Vec<u8> {
 		util::from_hex(hex_str.to_string()).unwrap()
