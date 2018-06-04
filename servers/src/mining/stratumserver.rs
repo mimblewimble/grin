@@ -424,7 +424,7 @@ impl StratumServer {
 
 	// Handle SUBMIT message
 	//  params contains a solved block header
-	// We accept and log valid shares of all difficulty above configured minimum 
+	// We accept and log valid shares of all difficulty above configured minimum
 	// Accepted shares that are full solutions will also be submitted to the
 	// network
 	fn handle_submit(
@@ -487,12 +487,13 @@ impl StratumServer {
 					let err = e.to_string();
 					return (err, true);
 				}
-				// Success case falls through to be logged
+			// Success case falls through to be logged
 			} else {
 				// Do some validation but dont submit
 				if self.current_block.header.pre_pow_hash() != b.header.pre_pow_hash() {
 					// Return error status
-					error!(LOGGER,
+					error!(
+						LOGGER,
 						"(Server ID: {}) Failed to validate share at height {} with nonce {}",
 						self.id,
 						submit_params.height,
@@ -594,7 +595,7 @@ impl StratumServer {
 		let job_request_json = serde_json::to_string(&job_request).unwrap();
 
 		// Push the new block to all connected clients
-		// NOTE: We do not give a uniqe nonce (should we?) so miners need 
+		// NOTE: We do not give a uniqe nonce (should we?) so miners need
 		//       to choose one for themselves
 		let mut workers_l = self.workers.lock().unwrap();
 		for num in 0..workers_l.len() {
@@ -698,7 +699,10 @@ impl StratumServer {
 				self.current_key_id = block_fees.key_id();
 				current_hash = latest_hash;
 				// set the minimum acceptable share difficulty for this block
-				self.minimum_share_difficulty = cmp::min(self.config.minimum_share_difficulty, self.current_difficulty);
+				self.minimum_share_difficulty = cmp::min(
+					self.config.minimum_share_difficulty,
+					self.current_difficulty,
+				);
 				// set a new deadline for rebuilding with fresh transactions
 				deadline = time::get_time().sec + attempt_time_per_block as i64;
 
