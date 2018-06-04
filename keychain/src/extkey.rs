@@ -162,8 +162,8 @@ impl AsRef<[u8]> for Identifier {
 
 impl ::std::fmt::Debug for Identifier {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-		try!(write!(f, "{}(", stringify!(Identifier)));
-		try!(write!(f, "{}", self.to_hex()));
+		write!(f, "{}(", stringify!(Identifier))?;
+		write!(f, "{}", self.to_hex())?;
 		write!(f, ")")
 	}
 }

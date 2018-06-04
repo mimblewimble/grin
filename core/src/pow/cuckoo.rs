@@ -188,8 +188,8 @@ impl Miner {
 			if us[0] == 0 {
 				continue; // ignore duplicate edges
 			}
-			let nu = try!(self.path(u, &mut us)) as usize;
-			let nv = try!(self.path(v, &mut vs)) as usize;
+			let nu = self.path(u, &mut us)? as usize;
+			let nv = self.path(v, &mut vs)? as usize;
 
 			let sol = self.find_sol(nu, &us, nv, &vs);
 			match sol {

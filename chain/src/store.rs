@@ -63,7 +63,7 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn head_header(&self) -> Result<BlockHeader, Error> {
-		self.get_block_header(&try!(self.head()).last_block_h)
+		self.get_block_header(&self.head()?.last_block_h)
 	}
 
 	fn save_head(&self, t: &Tip) -> Result<(), Error> {

@@ -31,9 +31,9 @@ macro_rules! map_vec {
 #[macro_export]
 macro_rules! try_map_vec {
   ($thing:expr, $mapfn:expr ) => {
-    try!($thing.iter()
+    $thing.iter()
       .map($mapfn)
-      .collect::<Result<Vec<_>, _>>());
+      .collect::<Result<Vec<_>, _>>()?;
   }
 }
 
