@@ -29,8 +29,10 @@ use util::secp::pedersen;
 
 /// Retrieve all of the outputs, updated with the latest information from
 /// the node
-pub fn retrieve_outputs<T: WalletBackend>(wallet: &mut T, show_spent: bool)
-	-> Result<Vec<OutputData>, Error>{
+pub fn retrieve_outputs<T: WalletBackend>(
+	wallet: &mut T,
+	show_spent: bool,
+) -> Result<Vec<OutputData>, Error> {
 	let root_key_id = wallet.keychain().clone().root_key_id();
 	refresh_outputs(wallet)?;
 

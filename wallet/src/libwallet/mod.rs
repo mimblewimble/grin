@@ -25,6 +25,7 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
+pub mod api;
 mod error;
 pub mod keys;
 pub mod restore;
@@ -32,6 +33,5 @@ pub mod selection;
 pub mod sigcontext;
 pub mod types;
 pub mod updater;
-pub mod api;
 
 pub use libwallet::error::{Error, ErrorKind};

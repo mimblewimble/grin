@@ -20,8 +20,7 @@ use prettytable;
 use std::io::prelude::*;
 use term;
 
-pub fn show_outputs<T: WalletBackend>(wallet: &mut T, show_spent: bool)
-	-> Result<(), Error> {
+pub fn show_outputs<T: WalletBackend>(wallet: &mut T, show_spent: bool) -> Result<(), Error> {
 	let outputs = updater::retrieve_outputs(wallet, show_spent)?;
 	let mut local_only = false;
 
@@ -33,7 +32,7 @@ pub fn show_outputs<T: WalletBackend>(wallet: &mut T, show_spent: bool)
 				Some(height) => height,
 				None => 0,
 			}
-		},
+		}
 	};
 
 	let title = format!("Wallet Outputs - Block Height: {}", current_height);

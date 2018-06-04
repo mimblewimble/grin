@@ -23,21 +23,19 @@ use libwallet::types::WalletBackend;
 /// the wallet/keychain that they're acting upon
 pub struct APIInternal<'a, W>
 where
-	W: 'a + WalletBackend
+	W: 'a + WalletBackend,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
 	/// perhaps)
 	pub wallet: &'a W,
 }
 
-impl <'a, W>APIInternal<'a, W> 
+impl<'a, W> APIInternal<'a, W>
 where
-	W: 'a + WalletBackend
+	W: 'a + WalletBackend,
 {
 	/// Create new API instance
 	pub fn new(wallet_in: &'a mut W) -> APIInternal<'a, W> {
-		APIInternal {
-			wallet: wallet_in,
-		}
+		APIInternal { wallet: wallet_in }
 	}
 }
