@@ -579,6 +579,7 @@ pub fn stratum_config() -> servers::common::types::StratumServerConfig {
 		enable_stratum_server: Some(true),
 		stratum_server_addr: Some(String::from("127.0.0.1:13416")),
 		attempt_time_per_block: 60,
+		minimum_share_difficulty: 1,
 		wallet_listener_url: String::from("http://127.0.0.1:13415"),
 		burn_reward: false,
 	}
