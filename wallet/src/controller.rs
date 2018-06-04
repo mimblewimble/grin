@@ -18,32 +18,42 @@
 
 use error::Error;
 use file_wallet::{FileWallet, WalletConfig, WalletSeed};
-use libwallet::api::APIInternal;
+use libwallet::api::APIOwner;
 
 /// Wallet controller
 pub struct Context {}
 
 impl Context {
+
 	/// Instantiate wallet and API for a single-use (command line) call
 	/// Return a function containing a loaded API context to call
-	pub fn internal_single_use<F>(config: WalletConfig, passphrase: &str, f: F) -> Result<(), Error>
+	pub fn owner_single_use<F>(config: WalletConfig, passphrase: &str, f: F) -> Result<(), Error>
 	where
-		F: FnOnce(&mut APIInternal<FileWallet>) -> Result<(), Error>,
+		F: FnOnce(&mut APIOwner<FileWallet>) -> Result<(), Error>,
 	{
-		// Load up wallet and keychain
-		let wallet_seed = WalletSeed::from_file(&config)?;
-
-		let keychain = wallet_seed.derive_keychain(passphrase)?;
-
-		let mut wallet = FileWallet::new(config.clone(), keychain)?;
-
-		// Instantiate API
-		let mut api = APIInternal::new(&mut wallet);
+		let mut wallet = Context::load_wallet(config, passphrase)?;
+		let mut api = APIOwner::new(&mut wallet);
 		f(&mut api)?;
 		Ok(())
 	}
 
 	/// Listener version, providing same API but listening for requests on a
 	/// port and wrapping the calls
-	pub fn tbd() {}
+	pub fn owner_listener<F>(config: WalletConfig, passphrase: &str, f: &mut F) -> Result<(), Error>
+	where
+		F: FnMut(&mut APIOwner<FileWallet>) -> Result<(), Error>
+	{
+		let mut wallet = Context::load_wallet(config, passphrase)?;
+		f(&mut APIOwner::new(&mut wallet))?;
+		Ok(())
+		
+	}
+
+	// load up wallet
+	fn load_wallet(config: WalletConfig, passphrase: &str) -> Result<FileWallet, Error> {
+		let wallet_seed = WalletSeed::from_file(&config)?;
+		let keychain = wallet_seed.derive_keychain(passphrase)?;
+		Ok(FileWallet::new(config, keychain)?)
+	}
+
 }

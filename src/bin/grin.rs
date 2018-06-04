@@ -547,6 +547,9 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			}
 			wallet::server::start_rest_apis(wallet, &wallet_config.api_listen_addr());
 		}
+		("owner_api", Some(api_args)) => {
+			//wallet::server::start_rest_apis(wallet, &wallet_config.api_listen_addr());
+		}
 		("send", Some(send_args)) => {
 			let amount = send_args
 				.value_of("amount")
@@ -621,7 +624,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			wallet::issue_burn_tx(&mut wallet, amount, minimum_confirmations, max_outputs).unwrap();
 		}
 		("info", Some(_)) => {
-			let _ = wallet::controller::Context::internal_single_use(
+			let _ = wallet::controller::Context::owner_single_use(
 				wallet_config,
 				passphrase,
 				|api| {

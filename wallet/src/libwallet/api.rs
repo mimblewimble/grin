@@ -23,7 +23,7 @@ use libwallet::updater;
 
 /// Wrapper around internal API functions, containing a reference to
 /// the wallet/keychain that they're acting upon
-pub struct APIInternal<'a, W>
+pub struct APIOwner<'a, W>
 where
 	W: 'a + WalletBackend,
 {
@@ -32,13 +32,13 @@ where
 	pub wallet: &'a mut W,
 }
 
-impl<'a, W> APIInternal<'a, W>
+impl<'a, W> APIOwner<'a, W>
 where
 	W: 'a + WalletBackend,
 {
 	/// Create new API instance
-	pub fn new(wallet_in: &'a mut W) -> APIInternal<'a, W> {
-		APIInternal { wallet: wallet_in }
+	pub fn new(wallet_in: &'a mut W) -> APIOwner<'a, W> {
+		APIOwner { wallet: wallet_in }
 	}
 
 	/// Attempt to update and retrieve outputs
