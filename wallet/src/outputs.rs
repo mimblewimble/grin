@@ -13,91 +13,77 @@
 // limitations under the License.
 
 use core::core;
-use libwallet::types::{OutputStatus, WalletBackend};
+use libwallet::Error;
+use libwallet::types::WalletBackend;
 use libwallet::updater;
 use prettytable;
 use std::io::prelude::*;
 use term;
 
-pub fn show_outputs<T: WalletBackend>(wallet: &mut T, show_spent: bool) {
-	let root_key_id = wallet.keychain().clone().root_key_id();
-	let result = updater::refresh_outputs(wallet);
+pub fn show_outputs<T: WalletBackend>(wallet: &mut T, show_spent: bool)
+	-> Result<(), Error> {
+	let outputs = updater::retrieve_outputs(wallet, show_spent)?;
+	let mut local_only = false;
 
-	// just read the wallet here, no need for a write lock
-	let _ = wallet.read_wallet(|wallet_data| {
-		// get the current height via the api
-		// if we cannot get the current height use the max height known to the wallet
-		let current_height = match updater::get_tip_from_node(wallet_data.node_url()) {
-			Ok(tip) => tip.height,
-			Err(_) => match wallet_data.outputs().values().map(|out| out.height).max() {
+	let current_height = match updater::get_tip_from_node(wallet.node_url()) {
+		Ok(tip) => tip.height,
+		Err(_) => {
+			local_only = true;
+			match outputs.iter().map(|out| out.height).max() {
 				Some(height) => height,
 				None => 0,
-			},
-		};
+			}
+		},
+	};
 
-		let mut outputs = wallet_data
-			.outputs()
-			.values()
-			.filter(|out| out.root_key_id == root_key_id)
-			.filter(|out| {
-				if show_spent {
-					true
-				} else {
-					out.status != OutputStatus::Spent
-				}
-			})
-			.collect::<Vec<_>>();
-		outputs.sort_by_key(|out| out.n_child);
+	let title = format!("Wallet Outputs - Block Height: {}", current_height);
+	println!();
+	let mut t = term::stdout().unwrap();
+	t.fg(term::color::MAGENTA).unwrap();
+	writeln!(t, "{}", title).unwrap();
+	t.reset().unwrap();
 
-		let title = format!("Wallet Outputs - Block Height: {}", current_height);
-		println!();
-		let mut t = term::stdout().unwrap();
-		t.fg(term::color::MAGENTA).unwrap();
-		writeln!(t, "{}", title).unwrap();
-		t.reset().unwrap();
+	let mut table = table!();
 
-		let mut table = table!();
+	table.set_titles(row![
+		bMG->"Key Id",
+		bMG->"Block Height",
+		bMG->"Locked Until",
+		bMG->"Status",
+		bMG->"Is Coinbase?",
+		bMG->"Num. of Confirmations",
+		bMG->"Value"
+	]);
 
-		table.set_titles(row![
-			bMG->"Key Id",
-			bMG->"Block Height",
-			bMG->"Locked Until",
-			bMG->"Status",
-			bMG->"Is Coinbase?",
-			bMG->"Num. of Confirmations",
-			bMG->"Value"
+	for out in outputs {
+		let key_id = format!("{}", out.key_id);
+		let height = format!("{}", out.height);
+		let lock_height = format!("{}", out.lock_height);
+		let status = format!("{:?}", out.status);
+		let is_coinbase = format!("{}", out.is_coinbase);
+		let num_confirmations = format!("{}", out.num_confirmations(current_height));
+		let value = format!("{}", core::amount_to_hr_string(out.value));
+		table.add_row(row![
+			bFC->key_id,
+			bFB->height,
+			bFB->lock_height,
+			bFR->status,
+			bFY->is_coinbase,
+			bFB->num_confirmations,
+			bFG->value
 		]);
+	}
 
-		for out in outputs {
-			let key_id = format!("{}", out.key_id);
-			let height = format!("{}", out.height);
-			let lock_height = format!("{}", out.lock_height);
-			let status = format!("{:?}", out.status);
-			let is_coinbase = format!("{}", out.is_coinbase);
-			let num_confirmations = format!("{}", out.num_confirmations(current_height));
-			let value = format!("{}", core::amount_to_hr_string(out.value));
-			table.add_row(row![
-				bFC->key_id,
-				bFB->height,
-				bFB->lock_height,
-				bFR->status,
-				bFY->is_coinbase,
-				bFB->num_confirmations,
-				bFG->value
-			]);
-		}
+	table.set_format(*prettytable::format::consts::FORMAT_NO_COLSEP);
+	table.printstd();
+	println!();
 
-		table.set_format(*prettytable::format::consts::FORMAT_NO_COLSEP);
-		table.printstd();
-		println!();
-		Ok(())
-	});
-
-	if let Err(_) = result {
+	if local_only {
 		println!(
 			"\nWARNING: Wallet failed to verify data. \
 			 The above is from local cache and possibly invalid! \
 			 (is your `grin server` offline or broken?)"
 		);
 	}
+	Ok(())
 }

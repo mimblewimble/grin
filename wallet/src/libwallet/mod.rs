@@ -32,5 +32,6 @@ pub mod selection;
 pub mod sigcontext;
 pub mod types;
 pub mod updater;
+pub mod api;
 
 pub use libwallet::error::{Error, ErrorKind};

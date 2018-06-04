@@ -27,6 +27,40 @@ use util;
 use util::LOGGER;
 use util::secp::pedersen;
 
+/// Retrieve all of the outputs, updated with the latest information from
+/// the node
+pub fn retrieve_outputs<T: WalletBackend>(wallet: &mut T, show_spent: bool)
+	-> Result<Vec<OutputData>, Error>{
+	let root_key_id = wallet.keychain().clone().root_key_id();
+	refresh_outputs(wallet)?;
+
+	let mut outputs = vec![];
+
+	// just read the wallet here, no need for a write lock
+	let _ = wallet.read_wallet(|wallet_data| {
+		// get the current height via the api
+		// if we cannot get the current height use the max height known to the wallet
+		outputs = wallet_data
+			.outputs()
+			.values()
+			.filter(|out| out.root_key_id == root_key_id)
+			.filter(|out| {
+				if show_spent {
+					true
+				} else {
+					out.status != OutputStatus::Spent
+				}
+			})
+			.collect::<Vec<_>>()
+			.iter()
+			.map(|&o| o.clone())
+			.collect();
+		outputs.sort_by_key(|out| out.n_child);
+		Ok(())
+	});
+	Ok(outputs)
+}
+
 /// Refreshes the outputs in a wallet with the latest information
 /// from a node
 pub fn refresh_outputs<T>(wallet: &mut T) -> Result<(), Error>
