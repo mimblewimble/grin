@@ -954,7 +954,6 @@ pub fn path(pos: u64, last_pos: u64) -> Vec<u64> {
 		path.push(parent);
 		current = parent;
 	}
-	println!("path - {}, {:?}, peaks {:?}", pos, path, peaks(last_pos));
 	path
 }
 

@@ -216,15 +216,9 @@ where
 	}
 
 	fn is_pruned(&self, pos: u64) -> bool {
-		println!(
-			"checking if {} is pruned, {:?}",
-			pos, self.pruned_nodes.pruned_nodes
-		);
 		let path = pmmr::path(pos, self.unpruned_size().unwrap_or(0));
-		let res = path.iter()
-			.any(|x| self.pruned_nodes.pruned_nodes.contains(x));
-		println!("is pruned? {}", res);
-		res
+		path.iter()
+			.any(|x| self.pruned_nodes.pruned_nodes.contains(x))
 	}
 
 	/// Number of elements in the PMMR stored by this backend. Only produces the
@@ -315,51 +309,13 @@ where
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
 		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
 
-		// Pos we want to get rid of.
-		// Filtered by cutoff index.
-		let rm_pre_cutoff = self.rm_log.removed_pre_cutoff(cutoff_index);
-		let leaf_pos_to_rm = rm_pre_cutoff.clone();
+		// Retrieve list of pos from the rm_log before the cutoff.
+		let leaf_pos_to_rm = self.rm_log.removed_pre_cutoff(cutoff_index);
 
-		// TODO - can this be done in a single step?
-		// Filtered to exclude the subtree "roots".
-		let all_pos_to_rm = leaf_pos_to_rm.clone();
-
-		let mut expanded = vec![];
-		println!(
-			"leaf_pos_to_rm {:?}, current prune list {:?}",
-			leaf_pos_to_rm, self.pruned_nodes.pruned_nodes
-		);
-		for x in leaf_pos_to_rm.clone() {
-			expanded.push(x);
-			let mut current = x;
-			loop {
-				let (parent, sibling) = family(current);
-				println!(
-					"current, sibling, parent here - {}, {}, {}",
-					current, sibling, parent
-				);
-
-				if expanded.contains(&sibling) {
-					expanded.push(parent);
-					current = parent;
-				} else if self.is_pruned(sibling) {
-					expanded.push(sibling);
-					expanded.push(parent);
-					current = parent;
-				} else {
-					break;
-				}
-			}
-		}
-		println!("*** expanded here - {:?}", expanded);
-
-		expanded.sort();
-		expanded.dedup();
-
-		println!("expanded sorted and deduped {:?}", expanded);
-
-		let pos_to_rm = removed_excl_roots(expanded.clone());
-		println!("pos_to_rm is now {:?}", pos_to_rm);
+		// Convert the list of leaf pos into full list of pos
+		// accounting for pos already pruned and excluding roots
+		// which we do not want to prune.
+		let pos_to_rm = self.pos_to_rm(&leaf_pos_to_rm);
 
 		// 1. Save compact copy of the hash file, skipping removed data.
 		{
@@ -432,6 +388,39 @@ where
 		self.rm_log.flush()?;
 
 		Ok(true)
+	}
+
+	fn pos_to_rm(&self, leaf_pos_to_rm: &Vec<u64>) -> Vec<u64> {
+		let mut expanded = vec![];
+
+		for x in leaf_pos_to_rm.clone() {
+			expanded.push(x);
+			let mut current = x;
+			loop {
+				let (parent, sibling) = family(current);
+				let sibling_pruned = self.is_pruned(sibling);
+
+				// if sibling previously pruned
+				// push it back onto list of pos to remove
+				// so we can remove it and traverse up to parent
+				if sibling_pruned {
+					expanded.push(sibling);
+				}
+
+				if sibling_pruned || expanded.contains(&sibling) {
+					expanded.push(parent);
+					current = parent;
+				} else {
+					break;
+				}
+			}
+		}
+
+		let pos_to_rm = removed_excl_roots(expanded.clone());
+
+		println!("pos_to_rm: {:?} -> {:?}", leaf_pos_to_rm, pos_to_rm);
+
+		pos_to_rm
 	}
 }
 
