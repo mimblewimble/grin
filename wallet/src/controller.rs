@@ -24,7 +24,6 @@ use libwallet::api::APIOwner;
 pub struct Context {}
 
 impl Context {
-
 	/// Instantiate wallet and API for a single-use (command line) call
 	/// Return a function containing a loaded API context to call
 	pub fn owner_single_use<F>(config: WalletConfig, passphrase: &str, f: F) -> Result<(), Error>
@@ -41,12 +40,11 @@ impl Context {
 	/// port and wrapping the calls
 	pub fn owner_listener<F>(config: WalletConfig, passphrase: &str, f: &mut F) -> Result<(), Error>
 	where
-		F: FnMut(&mut APIOwner<FileWallet>) -> Result<(), Error>
+		F: FnMut(&mut APIOwner<FileWallet>) -> Result<(), Error>,
 	{
 		let mut wallet = Context::load_wallet(config, passphrase)?;
 		f(&mut APIOwner::new(&mut wallet))?;
 		Ok(())
-		
 	}
 
 	// load up wallet
@@ -55,5 +53,4 @@ impl Context {
 		let keychain = wallet_seed.derive_keychain(passphrase)?;
 		Ok(FileWallet::new(config, keychain)?)
 	}
-
 }

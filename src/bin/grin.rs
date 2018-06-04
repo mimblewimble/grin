@@ -624,17 +624,14 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			wallet::issue_burn_tx(&mut wallet, amount, minimum_confirmations, max_outputs).unwrap();
 		}
 		("info", Some(_)) => {
-			let _ = wallet::controller::Context::owner_single_use(
-				wallet_config,
-				passphrase,
-				|api| {
+			let _ =
+				wallet::controller::Context::owner_single_use(wallet_config, passphrase, |api| {
 					let res = wallet::show_info(&api.retrieve_summary_info()?.1);
 					if let Err(e) = res {
 						println!("Could not get wallet info: {}", e)
 					}
 					Ok(())
-				},
-			);
+				});
 		}
 		("outputs", Some(_)) => {
 			wallet::show_outputs(&mut wallet, show_spent);
