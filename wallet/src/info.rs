@@ -14,15 +14,10 @@
 
 use core::core::amount_to_hr_string;
 use libwallet::Error;
-use libwallet::types::WalletBackend;
-use libwallet::updater;
+use libwallet::types::WalletInfo;
 use prettytable;
 
-pub fn show_info<T>(wallet: &mut T) -> Result<(), Error>
-where
-	T: WalletBackend,
-{
-	let wallet_info = updater::retrieve_info(wallet)?;
+pub fn show_info(wallet_info: &WalletInfo) -> Result<(), Error> {
 	println!(
 		"\n____ Wallet Summary Info at {} ({}) ____\n",
 		wallet_info.current_height, wallet_info.data_confirmed_from

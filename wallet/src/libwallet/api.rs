@@ -17,7 +17,9 @@
 //! vs. functions to interact with someone else)
 //! Still experimental, not sure this is the best way to do this
 
-use libwallet::types::WalletBackend;
+use libwallet::Error;
+use libwallet::types::{OutputData, WalletBackend, WalletInfo};
+use libwallet::updater;
 
 /// Wrapper around internal API functions, containing a reference to
 /// the wallet/keychain that they're acting upon
@@ -27,7 +29,7 @@ where
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
 	/// perhaps)
-	pub wallet: &'a W,
+	pub wallet: &'a mut W,
 }
 
 impl<'a, W> APIInternal<'a, W>
@@ -37,5 +39,32 @@ where
 	/// Create new API instance
 	pub fn new(wallet_in: &'a mut W) -> APIInternal<'a, W> {
 		APIInternal { wallet: wallet_in }
+	}
+
+	/// Attempt to update and retrieve outputs
+	/// Return (whether the outputs were validated against a node, OutputData)
+	pub fn retrieve_outputs(
+		&mut self,
+		include_spent: bool,
+	) -> Result<(bool, Vec<OutputData>), Error> {
+		let validated = self.update_outputs();
+		Ok((
+			validated,
+			updater::retrieve_outputs(self.wallet, include_spent)?,
+		))
+	}
+
+	/// Retrieve summary info for wallet
+	pub fn retrieve_summary_info(&mut self) -> Result<(bool, WalletInfo), Error> {
+		let validated = self.update_outputs();
+		Ok((validated, updater::retrieve_info(self.wallet)?))
+	}
+
+	/// Attempt to update outputs in wallet, return whether it was successful
+	fn update_outputs(&mut self) -> bool {
+		match updater::refresh_outputs(self.wallet) {
+			Ok(_) => true,
+			Err(_) => false,
+		}
 	}
 }
