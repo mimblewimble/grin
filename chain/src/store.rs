@@ -20,12 +20,12 @@ use lru_cache::LruCache;
 
 use util::secp::pedersen::Commitment;
 
-use types::*;
-use core::core::hash::{Hash, Hashed};
-use core::core::{Block, BlockHeader};
 use core::consensus::TargetError;
+use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
+use core::core::{Block, BlockHeader};
 use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
+use types::*;
 
 const STORE_SUBPATH: &'static str = "chain";
 

@@ -21,9 +21,9 @@ use std::thread;
 use std::time;
 
 use core::consensus::{MAX_MSG_LEN, MAX_TX_INPUTS, MAX_TX_KERNELS, MAX_TX_OUTPUTS};
+use core::core::BlockHeader;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
-use core::core::BlockHeader;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::*;
@@ -347,7 +347,7 @@ impl Writeable for Hand {
 impl Readable for Hand {
 	fn read(reader: &mut Reader) -> Result<Hand, ser::Error> {
 		let (version, capab, nonce) = ser_multiread!(reader, read_u32, read_u32, read_u64);
-		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData,)?;
+		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
 		let total_diff = Difficulty::read(reader)?;
 		let sender_addr = SockAddr::read(reader)?;
 		let receiver_addr = SockAddr::read(reader)?;
@@ -400,7 +400,7 @@ impl Writeable for Shake {
 impl Readable for Shake {
 	fn read(reader: &mut Reader) -> Result<Shake, ser::Error> {
 		let (version, capab) = ser_multiread!(reader, read_u32, read_u32);
-		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData,)?;
+		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
 		let total_diff = Difficulty::read(reader)?;
 		let ua = reader.read_vec()?;
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
@@ -430,7 +430,7 @@ impl Writeable for GetPeerAddrs {
 impl Readable for GetPeerAddrs {
 	fn read(reader: &mut Reader) -> Result<GetPeerAddrs, ser::Error> {
 		let capab = reader.read_u32()?;
-		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData,)?;
+		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
 		Ok(GetPeerAddrs {
 			capabilities: capabilities,
 		})
@@ -490,7 +490,7 @@ impl Writeable for PeerError {
 impl Readable for PeerError {
 	fn read(reader: &mut Reader) -> Result<PeerError, ser::Error> {
 		let (code, msg) = ser_multiread!(reader, read_u32, read_vec);
-		let message = String::from_utf8(msg).map_err(|_| ser::Error::CorruptedData,)?;
+		let message = String::from_utf8(msg).map_err(|_| ser::Error::CorruptedData)?;
 		Ok(PeerError {
 			code: code,
 			message: message,
