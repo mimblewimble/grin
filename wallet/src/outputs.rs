@@ -21,8 +21,13 @@ use std::io::prelude::*;
 use term;
 
 pub fn show_outputs<T: WalletBackend>(wallet: &mut T, show_spent: bool) -> Result<(), Error> {
-	let outputs = updater::retrieve_outputs(wallet, show_spent)?;
 	let mut local_only = false;
+	let res = updater::refresh_outputs(wallet);
+	if let Err(_) = res {
+		local_only = true;
+	};
+
+	let outputs = updater::retrieve_outputs(wallet, show_spent)?;
 
 	let current_height = match updater::get_tip_from_node(wallet.node_url()) {
 		Ok(tip) => tip.height,
