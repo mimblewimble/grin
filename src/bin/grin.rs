@@ -547,7 +547,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			wallet::server::start_rest_apis(wallet, &wallet_config.api_listen_addr());
 		}
 		("owner_api", Some(_api_args)) => {
-			wallet::controller::owner_listener(wallet).unwrap_or_else(|e| {
+			wallet::controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
 				panic!(
 					"Error creating wallet api listener: {:?} Config: {:?}",
 					e, wallet_config

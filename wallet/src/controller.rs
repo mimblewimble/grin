@@ -22,13 +22,15 @@ use bodyparser;
 use iron::Handler;
 use iron::prelude::*;
 use iron::status;
+use serde::Serialize;
 use serde_json;
 
 use failure::Fail;
 
-use libwallet::Error;
+use libtx::slate::Slate;
 use libwallet::api::{APIOwner, APIStranger};
-use libwallet::types::WalletBackend;
+use libwallet::types::{BlockFees, CbData, OutputData, WalletBackend, WalletInfo};
+use libwallet::{Error, ErrorKind};
 
 use util::LOGGER;
 
@@ -57,9 +59,10 @@ where
 	wallet.close()?;
 	Ok(())
 }
+
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
-pub fn owner_listener<T>(wallet: T) -> Result<(), Error>
+pub fn owner_listener<T>(wallet: T, addr: &str) -> Result<(), Error>
 where
 	T: WalletBackend,
 	OwnerAPIHandler<T>: Handler,
@@ -69,20 +72,48 @@ where
 	};
 
 	let router = router!(
-		receive_tx: get "/wallet/owner" => api_handler,
+		receive_tx: get "/wallet/owner/*" => api_handler,
 	);
 
 	let mut apis = ApiServer::new("/v1".to_string());
 	apis.register_handler(router);
-	match apis.start("127.0.0.1:13420") {
+	match apis.start(addr) {
 		Err(e) => error!(
 			LOGGER,
 			"Failed to start Grin wallet owner API listener: {}.", e
 		),
-		Ok(_) => info!(LOGGER, "Grin wallet owner API started at 127.0.0.1:13420"),
+		Ok(_) => info!(LOGGER, "Grin wallet owner API started at {}", addr),
 	};
 	Ok(())
 }
+
+/// Listener version, providing same API but listening for requests on a
+/// port and wrapping the calls
+pub fn stranger_listener<T>(wallet: T, addr: &str) -> Result<(), Error>
+where
+	T: WalletBackend,
+	StrangerAPIHandler<T>: Handler,
+{
+	let api_handler = StrangerAPIHandler {
+		wallet: Arc::new(Mutex::new(wallet)),
+	};
+
+	let router = router!(
+		receive_tx: get "/wallet/stranger/*" => api_handler,
+	);
+
+	let mut apis = ApiServer::new("/v1".to_string());
+	apis.register_handler(router);
+	match apis.start(addr) {
+		Err(e) => error!(
+			LOGGER,
+			"Failed to start Grin wallet stranger listener: {}.", e
+		),
+		Ok(_) => info!(LOGGER, "Grin wallet listener started at {}", addr),
+	};
+	Ok(())
+}
+/// API Handler/Wrapper for owner functions
 
 pub struct OwnerAPIHandler<T>
 where
@@ -95,8 +126,44 @@ impl<T> OwnerAPIHandler<T>
 where
 	T: WalletBackend,
 {
-	fn handle_request(&self, _req: &mut Request, _api: &mut APIOwner<T>) -> Result<(), Error> {
-		Ok(())
+	fn retrieve_outputs(
+		&self,
+		req: &mut Request,
+		api: &mut APIOwner<T>,
+	) -> Result<Vec<OutputData>, Error> {
+		let res = api.retrieve_outputs(false)?;
+		Ok(res.1)
+	}
+
+	fn retrieve_summary_info(
+		&self,
+		req: &mut Request,
+		api: &mut APIOwner<T>,
+	) -> Result<WalletInfo, Error> {
+		let res = api.retrieve_summary_info()?;
+		Ok(res.1)
+	}
+
+	fn issue_send_tx(&self, req: &mut Request, api: &mut APIOwner<T>) -> Result<(), Error> {
+		// TODO: Args
+		api.issue_send_tx(60, 10, "", 1000, true, true)
+	}
+
+	fn handle_request(&self, req: &mut Request, api: &mut APIOwner<T>) -> IronResult<Response> {
+		let url = req.url.clone();
+		let path_elems = url.path();
+		match *path_elems.last().unwrap() {
+			"retrieve_outputs" => json_response_pretty(&self.retrieve_outputs(req, api)
+				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
+			"retrieve_summary_info" => json_response_pretty(&self.retrieve_summary_info(req, api)
+				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
+			"issue_send_tx" => json_response_pretty(&self.issue_send_tx(req, api)
+				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
+			_ => Err(IronError::new(
+				Fail::compat(ErrorKind::Hyper),
+				status::BadRequest,
+			)),
+		}
 	}
 }
 
@@ -105,28 +172,114 @@ where
 	T: WalletBackend + Send + Sync + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		println!("handling");
 		// every request should open with stored credentials,
 		// do its thing and then de-init whatever secrets have been
 		// stored
 		let mut wallet = self.wallet.lock().unwrap();
-		wallet
-			.open_with_credentials()
-			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
+		wallet.open_with_credentials().map_err(|e| {
+			error!(LOGGER, "Error opening wallet: {:?}", e);
+			IronError::new(Fail::compat(e), status::BadRequest)
+		})?;
 		let mut api = APIOwner::new(&mut *wallet);
-		self.handle_request(req, &mut api)
-			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
+		let resp_json = self.handle_request(req, &mut api);
 		api.wallet
 			.close()
 			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
-		Ok(Response::with((status::Ok, "")))
-		//Ok(Response::with((status::BadRequest, "")))
-			/*if let Ok(json) = serde_json::to_string(&coinbase) {
-				Ok(Response::with((status::Ok, json)))
-			} else {
-				Ok(Response::with((status::BadRequest, "")))
-			}
+		resp_json
+	}
+}
+
+/// API Handler/Wrapper for stranger functions
+
+pub struct StrangerAPIHandler<T>
+where
+	T: WalletBackend,
+{
+	pub wallet: Arc<Mutex<T>>,
+}
+
+impl<T> StrangerAPIHandler<T>
+where
+	T: WalletBackend,
+{
+	fn build_coinbase(&self, req: &mut Request, api: &mut APIStranger<T>) -> Result<CbData, Error> {
+		let struct_body = req.get::<bodyparser::Struct<BlockFees>>();
+		if let Ok(Some(block_fees)) = struct_body {
+			api.build_coinbase(&block_fees)
 		} else {
-			Ok(Response::with((status::BadRequest, "")))
-		}*/	}
+			Err(ErrorKind::GenericError(
+				"Invalid request body: build_coinbase",
+			))?
+		}
+	}
+
+	fn receive_tx(&self, req: &mut Request, api: &mut APIStranger<T>) -> Result<Slate, Error> {
+		let struct_body = req.get::<bodyparser::Struct<Slate>>();
+		if let Ok(Some(mut slate)) = struct_body {
+			api.receive_tx(&mut slate)?;
+			Ok(slate.clone())
+		} else {
+			Err(ErrorKind::GenericError("Invalid request body: receive_tx"))?
+		}
+	}
+
+	fn handle_request(&self, req: &mut Request, api: &mut APIStranger<T>) -> IronResult<Response> {
+		let url = req.url.clone();
+		let path_elems = url.path();
+		match *path_elems.last().unwrap() {
+			"build_coinbase" => json_response(&self.build_coinbase(req, api)
+				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
+			"receive_tx" => json_response(&self.receive_tx(req, api)
+				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
+			_ => Err(IronError::new(
+				Fail::compat(ErrorKind::Hyper),
+				status::BadRequest,
+			)),
+		}
+	}
+}
+
+impl<T> Handler for StrangerAPIHandler<T>
+where
+	T: WalletBackend + Send + Sync + 'static,
+{
+	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+		// every request should open with stored credentials,
+		// do its thing and then de-init whatever secrets have been
+		// stored
+		let mut wallet = self.wallet.lock().unwrap();
+		wallet.open_with_credentials().map_err(|e| {
+			error!(LOGGER, "Error opening wallet: {:?}", e);
+			IronError::new(Fail::compat(e), status::BadRequest)
+		})?;
+		let mut api = APIStranger::new(&mut *wallet);
+		let resp_json = self.handle_request(req, &mut api);
+		api.wallet
+			.close()
+			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
+		resp_json
+	}
+}
+
+// Utility to serialize a struct into JSON and produce a sensible IronResult
+// out of it.
+fn json_response<T>(s: &T) -> IronResult<Response>
+where
+	T: Serialize,
+{
+	match serde_json::to_string(s) {
+		Ok(json) => Ok(Response::with((status::Ok, json))),
+		Err(_) => Ok(Response::with((status::InternalServerError, ""))),
+	}
+}
+
+// pretty-printed version of above
+fn json_response_pretty<T>(s: &T) -> IronResult<Response>
+where
+	T: Serialize,
+{
+	match serde_json::to_string_pretty(s) {
+		Ok(json) => Ok(Response::with((status::Ok, json))),
+		Err(_) => Ok(Response::with((status::InternalServerError, ""))),
+	}
 }
