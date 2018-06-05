@@ -25,13 +25,13 @@ RUN cargo build --release
 # runtime stage
 FROM debian:9.4
 
-RUN set -ex && \
-    apt-get update && \
-    apt-get --no-install-recommends --yes install locales && \
-    apt-get clean && \
-    rm -rf /var/lib/apt && \
-    sed -i '157 s/^##*//' /etc/locale.gen && \
-    locale-gen
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y locales
+
+RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+    dpkg-reconfigure --frontend=noninteractive locales && \
+    update-locale LANG=en_US.UTF-8
+
+ENV LANG en_US.UTF-8
 
 COPY --from=builder /usr/src/grin/target/release/grin /usr/local/bin/grin
 COPY --from=builder /usr/src/grin/grin.toml /usr/src/grin/grin.toml
