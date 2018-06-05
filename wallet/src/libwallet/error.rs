@@ -74,7 +74,7 @@ pub enum ErrorKind {
 	Secp,
 
 	/// Callback implementation error conversion
-	#[fail(display = "Callback Implementation error")]
+	#[fail(display = "Trait Implementation error")]
 	CallbackImpl(&'static str),
 
 	/// Callback implementation error conversion

@@ -19,12 +19,10 @@ use iron::prelude::*;
 use iron::status;
 use serde_json;
 
-use core::ser;
 use error::{Error, ErrorKind};
 use failure::{Fail, ResultExt};
 use libwallet::types::*;
-use receiver::receive_coinbase;
-use util;
+use libwallet::updater;
 
 pub struct CoinbaseHandler<T>
 where
@@ -38,23 +36,7 @@ where
 	T: WalletBackend,
 {
 	fn build_coinbase(&self, wallet: &mut T, block_fees: &BlockFees) -> Result<CbData, Error> {
-		let (out, kern, block_fees) =
-			receive_coinbase(wallet, block_fees).context(ErrorKind::Node)?;
-
-		let out_bin = ser::ser_vec(&out).context(ErrorKind::Node)?;
-
-		let kern_bin = ser::ser_vec(&kern).context(ErrorKind::Node)?;
-
-		let key_id_bin = match block_fees.key_id {
-			Some(key_id) => ser::ser_vec(&key_id).context(ErrorKind::Node)?,
-			None => vec![],
-		};
-
-		Ok(CbData {
-			output: util::to_hex(out_bin),
-			kernel: util::to_hex(kern_bin),
-			key_id: util::to_hex(key_id_bin),
-		})
+		Ok(updater::build_coinbase(wallet, block_fees).context(ErrorKind::Node)?)
 	}
 }
 

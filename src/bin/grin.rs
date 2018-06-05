@@ -216,6 +216,9 @@ fn main() {
 				.help("Port on which to run the wallet listener")
 				.takes_value(true)))
 
+		.subcommand(SubCommand::with_name("owner_api")
+			.about("Runs the wallet's local web API."))
+
 		.subcommand(SubCommand::with_name("receive")
 			.about("Processes a JSON transaction file.")
 			.arg(Arg::with_name("input")
@@ -423,7 +426,7 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 		let _ = thread::Builder::new()
 			.name("wallet_listener".to_string())
 			.spawn(move || {
-				let wallet = FileWallet::new(wallet_config.clone(), keychain).unwrap_or_else(|e| {
+				let wallet = FileWallet::new(wallet_config.clone(), "").unwrap_or_else(|e| {
 					panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
 				});
 				wallet::server::start_rest_apis(wallet, &wallet_config.api_listen_addr());
@@ -529,15 +532,11 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 		return;
 	}
 
-	let wallet_seed =
-		wallet::WalletSeed::from_file(&wallet_config).expect("Failed to read wallet seed file.");
 	let passphrase = wallet_args
 		.value_of("pass")
 		.expect("Failed to read passphrase.");
-	let keychain = wallet_seed
-		.derive_keychain(&passphrase)
-		.expect("Failed to derive keychain from seed file and passphrase.");
-	let mut wallet = FileWallet::new(wallet_config.clone(), keychain)
+
+	let mut wallet = FileWallet::new(wallet_config.clone(), passphrase)
 		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
 
 	match wallet_args.subcommand() {
@@ -547,8 +546,13 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			}
 			wallet::server::start_rest_apis(wallet, &wallet_config.api_listen_addr());
 		}
-		("owner_api", Some(api_args)) => {
-			//wallet::server::start_rest_apis(wallet, &wallet_config.api_listen_addr());
+		("owner_api", Some(_api_args)) => {
+			wallet::controller::owner_listener(wallet).unwrap_or_else(|e| {
+				panic!(
+					"Error creating wallet api listener: {:?} Config: {:?}",
+					e, wallet_config
+				)
+			});
 		}
 		("send", Some(send_args)) => {
 			let amount = send_args
@@ -576,7 +580,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				&mut wallet,
 				amount,
 				minimum_confirmations,
-				dest.to_string(),
+				dest,
 				max_outputs,
 				selection_strategy == "all",
 				fluff,
@@ -590,21 +594,16 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					selection_strategy,
 				),
 				Err(e) => {
-					error!(LOGGER, "Tx not sent: {}", e.cause());
-					match e.downcast::<libwallet::Error>() {
-						Ok(le) => {
-							match le.kind() {
-								// user errors, don't backtrace
-								libwallet::ErrorKind::NotEnoughFunds { .. } => {}
-								libwallet::ErrorKind::FeeDispute { .. } => {}
-								libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
-								_ => {
-									// otherwise give full dump
-									error!(LOGGER, "Backtrace: {}", le.backtrace().unwrap());
-								}
-							};
+					error!(LOGGER, "Tx not sent: {:?}", e);
+					match e.kind() {
+						// user errors, don't backtrace
+						libwallet::ErrorKind::NotEnoughFunds { .. } => {}
+						libwallet::ErrorKind::FeeDispute { .. } => {}
+						libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
+						_ => {
+							// otherwise give full dump
+							error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
 						}
-						_ => {}
 					};
 				}
 			}
@@ -624,14 +623,18 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			wallet::issue_burn_tx(&mut wallet, amount, minimum_confirmations, max_outputs).unwrap();
 		}
 		("info", Some(_)) => {
-			let _ =
-				wallet::controller::Context::owner_single_use(wallet_config, passphrase, |api| {
-					let res = wallet::show_info(&api.retrieve_summary_info()?.1);
-					if let Err(e) = res {
-						println!("Could not get wallet info: {}", e)
-					}
-					Ok(())
-				});
+			let res = wallet::controller::owner_single_use(&mut wallet, |api| {
+				let res = wallet::show_info(&api.retrieve_summary_info()?.1);
+				if let Err(e) = res {
+					println!("Could not get wallet info: {}", e)
+				}
+				Ok(())
+			}).unwrap_or_else(|e| {
+				panic!(
+					"Error getting wallet info: {:?} Config: {:?}",
+					e, wallet_config
+				)
+			});
 		}
 		("outputs", Some(_)) => {
 			wallet::show_outputs(&mut wallet, show_spent);

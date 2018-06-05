@@ -33,6 +33,12 @@ use libwallet::error::{Error, ErrorKind};
 /// here expect that the wallet instance has instantiated itself or stored
 /// whatever credentials it needs
 pub trait WalletBackend {
+	/// Initialise with whatever stored credentials we have
+	fn open_with_credentials(&mut self) -> Result<(), Error>;
+
+	/// Close wallet and remove any stored credentials (TBD)
+	fn close(&mut self) -> Result<(), Error>;
+
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut Keychain;
 

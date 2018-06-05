@@ -56,13 +56,12 @@ pub mod libtx;
 pub mod libwallet;
 mod outputs;
 pub mod receiver;
-mod sender;
 pub mod server;
 
 pub use error::{Error, ErrorKind};
 pub use file_wallet::{FileWallet, WalletConfig, WalletSeed};
 pub use info::show_info;
+pub use libwallet::tx::{issue_burn_tx, issue_send_tx};
 pub use libwallet::types::{BlockFees, CbData, WalletInfo};
 pub use outputs::show_outputs;
 pub use receiver::WalletReceiver;
-pub use sender::{issue_burn_tx, issue_send_tx};

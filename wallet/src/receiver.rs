@@ -25,14 +25,11 @@ use iron::status;
 use serde_json;
 
 use api;
-use core::consensus::reward;
-use core::core::{Output, TxKernel};
-use core::global;
 use error::Error;
 use failure::Fail;
-use libtx::{reward, slate::Slate};
+use libtx::slate::Slate;
+use libwallet::selection;
 use libwallet::types::*;
-use libwallet::{keys, selection};
 use util::LOGGER;
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
@@ -104,65 +101,4 @@ where
 			Ok(Response::with((status::BadRequest, "")))
 		}
 	}
-}
-
-//TODO: Split up the output creation and the wallet insertion
-/// Build a coinbase output and the corresponding kernel
-pub fn receive_coinbase<T>(
-	wallet: &mut T,
-	block_fees: &BlockFees,
-) -> Result<(Output, TxKernel, BlockFees), Error>
-where
-	T: WalletBackend,
-{
-	let root_key_id = wallet.keychain().root_key_id();
-
-	let height = block_fees.height;
-	let lock_height = height + global::coinbase_maturity();
-
-	// Now acquire the wallet lock and write the new output.
-	let (key_id, derivation) = wallet.with_wallet(|wallet_data| {
-		let key_id = block_fees.key_id();
-		let (key_id, derivation) = match key_id {
-			Some(key_id) => keys::retrieve_existing_key(wallet_data, key_id),
-			None => keys::next_available_key(wallet_data),
-		};
-
-		// track the new output and return the stuff needed for reward
-		wallet_data.add_output(OutputData {
-			root_key_id: root_key_id.clone(),
-			key_id: key_id.clone(),
-			n_child: derivation,
-			value: reward(block_fees.fees),
-			status: OutputStatus::Unconfirmed,
-			height: height,
-			lock_height: lock_height,
-			is_coinbase: true,
-			block: None,
-			merkle_proof: None,
-		});
-
-		(key_id, derivation)
-	})?;
-
-	debug!(
-		LOGGER,
-		"receive_coinbase: built candidate output - {:?}, {}",
-		key_id.clone(),
-		derivation,
-	);
-
-	let mut block_fees = block_fees.clone();
-	block_fees.key_id = Some(key_id.clone());
-
-	debug!(LOGGER, "receive_coinbase: {:?}", block_fees);
-
-	let (out, kern) = reward::output(
-		&wallet.keychain(),
-		&key_id,
-		block_fees.fees,
-		block_fees.height,
-	).unwrap();
-	/* .context(ErrorKind::Keychain)?; */
-	Ok((out, kern, block_fees))
 }

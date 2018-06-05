@@ -166,9 +166,11 @@ impl WalletSeed {
 #[derive(Debug, Clone)]
 pub struct FileWallet {
 	/// Keychain
-	pub keychain: Keychain,
+	pub keychain: Option<Keychain>,
 	/// Configuration
 	pub config: WalletConfig,
+	/// passphrase: TODO better ways of dealing with this other than storing
+	passphrase: String,
 	/// List of outputs
 	pub outputs: HashMap<String, OutputData>,
 	/// Data file path
@@ -180,9 +182,26 @@ pub struct FileWallet {
 }
 
 impl WalletBackend for FileWallet {
+	/// Initialise with whatever stored credentials we have
+	fn open_with_credentials(&mut self) -> Result<(), libwallet::Error> {
+		let wallet_seed = WalletSeed::from_file(&self.config)
+			.context(libwallet::ErrorKind::CallbackImpl("Error opening wallet"))?;
+		self.keychain = Some(wallet_seed.derive_keychain(&self.passphrase).context(
+			libwallet::ErrorKind::CallbackImpl("Error deriving keychain"),
+		)?);
+		Ok(())
+	}
+
+	/// Close wallet and remove any stored credentials (TBD)
+	fn close(&mut self) -> Result<(), libwallet::Error> {
+		self.keychain = None;
+		//TBD
+		Ok(())
+	}
+
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut Keychain {
-		&mut self.keychain
+		self.keychain.as_mut().unwrap()
 	}
 
 	/// Return URL for check node
@@ -375,10 +394,11 @@ impl WalletBackend for FileWallet {
 
 impl FileWallet {
 	/// Create a new FileWallet instance
-	pub fn new(config: WalletConfig, keychain: Keychain) -> Result<Self, Error> {
+	pub fn new(config: WalletConfig, passphrase: &str) -> Result<Self, Error> {
 		let mut retval = FileWallet {
-			keychain: keychain,
+			keychain: None,
 			config: config.clone(),
+			passphrase: String::from(passphrase),
 			outputs: HashMap::new(),
 			data_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, DAT_FILE),
 			backup_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, BCK_FILE),
