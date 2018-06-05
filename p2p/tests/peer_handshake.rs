@@ -14,19 +14,17 @@
 
 extern crate grin_core as core;
 extern crate grin_p2p as p2p;
-extern crate grin_pool as pool;
 extern crate grin_util as util;
 
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::thread;
 use std::time;
 
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
 use p2p::Peer;
-use pool::DandelionConfig;
 
 fn open_port() -> u16 {
 	// use port 0 to allow the OS to assign an open port
@@ -48,12 +46,6 @@ fn peer_handshake() {
 		peers_allow: None,
 		peers_deny: None,
 		..p2p::P2PConfig::default()
-	};
-	let dandelion_config = pool::DandelionConfig {
-		relay_secs: Some(600),
-		embargo_secs: Some(30),
-		patience_secs: Some(10),
-		stem_probability: Some(90),
 	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
 	let server = Arc::new(

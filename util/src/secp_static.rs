@@ -15,9 +15,9 @@
 //! Globally accessible static instance of secp256k1, to avoid
 //! initialisation overhead
 
-use std::sync::{Arc, Mutex};
 use rand::thread_rng;
 use secp_ as secp;
+use std::sync::{Arc, Mutex};
 
 lazy_static! {
 	/// Static reference to secp instance
