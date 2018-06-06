@@ -19,8 +19,8 @@ extern crate time;
 
 use std::fs;
 
-use core::ser::*;
 use core::core::pmmr::{Backend, PMMR};
+use core::ser::*;
 use store::types::prune_noop;
 
 #[test]
@@ -561,6 +561,78 @@ fn pmmr_compact_horizon() {
 		assert_eq!(backend.get_hash(11), Some(pos_11_hash));
 		assert_eq!(backend.get_data(11), Some(pos_11));
 		assert_eq!(backend.get_from_file(11), Some(pos_11_hash));
+	}
+
+	teardown(data_dir);
+}
+
+#[test]
+fn compact_twice() {
+	let (data_dir, elems) = setup("compact_twice");
+
+	// setup the mmr store with all elements
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
+	let mmr_size = load(0, &elems[..], &mut backend);
+	backend.sync().unwrap();
+
+	// save the root
+	let root = {
+		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		pmmr.root()
+	};
+
+	// pruning some choice nodes
+	{
+		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		pmmr.prune(1, 1).unwrap();
+		pmmr.prune(2, 1).unwrap();
+		pmmr.prune(4, 1).unwrap();
+	}
+	backend.sync().unwrap();
+
+	// check the root and stored data
+	{
+		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		assert_eq!(root, pmmr.root());
+		assert_eq!(pmmr.get_data(5).unwrap(), TestElem(4));
+		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
+	}
+
+	// compact
+	backend.check_compact(2, 2, &prune_noop).unwrap();
+
+	// recheck the root and stored data
+	{
+		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		assert_eq!(root, pmmr.root());
+		assert_eq!(pmmr.get_data(5).unwrap(), TestElem(4));
+		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
+	}
+
+	// now prune some more nodes
+	{
+		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		pmmr.prune(5, 2).unwrap();
+		pmmr.prune(8, 2).unwrap();
+		pmmr.prune(9, 2).unwrap();
+	}
+	backend.sync().unwrap();
+
+	// recheck the root and stored data
+	{
+		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		assert_eq!(root, pmmr.root());
+		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
+	}
+
+	// compact
+	backend.check_compact(2, 3, &prune_noop).unwrap();
+
+	// recheck the root and stored data
+	{
+		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		assert_eq!(root, pmmr.root());
+		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
 	}
 
 	teardown(data_dir);
