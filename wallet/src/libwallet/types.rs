@@ -21,14 +21,14 @@ use serde;
 
 use failure::ResultExt;
 
+use api;
 use core::core::hash::Hash;
 use core::core::pmmr::MerkleProof;
-use api;
 
 use keychain::{Identifier, Keychain};
 
-use libwallet::error::{Error, ErrorKind};
 use libtx::slate::Slate;
+use libwallet::error::{Error, ErrorKind};
 
 /// TODO:
 /// Wallets should implement this backend for their storage. All functions
@@ -109,10 +109,8 @@ pub trait WalletClient {
 	fn get_outputs_from_node() -> Result<(), Error>;
 
 	/// retrieve merkle proof for a commit from a node
-	fn get_merkle_proof_for_commit(addr: &str, commit: &str) 
-		-> Result<MerkleProofWrapper, Error>;
+	fn get_merkle_proof_for_commit(addr: &str, commit: &str) -> Result<MerkleProofWrapper, Error>;
 }
-
 
 /// Information about an output that's being tracked by the wallet. Must be
 /// enough to reconstruct the commitment associated with the ouput when the
