@@ -197,6 +197,14 @@ pub fn award_blocks_to_wallet<T: WalletBackend>(chain: &Chain, wallet: &mut T, n
 pub fn create_wallet(dir: &str) -> FileWallet {
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
-	FileWallet::new(wallet_config.clone(), "")
-		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config))
+	wallet::WalletSeed::init_file(&wallet_config).expect("Failed to create wallet seed file.");
+	let mut wallet = FileWallet::new(wallet_config.clone(), "")
+		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
+	wallet.open_with_credentials().unwrap_or_else(|e| {
+		panic!(
+			"Error initializing wallet: {:?} Config: {:?}",
+			e, wallet_config
+		)
+	});
+	wallet
 }
