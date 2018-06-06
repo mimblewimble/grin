@@ -364,6 +364,11 @@ where
 				let shift = self.pruned_nodes.get_leaf_shift(*pos).unwrap();
 				(flat_pos - 1 - shift) * record_len
 			});
+			println!("about to save pruned data file");
+			println!("rm_log: {:?}", self.rm_log.removed);
+			println!("leaf_pos_to_rm: {:?}", leaf_pos_to_rm);
+			println!("prunelist: {:?}", self.pruned_nodes.pruned_nodes);
+			println!("off_to_rm: {:?}", off_to_rm);
 
 			self.data_file.save_prune(
 				tmp_prune_file_data.clone(),
