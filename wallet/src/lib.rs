@@ -54,5 +54,5 @@ pub mod libwallet;
 
 pub use error::{Error, ErrorKind};
 pub use file_wallet::{FileWallet, WalletConfig, WalletSeed};
-pub use libwallet::types::{BlockFees, CbData, WalletInfo};
 pub use libwallet::controller;
+pub use libwallet::types::{BlockFees, CbData, WalletInfo};

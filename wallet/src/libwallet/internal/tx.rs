@@ -15,15 +15,15 @@
 //! Transaction buinding functions
 
 use api;
-use libwallet::client;
 use core::ser;
 use failure::ResultExt;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
+use libwallet::client;
+use libwallet::internal::{selection, updater};
 use libwallet::types::{TxWrapper, WalletBackend};
 use libwallet::{Error, ErrorKind};
-use libwallet::internal::{selection, updater};
 use util;
 use util::LOGGER;
 

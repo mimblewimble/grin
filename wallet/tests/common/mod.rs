@@ -28,8 +28,8 @@ use core::core::hash::Hashed;
 use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::{consensus, global, pow};
 use wallet::file_wallet::*;
-use wallet::libwallet::types::*;
 use wallet::libwallet::internal::updater;
+use wallet::libwallet::types::*;
 use wallet::libwallet::{Error, ErrorKind};
 
 use util::secp::pedersen;

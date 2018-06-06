@@ -22,11 +22,11 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-pub mod internal;
 pub mod api;
+pub mod client;
 pub mod controller;
 mod error;
-pub mod client;
+pub mod internal;
 pub mod types;
 
 pub use libwallet::error::{Error, ErrorKind};
