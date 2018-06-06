@@ -17,11 +17,11 @@
 //! vs. functions to interact with someone else)
 //! Still experimental, not sure this is the best way to do this
 
-use libwallet::client;
 use libtx::slate::Slate;
-use libwallet::{Error, ErrorKind};
+use libwallet::client;
 use libwallet::internal::{tx, updater};
 use libwallet::types::{BlockFees, CbData, OutputData, TxWrapper, WalletBackend, WalletInfo};
+use libwallet::{Error, ErrorKind};
 
 use failure::ResultExt;
 
@@ -121,7 +121,6 @@ where
 		// All good so, lock our inputs
 		lock_fn(self.wallet)?;
 		Ok(())
-
 	}
 
 	/// Issue a burn TX
@@ -134,8 +133,8 @@ where
 		let tx_burn = tx::issue_burn_tx(self.wallet, amount, minimum_confirmations, max_outputs)?;
 		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
 		let url = format!("{}/v1/pool/push", self.wallet.node_url());
-		let _: () =
-			api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
+		let _: () = api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
+			.context(ErrorKind::Node)?;
 		Ok(())
 	}
 

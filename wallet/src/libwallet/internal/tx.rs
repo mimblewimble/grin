@@ -18,7 +18,7 @@ use core::core::Transaction;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
-use libwallet::internal::{selection, updater, sigcontext};
+use libwallet::internal::{selection, sigcontext, updater};
 use libwallet::types::WalletBackend;
 use libwallet::{Error, ErrorKind};
 use util::LOGGER;
@@ -55,11 +55,14 @@ pub fn create_send_tx<T: WalletBackend>(
 	minimum_confirmations: u64,
 	max_outputs: usize,
 	selection_strategy_is_use_all: bool,
-) -> Result<(
+) -> Result<
+	(
 		Slate,
 		sigcontext::Context,
 		impl FnOnce(&mut T) -> Result<(), Error>,
-), Error> {
+	),
+	Error,
+> {
 	// Get lock height
 	let chain_tip = updater::get_tip_from_node(wallet.node_url())?;
 	let current_height = chain_tip.height;
