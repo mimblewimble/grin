@@ -13,6 +13,7 @@
 // limitations under the License.
 //! Functions to restore a wallet's outputs from just the master seed
 
+/// TODO: Remove api
 use api;
 use byteorder::{BigEndian, ByteOrder};
 use core::core::transaction::ProofMessageElements;

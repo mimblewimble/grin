@@ -23,10 +23,12 @@ use failure::ResultExt;
 
 use core::core::hash::Hash;
 use core::core::pmmr::MerkleProof;
+use api;
 
 use keychain::{Identifier, Keychain};
 
 use libwallet::error::{Error, ErrorKind};
+use libtx::slate::Slate;
 
 /// TODO:
 /// Wallets should implement this backend for their storage. All functions
@@ -89,6 +91,28 @@ pub trait WalletBackend {
 	/// Attempt to restore the contents of a wallet from seed
 	fn restore(&mut self) -> Result<(), Error>;
 }
+
+/// Encapsulate all communication functions. No functions within libwallet
+/// should care about communication details
+pub trait WalletClient {
+	/// Call the wallet API to create a coinbase transaction
+	fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error>;
+
+	/// Send a transaction slate to another listening wallet and return result
+	fn send_tx_slate(dest: &str, slate: &Slate, fluff: bool) -> Result<Slate, Error>;
+
+	/// retrieves the current tip from the specified grin node
+	fn get_tip_from_node(addr: &str) -> Result<api::Tip, Error>;
+
+	/// retrieve a list of outputs from the specified grin node
+	/// need "by_height" and "by_id" variants
+	fn get_outputs_from_node() -> Result<(), Error>;
+
+	/// retrieve merkle proof for a commit from a node
+	fn get_merkle_proof_for_commit(addr: &str, commit: &str) 
+		-> Result<MerkleProofWrapper, Error>;
+}
+
 
 /// Information about an output that's being tracked by the wallet. Must be
 /// enough to reconstruct the commitment associated with the ouput when the
