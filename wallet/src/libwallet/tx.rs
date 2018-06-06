@@ -19,10 +19,9 @@ use failure::ResultExt;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
-use libwallet::types::WalletBackend;
+use libwallet::types::{TxWrapper, WalletBackend};
 use libwallet::{Error, ErrorKind};
 use libwallet::{selection, updater};
-use receiver::TxWrapper;
 use util;
 use util::LOGGER;
 

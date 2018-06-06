@@ -51,14 +51,10 @@ pub mod controller;
 pub mod display;
 mod error;
 pub mod file_wallet;
-mod handlers;
 pub mod libtx;
 pub mod libwallet;
-pub mod receiver;
-pub mod server;
 
 pub use error::{Error, ErrorKind};
 pub use file_wallet::{FileWallet, WalletConfig, WalletSeed};
 pub use libwallet::tx::{issue_burn_tx, issue_send_tx};
 pub use libwallet::types::{BlockFees, CbData, WalletInfo};
-pub use receiver::WalletReceiver;
