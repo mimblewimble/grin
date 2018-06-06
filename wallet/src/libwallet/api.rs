@@ -83,6 +83,36 @@ where
 		)
 	}
 
+	/// Issue a burn TX
+	pub fn issue_burn_tx(
+		&mut self,
+		amount: u64,
+		minimum_confirmations: u64,
+		max_outputs: usize,
+	) -> Result<(), Error> {
+		tx::issue_burn_tx(self.wallet, amount, minimum_confirmations, max_outputs)
+	}
+
+	/// Attempt to restore contents of wallet
+	pub fn restore(&mut self) -> Result<(), Error> {
+		self.wallet.restore()
+	}
+
+	/// Retrieve current height from node
+	pub fn node_height(&mut self) -> Result<(u64, bool), Error> {
+		match updater::get_tip_from_node(self.wallet.node_url()) {
+			Ok(tip) => Ok((tip.height, true)),
+			Err(_) => {
+				let outputs = self.retrieve_outputs(true)?;
+				let height = match outputs.1.iter().map(|out| out.height).max() {
+					Some(height) => height,
+					None => 0,
+				};
+				Ok((height, false))
+			}
+		}
+	}
+
 	/// Attempt to update outputs in wallet, return whether it was successful
 	fn update_outputs(&mut self) -> bool {
 		match updater::refresh_outputs(self.wallet) {
@@ -94,7 +124,7 @@ where
 
 /// Wrapper around external API functions, intended to communicate
 /// with other parties
-pub struct APIStranger<'a, W>
+pub struct APIForeign<'a, W>
 where
 	W: 'a + WalletBackend,
 {
@@ -103,13 +133,13 @@ where
 	pub wallet: &'a mut W,
 }
 
-impl<'a, W> APIStranger<'a, W>
+impl<'a, W> APIForeign<'a, W>
 where
 	W: 'a + WalletBackend,
 {
 	/// Create new API instance
-	pub fn new(wallet_in: &'a mut W) -> APIStranger<'a, W> {
-		APIStranger { wallet: wallet_in }
+	pub fn new(wallet_in: &'a mut W) -> APIForeign<'a, W> {
+		APIForeign { wallet: wallet_in }
 	}
 
 	/// Build a new (potential) coinbase transaction in the wallet

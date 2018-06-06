@@ -189,13 +189,14 @@ impl WalletBackend for FileWallet {
 		self.keychain = Some(wallet_seed.derive_keychain(&self.passphrase).context(
 			libwallet::ErrorKind::CallbackImpl("Error deriving keychain"),
 		)?);
+		// Just blow up password for now after it's been used
+		self.passphrase = String::from("");
 		Ok(())
 	}
 
 	/// Close wallet and remove any stored credentials (TBD)
 	fn close(&mut self) -> Result<(), libwallet::Error> {
 		self.keychain = None;
-		//TBD
 		Ok(())
 	}
 
@@ -390,6 +391,12 @@ impl WalletBackend for FileWallet {
 		eligible.reverse();
 		eligible.iter().take(max_outputs).cloned().collect()
 	}
+
+	/// Restore wallet contents
+	fn restore(&mut self) -> Result<(), libwallet::Error> {
+		libwallet::restore::restore(self).context(libwallet::ErrorKind::Restore)?;
+		Ok(())
+	}
 }
 
 impl FileWallet {
@@ -408,12 +415,6 @@ impl FileWallet {
 			Ok(_) => Ok(retval),
 			Err(e) => Err(e),
 		}
-	}
-
-	/// Restore wallet contents
-	pub fn restore(&mut self) -> Result<(), failure::Error> {
-		libwallet::restore::restore(self).context(libwallet::ErrorKind::Restore)?;
-		Ok(())
 	}
 
 	/// Read the wallet data or create brand files if the data

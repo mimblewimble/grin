@@ -85,6 +85,9 @@ pub trait WalletBackend {
 		max_outputs: usize,
 		select_all: bool,
 	) -> Vec<OutputData>;
+
+	/// Attempt to restore the contents of a wallet from seed
+	fn restore(&mut self) -> Result<(), Error>;
 }
 
 /// Information about an output that's being tracked by the wallet. Must be

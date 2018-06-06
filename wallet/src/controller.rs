@@ -28,7 +28,7 @@ use serde_json;
 use failure::Fail;
 
 use libtx::slate::Slate;
-use libwallet::api::{APIOwner, APIStranger};
+use libwallet::api::{APIForeign, APIOwner};
 use libwallet::types::{BlockFees, CbData, OutputData, WalletBackend, WalletInfo};
 use libwallet::{Error, ErrorKind};
 
@@ -47,15 +47,15 @@ where
 	Ok(())
 }
 
-/// Instantiate wallet Stranger API for a single-use (command line) call
+/// Instantiate wallet Foreign API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
-pub fn stranger_single_use<F, T>(wallet: &mut T, f: F) -> Result<(), Error>
+pub fn foreign_single_use<F, T>(wallet: &mut T, f: F) -> Result<(), Error>
 where
 	T: WalletBackend,
-	F: FnOnce(&mut APIStranger<T>) -> Result<(), Error>,
+	F: FnOnce(&mut APIForeign<T>) -> Result<(), Error>,
 {
 	wallet.open_with_credentials()?;
-	f(&mut APIStranger::new(wallet))?;
+	f(&mut APIForeign::new(wallet))?;
 	wallet.close()?;
 	Ok(())
 }
@@ -89,17 +89,17 @@ where
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
-pub fn stranger_listener<T>(wallet: T, addr: &str) -> Result<(), Error>
+pub fn foreign_listener<T>(wallet: T, addr: &str) -> Result<(), Error>
 where
 	T: WalletBackend,
-	StrangerAPIHandler<T>: Handler,
+	ForeignAPIHandler<T>: Handler,
 {
-	let api_handler = StrangerAPIHandler {
+	let api_handler = ForeignAPIHandler {
 		wallet: Arc::new(Mutex::new(wallet)),
 	};
 
 	let router = router!(
-		receive_tx: get "/wallet/stranger/*" => api_handler,
+		receive_tx: get "/wallet/foreign/*" => api_handler,
 	);
 
 	let mut apis = ApiServer::new("/v1".to_string());
@@ -107,7 +107,7 @@ where
 	match apis.start(addr) {
 		Err(e) => error!(
 			LOGGER,
-			"Failed to start Grin wallet stranger listener: {}.", e
+			"Failed to start Grin wallet foreign listener: {}.", e
 		),
 		Ok(_) => info!(LOGGER, "Grin wallet listener started at {}", addr),
 	};
@@ -149,6 +149,11 @@ where
 		api.issue_send_tx(60, 10, "", 1000, true, true)
 	}
 
+	fn issue_burn_tx(&self, req: &mut Request, api: &mut APIOwner<T>) -> Result<(), Error> {
+		// TODO: Args
+		api.issue_burn_tx(60, 10, 1000)
+	}
+
 	fn handle_request(&self, req: &mut Request, api: &mut APIOwner<T>) -> IronResult<Response> {
 		let url = req.url.clone();
 		let path_elems = url.path();
@@ -158,6 +163,8 @@ where
 			"retrieve_summary_info" => json_response_pretty(&self.retrieve_summary_info(req, api)
 				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
 			"issue_send_tx" => json_response_pretty(&self.issue_send_tx(req, api)
+				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
+			"issue_burn_tx" => json_response_pretty(&self.issue_burn_tx(req, api)
 				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
 			_ => Err(IronError::new(
 				Fail::compat(ErrorKind::Hyper),
@@ -189,20 +196,20 @@ where
 	}
 }
 
-/// API Handler/Wrapper for stranger functions
+/// API Handler/Wrapper for foreign functions
 
-pub struct StrangerAPIHandler<T>
+pub struct ForeignAPIHandler<T>
 where
 	T: WalletBackend,
 {
 	pub wallet: Arc<Mutex<T>>,
 }
 
-impl<T> StrangerAPIHandler<T>
+impl<T> ForeignAPIHandler<T>
 where
 	T: WalletBackend,
 {
-	fn build_coinbase(&self, req: &mut Request, api: &mut APIStranger<T>) -> Result<CbData, Error> {
+	fn build_coinbase(&self, req: &mut Request, api: &mut APIForeign<T>) -> Result<CbData, Error> {
 		let struct_body = req.get::<bodyparser::Struct<BlockFees>>();
 		if let Ok(Some(block_fees)) = struct_body {
 			api.build_coinbase(&block_fees)
@@ -213,7 +220,7 @@ where
 		}
 	}
 
-	fn receive_tx(&self, req: &mut Request, api: &mut APIStranger<T>) -> Result<Slate, Error> {
+	fn receive_tx(&self, req: &mut Request, api: &mut APIForeign<T>) -> Result<Slate, Error> {
 		let struct_body = req.get::<bodyparser::Struct<Slate>>();
 		if let Ok(Some(mut slate)) = struct_body {
 			api.receive_tx(&mut slate)?;
@@ -223,7 +230,7 @@ where
 		}
 	}
 
-	fn handle_request(&self, req: &mut Request, api: &mut APIStranger<T>) -> IronResult<Response> {
+	fn handle_request(&self, req: &mut Request, api: &mut APIForeign<T>) -> IronResult<Response> {
 		let url = req.url.clone();
 		let path_elems = url.path();
 		match *path_elems.last().unwrap() {
@@ -239,7 +246,7 @@ where
 	}
 }
 
-impl<T> Handler for StrangerAPIHandler<T>
+impl<T> Handler for ForeignAPIHandler<T>
 where
 	T: WalletBackend + Send + Sync + 'static,
 {
@@ -252,7 +259,7 @@ where
 			error!(LOGGER, "Error opening wallet: {:?}", e);
 			IronError::new(Fail::compat(e), status::BadRequest)
 		})?;
-		let mut api = APIStranger::new(&mut *wallet);
+		let mut api = APIForeign::new(&mut *wallet);
 		let resp_json = self.handle_request(req, &mut api);
 		api.wallet
 			.close()
