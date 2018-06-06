@@ -220,7 +220,7 @@ where
 				Err(ErrorKind::GenericError(
 					"Invalid request body: build_coinbase",
 				))?
-			},
+			}
 			Err(e) => {
 				error!(LOGGER, "Invalid request body: build_coinbase: {:?}", e);
 				Err(ErrorKind::GenericError(

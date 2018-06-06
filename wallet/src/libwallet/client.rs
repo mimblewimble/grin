@@ -38,14 +38,8 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 				LOGGER,
 				"Failed to get coinbase from {}. Run grin wallet listen?", url
 			);
-			error!(
-				LOGGER,
-				"Underlying Error: {}", e.cause().unwrap()
-			);
-			error!(
-				LOGGER,
-				"Backtrace: {}", e.backtrace().unwrap()
-			);
+			error!(LOGGER, "Underlying Error: {}", e.cause().unwrap());
+			error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
 			Err(e)
 		}
 		Ok(res) => Ok(res),
