@@ -82,7 +82,7 @@ where
 			LOGGER,
 			"Failed to start Grin wallet owner API listener: {}.", e
 		),
-		Ok(_) => info!(LOGGER, "Grin wallet owner API started at {}", addr),
+		Ok(_) => info!(LOGGER, "Grin wallet owner API listener started at {}", addr),
 	};
 	Ok(())
 }
@@ -99,7 +99,7 @@ where
 	};
 
 	let router = router!(
-		receive_tx: get "/wallet/foreign/*" => api_handler,
+		receive_tx: post "/wallet/foreign/*" => api_handler,
 	);
 
 	let mut apis = ApiServer::new("/v1".to_string());
@@ -109,7 +109,7 @@ where
 			LOGGER,
 			"Failed to start Grin wallet foreign listener: {}.", e
 		),
-		Ok(_) => info!(LOGGER, "Grin wallet listener started at {}", addr),
+		Ok(_) => info!(LOGGER, "Grin wallet foreign listener started at {}", addr),
 	};
 	Ok(())
 }
@@ -213,12 +213,20 @@ where
 {
 	fn build_coinbase(&self, req: &mut Request, api: &mut APIForeign<T>) -> Result<CbData, Error> {
 		let struct_body = req.get::<bodyparser::Struct<BlockFees>>();
-		if let Ok(Some(block_fees)) = struct_body {
-			api.build_coinbase(&block_fees)
-		} else {
-			Err(ErrorKind::GenericError(
-				"Invalid request body: build_coinbase",
-			))?
+		match struct_body {
+			Ok(Some(block_fees)) => api.build_coinbase(&block_fees),
+			Ok(None) => {
+				error!(LOGGER, "Missing request body: build_coinbase");
+				Err(ErrorKind::GenericError(
+					"Invalid request body: build_coinbase",
+				))?
+			},
+			Err(e) => {
+				error!(LOGGER, "Invalid request body: build_coinbase: {:?}", e);
+				Err(ErrorKind::GenericError(
+					"Invalid request body: build_coinbase",
+				))?
+			}
 		}
 	}
 

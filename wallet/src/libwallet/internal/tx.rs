@@ -112,7 +112,7 @@ pub fn issue_send_tx<T: WalletBackend>(
 		0,
 	)?;
 
-	let url = format!("{}/v1/receive/transaction", dest);
+	let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
 	debug!(LOGGER, "Posting partial transaction to {}", url);
 	let mut slate = match client::send_slate(&url, &slate, fluff).context(ErrorKind::Node) {
 		Ok(s) => s,

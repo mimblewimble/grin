@@ -299,9 +299,9 @@ impl LocalServerContainer {
 		wallet_seed: &wallet::WalletSeed,
 	) -> wallet::WalletInfo {
 		let keychain = wallet_seed
-			.derive_keychain("grin_test")
+			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
-		let mut wallet = FileWallet::new(config.clone(), "grin_test")
+		let mut wallet = FileWallet::new(config.clone(), "")
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		wallet::libwallet::internal::updater::retrieve_info(&mut wallet).unwrap()
@@ -322,7 +322,7 @@ impl LocalServerContainer {
 			wallet::WalletSeed::from_file(config).expect("Failed to read wallet seed file.");
 
 		let keychain = wallet_seed
-			.derive_keychain("grin_test")
+			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let max_outputs = 500;
 

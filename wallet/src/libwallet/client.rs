@@ -36,7 +36,15 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 		Err(e) => {
 			error!(
 				LOGGER,
-				"Failed to get coinbase from {}. Run grin wallet listen", url
+				"Failed to get coinbase from {}. Run grin wallet listen?", url
+			);
+			error!(
+				LOGGER,
+				"Underlying Error: {}", e.cause().unwrap()
+			);
+			error!(
+				LOGGER,
+				"Backtrace: {}", e.backtrace().unwrap()
 			);
 			Err(e)
 		}
@@ -86,10 +94,12 @@ fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, E
 	);
 	req.headers_mut().set(ContentType::json());
 	let json = serde_json::to_string(&block_fees).context(ErrorKind::Format)?;
+	trace!(LOGGER, "Sending coinbase request: {:?}", json);
 	req.set_body(json);
 
 	let work = client.request(req).and_then(|res| {
 		res.body().concat2().and_then(move |body| {
+			trace!(LOGGER, "Returned Body: {:?}", body);
 			let coinbase: CbData =
 				serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 			Ok(coinbase)
