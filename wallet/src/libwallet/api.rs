@@ -17,10 +17,17 @@
 //! vs. functions to interact with someone else)
 //! Still experimental, not sure this is the best way to do this
 
+use libwallet::client;
 use libtx::slate::Slate;
-use libwallet::Error;
+use libwallet::{Error, ErrorKind};
 use libwallet::internal::{tx, updater};
-use libwallet::types::{BlockFees, CbData, OutputData, WalletBackend, WalletInfo};
+use libwallet::types::{BlockFees, CbData, OutputData, TxWrapper, WalletBackend, WalletInfo};
+
+use failure::ResultExt;
+
+use api;
+use core::ser;
+use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to
 /// the wallet/keychain that they're acting upon
@@ -72,15 +79,49 @@ where
 		selection_strategy_is_use_all: bool,
 		fluff: bool,
 	) -> Result<(), Error> {
-		tx::issue_send_tx(
+		if &dest[..4] != "http" {
+			panic!(
+				"dest formatted as {} but send -d expected stdout or http://IP:port",
+				dest
+			);
+		}
+
+		let (slate, context, lock_fn) = tx::create_send_tx(
 			self.wallet,
 			amount,
 			minimum_confirmations,
-			dest,
 			max_outputs,
 			selection_strategy_is_use_all,
-			fluff,
-		)
+		)?;
+
+		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
+		debug!(LOGGER, "Posting partial transaction to {}", url);
+		let mut slate = match client::send_slate(&url, &slate, fluff).context(ErrorKind::Node) {
+			Ok(s) => s,
+			Err(e) => {
+				error!(
+					LOGGER,
+					"Communication with receiver failed on SenderInitiation send. Aborting transaction"
+				);
+				return Err(e)?;
+			}
+		};
+
+		tx::complete_tx(self.wallet, &mut slate, &context)?;
+		// All good here, so let's post it
+		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
+		let url;
+		if fluff {
+			url = format!("{}/v1/pool/push?fluff", self.wallet.node_url(),);
+		} else {
+			url = format!("{}/v1/pool/push", self.wallet.node_url());
+		}
+		api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
+
+		// All good so, lock our inputs
+		lock_fn(self.wallet)?;
+		Ok(())
+
 	}
 
 	/// Issue a burn TX
@@ -90,7 +131,12 @@ where
 		minimum_confirmations: u64,
 		max_outputs: usize,
 	) -> Result<(), Error> {
-		tx::issue_burn_tx(self.wallet, amount, minimum_confirmations, max_outputs)
+		let tx_burn = tx::issue_burn_tx(self.wallet, amount, minimum_confirmations, max_outputs)?;
+		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
+		let url = format!("{}/v1/pool/push", self.wallet.node_url());
+		let _: () =
+			api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
+		Ok(())
 	}
 
 	/// Attempt to restore contents of wallet
