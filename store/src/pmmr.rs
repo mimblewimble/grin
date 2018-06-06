@@ -325,11 +325,9 @@ where
 
 			let off_to_rm = map_vec!(pos_to_rm, |&pos| {
 				let shift = self.pruned_nodes.get_shift(pos).unwrap();
-				println!("shift (hash file) for {:?}, {:?}", pos, shift);
 				(pos - 1 - shift) * record_len
 			});
 
-			println!("*** save pruning hash file");
 			self.hash_file.save_prune(
 				tmp_prune_file_hash.clone(),
 				off_to_rm,
@@ -348,17 +346,6 @@ where
 				.cloned()
 				.collect::<Vec<_>>();
 
-			println!("*** save pruning data file");
-			println!(
-				"*** existing prune list - {:?}",
-				self.pruned_nodes.pruned_nodes
-			);
-			println!("*** leaf_pos_to_rm - {:?}", leaf_pos_to_rm);
-			println!(
-				"*** data file size - {}, {}",
-				self.data_file.size().unwrap(),
-				self.data_file.size().unwrap() / record_len
-			);
 			let off_to_rm = map_vec!(leaf_pos_to_rm, |pos| {
 				let flat_pos = pmmr::n_leaves(*pos);
 				let shift = self.pruned_nodes.get_leaf_shift(*pos).unwrap();
@@ -381,15 +368,13 @@ where
 			// TODO - we can get rid of leaves in the prunelist here (and things still work)
 			// self.pruned_nodes.pruned_nodes.retain(|&x| !pmmr::is_leaf(x));
 
-			// TODO - we can get rid of leaves in the prunelist here (and things still work)
+			// Prunelist contains *only* non-leaf roots.
+			// Contrast this with the rm_log that *only* contains leaves.
+			// So we have two disjoint sets of positions - we could store these
+			// in a single bitmap if we were clever about it.
 			self.pruned_nodes
 				.pruned_nodes
 				.retain(|&x| !pmmr::is_leaf(x));
-
-			println!(
-				"*** updating prune_list to {:?} (do we have leaves in here?)",
-				self.pruned_nodes.pruned_nodes
-			);
 
 			write_vec(
 				format!("{}/{}", self.data_dir, PMMR_PRUNED_FILE),
@@ -446,15 +431,13 @@ where
 				}
 			}
 		}
+
 		// siblings may have been pushed out of order as we
 		// build up the list of positions so sort (and deduplicate for safety)
 		expanded.sort();
 		expanded.dedup();
-		println!("expanded: {:?}", expanded);
 
 		let pos_to_rm = removed_excl_roots(expanded.clone());
-
-		println!("pos_to_rm: {:?} -> {:?}", leaf_pos_to_rm, pos_to_rm);
 
 		pos_to_rm
 	}
