@@ -34,7 +34,7 @@ use chain::types::*;
 use core::global::ChainTypes;
 use core::{global, pow};
 use util::LOGGER;
-use wallet::libwallet::selection;
+use wallet::libwallet::internal::selection;
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);

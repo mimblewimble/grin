@@ -119,6 +119,7 @@ pub struct OwnerAPIHandler<T>
 where
 	T: WalletBackend,
 {
+	/// Wallet instance
 	pub wallet: Arc<Mutex<T>>,
 }
 
@@ -202,6 +203,7 @@ pub struct ForeignAPIHandler<T>
 where
 	T: WalletBackend,
 {
+	/// Wallet instance
 	pub wallet: Arc<Mutex<T>>,
 }
 

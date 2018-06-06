@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Transaction buinding functions
+
 use api;
-use client;
+use libwallet::client;
 use core::ser;
 use failure::ResultExt;
 use keychain::{Identifier, Keychain};
@@ -21,7 +23,7 @@ use libtx::slate::Slate;
 use libtx::{build, tx_fee};
 use libwallet::types::{TxWrapper, WalletBackend};
 use libwallet::{Error, ErrorKind};
-use libwallet::{selection, updater};
+use libwallet::internal::{selection, updater};
 use util;
 use util::LOGGER;
 

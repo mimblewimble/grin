@@ -27,7 +27,7 @@ use core::ser;
 use keychain::Identifier;
 use libtx::reward;
 use libwallet::error::{Error, ErrorKind};
-use libwallet::keys;
+use libwallet::internal::keys;
 use libwallet::types::*;
 use util;
 use util::LOGGER;

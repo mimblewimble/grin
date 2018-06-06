@@ -46,8 +46,6 @@ extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 
-pub mod client;
-pub mod controller;
 pub mod display;
 mod error;
 pub mod file_wallet;
@@ -56,5 +54,5 @@ pub mod libwallet;
 
 pub use error::{Error, ErrorKind};
 pub use file_wallet::{FileWallet, WalletConfig, WalletSeed};
-pub use libwallet::tx::{issue_burn_tx, issue_send_tx};
 pub use libwallet::types::{BlockFees, CbData, WalletInfo};
+pub use libwallet::controller;

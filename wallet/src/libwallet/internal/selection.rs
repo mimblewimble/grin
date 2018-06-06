@@ -18,7 +18,7 @@ use keychain::Identifier;
 use libtx::{build, tx_fee, slate::Slate};
 use libwallet::error::{Error, ErrorKind};
 use libwallet::types::*;
-use libwallet::{keys, sigcontext};
+use libwallet::internal::{keys, sigcontext};
 
 /// Initialise a transaction on the sender side, returns a corresponding
 /// libwallet transaction slate with the appropriate inputs selected,

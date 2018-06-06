@@ -25,7 +25,7 @@ use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::ProofMessage;
 use util::{kernel_sig_msg, secp};
 use wallet::libtx::{aggsig, proof};
-use wallet::libwallet::sigcontext;
+use wallet::libwallet::internal::sigcontext;
 
 use rand::thread_rng;
 

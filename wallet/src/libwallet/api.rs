@@ -20,7 +20,7 @@
 use libtx::slate::Slate;
 use libwallet::Error;
 use libwallet::types::{BlockFees, CbData, OutputData, WalletBackend, WalletInfo};
-use libwallet::{tx, updater};
+use libwallet::internal::{tx, updater};
 
 /// Wrapper around internal API functions, containing a reference to
 /// the wallet/keychain that they're acting upon

@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Client functions: TODO: doesn't really belong here or needs to be
+//! traited out
+
 use failure::ResultExt;
 use futures::{Future, Stream};
 use hyper;
@@ -41,6 +44,7 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 	}
 }
 
+/// Send the slate to a listening wallet instance
 pub fn send_slate(url: &str, slate: &Slate, fluff: bool) -> Result<Slate, Error> {
 	let mut core = reactor::Core::new().context(ErrorKind::Hyper)?;
 	let client = hyper::Client::new(&core.handle());
