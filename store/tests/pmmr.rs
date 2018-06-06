@@ -24,6 +24,78 @@ use core::ser::*;
 use store::types::prune_noop;
 
 #[test]
+fn compact_twice() {
+	let (data_dir, elems) = setup("compact_twice");
+
+	// setup the mmr store with all elements
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
+	let mmr_size = load(0, &elems[..], &mut backend);
+	backend.sync().unwrap();
+
+	// save the root
+	let root = {
+		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		pmmr.root()
+	};
+
+	// pruning some choice nodes
+	{
+		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		pmmr.prune(1, 1).unwrap();
+		pmmr.prune(2, 1).unwrap();
+		pmmr.prune(4, 1).unwrap();
+	}
+	backend.sync().unwrap();
+
+	// check the root and stored data
+	{
+		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		assert_eq!(root, pmmr.root());
+		assert_eq!(pmmr.get_data(5).unwrap(), TestElem(4));
+		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
+	}
+
+	// compact
+	backend.check_compact(2, 2, &prune_noop).unwrap();
+
+	// recheck the root and stored data
+	{
+		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		assert_eq!(root, pmmr.root());
+		assert_eq!(pmmr.get_data(5).unwrap(), TestElem(4));
+		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
+	}
+
+	// now prune some more nodes
+	{
+		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		pmmr.prune(5, 2).unwrap();
+		pmmr.prune(8, 2).unwrap();
+		pmmr.prune(9, 2).unwrap();
+	}
+	backend.sync().unwrap();
+
+	// recheck the root and stored data
+	{
+		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		assert_eq!(root, pmmr.root());
+		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
+	}
+
+	// compact
+	backend.check_compact(2, 3, &prune_noop).unwrap();
+
+	// recheck the root and stored data
+	{
+		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		assert_eq!(root, pmmr.root());
+		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
+	}
+
+	teardown(data_dir);
+}
+
+#[test]
 fn pmmr_append() {
 	let (data_dir, elems) = setup("append");
 	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
@@ -259,8 +331,8 @@ fn pmmr_reload() {
 		assert_eq!(backend.get_hash(1), None);
 		assert_eq!(backend.get_hash(2), None);
 
-		// pos 3 is removed (via prune list)
-		assert_eq!(backend.get_hash(3), None);
+		// pos 3 is "removed" but we keep the hash around for non-leaf pos.
+		assert_eq!(backend.get_hash(3), Some(pos_3_hash));
 
 		// pos 4 is removed (via prune list)
 		assert_eq!(backend.get_hash(4), None);
@@ -332,15 +404,18 @@ fn pmmr_rewind() {
 		assert_eq!(pmmr.root(), root2);
 	}
 
-	// also check the data file looks correct
-	// everything up to and including pos 7 should be pruned from the data file
-	// except the data at pos 8 and 9 (corresponding to elements 5 and 6)
-	for pos in 1..8 {
+	// Also check the data file looks correct.
+	// pos 1, 2, 4, 5 are all leaves but these have been pruned.
+	for pos in vec![1, 2, 4, 5] {
 		assert_eq!(backend.get_data(pos), None);
 	}
+	// pos 3, 6, 7 are non-leaves so we have no data for these
+	for pos in vec![3, 6, 7] {
+		assert_eq!(backend.get_data(pos), None);
+	}
+	// pos 8 and 9 anre both leaves and should be unaffected by prior pruning
 	assert_eq!(backend.get_data(8), Some(elems[4]));
 	assert_eq!(backend.get_data(9), Some(elems[5]));
-
 	assert_eq!(backend.data_size().unwrap(), 2);
 
 	{
@@ -428,12 +503,12 @@ fn pmmr_compact_entire_peak() {
 
 	// now check we have pruned up to and including the peak at pos 7
 	// hash still available in underlying hash file
-	assert_eq!(backend.get_hash(7), None);
+	assert_eq!(backend.get_hash(7), Some(pos_7_hash));
 	assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
 	// now check we still have subsequent hash and data where we expect
-	assert_eq!(backend.get_hash(8), Some(pos_8_hash));
 	assert_eq!(backend.get_data(8), Some(pos_8));
+	assert_eq!(backend.get_hash(8), Some(pos_8_hash));
 	assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
 
 	teardown(data_dir);
@@ -555,6 +630,8 @@ fn pmmr_compact_horizon() {
 		assert_eq!(backend.hash_size().unwrap(), 29);
 
 		// check we can read a hash by pos correctly from recreated backend
+		// get_hash() and get_from_file() should return the same value
+		// and we only store leaves in the rm_log so pos 7 still has a hash in there
 		assert_eq!(backend.get_hash(7), Some(pos_7_hash));
 		assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
@@ -564,7 +641,6 @@ fn pmmr_compact_horizon() {
 	}
 
 	teardown(data_dir);
-	panic!("stop!");
 }
 
 #[test]

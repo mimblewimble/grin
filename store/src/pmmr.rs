@@ -134,7 +134,9 @@ where
 	/// Get the data at pos.
 	/// Return None if it has been removed or if pos is not a leaf node.
 	fn get_data(&self, pos: u64) -> Option<(T)> {
-		if self.rm_log.includes(pos) {
+		if !pmmr::is_leaf(pos) {
+			None
+		} else if self.rm_log.includes(pos) {
 			None
 		} else {
 			self.get_data_from_file(pos)
@@ -310,12 +312,12 @@ where
 		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
 
 		// Retrieve list of pos from the rm_log before the cutoff.
-		let leaf_pos_to_rm = self.rm_log.removed_pre_cutoff(cutoff_index);
+		let rm_pre_cutoff = self.rm_log.removed_pre_cutoff(cutoff_index);
 
 		// Convert the list of leaf pos into full list of pos
 		// accounting for pos already pruned and excluding roots
 		// which we do not want to prune.
-		let pos_to_rm = self.pos_to_rm(&leaf_pos_to_rm);
+		let pos_to_rm = self.pos_to_rm(&rm_pre_cutoff);
 
 		// 1. Save compact copy of the hash file, skipping removed data.
 		{
@@ -323,9 +325,11 @@ where
 
 			let off_to_rm = map_vec!(pos_to_rm, |&pos| {
 				let shift = self.pruned_nodes.get_shift(pos).unwrap();
+				println!("shift (hash file) for {:?}, {:?}", pos, shift);
 				(pos - 1 - shift) * record_len
 			});
 
+			println!("*** save pruning hash file");
 			self.hash_file.save_prune(
 				tmp_prune_file_hash.clone(),
 				off_to_rm,
@@ -338,6 +342,23 @@ where
 		{
 			let record_len = T::len() as u64;
 
+			let leaf_pos_to_rm = pos_to_rm
+				.iter()
+				.filter(|&x| pmmr::is_leaf(*x))
+				.cloned()
+				.collect::<Vec<_>>();
+
+			println!("*** save pruning data file");
+			println!(
+				"*** existing prune list - {:?}",
+				self.pruned_nodes.pruned_nodes
+			);
+			println!("*** leaf_pos_to_rm - {:?}", leaf_pos_to_rm);
+			println!(
+				"*** data file size - {}, {}",
+				self.data_file.size().unwrap(),
+				self.data_file.size().unwrap() / record_len
+			);
 			let off_to_rm = map_vec!(leaf_pos_to_rm, |pos| {
 				let flat_pos = pmmr::n_leaves(*pos);
 				let shift = self.pruned_nodes.get_leaf_shift(*pos).unwrap();
@@ -354,11 +375,16 @@ where
 
 		// 3. Update the prune list and save it in place.
 		{
-			for &pos in &leaf_pos_to_rm.clone() {
+			for &pos in &rm_pre_cutoff.clone() {
 				self.pruned_nodes.add(pos);
 			}
 			// TODO - we can get rid of leaves in the prunelist here (and things still work)
 			// self.pruned_nodes.pruned_nodes.retain(|&x| !pmmr::is_leaf(x));
+
+			println!(
+				"*** updating prune_list to {:?} (do we have leaves in here?)",
+				self.pruned_nodes.pruned_nodes
+			);
 
 			write_vec(
 				format!("{}/{}", self.data_dir, PMMR_PRUNED_FILE),
@@ -415,6 +441,11 @@ where
 				}
 			}
 		}
+		// siblings may have been pushed out of order as we
+		// build up the list of positions so sort (and deduplicate for safety)
+		expanded.sort();
+		expanded.dedup();
+		println!("expanded: {:?}", expanded);
 
 		let pos_to_rm = removed_excl_roots(expanded.clone());
 

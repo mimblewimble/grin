@@ -222,6 +222,16 @@ impl AppendOnlyFile {
 				let mut buf_start = 0;
 				while prune_offs[prune_pos] >= read && prune_offs[prune_pos] < read + len {
 					let prune_at = (prune_offs[prune_pos] - read) as usize;
+					println!(
+						"save_prune: {}, {}, {}, {}, {}, {}",
+						read,
+						len,
+						prune_pos,
+						prune_offs.len(),
+						buf_start,
+						prune_at
+					);
+
 					if prune_at != buf_start {
 						writer.write_all(&buf[buf_start..prune_at])?;
 					} else {
