@@ -28,8 +28,8 @@ use core::core::hash::Hashed;
 use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::{consensus, global, pow};
 use wallet::file_wallet::*;
+use wallet::libwallet::internal::updater;
 use wallet::libwallet::types::*;
-use wallet::libwallet::updater;
 use wallet::libwallet::{Error, ErrorKind};
 
 use util::secp::pedersen;
@@ -162,7 +162,7 @@ pub fn award_block_to_wallet<T: WalletBackend>(
 		key_id: None,
 		height: prev.height + 1,
 	};
-	let coinbase_tx = wallet::receiver::receive_coinbase(wallet, &fees);
+	let coinbase_tx = wallet::libwallet::internal::updater::receive_coinbase(wallet, &fees);
 	let (coinbase_tx, fees) = match coinbase_tx {
 		Ok(t) => ((t.0, t.1), t.2),
 		Err(e) => {
@@ -197,10 +197,14 @@ pub fn award_blocks_to_wallet<T: WalletBackend>(chain: &Chain, wallet: &mut T, n
 pub fn create_wallet(dir: &str) -> FileWallet {
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
-	let wallet_seed = wallet::WalletSeed::init_file(&wallet_config).unwrap();
-	let keychain = wallet_seed
-		.derive_keychain("")
-		.expect("Failed to derive keychain from seed file and passphrase.");
-	FileWallet::new(wallet_config.clone(), keychain)
-		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config))
+	wallet::WalletSeed::init_file(&wallet_config).expect("Failed to create wallet seed file.");
+	let mut wallet = FileWallet::new(wallet_config.clone(), "")
+		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
+	wallet.open_with_credentials().unwrap_or_else(|e| {
+		panic!(
+			"Error initializing wallet: {:?} Config: {:?}",
+			e, wallet_config
+		)
+	});
+	wallet
 }

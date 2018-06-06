@@ -268,21 +268,21 @@ impl LocalServerContainer {
 			//panic!("Error initting wallet seed: {}", e);
 		}
 
-		let wallet_seed = wallet::WalletSeed::from_file(&self.wallet_config)
-			.expect("Failed to read wallet seed file.");
-
-		let keychain = wallet_seed
-			.derive_keychain("grin_test")
-			.expect("Failed to derive keychain from seed file and passphrase.");
-
-		let wallet = FileWallet::new(self.wallet_config.clone(), keychain).unwrap_or_else(|e| {
+		let wallet = FileWallet::new(self.wallet_config.clone(), "").unwrap_or_else(|e| {
 			panic!(
 				"Error creating wallet: {:?} Config: {:?}",
 				e, self.wallet_config
 			)
 		});
 
-		wallet::server::start_rest_apis(wallet, &self.wallet_config.api_listen_addr());
+		wallet::controller::foreign_listener(wallet, &self.wallet_config.api_listen_addr())
+			.unwrap_or_else(|e| {
+				panic!(
+					"Error creating wallet listener: {:?} Config: {:?}",
+					e, self.wallet_config
+				)
+			});
+
 		self.wallet_is_running = true;
 	}
 
@@ -299,11 +299,12 @@ impl LocalServerContainer {
 		wallet_seed: &wallet::WalletSeed,
 	) -> wallet::WalletInfo {
 		let keychain = wallet_seed
-			.derive_keychain("grin_test")
+			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
-		let mut wallet = FileWallet::new(config.clone(), keychain)
+		let mut wallet = FileWallet::new(config.clone(), "")
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
-		wallet::libwallet::updater::retrieve_info(&mut wallet).unwrap()
+		wallet.keychain = Some(keychain);
+		wallet::libwallet::internal::updater::retrieve_info(&mut wallet).unwrap()
 	}
 
 	pub fn send_amount_to(
@@ -321,16 +322,18 @@ impl LocalServerContainer {
 			wallet::WalletSeed::from_file(config).expect("Failed to read wallet seed file.");
 
 		let keychain = wallet_seed
-			.derive_keychain("grin_test")
+			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let max_outputs = 500;
-		let mut wallet = FileWallet::new(config.clone(), keychain)
+
+		let mut wallet = FileWallet::new(config.clone(), "grin_test")
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
-		let result = wallet::issue_send_tx(
+		wallet.keychain = Some(keychain);
+		let result = wallet::libwallet::internal::tx::issue_send_tx(
 			&mut wallet,
 			amount,
 			minimum_confirmations,
-			dest.to_string(),
+			dest,
 			max_outputs,
 			selection_strategy == "all",
 			fluff,

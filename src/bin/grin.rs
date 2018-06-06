@@ -216,6 +216,9 @@ fn main() {
 				.help("Port on which to run the wallet listener")
 				.takes_value(true)))
 
+		.subcommand(SubCommand::with_name("owner_api")
+			.about("Runs the wallet's local web API."))
+
 		.subcommand(SubCommand::with_name("receive")
 			.about("Processes a JSON transaction file.")
 			.arg(Arg::with_name("input")
@@ -411,22 +414,24 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 
 	if let Some(true) = server_config.run_wallet_listener {
 		let mut wallet_config = global_config.members.unwrap().wallet;
-		let wallet_seed = match wallet::WalletSeed::from_file(&wallet_config) {
-			Ok(ws) => ws,
-			Err(_) => wallet::WalletSeed::init_file(&wallet_config)
-				.expect("Failed to create wallet seed file."),
+		if let Err(_) = wallet::WalletSeed::from_file(&wallet_config) {
+			wallet::WalletSeed::init_file(&wallet_config)
+				.expect("Failed to create wallet seed file.");
 		};
-		let mut keychain = wallet_seed
-			.derive_keychain("")
-			.expect("Failed to derive keychain from seed file and passphrase.");
 
 		let _ = thread::Builder::new()
 			.name("wallet_listener".to_string())
 			.spawn(move || {
-				let wallet = FileWallet::new(wallet_config.clone(), keychain).unwrap_or_else(|e| {
+				let wallet = FileWallet::new(wallet_config.clone(), "").unwrap_or_else(|e| {
 					panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
 				});
-				wallet::server::start_rest_apis(wallet, &wallet_config.api_listen_addr());
+				wallet::controller::foreign_listener(wallet, &wallet_config.api_listen_addr())
+					.unwrap_or_else(|e| {
+						panic!(
+							"Error creating wallet listener: {:?} Config: {:?}",
+							e, wallet_config
+						)
+					});
 			});
 	}
 
@@ -524,117 +529,159 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 	// Generate the initial wallet seed if we are running "wallet init".
 	if let ("init", Some(_)) = wallet_args.subcommand() {
 		wallet::WalletSeed::init_file(&wallet_config).expect("Failed to init wallet seed file.");
-
 		// we are done here with creating the wallet, so just return
 		return;
 	}
 
-	let wallet_seed =
-		wallet::WalletSeed::from_file(&wallet_config).expect("Failed to read wallet seed file.");
 	let passphrase = wallet_args
 		.value_of("pass")
 		.expect("Failed to read passphrase.");
-	let keychain = wallet_seed
-		.derive_keychain(&passphrase)
-		.expect("Failed to derive keychain from seed file and passphrase.");
-	let mut wallet = FileWallet::new(wallet_config.clone(), keychain)
-		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
 
-	match wallet_args.subcommand() {
-		("listen", Some(listen_args)) => {
-			if let Some(port) = listen_args.value_of("port") {
-				wallet_config.api_listen_port = port.parse().unwrap();
+	// Handle listener startup commands
+	{
+		let wallet = FileWallet::new(wallet_config.clone(), passphrase).unwrap_or_else(|e| {
+			panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+		});
+		match wallet_args.subcommand() {
+			("listen", Some(listen_args)) => {
+				if let Some(port) = listen_args.value_of("port") {
+					wallet_config.api_listen_port = port.parse().unwrap();
+				}
+				wallet::controller::foreign_listener(wallet, &wallet_config.api_listen_addr())
+					.unwrap_or_else(|e| {
+						panic!(
+							"Error creating wallet listener: {:?} Config: {:?}",
+							e, wallet_config
+						)
+					});
 			}
-			wallet::server::start_rest_apis(wallet, &wallet_config.api_listen_addr());
-		}
-		("send", Some(send_args)) => {
-			let amount = send_args
-				.value_of("amount")
-				.expect("Amount to send required");
-			let amount = core::core::amount_from_hr_string(amount)
-				.expect("Could not parse amount as a number with optional decimal point.");
-			let minimum_confirmations: u64 = send_args
-				.value_of("minimum_confirmations")
-				.unwrap()
-				.parse()
-				.expect("Could not parse minimum_confirmations as a whole number.");
-			let selection_strategy = send_args
-				.value_of("selection_strategy")
-				.expect("Selection strategy required");
-			let dest = send_args
-				.value_of("dest")
-				.expect("Destination wallet address required");
-			let mut fluff = false;
-			if send_args.is_present("fluff") {
-				fluff = true;
+			("owner_api", Some(_api_args)) => {
+				wallet::controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
+					panic!(
+						"Error creating wallet api listener: {:?} Config: {:?}",
+						e, wallet_config
+					)
+				});
 			}
-			let max_outputs = 500;
-			let result = wallet::issue_send_tx(
-				&mut wallet,
-				amount,
-				minimum_confirmations,
-				dest.to_string(),
-				max_outputs,
-				selection_strategy == "all",
-				fluff,
-			);
-			match result {
-				Ok(_) => info!(
-					LOGGER,
-					"Tx sent: {} grin to {} (strategy '{}')",
-					amount_to_hr_string(amount),
-					dest,
-					selection_strategy,
-				),
-				Err(e) => {
-					error!(LOGGER, "Tx not sent: {}", e.cause());
-					match e.downcast::<libwallet::Error>() {
-						Ok(le) => {
-							match le.kind() {
+			_ => {}
+		};
+	}
+
+	// Handle single-use (command line) owner commands
+	{
+		let mut wallet = FileWallet::new(wallet_config.clone(), passphrase).unwrap_or_else(|e| {
+			panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+		});
+		let _res = wallet::controller::owner_single_use(&mut wallet, |api| {
+			match wallet_args.subcommand() {
+				("send", Some(send_args)) => {
+					let amount = send_args
+						.value_of("amount")
+						.expect("Amount to send required");
+					let amount = core::core::amount_from_hr_string(amount)
+						.expect("Could not parse amount as a number with optional decimal point.");
+					let minimum_confirmations: u64 = send_args
+						.value_of("minimum_confirmations")
+						.unwrap()
+						.parse()
+						.expect("Could not parse minimum_confirmations as a whole number.");
+					let selection_strategy = send_args
+						.value_of("selection_strategy")
+						.expect("Selection strategy required");
+					let dest = send_args
+						.value_of("dest")
+						.expect("Destination wallet address required");
+					let mut fluff = false;
+					if send_args.is_present("fluff") {
+						fluff = true;
+					}
+					let max_outputs = 500;
+					let result = api.issue_send_tx(
+						amount,
+						minimum_confirmations,
+						dest,
+						max_outputs,
+						selection_strategy == "all",
+						fluff,
+					);
+					match result {
+						Ok(_) => {
+							info!(
+								LOGGER,
+								"Tx sent: {} grin to {} (strategy '{}')",
+								amount_to_hr_string(amount),
+								dest,
+								selection_strategy,
+							);
+							Ok(())
+						}
+						Err(e) => {
+							error!(LOGGER, "Tx not sent: {:?}", e);
+							match e.kind() {
 								// user errors, don't backtrace
 								libwallet::ErrorKind::NotEnoughFunds { .. } => {}
 								libwallet::ErrorKind::FeeDispute { .. } => {}
 								libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
 								_ => {
 									// otherwise give full dump
-									error!(LOGGER, "Backtrace: {}", le.backtrace().unwrap());
+									error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
 								}
 							};
+							Err(e)
 						}
-						_ => {}
-					};
+					}
 				}
+				("burn", Some(send_args)) => {
+					let amount = send_args
+						.value_of("amount")
+						.expect("Amount to burn required");
+					let amount = core::core::amount_from_hr_string(amount)
+						.expect("Could not parse amount as number with optional decimal point.");
+					let minimum_confirmations: u64 = send_args
+						.value_of("minimum_confirmations")
+						.unwrap()
+						.parse()
+						.expect("Could not parse minimum_confirmations as a whole number.");
+					let max_outputs = 500;
+					api.issue_burn_tx(amount, minimum_confirmations, max_outputs)
+						.unwrap_or_else(|e| {
+							panic!("Error burning tx: {:?} Config: {:?}", e, wallet_config)
+						});
+					Ok(())
+				}
+				("info", Some(_)) => {
+					let _res = wallet::display::info(&api.retrieve_summary_info()?.1)
+						.unwrap_or_else(|e| {
+							panic!(
+								"Error getting wallet info: {:?} Config: {:?}",
+								e, wallet_config
+							)
+						});
+					Ok(())
+				}
+				("outputs", Some(_)) => {
+					let (height, validated) = api.node_height()?;
+					let (_, outputs) = api.retrieve_outputs(show_spent)?;
+					let _res =
+						wallet::display::outputs(height, validated, outputs).unwrap_or_else(|e| {
+							panic!(
+								"Error getting wallet outputs: {:?} Config: {:?}",
+								e, wallet_config
+							)
+						});
+					Ok(())
+				}
+				("restore", Some(_)) => {
+					let _res = api.restore().unwrap_or_else(|e| {
+						panic!(
+							"Error getting restoring wallet: {:?} Config: {:?}",
+							e, wallet_config
+						)
+					});
+					Ok(())
+				}
+				_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 			}
-		}
-		("burn", Some(send_args)) => {
-			let amount = send_args
-				.value_of("amount")
-				.expect("Amount to burn required");
-			let amount = core::core::amount_from_hr_string(amount)
-				.expect("Could not parse amount as number with optional decimal point.");
-			let minimum_confirmations: u64 = send_args
-				.value_of("minimum_confirmations")
-				.unwrap()
-				.parse()
-				.expect("Could not parse minimum_confirmations as a whole number.");
-			let max_outputs = 500;
-			wallet::issue_burn_tx(&mut wallet, amount, minimum_confirmations, max_outputs).unwrap();
-		}
-		("info", Some(_)) => {
-			let res = wallet::show_info(&mut wallet);
-			if let Err(e) = res {
-				println!("Could not get wallet info: {}", e);
-			}
-		}
-		("outputs", Some(_)) => {
-			wallet::show_outputs(&mut wallet, show_spent);
-		}
-		("restore", Some(_)) => {
-			let res = wallet.restore();
-			if let Err(e) = res {
-				println!("Could not restore wallet: {}", e);
-			}
-		}
-		_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
+		});
 	}
 }

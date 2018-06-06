@@ -33,6 +33,12 @@ use libwallet::error::{Error, ErrorKind};
 /// here expect that the wallet instance has instantiated itself or stored
 /// whatever credentials it needs
 pub trait WalletBackend {
+	/// Initialise with whatever stored credentials we have
+	fn open_with_credentials(&mut self) -> Result<(), Error>;
+
+	/// Close wallet and remove any stored credentials (TBD)
+	fn close(&mut self) -> Result<(), Error>;
+
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut Keychain;
 
@@ -79,6 +85,9 @@ pub trait WalletBackend {
 		max_outputs: usize,
 		select_all: bool,
 	) -> Vec<OutputData>;
+
+	/// Attempt to restore the contents of a wallet from seed
+	fn restore(&mut self) -> Result<(), Error>;
 }
 
 /// Information about an output that's being tracked by the wallet. Must be
@@ -353,4 +362,11 @@ pub struct WalletInfo {
 	pub data_confirmed: bool,
 	/// node confirming the data
 	pub data_confirmed_from: String,
+}
+
+/// Dummy wrapper for the hex-encoded serialized transaction.
+#[derive(Serialize, Deserialize)]
+pub struct TxWrapper {
+	/// hex representation of transaction
+	pub tx_hex: String,
 }

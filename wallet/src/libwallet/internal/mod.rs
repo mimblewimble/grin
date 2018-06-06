@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Higher level wallet functions which can be used by callers to operate
-//! on the wallet, as well as helpers to invoke and instantiate wallets
-//! and listeners
+//! lower-level wallet functions which build upon libtx to perform wallet
+//! operations
 
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
@@ -22,11 +21,9 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-pub mod api;
-pub mod client;
-pub mod controller;
-mod error;
-pub mod internal;
-pub mod types;
-
-pub use libwallet::error::{Error, ErrorKind};
+pub mod keys;
+pub mod restore;
+pub mod selection;
+pub mod sigcontext;
+pub mod tx;
+pub mod updater;

@@ -12,32 +12,60 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! Transaction buinding functions
+
 use api;
-use client;
 use core::ser;
-use error::{Error, ErrorKind};
-use failure::{self, ResultExt};
+use failure::ResultExt;
 use keychain::{Identifier, Keychain};
+use libtx::slate::Slate;
 use libtx::{build, tx_fee};
-use libwallet::types::WalletBackend;
-use libwallet::{selection, updater};
-use receiver::TxWrapper;
+use libwallet::client;
+use libwallet::internal::{selection, updater};
+use libwallet::types::{TxWrapper, WalletBackend};
+use libwallet::{Error, ErrorKind};
 use util;
 use util::LOGGER;
+
+/// Receive a tranaction, modifying the slate accordingly (which can then be
+/// sent back to sender for posting)
+pub fn receive_tx<T: WalletBackend>(wallet: &mut T, slate: &mut Slate) -> Result<(), Error> {
+	// create an output using the amount in the slate
+	let (_, mut context, receiver_create_fn) =
+		selection::build_recipient_output_with_slate(wallet, slate).unwrap();
+
+	// fill public keys
+	let _ = slate.fill_round_1(
+		wallet.keychain(),
+		&mut context.sec_key,
+		&context.sec_nonce,
+		1,
+	)?;
+
+	// perform partial sig
+	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)?;
+
+	// Save output in wallet
+	let _ = receiver_create_fn(wallet);
+
+	Ok(())
+}
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
 /// Outputs. The destination can be "stdout" (for command line) (currently
 /// disabled) or a URL to the recipients wallet receiver (to be implemented).
+/// TBD: this just does a straight http request to recipient.. split this out
+/// somehow
 pub fn issue_send_tx<T: WalletBackend>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
-	dest: String,
+	dest: &str,
 	max_outputs: usize,
 	selection_strategy_is_use_all: bool,
 	fluff: bool,
-) -> Result<(), failure::Error> {
+) -> Result<(), Error> {
 	// TODO: Stdout option, probably in a separate implementation
 	if &dest[..4] != "http" {
 		panic!(
@@ -84,9 +112,9 @@ pub fn issue_send_tx<T: WalletBackend>(
 		0,
 	)?;
 
-	let url = format!("{}/v1/receive/transaction", &dest);
+	let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
 	debug!(LOGGER, "Posting partial transaction to {}", url);
-	let mut slate = match client::send_slate(&url, &slate, fluff) {
+	let mut slate = match client::send_slate(&url, &slate, fluff).context(ErrorKind::Node) {
 		Ok(s) => s,
 		Err(e) => {
 			error!(
@@ -117,6 +145,7 @@ pub fn issue_send_tx<T: WalletBackend>(
 	Ok(())
 }
 
+/// Issue a burn tx
 pub fn issue_burn_tx<T: WalletBackend>(
 	wallet: &mut T,
 	amount: u64,

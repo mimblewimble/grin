@@ -29,12 +29,12 @@ mod common;
 use std::fs;
 use std::sync::Arc;
 
-use chain::types::*;
 use chain::Chain;
+use chain::types::*;
 use core::global::ChainTypes;
 use core::{global, pow};
 use util::LOGGER;
-use wallet::libwallet::selection;
+use wallet::libwallet::internal::selection;
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -100,7 +100,7 @@ fn build_transaction() {
 	// information to the slate
 	let _ = slate
 		.fill_round_1(
-			&wallet1.keychain,
+			wallet1.keychain.as_ref().unwrap(),
 			&mut sender_context.sec_key,
 			&sender_context.sec_nonce,
 			0,
@@ -120,7 +120,7 @@ fn build_transaction() {
 
 	let _ = slate
 		.fill_round_1(
-			&wallet2.keychain,
+			wallet2.keychain.as_ref().unwrap(),
 			&mut recp_context.sec_key,
 			&recp_context.sec_nonce,
 			1,
@@ -132,7 +132,7 @@ fn build_transaction() {
 
 	let _ = slate
 		.fill_round_2(
-			&wallet1.keychain,
+			&wallet1.keychain.as_ref().unwrap(),
 			&recp_context.sec_key,
 			&recp_context.sec_nonce,
 			1,
@@ -149,7 +149,7 @@ fn build_transaction() {
 	// SENDER Part 3: Sender confirmation
 	let _ = slate
 		.fill_round_2(
-			&wallet1.keychain,
+			&wallet1.keychain.as_ref().unwrap(),
 			&sender_context.sec_key,
 			&sender_context.sec_nonce,
 			0,
@@ -161,7 +161,7 @@ fn build_transaction() {
 	debug!(LOGGER, "{:?}", slate);
 
 	// Final transaction can be built by anyone at this stage
-	let res = slate.finalize(&wallet1.keychain);
+	let res = slate.finalize(&wallet1.keychain.as_ref().unwrap());
 
 	if let Err(e) = res {
 		panic!("Error creating final tx: {:?}", e);

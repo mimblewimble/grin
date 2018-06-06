@@ -20,12 +20,50 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
 use api;
+use core::consensus::reward;
+use core::core::{Output, TxKernel};
+use core::global;
+use core::ser;
 use keychain::Identifier;
+use libtx::reward;
 use libwallet::error::{Error, ErrorKind};
+use libwallet::internal::keys;
 use libwallet::types::*;
 use util;
 use util::LOGGER;
 use util::secp::pedersen;
+
+/// Retrieve all of the outputs (doesn't attempt to update from node)
+pub fn retrieve_outputs<T: WalletBackend>(
+	wallet: &mut T,
+	show_spent: bool,
+) -> Result<Vec<OutputData>, Error> {
+	let root_key_id = wallet.keychain().clone().root_key_id();
+
+	let mut outputs = vec![];
+
+	// just read the wallet here, no need for a write lock
+	let _ = wallet.read_wallet(|wallet_data| {
+		outputs = wallet_data
+			.outputs()
+			.values()
+			.filter(|out| out.root_key_id == root_key_id)
+			.filter(|out| {
+				if show_spent {
+					true
+				} else {
+					out.status != OutputStatus::Spent
+				}
+			})
+			.collect::<Vec<_>>()
+			.iter()
+			.map(|&o| o.clone())
+			.collect();
+		outputs.sort_by_key(|out| out.n_child);
+		Ok(())
+	});
+	Ok(outputs)
+}
 
 /// Refreshes the outputs in a wallet with the latest information
 /// from a node
@@ -313,4 +351,88 @@ where
 		})
 	});
 	ret_val
+}
+
+/// Build a coinbase output and insert into wallet
+pub fn build_coinbase<T>(wallet: &mut T, block_fees: &BlockFees) -> Result<CbData, Error>
+where
+	T: WalletBackend,
+{
+	let (out, kern, block_fees) = receive_coinbase(wallet, block_fees).context(ErrorKind::Node)?;
+
+	let out_bin = ser::ser_vec(&out).context(ErrorKind::Node)?;
+
+	let kern_bin = ser::ser_vec(&kern).context(ErrorKind::Node)?;
+
+	let key_id_bin = match block_fees.key_id {
+		Some(key_id) => ser::ser_vec(&key_id).context(ErrorKind::Node)?,
+		None => vec![],
+	};
+
+	Ok(CbData {
+		output: util::to_hex(out_bin),
+		kernel: util::to_hex(kern_bin),
+		key_id: util::to_hex(key_id_bin),
+	})
+}
+
+//TODO: Split up the output creation and the wallet insertion
+/// Build a coinbase output and the corresponding kernel
+pub fn receive_coinbase<T>(
+	wallet: &mut T,
+	block_fees: &BlockFees,
+) -> Result<(Output, TxKernel, BlockFees), Error>
+where
+	T: WalletBackend,
+{
+	let root_key_id = wallet.keychain().root_key_id();
+
+	let height = block_fees.height;
+	let lock_height = height + global::coinbase_maturity();
+
+	// Now acquire the wallet lock and write the new output.
+	let (key_id, derivation) = wallet.with_wallet(|wallet_data| {
+		let key_id = block_fees.key_id();
+		let (key_id, derivation) = match key_id {
+			Some(key_id) => keys::retrieve_existing_key(wallet_data, key_id),
+			None => keys::next_available_key(wallet_data),
+		};
+
+		// track the new output and return the stuff needed for reward
+		wallet_data.add_output(OutputData {
+			root_key_id: root_key_id.clone(),
+			key_id: key_id.clone(),
+			n_child: derivation,
+			value: reward(block_fees.fees),
+			status: OutputStatus::Unconfirmed,
+			height: height,
+			lock_height: lock_height,
+			is_coinbase: true,
+			block: None,
+			merkle_proof: None,
+		});
+
+		(key_id, derivation)
+	})?;
+
+	debug!(
+		LOGGER,
+		"receive_coinbase: built candidate output - {:?}, {}",
+		key_id.clone(),
+		derivation,
+	);
+
+	let mut block_fees = block_fees.clone();
+	block_fees.key_id = Some(key_id.clone());
+
+	debug!(LOGGER, "receive_coinbase: {:?}", block_fees);
+
+	let (out, kern) = reward::output(
+		&wallet.keychain(),
+		&key_id,
+		block_fees.fees,
+		block_fees.height,
+	).unwrap();
+	/* .context(ErrorKind::Keychain)?; */
+	Ok((out, kern, block_fees))
 }
