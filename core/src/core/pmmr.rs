@@ -977,14 +977,6 @@ pub fn family_branch(pos: u64, last_pos: u64) -> Vec<(u64, u64)> {
 	branch
 }
 
-pub fn children(pos: u64) -> (Option<u64>, Option<u64>) {
-	if is_leaf(pos) {
-		(None, None)
-	} else {
-		(bintree_move_down_left(pos), bintree_move_down_right(pos))
-	}
-}
-
 /// Calculates the position of the top-left child of a parent node in the
 /// postorder traversal of a full binary tree.
 fn bintree_move_down_left(num: u64) -> Option<u64> {
@@ -993,14 +985,6 @@ fn bintree_move_down_left(num: u64) -> Option<u64> {
 		return None;
 	}
 	Some(num - (1 << height))
-}
-
-fn bintree_move_down_right(num: u64) -> Option<u64> {
-	let height = bintree_postorder_height(num);
-	if height == 0 {
-		return None;
-	}
-	num.checked_sub(1)
 }
 
 /// Gets the position of the rightmost node (i.e. leaf) relative to the current
