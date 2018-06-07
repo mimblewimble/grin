@@ -1087,7 +1087,7 @@ impl ProofMessageElements {
 mod test {
 	use super::*;
 	use core::id::{ShortId, ShortIdentifiable};
-	use keychain::{Keychain, ExtKeychain};
+	use keychain::{ExtKeychain, Keychain};
 	use util::secp;
 
 	#[test]

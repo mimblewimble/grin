@@ -303,10 +303,11 @@ where
 #[cfg(test)]
 mod test {
 	use super::*;
+	use keychain::ExtKeychain;
 
 	#[test]
 	fn blind_simple_tx() {
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
@@ -326,7 +327,7 @@ mod test {
 
 	#[test]
 	fn blind_simple_tx_with_offset() {
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
@@ -346,7 +347,7 @@ mod test {
 
 	#[test]
 	fn blind_simpler_tx() {
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 

@@ -19,9 +19,9 @@ extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
+use grin_core::core::Transaction;
 use grin_core::core::block::{Block, BlockHeader};
 use grin_core::core::target::Difficulty;
-use grin_core::core::Transaction;
 use keychain::{Identifier, Keychain};
 use wallet::libtx::build::{self, input, output, with_fee};
 use wallet::libtx::reward;
@@ -83,7 +83,10 @@ pub fn new_block<K>(
 	keychain: &K,
 	previous_header: &BlockHeader,
 	key_id: &Identifier,
-) -> Block where K: Keychain {
+) -> Block
+where
+	K: Keychain,
+{
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward_output = reward::output(keychain, &key_id, fees, previous_header.height).unwrap();
 	Block::new(
@@ -96,12 +99,10 @@ pub fn new_block<K>(
 
 // utility producing a transaction that spends an output with the provided
 // value and blinding key
-pub fn txspend1i1o<K>(
-	v: u64,
-	keychain: &K,
-	key_id1: Identifier,
-	key_id2: Identifier,
-) -> Transaction where K: Keychain {
+pub fn txspend1i1o<K>(v: u64, keychain: &K, key_id1: Identifier, key_id2: Identifier) -> Transaction
+where
+	K: Keychain,
+{
 	build::transaction(
 		vec![input(v, key_id1), output(3, key_id2), with_fee(2)],
 		keychain,

@@ -27,7 +27,7 @@ use grin_core::core::id::{ShortId, ShortIdentifiable};
 use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
 use grin_core::global;
 use grin_core::ser;
-use keychain::{Keychain, ExtKeychain};
+use keychain::{ExtKeychain, Keychain};
 use std::time::Instant;
 use wallet::libtx::build::{self, input, output, with_fee};
 

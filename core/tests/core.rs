@@ -26,7 +26,7 @@ use grin_core::core::block::Error::KernelLockHeight;
 use grin_core::core::hash::{Hashed, ZERO_HASH};
 use grin_core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction};
 use grin_core::ser;
-use keychain::{Keychain, ExtKeychain};
+use keychain::{ExtKeychain, Keychain};
 use util::{secp_static, static_secp_instance};
 use wallet::libtx::build::{self, initial_tx, input, output, with_excess, with_fee,
                            with_lock_height};
