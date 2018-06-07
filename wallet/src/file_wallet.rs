@@ -33,8 +33,11 @@ use util;
 use util::LOGGER;
 
 use error::{Error, ErrorKind};
+
 use libwallet;
+use libtx::slate::Slate;
 use libwallet::types::*;
+use client;
 
 const DAT_FILE: &'static str = "wallet.dat";
 const BCK_FILE: &'static str = "wallet.bck";
@@ -397,6 +400,45 @@ impl WalletBackend for FileWallet {
 		libwallet::internal::restore::restore(self).context(libwallet::ErrorKind::Restore)?;
 		Ok(())
 	}
+}
+
+impl WalletClient for FileWallet {
+
+	/// Call the wallet API to create a coinbase transaction
+	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, libwallet::Error>{
+	 let res = client::create_coinbase(dest, block_fees).context(libwallet::ErrorKind::WalletComms)?;
+	 Ok(res)
+	}
+
+	/// Send a transaction slate to another listening wallet and return result
+	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error>{
+		let res = client::send_tx_slate(dest, slate).context(libwallet::ErrorKind::WalletComms)?;
+		Ok(res)
+	}
+
+	/// Posts a tranaction to a grin node
+	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), libwallet::Error> {
+		let res = client::post_tx(dest, tx, fluff).context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieves the current tip from the specified grin node
+	fn get_chain_height(&self, addr: &str) -> Result<u64, libwallet::Error> {
+		let res = client::get_chain_height(addr).context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieve a list of outputs from the specified grin node
+	/// need "by_height" and "by_id" variants
+	fn get_outputs_from_node(&self, ) -> Result<(), libwallet::Error> {
+		Err(libwallet::ErrorKind::GenericError("Not Implemented"))?
+	}
+
+	/// retrieve merkle proof for a commit from a node
+	fn get_merkle_proof_for_commit(&self, addr: &str, commit: &str) -> Result<MerkleProofWrapper, libwallet::Error>{
+		Err(libwallet::ErrorKind::GenericError("Not Implemented"))?
+	}
+
 }
 
 impl FileWallet {

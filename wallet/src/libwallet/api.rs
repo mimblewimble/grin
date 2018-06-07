@@ -18,14 +18,10 @@
 //! Still experimental, not sure this is the best way to do this
 
 use libtx::slate::Slate;
-use libwallet::client;
 use libwallet::internal::{tx, updater};
-use libwallet::types::{BlockFees, CbData, OutputData, TxWrapper, WalletBackend, WalletInfo};
-use libwallet::{Error, ErrorKind};
+use libwallet::types::{BlockFees, CbData, OutputData, TxWrapper, WalletBackend, WalletClient, WalletInfo};
+use libwallet::Error;
 
-use failure::ResultExt;
-
-use api;
 use core::ser;
 use util::{self, LOGGER};
 
@@ -33,7 +29,7 @@ use util::{self, LOGGER};
 /// the wallet/keychain that they're acting upon
 pub struct APIOwner<'a, W>
 where
-	W: 'a + WalletBackend,
+	W: 'a + WalletBackend + WalletClient,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
 	/// perhaps)
@@ -42,7 +38,7 @@ where
 
 impl<'a, W> APIOwner<'a, W>
 where
-	W: 'a + WalletBackend,
+	W: 'a + WalletBackend + WalletClient,
 {
 	/// Create new API instance
 	pub fn new(wallet_in: &'a mut W) -> APIOwner<'a, W> {
@@ -69,7 +65,6 @@ where
 	}
 
 	/// Issues a send transaction and sends to recipient
-	/// (TODO: Split into separate functions, create tx, send, complete tx)
 	pub fn issue_send_tx(
 		&mut self,
 		amount: u64,
@@ -79,12 +74,6 @@ where
 		selection_strategy_is_use_all: bool,
 		fluff: bool,
 	) -> Result<(), Error> {
-		if &dest[..4] != "http" {
-			panic!(
-				"dest formatted as {} but send -d expected stdout or http://IP:port",
-				dest
-			);
-		}
 
 		let (slate, context, lock_fn) = tx::create_send_tx(
 			self.wallet,
@@ -94,9 +83,7 @@ where
 			selection_strategy_is_use_all,
 		)?;
 
-		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
-		debug!(LOGGER, "Posting partial transaction to {}", url);
-		let mut slate = match client::send_slate(&url, &slate, fluff).context(ErrorKind::Node) {
+		let mut slate = match self.wallet.send_tx_slate(dest, &slate) {
 			Ok(s) => s,
 			Err(e) => {
 				error!(
@@ -108,17 +95,12 @@ where
 		};
 
 		tx::complete_tx(self.wallet, &mut slate, &context)?;
+
 		// All good here, so let's post it
 		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
-		let url;
-		if fluff {
-			url = format!("{}/v1/pool/push?fluff", self.wallet.node_url(),);
-		} else {
-			url = format!("{}/v1/pool/push", self.wallet.node_url());
-		}
-		api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
+		self.wallet.post_tx(self.wallet.node_url(), &TxWrapper {tx_hex: tx_hex}, fluff)?;
 
-		// All good so, lock our inputs
+		// All good here, lock our inputs
 		lock_fn(self.wallet)?;
 		Ok(())
 	}
@@ -132,9 +114,7 @@ where
 	) -> Result<(), Error> {
 		let tx_burn = tx::issue_burn_tx(self.wallet, amount, minimum_confirmations, max_outputs)?;
 		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
-		let url = format!("{}/v1/pool/push", self.wallet.node_url());
-		let _: () = api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex })
-			.context(ErrorKind::Node)?;
+		self.wallet.post_tx(self.wallet.node_url(), &TxWrapper {tx_hex: tx_hex}, false)?;
 		Ok(())
 	}
 
@@ -145,8 +125,8 @@ where
 
 	/// Retrieve current height from node
 	pub fn node_height(&mut self) -> Result<(u64, bool), Error> {
-		match updater::get_tip_from_node(self.wallet.node_url()) {
-			Ok(tip) => Ok((tip.height, true)),
+		match self.wallet.get_chain_height(self.wallet.node_url()) {
+			Ok(height) => Ok((height, true)),
 			Err(_) => {
 				let outputs = self.retrieve_outputs(true)?;
 				let height = match outputs.1.iter().map(|out| out.height).max() {
@@ -171,7 +151,7 @@ where
 /// with other parties
 pub struct APIForeign<'a, W>
 where
-	W: 'a + WalletBackend,
+	W: 'a + WalletBackend + WalletClient,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
 	/// perhaps)
@@ -180,7 +160,7 @@ where
 
 impl<'a, W> APIForeign<'a, W>
 where
-	W: 'a + WalletBackend,
+	W: 'a + WalletBackend + WalletClient,
 {
 	/// Create new API instance
 	pub fn new(wallet_in: &'a mut W) -> APIForeign<'a, W> {

@@ -23,7 +23,6 @@
 #![warn(missing_docs)]
 
 pub mod api;
-pub mod client;
 pub mod controller;
 mod error;
 pub mod internal;

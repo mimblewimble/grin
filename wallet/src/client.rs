@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Client functions: TODO: doesn't really belong here or needs to be
-//! traited out
+//! Client functions, implementations of the WalletClient trait
+//! specific to the FileWallet
 
+use api;
 use failure::ResultExt;
 use futures::{Future, Stream};
 use hyper;
@@ -31,7 +32,11 @@ use util::LOGGER;
 
 /// Call the wallet API to create a coinbase output for the given block_fees.
 /// Will retry based on default "retry forever with backoff" behavior.
-pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
+pub fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
+	let url = format!(
+		"{}/v1/wallet/foreign/build_coinbase",
+		dest
+	);
 	match single_create_coinbase(&url, &block_fees) {
 		Err(e) => {
 			error!(
@@ -47,15 +52,23 @@ pub fn create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Erro
 }
 
 /// Send the slate to a listening wallet instance
-pub fn send_slate(url: &str, slate: &Slate, fluff: bool) -> Result<Slate, Error> {
+pub fn send_tx_slate(dest: &str, slate: &Slate) -> Result<Slate, Error> {
+	if &dest[..4] != "http" {
+		
+		error!(
+			LOGGER,
+			"dest formatted as {} but send -d expected stdout or http://IP:port",
+			dest
+		);
+		Err(ErrorKind::Node)?
+	}
+	let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
+	debug!(LOGGER, "Posting transaction slate to {}", url);
+
 	let mut core = reactor::Core::new().context(ErrorKind::Hyper)?;
 	let client = hyper::Client::new(&core.handle());
 
-	// In case we want to do an express send
-	let mut url_pool = url.to_owned();
-	if fluff {
-		url_pool = format!("{}{}", url, "?fluff");
-	}
+	let url_pool = url.to_owned();
 
 	let mut req = Request::new(
 		Method::Post,
@@ -104,3 +117,25 @@ fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, E
 		.context(ErrorKind::GenericError("Could not run core"))?;
 	Ok(res)
 }
+
+/// Posts a tranaction to a grin node
+pub fn post_tx(dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error> {
+	let url;
+	if fluff {
+		url = format!("{}/v1/pool/push?fluff", dest);
+	} else {
+		url = format!("{}/v1/pool/push", dest);
+	}
+	let res = api::client::post(url.as_str(), tx).context(ErrorKind::Node)?;
+	Ok(res)
+}
+
+/// Return the chain tip from a given node
+pub fn get_chain_height(addr: &str) -> Result<u64, Error> {
+	let url = format!("{}/v1/chain", addr);
+	let res = api::client::get::<api::Tip>(url.as_str())
+		.context(ErrorKind::Node)?;
+	Ok(res.height)
+}
+
+

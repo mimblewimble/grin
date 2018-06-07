@@ -48,6 +48,7 @@ extern crate grin_util as util;
 
 pub mod display;
 mod error;
+mod client;
 pub mod file_wallet;
 pub mod libtx;
 pub mod libwallet;
@@ -56,3 +57,4 @@ pub use error::{Error, ErrorKind};
 pub use file_wallet::{FileWallet, WalletConfig, WalletSeed};
 pub use libwallet::controller;
 pub use libwallet::types::{BlockFees, CbData, WalletInfo};
+pub use client::create_coinbase;

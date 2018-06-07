@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Transaction buinding functions
+//! Transaction building functions
 
 use core::core::Transaction;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
 use libwallet::internal::{selection, sigcontext, updater};
-use libwallet::types::WalletBackend;
+use libwallet::types::{WalletBackend, WalletClient};
 use libwallet::{Error, ErrorKind};
 use util::LOGGER;
 
@@ -49,7 +49,7 @@ pub fn receive_tx<T: WalletBackend>(wallet: &mut T, slate: &mut Slate) -> Result
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
-pub fn create_send_tx<T: WalletBackend>(
+pub fn create_send_tx<T: WalletBackend + WalletClient>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
@@ -64,8 +64,7 @@ pub fn create_send_tx<T: WalletBackend>(
 	Error,
 > {
 	// Get lock height
-	let chain_tip = updater::get_tip_from_node(wallet.node_url())?;
-	let current_height = chain_tip.height;
+	let current_height = wallet.get_chain_height(wallet.node_url())?;
 	// ensure outputs we're selecting are up to date
 	updater::refresh_outputs(wallet)?;
 
@@ -118,7 +117,7 @@ pub fn complete_tx<T: WalletBackend>(
 }
 
 /// Issue a burn tx
-pub fn issue_burn_tx<T: WalletBackend>(
+pub fn issue_burn_tx<T: WalletBackend + WalletClient>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
@@ -126,8 +125,7 @@ pub fn issue_burn_tx<T: WalletBackend>(
 ) -> Result<Transaction, Error> {
 	let keychain = &Keychain::burn_enabled(wallet.keychain(), &Identifier::zero());
 
-	let chain_tip = updater::get_tip_from_node(wallet.node_url())?;
-	let current_height = chain_tip.height;
+	let current_height = wallet.get_chain_height(wallet.node_url())?;
 
 	let _ = updater::refresh_outputs(wallet);
 

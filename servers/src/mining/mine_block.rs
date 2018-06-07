@@ -239,13 +239,7 @@ fn get_coinbase(
 			return burn_reward(block_fees);
 		}
 		Some(wallet_listener_url) => {
-			// Get the wallet coinbase
-			let url = format!(
-				"{}/v1/wallet/foreign/build_coinbase",
-				wallet_listener_url.as_str()
-			);
-
-			let res = wallet::libwallet::client::create_coinbase(&url, &block_fees)?;
+			let res = wallet::create_coinbase(&wallet_listener_url, &block_fees)?;
 			let out_bin = util::from_hex(res.output).unwrap();
 			let kern_bin = util::from_hex(res.kernel).unwrap();
 			let key_id_bin = util::from_hex(res.key_id).unwrap();
@@ -258,7 +252,6 @@ fn get_coinbase(
 			};
 
 			debug!(LOGGER, "get_coinbase: {:?}", block_fees);
-
 			return Ok((output, kernel, block_fees));
 		}
 	}

@@ -69,17 +69,17 @@ pub fn retrieve_outputs<T: WalletBackend>(
 /// from a node
 pub fn refresh_outputs<T>(wallet: &mut T) -> Result<(), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend + WalletClient,
 {
-	let tip = get_tip_from_node(&wallet.node_url())?;
-	refresh_output_state(wallet, &tip)?;
-	refresh_missing_block_hashes(wallet, &tip)?;
+	let height = wallet.get_chain_height(wallet.node_url())?;
+	refresh_output_state(wallet, height)?;
+	refresh_missing_block_hashes(wallet, height)?;
 	Ok(())
 }
 
 // TODO - this might be slow if we have really old outputs that have never been
 // refreshed
-fn refresh_missing_block_hashes<T>(wallet: &mut T, tip: &api::Tip) -> Result<(), Error>
+fn refresh_missing_block_hashes<T>(wallet: &mut T, height: u64) -> Result<(), Error>
 where
 	T: WalletBackend,
 {
@@ -103,7 +103,7 @@ where
 		.map(|commit| format!("id={}", util::to_hex(commit.as_ref().to_vec())))
 		.collect();
 
-	let height_params = [format!("start_height={}&end_height={}", 0, tip.height)];
+	let height_params = [format!("start_height={}&end_height={}", 0, height)];
 
 	let mut api_blocks: HashMap<pedersen::Commitment, api::BlockHeaderInfo> = HashMap::new();
 	let mut api_merkle_proofs: HashMap<pedersen::Commitment, MerkleProofWrapper> = HashMap::new();
@@ -229,7 +229,7 @@ where
 
 /// Builds a single api query to retrieve the latest output data from the node.
 /// So we can refresh the local wallet outputs.
-fn refresh_output_state<T>(wallet: &mut T, tip: &api::Tip) -> Result<(), Error>
+fn refresh_output_state<T>(wallet: &mut T, height: u64) -> Result<(), Error>
 where
 	T: WalletBackend,
 {
@@ -269,43 +269,37 @@ where
 	}
 
 	apply_api_outputs(wallet, &wallet_outputs, &api_outputs)?;
-	clean_old_unconfirmed(wallet, tip)?;
+	clean_old_unconfirmed(wallet, height)?;
 	Ok(())
 }
 
-fn clean_old_unconfirmed<T>(wallet: &mut T, tip: &api::Tip) -> Result<(), Error>
+fn clean_old_unconfirmed<T>(wallet: &mut T, height: u64) -> Result<(), Error>
 where
 	T: WalletBackend,
 {
-	if tip.height < 500 {
+	if height < 500 {
 		return Ok(());
 	}
 	wallet.with_wallet(|wallet_data| {
 		wallet_data.outputs().retain(|_, ref mut out| {
 			!(out.status == OutputStatus::Unconfirmed && out.height > 0
-				&& out.height < tip.height - 500)
+				&& out.height < height - 500)
 		});
 	})
 }
 
-/// Return the chain tip from a given node
-pub fn get_tip_from_node(addr: &str) -> Result<api::Tip, Error> {
-	let url = format!("{}/v1/chain", addr);
-	api::client::get::<api::Tip>(url.as_str())
-		.context(ErrorKind::Node)
-		.map_err(|e| e.into())
-}
-
-/// Retrieve summar info about the wallet
+/// Retrieve summary info about the wallet
 pub fn retrieve_info<T>(wallet: &mut T) -> Result<WalletInfo, Error>
 where
-	T: WalletBackend,
+	T: WalletBackend + WalletClient,
 {
 	let result = refresh_outputs(wallet);
 
+	let height_res = wallet.get_chain_height(&wallet.node_url());
+
 	let ret_val = wallet.read_wallet(|wallet_data| {
-		let (current_height, from) = match get_tip_from_node(&wallet_data.node_url()) {
-			Ok(tip) => (tip.height, "from server node"),
+		let (current_height, from) = match height_res {
+			Ok(height) => (height, "from server node"),
 			Err(_) => match wallet_data.outputs().values().map(|out| out.height).max() {
 				Some(height) => (height, "from wallet"),
 				None => (0, "node/wallet unavailable"),

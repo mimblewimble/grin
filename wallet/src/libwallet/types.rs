@@ -21,7 +21,6 @@ use serde;
 
 use failure::ResultExt;
 
-use api;
 use core::core::hash::Hash;
 use core::core::pmmr::MerkleProof;
 
@@ -96,20 +95,24 @@ pub trait WalletBackend {
 /// should care about communication details
 pub trait WalletClient {
 	/// Call the wallet API to create a coinbase transaction
-	fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error>;
+	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, Error>;
 
 	/// Send a transaction slate to another listening wallet and return result
-	fn send_tx_slate(dest: &str, slate: &Slate, fluff: bool) -> Result<Slate, Error>;
+	/// TODO: Probably need a slate wrapper type
+	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, Error>;
+
+	/// Posts a tranaction to a grin node
+	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error>;
 
 	/// retrieves the current tip from the specified grin node
-	fn get_tip_from_node(addr: &str) -> Result<api::Tip, Error>;
+	fn get_chain_height(&self, addr: &str) -> Result<u64, Error>;
 
 	/// retrieve a list of outputs from the specified grin node
 	/// need "by_height" and "by_id" variants
-	fn get_outputs_from_node() -> Result<(), Error>;
+	fn get_outputs_from_node(&self) -> Result<(), Error>;
 
 	/// retrieve merkle proof for a commit from a node
-	fn get_merkle_proof_for_commit(addr: &str, commit: &str) -> Result<MerkleProofWrapper, Error>;
+	fn get_merkle_proof_for_commit(&self, addr: &str, commit: &str) -> Result<MerkleProofWrapper, Error>;
 }
 
 /// Information about an output that's being tracked by the wallet. Must be

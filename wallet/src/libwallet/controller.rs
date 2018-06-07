@@ -29,7 +29,7 @@ use failure::Fail;
 
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
-use libwallet::types::{BlockFees, CbData, OutputData, WalletBackend, WalletInfo};
+use libwallet::types::{BlockFees, CbData, OutputData, WalletBackend, WalletClient, WalletInfo};
 use libwallet::{Error, ErrorKind};
 
 use util::LOGGER;
@@ -38,7 +38,7 @@ use util::LOGGER;
 /// Return a function containing a loaded API context to call
 pub fn owner_single_use<F, T>(wallet: &mut T, f: F) -> Result<(), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend + WalletClient,
 	F: FnOnce(&mut APIOwner<T>) -> Result<(), Error>,
 {
 	wallet.open_with_credentials()?;
@@ -51,7 +51,7 @@ where
 /// Return a function containing a loaded API context to call
 pub fn foreign_single_use<F, T>(wallet: &mut T, f: F) -> Result<(), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend + WalletClient,
 	F: FnOnce(&mut APIForeign<T>) -> Result<(), Error>,
 {
 	wallet.open_with_credentials()?;
@@ -91,7 +91,7 @@ where
 /// port and wrapping the calls
 pub fn foreign_listener<T>(wallet: T, addr: &str) -> Result<(), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend + WalletClient,
 	ForeignAPIHandler<T>: Handler,
 {
 	let api_handler = ForeignAPIHandler {
@@ -125,7 +125,7 @@ where
 
 impl<T> OwnerAPIHandler<T>
 where
-	T: WalletBackend,
+	T: WalletBackend + WalletClient,
 {
 	fn retrieve_outputs(
 		&self,
@@ -177,7 +177,7 @@ where
 
 impl<T> Handler for OwnerAPIHandler<T>
 where
-	T: WalletBackend + Send + Sync + 'static,
+	T: WalletBackend + WalletClient + Send + Sync + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		// every request should open with stored credentials,
@@ -201,7 +201,7 @@ where
 
 pub struct ForeignAPIHandler<T>
 where
-	T: WalletBackend,
+	T: WalletBackend + WalletClient,
 {
 	/// Wallet instance
 	pub wallet: Arc<Mutex<T>>,
@@ -209,7 +209,7 @@ where
 
 impl<T> ForeignAPIHandler<T>
 where
-	T: WalletBackend,
+	T: WalletBackend + WalletClient,
 {
 	fn build_coinbase(&self, req: &mut Request, api: &mut APIForeign<T>) -> Result<CbData, Error> {
 		let struct_body = req.get::<bodyparser::Struct<BlockFees>>();
@@ -258,7 +258,7 @@ where
 
 impl<T> Handler for ForeignAPIHandler<T>
 where
-	T: WalletBackend + Send + Sync + 'static,
+	T: WalletBackend + WalletClient + Send + Sync + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		// every request should open with stored credentials,

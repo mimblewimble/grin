@@ -93,6 +93,10 @@ pub enum ErrorKind {
 	#[fail(display = "Node API error")]
 	Node,
 
+	/// Error contacting wallet API
+	#[fail(display = "Wallet communication error")]
+	WalletComms,
+
 	/// Error originating from hyper.
 	#[fail(display = "Hyper error")]
 	Hyper,
