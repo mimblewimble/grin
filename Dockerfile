@@ -36,9 +36,6 @@ ENV LANG en_US.UTF-8
 COPY --from=builder /usr/src/grin/target/release/grin /usr/local/bin/grin
 COPY --from=builder /usr/src/grin/grin.toml /usr/src/grin/grin.toml
 
-# Contains the blockchain and wallet
-VOLUME /usr/src/grin
-
 WORKDIR /usr/src/grin
 
 EXPOSE 13413

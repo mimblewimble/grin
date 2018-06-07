@@ -20,16 +20,13 @@ you can start mining by building and runing grin-miner against your running Grin
         # Build using all available cores
         docker build -t grin .
 
-        # or build using a specific number of cores (reduce RAM requirement)
-        docker build --build-arg NPROC=1 -t grin .
-
-        # either run in foreground
+        # run in foreground
         docker run -it -v grin:/usr/src/grin grin
 
         # or in background
         docker run -it -d -v grin:/usr/src/grin grin
 
-If you decide to use a persistent storage you'll need the grin.toml file in it.
+If you decide to use a persistent storage (e.g. ```-v grin:/usr/src/grin```) you will need grin.toml configuration file in it.
 
 ## Requirements
 
