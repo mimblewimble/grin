@@ -31,8 +31,12 @@ use failure::ResultExt;
 use keychain::{self, Keychain};
 use util;
 use util::LOGGER;
+use util::secp::pedersen;
 
 use error::{Error, ErrorKind};
+
+use client;
+use libtx::slate::Slate;
 use libwallet;
 use libwallet::types::*;
 
@@ -203,11 +207,6 @@ impl WalletBackend for FileWallet {
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut Keychain {
 		self.keychain.as_mut().unwrap()
-	}
-
-	/// Return URL for check node
-	fn node_url(&self) -> &str {
-		&self.config.check_node_api_http_addr
 	}
 
 	/// Return the outputs directly
@@ -396,6 +395,81 @@ impl WalletBackend for FileWallet {
 	fn restore(&mut self) -> Result<(), libwallet::Error> {
 		libwallet::internal::restore::restore(self).context(libwallet::ErrorKind::Restore)?;
 		Ok(())
+	}
+}
+
+impl WalletClient for FileWallet {
+	/// Return URL for check node
+	fn node_url(&self) -> &str {
+		&self.config.check_node_api_http_addr
+	}
+
+	/// Call the wallet API to create a coinbase transaction
+	fn create_coinbase(
+		&self,
+		dest: &str,
+		block_fees: &BlockFees,
+	) -> Result<CbData, libwallet::Error> {
+		let res =
+			client::create_coinbase(dest, block_fees).context(libwallet::ErrorKind::WalletComms)?;
+		Ok(res)
+	}
+
+	/// Send a transaction slate to another listening wallet and return result
+	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+		let res = client::send_tx_slate(dest, slate).context(libwallet::ErrorKind::WalletComms)?;
+		Ok(res)
+	}
+
+	/// Posts a tranaction to a grin node
+	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), libwallet::Error> {
+		let res = client::post_tx(dest, tx, fluff).context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieves the current tip from the specified grin node
+	fn get_chain_height(&self, addr: &str) -> Result<u64, libwallet::Error> {
+		let res = client::get_chain_height(addr).context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieve a list of outputs from the specified grin node
+	/// need "by_height" and "by_id" variants
+	fn get_outputs_from_node(
+		&self,
+		addr: &str,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<HashMap<pedersen::Commitment, String>, libwallet::Error> {
+		let res = client::get_outputs_from_node(addr, wallet_outputs)
+			.context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// Get any missing block hashes from node
+	fn get_missing_block_hashes_from_node(
+		&self,
+		addr: &str,
+		height: u64,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<
+		(
+			HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
+			HashMap<pedersen::Commitment, MerkleProofWrapper>,
+		),
+		libwallet::Error,
+	> {
+		let res = client::get_missing_block_hashes_from_node(addr, height, wallet_outputs)
+			.context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieve merkle proof for a commit from a node
+	fn get_merkle_proof_for_commit(
+		&self,
+		addr: &str,
+		commit: &str,
+	) -> Result<MerkleProofWrapper, libwallet::Error> {
+		Err(libwallet::ErrorKind::GenericError("Not Implemented"))?
 	}
 }
 

@@ -14,6 +14,7 @@
 
 //! Types and traits that should be provided by a wallet
 //! implementation
+
 use std::collections::HashMap;
 use std::fmt;
 
@@ -26,7 +27,10 @@ use core::core::pmmr::MerkleProof;
 
 use keychain::{Identifier, Keychain};
 
+use libtx::slate::Slate;
 use libwallet::error::{Error, ErrorKind};
+
+use util::secp::pedersen;
 
 /// TODO:
 /// Wallets should implement this backend for their storage. All functions
@@ -41,9 +45,6 @@ pub trait WalletBackend {
 
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut Keychain;
-
-	/// Return the URL of the check node
-	fn node_url(&self) -> &str;
 
 	/// Return the outputs directly
 	fn outputs(&mut self) -> &mut HashMap<String, OutputData>;
@@ -88,6 +89,55 @@ pub trait WalletBackend {
 
 	/// Attempt to restore the contents of a wallet from seed
 	fn restore(&mut self) -> Result<(), Error>;
+}
+
+/// Encapsulate all communication functions. No functions within libwallet
+/// should care about communication details
+pub trait WalletClient {
+	/// Return the URL of the check node
+	fn node_url(&self) -> &str;
+
+	/// Call the wallet API to create a coinbase transaction
+	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, Error>;
+
+	/// Send a transaction slate to another listening wallet and return result
+	/// TODO: Probably need a slate wrapper type
+	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, Error>;
+
+	/// Posts a tranaction to a grin node
+	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error>;
+
+	/// retrieves the current tip from the specified grin node
+	fn get_chain_height(&self, addr: &str) -> Result<u64, Error>;
+
+	/// retrieve a list of outputs from the specified grin node
+	/// need "by_height" and "by_id" variants
+	fn get_outputs_from_node(
+		&self,
+		addr: &str,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<HashMap<pedersen::Commitment, String>, Error>;
+
+	/// Get any missing block hashes from node
+	fn get_missing_block_hashes_from_node(
+		&self,
+		addr: &str,
+		height: u64,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<
+		(
+			HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
+			HashMap<pedersen::Commitment, MerkleProofWrapper>,
+		),
+		Error,
+	>;
+
+	/// retrieve merkle proof for a commit from a node
+	fn get_merkle_proof_for_commit(
+		&self,
+		addr: &str,
+		commit: &str,
+	) -> Result<MerkleProofWrapper, Error>;
 }
 
 /// Information about an output that's being tracked by the wallet. Must be

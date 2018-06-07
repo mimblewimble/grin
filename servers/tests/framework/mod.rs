@@ -326,29 +326,32 @@ impl LocalServerContainer {
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let max_outputs = 500;
 
-		let mut wallet = FileWallet::new(config.clone(), "grin_test")
+		let mut wallet = FileWallet::new(config.clone(), "")
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
-		let result = wallet::libwallet::internal::tx::issue_send_tx(
-			&mut wallet,
-			amount,
-			minimum_confirmations,
-			dest,
-			max_outputs,
-			selection_strategy == "all",
-			fluff,
-		);
-		match result {
-			Ok(_) => println!(
-				"Tx sent: {} grin to {} (strategy '{}')",
-				core::core::amount_to_hr_string(amount),
-				dest,
-				selection_strategy,
-			),
-			Err(e) => {
-				println!("Tx not sent to {}: {:?}", dest, e);
-			}
-		};
+		let _ =
+			wallet::controller::owner_single_use(&mut wallet, |api| {
+				let result = api.issue_send_tx(
+					amount,
+					minimum_confirmations,
+					dest,
+					max_outputs,
+					selection_strategy == "all",
+					fluff,
+				);
+				match result {
+					Ok(_) => println!(
+						"Tx sent: {} grin to {} (strategy '{}')",
+						core::core::amount_to_hr_string(amount),
+						dest,
+						selection_strategy,
+					),
+					Err(e) => {
+						println!("Tx not sent to {}: {:?}", dest, e);
+					}
+				};
+				Ok(())
+			}).unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 	}
 
 	/// Stops the running wallet server

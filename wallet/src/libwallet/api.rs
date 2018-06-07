@@ -20,13 +20,17 @@
 use libtx::slate::Slate;
 use libwallet::Error;
 use libwallet::internal::{tx, updater};
-use libwallet::types::{BlockFees, CbData, OutputData, WalletBackend, WalletInfo};
+use libwallet::types::{BlockFees, CbData, OutputData, TxWrapper, WalletBackend, WalletClient,
+                       WalletInfo};
+
+use core::ser;
+use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to
 /// the wallet/keychain that they're acting upon
 pub struct APIOwner<'a, W>
 where
-	W: 'a + WalletBackend,
+	W: 'a + WalletBackend + WalletClient,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
 	/// perhaps)
@@ -35,7 +39,7 @@ where
 
 impl<'a, W> APIOwner<'a, W>
 where
-	W: 'a + WalletBackend,
+	W: 'a + WalletBackend + WalletClient,
 {
 	/// Create new API instance
 	pub fn new(wallet_in: &'a mut W) -> APIOwner<'a, W> {
@@ -62,7 +66,6 @@ where
 	}
 
 	/// Issues a send transaction and sends to recipient
-	/// (TODO: Split into separate functions, create tx, send, complete tx)
 	pub fn issue_send_tx(
 		&mut self,
 		amount: u64,
@@ -72,15 +75,35 @@ where
 		selection_strategy_is_use_all: bool,
 		fluff: bool,
 	) -> Result<(), Error> {
-		tx::issue_send_tx(
+		let (slate, context, lock_fn) = tx::create_send_tx(
 			self.wallet,
 			amount,
 			minimum_confirmations,
-			dest,
 			max_outputs,
 			selection_strategy_is_use_all,
-			fluff,
-		)
+		)?;
+
+		let mut slate = match self.wallet.send_tx_slate(dest, &slate) {
+			Ok(s) => s,
+			Err(e) => {
+				error!(
+					LOGGER,
+					"Communication with receiver failed on SenderInitiation send. Aborting transaction"
+				);
+				return Err(e)?;
+			}
+		};
+
+		tx::complete_tx(self.wallet, &mut slate, &context)?;
+
+		// All good here, so let's post it
+		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
+		self.wallet
+			.post_tx(self.wallet.node_url(), &TxWrapper { tx_hex: tx_hex }, fluff)?;
+
+		// All good here, lock our inputs
+		lock_fn(self.wallet)?;
+		Ok(())
 	}
 
 	/// Issue a burn TX
@@ -90,7 +113,11 @@ where
 		minimum_confirmations: u64,
 		max_outputs: usize,
 	) -> Result<(), Error> {
-		tx::issue_burn_tx(self.wallet, amount, minimum_confirmations, max_outputs)
+		let tx_burn = tx::issue_burn_tx(self.wallet, amount, minimum_confirmations, max_outputs)?;
+		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
+		self.wallet
+			.post_tx(self.wallet.node_url(), &TxWrapper { tx_hex: tx_hex }, false)?;
+		Ok(())
 	}
 
 	/// Attempt to restore contents of wallet
@@ -100,8 +127,8 @@ where
 
 	/// Retrieve current height from node
 	pub fn node_height(&mut self) -> Result<(u64, bool), Error> {
-		match updater::get_tip_from_node(self.wallet.node_url()) {
-			Ok(tip) => Ok((tip.height, true)),
+		match self.wallet.get_chain_height(self.wallet.node_url()) {
+			Ok(height) => Ok((height, true)),
 			Err(_) => {
 				let outputs = self.retrieve_outputs(true)?;
 				let height = match outputs.1.iter().map(|out| out.height).max() {
@@ -126,7 +153,7 @@ where
 /// with other parties
 pub struct APIForeign<'a, W>
 where
-	W: 'a + WalletBackend,
+	W: 'a + WalletBackend + WalletClient,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
 	/// perhaps)
@@ -135,7 +162,7 @@ where
 
 impl<'a, W> APIForeign<'a, W>
 where
-	W: 'a + WalletBackend,
+	W: 'a + WalletBackend + WalletClient,
 {
 	/// Create new API instance
 	pub fn new(wallet_in: &'a mut W) -> APIForeign<'a, W> {

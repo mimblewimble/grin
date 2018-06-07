@@ -32,6 +32,7 @@ use wallet::libwallet::internal::updater;
 use wallet::libwallet::types::*;
 use wallet::libwallet::{Error, ErrorKind};
 
+use util;
 use util::secp::pedersen;
 
 /// Mostly for testing, refreshes output state against a local chain instance
@@ -48,11 +49,11 @@ pub fn refresh_output_state_local<T: WalletBackend>(
 			Ok(k) => Some(k),
 		})
 		.collect();
-	let mut api_outputs: HashMap<pedersen::Commitment, api::Output> = HashMap::new();
+	let mut api_outputs: HashMap<pedersen::Commitment, String> = HashMap::new();
 	for out in chain_outputs {
 		match out {
 			Some(o) => {
-				api_outputs.insert(o.commit.commit(), o);
+				api_outputs.insert(o.commit.commit(), util::to_hex(o.commit.to_vec()));
 			}
 			None => {}
 		}
