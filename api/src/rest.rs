@@ -18,20 +18,18 @@
 //! To use it, just have your service(s) implement the ApiEndpoint trait and
 //! register them on a ApiServer.
 
+use hyper::rt::{run, Future};
+use hyper::service::service_fn_ok;
+use hyper::{Body, Request, Response, Server};
 use std::fmt::{self, Display};
 use std::mem;
-use std::net::ToSocketAddrs;
+use std::net::SocketAddr;
 use std::string::ToString;
+use tokio::runtime::Runtime;
 
 use failure::{Backtrace, Context, Fail};
-use iron::Listening;
-use iron::middleware::Handler;
-use iron::prelude::Iron;
-use mount::Mount;
-use router::Router;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
-
 #[derive(Debug)]
 pub struct Error {
 	inner: Context<ErrorKind>,
@@ -45,6 +43,10 @@ pub enum ErrorKind {
 	Argument(String),
 	#[fail(display = "Not found.")]
 	NotFound,
+	#[fail(display = "Request error: {}", _0)]
+	RequestError(String),
+	#[fail(display = "ResponseError error: {}", _0)]
+	ResponseError(String),
 }
 
 impl Fail for Error {
@@ -85,44 +87,36 @@ impl From<Context<ErrorKind>> for Error {
 
 /// HTTP server allowing the registration of ApiEndpoint implementations.
 pub struct ApiServer {
-	root: String,
-	router: Router,
-	mount: Mount,
-	server_listener: Option<Listening>,
+    rt: Option<Runtime>,
 }
 
 impl ApiServer {
 	/// Creates a new ApiServer that will serve ApiEndpoint implementations
 	/// under the root URL.
-	pub fn new(root: String) -> ApiServer {
-		ApiServer {
-			root: root,
-			router: Router::new(),
-			mount: Mount::new(),
-			server_listener: None,
-		}
+	pub fn new() -> ApiServer {
+		ApiServer {rt: None}
 	}
 
 	/// Starts the ApiServer at the provided address.
-	pub fn start<A: ToSocketAddrs>(&mut self, addr: A) -> Result<(), String> {
-		// replace this value to satisfy borrow checker
-		let r = mem::replace(&mut self.router, Router::new());
-		let mut m = mem::replace(&mut self.mount, Mount::new());
-		m.mount("/", r);
-		let result = Iron::new(m).http(addr);
-		let return_value = result.as_ref().map(|_| ()).map_err(|e| e.to_string());
-		self.server_listener = Some(result.unwrap());
-		return_value
+	pub fn start<F>(&mut self, addr: SocketAddr, f: &'static F) -> Result<(), String>
+	where
+		F: Fn(Request<Body>) -> Response<Body> + Send + Sync + 'static,
+	{
+		let server = Server::bind(&addr)
+			.serve(move || service_fn_ok(f))
+			.map_err(|e| eprintln!("server error: {}", e));
+
+	    self.rt = Some( Runtime::new().unwrap());
+	    if let Some(ref mut rt) = self.rt {
+	         rt.block_on(server);
+	    }
+	    Ok(())
 	}
 
 	/// Stops the API server
 	pub fn stop(&mut self) {
-		let r = mem::replace(&mut self.server_listener, None);
-		r.unwrap().close().unwrap();
-	}
-
-	/// Registers an iron handler (via mount)
-	pub fn register_handler<H: Handler>(&mut self, handler: H) -> &mut Mount {
-		self.mount.mount(&self.root, handler)
+	    if let Some(rt) = self.rt.take() {
+	        rt.shutdown_now().wait().unwrap();
+	    }
 	}
 }
