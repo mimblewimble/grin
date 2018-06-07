@@ -326,7 +326,7 @@ impl LocalServerContainer {
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let max_outputs = 500;
 
-		let mut wallet = FileWallet::new(config.clone(), "grin_test")
+		let mut wallet = FileWallet::new(config.clone(), "")
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		let _ =
