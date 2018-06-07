@@ -35,6 +35,8 @@
 //! The underlying Hashes are stored in a Backend implementation that can
 //! either be a simple Vec or a database.
 
+use croaring::Bitmap;
+
 use core::hash::Hash;
 use ser::{self, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
 

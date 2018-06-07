@@ -25,6 +25,7 @@
 extern crate bitflags;
 extern crate blake2_rfc as blake2;
 extern crate byteorder;
+extern crate croaring;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 #[macro_use]

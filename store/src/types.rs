@@ -21,6 +21,8 @@ use std::io::{self, BufRead, BufReader, BufWriter, ErrorKind, Write};
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
+use croaring::Bitmap;
+
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use libc::{ftruncate as ftruncate64, off_t as off64_t};
 #[cfg(any(target_os = "linux"))]
@@ -264,6 +266,10 @@ pub struct RemoveLog {
 	removed_tmp: Vec<(u64, u32)>,
 	// Holds truncated removed temporarily until discarded or committed
 	removed_bak: Vec<(u64, u32)>,
+
+	bitmap_path: String,
+	bitmap: Bitmap,
+	bitmap_bak: Bitmap,
 }
 
 impl RemoveLog {
@@ -271,11 +277,28 @@ impl RemoveLog {
 	/// The content of the file will be read in memory for fast checking.
 	pub fn open(path: String) -> io::Result<RemoveLog> {
 		let removed = read_ordered_vec(path.clone(), 12)?;
+
+		// TODO - actually read the bitmap from disk here
+		let bitmap_path = format!("{}.roar", path);
+		let file_path = Path::new(&path);
+		let bitmap = if file_path.exists() {
+			let mut bitmap_file = File::open(bitmap_path.clone())?;
+			let mut buffer = vec![];
+			bitmap_file.read_to_end(&mut buffer)?;
+			Bitmap::deserialize(&buffer)
+		} else {
+			Bitmap::create()
+		};
+
 		Ok(RemoveLog {
-			path: path,
+			path: path.clone(),
 			removed: removed,
 			removed_tmp: vec![],
 			removed_bak: vec![],
+
+			bitmap_path,
+			bitmap: bitmap.clone(),
+			bitmap_bak: bitmap.clone(),
 		})
 	}
 
@@ -283,7 +306,8 @@ impl RemoveLog {
 	/// We keep everything in the rm_log from that index and earlier.
 	/// In practice the index is a block height, so we rewind back to that block
 	/// keeping everything in the rm_log up to and including that block.
-	pub fn rewind(&mut self, idx: u32) -> io::Result<()> {
+	pub fn rewind(&mut self, pos: u64, idx: u32) -> io::Result<()> {
+
 		// backing it up before truncating (unless we already have a backup)
 		if self.removed_bak.is_empty() {
 			self.removed_bak = self.removed.clone();
@@ -297,6 +321,27 @@ impl RemoveLog {
 			self.removed.retain(|&(_, x)| x <= idx);
 			self.removed_tmp.retain(|&(_, x)| x <= idx);
 		}
+
+		{
+			if self.bitmap_bak.is_empty() {
+				println!("*** rewind: backing up our bitmap");
+				self.bitmap_bak = self.bitmap.clone();
+			}
+
+			// TODO - here we take our bitmap and "rewind" everything after pos
+			// TODO - work out how to do this efficiently with roaring api
+			// TODO - can we just truncate somehow?
+			// TODO - or xor bitmaps together?
+			println!("*** rewind: pos {}, idx {}", pos, idx);
+
+			let from = pos as u32 + 1;
+			let to = self.bitmap.iter().last().unwrap_or(from);
+
+			for x in from..=to {
+				self.bitmap.remove(x);
+			}
+		}
+
 		Ok(())
 	}
 
@@ -308,6 +353,11 @@ impl RemoveLog {
 				self.removed_tmp.insert(idx, (elmt, index));
 			}
 		}
+
+		println!("*** append: {}", elmt);
+		self.bitmap.add(elmt as u32);
+		println!("*** after append - {} removed? {}", elmt, self.bitmap.contains(elmt as u32));
+
 		Ok(())
 	}
 
@@ -327,7 +377,29 @@ impl RemoveLog {
 		}
 		self.removed_tmp = vec![];
 		self.removed_bak = vec![];
-		file.flush()
+		file.flush()?;
+
+		// so we can see the size difference of storage on disk
+		self.flush_bitmap()?;
+
+		Ok(())
+	}
+
+	fn flush_bitmap(&mut self) -> io::Result<()> {
+		// TODO - how to handle u64 vs u32 here?
+		// presumably we could use a fixed offset for everything bigger than a u32 and store
+		// them in an additional bitmap?
+
+		let mut file = BufWriter::new(File::create(self.bitmap_path.clone())?);
+
+		self.bitmap.run_optimize();
+
+		file.write_all(&self.bitmap.serialize())?;
+		file.flush()?;
+
+		self.bitmap_bak = self.bitmap.clone();
+
+		Ok(())
 	}
 
 	/// Discard pending changes
@@ -337,16 +409,31 @@ impl RemoveLog {
 			self.removed_bak = vec![];
 		}
 		self.removed_tmp = vec![];
+
+		self.bitmap = self.bitmap_bak.clone();
 	}
 
 	/// Whether the remove log currently includes the provided position.
 	pub fn includes(&self, elmt: u64) -> bool {
-		include_tuple(&self.removed, elmt) || include_tuple(&self.removed_tmp, elmt)
+		let res = include_tuple(&self.removed, elmt) || include_tuple(&self.removed_tmp, elmt);
+
+		let bitmap_res = {
+			self.bitmap.contains(elmt as u32)
+		};
+
+		println!("*** includes: {} == {}? (should match...)", res, bitmap_res);
+
+		res
 	}
 
 	/// Number of positions stored in the remove log.
 	pub fn len(&self) -> usize {
-		self.removed.len()
+		let res = self.removed.len();
+		let bitmap_res = self.bitmap.cardinality();
+
+		println!("*** len: {} == {}? (should match...)", res, bitmap_res);
+
+		res
 	}
 
 	/// Return vec of pos for removed elements before the provided cutoff index.

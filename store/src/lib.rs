@@ -21,6 +21,7 @@
 #![warn(missing_docs)]
 
 extern crate byteorder;
+extern crate croaring;
 extern crate env_logger;
 #[macro_use]
 extern crate grin_core as core;

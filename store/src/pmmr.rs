@@ -148,7 +148,7 @@ where
 	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
 		// Rewind the rm_log based on index (block height)
 		self.rm_log
-			.rewind(index)
+			.rewind(position, index)
 			.map_err(|e| format!("Could not truncate remove log: {}", e))?;
 
 		// Rewind the hash file accounting for pruned/compacted pos
