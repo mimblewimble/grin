@@ -409,7 +409,7 @@ where
 	fn pos_to_rm(&self, leaf_pos_to_rm: &Vec<u64>) -> Vec<u64> {
 		let mut expanded = vec![];
 
-		for x in leaf_pos_to_rm.clone() {
+		for &x in leaf_pos_to_rm {
 			expanded.push(x);
 			let mut current = x;
 			loop {
@@ -437,9 +437,7 @@ where
 		expanded.sort();
 		expanded.dedup();
 
-		let pos_to_rm = removed_excl_roots(expanded.clone());
-
-		pos_to_rm
+		removed_excl_roots(expanded)
 	}
 }
 
