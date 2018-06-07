@@ -31,4 +31,4 @@ mod types;
 
 pub mod keychain;
 pub use keychain::ExtKeychain;
-pub use types::{Keychain, BlindSum, BlindingFactor, Error, Identifier, IDENTIFIER_SIZE};
+pub use types::{BlindSum, BlindingFactor, Error, Identifier, Keychain, IDENTIFIER_SIZE};

@@ -32,7 +32,10 @@ use libwallet::error::{Error, ErrorKind};
 /// Wallets should implement this backend for their storage. All functions
 /// here expect that the wallet instance has instantiated itself or stored
 /// whatever credentials it needs
-pub trait WalletBackend<K> where K: Keychain {
+pub trait WalletBackend<K>
+where
+	K: Keychain,
+{
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut K;
 

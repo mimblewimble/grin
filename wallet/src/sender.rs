@@ -37,7 +37,7 @@ pub fn issue_send_tx<T, K>(
 	max_outputs: usize,
 	selection_strategy_is_use_all: bool,
 	fluff: bool,
-) -> Result<(), failure::Error> 
+) -> Result<(), failure::Error>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
@@ -132,7 +132,8 @@ where
 	K: Keychain,
 {
 	// TODO
-	// let keychain = &Keychain::burn_enabled(wallet.keychain(), &Identifier::zero());
+	// let keychain = &Keychain::burn_enabled(wallet.keychain(),
+	// &Identifier::zero());
 	let keychain = wallet.keychain().clone();
 
 	let chain_tip = updater::get_tip_from_node(wallet.node_url())?;

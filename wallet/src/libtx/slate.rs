@@ -106,7 +106,10 @@ impl Slate {
 		&mut self,
 		keychain: &K,
 		mut elems: Vec<Box<build::Append<K>>>,
-	) -> Result<BlindingFactor, Error> where K: Keychain {
+	) -> Result<BlindingFactor, Error>
+	where
+		K: Keychain,
+	{
 		// Append to the exiting transaction
 		if self.tx.kernels.len() != 0 {
 			elems.insert(0, build::initial_tx(self.tx.clone()));
@@ -124,7 +127,10 @@ impl Slate {
 		sec_key: &mut SecretKey,
 		sec_nonce: &SecretKey,
 		participant_id: usize,
-	) -> Result<(), Error> where K: Keychain {
+	) -> Result<(), Error>
+	where
+		K: Keychain,
+	{
 		// Whoever does this first generates the offset
 		if self.tx.offset == BlindingFactor::zero() {
 			self.generate_offset(keychain, sec_key)?;
@@ -140,7 +146,10 @@ impl Slate {
 		sec_key: &SecretKey,
 		sec_nonce: &SecretKey,
 		participant_id: usize,
-	) -> Result<(), Error> where K: Keychain {
+	) -> Result<(), Error>
+	where
+		K: Keychain,
+	{
 		self.check_fees()?;
 		self.verify_part_sigs(keychain.secp())?;
 		let sig_part = aggsig::calculate_partial_sig(
@@ -158,7 +167,10 @@ impl Slate {
 	/// Creates the final signature, callable by either the sender or recipient
 	/// (after phase 3: sender confirmation)
 	/// TODO: Only callable by receiver at the moment
-	pub fn finalize<K>(&mut self, keychain: &K) -> Result<(), Error> where K: Keychain {
+	pub fn finalize<K>(&mut self, keychain: &K) -> Result<(), Error>
+	where
+		K: Keychain,
+	{
 		let final_sig = self.finalize_signature(keychain)?;
 		self.finalize_transaction(keychain, &final_sig)
 	}
@@ -206,7 +218,10 @@ impl Slate {
 		sec_nonce: &SecretKey,
 		id: usize,
 		part_sig: Option<Signature>,
-	) -> Result<(), Error> where K: Keychain {
+	) -> Result<(), Error>
+	where
+		K: Keychain,
+	{
 		// Add our public key and nonce to the slate
 		let pub_key = PublicKey::from_secret_key(keychain.secp(), &sec_key)?;
 		let pub_nonce = PublicKey::from_secret_key(keychain.secp(), &sec_nonce)?;
@@ -224,11 +239,10 @@ impl Slate {
 	/// For now, we'll have the transaction initiator be responsible for it
 	/// Return offset private key for the participant to use later in the
 	/// transaction
-	fn generate_offset<K>(
-		&mut self,
-		keychain: &K,
-		sec_key: &mut SecretKey,
-	) -> Result<(), Error> where K: Keychain {
+	fn generate_offset<K>(&mut self, keychain: &K, sec_key: &mut SecretKey) -> Result<(), Error>
+	where
+		K: Keychain,
+	{
 		// Generate a random kernel offset here
 		// and subtract it from the blind_sum so we create
 		// the aggsig context with the "split" key
@@ -306,7 +320,10 @@ impl Slate {
 	///
 	/// Returns completed transaction ready for posting to the chain
 
-	fn finalize_signature<K>(&mut self, keychain: &K) -> Result<Signature, Error> where K: Keychain {
+	fn finalize_signature<K>(&mut self, keychain: &K) -> Result<Signature, Error>
+	where
+		K: Keychain,
+	{
 		self.verify_part_sigs(keychain.secp())?;
 
 		let part_sigs = self.part_sigs();
@@ -334,7 +351,10 @@ impl Slate {
 		&mut self,
 		keychain: &K,
 		final_sig: &secp::Signature,
-	) -> Result<(), Error> where K: Keychain {
+	) -> Result<(), Error>
+	where
+		K: Keychain,
+	{
 		let kernel_offset = self.tx.offset;
 
 		self.check_fees()?;

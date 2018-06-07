@@ -35,7 +35,10 @@ use libtx::{aggsig, proof};
 use util::LOGGER;
 
 /// Context information available to transaction combinators.
-pub struct Context<'a, K: 'a> where K: Keychain {
+pub struct Context<'a, K: 'a>
+where
+	K: Keychain,
+{
 	keychain: &'a K,
 }
 
@@ -52,7 +55,10 @@ fn build_input<K>(
 	block_hash: Option<Hash>,
 	merkle_proof: Option<MerkleProof>,
 	key_id: Identifier,
-) -> Box<Append<K>> where K: Keychain {
+) -> Box<Append<K>>
+where
+	K: Keychain,
+{
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			let commit = build.keychain.commit(value, &key_id).unwrap();
@@ -64,7 +70,10 @@ fn build_input<K>(
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-pub fn input<K>(value: u64, key_id: Identifier) -> Box<Append<K>> where K: Keychain {
+pub fn input<K>(value: u64, key_id: Identifier) -> Box<Append<K>>
+where
+	K: Keychain,
+{
 	debug!(
 		LOGGER,
 		"Building input (spending regular output): {}, {}", value, key_id
@@ -79,7 +88,10 @@ pub fn coinbase_input<K>(
 	block_hash: Hash,
 	merkle_proof: MerkleProof,
 	key_id: Identifier,
-) -> Box<Append<K>> where K: Keychain {
+) -> Box<Append<K>>
+where
+	K: Keychain,
+{
 	debug!(
 		LOGGER,
 		"Building input (spending coinbase): {}, {}", value, key_id
@@ -95,7 +107,10 @@ pub fn coinbase_input<K>(
 
 /// Adds an output with the provided value and key identifier from the
 /// keychain.
-pub fn output<K>(value: u64, key_id: Identifier) -> Box<Append<K>> where K: Keychain {
+pub fn output<K>(value: u64, key_id: Identifier) -> Box<Append<K>>
+where
+	K: Keychain,
+{
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			debug!(LOGGER, "Building an output: {}, {}", value, key_id,);
@@ -128,7 +143,10 @@ pub fn output<K>(value: u64, key_id: Identifier) -> Box<Append<K>> where K: Keyc
 }
 
 /// Sets the fee on the transaction being built.
-pub fn with_fee<K>(fee: u64) -> Box<Append<K>> where K: Keychain {
+pub fn with_fee<K>(fee: u64) -> Box<Append<K>>
+where
+	K: Keychain,
+{
 	Box::new(
 		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			(tx, kern.with_fee(fee), sum)
@@ -137,7 +155,10 @@ pub fn with_fee<K>(fee: u64) -> Box<Append<K>> where K: Keychain {
 }
 
 /// Sets the lock_height on the transaction being built.
-pub fn with_lock_height<K>(lock_height: u64) -> Box<Append<K>> where K: Keychain {
+pub fn with_lock_height<K>(lock_height: u64) -> Box<Append<K>>
+where
+	K: Keychain,
+{
 	Box::new(
 		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			(tx, kern.with_lock_height(lock_height), sum)
@@ -148,7 +169,10 @@ pub fn with_lock_height<K>(lock_height: u64) -> Box<Append<K>> where K: Keychain
 /// Adds a known excess value on the transaction being built. Usually used in
 /// combination with the initial_tx function when a new transaction is built
 /// by adding to a pre-existing one.
-pub fn with_excess<K>(excess: BlindingFactor) -> Box<Append<K>> where K: Keychain {
+pub fn with_excess<K>(excess: BlindingFactor) -> Box<Append<K>>
+where
+	K: Keychain,
+{
 	Box::new(
 		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			(tx, kern, sum.add_blinding_factor(excess.clone()))
@@ -157,7 +181,10 @@ pub fn with_excess<K>(excess: BlindingFactor) -> Box<Append<K>> where K: Keychai
 }
 
 /// Sets a known tx "offset". Used in final step of tx construction.
-pub fn with_offset<K>(offset: BlindingFactor) -> Box<Append<K>> where K: Keychain {
+pub fn with_offset<K>(offset: BlindingFactor) -> Box<Append<K>>
+where
+	K: Keychain,
+{
 	Box::new(
 		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			(tx.with_offset(offset), kern, sum)
@@ -168,7 +195,10 @@ pub fn with_offset<K>(offset: BlindingFactor) -> Box<Append<K>> where K: Keychai
 /// Sets an initial transaction to add to when building a new transaction.
 /// We currently only support building a tx with a single kernel with
 /// build::transaction()
-pub fn initial_tx<K>(mut tx: Transaction) -> Box<Append<K>> where K: Keychain {
+pub fn initial_tx<K>(mut tx: Transaction) -> Box<Append<K>>
+where
+	K: Keychain,
+{
 	assert_eq!(tx.kernels.len(), 1);
 	let kern = tx.kernels.remove(0);
 	Box::new(
@@ -191,7 +221,10 @@ pub fn initial_tx<K>(mut tx: Transaction) -> Box<Append<K>> where K: Keychain {
 pub fn partial_transaction<K>(
 	elems: Vec<Box<Append<K>>>,
 	keychain: &K,
-) -> Result<(Transaction, BlindingFactor), keychain::Error> where K: Keychain {
+) -> Result<(Transaction, BlindingFactor), keychain::Error>
+where
+	K: Keychain,
+{
 	let mut ctx = Context { keychain };
 	let (mut tx, kern, sum) = elems.iter().fold(
 		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
@@ -210,7 +243,10 @@ pub fn partial_transaction<K>(
 pub fn transaction<K>(
 	elems: Vec<Box<Append<K>>>,
 	keychain: &K,
-) -> Result<Transaction, keychain::Error> where K: Keychain {
+) -> Result<Transaction, keychain::Error>
+where
+	K: Keychain,
+{
 	let (mut tx, blind_sum) = partial_transaction(elems, keychain)?;
 	assert_eq!(tx.kernels.len(), 1);
 
@@ -231,7 +267,10 @@ pub fn transaction<K>(
 pub fn transaction_with_offset<K>(
 	elems: Vec<Box<Append<K>>>,
 	keychain: &K,
-) -> Result<Transaction, keychain::Error> where K: Keychain {
+) -> Result<Transaction, keychain::Error>
+where
+	K: Keychain,
+{
 	let mut ctx = Context { keychain };
 	let (mut tx, mut kern, sum) = elems.iter().fold(
 		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),

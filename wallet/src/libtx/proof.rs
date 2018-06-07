@@ -22,7 +22,10 @@ use util::secp::key::SecretKey;
 use util::secp::pedersen::{Commitment, ProofInfo, ProofMessage, RangeProof};
 use util::secp::{self, Secp256k1};
 
-fn create_nonce<K>(k: &K, commit: &Commitment) -> Result<SecretKey, Error> where K: Keychain {
+fn create_nonce<K>(k: &K, commit: &Commitment) -> Result<SecretKey, Error>
+where
+	K: Keychain,
+{
 	// hash(commit|masterkey) as nonce
 	let root_key = k.root_key_id();
 	let res = blake2::blake2b::blake2b(32, &commit.0, &root_key.to_bytes()[..]);
@@ -49,7 +52,10 @@ pub fn create<K>(
 	_commit: Commitment,
 	extra_data: Option<Vec<u8>>,
 	msg: ProofMessage,
-) -> Result<RangeProof, Error> where K: Keychain {
+) -> Result<RangeProof, Error>
+where
+	K: Keychain,
+{
 	let commit = k.commit(amount, key_id)?;
 	let skey = k.derived_key(key_id)?;
 	let nonce = create_nonce(k, &commit)?;
@@ -88,7 +94,10 @@ pub fn rewind<K>(
 	commit: Commitment,
 	extra_data: Option<Vec<u8>>,
 	proof: RangeProof,
-) -> Result<ProofInfo, Error> where K: Keychain {
+) -> Result<ProofInfo, Error>
+where
+	K: Keychain,
+{
 	let skey = k.derived_key(key_id)?;
 	let nonce = create_nonce(k, &commit)?;
 	let proof_message = k.secp()

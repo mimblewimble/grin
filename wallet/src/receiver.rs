@@ -52,7 +52,7 @@ where
 	K: Keychain,
 {
 	pub wallet: Arc<RwLock<T>>,
-	phantom: PhantomData<K>
+	phantom: PhantomData<K>,
 }
 
 impl<T, K> WalletReceiver<T, K>
@@ -61,7 +61,10 @@ where
 	K: Keychain,
 {
 	pub fn new(wallet: Arc<RwLock<T>>) -> WalletReceiver<T, K> {
-		WalletReceiver{wallet, phantom: PhantomData}
+		WalletReceiver {
+			wallet,
+			phantom: PhantomData,
+		}
 	}
 
 	fn handle_send(&self, wallet: &mut T, slate: &mut Slate) -> Result<(), Error> {

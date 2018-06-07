@@ -138,7 +138,9 @@ where
 	// Add blinding sum to our context
 	let mut context = sigcontext::Context::new(
 		keychain.secp(),
-		blinding.secret_key(wallet.keychain().clone().secp()).unwrap(),
+		blinding
+			.secret_key(wallet.keychain().clone().secp())
+			.unwrap(),
 	);
 
 	context.add_output(&key_id);

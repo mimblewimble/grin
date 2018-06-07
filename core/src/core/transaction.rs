@@ -1087,12 +1087,12 @@ impl ProofMessageElements {
 mod test {
 	use super::*;
 	use core::id::{ShortId, ShortIdentifiable};
-	use keychain::Keychain;
+	use keychain::{Keychain, ExtKeychain};
 	use util::secp;
 
 	#[test]
 	fn test_kernel_ser_deser() {
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
 
@@ -1137,7 +1137,7 @@ mod test {
 
 	#[test]
 	fn commit_consistency() {
-		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
+		let keychain = ExtKeychain::from_seed(&[0; 32]).unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let commit = keychain.commit(1003, &key_id).unwrap();
@@ -1150,7 +1150,7 @@ mod test {
 
 	#[test]
 	fn input_short_id() {
-		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
+		let keychain = ExtKeychain::from_seed(&[0; 32]).unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
 

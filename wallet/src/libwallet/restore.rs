@@ -19,7 +19,7 @@ use core::core::transaction::ProofMessageElements;
 use core::global;
 use error::{Error, ErrorKind};
 use failure::{Fail, ResultExt};
-use keychain::{Keychain, Identifier};
+use keychain::{Identifier, Keychain};
 use libtx::proof;
 use libwallet::types::*;
 use util;

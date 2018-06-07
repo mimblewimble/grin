@@ -35,7 +35,7 @@ where
 	K: Keychain,
 {
 	pub wallet: Arc<RwLock<T>>,
-	phantom: PhantomData<K>
+	phantom: PhantomData<K>,
 }
 
 impl<T, K> CoinbaseHandler<T, K>
@@ -44,7 +44,10 @@ where
 	K: Keychain,
 {
 	pub fn new(wallet: Arc<RwLock<T>>) -> CoinbaseHandler<T, K> {
-		CoinbaseHandler{wallet, phantom: PhantomData}
+		CoinbaseHandler {
+			wallet,
+			phantom: PhantomData,
+		}
 	}
 
 	fn build_coinbase(&self, wallet: &mut T, block_fees: &BlockFees) -> Result<CbData, Error> {

@@ -75,7 +75,10 @@ pub fn sign_from_key_id<K>(
 	k: &K,
 	msg: &Message,
 	key_id: &Identifier,
-) -> Result<Signature, Error> where K: Keychain {
+) -> Result<Signature, Error>
+where
+	K: Keychain,
+{
 	let skey = k.derived_key(key_id)?;
 	let sig = aggsig::sign_single(secp, &msg, &skey, None, None, None)?;
 	Ok(sig)

@@ -29,7 +29,10 @@ pub fn output<K>(
 	key_id: &Identifier,
 	fees: u64,
 	height: u64,
-) -> Result<(Output, TxKernel), Error> where K: Keychain {
+) -> Result<(Output, TxKernel), Error>
+where
+	K: Keychain,
+{
 	let value = reward(fees);
 	let commit = keychain.commit(value, key_id)?;
 	let msg = ProofMessageElements::new(value, key_id);

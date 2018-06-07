@@ -179,7 +179,10 @@ pub struct FileWallet<K> {
 	pub lock_file_path: String,
 }
 
-impl<K> WalletBackend<K> for FileWallet<K> where K: Keychain {
+impl<K> WalletBackend<K> for FileWallet<K>
+where
+	K: Keychain,
+{
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut K {
 		&mut self.keychain
@@ -373,7 +376,10 @@ impl<K> WalletBackend<K> for FileWallet<K> where K: Keychain {
 	}
 }
 
-impl<K> FileWallet<K> where K: Keychain {
+impl<K> FileWallet<K>
+where
+	K: Keychain,
+{
 	/// Create a new FileWallet instance
 	pub fn new(config: WalletConfig, keychain: K) -> Result<Self, Error> {
 		let mut retval = FileWallet {

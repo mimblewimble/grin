@@ -31,7 +31,7 @@ use core::core;
 use core::core::hash::Hashed;
 use core::ser;
 use core::ser::AsFixedBytes;
-use keychain::{Identifier, Keychain, ExtKeychain};
+use keychain::{ExtKeychain, Identifier, Keychain};
 use pool;
 use util;
 use util::LOGGER;
