@@ -307,7 +307,6 @@ impl RemoveLog {
 	/// In practice the index is a block height, so we rewind back to that block
 	/// keeping everything in the rm_log up to and including that block.
 	pub fn rewind(&mut self, pos: u64, idx: u32) -> io::Result<()> {
-
 		// backing it up before truncating (unless we already have a backup)
 		if self.removed_bak.is_empty() {
 			self.removed_bak = self.removed.clone();
@@ -356,7 +355,11 @@ impl RemoveLog {
 
 		println!("*** append: {}", elmt);
 		self.bitmap.add(elmt as u32);
-		println!("*** after append - {} removed? {}", elmt, self.bitmap.contains(elmt as u32));
+		println!(
+			"*** after append - {} removed? {}",
+			elmt,
+			self.bitmap.contains(elmt as u32)
+		);
 
 		Ok(())
 	}
@@ -387,8 +390,8 @@ impl RemoveLog {
 
 	fn flush_bitmap(&mut self) -> io::Result<()> {
 		// TODO - how to handle u64 vs u32 here?
-		// presumably we could use a fixed offset for everything bigger than a u32 and store
-		// them in an additional bitmap?
+		// presumably we could use a fixed offset for everything bigger than a u32 and
+		// store them in an additional bitmap?
 
 		let mut file = BufWriter::new(File::create(self.bitmap_path.clone())?);
 
@@ -417,9 +420,7 @@ impl RemoveLog {
 	pub fn includes(&self, elmt: u64) -> bool {
 		let res = include_tuple(&self.removed, elmt) || include_tuple(&self.removed_tmp, elmt);
 
-		let bitmap_res = {
-			self.bitmap.contains(elmt as u32)
-		};
+		let bitmap_res = { self.bitmap.contains(elmt as u32) };
 
 		println!("*** includes: {} == {}? (should match...)", res, bitmap_res);
 

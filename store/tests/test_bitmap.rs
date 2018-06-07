@@ -15,14 +15,14 @@
 extern crate croaring;
 use croaring::Bitmap;
 
-
 #[test]
 fn test_a_small_bitmap() {
 	let bitmap: Bitmap = vec![1, 99, 1_000].into_iter().collect();
 	let serialized_buffer = bitmap.serialize();
 
 	// we can store 3 pos in a roaring bitmap in 22 bytes
-	// this is compared to storing them as a vec of u64 values which would be 8 * 3 = 32 bytes
+	// this is compared to storing them as a vec of u64 values which would be 8 * 3
+	// = 32 bytes
 	assert_eq!(serialized_buffer.len(), 22);
 }
 
