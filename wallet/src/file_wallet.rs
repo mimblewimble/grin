@@ -398,12 +398,12 @@ impl WalletBackend for FileWallet {
 }
 
 impl WalletClient for FileWallet {
-		/// Return URL for check node
+	/// Return URL for check node
 	fn node_url(&self) -> &str {
 		&self.config.check_node_api_http_addr
 	}
 
-/// Call the wallet API to create a coinbase transaction
+	/// Call the wallet API to create a coinbase transaction
 	fn create_coinbase(
 		&self,
 		dest: &str,
