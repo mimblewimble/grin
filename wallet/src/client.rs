@@ -33,10 +33,7 @@ use util::LOGGER;
 /// Call the wallet API to create a coinbase output for the given block_fees.
 /// Will retry based on default "retry forever with backoff" behavior.
 pub fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
-	let url = format!(
-		"{}/v1/wallet/foreign/build_coinbase",
-		dest
-	);
+	let url = format!("{}/v1/wallet/foreign/build_coinbase", dest);
 	match single_create_coinbase(&url, &block_fees) {
 		Err(e) => {
 			error!(
@@ -54,11 +51,9 @@ pub fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Err
 /// Send the slate to a listening wallet instance
 pub fn send_tx_slate(dest: &str, slate: &Slate) -> Result<Slate, Error> {
 	if &dest[..4] != "http" {
-		
 		error!(
 			LOGGER,
-			"dest formatted as {} but send -d expected stdout or http://IP:port",
-			dest
+			"dest formatted as {} but send -d expected stdout or http://IP:port", dest
 		);
 		Err(ErrorKind::Node)?
 	}
@@ -133,9 +128,6 @@ pub fn post_tx(dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error> {
 /// Return the chain tip from a given node
 pub fn get_chain_height(addr: &str) -> Result<u64, Error> {
 	let url = format!("{}/v1/chain", addr);
-	let res = api::client::get::<api::Tip>(url.as_str())
-		.context(ErrorKind::Node)?;
+	let res = api::client::get::<api::Tip>(url.as_str()).context(ErrorKind::Node)?;
 	Ok(res.height)
 }
-
-

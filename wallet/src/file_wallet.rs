@@ -34,10 +34,10 @@ use util::LOGGER;
 
 use error::{Error, ErrorKind};
 
-use libwallet;
-use libtx::slate::Slate;
-use libwallet::types::*;
 use client;
+use libtx::slate::Slate;
+use libwallet;
+use libwallet::types::*;
 
 const DAT_FILE: &'static str = "wallet.dat";
 const BCK_FILE: &'static str = "wallet.bck";
@@ -403,15 +403,19 @@ impl WalletBackend for FileWallet {
 }
 
 impl WalletClient for FileWallet {
-
 	/// Call the wallet API to create a coinbase transaction
-	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, libwallet::Error>{
-	 let res = client::create_coinbase(dest, block_fees).context(libwallet::ErrorKind::WalletComms)?;
-	 Ok(res)
+	fn create_coinbase(
+		&self,
+		dest: &str,
+		block_fees: &BlockFees,
+	) -> Result<CbData, libwallet::Error> {
+		let res =
+			client::create_coinbase(dest, block_fees).context(libwallet::ErrorKind::WalletComms)?;
+		Ok(res)
 	}
 
 	/// Send a transaction slate to another listening wallet and return result
-	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error>{
+	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
 		let res = client::send_tx_slate(dest, slate).context(libwallet::ErrorKind::WalletComms)?;
 		Ok(res)
 	}
@@ -430,15 +434,18 @@ impl WalletClient for FileWallet {
 
 	/// retrieve a list of outputs from the specified grin node
 	/// need "by_height" and "by_id" variants
-	fn get_outputs_from_node(&self, ) -> Result<(), libwallet::Error> {
+	fn get_outputs_from_node(&self) -> Result<(), libwallet::Error> {
 		Err(libwallet::ErrorKind::GenericError("Not Implemented"))?
 	}
 
 	/// retrieve merkle proof for a commit from a node
-	fn get_merkle_proof_for_commit(&self, addr: &str, commit: &str) -> Result<MerkleProofWrapper, libwallet::Error>{
+	fn get_merkle_proof_for_commit(
+		&self,
+		addr: &str,
+		commit: &str,
+	) -> Result<MerkleProofWrapper, libwallet::Error> {
 		Err(libwallet::ErrorKind::GenericError("Not Implemented"))?
 	}
-
 }
 
 impl FileWallet {

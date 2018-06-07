@@ -112,7 +112,11 @@ pub trait WalletClient {
 	fn get_outputs_from_node(&self) -> Result<(), Error>;
 
 	/// retrieve merkle proof for a commit from a node
-	fn get_merkle_proof_for_commit(&self, addr: &str, commit: &str) -> Result<MerkleProofWrapper, Error>;
+	fn get_merkle_proof_for_commit(
+		&self,
+		addr: &str,
+		commit: &str,
+	) -> Result<MerkleProofWrapper, Error>;
 }
 
 /// Information about an output that's being tracked by the wallet. Must be
