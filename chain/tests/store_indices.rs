@@ -29,7 +29,7 @@ use core::core::BlockHeader;
 use core::global;
 use core::global::ChainTypes;
 use core::pow;
-use keychain::Keychain;
+use keychain::{Keychain, ExtKeychain};
 
 use wallet::libtx;
 
@@ -43,7 +43,7 @@ fn test_various_store_indices() {
 	let chain_dir = ".grin_idx_1";
 	clean_output_dir(chain_dir);
 
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
 
 	let chain_store =

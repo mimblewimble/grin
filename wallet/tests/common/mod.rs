@@ -37,10 +37,7 @@ use util::secp::pedersen;
 
 /// Mostly for testing, refreshes output state against a local chain instance
 /// instead of via an http API call
-pub fn refresh_output_state_local<T, K> (
-	wallet: &mut T,
-	chain: &chain::Chain,
-) -> Result<(), Error>
+pub fn refresh_output_state_local<T, K>(wallet: &mut T, chain: &chain::Chain) -> Result<(), Error>
 where
 	T: WalletBackend<K>,
 	K: keychain::Keychain,
@@ -73,7 +70,7 @@ where
 pub fn get_wallet_balances<T, K>(
 	wallet: &mut T,
 	height: u64,
-) -> Result<(u64, u64, u64, u64, u64), Error> 
+) -> Result<(u64, u64, u64, u64, u64), Error>
 where
 	T: WalletBackend<K>,
 	K: keychain::Keychain,
@@ -159,11 +156,7 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: (Out
 /// adds a reward output to a wallet, includes that reward in a block, mines
 /// the block and adds it to the chain, with option transactions included.
 /// Helpful for building up precise wallet balances for testing.
-pub fn award_block_to_wallet<T, K>(
-	chain: &Chain,
-	txs: Vec<&Transaction>,
-	wallet: &mut T,
-)
+pub fn award_block_to_wallet<T, K>(chain: &Chain, txs: Vec<&Transaction>, wallet: &mut T)
 where
 	T: WalletBackend<K>,
 	K: keychain::Keychain,

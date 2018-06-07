@@ -20,7 +20,7 @@ extern crate grin_wallet as wallet;
 extern crate rand;
 extern crate uuid;
 
-use keychain::{BlindSum, BlindingFactor, Keychain, ExtKeychain};
+use keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::ProofMessage;
 use util::{kernel_sig_msg, secp};

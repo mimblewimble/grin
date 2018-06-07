@@ -176,7 +176,7 @@ where
 
 #[cfg(test)]
 mod test {
-	use keychain::{Keychain, ExtKeychain};
+	use keychain::{ExtKeychain, Keychain};
 	use libtx::build;
 
 	#[test]
