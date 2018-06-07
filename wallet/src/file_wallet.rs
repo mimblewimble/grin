@@ -208,11 +208,6 @@ impl WalletBackend for FileWallet {
 		self.keychain.as_mut().unwrap()
 	}
 
-	/// Return URL for check node
-	fn node_url(&self) -> &str {
-		&self.config.check_node_api_http_addr
-	}
-
 	/// Return the outputs directly
 	fn outputs(&mut self) -> &mut HashMap<String, OutputData> {
 		&mut self.outputs
@@ -403,7 +398,12 @@ impl WalletBackend for FileWallet {
 }
 
 impl WalletClient for FileWallet {
-	/// Call the wallet API to create a coinbase transaction
+		/// Return URL for check node
+	fn node_url(&self) -> &str {
+		&self.config.check_node_api_http_addr
+	}
+
+/// Call the wallet API to create a coinbase transaction
 	fn create_coinbase(
 		&self,
 		dest: &str,

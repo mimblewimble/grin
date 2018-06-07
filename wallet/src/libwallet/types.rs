@@ -43,9 +43,6 @@ pub trait WalletBackend {
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut Keychain;
 
-	/// Return the URL of the check node
-	fn node_url(&self) -> &str;
-
 	/// Return the outputs directly
 	fn outputs(&mut self) -> &mut HashMap<String, OutputData>;
 
@@ -94,6 +91,9 @@ pub trait WalletBackend {
 /// Encapsulate all communication functions. No functions within libwallet
 /// should care about communication details
 pub trait WalletClient {
+	/// Return the URL of the check node
+	fn node_url(&self) -> &str;
+
 	/// Call the wallet API to create a coinbase transaction
 	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, Error>;
 

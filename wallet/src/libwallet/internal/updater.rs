@@ -81,7 +81,7 @@ where
 // refreshed
 fn refresh_missing_block_hashes<T>(wallet: &mut T, height: u64) -> Result<(), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend + WalletClient,
 {
 	// build a local map of wallet outputs keyed by commit
 	// and a list of outputs we want to query the node for
@@ -231,7 +231,7 @@ where
 /// So we can refresh the local wallet outputs.
 fn refresh_output_state<T>(wallet: &mut T, height: u64) -> Result<(), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend + WalletClient,
 {
 	debug!(LOGGER, "Refreshing wallet outputs");
 
