@@ -66,7 +66,7 @@ pub fn create_send_tx<T, K>(
 		impl FnOnce(&mut T) -> Result<(), Error>,
 	),
 	Error,
-> 
+>
 where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
@@ -140,7 +140,8 @@ where
 	K: Keychain,
 {
 	// TODO
-	// let keychain = &Keychain::burn_enabled(wallet.keychain(), &Identifier::zero());
+	// let keychain = &Keychain::burn_enabled(wallet.keychain(),
+	// &Identifier::zero());
 	let keychain = wallet.keychain().clone();
 
 	let current_height = wallet.get_chain_height(wallet.node_url())?;

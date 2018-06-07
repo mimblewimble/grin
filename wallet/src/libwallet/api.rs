@@ -49,7 +49,10 @@ where
 {
 	/// Create new API instance
 	pub fn new(wallet_in: &'a mut W) -> APIOwner<'a, W, K> {
-		APIOwner { wallet: wallet_in, phantom: PhantomData }
+		APIOwner {
+			wallet: wallet_in,
+			phantom: PhantomData,
+		}
 	}
 
 	/// Attempt to update and retrieve outputs
@@ -171,11 +174,14 @@ where
 impl<'a, W, K> APIForeign<'a, W, K>
 where
 	W: 'a + WalletBackend<K> + WalletClient,
-	K: Keychain
+	K: Keychain,
 {
 	/// Create new API instance
 	pub fn new(wallet_in: &'a mut W) -> APIForeign<'a, W, K> {
-		APIForeign { wallet: wallet_in, phantom: PhantomData }
+		APIForeign {
+			wallet: wallet_in,
+			phantom: PhantomData,
+		}
 	}
 
 	/// Build a new (potential) coinbase transaction in the wallet

@@ -133,7 +133,10 @@ where
 	K: Keychain,
 {
 	pub fn new(wallet: Arc<Mutex<T>>) -> OwnerAPIHandler<T, K> {
-		OwnerAPIHandler{wallet, phantom: PhantomData}
+		OwnerAPIHandler {
+			wallet,
+			phantom: PhantomData,
+		}
 	}
 
 	fn retrieve_outputs(
@@ -225,10 +228,17 @@ where
 	K: Keychain,
 {
 	pub fn new(wallet: Arc<Mutex<T>>) -> ForeignAPIHandler<T, K> {
-		ForeignAPIHandler{wallet, phantom: PhantomData}
+		ForeignAPIHandler {
+			wallet,
+			phantom: PhantomData,
+		}
 	}
 
-	fn build_coinbase(&self, req: &mut Request, api: &mut APIForeign<T, K>) -> Result<CbData, Error> {
+	fn build_coinbase(
+		&self,
+		req: &mut Request,
+		api: &mut APIForeign<T, K>,
+	) -> Result<CbData, Error> {
 		let struct_body = req.get::<bodyparser::Struct<BlockFees>>();
 		match struct_body {
 			Ok(Some(block_fees)) => api.build_coinbase(&block_fees),
@@ -257,7 +267,11 @@ where
 		}
 	}
 
-	fn handle_request(&self, req: &mut Request, api: &mut APIForeign<T, K>) -> IronResult<Response> {
+	fn handle_request(
+		&self,
+		req: &mut Request,
+		api: &mut APIForeign<T, K>,
+	) -> IronResult<Response> {
 		let url = req.url.clone();
 		let path_elems = url.path();
 		match *path_elems.last().unwrap() {

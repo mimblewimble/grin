@@ -194,9 +194,9 @@ where
 		let wallet_seed = WalletSeed::from_file(&self.config)
 			.context(libwallet::ErrorKind::CallbackImpl("Error opening wallet"))?;
 		let keychain = wallet_seed.derive_keychain(&self.passphrase);
-		self.keychain = Some(keychain.context(
-			libwallet::ErrorKind::CallbackImpl("Error deriving keychain"),
-		)?);
+		self.keychain = Some(keychain.context(libwallet::ErrorKind::CallbackImpl(
+			"Error deriving keychain",
+		))?);
 		// Just blow up password for now after it's been used
 		self.passphrase = String::from("");
 		Ok(())

@@ -33,10 +33,7 @@ use util::LOGGER;
 use util::secp::pedersen;
 
 /// Retrieve all of the outputs (doesn't attempt to update from node)
-pub fn retrieve_outputs<T, K>(
-	wallet: &mut T,
-	show_spent: bool,
-) -> Result<Vec<OutputData>, Error>
+pub fn retrieve_outputs<T, K>(wallet: &mut T, show_spent: bool) -> Result<Vec<OutputData>, Error>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
