@@ -32,8 +32,8 @@ use wallet::libwallet::internal::updater;
 use wallet::libwallet::types::*;
 use wallet::libwallet::{Error, ErrorKind};
 
-use util::secp::pedersen;
 use util;
+use util::secp::pedersen;
 
 /// Mostly for testing, refreshes output state against a local chain instance
 /// instead of via an http API call
