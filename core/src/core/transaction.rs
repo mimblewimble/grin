@@ -14,8 +14,8 @@
 
 //! Transactions
 
-use std::cmp::Ordering;
 use std::cmp::max;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::io::Cursor;
 use std::{error, fmt};
@@ -26,11 +26,12 @@ use util::{kernel_sig_msg, static_secp_instance};
 
 use consensus;
 use consensus::VerifySortOrder;
-use core::BlockHeader;
-use core::Committed;
+use core::committed;
+use core::committed::Committed;
 use core::global;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
+use core::BlockHeader;
 use keychain;
 use keychain::BlindingFactor;
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
@@ -75,9 +76,8 @@ pub enum Error {
 	/// Returns if the value hidden within the a RangeProof message isn't
 	/// repeated 3 times, indicating it's incorrect
 	InvalidProofMessage,
-	/// Error when sums do not verify correctly during tx aggregation.
-	/// Likely a "double spend" across two unconfirmed txs.
-	AggregationError,
+	/// Error when verifying kernel sums via committed trait.
+	Committed(committed::Error),
 }
 
 impl error::Error for Error {
@@ -111,6 +111,12 @@ impl From<consensus::Error> for Error {
 impl From<keychain::Error> for Error {
 	fn from(e: keychain::Error) -> Error {
 		Error::Keychain(e)
+	}
+}
+
+impl From<committed::Error> for Error {
+	fn from(e: committed::Error) -> Error {
+		Error::Committed(e)
 	}
 }
 
@@ -387,6 +393,10 @@ impl Transaction {
 		self.kernels.iter().fold(0, |acc, ref x| acc + x.fee)
 	}
 
+	fn overage(&self) -> i64 {
+		self.fee() as i64
+	}
+
 	/// Lock height of a transaction is the max lock height of the kernels.
 	pub fn lock_height(&self) -> u64 {
 		self.kernels
@@ -394,43 +404,21 @@ impl Transaction {
 			.fold(0, |acc, ref x| max(acc, x.lock_height))
 	}
 
+	/// Verify the kernel signatures.
+	/// Note: this is expensive.
 	fn verify_kernel_signatures(&self) -> Result<(), Error> {
-		// Verify the kernel signatures.
-		// Note: this is expensive.
 		for x in &self.kernels {
 			x.verify()?;
 		}
 		Ok(())
 	}
 
+	/// Verify all the output rangeproofs.
+	/// Note: this is expensive.
 	fn verify_rangeproofs(&self) -> Result<(), Error> {
-		// Verify all the output rangeproofs.
-		// Note: this is expensive.
 		for x in &self.outputs {
 			x.verify_proof()?;
 		}
-		Ok(())
-	}
-
-	/// To verify transaction kernels we check that -
-	///  * all kernels have an even fee
-	/// * sum of input/output commitments matches sum of kernel commitments
-	/// after applying offset * each kernel sig is valid (i.e. tx commitments
-	/// sum to zero, given above is true)
-	fn verify_kernel_sums(&self) -> Result<(), Error> {
-		// Sum all input|output|overage commitments.
-		let overage = self.fee() as i64;
-		let io_sum = self.sum_commitments(overage, None)?;
-
-		// Sum the kernel excesses accounting for the kernel offset.
-		let (_, kernel_sum) = self.sum_kernel_excesses(&self.offset, None)?;
-
-		// sum of kernel commitments (including the offset) must match
-		// the sum of input/output commitments (minus fee)
-		if io_sum != kernel_sum {
-			return Err(Error::KernelSumMismatch);
-		}
-
 		Ok(())
 	}
 
@@ -442,7 +430,7 @@ impl Transaction {
 			return Err(Error::TooManyInputs);
 		}
 		self.verify_sorted()?;
-		self.verify_kernel_sums()?;
+		self.verify_kernel_sums(self.overage(), self.offset, None, None)?;
 		self.verify_rangeproofs()?;
 		self.verify_kernel_signatures()?;
 
@@ -553,10 +541,9 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 
 	let tx = Transaction::new(new_inputs, new_outputs, kernels).with_offset(total_kernel_offset);
 
-	// We need to check sums here as aggregation/cut-through may have created an
-	// invalid tx.
-	tx.verify_kernel_sums()
-		.map_err(|_| Error::AggregationError)?;
+	// We need to check sums here as aggregation/cut-through
+	// may have created an invalid tx.
+	tx.verify_kernel_sums(tx.overage(), tx.offset, None, None)?;
 
 	Ok(tx)
 }

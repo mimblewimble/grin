@@ -7,16 +7,16 @@ publish = false
 
 [dependencies]
 hyper = "0.10"
-itertools = "0.6"
+itertools = "0.7"
 rand = "0.3"
-router = "0.5"
-slog = { version = "~2.1", features = ["max_level_trace", "release_max_level_trace"] }
+router = "0.6"
+slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
 time = "0.1"
 bufstream = "~0.1"
-jsonrpc-core = "~4.0"
+jsonrpc-core = "~8.0"
 
 grin_api = { path = "../api" }
 grin_chain = { path = "../chain" }

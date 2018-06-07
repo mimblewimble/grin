@@ -24,11 +24,11 @@ use std::time::Instant;
 
 use util::secp::pedersen::{Commitment, RangeProof};
 
-use core::consensus::REWARD;
+use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::{self, MerkleProof, PMMR};
-use core::core::{Block, BlockHeader, Committed, Input, Output, OutputFeatures, OutputIdentifier,
-                 Transaction, TxKernel};
+use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, Transaction,
+                 TxKernel};
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
 
@@ -422,25 +422,27 @@ impl<'a> Extension<'a> {
 		let output_pos = self.output_pmmr.unpruned_size();
 		let kernel_pos = self.kernel_pmmr.unpruned_size();
 
+		let rewind_to_height = height - 1;
+
 		// When applying blocks we can apply the coinbase output first
 		// but we cannot do this here, so we need to apply outputs first.
 		for ref output in &tx.outputs {
 			if let Err(e) = self.apply_output(output) {
-				self.rewind_to_pos(output_pos, kernel_pos, height)?;
+				self.rewind_to_pos(output_pos, kernel_pos, rewind_to_height)?;
 				return Err(e);
 			}
 		}
 
 		for ref input in &tx.inputs {
 			if let Err(e) = self.apply_input(input, height) {
-				self.rewind_to_pos(output_pos, kernel_pos, height)?;
+				self.rewind_to_pos(output_pos, kernel_pos, rewind_to_height)?;
 				return Err(e);
 			}
 		}
 
 		for ref kernel in &tx.kernels {
 			if let Err(e) = self.apply_kernel(kernel) {
-				self.rewind_to_pos(output_pos, kernel_pos, height)?;
+				self.rewind_to_pos(output_pos, kernel_pos, rewind_to_height)?;
 				return Err(e);
 			}
 		}
@@ -474,13 +476,13 @@ impl<'a> Extension<'a> {
 		let mut height = height;
 		let mut valid_txs = vec![];
 		if let Some(tx) = pre_tx {
-			height += 1;
 			self.apply_raw_tx(&tx, height)?;
+			height += 1;
 		}
 		for tx in txs {
-			height += 1;
 			if self.apply_raw_tx(&tx, height).is_ok() {
 				valid_txs.push(tx);
+				height += 1;
 			}
 		}
 		Ok(valid_txs)
@@ -771,35 +773,6 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	/// The real magicking: the sum of all kernel excess should equal the sum
-	/// of all output commitments, minus the total supply.
-	pub fn validate_sums(&self, header: &BlockHeader) -> Result<((Commitment, Commitment)), Error> {
-		let now = Instant::now();
-
-		// Treat the total "supply" as one huge overage that needs to be accounted for.
-		// If we have a supply of 6,000 grin then we should
-		// have a corresponding 6,000 grin in unspent outputs.
-		let supply = ((header.height * REWARD) as i64).checked_neg().unwrap_or(0);
-		let output_sum = self.sum_commitments(supply, None)?;
-
-		let (kernel_sum, kernel_sum_plus_offset) =
-			self.sum_kernel_excesses(&header.total_kernel_offset, None)?;
-
-		if output_sum != kernel_sum_plus_offset {
-			return Err(Error::InvalidTxHashSet(
-				"Differing Output commitment and kernel excess sums.".to_owned(),
-			));
-		}
-
-		debug!(
-			LOGGER,
-			"txhashset: validated sums, took (total) {}s",
-			now.elapsed().as_secs(),
-		);
-
-		Ok((output_sum, kernel_sum))
-	}
-
 	/// Validate the txhashset state against the provided block header.
 	pub fn validate(
 		&mut self,
@@ -814,13 +787,21 @@ impl<'a> Extension<'a> {
 			return Ok((zero_commit.clone(), zero_commit.clone()));
 		}
 
-		let (output_sum, kernel_sum) = self.validate_sums(header)?;
+		// The real magicking happens here.
+		// Sum of kernel excesses should equal sum of
+		// unspent outputs minus total supply.
+		let (output_sum, kernel_sum) = self.verify_kernel_sums(
+			header.total_overage(),
+			header.total_kernel_offset(),
+			None,
+			None,
+		)?;
 
-		// this is a relatively expensive verification step
+		// This is an expensive verification step.
 		self.verify_kernel_signatures()?;
 
-		// verify the rangeproof for each output in the sum above
-		// this is an expensive operation (only verified if requested)
+		// Verify the rangeproof for each output in the sum above.
+		// This is an expensive verification step (skip for faster verification).
 		if !skip_rproofs {
 			self.verify_rangeproofs()?;
 		}

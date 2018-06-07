@@ -335,8 +335,9 @@ where
 			let record_len = T::len() as u64;
 
 			let off_to_rm = map_vec!(leaf_pos_to_rm, |pos| {
-				let shift = self.pruned_nodes.get_leaf_shift(*pos);
-				(pmmr::n_leaves(pos - shift.unwrap()) - 1) * record_len
+				let flat_pos = pmmr::n_leaves(*pos);
+				let shift = self.pruned_nodes.get_leaf_shift(*pos).unwrap();
+				(flat_pos - 1 - shift) * record_len
 			});
 
 			self.data_file.save_prune(
@@ -352,6 +353,8 @@ where
 			for &pos in &rm_pre_cutoff {
 				self.pruned_nodes.add(pos);
 			}
+			// TODO - we can get rid of leaves in the prunelist here (and things still work)
+			// self.pruned_nodes.pruned_nodes.retain(|&x| !pmmr::is_leaf(x));
 
 			write_vec(
 				format!("{}/{}", self.data_dir, PMMR_PRUNED_FILE),

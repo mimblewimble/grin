@@ -268,21 +268,21 @@ impl LocalServerContainer {
 			//panic!("Error initting wallet seed: {}", e);
 		}
 
-		let wallet_seed = wallet::WalletSeed::from_file(&self.wallet_config)
-			.expect("Failed to read wallet seed file.");
-
-		let keychain = wallet_seed
-			.derive_keychain("grin_test")
-			.expect("Failed to derive keychain from seed file and passphrase.");
-
-		let wallet = FileWallet::new(self.wallet_config.clone(), keychain).unwrap_or_else(|e| {
+		let wallet = FileWallet::new(self.wallet_config.clone(), "").unwrap_or_else(|e| {
 			panic!(
 				"Error creating wallet: {:?} Config: {:?}",
 				e, self.wallet_config
 			)
 		});
 
-		wallet::server::start_rest_apis(wallet, &self.wallet_config.api_listen_addr());
+		wallet::controller::foreign_listener(wallet, &self.wallet_config.api_listen_addr())
+			.unwrap_or_else(|e| {
+				panic!(
+					"Error creating wallet listener: {:?} Config: {:?}",
+					e, self.wallet_config
+				)
+			});
+
 		self.wallet_is_running = true;
 	}
 
@@ -299,11 +299,12 @@ impl LocalServerContainer {
 		wallet_seed: &wallet::WalletSeed,
 	) -> wallet::WalletInfo {
 		let keychain = wallet_seed
-			.derive_keychain("grin_test")
+			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
-		let mut wallet = FileWallet::new(config.clone(), keychain)
+		let mut wallet = FileWallet::new(config.clone(), "")
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
-		wallet::libwallet::updater::retrieve_info(&mut wallet).unwrap()
+		wallet.keychain = Some(keychain);
+		wallet::libwallet::internal::updater::retrieve_info(&mut wallet).unwrap()
 	}
 
 	pub fn send_amount_to(
@@ -321,31 +322,36 @@ impl LocalServerContainer {
 			wallet::WalletSeed::from_file(config).expect("Failed to read wallet seed file.");
 
 		let keychain = wallet_seed
-			.derive_keychain("grin_test")
+			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let max_outputs = 500;
-		let mut wallet = FileWallet::new(config.clone(), keychain)
+
+		let mut wallet = FileWallet::new(config.clone(), "")
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
-		let result = wallet::issue_send_tx(
-			&mut wallet,
-			amount,
-			minimum_confirmations,
-			dest.to_string(),
-			max_outputs,
-			selection_strategy == "all",
-			fluff,
-		);
-		match result {
-			Ok(_) => println!(
-				"Tx sent: {} grin to {} (strategy '{}')",
-				core::core::amount_to_hr_string(amount),
-				dest,
-				selection_strategy,
-			),
-			Err(e) => {
-				println!("Tx not sent to {}: {:?}", dest, e);
-			}
-		};
+		wallet.keychain = Some(keychain);
+		let _ =
+			wallet::controller::owner_single_use(&mut wallet, |api| {
+				let result = api.issue_send_tx(
+					amount,
+					minimum_confirmations,
+					dest,
+					max_outputs,
+					selection_strategy == "all",
+					fluff,
+				);
+				match result {
+					Ok(_) => println!(
+						"Tx sent: {} grin to {} (strategy '{}')",
+						core::core::amount_to_hr_string(amount),
+						dest,
+						selection_strategy,
+					),
+					Err(e) => {
+						println!("Tx not sent to {}: {:?}", dest, e);
+					}
+				};
+				Ok(())
+			}).unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 	}
 
 	/// Stops the running wallet server
@@ -579,6 +585,7 @@ pub fn stratum_config() -> servers::common::types::StratumServerConfig {
 		enable_stratum_server: Some(true),
 		stratum_server_addr: Some(String::from("127.0.0.1:13416")),
 		attempt_time_per_block: 60,
+		minimum_share_difficulty: 1,
 		wallet_listener_url: String::from("http://127.0.0.1:13415"),
 		burn_reward: false,
 	}

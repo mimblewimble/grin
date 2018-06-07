@@ -36,6 +36,25 @@ pub struct ExtKeychain {
 }
 
 impl Keychain for ExtKeychain {
+	fn from_seed(seed: &[u8]) -> Result<ExtKeychain, Error> {
+		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+		let extkey = extkey::ExtendedKey::from_seed(&secp, seed)?;
+		let keychain = ExtKeychain {
+			secp: secp,
+			extkey: extkey,
+			key_overrides: HashMap::new(),
+			key_derivation_cache: Arc::new(RwLock::new(HashMap::new())),
+		};
+		Ok(keychain)
+	}
+
+	/// For testing - probably not a good idea to use outside of tests.
+	fn from_random_seed() -> Result<ExtKeychain, Error> {
+		let seed: String = thread_rng().gen_ascii_chars().take(16).collect();
+		let seed = blake2::blake2b::blake2b(32, &[], seed.as_bytes());
+		ExtKeychain::from_seed(seed.as_bytes())
+	}
+
 	fn root_key_id(&self) -> Identifier {
 		self.extkey.root_key_id.clone()
 	}
@@ -134,25 +153,6 @@ impl ExtKeychain {
 			key_overrides: key_overrides,
 			..keychain.clone()
 		}
-	}
-
-	pub fn from_seed(seed: &[u8]) -> Result<ExtKeychain, Error> {
-		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
-		let extkey = extkey::ExtendedKey::from_seed(&secp, seed)?;
-		let keychain = ExtKeychain {
-			secp: secp,
-			extkey: extkey,
-			key_overrides: HashMap::new(),
-			key_derivation_cache: Arc::new(RwLock::new(HashMap::new())),
-		};
-		Ok(keychain)
-	}
-
-	/// For testing - probably not a good idea to use outside of tests.
-	pub fn from_random_seed() -> Result<ExtKeychain, Error> {
-		let seed: String = thread_rng().gen_ascii_chars().take(16).collect();
-		let seed = blake2::blake2b::blake2b(32, &[], seed.as_bytes());
-		ExtKeychain::from_seed(seed.as_bytes())
 	}
 
 	fn derived_child_key(&self, key_id: &Identifier) -> Result<extkey::ChildKey, Error> {

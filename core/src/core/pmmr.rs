@@ -93,10 +93,10 @@ where
 	fn dump_stats(&self);
 }
 
-/// Maixmum peaks for a Merkle proof
+/// Maximum peaks for a Merkle proof
 pub const MAX_PEAKS: u64 = 100;
 
-/// Maixmum path for a Merkle proof
+/// Maximum path for a Merkle proof
 pub const MAX_PATH: u64 = 100;
 
 /// A Merkle proof.
@@ -1330,9 +1330,9 @@ mod test {
 
 	impl Writeable for TestElem {
 		fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-			try!(writer.write_u32(self.0[0]));
-			try!(writer.write_u32(self.0[1]));
-			try!(writer.write_u32(self.0[2]));
+			writer.write_u32(self.0[0])?;
+			writer.write_u32(self.0[1])?;
+			writer.write_u32(self.0[2])?;
 			writer.write_u32(self.0[3])
 		}
 	}

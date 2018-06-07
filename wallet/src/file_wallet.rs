@@ -26,13 +26,17 @@ use tokio_core::reactor;
 use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;
 
-use failure::{self, ResultExt};
+use failure::ResultExt;
 
 use keychain::{self, Keychain};
 use util;
 use util::LOGGER;
+use util::secp::pedersen;
 
 use error::{Error, ErrorKind};
+
+use client;
+use libtx::slate::Slate;
 use libwallet;
 use libwallet::types::*;
 
@@ -99,9 +103,9 @@ impl WalletSeed {
 		util::to_hex(self.0.to_vec())
 	}
 
-	pub fn derive_keychain(&self, password: &str) -> Result<keychain::ExtKeychain, Error> {
+	pub fn derive_keychain<K: Keychain>(&self, password: &str) -> Result<K, Error> {
 		let seed = blake2::blake2b::blake2b(64, &password.as_bytes(), &self.0);
-		let result = keychain::ExtKeychain::from_seed(seed.as_bytes())?;
+		let result = K::from_seed(seed.as_bytes())?;
 		Ok(result)
 	}
 
@@ -166,9 +170,11 @@ impl WalletSeed {
 #[derive(Debug, Clone)]
 pub struct FileWallet<K> {
 	/// Keychain
-	pub keychain: K,
+	pub keychain: Option<K>,
 	/// Configuration
 	pub config: WalletConfig,
+	/// passphrase: TODO better ways of dealing with this other than storing
+	passphrase: String,
 	/// List of outputs
 	pub outputs: HashMap<String, OutputData>,
 	/// Data file path
@@ -183,14 +189,28 @@ impl<K> WalletBackend<K> for FileWallet<K>
 where
 	K: Keychain,
 {
-	/// Return the keychain being used
-	fn keychain(&mut self) -> &mut K {
-		&mut self.keychain
+	/// Initialise with whatever stored credentials we have
+	fn open_with_credentials(&mut self) -> Result<(), libwallet::Error> {
+		let wallet_seed = WalletSeed::from_file(&self.config)
+			.context(libwallet::ErrorKind::CallbackImpl("Error opening wallet"))?;
+		let keychain = wallet_seed.derive_keychain(&self.passphrase);
+		self.keychain = Some(keychain.context(
+			libwallet::ErrorKind::CallbackImpl("Error deriving keychain"),
+		)?);
+		// Just blow up password for now after it's been used
+		self.passphrase = String::from("");
+		Ok(())
 	}
 
-	/// Return URL for check node
-	fn node_url(&self) -> &str {
-		&self.config.check_node_api_http_addr
+	/// Close wallet and remove any stored credentials (TBD)
+	fn close(&mut self) -> Result<(), libwallet::Error> {
+		self.keychain = None;
+		Ok(())
+	}
+
+	/// Return the keychain being used
+	fn keychain(&mut self) -> &mut K {
+		self.keychain.as_mut().unwrap()
 	}
 
 	/// Return the outputs directly
@@ -374,6 +394,87 @@ where
 		eligible.reverse();
 		eligible.iter().take(max_outputs).cloned().collect()
 	}
+
+	/// Restore wallet contents
+	fn restore(&mut self) -> Result<(), libwallet::Error> {
+		libwallet::internal::restore::restore(self).context(libwallet::ErrorKind::Restore)?;
+		Ok(())
+	}
+}
+
+impl<K> WalletClient for FileWallet<K> {
+	/// Return URL for check node
+	fn node_url(&self) -> &str {
+		&self.config.check_node_api_http_addr
+	}
+
+	/// Call the wallet API to create a coinbase transaction
+	fn create_coinbase(
+		&self,
+		dest: &str,
+		block_fees: &BlockFees,
+	) -> Result<CbData, libwallet::Error> {
+		let res =
+			client::create_coinbase(dest, block_fees).context(libwallet::ErrorKind::WalletComms)?;
+		Ok(res)
+	}
+
+	/// Send a transaction slate to another listening wallet and return result
+	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+		let res = client::send_tx_slate(dest, slate).context(libwallet::ErrorKind::WalletComms)?;
+		Ok(res)
+	}
+
+	/// Posts a tranaction to a grin node
+	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), libwallet::Error> {
+		let res = client::post_tx(dest, tx, fluff).context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieves the current tip from the specified grin node
+	fn get_chain_height(&self, addr: &str) -> Result<u64, libwallet::Error> {
+		let res = client::get_chain_height(addr).context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieve a list of outputs from the specified grin node
+	/// need "by_height" and "by_id" variants
+	fn get_outputs_from_node(
+		&self,
+		addr: &str,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<HashMap<pedersen::Commitment, String>, libwallet::Error> {
+		let res = client::get_outputs_from_node(addr, wallet_outputs)
+			.context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// Get any missing block hashes from node
+	fn get_missing_block_hashes_from_node(
+		&self,
+		addr: &str,
+		height: u64,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<
+		(
+			HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
+			HashMap<pedersen::Commitment, MerkleProofWrapper>,
+		),
+		libwallet::Error,
+	> {
+		let res = client::get_missing_block_hashes_from_node(addr, height, wallet_outputs)
+			.context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieve merkle proof for a commit from a node
+	fn get_merkle_proof_for_commit(
+		&self,
+		addr: &str,
+		commit: &str,
+	) -> Result<MerkleProofWrapper, libwallet::Error> {
+		Err(libwallet::ErrorKind::GenericError("Not Implemented"))?
+	}
 }
 
 impl<K> FileWallet<K>
@@ -381,10 +482,11 @@ where
 	K: Keychain,
 {
 	/// Create a new FileWallet instance
-	pub fn new(config: WalletConfig, keychain: K) -> Result<Self, Error> {
+	pub fn new(config: WalletConfig, passphrase: &str) -> Result<Self, Error> {
 		let mut retval = FileWallet {
-			keychain: keychain,
+			keychain: None,
 			config: config.clone(),
+			passphrase: String::from(passphrase),
 			outputs: HashMap::new(),
 			data_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, DAT_FILE),
 			backup_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, BCK_FILE),
@@ -394,12 +496,6 @@ where
 			Ok(_) => Ok(retval),
 			Err(e) => Err(e),
 		}
-	}
-
-	/// Restore wallet contents
-	pub fn restore(&mut self) -> Result<(), failure::Error> {
-		libwallet::restore::restore(self).context(libwallet::ErrorKind::Restore)?;
-		Ok(())
 	}
 
 	/// Read the wallet data or create brand files if the data

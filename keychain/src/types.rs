@@ -279,6 +279,8 @@ impl BlindSum {
 }
 
 pub trait Keychain: Sync + Send + Clone {
+	fn from_seed(seed: &[u8]) -> Result<Self, Error>;
+	fn from_random_seed() -> Result<Self, Error>;
 	fn root_key_id(&self) -> Identifier;
 	fn derive_key_id(&self, derivation: u32) -> Result<Identifier, Error>;
 	fn derived_key(&self, key_id: &Identifier) -> Result<SecretKey, Error>;

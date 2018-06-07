@@ -23,6 +23,7 @@ use std::time::{Duration, Instant};
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
+use core::core::Committed;
 use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;
@@ -30,8 +31,8 @@ use pipe;
 use store;
 use txhashset;
 use types::*;
-use util::LOGGER;
 use util::secp::pedersen::{Commitment, RangeProof};
+use util::LOGGER;
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -200,7 +201,14 @@ impl Chain {
 								header.height,
 								header.hash()
 							);
-							let (output_sum, kernel_sum) = extension.validate_sums(&header)?;
+
+							let (output_sum, kernel_sum) = extension.verify_kernel_sums(
+								header.total_overage(),
+								header.total_kernel_offset(),
+								None,
+								None,
+							)?;
+
 							store.save_block_sums(
 								&header.hash(),
 								&BlockSums {
@@ -460,23 +468,23 @@ impl Chain {
 		txhashset.is_unspent(output_ref)
 	}
 
+	fn next_block_height(&self) -> Result<u64, Error> {
+		let bh = self.head_header()?;
+		Ok(bh.height + 1)
+	}
+
 	/// Validate a vector of "raw" transactions against the current chain state.
 	pub fn validate_raw_txs(
 		&self,
 		txs: Vec<Transaction>,
 		pre_tx: Option<Transaction>,
 	) -> Result<Vec<Transaction>, Error> {
-		let bh = self.head_header()?;
+		let height = self.next_block_height()?;
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset::extending_readonly(&mut txhashset, |extension| {
-			let valid_txs = extension.validate_raw_txs(txs, pre_tx, bh.height)?;
+			let valid_txs = extension.validate_raw_txs(txs, pre_tx, height)?;
 			Ok(valid_txs)
 		})
-	}
-
-	fn next_block_height(&self) -> Result<u64, Error> {
-		let bh = self.head_header()?;
-		Ok(bh.height + 1)
 	}
 
 	/// Verify we are not attempting to spend a coinbase output

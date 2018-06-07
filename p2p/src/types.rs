@@ -90,23 +90,6 @@ impl<T> From<mpsc::TrySendError<T>> for Error {
 	}
 }
 
-/// Configuration for "Dandelion".
-/// Note: shared between p2p and pool.
-/// Look in top-level server config for info on configuring these parameters.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DandelionConfig {
-	/// Choose new Dandelion relay peer every n secs.
-	pub relay_secs: u64,
-	/// Dandelion embargo, fluff and broadcast tx if not seen on network before
-	/// embargo expires.
-	pub embargo_secs: u64,
-	/// Dandelion patience timer, fluff/stem processing runs every n secs.
-	/// Tx aggregation happens on stem txs received within this window.
-	pub patience_secs: u64,
-	/// Dandelion stem probability (stem 90% of the time, fluff 10% etc.)
-	pub stem_probability: usize,
-}
-
 /// Configuration for the peer-to-peer server.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct P2PConfig {

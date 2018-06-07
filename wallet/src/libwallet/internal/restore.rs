@@ -13,6 +13,7 @@
 // limitations under the License.
 //! Functions to restore a wallet's outputs from just the master seed
 
+/// TODO: Remove api
 use api;
 use byteorder::{BigEndian, ByteOrder};
 use core::core::transaction::ProofMessageElements;
@@ -25,24 +26,6 @@ use libwallet::types::*;
 use util;
 use util::LOGGER;
 use util::secp::pedersen;
-
-fn get_chain_height(node_addr: &str) -> Result<u64, Error> {
-	let url = format!("{}/v1/chain", node_addr);
-
-	match api::client::get::<api::Tip>(url.as_str()) {
-		Ok(tip) => Ok(tip.height),
-		Err(e) => {
-			// if we got anything other than 200 back from server, bye
-			error!(
-				LOGGER,
-				"get_chain_height: Restore failed... unable to contact API {}. Error: {}",
-				node_addr,
-				e
-			);
-			Err(e.context(ErrorKind::Node).into())
-		}
-	}
-}
 
 fn get_merkle_proof_for_commit(node_addr: &str, commit: &str) -> Result<MerkleProofWrapper, Error> {
 	let url = format!("{}/v1/txhashset/merkleproof?id={}", node_addr, commit);
@@ -70,7 +53,7 @@ fn coinbase_status(output: &api::OutputPrintable) -> bool {
 
 fn outputs_batch<T, K>(wallet: &T, start_height: u64, max: u64) -> Result<api::OutputListing, Error>
 where
-	T: WalletBackend<K>,
+	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
 	let query_param = format!("start_index={}&max={}", start_height, max);
@@ -108,7 +91,7 @@ fn find_outputs_with_key<T, K>(
 	Option<MerkleProofWrapper>,
 )>
 where
-	T: WalletBackend<K>,
+	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
 	let mut wallet_outputs: Vec<(
@@ -125,7 +108,7 @@ where
 	let max_derivations = 1_000_000;
 
 	info!(LOGGER, "Scanning {} outputs", outputs.len(),);
-	let current_chain_height = get_chain_height(wallet.node_url()).unwrap();
+	let current_chain_height = wallet.get_chain_height(wallet.node_url()).unwrap();
 
 	// skey doesn't matter in this case
 	let skey = wallet.keychain().derive_key_id(1).unwrap();
@@ -249,7 +232,7 @@ where
 /// Restore a wallet
 pub fn restore<T, K>(wallet: &mut T) -> Result<(), Error>
 where
-	T: WalletBackend<K>,
+	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
 	// Don't proceed if wallet.dat has anything in it

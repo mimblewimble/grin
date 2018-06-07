@@ -12,49 +12,67 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use api;
-use client;
-use core::ser;
-use error::{Error, ErrorKind};
-use failure::{self, ResultExt};
+//! Transaction building functions
+
+use core::core::Transaction;
 use keychain::{Identifier, Keychain};
+use libtx::slate::Slate;
 use libtx::{build, tx_fee};
-use libwallet::types::WalletBackend;
-use libwallet::{selection, updater};
-use receiver::TxWrapper;
-use util;
+use libwallet::internal::{selection, sigcontext, updater};
+use libwallet::types::{WalletBackend, WalletClient};
+use libwallet::{Error, ErrorKind};
 use util::LOGGER;
 
-/// Issue a new transaction to the provided sender by spending some of our
-/// wallet
-/// Outputs. The destination can be "stdout" (for command line) (currently
-/// disabled) or a URL to the recipients wallet receiver (to be implemented).
-pub fn issue_send_tx<T, K>(
-	wallet: &mut T,
-	amount: u64,
-	minimum_confirmations: u64,
-	dest: String,
-	max_outputs: usize,
-	selection_strategy_is_use_all: bool,
-	fluff: bool,
-) -> Result<(), failure::Error>
+/// Receive a tranaction, modifying the slate accordingly (which can then be
+/// sent back to sender for posting)
+pub fn receive_tx<T, K>(wallet: &mut T, slate: &mut Slate) -> Result<(), Error>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
 {
-	// TODO: Stdout option, probably in a separate implementation
-	if &dest[..4] != "http" {
-		panic!(
-			"dest formatted as {} but send -d expected stdout or http://IP:port",
-			dest
-		);
-	}
+	// create an output using the amount in the slate
+	let (_, mut context, receiver_create_fn) =
+		selection::build_recipient_output_with_slate(wallet, slate).unwrap();
 
-	updater::refresh_outputs(wallet)?;
+	// fill public keys
+	let _ = slate.fill_round_1(
+		wallet.keychain(),
+		&mut context.sec_key,
+		&context.sec_nonce,
+		1,
+	)?;
 
+	// perform partial sig
+	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)?;
+
+	// Save output in wallet
+	let _ = receiver_create_fn(wallet);
+
+	Ok(())
+}
+
+/// Issue a new transaction to the provided sender by spending some of our
+/// wallet
+pub fn create_send_tx<T, K>(
+	wallet: &mut T,
+	amount: u64,
+	minimum_confirmations: u64,
+	max_outputs: usize,
+	selection_strategy_is_use_all: bool,
+) -> Result<
+	(
+		Slate,
+		sigcontext::Context,
+		impl FnOnce(&mut T) -> Result<(), Error>,
+	),
+	Error,
+> 
+where
+	T: WalletBackend<K> + WalletClient,
+	K: Keychain,
+{
 	// Get lock height
-	let chain_tip = updater::get_tip_from_node(wallet.node_url())?;
-	let current_height = chain_tip.height;
+	let current_height = wallet.get_chain_height(wallet.node_url())?;
 	// ensure outputs we're selecting are up to date
 	updater::refresh_outputs(wallet)?;
 
@@ -88,56 +106,44 @@ where
 		0,
 	)?;
 
-	let url = format!("{}/v1/receive/transaction", &dest);
-	debug!(LOGGER, "Posting partial transaction to {}", url);
-	let mut slate = match client::send_slate(&url, &slate, fluff) {
-		Ok(s) => s,
-		Err(e) => {
-			error!(
-				LOGGER,
-				"Communication with receiver failed on SenderInitiation send. Aborting transaction"
-			);
-			return Err(e)?;
-		}
-	};
-
-	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 0)?;
-
-	// Final transaction can be built by anyone at this stage
-	slate.finalize(wallet.keychain())?;
-
-	// So let's post it
-	let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
-	let url;
-	if fluff {
-		url = format!("{}/v1/pool/push?fluff", wallet.node_url(),);
-	} else {
-		url = format!("{}/v1/pool/push", wallet.node_url());
-	}
-	api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
-
-	// All good so, lock our inputs
-	sender_lock_fn(wallet)?;
-	Ok(())
+	Ok((slate, context, sender_lock_fn))
 }
 
-pub fn issue_burn_tx<T, K>(
+/// Complete a transaction as the sender
+pub fn complete_tx<T, K>(
 	wallet: &mut T,
-	amount: u64,
-	minimum_confirmations: u64,
-	max_outputs: usize,
+	slate: &mut Slate,
+	context: &sigcontext::Context,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
 {
+	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 0)?;
+	// Final transaction can be built by anyone at this stage
+	let res = slate.finalize(wallet.keychain());
+	if let Err(e) = res {
+		Err(ErrorKind::LibTX(e.kind()))?
+	}
+	Ok(())
+}
+
+/// Issue a burn tx
+pub fn issue_burn_tx<T, K>(
+	wallet: &mut T,
+	amount: u64,
+	minimum_confirmations: u64,
+	max_outputs: usize,
+) -> Result<Transaction, Error>
+where
+	T: WalletBackend<K> + WalletClient,
+	K: Keychain,
+{
 	// TODO
-	// let keychain = &Keychain::burn_enabled(wallet.keychain(),
-	// &Identifier::zero());
+	// let keychain = &Keychain::burn_enabled(wallet.keychain(), &Identifier::zero());
 	let keychain = wallet.keychain().clone();
 
-	let chain_tip = updater::get_tip_from_node(wallet.node_url())?;
-	let current_height = chain_tip.height;
+	let current_height = wallet.get_chain_height(wallet.node_url())?;
 
 	let _ = updater::refresh_outputs(wallet);
 
@@ -166,12 +172,7 @@ where
 	// finalize the burn transaction and send
 	let tx_burn = build::transaction(parts, &keychain)?;
 	tx_burn.validate()?;
-
-	let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
-	let url = format!("{}/v1/pool/push", wallet.node_url());
-	let _: () =
-		api::client::post(url.as_str(), &TxWrapper { tx_hex: tx_hex }).context(ErrorKind::Node)?;
-	Ok(())
+	Ok(tx_burn)
 }
 
 #[cfg(test)]

@@ -22,7 +22,7 @@ use time::now_utc;
 
 use core::core::hash::Hashed;
 use core::core::transaction;
-use p2p::DandelionConfig;
+use pool::DandelionConfig;
 use pool::{BlockChain, PoolEntryState, PoolError, TransactionPool, TxSource};
 use util::LOGGER;
 
@@ -52,7 +52,7 @@ pub fn monitor_transactions<T>(
 				}
 
 				// This is the patience timer, we loop every n secs.
-				let patience_secs = dandelion_config.patience_secs;
+				let patience_secs = dandelion_config.patience_secs.unwrap();
 				thread::sleep(Duration::from_secs(patience_secs));
 
 				let tx_pool = tx_pool.clone();
@@ -185,7 +185,7 @@ where
 
 		for x in &mut fresh_entries.iter_mut() {
 			let random = rng.gen_range(0, 101);
-			if random <= dandelion_config.stem_probability {
+			if random <= dandelion_config.stem_probability.unwrap() {
 				x.state = PoolEntryState::ToStem;
 			} else {
 				x.state = PoolEntryState::ToFluff;
@@ -203,7 +203,7 @@ where
 	T: BlockChain + Send + Sync + 'static,
 {
 	let now = now_utc().to_timespec().sec;
-	let embargo_sec = dandelion_config.embargo_secs + rand::thread_rng().gen_range(0, 31);
+	let embargo_sec = dandelion_config.embargo_secs.unwrap() + rand::thread_rng().gen_range(0, 31);
 	let cutoff = now - embargo_sec as i64;
 
 	let mut expired_entries = vec![];

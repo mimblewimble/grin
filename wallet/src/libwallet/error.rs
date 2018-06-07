@@ -74,7 +74,7 @@ pub enum ErrorKind {
 	Secp,
 
 	/// Callback implementation error conversion
-	#[fail(display = "Callback Implementation error")]
+	#[fail(display = "Trait Implementation error")]
 	CallbackImpl(&'static str),
 
 	/// Callback implementation error conversion
@@ -92,6 +92,10 @@ pub enum ErrorKind {
 	/// Error when contacting a node through its API
 	#[fail(display = "Node API error")]
 	Node,
+
+	/// Error contacting wallet API
+	#[fail(display = "Wallet communication error")]
+	WalletComms,
 
 	/// Error originating from hyper.
 	#[fail(display = "Hyper error")]

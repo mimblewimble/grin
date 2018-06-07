@@ -15,6 +15,7 @@
 //! Mining Stratum Server
 use bufstream::BufStream;
 use serde_json;
+use std::cmp;
 use std::error::Error;
 use std::io::BufRead;
 use std::io::{ErrorKind, Write};
@@ -25,7 +26,6 @@ use std::thread;
 use std::time::Duration;
 use std::time::SystemTime;
 use time;
-use util::LOGGER;
 
 use chain;
 use common::adapters::PoolToChainAdapter;
@@ -35,6 +35,7 @@ use core::core::{Block, BlockHeader};
 use keychain;
 use mining::mine_block;
 use pool;
+use util::LOGGER;
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
@@ -231,6 +232,7 @@ pub struct StratumServer {
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	current_block: Block,
 	current_difficulty: u64,
+	minimum_share_difficulty: u64,
 	current_key_id: Option<keychain::Identifier>,
 	workers: Arc<Mutex<Vec<Worker>>>,
 	currently_syncing: Arc<AtomicBool>,
@@ -245,6 +247,7 @@ impl StratumServer {
 	) -> StratumServer {
 		StratumServer {
 			id: String::from("StratumServer"),
+			minimum_share_difficulty: config.minimum_share_difficulty,
 			config: config,
 			chain: chain_ref,
 			tx_pool: tx_pool,
@@ -264,7 +267,7 @@ impl StratumServer {
 		let pre = pre_pow_writer.as_hex_string(false);
 		let job_template = JobTemplate {
 			height: bh.height,
-			difficulty: self.current_difficulty,
+			difficulty: self.minimum_share_difficulty,
 			pre_pow: pre,
 		};
 		return job_template;
@@ -421,7 +424,9 @@ impl StratumServer {
 
 	// Handle SUBMIT message
 	//  params contains a solved block header
-	//  we are expecting real solutions at the full difficulty.
+	// We accept and log valid shares of all difficulty above configured minimum
+	// Accepted shares that are full solutions will also be submitted to the
+	// network
 	fn handle_submit(
 		&self,
 		params: Option<String>,
@@ -442,26 +447,69 @@ impl StratumServer {
 		};
 
 		let mut b: Block;
+		let share_difficulty: u64;
 		if submit_params.height == self.current_block.header.height {
 			// Reconstruct the block header with this nonce and pow added
 			b = self.current_block.clone();
 			b.header.nonce = submit_params.nonce;
 			b.header.pow.nonces = submit_params.pow;
-			let res = self.chain.process_block(b.clone(), chain::Options::MINE);
-			if let Err(e) = res {
+			// Get share difficulty
+			share_difficulty = b.header.pow.to_difficulty().to_num();
+			// If the difficulty is too low its an error
+			if share_difficulty < self.minimum_share_difficulty {
+				// Return error status
 				error!(
 					LOGGER,
-					"(Server ID: {}) Error validating mined block: {:?}", self.id, e
+					"(Server ID: {}) Share rejected due to low difficulty: {}/{}",
+					self.id,
+					share_difficulty,
+					self.minimum_share_difficulty,
 				);
 				worker_stats.num_rejected += 1;
-				let e = r#"{"code": -1, "message": "Solution validation failed"}"#;
+				let e = r#"{"code": -1, "message": "Share rejected due to low difficulty"}"#;
 				let err = e.to_string();
 				return (err, true);
 			}
+			// If the difficulty is high enough, submit it (which also validates it)
+			if share_difficulty >= self.current_difficulty {
+				let res = self.chain.process_block(b.clone(), chain::Options::MINE);
+				if let Err(e) = res {
+					// Return error status
+					error!(
+						LOGGER,
+						"(Server ID: {}) Failed to validate solution at height {}: {:?}",
+						self.id,
+						submit_params.height,
+						e
+					);
+					worker_stats.num_rejected += 1;
+					let e = r#"{"code": -1, "message": "Failed to validate solution"}"#;
+					let err = e.to_string();
+					return (err, true);
+				}
+			// Success case falls through to be logged
+			} else {
+				// Do some validation but dont submit
+				if self.current_block.header.pre_pow_hash() != b.header.pre_pow_hash() {
+					// Return error status
+					error!(
+						LOGGER,
+						"(Server ID: {}) Failed to validate share at height {} with nonce {}",
+						self.id,
+						submit_params.height,
+						b.header.nonce
+					);
+					worker_stats.num_rejected += 1;
+					let e = r#"{"code": -1, "message": "Failed to validate share"}"#;
+					let err = e.to_string();
+					return (err, true);
+				}
+			}
 		} else {
-			warn!(
+			// Return error status
+			error!(
 				LOGGER,
-				"(Server ID: {}) Found POW for block at height: {} -  but too late",
+				"(Server ID: {}) Share at height {} submitted too late",
 				self.id,
 				submit_params.height
 			);
@@ -470,17 +518,20 @@ impl StratumServer {
 			let err = e.to_string();
 			return (err, true);
 		}
+		// Log this as a valid share
 		let submitted_by = match worker.login.clone() {
 			None => worker.id.to_string(),
 			Some(login) => login.clone(),
 		};
 		info!(
 			LOGGER,
-			"(Server ID: {}) Found POW for block with hash {} at height {} using nonce {} submitted by worker {}",
+			"(Server ID: {}) Got share for block: hash {}, height {}, nonce {}, difficulty {}/{}, submitted by {}",
 			self.id,
 			b.hash(),
 			b.header.height,
 			b.header.nonce,
+			share_difficulty,
+			self.current_difficulty,
 			submitted_by,
 		);
 		worker_stats.num_accepted += 1;
@@ -544,6 +595,8 @@ impl StratumServer {
 		let job_request_json = serde_json::to_string(&job_request).unwrap();
 
 		// Push the new block to all connected clients
+		// NOTE: We do not give a uniqe nonce (should we?) so miners need
+		//       to choose one for themselves
 		let mut workers_l = self.workers.lock().unwrap();
 		for num in 0..workers_l.len() {
 			workers_l[num].write_message(job_request_json.clone());
@@ -557,7 +610,6 @@ impl StratumServer {
 	/// be submitted.
 	pub fn run_loop(
 		&mut self,
-		miner_config: StratumServerConfig,
 		stratum_stats: Arc<RwLock<StratumStats>>,
 		cuckoo_size: u32,
 		proof_size: usize,
@@ -574,7 +626,7 @@ impl StratumServer {
 		self.currently_syncing = currently_syncing;
 
 		// "globals" for this function
-		let attempt_time_per_block = miner_config.attempt_time_per_block;
+		let attempt_time_per_block = self.config.attempt_time_per_block;
 		let mut deadline: i64 = 0;
 		// to prevent the wallet from generating a new HD key derivation for each
 		// iteration, we keep the returned derivation to provide it back when
@@ -584,7 +636,7 @@ impl StratumServer {
 		let mut head = self.chain.head().unwrap();
 		let mut current_hash = head.prev_block_h;
 		let mut latest_hash;
-		let listen_addr = miner_config.stratum_server_addr.clone().unwrap();
+		let listen_addr = self.config.stratum_server_addr.clone().unwrap();
 
 		// Start a thread to accept new worker connections
 		let mut workers_th = self.workers.clone();
@@ -604,7 +656,7 @@ impl StratumServer {
 		warn!(
 			LOGGER,
 			"Stratum server started on {}",
-			miner_config.stratum_server_addr.unwrap()
+			self.config.stratum_server_addr.clone().unwrap()
 		);
 
 		// Main Loop
@@ -646,6 +698,11 @@ impl StratumServer {
 					.to_num();
 				self.current_key_id = block_fees.key_id();
 				current_hash = latest_hash;
+				// set the minimum acceptable share difficulty for this block
+				self.minimum_share_difficulty = cmp::min(
+					self.config.minimum_share_difficulty,
+					self.current_difficulty,
+				);
 				// set a new deadline for rebuilding with fresh transactions
 				deadline = time::get_time().sec + attempt_time_per_block as i64;
 
