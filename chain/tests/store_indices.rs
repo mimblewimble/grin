@@ -22,14 +22,14 @@ extern crate rand;
 use std::fs;
 
 use chain::{ChainStore, Tip};
-use core::core::hash::Hashed;
-use core::core::target::Difficulty;
 use core::core::Block;
 use core::core::BlockHeader;
+use core::core::hash::Hashed;
+use core::core::target::Difficulty;
 use core::global;
 use core::global::ChainTypes;
 use core::pow;
-use keychain::{Keychain, ExtKeychain};
+use keychain::{ExtKeychain, Keychain};
 
 use wallet::libtx;
 

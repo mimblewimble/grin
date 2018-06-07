@@ -34,7 +34,7 @@ use core::global;
 use core::global::ChainTypes;
 use wallet::libtx::{self, build};
 
-use keychain::{Keychain, ExtKeychain};
+use keychain::{ExtKeychain, Keychain};
 
 use core::pow;
 
@@ -359,7 +359,10 @@ fn spend_in_fork_and_compact() {
 	chain.validate(false).unwrap();
 }
 
-fn prepare_block<K>(kc: &K, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block where K: Keychain {
+fn prepare_block<K>(kc: &K, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block
+where
+	K: Keychain,
+{
 	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
 	chain.set_txhashset_roots(&mut b, false).unwrap();
 	b
@@ -371,13 +374,19 @@ fn prepare_block_tx<K>(
 	chain: &Chain,
 	diff: u64,
 	txs: Vec<&Transaction>,
-) -> Block where K: Keychain {
+) -> Block
+where
+	K: Keychain,
+{
 	let mut b = prepare_block_nosum(kc, prev, diff, txs);
 	chain.set_txhashset_roots(&mut b, false).unwrap();
 	b
 }
 
-fn prepare_fork_block<K>(kc: &K, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block where K: Keychain {
+fn prepare_fork_block<K>(kc: &K, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block
+where
+	K: Keychain,
+{
 	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
 	chain.set_txhashset_roots(&mut b, true).unwrap();
 	b
@@ -389,18 +398,19 @@ fn prepare_fork_block_tx<K>(
 	chain: &Chain,
 	diff: u64,
 	txs: Vec<&Transaction>,
-) -> Block where K: Keychain {
+) -> Block
+where
+	K: Keychain,
+{
 	let mut b = prepare_block_nosum(kc, prev, diff, txs);
 	chain.set_txhashset_roots(&mut b, true).unwrap();
 	b
 }
 
-fn prepare_block_nosum<K>(
-	kc: &K,
-	prev: &BlockHeader,
-	diff: u64,
-	txs: Vec<&Transaction>,
-) -> Block where K: Keychain {
+fn prepare_block_nosum<K>(kc: &K, prev: &BlockHeader, diff: u64, txs: Vec<&Transaction>) -> Block
+where
+	K: Keychain,
+{
 	let proof_size = global::proofsize();
 	let key_id = kc.derive_key_id(diff as u32).unwrap();
 

@@ -25,14 +25,14 @@ use std::sync::Arc;
 
 use chain::types::*;
 use core::consensus;
+use core::core::OutputIdentifier;
 use core::core::target::Difficulty;
 use core::core::transaction;
-use core::core::OutputIdentifier;
 use core::global;
 use core::global::ChainTypes;
 use wallet::libtx::build;
 
-use keychain::{Keychain, ExtKeychain};
+use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
 
 use core::pow;

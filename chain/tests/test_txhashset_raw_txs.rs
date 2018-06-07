@@ -20,15 +20,15 @@ extern crate grin_wallet as wallet;
 use std::fs;
 use std::sync::Arc;
 
+use chain::ChainStore;
 use chain::store::ChainKVStore;
 use chain::txhashset;
 use chain::txhashset::TxHashSet;
 use chain::types::Tip;
-use chain::ChainStore;
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
-use keychain::{Keychain, ExtKeychain};
+use keychain::{ExtKeychain, Keychain};
 use wallet::libtx::{build, reward};
 
 fn clean_output_dir(dir_name: &str) {
