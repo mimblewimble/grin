@@ -14,6 +14,7 @@
 
 //! Types and traits that should be provided by a wallet
 //! implementation
+
 use std::collections::HashMap;
 use std::fmt;
 
@@ -28,6 +29,8 @@ use keychain::{Identifier, Keychain};
 
 use libtx::slate::Slate;
 use libwallet::error::{Error, ErrorKind};
+
+use util::secp::pedersen;
 
 /// TODO:
 /// Wallets should implement this backend for their storage. All functions
@@ -109,7 +112,22 @@ pub trait WalletClient {
 
 	/// retrieve a list of outputs from the specified grin node
 	/// need "by_height" and "by_id" variants
-	fn get_outputs_from_node(&self) -> Result<(), Error>;
+	fn get_outputs_from_node(&self, addr: &str, wallet_outputs:Vec<pedersen::Commitment>)
+		-> Result<HashMap<pedersen::Commitment, String>, Error>;
+
+	/// Get any missing block hashes from node
+	fn get_missing_block_hashes_from_node(
+		&self,
+		addr: &str,
+		height: u64,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<
+	(
+		HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
+		HashMap<pedersen::Commitment, MerkleProofWrapper>,
+	),
+	Error,
+	>;
 
 	/// retrieve merkle proof for a commit from a node
 	fn get_merkle_proof_for_commit(

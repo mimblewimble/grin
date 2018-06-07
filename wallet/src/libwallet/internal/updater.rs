@@ -19,7 +19,6 @@ use failure::ResultExt;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
-use api;
 use core::consensus::reward;
 use core::core::{Output, TxKernel};
 use core::global;
@@ -87,6 +86,11 @@ where
 	// and a list of outputs we want to query the node for
 	let wallet_outputs = map_wallet_outputs_missing_block(wallet)?;
 
+	let wallet_output_keys = wallet_outputs
+		.keys()
+		.map(|commit| commit.clone())
+		.collect();
+
 	// nothing to do so return (otherwise we hit the api with a monster query...)
 	if wallet_outputs.is_empty() {
 		return Ok(());
@@ -98,40 +102,11 @@ where
 		wallet_outputs.len(),
 	);
 
-	let id_params: Vec<String> = wallet_outputs
-		.keys()
-		.map(|commit| format!("id={}", util::to_hex(commit.as_ref().to_vec())))
-		.collect();
-
-	let height_params = [format!("start_height={}&end_height={}", 0, height)];
-
-	let mut api_blocks: HashMap<pedersen::Commitment, api::BlockHeaderInfo> = HashMap::new();
-	let mut api_merkle_proofs: HashMap<pedersen::Commitment, MerkleProofWrapper> = HashMap::new();
-
-	// Split up into separate requests, to avoid hitting http limits
-	for mut query_chunk in id_params.chunks(1000) {
-		let url = format!(
-			"{}/v1/chain/outputs/byheight?{}",
-			wallet.node_url(),
-			[&height_params, query_chunk].concat().join("&"),
-		);
-
-		match api::client::get::<Vec<api::BlockOutputs>>(url.as_str()) {
-			Ok(blocks) => for block in blocks {
-				for out in block.outputs {
-					api_blocks.insert(out.commit, block.header.clone());
-					if let Some(merkle_proof) = out.merkle_proof {
-						let wrapper = MerkleProofWrapper(merkle_proof);
-						api_merkle_proofs.insert(out.commit, wrapper);
-					}
-				}
-			},
-			Err(e) => {
-				// if we got anything other than 200 back from server, bye
-				return Err(e).context(ErrorKind::Node)?;
-			}
-		}
-	}
+	let (api_blocks, api_merkle_proofs) = wallet.get_missing_block_hashes_from_node(
+		wallet.node_url(),
+		height,
+		wallet_output_keys,
+	)?;
 
 	// now for each commit, find the output in the wallet and
 	// the corresponding api output (if it exists)
@@ -143,8 +118,8 @@ where
 			if let Entry::Occupied(mut output) = wallet_data.outputs().entry(id.to_hex()) {
 				if let Some(b) = api_blocks.get(&commit) {
 					let output = output.get_mut();
-					output.block = Some(BlockIdentifier::from_hex(&b.hash).unwrap());
-					output.height = b.height;
+					output.height = b.0;
+					output.block = Some(b.1.clone());
 					if let Some(merkle_proof) = api_merkle_proofs.get(&commit) {
 						output.merkle_proof = Some(merkle_proof.clone());
 					}
@@ -206,7 +181,7 @@ where
 pub fn apply_api_outputs<T>(
 	wallet: &mut T,
 	wallet_outputs: &HashMap<pedersen::Commitment, Identifier>,
-	api_outputs: &HashMap<pedersen::Commitment, api::Output>,
+	api_outputs: &HashMap<pedersen::Commitment, String>,
 ) -> Result<(), Error>
 where
 	T: WalletBackend,
@@ -239,35 +214,12 @@ where
 	// and a list of outputs we want to query the node for
 	let wallet_outputs = map_wallet_outputs(wallet)?;
 
-	// build the necessary query params -
-	// ?id=xxx&id=yyy&id=zzz
-	let query_params: Vec<String> = wallet_outputs
+	let wallet_output_keys = wallet_outputs
 		.keys()
-		.map(|commit| format!("id={}", util::to_hex(commit.as_ref().to_vec())))
+		.map(|commit| commit.clone())
 		.collect();
 
-	// build a map of api outputs by commit so we can look them up efficiently
-	let mut api_outputs: HashMap<pedersen::Commitment, api::Output> = HashMap::new();
-
-	for query_chunk in query_params.chunks(1000) {
-		let url = format!(
-			"{}/v1/chain/outputs/byids?{}",
-			wallet.node_url(),
-			query_chunk.join("&"),
-		);
-
-		match api::client::get::<Vec<api::Output>>(url.as_str()) {
-			Ok(outputs) => for out in outputs {
-				api_outputs.insert(out.commit.commit(), out);
-			},
-			Err(e) => {
-				// if we got anything other than 200 back from server, don't attempt to refresh
-				// the wallet data after
-				return Err(e).context(ErrorKind::Node)?;
-			}
-		}
-	}
-
+	let api_outputs = wallet.get_outputs_from_node(wallet.node_url(), wallet_output_keys)?;
 	apply_api_outputs(wallet, &wallet_outputs, &api_outputs)?;
 	clean_old_unconfirmed(wallet, height)?;
 	Ok(())

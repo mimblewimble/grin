@@ -15,20 +15,23 @@
 //! Client functions, implementations of the WalletClient trait
 //! specific to the FileWallet
 
-use api;
 use failure::ResultExt;
+use libwallet::types::*;
+use std::collections::HashMap;
+use std::io;
+
 use futures::{Future, Stream};
 use hyper;
 use hyper::header::ContentType;
 use hyper::{Method, Request};
-use libtx::slate::Slate;
 use serde_json;
 use tokio_core::reactor;
 
+use api;
 use error::{Error, ErrorKind};
-use libwallet::types::*;
-use std::io;
-use util::LOGGER;
+use libtx::slate::Slate;
+use util::secp::pedersen;
+use util::{self, LOGGER};
 
 /// Call the wallet API to create a coinbase output for the given block_fees.
 /// Will retry based on default "retry forever with backoff" behavior.
@@ -130,4 +133,90 @@ pub fn get_chain_height(addr: &str) -> Result<u64, Error> {
 	let url = format!("{}/v1/chain", addr);
 	let res = api::client::get::<api::Tip>(url.as_str()).context(ErrorKind::Node)?;
 	Ok(res.height)
+}
+
+/// Retrieve outputs from node
+pub fn get_outputs_from_node(
+	addr: &str,
+	wallet_outputs: Vec<pedersen::Commitment>,
+) -> Result<HashMap<pedersen::Commitment, String>, Error> {
+	// build the necessary query params -
+	// ?id=xxx&id=yyy&id=zzz
+	let query_params: Vec<String> = wallet_outputs
+		.iter()
+		.map(|commit| format!("id={}", util::to_hex(commit.as_ref().to_vec())))
+		.collect();
+
+	// build a map of api outputs by commit so we can look them up efficiently
+	let mut api_outputs: HashMap<pedersen::Commitment, String> = HashMap::new();
+
+	for query_chunk in query_params.chunks(1000) {
+		let url = format!("{}/v1/chain/outputs/byids?{}", addr, query_chunk.join("&"),);
+
+		match api::client::get::<Vec<api::Output>>(url.as_str()) {
+			Ok(outputs) => for out in outputs {
+				api_outputs.insert(out.commit.commit(), util::to_hex(out.commit.to_vec()));
+			},
+			Err(e) => {
+				// if we got anything other than 200 back from server, don't attempt to refresh
+				// the wallet data after
+				return Err(e).context(ErrorKind::Node)?;
+			}
+		}
+	}
+	Ok(api_outputs)
+}
+
+/// Get any missing block hashes from node
+pub fn get_missing_block_hashes_from_node(
+	addr: &str,
+	height: u64,
+	wallet_outputs: Vec<pedersen::Commitment>,
+) -> Result<
+	(
+		HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
+		HashMap<pedersen::Commitment, MerkleProofWrapper>,
+	),
+	Error,
+> {
+	let id_params: Vec<String> = wallet_outputs
+		.iter()
+		.map(|commit| format!("id={}", util::to_hex(commit.as_ref().to_vec())))
+		.collect();
+
+	let height_params = [format!("start_height={}&end_height={}", 0, height)];
+	let mut api_blocks: HashMap<pedersen::Commitment, (u64, BlockIdentifier)> = HashMap::new();
+	let mut api_merkle_proofs: HashMap<pedersen::Commitment, MerkleProofWrapper> = HashMap::new();
+
+	// Split up into separate requests, to avoid hitting http limits
+	for mut query_chunk in id_params.chunks(1000) {
+		let url = format!(
+			"{}/v1/chain/outputs/byheight?{}",
+			addr,
+			[&height_params, query_chunk].concat().join("&"),
+		);
+
+		match api::client::get::<Vec<api::BlockOutputs>>(url.as_str()) {
+			Ok(blocks) => for block in blocks {
+				for out in block.outputs {
+					api_blocks.insert(
+						out.commit,
+						(
+							block.header.height,
+							BlockIdentifier::from_hex(&block.header.hash).unwrap(),
+						),
+					);
+					if let Some(merkle_proof) = out.merkle_proof {
+						let wrapper = MerkleProofWrapper(merkle_proof);
+						api_merkle_proofs.insert(out.commit, wrapper);
+					}
+				}
+			},
+			Err(e) => {
+				// if we got anything other than 200 back from server, bye
+				return Err(e).context(ErrorKind::Node)?;
+			}
+		}
+	}
+	Ok((api_blocks, api_merkle_proofs))
 }
