@@ -16,6 +16,7 @@
 //! receiving money in MimbleWimble requires an interactive exchange, a
 //! wallet server that's running at all time is required in many cases.
 
+use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
 use bodyparser;
@@ -30,6 +31,7 @@ use core::core::{Output, TxKernel};
 use core::global;
 use error::Error;
 use failure::Fail;
+use keychain::Keychain;
 use libtx::{reward, slate::Slate};
 use libwallet::types::*;
 use libwallet::{keys, selection};
@@ -44,17 +46,24 @@ pub struct TxWrapper {
 /// Component used to receive coins, implements all the receiving end of the
 /// wallet REST API as well as some of the command-line operations.
 #[derive(Clone)]
-pub struct WalletReceiver<T>
+pub struct WalletReceiver<T, K>
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	pub wallet: Arc<RwLock<T>>,
+	phantom: PhantomData<K>
 }
 
-impl<T> WalletReceiver<T>
+impl<T, K> WalletReceiver<T, K>
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
+	pub fn new(wallet: Arc<RwLock<T>>) -> WalletReceiver<T, K> {
+		WalletReceiver{wallet, phantom: PhantomData}
+	}
+
 	fn handle_send(&self, wallet: &mut T, slate: &mut Slate) -> Result<(), Error> {
 		// create an output using the amount in the slate
 		let (_, mut context, receiver_create_fn) =
@@ -78,9 +87,10 @@ where
 	}
 }
 
-impl<T> Handler for WalletReceiver<T>
+impl<T, K> Handler for WalletReceiver<T, K>
 where
-	T: WalletBackend + Send + Sync + 'static,
+	T: WalletBackend<K> + Send + Sync + 'static,
+	K: Keychain + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
 		let struct_body = req.get::<bodyparser::Struct<Slate>>();
@@ -108,12 +118,13 @@ where
 
 //TODO: Split up the output creation and the wallet insertion
 /// Build a coinbase output and the corresponding kernel
-pub fn receive_coinbase<T>(
+pub fn receive_coinbase<T, K>(
 	wallet: &mut T,
 	block_fees: &BlockFees,
 ) -> Result<(Output, TxKernel, BlockFees), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	let root_key_id = wallet.keychain().root_key_id();
 
@@ -158,7 +169,7 @@ where
 	debug!(LOGGER, "receive_coinbase: {:?}", block_fees);
 
 	let (out, kern) = reward::output(
-		&wallet.keychain(),
+		wallet.keychain(),
 		&key_id,
 		block_fees.fees,
 		block_fees.height,

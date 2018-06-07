@@ -29,7 +29,7 @@ use util::LOGGER;
 /// wallet
 /// Outputs. The destination can be "stdout" (for command line) (currently
 /// disabled) or a URL to the recipients wallet receiver (to be implemented).
-pub fn issue_send_tx<T: WalletBackend>(
+pub fn issue_send_tx<T, K>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
@@ -37,7 +37,11 @@ pub fn issue_send_tx<T: WalletBackend>(
 	max_outputs: usize,
 	selection_strategy_is_use_all: bool,
 	fluff: bool,
-) -> Result<(), failure::Error> {
+) -> Result<(), failure::Error> 
+where
+	T: WalletBackend<K>,
+	K: Keychain,
+{
 	// TODO: Stdout option, probably in a separate implementation
 	if &dest[..4] != "http" {
 		panic!(
@@ -117,13 +121,19 @@ pub fn issue_send_tx<T: WalletBackend>(
 	Ok(())
 }
 
-pub fn issue_burn_tx<T: WalletBackend>(
+pub fn issue_burn_tx<T, K>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
 	max_outputs: usize,
-) -> Result<(), Error> {
-	let keychain = &Keychain::burn_enabled(wallet.keychain(), &Identifier::zero());
+) -> Result<(), Error>
+where
+	T: WalletBackend<K>,
+	K: Keychain,
+{
+	// TODO
+	// let keychain = &Keychain::burn_enabled(wallet.keychain(), &Identifier::zero());
+	let keychain = wallet.keychain().clone();
 
 	let chain_tip = updater::get_tip_from_node(wallet.node_url())?;
 	let current_height = chain_tip.height;

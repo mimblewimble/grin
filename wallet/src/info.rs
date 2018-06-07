@@ -13,14 +13,16 @@
 // limitations under the License.
 
 use core::core::amount_to_hr_string;
+use keychain::Keychain;
 use libwallet::Error;
 use libwallet::types::WalletBackend;
 use libwallet::updater;
 use prettytable;
 
-pub fn show_info<T>(wallet: &mut T) -> Result<(), Error>
+pub fn show_info<T, K>(wallet: &mut T) -> Result<(), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	let wallet_info = updater::retrieve_info(wallet)?;
 	println!(

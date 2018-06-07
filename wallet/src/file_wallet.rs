@@ -99,9 +99,9 @@ impl WalletSeed {
 		util::to_hex(self.0.to_vec())
 	}
 
-	pub fn derive_keychain(&self, password: &str) -> Result<keychain::Keychain, Error> {
+	pub fn derive_keychain(&self, password: &str) -> Result<keychain::ExtKeychain, Error> {
 		let seed = blake2::blake2b::blake2b(64, &password.as_bytes(), &self.0);
-		let result = keychain::Keychain::from_seed(seed.as_bytes())?;
+		let result = keychain::ExtKeychain::from_seed(seed.as_bytes())?;
 		Ok(result)
 	}
 
@@ -164,9 +164,9 @@ impl WalletSeed {
 /// Wallet information tracking all our outputs. Based on HD derivation and
 /// avoids storing any key data, only storing output amounts and child index.
 #[derive(Debug, Clone)]
-pub struct FileWallet {
+pub struct FileWallet<K> {
 	/// Keychain
-	pub keychain: Keychain,
+	pub keychain: K,
 	/// Configuration
 	pub config: WalletConfig,
 	/// List of outputs
@@ -179,9 +179,9 @@ pub struct FileWallet {
 	pub lock_file_path: String,
 }
 
-impl WalletBackend for FileWallet {
+impl<K> WalletBackend<K> for FileWallet<K> where K: Keychain {
 	/// Return the keychain being used
-	fn keychain(&mut self) -> &mut Keychain {
+	fn keychain(&mut self) -> &mut K {
 		&mut self.keychain
 	}
 
@@ -373,9 +373,9 @@ impl WalletBackend for FileWallet {
 	}
 }
 
-impl FileWallet {
+impl<K> FileWallet<K> where K: Keychain {
 	/// Create a new FileWallet instance
-	pub fn new(config: WalletConfig, keychain: Keychain) -> Result<Self, Error> {
+	pub fn new(config: WalletConfig, keychain: K) -> Result<Self, Error> {
 		let mut retval = FileWallet {
 			keychain: keychain,
 			config: config.clone(),

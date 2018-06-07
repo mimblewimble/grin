@@ -15,16 +15,18 @@
 use api::ApiServer;
 use handlers::CoinbaseHandler;
 use iron::Handler;
+use keychain::Keychain;
 use libwallet::types::WalletBackend;
 use receiver::WalletReceiver;
 use std::sync::{Arc, RwLock};
 use util::LOGGER;
 
-pub fn start_rest_apis<T>(in_wallet: T, api_listen_addr: &str)
+pub fn start_rest_apis<T, K>(in_wallet: T, api_listen_addr: &str)
 where
-	T: WalletBackend,
-	CoinbaseHandler<T>: Handler,
-	WalletReceiver<T>: Handler,
+	T: WalletBackend<K>,
+	CoinbaseHandler<T, K>: Handler,
+	WalletReceiver<T, K>: Handler,
+	K: Keychain,
 {
 	info!(
 		LOGGER,
@@ -33,12 +35,8 @@ where
 
 	let wallet = Arc::new(RwLock::new(in_wallet));
 
-	let receive_tx_handler = WalletReceiver {
-		wallet: wallet.clone(),
-	};
-	let coinbase_handler = CoinbaseHandler {
-		wallet: wallet.clone(),
-	};
+	let receive_tx_handler = WalletReceiver::new(wallet.clone());
+	let coinbase_handler = CoinbaseHandler::new(wallet.clone());
 
 	let router = router!(
 		receive_tx: post "/receive/transaction" => receive_tx_handler,

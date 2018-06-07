@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
 use api;
-use keychain::Identifier;
+use keychain::{Identifier, Keychain};
 use libwallet::error::{Error, ErrorKind};
 use libwallet::types::*;
 use util;
@@ -29,9 +29,10 @@ use util::secp::pedersen;
 
 /// Refreshes the outputs in a wallet with the latest information
 /// from a node
-pub fn refresh_outputs<T>(wallet: &mut T) -> Result<(), Error>
+pub fn refresh_outputs<T, K>(wallet: &mut T) -> Result<(), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	let tip = get_tip_from_node(&wallet.node_url())?;
 	refresh_output_state(wallet, &tip)?;
@@ -41,9 +42,10 @@ where
 
 // TODO - this might be slow if we have really old outputs that have never been
 // refreshed
-fn refresh_missing_block_hashes<T>(wallet: &mut T, tip: &api::Tip) -> Result<(), Error>
+fn refresh_missing_block_hashes<T, K>(wallet: &mut T, tip: &api::Tip) -> Result<(), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	// build a local map of wallet outputs keyed by commit
 	// and a list of outputs we want to query the node for
@@ -118,11 +120,12 @@ where
 
 /// build a local map of wallet outputs keyed by commit
 /// and a list of outputs we want to query the node for
-pub fn map_wallet_outputs<T>(
+pub fn map_wallet_outputs<T, K>(
 	wallet: &mut T,
 ) -> Result<HashMap<pedersen::Commitment, Identifier>, Error>
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
 	let _ = wallet.read_wallet(|wallet_data| {
@@ -143,19 +146,21 @@ where
 
 /// As above, but only return unspent outputs with missing block hashes
 /// and a list of outputs we want to query the node for
-pub fn map_wallet_outputs_missing_block<T>(
+pub fn map_wallet_outputs_missing_block<T, K>(
 	wallet: &mut T,
 ) -> Result<HashMap<pedersen::Commitment, Identifier>, Error>
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
 	let _ = wallet.read_wallet(|wallet_data| {
 		let keychain = wallet_data.keychain().clone();
-		for out in wallet_data.outputs().clone().values().filter(|x| {
-			x.root_key_id == wallet_data.keychain().root_key_id() && x.block.is_none()
+		let unspents = wallet_data.outputs().values().filter(|x| {
+			x.root_key_id == keychain.root_key_id() && x.block.is_none()
 				&& x.status == OutputStatus::Unspent
-		}) {
+		});
+		for out in unspents {
 			let commit = keychain.commit_with_key_index(out.value, out.n_child)?;
 			wallet_outputs.insert(commit, out.key_id.clone());
 		}
@@ -165,13 +170,14 @@ where
 }
 
 /// Apply refreshed API output data to the wallet
-pub fn apply_api_outputs<T>(
+pub fn apply_api_outputs<T, K>(
 	wallet: &mut T,
 	wallet_outputs: &HashMap<pedersen::Commitment, Identifier>,
 	api_outputs: &HashMap<pedersen::Commitment, api::Output>,
 ) -> Result<(), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	// now for each commit, find the output in the wallet and the corresponding
 	// api output (if it exists) and refresh it in-place in the wallet.
@@ -191,9 +197,10 @@ where
 
 /// Builds a single api query to retrieve the latest output data from the node.
 /// So we can refresh the local wallet outputs.
-fn refresh_output_state<T>(wallet: &mut T, tip: &api::Tip) -> Result<(), Error>
+fn refresh_output_state<T, K>(wallet: &mut T, tip: &api::Tip) -> Result<(), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	debug!(LOGGER, "Refreshing wallet outputs");
 
@@ -235,9 +242,10 @@ where
 	Ok(())
 }
 
-fn clean_old_unconfirmed<T>(wallet: &mut T, tip: &api::Tip) -> Result<(), Error>
+fn clean_old_unconfirmed<T, K>(wallet: &mut T, tip: &api::Tip) -> Result<(), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	if tip.height < 500 {
 		return Ok(());
@@ -259,9 +267,10 @@ pub fn get_tip_from_node(addr: &str) -> Result<api::Tip, Error> {
 }
 
 /// Retrieve summar info about the wallet
-pub fn retrieve_info<T>(wallet: &mut T) -> Result<WalletInfo, Error>
+pub fn retrieve_info<T, K>(wallet: &mut T) -> Result<WalletInfo, Error>
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	let result = refresh_outputs(wallet);
 

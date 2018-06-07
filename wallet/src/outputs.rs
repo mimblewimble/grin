@@ -13,14 +13,19 @@
 // limitations under the License.
 
 use core::core;
+use keychain::Keychain;
 use libwallet::types::{OutputStatus, WalletBackend};
 use libwallet::updater;
 use prettytable;
 use std::io::prelude::*;
 use term;
 
-pub fn show_outputs<T: WalletBackend>(wallet: &mut T, show_spent: bool) {
-	let root_key_id = wallet.keychain().clone().root_key_id();
+pub fn show_outputs<T, K>(wallet: &mut T, show_spent: bool)
+where
+	T: WalletBackend<K>,
+	K: Keychain,
+{
+	let root_key_id = wallet.keychain().root_key_id();
 	let result = updater::refresh_outputs(wallet);
 
 	// just read the wallet here, no need for a write lock
