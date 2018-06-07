@@ -112,8 +112,11 @@ pub trait WalletClient {
 
 	/// retrieve a list of outputs from the specified grin node
 	/// need "by_height" and "by_id" variants
-	fn get_outputs_from_node(&self, addr: &str, wallet_outputs:Vec<pedersen::Commitment>)
-		-> Result<HashMap<pedersen::Commitment, String>, Error>;
+	fn get_outputs_from_node(
+		&self,
+		addr: &str,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<HashMap<pedersen::Commitment, String>, Error>;
 
 	/// Get any missing block hashes from node
 	fn get_missing_block_hashes_from_node(
@@ -122,11 +125,11 @@ pub trait WalletClient {
 		height: u64,
 		wallet_outputs: Vec<pedersen::Commitment>,
 	) -> Result<
-	(
-		HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
-		HashMap<pedersen::Commitment, MerkleProofWrapper>,
-	),
-	Error,
+		(
+			HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
+			HashMap<pedersen::Commitment, MerkleProofWrapper>,
+		),
+		Error,
 	>;
 
 	/// retrieve merkle proof for a commit from a node

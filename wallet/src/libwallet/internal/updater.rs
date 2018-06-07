@@ -86,10 +86,7 @@ where
 	// and a list of outputs we want to query the node for
 	let wallet_outputs = map_wallet_outputs_missing_block(wallet)?;
 
-	let wallet_output_keys = wallet_outputs
-		.keys()
-		.map(|commit| commit.clone())
-		.collect();
+	let wallet_output_keys = wallet_outputs.keys().map(|commit| commit.clone()).collect();
 
 	// nothing to do so return (otherwise we hit the api with a monster query...)
 	if wallet_outputs.is_empty() {
@@ -102,11 +99,8 @@ where
 		wallet_outputs.len(),
 	);
 
-	let (api_blocks, api_merkle_proofs) = wallet.get_missing_block_hashes_from_node(
-		wallet.node_url(),
-		height,
-		wallet_output_keys,
-	)?;
+	let (api_blocks, api_merkle_proofs) =
+		wallet.get_missing_block_hashes_from_node(wallet.node_url(), height, wallet_output_keys)?;
 
 	// now for each commit, find the output in the wallet and
 	// the corresponding api output (if it exists)
@@ -214,10 +208,7 @@ where
 	// and a list of outputs we want to query the node for
 	let wallet_outputs = map_wallet_outputs(wallet)?;
 
-	let wallet_output_keys = wallet_outputs
-		.keys()
-		.map(|commit| commit.clone())
-		.collect();
+	let wallet_output_keys = wallet_outputs.keys().map(|commit| commit.clone()).collect();
 
 	let api_outputs = wallet.get_outputs_from_node(wallet.node_url(), wallet_output_keys)?;
 	apply_api_outputs(wallet, &wallet_outputs, &api_outputs)?;
