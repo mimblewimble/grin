@@ -172,6 +172,9 @@ impl Chain {
 
 		match head {
 			Ok(head) => {
+				// TODO - consolidate head vs head_header here.
+				let head_header = store.head_header()?;
+
 				let mut head = head;
 				loop {
 					// Use current chain tip if we have one.
@@ -187,7 +190,7 @@ impl Chain {
 							header.height,
 						);
 
-						extension.rewind(&header)?;
+						extension.rewind(&header, &head_header)?;
 
 						extension.validate_roots(&header)?;
 
@@ -525,7 +528,8 @@ impl Chain {
 		// Rewind the extension to the specified header to ensure the view is
 		// consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.rewind(&header)?;
+			// TODO - is this rewind guaranteed to be redundant now?
+			extension.rewind(&header, &header)?;
 			extension.validate(&header, skip_rproofs)?;
 			Ok(())
 		})
@@ -632,7 +636,8 @@ impl Chain {
 
 		// Note: we are validating against a writeable extension.
 		txhashset::extending(&mut txhashset, |extension| {
-			extension.rewind(&header)?;
+			panic!("this maybe complicates things a bit???");
+			// extension.rewind(&header, &head_header)?;
 			let (output_sum, kernel_sum) = extension.validate(&header, false)?;
 			extension.save_latest_block_sums(&header, output_sum, kernel_sum)?;
 			extension.rebuild_index()?;

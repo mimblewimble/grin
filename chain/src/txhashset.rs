@@ -229,13 +229,16 @@ impl TxHashSet {
 
 		let min_rm = (horizon / 10) as usize;
 
+		panic!("we need a cutoff_pos here!");
+		let cutoff_pos = 0;
+
 		self.output_pmmr_h
 			.backend
-			.check_compact(min_rm, horizon, clean_output_index)?;
+			.check_compact(min_rm, horizon, cutoff_pos, clean_output_index)?;
 
 		self.rproof_pmmr_h
 			.backend
-			.check_compact(min_rm, horizon, &prune_noop)?;
+			.check_compact(min_rm, horizon, cutoff_pos, &prune_noop)?;
 		Ok(())
 	}
 }
@@ -422,27 +425,32 @@ impl<'a> Extension<'a> {
 		let output_pos = self.output_pmmr.unpruned_size();
 		let kernel_pos = self.kernel_pmmr.unpruned_size();
 
-		let rewind_to_height = height - 1;
+		// let rewind_to_height = height - 1;
+
+		let pos_to_unremove = tx.inputs
+			.iter()
+			.filter_map(|x| self.commit_index.get_output_pos(&x.commitment()).ok())
+			.collect();
 
 		// When applying blocks we can apply the coinbase output first
 		// but we cannot do this here, so we need to apply outputs first.
 		for ref output in &tx.outputs {
 			if let Err(e) = self.apply_output(output) {
-				self.rewind_to_pos(output_pos, kernel_pos, rewind_to_height)?;
+				self.rewind_to_pos(output_pos, kernel_pos, &pos_to_unremove)?;
 				return Err(e);
 			}
 		}
 
 		for ref input in &tx.inputs {
 			if let Err(e) = self.apply_input(input, height) {
-				self.rewind_to_pos(output_pos, kernel_pos, rewind_to_height)?;
+				self.rewind_to_pos(output_pos, kernel_pos, &pos_to_unremove)?;
 				return Err(e);
 			}
 		}
 
 		for ref kernel in &tx.kernels {
 			if let Err(e) = self.apply_kernel(kernel) {
-				self.rewind_to_pos(output_pos, kernel_pos, rewind_to_height)?;
+				self.rewind_to_pos(output_pos, kernel_pos, &pos_to_unremove)?;
 				return Err(e);
 			}
 		}
@@ -659,7 +667,8 @@ impl<'a> Extension<'a> {
 		);
 
 		// rewind to the specified block for a consistent view
-		self.rewind(block_header)?;
+		let head_header = self.commit_index.head_header()?;
+		self.rewind(block_header, &head_header)?;
 
 		// then calculate the Merkle Proof based on the known pos
 		let pos = self.get_output_pos(&output.commit)?;
@@ -672,7 +681,39 @@ impl<'a> Extension<'a> {
 
 	/// Rewinds the MMRs to the provided block, using the last output and
 	/// last kernel of the block we want to rewind to.
-	pub fn rewind(&mut self, block_header: &BlockHeader) -> Result<(), Error> {
+	pub fn rewind(
+		&mut self,
+		block_header: &BlockHeader,
+		head_header: &BlockHeader,
+	) -> Result<(), Error> {
+		// TODO - Check our logic here, inclusive/exclusive, off by one etc...
+		// Now "rewind" back through blocks from current chain head until we
+		// reach the forked block, collecting all the input pos (to unremove)
+		// as we go.
+		let pos_to_unremove = {
+			let mut pos = vec![];
+			let mut current = head_header.hash();
+			loop {
+				if current == block_header.hash() {
+					break;
+				}
+				let current_block = self.commit_index.get_block(&current)?;
+				let mut pos_inputs: Vec<u64> = current_block
+					.inputs
+					.iter()
+					.filter_map(|x| self.commit_index.get_output_pos(&x.commitment()).ok())
+					.collect();
+				pos.append(&mut pos_inputs);
+				current = current_block.header.previous;
+			}
+			pos
+		};
+
+		println!(
+			"txhashset extension: rewind: pos_to_unremove - {:?}",
+			pos_to_unremove
+		);
+
 		let hash = block_header.hash();
 		let height = block_header.height;
 		trace!(LOGGER, "Rewind to header {} @ {}", height, hash);
@@ -680,7 +721,7 @@ impl<'a> Extension<'a> {
 		// rewind our MMRs to the appropriate pos
 		// based on block height and block marker
 		let marker = self.commit_index.get_block_marker(&hash)?;
-		self.rewind_to_pos(marker.output_pos, marker.kernel_pos, height)?;
+		self.rewind_to_pos(marker.output_pos, marker.kernel_pos, &pos_to_unremove)?;
 
 		Ok(())
 	}
@@ -691,24 +732,23 @@ impl<'a> Extension<'a> {
 		&mut self,
 		output_pos: u64,
 		kernel_pos: u64,
-		height: u64,
+		pos_to_unremove: &Vec<u64>,
 	) -> Result<(), Error> {
 		trace!(
 			LOGGER,
-			"Rewind txhashset to output {}, kernel {}, height {}",
+			"Rewind txhashset to output {}, kernel {}",
 			output_pos,
 			kernel_pos,
-			height
 		);
 
 		self.output_pmmr
-			.rewind(output_pos, height as u32)
+			.rewind(output_pos, pos_to_unremove)
 			.map_err(&Error::TxHashSetErr)?;
 		self.rproof_pmmr
-			.rewind(output_pos, height as u32)
+			.rewind(output_pos, pos_to_unremove)
 			.map_err(&Error::TxHashSetErr)?;
 		self.kernel_pmmr
-			.rewind(kernel_pos, height as u32)
+			.rewind(kernel_pos, pos_to_unremove)
 			.map_err(&Error::TxHashSetErr)?;
 
 		Ok(())

@@ -253,21 +253,13 @@ impl AppendOnlyFile {
 	}
 }
 
-/// Log file fully cached in memory containing all positions that should be
+/// ~Log file~ fully cached in memory containing all positions that should be
 /// eventually removed from the MMR append-only data file. Allows quick
-/// checking of whether a piece of data has been marked for deletion. When the
+/// checking of whether a piece of data has been marked for deletion. ~When the
 /// log becomes too long, the MMR backend will actually remove chunks from the
-/// MMR data file and truncate the remove log.
+/// MMR data file and truncate the remove log.~
 pub struct RemoveLog {
 	path: String,
-	/// Ordered vector of MMR positions that should get eventually removed.
-	pub removed: Vec<(u64, u32)>,
-	// Holds positions temporarily until flush is called.
-	removed_tmp: Vec<(u64, u32)>,
-	// Holds truncated removed temporarily until discarded or committed
-	removed_bak: Vec<(u64, u32)>,
-
-	bitmap_path: String,
 	bitmap: Bitmap,
 	bitmap_bak: Bitmap,
 }
@@ -276,13 +268,9 @@ impl RemoveLog {
 	/// Open the remove log file.
 	/// The content of the file will be read in memory for fast checking.
 	pub fn open(path: String) -> io::Result<RemoveLog> {
-		let removed = read_ordered_vec(path.clone(), 12)?;
-
-		// TODO - actually read the bitmap from disk here
-		let bitmap_path = format!("{}.roar", path);
 		let file_path = Path::new(&path);
 		let bitmap = if file_path.exists() {
-			let mut bitmap_file = File::open(bitmap_path.clone())?;
+			let mut bitmap_file = File::open(path.clone())?;
 			let mut buffer = vec![];
 			bitmap_file.read_to_end(&mut buffer)?;
 			Bitmap::deserialize(&buffer)
@@ -292,11 +280,6 @@ impl RemoveLog {
 
 		Ok(RemoveLog {
 			path: path.clone(),
-			removed: removed,
-			removed_tmp: vec![],
-			removed_bak: vec![],
-
-			bitmap_path,
 			bitmap: bitmap.clone(),
 			bitmap_bak: bitmap.clone(),
 		})
@@ -306,162 +289,69 @@ impl RemoveLog {
 	/// We keep everything in the rm_log from that index and earlier.
 	/// In practice the index is a block height, so we rewind back to that block
 	/// keeping everything in the rm_log up to and including that block.
-	pub fn rewind(&mut self, pos: u64, idx: u32) -> io::Result<()> {
-		// backing it up before truncating (unless we already have a backup)
-		if self.removed_bak.is_empty() {
-			self.removed_bak = self.removed.clone();
-		}
-
-		if idx == 0 {
-			self.removed = vec![];
-			self.removed_tmp = vec![];
-		} else {
-			// retain rm_log entries up to and including those at the provided index
-			self.removed.retain(|&(_, x)| x <= idx);
-			self.removed_tmp.retain(|&(_, x)| x <= idx);
-		}
-
-		{
-			if self.bitmap_bak.is_empty() {
-				println!("*** rewind: backing up our bitmap");
-				self.bitmap_bak = self.bitmap.clone();
-			}
-
-			// TODO - here we take our bitmap and "rewind" everything after pos
-			// TODO - work out how to do this efficiently with roaring api
-			// TODO - can we just truncate somehow?
-			// TODO - or xor bitmaps together?
-			println!("*** rewind: pos {}, idx {}", pos, idx);
-
-			let from = pos as u32 + 1;
-			let to = self.bitmap.iter().last().unwrap_or(from);
-
-			for x in from..=to {
-				self.bitmap.remove(x);
-			}
-		}
-
+	pub fn rewind(&mut self, to_unremove: &Vec<u64>) -> io::Result<()> {
+		let bitmask: Bitmap = to_unremove.iter().map(|&x| x as u32).collect();
+		self.bitmap.andnot_inplace(&bitmask);
 		Ok(())
 	}
 
 	/// Append a new position to the remove log.
 	pub fn append(&mut self, elmt: u64, index: u32) -> io::Result<()> {
-		match self.removed_tmp.binary_search(&(elmt, index)) {
-			Ok(_) => {}
-			Err(idx) => {
-				self.removed_tmp.insert(idx, (elmt, index));
-			}
-		}
-
-		println!("*** append: {}", elmt);
 		self.bitmap.add(elmt as u32);
-		println!(
-			"*** after append - {} removed? {}",
-			elmt,
-			self.bitmap.contains(elmt as u32)
-		);
-
 		Ok(())
 	}
 
 	/// Flush the positions to remove to file.
 	pub fn flush(&mut self) -> io::Result<()> {
-		for elmt in &self.removed_tmp {
-			match self.removed.binary_search(&elmt) {
-				Ok(_) => continue,
-				Err(idx) => {
-					self.removed.insert(idx, *elmt);
-				}
-			}
-		}
-		let mut file = BufWriter::new(File::create(self.path.clone())?);
-		for elmt in &self.removed {
-			file.write_all(&ser::ser_vec(&elmt).unwrap()[..])?;
-		}
-		self.removed_tmp = vec![];
-		self.removed_bak = vec![];
-		file.flush()?;
-
-		// so we can see the size difference of storage on disk
-		self.flush_bitmap()?;
-
-		Ok(())
-	}
-
-	fn flush_bitmap(&mut self) -> io::Result<()> {
-		// TODO - how to handle u64 vs u32 here?
-		// presumably we could use a fixed offset for everything bigger than a u32 and
-		// store them in an additional bitmap?
-
-		let mut file = BufWriter::new(File::create(self.bitmap_path.clone())?);
-
+		// First run the optimization step on the bitmap to compact it as small as
+		// possible.
 		self.bitmap.run_optimize();
 
-		file.write_all(&self.bitmap.serialize())?;
-		file.flush()?;
+		// TODO - consider writing this to disk in a tmp file and then renaming?
 
+		// Write the updated bitmap file to disk.
+		{
+			let mut file = BufWriter::new(File::create(self.path.clone())?);
+			file.write_all(&self.bitmap.serialize())?;
+			file.flush()?;
+		}
+
+		// Make sure our backup in memory is up to date.
 		self.bitmap_bak = self.bitmap.clone();
 
 		Ok(())
 	}
 
-	/// Discard pending changes
+	/// Discard any pending changes.
 	pub fn discard(&mut self) {
-		if self.removed_bak.len() > 0 {
-			self.removed = self.removed_bak.clone();
-			self.removed_bak = vec![];
-		}
-		self.removed_tmp = vec![];
-
 		self.bitmap = self.bitmap_bak.clone();
 	}
 
 	/// Whether the remove log currently includes the provided position.
 	pub fn includes(&self, elmt: u64) -> bool {
-		let res = include_tuple(&self.removed, elmt) || include_tuple(&self.removed_tmp, elmt);
-
-		let bitmap_res = { self.bitmap.contains(elmt as u32) };
-
-		println!("*** includes: {} == {}? (should match...)", res, bitmap_res);
-
-		res
+		self.bitmap.contains(elmt as u32)
 	}
 
 	/// Number of positions stored in the remove log.
 	pub fn len(&self) -> usize {
-		let res = self.removed.len();
-		let bitmap_res = self.bitmap.cardinality();
-
-		println!("*** len: {} == {}? (should match...)", res, bitmap_res);
-
-		res
+		self.bitmap.cardinality() as usize
 	}
 
-	/// Return vec of pos for removed elements before the provided cutoff index.
-	/// Useful for when we prune and compact an MMR.
-	pub fn removed_pre_cutoff(&self, cutoff_idx: u32) -> Vec<u64> {
-		self.removed
-			.iter()
-			.filter_map(
-				|&(pos, idx)| {
-					if idx < cutoff_idx {
-						Some(pos)
-					} else {
-						None
-					}
-				},
-			)
-			.collect()
-	}
-}
+	// /// Return vec of pos for removed elements before the provided cutoff index.
+	// /// Useful for when we prune and compact an MMR.
+	pub fn removed_pre_cutoff(&self, cutoff_idx: u32, cutoff_pos: u64) -> Vec<u64> {
+		// TODO - ... this does not actually work...
+		// We are not rewinding all pos earlier than x.
+		// We need to find all the outputs in the blocks post x and return everything
+		// else.
 
-fn include_tuple(v: &Vec<(u64, u32)>, e: u64) -> bool {
-	if let Err(pos) = v.binary_search(&(e, 0)) {
-		if pos < v.len() && v[pos].0 == e {
-			return true;
-		}
+		// let from = cutoff_pos as u32;
+		// let bitmask: Bitmap = (from..=self.max).collect();
+		// let pre_cutoff = self.bitmap.andnot(&bitmask);
+		// pre_cutoff.to_vec().into_iter().map(|x| x as u64).collect()
+		panic!("not yet implemented");
+		vec![]
 	}
-	false
 }
 
 /// Read an ordered vector of scalars from a file.

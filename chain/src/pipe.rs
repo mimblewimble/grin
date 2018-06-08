@@ -505,40 +505,41 @@ pub fn rewind_and_apply_fork(
 	// extending a fork, first identify the block where forking occurred
 	// keeping the hashes of blocks along the fork
 	let mut current = b.header.previous;
-	let mut hashes = vec![];
+	let mut fork_hashes = vec![];
 	loop {
 		let curr_header = store.get_block_header(&current)?;
 
 		if let Ok(_) = store.is_on_current_chain(&curr_header) {
 			break;
 		} else {
-			hashes.insert(0, (curr_header.height, curr_header.hash()));
+			fork_hashes.insert(0, (curr_header.height, curr_header.hash()));
 			current = curr_header.previous;
 		}
 	}
 
-	let forked_block = store.get_block_header(&current)?;
+	let head_header = store.head_header()?;
+	let forked_header = store.get_block_header(&current)?;
 
 	trace!(
 		LOGGER,
 		"rewind_and_apply_fork @ {} [{}], was @ {} [{}]",
-		forked_block.height,
-		forked_block.hash(),
+		forked_header.height,
+		forked_header.hash(),
 		b.header.height,
 		b.header.hash()
 	);
 
 	// rewind the sum trees up to the forking block
-	ext.rewind(&forked_block)?;
+	ext.rewind(&forked_header, &head_header)?;
 
 	trace!(
 		LOGGER,
 		"rewind_and_apply_fork: blocks on fork: {:?}",
-		hashes,
+		fork_hashes,
 	);
 
 	// apply all forked blocks, including this new one
-	for (_, h) in hashes {
+	for (_, h) in fork_hashes {
 		let fb = store
 			.get_block(&h)
 			.map_err(|e| Error::StoreErr(e, format!("getting forked blocks")))?;

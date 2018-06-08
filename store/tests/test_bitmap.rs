@@ -15,6 +15,32 @@
 extern crate croaring;
 use croaring::Bitmap;
 
+// We can use "andnot" to rewind the rm_log easily by passing in a "bitmask" of
+// all the subsequent pos we want to rewind.
+#[test]
+fn test_andnot_bitmap() {
+	// bitmap:  10010011
+	// bitmask: ....1111 (i.e. rewind to leave first 4 pos in place)
+	// result:  1001....
+	let bitmap: Bitmap = vec![1, 4, 7, 8].into_iter().collect();
+	let bitmask: Bitmap = vec![5, 6, 7, 8].into_iter().collect();
+	let res = bitmap.andnot(&bitmask);
+	assert_eq!(res.to_vec(), vec![1, 4]);
+}
+
+// Alternatively we can use "and" to rewind the rm_log easily by passing in a
+// "bitmask" of all the pos we want to keep.
+#[test]
+fn test_and_bitmap() {
+	// bitmap:  10010011
+	// bitmask: 1111.... (i.e. rewind to leave first 4 pos in place)
+	// result:  1001....
+	let bitmap: Bitmap = vec![1, 4, 7, 8].into_iter().collect();
+	let bitmask: Bitmap = vec![1, 2, 3, 4].into_iter().collect();
+	let res = bitmap.and(&bitmask);
+	assert_eq!(res.to_vec(), vec![1, 4]);
+}
+
 #[test]
 fn test_a_small_bitmap() {
 	let bitmap: Bitmap = vec![1, 99, 1_000].into_iter().collect();
@@ -28,15 +54,15 @@ fn test_a_small_bitmap() {
 
 #[test]
 fn test_a_big_bitmap() {
-	let mut bitmap: Bitmap = (1..1_000).collect();
+	let mut bitmap: Bitmap = (1..1_000_000).collect();
 	let serialized_buffer = bitmap.serialize();
 
 	// we can also store 1,000 pos in 2,014 bytes
 	// a vec of u64s here would be 8,000 bytes
-	assert_eq!(serialized_buffer.len(), 2014);
+	assert_eq!(serialized_buffer.len(), 131_208);
 
-	// but note that we can optimize this heavily to get down to 15 bytes...
+	// but note we can optimize this heavily to get down to 230 bytes...
 	assert!(bitmap.run_optimize());
 	let serialized_buffer = bitmap.serialize();
-	assert_eq!(serialized_buffer.len(), 15);
+	assert_eq!(serialized_buffer.len(), 230);
 }

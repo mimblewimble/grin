@@ -17,6 +17,8 @@ use std::fs;
 use std::io;
 use std::marker;
 
+use croaring::Bitmap;
+
 use core::core::hash::Hash;
 use core::core::pmmr::{self, family, Backend};
 use core::ser;
@@ -145,11 +147,9 @@ where
 
 	/// Rewind the PMMR backend to the given position.
 	/// Use the index to rewind the rm_log correctly (based on block height).
-	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
-		// Rewind the rm_log based on index (block height)
-		self.rm_log
-			.rewind(position, index)
-			.map_err(|e| format!("Could not truncate remove log: {}", e))?;
+	fn rewind(&mut self, position: u64, to_unremove: &Vec<u64>) -> Result<(), String> {
+		// First rewind the rm_log with the bitmap of pos we want to rewind.
+		self.rm_log.rewind(&to_unremove);
 
 		// Rewind the hash file accounting for pruned/compacted pos
 		let shift = self.pruned_nodes.get_shift(position).unwrap_or(0);
@@ -186,7 +186,7 @@ where
 			self.unpruned_size().unwrap_or(0),
 			self.hash_size().unwrap_or(0),
 			self.data_size().unwrap_or(0),
-			self.rm_log.removed.len(),
+			self.rm_log.len(),
 			self.pruned_nodes.pruned_nodes.len(),
 		);
 	}
@@ -296,6 +296,7 @@ where
 		&mut self,
 		max_len: usize,
 		cutoff_index: u32,
+		cutoff_pos: u64,
 		prune_cb: P,
 	) -> io::Result<bool>
 	where
@@ -312,7 +313,7 @@ where
 		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
 
 		// Retrieve list of pos from the rm_log before the cutoff.
-		let rm_pre_cutoff = self.rm_log.removed_pre_cutoff(cutoff_index);
+		let rm_pre_cutoff = self.rm_log.removed_pre_cutoff(cutoff_index, cutoff_pos);
 
 		// Convert the list of leaf pos into full list of pos
 		// accounting for pos already pruned and excluding roots
@@ -396,11 +397,8 @@ where
 		)?;
 		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
 
-		// 6. Truncate the rm log based on pos removed.
-		// Excluding roots which remain in rm log.
-		self.rm_log
-			.removed
-			.retain(|&(pos, _)| !pos_to_rm.binary_search(&&pos).is_ok());
+		// 6. Write the rm_log to disk (optimizing the roaring bitmap storage in the
+		// process). self.rm_log.truncate_and_flush()?;
 		self.rm_log.flush()?;
 
 		Ok(true)
