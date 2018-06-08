@@ -35,7 +35,7 @@ use chain::ChainStore;
 use core::core::target::Difficulty;
 use core::core::transaction;
 
-use keychain::Keychain;
+use keychain::{Keychain, ExtKeychain};
 use wallet::libtx;
 
 use common::*;
@@ -43,7 +43,7 @@ use common::*;
 /// Test we can add some txs to the pool (both stempool and txpool).
 #[test]
 fn test_the_transaction_pool() {
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain: ExtKeychain = Keychain::from_random_seed().unwrap();
 
 	let db_root = ".grin_transaction_pool".to_string();
 	clean_output_dir(db_root.clone());

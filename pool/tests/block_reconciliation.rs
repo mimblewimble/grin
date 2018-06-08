@@ -34,14 +34,14 @@ use chain::types::Tip;
 use chain::ChainStore;
 use core::core::target::Difficulty;
 
-use keychain::Keychain;
+use keychain::{Keychain, ExtKeychain};
 use wallet::libtx;
 
 use common::*;
 
 #[test]
 fn test_transaction_pool_block_reconciliation() {
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain: ExtKeychain = Keychain::from_random_seed().unwrap();
 
 	let db_root = ".grin_block_reconcilliation".to_string();
 	clean_output_dir(db_root.clone());

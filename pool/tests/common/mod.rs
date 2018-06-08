@@ -105,11 +105,11 @@ pub fn test_setup(chain: &Arc<ChainAdapter>) -> TransactionPool<ChainAdapter> {
 	)
 }
 
-pub fn test_transaction_spending_coinbase(
-	keychain: &Keychain,
+pub fn test_transaction_spending_coinbase<K>(
+	keychain: &K,
 	header: &BlockHeader,
 	output_values: Vec<u64>,
-) -> Transaction {
+) -> Transaction where K: Keychain {
 	let output_sum = output_values.iter().sum::<u64>() as i64;
 
 	let coinbase_reward: u64 = 60_000_000_000;
@@ -137,14 +137,14 @@ pub fn test_transaction_spending_coinbase(
 
 	tx_elements.push(libtx::build::with_fee(fees as u64));
 
-	libtx::build::transaction(tx_elements, &keychain).unwrap()
+	libtx::build::transaction(tx_elements, keychain).unwrap()
 }
 
-pub fn test_transaction(
-	keychain: &Keychain,
+pub fn test_transaction<K>(
+	keychain: &K,
 	input_values: Vec<u64>,
 	output_values: Vec<u64>,
-) -> Transaction {
+) -> Transaction where K: Keychain {
 	let input_sum = input_values.iter().sum::<u64>() as i64;
 	let output_sum = output_values.iter().sum::<u64>() as i64;
 
@@ -164,7 +164,7 @@ pub fn test_transaction(
 	}
 	tx_elements.push(libtx::build::with_fee(fees as u64));
 
-	libtx::build::transaction(tx_elements, &keychain).unwrap()
+	libtx::build::transaction(tx_elements, keychain).unwrap()
 }
 
 pub fn test_source() -> TxSource {
