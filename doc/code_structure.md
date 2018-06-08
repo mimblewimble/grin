@@ -20,7 +20,7 @@ After checking out grin, building and using, these are the folders you'll have:
 - config
   Code for handling configuration.
 - core
-  All core types: Hash, Block, Input, Output, and how to serialize them. Core mining algorith, and more.
+  All core types: Hash, Block, Input, Output, and how to serialize them. Core mining algorithm, and more.
 - doc
   All documentation.
 - servers
