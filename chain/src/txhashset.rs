@@ -229,16 +229,23 @@ impl TxHashSet {
 
 		let min_rm = (horizon / 10) as usize;
 
-		panic!("we need a cutoff_pos here!");
-		let cutoff_pos = 0;
+		// TODO - implement this...
+		println!(
+			"******************* need to calc the vec of pos rm post horizon here ***********"
+		);
+		let rm_post_horizon = vec![];
 
-		self.output_pmmr_h
-			.backend
-			.check_compact(min_rm, horizon, cutoff_pos, clean_output_index)?;
+		self.output_pmmr_h.backend.check_compact(
+			min_rm,
+			horizon,
+			&rm_post_horizon,
+			clean_output_index,
+		)?;
 
 		self.rproof_pmmr_h
 			.backend
-			.check_compact(min_rm, horizon, cutoff_pos, &prune_noop)?;
+			.check_compact(min_rm, horizon, &rm_post_horizon, &prune_noop)?;
+
 		Ok(())
 	}
 }

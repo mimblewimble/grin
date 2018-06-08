@@ -323,7 +323,7 @@ fn pmmr_rewind() {
 	// rewind and check the roots still match
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-		pmmr.rewind(9, 3).unwrap();
+		pmmr.rewind(9, &vec![]).unwrap();
 		assert_eq!(pmmr.root(), root2);
 	}
 	backend.sync().unwrap();
@@ -348,7 +348,7 @@ fn pmmr_rewind() {
 
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, 10);
-		pmmr.rewind(5, 3).unwrap();
+		pmmr.rewind(5, &vec![]).unwrap();
 		assert_eq!(pmmr.root(), root1);
 	}
 	backend.sync().unwrap();

@@ -260,7 +260,7 @@ impl AppendOnlyFile {
 /// MMR data file and truncate the remove log.~
 pub struct RemoveLog {
 	path: String,
-	bitmap: Bitmap,
+	pub bitmap: Bitmap,
 	bitmap_bak: Bitmap,
 }
 
@@ -335,22 +335,6 @@ impl RemoveLog {
 	/// Number of positions stored in the remove log.
 	pub fn len(&self) -> usize {
 		self.bitmap.cardinality() as usize
-	}
-
-	// /// Return vec of pos for removed elements before the provided cutoff index.
-	// /// Useful for when we prune and compact an MMR.
-	pub fn removed_pre_cutoff(&self, cutoff_idx: u32, cutoff_pos: u64) -> Vec<u64> {
-		// TODO - ... this does not actually work...
-		// We are not rewinding all pos earlier than x.
-		// We need to find all the outputs in the blocks post x and return everything
-		// else.
-
-		// let from = cutoff_pos as u32;
-		// let bitmask: Bitmap = (from..=self.max).collect();
-		// let pre_cutoff = self.bitmap.andnot(&bitmask);
-		// pre_cutoff.to_vec().into_iter().map(|x| x as u64).collect()
-		panic!("not yet implemented");
-		vec![]
 	}
 }
 

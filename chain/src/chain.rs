@@ -636,7 +636,9 @@ impl Chain {
 
 		// Note: we are validating against a writeable extension.
 		txhashset::extending(&mut txhashset, |extension| {
-			panic!("this maybe complicates things a bit???");
+			// TODO do we need to rewind here? We have no blocks to rewind
+			// (and we need them for the pos to unremove)
+			// panic!("this maybe complicates things a bit???");
 			// extension.rewind(&header, &head_header)?;
 			let (output_sum, kernel_sum) = extension.validate(&header, false)?;
 			extension.save_latest_block_sums(&header, output_sum, kernel_sum)?;

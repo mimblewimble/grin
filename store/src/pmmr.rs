@@ -296,7 +296,7 @@ where
 		&mut self,
 		max_len: usize,
 		cutoff_index: u32,
-		cutoff_pos: u64,
+		rm_post_cutoff: &Vec<u64>,
 		prune_cb: P,
 	) -> io::Result<bool>
 	where
@@ -312,8 +312,16 @@ where
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
 		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
 
-		// Retrieve list of pos from the rm_log before the cutoff.
-		let rm_pre_cutoff = self.rm_log.removed_pre_cutoff(cutoff_index, cutoff_pos);
+		// Now "unremove" all pos removed after the cutoff to leave
+		// everything removed pre cutoff.
+		let bitmask: Bitmap = rm_post_cutoff.iter().map(|&x| x as u32).collect();
+		let rm_pre_cutoff = self.rm_log
+			.bitmap
+			.andnot(&bitmask)
+			.to_vec()
+			.into_iter()
+			.map(|x| x as u64)
+			.collect();
 
 		// Convert the list of leaf pos into full list of pos
 		// accounting for pos already pruned and excluding roots
