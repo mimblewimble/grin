@@ -52,9 +52,11 @@ mod error;
 pub mod file_wallet;
 pub mod libtx;
 pub mod libwallet;
+mod types;
 
 pub use client::create_coinbase;
 pub use error::{Error, ErrorKind};
-pub use file_wallet::{FileWallet, WalletConfig, WalletSeed};
+pub use file_wallet::FileWallet;
 pub use libwallet::controller;
 pub use libwallet::types::{BlockFees, CbData, WalletInfo};
+pub use types::{WalletConfig, WalletSeed};

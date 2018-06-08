@@ -818,7 +818,6 @@ fn setup_head(
 	store: Arc<store::ChainStore>,
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
-
 	// check if we have a head in store, otherwise the genesis block is it
 	let head_res = store.head();
 	let mut batch = store.batch()?;
