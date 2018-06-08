@@ -49,6 +49,7 @@ use daemonize::Daemonize;
 use config::GlobalConfig;
 use core::core::amount_to_hr_string;
 use core::global;
+use keychain::ExtKeychain;
 use tui::ui;
 use util::{init_logger, LoggingConfig, LOGGER};
 use wallet::{libwallet, FileWallet};
@@ -422,9 +423,10 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 		let _ = thread::Builder::new()
 			.name("wallet_listener".to_string())
 			.spawn(move || {
-				let wallet = FileWallet::new(wallet_config.clone(), "").unwrap_or_else(|e| {
-					panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
-				});
+				let wallet: FileWallet<ExtKeychain> = FileWallet::new(wallet_config.clone(), "")
+					.unwrap_or_else(|e| {
+						panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+					});
 				wallet::controller::foreign_listener(wallet, &wallet_config.api_listen_addr())
 					.unwrap_or_else(|e| {
 						panic!(
@@ -539,9 +541,10 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 
 	// Handle listener startup commands
 	{
-		let wallet = FileWallet::new(wallet_config.clone(), passphrase).unwrap_or_else(|e| {
-			panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
-		});
+		let wallet: FileWallet<ExtKeychain> = FileWallet::new(wallet_config.clone(), passphrase)
+			.unwrap_or_else(|e| {
+				panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+			});
 		match wallet_args.subcommand() {
 			("listen", Some(listen_args)) => {
 				if let Some(port) = listen_args.value_of("port") {
@@ -569,9 +572,10 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 
 	// Handle single-use (command line) owner commands
 	{
-		let mut wallet = FileWallet::new(wallet_config.clone(), passphrase).unwrap_or_else(|e| {
-			panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
-		});
+		let mut wallet: FileWallet<ExtKeychain> =
+			FileWallet::new(wallet_config.clone(), passphrase).unwrap_or_else(|e| {
+				panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+			});
 		let _res = wallet::controller::owner_single_use(&mut wallet, |api| {
 			match wallet_args.subcommand() {
 				("send", Some(send_args)) => {
