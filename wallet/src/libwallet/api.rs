@@ -17,6 +17,8 @@
 //! vs. functions to interact with someone else)
 //! Still experimental, not sure this is the best way to do this
 
+use std::marker::PhantomData;
+
 use libtx::slate::Slate;
 use libwallet::Error;
 use libwallet::internal::{tx, updater};
@@ -24,26 +26,33 @@ use libwallet::types::{BlockFees, CbData, OutputData, TxWrapper, WalletBackend, 
                        WalletInfo};
 
 use core::ser;
+use keychain::Keychain;
 use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to
 /// the wallet/keychain that they're acting upon
-pub struct APIOwner<'a, W>
+pub struct APIOwner<'a, W, K>
 where
-	W: 'a + WalletBackend + WalletClient,
+	W: 'a + WalletBackend<K> + WalletClient,
+	K: Keychain,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
 	/// perhaps)
 	pub wallet: &'a mut W,
+	phantom: PhantomData<K>,
 }
 
-impl<'a, W> APIOwner<'a, W>
+impl<'a, W, K> APIOwner<'a, W, K>
 where
-	W: 'a + WalletBackend + WalletClient,
+	W: 'a + WalletBackend<K> + WalletClient,
+	K: Keychain,
 {
 	/// Create new API instance
-	pub fn new(wallet_in: &'a mut W) -> APIOwner<'a, W> {
-		APIOwner { wallet: wallet_in }
+	pub fn new(wallet_in: &'a mut W) -> APIOwner<'a, W, K> {
+		APIOwner {
+			wallet: wallet_in,
+			phantom: PhantomData,
+		}
 	}
 
 	/// Attempt to update and retrieve outputs
@@ -151,22 +160,28 @@ where
 
 /// Wrapper around external API functions, intended to communicate
 /// with other parties
-pub struct APIForeign<'a, W>
+pub struct APIForeign<'a, W, K>
 where
-	W: 'a + WalletBackend + WalletClient,
+	W: 'a + WalletBackend<K> + WalletClient,
+	K: Keychain,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
 	/// perhaps)
 	pub wallet: &'a mut W,
+	phantom: PhantomData<K>,
 }
 
-impl<'a, W> APIForeign<'a, W>
+impl<'a, W, K> APIForeign<'a, W, K>
 where
-	W: 'a + WalletBackend + WalletClient,
+	W: 'a + WalletBackend<K> + WalletClient,
+	K: Keychain,
 {
 	/// Create new API instance
-	pub fn new(wallet_in: &'a mut W) -> APIForeign<'a, W> {
-		APIForeign { wallet: wallet_in }
+	pub fn new(wallet_in: &'a mut W) -> APIForeign<'a, W, K> {
+		APIForeign {
+			wallet: wallet_in,
+			phantom: PhantomData,
+		}
 	}
 
 	/// Build a new (potential) coinbase transaction in the wallet

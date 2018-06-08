@@ -36,7 +36,10 @@ use util::secp::pedersen;
 /// Wallets should implement this backend for their storage. All functions
 /// here expect that the wallet instance has instantiated itself or stored
 /// whatever credentials it needs
-pub trait WalletBackend {
+pub trait WalletBackend<K>
+where
+	K: Keychain,
+{
 	/// Initialise with whatever stored credentials we have
 	fn open_with_credentials(&mut self) -> Result<(), Error>;
 
@@ -44,7 +47,7 @@ pub trait WalletBackend {
 	fn close(&mut self) -> Result<(), Error>;
 
 	/// Return the keychain being used
-	fn keychain(&mut self) -> &mut Keychain;
+	fn keychain(&mut self) -> &mut K;
 
 	/// Return the outputs directly
 	fn outputs(&mut self) -> &mut HashMap<String, OutputData>;

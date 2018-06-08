@@ -29,7 +29,7 @@ use std::sync::{Arc, RwLock};
 
 use core::core::Transaction;
 
-use keychain::Keychain;
+use keychain::{ExtKeychain, Keychain};
 use pool::TransactionPool;
 use pool::types::*;
 
@@ -82,7 +82,7 @@ impl BlockChain for CoinbaseMaturityErrorChainAdapter {
 /// Test we correctly verify coinbase maturity when adding txs to the pool.
 #[test]
 fn test_coinbase_maturity() {
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain: ExtKeychain = Keychain::from_random_seed().unwrap();
 
 	// Mocking this up with an adapter that will raise an error for coinbase
 	// maturity.

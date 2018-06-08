@@ -20,7 +20,7 @@ use core::core::transaction::ProofMessageElements;
 use core::global;
 use error::{Error, ErrorKind};
 use failure::{Fail, ResultExt};
-use keychain::Identifier;
+use keychain::{Identifier, Keychain};
 use libtx::proof;
 use libwallet::types::*;
 use util;
@@ -51,9 +51,10 @@ fn coinbase_status(output: &api::OutputPrintable) -> bool {
 	}
 }
 
-fn outputs_batch<T>(wallet: &T, start_height: u64, max: u64) -> Result<api::OutputListing, Error>
+fn outputs_batch<T, K>(wallet: &T, start_height: u64, max: u64) -> Result<api::OutputListing, Error>
 where
-	T: WalletBackend + WalletClient,
+	T: WalletBackend<K> + WalletClient,
+	K: Keychain,
 {
 	let query_param = format!("start_index={}&max={}", start_height, max);
 
@@ -75,7 +76,7 @@ where
 }
 
 // TODO - wrap the many return values in a struct
-fn find_outputs_with_key<T: WalletBackend + WalletClient>(
+fn find_outputs_with_key<T, K>(
 	wallet: &mut T,
 	outputs: Vec<api::OutputPrintable>,
 	found_key_index: &mut Vec<u32>,
@@ -88,7 +89,11 @@ fn find_outputs_with_key<T: WalletBackend + WalletClient>(
 	u64,
 	bool,
 	Option<MerkleProofWrapper>,
-)> {
+)>
+where
+	T: WalletBackend<K> + WalletClient,
+	K: Keychain,
+{
 	let mut wallet_outputs: Vec<(
 		pedersen::Commitment,
 		Identifier,
@@ -225,7 +230,11 @@ fn find_outputs_with_key<T: WalletBackend + WalletClient>(
 }
 
 /// Restore a wallet
-pub fn restore<T: WalletBackend + WalletClient>(wallet: &mut T) -> Result<(), Error> {
+pub fn restore<T, K>(wallet: &mut T) -> Result<(), Error>
+where
+	T: WalletBackend<K> + WalletClient,
+	K: Keychain,
+{
 	// Don't proceed if wallet.dat has anything in it
 	let is_empty = wallet
 		.read_wallet(|wallet_data| Ok(wallet_data.outputs().len() == 0))

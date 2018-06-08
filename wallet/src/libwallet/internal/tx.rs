@@ -25,7 +25,11 @@ use util::LOGGER;
 
 /// Receive a tranaction, modifying the slate accordingly (which can then be
 /// sent back to sender for posting)
-pub fn receive_tx<T: WalletBackend>(wallet: &mut T, slate: &mut Slate) -> Result<(), Error> {
+pub fn receive_tx<T, K>(wallet: &mut T, slate: &mut Slate) -> Result<(), Error>
+where
+	T: WalletBackend<K>,
+	K: Keychain,
+{
 	// create an output using the amount in the slate
 	let (_, mut context, receiver_create_fn) =
 		selection::build_recipient_output_with_slate(wallet, slate).unwrap();
@@ -49,7 +53,7 @@ pub fn receive_tx<T: WalletBackend>(wallet: &mut T, slate: &mut Slate) -> Result
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
-pub fn create_send_tx<T: WalletBackend + WalletClient>(
+pub fn create_send_tx<T, K>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
@@ -62,7 +66,11 @@ pub fn create_send_tx<T: WalletBackend + WalletClient>(
 		impl FnOnce(&mut T) -> Result<(), Error>,
 	),
 	Error,
-> {
+>
+where
+	T: WalletBackend<K> + WalletClient,
+	K: Keychain,
+{
 	// Get lock height
 	let current_height = wallet.get_chain_height(wallet.node_url())?;
 	// ensure outputs we're selecting are up to date
@@ -102,11 +110,15 @@ pub fn create_send_tx<T: WalletBackend + WalletClient>(
 }
 
 /// Complete a transaction as the sender
-pub fn complete_tx<T: WalletBackend>(
+pub fn complete_tx<T, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
 	context: &sigcontext::Context,
-) -> Result<(), Error> {
+) -> Result<(), Error>
+where
+	T: WalletBackend<K>,
+	K: Keychain,
+{
 	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 0)?;
 	// Final transaction can be built by anyone at this stage
 	let res = slate.finalize(wallet.keychain());
@@ -117,13 +129,20 @@ pub fn complete_tx<T: WalletBackend>(
 }
 
 /// Issue a burn tx
-pub fn issue_burn_tx<T: WalletBackend + WalletClient>(
+pub fn issue_burn_tx<T, K>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
 	max_outputs: usize,
-) -> Result<Transaction, Error> {
-	let keychain = &Keychain::burn_enabled(wallet.keychain(), &Identifier::zero());
+) -> Result<Transaction, Error>
+where
+	T: WalletBackend<K> + WalletClient,
+	K: Keychain,
+{
+	// TODO
+	// let keychain = &Keychain::burn_enabled(wallet.keychain(),
+	// &Identifier::zero());
+	let keychain = wallet.keychain().clone();
 
 	let current_height = wallet.get_chain_height(wallet.node_url())?;
 
@@ -159,14 +178,14 @@ pub fn issue_burn_tx<T: WalletBackend + WalletClient>(
 
 #[cfg(test)]
 mod test {
-	use keychain::Keychain;
+	use keychain::{ExtKeychain, Keychain};
 	use libtx::build;
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment
 	// based on the public key and amount begin spent
 	fn output_commitment_equals_input_commitment_on_spend() {
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 
 		let tx1 = build::transaction(vec![build::output(105, key_id1.clone())], &keychain).unwrap();

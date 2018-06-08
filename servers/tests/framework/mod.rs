@@ -268,12 +268,13 @@ impl LocalServerContainer {
 			//panic!("Error initting wallet seed: {}", e);
 		}
 
-		let wallet = FileWallet::new(self.wallet_config.clone(), "").unwrap_or_else(|e| {
-			panic!(
-				"Error creating wallet: {:?} Config: {:?}",
-				e, self.wallet_config
-			)
-		});
+		let wallet: FileWallet<keychain::ExtKeychain> =
+			FileWallet::new(self.wallet_config.clone(), "").unwrap_or_else(|e| {
+				panic!(
+					"Error creating wallet: {:?} Config: {:?}",
+					e, self.wallet_config
+				)
+			});
 
 		wallet::controller::foreign_listener(wallet, &self.wallet_config.api_listen_addr())
 			.unwrap_or_else(|e| {
@@ -298,7 +299,7 @@ impl LocalServerContainer {
 		config: &WalletConfig,
 		wallet_seed: &wallet::WalletSeed,
 	) -> wallet::WalletInfo {
-		let keychain = wallet_seed
+		let keychain: keychain::ExtKeychain = wallet_seed
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let mut wallet = FileWallet::new(config.clone(), "")
@@ -321,7 +322,7 @@ impl LocalServerContainer {
 		let wallet_seed =
 			wallet::WalletSeed::from_file(config).expect("Failed to read wallet seed file.");
 
-		let keychain = wallet_seed
+		let keychain: keychain::ExtKeychain = wallet_seed
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let max_outputs = 500;

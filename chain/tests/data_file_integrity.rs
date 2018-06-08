@@ -24,15 +24,15 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
-use chain::types::*;
 use chain::Chain;
+use chain::types::*;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};
 use core::global;
 use core::global::ChainTypes;
 use core::{consensus, genesis};
 
-use keychain::Keychain;
+use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
 
 use core::pow;
@@ -69,7 +69,7 @@ fn data_files() {
 	//new block so chain references should be freed
 	{
 		let chain = setup(chain_dir);
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed().unwrap();
 
 		for n in 1..4 {
 			let prev = chain.head_header().unwrap();
@@ -114,14 +114,14 @@ fn data_files() {
 	}
 }
 
-fn _prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
+fn _prepare_block(kc: &ExtKeychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
 	chain.set_txhashset_roots(&mut b, false).unwrap();
 	b
 }
 
 fn _prepare_block_tx(
-	kc: &Keychain,
+	kc: &ExtKeychain,
 	prev: &BlockHeader,
 	chain: &Chain,
 	diff: u64,
@@ -132,14 +132,14 @@ fn _prepare_block_tx(
 	b
 }
 
-fn _prepare_fork_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
+fn _prepare_fork_block(kc: &ExtKeychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
 	chain.set_txhashset_roots(&mut b, true).unwrap();
 	b
 }
 
 fn _prepare_fork_block_tx(
-	kc: &Keychain,
+	kc: &ExtKeychain,
 	prev: &BlockHeader,
 	chain: &Chain,
 	diff: u64,
@@ -151,7 +151,7 @@ fn _prepare_fork_block_tx(
 }
 
 fn _prepare_block_nosum(
-	kc: &Keychain,
+	kc: &ExtKeychain,
 	prev: &BlockHeader,
 	diff: u64,
 	txs: Vec<&Transaction>,
@@ -159,7 +159,7 @@ fn _prepare_block_nosum(
 	let key_id = kc.derive_key_id(diff as u32).unwrap();
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward = libtx::reward::output(&kc, &key_id, fees, prev.height).unwrap();
+	let reward = libtx::reward::output(kc, &key_id, fees, prev.height).unwrap();
 	let mut b = match core::core::Block::new(
 		prev,
 		txs.into_iter().cloned().collect(),

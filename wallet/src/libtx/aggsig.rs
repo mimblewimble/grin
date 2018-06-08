@@ -13,9 +13,7 @@
 // limitations under the License.
 //! Aggsig helper functions used in transaction creation.. should be only
 //! interface into the underlying secp library
-use keychain::Keychain;
-use keychain::blind::BlindingFactor;
-use keychain::extkey::Identifier;
+use keychain::{BlindingFactor, Identifier, Keychain};
 use libtx::error::{Error, ErrorKind};
 use util::kernel_sig_msg;
 use util::secp::key::{PublicKey, SecretKey};
@@ -72,12 +70,15 @@ pub fn verify_partial_sig(
 }
 
 /// Just a simple sig, creates its own nonce, etc
-pub fn sign_from_key_id(
+pub fn sign_from_key_id<K>(
 	secp: &Secp256k1,
-	k: &Keychain,
+	k: &K,
 	msg: &Message,
 	key_id: &Identifier,
-) -> Result<Signature, Error> {
+) -> Result<Signature, Error>
+where
+	K: Keychain,
+{
 	let skey = k.derived_key(key_id)?;
 	let sig = aggsig::sign_single(secp, &msg, &skey, None, None, None)?;
 	Ok(sig)

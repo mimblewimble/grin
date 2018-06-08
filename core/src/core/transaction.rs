@@ -14,8 +14,8 @@
 
 //! Transactions
 
-use std::cmp::max;
 use std::cmp::Ordering;
+use std::cmp::max;
 use std::collections::HashSet;
 use std::io::Cursor;
 use std::{error, fmt};
@@ -26,12 +26,12 @@ use util::{kernel_sig_msg, static_secp_instance};
 
 use consensus;
 use consensus::VerifySortOrder;
+use core::BlockHeader;
 use core::committed;
 use core::committed::Committed;
 use core::global;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
-use core::BlockHeader;
 use keychain;
 use keychain::BlindingFactor;
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
@@ -1074,12 +1074,12 @@ impl ProofMessageElements {
 mod test {
 	use super::*;
 	use core::id::{ShortId, ShortIdentifiable};
-	use keychain::Keychain;
+	use keychain::{ExtKeychain, Keychain};
 	use util::secp;
 
 	#[test]
 	fn test_kernel_ser_deser() {
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
 
@@ -1124,7 +1124,7 @@ mod test {
 
 	#[test]
 	fn commit_consistency() {
-		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
+		let keychain = ExtKeychain::from_seed(&[0; 32]).unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let commit = keychain.commit(1003, &key_id).unwrap();
@@ -1137,7 +1137,7 @@ mod test {
 
 	#[test]
 	fn input_short_id() {
-		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
+		let keychain = ExtKeychain::from_seed(&[0; 32]).unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
 

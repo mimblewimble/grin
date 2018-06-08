@@ -12,167 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp::min;
-use std::{error, fmt, num};
-
-use serde::{de, ser};
-
 use blake2::blake2b::blake2b;
 use byteorder::{BigEndian, ByteOrder};
-use util;
-use util::secp;
+use types::{Error, Identifier};
 use util::secp::Secp256k1;
-use util::secp::key::{PublicKey, SecretKey};
-
-// Size of an identifier in bytes
-pub const IDENTIFIER_SIZE: usize = 10;
-
-/// An ExtKey error
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub enum Error {
-	/// The size of the seed is invalid
-	InvalidSeedSize,
-	InvalidSliceSize,
-	InvalidExtendedKey,
-	Secp(secp::Error),
-	ParseIntError(num::ParseIntError),
-}
-
-impl From<secp::Error> for Error {
-	fn from(e: secp::Error) -> Error {
-		Error::Secp(e)
-	}
-}
-
-impl From<num::ParseIntError> for Error {
-	fn from(e: num::ParseIntError) -> Error {
-		Error::ParseIntError(e)
-	}
-}
-
-// Passthrough Debug to Display, since errors should be user-visible
-impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-		f.write_str(error::Error::description(self))
-	}
-}
-
-impl error::Error for Error {
-	fn cause(&self) -> Option<&error::Error> {
-		None
-	}
-
-	fn description(&self) -> &str {
-		match *self {
-			Error::InvalidSeedSize => "keychain: seed isn't of size 128, 256 or 512",
-			// TODO change when ser. ext. size is fixed
-			Error::InvalidSliceSize => "keychain: serialized extended key must be of size 73",
-			Error::InvalidExtendedKey => "keychain: the given serialized extended key is invalid",
-			Error::Secp(_) => "keychain: secp error",
-			Error::ParseIntError(_) => "keychain: error parsing int",
-		}
-	}
-}
-
-#[derive(Clone, PartialEq, Eq, Ord, Hash, PartialOrd)]
-pub struct Identifier([u8; IDENTIFIER_SIZE]);
-
-impl ser::Serialize for Identifier {
-	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-	where
-		S: ser::Serializer,
-	{
-		serializer.serialize_str(&self.to_hex())
-	}
-}
-
-impl<'de> de::Deserialize<'de> for Identifier {
-	fn deserialize<D>(deserializer: D) -> Result<Identifier, D::Error>
-	where
-		D: de::Deserializer<'de>,
-	{
-		deserializer.deserialize_str(IdentifierVisitor)
-	}
-}
-
-struct IdentifierVisitor;
-
-impl<'de> de::Visitor<'de> for IdentifierVisitor {
-	type Value = Identifier;
-
-	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-		formatter.write_str("an identifier")
-	}
-
-	fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-	where
-		E: de::Error,
-	{
-		let identifier = Identifier::from_hex(s).unwrap();
-		Ok(identifier)
-	}
-}
-
-impl Identifier {
-	pub fn zero() -> Identifier {
-		Identifier::from_bytes(&[0; IDENTIFIER_SIZE])
-	}
-
-	pub fn from_bytes(bytes: &[u8]) -> Identifier {
-		let mut identifier = [0; IDENTIFIER_SIZE];
-		for i in 0..min(IDENTIFIER_SIZE, bytes.len()) {
-			identifier[i] = bytes[i];
-		}
-		Identifier(identifier)
-	}
-
-	pub fn to_bytes(&self) -> [u8; IDENTIFIER_SIZE] {
-		self.0.clone()
-	}
-
-	pub fn from_pubkey(secp: &Secp256k1, pubkey: &PublicKey) -> Identifier {
-		let bytes = pubkey.serialize_vec(secp, true);
-		let identifier = blake2b(IDENTIFIER_SIZE, &[], &bytes[..]);
-		Identifier::from_bytes(&identifier.as_bytes())
-	}
-
-	/// Return the identifier of the secret key
-	/// which is the blake2b (10 byte) digest of the PublicKey
-	/// corresponding to the secret key provided.
-	fn from_secret_key(secp: &Secp256k1, key: &SecretKey) -> Result<Identifier, Error> {
-		let key_id = PublicKey::from_secret_key(secp, key)?;
-		Ok(Identifier::from_pubkey(secp, &key_id))
-	}
-
-	fn from_hex(hex: &str) -> Result<Identifier, Error> {
-		let bytes = util::from_hex(hex.to_string()).unwrap();
-		Ok(Identifier::from_bytes(&bytes))
-	}
-
-	pub fn to_hex(&self) -> String {
-		util::to_hex(self.0.to_vec())
-	}
-}
-
-impl AsRef<[u8]> for Identifier {
-	fn as_ref(&self) -> &[u8] {
-		&self.0.as_ref()
-	}
-}
-
-impl ::std::fmt::Debug for Identifier {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-		write!(f, "{}(", stringify!(Identifier))?;
-		write!(f, "{}", self.to_hex())?;
-		write!(f, ")")
-	}
-}
-
-impl fmt::Display for Identifier {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "{}", self.to_hex())
-	}
-}
+use util::secp::key::SecretKey;
 
 #[derive(Debug, Clone)]
 pub struct ChildKey {
@@ -210,7 +54,11 @@ impl ExtendedKey {
 	pub fn from_seed(secp: &Secp256k1, seed: &[u8]) -> Result<ExtendedKey, Error> {
 		match seed.len() {
 			16 | 32 | 64 => (),
-			_ => return Err(Error::InvalidSeedSize),
+			_ => {
+				return Err(Error::KeyDerivation(
+					"seed size must be 128, 256 or 512".to_owned(),
+				))
+			}
 		}
 
 		let derived = blake2b(64, b"Grin/MW Seed", seed);

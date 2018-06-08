@@ -20,7 +20,7 @@ extern crate grin_wallet as wallet;
 extern crate rand;
 extern crate uuid;
 
-use keychain::{BlindSum, BlindingFactor, Keychain};
+use keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::ProofMessage;
 use util::{kernel_sig_msg, secp};
@@ -31,8 +31,8 @@ use rand::thread_rng;
 
 #[test]
 fn aggsig_sender_receiver_interaction() {
-	let sender_keychain = Keychain::from_random_seed().unwrap();
-	let receiver_keychain = Keychain::from_random_seed().unwrap();
+	let sender_keychain = ExtKeychain::from_random_seed().unwrap();
+	let receiver_keychain = ExtKeychain::from_random_seed().unwrap();
 
 	// Calculate the kernel excess here for convenience.
 	// Normally this would happen during transaction building.
@@ -45,7 +45,7 @@ fn aggsig_sender_receiver_interaction() {
 			.derived_key(&receiver_keychain.derive_key_id(1).unwrap())
 			.unwrap();
 
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let blinding_factor = keychain
 			.blind_sum(&BlindSum::new()
 				.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
@@ -201,7 +201,7 @@ fn aggsig_sender_receiver_interaction() {
 
 	// Check we can verify the sig using the kernel excess
 	{
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed().unwrap();
 
 		let msg = secp::Message::from_slice(&kernel_sig_msg(0, 0)).unwrap();
 
@@ -214,8 +214,8 @@ fn aggsig_sender_receiver_interaction() {
 
 #[test]
 fn aggsig_sender_receiver_interaction_offset() {
-	let sender_keychain = Keychain::from_random_seed().unwrap();
-	let receiver_keychain = Keychain::from_random_seed().unwrap();
+	let sender_keychain = ExtKeychain::from_random_seed().unwrap();
+	let receiver_keychain = ExtKeychain::from_random_seed().unwrap();
 
 	// This is the kernel offset that we use to split the key
 	// Summing these at the block level prevents the
@@ -233,7 +233,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			.derived_key(&receiver_keychain.derive_key_id(1).unwrap())
 			.unwrap();
 
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let blinding_factor = keychain
 			.blind_sum(&BlindSum::new()
 				.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
@@ -393,7 +393,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 
 	// Check we can verify the sig using the kernel excess
 	{
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed().unwrap();
 
 		let msg = secp::Message::from_slice(&kernel_sig_msg(0, 0)).unwrap();
 
@@ -406,7 +406,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 
 #[test]
 fn test_rewind_range_proof() {
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
 	let commit = keychain.commit(5, &key_id).unwrap();
 	let msg = ProofMessage::from_bytes(&[0u8; 64]);

@@ -18,7 +18,7 @@ use std::fmt::{self, Display};
 
 use core::core::committed;
 use core::core::transaction;
-use keychain::{self, extkey};
+use keychain;
 use util::secp;
 
 /// Lib tx error definition
@@ -36,9 +36,6 @@ pub enum ErrorKind {
 	/// Keychain error
 	#[fail(display = "Keychain Error")]
 	Keychain(keychain::Error),
-	/// Extended key error
-	#[fail(display = "Extended Key Error")]
-	ExtendedKey(extkey::Error),
 	/// Transaction error
 	#[fail(display = "Transaction Error")]
 	Transaction(transaction::Error),
@@ -113,14 +110,6 @@ impl From<keychain::Error> for Error {
 	fn from(error: keychain::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::Keychain(error)),
-		}
-	}
-}
-
-impl From<extkey::Error> for Error {
-	fn from(error: extkey::Error) -> Error {
-		Error {
-			inner: Context::new(ErrorKind::ExtendedKey(error)),
 		}
 	}
 }

@@ -103,9 +103,9 @@ impl WalletSeed {
 		util::to_hex(self.0.to_vec())
 	}
 
-	pub fn derive_keychain(&self, password: &str) -> Result<keychain::Keychain, Error> {
+	pub fn derive_keychain<K: Keychain>(&self, password: &str) -> Result<K, Error> {
 		let seed = blake2::blake2b::blake2b(64, &password.as_bytes(), &self.0);
-		let result = keychain::Keychain::from_seed(seed.as_bytes())?;
+		let result = K::from_seed(seed.as_bytes())?;
 		Ok(result)
 	}
 
@@ -168,9 +168,9 @@ impl WalletSeed {
 /// Wallet information tracking all our outputs. Based on HD derivation and
 /// avoids storing any key data, only storing output amounts and child index.
 #[derive(Debug, Clone)]
-pub struct FileWallet {
+pub struct FileWallet<K> {
 	/// Keychain
-	pub keychain: Option<Keychain>,
+	pub keychain: Option<K>,
 	/// Configuration
 	pub config: WalletConfig,
 	/// passphrase: TODO better ways of dealing with this other than storing
@@ -185,14 +185,18 @@ pub struct FileWallet {
 	pub lock_file_path: String,
 }
 
-impl WalletBackend for FileWallet {
+impl<K> WalletBackend<K> for FileWallet<K>
+where
+	K: Keychain,
+{
 	/// Initialise with whatever stored credentials we have
 	fn open_with_credentials(&mut self) -> Result<(), libwallet::Error> {
 		let wallet_seed = WalletSeed::from_file(&self.config)
 			.context(libwallet::ErrorKind::CallbackImpl("Error opening wallet"))?;
-		self.keychain = Some(wallet_seed.derive_keychain(&self.passphrase).context(
-			libwallet::ErrorKind::CallbackImpl("Error deriving keychain"),
-		)?);
+		let keychain = wallet_seed.derive_keychain(&self.passphrase);
+		self.keychain = Some(keychain.context(libwallet::ErrorKind::CallbackImpl(
+			"Error deriving keychain",
+		))?);
 		// Just blow up password for now after it's been used
 		self.passphrase = String::from("");
 		Ok(())
@@ -205,7 +209,7 @@ impl WalletBackend for FileWallet {
 	}
 
 	/// Return the keychain being used
-	fn keychain(&mut self) -> &mut Keychain {
+	fn keychain(&mut self) -> &mut K {
 		self.keychain.as_mut().unwrap()
 	}
 
@@ -398,7 +402,7 @@ impl WalletBackend for FileWallet {
 	}
 }
 
-impl WalletClient for FileWallet {
+impl<K> WalletClient for FileWallet<K> {
 	/// Return URL for check node
 	fn node_url(&self) -> &str {
 		&self.config.check_node_api_http_addr
@@ -473,7 +477,10 @@ impl WalletClient for FileWallet {
 	}
 }
 
-impl FileWallet {
+impl<K> FileWallet<K>
+where
+	K: Keychain,
+{
 	/// Create a new FileWallet instance
 	pub fn new(config: WalletConfig, passphrase: &str) -> Result<Self, Error> {
 		let mut retval = FileWallet {

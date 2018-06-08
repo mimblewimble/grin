@@ -132,7 +132,7 @@ fn build_transaction() {
 
 	let _ = slate
 		.fill_round_2(
-			&wallet1.keychain.as_ref().unwrap(),
+			wallet1.keychain.as_ref().unwrap(),
 			&recp_context.sec_key,
 			&recp_context.sec_nonce,
 			1,
@@ -149,7 +149,7 @@ fn build_transaction() {
 	// SENDER Part 3: Sender confirmation
 	let _ = slate
 		.fill_round_2(
-			&wallet1.keychain.as_ref().unwrap(),
+			wallet1.keychain.as_ref().unwrap(),
 			&sender_context.sec_key,
 			&sender_context.sec_nonce,
 			0,
@@ -161,7 +161,7 @@ fn build_transaction() {
 	debug!(LOGGER, "{:?}", slate);
 
 	// Final transaction can be built by anyone at this stage
-	let res = slate.finalize(&wallet1.keychain.as_ref().unwrap());
+	let res = slate.finalize(wallet1.keychain.as_ref().unwrap());
 
 	if let Err(e) = res {
 		panic!("Error creating final tx: {:?}", e);

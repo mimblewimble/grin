@@ -27,6 +27,7 @@ use chain::Chain;
 use core::core::hash::Hashed;
 use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::{consensus, global, pow};
+use keychain::ExtKeychain;
 use wallet::file_wallet::*;
 use wallet::libwallet::internal::updater;
 use wallet::libwallet::types::*;
@@ -37,10 +38,11 @@ use util::secp::pedersen;
 
 /// Mostly for testing, refreshes output state against a local chain instance
 /// instead of via an http API call
-pub fn refresh_output_state_local<T: WalletBackend>(
-	wallet: &mut T,
-	chain: &chain::Chain,
-) -> Result<(), Error> {
+pub fn refresh_output_state_local<T, K>(wallet: &mut T, chain: &chain::Chain) -> Result<(), Error>
+where
+	T: WalletBackend<K>,
+	K: keychain::Keychain,
+{
 	let wallet_outputs = updater::map_wallet_outputs(wallet)?;
 	let chain_outputs: Vec<Option<api::Output>> = wallet_outputs
 		.keys()
@@ -66,10 +68,14 @@ pub fn refresh_output_state_local<T: WalletBackend>(
 /// (0:total, 1:amount_awaiting_confirmation, 2:confirmed but locked,
 /// 3:currently_spendable, 4:locked total) TODO: Should be a wallet lib
 /// function with nicer return values
-pub fn get_wallet_balances<T: WalletBackend>(
+pub fn get_wallet_balances<T, K>(
 	wallet: &mut T,
 	height: u64,
-) -> Result<(u64, u64, u64, u64, u64), Error> {
+) -> Result<(u64, u64, u64, u64, u64), Error>
+where
+	T: WalletBackend<K>,
+	K: keychain::Keychain,
+{
 	let ret_val = wallet.read_wallet(|wallet_data| {
 		let mut unspent_total = 0;
 		let mut unspent_but_locked_total = 0;
@@ -151,11 +157,11 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: (Out
 /// adds a reward output to a wallet, includes that reward in a block, mines
 /// the block and adds it to the chain, with option transactions included.
 /// Helpful for building up precise wallet balances for testing.
-pub fn award_block_to_wallet<T: WalletBackend>(
-	chain: &Chain,
-	txs: Vec<&Transaction>,
-	wallet: &mut T,
-) {
+pub fn award_block_to_wallet<T, K>(chain: &Chain, txs: Vec<&Transaction>, wallet: &mut T)
+where
+	T: WalletBackend<K>,
+	K: keychain::Keychain,
+{
 	let prev = chain.head_header().unwrap();
 	let fee_amt = txs.iter().map(|tx| tx.fee()).sum();
 	let fees = BlockFees {
@@ -188,14 +194,18 @@ pub fn award_block_to_wallet<T: WalletBackend>(
 }
 
 /// adds many block rewards to a wallet, no transactions
-pub fn award_blocks_to_wallet<T: WalletBackend>(chain: &Chain, wallet: &mut T, num_rewards: usize) {
+pub fn award_blocks_to_wallet<T, K>(chain: &Chain, wallet: &mut T, num_rewards: usize)
+where
+	T: WalletBackend<K>,
+	K: keychain::Keychain,
+{
 	for _ in 0..num_rewards {
 		award_block_to_wallet(chain, vec![], wallet);
 	}
 }
 
 /// Create a new wallet in a particular directory
-pub fn create_wallet(dir: &str) -> FileWallet {
+pub fn create_wallet(dir: &str) -> FileWallet<ExtKeychain> {
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
 	wallet::WalletSeed::init_file(&wallet_config).expect("Failed to create wallet seed file.");

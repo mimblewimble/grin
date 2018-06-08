@@ -20,15 +20,15 @@ extern crate grin_wallet as wallet;
 use std::fs;
 use std::sync::Arc;
 
+use chain::ChainStore;
 use chain::store::ChainKVStore;
 use chain::txhashset;
 use chain::txhashset::TxHashSet;
 use chain::types::Tip;
-use chain::ChainStore;
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
-use keychain::Keychain;
+use keychain::{ExtKeychain, Keychain};
 use wallet::libtx::{build, reward};
 
 fn clean_output_dir(dir_name: &str) {
@@ -43,7 +43,7 @@ fn test_some_raw_txs() {
 	let store = Arc::new(ChainKVStore::new(db_root.clone()).unwrap());
 	let mut txhashset = TxHashSet::open(db_root.clone(), store.clone()).unwrap();
 
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();
 	let key_id2 = keychain.derive_key_id(2).unwrap();
 	let key_id3 = keychain.derive_key_id(3).unwrap();
