@@ -29,13 +29,13 @@ use std::sync::{Arc, RwLock};
 
 use core::core::{Block, BlockHeader};
 
+use chain::ChainStore;
 use chain::txhashset;
 use chain::types::Tip;
-use chain::ChainStore;
 use core::core::target::Difficulty;
 use core::core::transaction;
 
-use keychain::{Keychain, ExtKeychain};
+use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
 
 use common::*;

@@ -268,12 +268,13 @@ impl LocalServerContainer {
 			//panic!("Error initting wallet seed: {}", e);
 		}
 
-		let wallet: FileWallet<keychain::ExtKeychain> = FileWallet::new(self.wallet_config.clone(), "").unwrap_or_else(|e| {
-			panic!(
-				"Error creating wallet: {:?} Config: {:?}",
-				e, self.wallet_config
-			)
-		});
+		let wallet: FileWallet<keychain::ExtKeychain> =
+			FileWallet::new(self.wallet_config.clone(), "").unwrap_or_else(|e| {
+				panic!(
+					"Error creating wallet: {:?} Config: {:?}",
+					e, self.wallet_config
+				)
+			});
 
 		wallet::controller::foreign_listener(wallet, &self.wallet_config.api_listen_addr())
 			.unwrap_or_else(|e| {

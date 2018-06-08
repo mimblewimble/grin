@@ -29,7 +29,7 @@ use std::sync::{Arc, RwLock};
 
 use core::core::Transaction;
 
-use keychain::{Keychain, ExtKeychain};
+use keychain::{ExtKeychain, Keychain};
 use pool::TransactionPool;
 use pool::types::*;
 
