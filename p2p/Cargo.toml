@@ -9,6 +9,7 @@ publish = false
 bitflags = "1"
 bytes = "0.4"
 enum_primitive = "0.1"
+lmdb-zero = "0.4.4"
 net2 = "0.2"
 num = "0.1"
 rand = "0.3"

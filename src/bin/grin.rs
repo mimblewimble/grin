@@ -422,7 +422,7 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 		let _ = thread::Builder::new()
 			.name("wallet_listener".to_string())
 			.spawn(move || {
-				let wallet = FileWallet::new(wallet_config.clone(), "").unwrap_or_else(|e| {
+				let wallet: FileWallet<keychain::ExtKeychain> = FileWallet::new(wallet_config.clone(), "").unwrap_or_else(|e| {
 					panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
 				});
 				wallet::controller::foreign_listener(wallet, &wallet_config.api_listen_addr())
@@ -539,7 +539,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 
 	// Handle listener startup commands
 	{
-		let wallet = FileWallet::new(wallet_config.clone(), passphrase).unwrap_or_else(|e| {
+		let wallet: FileWallet<keychain::ExtKeychain> = FileWallet::new(wallet_config.clone(), passphrase).unwrap_or_else(|e| {
 			panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
 		});
 		match wallet_args.subcommand() {
@@ -569,7 +569,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 
 	// Handle single-use (command line) owner commands
 	{
-		let mut wallet = FileWallet::new(wallet_config.clone(), passphrase).unwrap_or_else(|e| {
+		let mut wallet: FileWallet<keychain::ExtKeychain> = FileWallet::new(wallet_config.clone(), passphrase).unwrap_or_else(|e| {
 			panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
 		});
 		let _res = wallet::controller::owner_single_use(&mut wallet, |api| {
