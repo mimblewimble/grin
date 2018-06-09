@@ -22,6 +22,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
+use croaring::Bitmap;
+
 use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::core::committed::Committed;
@@ -437,6 +439,7 @@ impl<'a> Extension<'a> {
 		let pos_to_unremove = tx.inputs
 			.iter()
 			.filter_map(|x| self.commit_index.get_output_pos(&x.commitment()).ok())
+			.map(|x| x as u32)
 			.collect();
 
 		// When applying blocks we can apply the coinbase output first
@@ -686,6 +689,37 @@ impl<'a> Extension<'a> {
 		Ok(merkle_proof)
 	}
 
+	fn pos_to_unremove(
+		&self,
+		block_header: &BlockHeader,
+		head_header: &BlockHeader,
+	) -> Result<Bitmap, Error> {
+		// TODO - Check our logic here, inclusive/exclusive, off by one etc...
+		// Now "rewind" back through blocks from current chain head until we
+		// reach the forked block, collecting all the input pos (to unremove)
+		// as we go.
+
+		let mut bitmap = Bitmap::create();
+		let mut current = head_header.hash();
+		loop {
+			if current == block_header.hash() {
+				break;
+			}
+			// TODO - consider storing bitmap per block in the index
+			// so can just AND these together directly.
+			let current_block = self.commit_index.get_block(&current)?;
+			let pos_inputs = current_block
+				.inputs
+				.iter()
+				.filter_map(|x| self.commit_index.get_output_pos(&x.commitment()).ok())
+				.map(|x| x as u32)
+				.collect();
+			bitmap.and_inplace(&pos_inputs);
+			current = current_block.header.previous;
+		}
+		Ok(bitmap)
+	}
+
 	/// Rewinds the MMRs to the provided block, using the last output and
 	/// last kernel of the block we want to rewind to.
 	pub fn rewind(
@@ -693,34 +727,6 @@ impl<'a> Extension<'a> {
 		block_header: &BlockHeader,
 		head_header: &BlockHeader,
 	) -> Result<(), Error> {
-		// TODO - Check our logic here, inclusive/exclusive, off by one etc...
-		// Now "rewind" back through blocks from current chain head until we
-		// reach the forked block, collecting all the input pos (to unremove)
-		// as we go.
-		let pos_to_unremove = {
-			let mut pos = vec![];
-			let mut current = head_header.hash();
-			loop {
-				if current == block_header.hash() {
-					break;
-				}
-				let current_block = self.commit_index.get_block(&current)?;
-				let mut pos_inputs: Vec<u64> = current_block
-					.inputs
-					.iter()
-					.filter_map(|x| self.commit_index.get_output_pos(&x.commitment()).ok())
-					.collect();
-				pos.append(&mut pos_inputs);
-				current = current_block.header.previous;
-			}
-			pos
-		};
-
-		println!(
-			"txhashset extension: rewind: pos_to_unremove - {:?}",
-			pos_to_unremove
-		);
-
 		let hash = block_header.hash();
 		let height = block_header.height;
 		trace!(LOGGER, "Rewind to header {} @ {}", height, hash);
@@ -728,6 +734,7 @@ impl<'a> Extension<'a> {
 		// rewind our MMRs to the appropriate pos
 		// based on block height and block marker
 		let marker = self.commit_index.get_block_marker(&hash)?;
+		let pos_to_unremove = self.pos_to_unremove(block_header, head_header)?;
 		self.rewind_to_pos(marker.output_pos, marker.kernel_pos, &pos_to_unremove)?;
 
 		Ok(())
@@ -739,7 +746,7 @@ impl<'a> Extension<'a> {
 		&mut self,
 		output_pos: u64,
 		kernel_pos: u64,
-		pos_to_unremove: &Vec<u64>,
+		pos_to_unremove: &Bitmap,
 	) -> Result<(), Error> {
 		trace!(
 			LOGGER,

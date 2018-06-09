@@ -404,7 +404,7 @@ where
 	/// Rewind the PMMR to a previous position, as if all push operations after
 	/// that had been canceled. Expects a position in the PMMR to rewind to as
 	/// well as a vec of positions that need to be "unremoved".
-	pub fn rewind(&mut self, position: u64, pos_to_unremove: &Vec<u64>) -> Result<(), String> {
+	pub fn rewind(&mut self, position: u64, pos_to_unremove: &Bitmap) -> Result<(), String> {
 		// identify which actual position we should rewind to as the provided
 		// position is a leaf, which may had some parent that needs to exist
 		// afterward for the MMR to be valid
@@ -413,7 +413,7 @@ where
 			pos += 1;
 		}
 
-		self.backend.rewind(pos, &pos_to_unremove)?;
+		self.backend.rewind(pos, pos_to_unremove)?;
 		self.last_pos = pos;
 		Ok(())
 	}
