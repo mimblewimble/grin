@@ -63,7 +63,7 @@ where
 	/// operations after that had been canceled. Expects a position in the PMMR
 	/// to rewind to as well as the consumer-provided index of when the change
 	/// occurred (see remove).
-	fn rewind(&mut self, position: u64, pos_to_unremove: &Vec<u64>) -> Result<(), String>;
+	fn rewind(&mut self, position: u64, pos_to_unremove: &Bitmap) -> Result<(), String>;
 
 	/// Get a Hash by insertion position.
 	fn get_hash(&self, position: u64) -> Option<Hash>;

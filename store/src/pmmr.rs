@@ -147,7 +147,7 @@ where
 
 	/// Rewind the PMMR backend to the given position.
 	/// Use the index to rewind the rm_log correctly (based on block height).
-	fn rewind(&mut self, position: u64, to_unremove: &Vec<u64>) -> Result<(), String> {
+	fn rewind(&mut self, position: u64, to_unremove: &Bitmap) -> Result<(), String> {
 		// First rewind the rm_log with the bitmap of pos we want to rewind.
 		self.rm_log.rewind(&to_unremove);
 
@@ -169,9 +169,8 @@ where
 
 	/// Remove Hash by insertion position.
 	fn remove(&mut self, pos: u64, index: u32) -> Result<(), String> {
-		self.rm_log
-			.append(pos, index)
-			.map_err(|e| format!("Could not write to log storage, disk full? {:?}", e))
+		self.rm_log.append(pos, index);
+		Ok(())
 	}
 
 	/// Return data file path

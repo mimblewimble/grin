@@ -289,16 +289,13 @@ impl RemoveLog {
 	/// We keep everything in the rm_log from that index and earlier.
 	/// In practice the index is a block height, so we rewind back to that block
 	/// keeping everything in the rm_log up to and including that block.
-	pub fn rewind(&mut self, to_unremove: &Vec<u64>) -> io::Result<()> {
-		let bitmask: Bitmap = to_unremove.iter().map(|&x| x as u32).collect();
-		self.bitmap.andnot_inplace(&bitmask);
-		Ok(())
+	pub fn rewind(&mut self, to_unremove: &Bitmap) {
+		self.bitmap.andnot_inplace(&to_unremove);
 	}
 
 	/// Append a new position to the remove log.
-	pub fn append(&mut self, elmt: u64, index: u32) -> io::Result<()> {
+	pub fn append(&mut self, elmt: u64, index: u32) {
 		self.bitmap.add(elmt as u32);
-		Ok(())
 	}
 
 	/// Flush the positions to remove to file.
