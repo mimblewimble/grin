@@ -16,6 +16,7 @@
 
 use std::sync::{Arc, RwLock};
 
+use croaring::Bitmap;
 use lru_cache::LruCache;
 
 use util::secp::pedersen::Commitment;
@@ -24,7 +25,7 @@ use core::consensus::TargetError;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
-use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
+use grin_store::{self, option_to_not_found, to_key, u64_to_key, Error};
 use types::*;
 
 const STORE_SUBPATH: &'static str = "chain";
@@ -38,6 +39,7 @@ const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const BLOCK_MARKER_PREFIX: u8 = 'm' as u8;
 const BLOCK_SUMS_PREFIX: u8 = 'M' as u8;
+const BLOCK_INPUT_BITMAP_PREFIX: u8 = 'B' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
 /// store.
@@ -253,6 +255,31 @@ impl ChainStore for ChainKVStore {
 
 	fn delete_block_sums(&self, bh: &Hash) -> Result<(), Error> {
 		self.db.delete(&to_key(BLOCK_SUMS_PREFIX, &mut bh.to_vec()))
+	}
+
+	fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
+		// TODO - we can build this from scratch if necessary (backward compatibility)
+
+		// TODO - deserialize this into a bitmap
+		if let Ok(Some(bytes)) = self.db
+			.get(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
+		{
+			Ok(Bitmap::deserialize(&bytes))
+		} else {
+			// TODO - we can build this from scratch if necessary (backward compatibility)
+			Err(Error::NotFoundErr)
+		}
+	}
+
+	fn save_block_input_bitmap(&self, bh: &Hash, bitmap: &Bitmap) -> Result<(), Error> {
+		self.db.put(
+			&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec())[..],
+			bitmap.serialize(),
+		)
+	}
+
+	fn delete_block_input_bitmap(&self, bh: &Hash) -> Result<(), Error> {
+		panic!("not yet implemented!");
 	}
 
 	/// Maintain consistency of the "header_by_height" index by traversing back

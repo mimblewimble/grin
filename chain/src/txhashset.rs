@@ -434,8 +434,8 @@ impl<'a> Extension<'a> {
 		let output_pos = self.output_pmmr.unpruned_size();
 		let kernel_pos = self.kernel_pmmr.unpruned_size();
 
-		// let rewind_to_height = height - 1;
-
+		// Build a bitmap of all the output positions being spent by this tx
+		// so we can safely rewind the rm_log if necessary.
 		let pos_to_unremove = tx.inputs
 			.iter()
 			.filter_map(|x| self.commit_index.get_output_pos(&x.commitment()).ok())
@@ -705,17 +705,10 @@ impl<'a> Extension<'a> {
 			if current == block_header.hash() {
 				break;
 			}
-			// TODO - consider storing bitmap per block in the index
-			// so can just AND these together directly.
-			let current_block = self.commit_index.get_block(&current)?;
-			let pos_inputs = current_block
-				.inputs
-				.iter()
-				.filter_map(|x| self.commit_index.get_output_pos(&x.commitment()).ok())
-				.map(|x| x as u32)
-				.collect();
-			bitmap.and_inplace(&pos_inputs);
-			current = current_block.header.previous;
+			let current_header = self.commit_index.get_block_header(&current)?;
+			let input_bitmap = self.commit_index.get_block_input_bitmap(&current)?;
+			bitmap.and_inplace(&input_bitmap);
+			current = current_header.previous;
 		}
 		Ok(bitmap)
 	}

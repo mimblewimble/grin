@@ -16,6 +16,7 @@
 
 use std::sync::{Arc, RwLock};
 
+use croaring::Bitmap;
 use time;
 
 use core::consensus;
@@ -116,6 +117,7 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		);
 
 		add_block(b, &mut ctx)?;
+		add_block_input_bitmap(b, &mut ctx)?;
 		let h = update_head(b, &mut ctx)?;
 		if h.is_none() {
 			extension.force_rollback();
@@ -378,6 +380,17 @@ fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	ctx.store
 		.save_block(b)
 		.map_err(|e| Error::StoreErr(e, "pipe save block".to_owned()))
+}
+
+fn add_block_input_bitmap(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+	let bitmap: Bitmap = b.inputs
+		.iter()
+		.filter_map(|x| ctx.store.get_output_pos(&x.commitment()).ok())
+		.map(|x| x as u32)
+		.collect();
+	ctx.store
+		.save_block_input_bitmap(&b.hash(), &bitmap)
+		.map_err(|e| Error::StoreErr(e, "pipe save block input bitmap".to_owned()))
 }
 
 /// Officially adds the block header to our header chain.

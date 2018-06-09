@@ -16,6 +16,8 @@
 
 use std::{error, fmt, io};
 
+use croaring::Bitmap;
+
 use util::secp;
 use util::secp::pedersen::Commitment;
 use util::secp_static;
@@ -346,6 +348,12 @@ pub trait ChainStore: Send + Sync {
 
 	/// Delete block sums for the given block hash.
 	fn delete_block_sums(&self, bh: &Hash) -> Result<(), store::Error>;
+
+	fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, store::Error>;
+
+	fn save_block_input_bitmap(&self, bh: &Hash, bitmap: &Bitmap) -> Result<(), store::Error>;
+
+	fn delete_block_input_bitmap(&self, bh: &Hash) -> Result<(), store::Error>;
 
 	/// Saves the provided block header at the corresponding height. Also check
 	/// the consistency of the height chain in store by assuring previous
