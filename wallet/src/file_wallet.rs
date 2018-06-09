@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use std::collections::HashMap;
+use std::collections::hash_map::Values;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::MAIN_SEPARATOR;
@@ -88,6 +89,15 @@ where
 	fn keychain(&mut self) -> &mut K {
 		self.keychain.as_mut().unwrap()
 	}
+
+	fn iter<'a>(&'a self) -> Box<Iterator<Item=&'a OutputData> + 'a> {
+		Box::new(self.outputs.values())
+	}
+
+	fn get(&self, id: String) -> Option<OutputData> {
+		self.outputs.get(&id).map(|o| o.clone())
+	}
+
 
 	/// Return the outputs directly
 	fn outputs(&mut self) -> &mut HashMap<String, OutputData> {
