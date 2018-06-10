@@ -70,6 +70,9 @@ pub enum Error {
 	MerkleProof,
 	/// Error when verifying kernel sums via committed trait.
 	Committed(committed::Error),
+	/// Validation error relating to cut-through.
+	/// Specifically the tx is spending its own output, which is not valid.
+	CutThrough,
 	/// Other unspecified error condition
 	Other(String),
 }
@@ -682,6 +685,7 @@ impl Block {
 	) -> Result<((Commitment, Commitment)), Error> {
 		self.verify_weight()?;
 		self.verify_sorted()?;
+		self.verify_cut_through()?;
 		self.verify_coinbase()?;
 		self.verify_inputs()?;
 		self.verify_kernel_lock_heights()?;
@@ -705,10 +709,24 @@ impl Block {
 		Ok(())
 	}
 
+	// Verify that inputs|outputs|kernels are all sorted in lexicographical order.
 	fn verify_sorted(&self) -> Result<(), Error> {
 		self.inputs.verify_sort_order()?;
 		self.outputs.verify_sort_order()?;
 		self.kernels.verify_sort_order()?;
+		Ok(())
+	}
+
+	// Verify that no input is spending an ouput from the same block.
+	fn verify_cut_through(&self) -> Result<(), Error> {
+		for inp in &self.inputs {
+			if self.outputs
+				.iter()
+				.any(|out| out.commitment() == inp.commitment())
+			{
+				return Err(Error::CutThrough);
+			}
+		}
 		Ok(())
 	}
 
