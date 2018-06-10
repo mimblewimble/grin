@@ -434,9 +434,15 @@ impl<'a> Extension<'a> {
 		let output_pos = self.output_pmmr.unpruned_size();
 		let kernel_pos = self.kernel_pmmr.unpruned_size();
 
-		// Build a bitmap of all the output positions being spent by this tx
-		// so we can safely rewind the rm_log if necessary.
-		let pos_to_unremove = tx.inputs
+		// Build bitmap of output pos being added by this tx (for rewind).
+		let rewind_output_pos = tx.outputs
+			.iter()
+			.filter_map(|x| self.commit_index.get_output_pos(&x.commitment()).ok())
+			.map(|x| x as u32)
+			.collect();
+
+		// Build bitmap of output pos spent (as inputs) by this tx (for rewind).
+		let rewind_spent_pos = tx.inputs
 			.iter()
 			.filter_map(|x| self.commit_index.get_output_pos(&x.commitment()).ok())
 			.map(|x| x as u32)
@@ -446,21 +452,36 @@ impl<'a> Extension<'a> {
 		// but we cannot do this here, so we need to apply outputs first.
 		for ref output in &tx.outputs {
 			if let Err(e) = self.apply_output(output) {
-				self.rewind_to_pos(output_pos, kernel_pos, &pos_to_unremove)?;
+				self.rewind_to_pos(
+					output_pos,
+					kernel_pos,
+					&rewind_output_pos,
+					&rewind_spent_pos,
+				)?;
 				return Err(e);
 			}
 		}
 
 		for ref input in &tx.inputs {
 			if let Err(e) = self.apply_input(input, height) {
-				self.rewind_to_pos(output_pos, kernel_pos, &pos_to_unremove)?;
+				self.rewind_to_pos(
+					output_pos,
+					kernel_pos,
+					&rewind_output_pos,
+					&rewind_spent_pos,
+				)?;
 				return Err(e);
 			}
 		}
 
 		for ref kernel in &tx.kernels {
 			if let Err(e) = self.apply_kernel(kernel) {
-				self.rewind_to_pos(output_pos, kernel_pos, &pos_to_unremove)?;
+				self.rewind_to_pos(
+					output_pos,
+					kernel_pos,
+					&rewind_output_pos,
+					&rewind_spent_pos,
+				)?;
 				return Err(e);
 			}
 		}
@@ -727,8 +748,17 @@ impl<'a> Extension<'a> {
 		// rewind our MMRs to the appropriate pos
 		// based on block height and block marker
 		let marker = self.commit_index.get_block_marker(&hash)?;
-		let pos_to_unremove = self.pos_to_unremove(block_header, head_header)?;
-		self.rewind_to_pos(marker.output_pos, marker.kernel_pos, &pos_to_unremove)?;
+
+		panic!("work in progress");
+		let rewind_output_pos = self.pos_to_unremove(block_header, head_header)?;
+		let rewind_spent_pos = self.pos_to_unremove(block_header, head_header)?;
+
+		self.rewind_to_pos(
+			marker.output_pos,
+			marker.kernel_pos,
+			&rewind_output_pos,
+			&rewind_spent_pos,
+		)?;
 
 		Ok(())
 	}
@@ -739,7 +769,8 @@ impl<'a> Extension<'a> {
 		&mut self,
 		output_pos: u64,
 		kernel_pos: u64,
-		pos_to_unremove: &Bitmap,
+		rewind_output_pos: &Bitmap,
+		rewind_spent_pos: &Bitmap,
 	) -> Result<(), Error> {
 		trace!(
 			LOGGER,
@@ -749,13 +780,13 @@ impl<'a> Extension<'a> {
 		);
 
 		self.output_pmmr
-			.rewind(output_pos, pos_to_unremove)
+			.rewind(output_pos, rewind_output_pos, rewind_spent_pos)
 			.map_err(&Error::TxHashSetErr)?;
 		self.rproof_pmmr
-			.rewind(output_pos, pos_to_unremove)
+			.rewind(output_pos, rewind_output_pos, rewind_spent_pos)
 			.map_err(&Error::TxHashSetErr)?;
 		self.kernel_pmmr
-			.rewind(kernel_pos, pos_to_unremove)
+			.rewind(kernel_pos, rewind_output_pos, rewind_spent_pos)
 			.map_err(&Error::TxHashSetErr)?;
 
 		Ok(())

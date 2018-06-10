@@ -42,6 +42,13 @@ fn test_and_bitmap() {
 }
 
 #[test]
+fn test_flip_bitmap() {
+	let bitmap: Bitmap = vec![1, 2, 4].into_iter().collect();
+	let res = bitmap.flip((2..4));
+	assert_eq!(res.to_vec(), vec![1, 3, 4]);
+}
+
+#[test]
 fn test_a_small_bitmap() {
 	let bitmap: Bitmap = vec![1, 99, 1_000].into_iter().collect();
 	let serialized_buffer = bitmap.serialize();

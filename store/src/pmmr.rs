@@ -28,7 +28,7 @@ use util::LOGGER;
 
 const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
-const PMMR_RM_LOG_FILE: &'static str = "pmmr_rm_log.bin";
+const PMMR_UTXO_FILE: &'static str = "pmmr_utxo.bin";
 const PMMR_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
 
 /// Maximum number of nodes in the remove log before it gets flushed
@@ -51,7 +51,7 @@ where
 	data_dir: String,
 	hash_file: AppendOnlyFile,
 	data_file: AppendOnlyFile,
-	rm_log: RemoveLog,
+	utxo_set: UtxoSet,
 	pruned_nodes: pmmr::PruneList,
 	_marker: marker::PhantomData<T>,
 }
@@ -67,6 +67,9 @@ where
 			self.hash_file.append(&mut ser::ser_vec(&d.0).unwrap());
 			if let Some(elem) = d.1 {
 				self.data_file.append(&mut ser::ser_vec(&elem).unwrap());
+
+				// Add the new position to our UTXO set.
+				self.utxo_set.add(position);
 			}
 		}
 		Ok(())
@@ -125,31 +128,36 @@ where
 	/// Get the hash at pos.
 	/// Return None if it has been removed.
 	fn get_hash(&self, pos: u64) -> Option<(Hash)> {
-		// Check if this position has been removed via the remove log...
-		if self.rm_log.includes(pos) {
-			None
-		} else {
-			self.get_from_file(pos)
+		if self.utxo_set.includes(pos) {
+			return self.get_from_file(pos);
 		}
+		None
 	}
 
 	/// Get the data at pos.
 	/// Return None if it has been removed or if pos is not a leaf node.
 	fn get_data(&self, pos: u64) -> Option<(T)> {
 		if !pmmr::is_leaf(pos) {
-			None
-		} else if self.rm_log.includes(pos) {
-			None
-		} else {
-			self.get_data_from_file(pos)
+			return None;
 		}
+
+		if self.utxo_set.includes(pos) {
+			return self.get_data_from_file(pos);
+		}
+
+		None
 	}
 
 	/// Rewind the PMMR backend to the given position.
 	/// Use the index to rewind the rm_log correctly (based on block height).
-	fn rewind(&mut self, position: u64, to_unremove: &Bitmap) -> Result<(), String> {
-		// First rewind the rm_log with the bitmap of pos we want to rewind.
-		self.rm_log.rewind(&to_unremove);
+	fn rewind(
+		&mut self,
+		position: u64,
+		rewind_output_pos: &Bitmap,
+		rewind_spent_pos: &Bitmap,
+	) -> Result<(), String> {
+		// First rewind the UTXO set with the pos of outputs and spent outputs (inputs).
+		self.utxo_set.rewind(rewind_output_pos, rewind_spent_pos);
 
 		// Rewind the hash file accounting for pruned/compacted pos
 		let shift = self.pruned_nodes.get_shift(position).unwrap_or(0);
@@ -167,9 +175,9 @@ where
 		Ok(())
 	}
 
-	/// Remove Hash by insertion position.
-	fn remove(&mut self, pos: u64, index: u32) -> Result<(), String> {
-		self.rm_log.append(pos, index);
+	/// Remove by insertion position.
+	fn remove(&mut self, pos: u64) -> Result<(), String> {
+		self.utxo_set.remove(pos);
 		Ok(())
 	}
 
@@ -181,11 +189,11 @@ where
 	fn dump_stats(&self) {
 		debug!(
 			LOGGER,
-			"pmmr backend: unpruned: {}, hashes: {}, data: {}, rm_log: {}, prune_list: {}",
+			"pmmr backend: unpruned: {}, hashes: {}, data: {}, utxo_set: {}, prune_list: {}",
 			self.unpruned_size().unwrap_or(0),
 			self.hash_size().unwrap_or(0),
 			self.data_size().unwrap_or(0),
-			self.rm_log.len(),
+			self.utxo_set.len(),
 			self.pruned_nodes.pruned_nodes.len(),
 		);
 	}
@@ -202,7 +210,7 @@ where
 		let pruned_nodes = pmmr::PruneList {
 			pruned_nodes: prune_list,
 		};
-		let rm_log = RemoveLog::open(format!("{}/{}", data_dir, PMMR_RM_LOG_FILE))?;
+		let utxo_set = UtxoSet::open(format!("{}/{}", data_dir, PMMR_UTXO_FILE))?;
 		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		let data_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
 
@@ -210,7 +218,7 @@ where
 			data_dir,
 			hash_file,
 			data_file,
-			rm_log,
+			utxo_set,
 			pruned_nodes,
 			_marker: marker::PhantomData,
 		})
@@ -260,7 +268,7 @@ where
 				format!("Could not write to log data storage, disk full? {:?}", e),
 			));
 		}
-		self.rm_log.flush()?;
+		self.utxo_set.flush()?;
 
 		Ok(())
 	}
@@ -268,7 +276,7 @@ where
 	/// Discard the current, non synced state of the backend.
 	pub fn discard(&mut self) {
 		self.hash_file.discard();
-		self.rm_log.discard();
+		self.utxo_set.discard();
 		self.data_file.discard();
 	}
 
@@ -301,11 +309,12 @@ where
 	where
 		P: Fn(&[u8]),
 	{
-		if !(max_len > 0 && self.rm_log.len() >= max_len
-			|| max_len == 0 && self.rm_log.len() > RM_LOG_MAX_NODES)
-		{
-			return Ok(false);
-		}
+		// TODO - what do we check here for deciding to compact or not?
+		// if !(max_len > 0 && self.rm_log.len() >= max_len
+		// 	|| max_len == 0 && self.rm_log.len() > RM_LOG_MAX_NODES)
+		// {
+		// 	return Ok(false);
+		// }
 
 		// Paths for tmp hash and data files.
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
@@ -313,8 +322,12 @@ where
 
 		// Now "unremove" all pos removed after the cutoff to leave
 		// everything removed pre cutoff.
+		panic!("we have a utxo set now, compact not yet implemented!!!");
 		let bitmask: Bitmap = rm_post_cutoff.iter().map(|&x| x as u32).collect();
-		let rm_pre_cutoff = self.rm_log
+
+		// TODO - this is INCORRECT, needs thinking through, just getting it
+		// compiling...
+		let rm_pre_cutoff = self.utxo_set
 			.bitmap
 			.andnot(&bitmask)
 			.to_vec()
@@ -406,7 +419,7 @@ where
 
 		// 6. Write the rm_log to disk (optimizing the roaring bitmap storage in the
 		// process). self.rm_log.truncate_and_flush()?;
-		self.rm_log.flush()?;
+		self.utxo_set.flush()?;
 
 		Ok(true)
 	}

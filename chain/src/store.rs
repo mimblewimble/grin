@@ -258,16 +258,21 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
-		// TODO - we can build this from scratch if necessary (backward compatibility)
-
-		// TODO - deserialize this into a bitmap
 		if let Ok(Some(bytes)) = self.db
 			.get(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
 		{
 			Ok(Bitmap::deserialize(&bytes))
 		} else {
-			// TODO - we can build this from scratch if necessary (backward compatibility)
-			Err(Error::NotFoundErr)
+			// "cache miss" so build it from full block, store it in db and return it
+			let block = self.get_block(bh)?;
+			let bitmap = block
+				.inputs
+				.iter()
+				.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
+				.map(|x| x as u32)
+				.collect();
+			self.save_block_input_bitmap(bh, &bitmap)?;
+			Ok(bitmap)
 		}
 	}
 

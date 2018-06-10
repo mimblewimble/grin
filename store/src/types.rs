@@ -258,16 +258,16 @@ impl AppendOnlyFile {
 /// checking of whether a piece of data has been marked for deletion. ~When the
 /// log becomes too long, the MMR backend will actually remove chunks from the
 /// MMR data file and truncate the remove log.~
-pub struct RemoveLog {
+pub struct UtxoSet {
 	path: String,
 	pub bitmap: Bitmap,
 	bitmap_bak: Bitmap,
 }
 
-impl RemoveLog {
+impl UtxoSet {
 	/// Open the remove log file.
 	/// The content of the file will be read in memory for fast checking.
-	pub fn open(path: String) -> io::Result<RemoveLog> {
+	pub fn open(path: String) -> io::Result<UtxoSet> {
 		let file_path = Path::new(&path);
 		let bitmap = if file_path.exists() {
 			let mut bitmap_file = File::open(path.clone())?;
@@ -278,7 +278,7 @@ impl RemoveLog {
 			Bitmap::create()
 		};
 
-		Ok(RemoveLog {
+		Ok(UtxoSet {
 			path: path.clone(),
 			bitmap: bitmap.clone(),
 			bitmap_bak: bitmap.clone(),
@@ -289,19 +289,29 @@ impl RemoveLog {
 	/// We keep everything in the rm_log from that index and earlier.
 	/// In practice the index is a block height, so we rewind back to that block
 	/// keeping everything in the rm_log up to and including that block.
-	pub fn rewind(&mut self, to_unremove: &Bitmap) {
-		self.bitmap.andnot_inplace(&to_unremove);
+	pub fn rewind(&mut self, rewind_output_pos: &Bitmap, rewind_spent_pos: &Bitmap) {
+		// First remove output pos from UTXO set that were
+		// added after the point we are rewinding to.
+		self.bitmap.andnot_inplace(&rewind_output_pos);
+		// Then add back output pos to the UTXO set that were
+		// spent after the point we are rewinding to.
+		self.bitmap.and_inplace(&rewind_spent_pos);
 	}
 
-	/// Append a new position to the remove log.
-	pub fn append(&mut self, elmt: u64, index: u32) {
-		self.bitmap.add(elmt as u32);
+	/// Append a new position to the UTXO set.
+	/// TODO - are we going to use this?
+	pub fn add(&mut self, pos: u64) {
+		self.bitmap.add(pos as u32);
 	}
 
-	/// Flush the positions to remove to file.
+	/// Remove the provided position from the UTXO set.
+	pub fn remove(&mut self, pos: u64) {
+		self.bitmap.remove(pos as u32);
+	}
+
+	/// Flush the UTXO set to file.
 	pub fn flush(&mut self) -> io::Result<()> {
-		// First run the optimization step on the bitmap to compact it as small as
-		// possible.
+		// First run the optimization step on the bitmap.
 		self.bitmap.run_optimize();
 
 		// TODO - consider writing this to disk in a tmp file and then renaming?
@@ -324,12 +334,12 @@ impl RemoveLog {
 		self.bitmap = self.bitmap_bak.clone();
 	}
 
-	/// Whether the remove log currently includes the provided position.
-	pub fn includes(&self, elmt: u64) -> bool {
-		self.bitmap.contains(elmt as u32)
+	/// Whether the UTXO set includes the provided position.
+	pub fn includes(&self, pos: u64) -> bool {
+		self.bitmap.contains(pos as u32)
 	}
 
-	/// Number of positions stored in the remove log.
+	/// Number of positions stored in the UTXO set.
 	pub fn len(&self) -> usize {
 		self.bitmap.cardinality() as usize
 	}

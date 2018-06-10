@@ -63,7 +63,12 @@ where
 	/// operations after that had been canceled. Expects a position in the PMMR
 	/// to rewind to as well as the consumer-provided index of when the change
 	/// occurred (see remove).
-	fn rewind(&mut self, position: u64, pos_to_unremove: &Bitmap) -> Result<(), String>;
+	fn rewind(
+		&mut self,
+		position: u64,
+		rewind_output_pos: &Bitmap,
+		rewind_spent_pos: &Bitmap,
+	) -> Result<(), String>;
 
 	/// Get a Hash by insertion position.
 	fn get_hash(&self, position: u64) -> Option<Hash>;
@@ -83,7 +88,7 @@ where
 	/// underlying backend can implement some rollback of positions up to a
 	/// given index (practically the index is the height of a block that
 	/// triggered removal).
-	fn remove(&mut self, position: u64, index: u32) -> Result<(), String>;
+	fn remove(&mut self, position: u64) -> Result<(), String>;
 
 	/// Returns the data file path.. this is a bit of a hack now that doesn't
 	/// sit well with the design, but TxKernels have to be summed and the
@@ -404,7 +409,12 @@ where
 	/// Rewind the PMMR to a previous position, as if all push operations after
 	/// that had been canceled. Expects a position in the PMMR to rewind to as
 	/// well as a vec of positions that need to be "unremoved".
-	pub fn rewind(&mut self, position: u64, pos_to_unremove: &Bitmap) -> Result<(), String> {
+	pub fn rewind(
+		&mut self,
+		position: u64,
+		rewind_output_pos: &Bitmap,
+		rewind_spent_pos: &Bitmap,
+	) -> Result<(), String> {
 		// identify which actual position we should rewind to as the provided
 		// position is a leaf, which may had some parent that needs to exist
 		// afterward for the MMR to be valid
@@ -413,7 +423,8 @@ where
 			pos += 1;
 		}
 
-		self.backend.rewind(pos, pos_to_unremove)?;
+		self.backend
+			.rewind(pos, rewind_output_pos, rewind_spent_pos)?;
 		self.last_pos = pos;
 		Ok(())
 	}
@@ -427,7 +438,7 @@ where
 			return Ok(false);
 		}
 
-		self.backend.remove(position, index)?;
+		self.backend.remove(position)?;
 		Ok(true)
 	}
 
