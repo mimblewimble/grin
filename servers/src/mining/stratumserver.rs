@@ -489,8 +489,9 @@ impl StratumServer {
 				}
 			// Success case falls through to be logged
 			} else {
+				// This is a low-difficulty share, not a full solution
 				// Do some validation but dont submit
-				if self.current_block.header.pre_pow_hash() != b.header.pre_pow_hash() {
+				if !core::pow::verify_size(&b.header, consensus::DEFAULT_SIZESHIFT) {
 					// Return error status
 					error!(
 						LOGGER,
