@@ -128,10 +128,13 @@ where
 	/// Get the hash at pos.
 	/// Return None if it has been removed.
 	fn get_hash(&self, pos: u64) -> Option<(Hash)> {
-		if self.utxo_set.includes(pos) {
-			return self.get_from_file(pos);
+		if pos >= self.unpruned_size().unwrap_or(0) {
+			return None;
 		}
-		None
+		if !self.utxo_set.includes(pos) {
+			return None;
+		}
+		self.get_from_file(pos)
 	}
 
 	/// Get the data at pos.
@@ -140,16 +143,16 @@ where
 		if !pmmr::is_leaf(pos) {
 			return None;
 		}
-
-		if self.utxo_set.includes(pos) {
-			return self.get_data_from_file(pos);
+		if pos >= self.unpruned_size().unwrap_or(0) {
+			return None;
 		}
-
-		None
+		if !self.utxo_set.includes(pos) {
+			return None;
+		}
+		self.get_data_from_file(pos)
 	}
 
 	/// Rewind the PMMR backend to the given position.
-	/// Use the index to rewind the rm_log correctly (based on block height).
 	fn rewind(
 		&mut self,
 		position: u64,
@@ -177,6 +180,7 @@ where
 
 	/// Remove by insertion position.
 	fn remove(&mut self, pos: u64) -> Result<(), String> {
+		println!("backend: remove: {}", pos);
 		self.utxo_set.remove(pos);
 		Ok(())
 	}
@@ -256,6 +260,7 @@ where
 	/// Syncs all files to disk. A call to sync is required to ensure all the
 	/// data has been successfully written to disk.
 	pub fn sync(&mut self) -> io::Result<()> {
+		println!("syncing backend to disk");
 		if let Err(e) = self.hash_file.flush() {
 			return Err(io::Error::new(
 				io::ErrorKind::Interrupted,
@@ -302,8 +307,7 @@ where
 	pub fn check_compact<P>(
 		&mut self,
 		max_len: usize,
-		cutoff_index: u32,
-		rm_post_cutoff: &Vec<u64>,
+		cutoff_pos: u64,
 		prune_cb: P,
 	) -> io::Result<bool>
 	where
@@ -320,33 +324,21 @@ where
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
 		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
 
-		// Now "unremove" all pos removed after the cutoff to leave
-		// everything removed pre cutoff.
-		panic!("we have a utxo set now, compact not yet implemented!!!");
-		let bitmask: Bitmap = rm_post_cutoff.iter().map(|&x| x as u32).collect();
+		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos);
 
-		// TODO - this is INCORRECT, needs thinking through, just getting it
-		// compiling...
-		let rm_pre_cutoff = self.utxo_set
-			.bitmap
-			.andnot(&bitmask)
-			.to_vec()
-			.into_iter()
-			.map(|x| x as u64)
-			.collect();
-
-		// Convert the list of leaf pos into full list of pos
-		// accounting for pos already pruned and excluding roots
-		// which we do not want to prune.
-		let pos_to_rm = self.pos_to_rm(&rm_pre_cutoff);
+		println!(
+			"*** check_compact: {:?}, {:?}",
+			leaves_removed.to_vec(),
+			pos_to_rm.to_vec()
+		);
 
 		// 1. Save compact copy of the hash file, skipping removed data.
 		{
 			let record_len = 32;
 
-			let off_to_rm = map_vec!(pos_to_rm, |&pos| {
-				let shift = self.pruned_nodes.get_shift(pos).unwrap();
-				(pos - 1 - shift) * record_len
+			let off_to_rm = map_vec!(pos_to_rm, |pos| {
+				let shift = self.pruned_nodes.get_shift(pos.into()).unwrap();
+				((pos as u64) - 1 - shift) * record_len
 			});
 
 			self.hash_file.save_prune(
@@ -361,15 +353,17 @@ where
 		{
 			let record_len = T::len() as u64;
 
+			// TODO - is this different to leaves_removed above?
+			// Yes because it excludes roots and some leaves can also be roots.
 			let leaf_pos_to_rm = pos_to_rm
 				.iter()
-				.filter(|&x| pmmr::is_leaf(*x))
-				.cloned()
+				.filter(|&x| pmmr::is_leaf(x.into()))
+				.map(|x| x as u64)
 				.collect::<Vec<_>>();
 
-			let off_to_rm = map_vec!(leaf_pos_to_rm, |pos| {
-				let flat_pos = pmmr::n_leaves(*pos);
-				let shift = self.pruned_nodes.get_leaf_shift(*pos).unwrap();
+			let off_to_rm = map_vec!(leaf_pos_to_rm, |&pos| {
+				let flat_pos = pmmr::n_leaves(pos);
+				let shift = self.pruned_nodes.get_leaf_shift(pos).unwrap();
 				(flat_pos - 1 - shift) * record_len
 			});
 
@@ -383,19 +377,24 @@ where
 
 		// 3. Update the prune list and save it in place.
 		{
-			for &pos in &rm_pre_cutoff.clone() {
-				self.pruned_nodes.add(pos);
+			for pos in leaves_removed.iter() {
+				self.pruned_nodes.add(pos.into());
 			}
 			// TODO - we can get rid of leaves in the prunelist here (and things still work)
 			// self.pruned_nodes.pruned_nodes.retain(|&x| !pmmr::is_leaf(x));
 
+			println!(
+				"*** pruned nodes here: {:?}",
+				self.pruned_nodes.pruned_nodes
+			);
+
 			// Prunelist contains *only* non-leaf roots.
-			// Contrast this with the rm_log that *only* contains leaves.
-			// So we have two disjoint sets of positions - we could store these
-			// in a single bitmap if we were clever about it.
+			// Contrast this with the UTXO set that contains *only* leaves.
 			self.pruned_nodes
 				.pruned_nodes
 				.retain(|&x| !pmmr::is_leaf(x));
+
+			println!("*** pruned nodes now: {:?}", self.pruned_nodes.pruned_nodes);
 
 			write_vec(
 				format!("{}/{}", self.data_dir, PMMR_PRUNED_FILE),
@@ -417,19 +416,27 @@ where
 		)?;
 		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
 
-		// 6. Write the rm_log to disk (optimizing the roaring bitmap storage in the
-		// process). self.rm_log.truncate_and_flush()?;
+		// 6. Write the UTXO set to disk.
+		// (optimizing the roaring bitmap storage in the process).
+		println!("check_compact, flushing utxo set");
 		self.utxo_set.flush()?;
 
 		Ok(true)
 	}
 
-	fn pos_to_rm(&self, leaf_pos_to_rm: &Vec<u64>) -> Vec<u64> {
-		let mut expanded = vec![];
+	fn pos_to_rm(&self, cutoff_pos: u64) -> (Bitmap, Bitmap) {
+		let mut expanded = Bitmap::create();
 
-		for &x in leaf_pos_to_rm {
-			expanded.push(x);
-			let mut current = x;
+		let leaf_pos_to_rm = self.utxo_set.spent_lte_pos(cutoff_pos);
+		println!(
+			"pos_to_rm: cutoff_pos: {}, leaf_pos_to_rm {:?}",
+			cutoff_pos,
+			leaf_pos_to_rm.to_vec()
+		);
+
+		for x in leaf_pos_to_rm.iter() {
+			expanded.add(x);
+			let mut current = x as u64;
 			loop {
 				let (parent, sibling) = family(current);
 				let sibling_pruned = self.is_pruned(sibling);
@@ -438,36 +445,30 @@ where
 				// push it back onto list of pos to remove
 				// so we can remove it and traverse up to parent
 				if sibling_pruned {
-					expanded.push(sibling);
+					expanded.add(sibling as u32);
 				}
 
-				if sibling_pruned || expanded.contains(&sibling) {
-					expanded.push(parent);
+				if sibling_pruned || expanded.contains(sibling as u32) {
+					expanded.add(parent as u32);
 					current = parent;
 				} else {
 					break;
 				}
 			}
 		}
-
-		// siblings may have been pushed out of order as we
-		// build up the list of positions so sort (and deduplicate for safety)
-		expanded.sort();
-		expanded.dedup();
-
-		removed_excl_roots(expanded)
+		println!("*** expanded here: {:?}", expanded.to_vec());
+		(leaf_pos_to_rm, removed_excl_roots(expanded))
 	}
 }
 
 /// Filter remove list to exclude roots.
 /// We want to keep roots around so we have hashes for Merkle proofs.
-fn removed_excl_roots(removed: Vec<u64>) -> Vec<u64> {
+fn removed_excl_roots(removed: Bitmap) -> Bitmap {
 	removed
 		.iter()
-		.filter(|&pos| {
-			let (parent_pos, _) = family(*pos);
-			removed.binary_search(&parent_pos).is_ok()
+		.filter(|pos| {
+			let (parent_pos, _) = family(*pos as u64);
+			removed.contains(parent_pos as u32)
 		})
-		.cloned()
 		.collect()
 }

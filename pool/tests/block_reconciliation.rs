@@ -207,8 +207,6 @@ fn test_transaction_pool_block_reconciliation() {
 		// txhashset.apply_output() TODO - and we no longer incorrectly allow
 		// duplicate outputs in the MMR TODO - then this test will fail
 		//
-		// TODO - wtf is with these name permutations...
-		//
 		assert_eq!(write_pool.total_size(), 4);
 		assert_eq!(write_pool.txpool.entries[0].tx, valid_transaction);
 		assert_eq!(write_pool.txpool.entries[1].tx, conflict_valid_child);

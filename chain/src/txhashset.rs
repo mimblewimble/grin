@@ -222,7 +222,9 @@ impl TxHashSet {
 		let current_height = head.height;
 
 		// horizon for compacting is based on current_height
-		let horizon = (current_height as u32).saturating_sub(global::cut_through_horizon());
+		let horizon = current_height.saturating_sub(global::cut_through_horizon().into());
+		let horizon_header = self.commit_index.get_header_by_height(horizon)?;
+		let horizon_marker = self.commit_index.get_block_marker(&horizon_header.hash())?;
 
 		let clean_output_index = |commit: &[u8]| {
 			// do we care if this fails?
@@ -231,22 +233,15 @@ impl TxHashSet {
 
 		let min_rm = (horizon / 10) as usize;
 
-		// TODO - implement this...
-		println!(
-			"******************* need to calc the vec of pos rm post horizon here ***********"
-		);
-		let rm_post_horizon = vec![];
-
 		self.output_pmmr_h.backend.check_compact(
 			min_rm,
-			horizon,
-			&rm_post_horizon,
+			horizon_marker.output_pos,
 			clean_output_index,
 		)?;
 
 		self.rproof_pmmr_h
 			.backend
-			.check_compact(min_rm, horizon, &rm_post_horizon, &prune_noop)?;
+			.check_compact(min_rm, horizon_marker.output_pos, &prune_noop)?;
 
 		Ok(())
 	}
@@ -710,16 +705,28 @@ impl<'a> Extension<'a> {
 		Ok(merkle_proof)
 	}
 
-	fn pos_to_unremove(
+	// TODO - check this is actually not total garbage
+	fn output_pos_to_rewind(
 		&self,
 		block_header: &BlockHeader,
 		head_header: &BlockHeader,
 	) -> Result<Bitmap, Error> {
-		// TODO - Check our logic here, inclusive/exclusive, off by one etc...
-		// Now "rewind" back through blocks from current chain head until we
-		// reach the forked block, collecting all the input pos (to unremove)
-		// as we go.
+		let marker_from = self.commit_index.get_block_marker(&head_header.hash())?;
+		let marker_to = self.commit_index.get_block_marker(&block_header.hash())?;
+		Ok(((marker_from.output_pos + 1)..=marker_to.output_pos)
+			.map(|x| x as u32)
+			.collect())
+	}
 
+	// TODO - Check our logic here, inclusive/exclusive, off by one etc...
+	// Now "rewind" back through blocks from current chain head until we
+	// reach the forked block, collecting all the input pos (to unremove)
+	// as we go.
+	fn input_pos_to_rewind(
+		&self,
+		block_header: &BlockHeader,
+		head_header: &BlockHeader,
+	) -> Result<Bitmap, Error> {
 		let mut bitmap = Bitmap::create();
 		let mut current = head_header.hash();
 		loop {
@@ -750,8 +757,8 @@ impl<'a> Extension<'a> {
 		let marker = self.commit_index.get_block_marker(&hash)?;
 
 		panic!("work in progress");
-		let rewind_output_pos = self.pos_to_unremove(block_header, head_header)?;
-		let rewind_spent_pos = self.pos_to_unremove(block_header, head_header)?;
+		let rewind_output_pos = self.output_pos_to_rewind(block_header, head_header)?;
+		let rewind_spent_pos = self.input_pos_to_rewind(block_header, head_header)?;
 
 		self.rewind_to_pos(
 			marker.output_pos,

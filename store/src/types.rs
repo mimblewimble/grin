@@ -28,6 +28,7 @@ use libc::{ftruncate as ftruncate64, off_t as off64_t};
 #[cfg(any(target_os = "linux"))]
 use libc::{ftruncate64, off64_t};
 
+use core::core::pmmr;
 use core::ser;
 
 /// A no-op function for doing nothing with some pruned data.
@@ -260,7 +261,7 @@ impl AppendOnlyFile {
 /// MMR data file and truncate the remove log.~
 pub struct UtxoSet {
 	path: String,
-	pub bitmap: Bitmap,
+	bitmap: Bitmap,
 	bitmap_bak: Bitmap,
 }
 
@@ -285,22 +286,48 @@ impl UtxoSet {
 		})
 	}
 
-	/// Rewinds the remove log back to the provided index.
-	/// We keep everything in the rm_log from that index and earlier.
-	/// In practice the index is a block height, so we rewind back to that block
-	/// keeping everything in the rm_log up to and including that block.
+	pub fn utxo_lte_pos(&self, cutoff_pos: u64) -> Bitmap {
+		let bitmask: Bitmap = (1..=cutoff_pos).map(|x| x as u32).collect();
+		self.bitmap.and(&bitmask)
+	}
+
+	fn leaf_lte_pos(&self, cutoff_pos: u64) -> Bitmap {
+		(1..=cutoff_pos)
+			.filter(|&x| pmmr::is_leaf(x))
+			.map(|x| x as u32)
+			.collect()
+	}
+
+	// utxo:  100
+	// flip:  011
+	// spent: 010
+	pub fn spent_lte_pos(&self, cutoff_pos: u64) -> Bitmap {
+		let utxo_lte_pos = self.utxo_lte_pos(cutoff_pos);
+		println!("spent_lte_pos: cutoff_pos: {}", cutoff_pos);
+		println!("spent_lte_pos: utxo_lte_pos: {:?}", utxo_lte_pos.to_vec());
+		println!(
+			"spent_lte_pos: leaf_lte_pos: {:?}",
+			self.leaf_lte_pos(cutoff_pos).to_vec()
+		);
+		utxo_lte_pos
+			.flip(1..(cutoff_pos + 1))
+			.and(&self.leaf_lte_pos(cutoff_pos))
+	}
+
+	/// Rewinds the UTXO set back to a previous state.
 	pub fn rewind(&mut self, rewind_output_pos: &Bitmap, rewind_spent_pos: &Bitmap) {
 		// First remove output pos from UTXO set that were
 		// added after the point we are rewinding to.
 		self.bitmap.andnot_inplace(&rewind_output_pos);
 		// Then add back output pos to the UTXO set that were
 		// spent after the point we are rewinding to.
-		self.bitmap.and_inplace(&rewind_spent_pos);
+		self.bitmap.or_inplace(&rewind_spent_pos);
 	}
 
 	/// Append a new position to the UTXO set.
 	/// TODO - are we going to use this?
 	pub fn add(&mut self, pos: u64) {
+		println!("utxo set: add: {}", pos);
 		self.bitmap.add(pos as u32);
 	}
 
@@ -313,6 +340,8 @@ impl UtxoSet {
 	pub fn flush(&mut self) -> io::Result<()> {
 		// First run the optimization step on the bitmap.
 		self.bitmap.run_optimize();
+
+		println!("*** flush utxo set to disk: {:?}", self.bitmap.to_vec());
 
 		// TODO - consider writing this to disk in a tmp file and then renaming?
 

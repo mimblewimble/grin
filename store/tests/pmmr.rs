@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate croaring;
 extern crate env_logger;
 extern crate grin_core as core;
 extern crate grin_store as store;
 extern crate time;
 
 use std::fs;
+
+use croaring::Bitmap;
 
 use core::core::pmmr::{Backend, PMMR};
 use core::ser::*;
@@ -317,16 +320,20 @@ fn pmmr_rewind() {
 	backend.sync().unwrap();
 
 	// and compact the MMR to remove the 2 pruned elements
-	backend.check_compact(2, 2, &prune_noop).unwrap();
+	backend.check_compact(2, 7, &prune_noop).unwrap();
 	backend.sync().unwrap();
 
 	// rewind and check the roots still match
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-		pmmr.rewind(9, &vec![]).unwrap();
+		pmmr.rewind(9, &Bitmap::of(&vec![11, 12, 16]), &Bitmap::create())
+			.unwrap();
 		assert_eq!(pmmr.root(), root2);
 	}
+
+	println!("doing a sync after rewinding");
 	backend.sync().unwrap();
+
 	{
 		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, 10);
 		assert_eq!(pmmr.root(), root2);
@@ -341,14 +348,25 @@ fn pmmr_rewind() {
 	for pos in vec![3, 6, 7] {
 		assert_eq!(backend.get_data(pos), None);
 	}
-	// pos 8 and 9 anre both leaves and should be unaffected by prior pruning
+
+	// pos 8 and 9 are both leaves and should be unaffected by prior pruning
+
+	for x in 1..16 {
+		println!("data at {}, {:?}", x, backend.get_data(x));
+	}
+
 	assert_eq!(backend.get_data(8), Some(elems[4]));
+	assert_eq!(backend.get_hash(8), Some(elems[4].hash_with_index(7)));
+
 	assert_eq!(backend.get_data(9), Some(elems[5]));
+	assert_eq!(backend.get_hash(9), Some(elems[5].hash_with_index(8)));
+
 	assert_eq!(backend.data_size().unwrap(), 2);
 
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, 10);
-		pmmr.rewind(5, &vec![]).unwrap();
+		pmmr.rewind(5, &Bitmap::create(), &Bitmap::create())
+			.unwrap();
 		assert_eq!(pmmr.root(), root1);
 	}
 	backend.sync().unwrap();

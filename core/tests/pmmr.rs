@@ -15,6 +15,9 @@
 //! PMMR tests
 #[macro_use]
 extern crate grin_core as core;
+extern crate croaring;
+
+use croaring::Bitmap;
 
 use core::core::hash::Hash;
 use core::core::pmmr::{self, Backend, MerkleProof, PruneList, PMMR};
@@ -82,14 +85,18 @@ where
 		}
 	}
 
-	fn remove(&mut self, position: u64, _index: u32) -> Result<(), String> {
+	fn remove(&mut self, position: u64) -> Result<(), String> {
 		self.remove_list.push(position);
 		Ok(())
 	}
 
-	fn rewind(&mut self, position: u64, _index: u32) -> Result<(), String> {
-		self.elems = self.elems[0..(position as usize) + 1].to_vec();
-		Ok(())
+	fn rewind(
+		&mut self,
+		position: u64,
+		rewind_output_pos: &Bitmap,
+		rewind_spent_pos: &Bitmap,
+	) -> Result<(), String> {
+		panic!("not yet implemented for vec backend...");
 	}
 
 	fn get_data_file_path(&self) -> String {
