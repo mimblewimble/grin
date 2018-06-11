@@ -182,6 +182,9 @@ pub struct ServerConfig {
 	/// Whether to run the wallet listener with the server by default
 	pub run_wallet_listener: Option<bool>,
 
+	/// Whether to run the web wallet owner listener
+	pub run_wallet_owner_api: Option<bool>,
+
 	/// Whether to run the test miner (internal, cuckoo 16)
 	pub run_test_miner: Option<bool>,
 
@@ -207,6 +210,7 @@ impl Default for ServerConfig {
 			skip_sync_wait: None,
 			run_tui: None,
 			run_wallet_listener: Some(false),
+			run_wallet_owner_api: Some(false),
 			run_test_miner: Some(false),
 			test_miner_wallet_url: None,
 		}

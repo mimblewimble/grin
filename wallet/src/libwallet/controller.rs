@@ -202,7 +202,12 @@ where
 			IronError::new(Fail::compat(e), status::BadRequest)
 		})?;
 		let mut api = APIOwner::new(&mut *wallet);
-		let resp_json = self.handle_request(req, &mut api);
+		let mut resp_json = self.handle_request(req, &mut api);
+		resp_json
+			.as_mut()
+			.unwrap()
+			.headers
+			.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
 		api.wallet
 			.close()
 			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
