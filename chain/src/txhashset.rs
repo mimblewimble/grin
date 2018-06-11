@@ -411,6 +411,20 @@ impl<'a> Extension<'a> {
 		}
 	}
 
+	fn rewind_raw_tx(
+		&mut self,
+		output_pos: u64,
+		kernel_pos: u64,
+		rewind_spent_pos: &Bitmap,
+	) -> Result<(), Error> {
+		let latest_output_pos = self.output_pmmr.unpruned_size();
+		let rewind_output_pos: Bitmap = ((output_pos + 1)..(latest_output_pos + 1))
+			.map(|x| x as u32)
+			.collect();
+		self.rewind_to_pos(output_pos, kernel_pos, &rewind_output_pos, rewind_spent_pos)?;
+		Ok(())
+	}
+
 	/// Apply a "raw" transaction to the txhashset.
 	/// We will never commit a txhashset extension that includes raw txs.
 	/// But we can use this when validating txs in the tx pool.
@@ -429,17 +443,10 @@ impl<'a> Extension<'a> {
 		let output_pos = self.output_pmmr.unpruned_size();
 		let kernel_pos = self.kernel_pmmr.unpruned_size();
 
-		// Build bitmap of output pos being added by this tx (for rewind).
-		let rewind_output_pos = tx.outputs
-			.iter()
-			.filter_map(|x| self.commit_index.get_output_pos(&x.commitment()).ok())
-			.map(|x| x as u32)
-			.collect();
-
-		// Build bitmap of output pos spent (as inputs) by this tx (for rewind).
+		// Build bitmap of output pos spent (as inputs) by this tx for rewind.
 		let rewind_spent_pos = tx.inputs
 			.iter()
-			.filter_map(|x| self.commit_index.get_output_pos(&x.commitment()).ok())
+			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
 			.map(|x| x as u32)
 			.collect();
 
@@ -447,36 +454,21 @@ impl<'a> Extension<'a> {
 		// but we cannot do this here, so we need to apply outputs first.
 		for ref output in &tx.outputs {
 			if let Err(e) = self.apply_output(output) {
-				self.rewind_to_pos(
-					output_pos,
-					kernel_pos,
-					&rewind_output_pos,
-					&rewind_spent_pos,
-				)?;
+				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_spent_pos)?;
 				return Err(e);
 			}
 		}
 
 		for ref input in &tx.inputs {
 			if let Err(e) = self.apply_input(input, height) {
-				self.rewind_to_pos(
-					output_pos,
-					kernel_pos,
-					&rewind_output_pos,
-					&rewind_spent_pos,
-				)?;
+				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_spent_pos)?;
 				return Err(e);
 			}
 		}
 
 		for ref kernel in &tx.kernels {
 			if let Err(e) = self.apply_kernel(kernel) {
-				self.rewind_to_pos(
-					output_pos,
-					kernel_pos,
-					&rewind_output_pos,
-					&rewind_spent_pos,
-				)?;
+				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_spent_pos)?;
 				return Err(e);
 			}
 		}
@@ -711,8 +703,8 @@ impl<'a> Extension<'a> {
 		block_header: &BlockHeader,
 		head_header: &BlockHeader,
 	) -> Result<Bitmap, Error> {
-		let marker_from = self.commit_index.get_block_marker(&head_header.hash())?;
-		let marker_to = self.commit_index.get_block_marker(&block_header.hash())?;
+		let marker_to = self.commit_index.get_block_marker(&head_header.hash())?;
+		let marker_from = self.commit_index.get_block_marker(&block_header.hash())?;
 		Ok(((marker_from.output_pos + 1)..=marker_to.output_pos)
 			.map(|x| x as u32)
 			.collect())
@@ -735,7 +727,7 @@ impl<'a> Extension<'a> {
 			}
 			let current_header = self.commit_index.get_block_header(&current)?;
 			let input_bitmap = self.commit_index.get_block_input_bitmap(&current)?;
-			bitmap.and_inplace(&input_bitmap);
+			bitmap.or_inplace(&input_bitmap);
 			current = current_header.previous;
 		}
 		Ok(bitmap)
@@ -756,7 +748,6 @@ impl<'a> Extension<'a> {
 		// based on block height and block marker
 		let marker = self.commit_index.get_block_marker(&hash)?;
 
-		panic!("work in progress");
 		let rewind_output_pos = self.output_pos_to_rewind(block_header, head_header)?;
 		let rewind_spent_pos = self.input_pos_to_rewind(block_header, head_header)?;
 
@@ -785,6 +776,10 @@ impl<'a> Extension<'a> {
 			output_pos,
 			kernel_pos,
 		);
+
+		// Remember to "rewind" our new_output_commits.
+		self.new_output_commits
+			.retain(|_, v| v.clone() <= output_pos);
 
 		self.output_pmmr
 			.rewind(output_pos, rewind_output_pos, rewind_spent_pos)

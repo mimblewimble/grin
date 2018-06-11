@@ -126,12 +126,9 @@ where
 	}
 
 	/// Get the hash at pos.
-	/// Return None if it has been removed.
+	/// Return None if pos is a leaf and it has been spent.
 	fn get_hash(&self, pos: u64) -> Option<(Hash)> {
-		if pos >= self.unpruned_size().unwrap_or(0) {
-			return None;
-		}
-		if !self.utxo_set.includes(pos) {
+		if pmmr::is_leaf(pos) && !self.utxo_set.includes(pos) {
 			return None;
 		}
 		self.get_from_file(pos)
@@ -141,9 +138,6 @@ where
 	/// Return None if it has been removed or if pos is not a leaf node.
 	fn get_data(&self, pos: u64) -> Option<(T)> {
 		if !pmmr::is_leaf(pos) {
-			return None;
-		}
-		if pos >= self.unpruned_size().unwrap_or(0) {
 			return None;
 		}
 		if !self.utxo_set.includes(pos) {
@@ -180,7 +174,6 @@ where
 
 	/// Remove by insertion position.
 	fn remove(&mut self, pos: u64) -> Result<(), String> {
-		println!("backend: remove: {}", pos);
 		self.utxo_set.remove(pos);
 		Ok(())
 	}
@@ -260,7 +253,6 @@ where
 	/// Syncs all files to disk. A call to sync is required to ensure all the
 	/// data has been successfully written to disk.
 	pub fn sync(&mut self) -> io::Result<()> {
-		println!("syncing backend to disk");
 		if let Err(e) = self.hash_file.flush() {
 			return Err(io::Error::new(
 				io::ErrorKind::Interrupted,
@@ -326,12 +318,6 @@ where
 
 		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos);
 
-		println!(
-			"*** check_compact: {:?}, {:?}",
-			leaves_removed.to_vec(),
-			pos_to_rm.to_vec()
-		);
-
 		// 1. Save compact copy of the hash file, skipping removed data.
 		{
 			let record_len = 32;
@@ -353,8 +339,6 @@ where
 		{
 			let record_len = T::len() as u64;
 
-			// TODO - is this different to leaves_removed above?
-			// Yes because it excludes roots and some leaves can also be roots.
 			let leaf_pos_to_rm = pos_to_rm
 				.iter()
 				.filter(|&x| pmmr::is_leaf(x.into()))
@@ -383,18 +367,11 @@ where
 			// TODO - we can get rid of leaves in the prunelist here (and things still work)
 			// self.pruned_nodes.pruned_nodes.retain(|&x| !pmmr::is_leaf(x));
 
-			println!(
-				"*** pruned nodes here: {:?}",
-				self.pruned_nodes.pruned_nodes
-			);
-
 			// Prunelist contains *only* non-leaf roots.
 			// Contrast this with the UTXO set that contains *only* leaves.
 			self.pruned_nodes
 				.pruned_nodes
 				.retain(|&x| !pmmr::is_leaf(x));
-
-			println!("*** pruned nodes now: {:?}", self.pruned_nodes.pruned_nodes);
 
 			write_vec(
 				format!("{}/{}", self.data_dir, PMMR_PRUNED_FILE),
@@ -418,7 +395,6 @@ where
 
 		// 6. Write the UTXO set to disk.
 		// (optimizing the roaring bitmap storage in the process).
-		println!("check_compact, flushing utxo set");
 		self.utxo_set.flush()?;
 
 		Ok(true)
@@ -427,12 +403,7 @@ where
 	fn pos_to_rm(&self, cutoff_pos: u64) -> (Bitmap, Bitmap) {
 		let mut expanded = Bitmap::create();
 
-		let leaf_pos_to_rm = self.utxo_set.spent_lte_pos(cutoff_pos);
-		println!(
-			"pos_to_rm: cutoff_pos: {}, leaf_pos_to_rm {:?}",
-			cutoff_pos,
-			leaf_pos_to_rm.to_vec()
-		);
+		let leaf_pos_to_rm = self.utxo_set.spent_lte_pos(cutoff_pos, &self.pruned_nodes);
 
 		for x in leaf_pos_to_rm.iter() {
 			expanded.add(x);
@@ -456,7 +427,6 @@ where
 				}
 			}
 		}
-		println!("*** expanded here: {:?}", expanded.to_vec());
 		(leaf_pos_to_rm, removed_excl_roots(expanded))
 	}
 }

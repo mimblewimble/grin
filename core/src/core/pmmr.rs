@@ -445,7 +445,6 @@ where
 	/// Get the hash at provided position in the MMR.
 	pub fn get_hash(&self, pos: u64) -> Option<Hash> {
 		if pos > self.last_pos {
-			// If we are beyond the rhs of the MMR return None.
 			None
 		} else if is_leaf(pos) {
 			// If we are a leaf then get hash from the backend.
@@ -752,6 +751,10 @@ impl PruneList {
 				}
 			}
 		}
+	}
+
+	pub fn is_pruned(&self, pos: u64) -> bool {
+		self.next_pruned_idx(pos).is_none()
 	}
 
 	/// Gets the index a new pruned node should take in the prune list.

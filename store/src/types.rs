@@ -29,6 +29,7 @@ use libc::{ftruncate as ftruncate64, off_t as off64_t};
 use libc::{ftruncate64, off64_t};
 
 use core::core::pmmr;
+use core::core::pmmr::PruneList;
 use core::ser;
 
 /// A no-op function for doing nothing with some pruned data.
@@ -291,27 +292,21 @@ impl UtxoSet {
 		self.bitmap.and(&bitmask)
 	}
 
-	fn leaf_lte_pos(&self, cutoff_pos: u64) -> Bitmap {
+	// TODO - Probably a more efficient way of doing this.
+	// TODO - Should be able to translate prune list into bitmap of "unpruned" leaf
+	// pos.
+	fn unpruned_leaves_lte_pos(&self, cutoff_pos: u64, prune_list: &PruneList) -> Bitmap {
 		(1..=cutoff_pos)
 			.filter(|&x| pmmr::is_leaf(x))
+			.filter(|&x| !prune_list.is_pruned(x))
 			.map(|x| x as u32)
 			.collect()
 	}
 
-	// utxo:  100
-	// flip:  011
-	// spent: 010
-	pub fn spent_lte_pos(&self, cutoff_pos: u64) -> Bitmap {
-		let utxo_lte_pos = self.utxo_lte_pos(cutoff_pos);
-		println!("spent_lte_pos: cutoff_pos: {}", cutoff_pos);
-		println!("spent_lte_pos: utxo_lte_pos: {:?}", utxo_lte_pos.to_vec());
-		println!(
-			"spent_lte_pos: leaf_lte_pos: {:?}",
-			self.leaf_lte_pos(cutoff_pos).to_vec()
-		);
-		utxo_lte_pos
+	pub fn spent_lte_pos(&self, cutoff_pos: u64, prune_list: &PruneList) -> Bitmap {
+		self.utxo_lte_pos(cutoff_pos)
 			.flip(1..(cutoff_pos + 1))
-			.and(&self.leaf_lte_pos(cutoff_pos))
+			.and(&self.unpruned_leaves_lte_pos(cutoff_pos, prune_list))
 	}
 
 	/// Rewinds the UTXO set back to a previous state.
@@ -325,9 +320,7 @@ impl UtxoSet {
 	}
 
 	/// Append a new position to the UTXO set.
-	/// TODO - are we going to use this?
 	pub fn add(&mut self, pos: u64) {
-		println!("utxo set: add: {}", pos);
 		self.bitmap.add(pos as u32);
 	}
 
@@ -340,8 +333,6 @@ impl UtxoSet {
 	pub fn flush(&mut self) -> io::Result<()> {
 		// First run the optimization step on the bitmap.
 		self.bitmap.run_optimize();
-
-		println!("*** flush utxo set to disk: {:?}", self.bitmap.to_vec());
 
 		// TODO - consider writing this to disk in a tmp file and then renaming?
 
