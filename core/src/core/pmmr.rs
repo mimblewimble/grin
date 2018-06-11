@@ -576,7 +576,8 @@ where
 		Ok(())
 	}
 
-	/// Total size of the tree, including intermediary nodes and ignoring any pruning.
+	/// Total size of the tree, including intermediary nodes and ignoring any
+	/// pruning.
 	pub fn unpruned_size(&self) -> u64 {
 		self.last_pos
 	}
