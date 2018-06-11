@@ -371,7 +371,12 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 		info!(
 			LOGGER,
 			"Starting the Grin server from configuration file at {}",
-			global_config.config_file_path.as_ref().unwrap().to_str().unwrap()
+			global_config
+				.config_file_path
+				.as_ref()
+				.unwrap()
+				.to_str()
+				.unwrap()
 		);
 		global::set_mining_mode(
 			global_config
@@ -446,9 +451,10 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 		let _ = thread::Builder::new()
 			.name("wallet_owner_listener".to_string())
 			.spawn(move || {
-				let wallet = FileWallet::new(wallet_config.clone(), "").unwrap_or_else(|e| {
-					panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
-				});
+				let wallet: FileWallet<ExtKeychain> = FileWallet::new(wallet_config.clone(), "")
+					.unwrap_or_else(|e| {
+						panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+					});
 				wallet::controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
 					panic!(
 						"Error creating wallet api listener: {:?} Config: {:?}",
