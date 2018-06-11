@@ -107,7 +107,7 @@ pub fn get_block(
 			self::Error::Wallet(_) => {
 				error!(
 					LOGGER,
-					"Stratum server: Can't connect to wallet listener at {:?}; will retry",
+					"Error building new block: Can't connect to wallet listener at {:?}; will retry",
 					wallet_listener_url.as_ref().unwrap()
 				);
 				thread::sleep(Duration::from_secs(wallet_retry_interval));

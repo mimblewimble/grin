@@ -468,7 +468,7 @@ impl StratumServer {
 					self.minimum_share_difficulty,
 				);
 				worker_stats.num_rejected += 1;
-				let e = r#"{"code": -1, "message": "Share rejected due to low difficulty"}"#;
+				let e = r#"{"code": -32501, "message": "Share rejected due to low difficulty"}"#;
 				let err = e.to_string();
 				return (err, true);
 			}
@@ -485,7 +485,7 @@ impl StratumServer {
 						e
 					);
 					worker_stats.num_rejected += 1;
-					let e = r#"{"code": -1, "message": "Failed to validate solution"}"#;
+					let e = r#"{"code": -32502, "message": "Failed to validate solution"}"#;
 					let err = e.to_string();
 					return (err, true);
 				}
@@ -503,7 +503,7 @@ impl StratumServer {
 						b.header.nonce
 					);
 					worker_stats.num_rejected += 1;
-					let e = r#"{"code": -1, "message": "Failed to validate share"}"#;
+					let e = r#"{"code": -32502, "message": "Failed to validate share"}"#;
 					let err = e.to_string();
 					return (err, true);
 				}
@@ -517,7 +517,7 @@ impl StratumServer {
 				submit_params.height
 			);
 			worker_stats.num_stale += 1;
-			let e = r#"{"code": -1, "message": "Solution submitted too late"}"#;
+			let e = r#"{"code": -32503, "message": "Solution submitted too late"}"#;
 			let err = e.to_string();
 			return (err, true);
 		}
