@@ -201,15 +201,16 @@ where
 	);
 
 	// Get the maximum number of outputs in the wallet
-	let max_outputs = wallet.select_coins(
-		key_id.clone(),
-		amount,
-		current_height,
-		minimum_confirmations,
-		max_outputs,
-		true,
-	)
-	.len();
+	let max_outputs = wallet
+		.select_coins(
+			key_id.clone(),
+			amount,
+			current_height,
+			minimum_confirmations,
+			max_outputs,
+			true,
+		)
+		.len();
 
 	// sender is responsible for setting the fee on the partial tx
 	// recipient should double check the fee calculation and not blindly trust the

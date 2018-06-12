@@ -265,11 +265,8 @@ where
 		);
 
 		let root_key_id = wallet.keychain().root_key_id();
-		let result_vec = find_outputs_with_key(
-			wallet,
-			output_listing.outputs.clone(),
-			&mut found_key_index,
-		);
+		let result_vec =
+			find_outputs_with_key(wallet, output_listing.outputs.clone(), &mut found_key_index);
 		let mut batch = wallet.batch()?;
 		for output in result_vec {
 			batch.save(OutputData {

@@ -56,7 +56,7 @@ where
 	fn get(&self, id: &Identifier) -> Option<OutputData>;
 
 	/// Create a new write batch to update or remove output data
-	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch +	'a>, Error>;
+	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, Error>;
 
 	/// Next child ID when we want to create a new output
 	fn next_child(&self, root_key_id: Identifier) -> u32;

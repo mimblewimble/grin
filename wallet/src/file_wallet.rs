@@ -26,7 +26,7 @@ use tokio_retry::strategy::FibonacciBackoff;
 
 use failure::ResultExt;
 
-use keychain::{self, Keychain, Identifier};
+use keychain::{self, Identifier, Keychain};
 use util::LOGGER;
 use util::secp::pedersen;
 
@@ -73,15 +73,18 @@ impl<'a> WalletOutputBatch for FileBatch<'a> {
 	}
 
 	fn commit(&self) -> Result<(), libwallet::Error> {
-		let mut data_file =
-			File::create(self.data_file_path.clone()).context(libwallet::ErrorKind::CallbackImpl("Could not create"))?;
+		let mut data_file = File::create(self.data_file_path.clone())
+			.context(libwallet::ErrorKind::CallbackImpl("Could not create"))?;
 		let mut outputs = self.outputs.values().collect::<Vec<_>>();
 		outputs.sort();
-		let res_json = serde_json::to_vec_pretty(&outputs)
-			.context(libwallet::ErrorKind::CallbackImpl("Error serializing wallet data"))?;
+		let res_json = serde_json::to_vec_pretty(&outputs).context(
+			libwallet::ErrorKind::CallbackImpl("Error serializing wallet data"),
+		)?;
 		data_file
 			.write_all(res_json.as_slice())
-			.context(libwallet::ErrorKind::CallbackImpl("Error writing wallet file"))
+			.context(libwallet::ErrorKind::CallbackImpl(
+				"Error writing wallet file",
+			))
 			.map_err(|e| e.into())
 	}
 }
@@ -90,7 +93,10 @@ impl<'a> Drop for FileBatch<'a> {
 	fn drop(&mut self) {
 		// delete the lock file
 		if let Err(e) = fs::remove_dir(&self.lock_file_path) {
-			error!(LOGGER, "Could not remove wallet lock file. Maybe insufficient rights? ");
+			error!(
+				LOGGER,
+				"Could not remove wallet lock file. Maybe insufficient rights? "
+			);
 		}
 		info!(LOGGER, "... released wallet lock");
 	}
@@ -152,7 +158,7 @@ where
 		self.outputs.get(&id.to_hex()).map(|o| o.clone())
 	}
 
-	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch +	'a>, libwallet::Error> {
+	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, libwallet::Error> {
 		self.lock()?;
 
 		// We successfully acquired the lock - so do what needs to be done.
@@ -161,7 +167,11 @@ where
 		self.write(&self.backup_file_path)
 			.context(libwallet::ErrorKind::CallbackImpl("Write Error"))?;
 
-		Ok(Box::new(FileBatch{outputs: &mut self.outputs, data_file_path: self.data_file_path.clone(), lock_file_path: self.lock_file_path.clone()}))
+		Ok(Box::new(FileBatch {
+			outputs: &mut self.outputs,
+			data_file_path: self.data_file_path.clone(),
+			lock_file_path: self.lock_file_path.clone(),
+		}))
 	}
 
 	/// Next child index when we want to create a new output.
