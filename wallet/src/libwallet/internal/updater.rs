@@ -40,25 +40,20 @@ where
 {
 	let root_key_id = wallet.keychain().clone().root_key_id();
 
-	let mut outputs = vec![];
-
 	// just read the wallet here, no need for a write lock
-	let _ = wallet.read_wallet(|wallet_data| {
-		outputs = wallet_data
-			.iter()
-			.filter(|out| out.root_key_id == root_key_id)
-			.filter(|out| {
-				if show_spent {
-					true
-				} else {
-					out.status != OutputStatus::Spent
-				}
-			})
-			.cloned()
-			.collect();
-		outputs.sort_by_key(|out| out.n_child);
-		Ok(())
-	});
+	let mut outputs = wallet
+		.iter()
+		.filter(|out| out.root_key_id == root_key_id)
+		.filter(|out| {
+			if show_spent {
+				true
+			} else {
+				out.status != OutputStatus::Spent
+			}
+		})
+		.cloned()
+		.collect::<Vec<_>>();
+	outputs.sort_by_key(|out| out.n_child);
 	Ok(outputs)
 }
 
@@ -106,20 +101,21 @@ where
 	// the corresponding api output (if it exists)
 	// and refresh it in-place in the wallet.
 	// Note: minimizing the time we spend holding the wallet lock.
-	wallet.with_wallet(|wallet_data| {
-		for commit in wallet_outputs.keys() {
-			let id = wallet_outputs.get(&commit).unwrap();
-			if let Some(mut output) = wallet_data.get(id.to_hex()) {
-				if let Some(b) = api_blocks.get(&commit) {
-					output.height = b.0;
-					output.block = Some(b.1.clone());
-					if let Some(merkle_proof) = api_merkle_proofs.get(&commit) {
-						output.merkle_proof = Some(merkle_proof.clone());
-					}
+	let mut batch = wallet.batch()?;
+	for (commit, id) in wallet_outputs.iter() {
+		if let Some((height, bid)) = api_blocks.get(&commit) {
+			if let Some(mut output) = batch.get(id) {
+				output.height = *height;
+				output.block = Some(bid.clone());
+				if let Some(merkle_proof) = api_merkle_proofs.get(&commit) {
+					output.merkle_proof = Some(merkle_proof.clone());
 				}
+				batch.save(output);
 			}
 		}
-	})
+	}
+	batch.commit()?;
+	Ok(())
 }
 
 /// build a local map of wallet outputs keyed by commit
@@ -132,18 +128,15 @@ where
 	K: Keychain,
 {
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
-	let _ = wallet.read_wallet(|wallet_data| {
-		let keychain = wallet_data.keychain().clone();
-		let root_key_id = keychain.root_key_id().clone();
-		let unspents = wallet_data
-			.iter()
-			.filter(|x| x.root_key_id == root_key_id && x.status != OutputStatus::Spent);
-		for out in unspents {
-			let commit = keychain.commit_with_key_index(out.value, out.n_child)?;
-			wallet_outputs.insert(commit, out.key_id.clone());
-		}
-		Ok(())
-	});
+	let keychain = wallet.keychain().clone();
+	let root_key_id = keychain.root_key_id().clone();
+	let unspents = wallet
+		.iter()
+		.filter(|x| x.root_key_id == root_key_id && x.status != OutputStatus::Spent);
+	for out in unspents {
+		let commit = keychain.commit_with_key_index(out.value, out.n_child)?;
+		wallet_outputs.insert(commit, out.key_id.clone());
+	}
 	Ok(wallet_outputs)
 }
 
@@ -157,18 +150,15 @@ where
 	K: Keychain,
 {
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
-	let _ = wallet.read_wallet(|wallet_data| {
-		let keychain = wallet_data.keychain().clone();
-		let unspents = wallet_data.iter().filter(|x| {
-			x.root_key_id == keychain.root_key_id() && x.block.is_none()
-				&& x.status == OutputStatus::Unspent
-		});
-		for out in unspents {
-			let commit = keychain.commit_with_key_index(out.value, out.n_child)?;
-			wallet_outputs.insert(commit, out.key_id.clone());
-		}
-		Ok(())
+	let keychain = wallet.keychain().clone();
+	let unspents = wallet.iter().filter(|x| {
+		x.root_key_id == keychain.root_key_id() && x.block.is_none()
+			&& x.status == OutputStatus::Unspent
 	});
+	for out in unspents {
+		let commit = keychain.commit_with_key_index(out.value, out.n_child)?;
+		wallet_outputs.insert(commit, out.key_id.clone());
+	}
 	Ok(wallet_outputs)
 }
 
@@ -185,17 +175,18 @@ where
 	// now for each commit, find the output in the wallet and the corresponding
 	// api output (if it exists) and refresh it in-place in the wallet.
 	// Note: minimizing the time we spend holding the wallet lock.
-	wallet.with_wallet(|wallet_data| {
-		for commit in wallet_outputs.keys() {
-			let id = wallet_outputs.get(&commit).unwrap();
-			if let Some(mut output) = wallet_data.get(id.to_hex()) {
-				match api_outputs.get(&commit) {
-					Some(_) => output.mark_unspent(),
-					None => output.mark_spent(),
-				};
-			}
+	let mut batch = wallet.batch()?;
+	for (commit, id) in wallet_outputs.iter() {
+		if let Some(mut output) = batch.get(id) {
+			match api_outputs.get(&commit) {
+				Some(_) => output.mark_unspent(),
+				None => output.mark_spent(),
+			};
+			batch.save(output);
 		}
-	})
+	}
+	batch.commit()?;
+	Ok(())
 }
 
 /// Builds a single api query to retrieve the latest output data from the node.
@@ -227,12 +218,18 @@ where
 	if height < 500 {
 		return Ok(());
 	}
-	wallet.with_wallet(|wallet_data| {
-		wallet_data.outputs().retain(|_, ref mut out| {
-			!(out.status == OutputStatus::Unconfirmed && out.height > 0
-				&& out.height < height - 500)
-		});
-	})
+	let mut ids_to_del = vec![];
+	for out in wallet.iter() {
+		if out.status == OutputStatus::Unconfirmed && out.height > 0 && out.height < height - 500 {
+			ids_to_del.push(out.key_id.clone())
+		}
+	}
+	let mut batch = wallet.batch()?;
+	for id in ids_to_del {
+		batch.delete(&id);
+	}
+	batch.commit()?;
+	Ok(())
 }
 
 /// Retrieve summar info about the wallet
@@ -245,52 +242,51 @@ where
 
 	let height_res = wallet.get_chain_height(&wallet.node_url());
 
-	let ret_val = wallet.read_wallet(|wallet_data| {
-		let (current_height, from) = match height_res {
-			Ok(height) => (height, "from server node"),
-			Err(_) => match wallet_data.iter().map(|out| out.height).max() {
-				Some(height) => (height, "from wallet"),
-				None => (0, "node/wallet unavailable"),
-			},
-		};
-		let mut unspent_total = 0;
-		let mut unspent_but_locked_total = 0;
-		let mut unconfirmed_total = 0;
-		let mut locked_total = 0;
-		let keychain = wallet_data.keychain().clone();
-		let outputs = wallet_data.iter().filter(|out| out.root_key_id == keychain.root_key_id());
+	let (current_height, from) = match height_res {
+		Ok(height) => (height, "from server node"),
+		Err(_) => match wallet.iter().map(|out| out.height).max() {
+			Some(height) => (height, "from wallet"),
+			None => (0, "node/wallet unavailable"),
+		},
+	};
+	let mut unspent_total = 0;
+	let mut unspent_but_locked_total = 0;
+	let mut unconfirmed_total = 0;
+	let mut locked_total = 0;
+	let keychain = wallet.keychain().clone();
+	let outputs = wallet
+		.iter()
+		.filter(|out| out.root_key_id == keychain.root_key_id());
 
-		for out in outputs {
-			if out.status == OutputStatus::Unspent {
-				unspent_total += out.value;
-				if out.lock_height > current_height {
-					unspent_but_locked_total += out.value;
-				}
-			}
-			if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
-				unconfirmed_total += out.value;
-			}
-			if out.status == OutputStatus::Locked {
-				locked_total += out.value;
+	for out in outputs {
+		if out.status == OutputStatus::Unspent {
+			unspent_total += out.value;
+			if out.lock_height > current_height {
+				unspent_but_locked_total += out.value;
 			}
 		}
-
-		let mut data_confirmed = true;
-		if let Err(_) = result {
-			data_confirmed = false;
+		if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
+			unconfirmed_total += out.value;
 		}
-		Ok(WalletInfo {
-			current_height: current_height,
-			total: unspent_total + unconfirmed_total,
-			amount_awaiting_confirmation: unconfirmed_total,
-			amount_confirmed_but_locked: unspent_but_locked_total,
-			amount_currently_spendable: unspent_total - unspent_but_locked_total,
-			amount_locked: locked_total,
-			data_confirmed: data_confirmed,
-			data_confirmed_from: String::from(from),
-		})
-	});
-	ret_val
+		if out.status == OutputStatus::Locked {
+			locked_total += out.value;
+		}
+	}
+
+	let mut data_confirmed = true;
+	if let Err(_) = result {
+		data_confirmed = false;
+	}
+	Ok(WalletInfo {
+		current_height: current_height,
+		total: unspent_total + unconfirmed_total,
+		amount_awaiting_confirmation: unconfirmed_total,
+		amount_confirmed_but_locked: unspent_but_locked_total,
+		amount_currently_spendable: unspent_total - unspent_but_locked_total,
+		amount_locked: locked_total,
+		data_confirmed: data_confirmed,
+		data_confirmed_from: String::from(from),
+	})
 }
 
 /// Build a coinbase output and insert into wallet
@@ -331,17 +327,17 @@ where
 
 	let height = block_fees.height;
 	let lock_height = height + global::coinbase_maturity();
+	let key_id = block_fees.key_id();
 
-	// Now acquire the wallet lock and write the new output.
-	let (key_id, derivation) = wallet.with_wallet(|wallet_data| {
-		let key_id = block_fees.key_id();
-		let (key_id, derivation) = match key_id {
-			Some(key_id) => keys::retrieve_existing_key(wallet_data, key_id),
-			None => keys::next_available_key(wallet_data),
-		};
+	let (key_id, derivation) = match key_id {
+		Some(key_id) => keys::retrieve_existing_key(wallet, key_id),
+		None => keys::next_available_key(wallet),
+	};
 
-		// track the new output and return the stuff needed for reward
-		wallet_data.add_output(OutputData {
+	{
+		// Now acquire the wallet lock and write the new output.
+		let mut batch = wallet.batch()?;
+		batch.save(OutputData {
 			root_key_id: root_key_id.clone(),
 			key_id: key_id.clone(),
 			n_child: derivation,
@@ -353,9 +349,8 @@ where
 			block: None,
 			merkle_proof: None,
 		});
-
-		(key_id, derivation)
-	})?;
+		batch.commit()?;
+	}
 
 	debug!(
 		LOGGER,

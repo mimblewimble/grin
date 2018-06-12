@@ -15,7 +15,7 @@
 use std::collections::HashMap;
 use std::collections::hash_map::Values;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::MAIN_SEPARATOR;
 use std::path::Path;
 
@@ -26,7 +26,7 @@ use tokio_retry::strategy::FibonacciBackoff;
 
 use failure::ResultExt;
 
-use keychain::{self, Keychain};
+use keychain::{self, Keychain, Identifier};
 use util::LOGGER;
 use util::secp::pedersen;
 
@@ -41,6 +41,60 @@ use types::{WalletConfig, WalletSeed};
 pub const DAT_FILE: &'static str = "wallet.dat";
 pub const BCK_FILE: &'static str = "wallet.bck";
 pub const LOCK_FILE: &'static str = "wallet.lock";
+
+struct FileBatch<'a> {
+	/// List of outputs
+	outputs: &'a mut HashMap<String, OutputData>,
+	/// Data file path
+	data_file_path: String,
+	/// lock file path
+	lock_file_path: String,
+}
+
+impl<'a> WalletOutputBatch for FileBatch<'a> {
+	fn save(&mut self, out: OutputData) {
+		let _ = self.outputs.insert(out.key_id.to_hex(), out);
+	}
+
+	fn get(&self, id: &Identifier) -> Option<OutputData> {
+		self.outputs.get(&id.to_hex()).map(|od| od.clone())
+	}
+
+	fn delete(&mut self, id: &Identifier) {
+		let _ = self.outputs.remove(&id.to_hex());
+	}
+
+	fn lock_output(&mut self, out: &OutputData) {
+		if let Some(out_to_lock) = self.outputs.get_mut(&out.key_id.to_hex()) {
+			if out_to_lock.value == out.value {
+				out_to_lock.lock()
+			}
+		}
+	}
+
+	fn commit(&self) -> Result<(), libwallet::Error> {
+		let mut data_file =
+			File::create(self.data_file_path.clone()).context(libwallet::ErrorKind::CallbackImpl("Could not create"))?;
+		let mut outputs = self.outputs.values().collect::<Vec<_>>();
+		outputs.sort();
+		let res_json = serde_json::to_vec_pretty(&outputs)
+			.context(libwallet::ErrorKind::CallbackImpl("Error serializing wallet data"))?;
+		data_file
+			.write_all(res_json.as_slice())
+			.context(libwallet::ErrorKind::CallbackImpl("Error writing wallet file"))
+			.map_err(|e| e.into())
+	}
+}
+
+impl<'a> Drop for FileBatch<'a> {
+	fn drop(&mut self) {
+		// delete the lock file
+		if let Err(e) = fs::remove_dir(&self.lock_file_path) {
+			error!(LOGGER, "Could not remove wallet lock file. Maybe insufficient rights? ");
+		}
+		info!(LOGGER, "... released wallet lock");
+	}
+}
 
 /// Wallet information tracking all our outputs. Based on HD derivation and
 /// avoids storing any key data, only storing output amounts and child index.
@@ -90,118 +144,24 @@ where
 		self.keychain.as_mut().unwrap()
 	}
 
-	fn iter<'a>(&'a self) -> Box<Iterator<Item=&'a OutputData> + 'a> {
+	fn iter<'a>(&'a self) -> Box<Iterator<Item = &'a OutputData> + 'a> {
 		Box::new(self.outputs.values())
 	}
 
-	fn get(&self, id: String) -> Option<OutputData> {
-		self.outputs.get(&id).map(|o| o.clone())
+	fn get(&self, id: &Identifier) -> Option<OutputData> {
+		self.outputs.get(&id.to_hex()).map(|o| o.clone())
 	}
 
-
-	/// Return the outputs directly
-	fn outputs(&mut self) -> &mut HashMap<String, OutputData> {
-		&mut self.outputs
-	}
-
-	/// Allows for reading wallet data (without needing to acquire the write
-	/// lock).
-	fn read_wallet<T, F>(&mut self, f: F) -> Result<T, libwallet::Error>
-	where
-		F: FnOnce(&mut Self) -> Result<T, libwallet::Error>,
-	{
-		self.read_or_create_paths()
-			.context(libwallet::ErrorKind::CallbackImpl("Error reading wallet"))?;
-		f(self)
-	}
-
-	/// Allows the reading and writing of the wallet data within a file lock.
-	/// Just provide a closure taking a mutable FileWallet. The lock should
-	/// be held for as short a period as possible to avoid contention.
-	/// Note that due to the impossibility to do an actual file lock easily
-	/// across operating systems, this just creates a lock file with a "should
-	/// not exist" option.
-	fn with_wallet<T, F>(&mut self, f: F) -> Result<T, libwallet::Error>
-	where
-		F: FnOnce(&mut Self) -> T,
-	{
-		// create directory if it doesn't exist
-		fs::create_dir_all(self.config.data_file_dir.clone()).unwrap_or_else(|why| {
-			info!(LOGGER, "! {:?}", why.kind());
-		});
-
-		info!(LOGGER, "Acquiring wallet lock ...");
-
-		let lock_file_path = self.lock_file_path.clone();
-		let action = || {
-			trace!(LOGGER, "making lock file for wallet lock");
-			fs::create_dir(&lock_file_path)
-		};
-
-		// use tokio_retry to cleanly define some retry logic
-		let mut core = reactor::Core::new().unwrap();
-		let retry_strategy = FibonacciBackoff::from_millis(1000).take(10);
-		let retry_future = Retry::spawn(core.handle(), retry_strategy, action);
-		let retry_result = core.run(retry_future)
-			.context(libwallet::ErrorKind::CallbackImpl(
-				"Failed to acquire lock file",
-			));
-
-		match retry_result {
-			Ok(_) => {}
-			Err(e) => {
-				error!(
-					LOGGER,
-					"Failed to acquire wallet lock file (multiple retries)",
-				);
-				return Err(e.into());
-			}
-		}
+	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch +	'a>, libwallet::Error> {
+		self.lock()?;
 
 		// We successfully acquired the lock - so do what needs to be done.
 		self.read_or_create_paths()
 			.context(libwallet::ErrorKind::CallbackImpl("Lock Error"))?;
 		self.write(&self.backup_file_path)
 			.context(libwallet::ErrorKind::CallbackImpl("Write Error"))?;
-		let res = f(self);
-		self.write(&self.data_file_path)
-			.context(libwallet::ErrorKind::CallbackImpl("Write Error"))?;
 
-		// delete the lock file
-		fs::remove_dir(&self.lock_file_path).context(libwallet::ErrorKind::CallbackImpl(
-			&"Could not remove wallet lock file. Maybe insufficient rights? ",
-		))?;
-
-		info!(LOGGER, "... released wallet lock");
-
-		Ok(res)
-	}
-
-	/// Append a new output data to the wallet data.
-	/// TODO - we should check for overwriting here - only really valid for
-	/// unconfirmed coinbase
-	fn add_output(&mut self, out: OutputData) {
-		self.outputs.insert(out.key_id.to_hex(), out.clone());
-	}
-
-	// TODO - careful with this, only for Unconfirmed (maybe Locked)?
-	fn delete_output(&mut self, id: &keychain::Identifier) {
-		self.outputs.remove(&id.to_hex());
-	}
-
-	/// Lock an output data.
-	/// TODO - we should track identifier on these outputs (not just n_child)
-	fn lock_output(&mut self, out: &OutputData) {
-		if let Some(out_to_lock) = self.outputs.get_mut(&out.key_id.to_hex()) {
-			if out_to_lock.value == out.value {
-				out_to_lock.lock()
-			}
-		}
-	}
-
-	/// get a single output
-	fn get_output(&self, key_id: &keychain::Identifier) -> Option<&OutputData> {
-		self.outputs.get(&key_id.to_hex())
+		Ok(Box::new(FileBatch{outputs: &mut self.outputs, data_file_path: self.data_file_path.clone(), lock_file_path: self.lock_file_path.clone()}))
 	}
 
 	/// Next child index when we want to create a new output.
@@ -384,6 +344,41 @@ where
 		}
 	}
 
+	fn lock(&self) -> Result<(), libwallet::Error> {
+		// create directory if it doesn't exist
+		fs::create_dir_all(self.config.data_file_dir.clone()).unwrap_or_else(|why| {
+			info!(LOGGER, "! {:?}", why.kind());
+		});
+
+		info!(LOGGER, "Acquiring wallet lock ...");
+
+		let lock_file_path = self.lock_file_path.clone();
+		let action = || {
+			trace!(LOGGER, "making lock file for wallet lock");
+			fs::create_dir(&lock_file_path)
+		};
+
+		// use tokio_retry to cleanly define some retry logic
+		let mut core = reactor::Core::new().unwrap();
+		let retry_strategy = FibonacciBackoff::from_millis(1000).take(10);
+		let retry_future = Retry::spawn(core.handle(), retry_strategy, action);
+		let retry_result = core.run(retry_future)
+			.context(libwallet::ErrorKind::CallbackImpl(
+				"Failed to acquire lock file",
+			));
+
+		match retry_result {
+			Ok(_) => Ok(()),
+			Err(e) => {
+				error!(
+					LOGGER,
+					"Failed to acquire wallet lock file (multiple retries)",
+				);
+				Err(e.into())
+			}
+		}
+	}
+
 	/// Read the wallet data or create brand files if the data
 	/// files don't yet exist
 	fn read_or_create_paths(&mut self) -> Result<(), Error> {
@@ -412,7 +407,7 @@ where
 		let outputs = self.read_outputs()?;
 		self.outputs = HashMap::new();
 		for out in outputs {
-			self.add_output(out);
+			self.outputs.insert(out.key_id.to_hex(), out.clone());
 		}
 		Ok(())
 	}

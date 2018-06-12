@@ -151,16 +151,14 @@ where
 	let key_id = keychain.root_key_id();
 
 	// select some spendable coins from the wallet
-	let coins = wallet.read_wallet(|wallet_data| {
-		Ok(wallet_data.select_coins(
-			key_id.clone(),
-			amount,
-			current_height,
-			minimum_confirmations,
-			max_outputs,
-			false,
-		))
-	})?;
+	let coins = wallet.select_coins(
+		key_id.clone(),
+		amount,
+		current_height,
+		minimum_confirmations,
+		max_outputs,
+		false,
+	);
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 

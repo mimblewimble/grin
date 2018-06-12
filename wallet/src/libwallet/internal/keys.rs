@@ -17,15 +17,6 @@ use keychain::{Identifier, Keychain};
 use libwallet::error::Error;
 use libwallet::types::WalletBackend;
 
-/// Get our next available key
-pub fn new_output_key<T, K>(wallet: &mut T) -> Result<(Identifier, u32), Error>
-where
-	T: WalletBackend<K>,
-	K: Keychain,
-{
-	wallet.with_wallet(|wallet_data| next_available_key(wallet_data))
-}
-
 /// Get next available key in the wallet
 pub fn next_available_key<T, K>(wallet: &mut T) -> (Identifier, u32)
 where
@@ -44,7 +35,7 @@ where
 	T: WalletBackend<K>,
 	K: Keychain,
 {
-	if let Some(existing) = wallet.get_output(&key_id) {
+	if let Some(existing) = wallet.get(&key_id) {
 		let key_id = existing.key_id.clone();
 		let derivation = existing.n_child;
 		(key_id, derivation)

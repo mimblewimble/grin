@@ -36,7 +36,10 @@ use util::secp::pedersen;
 /// Wallets should implement this backend for their storage. All functions
 /// here expect that the wallet instance has instantiated itself or stored
 /// whatever credentials it needs
-pub trait WalletBackend<K>: where K: Keychain {
+pub trait WalletBackend<K>
+where
+	K: Keychain,
+{
 	/// Initialise with whatever stored credentials we have
 	fn open_with_credentials(&mut self) -> Result<(), Error>;
 
@@ -46,37 +49,14 @@ pub trait WalletBackend<K>: where K: Keychain {
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut K;
 
-	fn iter<'a>(&'a self) -> Box<Iterator<Item=&'a OutputData> + 'a>;
+	/// Iterate over all output data stored by the backend
+	fn iter<'a>(&'a self) -> Box<Iterator<Item = &'a OutputData> + 'a>;
 
-	fn get(&self, id: String) -> Option<OutputData>;
+	/// Get output data by id
+	fn get(&self, id: &Identifier) -> Option<OutputData>;
 
-
-	/// Return the outputs directly
-	fn outputs(&mut self) -> &mut HashMap<String, OutputData>;
-
-	/// Allows for reading wallet data (read-only)
-	fn read_wallet<T, F>(&mut self, f: F) -> Result<T, Error>
-	where
-		F: FnOnce(&mut Self) -> Result<T, Error>;
-
-	/// Get all outputs from a wallet impl (probably with some sort
-	/// of query param), read+write. Implementor should save
-	/// any changes to its data and perform any locking needed
-	fn with_wallet<T, F>(&mut self, f: F) -> Result<T, Error>
-	where
-		F: FnOnce(&mut Self) -> T;
-
-	/// Add an output
-	fn add_output(&mut self, out: OutputData);
-
-	/// Delete an output
-	fn delete_output(&mut self, id: &Identifier);
-
-	/// Lock an output
-	fn lock_output(&mut self, out: &OutputData);
-
-	/// get a single output
-	fn get_output(&self, key_id: &Identifier) -> Option<&OutputData>;
+	/// Create a new write batch to update or remove output data
+	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch +	'a>, Error>;
 
 	/// Next child ID when we want to create a new output
 	fn next_child(&self, root_key_id: Identifier) -> u32;
@@ -94,6 +74,24 @@ pub trait WalletBackend<K>: where K: Keychain {
 
 	/// Attempt to restore the contents of a wallet from seed
 	fn restore(&mut self) -> Result<(), Error>;
+}
+
+/// Batch trait to update the output data backend atomically
+pub trait WalletOutputBatch {
+	/// Add or update data about an output to the backend
+	fn save(&mut self, out: OutputData);
+
+	/// Gets output data by id
+	fn get(&self, id: &Identifier) -> Option<OutputData>;
+
+	/// Delete data about an output to the backend
+	fn delete(&mut self, id: &Identifier);
+
+	/// Save an output as locked in the backend
+	fn lock_output(&mut self, out: &OutputData);
+
+	/// Write the wallet data to backend file
+	fn commit(&self) -> Result<(), Error>;
 }
 
 /// Encapsulate all communication functions. No functions within libwallet

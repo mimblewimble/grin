@@ -88,17 +88,13 @@ where
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
 	let update_sender_wallet_fn = move |wallet: &mut T| {
-		wallet.with_wallet(|wallet_data| {
-			for id in lock_inputs {
-				let coin = wallet_data.get_output(&id).unwrap().clone();
-				wallet_data.lock_output(&coin);
-			}
-			// probably just want to leave as unconfirmed for now
-			// or create a new status
-			/*for id in lock_outputs {
-				let coin = wallet_data.get_output(&id).unwrap().clone();
-				wallet_data.lock_output(&coin);
-			}*/		})
+		let mut batch = wallet.batch()?;
+		for id in lock_inputs {
+			let coin = batch.get(&id).unwrap();
+			batch.lock_output(&coin);
+		}
+		batch.commit()?;
+		Ok(())
 	};
 
 	Ok((slate, context, update_sender_wallet_fn))
@@ -124,7 +120,7 @@ where
 	K: Keychain,
 {
 	// Create a potential output for this transaction
-	let (key_id, derivation) = keys::new_output_key(wallet)?;
+	let (key_id, derivation) = keys::next_available_key(wallet);
 
 	let keychain = wallet.keychain().clone();
 	let root_key_id = keychain.root_key_id();
@@ -148,20 +144,21 @@ where
 	// Create closure that adds the output to recipient's wallet
 	// (up to the caller to decide when to do)
 	let wallet_add_fn = move |wallet: &mut T| {
-		wallet.with_wallet(|wallet_data| {
-			wallet_data.add_output(OutputData {
-				root_key_id: root_key_id,
-				key_id: key_id_inner,
-				n_child: derivation,
-				value: amount,
-				status: OutputStatus::Unconfirmed,
-				height: height,
-				lock_height: 0,
-				is_coinbase: false,
-				block: None,
-				merkle_proof: None,
-			});
-		})
+		let mut batch = wallet.batch()?;
+		batch.save(OutputData {
+			root_key_id: root_key_id,
+			key_id: key_id_inner,
+			n_child: derivation,
+			value: amount,
+			status: OutputStatus::Unconfirmed,
+			height: height,
+			lock_height: 0,
+			is_coinbase: false,
+			block: None,
+			merkle_proof: None,
+		});
+		batch.commit()?;
+		Ok(())
 	};
 	Ok((key_id, context, wallet_add_fn))
 }
@@ -194,30 +191,25 @@ where
 	let key_id = wallet.keychain().root_key_id();
 
 	// select some spendable coins from the wallet
-	let mut coins = wallet.read_wallet(|wallet_data| {
-		Ok(wallet_data.select_coins(
-			key_id.clone(),
-			amount,
-			current_height,
-			minimum_confirmations,
-			max_outputs,
-			selection_strategy_is_use_all,
-		))
-	})?;
+	let mut coins = wallet.select_coins(
+		key_id.clone(),
+		amount,
+		current_height,
+		minimum_confirmations,
+		max_outputs,
+		selection_strategy_is_use_all,
+	);
 
 	// Get the maximum number of outputs in the wallet
-	let max_outputs = wallet
-		.read_wallet(|wallet_data| {
-			Ok(wallet_data.select_coins(
-				key_id.clone(),
-				amount,
-				current_height,
-				minimum_confirmations,
-				max_outputs,
-				true,
-			))
-		})?
-		.len();
+	let max_outputs = wallet.select_coins(
+		key_id.clone(),
+		amount,
+		current_height,
+		minimum_confirmations,
+		max_outputs,
+		true,
+	)
+	.len();
 
 	// sender is responsible for setting the fee on the partial tx
 	// recipient should double check the fee calculation and not blindly trust the
@@ -252,16 +244,14 @@ where
 			}
 
 			// select some spendable coins from the wallet
-			coins = wallet.read_wallet(|wallet_data| {
-				Ok(wallet_data.select_coins(
-					key_id.clone(),
-					amount_with_fee,
-					current_height,
-					minimum_confirmations,
-					max_outputs,
-					selection_strategy_is_use_all,
-				))
-			})?;
+			coins = wallet.select_coins(
+				key_id.clone(),
+				amount_with_fee,
+				current_height,
+				minimum_confirmations,
+				max_outputs,
+				selection_strategy_is_use_all,
+			);
 			fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
 			total = coins.iter().map(|c| c.value).sum();
 			amount_with_fee = amount + fee;
@@ -327,30 +317,29 @@ where
 	}
 	let change_key;
 	if change != 0 {
+		let keychain = wallet.keychain().clone();
+		let root_key_id = keychain.root_key_id();
+		let change_derivation = wallet.next_child(root_key_id.clone());
+		let change_k = keychain.derive_key_id(change_derivation).unwrap();
+
 		// track the output representing our change
-		change_key = wallet.with_wallet(|wallet_data| {
-			let keychain = wallet_data.keychain().clone();
-			let root_key_id = keychain.root_key_id();
-			let change_derivation = wallet_data.next_child(root_key_id.clone());
-			let change_key = keychain.derive_key_id(change_derivation).unwrap();
+		let mut batch = wallet.batch()?;
+		batch.save(OutputData {
+			root_key_id: root_key_id.clone(),
+			key_id: change_k.clone(),
+			n_child: change_derivation,
+			value: change as u64,
+			status: OutputStatus::Unconfirmed,
+			height: height,
+			lock_height: 0,
+			is_coinbase: false,
+			block: None,
+			merkle_proof: None,
+		});
+		batch.commit()?;
 
-			wallet_data.add_output(OutputData {
-				root_key_id: root_key_id.clone(),
-				key_id: change_key.clone(),
-				n_child: change_derivation,
-				value: change as u64,
-				status: OutputStatus::Unconfirmed,
-				height: height,
-				lock_height: 0,
-				is_coinbase: false,
-				block: None,
-				merkle_proof: None,
-			});
-
-			Some(change_key)
-		})?;
-
-		parts.push(build::output(change, change_key.clone().unwrap()));
+		parts.push(build::output(change, change_k.clone()));
+		change_key = Some(change_k);
 	} else {
 		change_key = None
 	}
