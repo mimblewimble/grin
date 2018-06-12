@@ -44,7 +44,7 @@ fn test_and_bitmap() {
 #[test]
 fn test_flip_bitmap() {
 	let bitmap: Bitmap = vec![1, 2, 4].into_iter().collect();
-	let res = bitmap.flip((2..4));
+	let res = bitmap.flip(2..4);
 	assert_eq!(res.to_vec(), vec![1, 3, 4]);
 }
 

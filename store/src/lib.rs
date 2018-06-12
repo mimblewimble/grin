@@ -34,7 +34,9 @@ extern crate serde;
 extern crate slog;
 
 pub mod pmmr;
+pub mod rm_log;
 pub mod types;
+pub mod utxo_set;
 
 const SEP: u8 = ':' as u8;
 

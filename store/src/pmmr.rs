@@ -25,6 +25,7 @@ use core::ser;
 use core::ser::PMMRable;
 use types::*;
 use util::LOGGER;
+use utxo_set::UtxoSet;
 
 const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
@@ -51,7 +52,7 @@ where
 	data_dir: String,
 	hash_file: AppendOnlyFile,
 	data_file: AppendOnlyFile,
-	utxo_set: UtxoSet,
+	pub utxo_set: UtxoSet,
 	pruned_nodes: pmmr::PruneList,
 	_marker: marker::PhantomData<T>,
 }
