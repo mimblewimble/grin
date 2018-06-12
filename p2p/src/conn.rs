@@ -23,8 +23,8 @@
 use std::cmp;
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::sync::{mpsc, Arc, Mutex};
 use std::net::TcpStream;
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time;
 
@@ -45,15 +45,13 @@ macro_rules! try_break {
 	($chan:ident, $inner:expr) => {
 		match $inner {
 			Ok(v) => Some(v),
-			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::WouldBlock => {
-				None
-			}
+			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::WouldBlock => None,
 			Err(e) => {
 				let _ = $chan.send(e);
 				break;
+				}
 			}
-		}
-	}
+	};
 }
 
 /// A message as received by the connection. Provides access to the message

@@ -24,8 +24,8 @@ use keychain::{Identifier, Keychain};
 use libtx::proof;
 use libwallet::types::*;
 use util;
-use util::LOGGER;
 use util::secp::pedersen;
+use util::LOGGER;
 
 fn get_merkle_proof_for_commit(node_addr: &str, commit: &str) -> Result<MerkleProofWrapper, Error> {
 	let url = format!("{}/v1/txhashset/merkleproof?id={}", node_addr, commit);
