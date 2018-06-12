@@ -17,13 +17,12 @@ use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use conn::*;
+use conn::{Response, Message, MessageHandler};
 use core::core;
 use core::core::hash::{Hash, Hashed};
-use msg::*;
-use rand;
-use rand::Rng;
-use types::*;
+use msg::{Type, PeerAddrs, Ping, BanReason, Locator, TxHashSetRequest, Headers, Pong, SockAddr, GetPeerAddrs, TxHashSetArchive};
+use rand::{self, Rng};
+use types::{NetAdapter, Error};
 use util::LOGGER;
 
 pub struct Protocol {

@@ -22,7 +22,7 @@ use cursive::view::Identifiable;
 use cursive::views::{BoxView, LinearLayout, OnEventView, SelectView, StackView, TextView, ViewRef};
 use cursive::direction::Orientation;
 
-use tui::constants::*;
+use tui::constants::{MAIN_MENU, ROOT_STACK, VIEW_BASIC_STATUS, VIEW_PEER_SYNC, VIEW_VERSION, SUBMENU_MINING_BUTTON, VIEW_MINING};
 
 pub fn create() -> Box<View> {
 	let mut main_menu = SelectView::new().h_align(HAlign::Left).with_id(MAIN_MENU);

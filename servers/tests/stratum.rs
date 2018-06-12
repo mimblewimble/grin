@@ -25,16 +25,14 @@ extern crate serde_json;
 
 mod framework;
 
-use std::io::prelude::*;
+use std::io::prelude::{Write, BufRead};
 use std::net::TcpStream;
 use bufstream::BufStream;
 use serde_json::Value;
 
-use std::thread;
-use std::time;
+use std::{thread, time};
 
-use core::global;
-use core::global::ChainTypes;
+use core::global::{self, ChainTypes};
 
 use framework::{config, stratum_config};
 

@@ -28,12 +28,10 @@ pub mod common;
 use std::sync::{Arc, RwLock};
 
 use core::core::Transaction;
-
+use common::{test_source, test_transaction};
 use keychain::{ExtKeychain, Keychain};
 use pool::TransactionPool;
-use pool::types::*;
-
-use common::*;
+use pool::types::{PoolConfig, PoolError, BlockChain, NoopAdapter};
 
 pub fn test_setup(
 	chain: &Arc<CoinbaseMaturityErrorChainAdapter>,

@@ -15,25 +15,21 @@
 //! Mining Stratum Server
 use bufstream::BufStream;
 use serde_json;
-use std::cmp;
 use std::error::Error;
-use std::io::BufRead;
-use std::io::{ErrorKind, Write};
+use std::io::{BufRead, ErrorKind, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
-use std::thread;
-use std::time::Duration;
-use std::time::SystemTime;
+use std::{cmp, thread};
+use std::time::{ Duration, SystemTime};
 use time;
 
 use chain;
 use common::adapters::PoolToChainAdapter;
 use common::stats::{StratumStats, WorkerStats};
 use common::types::StratumServerConfig;
-use core::consensus;
+use core::{consensus, pow};
 use core::core::{Block, BlockHeader};
-use core::pow;
 use keychain;
 use mining::mine_block;
 use pool;

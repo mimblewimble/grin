@@ -21,8 +21,7 @@ use byteorder::{ByteOrder, LittleEndian};
 use siphasher::sip::SipHasher24;
 
 use core::hash::{Hash, Hashed};
-use ser;
-use ser::{Readable, Reader, Writeable, Writer};
+use ser::{self, Readable, Reader, Writeable, Writer};
 use util;
 
 /// The size of a short id used to identify inputs|outputs|kernels (6 bytes)

@@ -24,7 +24,6 @@ use failure::ResultExt;
 
 use core::core::hash::Hash;
 use core::core::pmmr::MerkleProof;
-
 use keychain::{Identifier, Keychain};
 
 use libtx::slate::Slate;

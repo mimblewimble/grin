@@ -20,19 +20,19 @@ use time;
 
 use cursive::Cursive;
 use cursive::theme::{BaseColor, BorderStyle, Color, Theme};
-use cursive::theme::PaletteColor::*;
-use cursive::theme::Color::*;
-use cursive::theme::BaseColor::*;
+use cursive::theme::PaletteColor::{HighlightInactive, View, Background, Highlight, Shadow, Primary};
+use cursive::theme::Color::Dark;
+use cursive::theme::BaseColor::{Blue, White, Cyan, Black};
 use cursive::utils::markup::StyledString;
 use cursive::views::{LinearLayout, Panel, StackView, TextView, ViewBox};
 use cursive::direction::Orientation;
-use cursive::traits::*;
+use cursive::traits::Identifiable;
 
 use servers::Server;
 
 use tui::{menu, mining, peers, status, version};
-use tui::types::*;
-use tui::constants::*;
+use tui::types::{TUIStatusListener, UIMessage};
+use tui::constants::ROOT_STACK;
 
 use built_info;
 

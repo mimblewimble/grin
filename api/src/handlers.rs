@@ -17,9 +17,8 @@ use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 
 use failure::{Fail, ResultExt};
-use iron::Handler;
-use iron::prelude::*;
-use iron::status;
+use iron::{status, Handler};
+use iron::prelude::{IronError, Plugin, IronResult, Response, Request};
 use serde::Serialize;
 use serde_json;
 use urlencoded::UrlEncodedQuery;
@@ -32,10 +31,9 @@ use p2p;
 use p2p::types::ReasonForBan;
 use pool;
 use regex::Regex;
-use rest::*;
-use types::*;
-use util;
-use util::LOGGER;
+use rest::{ApiServer, ErrorKind, Error};
+use types::{TxHashSet, OutputType, Tip, BlockHeaderInfo, OutputPrintable, PoolInfo, BlockOutputs, CompactBlockPrintable, BlockPrintable, TxHashSetNode, Output, OutputListing, Status};
+use util::{self, LOGGER};
 use util::secp::pedersen::Commitment;
 
 // All handlers use `Weak` references instead of `Arc` to avoid cycles that

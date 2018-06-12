@@ -22,8 +22,7 @@ use std::sync::Arc;
 
 use chain::ChainStore;
 use chain::store::ChainKVStore;
-use chain::txhashset;
-use chain::txhashset::TxHashSet;
+use chain::txhashset::{self, TxHashSet};
 use chain::types::Tip;
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;

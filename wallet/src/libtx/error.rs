@@ -16,8 +16,7 @@
 use failure::{Backtrace, Context, Fail};
 use std::fmt::{self, Display};
 
-use core::core::committed;
-use core::core::transaction;
+use core::core::{committed, transaction};
 use keychain;
 use util::secp;
 

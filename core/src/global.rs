@@ -22,11 +22,8 @@
 /// e.g. CI, User testing, production values
 
 use std::sync::RwLock;
-use consensus::PROOFSIZE;
-use consensus::DEFAULT_SIZESHIFT;
-use consensus::COINBASE_MATURITY;
-use consensus::{BLOCK_TIME_SEC, CUT_THROUGH_HORIZON, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY,
-                MEDIAN_TIME_WINDOW};
+use consensus::{BLOCK_TIME_SEC, COINBASE_MATURITY,  CUT_THROUGH_HORIZON, DEFAULT_SIZESHIFT, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY,
+                MEDIAN_TIME_WINDOW, PROOFSIZE};
 use core::target::Difficulty;
 use consensus::TargetError;
 

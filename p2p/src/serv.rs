@@ -13,11 +13,10 @@
 // limitations under the License.
 
 use std::fs::File;
-use std::io;
+use std::{io, thread};
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
-use std::thread;
 use std::time::Duration;
 
 use core::core;
@@ -27,7 +26,7 @@ use handshake::Handshake;
 use peer::Peer;
 use peers::Peers;
 use store::PeerStore;
-use types::*;
+use types::{NetAdapter, TxHashSetRead, P2PConfig, ChainAdapter, Error, Capabilities};
 use util::LOGGER;
 
 /// P2P server implementation, handling bootstrapping to find and connect to

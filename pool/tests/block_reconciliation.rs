@@ -33,11 +33,9 @@ use chain::ChainStore;
 use chain::txhashset;
 use chain::types::Tip;
 use core::core::target::Difficulty;
-
+use common::{test_source, test_transaction};
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
-
-use common::*;
 
 #[test]
 fn test_transaction_pool_block_reconciliation() {

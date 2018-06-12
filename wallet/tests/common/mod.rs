@@ -28,9 +28,9 @@ use core::core::hash::Hashed;
 use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::{consensus, global, pow};
 use keychain::ExtKeychain;
-use wallet::file_wallet::*;
+use wallet::file_wallet::{FileWallet, WalletConfig};
 use wallet::libwallet::internal::updater;
-use wallet::libwallet::types::*;
+use wallet::libwallet::types::{BlockFees, BlockIdentifier, WalletBackend, MerkleProofWrapper, OutputStatus};
 use wallet::libwallet::{Error, ErrorKind};
 
 use util;

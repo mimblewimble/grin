@@ -21,10 +21,9 @@ use std::sync::Arc;
 use time;
 
 use core::core::hash::Hashed;
-use core::core::transaction;
-use core::core::{Block, CompactBlock, Transaction};
+use core::core::{Block, CompactBlock, Transaction, transaction};
 use pool::Pool;
-use types::*;
+use types::{PoolConfig, BlockChain, PoolEntry, PoolError, PoolAdapter, PoolEntryState, TxSource};
 use util::LOGGER;
 
 /// Transaction pool implementation.

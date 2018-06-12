@@ -18,7 +18,7 @@ extern crate time;
 
 use core::core::target::Difficulty;
 use core::global;
-use core::consensus::*;
+use core::consensus::{next_difficulty, MEDIAN_TIME_WINDOW, valid_header_version, DIFFICULTY_ADJUST_WINDOW, TargetError};
 
 // Builds an iterator for next difficulty calculation with the provided
 // constant time interval, difficulty and total length.

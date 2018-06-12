@@ -19,8 +19,7 @@ extern crate grin_util as util;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::thread;
-use std::time;
+use std::{thread, time};
 
 use core::core::hash::Hash;
 use core::core::target::Difficulty;

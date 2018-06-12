@@ -20,9 +20,8 @@ use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 use bodyparser;
-use iron::Handler;
-use iron::prelude::*;
-use iron::status;
+use iron::{Handler, status};
+use iron::prelude::{Request, IronError, Plugin, Response, IronResult};
 use serde::Serialize;
 use serde_json;
 

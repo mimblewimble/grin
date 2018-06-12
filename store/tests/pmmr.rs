@@ -20,7 +20,7 @@ extern crate time;
 use std::fs;
 
 use core::core::pmmr::{Backend, PMMR};
-use core::ser::*;
+use core::ser::{Reader, Readable, PMMRIndexHashable, Error, Writer, Writeable, PMMRable};
 use store::types::prune_noop;
 
 #[test]

@@ -27,7 +27,7 @@ use rand::{thread_rng, Rng};
 use std::num::ParseFloatError;
 use std::{fmt, iter};
 
-use util::secp::pedersen::*;
+use util::secp::pedersen::Commitment;
 
 pub use self::block::*;
 pub use self::committed::Committed;

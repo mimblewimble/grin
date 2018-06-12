@@ -17,8 +17,7 @@
 use num::FromPrimitive;
 use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
-use std::thread;
-use std::time;
+use std::{thread, time};
 
 use core::consensus::{MAX_MSG_LEN, MAX_TX_INPUTS, MAX_TX_KERNELS, MAX_TX_OUTPUTS};
 use core::core::BlockHeader;
@@ -26,7 +25,7 @@ use core::core::hash::Hash;
 use core::core::target::Difficulty;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
-use types::*;
+use types::{MAX_PEER_ADDRS, MAX_LOCATORS, ReasonForBan, Error, Capabilities, MAX_BLOCK_HEADERS};
 use util::LOGGER;
 
 /// Current latest version of the protocol

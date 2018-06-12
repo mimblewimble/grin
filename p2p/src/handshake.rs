@@ -21,9 +21,9 @@ use rand::os::OsRng;
 
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
-use msg::*;
+use msg::{Type, read_message, write_message, Hand, Shake, USER_AGENT, SockAddr, PROTOCOL_VERSION};
 use peer::Peer;
-use types::*;
+use types::{P2PConfig, Error, Capabilities, PeerInfo, Direction};
 use util::LOGGER;
 
 const NONCES_CAP: usize = 100;

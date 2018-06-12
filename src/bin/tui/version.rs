@@ -18,10 +18,10 @@ use cursive::Cursive;
 use cursive::view::View;
 use cursive::views::{BoxView, LinearLayout, TextView};
 use cursive::direction::Orientation;
-use cursive::traits::*;
+use cursive::traits::Identifiable;
 
-use tui::constants::*;
-use tui::types::*;
+use tui::constants::VIEW_VERSION;
+use tui::types::TUIStatusListener;
 
 use servers::ServerStats;
 use info_strings;

@@ -6,7 +6,6 @@ use std::fs::{self, File};
 use grin_core::ser;
 use grin_core::core::{Block, BlockHeader, CompactBlock, Transaction};
 use grin_core::core::target::Difficulty;
-
 use grin_core::core::build::{input, output, transaction_with_offset, with_fee};
 use grin_keychain::keychain::Keychain;
 

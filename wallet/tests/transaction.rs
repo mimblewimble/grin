@@ -30,7 +30,7 @@ use std::fs;
 use std::sync::Arc;
 
 use chain::Chain;
-use chain::types::*;
+use chain::types::NoopAdapter;
 use core::global::ChainTypes;
 use core::{global, pow};
 use util::LOGGER;

@@ -21,15 +21,13 @@ use std::collections::hash_map::Entry;
 
 use core::consensus::reward;
 use core::core::{Output, TxKernel};
-use core::global;
-use core::ser;
+use core::{global, ser};
 use keychain::{Identifier, Keychain};
 use libtx::reward;
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
-use libwallet::types::*;
-use util;
-use util::LOGGER;
+use libwallet::types::{OutputData, CbData, WalletClient, OutputStatus, BlockFees, WalletBackend, WalletInfo};
+use util::{self, LOGGER};
 use util::secp::pedersen;
 
 /// Retrieve all of the outputs (doesn't attempt to update from node)

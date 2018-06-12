@@ -62,7 +62,7 @@ use cursive::{Cursive, Printer};
 use cursive::direction::Direction;
 use cursive::view::{ScrollBase, View};
 use cursive::event::{Callback, Event, EventResult, Key};
-use cursive::theme::PaletteColor::*;
+use cursive::theme::PaletteColor::{Highlight, HighlightInactive, Primary};
 
 /// A trait for displaying and sorting items inside a
 /// [`TableView`](struct.TableView.html).

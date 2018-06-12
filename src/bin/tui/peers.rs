@@ -22,11 +22,11 @@ use cursive::Cursive;
 use cursive::view::View;
 use cursive::views::{BoxView, Dialog, LinearLayout, TextView};
 use cursive::direction::Orientation;
-use cursive::traits::*;
+use cursive::traits::{Identifiable, Boxable};
 
 use tui::table::{TableView, TableViewItem};
-use tui::constants::*;
-use tui::types::*;
+use tui::constants::{TABLE_PEER_STATUS, VIEW_PEER_SYNC};
+use tui::types::TUIStatusListener;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum PeerColumn {

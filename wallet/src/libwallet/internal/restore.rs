@@ -23,8 +23,7 @@ use failure::{Fail, ResultExt};
 use keychain::{Identifier, Keychain};
 use libtx::proof;
 use libwallet::types::*;
-use util;
-use util::LOGGER;
+use util::{self, LOGGER};
 use util::secp::pedersen;
 
 fn get_merkle_proof_for_commit(node_addr: &str, commit: &str) -> Result<MerkleProofWrapper, Error> {

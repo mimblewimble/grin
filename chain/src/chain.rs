@@ -30,7 +30,7 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::*;
+use types::{BlockSums, BlockMarker, Tip, ChainStore, Options, ChainAdapter, Error};
 use util::LOGGER;
 use util::secp::pedersen::{Commitment, RangeProof};
 

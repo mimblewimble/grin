@@ -19,22 +19,17 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use time;
 
-use consensus;
-use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
-use core::committed;
-use core::committed::Committed;
+use consensus::{self, exceeds_weight, reward, VerifySortOrder, REWARD};
+use core::committed::{self, Committed};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
 use core::target::Difficulty;
-use core::transaction;
-use core::{Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId, Transaction,
+use core::{Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId, Transaction, transaction,
            TxKernel};
 use global;
-use keychain;
-use keychain::BlindingFactor;
+use keychain::{self, BlindingFactor};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
-use util::LOGGER;
-use util::{secp, static_secp_instance};
+use util::{LOGGER, secp, static_secp_instance};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
