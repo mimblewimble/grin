@@ -20,7 +20,8 @@ extern crate croaring;
 use croaring::Bitmap;
 
 use core::core::hash::Hash;
-use core::core::pmmr::{self, Backend, MerkleProof, PruneList, PMMR};
+use core::core::pmmr::{self, Backend, MerkleProof, PMMR};
+use core::core::prune_list::PruneList;
 use core::ser::{self, Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
 
 /// Simple MMR backend implementation based on a Vector. Pruning does not

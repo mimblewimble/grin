@@ -19,8 +19,10 @@ pub mod committed;
 pub mod hash;
 pub mod id;
 pub mod pmmr;
+pub mod prune_list;
 pub mod target;
 pub mod transaction;
+
 use consensus::GRIN_BASE;
 #[allow(dead_code)]
 use rand::{thread_rng, Rng};

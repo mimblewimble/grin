@@ -29,7 +29,7 @@ use libc::{ftruncate as ftruncate64, off_t as off64_t};
 use libc::{ftruncate64, off64_t};
 
 use core::core::pmmr;
-use core::core::pmmr::PruneList;
+use core::core::prune_list::PruneList;
 use core::ser;
 
 /// A no-op function for doing nothing with some pruned data.

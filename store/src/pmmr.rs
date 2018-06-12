@@ -21,6 +21,7 @@ use croaring::Bitmap;
 
 use core::core::hash::Hash;
 use core::core::pmmr::{self, family, Backend};
+use core::core::prune_list::PruneList;
 use core::ser;
 use core::ser::PMMRable;
 use types::*;
@@ -53,7 +54,7 @@ where
 	hash_file: AppendOnlyFile,
 	data_file: AppendOnlyFile,
 	pub utxo_set: UtxoSet,
-	pruned_nodes: pmmr::PruneList,
+	pruned_nodes: PruneList,
 	_marker: marker::PhantomData<T>,
 }
 
@@ -205,7 +206,7 @@ where
 	/// Use the provided dir to store its files.
 	pub fn new(data_dir: String) -> io::Result<PMMRBackend<T>> {
 		let prune_list = read_ordered_vec(format!("{}/{}", data_dir, PMMR_PRUNED_FILE), 8)?;
-		let pruned_nodes = pmmr::PruneList {
+		let pruned_nodes = PruneList {
 			pruned_nodes: prune_list,
 		};
 		let utxo_set = UtxoSet::open(format!("{}/{}", data_dir, PMMR_UTXO_FILE))?;

@@ -22,7 +22,6 @@ use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
 use core::core::pmmr;
-use core::core::pmmr::PruneList;
 use core::ser;
 use types::read_ordered_vec;
 
