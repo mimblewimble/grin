@@ -189,7 +189,8 @@ impl Readable for BlockHeader {
 		let kernel_root = Hash::read(reader)?;
 		let total_kernel_offset = BlindingFactor::read(reader)?;
 		let total_kernel_sum = Commitment::read(reader)?;
-		let (output_mmr_size, kernel_mmr_size, nonce) = ser_multiread!(reader, read_u64, read_u64, read_u64);
+		let (output_mmr_size, kernel_mmr_size, nonce) =
+			ser_multiread!(reader, read_u64, read_u64, read_u64);
 		let pow = Proof::read(reader)?;
 
 		if timestamp > (1 << 55) || timestamp < -(1 << 55) {
