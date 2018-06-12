@@ -67,7 +67,7 @@ block height is rejected
 ## Trustless Transactions
 
 An aggregate (Schnorr) signature involving a single party is relatively simple
-but does not demonstrate the full flexibility of the contstruction. We show
+but does not demonstrate the full flexibility of the construction. We show
 here how to generalize it for use in outputs involving multiple parties.
 
 As constructed in section 1.2, an aggregate signature requires trusting the

@@ -24,7 +24,7 @@ pub enum UIMessage {
 	UpdateStatus(ServerStats),
 }
 
-/// Trait for a UI element that recieves status update messages
+/// Trait for a UI element that receives status update messages
 /// and updates itself
 
 pub trait TUIStatusListener {

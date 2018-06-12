@@ -14,7 +14,6 @@
 
 use core::core;
 use core::core::amount_to_hr_string;
-use keychain::Keychain;
 use libwallet::Error;
 use libwallet::types::{OutputData, WalletInfo};
 use prettytable;

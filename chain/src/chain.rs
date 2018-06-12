@@ -659,7 +659,7 @@ impl Chain {
 		Ok(())
 	}
 
-	/// Triggers chain compaction, cleaning up some unecessary historical
+	/// Triggers chain compaction, cleaning up some unnecessary historical
 	/// information. We introduce a chain depth called horizon, which is
 	/// typically in the range of a couple days. Before that horizon, this
 	/// method will:

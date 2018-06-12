@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //! Globally accessible static instance of secp256k1, to avoid
-//! initialisation overhead
+//! initialization overhead
 
 use rand::thread_rng;
 use secp_ as secp;

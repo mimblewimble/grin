@@ -240,7 +240,7 @@ where
 	})
 }
 
-/// Retrieve summar info about the wallet
+/// Retrieve summary info about the wallet
 pub fn retrieve_info<T, K>(wallet: &mut T) -> Result<WalletInfo, Error>
 where
 	T: WalletBackend<K> + WalletClient,

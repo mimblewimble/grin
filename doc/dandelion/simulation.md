@@ -2,7 +2,7 @@ Dandelion Simulation
 ==================
 This document describes a network of node with Dandelion.
 
-In this scenario, we simulate a successfull aggregation but a failed transaction cut-through forcing a node to revert its stempool state.
+In this scenario, we simulate a successful aggregation but a failed transaction cut-through forcing a node to revert its stempool state.
 
 This document also helps visualizing all the timers in a simple way.
 

@@ -25,7 +25,7 @@ use core::core::transaction::Transaction;
 /// Dandelion relay timer
 const DANDELION_RELAY_SECS: u64 = 600;
 
-/// Dandelion emabargo timer
+/// Dandelion embargo timer
 const DANDELION_EMBARGO_SECS: u64 = 180;
 
 /// Dandelion patience timer
@@ -86,7 +86,7 @@ fn default_dandelion_stem_probability() -> Option<usize> {
 pub struct PoolConfig {
 	/// Base fee for a transaction to be accepted by the pool. The transaction
 	/// weight is computed from its number of inputs, outputs and kernels and
-	/// multipled by the base fee to compare to the actual transaction fee.
+	/// multiplied by the base fee to compare to the actual transaction fee.
 	#[serde = "default_accept_fee_base"]
 	pub accept_fee_base: u64,
 
