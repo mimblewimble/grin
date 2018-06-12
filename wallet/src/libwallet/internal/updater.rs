@@ -240,14 +240,13 @@ where
 	})
 }
 
-/// Retrieve summar info about the wallet
-pub fn retrieve_info<T, K>(wallet: &mut T) -> Result<WalletInfo, Error>
+/// Retrieve summary info about the wallet
+/// caller should refresh first if desired
+pub fn retrieve_info<T, K>(wallet: &mut T, refreshed: bool) -> Result<WalletInfo, Error>
 where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
-	let result = refresh_outputs(wallet);
-
 	let height_res = wallet.get_chain_height(&wallet.node_url());
 
 	let ret_val = wallet.read_wallet(|wallet_data| {
@@ -282,10 +281,6 @@ where
 			}
 		}
 
-		let mut data_confirmed = true;
-		if let Err(_) = result {
-			data_confirmed = false;
-		}
 		Ok(WalletInfo {
 			current_height: current_height,
 			total: unspent_total + unconfirmed_total,
@@ -293,7 +288,7 @@ where
 			amount_confirmed_but_locked: unspent_but_locked_total,
 			amount_currently_spendable: unspent_total - unspent_but_locked_total,
 			amount_locked: locked_total,
-			data_confirmed: data_confirmed,
+			data_confirmed: refreshed,
 			data_confirmed_from: String::from(from),
 		})
 	});

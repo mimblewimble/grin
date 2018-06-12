@@ -25,6 +25,7 @@ use iron::prelude::*;
 use iron::status;
 use serde::Serialize;
 use serde_json;
+use urlencoded::UrlEncodedQuery;
 
 use failure::Fail;
 
@@ -143,9 +144,14 @@ where
 		&self,
 		req: &mut Request,
 		api: &mut APIOwner<T, K>,
-	) -> Result<Vec<OutputData>, Error> {
-		let res = api.retrieve_outputs(false)?;
-		Ok(res.1)
+	) -> Result<(bool, Vec<OutputData>), Error> {
+		let mut update_from_node = false;
+		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+			if let Some(_) = params.get("refresh") {
+				update_from_node = true;
+			}
+		}
+		api.retrieve_outputs(false, update_from_node)
 	}
 
 	fn retrieve_summary_info(
@@ -153,8 +159,21 @@ where
 		req: &mut Request,
 		api: &mut APIOwner<T, K>,
 	) -> Result<WalletInfo, Error> {
-		let res = api.retrieve_summary_info()?;
-		Ok(res.1)
+		let mut update_from_node = false;
+		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+			if let Some(_) = params.get("refresh") {
+				update_from_node = true;
+			}
+		}
+		api.retrieve_summary_info(update_from_node)
+	}
+
+	fn node_height(
+		&self,
+		req: &mut Request,
+		api: &mut APIOwner<T, K>,
+	) -> Result<(u64, bool), Error> {
+		api.node_height()
 	}
 
 	fn issue_send_tx(&self, req: &mut Request, api: &mut APIOwner<T, K>) -> Result<(), Error> {
@@ -174,6 +193,8 @@ where
 			"retrieve_outputs" => json_response_pretty(&self.retrieve_outputs(req, api)
 				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
 			"retrieve_summary_info" => json_response_pretty(&self.retrieve_summary_info(req, api)
+				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
+			"node_height" => json_response_pretty(&self.node_height(req, api)
 				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
 			"issue_send_tx" => json_response_pretty(&self.issue_send_tx(req, api)
 				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),

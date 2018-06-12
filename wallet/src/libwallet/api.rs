@@ -60,8 +60,12 @@ where
 	pub fn retrieve_outputs(
 		&mut self,
 		include_spent: bool,
+		refresh_from_node: bool,
 	) -> Result<(bool, Vec<OutputData>), Error> {
-		let validated = self.update_outputs();
+		let mut validated = false;
+		if refresh_from_node {
+			validated = self.update_outputs();
+		}
 		Ok((
 			validated,
 			updater::retrieve_outputs(self.wallet, include_spent)?,
@@ -69,9 +73,12 @@ where
 	}
 
 	/// Retrieve summary info for wallet
-	pub fn retrieve_summary_info(&mut self) -> Result<(bool, WalletInfo), Error> {
-		let validated = self.update_outputs();
-		Ok((validated, updater::retrieve_info(self.wallet)?))
+	pub fn retrieve_summary_info(&mut self, refresh_from_node: bool) -> Result<WalletInfo, Error> {
+		let mut validated = false;
+		if refresh_from_node {
+			validated = self.update_outputs();
+		}
+		updater::retrieve_info(self.wallet, validated)
 	}
 
 	/// Issues a send transaction and sends to recipient
@@ -139,7 +146,7 @@ where
 		match self.wallet.get_chain_height(self.wallet.node_url()) {
 			Ok(height) => Ok((height, true)),
 			Err(_) => {
-				let outputs = self.retrieve_outputs(true)?;
+				let outputs = self.retrieve_outputs(true, false)?;
 				let height = match outputs.1.iter().map(|out| out.height).max() {
 					Some(height) => height,
 					None => 0,
