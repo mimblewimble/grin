@@ -269,7 +269,7 @@ where
 	/// The last position in the PMMR
 	pub last_pos: u64,
 	backend: &'a mut B,
-	// only needed to parametrise Backend
+	// only needed to parameterise Backend
 	_marker: marker::PhantomData<T>,
 }
 
