@@ -29,7 +29,7 @@ use std::sync::{Arc, RwLock};
 
 use chain::types::Tip;
 use chain::{txhashset, ChainStore};
-use common::{test_source, test_transaction};
+use common::{ChainAdapter, clean_output_dir, test_setup, test_source, test_transaction, test_transaction_spending_coinbase};
 use core::core::target::Difficulty;
 use core::core::{transaction, Block, BlockHeader};
 use keychain::{ExtKeychain, Keychain};

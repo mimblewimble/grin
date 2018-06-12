@@ -24,7 +24,7 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
-use chain::types::{ChainStore, NoopAdapter, Tip};
+use chain::types::{NoopAdapter, Tip};
 use chain::Chain;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};

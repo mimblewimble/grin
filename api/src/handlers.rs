@@ -32,9 +32,7 @@ use p2p::types::ReasonForBan;
 use pool;
 use regex::Regex;
 use rest::{ApiServer, Error, ErrorKind};
-use types::{BlockHeaderInfo, BlockOutputs, BlockPrintable, CompactBlockPrintable, Output,
-            OutputListing, OutputPrintable, OutputType, PoolInfo, Status, Tip, TxHashSet,
-            TxHashSetNode};
+use types::*;
 use util::secp::pedersen::Commitment;
 use util::{self, LOGGER};
 
