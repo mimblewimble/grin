@@ -130,6 +130,13 @@ pub struct BlockHeader {
 	/// We can derive the kernel offset sum for *this* block from
 	/// the total kernel offset of the previous block header.
 	pub total_kernel_offset: BlindingFactor,
+	/// Total accumulated sum of kernel commitments since genesis block.
+	/// Should always equal the UTXO commitment sum minus supply.
+	pub total_kernel_sum: Commitment,
+	/// Total size of the output MMR after applying this block
+	pub output_mmr_size: u64,
+	/// Total size of the kernel MMR after applying this block
+	pub kernel_mmr_size: u64,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Proof of work data.
@@ -149,6 +156,9 @@ impl Default for BlockHeader {
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
 			total_kernel_offset: BlindingFactor::zero(),
+			total_kernel_sum: Commitment::from_vec(vec![0; 33]),
+			output_mmr_size: 0,
+			kernel_mmr_size: 0,
 			nonce: 0,
 			pow: Proof::zero(proof_size),
 		}
@@ -175,10 +185,11 @@ impl Readable for BlockHeader {
 		let timestamp = reader.read_i64()?;
 		let total_difficulty = Difficulty::read(reader)?;
 		let output_root = Hash::read(reader)?;
-		let rproof_root = Hash::read(reader)?;
+		let range_proof_root = Hash::read(reader)?;
 		let kernel_root = Hash::read(reader)?;
 		let total_kernel_offset = BlindingFactor::read(reader)?;
-		let nonce = reader.read_u64()?;
+		let total_kernel_sum = Commitment::read(reader)?;
+		let (output_mmr_size, kernel_mmr_size, nonce) = ser_multiread!(reader, read_u64, read_u64, read_u64);
 		let pow = Proof::read(reader)?;
 
 		if timestamp > (1 << 55) || timestamp < -(1 << 55) {
@@ -186,20 +197,23 @@ impl Readable for BlockHeader {
 		}
 
 		Ok(BlockHeader {
-			version: version,
-			height: height,
-			previous: previous,
+			version,
+			height,
+			previous,
 			timestamp: time::at_utc(time::Timespec {
 				sec: timestamp,
 				nsec: 0,
 			}),
-			total_difficulty: total_difficulty,
-			output_root: output_root,
-			range_proof_root: rproof_root,
-			kernel_root: kernel_root,
-			total_kernel_offset: total_kernel_offset,
-			nonce: nonce,
-			pow: pow,
+			total_difficulty,
+			output_root,
+			range_proof_root,
+			kernel_root,
+			total_kernel_offset,
+			total_kernel_sum,
+			output_mmr_size,
+			kernel_mmr_size,
+			nonce,
+			pow,
 		})
 	}
 }
@@ -218,6 +232,9 @@ impl BlockHeader {
 			[write_fixed_bytes, &self.range_proof_root],
 			[write_fixed_bytes, &self.kernel_root],
 			[write_fixed_bytes, &self.total_kernel_offset],
+			[write_fixed_bytes, &self.total_kernel_sum],
+			[write_u64, self.output_mmr_size],
+			[write_u64, self.kernel_mmr_size],
 			[write_u64, self.nonce]
 		);
 		Ok(())
