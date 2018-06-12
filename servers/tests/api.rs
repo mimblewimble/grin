@@ -29,7 +29,7 @@ mod framework;
 use std::{thread, time};
 use std::sync::{Arc, Mutex};
 
-use core::global{self, ChainTypes};
+use core::global::{self, ChainTypes};
 
 use framework::{LocalServerContainer, LocalServerContainerConfig};
 use util::{init_test_logger, LOGGER};

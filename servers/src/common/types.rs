@@ -18,8 +18,8 @@ use std::convert::From;
 
 use api;
 use chain;
-use core::{core, pow};
 use core::global::ChainTypes;
+use core::{core, pow};
 use p2p;
 use pool;
 use store;

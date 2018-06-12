@@ -16,7 +16,7 @@ use memmap;
 
 use std::cmp;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, BufReader, BufWriter, ErrorKind,Read, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 

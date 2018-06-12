@@ -18,25 +18,26 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::{MAIN_SEPARATOR, Path};
+use std::path::{Path, MAIN_SEPARATOR};
 
 use serde_json;
 use tokio_core::reactor;
-use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;
+use tokio_retry::Retry;
 
 use failure::ResultExt;
 
 use keychain::{self, Keychain};
-use util::{self, LOGGER};
 use util::secp::pedersen;
+use util::{self, LOGGER};
 
 use error::{Error, ErrorKind};
 
 use client;
 use libtx::slate::Slate;
 use libwallet;
-use libwallet::types::{MerkleProofWrapper, CbData, TxWrapper, WalletClient, BlockIdentifier, OutputData, BlockFees, WalletBackend};
+use libwallet::types::{BlockFees, BlockIdentifier, CbData, MerkleProofWrapper, OutputData,
+                       TxWrapper, WalletBackend, WalletClient};
 
 const DAT_FILE: &'static str = "wallet.dat";
 const BCK_FILE: &'static str = "wallet.bck";

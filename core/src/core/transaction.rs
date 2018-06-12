@@ -25,9 +25,9 @@ use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
 
 use consensus::{self, VerifySortOrder};
-use core::{BlockHeader, Committed, committed, global};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
+use core::{committed, global, BlockHeader, Committed};
 use keychain::{self, BlindingFactor};
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};

@@ -23,9 +23,10 @@ use std::{thread, time};
 
 use api;
 use chain;
-use common::adapters::{ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToNetAdapter, PoolToChainAdapter};
-use common::stats::{ServerStats, ServerStateInfo, PeerStats, DiffBlock, DiffStats};
-use common::types::{Seeding, StratumServerConfig, Error, ServerConfig};
+use common::adapters::{ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter,
+                       PoolToNetAdapter};
+use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
+use common::types::{Error, Seeding, ServerConfig, StratumServerConfig};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::{consensus, genesis, global, pow};

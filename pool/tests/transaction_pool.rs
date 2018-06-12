@@ -27,11 +27,11 @@ pub mod common;
 
 use std::sync::{Arc, RwLock};
 
-use chain::{ChainStore, txhashset};
 use chain::types::Tip;
-use core::core::target::Difficulty;
-use core::core::{Block, BlockHeader, transaction};
+use chain::{txhashset, ChainStore};
 use common::{test_source, test_transaction};
+use core::core::target::Difficulty;
+use core::core::{transaction, Block, BlockHeader};
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
 

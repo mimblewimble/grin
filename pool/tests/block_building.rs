@@ -29,8 +29,8 @@ use std::sync::{Arc, RwLock};
 
 use core::core::{Block, BlockHeader};
 
-use chain::{ChainStore, txhashset};
 use chain::types::Tip;
+use chain::{txhashset, ChainStore};
 use core::core::target::Difficulty;
 
 use keychain::{ExtKeychain, Keychain};

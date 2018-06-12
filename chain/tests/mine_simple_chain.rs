@@ -29,7 +29,7 @@ use chain::types::{NoopAdapter, ChainStore};
 use core::{consensus, global, pow};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
-use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};s
+use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
 use core::global::ChainTypes;
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx::{self, build};

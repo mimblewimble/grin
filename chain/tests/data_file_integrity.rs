@@ -24,12 +24,12 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
+use chain::types::{ChainStore, NoopAdapter, Tip};
 use chain::Chain;
-use chain::types::{Tip, NoopAdapter, ChainStore};
-use core::pow;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};
 use core::global::{self, ChainTypes};
+use core::pow;
 use core::{consensus, genesis};
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;

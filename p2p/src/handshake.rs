@@ -16,14 +16,14 @@ use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
-use rand::Rng;
 use rand::os::OsRng;
+use rand::Rng;
 
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
-use msg::{Type, read_message, write_message, Hand, Shake, USER_AGENT, SockAddr, PROTOCOL_VERSION};
+use msg::{read_message, write_message, Hand, Shake, SockAddr, Type, PROTOCOL_VERSION, USER_AGENT};
 use peer::Peer;
-use types::{P2PConfig, Error, Capabilities, PeerInfo, Direction};
+use types::{Capabilities, Direction, Error, P2PConfig, PeerInfo};
 use util::LOGGER;
 
 const NONCES_CAP: usize = 100;

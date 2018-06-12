@@ -25,10 +25,10 @@ extern crate serde_json;
 
 mod framework;
 
-use std::io::prelude::{Write, BufRead};
-use std::net::TcpStream;
 use bufstream::BufStream;
 use serde_json::Value;
+use std::io::prelude::{BufRead, Write};
+use std::net::TcpStream;
 
 use std::{thread, time};
 

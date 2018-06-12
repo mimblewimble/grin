@@ -27,7 +27,8 @@ use util::LOGGER;
 
 use peer::Peer;
 use store::{PeerData, PeerStore, State};
-use types::{NetAdapter, MAX_PEER_ADDRS, TxHashSetRead, P2PConfig, ChainAdapter, ReasonForBan, Error, Capabilities, Direction};
+use types::{Capabilities, ChainAdapter, Direction, Error, NetAdapter, P2PConfig, ReasonForBan,
+            TxHashSetRead, MAX_PEER_ADDRS};
 
 pub struct Peers {
 	pub adapter: Arc<ChainAdapter>,

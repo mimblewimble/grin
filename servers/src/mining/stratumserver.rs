@@ -20,16 +20,16 @@ use std::io::{BufRead, ErrorKind, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, SystemTime};
 use std::{cmp, thread};
-use std::time::{ Duration, SystemTime};
 use time;
 
 use chain;
 use common::adapters::PoolToChainAdapter;
 use common::stats::{StratumStats, WorkerStats};
 use common::types::StratumServerConfig;
-use core::{consensus, pow};
 use core::core::{Block, BlockHeader};
+use core::{consensus, pow};
 use keychain;
 use mining::mine_block;
 use pool;

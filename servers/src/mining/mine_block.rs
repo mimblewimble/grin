@@ -25,13 +25,13 @@ use time;
 use chain::{self, types::BlockSums};
 use common::adapters::PoolToChainAdapter;
 use common::types::Error;
-use core::{consensus, core};
 use core::core::hash::Hashed;
 use core::ser::{self, AsFixedBytes};
+use core::{consensus, core};
 use keychain::{ExtKeychain, Identifier, Keychain};
 use pool;
 use util::{self, LOGGER};
-use wallet::{self,BlockFees};
+use wallet::{self, BlockFees};
 
 /// Serializer that outputs the pre-pow part of the header,
 /// including the nonce (last 8 bytes) that can be sent off

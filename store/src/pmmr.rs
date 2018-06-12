@@ -20,7 +20,7 @@ use std::marker;
 use core::core::hash::Hash;
 use core::core::pmmr::{self, family, Backend};
 use core::ser::{self, PMMRable};
-use types::{read_ordered_vec, write_vec, prune_noop, RemoveLog, AppendOnlyFile};
+use types::{prune_noop, read_ordered_vec, write_vec, AppendOnlyFile, RemoveLog};
 use util::LOGGER;
 
 const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";

@@ -22,12 +22,12 @@
 
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::sync::{mpsc, Arc, Mutex};
 use std::net::TcpStream;
+use std::sync::{mpsc, Arc, Mutex};
 use std::{cmp, thread, time};
 
 use core::ser;
-use msg::{write_to_buf, read_header, read_exact, write_all, read_body, MsgHeader, Type};
+use msg::{read_body, read_exact, read_header, write_all, write_to_buf, MsgHeader, Type};
 use types::Error;
 use util::LOGGER;
 
@@ -43,15 +43,13 @@ macro_rules! try_break {
 	($chan:ident, $inner:expr) => {
 		match $inner {
 			Ok(v) => Some(v),
-			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::WouldBlock => {
-				None
-			}
+			Err(Error::Connection(ref e)) if e.kind() == io::ErrorKind::WouldBlock => None,
 			Err(e) => {
 				let _ = $chan.send(e);
 				break;
+				}
 			}
-		}
-	}
+	};
 }
 
 /// A message as received by the connection. Provides access to the message

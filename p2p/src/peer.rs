@@ -21,9 +21,10 @@ use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use handshake::Handshake;
-use msg::{self, Ping, BanReason, Locator, TxHashSetRequest, GetPeerAddrs};
+use msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest};
 use protocol::Protocol;
-use types::{ReasonForBan, Error, Capabilities, PeerInfo, NetAdapter, TxHashSetRead, P2PConfig, ChainAdapter};
+use types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerInfo, ReasonForBan,
+            TxHashSetRead};
 use util::LOGGER;
 
 const MAX_TRACK_SIZE: usize = 30;
