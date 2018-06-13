@@ -58,10 +58,14 @@ impl<T> PMMRHandle<T>
 where
 	T: PMMRable + ::std::fmt::Debug,
 {
-	fn new(root_dir: String, file_name: &str) -> Result<PMMRHandle<T>, Error> {
+	fn new(
+		root_dir: String,
+		file_name: &str,
+		header: Option<&BlockHeader>,
+	) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(&root_dir).join(TXHASHSET_SUBDIR).join(file_name);
 		fs::create_dir_all(path.clone())?;
-		let be = PMMRBackend::new(path.to_str().unwrap().to_string())?;
+		let be = PMMRBackend::new(path.to_str().unwrap().to_string(), header)?;
 		let sz = be.unpruned_size()?;
 		Ok(PMMRHandle {
 			backend: be,
@@ -91,7 +95,11 @@ pub struct TxHashSet {
 
 impl TxHashSet {
 	/// Open an existing or new set of backends for the TxHashSet
-	pub fn open(root_dir: String, commit_index: Arc<ChainStore>) -> Result<TxHashSet, Error> {
+	pub fn open(
+		root_dir: String,
+		commit_index: Arc<ChainStore>,
+		header: Option<&BlockHeader>,
+	) -> Result<TxHashSet, Error> {
 		let output_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, OUTPUT_SUBDIR]
 			.iter()
 			.collect();
@@ -108,9 +116,9 @@ impl TxHashSet {
 		fs::create_dir_all(kernel_file_path.clone())?;
 
 		Ok(TxHashSet {
-			output_pmmr_h: PMMRHandle::new(root_dir.clone(), OUTPUT_SUBDIR)?,
-			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR)?,
-			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR)?,
+			output_pmmr_h: PMMRHandle::new(root_dir.clone(), OUTPUT_SUBDIR, header)?,
+			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR, header)?,
+			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR, None)?,
 			commit_index,
 		})
 	}
@@ -231,17 +239,13 @@ impl TxHashSet {
 			let _ = commit_index.delete_output_pos(commit);
 		};
 
-		let min_rm = (horizon / 10) as usize;
-
-		self.output_pmmr_h.backend.check_compact(
-			min_rm,
-			horizon_marker.output_pos,
-			clean_output_index,
-		)?;
+		self.output_pmmr_h
+			.backend
+			.check_compact(horizon_marker.output_pos, clean_output_index)?;
 
 		self.rproof_pmmr_h
 			.backend
-			.check_compact(min_rm, horizon_marker.output_pos, &prune_noop)?;
+			.check_compact(horizon_marker.output_pos, &prune_noop)?;
 
 		Ok(())
 	}
@@ -698,7 +702,6 @@ impl<'a> Extension<'a> {
 		Ok(merkle_proof)
 	}
 
-	// TODO - check this is actually not total garbage
 	fn output_pos_to_rewind(
 		&self,
 		block_header: &BlockHeader,
@@ -711,10 +714,6 @@ impl<'a> Extension<'a> {
 			.collect())
 	}
 
-	// TODO - Check our logic here, inclusive/exclusive, off by one etc...
-	// Now "rewind" back through blocks from current chain head until we
-	// reach the forked block, collecting all the input pos (to unremove)
-	// as we go.
 	fn input_pos_to_rewind(
 		&self,
 		block_header: &BlockHeader,
@@ -732,6 +731,16 @@ impl<'a> Extension<'a> {
 			current = current_header.previous;
 		}
 		Ok(bitmap)
+	}
+
+	pub fn save_utxo_copy(&mut self, header: &BlockHeader) -> Result<(), Error> {
+		self.output_pmmr
+			.save_utxo_copy(header)
+			.map_err(|e| Error::Other(e))?;
+		self.rproof_pmmr
+			.save_utxo_copy(header)
+			.map_err(|e| Error::Other(e))?;
+		Ok(())
 	}
 
 	/// Rewinds the MMRs to the provided block, using the last output and
@@ -782,9 +791,10 @@ impl<'a> Extension<'a> {
 			kernel_pos,
 		);
 
-		// Remember to "rewind" our new_output_commits.
-		self.new_output_commits
-			.retain(|_, v| v.clone() <= output_pos);
+		// Remember to "rewind" our new_output_commits
+		// in case we are rewinding state that has not yet
+		// been sync'd to disk.
+		self.new_output_commits.retain(|_, &mut v| v <= output_pos);
 
 		self.output_pmmr
 			.rewind(output_pos, rewind_output_pos, rewind_spent_pos)

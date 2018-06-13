@@ -37,7 +37,8 @@
 
 use croaring::Bitmap;
 
-use core::hash::Hash;
+use core::hash::{Hash, Hashed};
+use core::BlockHeader;
 use ser::{self, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
 
 use std::clone::Clone;
@@ -94,6 +95,12 @@ where
 	/// sit well with the design, but TxKernels have to be summed and the
 	/// fastest way to to be able to allow direct access to the file
 	fn get_data_file_path(&self) -> String;
+
+	/// Also a bit of a hack...
+	/// Saves a copy of the rewound utxo_set file with the block hash as
+	/// filename suffix We need this when sending a txhashset zip file to a
+	/// node for fast sync.
+	fn save_utxo_copy(&self, header: &BlockHeader) -> Result<(), String>;
 
 	/// For debugging purposes so we can see how compaction is doing.
 	fn dump_stats(&self);
@@ -396,7 +403,6 @@ where
 			pos += 1;
 
 			current_hash = (left_hash, current_hash).hash_with_index(pos - 1);
-
 			to_append.push((current_hash, None));
 		}
 
@@ -404,6 +410,11 @@ where
 		self.backend.append(elmt_pos, to_append)?;
 		self.last_pos = pos;
 		Ok(elmt_pos)
+	}
+
+	pub fn save_utxo_copy(&mut self, header: &BlockHeader) -> Result<(), String> {
+		self.backend.save_utxo_copy(header)?;
+		Ok(())
 	}
 
 	/// Rewind the PMMR to a previous position, as if all push operations after

@@ -168,7 +168,7 @@ impl Chain {
 		let head = store.head();
 
 		// open the txhashset, creating a new one if necessary
-		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone())?;
+		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
 		match head {
 			Ok(head) => {
@@ -595,6 +595,23 @@ impl Chain {
 			txhashset.indexes_at(&h)?
 		};
 
+		// now we want to rewind the txhashset extension and
+		// sync a "rewound" copy of the utxo_set files to disk
+		// so we can send these across as part of the zip file.
+		// The fast sync client does *not* have the necessary data
+		// to rewind after receiving the txhashset zip.
+		{
+			let head_header = self.store.head_header()?;
+			let header = self.store.get_block_header(&h)?;
+
+			let mut txhashset = self.txhashset.write().unwrap();
+			txhashset::extending_readonly(&mut txhashset, |extension| {
+				extension.rewind(&header, &head_header)?;
+				extension.save_utxo_copy(&header)?;
+				Ok(())
+			})?;
+		}
+
 		// prepares the zip and return the corresponding Read
 		let txhashset_reader = txhashset::zip_read(self.db_root.clone())?;
 		Ok((marker.output_pos, marker.kernel_pos, txhashset_reader))
@@ -634,14 +651,14 @@ impl Chain {
 			"Going to validate new txhashset, might take some time..."
 		);
 
-		let mut txhashset = txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone())?;
+		let mut txhashset =
+			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
 
 		// Note: we are validating against a writeable extension.
 		txhashset::extending(&mut txhashset, |extension| {
 			// TODO do we need to rewind here? We have no blocks to rewind
 			// (and we need them for the pos to unremove)
-			// panic!("this maybe complicates things a bit???");
-			// extension.rewind(&header, &head_header)?;
+			extension.rewind(&header, &header)?;
 			let (output_sum, kernel_sum) = extension.validate(&header, false)?;
 			extension.save_latest_block_sums(&header, output_sum, kernel_sum)?;
 			extension.rebuild_index()?;

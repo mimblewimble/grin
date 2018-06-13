@@ -136,9 +136,7 @@ where
 	/// provided block.
 	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
 		// First reconcile the txpool.
-		println!("***** about to reconcile pool against block");
 		self.txpool.reconcile_block(block)?;
-		println!("***** about to reconcile pool itself");
 		self.txpool.reconcile(None)?;
 
 		// Then reconcile the stempool, accounting for the txpool txs.

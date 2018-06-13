@@ -20,9 +20,10 @@ use std::path::Path;
 
 use croaring::Bitmap;
 
-use core::core::hash::Hash;
+use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::{self, family, Backend};
 use core::core::prune_list::PruneList;
+use core::core::BlockHeader;
 use core::ser;
 use core::ser::PMMRable;
 use rm_log::RemoveLog;
@@ -188,6 +189,13 @@ where
 		self.data_file.path()
 	}
 
+	fn save_utxo_copy(&self, header: &BlockHeader) -> Result<(), String> {
+		self.utxo_set
+			.save_copy(header)
+			.map_err(|_| format!("Failed to save copy of utxo_set for {}", header.hash()))?;
+		Ok(())
+	}
+
 	fn dump_stats(&self) {
 		debug!(
 			LOGGER,
@@ -207,7 +215,7 @@ where
 {
 	/// Instantiates a new PMMR backend.
 	/// Use the provided dir to store its files.
-	pub fn new(data_dir: String) -> io::Result<PMMRBackend<T>> {
+	pub fn new(data_dir: String, header: Option<&BlockHeader>) -> io::Result<PMMRBackend<T>> {
 		let prune_list = read_ordered_vec(format!("{}/{}", data_dir, PMMR_PRUNED_FILE), 8)?;
 		let pruned_nodes = PruneList {
 			pruned_nodes: prune_list,
@@ -218,11 +226,32 @@ where
 		let utxo_set_path = format!("{}/{}", data_dir, PMMR_UTXO_FILE);
 		let rm_log_path = format!("{}/{}", data_dir, PMMR_RM_LOG_FILE);
 
+		if let Some(header) = header {
+			let utxo_rewound_path = format!("{}/{}.{}", data_dir, PMMR_UTXO_FILE, header.hash());
+			UtxoSet::copy_from(utxo_set_path.clone(), utxo_rewound_path.clone())?;
+		}
+
 		// If we need to migrate an old rm_log to a new utxo_set do it here before we
 		// start. Do *not* migrate if we already have a utxo_set.
-		if !Path::new(&utxo_set_path.clone()).exists() && Path::new(&rm_log_path).exists() {
-			let mut utxo_set = UtxoSet::open(utxo_set_path.clone())?;
-			let rm_log = RemoveLog::open(rm_log_path)?;
+		let mut utxo_set = UtxoSet::open(utxo_set_path.clone())?;
+		if utxo_set.len() == 0 && Path::new(&rm_log_path).exists() {
+			let mut rm_log = RemoveLog::open(rm_log_path)?;
+			debug!(
+				LOGGER,
+				"pmmr: utxo_set: {}, rm_log: {}",
+				utxo_set.len(),
+				rm_log.len()
+			);
+			debug!(LOGGER, "pmmr: migrating rm_log -> utxo_set");
+
+			if let Some(header) = header {
+				// Rewind the rm_log back to the height of the header we care about.
+				debug!(
+					LOGGER,
+					"pmmr: first rewinding rm_log to height {}", header.height
+				);
+				rm_log.rewind(header.height as u32)?;
+			}
 
 			// do not like this here but we have no pmmr to call
 			// unpruned_size() on yet...

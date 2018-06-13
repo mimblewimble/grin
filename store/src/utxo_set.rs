@@ -21,8 +21,12 @@ use std::path::Path;
 
 use croaring::Bitmap;
 
+use core::core::hash::Hashed;
 use core::core::pmmr;
 use core::core::prune_list::PruneList;
+use core::core::BlockHeader;
+
+use util::LOGGER;
 
 /// Compact (roaring) bitmap representing the set of positions of
 /// unspent outputs (UTXO) in the output MMR.
@@ -51,6 +55,34 @@ impl UtxoSet {
 			bitmap: bitmap.clone(),
 			bitmap_bak: bitmap.clone(),
 		})
+	}
+
+	pub fn copy_from(path: String, cp_path: String) -> io::Result<()> {
+		let cp_file_path = Path::new(&cp_path);
+
+		if !cp_file_path.exists() {
+			debug!(LOGGER, "utxo_set: rewound utxo file not found: {}", cp_path);
+			return Ok(());
+		}
+
+		let mut bitmap_file = File::open(cp_path.clone())?;
+		let mut buffer = vec![];
+		bitmap_file.read_to_end(&mut buffer)?;
+		let bitmap = Bitmap::deserialize(&buffer);
+
+		debug!(
+			LOGGER,
+			"utxo_set: copying rewound file {} to {}", cp_path, path
+		);
+
+		let mut utxo_set = UtxoSet {
+			path: path.clone(),
+			bitmap: bitmap.clone(),
+			bitmap_bak: bitmap.clone(),
+		};
+
+		utxo_set.flush()?;
+		Ok(())
 	}
 
 	/// Calculate the set of positions of all unspent outputs
@@ -102,6 +134,17 @@ impl UtxoSet {
 	/// Remove the provided position from the UTXO set.
 	pub fn remove(&mut self, pos: u64) {
 		self.bitmap.remove(pos as u32);
+	}
+
+	pub fn save_copy(&self, header: &BlockHeader) -> io::Result<()> {
+		let mut cp_bitmap = self.bitmap.clone();
+		cp_bitmap.run_optimize();
+
+		let cp_path = format!("{}.{}", self.path, header.hash());
+		let mut file = BufWriter::new(File::create(cp_path)?);
+		file.write_all(&cp_bitmap.serialize())?;
+		file.flush()?;
+		Ok(())
 	}
 
 	/// Flush the UTXO set to file.
