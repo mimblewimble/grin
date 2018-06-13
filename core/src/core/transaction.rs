@@ -500,7 +500,7 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	let mut kernel_offsets: Vec<BlindingFactor> = vec![];
 
 	for mut transaction in transactions {
-		// we will summ these later to give a single aggregate offset
+		// we will sum these later to give a single aggregate offset
 		kernel_offsets.push(transaction.offset);
 
 		inputs.append(&mut transaction.inputs);
