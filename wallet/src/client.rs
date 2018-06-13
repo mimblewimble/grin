@@ -116,7 +116,7 @@ fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, E
 	Ok(res)
 }
 
-/// Posts a tranaction to a grin node
+/// Posts a transaction to a grin node
 pub fn post_tx(dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error> {
 	let url;
 	if fluff {

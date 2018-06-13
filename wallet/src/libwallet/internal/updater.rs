@@ -16,8 +16,8 @@
 //! the wallet storage and update them.
 
 use failure::ResultExt;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 use core::consensus::reward;
 use core::core::{Output, TxKernel};
@@ -29,8 +29,8 @@ use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
 use libwallet::types::*;
 use util;
-use util::LOGGER;
 use util::secp::pedersen;
+use util::LOGGER;
 
 /// Retrieve all of the outputs (doesn't attempt to update from node)
 pub fn retrieve_outputs<T, K>(wallet: &mut T, show_spent: bool) -> Result<Vec<OutputData>, Error>
@@ -240,7 +240,7 @@ where
 	})
 }
 
-/// Retrieve summar info about the wallet
+/// Retrieve summary info about the wallet
 pub fn retrieve_info<T, K>(wallet: &mut T) -> Result<WalletInfo, Error>
 where
 	T: WalletBackend<K> + WalletClient,

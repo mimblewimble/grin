@@ -1,7 +1,7 @@
 # Documentation structure
 
 ## Explaining grin
-- [intro](intro.md) - Technical introduciton to grin
+- [intro](intro.md) - Technical introduction to grin
 - [grin4bitcoiners](grin4bitcoiners.md) - Explaining grin from a bitcoiner's perspective
 
 ## Understand the grin implementation

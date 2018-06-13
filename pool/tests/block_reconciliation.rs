@@ -29,9 +29,9 @@ use std::sync::{Arc, RwLock};
 
 use core::core::{Block, BlockHeader};
 
-use chain::ChainStore;
 use chain::txhashset;
 use chain::types::Tip;
+use chain::ChainStore;
 use core::core::target::Difficulty;
 
 use keychain::{ExtKeychain, Keychain};
@@ -43,7 +43,7 @@ use common::*;
 fn test_transaction_pool_block_reconciliation() {
 	let keychain: ExtKeychain = Keychain::from_random_seed().unwrap();
 
-	let db_root = ".grin_block_reconcilliation".to_string();
+	let db_root = ".grin_block_reconciliation".to_string();
 	clean_output_dir(db_root.clone());
 	let chain = ChainAdapter::init(db_root.clone()).unwrap();
 

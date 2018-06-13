@@ -3,9 +3,9 @@ Dandelion in Grin: Privacy-Preserving Transaction Propagation
 This document describes the implementation of Dandelion in Grin.
 ## Introduction
 
-Dandelion is a new transaction broadcasting mechanism that reduces the risk of eavesdroppers linking transactions to the source IP. Moreover, it allows Grin transactions to be aggregated (removing input-output pairs) before being broadasted to the entire network giving an additional privacy perk.
+Dandelion is a new transaction broadcasting mechanism that reduces the risk of eavesdroppers linking transactions to the source IP. Moreover, it allows Grin transactions to be aggregated (removing input-output pairs) before being broadcasted to the entire network giving an additional privacy perk.
 
-Dandelion was introduced in [1] by G. Fanti et al. and presented at ACM Sigmetrics 2017. On June 2017 a BIP was proposed introducing a more practical and robust variant of Dandelion called Dandelion++ [2].  This document is an adapation of this BIP for Grin.
+Dandelion was introduced in [1] by G. Fanti et al. and presented at ACM Sigmetrics 2017. On June 2017 a BIP was proposed introducing a more practical and robust variant of Dandelion called Dandelion++ [2].  This document is an adaptation of this BIP for Grin.
 
 ## Mechanism
 
@@ -56,7 +56,7 @@ Two aggregation scenarios have been proposed.
 
 In this scenario, transactions are aggregated during the stem phase and then broadcasted to the mempool only when the fluff phase happens.
 
-Each node maintains a ```patience``` timer along with a ```max_patience``` value. When a node receives a stem transaction, its ```patience``` timer starts, waiting for more stem transactions to aggregate. Once the ```patience``` timer reachs the ```max_patience``` value, the node flips a coin to decide whether to send as stem or fluff.
+Each node maintains a ```patience``` timer along with a ```max_patience``` value. When a node receives a stem transaction, its ```patience``` timer starts, waiting for more stem transactions to aggregate. Once the ```patience``` timer reaches the ```max_patience``` value, the node flips a coin to decide whether to send as stem or fluff.
 In the of a stem transactions, the node starts an embargo timer which is defined in the Considerations part. The node need to track every stem transactions it receives aggregated or not in order to guarantee its propagation and be able to revert to a previous stempool state.
 
 A simulation of this scenario is available [here](simulation.md).

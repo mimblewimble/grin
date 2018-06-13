@@ -8,7 +8,7 @@ following assumptions, which are all characteristics of Grin or MimbleWimble:
 * All block headers include the root hash of all unspent outputs in the chain at
   the time of that block.
 * Inputs or outputs cannot be tampered with or forged without invalidating the
-  whole block state. 
+  whole block state.
 
 We're purposefully only focusing on major node types and high level algorithms that
 may impact the security model. Detailed heuristics that can provide some additional
@@ -59,7 +59,7 @@ peers and learns about the head of the most worked chain. It asks for the block
 header at the horizon block, requiring peer agreement. If consensus is not reached
 at `h = H - Z`, the node gradually increases the horizon `Z`, moving `h` backward
 until consensus is reached. Then it gets the full UTXO set at the horizon block.
-With this information it can verify: 
+With this information it can verify:
 
 * the total difficulty on that chain (present in all block headers)
 * the sum of all UTXO commitments equals the expected money supply

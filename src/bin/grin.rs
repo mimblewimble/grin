@@ -301,7 +301,7 @@ fn main() {
 	});
 
 	if global_config.using_config_file {
-		// initialise the logger
+		// initialize the logger
 		let mut log_conf = global_config
 			.members
 			.as_mut()

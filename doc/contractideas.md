@@ -9,7 +9,7 @@ Note that this requires both chains to support hash preimages: all Bitcoin scrip
 
 "Ok, so algebraically how do atomic swaps work in a scriptless way? Suppose I'm trying to send Igno 1 MW1 coin on one chain in exchange for MW2 coin on another. Then:
 
-1. As before we send our coins to 2-of-2 outputs on each chain. Each of us refuses to move our coin until the other has given us a locktimed "refund" transaction; we set our locktimes so I can retrieve my coin before he can retrieve his. 
+1. As before we send our coins to 2-of-2 outputs on each chain. Each of us refuses to move our coin until the other has given us a locktimed "refund" transaction; we set our locktimes so I can retrieve my coin before he can retrieve his.
 
 (So far this is the same as the classic Bitcoin atomic swap by Tier Nolan [3]; the difference in locktimes is because during part of the protocol Igno can take his coins but I can't yet take mine, so I want to be sure he can't do this and simultaneously back out. This way ff he takes the coins, I can take mine, but if he backs out then I've long since backed out, and these are his only possibilities.)
 
@@ -136,7 +136,7 @@ support in principle." - Andrew Poelstra
 
 - https://lists.launchpad.net/mimblewimble/msg00029.html - bunch of replies, nothing super specific
 
-"ecently I've found a different construction that behaves much more like
+"Recently I've found a different construction that behaves much more like
 a hash preimage challenge, and this can actually be used for Lightning.
 Further, it supports reblinding, so you can learn a preimage but hide
 which one you're looking for. (Ethan, one might actually overlap with
@@ -263,7 +263,7 @@ for Ethereum+Schnorr. Further, it can link transactions across chains."  - Andre
 
 3. I produce a transaction which sends these coins to Igno. With the excess I sign the hash e, leave the locktime blank, and do my part to sign.
 
-At this point Igno can either (a) complete the transaction, doing his part of the signature and revealing the preimage to the network, including me; or (b) do nothing, in which case I'll take the coin back after the lock time." - Andrew Polestra 
+At this point Igno can either (a) complete the transaction, doing his part of the signature and revealing the preimage to the network, including me; or (b) do nothing, in which case I'll take the coin back after the lock time." - Andrew Poelstra
 - https://lists.launchpad.net/mimblewimble/msg00022.html
 
 - https://lists.launchpad.net/mimblewimble/msg00025.html
@@ -272,7 +272,7 @@ At this point Igno can either (a) complete the transaction, doing his part of th
 - https://lists.launchpad.net/mimblewimble/msg00050.html
 - https://lists.launchpad.net/mimblewimble/msg00102.html
 
-## ZKCP (Zero-Knowledge Contigent Payments)
+## ZKCP (Zero-Knowledge Contingent Payments)
 
 "Recall ZKCP, as written up here
 https://bitcoincore.org/en/2016/02/26/zero-knowledge-contingent-payments-announcement/
