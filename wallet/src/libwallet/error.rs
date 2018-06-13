@@ -94,8 +94,8 @@ pub enum ErrorKind {
 	Node,
 
 	/// Error contacting wallet API
-	#[fail(display = "Wallet communication error")]
-	WalletComms,
+	#[fail(display = "Wallet Communication Error: {}", _0)]
+	WalletComms(String),
 
 	/// Error originating from hyper.
 	#[fail(display = "Hyper error")]

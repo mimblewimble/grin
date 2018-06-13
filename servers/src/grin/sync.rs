@@ -295,7 +295,7 @@ fn needs_syncing(
 					let ch = chain.head().unwrap();
 					info!(
 						LOGGER,
-						"synchronised at {} @ {} [{}]",
+						"synchronized at {} @ {} [{}]",
 						local_diff.to_num(),
 						ch.height,
 						ch.last_block_h

@@ -13,7 +13,7 @@ What's working so far?
 
 Please note that all mining functions for Grin have moved into a separate, standalone package called
 [grin_miner](https://github.com/mimblewimble/grin-miner). Once your Grin code node is up and running,
-you can start mining by building and runing grin-miner against your running Grin node.
+you can start mining by building and running grin-miner against your running Grin node.
 
 ## Docker
 
@@ -83,7 +83,7 @@ export PATH=/path/to/grin/dir/target/debug:$PATH
 You can then run `grin` directly (try `grin help` for more options).
 
 *Important Note*: if you used Grin in testnet1, running the wallet listener
-manually isn't requred anymore. Grin will create a seed file and run the
+manually isn't required anymore. Grin will create a seed file and run the
 listener automatically on start.
 
 # Configuration

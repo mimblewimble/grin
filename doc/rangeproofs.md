@@ -1,12 +1,12 @@
 # Range Proofs - A Primer
 
-This document is intended to give the reader a high level conceptual overview of what range proofs are and how they're constructed. It's assumed that the reader has read and is familiar with more basic MimbleWimble concepts, in particular Pedersen commitments and MimbleWimble outputs as outlined in the [Introduction to MimbleWimble](intro.md). 
+This document is intended to give the reader a high level conceptual overview of what range proofs are and how they're constructed. It's assumed that the reader has read and is familiar with more basic MimbleWimble concepts, in particular Pedersen commitments and MimbleWimble outputs as outlined in the [Introduction to MimbleWimble](intro.md).
 
 While understanding range proofs is not 100% necessary in order to understand MimbleWimble, a few points about them should be noted, even if just from a 'black box' perspective:
 
 * Range Proofs are used to prove, with zero-knowledge (i.e. without revealing the amount or the blinding factor), that the value committed to in a given commitment falls within a certain range. The inclusion of a range proof in a MimbleWimble commitment demonstrates that the amount committed to is positive, and therefore doesn't create any new money.
 
-* The blinding factor used to create an output on the block chain must be known in order to create a valid range proof. The existence of a valid range proof therefore also proves that the signer has knowledge of the blinding factor and therefore all of the private keys used in the creation of a new output. 
+* The blinding factor used to create an output on the block chain must be known in order to create a valid range proof. The existence of a valid range proof therefore also proves that the signer has knowledge of the blinding factor and therefore all of the private keys used in the creation of a new output.
 
 The following outlines a simple example, which builds up the concept of a range proof and demonstrates why the blinding factor in an output must be known beforehand in order to create one.
 
@@ -20,9 +20,9 @@ Say I have this output:
 C = (113G + 20H)
 ```
 
-And I want to prove that the amount I'm commiting to (20) is positive, and in within the range for my coin. 
+And I want to prove that the amount I'm committing to (20) is positive, and in within the range for my coin. 
 
-Firstly, rember a commitment actually appears in the UTXO set as a large, mostly unintelligible number, for example:
+Firstly, remember a commitment actually appears in the UTXO set as a large, mostly unintelligible number, for example:
 
 ```
 C = 2342384723497239482384234.... 
@@ -54,7 +54,7 @@ Of course, that's not very useful in a blockchain context, as amounts will never
 C = (113G + 1H) -> Not a point on G or H
 ```
 
-Since C is not a point on G or H, on its own this output can't be signed for. However, I can easily prove it's a commitment to 1 without revealing the blinding factor by simply subtracting 1*H from it, and observing that the result is a valid key on G. 
+Since C is not a point on G or H, on its own this output can't be signed for. However, I can easily prove it's a commitment to 1 without revealing the blinding factor by simply subtracting 1*H from it, and observing that the result is a valid key on G.
 
 Consider:
 
@@ -74,7 +74,7 @@ Of course, the problem here is that I'm also revealing the amount. What we need 
 
 To demonstrate how we do this, let's assume that the only valid values for v that we could have in our currency are zero and one. Therefore, to show that the value we've committed to is positive it's sufficient to demonstrate that either v is zero, or that v is one. And we need to do this without actually revealing which value it is.
 
-In order to do this, we need another type of signature called a [ring signature](https://en.wikipedia.org/wiki/Ring_signature). For our purposes, a ring signature is a signature scheme where there are multiple public keys, and the signature proves that the signer knew the corresponding private key for at least one (but not necessarily more) of the public keys. 
+In order to do this, we need another type of signature called a [ring signature](https://en.wikipedia.org/wiki/Ring_signature). For our purposes, a ring signature is a signature scheme where there are multiple public keys, and the signature proves that the signer knew the corresponding private key for at least one (but not necessarily more) of the public keys.
 
 So, using a ring signature, it's possible to create what's called an OR proof that demonstrates C is either a commitment to zero OR a commitment to one as follows:
 
@@ -90,7 +90,7 @@ Following from the example:
 C' = 113G + 1H - 1H
 ```
 
-If a ring signature is provided over {C, C'}, it proves that the signer knows the private key for either C or C', but not both. If C was a commitment to zero, the signer was able to use C to create the ring signature. If C was a commitment to one, the signer was able to use C' to create the ring signature. If C is neither a commitment to one or zero, the signer would not have been able to create the ring signature at all. However, no matter how the ring signature was created, the private key that was used to create it was not revealed. If a ring signature exists at all, C must have been either a commitment to zero, OR a commitment to one. 
+If a ring signature is provided over {C, C'}, it proves that the signer knows the private key for either C or C', but not both. If C was a commitment to zero, the signer was able to use C to create the ring signature. If C was a commitment to one, the signer was able to use C' to create the ring signature. If C is neither a commitment to one or zero, the signer would not have been able to create the ring signature at all. However, no matter how the ring signature was created, the private key that was used to create it was not revealed. If a ring signature exists at all, C must have been either a commitment to zero, OR a commitment to one.
 
 As before, this works for all values of v I can pick... I can choose v=256 and construct a similar ring signature that proves v was zero OR that v was 256. In this case, the verifier just needs to subtract 256H from C and verify the ring signature used to produce the resulting C'.
 
@@ -132,7 +132,7 @@ Note that for efficiency reasons, the range proofs used in Grin actually build u
 
 ## FAQ
 
-Q: If I have an output `C=bG+vH` on the blockchain, and there is only a finite number of usable amounts for vH, why can't I reveal the amount by just subtracting each possible vH value from C until I get a value that can be used to create a signature on H? 
+Q: If I have an output `C=bG+vH` on the blockchain, and there is only a finite number of usable amounts for vH, why can't I reveal the amount by just subtracting each possible vH value from C until I get a value that can be used to create a signature on H?
 
 A: Pedersen Commitments are information-theoretically private. For any value of v I choose in `bG+vH`, I can choose a value of b that will make the entire commitment sum to C. Even given infinite computing power, it remains impossible to determine what the intended value of v in a given commitment is without knowing the blinding factor.
 

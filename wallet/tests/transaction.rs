@@ -114,7 +114,7 @@ fn build_transaction() {
 	// Now, just like the sender did, recipient is going to select a target output,
 	// add it to the transaction, and keep track of the corresponding wallet
 	// Identifier Again, this is a helper to do that, which returns a closure that
-	// creates the output when we're satisified the process was successful
+	// creates the output when we're satisfied the process was successful
 	let (_, mut recp_context, receiver_create_fn) =
 		selection::build_recipient_output_with_slate(&mut wallet2, &mut slate).unwrap();
 

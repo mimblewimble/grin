@@ -143,8 +143,8 @@ where
 
 		for i in start_index..max_derivations {
 			// much faster than calling EC functions for each found key
-			// Shouldn't be needed if assumtion about wallet key 'gaps' above
-			// holds.. otherwise this is a good optimisation.. perhaps 
+			// Shouldn't be needed if assumption about wallet key 'gaps' above
+			// holds.. otherwise this is a good optimization.. perhaps 
 			// provide a command line switch
 			/*if found_key_index.contains(&(i as u32)) {
 				continue;

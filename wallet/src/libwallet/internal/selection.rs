@@ -20,7 +20,7 @@ use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::{keys, sigcontext};
 use libwallet::types::*;
 
-/// Initialise a transaction on the sender side, returns a corresponding
+/// Initialize a transaction on the sender side, returns a corresponding
 /// libwallet transaction slate with the appropriate inputs selected,
 /// and saves the private wallet identifiers of our selected outputs
 /// into our transaction context
@@ -93,12 +93,7 @@ where
 				let coin = wallet_data.get_output(&id).unwrap().clone();
 				wallet_data.lock_output(&coin);
 			}
-			// probably just want to leave as unconfirmed for now
-			// or create a new status
-			/*for id in lock_outputs {
-				let coin = wallet_data.get_output(&id).unwrap().clone();
-				wallet_data.lock_output(&coin);
-			}*/		})
+		})
 	};
 
 	Ok((slate, context, update_sender_wallet_fn))

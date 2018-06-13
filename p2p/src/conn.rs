@@ -37,7 +37,7 @@ pub trait MessageHandler: Send + 'static {
 	fn consume<'a>(&self, msg: Message<'a>) -> Result<Option<Response<'a>>, Error>;
 }
 
-// Macro to simplify the boilerplate around asyn I/O error handling,
+// Macro to simplify the boilerplate around async I/O error handling,
 // especially with WouldBlock kind of errors.
 macro_rules! try_break {
 	($chan:ident, $inner:expr) => {
