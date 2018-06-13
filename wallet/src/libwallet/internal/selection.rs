@@ -93,12 +93,7 @@ where
 				let coin = wallet_data.get_output(&id).unwrap().clone();
 				wallet_data.lock_output(&coin);
 			}
-			// probably just want to leave as unconfirmed for now
-			// or create a new status
-			/*for id in lock_outputs {
-				let coin = wallet_data.get_output(&id).unwrap().clone();
-				wallet_data.lock_output(&coin);
-			}*/		})
+		})
 	};
 
 	Ok((slate, context, update_sender_wallet_fn))

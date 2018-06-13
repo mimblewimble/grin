@@ -423,3 +423,20 @@ pub struct TxWrapper {
 	/// hex representation of transaction
 	pub tx_hex: String,
 }
+
+/// Send TX API Args
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SendTXArgs {
+	/// amount to send
+	pub amount: u64,
+	/// minimum confirmations
+	pub minimum_confirmations: u64,
+	/// destination url
+	pub dest: String,
+	/// Max number of outputs
+	pub max_outputs: usize,
+	/// whether to use all outputs (combine)
+	pub selection_strategy_is_use_all: bool,
+	/// dandelion control
+	pub fluff: bool,
+}
