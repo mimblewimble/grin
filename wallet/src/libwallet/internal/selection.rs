@@ -15,7 +15,7 @@
 //! Selection of inputs for building transactions
 
 use keychain::{Identifier, Keychain};
-use libtx::{build, slate::Slate, tx_fee};
+use libtx::{build, tx_fee, slate::Slate};
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::{keys, sigcontext};
 use libwallet::types::*;

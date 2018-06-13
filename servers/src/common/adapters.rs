@@ -35,8 +35,8 @@ use core::core::transaction::Transaction;
 use p2p;
 use pool;
 use store;
-use util::OneTime;
 use util::LOGGER;
+use util::OneTime;
 
 // All adapters use `Weak` references instead of `Arc` to avoid cycles that
 // can never be destroyed. These 2 functions are simple helpers to reduce the
