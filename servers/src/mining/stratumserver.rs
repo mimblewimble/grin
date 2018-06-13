@@ -15,6 +15,7 @@
 //! Mining Stratum Server
 use bufstream::BufStream;
 use serde_json;
+use serde_json::Value;
 use std::cmp;
 use std::error::Error;
 use std::io::BufRead;
@@ -51,7 +52,7 @@ struct RpcRequest {
 	id: String,
 	jsonrpc: String,
 	method: String,
-	params: Option<String>,
+	params: Option<Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -59,7 +60,7 @@ struct RpcResponse {
 	id: String,
 	jsonrpc: String,
 	method: String,
-	result: Option<String>,
+	result: Option<Value>,
 	error: Option<RpcError>,
 }
 
@@ -306,16 +307,21 @@ impl StratumServer {
 						.unwrap();
 					stratum_stats.worker_stats[worker_stats_id].last_seen = SystemTime::now();
 
+					// Extract the request parameters from Value to JSON string
+			                let params = match request.params {
+						Some(val) => Some(serde_json::to_string(&val).unwrap()),
+						None => None,
+					};
 					// Call the handler function for requested method
 					let (response, err) = match request.method.as_str() {
 						"login" => {
 							let (response, err) =
-								self.handle_login(request.params, &mut workers_l[num]);
+								self.handle_login(params, &mut workers_l[num]);
 							(response, err)
 						}
 						"submit" => {
 							let res = self.handle_submit(
-								request.params,
+								params,
 								&mut workers_l[num],
 								&mut stratum_stats.worker_stats[worker_stats_id],
 							);
@@ -358,11 +364,13 @@ impl StratumServer {
 						};
 						rpc_response = serde_json::to_string(&resp).unwrap();
 					} else {
+						// Issue #1159 - use a serde_json Value type to avoid extra quoting
+						let response_value: Value = serde_json::from_str(&response.as_str()).unwrap();
 						let resp = RpcResponse {
 							id: workers_l[num].id.clone(),
 							jsonrpc: String::from("2.0"),
 							method: request.method,
-							result: Some(response),
+							result: Some(response_value),
 							error: None,
 						};
 						rpc_response = serde_json::to_string(&resp).unwrap();
@@ -589,11 +597,13 @@ impl StratumServer {
 		// Package new block into RpcRequest
 		let job_template = self.build_block_template(self.current_block.header.clone());
 		let job_template_json = serde_json::to_string(&job_template).unwrap();
+		// Issue #1159 - use a serde_json Value type to avoid extra quoting
+                let job_template_value: Value = serde_json::from_str(&job_template_json).unwrap();
 		let job_request = RpcRequest {
 			id: String::from("Stratum"),
 			jsonrpc: String::from("2.0"),
 			method: String::from("job"),
-			params: Some(job_template_json),
+			params: Some(job_template_value),
 		};
 		let job_request_json = serde_json::to_string(&job_request).unwrap();
 
