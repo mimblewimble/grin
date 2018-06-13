@@ -33,19 +33,18 @@ const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
 const PMMR_UTXO_FILE: &'static str = "pmmr_utxo.bin";
 const PMMR_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
 
-/// Maximum number of nodes in the remove log before it gets flushed
-pub const RM_LOG_MAX_NODES: usize = 10_000;
-
 /// PMMR persistent backend implementation. Relies on multiple facilities to
 /// handle writing, reading and pruning.
 ///
-/// * A main storage file appends Hash instances as they come. This
-/// AppendOnlyFile is also backed by a mmap for reads.
+/// * A main storage file appends Hash instances as they come.
+/// This AppendOnlyFile is also backed by a mmap for reads.
 /// * An in-memory backend buffers the latest batch of writes to ensure the
 /// PMMR can always read recent values even if they haven't been flushed to
 /// disk yet.
-/// * A remove log tracks the positions that need to be pruned from the
-/// main storage file.
+/// * A utxo_set tracks the positions of unspent outputs in the output MMR.
+/// Not applicable for the kernel MMR which does not store outputs.
+/// * A prune_list tracks the positions of pruned (and compacted) roots in the
+/// MMR.
 pub struct PMMRBackend<T>
 where
 	T: PMMRable,
@@ -53,7 +52,8 @@ where
 	data_dir: String,
 	hash_file: AppendOnlyFile,
 	data_file: AppendOnlyFile,
-	pub utxo_set: UtxoSet,
+	// TODO - the kernel MMR does not have a concept of unspent/spent.
+	utxo_set: UtxoSet,
 	pruned_nodes: PruneList,
 	_marker: marker::PhantomData<T>,
 }
@@ -289,35 +289,23 @@ where
 	/// saved, and the hash and data files are rewritten, cutting the removed
 	/// data.
 	///
-	/// If a max_len strictly greater than 0 is provided, the value will be used
-	/// to decide whether the remove log has reached its maximum length,
-	/// otherwise the RM_LOG_MAX_NODES default value is used.
-	///
-	/// A cutoff limits compaction on recent data. Provided as an indexed value
-	/// on pruned data (practically a block height), it forces compaction to
-	/// ignore any prunable data beyond the cutoff. This is used to enforce
-	/// a horizon after which the local node should have all the data to allow
-	/// rewinding.
-	pub fn check_compact<P>(
-		&mut self,
-		max_len: usize,
-		cutoff_pos: u64,
-		prune_cb: P,
-	) -> io::Result<bool>
+	/// A cutoff position limits compaction on recent data.
+	/// This will be the last position of a particular block
+	/// to keep things aligned.
+	/// The block_marker in the db/index for the particular block
+	/// will have a suitable output_pos.
+	/// This is used to enforce a horizon after which the local node
+	/// should have all the data to allow rewinding.
+	pub fn check_compact<P>(&mut self, cutoff_pos: u64, prune_cb: P) -> io::Result<bool>
 	where
 		P: Fn(&[u8]),
 	{
-		// TODO - what do we check here for deciding to compact or not?
-		// if !(max_len > 0 && self.rm_log.len() >= max_len
-		// 	|| max_len == 0 && self.rm_log.len() > RM_LOG_MAX_NODES)
-		// {
-		// 	return Ok(false);
-		// }
-
 		// Paths for tmp hash and data files.
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
 		let tmp_prune_file_data = format!("{}/{}.dataprune", self.data_dir, PMMR_DATA_FILE);
 
+		// Calculate the sets of leaf positions and node positions to remove based
+		// on the cutoff_pos provided.
 		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos);
 
 		// 1. Save compact copy of the hash file, skipping removed data.
@@ -396,7 +384,7 @@ where
 		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
 
 		// 6. Write the UTXO set to disk.
-		// (optimizing the roaring bitmap storage in the process).
+		// Optimize the bitmap storage in the process.
 		self.utxo_set.flush()?;
 
 		Ok(true)

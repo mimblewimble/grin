@@ -11,32 +11,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Common storage-related types
-use memmap;
+//! The Grin UTXO Set implementation.
+//! Compact (roaring) bitmap representing the set of positions of
+//! unspent outputs (UTXO) in the output MMR.
 
-use std::cmp;
-use std::fs::{self, File, OpenOptions};
-use std::io::Read;
-use std::io::{self, BufRead, BufReader, BufWriter, ErrorKind, Write};
-use std::os::unix::io::AsRawFd;
+use std::fs::File;
+use std::io::{self, BufWriter, Read, Write};
 use std::path::Path;
 
 use croaring::Bitmap;
 
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-use libc::{ftruncate as ftruncate64, off_t as off64_t};
-#[cfg(any(target_os = "linux"))]
-use libc::{ftruncate64, off64_t};
-
 use core::core::pmmr;
 use core::core::prune_list::PruneList;
-use core::ser;
 
-/// ~Log file~ fully cached in memory containing all positions that should be
-/// eventually removed from the MMR append-only data file. Allows quick
-/// checking of whether a piece of data has been marked for deletion. ~When the
-/// log becomes too long, the MMR backend will actually remove chunks from the
-/// MMR data file and truncate the remove log.~
+/// Compact (roaring) bitmap representing the set of positions of
+/// unspent outputs (UTXO) in the output MMR.
 pub struct UtxoSet {
 	path: String,
 	bitmap: Bitmap,
@@ -64,14 +53,18 @@ impl UtxoSet {
 		})
 	}
 
+	/// Calculate the set of positions of all unspent outputs
+	/// up to and including the cutoff_pos.
+	/// Returns these positions as a bitmap.
+	/// Only applicable for the output MMR.
 	pub fn utxo_lte_pos(&self, cutoff_pos: u64) -> Bitmap {
 		let bitmask: Bitmap = (1..=cutoff_pos).map(|x| x as u32).collect();
 		self.bitmap.and(&bitmask)
 	}
 
-	// TODO - Probably a more efficient way of doing this.
-	// TODO - Should be able to translate prune list into bitmap of "unpruned" leaf
-	// pos.
+	/// Calculate the set of unpruned leaves
+	/// up to and including the cutoff_pos.
+	/// Only applicable for the output MMR.
 	fn unpruned_leaves_lte_pos(&self, cutoff_pos: u64, prune_list: &PruneList) -> Bitmap {
 		(1..=cutoff_pos)
 			.filter(|&x| pmmr::is_leaf(x))
@@ -80,6 +73,11 @@ impl UtxoSet {
 			.collect()
 	}
 
+	/// Calculate the set of spent positions
+	/// up to and including the cutoff_pos.
+	/// Takes the prune_list into account when
+	/// calculating these spent positions (anything pruned is spent).
+	/// Only applicable for the output MMR.
 	pub fn spent_lte_pos(&self, cutoff_pos: u64, prune_list: &PruneList) -> Bitmap {
 		self.utxo_lte_pos(cutoff_pos)
 			.flip(1..(cutoff_pos + 1))

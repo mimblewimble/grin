@@ -21,15 +21,11 @@ use std::io::{self, BufRead, BufReader, BufWriter, ErrorKind, Write};
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
-use croaring::Bitmap;
-
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use libc::{ftruncate as ftruncate64, off_t as off64_t};
 #[cfg(any(target_os = "linux"))]
 use libc::{ftruncate64, off64_t};
 
-use core::core::pmmr;
-use core::core::prune_list::PruneList;
 use core::ser;
 
 /// A no-op function for doing nothing with some pruned data.

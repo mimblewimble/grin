@@ -11,17 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Common storage-related types
-use memmap;
+//! The depracated rm_log impl. Still used in some tests
+//! for perf comparison with utxo_set.
 
-use std::cmp;
-use std::fs::{self, File, OpenOptions};
-use std::io::Read;
-use std::io::{self, BufRead, BufReader, BufWriter, ErrorKind, Write};
-use std::os::unix::io::AsRawFd;
-use std::path::Path;
+use std::fs::File;
+use std::io::{self, BufWriter, Write};
 
-use core::core::pmmr;
 use core::ser;
 use types::read_ordered_vec;
 

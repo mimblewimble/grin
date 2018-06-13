@@ -13,6 +13,9 @@
 // limitations under the License.
 
 //! The Grin "Prune List" implementation.
+//! Currently implemented as a vec of u64 positions.
+//! *Soon* to be implemented as a compact bitmap.
+//!
 //! Maintains a set of pruned root node positions that define the pruned
 //! and compacted "gaps" in the MMR data and hash files.
 //! The root itself is maintained in the hash file, but all positions beneath
