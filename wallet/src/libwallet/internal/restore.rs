@@ -24,8 +24,8 @@ use keychain::{Identifier, Keychain};
 use libtx::proof;
 use libwallet::types::*;
 use util;
-use util::LOGGER;
 use util::secp::pedersen;
+use util::LOGGER;
 
 fn get_merkle_proof_for_commit(node_addr: &str, commit: &str) -> Result<MerkleProofWrapper, Error> {
 	let url = format!("{}/v1/txhashset/merkleproof?id={}", node_addr, commit);
@@ -144,8 +144,8 @@ where
 
 		for i in start_index..max_derivations {
 			// much faster than calling EC functions for each found key
-			// Shouldn't be needed if assumtion about wallet key 'gaps' above
-			// holds.. otherwise this is a good optimisation.. perhaps 
+			// Shouldn't be needed if assumption about wallet key 'gaps' above
+			// holds.. otherwise this is a good optimization.. perhaps 
 			// provide a command line switch
 			/*if found_key_index.contains(&(i as u32)) {
 				continue;

@@ -15,12 +15,12 @@
 //! Selection of inputs for building transactions
 
 use keychain::{Identifier, Keychain};
-use libtx::{build, tx_fee, slate::Slate};
+use libtx::{build, slate::Slate, tx_fee};
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::{keys, sigcontext};
 use libwallet::types::*;
 
-/// Initialise a transaction on the sender side, returns a corresponding
+/// Initialize a transaction on the sender side, returns a corresponding
 /// libwallet transaction slate with the appropriate inputs selected,
 /// and saves the private wallet identifiers of our selected outputs
 /// into our transaction context

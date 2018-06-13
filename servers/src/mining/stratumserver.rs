@@ -598,7 +598,7 @@ impl StratumServer {
 		let job_request_json = serde_json::to_string(&job_request).unwrap();
 
 		// Push the new block to all connected clients
-		// NOTE: We do not give a uniqe nonce (should we?) so miners need
+		// NOTE: We do not give a unique nonce (should we?) so miners need
 		//       to choose one for themselves
 		let mut workers_l = self.workers.lock().unwrap();
 		for num in 0..workers_l.len() {

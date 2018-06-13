@@ -40,7 +40,7 @@ pub trait WalletBackend<K>
 where
 	K: Keychain,
 {
-	/// Initialise with whatever stored credentials we have
+	/// Initialize with whatever stored credentials we have
 	fn open_with_credentials(&mut self) -> Result<(), Error>;
 
 	/// Close wallet and remove any stored credentials (TBD)
@@ -107,7 +107,7 @@ pub trait WalletClient {
 	/// TODO: Probably need a slate wrapper type
 	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, Error>;
 
-	/// Posts a tranaction to a grin node
+	/// Posts a transaction to a grin node
 	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error>;
 
 	/// retrieves the current tip from the specified grin node
@@ -144,7 +144,7 @@ pub trait WalletClient {
 }
 
 /// Information about an output that's being tracked by the wallet. Must be
-/// enough to reconstruct the commitment associated with the ouput when the
+/// enough to reconstruct the commitment associated with the output when the
 /// root private key is known.*/
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
@@ -247,7 +247,7 @@ impl OutputData {
 pub enum OutputStatus {
 	/// Unconfirmed
 	Unconfirmed,
-	/// Unspend
+	/// Unspent
 	Unspent,
 	/// Locked
 	Locked,

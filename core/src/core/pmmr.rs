@@ -197,7 +197,7 @@ impl MerkleProof {
 		util::to_hex(vec)
 	}
 
-	/// Convert hex string represenation back to a Merkle proof instance
+	/// Convert hex string representation back to a Merkle proof instance
 	pub fn from_hex(hex: &str) -> Result<MerkleProof, String> {
 		let bytes = util::from_hex(hex.to_string()).unwrap();
 		let res = ser::deserialize(&mut &bytes[..])
@@ -206,7 +206,7 @@ impl MerkleProof {
 	}
 
 	/// Verify the Merkle proof.
-	/// We do this by verifying the folloiwing -
+	/// We do this by verifying the following -
 	/// * inclusion of the node beneath a peak (via the Merkle path/branch of
 	/// siblings) * inclusion of the peak in the "bag of peaks" beneath the
 	/// root
@@ -269,7 +269,7 @@ where
 	/// The last position in the PMMR
 	pub last_pos: u64,
 	backend: &'a mut B,
-	// only needed for parameterizing Backend
+	// only needed to parameterise Backend
 	_marker: marker::PhantomData<T>,
 }
 
@@ -718,7 +718,7 @@ impl PruneList {
 
 		let idx = pruned_idx.or(next_idx)?;
 		Some(
-			// skip by the number of leaf nodes pruned in the preceeding subtrees
+			// skip by the number of leaf nodes pruned in the preceding subtrees
 			// which just 2^height
 			// except in the case of height==0
 			// (where we want to treat the pruned tree as 0 leaves)

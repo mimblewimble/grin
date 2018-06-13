@@ -561,7 +561,7 @@ impl Block {
 			// on the block_header
 			tx.validate()?;
 
-			// we will summ these later to give a single aggregate offset
+			// we will sum these later to give a single aggregate offset
 			kernel_offsets.push(tx.offset);
 
 			// add all tx inputs/outputs/kernels to the block
@@ -717,7 +717,7 @@ impl Block {
 		Ok(())
 	}
 
-	// Verify that no input is spending an ouput from the same block.
+	// Verify that no input is spending an output from the same block.
 	fn verify_cut_through(&self) -> Result<(), Error> {
 		for inp in &self.inputs {
 			if self.outputs
