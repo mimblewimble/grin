@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex};
 
 use bodyparser;
 use iron::prelude::{IronError, IronResult, Plugin, Request, Response};
-use iron::{status, Headers, Handler};
+use iron::{status, Handler, Headers};
 use serde::Serialize;
 use serde_json;
 use urlencoded::UrlEncodedQuery;
