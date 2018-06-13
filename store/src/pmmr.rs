@@ -16,6 +16,7 @@
 use std::fs;
 use std::io;
 use std::marker;
+use std::path::Path;
 
 use croaring::Bitmap;
 
@@ -24,6 +25,7 @@ use core::core::pmmr::{self, family, Backend};
 use core::core::prune_list::PruneList;
 use core::ser;
 use core::ser::PMMRable;
+use rm_log::RemoveLog;
 use types::*;
 use util::LOGGER;
 use utxo_set::UtxoSet;
@@ -31,6 +33,7 @@ use utxo_set::UtxoSet;
 const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
 const PMMR_UTXO_FILE: &'static str = "pmmr_utxo.bin";
+const PMMR_RM_LOG_FILE: &'static str = "pmmr_rm_log.bin";
 const PMMR_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
 
 /// PMMR persistent backend implementation. Relies on multiple facilities to
@@ -209,9 +212,31 @@ where
 		let pruned_nodes = PruneList {
 			pruned_nodes: prune_list,
 		};
-		let utxo_set = UtxoSet::open(format!("{}/{}", data_dir, PMMR_UTXO_FILE))?;
 		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		let data_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
+
+		let utxo_set_path = format!("{}/{}", data_dir, PMMR_UTXO_FILE);
+		let rm_log_path = format!("{}/{}", data_dir, PMMR_RM_LOG_FILE);
+
+		// If we need to migrate an old rm_log to a new utxo_set do it here before we
+		// start. Do *not* migrate if we already have a utxo_set.
+		if !Path::new(&utxo_set_path.clone()).exists() && Path::new(&rm_log_path).exists() {
+			let mut utxo_set = UtxoSet::open(utxo_set_path.clone())?;
+			let rm_log = RemoveLog::open(rm_log_path)?;
+
+			// do not like this here but we have no pmmr to call
+			// unpruned_size() on yet...
+			let last_pos = {
+				let total_shift = pruned_nodes.get_shift(::std::u64::MAX).unwrap();
+				let record_len = 32;
+				let sz = hash_file.size()?;
+				sz / record_len + total_shift
+			};
+
+			migrate_rm_log(&mut utxo_set, &rm_log, &pruned_nodes, last_pos)?;
+		}
+
+		let utxo_set = UtxoSet::open(utxo_set_path)?;
 
 		Ok(PMMRBackend {
 			data_dir,
@@ -431,4 +456,27 @@ fn removed_excl_roots(removed: Bitmap) -> Bitmap {
 			removed.contains(parent_pos as u32)
 		})
 		.collect()
+}
+
+fn migrate_rm_log(
+	utxo_set: &mut UtxoSet,
+	rm_log: &RemoveLog,
+	prune_list: &PruneList,
+	last_pos: u64,
+) -> io::Result<()> {
+	info!(
+		LOGGER,
+		"Migrating rm_log -> utxo_set. Might take a little while... {} pos", last_pos
+	);
+
+	// check every leaf
+	// if not pruned and not removed, add it to the utxo_set
+	for x in 1..=last_pos {
+		if pmmr::is_leaf(x) && !prune_list.is_pruned(x) && !rm_log.includes(x) {
+			utxo_set.add(x);
+		}
+	}
+
+	utxo_set.flush()?;
+	Ok(())
 }
