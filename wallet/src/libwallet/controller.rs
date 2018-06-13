@@ -21,9 +21,9 @@ use std::sync::{Arc, Mutex};
 
 use bodyparser;
 use iron::Handler;
+use iron::Headers;
 use iron::prelude::*;
 use iron::status;
-use iron::Headers;
 use serde::Serialize;
 use serde_json;
 use urlencoded::UrlEncodedQuery;
@@ -33,7 +33,8 @@ use failure::Fail;
 use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
-use libwallet::types::{BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient, WalletInfo};
+use libwallet::types::{BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient,
+                       WalletInfo};
 use libwallet::{Error, ErrorKind};
 
 use util::LOGGER;
@@ -78,7 +79,7 @@ where
 	let wallet_arc = Arc::new(Mutex::new(wallet));
 	let api_get_handler = OwnerAPIGetHandler::new(wallet_arc.clone());
 	let api_post_handler = OwnerAPIPostHandler::new(wallet_arc);
-	let api_options_handler = OwnerAPIOptionsHandler{};
+	let api_options_handler = OwnerAPIOptionsHandler {};
 
 	let router = router!(
 		owner_options: options "/wallet/owner/*" => api_options_handler,
@@ -290,21 +291,26 @@ where
 		match *path_elems.last().unwrap() {
 			"issue_send_tx" => json_response_pretty(&self.issue_send_tx(req, api)?),
 			"issue_burn_tx" => json_response_pretty(&self.issue_burn_tx(req, api)?),
-			_ => Err(ErrorKind::GenericError("Unknown error handling post request"))?,
+			_ => Err(ErrorKind::GenericError(
+				"Unknown error handling post request",
+			))?,
 		}
 	}
 
-	fn create_error_response(&self, e: Error) -> IronResult<Response>{
+	fn create_error_response(&self, e: Error) -> IronResult<Response> {
 		let mut headers = Headers::new();
 		headers.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
-		headers.set_raw("access-control-allow-headers", vec![b"Content-Type".to_vec()]);
+		headers.set_raw(
+			"access-control-allow-headers",
+			vec![b"Content-Type".to_vec()],
+		);
 		let message = format!("{}", e.kind());
 		let mut r = Response::with((status::InternalServerError, message));
 		r.headers = headers;
 		Ok(r)
 	}
 
-	fn create_ok_response(&self, json: &str) -> IronResult<Response>{
+	fn create_ok_response(&self, json: &str) -> IronResult<Response> {
 		let mut headers = Headers::new();
 		headers.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
 		let mut r = Response::with((status::Ok, json));
@@ -329,9 +335,7 @@ where
 		})?;
 		let mut api = APIOwner::new(&mut *wallet);
 		let resp = match self.handle_request(req, &mut api) {
-			Ok(r) => {
-				self.create_ok_response(&r)
-			},
+			Ok(r) => self.create_ok_response(&r),
 			Err(e) => {
 				error!(LOGGER, "Request Error: {:?}", e);
 				self.create_error_response(e)
@@ -342,24 +346,21 @@ where
 			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
 		resp
 	}
-
 }
 
 /// Options handler
-pub struct OwnerAPIOptionsHandler{}
+pub struct OwnerAPIOptionsHandler {}
 
-impl Handler for OwnerAPIOptionsHandler
-where
-{
+impl Handler for OwnerAPIOptionsHandler where {
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
 		let mut resp_json = Ok(Response::with((status::Ok, "{}")));
 		let mut headers = Headers::new();
 		headers.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
-		headers.set_raw("access-control-allow-headers", vec![b"Content-Type".to_vec()]);
-		resp_json
-			.as_mut()
-			.unwrap()
-			.headers = headers;
+		headers.set_raw(
+			"access-control-allow-headers",
+			vec![b"Content-Type".to_vec()],
+		);
+		resp_json.as_mut().unwrap().headers = headers;
 		resp_json
 	}
 }
