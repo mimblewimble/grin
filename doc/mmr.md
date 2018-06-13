@@ -6,11 +6,11 @@ Merkle Mountain Ranges [1] are an alternative to Merkle trees [2]. While the
 latter relies on perfectly balanced binary trees, the former can be seen
 either as list of perfectly balance binary trees or a single binary tree that
 would have been truncated from the top right. A Merkle Mountain Range (MMR) is
-strictly append-only, elements are added from the left to the right and
-the range fills up accordingly.
+strictly append-only: elements are added from the left to the right, adding a
+parent as soon as 2 children exist, fillung up the range accordingly.
 
-This illustrates a range of 19 elements, where each node is annotated with
-its order of insertion.
+This illustrates a range with 11 inserted leaves and total size 19, where each
+node is annotated with its order of insertion.
 
 ```
 Height
