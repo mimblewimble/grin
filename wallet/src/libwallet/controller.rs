@@ -21,17 +21,20 @@ use std::sync::{Arc, Mutex};
 
 use bodyparser;
 use iron::Handler;
+use iron::Headers;
 use iron::prelude::*;
 use iron::status;
 use serde::Serialize;
 use serde_json;
+use urlencoded::UrlEncodedQuery;
 
 use failure::Fail;
 
 use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
-use libwallet::types::{BlockFees, CbData, OutputData, WalletBackend, WalletClient, WalletInfo};
+use libwallet::types::{BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient,
+                       WalletInfo};
 use libwallet::{Error, ErrorKind};
 
 use util::LOGGER;
@@ -69,13 +72,19 @@ where
 pub fn owner_listener<T, K>(wallet: T, addr: &str) -> Result<(), Error>
 where
 	T: WalletBackend<K> + WalletClient,
-	OwnerAPIHandler<T, K>: Handler,
+	OwnerAPIGetHandler<T, K>: Handler,
+	OwnerAPIPostHandler<T, K>: Handler,
 	K: Keychain,
 {
-	let api_handler = OwnerAPIHandler::new(Arc::new(Mutex::new(wallet)));
+	let wallet_arc = Arc::new(Mutex::new(wallet));
+	let api_get_handler = OwnerAPIGetHandler::new(wallet_arc.clone());
+	let api_post_handler = OwnerAPIPostHandler::new(wallet_arc);
+	let api_options_handler = OwnerAPIOptionsHandler {};
 
 	let router = router!(
-		receive_tx: get "/wallet/owner/*" => api_handler,
+		owner_options: options "/wallet/owner/*" => api_options_handler,
+		owner_get: get "/wallet/owner/*" => api_get_handler,
+		owner_post: post "/wallet/owner/*" => api_post_handler,
 	);
 
 	let mut apis = ApiServer::new("/v1".to_string());
@@ -117,7 +126,7 @@ where
 }
 /// API Handler/Wrapper for owner functions
 
-pub struct OwnerAPIHandler<T, K>
+pub struct OwnerAPIGetHandler<T, K>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
@@ -127,13 +136,13 @@ where
 	phantom: PhantomData<K>,
 }
 
-impl<T, K> OwnerAPIHandler<T, K>
+impl<T, K> OwnerAPIGetHandler<T, K>
 where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
-	pub fn new(wallet: Arc<Mutex<T>>) -> OwnerAPIHandler<T, K> {
-		OwnerAPIHandler {
+	pub fn new(wallet: Arc<Mutex<T>>) -> OwnerAPIGetHandler<T, K> {
+		OwnerAPIGetHandler {
 			wallet,
 			phantom: PhantomData,
 		}
@@ -143,9 +152,14 @@ where
 		&self,
 		req: &mut Request,
 		api: &mut APIOwner<T, K>,
-	) -> Result<Vec<OutputData>, Error> {
-		let res = api.retrieve_outputs(false)?;
-		Ok(res.1)
+	) -> Result<(bool, Vec<OutputData>), Error> {
+		let mut update_from_node = false;
+		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+			if let Some(_) = params.get("refresh") {
+				update_from_node = true;
+			}
+		}
+		api.retrieve_outputs(false, update_from_node)
 	}
 
 	fn retrieve_summary_info(
@@ -153,31 +167,32 @@ where
 		req: &mut Request,
 		api: &mut APIOwner<T, K>,
 	) -> Result<WalletInfo, Error> {
-		let res = api.retrieve_summary_info()?;
-		Ok(res.1)
+		let mut update_from_node = false;
+		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+			if let Some(_) = params.get("refresh") {
+				update_from_node = true;
+			}
+		}
+		api.retrieve_summary_info(update_from_node)
 	}
 
-	fn issue_send_tx(&self, req: &mut Request, api: &mut APIOwner<T, K>) -> Result<(), Error> {
-		// TODO: Args
-		api.issue_send_tx(60, 10, "", 1000, true, true)
-	}
-
-	fn issue_burn_tx(&self, req: &mut Request, api: &mut APIOwner<T, K>) -> Result<(), Error> {
-		// TODO: Args
-		api.issue_burn_tx(60, 10, 1000)
+	fn node_height(
+		&self,
+		req: &mut Request,
+		api: &mut APIOwner<T, K>,
+	) -> Result<(u64, bool), Error> {
+		api.node_height()
 	}
 
 	fn handle_request(&self, req: &mut Request, api: &mut APIOwner<T, K>) -> IronResult<Response> {
 		let url = req.url.clone();
 		let path_elems = url.path();
 		match *path_elems.last().unwrap() {
-			"retrieve_outputs" => json_response_pretty(&self.retrieve_outputs(req, api)
+			"retrieve_outputs" => json_response(&self.retrieve_outputs(req, api)
 				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
-			"retrieve_summary_info" => json_response_pretty(&self.retrieve_summary_info(req, api)
+			"retrieve_summary_info" => json_response(&self.retrieve_summary_info(req, api)
 				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
-			"issue_send_tx" => json_response_pretty(&self.issue_send_tx(req, api)
-				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
-			"issue_burn_tx" => json_response_pretty(&self.issue_burn_tx(req, api)
+			"node_height" => json_response(&self.node_height(req, api)
 				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
 			_ => Err(IronError::new(
 				Fail::compat(ErrorKind::Hyper),
@@ -187,7 +202,7 @@ where
 	}
 }
 
-impl<T, K> Handler for OwnerAPIHandler<T, K>
+impl<T, K> Handler for OwnerAPIGetHandler<T, K>
 where
 	T: WalletBackend<K> + WalletClient + Send + Sync + 'static,
 	K: Keychain + 'static,
@@ -203,11 +218,13 @@ where
 		})?;
 		let mut api = APIOwner::new(&mut *wallet);
 		let mut resp_json = self.handle_request(req, &mut api);
-		resp_json
-			.as_mut()
-			.unwrap()
-			.headers
-			.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
+		if !resp_json.is_err() {
+			resp_json
+				.as_mut()
+				.unwrap()
+				.headers
+				.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
+		}
 		api.wallet
 			.close()
 			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
@@ -215,6 +232,138 @@ where
 	}
 }
 
+pub struct OwnerAPIPostHandler<T, K>
+where
+	T: WalletBackend<K>,
+	K: Keychain,
+{
+	/// Wallet instance
+	pub wallet: Arc<Mutex<T>>,
+	phantom: PhantomData<K>,
+}
+
+impl<T, K> OwnerAPIPostHandler<T, K>
+where
+	T: WalletBackend<K> + WalletClient,
+	K: Keychain,
+{
+	pub fn new(wallet: Arc<Mutex<T>>) -> OwnerAPIPostHandler<T, K> {
+		OwnerAPIPostHandler {
+			wallet,
+			phantom: PhantomData,
+		}
+	}
+
+	fn issue_send_tx(&self, req: &mut Request, api: &mut APIOwner<T, K>) -> Result<(), Error> {
+		let struct_body = req.get::<bodyparser::Struct<SendTXArgs>>();
+		match struct_body {
+			Ok(Some(args)) => api.issue_send_tx(
+				args.amount,
+				args.minimum_confirmations,
+				&args.dest,
+				args.max_outputs,
+				args.selection_strategy_is_use_all,
+				args.fluff,
+			),
+			Ok(None) => {
+				error!(LOGGER, "Missing request body: issue_send_tx");
+				Err(ErrorKind::GenericError(
+					"Invalid request body: issue_send_tx",
+				))?
+			}
+			Err(e) => {
+				error!(LOGGER, "Invalid request body: issue_send_tx {:?}", e);
+				Err(ErrorKind::GenericError(
+					"Invalid request body: issue_send_tx",
+				))?
+			}
+		}
+	}
+
+	fn issue_burn_tx(&self, req: &mut Request, api: &mut APIOwner<T, K>) -> Result<(), Error> {
+		// TODO: Args
+		api.issue_burn_tx(60, 10, 1000)
+	}
+
+	fn handle_request(&self, req: &mut Request, api: &mut APIOwner<T, K>) -> Result<String, Error> {
+		let url = req.url.clone();
+		let path_elems = url.path();
+		match *path_elems.last().unwrap() {
+			"issue_send_tx" => json_response_pretty(&self.issue_send_tx(req, api)?),
+			"issue_burn_tx" => json_response_pretty(&self.issue_burn_tx(req, api)?),
+			_ => Err(ErrorKind::GenericError(
+				"Unknown error handling post request",
+			))?,
+		}
+	}
+
+	fn create_error_response(&self, e: Error) -> IronResult<Response> {
+		let mut headers = Headers::new();
+		headers.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
+		headers.set_raw(
+			"access-control-allow-headers",
+			vec![b"Content-Type".to_vec()],
+		);
+		let message = format!("{}", e.kind());
+		let mut r = Response::with((status::InternalServerError, message));
+		r.headers = headers;
+		Ok(r)
+	}
+
+	fn create_ok_response(&self, json: &str) -> IronResult<Response> {
+		let mut headers = Headers::new();
+		headers.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
+		let mut r = Response::with((status::Ok, json));
+		r.headers = headers;
+		Ok(r)
+	}
+}
+
+impl<T, K> Handler for OwnerAPIPostHandler<T, K>
+where
+	T: WalletBackend<K> + WalletClient + Send + Sync + 'static,
+	K: Keychain + 'static,
+{
+	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+		// every request should open with stored credentials,
+		// do its thing and then de-init whatever secrets have been
+		// stored
+		let mut wallet = self.wallet.lock().unwrap();
+		wallet.open_with_credentials().map_err(|e| {
+			error!(LOGGER, "Error opening wallet: {:?}", e);
+			IronError::new(Fail::compat(e), status::BadRequest)
+		})?;
+		let mut api = APIOwner::new(&mut *wallet);
+		let resp = match self.handle_request(req, &mut api) {
+			Ok(r) => self.create_ok_response(&r),
+			Err(e) => {
+				error!(LOGGER, "Request Error: {:?}", e);
+				self.create_error_response(e)
+			}
+		};
+		api.wallet
+			.close()
+			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
+		resp
+	}
+}
+
+/// Options handler
+pub struct OwnerAPIOptionsHandler {}
+
+impl Handler for OwnerAPIOptionsHandler where {
+	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+		let mut resp_json = Ok(Response::with((status::Ok, "{}")));
+		let mut headers = Headers::new();
+		headers.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
+		headers.set_raw(
+			"access-control-allow-headers",
+			vec![b"Content-Type".to_vec()],
+		);
+		resp_json.as_mut().unwrap().headers = headers;
+		resp_json
+	}
+}
 /// API Handler/Wrapper for foreign functions
 
 pub struct ForeignAPIHandler<T, K>
@@ -291,7 +440,6 @@ where
 		}
 	}
 }
-
 impl<T, K> Handler for ForeignAPIHandler<T, K>
 where
 	T: WalletBackend<K> + WalletClient + Send + Sync + 'static,
@@ -328,12 +476,12 @@ where
 }
 
 // pretty-printed version of above
-fn json_response_pretty<T>(s: &T) -> IronResult<Response>
+fn json_response_pretty<T>(s: &T) -> Result<String, Error>
 where
 	T: Serialize,
 {
 	match serde_json::to_string_pretty(s) {
-		Ok(json) => Ok(Response::with((status::Ok, json))),
-		Err(_) => Ok(Response::with((status::InternalServerError, ""))),
+		Ok(json) => Ok(json),
+		Err(_) => Err(ErrorKind::Format)?,
 	}
 }

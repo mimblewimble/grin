@@ -14,8 +14,8 @@
 
 //! Transactions
 
-use std::cmp::max;
 use std::cmp::Ordering;
+use std::cmp::max;
 use std::collections::HashSet;
 use std::io::Cursor;
 use std::{error, fmt};
@@ -26,12 +26,12 @@ use util::{kernel_sig_msg, static_secp_instance};
 
 use consensus;
 use consensus::VerifySortOrder;
+use core::BlockHeader;
+use core::Committed;
 use core::committed;
 use core::global;
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
-use core::BlockHeader;
-use core::Committed;
 use keychain;
 use keychain::BlindingFactor;
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,

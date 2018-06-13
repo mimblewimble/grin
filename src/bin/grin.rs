@@ -681,7 +681,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					Ok(())
 				}
 				("info", Some(_)) => {
-					let _res = wallet::display::info(&api.retrieve_summary_info()?.1)
+					let _res = wallet::display::info(&api.retrieve_summary_info(true)?)
 						.unwrap_or_else(|e| {
 							panic!(
 								"Error getting wallet info: {:?} Config: {:?}",
@@ -692,7 +692,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				}
 				("outputs", Some(_)) => {
 					let (height, validated) = api.node_height()?;
-					let (_, outputs) = api.retrieve_outputs(show_spent)?;
+					let (_, outputs) = api.retrieve_outputs(show_spent, true)?;
 					let _res =
 						wallet::display::outputs(height, validated, outputs).unwrap_or_else(|e| {
 							panic!(

@@ -675,7 +675,7 @@ impl NetAdapter for Peers {
 
 	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height: u64) {
 		if diff != self.total_difficulty() || height != self.total_height() {
-			debug!(
+			trace!(
 				LOGGER,
 				"ping/pong: {}: {} @ {} vs us: {} @ {}",
 				addr,

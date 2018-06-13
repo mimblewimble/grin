@@ -16,8 +16,8 @@
 //! the wallet storage and update them.
 
 use failure::ResultExt;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use core::consensus::reward;
 use core::core::{Output, TxKernel};
@@ -29,8 +29,8 @@ use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
 use libwallet::types::*;
 use util;
-use util::secp::pedersen;
 use util::LOGGER;
+use util::secp::pedersen;
 
 /// Retrieve all of the outputs (doesn't attempt to update from node)
 pub fn retrieve_outputs<T, K>(wallet: &mut T, show_spent: bool) -> Result<Vec<OutputData>, Error>
@@ -241,13 +241,12 @@ where
 }
 
 /// Retrieve summary info about the wallet
-pub fn retrieve_info<T, K>(wallet: &mut T) -> Result<WalletInfo, Error>
+/// caller should refresh first if desired
+pub fn retrieve_info<T, K>(wallet: &mut T, refreshed: bool) -> Result<WalletInfo, Error>
 where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
-	let result = refresh_outputs(wallet);
-
 	let height_res = wallet.get_chain_height(&wallet.node_url());
 
 	let ret_val = wallet.read_wallet(|wallet_data| {
@@ -282,10 +281,6 @@ where
 			}
 		}
 
-		let mut data_confirmed = true;
-		if let Err(_) = result {
-			data_confirmed = false;
-		}
 		Ok(WalletInfo {
 			current_height: current_height,
 			total: unspent_total + unconfirmed_total,
@@ -293,7 +288,7 @@ where
 			amount_confirmed_but_locked: unspent_but_locked_total,
 			amount_currently_spendable: unspent_total - unspent_but_locked_total,
 			amount_locked: locked_total,
-			data_confirmed: data_confirmed,
+			data_confirmed: refreshed,
 			data_confirmed_from: String::from(from),
 		})
 	});

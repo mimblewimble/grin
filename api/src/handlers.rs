@@ -201,7 +201,7 @@ impl OutputHandler {
 		);
 
 		let mut return_vec = vec![];
-		for i in start_height..end_height + 1 {
+		for i in (start_height..=end_height).rev() {
 			let res = self.outputs_at_height(i, commitments.clone(), include_rp);
 			if res.outputs.len() > 0 {
 				return_vec.push(res);

@@ -414,15 +414,26 @@ impl<K> WalletClient for FileWallet<K> {
 		dest: &str,
 		block_fees: &BlockFees,
 	) -> Result<CbData, libwallet::Error> {
-		let res =
-			client::create_coinbase(dest, block_fees).context(libwallet::ErrorKind::WalletComms)?;
-		Ok(res)
+		let res = client::create_coinbase(dest, block_fees);
+		match res {
+			Ok(r) => Ok(r),
+			Err(e) => {
+				let message = format!("{}", e.cause().unwrap());
+				Err(libwallet::ErrorKind::WalletComms(message))?
+			}
+		}
 	}
 
 	/// Send a transaction slate to another listening wallet and return result
 	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
-		let res = client::send_tx_slate(dest, slate).context(libwallet::ErrorKind::WalletComms)?;
-		Ok(res)
+		let res = client::send_tx_slate(dest, slate);
+		match res {
+			Ok(r) => Ok(r),
+			Err(e) => {
+				let message = format!("{}", e.cause().unwrap());
+				Err(libwallet::ErrorKind::WalletComms(message))?
+			}
+		}
 	}
 
 	/// Posts a tranaction to a grin node
