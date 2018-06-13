@@ -20,11 +20,11 @@ extern crate grin_wallet as wallet;
 use std::fs;
 use std::sync::Arc;
 
-use chain::ChainStore;
 use chain::store::ChainKVStore;
 use chain::txhashset;
 use chain::txhashset::TxHashSet;
 use chain::types::Tip;
+use chain::ChainStore;
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
@@ -125,10 +125,10 @@ fn test_some_raw_txs() {
 		// Note: we pass in an increasing "height" here so we can rollback
 		// each tx individually as necessary, while maintaining a long lived
 		// txhashset extension.
-		assert!(extension.apply_raw_tx(&tx1, 3).is_ok());
-		assert!(extension.apply_raw_tx(&tx2, 4).is_err());
-		assert!(extension.apply_raw_tx(&tx3, 5).is_ok());
-		assert!(extension.apply_raw_tx(&tx4, 6).is_ok());
+		assert!(extension.apply_raw_tx(&tx1).is_ok());
+		assert!(extension.apply_raw_tx(&tx2).is_err());
+		assert!(extension.apply_raw_tx(&tx3).is_ok());
+		assert!(extension.apply_raw_tx(&tx4).is_ok());
 		Ok(())
 	});
 }

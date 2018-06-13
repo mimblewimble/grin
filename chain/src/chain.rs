@@ -20,10 +20,10 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use core::core::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
+use core::core::Committed;
 use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;
@@ -31,8 +31,8 @@ use pipe;
 use store;
 use txhashset;
 use types::*;
-use util::LOGGER;
 use util::secp::pedersen::{Commitment, RangeProof};
+use util::LOGGER;
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -476,16 +476,18 @@ impl Chain {
 		Ok(bh.height + 1)
 	}
 
-	/// Validate a vector of "raw" transactions against the current chain state.
+	/// Validate a vec of "raw" transactions against the current chain state.
+	/// Specifying a "pre_tx" if we need to adjust the state, for example when
+	/// validating the txs in the stempool we adjust the state based on the
+	/// txpool.
 	pub fn validate_raw_txs(
 		&self,
 		txs: Vec<Transaction>,
 		pre_tx: Option<Transaction>,
 	) -> Result<Vec<Transaction>, Error> {
-		let height = self.next_block_height()?;
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset::extending_readonly(&mut txhashset, |extension| {
-			let valid_txs = extension.validate_raw_txs(txs, pre_tx, height)?;
+			let valid_txs = extension.validate_raw_txs(txs, pre_tx)?;
 			Ok(valid_txs)
 		})
 	}
@@ -716,9 +718,12 @@ impl Chain {
 			match self.store.get_block(&current.hash()) {
 				Ok(b) => {
 					count += 1;
+
+					// TODO - consider wrapping these up in a single fn call?
 					self.store.delete_block(&b.hash())?;
 					self.store.delete_block_marker(&b.hash())?;
 					self.store.delete_block_sums(&b.hash())?;
+					self.store.delete_block_input_bitmap(&b.hash())?;
 				}
 				Err(NotFoundErr) => {
 					break;

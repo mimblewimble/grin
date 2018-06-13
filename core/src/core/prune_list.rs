@@ -12,6 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! The Grin "Prune List" implementation.
+//! Maintains a set of pruned root node positions that define the pruned
+//! and compacted "gaps" in the MMR data and hash files.
+//! The root itself is maintained in the hash file, but all positions beneath
+//! the root are compacted away. All positions to the right of a pruned node
+//! must be shifted the appropriate amount when reading from the hash and data
+//! files.
+
 use core::pmmr::{bintree_postorder_height, family};
 
 /// Maintains a list of previously pruned nodes in PMMR, compacting the list as
@@ -124,6 +132,9 @@ impl PruneList {
 		}
 	}
 
+	/// Checks if the specified position has been pruned,
+	/// either directly (pos contained in the prune list itself)
+	/// or indirectly (pos is beneath a pruned root).
 	pub fn is_pruned(&self, pos: u64) -> bool {
 		self.next_pruned_idx(pos).is_none()
 	}

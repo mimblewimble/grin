@@ -23,9 +23,6 @@ use std::time::{Duration, Instant};
 
 use croaring::Bitmap;
 
-use core::core::pmmr::{Backend, PMMR};
-use core::ser::*;
-use store::types::prune_noop;
 use store::utxo_set::UtxoSet;
 
 pub fn as_millis(d: Duration) -> u128 {
@@ -94,7 +91,7 @@ fn test_utxo_set_performance() {
 		as_millis(now.elapsed())
 	);
 
-	panic!("stop here to display results");
+	// panic!("stop here to display results");
 
 	teardown(data_dir);
 }

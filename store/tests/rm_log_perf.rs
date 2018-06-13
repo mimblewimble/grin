@@ -21,12 +21,7 @@ extern crate time;
 use std::fs;
 use std::time::{Duration, Instant};
 
-use croaring::Bitmap;
-
-use core::core::pmmr::{Backend, PMMR};
-use core::ser::*;
 use store::rm_log::RemoveLog;
-use store::types::prune_noop;
 
 pub fn as_millis(d: Duration) -> u128 {
 	d.as_secs() as u128 * 1_000 as u128 + (d.subsec_nanos() / (1_000 * 1_000)) as u128
@@ -95,7 +90,7 @@ fn test_rm_log_performance() {
 		as_millis(now.elapsed())
 	);
 
-	panic!("stop here to display results");
+	// panic!("stop here to display results");
 
 	teardown(data_dir);
 }

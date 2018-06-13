@@ -38,7 +38,6 @@
 use croaring::Bitmap;
 
 use core::hash::Hash;
-use core::prune_list::PruneList;
 use ser::{self, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
 
 use std::clone::Clone;
@@ -430,7 +429,11 @@ where
 		Ok(())
 	}
 
-	pub fn prune(&mut self, position: u64, index: u32) -> Result<bool, String> {
+	/// Prunes (removes) the leaf from the MMR at the specified position.
+	/// Returns an error if prune is called on a non-leaf position.
+	/// Returns false if the leaf node has already been pruned.
+	/// Returns true if pruning is successful.
+	pub fn prune(&mut self, position: u64) -> Result<bool, String> {
 		if !is_leaf(position) {
 			return Err(format!("Node at {} is not a leaf, can't prune.", position));
 		}
@@ -816,6 +819,10 @@ pub fn is_left_sibling(pos: u64) -> bool {
 	sibling_pos > pos
 }
 
+/// Returns the path from the specified position up to its
+/// corresponding peak in the MMR.
+/// The size (and therefore the set of peaks) of the MMR
+/// is defined by last_pos.
 pub fn path(pos: u64, last_pos: u64) -> Vec<u64> {
 	let mut path = vec![pos];
 	let mut current = pos;

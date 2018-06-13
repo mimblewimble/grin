@@ -432,7 +432,7 @@ impl<'a> Extension<'a> {
 	/// aggregated tx from the tx pool to the current chain state (via a
 	/// txhashset extension) then we know the tx pool is valid (including the
 	/// new tx).
-	pub fn apply_raw_tx(&mut self, tx: &Transaction, height: u64) -> Result<(), Error> {
+	pub fn apply_raw_tx(&mut self, tx: &Transaction) -> Result<(), Error> {
 		// This should *never* be called on a writeable extension...
 		if !self.rollback {
 			panic!("attempted to apply a raw tx to a writeable txhashset extension");
@@ -450,8 +450,6 @@ impl<'a> Extension<'a> {
 			.map(|x| x as u32)
 			.collect();
 
-		// When applying blocks we can apply the coinbase output first
-		// but we cannot do this here, so we need to apply outputs first.
 		for ref output in &tx.outputs {
 			if let Err(e) = self.apply_output(output) {
 				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_spent_pos)?;
@@ -460,7 +458,7 @@ impl<'a> Extension<'a> {
 		}
 
 		for ref input in &tx.inputs {
-			if let Err(e) = self.apply_input(input, height) {
+			if let Err(e) = self.apply_input(input) {
 				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_spent_pos)?;
 				return Err(e);
 			}
@@ -497,18 +495,21 @@ impl<'a> Extension<'a> {
 		&mut self,
 		txs: Vec<Transaction>,
 		pre_tx: Option<Transaction>,
-		height: u64,
 	) -> Result<Vec<Transaction>, Error> {
-		let mut height = height;
 		let mut valid_txs = vec![];
+
+		// First apply the "pre_tx" to account for any state that need adding to
+		// the chain state before we can validate our vec of txs.
+		// This is the aggregate tx from the txpool if we are validating the stempool.
 		if let Some(tx) = pre_tx {
-			self.apply_raw_tx(&tx, height)?;
-			height += 1;
+			self.apply_raw_tx(&tx)?;
 		}
+
+		// Now validate each tx, rewinding any tx (and only that tx)
+		// if it fails to validate successfully.
 		for tx in txs {
-			if self.apply_raw_tx(&tx, height).is_ok() {
+			if self.apply_raw_tx(&tx).is_ok() {
 				valid_txs.push(tx);
-				height += 1;
 			}
 		}
 		Ok(valid_txs)
@@ -549,7 +550,7 @@ impl<'a> Extension<'a> {
 		// then doing inputs guarantees an input can't spend an output in the
 		// same block, enforcing block cut-through
 		for input in &b.inputs {
-			self.apply_input(input, b.header.height)?;
+			self.apply_input(input)?;
 		}
 
 		// now all regular, non coinbase outputs
@@ -585,7 +586,7 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn apply_input(&mut self, input: &Input, height: u64) -> Result<(), Error> {
+	fn apply_input(&mut self, input: &Input) -> Result<(), Error> {
 		let commit = input.commitment();
 		let pos_res = self.get_output_pos(&commit);
 		if let Ok(pos) = pos_res {
@@ -606,10 +607,10 @@ impl<'a> Extension<'a> {
 			// Now prune the output_pmmr, rproof_pmmr and their storage.
 			// Input is not valid if we cannot prune successfully (to spend an unspent
 			// output).
-			match self.output_pmmr.prune(pos, height as u32) {
+			match self.output_pmmr.prune(pos) {
 				Ok(true) => {
 					self.rproof_pmmr
-						.prune(pos, height as u32)
+						.prune(pos)
 						.map_err(|s| Error::TxHashSetErr(s))?;
 				}
 				Ok(false) => return Err(Error::AlreadySpent(commit)),
@@ -741,11 +742,15 @@ impl<'a> Extension<'a> {
 		head_header: &BlockHeader,
 	) -> Result<(), Error> {
 		let hash = block_header.hash();
-		let height = block_header.height;
-		trace!(LOGGER, "Rewind to header {} @ {}", height, hash);
+		trace!(
+			LOGGER,
+			"Rewind to header {} @ {}",
+			block_header.height,
+			hash
+		);
 
 		// rewind our MMRs to the appropriate pos
-		// based on block height and block marker
+		// based on the block_marker
 		let marker = self.commit_index.get_block_marker(&hash)?;
 
 		let rewind_output_pos = self.output_pos_to_rewind(block_header, head_header)?;

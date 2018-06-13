@@ -284,7 +284,8 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn delete_block_input_bitmap(&self, bh: &Hash) -> Result<(), Error> {
-		panic!("not yet implemented!");
+		self.db
+			.delete(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
 	}
 
 	/// Maintain consistency of the "header_by_height" index by traversing back
