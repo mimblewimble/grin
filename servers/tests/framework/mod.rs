@@ -24,10 +24,8 @@ extern crate grin_wallet as wallet;
 extern crate blake2_rfc as blake2;
 
 use std::default::Default;
-use std::fs;
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time;
+use std::{fs, thread, time};
 
 use wallet::{FileWallet, WalletConfig};
 

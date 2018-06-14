@@ -14,8 +14,8 @@
 
 //! Types specific to the UI module
 
-use cursive::Cursive;
 use cursive::view::View;
+use cursive::Cursive;
 use servers::ServerStats;
 
 /// Main message struct to communicate between the UI and

@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::core;
-use core::core::amount_to_hr_string;
-use libwallet::Error;
+use core::core::{self, amount_to_hr_string};
 use libwallet::types::{OutputData, WalletInfo};
+use libwallet::Error;
 use prettytable;
-use std::io::prelude::*;
+use std::io::prelude::Write;
 use term;
 
 /// Display outputs in a pretty way

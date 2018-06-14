@@ -41,8 +41,10 @@
 //! Adapted from https://github.com/behnam/rust-cursive-table-view
 //! A basic table view implementation for [cursive](https://crates.io/crates/cursive).
 
-#![deny(missing_docs, missing_copy_implementations, trivial_casts, trivial_numeric_casts,
-        unsafe_code, unused_import_braces, unused_qualifications)]
+#![deny(
+	missing_docs, missing_copy_implementations, trivial_casts, trivial_numeric_casts, unsafe_code,
+	unused_import_braces, unused_qualifications
+)]
 
 // Crate Dependencies ---------------------------------------------------------
 extern crate cursive;
@@ -54,14 +56,14 @@ use std::hash::Hash;
 use std::rc::Rc;
 
 // External Dependencies ------------------------------------------------------
-use cursive::With;
 use cursive::align::HAlign;
 use cursive::direction::Direction;
 use cursive::event::{Callback, Event, EventResult, Key};
 use cursive::theme::ColorStyle;
-use cursive::theme::PaletteColor::*;
+use cursive::theme::PaletteColor::{Highlight, HighlightInactive, Primary};
 use cursive::vec::Vec2;
 use cursive::view::{ScrollBase, View};
+use cursive::With;
 use cursive::{Cursive, Printer};
 
 /// A trait for displaying and sorting items inside a

@@ -14,8 +14,8 @@
 
 //! Transactions
 
-use std::cmp::Ordering;
 use std::cmp::max;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::io::Cursor;
 use std::{error, fmt};
@@ -24,16 +24,11 @@ use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
 
-use consensus;
-use consensus::VerifySortOrder;
-use core::BlockHeader;
-use core::Committed;
-use core::committed;
-use core::global;
+use consensus::{self, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
-use keychain;
-use keychain::BlindingFactor;
+use core::{committed, global, BlockHeader, Committed};
+use keychain::{self, BlindingFactor};
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};
 use util;
@@ -505,7 +500,7 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	let mut kernel_offsets: Vec<BlindingFactor> = vec![];
 
 	for mut transaction in transactions {
-		// we will summ these later to give a single aggregate offset
+		// we will sum these later to give a single aggregate offset
 		kernel_offsets.push(transaction.offset);
 
 		inputs.append(&mut transaction.inputs);

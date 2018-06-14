@@ -15,8 +15,7 @@
 //! Adapters connecting new block, new transaction, and accepted transaction
 //! events to consumers of those events.
 
-use rand;
-use rand::Rng;
+use rand::{self, Rng};
 use std::fs::File;
 use std::net::SocketAddr;
 use std::ops::Deref;
@@ -35,8 +34,7 @@ use core::core::transaction::Transaction;
 use p2p;
 use pool;
 use store;
-use util::LOGGER;
-use util::OneTime;
+use util::{OneTime, LOGGER};
 
 // All adapters use `Weak` references instead of `Arc` to avoid cycles that
 // can never be destroyed. These 2 functions are simple helpers to reduce the
