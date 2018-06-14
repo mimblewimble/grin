@@ -116,7 +116,7 @@ fn basic_stratum_server() {
 	// keepalive - expected "ok" result
 	let mut response = String::new();
 	let job_req = "{\"id\":\"3\",\"jsonrpc\":\"2.0\",\"method\":\"keepalive\"}\n";
-	let ok_resp = "{\"id\":\"3\",\"jsonrpc\":\"2.0\",\"method\":\"keepalive\",\"result\":{\"status\":\"ok\"},\"error\":null}\n";
+	let ok_resp = "{\"id\":\"3\",\"jsonrpc\":\"2.0\",\"method\":\"keepalive\",\"result\":\"ok\",\"error\":null}\n";
 	workers[2].write(job_req.as_bytes()).unwrap();
 	workers[2].flush().unwrap();
 	thread::sleep(time::Duration::from_secs(1)); // Wait for the server to reply
