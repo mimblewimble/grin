@@ -156,7 +156,7 @@ fn test_dandelion_timeout() {
 	// The transaction should be waiting in the node stempool thus cannot be mined.
 	println!("Recipient wallet info: {:?}", recipient_info);
 	assert!(
-		recipient_info.data_confirmed && recipient_info.amount_awaiting_confirmation == 50000000000
+		recipient_info.amount_awaiting_confirmation == 50000000000
 	);
 
 	// Wait for stem timeout
