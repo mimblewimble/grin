@@ -7,7 +7,7 @@ latter relies on perfectly balanced binary trees, the former can be seen
 either as list of perfectly balance binary trees or a single binary tree that
 would have been truncated from the top right. A Merkle Mountain Range (MMR) is
 strictly append-only: elements are added from the left to the right, adding a
-parent as soon as 2 children exist, fillung up the range accordingly.
+parent as soon as 2 children exist, filling up the range accordingly.
 
 This illustrates a range with 11 inserted leaves and total size 19, where each
 node is annotated with its order of insertion.
@@ -83,7 +83,7 @@ peak will have a position of the form `2^n - 1` and will always be the
 largest such position that is inside the MMR (its position is lesser than the
 total size). We process iteratively for a MMR of size 11:
 
-```
+
 2^0 - 1 = 0, and 0 < 11
 2^1 - 1 = 1, and 1 < 11
 2^2 - 1 = 3, and 3 < 11
@@ -114,7 +114,7 @@ P = Blake2b(N | Blake2b(N | Node(p3) | Node(p2)) | Node(p1))
 
 In Grin, a lot of the data that gets hashed and stored in MMRs can eventually
 be removed. As this happens, the presence of some leaf hashes in the
-corresponding MMRs become unnecessary abd their hash can be removed. When
+corresponding MMRs become unnecessary and their hash can be removed. When
 enough leaves are removed, the presence of their parents may become unnecessary
 as well. We can therefore prune a significant part of a MMR from the removal of
 its leaves.
