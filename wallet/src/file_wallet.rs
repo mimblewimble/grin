@@ -38,7 +38,8 @@ use error::{Error, ErrorKind};
 use client;
 use libtx::slate::Slate;
 use libwallet;
-use libwallet::types::*;
+use libwallet::types::{BlockFees, BlockIdentifier, CbData, MerkleProofWrapper, OutputData,
+                       TxWrapper, WalletBackend, WalletClient, WalletDetails};
 
 const DETAIL_FILE: &'static str = "wallet.det";
 const DET_BCK_FILE: &'static str = "wallet.detbck";
@@ -500,8 +501,8 @@ impl<K> WalletClient for FileWallet<K> {
 	/// retrieve merkle proof for a commit from a node
 	fn get_merkle_proof_for_commit(
 		&self,
-		addr: &str,
-		commit: &str,
+		_addr: &str,
+		_commit: &str,
 	) -> Result<MerkleProofWrapper, libwallet::Error> {
 		Err(libwallet::ErrorKind::GenericError("Not Implemented"))?
 	}
