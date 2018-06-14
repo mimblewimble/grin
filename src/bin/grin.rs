@@ -681,8 +681,8 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					Ok(())
 				}
 				("info", Some(_)) => {
-					let (validated, wallet_info) = api.retrieve_summary_info(true)
-						.unwrap_or_else(|e| {
+					let (validated, wallet_info) =
+						api.retrieve_summary_info(true).unwrap_or_else(|e| {
 							panic!(
 								"Error getting wallet info: {:?} Config: {:?}",
 								e, wallet_config

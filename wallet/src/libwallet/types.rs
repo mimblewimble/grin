@@ -440,7 +440,6 @@ impl Default for WalletDetails {
 	}
 }
 
-
 /// Dummy wrapper for the hex-encoded serialized transaction.
 #[derive(Serialize, Deserialize)]
 pub struct TxWrapper {
