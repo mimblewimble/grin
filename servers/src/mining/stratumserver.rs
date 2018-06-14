@@ -16,25 +16,21 @@
 use bufstream::BufStream;
 use serde_json;
 use serde_json::Value;
-use std::cmp;
 use std::error::Error;
-use std::io::BufRead;
-use std::io::{ErrorKind, Write};
+use std::io::{BufRead, ErrorKind, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
-use std::thread;
-use std::time::Duration;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
+use std::{cmp, thread};
 use time;
 
 use chain;
 use common::adapters::PoolToChainAdapter;
 use common::stats::{StratumStats, WorkerStats};
 use common::types::StratumServerConfig;
-use core::consensus;
 use core::core::{Block, BlockHeader};
-use core::pow;
+use core::{consensus, pow};
 use keychain;
 use mining::mine_block;
 use pool;
@@ -596,7 +592,7 @@ impl StratumServer {
 		let job_request_json = serde_json::to_string(&job_request).unwrap();
 
 		// Push the new block to all connected clients
-		// NOTE: We do not give a uniqe nonce (should we?) so miners need
+		// NOTE: We do not give a unique nonce (should we?) so miners need
 		//       to choose one for themselves
 		let mut workers_l = self.workers.lock().unwrap();
 		for num in 0..workers_l.len() {

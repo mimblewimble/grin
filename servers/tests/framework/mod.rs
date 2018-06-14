@@ -24,10 +24,8 @@ extern crate grin_wallet as wallet;
 extern crate blake2_rfc as blake2;
 
 use std::default::Default;
-use std::fs;
 use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time;
+use std::{fs, thread, time};
 
 use wallet::{FileWallet, WalletConfig};
 
@@ -305,7 +303,7 @@ impl LocalServerContainer {
 		let mut wallet = FileWallet::new(config.clone(), "")
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
-		wallet::libwallet::internal::updater::retrieve_info(&mut wallet).unwrap()
+		wallet::libwallet::internal::updater::retrieve_info(&mut wallet, true).unwrap()
 	}
 
 	pub fn send_amount_to(

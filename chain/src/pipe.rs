@@ -26,7 +26,7 @@ use core::global;
 use grin_store;
 use store;
 use txhashset;
-use types::*;
+use types::{BlockSums, ChainStore, Error, Options, Tip};
 use util::LOGGER;
 
 /// Contextual information required to process a new block and either reject or

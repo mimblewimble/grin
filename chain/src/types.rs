@@ -26,7 +26,6 @@ use core::core::target::Difficulty;
 use core::core::{block, transaction, Block, BlockHeader};
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store as store;
-use grin_store;
 use keychain;
 
 bitflags! {
@@ -93,7 +92,7 @@ pub enum Error {
 	/// We've been provided a bad txhashset
 	InvalidTxHashSet(String),
 	/// Internal issue when trying to save or load data from store
-	StoreErr(grin_store::Error, String),
+	StoreErr(store::Error, String),
 	/// Internal issue when trying to save or load data from append only files
 	FileReadErr(String),
 	/// Error serializing or deserializing a type
@@ -128,8 +127,8 @@ impl fmt::Display for Error {
 	}
 }
 
-impl From<grin_store::Error> for Error {
-	fn from(e: grin_store::Error) -> Error {
+impl From<store::Error> for Error {
+	fn from(e: store::Error) -> Error {
 		Error::StoreErr(e, "wrapped".to_owned())
 	}
 }

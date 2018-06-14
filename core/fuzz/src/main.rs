@@ -1,14 +1,13 @@
 extern crate grin_core;
 extern crate grin_keychain;
 
-use std::path::Path;
-use std::fs::{self, File};
-use grin_core::ser;
-use grin_core::core::{Block, BlockHeader, CompactBlock, Transaction};
-use grin_core::core::target::Difficulty;
-
 use grin_core::core::build::{input, output, transaction_with_offset, with_fee};
+use grin_core::core::target::Difficulty;
+use grin_core::core::{Block, BlockHeader, CompactBlock, Transaction};
+use grin_core::ser;
 use grin_keychain::keychain::Keychain;
+use std::fs::{self, File};
+use std::path::Path;
 
 fn main() {
 	generate("transaction_read", &tx()).unwrap();

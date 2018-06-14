@@ -17,15 +17,14 @@
 use rand::thread_rng;
 use uuid::Uuid;
 
-use core::core::committed;
 use core::core::committed::Committed;
 use core::core::{amount_to_hr_string, Transaction};
 use keychain::{BlindSum, BlindingFactor, Keychain};
 use libtx::error::{Error, ErrorKind};
 use libtx::{aggsig, build, tx_fee};
 
-use util::secp::Signature;
 use util::secp::key::{PublicKey, SecretKey};
+use util::secp::Signature;
 use util::{secp, LOGGER};
 
 /// Public data for each participant in the slate
@@ -43,7 +42,7 @@ pub struct ParticipantData {
 }
 
 impl ParticipantData {
-	/// A helper to return whether this paricipant
+	/// A helper to return whether this participant
 	/// has completed round 1 and round 2;
 	/// Round 1 has to be completed before instantiation of this struct
 	/// anyhow, and for each participant consists of:
@@ -60,9 +59,9 @@ impl ParticipantData {
 }
 
 /// A 'Slate' is passed around to all parties to build up all of the public
-/// tranaction data needed to create a finalised tranaction. Callers can pass
+/// transaction data needed to create a finalized transaction. Callers can pass
 /// the slate around by whatever means they choose, (but we can provide some
-/// binary or JSON serialisation helpers here).
+/// binary or JSON serialization helpers here).
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Slate {
@@ -211,7 +210,7 @@ impl Slate {
 
 	/// Adds participants public keys to the slate data
 	/// and saves participant's transaction context
-	/// sec_key can be overriden to replace the blinding
+	/// sec_key can be overridden to replace the blinding
 	/// factor (by whoever split the offset)
 	fn add_participant_info<K>(
 		&mut self,

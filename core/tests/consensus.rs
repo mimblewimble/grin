@@ -16,9 +16,10 @@
 extern crate grin_core as core;
 extern crate time;
 
+use core::consensus::{next_difficulty, valid_header_version, TargetError,
+                      DIFFICULTY_ADJUST_WINDOW, MEDIAN_TIME_WINDOW};
 use core::core::target::Difficulty;
 use core::global;
-use core::consensus::*;
 
 // Builds an iterator for next difficulty calculation with the provided
 // constant time interval, difficulty and total length.
@@ -49,9 +50,10 @@ fn create_chain_sim(diff: u64) -> Vec<Result<(u64, Difficulty), TargetError>> {
 		time::get_time().sec,
 		Difficulty::from_num(diff)
 	);
-	vec![
-		Ok((time::get_time().sec as u64, Difficulty::from_num(diff))),
-	]
+	vec![Ok((
+		time::get_time().sec as u64,
+		Difficulty::from_num(diff),
+	))]
 }
 
 // Adds another 'block' to the iterator, so to speak, with difficulty calculated

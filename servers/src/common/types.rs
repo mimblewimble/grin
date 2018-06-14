@@ -18,9 +18,8 @@ use std::convert::From;
 
 use api;
 use chain;
-use core::core;
 use core::global::ChainTypes;
-use core::pow;
+use core::{core, pow};
 use p2p;
 use pool;
 use store;
@@ -111,7 +110,7 @@ pub enum Seeding {
 	List,
 	/// Automatically download a text file with a list of server addresses
 	WebStatic,
-	/// Automatically get a list of seeds from mutliple DNS
+	/// Automatically get a list of seeds from multiple DNS
 	DNSSeed,
 	/// Mostly for tests, where connections are initiated programmatically
 	Programmatic,

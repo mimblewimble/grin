@@ -23,11 +23,9 @@ extern crate grin_wallet as wallet;
 mod framework;
 
 use std::default::Default;
-use std::thread;
-use std::time;
+use std::{thread, time};
 
-use core::global;
-use core::global::ChainTypes;
+use core::global::{self, ChainTypes};
 
 use framework::{config, stratum_config, LocalServerContainerConfig, LocalServerContainerPool,
                 LocalServerContainerPoolConfig};

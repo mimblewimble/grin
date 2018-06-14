@@ -14,8 +14,8 @@
 
 //! Types specific to the UI module
 
-use cursive::Cursive;
 use cursive::view::View;
+use cursive::Cursive;
 use servers::ServerStats;
 
 /// Main message struct to communicate between the UI and
@@ -24,7 +24,7 @@ pub enum UIMessage {
 	UpdateStatus(ServerStats),
 }
 
-/// Trait for a UI element that recieves status update messages
+/// Trait for a UI element that receives status update messages
 /// and updates itself
 
 pub trait TUIStatusListener {
