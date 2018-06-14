@@ -22,7 +22,7 @@ use core::core::hash::Hashed;
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
 use core::core::{Block, CompactBlock, Transaction, TxKernel};
-use types::*;
+use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 use util::LOGGER;
 
 pub struct Pool<T> {

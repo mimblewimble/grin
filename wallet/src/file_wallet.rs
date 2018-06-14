@@ -18,27 +18,26 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::MAIN_SEPARATOR;
-use std::path::Path;
+use std::path::{Path, MAIN_SEPARATOR};
 
 use serde_json;
 use tokio_core::reactor;
-use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;
+use tokio_retry::Retry;
 
 use failure::ResultExt;
 
 use keychain::{self, Keychain};
-use util;
-use util::LOGGER;
 use util::secp::pedersen;
+use util::{self, LOGGER};
 
 use error::{Error, ErrorKind};
 
 use client;
 use libtx::slate::Slate;
 use libwallet;
-use libwallet::types::*;
+use libwallet::types::{BlockFees, BlockIdentifier, CbData, MerkleProofWrapper, OutputData,
+                       TxWrapper, WalletBackend, WalletClient};
 
 const DAT_FILE: &'static str = "wallet.dat";
 const BCK_FILE: &'static str = "wallet.bck";
@@ -189,7 +188,7 @@ impl<K> WalletBackend<K> for FileWallet<K>
 where
 	K: Keychain,
 {
-	/// Initialise with whatever stored credentials we have
+	/// Initialize with whatever stored credentials we have
 	fn open_with_credentials(&mut self) -> Result<(), libwallet::Error> {
 		let wallet_seed = WalletSeed::from_file(&self.config)
 			.context(libwallet::ErrorKind::CallbackImpl("Error opening wallet"))?;
@@ -361,7 +360,7 @@ where
 		// The limit exists because by default, we always select as many inputs as
 		// possible in a transaction, to reduce both the Output set and the fees.
 		// But that only makes sense up to a point, hence the limit to avoid being too
-		// greedy. But if max_outputs(500) is actually not enought to cover the whole
+		// greedy. But if max_outputs(500) is actually not enough to cover the whole
 		// amount, the wallet should allow going over it to satisfy what the user
 		// wants to send. So the wallet considers max_outputs more of a soft limit.
 		if eligible.len() > max_outputs {
@@ -436,7 +435,7 @@ impl<K> WalletClient for FileWallet<K> {
 		}
 	}
 
-	/// Posts a tranaction to a grin node
+	/// Posts a transaction to a grin node
 	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), libwallet::Error> {
 		let res = client::post_tx(dest, tx, fluff).context(libwallet::ErrorKind::Node)?;
 		Ok(res)

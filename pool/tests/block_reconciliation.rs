@@ -29,15 +29,13 @@ use std::sync::{Arc, RwLock};
 
 use core::core::{Block, BlockHeader};
 
-use chain::ChainStore;
-use chain::txhashset;
 use chain::types::Tip;
+use chain::{txhashset, ChainStore};
+use common::{clean_output_dir, test_setup, test_source, test_transaction,
+             test_transaction_spending_coinbase, ChainAdapter};
 use core::core::target::Difficulty;
-
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
-
-use common::*;
 
 #[test]
 fn test_transaction_pool_block_reconciliation() {

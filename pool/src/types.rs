@@ -19,8 +19,7 @@ use std::{error, fmt};
 use time::Timespec;
 
 use core::consensus;
-use core::core::transaction;
-use core::core::transaction::Transaction;
+use core::core::transaction::{self, Transaction};
 
 /// Dandelion relay timer
 const DANDELION_RELAY_SECS: u64 = 600;

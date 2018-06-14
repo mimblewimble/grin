@@ -17,7 +17,7 @@
 use keychain;
 use keychain::BlindingFactor;
 
-use util::secp::pedersen::*;
+use util::secp::pedersen::Commitment;
 use util::{secp, secp_static, static_secp_instance};
 
 /// Errors from summing and verifying kernel excesses via committed trait.

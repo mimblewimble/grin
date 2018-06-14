@@ -13,8 +13,8 @@
 // limitations under the License.
 
 //! Common functions to facilitate wallet, walletlib and transaction testing
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
@@ -28,9 +28,10 @@ use core::core::hash::Hashed;
 use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::{consensus, global, pow};
 use keychain::ExtKeychain;
-use wallet::file_wallet::*;
+use wallet::file_wallet::{FileWallet, WalletConfig};
 use wallet::libwallet::internal::updater;
-use wallet::libwallet::types::*;
+use wallet::libwallet::types::{BlockFees, BlockIdentifier, MerkleProofWrapper, OutputStatus,
+                               WalletBackend};
 use wallet::libwallet::{Error, ErrorKind};
 
 use util;

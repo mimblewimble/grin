@@ -21,18 +21,16 @@ pub mod common;
 
 use common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
 use grin_core::consensus::{BLOCK_OUTPUT_WEIGHT, MAX_BLOCK_WEIGHT};
-use grin_core::core::Committed;
 use grin_core::core::block::Error;
 use grin_core::core::hash::Hashed;
 use grin_core::core::id::{ShortId, ShortIdentifiable};
+use grin_core::core::Committed;
 use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
-use grin_core::global;
-use grin_core::ser;
+use grin_core::{global, ser};
 use keychain::{ExtKeychain, Keychain};
 use std::time::Instant;
-use wallet::libtx::build::{self, input, output, with_fee};
-
 use util::{secp, secp_static};
+use wallet::libtx::build::{self, input, output, with_fee};
 
 // Too slow for now #[test]
 // TODO: make this fast enough or add similar but faster test?

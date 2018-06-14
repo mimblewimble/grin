@@ -40,8 +40,7 @@ use ser::{self, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer
 
 use std::clone::Clone;
 use std::marker;
-use util;
-use util::LOGGER;
+use util::{self, LOGGER};
 
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
 /// The PMMR itself does not need the Backend to be accurate on the existence

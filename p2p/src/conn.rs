@@ -20,17 +20,15 @@
 //! forces us to go through some additional gymnastic to loop over the async
 //! stream and make sure we get the right number of bytes out.
 
-use std::cmp;
 use std::fs::File;
 use std::io::{self, Read, Write};
 use std::net::TcpStream;
 use std::sync::{mpsc, Arc, Mutex};
-use std::thread;
-use std::time;
+use std::{cmp, thread, time};
 
 use core::ser;
-use msg::*;
-use types::*;
+use msg::{read_body, read_exact, read_header, write_all, write_to_buf, MsgHeader, Type};
+use types::Error;
 use util::LOGGER;
 
 /// A trait to be implemented in order to receive messages from the
