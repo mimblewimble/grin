@@ -25,10 +25,10 @@ use core::global;
 use core::ser;
 use keychain::{Identifier, Keychain};
 use libtx::reward;
+use libwallet;
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
 use libwallet::types::*;
-use libwallet;
 use util;
 use util::LOGGER;
 use util::secp::pedersen;
@@ -252,7 +252,6 @@ where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
-
 	let ret_val = wallet.read_wallet(|wallet_data| {
 		let current_height = wallet_data.details().last_confirmed_height;
 		let mut unspent_total = 0;

@@ -195,10 +195,10 @@ pub fn select_send_tx<T, K>(
 	(
 		Vec<Box<build::Append<K>>>,
 		Vec<OutputData>,
-		u64, //change
+		u64,         //change
 		Option<u32>, //change derivation
-		u64, // amount
-		u64, // fee
+		u64,         // amount
+		u64,         // fee
 	),
 	Error,
 >
@@ -284,7 +284,8 @@ where
 	}
 
 	// build transaction skeleton with inputs and change
-	let (mut parts, change, change_derivation) = inputs_and_change(&coins, wallet, current_height, amount, fee)?;
+	let (mut parts, change, change_derivation) =
+		inputs_and_change(&coins, wallet, current_height, amount, fee)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
