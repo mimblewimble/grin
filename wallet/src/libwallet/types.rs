@@ -76,7 +76,11 @@ where
 	fn get_output(&self, key_id: &Identifier) -> Option<&OutputData>;
 
 	/// Next child ID when we want to create a new output
-	fn next_child(&self, root_key_id: Identifier) -> u32;
+	/// Should also increment index
+	fn next_child(&mut self, root_key_id: Identifier) -> u32;
+
+	/// Return current details
+	fn details(&mut self) -> &mut WalletDetails;
 
 	/// Select spendable coins from the wallet
 	fn select_coins(
@@ -399,21 +403,40 @@ pub struct CbData {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WalletInfo {
 	/// height from which info was taken
-	pub current_height: u64,
+	pub last_confirmed_height: u64,
 	/// total amount in the wallet
 	pub total: u64,
 	/// amount awaiting confirmation
 	pub amount_awaiting_confirmation: u64,
-	/// confirmed but locked
-	pub amount_confirmed_but_locked: u64,
+	/// coinbases waiting for lock height
+	pub amount_immature: u64,
 	/// amount currently spendable
 	pub amount_currently_spendable: u64,
-	/// amount locked by previous transactions
+	/// amount locked via previous transactions
 	pub amount_locked: u64,
-	/// whether the data was confirmed against a live node
-	pub data_confirmed: bool,
-	/// node confirming the data
-	pub data_confirmed_from: String,
+}
+
+/// Separate data for a wallet, containing fields
+/// that are needed but not necessarily represented
+/// via simple rows of OutputData
+/// If a wallet is restored from seed this is obvious
+/// lost and re-populated as well as possible
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WalletDetails {
+	/// The last block height at which the wallet data
+	/// was confirmed against a node
+	pub last_confirmed_height: u64,
+	/// The last child index used
+	pub last_child_index: u32,
+}
+
+impl Default for WalletDetails {
+	fn default() -> WalletDetails {
+		WalletDetails {
+			last_confirmed_height: 0,
+			last_child_index: 0,
+		}
+	}
 }
 
 /// Dummy wrapper for the hex-encoded serialized transaction.

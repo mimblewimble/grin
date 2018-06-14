@@ -165,7 +165,10 @@ where
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
 	let fee = tx_fee(coins.len(), 2, selection::coins_proof_count(&coins), None);
-	let (mut parts, _) = selection::inputs_and_change(&coins, wallet, current_height, amount, fee)?;
+	let (mut parts, _, _) =
+		selection::inputs_and_change(&coins, wallet, current_height, amount, fee)?;
+
+	//TODO: If we end up using this, create change output here
 
 	// add burn output and fees
 	parts.push(build::output(amount - fee, Identifier::zero()));

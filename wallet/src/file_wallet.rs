@@ -37,8 +37,10 @@ use client;
 use libtx::slate::Slate;
 use libwallet;
 use libwallet::types::{BlockFees, BlockIdentifier, CbData, MerkleProofWrapper, OutputData,
-                       TxWrapper, WalletBackend, WalletClient};
+                       TxWrapper, WalletBackend, WalletClient, WalletDetails};
 
+const DETAIL_FILE: &'static str = "wallet.det";
+const DET_BCK_FILE: &'static str = "wallet.detbck";
 const DAT_FILE: &'static str = "wallet.dat";
 const BCK_FILE: &'static str = "wallet.bck";
 const LOCK_FILE: &'static str = "wallet.lock";
@@ -176,12 +178,18 @@ pub struct FileWallet<K> {
 	passphrase: String,
 	/// List of outputs
 	pub outputs: HashMap<String, OutputData>,
+	/// Details
+	pub details: WalletDetails,
 	/// Data file path
 	pub data_file_path: String,
 	/// Backup file path
 	pub backup_file_path: String,
 	/// lock file path
 	pub lock_file_path: String,
+	/// details file path
+	pub details_file_path: String,
+	/// Details backup file path
+	pub details_bak_path: String,
 }
 
 impl<K> WalletBackend<K> for FileWallet<K>
@@ -274,10 +282,10 @@ where
 		// We successfully acquired the lock - so do what needs to be done.
 		self.read_or_create_paths()
 			.context(libwallet::ErrorKind::CallbackImpl("Lock Error"))?;
-		self.write(&self.backup_file_path)
+		self.write(&self.backup_file_path, &self.details_bak_path)
 			.context(libwallet::ErrorKind::CallbackImpl("Write Error"))?;
 		let res = f(self);
-		self.write(&self.data_file_path)
+		self.write(&self.data_file_path, &self.details_file_path)
 			.context(libwallet::ErrorKind::CallbackImpl("Write Error"))?;
 
 		// delete the lock file
@@ -318,14 +326,20 @@ where
 	}
 
 	/// Next child index when we want to create a new output.
-	fn next_child(&self, root_key_id: keychain::Identifier) -> u32 {
+	fn next_child(&mut self, root_key_id: keychain::Identifier) -> u32 {
 		let mut max_n = 0;
 		for out in self.outputs.values() {
 			if max_n < out.n_child && out.root_key_id == root_key_id {
 				max_n = out.n_child;
 			}
 		}
-		max_n + 1
+
+		if self.details.last_child_index <= max_n {
+			self.details.last_child_index = max_n + 1;
+		} else {
+			self.details.last_child_index += 1;
+		}
+		self.details.last_child_index
 	}
 
 	/// Select spendable coins from the wallet.
@@ -392,6 +406,11 @@ where
 		// possible
 		eligible.reverse();
 		eligible.iter().take(max_outputs).cloned().collect()
+	}
+
+	/// Return current metadata
+	fn details(&mut self) -> &mut WalletDetails {
+		&mut self.details
 	}
 
 	/// Restore wallet contents
@@ -480,8 +499,8 @@ impl<K> WalletClient for FileWallet<K> {
 	/// retrieve merkle proof for a commit from a node
 	fn get_merkle_proof_for_commit(
 		&self,
-		addr: &str,
-		commit: &str,
+		_addr: &str,
+		_commit: &str,
 	) -> Result<MerkleProofWrapper, libwallet::Error> {
 		Err(libwallet::ErrorKind::GenericError("Not Implemented"))?
 	}
@@ -498,9 +517,12 @@ where
 			config: config.clone(),
 			passphrase: String::from(passphrase),
 			outputs: HashMap::new(),
+			details: WalletDetails::default(),
 			data_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, DAT_FILE),
 			backup_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, BCK_FILE),
 			lock_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, LOCK_FILE),
+			details_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, DETAIL_FILE),
+			details_bak_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, DET_BCK_FILE),
 		};
 		match retval.read_or_create_paths() {
 			Ok(_) => Ok(retval),
@@ -519,7 +541,19 @@ where
 		if Path::new(&self.data_file_path.clone()).exists() {
 			self.read()?;
 		}
+		if Path::new(&self.details_file_path.clone()).exists() {
+			self.details = self.read_details()?;
+		}
 		Ok(())
+	}
+
+	/// Read details file from disk
+	fn read_details(&self) -> Result<WalletDetails, Error> {
+		let details_file = File::open(self.details_file_path.clone())
+			.context(ErrorKind::FileWallet(&"Could not open wallet details file"))?;
+		serde_json::from_reader(details_file)
+			.context(ErrorKind::Format)
+			.map_err(|e| e.into())
 	}
 
 	/// Read output_data vec from disk.
@@ -541,8 +575,8 @@ where
 		Ok(())
 	}
 
-	/// Write the wallet data to disk.
-	fn write(&self, data_file_path: &str) -> Result<(), Error> {
+	/// Write the wallet and details data to disk.
+	fn write(&self, data_file_path: &str, details_file_path: &str) -> Result<(), Error> {
 		let mut data_file =
 			File::create(data_file_path).context(ErrorKind::FileWallet(&"Could not create "))?;
 		let mut outputs = self.outputs.values().collect::<Vec<_>>();
@@ -551,7 +585,16 @@ where
 			.context(ErrorKind::FileWallet("Error serializing wallet data"))?;
 		data_file
 			.write_all(res_json.as_slice())
-			.context(ErrorKind::FileWallet(&"Error writing wallet file"))
+			.context(ErrorKind::FileWallet(&"Error writing wallet file"))?;
+		// write details file
+		let mut details_file =
+			File::create(details_file_path).context(ErrorKind::FileWallet(&"Could not create "))?;
+		let res_json = serde_json::to_string_pretty(&self.details).context(ErrorKind::FileWallet(
+			"Error serializing wallet details file",
+		))?;
+		details_file
+			.write_all(res_json.into_bytes().as_slice())
+			.context(ErrorKind::FileWallet(&"Error writing wallet details file"))
 			.map_err(|e| e.into())
 	}
 

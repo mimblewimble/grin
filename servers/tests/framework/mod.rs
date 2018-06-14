@@ -303,7 +303,8 @@ impl LocalServerContainer {
 		let mut wallet = FileWallet::new(config.clone(), "")
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
-		wallet::libwallet::internal::updater::retrieve_info(&mut wallet, true).unwrap()
+		let _ = wallet::libwallet::internal::updater::refresh_outputs(&mut wallet);
+		wallet::libwallet::internal::updater::retrieve_info(&mut wallet).unwrap()
 	}
 
 	pub fn send_amount_to(

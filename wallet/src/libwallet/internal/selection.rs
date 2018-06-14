@@ -46,7 +46,7 @@ where
 	T: WalletBackend<K>,
 	K: Keychain,
 {
-	let (elems, inputs, change_id, amount, fee) = select_send_tx(
+	let (elems, inputs, change, change_derivation, amount, fee) = select_send_tx(
 		wallet,
 		amount,
 		current_height,
@@ -78,8 +78,9 @@ where
 	}
 
 	// Store change output
-	if change_id.is_some() {
-		context.add_output(&change_id.unwrap());
+	if change_derivation.is_some() {
+		let change_id = keychain.derive_key_id(change_derivation.unwrap()).unwrap();
+		context.add_output(&change_id);
 	}
 
 	let lock_inputs = context.get_inputs().clone();
@@ -89,9 +90,27 @@ where
 	// so we avoid accidental double spend attempt.
 	let update_sender_wallet_fn = move |wallet: &mut T| {
 		wallet.with_wallet(|wallet_data| {
+			// Lock the inputs we've selected
 			for id in lock_inputs {
 				let coin = wallet_data.get_output(&id).unwrap().clone();
 				wallet_data.lock_output(&coin);
+			}
+			if let Some(d) = change_derivation {
+				// Add our change output to the wallet
+				let root_key_id = keychain.root_key_id();
+				let change_id = keychain.derive_key_id(change_derivation.unwrap()).unwrap();
+				wallet_data.add_output(OutputData {
+					root_key_id: root_key_id.clone(),
+					key_id: change_id,
+					n_child: d,
+					value: change as u64,
+					status: OutputStatus::Unconfirmed,
+					height: current_height,
+					lock_height: 0,
+					is_coinbase: false,
+					block: None,
+					merkle_proof: None,
+				});
 			}
 		})
 	};
@@ -176,9 +195,10 @@ pub fn select_send_tx<T, K>(
 	(
 		Vec<Box<build::Append<K>>>,
 		Vec<OutputData>,
-		Option<Identifier>,
-		u64, // amount
-		u64, // fee
+		u64,         //change
+		Option<u32>, //change derivation
+		u64,         // amount
+		u64,         // fee
 	),
 	Error,
 >
@@ -264,13 +284,14 @@ where
 	}
 
 	// build transaction skeleton with inputs and change
-	let (mut parts, change_key) = inputs_and_change(&coins, wallet, current_height, amount, fee)?;
+	let (mut parts, change, change_derivation) =
+		inputs_and_change(&coins, wallet, current_height, amount, fee)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
 	parts.push(build::with_lock_height(lock_height));
 
-	Ok((parts, coins, change_key, amount, fee))
+	Ok((parts, coins, change, change_derivation, amount, fee))
 }
 
 /// coins proof count
@@ -285,7 +306,7 @@ pub fn inputs_and_change<T, K>(
 	height: u64,
 	amount: u64,
 	fee: u64,
-) -> Result<(Vec<Box<build::Append<K>>>, Option<Identifier>), Error>
+) -> Result<(Vec<Box<build::Append<K>>>, u64, Option<u32>), Error>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
@@ -321,34 +342,20 @@ where
 		}
 	}
 	let change_key;
+	let mut change_derivation = None;
 	if change != 0 {
 		// track the output representing our change
 		change_key = wallet.with_wallet(|wallet_data| {
 			let keychain = wallet_data.keychain().clone();
 			let root_key_id = keychain.root_key_id();
-			let change_derivation = wallet_data.next_child(root_key_id.clone());
-			let change_key = keychain.derive_key_id(change_derivation).unwrap();
-
-			wallet_data.add_output(OutputData {
-				root_key_id: root_key_id.clone(),
-				key_id: change_key.clone(),
-				n_child: change_derivation,
-				value: change as u64,
-				status: OutputStatus::Unconfirmed,
-				height: height,
-				lock_height: 0,
-				is_coinbase: false,
-				block: None,
-				merkle_proof: None,
-			});
-
+			let cd = wallet_data.next_child(root_key_id.clone());
+			let change_key = keychain.derive_key_id(cd).unwrap();
+			change_derivation = Some(cd);
 			Some(change_key)
 		})?;
 
 		parts.push(build::output(change, change_key.clone().unwrap()));
-	} else {
-		change_key = None
 	}
 
-	Ok((parts, change_key))
+	Ok((parts, change, change_derivation))
 }

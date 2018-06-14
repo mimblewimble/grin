@@ -72,12 +72,16 @@ where
 	}
 
 	/// Retrieve summary info for wallet
-	pub fn retrieve_summary_info(&mut self, refresh_from_node: bool) -> Result<WalletInfo, Error> {
+	pub fn retrieve_summary_info(
+		&mut self,
+		refresh_from_node: bool,
+	) -> Result<(bool, WalletInfo), Error> {
 		let mut validated = false;
 		if refresh_from_node {
 			validated = self.update_outputs();
 		}
-		updater::retrieve_info(self.wallet, validated)
+		let wallet_info = updater::retrieve_info(self.wallet)?;
+		Ok((validated, wallet_info))
 	}
 
 	/// Issues a send transaction and sends to recipient

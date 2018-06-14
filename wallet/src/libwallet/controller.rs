@@ -164,7 +164,7 @@ where
 		&self,
 		req: &mut Request,
 		api: &mut APIOwner<T, K>,
-	) -> Result<WalletInfo, Error> {
+	) -> Result<(bool, WalletInfo), Error> {
 		let mut update_from_node = false;
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
 			if let Some(_) = params.get("refresh") {

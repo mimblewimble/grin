@@ -61,7 +61,8 @@ where
 			None => {}
 		}
 	}
-	updater::apply_api_outputs(wallet, &wallet_outputs, &api_outputs)?;
+	let height = chain.head().unwrap().height;
+	updater::apply_api_outputs(wallet, &wallet_outputs, &api_outputs, height)?;
 	Ok(())
 }
 

@@ -74,15 +74,15 @@ pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<OutputData>) -> Re
 }
 
 /// Display summary info in a pretty way
-pub fn info(wallet_info: &WalletInfo) -> Result<(), Error> {
+pub fn info(wallet_info: &WalletInfo, validated: bool) {
 	println!(
-		"\n____ Wallet Summary Info at {} ({}) ____\n",
-		wallet_info.current_height, wallet_info.data_confirmed_from
+		"\n____ Wallet Summary Info as of {} ____\n",
+		wallet_info.last_confirmed_height
 	);
 	let mut table = table!(
 		[bFG->"Total", FG->amount_to_hr_string(wallet_info.total)],
 		[bFY->"Awaiting Confirmation", FY->amount_to_hr_string(wallet_info.amount_awaiting_confirmation)],
-		[bFY->"Confirmed but Still Locked", FY->amount_to_hr_string(wallet_info.amount_confirmed_but_locked)],
+		[bFY->"Immature Coinbase", FY->amount_to_hr_string(wallet_info.amount_immature)],
 		[bFG->"Currently Spendable", FG->amount_to_hr_string(wallet_info.amount_currently_spendable)],
 		[Fw->"---------", Fw->"---------"],
 		[Fr->"(Locked by previous transaction)", Fr->amount_to_hr_string(wallet_info.amount_locked)]
@@ -90,13 +90,11 @@ pub fn info(wallet_info: &WalletInfo) -> Result<(), Error> {
 	table.set_format(*prettytable::format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
 	table.printstd();
 	println!();
-
-	if !wallet_info.data_confirmed {
+	if !validated {
 		println!(
-			"\nWARNING: Failed to verify wallet contents with grin server. \
-			 Above info is maybe not fully updated or invalid! \
-			 Check that your `grin server` is OK, or see `wallet help restore`"
+			"\nWARNING: Wallet failed to verify data against a live chain. \
+			 The above is from local cache and only valid up to the given height! \
+			 (is your `grin server` offline or broken?)"
 		);
-	};
-	Ok(())
+	}
 }
