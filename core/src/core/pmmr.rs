@@ -97,10 +97,10 @@ where
 	fn get_data_file_path(&self) -> String;
 
 	/// Also a bit of a hack...
-	/// Saves a copy of the rewound utxo_set file with the block hash as
-	/// filename suffix We need this when sending a txhashset zip file to a
+	/// Saves a snapshot of the rewound utxo file with the block hash as
+	/// filename suffix. We need this when sending a txhashset zip file to a
 	/// node for fast sync.
-	fn save_utxo_copy(&self, header: &BlockHeader) -> Result<(), String>;
+	fn snapshot(&self, header: &BlockHeader) -> Result<(), String>;
 
 	/// For debugging purposes so we can see how compaction is doing.
 	fn dump_stats(&self);
@@ -412,8 +412,11 @@ where
 		Ok(elmt_pos)
 	}
 
-	pub fn save_utxo_copy(&mut self, header: &BlockHeader) -> Result<(), String> {
-		self.backend.save_utxo_copy(header)?;
+	/// Saves a snaphost of the MMR tagged with the block hash.
+	/// Specifically - snapshots the utxo file as we need this rewound before
+	/// sending the txhashset zip file to another node for fast-sync.
+	pub fn snapshot(&mut self, header: &BlockHeader) -> Result<(), String> {
+		self.backend.snapshot(header)?;
 		Ok(())
 	}
 

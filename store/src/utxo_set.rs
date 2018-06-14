@@ -57,7 +57,8 @@ impl UtxoSet {
 		})
 	}
 
-	pub fn copy_from(path: String, cp_path: String) -> io::Result<()> {
+	/// Copies a snapshot of the utxo file into the primary utxo file.
+	pub fn copy_snapshot(path: String, cp_path: String) -> io::Result<()> {
 		let cp_file_path = Path::new(&cp_path);
 
 		if !cp_file_path.exists() {
@@ -136,7 +137,10 @@ impl UtxoSet {
 		self.bitmap.remove(pos as u32);
 	}
 
-	pub fn save_copy(&self, header: &BlockHeader) -> io::Result<()> {
+	/// Saves the utxo file tagged with block hash as filename suffix.
+	/// Needed during fast-sync as the receiving node cannot rewind
+	/// after receiving the txhashset zip file.
+	pub fn snapshot(&self, header: &BlockHeader) -> io::Result<()> {
 		let mut cp_bitmap = self.bitmap.clone();
 		cp_bitmap.run_optimize();
 

@@ -189,9 +189,9 @@ where
 		self.data_file.path()
 	}
 
-	fn save_utxo_copy(&self, header: &BlockHeader) -> Result<(), String> {
+	fn snapshot(&self, header: &BlockHeader) -> Result<(), String> {
 		self.utxo_set
-			.save_copy(header)
+			.snapshot(header)
 			.map_err(|_| format!("Failed to save copy of utxo_set for {}", header.hash()))?;
 		Ok(())
 	}
@@ -227,8 +227,8 @@ where
 		let rm_log_path = format!("{}/{}", data_dir, PMMR_RM_LOG_FILE);
 
 		if let Some(header) = header {
-			let utxo_rewound_path = format!("{}/{}.{}", data_dir, PMMR_UTXO_FILE, header.hash());
-			UtxoSet::copy_from(utxo_set_path.clone(), utxo_rewound_path.clone())?;
+			let utxo_snapshot_path = format!("{}/{}.{}", data_dir, PMMR_UTXO_FILE, header.hash());
+			UtxoSet::copy_snapshot(utxo_set_path.clone(), utxo_snapshot_path.clone())?;
 		}
 
 		// If we need to migrate an old rm_log to a new utxo_set do it here before we

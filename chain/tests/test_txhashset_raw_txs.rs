@@ -41,7 +41,7 @@ fn test_some_raw_txs() {
 	clean_output_dir(&db_root);
 
 	let store = Arc::new(ChainKVStore::new(db_root.clone()).unwrap());
-	let mut txhashset = TxHashSet::open(db_root.clone(), store.clone()).unwrap();
+	let mut txhashset = TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
 
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();

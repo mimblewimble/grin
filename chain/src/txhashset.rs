@@ -733,12 +733,17 @@ impl<'a> Extension<'a> {
 		Ok(bitmap)
 	}
 
-	pub fn save_utxo_copy(&mut self, header: &BlockHeader) -> Result<(), Error> {
+	/// Saves a snapshot of the output and rangeproof MMRs to disk.
+	/// Specifically - saves a snapshot of the utxo file, tagged with
+	/// the block hash as filename suffix.
+	/// Needed for fast-sync (utxo file needs to be rewound before sending
+	/// across).
+	pub fn snapshot(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		self.output_pmmr
-			.save_utxo_copy(header)
+			.snapshot(header)
 			.map_err(|e| Error::Other(e))?;
 		self.rproof_pmmr
-			.save_utxo_copy(header)
+			.snapshot(header)
 			.map_err(|e| Error::Other(e))?;
 		Ok(())
 	}

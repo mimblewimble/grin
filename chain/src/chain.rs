@@ -607,7 +607,7 @@ impl Chain {
 			let mut txhashset = self.txhashset.write().unwrap();
 			txhashset::extending_readonly(&mut txhashset, |extension| {
 				extension.rewind(&header, &head_header)?;
-				extension.save_utxo_copy(&header)?;
+				extension.snapshot(&header)?;
 				Ok(())
 			})?;
 		}
