@@ -75,6 +75,7 @@ Height
 1     11     110       1010
      /  \    / \      /    \
 0   1   10 100 101  1000  1001  1011
+```
 
 This MMR has 11 nodes and its peaks are at position 111 (7), 1010 (10) and
 1011 (11). We first notice how the first leftmost peak is always going to be
@@ -83,7 +84,7 @@ peak will have a position of the form `2^n - 1` and will always be the
 largest such position that is inside the MMR (its position is lesser than the
 total size). We process iteratively for a MMR of size 11:
 
-
+```
 2^0 - 1 = 0, and 0 < 11
 2^1 - 1 = 1, and 1 < 11
 2^2 - 1 = 3, and 3 < 11
