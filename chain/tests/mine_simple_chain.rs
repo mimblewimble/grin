@@ -39,7 +39,10 @@ fn clean_output_dir(dir_name: &str) {
 }
 
 fn setup(dir_name: &str) -> Chain {
-	let _ = env_logger::init();
+	match env_logger::try_init() {
+		Ok(_) => println!("Initializing env logger"),
+		Err(e) => println!("env logger already initialized: {:?}", e),
+	};
 	clean_output_dir(dir_name);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();

@@ -36,7 +36,10 @@ fn clean_output_dir(dir_name: &str) {
 
 #[test]
 fn test_various_store_indices() {
-	let _ = env_logger::init();
+	match env_logger::try_init() {
+		Ok(_) => println!("Initializing env logger"),
+		Err(e) => println!("env logger already initialized: {:?}", e),
+	};
 	let chain_dir = ".grin_idx_1";
 	clean_output_dir(chain_dir);
 
@@ -72,7 +75,10 @@ fn test_various_store_indices() {
 
 #[test]
 fn test_store_header_height() {
-	let _ = env_logger::init();
+	match env_logger::try_init() {
+		Ok(_) => println!("Initializing env logger"),
+		Err(e) => println!("env logger already initialized: {:?}", e),
+	};
 	let chain_dir = ".grin_idx_2";
 	clean_output_dir(chain_dir);
 
