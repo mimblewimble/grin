@@ -154,6 +154,7 @@ fn accept_workers(
 
 pub struct Worker {
 	id: String,
+	agent: String,
 	login: Option<String>,
 	stream: BufStream<TcpStream>,
 	error: bool,
@@ -165,6 +166,7 @@ impl Worker {
 	pub fn new(id: String, stream: BufStream<TcpStream>) -> Worker {
 		Worker {
 			id: id,
+			agent: String::from(""),
 			login: None,
 			stream: stream,
 			error: false,
@@ -307,21 +309,16 @@ impl StratumServer {
 						.unwrap();
 					stratum_stats.worker_stats[worker_stats_id].last_seen = SystemTime::now();
 
-					// Extract the request parameters from Value to JSON string
-			                let params = match request.params {
-						Some(val) => Some(serde_json::to_string(&val).unwrap()),
-						None => None,
-					};
 					// Call the handler function for requested method
 					let (response, err) = match request.method.as_str() {
 						"login" => {
 							let (response, err) =
-								self.handle_login(params, &mut workers_l[num]);
+								self.handle_login(request.params, &mut workers_l[num]);
 							(response, err)
 						}
 						"submit" => {
 							let res = self.handle_submit(
-								params,
+								request.params,
 								&mut workers_l[num],
 								&mut stratum_stats.worker_stats[worker_stats_id],
 							);
@@ -413,56 +410,48 @@ impl StratumServer {
 	}
 
 	// Handle LOGIN message
-	fn handle_login(&self, params: Option<String>, worker: &mut Worker) -> (String, bool) {
-		// Extract the params string into a LoginParams struct
-		let params_str = match params {
-			Some(val) => val,
-			None => String::from("{}"),
-		};
-		let login_params: LoginParams = match serde_json::from_str(&params_str) {
-			Ok(val) => val,
-			Err(_e) => {
+	fn handle_login(&self, params: Option<Value>, worker: &mut Worker) -> (String, bool) {
+		let params: LoginParams = match params {
+			Some(val) => serde_json::from_value(val).unwrap(),
+			None =>  {
 				let r = r#"{"code": -32600, "message": "Invalid Request"}"#;
 				return (String::from(r), true);
-			}
+			},
 		};
-		worker.login = Some(login_params.login);
-		// XXX TODO Future? - Validate login and password
+		worker.login = Some(params.login);
+		// XXX TODO Future - Validate password?
+		worker.agent = params.agent;
 		worker.authenticated = true;
 		return (String::from("ok"), false);
 	}
 
 	// Handle SUBMIT message
-	//  params contains a solved block header
+	// params contains a solved block header
 	// We accept and log valid shares of all difficulty above configured minimum
 	// Accepted shares that are full solutions will also be submitted to the
 	// network
 	fn handle_submit(
 		&self,
-		params: Option<String>,
+		params: Option<Value>,
 		worker: &mut Worker,
 		worker_stats: &mut WorkerStats,
 	) -> (String, bool) {
-		// Extract the params string into a SubmitParams struct
-		let params_str = match params {
-			Some(val) => val,
-			None => String::from("{}"),
-		};
-		let submit_params: SubmitParams = match serde_json::from_str(&params_str) {
-			Ok(val) => val,
-			Err(_e) => {
+		// Validate parameters
+		let params: SubmitParams = match params {
+			Some(val) => serde_json::from_value(val).unwrap(),
+			None =>  {
 				let r = r#"{"code": -32600, "message": "Invalid Request"}"#;
 				return (String::from(r), true);
-			}
+			},
 		};
 
 		let mut b: Block;
 		let share_difficulty: u64;
-		if submit_params.height == self.current_block.header.height {
+		if params.height == self.current_block.header.height {
 			// Reconstruct the block header with this nonce and pow added
 			b = self.current_block.clone();
-			b.header.nonce = submit_params.nonce;
-			b.header.pow.nonces = submit_params.pow;
+			b.header.nonce = params.nonce;
+			b.header.pow.nonces = params.pow;
 			// Get share difficulty
 			share_difficulty = b.header.pow.to_difficulty().to_num();
 			// If the difficulty is too low its an error
@@ -489,7 +478,7 @@ impl StratumServer {
 						LOGGER,
 						"(Server ID: {}) Failed to validate solution at height {}: {:?}",
 						self.id,
-						submit_params.height,
+						params.height,
 						e
 					);
 					worker_stats.num_rejected += 1;
@@ -507,7 +496,7 @@ impl StratumServer {
 						LOGGER,
 						"(Server ID: {}) Failed to validate share at height {} with nonce {}",
 						self.id,
-						submit_params.height,
+						params.height,
 						b.header.nonce
 					);
 					worker_stats.num_rejected += 1;
@@ -522,7 +511,7 @@ impl StratumServer {
 				LOGGER,
 				"(Server ID: {}) Share at height {} submitted too late",
 				self.id,
-				submit_params.height
+				params.height,
 			);
 			worker_stats.num_stale += 1;
 			let e = r#"{"code": -32503, "message": "Solution submitted too late"}"#;
