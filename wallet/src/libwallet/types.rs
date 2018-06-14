@@ -413,7 +413,7 @@ pub struct WalletInfo {
 	pub amount_immature: u64,
 	/// amount currently spendable
 	pub amount_currently_spendable: u64,
-	/// amount locked by previous transactions
+	/// amount locked via previous transactions
 	pub amount_locked: u64,
 }
 
