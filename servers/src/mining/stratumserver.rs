@@ -362,7 +362,7 @@ impl StratumServer {
 						rpc_response = serde_json::to_string(&resp).unwrap();
 					} else {
 						// Issue #1159 - use a serde_json Value type to avoid extra quoting
-						let response_value: Value = serde_json::from_str(&response.as_str()).unwrap();
+						let response_value: Value = serde_json::from_str(response.as_str()).unwrap();
 						let resp = RpcResponse {
 							id: workers_l[num].id.clone(),
 							jsonrpc: String::from("2.0"),
@@ -406,7 +406,7 @@ impl StratumServer {
 
 	// Handle KEEPALIVE message
 	fn handle_keepalive(&self) -> (String, bool) {
-		return (String::from("ok"), false);
+		return (String::from("{\"status\":\"ok\"}"), false);
 	}
 
 	// Handle LOGIN message
@@ -422,7 +422,7 @@ impl StratumServer {
 		// XXX TODO Future - Validate password?
 		worker.agent = params.agent;
 		worker.authenticated = true;
-		return (String::from("ok"), false);
+		return (String::from("{\"status\":\"ok\"}"), false);
 	}
 
 	// Handle SUBMIT message
@@ -535,7 +535,7 @@ impl StratumServer {
 			submitted_by,
 		);
 		worker_stats.num_accepted += 1;
-		return (String::from("ok"), false);
+		return (String::from("{\"status\":\"ok\"}"), false);
 	} // handle submit a solution
 
 	// Purge dead/sick workers - remove all workers marked in error state
