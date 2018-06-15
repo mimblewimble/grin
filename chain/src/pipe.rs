@@ -310,7 +310,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	let prev = ctx.store.get_block_header(&b.header.previous)?;
 	b.validate(&prev.total_kernel_offset, &prev.total_kernel_sum)
-			.map_err(&Error::InvalidBlockProof)?;
+		.map_err(&Error::InvalidBlockProof)?;
 	Ok(())
 }
 

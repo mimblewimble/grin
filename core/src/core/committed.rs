@@ -17,9 +17,9 @@
 use keychain;
 use keychain::BlindingFactor;
 
+use util::secp::key::SecretKey;
 use util::secp::pedersen::*;
 use util::{secp, secp_static, static_secp_instance};
-use util::secp::key::SecretKey;
 
 /// Errors from summing and verifying kernel excesses via committed trait.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,7 +54,6 @@ pub trait Committed {
 		&self,
 		offset: &BlindingFactor,
 	) -> Result<(Commitment, Commitment), Error> {
-	
 		// then gather the kernel excess commitments
 		let kernel_commits = self.kernels_committed();
 
@@ -78,12 +77,8 @@ pub trait Committed {
 		Ok((kernel_sum, kernel_sum_plus_offset))
 	}
 
-
 	/// Gathers commitments and sum them.
-	fn sum_commitments(
-		&self,
-		overage: i64,
-	) -> Result<Commitment, Error> {
+	fn sum_commitments(&self, overage: i64) -> Result<Commitment, Error> {
 		// gather the commitments
 		let mut input_commits = self.inputs_committed();
 		let mut output_commits = self.outputs_committed();
@@ -127,8 +122,7 @@ pub trait Committed {
 		let utxo_sum = self.sum_commitments(overage)?;
 
 		// Sum the kernel excesses accounting for the kernel offset.
-		let (kernel_sum, kernel_sum_plus_offset) =
-			self.sum_kernel_excesses(&kernel_offset)?;
+		let (kernel_sum, kernel_sum_plus_offset) = self.sum_kernel_excesses(&kernel_offset)?;
 
 		if utxo_sum != kernel_sum_plus_offset {
 			return Err(Error::KernelSumMismatch);
@@ -139,7 +133,10 @@ pub trait Committed {
 }
 
 /// Utility to sum positive and negative commitments, eliminating zero values
-pub fn sum_commits(mut positive: Vec<Commitment>, mut negative: Vec<Commitment>) -> Result<Commitment, Error> {
+pub fn sum_commits(
+	mut positive: Vec<Commitment>,
+	mut negative: Vec<Commitment>,
+) -> Result<Commitment, Error> {
 	let zero_commit = secp_static::commit_to_zero_value();
 	positive.retain(|x| *x != zero_commit);
 	negative.retain(|x| *x != zero_commit);
@@ -151,7 +148,10 @@ pub fn sum_commits(mut positive: Vec<Commitment>, mut negative: Vec<Commitment>)
 /// Utility function to take sets of positive and negative kernel offsets as
 /// blinding factors, convert them to private key filtering zero values and
 /// summing all of them. Useful to build blocks.
-pub fn sum_kernel_offsets(positive: Vec<BlindingFactor>, negative: Vec<BlindingFactor>) -> Result<BlindingFactor, Error> {
+pub fn sum_kernel_offsets(
+	positive: Vec<BlindingFactor>,
+	negative: Vec<BlindingFactor>,
+) -> Result<BlindingFactor, Error> {
 	let secp = static_secp_instance();
 	let secp = secp.lock().unwrap();
 	let positive = to_secrets(positive, &secp);
@@ -166,8 +166,7 @@ pub fn sum_kernel_offsets(positive: Vec<BlindingFactor>, negative: Vec<BlindingF
 }
 
 fn to_secrets(bf: Vec<BlindingFactor>, secp: &secp::Secp256k1) -> Vec<SecretKey> {
-	bf
-		.into_iter()
+	bf.into_iter()
 		.filter(|x| *x != BlindingFactor::zero())
 		.filter_map(|x| x.secret_key(&secp).ok())
 		.collect::<Vec<_>>()

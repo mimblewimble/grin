@@ -774,11 +774,7 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Validate the txhashset state against the provided block header.
-	pub fn validate(
-		&mut self,
-		header: &BlockHeader,
-		skip_rproofs: bool,
-	) -> Result<(), Error> {
+	pub fn validate(&mut self, header: &BlockHeader, skip_rproofs: bool) -> Result<(), Error> {
 		self.validate_mmrs()?;
 		self.validate_roots(header)?;
 

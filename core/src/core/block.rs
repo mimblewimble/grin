@@ -33,7 +33,7 @@ use keychain;
 use keychain::BlindingFactor;
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util::LOGGER;
-use util::{secp, static_secp_instance, secp_static};
+use util::{secp, secp_static, static_secp_instance};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
@@ -603,7 +603,7 @@ impl Block {
 		kernel_offsets.push(prev.total_kernel_offset);
 		let total_kernel_offset = committed::sum_kernel_offsets(kernel_offsets, vec![])?;
 
-		let total_kernel_sum = {	
+		let total_kernel_sum = {
 			let zero_commit = secp_static::commit_to_zero_value();
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
@@ -707,17 +707,14 @@ impl Block {
 		// verify outputs and kernel sums
 		let block_kernel_offset = committed::sum_kernel_offsets(
 			vec![self.header.total_kernel_offset()],
-			vec![prev_kernel_offset.clone()]
+			vec![prev_kernel_offset.clone()],
 		)?;
-		let sum = self.verify_kernel_sums(
-			self.header.overage(),
-			block_kernel_offset,
-		)?;
+		let sum = self.verify_kernel_sums(self.header.overage(), block_kernel_offset)?;
 
 		// check the block header's total kernel sum
 		let total_sum = committed::sum_commits(vec![sum, prev_kernel_sum.clone()], vec![])?;
 		if total_sum != self.header.total_kernel_sum {
-			return Err(Error::InvalidTotalKernelSum)
+			return Err(Error::InvalidTotalKernelSum);
 		}
 
 		self.verify_rangeproofs()?;

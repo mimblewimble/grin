@@ -28,7 +28,7 @@ use grin_core::core::id::{ShortId, ShortIdentifiable};
 use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
 use grin_core::global;
 use grin_core::ser;
-use keychain::{ExtKeychain, Keychain, BlindingFactor};
+use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::time::Instant;
 use wallet::libtx::build::{self, input, output, with_fee};
 
@@ -170,10 +170,10 @@ fn remove_coinbase_output_flag() {
 		.remove(OutputFeatures::COINBASE_OUTPUT);
 
 	assert_eq!(b.verify_coinbase(), Err(Error::CoinbaseSumMismatch));
-	assert!(b.verify_kernel_sums(
-		b.header.overage(),
-		b.header.total_kernel_offset(),
-	).is_ok());
+	assert!(
+		b.verify_kernel_sums(b.header.overage(), b.header.total_kernel_offset())
+			.is_ok()
+	);
 	assert_eq!(
 		b.validate(&BlindingFactor::zero(), &zero_commit),
 		Err(Error::CoinbaseSumMismatch)
