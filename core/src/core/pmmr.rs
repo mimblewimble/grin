@@ -37,7 +37,7 @@
 
 use croaring::Bitmap;
 
-use core::hash::{Hash, Hashed};
+use core::hash::Hash;
 use core::BlockHeader;
 use ser::{self, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
 
