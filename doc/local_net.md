@@ -73,6 +73,6 @@ use node 2's API listener to validate our transaction inputs before sending:
     node1$ grin wallet -p "password" -a "http://127.0.0.1:20001" send 20000 -d "http://127.0.0.1:35000"
 
 Your terminal windows should all light up now. Node 1 will check its inputs against node 2, and then send a partial transaction to node 3's wallet listener. Node 3 has been configured to
-send signed and finalised transactions to the api listener on node 1, which should then add the transaction to the next block and validate it via mining.
+send signed and finalized transactions to the api listener on node 1, which should then add the transaction to the next block and validate it via mining.
 
 You can feel free to try any number of permutations or combinations of the above, just note that grin is very new and under active development, so your mileage may vary. You can also use a separate 'grin.toml' file in each server directory to simplify command line switches.

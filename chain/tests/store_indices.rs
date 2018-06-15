@@ -22,15 +22,12 @@ extern crate rand;
 use std::fs;
 
 use chain::{ChainStore, Tip};
-use core::core::Block;
-use core::core::BlockHeader;
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
-use core::global;
-use core::global::ChainTypes;
+use core::core::{Block, BlockHeader};
+use core::global::{self, ChainTypes};
 use core::pow;
 use keychain::{ExtKeychain, Keychain};
-
 use wallet::libtx;
 
 fn clean_output_dir(dir_name: &str) {
@@ -39,7 +36,10 @@ fn clean_output_dir(dir_name: &str) {
 
 #[test]
 fn test_various_store_indices() {
-	let _ = env_logger::init();
+	match env_logger::try_init() {
+		Ok(_) => println!("Initializing env logger"),
+		Err(e) => println!("env logger already initialized: {:?}", e),
+	};
 	let chain_dir = ".grin_idx_1";
 	clean_output_dir(chain_dir);
 
@@ -75,7 +75,10 @@ fn test_various_store_indices() {
 
 #[test]
 fn test_store_header_height() {
-	let _ = env_logger::init();
+	match env_logger::try_init() {
+		Ok(_) => println!("Initializing env logger"),
+		Err(e) => println!("env logger already initialized: {:?}", e),
+	};
 	let chain_dir = ".grin_idx_2";
 	clean_output_dir(chain_dir);
 

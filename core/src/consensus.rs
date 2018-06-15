@@ -72,7 +72,7 @@ pub const CUT_THROUGH_HORIZON: u32 = 48 * 3600 / (BLOCK_TIME_SEC as u32);
 /// peer-to-peer networking layer only for DoS protection.
 pub const MAX_MSG_LEN: u64 = 20_000_000;
 
-/// Weight of an input when counted against the max block weigth capacity
+/// Weight of an input when counted against the max block weight capacity
 pub const BLOCK_INPUT_WEIGHT: usize = 1;
 
 /// Weight of an output when counted against the max block weight capacity
@@ -178,7 +178,7 @@ impl fmt::Display for TargetError {
 ///
 /// The difficulty calculation is based on both Digishield and GravityWave
 /// family of difficulty computation, coming to something very close to Zcash.
-/// The refence difficulty is an average of the difficulty over a window of
+/// The reference difficulty is an average of the difficulty over a window of
 /// DIFFICULTY_ADJUST_WINDOW blocks. The corresponding timespan is calculated
 /// by using the difference between the median timestamps at the beginning
 /// and the end of the window.

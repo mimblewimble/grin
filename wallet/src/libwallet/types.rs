@@ -24,7 +24,6 @@ use failure::ResultExt;
 
 use core::core::hash::Hash;
 use core::core::pmmr::MerkleProof;
-
 use keychain::{Identifier, Keychain};
 
 use libtx::slate::Slate;
@@ -40,7 +39,7 @@ pub trait WalletBackend<K>
 where
 	K: Keychain,
 {
-	/// Initialise with whatever stored credentials we have
+	/// Initialize with whatever stored credentials we have
 	fn open_with_credentials(&mut self) -> Result<(), Error>;
 
 	/// Close wallet and remove any stored credentials (TBD)
@@ -77,7 +76,11 @@ where
 	fn get_output(&self, key_id: &Identifier) -> Option<&OutputData>;
 
 	/// Next child ID when we want to create a new output
-	fn next_child(&self, root_key_id: Identifier) -> u32;
+	/// Should also increment index
+	fn next_child(&mut self, root_key_id: Identifier) -> u32;
+
+	/// Return current details
+	fn details(&mut self) -> &mut WalletDetails;
 
 	/// Select spendable coins from the wallet
 	fn select_coins(
@@ -107,7 +110,7 @@ pub trait WalletClient {
 	/// TODO: Probably need a slate wrapper type
 	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, Error>;
 
-	/// Posts a tranaction to a grin node
+	/// Posts a transaction to a grin node
 	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error>;
 
 	/// retrieves the current tip from the specified grin node
@@ -144,7 +147,7 @@ pub trait WalletClient {
 }
 
 /// Information about an output that's being tracked by the wallet. Must be
-/// enough to reconstruct the commitment associated with the ouput when the
+/// enough to reconstruct the commitment associated with the output when the
 /// root private key is known.*/
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
@@ -247,7 +250,7 @@ impl OutputData {
 pub enum OutputStatus {
 	/// Unconfirmed
 	Unconfirmed,
-	/// Unspend
+	/// Unspent
 	Unspent,
 	/// Locked
 	Locked,
@@ -400,21 +403,40 @@ pub struct CbData {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WalletInfo {
 	/// height from which info was taken
-	pub current_height: u64,
+	pub last_confirmed_height: u64,
 	/// total amount in the wallet
 	pub total: u64,
 	/// amount awaiting confirmation
 	pub amount_awaiting_confirmation: u64,
-	/// confirmed but locked
-	pub amount_confirmed_but_locked: u64,
+	/// coinbases waiting for lock height
+	pub amount_immature: u64,
 	/// amount currently spendable
 	pub amount_currently_spendable: u64,
-	/// amount locked by previous transactions
+	/// amount locked via previous transactions
 	pub amount_locked: u64,
-	/// whether the data was confirmed against a live node
-	pub data_confirmed: bool,
-	/// node confirming the data
-	pub data_confirmed_from: String,
+}
+
+/// Separate data for a wallet, containing fields
+/// that are needed but not necessarily represented
+/// via simple rows of OutputData
+/// If a wallet is restored from seed this is obvious
+/// lost and re-populated as well as possible
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WalletDetails {
+	/// The last block height at which the wallet data
+	/// was confirmed against a node
+	pub last_confirmed_height: u64,
+	/// The last child index used
+	pub last_child_index: u32,
+}
+
+impl Default for WalletDetails {
+	fn default() -> WalletDetails {
+		WalletDetails {
+			last_confirmed_height: 0,
+			last_child_index: 0,
+		}
+	}
 }
 
 /// Dummy wrapper for the hex-encoded serialized transaction.
@@ -422,4 +444,21 @@ pub struct WalletInfo {
 pub struct TxWrapper {
 	/// hex representation of transaction
 	pub tx_hex: String,
+}
+
+/// Send TX API Args
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SendTXArgs {
+	/// amount to send
+	pub amount: u64,
+	/// minimum confirmations
+	pub minimum_confirmations: u64,
+	/// destination url
+	pub dest: String,
+	/// Max number of outputs
+	pub max_outputs: usize,
+	/// whether to use all outputs (combine)
+	pub selection_strategy_is_use_all: bool,
+	/// dandelion control
+	pub fluff: bool,
 }

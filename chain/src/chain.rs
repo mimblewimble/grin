@@ -30,7 +30,7 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::*;
+use types::{BlockMarker, BlockSums, ChainAdapter, ChainStore, Error, Options, Tip};
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::LOGGER;
 
@@ -685,7 +685,7 @@ impl Chain {
 		Ok(())
 	}
 
-	/// Triggers chain compaction, cleaning up some unecessary historical
+	/// Triggers chain compaction, cleaning up some unnecessary historical
 	/// information. We introduce a chain depth called horizon, which is
 	/// typically in the range of a couple days. Before that horizon, this
 	/// method will:

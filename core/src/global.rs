@@ -16,19 +16,15 @@
 //! having to pass them all over the place, but aren't consensus values.
 //! should be used sparingly.
 
+use consensus::TargetError;
+use consensus::{BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_SIZESHIFT,
+                DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE};
+use core::target::Difficulty;
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
 /// e.g. CI, User testing, production values
-
 use std::sync::RwLock;
-use consensus::PROOFSIZE;
-use consensus::DEFAULT_SIZESHIFT;
-use consensus::COINBASE_MATURITY;
-use consensus::{BLOCK_TIME_SEC, CUT_THROUGH_HORIZON, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY,
-                MEDIAN_TIME_WINDOW};
-use core::target::Difficulty;
-use consensus::TargetError;
 
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
@@ -193,8 +189,9 @@ pub fn get_genesis_nonce() -> u64 {
 	}
 }
 
-/// Converts an iterator of block difficulty data to more a more mangeable vector and pads
-/// if needed (which will) only be needed for the first few blocks after genesis
+/// Converts an iterator of block difficulty data to more a more mangeable
+/// vector and pads if needed (which will) only be needed for the first few
+/// blocks after genesis
 
 pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<Result<(u64, Difficulty), TargetError>>
 where

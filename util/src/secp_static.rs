@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //! Globally accessible static instance of secp256k1, to avoid
-//! initialisation overhead
+//! initialization overhead
 
 use rand::thread_rng;
 use secp_ as secp;
@@ -33,8 +33,7 @@ pub fn static_secp_instance() -> Arc<Mutex<secp::Secp256k1>> {
 	SECP256K1.clone()
 }
 
-// TODO - Can we generate this once and memoize it for subsequent use?
-// Even if we clone it each time it will likely be faster than this.
+/// Convenient way to generate a commitment to zero.
 pub fn commit_to_zero_value() -> secp::pedersen::Commitment {
 	let secp = static_secp_instance();
 	let secp = secp.lock().unwrap();

@@ -24,10 +24,9 @@ use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::{self, family, Backend};
 use core::core::prune_list::PruneList;
 use core::core::BlockHeader;
-use core::ser;
-use core::ser::PMMRable;
+use core::ser::{self, PMMRable};
 use rm_log::RemoveLog;
-use types::*;
+use types::{prune_noop, read_ordered_vec, write_vec, AppendOnlyFile};
 use util::LOGGER;
 use utxo_set::UtxoSet;
 

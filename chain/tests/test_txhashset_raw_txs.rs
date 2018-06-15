@@ -21,8 +21,7 @@ use std::fs;
 use std::sync::Arc;
 
 use chain::store::ChainKVStore;
-use chain::txhashset;
-use chain::txhashset::TxHashSet;
+use chain::txhashset::{self, TxHashSet};
 use chain::types::Tip;
 use chain::ChainStore;
 use core::core::pmmr::MerkleProof;

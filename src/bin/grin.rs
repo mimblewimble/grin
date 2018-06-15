@@ -301,7 +301,7 @@ fn main() {
 	});
 
 	if global_config.using_config_file {
-		// initialise the logger
+		// initialize the logger
 		let mut log_conf = global_config
 			.members
 			.as_mut()
@@ -681,18 +681,19 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					Ok(())
 				}
 				("info", Some(_)) => {
-					let _res = wallet::display::info(&api.retrieve_summary_info()?.1)
-						.unwrap_or_else(|e| {
+					let (validated, wallet_info) =
+						api.retrieve_summary_info(true).unwrap_or_else(|e| {
 							panic!(
 								"Error getting wallet info: {:?} Config: {:?}",
 								e, wallet_config
 							)
 						});
+					wallet::display::info(&wallet_info, validated);
 					Ok(())
 				}
 				("outputs", Some(_)) => {
 					let (height, validated) = api.node_height()?;
-					let (_, outputs) = api.retrieve_outputs(show_spent)?;
+					let (_, outputs) = api.retrieve_outputs(show_spent, true)?;
 					let _res =
 						wallet::display::outputs(height, validated, outputs).unwrap_or_else(|e| {
 							panic!(

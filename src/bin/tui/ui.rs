@@ -18,21 +18,21 @@
 use std::sync::{mpsc, Arc};
 use time;
 
-use cursive::Cursive;
+use cursive::direction::Orientation;
+use cursive::theme::BaseColor::{Black, Blue, Cyan, White};
+use cursive::theme::Color::Dark;
+use cursive::theme::PaletteColor::{Background, Highlight, HighlightInactive, Primary, Shadow, View};
 use cursive::theme::{BaseColor, BorderStyle, Color, Theme};
-use cursive::theme::PaletteColor::*;
-use cursive::theme::Color::*;
-use cursive::theme::BaseColor::*;
+use cursive::traits::Identifiable;
 use cursive::utils::markup::StyledString;
 use cursive::views::{LinearLayout, Panel, StackView, TextView, ViewBox};
-use cursive::direction::Orientation;
-use cursive::traits::*;
+use cursive::Cursive;
 
 use servers::Server;
 
+use tui::constants::ROOT_STACK;
+use tui::types::{TUIStatusListener, UIMessage};
 use tui::{menu, mining, peers, status, version};
-use tui::types::*;
-use tui::constants::*;
 
 use built_info;
 
