@@ -929,7 +929,10 @@ impl<'a> Extension<'a> {
 				.rewind(current.kernel_mmr_size, current.height as u32)
 				.map_err(&Error::TxHashSetErr)?;
 			if self.kernel_pmmr.root() != current.kernel_root {
-				return Err(Error::InvalidTxHashSet(format!("Kernel root at {} does not match", current.height)));
+				return Err(Error::InvalidTxHashSet(format!(
+					"Kernel root at {} does not match",
+					current.height
+				)));
 			}
 		}
 		Ok(())
