@@ -22,6 +22,7 @@ use croaring::Bitmap;
 use core::core::hash::Hash;
 use core::core::pmmr::{self, Backend, MerkleProof, PMMR};
 use core::core::prune_list::PruneList;
+use core::core::BlockHeader;
 use core::ser::{self, Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
 
 /// Simple MMR backend implementation based on a Vector. Pruning does not
@@ -102,6 +103,10 @@ where
 
 	fn get_data_file_path(&self) -> String {
 		"".to_string()
+	}
+
+	fn snapshot(&self, header: &BlockHeader) -> Result<(), String> {
+		Ok(())
 	}
 
 	fn dump_stats(&self) {}
@@ -401,7 +406,7 @@ fn pmmr_merkle_proof_prune_and_rewind() {
 
 	// now prune an element and check we can still generate
 	// the correct Merkle proof for the other element (after sibling pruned)
-	pmmr.prune(1, 1).unwrap();
+	pmmr.prune(1).unwrap();
 	let proof_2 = pmmr.merkle_proof(2).unwrap();
 	assert_eq!(proof, proof_2);
 }
@@ -604,7 +609,7 @@ fn pmmr_prune() {
 	// pruning a leaf with no parent should do nothing
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(16, 0).unwrap();
+		pmmr.prune(16).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
 	assert_eq!(ba.elems.len(), 16);
@@ -613,7 +618,7 @@ fn pmmr_prune() {
 	// pruning leaves with no shared parent just removes 1 element
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(2, 0).unwrap();
+		pmmr.prune(2).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
 	assert_eq!(ba.elems.len(), 16);
@@ -621,7 +626,7 @@ fn pmmr_prune() {
 
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(4, 0).unwrap();
+		pmmr.prune(4).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
 	assert_eq!(ba.elems.len(), 16);
@@ -630,7 +635,7 @@ fn pmmr_prune() {
 	// pruning a non-leaf node has no effect
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(3, 0).unwrap_err();
+		pmmr.prune(3).unwrap_err();
 		assert_eq!(orig_root, pmmr.root());
 	}
 	assert_eq!(ba.elems.len(), 16);
@@ -639,7 +644,7 @@ fn pmmr_prune() {
 	// TODO - no longer true (leaves only now) - pruning sibling removes subtree
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(5, 0).unwrap();
+		pmmr.prune(5).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
 	assert_eq!(ba.elems.len(), 16);
@@ -649,7 +654,7 @@ fn pmmr_prune() {
 	// removes all subtree
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(1, 0).unwrap();
+		pmmr.prune(1).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
 	assert_eq!(ba.elems.len(), 16);
@@ -659,7 +664,7 @@ fn pmmr_prune() {
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 		for n in 1..16 {
-			let _ = pmmr.prune(n, 0);
+			let _ = pmmr.prune(n);
 		}
 		assert_eq!(orig_root, pmmr.root());
 	}
@@ -1008,11 +1013,11 @@ fn check_elements_from_insertion_index() {
 	assert_eq!(res.1[349].0[3], 999);
 
 	// pruning a few nodes should get consistent results
-	pmmr.prune(pmmr::insertion_to_pmmr_index(650), 0).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(651), 0).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(800), 0).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(900), 0).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(998), 0).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(650)).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(651)).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(800)).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(900)).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(998)).unwrap();
 	let res = pmmr.elements_from_insertion_index(650, 1000);
 	assert_eq!(res.0, 999);
 	assert_eq!(res.1.len(), 345);
