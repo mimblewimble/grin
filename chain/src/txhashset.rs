@@ -35,8 +35,8 @@ use core::ser::{PMMRIndexHashable, PMMRable};
 use grin_store;
 use grin_store::pmmr::PMMRBackend;
 use grin_store::types::prune_noop;
-use types::{BlockMarker, BlockSums, ChainStore, Error, TxHashSetRoots};
-use util::{secp_static, zip, LOGGER};
+use types::{BlockMarker, ChainStore, Error, TxHashSetRoots};
+use util::{zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
 const OUTPUT_SUBDIR: &'static str = "output";
@@ -774,23 +774,18 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Validate the txhashset state against the provided block header.
-	pub fn validate(
-		&mut self,
-		header: &BlockHeader,
-		skip_rproofs: bool,
-	) -> Result<((Commitment, Commitment)), Error> {
+	pub fn validate(&mut self, header: &BlockHeader, skip_rproofs: bool) -> Result<(), Error> {
 		self.validate_mmrs()?;
 		self.validate_roots(header)?;
 
 		if header.height == 0 {
-			let zero_commit = secp_static::commit_to_zero_value();
-			return Ok((zero_commit.clone(), zero_commit.clone()));
+			return Ok(());
 		}
 
 		// The real magicking happens here.
 		// Sum of kernel excesses should equal sum of
 		// unspent outputs minus total supply.
-		let (output_sum, kernel_sum) = self.verify_kernel_sums(
+		self.verify_kernel_sums(
 			header.total_overage(),
 			header.total_kernel_offset(),
 			None,
@@ -806,24 +801,6 @@ impl<'a> Extension<'a> {
 			self.verify_rangeproofs()?;
 		}
 
-		Ok((output_sum, kernel_sum))
-	}
-
-	/// Save blocks sums (the output_sum and kernel_sum) for the given block
-	/// header.
-	pub fn save_latest_block_sums(
-		&self,
-		header: &BlockHeader,
-		output_sum: Commitment,
-		kernel_sum: Commitment,
-	) -> Result<(), Error> {
-		self.commit_index.save_block_sums(
-			&header.hash(),
-			&BlockSums {
-				output_sum,
-				kernel_sum,
-			},
-		)?;
 		Ok(())
 	}
 

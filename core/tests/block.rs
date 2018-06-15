@@ -27,7 +27,7 @@ use grin_core::core::id::{ShortId, ShortIdentifiable};
 use grin_core::core::Committed;
 use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
 use grin_core::{global, ser};
-use keychain::{ExtKeychain, Keychain};
+use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::time::Instant;
 use util::{secp, secp_static};
 use wallet::libtx::build::{self, input, output, with_fee};
@@ -59,7 +59,7 @@ fn too_large_block() {
 	let prev = BlockHeader::default();
 	let key_id = keychain.derive_key_id(1).unwrap();
 	let b = new_block(vec![&tx], &keychain, &prev, &key_id);
-	assert!(b.validate(&zero_commit, &zero_commit).is_err());
+	assert!(b.validate(&BlindingFactor::zero()).is_err());
 }
 
 #[test]
@@ -109,7 +109,7 @@ fn block_with_cut_through() {
 
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
-	b.validate(&zero_commit, &zero_commit).unwrap();
+	b.validate(&BlindingFactor::zero()).unwrap();
 	assert_eq!(b.inputs.len(), 3);
 	assert_eq!(b.outputs.len(), 3);
 }
@@ -117,7 +117,6 @@ fn block_with_cut_through() {
 #[test]
 fn empty_block_with_coinbase_is_valid() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let zero_commit = secp_static::commit_to_zero_value();
 	let prev = BlockHeader::default();
 	let key_id = keychain.derive_key_id(1).unwrap();
 	let b = new_block(vec![], &keychain, &prev, &key_id);
@@ -142,7 +141,7 @@ fn empty_block_with_coinbase_is_valid() {
 
 	// the block should be valid here (single coinbase output with corresponding
 	// txn kernel)
-	assert!(b.validate(&zero_commit, &zero_commit).is_ok());
+	assert!(b.validate(&prev.total_kernel_offset).is_ok());
 }
 
 #[test]
@@ -173,7 +172,7 @@ fn remove_coinbase_output_flag() {
 		None
 	).is_ok());
 	assert_eq!(
-		b.validate(&zero_commit, &zero_commit),
+		b.validate(&BlindingFactor::zero()),
 		Err(Error::CoinbaseSumMismatch)
 	);
 }
@@ -203,7 +202,7 @@ fn remove_coinbase_kernel_flag() {
 	);
 
 	assert_eq!(
-		b.validate(&zero_commit, &zero_commit),
+		b.validate(&BlindingFactor::zero()),
 		Err(Error::Secp(secp::Error::IncorrectCommitSum))
 	);
 }
