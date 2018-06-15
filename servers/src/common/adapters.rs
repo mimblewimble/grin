@@ -140,8 +140,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				.upgrade()
 				.expect("failed to upgrade weak ref to chain");
 
-			if let Ok(sums) = chain.get_block_sums(&cb.header.previous) {
-				if block.validate(&sums.output_sum, &sums.kernel_sum).is_ok() {
+			if let Ok(prev_header) = chain.get_block_header(&cb.header.previous) {
+				if block.validate(&prev_header).is_ok() {
 					debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
 					self.process_block(block, addr)
 				} else {

@@ -23,14 +23,13 @@ use std::time::{Duration, Instant};
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
-use core::core::Committed;
 use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{BlockMarker, BlockSums, ChainAdapter, ChainStore, Error, Options, Tip};
+use types::{BlockMarker, ChainAdapter, ChainStore, Error, Options, Tip};
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::LOGGER;
 
@@ -190,33 +189,6 @@ impl Chain {
 						extension.rewind(&header)?;
 
 						extension.validate_roots(&header)?;
-
-						// now check we have the "block sums" for the block in question
-						// if we have no sums (migrating an existing node) we need to go
-						// back to the txhashset and sum the outputs and kernels
-						if header.height > 0 && store.get_block_sums(&header.hash()).is_err() {
-							debug!(
-								LOGGER,
-								"chain: init: building (missing) block sums for {} @ {}",
-								header.height,
-								header.hash()
-							);
-
-							let (output_sum, kernel_sum) = extension.verify_kernel_sums(
-								header.total_overage(),
-								header.total_kernel_offset(),
-								None,
-								None,
-							)?;
-
-							store.save_block_sums(
-								&header.hash(),
-								&BlockSums {
-									output_sum,
-									kernel_sum,
-								},
-							)?;
-						}
 
 						Ok(())
 					});
@@ -633,8 +605,7 @@ impl Chain {
 		// Note: we are validating against a writeable extension.
 		txhashset::extending(&mut txhashset, |extension| {
 			extension.rewind(&header)?;
-			let (output_sum, kernel_sum) = extension.validate(&header, false)?;
-			extension.save_latest_block_sums(&header, output_sum, kernel_sum)?;
+			extension.validate(&header, false)?;
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
@@ -711,7 +682,6 @@ impl Chain {
 					count += 1;
 					self.store.delete_block(&b.hash())?;
 					self.store.delete_block_marker(&b.hash())?;
-					self.store.delete_block_sums(&b.hash())?;
 				}
 				Err(NotFoundErr) => {
 					break;
@@ -828,13 +798,6 @@ impl Chain {
 		self.store
 			.get_block_marker(bh)
 			.map_err(|e| Error::StoreErr(e, "chain get block marker".to_owned()))
-	}
-
-	/// Get the blocks sums for the specified block hash.
-	pub fn get_block_sums(&self, bh: &Hash) -> Result<BlockSums, Error> {
-		self.store
-			.get_block_sums(bh)
-			.map_err(|e| Error::StoreErr(e, "chain get block sums".to_owned()))
 	}
 
 	/// Gets the block header at the provided height

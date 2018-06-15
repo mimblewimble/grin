@@ -26,8 +26,8 @@ use grin_core::core::block::Error::KernelLockHeight;
 use grin_core::core::hash::{Hashed, ZERO_HASH};
 use grin_core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction};
 use grin_core::ser;
-use keychain::{ExtKeychain, Keychain};
-use util::{secp_static, static_secp_instance};
+use keychain::{BlindingFactor, ExtKeychain, Keychain};
+use util::static_secp_instance;
 use wallet::libtx::build::{self, initial_tx, input, output, with_excess, with_fee,
                            with_lock_height};
 
@@ -389,23 +389,17 @@ fn reward_empty_block() {
 	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
 
-	let zero_commit = secp_static::commit_to_zero_value();
-
 	let previous_header = BlockHeader::default();
 
 	let b = new_block(vec![], &keychain, &previous_header, &key_id);
 
-	b.cut_through()
-		.validate(&zero_commit, &zero_commit)
-		.unwrap();
+	b.cut_through().validate(&BlindingFactor::zero()).unwrap();
 }
 
 #[test]
 fn reward_with_tx_block() {
 	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
-
-	let zero_commit = secp_static::commit_to_zero_value();
 
 	let mut tx1 = tx2i1o();
 	tx1.validate().unwrap();
@@ -415,7 +409,7 @@ fn reward_with_tx_block() {
 	let block = new_block(vec![&mut tx1], &keychain, &previous_header, &key_id);
 	block
 		.cut_through()
-		.validate(&zero_commit, &zero_commit)
+		.validate(&BlindingFactor::zero())
 		.unwrap();
 }
 
@@ -423,8 +417,6 @@ fn reward_with_tx_block() {
 fn simple_block() {
 	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
-
-	let zero_commit = secp_static::commit_to_zero_value();
 
 	let mut tx1 = tx2i1o();
 	let mut tx2 = tx1i1o();
@@ -437,7 +429,7 @@ fn simple_block() {
 		&key_id,
 	);
 
-	b.validate(&zero_commit, &zero_commit).unwrap();
+	b.validate(&BlindingFactor::zero()).unwrap();
 }
 
 #[test]
@@ -447,8 +439,6 @@ fn test_block_with_timelocked_tx() {
 	let key_id1 = keychain.derive_key_id(1).unwrap();
 	let key_id2 = keychain.derive_key_id(2).unwrap();
 	let key_id3 = keychain.derive_key_id(3).unwrap();
-
-	let zero_commit = secp_static::commit_to_zero_value();
 
 	// first check we can add a timelocked tx where lock height matches current
 	// block height and that the resulting block is valid
@@ -465,7 +455,7 @@ fn test_block_with_timelocked_tx() {
 	let previous_header = BlockHeader::default();
 
 	let b = new_block(vec![&tx1], &keychain, &previous_header, &key_id3.clone());
-	b.validate(&zero_commit, &zero_commit).unwrap();
+	b.validate(&BlindingFactor::zero()).unwrap();
 
 	// now try adding a timelocked tx where lock height is greater than current
 	// block height
@@ -482,7 +472,7 @@ fn test_block_with_timelocked_tx() {
 	let previous_header = BlockHeader::default();
 	let b = new_block(vec![&tx1], &keychain, &previous_header, &key_id3.clone());
 
-	match b.validate(&zero_commit, &zero_commit) {
+	match b.validate(&BlindingFactor::zero()) {
 		Err(KernelLockHeight(height)) => {
 			assert_eq!(height, 2);
 		}

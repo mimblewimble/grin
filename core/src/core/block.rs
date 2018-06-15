@@ -29,6 +29,7 @@ use core::{transaction, Commitment, Input, KernelFeatures, Output, OutputFeature
 use global;
 use keychain::{self, BlindingFactor};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
+use util::secp::key::SecretKey;
 use util::{secp, static_secp_instance, LOGGER};
 
 /// Errors thrown by Block validation
@@ -673,11 +674,7 @@ impl Block {
 	/// Validates all the elements in a block that can be checked without
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
-	pub fn validate(
-		&self,
-		prev_output_sum: &Commitment,
-		prev_kernel_sum: &Commitment,
-	) -> Result<((Commitment, Commitment)), Error> {
+	pub fn validate(&self, prev_offset: &BlindingFactor) -> Result<(), Error> {
 		self.verify_weight()?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
@@ -685,16 +682,37 @@ impl Block {
 		self.verify_inputs()?;
 		self.verify_kernel_lock_heights()?;
 
-		let sums = self.verify_kernel_sums(
-			self.header.overage(),
-			self.header.total_kernel_offset(),
-			Some(prev_output_sum),
-			Some(prev_kernel_sum),
-		)?;
+		// TODO -  Can we pull this out into Committed somehow?
+		let kernel_offset = {
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+
+			let offset = self.header.total_kernel_offset;
+			let pos_keys = vec![offset]
+				.into_iter()
+				.filter(|&x| x != BlindingFactor::zero())
+				.filter_map(|x| x.secret_key(&secp).ok())
+				.collect::<Vec<SecretKey>>();
+			let neg_keys = vec![*prev_offset]
+				.into_iter()
+				.filter(|&x| x != BlindingFactor::zero())
+				.filter_map(|x| x.secret_key(&secp).ok())
+				.collect::<Vec<SecretKey>>();
+			println!("{}, {}", pos_keys.len(), neg_keys.len());
+			if pos_keys.is_empty() && neg_keys.is_empty() {
+				BlindingFactor::zero()
+			} else {
+				let sum = secp.blind_sum(pos_keys, neg_keys)?;
+				BlindingFactor::from_secret_key(sum)
+			}
+		};
+
+		self.verify_kernel_sums(self.header.overage(), kernel_offset, None, None)?;
 
 		self.verify_rangeproofs()?;
 		self.verify_kernel_signatures()?;
-		Ok(sums)
+
+		Ok(())
 	}
 
 	fn verify_weight(&self) -> Result<(), Error> {
