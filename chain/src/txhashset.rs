@@ -966,32 +966,59 @@ pub fn zip_write(root_dir: String, txhashset_data: File) -> Result<(), Error> {
 
 /// Check that the txhashset directory does not contains unexpected files
 fn check_files(txhashset_path: &PathBuf) -> Result<(), Error> {
-	let subdirectories_expected:HashSet<_> = [OUTPUT_SUBDIR,KERNEL_SUBDIR, RANGE_PROOF_SUBDIR].iter().cloned().map(|s| String::from(s)).collect();
-	let subdirectories_found: HashSet<_> = fs::read_dir(txhashset_path).unwrap().filter_map(|entry| {
-    						entry.ok().and_then(|e|
-      						e.path().file_name()
-      						.and_then(|n| n.to_str().map(|s| String::from(s)))
-    					)}).collect();
-	let dir_difference: Vec<String> = subdirectories_found.difference(&subdirectories_expected).cloned().collect();
+	let subdirectories_expected: HashSet<_> = [OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR]
+		.iter()
+		.cloned()
+		.map(|s| String::from(s))
+		.collect();
+	let subdirectories_found: HashSet<_> = fs::read_dir(txhashset_path)
+		.unwrap()
+		.filter_map(|entry| {
+			entry.ok().and_then(|e| {
+				e.path()
+					.file_name()
+					.and_then(|n| n.to_str().map(|s| String::from(s)))
+			})
+		})
+		.collect();
+	let dir_difference: Vec<String> = subdirectories_found
+		.difference(&subdirectories_expected)
+		.cloned()
+		.collect();
 	if !dir_difference.is_empty() {
-		return Err(Error::Other("Unexpected file(s) found in txhashset folder".to_string()));
+		return Err(Error::Other(
+			"Unexpected file(s) found in txhashset folder".to_string(),
+		));
 	}
 
 	// Checking now every subdirectory
-	let pmmr_files_expected: HashSet<_> = PMMR_FILES.iter().cloned().map(|s| String::from(s)).collect();
+	let pmmr_files_expected: HashSet<_> = PMMR_FILES
+		.iter()
+		.cloned()
+		.map(|s| String::from(s))
+		.collect();
 	let subdirectories = fs::read_dir(txhashset_path).unwrap();
 	for subdirectory in subdirectories {
 		let subdirectory_path = subdirectory.unwrap().path();
 		let pmmr_files = fs::read_dir(subdirectory_path).unwrap();
-		let pmmr_files_found: HashSet<_> = pmmr_files.filter_map(|entry| {
-    						entry.ok().and_then(|e|
-      						e.path().file_name()
-      						.and_then(|n| n.to_str().map(|s| String::from(s)))
-    					)}).collect();
-		let difference: Vec<String> = pmmr_files_found.difference(&pmmr_files_expected).cloned().collect();
+		let pmmr_files_found: HashSet<_> = pmmr_files
+			.filter_map(|entry| {
+				entry.ok().and_then(|e| {
+					e.path()
+						.file_name()
+						.and_then(|n| n.to_str().map(|s| String::from(s)))
+				})
+			})
+			.collect();
+		let difference: Vec<String> = pmmr_files_found
+			.difference(&pmmr_files_expected)
+			.cloned()
+			.collect();
 		if !difference.is_empty() {
-						return Err(Error::Other("Unexpected file(s) found in txhashset folder".to_string()));
-			}
+			return Err(Error::Other(
+				"Unexpected file(s) found in txhashset folder".to_string(),
+			));
 		}
-		Ok(())
+	}
+	Ok(())
 }

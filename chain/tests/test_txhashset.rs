@@ -144,10 +144,13 @@ fn test_unexpected_zip() {
 	assert!(txhashset::zip_read(db_root.clone()).is_ok());
 	let zip_path = Path::new(&db_root).join("txhashset_snapshot.zip");
 	let zip_file = File::open(&zip_path).unwrap();
-	assert!(txhashset::zip_write(db_root.clone(),zip_file).is_ok());
+	assert!(txhashset::zip_write(db_root.clone(), zip_file).is_ok());
 
 	// Then add a strange file
-	OpenOptions::new().create(true).write(true).open(Path::new(&db_root).join("txhashset").join("strange"));
+	OpenOptions::new()
+		.create(true)
+		.write(true)
+		.open(Path::new(&db_root).join("txhashset").join("strange"));
 	// Expect r/w to have an error
 	assert!(txhashset::zip_read(db_root.clone()).is_err());
 	let zip_file = File::open(zip_path).unwrap();

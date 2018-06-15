@@ -29,11 +29,15 @@ const PMMR_RM_LOG_FILE: &'static str = "pmmr_rm_log.bin";
 const PMMR_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
 
 /// The list of PMMR_Files for internal purposes
-pub const PMMR_FILES: [&str; 4] = [PMMR_HASH_FILE, PMMR_DATA_FILE, PMMR_RM_LOG_FILE, PMMR_PRUNED_FILE];
+pub const PMMR_FILES: [&str; 4] = [
+	PMMR_HASH_FILE,
+	PMMR_DATA_FILE,
+	PMMR_RM_LOG_FILE,
+	PMMR_PRUNED_FILE,
+];
 
 /// Maximum number of nodes in the remove log before it gets flushed
 pub const RM_LOG_MAX_NODES: usize = 10_000;
-
 
 /// PMMR persistent backend implementation. Relies on multiple facilities to
 /// handle writing, reading and pruning.
