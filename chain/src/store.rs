@@ -24,7 +24,7 @@ use core::consensus::TargetError;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
-use grin_store::{self, option_to_not_found, to_key, u64_to_key, Error};
+use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
 use types::{BlockMarker, BlockSums, ChainStore, Tip};
 
 const STORE_SUBPATH: &'static str = "chain";

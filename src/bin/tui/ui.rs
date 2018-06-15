@@ -18,6 +18,7 @@
 use std::sync::{mpsc, Arc};
 use time;
 
+use cursive::Cursive;
 use cursive::direction::Orientation;
 use cursive::theme::BaseColor::{Black, Blue, Cyan, White};
 use cursive::theme::Color::Dark;
@@ -26,7 +27,6 @@ use cursive::theme::{BaseColor, BorderStyle, Color, Theme};
 use cursive::traits::Identifiable;
 use cursive::utils::markup::StyledString;
 use cursive::views::{LinearLayout, Panel, StackView, TextView, ViewBox};
-use cursive::Cursive;
 
 use servers::Server;
 

@@ -22,8 +22,8 @@ use std::path::{Path, MAIN_SEPARATOR};
 
 use serde_json;
 use tokio_core::reactor;
-use tokio_retry::strategy::FibonacciBackoff;
 use tokio_retry::Retry;
+use tokio_retry::strategy::FibonacciBackoff;
 
 use failure::ResultExt;
 

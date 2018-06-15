@@ -24,9 +24,9 @@ use std::net::ToSocketAddrs;
 use std::string::ToString;
 
 use failure::{Backtrace, Context, Fail};
+use iron::Listening;
 use iron::middleware::Handler;
 use iron::prelude::Iron;
-use iron::Listening;
 use mount::Mount;
 use router::Router;
 
