@@ -14,14 +14,14 @@
 
 //! Basic status view definition
 
-use cursive::Cursive;
+use cursive::direction::Orientation;
+use cursive::traits::Identifiable;
 use cursive::view::View;
 use cursive::views::{BoxView, LinearLayout, TextView};
-use cursive::direction::Orientation;
-use cursive::traits::*;
+use cursive::Cursive;
 
-use tui::constants::*;
-use tui::types::*;
+use tui::constants::VIEW_BASIC_STATUS;
+use tui::types::TUIStatusListener;
 
 use servers::ServerStats;
 

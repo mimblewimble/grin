@@ -15,14 +15,14 @@
 //! Configuration file management
 
 use std::env;
+use std::fs::File;
 use std::io::Read;
 use std::path::PathBuf;
-use std::fs::File;
-
 use toml;
+
 use servers::{ServerConfig, StratumServerConfig};
-use util::LoggingConfig;
 use types::{ConfigError, ConfigMembers, GlobalConfig};
+use util::LoggingConfig;
 use wallet::WalletConfig;
 
 /// The default file name to use when trying to derive
@@ -108,7 +108,7 @@ impl GlobalConfig {
 		let config_file = return_value.config_file_path.clone().unwrap();
 		if !config_file.exists() {
 			return Err(ConfigError::FileNotFoundError(String::from(
-						config_file.to_str().unwrap()
+				config_file.to_str().unwrap(),
 			)));
 		}
 

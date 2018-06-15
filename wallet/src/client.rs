@@ -21,9 +21,8 @@ use std::collections::HashMap;
 use std::io;
 
 use futures::{Future, Stream};
-use hyper;
 use hyper::header::ContentType;
-use hyper::{Method, Request};
+use hyper::{self, Method, Request};
 use serde_json;
 use tokio_core::reactor;
 
@@ -116,7 +115,7 @@ fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, E
 	Ok(res)
 }
 
-/// Posts a tranaction to a grin node
+/// Posts a transaction to a grin node
 pub fn post_tx(dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error> {
 	let url;
 	if fluff {

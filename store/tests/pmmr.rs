@@ -20,7 +20,7 @@ extern crate time;
 use std::fs;
 
 use core::core::pmmr::{Backend, PMMR};
-use core::ser::*;
+use core::ser::{Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
 use store::types::prune_noop;
 
 #[test]
@@ -639,7 +639,10 @@ fn compact_twice() {
 }
 
 fn setup(tag: &str) -> (String, Vec<TestElem>) {
-	let _ = env_logger::init();
+	match env_logger::try_init() {
+		Ok(_) => println!("Initializing env logger"),
+		Err(e) => println!("env logger already initialized: {:?}", e),
+	};
 	let t = time::get_time();
 	let data_dir = format!("./target/tmp/{}.{}-{}", t.sec, t.nsec, tag);
 	fs::create_dir_all(data_dir.clone()).unwrap();

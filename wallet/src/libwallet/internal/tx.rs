@@ -23,7 +23,7 @@ use libwallet::types::{WalletBackend, WalletClient};
 use libwallet::{Error, ErrorKind};
 use util::LOGGER;
 
-/// Receive a tranaction, modifying the slate accordingly (which can then be
+/// Receive a transaction, modifying the slate accordingly (which can then be
 /// sent back to sender for posting)
 pub fn receive_tx<T, K>(wallet: &mut T, slate: &mut Slate) -> Result<(), Error>
 where
@@ -78,7 +78,7 @@ where
 
 	let lock_height = current_height;
 
-	// Sender selects outputs into a new slate and save our corresponding keyss in
+	// Sender selects outputs into a new slate and save our corresponding keys in
 	// a transaction context. The secret key in our transaction context will be
 	// randomly selected. This returns the public slate, and a closure that locks
 	// our inputs and outputs once we're convinced the transaction exchange went
@@ -165,7 +165,10 @@ where
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
 	let fee = tx_fee(coins.len(), 2, selection::coins_proof_count(&coins), None);
-	let (mut parts, _) = selection::inputs_and_change(&coins, wallet, current_height, amount, fee)?;
+	let (mut parts, _, _) =
+		selection::inputs_and_change(&coins, wallet, current_height, amount, fee)?;
+
+	//TODO: If we end up using this, create change output here
 
 	// add burn output and fees
 	parts.push(build::output(amount - fee, Identifier::zero()));

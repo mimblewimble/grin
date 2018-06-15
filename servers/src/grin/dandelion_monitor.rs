@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use rand;
-use rand::Rng;
+use rand::{self, Rng};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -22,8 +21,7 @@ use time::now_utc;
 
 use core::core::hash::Hashed;
 use core::core::transaction;
-use pool::DandelionConfig;
-use pool::{BlockChain, PoolEntryState, PoolError, TransactionPool, TxSource};
+use pool::{BlockChain, DandelionConfig, PoolEntryState, PoolError, TransactionPool, TxSource};
 use util::LOGGER;
 
 /// A process to monitor transactions in the stempool.

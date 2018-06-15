@@ -19,14 +19,13 @@
 
 use std::marker::PhantomData;
 
+use core::ser;
+use keychain::Keychain;
 use libtx::slate::Slate;
-use libwallet::Error;
 use libwallet::internal::{tx, updater};
 use libwallet::types::{BlockFees, CbData, OutputData, TxWrapper, WalletBackend, WalletClient,
                        WalletInfo};
-
-use core::ser;
-use keychain::Keychain;
+use libwallet::Error;
 use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to
@@ -60,8 +59,12 @@ where
 	pub fn retrieve_outputs(
 		&mut self,
 		include_spent: bool,
+		refresh_from_node: bool,
 	) -> Result<(bool, Vec<OutputData>), Error> {
-		let validated = self.update_outputs();
+		let mut validated = false;
+		if refresh_from_node {
+			validated = self.update_outputs();
+		}
 		Ok((
 			validated,
 			updater::retrieve_outputs(self.wallet, include_spent)?,
@@ -69,9 +72,16 @@ where
 	}
 
 	/// Retrieve summary info for wallet
-	pub fn retrieve_summary_info(&mut self) -> Result<(bool, WalletInfo), Error> {
-		let validated = self.update_outputs();
-		Ok((validated, updater::retrieve_info(self.wallet)?))
+	pub fn retrieve_summary_info(
+		&mut self,
+		refresh_from_node: bool,
+	) -> Result<(bool, WalletInfo), Error> {
+		let mut validated = false;
+		if refresh_from_node {
+			validated = self.update_outputs();
+		}
+		let wallet_info = updater::retrieve_info(self.wallet)?;
+		Ok((validated, wallet_info))
 	}
 
 	/// Issues a send transaction and sends to recipient
@@ -139,7 +149,7 @@ where
 		match self.wallet.get_chain_height(self.wallet.node_url()) {
 			Ok(height) => Ok((height, true)),
 			Err(_) => {
-				let outputs = self.retrieve_outputs(true)?;
+				let outputs = self.retrieve_outputs(true, false)?;
 				let height = match outputs.1.iter().map(|out| out.height).max() {
 					Some(height) => height,
 					None => 0,

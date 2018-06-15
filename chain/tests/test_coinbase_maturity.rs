@@ -23,19 +23,13 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
-use chain::types::*;
-use core::consensus;
-use core::core::OutputIdentifier;
+use chain::types::{Error, NoopAdapter};
 use core::core::target::Difficulty;
-use core::core::transaction;
-use core::global;
-use core::global::ChainTypes;
-use wallet::libtx::build;
-
+use core::core::{transaction, OutputIdentifier};
+use core::global::{self, ChainTypes};
+use core::{consensus, pow};
 use keychain::{ExtKeychain, Keychain};
-use wallet::libtx;
-
-use core::pow;
+use wallet::libtx::{self, build};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);

@@ -22,21 +22,16 @@ use std::thread;
 use std::time::Duration;
 use time;
 
-use chain;
-use chain::types::BlockSums;
+use chain::{self, types::BlockSums};
 use common::adapters::PoolToChainAdapter;
 use common::types::Error;
-use core::consensus;
-use core::core;
 use core::core::hash::Hashed;
-use core::ser;
-use core::ser::AsFixedBytes;
+use core::ser::{self, AsFixedBytes};
+use core::{consensus, core};
 use keychain::{ExtKeychain, Identifier, Keychain};
 use pool;
-use util;
-use util::LOGGER;
-use wallet;
-use wallet::BlockFees;
+use util::{self, LOGGER};
+use wallet::{self, BlockFees};
 
 /// Serializer that outputs the pre-pow part of the header,
 /// including the nonce (last 8 bytes) that can be sent off
