@@ -28,7 +28,7 @@ use grin_core::core::id::{ShortId, ShortIdentifiable};
 use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
 use grin_core::global;
 use grin_core::ser;
-use keychain::{ExtKeychain, Keychain};
+use keychain::{ExtKeychain, Keychain, BlindingFactor};
 use std::time::Instant;
 use wallet::libtx::build::{self, input, output, with_fee};
 
@@ -61,7 +61,7 @@ fn too_large_block() {
 	let prev = BlockHeader::default();
 	let key_id = keychain.derive_key_id(1).unwrap();
 	let b = new_block(vec![&tx], &keychain, &prev, &key_id);
-	assert!(b.validate(&zero_commit, &zero_commit).is_err());
+	assert!(b.validate(&BlindingFactor::zero(), &zero_commit).is_err());
 }
 
 #[test]
@@ -111,9 +111,11 @@ fn block_with_cut_through() {
 
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
-	b.validate(&zero_commit, &zero_commit).unwrap();
+	println!("3");
+	b.validate(&BlindingFactor::zero(), &zero_commit).unwrap();
 	assert_eq!(b.inputs.len(), 3);
 	assert_eq!(b.outputs.len(), 3);
+	println!("4");
 }
 
 #[test]
@@ -144,7 +146,7 @@ fn empty_block_with_coinbase_is_valid() {
 
 	// the block should be valid here (single coinbase output with corresponding
 	// txn kernel)
-	assert!(b.validate(&zero_commit, &zero_commit).is_ok());
+	assert!(b.validate(&BlindingFactor::zero(), &zero_commit).is_ok());
 }
 
 #[test]
@@ -171,11 +173,9 @@ fn remove_coinbase_output_flag() {
 	assert!(b.verify_kernel_sums(
 		b.header.overage(),
 		b.header.total_kernel_offset(),
-		None,
-		None
 	).is_ok());
 	assert_eq!(
-		b.validate(&zero_commit, &zero_commit),
+		b.validate(&BlindingFactor::zero(), &zero_commit),
 		Err(Error::CoinbaseSumMismatch)
 	);
 }
@@ -205,7 +205,7 @@ fn remove_coinbase_kernel_flag() {
 	);
 
 	assert_eq!(
-		b.validate(&zero_commit, &zero_commit),
+		b.validate(&BlindingFactor::zero(), &zero_commit),
 		Err(Error::Secp(secp::Error::IncorrectCommitSum))
 	);
 }

@@ -21,8 +21,7 @@ use time;
 
 use consensus;
 use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
-use core::committed;
-use core::committed::Committed;
+use core::committed::{self, Committed};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
 use core::target::Difficulty;
@@ -34,7 +33,7 @@ use keychain;
 use keychain::BlindingFactor;
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util::LOGGER;
-use util::{secp, static_secp_instance};
+use util::{secp, static_secp_instance, secp_static};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
@@ -42,6 +41,8 @@ pub enum Error {
 	/// The sum of output minus input commitments does not
 	/// match the sum of kernel commitments
 	KernelSumMismatch,
+	/// The total kernel sum on the block header is wrong
+	InvalidTotalKernelSum,
 	/// Same as above but for the coinbase part of a block, including reward
 	CoinbaseSumMismatch,
 	/// Too many inputs, outputs or kernels in the block
@@ -599,24 +600,17 @@ impl Block {
 
 		// now sum the kernel_offsets up to give us
 		// an aggregate offset for the entire block
-		let total_kernel_offset = {
+		kernel_offsets.push(prev.total_kernel_offset);
+		let total_kernel_offset = committed::sum_kernel_offsets(kernel_offsets, vec![])?;
+
+		let total_kernel_sum = {	
+			let zero_commit = secp_static::commit_to_zero_value();
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			let mut keys = kernel_offsets
-				.into_iter()
-				.filter(|x| *x != BlindingFactor::zero())
-				.filter_map(|x| x.secret_key(&secp).ok())
-				.collect::<Vec<_>>();
-			if prev.total_kernel_offset != BlindingFactor::zero() {
-				keys.push(prev.total_kernel_offset.secret_key(&secp)?);
-			}
-
-			if keys.is_empty() {
-				BlindingFactor::zero()
-			} else {
-				let sum = secp.blind_sum(keys, vec![])?;
-				BlindingFactor::from_secret_key(sum)
-			}
+			let mut excesses = map_vec!(kernels, |x| x.excess());
+			excesses.push(prev.total_kernel_sum);
+			excesses.retain(|x| *x != zero_commit);
+			secp.commit_sum(excesses, vec![])?
 		};
 
 		Ok(Block {
@@ -628,12 +622,13 @@ impl Block {
 				},
 				previous: prev.hash(),
 				total_difficulty: difficulty + prev.total_difficulty,
-				total_kernel_offset: total_kernel_offset,
+				total_kernel_offset,
+				total_kernel_sum,
 				..Default::default()
 			},
-			inputs: inputs,
-			outputs: outputs,
-			kernels: kernels,
+			inputs,
+			outputs,
+			kernels,
 		}.cut_through())
 	}
 
@@ -698,9 +693,9 @@ impl Block {
 	/// trees, reward, etc.
 	pub fn validate(
 		&self,
-		prev_output_sum: &Commitment,
+		prev_kernel_offset: &BlindingFactor,
 		prev_kernel_sum: &Commitment,
-	) -> Result<((Commitment, Commitment)), Error> {
+	) -> Result<(Commitment), Error> {
 		self.verify_weight()?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
@@ -708,16 +703,26 @@ impl Block {
 		self.verify_inputs()?;
 		self.verify_kernel_lock_heights()?;
 
-		let sums = self.verify_kernel_sums(
-			self.header.overage(),
-			self.header.total_kernel_offset(),
-			Some(prev_output_sum),
-			Some(prev_kernel_sum),
+		// take the kernel offset for this block (block offset minus previous) and
+		// verify outputs and kernel sums
+		let block_kernel_offset = committed::sum_kernel_offsets(
+			vec![self.header.total_kernel_offset()],
+			vec![prev_kernel_offset.clone()]
 		)?;
+		let sum = self.verify_kernel_sums(
+			self.header.overage(),
+			block_kernel_offset,
+		)?;
+
+		// check the block header's total kernel sum
+		let total_sum = committed::sum_commits(vec![sum, prev_kernel_sum.clone()], vec![])?;
+		if total_sum != self.header.total_kernel_sum {
+			return Err(Error::InvalidTotalKernelSum)
+		}
 
 		self.verify_rangeproofs()?;
 		self.verify_kernel_signatures()?;
-		Ok(sums)
+		Ok(sum)
 	}
 
 	fn verify_weight(&self) -> Result<(), Error> {
