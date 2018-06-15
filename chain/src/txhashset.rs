@@ -36,7 +36,7 @@ use grin_store;
 use grin_store::pmmr::PMMRBackend;
 use grin_store::types::prune_noop;
 use types::{BlockMarker, ChainStore, Error, TxHashSetRoots};
-use util::{secp_static, zip, LOGGER};
+use util::{zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
 const OUTPUT_SUBDIR: &'static str = "output";
@@ -734,9 +734,8 @@ impl<'a> Extension<'a> {
 
 	/// Validate the various MMR roots against the block header.
 	pub fn validate_roots(&self, header: &BlockHeader) -> Result<(), Error> {
-		// If we are validating the genesis block then
-		// we have no outputs or kernels.
-		// So we are done here.
+		// If we are validating the genesis block then we have no outputs or
+		// kernels. So we are done here.
 		if header.height == 0 {
 			return Ok(());
 		}
@@ -795,6 +794,10 @@ impl<'a> Extension<'a> {
 		if !skip_rproofs {
 			self.verify_rangeproofs()?;
 		}
+
+		// Verify kernel roots for all past headers, need to be last as it rewinds
+		// a lot without resetting
+		self.verify_kernel_history(header)?;
 
 		Ok(())
 	}
@@ -906,6 +909,29 @@ impl<'a> Extension<'a> {
 			self.rproof_pmmr.unpruned_size(),
 			now.elapsed().as_secs(),
 		);
+		Ok(())
+	}
+
+	fn verify_kernel_history(&mut self, header: &BlockHeader) -> Result<(), Error> {
+		// Special handling to make sure the whole kernel set matches each of its
+		// roots in each block header, without truncation. We go back header by
+		// header, rewind and check each root. This fixes a potential weakness in
+		// fast sync where a reorg past the horizon could allow a whole rewrite of
+		// the kernel set.
+		let mut current = header.clone();
+		loop {
+			current = self.commit_index.get_block_header(&current.previous)?;
+			if current.height == 0 {
+				break;
+			}
+			// rewinding further and further back
+			self.kernel_pmmr
+				.rewind(current.kernel_mmr_size, current.height as u32)
+				.map_err(&Error::TxHashSetErr)?;
+			if self.kernel_pmmr.root() != current.kernel_root {
+				return Err(Error::InvalidTxHashSet(format!("Kernel root at {} does not match", current.height)));
+			}
+		}
 		Ok(())
 	}
 }

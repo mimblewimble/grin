@@ -353,6 +353,10 @@ fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Re
 
 		return Err(Error::InvalidRoot);
 	}
+	let sizes = ext.sizes();
+	if b.header.output_mmr_size != sizes.0 || b.header.kernel_mmr_size != sizes.2 {
+		return Err(Error::InvalidMMRSize);
+	}
 
 	Ok(())
 }

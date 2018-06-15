@@ -75,6 +75,8 @@ pub enum Error {
 	InvalidBlockHeight,
 	/// One of the root hashes in the block is invalid
 	InvalidRoot,
+	/// One of the MMR sizes in the block header is invalid
+	InvalidMMRSize,
 	/// Error from underlying keychain impl
 	Keychain(keychain::Error),
 	/// Error from underlying secp lib

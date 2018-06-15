@@ -603,10 +603,15 @@ impl Chain {
 
 		let mut txhashset = txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone())?;
 
-		// Note: we are validating against a writeable extension.
-		txhashset::extending(&mut txhashset, |extension| {
+		// first read-only extension, for validation only
+		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.rewind(&header)?;
 			extension.validate(&header, false)?;
+			Ok(())
+		})?;
+		// second real extension to commit the rewind and indexes
+		txhashset::extending(&mut txhashset, |extension| {
+			extension.rewind(&header)?;
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
