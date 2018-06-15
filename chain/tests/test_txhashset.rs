@@ -17,7 +17,8 @@ extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_wallet as wallet;
 
-use std::fs;
+use std::fs::{self, File, OpenOptions};
+use std::path::Path;
 use std::sync::Arc;
 
 use chain::store::ChainKVStore;
@@ -130,4 +131,25 @@ fn test_some_raw_txs() {
 		assert!(extension.apply_raw_tx(&tx4, 6).is_ok());
 		Ok(())
 	});
+}
+
+#[test]
+fn test_unexpected_zip() {
+	let db_root = format!(".grin_txhashset_zip");
+	clean_output_dir(&db_root);
+	let store = Arc::new(ChainKVStore::new(db_root.clone()).unwrap());
+	let txhashset = TxHashSet::open(db_root.clone(), store.clone()).unwrap();
+
+	// First check if everything works out of the box
+	assert!(txhashset::zip_read(db_root.clone()).is_ok());
+	let zip_path = Path::new(&db_root).join("txhashset_snapshot.zip");
+	let zip_file = File::open(&zip_path).unwrap();
+	assert!(txhashset::zip_write(db_root.clone(),zip_file).is_ok());
+
+	// Then add a strange file
+	OpenOptions::new().create(true).write(true).open(Path::new(&db_root).join("txhashset").join("strange"));
+	// Expect r/w to have an error
+	assert!(txhashset::zip_read(db_root.clone()).is_err());
+	let zip_file = File::open(zip_path).unwrap();
+	assert!(txhashset::zip_write(db_root.clone(), zip_file).is_err());
 }
