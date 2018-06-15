@@ -338,10 +338,10 @@ where
 		self.get_data_file_path()
 	}
 
-	/// Checks the length of the remove log to see if it should get compacted.
-	/// If so, the remove log is flushed into the pruned list, which itself gets
-	/// saved, and the hash and data files are rewritten, cutting the removed
-	/// data.
+	/// Takes the utxo_set at a given cutoff_pos and generates an updated
+	/// prune_list. Saves the updated prune_list to disk
+	/// Compacts the hash and data files based on the prune_list and saves both
+	/// to disk.
 	///
 	/// A cutoff position limits compaction on recent data.
 	/// This will be the last position of a particular block
