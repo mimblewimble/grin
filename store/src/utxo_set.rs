@@ -86,15 +86,6 @@ impl UtxoSet {
 		Ok(())
 	}
 
-	/// Calculate the set of positions of all unspent outputs
-	/// up to and including the cutoff_pos.
-	/// Returns these positions as a bitmap.
-	/// Only applicable for the output MMR.
-	pub fn utxo_lte_pos(&self, cutoff_pos: u64) -> Bitmap {
-		let bitmask: Bitmap = (1..=cutoff_pos).map(|x| x as u32).collect();
-		self.bitmap.and(&bitmask)
-	}
-
 	/// Calculate the set of unpruned leaves
 	/// up to and including the cutoff_pos.
 	/// Only applicable for the output MMR.
@@ -111,8 +102,21 @@ impl UtxoSet {
 	/// Takes the prune_list into account when
 	/// calculating these spent positions (anything pruned is spent).
 	/// Only applicable for the output MMR.
-	pub fn spent_lte_pos(&self, cutoff_pos: u64, prune_list: &PruneList) -> Bitmap {
-		self.utxo_lte_pos(cutoff_pos)
+	pub fn spent_lte_pos(
+		&self,
+		cutoff_pos: u64,
+		rewind_output_pos: &Bitmap,
+		rewind_spent_pos: &Bitmap,
+		prune_list: &PruneList,
+	) -> Bitmap {
+		let mut bitmap = self.bitmap.clone();
+
+		// Now "rewind" using the output_pos and spent_pos passed in
+		bitmap.andnot_inplace(&rewind_output_pos);
+		bitmap.or_inplace(&rewind_spent_pos);
+
+		// Invert spent/unspent for the leaves and return the resulting bitmap.
+		bitmap
 			.flip(1..(cutoff_pos + 1))
 			.and(&self.unpruned_leaves_lte_pos(cutoff_pos, prune_list))
 	}

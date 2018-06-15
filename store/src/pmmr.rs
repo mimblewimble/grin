@@ -350,7 +350,13 @@ where
 	/// will have a suitable output_pos.
 	/// This is used to enforce a horizon after which the local node
 	/// should have all the data to allow rewinding.
-	pub fn check_compact<P>(&mut self, cutoff_pos: u64, prune_cb: P) -> io::Result<bool>
+	pub fn check_compact<P>(
+		&mut self,
+		cutoff_pos: u64,
+		rewind_output_pos: &Bitmap,
+		rewind_spent_pos: &Bitmap,
+		prune_cb: P,
+	) -> io::Result<bool>
 	where
 		P: Fn(&[u8]),
 	{
@@ -360,7 +366,8 @@ where
 
 		// Calculate the sets of leaf positions and node positions to remove based
 		// on the cutoff_pos provided.
-		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos);
+		let (leaves_removed, pos_to_rm) =
+			self.pos_to_rm(cutoff_pos, rewind_output_pos, rewind_spent_pos);
 
 		// 1. Save compact copy of the hash file, skipping removed data.
 		{
@@ -444,10 +451,20 @@ where
 		Ok(true)
 	}
 
-	fn pos_to_rm(&self, cutoff_pos: u64) -> (Bitmap, Bitmap) {
+	fn pos_to_rm(
+		&self,
+		cutoff_pos: u64,
+		rewind_output_pos: &Bitmap,
+		rewind_spent_pos: &Bitmap,
+	) -> (Bitmap, Bitmap) {
 		let mut expanded = Bitmap::create();
 
-		let leaf_pos_to_rm = self.utxo_set.spent_lte_pos(cutoff_pos, &self.pruned_nodes);
+		let leaf_pos_to_rm = self.utxo_set.spent_lte_pos(
+			cutoff_pos,
+			rewind_output_pos,
+			rewind_spent_pos,
+			&self.pruned_nodes,
+		);
 
 		for x in leaf_pos_to_rm.iter() {
 			expanded.add(x);

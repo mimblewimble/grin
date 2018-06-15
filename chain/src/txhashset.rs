@@ -226,26 +226,37 @@ impl TxHashSet {
 	/// Compact the MMR data files and flush the rm logs
 	pub fn compact(&mut self) -> Result<(), Error> {
 		let commit_index = self.commit_index.clone();
-		let head = commit_index.head()?;
-		let current_height = head.height;
+		let head_header = commit_index.head_header()?;
+		let current_height = head_header.height;
 
 		// horizon for compacting is based on current_height
 		let horizon = current_height.saturating_sub(global::cut_through_horizon().into());
 		let horizon_header = self.commit_index.get_header_by_height(horizon)?;
 		let horizon_marker = self.commit_index.get_block_marker(&horizon_header.hash())?;
 
+		let rewind_output_pos =
+			output_pos_to_rewind(self.commit_index.clone(), &horizon_header, &head_header)?;
+		let rewind_spent_pos =
+			input_pos_to_rewind(self.commit_index.clone(), &horizon_header, &head_header)?;
+
 		let clean_output_index = |commit: &[u8]| {
 			// do we care if this fails?
 			let _ = commit_index.delete_output_pos(commit);
 		};
 
-		self.output_pmmr_h
-			.backend
-			.check_compact(horizon_marker.output_pos, clean_output_index)?;
+		self.output_pmmr_h.backend.check_compact(
+			horizon_marker.output_pos,
+			&rewind_output_pos,
+			&rewind_spent_pos,
+			clean_output_index,
+		)?;
 
-		self.rproof_pmmr_h
-			.backend
-			.check_compact(horizon_marker.output_pos, &prune_noop)?;
+		self.rproof_pmmr_h.backend.check_compact(
+			horizon_marker.output_pos,
+			&rewind_output_pos,
+			&rewind_spent_pos,
+			&prune_noop,
+		)?;
 
 		Ok(())
 	}
@@ -702,37 +713,6 @@ impl<'a> Extension<'a> {
 		Ok(merkle_proof)
 	}
 
-	fn output_pos_to_rewind(
-		&self,
-		block_header: &BlockHeader,
-		head_header: &BlockHeader,
-	) -> Result<Bitmap, Error> {
-		let marker_to = self.commit_index.get_block_marker(&head_header.hash())?;
-		let marker_from = self.commit_index.get_block_marker(&block_header.hash())?;
-		Ok(((marker_from.output_pos + 1)..=marker_to.output_pos)
-			.map(|x| x as u32)
-			.collect())
-	}
-
-	fn input_pos_to_rewind(
-		&self,
-		block_header: &BlockHeader,
-		head_header: &BlockHeader,
-	) -> Result<Bitmap, Error> {
-		let mut bitmap = Bitmap::create();
-		let mut current = head_header.hash();
-		loop {
-			if current == block_header.hash() {
-				break;
-			}
-			let current_header = self.commit_index.get_block_header(&current)?;
-			let input_bitmap = self.commit_index.get_block_input_bitmap(&current)?;
-			bitmap.or_inplace(&input_bitmap);
-			current = current_header.previous;
-		}
-		Ok(bitmap)
-	}
-
 	/// Saves a snapshot of the output and rangeproof MMRs to disk.
 	/// Specifically - saves a snapshot of the utxo file, tagged with
 	/// the block hash as filename suffix.
@@ -767,8 +747,10 @@ impl<'a> Extension<'a> {
 		// based on the block_marker
 		let marker = self.commit_index.get_block_marker(&hash)?;
 
-		let rewind_output_pos = self.output_pos_to_rewind(block_header, head_header)?;
-		let rewind_spent_pos = self.input_pos_to_rewind(block_header, head_header)?;
+		let rewind_output_pos =
+			output_pos_to_rewind(self.commit_index.clone(), block_header, head_header)?;
+		let rewind_spent_pos =
+			input_pos_to_rewind(self.commit_index.clone(), block_header, head_header)?;
 
 		self.rewind_to_pos(
 			marker.output_pos,
@@ -1062,4 +1044,35 @@ pub fn zip_write(root_dir: String, txhashset_data: File) -> Result<(), Error> {
 
 	fs::create_dir_all(txhashset_path.clone())?;
 	zip::decompress(txhashset_data, &txhashset_path).map_err(|ze| Error::Other(ze.to_string()))
+}
+
+fn output_pos_to_rewind(
+	commit_index: Arc<ChainStore>,
+	block_header: &BlockHeader,
+	head_header: &BlockHeader,
+) -> Result<Bitmap, Error> {
+	let marker_to = commit_index.get_block_marker(&head_header.hash())?;
+	let marker_from = commit_index.get_block_marker(&block_header.hash())?;
+	Ok(((marker_from.output_pos + 1)..=marker_to.output_pos)
+		.map(|x| x as u32)
+		.collect())
+}
+
+fn input_pos_to_rewind(
+	commit_index: Arc<ChainStore>,
+	block_header: &BlockHeader,
+	head_header: &BlockHeader,
+) -> Result<Bitmap, Error> {
+	let mut bitmap = Bitmap::create();
+	let mut current = head_header.hash();
+	loop {
+		if current == block_header.hash() {
+			break;
+		}
+		let current_header = commit_index.get_block_header(&current)?;
+		let input_bitmap = commit_index.get_block_input_bitmap(&current)?;
+		bitmap.or_inplace(&input_bitmap);
+		current = current_header.previous;
+	}
+	Ok(bitmap)
 }
