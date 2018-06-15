@@ -30,7 +30,6 @@ use std::sync::{Arc, RwLock};
 
 use core::core::{BlockHeader, Transaction};
 
-use chain::ChainStore;
 use chain::store::ChainKVStore;
 use chain::txhashset;
 use chain::txhashset::TxHashSet;
@@ -41,8 +40,8 @@ use pool::*;
 use keychain::Keychain;
 use wallet::libtx;
 
-use pool::TransactionPool;
 use pool::types::*;
+use pool::TransactionPool;
 
 #[derive(Clone)]
 pub struct ChainAdapter {
@@ -56,7 +55,7 @@ impl ChainAdapter {
 		let chain_store = ChainKVStore::new(target_dir.clone())
 			.map_err(|e| format!("failed to init chain_store, {}", e))?;
 		let store = Arc::new(chain_store);
-		let txhashset = TxHashSet::open(target_dir.clone(), store.clone())
+		let txhashset = TxHashSet::open(target_dir.clone(), store.clone(), None)
 			.map_err(|e| format!("failed to init txhashset, {}", e))?;
 
 		Ok(ChainAdapter {
@@ -72,13 +71,11 @@ impl BlockChain for ChainAdapter {
 		txs: Vec<Transaction>,
 		pre_tx: Option<Transaction>,
 	) -> Result<Vec<Transaction>, PoolError> {
-		let header = self.store.head_header().unwrap();
 		let mut txhashset = self.txhashset.write().unwrap();
 		let res = txhashset::extending_readonly(&mut txhashset, |extension| {
-			let valid_txs = extension.validate_raw_txs(txs, pre_tx, header.height)?;
+			let valid_txs = extension.validate_raw_txs(txs, pre_tx)?;
 			Ok(valid_txs)
 		}).map_err(|e| PoolError::Other(format!("Error: test chain adapter: {:?}", e)))?;
-
 		Ok(res)
 	}
 
