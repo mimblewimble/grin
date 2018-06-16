@@ -175,14 +175,14 @@ where
 	}
 
 	/// Next child index when we want to create a new output.
-	fn next_child(&self, root_key_id: keychain::Identifier) -> u32 {
+	fn next_child(&self, root_key_id: keychain::Identifier) -> Result<u32, libwallet::Error> {
 		let mut max_n = 0;
 		for out in self.outputs.values() {
 			if max_n < out.n_child && out.root_key_id == root_key_id {
 				max_n = out.n_child;
 			}
 		}
-		max_n + 1
+		Ok(max_n + 1)
 	}
 
 	/// Select spendable coins from the wallet.

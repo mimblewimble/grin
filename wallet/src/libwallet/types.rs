@@ -59,7 +59,7 @@ where
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, Error>;
 
 	/// Next child ID when we want to create a new output
-	fn next_child(&self, root_key_id: Identifier) -> u32;
+	fn next_child(&self, root_key_id: Identifier) -> Result<u32, Error>;
 
 	/// Select spendable coins from the wallet
 	fn select_coins(

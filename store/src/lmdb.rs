@@ -249,11 +249,14 @@ where
 {
 	fn deser_if_prefix_match(&self, kv: Result<(&[u8], &[u8]), lmdb::Error>) -> Option<T> {
 		match kv {
-			Ok((k, v)) => if k[0..self.prefix.len()] == self.prefix[..] {
-				ser::deserialize(&mut &v[..]).ok()
-			} else {
-				None
-			},
+			Ok((k, v)) => {
+				let plen = self.prefix.len();
+				if plen == 0 || k[0..plen] == self.prefix[..] {
+					ser::deserialize(&mut &v[..]).ok()
+				} else {
+					None
+				}
+			}
 			Err(_) => None,
 		}
 	}
