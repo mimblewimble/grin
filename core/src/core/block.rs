@@ -701,10 +701,16 @@ impl Block {
 
 		// take the kernel offset for this block (block offset minus previous) and
 		// verify outputs and kernel sums
-		let block_kernel_offset = committed::sum_kernel_offsets(
-			vec![self.header.total_kernel_offset()],
-			vec![prev_kernel_offset.clone()],
-		)?;
+		let block_kernel_offset = if self.header.total_kernel_offset() == prev_kernel_offset.clone() {
+			// special case when the sum hasn't changed (typically an empty block),
+			// zero isn't a valid private key but it's a valid blinding factor
+			BlindingFactor::zero()
+		} else {
+			committed::sum_kernel_offsets(
+				vec![self.header.total_kernel_offset()],
+				vec![prev_kernel_offset.clone()],
+			)?
+		};
 		let sum = self.verify_kernel_sums(self.header.overage(), block_kernel_offset)?;
 
 		// check the block header's total kernel sum
