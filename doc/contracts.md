@@ -34,8 +34,8 @@ We build the challenge `e = SHA256(M | k*G | x*G)`, and the scalar
 `s = k + e * x`. The full aggregate signature is then the pair `(s, k*G)`.
 
 The signature can be checked using the public key `x*G`, re-calculating `e`
-using M and `k*G` from the 2nd part of the signature pair and by veryfying
-that `s`, the first part of the signature pair, verifies:
+using M and `k*G` from the 2nd part of the signature pair and by verifying
+that `s`, the first part of the signature pair, satisfies:
 
 ```
 s*G = k*G + e * x*G
