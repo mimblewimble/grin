@@ -22,10 +22,9 @@ use std::thread;
 use std::time::Duration;
 use time;
 
-use chain::{self, types::BlockSums};
+use chain;
 use common::adapters::PoolToChainAdapter;
 use common::types::Error;
-use core::core::hash::Hashed;
 use core::ser::{self, AsFixedBytes};
 use core::{consensus, core};
 use keychain::{ExtKeychain, Identifier, Keychain};
@@ -135,12 +134,6 @@ fn build_block(
 	// prepare the block header timestamp
 	let head = chain.head_header()?;
 
-	let prev_sums = if head.height == 0 {
-		BlockSums::default()
-	} else {
-		chain.get_block_sums(&head.hash())?
-	};
-
 	let mut now_sec = time::get_time().sec;
 	let head_sec = head.timestamp.to_timespec().sec;
 	if now_sec <= head_sec {
@@ -170,7 +163,7 @@ fn build_block(
 	let mut b = core::Block::with_reward(&head, txs, output, kernel, difficulty.clone())?;
 
 	// making sure we're not spending time mining a useless block
-	b.validate(&prev_sums.output_sum, &prev_sums.kernel_sum)?;
+	b.validate(&head.total_kernel_offset, &head.total_kernel_sum)?;
 
 	let mut rng = rand::OsRng::new().unwrap();
 	b.header.nonce = rng.gen();
@@ -186,7 +179,7 @@ fn build_block(
 		b.header.clone().total_difficulty.to_num(),
 	);
 
-	let roots_result = chain.set_txhashset_roots(&mut b, false);
+	let roots_result = chain.set_block_roots(&mut b, false);
 
 	match roots_result {
 		Ok(_) => Ok((b, block_fees)),
