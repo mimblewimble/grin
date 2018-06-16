@@ -701,7 +701,8 @@ impl Block {
 
 		// take the kernel offset for this block (block offset minus previous) and
 		// verify outputs and kernel sums
-		let block_kernel_offset = if self.header.total_kernel_offset() == prev_kernel_offset.clone() {
+		let block_kernel_offset = if self.header.total_kernel_offset() == prev_kernel_offset.clone()
+		{
 			// special case when the sum hasn't changed (typically an empty block),
 			// zero isn't a valid private key but it's a valid blinding factor
 			BlindingFactor::zero()
