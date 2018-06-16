@@ -43,8 +43,8 @@ s*G = k*G + e * x*G
 
 In this simple case of someone sending a transaction to a receiver they trust
 (see later for the trustless case), an aggregate signature can be directly
-built for a Grin transaction by calculating the total blinding factor of inputs
-and outputs `r` and using it as the private key `x` above. The resulting
+built for a Grin transaction by taking the above private key `x` to be the sum
+of output blinding factors minus the sum of input blinding factors. The resulting
 kernel is assembled from the aggregate signature generated using `r` and the
 public key `r*G`, and allows to verify non-inflation for all Grin transactions
 (and signs the fees).
@@ -135,7 +135,7 @@ protocol very close to Trustless Transactions.
 
 ## Multiparty Timelocks
 
-This contract is a building block from multiple other contracts. Here, Alice
+This contract is a building block for multiple other contracts. Here, Alice
 agrees to lock some funds to start a financial interaction with Bob and prove
 to Bob she has funds. The setup is the following:
 
