@@ -158,10 +158,11 @@ This contract can be trivially used for unidirectional payment channels.
 TODO still WIP, mostly ability for Alice to check `x*G` is what is locked on
 the other chain. Check this would work on Ethereum (pubkey derivation).
 
-Alice has grins and Bob has bitcoins. They would like to swap. We assume that
-Bob built an output on the Bitcoin blockchain that can be spent either by Alice
-if she learns about a hash pre-image `x`, or by Bob after time `Tb`. Alice is
-ready to send her grins to Bob if he reveals `x`.
+Alice has grins and Bob has ether. They would like to swap. We assume Bob has
+a contract on the Ethereum blockchain that allows withdrawal either by Alice
+if she learns a hash pre-image `x`, or by Bob after time `Tb`. Alice is ready
+to send her grins to Bob if he reveals `x`. In this setup, we consider public
+key derivation `x*G` to be our hash function.
 
 First, Alice sends her grins to a multiparty timelock contract with a refund
 time `Ta < Tb`. To send the 2-of-2 output to Bob and execute the swap, Alice
@@ -180,6 +181,8 @@ can also compute `e = SHA256(M | ks*G + kr*G)`.
 signature is `(sr + ss, kr*G + ks*G)`.
 6. As soon as Bob broadcasts the final transaction to get his new grins, Alice
 can compute `sr' - sr` to get `x`.
+
+TODO review this, see if it could work on other chains.
 
 ## Hashed Timelocks (Lightning Network)
 
