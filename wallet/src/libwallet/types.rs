@@ -19,11 +19,13 @@ use std::collections::HashMap;
 use std::fmt;
 
 use serde;
+use serde_json;
 
 use failure::ResultExt;
 
 use core::core::hash::Hash;
 use core::core::pmmr::MerkleProof;
+use core::ser;
 
 use keychain::{Identifier, Keychain};
 
@@ -53,7 +55,7 @@ where
 	fn iter<'a>(&'a self) -> Box<Iterator<Item = &'a OutputData> + 'a>;
 
 	/// Get output data by id
-	fn get(&self, id: &Identifier) -> Option<OutputData>;
+	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
 
 	/// Create a new write batch to update or remove output data
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, Error>;
@@ -145,8 +147,7 @@ pub trait WalletClient {
 
 /// Information about an output that's being tracked by the wallet. Must be
 /// enough to reconstruct the commitment associated with the ouput when the
-/// root private key is known.*/
-
+/// root private key is known.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct OutputData {
 	/// Root key_id that the key for this output is derived from
@@ -169,6 +170,25 @@ pub struct OutputData {
 	pub block: Option<BlockIdentifier>,
 	/// Merkle proof
 	pub merkle_proof: Option<MerkleProofWrapper>,
+}
+
+impl ser::Writeable for OutputData {
+	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_bytes(&serde_json::to_vec(self).map_err(|_| ser::Error::CorruptedData)?)
+	}
+}
+
+impl<'a> ser::Readable for &'a OutputData {
+	fn read(reader: &mut ser::Reader) -> Result<&'a OutputData, ser::Error> {
+		let output = OutputData::read(reader)?;
+		Ok(&output)
+	}
+}
+impl ser::Readable for OutputData {
+	fn read(reader: &mut ser::Reader) -> Result<OutputData, ser::Error> {
+		let data = reader.read_vec()?;
+		serde_json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
+	}
 }
 
 impl OutputData {

@@ -330,8 +330,8 @@ where
 	let key_id = block_fees.key_id();
 
 	let (key_id, derivation) = match key_id {
-		Some(key_id) => keys::retrieve_existing_key(wallet, key_id),
-		None => keys::next_available_key(wallet),
+		Some(key_id) => keys::retrieve_existing_key(wallet, key_id)?,
+		None => keys::next_available_key(wallet)?,
 	};
 
 	{

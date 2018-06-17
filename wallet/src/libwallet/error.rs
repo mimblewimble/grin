@@ -79,7 +79,7 @@ pub enum ErrorKind {
 
 	/// Wallet backend error
 	#[fail(display = "Wallet store error")]
-	Backend,
+	Backend(String),
 
 	/// Callback implementation error conversion
 	#[fail(display = "Restore Error")]

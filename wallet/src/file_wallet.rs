@@ -154,8 +154,8 @@ where
 		Box::new(self.outputs.values())
 	}
 
-	fn get(&self, id: &Identifier) -> Option<OutputData> {
-		self.outputs.get(&id.to_hex()).map(|o| o.clone())
+	fn get(&self, id: &Identifier) -> Result<OutputData, libwallet::Error> {
+		self.outputs.get(&id.to_hex()).map(|o| o.clone()).ok_or(libwallet::ErrorKind::Backend("not found".to_string()).into())
 	}
 
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, libwallet::Error> {

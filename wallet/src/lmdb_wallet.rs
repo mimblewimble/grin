@@ -12,17 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
+use std::collections::hash_map::Values;
 use std::{fs, path};
+use std::sync::Arc;
 
-use failure::Context;
+use failure::{Context, ResultExt};
 
-use grin_store as store;
-use grin_store::{option_to_not_found, to_key, u64_to_key};
+use store::{self, option_to_not_found, to_key, u64_to_key};
 use keychain::{Identifier, Keychain};
 
-use libwallet::error::{Error, ErrorKind};
-use libwallet::types::{WalletBackend, WalletOutputBatch, OutputData};
-use types::{WalletConfig, WalletSeed, Identifier};
+use client;
+use libtx::slate::Slate;
+use libwallet::{internal, Error, ErrorKind};
+use libwallet::types::*;
+use types::{WalletConfig, WalletSeed};
+use util::secp::pedersen;
 
 pub const DB_DIR: &'static str = "wallet";
 
@@ -31,15 +36,15 @@ const DERIV_PREFIX: u8 = 'd' as u8;
 
 impl From<store::Error> for Error {
 	fn from(error: store::Error) -> Error {
-		Error {
-			inner: Context::new(ErrorKind::Backend(error)),
-		}
+		Error::from((ErrorKind::Backend(format!("{:?}", error))))
 	}
 }
 
 pub struct LMDBBackend<K> {
 	db: store::Store,
 	config: WalletConfig,
+	/// passphrase: TODO better ways of dealing with this other than storing
+	passphrase: String,
 
 	/// Keychain
 	keychain: Option<K>,
@@ -47,30 +52,31 @@ pub struct LMDBBackend<K> {
 
 impl<K> LMDBBackend<K> {
 	pub fn new(config: WalletConfig, passphrase: &str) -> Result<Self, Error> {
-		let db_path = path::Path::new(config.data_file_dir).join(DB_DIR);
+		let db_path = path::Path::new(&config.data_file_dir).join(DB_DIR);
 		fs::create_dir_all(&db_path)
 			.expect("Couldn't create wallet backend directory!");
 
-		let lmdb_env = store::new_env(config.db_root.clone())
-		let db = store::Store::open(db_env, DB_DIR);
+		let lmdb_env = Arc::new(store::new_env(db_path.to_str().unwrap().to_string()));
+		let db = store::Store::open(lmdb_env, DB_DIR);
 		Ok(LMDBBackend {
 			db,
 			config: config.clone(),
+			passphrase: String::from(passphrase),
 			keychain: None,
 		})
 	}
 }
 
-impl<K> WalletBackend<K> for LMDBackend<K>
+impl<K> WalletBackend<K> for LMDBBackend<K>
 where
 	K: Keychain,
 {
 	/// Initialise with whatever stored credentials we have
-	fn open_with_credentials(&mut self) -> Result<(), libwallet::Error> {
+	fn open_with_credentials(&mut self) -> Result<(), Error> {
 		let wallet_seed = WalletSeed::from_file(&self.config)
-			.context(libwallet::ErrorKind::CallbackImpl("Error opening wallet"))?;
+			.context(ErrorKind::CallbackImpl("Error opening wallet"))?;
 		let keychain = wallet_seed.derive_keychain(&self.passphrase);
-		self.keychain = Some(keychain.context(libwallet::ErrorKind::CallbackImpl(
+		self.keychain = Some(keychain.context(ErrorKind::CallbackImpl(
 			"Error deriving keychain",
 		))?);
 		// Just blow up password for now after it's been used
@@ -79,7 +85,7 @@ where
 	}
 
 	/// Close wallet and remove any stored credentials (TBD)
-	fn close(&mut self) -> Result<(), libwallet::Error> {
+	fn close(&mut self) -> Result<(), Error> {
 		self.keychain = None;
 		Ok(())
 	}
@@ -89,18 +95,23 @@ where
 		self.keychain.as_mut().unwrap()
 	}
 
+	fn get(&self, id: &Identifier) -> Result<OutputData, Error> {
+		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
+		option_to_not_found(self.db.get_ser(&key)).map_err(|e| e.into())
+	}
+
 	fn iter<'a>(&'a self) -> Box<Iterator<Item = &'a OutputData> + 'a> {
-		self.db.iter(&[OUTPUT_PREFIX])
+		Box::new(self.db.iter(&[OUTPUT_PREFIX]).unwrap())
 	}
 
-	fn get(&self, id: &Identifier) -> Option<OutputData> {
-		option_to_not_found(self.db.get_ser(&to_key(OUTPUT_PREFIX, &mut id.to_bytes())))
+	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, Error> {
+		unimplemented!()
 	}
 
-	fn next_child(&self, root_key_id: keychain::Identifier) -> Result<u32, Error> {
-		let mut batch = self.db.batch()?;
+	fn next_child(&self, root_key_id: Identifier) -> Result<u32, Error> {
+		let batch = self.db.batch()?;
 		// a simple counter, only one batch per db guarantees atomicity
-		let deriv_key = to_key(DERIV_PREFIX, &mut root_key_id.to_bytes());
+		let deriv_key = to_key(DERIV_PREFIX, &mut root_key_id.to_bytes().to_vec());
 		let deriv_idx = match batch.get_ser(&deriv_key)? {
 			Some(idx) => idx,
 			None => 0,
@@ -112,7 +123,7 @@ where
 
 	fn select_coins(
 		&self,
-		root_key_id: keychain::Identifier,
+		root_key_id: Identifier,
 		amount: u64,
 		current_height: u64,
 		minimum_confirmations: u64,
@@ -122,8 +133,83 @@ where
 		unimplemented!()
 	}
 
-	fn restore(&mut self) -> Result<(), libwallet::Error> {
-		libwallet::internal::restore::restore(self).context(libwallet::ErrorKind::Restore)?;
+	fn restore(&mut self) -> Result<(), Error> {
+		internal::restore::restore(self).context(ErrorKind::Restore)?;
 		Ok(())
+	}
+}
+
+impl<K> WalletClient for LMDBBackend<K> {
+	/// Return URL for check node
+	fn node_url(&self) -> &str {
+		&self.config.check_node_api_http_addr
+	}
+
+	/// Call the wallet API to create a coinbase transaction
+	fn create_coinbase(
+		&self,
+		dest: &str,
+		block_fees: &BlockFees,
+	) -> Result<CbData, Error> {
+		let res =
+			client::create_coinbase(dest, block_fees).context(ErrorKind::WalletComms)?;
+		Ok(res)
+	}
+
+	/// Send a transaction slate to another listening wallet and return result
+	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, Error> {
+		let res = client::send_tx_slate(dest, slate).context(ErrorKind::WalletComms)?;
+		Ok(res)
+	}
+
+	/// Posts a tranaction to a grin node
+	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error> {
+		let res = client::post_tx(dest, tx, fluff).context(ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieves the current tip from the specified grin node
+	fn get_chain_height(&self, addr: &str) -> Result<u64, Error> {
+		let res = client::get_chain_height(addr).context(ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieve a list of outputs from the specified grin node
+	/// need "by_height" and "by_id" variants
+	fn get_outputs_from_node(
+		&self,
+		addr: &str,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<HashMap<pedersen::Commitment, String>, Error> {
+		let res = client::get_outputs_from_node(addr, wallet_outputs)
+			.context(ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// Get any missing block hashes from node
+	fn get_missing_block_hashes_from_node(
+		&self,
+		addr: &str,
+		height: u64,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<
+		(
+			HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
+			HashMap<pedersen::Commitment, MerkleProofWrapper>,
+		),
+		Error,
+	> {
+		let res = client::get_missing_block_hashes_from_node(addr, height, wallet_outputs)
+			.context(ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieve merkle proof for a commit from a node
+	fn get_merkle_proof_for_commit(
+		&self,
+		addr: &str,
+		commit: &str,
+	) -> Result<MerkleProofWrapper, Error> {
+		Err(ErrorKind::GenericError("Not Implemented"))?
 	}
 }

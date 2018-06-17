@@ -120,7 +120,7 @@ where
 	K: Keychain,
 {
 	// Create a potential output for this transaction
-	let (key_id, derivation) = keys::next_available_key(wallet);
+	let (key_id, derivation) = keys::next_available_key(wallet).unwrap();
 
 	let keychain = wallet.keychain().clone();
 	let root_key_id = keychain.root_key_id();
@@ -320,7 +320,7 @@ where
 	if change != 0 {
 		let keychain = wallet.keychain().clone();
 		let root_key_id = keychain.root_key_id();
-		let change_derivation = wallet.next_child(root_key_id.clone());
+		let change_derivation = wallet.next_child(root_key_id.clone()).unwrap();
 		let change_k = keychain.derive_key_id(change_derivation).unwrap();
 
 		// track the output representing our change
