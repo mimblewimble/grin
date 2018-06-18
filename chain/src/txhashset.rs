@@ -1054,7 +1054,6 @@ pub fn zip_write(root_dir: String, txhashset_data: File) -> Result<(), Error> {
 	zip::decompress(txhashset_data, &txhashset_path).map_err(|ze| Error::Other(ze.to_string()))
 }
 
-<<<<<<< HEAD
 /// Check that the txhashset directory does not contains unexpected files
 fn check_files(txhashset_path: &PathBuf) -> Result<(), Error> {
 	let subdirectories_expected: HashSet<_> = [OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR]
@@ -1112,7 +1111,6 @@ fn check_files(txhashset_path: &PathBuf) -> Result<(), Error> {
 		}
 	}
 	Ok(())
-=======
 /// Given a block header to rewind to and the block header at the
 /// head of the current chain state, we need to calculate the positions
 /// of all outputs we need to "undo" during a rewind.
@@ -1158,5 +1156,4 @@ fn input_pos_to_rewind(
 		current = current_header.previous;
 	}
 	Ok(bitmap)
->>>>>>> 028b14d9d9fa14424c23685b3d5a246c64ac5097
 }
