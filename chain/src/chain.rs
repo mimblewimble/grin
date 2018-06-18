@@ -25,6 +25,7 @@ use lmdb;
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
+use core::core::Committed;
 use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, Transaction,
                  TxKernel};
 use core::global;
@@ -32,9 +33,10 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::*;
-use util::LOGGER;
+use types::{BlockMarker, BlockSums, ChainAdapter, Error, Options, Tip};
+use chain::store::ChainStore;
 use util::secp::pedersen::{Commitment, RangeProof};
+use util::LOGGER;
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -583,7 +585,7 @@ impl Chain {
 		Ok(())
 	}
 
-	/// Triggers chain compaction, cleaning up some unecessary historical
+	/// Triggers chain compaction, cleaning up some unnecessary historical
 	/// information. We introduce a chain depth called horizon, which is
 	/// typically in the range of a couple days. Before that horizon, this
 	/// method will:

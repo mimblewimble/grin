@@ -15,12 +15,12 @@
 //! Selection of inputs for building transactions
 
 use keychain::{Identifier, Keychain};
-use libtx::{build, tx_fee, slate::Slate};
+use libtx::{build, slate::Slate, tx_fee};
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::{keys, sigcontext};
 use libwallet::types::*;
 
-/// Initialise a transaction on the sender side, returns a corresponding
+/// Initialize a transaction on the sender side, returns a corresponding
 /// libwallet transaction slate with the appropriate inputs selected,
 /// and saves the private wallet identifiers of our selected outputs
 /// into our transaction context
@@ -46,7 +46,7 @@ where
 	T: WalletBackend<K>,
 	K: Keychain,
 {
-	let (elems, inputs, change_id, amount, fee) = select_send_tx(
+	let (elems, inputs, change, change_derivation, amount, fee) = select_send_tx(
 		wallet,
 		amount,
 		current_height,
@@ -78,12 +78,15 @@ where
 	}
 
 	// Store change output
-	if change_id.is_some() {
-		context.add_output(&change_id.unwrap());
+	if change_derivation.is_some() {
+		let change_id = keychain.derive_key_id(change_derivation.unwrap()).unwrap();
+		context.add_output(&change_id);
 	}
 
 	let lock_inputs = context.get_inputs().clone();
 	let _lock_outputs = context.get_outputs().clone();
+
+	let root_key_id = keychain.root_key_id();
 
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
@@ -92,6 +95,23 @@ where
 		for id in lock_inputs {
 			let coin = batch.get(&id).unwrap();
 			batch.lock_output(&coin);
+		}
+		// write the output representing our change
+		if let Some(d) = change_derivation {
+			let change_id = keychain.derive_key_id(change_derivation.unwrap()).unwrap();
+
+			batch.save(OutputData {
+				root_key_id: root_key_id,
+				key_id: change_id.clone(),
+				n_child: d,
+				value: change as u64,
+				status: OutputStatus::Unconfirmed,
+				height: current_height,
+				lock_height: 0,
+				is_coinbase: false,
+				block: None,
+				merkle_proof: None,
+			});
 		}
 		batch.commit()?;
 		Ok(())
@@ -178,9 +198,10 @@ pub fn select_send_tx<T, K>(
 	(
 		Vec<Box<build::Append<K>>>,
 		Vec<OutputData>,
-		Option<Identifier>,
-		u64, // amount
-		u64, // fee
+		u64,         //change
+		Option<u32>, //change derivation
+		u64,         // amount
+		u64,         // fee
 	),
 	Error,
 >
@@ -260,13 +281,14 @@ where
 	}
 
 	// build transaction skeleton with inputs and change
-	let (mut parts, change_key) = inputs_and_change(&coins, wallet, current_height, amount, fee)?;
+	let (mut parts, change, change_derivation) =
+		inputs_and_change(&coins, wallet, amount, fee)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
 	parts.push(build::with_lock_height(lock_height));
 
-	Ok((parts, coins, change_key, amount, fee))
+	Ok((parts, coins, change, change_derivation, amount, fee))
 }
 
 /// coins proof count
@@ -278,10 +300,9 @@ pub fn coins_proof_count(coins: &Vec<OutputData>) -> usize {
 pub fn inputs_and_change<T, K>(
 	coins: &Vec<OutputData>,
 	wallet: &mut T,
-	height: u64,
 	amount: u64,
 	fee: u64,
-) -> Result<(Vec<Box<build::Append<K>>>, Option<Identifier>), Error>
+) -> Result<(Vec<Box<build::Append<K>>>, u64, Option<u32>), Error>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
@@ -316,34 +337,15 @@ where
 			parts.push(build::input(coin.value, key_id));
 		}
 	}
-	let change_key;
+	let mut change_derivation = None;
 	if change != 0 {
 		let keychain = wallet.keychain().clone();
 		let root_key_id = keychain.root_key_id();
-		let change_derivation = wallet.next_child(root_key_id.clone()).unwrap();
-		let change_k = keychain.derive_key_id(change_derivation).unwrap();
-
-		// track the output representing our change
-		let mut batch = wallet.batch()?;
-		batch.save(OutputData {
-			root_key_id: root_key_id.clone(),
-			key_id: change_k.clone(),
-			n_child: change_derivation,
-			value: change as u64,
-			status: OutputStatus::Unconfirmed,
-			height: height,
-			lock_height: 0,
-			is_coinbase: false,
-			block: None,
-			merkle_proof: None,
-		});
-		batch.commit()?;
+		change_derivation = Some(wallet.next_child(root_key_id.clone()).unwrap());
+		let change_k = keychain.derive_key_id(change_derivation.unwrap()).unwrap();
 
 		parts.push(build::output(change, change_k.clone()));
-		change_key = Some(change_k);
-	} else {
-		change_key = None
 	}
 
-	Ok((parts, change_key))
+	Ok((parts, change, change_derivation))
 }

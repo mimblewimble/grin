@@ -21,19 +21,16 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use time;
 
+use chain;
 use common::adapters::PoolToChainAdapter;
 use common::types::StratumServerConfig;
-use core::consensus;
-use core::core::Proof;
 use core::core::hash::{Hash, Hashed};
-use core::core::{Block, BlockHeader};
+use core::core::{Block, BlockHeader, Proof};
 use core::pow::cuckoo;
-use util::LOGGER;
-
-use chain;
-use core::global;
+use core::{consensus, global};
 use mining::mine_block;
 use pool;
+use util::LOGGER;
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;

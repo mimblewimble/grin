@@ -75,7 +75,7 @@ impl From<io::Error> for ConfigError {
 /// as they tend to be quite nested in the code
 /// Most structs optional, as they may or may not
 /// be needed depending on what's being run
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct GlobalConfig {
 	/// Keep track of the file we've read
 	pub config_file_path: Option<PathBuf>,
@@ -91,7 +91,7 @@ pub struct GlobalConfig {
 /// level GlobalConfigContainer options might want to keep
 /// internal state that we don't necessarily
 /// want serialised or deserialised
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConfigMembers {
 	/// Server config
 	#[serde(default)]

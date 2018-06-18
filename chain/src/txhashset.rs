@@ -172,7 +172,7 @@ impl TxHashSet {
 		output_pmmr.elements_from_insertion_index(start_index, max_count)
 	}
 
-	/// highest output insertion index availalbe
+	/// highest output insertion index available
 	pub fn highest_output_insertion_index(&mut self) -> u64 {
 		pmmr::n_leaves(self.output_pmmr_h.last_pos)
 	}

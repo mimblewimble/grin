@@ -27,15 +27,16 @@ extern crate grin_wallet as wallet;
 
 mod framework;
 
-use std::{thread, time};
-use std::sync::{Arc, Mutex};
 use framework::{LocalServerContainer, LocalServerContainerConfig};
+use std::sync::{Arc, Mutex};
+use std::{thread, time};
 
 use util::LOGGER;
 
 /// Start 1 node mining, 1 non mining node and two wallets.
-/// Then send a transaction from one wallet to another and propagate it a stem transaction
-/// but without stem relay and check if the transaction is still broadcasted.
+/// Then send a transaction from one wallet to another and propagate it a stem
+/// transaction but without stem relay and check if the transaction is still
+/// broadcasted.
 #[test]
 #[ignore]
 fn test_dandelion_timeout() {
@@ -155,9 +156,7 @@ fn test_dandelion_timeout() {
 
 	// The transaction should be waiting in the node stempool thus cannot be mined.
 	println!("Recipient wallet info: {:?}", recipient_info);
-	assert!(
-		recipient_info.data_confirmed && recipient_info.amount_awaiting_confirmation == 50000000000
-	);
+	assert!(recipient_info.amount_awaiting_confirmation == 50000000000);
 
 	// Wait for stem timeout
 	thread::sleep(time::Duration::from_millis(35000));

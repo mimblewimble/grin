@@ -14,8 +14,8 @@
 
 //! Transactions
 
-use std::cmp::Ordering;
 use std::cmp::max;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::io::Cursor;
 use std::{error, fmt};
@@ -24,16 +24,11 @@ use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
 
-use consensus;
-use consensus::VerifySortOrder;
-use core::BlockHeader;
-use core::committed;
-use core::committed::Committed;
-use core::global;
+use consensus::{self, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::pmmr::MerkleProof;
-use keychain;
-use keychain::BlindingFactor;
+use core::{committed, global, BlockHeader, Committed};
+use keychain::{self, BlindingFactor};
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};
 use util;
@@ -78,6 +73,12 @@ pub enum Error {
 	InvalidProofMessage,
 	/// Error when verifying kernel sums via committed trait.
 	Committed(committed::Error),
+	/// Error when sums do not verify correctly during tx aggregation.
+	/// Likely a "double spend" across two unconfirmed txs.
+	AggregationError,
+	/// Validation error relating to cut-through (tx is spending its own
+	/// output).
+	CutThrough,
 }
 
 impl error::Error for Error {
@@ -430,6 +431,7 @@ impl Transaction {
 			return Err(Error::TooManyInputs);
 		}
 		self.verify_sorted()?;
+		self.verify_cut_through()?;
 		self.verify_kernel_sums(self.overage(), self.offset, None, None)?;
 		self.verify_rangeproofs()?;
 		self.verify_kernel_signatures()?;
@@ -464,10 +466,24 @@ impl Transaction {
 		tx_weight as u32
 	}
 
+	// Verify that inputs|outputs|kernels are all sorted in lexicographical order.
 	fn verify_sorted(&self) -> Result<(), Error> {
 		self.inputs.verify_sort_order()?;
 		self.outputs.verify_sort_order()?;
 		self.kernels.verify_sort_order()?;
+		Ok(())
+	}
+
+	// Verify that no input is spending an output from the same block.
+	fn verify_cut_through(&self) -> Result<(), Error> {
+		for inp in &self.inputs {
+			if self.outputs
+				.iter()
+				.any(|out| out.commitment() == inp.commitment())
+			{
+				return Err(Error::CutThrough);
+			}
+		}
 		Ok(())
 	}
 }
@@ -484,7 +500,7 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	let mut kernel_offsets: Vec<BlindingFactor> = vec![];
 
 	for mut transaction in transactions {
-		// we will summ these later to give a single aggregate offset
+		// we will sum these later to give a single aggregate offset
 		kernel_offsets.push(transaction.offset);
 
 		inputs.append(&mut transaction.inputs);
@@ -713,7 +729,7 @@ impl Input {
 		self.commit
 	}
 
-	/// Convenience functon to return the (optional) block_hash for this input.
+	/// Convenience function to return the (optional) block_hash for this input.
 	/// Will return the default hash if we do not have one.
 	pub fn block_hash(&self) -> Hash {
 		self.block_hash.unwrap_or_else(Hash::default)
@@ -962,7 +978,7 @@ impl Readable for OutputIdentifier {
 	}
 }
 
-/// A structure which contains fields that are to be commited to within
+/// A structure which contains fields that are to be committed to within
 /// an Output's range (bullet) proof.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ProofMessageElements {
@@ -1056,12 +1072,12 @@ impl ProofMessageElements {
 		true
 	}
 
-	/// Serialise and return a ProofMessage
+	/// Serialize and return a ProofMessage
 	pub fn to_proof_message(&self) -> ProofMessage {
 		ProofMessage::from_bytes(&ser_vec(self).unwrap())
 	}
 
-	/// Deserialise and return the message elements
+	/// Deserialize and return the message elements
 	pub fn from_proof_message(
 		proof_message: &ProofMessage,
 	) -> Result<ProofMessageElements, ser::Error> {
@@ -1103,7 +1119,7 @@ mod test {
 		assert_eq!(kernel2.excess_sig, sig.clone());
 		assert_eq!(kernel2.fee, 10);
 
-		// now check a kernel with lock_height serializes/deserializes correctly
+		// now check a kernel with lock_height serialize/deserialize correctly
 		let kernel = TxKernel {
 			features: KernelFeatures::DEFAULT_KERNEL,
 			lock_height: 100,

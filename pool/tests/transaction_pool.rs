@@ -27,18 +27,14 @@ pub mod common;
 
 use std::sync::{Arc, RwLock};
 
-use core::core::{Block, BlockHeader};
-
-use chain::ChainStore;
-use chain::txhashset;
 use chain::types::Tip;
+use chain::{txhashset, ChainStore};
+use common::{clean_output_dir, test_setup, test_source, test_transaction,
+             test_transaction_spending_coinbase, ChainAdapter};
 use core::core::target::Difficulty;
-use core::core::transaction;
-
+use core::core::{transaction, Block, BlockHeader};
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
-
-use common::*;
 
 /// Test we can add some txs to the pool (both stempool and txpool).
 #[test]

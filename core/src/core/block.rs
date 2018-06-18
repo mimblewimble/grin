@@ -19,22 +19,17 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use time;
 
-use consensus;
-use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
-use core::committed;
-use core::committed::Committed;
+use consensus::{self, exceeds_weight, reward, VerifySortOrder, REWARD};
+use core::committed::{self, Committed};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
 use core::target::Difficulty;
-use core::transaction;
-use core::{Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId, Transaction,
-           TxKernel};
+use core::{transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId,
+           Transaction, TxKernel};
 use global;
-use keychain;
-use keychain::BlindingFactor;
+use keychain::{self, BlindingFactor};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
-use util::LOGGER;
-use util::{secp, static_secp_instance};
+use util::{secp, static_secp_instance, LOGGER};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
@@ -70,6 +65,9 @@ pub enum Error {
 	MerkleProof,
 	/// Error when verifying kernel sums via committed trait.
 	Committed(committed::Error),
+	/// Validation error relating to cut-through.
+	/// Specifically the tx is spending its own output, which is not valid.
+	CutThrough,
 	/// Other unspecified error condition
 	Other(String),
 }
@@ -558,7 +556,7 @@ impl Block {
 			// on the block_header
 			tx.validate()?;
 
-			// we will summ these later to give a single aggregate offset
+			// we will sum these later to give a single aggregate offset
 			kernel_offsets.push(tx.offset);
 
 			// add all tx inputs/outputs/kernels to the block
@@ -682,6 +680,7 @@ impl Block {
 	) -> Result<((Commitment, Commitment)), Error> {
 		self.verify_weight()?;
 		self.verify_sorted()?;
+		self.verify_cut_through()?;
 		self.verify_coinbase()?;
 		self.verify_inputs()?;
 		self.verify_kernel_lock_heights()?;
@@ -705,10 +704,24 @@ impl Block {
 		Ok(())
 	}
 
+	// Verify that inputs|outputs|kernels are all sorted in lexicographical order.
 	fn verify_sorted(&self) -> Result<(), Error> {
 		self.inputs.verify_sort_order()?;
 		self.outputs.verify_sort_order()?;
 		self.kernels.verify_sort_order()?;
+		Ok(())
+	}
+
+	// Verify that no input is spending an output from the same block.
+	fn verify_cut_through(&self) -> Result<(), Error> {
+		for inp in &self.inputs {
+			if self.outputs
+				.iter()
+				.any(|out| out.commitment() == inp.commitment())
+			{
+				return Err(Error::CutThrough);
+			}
+		}
 		Ok(())
 	}
 

@@ -16,21 +16,21 @@
 //! the wallet storage and update them.
 
 use failure::ResultExt;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 use core::consensus::reward;
 use core::core::{Output, TxKernel};
-use core::global;
-use core::ser;
+use core::{global, ser};
 use keychain::{Identifier, Keychain};
 use libtx::reward;
+use libwallet;
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
-use libwallet::types::*;
-use util;
-use util::LOGGER;
+use libwallet::types::{BlockFees, CbData, OutputData, OutputStatus, WalletBackend, WalletClient,
+                       WalletInfo};
 use util::secp::pedersen;
+use util::{self, LOGGER};
 
 /// Retrieve all of the outputs (doesn't attempt to update from node)
 pub fn retrieve_outputs<T, K>(wallet: &mut T, show_spent: bool) -> Result<Vec<OutputData>, Error>
@@ -167,7 +167,8 @@ pub fn apply_api_outputs<T, K>(
 	wallet: &mut T,
 	wallet_outputs: &HashMap<pedersen::Commitment, Identifier>,
 	api_outputs: &HashMap<pedersen::Commitment, String>,
-) -> Result<(), Error>
+	height: u64,
+) -> Result<(), libwallet::Error>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
@@ -175,17 +176,21 @@ where
 	// now for each commit, find the output in the wallet and the corresponding
 	// api output (if it exists) and refresh it in-place in the wallet.
 	// Note: minimizing the time we spend holding the wallet lock.
-	let mut batch = wallet.batch()?;
-	for (commit, id) in wallet_outputs.iter() {
-		if let Some(mut output) = batch.get(id) {
-			match api_outputs.get(&commit) {
-				Some(_) => output.mark_unspent(),
-				None => output.mark_spent(),
-			};
-			batch.save(output);
+	{
+		let mut batch = wallet.batch()?;
+		for (commit, id) in wallet_outputs.iter() {
+			if let Some(mut output) = batch.get(id) {
+				match api_outputs.get(&commit) {
+					Some(_) => output.mark_unspent(),
+					None => output.mark_spent(),
+				};
+				batch.save(output);
+			}
 		}
+		batch.commit()?;
 	}
-	batch.commit()?;
+	let details = wallet.details();
+	details.last_confirmed_height = height;
 	Ok(())
 }
 
@@ -205,7 +210,7 @@ where
 	let wallet_output_keys = wallet_outputs.keys().map(|commit| commit.clone()).collect();
 
 	let api_outputs = wallet.get_outputs_from_node(wallet.node_url(), wallet_output_keys)?;
-	apply_api_outputs(wallet, &wallet_outputs, &api_outputs)?;
+	apply_api_outputs(wallet, &wallet_outputs, &api_outputs, height)?;
 	clean_old_unconfirmed(wallet, height)?;
 	Ok(())
 }
@@ -232,38 +237,30 @@ where
 	Ok(())
 }
 
-/// Retrieve summar info about the wallet
+/// Retrieve summary info about the wallet
+/// caller should refresh first if desired
 pub fn retrieve_info<T, K>(wallet: &mut T) -> Result<WalletInfo, Error>
 where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
-	let result = refresh_outputs(wallet);
+	let current_height = wallet.details().last_confirmed_height;
+	let keychain = wallet.keychain().clone();
+	let outputs = wallet.iter()
+		.filter(|out| out.root_key_id == keychain.root_key_id());
+	
 
-	let height_res = wallet.get_chain_height(&wallet.node_url());
-
-	let (current_height, from) = match height_res {
-		Ok(height) => (height, "from server node"),
-		Err(_) => match wallet.iter().map(|out| out.height).max() {
-			Some(height) => (height, "from wallet"),
-			None => (0, "node/wallet unavailable"),
-		},
-	};
 	let mut unspent_total = 0;
-	let mut unspent_but_locked_total = 0;
+	let mut immature_total = 0;
 	let mut unconfirmed_total = 0;
 	let mut locked_total = 0;
-	let keychain = wallet.keychain().clone();
-	let outputs = wallet
-		.iter()
-		.filter(|out| out.root_key_id == keychain.root_key_id());
-
-	for out in outputs {
-		if out.status == OutputStatus::Unspent {
+	for out in outputs
+	{
+		if out.status == OutputStatus::Unspent && out.lock_height <= current_height {
 			unspent_total += out.value;
-			if out.lock_height > current_height {
-				unspent_but_locked_total += out.value;
-			}
+		}
+		if out.status == OutputStatus::Unspent && out.lock_height > current_height {
+			immature_total += out.value;
 		}
 		if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
 			unconfirmed_total += out.value;
@@ -273,19 +270,13 @@ where
 		}
 	}
 
-	let mut data_confirmed = true;
-	if let Err(_) = result {
-		data_confirmed = false;
-	}
 	Ok(WalletInfo {
-		current_height: current_height,
-		total: unspent_total + unconfirmed_total,
+		last_confirmed_height: current_height,
+		total: unspent_total + unconfirmed_total + immature_total,
 		amount_awaiting_confirmation: unconfirmed_total,
-		amount_confirmed_but_locked: unspent_but_locked_total,
-		amount_currently_spendable: unspent_total - unspent_but_locked_total,
+		amount_immature: immature_total,
 		amount_locked: locked_total,
-		data_confirmed: data_confirmed,
-		data_confirmed_from: String::from(from),
+		amount_currently_spendable: unspent_total,
 	})
 }
 

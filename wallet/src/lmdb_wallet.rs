@@ -108,7 +108,7 @@ where
 		unimplemented!()
 	}
 
-	fn next_child(&self, root_key_id: Identifier) -> Result<u32, Error> {
+	fn next_child<'a>(&mut self, root_key_id: Identifier) -> Result<u32, Error> {
 		let batch = self.db.batch()?;
 		// a simple counter, only one batch per db guarantees atomicity
 		let deriv_key = to_key(DERIV_PREFIX, &mut root_key_id.to_bytes().to_vec());
@@ -132,6 +132,10 @@ where
 	) -> Vec<OutputData> {
 		unimplemented!()
 	}
+	
+	fn details(&mut self) -> &mut WalletDetails {
+		unimplemented!()
+	}
 
 	fn restore(&mut self) -> Result<(), Error> {
 		internal::restore::restore(self).context(ErrorKind::Restore)?;
@@ -152,13 +156,13 @@ impl<K> WalletClient for LMDBBackend<K> {
 		block_fees: &BlockFees,
 	) -> Result<CbData, Error> {
 		let res =
-			client::create_coinbase(dest, block_fees).context(ErrorKind::WalletComms)?;
+			client::create_coinbase(dest, block_fees).context(ErrorKind::WalletComms(format!("Creating Coinbase")))?;
 		Ok(res)
 	}
 
 	/// Send a transaction slate to another listening wallet and return result
 	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, Error> {
-		let res = client::send_tx_slate(dest, slate).context(ErrorKind::WalletComms)?;
+		let res = client::send_tx_slate(dest, slate).context(ErrorKind::WalletComms(format!("Sending transaction")))?;
 		Ok(res)
 	}
 

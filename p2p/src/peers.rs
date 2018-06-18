@@ -27,7 +27,8 @@ use util::LOGGER;
 
 use peer::Peer;
 use store::{PeerData, PeerStore, State};
-use types::*;
+use types::{Capabilities, ChainAdapter, Direction, Error, NetAdapter, P2PConfig, ReasonForBan,
+            TxHashSetRead, MAX_PEER_ADDRS};
 
 pub struct Peers {
 	pub adapter: Arc<ChainAdapter>,
@@ -279,7 +280,7 @@ impl Peers {
 		}
 	}
 
-	/// Unbans a peer, checks if it exists and banned then unban
+	/// Unban a peer, checks if it exists and banned then unban
 	pub fn unban_peer(&self, peer_addr: &SocketAddr) {
 		match self.get_peer(peer_addr.clone()) {
 			Ok(_) => {
@@ -553,7 +554,7 @@ impl ChainAdapter for Peers {
 		let hash = b.hash();
 		if !self.adapter.block_received(b, peer_addr) {
 			// if the peer sent us a block that's intrinsically bad
-			// they are either mistaken or manevolent, both of which require a ban
+			// they are either mistaken or malevolent, both of which require a ban
 			debug!(
 				LOGGER,
 				"Received a bad block {} from  {}, the peer will be banned", hash, peer_addr
@@ -569,7 +570,7 @@ impl ChainAdapter for Peers {
 		let hash = cb.hash();
 		if !self.adapter.compact_block_received(cb, peer_addr) {
 			// if the peer sent us a block that's intrinsically bad
-			// they are either mistaken or manevolent, both of which require a ban
+			// they are either mistaken or malevolent, both of which require a ban
 			debug!(
 				LOGGER,
 				"Received a bad compact block {} from  {}, the peer will be banned",
@@ -586,7 +587,7 @@ impl ChainAdapter for Peers {
 	fn header_received(&self, bh: core::BlockHeader, peer_addr: SocketAddr) -> bool {
 		if !self.adapter.header_received(bh, peer_addr) {
 			// if the peer sent us a block header that's intrinsically bad
-			// they are either mistaken or manevolent, both of which require a ban
+			// they are either mistaken or malevolent, both of which require a ban
 			self.ban_peer(&peer_addr, ReasonForBan::BadBlockHeader);
 			false
 		} else {
@@ -675,7 +676,7 @@ impl NetAdapter for Peers {
 
 	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height: u64) {
 		if diff != self.total_difficulty() || height != self.total_height() {
-			debug!(
+			trace!(
 				LOGGER,
 				"ping/pong: {}: {} @ {} vs us: {} @ {}",
 				addr,

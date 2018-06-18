@@ -15,7 +15,7 @@ hashes for *all* outputs, not only the unspent ones).
 In addition, all headers in the chain are required to anchor the above state
 with a valid proof of work (the state corresponds to the most worked chain).
 We note that once each range proof is validated and the sum of all kernels
-commitment is computed, range proofs and kernels are not stricly necessary for
+commitment is computed, range proofs and kernels are not strictly necessary for
 a node to function anymore.
 
 ### Validation

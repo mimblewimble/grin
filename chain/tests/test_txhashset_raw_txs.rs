@@ -25,6 +25,7 @@ use chain::store::ChainStore;
 use chain::txhashset;
 use chain::txhashset::TxHashSet;
 use chain::types::Tip;
+use chain::ChainStore;
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};

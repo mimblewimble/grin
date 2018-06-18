@@ -49,6 +49,7 @@ use daemonize::Daemonize;
 use config::GlobalConfig;
 use core::core::amount_to_hr_string;
 use core::global;
+use keychain::{self, ExtKeychain};
 use tui::ui;
 use util::{init_logger, LoggingConfig, LOGGER};
 use wallet::{libwallet, FileWallet};
@@ -300,7 +301,7 @@ fn main() {
 	});
 
 	if global_config.using_config_file {
-		// initialise the logger
+		// initialize the logger
 		let mut log_conf = global_config
 			.members
 			.as_mut()
@@ -370,7 +371,12 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 		info!(
 			LOGGER,
 			"Starting the Grin server from configuration file at {}",
-			global_config.config_file_path.unwrap().to_str().unwrap()
+			global_config
+				.config_file_path
+				.as_ref()
+				.unwrap()
+				.to_str()
+				.unwrap()
 		);
 		global::set_mining_mode(
 			global_config
@@ -413,7 +419,7 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 	}
 
 	if let Some(true) = server_config.run_wallet_listener {
-		let mut wallet_config = global_config.members.unwrap().wallet;
+		let mut wallet_config = global_config.members.as_ref().unwrap().wallet.clone();
 		if let Err(_) = wallet::WalletSeed::from_file(&wallet_config) {
 			wallet::WalletSeed::init_file(&wallet_config)
 				.expect("Failed to create wallet seed file.");
@@ -433,6 +439,28 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 							e, wallet_config
 						)
 					});
+			});
+	}
+	if let Some(true) = server_config.run_wallet_owner_api {
+		let mut wallet_config = global_config.members.unwrap().wallet;
+		if let Err(_) = wallet::WalletSeed::from_file(&wallet_config) {
+			wallet::WalletSeed::init_file(&wallet_config)
+				.expect("Failed to create wallet seed file.");
+		};
+
+		let _ = thread::Builder::new()
+			.name("wallet_owner_listener".to_string())
+			.spawn(move || {
+				let wallet: FileWallet<ExtKeychain> = FileWallet::new(wallet_config.clone(), "")
+					.unwrap_or_else(|e| {
+						panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+					});
+				wallet::controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
+					panic!(
+						"Error creating wallet api listener: {:?} Config: {:?}",
+						e, wallet_config
+					)
+				});
 			});
 	}
 
@@ -653,18 +681,19 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					Ok(())
 				}
 				("info", Some(_)) => {
-					let _res = wallet::display::info(&api.retrieve_summary_info()?.1)
-						.unwrap_or_else(|e| {
+					let (validated, wallet_info) =
+						api.retrieve_summary_info(true).unwrap_or_else(|e| {
 							panic!(
 								"Error getting wallet info: {:?} Config: {:?}",
 								e, wallet_config
 							)
 						});
+					wallet::display::info(&wallet_info, validated);
 					Ok(())
 				}
 				("outputs", Some(_)) => {
 					let (height, validated) = api.node_height()?;
-					let (_, outputs) = api.retrieve_outputs(show_spent)?;
+					let (_, outputs) = api.retrieve_outputs(show_spent, true)?;
 					let _res =
 						wallet::display::outputs(height, validated, outputs).unwrap_or_else(|e| {
 							panic!(

@@ -48,8 +48,11 @@ pub enum ErrorKind {
 	},
 
 	/// Fee Exceeds amount
-	#[fail(display = "Fee exceeds amount: sender amount {}, recipient fee {}", sender_amount,
-	       recipient_fee)]
+	#[fail(
+		display = "Fee exceeds amount: sender amount {}, recipient fee {}",
+		sender_amount,
+		recipient_fee
+	)]
 	FeeExceedsAmount {
 		/// sender amount
 		sender_amount: u64,
@@ -98,8 +101,8 @@ pub enum ErrorKind {
 	Node,
 
 	/// Error contacting wallet API
-	#[fail(display = "Wallet communication error")]
-	WalletComms,
+	#[fail(display = "Wallet Communication Error: {}", _0)]
+	WalletComms(String),
 
 	/// Error originating from hyper.
 	#[fail(display = "Hyper error")]

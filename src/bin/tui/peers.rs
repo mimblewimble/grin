@@ -18,15 +18,15 @@ use std::cmp::Ordering;
 
 use servers::{PeerStats, ServerStats};
 
-use cursive::Cursive;
+use cursive::direction::Orientation;
+use cursive::traits::{Boxable, Identifiable};
 use cursive::view::View;
 use cursive::views::{BoxView, Dialog, LinearLayout, TextView};
-use cursive::direction::Orientation;
-use cursive::traits::*;
+use cursive::Cursive;
 
+use tui::constants::{TABLE_PEER_STATUS, VIEW_PEER_SYNC};
 use tui::table::{TableView, TableViewItem};
-use tui::constants::*;
-use tui::types::*;
+use tui::types::TUIStatusListener;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum PeerColumn {
