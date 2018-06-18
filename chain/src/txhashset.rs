@@ -234,9 +234,9 @@ impl TxHashSet {
 		let horizon_header = self.commit_index.get_header_by_height(horizon)?;
 		let horizon_marker = self.commit_index.get_block_marker(&horizon_header.hash())?;
 
-		let rewind_output_pos =
+		let rewind_add_pos =
 			output_pos_to_rewind(self.commit_index.clone(), &horizon_header, &head_header)?;
-		let rewind_spent_pos =
+		let rewind_rm_pos =
 			input_pos_to_rewind(self.commit_index.clone(), &horizon_header, &head_header)?;
 
 		let clean_output_index = |commit: &[u8]| {
@@ -246,15 +246,15 @@ impl TxHashSet {
 
 		self.output_pmmr_h.backend.check_compact(
 			horizon_marker.output_pos,
-			&rewind_output_pos,
-			&rewind_spent_pos,
+			&rewind_add_pos,
+			&rewind_rm_pos,
 			clean_output_index,
 		)?;
 
 		self.rproof_pmmr_h.backend.check_compact(
 			horizon_marker.output_pos,
-			&rewind_output_pos,
-			&rewind_spent_pos,
+			&rewind_add_pos,
+			&rewind_rm_pos,
 			&prune_noop,
 		)?;
 
@@ -430,13 +430,13 @@ impl<'a> Extension<'a> {
 		&mut self,
 		output_pos: u64,
 		kernel_pos: u64,
-		rewind_spent_pos: &Bitmap,
+		rewind_rm_pos: &Bitmap,
 	) -> Result<(), Error> {
 		let latest_output_pos = self.output_pmmr.unpruned_size();
-		let rewind_output_pos: Bitmap = ((output_pos + 1)..(latest_output_pos + 1))
+		let rewind_add_pos: Bitmap = ((output_pos + 1)..(latest_output_pos + 1))
 			.map(|x| x as u32)
 			.collect();
-		self.rewind_to_pos(output_pos, kernel_pos, &rewind_output_pos, rewind_spent_pos)?;
+		self.rewind_to_pos(output_pos, kernel_pos, &rewind_add_pos, rewind_rm_pos)?;
 		Ok(())
 	}
 
@@ -459,7 +459,7 @@ impl<'a> Extension<'a> {
 		let kernel_pos = self.kernel_pmmr.unpruned_size();
 
 		// Build bitmap of output pos spent (as inputs) by this tx for rewind.
-		let rewind_spent_pos = tx.inputs
+		let rewind_rm_pos = tx.inputs
 			.iter()
 			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
 			.map(|x| x as u32)
@@ -467,21 +467,21 @@ impl<'a> Extension<'a> {
 
 		for ref output in &tx.outputs {
 			if let Err(e) = self.apply_output(output) {
-				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_spent_pos)?;
+				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
 				return Err(e);
 			}
 		}
 
 		for ref input in &tx.inputs {
 			if let Err(e) = self.apply_input(input) {
-				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_spent_pos)?;
+				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
 				return Err(e);
 			}
 		}
 
 		for ref kernel in &tx.kernels {
 			if let Err(e) = self.apply_kernel(kernel) {
-				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_spent_pos)?;
+				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
 				return Err(e);
 			}
 		}
@@ -747,16 +747,16 @@ impl<'a> Extension<'a> {
 		// based on the block_marker
 		let marker = self.commit_index.get_block_marker(&hash)?;
 
-		let rewind_output_pos =
+		let rewind_add_pos =
 			output_pos_to_rewind(self.commit_index.clone(), block_header, head_header)?;
-		let rewind_spent_pos =
+		let rewind_rm_pos =
 			input_pos_to_rewind(self.commit_index.clone(), block_header, head_header)?;
 
 		self.rewind_to_pos(
 			marker.output_pos,
 			marker.kernel_pos,
-			&rewind_output_pos,
-			&rewind_spent_pos,
+			&rewind_add_pos,
+			&rewind_rm_pos,
 		)?;
 
 		Ok(())
@@ -768,8 +768,8 @@ impl<'a> Extension<'a> {
 		&mut self,
 		output_pos: u64,
 		kernel_pos: u64,
-		rewind_output_pos: &Bitmap,
-		rewind_spent_pos: &Bitmap,
+		rewind_add_pos: &Bitmap,
+		rewind_rm_pos: &Bitmap,
 	) -> Result<(), Error> {
 		trace!(
 			LOGGER,
@@ -784,13 +784,13 @@ impl<'a> Extension<'a> {
 		self.new_output_commits.retain(|_, &mut v| v <= output_pos);
 
 		self.output_pmmr
-			.rewind(output_pos, rewind_output_pos, rewind_spent_pos)
+			.rewind(output_pos, rewind_add_pos, rewind_rm_pos)
 			.map_err(&Error::TxHashSetErr)?;
 		self.rproof_pmmr
-			.rewind(output_pos, rewind_output_pos, rewind_spent_pos)
+			.rewind(output_pos, rewind_add_pos, rewind_rm_pos)
 			.map_err(&Error::TxHashSetErr)?;
 		self.kernel_pmmr
-			.rewind(kernel_pos, rewind_output_pos, rewind_spent_pos)
+			.rewind(kernel_pos, rewind_add_pos, rewind_rm_pos)
 			.map_err(&Error::TxHashSetErr)?;
 
 		Ok(())

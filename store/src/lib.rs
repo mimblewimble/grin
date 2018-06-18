@@ -33,10 +33,10 @@ extern crate serde;
 #[macro_use]
 extern crate slog;
 
+pub mod leaf_set;
 pub mod pmmr;
 pub mod rm_log;
 pub mod types;
-pub mod utxo_set;
 
 const SEP: u8 = ':' as u8;
 

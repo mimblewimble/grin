@@ -66,8 +66,8 @@ where
 	fn rewind(
 		&mut self,
 		position: u64,
-		rewind_output_pos: &Bitmap,
-		rewind_spent_pos: &Bitmap,
+		rewind_add_pos: &Bitmap,
+		rewind_rm_pos: &Bitmap,
 	) -> Result<(), String>;
 
 	/// Get a Hash by insertion position.
@@ -425,8 +425,8 @@ where
 	pub fn rewind(
 		&mut self,
 		position: u64,
-		rewind_output_pos: &Bitmap,
-		rewind_spent_pos: &Bitmap,
+		rewind_add_pos: &Bitmap,
+		rewind_rm_pos: &Bitmap,
 	) -> Result<(), String> {
 		// identify which actual position we should rewind to as the provided
 		// position is a leaf, which may had some parent that needs to exist
@@ -436,8 +436,7 @@ where
 			pos += 1;
 		}
 
-		self.backend
-			.rewind(pos, rewind_output_pos, rewind_spent_pos)?;
+		self.backend.rewind(pos, rewind_add_pos, rewind_rm_pos)?;
 		self.last_pos = pos;
 		Ok(())
 	}

@@ -95,8 +95,8 @@ where
 	fn rewind(
 		&mut self,
 		position: u64,
-		rewind_output_pos: &Bitmap,
-		rewind_spent_pos: &Bitmap,
+		rewind_add_pos: &Bitmap,
+		rewind_rm_pos: &Bitmap,
 	) -> Result<(), String> {
 		panic!("not yet implemented for vec backend...");
 	}

@@ -11,9 +11,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The Grin UTXO Set implementation.
-//! Compact (roaring) bitmap representing the set of positions of
-//! unspent outputs (UTXO) in the output MMR.
+//! The Grin leaf_set implementation.
+//! Compact (roaring) bitmap representing the set of leaf positions
+//! that exist and are not currently pruned in the MMR.
 
 use std::fs::File;
 use std::io::{self, BufWriter, Read, Write};
@@ -29,17 +29,17 @@ use core::core::BlockHeader;
 use util::LOGGER;
 
 /// Compact (roaring) bitmap representing the set of positions of
-/// unspent outputs (UTXO) in the output MMR.
-pub struct UtxoSet {
+/// leaves that are currently unpruned in the MMR.
+pub struct LeafSet {
 	path: String,
 	bitmap: Bitmap,
 	bitmap_bak: Bitmap,
 }
 
-impl UtxoSet {
+impl LeafSet {
 	/// Open the remove log file.
 	/// The content of the file will be read in memory for fast checking.
-	pub fn open(path: String) -> io::Result<UtxoSet> {
+	pub fn open(path: String) -> io::Result<LeafSet> {
 		let file_path = Path::new(&path);
 		let bitmap = if file_path.exists() {
 			let mut bitmap_file = File::open(path.clone())?;
@@ -50,7 +50,7 @@ impl UtxoSet {
 			Bitmap::create()
 		};
 
-		Ok(UtxoSet {
+		Ok(LeafSet {
 			path: path.clone(),
 			bitmap: bitmap.clone(),
 			bitmap_bak: bitmap.clone(),
@@ -62,7 +62,7 @@ impl UtxoSet {
 		let cp_file_path = Path::new(&cp_path);
 
 		if !cp_file_path.exists() {
-			debug!(LOGGER, "utxo_set: rewound utxo file not found: {}", cp_path);
+			debug!(LOGGER, "leaf_set: rewound leaf file not found: {}", cp_path);
 			return Ok(());
 		}
 
@@ -73,23 +73,23 @@ impl UtxoSet {
 
 		debug!(
 			LOGGER,
-			"utxo_set: copying rewound file {} to {}", cp_path, path
+			"leaf_set: copying rewound file {} to {}", cp_path, path
 		);
 
-		let mut utxo_set = UtxoSet {
+		let mut leaf_set = LeafSet {
 			path: path.clone(),
 			bitmap: bitmap.clone(),
 			bitmap_bak: bitmap.clone(),
 		};
 
-		utxo_set.flush()?;
+		leaf_set.flush()?;
 		Ok(())
 	}
 
 	/// Calculate the set of unpruned leaves
 	/// up to and including the cutoff_pos.
 	/// Only applicable for the output MMR.
-	fn unpruned_leaves_lte_pos(&self, cutoff_pos: u64, prune_list: &PruneList) -> Bitmap {
+	fn unpruned_pre_cutoff(&self, cutoff_pos: u64, prune_list: &PruneList) -> Bitmap {
 		(1..=cutoff_pos)
 			.filter(|&x| pmmr::is_leaf(x))
 			.filter(|&x| !prune_list.is_pruned(x))
@@ -97,46 +97,44 @@ impl UtxoSet {
 			.collect()
 	}
 
-	/// Calculate the set of spent positions
+	/// Calculate the set of pruned positions
 	/// up to and including the cutoff_pos.
-	/// Takes the prune_list into account when
-	/// calculating these spent positions (anything pruned is spent).
-	/// Only applicable for the output MMR.
-	pub fn spent_lte_pos(
+	/// Uses both the leaf_set and the prune_list to determine prunedness.
+	pub fn removed_pre_cutoff(
 		&self,
 		cutoff_pos: u64,
-		rewind_output_pos: &Bitmap,
-		rewind_spent_pos: &Bitmap,
+		rewind_add_pos: &Bitmap,
+		rewind_rm_pos: &Bitmap,
 		prune_list: &PruneList,
 	) -> Bitmap {
 		let mut bitmap = self.bitmap.clone();
 
-		// Now "rewind" using the output_pos and spent_pos passed in
-		bitmap.andnot_inplace(&rewind_output_pos);
-		bitmap.or_inplace(&rewind_spent_pos);
+		// Now "rewind" using the rewind_add_pos and rewind_rm_pos bitmaps passed in.
+		bitmap.andnot_inplace(&rewind_add_pos);
+		bitmap.or_inplace(&rewind_rm_pos);
 
-		// Invert spent/unspent for the leaves and return the resulting bitmap.
+		// Invert bitmap for the leaf pos and return the resulting bitmap.
 		bitmap
 			.flip(1..(cutoff_pos + 1))
-			.and(&self.unpruned_leaves_lte_pos(cutoff_pos, prune_list))
+			.and(&self.unpruned_pre_cutoff(cutoff_pos, prune_list))
 	}
 
-	/// Rewinds the UTXO set back to a previous state.
-	pub fn rewind(&mut self, rewind_output_pos: &Bitmap, rewind_spent_pos: &Bitmap) {
-		// First remove output pos from UTXO set that were
+	/// Rewinds the leaf_set back to a previous state.
+	pub fn rewind(&mut self, rewind_add_pos: &Bitmap, rewind_rm_pos: &Bitmap) {
+		// First remove pos from leaf_set that were
 		// added after the point we are rewinding to.
-		self.bitmap.andnot_inplace(&rewind_output_pos);
-		// Then add back output pos to the UTXO set that were
-		// spent after the point we are rewinding to.
-		self.bitmap.or_inplace(&rewind_spent_pos);
+		self.bitmap.andnot_inplace(&rewind_add_pos);
+		// Then add back output pos to the leaf_set
+		// that were removed.
+		self.bitmap.or_inplace(&rewind_rm_pos);
 	}
 
-	/// Append a new position to the UTXO set.
+	/// Append a new position to the leaf_set.
 	pub fn add(&mut self, pos: u64) {
 		self.bitmap.add(pos as u32);
 	}
 
-	/// Remove the provided position from the UTXO set.
+	/// Remove the provided position from the leaf_set.
 	pub fn remove(&mut self, pos: u64) {
 		self.bitmap.remove(pos as u32);
 	}
@@ -155,7 +153,7 @@ impl UtxoSet {
 		Ok(())
 	}
 
-	/// Flush the UTXO set to file.
+	/// Flush the leaf_set to file.
 	pub fn flush(&mut self) -> io::Result<()> {
 		// First run the optimization step on the bitmap.
 		self.bitmap.run_optimize();
@@ -180,13 +178,18 @@ impl UtxoSet {
 		self.bitmap = self.bitmap_bak.clone();
 	}
 
-	/// Whether the UTXO set includes the provided position.
+	/// Whether the leaf_set includes the provided position.
 	pub fn includes(&self, pos: u64) -> bool {
 		self.bitmap.contains(pos as u32)
 	}
 
-	/// Number of positions stored in the UTXO set.
+	/// Number of positions stored in the leaf_set.
 	pub fn len(&self) -> usize {
 		self.bitmap.cardinality() as usize
+	}
+
+	// Is the leaf_set empty.
+	pub fn is_empty(&self) -> bool {
+		self.len() == 0
 	}
 }

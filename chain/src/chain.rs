@@ -596,7 +596,7 @@ impl Chain {
 		};
 
 		// now we want to rewind the txhashset extension and
-		// sync a "rewound" copy of the utxo_set files to disk
+		// sync a "rewound" copy of the leaf_set files to disk
 		// so we can send these across as part of the zip file.
 		// The fast sync client does *not* have the necessary data
 		// to rewind after receiving the txhashset zip.

@@ -23,41 +23,41 @@ use std::time::{Duration, Instant};
 
 use croaring::Bitmap;
 
-use store::utxo_set::UtxoSet;
+use store::leaf_set::LeafSet;
 
 pub fn as_millis(d: Duration) -> u128 {
 	d.as_secs() as u128 * 1_000 as u128 + (d.subsec_nanos() / (1_000 * 1_000)) as u128
 }
 
 #[test]
-fn test_utxo_set_performance() {
-	let (mut utxo_set, data_dir) = setup("utxo_set_perf");
+fn test_leaf_set_performance() {
+	let (mut leaf_set, data_dir) = setup("leaf_set_perf");
 
 	println!("Timing some common operations:");
 
-	// Add a million pos to the UTXO set, syncing data to disk in 1,000 pos chunks
+	// Add a million pos to the  set, syncing data to disk in 1,000 pos chunks
 	// Simulating 1,000 blocks with 1,000 outputs each.
 	let now = Instant::now();
 	for x in 0..1_000 {
 		for y in 0..1_000 {
 			let pos = (x * 1_000) + y + 1;
-			utxo_set.add(pos);
+			leaf_set.add(pos);
 		}
-		utxo_set.flush().unwrap();
+		leaf_set.flush().unwrap();
 	}
-	assert_eq!(utxo_set.len(), 1_000_000);
+	assert_eq!(leaf_set.len(), 1_000_000);
 	println!(
-		"Adding 1,000 chunks of 1,000 pos to UTXO set took {}ms",
+		"Adding 1,000 chunks of 1,000 pos to leaf_set took {}ms",
 		as_millis(now.elapsed())
 	);
 
-	// Simulate looking up existence of a large number of pos in the UTXO set.
+	// Simulate looking up existence of a large number of pos in the leaf_set.
 	let now = Instant::now();
 	for x in 0..1_000_000 {
-		assert!(utxo_set.includes(x + 1));
+		assert!(leaf_set.includes(x + 1));
 	}
 	println!(
-		"Checking 1,000,000 inclusions in UTXO set took {}ms",
+		"Checking 1,000,000 inclusions in leaf_set took {}ms",
 		as_millis(now.elapsed())
 	);
 
@@ -67,13 +67,13 @@ fn test_utxo_set_performance() {
 	for x in 0..1_000 {
 		for y in 0..1_000 {
 			let pos = (x * 1_000) + y + 1;
-			utxo_set.remove(pos);
+			leaf_set.remove(pos);
 		}
-		utxo_set.flush().unwrap();
+		leaf_set.flush().unwrap();
 	}
-	assert_eq!(utxo_set.len(), 0);
+	assert_eq!(leaf_set.len(), 0);
 	println!(
-		"Removing 1,000 chunks of 1,000 pos from UTXO set took {}ms",
+		"Removing 1,000 chunks of 1,000 pos from leaf_set took {}ms",
 		as_millis(now.elapsed())
 	);
 
@@ -83,11 +83,11 @@ fn test_utxo_set_performance() {
 		let from_pos = x * 1_000 + 1;
 		let to_pos = from_pos + 1_000;
 		let bitmap: Bitmap = (from_pos..to_pos).collect();
-		utxo_set.rewind(&Bitmap::create(), &bitmap);
+		leaf_set.rewind(&Bitmap::create(), &bitmap);
 	}
-	assert_eq!(utxo_set.len(), 1_000_000);
+	assert_eq!(leaf_set.len(), 1_000_000);
 	println!(
-		"Rewinding 1,000 chunks of 1,000 pos from UTXO set took {}ms",
+		"Rewinding 1,000 chunks of 1,000 pos from leaf_set took {}ms",
 		as_millis(now.elapsed())
 	);
 
@@ -96,13 +96,13 @@ fn test_utxo_set_performance() {
 	teardown(data_dir);
 }
 
-fn setup(test_name: &str) -> (UtxoSet, String) {
+fn setup(test_name: &str) -> (LeafSet, String) {
 	let _ = env_logger::init();
 	let t = time::get_time();
 	let data_dir = format!("./target/{}-{}", test_name, t.sec);
 	fs::create_dir_all(data_dir.clone()).unwrap();
-	let utxo_set = UtxoSet::open(format!("{}/{}", data_dir, "utxo.bin")).unwrap();
-	(utxo_set, data_dir)
+	let leaf_set = LeafSet::open(format!("{}/{}", data_dir, "utxo.bin")).unwrap();
+	(leaf_set, data_dir)
 }
 
 fn teardown(data_dir: String) {

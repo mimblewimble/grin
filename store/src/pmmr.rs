@@ -25,14 +25,14 @@ use core::core::pmmr::{self, family, Backend};
 use core::core::prune_list::PruneList;
 use core::core::BlockHeader;
 use core::ser::{self, PMMRable};
+use leaf_set::LeafSet;
 use rm_log::RemoveLog;
 use types::{prune_noop, read_ordered_vec, write_vec, AppendOnlyFile};
 use util::LOGGER;
-use utxo_set::UtxoSet;
 
 const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
-const PMMR_UTXO_FILE: &'static str = "pmmr_utxo.bin";
+const PMMR_LEAF_FILE: &'static str = "pmmr_leaf.bin";
 const PMMR_RM_LOG_FILE: &'static str = "pmmr_rm_log.bin";
 const PMMR_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
 
@@ -44,8 +44,7 @@ const PMMR_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
 /// * An in-memory backend buffers the latest batch of writes to ensure the
 /// PMMR can always read recent values even if they haven't been flushed to
 /// disk yet.
-/// * A utxo_set tracks the positions of unspent outputs in the output MMR.
-/// Not applicable for the kernel MMR which does not store outputs.
+/// * A leaf_set tracks unpruned (unremoved) leaf positions in the MMR..
 /// * A prune_list tracks the positions of pruned (and compacted) roots in the
 /// MMR.
 pub struct PMMRBackend<T>
@@ -55,8 +54,7 @@ where
 	data_dir: String,
 	hash_file: AppendOnlyFile,
 	data_file: AppendOnlyFile,
-	// TODO - the kernel MMR does not have a concept of unspent/spent.
-	utxo_set: UtxoSet,
+	leaf_set: LeafSet,
 	pruned_nodes: PruneList,
 	_marker: marker::PhantomData<T>,
 }
@@ -73,8 +71,8 @@ where
 			if let Some(elem) = d.1 {
 				self.data_file.append(&mut ser::ser_vec(&elem).unwrap());
 
-				// Add the new position to our UTXO set.
-				self.utxo_set.add(position);
+				// Add the new position to our leaf_set.
+				self.leaf_set.add(position);
 			}
 		}
 		Ok(())
@@ -131,9 +129,10 @@ where
 	}
 
 	/// Get the hash at pos.
-	/// Return None if pos is a leaf and it has been spent.
+	/// Return None if pos is a leaf and it has been removed (or pruned or
+	/// compacted).
 	fn get_hash(&self, pos: u64) -> Option<(Hash)> {
-		if pmmr::is_leaf(pos) && !self.utxo_set.includes(pos) {
+		if pmmr::is_leaf(pos) && !self.leaf_set.includes(pos) {
 			return None;
 		}
 		self.get_from_file(pos)
@@ -145,7 +144,7 @@ where
 		if !pmmr::is_leaf(pos) {
 			return None;
 		}
-		if !self.utxo_set.includes(pos) {
+		if !self.leaf_set.includes(pos) {
 			return None;
 		}
 		self.get_data_from_file(pos)
@@ -155,11 +154,11 @@ where
 	fn rewind(
 		&mut self,
 		position: u64,
-		rewind_output_pos: &Bitmap,
-		rewind_spent_pos: &Bitmap,
+		rewind_add_pos: &Bitmap,
+		rewind_rm_pos: &Bitmap,
 	) -> Result<(), String> {
-		// First rewind the UTXO set with the pos of outputs and spent outputs (inputs).
-		self.utxo_set.rewind(rewind_output_pos, rewind_spent_pos);
+		// First rewind the leaf_set with the necessary added and removed positions.
+		self.leaf_set.rewind(rewind_add_pos, rewind_rm_pos);
 
 		// Rewind the hash file accounting for pruned/compacted pos
 		let shift = self.pruned_nodes.get_shift(position).unwrap_or(0);
@@ -179,7 +178,7 @@ where
 
 	/// Remove by insertion position.
 	fn remove(&mut self, pos: u64) -> Result<(), String> {
-		self.utxo_set.remove(pos);
+		self.leaf_set.remove(pos);
 		Ok(())
 	}
 
@@ -189,20 +188,20 @@ where
 	}
 
 	fn snapshot(&self, header: &BlockHeader) -> Result<(), String> {
-		self.utxo_set
+		self.leaf_set
 			.snapshot(header)
-			.map_err(|_| format!("Failed to save copy of utxo_set for {}", header.hash()))?;
+			.map_err(|_| format!("Failed to save copy of leaf_set for {}", header.hash()))?;
 		Ok(())
 	}
 
 	fn dump_stats(&self) {
 		debug!(
 			LOGGER,
-			"pmmr backend: unpruned: {}, hashes: {}, data: {}, utxo_set: {}, prune_list: {}",
+			"pmmr backend: unpruned: {}, hashes: {}, data: {}, leaf_set: {}, prune_list: {}",
 			self.unpruned_size().unwrap_or(0),
 			self.hash_size().unwrap_or(0),
 			self.data_size().unwrap_or(0),
-			self.utxo_set.len(),
+			self.leaf_set.len(),
 			self.pruned_nodes.pruned_nodes.len(),
 		);
 	}
@@ -222,26 +221,26 @@ where
 		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		let data_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
 
-		let utxo_set_path = format!("{}/{}", data_dir, PMMR_UTXO_FILE);
+		let leaf_set_path = format!("{}/{}", data_dir, PMMR_LEAF_FILE);
 		let rm_log_path = format!("{}/{}", data_dir, PMMR_RM_LOG_FILE);
 
 		if let Some(header) = header {
-			let utxo_snapshot_path = format!("{}/{}.{}", data_dir, PMMR_UTXO_FILE, header.hash());
-			UtxoSet::copy_snapshot(utxo_set_path.clone(), utxo_snapshot_path.clone())?;
+			let leaf_snapshot_path = format!("{}/{}.{}", data_dir, PMMR_LEAF_FILE, header.hash());
+			LeafSet::copy_snapshot(leaf_set_path.clone(), leaf_snapshot_path.clone())?;
 		}
 
-		// If we need to migrate an old rm_log to a new utxo_set do it here before we
-		// start. Do *not* migrate if we already have a utxo_set.
-		let mut utxo_set = UtxoSet::open(utxo_set_path.clone())?;
-		if utxo_set.len() == 0 && Path::new(&rm_log_path).exists() {
+		// If we need to migrate an old rm_log to a new leaf_set do it here before we
+		// start. Do *not* migrate if we already have a leaf_set.
+		let mut leaf_set = LeafSet::open(leaf_set_path.clone())?;
+		if leaf_set.is_empty() && Path::new(&rm_log_path).exists() {
 			let mut rm_log = RemoveLog::open(rm_log_path)?;
 			debug!(
 				LOGGER,
-				"pmmr: utxo_set: {}, rm_log: {}",
-				utxo_set.len(),
+				"pmmr: leaf_set: {}, rm_log: {}",
+				leaf_set.len(),
 				rm_log.len()
 			);
-			debug!(LOGGER, "pmmr: migrating rm_log -> utxo_set");
+			debug!(LOGGER, "pmmr: migrating rm_log -> leaf_set");
 
 			if let Some(header) = header {
 				// Rewind the rm_log back to the height of the header we care about.
@@ -261,16 +260,16 @@ where
 				sz / record_len + total_shift
 			};
 
-			migrate_rm_log(&mut utxo_set, &rm_log, &pruned_nodes, last_pos)?;
+			migrate_rm_log(&mut leaf_set, &rm_log, &pruned_nodes, last_pos)?;
 		}
 
-		let utxo_set = UtxoSet::open(utxo_set_path)?;
+		let leaf_set = LeafSet::open(leaf_set_path)?;
 
 		Ok(PMMRBackend {
 			data_dir,
 			hash_file,
 			data_file,
-			utxo_set,
+			leaf_set,
 			pruned_nodes,
 			_marker: marker::PhantomData,
 		})
@@ -320,7 +319,7 @@ where
 				format!("Could not write to log data storage, disk full? {:?}", e),
 			));
 		}
-		self.utxo_set.flush()?;
+		self.leaf_set.flush()?;
 
 		Ok(())
 	}
@@ -328,7 +327,7 @@ where
 	/// Discard the current, non synced state of the backend.
 	pub fn discard(&mut self) {
 		self.hash_file.discard();
-		self.utxo_set.discard();
+		self.leaf_set.discard();
 		self.data_file.discard();
 	}
 
@@ -337,7 +336,7 @@ where
 		self.get_data_file_path()
 	}
 
-	/// Takes the utxo_set at a given cutoff_pos and generates an updated
+	/// Takes the leaf_set at a given cutoff_pos and generates an updated
 	/// prune_list. Saves the updated prune_list to disk
 	/// Compacts the hash and data files based on the prune_list and saves both
 	/// to disk.
@@ -352,8 +351,8 @@ where
 	pub fn check_compact<P>(
 		&mut self,
 		cutoff_pos: u64,
-		rewind_output_pos: &Bitmap,
-		rewind_spent_pos: &Bitmap,
+		rewind_add_pos: &Bitmap,
+		rewind_rm_pos: &Bitmap,
 		prune_cb: P,
 	) -> io::Result<bool>
 	where
@@ -365,8 +364,7 @@ where
 
 		// Calculate the sets of leaf positions and node positions to remove based
 		// on the cutoff_pos provided.
-		let (leaves_removed, pos_to_rm) =
-			self.pos_to_rm(cutoff_pos, rewind_output_pos, rewind_spent_pos);
+		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos, rewind_add_pos, rewind_rm_pos);
 
 		// 1. Save compact copy of the hash file, skipping removed data.
 		{
@@ -418,7 +416,7 @@ where
 			// self.pruned_nodes.pruned_nodes.retain(|&x| !pmmr::is_leaf(x));
 
 			// Prunelist contains *only* non-leaf roots.
-			// Contrast this with the UTXO set that contains *only* leaves.
+			// Contrast this with the leaf_set that contains *only* leaves.
 			self.pruned_nodes
 				.pruned_nodes
 				.retain(|&x| !pmmr::is_leaf(x));
@@ -443,9 +441,9 @@ where
 		)?;
 		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
 
-		// 6. Write the UTXO set to disk.
+		// 6. Write the leaf_set to disk.
 		// Optimize the bitmap storage in the process.
-		self.utxo_set.flush()?;
+		self.leaf_set.flush()?;
 
 		Ok(true)
 	}
@@ -453,15 +451,15 @@ where
 	fn pos_to_rm(
 		&self,
 		cutoff_pos: u64,
-		rewind_output_pos: &Bitmap,
-		rewind_spent_pos: &Bitmap,
+		rewind_add_pos: &Bitmap,
+		rewind_rm_pos: &Bitmap,
 	) -> (Bitmap, Bitmap) {
 		let mut expanded = Bitmap::create();
 
-		let leaf_pos_to_rm = self.utxo_set.spent_lte_pos(
+		let leaf_pos_to_rm = self.leaf_set.removed_pre_cutoff(
 			cutoff_pos,
-			rewind_output_pos,
-			rewind_spent_pos,
+			rewind_add_pos,
+			rewind_rm_pos,
 			&self.pruned_nodes,
 		);
 
@@ -504,24 +502,24 @@ fn removed_excl_roots(removed: Bitmap) -> Bitmap {
 }
 
 fn migrate_rm_log(
-	utxo_set: &mut UtxoSet,
+	leaf_set: &mut LeafSet,
 	rm_log: &RemoveLog,
 	prune_list: &PruneList,
 	last_pos: u64,
 ) -> io::Result<()> {
 	info!(
 		LOGGER,
-		"Migrating rm_log -> utxo_set. Might take a little while... {} pos", last_pos
+		"Migrating rm_log -> leaf_set. Might take a little while... {} pos", last_pos
 	);
 
 	// check every leaf
-	// if not pruned and not removed, add it to the utxo_set
+	// if not pruned and not removed, add it to the leaf_set
 	for x in 1..=last_pos {
 		if pmmr::is_leaf(x) && !prune_list.is_pruned(x) && !rm_log.includes(x) {
-			utxo_set.add(x);
+			leaf_set.add(x);
 		}
 	}
 
-	utxo_set.flush()?;
+	leaf_set.flush()?;
 	Ok(())
 }

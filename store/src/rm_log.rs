@@ -11,8 +11,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The depracated rm_log impl. Still used in some tests
-//! for perf comparison with utxo_set.
+//! The deprecated rm_log impl. Still used for migration
+//! from rm_log -> leaf_set on startup and fast sync.
 
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
