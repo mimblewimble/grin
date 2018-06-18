@@ -40,7 +40,7 @@ fn test_some_raw_txs() {
 	clean_output_dir(&db_root);
 
 	let store = Arc::new(ChainKVStore::new(db_root.clone()).unwrap());
-	let mut txhashset = TxHashSet::open(db_root.clone(), store.clone()).unwrap();
+	let mut txhashset = TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
 
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();
@@ -124,10 +124,10 @@ fn test_some_raw_txs() {
 		// Note: we pass in an increasing "height" here so we can rollback
 		// each tx individually as necessary, while maintaining a long lived
 		// txhashset extension.
-		assert!(extension.apply_raw_tx(&tx1, 3).is_ok());
-		assert!(extension.apply_raw_tx(&tx2, 4).is_err());
-		assert!(extension.apply_raw_tx(&tx3, 5).is_ok());
-		assert!(extension.apply_raw_tx(&tx4, 6).is_ok());
+		assert!(extension.apply_raw_tx(&tx1).is_ok());
+		assert!(extension.apply_raw_tx(&tx2).is_err());
+		assert!(extension.apply_raw_tx(&tx3).is_ok());
+		assert!(extension.apply_raw_tx(&tx4).is_ok());
 		Ok(())
 	});
 }
