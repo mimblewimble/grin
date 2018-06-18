@@ -1111,6 +1111,7 @@ fn check_files(txhashset_path: &PathBuf) -> Result<(), Error> {
 		}
 	}
 	Ok(())
+}
 /// Given a block header to rewind to and the block header at the
 /// head of the current chain state, we need to calculate the positions
 /// of all outputs we need to "undo" during a rewind.
