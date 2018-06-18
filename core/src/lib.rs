@@ -25,6 +25,7 @@
 extern crate bitflags;
 extern crate blake2_rfc as blake2;
 extern crate byteorder;
+extern crate croaring;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 #[macro_use]
@@ -45,6 +46,6 @@ pub mod macros;
 pub mod consensus;
 pub mod core;
 pub mod genesis;
-pub mod ser;
 pub mod global;
 pub mod pow;
+pub mod ser;

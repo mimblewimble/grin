@@ -7,9 +7,11 @@ publish = false
 
 [dependencies]
 byteorder = "1"
+croaring = "0.3"
 env_logger = "0.5"
 libc = "0.2"
 memmap = { git = "https://github.com/danburkert/memmap-rs", tag = "0.6.2" }
+rand = "0.3"
 rocksdb = "0.10"
 serde = "1"
 serde_derive = "1"
