@@ -46,6 +46,7 @@ const BLOCK_INPUT_BITMAP_PREFIX: u8 = 'B' as u8;
 pub struct ChainKVStore {
 	db: grin_store::Store,
 	header_cache: Arc<RwLock<LruCache<Hash, BlockHeader>>>,
+	block_input_bitmap_cache: Arc<RwLock<LruCache<Hash, Vec<u8>>>>,
 }
 
 impl ChainKVStore {
@@ -54,8 +55,44 @@ impl ChainKVStore {
 		let db = grin_store::Store::open(format!("{}/{}", root_path, STORE_SUBPATH).as_str())?;
 		Ok(ChainKVStore {
 			db,
-			header_cache: Arc::new(RwLock::new(LruCache::new(100))),
+			header_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
+			block_input_bitmap_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
 		})
+	}
+
+	fn get_block_header_db(&self, h: &Hash) -> Result<BlockHeader, Error> {
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
+		)
+	}
+
+	fn build_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
+		let bitmap = block
+			.inputs
+			.iter()
+			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
+			.map(|x| x as u32)
+			.collect();
+		Ok(bitmap)
+	}
+
+	// Get the block input bitmap from the db or build the bitmap from
+	// the full block from the db (if the block is found).
+	fn get_block_input_bitmap_db(&self, bh: &Hash) -> Result<Bitmap, Error> {
+		if let Ok(Some(bytes)) = self.db
+			.get(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
+		{
+			Ok(Bitmap::deserialize(&bytes))
+		} else {
+			match self.get_block(bh) {
+				Ok(block) => {
+					let bitmap = self.save_block_input_bitmap(&block)?;
+					Ok(bitmap)
+				}
+				Err(e) => Err(e),
+			}
+		}
 	}
 }
 
@@ -130,21 +167,15 @@ impl ChainStore for ChainKVStore {
 			}
 		}
 
-		let header: Result<BlockHeader, Error> = option_to_not_found(
-			self.db
-				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
-		);
-
-		// cache miss - so adding to the cache for next time
-		if let Ok(header) = header {
-			{
-				let mut header_cache = self.header_cache.write().unwrap();
-				header_cache.insert(*h, header.clone());
-			}
-			Ok(header)
-		} else {
-			header
+		// cache miss - get it from db and cache it for next time (if we found one in
+		// db)
+		let res = self.get_block_header_db(h);
+		if let Ok(header) = res {
+			let mut header_cache = self.header_cache.write().unwrap();
+			header_cache.insert(*h, header.clone());
+			return Ok(header);
 		}
+		res
 	}
 
 	/// Save the block and its header
@@ -258,29 +289,34 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
-		if let Ok(Some(bytes)) = self.db
-			.get(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
 		{
-			Ok(Bitmap::deserialize(&bytes))
-		} else {
-			// "cache miss" so build it from full block, store it in db and return it
-			let block = self.get_block(bh)?;
-			let bitmap = block
-				.inputs
-				.iter()
-				.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
-				.map(|x| x as u32)
-				.collect();
-			self.save_block_input_bitmap(bh, &bitmap)?;
-			Ok(bitmap)
+			let mut cache = self.block_input_bitmap_cache.write().unwrap();
+
+			// cache hit - return the value from the cache
+			if let Some(bytes) = cache.get_mut(bh) {
+				return Ok(Bitmap::deserialize(&bytes));
+			}
 		}
+
+		// cache miss - get it from db and cache it for next time (if we found one in
+		// db)
+		let res = self.get_block_input_bitmap_db(bh);
+		if let Ok(bitmap) = res {
+			let mut cache = self.block_input_bitmap_cache.write().unwrap();
+			cache.insert(*bh, bitmap.serialize());
+			return Ok(bitmap);
+		}
+		res
 	}
 
-	fn save_block_input_bitmap(&self, bh: &Hash, bitmap: &Bitmap) -> Result<(), Error> {
+	fn save_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
+		let bh = block.hash();
+		let bitmap = self.build_block_input_bitmap(block)?;
 		self.db.put(
 			&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec())[..],
 			bitmap.serialize(),
-		)
+		)?;
+		Ok(bitmap)
 	}
 
 	fn delete_block_input_bitmap(&self, bh: &Hash) -> Result<(), Error> {

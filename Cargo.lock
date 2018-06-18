@@ -799,6 +799,7 @@ dependencies = [
  "grin_util 0.2.0",
  "libc 0.2.40 (registry+https://github.com/rust-lang/crates.io-index)",
  "memmap 0.6.2 (git+https://github.com/danburkert/memmap-rs?tag=0.6.2)",
+ "rand 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "rocksdb 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.66 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.35 (registry+https://github.com/rust-lang/crates.io-index)",

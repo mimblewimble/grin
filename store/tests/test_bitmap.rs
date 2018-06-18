@@ -13,7 +13,10 @@
 // limitations under the License.
 
 extern crate croaring;
+extern crate rand;
+
 use croaring::Bitmap;
+use rand::Rng;
 
 // We can use "andnot" to rewind the rm_log easily by passing in a "bitmask" of
 // all the subsequent pos we want to rewind.
@@ -57,6 +60,27 @@ fn test_a_small_bitmap() {
 	// this is compared to storing them as a vec of u64 values which would be 8 * 3
 	// = 32 bytes
 	assert_eq!(serialized_buffer.len(), 22);
+}
+
+#[test]
+fn test_1000_inputs() {
+	let mut rng = rand::thread_rng();
+	let mut bitmap = Bitmap::create();
+	for _ in 1..1_000 {
+		let n = rng.gen_range(0, 1_000_000);
+		bitmap.add(n);
+	}
+	let serialized_buffer = bitmap.serialize();
+	println!(
+		"bitmap with 1,000 (out of 1,000,000) values in it: {}",
+		serialized_buffer.len()
+	);
+	bitmap.run_optimize();
+	let serialized_buffer = bitmap.serialize();
+	println!(
+		"bitmap with 1,000 (out of 1,000,000) values in it (optimized): {}",
+		serialized_buffer.len()
+	);
 }
 
 #[test]

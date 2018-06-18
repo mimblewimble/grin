@@ -352,7 +352,7 @@ pub trait ChainStore: Send + Sync {
 	fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, store::Error>;
 
 	/// Save the bitmap representing the inputs for the specified block.
-	fn save_block_input_bitmap(&self, bh: &Hash, bitmap: &Bitmap) -> Result<(), store::Error>;
+	fn save_block_input_bitmap(&self, b: &Block) -> Result<Bitmap, store::Error>;
 
 	/// Delete the bitmap representing the inputs for the specified block.
 	fn delete_block_input_bitmap(&self, bh: &Hash) -> Result<(), store::Error>;
