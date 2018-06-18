@@ -61,8 +61,9 @@ where
 
 	/// Rewind the backend state to a previous position, as if all append
 	/// operations after that had been canceled. Expects a position in the PMMR
-	/// to rewind to as well as the consumer-provided index of when the change
-	/// occurred (see remove).
+	/// to rewind to as well as bitmaps representing the positions added and
+	/// removed since the rewind position. These are what we will "undo"
+	/// during the rewind.
 	fn rewind(
 		&mut self,
 		position: u64,
@@ -420,17 +421,18 @@ where
 	}
 
 	/// Rewind the PMMR to a previous position, as if all push operations after
-	/// that had been canceled. Expects a position in the PMMR to rewind to as
-	/// well as a vec of positions that need to be "unremoved".
+	/// that had been canceled. Expects a position in the PMMR to rewind and
+	/// bitmaps representing the positions added and removed that we want to
+	/// "undo".
 	pub fn rewind(
 		&mut self,
 		position: u64,
 		rewind_add_pos: &Bitmap,
 		rewind_rm_pos: &Bitmap,
 	) -> Result<(), String> {
-		// identify which actual position we should rewind to as the provided
-		// position is a leaf, which may had some parent that needs to exist
-		// afterward for the MMR to be valid
+		// Identify which actual position we should rewind to as the provided
+		// position is a leaf. We traverse the MMR to inclue any parent(s) that
+		// need to be included for the MMR to be valid.
 		let mut pos = position;
 		while bintree_postorder_height(pos + 1) > 0 {
 			pos += 1;

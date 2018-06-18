@@ -426,6 +426,8 @@ impl<'a> Extension<'a> {
 		}
 	}
 
+	// Rewind the MMR backend to undo applying a raw tx to the txhashset extension.
+	// This is used during txpool validation to undo an invalid tx.
 	fn rewind_raw_tx(
 		&mut self,
 		output_pos: u64,
@@ -728,8 +730,8 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	/// Rewinds the MMRs to the provided block, using the last output and
-	/// last kernel of the block we want to rewind to.
+	/// Rewinds the MMRs to the provided block, rewinding to the last output pos
+	/// and last kernel pos of that block.
 	pub fn rewind(
 		&mut self,
 		block_header: &BlockHeader,
@@ -743,10 +745,16 @@ impl<'a> Extension<'a> {
 			hash
 		);
 
-		// rewind our MMRs to the appropriate pos
-		// based on the block_marker
+		// Rewind our MMRs to the appropriate positions
+		// based on the block_marker.
 		let marker = self.commit_index.get_block_marker(&hash)?;
 
+		// We need to build bitmaps of added and removed output positions
+		// so we can correctly rewind all operations applied to the output MMR
+		// after the position we are rewinding to (these operations will be
+		// undone during rewind).
+		// Rewound output pos will be removed from the MMR.
+		// Rewound input (spent) pos will be added back to the MMR.
 		let rewind_add_pos =
 			output_pos_to_rewind(self.commit_index.clone(), block_header, head_header)?;
 		let rewind_rm_pos =
@@ -1046,6 +1054,11 @@ pub fn zip_write(root_dir: String, txhashset_data: File) -> Result<(), Error> {
 	zip::decompress(txhashset_data, &txhashset_path).map_err(|ze| Error::Other(ze.to_string()))
 }
 
+/// Given a block header to rewind to and the block header at the
+/// head of the current chain state, we need to calculate the positions
+/// of all outputs we need to "undo" during a rewind.
+/// The MMR is append-only so we can simply look for all positions added after
+/// the rewind pos.
 fn output_pos_to_rewind(
 	commit_index: Arc<ChainStore>,
 	block_header: &BlockHeader,
@@ -1058,6 +1071,11 @@ fn output_pos_to_rewind(
 		.collect())
 }
 
+/// Given a block header to rewind to and the block header at the
+/// head of the current chain state, we need to calculate the positions
+/// of all inputs (spent outputs) we need to "undo" during a rewind.
+/// We do this by leveraging the "block_input_bitmap" cache and OR'ing
+/// the set of bitmaps together for the set of blocks being rewound.
 fn input_pos_to_rewind(
 	commit_index: Arc<ChainStore>,
 	block_header: &BlockHeader,
@@ -1069,8 +1087,14 @@ fn input_pos_to_rewind(
 		if current == block_header.hash() {
 			break;
 		}
+
+		// We cache recent block headers and block_input_bitmaps
+		// internally in our db layer (commit_index).
+		// I/O should be minimized or eliminated here for most
+		// rewind scenarios.
 		let current_header = commit_index.get_block_header(&current)?;
 		let input_bitmap = commit_index.get_block_input_bitmap(&current)?;
+
 		bitmap.or_inplace(&input_bitmap);
 		current = current_header.previous;
 	}
