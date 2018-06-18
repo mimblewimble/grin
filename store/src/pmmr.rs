@@ -37,7 +37,7 @@ const PMMR_RM_LOG_FILE: &'static str = "pmmr_rm_log.bin";
 const PMMR_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
 
 /// The list of PMMR_Files for internal purposes
-pub const PMMR_FILES: [&str; 4] = [
+pub const PMMR_FILES: [&str; 5] = [
 	PMMR_HASH_FILE,
 	PMMR_DATA_FILE,
 	PMMR_LEAF_FILE,
