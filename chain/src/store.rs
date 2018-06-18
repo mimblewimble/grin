@@ -216,10 +216,17 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error> {
-		self.db.put_ser(
-			&to_key(BLOCK_HEADER_PREFIX, &mut bh.hash().to_vec())[..],
-			bh,
-		)
+		let hash = bh.hash();
+		self.db
+			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut hash.to_vec())[..], bh)?;
+
+		// Write the block_header to the cache also.
+		{
+			let mut header_cache = self.header_cache.write().unwrap();
+			header_cache.insert(hash, bh.clone());
+		}
+
+		Ok(())
 	}
 
 	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
@@ -298,8 +305,8 @@ impl ChainStore for ChainKVStore {
 			}
 		}
 
-		// cache miss - get it from db and cache it for next time (if we found one in
-		// db)
+		// cache miss - get it from db and cache it for next time
+		// if we found one in db
 		let res = self.get_block_input_bitmap_db(bh);
 		if let Ok(bitmap) = res {
 			let mut cache = self.block_input_bitmap_cache.write().unwrap();
@@ -310,12 +317,16 @@ impl ChainStore for ChainKVStore {
 	}
 
 	fn save_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
-		let bh = block.hash();
+		let hash = block.hash();
 		let bitmap = self.build_block_input_bitmap(block)?;
 		self.db.put(
-			&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec())[..],
+			&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut hash.to_vec())[..],
 			bitmap.serialize(),
 		)?;
+		{
+			let mut cache = self.block_input_bitmap_cache.write().unwrap();
+			cache.insert(hash, bitmap.serialize());
+		}
 		Ok(bitmap)
 	}
 
