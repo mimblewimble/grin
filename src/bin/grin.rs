@@ -40,8 +40,8 @@ pub mod tui;
 
 use std::env::current_dir;
 use std::process::exit;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -113,23 +113,23 @@ fn start_server_tui(config: servers::ServerConfig) {
 					let mut controller = ui::Controller::new().unwrap_or_else(|e| {
 						panic!("Error loading UI controller: {}", e);
 					});
-					controller.run(serv.clone(), r.clone());
+					controller.run(serv.clone(), r);
 				});
-    			ctrlc::set_handler(move || {
-        			running.store(false, Ordering::SeqCst);
-    			}).expect("Error setting Ctrl-C handler");
+			ctrlc::set_handler(move || {
+				running.store(false, Ordering::SeqCst);
+			}).expect("Error setting Ctrl-C handler");
 		}).unwrap();
 	} else {
-		servers::Server::start(config,|serv: Arc<servers::Server>| {
+		servers::Server::start(config, |serv: Arc<servers::Server>| {
 			let running = Arc::new(AtomicBool::new(true));
-   			let r = running.clone();
-    		ctrlc::set_handler(move || {
-        		r.store(false, Ordering::SeqCst);
-    		}).expect("Error setting Ctrl-C handler");
-    		while running.load(Ordering::SeqCst) {
-        		thread::sleep(Duration::from_secs(1));
-    		}
-    		warn!(LOGGER,"Received SIGINT (Ctrl+C).");
+			let r = running.clone();
+			ctrlc::set_handler(move || {
+				r.store(false, Ordering::SeqCst);
+			}).expect("Error setting Ctrl-C handler");
+			while running.load(Ordering::SeqCst) {
+				thread::sleep(Duration::from_secs(1));
+			}
+			warn!(LOGGER, "Received SIGINT (Ctrl+C).");
 			serv.stop();
 		}).unwrap();
 	}
