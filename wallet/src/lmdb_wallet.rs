@@ -132,7 +132,7 @@ where
 	) -> Vec<OutputData> {
 		unimplemented!()
 	}
-	
+
 	fn details(&mut self) -> &mut WalletDetails {
 		unimplemented!()
 	}
@@ -152,24 +152,24 @@ pub struct Batch<'a, K: 'a> {
 
 #[allow(missing_docs)]
 impl<'a, K> WalletOutputBatch for Batch<'a, K> {
-	fn save(&mut self, out: OutputData)-> Result<(), Error> {
+	fn save(&mut self, out: OutputData) -> Result<(), Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut out.key_id.to_bytes().to_vec());
 		self.db.put_ser(&key, &out)?;
 		Ok(())
 	}
 
-	fn get(&self, id: &Identifier)-> Result<OutputData, Error> {
+	fn get(&self, id: &Identifier) -> Result<OutputData, Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
 		option_to_not_found(self.db.get_ser(&key)).map_err(|e| e.into())
 	}
 
-	fn delete(&mut self, id: &Identifier)-> Result<(), Error> {
+	fn delete(&mut self, id: &Identifier) -> Result<(), Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
 		self.db.delete(&key)?;
 		Ok(())
 	}
 
-	fn lock_output(&mut self, out: &mut OutputData)-> Result<(), Error> {
+	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error> {
 		out.lock();
 		self.save(out.clone())
 	}
@@ -187,19 +187,16 @@ impl<K> WalletClient for LMDBBackend<K> {
 	}
 
 	/// Call the wallet API to create a coinbase transaction
-	fn create_coinbase(
-		&self,
-		dest: &str,
-		block_fees: &BlockFees,
-	) -> Result<CbData, Error> {
-		let res =
-			client::create_coinbase(dest, block_fees).context(ErrorKind::WalletComms(format!("Creating Coinbase")))?;
+	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
+		let res = client::create_coinbase(dest, block_fees)
+			.context(ErrorKind::WalletComms(format!("Creating Coinbase")))?;
 		Ok(res)
 	}
 
 	/// Send a transaction slate to another listening wallet and return result
 	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, Error> {
-		let res = client::send_tx_slate(dest, slate).context(ErrorKind::WalletComms(format!("Sending transaction")))?;
+		let res = client::send_tx_slate(dest, slate)
+			.context(ErrorKind::WalletComms(format!("Sending transaction")))?;
 		Ok(res)
 	}
 

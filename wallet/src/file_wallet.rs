@@ -20,14 +20,14 @@ use std::path::{Path, MAIN_SEPARATOR};
 
 use serde_json;
 use tokio_core::reactor;
-use tokio_retry::strategy::FibonacciBackoff;
 use tokio_retry::Retry;
+use tokio_retry::strategy::FibonacciBackoff;
 
 use failure::ResultExt;
 
 use keychain::{self, Identifier, Keychain};
-use util::secp::pedersen;
 use util::LOGGER;
+use util::secp::pedersen;
 
 use error::{Error, ErrorKind};
 
@@ -35,7 +35,7 @@ use client;
 use libtx::slate::Slate;
 use libwallet;
 use libwallet::types::{BlockFees, BlockIdentifier, CbData, MerkleProofWrapper, OutputData,
-                       TxWrapper, WalletBackend, WalletClient, WalletDetails, WalletOutputBatch };
+                       TxWrapper, WalletBackend, WalletClient, WalletDetails, WalletOutputBatch};
 use types::{WalletConfig, WalletSeed};
 
 const DETAIL_FILE: &'static str = "wallet.det";
@@ -62,7 +62,9 @@ impl<'a> WalletOutputBatch for FileBatch<'a> {
 	}
 
 	fn get(&self, id: &Identifier) -> Result<OutputData, libwallet::Error> {
-		self.outputs.get(&id.to_hex()).map(|od| od.clone())
+		self.outputs
+			.get(&id.to_hex())
+			.map(|od| od.clone())
 			.ok_or(libwallet::ErrorKind::Backend("not found".to_string()).into())
 	}
 
@@ -192,7 +194,10 @@ where
 	}
 
 	/// Next child index when we want to create a new output.
-	fn next_child<'a>(&'a mut self, root_key_id: keychain::Identifier) -> Result<u32, libwallet::Error> {
+	fn next_child<'a>(
+		&'a mut self,
+		root_key_id: keychain::Identifier,
+	) -> Result<u32, libwallet::Error> {
 		let mut max_n = 0;
 		for out in self.outputs.values() {
 			if max_n < out.n_child && out.root_key_id == root_key_id {

@@ -16,8 +16,8 @@
 //! the wallet storage and update them.
 
 use failure::ResultExt;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use core::consensus::reward;
 use core::core::{Output, TxKernel};
@@ -245,16 +245,15 @@ where
 {
 	let current_height = wallet.details().last_confirmed_height;
 	let keychain = wallet.keychain().clone();
-	let outputs = wallet.iter()
+	let outputs = wallet
+		.iter()
 		.filter(|out| out.root_key_id == keychain.root_key_id());
-	
 
 	let mut unspent_total = 0;
 	let mut immature_total = 0;
 	let mut unconfirmed_total = 0;
 	let mut locked_total = 0;
-	for out in outputs
-	{
+	for out in outputs {
 		if out.status == OutputStatus::Unspent && out.lock_height <= current_height {
 			unspent_total += out.value;
 		}

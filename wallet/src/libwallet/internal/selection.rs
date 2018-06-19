@@ -15,7 +15,7 @@
 //! Selection of inputs for building transactions
 
 use keychain::{Identifier, Keychain};
-use libtx::{build, slate::Slate, tx_fee};
+use libtx::{build, tx_fee, slate::Slate};
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::{keys, sigcontext};
 use libwallet::types::*;
@@ -281,8 +281,7 @@ where
 	}
 
 	// build transaction skeleton with inputs and change
-	let (mut parts, change, change_derivation) =
-		inputs_and_change(&coins, wallet, amount, fee)?;
+	let (mut parts, change, change_derivation) = inputs_and_change(&coins, wallet, amount, fee)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
