@@ -23,7 +23,7 @@
 //! must be shifted the appropriate amount when reading from the hash and data
 //! files.
 
-use core::pmmr::{bintree_postorder_height, family};
+use core::core::pmmr::{bintree_postorder_height, family};
 
 /// Maintains a list of previously pruned nodes in PMMR, compacting the list as
 /// parents get pruned and allowing checking whether a leaf is pruned. Given
@@ -37,15 +37,15 @@ use core::pmmr::{bintree_postorder_height, family};
 /// backend storage anymore. The PruneList accounts for that mismatch and does
 /// the position translation.
 #[derive(Default)]
-pub struct PruneList {
+pub struct LegacyPruneList {
 	/// Vector of pruned nodes positions
 	pub pruned_nodes: Vec<u64>,
 }
 
-impl PruneList {
+impl LegacyPruneList {
 	/// Instantiate a new empty prune list
-	pub fn new() -> PruneList {
-		PruneList {
+	pub fn new() -> LegacyPruneList {
+		LegacyPruneList {
 			pruned_nodes: vec![],
 		}
 	}

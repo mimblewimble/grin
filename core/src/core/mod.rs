@@ -19,7 +19,6 @@ pub mod committed;
 pub mod hash;
 pub mod id;
 pub mod pmmr;
-pub mod prune_list;
 pub mod target;
 pub mod transaction;
 

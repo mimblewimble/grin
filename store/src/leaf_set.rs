@@ -23,9 +23,8 @@ use croaring::Bitmap;
 
 use core::core::hash::Hashed;
 use core::core::pmmr;
-use core::core::prune_list::PruneList;
 use core::core::BlockHeader;
-
+use prune_list::PruneList;
 use util::LOGGER;
 
 /// Compact (roaring) bitmap representing the set of positions of

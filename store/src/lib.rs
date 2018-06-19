@@ -34,7 +34,9 @@ extern crate serde;
 extern crate slog;
 
 pub mod leaf_set;
+pub mod legacy_prune_list;
 pub mod pmmr;
+pub mod prune_list;
 pub mod rm_log;
 pub mod types;
 
