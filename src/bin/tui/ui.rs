@@ -15,8 +15,8 @@
 //! Basic TUI to better output the overall system status and status
 //! of various subsystems
 
-use std::sync::{mpsc, Arc};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{mpsc, Arc};
 use time;
 
 use cursive::Cursive;
@@ -163,12 +163,12 @@ impl Controller {
 		})
 	}
 	/// Run the controller
-	pub fn run(&mut self, server: Arc<Server>, running: Arc<AtomicBool> ) {
+	pub fn run(&mut self, server: Arc<Server>, running: Arc<AtomicBool>) {
 		let stat_update_interval = 1;
 		let mut next_stat_update = time::get_time().sec + stat_update_interval;
 		while self.ui.step() {
 			if !running.load(Ordering::SeqCst) {
-				warn!(LOGGER,"Received SIGINT (Ctrl+C).");
+				warn!(LOGGER, "Received SIGINT (Ctrl+C).");
 				server.stop();
 				self.ui.stop();
 			}
