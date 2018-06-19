@@ -351,7 +351,7 @@ impl StratumServer {
 					match response {
 						Err(response) => {
 							let resp = RpcResponse {
-								id: workers_l[num].id.clone(),
+								id: request.id,
 								jsonrpc: String::from("2.0"),
 								method: request.method,
 								result: None,
@@ -361,7 +361,7 @@ impl StratumServer {
 						}
 						Ok(response) => {
 							let resp = RpcResponse {
-								id: workers_l[num].id.clone(),
+								id: request.id,
 								jsonrpc: String::from("2.0"),
 								method: request.method,
 								result: Some(response),

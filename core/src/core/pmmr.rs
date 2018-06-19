@@ -35,7 +35,10 @@
 //! The underlying Hashes are stored in a Backend implementation that can
 //! either be a simple Vec or a database.
 
+use croaring::Bitmap;
+
 use core::hash::Hash;
+use core::BlockHeader;
 use ser::{self, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
 
 use std::clone::Clone;
@@ -58,9 +61,15 @@ where
 
 	/// Rewind the backend state to a previous position, as if all append
 	/// operations after that had been canceled. Expects a position in the PMMR
-	/// to rewind to as well as the consumer-provided index of when the change
-	/// occurred (see remove).
-	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String>;
+	/// to rewind to as well as bitmaps representing the positions added and
+	/// removed since the rewind position. These are what we will "undo"
+	/// during the rewind.
+	fn rewind(
+		&mut self,
+		position: u64,
+		rewind_add_pos: &Bitmap,
+		rewind_rm_pos: &Bitmap,
+	) -> Result<(), String>;
 
 	/// Get a Hash by insertion position.
 	fn get_hash(&self, position: u64) -> Option<Hash>;
@@ -76,16 +85,22 @@ where
 	/// (ignoring the remove log).
 	fn get_data_from_file(&self, position: u64) -> Option<T>;
 
-	/// Remove HashSums by insertion position. An index is also provided so the
+	/// Remove Hash by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
 	/// given index (practically the index is the height of a block that
 	/// triggered removal).
-	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String>;
+	fn remove(&mut self, position: u64) -> Result<(), String>;
 
 	/// Returns the data file path.. this is a bit of a hack now that doesn't
 	/// sit well with the design, but TxKernels have to be summed and the
 	/// fastest way to to be able to allow direct access to the file
 	fn get_data_file_path(&self) -> String;
+
+	/// Also a bit of a hack...
+	/// Saves a snapshot of the rewound utxo file with the block hash as
+	/// filename suffix. We need this when sending a txhashset zip file to a
+	/// node for fast sync.
+	fn snapshot(&self, header: &BlockHeader) -> Result<(), String>;
 
 	/// For debugging purposes so we can see how compaction is doing.
 	fn dump_stats(&self);
@@ -388,7 +403,6 @@ where
 			pos += 1;
 
 			current_hash = (left_hash, current_hash).hash_with_index(pos - 1);
-
 			to_append.push((current_hash, None));
 		}
 
@@ -398,61 +412,51 @@ where
 		Ok(elmt_pos)
 	}
 
+	/// Saves a snaphost of the MMR tagged with the block hash.
+	/// Specifically - snapshots the utxo file as we need this rewound before
+	/// sending the txhashset zip file to another node for fast-sync.
+	pub fn snapshot(&mut self, header: &BlockHeader) -> Result<(), String> {
+		self.backend.snapshot(header)?;
+		Ok(())
+	}
+
 	/// Rewind the PMMR to a previous position, as if all push operations after
-	/// that had been canceled. Expects a position in the PMMR to rewind to as
-	/// well as the consumer-provided index of when the change occurred.
-	pub fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
-		// identify which actual position we should rewind to as the provided
-		// position is a leaf, which may had some parent that needs to exist
-		// afterward for the MMR to be valid
+	/// that had been canceled. Expects a position in the PMMR to rewind and
+	/// bitmaps representing the positions added and removed that we want to
+	/// "undo".
+	pub fn rewind(
+		&mut self,
+		position: u64,
+		rewind_add_pos: &Bitmap,
+		rewind_rm_pos: &Bitmap,
+	) -> Result<(), String> {
+		// Identify which actual position we should rewind to as the provided
+		// position is a leaf. We traverse the MMR to inclue any parent(s) that
+		// need to be included for the MMR to be valid.
 		let mut pos = position;
 		while bintree_postorder_height(pos + 1) > 0 {
 			pos += 1;
 		}
 
-		self.backend.rewind(pos, index)?;
+		self.backend.rewind(pos, rewind_add_pos, rewind_rm_pos)?;
 		self.last_pos = pos;
 		Ok(())
 	}
 
-	/// Prune an element from the tree given its position. Note that to be able
-	/// to provide that position and prune, consumers of this API are expected
-	/// to keep an index of elements to positions in the tree. Prunes parent
-	/// nodes as well when they become childless.
-	pub fn prune(&mut self, position: u64, index: u32) -> Result<bool, String> {
-		if self.backend.get_hash(position).is_none() {
-			return Ok(false);
-		}
-		let prunable_height = bintree_postorder_height(position);
-		if prunable_height > 0 {
-			// only leaves can be pruned
+	/// Prunes (removes) the leaf from the MMR at the specified position.
+	/// Returns an error if prune is called on a non-leaf position.
+	/// Returns false if the leaf node has already been pruned.
+	/// Returns true if pruning is successful.
+	pub fn prune(&mut self, position: u64) -> Result<bool, String> {
+		if !is_leaf(position) {
 			return Err(format!("Node at {} is not a leaf, can't prune.", position));
 		}
 
-		// loop going up the tree, from node to parent, as long as we stay inside
-		// the tree.
-		let mut to_prune = vec![];
-
-		let mut current = position;
-		while current + 1 <= self.last_pos {
-			let (parent, sibling) = family(current);
-
-			to_prune.push(current);
-
-			if parent > self.last_pos {
-				// can't prune when our parent isn't here yet
-				break;
-			}
-
-			// if we have a pruned sibling, we can continue up the tree
-			// otherwise we're done
-			if self.backend.get_hash(sibling).is_none() {
-				current = parent;
-			} else {
-				break;
-			}
+		if self.backend.get_hash(position).is_none() {
+			return Ok(false);
 		}
-		self.backend.remove(to_prune, index)?;
+
+		self.backend.remove(position)?;
 		Ok(true)
 	}
 
@@ -460,17 +464,26 @@ where
 	pub fn get_hash(&self, pos: u64) -> Option<Hash> {
 		if pos > self.last_pos {
 			None
-		} else {
+		} else if is_leaf(pos) {
+			// If we are a leaf then get hash from the backend.
 			self.backend.get_hash(pos)
+		} else {
+			// If we are not a leaf get hash ignoring the remove log.
+			self.backend.get_from_file(pos)
 		}
 	}
 
 	/// Get the data element at provided position in the MMR.
 	pub fn get_data(&self, pos: u64) -> Option<T> {
 		if pos > self.last_pos {
+			// If we are beyond the rhs of the MMR return None.
 			None
-		} else {
+		} else if is_leaf(pos) {
+			// If we are a leaf then get data from the backend.
 			self.backend.get_data(pos)
+		} else {
+			// If we are not a leaf then return None as only leaves have data.
+			None
 		}
 	}
 
@@ -648,146 +661,6 @@ where
 	}
 }
 
-/// Maintains a list of previously pruned nodes in PMMR, compacting the list as
-/// parents get pruned and allowing checking whether a leaf is pruned. Given
-/// a node's position, computes how much it should get shifted given the
-/// subtrees that have been pruned before.
-///
-/// The PruneList is useful when implementing compact backends for a PMMR (for
-/// example a single large byte array or a file). As nodes get pruned and
-/// removed from the backend to free space, the backend will get more compact
-/// but positions of a node within the PMMR will not match positions in the
-/// backend storage anymore. The PruneList accounts for that mismatch and does
-/// the position translation.
-#[derive(Default)]
-pub struct PruneList {
-	/// Vector of pruned nodes positions
-	pub pruned_nodes: Vec<u64>,
-}
-
-impl PruneList {
-	/// Instantiate a new empty prune list
-	pub fn new() -> PruneList {
-		PruneList {
-			pruned_nodes: vec![],
-		}
-	}
-
-	/// Computes by how many positions a node at pos should be shifted given the
-	/// number of nodes that have already been pruned before it. Returns None if
-	/// the position has already been pruned.
-	pub fn get_shift(&self, pos: u64) -> Option<u64> {
-		// get the position where the node at pos would fit in the pruned list, if
-		// it's already pruned, nothing to skip
-
-		let pruned_idx = self.next_pruned_idx(pos);
-		let next_idx = self.pruned_nodes.binary_search(&pos).map(|x| x + 1).ok();
-		match pruned_idx.or(next_idx) {
-			None => None,
-			Some(idx) => {
-				// skip by the number of elements pruned in the preceding subtrees,
-				// which is the sum of the size of each subtree
-				Some(
-					self.pruned_nodes[0..(idx as usize)]
-						.iter()
-						.map(|n| {
-							let height = bintree_postorder_height(*n);
-							// height 0, 1 node, offset 0 = 0 + 0
-							// height 1, 3 nodes, offset 2 = 1 + 1
-							// height 2, 7 nodes, offset 6 = 3 + 3
-							// height 3, 15 nodes, offset 14 = 7 + 7
-							2 * ((1 << height) - 1)
-						})
-						.sum(),
-				)
-			}
-		}
-	}
-
-	/// As above, but only returning the number of leaf nodes to skip for a
-	/// given leaf. Helpful if, for instance, data for each leaf is being stored
-	/// separately in a continuous flat-file. Returns None if the position has
-	/// already been pruned.
-	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
-		// get the position where the node at pos would fit in the pruned list, if
-		// it's already pruned, nothing to skip
-
-		let pruned_idx = self.next_pruned_idx(pos);
-		let next_idx = self.pruned_nodes.binary_search(&pos).map(|x| x + 1).ok();
-
-		let idx = pruned_idx.or(next_idx)?;
-		Some(
-			// skip by the number of leaf nodes pruned in the preceding subtrees
-			// which just 2^height
-			// except in the case of height==0
-			// (where we want to treat the pruned tree as 0 leaves)
-			self.pruned_nodes[0..(idx as usize)]
-				.iter()
-				.map(|n| {
-					let height = bintree_postorder_height(*n);
-					if height == 0 {
-						0
-					} else {
-						(1 << height)
-					}
-				})
-				.sum(),
-		)
-	}
-
-	/// Push the node at the provided position in the prune list. Compacts the
-	/// list if pruning the additional node means a parent can get pruned as
-	/// well.
-	pub fn add(&mut self, pos: u64) {
-		let mut current = pos;
-		loop {
-			let (parent, sibling) = family(current);
-
-			match self.pruned_nodes.binary_search(&sibling) {
-				Ok(idx) => {
-					self.pruned_nodes.remove(idx);
-					current = parent;
-				}
-				Err(_) => {
-					if let Some(idx) = self.next_pruned_idx(current) {
-						self.pruned_nodes.insert(idx, current);
-					}
-					break;
-				}
-			}
-		}
-	}
-
-	/// Gets the index a new pruned node should take in the prune list.
-	/// If the node has already been pruned, either directly or through one of
-	/// its parents contained in the prune list, returns None.
-	pub fn next_pruned_idx(&self, pos: u64) -> Option<usize> {
-		match self.pruned_nodes.binary_search(&pos) {
-			Ok(_) => None,
-			Err(idx) => {
-				if self.pruned_nodes.len() > idx {
-					// the node at pos can't be a child of lower position nodes by MMR
-					// construction but can be a child of the next node, going up parents
-					// from pos to make sure it's not the case
-					let next_peak_pos = self.pruned_nodes[idx];
-					let mut cursor = pos;
-					loop {
-						let (parent, _) = family(cursor);
-						if next_peak_pos == parent {
-							return None;
-						}
-						if next_peak_pos < parent {
-							break;
-						}
-						cursor = parent;
-					}
-				}
-				Some(idx)
-			}
-		}
-	}
-}
-
 /// Gets the postorder traversal index of all peaks in a MMR given the last
 /// node's position. Starts with the top peak, which is always on the left
 /// side of the range, and navigates toward lower siblings toward the right
@@ -958,6 +831,24 @@ pub fn family(pos: u64) -> (u64, u64) {
 pub fn is_left_sibling(pos: u64) -> bool {
 	let (_, sibling_pos) = family(pos);
 	sibling_pos > pos
+}
+
+/// Returns the path from the specified position up to its
+/// corresponding peak in the MMR.
+/// The size (and therefore the set of peaks) of the MMR
+/// is defined by last_pos.
+pub fn path(pos: u64, last_pos: u64) -> Vec<u64> {
+	let mut path = vec![pos];
+	let mut current = pos;
+	while current + 1 <= last_pos {
+		let (parent, _) = family(current);
+		if parent > last_pos {
+			break;
+		}
+		path.push(parent);
+		current = parent;
+	}
+	path
 }
 
 /// For a given starting position calculate the parent and sibling positions
