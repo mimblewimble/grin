@@ -352,7 +352,7 @@ impl StratumServer {
 					let rpc_response: String;
 					if err == true {
 						let resp = RpcResponse {
-							id: workers_l[num].id.clone(),
+							id: request.id,
 							jsonrpc: String::from("2.0"),
 							method: request.method,
 							result: None,
@@ -361,7 +361,7 @@ impl StratumServer {
 						rpc_response = serde_json::to_string(&resp).unwrap();
 					} else {
 						let resp = RpcResponse {
-							id: workers_l[num].id.clone(),
+							id: request.id,
 							jsonrpc: String::from("2.0"),
 							method: request.method,
 							result: Some(response),
