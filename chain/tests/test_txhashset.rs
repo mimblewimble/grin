@@ -138,7 +138,7 @@ fn test_unexpected_zip() {
 	let db_root = format!(".grin_txhashset_zip");
 	clean_output_dir(&db_root);
 	let store = Arc::new(ChainKVStore::new(db_root.clone()).unwrap());
-	TxHashSet::open(db_root.clone(), store.clone()).unwrap();
+	TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
 
 	// First check if everything works out of the box
 	assert!(txhashset::zip_read(db_root.clone()).is_ok());
