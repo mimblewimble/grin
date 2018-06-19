@@ -30,7 +30,10 @@ where
 }
 
 /// Retrieve an existing key from a wallet
-pub fn retrieve_existing_key<T, K>(wallet: &T, key_id: Identifier) -> Result<(Identifier, u32), Error>
+pub fn retrieve_existing_key<T, K>(
+	wallet: &T,
+	key_id: Identifier,
+) -> Result<(Identifier, u32), Error>
 where
 	T: WalletBackend<K>,
 	K: Keychain,

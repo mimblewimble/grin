@@ -51,7 +51,6 @@ where
 				out.status != OutputStatus::Spent
 			}
 		})
-		.cloned()
 		.collect::<Vec<_>>();
 	outputs.sort_by_key(|out| out.n_child);
 	Ok(outputs)
@@ -104,7 +103,7 @@ where
 	let mut batch = wallet.batch()?;
 	for (commit, id) in wallet_outputs.iter() {
 		if let Some((height, bid)) = api_blocks.get(&commit) {
-			if let Some(mut output) = batch.get(id) {
+			if let Ok(mut output) = batch.get(id) {
 				output.height = *height;
 				output.block = Some(bid.clone());
 				if let Some(merkle_proof) = api_merkle_proofs.get(&commit) {
@@ -179,7 +178,7 @@ where
 	{
 		let mut batch = wallet.batch()?;
 		for (commit, id) in wallet_outputs.iter() {
-			if let Some(mut output) = batch.get(id) {
+			if let Ok(mut output) = batch.get(id) {
 				match api_outputs.get(&commit) {
 					Some(_) => output.mark_unspent(),
 					None => output.mark_spent(),

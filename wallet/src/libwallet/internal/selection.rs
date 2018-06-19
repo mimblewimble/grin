@@ -93,8 +93,8 @@ where
 	let update_sender_wallet_fn = move |wallet: &mut T| {
 		let mut batch = wallet.batch()?;
 		for id in lock_inputs {
-			let coin = batch.get(&id).unwrap();
-			batch.lock_output(&coin);
+			let mut coin = batch.get(&id).unwrap();
+			batch.lock_output(&mut coin);
 		}
 		// write the output representing our change
 		if let Some(d) = change_derivation {

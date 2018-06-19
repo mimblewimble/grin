@@ -52,7 +52,7 @@ where
 	fn keychain(&mut self) -> &mut K;
 
 	/// Iterate over all output data stored by the backend
-	fn iter<'a>(&'a self) -> Box<Iterator<Item = &'a OutputData> + 'a>;
+	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a>;
 
 	/// Get output data by id
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
@@ -84,19 +84,19 @@ where
 /// Batch trait to update the output data backend atomically
 pub trait WalletOutputBatch {
 	/// Add or update data about an output to the backend
-	fn save(&mut self, out: OutputData);
+	fn save(&mut self, out: OutputData) -> Result<(), Error>;
 
 	/// Gets output data by id
-	fn get(&self, id: &Identifier) -> Option<OutputData>;
+	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
 
 	/// Delete data about an output to the backend
-	fn delete(&mut self, id: &Identifier);
+	fn delete(&mut self, id: &Identifier) -> Result<(), Error>;
 
 	/// Save an output as locked in the backend
-	fn lock_output(&mut self, out: &OutputData);
+	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error>;
 
 	/// Write the wallet data to backend file
-	fn commit(&self) -> Result<(), Error>;
+	fn commit(self) -> Result<(), Error>;
 }
 
 /// Encapsulate all communication functions. No functions within libwallet
@@ -179,13 +179,6 @@ pub struct OutputData {
 impl ser::Writeable for OutputData {
 	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_bytes(&serde_json::to_vec(self).map_err(|_| ser::Error::CorruptedData)?)
-	}
-}
-
-impl<'a> ser::Readable for &'a OutputData {
-	fn read(reader: &mut ser::Reader) -> Result<&'a OutputData, ser::Error> {
-		let output = OutputData::read(reader)?;
-		Ok(&output)
 	}
 }
 

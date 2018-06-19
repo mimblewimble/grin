@@ -56,27 +56,31 @@ struct FileBatch<'a> {
 }
 
 impl<'a> WalletOutputBatch for FileBatch<'a> {
-	fn save(&mut self, out: OutputData) {
+	fn save(&mut self, out: OutputData) -> Result<(), libwallet::Error> {
 		let _ = self.outputs.insert(out.key_id.to_hex(), out);
+		Ok(())
 	}
 
-	fn get(&self, id: &Identifier) -> Option<OutputData> {
+	fn get(&self, id: &Identifier) -> Result<OutputData, libwallet::Error> {
 		self.outputs.get(&id.to_hex()).map(|od| od.clone())
+			.ok_or(libwallet::ErrorKind::Backend("not found".to_string()).into())
 	}
 
-	fn delete(&mut self, id: &Identifier) {
+	fn delete(&mut self, id: &Identifier) -> Result<(), libwallet::Error> {
 		let _ = self.outputs.remove(&id.to_hex());
+		Ok(())
 	}
 
-	fn lock_output(&mut self, out: &OutputData) {
+	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), libwallet::Error> {
 		if let Some(out_to_lock) = self.outputs.get_mut(&out.key_id.to_hex()) {
 			if out_to_lock.value == out.value {
 				out_to_lock.lock()
 			}
 		}
+		Ok(())
 	}
 
-	fn commit(&self) -> Result<(), libwallet::Error> {
+	fn commit(self) -> Result<(), libwallet::Error> {
 		let mut data_file = File::create(self.data_file_path.clone())
 			.context(libwallet::ErrorKind::CallbackImpl("Could not create"))?;
 		let mut outputs = self.outputs.values().collect::<Vec<_>>();
@@ -160,12 +164,15 @@ where
 		self.keychain.as_mut().unwrap()
 	}
 
-	fn iter<'a>(&'a self) -> Box<Iterator<Item = &'a OutputData> + 'a> {
-		Box::new(self.outputs.values())
+	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a> {
+		Box::new(self.outputs.values().cloned())
 	}
 
 	fn get(&self, id: &Identifier) -> Result<OutputData, libwallet::Error> {
-		self.outputs.get(&id.to_hex()).map(|o| o.clone()).ok_or(libwallet::ErrorKind::Backend("not found".to_string()).into())
+		self.outputs
+			.get(&id.to_hex())
+			.map(|o| o.clone())
+			.ok_or(libwallet::ErrorKind::Backend("not found".to_string()).into())
 	}
 
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, libwallet::Error> {

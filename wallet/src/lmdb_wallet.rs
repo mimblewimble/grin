@@ -14,18 +14,18 @@
 
 use std::collections::HashMap;
 use std::collections::hash_map::Values;
-use std::{fs, path};
 use std::sync::Arc;
+use std::{fs, path};
 
 use failure::{Context, ResultExt};
 
-use store::{self, option_to_not_found, to_key, u64_to_key};
 use keychain::{Identifier, Keychain};
+use store::{self, option_to_not_found, to_key, u64_to_key};
 
 use client;
 use libtx::slate::Slate;
-use libwallet::{internal, Error, ErrorKind};
 use libwallet::types::*;
+use libwallet::{internal, Error, ErrorKind};
 use types::{WalletConfig, WalletSeed};
 use util::secp::pedersen;
 
@@ -53,8 +53,7 @@ pub struct LMDBBackend<K> {
 impl<K> LMDBBackend<K> {
 	pub fn new(config: WalletConfig, passphrase: &str) -> Result<Self, Error> {
 		let db_path = path::Path::new(&config.data_file_dir).join(DB_DIR);
-		fs::create_dir_all(&db_path)
-			.expect("Couldn't create wallet backend directory!");
+		fs::create_dir_all(&db_path).expect("Couldn't create wallet backend directory!");
 
 		let lmdb_env = Arc::new(store::new_env(db_path.to_str().unwrap().to_string()));
 		let db = store::Store::open(lmdb_env, DB_DIR);
@@ -76,9 +75,7 @@ where
 		let wallet_seed = WalletSeed::from_file(&self.config)
 			.context(ErrorKind::CallbackImpl("Error opening wallet"))?;
 		let keychain = wallet_seed.derive_keychain(&self.passphrase);
-		self.keychain = Some(keychain.context(ErrorKind::CallbackImpl(
-			"Error deriving keychain",
-		))?);
+		self.keychain = Some(keychain.context(ErrorKind::CallbackImpl("Error deriving keychain"))?);
 		// Just blow up password for now after it's been used
 		self.passphrase = String::from("");
 		Ok(())
@@ -100,12 +97,15 @@ where
 		option_to_not_found(self.db.get_ser(&key)).map_err(|e| e.into())
 	}
 
-	fn iter<'a>(&'a self) -> Box<Iterator<Item = &'a OutputData> + 'a> {
+	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a> {
 		Box::new(self.db.iter(&[OUTPUT_PREFIX]).unwrap())
 	}
 
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, Error> {
-		unimplemented!()
+		Ok(Box::new(Batch {
+			store: self,
+			db: self.db.batch()?,
+		}))
 	}
 
 	fn next_child<'a>(&mut self, root_key_id: Identifier) -> Result<u32, Error> {
@@ -139,6 +139,43 @@ where
 
 	fn restore(&mut self) -> Result<(), Error> {
 		internal::restore::restore(self).context(ErrorKind::Restore)?;
+		Ok(())
+	}
+}
+
+/// An atomic batch in which all changes can be committed all at once or
+/// discarded on error.
+pub struct Batch<'a, K: 'a> {
+	store: &'a LMDBBackend<K>,
+	db: store::Batch<'a>,
+}
+
+#[allow(missing_docs)]
+impl<'a, K> WalletOutputBatch for Batch<'a, K> {
+	fn save(&mut self, out: OutputData)-> Result<(), Error> {
+		let key = to_key(OUTPUT_PREFIX, &mut out.key_id.to_bytes().to_vec());
+		self.db.put_ser(&key, &out)?;
+		Ok(())
+	}
+
+	fn get(&self, id: &Identifier)-> Result<OutputData, Error> {
+		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
+		option_to_not_found(self.db.get_ser(&key)).map_err(|e| e.into())
+	}
+
+	fn delete(&mut self, id: &Identifier)-> Result<(), Error> {
+		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
+		self.db.delete(&key)?;
+		Ok(())
+	}
+
+	fn lock_output(&mut self, out: &mut OutputData)-> Result<(), Error> {
+		out.lock();
+		self.save(out.clone())
+	}
+
+	fn commit(self) -> Result<(), Error> {
+		self.db.commit()?;
 		Ok(())
 	}
 }
@@ -185,8 +222,7 @@ impl<K> WalletClient for LMDBBackend<K> {
 		addr: &str,
 		wallet_outputs: Vec<pedersen::Commitment>,
 	) -> Result<HashMap<pedersen::Commitment, String>, Error> {
-		let res = client::get_outputs_from_node(addr, wallet_outputs)
-			.context(ErrorKind::Node)?;
+		let res = client::get_outputs_from_node(addr, wallet_outputs).context(ErrorKind::Node)?;
 		Ok(res)
 	}
 
