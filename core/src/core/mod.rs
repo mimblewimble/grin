@@ -18,6 +18,7 @@ pub mod block;
 pub mod committed;
 pub mod hash;
 pub mod id;
+pub mod merkle_proof;
 pub mod pmmr;
 pub mod prune_list;
 pub mod target;

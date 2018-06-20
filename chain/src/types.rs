@@ -85,6 +85,10 @@ pub enum Error {
 	AlreadySpent(Commitment),
 	/// An output with that commitment already exists (should be unique)
 	DuplicateCommitment(Commitment),
+	/// Attempt to spend a coinbase output before it sufficiently matures.
+	ImmatureCoinbase,
+	/// Error validating a Merkle proof (coinbase output)
+	MerkleProof,
 	/// output not found
 	OutputNotFound,
 	/// output spent

@@ -35,15 +35,15 @@
 //! The underlying Hashes are stored in a Backend implementation that can
 //! either be a simple Vec or a database.
 
+use std::marker;
+
 use croaring::Bitmap;
 
 use core::hash::Hash;
+use core::merkle_proof::MerkleProof;
 use core::BlockHeader;
-use ser::{self, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
-
-use std::clone::Clone;
-use std::marker;
-use util::{self, LOGGER};
+use ser::{PMMRIndexHashable, PMMRable};
+use util::LOGGER;
 
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
 /// The PMMR itself does not need the Backend to be accurate on the existence
@@ -106,168 +106,6 @@ where
 	fn dump_stats(&self);
 }
 
-/// Maximum peaks for a Merkle proof
-pub const MAX_PEAKS: u64 = 100;
-
-/// Maximum path for a Merkle proof
-pub const MAX_PATH: u64 = 100;
-
-/// A Merkle proof.
-/// Proves inclusion of an output (node) in the output MMR.
-/// We can use this to prove an output was unspent at the time of a given block
-/// as the root will match the output_root of the block header.
-/// The path and left_right can be used to reconstruct the peak hash for a
-/// given tree in the MMR.
-/// The root is the result of hashing all the peaks together.
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-pub struct MerkleProof {
-	/// The root hash of the full Merkle tree (in an MMR the hash of all peaks)
-	pub root: Hash,
-	/// The hash of the element in the tree we care about
-	pub node: Hash,
-	/// The size of the full Merkle tree
-	pub mmr_size: u64,
-	/// The full list of peak hashes in the MMR
-	pub peaks: Vec<Hash>,
-	/// The sibling (hash, pos) along the path of the tree
-	/// as we traverse from node to peak
-	pub path: Vec<(Hash, u64)>,
-}
-
-impl Writeable for MerkleProof {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(
-			writer,
-			[write_fixed_bytes, &self.root],
-			[write_fixed_bytes, &self.node],
-			[write_u64, self.mmr_size],
-			[write_u64, self.peaks.len() as u64],
-			[write_u64, self.path.len() as u64]
-		);
-
-		self.peaks.write(writer)?;
-		self.path.write(writer)?;
-
-		Ok(())
-	}
-}
-
-impl Readable for MerkleProof {
-	fn read(reader: &mut Reader) -> Result<MerkleProof, ser::Error> {
-		let root = Hash::read(reader)?;
-		let node = Hash::read(reader)?;
-
-		let (mmr_size, peaks_len, path_len) = ser_multiread!(reader, read_u64, read_u64, read_u64);
-
-		if peaks_len > MAX_PEAKS || path_len > MAX_PATH {
-			return Err(ser::Error::CorruptedData);
-		}
-
-		let mut peaks = Vec::with_capacity(peaks_len as usize);
-		for _ in 0..peaks_len {
-			peaks.push(Hash::read(reader)?);
-		}
-
-		let mut path = Vec::with_capacity(path_len as usize);
-		for _ in 0..path_len {
-			let hash = Hash::read(reader)?;
-			let pos = reader.read_u64()?;
-			path.push((hash, pos));
-		}
-
-		Ok(MerkleProof {
-			root,
-			node,
-			mmr_size,
-			peaks,
-			path,
-		})
-	}
-}
-
-impl Default for MerkleProof {
-	fn default() -> MerkleProof {
-		MerkleProof::empty()
-	}
-}
-
-impl MerkleProof {
-	/// The "empty" Merkle proof.
-	/// Basically some reasonable defaults. Will not verify successfully.
-	pub fn empty() -> MerkleProof {
-		MerkleProof {
-			root: Hash::default(),
-			node: Hash::default(),
-			mmr_size: 0,
-			peaks: vec![],
-			path: vec![],
-		}
-	}
-
-	/// Serialize the Merkle proof as a hex string (for api json endpoints)
-	pub fn to_hex(&self) -> String {
-		let mut vec = Vec::new();
-		ser::serialize(&mut vec, &self).expect("serialization failed");
-		util::to_hex(vec)
-	}
-
-	/// Convert hex string representation back to a Merkle proof instance
-	pub fn from_hex(hex: &str) -> Result<MerkleProof, String> {
-		let bytes = util::from_hex(hex.to_string()).unwrap();
-		let res = ser::deserialize(&mut &bytes[..])
-			.map_err(|_| "failed to deserialize a Merkle Proof".to_string())?;
-		Ok(res)
-	}
-
-	/// Verify the Merkle proof.
-	/// We do this by verifying the following -
-	/// * inclusion of the node beneath a peak (via the Merkle path/branch of
-	/// siblings) * inclusion of the peak in the "bag of peaks" beneath the
-	/// root
-	pub fn verify(&self) -> bool {
-		// if we have no further elements in the path
-		// then this proof verifies successfully if our node is
-		// one of the peaks
-		// and the peaks themselves hash to give the root
-		if self.path.len() == 0 {
-			if !self.peaks.contains(&self.node) {
-				return false;
-			}
-
-			let mut bagged = None;
-			for peak in self.peaks.iter().rev() {
-				bagged = match bagged {
-					None => Some(*peak),
-					Some(rhs) => Some((*peak, rhs).hash_with_index(self.mmr_size)),
-				}
-			}
-			return bagged == Some(self.root);
-		}
-
-		let mut path = self.path.clone();
-		let (sibling, sibling_pos) = path.remove(0);
-		let (parent_pos, _) = family(sibling_pos);
-
-		// hash our node and sibling together (noting left/right position of the
-		// sibling)
-		let parent = if is_left_sibling(sibling_pos) {
-			(sibling, self.node).hash_with_index(parent_pos - 1)
-		} else {
-			(self.node, sibling).hash_with_index(parent_pos - 1)
-		};
-
-		let proof = MerkleProof {
-			root: self.root,
-			node: parent,
-			mmr_size: self.mmr_size,
-			peaks: self.peaks.clone(),
-			path,
-		};
-
-		proof.verify()
-	}
-}
-
 /// Prunable Merkle Mountain Range implementation. All positions within the tree
 /// start at 1 as they're postorder tree traversal positions rather than array
 /// indices.
@@ -324,6 +162,41 @@ where
 			.collect()
 	}
 
+	fn peak_path(&self, peak_pos: u64) -> Vec<Hash> {
+		let rhs = self.bag_the_rhs(peak_pos);
+		let mut res = peaks(self.last_pos)
+			.into_iter()
+			.filter(|x| x < &peak_pos)
+			.filter_map(|x| self.backend.get_from_file(x))
+			.collect::<Vec<_>>();
+		res.reverse();
+		if let Some(rhs) = rhs {
+			res.insert(0, rhs);
+		}
+		res
+	}
+
+	/// Takes a single peak position and hashes together
+	/// all the peaks to the right of this peak (if any).
+	/// If this return a hash then this is our peaks sibling.
+	/// If none then the sibling of our peak is the peak to the left.
+	pub fn bag_the_rhs(&self, peak_pos: u64) -> Option<Hash> {
+		let rhs = peaks(self.last_pos)
+			.into_iter()
+			.filter(|x| x > &peak_pos)
+			.filter_map(|x| self.backend.get_from_file(x))
+			.collect::<Vec<_>>();
+
+		let mut res = None;
+		for peak in rhs.iter().rev() {
+			res = match res {
+				None => Some(*peak),
+				Some(rhash) => Some((*peak, rhash).hash_with_index(self.unpruned_size())),
+			}
+		}
+		res
+	}
+
 	/// Computes the root of the MMR. Find all the peaks in the current
 	/// tree and "bags" them to get a single peak.
 	pub fn root(&self) -> Hash {
@@ -337,45 +210,46 @@ where
 		res.expect("no root, invalid tree")
 	}
 
-	/// Build a Merkle proof for the element at the given position in the MMR
+	/// Build a Merkle proof for the element at the given position.
 	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
-		debug!(
-			LOGGER,
-			"merkle_proof (via rewind) - {}, last_pos {}", pos, self.last_pos
-		);
+		debug!(LOGGER, "merkle_proof  {}, last_pos {}", pos, self.last_pos);
 
+		// check this pos is actually a leaf in the MMR
 		if !is_leaf(pos) {
 			return Err(format!("not a leaf at pos {}", pos));
 		}
 
-		let root = self.root();
-
-		let node = self.get_hash(pos)
+		// check we actually have a hash in the MMR at this pos
+		self.get_hash(pos)
 			.ok_or(format!("no element at pos {}", pos))?;
 
 		let mmr_size = self.unpruned_size();
 
+		// Edge case: an MMR with a single entry in it
+		// this entry is a leaf, a peak and the root itself
+		// and there are no siblings to hash with
+		if mmr_size == 1 {
+			return Ok(MerkleProof {
+				mmr_size,
+				path: vec![],
+			});
+		}
+
 		let family_branch = family_branch(pos, self.last_pos);
 
-		let path = family_branch
+		let mut path = family_branch
 			.iter()
-			.map(|x| (self.get_from_file(x.1).unwrap_or_default(), x.1))
+			.filter_map(|x| self.get_from_file(x.1))
 			.collect::<Vec<_>>();
 
-		let peaks = peaks(self.last_pos)
-			.iter()
-			.filter_map(|&x| self.get_from_file(x))
-			.collect::<Vec<_>>();
-
-		let proof = MerkleProof {
-			root,
-			node,
-			mmr_size,
-			peaks,
-			path,
+		let peak_pos = match family_branch.last() {
+			Some(&(x, _)) => x,
+			None => pos,
 		};
 
-		Ok(proof)
+		path.append(&mut self.peak_path(peak_pos));
+
+		Ok(MerkleProof { mmr_size, path })
 	}
 
 	/// Push a new element into the MMR. Computes new related peaks at

@@ -28,7 +28,9 @@ use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
-use core::core::pmmr::{self, MerkleProof, PMMR};
+use core::core::merkle_proof::MerkleProof;
+use core::core::pmmr;
+use core::core::pmmr::PMMR;
 use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, Transaction,
                  TxKernel};
 use core::global;
@@ -539,15 +541,34 @@ impl<'a> Extension<'a> {
 		inputs: &Vec<Input>,
 		height: u64,
 	) -> Result<(), Error> {
-		for x in inputs {
-			if x.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-				let header = self.commit_index.get_block_header(&x.block_hash())?;
-				let pos = self.get_output_pos(&x.commitment())?;
-				let out_hash = self.output_pmmr.get_hash(pos).ok_or(Error::OutputNotFound)?;
-				x.verify_maturity(out_hash, &header, height)?;
+		for input in inputs {
+			if input.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+				self.verify_maturity_via_merkle_proof(input, height)?;
 			}
 		}
 		Ok(())
+	}
+
+	fn verify_maturity_via_merkle_proof(&self, input: &Input, height: u64) -> Result<(), Error> {
+		let header = self.commit_index.get_block_header(&input.block_hash())?;
+
+		// Check that the height indicates it has matured sufficiently
+		// we will check the Merkle proof below to ensure we are being
+		// honest about the height
+		if header.height + global::coinbase_maturity() >= height {
+			return Err(Error::ImmatureCoinbase);
+		}
+
+		// We need the MMR pos to verify the Merkle proof
+		let pos = self.get_output_pos(&input.commitment())?;
+
+		let out_id = OutputIdentifier::from_input(input);
+		let res = input
+			.merkle_proof()
+			.verify(header.output_root, &out_id, pos)
+			.map_err(|_| Error::MerkleProof)?;
+
+		Ok(res)
 	}
 
 	/// Apply a new set of blocks on top the existing sum trees. Blocks are

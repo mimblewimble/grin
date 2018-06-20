@@ -24,7 +24,7 @@ use chain::store::ChainKVStore;
 use chain::txhashset::{self, TxHashSet};
 use chain::types::Tip;
 use chain::ChainStore;
-use core::core::pmmr::MerkleProof;
+use core::core::merkle_proof::MerkleProof;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
 use keychain::{ExtKeychain, Keychain};

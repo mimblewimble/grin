@@ -52,15 +52,6 @@ pub enum Error {
 	Keychain(keychain::Error),
 	/// Underlying consensus error (sort order currently)
 	Consensus(consensus::Error),
-	/// Coinbase has not yet matured and cannot be spent (1,000 blocks)
-	ImmatureCoinbase {
-		/// The height of the block containing the input spending the coinbase
-		/// output
-		height: u64,
-		/// The lock_height needed to be reached for the coinbase output to
-		/// mature
-		lock_height: u64,
-	},
 	/// Underlying Merkle proof error
 	MerkleProof,
 	/// Error when verifying kernel sums via committed trait.
@@ -682,7 +673,6 @@ impl Block {
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 		self.verify_coinbase()?;
-		self.verify_inputs()?;
 		self.verify_kernel_lock_heights()?;
 
 		let sums = self.verify_kernel_sums(
@@ -722,27 +712,6 @@ impl Block {
 				return Err(Error::CutThrough);
 			}
 		}
-		Ok(())
-	}
-
-	/// We can verify the Merkle proof (for coinbase inputs) here in isolation.
-	/// But we cannot check the following as we need data from the index and
-	/// the PMMR. So we must be sure to check these at the appropriate point
-	/// during block validation.   * node is in the correct pos in the PMMR
-	/// * block is the correct one (based on output_root from block_header
-	/// via the index)
-	fn verify_inputs(&self) -> Result<(), Error> {
-		let coinbase_inputs = self.inputs
-			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT));
-
-		for input in coinbase_inputs {
-			let merkle_proof = input.merkle_proof();
-			if !merkle_proof.verify() {
-				return Err(Error::MerkleProof);
-			}
-		}
-
 		Ok(())
 	}
 

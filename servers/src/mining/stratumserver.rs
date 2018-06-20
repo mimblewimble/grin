@@ -307,9 +307,7 @@ impl StratumServer {
 
 					// Call the handler function for requested method
 					let response = match request.method.as_str() {
-						"login" => {
-								self.handle_login(request.params, &mut workers_l[num])
-						}
+						"login" => self.handle_login(request.params, &mut workers_l[num]),
 						"submit" => {
 							let res = self.handle_submit(
 								request.params,

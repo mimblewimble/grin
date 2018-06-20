@@ -188,7 +188,7 @@ impl LeafSet {
 		self.bitmap.cardinality() as usize
 	}
 
-	// Is the leaf_set empty.
+	/// Is the leaf_set empty.
 	pub fn is_empty(&self) -> bool {
 		self.len() == 0
 	}
