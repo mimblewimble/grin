@@ -13,22 +13,24 @@
 // limitations under the License.
 
 //! Wallet key management functions
-use keychain::Identifier;
+use keychain::{Identifier, Keychain};
 use libwallet::error::Error;
 use libwallet::types::WalletBackend;
 
 /// Get our next available key
-pub fn new_output_key<T>(wallet: &mut T) -> Result<(Identifier, u32), Error>
+pub fn new_output_key<T, K>(wallet: &mut T) -> Result<(Identifier, u32), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	wallet.with_wallet(|wallet_data| next_available_key(wallet_data))
 }
 
 /// Get next available key in the wallet
-pub fn next_available_key<T>(wallet: &mut T) -> (Identifier, u32)
+pub fn next_available_key<T, K>(wallet: &mut T) -> (Identifier, u32)
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	let root_key_id = wallet.keychain().root_key_id();
 	let derivation = wallet.next_child(root_key_id.clone());
@@ -37,9 +39,10 @@ where
 }
 
 /// Retrieve an existing key from a wallet
-pub fn retrieve_existing_key<T>(wallet: &T, key_id: Identifier) -> (Identifier, u32)
+pub fn retrieve_existing_key<T, K>(wallet: &T, key_id: Identifier) -> (Identifier, u32)
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	if let Some(existing) = wallet.get_output(&key_id) {
 		let key_id = existing.key_id.clone();

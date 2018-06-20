@@ -14,7 +14,7 @@
 
 //! Builds the blinded output and related signature proof for the block
 //! reward.
-use keychain;
+use keychain::{Identifier, Keychain};
 
 use core::consensus::reward;
 use core::core::KernelFeatures;
@@ -24,12 +24,15 @@ use libtx::{aggsig, proof};
 use util::{kernel_sig_msg, secp, static_secp_instance, LOGGER};
 
 /// output a reward output
-pub fn output(
-	keychain: &keychain::Keychain,
-	key_id: &keychain::Identifier,
+pub fn output<K>(
+	keychain: &K,
+	key_id: &Identifier,
 	fees: u64,
 	height: u64,
-) -> Result<(Output, TxKernel), Error> {
+) -> Result<(Output, TxKernel), Error>
+where
+	K: Keychain,
+{
 	let value = reward(fees);
 	let commit = keychain.commit(value, key_id)?;
 	let msg = ProofMessageElements::new(value, key_id);

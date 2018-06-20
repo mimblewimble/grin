@@ -12,12 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Library specific to the Grin wallet implementation, as distinct from
-//! libwallet, which should build transactions without any knowledge of the
-//! wallet implementation.
-
-// TODO: Once this is working, extract a set of traits that wallet
-// implementations would need to provide
+//! Higher level wallet functions which can be used by callers to operate
+//! on the wallet, as well as helpers to invoke and instantiate wallets
+//! and listeners
 
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
@@ -25,12 +22,10 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
+pub mod api;
+pub mod controller;
 mod error;
-pub mod keys;
-pub mod restore;
-pub mod selection;
-pub mod sigcontext;
+pub mod internal;
 pub mod types;
-pub mod updater;
 
 pub use libwallet::error::{Error, ErrorKind};

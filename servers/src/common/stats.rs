@@ -40,7 +40,7 @@ impl Default for ServerStateInfo {
 		}
 	}
 }
-/// Simpler thread-unware version of above to be populated and retured to
+/// Simpler thread-unaware version of above to be populated and returned to
 /// consumers might be interested in, such as test results or UI
 #[derive(Clone)]
 pub struct ServerStats {

@@ -20,15 +20,17 @@ pub mod hash;
 pub mod id;
 pub mod merkle_proof;
 pub mod pmmr;
+pub mod prune_list;
 pub mod target;
 pub mod transaction;
+
 use consensus::GRIN_BASE;
 #[allow(dead_code)]
 use rand::{thread_rng, Rng};
 use std::num::ParseFloatError;
 use std::{fmt, iter};
 
-use util::secp::pedersen::*;
+use util::secp::pedersen::Commitment;
 
 pub use self::block::*;
 pub use self::committed::Committed;

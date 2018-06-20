@@ -15,26 +15,26 @@
 //! Mining Stratum Server
 use bufstream::BufStream;
 use serde_json;
+use serde_json::Value;
 use std::error::Error;
-use std::io::BufRead;
-use std::io::{ErrorKind, Write};
+use std::io::{BufRead, ErrorKind, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
-use std::thread;
-use std::time::Duration;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
+use std::{cmp, thread};
 use time;
-use util::LOGGER;
 
 use chain;
 use common::adapters::PoolToChainAdapter;
 use common::stats::{StratumStats, WorkerStats};
 use common::types::StratumServerConfig;
 use core::core::{Block, BlockHeader};
+use core::{consensus, pow};
 use keychain;
 use mining::mine_block;
 use pool;
+use util::LOGGER;
 
 // Max number of transactions this miner will assemble in a block
 const MAX_TX: u32 = 5000;
@@ -48,7 +48,7 @@ struct RpcRequest {
 	id: String,
 	jsonrpc: String,
 	method: String,
-	params: Option<String>,
+	params: Option<Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -56,8 +56,8 @@ struct RpcResponse {
 	id: String,
 	jsonrpc: String,
 	method: String,
-	result: Option<String>,
-	error: Option<RpcError>,
+	result: Option<Value>,
+	error: Option<Value>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -150,6 +150,7 @@ fn accept_workers(
 
 pub struct Worker {
 	id: String,
+	agent: String,
 	login: Option<String>,
 	stream: BufStream<TcpStream>,
 	error: bool,
@@ -161,6 +162,7 @@ impl Worker {
 	pub fn new(id: String, stream: BufStream<TcpStream>) -> Worker {
 		Worker {
 			id: id,
+			agent: String::from(""),
 			login: None,
 			stream: stream,
 			error: false,
@@ -231,6 +233,7 @@ pub struct StratumServer {
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	current_block: Block,
 	current_difficulty: u64,
+	minimum_share_difficulty: u64,
 	current_key_id: Option<keychain::Identifier>,
 	workers: Arc<Mutex<Vec<Worker>>>,
 	currently_syncing: Arc<AtomicBool>,
@@ -245,6 +248,7 @@ impl StratumServer {
 	) -> StratumServer {
 		StratumServer {
 			id: String::from("StratumServer"),
+			minimum_share_difficulty: config.minimum_share_difficulty,
 			config: config,
 			chain: chain_ref,
 			tx_pool: tx_pool,
@@ -264,7 +268,7 @@ impl StratumServer {
 		let pre = pre_pow_writer.as_hex_string(false);
 		let job_template = JobTemplate {
 			height: bh.height,
-			difficulty: self.current_difficulty,
+			difficulty: self.minimum_share_difficulty,
 			pre_pow: pre,
 		};
 		return job_template;
@@ -302,12 +306,8 @@ impl StratumServer {
 					stratum_stats.worker_stats[worker_stats_id].last_seen = SystemTime::now();
 
 					// Call the handler function for requested method
-					let (response, err) = match request.method.as_str() {
-						"login" => {
-							let (response, err) =
-								self.handle_login(request.params, &mut workers_l[num]);
-							(response, err)
-						}
+					let response = match request.method.as_str() {
+						"login" => self.handle_login(request.params, &mut workers_l[num]),
 						"submit" => {
 							let res = self.handle_submit(
 								request.params,
@@ -321,9 +321,11 @@ impl StratumServer {
 						"keepalive" => self.handle_keepalive(),
 						"getjobtemplate" => {
 							if self.currently_syncing.load(Ordering::Relaxed) {
-								let e = r#"{"code": -32701, "message": "Node is syncing - Please wait"}"#;
-								let err = e.to_string();
-								(err, true)
+								let e = RpcError {
+									code: -32701,
+									message: "Node is syncing - Please wait".to_string(),
+								};
+								Err(serde_json::to_value(e).unwrap())
 							} else {
 								let b = self.current_block.header.clone();
 								self.handle_getjobtemplate(b)
@@ -334,33 +336,37 @@ impl StratumServer {
 						}
 						_ => {
 							// Called undefined method
-							let e = r#"{"code": -32601, "message": "Method not found"}"#;
-							let err = e.to_string();
-							(err, true)
+							let e = RpcError {
+								code: -32601,
+								message: "Method not found".to_string(),
+							};
+							Err(serde_json::to_value(e).unwrap())
 						}
 					};
 
 					// Package the reply as RpcResponse json
 					let rpc_response: String;
-					if err == true {
-						let rpc_err: RpcError = serde_json::from_str(&response).unwrap();
-						let resp = RpcResponse {
-							id: workers_l[num].id.clone(),
-							jsonrpc: String::from("2.0"),
-							method: request.method,
-							result: None,
-							error: Some(rpc_err),
-						};
-						rpc_response = serde_json::to_string(&resp).unwrap();
-					} else {
-						let resp = RpcResponse {
-							id: workers_l[num].id.clone(),
-							jsonrpc: String::from("2.0"),
-							method: request.method,
-							result: Some(response),
-							error: None,
-						};
-						rpc_response = serde_json::to_string(&resp).unwrap();
+					match response {
+						Err(response) => {
+							let resp = RpcResponse {
+								id: request.id,
+								jsonrpc: String::from("2.0"),
+								method: request.method,
+								result: None,
+								error: Some(response),
+							};
+							rpc_response = serde_json::to_string(&resp).unwrap();
+						}
+						Ok(response) => {
+							let resp = RpcResponse {
+								id: request.id,
+								jsonrpc: String::from("2.0"),
+								method: request.method,
+								result: Some(response),
+								error: None,
+							};
+							rpc_response = serde_json::to_string(&resp).unwrap();
+						}
 					}
 
 					// Send the reply
@@ -372,7 +378,7 @@ impl StratumServer {
 	}
 
 	// Handle STATUS message
-	fn handle_status(&self, worker_stats: &WorkerStats) -> (String, bool) {
+	fn handle_status(&self, worker_stats: &WorkerStats) -> Result<Value, Value> {
 		// Return worker status in json for use by a dashboard or healthcheck.
 		let status = WorkerStatus {
 			id: worker_stats.id.clone(),
@@ -382,109 +388,162 @@ impl StratumServer {
 			rejected: worker_stats.num_rejected,
 			stale: worker_stats.num_stale,
 		};
-		let response = serde_json::to_string(&status).unwrap();
-		return (response, false);
+		let response = serde_json::to_value(&status).unwrap();
+		return Ok(response);
 	}
 
 	// Handle GETJOBTEMPLATE message
-	fn handle_getjobtemplate(&self, bh: BlockHeader) -> (String, bool) {
+	fn handle_getjobtemplate(&self, bh: BlockHeader) -> Result<Value, Value> {
 		// Build a JobTemplate from a BlockHeader and return JSON
 		let job_template = self.build_block_template(bh);
-		let job_template_json = serde_json::to_string(&job_template).unwrap();
-		return (job_template_json, false);
+		let response = serde_json::to_value(&job_template).unwrap();
+		return Ok(response);
 	}
 
 	// Handle KEEPALIVE message
-	fn handle_keepalive(&self) -> (String, bool) {
-		return (String::from("ok"), false);
+	fn handle_keepalive(&self) -> Result<Value, Value> {
+		return Ok(serde_json::to_value("ok".to_string()).unwrap());
 	}
 
 	// Handle LOGIN message
-	fn handle_login(&self, params: Option<String>, worker: &mut Worker) -> (String, bool) {
-		// Extract the params string into a LoginParams struct
-		let params_str = match params {
-			Some(val) => val,
-			None => String::from("{}"),
-		};
-		let login_params: LoginParams = match serde_json::from_str(&params_str) {
-			Ok(val) => val,
-			Err(_e) => {
-				let r = r#"{"code": -32600, "message": "Invalid Request"}"#;
-				return (String::from(r), true);
+	fn handle_login(&self, params: Option<Value>, worker: &mut Worker) -> Result<Value, Value> {
+		let params: LoginParams = match params {
+			Some(val) => serde_json::from_value(val).unwrap(),
+			None => {
+				let e = RpcError {
+					code: -32600,
+					message: "Invalid Request".to_string(),
+				};
+				return Err(serde_json::to_value(e).unwrap());
 			}
 		};
-		worker.login = Some(login_params.login);
-		// XXX TODO Future? - Validate login and password
+		worker.login = Some(params.login);
+		// XXX TODO Future - Validate password?
+		worker.agent = params.agent;
 		worker.authenticated = true;
-		return (String::from("ok"), false);
+		return Ok(serde_json::to_value("ok".to_string()).unwrap());
 	}
 
 	// Handle SUBMIT message
-	//  params contains a solved block header
-	//  we are expecting real solutions at the full difficulty.
+	// params contains a solved block header
+	// We accept and log valid shares of all difficulty above configured minimum
+	// Accepted shares that are full solutions will also be submitted to the
+	// network
 	fn handle_submit(
 		&self,
-		params: Option<String>,
+		params: Option<Value>,
 		worker: &mut Worker,
 		worker_stats: &mut WorkerStats,
-	) -> (String, bool) {
-		// Extract the params string into a SubmitParams struct
-		let params_str = match params {
-			Some(val) => val,
-			None => String::from("{}"),
-		};
-		let submit_params: SubmitParams = match serde_json::from_str(&params_str) {
-			Ok(val) => val,
-			Err(_e) => {
-				let r = r#"{"code": -32600, "message": "Invalid Request"}"#;
-				return (String::from(r), true);
+	) -> Result<Value, Value> {
+		// Validate parameters
+		let params: SubmitParams = match params {
+			Some(val) => serde_json::from_value(val).unwrap(),
+			None => {
+				let e = RpcError {
+					code: -32600,
+					message: "Invalid Request".to_string(),
+				};
+				return Err(serde_json::to_value(e).unwrap());
 			}
 		};
 
 		let mut b: Block;
-		if submit_params.height == self.current_block.header.height {
+		let share_difficulty: u64;
+		if params.height == self.current_block.header.height {
 			// Reconstruct the block header with this nonce and pow added
 			b = self.current_block.clone();
-			b.header.nonce = submit_params.nonce;
-			b.header.pow.nonces = submit_params.pow;
-			let res = self.chain.process_block(b.clone(), chain::Options::MINE);
-			if let Err(e) = res {
+			b.header.nonce = params.nonce;
+			b.header.pow.nonces = params.pow;
+			// Get share difficulty
+			share_difficulty = b.header.pow.to_difficulty().to_num();
+			// If the difficulty is too low its an error
+			if share_difficulty < self.minimum_share_difficulty {
+				// Return error status
 				error!(
 					LOGGER,
-					"(Server ID: {}) Error validating mined block: {:?}", self.id, e
+					"(Server ID: {}) Share rejected due to low difficulty: {}/{}",
+					self.id,
+					share_difficulty,
+					self.minimum_share_difficulty,
 				);
 				worker_stats.num_rejected += 1;
-				let e = r#"{"code": -1, "message": "Solution validation failed"}"#;
-				let err = e.to_string();
-				return (err, true);
+				let e = RpcError {
+					code: -32501,
+					message: "Share rejected due to low difficulty".to_string(),
+				};
+				return Err(serde_json::to_value(e).unwrap());
+			}
+			// If the difficulty is high enough, submit it (which also validates it)
+			if share_difficulty >= self.current_difficulty {
+				let res = self.chain.process_block(b.clone(), chain::Options::MINE);
+				if let Err(e) = res {
+					// Return error status
+					error!(
+						LOGGER,
+						"(Server ID: {}) Failed to validate solution at height {}: {:?}",
+						self.id,
+						params.height,
+						e
+					);
+					worker_stats.num_rejected += 1;
+					let e = RpcError {
+						code: -32502,
+						message: "Failed to validate solution".to_string(),
+					};
+					return Err(serde_json::to_value(e).unwrap());
+				}
+			// Success case falls through to be logged
+			} else {
+				// This is a low-difficulty share, not a full solution
+				// Do some validation but dont submit
+				if !pow::verify_size(&b.header, consensus::DEFAULT_SIZESHIFT) {
+					// Return error status
+					error!(
+						LOGGER,
+						"(Server ID: {}) Failed to validate share at height {} with nonce {}",
+						self.id,
+						params.height,
+						b.header.nonce
+					);
+					worker_stats.num_rejected += 1;
+					let e = RpcError {
+						code: -32502,
+						message: "Failed to validate solution".to_string(),
+					};
+					return Err(serde_json::to_value(e).unwrap());
+				}
 			}
 		} else {
-			warn!(
+			// Return error status
+			error!(
 				LOGGER,
-				"(Server ID: {}) Found POW for block at height: {} -  but too late",
-				self.id,
-				submit_params.height
+				"(Server ID: {}) Share at height {} submitted too late", self.id, params.height,
 			);
 			worker_stats.num_stale += 1;
-			let e = r#"{"code": -1, "message": "Solution submitted too late"}"#;
-			let err = e.to_string();
-			return (err, true);
+			let e = RpcError {
+				code: -32503,
+				message: "Solution submitted too late".to_string(),
+			};
+			return Err(serde_json::to_value(e).unwrap());
 		}
+		// Log this as a valid share
 		let submitted_by = match worker.login.clone() {
 			None => worker.id.to_string(),
 			Some(login) => login.clone(),
 		};
 		info!(
 			LOGGER,
-			"(Server ID: {}) Found POW for block with hash {} at height {} using nonce {} submitted by worker {}",
+			"(Server ID: {}) Got share for block: hash {}, height {}, nonce {}, difficulty {}/{}, submitted by {}",
 			self.id,
 			b.hash(),
 			b.header.height,
 			b.header.nonce,
+			share_difficulty,
+			self.current_difficulty,
 			submitted_by,
 		);
 		worker_stats.num_accepted += 1;
-		return (String::from("ok"), false);
+		return Ok(serde_json::to_value("ok".to_string()).unwrap());
 	} // handle submit a solution
 
 	// Purge dead/sick workers - remove all workers marked in error state
@@ -535,15 +594,19 @@ impl StratumServer {
 		// Package new block into RpcRequest
 		let job_template = self.build_block_template(self.current_block.header.clone());
 		let job_template_json = serde_json::to_string(&job_template).unwrap();
+		// Issue #1159 - use a serde_json Value type to avoid extra quoting
+		let job_template_value: Value = serde_json::from_str(&job_template_json).unwrap();
 		let job_request = RpcRequest {
 			id: String::from("Stratum"),
 			jsonrpc: String::from("2.0"),
 			method: String::from("job"),
-			params: Some(job_template_json),
+			params: Some(job_template_value),
 		};
 		let job_request_json = serde_json::to_string(&job_request).unwrap();
 
 		// Push the new block to all connected clients
+		// NOTE: We do not give a unique nonce (should we?) so miners need
+		//       to choose one for themselves
 		let mut workers_l = self.workers.lock().unwrap();
 		for num in 0..workers_l.len() {
 			workers_l[num].write_message(job_request_json.clone());
@@ -557,7 +620,6 @@ impl StratumServer {
 	/// be submitted.
 	pub fn run_loop(
 		&mut self,
-		miner_config: StratumServerConfig,
 		stratum_stats: Arc<RwLock<StratumStats>>,
 		cuckoo_size: u32,
 		proof_size: usize,
@@ -574,7 +636,7 @@ impl StratumServer {
 		self.currently_syncing = currently_syncing;
 
 		// "globals" for this function
-		let attempt_time_per_block = miner_config.attempt_time_per_block;
+		let attempt_time_per_block = self.config.attempt_time_per_block;
 		let mut deadline: i64 = 0;
 		// to prevent the wallet from generating a new HD key derivation for each
 		// iteration, we keep the returned derivation to provide it back when
@@ -584,7 +646,7 @@ impl StratumServer {
 		let mut head = self.chain.head().unwrap();
 		let mut current_hash = head.prev_block_h;
 		let mut latest_hash;
-		let listen_addr = miner_config.stratum_server_addr.clone().unwrap();
+		let listen_addr = self.config.stratum_server_addr.clone().unwrap();
 
 		// Start a thread to accept new worker connections
 		let mut workers_th = self.workers.clone();
@@ -604,7 +666,7 @@ impl StratumServer {
 		warn!(
 			LOGGER,
 			"Stratum server started on {}",
-			miner_config.stratum_server_addr.unwrap()
+			self.config.stratum_server_addr.clone().unwrap()
 		);
 
 		// Main Loop
@@ -646,6 +708,11 @@ impl StratumServer {
 					.to_num();
 				self.current_key_id = block_fees.key_id();
 				current_hash = latest_hash;
+				// set the minimum acceptable share difficulty for this block
+				self.minimum_share_difficulty = cmp::min(
+					self.config.minimum_share_difficulty,
+					self.current_difficulty,
+				);
 				// set a new deadline for rebuilding with fresh transactions
 				deadline = time::get_time().sec + attempt_time_per_block as i64;
 

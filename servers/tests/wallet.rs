@@ -114,7 +114,7 @@ fn basic_wallet_transactions() {
 		1,
 		"not_all",
 		"http://127.0.0.1:20002",
-		true,
+		false,
 	);
 
 	//Wait for a confirmation
@@ -125,9 +125,7 @@ fn basic_wallet_transactions() {
 
 	let recipient_info = LocalServerContainer::get_wallet_info(&recp_wallet_config, &recp_seed);
 	println!("Recipient wallet info: {:?}", recipient_info);
-	assert!(
-		recipient_info.data_confirmed && recipient_info.amount_currently_spendable == 50000000000
-	);
+	assert!(recipient_info.amount_currently_spendable == 50000000000);
 
 	warn!(
 		LOGGER,
@@ -140,7 +138,7 @@ fn basic_wallet_transactions() {
 			1,
 			"not_all",
 			"http://127.0.0.1:20002",
-			true,
+			false,
 		);
 	}
 
@@ -151,9 +149,7 @@ fn basic_wallet_transactions() {
 		recipient_info
 	);
 
-	assert!(
-		recipient_info.data_confirmed && recipient_info.amount_currently_spendable == 60000000000
-	);
+	assert!(recipient_info.amount_currently_spendable == 60000000000);
 	//send some cash right back
 	LocalServerContainer::send_amount_to(
 		&recp_wallet_config,
@@ -161,7 +157,7 @@ fn basic_wallet_transactions() {
 		1,
 		"all",
 		"http://127.0.0.1:10002",
-		true,
+		false,
 	);
 
 	thread::sleep(time::Duration::from_millis(5000));

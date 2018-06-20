@@ -13,36 +13,18 @@
 // limitations under the License.
 //! Functions to restore a wallet's outputs from just the master seed
 
+/// TODO: Remove api
 use api;
 use byteorder::{BigEndian, ByteOrder};
 use core::core::transaction::ProofMessageElements;
 use core::global;
 use error::{Error, ErrorKind};
 use failure::{Fail, ResultExt};
-use keychain::Identifier;
+use keychain::{Identifier, Keychain};
 use libtx::proof;
 use libwallet::types::*;
-use util;
-use util::LOGGER;
 use util::secp::pedersen;
-
-fn get_chain_height(node_addr: &str) -> Result<u64, Error> {
-	let url = format!("{}/v1/chain", node_addr);
-
-	match api::client::get::<api::Tip>(url.as_str()) {
-		Ok(tip) => Ok(tip.height),
-		Err(e) => {
-			// if we got anything other than 200 back from server, bye
-			error!(
-				LOGGER,
-				"get_chain_height: Restore failed... unable to contact API {}. Error: {}",
-				node_addr,
-				e
-			);
-			Err(e.context(ErrorKind::Node).into())
-		}
-	}
-}
+use util::{self, LOGGER};
 
 fn get_merkle_proof_for_commit(node_addr: &str, commit: &str) -> Result<MerkleProofWrapper, Error> {
 	let url = format!("{}/v1/txhashset/merkleproof?id={}", node_addr, commit);
@@ -68,9 +50,10 @@ fn coinbase_status(output: &api::OutputPrintable) -> bool {
 	}
 }
 
-fn outputs_batch<T>(wallet: &T, start_height: u64, max: u64) -> Result<api::OutputListing, Error>
+fn outputs_batch<T, K>(wallet: &T, start_height: u64, max: u64) -> Result<api::OutputListing, Error>
 where
-	T: WalletBackend,
+	T: WalletBackend<K> + WalletClient,
+	K: Keychain,
 {
 	let query_param = format!("start_index={}&max={}", start_height, max);
 
@@ -92,7 +75,7 @@ where
 }
 
 // TODO - wrap the many return values in a struct
-fn find_outputs_with_key<T: WalletBackend>(
+fn find_outputs_with_key<T, K>(
 	wallet: &mut T,
 	outputs: Vec<api::OutputPrintable>,
 	found_key_index: &mut Vec<u32>,
@@ -105,7 +88,11 @@ fn find_outputs_with_key<T: WalletBackend>(
 	u64,
 	bool,
 	Option<MerkleProofWrapper>,
-)> {
+)>
+where
+	T: WalletBackend<K> + WalletClient,
+	K: Keychain,
+{
 	let mut wallet_outputs: Vec<(
 		pedersen::Commitment,
 		Identifier,
@@ -120,7 +107,7 @@ fn find_outputs_with_key<T: WalletBackend>(
 	let max_derivations = 1_000_000;
 
 	info!(LOGGER, "Scanning {} outputs", outputs.len(),);
-	let current_chain_height = get_chain_height(wallet.node_url()).unwrap();
+	let current_chain_height = wallet.get_chain_height(wallet.node_url()).unwrap();
 
 	// skey doesn't matter in this case
 	let skey = wallet.keychain().derive_key_id(1).unwrap();
@@ -156,8 +143,8 @@ fn find_outputs_with_key<T: WalletBackend>(
 
 		for i in start_index..max_derivations {
 			// much faster than calling EC functions for each found key
-			// Shouldn't be needed if assumtion about wallet key 'gaps' above
-			// holds.. otherwise this is a good optimisation.. perhaps 
+			// Shouldn't be needed if assumption about wallet key 'gaps' above
+			// holds.. otherwise this is a good optimization.. perhaps 
 			// provide a command line switch
 			/*if found_key_index.contains(&(i as u32)) {
 				continue;
@@ -242,7 +229,11 @@ fn find_outputs_with_key<T: WalletBackend>(
 }
 
 /// Restore a wallet
-pub fn restore<T: WalletBackend>(wallet: &mut T) -> Result<(), Error> {
+pub fn restore<T, K>(wallet: &mut T) -> Result<(), Error>
+where
+	T: WalletBackend<K> + WalletClient,
+	K: Keychain,
+{
 	// Don't proceed if wallet.dat has anything in it
 	let is_empty = wallet
 		.read_wallet(|wallet_data| Ok(wallet_data.outputs().len() == 0))

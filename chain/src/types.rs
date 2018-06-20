@@ -16,6 +16,8 @@
 
 use std::{error, fmt, io};
 
+use croaring::Bitmap;
+
 use util::secp;
 use util::secp::pedersen::Commitment;
 use util::secp_static;
@@ -26,7 +28,6 @@ use core::core::target::Difficulty;
 use core::core::{block, transaction, Block, BlockHeader};
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store as store;
-use grin_store;
 use keychain;
 
 bitflags! {
@@ -97,7 +98,7 @@ pub enum Error {
 	/// We've been provided a bad txhashset
 	InvalidTxHashSet(String),
 	/// Internal issue when trying to save or load data from store
-	StoreErr(grin_store::Error, String),
+	StoreErr(store::Error, String),
 	/// Internal issue when trying to save or load data from append only files
 	FileReadErr(String),
 	/// Error serializing or deserializing a type
@@ -132,8 +133,8 @@ impl fmt::Display for Error {
 	}
 }
 
-impl From<grin_store::Error> for Error {
-	fn from(e: grin_store::Error) -> Error {
+impl From<store::Error> for Error {
+	fn from(e: store::Error) -> Error {
 		Error::StoreErr(e, "wrapped".to_owned())
 	}
 }
@@ -232,19 +233,19 @@ impl Tip {
 /// Serialization of a tip, required to save to datastore.
 impl ser::Writeable for Tip {
 	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		try!(writer.write_u64(self.height));
-		try!(writer.write_fixed_bytes(&self.last_block_h));
-		try!(writer.write_fixed_bytes(&self.prev_block_h));
+		writer.write_u64(self.height)?;
+		writer.write_fixed_bytes(&self.last_block_h)?;
+		writer.write_fixed_bytes(&self.prev_block_h)?;
 		self.total_difficulty.write(writer)
 	}
 }
 
 impl ser::Readable for Tip {
 	fn read(reader: &mut ser::Reader) -> Result<Tip, ser::Error> {
-		let height = try!(reader.read_u64());
-		let last = try!(Hash::read(reader));
-		let prev = try!(Hash::read(reader));
-		let diff = try!(Difficulty::read(reader));
+		let height = reader.read_u64()?;
+		let last = Hash::read(reader)?;
+		let prev = Hash::read(reader)?;
+		let diff = Difficulty::read(reader)?;
 		Ok(Tip {
 			height: height,
 			last_block_h: last,
@@ -350,6 +351,15 @@ pub trait ChainStore: Send + Sync {
 
 	/// Delete block sums for the given block hash.
 	fn delete_block_sums(&self, bh: &Hash) -> Result<(), store::Error>;
+
+	/// Get the bitmap representing the inputs for the specified block.
+	fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, store::Error>;
+
+	/// Save the bitmap representing the inputs for the specified block.
+	fn save_block_input_bitmap(&self, b: &Block) -> Result<Bitmap, store::Error>;
+
+	/// Delete the bitmap representing the inputs for the specified block.
+	fn delete_block_input_bitmap(&self, bh: &Hash) -> Result<(), store::Error>;
 
 	/// Saves the provided block header at the corresponding height. Also check
 	/// the consistency of the height chain in store by assuring previous

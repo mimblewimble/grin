@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //! Signature context holder helper (may be removed or replaced eventually)
-use keychain::extkey::Identifier;
+use keychain::Identifier;
 use libtx::aggsig;
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::{self, Secp256k1};

@@ -18,10 +18,9 @@ use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::mpsc;
 
-use core::core;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
-use core::ser;
+use core::{core, ser};
 use grin_store;
 
 /// Maximum number of block headers a peer should ever send
