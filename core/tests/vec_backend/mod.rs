@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_core;
+extern crate croaring;
 
-use grin_core::core::hash::Hash;
-use grin_core::core::pmmr::Backend;
-use grin_core::ser;
-use grin_core::ser::{PMMRable, Readable, Reader, Writeable, Writer};
+use croaring::Bitmap;
+
+use core::core::hash::Hash;
+use core::core::pmmr::Backend;
+use core::core::BlockHeader;
+use core::ser;
+use core::ser::{PMMRable, Readable, Reader, Writeable, Writer};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TestElem(pub [u32; 4]);
@@ -110,15 +113,22 @@ where
 		}
 	}
 
-	fn remove(&mut self, positions: Vec<u64>, _index: u32) -> Result<(), String> {
-		for n in positions {
-			self.remove_list.push(n)
-		}
+	fn remove(&mut self, position: u64) -> Result<(), String> {
+		self.remove_list.push(position);
 		Ok(())
 	}
 
-	fn rewind(&mut self, position: u64, _index: u32) -> Result<(), String> {
+	fn rewind(
+		&mut self,
+		position: u64,
+		_rewind_add_pos: &Bitmap,
+		_rewind_rm_pos: &Bitmap,
+	) -> Result<(), String> {
 		self.elems = self.elems[0..(position as usize) + 1].to_vec();
+		Ok(())
+	}
+
+	fn snapshot(&self, _header: &BlockHeader) -> Result<(), String> {
 		Ok(())
 	}
 
@@ -141,15 +151,15 @@ where
 		}
 	}
 
-	/// Current number of elements in the underlying Vec.
-	pub fn used_size(&self) -> usize {
-		let mut usz = self.elems.len();
-		for (idx, _) in self.elems.iter().enumerate() {
-			let idx = idx as u64;
-			if self.remove_list.contains(&idx) {
-				usz -= 1;
-			}
-		}
-		usz
-	}
+	// /// Current number of elements in the underlying Vec.
+	// pub fn used_size(&self) -> usize {
+	// 	let mut usz = self.elems.len();
+	// 	for (idx, _) in self.elems.iter().enumerate() {
+	// 		let idx = idx as u64;
+	// 		if self.remove_list.contains(&idx) {
+	// 			usz -= 1;
+	// 		}
+	// 	}
+	// 	usz
+	// }
 }

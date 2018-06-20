@@ -17,13 +17,13 @@
 extern crate grin_core as core;
 extern crate croaring;
 
-use croaring::Bitmap;
+mod vec_backend;
 
 use core::core::hash::Hash;
-use core::core::pmmr::{self, Backend, PMMR};
+use core::core::pmmr::{self, PMMR};
 use core::core::prune_list::PruneList;
-use core::core::BlockHeader;
-use core::ser::{self, Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
+use core::ser::PMMRIndexHashable;
+use vec_backend::{TestElem, VecBackend};
 
 #[test]
 fn some_all_ones() {
@@ -196,35 +196,6 @@ fn some_peaks() {
 			1048053, 1048308, 1048435, 1048498, 1048529, 1048544, 1048551, 1048554, 1048555,
 		],
 	);
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-struct TestElem([u32; 4]);
-
-impl PMMRable for TestElem {
-	fn len() -> usize {
-		16
-	}
-}
-
-impl Writeable for TestElem {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u32(self.0[0])?;
-		writer.write_u32(self.0[1])?;
-		writer.write_u32(self.0[2])?;
-		writer.write_u32(self.0[3])
-	}
-}
-
-impl Readable for TestElem {
-	fn read(reader: &mut Reader) -> Result<TestElem, Error> {
-		Ok(TestElem([
-			reader.read_u32()?,
-			reader.read_u32()?,
-			reader.read_u32()?,
-			reader.read_u32()?,
-		]))
-	}
 }
 
 #[test]

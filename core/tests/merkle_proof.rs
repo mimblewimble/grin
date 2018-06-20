@@ -13,14 +13,15 @@
 // limitations under the License.
 
 #[macro_use]
-extern crate grin_core;
+extern crate grin_core as core;
+extern crate croaring;
 
 mod vec_backend;
 
-use grin_core::core::pmmr::PMMR;
-use grin_core::core::merkle_proof::MerkleProof;
-use grin_core::ser;
-use grin_core::ser::PMMRIndexHashable;
+use core::core::merkle_proof::MerkleProof;
+use core::core::pmmr::PMMR;
+use core::ser;
+use core::ser::PMMRIndexHashable;
 use vec_backend::{TestElem, VecBackend};
 
 #[test]
@@ -56,7 +57,7 @@ fn pmmr_merkle_proof_prune_and_rewind() {
 
 	// now prune an element and check we can still generate
 	// the correct Merkle proof for the other element (after sibling pruned)
-	pmmr.prune(1, 1).unwrap();
+	pmmr.prune(1).unwrap();
 	let proof_2 = pmmr.merkle_proof(2).unwrap();
 	assert_eq!(proof, proof_2);
 }
