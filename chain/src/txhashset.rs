@@ -575,30 +575,17 @@ impl<'a> Extension<'a> {
 	/// applied in order of the provided Vec. If pruning is enabled, inputs also
 	/// prune MMR data.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
-		// first applying coinbase outputs. due to the construction of PMMRs the
-		// last element, when its a leaf, can never be pruned as it has no parent
-		// yet and it will be needed to calculate that hash. to work around this,
-		// we insert coinbase outputs first to add at least one output of padding
+		// A block is not valid if it has not been fully cut-through.
+		// So we can safely apply outputs first (we will not spend these in the same
+		// block).
 		for out in &b.outputs {
-			if out.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-				self.apply_output(out)?;
-			}
+			self.apply_output(out)?;
 		}
 
-		// then doing inputs guarantees an input can't spend an output in the
-		// same block, enforcing block cut-through
 		for input in &b.inputs {
 			self.apply_input(input)?;
 		}
 
-		// now all regular, non coinbase outputs
-		for out in &b.outputs {
-			if !out.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-				self.apply_output(out)?;
-			}
-		}
-
-		// then applying all kernels
 		for kernel in &b.kernels {
 			self.apply_kernel(kernel)?;
 		}
