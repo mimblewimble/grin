@@ -306,11 +306,9 @@ impl StratumServer {
 					stratum_stats.worker_stats[worker_stats_id].last_seen = SystemTime::now();
 
 					// Call the handler function for requested method
-					let (response, err) = match request.method.as_str() {
+					let response = match request.method.as_str() {
 						"login" => {
-							let (response, err) =
-								self.handle_login(request.params, &mut workers_l[num]);
-							(response, err)
+								self.handle_login(request.params, &mut workers_l[num])
 						}
 						"submit" => {
 							let res = self.handle_submit(
@@ -329,7 +327,7 @@ impl StratumServer {
 									code: -32701,
 									message: "Node is syncing - Please wait".to_string(),
 								};
-								(serde_json::to_value(e).unwrap(), true)
+								Err(serde_json::to_value(e).unwrap())
 							} else {
 								let b = self.current_block.header.clone();
 								self.handle_getjobtemplate(b)
@@ -344,30 +342,33 @@ impl StratumServer {
 								code: -32601,
 								message: "Method not found".to_string(),
 							};
-							(serde_json::to_value(e).unwrap(), true)
+							Err(serde_json::to_value(e).unwrap())
 						}
 					};
 
 					// Package the reply as RpcResponse json
 					let rpc_response: String;
-					if err == true {
-						let resp = RpcResponse {
-							id: request.id,
-							jsonrpc: String::from("2.0"),
-							method: request.method,
-							result: None,
-							error: Some(response),
-						};
-						rpc_response = serde_json::to_string(&resp).unwrap();
-					} else {
-						let resp = RpcResponse {
-							id: request.id,
-							jsonrpc: String::from("2.0"),
-							method: request.method,
-							result: Some(response),
-							error: None,
-						};
-						rpc_response = serde_json::to_string(&resp).unwrap();
+					match response {
+						Err(response) => {
+							let resp = RpcResponse {
+								id: request.id,
+								jsonrpc: String::from("2.0"),
+								method: request.method,
+								result: None,
+								error: Some(response),
+							};
+							rpc_response = serde_json::to_string(&resp).unwrap();
+						}
+						Ok(response) => {
+							let resp = RpcResponse {
+								id: request.id,
+								jsonrpc: String::from("2.0"),
+								method: request.method,
+								result: Some(response),
+								error: None,
+							};
+							rpc_response = serde_json::to_string(&resp).unwrap();
+						}
 					}
 
 					// Send the reply
@@ -379,7 +380,7 @@ impl StratumServer {
 	}
 
 	// Handle STATUS message
-	fn handle_status(&self, worker_stats: &WorkerStats) -> (Value, bool) {
+	fn handle_status(&self, worker_stats: &WorkerStats) -> Result<Value, Value> {
 		// Return worker status in json for use by a dashboard or healthcheck.
 		let status = WorkerStatus {
 			id: worker_stats.id.clone(),
@@ -390,24 +391,24 @@ impl StratumServer {
 			stale: worker_stats.num_stale,
 		};
 		let response = serde_json::to_value(&status).unwrap();
-		return (response, false);
+		return Ok(response);
 	}
 
 	// Handle GETJOBTEMPLATE message
-	fn handle_getjobtemplate(&self, bh: BlockHeader) -> (Value, bool) {
+	fn handle_getjobtemplate(&self, bh: BlockHeader) -> Result<Value, Value> {
 		// Build a JobTemplate from a BlockHeader and return JSON
 		let job_template = self.build_block_template(bh);
 		let response = serde_json::to_value(&job_template).unwrap();
-		return (response, false);
+		return Ok(response);
 	}
 
 	// Handle KEEPALIVE message
-	fn handle_keepalive(&self) -> (Value, bool) {
-		return (serde_json::to_value("ok".to_string()).unwrap(), false);
+	fn handle_keepalive(&self) -> Result<Value, Value> {
+		return Ok(serde_json::to_value("ok".to_string()).unwrap());
 	}
 
 	// Handle LOGIN message
-	fn handle_login(&self, params: Option<Value>, worker: &mut Worker) -> (Value, bool) {
+	fn handle_login(&self, params: Option<Value>, worker: &mut Worker) -> Result<Value, Value> {
 		let params: LoginParams = match params {
 			Some(val) => serde_json::from_value(val).unwrap(),
 			None => {
@@ -415,14 +416,14 @@ impl StratumServer {
 					code: -32600,
 					message: "Invalid Request".to_string(),
 				};
-				return (serde_json::to_value(e).unwrap(), true);
+				return Err(serde_json::to_value(e).unwrap());
 			}
 		};
 		worker.login = Some(params.login);
 		// XXX TODO Future - Validate password?
 		worker.agent = params.agent;
 		worker.authenticated = true;
-		return (serde_json::to_value("ok".to_string()).unwrap(), false);
+		return Ok(serde_json::to_value("ok".to_string()).unwrap());
 	}
 
 	// Handle SUBMIT message
@@ -435,7 +436,7 @@ impl StratumServer {
 		params: Option<Value>,
 		worker: &mut Worker,
 		worker_stats: &mut WorkerStats,
-	) -> (Value, bool) {
+	) -> Result<Value, Value> {
 		// Validate parameters
 		let params: SubmitParams = match params {
 			Some(val) => serde_json::from_value(val).unwrap(),
@@ -444,7 +445,7 @@ impl StratumServer {
 					code: -32600,
 					message: "Invalid Request".to_string(),
 				};
-				return (serde_json::to_value(e).unwrap(), true);
+				return Err(serde_json::to_value(e).unwrap());
 			}
 		};
 
@@ -472,7 +473,7 @@ impl StratumServer {
 					code: -32501,
 					message: "Share rejected due to low difficulty".to_string(),
 				};
-				return (serde_json::to_value(e).unwrap(), true);
+				return Err(serde_json::to_value(e).unwrap());
 			}
 			// If the difficulty is high enough, submit it (which also validates it)
 			if share_difficulty >= self.current_difficulty {
@@ -491,7 +492,7 @@ impl StratumServer {
 						code: -32502,
 						message: "Failed to validate solution".to_string(),
 					};
-					return (serde_json::to_value(e).unwrap(), true);
+					return Err(serde_json::to_value(e).unwrap());
 				}
 			// Success case falls through to be logged
 			} else {
@@ -511,7 +512,7 @@ impl StratumServer {
 						code: -32502,
 						message: "Failed to validate solution".to_string(),
 					};
-					return (serde_json::to_value(e).unwrap(), true);
+					return Err(serde_json::to_value(e).unwrap());
 				}
 			}
 		} else {
@@ -525,7 +526,7 @@ impl StratumServer {
 				code: -32503,
 				message: "Solution submitted too late".to_string(),
 			};
-			return (serde_json::to_value(e).unwrap(), true);
+			return Err(serde_json::to_value(e).unwrap());
 		}
 		// Log this as a valid share
 		let submitted_by = match worker.login.clone() {
@@ -544,7 +545,7 @@ impl StratumServer {
 			submitted_by,
 		);
 		worker_stats.num_accepted += 1;
-		return (serde_json::to_value("ok".to_string()).unwrap(), false);
+		return Ok(serde_json::to_value("ok".to_string()).unwrap());
 	} // handle submit a solution
 
 	// Purge dead/sick workers - remove all workers marked in error state
