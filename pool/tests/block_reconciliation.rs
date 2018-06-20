@@ -199,23 +199,10 @@ fn test_transaction_pool_block_reconciliation() {
 		let mut write_pool = pool.write().unwrap();
 		write_pool.reconcile_block(&block).unwrap();
 
-		// TODO - this is the "correct" behavior (see below)
-		// assert_eq!(write_pool.total_size(), 4);
-		// assert_eq!(write_pool.txpool.entries[0].tx, valid_transaction);
-		// assert_eq!(write_pool.txpool.entries[1].tx, pool_child);
-		// assert_eq!(write_pool.txpool.entries[2].tx, conflict_valid_child);
-		// assert_eq!(write_pool.txpool.entries[3].tx, valid_child_valid);
-
-		//
-		// TODO - once the hash() vs hash_with_index(pos - 1) change is made in
-		// txhashset.apply_output() TODO - and we no longer incorrectly allow
-		// duplicate outputs in the MMR TODO - then this test will fail
-		//
-		assert_eq!(write_pool.total_size(), 5);
+		assert_eq!(write_pool.total_size(), 4);
 		assert_eq!(write_pool.txpool.entries[0].tx, valid_transaction);
 		assert_eq!(write_pool.txpool.entries[1].tx, pool_child);
 		assert_eq!(write_pool.txpool.entries[2].tx, conflict_valid_child);
-		assert_eq!(write_pool.txpool.entries[3].tx, valid_child_conflict);
-		assert_eq!(write_pool.txpool.entries[4].tx, valid_child_valid);
+		assert_eq!(write_pool.txpool.entries[3].tx, valid_child_valid);
 	}
 }
