@@ -23,19 +23,13 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
-use chain::types::*;
-use core::consensus;
+use chain::types::{Error, NoopAdapter};
 use core::core::target::Difficulty;
-use core::core::transaction;
-use core::core::OutputIdentifier;
-use core::global;
-use core::global::ChainTypes;
-use wallet::libtx::build;
-
-use keychain::Keychain;
-use wallet::libtx;
-
-use core::pow;
+use core::core::{transaction, OutputIdentifier};
+use core::global::{self, ChainTypes};
+use core::{consensus, pow};
+use keychain::{ExtKeychain, Keychain};
+use wallet::libtx::{self, build};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -58,7 +52,7 @@ fn test_coinbase_maturity() {
 
 	let prev = chain.head_header().unwrap();
 
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();
 	let key_id2 = keychain.derive_key_id(2).unwrap();
 	let key_id3 = keychain.derive_key_id(3).unwrap();
@@ -129,7 +123,7 @@ fn test_coinbase_maturity() {
 	// Confirm the tx attempting to spend the coinbase output
 	// is not valid at the current block height given the current chain state.
 	match chain.verify_coinbase_maturity(&coinbase_txn) {
-		Err(Error::Transaction(transaction::Error::ImmatureCoinbase)) => {}
+		Err(Error::ImmatureCoinbase) => {}
 		_ => panic!("Expected transaction error with immature coinbase."),
 	}
 
@@ -145,7 +139,7 @@ fn test_coinbase_maturity() {
 	for _ in 0..3 {
 		let prev = chain.head_header().unwrap();
 
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let pk = keychain.derive_key_id(1).unwrap();
 
 		let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();

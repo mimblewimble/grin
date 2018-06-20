@@ -8,15 +8,15 @@ publish = false
 [dependencies]
 backtrace = "0.3"
 byteorder = "1"
-lazy_static = "0.2"
+lazy_static = "1"
 rand = "0.3"
 serde = "1"
 serde_derive = "1"
-slog = { version = "~2.1", features = ["max_level_trace", "release_max_level_trace"] }
-slog-term = "2.1"
-slog-async = "2.1"
+slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
+slog-term = "2.4"
+slog-async = "2.3"
 walkdir = "2"
-zip = "0.2"
+zip = "0.4"
 
 [dependencies.secp256k1zkp]
 git = "https://github.com/mimblewimble/rust-secp256k1-zkp"

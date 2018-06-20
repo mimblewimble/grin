@@ -21,9 +21,9 @@ more widely.
 		* Compact Block
 * Chain State and Merkle Mountain Range
 	* Motivation
-	* Merkle Mountain Range
-	* State and Storage
-	* Fast Sync
+	* [Merkle Mountain Range](mmr.md)
+	* [State and Storage](state.md)
+	* [Fast Sync](fast-sync.md)
 	* Merkle Proofs
 * Proof of Work
 	* Cuckoo Cycle

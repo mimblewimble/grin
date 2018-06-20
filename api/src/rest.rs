@@ -25,7 +25,7 @@ use std::string::ToString;
 
 use failure::{Backtrace, Context, Fail};
 use iron::middleware::Handler;
-use iron::prelude::*;
+use iron::prelude::Iron;
 use iron::Listening;
 use mount::Mount;
 use router::Router;

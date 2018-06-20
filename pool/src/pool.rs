@@ -22,7 +22,7 @@ use core::core::hash::Hashed;
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
 use core::core::{Block, CompactBlock, Transaction, TxKernel};
-use types::*;
+use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 use util::LOGGER;
 
 pub struct Pool<T> {
@@ -102,7 +102,10 @@ where
 			.filter(|x| x.state == from_state)
 			.collect::<Vec<_>>();
 
-		let candidate_txs = entries.iter().map(|x| x.tx.clone()).collect();
+		let candidate_txs: Vec<Transaction> = entries.iter().map(|x| x.tx.clone()).collect();
+		if candidate_txs.is_empty() {
+			return Ok(vec![]);
+		}
 		let valid_txs = self.blockchain.validate_raw_txs(candidate_txs, extra_tx)?;
 
 		// Update state on all entries included in final vec of valid txs.

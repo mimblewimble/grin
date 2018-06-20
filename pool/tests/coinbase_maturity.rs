@@ -27,13 +27,11 @@ pub mod common;
 
 use std::sync::{Arc, RwLock};
 
+use common::{test_source, test_transaction};
 use core::core::Transaction;
-
-use keychain::Keychain;
+use keychain::{ExtKeychain, Keychain};
+use pool::types::{BlockChain, NoopAdapter, PoolConfig, PoolError};
 use pool::TransactionPool;
-use pool::types::*;
-
-use common::*;
 
 pub fn test_setup(
 	chain: &Arc<CoinbaseMaturityErrorChainAdapter>,
@@ -82,7 +80,7 @@ impl BlockChain for CoinbaseMaturityErrorChainAdapter {
 /// Test we correctly verify coinbase maturity when adding txs to the pool.
 #[test]
 fn test_coinbase_maturity() {
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain: ExtKeychain = Keychain::from_random_seed().unwrap();
 
 	// Mocking this up with an adapter that will raise an error for coinbase
 	// maturity.

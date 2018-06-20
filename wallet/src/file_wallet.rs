@@ -18,24 +18,29 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::MAIN_SEPARATOR;
-use std::path::Path;
+use std::path::{Path, MAIN_SEPARATOR};
 
 use serde_json;
 use tokio_core::reactor;
-use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;
+use tokio_retry::Retry;
 
-use failure::{self, ResultExt};
+use failure::ResultExt;
 
 use keychain::{self, Keychain};
-use util;
-use util::LOGGER;
+use util::secp::pedersen;
+use util::{self, LOGGER};
 
 use error::{Error, ErrorKind};
-use libwallet;
-use libwallet::types::*;
 
+use client;
+use libtx::slate::Slate;
+use libwallet;
+use libwallet::types::{BlockFees, BlockIdentifier, CbData, MerkleProofWrapper, OutputData,
+                       TxWrapper, WalletBackend, WalletClient, WalletDetails};
+
+const DETAIL_FILE: &'static str = "wallet.det";
+const DET_BCK_FILE: &'static str = "wallet.detbck";
 const DAT_FILE: &'static str = "wallet.dat";
 const BCK_FILE: &'static str = "wallet.bck";
 const LOCK_FILE: &'static str = "wallet.lock";
@@ -99,9 +104,9 @@ impl WalletSeed {
 		util::to_hex(self.0.to_vec())
 	}
 
-	pub fn derive_keychain(&self, password: &str) -> Result<keychain::Keychain, Error> {
+	pub fn derive_keychain<K: Keychain>(&self, password: &str) -> Result<K, Error> {
 		let seed = blake2::blake2b::blake2b(64, &password.as_bytes(), &self.0);
-		let result = keychain::Keychain::from_seed(seed.as_bytes())?;
+		let result = K::from_seed(seed.as_bytes())?;
 		Ok(result)
 	}
 
@@ -164,30 +169,55 @@ impl WalletSeed {
 /// Wallet information tracking all our outputs. Based on HD derivation and
 /// avoids storing any key data, only storing output amounts and child index.
 #[derive(Debug, Clone)]
-pub struct FileWallet {
+pub struct FileWallet<K> {
 	/// Keychain
-	pub keychain: Keychain,
+	pub keychain: Option<K>,
 	/// Configuration
 	pub config: WalletConfig,
+	/// passphrase: TODO better ways of dealing with this other than storing
+	passphrase: String,
 	/// List of outputs
 	pub outputs: HashMap<String, OutputData>,
+	/// Details
+	pub details: WalletDetails,
 	/// Data file path
 	pub data_file_path: String,
 	/// Backup file path
 	pub backup_file_path: String,
 	/// lock file path
 	pub lock_file_path: String,
+	/// details file path
+	pub details_file_path: String,
+	/// Details backup file path
+	pub details_bak_path: String,
 }
 
-impl WalletBackend for FileWallet {
-	/// Return the keychain being used
-	fn keychain(&mut self) -> &mut Keychain {
-		&mut self.keychain
+impl<K> WalletBackend<K> for FileWallet<K>
+where
+	K: Keychain,
+{
+	/// Initialize with whatever stored credentials we have
+	fn open_with_credentials(&mut self) -> Result<(), libwallet::Error> {
+		let wallet_seed = WalletSeed::from_file(&self.config)
+			.context(libwallet::ErrorKind::CallbackImpl("Error opening wallet"))?;
+		let keychain = wallet_seed.derive_keychain(&self.passphrase);
+		self.keychain = Some(keychain.context(libwallet::ErrorKind::CallbackImpl(
+			"Error deriving keychain",
+		))?);
+		// Just blow up password for now after it's been used
+		self.passphrase = String::from("");
+		Ok(())
 	}
 
-	/// Return URL for check node
-	fn node_url(&self) -> &str {
-		&self.config.check_node_api_http_addr
+	/// Close wallet and remove any stored credentials (TBD)
+	fn close(&mut self) -> Result<(), libwallet::Error> {
+		self.keychain = None;
+		Ok(())
+	}
+
+	/// Return the keychain being used
+	fn keychain(&mut self) -> &mut K {
+		self.keychain.as_mut().unwrap()
 	}
 
 	/// Return the outputs directly
@@ -252,10 +282,10 @@ impl WalletBackend for FileWallet {
 		// We successfully acquired the lock - so do what needs to be done.
 		self.read_or_create_paths()
 			.context(libwallet::ErrorKind::CallbackImpl("Lock Error"))?;
-		self.write(&self.backup_file_path)
+		self.write(&self.backup_file_path, &self.details_bak_path)
 			.context(libwallet::ErrorKind::CallbackImpl("Write Error"))?;
 		let res = f(self);
-		self.write(&self.data_file_path)
+		self.write(&self.data_file_path, &self.details_file_path)
 			.context(libwallet::ErrorKind::CallbackImpl("Write Error"))?;
 
 		// delete the lock file
@@ -296,14 +326,20 @@ impl WalletBackend for FileWallet {
 	}
 
 	/// Next child index when we want to create a new output.
-	fn next_child(&self, root_key_id: keychain::Identifier) -> u32 {
+	fn next_child(&mut self, root_key_id: keychain::Identifier) -> u32 {
 		let mut max_n = 0;
 		for out in self.outputs.values() {
 			if max_n < out.n_child && out.root_key_id == root_key_id {
 				max_n = out.n_child;
 			}
 		}
-		max_n + 1
+
+		if self.details.last_child_index <= max_n {
+			self.details.last_child_index = max_n + 1;
+		} else {
+			self.details.last_child_index += 1;
+		}
+		self.details.last_child_index
 	}
 
 	/// Select spendable coins from the wallet.
@@ -338,7 +374,7 @@ impl WalletBackend for FileWallet {
 		// The limit exists because by default, we always select as many inputs as
 		// possible in a transaction, to reduce both the Output set and the fees.
 		// But that only makes sense up to a point, hence the limit to avoid being too
-		// greedy. But if max_outputs(500) is actually not enought to cover the whole
+		// greedy. But if max_outputs(500) is actually not enough to cover the whole
 		// amount, the wallet should allow going over it to satisfy what the user
 		// wants to send. So the wallet considers max_outputs more of a soft limit.
 		if eligible.len() > max_outputs {
@@ -371,29 +407,127 @@ impl WalletBackend for FileWallet {
 		eligible.reverse();
 		eligible.iter().take(max_outputs).cloned().collect()
 	}
+
+	/// Return current metadata
+	fn details(&mut self) -> &mut WalletDetails {
+		&mut self.details
+	}
+
+	/// Restore wallet contents
+	fn restore(&mut self) -> Result<(), libwallet::Error> {
+		libwallet::internal::restore::restore(self).context(libwallet::ErrorKind::Restore)?;
+		Ok(())
+	}
 }
 
-impl FileWallet {
+impl<K> WalletClient for FileWallet<K> {
+	/// Return URL for check node
+	fn node_url(&self) -> &str {
+		&self.config.check_node_api_http_addr
+	}
+
+	/// Call the wallet API to create a coinbase transaction
+	fn create_coinbase(
+		&self,
+		dest: &str,
+		block_fees: &BlockFees,
+	) -> Result<CbData, libwallet::Error> {
+		let res = client::create_coinbase(dest, block_fees);
+		match res {
+			Ok(r) => Ok(r),
+			Err(e) => {
+				let message = format!("{}", e.cause().unwrap());
+				Err(libwallet::ErrorKind::WalletComms(message))?
+			}
+		}
+	}
+
+	/// Send a transaction slate to another listening wallet and return result
+	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+		let res = client::send_tx_slate(dest, slate);
+		match res {
+			Ok(r) => Ok(r),
+			Err(e) => {
+				let message = format!("{}", e.cause().unwrap());
+				Err(libwallet::ErrorKind::WalletComms(message))?
+			}
+		}
+	}
+
+	/// Posts a transaction to a grin node
+	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), libwallet::Error> {
+		let res = client::post_tx(dest, tx, fluff).context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieves the current tip from the specified grin node
+	fn get_chain_height(&self, addr: &str) -> Result<u64, libwallet::Error> {
+		let res = client::get_chain_height(addr).context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieve a list of outputs from the specified grin node
+	/// need "by_height" and "by_id" variants
+	fn get_outputs_from_node(
+		&self,
+		addr: &str,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<HashMap<pedersen::Commitment, String>, libwallet::Error> {
+		let res = client::get_outputs_from_node(addr, wallet_outputs)
+			.context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// Get any missing block hashes from node
+	fn get_missing_block_hashes_from_node(
+		&self,
+		addr: &str,
+		height: u64,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<
+		(
+			HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
+			HashMap<pedersen::Commitment, MerkleProofWrapper>,
+		),
+		libwallet::Error,
+	> {
+		let res = client::get_missing_block_hashes_from_node(addr, height, wallet_outputs)
+			.context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieve merkle proof for a commit from a node
+	fn get_merkle_proof_for_commit(
+		&self,
+		_addr: &str,
+		_commit: &str,
+	) -> Result<MerkleProofWrapper, libwallet::Error> {
+		Err(libwallet::ErrorKind::GenericError("Not Implemented"))?
+	}
+}
+
+impl<K> FileWallet<K>
+where
+	K: Keychain,
+{
 	/// Create a new FileWallet instance
-	pub fn new(config: WalletConfig, keychain: Keychain) -> Result<Self, Error> {
+	pub fn new(config: WalletConfig, passphrase: &str) -> Result<Self, Error> {
 		let mut retval = FileWallet {
-			keychain: keychain,
+			keychain: None,
 			config: config.clone(),
+			passphrase: String::from(passphrase),
 			outputs: HashMap::new(),
+			details: WalletDetails::default(),
 			data_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, DAT_FILE),
 			backup_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, BCK_FILE),
 			lock_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, LOCK_FILE),
+			details_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, DETAIL_FILE),
+			details_bak_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, DET_BCK_FILE),
 		};
 		match retval.read_or_create_paths() {
 			Ok(_) => Ok(retval),
 			Err(e) => Err(e),
 		}
-	}
-
-	/// Restore wallet contents
-	pub fn restore(&mut self) -> Result<(), failure::Error> {
-		libwallet::restore::restore(self).context(libwallet::ErrorKind::Restore)?;
-		Ok(())
 	}
 
 	/// Read the wallet data or create brand files if the data
@@ -407,7 +541,19 @@ impl FileWallet {
 		if Path::new(&self.data_file_path.clone()).exists() {
 			self.read()?;
 		}
+		if Path::new(&self.details_file_path.clone()).exists() {
+			self.details = self.read_details()?;
+		}
 		Ok(())
+	}
+
+	/// Read details file from disk
+	fn read_details(&self) -> Result<WalletDetails, Error> {
+		let details_file = File::open(self.details_file_path.clone())
+			.context(ErrorKind::FileWallet(&"Could not open wallet details file"))?;
+		serde_json::from_reader(details_file)
+			.context(ErrorKind::Format)
+			.map_err(|e| e.into())
 	}
 
 	/// Read output_data vec from disk.
@@ -429,8 +575,8 @@ impl FileWallet {
 		Ok(())
 	}
 
-	/// Write the wallet data to disk.
-	fn write(&self, data_file_path: &str) -> Result<(), Error> {
+	/// Write the wallet and details data to disk.
+	fn write(&self, data_file_path: &str, details_file_path: &str) -> Result<(), Error> {
 		let mut data_file =
 			File::create(data_file_path).context(ErrorKind::FileWallet(&"Could not create "))?;
 		let mut outputs = self.outputs.values().collect::<Vec<_>>();
@@ -439,7 +585,16 @@ impl FileWallet {
 			.context(ErrorKind::FileWallet("Error serializing wallet data"))?;
 		data_file
 			.write_all(res_json.as_slice())
-			.context(ErrorKind::FileWallet(&"Error writing wallet file"))
+			.context(ErrorKind::FileWallet(&"Error writing wallet file"))?;
+		// write details file
+		let mut details_file =
+			File::create(details_file_path).context(ErrorKind::FileWallet(&"Could not create "))?;
+		let res_json = serde_json::to_string_pretty(&self.details).context(ErrorKind::FileWallet(
+			"Error serializing wallet details file",
+		))?;
+		details_file
+			.write_all(res_json.into_bytes().as_slice())
+			.context(ErrorKind::FileWallet(&"Error writing wallet details file"))
 			.map_err(|e| e.into())
 	}
 

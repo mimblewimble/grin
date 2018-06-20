@@ -48,8 +48,11 @@ pub enum ErrorKind {
 	},
 
 	/// Fee Exceeds amount
-	#[fail(display = "Fee exceeds amount: sender amount {}, recipient fee {}", sender_amount,
-	       recipient_fee)]
+	#[fail(
+		display = "Fee exceeds amount: sender amount {}, recipient fee {}",
+		sender_amount,
+		recipient_fee
+	)]
 	FeeExceedsAmount {
 		/// sender amount
 		sender_amount: u64,
@@ -74,7 +77,7 @@ pub enum ErrorKind {
 	Secp,
 
 	/// Callback implementation error conversion
-	#[fail(display = "Callback Implementation error")]
+	#[fail(display = "Trait Implementation error")]
 	CallbackImpl(&'static str),
 
 	/// Callback implementation error conversion
@@ -92,6 +95,10 @@ pub enum ErrorKind {
 	/// Error when contacting a node through its API
 	#[fail(display = "Node API error")]
 	Node,
+
+	/// Error contacting wallet API
+	#[fail(display = "Wallet Communication Error: {}", _0)]
+	WalletComms(String),
 
 	/// Error originating from hyper.
 	#[fail(display = "Hyper error")]

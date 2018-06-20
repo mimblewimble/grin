@@ -19,20 +19,18 @@
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
-use std::thread;
-use std::time;
+use std::{thread, time};
 
 use api;
 use chain;
-use common::adapters::*;
-use common::stats::*;
-use common::types::*;
+use common::adapters::{ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter,
+                       PoolToNetAdapter};
+use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
+use common::types::{Error, Seeding, ServerConfig, StratumServerConfig};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::{consensus, genesis, global, pow};
-use grin::dandelion_monitor;
-use grin::seed;
-use grin::sync;
+use grin::{dandelion_monitor, seed, sync};
 use mining::stratumserver;
 use mining::test_miner::Miner;
 use p2p;
@@ -279,7 +277,6 @@ impl Server {
 			.name("stratum_server".to_string())
 			.spawn(move || {
 				stratum_server.run_loop(
-					config.clone(),
 					stratum_stats,
 					cuckoo_size as u32,
 					proof_size,
@@ -304,6 +301,7 @@ impl Server {
 			enable_stratum_server: None,
 			stratum_server_addr: None,
 			wallet_listener_url: config_wallet_url,
+			minimum_share_difficulty: 1,
 		};
 
 		let mut miner = Miner::new(

@@ -22,21 +22,16 @@ use std::thread;
 use std::time::Duration;
 use time;
 
-use chain;
-use chain::types::BlockSums;
+use chain::{self, types::BlockSums};
 use common::adapters::PoolToChainAdapter;
 use common::types::Error;
-use core::consensus;
-use core::core;
 use core::core::hash::Hashed;
-use core::ser;
-use core::ser::AsFixedBytes;
-use keychain::{Identifier, Keychain};
+use core::ser::{self, AsFixedBytes};
+use core::{consensus, core};
+use keychain::{ExtKeychain, Identifier, Keychain};
 use pool;
-use util;
-use util::LOGGER;
-use wallet;
-use wallet::BlockFees;
+use util::{self, LOGGER};
+use wallet::{self, BlockFees};
 
 /// Serializer that outputs the pre-pow part of the header,
 /// including the nonce (last 8 bytes) that can be sent off
@@ -107,7 +102,7 @@ pub fn get_block(
 			self::Error::Wallet(_) => {
 				error!(
 					LOGGER,
-					"Stratum server: Can't connect to wallet listener at {:?}; will retry",
+					"Error building new block: Can't connect to wallet listener at {:?}; will retry",
 					wallet_listener_url.as_ref().unwrap()
 				);
 				thread::sleep(Duration::from_secs(wallet_retry_interval));
@@ -219,7 +214,7 @@ fn build_block(
 ///
 fn burn_reward(block_fees: BlockFees) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
 	warn!(LOGGER, "Burning block fees: {:?}", block_fees);
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
 	let (out, kernel) =
 		wallet::libtx::reward::output(&keychain, &key_id, block_fees.fees, block_fees.height)
@@ -239,10 +234,7 @@ fn get_coinbase(
 			return burn_reward(block_fees);
 		}
 		Some(wallet_listener_url) => {
-			// Get the wallet coinbase
-			let url = format!("{}/v1/receive/coinbase", wallet_listener_url.as_str());
-
-			let res = wallet::client::create_coinbase(&url, &block_fees)?;
+			let res = wallet::create_coinbase(&wallet_listener_url, &block_fees)?;
 			let out_bin = util::from_hex(res.output).unwrap();
 			let kern_bin = util::from_hex(res.kernel).unwrap();
 			let key_id_bin = util::from_hex(res.key_id).unwrap();
@@ -255,7 +247,6 @@ fn get_coinbase(
 			};
 
 			debug!(LOGGER, "get_coinbase: {:?}", block_fees);
-
 			return Ok((output, kernel, block_fees));
 		}
 	}

@@ -14,8 +14,8 @@
 
 //! Transactions
 
-use std::cmp::Ordering;
 use std::cmp::max;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::io::Cursor;
 use std::{error, fmt};
@@ -24,15 +24,11 @@ use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
 
-use consensus;
-use consensus::VerifySortOrder;
-use core::BlockHeader;
-use core::Committed;
-use core::global;
+use consensus::{self, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
-use core::pmmr::MerkleProof;
-use keychain;
-use keychain::BlindingFactor;
+use core::merkle_proof::MerkleProof;
+use core::{committed, Committed};
+use keychain::{self, BlindingFactor};
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};
 use util;
@@ -69,15 +65,17 @@ pub enum Error {
 	RangeProof,
 	/// Error originating from an invalid Merkle proof
 	MerkleProof,
-	/// Error originating from an input attempting to spend an immature
-	/// coinbase output
-	ImmatureCoinbase,
 	/// Returns if the value hidden within the a RangeProof message isn't
 	/// repeated 3 times, indicating it's incorrect
 	InvalidProofMessage,
+	/// Error when verifying kernel sums via committed trait.
+	Committed(committed::Error),
 	/// Error when sums do not verify correctly during tx aggregation.
 	/// Likely a "double spend" across two unconfirmed txs.
 	AggregationError,
+	/// Validation error relating to cut-through (tx is spending its own
+	/// output).
+	CutThrough,
 }
 
 impl error::Error for Error {
@@ -111,6 +109,12 @@ impl From<consensus::Error> for Error {
 impl From<keychain::Error> for Error {
 	fn from(e: keychain::Error) -> Error {
 		Error::Keychain(e)
+	}
+}
+
+impl From<committed::Error> for Error {
+	fn from(e: committed::Error) -> Error {
+		Error::Committed(e)
 	}
 }
 
@@ -387,6 +391,10 @@ impl Transaction {
 		self.kernels.iter().fold(0, |acc, ref x| acc + x.fee)
 	}
 
+	fn overage(&self) -> i64 {
+		self.fee() as i64
+	}
+
 	/// Lock height of a transaction is the max lock height of the kernels.
 	pub fn lock_height(&self) -> u64 {
 		self.kernels
@@ -394,43 +402,21 @@ impl Transaction {
 			.fold(0, |acc, ref x| max(acc, x.lock_height))
 	}
 
+	/// Verify the kernel signatures.
+	/// Note: this is expensive.
 	fn verify_kernel_signatures(&self) -> Result<(), Error> {
-		// Verify the kernel signatures.
-		// Note: this is expensive.
 		for x in &self.kernels {
 			x.verify()?;
 		}
 		Ok(())
 	}
 
+	/// Verify all the output rangeproofs.
+	/// Note: this is expensive.
 	fn verify_rangeproofs(&self) -> Result<(), Error> {
-		// Verify all the output rangeproofs.
-		// Note: this is expensive.
 		for x in &self.outputs {
 			x.verify_proof()?;
 		}
-		Ok(())
-	}
-
-	/// To verify transaction kernels we check that -
-	///  * all kernels have an even fee
-	/// * sum of input/output commitments matches sum of kernel commitments
-	/// after applying offset * each kernel sig is valid (i.e. tx commitments
-	/// sum to zero, given above is true)
-	fn verify_kernel_sums(&self) -> Result<(), Error> {
-		// Sum all input|output|overage commitments.
-		let overage = self.fee() as i64;
-		let io_sum = self.sum_commitments(overage, None)?;
-
-		// Sum the kernel excesses accounting for the kernel offset.
-		let (_, kernel_sum) = self.sum_kernel_excesses(&self.offset, None)?;
-
-		// sum of kernel commitments (including the offset) must match
-		// the sum of input/output commitments (minus fee)
-		if io_sum != kernel_sum {
-			return Err(Error::KernelSumMismatch);
-		}
-
 		Ok(())
 	}
 
@@ -442,7 +428,8 @@ impl Transaction {
 			return Err(Error::TooManyInputs);
 		}
 		self.verify_sorted()?;
-		self.verify_kernel_sums()?;
+		self.verify_cut_through()?;
+		self.verify_kernel_sums(self.overage(), self.offset, None, None)?;
 		self.verify_rangeproofs()?;
 		self.verify_kernel_signatures()?;
 
@@ -476,10 +463,24 @@ impl Transaction {
 		tx_weight as u32
 	}
 
+	// Verify that inputs|outputs|kernels are all sorted in lexicographical order.
 	fn verify_sorted(&self) -> Result<(), Error> {
 		self.inputs.verify_sort_order()?;
 		self.outputs.verify_sort_order()?;
 		self.kernels.verify_sort_order()?;
+		Ok(())
+	}
+
+	// Verify that no input is spending an output from the same block.
+	fn verify_cut_through(&self) -> Result<(), Error> {
+		for inp in &self.inputs {
+			if self.outputs
+				.iter()
+				.any(|out| out.commitment() == inp.commitment())
+			{
+				return Err(Error::CutThrough);
+			}
+		}
 		Ok(())
 	}
 }
@@ -496,7 +497,7 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	let mut kernel_offsets: Vec<BlindingFactor> = vec![];
 
 	for mut transaction in transactions {
-		// we will summ these later to give a single aggregate offset
+		// we will sum these later to give a single aggregate offset
 		kernel_offsets.push(transaction.offset);
 
 		inputs.append(&mut transaction.inputs);
@@ -553,10 +554,9 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 
 	let tx = Transaction::new(new_inputs, new_outputs, kernels).with_offset(total_kernel_offset);
 
-	// We need to check sums here as aggregation/cut-through may have created an
-	// invalid tx.
-	tx.verify_kernel_sums()
-		.map_err(|_| Error::AggregationError)?;
+	// We need to check sums here as aggregation/cut-through
+	// may have created an invalid tx.
+	tx.verify_kernel_sums(tx.overage(), tx.offset, None, None)?;
 
 	Ok(tx)
 }
@@ -726,7 +726,7 @@ impl Input {
 		self.commit
 	}
 
-	/// Convenience functon to return the (optional) block_hash for this input.
+	/// Convenience function to return the (optional) block_hash for this input.
 	/// Will return the default hash if we do not have one.
 	pub fn block_hash(&self) -> Hash {
 		self.block_hash.unwrap_or_else(Hash::default)
@@ -739,64 +739,6 @@ impl Input {
 	pub fn merkle_proof(&self) -> MerkleProof {
 		let merkle_proof = self.merkle_proof.clone();
 		merkle_proof.unwrap_or_else(MerkleProof::empty)
-	}
-
-	/// Verify the maturity of an output being spent by an input.
-	/// Only relevant for spending coinbase outputs currently (locked for 1,000
-	/// confirmations).
-	///
-	/// The proof associates the output with the root by its hash (and pos) in
-	/// the MMR. The proof shows the output existed and was unspent at the
-	/// time the output_root was built. The root associates the proof with a
-	/// specific block header with that output_root. So the proof shows the
-	/// output was unspent at the time of the block and is at least as old as
-	/// that block (may be older).
-	///
-	/// We can verify maturity of the output being spent by -
-	///
-	/// * verifying the Merkle Proof produces the correct root for the given
-	/// hash (from MMR) * verifying the root matches the output_root in the
-	/// block_header * verifying the hash matches the node hash in the Merkle
-	/// Proof * finally verify maturity rules based on height of the block
-	/// header
-	///
-	pub fn verify_maturity(
-		&self,
-		hash: Hash,
-		header: &BlockHeader,
-		height: u64,
-	) -> Result<(), Error> {
-		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			let block_hash = self.block_hash();
-			let merkle_proof = self.merkle_proof();
-
-			// Check we are dealing with the correct block header
-			if block_hash != header.hash() {
-				return Err(Error::MerkleProof);
-			}
-
-			// Is our Merkle Proof valid? Does node hash up consistently to the root?
-			if !merkle_proof.verify() {
-				return Err(Error::MerkleProof);
-			}
-
-			// Is the root the correct root for the given block header?
-			if merkle_proof.root != header.output_root {
-				return Err(Error::MerkleProof);
-			}
-
-			// Does the hash from the MMR actually match the one in the Merkle Proof?
-			if merkle_proof.node != hash {
-				return Err(Error::MerkleProof);
-			}
-
-			// Finally has the output matured sufficiently now we know the block?
-			let lock_height = header.height + global::coinbase_maturity();
-			if lock_height > height {
-				return Err(Error::ImmatureCoinbase);
-			}
-		}
-		Ok(())
 	}
 }
 
@@ -975,7 +917,7 @@ impl Readable for OutputIdentifier {
 	}
 }
 
-/// A structure which contains fields that are to be commited to within
+/// A structure which contains fields that are to be committed to within
 /// an Output's range (bullet) proof.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ProofMessageElements {
@@ -1069,12 +1011,12 @@ impl ProofMessageElements {
 		true
 	}
 
-	/// Serialise and return a ProofMessage
+	/// Serialize and return a ProofMessage
 	pub fn to_proof_message(&self) -> ProofMessage {
 		ProofMessage::from_bytes(&ser_vec(self).unwrap())
 	}
 
-	/// Deserialise and return the message elements
+	/// Deserialize and return the message elements
 	pub fn from_proof_message(
 		proof_message: &ProofMessage,
 	) -> Result<ProofMessageElements, ser::Error> {
@@ -1087,12 +1029,12 @@ impl ProofMessageElements {
 mod test {
 	use super::*;
 	use core::id::{ShortId, ShortIdentifiable};
-	use keychain::Keychain;
+	use keychain::{ExtKeychain, Keychain};
 	use util::secp;
 
 	#[test]
 	fn test_kernel_ser_deser() {
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
 
@@ -1116,7 +1058,7 @@ mod test {
 		assert_eq!(kernel2.excess_sig, sig.clone());
 		assert_eq!(kernel2.fee, 10);
 
-		// now check a kernel with lock_height serializes/deserializes correctly
+		// now check a kernel with lock_height serialize/deserialize correctly
 		let kernel = TxKernel {
 			features: KernelFeatures::DEFAULT_KERNEL,
 			lock_height: 100,
@@ -1137,7 +1079,7 @@ mod test {
 
 	#[test]
 	fn commit_consistency() {
-		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
+		let keychain = ExtKeychain::from_seed(&[0; 32]).unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 
 		let commit = keychain.commit(1003, &key_id).unwrap();
@@ -1150,7 +1092,7 @@ mod test {
 
 	#[test]
 	fn input_short_id() {
-		let keychain = Keychain::from_seed(&[0; 32]).unwrap();
+		let keychain = ExtKeychain::from_seed(&[0; 32]).unwrap();
 		let key_id = keychain.derive_key_id(1).unwrap();
 		let commit = keychain.commit(5, &key_id).unwrap();
 

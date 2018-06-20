@@ -19,20 +19,17 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use time;
 
-use consensus;
-use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
+use consensus::{self, exceeds_weight, reward, VerifySortOrder, REWARD};
+use core::committed::{self, Committed};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
 use core::target::Difficulty;
-use core::transaction;
-use core::{Commitment, Committed, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId,
+use core::{transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId,
            Transaction, TxKernel};
 use global;
-use keychain;
-use keychain::BlindingFactor;
+use keychain::{self, BlindingFactor};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
-use util::LOGGER;
-use util::{secp, static_secp_instance};
+use util::{secp, static_secp_instance, LOGGER};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
@@ -55,19 +52,21 @@ pub enum Error {
 	Keychain(keychain::Error),
 	/// Underlying consensus error (sort order currently)
 	Consensus(consensus::Error),
-	/// Coinbase has not yet matured and cannot be spent (1,000 blocks)
-	ImmatureCoinbase {
-		/// The height of the block containing the input spending the coinbase
-		/// output
-		height: u64,
-		/// The lock_height needed to be reached for the coinbase output to
-		/// mature
-		lock_height: u64,
-	},
 	/// Underlying Merkle proof error
 	MerkleProof,
+	/// Error when verifying kernel sums via committed trait.
+	Committed(committed::Error),
+	/// Validation error relating to cut-through.
+	/// Specifically the tx is spending its own output, which is not valid.
+	CutThrough,
 	/// Other unspecified error condition
 	Other(String),
+}
+
+impl From<committed::Error> for Error {
+	fn from(e: committed::Error) -> Error {
+		Error::Committed(e)
+	}
 }
 
 impl From<transaction::Error> for Error {
@@ -218,6 +217,23 @@ impl BlockHeader {
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
+	}
+
+	/// The "overage" to use when verifying the kernel sums.
+	/// For a block header the overage is 0 - reward.
+	pub fn overage(&self) -> i64 {
+		(REWARD as i64).checked_neg().unwrap_or(0)
+	}
+
+	/// The "total overage" to use when verifying the kernel sums for a full
+	/// chain state. For a full chain state this is 0 - (height * reward).
+	pub fn total_overage(&self) -> i64 {
+		((self.height * REWARD) as i64).checked_neg().unwrap_or(0)
+	}
+
+	/// Total kernel offset for the chain state up to and including this block.
+	pub fn total_kernel_offset(&self) -> BlindingFactor {
+		self.total_kernel_offset
 	}
 }
 
@@ -396,7 +412,8 @@ impl Block {
 	/// transactions and the private key that will receive the reward. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
 	///
-	/// Only used in tests (to be confirmed, may be wrong here).
+	/// TODO - Move this somewhere where only tests will use it.
+	/// *** Only used in tests. ***
 	///
 	pub fn new(
 		prev: &BlockHeader,
@@ -404,7 +421,16 @@ impl Block {
 		difficulty: Difficulty,
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
-		Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)
+		let mut block =
+			Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
+
+		// Now set the pow on the header so block hashing works as expected.
+		{
+			let proof_size = global::proofsize();
+			block.header.pow = Proof::random(proof_size);
+		}
+
+		Ok(block)
 	}
 
 	/// Hydrate a block from a compact block.
@@ -521,7 +547,7 @@ impl Block {
 			// on the block_header
 			tx.validate()?;
 
-			// we will summ these later to give a single aggregate offset
+			// we will sum these later to give a single aggregate offset
 			kernel_offsets.push(tx.offset);
 
 			// add all tx inputs/outputs/kernels to the block
@@ -645,10 +671,20 @@ impl Block {
 	) -> Result<((Commitment, Commitment)), Error> {
 		self.verify_weight()?;
 		self.verify_sorted()?;
+		self.verify_cut_through()?;
 		self.verify_coinbase()?;
-		self.verify_inputs()?;
 		self.verify_kernel_lock_heights()?;
-		self.verify_sums(prev_output_sum, prev_kernel_sum)
+
+		let sums = self.verify_kernel_sums(
+			self.header.overage(),
+			self.header.total_kernel_offset(),
+			Some(prev_output_sum),
+			Some(prev_kernel_sum),
+		)?;
+
+		self.verify_rangeproofs()?;
+		self.verify_kernel_signatures()?;
+		Ok(sums)
 	}
 
 	fn verify_weight(&self) -> Result<(), Error> {
@@ -658,6 +694,7 @@ impl Block {
 		Ok(())
 	}
 
+	// Verify that inputs|outputs|kernels are all sorted in lexicographical order.
 	fn verify_sorted(&self) -> Result<(), Error> {
 		self.inputs.verify_sort_order()?;
 		self.outputs.verify_sort_order()?;
@@ -665,24 +702,16 @@ impl Block {
 		Ok(())
 	}
 
-	/// We can verify the Merkle proof (for coinbase inputs) here in isolation.
-	/// But we cannot check the following as we need data from the index and
-	/// the PMMR. So we must be sure to check these at the appropriate point
-	/// during block validation.   * node is in the correct pos in the PMMR
-	/// * block is the correct one (based on output_root from block_header
-	/// via the index)
-	fn verify_inputs(&self) -> Result<(), Error> {
-		let coinbase_inputs = self.inputs
-			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT));
-
-		for input in coinbase_inputs {
-			let merkle_proof = input.merkle_proof();
-			if !merkle_proof.verify() {
-				return Err(Error::MerkleProof);
+	// Verify that no input is spending an output from the same block.
+	fn verify_cut_through(&self) -> Result<(), Error> {
+		for inp in &self.inputs {
+			if self.outputs
+				.iter()
+				.any(|out| out.commitment() == inp.commitment())
+			{
+				return Err(Error::CutThrough);
 			}
 		}
-
 		Ok(())
 	}
 
@@ -697,37 +726,22 @@ impl Block {
 		Ok(())
 	}
 
-	/// Verify sums
-	pub fn verify_sums(
-		&self,
-		prev_output_sum: &Commitment,
-		prev_kernel_sum: &Commitment,
-	) -> Result<((Commitment, Commitment)), Error> {
-		// Verify the output rangeproofs.
-		// Note: this is expensive.
-		for x in &self.outputs {
-			x.verify_proof()?;
-		}
-
-		// Verify the kernel signatures.
-		// Note: this is expensive.
+	/// Verify the kernel signatures.
+	/// Note: this is expensive.
+	fn verify_kernel_signatures(&self) -> Result<(), Error> {
 		for x in &self.kernels {
 			x.verify()?;
 		}
+		Ok(())
+	}
 
-		// Sum all input|output|overage commitments.
-		let overage = (REWARD as i64).checked_neg().unwrap_or(0);
-		let io_sum = self.sum_commitments(overage, Some(prev_output_sum))?;
-
-		// Sum the kernel excesses accounting for the kernel offset.
-		let (kernel_sum, kernel_sum_plus_offset) =
-			self.sum_kernel_excesses(&self.header.total_kernel_offset, Some(prev_kernel_sum))?;
-
-		if io_sum != kernel_sum_plus_offset {
-			return Err(Error::KernelSumMismatch);
+	/// Verify all the output rangeproofs.
+	/// Note: this is expensive.
+	fn verify_rangeproofs(&self) -> Result<(), Error> {
+		for x in &self.outputs {
+			x.verify_proof()?;
 		}
-
-		Ok((io_sum, kernel_sum))
+		Ok(())
 	}
 
 	/// Validate the coinbase outputs generated by miners. Entails 2 main
