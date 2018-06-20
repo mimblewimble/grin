@@ -23,13 +23,14 @@ use std::time::{Duration, Instant};
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::MerkleProof;
 use core::core::target::Difficulty;
+use core::core::Committed;
 use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::*;
+use types::{BlockMarker, BlockSums, ChainAdapter, ChainStore, Error, Options, Tip};
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::LOGGER;
 
@@ -167,10 +168,13 @@ impl Chain {
 		let head = store.head();
 
 		// open the txhashset, creating a new one if necessary
-		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone())?;
+		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
 		match head {
 			Ok(head) => {
+				// TODO - consolidate head vs head_header here.
+				let head_header = store.head_header()?;
+
 				let mut head = head;
 				loop {
 					// Use current chain tip if we have one.
@@ -186,7 +190,7 @@ impl Chain {
 							header.height,
 						);
 
-						extension.rewind(&header)?;
+						extension.rewind(&header, &head_header)?;
 
 						extension.validate_roots(&header)?;
 
@@ -200,7 +204,14 @@ impl Chain {
 								header.height,
 								header.hash()
 							);
-							let (output_sum, kernel_sum) = extension.validate_sums(&header)?;
+
+							let (output_sum, kernel_sum) = extension.verify_kernel_sums(
+								header.total_overage(),
+								header.total_kernel_offset(),
+								None,
+								None,
+							)?;
+
 							store.save_block_sums(
 								&header.hash(),
 								&BlockSums {
@@ -260,7 +271,7 @@ impl Chain {
 		debug!(
 			LOGGER,
 			"Chain init: {} @ {} [{}]",
-			head.total_difficulty.into_num(),
+			head.total_difficulty.to_num(),
 			head.height,
 			head.last_block_h,
 		);
@@ -460,23 +471,25 @@ impl Chain {
 		txhashset.is_unspent(output_ref)
 	}
 
-	/// Validate a vector of "raw" transactions against the current chain state.
+	fn next_block_height(&self) -> Result<u64, Error> {
+		let bh = self.head_header()?;
+		Ok(bh.height + 1)
+	}
+
+	/// Validate a vec of "raw" transactions against the current chain state.
+	/// Specifying a "pre_tx" if we need to adjust the state, for example when
+	/// validating the txs in the stempool we adjust the state based on the
+	/// txpool.
 	pub fn validate_raw_txs(
 		&self,
 		txs: Vec<Transaction>,
 		pre_tx: Option<Transaction>,
 	) -> Result<Vec<Transaction>, Error> {
-		let bh = self.head_header()?;
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset::extending_readonly(&mut txhashset, |extension| {
-			let valid_txs = extension.validate_raw_txs(txs, pre_tx, bh.height)?;
+			let valid_txs = extension.validate_raw_txs(txs, pre_tx)?;
 			Ok(valid_txs)
 		})
-	}
-
-	fn next_block_height(&self) -> Result<u64, Error> {
-		let bh = self.head_header()?;
-		Ok(bh.height + 1)
 	}
 
 	/// Verify we are not attempting to spend a coinbase output
@@ -517,7 +530,8 @@ impl Chain {
 		// Rewind the extension to the specified header to ensure the view is
 		// consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.rewind(&header)?;
+			// TODO - is this rewind guaranteed to be redundant now?
+			extension.rewind(&header, &header)?;
 			extension.validate(&header, skip_rproofs)?;
 			Ok(())
 		})
@@ -581,6 +595,23 @@ impl Chain {
 			txhashset.indexes_at(&h)?
 		};
 
+		// now we want to rewind the txhashset extension and
+		// sync a "rewound" copy of the leaf_set files to disk
+		// so we can send these across as part of the zip file.
+		// The fast sync client does *not* have the necessary data
+		// to rewind after receiving the txhashset zip.
+		{
+			let head_header = self.store.head_header()?;
+			let header = self.store.get_block_header(&h)?;
+
+			let mut txhashset = self.txhashset.write().unwrap();
+			txhashset::extending_readonly(&mut txhashset, |extension| {
+				extension.rewind(&header, &head_header)?;
+				extension.snapshot(&header)?;
+				Ok(())
+			})?;
+		}
+
 		// prepares the zip and return the corresponding Read
 		let txhashset_reader = txhashset::zip_read(self.db_root.clone())?;
 		Ok((marker.output_pos, marker.kernel_pos, txhashset_reader))
@@ -620,11 +651,14 @@ impl Chain {
 			"Going to validate new txhashset, might take some time..."
 		);
 
-		let mut txhashset = txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone())?;
+		let mut txhashset =
+			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
 
 		// Note: we are validating against a writeable extension.
 		txhashset::extending(&mut txhashset, |extension| {
-			extension.rewind(&header)?;
+			// TODO do we need to rewind here? We have no blocks to rewind
+			// (and we need them for the pos to unremove)
+			extension.rewind(&header, &header)?;
 			let (output_sum, kernel_sum) = extension.validate(&header, false)?;
 			extension.save_latest_block_sums(&header, output_sum, kernel_sum)?;
 			extension.rebuild_index()?;
@@ -651,7 +685,7 @@ impl Chain {
 		Ok(())
 	}
 
-	/// Triggers chain compaction, cleaning up some unecessary historical
+	/// Triggers chain compaction, cleaning up some unnecessary historical
 	/// information. We introduce a chain depth called horizon, which is
 	/// typically in the range of a couple days. Before that horizon, this
 	/// method will:
@@ -701,9 +735,12 @@ impl Chain {
 			match self.store.get_block(&current.hash()) {
 				Ok(b) => {
 					count += 1;
+
+					// TODO - consider wrapping these up in a single fn call?
 					self.store.delete_block(&b.hash())?;
 					self.store.delete_block_marker(&b.hash())?;
 					self.store.delete_block_sums(&b.hash())?;
+					self.store.delete_block_input_bitmap(&b.hash())?;
 				}
 				Err(NotFoundErr) => {
 					break;

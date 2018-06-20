@@ -14,18 +14,18 @@
 
 //! Selection of inputs for building transactions
 
-use failure::ResultExt;
-use keychain::Identifier;
+use keychain::{Identifier, Keychain};
 use libtx::{build, slate::Slate, tx_fee};
+use libwallet::error::{Error, ErrorKind};
+use libwallet::internal::{keys, sigcontext};
 use libwallet::types::*;
-use libwallet::{keys, sigcontext};
 
-/// Initialise a transaction on the sender side, returns a corresponding
+/// Initialize a transaction on the sender side, returns a corresponding
 /// libwallet transaction slate with the appropriate inputs selected,
 /// and saves the private wallet identifiers of our selected outputs
 /// into our transaction context
 
-pub fn build_send_tx_slate<T>(
+pub fn build_send_tx_slate<T, K>(
 	wallet: &mut T,
 	num_participants: usize,
 	amount: u64,
@@ -43,9 +43,10 @@ pub fn build_send_tx_slate<T>(
 	Error,
 >
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
-	let (elems, inputs, change_id, amount, fee) = select_send_tx(
+	let (elems, inputs, change, change_derivation, amount, fee) = select_send_tx(
 		wallet,
 		amount,
 		current_height,
@@ -64,9 +65,7 @@ where
 
 	let keychain = wallet.keychain().clone();
 
-	let blinding = slate
-		.add_transaction_elements(&keychain, elems)
-		.context(ErrorKind::LibWalletError)?;
+	let blinding = slate.add_transaction_elements(&keychain, elems)?;
 	// Create our own private context
 	let mut context = sigcontext::Context::new(
 		wallet.keychain().secp(),
@@ -79,8 +78,9 @@ where
 	}
 
 	// Store change output
-	if change_id.is_some() {
-		context.add_output(&change_id.unwrap());
+	if change_derivation.is_some() {
+		let change_id = keychain.derive_key_id(change_derivation.unwrap()).unwrap();
+		context.add_output(&change_id);
 	}
 
 	let lock_inputs = context.get_inputs().clone();
@@ -90,16 +90,29 @@ where
 	// so we avoid accidental double spend attempt.
 	let update_sender_wallet_fn = move |wallet: &mut T| {
 		wallet.with_wallet(|wallet_data| {
+			// Lock the inputs we've selected
 			for id in lock_inputs {
 				let coin = wallet_data.get_output(&id).unwrap().clone();
 				wallet_data.lock_output(&coin);
 			}
-			// probably just want to leave as unconfirmed for now
-			// or create a new status
-			/*for id in lock_outputs {
-				let coin = wallet_data.get_output(&id).unwrap().clone();
-				wallet_data.lock_output(&coin);
-			}*/		})
+			if let Some(d) = change_derivation {
+				// Add our change output to the wallet
+				let root_key_id = keychain.root_key_id();
+				let change_id = keychain.derive_key_id(change_derivation.unwrap()).unwrap();
+				wallet_data.add_output(OutputData {
+					root_key_id: root_key_id.clone(),
+					key_id: change_id,
+					n_child: d,
+					value: change as u64,
+					status: OutputStatus::Unconfirmed,
+					height: current_height,
+					lock_height: 0,
+					is_coinbase: false,
+					block: None,
+					merkle_proof: None,
+				});
+			}
+		})
 	};
 
 	Ok((slate, context, update_sender_wallet_fn))
@@ -109,7 +122,7 @@ where
 /// returning the key of the fresh output and a closure
 /// that actually performs the addition of the output to the
 /// wallet
-pub fn build_recipient_output_with_slate<T>(
+pub fn build_recipient_output_with_slate<T, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
 ) -> Result<
@@ -121,26 +134,27 @@ pub fn build_recipient_output_with_slate<T>(
 	Error,
 >
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	// Create a potential output for this transaction
 	let (key_id, derivation) = keys::new_output_key(wallet)?;
 
-	let root_key_id = wallet.keychain().root_key_id();
+	let keychain = wallet.keychain().clone();
+	let root_key_id = keychain.root_key_id();
 	let key_id_inner = key_id.clone();
 	let amount = slate.amount;
 	let height = slate.height;
 
-	let keychain = wallet.keychain().clone();
-
-	let blinding = slate
-		.add_transaction_elements(&keychain, vec![build::output(amount, key_id.clone())])
-		.context(ErrorKind::LibWalletError)?;
+	let blinding =
+		slate.add_transaction_elements(&keychain, vec![build::output(amount, key_id.clone())])?;
 
 	// Add blinding sum to our context
 	let mut context = sigcontext::Context::new(
 		keychain.secp(),
-		blinding.secret_key(wallet.keychain().secp()).unwrap(),
+		blinding
+			.secret_key(wallet.keychain().clone().secp())
+			.unwrap(),
 	);
 
 	context.add_output(&key_id);
@@ -169,7 +183,7 @@ where
 /// Builds a transaction to send to someone from the HD seed associated with the
 /// wallet and the amount to send. Handles reading through the wallet data file,
 /// selecting outputs to spend and building the change.
-pub fn select_send_tx<T>(
+pub fn select_send_tx<T, K>(
 	wallet: &mut T,
 	amount: u64,
 	current_height: u64,
@@ -179,18 +193,20 @@ pub fn select_send_tx<T>(
 	selection_strategy_is_use_all: bool,
 ) -> Result<
 	(
-		Vec<Box<build::Append>>,
+		Vec<Box<build::Append<K>>>,
 		Vec<OutputData>,
-		Option<Identifier>,
-		u64, // amount
-		u64, // fee
+		u64,         //change
+		Option<u32>, //change derivation
+		u64,         // amount
+		u64,         // fee
 	),
 	Error,
 >
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
-	let key_id = wallet.keychain().clone().root_key_id();
+	let key_id = wallet.keychain().root_key_id();
 
 	// select some spendable coins from the wallet
 	let mut coins = wallet.read_wallet(|wallet_data| {
@@ -228,7 +244,10 @@ where
 	let mut amount_with_fee = amount + fee;
 
 	if total == 0 {
-		return Err(ErrorKind::NotEnoughFunds(total as u64))?;
+		return Err(ErrorKind::NotEnoughFunds {
+			available: 0,
+			needed: amount_with_fee as u64,
+		})?;
 	}
 
 	// Check if we need to use a change address
@@ -241,7 +260,10 @@ where
 		while total < amount_with_fee {
 			// End the loop if we have selected all the outputs and still not enough funds
 			if coins.len() == max_outputs {
-				return Err(ErrorKind::NotEnoughFunds(total as u64))?;
+				return Err(ErrorKind::NotEnoughFunds {
+					available: total as u64,
+					needed: amount_with_fee as u64,
+				})?;
 			}
 
 			// select some spendable coins from the wallet
@@ -262,13 +284,14 @@ where
 	}
 
 	// build transaction skeleton with inputs and change
-	let (mut parts, change_key) = inputs_and_change(&coins, wallet, current_height, amount, fee)?;
+	let (mut parts, change, change_derivation) =
+		inputs_and_change(&coins, wallet, current_height, amount, fee)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
 	parts.push(build::with_lock_height(lock_height));
 
-	Ok((parts, coins, change_key, amount, fee))
+	Ok((parts, coins, change, change_derivation, amount, fee))
 }
 
 /// coins proof count
@@ -277,15 +300,16 @@ pub fn coins_proof_count(coins: &Vec<OutputData>) -> usize {
 }
 
 /// Selects inputs and change for a transaction
-pub fn inputs_and_change<T>(
+pub fn inputs_and_change<T, K>(
 	coins: &Vec<OutputData>,
 	wallet: &mut T,
 	height: u64,
 	amount: u64,
 	fee: u64,
-) -> Result<(Vec<Box<build::Append>>, Option<Identifier>), Error>
+) -> Result<(Vec<Box<build::Append<K>>>, u64, Option<u32>), Error>
 where
-	T: WalletBackend,
+	T: WalletBackend<K>,
+	K: Keychain,
 {
 	let mut parts = vec![];
 
@@ -301,10 +325,7 @@ where
 
 	// build inputs using the appropriate derived key_ids
 	for coin in coins {
-		let key_id = wallet
-			.keychain()
-			.derive_key_id(coin.n_child)
-			.context(ErrorKind::Keychain)?;
+		let key_id = wallet.keychain().derive_key_id(coin.n_child)?;
 		if coin.is_coinbase {
 			let block = coin.block.clone();
 			let merkle_proof = coin.merkle_proof.clone();
@@ -321,34 +342,20 @@ where
 		}
 	}
 	let change_key;
+	let mut change_derivation = None;
 	if change != 0 {
 		// track the output representing our change
 		change_key = wallet.with_wallet(|wallet_data| {
 			let keychain = wallet_data.keychain().clone();
 			let root_key_id = keychain.root_key_id();
-			let change_derivation = wallet_data.next_child(root_key_id.clone());
-			let change_key = keychain.derive_key_id(change_derivation).unwrap();
-
-			wallet_data.add_output(OutputData {
-				root_key_id: root_key_id.clone(),
-				key_id: change_key.clone(),
-				n_child: change_derivation,
-				value: change as u64,
-				status: OutputStatus::Unconfirmed,
-				height: height,
-				lock_height: 0,
-				is_coinbase: false,
-				block: None,
-				merkle_proof: None,
-			});
-
+			let cd = wallet_data.next_child(root_key_id.clone());
+			let change_key = keychain.derive_key_id(cd).unwrap();
+			change_derivation = Some(cd);
 			Some(change_key)
 		})?;
 
 		parts.push(build::output(change, change_key.clone().unwrap()));
-	} else {
-		change_key = None
 	}
 
-	Ok((parts, change_key))
+	Ok((parts, change, change_derivation))
 }

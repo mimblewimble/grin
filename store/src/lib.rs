@@ -21,6 +21,7 @@
 #![warn(missing_docs)]
 
 extern crate byteorder;
+extern crate croaring;
 extern crate env_logger;
 #[macro_use]
 extern crate grin_core as core;
@@ -32,7 +33,9 @@ extern crate serde;
 #[macro_use]
 extern crate slog;
 
+pub mod leaf_set;
 pub mod pmmr;
+pub mod rm_log;
 pub mod types;
 
 const SEP: u8 = ':' as u8;
@@ -91,7 +94,7 @@ impl Store {
 		opts.set_compaction_style(DBCompactionStyle::Universal);
 		opts.set_max_open_files(256);
 		opts.set_use_fsync(false);
-		let db = try!(DB::open(&opts, &path));
+		let db = DB::open(&opts, &path)?;
 		Ok(Store {
 			rdb: RwLock::new(db),
 		})
@@ -135,11 +138,11 @@ impl Store {
 		key: &[u8],
 		len: usize,
 	) -> Result<Option<T>, Error> {
-		let data = try!(self.get(key));
+		let data = self.get(key)?;
 		match data {
 			Some(val) => {
 				let mut lval = if len > 0 { &val[..len] } else { &val[..] };
-				let r = try!(ser::deserialize(&mut lval).map_err(Error::SerErr));
+				let r = ser::deserialize(&mut lval).map_err(Error::SerErr)?;
 				Ok(Some(r))
 			}
 			None => Ok(None),

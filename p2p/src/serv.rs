@@ -13,12 +13,11 @@
 // limitations under the License.
 
 use std::fs::File;
-use std::io;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
-use std::thread;
 use std::time::Duration;
+use std::{io, thread};
 
 use core::core;
 use core::core::hash::Hash;
@@ -27,14 +26,13 @@ use handshake::Handshake;
 use peer::Peer;
 use peers::Peers;
 use store::PeerStore;
-use types::*;
+use types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, TxHashSetRead};
 use util::LOGGER;
 
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.
 pub struct Server {
 	pub config: P2PConfig,
-	pub dandelion_config: DandelionConfig,
 	capabilities: Capabilities,
 	handshake: Arc<Handshake>,
 	pub peers: Arc<Peers>,
@@ -51,7 +49,6 @@ impl Server {
 		db_root: String,
 		mut capab: Capabilities,
 		config: P2PConfig,
-		dandelion_config: DandelionConfig,
 		adapter: Arc<ChainAdapter>,
 		genesis: Hash,
 		stop: Arc<AtomicBool>,
@@ -81,7 +78,6 @@ impl Server {
 		}
 		Ok(Server {
 			config: config.clone(),
-			dandelion_config: dandelion_config.clone(),
 			capabilities: capab,
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
 			peers: Arc::new(Peers::new(PeerStore::new(db_root)?, adapter, config)),

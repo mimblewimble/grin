@@ -16,22 +16,20 @@
 
 use rand::{thread_rng, Rng};
 use std::collections::HashSet;
+use std::iter::FromIterator;
 use time;
 
-use consensus;
-use consensus::{exceeds_weight, reward, VerifySortOrder, REWARD};
+use consensus::{self, exceeds_weight, reward, VerifySortOrder, REWARD};
+use core::committed::{self, Committed};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
 use core::target::Difficulty;
-use core::transaction;
-use core::{Commitment, Committed, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId,
+use core::{transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId,
            Transaction, TxKernel};
 use global;
-use keychain;
-use keychain::BlindingFactor;
+use keychain::{self, BlindingFactor};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
-use util::LOGGER;
-use util::{secp, static_secp_instance};
+use util::{secp, static_secp_instance, LOGGER};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
@@ -65,11 +63,19 @@ pub enum Error {
 	},
 	/// Underlying Merkle proof error
 	MerkleProof,
-	/// Validation error relating to cut-through (tx is spending its own
-	/// output).
+	/// Error when verifying kernel sums via committed trait.
+	Committed(committed::Error),
+	/// Validation error relating to cut-through.
+	/// Specifically the tx is spending its own output, which is not valid.
 	CutThrough,
 	/// Other unspecified error condition
 	Other(String),
+}
+
+impl From<committed::Error> for Error {
+	fn from(e: committed::Error) -> Error {
+		Error::Committed(e)
+	}
 }
 
 impl From<transaction::Error> for Error {
@@ -202,7 +208,7 @@ impl BlockHeader {
 			[write_u64, self.height],
 			[write_fixed_bytes, &self.previous],
 			[write_i64, self.timestamp.to_timespec().sec],
-			[write_u64, self.total_difficulty.into_num()],
+			[write_u64, self.total_difficulty.to_num()],
 			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
 			[write_fixed_bytes, &self.kernel_root],
@@ -220,6 +226,23 @@ impl BlockHeader {
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
+	}
+
+	/// The "overage" to use when verifying the kernel sums.
+	/// For a block header the overage is 0 - reward.
+	pub fn overage(&self) -> i64 {
+		(REWARD as i64).checked_neg().unwrap_or(0)
+	}
+
+	/// The "total overage" to use when verifying the kernel sums for a full
+	/// chain state. For a full chain state this is 0 - (height * reward).
+	pub fn total_overage(&self) -> i64 {
+		((self.height * REWARD) as i64).checked_neg().unwrap_or(0)
+	}
+
+	/// Total kernel offset for the chain state up to and including this block.
+	pub fn total_kernel_offset(&self) -> BlindingFactor {
+		self.total_kernel_offset
 	}
 }
 
@@ -248,10 +271,10 @@ pub struct CompactBlock {
 /// purpose of full serialization and the one of just extracting a hash.
 impl Writeable for CompactBlock {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		try!(self.header.write(writer));
+		self.header.write(writer)?;
 
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			try!(writer.write_u64(self.nonce));
+			writer.write_u64(self.nonce)?;
 
 			ser_multiwrite!(
 				writer,
@@ -266,9 +289,9 @@ impl Writeable for CompactBlock {
 
 			// Consensus rule that everything is sorted in lexicographical order on the
 			// wire.
-			try!(out_full.write_sorted(writer));
-			try!(kern_full.write_sorted(writer));
-			try!(kern_ids.write_sorted(writer));
+			out_full.write_sorted(writer)?;
+			kern_full.write_sorted(writer)?;
+			kern_ids.write_sorted(writer)?;
 		}
 		Ok(())
 	}
@@ -278,7 +301,7 @@ impl Writeable for CompactBlock {
 /// compact block from a binary stream.
 impl Readable for CompactBlock {
 	fn read(reader: &mut Reader) -> Result<CompactBlock, ser::Error> {
-		let header = try!(BlockHeader::read(reader));
+		let header = BlockHeader::read(reader)?;
 
 		let (nonce, out_full_len, kern_full_len, kern_id_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
@@ -319,7 +342,7 @@ pub struct Block {
 /// full serialization and the one of just extracting a hash.
 impl Writeable for Block {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		try!(self.header.write(writer));
+		self.header.write(writer)?;
 
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			ser_multiwrite!(
@@ -335,9 +358,9 @@ impl Writeable for Block {
 
 			// Consensus rule that everything is sorted in lexicographical order on the
 			// wire.
-			try!(inputs.write_sorted(writer));
-			try!(outputs.write_sorted(writer));
-			try!(kernels.write_sorted(writer));
+			inputs.write_sorted(writer)?;
+			outputs.write_sorted(writer)?;
+			kernels.write_sorted(writer)?;
 		}
 		Ok(())
 	}
@@ -347,7 +370,7 @@ impl Writeable for Block {
 /// from a binary stream.
 impl Readable for Block {
 	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
-		let header = try!(BlockHeader::read(reader));
+		let header = BlockHeader::read(reader)?;
 
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
@@ -361,7 +384,6 @@ impl Readable for Block {
 			inputs: inputs,
 			outputs: outputs,
 			kernels: kernels,
-			..Default::default()
 		})
 	}
 }
@@ -399,7 +421,8 @@ impl Block {
 	/// transactions and the private key that will receive the reward. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
 	///
-	/// Only used in tests (to be confirmed, may be wrong here).
+	/// TODO - Move this somewhere where only tests will use it.
+	/// *** Only used in tests. ***
 	///
 	pub fn new(
 		prev: &BlockHeader,
@@ -407,7 +430,15 @@ impl Block {
 		difficulty: Difficulty,
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
-		let block = Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
+		let mut block =
+			Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
+
+		// Now set the pow on the header so block hashing works as expected.
+		{
+			let proof_size = global::proofsize();
+			block.header.pow = Proof::random(proof_size);
+		}
+
 		Ok(block)
 	}
 
@@ -438,9 +469,9 @@ impl Block {
 		all_kernels.extend(cb.kern_full);
 
 		// convert the sets to vecs
-		let mut all_inputs = all_inputs.iter().cloned().collect::<Vec<_>>();
-		let mut all_outputs = all_outputs.iter().cloned().collect::<Vec<_>>();
-		let mut all_kernels = all_kernels.iter().cloned().collect::<Vec<_>>();
+		let mut all_inputs = Vec::from_iter(all_inputs);
+		let mut all_outputs = Vec::from_iter(all_outputs);
+		let mut all_kernels = Vec::from_iter(all_kernels);
 
 		// sort them all lexicographically
 		all_inputs.sort();
@@ -525,13 +556,13 @@ impl Block {
 			// on the block_header
 			tx.validate()?;
 
-			// we will summ these later to give a single aggregate offset
+			// we will sum these later to give a single aggregate offset
 			kernel_offsets.push(tx.offset);
 
 			// add all tx inputs/outputs/kernels to the block
-			kernels.extend(tx.kernels.iter().cloned());
-			inputs.extend(tx.inputs.iter().cloned());
-			outputs.extend(tx.outputs.iter().cloned());
+			kernels.extend(tx.kernels.into_iter());
+			inputs.extend(tx.inputs.into_iter());
+			outputs.extend(tx.outputs.into_iter());
 		}
 
 		// include the reward kernel and output
@@ -549,8 +580,7 @@ impl Block {
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
 			let mut keys = kernel_offsets
-				.iter()
-				.cloned()
+				.into_iter()
 				.filter(|x| *x != BlindingFactor::zero())
 				.filter_map(|x| x.secret_key(&secp).ok())
 				.collect::<Vec<_>>();
@@ -574,7 +604,7 @@ impl Block {
 					..time::now_utc()
 				},
 				previous: prev.hash(),
-				total_difficulty: difficulty + prev.total_difficulty.clone(),
+				total_difficulty: difficulty + prev.total_difficulty,
 				total_kernel_offset: total_kernel_offset,
 				..Default::default()
 			},
@@ -597,13 +627,14 @@ impl Block {
 	/// Matches any output with a potential spending input, eliminating them
 	/// from the block. Provides a simple way to cut-through the block. The
 	/// elimination is stable with respect to the order of inputs and outputs.
+	/// Method consumes the block.
 	///
 	/// NOTE: exclude coinbase from cut-through process
 	/// if a block contains a new coinbase output and
 	/// is a transaction spending a previous coinbase
 	/// we do not want to cut-through (all coinbase must be preserved)
 	///
-	pub fn cut_through(&self) -> Block {
+	pub fn cut_through(self) -> Block {
 		let in_set = self.inputs
 			.iter()
 			.map(|inp| inp.commitment())
@@ -618,26 +649,24 @@ impl Block {
 		let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
 
 		let new_inputs = self.inputs
-			.iter()
+			.into_iter()
 			.filter(|inp| !to_cut_through.contains(&inp.commitment()))
-			.cloned()
 			.collect::<Vec<_>>();
 
 		let new_outputs = self.outputs
-			.iter()
+			.into_iter()
 			.filter(|out| !to_cut_through.contains(&out.commitment()))
-			.cloned()
 			.collect::<Vec<_>>();
 
 		Block {
 			header: BlockHeader {
-				pow: self.header.pow.clone(),
-				total_difficulty: self.header.total_difficulty.clone(),
+				pow: self.header.pow,
+				total_difficulty: self.header.total_difficulty,
 				..self.header
 			},
 			inputs: new_inputs,
 			outputs: new_outputs,
-			kernels: self.kernels.clone(),
+			kernels: self.kernels,
 		}
 	}
 
@@ -655,9 +684,17 @@ impl Block {
 		self.verify_coinbase()?;
 		self.verify_inputs()?;
 		self.verify_kernel_lock_heights()?;
-		let (new_output_sum, new_kernel_sum) = self.verify_sums(prev_output_sum, prev_kernel_sum)?;
 
-		Ok((new_output_sum, new_kernel_sum))
+		let sums = self.verify_kernel_sums(
+			self.header.overage(),
+			self.header.total_kernel_offset(),
+			Some(prev_output_sum),
+			Some(prev_kernel_sum),
+		)?;
+
+		self.verify_rangeproofs()?;
+		self.verify_kernel_signatures()?;
+		Ok(sums)
 	}
 
 	fn verify_weight(&self) -> Result<(), Error> {
@@ -675,7 +712,7 @@ impl Block {
 		Ok(())
 	}
 
-	// Verify that no input is spending an ouput from the same block.
+	// Verify that no input is spending an output from the same block.
 	fn verify_cut_through(&self) -> Result<(), Error> {
 		for inp in &self.inputs {
 			if self.outputs
@@ -720,37 +757,22 @@ impl Block {
 		Ok(())
 	}
 
-	/// Verify sums
-	pub fn verify_sums(
-		&self,
-		prev_output_sum: &Commitment,
-		prev_kernel_sum: &Commitment,
-	) -> Result<((Commitment, Commitment)), Error> {
-		// Verify the output rangeproofs.
-		// Note: this is expensive.
-		for x in &self.outputs {
-			x.verify_proof()?;
-		}
-
-		// Verify the kernel signatures.
-		// Note: this is expensive.
+	/// Verify the kernel signatures.
+	/// Note: this is expensive.
+	fn verify_kernel_signatures(&self) -> Result<(), Error> {
 		for x in &self.kernels {
 			x.verify()?;
 		}
+		Ok(())
+	}
 
-		// Sum all input|output|overage commitments.
-		let overage = (REWARD as i64).checked_neg().unwrap_or(0);
-		let io_sum = self.sum_commitments(overage, Some(prev_output_sum))?;
-
-		// Sum the kernel excesses accounting for the kernel offset.
-		let (kernel_sum, kernel_sum_plus_offset) =
-			self.sum_kernel_excesses(&self.header.total_kernel_offset, Some(prev_kernel_sum))?;
-
-		if io_sum != kernel_sum_plus_offset {
-			return Err(Error::KernelSumMismatch);
+	/// Verify all the output rangeproofs.
+	/// Note: this is expensive.
+	fn verify_rangeproofs(&self) -> Result<(), Error> {
+		for x in &self.outputs {
+			x.verify_proof()?;
 		}
-
-		Ok((io_sum, kernel_sum))
+		Ok(())
 	}
 
 	/// Validate the coinbase outputs generated by miners. Entails 2 main
@@ -763,14 +785,12 @@ impl Block {
 		let cb_outs = self.outputs
 			.iter()
 			.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
-			.cloned()
-			.collect::<Vec<Output>>();
+			.collect::<Vec<&Output>>();
 
 		let cb_kerns = self.kernels
 			.iter()
 			.filter(|kernel| kernel.features.contains(KernelFeatures::COINBASE_KERNEL))
-			.cloned()
-			.collect::<Vec<TxKernel>>();
+			.collect::<Vec<&TxKernel>>();
 
 		let over_commit;
 		let out_adjust_sum;

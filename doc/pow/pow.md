@@ -91,7 +91,7 @@ i.e. you add more edges relative to the number of nodes in a graph.
 
 ## Cuckoo Cycle
 
-The Cuckoo Cycle algorithm is a specialised algorithm designed to solve exactly this problem, and it does
+The Cuckoo Cycle algorithm is a specialized algorithm designed to solve exactly this problem, and it does
 so by inserting values into a structure called a 'Cuckoo Hashtable' according to a hash which maps nodes
 into possible locations in two separate arrays. This document won't go into detail on the base algorithm, as
 it's outlined plainly enough in section 5 of the
@@ -134,7 +134,7 @@ the proof difficulty is calculated as the maximum target hash (2^256) divided by
 rounded to give an integer. If this integer is larger than the evolving network difficulty, the POW
 is considered valid and the block is submit to the chain for validation.
 
-In other words, a potential proof, as well as containting a valid Cuckoo Cycle, also needs to hash to a value higher than the target difficulty. This difficulty is derived from:
+In other words, a potential proof, as well as containing a valid Cuckoo Cycle, also needs to hash to a value higher than the target difficulty. This difficulty is derived from:
 
 ### Evolving Network Difficulty
 
@@ -143,7 +143,7 @@ keeping the average block solution time within range of a target (currently 60 s
 to change).
 
 The difficulty calculation is based on both Digishield and GravityWave family of difficulty computation,
-coming to something very close to ZCash. The refence difficulty is an average of the difficulty over a window of
+coming to something very close to ZCash. The reference difficulty is an average of the difficulty over a window of
 23 blocks (the current consensus value). The corresponding timespan is calculated by using the difference between
 the median timestamps at the beginning and the end of the window. If the timespan is higher or lower than a certain
 range, (adjusted with a dampening factor to allow for normal variation,) then the difficulty is raised or lowered
@@ -167,7 +167,7 @@ valid Proofs-of-Work to create the latest block in the chain. The following is a
         * Then, a sub-loop runs for a set amount of time, currently configured at 2 seconds, where the following happens:
 
             * The new block header is hashed to create a hash value
-            * The cuckoo graph generator is initialised, which accepts as parameters:
+            * The cuckoo graph generator is initialized, which accepts as parameters:
                 * The hash of the potential block header, which is to be used as the key to a SIPHASH function
                 that will generate pairs of locations for each element in a set of nonces 0..N in the graph.
                 * The size of the graph (a consensus value).
@@ -178,7 +178,7 @@ valid Proofs-of-Work to create the latest block in the chain. The following is a
             * If a cycle is found, a Blake2b hash of the proof is created and is compared to the current target
             difficulty, as outlined in [Additional Difficulty Control](#additional-difficulty-control) above.
             * If the Blake2b Hash difficulty is greater than or equal to the target difficulty, the block is sent to the
-            transaction pool, propogated amongst peers for validation, and work begins on the next block.
+            transaction pool, propagated amongst peers for validation, and work begins on the next block.
             * If the Blake2b Hash difficulty is less than the target difficulty, the proof is thrown out and the timed loop continues.
             * If no solution is found, increment the nonce in the header by 1, and update the header's timestamp so the next iteration
             hashes a different value for seeding the next loop's graph generation step.
@@ -210,8 +210,8 @@ long time to find a solution in a single graph, well outside a window in which y
 transactions.
 
 These values are currently set to 2^12 for the graph size and 50% (as fixed by Cuckoo Cycle) for the easiness value,
-however the size is only a temporary values for testing. The current miner implementation is very unoptimised,
-and the graph size will need to be changed as faster and more optimised Cuckoo Cycle algorithms are put in place.
+however the size is only a temporary values for testing. The current miner implementation is very unoptimized,
+and the graph size will need to be changed as faster and more optimized Cuckoo Cycle algorithms are put in place.
 
 ### Pooling Capability
 

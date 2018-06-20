@@ -170,4 +170,3 @@ additional index over the whole key space is required. As an MMR is an append
 only binary tree, we can find a key in the tree by its insertion position. So a
 full index of keys inserted in the tree (i.e. an output commitment) to their
 insertion positions is also required.
-

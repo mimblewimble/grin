@@ -26,7 +26,7 @@ use grin_core::core::block::Error::KernelLockHeight;
 use grin_core::core::hash::{Hashed, ZERO_HASH};
 use grin_core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction};
 use grin_core::ser;
-use keychain::Keychain;
+use keychain::{ExtKeychain, Keychain};
 use util::{secp_static, static_secp_instance};
 use wallet::libtx::build::{self, initial_tx, input, output, with_excess, with_fee,
                            with_lock_height};
@@ -72,7 +72,7 @@ fn tx_double_ser_deser() {
 #[test]
 #[should_panic(expected = "InvalidSecretKey")]
 fn test_zero_commit_fails() {
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();
 
 	// blinding should fail as signing with a zero r*G shouldn't work
@@ -88,7 +88,7 @@ fn test_zero_commit_fails() {
 
 #[test]
 fn build_tx_kernel() {
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();
 	let key_id2 = keychain.derive_key_id(2).unwrap();
 	let key_id3 = keychain.derive_key_id(3).unwrap();
@@ -295,7 +295,7 @@ fn basic_transaction_deaggregation() {
 
 #[test]
 fn hash_output() {
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();
 	let key_id2 = keychain.derive_key_id(2).unwrap();
 	let key_id3 = keychain.derive_key_id(3).unwrap();
@@ -349,7 +349,7 @@ fn tx_hash_diff() {
 /// 2 inputs, 2 outputs transaction.
 #[test]
 fn tx_build_exchange() {
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();
 	let key_id2 = keychain.derive_key_id(2).unwrap();
 	let key_id3 = keychain.derive_key_id(3).unwrap();
@@ -386,7 +386,7 @@ fn tx_build_exchange() {
 
 #[test]
 fn reward_empty_block() {
-	let keychain = keychain::Keychain::from_random_seed().unwrap();
+	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
 
 	let zero_commit = secp_static::commit_to_zero_value();
@@ -402,7 +402,7 @@ fn reward_empty_block() {
 
 #[test]
 fn reward_with_tx_block() {
-	let keychain = keychain::Keychain::from_random_seed().unwrap();
+	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
 
 	let zero_commit = secp_static::commit_to_zero_value();
@@ -421,7 +421,7 @@ fn reward_with_tx_block() {
 
 #[test]
 fn simple_block() {
-	let keychain = keychain::Keychain::from_random_seed().unwrap();
+	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
 
 	let zero_commit = secp_static::commit_to_zero_value();
@@ -442,7 +442,7 @@ fn simple_block() {
 
 #[test]
 fn test_block_with_timelocked_tx() {
-	let keychain = keychain::Keychain::from_random_seed().unwrap();
+	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
 
 	let key_id1 = keychain.derive_key_id(1).unwrap();
 	let key_id2 = keychain.derive_key_id(2).unwrap();

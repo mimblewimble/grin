@@ -17,10 +17,9 @@ extern crate grin_p2p as p2p;
 extern crate grin_util as util;
 
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::thread;
-use std::time;
+use std::sync::Arc;
+use std::{thread, time};
 
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
@@ -47,21 +46,14 @@ fn peer_handshake() {
 		peers_deny: None,
 		..p2p::P2PConfig::default()
 	};
-	let dandelion_config = p2p::DandelionConfig {
-		relay_secs: 600,
-		embargo_secs: 30,
-		patience_secs: 10,
-		stem_probability: 90,
-	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
 	let server = Arc::new(
 		p2p::Server::new(
 			".grin".to_owned(),
 			p2p::Capabilities::UNKNOWN,
 			p2p_config.clone(),
-			dandelion_config.clone(),
 			net_adapter.clone(),
-			Hash::from_vec(vec![]),
+			Hash::from_vec(&vec![]),
 			Arc::new(AtomicBool::new(false)),
 			false,
 			None,
@@ -82,7 +74,7 @@ fn peer_handshake() {
 		p2p::Capabilities::UNKNOWN,
 		Difficulty::one(),
 		my_addr,
-		&p2p::handshake::Handshake::new(Hash::from_vec(vec![]), p2p_config.clone()),
+		&p2p::handshake::Handshake::new(Hash::from_vec(&vec![]), p2p_config.clone()),
 		net_adapter,
 	).unwrap();
 

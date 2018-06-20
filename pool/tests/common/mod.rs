@@ -33,7 +33,6 @@ use core::core::{BlockHeader, Transaction};
 use chain::store::ChainKVStore;
 use chain::txhashset;
 use chain::txhashset::TxHashSet;
-use chain::ChainStore;
 use core::core::hash::Hashed;
 use core::core::pmmr::MerkleProof;
 use pool::*;
@@ -56,7 +55,7 @@ impl ChainAdapter {
 		let chain_store = ChainKVStore::new(target_dir.clone())
 			.map_err(|e| format!("failed to init chain_store, {}", e))?;
 		let store = Arc::new(chain_store);
-		let txhashset = TxHashSet::open(target_dir.clone(), store.clone())
+		let txhashset = TxHashSet::open(target_dir.clone(), store.clone(), None)
 			.map_err(|e| format!("failed to init txhashset, {}", e))?;
 
 		Ok(ChainAdapter {
@@ -72,13 +71,11 @@ impl BlockChain for ChainAdapter {
 		txs: Vec<Transaction>,
 		pre_tx: Option<Transaction>,
 	) -> Result<Vec<Transaction>, PoolError> {
-		let header = self.store.head_header().unwrap();
 		let mut txhashset = self.txhashset.write().unwrap();
 		let res = txhashset::extending_readonly(&mut txhashset, |extension| {
-			let valid_txs = extension.validate_raw_txs(txs, pre_tx, header.height)?;
+			let valid_txs = extension.validate_raw_txs(txs, pre_tx)?;
 			Ok(valid_txs)
 		}).map_err(|e| PoolError::Other(format!("Error: test chain adapter: {:?}", e)))?;
-
 		Ok(res)
 	}
 
@@ -105,11 +102,14 @@ pub fn test_setup(chain: &Arc<ChainAdapter>) -> TransactionPool<ChainAdapter> {
 	)
 }
 
-pub fn test_transaction_spending_coinbase(
-	keychain: &Keychain,
+pub fn test_transaction_spending_coinbase<K>(
+	keychain: &K,
 	header: &BlockHeader,
 	output_values: Vec<u64>,
-) -> Transaction {
+) -> Transaction
+where
+	K: Keychain,
+{
 	let output_sum = output_values.iter().sum::<u64>() as i64;
 
 	let coinbase_reward: u64 = 60_000_000_000;
@@ -137,14 +137,17 @@ pub fn test_transaction_spending_coinbase(
 
 	tx_elements.push(libtx::build::with_fee(fees as u64));
 
-	libtx::build::transaction(tx_elements, &keychain).unwrap()
+	libtx::build::transaction(tx_elements, keychain).unwrap()
 }
 
-pub fn test_transaction(
-	keychain: &Keychain,
+pub fn test_transaction<K>(
+	keychain: &K,
 	input_values: Vec<u64>,
 	output_values: Vec<u64>,
-) -> Transaction {
+) -> Transaction
+where
+	K: Keychain,
+{
 	let input_sum = input_values.iter().sum::<u64>() as i64;
 	let output_sum = output_values.iter().sum::<u64>() as i64;
 
@@ -164,7 +167,7 @@ pub fn test_transaction(
 	}
 	tx_elements.push(libtx::build::with_fee(fees as u64));
 
-	libtx::build::transaction(tx_elements, &keychain).unwrap()
+	libtx::build::transaction(tx_elements, keychain).unwrap()
 }
 
 pub fn test_source() -> TxSource {

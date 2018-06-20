@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{thread, cmp};
-use std::time::Duration;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+use std::{cmp, thread};
 use time;
 
 use chain;
@@ -295,8 +295,8 @@ fn needs_syncing(
 					let ch = chain.head().unwrap();
 					info!(
 						LOGGER,
-						"synchronised at {} @ {} [{}]",
-						local_diff.into_num(),
+						"synchronized at {} @ {} [{}]",
+						local_diff.to_num(),
 						ch.height,
 						ch.last_block_h
 					);
@@ -338,8 +338,8 @@ fn needs_syncing(
 }
 
 /// We build a locator based on sync_head.
-/// Even if sync_head is significantly out of date we will "reset" it once we start getting
-/// headers back from a peer.
+/// Even if sync_head is significantly out of date we will "reset" it once we
+/// start getting headers back from a peer.
 ///
 /// TODO - this gets *expensive* with a large header chain to iterate over
 /// as we need to get each block header from the db
@@ -457,7 +457,7 @@ mod test {
 		assert_eq!(
 			get_locator_heights(10000),
 			vec![
-				10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0
+				10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0,
 			]
 		);
 	}

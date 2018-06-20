@@ -16,14 +16,14 @@ use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
-use rand::Rng;
 use rand::os::OsRng;
+use rand::Rng;
 
-use core::core::target::Difficulty;
 use core::core::hash::Hash;
-use msg::*;
+use core::core::target::Difficulty;
+use msg::{read_message, write_message, Hand, Shake, SockAddr, Type, PROTOCOL_VERSION, USER_AGENT};
 use peer::Peer;
-use types::*;
+use types::{Capabilities, Direction, Error, P2PConfig, PeerInfo};
 use util::LOGGER;
 
 const NONCES_CAP: usize = 100;
@@ -35,7 +35,8 @@ pub struct Handshake {
 	/// a node id.
 	nonces: Arc<RwLock<VecDeque<u64>>>,
 	/// The genesis block header of the chain seen by this node.
-	/// We only want to connect to other nodes seeing the same chain (forks are ok).
+	/// We only want to connect to other nodes seeing the same chain (forks are
+	/// ok).
 	genesis: Hash,
 	config: P2PConfig,
 }
@@ -111,7 +112,7 @@ impl Handshake {
 		debug!(
 			LOGGER,
 			"Connected! Cumulative {} offered from {:?} {:?} {:?}",
-			peer_info.total_difficulty.into_num(),
+			peer_info.total_difficulty.to_num(),
 			peer_info.addr,
 			peer_info.user_agent,
 			peer_info.capabilities

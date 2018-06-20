@@ -29,21 +29,19 @@ use std::sync::{Arc, RwLock};
 
 use core::core::{Block, BlockHeader};
 
-use chain::txhashset;
 use chain::types::Tip;
-use chain::ChainStore;
+use chain::{txhashset, ChainStore};
+use common::{clean_output_dir, test_setup, test_source, test_transaction,
+             test_transaction_spending_coinbase, ChainAdapter};
 use core::core::target::Difficulty;
-
-use keychain::Keychain;
+use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
-
-use common::*;
 
 #[test]
 fn test_transaction_pool_block_reconciliation() {
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain: ExtKeychain = Keychain::from_random_seed().unwrap();
 
-	let db_root = ".grin_block_reconcilliation".to_string();
+	let db_root = ".grin_block_reconciliation".to_string();
 	clean_output_dir(db_root.clone());
 	let chain = ChainAdapter::init(db_root.clone()).unwrap();
 
@@ -183,17 +181,27 @@ fn test_transaction_pool_block_reconciliation() {
 			}).unwrap();
 		}
 
+		let tip = Tip::from_block(&block.header);
+		chain.store.save_block_header(&block.header).unwrap();
+		chain.store.save_head(&tip).unwrap();
+
 		block
 	};
+
+	// Check the pool still contains everything we expect at this point.
+	{
+		let write_pool = pool.write().unwrap();
+		assert_eq!(write_pool.total_size(), txs_to_add.len());
+	}
 
 	// And reconcile the pool with this latest block.
 	{
 		let mut write_pool = pool.write().unwrap();
 		write_pool.reconcile_block(&block).unwrap();
 
-		assert_eq!(write_pool.total_size(), 4);
-		assert_eq!(write_pool.txpool.entries[0].tx, valid_transaction);
 		// TODO - this is the "correct" behavior (see below)
+		// assert_eq!(write_pool.total_size(), 4);
+		// assert_eq!(write_pool.txpool.entries[0].tx, valid_transaction);
 		// assert_eq!(write_pool.txpool.entries[1].tx, pool_child);
 		// assert_eq!(write_pool.txpool.entries[2].tx, conflict_valid_child);
 		// assert_eq!(write_pool.txpool.entries[3].tx, valid_child_valid);
@@ -203,10 +211,11 @@ fn test_transaction_pool_block_reconciliation() {
 		// txhashset.apply_output() TODO - and we no longer incorrectly allow
 		// duplicate outputs in the MMR TODO - then this test will fail
 		//
-		// TODO - wtf is with these name permutations...
-		//
-		assert_eq!(write_pool.txpool.entries[1].tx, conflict_valid_child);
-		assert_eq!(write_pool.txpool.entries[2].tx, valid_child_conflict);
-		assert_eq!(write_pool.txpool.entries[3].tx, valid_child_valid);
+		assert_eq!(write_pool.total_size(), 5);
+		assert_eq!(write_pool.txpool.entries[0].tx, valid_transaction);
+		assert_eq!(write_pool.txpool.entries[1].tx, pool_child);
+		assert_eq!(write_pool.txpool.entries[2].tx, conflict_valid_child);
+		assert_eq!(write_pool.txpool.entries[3].tx, valid_child_conflict);
+		assert_eq!(write_pool.txpool.entries[4].tx, valid_child_valid);
 	}
 }

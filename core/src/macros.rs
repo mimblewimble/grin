@@ -19,33 +19,27 @@
 /// around every map call.
 #[macro_export]
 macro_rules! map_vec {
-  ($thing:expr, $mapfn:expr ) => {
-    $thing.iter()
-      .map($mapfn)
-      .collect::<Vec<_>>();
-  }
+	($thing:expr, $mapfn:expr) => {
+		$thing.iter().map($mapfn).collect::<Vec<_>>();
+	};
 }
 
 /// Same as map_vec when the map closure returns Results. Makes sure the
 /// results are "pushed up" and wraps with a try.
 #[macro_export]
 macro_rules! try_map_vec {
-  ($thing:expr, $mapfn:expr ) => {
-    try!($thing.iter()
-      .map($mapfn)
-      .collect::<Result<Vec<_>, _>>());
-  }
+	($thing:expr, $mapfn:expr) => {
+		$thing.iter().map($mapfn).collect::<Result<Vec<_>, _>>()?;
+	};
 }
 
 /// Eliminates some of the verbosity in having iter and collect
 /// around every filter_map call.
 #[macro_export]
 macro_rules! filter_map_vec {
-  ($thing:expr, $mapfn:expr ) => {
-    $thing.iter()
-      .filter_map($mapfn)
-      .collect::<Vec<_>>();
-  }
+	($thing:expr, $mapfn:expr) => {
+		$thing.iter().filter_map($mapfn).collect::<Vec<_>>();
+	};
 }
 
 /// Allows the conversion of an expression that doesn't return anything to one
@@ -55,12 +49,10 @@ macro_rules! filter_map_vec {
 ///   println!(tee!(foo, foo.append(vec![3,4,5]))
 #[macro_export]
 macro_rules! tee {
-  ($thing:ident, $thing_expr:expr) => {
-    {
-    $thing_expr;
-    $thing
-    }
-  }
+	($thing:ident, $thing_expr:expr) => {{
+		$thing_expr;
+		$thing
+		}};
 }
 
 /// Eliminate some of the boilerplate of deserialization (package ser) by
@@ -70,8 +62,8 @@ macro_rules! tee {
 ///   let bar = try!(reader.read_u32());
 ///   let fixed_byte_var = try!(reader.read_fixed_bytes(64));
 /// Example after:
-///   let (foo, bar, fixed_byte_var) = ser_multiread!(reader, read_u64, read_u32,
-///   read_fixed_bytes(64));
+/// let (foo, bar, fixed_byte_var) = ser_multiread!(reader, read_u64,
+/// read_u32,   read_fixed_bytes(64));
 #[macro_export]
 macro_rules! ser_multiread {
   ($rdr:ident, $($read_call:ident $(($val:expr)),*),*) => {
@@ -96,7 +88,7 @@ macro_rules! ser_multiwrite {
 // don't seem to be able to define an Ord implementation for Hash due to
 // Ord being defined on all pointers, resorting to a macro instead
 macro_rules! hashable_ord {
-	($hashable: ident) => {
+	($hashable:ident) => {
 		impl Ord for $hashable {
 			fn cmp(&self, other: &$hashable) -> Ordering {
 				self.hash().cmp(&other.hash())
@@ -113,5 +105,5 @@ macro_rules! hashable_ord {
 			}
 		}
 		impl Eq for $hashable {}
-	}
+	};
 }

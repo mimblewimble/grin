@@ -14,15 +14,14 @@
 
 //! short ids for compact blocks
 
-use std::cmp::Ordering;
 use std::cmp::min;
+use std::cmp::Ordering;
 
 use byteorder::{ByteOrder, LittleEndian};
 use siphasher::sip::SipHasher24;
 
 use core::hash::{Hash, Hashed};
-use ser;
-use ser::{Readable, Reader, Writeable, Writer};
+use ser::{self, Readable, Reader, Writeable, Writer};
 use util;
 
 /// The size of a short id used to identify inputs|outputs|kernels (6 bytes)
@@ -38,8 +37,8 @@ pub trait ShortIdentifiable {
 impl<H: Hashed> ShortIdentifiable for H {
 	/// Generate a short_id via the following -
 	///
-	///   * extract k0/k1 from block_hash hashed with the nonce (first two u64 values)
-	///   * initialize a siphasher24 with k0/k1
+	/// * extract k0/k1 from block_hash hashed with the nonce (first two u64
+	/// values)   * initialize a siphasher24 with k0/k1
 	///   * self.hash() passing in the siphasher24 instance
 	///   * drop the 2 most significant bytes (to return a 6 byte short_id)
 	///
@@ -75,24 +74,23 @@ impl<H: Hashed> ShortIdentifiable for H {
 pub struct ShortId([u8; 6]);
 
 /// We want to sort short_ids in a canonical and consistent manner so we can
-/// verify sort order in the same way we do for full inputs|outputs|kernels themselves.
+/// verify sort order in the same way we do for full inputs|outputs|kernels
+/// themselves.
 hashable_ord!(ShortId);
 
 impl ::std::fmt::Debug for ShortId {
 	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-		try!(write!(f, "{}(", stringify!(ShortId)));
-		try!(write!(f, "{}", self.to_hex()));
+		write!(f, "{}(", stringify!(ShortId))?;
+		write!(f, "{}", self.to_hex())?;
 		write!(f, ")")
 	}
 }
 
 impl Readable for ShortId {
 	fn read(reader: &mut Reader) -> Result<ShortId, ser::Error> {
-		let v = try!(reader.read_fixed_bytes(SHORT_ID_SIZE));
+		let v = reader.read_fixed_bytes(SHORT_ID_SIZE)?;
 		let mut a = [0; SHORT_ID_SIZE];
-		for i in 0..a.len() {
-			a[i] = v[i];
-		}
+		a.copy_from_slice(&v[..]);
 		Ok(ShortId(a))
 	}
 }
@@ -107,9 +105,8 @@ impl ShortId {
 	/// Build a new short_id from a byte slice
 	pub fn from_bytes(bytes: &[u8]) -> ShortId {
 		let mut hash = [0; SHORT_ID_SIZE];
-		for i in 0..min(SHORT_ID_SIZE, bytes.len()) {
-			hash[i] = bytes[i];
-		}
+		let copy_size = min(SHORT_ID_SIZE, bytes.len());
+		hash[..copy_size].copy_from_slice(&bytes[..copy_size]);
 		ShortId(hash)
 	}
 
@@ -121,7 +118,7 @@ impl ShortId {
 	/// Reconstructs a switch commit hash from a hex string.
 	pub fn from_hex(hex: &str) -> Result<ShortId, ser::Error> {
 		let bytes = util::from_hex(hex.to_string())
-			.map_err(|_| ser::Error::HexError(format!("short_id from_hex error")))?;
+			.map_err(|_| ser::Error::HexError("short_id from_hex error".to_string()))?;
 		Ok(ShortId::from_bytes(&bytes))
 	}
 

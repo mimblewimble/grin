@@ -14,28 +14,39 @@
 
 //! Types and traits that should be provided by a wallet
 //! implementation
+
 use std::collections::HashMap;
-use std::fmt::{self, Display};
+use std::fmt;
 
 use serde;
 
-use failure::{Backtrace, Context, Fail, ResultExt};
+use failure::ResultExt;
 
 use core::core::hash::Hash;
 use core::core::pmmr::MerkleProof;
-
 use keychain::{Identifier, Keychain};
+
+use libtx::slate::Slate;
+use libwallet::error::{Error, ErrorKind};
+
+use util::secp::pedersen;
 
 /// TODO:
 /// Wallets should implement this backend for their storage. All functions
 /// here expect that the wallet instance has instantiated itself or stored
 /// whatever credentials it needs
-pub trait WalletBackend {
-	/// Return the keychain being used
-	fn keychain(&mut self) -> &mut Keychain;
+pub trait WalletBackend<K>
+where
+	K: Keychain,
+{
+	/// Initialize with whatever stored credentials we have
+	fn open_with_credentials(&mut self) -> Result<(), Error>;
 
-	/// Return the URL of the check node
-	fn node_url(&self) -> &str;
+	/// Close wallet and remove any stored credentials (TBD)
+	fn close(&mut self) -> Result<(), Error>;
+
+	/// Return the keychain being used
+	fn keychain(&mut self) -> &mut K;
 
 	/// Return the outputs directly
 	fn outputs(&mut self) -> &mut HashMap<String, OutputData>;
@@ -65,7 +76,11 @@ pub trait WalletBackend {
 	fn get_output(&self, key_id: &Identifier) -> Option<&OutputData>;
 
 	/// Next child ID when we want to create a new output
-	fn next_child(&self, root_key_id: Identifier) -> u32;
+	/// Should also increment index
+	fn next_child(&mut self, root_key_id: Identifier) -> u32;
+
+	/// Return current details
+	fn details(&mut self) -> &mut WalletDetails;
 
 	/// Select spendable coins from the wallet
 	fn select_coins(
@@ -77,10 +92,62 @@ pub trait WalletBackend {
 		max_outputs: usize,
 		select_all: bool,
 	) -> Vec<OutputData>;
+
+	/// Attempt to restore the contents of a wallet from seed
+	fn restore(&mut self) -> Result<(), Error>;
+}
+
+/// Encapsulate all communication functions. No functions within libwallet
+/// should care about communication details
+pub trait WalletClient {
+	/// Return the URL of the check node
+	fn node_url(&self) -> &str;
+
+	/// Call the wallet API to create a coinbase transaction
+	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, Error>;
+
+	/// Send a transaction slate to another listening wallet and return result
+	/// TODO: Probably need a slate wrapper type
+	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, Error>;
+
+	/// Posts a transaction to a grin node
+	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error>;
+
+	/// retrieves the current tip from the specified grin node
+	fn get_chain_height(&self, addr: &str) -> Result<u64, Error>;
+
+	/// retrieve a list of outputs from the specified grin node
+	/// need "by_height" and "by_id" variants
+	fn get_outputs_from_node(
+		&self,
+		addr: &str,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<HashMap<pedersen::Commitment, String>, Error>;
+
+	/// Get any missing block hashes from node
+	fn get_missing_block_hashes_from_node(
+		&self,
+		addr: &str,
+		height: u64,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<
+		(
+			HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
+			HashMap<pedersen::Commitment, MerkleProofWrapper>,
+		),
+		Error,
+	>;
+
+	/// retrieve merkle proof for a commit from a node
+	fn get_merkle_proof_for_commit(
+		&self,
+		addr: &str,
+		commit: &str,
+	) -> Result<MerkleProofWrapper, Error>;
 }
 
 /// Information about an output that's being tracked by the wallet. Must be
-/// enough to reconstruct the commitment associated with the ouput when the
+/// enough to reconstruct the commitment associated with the output when the
 /// root private key is known.*/
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
@@ -103,6 +170,7 @@ pub struct OutputData {
 	pub is_coinbase: bool,
 	/// Hash of the block this output originated from.
 	pub block: Option<BlockIdentifier>,
+	/// Merkle proof
 	pub merkle_proof: Option<MerkleProofWrapper>,
 }
 
@@ -165,6 +233,7 @@ impl OutputData {
 		}
 	}
 
+	/// Mark an output as spent
 	pub fn mark_spent(&mut self) {
 		match self.status {
 			OutputStatus::Unspent => self.status = OutputStatus::Spent,
@@ -179,9 +248,13 @@ impl OutputData {
 /// broadcasted or mined).
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Ord, PartialOrd)]
 pub enum OutputStatus {
+	/// Unconfirmed
 	Unconfirmed,
+	/// Unspent
 	Unspent,
+	/// Locked
 	Locked,
+	/// Spent
 	Spent,
 }
 
@@ -196,10 +269,12 @@ impl fmt::Display for OutputStatus {
 	}
 }
 
+/// Wrapper for a merkle proof
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct MerkleProofWrapper(pub MerkleProof);
 
 impl MerkleProofWrapper {
+	/// Create
 	pub fn merkle_proof(&self) -> MerkleProof {
 		self.0.clone()
 	}
@@ -241,14 +316,17 @@ impl<'de> serde::de::Visitor<'de> for MerkleProofWrapperVisitor {
 	}
 }
 
+/// Block Identifier
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct BlockIdentifier(pub Hash);
 
 impl BlockIdentifier {
+	/// return hash
 	pub fn hash(&self) -> Hash {
 		self.0
 	}
 
+	/// convert to hex string
 	pub fn from_hex(hex: &str) -> Result<BlockIdentifier, Error> {
 		let hash = Hash::from_hex(hex).context(ErrorKind::GenericError("Invalid hex"))?;
 		Ok(BlockIdentifier(hash))
@@ -291,23 +369,19 @@ impl<'de> serde::de::Visitor<'de> for BlockIdentifierVisitor {
 	}
 }
 
-/// Amount in request to build a coinbase output.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum WalletReceiveRequest {
-	Coinbase(BlockFees),
-	PartialTransaction(String),
-	Finalize(String),
-}
-
 /// Fees in block to use for coinbase amount calculation
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct BlockFees {
+	/// fees
 	pub fees: u64,
+	/// height
 	pub height: u64,
+	/// key id
 	pub key_id: Option<Identifier>,
 }
 
 impl BlockFees {
+	/// return key id
 	pub fn key_id(&self) -> Option<Identifier> {
 		self.key_id.clone()
 	}
@@ -316,8 +390,11 @@ impl BlockFees {
 /// Response to build a coinbase output.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CbData {
+	/// Output
 	pub output: String,
+	/// Kernel
 	pub kernel: String,
+	/// Key Id
 	pub key_id: String,
 }
 
@@ -325,133 +402,63 @@ pub struct CbData {
 /// can add more fields here over time as needed
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct WalletInfo {
-	// height from which info was taken
-	pub current_height: u64,
-	// total amount in the wallet
+	/// height from which info was taken
+	pub last_confirmed_height: u64,
+	/// total amount in the wallet
 	pub total: u64,
-	// amount awaiting confirmation
+	/// amount awaiting confirmation
 	pub amount_awaiting_confirmation: u64,
-	// confirmed but locked
-	pub amount_confirmed_but_locked: u64,
-	// amount currently spendable
+	/// coinbases waiting for lock height
+	pub amount_immature: u64,
+	/// amount currently spendable
 	pub amount_currently_spendable: u64,
-	// amount locked by previous transactions
+	/// amount locked via previous transactions
 	pub amount_locked: u64,
-	// whether the data was confirmed against a live node
-	pub data_confirmed: bool,
-	// node confirming the data
-	pub data_confirmed_from: String,
 }
 
-#[derive(Debug)]
-pub struct Error {
-	inner: Context<ErrorKind>,
+/// Separate data for a wallet, containing fields
+/// that are needed but not necessarily represented
+/// via simple rows of OutputData
+/// If a wallet is restored from seed this is obvious
+/// lost and re-populated as well as possible
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct WalletDetails {
+	/// The last block height at which the wallet data
+	/// was confirmed against a node
+	pub last_confirmed_height: u64,
+	/// The last child index used
+	pub last_child_index: u32,
 }
 
-/// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Fail)]
-pub enum ErrorKind {
-	#[fail(display = "Not enough funds")]
-	NotEnoughFunds(u64),
-
-	#[fail(display = "Fee dispute: sender fee {}, recipient fee {}", sender_fee, recipient_fee)]
-	FeeDispute { sender_fee: u64, recipient_fee: u64 },
-
-	#[fail(
-		display = "Fee exceeds amount: sender amount {}, recipient fee {}",
-		sender_amount,
-		recipient_fee
-	)]
-	FeeExceedsAmount {
-		sender_amount: u64,
-		recipient_fee: u64,
-	},
-
-	#[fail(display = "Keychain error")]
-	Keychain,
-
-	#[fail(display = "Transaction error")]
-	Transaction,
-
-	#[fail(display = "Secp error")]
-	Secp,
-
-	#[fail(display = "LibWallet error")]
-	LibWalletError,
-
-	#[fail(display = "Wallet data error: {}", _0)]
-	FileWallet(&'static str),
-
-	/// An error in the format of the JSON structures exchanged by the wallet
-	#[fail(display = "JSON format error")]
-	Format,
-
-	#[fail(display = "I/O error")]
-	IO,
-
-	/// Error when contacting a node through its API
-	#[fail(display = "Node API error")]
-	Node,
-
-	/// Error originating from hyper.
-	#[fail(display = "Hyper error")]
-	Hyper,
-
-	/// Error originating from hyper uri parsing.
-	#[fail(display = "Uri parsing error")]
-	Uri,
-
-	#[fail(display = "Signature error")]
-	Signature(&'static str),
-
-	/// Attempt to use duplicate transaction id in separate transactions
-	#[fail(display = "Duplicate transaction ID error")]
-	DuplicateTransactionId,
-
-	/// Wallet seed already exists
-	#[fail(display = "Wallet seed exists error")]
-	WalletSeedExists,
-
-	/// Wallet seed doesn't exist
-	#[fail(display = "Wallet seed doesn't exist error")]
-	WalletSeedDoesntExist,
-
-	#[fail(display = "Generic error: {}", _0)]
-	GenericError(&'static str),
-}
-
-impl Fail for Error {
-	fn cause(&self) -> Option<&Fail> {
-		self.inner.cause()
-	}
-
-	fn backtrace(&self) -> Option<&Backtrace> {
-		self.inner.backtrace()
-	}
-}
-
-impl Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		Display::fmt(&self.inner, f)
-	}
-}
-
-impl Error {
-	pub fn kind(&self) -> ErrorKind {
-		*self.inner.get_context()
-	}
-}
-
-impl From<ErrorKind> for Error {
-	fn from(kind: ErrorKind) -> Error {
-		Error {
-			inner: Context::new(kind),
+impl Default for WalletDetails {
+	fn default() -> WalletDetails {
+		WalletDetails {
+			last_confirmed_height: 0,
+			last_child_index: 0,
 		}
 	}
 }
 
-impl From<Context<ErrorKind>> for Error {
-	fn from(inner: Context<ErrorKind>) -> Error {
-		Error { inner: inner }
-	}
+/// Dummy wrapper for the hex-encoded serialized transaction.
+#[derive(Serialize, Deserialize)]
+pub struct TxWrapper {
+	/// hex representation of transaction
+	pub tx_hex: String,
+}
+
+/// Send TX API Args
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SendTXArgs {
+	/// amount to send
+	pub amount: u64,
+	/// minimum confirmations
+	pub minimum_confirmations: u64,
+	/// destination url
+	pub dest: String,
+	/// Max number of outputs
+	pub max_outputs: usize,
+	/// whether to use all outputs (combine)
+	pub selection_strategy_is_use_all: bool,
+	/// dandelion control
+	pub fluff: bool,
 }
