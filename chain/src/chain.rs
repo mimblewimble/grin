@@ -430,7 +430,7 @@ impl Chain {
 		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			// TODO - is this rewind guaranteed to be redundant now?
-			extension.rewind(&header, &header)?;
+			extension.rewind(&header, &header, true, true, true)?;
 			extension.validate(&header, skip_rproofs)?;
 			Ok(())
 		})
@@ -505,7 +505,7 @@ pub fn set_txhashset_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Er
 
 			let mut txhashset = self.txhashset.write().unwrap();
 			txhashset::extending_readonly(&mut txhashset, |extension| {
-				extension.rewind(&header, &head_header)?;
+				extension.rewind(&header, &head_header, true, true, true)?;
 				extension.snapshot(&header)?;
 				Ok(())
 			})?;
@@ -558,9 +558,8 @@ pub fn set_txhashset_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Er
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			// TODO do we need to rewind here? We have no blocks to rewind
 			// (and we need them for the pos to unremove)
-			extension.rewind(&header, &header)?;
-			let (output_sum, kernel_sum) = extension.validate(&header, false)?;
-			extension.save_latest_block_sums(&header, output_sum, kernel_sum)?;
+			extension.rewind(&header, &header, true, true, true)?;
+			let (_output_sum, _kernel_sum) = extension.validate(&header, false)?;
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
@@ -829,7 +828,7 @@ fn setup_head(
 
 
 				let res = txhashset::extending(txhashset, &mut batch, |extension| {
-					extension.rewind(&header, &head_header)?;
+					extension.rewind(&header, &head_header, true, true, true)?;
 					extension.validate_roots(&header)?;
 					debug!(
 						LOGGER,

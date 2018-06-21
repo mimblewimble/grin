@@ -85,7 +85,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 
 	// validate the block itself
 	// we can do this now before interacting with the txhashset
-	let sums = validate_block(b, ctx)?;
+	let _sums = validate_block(b, ctx)?;
 
 	// header and block both valid, and we have a previous block
 	// so take the lock on the txhashset
@@ -101,7 +101,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 
 	// start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
-	let result = txhashset::extending(&mut txhashset, &mut batch, |mut extension| {
+	let _ = txhashset::extending(&mut txhashset, &mut batch, |mut extension| {
 		// First we rewind the txhashset extension if necessary
 		// to put it into a consistent state for validating the block.
 		// We can skip this step if the previous header is the latest header we saw.
@@ -110,21 +110,24 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		}
 		validate_block_via_txhashset(b, &mut extension)?;
 
-		trace!(
-			LOGGER,
-			"pipe: process_block: {} at {} is valid, save and append.",
-			b.hash(),
-			b.header.height,
-		);
-		add_block(b, &mut batch)?;
-		let h = update_head(b, &ctx, &mut batch)?;
-		if h.is_none() {
+		if !block_has_more_work(b, &ctx.head) {
 			extension.force_rollback();
 		}
-		Ok(h)
+		Ok(())
 	});
 
-	result
+	trace!(
+		LOGGER,
+		"pipe: process_block: {} at {} is valid, save and append.",
+		b.hash(),
+		b.header.height,
+	);
+	add_block(b, &mut batch)?;
+	let res = update_head(b, &ctx, &mut batch);
+	if res.is_ok() {
+		batch.commit()?;
+	}
+	res
 }
 
 /// Process the block header.
@@ -494,7 +497,7 @@ pub fn rewind_and_apply_fork(
 	);
 
 	// rewind the sum trees up to the forking block
-	ext.rewind(&forked_header, &head_header)?;
+	ext.rewind(&forked_header, &head_header, true, true, true)?;
 
 	trace!(
 		LOGGER,

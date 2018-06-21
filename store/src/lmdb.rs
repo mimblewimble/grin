@@ -183,6 +183,11 @@ impl<'a> Batch<'a> {
 		}
 	}
 
+	/// gets a value from the db, provided its key
+	pub fn get(&self, key: &[u8]) -> Result<Option<Vec<u8>>, Error> {
+		self.store.get(key)
+	}
+
 	/// Gets a `Readable` value from the db, provided its key, taking the
 	/// content of the current batch into account.
 	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {

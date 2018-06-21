@@ -287,7 +287,7 @@ impl<'a> Batch<'a> {
 			.delete(&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec()))
 	}
 
-	fn get_block_header_db(&self, h: &Hash) -> Result<BlockHeader, Error> {
+	pub fn get_block_header_db(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
@@ -308,7 +308,7 @@ impl<'a> Batch<'a> {
 	// the full block from the db (if the block is found).
 	fn get_block_input_bitmap_db(&self, bh: &Hash) -> Result<Bitmap, Error> {
 		if let Ok(Some(bytes)) = self.db
-			.get_ser(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
+			.get(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
 		{
 			Ok(Bitmap::deserialize(&bytes))
 		} else {
@@ -322,7 +322,7 @@ impl<'a> Batch<'a> {
 		}
 	}
 
-	fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
+	pub fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
 		{
 			let mut cache = self.block_input_bitmap_cache.write().unwrap();
 
@@ -408,6 +408,7 @@ impl<'a> Batch<'a> {
 		Ok(Batch {
 			store: self.store,
 			db: self.db.child()?,
+			block_input_bitmap_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
 		})
 	}
 }

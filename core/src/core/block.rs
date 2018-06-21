@@ -702,17 +702,17 @@ impl Block {
 				vec![prev_kernel_offset.clone()],
 			)?
 		};
-		let sum = self.verify_kernel_sums(self.header.overage(), block_kernel_offset)?;
+		let (_utxo_sum, kernel_sum) = self.verify_kernel_sums(self.header.overage(), block_kernel_offset)?;
 
 		// check the block header's total kernel sum
-		let total_sum = committed::sum_commits(vec![sum, prev_kernel_sum.clone()], vec![])?;
+		let total_sum = committed::sum_commits(vec![kernel_sum, prev_kernel_sum.clone()], vec![])?;
 		if total_sum != self.header.total_kernel_sum {
 			return Err(Error::InvalidTotalKernelSum);
 		}
 
 		self.verify_rangeproofs()?;
 		self.verify_kernel_signatures()?;
-		Ok(sum)
+		Ok(kernel_sum)
 	}
 
 	fn verify_weight(&self) -> Result<(), Error> {
