@@ -81,7 +81,9 @@ where
 	fn restore(&mut self) -> Result<(), Error>;
 }
 
-/// Batch trait to update the output data backend atomically
+/// Batch trait to update the output data backend atomically. Trying to use a
+/// batch after commit MAY result in a panic. Due to this being a trait, the
+/// commit method can't take ownership.
 pub trait WalletOutputBatch {
 	/// Add or update data about an output to the backend
 	fn save(&mut self, out: OutputData) -> Result<(), Error>;
@@ -96,7 +98,7 @@ pub trait WalletOutputBatch {
 	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error>;
 
 	/// Write the wallet data to backend file
-	fn commit(self) -> Result<(), Error>;
+	fn commit(&self) -> Result<(), Error>;
 }
 
 /// Encapsulate all communication functions. No functions within libwallet

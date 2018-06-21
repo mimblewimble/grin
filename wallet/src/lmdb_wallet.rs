@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::hash_map::Values;
+use std::ops::Deref;
 use std::sync::Arc;
 use std::{fs, path};
 
@@ -104,7 +106,7 @@ where
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, Error> {
 		Ok(Box::new(Batch {
 			store: self,
-			db: self.db.batch()?,
+			db: RefCell::new(Some(self.db.batch()?)),
 		}))
 	}
 
@@ -147,25 +149,25 @@ where
 /// discarded on error.
 pub struct Batch<'a, K: 'a> {
 	store: &'a LMDBBackend<K>,
-	db: store::Batch<'a>,
+	db: RefCell<Option<store::Batch<'a>>>,
 }
 
 #[allow(missing_docs)]
 impl<'a, K> WalletOutputBatch for Batch<'a, K> {
 	fn save(&mut self, out: OutputData) -> Result<(), Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut out.key_id.to_bytes().to_vec());
-		self.db.put_ser(&key, &out)?;
+		self.db.borrow().as_ref().unwrap().put_ser(&key, &out)?;
 		Ok(())
 	}
 
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
-		option_to_not_found(self.db.get_ser(&key)).map_err(|e| e.into())
+		option_to_not_found(self.db.borrow().as_ref().unwrap().get_ser(&key)).map_err(|e| e.into())
 	}
 
 	fn delete(&mut self, id: &Identifier) -> Result<(), Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
-		self.db.delete(&key)?;
+		self.db.borrow().as_ref().unwrap().delete(&key)?;
 		Ok(())
 	}
 
@@ -174,8 +176,9 @@ impl<'a, K> WalletOutputBatch for Batch<'a, K> {
 		self.save(out.clone())
 	}
 
-	fn commit(self) -> Result<(), Error> {
-		self.db.commit()?;
+	fn commit(&self) -> Result<(), Error> {
+		let db = self.db.replace(None);
+		db.unwrap().commit()?;
 		Ok(())
 	}
 }

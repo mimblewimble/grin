@@ -82,7 +82,7 @@ impl<'a> WalletOutputBatch for FileBatch<'a> {
 		Ok(())
 	}
 
-	fn commit(self) -> Result<(), libwallet::Error> {
+	fn commit(&self) -> Result<(), libwallet::Error> {
 		let mut data_file = File::create(self.data_file_path.clone())
 			.context(libwallet::ErrorKind::CallbackImpl("Could not create"))?;
 		let mut outputs = self.outputs.values().collect::<Vec<_>>();
