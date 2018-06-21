@@ -46,7 +46,6 @@ pub struct PruneList {
 	path: Option<String>,
 	/// Bitmap representing pruned root node positions.
 	bitmap: Bitmap,
-	last_pos: u64,
 }
 
 impl PruneList {
@@ -55,7 +54,6 @@ impl PruneList {
 		PruneList {
 			path: None,
 			bitmap: Bitmap::create(),
-			last_pos: 0,
 		}
 	}
 
@@ -70,12 +68,9 @@ impl PruneList {
 			Bitmap::create()
 		};
 
-		let last_pos = bitmap.iter().last().unwrap_or(0) as u64;
-
 		Ok(PruneList {
 			path: Some(path.clone()),
 			bitmap,
-			last_pos,
 		})
 	}
 
@@ -87,9 +82,6 @@ impl PruneList {
 			}
 		}
 		self.bitmap.andnot_inplace(&leaf_pos);
-		// Make sure we update last_pos to be accurate
-		// (we may have just removed previous last_pos)
-		self.last_pos = self.bitmap.iter().last().unwrap_or(0) as u64;
 	}
 
 	pub fn flush(&mut self) -> io::Result<()> {
@@ -113,7 +105,7 @@ impl PruneList {
 	}
 
 	pub fn get_total_shift(&self) -> u64 {
-		self.get_shift(self.last_pos + 1)
+		self.get_shift(self.bitmap.maximum() as u64 + 1)
 	}
 
 	/// Computes by how many positions a node at pos should be shifted given the
@@ -177,11 +169,6 @@ impl PruneList {
 			} else {
 				if !self.is_pruned(current) {
 					self.bitmap.add(current as u32);
-
-					// Update last_pos here if necessary.
-					if current > self.last_pos {
-						self.last_pos = current;
-					}
 				}
 				break;
 			}
@@ -204,11 +191,11 @@ impl PruneList {
 	/// either directly (pos contained in the prune list itself)
 	/// or indirectly (pos is beneath a pruned root).
 	pub fn is_pruned(&self, pos: u64) -> bool {
-		if self.last_pos == 0 {
+		if self.bitmap.is_empty() {
 			return false;
 		}
 
-		let path = path(pos, self.last_pos);
+		let path = path(pos, self.bitmap.maximum() as u64);
 		path.into_iter().any(|x| self.bitmap.contains(x as u32))
 	}
 
