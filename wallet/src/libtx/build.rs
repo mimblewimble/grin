@@ -32,6 +32,7 @@ use core::core::pmmr::MerkleProof;
 use core::core::{Input, Output, OutputFeatures, ProofMessageElements, Transaction, TxKernel};
 use keychain::{self, BlindSum, BlindingFactor, Identifier, Keychain};
 use libtx::{aggsig, proof};
+use util::secp::pedersen::Commitment;
 use util::LOGGER;
 
 /// Context information available to transaction combinators.
@@ -68,6 +69,29 @@ where
 	)
 }
 
+// "Spend" pair of outputs with a single aggregate key.
+// We do not need to know the individual keys to be able to spend the pair.
+fn entangled_inputs<K>(
+	commit1: Commitment,
+	commit2: Commitment,
+	key: BlindingFactor,
+) -> Box<Append<K>>
+where
+	K: Keychain,
+{
+	Box::new(
+		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+			let input1 = Input::new(OutputFeatures::DEFAULT_OUTPUT, commit1, None, None);
+			let input2 = Input::new(OutputFeatures::DEFAULT_OUTPUT, commit2, None, None);
+			(
+				tx.with_input(input1).with_input(input2),
+				kern,
+				sum.sub_blinding_factor(key),
+			)
+		},
+	)
+}
+
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
 pub fn input<K>(value: u64, key_id: Identifier) -> Box<Append<K>>
@@ -76,7 +100,7 @@ where
 {
 	debug!(
 		LOGGER,
-		"Building input (spending regular output): {}, {}", value, key_id
+		"Building input (spending regular output): {}, {}", value, key_id,
 	);
 	build_input(value, OutputFeatures::DEFAULT_OUTPUT, None, None, key_id)
 }
@@ -357,5 +381,75 @@ mod test {
 		).unwrap();
 
 		tx.validate().unwrap();
+	}
+
+	#[test]
+	fn test_entangled_outputs() {
+		// using a keychain here for convenience but in reality
+		// we would generate an initial key K and then split it into K=K1+K2
+		// [tbd - can this be done such that K1 and K2 are never exposed?]
+		let keychain = ExtKeychain::from_random_seed().unwrap();
+		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id2 = keychain.derive_key_id(2).unwrap();
+
+		let key = {
+			let key1 = keychain.derived_key(&key_id1).unwrap();
+			let key2 = keychain.derived_key(&key_id2).unwrap();
+			keychain.secp().blind_sum(vec![key1, key2], vec![]).unwrap()
+		};
+
+		// At this point key = key1 + key2 (where key1 and key2 are in our keychain for
+		// convenience). But imagine we have a scenario where Alice and Bob interact
+		// to construct these where neither knows either split keys and they only
+		// know the single aggregate key. Neither party can spend Out1 or Out2
+		// individually. Out1 and Out2 can only be spent together using the single
+		// key.
+
+		// Construct a tx that includes Out1 that we wish to encumber with a timelock.
+		let key_id3 = keychain.derive_key_id(3).unwrap();
+		let tx1 = transaction(
+			vec![input(3, key_id3), output(2, key_id1.clone()), with_fee(1)],
+			&keychain,
+		).unwrap();
+		assert!(tx1.validate().is_ok());
+
+		// Now construct a second tx including Out2, but with a lock_height on the tx
+		// itself.
+		let key_id4 = keychain.derive_key_id(4).unwrap();
+		let tx2 = transaction(
+			vec![
+				input(30, key_id4),
+				output(20, key_id2.clone()),
+				with_fee(10),
+				with_lock_height(1_000),
+			],
+			&keychain,
+		).unwrap();
+		assert!(tx2.validate().is_ok());
+
+		// These are the commitments from outputs 1 and 2 above.
+		let commit1 = keychain.commit(2, &key_id1).unwrap();
+		let commit2 = keychain.commit(20, &key_id2).unwrap();
+
+		// At this point we have two outputs (using key1 and key2)
+
+		// Now show we can spend the two outputs Out1 and Out2 _together_
+		// if we know the two commitments and the original aggregate key.
+		// Note: we can only do this _after_ the tx lock_height from Tx2 has passed.
+		//
+		// Out1 (confirmed and on-chain) can *only* be spent
+		// after the lock_height specified in Tx2.
+		//
+		let blind = BlindingFactor::from_secret_key(key);
+		let key_id5 = keychain.derive_key_id(5).unwrap();
+		let tx3 = transaction(
+			vec![
+				entangled_inputs(commit1, commit2, blind),
+				output(21, key_id5),
+				with_fee(1),
+			],
+			&keychain,
+		).unwrap();
+		assert!(tx3.validate().is_ok());
 	}
 }
