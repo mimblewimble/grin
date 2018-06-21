@@ -50,10 +50,9 @@ fn create_chain_sim(diff: u64) -> Vec<Result<(u64, Difficulty), TargetError>> {
 		time::get_time().sec,
 		Difficulty::from_num(diff)
 	);
-	vec![Ok((
-		time::get_time().sec as u64,
-		Difficulty::from_num(diff),
-	))]
+	vec![
+		Ok((time::get_time().sec as u64, Difficulty::from_num(diff))),
+	]
 }
 
 // Adds another 'block' to the iterator, so to speak, with difficulty calculated

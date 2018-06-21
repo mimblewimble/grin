@@ -14,8 +14,8 @@
 
 //! short ids for compact blocks
 
-use std::cmp::min;
 use std::cmp::Ordering;
+use std::cmp::min;
 
 use byteorder::{ByteOrder, LittleEndian};
 use siphasher::sip::SipHasher24;

@@ -24,6 +24,7 @@
 extern crate bitflags;
 extern crate byteorder;
 extern crate lmdb_zero as lmdb;
+extern crate croaring;
 extern crate lru_cache;
 extern crate serde;
 #[macro_use]

@@ -17,6 +17,7 @@
 extern crate blake2_rfc as blake2;
 #[macro_use]
 extern crate clap;
+extern crate ctrlc;
 extern crate cursive;
 extern crate daemonize;
 extern crate serde;
@@ -39,6 +40,7 @@ pub mod tui;
 
 use std::env::current_dir;
 use std::process::exit;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -103,17 +105,33 @@ fn start_server_tui(config: servers::ServerConfig) {
 	if config.run_tui.is_some() && config.run_tui.unwrap() {
 		println!("Starting GRIN in UI mode...");
 		servers::Server::start(config, |serv: Arc<servers::Server>| {
+			let running = Arc::new(AtomicBool::new(true));
+			let r = running.clone();
 			let _ = thread::Builder::new()
 				.name("ui".to_string())
 				.spawn(move || {
 					let mut controller = ui::Controller::new().unwrap_or_else(|e| {
 						panic!("Error loading UI controller: {}", e);
 					});
-					controller.run(serv.clone());
+					controller.run(serv.clone(), r);
 				});
+			ctrlc::set_handler(move || {
+				running.store(false, Ordering::SeqCst);
+			}).expect("Error setting Ctrl-C handler");
 		}).unwrap();
 	} else {
-		servers::Server::start(config, |_| {}).unwrap();
+		servers::Server::start(config, |serv: Arc<servers::Server>| {
+			let running = Arc::new(AtomicBool::new(true));
+			let r = running.clone();
+			ctrlc::set_handler(move || {
+				r.store(false, Ordering::SeqCst);
+			}).expect("Error setting Ctrl-C handler");
+			while running.load(Ordering::SeqCst) {
+				thread::sleep(Duration::from_secs(1));
+			}
+			warn!(LOGGER, "Received SIGINT (Ctrl+C).");
+			serv.stop();
+		}).unwrap();
 	}
 }
 

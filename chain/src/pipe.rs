@@ -26,7 +26,7 @@ use core::global;
 use grin_store;
 use store;
 use txhashset;
-use types::{BlockSums, Error, Options, Tip};
+use types::{Error, Options, Tip};
 use util::LOGGER;
 
 /// Contextual information required to process a new block and either reject or
@@ -101,7 +101,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 
 	// start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
-	txhashset::extending(&mut txhashset, &mut batch, |mut extension| {
+	let result = txhashset::extending(&mut txhashset, &mut batch, |mut extension| {
 		// First we rewind the txhashset extension if necessary
 		// to put it into a consistent state for validating the block.
 		// We can skip this step if the previous header is the latest header we saw.
@@ -110,19 +110,21 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		}
 		validate_block_via_txhashset(b, &mut extension)?;
 
-		if !block_has_more_work(b, &ctx.head) {
+		trace!(
+			LOGGER,
+			"pipe: process_block: {} at {} is valid, save and append.",
+			b.hash(),
+			b.header.height,
+		);
+		add_block(b, &mut batch)?;
+		let h = update_head(b, &ctx, &mut batch)?;
+		if h.is_none() {
 			extension.force_rollback();
 		}
-		Ok(())
-	})?;
+		Ok(h)
+	});
 
-	batch.save_block_sums(&b.hash(), &sums)?;
-	add_block(b, &mut batch)?;
-	let res = update_head(b, &ctx, &mut batch);
-	if res.is_ok() {
-		batch.commit()?;
-	}
-	res
+	result
 }
 
 /// Process the block header.
@@ -307,22 +309,11 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	Ok(())
 }
 
-fn validate_block(b: &Block, ctx: &BlockContext) -> Result<BlockSums, Error> {
-	// If this is the first block then we have no previous block sums stored.
-	let block_sums = if b.header.height == 1 {
-		BlockSums::default()
-	} else {
-		ctx.store.get_block_sums(&b.header.previous)?
-	};
-
-	let (new_output_sum, new_kernel_sum) =
-		b.validate(&block_sums.output_sum, &block_sums.kernel_sum)
-			.map_err(&Error::InvalidBlockProof)?;
-
-	Ok(BlockSums {
-		output_sum: new_output_sum,
-		kernel_sum: new_kernel_sum,
-	})
+fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+	let prev = ctx.store.get_block_header(&b.header.previous)?;
+	b.validate(&prev.total_kernel_offset, &prev.total_kernel_sum)
+		.map_err(&Error::InvalidBlockProof)?;
+	Ok(())
 }
 
 /// Fully validate the block by applying it to the txhashset extension
@@ -364,6 +355,10 @@ fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Re
 
 		return Err(Error::InvalidRoot);
 	}
+	let sizes = ext.sizes();
+	if b.header.output_mmr_size != sizes.0 || b.header.kernel_mmr_size != sizes.2 {
+		return Err(Error::InvalidMMRSize);
+	}
 
 	Ok(())
 }
@@ -372,7 +367,11 @@ fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Re
 fn add_block(b: &Block, batch: &store::Batch) -> Result<(), Error> {
 	batch
 		.save_block(b)
-		.map_err(|e| Error::StoreErr(e, "pipe save block".to_owned()))
+		.map_err(|e| Error::StoreErr(e, "pipe save block".to_owned()))?;
+	batch
+		.save_block_input_bitmap(&b)
+		.map_err(|e| Error::StoreErr(e, "pipe save block input bitmap".to_owned()))?;
+	Ok(())
 }
 
 /// Officially adds the block header to our header chain.
@@ -470,40 +469,41 @@ pub fn rewind_and_apply_fork(
 	// extending a fork, first identify the block where forking occurred
 	// keeping the hashes of blocks along the fork
 	let mut current = b.header.previous;
-	let mut hashes = vec![];
+	let mut fork_hashes = vec![];
 	loop {
 		let curr_header = store.get_block_header(&current)?;
 
 		if let Ok(_) = store.is_on_current_chain(&curr_header) {
 			break;
 		} else {
-			hashes.insert(0, (curr_header.height, curr_header.hash()));
+			fork_hashes.insert(0, (curr_header.height, curr_header.hash()));
 			current = curr_header.previous;
 		}
 	}
 
-	let forked_block = store.get_block_header(&current)?;
+	let head_header = store.head_header()?;
+	let forked_header = store.get_block_header(&current)?;
 
 	trace!(
 		LOGGER,
 		"rewind_and_apply_fork @ {} [{}], was @ {} [{}]",
-		forked_block.height,
-		forked_block.hash(),
+		forked_header.height,
+		forked_header.hash(),
 		b.header.height,
 		b.header.hash()
 	);
 
 	// rewind the sum trees up to the forking block
-	ext.rewind(&forked_block)?;
+	ext.rewind(&forked_header, &head_header)?;
 
 	trace!(
 		LOGGER,
 		"rewind_and_apply_fork: blocks on fork: {:?}",
-		hashes,
+		fork_hashes,
 	);
 
 	// apply all forked blocks, including this new one
-	for (_, h) in hashes {
+	for (_, h) in fork_hashes {
 		let fb = store
 			.get_block(&h)
 			.map_err(|e| Error::StoreErr(e, format!("getting forked blocks")))?;

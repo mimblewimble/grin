@@ -75,6 +75,8 @@ pub enum Error {
 	InvalidBlockHeight,
 	/// One of the root hashes in the block is invalid
 	InvalidRoot,
+	/// One of the MMR sizes in the block header is invalid
+	InvalidMMRSize,
 	/// Error from underlying keychain impl
 	Keychain(keychain::Error),
 	/// Error from underlying secp lib
@@ -83,6 +85,10 @@ pub enum Error {
 	AlreadySpent(Commitment),
 	/// An output with that commitment already exists (should be unique)
 	DuplicateCommitment(Commitment),
+	/// Attempt to spend a coinbase output before it sufficiently matures.
+	ImmatureCoinbase,
+	/// Error validating a Merkle proof (coinbase output)
+	MerkleProof,
 	/// output not found
 	OutputNotFound,
 	/// output spent
@@ -340,3 +346,6 @@ impl Default for BlockSums {
 		}
 	}
 }
+
+
+

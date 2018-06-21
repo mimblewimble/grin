@@ -48,11 +48,8 @@ pub enum ErrorKind {
 	},
 
 	/// Fee Exceeds amount
-	#[fail(
-		display = "Fee exceeds amount: sender amount {}, recipient fee {}",
-		sender_amount,
-		recipient_fee
-	)]
+	#[fail(display = "Fee exceeds amount: sender amount {}, recipient fee {}", sender_amount,
+	       recipient_fee)]
 	FeeExceedsAmount {
 		/// sender amount
 		sender_amount: u64,

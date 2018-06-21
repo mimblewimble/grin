@@ -35,7 +35,7 @@ use chain::store::ChainStore;
 use chain::txhashset;
 use chain::txhashset::TxHashSet;
 use core::core::hash::Hashed;
-use core::core::pmmr::MerkleProof;
+use core::core::merkle_proof::MerkleProof;
 use pool::*;
 
 use keychain::Keychain;
@@ -57,7 +57,7 @@ impl ChainAdapter {
 		let chain_store =
 			ChainStore::new(db_env).map_err(|e| format!("failed to init chain_store, {:?}", e))?;
 		let store = Arc::new(chain_store);
-		let txhashset = TxHashSet::open(target_dir.clone(), store.clone())
+		let txhashset = TxHashSet::open(target_dir.clone(), store.clone(), None)
 			.map_err(|e| format!("failed to init txhashset, {}", e))?;
 
 		Ok(ChainAdapter {
@@ -73,13 +73,11 @@ impl BlockChain for ChainAdapter {
 		txs: Vec<Transaction>,
 		pre_tx: Option<Transaction>,
 	) -> Result<Vec<Transaction>, PoolError> {
-		let header = self.store.head_header().unwrap();
 		let mut txhashset = self.txhashset.write().unwrap();
 		let res = txhashset::extending_readonly(&mut txhashset, |extension| {
-			let valid_txs = extension.validate_raw_txs(txs, pre_tx, header.height)?;
+			let valid_txs = extension.validate_raw_txs(txs, pre_tx)?;
 			Ok(valid_txs)
 		}).map_err(|e| PoolError::Other(format!("Error: test chain adapter: {:?}", e)))?;
-
 		Ok(res)
 	}
 

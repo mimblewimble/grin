@@ -15,116 +15,15 @@
 //! PMMR tests
 #[macro_use]
 extern crate grin_core as core;
+extern crate croaring;
+
+mod vec_backend;
 
 use core::core::hash::Hash;
-use core::core::pmmr::{self, Backend, MerkleProof, PruneList, PMMR};
-use core::ser::{self, Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
-
-/// Simple MMR backend implementation based on a Vector. Pruning does not
-/// compact the Vec itself.
-#[derive(Clone, Debug)]
-pub struct VecBackend<T>
-where
-	T: PMMRable,
-{
-	/// Backend elements
-	pub elems: Vec<Option<(Hash, Option<T>)>>,
-	/// Positions of removed elements
-	pub remove_list: Vec<u64>,
-}
-
-impl<T> Backend<T> for VecBackend<T>
-where
-	T: PMMRable,
-{
-	fn append(&mut self, _position: u64, data: Vec<(Hash, Option<T>)>) -> Result<(), String> {
-		self.elems.append(&mut map_vec!(data, |d| Some(d.clone())));
-		Ok(())
-	}
-
-	fn get_hash(&self, position: u64) -> Option<Hash> {
-		if self.remove_list.contains(&position) {
-			None
-		} else {
-			if let Some(ref elem) = self.elems[(position - 1) as usize] {
-				Some(elem.0)
-			} else {
-				None
-			}
-		}
-	}
-
-	fn get_data(&self, position: u64) -> Option<T> {
-		if self.remove_list.contains(&position) {
-			None
-		} else {
-			if let Some(ref elem) = self.elems[(position - 1) as usize] {
-				elem.1.clone()
-			} else {
-				None
-			}
-		}
-	}
-
-	fn get_from_file(&self, position: u64) -> Option<Hash> {
-		if let Some(ref x) = self.elems[(position - 1) as usize] {
-			Some(x.0)
-		} else {
-			None
-		}
-	}
-
-	fn get_data_from_file(&self, position: u64) -> Option<T> {
-		if let Some(ref x) = self.elems[(position - 1) as usize] {
-			x.1.clone()
-		} else {
-			None
-		}
-	}
-
-	fn remove(&mut self, positions: Vec<u64>, _index: u32) -> Result<(), String> {
-		for n in positions {
-			self.remove_list.push(n)
-		}
-		Ok(())
-	}
-
-	fn rewind(&mut self, position: u64, _index: u32) -> Result<(), String> {
-		self.elems = self.elems[0..(position as usize) + 1].to_vec();
-		Ok(())
-	}
-
-	fn get_data_file_path(&self) -> String {
-		"".to_string()
-	}
-
-	fn dump_stats(&self) {}
-}
-
-impl<T> VecBackend<T>
-where
-	T: PMMRable,
-{
-	/// Instantiates a new VecBackend<T>
-	pub fn new() -> VecBackend<T> {
-		VecBackend {
-			elems: vec![],
-			remove_list: vec![],
-		}
-	}
-
-	/// Current number of elements in the underlying Vec.
-	pub fn used_size(&self) -> usize {
-		let mut usz = self.elems.len();
-		for (idx, _) in self.elems.iter().enumerate() {
-			let idx = idx as u64;
-			if self.remove_list.contains(&idx) {
-				usz -= 1;
-			}
-		}
-		usz
-	}
-}
+use core::core::pmmr::{self, PMMR};
+use core::core::prune_list::PruneList;
+use core::ser::PMMRIndexHashable;
+use vec_backend::{TestElem, VecBackend};
 
 #[test]
 fn some_all_ones() {
@@ -297,124 +196,6 @@ fn some_peaks() {
 			1048053, 1048308, 1048435, 1048498, 1048529, 1048544, 1048551, 1048554, 1048555,
 		],
 	);
-}
-
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-struct TestElem([u32; 4]);
-
-impl PMMRable for TestElem {
-	fn len() -> usize {
-		16
-	}
-}
-
-impl Writeable for TestElem {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u32(self.0[0])?;
-		writer.write_u32(self.0[1])?;
-		writer.write_u32(self.0[2])?;
-		writer.write_u32(self.0[3])
-	}
-}
-
-impl Readable for TestElem {
-	fn read(reader: &mut Reader) -> Result<TestElem, Error> {
-		Ok(TestElem([
-			reader.read_u32()?,
-			reader.read_u32()?,
-			reader.read_u32()?,
-			reader.read_u32()?,
-		]))
-	}
-}
-
-#[test]
-fn empty_merkle_proof() {
-	let proof = MerkleProof::empty();
-	assert_eq!(proof.verify(), false);
-}
-
-#[test]
-fn pmmr_merkle_proof() {
-	// 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3
-
-	let mut ba = VecBackend::new();
-	let mut pmmr = PMMR::new(&mut ba);
-
-	pmmr.push(TestElem([0, 0, 0, 1])).unwrap();
-	assert_eq!(pmmr.last_pos, 1);
-	let proof = pmmr.merkle_proof(1).unwrap();
-	let root = pmmr.root();
-	assert_eq!(proof.peaks, [root]);
-	assert!(proof.path.is_empty());
-	assert!(proof.verify());
-
-	// push two more elements into the PMMR
-	pmmr.push(TestElem([0, 0, 0, 2])).unwrap();
-	pmmr.push(TestElem([0, 0, 0, 3])).unwrap();
-	assert_eq!(pmmr.last_pos, 4);
-
-	let proof1 = pmmr.merkle_proof(1).unwrap();
-	assert_eq!(proof1.peaks.len(), 2);
-	assert_eq!(proof1.path.len(), 1);
-	assert!(proof1.verify());
-
-	let proof2 = pmmr.merkle_proof(2).unwrap();
-	assert_eq!(proof2.peaks.len(), 2);
-	assert_eq!(proof2.path.len(), 1);
-	assert!(proof2.verify());
-
-	// check that we cannot generate a merkle proof for pos 3 (not a leaf node)
-	assert_eq!(
-		pmmr.merkle_proof(3).err(),
-		Some(format!("not a leaf at pos 3"))
-	);
-
-	let proof4 = pmmr.merkle_proof(4).unwrap();
-	assert_eq!(proof4.peaks.len(), 2);
-	assert!(proof4.path.is_empty());
-	assert!(proof4.verify());
-
-	// now add a few more elements to the PMMR to build a larger merkle proof
-	for x in 4..1000 {
-		pmmr.push(TestElem([0, 0, 0, x])).unwrap();
-	}
-	let proof = pmmr.merkle_proof(1).unwrap();
-	assert_eq!(proof.peaks.len(), 8);
-	assert_eq!(proof.path.len(), 9);
-	assert!(proof.verify());
-}
-
-#[test]
-fn pmmr_merkle_proof_prune_and_rewind() {
-	let mut ba = VecBackend::new();
-	let mut pmmr = PMMR::new(&mut ba);
-	pmmr.push(TestElem([0, 0, 0, 1])).unwrap();
-	pmmr.push(TestElem([0, 0, 0, 2])).unwrap();
-	let proof = pmmr.merkle_proof(2).unwrap();
-
-	// now prune an element and check we can still generate
-	// the correct Merkle proof for the other element (after sibling pruned)
-	pmmr.prune(1, 1).unwrap();
-	let proof_2 = pmmr.merkle_proof(2).unwrap();
-	assert_eq!(proof, proof_2);
-}
-
-#[test]
-fn merkle_proof_ser_deser() {
-	let mut ba = VecBackend::new();
-	let mut pmmr = PMMR::new(&mut ba);
-	for x in 0..15 {
-		pmmr.push(TestElem([0, 0, 0, x])).unwrap();
-	}
-	let proof = pmmr.merkle_proof(9).unwrap();
-	assert!(proof.verify());
-
-	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &proof).expect("serialization failed");
-	let proof_2: MerkleProof = ser::deserialize(&mut &vec[..]).unwrap();
-
-	assert_eq!(proof, proof_2);
 }
 
 #[test]
@@ -591,62 +372,74 @@ fn pmmr_prune() {
 		sz = pmmr.unpruned_size();
 	}
 
+	// First check the initial numbers of elements.
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 0);
+
 	// pruning a leaf with no parent should do nothing
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(16, 0).unwrap();
+		pmmr.prune(16).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.used_size(), 16);
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 1);
 
 	// pruning leaves with no shared parent just removes 1 element
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(2, 0).unwrap();
+		pmmr.prune(2).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.used_size(), 15);
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 2);
 
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(4, 0).unwrap();
+		pmmr.prune(4).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.used_size(), 14);
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 3);
 
 	// pruning a non-leaf node has no effect
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(3, 0).unwrap_err();
+		pmmr.prune(3).unwrap_err();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.used_size(), 14);
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 3);
 
-	// pruning sibling removes subtree
+	// TODO - no longer true (leaves only now) - pruning sibling removes subtree
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(5, 0).unwrap();
+		pmmr.prune(5).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.used_size(), 12);
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 4);
 
-	// pruning all leaves under level >1 removes all subtree
+	// TODO - no longeer true (leaves only now) - pruning all leaves under level >1
+	// removes all subtree
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
-		pmmr.prune(1, 0).unwrap();
+		pmmr.prune(1).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.used_size(), 9);
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 5);
 
 	// pruning everything should only leave us with a single peak
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
 		for n in 1..16 {
-			let _ = pmmr.prune(n, 0);
+			let _ = pmmr.prune(n);
 		}
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.used_size(), 1);
+	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.remove_list.len(), 9);
 }
 
 #[test]
@@ -990,11 +783,11 @@ fn check_elements_from_insertion_index() {
 	assert_eq!(res.1[349].0[3], 999);
 
 	// pruning a few nodes should get consistent results
-	pmmr.prune(pmmr::insertion_to_pmmr_index(650), 0).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(651), 0).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(800), 0).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(900), 0).unwrap();
-	pmmr.prune(pmmr::insertion_to_pmmr_index(998), 0).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(650)).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(651)).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(800)).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(900)).unwrap();
+	pmmr.prune(pmmr::insertion_to_pmmr_index(998)).unwrap();
 	let res = pmmr.elements_from_insertion_index(650, 1000);
 	assert_eq!(res.0, 999);
 	assert_eq!(res.1.len(), 345);

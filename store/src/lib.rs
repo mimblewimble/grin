@@ -21,6 +21,7 @@
 #![warn(missing_docs)]
 
 extern crate byteorder;
+extern crate croaring;
 extern crate env_logger;
 extern crate libc;
 extern crate lmdb_zero;
@@ -34,7 +35,9 @@ extern crate grin_core as core;
 extern crate grin_util as util;
 
 mod lmdb;
+pub mod leaf_set;
 pub mod pmmr;
+pub mod rm_log;
 pub mod types;
 
 const SEP: u8 = ':' as u8;

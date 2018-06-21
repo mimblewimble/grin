@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate croaring;
 extern crate env_logger;
 extern crate grin_core as core;
 extern crate grin_store as store;
 extern crate time;
 
 use std::fs;
+
+use croaring::Bitmap;
 
 use core::core::pmmr::{Backend, PMMR};
 use core::ser::{Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
@@ -26,7 +29,7 @@ use store::types::prune_noop;
 #[test]
 fn pmmr_append() {
 	let (data_dir, elems) = setup("append");
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
 
 	// adding first set of 4 elements and sync
 	let mut mmr_size = load(0, &elems[0..4], &mut backend);
@@ -76,7 +79,7 @@ fn pmmr_compact_leaf_sibling() {
 	let (data_dir, elems) = setup("compact_leaf_sibling");
 
 	// setup the mmr store with all elements
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
 	let mmr_size = load(0, &elems[..], &mut backend);
 	backend.sync().unwrap();
 
@@ -96,10 +99,10 @@ fn pmmr_compact_leaf_sibling() {
 	// prune pos 1
 	{
 		let mut pmmr = PMMR::at(&mut backend, mmr_size);
-		pmmr.prune(1, 1).unwrap();
+		pmmr.prune(1).unwrap();
 
 		// prune pos 8 as well to push the remove list past the cutoff
-		pmmr.prune(8, 1).unwrap();
+		pmmr.prune(8).unwrap();
 	}
 	backend.sync().unwrap();
 
@@ -120,7 +123,9 @@ fn pmmr_compact_leaf_sibling() {
 	assert_eq!(backend.get_from_file(1).unwrap(), pos_1_hash);
 
 	// aggressively compact the PMMR files
-	backend.check_compact(1, 2, &prune_noop).unwrap();
+	backend
+		.check_compact(1, &Bitmap::create(), &Bitmap::create(), &prune_noop)
+		.unwrap();
 
 	// check pos 1, 2, 3 are in the state we expect after compacting
 	{
@@ -146,7 +151,7 @@ fn pmmr_prune_compact() {
 	let (data_dir, elems) = setup("prune_compact");
 
 	// setup the mmr store with all elements
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
 	let mmr_size = load(0, &elems[..], &mut backend);
 	backend.sync().unwrap();
 
@@ -159,9 +164,9 @@ fn pmmr_prune_compact() {
 	// pruning some choice nodes
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-		pmmr.prune(1, 1).unwrap();
-		pmmr.prune(4, 1).unwrap();
-		pmmr.prune(5, 1).unwrap();
+		pmmr.prune(1).unwrap();
+		pmmr.prune(4).unwrap();
+		pmmr.prune(5).unwrap();
 	}
 	backend.sync().unwrap();
 
@@ -176,7 +181,9 @@ fn pmmr_prune_compact() {
 	}
 
 	// compact
-	backend.check_compact(2, 2, &prune_noop).unwrap();
+	backend
+		.check_compact(2, &Bitmap::create(), &Bitmap::create(), &prune_noop)
+		.unwrap();
 
 	// recheck the root and stored data
 	{
@@ -194,7 +201,7 @@ fn pmmr_reload() {
 	let (data_dir, elems) = setup("reload");
 
 	// set everything up with an initial backend
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
 
 	let mmr_size = load(0, &elems[..], &mut backend);
 
@@ -215,23 +222,27 @@ fn pmmr_reload() {
 		// prune a node so we have prune data
 		{
 			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.prune(1, 1).unwrap();
+			pmmr.prune(1).unwrap();
 		}
 		backend.sync().unwrap();
 
 		// now check and compact the backend
-		backend.check_compact(1, 2, &prune_noop).unwrap();
+		backend
+			.check_compact(1, &Bitmap::create(), &Bitmap::create(), &prune_noop)
+			.unwrap();
 		backend.sync().unwrap();
 
 		// prune another node to force compact to actually do something
 		{
 			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.prune(4, 1).unwrap();
-			pmmr.prune(2, 1).unwrap();
+			pmmr.prune(4).unwrap();
+			pmmr.prune(2).unwrap();
 		}
 		backend.sync().unwrap();
 
-		backend.check_compact(1, 2, &prune_noop).unwrap();
+		backend
+			.check_compact(4, &Bitmap::create(), &Bitmap::create(), &prune_noop)
+			.unwrap();
 		backend.sync().unwrap();
 
 		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
@@ -239,7 +250,7 @@ fn pmmr_reload() {
 		// prune some more to get rm log data
 		{
 			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.prune(5, 1).unwrap();
+			pmmr.prune(5).unwrap();
 		}
 		backend.sync().unwrap();
 		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
@@ -248,7 +259,7 @@ fn pmmr_reload() {
 	// create a new backend referencing the data files
 	// and check everything still works as expected
 	{
-		let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
+		let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
 		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
 		{
 			let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
@@ -259,8 +270,8 @@ fn pmmr_reload() {
 		assert_eq!(backend.get_hash(1), None);
 		assert_eq!(backend.get_hash(2), None);
 
-		// pos 3 is removed (via prune list)
-		assert_eq!(backend.get_hash(3), None);
+		// pos 3 is "removed" but we keep the hash around for non-leaf pos.
+		assert_eq!(backend.get_hash(3), Some(pos_3_hash));
 
 		// pos 4 is removed (via prune list)
 		assert_eq!(backend.get_hash(4), None);
@@ -286,7 +297,7 @@ fn pmmr_reload() {
 #[test]
 fn pmmr_rewind() {
 	let (data_dir, elems) = setup("rewind");
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone()).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
 
 	// adding elements and keeping the corresponding root
 	let mut mmr_size = load(0, &elems[0..4], &mut backend);
@@ -309,43 +320,63 @@ fn pmmr_rewind() {
 	// prune the first 4 elements (leaves at pos 1, 2, 4, 5)
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-		pmmr.prune(1, 1).unwrap();
-		pmmr.prune(2, 1).unwrap();
-		pmmr.prune(4, 1).unwrap();
-		pmmr.prune(5, 1).unwrap();
+		pmmr.prune(1).unwrap();
+		pmmr.prune(2).unwrap();
+		pmmr.prune(4).unwrap();
+		pmmr.prune(5).unwrap();
 	}
 	backend.sync().unwrap();
 
-	// and compact the MMR to remove the 2 pruned elements
-	backend.check_compact(2, 2, &prune_noop).unwrap();
+	// and compact the MMR to remove the pruned elements
+	backend
+		.check_compact(6, &Bitmap::create(), &Bitmap::create(), &prune_noop)
+		.unwrap();
 	backend.sync().unwrap();
 
 	// rewind and check the roots still match
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-		pmmr.rewind(9, 3).unwrap();
+		pmmr.rewind(9, &Bitmap::of(&vec![11, 12, 16]), &Bitmap::create())
+			.unwrap();
 		assert_eq!(pmmr.root(), root2);
 	}
+
+	println!("doing a sync after rewinding");
 	backend.sync().unwrap();
+
 	{
 		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, 10);
 		assert_eq!(pmmr.root(), root2);
 	}
 
-	// also check the data file looks correct
-	// everything up to and including pos 7 should be pruned from the data file
-	// except the data at pos 8 and 9 (corresponding to elements 5 and 6)
-	for pos in 1..8 {
+	// Also check the data file looks correct.
+	// pos 1, 2, 4, 5 are all leaves but these have been pruned.
+	for pos in vec![1, 2, 4, 5] {
 		assert_eq!(backend.get_data(pos), None);
 	}
+	// pos 3, 6, 7 are non-leaves so we have no data for these
+	for pos in vec![3, 6, 7] {
+		assert_eq!(backend.get_data(pos), None);
+	}
+
+	// pos 8 and 9 are both leaves and should be unaffected by prior pruning
+
+	for x in 1..16 {
+		println!("data at {}, {:?}", x, backend.get_data(x));
+	}
+
 	assert_eq!(backend.get_data(8), Some(elems[4]));
+	assert_eq!(backend.get_hash(8), Some(elems[4].hash_with_index(7)));
+
 	assert_eq!(backend.get_data(9), Some(elems[5]));
+	assert_eq!(backend.get_hash(9), Some(elems[5].hash_with_index(8)));
 
 	assert_eq!(backend.data_size().unwrap(), 2);
 
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, 10);
-		pmmr.rewind(5, 3).unwrap();
+		pmmr.rewind(5, &Bitmap::create(), &Bitmap::create())
+			.unwrap();
 		assert_eq!(pmmr.root(), root1);
 	}
 	backend.sync().unwrap();
@@ -371,31 +402,35 @@ fn pmmr_rewind() {
 #[test]
 fn pmmr_compact_single_leaves() {
 	let (data_dir, elems) = setup("compact_single_leaves");
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone()).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
 	let mmr_size = load(0, &elems[0..5], &mut backend);
 	backend.sync().unwrap();
 
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-		pmmr.prune(1, 1).unwrap();
-		pmmr.prune(4, 1).unwrap();
+		pmmr.prune(1).unwrap();
+		pmmr.prune(4).unwrap();
 	}
 
 	backend.sync().unwrap();
 
 	// compact
-	backend.check_compact(2, 2, &prune_noop).unwrap();
+	backend
+		.check_compact(2, &Bitmap::create(), &Bitmap::create(), &prune_noop)
+		.unwrap();
 
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-		pmmr.prune(2, 2).unwrap();
-		pmmr.prune(5, 2).unwrap();
+		pmmr.prune(2).unwrap();
+		pmmr.prune(5).unwrap();
 	}
 
 	backend.sync().unwrap();
 
 	// compact
-	backend.check_compact(2, 3, &prune_noop).unwrap();
+	backend
+		.check_compact(2, &Bitmap::create(), &Bitmap::create(), &prune_noop)
+		.unwrap();
 
 	teardown(data_dir);
 }
@@ -403,7 +438,7 @@ fn pmmr_compact_single_leaves() {
 #[test]
 fn pmmr_compact_entire_peak() {
 	let (data_dir, elems) = setup("compact_entire_peak");
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone()).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
 	let mmr_size = load(0, &elems[0..5], &mut backend);
 	backend.sync().unwrap();
 
@@ -415,25 +450,27 @@ fn pmmr_compact_entire_peak() {
 	// prune all leaves under the peak at pos 7
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-		pmmr.prune(1, 1).unwrap();
-		pmmr.prune(2, 1).unwrap();
-		pmmr.prune(4, 1).unwrap();
-		pmmr.prune(5, 1).unwrap();
+		pmmr.prune(1).unwrap();
+		pmmr.prune(2).unwrap();
+		pmmr.prune(4).unwrap();
+		pmmr.prune(5).unwrap();
 	}
 
 	backend.sync().unwrap();
 
 	// compact
-	backend.check_compact(2, 2, &prune_noop).unwrap();
+	backend
+		.check_compact(2, &Bitmap::create(), &Bitmap::create(), &prune_noop)
+		.unwrap();
 
 	// now check we have pruned up to and including the peak at pos 7
 	// hash still available in underlying hash file
-	assert_eq!(backend.get_hash(7), None);
+	assert_eq!(backend.get_hash(7), Some(pos_7_hash));
 	assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
 	// now check we still have subsequent hash and data where we expect
-	assert_eq!(backend.get_hash(8), Some(pos_8_hash));
 	assert_eq!(backend.get_data(8), Some(pos_8));
+	assert_eq!(backend.get_hash(8), Some(pos_8_hash));
 	assert_eq!(backend.get_from_file(8), Some(pos_8_hash));
 
 	teardown(data_dir);
@@ -442,7 +479,7 @@ fn pmmr_compact_entire_peak() {
 #[test]
 fn pmmr_compact_horizon() {
 	let (data_dir, elems) = setup("compact_horizon");
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone()).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
 	let mmr_size = load(0, &elems[..], &mut backend);
 	backend.sync().unwrap();
 
@@ -451,10 +488,10 @@ fn pmmr_compact_horizon() {
 	assert_eq!(backend.data_size().unwrap(), 19);
 	assert_eq!(backend.hash_size().unwrap(), 35);
 
+	let pos_1_hash = backend.get_hash(1).unwrap();
+	let pos_2_hash = backend.get_hash(2).unwrap();
 	let pos_3_hash = backend.get_hash(3).unwrap();
-
 	let pos_6_hash = backend.get_hash(6).unwrap();
-
 	let pos_7_hash = backend.get_hash(7).unwrap();
 
 	let pos_8 = backend.get_data(8).unwrap();
@@ -464,25 +501,25 @@ fn pmmr_compact_horizon() {
 	let pos_11_hash = backend.get_hash(11).unwrap();
 
 	{
-		// pruning some choice nodes with an increasing block height
+		// pruning some choice nodes
 		{
 			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-			pmmr.prune(4, 1).unwrap();
-			pmmr.prune(5, 2).unwrap();
-			pmmr.prune(1, 3).unwrap();
-			pmmr.prune(2, 4).unwrap();
+			pmmr.prune(4).unwrap();
+			pmmr.prune(5).unwrap();
+			pmmr.prune(1).unwrap();
+			pmmr.prune(2).unwrap();
 		}
 		backend.sync().unwrap();
 
 		// check we can read hashes and data correctly after pruning
 		{
-			assert_eq!(backend.get_hash(3), None);
+			// assert_eq!(backend.get_hash(3), None);
 			assert_eq!(backend.get_from_file(3), Some(pos_3_hash));
 
-			assert_eq!(backend.get_hash(6), None);
+			// assert_eq!(backend.get_hash(6), None);
 			assert_eq!(backend.get_from_file(6), Some(pos_6_hash));
 
-			assert_eq!(backend.get_hash(7), None);
+			// assert_eq!(backend.get_hash(7), None);
 			assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
 			assert_eq!(backend.get_hash(8), Some(pos_8_hash));
@@ -495,18 +532,25 @@ fn pmmr_compact_horizon() {
 		}
 
 		// compact
-		backend.check_compact(2, 3, &prune_noop).unwrap();
+		backend
+			.check_compact(4, &Bitmap::create(), &Bitmap::of(&vec![1, 2]), &prune_noop)
+			.unwrap();
 		backend.sync().unwrap();
 
 		// check we can read a hash by pos correctly after compaction
 		{
-			assert_eq!(backend.get_hash(3), None);
-			assert_eq!(backend.get_from_file(3), Some(pos_3_hash));
+			assert_eq!(backend.get_hash(1), None);
+			assert_eq!(backend.get_from_file(1), Some(pos_1_hash));
 
-			assert_eq!(backend.get_hash(6), None);
-			assert_eq!(backend.get_from_file(6), Some(pos_6_hash));
+			assert_eq!(backend.get_hash(2), None);
+			assert_eq!(backend.get_from_file(2), Some(pos_2_hash));
 
-			assert_eq!(backend.get_hash(7), None);
+			assert_eq!(backend.get_hash(3), Some(pos_3_hash));
+
+			assert_eq!(backend.get_hash(4), None);
+			assert_eq!(backend.get_hash(5), None);
+			assert_eq!(backend.get_hash(6), Some(pos_6_hash));
+
 			assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
 			assert_eq!(backend.get_hash(8), Some(pos_8_hash));
@@ -517,13 +561,14 @@ fn pmmr_compact_horizon() {
 	// recheck stored data
 	{
 		// recreate backend
-		let backend = store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string()).unwrap();
+		let backend =
+			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), None).unwrap();
 
-		assert_eq!(backend.data_size().unwrap(), 17);
-		assert_eq!(backend.hash_size().unwrap(), 33);
+		assert_eq!(backend.data_size().unwrap(), 19);
+		assert_eq!(backend.hash_size().unwrap(), 35);
 
 		// check we can read a hash by pos correctly from recreated backend
-		assert_eq!(backend.get_hash(7), None);
+		assert_eq!(backend.get_hash(7), Some(pos_7_hash));
 		assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
 		assert_eq!(backend.get_hash(8), Some(pos_8_hash));
@@ -531,31 +576,37 @@ fn pmmr_compact_horizon() {
 	}
 
 	{
-		let mut backend = store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string()).unwrap();
+		let mut backend =
+			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), None).unwrap();
 
 		{
 			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 
-			pmmr.prune(8, 5).unwrap();
-			pmmr.prune(9, 5).unwrap();
+			pmmr.prune(8).unwrap();
+			pmmr.prune(9).unwrap();
 		}
 
 		// compact some more
-		backend.check_compact(1, 6, &prune_noop).unwrap();
+		backend
+			.check_compact(9, &Bitmap::create(), &Bitmap::create(), &prune_noop)
+			.unwrap();
 	}
 
 	// recheck stored data
 	{
 		// recreate backend
-		let backend = store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string()).unwrap();
+		let backend =
+			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), None).unwrap();
 
 		// 0010012001001230
 
-		assert_eq!(backend.data_size().unwrap(), 15);
-		assert_eq!(backend.hash_size().unwrap(), 29);
+		assert_eq!(backend.data_size().unwrap(), 13);
+		assert_eq!(backend.hash_size().unwrap(), 27);
 
 		// check we can read a hash by pos correctly from recreated backend
-		assert_eq!(backend.get_hash(7), None);
+		// get_hash() and get_from_file() should return the same value
+		// and we only store leaves in the rm_log so pos 7 still has a hash in there
+		assert_eq!(backend.get_hash(7), Some(pos_7_hash));
 		assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
 		assert_eq!(backend.get_hash(11), Some(pos_11_hash));
@@ -571,7 +622,7 @@ fn compact_twice() {
 	let (data_dir, elems) = setup("compact_twice");
 
 	// setup the mmr store with all elements
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string()).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
 	let mmr_size = load(0, &elems[..], &mut backend);
 	backend.sync().unwrap();
 
@@ -584,9 +635,9 @@ fn compact_twice() {
 	// pruning some choice nodes
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-		pmmr.prune(1, 1).unwrap();
-		pmmr.prune(2, 1).unwrap();
-		pmmr.prune(4, 1).unwrap();
+		pmmr.prune(1).unwrap();
+		pmmr.prune(2).unwrap();
+		pmmr.prune(4).unwrap();
 	}
 	backend.sync().unwrap();
 
@@ -599,7 +650,9 @@ fn compact_twice() {
 	}
 
 	// compact
-	backend.check_compact(2, 2, &prune_noop).unwrap();
+	backend
+		.check_compact(2, &Bitmap::create(), &Bitmap::create(), &prune_noop)
+		.unwrap();
 
 	// recheck the root and stored data
 	{
@@ -612,9 +665,9 @@ fn compact_twice() {
 	// now prune some more nodes
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-		pmmr.prune(5, 2).unwrap();
-		pmmr.prune(8, 2).unwrap();
-		pmmr.prune(9, 2).unwrap();
+		pmmr.prune(5).unwrap();
+		pmmr.prune(8).unwrap();
+		pmmr.prune(9).unwrap();
 	}
 	backend.sync().unwrap();
 
@@ -626,7 +679,9 @@ fn compact_twice() {
 	}
 
 	// compact
-	backend.check_compact(2, 3, &prune_noop).unwrap();
+	backend
+		.check_compact(2, &Bitmap::create(), &Bitmap::create(), &prune_noop)
+		.unwrap();
 
 	// recheck the root and stored data
 	{

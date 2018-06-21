@@ -21,13 +21,13 @@ pub mod common;
 
 use common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
 use grin_core::consensus::{BLOCK_OUTPUT_WEIGHT, MAX_BLOCK_WEIGHT};
+use grin_core::core::Committed;
 use grin_core::core::block::Error;
 use grin_core::core::hash::Hashed;
 use grin_core::core::id::{ShortId, ShortIdentifiable};
-use grin_core::core::Committed;
 use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
 use grin_core::{global, ser};
-use keychain::{ExtKeychain, Keychain};
+use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::time::Instant;
 use util::{secp, secp_static};
 use wallet::libtx::build::{self, input, output, with_fee};
@@ -59,7 +59,7 @@ fn too_large_block() {
 	let prev = BlockHeader::default();
 	let key_id = keychain.derive_key_id(1).unwrap();
 	let b = new_block(vec![&tx], &keychain, &prev, &key_id);
-	assert!(b.validate(&zero_commit, &zero_commit).is_err());
+	assert!(b.validate(&BlindingFactor::zero(), &zero_commit).is_err());
 }
 
 #[test]
@@ -109,9 +109,11 @@ fn block_with_cut_through() {
 
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
-	b.validate(&zero_commit, &zero_commit).unwrap();
+	println!("3");
+	b.validate(&BlindingFactor::zero(), &zero_commit).unwrap();
 	assert_eq!(b.inputs.len(), 3);
 	assert_eq!(b.outputs.len(), 3);
+	println!("4");
 }
 
 #[test]
@@ -142,7 +144,7 @@ fn empty_block_with_coinbase_is_valid() {
 
 	// the block should be valid here (single coinbase output with corresponding
 	// txn kernel)
-	assert!(b.validate(&zero_commit, &zero_commit).is_ok());
+	assert!(b.validate(&BlindingFactor::zero(), &zero_commit).is_ok());
 }
 
 #[test]
@@ -166,14 +168,12 @@ fn remove_coinbase_output_flag() {
 		.remove(OutputFeatures::COINBASE_OUTPUT);
 
 	assert_eq!(b.verify_coinbase(), Err(Error::CoinbaseSumMismatch));
-	assert!(b.verify_kernel_sums(
-		b.header.overage(),
-		b.header.total_kernel_offset(),
-		None,
-		None
-	).is_ok());
+	assert!(
+		b.verify_kernel_sums(b.header.overage(), b.header.total_kernel_offset())
+			.is_ok()
+	);
 	assert_eq!(
-		b.validate(&zero_commit, &zero_commit),
+		b.validate(&BlindingFactor::zero(), &zero_commit),
 		Err(Error::CoinbaseSumMismatch)
 	);
 }
@@ -203,7 +203,7 @@ fn remove_coinbase_kernel_flag() {
 	);
 
 	assert_eq!(
-		b.validate(&zero_commit, &zero_commit),
+		b.validate(&BlindingFactor::zero(), &zero_commit),
 		Err(Error::Secp(secp::Error::IncorrectCommitSum))
 	);
 }
@@ -233,7 +233,7 @@ fn empty_block_serialized_size() {
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 1_216;
+	let target_len = 1_265;
 	assert_eq!(vec.len(), target_len,);
 }
 
@@ -246,7 +246,7 @@ fn block_single_tx_serialized_size() {
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 2_796;
+	let target_len = 2_845;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -258,7 +258,7 @@ fn empty_compact_block_serialized_size() {
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-	let target_len = 1_224;
+	let target_len = 1_273;
 	assert_eq!(vec.len(), target_len,);
 }
 
@@ -271,7 +271,7 @@ fn compact_block_single_tx_serialized_size() {
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-	let target_len = 1_230;
+	let target_len = 1_279;
 	assert_eq!(vec.len(), target_len,);
 }
 
@@ -290,7 +290,7 @@ fn block_10_tx_serialized_size() {
 	let b = new_block(txs.iter().collect(), &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 17_016;
+	let target_len = 17_065;
 	assert_eq!(vec.len(), target_len,);
 }
 
@@ -308,7 +308,7 @@ fn compact_block_10_tx_serialized_size() {
 	let b = new_block(txs.iter().collect(), &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-	let target_len = 1_284;
+	let target_len = 1_333;
 	assert_eq!(vec.len(), target_len,);
 }
 

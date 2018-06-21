@@ -25,10 +25,10 @@ use core::hash::{Hash, Hashed};
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use std::io::{self, Read, Write};
 use std::{cmp, error, fmt, mem};
+use util::secp::Signature;
 use util::secp::constants::{AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE,
                             SECRET_KEY_SIZE};
 use util::secp::pedersen::{Commitment, RangeProof};
-use util::secp::Signature;
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Debug)]

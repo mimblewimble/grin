@@ -21,12 +21,17 @@ extern crate grin_wallet as wallet;
 use std::fs;
 use std::sync::Arc;
 
+<<<<<<< HEAD
 use chain::store::ChainStore;
 use chain::txhashset;
 use chain::txhashset::TxHashSet;
-use chain::types::Tip;
+=======
 use chain::ChainStore;
-use core::core::pmmr::MerkleProof;
+use chain::store::ChainKVStore;
+use chain::txhashset::{self, TxHashSet};
+>>>>>>> testnet3
+use chain::types::Tip;
+use core::core::merkle_proof::MerkleProof;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
 use keychain::{ExtKeychain, Keychain};
@@ -41,9 +46,14 @@ fn test_some_raw_txs() {
 	let db_root = format!(".grin_txhashset_raw_txs");
 	clean_output_dir(&db_root);
 
+<<<<<<< HEAD
 	let db_env = Arc::new(store::new_env(db_root.clone()));
 	let store = Arc::new(ChainStore::new(db_env).unwrap());
 	let mut txhashset = TxHashSet::open(db_root.clone(), store.clone()).unwrap();
+=======
+	let store = Arc::new(ChainKVStore::new(db_root.clone()).unwrap());
+	let mut txhashset = TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
+>>>>>>> testnet3
 
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();
@@ -131,10 +141,10 @@ fn test_some_raw_txs() {
 		// Note: we pass in an increasing "height" here so we can rollback
 		// each tx individually as necessary, while maintaining a long lived
 		// txhashset extension.
-		assert!(extension.apply_raw_tx(&tx1, 3).is_ok());
-		assert!(extension.apply_raw_tx(&tx2, 4).is_err());
-		assert!(extension.apply_raw_tx(&tx3, 5).is_ok());
-		assert!(extension.apply_raw_tx(&tx4, 6).is_ok());
+		assert!(extension.apply_raw_tx(&tx1).is_ok());
+		assert!(extension.apply_raw_tx(&tx2).is_err());
+		assert!(extension.apply_raw_tx(&tx3).is_ok());
+		assert!(extension.apply_raw_tx(&tx4).is_ok());
 		Ok(())
 	});
 }
