@@ -14,9 +14,9 @@
 
 //! Public types for config modules
 
-use std::path::PathBuf;
-use std::io;
 use std::fmt;
+use std::io;
+use std::path::PathBuf;
 
 use servers::{ServerConfig, StratumServerConfig};
 use util::LoggingConfig;

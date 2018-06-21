@@ -26,8 +26,8 @@ use util::{kernel_sig_msg, static_secp_instance};
 
 use consensus::{self, VerifySortOrder};
 use core::hash::{Hash, Hashed, ZERO_HASH};
-use core::pmmr::MerkleProof;
-use core::{committed, global, BlockHeader, Committed};
+use core::merkle_proof::MerkleProof;
+use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
 use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};
@@ -65,9 +65,6 @@ pub enum Error {
 	RangeProof,
 	/// Error originating from an invalid Merkle proof
 	MerkleProof,
-	/// Error originating from an input attempting to spend an immature
-	/// coinbase output
-	ImmatureCoinbase,
 	/// Returns if the value hidden within the a RangeProof message isn't
 	/// repeated 3 times, indicating it's incorrect
 	InvalidProofMessage,
@@ -742,64 +739,6 @@ impl Input {
 	pub fn merkle_proof(&self) -> MerkleProof {
 		let merkle_proof = self.merkle_proof.clone();
 		merkle_proof.unwrap_or_else(MerkleProof::empty)
-	}
-
-	/// Verify the maturity of an output being spent by an input.
-	/// Only relevant for spending coinbase outputs currently (locked for 1,000
-	/// confirmations).
-	///
-	/// The proof associates the output with the root by its hash (and pos) in
-	/// the MMR. The proof shows the output existed and was unspent at the
-	/// time the output_root was built. The root associates the proof with a
-	/// specific block header with that output_root. So the proof shows the
-	/// output was unspent at the time of the block and is at least as old as
-	/// that block (may be older).
-	///
-	/// We can verify maturity of the output being spent by -
-	///
-	/// * verifying the Merkle Proof produces the correct root for the given
-	/// hash (from MMR) * verifying the root matches the output_root in the
-	/// block_header * verifying the hash matches the node hash in the Merkle
-	/// Proof * finally verify maturity rules based on height of the block
-	/// header
-	///
-	pub fn verify_maturity(
-		&self,
-		hash: Hash,
-		header: &BlockHeader,
-		height: u64,
-	) -> Result<(), Error> {
-		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			let block_hash = self.block_hash();
-			let merkle_proof = self.merkle_proof();
-
-			// Check we are dealing with the correct block header
-			if block_hash != header.hash() {
-				return Err(Error::MerkleProof);
-			}
-
-			// Is our Merkle Proof valid? Does node hash up consistently to the root?
-			if !merkle_proof.verify() {
-				return Err(Error::MerkleProof);
-			}
-
-			// Is the root the correct root for the given block header?
-			if merkle_proof.root != header.output_root {
-				return Err(Error::MerkleProof);
-			}
-
-			// Does the hash from the MMR actually match the one in the Merkle Proof?
-			if merkle_proof.node != hash {
-				return Err(Error::MerkleProof);
-			}
-
-			// Finally has the output matured sufficiently now we know the block?
-			let lock_height = header.height + global::coinbase_maturity();
-			if lock_height > height {
-				return Err(Error::ImmatureCoinbase);
-			}
-		}
-		Ok(())
 	}
 }
 

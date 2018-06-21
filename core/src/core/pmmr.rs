@@ -35,12 +35,15 @@
 //! The underlying Hashes are stored in a Backend implementation that can
 //! either be a simple Vec or a database.
 
-use core::hash::Hash;
-use ser::{self, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
-
-use std::clone::Clone;
 use std::marker;
-use util::{self, LOGGER};
+
+use croaring::Bitmap;
+
+use core::hash::Hash;
+use core::merkle_proof::MerkleProof;
+use core::BlockHeader;
+use ser::{PMMRIndexHashable, PMMRable};
+use util::LOGGER;
 
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
 /// The PMMR itself does not need the Backend to be accurate on the existence
@@ -58,9 +61,15 @@ where
 
 	/// Rewind the backend state to a previous position, as if all append
 	/// operations after that had been canceled. Expects a position in the PMMR
-	/// to rewind to as well as the consumer-provided index of when the change
-	/// occurred (see remove).
-	fn rewind(&mut self, position: u64, index: u32) -> Result<(), String>;
+	/// to rewind to as well as bitmaps representing the positions added and
+	/// removed since the rewind position. These are what we will "undo"
+	/// during the rewind.
+	fn rewind(
+		&mut self,
+		position: u64,
+		rewind_add_pos: &Bitmap,
+		rewind_rm_pos: &Bitmap,
+	) -> Result<(), String>;
 
 	/// Get a Hash by insertion position.
 	fn get_hash(&self, position: u64) -> Option<Hash>;
@@ -76,181 +85,25 @@ where
 	/// (ignoring the remove log).
 	fn get_data_from_file(&self, position: u64) -> Option<T>;
 
-	/// Remove HashSums by insertion position. An index is also provided so the
+	/// Remove Hash by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
 	/// given index (practically the index is the height of a block that
 	/// triggered removal).
-	fn remove(&mut self, positions: Vec<u64>, index: u32) -> Result<(), String>;
+	fn remove(&mut self, position: u64) -> Result<(), String>;
 
 	/// Returns the data file path.. this is a bit of a hack now that doesn't
 	/// sit well with the design, but TxKernels have to be summed and the
 	/// fastest way to to be able to allow direct access to the file
 	fn get_data_file_path(&self) -> String;
 
+	/// Also a bit of a hack...
+	/// Saves a snapshot of the rewound utxo file with the block hash as
+	/// filename suffix. We need this when sending a txhashset zip file to a
+	/// node for fast sync.
+	fn snapshot(&self, header: &BlockHeader) -> Result<(), String>;
+
 	/// For debugging purposes so we can see how compaction is doing.
 	fn dump_stats(&self);
-}
-
-/// Maximum peaks for a Merkle proof
-pub const MAX_PEAKS: u64 = 100;
-
-/// Maximum path for a Merkle proof
-pub const MAX_PATH: u64 = 100;
-
-/// A Merkle proof.
-/// Proves inclusion of an output (node) in the output MMR.
-/// We can use this to prove an output was unspent at the time of a given block
-/// as the root will match the output_root of the block header.
-/// The path and left_right can be used to reconstruct the peak hash for a
-/// given tree in the MMR.
-/// The root is the result of hashing all the peaks together.
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-pub struct MerkleProof {
-	/// The root hash of the full Merkle tree (in an MMR the hash of all peaks)
-	pub root: Hash,
-	/// The hash of the element in the tree we care about
-	pub node: Hash,
-	/// The size of the full Merkle tree
-	pub mmr_size: u64,
-	/// The full list of peak hashes in the MMR
-	pub peaks: Vec<Hash>,
-	/// The sibling (hash, pos) along the path of the tree
-	/// as we traverse from node to peak
-	pub path: Vec<(Hash, u64)>,
-}
-
-impl Writeable for MerkleProof {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(
-			writer,
-			[write_fixed_bytes, &self.root],
-			[write_fixed_bytes, &self.node],
-			[write_u64, self.mmr_size],
-			[write_u64, self.peaks.len() as u64],
-			[write_u64, self.path.len() as u64]
-		);
-
-		self.peaks.write(writer)?;
-		self.path.write(writer)?;
-
-		Ok(())
-	}
-}
-
-impl Readable for MerkleProof {
-	fn read(reader: &mut Reader) -> Result<MerkleProof, ser::Error> {
-		let root = Hash::read(reader)?;
-		let node = Hash::read(reader)?;
-
-		let (mmr_size, peaks_len, path_len) = ser_multiread!(reader, read_u64, read_u64, read_u64);
-
-		if peaks_len > MAX_PEAKS || path_len > MAX_PATH {
-			return Err(ser::Error::CorruptedData);
-		}
-
-		let mut peaks = Vec::with_capacity(peaks_len as usize);
-		for _ in 0..peaks_len {
-			peaks.push(Hash::read(reader)?);
-		}
-
-		let mut path = Vec::with_capacity(path_len as usize);
-		for _ in 0..path_len {
-			let hash = Hash::read(reader)?;
-			let pos = reader.read_u64()?;
-			path.push((hash, pos));
-		}
-
-		Ok(MerkleProof {
-			root,
-			node,
-			mmr_size,
-			peaks,
-			path,
-		})
-	}
-}
-
-impl Default for MerkleProof {
-	fn default() -> MerkleProof {
-		MerkleProof::empty()
-	}
-}
-
-impl MerkleProof {
-	/// The "empty" Merkle proof.
-	/// Basically some reasonable defaults. Will not verify successfully.
-	pub fn empty() -> MerkleProof {
-		MerkleProof {
-			root: Hash::default(),
-			node: Hash::default(),
-			mmr_size: 0,
-			peaks: vec![],
-			path: vec![],
-		}
-	}
-
-	/// Serialize the Merkle proof as a hex string (for api json endpoints)
-	pub fn to_hex(&self) -> String {
-		let mut vec = Vec::new();
-		ser::serialize(&mut vec, &self).expect("serialization failed");
-		util::to_hex(vec)
-	}
-
-	/// Convert hex string representation back to a Merkle proof instance
-	pub fn from_hex(hex: &str) -> Result<MerkleProof, String> {
-		let bytes = util::from_hex(hex.to_string()).unwrap();
-		let res = ser::deserialize(&mut &bytes[..])
-			.map_err(|_| "failed to deserialize a Merkle Proof".to_string())?;
-		Ok(res)
-	}
-
-	/// Verify the Merkle proof.
-	/// We do this by verifying the following -
-	/// * inclusion of the node beneath a peak (via the Merkle path/branch of
-	/// siblings) * inclusion of the peak in the "bag of peaks" beneath the
-	/// root
-	pub fn verify(&self) -> bool {
-		// if we have no further elements in the path
-		// then this proof verifies successfully if our node is
-		// one of the peaks
-		// and the peaks themselves hash to give the root
-		if self.path.len() == 0 {
-			if !self.peaks.contains(&self.node) {
-				return false;
-			}
-
-			let mut bagged = None;
-			for peak in self.peaks.iter().rev() {
-				bagged = match bagged {
-					None => Some(*peak),
-					Some(rhs) => Some((*peak, rhs).hash_with_index(self.mmr_size)),
-				}
-			}
-			return bagged == Some(self.root);
-		}
-
-		let mut path = self.path.clone();
-		let (sibling, sibling_pos) = path.remove(0);
-		let (parent_pos, _) = family(sibling_pos);
-
-		// hash our node and sibling together (noting left/right position of the
-		// sibling)
-		let parent = if is_left_sibling(sibling_pos) {
-			(sibling, self.node).hash_with_index(parent_pos - 1)
-		} else {
-			(self.node, sibling).hash_with_index(parent_pos - 1)
-		};
-
-		let proof = MerkleProof {
-			root: self.root,
-			node: parent,
-			mmr_size: self.mmr_size,
-			peaks: self.peaks.clone(),
-			path,
-		};
-
-		proof.verify()
-	}
 }
 
 /// Prunable Merkle Mountain Range implementation. All positions within the tree
@@ -309,6 +162,41 @@ where
 			.collect()
 	}
 
+	fn peak_path(&self, peak_pos: u64) -> Vec<Hash> {
+		let rhs = self.bag_the_rhs(peak_pos);
+		let mut res = peaks(self.last_pos)
+			.into_iter()
+			.filter(|x| x < &peak_pos)
+			.filter_map(|x| self.backend.get_from_file(x))
+			.collect::<Vec<_>>();
+		res.reverse();
+		if let Some(rhs) = rhs {
+			res.insert(0, rhs);
+		}
+		res
+	}
+
+	/// Takes a single peak position and hashes together
+	/// all the peaks to the right of this peak (if any).
+	/// If this return a hash then this is our peaks sibling.
+	/// If none then the sibling of our peak is the peak to the left.
+	pub fn bag_the_rhs(&self, peak_pos: u64) -> Option<Hash> {
+		let rhs = peaks(self.last_pos)
+			.into_iter()
+			.filter(|x| x > &peak_pos)
+			.filter_map(|x| self.backend.get_from_file(x))
+			.collect::<Vec<_>>();
+
+		let mut res = None;
+		for peak in rhs.iter().rev() {
+			res = match res {
+				None => Some(*peak),
+				Some(rhash) => Some((*peak, rhash).hash_with_index(self.unpruned_size())),
+			}
+		}
+		res
+	}
+
 	/// Computes the root of the MMR. Find all the peaks in the current
 	/// tree and "bags" them to get a single peak.
 	pub fn root(&self) -> Hash {
@@ -322,45 +210,46 @@ where
 		res.expect("no root, invalid tree")
 	}
 
-	/// Build a Merkle proof for the element at the given position in the MMR
+	/// Build a Merkle proof for the element at the given position.
 	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
-		debug!(
-			LOGGER,
-			"merkle_proof (via rewind) - {}, last_pos {}", pos, self.last_pos
-		);
+		debug!(LOGGER, "merkle_proof  {}, last_pos {}", pos, self.last_pos);
 
+		// check this pos is actually a leaf in the MMR
 		if !is_leaf(pos) {
 			return Err(format!("not a leaf at pos {}", pos));
 		}
 
-		let root = self.root();
-
-		let node = self.get_hash(pos)
+		// check we actually have a hash in the MMR at this pos
+		self.get_hash(pos)
 			.ok_or(format!("no element at pos {}", pos))?;
 
 		let mmr_size = self.unpruned_size();
 
+		// Edge case: an MMR with a single entry in it
+		// this entry is a leaf, a peak and the root itself
+		// and there are no siblings to hash with
+		if mmr_size == 1 {
+			return Ok(MerkleProof {
+				mmr_size,
+				path: vec![],
+			});
+		}
+
 		let family_branch = family_branch(pos, self.last_pos);
 
-		let path = family_branch
+		let mut path = family_branch
 			.iter()
-			.map(|x| (self.get_from_file(x.1).unwrap_or_default(), x.1))
+			.filter_map(|x| self.get_from_file(x.1))
 			.collect::<Vec<_>>();
 
-		let peaks = peaks(self.last_pos)
-			.iter()
-			.filter_map(|&x| self.get_from_file(x))
-			.collect::<Vec<_>>();
-
-		let proof = MerkleProof {
-			root,
-			node,
-			mmr_size,
-			peaks,
-			path,
+		let peak_pos = match family_branch.last() {
+			Some(&(x, _)) => x,
+			None => pos,
 		};
 
-		Ok(proof)
+		path.append(&mut self.peak_path(peak_pos));
+
+		Ok(MerkleProof { mmr_size, path })
 	}
 
 	/// Push a new element into the MMR. Computes new related peaks at
@@ -388,7 +277,6 @@ where
 			pos += 1;
 
 			current_hash = (left_hash, current_hash).hash_with_index(pos - 1);
-
 			to_append.push((current_hash, None));
 		}
 
@@ -398,61 +286,51 @@ where
 		Ok(elmt_pos)
 	}
 
+	/// Saves a snaphost of the MMR tagged with the block hash.
+	/// Specifically - snapshots the utxo file as we need this rewound before
+	/// sending the txhashset zip file to another node for fast-sync.
+	pub fn snapshot(&mut self, header: &BlockHeader) -> Result<(), String> {
+		self.backend.snapshot(header)?;
+		Ok(())
+	}
+
 	/// Rewind the PMMR to a previous position, as if all push operations after
-	/// that had been canceled. Expects a position in the PMMR to rewind to as
-	/// well as the consumer-provided index of when the change occurred.
-	pub fn rewind(&mut self, position: u64, index: u32) -> Result<(), String> {
-		// identify which actual position we should rewind to as the provided
-		// position is a leaf, which may had some parent that needs to exist
-		// afterward for the MMR to be valid
+	/// that had been canceled. Expects a position in the PMMR to rewind and
+	/// bitmaps representing the positions added and removed that we want to
+	/// "undo".
+	pub fn rewind(
+		&mut self,
+		position: u64,
+		rewind_add_pos: &Bitmap,
+		rewind_rm_pos: &Bitmap,
+	) -> Result<(), String> {
+		// Identify which actual position we should rewind to as the provided
+		// position is a leaf. We traverse the MMR to inclue any parent(s) that
+		// need to be included for the MMR to be valid.
 		let mut pos = position;
 		while bintree_postorder_height(pos + 1) > 0 {
 			pos += 1;
 		}
 
-		self.backend.rewind(pos, index)?;
+		self.backend.rewind(pos, rewind_add_pos, rewind_rm_pos)?;
 		self.last_pos = pos;
 		Ok(())
 	}
 
-	/// Prune an element from the tree given its position. Note that to be able
-	/// to provide that position and prune, consumers of this API are expected
-	/// to keep an index of elements to positions in the tree. Prunes parent
-	/// nodes as well when they become childless.
-	pub fn prune(&mut self, position: u64, index: u32) -> Result<bool, String> {
-		if self.backend.get_hash(position).is_none() {
-			return Ok(false);
-		}
-		let prunable_height = bintree_postorder_height(position);
-		if prunable_height > 0 {
-			// only leaves can be pruned
+	/// Prunes (removes) the leaf from the MMR at the specified position.
+	/// Returns an error if prune is called on a non-leaf position.
+	/// Returns false if the leaf node has already been pruned.
+	/// Returns true if pruning is successful.
+	pub fn prune(&mut self, position: u64) -> Result<bool, String> {
+		if !is_leaf(position) {
 			return Err(format!("Node at {} is not a leaf, can't prune.", position));
 		}
 
-		// loop going up the tree, from node to parent, as long as we stay inside
-		// the tree.
-		let mut to_prune = vec![];
-
-		let mut current = position;
-		while current + 1 <= self.last_pos {
-			let (parent, sibling) = family(current);
-
-			to_prune.push(current);
-
-			if parent > self.last_pos {
-				// can't prune when our parent isn't here yet
-				break;
-			}
-
-			// if we have a pruned sibling, we can continue up the tree
-			// otherwise we're done
-			if self.backend.get_hash(sibling).is_none() {
-				current = parent;
-			} else {
-				break;
-			}
+		if self.backend.get_hash(position).is_none() {
+			return Ok(false);
 		}
-		self.backend.remove(to_prune, index)?;
+
+		self.backend.remove(position)?;
 		Ok(true)
 	}
 
@@ -460,17 +338,26 @@ where
 	pub fn get_hash(&self, pos: u64) -> Option<Hash> {
 		if pos > self.last_pos {
 			None
-		} else {
+		} else if is_leaf(pos) {
+			// If we are a leaf then get hash from the backend.
 			self.backend.get_hash(pos)
+		} else {
+			// If we are not a leaf get hash ignoring the remove log.
+			self.backend.get_from_file(pos)
 		}
 	}
 
 	/// Get the data element at provided position in the MMR.
 	pub fn get_data(&self, pos: u64) -> Option<T> {
 		if pos > self.last_pos {
+			// If we are beyond the rhs of the MMR return None.
 			None
-		} else {
+		} else if is_leaf(pos) {
+			// If we are a leaf then get data from the backend.
 			self.backend.get_data(pos)
+		} else {
+			// If we are not a leaf then return None as only leaves have data.
+			None
 		}
 	}
 
@@ -648,146 +535,6 @@ where
 	}
 }
 
-/// Maintains a list of previously pruned nodes in PMMR, compacting the list as
-/// parents get pruned and allowing checking whether a leaf is pruned. Given
-/// a node's position, computes how much it should get shifted given the
-/// subtrees that have been pruned before.
-///
-/// The PruneList is useful when implementing compact backends for a PMMR (for
-/// example a single large byte array or a file). As nodes get pruned and
-/// removed from the backend to free space, the backend will get more compact
-/// but positions of a node within the PMMR will not match positions in the
-/// backend storage anymore. The PruneList accounts for that mismatch and does
-/// the position translation.
-#[derive(Default)]
-pub struct PruneList {
-	/// Vector of pruned nodes positions
-	pub pruned_nodes: Vec<u64>,
-}
-
-impl PruneList {
-	/// Instantiate a new empty prune list
-	pub fn new() -> PruneList {
-		PruneList {
-			pruned_nodes: vec![],
-		}
-	}
-
-	/// Computes by how many positions a node at pos should be shifted given the
-	/// number of nodes that have already been pruned before it. Returns None if
-	/// the position has already been pruned.
-	pub fn get_shift(&self, pos: u64) -> Option<u64> {
-		// get the position where the node at pos would fit in the pruned list, if
-		// it's already pruned, nothing to skip
-
-		let pruned_idx = self.next_pruned_idx(pos);
-		let next_idx = self.pruned_nodes.binary_search(&pos).map(|x| x + 1).ok();
-		match pruned_idx.or(next_idx) {
-			None => None,
-			Some(idx) => {
-				// skip by the number of elements pruned in the preceding subtrees,
-				// which is the sum of the size of each subtree
-				Some(
-					self.pruned_nodes[0..(idx as usize)]
-						.iter()
-						.map(|n| {
-							let height = bintree_postorder_height(*n);
-							// height 0, 1 node, offset 0 = 0 + 0
-							// height 1, 3 nodes, offset 2 = 1 + 1
-							// height 2, 7 nodes, offset 6 = 3 + 3
-							// height 3, 15 nodes, offset 14 = 7 + 7
-							2 * ((1 << height) - 1)
-						})
-						.sum(),
-				)
-			}
-		}
-	}
-
-	/// As above, but only returning the number of leaf nodes to skip for a
-	/// given leaf. Helpful if, for instance, data for each leaf is being stored
-	/// separately in a continuous flat-file. Returns None if the position has
-	/// already been pruned.
-	pub fn get_leaf_shift(&self, pos: u64) -> Option<u64> {
-		// get the position where the node at pos would fit in the pruned list, if
-		// it's already pruned, nothing to skip
-
-		let pruned_idx = self.next_pruned_idx(pos);
-		let next_idx = self.pruned_nodes.binary_search(&pos).map(|x| x + 1).ok();
-
-		let idx = pruned_idx.or(next_idx)?;
-		Some(
-			// skip by the number of leaf nodes pruned in the preceding subtrees
-			// which just 2^height
-			// except in the case of height==0
-			// (where we want to treat the pruned tree as 0 leaves)
-			self.pruned_nodes[0..(idx as usize)]
-				.iter()
-				.map(|n| {
-					let height = bintree_postorder_height(*n);
-					if height == 0 {
-						0
-					} else {
-						(1 << height)
-					}
-				})
-				.sum(),
-		)
-	}
-
-	/// Push the node at the provided position in the prune list. Compacts the
-	/// list if pruning the additional node means a parent can get pruned as
-	/// well.
-	pub fn add(&mut self, pos: u64) {
-		let mut current = pos;
-		loop {
-			let (parent, sibling) = family(current);
-
-			match self.pruned_nodes.binary_search(&sibling) {
-				Ok(idx) => {
-					self.pruned_nodes.remove(idx);
-					current = parent;
-				}
-				Err(_) => {
-					if let Some(idx) = self.next_pruned_idx(current) {
-						self.pruned_nodes.insert(idx, current);
-					}
-					break;
-				}
-			}
-		}
-	}
-
-	/// Gets the index a new pruned node should take in the prune list.
-	/// If the node has already been pruned, either directly or through one of
-	/// its parents contained in the prune list, returns None.
-	pub fn next_pruned_idx(&self, pos: u64) -> Option<usize> {
-		match self.pruned_nodes.binary_search(&pos) {
-			Ok(_) => None,
-			Err(idx) => {
-				if self.pruned_nodes.len() > idx {
-					// the node at pos can't be a child of lower position nodes by MMR
-					// construction but can be a child of the next node, going up parents
-					// from pos to make sure it's not the case
-					let next_peak_pos = self.pruned_nodes[idx];
-					let mut cursor = pos;
-					loop {
-						let (parent, _) = family(cursor);
-						if next_peak_pos == parent {
-							return None;
-						}
-						if next_peak_pos < parent {
-							break;
-						}
-						cursor = parent;
-					}
-				}
-				Some(idx)
-			}
-		}
-	}
-}
-
 /// Gets the postorder traversal index of all peaks in a MMR given the last
 /// node's position. Starts with the top peak, which is always on the left
 /// side of the range, and navigates toward lower siblings toward the right
@@ -958,6 +705,24 @@ pub fn family(pos: u64) -> (u64, u64) {
 pub fn is_left_sibling(pos: u64) -> bool {
 	let (_, sibling_pos) = family(pos);
 	sibling_pos > pos
+}
+
+/// Returns the path from the specified position up to its
+/// corresponding peak in the MMR.
+/// The size (and therefore the set of peaks) of the MMR
+/// is defined by last_pos.
+pub fn path(pos: u64, last_pos: u64) -> Vec<u64> {
+	let mut path = vec![pos];
+	let mut current = pos;
+	while current + 1 <= last_pos {
+		let (parent, _) = family(current);
+		if parent > last_pos {
+			break;
+		}
+		path.push(parent);
+		current = parent;
+	}
+	path
 }
 
 /// For a given starting position calculate the parent and sibling positions

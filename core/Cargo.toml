@@ -9,6 +9,7 @@ publish = false
 bitflags = "1"
 blake2-rfc = "0.2"
 byteorder = "1"
+croaring = "0.3"
 lazy_static = "1"
 num-bigint = "0.2"
 rand = "0.3"

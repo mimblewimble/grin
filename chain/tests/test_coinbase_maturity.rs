@@ -123,7 +123,7 @@ fn test_coinbase_maturity() {
 	// Confirm the tx attempting to spend the coinbase output
 	// is not valid at the current block height given the current chain state.
 	match chain.verify_coinbase_maturity(&coinbase_txn) {
-		Err(Error::Transaction(transaction::Error::ImmatureCoinbase)) => {}
+		Err(Error::ImmatureCoinbase) => {}
 		_ => panic!("Expected transaction error with immature coinbase."),
 	}
 
