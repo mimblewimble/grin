@@ -20,7 +20,6 @@ use croaring::Bitmap;
 
 use util::secp;
 use util::secp::pedersen::Commitment;
-use util::secp_static;
 
 use core::core::committed;
 use core::core::hash::{Hash, Hashed};
@@ -77,6 +76,8 @@ pub enum Error {
 	InvalidBlockHeight,
 	/// One of the root hashes in the block is invalid
 	InvalidRoot,
+	/// One of the MMR sizes in the block header is invalid
+	InvalidMMRSize,
 	/// Error from underlying keychain impl
 	Keychain(keychain::Error),
 	/// Error from underlying secp lib
@@ -343,15 +344,6 @@ pub trait ChainStore: Send + Sync {
 	/// Deletes a block marker associated with the provided hash
 	fn delete_block_marker(&self, bh: &Hash) -> Result<(), store::Error>;
 
-	/// Save block sums for the given block hash.
-	fn save_block_sums(&self, bh: &Hash, marker: &BlockSums) -> Result<(), store::Error>;
-
-	/// Get block sums for the given block hash.
-	fn get_block_sums(&self, bh: &Hash) -> Result<BlockSums, store::Error>;
-
-	/// Delete block sums for the given block hash.
-	fn delete_block_sums(&self, bh: &Hash) -> Result<(), store::Error>;
-
 	/// Get the bitmap representing the inputs for the specified block.
 	fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, store::Error>;
 
@@ -419,45 +411,6 @@ impl Default for BlockMarker {
 		BlockMarker {
 			output_pos: 0,
 			kernel_pos: 0,
-		}
-	}
-}
-
-/// The output_sum and kernel_sum for a given block.
-/// This is used to validate the next block being processed by applying
-/// the inputs, outputs, kernels and kernel_offset from the new block
-/// and checking everything sums correctly.
-#[derive(Debug, Clone)]
-pub struct BlockSums {
-	/// The total output sum so far.
-	pub output_sum: Commitment,
-	/// The total kernel sum so far.
-	pub kernel_sum: Commitment,
-}
-
-impl Writeable for BlockSums {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_fixed_bytes(&self.output_sum)?;
-		writer.write_fixed_bytes(&self.kernel_sum)?;
-		Ok(())
-	}
-}
-
-impl Readable for BlockSums {
-	fn read(reader: &mut Reader) -> Result<BlockSums, ser::Error> {
-		Ok(BlockSums {
-			output_sum: Commitment::read(reader)?,
-			kernel_sum: Commitment::read(reader)?,
-		})
-	}
-}
-
-impl Default for BlockSums {
-	fn default() -> BlockSums {
-		let zero_commit = secp_static::commit_to_zero_value();
-		BlockSums {
-			output_sum: zero_commit.clone(),
-			kernel_sum: zero_commit.clone(),
 		}
 	}
 }

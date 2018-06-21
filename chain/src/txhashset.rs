@@ -39,8 +39,8 @@ use core::ser::{PMMRIndexHashable, PMMRable};
 use grin_store;
 use grin_store::pmmr::PMMRBackend;
 use grin_store::types::prune_noop;
-use types::{BlockMarker, BlockSums, ChainStore, Error, TxHashSetRoots};
-use util::{secp_static, zip, LOGGER};
+use types::{BlockMarker, ChainStore, Error, TxHashSetRoots};
+use util::{zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
 const OUTPUT_SUBDIR: &'static str = "output";
@@ -825,9 +825,8 @@ impl<'a> Extension<'a> {
 
 	/// Validate the various MMR roots against the block header.
 	pub fn validate_roots(&self, header: &BlockHeader) -> Result<(), Error> {
-		// If we are validating the genesis block then
-		// we have no outputs or kernels.
-		// So we are done here.
+		// If we are validating the genesis block then we have no outputs or
+		// kernels. So we are done here.
 		if header.height == 0 {
 			return Ok(());
 		}
@@ -865,28 +864,18 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Validate the txhashset state against the provided block header.
-	pub fn validate(
-		&mut self,
-		header: &BlockHeader,
-		skip_rproofs: bool,
-	) -> Result<((Commitment, Commitment)), Error> {
+	pub fn validate(&mut self, header: &BlockHeader, skip_rproofs: bool) -> Result<(), Error> {
 		self.validate_mmrs()?;
 		self.validate_roots(header)?;
 
 		if header.height == 0 {
-			let zero_commit = secp_static::commit_to_zero_value();
-			return Ok((zero_commit.clone(), zero_commit.clone()));
+			return Ok(());
 		}
 
 		// The real magicking happens here.
 		// Sum of kernel excesses should equal sum of
 		// unspent outputs minus total supply.
-		let (output_sum, kernel_sum) = self.verify_kernel_sums(
-			header.total_overage(),
-			header.total_kernel_offset(),
-			None,
-			None,
-		)?;
+		self.verify_kernel_sums(header.total_overage(), header.total_kernel_offset())?;
 
 		// This is an expensive verification step.
 		self.verify_kernel_signatures()?;
@@ -897,24 +886,10 @@ impl<'a> Extension<'a> {
 			self.verify_rangeproofs()?;
 		}
 
-		Ok((output_sum, kernel_sum))
-	}
+		// Verify kernel roots for all past headers, need to be last as it rewinds
+		// a lot without resetting
+		self.verify_kernel_history(header)?;
 
-	/// Save blocks sums (the output_sum and kernel_sum) for the given block
-	/// header.
-	pub fn save_latest_block_sums(
-		&self,
-		header: &BlockHeader,
-		output_sum: Commitment,
-		kernel_sum: Commitment,
-	) -> Result<(), Error> {
-		self.commit_index.save_block_sums(
-			&header.hash(),
-			&BlockSums {
-				output_sum,
-				kernel_sum,
-			},
-		)?;
 		Ok(())
 	}
 
@@ -961,8 +936,8 @@ impl<'a> Extension<'a> {
 		}
 	}
 
-	// Sizes of the sum trees, used by `extending` on rollback.
-	fn sizes(&self) -> (u64, u64, u64) {
+	/// Sizes of each of the sum trees
+	pub fn sizes(&self) -> (u64, u64, u64) {
 		(
 			self.output_pmmr.unpruned_size(),
 			self.rproof_pmmr.unpruned_size(),
@@ -1025,6 +1000,32 @@ impl<'a> Extension<'a> {
 			self.rproof_pmmr.unpruned_size(),
 			now.elapsed().as_secs(),
 		);
+		Ok(())
+	}
+
+	fn verify_kernel_history(&mut self, header: &BlockHeader) -> Result<(), Error> {
+		// Special handling to make sure the whole kernel set matches each of its
+		// roots in each block header, without truncation. We go back header by
+		// header, rewind and check each root. This fixes a potential weakness in
+		// fast sync where a reorg past the horizon could allow a whole rewrite of
+		// the kernel set.
+		let mut current = header.clone();
+		loop {
+			current = self.commit_index.get_block_header(&current.previous)?;
+			if current.height == 0 {
+				break;
+			}
+			// rewinding further and further back
+			self.kernel_pmmr
+				.rewind(current.kernel_mmr_size, current.height as u32)
+				.map_err(&Error::TxHashSetErr)?;
+			if self.kernel_pmmr.root() != current.kernel_root {
+				return Err(Error::InvalidTxHashSet(format!(
+					"Kernel root at {} does not match",
+					current.height
+				)));
+			}
+		}
 		Ok(())
 	}
 }

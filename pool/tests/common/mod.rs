@@ -40,8 +40,8 @@ use pool::*;
 use keychain::Keychain;
 use wallet::libtx;
 
-use pool::types::*;
 use pool::TransactionPool;
+use pool::types::*;
 
 #[derive(Clone)]
 pub struct ChainAdapter {

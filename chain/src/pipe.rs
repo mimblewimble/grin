@@ -26,7 +26,7 @@ use core::global;
 use grin_store;
 use store;
 use txhashset;
-use types::{BlockSums, ChainStore, Error, Options, Tip};
+use types::{ChainStore, Error, Options, Tip};
 use util::LOGGER;
 
 /// Contextual information required to process a new block and either reject or
@@ -308,25 +308,9 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 }
 
 fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	// If this is the first block then we have no previous block sums stored.
-	let block_sums = if b.header.height == 1 {
-		BlockSums::default()
-	} else {
-		ctx.store.get_block_sums(&b.header.previous)?
-	};
-
-	let (new_output_sum, new_kernel_sum) =
-		b.validate(&block_sums.output_sum, &block_sums.kernel_sum)
-			.map_err(&Error::InvalidBlockProof)?;
-
-	ctx.store.save_block_sums(
-		&b.hash(),
-		&BlockSums {
-			output_sum: new_output_sum,
-			kernel_sum: new_kernel_sum,
-		},
-	)?;
-
+	let prev = ctx.store.get_block_header(&b.header.previous)?;
+	b.validate(&prev.total_kernel_offset, &prev.total_kernel_sum)
+		.map_err(&Error::InvalidBlockProof)?;
 	Ok(())
 }
 
@@ -368,6 +352,10 @@ fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Re
 		);
 
 		return Err(Error::InvalidRoot);
+	}
+	let sizes = ext.sizes();
+	if b.header.output_mmr_size != sizes.0 || b.header.kernel_mmr_size != sizes.2 {
+		return Err(Error::InvalidMMRSize);
 	}
 
 	Ok(())

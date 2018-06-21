@@ -16,9 +16,9 @@ extern crate croaring;
 
 use croaring::Bitmap;
 
+use core::core::BlockHeader;
 use core::core::hash::Hash;
 use core::core::pmmr::Backend;
-use core::core::BlockHeader;
 use core::ser;
 use core::ser::{PMMRable, Readable, Reader, Writeable, Writer};
 

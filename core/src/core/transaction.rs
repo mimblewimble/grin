@@ -14,8 +14,8 @@
 
 //! Transactions
 
-use std::cmp::max;
 use std::cmp::Ordering;
+use std::cmp::max;
 use std::collections::HashSet;
 use std::io::Cursor;
 use std::{error, fmt};
@@ -429,7 +429,7 @@ impl Transaction {
 		}
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
-		self.verify_kernel_sums(self.overage(), self.offset, None, None)?;
+		self.verify_kernel_sums(self.overage(), self.offset)?;
 		self.verify_rangeproofs()?;
 		self.verify_kernel_signatures()?;
 
@@ -556,7 +556,7 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 
 	// We need to check sums here as aggregation/cut-through
 	// may have created an invalid tx.
-	tx.verify_kernel_sums(tx.overage(), tx.offset, None, None)?;
+	tx.verify_kernel_sums(tx.overage(), tx.offset)?;
 
 	Ok(tx)
 }

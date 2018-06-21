@@ -16,8 +16,8 @@
 //! the wallet storage and update them.
 
 use failure::ResultExt;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use core::consensus::reward;
 use core::core::{Output, TxKernel};

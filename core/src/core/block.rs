@@ -29,7 +29,7 @@ use core::{transaction, Commitment, Input, KernelFeatures, Output, OutputFeature
 use global;
 use keychain::{self, BlindingFactor};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
-use util::{secp, static_secp_instance, LOGGER};
+use util::{secp, secp_static, static_secp_instance, LOGGER};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, PartialEq)]
@@ -37,6 +37,8 @@ pub enum Error {
 	/// The sum of output minus input commitments does not
 	/// match the sum of kernel commitments
 	KernelSumMismatch,
+	/// The total kernel sum on the block header is wrong
+	InvalidTotalKernelSum,
 	/// Same as above but for the coinbase part of a block, including reward
 	CoinbaseSumMismatch,
 	/// Too many inputs, outputs or kernels in the block
@@ -116,6 +118,13 @@ pub struct BlockHeader {
 	/// We can derive the kernel offset sum for *this* block from
 	/// the total kernel offset of the previous block header.
 	pub total_kernel_offset: BlindingFactor,
+	/// Total accumulated sum of kernel commitments since genesis block.
+	/// Should always equal the UTXO commitment sum minus supply.
+	pub total_kernel_sum: Commitment,
+	/// Total size of the output MMR after applying this block
+	pub output_mmr_size: u64,
+	/// Total size of the kernel MMR after applying this block
+	pub kernel_mmr_size: u64,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Proof of work data.
@@ -135,6 +144,9 @@ impl Default for BlockHeader {
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
 			total_kernel_offset: BlindingFactor::zero(),
+			total_kernel_sum: Commitment::from_vec(vec![0; 33]),
+			output_mmr_size: 0,
+			kernel_mmr_size: 0,
 			nonce: 0,
 			pow: Proof::zero(proof_size),
 		}
@@ -161,10 +173,12 @@ impl Readable for BlockHeader {
 		let timestamp = reader.read_i64()?;
 		let total_difficulty = Difficulty::read(reader)?;
 		let output_root = Hash::read(reader)?;
-		let rproof_root = Hash::read(reader)?;
+		let range_proof_root = Hash::read(reader)?;
 		let kernel_root = Hash::read(reader)?;
 		let total_kernel_offset = BlindingFactor::read(reader)?;
-		let nonce = reader.read_u64()?;
+		let total_kernel_sum = Commitment::read(reader)?;
+		let (output_mmr_size, kernel_mmr_size, nonce) =
+			ser_multiread!(reader, read_u64, read_u64, read_u64);
 		let pow = Proof::read(reader)?;
 
 		if timestamp > (1 << 55) || timestamp < -(1 << 55) {
@@ -172,20 +186,23 @@ impl Readable for BlockHeader {
 		}
 
 		Ok(BlockHeader {
-			version: version,
-			height: height,
-			previous: previous,
+			version,
+			height,
+			previous,
 			timestamp: time::at_utc(time::Timespec {
 				sec: timestamp,
 				nsec: 0,
 			}),
-			total_difficulty: total_difficulty,
-			output_root: output_root,
-			range_proof_root: rproof_root,
-			kernel_root: kernel_root,
-			total_kernel_offset: total_kernel_offset,
-			nonce: nonce,
-			pow: pow,
+			total_difficulty,
+			output_root,
+			range_proof_root,
+			kernel_root,
+			total_kernel_offset,
+			total_kernel_sum,
+			output_mmr_size,
+			kernel_mmr_size,
+			nonce,
+			pow,
 		})
 	}
 }
@@ -204,6 +221,9 @@ impl BlockHeader {
 			[write_fixed_bytes, &self.range_proof_root],
 			[write_fixed_bytes, &self.kernel_root],
 			[write_fixed_bytes, &self.total_kernel_offset],
+			[write_fixed_bytes, &self.total_kernel_sum],
+			[write_u64, self.output_mmr_size],
+			[write_u64, self.kernel_mmr_size],
 			[write_u64, self.nonce]
 		);
 		Ok(())
@@ -567,24 +587,17 @@ impl Block {
 
 		// now sum the kernel_offsets up to give us
 		// an aggregate offset for the entire block
-		let total_kernel_offset = {
+		kernel_offsets.push(prev.total_kernel_offset);
+		let total_kernel_offset = committed::sum_kernel_offsets(kernel_offsets, vec![])?;
+
+		let total_kernel_sum = {
+			let zero_commit = secp_static::commit_to_zero_value();
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			let mut keys = kernel_offsets
-				.into_iter()
-				.filter(|x| *x != BlindingFactor::zero())
-				.filter_map(|x| x.secret_key(&secp).ok())
-				.collect::<Vec<_>>();
-			if prev.total_kernel_offset != BlindingFactor::zero() {
-				keys.push(prev.total_kernel_offset.secret_key(&secp)?);
-			}
-
-			if keys.is_empty() {
-				BlindingFactor::zero()
-			} else {
-				let sum = secp.blind_sum(keys, vec![])?;
-				BlindingFactor::from_secret_key(sum)
-			}
+			let mut excesses = map_vec!(kernels, |x| x.excess());
+			excesses.push(prev.total_kernel_sum);
+			excesses.retain(|x| *x != zero_commit);
+			secp.commit_sum(excesses, vec![])?
 		};
 
 		Ok(Block {
@@ -596,12 +609,13 @@ impl Block {
 				},
 				previous: prev.hash(),
 				total_difficulty: difficulty + prev.total_difficulty,
-				total_kernel_offset: total_kernel_offset,
+				total_kernel_offset,
+				total_kernel_sum,
 				..Default::default()
 			},
-			inputs: inputs,
-			outputs: outputs,
-			kernels: kernels,
+			inputs,
+			outputs,
+			kernels,
 		}.cut_through())
 	}
 
@@ -666,25 +680,39 @@ impl Block {
 	/// trees, reward, etc.
 	pub fn validate(
 		&self,
-		prev_output_sum: &Commitment,
+		prev_kernel_offset: &BlindingFactor,
 		prev_kernel_sum: &Commitment,
-	) -> Result<((Commitment, Commitment)), Error> {
+	) -> Result<(Commitment), Error> {
 		self.verify_weight()?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 		self.verify_coinbase()?;
 		self.verify_kernel_lock_heights()?;
 
-		let sums = self.verify_kernel_sums(
-			self.header.overage(),
-			self.header.total_kernel_offset(),
-			Some(prev_output_sum),
-			Some(prev_kernel_sum),
-		)?;
+		// take the kernel offset for this block (block offset minus previous) and
+		// verify outputs and kernel sums
+		let block_kernel_offset = if self.header.total_kernel_offset() == prev_kernel_offset.clone()
+		{
+			// special case when the sum hasn't changed (typically an empty block),
+			// zero isn't a valid private key but it's a valid blinding factor
+			BlindingFactor::zero()
+		} else {
+			committed::sum_kernel_offsets(
+				vec![self.header.total_kernel_offset()],
+				vec![prev_kernel_offset.clone()],
+			)?
+		};
+		let sum = self.verify_kernel_sums(self.header.overage(), block_kernel_offset)?;
+
+		// check the block header's total kernel sum
+		let total_sum = committed::sum_commits(vec![sum, prev_kernel_sum.clone()], vec![])?;
+		if total_sum != self.header.total_kernel_sum {
+			return Err(Error::InvalidTotalKernelSum);
+		}
 
 		self.verify_rangeproofs()?;
 		self.verify_kernel_signatures()?;
-		Ok(sums)
+		Ok(sum)
 	}
 
 	fn verify_weight(&self) -> Result<(), Error> {

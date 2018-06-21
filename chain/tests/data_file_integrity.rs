@@ -24,8 +24,8 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
-use chain::types::{NoopAdapter, Tip};
 use chain::Chain;
+use chain::types::{NoopAdapter, Tip};
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};
 use core::global::{self, ChainTypes};
@@ -76,7 +76,7 @@ fn data_files() {
 			let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
 			b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
-			chain.set_txhashset_roots(&mut b, false).unwrap();
+			chain.set_block_roots(&mut b, false).unwrap();
 
 			pow::pow_size(
 				&mut b.header,
@@ -93,14 +93,13 @@ fn data_files() {
 			let head = Tip::from_block(&b.header);
 
 			// Check we have block markers for the last block and the block previous
-			let cur_pmmr_md = chain
+			let _cur_pmmr_md = chain
 				.get_block_marker(&head.last_block_h)
 				.expect("block marker does not exist");
 			chain
 				.get_block_marker(&head.prev_block_h)
 				.expect("prev block marker does not exist");
 
-			println!("Cur_pmmr_md: {:?}", cur_pmmr_md);
 			chain.validate(false).unwrap();
 		}
 	}
@@ -113,7 +112,7 @@ fn data_files() {
 
 fn _prepare_block(kc: &ExtKeychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_txhashset_roots(&mut b, false).unwrap();
+	chain.set_block_roots(&mut b, false).unwrap();
 	b
 }
 
@@ -125,13 +124,13 @@ fn _prepare_block_tx(
 	txs: Vec<&Transaction>,
 ) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_txhashset_roots(&mut b, false).unwrap();
+	chain.set_block_roots(&mut b, false).unwrap();
 	b
 }
 
 fn _prepare_fork_block(kc: &ExtKeychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_txhashset_roots(&mut b, true).unwrap();
+	chain.set_block_roots(&mut b, true).unwrap();
 	b
 }
 
@@ -143,7 +142,7 @@ fn _prepare_fork_block_tx(
 	txs: Vec<&Transaction>,
 ) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_txhashset_roots(&mut b, true).unwrap();
+	chain.set_block_roots(&mut b, true).unwrap();
 	b
 }
 

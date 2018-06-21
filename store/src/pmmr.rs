@@ -20,10 +20,10 @@ use std::path::Path;
 
 use croaring::Bitmap;
 
+use core::core::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::{self, family, Backend};
 use core::core::prune_list::PruneList;
-use core::core::BlockHeader;
 use core::ser::{self, PMMRable};
 use leaf_set::LeafSet;
 use rm_log::RemoveLog;

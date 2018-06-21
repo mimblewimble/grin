@@ -16,13 +16,13 @@
 
 use std::cmp::Ordering;
 
+use cursive::Cursive;
 use cursive::direction::Orientation;
 use cursive::event::Key;
 use cursive::traits::{Boxable, Identifiable};
 use cursive::view::View;
 use cursive::views::{BoxView, Button, Dialog, LinearLayout, OnEventView, Panel, StackView,
                      TextView};
-use cursive::Cursive;
 use std::time;
 use tui::chrono::prelude::{DateTime, NaiveDateTime, Utc};
 

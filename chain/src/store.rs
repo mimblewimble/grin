@@ -25,8 +25,8 @@ use core::consensus::TargetError;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
-use grin_store::{self, option_to_not_found, to_key, u64_to_key, Error};
-use types::{BlockMarker, BlockSums, ChainStore, Tip};
+use grin_store::{self, option_to_not_found, to_key, Error, u64_to_key};
+use types::{BlockMarker, ChainStore, Tip};
 
 const STORE_SUBPATH: &'static str = "chain";
 
@@ -38,7 +38,6 @@ const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const BLOCK_MARKER_PREFIX: u8 = 'm' as u8;
-const BLOCK_SUMS_PREFIX: u8 = 'M' as u8;
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = 'B' as u8;
 
 /// An implementation of the ChainStore trait backed by a simple key-value
@@ -277,22 +276,6 @@ impl ChainStore for ChainKVStore {
 	fn delete_block_marker(&self, bh: &Hash) -> Result<(), Error> {
 		self.db
 			.delete(&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec()))
-	}
-
-	fn save_block_sums(&self, bh: &Hash, marker: &BlockSums) -> Result<(), Error> {
-		self.db
-			.put_ser(&to_key(BLOCK_SUMS_PREFIX, &mut bh.to_vec())[..], &marker)
-	}
-
-	fn get_block_sums(&self, bh: &Hash) -> Result<BlockSums, Error> {
-		option_to_not_found(
-			self.db
-				.get_ser(&to_key(BLOCK_SUMS_PREFIX, &mut bh.to_vec())),
-		)
-	}
-
-	fn delete_block_sums(&self, bh: &Hash) -> Result<(), Error> {
-		self.db.delete(&to_key(BLOCK_SUMS_PREFIX, &mut bh.to_vec()))
 	}
 
 	fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {

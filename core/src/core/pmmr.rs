@@ -39,9 +39,9 @@ use std::marker;
 
 use croaring::Bitmap;
 
+use core::BlockHeader;
 use core::hash::Hash;
 use core::merkle_proof::MerkleProof;
-use core::BlockHeader;
 use ser::{PMMRIndexHashable, PMMRable};
 use util::LOGGER;
 

@@ -20,19 +20,19 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
+use core::core::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::target::Difficulty;
-use core::core::Committed;
 use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{BlockMarker, BlockSums, ChainAdapter, ChainStore, Error, Options, Tip};
-use util::secp::pedersen::{Commitment, RangeProof};
+use types::{BlockMarker, ChainAdapter, ChainStore, Error, Options, Tip};
 use util::LOGGER;
+use util::secp::pedersen::{Commitment, RangeProof};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -191,35 +191,7 @@ impl Chain {
 						);
 
 						extension.rewind(&header, &head_header)?;
-
 						extension.validate_roots(&header)?;
-
-						// now check we have the "block sums" for the block in question
-						// if we have no sums (migrating an existing node) we need to go
-						// back to the txhashset and sum the outputs and kernels
-						if header.height > 0 && store.get_block_sums(&header.hash()).is_err() {
-							debug!(
-								LOGGER,
-								"chain: init: building (missing) block sums for {} @ {}",
-								header.height,
-								header.hash()
-							);
-
-							let (output_sum, kernel_sum) = extension.verify_kernel_sums(
-								header.total_overage(),
-								header.total_kernel_offset(),
-								None,
-								None,
-							)?;
-
-							store.save_block_sums(
-								&header.hash(),
-								&BlockSums {
-									output_sum,
-									kernel_sum,
-								},
-							)?;
-						}
 
 						Ok(())
 					});
@@ -539,21 +511,23 @@ impl Chain {
 
 	/// Sets the txhashset roots on a brand new block by applying the block on
 	/// the current txhashset state.
-	pub fn set_txhashset_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
+	pub fn set_block_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		let store = self.store.clone();
 
-		let roots = txhashset::extending_readonly(&mut txhashset, |extension| {
+		let (roots, sizes) = txhashset::extending_readonly(&mut txhashset, |extension| {
 			if is_fork {
 				pipe::rewind_and_apply_fork(b, store, extension)?;
 			}
 			extension.apply_block(b)?;
-			Ok(extension.roots())
+			Ok((extension.roots(), extension.sizes()))
 		})?;
 
 		b.header.output_root = roots.output_root;
 		b.header.range_proof_root = roots.rproof_root;
 		b.header.kernel_root = roots.kernel_root;
+		b.header.output_mmr_size = sizes.0;
+		b.header.kernel_mmr_size = sizes.2;
 		Ok(())
 	}
 
@@ -654,13 +628,18 @@ impl Chain {
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
 
-		// Note: we are validating against a writeable extension.
+		// first read-only extension, for validation only
+		txhashset::extending_readonly(&mut txhashset, |extension| {
+			extension.rewind(&header)?;
+			extension.validate(&header, false)?;
+			Ok(())
+		})?;
+		// second real extension to commit the rewind and indexes
 		txhashset::extending(&mut txhashset, |extension| {
 			// TODO do we need to rewind here? We have no blocks to rewind
 			// (and we need them for the pos to unremove)
 			extension.rewind(&header, &header)?;
-			let (output_sum, kernel_sum) = extension.validate(&header, false)?;
-			extension.save_latest_block_sums(&header, output_sum, kernel_sum)?;
+			extension.validate(&header, false)?;
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
@@ -739,7 +718,6 @@ impl Chain {
 					// TODO - consider wrapping these up in a single fn call?
 					self.store.delete_block(&b.hash())?;
 					self.store.delete_block_marker(&b.hash())?;
-					self.store.delete_block_sums(&b.hash())?;
 					self.store.delete_block_input_bitmap(&b.hash())?;
 				}
 				Err(NotFoundErr) => {
@@ -857,13 +835,6 @@ impl Chain {
 		self.store
 			.get_block_marker(bh)
 			.map_err(|e| Error::StoreErr(e, "chain get block marker".to_owned()))
-	}
-
-	/// Get the blocks sums for the specified block hash.
-	pub fn get_block_sums(&self, bh: &Hash) -> Result<BlockSums, Error> {
-		self.store
-			.get_block_sums(bh)
-			.map_err(|e| Error::StoreErr(e, "chain get block sums".to_owned()))
 	}
 
 	/// Gets the block header at the provided height

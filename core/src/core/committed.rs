@@ -17,6 +17,7 @@
 use keychain;
 use keychain::BlindingFactor;
 
+use util::secp::key::SecretKey;
 use util::secp::pedersen::Commitment;
 use util::{secp, secp_static, static_secp_instance};
 
@@ -52,26 +53,12 @@ pub trait Committed {
 	fn sum_kernel_excesses(
 		&self,
 		offset: &BlindingFactor,
-		extra_excess: Option<&Commitment>,
 	) -> Result<(Commitment, Commitment), Error> {
-		let zero_commit = secp_static::commit_to_zero_value();
-
 		// then gather the kernel excess commitments
-		let mut kernel_commits = self.kernels_committed();
-
-		if let Some(extra) = extra_excess {
-			kernel_commits.push(*extra);
-		}
-
-		// handle "zero commit" values by filtering them out here
-		kernel_commits.retain(|x| *x != zero_commit);
+		let kernel_commits = self.kernels_committed();
 
 		// sum the commitments
-		let kernel_sum = {
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			secp.commit_sum(kernel_commits, vec![])?
-		};
+		let kernel_sum = sum_commits(kernel_commits, vec![])?;
 
 		// sum the commitments along with the
 		// commit to zero built from the offset
@@ -91,14 +78,8 @@ pub trait Committed {
 	}
 
 	/// Gathers commitments and sum them.
-	fn sum_commitments(
-		&self,
-		overage: i64,
-		extra_commit: Option<&Commitment>,
-	) -> Result<Commitment, Error> {
-		let zero_commit = secp_static::commit_to_zero_value();
-
-		// then gather the commitments
+	fn sum_commitments(&self, overage: i64) -> Result<Commitment, Error> {
+		// gather the commitments
 		let mut input_commits = self.inputs_committed();
 		let mut output_commits = self.outputs_committed();
 
@@ -117,21 +98,7 @@ pub trait Committed {
 			}
 		}
 
-		if let Some(extra) = extra_commit {
-			output_commits.push(*extra);
-		}
-
-		// handle "zero commit" values by filtering them out here
-		output_commits.retain(|x| *x != zero_commit);
-		input_commits.retain(|x| *x != zero_commit);
-
-		// sum all that stuff
-		{
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			let res = secp.commit_sum(output_commits, input_commits)?;
-			Ok(res)
-		}
+		sum_commits(output_commits, input_commits)
 	}
 
 	/// Vector of input commitments to verify.
@@ -150,20 +117,57 @@ pub trait Committed {
 		&self,
 		overage: i64,
 		kernel_offset: BlindingFactor,
-		prev_output_sum: Option<&Commitment>,
-		prev_kernel_sum: Option<&Commitment>,
-	) -> Result<((Commitment, Commitment)), Error> {
+	) -> Result<(Commitment), Error> {
 		// Sum all input|output|overage commitments.
-		let utxo_sum = self.sum_commitments(overage, prev_output_sum)?;
+		let utxo_sum = self.sum_commitments(overage)?;
 
 		// Sum the kernel excesses accounting for the kernel offset.
-		let (kernel_sum, kernel_sum_plus_offset) =
-			self.sum_kernel_excesses(&kernel_offset, prev_kernel_sum)?;
+		let (kernel_sum, kernel_sum_plus_offset) = self.sum_kernel_excesses(&kernel_offset)?;
 
 		if utxo_sum != kernel_sum_plus_offset {
 			return Err(Error::KernelSumMismatch);
 		}
 
-		Ok((utxo_sum, kernel_sum))
+		Ok(kernel_sum)
 	}
+}
+
+/// Utility to sum positive and negative commitments, eliminating zero values
+pub fn sum_commits(
+	mut positive: Vec<Commitment>,
+	mut negative: Vec<Commitment>,
+) -> Result<Commitment, Error> {
+	let zero_commit = secp_static::commit_to_zero_value();
+	positive.retain(|x| *x != zero_commit);
+	negative.retain(|x| *x != zero_commit);
+	let secp = static_secp_instance();
+	let secp = secp.lock().unwrap();
+	Ok(secp.commit_sum(positive, negative)?)
+}
+
+/// Utility function to take sets of positive and negative kernel offsets as
+/// blinding factors, convert them to private key filtering zero values and
+/// summing all of them. Useful to build blocks.
+pub fn sum_kernel_offsets(
+	positive: Vec<BlindingFactor>,
+	negative: Vec<BlindingFactor>,
+) -> Result<BlindingFactor, Error> {
+	let secp = static_secp_instance();
+	let secp = secp.lock().unwrap();
+	let positive = to_secrets(positive, &secp);
+	let negative = to_secrets(negative, &secp);
+
+	if positive.is_empty() {
+		Ok(BlindingFactor::zero())
+	} else {
+		let sum = secp.blind_sum(positive, negative)?;
+		Ok(BlindingFactor::from_secret_key(sum))
+	}
+}
+
+fn to_secrets(bf: Vec<BlindingFactor>, secp: &secp::Secp256k1) -> Vec<SecretKey> {
+	bf.into_iter()
+		.filter(|x| *x != BlindingFactor::zero())
+		.filter_map(|x| x.secret_key(&secp).ok())
+		.collect::<Vec<_>>()
 }

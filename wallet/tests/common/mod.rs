@@ -13,8 +13,8 @@
 // limitations under the License.
 
 //! Common functions to facilitate wallet, walletlib and transaction testing
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
@@ -145,7 +145,7 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: (Out
 		reward,
 	).unwrap();
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
-	chain.set_txhashset_roots(&mut b, false).unwrap();
+	chain.set_block_roots(&mut b, false).unwrap();
 	pow::pow_size(
 		&mut b.header,
 		difficulty,

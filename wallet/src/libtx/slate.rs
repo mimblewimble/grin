@@ -23,8 +23,8 @@ use keychain::{BlindSum, BlindingFactor, Keychain};
 use libtx::error::{Error, ErrorKind};
 use libtx::{aggsig, build, tx_fee};
 
-use util::secp::key::{PublicKey, SecretKey};
 use util::secp::Signature;
+use util::secp::key::{PublicKey, SecretKey};
 use util::{secp, LOGGER};
 
 /// Public data for each participant in the slate
@@ -371,7 +371,7 @@ impl Slate {
 
 			// sum the input/output commitments on the final tx
 			let overage = final_tx.fee() as i64;
-			let tx_excess = final_tx.sum_commitments(overage, None)?;
+			let tx_excess = final_tx.sum_commitments(overage)?;
 
 			// subtract the kernel_excess (built from kernel_offset)
 			let offset_excess = keychain

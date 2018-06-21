@@ -20,10 +20,10 @@ extern crate grin_wallet as wallet;
 use std::fs;
 use std::sync::Arc;
 
+use chain::ChainStore;
 use chain::store::ChainKVStore;
 use chain::txhashset::{self, TxHashSet};
 use chain::types::Tip;
-use chain::ChainStore;
 use core::core::merkle_proof::MerkleProof;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};

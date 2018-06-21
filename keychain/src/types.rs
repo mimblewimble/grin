@@ -297,8 +297,8 @@ mod test {
 	use rand::thread_rng;
 
 	use types::BlindingFactor;
-	use util::secp::key::{SecretKey, ZERO_KEY};
 	use util::secp::Secp256k1;
+	use util::secp::key::{SecretKey, ZERO_KEY};
 
 	#[test]
 	fn split_blinding_factor() {
