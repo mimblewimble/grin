@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 bitflags = "1"
 byteorder = "1"
-croaring = "0.3"
+croaring = "=0.3.2"
 slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
 serde = "1"
 serde_derive = "1"
