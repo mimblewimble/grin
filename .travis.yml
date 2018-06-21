@@ -6,7 +6,7 @@ cache:
 before_cache:
   - rm -rf target/tmp
 dist: trusty
-sudo: false
+sudo: required
 rust:
   - stable
 
