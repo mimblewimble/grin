@@ -77,6 +77,10 @@ pub enum ErrorKind {
 	#[fail(display = "Trait Implementation error")]
 	CallbackImpl(&'static str),
 
+	/// Wallet backend error
+	#[fail(display = "Wallet store error")]
+	Backend(String),
+
 	/// Callback implementation error conversion
 	#[fail(display = "Restore Error")]
 	Restore,

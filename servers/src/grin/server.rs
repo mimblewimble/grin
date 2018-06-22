@@ -35,6 +35,7 @@ use mining::stratumserver;
 use mining::test_miner::Miner;
 use p2p;
 use pool;
+use store;
 use util::LOGGER;
 
 /// Grin server holding internal structures.
@@ -130,8 +131,10 @@ impl Server {
 
 		info!(LOGGER, "Starting server, genesis block: {}", genesis.hash());
 
+		let db_env = Arc::new(store::new_env(config.db_root.clone()));
 		let shared_chain = Arc::new(chain::Chain::init(
 			config.db_root.clone(),
+			db_env.clone(),
 			chain_adapter.clone(),
 			genesis.clone(),
 			pow::verify_size,
@@ -156,7 +159,7 @@ impl Server {
 		};
 
 		let p2p_server = Arc::new(p2p::Server::new(
-			config.db_root.clone(),
+			db_env,
 			config.capabilities,
 			config.p2p_config.clone(),
 			net_adapter.clone(),

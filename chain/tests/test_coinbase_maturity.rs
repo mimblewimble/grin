@@ -16,6 +16,7 @@ extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_store as store;
 extern crate grin_wallet as wallet;
 extern crate rand;
 extern crate time;
@@ -43,8 +44,10 @@ fn test_coinbase_maturity() {
 
 	let genesis_block = pow::mine_genesis_block().unwrap();
 
+	let db_env = Arc::new(store::new_env(".grin".to_string()));
 	let chain = chain::Chain::init(
 		".grin".to_string(),
+		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,

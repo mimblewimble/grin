@@ -26,7 +26,7 @@ use core::global;
 use grin_store;
 use store;
 use txhashset;
-use types::{ChainStore, Error, Options, Tip};
+use types::{Error, Options, Tip};
 use util::LOGGER;
 
 /// Contextual information required to process a new block and either reject or
@@ -35,7 +35,7 @@ pub struct BlockContext {
 	/// The options
 	pub opts: Options,
 	/// The store
-	pub store: Arc<ChainStore>,
+	pub store: Arc<store::ChainStore>,
 	/// The head
 	pub head: Tip,
 	/// The POW verification function
@@ -45,9 +45,9 @@ pub struct BlockContext {
 }
 
 /// Runs the block processing pipeline, including validation and finding a
-/// place for the new block in the chain. Returns the new
-/// chain head if updated.
-pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
+/// place for the new block in the chain. Returns the new chain head if
+/// updated.
+pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
@@ -60,9 +60,9 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		b.outputs.len(),
 		b.kernels.len(),
 	);
-	check_known(b.hash(), &mut ctx)?;
+	check_known(b.hash(), ctx)?;
 
-	validate_header(&b.header, &mut ctx)?;
+	validate_header(&b.header, ctx)?;
 
 	// now check we actually have the previous block in the store
 	// not just the header but the block itself
@@ -84,8 +84,8 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 	}
 
 	// validate the block itself
-	// we can do this now before interact with the txhashset
-	validate_block(b, &mut ctx)?;
+	// we can do this now before interacting with the txhashset
+	let _sums = validate_block(b, ctx)?;
 
 	// header and block both valid, and we have a previous block
 	// so take the lock on the txhashset
@@ -97,9 +97,11 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		.head()
 		.map_err(|e| Error::StoreErr(e, "pipe reload head".to_owned()))?;
 
+	let mut batch = ctx.store.batch()?;
+
 	// start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
-	let result = txhashset::extending(&mut txhashset, |mut extension| {
+	let _ = txhashset::extending(&mut txhashset, &mut batch, |mut extension| {
 		// First we rewind the txhashset extension if necessary
 		// to put it into a consistent state for validating the block.
 		// We can skip this step if the previous header is the latest header we saw.
@@ -108,30 +110,33 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		}
 		validate_block_via_txhashset(b, &mut extension)?;
 
-		trace!(
-			LOGGER,
-			"pipe: process_block: {} at {} is valid, save and append.",
-			b.hash(),
-			b.header.height,
-		);
-
-		add_block(b, &mut ctx)?;
-		let h = update_head(b, &mut ctx)?;
-		if h.is_none() {
+		if !block_has_more_work(b, &ctx.head) {
 			extension.force_rollback();
 		}
-		Ok(h)
+		Ok(())
 	});
 
-	result
+	trace!(
+		LOGGER,
+		"pipe: process_block: {} at {} is valid, save and append.",
+		b.hash(),
+		b.header.height,
+	);
+	add_block(b, &mut batch)?;
+	let res = update_head(b, &ctx, &mut batch);
+	if res.is_ok() {
+		batch.commit()?;
+	}
+	res
 }
 
 /// Process the block header.
 /// This is only ever used during sync and uses a context based on sync_head.
 pub fn sync_block_header(
 	bh: &BlockHeader,
-	mut sync_ctx: BlockContext,
-	mut header_ctx: BlockContext,
+	sync_ctx: &mut BlockContext,
+	header_ctx: &mut BlockContext,
+	batch: &mut store::Batch,
 ) -> Result<Option<Tip>, Error> {
 	debug!(
 		LOGGER,
@@ -140,20 +145,20 @@ pub fn sync_block_header(
 		bh.height
 	);
 
-	validate_header(&bh, &mut sync_ctx)?;
-	add_block_header(bh, &mut sync_ctx)?;
+	validate_header(&bh, sync_ctx)?;
+	add_block_header(bh, batch)?;
 
 	// now update the header_head (if new header with most work) and the sync_head
 	// (always)
-	update_header_head(bh, &mut header_ctx)?;
-	update_sync_head(bh, &mut sync_ctx)
+	update_header_head(bh, header_ctx, batch)?;
+	update_sync_head(bh, sync_ctx, batch)
 }
 
 /// Process block header as part of "header first" block propagation.
 /// We validate the header but we do not store it or update header head based
 /// on this. We will update these once we get the block back after requesting
 /// it.
-pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<(), Error> {
+pub fn process_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	debug!(
 		LOGGER,
 		"pipe: process_block_header at {} [{}]",
@@ -161,8 +166,8 @@ pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<(
 		bh.hash()
 	); // keep this
 
-	check_header_known(bh.hash(), &mut ctx)?;
-	validate_header(&bh, &mut ctx)
+	check_header_known(bh.hash(), ctx)?;
+	validate_header(&bh, ctx)
 }
 
 /// Quick in-memory check to fast-reject any block header we've already handled
@@ -362,19 +367,19 @@ fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Re
 }
 
 /// Officially adds the block to our chain.
-fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	ctx.store
+fn add_block(b: &Block, batch: &store::Batch) -> Result<(), Error> {
+	batch
 		.save_block(b)
 		.map_err(|e| Error::StoreErr(e, "pipe save block".to_owned()))?;
-	ctx.store
+	batch
 		.save_block_input_bitmap(&b)
 		.map_err(|e| Error::StoreErr(e, "pipe save block input bitmap".to_owned()))?;
 	Ok(())
 }
 
 /// Officially adds the block header to our header chain.
-fn add_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	ctx.store
+fn add_block_header(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
+	batch
 		.save_block_header(bh)
 		.map_err(|e| Error::StoreErr(e, "pipe save header".to_owned()))
 }
@@ -382,103 +387,73 @@ fn add_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Erro
 /// Directly updates the head if we've just appended a new block to it or handle
 /// the situation where we've just added enough work to have a fork with more
 /// work than the head.
-fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+fn update_head(b: &Block, ctx: &BlockContext, batch: &store::Batch) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
 	// when extending the head), update it
-	let tip = Tip::from_block(&b.header);
-	if tip.total_difficulty > ctx.head.total_difficulty {
+	if block_has_more_work(b, &ctx.head) {
 		// update the block height index
-		ctx.store
+		batch
 			.setup_height(&b.header, &ctx.head)
 			.map_err(|e| Error::StoreErr(e, "pipe setup height".to_owned()))?;
 
 		// in sync mode, only update the "body chain", otherwise update both the
 		// "header chain" and "body chain", updating the header chain in sync resets
 		// all additional "future" headers we've received
+		let tip = Tip::from_block(&b.header);
 		if ctx.opts.contains(Options::SYNC) {
-			ctx.store
+			batch
 				.save_body_head(&tip)
 				.map_err(|e| Error::StoreErr(e, "pipe save body".to_owned()))?;
 		} else {
-			ctx.store
+			batch
 				.save_head(&tip)
 				.map_err(|e| Error::StoreErr(e, "pipe save head".to_owned()))?;
 		}
-		ctx.head = tip.clone();
-		if b.header.height % 100 == 0 {
-			info!(
-				LOGGER,
-				"pipe: chain head reached {} @ {} [{}]",
-				b.header.height,
-				b.header.total_difficulty,
-				b.hash()
-			);
-		} else {
-			debug!(
-				LOGGER,
-				"pipe: chain head reached {} @ {} [{}]",
-				b.header.height,
-				b.header.total_difficulty,
-				b.hash()
-			);
-		}
+		debug!(
+			LOGGER,
+			"pipe: chain head {} @ {}",
+			b.hash(),
+			b.header.height
+		);
 		Ok(Some(tip))
 	} else {
 		Ok(None)
 	}
 }
 
+// Whether the provided block totals more work than the chain tip
+fn block_has_more_work(b: &Block, tip: &Tip) -> bool {
+	let block_tip = Tip::from_block(&b.header);
+	block_tip.total_difficulty > tip.total_difficulty
+}
+
 /// Update the sync head so we can keep syncing from where we left off.
-fn update_sync_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+fn update_sync_head(
+	bh: &BlockHeader,
+	ctx: &mut BlockContext,
+	batch: &mut store::Batch,
+) -> Result<Option<Tip>, Error> {
 	let tip = Tip::from_block(bh);
-	ctx.store
+	batch
 		.save_sync_head(&tip)
 		.map_err(|e| Error::StoreErr(e, "pipe save sync head".to_owned()))?;
 	ctx.head = tip.clone();
-	if bh.height % 100 == 0 {
-		info!(
-			LOGGER,
-			"sync head {} @ {} [{}]",
-			bh.total_difficulty,
-			bh.height,
-			bh.hash()
-		);
-	} else {
-		debug!(
-			LOGGER,
-			"sync head {} @ {} [{}]",
-			bh.total_difficulty,
-			bh.height,
-			bh.hash()
-		);
-	}
+	debug!(LOGGER, "sync head {} @ {}", bh.hash(), bh.height);
 	Ok(Some(tip))
 }
 
-fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+fn update_header_head(
+	bh: &BlockHeader,
+	ctx: &mut BlockContext,
+	batch: &mut store::Batch,
+) -> Result<Option<Tip>, Error> {
 	let tip = Tip::from_block(bh);
 	if tip.total_difficulty > ctx.head.total_difficulty {
-		ctx.store
+		batch
 			.save_header_head(&tip)
 			.map_err(|e| Error::StoreErr(e, "pipe save header head".to_owned()))?;
 		ctx.head = tip.clone();
-		if bh.height % 100 == 0 {
-			info!(
-				LOGGER,
-				"header head {} @ {} [{}]",
-				bh.total_difficulty,
-				bh.height,
-				bh.hash()
-			);
-		} else {
-			debug!(
-				LOGGER,
-				"header head {} @ {} [{}]",
-				bh.total_difficulty,
-				bh.height,
-				bh.hash()
-			);
-		}
+		debug!(LOGGER, "header head {} @ {}", bh.hash(), bh.height);
 		Ok(Some(tip))
 	} else {
 		Ok(None)
@@ -491,7 +466,7 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 /// the expected state.
 pub fn rewind_and_apply_fork(
 	b: &Block,
-	store: Arc<ChainStore>,
+	store: Arc<store::ChainStore>,
 	ext: &mut txhashset::Extension,
 ) -> Result<(), Error> {
 	// extending a fork, first identify the block where forking occurred
@@ -522,7 +497,7 @@ pub fn rewind_and_apply_fork(
 	);
 
 	// rewind the sum trees up to the forking block
-	ext.rewind(&forked_header, &head_header)?;
+	ext.rewind(&forked_header, &head_header, true, true, true)?;
 
 	trace!(
 		LOGGER,

@@ -16,6 +16,7 @@ extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
@@ -43,8 +44,10 @@ fn setup(dir_name: &str) -> Chain {
 	clean_output_dir(dir_name);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();
+	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
+		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,
@@ -52,8 +55,10 @@ fn setup(dir_name: &str) -> Chain {
 }
 
 fn reload_chain(dir_name: &str) -> Chain {
+	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
+		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis::genesis_dev(),
 		pow::verify_size,

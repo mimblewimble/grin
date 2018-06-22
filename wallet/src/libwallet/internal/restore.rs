@@ -235,9 +235,7 @@ where
 	K: Keychain,
 {
 	// Don't proceed if wallet.dat has anything in it
-	let is_empty = wallet
-		.read_wallet(|wallet_data| Ok(wallet_data.outputs().len() == 0))
-		.context(ErrorKind::FileWallet("could not read wallet"))?;
+	let is_empty = wallet.iter().next().is_none();
 	if !is_empty {
 		error!(
 			LOGGER,
@@ -265,31 +263,26 @@ where
 			output_listing.highest_index
 		);
 
-		let _ = wallet.with_wallet(|wallet_data| {
-			let keychain = wallet_data.keychain().clone();
-			let result_vec = find_outputs_with_key(
-				wallet_data,
-				output_listing.outputs.clone(),
-				&mut found_key_index,
-			);
-			if result_vec.len() > 0 {
-				for output in result_vec.clone() {
-					let root_key_id = keychain.root_key_id();
-					wallet_data.add_output(OutputData {
-						root_key_id: root_key_id.clone(),
-						key_id: output.1.clone(),
-						n_child: output.2,
-						value: output.3,
-						status: OutputStatus::Unconfirmed,
-						height: output.4,
-						lock_height: output.5,
-						is_coinbase: output.6,
-						block: None,
-						merkle_proof: output.7,
-					});
-				}
-			}
-		});
+		let root_key_id = wallet.keychain().root_key_id();
+		let result_vec =
+			find_outputs_with_key(wallet, output_listing.outputs.clone(), &mut found_key_index);
+		let mut batch = wallet.batch()?;
+		for output in result_vec {
+			batch.save(OutputData {
+				root_key_id: root_key_id.clone(),
+				key_id: output.1.clone(),
+				n_child: output.2,
+				value: output.3,
+				status: OutputStatus::Unconfirmed,
+				height: output.4,
+				lock_height: output.5,
+				is_coinbase: output.6,
+				block: None,
+				merkle_proof: output.7,
+			});
+		}
+		batch.commit()?;
+
 		if output_listing.highest_index == output_listing.last_retrieved_index {
 			break;
 		}

@@ -8,6 +8,7 @@ publish = false
 [dependencies]
 bitflags = "1"
 byteorder = "1"
+lmdb-zero = "0.4.4"
 croaring = "0.3"
 slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
 serde = "1"

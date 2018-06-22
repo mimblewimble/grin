@@ -117,7 +117,7 @@ pub trait Committed {
 		&self,
 		overage: i64,
 		kernel_offset: BlindingFactor,
-	) -> Result<(Commitment), Error> {
+	) -> Result<((Commitment, Commitment)), Error> {
 		// Sum all input|output|overage commitments.
 		let utxo_sum = self.sum_commitments(overage)?;
 
@@ -128,7 +128,7 @@ pub trait Committed {
 			return Err(Error::KernelSumMismatch);
 		}
 
-		Ok(kernel_sum)
+		Ok((utxo_sum, kernel_sum))
 	}
 }
 

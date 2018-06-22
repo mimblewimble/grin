@@ -19,6 +19,8 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::{io, thread};
 
+use lmdb;
+
 use core::core;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
@@ -46,7 +48,7 @@ unsafe impl Send for Server {}
 impl Server {
 	/// Creates a new idle p2p server with no peers
 	pub fn new(
-		db_root: String,
+		db_env: Arc<lmdb::Environment>,
 		mut capab: Capabilities,
 		config: P2PConfig,
 		adapter: Arc<ChainAdapter>,
@@ -80,7 +82,7 @@ impl Server {
 			config: config.clone(),
 			capabilities: capab,
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
-			peers: Arc::new(Peers::new(PeerStore::new(db_root)?, adapter, config)),
+			peers: Arc::new(Peers::new(PeerStore::new(db_env)?, adapter, config)),
 			stop: stop,
 		})
 	}

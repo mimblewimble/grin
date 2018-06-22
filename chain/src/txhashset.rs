@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Utility structs to handle the 3 hashtrees (output, range proof, kernel) more
-//! conveniently and transactionally.
+//! Utility structs to handle the 3 hashtrees (output, range proof,
+//! kernel) more conveniently and transactionally.
 
 use std::collections::HashMap;
 use std::fs;
@@ -39,8 +39,9 @@ use core::ser::{PMMRIndexHashable, PMMRable};
 use grin_store;
 use grin_store::pmmr::PMMRBackend;
 use grin_store::types::prune_noop;
-use types::{BlockMarker, ChainStore, Error, TxHashSetRoots};
-use util::{zip, LOGGER};
+use store::{Batch, ChainStore};
+use types::{BlockMarker, Error, TxHashSetRoots};
+use util::{secp_static, zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
 const OUTPUT_SUBDIR: &'static str = "output";
@@ -241,24 +242,28 @@ impl TxHashSet {
 		let rewind_rm_pos =
 			input_pos_to_rewind(self.commit_index.clone(), &horizon_header, &head_header)?;
 
-		let clean_output_index = |commit: &[u8]| {
-			// do we care if this fails?
-			let _ = commit_index.delete_output_pos(commit);
-		};
+		let batch = self.commit_index.batch()?;
+		{
+			let clean_output_index = |commit: &[u8]| {
+				// do we care if this fails?
+				let _ = batch.delete_output_pos(commit);
+			};
 
-		self.output_pmmr_h.backend.check_compact(
-			horizon_marker.output_pos,
-			&rewind_add_pos,
-			&rewind_rm_pos,
-			clean_output_index,
-		)?;
+			self.output_pmmr_h.backend.check_compact(
+				horizon_marker.output_pos,
+				&rewind_add_pos,
+				&rewind_rm_pos,
+				clean_output_index,
+			)?;
 
-		self.rproof_pmmr_h.backend.check_compact(
-			horizon_marker.output_pos,
-			&rewind_add_pos,
-			&rewind_rm_pos,
-			&prune_noop,
-		)?;
+			self.rproof_pmmr_h.backend.check_compact(
+				horizon_marker.output_pos,
+				&rewind_add_pos,
+				&rewind_rm_pos,
+				&prune_noop,
+			)?;
+		}
+		batch.commit()?;
 
 		Ok(())
 	}
@@ -274,24 +279,19 @@ pub fn extending_readonly<'a, F, T>(trees: &'a mut TxHashSet, inner: F) -> Resul
 where
 	F: FnOnce(&mut Extension) -> Result<T, Error>,
 {
-	let sizes: (u64, u64, u64);
 	let res: Result<T, Error>;
 	{
 		let commit_index = trees.commit_index.clone();
+		let commit_index2 = trees.commit_index.clone();
+		let batch = commit_index.batch()?;
 
 		trace!(LOGGER, "Starting new txhashset (readonly) extension.");
-		let mut extension = Extension::new(trees, commit_index);
+		let mut extension = Extension::new(trees, &batch, commit_index2);
 		extension.force_rollback();
 		res = inner(&mut extension);
-
-		sizes = extension.sizes();
 	}
 
-	trace!(
-		LOGGER,
-		"Rollbacking txhashset (readonly) extension. sizes {:?}",
-		sizes
-	);
+	trace!(LOGGER, "Rollbacking txhashset (readonly) extension.");
 
 	trees.output_pmmr_h.backend.discard();
 	trees.rproof_pmmr_h.backend.discard();
@@ -309,7 +309,11 @@ where
 ///
 /// If the closure returns an error, modifications are canceled and the unit
 /// of work is abandoned. Otherwise, the unit of work is permanently applied.
-pub fn extending<'a, F, T>(trees: &'a mut TxHashSet, inner: F) -> Result<T, Error>
+pub fn extending<'a, F, T>(
+	trees: &'a mut TxHashSet,
+	batch: &'a mut Batch,
+	inner: F,
+) -> Result<T, Error>
 where
 	F: FnOnce(&mut Extension) -> Result<T, Error>,
 {
@@ -317,11 +321,14 @@ where
 	let res: Result<T, Error>;
 	let rollback: bool;
 
+	// create a child transaction so if the state is rolled back by itself, all
+	// index saving can be undone
+	let child_batch = batch.child()?;
 	{
 		let commit_index = trees.commit_index.clone();
 
 		trace!(LOGGER, "Starting new txhashset extension.");
-		let mut extension = Extension::new(trees, commit_index);
+		let mut extension = Extension::new(trees, &child_batch, commit_index);
 		res = inner(&mut extension);
 
 		rollback = extension.rollback;
@@ -347,6 +354,7 @@ where
 				trees.kernel_pmmr_h.backend.discard();
 			} else {
 				trace!(LOGGER, "Committing txhashset extension. sizes {:?}", sizes);
+				child_batch.commit()?;
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
@@ -373,6 +381,11 @@ pub struct Extension<'a> {
 	new_output_commits: HashMap<Commitment, u64>,
 	new_block_markers: HashMap<Hash, BlockMarker>,
 	rollback: bool,
+
+	/// Batch in which the extension occurs, public so it can be used within
+	/// and `extending` closure. Just be careful using it that way as it will
+	/// get rolled back with the extension (i.e on a losing fork).
+	pub batch: &'a Batch<'a>,
 }
 
 impl<'a> Committed for Extension<'a> {
@@ -407,7 +420,11 @@ impl<'a> Committed for Extension<'a> {
 
 impl<'a> Extension<'a> {
 	// constructor
-	fn new(trees: &'a mut TxHashSet, commit_index: Arc<ChainStore>) -> Extension<'a> {
+	fn new(
+		trees: &'a mut TxHashSet,
+		batch: &'a Batch,
+		commit_index: Arc<ChainStore>,
+	) -> Extension<'a> {
 		Extension {
 			output_pmmr: PMMR::at(
 				&mut trees.output_pmmr_h.backend,
@@ -421,10 +438,11 @@ impl<'a> Extension<'a> {
 				&mut trees.kernel_pmmr_h.backend,
 				trees.kernel_pmmr_h.last_pos,
 			),
-			commit_index: commit_index,
+			commit_index,
 			new_output_commits: HashMap::new(),
 			new_block_markers: HashMap::new(),
 			rollback: false,
+			batch,
 		}
 	}
 
@@ -440,7 +458,7 @@ impl<'a> Extension<'a> {
 		let rewind_add_pos: Bitmap = ((output_pos + 1)..(latest_output_pos + 1))
 			.map(|x| x as u32)
 			.collect();
-		self.rewind_to_pos(output_pos, kernel_pos, &rewind_add_pos, rewind_rm_pos)?;
+		self.rewind_to_pos(output_pos, kernel_pos, &rewind_add_pos, rewind_rm_pos, true, true, true)?;
 		Ok(())
 	}
 
@@ -465,8 +483,7 @@ impl<'a> Extension<'a> {
 		// Build bitmap of output pos spent (as inputs) by this tx for rewind.
 		let rewind_rm_pos = tx.inputs
 			.iter()
-			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
-			.map(|x| x as u32)
+			.filter_map(|x| self.get_output_pos(&x.commitment()).ok()) .map(|x| x as u32)
 			.collect();
 
 		for ref output in &tx.outputs {
@@ -595,6 +612,8 @@ impl<'a> Extension<'a> {
 			output_pos: self.output_pmmr.unpruned_size(),
 			kernel_pos: self.kernel_pmmr.unpruned_size(),
 		};
+		//TODO: This doesn't look right
+		self.batch.save_block_marker(&b.hash(), &marker)?;
 		self.new_block_markers.insert(b.hash(), marker);
 		Ok(())
 	}
@@ -603,17 +622,17 @@ impl<'a> Extension<'a> {
 	// Also store any new block_markers.
 	fn save_indexes(&self) -> Result<(), Error> {
 		for (commit, pos) in &self.new_output_commits {
-			self.commit_index.save_output_pos(commit, *pos)?;
+			self.batch.save_output_pos(commit, *pos)?;
 		}
 		for (bh, marker) in &self.new_block_markers {
-			self.commit_index.save_block_marker(bh, marker)?;
+			self.batch.save_block_marker(bh, marker)?;
 		}
 		Ok(())
 	}
 
 	fn apply_input(&mut self, input: &Input) -> Result<(), Error> {
 		let commit = input.commitment();
-		let pos_res = self.get_output_pos(&commit);
+		let pos_res = self.batch.get_output_pos(&commit);
 		if let Ok(pos) = pos_res {
 			let output_id_hash = OutputIdentifier::from_input(input).hash_with_index(pos - 1);
 			if let Some(read_hash) = self.output_pmmr.get_hash(pos) {
@@ -649,7 +668,8 @@ impl<'a> Extension<'a> {
 
 	fn apply_output(&mut self, out: &Output) -> Result<(), Error> {
 		let commit = out.commitment();
-		if let Ok(pos) = self.get_output_pos(&commit) {
+
+		if let Ok(pos) = self.batch.get_output_pos(&commit) {
 			// we need to check whether the commitment is in the current MMR view
 			// as well as the index doesn't support rewind and is non-authoritative
 			// (non-historical node will have a much smaller one)
@@ -668,6 +688,7 @@ impl<'a> Extension<'a> {
 		let pos = self.output_pmmr
 			.push(OutputIdentifier::from_output(out))
 			.map_err(&Error::TxHashSetErr)?;
+		self.batch.save_output_pos(&out.commitment(), pos)?;
 		self.new_output_commits.insert(out.commitment(), pos);
 
 		// push range proofs in their MMR and file
@@ -705,10 +726,10 @@ impl<'a> Extension<'a> {
 
 		// rewind to the specified block for a consistent view
 		let head_header = self.commit_index.head_header()?;
-		self.rewind(block_header, &head_header)?;
+		self.rewind(block_header, &head_header, true, true, true)?;
 
 		// then calculate the Merkle Proof based on the known pos
-		let pos = self.get_output_pos(&output.commit)?;
+		let pos = self.batch.get_output_pos(&output.commit)?;
 		let merkle_proof = self.output_pmmr
 			.merkle_proof(pos)
 			.map_err(&Error::TxHashSetErr)?;
@@ -737,6 +758,9 @@ impl<'a> Extension<'a> {
 		&mut self,
 		block_header: &BlockHeader,
 		head_header: &BlockHeader,
+		rewind_utxo: bool,
+		rewind_kernel: bool,
+		rewind_rangeproof: bool,
 	) -> Result<(), Error> {
 		let hash = block_header.hash();
 		trace!(
@@ -748,7 +772,7 @@ impl<'a> Extension<'a> {
 
 		// Rewind our MMRs to the appropriate positions
 		// based on the block_marker.
-		let marker = self.commit_index.get_block_marker(&hash)?;
+		let marker = self.batch.get_block_marker(&hash)?;
 
 		// We need to build bitmaps of added and removed output positions
 		// so we can correctly rewind all operations applied to the output MMR
@@ -766,6 +790,9 @@ impl<'a> Extension<'a> {
 			marker.kernel_pos,
 			&rewind_add_pos,
 			&rewind_rm_pos,
+			rewind_utxo,
+			rewind_kernel,
+			rewind_rangeproof
 		)?;
 
 		Ok(())
@@ -779,6 +806,9 @@ impl<'a> Extension<'a> {
 		kernel_pos: u64,
 		rewind_add_pos: &Bitmap,
 		rewind_rm_pos: &Bitmap,
+		rewind_utxo: bool,
+		rewind_kernel: bool,
+		rewind_rproof: bool,
 	) -> Result<(), Error> {
 		trace!(
 			LOGGER,
@@ -792,15 +822,21 @@ impl<'a> Extension<'a> {
 		// been sync'd to disk.
 		self.new_output_commits.retain(|_, &mut v| v <= output_pos);
 
-		self.output_pmmr
-			.rewind(output_pos, rewind_add_pos, rewind_rm_pos)
-			.map_err(&Error::TxHashSetErr)?;
-		self.rproof_pmmr
-			.rewind(output_pos, rewind_add_pos, rewind_rm_pos)
-			.map_err(&Error::TxHashSetErr)?;
-		self.kernel_pmmr
-			.rewind(kernel_pos, rewind_add_pos, rewind_rm_pos)
-			.map_err(&Error::TxHashSetErr)?;
+		if rewind_utxo {
+			self.output_pmmr
+				.rewind(output_pos, rewind_add_pos, rewind_rm_pos)
+				.map_err(&Error::TxHashSetErr)?;
+		}
+		if rewind_rproof {
+			self.rproof_pmmr
+				.rewind(output_pos, rewind_add_pos, rewind_rm_pos)
+				.map_err(&Error::TxHashSetErr)?;
+		}
+		if rewind_kernel {
+			self.kernel_pmmr
+				.rewind(kernel_pos, rewind_add_pos, rewind_rm_pos)
+				.map_err(&Error::TxHashSetErr)?;
+		}
 
 		Ok(())
 	}
@@ -864,18 +900,26 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Validate the txhashset state against the provided block header.
-	pub fn validate(&mut self, header: &BlockHeader, skip_rproofs: bool) -> Result<(), Error> {
+	pub fn validate(
+		&mut self,
+		header: &BlockHeader,
+		skip_rproofs: bool,
+	) -> Result<((Commitment, Commitment)), Error> {
 		self.validate_mmrs()?;
 		self.validate_roots(header)?;
 
 		if header.height == 0 {
-			return Ok(());
+			let zero_commit = secp_static::commit_to_zero_value();
+			return Ok((zero_commit.clone(), zero_commit.clone()));
 		}
 
 		// The real magicking happens here.
 		// Sum of kernel excesses should equal sum of
 		// unspent outputs minus total supply.
-		self.verify_kernel_sums(header.total_overage(), header.total_kernel_offset())?;
+		let (output_sum, kernel_sum) = self.verify_kernel_sums(
+			header.total_overage(),
+			header.total_kernel_offset(),
+		)?;
 
 		// This is an expensive verification step.
 		self.verify_kernel_signatures()?;
@@ -890,7 +934,7 @@ impl<'a> Extension<'a> {
 		// a lot without resetting
 		self.verify_kernel_history(header)?;
 
-		Ok(())
+		Ok((output_sum, kernel_sum))
 	}
 
 	/// Rebuild the index of MMR positions to the corresponding Output and
@@ -901,7 +945,7 @@ impl<'a> Extension<'a> {
 			// non-pruned leaves only
 			if pmmr::bintree_postorder_height(n) == 0 {
 				if let Some(out) = self.output_pmmr.get_data(n) {
-					self.commit_index.save_output_pos(&out.commit, n)?;
+					self.batch.save_output_pos(&out.commit, n)?;
 				}
 			}
 		}
@@ -1015,10 +1059,9 @@ impl<'a> Extension<'a> {
 			if current.height == 0 {
 				break;
 			}
+			let head_header = self.commit_index.head_header()?;
 			// rewinding further and further back
-			self.kernel_pmmr
-				.rewind(current.kernel_mmr_size, current.height as u32)
-				.map_err(&Error::TxHashSetErr)?;
+			self.rewind(&current, &head_header, false, true, false)?;
 			if self.kernel_pmmr.root() != current.kernel_root {
 				return Err(Error::InvalidTxHashSet(format!(
 					"Kernel root at {} does not match",
@@ -1095,7 +1138,7 @@ fn input_pos_to_rewind(
 		// I/O should be minimized or eliminated here for most
 		// rewind scenarios.
 		let current_header = commit_index.get_block_header(&current)?;
-		let input_bitmap = commit_index.get_block_input_bitmap(&current)?;
+		let input_bitmap = commit_index.batch()?.get_block_input_bitmap(&current)?;
 
 		bitmap.or_inplace(&input_bitmap);
 		current = current_header.previous;

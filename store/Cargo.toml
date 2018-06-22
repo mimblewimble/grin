@@ -10,9 +10,8 @@ byteorder = "1"
 croaring = "0.3"
 env_logger = "0.5"
 libc = "0.2"
+lmdb-zero = "0.4.4"
 memmap = { git = "https://github.com/danburkert/memmap-rs", tag = "0.6.2" }
-rand = "0.3"
-rocksdb = "0.10"
 serde = "1"
 serde_derive = "1"
 slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
@@ -22,3 +21,4 @@ grin_util = { path = "../util" }
 
 [dev-dependencies]
 time = "0.1"
+rand = "0.3"

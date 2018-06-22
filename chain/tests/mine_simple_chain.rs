@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
@@ -38,25 +38,23 @@ fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
 }
 
-fn setup(dir_name: &str) -> Chain {
-	match env_logger::try_init() {
-		Ok(_) => println!("Initializing env logger"),
-		Err(e) => println!("env logger already initialized: {:?}", e),
-	};
+fn setup(dir_name: &str, genesis: Block) -> Chain {
+	util::init_test_logger();
 	clean_output_dir(dir_name);
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let genesis_block = pow::mine_genesis_block().unwrap();
+	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
+		db_env,
 		Arc::new(NoopAdapter {}),
-		genesis_block,
+		genesis,
 		pow::verify_size,
 	).unwrap()
 }
 
 #[test]
 fn mine_empty_chain() {
-	let chain = setup(".grin");
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let chain = setup(".grin", pow::mine_genesis_block().unwrap());
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 
 	for n in 1..4 {
@@ -105,7 +103,8 @@ fn mine_empty_chain() {
 
 #[test]
 fn mine_forks() {
-	let chain = setup(".grin2");
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let chain = setup(".grin2", pow::mine_genesis_block().unwrap());
 	let kc = ExtKeychain::from_random_seed().unwrap();
 
 	// add a first block to not fork genesis
@@ -147,8 +146,9 @@ fn mine_forks() {
 
 #[test]
 fn mine_losing_fork() {
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let kc = ExtKeychain::from_random_seed().unwrap();
-	let chain = setup(".grin3");
+	let chain = setup(".grin3", pow::mine_genesis_block().unwrap());
 
 	// add a first block we'll be forking from
 	let prev = chain.head_header().unwrap();
@@ -178,12 +178,14 @@ fn mine_losing_fork() {
 
 #[test]
 fn longer_fork() {
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let kc = ExtKeychain::from_random_seed().unwrap();
 	// to make it easier to compute the txhashset roots in the test, we
 	// prepare 2 chains, the 2nd will be have the forked blocks we can
 	// then send back on the 1st
-	let chain = setup(".grin4");
-	let chain_fork = setup(".grin5");
+	let genesis = pow::mine_genesis_block().unwrap();
+	let chain = setup(".grin4", genesis.clone());
+	let chain_fork = setup(".grin5", genesis);
 
 	// add blocks to both chains, 20 on the main one, only the first 5
 	// for the forked chain
@@ -193,9 +195,8 @@ fn longer_fork() {
 		let bh = b.header.clone();
 
 		if n < 5 {
-			let b_fork = b.clone();
 			chain_fork
-				.process_block(b_fork, chain::Options::SKIP_POW)
+				.process_block(b.clone(), chain::Options::SKIP_POW)
 				.unwrap();
 		}
 
@@ -227,8 +228,9 @@ fn longer_fork() {
 
 #[test]
 fn spend_in_fork_and_compact() {
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	util::init_test_logger();
-	let chain = setup(".grin6");
+	let chain = setup(".grin6", pow::mine_genesis_block().unwrap());
 	let prev = chain.head_header().unwrap();
 	let kc = ExtKeychain::from_random_seed().unwrap();
 
@@ -435,8 +437,10 @@ where
 fn actual_diff_iter_output() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();
+	let db_env = Arc::new(store::new_env(".grin".to_string()));
 	let chain = chain::Chain::init(
 		"../.grin".to_string(),
+		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,

@@ -44,6 +44,7 @@ extern crate tokio_retry;
 extern crate grin_api as api;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_store as store;
 extern crate grin_util as util;
 
 mod client;
@@ -52,9 +53,12 @@ mod error;
 pub mod file_wallet;
 pub mod libtx;
 pub mod libwallet;
+pub mod lmdb_wallet;
+mod types;
 
 pub use client::create_coinbase;
 pub use error::{Error, ErrorKind};
-pub use file_wallet::{FileWallet, WalletConfig, WalletSeed};
+pub use file_wallet::FileWallet;
 pub use libwallet::controller;
 pub use libwallet::types::{BlockFees, CbData, WalletInfo};
+pub use types::{WalletConfig, WalletSeed};

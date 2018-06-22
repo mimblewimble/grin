@@ -20,17 +20,19 @@ use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
-use core::core::Committed;
+use lmdb;
+
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::target::Difficulty;
-use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
+use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction,
+                 TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{BlockMarker, ChainAdapter, ChainStore, Error, Options, Tip};
+use types::{BlockMarker, ChainAdapter, Error, Options, Tip};
 use util::LOGGER;
 use util::secp::pedersen::{Commitment, RangeProof};
 
@@ -123,7 +125,7 @@ impl OrphanBlockPool {
 /// maintains locking for the pipeline to avoid conflicting processing.
 pub struct Chain {
 	db_root: String,
-	store: Arc<ChainStore>,
+	store: Arc<store::ChainStore>,
 	adapter: Arc<ChainAdapter>,
 
 	head: Arc<Mutex<Tip>>,
@@ -139,106 +141,27 @@ unsafe impl Sync for Chain {}
 unsafe impl Send for Chain {}
 
 impl Chain {
-	/// Check whether the chain exists. If not, the call to 'init' will
-	/// expect an already mined genesis block. This keeps the chain free
-	/// from needing to know about the mining implementation
-	pub fn chain_exists(db_root: String) -> bool {
-		let chain_store = store::ChainKVStore::new(db_root).unwrap();
-		match chain_store.head() {
-			Ok(_) => true,
-			Err(NotFoundErr) => false,
-			Err(_) => false,
-		}
-	}
-
 	/// Initializes the blockchain and returns a new Chain instance. Does a
 	/// check on the current chain head to make sure it exists and creates one
 	/// based on the genesis block if necessary.
 	pub fn init(
 		db_root: String,
+		db_env: Arc<lmdb::Environment>,
 		adapter: Arc<ChainAdapter>,
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader, u8) -> bool,
 	) -> Result<Chain, Error> {
-		let chain_store = store::ChainKVStore::new(db_root.clone())?;
+		let chain_store = store::ChainStore::new(db_env)?;
 
 		let store = Arc::new(chain_store);
-
-		// check if we have a head in store, otherwise the genesis block is it
-		let head = store.head();
 
 		// open the txhashset, creating a new one if necessary
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
-		match head {
-			Ok(head) => {
-				// TODO - consolidate head vs head_header here.
-				let head_header = store.head_header()?;
-
-				let mut head = head;
-				loop {
-					// Use current chain tip if we have one.
-					// Note: We are rewinding and validating against a writeable extension.
-					// If validation is successful we will truncate the backend files
-					// to match the provided block header.
-					let header = store.get_block_header(&head.last_block_h)?;
-					let res = txhashset::extending(&mut txhashset, |extension| {
-						debug!(
-							LOGGER,
-							"chain: init: rewinding and validating before we start... {} at {}",
-							header.hash(),
-							header.height,
-						);
-
-						extension.rewind(&header, &head_header)?;
-						extension.validate_roots(&header)?;
-
-						Ok(())
-					});
-
-					if res.is_ok() {
-						break;
-					} else {
-						// We may have corrupted the MMR backend files
-						// last time we stopped the node.
-						// If this appears to be the case
-						// revert the head to the previous header and try again
-
-						let _ = store.delete_block(&header.hash());
-						let prev_header = store.get_block_header(&head.prev_block_h)?;
-						let _ = store.setup_height(&prev_header, &head)?;
-						head = Tip::from_block(&prev_header);
-						store.save_head(&head)?;
-					}
-				}
-			}
-			Err(NotFoundErr) => {
-				let tip = Tip::from_block(&genesis.header);
-				store.save_block(&genesis)?;
-				store.setup_height(&genesis.header, &tip)?;
-				txhashset::extending(&mut txhashset, |extension| {
-					extension.apply_block(&genesis)?;
-					Ok(())
-				})?;
-
-				// saving a new tip based on genesis
-				store.save_head(&tip)?;
-				info!(
-					LOGGER,
-					"chain: init: saved genesis block: {:?}, nonce: {:?}, pow: {:?}",
-					genesis.hash(),
-					genesis.header.nonce,
-					genesis.header.pow,
-				);
-			}
-			Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
-		};
+		setup_head(genesis, store.clone(), &mut txhashset)?;
 
 		// Now reload the chain head (either existing head or genesis from above)
 		let head = store.head()?;
-
-		// Initialize header_head and sync_head as necessary for chain init.
-		store.init_head()?;
 
 		debug!(
 			LOGGER,
@@ -291,9 +214,9 @@ impl Chain {
 		let head = self.store
 			.head()
 			.map_err(|e| Error::StoreErr(e, "chain load head".to_owned()))?;
-		let ctx = self.ctx_from_head(head, opts);
+		let mut ctx = self.ctx_from_head(head, opts)?;
 
-		let res = pipe::process_block(&b, ctx);
+		let res = pipe::process_block(&b, &mut ctx);
 
 		match res {
 			Ok(Some(ref tip)) => {
@@ -378,8 +301,8 @@ impl Chain {
 	/// Process a block header received during "header first" propagation.
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
 		let header_head = self.get_header_head()?;
-		let ctx = self.ctx_from_head(header_head, opts);
-		pipe::process_block_header(bh, ctx)
+		let mut ctx = self.ctx_from_head(header_head, opts)?;
+		pipe::process_block_header(bh, &mut ctx)
 	}
 
 	/// Attempt to add a new header to the header chain.
@@ -387,19 +310,24 @@ impl Chain {
 	pub fn sync_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<Option<Tip>, Error> {
 		let sync_head = self.get_sync_head()?;
 		let header_head = self.get_header_head()?;
-		let sync_ctx = self.ctx_from_head(sync_head, opts);
-		let header_ctx = self.ctx_from_head(header_head, opts);
-		pipe::sync_block_header(bh, sync_ctx, header_ctx)
+		let mut sync_ctx = self.ctx_from_head(sync_head, opts)?;
+		let mut header_ctx = self.ctx_from_head(header_head, opts)?;
+		let mut batch = self.store.batch()?;
+		let res = pipe::sync_block_header(bh, &mut sync_ctx, &mut header_ctx, &mut batch);
+		if res.is_ok() {
+			batch.commit()?;
+		}
+		res
 	}
 
-	fn ctx_from_head(&self, head: Tip, opts: Options) -> pipe::BlockContext {
-		pipe::BlockContext {
+	fn ctx_from_head<'a>(&self, head: Tip, opts: Options) -> Result<pipe::BlockContext, Error> {
+		Ok(pipe::BlockContext {
 			opts: opts,
 			store: self.store.clone(),
 			head: head,
 			pow_verifier: self.pow_verifier,
 			txhashset: self.txhashset.clone(),
-		}
+		})
 	}
 
 	/// Check if hash is for a known orphan.
@@ -497,39 +425,36 @@ impl Chain {
 
 		let mut txhashset = self.txhashset.write().unwrap();
 
-		// Now create an extension from the txhashset and validate
-		// against the latest block header.
-		// Rewind the extension to the specified header to ensure the view is
-		// consistent.
+		// Now create an extension from the txhashset and validate against the
+		// latest block header. Rewind the extension to the specified header to
+		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			// TODO - is this rewind guaranteed to be redundant now?
-			extension.rewind(&header, &header)?;
+			extension.rewind(&header, &header, true, true, true)?;
 			extension.validate(&header, skip_rproofs)?;
 			Ok(())
 		})
 	}
 
-	/// Sets the txhashset roots on a brand new block by applying the block on
-	/// the current txhashset state.
-	pub fn set_block_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
-		let mut txhashset = self.txhashset.write().unwrap();
-		let store = self.store.clone();
+/// Sets the txhashset roots on a brand new block by applying the block on
+/// the current txhashset state.
+pub fn set_txhashset_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
+	let mut txhashset = self.txhashset.write().unwrap();
+	let store = self.store.clone();
 
-		let (roots, sizes) = txhashset::extending_readonly(&mut txhashset, |extension| {
-			if is_fork {
-				pipe::rewind_and_apply_fork(b, store, extension)?;
-			}
-			extension.apply_block(b)?;
-			Ok((extension.roots(), extension.sizes()))
-		})?;
+	let roots = txhashset::extending_readonly(&mut txhashset, |extension| {
+		if is_fork {
+			pipe::rewind_and_apply_fork(b, store, extension)?;
+		}
+		extension.apply_block(b)?;
+		Ok(extension.roots())
+	})?;
 
-		b.header.output_root = roots.output_root;
-		b.header.range_proof_root = roots.rproof_root;
-		b.header.kernel_root = roots.kernel_root;
-		b.header.output_mmr_size = sizes.0;
-		b.header.kernel_mmr_size = sizes.2;
-		Ok(())
-	}
+	b.header.output_root = roots.output_root;
+	b.header.range_proof_root = roots.rproof_root;
+	b.header.kernel_root = roots.kernel_root;
+	Ok(())
+}
 
 	/// Return a pre-built Merkle proof for the given commitment from the store.
 	pub fn get_merkle_proof(
@@ -580,7 +505,7 @@ impl Chain {
 
 			let mut txhashset = self.txhashset.write().unwrap();
 			txhashset::extending_readonly(&mut txhashset, |extension| {
-				extension.rewind(&header, &head_header)?;
+				extension.rewind(&header, &head_header, true, true, true)?;
 				extension.snapshot(&header)?;
 				Ok(())
 			})?;
@@ -612,34 +537,29 @@ impl Chain {
 		let header = self.store.get_block_header(&h)?;
 		txhashset::zip_write(self.db_root.clone(), txhashset_data)?;
 
-		// write the block marker so we can safely rewind to
-		// the pos for that block when we validate the extension below
-		let marker = BlockMarker {
-			output_pos: rewind_to_output,
-			kernel_pos: rewind_to_kernel,
-		};
-		self.store.save_block_marker(&h, &marker)?;
-
-		debug!(
-			LOGGER,
-			"Going to validate new txhashset, might take some time..."
-		);
+		{
+			// write the block marker so we can safely rewind to
+			// the pos for that block when we validate the extension below
+			let batch = self.store.batch()?;
+			let marker = BlockMarker {
+				output_pos: rewind_to_output,
+				kernel_pos: rewind_to_kernel,
+			};
+			batch.save_block_marker(&h, &marker)?;
+			batch.commit()?;
+		}
 
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
 
-		// first read-only extension, for validation only
-		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.rewind(&header)?;
-			extension.validate(&header, false)?;
-			Ok(())
-		})?;
-		// second real extension to commit the rewind and indexes
-		txhashset::extending(&mut txhashset, |extension| {
+		// all good, prepare a new batch and update all the required records
+		let mut batch = self.store.batch()?;
+		// Note: we are validataing against a writeable extension.
+		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			// TODO do we need to rewind here? We have no blocks to rewind
 			// (and we need them for the pos to unremove)
-			extension.rewind(&header, &header)?;
-			extension.validate(&header, false)?;
+			extension.rewind(&header, &header, true, true, true)?;
+			let (_output_sum, _kernel_sum) = extension.validate(&header, false)?;
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
@@ -649,18 +569,17 @@ impl Chain {
 			let mut txhashset_ref = self.txhashset.write().unwrap();
 			*txhashset_ref = txhashset;
 		}
-
 		// setup new head
 		{
 			let mut head = self.head.lock().unwrap();
 			*head = Tip::from_block(&header);
-			let _ = self.store.save_body_head(&head);
-			self.store.save_header_height(&header)?;
-			self.store.build_by_height_index(&header, true)?;
+			batch.save_body_head(&head)?;
+			batch.save_header_height(&header)?;
+			batch.build_by_height_index(&header, true)?;
 		}
+		batch.commit()?;
 
 		self.check_orphans(header.height + 1);
-
 		Ok(())
 	}
 
@@ -710,15 +629,14 @@ impl Chain {
 		);
 		let mut count = 0;
 		let mut current = self.store.get_header_by_height(head.height - horizon - 1)?;
+		let batch = self.store.batch()?;
 		loop {
 			match self.store.get_block(&current.hash()) {
 				Ok(b) => {
 					count += 1;
-
-					// TODO - consider wrapping these up in a single fn call?
-					self.store.delete_block(&b.hash())?;
-					self.store.delete_block_marker(&b.hash())?;
-					self.store.delete_block_input_bitmap(&b.hash())?;
+					batch.delete_block(&b.hash())?;
+					batch.delete_block_marker(&b.hash())?;
+					batch.delete_block_input_bitmap(&b.hash())?;
 				}
 				Err(NotFoundErr) => {
 					break;
@@ -734,6 +652,7 @@ impl Chain {
 				Err(e) => return Err(From::from(e)),
 			}
 		}
+		batch.commit()?;
 		debug!(LOGGER, "Compaction removed {} blocks, done.", count);
 		Ok(())
 	}
@@ -799,9 +718,12 @@ impl Chain {
 
 	/// Reset header_head and sync_head to head of current body chain
 	pub fn reset_head(&self) -> Result<(), Error> {
-		self.store
+		let batch = self.store.batch()?;
+		batch
 			.reset_head()
-			.map_err(|e| Error::StoreErr(e, "chain reset_head".to_owned()))
+			.map_err(|e| Error::StoreErr(e, "chain reset_head".to_owned()))?;
+		batch.commit()?;
+		Ok(())
 	}
 
 	/// Get the tip that's also the head of the chain
@@ -882,12 +804,75 @@ impl Chain {
 			.block_exists(&h)
 			.map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
 	}
+}
 
-	/// Rebuilds height index. Reachable as endpoint POST /chain/height-index
-	pub fn rebuild_header_by_height(&self) -> Result<(), Error> {
-		let head = self.head_header()?;
-		self.store
-			.build_by_height_index(&head, true)
-			.map_err(|e| Error::StoreErr(e, "rebuild header by height index".to_owned()))
-	}
+fn setup_head(
+	genesis: Block,
+	store: Arc<store::ChainStore>,
+	txhashset: &mut txhashset::TxHashSet,
+) -> Result<(), Error> {
+	// check if we have a head in store, otherwise the genesis block is it
+	let head_res = store.head();
+	let mut batch = store.batch()?;
+	let mut head: Tip;
+	match head_res {
+		Ok(h) => {
+			head = h;
+			let head_header = store.head_header()?;
+			loop {
+				// Use current chain tip if we have one.
+				// Note: We are rewinding and validating against a writeable extension.
+				// If validation is successful we will truncate the backend files
+				// to match the provided block header.
+				let header = store.get_block_header(&head.last_block_h)?;
+
+
+				let res = txhashset::extending(txhashset, &mut batch, |extension| {
+					extension.rewind(&header, &head_header, true, true, true)?;
+					extension.validate_roots(&header)?;
+					debug!(
+						LOGGER,
+						"chain: init: rewinding and validating before we start... {} at {}",
+						header.hash(),
+						header.height,
+					);
+					Ok(())
+				});
+
+				if res.is_ok() {
+					break;
+				} else {
+					// We may have corrupted the MMR backend files last time we stopped the
+					// node. If this appears to be the case revert the head to the previous
+					// header and try again
+					let prev_header = store.get_block_header(&head.prev_block_h)?;
+					let _ = batch.delete_block(&header.hash());
+					let _ = batch.setup_height(&prev_header, &head)?;
+					head = Tip::from_block(&prev_header);
+					batch.save_head(&head)?;
+				}
+			}
+		}
+		Err(NotFoundErr) => {
+			let tip = Tip::from_block(&genesis.header);
+			batch.save_block(&genesis)?;
+			batch.setup_height(&genesis.header, &tip)?;
+			txhashset::extending(txhashset, &mut batch, |extension| {
+				extension.apply_block(&genesis)?;
+				Ok(())
+			})?;
+
+			// saving a new tip based on genesis
+			batch.save_head(&tip)?;
+			head = tip;
+			info!(LOGGER, "chain: init: saved genesis: {:?}", genesis.hash());
+		}
+		Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
+	};
+
+	// Initialize header_head and sync_head as necessary for chain init.
+	batch.init_sync_head(&head)?;
+	batch.commit()?;
+
+	Ok(())
 }

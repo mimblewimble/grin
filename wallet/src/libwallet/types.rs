@@ -19,11 +19,13 @@ use std::collections::HashMap;
 use std::fmt;
 
 use serde;
+use serde_json;
 
 use failure::ResultExt;
 
 use core::core::hash::Hash;
 use core::core::merkle_proof::MerkleProof;
+use core::ser;
 
 use keychain::{Identifier, Keychain};
 
@@ -49,36 +51,17 @@ where
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut K;
 
-	/// Return the outputs directly
-	fn outputs(&mut self) -> &mut HashMap<String, OutputData>;
+	/// Iterate over all output data stored by the backend
+	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a>;
 
-	/// Allows for reading wallet data (read-only)
-	fn read_wallet<T, F>(&mut self, f: F) -> Result<T, Error>
-	where
-		F: FnOnce(&mut Self) -> Result<T, Error>;
+	/// Get output data by id
+	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
 
-	/// Get all outputs from a wallet impl (probably with some sort
-	/// of query param), read+write. Implementor should save
-	/// any changes to its data and perform any locking needed
-	fn with_wallet<T, F>(&mut self, f: F) -> Result<T, Error>
-	where
-		F: FnOnce(&mut Self) -> T;
-
-	/// Add an output
-	fn add_output(&mut self, out: OutputData);
-
-	/// Delete an output
-	fn delete_output(&mut self, id: &Identifier);
-
-	/// Lock an output
-	fn lock_output(&mut self, out: &OutputData);
-
-	/// get a single output
-	fn get_output(&self, key_id: &Identifier) -> Option<&OutputData>;
+	/// Create a new write batch to update or remove output data
+	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, Error>;
 
 	/// Next child ID when we want to create a new output
-	/// Should also increment index
-	fn next_child(&mut self, root_key_id: Identifier) -> u32;
+	fn next_child<'a>(&mut self, root_key_id: Identifier) -> Result<u32, Error>;
 
 	/// Return current details
 	fn details(&mut self) -> &mut WalletDetails;
@@ -96,6 +79,26 @@ where
 
 	/// Attempt to restore the contents of a wallet from seed
 	fn restore(&mut self) -> Result<(), Error>;
+}
+
+/// Batch trait to update the output data backend atomically. Trying to use a
+/// batch after commit MAY result in a panic. Due to this being a trait, the
+/// commit method can't take ownership.
+pub trait WalletOutputBatch {
+	/// Add or update data about an output to the backend
+	fn save(&mut self, out: OutputData) -> Result<(), Error>;
+
+	/// Gets output data by id
+	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
+
+	/// Delete data about an output to the backend
+	fn delete(&mut self, id: &Identifier) -> Result<(), Error>;
+
+	/// Save an output as locked in the backend
+	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error>;
+
+	/// Write the wallet data to backend file
+	fn commit(&self) -> Result<(), Error>;
 }
 
 /// Encapsulate all communication functions. No functions within libwallet
@@ -148,8 +151,8 @@ pub trait WalletClient {
 }
 
 /// Information about an output that's being tracked by the wallet. Must be
-/// enough to reconstruct the commitment associated with the output when the
-/// root private key is known.*/
+/// enough to reconstruct the commitment associated with the ouput when the
+/// root private key is known.
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct OutputData {
@@ -173,6 +176,19 @@ pub struct OutputData {
 	pub block: Option<BlockIdentifier>,
 	/// Merkle proof
 	pub merkle_proof: Option<MerkleProofWrapper>,
+}
+
+impl ser::Writeable for OutputData {
+	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_bytes(&serde_json::to_vec(self).map_err(|_| ser::Error::CorruptedData)?)
+	}
+}
+
+impl ser::Readable for OutputData {
+	fn read(reader: &mut ser::Reader) -> Result<OutputData, ser::Error> {
+		let data = reader.read_vec()?;
+		serde_json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
+	}
 }
 
 impl OutputData {

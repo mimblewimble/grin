@@ -15,13 +15,13 @@
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_store as store;
 extern crate grin_wallet as wallet;
 
 use std::fs;
 use std::sync::Arc;
 
-use chain::ChainStore;
-use chain::store::ChainKVStore;
+use chain::store::ChainStore;
 use chain::txhashset::{self, TxHashSet};
 use chain::types::Tip;
 use core::core::merkle_proof::MerkleProof;
@@ -39,6 +39,7 @@ fn test_some_raw_txs() {
 	let db_root = format!(".grin_txhashset_raw_txs");
 	clean_output_dir(&db_root);
 
+	let db_env = Arc::new(store::new_env(db_root.clone()));
 	let store = Arc::new(ChainKVStore::new(db_root.clone()).unwrap());
 	let mut txhashset = TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
 
@@ -60,11 +61,15 @@ fn test_some_raw_txs() {
 	// Note: this results in an output MMR with a single leaf node.
 	// We need to be careful with pruning while processing the txs below
 	// as we cannot prune a tree with a single node in it (no sibling or parent).
-	txhashset::extending(&mut txhashset, |extension| extension.apply_block(&block)).unwrap();
+	let mut batch = store.batch().unwrap();
+	txhashset::extending(&mut txhashset, &mut batch, |extension| {
+		extension.apply_block(&block)
+	}).unwrap();
 
 	// Make sure we setup the head in the store based on block we just accepted.
 	let head = Tip::from_block(&block.header);
-	store.save_head(&head).unwrap();
+	batch.save_head(&head).unwrap();
+	batch.commit().unwrap();
 
 	let coinbase_reward = 60_000_000_000;
 

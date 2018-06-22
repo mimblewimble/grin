@@ -16,10 +16,9 @@
 
 use std::{error, fmt, io};
 
-use croaring::Bitmap;
-
 use util::secp;
 use util::secp::pedersen::Commitment;
+use util::secp_static;
 
 use core::core::committed;
 use core::core::hash::{Hash, Hashed};
@@ -256,112 +255,6 @@ impl ser::Readable for Tip {
 	}
 }
 
-/// Trait the chain pipeline requires an implementor for in order to process
-/// blocks.
-pub trait ChainStore: Send + Sync {
-	/// Get the tip that's also the head of the chain
-	fn head(&self) -> Result<Tip, store::Error>;
-
-	/// Block header for the chain head
-	fn head_header(&self) -> Result<BlockHeader, store::Error>;
-
-	/// Save the provided tip as the current head of our chain
-	fn save_head(&self, t: &Tip) -> Result<(), store::Error>;
-
-	/// Save the provided tip as the current head of the body chain, leaving the
-	/// header chain alone.
-	fn save_body_head(&self, t: &Tip) -> Result<(), store::Error>;
-
-	/// Gets a block header by hash
-	fn get_block(&self, h: &Hash) -> Result<Block, store::Error>;
-
-	/// Check whether we have a block without reading it
-	fn block_exists(&self, h: &Hash) -> Result<bool, store::Error>;
-
-	/// Gets a block header by hash
-	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, store::Error>;
-
-	/// Save the provided block in store
-	fn save_block(&self, b: &Block) -> Result<(), store::Error>;
-
-	/// Delete a full block. Does not delete any record associated with a block
-	/// header.
-	fn delete_block(&self, bh: &Hash) -> Result<(), store::Error>;
-
-	/// Save the provided block header in store
-	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), store::Error>;
-
-	/// Get the tip of the header chain
-	fn get_header_head(&self) -> Result<Tip, store::Error>;
-
-	/// Save the provided tip as the current head of the block header chain
-	fn save_header_head(&self, t: &Tip) -> Result<(), store::Error>;
-
-	/// Get the tip of the current sync header chain
-	fn get_sync_head(&self) -> Result<Tip, store::Error>;
-
-	/// Save the provided tip as the current head of the sync header chain
-	fn save_sync_head(&self, t: &Tip) -> Result<(), store::Error>;
-
-	/// Initialize header_head if necessary and set sync_head to header_head.
-	fn init_head(&self) -> Result<(), store::Error>;
-
-	/// Reset header_head and sync_head to head of current body chain
-	fn reset_head(&self) -> Result<(), store::Error>;
-
-	/// Gets the block header at the provided height
-	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, store::Error>;
-
-	/// Save a header as associated with its height
-	fn save_header_height(&self, header: &BlockHeader) -> Result<(), store::Error>;
-
-	/// Delete the block header at the height
-	fn delete_header_by_height(&self, height: u64) -> Result<(), store::Error>;
-
-	/// Is the block header on the current chain?
-	/// Use the header_by_height index to verify the block header is where we
-	/// think it is.
-	fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), store::Error>;
-
-	/// Saves the position of an output, represented by its commitment, in the
-	/// Output MMR. Used as an index for spending and pruning.
-	fn save_output_pos(&self, commit: &Commitment, pos: u64) -> Result<(), store::Error>;
-
-	/// Gets the position of an output, represented by its commitment, in the
-	/// Output MMR. Used as an index for spending and pruning.
-	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, store::Error>;
-
-	/// Deletes the MMR position of an output.
-	fn delete_output_pos(&self, commit: &[u8]) -> Result<(), store::Error>;
-
-	/// Saves a marker associated with a block recording the MMR positions of
-	/// its last elements.
-	fn save_block_marker(&self, bh: &Hash, marker: &BlockMarker) -> Result<(), store::Error>;
-
-	/// Retrieves a block marker from a block hash.
-	fn get_block_marker(&self, bh: &Hash) -> Result<BlockMarker, store::Error>;
-
-	/// Deletes a block marker associated with the provided hash
-	fn delete_block_marker(&self, bh: &Hash) -> Result<(), store::Error>;
-
-	/// Get the bitmap representing the inputs for the specified block.
-	fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, store::Error>;
-
-	/// Save the bitmap representing the inputs for the specified block.
-	fn save_block_input_bitmap(&self, b: &Block) -> Result<Bitmap, store::Error>;
-
-	/// Delete the bitmap representing the inputs for the specified block.
-	fn delete_block_input_bitmap(&self, bh: &Hash) -> Result<(), store::Error>;
-
-	/// Saves the provided block header at the corresponding height. Also check
-	/// the consistency of the height chain in store by assuring previous
-	/// headers are also at their respective heights.
-	fn setup_height(&self, bh: &BlockHeader, old_tip: &Tip) -> Result<(), store::Error>;
-
-	/// Similar to setup_height but without handling fork
-	fn build_by_height_index(&self, header: &BlockHeader, force: bool) -> Result<(), store::Error>;
-}
-
 /// Bridge between the chain pipeline and the rest of the system. Handles
 /// downstream processing of valid blocks by the rest of the system, most
 /// importantly the broadcasting of blocks to our peers.
@@ -414,3 +307,45 @@ impl Default for BlockMarker {
 		}
 	}
 }
+
+/// The output_sum and kernel_sum for a given block.
+/// This is used to validate the next block being processed by applying
+/// the inputs, outputs, kernels and kernel_offset from the new block
+/// and checking everything sums correctly.
+#[derive(Debug, Clone)]
+pub struct BlockSums {
+	/// The total output sum so far.
+	pub output_sum: Commitment,
+	/// The total kernel sum so far.
+	pub kernel_sum: Commitment,
+}
+
+impl Writeable for BlockSums {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_fixed_bytes(&self.output_sum)?;
+		writer.write_fixed_bytes(&self.kernel_sum)?;
+		Ok(())
+	}
+}
+
+impl Readable for BlockSums {
+	fn read(reader: &mut Reader) -> Result<BlockSums, ser::Error> {
+		Ok(BlockSums {
+			output_sum: Commitment::read(reader)?,
+			kernel_sum: Commitment::read(reader)?,
+		})
+	}
+}
+
+impl Default for BlockSums {
+	fn default() -> BlockSums {
+		let zero_commit = secp_static::commit_to_zero_value();
+		BlockSums {
+			output_sum: zero_commit.clone(),
+			kernel_sum: zero_commit.clone(),
+		}
+	}
+}
+
+
+

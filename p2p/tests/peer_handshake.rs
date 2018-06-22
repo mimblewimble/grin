@@ -14,6 +14,8 @@
 
 extern crate grin_core as core;
 extern crate grin_p2p as p2p;
+extern crate grin_pool as pool;
+extern crate grin_store as store;
 extern crate grin_util as util;
 
 use std::net::{SocketAddr, TcpListener, TcpStream};
@@ -47,9 +49,10 @@ fn peer_handshake() {
 		..p2p::P2PConfig::default()
 	};
 	let net_adapter = Arc::new(p2p::DummyAdapter {});
+	let db_env = Arc::new(store::new_env(".grin".to_string()));
 	let server = Arc::new(
 		p2p::Server::new(
-			".grin".to_owned(),
+			db_env,
 			p2p::Capabilities::UNKNOWN,
 			p2p_config.clone(),
 			net_adapter.clone(),
