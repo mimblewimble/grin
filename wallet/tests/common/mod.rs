@@ -28,8 +28,8 @@ use core::core::hash::Hashed;
 use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::{consensus, global, pow};
 use keychain::ExtKeychain;
-use wallet::file_wallet::FileWallet;
 use wallet::WalletConfig;
+use wallet::file_wallet::FileWallet;
 use wallet::libwallet::internal::updater;
 use wallet::libwallet::types::{BlockFees, BlockIdentifier, MerkleProofWrapper, OutputStatus,
                                WalletBackend};
@@ -84,7 +84,8 @@ where
 	let mut unconfirmed_total = 0;
 	let mut locked_total = 0;
 	let keychain = wallet.keychain().clone();
-	for out in wallet.iter()
+	for out in wallet
+		.iter()
 		.filter(|out| out.root_key_id == keychain.root_key_id())
 	{
 		if out.status == OutputStatus::Unspent {
