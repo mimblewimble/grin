@@ -272,7 +272,7 @@ impl<'a> Batch<'a> {
 	}
 
 	/// get block
-	fn get_block(&self, h: &Hash) -> Result<Block, Error> {
+	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
 		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, &mut h.to_vec())))
 	}
 

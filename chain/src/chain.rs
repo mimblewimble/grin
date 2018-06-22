@@ -636,6 +636,7 @@ impl Chain {
 				Ok(b) => {
 					count += 1;
 					batch.delete_block(&b.hash())?;
+					//TODO: Validation seems to fail as block markers are being deleted?
 					batch.delete_block_marker(&b.hash())?;
 					batch.delete_block_input_bitmap(&b.hash())?;
 				}

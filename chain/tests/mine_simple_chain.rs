@@ -356,8 +356,12 @@ fn spend_in_fork_and_compact() {
 	}
 
 	chain.validate(false).unwrap();
-	chain.compact().unwrap();
-	chain.validate(false).unwrap();
+	if let Err(e) = chain.compact() {
+		panic!("Error compacting chain: {:?}", e);
+	}
+	if let Err(e) = chain.validate(false) {
+		panic!("Validation error after compacting chain: {:?}", e);
+	}
 }
 
 fn prepare_block<K>(kc: &K, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block

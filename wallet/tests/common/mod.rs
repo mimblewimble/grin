@@ -28,7 +28,8 @@ use core::core::hash::Hashed;
 use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::{consensus, global, pow};
 use keychain::ExtKeychain;
-use wallet::file_wallet::{FileWallet, WalletConfig};
+use wallet::file_wallet::FileWallet;
+use wallet::WalletConfig;
 use wallet::libwallet::internal::updater;
 use wallet::libwallet::types::{BlockFees, BlockIdentifier, MerkleProofWrapper, OutputStatus,
                                WalletBackend};
@@ -78,40 +79,35 @@ where
 	T: WalletBackend<K>,
 	K: keychain::Keychain,
 {
-	let ret_val = wallet.read_wallet(|wallet_data| {
-		let mut unspent_total = 0;
-		let mut unspent_but_locked_total = 0;
-		let mut unconfirmed_total = 0;
-		let mut locked_total = 0;
-		let keychain = wallet_data.keychain().clone();
-		for out in wallet_data
-			.outputs()
-			.values()
-			.filter(|out| out.root_key_id == keychain.root_key_id())
-		{
-			if out.status == OutputStatus::Unspent {
-				unspent_total += out.value;
-				if out.lock_height > height {
-					unspent_but_locked_total += out.value;
-				}
-			}
-			if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
-				unconfirmed_total += out.value;
-			}
-			if out.status == OutputStatus::Locked {
-				locked_total += out.value;
+	let mut unspent_total = 0;
+	let mut unspent_but_locked_total = 0;
+	let mut unconfirmed_total = 0;
+	let mut locked_total = 0;
+	let keychain = wallet.keychain().clone();
+	for out in wallet.iter()
+		.filter(|out| out.root_key_id == keychain.root_key_id())
+	{
+		if out.status == OutputStatus::Unspent {
+			unspent_total += out.value;
+			if out.lock_height > height {
+				unspent_but_locked_total += out.value;
 			}
 		}
+		if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
+			unconfirmed_total += out.value;
+		}
+		if out.status == OutputStatus::Locked {
+			locked_total += out.value;
+		}
+	}
 
-		Ok((
-			unspent_total + unconfirmed_total,        //total
-			unconfirmed_total,                        //amount_awaiting_confirmation
-			unspent_but_locked_total,                 // confirmed but locked
-			unspent_total - unspent_but_locked_total, // currently spendable
-			locked_total,                             // locked total
-		))
-	});
-	ret_val
+	Ok((
+		unspent_total + unconfirmed_total,        //total
+		unconfirmed_total,                        //amount_awaiting_confirmation
+		unspent_but_locked_total,                 // confirmed but locked
+		unspent_total - unspent_but_locked_total, // currently spendable
+		locked_total,                             // locked total
+	))
 }
 
 /// Get an output from the chain locally and present it back as an API output
@@ -183,16 +179,12 @@ where
 	let output_id = OutputIdentifier::from_output(&coinbase_tx.0.clone());
 	let m_proof = chain.get_merkle_proof(&output_id, &chain.head_header().unwrap());
 	let block_id = Some(BlockIdentifier(chain.head_header().unwrap().hash()));
-	let _ = wallet.with_wallet(|wallet_data| {
-		if let Entry::Occupied(mut output) = wallet_data
-			.outputs()
-			.entry(fees.key_id.as_ref().unwrap().to_hex())
-		{
-			let output = output.get_mut();
-			output.block = block_id;
-			output.merkle_proof = Some(MerkleProofWrapper(m_proof.unwrap()));
-		}
-	});
+	let mut output = wallet.get(&fees.key_id.unwrap()).unwrap();
+	output.block = block_id;
+	output.merkle_proof = Some(MerkleProofWrapper(m_proof.unwrap()));
+	let mut batch = wallet.batch().unwrap();
+	batch.save(output).unwrap();
+	batch.commit().unwrap();
 }
 
 /// adds many block rewards to a wallet, no transactions
