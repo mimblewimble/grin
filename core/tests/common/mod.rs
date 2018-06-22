@@ -19,16 +19,16 @@ extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
+use grin_core::core::Transaction;
 use grin_core::core::block::{Block, BlockHeader};
 use grin_core::core::target::Difficulty;
-use grin_core::core::Transaction;
 use keychain::{Identifier, Keychain};
 use wallet::libtx::build::{self, input, output, with_fee};
 use wallet::libtx::reward;
 
 // utility producing a transaction with 2 inputs and a single outputs
 pub fn tx2i1o() -> Transaction {
-	let keychain = keychain::Keychain::from_random_seed().unwrap();
+	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();
 	let key_id2 = keychain.derive_key_id(2).unwrap();
 	let key_id3 = keychain.derive_key_id(3).unwrap();
@@ -46,7 +46,7 @@ pub fn tx2i1o() -> Transaction {
 
 // utility producing a transaction with a single input and output
 pub fn tx1i1o() -> Transaction {
-	let keychain = keychain::Keychain::from_random_seed().unwrap();
+	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();
 	let key_id2 = keychain.derive_key_id(2).unwrap();
 
@@ -60,7 +60,7 @@ pub fn tx1i1o() -> Transaction {
 // and two outputs (one change output)
 // Note: this tx has an "offset" kernel
 pub fn tx1i2o() -> Transaction {
-	let keychain = keychain::Keychain::from_random_seed().unwrap();
+	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();
 	let key_id2 = keychain.derive_key_id(2).unwrap();
 	let key_id3 = keychain.derive_key_id(3).unwrap();
@@ -78,12 +78,15 @@ pub fn tx1i2o() -> Transaction {
 
 // utility to create a block without worrying about the key or previous
 // header
-pub fn new_block(
+pub fn new_block<K>(
 	txs: Vec<&Transaction>,
-	keychain: &Keychain,
+	keychain: &K,
 	previous_header: &BlockHeader,
 	key_id: &Identifier,
-) -> Block {
+) -> Block
+where
+	K: Keychain,
+{
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward_output = reward::output(keychain, &key_id, fees, previous_header.height).unwrap();
 	Block::new(
@@ -96,14 +99,12 @@ pub fn new_block(
 
 // utility producing a transaction that spends an output with the provided
 // value and blinding key
-pub fn txspend1i1o(
-	v: u64,
-	keychain: &Keychain,
-	key_id1: Identifier,
-	key_id2: Identifier,
-) -> Transaction {
+pub fn txspend1i1o<K>(v: u64, keychain: &K, key_id1: Identifier, key_id2: Identifier) -> Transaction
+where
+	K: Keychain,
+{
 	build::transaction(
 		vec![input(v, key_id1), output(3, key_id2), with_fee(2)],
-		&keychain,
+		keychain,
 	).unwrap()
 }

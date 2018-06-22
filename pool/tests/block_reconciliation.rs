@@ -29,21 +29,19 @@ use std::sync::{Arc, RwLock};
 
 use core::core::{Block, BlockHeader};
 
-use chain::txhashset;
 use chain::types::Tip;
-use chain::ChainStore;
+use chain::{txhashset, ChainStore};
+use common::{clean_output_dir, test_setup, test_source, test_transaction,
+             test_transaction_spending_coinbase, ChainAdapter};
 use core::core::target::Difficulty;
-
-use keychain::Keychain;
+use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
-
-use common::*;
 
 #[test]
 fn test_transaction_pool_block_reconciliation() {
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain: ExtKeychain = Keychain::from_random_seed().unwrap();
 
-	let db_root = ".grin_block_reconcilliation".to_string();
+	let db_root = ".grin_block_reconciliation".to_string();
 	clean_output_dir(db_root.clone());
 	let chain = ChainAdapter::init(db_root.clone()).unwrap();
 
@@ -55,12 +53,16 @@ fn test_transaction_pool_block_reconciliation() {
 		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
 		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
 
+		let mut batch = chain.store.batch().unwrap();
 		let mut txhashset = chain.txhashset.write().unwrap();
-		txhashset::extending(&mut txhashset, |extension| extension.apply_block(&block)).unwrap();
+		txhashset::extending(&mut txhashset, &mut batch, |extension| {
+			extension.apply_block(&block)
+		}).unwrap();
 
 		let tip = Tip::from_block(&block.header);
-		chain.store.save_block_header(&block.header).unwrap();
-		chain.store.save_head(&tip).unwrap();
+		batch.save_block_header(&block.header).unwrap();
+		batch.save_head(&tip).unwrap();
+		batch.commit().unwrap();
 
 		block.header
 	};
@@ -78,17 +80,19 @@ fn test_transaction_pool_block_reconciliation() {
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
 		let block = Block::new(&header, vec![initial_tx], Difficulty::one(), reward).unwrap();
 
+		let mut batch = chain.store.batch().unwrap();
 		{
 			let mut txhashset = chain.txhashset.write().unwrap();
-			txhashset::extending(&mut txhashset, |extension| {
+			txhashset::extending(&mut txhashset, &mut batch, |extension| {
 				extension.apply_block(&block)?;
 				Ok(())
 			}).unwrap();
 		}
 
 		let tip = Tip::from_block(&block.header);
-		chain.store.save_block_header(&block.header).unwrap();
-		chain.store.save_head(&tip).unwrap();
+		batch.save_block_header(&block.header).unwrap();
+		batch.save_head(&tip).unwrap();
+		batch.commit().unwrap();
 
 		block.header
 	};
@@ -176,15 +180,29 @@ fn test_transaction_pool_block_reconciliation() {
 		let block = Block::new(&header, block_txs, Difficulty::one(), reward).unwrap();
 
 		{
+			let mut batch = chain.store.batch().unwrap();
 			let mut txhashset = chain.txhashset.write().unwrap();
-			txhashset::extending(&mut txhashset, |extension| {
+			txhashset::extending(&mut txhashset, &mut batch, |extension| {
 				extension.apply_block(&block)?;
 				Ok(())
 			}).unwrap();
+			batch.commit().unwrap();
 		}
+
+		let tip = Tip::from_block(&block.header);
+		let batch = chain.store.batch().unwrap();
+		batch.save_block_header(&block.header).unwrap();
+		batch.save_head(&tip).unwrap();
+		batch.commit().unwrap();
 
 		block
 	};
+
+	// Check the pool still contains everything we expect at this point.
+	{
+		let write_pool = pool.write().unwrap();
+		assert_eq!(write_pool.total_size(), txs_to_add.len());
+	}
 
 	// And reconcile the pool with this latest block.
 	{
@@ -193,20 +211,8 @@ fn test_transaction_pool_block_reconciliation() {
 
 		assert_eq!(write_pool.total_size(), 4);
 		assert_eq!(write_pool.txpool.entries[0].tx, valid_transaction);
-		// TODO - this is the "correct" behavior (see below)
-		// assert_eq!(write_pool.txpool.entries[1].tx, pool_child);
-		// assert_eq!(write_pool.txpool.entries[2].tx, conflict_valid_child);
-		// assert_eq!(write_pool.txpool.entries[3].tx, valid_child_valid);
-
-		//
-		// TODO - once the hash() vs hash_with_index(pos - 1) change is made in
-		// txhashset.apply_output() TODO - and we no longer incorrectly allow
-		// duplicate outputs in the MMR TODO - then this test will fail
-		//
-		// TODO - wtf is with these name permutations...
-		//
-		assert_eq!(write_pool.txpool.entries[1].tx, conflict_valid_child);
-		assert_eq!(write_pool.txpool.entries[2].tx, valid_child_conflict);
+		assert_eq!(write_pool.txpool.entries[1].tx, pool_child);
+		assert_eq!(write_pool.txpool.entries[2].tx, conflict_valid_child);
 		assert_eq!(write_pool.txpool.entries[3].tx, valid_child_valid);
 	}
 }

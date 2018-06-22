@@ -15,18 +15,20 @@
 //! Rangeproof library functions
 
 use blake2;
-use keychain::extkey::Identifier;
-use keychain::Keychain;
-use libtx::error::Error;
+use keychain::{Identifier, Keychain};
+use libtx::error::{Error, ErrorKind};
 use util::logger::LOGGER;
 use util::secp::key::SecretKey;
 use util::secp::pedersen::{Commitment, ProofInfo, ProofMessage, RangeProof};
 use util::secp::{self, Secp256k1};
 
-fn create_nonce(k: &Keychain, commit: &Commitment) -> Result<SecretKey, Error> {
+fn create_nonce<K>(k: &K, commit: &Commitment) -> Result<SecretKey, Error>
+where
+	K: Keychain,
+{
 	// hash(commit|masterkey) as nonce
-	let root_key = k.root_key_id().to_bytes();
-	let res = blake2::blake2b::blake2b(32, &commit.0, &root_key);
+	let root_key = k.root_key_id();
+	let res = blake2::blake2b::blake2b(32, &commit.0, &root_key.to_bytes()[..]);
 	let res = res.as_bytes();
 	let mut ret_val = [0; 32];
 	for i in 0..res.len() {
@@ -34,23 +36,26 @@ fn create_nonce(k: &Keychain, commit: &Commitment) -> Result<SecretKey, Error> {
 	}
 	match SecretKey::from_slice(k.secp(), &ret_val) {
 		Ok(sk) => Ok(sk),
-		Err(e) => Err(Error::RangeProof(
+		Err(e) => Err(ErrorKind::RangeProof(
 			format!("Unable to create nonce: {:?}", e).to_string(),
-		)),
+		))?,
 	}
 }
 
 /// So we want this to take an opaque structure that can be called
 /// back to get the sensitive data
 
-pub fn create(
-	k: &Keychain,
+pub fn create<K>(
+	k: &K,
 	amount: u64,
 	key_id: &Identifier,
 	_commit: Commitment,
 	extra_data: Option<Vec<u8>>,
 	msg: ProofMessage,
-) -> Result<RangeProof, Error> {
+) -> Result<RangeProof, Error>
+where
+	K: Keychain,
+{
 	let commit = k.commit(amount, key_id)?;
 	let skey = k.derived_key(key_id)?;
 	let nonce = create_nonce(k, &commit)?;
@@ -59,9 +64,9 @@ pub fn create(
 	} else {
 		if msg.len() != 64 {
 			error!(LOGGER, "Bullet proof message must be 64 bytes.");
-			return Err(Error::RangeProof(
+			return Err(ErrorKind::RangeProof(
 				"Bullet proof message must be 64 bytes".to_string(),
-			));
+			))?;
 		}
 	}
 	return Ok(k.secp()
@@ -83,13 +88,16 @@ pub fn verify(
 }
 
 /// Rewind a rangeproof to retrieve the amount
-pub fn rewind(
-	k: &Keychain,
+pub fn rewind<K>(
+	k: &K,
 	key_id: &Identifier,
 	commit: Commitment,
 	extra_data: Option<Vec<u8>>,
 	proof: RangeProof,
-) -> Result<ProofInfo, Error> {
+) -> Result<ProofInfo, Error>
+where
+	K: Keychain,
+{
 	let skey = k.derived_key(key_id)?;
 	let nonce = create_nonce(k, &commit)?;
 	let proof_message = k.secp()

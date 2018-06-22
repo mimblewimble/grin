@@ -15,6 +15,7 @@
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
@@ -29,12 +30,12 @@ mod common;
 use std::fs;
 use std::sync::Arc;
 
-use chain::types::*;
 use chain::Chain;
+use chain::types::NoopAdapter;
 use core::global::ChainTypes;
 use core::{global, pow};
 use util::LOGGER;
-use wallet::libwallet::selection;
+use wallet::libwallet::internal::selection;
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -46,8 +47,10 @@ fn setup(test_dir: &str, chain_dir: &str) -> Chain {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();
 	let dir_name = format!("{}/{}", test_dir, chain_dir);
+	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
+		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,
@@ -100,7 +103,7 @@ fn build_transaction() {
 	// information to the slate
 	let _ = slate
 		.fill_round_1(
-			&wallet1.keychain,
+			wallet1.keychain.as_ref().unwrap(),
 			&mut sender_context.sec_key,
 			&sender_context.sec_nonce,
 			0,
@@ -114,13 +117,13 @@ fn build_transaction() {
 	// Now, just like the sender did, recipient is going to select a target output,
 	// add it to the transaction, and keep track of the corresponding wallet
 	// Identifier Again, this is a helper to do that, which returns a closure that
-	// creates the output when we're satisified the process was successful
+	// creates the output when we're satisfied the process was successful
 	let (_, mut recp_context, receiver_create_fn) =
 		selection::build_recipient_output_with_slate(&mut wallet2, &mut slate).unwrap();
 
 	let _ = slate
 		.fill_round_1(
-			&wallet2.keychain,
+			wallet2.keychain.as_ref().unwrap(),
 			&mut recp_context.sec_key,
 			&recp_context.sec_nonce,
 			1,
@@ -132,7 +135,7 @@ fn build_transaction() {
 
 	let _ = slate
 		.fill_round_2(
-			&wallet1.keychain,
+			wallet1.keychain.as_ref().unwrap(),
 			&recp_context.sec_key,
 			&recp_context.sec_nonce,
 			1,
@@ -149,7 +152,7 @@ fn build_transaction() {
 	// SENDER Part 3: Sender confirmation
 	let _ = slate
 		.fill_round_2(
-			&wallet1.keychain,
+			wallet1.keychain.as_ref().unwrap(),
 			&sender_context.sec_key,
 			&sender_context.sec_nonce,
 			0,
@@ -161,7 +164,7 @@ fn build_transaction() {
 	debug!(LOGGER, "{:?}", slate);
 
 	// Final transaction can be built by anyone at this stage
-	let res = slate.finalize(&wallet1.keychain);
+	let res = slate.finalize(wallet1.keychain.as_ref().unwrap());
 
 	if let Err(e) = res {
 		panic!("Error creating final tx: {:?}", e);

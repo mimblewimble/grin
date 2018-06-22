@@ -17,9 +17,8 @@ use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 
 use failure::{Fail, ResultExt};
-use iron::Handler;
-use iron::prelude::*;
-use iron::status;
+use iron::prelude::{IronError, IronResult, Plugin, Request, Response};
+use iron::{status, Handler};
 use serde::Serialize;
 use serde_json;
 use urlencoded::UrlEncodedQuery;
@@ -32,11 +31,10 @@ use p2p;
 use p2p::types::ReasonForBan;
 use pool;
 use regex::Regex;
-use rest::*;
+use rest::{ApiServer, Error, ErrorKind};
 use types::*;
-use util;
-use util::LOGGER;
 use util::secp::pedersen::Commitment;
+use util::{self, LOGGER};
 
 // All handlers use `Weak` references instead of `Arc` to avoid cycles that
 // can never be destroyed. These 2 functions are simple helpers to reduce the
@@ -201,7 +199,7 @@ impl OutputHandler {
 		);
 
 		let mut return_vec = vec![];
-		for i in start_height..end_height + 1 {
+		for i in (start_height..=end_height).rev() {
 			let res = self.outputs_at_height(i, commitments.clone(), include_rp);
 			if res.outputs.len() > 0 {
 				return_vec.push(res);
@@ -498,21 +496,6 @@ impl Handler for ChainValidationHandler {
 	}
 }
 
-/// Temporary - fix header by height index.
-/// POST /v1/chain/height-index
-pub struct HeaderByHeightHandler {
-	pub chain: Weak<chain::Chain>,
-}
-
-impl Handler for HeaderByHeightHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-		match w(&self.chain).rebuild_header_by_height() {
-			Ok(_) => Ok(Response::with((status::Ok, ""))),
-			Err(_) => Ok(Response::with((status::InternalServerError, ""))),
-		}
-	}
-}
-
 /// Chain compaction handler. Trigger a compaction of the chain state to regain
 /// storage space.
 /// GET /v1/chain/compact
@@ -568,7 +551,7 @@ impl BlockHandler {
 			))?;
 		}
 		let vec = util::from_hex(input).unwrap();
-		Ok(Hash::from_vec(vec))
+		Ok(Hash::from_vec(&vec))
 	}
 }
 
@@ -735,9 +718,6 @@ pub fn start_rest_apis<T>(
 			let chain_compact_handler = ChainCompactHandler {
 				chain: chain.clone(),
 			};
-			let header_height_handler = HeaderByHeightHandler {
-				chain: chain.clone(),
-			};
 			let chain_validation_handler = ChainValidationHandler {
 				chain: chain.clone(),
 			};
@@ -797,7 +777,6 @@ pub fn start_rest_apis<T>(
 				chain_compact: get "/chain/compact" => chain_compact_handler,
 				chain_validate: get "/chain/validate" => chain_validation_handler,
 				chain_outputs: get "/chain/outputs/*" => output_handler,
-				header_height: post "/chain/height-index" => header_height_handler,
 				status: get "/status" => status_handler,
 				txhashset_roots: get "/txhashset/*" => txhashset_handler,
 				pool_info: get "/pool" => pool_info_handler,

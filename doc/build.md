@@ -13,7 +13,20 @@ What's working so far?
 
 Please note that all mining functions for Grin have moved into a separate, standalone package called
 [grin_miner](https://github.com/mimblewimble/grin-miner). Once your Grin code node is up and running,
-you can start mining by building and runing grin-miner against your running Grin node.
+you can start mining by building and running grin-miner against your running Grin node.
+
+## Docker
+
+        # Build using all available cores
+        docker build -t grin .
+
+        # run in foreground
+        docker run -it -v grin:/usr/src/grin grin
+
+        # or in background
+        docker run -it -d -v grin:/usr/src/grin grin
+
+If you decide to use a persistent storage (e.g. ```-v grin:/usr/src/grin```) you will need grin.toml configuration file in it.
 
 ## Requirements
 
@@ -53,7 +66,7 @@ See [Troubleshooting](https://github.com/mimblewimble/docs/wiki/Troubleshooting)
 A successful build gets you:
 
  - `target/debug/grin` - the main grin binary
- 
+
 Grin is still sensitive to the directory from which it's run. Make sure you
 always run it within a directory that contains a `grin.toml` configuration and
 stay consistent as to where it's run from.
@@ -70,7 +83,7 @@ export PATH=/path/to/grin/dir/target/debug:$PATH
 You can then run `grin` directly (try `grin help` for more options).
 
 *Important Note*: if you used Grin in testnet1, running the wallet listener
-manually isn't requred anymore. Grin will create a seed file and run the
+manually isn't required anymore. Grin will create a seed file and run the
 listener automatically on start.
 
 # Configuration
@@ -88,7 +101,7 @@ The `grin.toml` file can placed in one of several locations, using the first one
 
 While it's recommended that you perform all grin server configuration via
 `grin.toml`, it's also possible to supply command line switches to grin that
-override any settings in the `grin.toml` file. 
+override any settings in the `grin.toml` file.
 
 For help on grin commands and their switches, try:
 
@@ -103,4 +116,3 @@ grin client help
 The wiki page [How to use grin](https://github.com/mimblewimble/docs/wiki/How-to-use-grin)
 and linked pages have more information on what features we have,
 troubleshooting, etc.
-

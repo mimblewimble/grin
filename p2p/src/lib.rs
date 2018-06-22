@@ -25,6 +25,7 @@ extern crate bitflags;
 extern crate bytes;
 #[macro_use]
 extern crate enum_primitive;
+extern crate lmdb_zero as lmdb;
 
 #[macro_use]
 extern crate grin_core as core;
@@ -53,6 +54,5 @@ pub use peer::Peer;
 pub use peers::Peers;
 pub use serv::{DummyAdapter, Server};
 pub use store::{PeerData, State};
-pub use types::{Capabilities, ChainAdapter, DandelionConfig, Direction, Error, P2PConfig,
-                PeerInfo, ReasonForBan, TxHashSetRead, MAX_BLOCK_HEADERS, MAX_LOCATORS,
-                MAX_PEER_ADDRS};
+pub use types::{Capabilities, ChainAdapter, Direction, Error, P2PConfig, PeerInfo, ReasonForBan,
+                TxHashSetRead, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};

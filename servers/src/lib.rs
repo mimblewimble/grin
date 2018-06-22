@@ -25,6 +25,7 @@ extern crate bufstream;
 extern crate hyper;
 extern crate itertools;
 extern crate jsonrpc_core;
+extern crate lmdb_zero as lmdb;
 extern crate rand;
 extern crate serde;
 #[macro_use]
@@ -48,6 +49,6 @@ pub mod common;
 mod grin;
 mod mining;
 
-pub use grin::server::Server;
-pub use common::types::{Seeding, ServerConfig, StratumServerConfig};
 pub use common::stats::{DiffBlock, PeerStats, ServerStats, StratumStats, WorkerStats};
+pub use common::types::{Seeding, ServerConfig, StratumServerConfig};
+pub use grin::server::Server;

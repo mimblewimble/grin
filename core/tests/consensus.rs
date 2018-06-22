@@ -16,9 +16,10 @@
 extern crate grin_core as core;
 extern crate time;
 
+use core::consensus::{next_difficulty, valid_header_version, TargetError,
+                      DIFFICULTY_ADJUST_WINDOW, MEDIAN_TIME_WINDOW};
 use core::core::target::Difficulty;
 use core::global;
-use core::consensus::*;
 
 // Builds an iterator for next difficulty calculation with the provided
 // constant time interval, difficulty and total length.

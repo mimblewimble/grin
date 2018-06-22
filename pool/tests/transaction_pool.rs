@@ -27,23 +27,19 @@ pub mod common;
 
 use std::sync::{Arc, RwLock};
 
-use core::core::{Block, BlockHeader};
-
-use chain::txhashset;
 use chain::types::Tip;
-use chain::ChainStore;
+use chain::{txhashset, ChainStore};
+use common::{clean_output_dir, test_setup, test_source, test_transaction,
+             test_transaction_spending_coinbase, ChainAdapter};
 use core::core::target::Difficulty;
-use core::core::transaction;
-
-use keychain::Keychain;
+use core::core::{transaction, Block, BlockHeader};
+use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
-
-use common::*;
 
 /// Test we can add some txs to the pool (both stempool and txpool).
 #[test]
 fn test_the_transaction_pool() {
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain: ExtKeychain = Keychain::from_random_seed().unwrap();
 
 	let db_root = ".grin_transaction_pool".to_string();
 	clean_output_dir(db_root.clone());
@@ -58,11 +54,15 @@ fn test_the_transaction_pool() {
 		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
 
 		let mut txhashset = chain.txhashset.write().unwrap();
-		txhashset::extending(&mut txhashset, |extension| extension.apply_block(&block)).unwrap();
+		let mut batch = chain.store.batch().unwrap();
+		txhashset::extending(&mut txhashset, &mut batch, |extension| {
+			extension.apply_block(&block)
+		}).unwrap();
 
 		let tip = Tip::from_block(&block.header);
-		chain.store.save_block_header(&block.header).unwrap();
-		chain.store.save_head(&tip).unwrap();
+		batch.save_block_header(&block.header).unwrap();
+		batch.save_head(&tip).unwrap();
+		batch.commit().unwrap();
 
 		block.header
 	};

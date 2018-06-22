@@ -15,20 +15,19 @@
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_store as store;
 extern crate grin_wallet as wallet;
 
 use std::fs;
 use std::sync::Arc;
 
-use chain::store::ChainKVStore;
+use chain::store::ChainStore;
 use chain::txhashset;
-use chain::txhashset::TxHashSet;
 use chain::types::Tip;
-use chain::ChainStore;
-use core::core::pmmr::MerkleProof;
+use core::core::merkle_proof::MerkleProof;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
-use keychain::Keychain;
+use keychain::{ExtKeychain, Keychain};
 use wallet::libtx::{build, reward};
 
 fn clean_output_dir(dir_name: &str) {
@@ -40,10 +39,14 @@ fn test_some_raw_txs() {
 	let db_root = format!(".grin_txhashset_raw_txs");
 	clean_output_dir(&db_root);
 
-	let store = Arc::new(ChainKVStore::new(db_root.clone()).unwrap());
-	let mut txhashset = TxHashSet::open(db_root.clone(), store.clone()).unwrap();
+	let db_env = Arc::new(store::new_env(db_root.clone()));
 
-	let keychain = Keychain::from_random_seed().unwrap();
+	let chain_store = ChainStore::new(db_env).unwrap();
+	let store = Arc::new(chain_store);
+	// open the txhashset, creating a new one if necessary
+	let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
+
+	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();
 	let key_id2 = keychain.derive_key_id(2).unwrap();
 	let key_id3 = keychain.derive_key_id(3).unwrap();
@@ -61,11 +64,15 @@ fn test_some_raw_txs() {
 	// Note: this results in an output MMR with a single leaf node.
 	// We need to be careful with pruning while processing the txs below
 	// as we cannot prune a tree with a single node in it (no sibling or parent).
-	txhashset::extending(&mut txhashset, |extension| extension.apply_block(&block)).unwrap();
+	let mut batch = store.batch().unwrap();
+	txhashset::extending(&mut txhashset, &mut batch, |extension| {
+		extension.apply_block(&block)
+	}).unwrap();
 
 	// Make sure we setup the head in the store based on block we just accepted.
 	let head = Tip::from_block(&block.header);
-	store.save_head(&head).unwrap();
+	batch.save_head(&head).unwrap();
+	batch.commit().unwrap();
 
 	let coinbase_reward = 60_000_000_000;
 
@@ -125,10 +132,10 @@ fn test_some_raw_txs() {
 		// Note: we pass in an increasing "height" here so we can rollback
 		// each tx individually as necessary, while maintaining a long lived
 		// txhashset extension.
-		assert!(extension.apply_raw_tx(&tx1, 3).is_ok());
-		assert!(extension.apply_raw_tx(&tx2, 4).is_err());
-		assert!(extension.apply_raw_tx(&tx3, 5).is_ok());
-		assert!(extension.apply_raw_tx(&tx4, 6).is_ok());
+		assert!(extension.apply_raw_tx(&tx1).is_ok());
+		assert!(extension.apply_raw_tx(&tx2).is_err());
+		assert!(extension.apply_raw_tx(&tx3).is_ok());
+		assert!(extension.apply_raw_tx(&tx4).is_ok());
 		Ok(())
 	});
 }

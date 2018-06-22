@@ -16,8 +16,8 @@
 
 use time;
 
-use core;
 use consensus;
+use core;
 use core::target::Difficulty;
 use global;
 

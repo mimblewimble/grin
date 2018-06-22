@@ -12,12 +12,12 @@
 // limitations under the License.
 
 //! Logging wrapper to be used throughout all crates in the workspace
-use std::fs::OpenOptions;
-use std::sync::Mutex;
-use std::ops::Deref;
 use slog::{Discard, Drain, Duplicate, Level, LevelFilter, Logger};
-use slog_term;
 use slog_async;
+use slog_term;
+use std::fs::OpenOptions;
+use std::ops::Deref;
+use std::sync::Mutex;
 
 use backtrace::Backtrace;
 use std::{panic, thread};
@@ -110,7 +110,6 @@ pub fn init_test_logger() {
 	let mut config_ref = LOGGING_CONFIG.lock().unwrap();
 	*config_ref = LoggingConfig::default();
 	*was_init_ref = true;
-	send_panic_to_log();
 }
 
 /// hook to send panics to logs as well as stderr

@@ -12,292 +12,205 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use blake2;
-use rand::{thread_rng, Rng};
-use std::cmp::min;
 use std::collections::HashMap;
+use std::collections::hash_map::Values;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::Path;
-use std::path::MAIN_SEPARATOR;
+use std::path::{Path, MAIN_SEPARATOR};
 
 use serde_json;
 use tokio_core::reactor;
-use tokio_retry::strategy::FibonacciBackoff;
 use tokio_retry::Retry;
+use tokio_retry::strategy::FibonacciBackoff;
 
-use failure::{Fail, ResultExt};
+use failure::ResultExt;
 
-use keychain::{self, Keychain};
-use util;
+use keychain::{self, Identifier, Keychain};
 use util::LOGGER;
+use util::secp::pedersen;
 
-use libwallet::types::*;
+use error::{Error, ErrorKind};
 
+use client;
+use libtx::slate::Slate;
+use libwallet;
+use libwallet::types::{BlockFees, BlockIdentifier, CbData, MerkleProofWrapper, OutputData,
+                       TxWrapper, WalletBackend, WalletClient, WalletDetails, WalletOutputBatch};
+use types::{WalletConfig, WalletSeed};
+
+const DETAIL_FILE: &'static str = "wallet.det";
+const DET_BCK_FILE: &'static str = "wallet.detbck";
 const DAT_FILE: &'static str = "wallet.dat";
 const BCK_FILE: &'static str = "wallet.bck";
 const LOCK_FILE: &'static str = "wallet.lock";
 const SEED_FILE: &'static str = "wallet.seed";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WalletConfig {
-	// Right now the decision to run or not a wallet is based on the command.
-	// This may change in the near-future.
-	// pub enable_wallet: bool,
-
-	// The api interface/ip_address that this api server (i.e. this wallet) will run
-	// by default this is 127.0.0.1 (and will not accept connections from external clients)
-	pub api_listen_interface: String,
-	// The port this wallet will run on
-	pub api_listen_port: u16,
-	// The api address of a running server node against which transaction inputs
-	// will be checked during send
-	pub check_node_api_http_addr: String,
-	// The directory in which wallet files are stored
-	pub data_file_dir: String,
+#[derive(Debug)]
+struct FileBatch<'a> {
+	/// List of outputs
+	outputs: &'a mut HashMap<String, OutputData>,
+	/// Data file path
+	data_file_path: String,
+	/// lock file path
+	lock_file_path: String,
 }
 
-impl Default for WalletConfig {
-	fn default() -> WalletConfig {
-		WalletConfig {
-			// enable_wallet: false,
-			api_listen_interface: "127.0.0.1".to_string(),
-			api_listen_port: 13415,
-			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
-			data_file_dir: ".".to_string(),
+impl<'a> WalletOutputBatch for FileBatch<'a> {
+	fn save(&mut self, out: OutputData) -> Result<(), libwallet::Error> {
+		let _ = self.outputs.insert(out.key_id.to_hex(), out);
+		Ok(())
+	}
+
+	fn get(&self, id: &Identifier) -> Result<OutputData, libwallet::Error> {
+		self.outputs
+			.get(&id.to_hex())
+			.map(|od| od.clone())
+			.ok_or(libwallet::ErrorKind::Backend("not found".to_string()).into())
+	}
+
+	fn delete(&mut self, id: &Identifier) -> Result<(), libwallet::Error> {
+		let _ = self.outputs.remove(&id.to_hex());
+		Ok(())
+	}
+
+	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), libwallet::Error> {
+		if let Some(out_to_lock) = self.outputs.get_mut(&out.key_id.to_hex()) {
+			if out_to_lock.value == out.value {
+				out_to_lock.lock()
+			}
 		}
+		Ok(())
+	}
+
+	fn commit(&self) -> Result<(), libwallet::Error> {
+		let mut data_file = File::create(self.data_file_path.clone())
+			.context(libwallet::ErrorKind::CallbackImpl("Could not create"))?;
+		let mut outputs = self.outputs.values().collect::<Vec<_>>();
+		outputs.sort();
+		let res_json = serde_json::to_vec_pretty(&outputs).context(
+			libwallet::ErrorKind::CallbackImpl("Error serializing wallet data"),
+		)?;
+		data_file
+			.write_all(res_json.as_slice())
+			.context(libwallet::ErrorKind::CallbackImpl(
+				"Error writing wallet file",
+			))
+			.map_err(|e| e.into())
 	}
 }
 
-impl WalletConfig {
-	pub fn api_listen_addr(&self) -> String {
-		format!("{}:{}", self.api_listen_interface, self.api_listen_port)
-	}
-}
-
-#[derive(Clone, PartialEq)]
-pub struct WalletSeed([u8; 32]);
-
-impl WalletSeed {
-	pub fn from_bytes(bytes: &[u8]) -> WalletSeed {
-		let mut seed = [0; 32];
-		for i in 0..min(32, bytes.len()) {
-			seed[i] = bytes[i];
-		}
-		WalletSeed(seed)
-	}
-
-	fn from_hex(hex: &str) -> Result<WalletSeed, Error> {
-		let bytes =
-			util::from_hex(hex.to_string()).context(ErrorKind::GenericError("Invalid hex"))?;
-		Ok(WalletSeed::from_bytes(&bytes))
-	}
-
-	pub fn to_hex(&self) -> String {
-		util::to_hex(self.0.to_vec())
-	}
-
-	pub fn derive_keychain(&self, password: &str) -> Result<keychain::Keychain, Error> {
-		let seed = blake2::blake2b::blake2b(64, &password.as_bytes(), &self.0);
-		let result = keychain::Keychain::from_seed(seed.as_bytes()).context(ErrorKind::Keychain)?;
-		Ok(result)
-	}
-
-	pub fn init_new() -> WalletSeed {
-		let seed: [u8; 32] = thread_rng().gen();
-		WalletSeed(seed)
-	}
-
-	pub fn init_file(wallet_config: &WalletConfig) -> Result<WalletSeed, Error> {
-		// create directory if it doesn't exist
-		fs::create_dir_all(&wallet_config.data_file_dir).context(ErrorKind::IO)?;
-
-		let seed_file_path = &format!(
-			"{}{}{}",
-			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
-		);
-
-		debug!(LOGGER, "Generating wallet seed file at: {}", seed_file_path,);
-
-		if Path::new(seed_file_path).exists() {
-			Err(ErrorKind::WalletSeedExists)?
-		} else {
-			let seed = WalletSeed::init_new();
-			let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
-			file.write_all(&seed.to_hex().as_bytes())
-				.context(ErrorKind::IO)?;
-			Ok(seed)
-		}
-	}
-
-	pub fn from_file(wallet_config: &WalletConfig) -> Result<WalletSeed, Error> {
-		// create directory if it doesn't exist
-		fs::create_dir_all(&wallet_config.data_file_dir).context(ErrorKind::IO)?;
-
-		let seed_file_path = &format!(
-			"{}{}{}",
-			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
-		);
-
-		debug!(LOGGER, "Using wallet seed file at: {}", seed_file_path,);
-
-		if Path::new(seed_file_path).exists() {
-			let mut file = File::open(seed_file_path).context(ErrorKind::IO)?;
-			let mut buffer = String::new();
-			file.read_to_string(&mut buffer).context(ErrorKind::IO)?;
-			let wallet_seed = WalletSeed::from_hex(&buffer)?;
-			Ok(wallet_seed)
-		} else {
+impl<'a> Drop for FileBatch<'a> {
+	fn drop(&mut self) {
+		// delete the lock file
+		if let Err(e) = fs::remove_dir(&self.lock_file_path) {
 			error!(
 				LOGGER,
-				"wallet seed file {} could not be opened (grin wallet init). \
-				 Run \"grin wallet init\" to initialize a new wallet.",
-				seed_file_path
+				"Could not remove wallet lock file. Maybe insufficient rights? "
 			);
-			Err(ErrorKind::WalletSeedDoesntExist)?
 		}
+		info!(LOGGER, "... released wallet lock");
 	}
 }
 
 /// Wallet information tracking all our outputs. Based on HD derivation and
 /// avoids storing any key data, only storing output amounts and child index.
 #[derive(Debug, Clone)]
-pub struct FileWallet {
+pub struct FileWallet<K> {
 	/// Keychain
-	pub keychain: Keychain,
+	pub keychain: Option<K>,
 	/// Configuration
 	pub config: WalletConfig,
+	/// passphrase: TODO better ways of dealing with this other than storing
+	passphrase: String,
 	/// List of outputs
 	pub outputs: HashMap<String, OutputData>,
+	/// Details
+	pub details: WalletDetails,
 	/// Data file path
 	pub data_file_path: String,
 	/// Backup file path
 	pub backup_file_path: String,
 	/// lock file path
 	pub lock_file_path: String,
+	/// details file path
+	pub details_file_path: String,
+	/// Details backup file path
+	pub details_bak_path: String,
 }
 
-impl WalletBackend for FileWallet {
+impl<K> WalletBackend<K> for FileWallet<K>
+where
+	K: Keychain,
+{
+	/// Initialize with whatever stored credentials we have
+	fn open_with_credentials(&mut self) -> Result<(), libwallet::Error> {
+		let wallet_seed = WalletSeed::from_file(&self.config)
+			.context(libwallet::ErrorKind::CallbackImpl("Error opening wallet"))?;
+		let keychain = wallet_seed.derive_keychain(&self.passphrase);
+		self.keychain = Some(keychain.context(libwallet::ErrorKind::CallbackImpl(
+			"Error deriving keychain",
+		))?);
+		// Just blow up password for now after it's been used
+		self.passphrase = String::from("");
+		Ok(())
+	}
+
+	/// Close wallet and remove any stored credentials (TBD)
+	fn close(&mut self) -> Result<(), libwallet::Error> {
+		self.keychain = None;
+		Ok(())
+	}
+
 	/// Return the keychain being used
-	fn keychain(&mut self) -> &mut Keychain {
-		&mut self.keychain
+	fn keychain(&mut self) -> &mut K {
+		self.keychain.as_mut().unwrap()
 	}
 
-	/// Return URL for check node
-	fn node_url(&self) -> &str {
-		&self.config.check_node_api_http_addr
+	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a> {
+		Box::new(self.outputs.values().cloned())
 	}
 
-	/// Return the outputs directly
-	fn outputs(&mut self) -> &mut HashMap<String, OutputData> {
-		&mut self.outputs
+	fn get(&self, id: &Identifier) -> Result<OutputData, libwallet::Error> {
+		self.outputs
+			.get(&id.to_hex())
+			.map(|o| o.clone())
+			.ok_or(libwallet::ErrorKind::Backend("not found".to_string()).into())
 	}
 
-	/// Allows for reading wallet data (without needing to acquire the write
-	/// lock).
-	fn read_wallet<T, F>(&mut self, f: F) -> Result<T, Error>
-	where
-		F: FnOnce(&mut Self) -> Result<T, Error>,
-	{
-		self.read_or_create_paths()?;
-		f(self)
-	}
-
-	/// Allows the reading and writing of the wallet data within a file lock.
-	/// Just provide a closure taking a mutable FileWallet. The lock should
-	/// be held for as short a period as possible to avoid contention.
-	/// Note that due to the impossibility to do an actual file lock easily
-	/// across operating systems, this just creates a lock file with a "should
-	/// not exist" option.
-	fn with_wallet<T, F>(&mut self, f: F) -> Result<T, Error>
-	where
-		F: FnOnce(&mut Self) -> T,
-	{
-		// create directory if it doesn't exist
-		fs::create_dir_all(self.config.data_file_dir.clone()).unwrap_or_else(|why| {
-			info!(LOGGER, "! {:?}", why.kind());
-		});
-
-		info!(LOGGER, "Acquiring wallet lock ...");
-
-		let lock_file_path = self.lock_file_path.clone();
-		let action = || {
-			trace!(LOGGER, "making lock file for wallet lock");
-			fs::create_dir(&lock_file_path)
-		};
-
-		// use tokio_retry to cleanly define some retry logic
-		let mut core = reactor::Core::new().unwrap();
-		let retry_strategy = FibonacciBackoff::from_millis(1000).take(10);
-		let retry_future = Retry::spawn(core.handle(), retry_strategy, action);
-		let retry_result = core.run(retry_future);
-
-		match retry_result {
-			Ok(_) => {}
-			Err(e) => {
-				error!(
-					LOGGER,
-					"Failed to acquire wallet lock file (multiple retries)",
-				);
-				return Err(
-					e.context(ErrorKind::FileWallet("Failed to acquire lock file"))
-						.into(),
-				);
-			}
-		}
+	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, libwallet::Error> {
+		self.lock()?;
 
 		// We successfully acquired the lock - so do what needs to be done.
-		self.read_or_create_paths()?;
-		self.write(&self.backup_file_path)?;
-		let res = f(self);
-		self.write(&self.data_file_path)?;
+		self.read_or_create_paths()
+			.context(libwallet::ErrorKind::CallbackImpl("Lock Error"))?;
+		self.write(&self.backup_file_path, &self.details_bak_path)
+			.context(libwallet::ErrorKind::CallbackImpl("Write Error"))?;
 
-		// delete the lock file
-		fs::remove_dir(&self.lock_file_path).context(ErrorKind::FileWallet(
-			"Could not remove wallet lock file. Maybe insufficient rights?",
-		))?;
-
-		info!(LOGGER, "... released wallet lock");
-
-		Ok(res)
-	}
-
-	/// Append a new output data to the wallet data.
-	/// TODO - we should check for overwriting here - only really valid for
-	/// unconfirmed coinbase
-	fn add_output(&mut self, out: OutputData) {
-		self.outputs.insert(out.key_id.to_hex(), out.clone());
-	}
-
-	// TODO - careful with this, only for Unconfirmed (maybe Locked)?
-	fn delete_output(&mut self, id: &keychain::Identifier) {
-		self.outputs.remove(&id.to_hex());
-	}
-
-	/// Lock an output data.
-	/// TODO - we should track identifier on these outputs (not just n_child)
-	fn lock_output(&mut self, out: &OutputData) {
-		if let Some(out_to_lock) = self.outputs.get_mut(&out.key_id.to_hex()) {
-			if out_to_lock.value == out.value {
-				out_to_lock.lock()
-			}
-		}
-	}
-
-	/// get a single output
-	fn get_output(&self, key_id: &keychain::Identifier) -> Option<&OutputData> {
-		self.outputs.get(&key_id.to_hex())
+		Ok(Box::new(FileBatch {
+			outputs: &mut self.outputs,
+			data_file_path: self.data_file_path.clone(),
+			lock_file_path: self.lock_file_path.clone(),
+		}))
 	}
 
 	/// Next child index when we want to create a new output.
-	fn next_child(&self, root_key_id: keychain::Identifier) -> u32 {
+	fn next_child<'a>(
+		&'a mut self,
+		root_key_id: keychain::Identifier,
+	) -> Result<u32, libwallet::Error> {
 		let mut max_n = 0;
 		for out in self.outputs.values() {
 			if max_n < out.n_child && out.root_key_id == root_key_id {
 				max_n = out.n_child;
 			}
 		}
-		max_n + 1
+
+		if self.details.last_child_index <= max_n {
+			self.details.last_child_index = max_n + 1;
+		} else {
+			self.details.last_child_index += 1;
+		}
+		Ok(self.details.last_child_index)
 	}
 
 	/// Select spendable coins from the wallet.
@@ -332,7 +245,7 @@ impl WalletBackend for FileWallet {
 		// The limit exists because by default, we always select as many inputs as
 		// possible in a transaction, to reduce both the Output set and the fees.
 		// But that only makes sense up to a point, hence the limit to avoid being too
-		// greedy. But if max_outputs(500) is actually not enought to cover the whole
+		// greedy. But if max_outputs(500) is actually not enough to cover the whole
 		// amount, the wallet should allow going over it to satisfy what the user
 		// wants to send. So the wallet considers max_outputs more of a soft limit.
 		if eligible.len() > max_outputs {
@@ -365,22 +278,161 @@ impl WalletBackend for FileWallet {
 		eligible.reverse();
 		eligible.iter().take(max_outputs).cloned().collect()
 	}
+
+	/// Return current metadata
+	fn details(&mut self) -> &mut WalletDetails {
+		&mut self.details
+	}
+
+	/// Restore wallet contents
+	fn restore(&mut self) -> Result<(), libwallet::Error> {
+		libwallet::internal::restore::restore(self).context(libwallet::ErrorKind::Restore)?;
+		Ok(())
+	}
 }
 
-impl FileWallet {
+impl<K> WalletClient for FileWallet<K> {
+	/// Return URL for check node
+	fn node_url(&self) -> &str {
+		&self.config.check_node_api_http_addr
+	}
+
+	/// Call the wallet API to create a coinbase transaction
+	fn create_coinbase(
+		&self,
+		dest: &str,
+		block_fees: &BlockFees,
+	) -> Result<CbData, libwallet::Error> {
+		let res = client::create_coinbase(dest, block_fees);
+		match res {
+			Ok(r) => Ok(r),
+			Err(e) => {
+				let message = format!("{}", e.cause().unwrap());
+				Err(libwallet::ErrorKind::WalletComms(message))?
+			}
+		}
+	}
+
+	/// Send a transaction slate to another listening wallet and return result
+	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+		let res = client::send_tx_slate(dest, slate);
+		match res {
+			Ok(r) => Ok(r),
+			Err(e) => {
+				let message = format!("{}", e.cause().unwrap());
+				Err(libwallet::ErrorKind::WalletComms(message))?
+			}
+		}
+	}
+
+	/// Posts a transaction to a grin node
+	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), libwallet::Error> {
+		let res = client::post_tx(dest, tx, fluff).context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieves the current tip from the specified grin node
+	fn get_chain_height(&self, addr: &str) -> Result<u64, libwallet::Error> {
+		let res = client::get_chain_height(addr).context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieve a list of outputs from the specified grin node
+	/// need "by_height" and "by_id" variants
+	fn get_outputs_from_node(
+		&self,
+		addr: &str,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<HashMap<pedersen::Commitment, String>, libwallet::Error> {
+		let res = client::get_outputs_from_node(addr, wallet_outputs)
+			.context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// Get any missing block hashes from node
+	fn get_missing_block_hashes_from_node(
+		&self,
+		addr: &str,
+		height: u64,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<
+		(
+			HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
+			HashMap<pedersen::Commitment, MerkleProofWrapper>,
+		),
+		libwallet::Error,
+	> {
+		let res = client::get_missing_block_hashes_from_node(addr, height, wallet_outputs)
+			.context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// retrieve merkle proof for a commit from a node
+	fn get_merkle_proof_for_commit(
+		&self,
+		_addr: &str,
+		_commit: &str,
+	) -> Result<MerkleProofWrapper, libwallet::Error> {
+		Err(libwallet::ErrorKind::GenericError("Not Implemented"))?
+	}
+}
+
+impl<K> FileWallet<K>
+where
+	K: Keychain,
+{
 	/// Create a new FileWallet instance
-	pub fn new(config: WalletConfig, keychain: Keychain) -> Result<Self, Error> {
+	pub fn new(config: WalletConfig, passphrase: &str) -> Result<Self, Error> {
 		let mut retval = FileWallet {
-			keychain: keychain,
+			keychain: None,
 			config: config.clone(),
+			passphrase: String::from(passphrase),
 			outputs: HashMap::new(),
+			details: WalletDetails::default(),
 			data_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, DAT_FILE),
 			backup_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, BCK_FILE),
 			lock_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, LOCK_FILE),
+			details_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, DETAIL_FILE),
+			details_bak_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, DET_BCK_FILE),
 		};
 		match retval.read_or_create_paths() {
 			Ok(_) => Ok(retval),
 			Err(e) => Err(e),
+		}
+	}
+
+	fn lock(&self) -> Result<(), libwallet::Error> {
+		// create directory if it doesn't exist
+		fs::create_dir_all(self.config.data_file_dir.clone()).unwrap_or_else(|why| {
+			info!(LOGGER, "! {:?}", why.kind());
+		});
+
+		info!(LOGGER, "Acquiring wallet lock ...");
+
+		let lock_file_path = self.lock_file_path.clone();
+		let action = || {
+			trace!(LOGGER, "making lock file for wallet lock");
+			fs::create_dir(&lock_file_path)
+		};
+
+		// use tokio_retry to cleanly define some retry logic
+		let mut core = reactor::Core::new().unwrap();
+		let retry_strategy = FibonacciBackoff::from_millis(1000).take(10);
+		let retry_future = Retry::spawn(core.handle(), retry_strategy, action);
+		let retry_result = core.run(retry_future)
+			.context(libwallet::ErrorKind::CallbackImpl(
+				"Failed to acquire lock file",
+			));
+
+		match retry_result {
+			Ok(_) => Ok(()),
+			Err(e) => {
+				error!(
+					LOGGER,
+					"Failed to acquire wallet lock file (multiple retries)",
+				);
+				Err(e.into())
+			}
 		}
 	}
 
@@ -395,17 +447,28 @@ impl FileWallet {
 		if Path::new(&self.data_file_path.clone()).exists() {
 			self.read()?;
 		}
+		if Path::new(&self.details_file_path.clone()).exists() {
+			self.details = self.read_details()?;
+		}
 		Ok(())
+	}
+
+	/// Read details file from disk
+	fn read_details(&self) -> Result<WalletDetails, Error> {
+		let details_file = File::open(self.details_file_path.clone())
+			.context(ErrorKind::FileWallet(&"Could not open wallet details file"))?;
+		serde_json::from_reader(details_file)
+			.context(ErrorKind::Format)
+			.map_err(|e| e.into())
 	}
 
 	/// Read output_data vec from disk.
 	fn read_outputs(&self) -> Result<Vec<OutputData>, Error> {
 		let data_file = File::open(self.data_file_path.clone())
 			.context(ErrorKind::FileWallet(&"Could not open wallet file"))?;
-		serde_json::from_reader(data_file).map_err(|e| {
-			e.context(ErrorKind::FileWallet(&"Error reading wallet file "))
-				.into()
-		})
+		serde_json::from_reader(data_file)
+			.context(ErrorKind::Format)
+			.map_err(|e| e.into())
 	}
 
 	/// Populate wallet_data with output_data from disk.
@@ -413,22 +476,31 @@ impl FileWallet {
 		let outputs = self.read_outputs()?;
 		self.outputs = HashMap::new();
 		for out in outputs {
-			self.add_output(out);
+			self.outputs.insert(out.key_id.to_hex(), out.clone());
 		}
 		Ok(())
 	}
 
-	/// Write the wallet data to disk.
-	fn write(&self, data_file_path: &str) -> Result<(), Error> {
-		let mut data_file = File::create(data_file_path)
-			.map_err(|e| e.context(ErrorKind::FileWallet(&"Could not create ")))?;
+	/// Write the wallet and details data to disk.
+	fn write(&self, data_file_path: &str, details_file_path: &str) -> Result<(), Error> {
+		let mut data_file =
+			File::create(data_file_path).context(ErrorKind::FileWallet(&"Could not create "))?;
 		let mut outputs = self.outputs.values().collect::<Vec<_>>();
 		outputs.sort();
 		let res_json = serde_json::to_vec_pretty(&outputs)
-			.map_err(|e| e.context(ErrorKind::FileWallet("Error serializing wallet data")))?;
+			.context(ErrorKind::FileWallet("Error serializing wallet data"))?;
 		data_file
 			.write_all(res_json.as_slice())
-			.context(ErrorKind::FileWallet(&"Error writing wallet file"))
+			.context(ErrorKind::FileWallet(&"Error writing wallet file"))?;
+		// write details file
+		let mut details_file =
+			File::create(details_file_path).context(ErrorKind::FileWallet(&"Could not create "))?;
+		let res_json = serde_json::to_string_pretty(&self.details).context(ErrorKind::FileWallet(
+			"Error serializing wallet details file",
+		))?;
+		details_file
+			.write_all(res_json.into_bytes().as_slice())
+			.context(ErrorKind::FileWallet(&"Error writing wallet details file"))
 			.map_err(|e| e.into())
 	}
 

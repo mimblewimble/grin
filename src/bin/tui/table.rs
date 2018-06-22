@@ -48,21 +48,21 @@
 extern crate cursive;
 
 // STD Dependencies -----------------------------------------------------------
-use std::rc::Rc;
-use std::hash::Hash;
 use std::cmp::{self, Ordering};
 use std::collections::HashMap;
+use std::hash::Hash;
+use std::rc::Rc;
 
 // External Dependencies ------------------------------------------------------
 use cursive::With;
-use cursive::vec::Vec2;
 use cursive::align::HAlign;
-use cursive::theme::ColorStyle;
-use cursive::{Cursive, Printer};
 use cursive::direction::Direction;
-use cursive::view::{ScrollBase, View};
 use cursive::event::{Callback, Event, EventResult, Key};
-use cursive::theme::PaletteColor::*;
+use cursive::theme::ColorStyle;
+use cursive::theme::PaletteColor::{Highlight, HighlightInactive, Primary};
+use cursive::vec::Vec2;
+use cursive::view::{ScrollBase, View};
+use cursive::{Cursive, Printer};
 
 /// A trait for displaying and sorting items inside a
 /// [`TableView`](struct.TableView.html).
@@ -80,7 +80,8 @@ where
 		Self: Sized;
 }
 
-/// View to select an item among a list, supporting multiple columns for sorting.
+/// View to select an item among a list, supporting multiple columns for
+/// sorting.
 ///
 /// # Examples
 ///
@@ -144,7 +145,7 @@ pub struct TableView<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static>
 
 	column_select: bool,
 	columns: Vec<TableColumn<H>>,
-	column_indicies: HashMap<H, usize>,
+	column_indices: HashMap<H, usize>,
 
 	focus: usize,
 	items: Vec<T>,
@@ -170,7 +171,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 
 			column_select: false,
 			columns: Vec::new(),
-			column_indicies: HashMap::new(),
+			column_indices: HashMap::new(),
 
 			focus: 0,
 			items: Vec::new(),
@@ -182,7 +183,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 		}
 	}
 
-	/// Adds a column for the specified table colum from type `H` along with
+	/// Adds a column for the specified table column from type `H` along with
 	/// a title for its visual display.
 	///
 	/// The provided callback can be used to further configure the
@@ -193,11 +194,11 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 		title: S,
 		callback: C,
 	) -> Self {
-		self.column_indicies.insert(column, self.columns.len());
+		self.column_indices.insert(column, self.columns.len());
 		self.columns
 			.push(callback(TableColumn::new(column, title.into())));
 
-		// Make the first colum the default one
+		// Make the first column the default one
 		if self.columns.len() == 1 {
 			self.default_column(column)
 		} else {
@@ -207,7 +208,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 
 	/// Sets the initially active column of the table.
 	pub fn default_column(mut self, column: H) -> Self {
-		if self.column_indicies.contains_key(&column) {
+		if self.column_indices.contains_key(&column) {
 			for c in &mut self.columns {
 				c.selected = c.column == column;
 				if c.selected {
@@ -223,7 +224,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	/// Sorts the table using the specified table `column` and the passed
 	/// `order`.
 	pub fn sort_by(&mut self, column: H, order: Ordering) {
-		if self.column_indicies.contains_key(&column) {
+		if self.column_indices.contains_key(&column) {
 			for c in &mut self.columns {
 				c.selected = c.column == column;
 				if c.selected {
@@ -457,7 +458,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 		self.with(|t| t.set_items(items))
 	}
 
-	/// Returns a immmutable reference to the item at the specified index
+	/// Returns a immutable reference to the item at the specified index
 	/// within the underlying storage vector.
 	pub fn borrow_item(&mut self, index: usize) -> Option<&T> {
 		self.items.get(index)
@@ -469,7 +470,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 		self.items.get_mut(index)
 	}
 
-	/// Returns a immmutable reference to the items contained within the table.
+	/// Returns a immutable reference to the items contained within the table.
 	pub fn borrow_items(&mut self) -> &Vec<T> {
 		&self.items
 	}
@@ -740,7 +741,7 @@ impl<T: TableViewItem<H> + 'static, H: Eq + Hash + Copy + Clone + 'static> View
 				.iter_mut()
 				.partition(|c| c.requested_width.is_some());
 
-		// Subtract one for the seperators between our columns (that's column_count - 1)
+		// Subtract one for the separators between our columns (that's column_count - 1)
 		let mut available_width = size.x.saturating_sub(column_count.saturating_sub(1) * 3);
 
 		// Reduce the with in case we are displaying a scrollbar

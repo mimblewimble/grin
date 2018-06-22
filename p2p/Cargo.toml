@@ -9,14 +9,18 @@ publish = false
 bitflags = "1"
 bytes = "0.4"
 enum_primitive = "0.1"
+lmdb-zero = "0.4.4"
 net2 = "0.2"
 num = "0.1"
 rand = "0.3"
 serde = "1"
 serde_derive = "1"
-slog = { version = "~2.1", features = ["max_level_trace", "release_max_level_trace"] }
+slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
 time = "0.1"
 
 grin_core = { path = "../core" }
 grin_store = { path = "../store" }
 grin_util = { path = "../util" }
+
+[dev-dependencies]
+grin_pool = { path = "../pool" }

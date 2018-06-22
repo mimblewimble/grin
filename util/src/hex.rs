@@ -16,7 +16,6 @@
 /// to bytes. Given that rustc-serialize is deprecated and serde doesn't
 /// provide easy hex encoding, hex is a bit in limbo right now in Rust-
 /// land. It's simple enough that we can just have our own.
-
 use std::fmt::Write;
 use std::num;
 

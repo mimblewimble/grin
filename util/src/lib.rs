@@ -54,10 +54,10 @@ pub mod types;
 pub use types::{LogLevel, LoggingConfig};
 
 // other utils
+use byteorder::{BigEndian, ByteOrder};
 use std::cell::{Ref, RefCell};
 #[allow(unused_imports)]
 use std::ops::Deref;
-use byteorder::{BigEndian, ByteOrder};
 
 mod hex;
 pub use hex::*;

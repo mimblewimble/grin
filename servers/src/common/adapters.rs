@@ -15,8 +15,7 @@
 //! Adapters connecting new block, new transaction, and accepted transaction
 //! events to consumers of those events.
 
-use rand;
-use rand::Rng;
+use rand::{self, Rng};
 use std::fs::File;
 use std::net::SocketAddr;
 use std::ops::Deref;
@@ -35,8 +34,7 @@ use core::core::transaction::Transaction;
 use p2p;
 use pool;
 use store;
-use util::LOGGER;
-use util::OneTime;
+use util::{OneTime, LOGGER};
 
 // All adapters use `Weak` references instead of `Arc` to avoid cycles that
 // can never be destroyed. These 2 functions are simple helpers to reduce the
@@ -142,8 +140,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				.upgrade()
 				.expect("failed to upgrade weak ref to chain");
 
-			if let Ok(sums) = chain.get_block_sums(&cb.header.previous) {
-				if block.validate(&sums.output_sum, &sums.kernel_sum).is_ok() {
+			if let Ok(prev) = chain.get_block_header(&cb.header.previous) {
+				if block
+					.validate(&prev.total_kernel_offset, &prev.total_kernel_sum)
+					.is_ok()
+				{
 					debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
 					self.process_block(block, addr)
 				} else {
@@ -295,7 +296,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	/// Provides a reading view into the current txhashset state as well as
-	/// the required indexes for a consumer to rewind to a consistant state
+	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.
 	fn txhashset_read(&self, h: Hash) -> Option<p2p::TxHashSetRead> {
 		match w(&self.chain).txhashset_read(h.clone()) {
@@ -613,7 +614,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 }
 
 impl ChainToPoolAndNetAdapter {
-	/// Construct a ChainToPoolAndNetAdaper instance.
+	/// Construct a ChainToPoolAndNetAdapter instance.
 	pub fn new(
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	) -> ChainToPoolAndNetAdapter {
@@ -623,7 +624,7 @@ impl ChainToPoolAndNetAdapter {
 		}
 	}
 
-	/// Initialize a ChainToPoolAndNetAdapter instance with hanlde to a Peers
+	/// Initialize a ChainToPoolAndNetAdapter instance with handle to a Peers
 	/// object. Should only be called once.
 	pub fn init(&self, peers: Weak<p2p::Peers>) {
 		self.peers.init(peers);

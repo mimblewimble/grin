@@ -13,7 +13,7 @@ entity "Grin Node" as grin_node
 
 note left of sender
 	1: Create Transaction **UUID** (for reference and maintaining correct state)
-	2: Set **lock_height** for output (current chain height)
+	2: Set **lock_height** for transaction kernel (current chain height)
 	3: Select **inputs** using desired selection strategy
 	4: Create **change_output** 
 	5: Select blinding factor for **change_output**

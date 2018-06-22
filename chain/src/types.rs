@@ -20,12 +20,12 @@ use util::secp;
 use util::secp::pedersen::Commitment;
 use util::secp_static;
 
+use core::core::committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::{block, transaction, Block, BlockHeader};
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store as store;
-use grin_store;
 use keychain;
 
 bitflags! {
@@ -75,6 +75,8 @@ pub enum Error {
 	InvalidBlockHeight,
 	/// One of the root hashes in the block is invalid
 	InvalidRoot,
+	/// One of the MMR sizes in the block header is invalid
+	InvalidMMRSize,
 	/// Error from underlying keychain impl
 	Keychain(keychain::Error),
 	/// Error from underlying secp lib
@@ -83,6 +85,10 @@ pub enum Error {
 	AlreadySpent(Commitment),
 	/// An output with that commitment already exists (should be unique)
 	DuplicateCommitment(Commitment),
+	/// Attempt to spend a coinbase output before it sufficiently matures.
+	ImmatureCoinbase,
+	/// Error validating a Merkle proof (coinbase output)
+	MerkleProof,
 	/// output not found
 	OutputNotFound,
 	/// output spent
@@ -92,7 +98,7 @@ pub enum Error {
 	/// We've been provided a bad txhashset
 	InvalidTxHashSet(String),
 	/// Internal issue when trying to save or load data from store
-	StoreErr(grin_store::Error, String),
+	StoreErr(store::Error, String),
 	/// Internal issue when trying to save or load data from append only files
 	FileReadErr(String),
 	/// Error serializing or deserializing a type
@@ -107,6 +113,8 @@ pub enum Error {
 	Transaction(transaction::Error),
 	/// Anything else
 	Other(String),
+	/// Error from summing and verifying kernel sums via committed trait.
+	Committed(committed::Error),
 }
 
 impl error::Error for Error {
@@ -125,8 +133,8 @@ impl fmt::Display for Error {
 	}
 }
 
-impl From<grin_store::Error> for Error {
-	fn from(e: grin_store::Error) -> Error {
+impl From<store::Error> for Error {
+	fn from(e: store::Error) -> Error {
 		Error::StoreErr(e, "wrapped".to_owned())
 	}
 }
@@ -152,6 +160,12 @@ impl From<keychain::Error> for Error {
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
 		Error::Secp(e)
+	}
+}
+
+impl From<committed::Error> for Error {
+	fn from(e: committed::Error) -> Error {
+		Error::Committed(e)
 	}
 }
 
@@ -219,19 +233,19 @@ impl Tip {
 /// Serialization of a tip, required to save to datastore.
 impl ser::Writeable for Tip {
 	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		try!(writer.write_u64(self.height));
-		try!(writer.write_fixed_bytes(&self.last_block_h));
-		try!(writer.write_fixed_bytes(&self.prev_block_h));
+		writer.write_u64(self.height)?;
+		writer.write_fixed_bytes(&self.last_block_h)?;
+		writer.write_fixed_bytes(&self.prev_block_h)?;
 		self.total_difficulty.write(writer)
 	}
 }
 
 impl ser::Readable for Tip {
 	fn read(reader: &mut ser::Reader) -> Result<Tip, ser::Error> {
-		let height = try!(reader.read_u64());
-		let last = try!(Hash::read(reader));
-		let prev = try!(Hash::read(reader));
-		let diff = try!(Difficulty::read(reader));
+		let height = reader.read_u64()?;
+		let last = Hash::read(reader)?;
+		let prev = Hash::read(reader)?;
+		let diff = Difficulty::read(reader)?;
 		Ok(Tip {
 			height: height,
 			last_block_h: last,
@@ -239,112 +253,6 @@ impl ser::Readable for Tip {
 			total_difficulty: diff,
 		})
 	}
-}
-
-/// Trait the chain pipeline requires an implementor for in order to process
-/// blocks.
-pub trait ChainStore: Send + Sync {
-	/// Get the tip that's also the head of the chain
-	fn head(&self) -> Result<Tip, store::Error>;
-
-	/// Block header for the chain head
-	fn head_header(&self) -> Result<BlockHeader, store::Error>;
-
-	/// Save the provided tip as the current head of our chain
-	fn save_head(&self, t: &Tip) -> Result<(), store::Error>;
-
-	/// Save the provided tip as the current head of the body chain, leaving the
-	/// header chain alone.
-	fn save_body_head(&self, t: &Tip) -> Result<(), store::Error>;
-
-	/// Gets a block header by hash
-	fn get_block(&self, h: &Hash) -> Result<Block, store::Error>;
-
-	/// Check whether we have a block without reading it
-	fn block_exists(&self, h: &Hash) -> Result<bool, store::Error>;
-
-	/// Gets a block header by hash
-	fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, store::Error>;
-
-	/// Save the provided block in store
-	fn save_block(&self, b: &Block) -> Result<(), store::Error>;
-
-	/// Delete a full block. Does not delete any record associated with a block
-	/// header.
-	fn delete_block(&self, bh: &Hash) -> Result<(), store::Error>;
-
-	/// Save the provided block header in store
-	fn save_block_header(&self, bh: &BlockHeader) -> Result<(), store::Error>;
-
-	/// Get the tip of the header chain
-	fn get_header_head(&self) -> Result<Tip, store::Error>;
-
-	/// Save the provided tip as the current head of the block header chain
-	fn save_header_head(&self, t: &Tip) -> Result<(), store::Error>;
-
-	/// Get the tip of the current sync header chain
-	fn get_sync_head(&self) -> Result<Tip, store::Error>;
-
-	/// Save the provided tip as the current head of the sync header chain
-	fn save_sync_head(&self, t: &Tip) -> Result<(), store::Error>;
-
-	/// Initialize header_head if necessary and set sync_head to header_head.
-	fn init_head(&self) -> Result<(), store::Error>;
-
-	/// Reset header_head and sync_head to head of current body chain
-	fn reset_head(&self) -> Result<(), store::Error>;
-
-	/// Gets the block header at the provided height
-	fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, store::Error>;
-
-	/// Save a header as associated with its height
-	fn save_header_height(&self, header: &BlockHeader) -> Result<(), store::Error>;
-
-	/// Delete the block header at the height
-	fn delete_header_by_height(&self, height: u64) -> Result<(), store::Error>;
-
-	/// Is the block header on the current chain?
-	/// Use the header_by_height index to verify the block header is where we
-	/// think it is.
-	fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), store::Error>;
-
-	/// Saves the position of an output, represented by its commitment, in the
-	/// Output MMR. Used as an index for spending and pruning.
-	fn save_output_pos(&self, commit: &Commitment, pos: u64) -> Result<(), store::Error>;
-
-	/// Gets the position of an output, represented by its commitment, in the
-	/// Output MMR. Used as an index for spending and pruning.
-	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, store::Error>;
-
-	/// Deletes the MMR position of an output.
-	fn delete_output_pos(&self, commit: &[u8]) -> Result<(), store::Error>;
-
-	/// Saves a marker associated with a block recording the MMR positions of
-	/// its last elements.
-	fn save_block_marker(&self, bh: &Hash, marker: &BlockMarker) -> Result<(), store::Error>;
-
-	/// Retrieves a block marker from a block hash.
-	fn get_block_marker(&self, bh: &Hash) -> Result<BlockMarker, store::Error>;
-
-	/// Deletes a block marker associated with the provided hash
-	fn delete_block_marker(&self, bh: &Hash) -> Result<(), store::Error>;
-
-	/// Save block sums for the given block hash.
-	fn save_block_sums(&self, bh: &Hash, marker: &BlockSums) -> Result<(), store::Error>;
-
-	/// Get block sums for the given block hash.
-	fn get_block_sums(&self, bh: &Hash) -> Result<BlockSums, store::Error>;
-
-	/// Delete block sums for the given block hash.
-	fn delete_block_sums(&self, bh: &Hash) -> Result<(), store::Error>;
-
-	/// Saves the provided block header at the corresponding height. Also check
-	/// the consistency of the height chain in store by assuring previous
-	/// headers are also at their respective heights.
-	fn setup_height(&self, bh: &BlockHeader, old_tip: &Tip) -> Result<(), store::Error>;
-
-	/// Similar to setup_height but without handling fork
-	fn build_by_height_index(&self, header: &BlockHeader, force: bool) -> Result<(), store::Error>;
 }
 
 /// Bridge between the chain pipeline and the rest of the system. Handles
