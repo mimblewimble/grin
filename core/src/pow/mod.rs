@@ -48,7 +48,7 @@ use pow::cuckoo::{Cuckoo, Error};
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u8) -> bool {
-	Cuckoo::new(&bh.pre_pow_hash()[..], cuckoo_sz)
+	Cuckoo::from_hash(bh.pre_pow_hash().as_ref(), cuckoo_sz)
 		.verify(bh.pow.clone(), consensus::EASINESS as u64)
 }
 
@@ -88,15 +88,9 @@ pub fn pow_size(
 
 	// try to find a cuckoo cycle on that header hash
 	loop {
-		// can be trivially optimized by avoiding re-serialization every time but this
-		// is not meant as a fast miner implementation
-		let pow_hash = bh.pre_pow_hash();
-
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
-		if let Ok(proof) =
-			cuckoo::Miner::new(&pow_hash[..], consensus::EASINESS, proof_size, sz).mine()
-		{
+		if let Ok(proof) = cuckoo::Miner::new(bh, consensus::EASINESS, proof_size, sz).mine() {
 			if proof.to_difficulty() >= diff {
 				bh.pow = proof.clone();
 				return Ok(());

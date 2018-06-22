@@ -97,9 +97,8 @@ impl Miner {
 
 		let mut sol = None;
 		while head.hash() == *latest_hash && time::get_time().sec < deadline {
-			let pow_hash = b.header.pre_pow_hash();
 			if let Ok(proof) = cuckoo::Miner::new(
-				&pow_hash[..],
+				&b.header,
 				consensus::EASINESS,
 				global::proofsize(),
 				global::sizeshift(),
