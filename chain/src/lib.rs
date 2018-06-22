@@ -48,4 +48,4 @@ pub mod types;
 
 pub use chain::{Chain, MAX_ORPHAN_SIZE};
 pub use store::ChainStore;
-pub use types::{BlockSums, ChainAdapter, Error, Options, Tip};
+pub use types::{ChainAdapter, Error, Options, Tip};
