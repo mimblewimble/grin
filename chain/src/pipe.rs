@@ -367,16 +367,16 @@ fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Re
 }
 
 /// Officially adds the block to our chain.
-fn add_block(b: &Block, store: Arc<store::ChainStore>, batch: &mut store::Batch) -> Result<(), Error> {
+fn add_block(
+	b: &Block,
+	store: Arc<store::ChainStore>,
+	batch: &mut store::Batch,
+) -> Result<(), Error> {
 	batch
 		.save_block(b)
 		.map_err(|e| Error::StoreErr(e, "pipe save block".to_owned()))?;
 	let bitmap = store.build_and_cache_block_input_bitmap(&b)?;
-	batch
-		.save_block_input_bitmap(
-			&b.hash(),
-			&bitmap
-	)?;
+	batch.save_block_input_bitmap(&b.hash(), &bitmap)?;
 	Ok(())
 }
 

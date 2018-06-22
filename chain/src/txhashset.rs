@@ -343,7 +343,10 @@ where
 
 	match res {
 		Err(e) => {
-			debug!(LOGGER, "Error returned, discarding txhashset extension: {:?}", e);
+			debug!(
+				LOGGER,
+				"Error returned, discarding txhashset extension: {:?}", e
+			);
 			trees.output_pmmr_h.backend.discard();
 			trees.rproof_pmmr_h.backend.discard();
 			trees.kernel_pmmr_h.backend.discard();
@@ -798,7 +801,8 @@ impl<'a> Extension<'a> {
 		let rewind_rm_pos =
 			input_pos_to_rewind(self.commit_index.clone(), block_header, head_header)?;
 		if !rewind_rm_pos.0 {
-			self.batch.save_block_input_bitmap(&head_header.hash(), &rewind_rm_pos.1)?;
+			self.batch
+				.save_block_input_bitmap(&head_header.hash(), &rewind_rm_pos.1)?;
 		}
 
 		self.rewind_to_pos(

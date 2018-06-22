@@ -160,7 +160,6 @@ impl ChainStore {
 		)
 	}
 
-
 	pub fn build_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
 		let bitmap = block
 			.inputs
@@ -353,8 +352,10 @@ impl<'a> Batch<'a> {
 	}
 
 	pub fn save_block_input_bitmap(&self, bh: &Hash, bm: &Bitmap) -> Result<(), Error> {
-		self.db
-			.put(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec())[..], bm.serialize())
+		self.db.put(
+			&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec())[..],
+			bm.serialize(),
+		)
 	}
 
 	pub fn delete_block_input_bitmap(&self, bh: &Hash) -> Result<(), Error> {
