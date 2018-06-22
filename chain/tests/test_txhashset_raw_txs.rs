@@ -22,7 +22,7 @@ use std::fs;
 use std::sync::Arc;
 
 use chain::store::ChainStore;
-use chain::txhashset::{self, TxHashSet};
+use chain::txhashset;
 use chain::types::Tip;
 use core::core::merkle_proof::MerkleProof;
 use core::core::target::Difficulty;
@@ -40,8 +40,11 @@ fn test_some_raw_txs() {
 	clean_output_dir(&db_root);
 
 	let db_env = Arc::new(store::new_env(db_root.clone()));
-	let store = Arc::new(ChainKVStore::new(db_root.clone()).unwrap());
-	let mut txhashset = TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
+
+	let chain_store = ChainStore::new(db_env).unwrap();
+	let store = Arc::new(chain_store);
+	// open the txhashset, creating a new one if necessary
+	let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
 
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();

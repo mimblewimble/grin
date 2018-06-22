@@ -145,7 +145,7 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: (Out
 		reward,
 	).unwrap();
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
-	chain.set_block_roots(&mut b, false).unwrap();
+	chain.set_txhashset_roots(&mut b, false).unwrap();
 	pow::pow_size(
 		&mut b.header,
 		difficulty,

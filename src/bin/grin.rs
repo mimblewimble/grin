@@ -51,7 +51,7 @@ use daemonize::Daemonize;
 use config::GlobalConfig;
 use core::core::amount_to_hr_string;
 use core::global;
-use keychain::{self, ExtKeychain};
+use keychain::ExtKeychain;
 use tui::ui;
 use util::{init_logger, LoggingConfig, LOGGER};
 use wallet::{libwallet, FileWallet};

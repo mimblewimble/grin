@@ -67,7 +67,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
-	chain.set_block_roots(&mut block, false).unwrap();
+	chain.set_txhashset_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
 		&mut block.header,
@@ -121,7 +121,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
-	chain.set_block_roots(&mut block, false).unwrap();
+	chain.set_txhashset_roots(&mut block, false).unwrap();
 
 	// Confirm the tx attempting to spend the coinbase output
 	// is not valid at the current block height given the current chain state.
@@ -151,7 +151,7 @@ fn test_coinbase_maturity() {
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
-		chain.set_block_roots(&mut block, false).unwrap();
+		chain.set_txhashset_roots(&mut block, false).unwrap();
 
 		pow::pow_size(
 			&mut block.header,
@@ -178,7 +178,7 @@ fn test_coinbase_maturity() {
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
-	chain.set_block_roots(&mut block, false).unwrap();
+	chain.set_txhashset_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
 		&mut block.header,

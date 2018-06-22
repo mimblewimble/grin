@@ -65,7 +65,7 @@ fn mine_empty_chain() {
 		let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
-		chain.set_block_roots(&mut b, false).unwrap();
+		chain.set_txhashset_roots(&mut b, false).unwrap();
 
 		pow::pow_size(
 			&mut b.header,
@@ -365,7 +365,7 @@ where
 	K: Keychain,
 {
 	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_block_roots(&mut b, false).unwrap();
+	chain.set_txhashset_roots(&mut b, false).unwrap();
 	b
 }
 
@@ -380,7 +380,7 @@ where
 	K: Keychain,
 {
 	let mut b = prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_block_roots(&mut b, false).unwrap();
+	chain.set_txhashset_roots(&mut b, false).unwrap();
 	b
 }
 
@@ -389,7 +389,7 @@ where
 	K: Keychain,
 {
 	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_block_roots(&mut b, true).unwrap();
+	chain.set_txhashset_roots(&mut b, true).unwrap();
 	b
 }
 
@@ -404,7 +404,7 @@ where
 	K: Keychain,
 {
 	let mut b = prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_block_roots(&mut b, true).unwrap();
+	chain.set_txhashset_roots(&mut b, true).unwrap();
 	b
 }
 
