@@ -28,7 +28,7 @@ use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, Error, u64_to_key};
-use types::{BlockMarker, BlockSums, Tip};
+use types::Tip;
 
 const STORE_SUBPATH: &'static str = "chain";
 
@@ -143,20 +143,6 @@ impl ChainStore {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())),
-		)
-	}
-
-	pub fn get_block_marker(&self, bh: &Hash) -> Result<BlockMarker, Error> {
-		option_to_not_found(
-			self.db
-				.get_ser(&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec())),
-		)
-	}
-
-	pub fn get_block_sums(&self, bh: &Hash) -> Result<BlockSums, Error> {
-		option_to_not_found(
-			self.db
-				.get_ser(&to_key(BLOCK_SUMS_PREFIX, &mut bh.to_vec())),
 		)
 	}
 
@@ -325,23 +311,6 @@ impl<'a> Batch<'a> {
 	pub fn delete_output_pos(&self, commit: &[u8]) -> Result<(), Error> {
 		self.db
 			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
-	}
-
-	pub fn get_block_marker(&self, bh: &Hash) -> Result<BlockMarker, Error> {
-		option_to_not_found(
-			self.db
-				.get_ser(&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec())),
-		)
-	}
-
-	pub fn save_block_marker(&self, bh: &Hash, marker: &BlockMarker) -> Result<(), Error> {
-		self.db
-			.put_ser(&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec())[..], &marker)
-	}
-
-	pub fn delete_block_marker(&self, bh: &Hash) -> Result<(), Error> {
-		self.db
-			.delete(&to_key(BLOCK_MARKER_PREFIX, &mut bh.to_vec()))
 	}
 
 	pub fn get_block_header_db(&self, h: &Hash) -> Result<BlockHeader, Error> {
