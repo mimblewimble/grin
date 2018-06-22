@@ -441,17 +441,19 @@ impl Chain {
 		let mut txhashset = self.txhashset.write().unwrap();
 		let store = self.store.clone();
 
-		let roots = txhashset::extending_readonly(&mut txhashset, |extension| {
+		let (roots, sizes) = txhashset::extending_readonly(&mut txhashset, |extension| {
 			if is_fork {
 				pipe::rewind_and_apply_fork(b, store, extension)?;
 			}
 			extension.apply_block(b)?;
-			Ok(extension.roots())
+			Ok((extension.roots(), extension.sizes()))
 		})?;
 
 		b.header.output_root = roots.output_root;
 		b.header.range_proof_root = roots.rproof_root;
 		b.header.kernel_root = roots.kernel_root;
+		b.header.output_mmr_size = sizes.0;
+		b.header.kernel_mmr_size = sizes.2;
 		Ok(())
 	}
 

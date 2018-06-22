@@ -47,6 +47,7 @@ const BLOCK_INPUT_BITMAP_PREFIX: u8 = 'B' as u8;
 pub struct ChainStore {
 	db: store::Store,
 	header_cache: Arc<RwLock<LruCache<Hash, BlockHeader>>>,
+	block_input_bitmap_cache: Arc<RwLock<LruCache<Hash, Vec<u8>>>>,
 }
 
 impl ChainStore {
@@ -56,6 +57,7 @@ impl ChainStore {
 		Ok(ChainStore {
 			db,
 			header_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
+			block_input_bitmap_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
 		})
 	}
 }
@@ -158,12 +160,69 @@ impl ChainStore {
 		)
 	}
 
+
+	pub fn build_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
+		let bitmap = block
+			.inputs
+			.iter()
+			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
+			.map(|x| x as u32)
+			.collect();
+		Ok(bitmap)
+	}
+
+	pub fn build_and_cache_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
+		let bitmap = self.build_block_input_bitmap(block)?;
+		let mut cache = self.block_input_bitmap_cache.write().unwrap();
+		cache.insert(block.hash(), bitmap.serialize());
+		Ok(bitmap)
+	}
+
+	pub fn get_block_input_bitmap(&self, bh: &Hash) -> Result<(bool, Bitmap), Error> {
+		{
+			let mut cache = self.block_input_bitmap_cache.write().unwrap();
+
+			// cache hit - return the value from the cache
+			if let Some(bytes) = cache.get_mut(bh) {
+				return Ok((true, Bitmap::deserialize(&bytes)));
+			}
+		}
+
+		// cache miss - get it from db and cache it for next time
+		// if we found one in db
+		let res = self.get_block_input_bitmap_db(bh);
+		if let Ok((found, bitmap)) = res {
+			let mut cache = self.block_input_bitmap_cache.write().unwrap();
+			cache.insert(*bh, bitmap.serialize());
+			return Ok((found, bitmap));
+		}
+		res
+	}
+
+	// Get the block input bitmap from the db or build the bitmap from
+	// the full block from the db (if the block is found).
+	// (bool, Bitmap) : (false if bitmap was built and not found in db)
+	fn get_block_input_bitmap_db(&self, bh: &Hash) -> Result<(bool, Bitmap), Error> {
+		if let Ok(Some(bytes)) = self.db
+			.get(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
+		{
+			Ok((true, Bitmap::deserialize(&bytes)))
+		} else {
+			match self.get_block(bh) {
+				Ok(block) => {
+					let bitmap = self.build_and_cache_block_input_bitmap(&block)?;
+					Ok((false, bitmap))
+				}
+				Err(e) => Err(e),
+			}
+		}
+	}
+
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch, Error> {
 		Ok(Batch {
 			store: self,
 			db: self.db.batch()?,
-			block_input_bitmap_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
 		})
 	}
 }
@@ -173,7 +232,6 @@ impl ChainStore {
 pub struct Batch<'a> {
 	store: &'a ChainStore,
 	db: store::Batch<'a>,
-	block_input_bitmap_cache: Arc<RwLock<LruCache<Hash, Vec<u8>>>>,
 }
 
 #[allow(missing_docs)]
@@ -294,67 +352,9 @@ impl<'a> Batch<'a> {
 		)
 	}
 
-	fn build_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
-		let bitmap = block
-			.inputs
-			.iter()
-			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
-			.map(|x| x as u32)
-			.collect();
-		Ok(bitmap)
-	}
-
-	// Get the block input bitmap from the db or build the bitmap from
-	// the full block from the db (if the block is found).
-	fn get_block_input_bitmap_db(&self, bh: &Hash) -> Result<Bitmap, Error> {
-		if let Ok(Some(bytes)) = self.db
-			.get(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
-		{
-			Ok(Bitmap::deserialize(&bytes))
-		} else {
-			match self.get_block(bh) {
-				Ok(block) => {
-					let bitmap = self.save_block_input_bitmap(&block)?;
-					Ok(bitmap)
-				}
-				Err(e) => Err(e),
-			}
-		}
-	}
-
-	pub fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
-		{
-			let mut cache = self.block_input_bitmap_cache.write().unwrap();
-
-			// cache hit - return the value from the cache
-			if let Some(bytes) = cache.get_mut(bh) {
-				return Ok(Bitmap::deserialize(&bytes));
-			}
-		}
-
-		// cache miss - get it from db and cache it for next time
-		// if we found one in db
-		let res = self.get_block_input_bitmap_db(bh);
-		if let Ok(bitmap) = res {
-			let mut cache = self.block_input_bitmap_cache.write().unwrap();
-			cache.insert(*bh, bitmap.serialize());
-			return Ok(bitmap);
-		}
-		res
-	}
-
-	pub fn save_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
-		let hash = block.hash();
-		let bitmap = self.build_block_input_bitmap(block)?;
-		self.db.put(
-			&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut hash.to_vec())[..],
-			bitmap.serialize(),
-		)?;
-		{
-			let mut cache = self.block_input_bitmap_cache.write().unwrap();
-			cache.insert(hash, bitmap.serialize());
-		}
-		Ok(bitmap)
+	pub fn save_block_input_bitmap(&self, bh: &Hash, bm: &Bitmap) -> Result<(), Error> {
+		self.db
+			.put(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec())[..], bm.serialize())
 	}
 
 	pub fn delete_block_input_bitmap(&self, bh: &Hash) -> Result<(), Error> {
@@ -408,7 +408,6 @@ impl<'a> Batch<'a> {
 		Ok(Batch {
 			store: self.store,
 			db: self.db.child()?,
-			block_input_bitmap_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
 		})
 	}
 }

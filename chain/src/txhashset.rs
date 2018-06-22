@@ -243,6 +243,9 @@ impl TxHashSet {
 			input_pos_to_rewind(self.commit_index.clone(), &horizon_header, &head_header)?;
 
 		let batch = self.commit_index.batch()?;
+		if !rewind_rm_pos.0 {
+			batch.save_block_input_bitmap(&head_header.hash(), &rewind_rm_pos.1)?;
+		}
 		{
 			let clean_output_index = |commit: &[u8]| {
 				// do we care if this fails?
@@ -252,14 +255,14 @@ impl TxHashSet {
 			self.output_pmmr_h.backend.check_compact(
 				horizon_marker.output_pos,
 				&rewind_add_pos,
-				&rewind_rm_pos,
+				&rewind_rm_pos.1,
 				clean_output_index,
 			)?;
 
 			self.rproof_pmmr_h.backend.check_compact(
 				horizon_marker.output_pos,
 				&rewind_add_pos,
-				&rewind_rm_pos,
+				&rewind_rm_pos.1,
 				&prune_noop,
 			)?;
 		}
@@ -340,7 +343,7 @@ where
 
 	match res {
 		Err(e) => {
-			debug!(LOGGER, "Error returned, discarding txhashset extension.");
+			debug!(LOGGER, "Error returned, discarding txhashset extension: {:?}", e);
 			trees.output_pmmr_h.backend.discard();
 			trees.rproof_pmmr_h.backend.discard();
 			trees.kernel_pmmr_h.backend.discard();
@@ -621,8 +624,6 @@ impl<'a> Extension<'a> {
 			output_pos: self.output_pmmr.unpruned_size(),
 			kernel_pos: self.kernel_pmmr.unpruned_size(),
 		};
-		//TODO: This doesn't look right
-		self.batch.save_block_marker(&b.hash(), &marker)?;
 		self.new_block_markers.insert(b.hash(), marker);
 		Ok(())
 	}
@@ -781,7 +782,10 @@ impl<'a> Extension<'a> {
 
 		// Rewind our MMRs to the appropriate positions
 		// based on the block_marker.
-		let marker = self.batch.get_block_marker(&hash)?;
+		let (output_pos, kernel_pos) = {
+			let marker = self.batch.get_block_marker(&hash)?;
+			(marker.output_pos, marker.kernel_pos)
+		};
 
 		// We need to build bitmaps of added and removed output positions
 		// so we can correctly rewind all operations applied to the output MMR
@@ -793,12 +797,15 @@ impl<'a> Extension<'a> {
 			output_pos_to_rewind(self.commit_index.clone(), block_header, head_header)?;
 		let rewind_rm_pos =
 			input_pos_to_rewind(self.commit_index.clone(), block_header, head_header)?;
+		if !rewind_rm_pos.0 {
+			self.batch.save_block_input_bitmap(&head_header.hash(), &rewind_rm_pos.1)?;
+		}
 
 		self.rewind_to_pos(
-			marker.output_pos,
-			marker.kernel_pos,
+			output_pos,
+			kernel_pos,
 			&rewind_add_pos,
-			&rewind_rm_pos,
+			&rewind_rm_pos.1,
 			rewind_utxo,
 			rewind_kernel,
 			rewind_rangeproof,
@@ -1132,9 +1139,10 @@ fn input_pos_to_rewind(
 	commit_index: Arc<ChainStore>,
 	block_header: &BlockHeader,
 	head_header: &BlockHeader,
-) -> Result<Bitmap, Error> {
+) -> Result<(bool, Bitmap), Error> {
 	let mut bitmap = Bitmap::create();
 	let mut current = head_header.hash();
+	let mut found = false;
 	loop {
 		if current == block_header.hash() {
 			break;
@@ -1145,10 +1153,10 @@ fn input_pos_to_rewind(
 		// I/O should be minimized or eliminated here for most
 		// rewind scenarios.
 		let current_header = commit_index.get_block_header(&current)?;
-		let input_bitmap = commit_index.batch()?.get_block_input_bitmap(&current)?;
-
-		bitmap.or_inplace(&input_bitmap);
+		let input_bitmap = commit_index.get_block_input_bitmap(&current)?;
+		found = input_bitmap.0;
+		bitmap.or_inplace(&input_bitmap.1);
 		current = current_header.previous;
 	}
-	Ok(bitmap)
+	Ok((found, bitmap))
 }

@@ -122,7 +122,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		b.hash(),
 		b.header.height,
 	);
-	add_block(b, &mut batch)?;
+	add_block(b, ctx.store.clone(), &mut batch)?;
 	let res = update_head(b, &ctx, &mut batch);
 	if res.is_ok() {
 		batch.commit()?;
@@ -367,13 +367,16 @@ fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Re
 }
 
 /// Officially adds the block to our chain.
-fn add_block(b: &Block, batch: &store::Batch) -> Result<(), Error> {
+fn add_block(b: &Block, store: Arc<store::ChainStore>, batch: &mut store::Batch) -> Result<(), Error> {
 	batch
 		.save_block(b)
 		.map_err(|e| Error::StoreErr(e, "pipe save block".to_owned()))?;
+	let bitmap = store.build_and_cache_block_input_bitmap(&b)?;
 	batch
-		.save_block_input_bitmap(&b)
-		.map_err(|e| Error::StoreErr(e, "pipe save block input bitmap".to_owned()))?;
+		.save_block_input_bitmap(
+			&b.hash(),
+			&bitmap
+	)?;
 	Ok(())
 }
 
