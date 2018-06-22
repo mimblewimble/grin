@@ -507,7 +507,11 @@ impl Chain {
 
 		// prepares the zip and return the corresponding Read
 		let txhashset_reader = txhashset::zip_read(self.db_root.clone())?;
-		Ok((header.output_mmr_size, header.kernel_mmr_size, txhashset_reader))
+		Ok((
+			header.output_mmr_size,
+			header.kernel_mmr_size,
+			txhashset_reader,
+		))
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.

@@ -231,8 +231,7 @@ impl TxHashSet {
 		let horizon = current_height.saturating_sub(global::cut_through_horizon().into());
 		let horizon_header = self.commit_index.get_header_by_height(horizon)?;
 
-		let rewind_add_pos =
-			output_pos_to_rewind(&horizon_header, &head_header)?;
+		let rewind_add_pos = output_pos_to_rewind(&horizon_header, &head_header)?;
 		let rewind_rm_pos =
 			input_pos_to_rewind(self.commit_index.clone(), &horizon_header, &head_header)?;
 
@@ -770,8 +769,7 @@ impl<'a> Extension<'a> {
 		// undone during rewind).
 		// Rewound output pos will be removed from the MMR.
 		// Rewound input (spent) pos will be added back to the MMR.
-		let rewind_add_pos =
-			output_pos_to_rewind(block_header, head_header)?;
+		let rewind_add_pos = output_pos_to_rewind(block_header, head_header)?;
 		let rewind_rm_pos =
 			input_pos_to_rewind(self.commit_index.clone(), block_header, head_header)?;
 		if !rewind_rm_pos.0 {
