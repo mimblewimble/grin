@@ -20,8 +20,8 @@
 use std::cmp;
 use std::collections::HashSet;
 
-use core::Proof;
 use core::BlockHeader;
+use core::Proof;
 use pow::siphash::siphash24;
 
 const MAXPATHLEN: usize = 8192;
@@ -308,8 +308,8 @@ fn u8_to_u64(p: &[u8], i: usize) -> u64 {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::Proof;
 	use blake2;
+	use core::Proof;
 
 	static V1: [u32; 42] = [
 		0x3bbd, 0x4e96, 0x1013b, 0x1172b, 0x1371b, 0x13e6a, 0x1aaa6, 0x1b575, 0x1e237, 0x1ee88,
@@ -396,8 +396,7 @@ mod test {
 	#[test]
 	fn validate_fail() {
 		// edge checks
-		assert!(!Cuckoo::from_hash(blake2(&[49]).as_bytes(), 20)
-			.verify(Proof::new(vec![0; 42]), 75));
+		assert!(!Cuckoo::from_hash(blake2(&[49]).as_bytes(), 20).verify(Proof::new(vec![0; 42]), 75));
 		assert!(!Cuckoo::from_hash(blake2(&[49]).as_bytes(), 20)
 			.verify(Proof::new(vec![0xffff; 42]), 75));
 		// wrong data for proof
