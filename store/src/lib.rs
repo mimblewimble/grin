@@ -34,8 +34,8 @@ extern crate slog;
 extern crate grin_core as core;
 extern crate grin_util as util;
 
-mod lmdb;
 pub mod leaf_set;
+mod lmdb;
 pub mod pmmr;
 pub mod rm_log;
 pub mod types;

@@ -16,8 +16,8 @@
 
 use std::sync::{Arc, RwLock};
 
-use lmdb;
 use croaring::Bitmap;
+use lmdb;
 use lru_cache::LruCache;
 
 use util::secp::pedersen::Commitment;

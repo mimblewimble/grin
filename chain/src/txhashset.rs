@@ -458,7 +458,15 @@ impl<'a> Extension<'a> {
 		let rewind_add_pos: Bitmap = ((output_pos + 1)..(latest_output_pos + 1))
 			.map(|x| x as u32)
 			.collect();
-		self.rewind_to_pos(output_pos, kernel_pos, &rewind_add_pos, rewind_rm_pos, true, true, true)?;
+		self.rewind_to_pos(
+			output_pos,
+			kernel_pos,
+			&rewind_add_pos,
+			rewind_rm_pos,
+			true,
+			true,
+			true,
+		)?;
 		Ok(())
 	}
 
@@ -483,7 +491,8 @@ impl<'a> Extension<'a> {
 		// Build bitmap of output pos spent (as inputs) by this tx for rewind.
 		let rewind_rm_pos = tx.inputs
 			.iter()
-			.filter_map(|x| self.get_output_pos(&x.commitment()).ok()) .map(|x| x as u32)
+			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
+			.map(|x| x as u32)
 			.collect();
 
 		for ref output in &tx.outputs {
@@ -792,7 +801,7 @@ impl<'a> Extension<'a> {
 			&rewind_rm_pos,
 			rewind_utxo,
 			rewind_kernel,
-			rewind_rangeproof
+			rewind_rangeproof,
 		)?;
 
 		Ok(())
@@ -916,10 +925,8 @@ impl<'a> Extension<'a> {
 		// The real magicking happens here.
 		// Sum of kernel excesses should equal sum of
 		// unspent outputs minus total supply.
-		let (output_sum, kernel_sum) = self.verify_kernel_sums(
-			header.total_overage(),
-			header.total_kernel_offset(),
-		)?;
+		let (output_sum, kernel_sum) =
+			self.verify_kernel_sums(header.total_overage(), header.total_kernel_offset())?;
 
 		// This is an expensive verification step.
 		self.verify_kernel_signatures()?;

@@ -346,6 +346,3 @@ impl Default for BlockSums {
 		}
 	}
 }
-
-
-

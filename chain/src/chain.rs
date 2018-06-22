@@ -25,8 +25,7 @@ use lmdb;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::target::Difficulty;
-use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction,
-                 TxKernel};
+use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use grin_store::Error::NotFoundErr;
 use pipe;
@@ -436,25 +435,25 @@ impl Chain {
 		})
 	}
 
-/// Sets the txhashset roots on a brand new block by applying the block on
-/// the current txhashset state.
-pub fn set_txhashset_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
-	let mut txhashset = self.txhashset.write().unwrap();
-	let store = self.store.clone();
+	/// Sets the txhashset roots on a brand new block by applying the block on
+	/// the current txhashset state.
+	pub fn set_txhashset_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
+		let mut txhashset = self.txhashset.write().unwrap();
+		let store = self.store.clone();
 
-	let roots = txhashset::extending_readonly(&mut txhashset, |extension| {
-		if is_fork {
-			pipe::rewind_and_apply_fork(b, store, extension)?;
-		}
-		extension.apply_block(b)?;
-		Ok(extension.roots())
-	})?;
+		let roots = txhashset::extending_readonly(&mut txhashset, |extension| {
+			if is_fork {
+				pipe::rewind_and_apply_fork(b, store, extension)?;
+			}
+			extension.apply_block(b)?;
+			Ok(extension.roots())
+		})?;
 
-	b.header.output_root = roots.output_root;
-	b.header.range_proof_root = roots.rproof_root;
-	b.header.kernel_root = roots.kernel_root;
-	Ok(())
-}
+		b.header.output_root = roots.output_root;
+		b.header.range_proof_root = roots.rproof_root;
+		b.header.kernel_root = roots.kernel_root;
+		Ok(())
+	}
 
 	/// Return a pre-built Merkle proof for the given commitment from the store.
 	pub fn get_merkle_proof(
@@ -825,7 +824,6 @@ fn setup_head(
 				// If validation is successful we will truncate the backend files
 				// to match the provided block header.
 				let header = store.get_block_header(&head.last_block_h)?;
-
 
 				let res = txhashset::extending(txhashset, &mut batch, |extension| {
 					extension.rewind(&header, &head_header, true, true, true)?;

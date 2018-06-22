@@ -15,12 +15,12 @@
 //! Grin TUI
 extern crate chrono;
 
-pub mod ui;
-pub mod table;
-mod peers;
 mod constants;
 mod menu;
-mod status;
 mod mining;
-mod version;
+mod peers;
+mod status;
+pub mod table;
 mod types;
+pub mod ui;
+mod version;
