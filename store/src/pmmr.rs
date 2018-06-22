@@ -27,7 +27,7 @@ use core::ser::{self, PMMRable};
 use leaf_set::LeafSet;
 use prune_list::PruneList;
 use rm_log::RemoveLog;
-use types::{prune_noop, AppendOnlyFile};
+use types::{prune_noop, read_ordered_vec, AppendOnlyFile};
 use util::LOGGER;
 
 const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
@@ -35,7 +35,11 @@ const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
 const PMMR_LEAF_FILE: &'static str = "pmmr_leaf.bin";
 const PMMR_PRUN_FILE: &'static str = "pmmr_prun.bin";
 
+// TODO - we can get rid of these for testnet3 (only used for migration during
+// testnet2). "Legacy" rm_log.bin and pruned.bin files (used when migrating
+// existing node).
 const PMMR_RM_LOG_FILE: &'static str = "pmmr_rm_log.bin";
+const PMMR_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
 
 /// PMMR persistent backend implementation. Relies on multiple facilities to
 /// handle writing, reading and pruning.
@@ -215,23 +219,36 @@ where
 	/// Instantiates a new PMMR backend.
 	/// Use the provided dir to store its files.
 	pub fn new(data_dir: String, header: Option<&BlockHeader>) -> io::Result<PMMRBackend<T>> {
-		let prune_list = PruneList::open(format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
 		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		let data_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
 
 		let leaf_set_path = format!("{}/{}", data_dir, PMMR_LEAF_FILE);
-		let rm_log_path = format!("{}/{}", data_dir, PMMR_RM_LOG_FILE);
 
+		// If we received a rewound "snapshot" leaf_set file
+		// move it into place so we use it.
 		if let Some(header) = header {
 			let leaf_snapshot_path = format!("{}/{}.{}", data_dir, PMMR_LEAF_FILE, header.hash());
 			LeafSet::copy_snapshot(leaf_set_path.clone(), leaf_snapshot_path.clone())?;
 		}
 
-		// If we need to migrate an old rm_log to a new leaf_set do it here before we
-		// start. Do *not* migrate if we already have a leaf_set.
+		// If we need to migrate legacy prune_list do it here before we start.
+		// Do *not* migrate if we already have a non-empty prune_list.
+		let mut prune_list = PruneList::open(format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
+		let legacy_prune_list_path = format!("{}/{}", data_dir, PMMR_RM_LOG_FILE);
+		if prune_list.is_empty() && Path::new(&legacy_prune_list_path).exists() {
+			let legacy_prune_pos = read_ordered_vec(legacy_prune_list_path, 8)?;
+			for x in legacy_prune_pos {
+				prune_list.add(x);
+			}
+			prune_list.flush()?;
+		}
+
+		// If we need to migrate legacy rm_log to a new leaf_set do it here before we
+		// start. Do *not* migrate if we already have a non-empty leaf_set.
 		let mut leaf_set = LeafSet::open(leaf_set_path.clone())?;
-		if leaf_set.is_empty() && Path::new(&rm_log_path).exists() {
-			let mut rm_log = RemoveLog::open(rm_log_path)?;
+		let legacy_rm_log_path = format!("{}/{}", data_dir, PMMR_RM_LOG_FILE);
+		if leaf_set.is_empty() && Path::new(&legacy_rm_log_path).exists() {
+			let mut rm_log = RemoveLog::open(legacy_rm_log_path)?;
 			debug!(
 				LOGGER,
 				"pmmr: leaf_set: {}, rm_log: {}",
@@ -261,7 +278,7 @@ where
 			migrate_rm_log(&mut leaf_set, &rm_log, &prune_list, last_pos)?;
 		}
 
-		let leaf_set = LeafSet::open(leaf_set_path)?;
+		// let leaf_set = LeafSet::open(leaf_set_path)?;
 
 		Ok(PMMRBackend {
 			data_dir,
