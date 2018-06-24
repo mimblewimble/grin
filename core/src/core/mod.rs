@@ -68,7 +68,10 @@ impl Eq for Proof {}
 impl Proof {
 	/// Builds a proof with all bytes zeroed out
 	pub fn new(in_nonces: Vec<u64>) -> Proof {
-		Proof { cuckoo_sizeshift: global::sizeshift(), nonces: in_nonces }
+		Proof {
+			cuckoo_sizeshift: global::sizeshift(),
+			nonces: in_nonces,
+		}
 	}
 
 	/// Builds a proof with all bytes zeroed out
@@ -110,7 +113,10 @@ impl Readable for Proof {
 	fn read(reader: &mut Reader) -> Result<Proof, Error> {
 		let cuckoo_sizeshift = reader.read_u8()?;
 		let nonces = vlq::read(global::proofsize(), reader)?;
-		Ok(Proof{cuckoo_sizeshift, nonces})
+		Ok(Proof {
+			cuckoo_sizeshift,
+			nonces,
+		})
 	}
 }
 

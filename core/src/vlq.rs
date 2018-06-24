@@ -14,8 +14,7 @@
 
 /// Variable Length Quantity encoding. See:
 /// https://en.wikipedia.org/wiki/Variable-length_quantity
-
-use ser::{Reader, Writer, Error};
+use ser::{Error, Reader, Writer};
 
 const MASK: u8 = 0b01111111;
 const HIGH_BIT: u8 = 0b10000000;
@@ -25,7 +24,7 @@ const HIGH_BIT: u8 = 0b10000000;
 pub fn read(n: usize, reader: &mut Reader) -> Result<Vec<u64>, Error> {
 	let mut qties = Vec::with_capacity(n);
 	for m in 0..n {
-		let mut qty: u64 =  0;
+		let mut qty: u64 = 0;
 		for n in 0..8 {
 			let b = reader.read_u8()?;
 			qty += ((b & MASK) as u64) << (n * 7);
@@ -40,7 +39,10 @@ pub fn read(n: usize, reader: &mut Reader) -> Result<Vec<u64>, Error> {
 	Ok(qties)
 }
 
-pub fn write<W>(qties: Vec<u64>, writer: &mut W) -> Result<(), Error> where W: Writer {
+pub fn write<W>(qties: Vec<u64>, writer: &mut W) -> Result<(), Error>
+where
+	W: Writer,
+{
 	for mut qty in qties {
 		loop {
 			let mut b = qty & (MASK as u64);
@@ -67,7 +69,9 @@ mod test {
 	}
 	impl Readable for MyVec {
 		fn read(reader: &mut Reader) -> Result<MyVec, Error> {
-			Ok(MyVec{values: read(10, reader)?})
+			Ok(MyVec {
+				values: read(10, reader)?,
+			})
 		}
 	}
 	impl Writeable for MyVec {
@@ -78,7 +82,9 @@ mod test {
 
 	#[test]
 	fn roundtrip_vlqs() {
-		let myvec = MyVec{values: vec![1000, 100, 127, 128, 65535, 65536, 1000000, 0, 1, 255]};
+		let myvec = MyVec {
+			values: vec![1000, 100, 127, 128, 65535, 65536, 1000000, 0, 1, 255],
+		};
 		let vlqs = ser::ser_vec(&myvec).unwrap();
 		assert_eq!(vlqs[0], 232);
 		assert_eq!(vlqs[1], 7);
