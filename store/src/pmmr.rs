@@ -236,6 +236,7 @@ where
 		let mut prune_list = PruneList::open(format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
 		let legacy_prune_list_path = format!("{}/{}", data_dir, LEGACY_PRUNED_FILE);
 		if prune_list.is_empty() && Path::new(&legacy_prune_list_path).exists() {
+			debug!(LOGGER, "pmmr: migrating prune_list -> bitmap prune_list");
 			let legacy_prune_pos = read_ordered_vec(legacy_prune_list_path, 8)?;
 			for x in legacy_prune_pos {
 				prune_list.add(x);
@@ -248,15 +249,8 @@ where
 		let mut leaf_set = LeafSet::open(leaf_set_path.clone())?;
 		let legacy_rm_log_path = format!("{}/{}", data_dir, LEGACY_RM_LOG_FILE);
 		if leaf_set.is_empty() && Path::new(&legacy_rm_log_path).exists() {
-			let mut rm_log = RemoveLog::open(legacy_rm_log_path)?;
-			debug!(
-				LOGGER,
-				"pmmr: leaf_set: {}, rm_log: {}",
-				leaf_set.len(),
-				rm_log.len()
-			);
 			debug!(LOGGER, "pmmr: migrating rm_log -> leaf_set");
-
+			let mut rm_log = RemoveLog::open(legacy_rm_log_path)?;
 			if let Some(header) = header {
 				// Rewind the rm_log back to the height of the header we care about.
 				debug!(
@@ -266,8 +260,6 @@ where
 				rm_log.rewind(header.height as u32)?;
 			}
 
-			// do not like this here but we have no pmmr to call
-			// unpruned_size() on yet...
 			let last_pos = {
 				let total_shift = prune_list.get_total_shift();
 				let record_len = 32;
@@ -277,8 +269,6 @@ where
 
 			migrate_rm_log(&mut leaf_set, &rm_log, &prune_list, last_pos)?;
 		}
-
-		// let leaf_set = LeafSet::open(leaf_set_path)?;
 
 		Ok(PMMRBackend {
 			data_dir,

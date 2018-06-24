@@ -57,6 +57,7 @@ impl PruneList {
 		}
 	}
 
+	/// Open an existing prune_list or create a new one.
 	pub fn open(path: String) -> io::Result<PruneList> {
 		let file_path = Path::new(&path);
 		let bitmap = if file_path.exists() {
@@ -84,6 +85,9 @@ impl PruneList {
 		self.bitmap.andnot_inplace(&leaf_pos);
 	}
 
+	/// Save the prune_list to disk.
+	/// Clears out leaf pos before saving to disk
+	/// as we track these via the leaf_set.
 	pub fn flush(&mut self) -> io::Result<()> {
 		// First clear any leaf pos from the prune_list (these are tracked via the
 		// leaf_set).
@@ -104,6 +108,7 @@ impl PruneList {
 		Ok(())
 	}
 
+	/// Return the total shift from all entries in the prune_list.
 	pub fn get_total_shift(&self) -> u64 {
 		self.get_shift(self.bitmap.maximum() as u64 + 1)
 	}
@@ -175,14 +180,17 @@ impl PruneList {
 		}
 	}
 
+	/// Number of entries in the prune_list.
 	pub fn len(&self) -> u64 {
 		self.bitmap.cardinality()
 	}
 
+	/// Is the prune_list empty?
 	pub fn is_empty(&self) -> bool {
-		return self.len() == 0;
+		self.bitmap.is_empty()
 	}
 
+	/// Convert the prune_list to a vec of pos.
 	pub fn to_vec(&self) -> Vec<u64> {
 		self.bitmap.to_vec().into_iter().map(|x| x as u64).collect()
 	}
@@ -191,7 +199,7 @@ impl PruneList {
 	/// either directly (pos contained in the prune list itself)
 	/// or indirectly (pos is beneath a pruned root).
 	pub fn is_pruned(&self, pos: u64) -> bool {
-		if self.bitmap.is_empty() {
+		if self.is_empty() {
 			return false;
 		}
 
@@ -199,6 +207,7 @@ impl PruneList {
 		path.into_iter().any(|x| self.bitmap.contains(x as u32))
 	}
 
+	/// Is the specified position a root of a pruned subtree?
 	pub fn is_pruned_root(&self, pos: u64) -> bool {
 		self.bitmap.contains(pos as u32)
 	}
