@@ -39,12 +39,15 @@ pub use self::transaction::*;
 use core::hash::Hashed;
 use global;
 use ser::{Error, Readable, Reader, Writeable, Writer};
+use vlq;
 
 /// Proof of work
 #[derive(Clone, PartialOrd, PartialEq)]
 pub struct Proof {
+	/// Power of 2 used for the size of the cuckoo graph
+	pub cuckoo_sizeshift: u8,
 	/// The nonces
-	pub nonces: Vec<u32>,
+	pub nonces: Vec<u64>,
 }
 
 impl fmt::Debug for Proof {
@@ -64,13 +67,14 @@ impl Eq for Proof {}
 
 impl Proof {
 	/// Builds a proof with all bytes zeroed out
-	pub fn new(in_nonces: Vec<u32>) -> Proof {
-		Proof { nonces: in_nonces }
+	pub fn new(in_nonces: Vec<u64>) -> Proof {
+		Proof { cuckoo_sizeshift: global::sizeshift(), nonces: in_nonces }
 	}
 
 	/// Builds a proof with all bytes zeroed out
 	pub fn zero(proof_size: usize) -> Proof {
 		Proof {
+			cuckoo_sizeshift: global::sizeshift(),
 			nonces: vec![0; proof_size],
 		}
 	}
@@ -80,25 +84,14 @@ impl Proof {
 	/// don't fail due to duplicate hashes
 	pub fn random(proof_size: usize) -> Proof {
 		let mut rng = thread_rng();
-		let v: Vec<u32> = iter::repeat(())
+		let v: Vec<u64> = iter::repeat(())
 			.map(|()| rng.gen())
 			.take(proof_size)
 			.collect();
-		Proof { nonces: v }
-	}
-
-	/// Converts the proof to a vector of u64s
-	pub fn to_u64s(&self) -> Vec<u64> {
-		let mut out_nonces = Vec::with_capacity(self.proof_size());
-		for n in &self.nonces {
-			out_nonces.push(*n as u64);
+		Proof {
+			cuckoo_sizeshift: global::sizeshift(),
+			nonces: v,
 		}
-		out_nonces
-	}
-
-	/// Converts the proof to a vector of u32s
-	pub fn to_u32s(&self) -> Vec<u32> {
-		self.clone().nonces
 	}
 
 	/// Converts the proof to a proof-of-work Target so they can be compared.
@@ -115,20 +108,16 @@ impl Proof {
 
 impl Readable for Proof {
 	fn read(reader: &mut Reader) -> Result<Proof, Error> {
-		let proof_size = global::proofsize();
-		let mut pow = vec![0u32; proof_size];
-		for n in 0..proof_size {
-			pow[n] = reader.read_u32()?;
-		}
-		Ok(Proof::new(pow))
+		let cuckoo_sizeshift = reader.read_u8()?;
+		let nonces = vlq::read(global::proofsize(), reader)?;
+		Ok(Proof{cuckoo_sizeshift, nonces})
 	}
 }
 
 impl Writeable for Proof {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		for n in 0..self.proof_size() {
-			writer.write_u32(self.nonces[n])?;
-		}
+		writer.write_u8(self.cuckoo_sizeshift)?;
+		vlq::write(self.nonces.clone(), writer)?;
 		Ok(())
 	}
 }

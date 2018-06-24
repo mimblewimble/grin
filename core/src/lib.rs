@@ -49,3 +49,4 @@ pub mod genesis;
 pub mod global;
 pub mod pow;
 pub mod ser;
+mod vlq;

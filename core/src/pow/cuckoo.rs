@@ -89,7 +89,7 @@ impl Cuckoo {
 	/// build the nodes on both side of that edge and count the connections.
 	pub fn verify(&self, proof: Proof, ease: u64) -> bool {
 		let easiness = ease * (self.size as u64) / 100;
-		let nonces = proof.to_u64s();
+		let nonces = proof.nonces;
 		let mut us = vec![0; proof.proof_size()];
 		let mut vs = vec![0; proof.proof_size()];
 		for n in 0..proof.proof_size() {
