@@ -16,10 +16,9 @@
 /// TODO: Remove api
 use api;
 use byteorder::{BigEndian, ByteOrder};
-use core::core::transaction::ProofMessageElements;
 use core::global;
 use error::{Error, ErrorKind};
-use failure::{Fail, ResultExt};
+use failure::Fail;
 use keychain::{Identifier, Keychain};
 use libtx::proof;
 use libwallet::types::*;
@@ -77,8 +76,7 @@ where
 // TODO - wrap the many return values in a struct
 fn find_outputs_with_key<T, K>(
 	wallet: &mut T,
-	outputs: Vec<api::OutputPrintable>,
-	found_key_index: &mut Vec<u32>,
+	outputs: Vec<api::OutputPrintable>
 ) -> Vec<(
 	pedersen::Commitment,
 	Identifier,
@@ -109,76 +107,41 @@ where
 	info!(LOGGER, "Scanning {} outputs", outputs.len(),);
 	let current_chain_height = wallet.get_chain_height(wallet.node_url()).unwrap();
 
-	// skey doesn't matter in this case
-	let skey = wallet.keychain().derive_key_id(1).unwrap();
 	for output in outputs.iter().filter(|x| !x.spent) {
-		// attempt to unwind message from the RP and get a value.. note
-		// this will only return okay if the value is included in the
-		// message 3 times, indicating a strong match. Also, sec_key provided
-		// to unwind in this case will be meaningless. With only the nonce known
-		// only the first 32 bytes of the recovered message will be accurate
+		// attempt to unwind message from the RP and get a value
+		// will fail if it's not ours
 		let info = proof::rewind(
 			wallet.keychain(),
-			&skey,
 			output.commit,
 			None,
 			output.range_proof().unwrap(),
 		).unwrap();
-		let message = ProofMessageElements::from_proof_message(&info.message).unwrap();
-		let value = message.value();
-		if value.is_err() {
+
+		if !info.success {
 			continue;
 		}
-		// we have a match, now check through our key iterations to find a partial match
-		let mut found = false;
 
+		// we have a match, now check through our key iterations to find out which one it was
+		let mut found = false;
 		let mut start_index = 1;
 
-		// TODO: This assumption only holds with current wallet software assuming
-		// wallet doesn't go back and re-use gaps in its key index, ie. every
-		// new key index produced is always greater than the previous max key index
-		if let Some(m) = found_key_index.iter().max() {
-			start_index = *m as usize + 1;
-		}
-
 		for i in start_index..max_derivations {
-			// much faster than calling EC functions for each found key
-			// Shouldn't be needed if assumption about wallet key 'gaps' above
-			// holds.. otherwise this is a good optimization.. perhaps 
-			// provide a command line switch
-			/*if found_key_index.contains(&(i as u32)) {
-				continue;
-			}*/
 			let key_id = &wallet.keychain().derive_key_id(i as u32).unwrap();
-			if !message.compare_bf_first_8(key_id) {
+			let b = wallet.keychain().derived_key(key_id).unwrap();
+			if info.blinding != b {
 				continue;
 			}
 			found = true;
 			// we have a partial match, let's just confirm
-			let info = proof::rewind(
-				wallet.keychain(),
-				key_id,
-				output.commit,
-				None,
-				output.range_proof().unwrap(),
-			).unwrap();
-			let message = ProofMessageElements::from_proof_message(&info.message).unwrap();
-			let value = message.value();
-			if value.is_err() || !message.zeroes_correct() {
-				continue;
-			}
-			let value = value.unwrap();
 			info!(
 				LOGGER,
 				"Output found: {:?}, key_index: {:?}", output.commit, i,
 			);
-			found_key_index.push(i as u32);
 			// add it to result set here
 			let commit_id = output.commit.0;
-
 			let is_coinbase = coinbase_status(output);
 
-			info!(LOGGER, "Amount: {}", value);
+			info!(LOGGER, "Amount: {}", info.value);
 
 			let commit = wallet
 				.keychain()
@@ -204,7 +167,7 @@ where
 				commit,
 				key_id.clone(),
 				i as u32,
-				value,
+				info.value,
 				height,
 				lock_height,
 				is_coinbase,
@@ -218,7 +181,7 @@ where
 				LOGGER,
 				"Very probable matching output found with amount: {} \
 				 but didn't match key child key up to {}",
-				message.value().unwrap(),
+				info.value,
 				max_derivations,
 			);
 		}
@@ -248,9 +211,6 @@ where
 
 	let batch_size = 1000;
 	let mut start_index = 1;
-	// Keep a set of keys we've already claimed (cause it's far faster than
-	// deriving a key for each one)
-	let mut found_key_index: Vec<u32> = vec![];
 	// this will start here, then lower as outputs are found, moving backwards on
 	// the chain
 	loop {
@@ -265,10 +225,10 @@ where
 
 		let root_key_id = wallet.keychain().root_key_id();
 		let result_vec =
-			find_outputs_with_key(wallet, output_listing.outputs.clone(), &mut found_key_index);
+			find_outputs_with_key(wallet, output_listing.outputs.clone());
 		let mut batch = wallet.batch()?;
 		for output in result_vec {
-			batch.save(OutputData {
+			let _ = batch.save(OutputData {
 				root_key_id: root_key_id.clone(),
 				key_id: output.1.clone(),
 				n_child: output.2,

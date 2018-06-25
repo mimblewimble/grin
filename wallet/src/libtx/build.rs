@@ -29,7 +29,7 @@ use util::{kernel_sig_msg, secp};
 
 use core::core::hash::Hash;
 use core::core::merkle_proof::MerkleProof;
-use core::core::{Input, Output, OutputFeatures, ProofMessageElements, Transaction, TxKernel};
+use core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use keychain::{self, BlindSum, BlindingFactor, Identifier, Keychain};
 use libtx::{aggsig, proof};
 use util::LOGGER;
@@ -118,15 +118,12 @@ where
 			let commit = build.keychain.commit(value, &key_id).unwrap();
 			trace!(LOGGER, "Builder - Pedersen Commit is: {:?}", commit,);
 
-			let msg = ProofMessageElements::new(value, &key_id);
-
 			let rproof = proof::create(
 				build.keychain,
 				value,
 				&key_id,
 				commit,
 				None,
-				msg.to_proof_message(),
 			).unwrap();
 
 			(
