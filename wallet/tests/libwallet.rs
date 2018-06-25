@@ -22,7 +22,6 @@ extern crate uuid;
 
 use keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
 use util::secp::key::{PublicKey, SecretKey};
-use util::secp::pedersen::ProofMessage;
 use util::{kernel_sig_msg, secp};
 use wallet::libtx::{aggsig, proof};
 use wallet::libwallet::internal::sigcontext;
@@ -408,8 +407,8 @@ fn aggsig_sender_receiver_interaction_offset() {
 fn test_rewind_range_proof() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id2 = keychain.derive_key_id(2).unwrap();
 	let commit = keychain.commit(5, &key_id).unwrap();
-	let msg = ProofMessage::from_bytes(&[0u8; 64]);
 	let extra_data = [99u8; 64];
 
 	let proof = proof::create(
@@ -418,65 +417,24 @@ fn test_rewind_range_proof() {
 		&key_id,
 		commit,
 		Some(extra_data.to_vec().clone()),
-		msg,
 	).unwrap();
-	let proof_info = proof::rewind(
-		&keychain,
-		&key_id,
-		commit,
-		Some(extra_data.to_vec().clone()),
-		proof,
-	).unwrap();
+	let proof_info =
+		proof::rewind(&keychain, commit, Some(extra_data.to_vec().clone()), proof).unwrap();
 
 	assert_eq!(proof_info.success, true);
+	assert_eq!(proof_info.value, 5);
 
-	// now check the recovered message is "empty" (but not truncated) i.e. all
-	// zeroes
-	//Value is in the message in this case
-	assert_eq!(
-		proof_info.message,
-		secp::pedersen::ProofMessage::from_bytes(&[0; secp::constants::BULLET_PROOF_MSG_SIZE])
-	);
-
-	let key_id2 = keychain.derive_key_id(2).unwrap();
-
-	// cannot rewind with a different nonce
-	let proof_info = proof::rewind(
-		&keychain,
-		&key_id2,
-		commit,
-		Some(extra_data.to_vec().clone()),
-		proof,
-	).unwrap();
-	// With bullet proofs, if you provide the wrong nonce you'll get gibberish back
-	// as opposed to a failure to recover the message
-	assert_ne!(
-		proof_info.message,
-		secp::pedersen::ProofMessage::from_bytes(&[0; secp::constants::BULLET_PROOF_MSG_SIZE])
-	);
-	assert_eq!(proof_info.value, 0);
-
-	// cannot rewind with a commitment to the same value using a different key
+	// cannot rewind with a different commit
 	let commit2 = keychain.commit(5, &key_id2).unwrap();
-	let proof_info = proof::rewind(
-		&keychain,
-		&key_id,
-		commit2,
-		Some(extra_data.to_vec().clone()),
-		proof,
-	).unwrap();
+	let proof_info =
+		proof::rewind(&keychain, commit2, Some(extra_data.to_vec().clone()), proof).unwrap();
 	assert_eq!(proof_info.success, false);
 	assert_eq!(proof_info.value, 0);
 
 	// cannot rewind with a commitment to a different value
 	let commit3 = keychain.commit(4, &key_id).unwrap();
-	let proof_info = proof::rewind(
-		&keychain,
-		&key_id,
-		commit3,
-		Some(extra_data.to_vec().clone()),
-		proof,
-	).unwrap();
+	let proof_info =
+		proof::rewind(&keychain, commit3, Some(extra_data.to_vec().clone()), proof).unwrap();
 	assert_eq!(proof_info.success, false);
 	assert_eq!(proof_info.value, 0);
 
@@ -485,7 +443,6 @@ fn test_rewind_range_proof() {
 	let wrong_extra_data = [98u8; 64];
 	let _should_err = proof::rewind(
 		&keychain,
-		&key_id,
 		commit3,
 		Some(wrong_extra_data.to_vec().clone()),
 		proof,
