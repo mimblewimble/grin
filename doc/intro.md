@@ -244,6 +244,7 @@ section, to prove that the value is zero and that she was given the summation of
 factors for the input and change. The signature is included in the _transaction kernel_
 which will be checked by all transaction validators.
 
+
 #### Range Proofs
 
 In all the above calculations, we rely on the transaction values to always be positive. The
@@ -294,6 +295,63 @@ concept: _cut-through_. With this addition, a MimbleWimble chain gains:
 * And the ability for new nodes to sync up with the rest of the network very
 efficiently.
 
+### Transaction Aggregation
+
+Recall that a transaction consists of the following -
+* a set of inputs that reference and spent a set of previous outputs
+* a set of new outputs (Pedersen commitments)
+* a transaction kernel, consisting of
+	* kernel excess (Pedersen commitment to zero)
+	* transaction signature (using kernel excess as public key)
+
+A tx is signed and the signature included in a _transaction kernel_. The signature is generated using the _kernel excess_ as a public key proving that the transaction sums to 0.
+
+    (42*G + 1*H) + (99*G + 2*H) - (113*G + 3*H) = 28*G + 0*H
+
+The public key in this example being `28*G`.
+
+We can say the following is true for any valid transaction (ignoring fees for simplicity) -
+
+	sum(outputs) - sum(inputs) = kernel_excess
+
+The same holds true for blocks themselves once we realize a block is simply a set of aggregated inputs, outputs and transaction kernels. We can sum the tx outputs, subtract the sum of the tx inputs and compare the resulting Pedersen commitment to the sum of the kernel excesses -
+
+	sum(outputs) - sum(inputs) = sum(kernel_excess)
+
+Simplifying slightly, (again ignoring transaction fees) we can say that MimbleWimble blocks can be treated exactly as MimbleWimble transactions.
+
+#### Kernel Offsets
+
+There is a subtle problem with MimbleWimble blocks and transactions as described above. It is possible (and in some cases trivial) to reconstruct the constituent transactions in a block. This is clearly bad for privacy. This is the "subset" problem - given a set of inputs, outputs and transaction kernels a subset of these will recombine to  reconstruct a valid transaction.
+
+For example, given the following two transactions -
+
+	(in1, in2) -> (out1), (kern1)
+	(in3) -> (out2), (kern2)
+
+We can aggregate them into the following block (or aggregate transaction) -
+
+	(in1, in2, in3) -> (out1, out2), (kern1, kern2)
+
+It is trivially easy to try all possible permutations to recover one of the transactions (where it sums successfully to zero) -
+
+	(in1, in2) -> (out1), (kern1)
+
+We also know that everything remaining can be used to reconstruct the other valid transaction -
+
+	(in3) -> (out2), (kern2)
+
+To mitigate this we include a _kernel offset_ with every transaction kernel. This is a blinding factor (private key) that needs to be added back to the kernel excess to verify the commitments sum to zero -
+
+	sum(outputs) - sum(inputs) = kernel_excess + kernel_offset
+
+When we aggregate transactions in a block we store a _single_ aggregate offset in the block header. And now we have a single offset that cannot be decomposed into the individual transaction kernel offsets and the transactions can no longer be reconstructed -
+
+	sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset
+
+We "split" the key `k` into `k1+k2` during transaction construction. For a transaction kernel `(k1+k2)*G` we publish `k1*G` (the excess) and `k2` (the offset) and sign the transaction with `k1*G` as before.
+During block construction we can simply sum the `k2` offsets to generate a single aggregate `k2` offset to cover all transactions in the block. The `k2` offset for any individual transaction is unrecoverable.
+
 ### Cut-through
 
 Blocks let miners assemble multiple transactions into a single set that's added
@@ -337,6 +395,7 @@ A block is simply built from:
 * A block header.
 * The list of inputs remaining after cut-through.
 * The list of outputs remaining after cut-through.
+* A single kernel offset to cover the full block.
 * The transaction kernels containing, for each transaction:
   * The public key `r*G` obtained from the summation of all the commitments.
   * The signatures generated using the excess value.
@@ -345,7 +404,7 @@ A block is simply built from:
 When structured this way, a MimbleWimble block offers extremely good privacy
 guarantees:
 
-* More transactions may have been done but do not appear.
+* Intermediate (cut-through) transactions will be represented only by their transaction kernels.
 * All outputs look the same: just very large numbers that are impossible to
 differentiate from one another. If one wanted to exclude some outputs, they'd have
 to exclude all.
@@ -382,6 +441,7 @@ In addition, the complete set of unspent outputs cannot be tampered with, even
 only by adding or removing an output. Doing so would cause the summation of all
 blinding factors in the transaction kernels to differ from the summation of blinding
 factors in the outputs.
+
 
 ## Conclusion
 
