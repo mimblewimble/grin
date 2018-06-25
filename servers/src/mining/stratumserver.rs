@@ -77,7 +77,7 @@ struct LoginParams {
 struct SubmitParams {
 	height: u64,
 	nonce: u64,
-	pow: Vec<u32>,
+	pow: Vec<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

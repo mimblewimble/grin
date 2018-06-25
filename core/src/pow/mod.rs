@@ -49,7 +49,7 @@ use pow::cuckoo::{Cuckoo, Error};
 /// satisfies the requirements of the header.
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u8) -> bool {
 	Cuckoo::from_hash(bh.pre_pow_hash().as_ref(), cuckoo_sz)
-		.verify(bh.pow.clone(), consensus::EASINESS as u64)
+		.verify(&bh.pow, consensus::EASINESS as u64)
 }
 
 /// Mines a genesis block using the internal miner
