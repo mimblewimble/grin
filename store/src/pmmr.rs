@@ -22,19 +22,24 @@ use croaring::Bitmap;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::{self, family, Backend};
-use core::core::prune_list::PruneList;
 use core::core::BlockHeader;
 use core::ser::{self, PMMRable};
 use leaf_set::LeafSet;
+use prune_list::PruneList;
 use rm_log::RemoveLog;
-use types::{prune_noop, read_ordered_vec, write_vec, AppendOnlyFile};
+use types::{prune_noop, read_ordered_vec, AppendOnlyFile};
 use util::LOGGER;
 
 const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
 const PMMR_LEAF_FILE: &'static str = "pmmr_leaf.bin";
-const PMMR_RM_LOG_FILE: &'static str = "pmmr_rm_log.bin";
-const PMMR_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
+const PMMR_PRUN_FILE: &'static str = "pmmr_prun.bin";
+
+// TODO - we can get rid of these for testnet3 (only used for migration during
+// testnet2). "Legacy" rm_log.bin and pruned.bin files (used when migrating
+// existing node).
+const LEGACY_RM_LOG_FILE: &'static str = "pmmr_rm_log.bin";
+const LEGACY_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
 
 /// PMMR persistent backend implementation. Relies on multiple facilities to
 /// handle writing, reading and pruning.
@@ -55,7 +60,7 @@ where
 	hash_file: AppendOnlyFile,
 	data_file: AppendOnlyFile,
 	leaf_set: LeafSet,
-	pruned_nodes: PruneList,
+	prune_list: PruneList,
 	_marker: marker::PhantomData<T>,
 }
 
@@ -79,10 +84,11 @@ where
 	}
 
 	fn get_from_file(&self, position: u64) -> Option<Hash> {
-		let shift = self.pruned_nodes.get_shift(position);
-		if let None = shift {
+		if self.is_compacted(position) {
 			return None;
 		}
+
+		let shift = self.prune_list.get_shift(position);
 
 		// Read PMMR
 		// The MMR starts at 1, our binary backend starts at 0
@@ -90,7 +96,7 @@ where
 
 		// Must be on disk, doing a read at the correct position
 		let hash_record_len = 32;
-		let file_offset = ((pos - shift.unwrap()) as usize) * hash_record_len;
+		let file_offset = ((pos - shift) as usize) * hash_record_len;
 		let data = self.hash_file.read(file_offset, hash_record_len);
 		match ser::deserialize(&mut &data[..]) {
 			Ok(h) => Some(h),
@@ -105,16 +111,15 @@ where
 	}
 
 	fn get_data_from_file(&self, position: u64) -> Option<T> {
-		let shift = self.pruned_nodes.get_leaf_shift(position);
-		if let None = shift {
+		if self.is_compacted(position) {
 			return None;
 		}
-
+		let shift = self.prune_list.get_leaf_shift(position);
 		let pos = pmmr::n_leaves(position) - 1;
 
 		// Must be on disk, doing a read at the correct position
 		let record_len = T::len();
-		let file_offset = ((pos - shift.unwrap()) as usize) * record_len;
+		let file_offset = ((pos - shift) as usize) * record_len;
 		let data = self.data_file.read(file_offset, record_len);
 		match ser::deserialize(&mut &data[..]) {
 			Ok(h) => Some(h),
@@ -161,13 +166,13 @@ where
 		self.leaf_set.rewind(rewind_add_pos, rewind_rm_pos);
 
 		// Rewind the hash file accounting for pruned/compacted pos
-		let shift = self.pruned_nodes.get_shift(position).unwrap_or(0);
+		let shift = self.prune_list.get_shift(position);
 		let record_len = 32 as u64;
 		let file_pos = (position - shift) * record_len;
 		self.hash_file.rewind(file_pos);
 
 		// Rewind the data file accounting for pruned/compacted pos
-		let leaf_shift = self.pruned_nodes.get_leaf_shift(position).unwrap_or(0);
+		let leaf_shift = self.prune_list.get_leaf_shift(position);
 		let flatfile_pos = pmmr::n_leaves(position);
 		let record_len = T::len() as u64;
 		let file_pos = (flatfile_pos - leaf_shift) * record_len;
@@ -202,7 +207,7 @@ where
 			self.hash_size().unwrap_or(0),
 			self.data_size().unwrap_or(0),
 			self.leaf_set.len(),
-			self.pruned_nodes.pruned_nodes.len(),
+			self.prune_list.len(),
 		);
 	}
 }
@@ -214,34 +219,38 @@ where
 	/// Instantiates a new PMMR backend.
 	/// Use the provided dir to store its files.
 	pub fn new(data_dir: String, header: Option<&BlockHeader>) -> io::Result<PMMRBackend<T>> {
-		let prune_list = read_ordered_vec(format!("{}/{}", data_dir, PMMR_PRUNED_FILE), 8)?;
-		let pruned_nodes = PruneList {
-			pruned_nodes: prune_list,
-		};
 		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		let data_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
 
 		let leaf_set_path = format!("{}/{}", data_dir, PMMR_LEAF_FILE);
-		let rm_log_path = format!("{}/{}", data_dir, PMMR_RM_LOG_FILE);
 
+		// If we received a rewound "snapshot" leaf_set file
+		// move it into place so we use it.
 		if let Some(header) = header {
 			let leaf_snapshot_path = format!("{}/{}.{}", data_dir, PMMR_LEAF_FILE, header.hash());
 			LeafSet::copy_snapshot(leaf_set_path.clone(), leaf_snapshot_path.clone())?;
 		}
 
-		// If we need to migrate an old rm_log to a new leaf_set do it here before we
-		// start. Do *not* migrate if we already have a leaf_set.
-		let mut leaf_set = LeafSet::open(leaf_set_path.clone())?;
-		if leaf_set.is_empty() && Path::new(&rm_log_path).exists() {
-			let mut rm_log = RemoveLog::open(rm_log_path)?;
-			debug!(
-				LOGGER,
-				"pmmr: leaf_set: {}, rm_log: {}",
-				leaf_set.len(),
-				rm_log.len()
-			);
-			debug!(LOGGER, "pmmr: migrating rm_log -> leaf_set");
+		// If we need to migrate legacy prune_list do it here before we start.
+		// Do *not* migrate if we already have a non-empty prune_list.
+		let mut prune_list = PruneList::open(format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
+		let legacy_prune_list_path = format!("{}/{}", data_dir, LEGACY_PRUNED_FILE);
+		if prune_list.is_empty() && Path::new(&legacy_prune_list_path).exists() {
+			debug!(LOGGER, "pmmr: migrating prune_list -> bitmap prune_list");
+			let legacy_prune_pos = read_ordered_vec(legacy_prune_list_path, 8)?;
+			for x in legacy_prune_pos {
+				prune_list.add(x);
+			}
+			prune_list.flush()?;
+		}
 
+		// If we need to migrate legacy rm_log to a new leaf_set do it here before we
+		// start. Do *not* migrate if we already have a non-empty leaf_set.
+		let mut leaf_set = LeafSet::open(leaf_set_path.clone())?;
+		let legacy_rm_log_path = format!("{}/{}", data_dir, LEGACY_RM_LOG_FILE);
+		if leaf_set.is_empty() && Path::new(&legacy_rm_log_path).exists() {
+			debug!(LOGGER, "pmmr: migrating rm_log -> leaf_set");
+			let mut rm_log = RemoveLog::open(legacy_rm_log_path)?;
 			if let Some(header) = header {
 				// Rewind the rm_log back to the height of the header we care about.
 				debug!(
@@ -251,40 +260,42 @@ where
 				rm_log.rewind(header.height as u32)?;
 			}
 
-			// do not like this here but we have no pmmr to call
-			// unpruned_size() on yet...
 			let last_pos = {
-				let total_shift = pruned_nodes.get_shift(::std::u64::MAX).unwrap();
+				let total_shift = prune_list.get_total_shift();
 				let record_len = 32;
 				let sz = hash_file.size()?;
 				sz / record_len + total_shift
 			};
 
-			migrate_rm_log(&mut leaf_set, &rm_log, &pruned_nodes, last_pos)?;
+			migrate_rm_log(&mut leaf_set, &rm_log, &prune_list, last_pos)?;
 		}
-
-		let leaf_set = LeafSet::open(leaf_set_path)?;
 
 		Ok(PMMRBackend {
 			data_dir,
 			hash_file,
 			data_file,
 			leaf_set,
-			pruned_nodes,
+			prune_list,
 			_marker: marker::PhantomData,
 		})
 	}
 
 	fn is_pruned(&self, pos: u64) -> bool {
-		let path = pmmr::path(pos, self.unpruned_size().unwrap_or(0));
-		path.iter()
-			.any(|x| self.pruned_nodes.pruned_nodes.contains(x))
+		self.prune_list.is_pruned(pos)
+	}
+
+	fn is_pruned_root(&self, pos: u64) -> bool {
+		self.prune_list.is_pruned_root(pos)
+	}
+
+	fn is_compacted(&self, pos: u64) -> bool {
+		self.is_pruned(pos) && !self.is_pruned_root(pos)
 	}
 
 	/// Number of elements in the PMMR stored by this backend. Only produces the
 	/// fully sync'd size.
 	pub fn unpruned_size(&self) -> io::Result<u64> {
-		let total_shift = self.pruned_nodes.get_shift(::std::u64::MAX).unwrap();
+		let total_shift = self.prune_list.get_total_shift();
 
 		let record_len = 32;
 		let sz = self.hash_file.size()?;
@@ -371,7 +382,7 @@ where
 			let record_len = 32;
 
 			let off_to_rm = map_vec!(pos_to_rm, |pos| {
-				let shift = self.pruned_nodes.get_shift(pos.into()).unwrap();
+				let shift = self.prune_list.get_shift(pos.into());
 				((pos as u64) - 1 - shift) * record_len
 			});
 
@@ -395,7 +406,7 @@ where
 
 			let off_to_rm = map_vec!(leaf_pos_to_rm, |&pos| {
 				let flat_pos = pmmr::n_leaves(pos);
-				let shift = self.pruned_nodes.get_leaf_shift(pos).unwrap();
+				let shift = self.prune_list.get_leaf_shift(pos);
 				(flat_pos - 1 - shift) * record_len
 			});
 
@@ -407,24 +418,12 @@ where
 			)?;
 		}
 
-		// 3. Update the prune list and save it in place.
+		// 3. Update the prune list and write to disk.
 		{
 			for pos in leaves_removed.iter() {
-				self.pruned_nodes.add(pos.into());
+				self.prune_list.add(pos.into());
 			}
-			// TODO - we can get rid of leaves in the prunelist here (and things still work)
-			// self.pruned_nodes.pruned_nodes.retain(|&x| !pmmr::is_leaf(x));
-
-			// Prunelist contains *only* non-leaf roots.
-			// Contrast this with the leaf_set that contains *only* leaves.
-			self.pruned_nodes
-				.pruned_nodes
-				.retain(|&x| !pmmr::is_leaf(x));
-
-			write_vec(
-				format!("{}/{}", self.data_dir, PMMR_PRUNED_FILE),
-				&self.pruned_nodes.pruned_nodes,
-			)?;
+			self.prune_list.flush()?;
 		}
 
 		// 4. Rename the compact copy of hash file and reopen it.
@@ -460,7 +459,7 @@ where
 			cutoff_pos,
 			rewind_add_pos,
 			rewind_rm_pos,
-			&self.pruned_nodes,
+			&self.prune_list,
 		);
 
 		for x in leaf_pos_to_rm.iter() {
@@ -468,7 +467,7 @@ where
 			let mut current = x as u64;
 			loop {
 				let (parent, sibling) = family(current);
-				let sibling_pruned = self.is_pruned(sibling);
+				let sibling_pruned = self.is_pruned_root(sibling);
 
 				// if sibling previously pruned
 				// push it back onto list of pos to remove
