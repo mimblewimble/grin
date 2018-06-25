@@ -52,15 +52,34 @@ public key `r*G`, and allows to verify non-inflation for all Grin transactions
 Because these signatures are built simply from a scalar and a public key, they
 can be used to construct a variety of contracts using "simple" arithmetic.
 
-## Timelocked Transactions
+## (Absolute) Timelocked Transactions
+
+Analogus to Bitcoin [nLockTime](https://en.bitcoin.it/wiki/Timelock#nLockTime).
 
 A transaction can be time-locked with a few simple modifications:
 
-* the message `M` to sign becomes the block height `h` at which the transaction
-becomes spendable appended to the fee (so `M = fee | h`)
+* the message `M` to sign becomes the lock_height `h` at which the transaction
+becomes spendable appended to the fee
+    * `M = fee | h`
 * the lock height `h` is included in the transaction kernel
 * a block with a kernel that includes a lock height greater than the current
 block height is rejected
+
+## (Relative) Timelocked Transactions
+
+We can extend the concept of an absolute locktime on a tx by including a (kernel) commitment that we can define the lock_height relative to.
+
+The lock_height would be relative to the block height where the referenced kernel was first included in the chain state.
+
+Tx2 can then be restricted such that it would only be valid to include it in a block once `h` blocks have passed after first seeing Tx1 (via the referenced kernel commitment).
+
+* the message `M` to sign would need to include the following -
+	* the `fee` as before
+	* the lock_height `h` (as before but interpreted as a relative value)
+	* a referenced kernel commitment `C`
+	* M = `fee | h | C`
+
+For Tx2 to be accepted it would also need to include a Merkle proof identifying the block including `C` from Tx1. This proves the relative lock_height requirement has been met.
 
 # Derived Contracts
 
@@ -153,6 +172,47 @@ lock expires.
 
 This contract can be trivially used for unidirectional payment channels.
 
+## Conditional Output Timelocks
+
+Analogous to Bitcoin [CheckLockTimeVerify](https://en.bitcoin.it/wiki/Timelock#CheckLockTimeVerify).
+
+We currently have _unconditional_ lock_heights on txs (tx is not valid and will not be accepted until lock_height has passed).
+
+Private keys can be summed together.
+Key<sub>3</sub> = Key<sub>1</sub> + Key<sub>2</sub>
+
+Commitments can be summed together.
+C<sub>3</sub> = C<sub>1</sub> + C<sub>2</sub>
+
+Given _unconditional locktimes on txs_ we can leverage these to give us _conditional locktimes on outputs_ by "entangling" two outputs on two related txs together.
+
+We can construct two txs (Tx<sub>1</sub>, Tx<sub>2</sub>) with two entangled outputs Out<sub>1</sub> and Out<sub>2</sub> such that -
+  * Out<sub>1</sub> (commitment C<sub>1</sub>) is from Tx<sub>1</sub> and built using Key<sub>1</sub>
+  * Out<sub>2</sub> (commitment C<sub>2</sub>) is from Tx<sub>2</sub> and built using Key<sub>2</sub>
+  * Tx<sub>2</sub> has an _unconditional_ lock_height on it
+
+If we do this (and we can manage the keys as necessary) -
+  * Out<sub>1</sub> + Out<sub>2</sub> can _only_ be spent as a pair using Key<sub>3</sub>
+  * They can _only_ be spent after lock_height from Tx<sub>2</sub>
+
+Tx<sub>1</sub> (containing Out<sub>1</sub>) can be broadcast, accepted and confirmed on-chain immediately.
+Tx<sub>2</sub> cannot be broadcast and accepted until lock_height has passed.
+
+So if Alice only knows K<sub>3</sub> and does not know Key<sub>1</sub> or Key<sub>2</sub>, then Out<sub>1</sub> can only be spent by Alice after lock_height has passed.
+If Bob on the other hand knows Key<sub>2</sub> then Out<sub>1</sub> can be spent by Bob immediately.
+
+We have a _conditional_ timelock on Out<sub>1</sub> (confirmed, on-chain)
+where it can be spent either with Key<sub>3</sub> (after lock_height), _or_ Key<sub>2</sub> immediately.
+
+## (Relative) Conditional Output Timelocks
+
+Analogous to Bitcoin [CheckSequenceVerify](https://en.bitcoin.it/wiki/Timelock#CheckSequenceVerify).
+
+By combining "Conditional Timelock on Output" with "(Relative) Timelocked Transactions" we can encumber a confirmed output with a relative timelock (relative to a related tx kernel).
+
+Tx<sub>1</sub> (containing Out<sub>1</sub>) can be broadcast, accepted and confirmed on-chain immediately.
+Tx<sub>2</sub> cannot be broadcast and accepted until the _relative_ lock_height has passed, relative to the referenced kernel from the earlier Tx<sub>1</sub>.
+
 ## Atomic Swap
 
 This setup can work on Bitcoin, Ethereum and likely other chains. It relies
@@ -166,7 +226,7 @@ addition to her own private key).
 Alice has grins and Bob has bitcoin. They would like to swap. We assume Bob
 created an output on the Bitcoin blockchain that allows spending either by
 Alice if she learns a hash pre-image `x`, or by Bob after time `Tb`. Alice is
-ready to send her grins to Bob if he reveals `x`. 
+ready to send her grins to Bob if he reveals `x`.
 
 First, Alice sends her grins to a multiparty timelock contract with a refund
 time `Ta < Tb`. To send the 2-of-2 output to Bob and execute the swap, Alice
