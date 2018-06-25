@@ -93,18 +93,18 @@ where
 
 	fn rewind(
 		&mut self,
-		position: u64,
-		rewind_add_pos: &Bitmap,
-		rewind_rm_pos: &Bitmap,
+		_position: u64,
+		_rewind_add_pos: &Bitmap,
+		_rewind_rm_pos: &Bitmap,
 	) -> Result<(), String> {
-		panic!("not yet implemented for vec backend...");
+		panic!("not implemented for vec backend...");
 	}
 
 	fn get_data_file_path(&self) -> String {
 		"".to_string()
 	}
 
-	fn snapshot(&self, header: &BlockHeader) -> Result<(), String> {
+	fn snapshot(&self, _header: &BlockHeader) -> Result<(), String> {
 		Ok(())
 	}
 
@@ -206,6 +206,14 @@ fn various_families() {
 	assert_eq!(pmmr::family(6), (7, 3));
 	assert_eq!(pmmr::family(7), (15, 14));
 	assert_eq!(pmmr::family(1_000), (1_001, 997));
+}
+
+#[test]
+fn test_paths() {
+	assert_eq!(pmmr::path(1, 1), [1]);
+	assert_eq!(pmmr::path(1, 3), [1, 3]);
+	assert_eq!(pmmr::path(2, 3), [2, 3]);
+	assert_eq!(pmmr::path(4, 16), [4, 6, 7, 15]);
 }
 
 #[test]

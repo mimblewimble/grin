@@ -838,14 +838,11 @@ pub fn is_left_sibling(pos: u64) -> bool {
 /// The size (and therefore the set of peaks) of the MMR
 /// is defined by last_pos.
 pub fn path(pos: u64, last_pos: u64) -> Vec<u64> {
-	let mut path = vec![pos];
+	let mut path = vec![];
 	let mut current = pos;
-	while current + 1 <= last_pos {
+	while current <= last_pos {
+		path.push(current);
 		let (parent, _) = family(current);
-		if parent > last_pos {
-			break;
-		}
-		path.push(parent);
 		current = parent;
 	}
 	path
