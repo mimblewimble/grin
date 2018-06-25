@@ -722,6 +722,18 @@ pub fn path(pos: u64, last_pos: u64) -> Vec<u64> {
 	path
 }
 
+// TODO - this is simpler, test it is actually correct?
+// pub fn path(pos: u64, last_pos: u64) -> Vec<u64> {
+// 	let mut path = vec![];
+// 	let mut current = pos;
+// 	while current <= last_pos {
+// 		path.push(current);
+// 		let (parent, _) = family(current);
+// 		current = parent;
+// 	}
+// 	path
+// }
+
 /// For a given starting position calculate the parent and sibling positions
 /// for the branch/path from that position to the peak of the tree.
 /// We will use the sibling positions to generate the "path" of a Merkle proof.
