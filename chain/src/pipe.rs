@@ -230,7 +230,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	if !ctx.opts.contains(Options::SKIP_POW) {
-		let n = global::sizeshift();
+		let n = global::min_sizeshift();
 		if !(ctx.pow_verifier)(header, n) {
 			error!(
 				LOGGER,

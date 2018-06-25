@@ -63,7 +63,7 @@ pub fn mine_genesis_block() -> Result<Block, Error> {
 	// total_difficulty on the genesis header *is* the difficulty of that block
 	let genesis_difficulty = gen.header.total_difficulty.clone();
 
-	let sz = global::sizeshift();
+	let sz = global::min_sizeshift();
 	let proof_size = global::proofsize();
 
 	pow_size(&mut gen.header, genesis_difficulty, proof_size, sz).unwrap();
@@ -125,10 +125,10 @@ mod test {
 			&mut b.header,
 			Difficulty::one(),
 			global::proofsize(),
-			global::sizeshift(),
+			global::min_sizeshift(),
 		).unwrap();
 		assert!(b.header.nonce != 310);
 		assert!(b.header.pow.to_difficulty() >= Difficulty::one());
-		assert!(verify_size(&b.header, global::sizeshift()));
+		assert!(verify_size(&b.header, global::min_sizeshift()));
 	}
 }

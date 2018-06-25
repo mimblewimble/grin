@@ -87,7 +87,7 @@ fn data_files() {
 				&mut b.header,
 				difficulty,
 				global::proofsize(),
-				global::sizeshift(),
+				global::min_sizeshift(),
 			).unwrap();
 
 			let _bhash = b.hash();

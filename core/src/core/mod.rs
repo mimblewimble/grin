@@ -69,7 +69,7 @@ impl Proof {
 	/// Builds a proof with all bytes zeroed out
 	pub fn new(in_nonces: Vec<u64>) -> Proof {
 		Proof {
-			cuckoo_sizeshift: global::sizeshift(),
+			cuckoo_sizeshift: global::min_sizeshift(),
 			nonces: in_nonces,
 		}
 	}
@@ -77,7 +77,7 @@ impl Proof {
 	/// Builds a proof with all bytes zeroed out
 	pub fn zero(proof_size: usize) -> Proof {
 		Proof {
-			cuckoo_sizeshift: global::sizeshift(),
+			cuckoo_sizeshift: global::min_sizeshift(),
 			nonces: vec![0; proof_size],
 		}
 	}
@@ -92,7 +92,7 @@ impl Proof {
 			.take(proof_size)
 			.collect();
 		Proof {
-			cuckoo_sizeshift: global::sizeshift(),
+			cuckoo_sizeshift: global::min_sizeshift(),
 			nonces: v,
 		}
 	}

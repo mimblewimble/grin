@@ -71,7 +71,7 @@ fn mine_empty_chain() {
 			&mut b.header,
 			difficulty,
 			global::proofsize(),
-			global::sizeshift(),
+			global::min_sizeshift(),
 		).unwrap();
 
 		let bhash = b.hash();
