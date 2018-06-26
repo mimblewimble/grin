@@ -53,11 +53,12 @@ pub fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Err
 /// Send the slate to a listening wallet instance
 pub fn send_tx_slate(dest: &str, slate: &Slate) -> Result<Slate, Error> {
 	if &dest[..4] != "http" {
-		error!(
-			LOGGER,
-			"dest formatted as {} but send -d expected stdout or http://IP:port", dest
+		let err_str = format!(
+			"dest formatted as {} but send -d expected stdout or http://IP:port",
+			dest
 		);
-		Err(ErrorKind::Node)?
+		error!(LOGGER, "{}", err_str,);
+		Err(ErrorKind::Uri)?
 	}
 	let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
 	debug!(LOGGER, "Posting transaction slate to {}", url);
@@ -123,14 +124,14 @@ pub fn post_tx(dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error> {
 	} else {
 		url = format!("{}/v1/pool/push", dest);
 	}
-	let res = api::client::post(url.as_str(), tx).context(ErrorKind::Node)?;
-	Ok(res)
+	api::client::post(url.as_str(), tx)?;
+	Ok(())
 }
 
 /// Return the chain tip from a given node
 pub fn get_chain_height(addr: &str) -> Result<u64, Error> {
 	let url = format!("{}/v1/chain", addr);
-	let res = api::client::get::<api::Tip>(url.as_str()).context(ErrorKind::Node)?;
+	let res = api::client::get::<api::Tip>(url.as_str())?;
 	Ok(res.height)
 }
 
@@ -159,11 +160,52 @@ pub fn get_outputs_from_node(
 			Err(e) => {
 				// if we got anything other than 200 back from server, don't attempt to refresh
 				// the wallet data after
-				return Err(e).context(ErrorKind::Node)?;
+				return Err(e)?;
 			}
 		}
 	}
 	Ok(api_outputs)
+}
+
+pub fn get_outputs_by_pmmr_index(
+	addr: &str,
+	start_height: u64,
+	max_outputs: u64,
+) -> Result<
+	(
+		u64,
+		u64,
+		Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+	),
+	Error,
+> {
+	let query_param = format!("start_index={}&max={}", start_height, max_outputs);
+
+	let url = format!("{}/v1/txhashset/outputs?{}", addr, query_param,);
+
+	let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool)> = Vec::new();
+
+	match api::client::get::<api::OutputListing>(url.as_str()) {
+		Ok(o) => {
+			for out in o.outputs {
+				let is_coinbase = match out.output_type {
+					api::OutputType::Coinbase => true,
+					api::OutputType::Transaction => false,
+				};
+				api_outputs.push((out.commit, out.range_proof().unwrap(), is_coinbase));
+			}
+
+			Ok((o.highest_index, o.last_retrieved_index, api_outputs))
+		}
+		Err(e) => {
+			// if we got anything other than 200 back from server, bye
+			error!(
+				LOGGER,
+				"get_outputs_by_pmmr_index: unable to contact API {}. Error: {}", addr, e
+			);
+			Err(e)?
+		}
+	}
 }
 
 /// Get any missing block hashes from node
@@ -213,9 +255,28 @@ pub fn get_missing_block_hashes_from_node(
 			},
 			Err(e) => {
 				// if we got anything other than 200 back from server, bye
-				return Err(e).context(ErrorKind::Node)?;
+				return Err(e)?;
 			}
 		}
 	}
 	Ok((api_blocks, api_merkle_proofs))
+}
+
+/// Create a merkle proof at the given height for the given commit
+pub fn create_merkle_proof(addr: &str, commit: &str) -> Result<MerkleProofWrapper, Error> {
+	let url = format!("{}/v1/txhashset/merkleproof?id={}", addr, commit);
+
+	match api::client::get::<api::OutputPrintable>(url.as_str()) {
+		Ok(output) => Ok(MerkleProofWrapper(output.merkle_proof.unwrap())),
+		Err(e) => {
+			// if we got anything other than 200 back from server, bye
+			error!(
+				LOGGER,
+				"get_merkle_proof_for_pos: Restore failed... unable to create merkle proof for commit {}. Error: {}",
+				commit,
+				e
+			);
+			Err(e)?
+		}
+	}
 }

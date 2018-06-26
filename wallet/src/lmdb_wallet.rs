@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::collections::hash_map::Values;
+use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::{fs, path};
@@ -190,28 +190,28 @@ impl<K> WalletClient for LMDBBackend<K> {
 	}
 
 	/// Call the wallet API to create a coinbase transaction
-	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
-		let res = client::create_coinbase(dest, block_fees)
+	fn create_coinbase(&self, block_fees: &BlockFees) -> Result<CbData, Error> {
+		let res = client::create_coinbase(self.node_url(), block_fees)
 			.context(ErrorKind::WalletComms(format!("Creating Coinbase")))?;
 		Ok(res)
 	}
 
 	/// Send a transaction slate to another listening wallet and return result
-	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, Error> {
-		let res = client::send_tx_slate(dest, slate)
+	fn send_tx_slate(&self, slate: &Slate) -> Result<Slate, Error> {
+		let res = client::send_tx_slate(self.node_url(), slate)
 			.context(ErrorKind::WalletComms(format!("Sending transaction")))?;
 		Ok(res)
 	}
 
 	/// Posts a tranaction to a grin node
-	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error> {
-		let res = client::post_tx(dest, tx, fluff).context(ErrorKind::Node)?;
+	fn post_tx(&self, tx: &TxWrapper, fluff: bool) -> Result<(), Error> {
+		let res = client::post_tx(self.node_url(), tx, fluff).context(ErrorKind::Node)?;
 		Ok(res)
 	}
 
 	/// retrieves the current tip from the specified grin node
-	fn get_chain_height(&self, addr: &str) -> Result<u64, Error> {
-		let res = client::get_chain_height(addr).context(ErrorKind::Node)?;
+	fn get_chain_height(&self) -> Result<u64, Error> {
+		let res = client::get_chain_height(self.node_url()).context(ErrorKind::Node)?;
 		Ok(res)
 	}
 
@@ -219,17 +219,34 @@ impl<K> WalletClient for LMDBBackend<K> {
 	/// need "by_height" and "by_id" variants
 	fn get_outputs_from_node(
 		&self,
-		addr: &str,
 		wallet_outputs: Vec<pedersen::Commitment>,
 	) -> Result<HashMap<pedersen::Commitment, String>, Error> {
-		let res = client::get_outputs_from_node(addr, wallet_outputs).context(ErrorKind::Node)?;
+		let res = client::get_outputs_from_node(self.node_url(), wallet_outputs)
+			.context(ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// Outputs by PMMR index
+	fn get_outputs_by_pmmr_index(
+		&self,
+		start_height: u64,
+		max_outputs: u64,
+	) -> Result<
+		(
+			u64,
+			u64,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+		),
+		Error,
+	> {
+		let res = client::get_outputs_by_pmmr_index(self.node_url(), start_height, max_outputs)
+			.context(ErrorKind::Node)?;
 		Ok(res)
 	}
 
 	/// Get any missing block hashes from node
 	fn get_missing_block_hashes_from_node(
 		&self,
-		addr: &str,
 		height: u64,
 		wallet_outputs: Vec<pedersen::Commitment>,
 	) -> Result<
@@ -239,17 +256,15 @@ impl<K> WalletClient for LMDBBackend<K> {
 		),
 		Error,
 	> {
-		let res = client::get_missing_block_hashes_from_node(addr, height, wallet_outputs)
-			.context(ErrorKind::Node)?;
+		let res =
+			client::get_missing_block_hashes_from_node(self.node_url(), height, wallet_outputs)
+				.context(ErrorKind::Node)?;
 		Ok(res)
 	}
 
 	/// retrieve merkle proof for a commit from a node
-	fn get_merkle_proof_for_commit(
-		&self,
-		addr: &str,
-		commit: &str,
-	) -> Result<MerkleProofWrapper, Error> {
-		Err(ErrorKind::GenericError("Not Implemented"))?
+	fn create_merkle_proof(&self, commit: &str) -> Result<MerkleProofWrapper, Error> {
+		let res = client::create_merkle_proof(self.node_url(), commit).context(ErrorKind::Node)?;
+		Ok(res)
 	}
 }

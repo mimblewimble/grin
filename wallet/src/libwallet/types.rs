@@ -108,30 +108,46 @@ pub trait WalletClient {
 	fn node_url(&self) -> &str;
 
 	/// Call the wallet API to create a coinbase transaction
-	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, Error>;
+	fn create_coinbase(&self, block_fees: &BlockFees) -> Result<CbData, Error>;
 
 	/// Send a transaction slate to another listening wallet and return result
 	/// TODO: Probably need a slate wrapper type
-	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, Error>;
+	fn send_tx_slate(&self, slate: &Slate) -> Result<Slate, Error>;
 
 	/// Posts a transaction to a grin node
-	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error>;
+	fn post_tx(&self, tx: &TxWrapper, fluff: bool) -> Result<(), Error>;
 
 	/// retrieves the current tip from the specified grin node
-	fn get_chain_height(&self, addr: &str) -> Result<u64, Error>;
+	fn get_chain_height(&self) -> Result<u64, Error>;
 
 	/// retrieve a list of outputs from the specified grin node
 	/// need "by_height" and "by_id" variants
 	fn get_outputs_from_node(
 		&self,
-		addr: &str,
 		wallet_outputs: Vec<pedersen::Commitment>,
 	) -> Result<HashMap<pedersen::Commitment, String>, Error>;
+
+	/// Get a list of outputs from the node by traversing the UTXO
+	/// set in PMMR index order.
+	/// Returns
+	/// (last available output index, last insertion index retrieved,
+	/// outputs(commit, proof, is_coinbase))
+	fn get_outputs_by_pmmr_index(
+		&self,
+		start_height: u64,
+		max_outputs: u64,
+	) -> Result<
+		(
+			u64,
+			u64,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+		),
+		Error,
+	>;
 
 	/// Get any missing block hashes from node
 	fn get_missing_block_hashes_from_node(
 		&self,
-		addr: &str,
 		height: u64,
 		wallet_outputs: Vec<pedersen::Commitment>,
 	) -> Result<
@@ -142,12 +158,8 @@ pub trait WalletClient {
 		Error,
 	>;
 
-	/// retrieve merkle proof for a commit from a node
-	fn get_merkle_proof_for_commit(
-		&self,
-		addr: &str,
-		commit: &str,
-	) -> Result<MerkleProofWrapper, Error>;
+	/// create merkle proof for a commit from a node at the current height
+	fn create_merkle_proof(&self, commit: &str) -> Result<MerkleProofWrapper, Error>;
 }
 
 /// Information about an output that's being tracked by the wallet. Must be
