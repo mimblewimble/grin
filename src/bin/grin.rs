@@ -722,13 +722,21 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					Ok(())
 				}
 				("restore", Some(_)) => {
-					let _res = api.restore().unwrap_or_else(|e| {
-						panic!(
-							"Error getting restoring wallet: {:?} Config: {:?}",
-							e, wallet_config
-						)
-					});
-					Ok(())
+					let result = api.restore();
+					match result {
+						Ok(_) => {
+							info!(
+								LOGGER,
+								"Wallet restore complete",
+							);
+							Ok(())
+						}
+						Err(e) => {
+							error!(LOGGER, "Wallet restore failed: {:?}", e);
+							error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
+							Err(e)
+						}
+					}
 				}
 				_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 			}

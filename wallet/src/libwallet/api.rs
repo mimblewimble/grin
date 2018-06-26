@@ -102,7 +102,7 @@ where
 			selection_strategy_is_use_all,
 		)?;
 
-		let mut slate = match self.wallet.send_tx_slate(dest, &slate) {
+		let mut slate = match self.wallet.send_tx_slate(&slate) {
 			Ok(s) => s,
 			Err(e) => {
 				error!(
@@ -118,7 +118,7 @@ where
 		// All good here, so let's post it
 		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
 		self.wallet
-			.post_tx(self.wallet.node_url(), &TxWrapper { tx_hex: tx_hex }, fluff)?;
+			.post_tx(&TxWrapper { tx_hex: tx_hex }, fluff)?;
 
 		// All good here, lock our inputs
 		lock_fn(self.wallet)?;
@@ -135,7 +135,7 @@ where
 		let tx_burn = tx::issue_burn_tx(self.wallet, amount, minimum_confirmations, max_outputs)?;
 		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
 		self.wallet
-			.post_tx(self.wallet.node_url(), &TxWrapper { tx_hex: tx_hex }, false)?;
+			.post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
 		Ok(())
 	}
 
@@ -146,7 +146,7 @@ where
 
 	/// Retrieve current height from node
 	pub fn node_height(&mut self) -> Result<(u64, bool), Error> {
-		match self.wallet.get_chain_height(self.wallet.node_url()) {
+		match self.wallet.get_chain_height() {
 			Ok(height) => Ok((height, true)),
 			Err(_) => {
 				let outputs = self.retrieve_outputs(true, false)?;

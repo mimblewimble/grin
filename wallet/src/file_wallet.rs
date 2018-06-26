@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use std::collections::HashMap;
-use std::collections::hash_map::Values;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::{Path, MAIN_SEPARATOR};
@@ -105,7 +104,8 @@ impl<'a> Drop for FileBatch<'a> {
 		if let Err(e) = fs::remove_dir(&self.lock_file_path) {
 			error!(
 				LOGGER,
-				"Could not remove wallet lock file. Maybe insufficient rights? "
+				"Could not remove wallet lock file. Maybe insufficient rights? {:?} ",
+				e
 			);
 		}
 		info!(LOGGER, "... released wallet lock");
@@ -286,8 +286,7 @@ where
 
 	/// Restore wallet contents
 	fn restore(&mut self) -> Result<(), libwallet::Error> {
-		libwallet::internal::restore::restore(self).context(libwallet::ErrorKind::Restore)?;
-		Ok(())
+		libwallet::internal::restore::restore(self)
 	}
 }
 
@@ -300,10 +299,9 @@ impl<K> WalletClient for FileWallet<K> {
 	/// Call the wallet API to create a coinbase transaction
 	fn create_coinbase(
 		&self,
-		dest: &str,
 		block_fees: &BlockFees,
 	) -> Result<CbData, libwallet::Error> {
-		let res = client::create_coinbase(dest, block_fees);
+		let res = client::create_coinbase(self.node_url(), block_fees);
 		match res {
 			Ok(r) => Ok(r),
 			Err(e) => {
@@ -314,8 +312,8 @@ impl<K> WalletClient for FileWallet<K> {
 	}
 
 	/// Send a transaction slate to another listening wallet and return result
-	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
-		let res = client::send_tx_slate(dest, slate);
+	fn send_tx_slate(&self, slate: &Slate) -> Result<Slate, libwallet::Error> {
+		let res = client::send_tx_slate(self.node_url(), slate);
 		match res {
 			Ok(r) => Ok(r),
 			Err(e) => {
@@ -326,14 +324,14 @@ impl<K> WalletClient for FileWallet<K> {
 	}
 
 	/// Posts a transaction to a grin node
-	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), libwallet::Error> {
-		let res = client::post_tx(dest, tx, fluff).context(libwallet::ErrorKind::Node)?;
+	fn post_tx(&self, tx: &TxWrapper, fluff: bool) -> Result<(), libwallet::Error> {
+		let res = client::post_tx(self.node_url(), tx, fluff).context(libwallet::ErrorKind::Node)?;
 		Ok(res)
 	}
 
 	/// retrieves the current tip from the specified grin node
-	fn get_chain_height(&self, addr: &str) -> Result<u64, libwallet::Error> {
-		let res = client::get_chain_height(addr).context(libwallet::ErrorKind::Node)?;
+	fn get_chain_height(&self) -> Result<u64, libwallet::Error> {
+		let res = client::get_chain_height(self.node_url()).context(libwallet::ErrorKind::Node)?;
 		Ok(res)
 	}
 
@@ -341,10 +339,20 @@ impl<K> WalletClient for FileWallet<K> {
 	/// need "by_height" and "by_id" variants
 	fn get_outputs_from_node(
 		&self,
-		addr: &str,
 		wallet_outputs: Vec<pedersen::Commitment>,
 	) -> Result<HashMap<pedersen::Commitment, String>, libwallet::Error> {
-		let res = client::get_outputs_from_node(addr, wallet_outputs)
+		let res = client::get_outputs_from_node(self.node_url(), wallet_outputs)
+			.context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+	}
+
+	/// Outputs by PMMR index
+	fn get_outputs_by_pmmr_index(
+		&self,
+		start_height: u64,
+		max_outputs: u64
+	) -> Result<(u64, u64, Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>), libwallet::Error> {
+		let res = client::get_outputs_by_pmmr_index(self.node_url(), start_height, max_outputs)
 			.context(libwallet::ErrorKind::Node)?;
 		Ok(res)
 	}
@@ -352,7 +360,6 @@ impl<K> WalletClient for FileWallet<K> {
 	/// Get any missing block hashes from node
 	fn get_missing_block_hashes_from_node(
 		&self,
-		addr: &str,
 		height: u64,
 		wallet_outputs: Vec<pedersen::Commitment>,
 	) -> Result<
@@ -362,18 +369,20 @@ impl<K> WalletClient for FileWallet<K> {
 		),
 		libwallet::Error,
 	> {
-		let res = client::get_missing_block_hashes_from_node(addr, height, wallet_outputs)
+		let res = client::get_missing_block_hashes_from_node(self.node_url(), height, wallet_outputs)
 			.context(libwallet::ErrorKind::Node)?;
 		Ok(res)
 	}
 
 	/// retrieve merkle proof for a commit from a node
-	fn get_merkle_proof_for_commit(
+	fn create_merkle_proof(
 		&self,
-		_addr: &str,
-		_commit: &str,
+		commit: &str,
 	) -> Result<MerkleProofWrapper, libwallet::Error> {
-		Err(libwallet::ErrorKind::GenericError("Not Implemented"))?
+		let res = client::create_merkle_proof(self.node_url(), commit)
+			.context(libwallet::ErrorKind::Node)?;
+		Ok(res)
+		
 	}
 }
 

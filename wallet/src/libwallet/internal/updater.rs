@@ -63,7 +63,7 @@ where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
-	let height = wallet.get_chain_height(wallet.node_url())?;
+	let height = wallet.get_chain_height()?;
 	refresh_output_state(wallet, height)?;
 	refresh_missing_block_hashes(wallet, height)?;
 	Ok(())
@@ -94,7 +94,7 @@ where
 	);
 
 	let (api_blocks, api_merkle_proofs) =
-		wallet.get_missing_block_hashes_from_node(wallet.node_url(), height, wallet_output_keys)?;
+		wallet.get_missing_block_hashes_from_node(height, wallet_output_keys)?;
 
 	// now for each commit, find the output in the wallet and
 	// the corresponding api output (if it exists)
@@ -208,7 +208,7 @@ where
 
 	let wallet_output_keys = wallet_outputs.keys().map(|commit| commit.clone()).collect();
 
-	let api_outputs = wallet.get_outputs_from_node(wallet.node_url(), wallet_output_keys)?;
+	let api_outputs = wallet.get_outputs_from_node(wallet_output_keys)?;
 	apply_api_outputs(wallet, &wallet_outputs, &api_outputs, height)?;
 	clean_old_unconfirmed(wallet, height)?;
 	Ok(())
