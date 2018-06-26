@@ -18,13 +18,12 @@ use std::{error, fmt, io};
 
 use util::secp;
 use util::secp::pedersen::Commitment;
-use util::secp_static;
 
 use core::core::committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::{block, transaction, Block, BlockHeader};
-use core::ser::{self, Readable, Reader, Writeable, Writer};
+use core::ser;
 use grin_store as store;
 use keychain;
 

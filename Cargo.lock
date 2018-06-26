@@ -1617,7 +1617,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 [[package]]
 name = "secp256k1zkp"
 version = "0.7.1"
-source = "git+https://github.com/mimblewimble/rust-secp256k1-zkp?branch=testnet3#748296c61341461e46e7b2c05db494d60f96ac44"
+source = "git+https://github.com/mimblewimble/rust-secp256k1-zkp?branch=testnet3#2564e8cebccb827ed442886d81866af783aaebc4"
 dependencies = [
  "arrayvec 0.3.25 (registry+https://github.com/rust-lang/crates.io-index)",
  "gcc 0.3.54 (registry+https://github.com/rust-lang/crates.io-index)",

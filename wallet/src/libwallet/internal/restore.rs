@@ -38,8 +38,6 @@ struct OutputResult {
 	///
 	pub is_coinbase: bool,
 	///
-	pub merkle_proof: Option<MerkleProofWrapper>,
-	///
 	pub blinding: SecretKey,
 }
 
@@ -75,12 +73,7 @@ where
 			"Output found: {:?}, amount: {:?}", commit, info.value
 		);
 
-		let mut merkle_proof = None;
 		let commit_str = util::to_hex(commit.as_ref().to_vec());
-
-		if *is_coinbase {
-			merkle_proof = Some(wallet.create_merkle_proof(&commit_str)?);
-		}
 
 		let height = current_chain_height;
 		let lock_height = if *is_coinbase {
@@ -97,7 +90,6 @@ where
 			height: height,
 			lock_height: lock_height,
 			is_coinbase: *is_coinbase,
-			merkle_proof: merkle_proof,
 			blinding: info.blinding,
 		});
 	}
@@ -219,8 +211,6 @@ where
 				height: output.height,
 				lock_height: output.lock_height,
 				is_coinbase: output.is_coinbase,
-				block: None,
-				merkle_proof: output.merkle_proof,
 			});
 		} else {
 			warn!(

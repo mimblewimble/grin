@@ -264,7 +264,6 @@ impl Slate {
 		let fee = tx_fee(
 			self.tx.inputs.len(),
 			self.tx.outputs.len(),
-			self.tx.input_proofs_count(),
 			None,
 		);
 		if fee > self.tx.fee() {
