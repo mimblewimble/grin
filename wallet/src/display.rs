@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use core::core::{self, amount_to_hr_string};
-use libwallet::Error;
 use libwallet::types::{OutputData, WalletInfo};
+use libwallet::Error;
 use prettytable;
 use std::io::prelude::Write;
 use term;
@@ -32,6 +32,7 @@ pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<OutputData>) -> Re
 
 	table.set_titles(row![
 		bMG->"Key Id",
+		bMG->"Child Key Index",
 		bMG->"Block Height",
 		bMG->"Locked Until",
 		bMG->"Status",
@@ -42,6 +43,7 @@ pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<OutputData>) -> Re
 
 	for out in outputs {
 		let key_id = format!("{}", out.key_id);
+		let n_child = format!("{}", out.n_child);
 		let height = format!("{}", out.height);
 		let lock_height = format!("{}", out.lock_height);
 		let status = format!("{:?}", out.status);
@@ -50,6 +52,7 @@ pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<OutputData>) -> Re
 		let value = format!("{}", core::amount_to_hr_string(out.value));
 		table.add_row(row![
 			bFC->key_id,
+			bFC->n_child,
 			bFB->height,
 			bFB->lock_height,
 			bFR->status,
