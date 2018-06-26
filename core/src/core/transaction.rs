@@ -667,14 +667,12 @@ impl Writeable for Input {
 		writer.write_u8(self.features.bits())?;
 		self.commit.write(writer)?;
 
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-				let block_hash = &self.block_hash.unwrap_or(ZERO_HASH);
-				let merkle_proof = self.merkle_proof();
+		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
+			let block_hash = &self.block_hash.unwrap_or(ZERO_HASH);
+			let merkle_proof = self.merkle_proof();
 
-				writer.write_fixed_bytes(block_hash)?;
-				merkle_proof.write(writer)?;
-			}
+			writer.write_fixed_bytes(block_hash)?;
+			merkle_proof.write(writer)?;
 		}
 
 		Ok(())
@@ -1173,8 +1171,8 @@ mod test {
 		let short_id = input.short_id(&block_hash, nonce);
 		assert_eq!(short_id, ShortId::from_hex("28fea5a693af").unwrap());
 
-		// now generate the short_id for a *very* similar output (single feature flag
-		// different) and check it generates a different short_id
+		// now generate the short_id for a similar output
+		// and confirm it generates a different short_id
 		let input = Input {
 			features: OutputFeatures::COINBASE_OUTPUT,
 			commit: commit,
@@ -1183,6 +1181,6 @@ mod test {
 		};
 
 		let short_id = input.short_id(&block_hash, nonce);
-		assert_eq!(short_id, ShortId::from_hex("2df325971ab0").unwrap());
+		assert_eq!(short_id, ShortId::from_hex("cd0a0c52ec5e").unwrap());
 	}
 }
