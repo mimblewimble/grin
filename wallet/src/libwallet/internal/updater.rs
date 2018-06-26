@@ -16,8 +16,8 @@
 //! the wallet storage and update them.
 
 use failure::ResultExt;
-use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 use core::consensus::reward;
 use core::core::{Output, TxKernel};
@@ -27,8 +27,9 @@ use libtx::reward;
 use libwallet;
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
-use libwallet::types::{BlockFees, CbData, OutputData, OutputStatus, WalletBackend, WalletClient,
-                       WalletInfo};
+use libwallet::types::{
+	BlockFees, CbData, OutputData, OutputStatus, WalletBackend, WalletClient, WalletInfo,
+};
 use util::secp::pedersen;
 use util::{self, LOGGER};
 
@@ -151,7 +152,8 @@ where
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
 	let keychain = wallet.keychain().clone();
 	let unspents = wallet.iter().filter(|x| {
-		x.root_key_id == keychain.root_key_id() && x.block.is_none()
+		x.root_key_id == keychain.root_key_id()
+			&& x.block.is_none()
 			&& x.status == OutputStatus::Unspent
 	});
 	for out in unspents {

@@ -14,10 +14,10 @@
 //! Functions to restore a wallet's outputs from just the master seed
 
 use core::global;
-use libwallet::Error;
 use keychain::{Identifier, Keychain};
 use libtx::proof;
 use libwallet::types::*;
+use libwallet::Error;
 use util::secp::pedersen;
 use util::{self, LOGGER};
 
@@ -25,16 +25,19 @@ use util::{self, LOGGER};
 fn find_outputs_with_key<T, K>(
 	wallet: &mut T,
 	outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
-) -> Result<Vec<(
-	pedersen::Commitment,
-	Identifier,
-	u32,
-	u64,
-	u64,
-	u64,
-	bool,
-	Option<MerkleProofWrapper>,
-)>, Error>
+) -> Result<
+	Vec<(
+		pedersen::Commitment,
+		Identifier,
+		u32,
+		u64,
+		u64,
+		u64,
+		bool,
+		Option<MerkleProofWrapper>,
+	)>,
+	Error,
+>
 where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
@@ -59,18 +62,14 @@ where
 		let (commit, proof, is_coinbase) = output;
 		// attempt to unwind message from the RP and get a value
 		// will fail if it's not ours
-		let info = proof::rewind(
-			wallet.keychain(),
-			*commit,
-			None,
-			*proof,
-		)?;
+		let info = proof::rewind(wallet.keychain(), *commit, None, *proof)?;
 
 		if !info.success {
 			continue;
 		}
 
-		// we have a match, now check through our key iterations to find out which one it was
+		// we have a match, now check through our key iterations to find out which one
+		// it was
 		let mut found = false;
 		let mut start_index = 1;
 
@@ -91,8 +90,7 @@ where
 			let commit_str = util::to_hex(commit.as_ref().to_vec());
 
 			if *is_coinbase {
-				merkle_proof =
-					Some(wallet.create_merkle_proof(&commit_str)?);
+				merkle_proof = Some(wallet.create_merkle_proof(&commit_str)?);
 			}
 
 			let height = current_chain_height;
@@ -153,7 +151,8 @@ where
 	// this will start here, then lower as outputs are found, moving backwards on
 	// the chain
 	loop {
-		let (highest_index, last_retrieved_index, outputs) = wallet.get_outputs_by_pmmr_index(start_index, batch_size)?;
+		let (highest_index, last_retrieved_index, outputs) =
+			wallet.get_outputs_by_pmmr_index(start_index, batch_size)?;
 		info!(
 			LOGGER,
 			"Retrieved {} outputs, up to index {}. (Highest index: {})",
@@ -163,8 +162,7 @@ where
 		);
 
 		let root_key_id = wallet.keychain().root_key_id();
-		let result_vec =
-			find_outputs_with_key(wallet, outputs.clone())?;
+		let result_vec = find_outputs_with_key(wallet, outputs.clone())?;
 		let mut batch = wallet.batch()?;
 		for output in result_vec {
 			let _ = batch.save(OutputData {

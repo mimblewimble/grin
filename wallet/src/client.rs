@@ -53,12 +53,11 @@ pub fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Err
 /// Send the slate to a listening wallet instance
 pub fn send_tx_slate(dest: &str, slate: &Slate) -> Result<Slate, Error> {
 	if &dest[..4] != "http" {
-		let err_str = format!("dest formatted as {} but send -d expected stdout or http://IP:port", dest);
-		error!(
-			LOGGER,
-			"{}",
-			err_str,
+		let err_str = format!(
+			"dest formatted as {} but send -d expected stdout or http://IP:port",
+			dest
 		);
+		error!(LOGGER, "{}", err_str,);
 		Err(ErrorKind::Uri)?
 	}
 	let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
@@ -169,10 +168,17 @@ pub fn get_outputs_from_node(
 }
 
 pub fn get_outputs_by_pmmr_index(
-		addr: &str,
-		start_height: u64,
-		max_outputs: u64
-	) -> Result<(u64, u64, Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>), Error> {
+	addr: &str,
+	start_height: u64,
+	max_outputs: u64,
+) -> Result<
+	(
+		u64,
+		u64,
+		Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+	),
+	Error,
+> {
 	let query_param = format!("start_index={}&max={}", start_height, max_outputs);
 
 	let url = format!("{}/v1/txhashset/outputs?{}", addr, query_param,);
@@ -186,22 +192,16 @@ pub fn get_outputs_by_pmmr_index(
 					api::OutputType::Coinbase => true,
 					api::OutputType::Transaction => false,
 				};
-				api_outputs.push((
-					out.commit,
-					out.range_proof().unwrap(),
-					is_coinbase,
-				));
+				api_outputs.push((out.commit, out.range_proof().unwrap(), is_coinbase));
 			}
 
 			Ok((o.highest_index, o.last_retrieved_index, api_outputs))
-		},
+		}
 		Err(e) => {
 			// if we got anything other than 200 back from server, bye
 			error!(
 				LOGGER,
-				"get_outputs_by_pmmr_index: unable to contact API {}. Error: {}",
-				addr,
-				e
+				"get_outputs_by_pmmr_index: unable to contact API {}. Error: {}", addr, e
 			);
 			Err(e)?
 		}

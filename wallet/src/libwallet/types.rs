@@ -129,14 +129,21 @@ pub trait WalletClient {
 
 	/// Get a list of outputs from the node by traversing the UTXO
 	/// set in PMMR index order.
-	/// Returns 
-	/// (last available output index, last insertion index retrieved, 
+	/// Returns
+	/// (last available output index, last insertion index retrieved,
 	/// outputs(commit, proof, is_coinbase))
 	fn get_outputs_by_pmmr_index(
 		&self,
 		start_height: u64,
-		max_outputs: u64
-	) -> Result<(u64, u64, Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>), Error>;
+		max_outputs: u64,
+	) -> Result<
+		(
+			u64,
+			u64,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+		),
+		Error,
+	>;
 
 	/// Get any missing block hashes from node
 	fn get_missing_block_hashes_from_node(
@@ -152,10 +159,7 @@ pub trait WalletClient {
 	>;
 
 	/// create merkle proof for a commit from a node at the current height
-	fn create_merkle_proof(
-		&self,
-		commit: &str,
-	) -> Result<MerkleProofWrapper, Error>;
+	fn create_merkle_proof(&self, commit: &str) -> Result<MerkleProofWrapper, Error>;
 }
 
 /// Information about an output that's being tracked by the wallet. Must be

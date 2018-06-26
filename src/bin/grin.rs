@@ -40,8 +40,8 @@ pub mod tui;
 
 use std::env::current_dir;
 use std::process::exit;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -725,10 +725,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					let result = api.restore();
 					match result {
 						Ok(_) => {
-							info!(
-								LOGGER,
-								"Wallet restore complete",
-							);
+							info!(LOGGER, "Wallet restore complete",);
 							Ok(())
 						}
 						Err(e) => {

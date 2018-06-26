@@ -162,14 +162,16 @@ pub struct Output {
 impl Output {
 	pub fn new(commit: &pedersen::Commitment) -> Output {
 		Output {
-			commit: PrintableCommitment{commit: commit.clone()},
+			commit: PrintableCommitment {
+				commit: commit.clone(),
+			},
 		}
 	}
 }
 
 #[derive(Debug, Clone)]
 pub struct PrintableCommitment {
-	pub commit: pedersen::Commitment
+	pub commit: pedersen::Commitment,
 }
 
 impl PrintableCommitment {
@@ -213,9 +215,9 @@ impl<'de> serde::de::Visitor<'de> for PrintableCommitmentVisitor {
 	where
 		E: serde::de::Error,
 	{
-		Ok(PrintableCommitment{commit: pedersen::Commitment::from_vec(
-			util::from_hex(String::from(v)).unwrap(),
-		)})
+		Ok(PrintableCommitment {
+			commit: pedersen::Commitment::from_vec(util::from_hex(String::from(v)).unwrap()),
+		})
 	}
 }
 

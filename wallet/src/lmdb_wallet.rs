@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::collections::hash_map::Values;
+use std::collections::HashMap;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::{fs, path};
@@ -221,7 +221,8 @@ impl<K> WalletClient for LMDBBackend<K> {
 		&self,
 		wallet_outputs: Vec<pedersen::Commitment>,
 	) -> Result<HashMap<pedersen::Commitment, String>, Error> {
-		let res = client::get_outputs_from_node(self.node_url(), wallet_outputs).context(ErrorKind::Node)?;
+		let res = client::get_outputs_from_node(self.node_url(), wallet_outputs)
+			.context(ErrorKind::Node)?;
 		Ok(res)
 	}
 
@@ -229,8 +230,15 @@ impl<K> WalletClient for LMDBBackend<K> {
 	fn get_outputs_by_pmmr_index(
 		&self,
 		start_height: u64,
-		max_outputs: u64
-	) -> Result<(u64, u64, Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>), Error> {
+		max_outputs: u64,
+	) -> Result<
+		(
+			u64,
+			u64,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+		),
+		Error,
+	> {
 		let res = client::get_outputs_by_pmmr_index(self.node_url(), start_height, max_outputs)
 			.context(ErrorKind::Node)?;
 		Ok(res)
@@ -248,19 +256,15 @@ impl<K> WalletClient for LMDBBackend<K> {
 		),
 		Error,
 	> {
-		let res = client::get_missing_block_hashes_from_node(self.node_url(), height, wallet_outputs)
-			.context(ErrorKind::Node)?;
+		let res =
+			client::get_missing_block_hashes_from_node(self.node_url(), height, wallet_outputs)
+				.context(ErrorKind::Node)?;
 		Ok(res)
 	}
 
 	/// retrieve merkle proof for a commit from a node
-	fn create_merkle_proof(
-		&self,
-		commit: &str,
-	) -> Result<MerkleProofWrapper, Error> {
-		let res = client::create_merkle_proof(self.node_url(), commit)
-			.context(ErrorKind::Node)?;
+	fn create_merkle_proof(&self, commit: &str) -> Result<MerkleProofWrapper, Error> {
+		let res = client::create_merkle_proof(self.node_url(), commit).context(ErrorKind::Node)?;
 		Ok(res)
-		
 	}
 }
