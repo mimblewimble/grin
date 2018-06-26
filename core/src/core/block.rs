@@ -145,7 +145,7 @@ impl Default for BlockHeader {
 			kernel_root: ZERO_HASH,
 			total_kernel_offset: BlindingFactor::zero(),
 			nonce: 0,
-			pow: Proof::zero(proof_size),
+			pow: Proof::random(proof_size),
 		}
 	}
 }
