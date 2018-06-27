@@ -67,7 +67,8 @@ impl Eq for Proof {}
 
 impl Proof {
 	/// Builds a proof with all bytes zeroed out
-	pub fn new(in_nonces: Vec<u64>) -> Proof {
+	pub fn new(mut in_nonces: Vec<u64>) -> Proof {
+		in_nonces.sort();
 		Proof {
 			cuckoo_sizeshift: global::min_sizeshift(),
 			nonces: in_nonces,
@@ -87,10 +88,11 @@ impl Proof {
 	/// don't fail due to duplicate hashes
 	pub fn random(proof_size: usize) -> Proof {
 		let mut rng = thread_rng();
-		let v: Vec<u64> = iter::repeat(())
-			.map(|()| rng.gen())
+		let mut v: Vec<u64> = iter::repeat(())
+			.map(|()| rng.gen::<u32>() as u64)
 			.take(proof_size)
 			.collect();
+		v.sort();
 		Proof {
 			cuckoo_sizeshift: global::min_sizeshift(),
 			nonces: v,
@@ -100,7 +102,7 @@ impl Proof {
 	/// Converts the proof to a proof-of-work Target so they can be compared.
 	/// Hashes the Cuckoo Proof data.
 	pub fn to_difficulty(&self) -> target::Difficulty {
-		target::Difficulty::from_hash(&self.hash())
+		target::Difficulty::from_hash_and_shift(&self.hash(), self.cuckoo_sizeshift)
 	}
 
 	/// Returns the proof size
@@ -112,7 +114,15 @@ impl Proof {
 impl Readable for Proof {
 	fn read(reader: &mut Reader) -> Result<Proof, Error> {
 		let cuckoo_sizeshift = reader.read_u8()?;
-		let nonces = vlq::read(global::proofsize(), reader)?;
+		// 1. VLQ decode
+		let delta_nonces = vlq::read(global::proofsize(), reader)?;
+		// 2. delta decode
+		let mut nonces = vec![delta_nonces[0]];
+		for win in delta_nonces.windows(2) {
+			if let &[left, right] = win {
+				nonces.push(right + left);
+			}
+		}
 		Ok(Proof {
 			cuckoo_sizeshift,
 			nonces,
@@ -123,7 +133,17 @@ impl Readable for Proof {
 impl Writeable for Proof {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_u8(self.cuckoo_sizeshift)?;
-		vlq::write(self.nonces.clone(), writer)?;
+
+		// 1. delta encode, note that nonces are guaranteed to be ordered
+		let mut delta_nonces = vec![self.nonces[0]];
+		for win in self.nonces.windows(2) {
+			if let &[left, right] = win {
+				delta_nonces.push(right - left);
+			}
+		}
+		// 2. VLQ encode and write
+		vlq::write(delta_nonces, writer)?;
+
 		Ok(())
 	}
 }

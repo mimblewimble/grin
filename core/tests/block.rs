@@ -259,7 +259,7 @@ fn empty_compact_block_serialized_size() {
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 	let target_len = 1_273;
-	assert_eq!(vec.len(), target_len,);
+	assert_eq!(vec.len(), target_len);
 }
 
 #[test]
@@ -272,7 +272,7 @@ fn compact_block_single_tx_serialized_size() {
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
 	let target_len = 1_279;
-	assert_eq!(vec.len(), target_len,);
+	assert_eq!(vec.len(), target_len);
 }
 
 #[test]

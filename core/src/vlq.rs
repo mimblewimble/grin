@@ -28,12 +28,10 @@ pub fn read(n: usize, reader: &mut Reader) -> Result<Vec<u64>, Error> {
 		for n in 0..8 {
 			let b = reader.read_u8()?;
 			qty += ((b & MASK) as u64) << (n * 7);
-			println!("    {} {}", b, qty);
 			if (b & HIGH_BIT) == 0 {
 				break;
 			}
 		}
-		println!("{}+ {}", m, qty);
 		qties.push(qty);
 	}
 	Ok(qties)
