@@ -128,7 +128,7 @@ impl Readable for Proof {
 		let nonce_bits = cuckoo_sizeshift as usize;
 		let bytes_len = BitVec::bytes_len(nonce_bits * global::proofsize());
 		let bits = reader.read_fixed_bytes(bytes_len)?;
-		let bitvec = BitVec{bits};
+		let bitvec = BitVec { bits };
 		for n in 0..global::proofsize() {
 			let mut nonce = 0;
 			for bit in 0..nonce_bits {
@@ -178,7 +178,9 @@ impl BitVec {
 	}
 
 	fn new(bits_len: usize) -> BitVec {
-		BitVec {bits: vec![0; BitVec::bytes_len(bits_len)]}
+		BitVec {
+			bits: vec![0; BitVec::bytes_len(bits_len)],
+		}
 	}
 
 	fn set_bit_at(&mut self, pos: usize) {
