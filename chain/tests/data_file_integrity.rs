@@ -97,14 +97,6 @@ fn data_files() {
 
 			let head = Tip::from_block(&b.header);
 
-			// Check we have block markers for the last block and the block previous
-			let _cur_pmmr_md = chain
-				.get_block_marker(&head.last_block_h)
-				.expect("block marker does not exist");
-			chain
-				.get_block_marker(&head.prev_block_h)
-				.expect("prev block marker does not exist");
-
 			chain.validate(false).unwrap();
 		}
 	}

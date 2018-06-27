@@ -32,7 +32,7 @@ where
 {
 	// create an output using the amount in the slate
 	let (_, mut context, receiver_create_fn) =
-		selection::build_recipient_output_with_slate(wallet, slate).unwrap();
+		selection::build_recipient_output_with_slate(wallet, slate)?;
 
 	// fill public keys
 	let _ = slate.fill_round_1(
@@ -72,7 +72,7 @@ where
 	K: Keychain,
 {
 	// Get lock height
-	let current_height = wallet.get_chain_height(wallet.node_url())?;
+	let current_height = wallet.get_chain_height()?;
 	// ensure outputs we're selecting are up to date
 	updater::refresh_outputs(wallet)?;
 
@@ -144,7 +144,7 @@ where
 	// &Identifier::zero());
 	let keychain = wallet.keychain().clone();
 
-	let current_height = wallet.get_chain_height(wallet.node_url())?;
+	let current_height = wallet.get_chain_height()?;
 
 	let _ = updater::refresh_outputs(wallet);
 

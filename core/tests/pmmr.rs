@@ -98,6 +98,14 @@ fn various_families() {
 }
 
 #[test]
+fn test_paths() {
+	assert_eq!(pmmr::path(1, 1), [1]);
+	assert_eq!(pmmr::path(1, 3), [1, 3]);
+	assert_eq!(pmmr::path(2, 3), [2, 3]);
+	assert_eq!(pmmr::path(4, 16), [4, 6, 7, 15]);
+}
+
+#[test]
 fn test_is_left_sibling() {
 	assert_eq!(pmmr::is_left_sibling(1), true);
 	assert_eq!(pmmr::is_left_sibling(2), false);

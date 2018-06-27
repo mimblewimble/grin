@@ -40,7 +40,7 @@ use grin_store;
 use grin_store::pmmr::PMMRBackend;
 use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
-use types::{BlockMarker, Error, TxHashSetRoots};
+use types::{Error, TxHashSetRoots};
 use util::{secp_static, zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
@@ -201,11 +201,6 @@ impl TxHashSet {
 		rproof_pmmr.elements_from_insertion_index(start_index, max_count)
 	}
 
-	/// Output and kernel MMR indexes at the end of the provided block
-	pub fn indexes_at(&self, bh: &Hash) -> Result<BlockMarker, Error> {
-		self.commit_index.get_block_marker(bh).map_err(&From::from)
-	}
-
 	/// Get sum tree roots
 	/// TODO: Return data instead of hashes
 	pub fn roots(&mut self) -> (Hash, Hash, Hash) {
@@ -235,10 +230,8 @@ impl TxHashSet {
 		// horizon for compacting is based on current_height
 		let horizon = current_height.saturating_sub(global::cut_through_horizon().into());
 		let horizon_header = self.commit_index.get_header_by_height(horizon)?;
-		let horizon_marker = self.commit_index.get_block_marker(&horizon_header.hash())?;
 
-		let rewind_add_pos =
-			output_pos_to_rewind(self.commit_index.clone(), &horizon_header, &head_header)?;
+		let rewind_add_pos = output_pos_to_rewind(&horizon_header, &head_header)?;
 		let rewind_rm_pos =
 			input_pos_to_rewind(self.commit_index.clone(), &horizon_header, &head_header)?;
 
@@ -253,14 +246,14 @@ impl TxHashSet {
 			};
 
 			self.output_pmmr_h.backend.check_compact(
-				horizon_marker.output_pos,
+				horizon_header.output_mmr_size,
 				&rewind_add_pos,
 				&rewind_rm_pos.1,
 				clean_output_index,
 			)?;
 
 			self.rproof_pmmr_h.backend.check_compact(
-				horizon_marker.output_pos,
+				horizon_header.output_mmr_size,
 				&rewind_add_pos,
 				&rewind_rm_pos.1,
 				&prune_noop,
@@ -385,7 +378,6 @@ pub struct Extension<'a> {
 
 	commit_index: Arc<ChainStore>,
 	new_output_commits: HashMap<Commitment, u64>,
-	new_block_markers: HashMap<Hash, BlockMarker>,
 	rollback: bool,
 
 	/// Batch in which the extension occurs, public so it can be used within
@@ -446,7 +438,6 @@ impl<'a> Extension<'a> {
 			),
 			commit_index,
 			new_output_commits: HashMap::new(),
-			new_block_markers: HashMap::new(),
 			rollback: false,
 			batch,
 		}
@@ -622,23 +613,13 @@ impl<'a> Extension<'a> {
 			self.apply_kernel(kernel)?;
 		}
 
-		// finally, recording the PMMR positions after this block for future rewind
-		let marker = BlockMarker {
-			output_pos: self.output_pmmr.unpruned_size(),
-			kernel_pos: self.kernel_pmmr.unpruned_size(),
-		};
-		self.new_block_markers.insert(b.hash(), marker);
 		Ok(())
 	}
 
 	// Store all new output pos in the index.
-	// Also store any new block_markers.
 	fn save_indexes(&self) -> Result<(), Error> {
 		for (commit, pos) in &self.new_output_commits {
 			self.batch.save_output_pos(commit, *pos)?;
-		}
-		for (bh, marker) in &self.new_block_markers {
-			self.batch.save_block_marker(bh, marker)?;
 		}
 		Ok(())
 	}
@@ -775,20 +756,12 @@ impl<'a> Extension<'a> {
 		rewind_kernel: bool,
 		rewind_rangeproof: bool,
 	) -> Result<(), Error> {
-		let hash = block_header.hash();
 		trace!(
 			LOGGER,
 			"Rewind to header {} @ {}",
 			block_header.height,
-			hash
+			block_header.hash(),
 		);
-
-		// Rewind our MMRs to the appropriate positions
-		// based on the block_marker.
-		let (output_pos, kernel_pos) = {
-			let marker = self.batch.get_block_marker(&hash)?;
-			(marker.output_pos, marker.kernel_pos)
-		};
 
 		// We need to build bitmaps of added and removed output positions
 		// so we can correctly rewind all operations applied to the output MMR
@@ -796,8 +769,7 @@ impl<'a> Extension<'a> {
 		// undone during rewind).
 		// Rewound output pos will be removed from the MMR.
 		// Rewound input (spent) pos will be added back to the MMR.
-		let rewind_add_pos =
-			output_pos_to_rewind(self.commit_index.clone(), block_header, head_header)?;
+		let rewind_add_pos = output_pos_to_rewind(block_header, head_header)?;
 		let rewind_rm_pos =
 			input_pos_to_rewind(self.commit_index.clone(), block_header, head_header)?;
 		if !rewind_rm_pos.0 {
@@ -806,8 +778,8 @@ impl<'a> Extension<'a> {
 		}
 
 		self.rewind_to_pos(
-			output_pos,
-			kernel_pos,
+			block_header.output_mmr_size,
+			block_header.kernel_mmr_size,
 			&rewind_add_pos,
 			&rewind_rm_pos.1,
 			rewind_utxo,
@@ -1123,15 +1095,12 @@ pub fn zip_write(root_dir: String, txhashset_data: File) -> Result<(), Error> {
 /// The MMR is append-only so we can simply look for all positions added after
 /// the rewind pos.
 fn output_pos_to_rewind(
-	commit_index: Arc<ChainStore>,
 	block_header: &BlockHeader,
 	head_header: &BlockHeader,
 ) -> Result<Bitmap, Error> {
-	let marker_to = commit_index.get_block_marker(&head_header.hash())?;
-	let marker_from = commit_index.get_block_marker(&block_header.hash())?;
-	Ok(((marker_from.output_pos + 1)..=marker_to.output_pos)
-		.map(|x| x as u32)
-		.collect())
+	let marker_to = head_header.output_mmr_size;
+	let marker_from = block_header.output_mmr_size;
+	Ok(((marker_from + 1)..=marker_to).map(|x| x as u32).collect())
 }
 
 /// Given a block header to rewind to and the block header at the

@@ -31,8 +31,9 @@ use failure::Fail;
 use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
-use libwallet::types::{BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient,
-                       WalletInfo};
+use libwallet::types::{
+	BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient, WalletInfo,
+};
 use libwallet::{Error, ErrorKind};
 
 use util::LOGGER;
@@ -379,6 +380,7 @@ where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
+	/// create a new api handler
 	pub fn new(wallet: Arc<Mutex<T>>) -> ForeignAPIHandler<T, K> {
 		ForeignAPIHandler {
 			wallet,

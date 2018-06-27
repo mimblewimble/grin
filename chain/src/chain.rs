@@ -31,7 +31,7 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{BlockMarker, ChainAdapter, Error, Options, Tip};
+use types::{ChainAdapter, Error, Options, Tip};
 use util::LOGGER;
 use util::secp::pedersen::{Commitment, RangeProof};
 
@@ -489,21 +489,14 @@ impl Chain {
 	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.
 	pub fn txhashset_read(&self, h: Hash) -> Result<(u64, u64, File), Error> {
-		// get the indexes for the block
-		let marker = {
-			let txhashset = self.txhashset.read().unwrap();
-			txhashset.indexes_at(&h)?
-		};
-
 		// now we want to rewind the txhashset extension and
 		// sync a "rewound" copy of the leaf_set files to disk
 		// so we can send these across as part of the zip file.
 		// The fast sync client does *not* have the necessary data
 		// to rewind after receiving the txhashset zip.
+		let header = self.store.get_block_header(&h)?;
+		let head_header = self.store.head_header()?;
 		{
-			let head_header = self.store.head_header()?;
-			let header = self.store.get_block_header(&h)?;
-
 			let mut txhashset = self.txhashset.write().unwrap();
 			txhashset::extending_readonly(&mut txhashset, |extension| {
 				extension.rewind(&header, &head_header, true, true, true)?;
@@ -514,7 +507,11 @@ impl Chain {
 
 		// prepares the zip and return the corresponding Read
 		let txhashset_reader = txhashset::zip_read(self.db_root.clone())?;
-		Ok((marker.output_pos, marker.kernel_pos, txhashset_reader))
+		Ok((
+			header.output_mmr_size,
+			header.kernel_mmr_size,
+			txhashset_reader,
+		))
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.
@@ -537,18 +534,6 @@ impl Chain {
 
 		let header = self.store.get_block_header(&h)?;
 		txhashset::zip_write(self.db_root.clone(), txhashset_data)?;
-
-		{
-			// write the block marker so we can safely rewind to
-			// the pos for that block when we validate the extension below
-			let batch = self.store.batch()?;
-			let marker = BlockMarker {
-				output_pos: rewind_to_output,
-				kernel_pos: rewind_to_kernel,
-			};
-			batch.save_block_marker(&h, &marker)?;
-			batch.commit()?;
-		}
 
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
@@ -636,8 +621,6 @@ impl Chain {
 				Ok(b) => {
 					count += 1;
 					batch.delete_block(&b.hash())?;
-					//TODO: Validation seems to fail as block markers are being deleted?
-					batch.delete_block_marker(&b.hash())?;
 					batch.delete_block_input_bitmap(&b.hash())?;
 				}
 				Err(NotFoundErr) => {
@@ -752,13 +735,6 @@ impl Chain {
 		self.store
 			.get_block_header(h)
 			.map_err(|e| Error::StoreErr(e, "chain get header".to_owned()))
-	}
-
-	/// Get the block marker for the specified block hash.
-	pub fn get_block_marker(&self, bh: &Hash) -> Result<BlockMarker, Error> {
-		self.store
-			.get_block_marker(bh)
-			.map_err(|e| Error::StoreErr(e, "chain get block marker".to_owned()))
 	}
 
 	/// Gets the block header at the provided height
