@@ -739,4 +739,6 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			}
 		});
 	}
+	// we need to give log output a chance to catch up before exiting
+	thread::sleep(Duration::from_millis(100));
 }

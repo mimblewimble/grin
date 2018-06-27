@@ -88,8 +88,14 @@ pub trait WalletOutputBatch {
 	/// Add or update data about an output to the backend
 	fn save(&mut self, out: OutputData) -> Result<(), Error>;
 
+	/// Get wallet details
+	fn details(&mut self) -> &mut WalletDetails;
+
 	/// Gets output data by id
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
+
+	/// Iterate over all output data in batch
+	fn iter<'b>(&'b self) -> Box<Iterator<Item = OutputData> + 'b>;
 
 	/// Delete data about an output to the backend
 	fn delete(&mut self, id: &Identifier) -> Result<(), Error>;
@@ -112,7 +118,7 @@ pub trait WalletClient {
 
 	/// Send a transaction slate to another listening wallet and return result
 	/// TODO: Probably need a slate wrapper type
-	fn send_tx_slate(&self, slate: &Slate) -> Result<Slate, Error>;
+	fn send_tx_slate(&self, addr: &str, slate: &Slate) -> Result<Slate, Error>;
 
 	/// Posts a transaction to a grin node
 	fn post_tx(&self, tx: &TxWrapper, fluff: bool) -> Result<(), Error>;
