@@ -26,9 +26,8 @@ use libtx::reward;
 use libwallet;
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
-use libwallet::types::{
-	BlockFees, CbData, OutputData, OutputStatus, WalletBackend, WalletClient, WalletInfo,
-};
+use libwallet::types::{BlockFees, CbData, OutputData, OutputStatus, WalletBackend, WalletClient,
+                       WalletInfo};
 use util::secp::pedersen;
 use util::{self, LOGGER};
 
@@ -151,8 +150,7 @@ where
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
 	let keychain = wallet.keychain().clone();
 	let unspents = wallet.iter().filter(|x| {
-		x.root_key_id == keychain.root_key_id()
-			&& x.block.is_none()
+		x.root_key_id == keychain.root_key_id() && x.block.is_none()
 			&& x.status == OutputStatus::Unspent
 	});
 	for out in unspents {
