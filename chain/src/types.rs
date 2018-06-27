@@ -65,7 +65,7 @@ pub enum Error {
 	DifficultyTooLow,
 	/// Addition of difficulties on all previous block is wrong
 	WrongTotalDifficulty,
-  /// Block header sizeshift is lower than our min
+	/// Block header sizeshift is lower than our min
 	LowSizeshift,
 	/// The proof of work is invalid
 	InvalidPow,
