@@ -233,8 +233,8 @@ fn empty_block_serialized_size() {
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 1_265;
-	assert_eq!(vec.len(), target_len,);
+	let target_len = 1_256;
+	assert_eq!(vec.len(), target_len);
 }
 
 #[test]
@@ -246,7 +246,7 @@ fn block_single_tx_serialized_size() {
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 2_845;
+	let target_len = 2_836;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -258,7 +258,7 @@ fn empty_compact_block_serialized_size() {
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-	let target_len = 1_273;
+	let target_len = 1_264;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -271,7 +271,7 @@ fn compact_block_single_tx_serialized_size() {
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-	let target_len = 1_279;
+	let target_len = 1_270;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -290,7 +290,7 @@ fn block_10_tx_serialized_size() {
 	let b = new_block(txs.iter().collect(), &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 17_065;
+	let target_len = 17_056;
 	assert_eq!(vec.len(), target_len,);
 }
 
@@ -308,7 +308,7 @@ fn compact_block_10_tx_serialized_size() {
 	let b = new_block(txs.iter().collect(), &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-	let target_len = 1_333;
+	let target_len = 1_324;
 	assert_eq!(vec.len(), target_len,);
 }
 

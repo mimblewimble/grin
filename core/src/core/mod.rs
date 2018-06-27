@@ -38,10 +38,17 @@ pub use self::id::ShortId;
 pub use self::transaction::*;
 use core::hash::Hashed;
 use global;
-use ser::{Error, Readable, Reader, Writeable, Writer};
-use vlq;
+use ser::{self, Error, Readable, Reader, Writeable, Writer};
 
-/// Proof of work
+/// A Cuckoo Cycle proof of work, consisting of the shift to get the graph
+/// size (i.e. 31 for Cuckoo31 with a 2^31 or 1<<31 graph size) and the nonces
+/// of the graph solution. While being expressed as u64 for simplicity, each
+/// nonce is strictly lesser than the cycle size (i.e. <2^31 for Cuckoo 31).
+///
+/// The hash of the `Proof` is the hash of its packed nonces when serializing
+/// them at their exact bit size. The resulting bit sequence is padded to be
+/// byte-aligned.
+///
 #[derive(Clone, PartialOrd, PartialEq)]
 pub struct Proof {
 	/// Power of 2 used for the size of the cuckoo graph
@@ -52,7 +59,7 @@ pub struct Proof {
 
 impl fmt::Debug for Proof {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "Cuckoo(")?;
+		write!(f, "Cuckoo{}(", self.cuckoo_sizeshift)?;
 		for (i, val) in self.nonces[..].iter().enumerate() {
 			write!(f, "{:x}", val)?;
 			if i < self.nonces.len() - 1 {
@@ -87,9 +94,11 @@ impl Proof {
 	/// needed so that tests that ignore POW
 	/// don't fail due to duplicate hashes
 	pub fn random(proof_size: usize) -> Proof {
+		let sizeshift = global::min_sizeshift();
 		let mut rng = thread_rng();
+		// force the random num to be within sizeshift bits
 		let mut v: Vec<u64> = iter::repeat(())
-			.map(|()| rng.gen::<u32>() as u64)
+			.map(|()| (rng.gen::<u32>() & ((1 << sizeshift) - 1)) as u64)
 			.take(proof_size)
 			.collect();
 		v.sort();
@@ -114,14 +123,20 @@ impl Proof {
 impl Readable for Proof {
 	fn read(reader: &mut Reader) -> Result<Proof, Error> {
 		let cuckoo_sizeshift = reader.read_u8()?;
-		// 1. VLQ decode
-		let delta_nonces = vlq::read(global::proofsize(), reader)?;
-		// 2. delta decode
-		let mut nonces = vec![delta_nonces[0]];
-		for win in delta_nonces.windows(2) {
-			if let &[left, right] = win {
-				nonces.push(right + left);
+
+		let mut nonces = Vec::with_capacity(global::proofsize());
+		let nonce_bits = cuckoo_sizeshift as usize;
+		let bytes_len = BitVec::bytes_len(nonce_bits * global::proofsize());
+		let bits = reader.read_fixed_bytes(bytes_len)?;
+		let bitvec = BitVec{bits};
+		for n in 0..global::proofsize() {
+			let mut nonce = 0;
+			for bit in 0..nonce_bits {
+				if bitvec.bit_at(n * nonce_bits + (bit as usize)) {
+					nonce |= 1 << bit;
+				}
 			}
+			nonces.push(nonce);
 		}
 		Ok(Proof {
 			cuckoo_sizeshift,
@@ -132,19 +147,46 @@ impl Readable for Proof {
 
 impl Writeable for Proof {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u8(self.cuckoo_sizeshift)?;
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			writer.write_u8(self.cuckoo_sizeshift)?;
+		}
 
-		// 1. delta encode, note that nonces are guaranteed to be ordered
-		let mut delta_nonces = vec![self.nonces[0]];
-		for win in self.nonces.windows(2) {
-			if let &[left, right] = win {
-				delta_nonces.push(right - left);
+		let nonce_bits = self.cuckoo_sizeshift as usize;
+		let mut bitvec = BitVec::new(nonce_bits * global::proofsize());
+		for (n, nonce) in self.nonces.iter().enumerate() {
+			for bit in 0..nonce_bits {
+				if nonce & (1 << bit) != 0 {
+					bitvec.set_bit_at(n * nonce_bits + (bit as usize))
+				}
 			}
 		}
-		// 2. VLQ encode and write
-		vlq::write(delta_nonces, writer)?;
-
+		writer.write_fixed_bytes(&bitvec.bits)?;
 		Ok(())
+	}
+}
+
+// TODO this could likely be optimized by writing whole bytes (or even words)
+// in the `BitVec` at once, dealing with the truncation, instead of bits by bits
+struct BitVec {
+	bits: Vec<u8>,
+}
+
+impl BitVec {
+	/// Number of bytes required to store the provided number of bits
+	fn bytes_len(bits_len: usize) -> usize {
+		(bits_len + 7) / 8
+	}
+
+	fn new(bits_len: usize) -> BitVec {
+		BitVec {bits: vec![0; BitVec::bytes_len(bits_len)]}
+	}
+
+	fn set_bit_at(&mut self, pos: usize) {
+		self.bits[pos / 8] |= 1 << (pos % 8) as u8;
+	}
+
+	fn bit_at(&self, pos: usize) -> bool {
+		self.bits[pos / 8] & (1 << (pos % 8) as u8) != 0
 	}
 }
 
