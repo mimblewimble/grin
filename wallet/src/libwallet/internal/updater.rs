@@ -16,7 +16,6 @@
 //! the wallet storage and update them.
 
 use failure::ResultExt;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
 use core::consensus::reward;
@@ -185,13 +184,15 @@ where
 					Some(_) => output.mark_unspent(),
 					None => output.mark_spent(),
 				};
-				batch.save(output);
+				batch.save(output)?;
 			}
+		}
+		{
+			let details = batch.details();
+			details.last_confirmed_height = height;
 		}
 		batch.commit()?;
 	}
-	let details = wallet.details();
-	details.last_confirmed_height = height;
 	Ok(())
 }
 
@@ -328,18 +329,20 @@ where
 	{
 		// Now acquire the wallet lock and write the new output.
 		let mut batch = wallet.batch()?;
-		batch.save(OutputData {
-			root_key_id: root_key_id.clone(),
-			key_id: key_id.clone(),
-			n_child: derivation,
-			value: reward(block_fees.fees),
-			status: OutputStatus::Unconfirmed,
-			height: height,
-			lock_height: lock_height,
-			is_coinbase: true,
-			block: None,
-			merkle_proof: None,
-		});
+		{
+			batch.save(OutputData {
+				root_key_id: root_key_id.clone(),
+				key_id: key_id.clone(),
+				n_child: derivation,
+				value: reward(block_fees.fees),
+				status: OutputStatus::Unconfirmed,
+				height: height,
+				lock_height: lock_height,
+				is_coinbase: true,
+				block: None,
+				merkle_proof: None,
+			})?;
+		}
 		batch.commit()?;
 	}
 
