@@ -24,26 +24,25 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
+use chain::types::NoopAdapter;
 use chain::Chain;
-use chain::types::*;
-use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
-use core::consensus;
-use core::global;
+use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
 use core::global::ChainTypes;
-use wallet::libwallet::{self, build};
-
-use keychain::Keychain;
-
-use core::pow;
+use core::{consensus, global, pow};
+use keychain::{ExtKeychain, Keychain};
+use wallet::libtx::{self, build};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
 }
 
 fn setup(dir_name: &str) -> Chain {
-	let _ = env_logger::init();
+	match env_logger::try_init() {
+		Ok(_) => println!("Initializing env logger"),
+		Err(e) => println!("env logger already initialized: {:?}", e),
+	};
 	clean_output_dir(dir_name);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();
@@ -58,13 +57,13 @@ fn setup(dir_name: &str) -> Chain {
 #[test]
 fn mine_empty_chain() {
 	let chain = setup(".grin");
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
 
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 		let pk = keychain.derive_key_id(n as u32).unwrap();
-		let reward = libwallet::reward::output(&keychain, &pk, 0, prev.height).unwrap();
+		let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
 		let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
 		b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
@@ -107,7 +106,7 @@ fn mine_empty_chain() {
 #[test]
 fn mine_forks() {
 	let chain = setup(".grin2");
-	let kc = Keychain::from_random_seed().unwrap();
+	let kc = ExtKeychain::from_random_seed().unwrap();
 
 	// add a first block to not fork genesis
 	let prev = chain.head_header().unwrap();
@@ -148,7 +147,7 @@ fn mine_forks() {
 
 #[test]
 fn mine_losing_fork() {
-	let kc = Keychain::from_random_seed().unwrap();
+	let kc = ExtKeychain::from_random_seed().unwrap();
 	let chain = setup(".grin3");
 
 	// add a first block we'll be forking from
@@ -179,7 +178,7 @@ fn mine_losing_fork() {
 
 #[test]
 fn longer_fork() {
-	let kc = Keychain::from_random_seed().unwrap();
+	let kc = ExtKeychain::from_random_seed().unwrap();
 	// to make it easier to compute the txhashset roots in the test, we
 	// prepare 2 chains, the 2nd will be have the forked blocks we can
 	// then send back on the 1st
@@ -231,7 +230,7 @@ fn spend_in_fork_and_compact() {
 	util::init_test_logger();
 	let chain = setup(".grin6");
 	let prev = chain.head_header().unwrap();
-	let kc = Keychain::from_random_seed().unwrap();
+	let kc = ExtKeychain::from_random_seed().unwrap();
 
 	let mut fork_head = prev;
 
@@ -248,8 +247,6 @@ fn spend_in_fork_and_compact() {
 
 	let merkle_proof = chain.get_merkle_proof(&out_id, &b.header).unwrap();
 
-	println!("First block");
-
 	// now mine three further blocks
 	for n in 3..6 {
 		let b = prepare_block(&kc, &fork_head, &chain, n);
@@ -257,10 +254,8 @@ fn spend_in_fork_and_compact() {
 		chain.process_block(b, chain::Options::SKIP_POW).unwrap();
 	}
 
-	let lock_height = 1 + global::coinbase_maturity();
-	assert_eq!(lock_height, 4);
-
-	println!("3 Further Blocks: should have 4 blocks or 264 bytes in file ");
+	// Check the height of the "fork block".
+	assert_eq!(fork_head.height, 4);
 
 	let tx1 = build::transaction(
 		vec![
@@ -276,16 +271,12 @@ fn spend_in_fork_and_compact() {
 		&kc,
 	).unwrap();
 
-	println!("Built coinbase input and output");
-
 	let next = prepare_block_tx(&kc, &fork_head, &chain, 7, vec![&tx1]);
 	let prev_main = next.header.clone();
 	chain
 		.process_block(next.clone(), chain::Options::SKIP_POW)
 		.unwrap();
 	chain.validate(false).unwrap();
-
-	println!("tx 1 processed, should have 6 outputs or 396 bytes in file, first skipped");
 
 	let tx2 = build::transaction(
 		vec![
@@ -299,10 +290,9 @@ fn spend_in_fork_and_compact() {
 	let next = prepare_block_tx(&kc, &prev_main, &chain, 9, vec![&tx2]);
 	let prev_main = next.header.clone();
 	chain.process_block(next, chain::Options::SKIP_POW).unwrap();
-	chain.validate(false).unwrap();
 
-	println!("tx 2 processed");
-	/* panic!("Stop"); */
+	// Full chain validation for completeness.
+	chain.validate(false).unwrap();
 
 	// mine 2 forked blocks from the first
 	let fork = prepare_fork_block_tx(&kc, &fork_head, &chain, 6, vec![&tx1]);
@@ -314,6 +304,7 @@ fn spend_in_fork_and_compact() {
 	chain
 		.process_block(fork_next, chain::Options::SKIP_POW)
 		.unwrap();
+
 	chain.validate(false).unwrap();
 
 	// check state
@@ -367,54 +358,69 @@ fn spend_in_fork_and_compact() {
 	chain.validate(false).unwrap();
 }
 
-fn prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
+fn prepare_block<K>(kc: &K, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block
+where
+	K: Keychain,
+{
 	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
 	chain.set_txhashset_roots(&mut b, false).unwrap();
 	b
 }
 
-fn prepare_block_tx(
-	kc: &Keychain,
+fn prepare_block_tx<K>(
+	kc: &K,
 	prev: &BlockHeader,
 	chain: &Chain,
 	diff: u64,
 	txs: Vec<&Transaction>,
-) -> Block {
+) -> Block
+where
+	K: Keychain,
+{
 	let mut b = prepare_block_nosum(kc, prev, diff, txs);
 	chain.set_txhashset_roots(&mut b, false).unwrap();
 	b
 }
 
-fn prepare_fork_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
+fn prepare_fork_block<K>(kc: &K, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block
+where
+	K: Keychain,
+{
 	let mut b = prepare_block_nosum(kc, prev, diff, vec![]);
 	chain.set_txhashset_roots(&mut b, true).unwrap();
 	b
 }
 
-fn prepare_fork_block_tx(
-	kc: &Keychain,
+fn prepare_fork_block_tx<K>(
+	kc: &K,
 	prev: &BlockHeader,
 	chain: &Chain,
 	diff: u64,
 	txs: Vec<&Transaction>,
-) -> Block {
+) -> Block
+where
+	K: Keychain,
+{
 	let mut b = prepare_block_nosum(kc, prev, diff, txs);
 	chain.set_txhashset_roots(&mut b, true).unwrap();
 	b
 }
 
-fn prepare_block_nosum(
-	kc: &Keychain,
-	prev: &BlockHeader,
-	diff: u64,
-	txs: Vec<&Transaction>,
-) -> Block {
+fn prepare_block_nosum<K>(kc: &K, prev: &BlockHeader, diff: u64, txs: Vec<&Transaction>) -> Block
+where
+	K: Keychain,
+{
 	let proof_size = global::proofsize();
 	let key_id = kc.derive_key_id(diff as u32).unwrap();
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward = libwallet::reward::output(&kc, &key_id, fees, prev.height).unwrap();
-	let mut b = match core::core::Block::new(prev, txs, Difficulty::from_num(diff), reward) {
+	let reward = libtx::reward::output(kc, &key_id, fees, prev.height).unwrap();
+	let mut b = match core::core::Block::new(
+		prev,
+		txs.into_iter().cloned().collect(),
+		Difficulty::from_num(diff),
+		reward,
+	) {
 		Err(e) => panic!("{:?}", e),
 		Ok(b) => b,
 	};
@@ -447,7 +453,7 @@ fn actual_diff_iter_output() {
 		println!(
 			"next_difficulty time: {}, diff: {}, duration: {} ",
 			elem.0,
-			elem.1.into_num(),
+			elem.1.to_num(),
 			last_time - elem.0
 		);
 		last_time = elem.0;

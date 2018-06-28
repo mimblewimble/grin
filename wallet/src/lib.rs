@@ -46,23 +46,15 @@ extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 
-pub mod checker;
-pub mod client;
-pub mod grinwallet;
-mod handlers;
-mod info;
+mod client;
+pub mod display;
+mod error;
+pub mod file_wallet;
+pub mod libtx;
 pub mod libwallet;
-mod outputs;
-pub mod receiver;
-mod restore;
-mod sender;
-pub mod server;
-pub mod types;
 
-pub use info::{retrieve_info, show_info};
-pub use outputs::show_outputs;
-pub use receiver::WalletReceiver;
-pub use restore::restore;
-pub use sender::{issue_burn_tx, issue_send_tx};
-pub use types::{BlockFees, CbData, Error, ErrorKind, WalletConfig, WalletInfo,
-                WalletReceiveRequest, WalletSeed};
+pub use client::create_coinbase;
+pub use error::{Error, ErrorKind};
+pub use file_wallet::{FileWallet, WalletConfig, WalletSeed};
+pub use libwallet::controller;
+pub use libwallet::types::{BlockFees, CbData, WalletInfo};

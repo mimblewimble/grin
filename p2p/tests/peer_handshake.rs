@@ -17,13 +17,12 @@ extern crate grin_p2p as p2p;
 extern crate grin_util as util;
 
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
-use std::thread;
-use std::time;
+use std::sync::Arc;
+use std::{thread, time};
 
-use core::core::target::Difficulty;
 use core::core::hash::Hash;
+use core::core::target::Difficulty;
 use p2p::Peer;
 
 fn open_port() -> u16 {
@@ -40,7 +39,7 @@ fn open_port() -> u16 {
 fn peer_handshake() {
 	util::init_test_logger();
 
-	let p2p_conf = p2p::P2PConfig {
+	let p2p_config = p2p::P2PConfig {
 		host: "0.0.0.0".parse().unwrap(),
 		port: open_port(),
 		peers_allow: None,
@@ -52,9 +51,9 @@ fn peer_handshake() {
 		p2p::Server::new(
 			".grin".to_owned(),
 			p2p::Capabilities::UNKNOWN,
-			p2p_conf.clone(),
+			p2p_config.clone(),
 			net_adapter.clone(),
-			Hash::from_vec(vec![]),
+			Hash::from_vec(&vec![]),
 			Arc::new(AtomicBool::new(false)),
 			false,
 			None,
@@ -66,7 +65,7 @@ fn peer_handshake() {
 
 	thread::sleep(time::Duration::from_secs(1));
 
-	let addr = SocketAddr::new(p2p_conf.host, p2p_conf.port);
+	let addr = SocketAddr::new(p2p_config.host, p2p_config.port);
 	let mut socket = TcpStream::connect_timeout(&addr, time::Duration::from_secs(10)).unwrap();
 
 	let my_addr = "127.0.0.1:5000".parse().unwrap();
@@ -75,7 +74,7 @@ fn peer_handshake() {
 		p2p::Capabilities::UNKNOWN,
 		Difficulty::one(),
 		my_addr,
-		&p2p::handshake::Handshake::new(Hash::from_vec(vec![]), p2p_conf.clone()),
+		&p2p::handshake::Handshake::new(Hash::from_vec(&vec![]), p2p_config.clone()),
 		net_adapter,
 	).unwrap();
 

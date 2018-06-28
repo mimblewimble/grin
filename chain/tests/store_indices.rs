@@ -23,15 +23,12 @@ use std::fs;
 
 use chain::{ChainStore, Tip};
 use core::core::hash::Hashed;
-use core::core::Block;
-use core::core::BlockHeader;
 use core::core::target::Difficulty;
-use keychain::Keychain;
-use core::global;
-use core::global::ChainTypes;
+use core::core::{Block, BlockHeader};
+use core::global::{self, ChainTypes};
 use core::pow;
-
-use wallet::libwallet;
+use keychain::{ExtKeychain, Keychain};
+use wallet::libtx;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -39,11 +36,14 @@ fn clean_output_dir(dir_name: &str) {
 
 #[test]
 fn test_various_store_indices() {
-	let _ = env_logger::init();
+	match env_logger::try_init() {
+		Ok(_) => println!("Initializing env logger"),
+		Err(e) => println!("env logger already initialized: {:?}", e),
+	};
 	let chain_dir = ".grin_idx_1";
 	clean_output_dir(chain_dir);
 
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
 
 	let chain_store =
@@ -56,7 +56,7 @@ fn test_various_store_indices() {
 		.setup_height(&genesis.header, &Tip::new(genesis.hash()))
 		.unwrap();
 
-	let reward = libwallet::reward::output(&keychain, &key_id, 0, 1).unwrap();
+	let reward = libtx::reward::output(&keychain, &key_id, 0, 1).unwrap();
 
 	let block = Block::new(&genesis.header, vec![], Difficulty::one(), reward).unwrap();
 	let block_hash = block.hash();
@@ -75,7 +75,10 @@ fn test_various_store_indices() {
 
 #[test]
 fn test_store_header_height() {
-	let _ = env_logger::init();
+	match env_logger::try_init() {
+		Ok(_) => println!("Initializing env logger"),
+		Err(e) => println!("env logger already initialized: {:?}", e),
+	};
 	let chain_dir = ".grin_idx_2";
 	clean_output_dir(chain_dir);
 

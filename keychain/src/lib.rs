@@ -26,10 +26,9 @@ extern crate serde_json;
 extern crate slog;
 extern crate uuid;
 
-pub mod blind;
 pub mod extkey;
+mod types;
 
-pub use blind::{BlindSum, BlindingFactor};
-pub use extkey::{ExtendedKey, Identifier, IDENTIFIER_SIZE};
 pub mod keychain;
-pub use keychain::{Error, Keychain};
+pub use keychain::ExtKeychain;
+pub use types::{BlindSum, BlindingFactor, Error, Identifier, Keychain, IDENTIFIER_SIZE};

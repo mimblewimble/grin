@@ -34,8 +34,8 @@ We build the challenge `e = SHA256(M | k*G | x*G)`, and the scalar
 `s = k + e * x`. The full aggregate signature is then the pair `(s, k*G)`.
 
 The signature can be checked using the public key `x*G`, re-calculating `e`
-using M and `k*G` from the 2nd part of the signature pair and by veryfying
-that `s`, the first part of the signature pair, verifies:
+using M and `k*G` from the 2nd part of the signature pair and by verifying
+that `s`, the first part of the signature pair, satisfies:
 
 ```
 s*G = k*G + e * x*G
@@ -43,8 +43,8 @@ s*G = k*G + e * x*G
 
 In this simple case of someone sending a transaction to a receiver they trust
 (see later for the trustless case), an aggregate signature can be directly
-built for a Grin transaction by calculating the total blinding factor of inputs
-and outputs `r` and using it as the private key `x` above. The resulting
+built for a Grin transaction by taking the above private key `x` to be the sum
+of output blinding factors minus the sum of input blinding factors. The resulting
 kernel is assembled from the aggregate signature generated using `r` and the
 public key `r*G`, and allows to verify non-inflation for all Grin transactions
 (and signs the fees).
@@ -52,22 +52,41 @@ public key `r*G`, and allows to verify non-inflation for all Grin transactions
 Because these signatures are built simply from a scalar and a public key, they
 can be used to construct a variety of contracts using "simple" arithmetic.
 
-## Timelocked Transactions
+## (Absolute) Timelocked Transactions
+
+Analogus to Bitcoin [nLockTime](https://en.bitcoin.it/wiki/Timelock#nLockTime).
 
 A transaction can be time-locked with a few simple modifications:
 
-* the message `M` to sign becomes the block height `h` at which the transaction
-becomes spendable appended to the fee (so `M = fee | h`)
+* the message `M` to sign becomes the lock_height `h` at which the transaction
+becomes spendable appended to the fee
+    * `M = fee | h`
 * the lock height `h` is included in the transaction kernel
 * a block with a kernel that includes a lock height greater than the current
 block height is rejected
+
+## (Relative) Timelocked Transactions
+
+We can extend the concept of an absolute locktime on a tx by including a (kernel) commitment that we can define the lock_height relative to.
+
+The lock_height would be relative to the block height where the referenced kernel was first included in the chain state.
+
+Tx2 can then be restricted such that it would only be valid to include it in a block once `h` blocks have passed after first seeing Tx1 (via the referenced kernel commitment).
+
+* the message `M` to sign would need to include the following -
+	* the `fee` as before
+	* the lock_height `h` (as before but interpreted as a relative value)
+	* a referenced kernel commitment `C`
+	* M = `fee | h | C`
+
+For Tx2 to be accepted it would also need to include a Merkle proof identifying the block including `C` from Tx1. This proves the relative lock_height requirement has been met.
 
 # Derived Contracts
 
 ## Trustless Transactions
 
 An aggregate (Schnorr) signature involving a single party is relatively simple
-but does not demonstrate the full flexibility of the contstruction. We show
+but does not demonstrate the full flexibility of the construction. We show
 here how to generalize it for use in outputs involving multiple parties.
 
 As constructed in section 1.2, an aggregate signature requires trusting the
@@ -135,7 +154,7 @@ protocol very close to Trustless Transactions.
 
 ## Multiparty Timelocks
 
-This contract is a building block from multiple other contracts. Here, Alice
+This contract is a building block for multiple other contracts. Here, Alice
 agrees to lock some funds to start a financial interaction with Bob and prove
 to Bob she has funds. The setup is the following:
 
@@ -153,14 +172,60 @@ lock expires.
 
 This contract can be trivially used for unidirectional payment channels.
 
+## Conditional Output Timelocks
+
+Analogous to Bitcoin [CheckLockTimeVerify](https://en.bitcoin.it/wiki/Timelock#CheckLockTimeVerify).
+
+We currently have _unconditional_ lock_heights on txs (tx is not valid and will not be accepted until lock_height has passed).
+
+Private keys can be summed together.
+Key<sub>3</sub> = Key<sub>1</sub> + Key<sub>2</sub>
+
+Commitments can be summed together.
+C<sub>3</sub> = C<sub>1</sub> + C<sub>2</sub>
+
+Given _unconditional locktimes on txs_ we can leverage these to give us _conditional locktimes on outputs_ by "entangling" two outputs on two related txs together.
+
+We can construct two txs (Tx<sub>1</sub>, Tx<sub>2</sub>) with two entangled outputs Out<sub>1</sub> and Out<sub>2</sub> such that -
+  * Out<sub>1</sub> (commitment C<sub>1</sub>) is from Tx<sub>1</sub> and built using Key<sub>1</sub>
+  * Out<sub>2</sub> (commitment C<sub>2</sub>) is from Tx<sub>2</sub> and built using Key<sub>2</sub>
+  * Tx<sub>2</sub> has an _unconditional_ lock_height on it
+
+If we do this (and we can manage the keys as necessary) -
+  * Out<sub>1</sub> + Out<sub>2</sub> can _only_ be spent as a pair using Key<sub>3</sub>
+  * They can _only_ be spent after lock_height from Tx<sub>2</sub>
+
+Tx<sub>1</sub> (containing Out<sub>1</sub>) can be broadcast, accepted and confirmed on-chain immediately.
+Tx<sub>2</sub> cannot be broadcast and accepted until lock_height has passed.
+
+So if Alice only knows K<sub>3</sub> and does not know Key<sub>1</sub> or Key<sub>2</sub>, then Out<sub>1</sub> can only be spent by Alice after lock_height has passed.
+If Bob on the other hand knows Key<sub>2</sub> then Out<sub>1</sub> can be spent by Bob immediately.
+
+We have a _conditional_ timelock on Out<sub>1</sub> (confirmed, on-chain)
+where it can be spent either with Key<sub>3</sub> (after lock_height), _or_ Key<sub>2</sub> immediately.
+
+## (Relative) Conditional Output Timelocks
+
+Analogous to Bitcoin [CheckSequenceVerify](https://en.bitcoin.it/wiki/Timelock#CheckSequenceVerify).
+
+By combining "Conditional Timelock on Output" with "(Relative) Timelocked Transactions" we can encumber a confirmed output with a relative timelock (relative to a related tx kernel).
+
+Tx<sub>1</sub> (containing Out<sub>1</sub>) can be broadcast, accepted and confirmed on-chain immediately.
+Tx<sub>2</sub> cannot be broadcast and accepted until the _relative_ lock_height has passed, relative to the referenced kernel from the earlier Tx<sub>1</sub>.
+
 ## Atomic Swap
 
-TODO still WIP, mostly ability for Alice to check `x*G` is what is locked on
-the other chain. Check this would work on Ethereum (pubkey derivation).
+This setup can work on Bitcoin, Ethereum and likely other chains. It relies
+on a time locked contract combined with a check for 2 public keys. On Bitcoin
+this would be a 2-of-2 multisig, one public key being Alice's, the second
+being the hash of a preimage that Bob has to reveal. In this setup, we consider
+public key derivation `x*G` to be the hash function and by Bob revealing `x`,
+Alice can then produce an adequate signature proving she knows `x` (in
+addition to her own private key).
 
-Alice has grins and Bob has bitcoins. They would like to swap. We assume that
-Bob built an output on the Bitcoin blockchain that can be spent either by Alice
-if she learns about a hash pre-image `x`, or by Bob after time `Tb`. Alice is
+Alice has grins and Bob has bitcoin. They would like to swap. We assume Bob
+created an output on the Bitcoin blockchain that allows spending either by
+Alice if she learns a hash pre-image `x`, or by Bob after time `Tb`. Alice is
 ready to send her grins to Bob if he reveals `x`.
 
 First, Alice sends her grins to a multiparty timelock contract with a refund
@@ -173,13 +238,28 @@ and `rs*G` to Bob.
 2. Bob picks a random blinding factor `rr` and a random nonce `kr`. However
 this time, instead of simply sending `sr = kr + e * rr` with his `rr*G` and
 `kr*G`, Bob sends `sr' = kr + x + e * rr` as well as `x*G`.
-3. Alice can validate that `sr'*G = kr*G + x*G + rr*G`.
+3. Alice can validate that `sr'*G = kr*G + x*G + rr*G`. She can also check
+that Bob has money locked with `x*G` on the other chain.
 4. Alice sends back her `ss = ks + e * xs` as she normally would, now that she
 can also compute `e = SHA256(M | ks*G + kr*G)`.
 5. To complete the signature, Bob computes `sr = kr + e * rr` and the final
 signature is `(sr + ss, kr*G + ks*G)`.
 6. As soon as Bob broadcasts the final transaction to get his new grins, Alice
 can compute `sr' - sr` to get `x`.
+
+### Notes on the Bitcoin setup
+
+Prior to completing the atomic swap, Bob needs to know Alice's public key. Bob
+would then create an outpout on the Bitcoin blockchain with a 2-of-2 multisig
+similar to `alice_pubkey secret_pubkey 2 OP_CHECKMULTISIG`. This should be
+wrapped in an `OP_IF` so Bob can get his money back after an agreed-upon time
+and all of this can even be wrapped in a P2SH. Here `secret_pubkey` is `x*G`
+from the previous section.
+
+To verify the output, Alice would take `x*G`, recreate the bitcoin script, hash
+it and check that her hash matches what's in the P2SH (step 2 in previous
+section). Once she gets `x` (step 6), she can build the 2 signatures necessary
+to spend the 2-of-2, having both private keys, and get her bitcoin.
 
 ## Hashed Timelocks (Lightning Network)
 

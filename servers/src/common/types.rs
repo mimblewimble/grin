@@ -18,13 +18,12 @@ use std::convert::From;
 
 use api;
 use chain;
-use core::core;
+use core::global::ChainTypes;
+use core::{core, pow};
 use p2p;
 use pool;
 use store;
 use wallet;
-use core::global::ChainTypes;
-use core::pow;
 
 /// Error type wrapping underlying module errors.
 #[derive(Debug)]
@@ -111,7 +110,7 @@ pub enum Seeding {
 	List,
 	/// Automatically download a text file with a list of server addresses
 	WebStatic,
-	/// Automatically get a list of seeds from mutliple DNS
+	/// Automatically get a list of seeds from multiple DNS
 	DNSSeed,
 	/// Mostly for tests, where connections are initiated programmatically
 	Programmatic,
@@ -167,6 +166,10 @@ pub struct ServerConfig {
 	#[serde(default)]
 	pub pool_config: pool::PoolConfig,
 
+	/// Dandelion configuration
+	#[serde(default)]
+	pub dandelion_config: pool::DandelionConfig,
+
 	/// Whether to skip the sync timeout on startup
 	/// (To assist testing on solo chains)
 	pub skip_sync_wait: Option<bool>,
@@ -177,6 +180,9 @@ pub struct ServerConfig {
 
 	/// Whether to run the wallet listener with the server by default
 	pub run_wallet_listener: Option<bool>,
+
+	/// Whether to run the web wallet owner listener
+	pub run_wallet_owner_api: Option<bool>,
 
 	/// Whether to run the test miner (internal, cuckoo 16)
 	pub run_test_miner: Option<bool>,
@@ -194,6 +200,7 @@ impl Default for ServerConfig {
 			seeding_type: Seeding::default(),
 			seeds: None,
 			p2p_config: p2p::P2PConfig::default(),
+			dandelion_config: pool::DandelionConfig::default(),
 			stratum_mining_config: Some(StratumServerConfig::default()),
 			chain_type: ChainTypes::default(),
 			archive_mode: None,
@@ -202,6 +209,7 @@ impl Default for ServerConfig {
 			skip_sync_wait: None,
 			run_tui: None,
 			run_wallet_listener: Some(false),
+			run_wallet_owner_api: Some(false),
 			run_test_miner: Some(false),
 			test_miner_wallet_url: None,
 		}
@@ -222,6 +230,9 @@ pub struct StratumServerConfig {
 	/// and starting again
 	pub attempt_time_per_block: u32,
 
+	/// Minimum difficulty for worker shares
+	pub minimum_share_difficulty: u64,
+
 	/// Base address to the HTTP wallet receiver
 	pub wallet_listener_url: String,
 
@@ -235,7 +246,8 @@ impl Default for StratumServerConfig {
 		StratumServerConfig {
 			wallet_listener_url: "http://localhost:13415".to_string(),
 			burn_reward: false,
-			attempt_time_per_block: 2,
+			attempt_time_per_block: <u32>::max_value(),
+			minimum_share_difficulty: 1,
 			enable_stratum_server: None,
 			stratum_server_addr: None,
 		}

@@ -20,13 +20,13 @@ use time;
 
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
-use core::core::{Block, BlockHeader};
 use core::core::target::Difficulty;
+use core::core::{Block, BlockHeader};
+use core::global;
 use grin_store;
-use types::*;
 use store;
 use txhashset;
-use core::global;
+use types::{BlockSums, ChainStore, Error, Options, Tip};
 use util::LOGGER;
 
 /// Contextual information required to process a new block and either reject or
@@ -100,7 +100,14 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 	// start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
 	let result = txhashset::extending(&mut txhashset, |mut extension| {
-		validate_block_via_txhashset(b, &mut ctx, &mut extension)?;
+		// First we rewind the txhashset extension if necessary
+		// to put it into a consistent state for validating the block.
+		// We can skip this step if the previous header is the latest header we saw.
+		if b.header.previous != ctx.head.last_block_h {
+			rewind_and_apply_fork(b, ctx.store.clone(), extension)?;
+		}
+		validate_block_via_txhashset(b, &mut extension)?;
+
 		trace!(
 			LOGGER,
 			"pipe: process_block: {} at {} is valid, save and append.",
@@ -143,8 +150,9 @@ pub fn sync_block_header(
 }
 
 /// Process block header as part of "header first" block propagation.
-/// We validate the header but we do not store it or update header head based on this.
-/// We will update these once we get the block back after requesting it.
+/// We validate the header but we do not store it or update header head based
+/// on this. We will update these once we get the block back after requesting
+/// it.
 pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<(), Error> {
 	debug!(
 		LOGGER,
@@ -269,7 +277,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 		let target_difficulty = header.total_difficulty.clone() - prev.total_difficulty.clone();
 
-		if header.pow.clone().to_difficulty() < target_difficulty {
+		if header.pow.to_difficulty() < target_difficulty {
 			return Err(Error::DifficultyTooLow);
 		}
 
@@ -289,8 +297,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			error!(
 				LOGGER,
 				"validate_header: BANNABLE OFFENCE: header cumulative difficulty {} != {}",
-				target_difficulty.into_num(),
-				prev.total_difficulty.into_num() + network_difficulty.into_num()
+				target_difficulty.to_num(),
+				prev.total_difficulty.to_num() + network_difficulty.to_num()
 			);
 			return Err(Error::WrongTotalDifficulty);
 		}
@@ -326,14 +334,10 @@ fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 /// and checking the roots.
 /// Rewind and reapply forked blocks if necessary to put the txhashset extension
 /// in the correct state to accept the block.
-fn validate_block_via_txhashset(
-	b: &Block,
-	ctx: &mut BlockContext,
-	ext: &mut txhashset::Extension,
-) -> Result<(), Error> {
-	if b.header.previous != ctx.head.last_block_h {
-		rewind_and_apply_fork(b, ctx.store.clone(), ext)?;
-	}
+fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+	// First check we are not attempting to spend any coinbase outputs
+	// before they have matured sufficiently.
+	ext.verify_coinbase_maturity(&b.inputs, b.header.height)?;
 
 	// apply the new block to the MMR trees and check the new root hashes
 	ext.apply_block(&b)?;
@@ -373,7 +377,11 @@ fn validate_block_via_txhashset(
 fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	ctx.store
 		.save_block(b)
-		.map_err(|e| Error::StoreErr(e, "pipe save block".to_owned()))
+		.map_err(|e| Error::StoreErr(e, "pipe save block".to_owned()))?;
+	ctx.store
+		.save_block_input_bitmap(&b)
+		.map_err(|e| Error::StoreErr(e, "pipe save block input bitmap".to_owned()))?;
+	Ok(())
 }
 
 /// Officially adds the block header to our header chain.
@@ -501,39 +509,41 @@ pub fn rewind_and_apply_fork(
 	// extending a fork, first identify the block where forking occurred
 	// keeping the hashes of blocks along the fork
 	let mut current = b.header.previous;
-	let mut hashes = vec![];
+	let mut fork_hashes = vec![];
 	loop {
 		let curr_header = store.get_block_header(&current)?;
 
 		if let Ok(_) = store.is_on_current_chain(&curr_header) {
 			break;
 		} else {
-			hashes.insert(0, (curr_header.height, curr_header.hash()));
+			fork_hashes.insert(0, (curr_header.height, curr_header.hash()));
 			current = curr_header.previous;
 		}
 	}
 
-	let forked_block = store.get_block_header(&current)?;
+	let head_header = store.head_header()?;
+	let forked_header = store.get_block_header(&current)?;
 
-	debug!(
+	trace!(
 		LOGGER,
 		"rewind_and_apply_fork @ {} [{}], was @ {} [{}]",
-		forked_block.height,
-		forked_block.hash(),
+		forked_header.height,
+		forked_header.hash(),
 		b.header.height,
 		b.header.hash()
 	);
 
 	// rewind the sum trees up to the forking block
-	ext.rewind(&forked_block)?;
+	ext.rewind(&forked_header, &head_header)?;
 
-	debug!(
+	trace!(
 		LOGGER,
-		"rewind_and_apply_fork: blocks on fork: {:?}", hashes
+		"rewind_and_apply_fork: blocks on fork: {:?}",
+		fork_hashes,
 	);
 
 	// apply all forked blocks, including this new one
-	for (_, h) in hashes {
+	for (_, h) in fork_hashes {
 		let fb = store
 			.get_block(&h)
 			.map_err(|e| Error::StoreErr(e, format!("getting forked blocks")))?;

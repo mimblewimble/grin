@@ -12,7 +12,6 @@ The maturity rule _only_ applies to coinbase outputs, regular transaction output
 An output consists of -
   * features (currently coinbase vs. non-coinbase)
   * commitment `rG+vH`
-  * switch commitment hash `blake2(rJ)`
   * rangeproof
 
 To spend a regular transaction output two conditions must be met. We need to show the output has not been previously spent and we need to prove ownership of the output.

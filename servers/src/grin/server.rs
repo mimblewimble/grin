@@ -17,27 +17,25 @@
 //! as a facade.
 
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
-use std::time;
+use std::sync::{Arc, RwLock};
+use std::{thread, time};
 
-use common::adapters::*;
 use api;
 use chain;
-use core::{consensus, genesis, global, pow};
-use core::core::target::Difficulty;
+use common::adapters::{ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter,
+                       PoolToNetAdapter};
+use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
+use common::types::{Error, Seeding, ServerConfig, StratumServerConfig};
 use core::core::hash::Hashed;
-use grin::dandelion_monitor;
+use core::core::target::Difficulty;
+use core::{consensus, genesis, global, pow};
+use grin::{dandelion_monitor, seed, sync};
 use mining::stratumserver;
+use mining::test_miner::Miner;
 use p2p;
 use pool;
-use grin::seed;
-use grin::sync;
-use common::types::*;
-use common::stats::*;
 use util::LOGGER;
-use mining::test_miner::Miner;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -157,11 +155,10 @@ impl Server {
 			Err(_) => None,
 		};
 
-		let p2p_config = config.p2p_config.clone();
 		let p2p_server = Arc::new(p2p::Server::new(
 			config.db_root.clone(),
 			config.capabilities,
-			p2p_config,
+			config.p2p_config.clone(),
 			net_adapter.clone(),
 			genesis.hash(),
 			stop.clone(),
@@ -189,6 +186,7 @@ impl Server {
 			seed::connect_and_monitor(
 				p2p_server.clone(),
 				config.capabilities,
+				config.dandelion_config.clone(),
 				seeder,
 				stop.clone(),
 			);
@@ -232,7 +230,7 @@ impl Server {
 			"Starting dandelion monitor: {}", &config.api_http_addr
 		);
 		dandelion_monitor::monitor_transactions(
-			config.pool_config.clone(),
+			config.dandelion_config.clone(),
 			tx_pool.clone(),
 			stop.clone(),
 		);
@@ -279,7 +277,6 @@ impl Server {
 			.name("stratum_server".to_string())
 			.spawn(move || {
 				stratum_server.run_loop(
-					config.clone(),
 					stratum_stats,
 					cuckoo_size as u32,
 					proof_size,
@@ -288,9 +285,9 @@ impl Server {
 			});
 	}
 
-	/// Start mining for blocks internally on a separate thread. Relies on internal miner,
-	/// and should only be used for automated testing. Burns reward if wallet_listener_url
-	/// is 'None'
+	/// Start mining for blocks internally on a separate thread. Relies on
+	/// internal miner, and should only be used for automated testing. Burns
+	/// reward if wallet_listener_url is 'None'
 	pub fn start_test_miner(&self, wallet_listener_url: Option<String>) {
 		let currently_syncing = self.currently_syncing.clone();
 		let config_wallet_url = match wallet_listener_url.clone() {
@@ -304,6 +301,7 @@ impl Server {
 			enable_stratum_server: None,
 			stratum_server_addr: None,
 			wallet_listener_url: config_wallet_url,
+			minimum_share_difficulty: 1,
 		};
 
 		let mut miner = Miner::new(
@@ -376,7 +374,7 @@ impl Server {
 					last_time = time;
 					DiffBlock {
 						block_number: height,
-						difficulty: diff.into_num(),
+						difficulty: diff.to_num(),
 						time: time,
 						duration: dur,
 					}

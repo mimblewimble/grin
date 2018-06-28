@@ -17,18 +17,18 @@
 //!
 
 use std::io::Read;
-use std::net::SocketAddr;
-use std::net::ToSocketAddrs;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::str;
-use std::sync::{mpsc, Arc};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::sync::{mpsc, Arc};
 use std::thread;
+use std::time::Duration;
 use time::{self, now_utc};
 
 use hyper;
 
 use p2p;
+use pool::DandelionConfig;
 use util::LOGGER;
 
 const SEEDS_URL: &'static str = "http://grin-tech.org/seeds.txt";
@@ -42,6 +42,7 @@ const DNS_SEEDS: &'static [&'static str] = &[
 pub fn connect_and_monitor(
 	p2p_server: Arc<p2p::Server>,
 	capabilities: p2p::Capabilities,
+	dandelion_config: DandelionConfig,
 	seed_list: Box<Fn() -> Vec<SocketAddr> + Send>,
 	stop: Arc<AtomicBool>,
 ) {
@@ -73,7 +74,7 @@ pub fn connect_and_monitor(
 						tx.clone(),
 					);
 
-					update_dandelion_relay(peers.clone(), p2p_server.config.clone());
+					update_dandelion_relay(peers.clone(), dandelion_config.clone());
 
 					prev = current_time;
 				}
@@ -159,7 +160,7 @@ fn monitor_peers(
 	}
 }
 
-fn update_dandelion_relay(peers: Arc<p2p::Peers>, config: p2p::P2PConfig) {
+fn update_dandelion_relay(peers: Arc<p2p::Peers>, dandelion_config: DandelionConfig) {
 	// Dandelion Relay Updater
 	let dandelion_relay = peers.get_dandelion_relay();
 	if dandelion_relay.is_empty() {
@@ -168,7 +169,7 @@ fn update_dandelion_relay(peers: Arc<p2p::Peers>, config: p2p::P2PConfig) {
 	} else {
 		for last_added in dandelion_relay.keys() {
 			let dandelion_interval = now_utc().to_timespec().sec - last_added;
-			if dandelion_interval >= config.dandelion_relay_time() {
+			if dandelion_interval >= dandelion_config.relay_secs.unwrap() as i64 {
 				debug!(LOGGER, "monitor_peers: updating expired dandelion relay");
 				peers.update_dandelion_relay();
 			}

@@ -9,10 +9,10 @@ publish = false
 byteorder = "1"
 blake2-rfc = "0.2"
 rand = "0.3"
-slog = { version = "~2.1", features = ["max_level_trace", "release_max_level_trace"] }
+slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
-uuid = { version = "0.5", features = ["serde", "v4"] }
+uuid = { version = "0.6", features = ["serde", "v4"] }
 
 grin_util = { path = "../util" }

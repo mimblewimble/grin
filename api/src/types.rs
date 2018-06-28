@@ -14,23 +14,23 @@
 
 use std::sync::Arc;
 
-use core::{core, ser};
+use chain;
 use core::core::hash::Hashed;
 use core::core::pmmr::MerkleProof;
-use chain;
+use core::{core, ser};
 use p2p;
+use serde;
+use serde::de::MapAccess;
+use serde::ser::SerializeStruct;
+use std::fmt;
 use util;
 use util::secp::pedersen;
-use serde;
-use serde::ser::SerializeStruct;
-use serde::de::MapAccess;
-use std::fmt;
 
 macro_rules! no_dup {
-	($field: ident) => {
+	($field:ident) => {
 		if $field.is_some() {
 			return Err(serde::de::Error::duplicate_field("$field"));
-		}
+			}
 	};
 }
 
@@ -53,7 +53,7 @@ impl Tip {
 			height: tip.height,
 			last_block_pushed: util::to_hex(tip.last_block_h.to_vec()),
 			prev_block_to_last: util::to_hex(tip.prev_block_h.to_vec()),
-			total_difficulty: tip.total_difficulty.into_num(),
+			total_difficulty: tip.total_difficulty.to_num(),
 		}
 	}
 }
@@ -497,7 +497,7 @@ impl BlockHeaderPrintable {
 			range_proof_root: util::to_hex(h.range_proof_root.to_vec()),
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),
 			nonce: h.nonce,
-			total_difficulty: h.total_difficulty.into_num(),
+			total_difficulty: h.total_difficulty.to_num(),
 			total_kernel_offset: h.total_kernel_offset.to_hex(),
 		}
 	}
@@ -616,10 +616,6 @@ pub struct OutputListing {
 pub struct PoolInfo {
 	/// Size of the pool
 	pub pool_size: usize,
-	/// Size of orphans
-	pub orphans_size: usize,
-	/// Total size of pool + orphans
-	pub total_size: usize,
 }
 
 #[cfg(test)]

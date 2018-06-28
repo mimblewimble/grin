@@ -4,7 +4,7 @@ Mode of Interactions
 
 There's a variety of ways wallet software can be integrated with, from hardware
 to automated bots to the more classic desktop wallets. No single implementation
-can hope to accomodate all possible interactions, especially if it wants to
+can hope to accommodate all possible interactions, especially if it wants to
 remain user friendly (who or whatever the user may be). With that in mind, Grin
 needs to provide a healthy base for a more complete wallet ecosystem to
 develop.

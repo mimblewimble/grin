@@ -24,18 +24,15 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
+use chain::types::{NoopAdapter, Tip};
 use chain::Chain;
-use chain::types::*;
-use core::core::{Block, BlockHeader, Transaction};
 use core::core::target::Difficulty;
-use core::{consensus, genesis};
-use core::global;
-use core::global::ChainTypes;
-
-use keychain::Keychain;
-use wallet::libwallet;
-
+use core::core::{Block, BlockHeader, Transaction};
+use core::global::{self, ChainTypes};
 use core::pow;
+use core::{consensus, genesis};
+use keychain::{ExtKeychain, Keychain};
+use wallet::libtx;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -69,13 +66,13 @@ fn data_files() {
 	//new block so chain references should be freed
 	{
 		let chain = setup(chain_dir);
-		let keychain = Keychain::from_random_seed().unwrap();
+		let keychain = ExtKeychain::from_random_seed().unwrap();
 
 		for n in 1..4 {
 			let prev = chain.head_header().unwrap();
 			let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 			let pk = keychain.derive_key_id(n as u32).unwrap();
-			let reward = libwallet::reward::output(&keychain, &pk, 0, prev.height).unwrap();
+			let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
 			let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
 			b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 
@@ -114,14 +111,14 @@ fn data_files() {
 	}
 }
 
-fn _prepare_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
+fn _prepare_block(kc: &ExtKeychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
 	chain.set_txhashset_roots(&mut b, false).unwrap();
 	b
 }
 
 fn _prepare_block_tx(
-	kc: &Keychain,
+	kc: &ExtKeychain,
 	prev: &BlockHeader,
 	chain: &Chain,
 	diff: u64,
@@ -132,14 +129,14 @@ fn _prepare_block_tx(
 	b
 }
 
-fn _prepare_fork_block(kc: &Keychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
+fn _prepare_fork_block(kc: &ExtKeychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
 	chain.set_txhashset_roots(&mut b, true).unwrap();
 	b
 }
 
 fn _prepare_fork_block_tx(
-	kc: &Keychain,
+	kc: &ExtKeychain,
 	prev: &BlockHeader,
 	chain: &Chain,
 	diff: u64,
@@ -151,7 +148,7 @@ fn _prepare_fork_block_tx(
 }
 
 fn _prepare_block_nosum(
-	kc: &Keychain,
+	kc: &ExtKeychain,
 	prev: &BlockHeader,
 	diff: u64,
 	txs: Vec<&Transaction>,
@@ -159,8 +156,13 @@ fn _prepare_block_nosum(
 	let key_id = kc.derive_key_id(diff as u32).unwrap();
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
-	let reward = libwallet::reward::output(&kc, &key_id, fees, prev.height).unwrap();
-	let mut b = match core::core::Block::new(prev, txs, Difficulty::from_num(diff), reward) {
+	let reward = libtx::reward::output(kc, &key_id, fees, prev.height).unwrap();
+	let mut b = match core::core::Block::new(
+		prev,
+		txs.into_iter().cloned().collect(),
+		Difficulty::from_num(diff),
+		reward,
+	) {
 		Err(e) => panic!("{:?}", e),
 		Ok(b) => b,
 	};

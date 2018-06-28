@@ -17,9 +17,8 @@ use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 
 use failure::{Fail, ResultExt};
-use iron::Handler;
-use iron::prelude::*;
-use iron::status;
+use iron::prelude::{IronError, IronResult, Plugin, Request, Response};
+use iron::{status, Handler};
 use serde::Serialize;
 use serde_json;
 use urlencoded::UrlEncodedQuery;
@@ -29,13 +28,13 @@ use core::core::hash::{Hash, Hashed};
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::ser;
 use p2p;
+use p2p::types::ReasonForBan;
 use pool;
 use regex::Regex;
-use rest::*;
+use rest::{ApiServer, Error, ErrorKind};
 use types::*;
-use util;
-use util::LOGGER;
 use util::secp::pedersen::Commitment;
+use util::{self, LOGGER};
 
 // All handlers use `Weak` references instead of `Arc` to avoid cycles that
 // can never be destroyed. These 2 functions are simple helpers to reduce the
@@ -225,7 +224,7 @@ impl OutputHandler {
 		);
 
 		let mut return_vec = vec![];
-		for i in start_height..end_height + 1 {
+		for i in (start_height..=end_height).rev() {
 			let res = self.outputs_at_height(i, commitments.clone(), include_rp);
 			if res.outputs.len() > 0 {
 				return_vec.push(res);
@@ -439,7 +438,7 @@ impl Handler for PeerPostHandler {
 			"ban" => {
 				path_elems.pop();
 				if let Ok(addr) = path_elems.last().unwrap().parse() {
-					w(&self.peers).ban_peer(&addr);
+					w(&self.peers).ban_peer(&addr, ReasonForBan::ManualBan);
 					Ok(Response::with((status::Ok, "")))
 				} else {
 					Ok(Response::with((status::BadRequest, "")))
@@ -567,7 +566,7 @@ impl Handler for ChainCompactHandler {
 /// GET /v1/blocks/<height>
 ///
 /// Optionally return results as "compact blocks" by passing "?compact" query
-/// param. GET /v1/blocks/<hash>?compact
+/// param GET /v1/blocks/<hash>?compact
 pub struct BlockHandler {
 	pub chain: Weak<chain::Chain>,
 }
@@ -603,7 +602,7 @@ impl BlockHandler {
 			))?;
 		}
 		let vec = util::from_hex(input).unwrap();
-		Ok(Hash::from_vec(vec))
+		Ok(Hash::from_vec(&vec))
 	}
 }
 
@@ -649,10 +648,9 @@ where
 	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
 		let pool_arc = w(&self.tx_pool);
 		let pool = pool_arc.read().unwrap();
+
 		json_response(&PoolInfo {
-			pool_size: pool.pool_size(),
-			orphans_size: pool.orphans_size(),
-			total_size: pool.total_size(),
+			pool_size: pool.total_size(),
 		})
 	}
 }
@@ -663,10 +661,8 @@ struct TxWrapper {
 	tx_hex: String,
 }
 
-// Push new transactions to our stem transaction pool, that should broadcast it
-// to the network if valid.
+// Push new transaction to our local transaction pool.
 struct PoolPushHandler<T> {
-	peers: Weak<p2p::Peers>,
 	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
 }
 
@@ -702,21 +698,12 @@ where
 			}
 		}
 
-		// Will not do a stem transaction if our dandelion peer relay is empty
-		if !fluff && w(&self.peers).get_dandelion_relay().is_empty() {
-			debug!(
-				LOGGER,
-				"Missing Dandelion relay: will push stem transaction normally"
-			);
-			fluff = true;
-		}
-
-		//  Push into the pool or stempool
-		let pool_arc = w(&self.tx_pool);
-		let res = pool_arc
-			.write()
-			.unwrap()
-			.add_to_memory_pool(source, tx, !fluff);
+		//  Push to tx pool.
+		let res = {
+			let pool_arc = w(&self.tx_pool);
+			let mut tx_pool = pool_arc.write().unwrap();
+			tx_pool.add_to_pool(source, tx, !fluff)
+		};
 
 		match res {
 			Ok(()) => Ok(Response::with(status::Ok)),
@@ -799,7 +786,6 @@ pub fn start_rest_apis<T>(
 				tx_pool: tx_pool.clone(),
 			};
 			let pool_push_handler = PoolPushHandler {
-				peers: peers.clone(),
 				tx_pool: tx_pool.clone(),
 			};
 			let peers_all_handler = PeersAllHandler {

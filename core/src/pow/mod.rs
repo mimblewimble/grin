@@ -35,14 +35,14 @@ extern crate time;
 
 extern crate grin_util as util;
 
-mod siphash;
 pub mod cuckoo;
+mod siphash;
 
 use consensus;
-use core::{Block, BlockHeader};
 use core::target::Difficulty;
-use global;
+use core::{Block, BlockHeader};
 use genesis;
+use global;
 use pow::cuckoo::{Cuckoo, Error};
 
 /// Validates the proof of work of a given header, and that the proof of work
@@ -97,7 +97,7 @@ pub fn pow_size(
 		if let Ok(proof) =
 			cuckoo::Miner::new(&pow_hash[..], consensus::EASINESS, proof_size, sz).mine()
 		{
-			if proof.clone().to_difficulty() >= diff {
+			if proof.to_difficulty() >= diff {
 				bh.pow = proof.clone();
 				return Ok(());
 			}
@@ -117,9 +117,9 @@ pub fn pow_size(
 #[cfg(test)]
 mod test {
 	use super::*;
-	use global;
 	use core::target::Difficulty;
 	use genesis;
+	use global;
 
 	/// We'll be generating genesis blocks differently
 	#[ignore]
@@ -134,7 +134,7 @@ mod test {
 			global::sizeshift(),
 		).unwrap();
 		assert!(b.header.nonce != 310);
-		assert!(b.header.pow.clone().to_difficulty() >= Difficulty::one());
+		assert!(b.header.pow.to_difficulty() >= Difficulty::one());
 		assert!(verify_size(&b.header, global::sizeshift()));
 	}
 }

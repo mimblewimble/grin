@@ -16,15 +16,14 @@ use memmap;
 
 use std::cmp;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, BufReader, BufWriter, ErrorKind, Write};
+use std::io::{self, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::os::unix::io::AsRawFd;
-use std::io::Read;
 use std::path::Path;
 
-#[cfg(any(target_os = "linux"))]
-use libc::{ftruncate64, off64_t};
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use libc::{ftruncate as ftruncate64, off_t as off64_t};
+#[cfg(any(target_os = "linux"))]
+use libc::{ftruncate64, off64_t};
 
 use core::ser;
 
@@ -82,12 +81,25 @@ impl AppendOnlyFile {
 
 	/// Rewinds the data file back to a lower position. The new position needs
 	/// to be the one of the first byte the next time data is appended.
-	pub fn rewind(&mut self, pos: u64) {
-		if self.buffer_start_bak > 0 || self.buffer.len() > 0 {
-			panic!("Can't rewind on a dirty state.");
+	/// Supports two scenarios currently -
+	///   * rewind from a clean state (rewinding to handle a forked block)
+	///   * rewind within the buffer itself (raw_tx fails to validate)
+	/// Note: we do not currently support a rewind() that
+	/// crosses the buffer boundary.
+	pub fn rewind(&mut self, file_pos: u64) {
+		if self.buffer.is_empty() {
+			// rewinding from clean state, no buffer, not already rewound anything
+			self.buffer_start_bak = self.buffer_start;
+			self.buffer_start = file_pos as usize;
+		} else {
+			// rewinding (within) the buffer
+			if self.buffer_start as u64 > file_pos {
+				panic!("cannot rewind buffer beyond buffer_start");
+			} else {
+				let buffer_len = file_pos - self.buffer_start as u64;
+				self.buffer.truncate(buffer_len as usize);
+			}
 		}
-		self.buffer_start_bak = self.buffer_start;
-		self.buffer_start = pos as usize;
 	}
 
 	/// Syncs all writes (fsync), reallocating the memory map to make the newly
@@ -135,11 +147,8 @@ impl AppendOnlyFile {
 	/// Leverages the memory map.
 	pub fn read(&self, offset: usize, length: usize) -> Vec<u8> {
 		if offset >= self.buffer_start {
-			if self.buffer.is_empty() {
-				return vec![];
-			}
-			let offset = offset - self.buffer_start;
-			return self.buffer[offset..(offset + length)].to_vec();
+			let buffer_offset = offset - self.buffer_start;
+			return self.read_from_buffer(buffer_offset, length);
 		}
 		if let None = self.mmap {
 			return vec![];
@@ -151,6 +160,17 @@ impl AppendOnlyFile {
 		}
 
 		(&mmap[offset..(offset + length)]).to_vec()
+	}
+
+	// Read length bytes from the buffer, from offset.
+	// Return empty vec if we do not have enough bytes in the buffer to read a full
+	// vec.
+	fn read_from_buffer(&self, offset: usize, length: usize) -> Vec<u8> {
+		if self.buffer.len() < (offset + length) {
+			vec![]
+		} else {
+			self.buffer[offset..(offset + length)].to_vec()
+		}
 	}
 
 	/// Truncates the underlying file to the provided offset
@@ -228,132 +248,6 @@ impl AppendOnlyFile {
 	pub fn path(&self) -> String {
 		self.path.clone()
 	}
-}
-
-/// Log file fully cached in memory containing all positions that should be
-/// eventually removed from the MMR append-only data file. Allows quick
-/// checking of whether a piece of data has been marked for deletion. When the
-/// log becomes too long, the MMR backend will actually remove chunks from the
-/// MMR data file and truncate the remove log.
-pub struct RemoveLog {
-	path: String,
-	/// Ordered vector of MMR positions that should get eventually removed.
-	pub removed: Vec<(u64, u32)>,
-	// Holds positions temporarily until flush is called.
-	removed_tmp: Vec<(u64, u32)>,
-	// Holds truncated removed temporarily until discarded or committed
-	removed_bak: Vec<(u64, u32)>,
-}
-
-impl RemoveLog {
-	/// Open the remove log file.
-	/// The content of the file will be read in memory for fast checking.
-	pub fn open(path: String) -> io::Result<RemoveLog> {
-		let removed = read_ordered_vec(path.clone(), 12)?;
-		Ok(RemoveLog {
-			path: path,
-			removed: removed,
-			removed_tmp: vec![],
-			removed_bak: vec![],
-		})
-	}
-
-	/// Rewinds the remove log back to the provided index.
-	/// We keep everything in the rm_log from that index and earlier.
-	/// In practice the index is a block height, so we rewind back to that block
-	/// keeping everything in the rm_log up to and including that block.
-	pub fn rewind(&mut self, idx: u32) -> io::Result<()> {
-		// simplifying assumption: we always remove older than what's in tmp
-		self.removed_tmp = vec![];
-		// backing it up before truncating
-		self.removed_bak = self.removed.clone();
-
-		if idx == 0 {
-			self.removed = vec![];
-		} else {
-			// retain rm_log entries up to and including those at the provided index
-			self.removed.retain(|&(_, x)| x <= idx);
-		}
-		Ok(())
-	}
-
-	/// Append a set of new positions to the remove log. Both adds those
-	/// positions the ordered in-memory set and to the file.
-	pub fn append(&mut self, elmts: Vec<u64>, index: u32) -> io::Result<()> {
-		for elmt in elmts {
-			match self.removed_tmp.binary_search(&(elmt, index)) {
-				Ok(_) => continue,
-				Err(idx) => {
-					self.removed_tmp.insert(idx, (elmt, index));
-				}
-			}
-		}
-		Ok(())
-	}
-
-	/// Flush the positions to remove to file.
-	pub fn flush(&mut self) -> io::Result<()> {
-		for elmt in &self.removed_tmp {
-			match self.removed.binary_search(&elmt) {
-				Ok(_) => continue,
-				Err(idx) => {
-					self.removed.insert(idx, *elmt);
-				}
-			}
-		}
-		let mut file = BufWriter::new(File::create(self.path.clone())?);
-		for elmt in &self.removed {
-			file.write_all(&ser::ser_vec(&elmt).unwrap()[..])?;
-		}
-		self.removed_tmp = vec![];
-		self.removed_bak = vec![];
-		file.flush()
-	}
-
-	/// Discard pending changes
-	pub fn discard(&mut self) {
-		if self.removed_bak.len() > 0 {
-			self.removed = self.removed_bak.clone();
-			self.removed_bak = vec![];
-		}
-		self.removed_tmp = vec![];
-	}
-
-	/// Whether the remove log currently includes the provided position.
-	pub fn includes(&self, elmt: u64) -> bool {
-		include_tuple(&self.removed, elmt) || include_tuple(&self.removed_tmp, elmt)
-	}
-
-	/// Number of positions stored in the remove log.
-	pub fn len(&self) -> usize {
-		self.removed.len()
-	}
-
-	/// Return vec of pos for removed elements before the provided cutoff index.
-	/// Useful for when we prune and compact an MMR.
-	pub fn removed_pre_cutoff(&self, cutoff_idx: u32) -> Vec<u64> {
-		self.removed
-			.iter()
-			.filter_map(
-				|&(pos, idx)| {
-					if idx < cutoff_idx {
-						Some(pos)
-					} else {
-						None
-					}
-				},
-			)
-			.collect()
-	}
-}
-
-fn include_tuple(v: &Vec<(u64, u32)>, e: u64) -> bool {
-	if let Err(pos) = v.binary_search(&(e, 0)) {
-		if pos < v.len() && v[pos].0 == e {
-			return true;
-		}
-	}
-	false
 }
 
 /// Read an ordered vector of scalars from a file.

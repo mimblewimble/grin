@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Wallet lib... should be used by clients to build wallets and
-//! encapsulate all functions needed to build transactions and operate a wallet
+//! Higher level wallet functions which can be used by callers to operate
+//! on the wallet, as well as helpers to invoke and instantiate wallets
+//! and listeners
 
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
@@ -21,9 +22,10 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-pub mod aggsig;
-pub mod build;
-pub mod error;
-pub mod proof;
-pub mod reward;
-pub mod transaction;
+pub mod api;
+pub mod controller;
+mod error;
+pub mod internal;
+pub mod types;
+
+pub use libwallet::error::{Error, ErrorKind};
