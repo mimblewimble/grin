@@ -63,7 +63,7 @@ impl Difficulty {
 		// the minimum sizeshift and N the provided sizeshift
 		let adjust_factor = (1 << (shift - global::ref_sizeshift()) as u64) * (shift as u64 - 1);
 		Difficulty {
-			num: (max_target / max(num, 1)) * adjust_factor,
+			num: (max_target / max(num, adjust_factor)) * adjust_factor,
 		}
 	}
 
