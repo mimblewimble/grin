@@ -61,7 +61,7 @@ impl Difficulty {
 		let num = h.to_u64();
 		// Adjust the difficulty based on a 2^(N-M)*(N-1) factor, with M being
 		// the minimum sizeshift and N the provided sizeshift
-		let adjust_factor = (1 << (shift - global::min_sizeshift()) as u64) * (shift as u64 - 1);
+		let adjust_factor = (1 << (shift - global::ref_sizeshift()) as u64) * (shift as u64 - 1);
 		Difficulty {
 			num: (max_target / max(num, 1)) * adjust_factor,
 		}

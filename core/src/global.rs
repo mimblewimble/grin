@@ -17,7 +17,8 @@
 //! should be used sparingly.
 
 use consensus::TargetError;
-use consensus::{BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_MIN_SIZESHIFT,
+use consensus::{BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, 
+								DEFAULT_MIN_SIZESHIFT, REFERENCE_SIZESHIFT,
                 DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE};
 use core::target::Difficulty;
 /// An enum collecting sets of parameters used throughout the
@@ -94,7 +95,7 @@ pub fn set_mining_mode(mode: ChainTypes) {
 	*param_ref = mode;
 }
 
-/// The sizeshift
+/// The minimum acceptablesizeshift
 pub fn min_sizeshift() -> u8 {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
@@ -103,6 +104,20 @@ pub fn min_sizeshift() -> u8 {
 		ChainTypes::Testnet1 => USER_TESTING_MIN_SIZESHIFT,
 		ChainTypes::Testnet2 => DEFAULT_MIN_SIZESHIFT,
 		ChainTypes::Mainnet => DEFAULT_MIN_SIZESHIFT,
+	}
+}
+
+/// Reference sizeshift used to compute factor on higher Cuckoo graph sizes,
+/// while the min_sizeshift can be changed on a soft fork, changing
+/// ref_sizeshift is a hard fork.
+pub fn ref_sizeshift() -> u8 {
+	let param_ref = CHAIN_TYPE.read().unwrap();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_SIZESHIFT,
+		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
+		ChainTypes::Testnet1 => USER_TESTING_MIN_SIZESHIFT,
+		ChainTypes::Testnet2 => REFERENCE_SIZESHIFT,
+		ChainTypes::Mainnet => REFERENCE_SIZESHIFT,
 	}
 }
 

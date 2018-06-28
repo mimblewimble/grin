@@ -43,7 +43,7 @@ use ser::{self, Error, Readable, Reader, Writeable, Writer};
 /// A Cuckoo Cycle proof of work, consisting of the shift to get the graph
 /// size (i.e. 31 for Cuckoo31 with a 2^31 or 1<<31 graph size) and the nonces
 /// of the graph solution. While being expressed as u64 for simplicity, each
-/// nonce is strictly lesser than the cycle size (i.e. <2^31 for Cuckoo 31).
+/// nonce is strictly less than half the cycle size (i.e. <2^30 for Cuckoo 31).
 ///
 /// The hash of the `Proof` is the hash of its packed nonces when serializing
 /// them at their exact bit size. The resulting bit sequence is padded to be
@@ -95,10 +95,11 @@ impl Proof {
 	/// don't fail due to duplicate hashes
 	pub fn random(proof_size: usize) -> Proof {
 		let sizeshift = global::min_sizeshift();
+		let nonce_mask = 1 << (sizeshift-1) - 1;
 		let mut rng = thread_rng();
 		// force the random num to be within sizeshift bits
 		let mut v: Vec<u64> = iter::repeat(())
-			.map(|()| (rng.gen::<u32>() & ((1 << sizeshift) - 1)) as u64)
+			.map(|()| (rng.gen::<u32>() & nonce_mask) as u64)
 			.take(proof_size)
 			.collect();
 		v.sort();
@@ -125,7 +126,7 @@ impl Readable for Proof {
 		let cuckoo_sizeshift = reader.read_u8()?;
 
 		let mut nonces = Vec::with_capacity(global::proofsize());
-		let nonce_bits = cuckoo_sizeshift as usize;
+		let nonce_bits = cuckoo_sizeshift as usize - 1;
 		let bytes_len = BitVec::bytes_len(nonce_bits * global::proofsize());
 		let bits = reader.read_fixed_bytes(bytes_len)?;
 		let bitvec = BitVec { bits };
@@ -151,7 +152,7 @@ impl Writeable for Proof {
 			writer.write_u8(self.cuckoo_sizeshift)?;
 		}
 
-		let nonce_bits = self.cuckoo_sizeshift as usize;
+		let nonce_bits = self.cuckoo_sizeshift as usize - 1;
 		let mut bitvec = BitVec::new(nonce_bits * global::proofsize());
 		for (n, nonce) in self.nonces.iter().enumerate() {
 			for bit in 0..nonce_bits {
