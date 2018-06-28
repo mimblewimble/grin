@@ -95,7 +95,7 @@ impl Proof {
 	/// don't fail due to duplicate hashes
 	pub fn random(proof_size: usize) -> Proof {
 		let sizeshift = global::min_sizeshift();
-		let nonce_mask = 1 << (sizeshift-1) - 1;
+		let nonce_mask = (1 << (sizeshift - 1)) - 1;
 		let mut rng = thread_rng();
 		// force the random num to be within sizeshift bits
 		let mut v: Vec<u64> = iter::repeat(())

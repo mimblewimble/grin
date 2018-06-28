@@ -17,9 +17,9 @@
 //! should be used sparingly.
 
 use consensus::TargetError;
-use consensus::{BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, 
-								DEFAULT_MIN_SIZESHIFT, REFERENCE_SIZESHIFT,
-                DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE};
+use consensus::{BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_MIN_SIZESHIFT,
+                DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
+                REFERENCE_SIZESHIFT};
 use core::target::Difficulty;
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
@@ -95,7 +95,7 @@ pub fn set_mining_mode(mode: ChainTypes) {
 	*param_ref = mode;
 }
 
-/// The minimum acceptablesizeshift
+/// The minimum acceptable sizeshift
 pub fn min_sizeshift() -> u8 {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
