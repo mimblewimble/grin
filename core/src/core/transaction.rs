@@ -866,6 +866,7 @@ impl Readable for OutputIdentifier {
 #[cfg(test)]
 mod test {
 	use super::*;
+	use core::hash::Hash;
 	use core::id::{ShortId, ShortIdentifiable};
 	use keychain::{ExtKeychain, Keychain};
 	use util::secp;
@@ -937,8 +938,6 @@ mod test {
 		let input = Input {
 			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: commit,
-			block_hash: None,
-			merkle_proof: None,
 		};
 
 		let block_hash = Hash::from_hex(
@@ -955,8 +954,6 @@ mod test {
 		let input = Input {
 			features: OutputFeatures::COINBASE_OUTPUT,
 			commit: commit,
-			block_hash: None,
-			merkle_proof: None,
 		};
 
 		let short_id = input.short_id(&block_hash, nonce);

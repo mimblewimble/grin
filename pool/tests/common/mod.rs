@@ -126,8 +126,6 @@ where
 		let key_id = keychain.derive_key_id(header.height as u32).unwrap();
 		tx_elements.push(libtx::build::coinbase_input(
 			coinbase_reward,
-			header.hash(),
-			MerkleProof::default(),
 			key_id,
 		));
 	}
