@@ -146,6 +146,7 @@ pub struct Miner {
 	proof_size: usize,
 	cuckoo: Cuckoo,
 	graph: Vec<u32>,
+	sizeshift: u8,
 }
 
 /// What type of cycle we have found?
@@ -170,12 +171,7 @@ impl Miner {
 		let size = 1 << sizeshift;
 		let graph = vec![0; size + 1];
 		let easiness = (ease as u64) * (size as u64) / 100;
-		Miner {
-			easiness: easiness,
-			cuckoo: cuckoo,
-			graph: graph,
-			proof_size: proof_size,
-		}
+		Miner{easiness, cuckoo, graph, proof_size, sizeshift}
 	}
 
 	/// Searches for a solution
@@ -196,7 +192,9 @@ impl Miner {
 			let sol = self.find_sol(nu, &us, nv, &vs);
 			match sol {
 				CycleSol::ValidProof(res) => {
-					return Ok(Proof::new(map_vec!(res.to_vec(), |&n| n as u64)));
+					let mut proof = Proof::new(map_vec!(res.to_vec(), |&n| n as u64));
+					proof.cuckoo_sizeshift = self.sizeshift;
+					return Ok(proof);
 				}
 				CycleSol::InvalidCycle(_) => continue,
 				CycleSol::NoCycle => {

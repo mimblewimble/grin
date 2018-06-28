@@ -73,7 +73,7 @@ impl fmt::Debug for Proof {
 impl Eq for Proof {}
 
 impl Proof {
-	/// Builds a proof with all bytes zeroed out
+	/// Builds a proof with provided nonces at default sizeshift
 	pub fn new(mut in_nonces: Vec<u64>) -> Proof {
 		in_nonces.sort();
 		Proof {
