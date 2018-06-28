@@ -160,9 +160,17 @@ impl<'a, K> WalletOutputBatch for Batch<'a, K> {
 		Ok(())
 	}
 
+	fn details(&mut self) -> &mut WalletDetails {
+		unimplemented!()
+	}
+
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
 		option_to_not_found(self.db.borrow().as_ref().unwrap().get_ser(&key)).map_err(|e| e.into())
+	}
+
+	fn iter<'b>(&'b self) -> Box<Iterator<Item = OutputData> + 'b> {
+		unimplemented!();
 	}
 
 	fn delete(&mut self, id: &Identifier) -> Result<(), Error> {
@@ -197,8 +205,8 @@ impl<K> WalletClient for LMDBBackend<K> {
 	}
 
 	/// Send a transaction slate to another listening wallet and return result
-	fn send_tx_slate(&self, slate: &Slate) -> Result<Slate, Error> {
-		let res = client::send_tx_slate(self.node_url(), slate)
+	fn send_tx_slate(&self, addr: &str, slate: &Slate) -> Result<Slate, Error> {
+		let res = client::send_tx_slate(addr, slate)
 			.context(ErrorKind::WalletComms(format!("Sending transaction")))?;
 		Ok(res)
 	}

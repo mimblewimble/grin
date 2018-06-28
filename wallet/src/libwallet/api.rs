@@ -103,7 +103,7 @@ where
 			selection_strategy_is_use_all,
 		)?;
 
-		let mut slate = match self.wallet.send_tx_slate(&slate) {
+		let mut slate = match self.wallet.send_tx_slate(dest, &slate) {
 			Ok(s) => s,
 			Err(e) => {
 				error!(

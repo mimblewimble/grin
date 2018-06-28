@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 use std::fs::{self, File};
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, MAIN_SEPARATOR};
 
 use serde_json;
@@ -44,14 +44,17 @@ const DET_BCK_FILE: &'static str = "wallet.detbck";
 const DAT_FILE: &'static str = "wallet.dat";
 const BCK_FILE: &'static str = "wallet.bck";
 const LOCK_FILE: &'static str = "wallet.lock";
-const SEED_FILE: &'static str = "wallet.seed";
 
 #[derive(Debug)]
 struct FileBatch<'a> {
 	/// List of outputs
 	outputs: &'a mut HashMap<String, OutputData>,
+	/// Wallet Details
+	details: &'a mut WalletDetails,
 	/// Data file path
 	data_file_path: String,
+	/// Details file path
+	details_file_path: String,
 	/// lock file path
 	lock_file_path: String,
 }
@@ -62,11 +65,19 @@ impl<'a> WalletOutputBatch for FileBatch<'a> {
 		Ok(())
 	}
 
+	fn details(&mut self) -> &mut WalletDetails {
+		&mut self.details
+	}
+
 	fn get(&self, id: &Identifier) -> Result<OutputData, libwallet::Error> {
 		self.outputs
 			.get(&id.to_hex())
 			.map(|od| od.clone())
 			.ok_or(libwallet::ErrorKind::Backend("not found".to_string()).into())
+	}
+
+	fn iter<'b>(&'b self) -> Box<Iterator<Item = OutputData> + 'b> {
+		Box::new(self.outputs.values().cloned())
 	}
 
 	fn delete(&mut self, id: &Identifier) -> Result<(), libwallet::Error> {
@@ -86,17 +97,27 @@ impl<'a> WalletOutputBatch for FileBatch<'a> {
 	fn commit(&self) -> Result<(), libwallet::Error> {
 		let mut data_file = File::create(self.data_file_path.clone())
 			.context(libwallet::ErrorKind::CallbackImpl("Could not create"))?;
+		let mut details_file = File::create(self.details_file_path.clone())
+			.context(libwallet::ErrorKind::CallbackImpl("Could not create"))?;
 		let mut outputs = self.outputs.values().collect::<Vec<_>>();
 		outputs.sort();
 		let res_json = serde_json::to_vec_pretty(&outputs).context(
-			libwallet::ErrorKind::CallbackImpl("Error serializing wallet data"),
+			libwallet::ErrorKind::CallbackImpl("Error serializing wallet output data"),
+		)?;
+		let details_res_json = serde_json::to_vec_pretty(&self.details).context(
+			libwallet::ErrorKind::CallbackImpl("Error serializing wallet details data"),
 		)?;
 		data_file
 			.write_all(res_json.as_slice())
 			.context(libwallet::ErrorKind::CallbackImpl(
-				"Error writing wallet file",
-			))
-			.map_err(|e| e.into())
+				"Error writing wallet data file",
+			))?;
+		details_file
+			.write_all(details_res_json.as_slice())
+			.context(libwallet::ErrorKind::CallbackImpl(
+				"Error writing wallet details file",
+			))?;
+		Ok(())
 	}
 }
 
@@ -189,7 +210,9 @@ where
 
 		Ok(Box::new(FileBatch {
 			outputs: &mut self.outputs,
+			details: &mut self.details,
 			data_file_path: self.data_file_path.clone(),
+			details_file_path: self.details_file_path.clone(),
 			lock_file_path: self.lock_file_path.clone(),
 		}))
 	}
@@ -199,19 +222,23 @@ where
 		&'a mut self,
 		root_key_id: keychain::Identifier,
 	) -> Result<u32, libwallet::Error> {
-		let mut max_n = 0;
-		for out in self.outputs.values() {
-			if max_n < out.n_child && out.root_key_id == root_key_id {
-				max_n = out.n_child;
+		let mut batch = self.batch()?;
+		{
+			let mut max_n = 0;
+			for out in batch.iter() {
+				if max_n < out.n_child && out.root_key_id == root_key_id {
+					max_n = out.n_child;
+				}
+			}
+			let details = batch.details();
+			if details.last_child_index <= max_n {
+				details.last_child_index = max_n + 1;
+			} else {
+				details.last_child_index += 1;
 			}
 		}
-
-		if self.details.last_child_index <= max_n {
-			self.details.last_child_index = max_n + 1;
-		} else {
-			self.details.last_child_index += 1;
-		}
-		Ok(self.details.last_child_index)
+		batch.commit()?;
+		Ok(batch.details().last_child_index)
 	}
 
 	/// Select spendable coins from the wallet.
@@ -304,18 +331,30 @@ impl<K> WalletClient for FileWallet<K> {
 			Ok(r) => Ok(r),
 			Err(e) => {
 				let message = format!("{}", e.cause().unwrap());
+				error!(
+					LOGGER,
+					"Create Coinbase: Communication error: {},{}",
+					e.cause().unwrap(),
+					e.backtrace().unwrap()
+				);
 				Err(libwallet::ErrorKind::WalletComms(message))?
 			}
 		}
 	}
 
 	/// Send a transaction slate to another listening wallet and return result
-	fn send_tx_slate(&self, slate: &Slate) -> Result<Slate, libwallet::Error> {
-		let res = client::send_tx_slate(self.node_url(), slate);
+	fn send_tx_slate(&self, addr: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+		let res = client::send_tx_slate(addr, slate);
 		match res {
 			Ok(r) => Ok(r),
 			Err(e) => {
 				let message = format!("{}", e.cause().unwrap());
+				error!(
+					LOGGER,
+					"Send TX Slate: Communication error: {},{}",
+					e.cause().unwrap(),
+					e.backtrace().unwrap()
+				);
 				Err(libwallet::ErrorKind::WalletComms(message))?
 			}
 		}

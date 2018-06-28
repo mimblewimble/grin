@@ -32,7 +32,7 @@ where
 {
 	// create an output using the amount in the slate
 	let (_, mut context, receiver_create_fn) =
-		selection::build_recipient_output_with_slate(wallet, slate).unwrap();
+		selection::build_recipient_output_with_slate(wallet, slate)?;
 
 	// fill public keys
 	let _ = slate.fill_round_1(
