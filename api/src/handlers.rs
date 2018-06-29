@@ -57,6 +57,11 @@ impl Handler for IndexHandler {
 	}
 }
 
+struct HandlerResult {
+	with_status: status::Status,
+	with_body: String,
+}
+
 // Supports retrieval of multiple outputs in a single request -
 // GET /v1/chain/outputs/byids?id=xxx,yyy,zzz
 // GET /v1/chain/outputs/byids?id=xxx&id=yyy&id=zzz
@@ -158,7 +163,11 @@ impl OutputHandler {
 	}
 
 	// returns outputs for a specified range of blocks
-	fn outputs_block_batch(&self, req: &mut Request) -> Vec<BlockOutputs> {
+	fn outputs_block_batch(
+		&self,
+		req: &mut Request,
+		result: &mut HandlerResult,
+	) -> Vec<BlockOutputs> {
 		let mut commitments: Vec<Commitment> = vec![];
 		let mut start_height = 1;
 		let mut end_height = 1;
@@ -176,12 +185,28 @@ impl OutputHandler {
 			}
 			if let Some(heights) = params.get("start_height") {
 				for height in heights {
-					start_height = height.parse().unwrap();
+					start_height = match height.parse() {
+						Ok(h) => h,
+						_ => {
+							result.with_status = status::BadRequest;
+							result.with_body =
+								String::from("start_height parse error. check request format");
+							return vec![];
+						}
+					}
 				}
 			}
 			if let Some(heights) = params.get("end_height") {
 				for height in heights {
-					end_height = height.parse().unwrap();
+					end_height = match height.parse() {
+						Ok(h) => h,
+						_ => {
+							result.with_status = status::BadRequest;
+							result.with_body =
+								String::from("end_height parse error. check request format");
+							return vec![];
+						}
+					}
 				}
 			}
 			if let Some(_) = params.get("include_rp") {
@@ -217,10 +242,21 @@ impl Handler for OutputHandler {
 		if *path_elems.last().unwrap() == "" {
 			path_elems.pop();
 		}
-		match *path_elems.last().unwrap() {
+
+		let mut result = HandlerResult {
+			with_status: status::Ok,
+			with_body: String::new(),
+		};
+
+		let response = match *path_elems.last().unwrap() {
 			"byids" => json_response(&self.outputs_by_ids(req)),
-			"byheight" => json_response(&self.outputs_block_batch(req)),
+			"byheight" => json_response(&self.outputs_block_batch(req, &mut result)),
 			_ => Ok(Response::with((status::BadRequest, ""))),
+		};
+
+		match result.with_status {
+			status::Ok => response,
+			_ => Ok(Response::with((result.with_status, result.with_body))),
 		}
 	}
 }

@@ -16,7 +16,6 @@
 /// to bytes. Given that rustc-serialize is deprecated and serde doesn't
 /// provide easy hex encoding, hex is a bit in limbo right now in Rust-
 /// land. It's simple enough that we can just have our own.
-
 use std::fmt::Write;
 use std::num;
 
@@ -31,11 +30,17 @@ pub fn to_hex(bytes: Vec<u8>) -> String {
 
 /// Decode a hex string into bytes.
 pub fn from_hex(hex_str: String) -> Result<Vec<u8>, num::ParseIntError> {
-	let hex_trim = if &hex_str[..2] == "0x" {
+	let mut hex_trim = if hex_str.len() >= 2 && &hex_str[..2] == "0x" {
 		hex_str[2..].to_owned()
 	} else {
 		hex_str.clone()
 	};
+
+	// fill one nibble if having half byte tail
+	if hex_trim.len() & 1 != 0 {
+		hex_trim.push('0');
+	}
+
 	split_n(&hex_trim.trim()[..], 2)
 		.iter()
 		.map(|b| u8::from_str_radix(b, 16))
@@ -43,6 +48,9 @@ pub fn from_hex(hex_str: String) -> Result<Vec<u8>, num::ParseIntError> {
 }
 
 fn split_n(s: &str, n: usize) -> Vec<&str> {
+	if s.len() < n {
+		return vec![];
+	}
 	(0..(s.len() - n + 1) / 2 + 1)
 		.map(|i| &s[2 * i..2 * i + n])
 		.collect()
@@ -70,5 +78,11 @@ mod test {
 			from_hex("000000ff".to_string()).unwrap(),
 			vec![0, 0, 0, 255]
 		);
+		assert!(
+			from_hex("".to_string()).is_ok(),
+			"should return Ok([]) for empty string"
+		);
+		assert_eq!(from_hex("0".to_string()).unwrap(), vec![0]);
+		assert_eq!(from_hex("0ff".to_string()).unwrap(), vec![15, 240]);
 	}
 }
