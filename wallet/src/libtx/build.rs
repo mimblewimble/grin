@@ -28,7 +28,6 @@
 use util::{kernel_sig_msg, secp};
 
 use core::core::hash::Hash;
-use core::core::merkle_proof::MerkleProof;
 use core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use keychain::{self, BlindSum, BlindingFactor, Identifier, Keychain};
 use libtx::{aggsig, proof};
@@ -52,8 +51,6 @@ pub type Append<K: Keychain> = for<'a> Fn(&'a mut Context<K>, (Transaction, TxKe
 fn build_input<K>(
 	value: u64,
 	features: OutputFeatures,
-	block_hash: Option<Hash>,
-	merkle_proof: Option<MerkleProof>,
 	key_id: Identifier,
 ) -> Box<Append<K>>
 where
@@ -62,7 +59,7 @@ where
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			let commit = build.keychain.commit(value, &key_id).unwrap();
-			let input = Input::new(features, commit, block_hash.clone(), merkle_proof.clone());
+			let input = Input::new(features, commit);
 			(tx.with_input(input), kern, sum.sub_key_id(key_id.clone()))
 		},
 	)
@@ -78,15 +75,12 @@ where
 		LOGGER,
 		"Building input (spending regular output): {}, {}", value, key_id
 	);
-	build_input(value, OutputFeatures::DEFAULT_OUTPUT, None, None, key_id)
+	build_input(value, OutputFeatures::DEFAULT_OUTPUT, key_id)
 }
 
 /// Adds a coinbase input spending a coinbase output.
-/// We will use the block hash to verify coinbase maturity.
 pub fn coinbase_input<K>(
 	value: u64,
-	block_hash: Hash,
-	merkle_proof: MerkleProof,
 	key_id: Identifier,
 ) -> Box<Append<K>>
 where
@@ -96,13 +90,7 @@ where
 		LOGGER,
 		"Building input (spending coinbase): {}, {}", value, key_id
 	);
-	build_input(
-		value,
-		OutputFeatures::COINBASE_OUTPUT,
-		Some(block_hash),
-		Some(merkle_proof),
-		key_id,
-	)
+	build_input(value, OutputFeatures::COINBASE_OUTPUT, key_id)
 }
 
 /// Adds an output with the provided value and key identifier from the

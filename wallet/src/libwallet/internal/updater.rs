@@ -65,55 +65,6 @@ where
 {
 	let height = wallet.get_chain_height()?;
 	refresh_output_state(wallet, height)?;
-	refresh_missing_block_hashes(wallet, height)?;
-	Ok(())
-}
-
-// TODO - this might be slow if we have really old outputs that have never been
-// refreshed
-fn refresh_missing_block_hashes<T, K>(wallet: &mut T, height: u64) -> Result<(), Error>
-where
-	T: WalletBackend<K> + WalletClient,
-	K: Keychain,
-{
-	// build a local map of wallet outputs keyed by commit
-	// and a list of outputs we want to query the node for
-	let wallet_outputs = map_wallet_outputs_missing_block(wallet)?;
-
-	let wallet_output_keys = wallet_outputs.keys().map(|commit| commit.clone()).collect();
-
-	// nothing to do so return (otherwise we hit the api with a monster query...)
-	if wallet_outputs.is_empty() {
-		return Ok(());
-	}
-
-	debug!(
-		LOGGER,
-		"Refreshing missing block hashes (and heights) for {} outputs",
-		wallet_outputs.len(),
-	);
-
-	let (api_blocks, api_merkle_proofs) =
-		wallet.get_missing_block_hashes_from_node(height, wallet_output_keys)?;
-
-	// now for each commit, find the output in the wallet and
-	// the corresponding api output (if it exists)
-	// and refresh it in-place in the wallet.
-	// Note: minimizing the time we spend holding the wallet lock.
-	let mut batch = wallet.batch()?;
-	for (commit, id) in wallet_outputs.iter() {
-		if let Some((height, bid)) = api_blocks.get(&commit) {
-			if let Ok(mut output) = batch.get(id) {
-				output.height = *height;
-				output.block = Some(bid.clone());
-				if let Some(merkle_proof) = api_merkle_proofs.get(&commit) {
-					output.merkle_proof = Some(merkle_proof.clone());
-				}
-				batch.save(output);
-			}
-		}
-	}
-	batch.commit()?;
 	Ok(())
 }
 
@@ -132,29 +83,6 @@ where
 	let unspents = wallet
 		.iter()
 		.filter(|x| x.root_key_id == root_key_id && x.status != OutputStatus::Spent);
-	for out in unspents {
-		let commit = keychain.commit_with_key_index(out.value, out.n_child)?;
-		wallet_outputs.insert(commit, out.key_id.clone());
-	}
-	Ok(wallet_outputs)
-}
-
-/// As above, but only return unspent outputs with missing block hashes
-/// and a list of outputs we want to query the node for
-pub fn map_wallet_outputs_missing_block<T, K>(
-	wallet: &mut T,
-) -> Result<HashMap<pedersen::Commitment, Identifier>, Error>
-where
-	T: WalletBackend<K>,
-	K: Keychain,
-{
-	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
-	let keychain = wallet.keychain().clone();
-	let unspents = wallet.iter().filter(|x| {
-		x.root_key_id == keychain.root_key_id()
-			&& x.block.is_none()
-			&& x.status == OutputStatus::Unspent
-	});
 	for out in unspents {
 		let commit = keychain.commit_with_key_index(out.value, out.n_child)?;
 		wallet_outputs.insert(commit, out.key_id.clone());
@@ -329,20 +257,16 @@ where
 	{
 		// Now acquire the wallet lock and write the new output.
 		let mut batch = wallet.batch()?;
-		{
-			batch.save(OutputData {
-				root_key_id: root_key_id.clone(),
-				key_id: key_id.clone(),
-				n_child: derivation,
-				value: reward(block_fees.fees),
-				status: OutputStatus::Unconfirmed,
-				height: height,
-				lock_height: lock_height,
-				is_coinbase: true,
-				block: None,
-				merkle_proof: None,
-			})?;
-		}
+		batch.save(OutputData {
+			root_key_id: root_key_id.clone(),
+			key_id: key_id.clone(),
+			n_child: derivation,
+			value: reward(block_fees.fees),
+			status: OutputStatus::Unconfirmed,
+			height: height,
+			lock_height: lock_height,
+			is_coinbase: true,
+		});
 		batch.commit()?;
 	}
 

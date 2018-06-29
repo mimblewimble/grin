@@ -24,7 +24,6 @@ use serde_json;
 use failure::ResultExt;
 
 use core::core::hash::Hash;
-use core::core::merkle_proof::MerkleProof;
 use core::ser;
 
 use keychain::{Identifier, Keychain};
@@ -150,22 +149,6 @@ pub trait WalletClient {
 		),
 		Error,
 	>;
-
-	/// Get any missing block hashes from node
-	fn get_missing_block_hashes_from_node(
-		&self,
-		height: u64,
-		wallet_outputs: Vec<pedersen::Commitment>,
-	) -> Result<
-		(
-			HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
-			HashMap<pedersen::Commitment, MerkleProofWrapper>,
-		),
-		Error,
-	>;
-
-	/// create merkle proof for a commit from a node at the current height
-	fn create_merkle_proof(&self, commit: &str) -> Result<MerkleProofWrapper, Error>;
 }
 
 /// Information about an output that's being tracked by the wallet. Must be
@@ -190,10 +173,6 @@ pub struct OutputData {
 	pub lock_height: u64,
 	/// Is this a coinbase output? Is it subject to coinbase locktime?
 	pub is_coinbase: bool,
-	/// Hash of the block this output originated from.
-	pub block: Option<BlockIdentifier>,
-	/// Merkle proof
-	pub merkle_proof: Option<MerkleProofWrapper>,
 }
 
 impl ser::Writeable for OutputData {
@@ -238,14 +217,6 @@ impl OutputData {
 		if [OutputStatus::Spent, OutputStatus::Locked].contains(&self.status) {
 			return false;
 		} else if self.status == OutputStatus::Unconfirmed && self.is_coinbase {
-			return false;
-		} else if self.is_coinbase && self.block.is_none() {
-			// if we do not have a block hash for coinbase output we cannot spent it
-			// block index got compacted before we refreshed our wallet?
-			return false;
-		} else if self.is_coinbase && self.merkle_proof.is_none() {
-			// if we do not have a Merkle proof for coinbase output we cannot spent it
-			// block index got compacted before we refreshed our wallet?
 			return false;
 		} else if self.lock_height > current_height {
 			return false;
@@ -301,53 +272,6 @@ impl fmt::Display for OutputStatus {
 			OutputStatus::Locked => write!(f, "Locked"),
 			OutputStatus::Spent => write!(f, "Spent"),
 		}
-	}
-}
-
-/// Wrapper for a merkle proof
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
-pub struct MerkleProofWrapper(pub MerkleProof);
-
-impl MerkleProofWrapper {
-	/// Create
-	pub fn merkle_proof(&self) -> MerkleProof {
-		self.0.clone()
-	}
-}
-
-impl serde::ser::Serialize for MerkleProofWrapper {
-	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-	where
-		S: serde::ser::Serializer,
-	{
-		serializer.serialize_str(&self.0.to_hex())
-	}
-}
-
-impl<'de> serde::de::Deserialize<'de> for MerkleProofWrapper {
-	fn deserialize<D>(deserializer: D) -> Result<MerkleProofWrapper, D::Error>
-	where
-		D: serde::de::Deserializer<'de>,
-	{
-		deserializer.deserialize_str(MerkleProofWrapperVisitor)
-	}
-}
-
-struct MerkleProofWrapperVisitor;
-
-impl<'de> serde::de::Visitor<'de> for MerkleProofWrapperVisitor {
-	type Value = MerkleProofWrapper;
-
-	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-		formatter.write_str("a merkle proof")
-	}
-
-	fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-	where
-		E: serde::de::Error,
-	{
-		let merkle_proof = MerkleProof::from_hex(s).unwrap();
-		Ok(MerkleProofWrapper(merkle_proof))
 	}
 }
 

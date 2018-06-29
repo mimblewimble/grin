@@ -109,8 +109,6 @@ where
 				height: current_height,
 				lock_height: 0,
 				is_coinbase: false,
-				block: None,
-				merkle_proof: None,
 			});
 		}
 		batch.commit()?;
@@ -174,8 +172,6 @@ where
 			height: height,
 			lock_height: 0,
 			is_coinbase: false,
-			block: None,
-			merkle_proof: None,
 		});
 		batch.commit()?;
 		Ok(())
@@ -238,7 +234,7 @@ where
 	// sender
 	let mut fee;
 	// First attempt to spend without change
-	fee = tx_fee(coins.len(), 1, coins_proof_count(&coins), None);
+	fee = tx_fee(coins.len(), 1, None);
 	let mut total: u64 = coins.iter().map(|c| c.value).sum();
 	let mut amount_with_fee = amount + fee;
 
@@ -251,7 +247,7 @@ where
 
 	// Check if we need to use a change address
 	if total > amount_with_fee {
-		fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
+		fee = tx_fee(coins.len(), 2, None);
 		amount_with_fee = amount + fee;
 
 		// Here check if we have enough outputs for the amount including fee otherwise
@@ -274,7 +270,7 @@ where
 				max_outputs,
 				selection_strategy_is_use_all,
 			);
-			fee = tx_fee(coins.len(), 2, coins_proof_count(&coins), None);
+			fee = tx_fee(coins.len(), 2, None);
 			total = coins.iter().map(|c| c.value).sum();
 			amount_with_fee = amount + fee;
 		}
@@ -288,11 +284,6 @@ where
 	parts.push(build::with_lock_height(lock_height));
 
 	Ok((parts, coins, change, change_derivation, amount, fee))
-}
-
-/// coins proof count
-pub fn coins_proof_count(coins: &Vec<OutputData>) -> usize {
-	coins.iter().filter(|c| c.merkle_proof.is_some()).count()
 }
 
 /// Selects inputs and change for a transaction
@@ -322,14 +313,8 @@ where
 	for coin in coins {
 		let key_id = wallet.keychain().derive_key_id(coin.n_child)?;
 		if coin.is_coinbase {
-			let block = coin.block.clone();
-			let merkle_proof = coin.merkle_proof.clone();
-			let merkle_proof = merkle_proof.unwrap().merkle_proof();
-
 			parts.push(build::coinbase_input(
 				coin.value,
-				block.unwrap().hash(),
-				merkle_proof,
 				key_id,
 			));
 		} else {

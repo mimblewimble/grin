@@ -81,8 +81,6 @@ fn test_some_raw_txs() {
 		vec![
 			build::coinbase_input(
 				coinbase_reward,
-				block.hash(),
-				MerkleProof::default(),
 				key_id1.clone(),
 			),
 			build::output(100, key_id2.clone()),
@@ -97,8 +95,6 @@ fn test_some_raw_txs() {
 		vec![
 			build::coinbase_input(
 				coinbase_reward,
-				block.hash(),
-				MerkleProof::default(),
 				key_id1.clone(),
 			),
 			build::output(100, key_id4.clone()),

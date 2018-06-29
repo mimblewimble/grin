@@ -263,8 +263,6 @@ fn spend_in_fork_and_compact() {
 		vec![
 			build::coinbase_input(
 				consensus::REWARD,
-				block_hash,
-				merkle_proof,
 				kc.derive_key_id(2).unwrap(),
 			),
 			build::output(consensus::REWARD - 20000, kc.derive_key_id(30).unwrap()),
