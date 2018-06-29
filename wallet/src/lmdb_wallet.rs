@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use std::cell::RefCell;
-use std::collections::hash_map::Values;
 use std::collections::HashMap;
+use std::collections::hash_map::Values;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::{fs, path};

@@ -54,7 +54,11 @@ pub const BLOCK_TIME_SEC: u64 = 60;
 pub const PROOFSIZE: usize = 42;
 
 /// Default Cuckoo Cycle size shift used for mining and validating.
-pub const DEFAULT_SIZESHIFT: u8 = 30;
+pub const DEFAULT_MIN_SIZESHIFT: u8 = 30;
+
+/// Original reference sizeshift to compute difficulty factors for higher
+/// Cuckoo graph sizes, changing this would hard fork
+pub const REFERENCE_SIZESHIFT: u8 = 30;
 
 /// Default Cuckoo Cycle easiness, high enough to have good likeliness to find
 /// a solution.

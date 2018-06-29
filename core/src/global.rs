@@ -17,8 +17,9 @@
 //! should be used sparingly.
 
 use consensus::TargetError;
-use consensus::{BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_SIZESHIFT,
-                DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE};
+use consensus::{BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_MIN_SIZESHIFT,
+                DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
+                REFERENCE_SIZESHIFT};
 use core::target::Difficulty;
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
@@ -30,13 +31,13 @@ use std::sync::RwLock;
 /// by users
 
 /// Automated testing sizeshift
-pub const AUTOMATED_TESTING_SIZESHIFT: u8 = 10;
+pub const AUTOMATED_TESTING_MIN_SIZESHIFT: u8 = 10;
 
 /// Automated testing proof size
 pub const AUTOMATED_TESTING_PROOF_SIZE: usize = 4;
 
 /// User testing sizeshift
-pub const USER_TESTING_SIZESHIFT: u8 = 16;
+pub const USER_TESTING_MIN_SIZESHIFT: u8 = 16;
 
 /// User testing proof size
 pub const USER_TESTING_PROOF_SIZE: usize = 42;
@@ -94,15 +95,29 @@ pub fn set_mining_mode(mode: ChainTypes) {
 	*param_ref = mode;
 }
 
-/// The sizeshift
-pub fn sizeshift() -> u8 {
+/// The minimum acceptable sizeshift
+pub fn min_sizeshift() -> u8 {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
-		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_SIZESHIFT,
-		ChainTypes::UserTesting => USER_TESTING_SIZESHIFT,
-		ChainTypes::Testnet1 => USER_TESTING_SIZESHIFT,
-		ChainTypes::Testnet2 => DEFAULT_SIZESHIFT,
-		ChainTypes::Mainnet => DEFAULT_SIZESHIFT,
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_SIZESHIFT,
+		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
+		ChainTypes::Testnet1 => USER_TESTING_MIN_SIZESHIFT,
+		ChainTypes::Testnet2 => DEFAULT_MIN_SIZESHIFT,
+		ChainTypes::Mainnet => DEFAULT_MIN_SIZESHIFT,
+	}
+}
+
+/// Reference sizeshift used to compute factor on higher Cuckoo graph sizes,
+/// while the min_sizeshift can be changed on a soft fork, changing
+/// ref_sizeshift is a hard fork.
+pub fn ref_sizeshift() -> u8 {
+	let param_ref = CHAIN_TYPE.read().unwrap();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_SIZESHIFT,
+		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
+		ChainTypes::Testnet1 => USER_TESTING_MIN_SIZESHIFT,
+		ChainTypes::Testnet2 => REFERENCE_SIZESHIFT,
+		ChainTypes::Mainnet => REFERENCE_SIZESHIFT,
 	}
 }
 

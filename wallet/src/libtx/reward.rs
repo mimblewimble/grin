@@ -38,13 +38,7 @@ where
 
 	trace!(LOGGER, "Block reward - Pedersen Commit is: {:?}", commit,);
 
-	let rproof = proof::create(
-		keychain,
-		value,
-		key_id,
-		commit,
-		None,
-	)?;
+	let rproof = proof::create(keychain, value, key_id, commit, None)?;
 
 	let output = Output {
 		features: OutputFeatures::COINBASE_OUTPUT,

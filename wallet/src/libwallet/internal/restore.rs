@@ -16,9 +16,9 @@
 use core::global;
 use keychain::{Identifier, Keychain};
 use libtx::proof;
-use libwallet::types::*;
 use libwallet::Error;
-use util::secp::{key::SecretKey, pedersen};
+use libwallet::types::*;
+use util::secp::{pedersen, key::SecretKey};
 use util::{self, LOGGER};
 
 /// Utility struct for return values from below

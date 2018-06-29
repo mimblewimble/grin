@@ -22,11 +22,10 @@ use std::marker::PhantomData;
 use core::ser;
 use keychain::Keychain;
 use libtx::slate::Slate;
-use libwallet::internal::{tx, updater};
-use libwallet::types::{
-	BlockFees, CbData, OutputData, TxWrapper, WalletBackend, WalletClient, WalletInfo,
-};
 use libwallet::Error;
+use libwallet::internal::{tx, updater};
+use libwallet::types::{BlockFees, CbData, OutputData, TxWrapper, WalletBackend, WalletClient,
+                       WalletInfo};
 use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to

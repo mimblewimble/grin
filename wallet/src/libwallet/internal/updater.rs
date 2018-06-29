@@ -26,9 +26,8 @@ use libtx::reward;
 use libwallet;
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
-use libwallet::types::{
-	BlockFees, CbData, OutputData, OutputStatus, WalletBackend, WalletClient, WalletInfo,
-};
+use libwallet::types::{BlockFees, CbData, OutputData, OutputStatus, WalletBackend, WalletClient,
+                       WalletInfo};
 use util::secp::pedersen;
 use util::{self, LOGGER};
 

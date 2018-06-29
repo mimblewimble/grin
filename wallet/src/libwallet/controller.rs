@@ -31,9 +31,8 @@ use failure::Fail;
 use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
-use libwallet::types::{
-	BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient, WalletInfo,
-};
+use libwallet::types::{BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient,
+                       WalletInfo};
 use libwallet::{Error, ErrorKind};
 
 use util::LOGGER;

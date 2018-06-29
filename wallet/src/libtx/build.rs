@@ -106,13 +106,7 @@ where
 			let commit = build.keychain.commit(value, &key_id).unwrap();
 			trace!(LOGGER, "Builder - Pedersen Commit is: {:?}", commit,);
 
-			let rproof = proof::create(
-				build.keychain,
-				value,
-				&key_id,
-				commit,
-				None,
-			).unwrap();
+			let rproof = proof::create(build.keychain, value, &key_id, commit, None).unwrap();
 
 			(
 				tx.with_output(Output {

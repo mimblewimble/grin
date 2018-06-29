@@ -230,19 +230,16 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	if !ctx.opts.contains(Options::SKIP_POW) {
-		let n = global::sizeshift();
-		if !(ctx.pow_verifier)(header, n) {
+		if global::min_sizeshift() > header.pow.cuckoo_sizeshift {
+			return Err(Error::LowSizeshift);
+		}
+		if !(ctx.pow_verifier)(header, header.pow.cuckoo_sizeshift) {
 			error!(
 				LOGGER,
-				"pipe: validate_header failed for cuckoo shift size {}", n
+				"pipe: validate_header failed for cuckoo shift size {}",
+				header.pow.cuckoo_sizeshift,
 			);
 			return Err(Error::InvalidPow);
-		}
-		if header.height % 500 == 0 {
-			debug!(
-				LOGGER,
-				"Validating header validated, using cuckoo shift size {}", n
-			);
 		}
 	}
 
