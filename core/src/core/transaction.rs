@@ -17,19 +17,17 @@
 use std::cmp::Ordering;
 use std::cmp::max;
 use std::collections::HashSet;
-use std::io::Cursor;
 use std::{error, fmt};
 
-use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
+use util::secp::pedersen::{Commitment, RangeProof};
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
 
 use consensus::{self, VerifySortOrder};
-use core::hash::{Hash, Hashed, ZERO_HASH};
-use core::merkle_proof::MerkleProof;
+use core::hash::Hashed;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
-use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
+use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable,
           WriteableSorted, Writer};
 use util;
 
@@ -441,22 +439,13 @@ impl Transaction {
 		Transaction::weight(
 			self.inputs.len(),
 			self.outputs.len(),
-			self.input_proofs_count(),
 		)
 	}
 
-	/// Collect input's Merkle proofs
-	pub fn input_proofs_count(&self) -> usize {
-		self.inputs
-			.iter()
-			.filter(|i| i.merkle_proof.is_some())
-			.count()
-	}
-
 	/// Calculate transaction weight from transaction details
-	pub fn weight(input_len: usize, output_len: usize, proof_len: usize) -> u32 {
+	pub fn weight(input_len: usize, output_len: usize) -> u32 {
 		let mut tx_weight =
-			-1 * (input_len as i32) + (4 * output_len as i32) + (proof_len as i32) + 1;
+			-1 * (input_len as i32) + (4 * output_len as i32) + 1;
 		if tx_weight < 1 {
 			tx_weight = 1;
 		}
@@ -636,13 +625,6 @@ pub struct Input {
 	pub features: OutputFeatures,
 	/// The commit referencing the output being spent.
 	pub commit: Commitment,
-	/// The hash of the block the output originated from.
-	/// Currently we only care about this for coinbase outputs.
-	pub block_hash: Option<Hash>,
-	/// The Merkle Proof that shows the output being spent by this input
-	/// existed and was unspent at the time of this block (proof of inclusion
-	/// in output_root)
-	pub merkle_proof: Option<MerkleProof>,
 }
 
 hashable_ord!(Input);
@@ -663,17 +645,6 @@ impl Writeable for Input {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
 		self.commit.write(writer)?;
-
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-				let block_hash = &self.block_hash.unwrap_or(ZERO_HASH);
-				let merkle_proof = self.merkle_proof();
-
-				writer.write_fixed_bytes(block_hash)?;
-				merkle_proof.write(writer)?;
-			}
-		}
-
 		Ok(())
 	}
 }
@@ -687,13 +658,7 @@ impl Readable for Input {
 
 		let commit = Commitment::read(reader)?;
 
-		if features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			let block_hash = Some(Hash::read(reader)?);
-			let merkle_proof = Some(MerkleProof::read(reader)?);
-			Ok(Input::new(features, commit, block_hash, merkle_proof))
-		} else {
-			Ok(Input::new(features, commit, None, None))
-		}
+		Ok(Input::new(features, commit))
 	}
 }
 
@@ -707,14 +672,10 @@ impl Input {
 	pub fn new(
 		features: OutputFeatures,
 		commit: Commitment,
-		block_hash: Option<Hash>,
-		merkle_proof: Option<MerkleProof>,
 	) -> Input {
 		Input {
 			features,
 			commit,
-			block_hash,
-			merkle_proof,
 		}
 	}
 
@@ -724,21 +685,6 @@ impl Input {
 	/// calculate lock_height for coinbase outputs).
 	pub fn commitment(&self) -> Commitment {
 		self.commit
-	}
-
-	/// Convenience function to return the (optional) block_hash for this input.
-	/// Will return the default hash if we do not have one.
-	pub fn block_hash(&self) -> Hash {
-		self.block_hash.unwrap_or_else(Hash::default)
-	}
-
-	/// Convenience function to return the (optional) merkle_proof for this
-	/// input. Will return the "empty" Merkle proof if we do not have one.
-	/// We currently only care about the Merkle proof for inputs spending
-	/// coinbase outputs.
-	pub fn merkle_proof(&self) -> MerkleProof {
-		let merkle_proof = self.merkle_proof.clone();
-		merkle_proof.unwrap_or_else(MerkleProof::empty)
 	}
 }
 
@@ -920,6 +866,7 @@ impl Readable for OutputIdentifier {
 #[cfg(test)]
 mod test {
 	use super::*;
+	use core::hash::Hash;
 	use core::id::{ShortId, ShortIdentifiable};
 	use keychain::{ExtKeychain, Keychain};
 	use util::secp;
@@ -991,8 +938,6 @@ mod test {
 		let input = Input {
 			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: commit,
-			block_hash: None,
-			merkle_proof: None,
 		};
 
 		let block_hash = Hash::from_hex(
@@ -1009,8 +954,6 @@ mod test {
 		let input = Input {
 			features: OutputFeatures::COINBASE_OUTPUT,
 			commit: commit,
-			block_hash: None,
-			merkle_proof: None,
 		};
 
 		let short_id = input.short_id(&block_hash, nonce);

@@ -33,8 +33,12 @@ use error::{Error, ErrorKind};
 use client;
 use libtx::slate::Slate;
 use libwallet;
-use libwallet::types::{BlockFees, BlockIdentifier, CbData, MerkleProofWrapper, OutputData,
-                       TxWrapper, WalletBackend, WalletClient, WalletDetails, WalletOutputBatch};
+
+use libwallet::types::{
+	BlockFees, BlockIdentifier, CbData, OutputData, TxWrapper, WalletBackend,
+	WalletClient, WalletDetails, WalletOutputBatch,
+};
+
 use types::{WalletConfig, WalletSeed};
 
 const DETAIL_FILE: &'static str = "wallet.det";
@@ -395,31 +399,6 @@ impl<K> WalletClient for FileWallet<K> {
 		libwallet::Error,
 	> {
 		let res = client::get_outputs_by_pmmr_index(self.node_url(), start_height, max_outputs)
-			.context(libwallet::ErrorKind::Node)?;
-		Ok(res)
-	}
-
-	/// Get any missing block hashes from node
-	fn get_missing_block_hashes_from_node(
-		&self,
-		height: u64,
-		wallet_outputs: Vec<pedersen::Commitment>,
-	) -> Result<
-		(
-			HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
-			HashMap<pedersen::Commitment, MerkleProofWrapper>,
-		),
-		libwallet::Error,
-	> {
-		let res =
-			client::get_missing_block_hashes_from_node(self.node_url(), height, wallet_outputs)
-				.context(libwallet::ErrorKind::Node)?;
-		Ok(res)
-	}
-
-	/// retrieve merkle proof for a commit from a node
-	fn create_merkle_proof(&self, commit: &str) -> Result<MerkleProofWrapper, libwallet::Error> {
-		let res = client::create_merkle_proof(self.node_url(), commit)
 			.context(libwallet::ErrorKind::Node)?;
 		Ok(res)
 	}

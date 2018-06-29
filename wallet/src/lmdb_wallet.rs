@@ -251,28 +251,4 @@ impl<K> WalletClient for LMDBBackend<K> {
 			.context(ErrorKind::Node)?;
 		Ok(res)
 	}
-
-	/// Get any missing block hashes from node
-	fn get_missing_block_hashes_from_node(
-		&self,
-		height: u64,
-		wallet_outputs: Vec<pedersen::Commitment>,
-	) -> Result<
-		(
-			HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
-			HashMap<pedersen::Commitment, MerkleProofWrapper>,
-		),
-		Error,
-	> {
-		let res =
-			client::get_missing_block_hashes_from_node(self.node_url(), height, wallet_outputs)
-				.context(ErrorKind::Node)?;
-		Ok(res)
-	}
-
-	/// retrieve merkle proof for a commit from a node
-	fn create_merkle_proof(&self, commit: &str) -> Result<MerkleProofWrapper, Error> {
-		let res = client::create_merkle_proof(self.node_url(), commit).context(ErrorKind::Node)?;
-		Ok(res)
-	}
 }

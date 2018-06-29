@@ -31,7 +31,7 @@ use keychain::ExtKeychain;
 use wallet::WalletConfig;
 use wallet::file_wallet::FileWallet;
 use wallet::libwallet::internal::updater;
-use wallet::libwallet::types::{BlockFees, BlockIdentifier, MerkleProofWrapper, OutputStatus,
+use wallet::libwallet::types::{BlockFees, BlockIdentifier, OutputStatus,
                                WalletBackend};
 use wallet::libwallet::{Error, ErrorKind};
 
@@ -176,13 +176,7 @@ where
 		}
 	};
 	add_block_with_reward(chain, txs, coinbase_tx.clone());
-	// build merkle proof and block identifier and save in wallet
-	let output_id = OutputIdentifier::from_output(&coinbase_tx.0.clone());
-	let m_proof = chain.get_merkle_proof(&output_id, &chain.head_header().unwrap());
-	let block_id = Some(BlockIdentifier(chain.head_header().unwrap().hash()));
-	let mut output = wallet.get(&fees.key_id.unwrap()).unwrap();
-	output.block = block_id;
-	output.merkle_proof = Some(MerkleProofWrapper(m_proof.unwrap()));
+	let output = wallet.get(&fees.key_id.unwrap()).unwrap();
 	let mut batch = wallet.batch().unwrap();
 	batch.save(output).unwrap();
 	batch.commit().unwrap();

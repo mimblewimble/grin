@@ -107,7 +107,8 @@ where
 			Err(e) => {
 				error!(
 					LOGGER,
-					"Communication with receiver failed on SenderInitiation send. Aborting transaction"
+					"Communication with receiver failed on SenderInitiation send. Aborting transaction {:?}",
+					e,
 				);
 				return Err(e)?;
 			}

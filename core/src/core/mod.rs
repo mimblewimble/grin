@@ -20,7 +20,6 @@ pub mod hash;
 pub mod id;
 pub mod merkle_proof;
 pub mod pmmr;
-pub mod prune_list;
 pub mod target;
 pub mod transaction;
 
