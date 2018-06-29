@@ -14,8 +14,8 @@
 
 //! Transactions
 
-use std::cmp::Ordering;
 use std::cmp::max;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::{error, fmt};
 
@@ -27,8 +27,9 @@ use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
-use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable,
-          WriteableSorted, Writer};
+use ser::{
+	self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted, Writer,
+};
 use util;
 
 bitflags! {
@@ -250,7 +251,9 @@ pub struct Transaction {
 /// PartialEq
 impl PartialEq for Transaction {
 	fn eq(&self, tx: &Transaction) -> bool {
-		self.inputs == tx.inputs && self.outputs == tx.outputs && self.kernels == tx.kernels
+		self.inputs == tx.inputs
+			&& self.outputs == tx.outputs
+			&& self.kernels == tx.kernels
 			&& self.offset == tx.offset
 	}
 }
@@ -290,7 +293,8 @@ impl Readable for Transaction {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
-		if input_len > consensus::MAX_TX_INPUTS || output_len > consensus::MAX_TX_OUTPUTS
+		if input_len > consensus::MAX_TX_INPUTS
+			|| output_len > consensus::MAX_TX_OUTPUTS
 			|| kernel_len > consensus::MAX_TX_KERNELS
 		{
 			return Err(ser::Error::CorruptedData);
@@ -436,16 +440,12 @@ impl Transaction {
 
 	/// Calculate transaction weight
 	pub fn tx_weight(&self) -> u32 {
-		Transaction::weight(
-			self.inputs.len(),
-			self.outputs.len(),
-		)
+		Transaction::weight(self.inputs.len(), self.outputs.len())
 	}
 
 	/// Calculate transaction weight from transaction details
 	pub fn weight(input_len: usize, output_len: usize) -> u32 {
-		let mut tx_weight =
-			-1 * (input_len as i32) + (4 * output_len as i32) + 1;
+		let mut tx_weight = -1 * (input_len as i32) + (4 * output_len as i32) + 1;
 		if tx_weight < 1 {
 			tx_weight = 1;
 		}
@@ -669,14 +669,8 @@ impl Readable for Input {
 impl Input {
 	/// Build a new input from the data required to identify and verify an
 	/// output being spent.
-	pub fn new(
-		features: OutputFeatures,
-		commit: Commitment,
-	) -> Input {
-		Input {
-			features,
-			commit,
-		}
+	pub fn new(features: OutputFeatures, commit: Commitment) -> Input {
+		Input { features, commit }
 	}
 
 	/// The input commitment which _partially_ identifies the output being

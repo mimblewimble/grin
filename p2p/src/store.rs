@@ -118,7 +118,10 @@ impl PeerStore {
 	}
 
 	pub fn get_peer(&self, peer_addr: SocketAddr) -> Result<PeerData, Error> {
-		option_to_not_found(self.db.get_ser(&peer_key(peer_addr)[..]))
+		option_to_not_found(
+			self.db.get_ser(&peer_key(peer_addr)[..]),
+			&format!("Peer at address: {}", peer_addr),
+		)
 	}
 
 	pub fn exists_peer(&self, peer_addr: SocketAddr) -> Result<bool, Error> {

@@ -38,7 +38,10 @@ extern crate serde_derive;
 extern crate siphasher;
 #[macro_use]
 extern crate slog;
+extern crate failure;
 extern crate time;
+#[macro_use]
+extern crate failure_derive;
 
 #[macro_use]
 pub mod macros;

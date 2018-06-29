@@ -27,7 +27,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
 use grin_store as store;
-use grin_store::{option_to_not_found, to_key, Error, u64_to_key};
+use grin_store::{option_to_not_found, to_key, u64_to_key, Error};
 use types::Tip;
 
 const STORE_SUBPATH: &'static str = "chain";
@@ -63,7 +63,7 @@ impl ChainStore {
 #[allow(missing_docs)]
 impl ChainStore {
 	pub fn head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]))
+		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), "HEAD")
 	}
 
 	pub fn head_header(&self) -> Result<BlockHeader, Error> {
@@ -71,15 +71,18 @@ impl ChainStore {
 	}
 
 	pub fn get_header_head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]))
+		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]), "HEADER_HEAD")
 	}
 
 	pub fn get_sync_head(&self) -> Result<Tip, Error> {
-		option_to_not_found(self.db.get_ser(&vec![SYNC_HEAD_PREFIX]))
+		option_to_not_found(self.db.get_ser(&vec![SYNC_HEAD_PREFIX]), "SYNC_HEAD")
 	}
 
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, &mut h.to_vec())))
+		option_to_not_found(
+			self.db.get_ser(&to_key(BLOCK_PREFIX, &mut h.to_vec())),
+			&format!("BLOCK: {} ", h),
+		)
 	}
 
 	pub fn block_exists(&self, h: &Hash) -> Result<bool, Error> {
@@ -99,6 +102,7 @@ impl ChainStore {
 		let header: Result<BlockHeader, Error> = option_to_not_found(
 			self.db
 				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
+			&format!("BLOCK HEADER: {}", h),
 		);
 
 		// cache miss - so adding to the cache for next time
@@ -121,26 +125,33 @@ impl ChainStore {
 
 		// check we are not out ahead of the current head
 		if header.height > head.height {
-			return Err(Error::NotFoundErr);
+			return Err(Error::NotFoundErr(String::from(
+				"header.height > head.height",
+			)));
 		}
 
 		let header_at_height = self.get_header_by_height(header.height)?;
 		if header.hash() == header_at_height.hash() {
 			Ok(())
 		} else {
-			Err(Error::NotFoundErr)
+			Err(Error::NotFoundErr(String::from(
+				"header.hash == header_at_height.hash",
+			)))
 		}
 	}
 
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		option_to_not_found(self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)))
-			.and_then(|hash| self.get_block_header(&hash))
+		option_to_not_found(
+			self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)),
+			&format!("Header at height: {}", height),
+		).and_then(|hash| self.get_block_header(&hash))
 	}
 
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())),
+			&format!("Output position for: {:?}", commit),
 		)
 	}
 
@@ -239,7 +250,7 @@ impl<'a> Batch<'a> {
 	pub fn init_sync_head(&self, t: &Tip) -> Result<(), Error> {
 		let header_tip = match self.store.get_header_head() {
 			Ok(hh) => hh,
-			Err(store::Error::NotFoundErr) => {
+			Err(store::Error::NotFoundErr(_)) => {
 				self.save_header_head(t)?;
 				t.clone()
 			}
@@ -257,7 +268,10 @@ impl<'a> Batch<'a> {
 
 	/// get block
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		option_to_not_found(self.db.get_ser(&to_key(BLOCK_PREFIX, &mut h.to_vec())))
+		option_to_not_found(
+			self.db.get_ser(&to_key(BLOCK_PREFIX, &mut h.to_vec())),
+			&format!("Block with hash: {}", h),
+		)
 	}
 
 	/// Save the block and its header
@@ -303,6 +317,7 @@ impl<'a> Batch<'a> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())),
+			&format!("Output position for commit: {:?}", commit),
 		)
 	}
 
@@ -315,6 +330,7 @@ impl<'a> Batch<'a> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
+			&format!("Block header for block: {}", h),
 		)
 	}
 

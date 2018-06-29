@@ -17,8 +17,10 @@
 //! should be used sparingly.
 
 use consensus::TargetError;
-use consensus::{BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_SIZESHIFT,
-                DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE};
+use consensus::{
+	BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_SIZESHIFT,
+	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
+};
 use core::target::Difficulty;
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
@@ -169,7 +171,8 @@ pub fn is_user_testing_mode() -> bool {
 /// Are we in production mode (a live public network)?
 pub fn is_production_mode() -> bool {
 	let param_ref = CHAIN_TYPE.read().unwrap();
-	ChainTypes::Testnet1 == *param_ref || ChainTypes::Testnet2 == *param_ref
+	ChainTypes::Testnet1 == *param_ref
+		|| ChainTypes::Testnet2 == *param_ref
 		|| ChainTypes::Mainnet == *param_ref
 }
 

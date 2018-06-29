@@ -31,7 +31,10 @@ extern crate serde;
 extern crate serde_derive;
 #[macro_use]
 extern crate slog;
+extern crate failure;
 extern crate time;
+#[macro_use]
+extern crate failure_derive;
 
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
@@ -39,6 +42,7 @@ extern crate grin_store;
 extern crate grin_util as util;
 
 mod chain;
+mod error;
 pub mod pipe;
 pub mod store;
 pub mod txhashset;
@@ -47,5 +51,6 @@ pub mod types;
 // Re-export the base interface
 
 pub use chain::{Chain, MAX_ORPHAN_SIZE};
+pub use error::{Error, ErrorKind};
 pub use store::ChainStore;
-pub use types::{ChainAdapter, Error, Options, Tip};
+pub use types::{ChainAdapter, Options, Tip};

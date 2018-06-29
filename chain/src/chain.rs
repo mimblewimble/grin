@@ -27,13 +27,14 @@ use core::core::merkle_proof::MerkleProof;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
+use error::{Error, ErrorKind};
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{ChainAdapter, Error, Options, Tip};
-use util::LOGGER;
+use types::{ChainAdapter, Options, Tip};
 use util::secp::pedersen::{Commitment, RangeProof};
+use util::LOGGER;
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -210,9 +211,7 @@ impl Chain {
 		b: Block,
 		opts: Options,
 	) -> Result<(Option<Tip>, Option<Block>), Error> {
-		let head = self.store
-			.head()
-			.map_err(|e| Error::StoreErr(e, "chain load head".to_owned()))?;
+		let head = self.store.head()?;
 		let mut ctx = self.ctx_from_head(head, opts)?;
 
 		let res = pipe::process_block(&b, &mut ctx);
@@ -252,47 +251,51 @@ impl Chain {
 				}
 				Ok((None, Some(b)))
 			}
-			Err(Error::Orphan) => {
-				let block_hash = b.hash();
-				let orphan = Orphan {
-					block: b,
-					opts: opts,
-					added: Instant::now(),
-				};
-
-				// In the case of a fork - it is possible to have multiple blocks
-				// that are children of a given block.
-				// We do not handle this currently for orphans (future enhancement?).
-				// We just assume "last one wins" for now.
-				&self.orphans.add(orphan);
-
-				debug!(
-					LOGGER,
-					"process_block: orphan: {:?}, # orphans {}",
-					block_hash,
-					self.orphans.len(),
-				);
-				Err(Error::Orphan)
-			}
-			Err(Error::Unfit(ref msg)) => {
-				debug!(
-					LOGGER,
-					"Block {} at {} is unfit at this time: {}",
-					b.hash(),
-					b.header.height,
-					msg
-				);
-				Err(Error::Unfit(msg.clone()))
-			}
 			Err(e) => {
-				info!(
-					LOGGER,
-					"Rejected block {} at {}: {:?}",
-					b.hash(),
-					b.header.height,
-					e
-				);
-				Err(e)
+				match e.kind() {
+					ErrorKind::Orphan => {
+						let block_hash = b.hash();
+						let orphan = Orphan {
+							block: b,
+							opts: opts,
+							added: Instant::now(),
+						};
+
+						// In the case of a fork - it is possible to have multiple blocks
+						// that are children of a given block.
+						// We do not handle this currently for orphans (future enhancement?).
+						// We just assume "last one wins" for now.
+						&self.orphans.add(orphan);
+
+						debug!(
+							LOGGER,
+							"process_block: orphan: {:?}, # orphans {}",
+							block_hash,
+							self.orphans.len(),
+						);
+						Err(ErrorKind::Orphan.into())
+					}
+					ErrorKind::Unfit(ref msg) => {
+						debug!(
+							LOGGER,
+							"Block {} at {} is unfit at this time: {}",
+							b.hash(),
+							b.header.height,
+							msg
+						);
+						Err(ErrorKind::Unfit(msg.clone()).into())
+					}
+					_ => {
+						info!(
+							LOGGER,
+							"Rejected block {} at {}: {:?}",
+							b.hash(),
+							b.header.height,
+							e
+						);
+						Err(ErrorKind::Other(format!("{:?}", e).to_owned()).into())
+					}
+				}
 			}
 		}
 	}
@@ -409,7 +412,7 @@ impl Chain {
 		if tx.lock_height() <= height {
 			Ok(())
 		} else {
-			Err(Error::TxLockHeight)
+			Err(ErrorKind::TxLockHeight.into())
 		}
 	}
 
@@ -529,7 +532,7 @@ impl Chain {
 		let head = self.head().unwrap();
 		let header_head = self.get_header_head().unwrap();
 		if header_head.height - head.height < global::cut_through_horizon() as u64 {
-			return Err(Error::InvalidTxHashSet("not needed".to_owned()));
+			return Err(ErrorKind::InvalidTxHashSet("not needed".to_owned()).into());
 		}
 
 		let header = self.store.get_block_header(&h)?;
@@ -623,17 +626,21 @@ impl Chain {
 					batch.delete_block(&b.hash())?;
 					batch.delete_block_input_bitmap(&b.hash())?;
 				}
-				Err(NotFoundErr) => {
+				Err(NotFoundErr(_)) => {
 					break;
 				}
-				Err(e) => return Err(Error::StoreErr(e, "retrieving block to compact".to_owned())),
+				Err(e) => {
+					return Err(
+						ErrorKind::StoreErr(e, "retrieving block to compact".to_owned()).into(),
+					)
+				}
 			}
 			if current.height <= 1 {
 				break;
 			}
 			match self.store.get_block_header(&current.previous) {
 				Ok(h) => current = h,
-				Err(NotFoundErr) => break,
+				Err(NotFoundErr(_)) => break,
 				Err(e) => return Err(From::from(e)),
 			}
 		}
@@ -671,9 +678,9 @@ impl Chain {
 		let outputs = txhashset.outputs_by_insertion_index(start_index, max);
 		let rangeproofs = txhashset.rangeproofs_by_insertion_index(start_index, max);
 		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
-			return Err(Error::TxHashSetErr(String::from(
+			return Err(ErrorKind::TxHashSetErr(String::from(
 				"Output and rangeproof sets don't match",
-			)));
+			)).into());
 		}
 		let mut output_vec: Vec<Output> = vec![];
 		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
@@ -704,9 +711,7 @@ impl Chain {
 	/// Reset header_head and sync_head to head of current body chain
 	pub fn reset_head(&self) -> Result<(), Error> {
 		let batch = self.store.batch()?;
-		batch
-			.reset_head()
-			.map_err(|e| Error::StoreErr(e, "chain reset_head".to_owned()))?;
+		batch.reset_head()?;
 		batch.commit()?;
 		Ok(())
 	}
@@ -720,28 +725,28 @@ impl Chain {
 	pub fn head_header(&self) -> Result<BlockHeader, Error> {
 		self.store
 			.head_header()
-			.map_err(|e| Error::StoreErr(e, "chain head header".to_owned()))
+			.map_err(|e| ErrorKind::StoreErr(e, "chain head header".to_owned()).into())
 	}
 
 	/// Gets a block header by hash
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
 		self.store
 			.get_block(h)
-			.map_err(|e| Error::StoreErr(e, "chain get block".to_owned()))
+			.map_err(|e| ErrorKind::StoreErr(e, "chain get block".to_owned()).into())
 	}
 
 	/// Gets a block header by hash
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		self.store
 			.get_block_header(h)
-			.map_err(|e| Error::StoreErr(e, "chain get header".to_owned()))
+			.map_err(|e| ErrorKind::StoreErr(e, "chain get header".to_owned()).into())
 	}
 
 	/// Gets the block header at the provided height
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		self.store
 			.get_header_by_height(height)
-			.map_err(|e| Error::StoreErr(e, "chain get header by height".to_owned()))
+			.map_err(|e| ErrorKind::StoreErr(e, "chain get header by height".to_owned()).into())
 	}
 
 	/// Verifies the given block header is actually on the current chain.
@@ -750,7 +755,7 @@ impl Chain {
 	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
 		self.store
 			.is_on_current_chain(header)
-			.map_err(|e| Error::StoreErr(e, "chain is_on_current_chain".to_owned()))
+			.map_err(|e| ErrorKind::StoreErr(e, "chain is_on_current_chain".to_owned()).into())
 	}
 
 	/// Get the tip of the current "sync" header chain.
@@ -758,14 +763,14 @@ impl Chain {
 	pub fn get_sync_head(&self) -> Result<Tip, Error> {
 		self.store
 			.get_sync_head()
-			.map_err(|e| Error::StoreErr(e, "chain get sync head".to_owned()))
+			.map_err(|e| ErrorKind::StoreErr(e, "chain get sync head".to_owned()).into())
 	}
 
 	/// Get the tip of the header chain.
 	pub fn get_header_head(&self) -> Result<Tip, Error> {
 		self.store
 			.get_header_head()
-			.map_err(|e| Error::StoreErr(e, "chain get header head".to_owned()))
+			.map_err(|e| ErrorKind::StoreErr(e, "chain get header head".to_owned()).into())
 	}
 
 	/// Builds an iterator on blocks starting from the current chain head and
@@ -780,7 +785,7 @@ impl Chain {
 	pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {
 		self.store
 			.block_exists(&h)
-			.map_err(|e| Error::StoreErr(e, "chain block exists".to_owned()))
+			.map_err(|e| ErrorKind::StoreErr(e, "chain block exists".to_owned()).into())
 	}
 }
 
@@ -830,7 +835,7 @@ fn setup_head(
 				}
 			}
 		}
-		Err(NotFoundErr) => {
+		Err(NotFoundErr(_)) => {
 			let tip = Tip::from_block(&genesis.header);
 			batch.save_block(&genesis)?;
 			batch.setup_height(&genesis.header, &tip)?;
@@ -844,7 +849,7 @@ fn setup_head(
 			head = tip;
 			info!(LOGGER, "chain: init: saved genesis: {:?}", genesis.hash());
 		}
-		Err(e) => return Err(Error::StoreErr(e, "chain init load head".to_owned())),
+		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()))?,
 	};
 
 	// Initialize header_head and sync_head as necessary for chain init.

@@ -92,12 +92,17 @@ pub fn get_block(
 	);
 	while let Err(e) = result {
 		match e {
-			self::Error::Chain(chain::Error::DuplicateCommitment(_)) => {
-				debug!(
-					LOGGER,
-					"Duplicate commit for potential coinbase detected. Trying next derivation."
-				);
-			}
+			self::Error::Chain(c) => match c.kind() {
+				chain::ErrorKind::DuplicateCommitment(_) => {
+					debug!(
+						LOGGER,
+						"Duplicate commit for potential coinbase detected. Trying next derivation."
+					);
+				}
+				_ => {
+					error!(LOGGER, "Chain Error: {}", c);
+				}
+			},
 			self::Error::Wallet(_) => {
 				error!(
 					LOGGER,
@@ -187,17 +192,23 @@ fn build_block(
 		// If it's a duplicate commitment, it's likely trying to use
 		// a key that's already been derived but not in the wallet
 		// for some reason, allow caller to retry
-		Err(chain::Error::DuplicateCommitment(e)) => {
-			Err(Error::Chain(chain::Error::DuplicateCommitment(e)))
-		}
-
-		//Some other issue, possibly duplicate kernel
 		Err(e) => {
-			error!(
-				LOGGER,
-				"Error setting txhashset root to build a block: {:?}", e
-			);
-			Err(Error::Chain(chain::Error::Other(format!("{:?}", e))))
+			match e.kind() {
+				chain::ErrorKind::DuplicateCommitment(e) => Err(Error::Chain(
+					chain::ErrorKind::DuplicateCommitment(e).into(),
+				)),
+
+				//Some other issue, possibly duplicate kernel
+				_ => {
+					error!(
+						LOGGER,
+						"Error setting txhashset root to build a block: {:?}", e
+					);
+					Err(Error::Chain(
+						chain::ErrorKind::Other(format!("{:?}", e)).into(),
+					))
+				}
+			}
 		}
 	}
 }

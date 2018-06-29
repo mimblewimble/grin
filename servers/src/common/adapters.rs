@@ -216,28 +216,32 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				Ok(_) => {
 					added_hs.push(bh.hash());
 				}
-				Err(chain::Error::Unfit(s)) => {
-					info!(
-						LOGGER,
-						"Received unfit block header {} at {}: {}.",
-						bh.hash(),
-						bh.height,
-						s
-					);
-				}
-				Err(chain::Error::StoreErr(e, explanation)) => {
-					error!(
-						LOGGER,
-						"Store error processing block header {}: in {} {:?}",
-						bh.hash(),
-						explanation,
-						e
-					);
-					return;
-				}
 				Err(e) => {
-					info!(LOGGER, "Invalid block header {}: {:?}.", bh.hash(), e);
-					// TODO penalize peer somehow
+					match e.kind() {
+						chain::ErrorKind::Unfit(s) => {
+							info!(
+								LOGGER,
+								"Received unfit block header {} at {}: {}.",
+								bh.hash(),
+								bh.height,
+								s
+							);
+						}
+						chain::ErrorKind::StoreErr(e, explanation) => {
+							error!(
+								LOGGER,
+								"Store error processing block header {}: in {} {:?}",
+								bh.hash(),
+								explanation,
+								e
+							);
+							return;
+						}
+						_ => {
+							info!(LOGGER, "Invalid block header {}: {:?}.", bh.hash(), e);
+							// TODO penalize peer somehow
+						}
+					}
 				}
 			}
 		}
@@ -269,11 +273,13 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			let header = w(&self.chain).get_header_by_height(h);
 			match header {
 				Ok(head) => headers.push(head),
-				Err(chain::Error::StoreErr(store::Error::NotFoundErr, _)) => break,
-				Err(e) => {
-					error!(LOGGER, "Could not build header locator: {:?}", e);
-					return vec![];
-				}
+				Err(e) => match e.kind() {
+					chain::ErrorKind::StoreErr(store::Error::NotFoundErr(_), _) => break,
+					_ => {
+						error!(LOGGER, "Could not build header locator: {:?}", e);
+						return vec![];
+					}
+				},
 			}
 		}
 
@@ -331,7 +337,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		if let Err(e) =
 			w(&self.chain).txhashset_write(h, rewind_to_output, rewind_to_kernel, txhashset_data)
 		{
-			error!(LOGGER, "Failed to save txhashset archive: {:?}", e);
+			error!(LOGGER, "Failed to save txhashset archive: {}", e);
 			!e.is_bad_data()
 		} else {
 			info!(LOGGER, "Received valid txhashset data for {}.", h);
@@ -391,13 +397,15 @@ impl NetToChainAdapter {
 					self.find_common_header(locator[1..].to_vec())
 				}
 			}
-			Err(chain::Error::StoreErr(store::Error::NotFoundErr, _)) => {
-				self.find_common_header(locator[1..].to_vec())
-			}
-			Err(e) => {
-				error!(LOGGER, "Could not build header locator: {:?}", e);
-				None
-			}
+			Err(e) => match e.kind() {
+				chain::ErrorKind::StoreErr(store::Error::NotFoundErr(_), _) => {
+					self.find_common_header(locator[1..].to_vec())
+				}
+				_ => {
+					error!(LOGGER, "Could not build header locator: {:?}", e);
+					None
+				}
+			},
 		}
 	}
 
@@ -411,14 +419,6 @@ impl NetToChainAdapter {
 			Ok((tip, _)) => {
 				self.validate_chain(bhash);
 				self.check_compact(tip);
-				true
-			}
-			Err(chain::Error::Orphan) => {
-				// make sure we did not miss the parent block
-				if !chain.is_orphan(&prev_hash) && !self.currently_syncing.load(Ordering::Relaxed) {
-					debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
-					self.request_block_by_hash(prev_hash, &addr)
-				}
 				true
 			}
 			Err(ref e) if e.is_bad_data() => {
@@ -435,11 +435,25 @@ impl NetToChainAdapter {
 				false
 			}
 			Err(e) => {
-				debug!(
-					LOGGER,
-					"adapter: process_block: block {} refused by chain: {:?}", bhash, e
-				);
-				true
+				match e.kind() {
+					chain::ErrorKind::Orphan => {
+						// make sure we did not miss the parent block
+						if !chain.is_orphan(&prev_hash)
+							&& !self.currently_syncing.load(Ordering::Relaxed)
+						{
+							debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
+							self.request_block_by_hash(prev_hash, &addr)
+						}
+						true
+					}
+					_ => {
+						debug!(
+							LOGGER,
+							"adapter: process_block: block {} refused by chain: {:?}", bhash, e
+						);
+						true
+					}
+				}
 			}
 		}
 	}
@@ -451,7 +465,8 @@ impl NetToChainAdapter {
 		// down as soon as possible.
 		// Skip this if we are currently syncing (too slow).
 		let chain = w(&self.chain);
-		if chain.head().unwrap().height > 0 && !self.currently_syncing.load(Ordering::Relaxed)
+		if chain.head().unwrap().height > 0
+			&& !self.currently_syncing.load(Ordering::Relaxed)
 			&& self.config.chain_validation_mode == ChainValidationMode::EveryBlock
 		{
 			let now = Instant::now();

@@ -16,6 +16,7 @@
 
 use rand::{thread_rng, Rng};
 use std::collections::HashSet;
+use std::fmt;
 use std::iter::FromIterator;
 use time;
 
@@ -24,15 +25,17 @@ use core::committed::{self, Committed};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
 use core::target::Difficulty;
-use core::{transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId,
-           Transaction, TxKernel};
+use core::{
+	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId,
+	Transaction, TxKernel,
+};
 use global;
 use keychain::{self, BlindingFactor};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
 use util::{secp, secp_static, static_secp_instance, LOGGER};
 
 /// Errors thrown by Block validation
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Fail)]
 pub enum Error {
 	/// The sum of output minus input commitments does not
 	/// match the sum of kernel commitments
@@ -92,6 +95,12 @@ impl From<keychain::Error> for Error {
 impl From<consensus::Error> for Error {
 	fn from(e: consensus::Error) -> Error {
 		Error::Consensus(e)
+	}
+}
+
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "Block Error (display needs implementation")
 	}
 }
 

@@ -25,16 +25,17 @@ use core::hash::{Hash, Hashed};
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use std::io::{self, Read, Write};
 use std::{cmp, error, fmt, mem};
-use util::secp::Signature;
-use util::secp::constants::{AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE,
-                            SECRET_KEY_SIZE};
+use util::secp::constants::{
+	AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE, SECRET_KEY_SIZE,
+};
 use util::secp::pedersen::{Commitment, RangeProof};
+use util::secp::Signature;
 
 /// Possible errors deriving from serializing or deserializing.
-#[derive(Debug)]
+#[derive(Clone, Eq, PartialEq, Debug)]
 pub enum Error {
 	/// Wraps an io error produced when reading or writing
-	IOErr(io::Error),
+	IOErr(String, io::ErrorKind),
 	/// Expected a given value that wasn't found
 	UnexpectedData {
 		/// What we wanted
@@ -54,7 +55,7 @@ pub enum Error {
 
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
-		Error::IOErr(e)
+		Error::IOErr(format!("{}", e), e.kind())
 	}
 }
 
@@ -67,7 +68,7 @@ impl From<consensus::Error> for Error {
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		match *self {
-			Error::IOErr(ref e) => write!(f, "{}", e),
+			Error::IOErr(ref e, ref _k) => write!(f, "{}", e),
 			Error::UnexpectedData {
 				expected: ref e,
 				received: ref r,
@@ -83,14 +84,14 @@ impl fmt::Display for Error {
 impl error::Error for Error {
 	fn cause(&self) -> Option<&error::Error> {
 		match *self {
-			Error::IOErr(ref e) => Some(e),
+			Error::IOErr(ref _e, ref _k) => Some(self),
 			_ => None,
 		}
 	}
 
 	fn description(&self) -> &str {
 		match *self {
-			Error::IOErr(ref e) => error::Error::description(e),
+			Error::IOErr(ref e, _) => e,
 			Error::UnexpectedData {
 				expected: _,
 				received: _,
@@ -265,26 +266,30 @@ struct BinReader<'a> {
 	source: &'a mut Read,
 }
 
+fn map_io_err(err: io::Error) -> Error {
+	Error::IOErr(format!("{}", err), err.kind())
+}
+
 /// Utility wrapper for an underlying byte Reader. Defines higher level methods
 /// to read numbers, byte vectors, hashes, etc.
 impl<'a> Reader for BinReader<'a> {
 	fn read_u8(&mut self) -> Result<u8, Error> {
-		self.source.read_u8().map_err(Error::IOErr)
+		self.source.read_u8().map_err(map_io_err)
 	}
 	fn read_u16(&mut self) -> Result<u16, Error> {
-		self.source.read_u16::<BigEndian>().map_err(Error::IOErr)
+		self.source.read_u16::<BigEndian>().map_err(map_io_err)
 	}
 	fn read_u32(&mut self) -> Result<u32, Error> {
-		self.source.read_u32::<BigEndian>().map_err(Error::IOErr)
+		self.source.read_u32::<BigEndian>().map_err(map_io_err)
 	}
 	fn read_i32(&mut self) -> Result<i32, Error> {
-		self.source.read_i32::<BigEndian>().map_err(Error::IOErr)
+		self.source.read_i32::<BigEndian>().map_err(map_io_err)
 	}
 	fn read_u64(&mut self) -> Result<u64, Error> {
-		self.source.read_u64::<BigEndian>().map_err(Error::IOErr)
+		self.source.read_u64::<BigEndian>().map_err(map_io_err)
 	}
 	fn read_i64(&mut self) -> Result<i64, Error> {
-		self.source.read_i64::<BigEndian>().map_err(Error::IOErr)
+		self.source.read_i64::<BigEndian>().map_err(map_io_err)
 	}
 	/// Read a variable size vector from the underlying Read. Expects a usize
 	fn read_vec(&mut self) -> Result<Vec<u8>, Error> {
@@ -306,7 +311,7 @@ impl<'a> Reader for BinReader<'a> {
 		self.source
 			.read_exact(&mut buf)
 			.map(move |_| buf)
-			.map_err(Error::IOErr)
+			.map_err(map_io_err)
 	}
 
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error> {
@@ -459,7 +464,7 @@ where
 			let elem = T::read(reader);
 			match elem {
 				Ok(e) => buf.push(e),
-				Err(Error::IOErr(ref ioerr)) if ioerr.kind() == io::ErrorKind::UnexpectedEof => {
+				Err(Error::IOErr(ref _d, ref kind)) if *kind == io::ErrorKind::UnexpectedEof => {
 					break
 				}
 				Err(e) => return Err(e),
