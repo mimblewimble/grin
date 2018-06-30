@@ -232,7 +232,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 	if !ctx.opts.contains(Options::SKIP_POW) {
 		if global::min_sizeshift() > header.pow.cuckoo_sizeshift {
-			return Err(Error::LowSizeshift);
+			return Err(ErrorKind::LowSizeshift.into());
 		}
 		if !(ctx.pow_verifier)(header, header.pow.cuckoo_sizeshift) {
 			error!(

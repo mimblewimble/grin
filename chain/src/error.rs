@@ -45,6 +45,9 @@ pub enum ErrorKind {
 	/// Addition of difficulties on all previous block is wrong
 	#[fail(display = "Addition of difficulties on all previous blocks is wrong")]
 	WrongTotalDifficulty,
+	/// Block header sizeshift is lower than our min
+	#[fail(display = "Cuckoo Size too Low")]
+	LowSizeshift,
 	/// The proof of work is invalid
 	#[fail(display = "Invalid PoW")]
 	InvalidPow,
