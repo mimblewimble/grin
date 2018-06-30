@@ -24,7 +24,8 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
-use chain::types::{Error, NoopAdapter};
+use chain::types::NoopAdapter;
+use chain::{Error, ErrorKind};
 use core::core::target::Difficulty;
 use core::core::{transaction, OutputIdentifier};
 use core::global::{self, ChainTypes};
@@ -126,8 +127,11 @@ fn test_coinbase_maturity() {
 	// Confirm the tx attempting to spend the coinbase output
 	// is not valid at the current block height given the current chain state.
 	match chain.verify_coinbase_maturity(&coinbase_txn) {
-		Err(Error::ImmatureCoinbase) => {}
-		_ => panic!("Expected transaction error with immature coinbase."),
+		Ok(_) => {}
+		Err(e) => match e.kind() {
+			ErrorKind::ImmatureCoinbase => {}
+			_ => panic!("Expected transaction error with immature coinbase."),
+		},
 	}
 
 	pow::pow_size(

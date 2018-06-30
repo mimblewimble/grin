@@ -171,7 +171,13 @@ impl Miner {
 		let size = 1 << sizeshift;
 		let graph = vec![0; size + 1];
 		let easiness = (ease as u64) * (size as u64) / 100;
-		Miner{easiness, cuckoo, graph, proof_size, sizeshift}
+		Miner {
+			easiness,
+			cuckoo,
+			graph,
+			proof_size,
+			sizeshift,
+		}
 	}
 
 	/// Searches for a solution
@@ -298,8 +304,13 @@ impl Miner {
 
 /// Utility to transform a 8 bytes of a byte array into a u64.
 fn u8_to_u64(p: &[u8], i: usize) -> u64 {
-	(p[i] as u64) | (p[i + 1] as u64) << 8 | (p[i + 2] as u64) << 16 | (p[i + 3] as u64) << 24
-		| (p[i + 4] as u64) << 32 | (p[i + 5] as u64) << 40 | (p[i + 6] as u64) << 48
+	(p[i] as u64)
+		| (p[i + 1] as u64) << 8
+		| (p[i + 2] as u64) << 16
+		| (p[i + 3] as u64) << 24
+		| (p[i + 4] as u64) << 32
+		| (p[i + 5] as u64) << 40
+		| (p[i + 6] as u64) << 48
 		| (p[i + 7] as u64) << 56
 }
 
@@ -400,7 +411,9 @@ mod test {
 	#[test]
 	fn validate_fail() {
 		// edge checks
-		assert!(!Cuckoo::from_hash(blake2(&[49]).as_bytes(), 20).verify(&Proof::new(vec![0; 42]), 75));
+		assert!(
+			!Cuckoo::from_hash(blake2(&[49]).as_bytes(), 20).verify(&Proof::new(vec![0; 42]), 75)
+		);
 		assert!(!Cuckoo::from_hash(blake2(&[49]).as_bytes(), 20)
 			.verify(&Proof::new(vec![0xffff; 42]), 75));
 		// wrong data for proof

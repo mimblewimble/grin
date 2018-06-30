@@ -96,7 +96,7 @@ where
 
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
-		option_to_not_found(self.db.get_ser(&key)).map_err(|e| e.into())
+		option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id)).map_err(|e| e.into())
 	}
 
 	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a> {
@@ -166,7 +166,10 @@ impl<'a, K> WalletOutputBatch for Batch<'a, K> {
 
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
-		option_to_not_found(self.db.borrow().as_ref().unwrap().get_ser(&key)).map_err(|e| e.into())
+		option_to_not_found(
+			self.db.borrow().as_ref().unwrap().get_ser(&key),
+			&format!("Key ID: {}", id),
+		).map_err(|e| e.into())
 	}
 
 	fn iter<'b>(&'b self) -> Box<Iterator<Item = OutputData> + 'b> {

@@ -103,7 +103,8 @@ pub const MAX_TX_KERNELS: u64 = 2048;
 
 /// Whether a block exceeds the maximum acceptable weight
 pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) -> bool {
-	input_len * BLOCK_INPUT_WEIGHT + output_len * BLOCK_OUTPUT_WEIGHT
+	input_len * BLOCK_INPUT_WEIGHT
+		+ output_len * BLOCK_OUTPUT_WEIGHT
 		+ kernel_len * BLOCK_KERNEL_WEIGHT > MAX_BLOCK_WEIGHT || input_len > MAX_BLOCK_INPUTS
 }
 
@@ -159,14 +160,20 @@ pub const DAMP_FACTOR: u64 = 3;
 pub const INITIAL_DIFFICULTY: u64 = 1_000_000;
 
 /// Consensus errors
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Fail)]
 pub enum Error {
 	/// Inputs/outputs/kernels must be sorted lexicographically.
 	SortError,
 }
 
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "Sort Error")
+	}
+}
+
 /// Error when computing the next difficulty adjustment.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Fail)]
 pub struct TargetError(pub String);
 
 impl fmt::Display for TargetError {

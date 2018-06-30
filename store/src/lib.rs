@@ -29,6 +29,9 @@ extern crate memmap;
 extern crate serde;
 #[macro_use]
 extern crate slog;
+extern crate failure;
+#[macro_use]
+extern crate failure_derive;
 
 #[macro_use]
 extern crate grin_core as core;

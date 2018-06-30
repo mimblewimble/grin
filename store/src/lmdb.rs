@@ -19,21 +19,24 @@ use std::marker;
 use std::sync::Arc;
 
 use lmdb_zero as lmdb;
-use lmdb_zero::LmdbResultExt;
 use lmdb_zero::traits::CreateCursor;
+use lmdb_zero::LmdbResultExt;
 
 use core::ser;
 
 /// Main error type for this lmdb
-#[derive(Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Fail)]
 pub enum Error {
 	/// Couldn't find what we were looking for
-	NotFoundErr,
+	#[fail(display = "DB Not Found Error: {}", _0)]
+	NotFoundErr(String),
 	/// Wraps an error originating from RocksDB (which unfortunately returns
 	/// string errors).
+	#[fail(display = "LMDB error")]
 	LmdbErr(lmdb::error::Error),
 	/// Wraps a serialization error for Writeable or Readable
-	SerErr(ser::Error),
+	#[fail(display = "Serialization Error")]
+	SerErr(String),
 }
 
 impl From<lmdb::error::Error> for Error {
@@ -43,9 +46,9 @@ impl From<lmdb::error::Error> for Error {
 }
 
 /// unwraps the inner option by converting the none case to a not found error
-pub fn option_to_not_found<T>(res: Result<Option<T>, Error>) -> Result<T, Error> {
+pub fn option_to_not_found<T>(res: Result<Option<T>, Error>, field_name: &str) -> Result<T, Error> {
 	match res {
-		Ok(None) => Err(Error::NotFoundErr),
+		Ok(None) => Err(Error::NotFoundErr(field_name.to_owned())),
 		Ok(Some(o)) => Ok(o),
 		Err(e) => Err(e),
 	}
@@ -117,9 +120,9 @@ impl Store {
 	) -> Result<Option<T>, Error> {
 		let res: lmdb::error::Result<&[u8]> = access.get(&self.db, key);
 		match res.to_opt() {
-			Ok(Some(mut res)) => match ser::deserialize(&mut res).map_err(Error::SerErr) {
+			Ok(Some(mut res)) => match ser::deserialize(&mut res) {
 				Ok(res) => Ok(Some(res)),
-				Err(e) => Err(From::from(e)),
+				Err(e) => Err(Error::SerErr(format!("{}", e))),
 			},
 			Ok(None) => Ok(None),
 			Err(e) => Err(From::from(e)),
@@ -179,7 +182,7 @@ impl<'a> Batch<'a> {
 		let ser_value = ser::ser_vec(value);
 		match ser_value {
 			Ok(data) => self.put(key, data),
-			Err(err) => Err(Error::SerErr(err)),
+			Err(err) => Err(Error::SerErr(format!("{}", err))),
 		}
 	}
 

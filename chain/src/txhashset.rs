@@ -31,16 +31,18 @@ use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::pmmr;
 use core::core::pmmr::PMMR;
-use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, Transaction,
-                 TxKernel};
+use core::core::{
+	Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel,
+};
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
 
+use error::{Error, ErrorKind};
 use grin_store;
 use grin_store::pmmr::PMMRBackend;
 use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
-use types::{Error, TxHashSetRoots};
+use types::TxHashSetRoots;
 use util::{secp_static, zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
@@ -138,14 +140,14 @@ impl TxHashSet {
 					if hash == output_id.hash_with_index(pos - 1) {
 						Ok(hash)
 					} else {
-						Err(Error::TxHashSetErr(format!("txhashset hash mismatch")))
+						Err(ErrorKind::TxHashSetErr(format!("txhashset hash mismatch")).into())
 					}
 				} else {
-					Err(Error::OutputNotFound)
+					Err(ErrorKind::OutputNotFound.into())
 				}
 			}
-			Err(grin_store::Error::NotFoundErr) => Err(Error::OutputNotFound),
-			Err(e) => Err(Error::StoreErr(e, format!("txhashset unspent check"))),
+			Err(grin_store::Error::NotFoundErr(_)) => Err(ErrorKind::OutputNotFound.into()),
+			Err(e) => Err(ErrorKind::StoreErr(e, format!("txhashset unspent check")).into()),
 		}
 	}
 
@@ -338,7 +340,7 @@ where
 		Err(e) => {
 			debug!(
 				LOGGER,
-				"Error returned, discarding txhashset extension: {:?}", e
+				"Error returned, discarding txhashset extension: {}", e
 			);
 			trees.output_pmmr_h.backend.discard();
 			trees.rproof_pmmr_h.backend.discard();
@@ -577,7 +579,7 @@ impl<'a> Extension<'a> {
 			// If we have not yet reached 1,000 blocks then
 			// we can fail immediately as coinbase cannot be mature.
 			if height < global::coinbase_maturity() {
-				return Err(Error::ImmatureCoinbase);
+				return Err(ErrorKind::ImmatureCoinbase.into());
 			}
 
 			// Find the "cutoff" pos in the output MMR based on the
@@ -586,11 +588,10 @@ impl<'a> Extension<'a> {
 			let cutoff_header = self.commit_index.get_header_by_height(cutoff_height)?;
 			let cutoff_pos = cutoff_header.output_mmr_size;
 
-
 			// If any output pos exceeed the cutoff_pos
 			// we know they have not yet sufficiently matured.
 			if pos > cutoff_pos {
-				return Err(Error::ImmatureCoinbase);
+				return Err(ErrorKind::ImmatureCoinbase.into());
 			}
 		}
 
@@ -641,7 +642,9 @@ impl<'a> Extension<'a> {
 					.expect("no output at pos")
 					.hash_with_index(pos - 1);
 				if output_id_hash != read_hash || output_id_hash != read_elem_hash {
-					return Err(Error::TxHashSetErr(format!("output pmmr hash mismatch")));
+					return Err(
+						ErrorKind::TxHashSetErr(format!("output pmmr hash mismatch")).into(),
+					);
 				}
 			}
 
@@ -652,13 +655,13 @@ impl<'a> Extension<'a> {
 				Ok(true) => {
 					self.rproof_pmmr
 						.prune(pos)
-						.map_err(|s| Error::TxHashSetErr(s))?;
+						.map_err(|s| ErrorKind::TxHashSetErr(s))?;
 				}
-				Ok(false) => return Err(Error::AlreadySpent(commit)),
-				Err(s) => return Err(Error::TxHashSetErr(s)),
+				Ok(false) => return Err(ErrorKind::AlreadySpent(commit).into()),
+				Err(s) => return Err(ErrorKind::TxHashSetErr(s).into()),
 			}
 		} else {
-			return Err(Error::AlreadySpent(commit));
+			return Err(ErrorKind::AlreadySpent(commit).into());
 		}
 		Ok(())
 	}
@@ -677,21 +680,21 @@ impl<'a> Extension<'a> {
 				// We may be on a fork which may result in the entry at that pos being
 				// different to the one we expect.
 				if hash == OutputIdentifier::from_output(out).hash_with_index(pos - 1) {
-					return Err(Error::DuplicateCommitment(commit));
+					return Err(ErrorKind::DuplicateCommitment(commit).into());
 				}
 			}
 		}
 		// push new outputs in their MMR and save them in the index
 		let pos = self.output_pmmr
 			.push(OutputIdentifier::from_output(out))
-			.map_err(&Error::TxHashSetErr)?;
+			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.batch.save_output_pos(&out.commitment(), pos)?;
 		self.new_output_commits.insert(out.commitment(), pos);
 
 		// push range proofs in their MMR and file
 		self.rproof_pmmr
 			.push(out.proof)
-			.map_err(&Error::TxHashSetErr)?;
+			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
 
@@ -699,7 +702,7 @@ impl<'a> Extension<'a> {
 		// push kernels in their MMR and file
 		self.kernel_pmmr
 			.push(kernel.clone())
-			.map_err(&Error::TxHashSetErr)?;
+			.map_err(&ErrorKind::TxHashSetErr)?;
 
 		Ok(())
 	}
@@ -729,7 +732,7 @@ impl<'a> Extension<'a> {
 		let pos = self.batch.get_output_pos(&output.commit)?;
 		let merkle_proof = self.output_pmmr
 			.merkle_proof(pos)
-			.map_err(&Error::TxHashSetErr)?;
+			.map_err(&ErrorKind::TxHashSetErr)?;
 
 		Ok(merkle_proof)
 	}
@@ -742,10 +745,10 @@ impl<'a> Extension<'a> {
 	pub fn snapshot(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		self.output_pmmr
 			.snapshot(header)
-			.map_err(|e| Error::Other(e))?;
+			.map_err(|e| ErrorKind::Other(e))?;
 		self.rproof_pmmr
 			.snapshot(header)
-			.map_err(|e| Error::Other(e))?;
+			.map_err(|e| ErrorKind::Other(e))?;
 		Ok(())
 	}
 
@@ -820,17 +823,17 @@ impl<'a> Extension<'a> {
 		if rewind_utxo {
 			self.output_pmmr
 				.rewind(output_pos, rewind_add_pos, rewind_rm_pos)
-				.map_err(&Error::TxHashSetErr)?;
+				.map_err(&ErrorKind::TxHashSetErr)?;
 		}
 		if rewind_rproof {
 			self.rproof_pmmr
 				.rewind(output_pos, rewind_add_pos, rewind_rm_pos)
-				.map_err(&Error::TxHashSetErr)?;
+				.map_err(&ErrorKind::TxHashSetErr)?;
 		}
 		if rewind_kernel {
 			self.kernel_pmmr
 				.rewind(kernel_pos, rewind_add_pos, rewind_rm_pos)
-				.map_err(&Error::TxHashSetErr)?;
+				.map_err(&ErrorKind::TxHashSetErr)?;
 		}
 
 		Ok(())
@@ -863,10 +866,11 @@ impl<'a> Extension<'a> {
 		}
 
 		let roots = self.roots();
-		if roots.output_root != header.output_root || roots.rproof_root != header.range_proof_root
+		if roots.output_root != header.output_root
+			|| roots.rproof_root != header.range_proof_root
 			|| roots.kernel_root != header.kernel_root
 		{
-			return Err(Error::InvalidRoot);
+			return Err(ErrorKind::InvalidRoot.into());
 		}
 		Ok(())
 	}
@@ -876,13 +880,13 @@ impl<'a> Extension<'a> {
 
 		// validate all hashes and sums within the trees
 		if let Err(e) = self.output_pmmr.validate() {
-			return Err(Error::InvalidTxHashSet(e));
+			return Err(ErrorKind::InvalidTxHashSet(e).into());
 		}
 		if let Err(e) = self.rproof_pmmr.validate() {
-			return Err(Error::InvalidTxHashSet(e));
+			return Err(ErrorKind::InvalidTxHashSet(e).into());
 		}
 		if let Err(e) = self.kernel_pmmr.validate() {
-			return Err(Error::InvalidTxHashSet(e));
+			return Err(ErrorKind::InvalidTxHashSet(e).into());
 		}
 
 		debug!(
@@ -1017,7 +1021,7 @@ impl<'a> Extension<'a> {
 						out.into_output(rp).verify_proof()?;
 					} else {
 						// TODO - rangeproof not found
-						return Err(Error::OutputNotFound);
+						return Err(ErrorKind::OutputNotFound.into());
 					}
 					proof_count += 1;
 
@@ -1056,10 +1060,10 @@ impl<'a> Extension<'a> {
 			// rewinding further and further back
 			self.rewind(&current, &head_header, false, true, false)?;
 			if self.kernel_pmmr.root() != current.kernel_root {
-				return Err(Error::InvalidTxHashSet(format!(
+				return Err(ErrorKind::InvalidTxHashSet(format!(
 					"Kernel root at {} does not match",
 					current.height
-				)));
+				)).into());
 			}
 		}
 		Ok(())
@@ -1075,7 +1079,7 @@ pub fn zip_read(root_dir: String) -> Result<File, Error> {
 	// create the zip archive
 	{
 		zip::compress(&txhashset_path, &File::create(zip_path.clone())?)
-			.map_err(|ze| Error::Other(ze.to_string()))?;
+			.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
 	}
 
 	// open it again to read it back
@@ -1089,7 +1093,8 @@ pub fn zip_write(root_dir: String, txhashset_data: File) -> Result<(), Error> {
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 
 	fs::create_dir_all(txhashset_path.clone())?;
-	zip::decompress(txhashset_data, &txhashset_path).map_err(|ze| Error::Other(ze.to_string()))
+	zip::decompress(txhashset_data, &txhashset_path)
+		.map_err(|ze| ErrorKind::Other(ze.to_string()).into())
 }
 
 /// Given a block header to rewind to and the block header at the

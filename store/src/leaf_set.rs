@@ -21,9 +21,9 @@ use std::path::Path;
 
 use croaring::Bitmap;
 
-use core::core::BlockHeader;
 use core::core::hash::Hashed;
 use core::core::pmmr;
+use core::core::BlockHeader;
 use prune_list::PruneList;
 use util::LOGGER;
 
