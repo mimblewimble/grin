@@ -30,7 +30,7 @@ use common::adapters::PoolToChainAdapter;
 use common::stats::{StratumStats, WorkerStats};
 use common::types::StratumServerConfig;
 use core::core::{Block, BlockHeader};
-use core::{consensus, pow};
+use core::{pow, global};
 use keychain;
 use mining::mine_block;
 use pool;
@@ -77,7 +77,7 @@ struct LoginParams {
 struct SubmitParams {
 	height: u64,
 	nonce: u64,
-	pow: Vec<u32>,
+	pow: Vec<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -496,7 +496,7 @@ impl StratumServer {
 			} else {
 				// This is a low-difficulty share, not a full solution
 				// Do some validation but dont submit
-				if !pow::verify_size(&b.header, consensus::DEFAULT_SIZESHIFT) {
+				if !pow::verify_size(&b.header, global::min_sizeshift()) {
 					// Return error status
 					error!(
 						LOGGER,

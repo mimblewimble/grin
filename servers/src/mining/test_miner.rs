@@ -87,7 +87,7 @@ impl Miner {
 			LOGGER,
 			"(Server ID: {}) Mining Cuckoo{} for max {}s on {} @ {} [{}].",
 			self.debug_output_id,
-			global::sizeshift(),
+			global::min_sizeshift(),
 			attempt_time_per_block,
 			b.header.total_difficulty,
 			b.header.height,
@@ -101,7 +101,7 @@ impl Miner {
 				&b.header,
 				consensus::EASINESS,
 				global::proofsize(),
-				global::sizeshift(),
+				global::min_sizeshift(),
 			).mine()
 			{
 				let proof_diff = proof.to_difficulty();

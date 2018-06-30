@@ -67,12 +67,19 @@ fn mine_empty_chain() {
 
 		chain.set_txhashset_roots(&mut b, false).unwrap();
 
+		let sizeshift = if n == 2 {
+			global::min_sizeshift() + 1
+		} else {
+			global::min_sizeshift()
+		};
+		b.header.pow.cuckoo_sizeshift = sizeshift;
 		pow::pow_size(
 			&mut b.header,
 			difficulty,
 			global::proofsize(),
-			global::sizeshift(),
+			sizeshift,
 		).unwrap();
+		b.header.pow.cuckoo_sizeshift = sizeshift;
 
 		let bhash = b.hash();
 		chain.process_block(b, chain::Options::MINE).unwrap();

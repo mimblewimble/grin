@@ -266,7 +266,7 @@ impl Server {
 
 	/// Start a minimal "stratum" mining service on a separate thread
 	pub fn start_stratum_server(&self, config: StratumServerConfig) {
-		let cuckoo_size = global::sizeshift();
+		let cuckoo_size = global::min_sizeshift();
 		let proof_size = global::proofsize();
 		let currently_syncing = self.currently_syncing.clone();
 
