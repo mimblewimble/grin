@@ -352,17 +352,23 @@ mod test {
 		let nonces1 = Miner::from_hash(blake2(&[49]).as_bytes(), 75, 42, 20)
 			.mine()
 			.unwrap();
-		assert_eq!(Proof::new(V1.to_vec()), nonces1);
+		let mut proof = Proof::new(V1.to_vec());
+		proof.cuckoo_sizeshift = 20;
+		assert_eq!(proof, nonces1);
 
 		let nonces2 = Miner::from_hash(blake2(&[50]).as_bytes(), 70, 42, 20)
 			.mine()
 			.unwrap();
-		assert_eq!(Proof::new(V2.to_vec()), nonces2);
+		let mut proof = Proof::new(V2.to_vec());
+		proof.cuckoo_sizeshift = 20;
+		assert_eq!(proof, nonces2);
 
 		let nonces3 = Miner::from_hash(blake2(&[51]).as_bytes(), 70, 42, 20)
 			.mine()
 			.unwrap();
-		assert_eq!(Proof::new(V3.to_vec()), nonces3);
+		let mut proof = Proof::new(V3.to_vec());
+		proof.cuckoo_sizeshift = 20;
+		assert_eq!(proof, nonces3);
 	}
 
 	#[test]
