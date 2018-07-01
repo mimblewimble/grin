@@ -324,9 +324,13 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		_peer_addr: SocketAddr,
 	) -> bool {
 		// TODO check whether we should accept any txhashset now
-		if let Err(e) =
-			w(&self.chain).txhashset_write(h, rewind_to_output, rewind_to_kernel, txhashset_data, self.sync_state.as_ref())
-		{
+		if let Err(e) = w(&self.chain).txhashset_write(
+			h,
+			rewind_to_output,
+			rewind_to_kernel,
+			txhashset_data,
+			self.sync_state.as_ref(),
+		) {
 			error!(LOGGER, "Failed to save txhashset archive: {:?}", e);
 			!e.is_bad_data()
 		} else {
@@ -446,7 +450,8 @@ impl NetToChainAdapter {
 		// down as soon as possible.
 		// Skip this if we are currently syncing (too slow).
 		let chain = w(&self.chain);
-		if chain.head().unwrap().height > 0 && !self.sync_state.is_syncing()
+		if chain.head().unwrap().height > 0
+			&& !self.sync_state.is_syncing()
 			&& self.config.chain_validation_mode == ChainValidationMode::EveryBlock
 		{
 			let now = Instant::now();

@@ -23,8 +23,8 @@ use cursive::Cursive;
 use tui::constants::VIEW_BASIC_STATUS;
 use tui::types::TUIStatusListener;
 
-use servers::ServerStats;
 use servers::common::types::SyncStatus;
+use servers::ServerStats;
 
 pub struct TUIStatusView;
 
@@ -82,13 +82,29 @@ impl TUIStatusListener for TUIStatusView {
 			} else {
 				match stats.sync_status {
 					SyncStatus::NoSync => "Running".to_string(),
-					SyncStatus::HeaderSync{current_height, highest_height} => {
-						let percent = if highest_height == 0 { 0 } else { current_height * 100 / highest_height };
+					SyncStatus::HeaderSync {
+						current_height,
+						highest_height,
+					} => {
+						let percent = if highest_height == 0 {
+							0
+						} else {
+							current_height * 100 / highest_height
+						};
 						format!("Downloading headers: {}%, step 1/4", percent)
 					}
-					SyncStatus::TxHashsetDownload => "Downloading chain state for fast sync, step 2/4".to_string(),
-					SyncStatus::TxHashsetSetup => "Preparing chain state for validation, step 3/4". to_string(),
-					SyncStatus::TxHashsetValidation{kernels, kernel_total, rproofs, rproof_total} => {
+					SyncStatus::TxHashsetDownload => {
+						"Downloading chain state for fast sync, step 2/4".to_string()
+					}
+					SyncStatus::TxHashsetSetup => {
+						"Preparing chain state for validation, step 3/4".to_string()
+					}
+					SyncStatus::TxHashsetValidation {
+						kernels,
+						kernel_total,
+						rproofs,
+						rproof_total,
+					} => {
 						// 10% of overall progress is attributed to kernel validation
 						// 90% to range proofs (which are much longer)
 						let mut percent = if kernel_total > 0 {
@@ -103,9 +119,18 @@ impl TUIStatusListener for TUIStatusView {
 						};
 						format!("Validating chain state: {}%, step 3/4", percent)
 					}
-					SyncStatus::TxHashsetSave => "Finalizing chain state for fast sync, step 3/4".to_string(),
-					SyncStatus::BodySync{current_height, highest_height} => {
-						let percent = if highest_height == 0 { 0 } else { current_height * 100 / highest_height };
+					SyncStatus::TxHashsetSave => {
+						"Finalizing chain state for fast sync, step 3/4".to_string()
+					}
+					SyncStatus::BodySync {
+						current_height,
+						highest_height,
+					} => {
+						let percent = if highest_height == 0 {
+							0
+						} else {
+							current_height * 100 / highest_height
+						};
 						format!("Downloading blocks: {}%, step 4/4", percent)
 					}
 				}

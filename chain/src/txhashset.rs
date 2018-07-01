@@ -29,8 +29,9 @@ use util::secp::pedersen::{Commitment, RangeProof};
 use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::{self, MerkleProof, PMMR};
-use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, Transaction,
-                 TxKernel};
+use core::core::{
+	Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel,
+};
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
 
@@ -832,7 +833,8 @@ impl<'a> Extension<'a> {
 		}
 
 		let roots = self.roots();
-		if roots.output_root != header.output_root || roots.rproof_root != header.range_proof_root
+		if roots.output_root != header.output_root
+			|| roots.rproof_root != header.range_proof_root
 			|| roots.kernel_root != header.kernel_root
 		{
 			return Err(Error::InvalidRoot);
@@ -871,7 +873,7 @@ impl<'a> Extension<'a> {
 		status: &T,
 	) -> Result<((Commitment, Commitment)), Error>
 	where
-		T: TxHashsetWriteStatus
+		T: TxHashsetWriteStatus,
 	{
 		self.validate_mmrs()?;
 		self.validate_roots(header)?;
@@ -974,7 +976,7 @@ impl<'a> Extension<'a> {
 
 	fn verify_kernel_signatures<T>(&self, status: &T) -> Result<(), Error>
 	where
-		T: TxHashsetWriteStatus
+		T: TxHashsetWriteStatus,
 	{
 		let now = Instant::now();
 
@@ -1005,7 +1007,7 @@ impl<'a> Extension<'a> {
 
 	fn verify_rangeproofs<T>(&self, status: &T) -> Result<(), Error>
 	where
-		T: TxHashsetWriteStatus
+		T: TxHashsetWriteStatus,
 	{
 		let now = Instant::now();
 

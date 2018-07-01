@@ -30,7 +30,10 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{BlockMarker, BlockSums, ChainAdapter, ChainStore, Error, Options, Tip, TxHashsetWriteStatus, NoStatus};
+use types::{
+	BlockMarker, BlockSums, ChainAdapter, ChainStore, Error, NoStatus, Options, Tip,
+	TxHashsetWriteStatus,
+};
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::LOGGER;
 
@@ -630,7 +633,7 @@ impl Chain {
 		status: &T,
 	) -> Result<(), Error>
 	where
-		T: TxHashsetWriteStatus
+		T: TxHashsetWriteStatus,
 	{
 		self.txhashset_lock.lock().unwrap();
 		status.on_setup();
