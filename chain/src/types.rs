@@ -375,6 +375,21 @@ pub trait ChainAdapter {
 	fn block_accepted(&self, b: &Block, opts: Options);
 }
 
+/// Inform the caller of the current status of a txhashset write operation,
+/// as it can take quite a while to process. Each function is called in the
+/// order defined below and can be used to provide some feedback to the
+/// caller.
+pub trait TxHashsetWriteStatus {
+	/// First setup of the txhashset
+	fn on_setup(&self);
+	/// Starting validation
+	fn on_validation(&self);
+	/// Starting to save the txhashset and related data
+	fn on_save(&self);
+	/// Done writing a new txhashset
+	fn on_done(&self);
+}
+
 /// Dummy adapter used as a placeholder for real implementations
 pub struct NoopAdapter {}
 

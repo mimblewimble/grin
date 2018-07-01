@@ -15,6 +15,7 @@
 //! Server types
 
 use std::convert::From;
+use std::sync::RwLock;
 
 use api;
 use chain;
@@ -251,5 +252,70 @@ impl Default for StratumServerConfig {
 			enable_stratum_server: None,
 			stratum_server_addr: None,
 		}
+	}
+}
+
+/// Various status sync can be in, whether it's fast sync or archival.
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum SyncStatus {
+	/// Not syncing
+	NoSync,
+	/// Downloading block headers
+	HeaderSync,
+	/// Downloading the various txhashsets
+	TxHashsetDownload,
+	/// Setting up before validation
+	TxHashsetSetup,
+	/// Validating the full state
+	TxHashsetValidation,
+	/// Finalizing the new state
+	TxHashsetSave,
+	/// Downloading blocks
+	BodySync,
+}
+
+/// Current sync state. Encapsulates the current SyncStatus.
+pub struct SyncState {
+	current: RwLock<SyncStatus>,
+}
+
+impl SyncState {
+	/// Return a new SyncState initialize to NoSync
+	pub fn new() -> SyncState {
+		SyncState{current: RwLock::new(SyncStatus::NoSync)}
+	}
+
+	/// Whether the current state matches any active syncing operation
+	pub fn is_syncing(&self) -> bool {
+		*self.current.read().unwrap() != SyncStatus::NoSync
+	}
+
+	/// Current syncing status
+	pub fn status(&self) -> SyncStatus {
+		*self.current.read().unwrap()
+	}
+
+	/// Update the syncing status
+	pub fn update(&self, new_status: SyncStatus) {
+		let mut status = self.current.write().unwrap();
+		*status = new_status;
+	}
+}
+
+impl chain::TxHashsetWriteStatus for SyncState {
+	fn on_setup(&self) {
+		self.update(SyncStatus::TxHashsetSetup);
+	}
+
+	fn on_validation(&self) {
+		self.update(SyncStatus::TxHashsetValidation);
+	}
+
+	fn on_save(&self) {
+		self.update(SyncStatus::TxHashsetSave);
+	}
+
+	fn on_done(&self) {
+		self.update(SyncStatus::BodySync);
 	}
 }

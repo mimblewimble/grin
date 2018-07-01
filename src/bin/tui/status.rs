@@ -24,6 +24,7 @@ use tui::constants::VIEW_BASIC_STATUS;
 use tui::types::TUIStatusListener;
 
 use servers::ServerStats;
+use servers::common::types::SyncStatus;
 
 pub struct TUIStatusView;
 
@@ -76,14 +77,18 @@ impl TUIStatusListener for TUIStatusView {
 	fn update(c: &mut Cursive, stats: &ServerStats) {
 		//find and update here as needed
 		let basic_status = {
-			if stats.is_syncing {
-				if stats.awaiting_peers {
-					"Waiting for peers".to_string()
-				} else {
-					format!("Syncing - Latest header: {}", stats.header_head.height).to_string()
-				}
+			if stats.awaiting_peers {
+				"Waiting for peers".to_string()
 			} else {
-				"Running".to_string()
+				match stats.sync_status {
+					SyncStatus::NoSync => "Running".to_string(),
+					SyncStatus::HeaderSync => format!("Syncing - Latest header: {}", stats.header_head.height).to_string(),
+					SyncStatus::TxHashsetDownload => "Downloading chain state for fast sync".to_string(),
+					SyncStatus::TxHashsetSetup => "Preparing chain state for validation". to_string(),
+					SyncStatus::TxHashsetValidation => "Validating chain state (takes a while, once done chain height will jump forward)".to_string(),
+					SyncStatus::TxHashsetSave => "Finalizing chain state for fast sync".to_string(),
+					SyncStatus::BodySync => "Downloading blocks".to_string(),
+				}
 			}
 		};
 		/*let basic_mining_config_status = {
