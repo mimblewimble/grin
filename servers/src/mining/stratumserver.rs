@@ -19,7 +19,6 @@ use serde_json::Value;
 use std::error::Error;
 use std::io::{BufRead, ErrorKind, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, SystemTime};
 use std::{cmp, thread};
@@ -28,7 +27,7 @@ use time;
 use chain;
 use common::adapters::PoolToChainAdapter;
 use common::stats::{StratumStats, WorkerStats};
-use common::types::StratumServerConfig;
+use common::types::{StratumServerConfig, SyncState};
 use core::core::{Block, BlockHeader};
 use core::{pow, global};
 use keychain;
@@ -236,7 +235,7 @@ pub struct StratumServer {
 	minimum_share_difficulty: u64,
 	current_key_id: Option<keychain::Identifier>,
 	workers: Arc<Mutex<Vec<Worker>>>,
-	currently_syncing: Arc<AtomicBool>,
+	sync_state: Arc<SyncState>,
 }
 
 impl StratumServer {
@@ -256,7 +255,7 @@ impl StratumServer {
 			current_difficulty: <u64>::max_value(),
 			current_key_id: None,
 			workers: Arc::new(Mutex::new(Vec::new())),
-			currently_syncing: Arc::new(AtomicBool::new(false)),
+			sync_state: Arc::new(SyncState::new()),
 		}
 	}
 
@@ -320,7 +319,7 @@ impl StratumServer {
 						}
 						"keepalive" => self.handle_keepalive(),
 						"getjobtemplate" => {
-							if self.currently_syncing.load(Ordering::Relaxed) {
+							if self.sync_state.is_syncing() {
 								let e = RpcError {
 									code: -32701,
 									message: "Node is syncing - Please wait".to_string(),
@@ -623,7 +622,7 @@ impl StratumServer {
 		stratum_stats: Arc<RwLock<StratumStats>>,
 		cuckoo_size: u32,
 		proof_size: usize,
-		currently_syncing: Arc<AtomicBool>,
+		sync_state: Arc<SyncState>,
 	) {
 		info!(
 			LOGGER,
@@ -633,7 +632,7 @@ impl StratumServer {
 			proof_size
 		);
 
-		self.currently_syncing = currently_syncing;
+		self.sync_state = sync_state;
 
 		// "globals" for this function
 		let attempt_time_per_block = self.config.attempt_time_per_block;
@@ -673,7 +672,7 @@ impl StratumServer {
 		loop {
 			// If we're fallen into sync mode, (or are just starting up,
 			// tell connected clients to stop what they're doing
-			let mining_stopped = self.currently_syncing.load(Ordering::Relaxed);
+			let mining_stopped = self.sync_state.is_syncing();
 
 			// Remove workers with failed connections
 			num_workers = self.clean_workers(&mut stratum_stats.clone());

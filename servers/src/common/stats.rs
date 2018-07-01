@@ -20,6 +20,7 @@ use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
 use chain;
+use common::types::SyncStatus;
 use p2p;
 
 /// Server state info collection struct, to be passed around into internals
@@ -51,7 +52,7 @@ pub struct ServerStats {
 	/// sync header head
 	pub header_head: chain::Tip,
 	/// Whether we're currently syncing
-	pub is_syncing: bool,
+	pub sync_status: SyncStatus,
 	/// Whether we're awaiting peers
 	pub awaiting_peers: bool,
 	/// Handle to current stratum server stats
