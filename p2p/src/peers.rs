@@ -614,15 +614,11 @@ impl ChainAdapter for Peers {
 	fn txhashset_write(
 		&self,
 		h: Hash,
-		rewind_to_output: u64,
-		rewind_to_kernel: u64,
 		txhashset_data: File,
 		peer_addr: SocketAddr,
 	) -> bool {
 		if !self.adapter.txhashset_write(
 			h,
-			rewind_to_output,
-			rewind_to_kernel,
 			txhashset_data,
 			peer_addr,
 		) {

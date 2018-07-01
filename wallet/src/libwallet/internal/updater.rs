@@ -160,7 +160,7 @@ where
 	}
 	let mut batch = wallet.batch()?;
 	for id in ids_to_del {
-		batch.delete(&id);
+		batch.delete(&id)?;
 	}
 	batch.commit()?;
 	Ok(())
@@ -265,7 +265,7 @@ where
 			height: height,
 			lock_height: lock_height,
 			is_coinbase: true,
-		});
+		})?;
 		batch.commit()?;
 	}
 

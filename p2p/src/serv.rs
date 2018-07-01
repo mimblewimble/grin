@@ -253,8 +253,6 @@ impl ChainAdapter for DummyAdapter {
 	fn txhashset_write(
 		&self,
 		_h: Hash,
-		_rewind_to_output: u64,
-		_rewind_to_kernel: u64,
 		_txhashset_data: File,
 		_peer_addr: SocketAddr,
 	) -> bool {

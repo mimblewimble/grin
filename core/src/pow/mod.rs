@@ -44,7 +44,6 @@ use core::{Block, BlockHeader};
 use genesis;
 use global;
 use pow::cuckoo::{Cuckoo, Error};
-use ser;
 
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.

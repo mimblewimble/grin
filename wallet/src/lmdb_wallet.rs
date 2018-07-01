@@ -14,15 +14,13 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::collections::hash_map::Values;
-use std::ops::Deref;
 use std::sync::Arc;
 use std::{fs, path};
 
-use failure::{Context, ResultExt};
+use failure::ResultExt;
 
 use keychain::{Identifier, Keychain};
-use store::{self, option_to_not_found, to_key, u64_to_key};
+use store::{self, option_to_not_found, to_key};
 
 use client;
 use libtx::slate::Slate;
@@ -38,7 +36,7 @@ const DERIV_PREFIX: u8 = 'd' as u8;
 
 impl From<store::Error> for Error {
 	fn from(error: store::Error) -> Error {
-		Error::from((ErrorKind::Backend(format!("{:?}", error))))
+		Error::from(ErrorKind::Backend(format!("{:?}", error)))
 	}
 }
 

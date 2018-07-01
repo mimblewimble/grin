@@ -94,7 +94,7 @@ where
 		let mut batch = wallet.batch()?;
 		for id in lock_inputs {
 			let mut coin = batch.get(&id).unwrap();
-			batch.lock_output(&mut coin);
+			batch.lock_output(&mut coin)?;
 		}
 		// write the output representing our change
 		if let Some(d) = change_derivation {
@@ -109,7 +109,7 @@ where
 				height: current_height,
 				lock_height: 0,
 				is_coinbase: false,
-			});
+			})?;
 		}
 		batch.commit()?;
 		Ok(())
@@ -172,7 +172,7 @@ where
 			height: height,
 			lock_height: 0,
 			is_coinbase: false,
-		});
+		})?;
 		batch.commit()?;
 		Ok(())
 	};

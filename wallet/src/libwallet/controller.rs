@@ -139,6 +139,7 @@ where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
+	/// Create a new owner API handler for GET methods
 	pub fn new(wallet: Arc<Mutex<T>>) -> OwnerAPIGetHandler<T, K> {
 		OwnerAPIGetHandler {
 			wallet,
@@ -176,7 +177,7 @@ where
 
 	fn node_height(
 		&self,
-		req: &mut Request,
+		_req: &mut Request,
 		api: &mut APIOwner<T, K>,
 	) -> Result<(u64, bool), Error> {
 		api.node_height()
@@ -230,6 +231,7 @@ where
 	}
 }
 
+/// Handles all owner API POST requests
 pub struct OwnerAPIPostHandler<T, K>
 where
 	T: WalletBackend<K>,
@@ -245,6 +247,7 @@ where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
+	/// New POST handler
 	pub fn new(wallet: Arc<Mutex<T>>) -> OwnerAPIPostHandler<T, K> {
 		OwnerAPIPostHandler {
 			wallet,
@@ -278,7 +281,7 @@ where
 		}
 	}
 
-	fn issue_burn_tx(&self, req: &mut Request, api: &mut APIOwner<T, K>) -> Result<(), Error> {
+	fn issue_burn_tx(&self, _req: &mut Request, api: &mut APIOwner<T, K>) -> Result<(), Error> {
 		// TODO: Args
 		api.issue_burn_tx(60, 10, 1000)
 	}

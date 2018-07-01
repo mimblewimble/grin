@@ -35,7 +35,7 @@ use libtx::slate::Slate;
 use libwallet;
 
 use libwallet::types::{
-	BlockFees, BlockIdentifier, CbData, OutputData, TxWrapper, WalletBackend,
+	BlockFees, CbData, OutputData, TxWrapper, WalletBackend,
 	WalletClient, WalletDetails, WalletOutputBatch,
 };
 

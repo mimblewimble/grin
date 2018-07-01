@@ -73,8 +73,6 @@ where
 			"Output found: {:?}, amount: {:?}", commit, info.value
 		);
 
-		let commit_str = util::to_hex(commit.as_ref().to_vec());
-
 		let height = current_chain_height;
 		let lock_height = if *is_coinbase {
 			height + global::coinbase_maturity()

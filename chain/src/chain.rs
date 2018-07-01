@@ -524,8 +524,6 @@ impl Chain {
 	pub fn txhashset_write<T>(
 		&self,
 		h: Hash,
-		rewind_to_output: u64,
-		rewind_to_kernel: u64,
 		txhashset_data: File,
 		status: &T,
 	) -> Result<(), Error>

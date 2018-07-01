@@ -27,7 +27,6 @@
 
 use util::{kernel_sig_msg, secp};
 
-use core::core::hash::Hash;
 use core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use keychain::{self, BlindSum, BlindingFactor, Identifier, Keychain};
 use libtx::{aggsig, proof};
@@ -43,7 +42,7 @@ where
 
 /// Function type returned by the transaction combinators. Transforms a
 /// (Transaction, BlindSum) pair into another, provided some context.
-pub type Append<K: Keychain> = for<'a> Fn(&'a mut Context<K>, (Transaction, TxKernel, BlindSum))
+pub type Append<K> = for<'a> Fn(&'a mut Context<K>, (Transaction, TxKernel, BlindSum))
 	-> (Transaction, TxKernel, BlindSum);
 
 /// Adds an input with the provided value and blinding key to the transaction
