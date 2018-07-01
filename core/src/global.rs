@@ -59,22 +59,24 @@ pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 /// Testnet 2 initial block difficulty, high to see how it goes
 pub const TESTNET2_INITIAL_DIFFICULTY: u64 = 1000;
 
+/// Testnet 2 initial block difficulty, moderatly hight, taking into account
+/// a 30x Cuckoo adjustment factor
+pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 15000;
+
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ChainTypes {
 	/// For CI testing
 	AutomatedTesting,
-
 	/// For User testing
 	UserTesting,
-
 	/// First test network
 	Testnet1,
-
 	/// Second test network
 	Testnet2,
-
+	/// Thirs test network
+	Testnet3,
 	/// Main production network
 	Mainnet,
 }
@@ -105,6 +107,7 @@ pub fn min_sizeshift() -> u8 {
 		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
 		ChainTypes::Testnet1 => USER_TESTING_MIN_SIZESHIFT,
 		ChainTypes::Testnet2 => DEFAULT_MIN_SIZESHIFT,
+		ChainTypes::Testnet3 => DEFAULT_MIN_SIZESHIFT,
 		ChainTypes::Mainnet => DEFAULT_MIN_SIZESHIFT,
 	}
 }
@@ -119,6 +122,7 @@ pub fn ref_sizeshift() -> u8 {
 		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
 		ChainTypes::Testnet1 => USER_TESTING_MIN_SIZESHIFT,
 		ChainTypes::Testnet2 => REFERENCE_SIZESHIFT,
+		ChainTypes::Testnet3 => REFERENCE_SIZESHIFT,
 		ChainTypes::Mainnet => REFERENCE_SIZESHIFT,
 	}
 }
@@ -131,6 +135,7 @@ pub fn proofsize() -> usize {
 		ChainTypes::UserTesting => USER_TESTING_PROOF_SIZE,
 		ChainTypes::Testnet1 => PROOFSIZE,
 		ChainTypes::Testnet2 => PROOFSIZE,
+		ChainTypes::Testnet3 => PROOFSIZE,
 		ChainTypes::Mainnet => PROOFSIZE,
 	}
 }
@@ -143,6 +148,7 @@ pub fn coinbase_maturity() -> u64 {
 		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
 		ChainTypes::Testnet1 => COINBASE_MATURITY,
 		ChainTypes::Testnet2 => COINBASE_MATURITY,
+		ChainTypes::Testnet3 => COINBASE_MATURITY,
 		ChainTypes::Mainnet => COINBASE_MATURITY,
 	}
 }
@@ -155,6 +161,7 @@ pub fn initial_block_difficulty() -> u64 {
 		ChainTypes::UserTesting => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet1 => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet2 => TESTNET2_INITIAL_DIFFICULTY,
+		ChainTypes::Testnet3 => TESTNET2_INITIAL_DIFFICULTY,
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
 	}
 }
@@ -167,6 +174,7 @@ pub fn cut_through_horizon() -> u32 {
 		ChainTypes::UserTesting => TESTING_CUT_THROUGH_HORIZON,
 		ChainTypes::Testnet1 => CUT_THROUGH_HORIZON,
 		ChainTypes::Testnet2 => CUT_THROUGH_HORIZON,
+		ChainTypes::Testnet3 => CUT_THROUGH_HORIZON,
 		ChainTypes::Mainnet => CUT_THROUGH_HORIZON,
 	}
 }
@@ -188,6 +196,7 @@ pub fn is_production_mode() -> bool {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	ChainTypes::Testnet1 == *param_ref
 		|| ChainTypes::Testnet2 == *param_ref
+		|| ChainTypes::Testnet3 == *param_ref
 		|| ChainTypes::Mainnet == *param_ref
 }
 

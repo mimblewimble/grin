@@ -74,9 +74,7 @@ pub fn genesis_testnet1() -> core::Block {
 	}
 }
 
-/// Second testnet genesis block (cuckoo30). TBD and don't start getting excited
-/// just because you see this reference here... this is for testing mining
-/// at cuckoo 30
+/// Second testnet genesis block (cuckoo30).
 pub fn genesis_testnet2() -> core::Block {
 	core::Block {
 		header: core::BlockHeader {
@@ -87,6 +85,37 @@ pub fn genesis_testnet2() -> core::Block {
 				tm_mon: 2,
 				tm_mday: 26,
 				tm_hour: 16,
+				..time::empty_tm()
+			},
+			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
+			nonce: 1060,
+			pow: core::Proof::new(vec![
+				0x1940730, 0x333b9d0, 0x4739d6f, 0x4c6cfb1, 0x6e3d6c3, 0x74408a3, 0x7ba2bd2,
+				0x83e2024, 0x8ca22b5, 0x9d39ab8, 0xb6646dd, 0xc6698b6, 0xc6f78fe, 0xc99b662,
+				0xcf2ae8c, 0xcf41eed, 0xdd073e6, 0xded6af8, 0xf08d1a5, 0x1156a144, 0x11d1160a,
+				0x131bb0a5, 0x137ad703, 0x13b0831f, 0x1421683f, 0x147e3c1f, 0x1496fda0, 0x150ba22b,
+				0x15cc5bc6, 0x16edf697, 0x17ced40c, 0x17d84f9e, 0x18a515c1, 0x19320d9c, 0x19da4f6d,
+				0x1b50bcb1, 0x1b8bc72f, 0x1c7b6964, 0x1d07b3a9, 0x1d189d4d, 0x1d1f9a15, 0x1dafcd41,
+			]),
+			..Default::default()
+		},
+		inputs: vec![],
+		outputs: vec![],
+		kernels: vec![],
+	}
+}
+
+/// Second testnet genesis block (cuckoo30). Temporary values for now.
+pub fn genesis_testnet3() -> core::Block {
+	core::Block {
+		header: core::BlockHeader {
+			height: 0,
+			previous: core::hash::Hash([0xff; 32]),
+			timestamp: time::Tm {
+				tm_year: 2018 - 1900,
+				tm_mon: 6,
+				tm_mday: 2,
+				tm_hour: 0,
 				..time::empty_tm()
 			},
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),

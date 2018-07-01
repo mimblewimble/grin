@@ -124,6 +124,7 @@ impl Server {
 		let genesis = match config.chain_type {
 			global::ChainTypes::Testnet1 => genesis::genesis_testnet1(),
 			global::ChainTypes::Testnet2 => genesis::genesis_testnet2(),
+			global::ChainTypes::Testnet3 => genesis::genesis_testnet3(),
 			global::ChainTypes::AutomatedTesting => genesis::genesis_dev(),
 			global::ChainTypes::UserTesting => genesis::genesis_dev(),
 			global::ChainTypes::Mainnet => genesis::genesis_testnet2(), //TODO: Fix, obviously
