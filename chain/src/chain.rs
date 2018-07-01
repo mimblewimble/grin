@@ -30,7 +30,7 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{BlockMarker, BlockSums, ChainAdapter, ChainStore, Error, Options, Tip, TxHashsetWriteStatus};
+use types::{BlockMarker, BlockSums, ChainAdapter, ChainStore, Error, Options, Tip, TxHashsetWriteStatus, NoStatus};
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::LOGGER;
 
@@ -532,7 +532,7 @@ impl Chain {
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			// TODO - is this rewind guaranteed to be redundant now?
 			extension.rewind(&header, &header)?;
-			extension.validate(&header, skip_rproofs)?;
+			extension.validate(&header, skip_rproofs, &NoStatus)?;
 			Ok(())
 		})
 	}
@@ -660,12 +660,12 @@ impl Chain {
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
 
 		// Note: we are validating against a writeable extension.
-		status.on_validation();
+		status.on_validation(0, 0, 0, 0);
 		txhashset::extending(&mut txhashset, |extension| {
 			// TODO do we need to rewind here? We have no blocks to rewind
 			// (and we need them for the pos to unremove)
 			extension.rewind(&header, &header)?;
-			let (output_sum, kernel_sum) = extension.validate(&header, false)?;
+			let (output_sum, kernel_sum) = extension.validate(&header, false, status)?;
 			extension.save_latest_block_sums(&header, output_sum, kernel_sum)?;
 			extension.rebuild_index()?;
 			Ok(())

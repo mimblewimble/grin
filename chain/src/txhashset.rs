@@ -37,7 +37,7 @@ use core::ser::{PMMRIndexHashable, PMMRable};
 use grin_store;
 use grin_store::pmmr::PMMRBackend;
 use grin_store::types::prune_noop;
-use types::{BlockMarker, BlockSums, ChainStore, Error, TxHashSetRoots};
+use types::{BlockMarker, BlockSums, ChainStore, Error, TxHashSetRoots, TxHashsetWriteStatus};
 use util::{secp_static, zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
@@ -864,11 +864,15 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Validate the txhashset state against the provided block header.
-	pub fn validate(
+	pub fn validate<T>(
 		&mut self,
 		header: &BlockHeader,
 		skip_rproofs: bool,
-	) -> Result<((Commitment, Commitment)), Error> {
+		status: &T,
+	) -> Result<((Commitment, Commitment)), Error>
+	where
+		T: TxHashsetWriteStatus
+	{
 		self.validate_mmrs()?;
 		self.validate_roots(header)?;
 
@@ -877,9 +881,8 @@ impl<'a> Extension<'a> {
 			return Ok((zero_commit.clone(), zero_commit.clone()));
 		}
 
-		// The real magicking happens here.
-		// Sum of kernel excesses should equal sum of
-		// unspent outputs minus total supply.
+		// The real magicking happens here. Sum of kernel excesses should equal sum
+		// of unspent outputs minus total supply.
 		let (output_sum, kernel_sum) = self.verify_kernel_sums(
 			header.total_overage(),
 			header.total_kernel_offset(),
@@ -888,12 +891,12 @@ impl<'a> Extension<'a> {
 		)?;
 
 		// This is an expensive verification step.
-		self.verify_kernel_signatures()?;
+		self.verify_kernel_signatures(status)?;
 
 		// Verify the rangeproof for each output in the sum above.
 		// This is an expensive verification step (skip for faster verification).
 		if !skip_rproofs {
-			self.verify_rangeproofs()?;
+			self.verify_rangeproofs(status)?;
 		}
 
 		Ok((output_sum, kernel_sum))
@@ -969,16 +972,23 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	fn verify_kernel_signatures(&self) -> Result<(), Error> {
+	fn verify_kernel_signatures<T>(&self, status: &T) -> Result<(), Error>
+	where
+		T: TxHashsetWriteStatus
+	{
 		let now = Instant::now();
 
 		let mut kern_count = 0;
+		let total_kernels = pmmr::n_leaves(self.kernel_pmmr.unpruned_size());
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
 				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
 					kernel.verify()?;
 					kern_count += 1;
 				}
+			}
+			if n % 20 == 0 {
+				status.on_validation(kern_count, total_kernels, 0, 0);
 			}
 		}
 
@@ -993,10 +1003,14 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn verify_rangeproofs(&self) -> Result<(), Error> {
+	fn verify_rangeproofs<T>(&self, status: &T) -> Result<(), Error>
+	where
+		T: TxHashsetWriteStatus
+	{
 		let now = Instant::now();
 
 		let mut proof_count = 0;
+		let total_rproofs = pmmr::n_leaves(self.output_pmmr.unpruned_size());
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
 				if let Some(out) = self.output_pmmr.get_data(n) {
@@ -1015,6 +1029,9 @@ impl<'a> Extension<'a> {
 						);
 					}
 				}
+			}
+			if n % 20 == 0 {
+				status.on_validation(0, 0, proof_count, total_rproofs);
 			}
 		}
 		debug!(

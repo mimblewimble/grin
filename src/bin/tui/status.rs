@@ -82,12 +82,32 @@ impl TUIStatusListener for TUIStatusView {
 			} else {
 				match stats.sync_status {
 					SyncStatus::NoSync => "Running".to_string(),
-					SyncStatus::HeaderSync => format!("Syncing - Latest header: {}", stats.header_head.height).to_string(),
-					SyncStatus::TxHashsetDownload => "Downloading chain state for fast sync".to_string(),
-					SyncStatus::TxHashsetSetup => "Preparing chain state for validation". to_string(),
-					SyncStatus::TxHashsetValidation => "Validating chain state (takes a while, once done chain height will jump forward)".to_string(),
-					SyncStatus::TxHashsetSave => "Finalizing chain state for fast sync".to_string(),
-					SyncStatus::BodySync => "Downloading blocks".to_string(),
+					SyncStatus::HeaderSync{current_height, highest_height} => {
+						let percent = if highest_height == 0 { 0 } else { current_height * 100 / highest_height };
+						format!("Downloading headers: {}%, step 1/4", percent)
+					}
+					SyncStatus::TxHashsetDownload => "Downloading chain state for fast sync, step 2/4".to_string(),
+					SyncStatus::TxHashsetSetup => "Preparing chain state for validation, step 3/4". to_string(),
+					SyncStatus::TxHashsetValidation{kernels, kernel_total, rproofs, rproof_total} => {
+						// 10% of overall progress is attributed to kernel validation
+						// 90% to range proofs (which are much longer)
+						let mut percent = if kernel_total > 0 {
+							kernels * 10 / kernel_total
+						} else {
+							0
+						};
+						percent += if rproof_total > 0 {
+							rproofs * 90 / rproof_total
+						} else {
+							0
+						};
+						format!("Validating chain state: {}%, step 3/4", percent)
+					}
+					SyncStatus::TxHashsetSave => "Finalizing chain state for fast sync, step 3/4".to_string(),
+					SyncStatus::BodySync{current_height, highest_height} => {
+						let percent = if highest_height == 0 { 0 } else { current_height * 100 / highest_height };
+						format!("Downloading blocks: {}%, step 4/4", percent)
+					}
 				}
 			}
 		};

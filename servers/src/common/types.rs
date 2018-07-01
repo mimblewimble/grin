@@ -257,21 +257,22 @@ impl Default for StratumServerConfig {
 
 /// Various status sync can be in, whether it's fast sync or archival.
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
+#[allow(missing_docs)]
 pub enum SyncStatus {
 	/// Not syncing
 	NoSync,
 	/// Downloading block headers
-	HeaderSync,
+	HeaderSync { current_height: u64, highest_height: u64},
 	/// Downloading the various txhashsets
 	TxHashsetDownload,
 	/// Setting up before validation
 	TxHashsetSetup,
 	/// Validating the full state
-	TxHashsetValidation,
+	TxHashsetValidation{kernels: u64, kernel_total: u64, rproofs: u64, rproof_total: u64},
 	/// Finalizing the new state
 	TxHashsetSave,
 	/// Downloading blocks
-	BodySync,
+	BodySync { current_height: u64, highest_height: u64},
 }
 
 /// Current sync state. Encapsulates the current SyncStatus.
@@ -307,8 +308,18 @@ impl chain::TxHashsetWriteStatus for SyncState {
 		self.update(SyncStatus::TxHashsetSetup);
 	}
 
-	fn on_validation(&self) {
-		self.update(SyncStatus::TxHashsetValidation);
+	fn on_validation(&self, vkernels: u64, vkernel_total: u64, vrproofs: u64, vrproof_total: u64) {
+		let mut status = self.current.write().unwrap();
+		match *status {
+			SyncStatus::TxHashsetValidation{kernels, kernel_total, rproofs, rproof_total} => {
+				let ks = if vkernels > 0 { vkernels } else { kernels };
+				let kt = if vkernel_total > 0 { vkernel_total } else { kernel_total };
+				let rps = if vrproofs > 0 { vrproofs } else { rproofs };
+				let rpt = if vrproof_total > 0 { vrproof_total } else { rproof_total };
+				*status = SyncStatus::TxHashsetValidation{kernels: ks, kernel_total: kt, rproofs: rps, rproof_total: rpt};
+			}
+			_ => *status = SyncStatus::TxHashsetValidation{kernels: 0, kernel_total: 0, rproofs: 0, rproof_total: 0},
+		}
 	}
 
 	fn on_save(&self) {
@@ -316,6 +327,6 @@ impl chain::TxHashsetWriteStatus for SyncState {
 	}
 
 	fn on_done(&self) {
-		self.update(SyncStatus::BodySync);
+		self.update(SyncStatus::BodySync{current_height: 0, highest_height: 0});
 	}
 }

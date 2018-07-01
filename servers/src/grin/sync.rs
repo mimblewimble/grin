@@ -112,7 +112,7 @@ pub fn run_sync(
 					// run the header sync every 10s
 					if si.header_sync_due(&header_head) {
 						header_sync(peers.clone(), chain.clone());
-						sync_state.update(SyncStatus::HeaderSync);
+						sync_state.update(SyncStatus::HeaderSync{current_height: header_head.height, highest_height: si.highest_height});
 					}
 
 					if fast_sync_enabled {
@@ -125,7 +125,7 @@ pub fn run_sync(
 						// run the body_sync every 5s
 						if si.body_sync_due(&head) {
 							body_sync(peers.clone(), chain.clone());
-							sync_state.update(SyncStatus::BodySync);
+							sync_state.update(SyncStatus::BodySync{current_height: head.height, highest_height: si.highest_height});
 						}
 					}
 				} else {
