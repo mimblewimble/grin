@@ -19,7 +19,7 @@ use std::{cmp, thread};
 use time;
 
 use chain;
-use common::types::Error;
+use common::types::{Error, SyncState, SyncStatus};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::global;
@@ -36,7 +36,7 @@ impl Syncer {
 
 	pub fn run_sync(
 		&self,
-		currently_syncing: Arc<AtomicBool>,
+		sync_state: Arc<SyncState>,
 		awaiting_peers: Arc<AtomicBool>,
 		peers: Arc<p2p::Peers>,
 		chain: Arc<chain::Chain>,
@@ -45,7 +45,7 @@ impl Syncer {
 		stop: Arc<AtomicBool>,
 	) {
 		sync::run_sync(
-			currently_syncing,
+			sync_state,
 			awaiting_peers,
 			peers,
 			chain,
@@ -58,7 +58,7 @@ impl Syncer {
 
 /// Starts the syncing loop, just spawns two threads that loop forever
 pub fn run_sync(
-	currently_syncing: Arc<AtomicBool>,
+	sync_state: Arc<SyncState>,
 	awaiting_peers: Arc<AtomicBool>,
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
@@ -98,7 +98,7 @@ pub fn run_sync(
 
 				// is syncing generally needed when we compare our state with others
 				let (syncing, most_work_height) =
-					needs_syncing(currently_syncing.as_ref(), peers.clone(), chain.clone());
+					needs_syncing(sync_state.as_ref(), peers.clone(), chain.clone());
 
 				if most_work_height > 0 {
 					// we can occasionally get a most work height of 0 if read locks fail
@@ -112,22 +112,25 @@ pub fn run_sync(
 					// run the header sync every 10s
 					if si.header_sync_due(&header_head) {
 						header_sync(peers.clone(), chain.clone());
+						sync_state.update(SyncStatus::HeaderSync{current_height: header_head.height, highest_height: si.highest_height});
 					}
 
 					if fast_sync_enabled {
 						// run fast sync if applicable, every 5 min
 						if header_head.height == si.highest_height && si.fast_sync_due() {
 							fast_sync(peers.clone(), chain.clone(), &header_head);
+							sync_state.update(SyncStatus::TxHashsetDownload);
 						}
 					} else {
 						// run the body_sync every 5s
 						if si.body_sync_due(&head) {
 							body_sync(peers.clone(), chain.clone());
+							sync_state.update(SyncStatus::BodySync{current_height: head.height, highest_height: si.highest_height});
 						}
 					}
+				} else {
+					sync_state.update(SyncStatus::NoSync);
 				}
-
-				currently_syncing.store(syncing, Ordering::Relaxed);
 
 				thread::sleep(Duration::from_secs(1));
 
@@ -275,13 +278,13 @@ fn request_headers(peer: &Peer, chain: Arc<chain::Chain>) {
 /// Whether we're currently syncing the chain or we're fully caught up and
 /// just receiving blocks through gossip.
 fn needs_syncing(
-	currently_syncing: &AtomicBool,
+	sync_state: &SyncState,
 	peers: Arc<Peers>,
 	chain: Arc<chain::Chain>,
 ) -> (bool, u64) {
 	let local_diff = chain.total_difficulty();
 	let peer = peers.most_work_peer();
-	let is_syncing = currently_syncing.load(Ordering::Relaxed);
+	let is_syncing = sync_state.is_syncing();
 	let mut most_work_height = 0;
 
 	// if we're already syncing, we're caught up if no peer has a higher

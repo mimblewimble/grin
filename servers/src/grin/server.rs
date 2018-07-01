@@ -26,7 +26,7 @@ use chain;
 use common::adapters::{ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter,
                        PoolToNetAdapter};
 use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
-use common::types::{Error, Seeding, ServerConfig, StratumServerConfig};
+use common::types::{Error, Seeding, ServerConfig, StratumServerConfig, SyncState};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::{consensus, genesis, global, pow};
@@ -48,7 +48,7 @@ pub struct Server {
 	/// in-memory transaction pool
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	/// Whether we're currently syncing
-	currently_syncing: Arc<AtomicBool>,
+	sync_state: Arc<SyncState>,
 	/// To be passed around to collect stats and info
 	state_info: ServerStateInfo,
 	/// Stop flag
@@ -139,11 +139,11 @@ impl Server {
 
 		pool_adapter.set_chain(Arc::downgrade(&shared_chain));
 
-		let currently_syncing = Arc::new(AtomicBool::new(true));
+		let sync_state = Arc::new(SyncState::new());
 		let awaiting_peers = Arc::new(AtomicBool::new(false));
 
 		let net_adapter = Arc::new(NetToChainAdapter::new(
-			currently_syncing.clone(),
+			sync_state.clone(),
 			archive_mode,
 			Arc::downgrade(&shared_chain),
 			tx_pool.clone(),
@@ -202,7 +202,7 @@ impl Server {
 		let syncer = sync::Syncer::new();
 
 		syncer.run_sync(
-			currently_syncing.clone(),
+			sync_state.clone(),
 			awaiting_peers.clone(),
 			p2p_server.peers.clone(),
 			shared_chain.clone(),
@@ -241,7 +241,7 @@ impl Server {
 			p2p: p2p_server,
 			chain: shared_chain,
 			tx_pool: tx_pool,
-			currently_syncing: currently_syncing,
+			sync_state,
 			state_info: ServerStateInfo {
 				awaiting_peers: awaiting_peers,
 				..Default::default()
@@ -265,7 +265,7 @@ impl Server {
 	pub fn start_stratum_server(&self, config: StratumServerConfig) {
 		let cuckoo_size = global::sizeshift();
 		let proof_size = global::proofsize();
-		let currently_syncing = self.currently_syncing.clone();
+		let sync_state = self.sync_state.clone();
 
 		let mut stratum_server = stratumserver::StratumServer::new(
 			config.clone(),
@@ -280,7 +280,7 @@ impl Server {
 					stratum_stats,
 					cuckoo_size as u32,
 					proof_size,
-					currently_syncing,
+					sync_state,
 				);
 			});
 	}
@@ -289,7 +289,7 @@ impl Server {
 	/// internal miner, and should only be used for automated testing. Burns
 	/// reward if wallet_listener_url is 'None'
 	pub fn start_test_miner(&self, wallet_listener_url: Option<String>) {
-		let currently_syncing = self.currently_syncing.clone();
+		let sync_state = self.sync_state.clone();
 		let config_wallet_url = match wallet_listener_url.clone() {
 			Some(u) => u,
 			None => String::from("http://127.0.0.1:13415"),
@@ -317,7 +317,7 @@ impl Server {
 				// TODO push this down in the run loop so miner gets paused anytime we
 				// decide to sync again
 				let secs_5 = time::Duration::from_secs(5);
-				while currently_syncing.load(Ordering::Relaxed) {
+				while sync_state.is_syncing() {
 					thread::sleep(secs_5);
 				}
 				miner.run_loop(wallet_listener_url);
@@ -405,7 +405,7 @@ impl Server {
 			peer_count: self.peer_count(),
 			head: self.head(),
 			header_head: self.header_head(),
-			is_syncing: self.currently_syncing.load(Ordering::Relaxed),
+			sync_status: self.sync_state.status(),
 			awaiting_peers: awaiting_peers,
 			stratum_stats: stratum_stats,
 			peer_stats: peer_stats,
