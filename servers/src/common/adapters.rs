@@ -332,18 +332,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	) -> bool {
 		// TODO check whether we should accept any txhashset now
 		if let Err(e) =
-<<<<<<< HEAD
-			w(&self.chain).txhashset_write(
-				h,
-				rewind_to_output,
-				rewind_to_kernel,
-				txhashset_data,
-				self.sync_state.as_ref(),
-		) {
-=======
-			w(&self.chain).txhashset_write(h, txhashset_data)
+			w(&self.chain).txhashset_write(h, txhashset_data, self.sync_state.as_ref())
 		{
->>>>>>> Cleanup a bunch of build warnings
 			error!(LOGGER, "Failed to save txhashset archive: {}", e);
 			!e.is_bad_data()
 		} else {
