@@ -32,7 +32,7 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{ChainAdapter, Options, Tip};
+use types::{ChainAdapter, NoStatus, Options, Tip, TxHashsetWriteStatus};
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::LOGGER;
 
@@ -433,7 +433,7 @@ impl Chain {
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			// TODO - is this rewind guaranteed to be redundant now?
 			extension.rewind(&header, &header, true, true, true)?;
-			extension.validate(&header, skip_rproofs)?;
+			extension.validate(&header, skip_rproofs, &NoStatus)?;
 			Ok(())
 		})
 	}
@@ -521,14 +521,19 @@ impl Chain {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	pub fn txhashset_write(
+	pub fn txhashset_write<T>(
 		&self,
 		h: Hash,
 		rewind_to_output: u64,
 		rewind_to_kernel: u64,
 		txhashset_data: File,
-	) -> Result<(), Error> {
-		let _lock = self.txhashset_lock.lock().unwrap();
+		status: &T,
+	) -> Result<(), Error>
+	where
+		T: TxHashsetWriteStatus,
+	{
+		self.txhashset_lock.lock().unwrap();
+		status.on_setup();
 		let head = self.head().unwrap();
 		let header_head = self.get_header_head().unwrap();
 		if header_head.height - head.height < global::cut_through_horizon() as u64 {
@@ -543,16 +548,17 @@ impl Chain {
 
 		// all good, prepare a new batch and update all the required records
 		let mut batch = self.store.batch()?;
-		// Note: we are validataing against a writeable extension.
+		// Note: we are validating against a writeable extension.
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			// TODO do we need to rewind here? We have no blocks to rewind
 			// (and we need them for the pos to unremove)
 			extension.rewind(&header, &header, true, true, true)?;
-			let (_output_sum, _kernel_sum) = extension.validate(&header, false)?;
+			extension.validate(&header, false, status)?;
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
 
+		status.on_save();
 		// replace the chain txhashset with the newly built one
 		{
 			let mut txhashset_ref = self.txhashset.write().unwrap();
@@ -569,6 +575,8 @@ impl Chain {
 		batch.commit()?;
 
 		self.check_orphans(header.height + 1);
+
+		status.on_done();
 		Ok(())
 	}
 

@@ -19,13 +19,12 @@ use rand::{self, Rng};
 use std::fs::File;
 use std::net::SocketAddr;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 use std::time::Instant;
 
 use chain::{self, ChainAdapter, Options, Tip};
-use common::types::{ChainValidationMode, ServerConfig};
+use common::types::{ChainValidationMode, ServerConfig, SyncState};
 use core::core;
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
@@ -51,7 +50,7 @@ fn wo<T>(weak_one: &OneTime<Weak<T>>) -> Arc<T> {
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
 pub struct NetToChainAdapter {
-	currently_syncing: Arc<AtomicBool>,
+	sync_state: Arc<SyncState>,
 	archive_mode: bool,
 	chain: Weak<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
@@ -335,13 +334,17 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	) -> bool {
 		// TODO check whether we should accept any txhashset now
 		if let Err(e) =
-			w(&self.chain).txhashset_write(h, rewind_to_output, rewind_to_kernel, txhashset_data)
-		{
+			w(&self.chain).txhashset_write(
+				h,
+				rewind_to_output,
+				rewind_to_kernel,
+				txhashset_data,
+				self.sync_state.as_ref(),
+		) {
 			error!(LOGGER, "Failed to save txhashset archive: {}", e);
 			!e.is_bad_data()
 		} else {
 			info!(LOGGER, "Received valid txhashset data for {}.", h);
-			self.currently_syncing.store(true, Ordering::Relaxed);
 			true
 		}
 	}
@@ -350,14 +353,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 impl NetToChainAdapter {
 	/// Construct a new NetToChainAdapter instance
 	pub fn new(
-		currently_syncing: Arc<AtomicBool>,
+		sync_state: Arc<SyncState>,
 		archive_mode: bool,
 		chain_ref: Weak<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 		config: ServerConfig,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
-			currently_syncing,
+			sync_state,
 			archive_mode,
 			chain: chain_ref,
 			tx_pool,
@@ -438,9 +441,7 @@ impl NetToChainAdapter {
 				match e.kind() {
 					chain::ErrorKind::Orphan => {
 						// make sure we did not miss the parent block
-						if !chain.is_orphan(&prev_hash)
-							&& !self.currently_syncing.load(Ordering::Relaxed)
-						{
+						if !chain.is_orphan(&prev_hash) && !self.sync_state.is_syncing() {
 							debug!(LOGGER, "adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
 							self.request_block_by_hash(prev_hash, &addr)
 						}
@@ -466,7 +467,7 @@ impl NetToChainAdapter {
 		// Skip this if we are currently syncing (too slow).
 		let chain = w(&self.chain);
 		if chain.head().unwrap().height > 0
-			&& !self.currently_syncing.load(Ordering::Relaxed)
+			&& !self.sync_state.is_syncing()
 			&& self.config.chain_validation_mode == ChainValidationMode::EveryBlock
 		{
 			let now = Instant::now();
@@ -491,7 +492,7 @@ impl NetToChainAdapter {
 
 	fn check_compact(&self, tip_res: Option<Tip>) {
 		// no compaction during sync or if we're in historical mode
-		if self.archive_mode || self.currently_syncing.load(Ordering::Relaxed) {
+		if self.archive_mode || self.sync_state.is_syncing() {
 			return;
 		}
 
@@ -559,7 +560,7 @@ impl NetToChainAdapter {
 
 	/// Prepare options for the chain pipeline
 	fn chain_opts(&self) -> chain::Options {
-		let opts = if self.currently_syncing.load(Ordering::Relaxed) {
+		let opts = if self.sync_state.is_syncing() {
 			chain::Options::SYNC
 		} else {
 			chain::Options::NONE
