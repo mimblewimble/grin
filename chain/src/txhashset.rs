@@ -931,7 +931,8 @@ impl<'a> Extension<'a> {
 
 		// Verify kernel roots for all past headers, need to be last as it rewinds
 		// a lot without resetting
-		self.verify_kernel_history(header)?;
+		// TODO broken in fast sync, fix
+		// self.verify_kernel_history(header)?;
 
 		Ok((output_sum, kernel_sum))
 	}
