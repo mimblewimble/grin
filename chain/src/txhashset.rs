@@ -1066,15 +1066,15 @@ impl<'a> Extension<'a> {
 		// header, rewind and check each root. This fixes a potential weakness in
 		// fast sync where a reorg past the horizon could allow a whole rewrite of
 		// the kernel set.
+		let header_head = header.clone();
 		let mut current = header.clone();
 		loop {
 			current = self.commit_index.get_block_header(&current.previous)?;
 			if current.height == 0 {
 				break;
 			}
-			let head_header = self.commit_index.head_header()?;
 			// rewinding further and further back
-			self.rewind(&current, &head_header, false, true, false)?;
+			self.rewind(&current, &header_head, false, true, false)?;
 			if self.kernel_pmmr.root() != current.kernel_root {
 				return Err(ErrorKind::InvalidTxHashSet(format!(
 					"Kernel root at {} does not match",
@@ -1150,9 +1150,11 @@ fn input_pos_to_rewind(
 		// I/O should be minimized or eliminated here for most
 		// rewind scenarios.
 		let current_header = commit_index.get_block_header(&current)?;
-		let input_bitmap = commit_index.get_block_input_bitmap(&current)?;
-		found = input_bitmap.0;
-		bitmap.or_inplace(&input_bitmap.1);
+		let input_bitmap_res = commit_index.get_block_input_bitmap(&current);
+		if let Ok(b) = input_bitmap_res {
+			found = b.0;
+			bitmap.or_inplace(&b.1);
+		}
 		current = current_header.previous;
 	}
 	Ok((found, bitmap))
