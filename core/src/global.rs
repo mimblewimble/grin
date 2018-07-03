@@ -161,7 +161,7 @@ pub fn initial_block_difficulty() -> u64 {
 		ChainTypes::UserTesting => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet1 => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet2 => TESTNET2_INITIAL_DIFFICULTY,
-		ChainTypes::Testnet3 => TESTNET2_INITIAL_DIFFICULTY,
+		ChainTypes::Testnet3 => TESTNET3_INITIAL_DIFFICULTY,
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
 	}
 }
