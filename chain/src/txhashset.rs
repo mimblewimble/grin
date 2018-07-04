@@ -814,7 +814,8 @@ impl<'a> Extension<'a> {
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.kernel_pmmr
 			.rewind(kernel_pos, rewind_add_pos, rewind_rm_pos)
-			.map_err(&ErrorKind::TxHashSetErr)
+			.map_err(&ErrorKind::TxHashSetErr)?;
+		Ok(())
 	}
 
 	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, grin_store::Error> {
