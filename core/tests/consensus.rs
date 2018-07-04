@@ -199,8 +199,8 @@ fn get_diff_stats(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) -> Di
 	DiffStats {
 		height: tip_height as u64,
 		last_blocks: diff_entries,
-		average_block_time: block_time_sum / (DIFFICULTY_ADJUST_WINDOW - 1),
-		average_difficulty: block_diff_sum / (DIFFICULTY_ADJUST_WINDOW - 1),
+		average_block_time: block_time_sum / (DIFFICULTY_ADJUST_WINDOW),
+		average_difficulty: block_diff_sum / (DIFFICULTY_ADJUST_WINDOW),
 		window_size: DIFFICULTY_ADJUST_WINDOW,
 		block_time_sum: block_time_sum,
 		block_diff_sum: block_diff_sum,
