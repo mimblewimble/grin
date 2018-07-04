@@ -215,7 +215,7 @@ where
 	let earliest_ts = window_earliest[MEDIAN_TIME_INDEX as usize];
 
 	// Obtain the median window for the latest time period
-	// i.e. the last  MEDIAN_TIME_WINDOW elements
+	// i.e. the last MEDIAN_TIME_WINDOW elements
 	let mut window_latest: Vec<u64> = diff_data
 		.iter()
 		.skip(DIFFICULTY_ADJUST_WINDOW as usize)
