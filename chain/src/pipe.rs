@@ -500,7 +500,7 @@ pub fn rewind_and_apply_fork(
 	);
 
 	// rewind the sum trees up to the forking block
-	ext.rewind(&forked_header, &head_header, true, true, true)?;
+	ext.rewind(&forked_header, &head_header)?;
 
 	trace!(
 		LOGGER,

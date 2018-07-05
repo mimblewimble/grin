@@ -29,7 +29,7 @@ use store::types::prune_noop;
 #[test]
 fn pmmr_append() {
 	let (data_dir, elems) = setup("append");
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), true, None).unwrap();
 
 	// adding first set of 4 elements and sync
 	let mut mmr_size = load(0, &elems[0..4], &mut backend);
@@ -79,7 +79,7 @@ fn pmmr_compact_leaf_sibling() {
 	let (data_dir, elems) = setup("compact_leaf_sibling");
 
 	// setup the mmr store with all elements
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), true, None).unwrap();
 	let mmr_size = load(0, &elems[..], &mut backend);
 	backend.sync().unwrap();
 
@@ -151,7 +151,7 @@ fn pmmr_prune_compact() {
 	let (data_dir, elems) = setup("prune_compact");
 
 	// setup the mmr store with all elements
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), true, None).unwrap();
 	let mmr_size = load(0, &elems[..], &mut backend);
 	backend.sync().unwrap();
 
@@ -201,7 +201,7 @@ fn pmmr_reload() {
 	let (data_dir, elems) = setup("reload");
 
 	// set everything up with an initial backend
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), true, None).unwrap();
 
 	let mmr_size = load(0, &elems[..], &mut backend);
 
@@ -259,7 +259,7 @@ fn pmmr_reload() {
 	// create a new backend referencing the data files
 	// and check everything still works as expected
 	{
-		let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
+		let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), true, None).unwrap();
 		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
 		{
 			let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
@@ -297,7 +297,7 @@ fn pmmr_reload() {
 #[test]
 fn pmmr_rewind() {
 	let (data_dir, elems) = setup("rewind");
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), true, None).unwrap();
 
 	// adding elements and keeping the corresponding root
 	let mut mmr_size = load(0, &elems[0..4], &mut backend);
@@ -426,7 +426,7 @@ fn pmmr_rewind() {
 #[test]
 fn pmmr_compact_single_leaves() {
 	let (data_dir, elems) = setup("compact_single_leaves");
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), true, None).unwrap();
 	let mmr_size = load(0, &elems[0..5], &mut backend);
 	backend.sync().unwrap();
 
@@ -462,7 +462,7 @@ fn pmmr_compact_single_leaves() {
 #[test]
 fn pmmr_compact_entire_peak() {
 	let (data_dir, elems) = setup("compact_entire_peak");
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), true, None).unwrap();
 	let mmr_size = load(0, &elems[0..5], &mut backend);
 	backend.sync().unwrap();
 
@@ -503,7 +503,7 @@ fn pmmr_compact_entire_peak() {
 #[test]
 fn pmmr_compact_horizon() {
 	let (data_dir, elems) = setup("compact_horizon");
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), None).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.clone(), true, None).unwrap();
 	let mmr_size = load(0, &elems[..], &mut backend);
 	backend.sync().unwrap();
 
@@ -586,7 +586,7 @@ fn pmmr_compact_horizon() {
 	{
 		// recreate backend
 		let backend =
-			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), None).unwrap();
+			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), true, None).unwrap();
 
 		assert_eq!(backend.data_size().unwrap(), 19);
 		assert_eq!(backend.hash_size().unwrap(), 35);
@@ -601,7 +601,7 @@ fn pmmr_compact_horizon() {
 
 	{
 		let mut backend =
-			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), None).unwrap();
+			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), true, None).unwrap();
 
 		{
 			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
@@ -620,7 +620,7 @@ fn pmmr_compact_horizon() {
 	{
 		// recreate backend
 		let backend =
-			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), None).unwrap();
+			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), true, None).unwrap();
 
 		// 0010012001001230
 
@@ -646,7 +646,7 @@ fn compact_twice() {
 	let (data_dir, elems) = setup("compact_twice");
 
 	// setup the mmr store with all elements
-	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), None).unwrap();
+	let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), true, None).unwrap();
 	let mmr_size = load(0, &elems[..], &mut backend);
 	backend.sync().unwrap();
 
