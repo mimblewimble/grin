@@ -65,11 +65,12 @@ where
 	fn new(
 		root_dir: String,
 		file_name: &str,
+		prunable: bool,
 		header: Option<&BlockHeader>,
 	) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(&root_dir).join(TXHASHSET_SUBDIR).join(file_name);
 		fs::create_dir_all(path.clone())?;
-		let be = PMMRBackend::new(path.to_str().unwrap().to_string(), header)?;
+		let be = PMMRBackend::new(path.to_str().unwrap().to_string(), prunable, header)?;
 		let sz = be.unpruned_size()?;
 		Ok(PMMRHandle {
 			backend: be,
@@ -120,9 +121,9 @@ impl TxHashSet {
 		fs::create_dir_all(kernel_file_path.clone())?;
 
 		Ok(TxHashSet {
-			output_pmmr_h: PMMRHandle::new(root_dir.clone(), OUTPUT_SUBDIR, header)?,
-			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR, header)?,
-			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR, None)?,
+			output_pmmr_h: PMMRHandle::new(root_dir.clone(), OUTPUT_SUBDIR, true, header)?,
+			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR, true, header)?,
+			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR, false, None)?,
 			commit_index,
 		})
 	}
@@ -461,9 +462,6 @@ impl<'a> Extension<'a> {
 			kernel_pos,
 			&rewind_add_pos,
 			rewind_rm_pos,
-			true,
-			true,
-			true,
 		)?;
 		Ok(())
 	}
@@ -725,7 +723,7 @@ impl<'a> Extension<'a> {
 
 		// rewind to the specified block for a consistent view
 		let head_header = self.commit_index.head_header()?;
-		self.rewind(block_header, &head_header, true, true, true)?;
+		self.rewind(block_header, &head_header)?;
 
 		// then calculate the Merkle Proof based on the known pos
 		let pos = self.batch.get_output_pos(&output.commit)?;
@@ -757,9 +755,6 @@ impl<'a> Extension<'a> {
 		&mut self,
 		block_header: &BlockHeader,
 		head_header: &BlockHeader,
-		rewind_utxo: bool,
-		rewind_kernel: bool,
-		rewind_rangeproof: bool,
 	) -> Result<(), Error> {
 		trace!(
 			LOGGER,
@@ -787,12 +782,7 @@ impl<'a> Extension<'a> {
 			block_header.kernel_mmr_size,
 			&rewind_add_pos,
 			&rewind_rm_pos.1,
-			rewind_utxo,
-			rewind_kernel,
-			rewind_rangeproof,
-		)?;
-
-		Ok(())
+		)
 	}
 
 	/// Rewinds the MMRs to the provided positions, given the output and
@@ -803,9 +793,6 @@ impl<'a> Extension<'a> {
 		kernel_pos: u64,
 		rewind_add_pos: &Bitmap,
 		rewind_rm_pos: &Bitmap,
-		rewind_utxo: bool,
-		rewind_kernel: bool,
-		rewind_rproof: bool,
 	) -> Result<(), Error> {
 		trace!(
 			LOGGER,
@@ -819,22 +806,15 @@ impl<'a> Extension<'a> {
 		// been sync'd to disk.
 		self.new_output_commits.retain(|_, &mut v| v <= output_pos);
 
-		if rewind_utxo {
-			self.output_pmmr
-				.rewind(output_pos, rewind_add_pos, rewind_rm_pos)
-				.map_err(&ErrorKind::TxHashSetErr)?;
-		}
-		if rewind_rproof {
-			self.rproof_pmmr
-				.rewind(output_pos, rewind_add_pos, rewind_rm_pos)
-				.map_err(&ErrorKind::TxHashSetErr)?;
-		}
-		if rewind_kernel {
-			self.kernel_pmmr
-				.rewind(kernel_pos, rewind_add_pos, rewind_rm_pos)
-				.map_err(&ErrorKind::TxHashSetErr)?;
-		}
-
+		self.output_pmmr
+			.rewind(output_pos, rewind_add_pos, rewind_rm_pos)
+			.map_err(&ErrorKind::TxHashSetErr)?;
+		self.rproof_pmmr
+			.rewind(output_pos, rewind_add_pos, rewind_rm_pos)
+			.map_err(&ErrorKind::TxHashSetErr)?;
+		self.kernel_pmmr
+			.rewind(kernel_pos, rewind_add_pos, rewind_rm_pos)
+			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
 
@@ -1068,14 +1048,17 @@ impl<'a> Extension<'a> {
 		// fast sync where a reorg past the horizon could allow a whole rewrite of
 		// the kernel set.
 		let mut current = header.clone();
+		let empty_bitmap = Bitmap::create();
 		loop {
 			current = self.commit_index.get_block_header(&current.previous)?;
 			if current.height == 0 {
 				break;
 			}
-			let head_header = self.commit_index.head_header()?;
-			// rewinding further and further back
-			self.rewind(&current, &head_header, false, true, false)?;
+			// rewinding kernels only further and further back
+			self.kernel_pmmr
+				.rewind(current.kernel_mmr_size, &empty_bitmap, &empty_bitmap)
+				.map_err(&ErrorKind::TxHashSetErr)?;
+
 			if self.kernel_pmmr.root() != current.kernel_root {
 				return Err(ErrorKind::InvalidTxHashSet(format!(
 					"Kernel root at {} does not match",
@@ -1085,6 +1068,7 @@ impl<'a> Extension<'a> {
 		}
 		Ok(())
 	}
+
 }
 
 /// Packages the txhashset data files into a zip and returns a Read to the
