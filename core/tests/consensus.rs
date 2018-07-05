@@ -328,6 +328,9 @@ fn adjustment_scenarios() {
 	let chain_sim = add_block_repeated(3600, chain_sim, 2);
 	let chain_sim = add_block_repeated(1800, chain_sim, 2);
 	let chain_sim = add_block_repeated(900, chain_sim, 10);
+	let chain_sim = add_block_repeated(450, chain_sim, 30);
+	let chain_sim = add_block_repeated(400, chain_sim, 30);
+	let chain_sim = add_block_repeated(300, chain_sim, 30);
 
 	println!("*********************************************************");
 	println!("Scenario 1) Grossly over-estimated genesis difficulty ");
@@ -339,6 +342,7 @@ fn adjustment_scenarios() {
 	let chain_sim = create_chain_sim(global::initial_block_difficulty());
 	let chain_sim = add_block_repeated(1, chain_sim, 5);
 	let chain_sim = add_block_repeated(20, chain_sim, 5);
+	let chain_sim = add_block_repeated(30, chain_sim, 20);
 
 	println!("*********************************************************");
 	println!("Scenario 2) Grossly under-estimated genesis difficulty ");
@@ -349,8 +353,8 @@ fn adjustment_scenarios() {
 
 	// Steady difficulty for a good while, then a sudden drop
 	let chain_sim = create_chain_sim(global::initial_block_difficulty());
-	let chain_sim = add_block_repeated(10, chain_sim, just_enough as usize);
-	let chain_sim = add_block_repeated(600, chain_sim, 10);
+	let chain_sim = add_block_repeated(60, chain_sim, just_enough as usize);
+	let chain_sim = add_block_repeated(600, chain_sim, 60);
 
 	println!("");
 	println!("*********************************************************");
