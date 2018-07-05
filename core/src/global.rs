@@ -249,7 +249,6 @@ where
 				live_intervals[i].0 = live_intervals[i].0 - live_intervals[i - 1].0;
 			}
 		}
-		//
 		// Remove genesis "interval"
 		if live_intervals.len() > 1 {
 			live_intervals.remove(0);
@@ -259,14 +258,11 @@ where
 		}
 		let mut interval_index = live_intervals.len() - 1;
 		let mut last_ts = last_n.first().as_ref().unwrap().as_ref().unwrap().0;
-		// fill in simulated blocks, repeating whatever pattern we've obtained from
-		// real data
-		// if we have, say, 15 blocks so far with intervals of I1..I15, then
-		// the 71-15=56 pre genesis blocks will have
-		// intervals/difficulties I1..I15 I1..I15 I1..I15 I1..I11
+		let last_diff = live_intervals[live_intervals.len()-1].1;
+		// fill in simulated blocks with values from the previous real block
+
 		for _ in 0..block_count_difference {
-			last_ts = last_ts.saturating_sub(live_intervals[interval_index].0);
-			let last_diff = &live_intervals[interval_index].1;
+			last_ts = last_ts.saturating_sub(live_intervals[live_intervals.len()-1].0);
 			last_n.insert(0, Ok((last_ts, last_diff.clone())));
 			interval_index = match interval_index {
 				0 => live_intervals.len() - 1,
