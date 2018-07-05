@@ -146,9 +146,6 @@ pub const BLOCK_TIME_WINDOW: u64 = DIFFICULTY_ADJUST_WINDOW * BLOCK_TIME_SEC;
 /// Maximum size time window used for difficulty adjustments
 pub const UPPER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 2;
 
-/// Minimum size time window used for difficulty adjustments
-pub const LOWER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW / 2;
-
 /// Dampening factor to use for difficulty adjustment
 pub const DAMP_FACTOR: u64 = 3;
 
@@ -242,9 +239,7 @@ where
 	};
 
 	// Apply time bounds
-	let adj_ts = if ts_damp < LOWER_TIME_BOUND {
-		LOWER_TIME_BOUND
-	} else if ts_damp > UPPER_TIME_BOUND {
+	let adj_ts = if ts_damp > UPPER_TIME_BOUND {
 		UPPER_TIME_BOUND
 	} else {
 		ts_damp
