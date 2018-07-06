@@ -59,7 +59,7 @@ pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 /// Testnet 2 initial block difficulty, high to see how it goes
 pub const TESTNET2_INITIAL_DIFFICULTY: u64 = 1000;
 
-/// Testnet 2 initial block difficulty, moderatly hight, taking into account
+/// Testnet 2 initial block difficulty, moderately hight, taking into account
 /// a 30x Cuckoo adjustment factor
 pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 15000;
 
@@ -75,7 +75,7 @@ pub enum ChainTypes {
 	Testnet1,
 	/// Second test network
 	Testnet2,
-	/// Thirs test network
+	/// Third test network
 	Testnet3,
 	/// Main production network
 	Mainnet,
