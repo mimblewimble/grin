@@ -537,7 +537,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "grin"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "built 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -546,14 +546,14 @@ dependencies = [
  "ctrlc 3.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "cursive 0.8.2-alpha.0 (git+https://github.com/yeastplume/Cursive?tag=grin_integration_1)",
  "daemonize 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_api 0.2.0",
- "grin_config 0.2.0",
- "grin_core 0.2.0",
- "grin_keychain 0.2.0",
- "grin_p2p 0.2.0",
- "grin_servers 0.2.0",
- "grin_util 0.2.0",
- "grin_wallet 0.2.0",
+ "grin_api 0.3.0",
+ "grin_config 0.3.0",
+ "grin_core 0.3.0",
+ "grin_keychain 0.3.0",
+ "grin_p2p 0.3.0",
+ "grin_servers 0.3.0",
+ "grin_util 0.3.0",
+ "grin_wallet 0.3.0",
  "serde 1.0.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "slog 2.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -563,16 +563,16 @@ dependencies = [
 
 [[package]]
 name = "grin_api"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_chain 0.2.0",
- "grin_core 0.2.0",
- "grin_p2p 0.2.0",
- "grin_pool 0.2.0",
- "grin_store 0.2.0",
- "grin_util 0.2.0",
+ "grin_chain 0.3.0",
+ "grin_core 0.3.0",
+ "grin_p2p 0.3.0",
+ "grin_pool 0.3.0",
+ "grin_store 0.3.0",
+ "grin_util 0.3.0",
  "hyper 0.10.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "iron 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -588,7 +588,7 @@ dependencies = [
 
 [[package]]
 name = "grin_chain"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bitflags 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -596,11 +596,11 @@ dependencies = [
  "env_logger 0.5.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_core 0.2.0",
- "grin_keychain 0.2.0",
- "grin_store 0.2.0",
- "grin_util 0.2.0",
- "grin_wallet 0.2.0",
+ "grin_core 0.3.0",
+ "grin_keychain 0.3.0",
+ "grin_store 0.3.0",
+ "grin_util 0.3.0",
+ "grin_wallet 0.3.0",
  "lmdb-zero 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "lru-cache 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -612,12 +612,12 @@ dependencies = [
 
 [[package]]
 name = "grin_config"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
- "grin_p2p 0.2.0",
- "grin_servers 0.2.0",
- "grin_util 0.2.0",
- "grin_wallet 0.2.0",
+ "grin_p2p 0.3.0",
+ "grin_servers 0.3.0",
+ "grin_util 0.3.0",
+ "grin_wallet 0.3.0",
  "serde 1.0.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -625,7 +625,7 @@ dependencies = [
 
 [[package]]
 name = "grin_core"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bitflags 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -633,9 +633,9 @@ dependencies = [
  "croaring 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_keychain 0.2.0",
- "grin_util 0.2.0",
- "grin_wallet 0.2.0",
+ "grin_keychain 0.3.0",
+ "grin_util 0.3.0",
+ "grin_wallet 0.3.0",
  "lazy_static 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "num-bigint 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -648,11 +648,11 @@ dependencies = [
 
 [[package]]
 name = "grin_keychain"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_util 0.2.0",
+ "grin_util 0.3.0",
  "rand 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.69 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -663,15 +663,15 @@ dependencies = [
 
 [[package]]
 name = "grin_p2p"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "bitflags 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "bytes 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "enum_primitive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_core 0.2.0",
- "grin_pool 0.2.0",
- "grin_store 0.2.0",
- "grin_util 0.2.0",
+ "grin_core 0.3.0",
+ "grin_pool 0.3.0",
+ "grin_store 0.3.0",
+ "grin_util 0.3.0",
  "lmdb-zero 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "net2 0.2.33 (registry+https://github.com/rust-lang/crates.io-index)",
  "num 0.1.42 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -684,15 +684,15 @@ dependencies = [
 
 [[package]]
 name = "grin_pool"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_chain 0.2.0",
- "grin_core 0.2.0",
- "grin_keychain 0.2.0",
- "grin_store 0.2.0",
- "grin_util 0.2.0",
- "grin_wallet 0.2.0",
+ "grin_chain 0.3.0",
+ "grin_core 0.3.0",
+ "grin_keychain 0.3.0",
+ "grin_store 0.3.0",
+ "grin_util 0.3.0",
+ "grin_wallet 0.3.0",
  "rand 0.3.22 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.69 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.69 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -702,20 +702,20 @@ dependencies = [
 
 [[package]]
 name = "grin_servers"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "bufstream 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_api 0.2.0",
- "grin_chain 0.2.0",
- "grin_config 0.2.0",
- "grin_core 0.2.0",
- "grin_keychain 0.2.0",
- "grin_p2p 0.2.0",
- "grin_pool 0.2.0",
- "grin_store 0.2.0",
- "grin_util 0.2.0",
- "grin_wallet 0.2.0",
+ "grin_api 0.3.0",
+ "grin_chain 0.3.0",
+ "grin_config 0.3.0",
+ "grin_core 0.3.0",
+ "grin_keychain 0.3.0",
+ "grin_p2p 0.3.0",
+ "grin_pool 0.3.0",
+ "grin_store 0.3.0",
+ "grin_util 0.3.0",
+ "grin_wallet 0.3.0",
  "hyper 0.10.13 (registry+https://github.com/rust-lang/crates.io-index)",
  "itertools 0.7.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "jsonrpc-core 8.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -731,15 +731,15 @@ dependencies = [
 
 [[package]]
 name = "grin_store"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "byteorder 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "croaring 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.5.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_core 0.2.0",
- "grin_util 0.2.0",
+ "grin_core 0.3.0",
+ "grin_util 0.3.0",
  "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
  "lmdb-zero 0.4.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "memmap 0.6.2 (git+https://github.com/danburkert/memmap-rs?tag=0.6.2)",
@@ -752,7 +752,7 @@ dependencies = [
 
 [[package]]
 name = "grin_util"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "backtrace 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -770,7 +770,7 @@ dependencies = [
 
 [[package]]
 name = "grin_wallet"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "bodyparser 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -778,12 +778,12 @@ dependencies = [
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "futures 0.1.21 (registry+https://github.com/rust-lang/crates.io-index)",
- "grin_api 0.2.0",
- "grin_chain 0.2.0",
- "grin_core 0.2.0",
- "grin_keychain 0.2.0",
- "grin_store 0.2.0",
- "grin_util 0.2.0",
+ "grin_api 0.3.0",
+ "grin_chain 0.3.0",
+ "grin_core 0.3.0",
+ "grin_keychain 0.3.0",
+ "grin_store 0.3.0",
+ "grin_util 0.3.0",
  "hyper 0.11.27 (registry+https://github.com/rust-lang/crates.io-index)",
  "iron 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "prettytable-rs 0.7.0 (registry+https://github.com/rust-lang/crates.io-index)",
