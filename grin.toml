@@ -39,8 +39,8 @@ db_root = ".grin"
 #UserTesting - For regular user testing (cuckoo 16)
 #Testnet1 - Testnet1 genesis block (cuckoo 16)
 #Testnet2 - Testnet2 genesis block (cuckoo 30)
-#
-chain_type = "Testnet2"
+
+chain_type = "Testnet3"
 
 #The chain validation mode, defines how often (if at all) we
 #want to run a full chain validation. Can be:
