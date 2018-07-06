@@ -75,7 +75,7 @@ pub enum ChainTypes {
 	Testnet1,
 	/// Second test network
 	Testnet2,
-	/// Thirs test network
+	/// Third test network
 	Testnet3,
 	/// Main production network
 	Mainnet,
