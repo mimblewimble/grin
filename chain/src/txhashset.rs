@@ -911,8 +911,7 @@ impl<'a> Extension<'a> {
 
 		// Verify kernel roots for all past headers, need to be last as it rewinds
 		// a lot without resetting
-		// TODO broken in fast sync, fix
-		// self.verify_kernel_history(header)?;
+		self.verify_kernel_history(header)?;
 
 		Ok((output_sum, kernel_sum))
 	}
@@ -1047,7 +1046,6 @@ impl<'a> Extension<'a> {
 		// header, rewind and check each root. This fixes a potential weakness in
 		// fast sync where a reorg past the horizon could allow a whole rewrite of
 		// the kernel set.
-		let header_head = header.clone();
 		let mut current = header.clone();
 		let empty_bitmap = Bitmap::create();
 		loop {

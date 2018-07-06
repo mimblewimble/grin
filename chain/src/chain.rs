@@ -544,9 +544,15 @@ impl Chain {
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
 
+		// validate against a read-only extension first (some of the validation
+		// runs additional rewinds)
+		txhashset::extending_readonly(&mut txhashset, |extension| {
+			extension.rewind(&header, &header)?;
+			extension.validate(&header, false, status)
+		})?;
+
 		// all good, prepare a new batch and update all the required records
 		let mut batch = self.store.batch()?;
-		// Note: we are validating against a writeable extension.
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			// TODO do we need to rewind here? We have no blocks to rewind
 			// (and we need them for the pos to unremove)
