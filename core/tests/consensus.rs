@@ -17,7 +17,7 @@ extern crate grin_core as core;
 extern crate time;
 
 use core::consensus::{next_difficulty, valid_header_version, TargetError,
-                      DIFFICULTY_ADJUST_WINDOW, MEDIAN_TIME_WINDOW, LOWER_TIME_BOUND,
+                      DIFFICULTY_ADJUST_WINDOW, MEDIAN_TIME_WINDOW,
                       UPPER_TIME_BOUND, BLOCK_TIME_WINDOW, DAMP_FACTOR, MEDIAN_TIME_INDEX};
 use core::core::target::Difficulty;
 use std::fmt::{self, Display};
@@ -268,7 +268,6 @@ fn print_chain_sim(
 	println!("DIFFICULTY_ADJUST_WINDOW: {}", DIFFICULTY_ADJUST_WINDOW);
 	println!("BLOCK_TIME_WINDOW: {}", BLOCK_TIME_WINDOW);
 	println!("MEDIAN_TIME_WINDOW: {}", MEDIAN_TIME_WINDOW);
-	println!("LOWER_TIME_BOUND: {}", LOWER_TIME_BOUND);
 	println!("UPPER_TIME_BOUND: {}", UPPER_TIME_BOUND);
 	println!("DAMP_FACTOR: {}", DAMP_FACTOR);
 	chain_sim.iter().enumerate().for_each(|(i, b)| {
