@@ -242,7 +242,6 @@ where
 	};
 
 	// Apply time bounds
-
 	let adj_ts = if ts_damp < LOWER_TIME_BOUND {
 		LOWER_TIME_BOUND
 	} else if ts_damp > UPPER_TIME_BOUND {
