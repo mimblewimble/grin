@@ -13,10 +13,7 @@
 
 //! Implementation of the persistent Backend for the prunable MMR tree.
 
-use std::fs;
-use std::io;
-use std::marker;
-use std::path::Path;
+use std::{fs, io, marker};
 
 use croaring::Bitmap;
 
@@ -26,20 +23,13 @@ use core::core::BlockHeader;
 use core::ser::{self, PMMRable};
 use leaf_set::LeafSet;
 use prune_list::PruneList;
-use rm_log::RemoveLog;
-use types::{prune_noop, read_ordered_vec, AppendOnlyFile};
+use types::{prune_noop, AppendOnlyFile};
 use util::LOGGER;
 
 const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
 const PMMR_LEAF_FILE: &'static str = "pmmr_leaf.bin";
 const PMMR_PRUN_FILE: &'static str = "pmmr_prun.bin";
-
-// TODO - we can get rid of these for testnet3 (only used for migration during
-// testnet2). "Legacy" rm_log.bin and pruned.bin files (used when migrating
-// existing node).
-const LEGACY_RM_LOG_FILE: &'static str = "pmmr_rm_log.bin";
-const LEGACY_PRUNED_FILE: &'static str = "pmmr_pruned.bin";
 
 /// PMMR persistent backend implementation. Relies on multiple facilities to
 /// handle writing, reading and pruning.

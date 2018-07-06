@@ -19,7 +19,7 @@ use libtx::proof;
 use libwallet::Error;
 use libwallet::types::*;
 use util::secp::{pedersen, key::SecretKey};
-use util::{self, LOGGER};
+use util::LOGGER;
 
 /// Utility struct for return values from below
 struct OutputResult {
