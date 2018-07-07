@@ -119,7 +119,7 @@ pub fn genesis_testnet3() -> core::Block {
 				..time::empty_tm()
 			},
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
-			nonce: 1060,
+			nonce: 0,
 			pow: core::Proof::new(vec![
 				0x1940730, 0x333b9d0, 0x4739d6f, 0x4c6cfb1, 0x6e3d6c3, 0x74408a3, 0x7ba2bd2,
 				0x83e2024, 0x8ca22b5, 0x9d39ab8, 0xb6646dd, 0xc6698b6, 0xc6f78fe, 0xc99b662,

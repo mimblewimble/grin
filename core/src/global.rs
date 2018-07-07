@@ -59,9 +59,9 @@ pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 /// Testnet 2 initial block difficulty, high to see how it goes
 pub const TESTNET2_INITIAL_DIFFICULTY: u64 = 1000;
 
-/// Testnet 2 initial block difficulty, moderately hight, taking into account
+/// Testnet 3 initial block difficulty, moderately high, taking into account
 /// a 30x Cuckoo adjustment factor
-pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 15000;
+pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
 
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
@@ -106,9 +106,7 @@ pub fn min_sizeshift() -> u8 {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_SIZESHIFT,
 		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
 		ChainTypes::Testnet1 => USER_TESTING_MIN_SIZESHIFT,
-		ChainTypes::Testnet2 => DEFAULT_MIN_SIZESHIFT,
-		ChainTypes::Testnet3 => DEFAULT_MIN_SIZESHIFT,
-		ChainTypes::Mainnet => DEFAULT_MIN_SIZESHIFT,
+		_ => DEFAULT_MIN_SIZESHIFT,
 	}
 }
 
@@ -121,9 +119,7 @@ pub fn ref_sizeshift() -> u8 {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_SIZESHIFT,
 		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
 		ChainTypes::Testnet1 => USER_TESTING_MIN_SIZESHIFT,
-		ChainTypes::Testnet2 => REFERENCE_SIZESHIFT,
-		ChainTypes::Testnet3 => REFERENCE_SIZESHIFT,
-		ChainTypes::Mainnet => REFERENCE_SIZESHIFT,
+		_ => REFERENCE_SIZESHIFT,
 	}
 }
 
@@ -133,10 +129,7 @@ pub fn proofsize() -> usize {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
 		ChainTypes::UserTesting => USER_TESTING_PROOF_SIZE,
-		ChainTypes::Testnet1 => PROOFSIZE,
-		ChainTypes::Testnet2 => PROOFSIZE,
-		ChainTypes::Testnet3 => PROOFSIZE,
-		ChainTypes::Mainnet => PROOFSIZE,
+		_ => PROOFSIZE,
 	}
 }
 
@@ -146,10 +139,7 @@ pub fn coinbase_maturity() -> u64 {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
 		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
-		ChainTypes::Testnet1 => COINBASE_MATURITY,
-		ChainTypes::Testnet2 => COINBASE_MATURITY,
-		ChainTypes::Testnet3 => COINBASE_MATURITY,
-		ChainTypes::Mainnet => COINBASE_MATURITY,
+		_ => COINBASE_MATURITY,
 	}
 }
 
@@ -172,10 +162,7 @@ pub fn cut_through_horizon() -> u32 {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => TESTING_CUT_THROUGH_HORIZON,
 		ChainTypes::UserTesting => TESTING_CUT_THROUGH_HORIZON,
-		ChainTypes::Testnet1 => CUT_THROUGH_HORIZON,
-		ChainTypes::Testnet2 => CUT_THROUGH_HORIZON,
-		ChainTypes::Testnet3 => CUT_THROUGH_HORIZON,
-		ChainTypes::Mainnet => CUT_THROUGH_HORIZON,
+		_ => CUT_THROUGH_HORIZON,
 	}
 }
 
