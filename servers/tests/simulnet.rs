@@ -191,7 +191,6 @@ fn simulate_block_propagation() {
 
 	// start mining
 	servers[0].start_test_miner(None);
-	let _original_height = servers[0].head().height;
 
 	// monitor for a change of head on a different server and check whether
 	// chain height has changed
@@ -205,7 +204,7 @@ fn simulate_block_propagation() {
 		if count == 5 {
 			break;
 		}
-		thread::sleep(time::Duration::from_millis(100));
+		thread::sleep(time::Duration::from_millis(1_000));
 	}
 	for n in 0..5 {
 		servers[n].stop();
@@ -229,12 +228,21 @@ fn simulate_full_sync() {
 	s1.start_test_miner(None);
 	thread::sleep(time::Duration::from_secs(8));
 
-	#[ignore(unused_mut)] // mut needed?
-	let mut conf = framework::config(1001, "grin-sync", 1000);
-	let s2 = servers::Server::new(conf).unwrap();
-	while s2.head().height < 4 {
-		thread::sleep(time::Duration::from_millis(100));
+	let s2 = servers::Server::new(framework::config(1001, "grin-sync", 1000)).unwrap();
+
+	// Get the current header from s1.
+	let s1_header = s1.chain.head_header().unwrap();
+
+	// Wait for s2 to sync up to and including the header from s1.
+	while s2.head().height < s1_header.height {
+		thread::sleep(time::Duration::from_millis(1_000));
 	}
+
+	// Confirm both s1 and s2 see a consistent header at that height.
+	let s2_header = s2.chain.get_block_header(&s1_header.hash()).unwrap();
+	assert_eq!(s1_header, s2_header);
+
+	// Stop our servers cleanly.
 	s1.stop();
 	s2.stop();
 }
@@ -272,7 +280,7 @@ fn simulate_fast_sync() {
 
 	// Wait for s2 to sync up to and including the header from s1.
 	while s2.head().height < s1_header.height {
-		thread::sleep(time::Duration::from_millis(1_00));
+		thread::sleep(time::Duration::from_millis(1_000));
 	}
 
 	// Confirm both s1 and s2 see a consistent header at that height.
