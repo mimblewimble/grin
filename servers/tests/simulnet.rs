@@ -25,6 +25,7 @@ mod framework;
 use std::default::Default;
 use std::{thread, time};
 
+use core::core::hash::Hashed;
 use core::global::{self, ChainTypes};
 
 use framework::{config, stratum_config, LocalServerContainerConfig, LocalServerContainerPool,
@@ -250,11 +251,12 @@ fn simulate_fast_sync() {
 	let test_name_dir = "grin-fast";
 	framework::clean_all_output(test_name_dir);
 
+	// start s1 and mine enough blocks to get beyond the fast sync horizon
 	let s1 = servers::Server::new(framework::config(2000, "grin-fast", 2000)).unwrap();
-	// mine enough blocks to get beyond the fast sync horizon
 	s1.start_test_miner(None);
+
 	while s1.head().height < 21 {
-		thread::sleep(time::Duration::from_millis(1000));
+		thread::sleep(time::Duration::from_millis(1_000));
 	}
 
 	let mut conf = config(2001, "grin-fast", 2000);
@@ -262,14 +264,22 @@ fn simulate_fast_sync() {
 
 	let s2 = servers::Server::new(conf).unwrap();
 	while s2.head().height < 21 {
-		thread::sleep(time::Duration::from_millis(1000));
+		thread::sleep(time::Duration::from_millis(1_000));
 	}
 
-	let h_node1 = s1.chain.get_header_by_height(21).unwrap();
-	let h_node2 = s2.chain.get_header_by_height(21).unwrap();
+	// Get the current header from s1.
+	let s1_header = s1.chain.head_header().unwrap();
 
-	assert_eq!(h_node1, h_node2);
+	// Wait for s2 to sync up to and including the header from s1.
+	while s2.head().height < s1_header.height {
+		thread::sleep(time::Duration::from_millis(1_00));
+	}
 
+	// Confirm both s1 and s2 see a consistent header at that height.
+	let s2_header = s2.chain.get_block_header(&s1_header.hash()).unwrap();
+	assert_eq!(s1_header, s2_header);
+
+	// Stop our servers cleanly.
 	s1.stop();
 	s2.stop();
 }

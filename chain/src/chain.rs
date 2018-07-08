@@ -425,15 +425,17 @@ impl Chain {
 			return Ok(());
 		}
 
+		// We want to validate the full kernel history here for completeness.
+		let skip_kernel_hist = false;
+
 		let mut txhashset = self.txhashset.write().unwrap();
 
 		// Now create an extension from the txhashset and validate against the
 		// latest block header. Rewind the extension to the specified header to
 		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
-			// TODO - is this rewind guaranteed to be redundant now?
 			extension.rewind(&header, &header)?;
-			extension.validate(&header, skip_rproofs, &NoStatus)?;
+			extension.validate(&header, skip_rproofs, skip_kernel_hist, &NoStatus)?;
 			Ok(())
 		})
 	}
@@ -549,7 +551,7 @@ impl Chain {
 		debug!(LOGGER, "chain: txhashset_write: rewinding and validating (read-only)");
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.rewind(&header, &header)?;
-			extension.validate(&header, false, status)?;
+			extension.validate(&header, false, false, status)?;
 			Ok(())
 		})?;
 
@@ -558,7 +560,7 @@ impl Chain {
 		let mut batch = self.store.batch()?;
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			extension.rewind(&header, &header)?;
-			extension.validate(&header, false, status)?;
+			extension.validate(&header, false, true, status)?;
 			extension.rebuild_index()?;
 			Ok(())
 		})?;

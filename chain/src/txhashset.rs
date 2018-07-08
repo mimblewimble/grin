@@ -467,9 +467,7 @@ impl<'a> Extension<'a> {
 	/// new tx).
 	pub fn apply_raw_tx(&mut self, tx: &Transaction) -> Result<(), Error> {
 		// This should *never* be called on a writeable extension...
-		if !self.rollback {
-			panic!("attempted to apply a raw tx to a writeable txhashset extension");
-		}
+		assert!(self.rollback, "applied raw_tx to writeable txhashset extension");
 
 		// Checkpoint the MMR positions before we apply the new tx,
 		// anything goes wrong we will rewind to these positions.
@@ -871,6 +869,7 @@ impl<'a> Extension<'a> {
 		&mut self,
 		header: &BlockHeader,
 		skip_rproofs: bool,
+		skip_kernel_hist: bool,
 		status: &T,
 	) -> Result<((Commitment, Commitment)), Error>
 	where
@@ -900,7 +899,9 @@ impl<'a> Extension<'a> {
 
 		// Verify kernel roots for all past headers, need to be last as it rewinds
 		// a lot without resetting
-		self.verify_kernel_history(header)?;
+		if !skip_kernel_hist {
+			self.verify_kernel_history(header)?;
+		}
 
 		Ok((output_sum, kernel_sum))
 	}
@@ -1029,12 +1030,14 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	// Special handling to make sure the whole kernel set matches each of its
+	// roots in each block header, without truncation. We go back header by
+	// header, rewind and check each root. This fixes a potential weakness in
+	// fast sync where a reorg past the horizon could allow a whole rewrite of
+	// the kernel set.
 	fn verify_kernel_history(&mut self, header: &BlockHeader) -> Result<(), Error> {
-		// Special handling to make sure the whole kernel set matches each of its
-		// roots in each block header, without truncation. We go back header by
-		// header, rewind and check each root. This fixes a potential weakness in
-		// fast sync where a reorg past the horizon could allow a whole rewrite of
-		// the kernel set.
+		assert!(self.rollback, "verified kernel history on writeable txhashset extension");
+
 		let mut current = header.clone();
 		loop {
 			current = self.commit_index.get_block_header(&current.previous)?;
