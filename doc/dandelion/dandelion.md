@@ -1,13 +1,17 @@
-Dandelion in Grin: Privacy-Preserving Transaction Propagation
+Dandelion in Grin: Privacy-Preserving Transaction Aggregation and Propagation
 ==================
-This document describes the implementation of Dandelion in Grin.
+This document describes the implementation of Dandelion in Grin and its modification to handle transactions aggregation in the P2P protocol.
 ## Introduction
 
 Dandelion is a new transaction broadcasting mechanism that reduces the risk of eavesdroppers linking transactions to the source IP. Moreover, it allows Grin transactions to be aggregated (removing input-output pairs) before being broadcasted to the entire network giving an additional privacy perk.
 
-Dandelion was introduced in [1] by G. Fanti et al. and presented at ACM Sigmetrics 2017. On June 2017 a BIP was proposed introducing a more practical and robust variant of Dandelion called Dandelion++ [2].  This document is an adaptation of this BIP for Grin.
+Dandelion was introduced in [1] by G. Fanti et al. and presented at ACM Sigmetrics 2017. On June 2017, a BIP [2] was proposed introducing a more practical and robust variant of Dandelion called Dandelion++ [3] published later in 2018.  This document is an adaptation of this BIP for Grin.
 
-## Mechanism
+We first define the original Dandelion propagation then the Grin adaptation  of the protocol with transaction aggregation.
+
+## Original Dandelion
+
+### Mechanism
 
 Dandelion transaction propagation proceeds in two phases: first the “stem” phase, and then “fluff” phase. During the stem phase, each node relays the transaction to a *single* peer. After a random number of hops along the stem, the transaction enters the fluff phase, which behaves just like ordinary flooding/diffusion. Even when an attacker can identify the location of the fluff phase, it is much more difficult to identify the source of the stem.
 
@@ -22,9 +26,7 @@ Illustration:
                                                    └-> I ...
 </pre>
 
-This mechanism also allows Grin transactions to be aggregated during the stem phase and then broadcasted to all the nodes on the network. This result in transaction aggregation and possibly cut-through (thus removing spent outputs) giving a significant privacy gain similar to a non-interactive coinjoin with cut-through.
-
-## Specification
+### Specifications
 
 The Dandelion protocol is based on three mechanisms:
 
@@ -48,31 +50,7 @@ After receiving a stem transaction, the node flips a biased coin to determine wh
 
 Nodes that receives stem transactions are called stem relays. This relay is chosen from among the outgoing (or whitelisted) connections, which prevents an adversary from easily inserting itself into the stem graph. Each node periodically randomly choose its stem relay every 10 minutes.
 
-## Aggregation
-
-Two aggregation scenarios have been proposed.
-
-### Scenario 1: aggregating transaction without lock_height
-
-In this scenario, transactions are aggregated during the stem phase and then broadcasted to the mempool only when the fluff phase happens.
-
-Each node maintains a ```patience``` timer along with a ```max_patience``` value. When a node receives a stem transaction, its ```patience``` timer starts, waiting for more stem transactions to aggregate. Once the ```patience``` timer reaches the ```max_patience``` value, the node flips a coin to decide whether to send as stem or fluff.
-In the of a stem transactions, the node starts an embargo timer which is defined in the Considerations part. The node need to track every stem transactions it receives aggregated or not in order to guarantee its propagation and be able to revert to a previous stempool state.
-
-A simulation of this scenario is available [here](simulation.md).
-
-### Scenario 2: aggregating transaction with lock_height
-
-Similar to the previous scenario, except that we aggregate transactions that are locked with ```lock_height```. As of now (7f478d7), transactions with ```lock_height > chain_height``` are rejected by the mempool. In this scenario, such locked transaction would be accepted in the stempool and relayed to other stem relays with the following conditions:
-
-```
-if (lock_height <= chain_tip.height && coin_flip <= stem_probability)
-```
-
-In this scenario, a patience parameter would still exist to know for how long a peer keep the transaction to its stempool before broadcasting it. Also a ```max_lock_height``` parameter must be defined in order to limit the potential denial of service vector.
-
-
-## Considerations
+### Considerations
 
 The main implementation challenges are: (1) identifying a satisfactory tradeoff between Dandelion’s privacy guarantees and its latency/overhead, and (2) ensuring that privacy cannot be degraded through abuse of existing mechanisms. In particular, the implementation should prevent an attacker from identifying stem nodes without interfering too much with the various existing mechanisms for efficient and DoS-resistant propagation.
 
@@ -83,7 +61,23 @@ The main implementation challenges are: (1) identifying a satisfactory tradeoff 
 * If a node receives a child transaction that depends on one or more currently-embargoed Dandelion transactions, then the transaction is also relayed in stem mode, and the embargo timer is set to the maximum of the embargo times of its parents. This helps ensure that parent transactions enter fluff mode before child transactions. Later on, this two transaction will be aggregated in one unique transaction removing the need for the timer.
 * Transaction propagation latency should be minimally affected by opting-in to this privacy feature; in particular, a transaction should never be prevented from propagating at all because of Dandelion. The random timer guarantees that the embargo mechanism is temporary, and every transaction is relayed according to the ordinary diffusion mechanism after some maximum (random) delay on the order of 30-60 seconds.
 
+## Dandelion in Grin
+
+Dandelion also allows Grin transactions to be aggregated during the stem phase and then broadcasted to all the nodes on the network. This result in transaction aggregation and possibly cut-through (thus removing spent outputs) giving a significant privacy gain similar to a non-interactive coinjoin with cut-through. This section details this mechanism.
+
+### Aggregation Mechanism
+
+In order to aggregate transactions, Grin implements a modified version of the Dandelion protocol [4].
+
+By default, when a node sends a transaction on the network it will be broadcasted with the Dandelion protocol as a stem transaction to its Dandelion relay. The Dandelion relay will then wait a period of time (the patience timer), in order to get more stem transactions to aggregate. At the end of the timer, the relay does a coin flip for each new stem transaction and determines if it will stem it (send to the next Dandelion relay) or fluff it (broadcast normally). Then the relay will take all the transactions to stem, aggregate them, and broadcast them to the next Dandelion relay. It will do the same for the transactions to fluff, except that it will broadcast the aggregated transactions “normally” (to a random subset of the peers).
+
+This gives us a P2P protocol that can handle transaction merging.
+
+A simulation of this scenario is available [here](simulation.md).
+
 ## References
-1. (Sigmetrics 2017) Dandelion: Redesigning the Bitcoin Network for Anonymity https://arxiv.org/abs/1701.04439
-2. Dandelion++: TBA
-3. Dandelion BIP https://github.com/gfanti/bips/blob/master/bip-dandelion.mediawiki
+
+- [1] (Sigmetrics 2017) Dandelion: Redesigning the Bitcoin Network for Anonymity https://arxiv.org/abs/1701.04439
+- [2] Dandelion BIP https://github.com/dandelion-org/bips/blob/master/bip-dandelion.mediawiki
+- [3] (Sigmetrics 2018) Dandelion++: Lightweight Cryptocurrency Networking with Formal Anonymity Guarantees https://arxiv.org/abs/1805.11060
+- [4] Dandelion Grin Pull Request #1067: https://github.com/mimblewimble/grin/pull/1067
