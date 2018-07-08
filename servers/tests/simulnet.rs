@@ -251,17 +251,24 @@ fn simulate_fast_sync() {
 	framework::clean_all_output(test_name_dir);
 
 	let s1 = servers::Server::new(framework::config(2000, "grin-fast", 2000)).unwrap();
-	// mine a few blocks on server 1
+	// mine enough blocks to get beyond the fast sync horizon
 	s1.start_test_miner(None);
-	thread::sleep(time::Duration::from_secs(8));
+	while s1.head().height < 21 {
+		thread::sleep(time::Duration::from_millis(1000));
+	}
 
 	let mut conf = config(2001, "grin-fast", 2000);
 	conf.archive_mode = Some(false);
+
 	let s2 = servers::Server::new(conf).unwrap();
-	while s2.head().height != s2.header_head().height || s2.head().height < 20 {
+	while s2.head().height < 21 {
 		thread::sleep(time::Duration::from_millis(1000));
 	}
-	let _h2 = s2.chain.get_header_by_height(1).unwrap();
+
+	let h_node1 = s1.chain.get_header_by_height(21).unwrap();
+	let h_node2 = s2.chain.get_header_by_height(21).unwrap();
+
+	assert_eq!(h_node1, h_node2);
 
 	s1.stop();
 	s2.stop();

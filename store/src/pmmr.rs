@@ -152,12 +152,11 @@ where
 	fn rewind(
 		&mut self,
 		position: u64,
-		rewind_add_pos: &Bitmap,
 		rewind_rm_pos: &Bitmap,
 	) -> Result<(), String> {
 		// First rewind the leaf_set with the necessary added and removed positions.
 		if self.prunable {
-			self.leaf_set.rewind(rewind_add_pos, rewind_rm_pos);
+			self.leaf_set.rewind(position, rewind_rm_pos);
 		}
 
 		// Rewind the hash file accounting for pruned/compacted pos
@@ -328,7 +327,6 @@ where
 	pub fn check_compact<P>(
 		&mut self,
 		cutoff_pos: u64,
-		rewind_add_pos: &Bitmap,
 		rewind_rm_pos: &Bitmap,
 		prune_cb: P,
 	) -> io::Result<bool>
@@ -343,7 +341,7 @@ where
 
 		// Calculate the sets of leaf positions and node positions to remove based
 		// on the cutoff_pos provided.
-		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos, rewind_add_pos, rewind_rm_pos);
+		let (leaves_removed, pos_to_rm) = self.pos_to_rm(cutoff_pos, rewind_rm_pos);
 
 		// 1. Save compact copy of the hash file, skipping removed data.
 		{
@@ -418,14 +416,12 @@ where
 	fn pos_to_rm(
 		&self,
 		cutoff_pos: u64,
-		rewind_add_pos: &Bitmap,
 		rewind_rm_pos: &Bitmap,
 	) -> (Bitmap, Bitmap) {
 		let mut expanded = Bitmap::create();
 
 		let leaf_pos_to_rm = self.leaf_set.removed_pre_cutoff(
 			cutoff_pos,
-			rewind_add_pos,
 			rewind_rm_pos,
 			&self.prune_list,
 		);
@@ -467,4 +463,3 @@ fn removed_excl_roots(removed: Bitmap) -> Bitmap {
 		})
 		.collect()
 }
-

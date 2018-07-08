@@ -24,6 +24,7 @@ use core::{core, pow};
 use p2p;
 use pool;
 use store;
+use util::LOGGER;
 use wallet;
 
 /// Error type wrapping underlying module errors.
@@ -259,6 +260,8 @@ impl Default for StratumServerConfig {
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 #[allow(missing_docs)]
 pub enum SyncStatus {
+	/// Initial State (we do not yet know if we are/should be syncing)
+	Initial,
 	/// Not syncing
 	NoSync,
 	/// Downloading block headers
@@ -295,11 +298,12 @@ impl SyncState {
 	/// Return a new SyncState initialize to NoSync
 	pub fn new() -> SyncState {
 		SyncState {
-			current: RwLock::new(SyncStatus::NoSync),
+			current: RwLock::new(SyncStatus::Initial),
 		}
 	}
 
-	/// Whether the current state matches any active syncing operation
+	/// Whether the current state matches any active syncing operation.
+	/// Note: This includes our "initial" state.
 	pub fn is_syncing(&self) -> bool {
 		*self.current.read().unwrap() != SyncStatus::NoSync
 	}
@@ -311,7 +315,19 @@ impl SyncState {
 
 	/// Update the syncing status
 	pub fn update(&self, new_status: SyncStatus) {
+		if self.status() == new_status {
+			return;
+		}
+
 		let mut status = self.current.write().unwrap();
+
+		debug!(
+			LOGGER,
+			"sync_state: sync_status: {:?} -> {:?}",
+			*status,
+			new_status,
+		);
+
 		*status = new_status;
 	}
 }

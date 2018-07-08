@@ -233,7 +233,6 @@ impl TxHashSet {
 		let horizon = current_height.saturating_sub(global::cut_through_horizon().into());
 		let horizon_header = self.commit_index.get_header_by_height(horizon)?;
 
-		let rewind_add_pos = output_pos_to_rewind(&horizon_header, &head_header)?;
 		let rewind_rm_pos =
 			input_pos_to_rewind(self.commit_index.clone(), &horizon_header, &head_header)?;
 
@@ -249,14 +248,12 @@ impl TxHashSet {
 
 			self.output_pmmr_h.backend.check_compact(
 				horizon_header.output_mmr_size,
-				&rewind_add_pos,
 				&rewind_rm_pos.1,
 				clean_output_index,
 			)?;
 
 			self.rproof_pmmr_h.backend.check_compact(
 				horizon_header.output_mmr_size,
-				&rewind_add_pos,
 				&rewind_rm_pos.1,
 				&prune_noop,
 			)?;
@@ -453,14 +450,9 @@ impl<'a> Extension<'a> {
 		kernel_pos: u64,
 		rewind_rm_pos: &Bitmap,
 	) -> Result<(), Error> {
-		let latest_output_pos = self.output_pmmr.unpruned_size();
-		let rewind_add_pos: Bitmap = ((output_pos + 1)..(latest_output_pos + 1))
-			.map(|x| x as u32)
-			.collect();
 		self.rewind_to_pos(
 			output_pos,
 			kernel_pos,
-			&rewind_add_pos,
 			rewind_rm_pos,
 		)?;
 		Ok(())
@@ -769,7 +761,6 @@ impl<'a> Extension<'a> {
 		// undone during rewind).
 		// Rewound output pos will be removed from the MMR.
 		// Rewound input (spent) pos will be added back to the MMR.
-		let rewind_add_pos = output_pos_to_rewind(block_header, head_header)?;
 		let rewind_rm_pos =
 			input_pos_to_rewind(self.commit_index.clone(), block_header, head_header)?;
 		if !rewind_rm_pos.0 {
@@ -780,7 +771,6 @@ impl<'a> Extension<'a> {
 		self.rewind_to_pos(
 			block_header.output_mmr_size,
 			block_header.kernel_mmr_size,
-			&rewind_add_pos,
 			&rewind_rm_pos.1,
 		)
 	}
@@ -791,7 +781,6 @@ impl<'a> Extension<'a> {
 		&mut self,
 		output_pos: u64,
 		kernel_pos: u64,
-		rewind_add_pos: &Bitmap,
 		rewind_rm_pos: &Bitmap,
 	) -> Result<(), Error> {
 		trace!(
@@ -807,13 +796,13 @@ impl<'a> Extension<'a> {
 		self.new_output_commits.retain(|_, &mut v| v <= output_pos);
 
 		self.output_pmmr
-			.rewind(output_pos, rewind_add_pos, rewind_rm_pos)
+			.rewind(output_pos, rewind_rm_pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.rproof_pmmr
-			.rewind(output_pos, rewind_add_pos, rewind_rm_pos)
+			.rewind(output_pos, rewind_rm_pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.kernel_pmmr
-			.rewind(kernel_pos, rewind_add_pos, rewind_rm_pos)
+			.rewind(kernel_pos, &Bitmap::create())
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
@@ -1047,7 +1036,6 @@ impl<'a> Extension<'a> {
 		// fast sync where a reorg past the horizon could allow a whole rewrite of
 		// the kernel set.
 		let mut current = header.clone();
-		let empty_bitmap = Bitmap::create();
 		loop {
 			current = self.commit_index.get_block_header(&current.previous)?;
 			if current.height == 0 {
@@ -1055,7 +1043,7 @@ impl<'a> Extension<'a> {
 			}
 			// rewinding kernels only further and further back
 			self.kernel_pmmr
-				.rewind(current.kernel_mmr_size, &empty_bitmap, &empty_bitmap)
+				.rewind(current.kernel_mmr_size, &Bitmap::create())
 				.map_err(&ErrorKind::TxHashSetErr)?;
 			if self.kernel_pmmr.root() != current.kernel_root {
 				return Err(ErrorKind::InvalidTxHashSet(format!(
@@ -1094,20 +1082,6 @@ pub fn zip_write(root_dir: String, txhashset_data: File) -> Result<(), Error> {
 	fs::create_dir_all(txhashset_path.clone())?;
 	zip::decompress(txhashset_data, &txhashset_path)
 		.map_err(|ze| ErrorKind::Other(ze.to_string()).into())
-}
-
-/// Given a block header to rewind to and the block header at the
-/// head of the current chain state, we need to calculate the positions
-/// of all outputs we need to "undo" during a rewind.
-/// The MMR is append-only so we can simply look for all positions added after
-/// the rewind pos.
-fn output_pos_to_rewind(
-	block_header: &BlockHeader,
-	head_header: &BlockHeader,
-) -> Result<Bitmap, Error> {
-	let marker_to = head_header.output_mmr_size;
-	let marker_from = block_header.output_mmr_size;
-	Ok(((marker_from + 1)..=marker_to).map(|x| x as u32).collect())
 }
 
 /// Given a block header to rewind to and the block header at the

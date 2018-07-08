@@ -67,7 +67,6 @@ where
 	fn rewind(
 		&mut self,
 		position: u64,
-		rewind_add_pos: &Bitmap,
 		rewind_rm_pos: &Bitmap,
 	) -> Result<(), String>;
 
@@ -301,7 +300,6 @@ where
 	pub fn rewind(
 		&mut self,
 		position: u64,
-		rewind_add_pos: &Bitmap,
 		rewind_rm_pos: &Bitmap,
 	) -> Result<(), String> {
 		// Identify which actual position we should rewind to as the provided
@@ -312,7 +310,7 @@ where
 			pos += 1;
 		}
 
-		self.backend.rewind(pos, rewind_add_pos, rewind_rm_pos)?;
+		self.backend.rewind(pos, rewind_rm_pos)?;
 		self.last_pos = pos;
 		Ok(())
 	}

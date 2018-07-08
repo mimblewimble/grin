@@ -121,7 +121,6 @@ where
 	fn rewind(
 		&mut self,
 		position: u64,
-		_rewind_add_pos: &Bitmap,
 		_rewind_rm_pos: &Bitmap,
 	) -> Result<(), String> {
 		self.elems = self.elems[0..(position as usize) + 1].to_vec();

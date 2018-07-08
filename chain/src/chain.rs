@@ -546,21 +546,24 @@ impl Chain {
 
 		// validate against a read-only extension first (some of the validation
 		// runs additional rewinds)
+		debug!(LOGGER, "chain: txhashset_write: rewinding and validating (read-only)");
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.rewind(&header, &header)?;
-			extension.validate(&header, false, status)
+			extension.validate(&header, false, status)?;
+			Ok(())
 		})?;
 
 		// all good, prepare a new batch and update all the required records
+		debug!(LOGGER, "chain: txhashset_write: rewinding and validating a 2nd time (writeable)");
 		let mut batch = self.store.batch()?;
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
-			// TODO do we need to rewind here? We have no blocks to rewind
-			// (and we need them for the pos to unremove)
 			extension.rewind(&header, &header)?;
 			extension.validate(&header, false, status)?;
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
+
+		debug!(LOGGER, "chain: txhashset_write: finished validating and rebuilding");
 
 		status.on_save();
 		// replace the chain txhashset with the newly built one
@@ -577,6 +580,8 @@ impl Chain {
 			batch.build_by_height_index(&header, true)?;
 		}
 		batch.commit()?;
+
+		debug!(LOGGER, "chain: txhashset_write: finished committing the batch (head etc.)");
 
 		self.check_orphans(header.height + 1);
 
