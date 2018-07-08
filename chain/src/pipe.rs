@@ -102,7 +102,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 
 	// start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
-	let _ = txhashset::extending(&mut txhashset, &mut batch, |mut extension| {
+	txhashset::extending(&mut txhashset, &mut batch, |mut extension| {
 		// First we rewind the txhashset extension if necessary
 		// to put it into a consistent state for validating the block.
 		// We can skip this step if the previous header is the latest header we saw.
@@ -115,7 +115,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 			extension.force_rollback();
 		}
 		Ok(())
-	});
+	})?;
 
 	trace!(
 		LOGGER,
