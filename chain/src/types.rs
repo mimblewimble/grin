@@ -49,7 +49,7 @@ pub struct TxHashSetRoots {
 /// blockchain tree. References the max height and the latest and previous
 /// blocks
 /// for convenience and the total difficulty.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Tip {
 	/// Height of the tip (max height of the fork)
 	pub height: u64,

@@ -72,11 +72,19 @@ pub fn run_sync(
 		.spawn(move || {
 			let mut si = SyncInfo::new();
 
-			// initial sleep to give us time to peer with some nodes
-			if !skip_sync_wait {
+			{
+				// Initial sleep to give us time to peer with some nodes.
+				// Note: Even if we have "skip_sync_wait" we need to wait a
+				// short period of time for tests to do the right thing.
+				let wait_secs = if skip_sync_wait {
+					3
+				} else {
+					30
+				};
+
 				awaiting_peers.store(true, Ordering::Relaxed);
 				let mut n = 0;
-				while peers.more_work_peers().len() < 4 && n < 30 {
+				while peers.more_work_peers().len() < 4 && n < wait_secs {
 					thread::sleep(Duration::from_secs(1));
 					n += 1;
 				}
@@ -305,7 +313,7 @@ fn needs_syncing(
 					);
 
 					let _ = chain.reset_head();
-					return (false, 0);
+					return (false, most_work_height);
 				}
 			}
 		} else {

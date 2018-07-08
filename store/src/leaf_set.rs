@@ -102,14 +102,20 @@ impl LeafSet {
 	pub fn removed_pre_cutoff(
 		&self,
 		cutoff_pos: u64,
-		rewind_add_pos: &Bitmap,
 		rewind_rm_pos: &Bitmap,
 		prune_list: &PruneList,
 	) -> Bitmap {
 		let mut bitmap = self.bitmap.clone();
 
-		// Now "rewind" using the rewind_add_pos and rewind_rm_pos bitmaps passed in.
+		// First remove pos from leaf_set that were
+		// added after the point we are rewinding to.
+		let marker_from = cutoff_pos;
+		let marker_to = self.bitmap.maximum() as u64;
+		let rewind_add_pos: Bitmap = ((marker_from + 1)..=marker_to).map(|x| x as u32).collect();
 		bitmap.andnot_inplace(&rewind_add_pos);
+
+		// Then add back output pos to the leaf_set
+		// that were removed.
 		bitmap.or_inplace(&rewind_rm_pos);
 
 		// Invert bitmap for the leaf pos and return the resulting bitmap.
@@ -119,10 +125,16 @@ impl LeafSet {
 	}
 
 	/// Rewinds the leaf_set back to a previous state.
-	pub fn rewind(&mut self, rewind_add_pos: &Bitmap, rewind_rm_pos: &Bitmap) {
+	/// Removes all pos after the cutoff.
+	/// Adds back all pos in rewind_rm_pos.
+	pub fn rewind(&mut self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) {
 		// First remove pos from leaf_set that were
 		// added after the point we are rewinding to.
+		let marker_from = cutoff_pos;
+		let marker_to = self.bitmap.maximum() as u64;
+		let rewind_add_pos: Bitmap = ((marker_from + 1)..=marker_to).map(|x| x as u32).collect();
 		self.bitmap.andnot_inplace(&rewind_add_pos);
+
 		// Then add back output pos to the leaf_set
 		// that were removed.
 		self.bitmap.or_inplace(&rewind_rm_pos);
