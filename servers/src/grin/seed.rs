@@ -34,9 +34,7 @@ use util::LOGGER;
 const SEEDS_URL: &'static str = "http://grin-tech.org/seeds.txt";
 // DNS Seeds with contact email associated
 const DNS_SEEDS: &'static [&'static str] = &[
-	"seed.grin-tech.org",      // igno.peverell@protonmail.com
-	"seed.grin.lesceller.com", // q.lesceller@gmail.com
-	"grin-seed.owncrypto.de",  // roll@yourowncryp.to
+	"t3.seed.grin-tech.org",   // igno.peverell@protonmail.com
 ];
 
 pub fn connect_and_monitor(
