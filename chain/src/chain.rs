@@ -425,9 +425,6 @@ impl Chain {
 			return Ok(());
 		}
 
-		// We want to validate the full kernel history here for completeness.
-		let skip_kernel_hist = false;
-
 		let mut txhashset = self.txhashset.write().unwrap();
 
 		// Now create an extension from the txhashset and validate against the
@@ -435,7 +432,7 @@ impl Chain {
 		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.rewind(&header, &header)?;
-			extension.validate(&header, skip_rproofs, skip_kernel_hist, &NoStatus)?;
+			extension.validate(&header, skip_rproofs, &NoStatus)?;
 			Ok(())
 		})
 	}
@@ -546,17 +543,23 @@ impl Chain {
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
 
-		// validate against a read-only extension first (some of the validation
-		// runs additional rewinds)
+		// Validate against a read-only extension first.
+		// The kernel history validation requires a read-only extension
+		// due to the internal rewind behavior.
 		debug!(LOGGER, "chain: txhashset_write: rewinding and validating (read-only)");
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.rewind(&header, &header)?;
-			extension.validate(&header, false, false, status)?;
+			extension.validate(&header, false, status)?;
+
+			// Now validate kernel sums at each historical header height
+			// so we know we can trust the kernel history.
+			extension.validate_kernel_history(&header)?;
+
 			Ok(())
 		})?;
 
 		// all good, prepare a new batch and update all the required records
-		debug!(LOGGER, "chain: txhashset_write: rewinding and validating a 2nd time (writeable)");
+		debug!(LOGGER, "chain: txhashset_write: rewinding a 2nd time (writeable)");
 		let mut batch = self.store.batch()?;
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			extension.rewind(&header, &header)?;
