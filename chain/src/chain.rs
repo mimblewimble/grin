@@ -560,7 +560,6 @@ impl Chain {
 		let mut batch = self.store.batch()?;
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			extension.rewind(&header, &header)?;
-			extension.validate(&header, false, true, status)?;
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
