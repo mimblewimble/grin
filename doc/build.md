@@ -15,34 +15,19 @@ Please note that all mining functions for Grin have moved into a separate, stand
 [grin_miner](https://github.com/mimblewimble/grin-miner). Once your Grin code node is up and running,
 you can start mining by building and running grin-miner against your running Grin node.
 
-## Docker
-
-        # Build using all available cores
-        docker build -t grin .
-
-        # run in foreground
-        docker run -it -v grin:/usr/src/grin grin
-
-        # or in background
-        docker run -it -d -v grin:/usr/src/grin grin
-
-If you decide to use a persistent storage (e.g. ```-v grin:/usr/src/grin```) you will need grin.toml configuration file in it.
-
 ## Requirements
 
-- rust 1.24+ (use [rustup]((https://www.rustup.rs/))- i.e. `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
-- rocksdb + libs for compiling rocksdb:
-  - clang (clanglib or clang-devel or libclang-dev)
-  - llvm (Fedora llvm-devel, Debian llvm-dev)
+- rust 1.26+ (use [rustup]((https://www.rustup.rs/))- i.e. `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
+- clang (clanglib or clang-devel or libclang-dev)
 - ncurses and libs (ncurses, ncursesw5)
 - zlib libs (zlib1g-dev or zlib-devel)
 - linux-headers (reported needed on Alpine linux)
-
 
 ## Build steps
 
 ```sh
 git clone https://github.com/mimblewimble/grin.git
+git checkout milestone/testnet3
 cd grin
 cargo build --release
 ```
@@ -85,6 +70,19 @@ You can then run `grin` directly (try `grin help` for more options).
 *Important Note*: if you used Grin in testnet1, running the wallet listener
 manually isn't required anymore. Grin will create a seed file and run the
 listener automatically on start.
+
+## Docker
+
+        # Build using all available cores
+        docker build -t grin .
+
+        # run in foreground
+        docker run -it -v grin:/usr/src/grin grin
+
+        # or in background
+        docker run -it -d -v grin:/usr/src/grin grin
+
+If you decide to use a persistent storage (e.g. ```-v grin:/usr/src/grin```) you will need grin.toml configuration file in it.
 
 # Configuration
 
