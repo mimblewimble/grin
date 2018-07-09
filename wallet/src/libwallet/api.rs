@@ -31,27 +31,31 @@ use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to
 /// the wallet/keychain that they're acting upon
-pub struct APIOwner<'a, W: ?Sized, K>
+pub struct APIOwner<'a, W: ?Sized, C, K>
 where
-	W: 'a + WalletBackend<K> + WalletClient,
+	W: 'a + WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
 	/// perhaps)
 	pub wallet: &'a mut Box<W>,
 	phantom: PhantomData<K>,
+	phantom_c: PhantomData<C>,
 }
 
-impl<'a, W: ?Sized, K> APIOwner<'a, W, K>
+impl<'a, W: ?Sized, C, K> APIOwner<'a, W, C, K>
 where
-	W: 'a + WalletBackend<K> + WalletClient,
+	W: 'a + WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Create new API instance
-	pub fn new(wallet_in: &'a mut Box<W>) -> APIOwner<'a, W, K> {
+	pub fn new(wallet_in: &'a mut Box<W>) -> APIOwner<'a, W, C, K> {
 		APIOwner {
 			wallet: wallet_in,
 			phantom: PhantomData,
+			phantom_c: PhantomData,
 		}
 	}
 
@@ -103,7 +107,7 @@ where
 			selection_strategy_is_use_all,
 		)?;
 
-		let mut slate = match self.wallet.send_tx_slate(dest, &slate) {
+		let mut slate = match self.wallet.client().send_tx_slate(dest, &slate) {
 			Ok(s) => s,
 			Err(e) => {
 				error!(
@@ -119,7 +123,7 @@ where
 
 		// All good here, so let's post it
 		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
-		self.wallet.post_tx(&TxWrapper { tx_hex: tx_hex }, fluff)?;
+		self.wallet.client().post_tx(&TxWrapper { tx_hex: tx_hex }, fluff)?;
 
 		// All good here, lock our inputs
 		lock_fn(self.wallet)?;
@@ -140,7 +144,7 @@ where
 			max_outputs,
 		)?;
 		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
-		self.wallet.post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
+		self.wallet.client().post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
 		Ok(())
 	}
 
@@ -151,7 +155,7 @@ where
 
 	/// Retrieve current height from node
 	pub fn node_height(&mut self) -> Result<(u64, bool), Error> {
-		match self.wallet.get_chain_height() {
+		match self.wallet.client().get_chain_height() {
 			Ok(height) => Ok((height, true)),
 			Err(_) => {
 				let outputs = self.retrieve_outputs(true, false)?;
@@ -175,27 +179,31 @@ where
 
 /// Wrapper around external API functions, intended to communicate
 /// with other parties
-pub struct APIForeign<'a, W: ?Sized, K>
+pub struct APIForeign<'a, W: ?Sized, C, K>
 where
-	W: WalletBackend<K> + WalletClient + 'a,
+	W: 'a + WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
 	/// perhaps)
 	pub wallet: &'a mut Box<W>,
 	phantom: PhantomData<K>,
+	phantom_c: PhantomData<C>,
 }
 
-impl<'a, W: ?Sized, K> APIForeign<'a, W, K>
+impl<'a, W: ?Sized, C, K> APIForeign<'a, W, C, K>
 where
-	W: WalletBackend<K> + WalletClient,
+	W: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Create new API instance
-	pub fn new(wallet_in: &'a mut Box<W>) -> APIForeign<W, K> {
+	pub fn new(wallet_in: &'a mut Box<W>) -> APIForeign<W, C, K> {
 		APIForeign {
 			wallet: wallet_in,
 			phantom: PhantomData,
+			phantom_c: PhantomData,
 		}
 	}
 

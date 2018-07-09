@@ -34,14 +34,16 @@ use libwallet::error::{Error, ErrorKind};
 use util::secp::pedersen;
 
 /// Combined trait to allow dynamic wallet dispatch
-pub trait WalletInst<K>: WalletBackend<K> + WalletClient + Send + Sync + 'static
+pub trait WalletInst<C, K>: WalletBackend<C, K> + Send + Sync + 'static
 where
+	C: WalletClient,
 	K: Keychain,
 {
 }
-impl<T, K> WalletInst<K> for T
+impl<T, C, K> WalletInst<C, K> for T
 where
-	T: WalletBackend<K> + WalletClient + Send + Sync + 'static,
+	T: WalletBackend<C, K> + Send + Sync + 'static,
+	C: WalletClient,
 	K: Keychain,
 {
 }
@@ -50,8 +52,9 @@ where
 /// Wallets should implement this backend for their storage. All functions
 /// here expect that the wallet instance has instantiated itself or stored
 /// whatever credentials it needs
-pub trait WalletBackend<K>
+pub trait WalletBackend<C, K>
 where
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Initialize with whatever stored credentials we have
@@ -62,6 +65,9 @@ where
 
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut K;
+
+	/// Return the client being used
+	fn client(&mut self) -> &mut C;
 
 	/// Iterate over all output data stored by the backend
 	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a>;
@@ -121,12 +127,12 @@ pub trait WalletOutputBatch {
 
 /// Encapsulate all communication functions. No functions within libwallet
 /// should care about communication details
-pub trait WalletClient {
+pub trait WalletClient: Sync + Send + Clone {
 	/// Return the URL of the check node
 	fn node_url(&self) -> &str;
 
 	/// Call the wallet API to create a coinbase transaction
-	fn create_coinbase(&self, block_fees: &BlockFees) -> Result<CbData, Error>;
+	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, Error>;
 
 	/// Send a transaction slate to another listening wallet and return result
 	/// TODO: Probably need a slate wrapper type

@@ -139,9 +139,11 @@ impl<'a> Drop for FileBatch<'a> {
 /// Wallet information tracking all our outputs. Based on HD derivation and
 /// avoids storing any key data, only storing output amounts and child index.
 #[derive(Debug, Clone)]
-pub struct FileWallet<K> {
+pub struct FileWallet<C, K> {
 	/// Keychain
 	pub keychain: Option<K>,
+	/// Client implementation
+	pub client: C,
 	/// Configuration
 	pub config: WalletConfig,
 	/// passphrase: TODO better ways of dealing with this other than storing
@@ -162,8 +164,9 @@ pub struct FileWallet<K> {
 	pub details_bak_path: String,
 }
 
-impl<K> WalletBackend<K> for FileWallet<K>
+impl<C, K> WalletBackend<C, K> for FileWallet<C, K>
 where
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Initialize with whatever stored credentials we have
@@ -188,6 +191,11 @@ where
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut K {
 		self.keychain.as_mut().unwrap()
+	}
+
+	/// Return the client being used
+	fn client(&mut self) -> &mut C {
+		&mut self.client
 	}
 
 	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a> {
@@ -320,98 +328,16 @@ where
 	}
 }
 
-impl<K> WalletClient for FileWallet<K> {
-	/// Return URL for check node
-	fn node_url(&self) -> &str {
-		&self.config.check_node_api_http_addr
-	}
-
-	/// Call the wallet API to create a coinbase transaction
-	fn create_coinbase(&self, block_fees: &BlockFees) -> Result<CbData, libwallet::Error> {
-		let res = client::create_coinbase(self.node_url(), block_fees);
-		match res {
-			Ok(r) => Ok(r),
-			Err(e) => {
-				let message = format!("{}", e.cause().unwrap());
-				error!(
-					LOGGER,
-					"Create Coinbase: Communication error: {},{}",
-					e.cause().unwrap(),
-					e.backtrace().unwrap()
-				);
-				Err(libwallet::ErrorKind::WalletComms(message))?
-			}
-		}
-	}
-
-	/// Send a transaction slate to another listening wallet and return result
-	fn send_tx_slate(&self, addr: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
-		let res = client::send_tx_slate(addr, slate);
-		match res {
-			Ok(r) => Ok(r),
-			Err(e) => {
-				let message = format!("{}", e.cause().unwrap());
-				error!(
-					LOGGER,
-					"Send TX Slate: Communication error: {},{}",
-					e.cause().unwrap(),
-					e.backtrace().unwrap()
-				);
-				Err(libwallet::ErrorKind::WalletComms(message))?
-			}
-		}
-	}
-
-	/// Posts a transaction to a grin node
-	fn post_tx(&self, tx: &TxWrapper, fluff: bool) -> Result<(), libwallet::Error> {
-		let res = client::post_tx(self.node_url(), tx, fluff).context(libwallet::ErrorKind::Node)?;
-		Ok(res)
-	}
-
-	/// retrieves the current tip from the specified grin node
-	fn get_chain_height(&self) -> Result<u64, libwallet::Error> {
-		let res = client::get_chain_height(self.node_url()).context(libwallet::ErrorKind::Node)?;
-		Ok(res)
-	}
-
-	/// retrieve a list of outputs from the specified grin node
-	/// need "by_height" and "by_id" variants
-	fn get_outputs_from_node(
-		&self,
-		wallet_outputs: Vec<pedersen::Commitment>,
-	) -> Result<HashMap<pedersen::Commitment, String>, libwallet::Error> {
-		let res = client::get_outputs_from_node(self.node_url(), wallet_outputs)
-			.context(libwallet::ErrorKind::Node)?;
-		Ok(res)
-	}
-
-	/// Outputs by PMMR index
-	fn get_outputs_by_pmmr_index(
-		&self,
-		start_height: u64,
-		max_outputs: u64,
-	) -> Result<
-		(
-			u64,
-			u64,
-			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
-		),
-		libwallet::Error,
-	> {
-		let res = client::get_outputs_by_pmmr_index(self.node_url(), start_height, max_outputs)
-			.context(libwallet::ErrorKind::Node)?;
-		Ok(res)
-	}
-}
-
-impl<K> FileWallet<K>
+impl<C, K> FileWallet<C, K>
 where
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Create a new FileWallet instance
-	pub fn new(config: WalletConfig, passphrase: &str) -> Result<Self, Error> {
+	pub fn new(config: WalletConfig, passphrase: &str, client: C) -> Result<Self, Error> {
 		let mut retval = FileWallet {
 			keychain: None,
+			client: client,
 			config: config.clone(),
 			passphrase: String::from(passphrase),
 			outputs: HashMap::new(),

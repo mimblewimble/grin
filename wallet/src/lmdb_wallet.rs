@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::{fs, path};
 
@@ -22,12 +21,9 @@ use failure::ResultExt;
 use keychain::{Identifier, Keychain};
 use store::{self, option_to_not_found, to_key};
 
-use client;
-use libtx::slate::Slate;
 use libwallet::types::*;
 use libwallet::{internal, Error, ErrorKind};
 use types::{WalletConfig, WalletSeed};
-use util::secp::pedersen;
 
 pub const DB_DIR: &'static str = "wallet_data";
 
@@ -47,18 +43,19 @@ pub fn wallet_db_exists(config: WalletConfig) -> bool {
 	db_path.exists()
 }
 
-pub struct LMDBBackend<K> {
+pub struct LMDBBackend<C, K> {
 	db: store::Store,
 	config: WalletConfig,
 	/// passphrase: TODO better ways of dealing with this other than storing
 	passphrase: String,
-
 	/// Keychain
 	keychain: Option<K>,
+	/// client
+	client: C,
 }
 
-impl<K> LMDBBackend<K> {
-	pub fn new(config: WalletConfig, passphrase: &str) -> Result<Self, Error> {
+impl<C, K> LMDBBackend<C, K> {
+	pub fn new(config: WalletConfig, passphrase: &str, client: C) -> Result<Self, Error> {
 		let db_path = path::Path::new(&config.data_file_dir).join(DB_DIR);
 		fs::create_dir_all(&db_path).expect("Couldn't create wallet backend directory!");
 
@@ -69,6 +66,7 @@ impl<K> LMDBBackend<K> {
 			config: config.clone(),
 			passphrase: String::from(passphrase),
 			keychain: None,
+			client: client,
 		})
 	}
 
@@ -80,8 +78,9 @@ impl<K> LMDBBackend<K> {
 	}
 }
 
-impl<K> WalletBackend<K> for LMDBBackend<K>
+impl<C, K> WalletBackend<C, K> for LMDBBackend<C, K>
 where
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Initialise with whatever stored credentials we have
@@ -104,6 +103,11 @@ where
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut K {
 		self.keychain.as_mut().unwrap()
+	}
+
+	/// Return the client being used
+	fn client(&mut self) -> &mut C {
+		&mut self.client
 	}
 
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error> {
@@ -159,13 +163,21 @@ where
 
 /// An atomic batch in which all changes can be committed all at once or
 /// discarded on error.
-pub struct Batch<'a, K: 'a> {
-	store: &'a LMDBBackend<K>,
+pub struct Batch<'a, C: 'a, K: 'a>
+where
+	C: WalletClient,
+	K: Keychain,
+{
+	store: &'a LMDBBackend<C, K>,
 	db: RefCell<Option<store::Batch<'a>>>,
 }
 
 #[allow(missing_docs)]
-impl<'a, K> WalletOutputBatch for Batch<'a, K> {
+impl<'a, C, K> WalletOutputBatch for Batch<'a, C, K>
+where
+	C: WalletClient,
+	K: Keychain,
+{
 	fn save(&mut self, out: OutputData) -> Result<(), Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut out.key_id.to_bytes().to_vec());
 		self.db.borrow().as_ref().unwrap().put_ser(&key, &out)?;
@@ -203,67 +215,5 @@ impl<'a, K> WalletOutputBatch for Batch<'a, K> {
 		let db = self.db.replace(None);
 		db.unwrap().commit()?;
 		Ok(())
-	}
-}
-
-impl<K> WalletClient for LMDBBackend<K> {
-	/// Return URL for check node
-	fn node_url(&self) -> &str {
-		&self.config.check_node_api_http_addr
-	}
-
-	/// Call the wallet API to create a coinbase transaction
-	fn create_coinbase(&self, block_fees: &BlockFees) -> Result<CbData, Error> {
-		let res = client::create_coinbase(self.node_url(), block_fees)
-			.context(ErrorKind::WalletComms(format!("Creating Coinbase")))?;
-		Ok(res)
-	}
-
-	/// Send a transaction slate to another listening wallet and return result
-	fn send_tx_slate(&self, addr: &str, slate: &Slate) -> Result<Slate, Error> {
-		let res = client::send_tx_slate(addr, slate)
-			.context(ErrorKind::WalletComms(format!("Sending transaction")))?;
-		Ok(res)
-	}
-
-	/// Posts a tranaction to a grin node
-	fn post_tx(&self, tx: &TxWrapper, fluff: bool) -> Result<(), Error> {
-		let res = client::post_tx(self.node_url(), tx, fluff).context(ErrorKind::Node)?;
-		Ok(res)
-	}
-
-	/// retrieves the current tip from the specified grin node
-	fn get_chain_height(&self) -> Result<u64, Error> {
-		let res = client::get_chain_height(self.node_url()).context(ErrorKind::Node)?;
-		Ok(res)
-	}
-
-	/// retrieve a list of outputs from the specified grin node
-	/// need "by_height" and "by_id" variants
-	fn get_outputs_from_node(
-		&self,
-		wallet_outputs: Vec<pedersen::Commitment>,
-	) -> Result<HashMap<pedersen::Commitment, String>, Error> {
-		let res = client::get_outputs_from_node(self.node_url(), wallet_outputs)
-			.context(ErrorKind::Node)?;
-		Ok(res)
-	}
-
-	/// Outputs by PMMR index
-	fn get_outputs_by_pmmr_index(
-		&self,
-		start_height: u64,
-		max_outputs: u64,
-	) -> Result<
-		(
-			u64,
-			u64,
-			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
-		),
-		Error,
-	> {
-		let res = client::get_outputs_by_pmmr_index(self.node_url(), start_height, max_outputs)
-			.context(ErrorKind::Node)?;
-		Ok(res)
 	}
 }

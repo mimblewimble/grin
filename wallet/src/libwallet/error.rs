@@ -72,6 +72,10 @@ pub enum ErrorKind {
 	#[fail(display = "Transaction error")]
 	Transaction(transaction::Error),
 
+	/// API Error
+	#[fail(display = "Client Callback Error: {}", _0)]
+	ClientCallback(&'static str),
+
 	/// Secp Error
 	#[fail(display = "Secp error")]
 	Secp,

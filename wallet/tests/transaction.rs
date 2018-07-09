@@ -35,6 +35,7 @@ use chain::types::NoopAdapter;
 use core::global::ChainTypes;
 use core::{global, pow};
 use util::LOGGER;
+use wallet::HTTPWalletClient;
 use wallet::libwallet::internal::selection;
 
 fn clean_output_dir(test_dir: &str) {
@@ -60,9 +61,10 @@ fn setup(test_dir: &str, chain_dir: &str) -> Chain {
 /// Build and test new version of sending API
 #[test]
 fn build_transaction() {
+	let client = HTTPWalletClient::new("");
 	let chain = setup("test_output", "build_transaction_2/.grin");
-	let mut wallet1 = common::create_wallet("test_output/build_transaction_2/wallet1");
-	let mut wallet2 = common::create_wallet("test_output/build_transaction_2/wallet2");
+	let mut wallet1 = common::create_wallet("test_output/build_transaction_2/wallet1", client.clone());
+	let mut wallet2 = common::create_wallet("test_output/build_transaction_2/wallet2", client);
 	common::award_blocks_to_wallet(&chain, &mut wallet1, 10);
 	// Wallet 1 has 600 Grins, wallet 2 has 0. Create a transaction that sends
 	// 300 Grins from wallet 1 to wallet 2, using libtx
