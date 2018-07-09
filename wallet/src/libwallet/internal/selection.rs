@@ -25,7 +25,7 @@ use libwallet::types::*;
 /// and saves the private wallet identifiers of our selected outputs
 /// into our transaction context
 
-pub fn build_send_tx_slate<T: ?Sized, K>(
+pub fn build_send_tx_slate<T: ?Sized, C, K>(
 	wallet: &mut T,
 	num_participants: usize,
 	amount: u64,
@@ -43,7 +43,8 @@ pub fn build_send_tx_slate<T: ?Sized, K>(
 	Error,
 >
 where
-	T: WalletBackend<K>,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	let (elems, inputs, change, change_derivation, amount, fee) = select_send_tx(
@@ -122,7 +123,7 @@ where
 /// returning the key of the fresh output and a closure
 /// that actually performs the addition of the output to the
 /// wallet
-pub fn build_recipient_output_with_slate<T: ?Sized, K>(
+pub fn build_recipient_output_with_slate<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
 ) -> Result<
@@ -134,7 +135,8 @@ pub fn build_recipient_output_with_slate<T: ?Sized, K>(
 	Error,
 >
 where
-	T: WalletBackend<K>,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	// Create a potential output for this transaction
@@ -182,7 +184,7 @@ where
 /// Builds a transaction to send to someone from the HD seed associated with the
 /// wallet and the amount to send. Handles reading through the wallet data file,
 /// selecting outputs to spend and building the change.
-pub fn select_send_tx<T: ?Sized, K>(
+pub fn select_send_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	amount: u64,
 	current_height: u64,
@@ -202,7 +204,8 @@ pub fn select_send_tx<T: ?Sized, K>(
 	Error,
 >
 where
-	T: WalletBackend<K>,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	let key_id = wallet.keychain().root_key_id();
@@ -287,14 +290,15 @@ where
 }
 
 /// Selects inputs and change for a transaction
-pub fn inputs_and_change<T: ?Sized, K>(
+pub fn inputs_and_change<T: ?Sized, C, K>(
 	coins: &Vec<OutputData>,
 	wallet: &mut T,
 	amount: u64,
 	fee: u64,
 ) -> Result<(Vec<Box<build::Append<K>>>, u64, Option<u32>), Error>
 where
-	T: WalletBackend<K>,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	let mut parts = vec![];

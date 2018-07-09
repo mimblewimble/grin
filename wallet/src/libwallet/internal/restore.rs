@@ -41,12 +41,13 @@ struct OutputResult {
 	pub blinding: SecretKey,
 }
 
-fn identify_utxo_outputs<T, K>(
+fn identify_utxo_outputs<T, C, K>(
 	wallet: &mut T,
 	outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
 ) -> Result<Vec<OutputResult>, Error>
 where
-	T: WalletBackend<K> + WalletClient,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	let mut wallet_outputs: Vec<OutputResult> = Vec::new();
@@ -56,7 +57,7 @@ where
 		"Scanning {} outputs in the current Grin utxo set",
 		outputs.len(),
 	);
-	let current_chain_height = wallet.get_chain_height()?;
+	let current_chain_height = wallet.client().get_chain_height()?;
 
 	for output in outputs.iter() {
 		let (commit, proof, is_coinbase) = output;
@@ -96,13 +97,14 @@ where
 
 /// Attempts to populate a list of outputs with their
 /// correct child indices based on the root key
-fn populate_child_indices<T, K>(
+fn populate_child_indices<T, C, K>(
 	wallet: &mut T,
 	outputs: &mut Vec<OutputResult>,
 	max_derivations: u32,
 ) -> Result<(), Error>
 where
-	T: WalletBackend<K> + WalletClient,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	info!(
@@ -146,9 +148,10 @@ where
 }
 
 /// Restore a wallet
-pub fn restore<T, K>(wallet: &mut T) -> Result<(), Error>
+pub fn restore<T, C, K>(wallet: &mut T) -> Result<(), Error>
 where
-	T: WalletBackend<K> + WalletClient,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	let max_derivations = 1_000_000;
@@ -170,7 +173,7 @@ where
 	let mut result_vec: Vec<OutputResult> = vec![];
 	loop {
 		let (highest_index, last_retrieved_index, outputs) =
-			wallet.get_outputs_by_pmmr_index(start_index, batch_size)?;
+			wallet.client().get_outputs_by_pmmr_index(start_index, batch_size)?;
 		info!(
 			LOGGER,
 			"Retrieved {} outputs, up to index {}. (Highest index: {})",
