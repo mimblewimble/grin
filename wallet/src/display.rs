@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use core::core::{self, amount_to_hr_string};
-use libwallet::Error;
 use libwallet::types::{OutputData, WalletInfo};
+use libwallet::Error;
 use prettytable;
 use std::io::prelude::Write;
 use term;

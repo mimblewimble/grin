@@ -54,7 +54,6 @@ use std::hash::Hash;
 use std::rc::Rc;
 
 // External Dependencies ------------------------------------------------------
-use cursive::With;
 use cursive::align::HAlign;
 use cursive::direction::Direction;
 use cursive::event::{Callback, Event, EventResult, Key};
@@ -62,6 +61,7 @@ use cursive::theme::ColorStyle;
 use cursive::theme::PaletteColor::{Highlight, HighlightInactive, Primary};
 use cursive::vec::Vec2;
 use cursive::view::{ScrollBase, View};
+use cursive::With;
 use cursive::{Cursive, Printer};
 
 /// A trait for displaying and sorting items inside a

@@ -16,18 +16,20 @@
 
 use std::cmp::Ordering;
 
-use cursive::Cursive;
 use cursive::direction::Orientation;
 use cursive::event::Key;
 use cursive::traits::{Boxable, Identifiable};
 use cursive::view::View;
-use cursive::views::{BoxView, Button, Dialog, LinearLayout, OnEventView, Panel, StackView,
-                     TextView};
+use cursive::views::{
+	BoxView, Button, Dialog, LinearLayout, OnEventView, Panel, StackView, TextView,
+};
+use cursive::Cursive;
 use std::time;
 use tui::chrono::prelude::{DateTime, NaiveDateTime, Utc};
 
-use tui::constants::{MAIN_MENU, SUBMENU_MINING_BUTTON, TABLE_MINING_DIFF_STATUS,
-                     TABLE_MINING_STATUS, VIEW_MINING};
+use tui::constants::{
+	MAIN_MENU, SUBMENU_MINING_BUTTON, TABLE_MINING_DIFF_STATUS, TABLE_MINING_STATUS, VIEW_MINING,
+};
 use tui::types::TUIStatusListener;
 
 use servers::{DiffBlock, ServerStats, WorkerStats};

@@ -23,8 +23,8 @@ use keychain::{BlindSum, BlindingFactor, Keychain};
 use libtx::error::{Error, ErrorKind};
 use libtx::{aggsig, build, tx_fee};
 
-use util::secp::Signature;
 use util::secp::key::{PublicKey, SecretKey};
+use util::secp::Signature;
 use util::{secp, LOGGER};
 
 /// Public data for each participant in the slate
@@ -261,11 +261,7 @@ impl Slate {
 		// double check the fee amount included in the partial tx
 		// we don't necessarily want to just trust the sender
 		// we could just overwrite the fee here (but we won't) due to the sig
-		let fee = tx_fee(
-			self.tx.inputs.len(),
-			self.tx.outputs.len(),
-			None,
-		);
+		let fee = tx_fee(self.tx.inputs.len(), self.tx.outputs.len(), None);
 		if fee > self.tx.fee() {
 			return Err(ErrorKind::Fee(
 				format!("Fee Dispute Error: {}, {}", self.tx.fee(), fee,).to_string(),

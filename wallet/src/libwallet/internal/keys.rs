@@ -18,7 +18,7 @@ use libwallet::error::Error;
 use libwallet::types::WalletBackend;
 
 /// Get next available key in the wallet
-pub fn next_available_key<T, K>(wallet: &mut T) -> Result<(Identifier, u32), Error>
+pub fn next_available_key<T: ?Sized, K>(wallet: &mut T) -> Result<(Identifier, u32), Error>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
@@ -30,7 +30,7 @@ where
 }
 
 /// Retrieve an existing key from a wallet
-pub fn retrieve_existing_key<T, K>(
+pub fn retrieve_existing_key<T: ?Sized, K>(
 	wallet: &T,
 	key_id: Identifier,
 ) -> Result<(Identifier, u32), Error>
