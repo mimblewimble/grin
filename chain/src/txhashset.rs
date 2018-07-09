@@ -869,7 +869,6 @@ impl<'a> Extension<'a> {
 		&mut self,
 		header: &BlockHeader,
 		skip_rproofs: bool,
-		skip_kernel_hist: bool,
 		status: &T,
 	) -> Result<((Commitment, Commitment)), Error>
 	where
@@ -895,12 +894,6 @@ impl<'a> Extension<'a> {
 		// This is an expensive verification step (skip for faster verification).
 		if !skip_rproofs {
 			self.verify_rangeproofs(status)?;
-		}
-
-		// Verify kernel roots for all past headers, need to be last as it rewinds
-		// a lot without resetting
-		if !skip_kernel_hist {
-			self.verify_kernel_history(header)?;
 		}
 
 		Ok((output_sum, kernel_sum))
@@ -1035,7 +1028,7 @@ impl<'a> Extension<'a> {
 	// header, rewind and check each root. This fixes a potential weakness in
 	// fast sync where a reorg past the horizon could allow a whole rewrite of
 	// the kernel set.
-	fn verify_kernel_history(&mut self, header: &BlockHeader) -> Result<(), Error> {
+	pub fn validate_kernel_history(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		assert!(self.rollback, "verified kernel history on writeable txhashset extension");
 
 		let mut current = header.clone();
