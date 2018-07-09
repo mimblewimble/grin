@@ -33,6 +33,19 @@ use libwallet::error::{Error, ErrorKind};
 
 use util::secp::pedersen;
 
+/// Combined trait to allow dynamic wallet dispatch
+pub trait WalletInst<K>: WalletBackend<K> + WalletClient + Send + Sync + 'static
+where
+	K: Keychain,
+{
+}
+impl<T, K> WalletInst<K> for T
+where
+	T: WalletBackend<K> + WalletClient + Send + Sync + 'static,
+	K: Keychain,
+{
+}
+
 /// TODO:
 /// Wallets should implement this backend for their storage. All functions
 /// here expect that the wallet instance has instantiated itself or stored

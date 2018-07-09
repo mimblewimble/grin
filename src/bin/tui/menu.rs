@@ -14,16 +14,20 @@
 
 //! Main Menu definition
 
-use cursive::Cursive;
 use cursive::align::HAlign;
 use cursive::direction::Orientation;
 use cursive::event::{EventResult, Key};
 use cursive::view::Identifiable;
 use cursive::view::View;
-use cursive::views::{BoxView, LinearLayout, OnEventView, SelectView, StackView, TextView, ViewRef};
+use cursive::views::{
+	BoxView, LinearLayout, OnEventView, SelectView, StackView, TextView, ViewRef,
+};
+use cursive::Cursive;
 
-use tui::constants::{MAIN_MENU, ROOT_STACK, SUBMENU_MINING_BUTTON, VIEW_BASIC_STATUS, VIEW_MINING,
-                     VIEW_PEER_SYNC, VIEW_VERSION};
+use tui::constants::{
+	MAIN_MENU, ROOT_STACK, SUBMENU_MINING_BUTTON, VIEW_BASIC_STATUS, VIEW_MINING, VIEW_PEER_SYNC,
+	VIEW_VERSION,
+};
 
 pub fn create() -> Box<View> {
 	let mut main_menu = SelectView::new().h_align(HAlign::Left).with_id(MAIN_MENU);

@@ -15,8 +15,8 @@
 use std::cmp::min;
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::path::MAIN_SEPARATOR;
 use std::path::Path;
+use std::path::MAIN_SEPARATOR;
 
 use blake2;
 use rand::{thread_rng, Rng};

@@ -29,7 +29,7 @@ use libwallet::{internal, Error, ErrorKind};
 use types::{WalletConfig, WalletSeed};
 use util::secp::pedersen;
 
-pub const DB_DIR: &'static str = "wallet";
+pub const DB_DIR: &'static str = "wallet_data";
 
 const OUTPUT_PREFIX: u8 = 'o' as u8;
 const DERIV_PREFIX: u8 = 'd' as u8;
@@ -38,6 +38,13 @@ impl From<store::Error> for Error {
 	fn from(error: store::Error) -> Error {
 		Error::from(ErrorKind::Backend(format!("{:?}", error)))
 	}
+}
+
+/// test to see if database files exist in the current directory. If so,
+/// use a DB backend for all operations
+pub fn wallet_db_exists(config: WalletConfig) -> bool {
+	let db_path = path::Path::new(&config.data_file_dir).join(DB_DIR);
+	db_path.exists()
 }
 
 pub struct LMDBBackend<K> {
@@ -63,6 +70,13 @@ impl<K> LMDBBackend<K> {
 			passphrase: String::from(passphrase),
 			keychain: None,
 		})
+	}
+
+	/// Just test to see if database files exist in the current directory. If
+	/// so, use a DB backend for all operations
+	pub fn exists(config: WalletConfig) -> bool {
+		let db_path = path::Path::new(&config.data_file_dir).join(DB_DIR);
+		db_path.exists()
 	}
 }
 

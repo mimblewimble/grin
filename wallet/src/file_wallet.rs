@@ -19,14 +19,14 @@ use std::path::{Path, MAIN_SEPARATOR};
 
 use serde_json;
 use tokio_core::reactor;
-use tokio_retry::Retry;
 use tokio_retry::strategy::FibonacciBackoff;
+use tokio_retry::Retry;
 
 use failure::ResultExt;
 
 use keychain::{self, Identifier, Keychain};
-use util::LOGGER;
 use util::secp::pedersen;
+use util::LOGGER;
 
 use error::{Error, ErrorKind};
 
@@ -35,8 +35,8 @@ use libtx::slate::Slate;
 use libwallet;
 
 use libwallet::types::{
-	BlockFees, CbData, OutputData, TxWrapper, WalletBackend,
-	WalletClient, WalletDetails, WalletOutputBatch,
+	BlockFees, CbData, OutputData, TxWrapper, WalletBackend, WalletClient, WalletDetails,
+	WalletOutputBatch,
 };
 
 use types::{WalletConfig, WalletSeed};

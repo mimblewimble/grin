@@ -104,7 +104,19 @@ impl Fail for Error {
 
 impl Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		Display::fmt(&self.inner, f)
+		let cause = match self.cause() {
+			Some(c) => format!("{}", c),
+			None => String::from("Unknown"),
+		};
+		let backtrace = match self.backtrace() {
+			Some(b) => format!("{}", b),
+			None => String::from("Unknown"),
+		};
+		let output = format!(
+			"{} \n Cause: {} \n Backtrace: {}",
+			self.inner, cause, backtrace
+		);
+		Display::fmt(&output, f)
 	}
 }
 

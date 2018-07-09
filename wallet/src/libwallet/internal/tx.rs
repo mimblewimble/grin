@@ -25,7 +25,7 @@ use util::LOGGER;
 
 /// Receive a transaction, modifying the slate accordingly (which can then be
 /// sent back to sender for posting)
-pub fn receive_tx<T, K>(wallet: &mut T, slate: &mut Slate) -> Result<(), Error>
+pub fn receive_tx<T: ?Sized, K>(wallet: &mut T, slate: &mut Slate) -> Result<(), Error>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
@@ -53,7 +53,7 @@ where
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
-pub fn create_send_tx<T, K>(
+pub fn create_send_tx<T: ?Sized, K>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
@@ -110,7 +110,7 @@ where
 }
 
 /// Complete a transaction as the sender
-pub fn complete_tx<T, K>(
+pub fn complete_tx<T: ?Sized, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
 	context: &sigcontext::Context,
@@ -129,7 +129,7 @@ where
 }
 
 /// Issue a burn tx
-pub fn issue_burn_tx<T, K>(
+pub fn issue_burn_tx<T: ?Sized, K>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,

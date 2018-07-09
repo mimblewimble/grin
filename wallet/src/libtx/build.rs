@@ -47,11 +47,7 @@ pub type Append<K> = for<'a> Fn(&'a mut Context<K>, (Transaction, TxKernel, Blin
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
-fn build_input<K>(
-	value: u64,
-	features: OutputFeatures,
-	key_id: Identifier,
-) -> Box<Append<K>>
+fn build_input<K>(value: u64, features: OutputFeatures, key_id: Identifier) -> Box<Append<K>>
 where
 	K: Keychain,
 {
@@ -78,10 +74,7 @@ where
 }
 
 /// Adds a coinbase input spending a coinbase output.
-pub fn coinbase_input<K>(
-	value: u64,
-	key_id: Identifier,
-) -> Box<Append<K>>
+pub fn coinbase_input<K>(value: u64, key_id: Identifier) -> Box<Append<K>>
 where
 	K: Keychain,
 {
