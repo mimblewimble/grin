@@ -83,7 +83,7 @@ fn test_leaf_set_performance() {
 		let from_pos = x * 1_000 + 1;
 		let to_pos = from_pos + 1_000;
 		let bitmap: Bitmap = (from_pos..to_pos).collect();
-		leaf_set.rewind(&Bitmap::create(), &bitmap);
+		leaf_set.rewind(1_000_000, &bitmap);
 	}
 	assert_eq!(leaf_set.len(), 1_000_000);
 	println!(

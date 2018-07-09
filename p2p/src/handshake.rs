@@ -16,8 +16,8 @@ use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
-use rand::os::OsRng;
 use rand::Rng;
+use rand::os::OsRng;
 
 use core::core::hash::Hash;
 use core::core::target::Difficulty;

@@ -18,7 +18,7 @@ use keychain::{Identifier, Keychain};
 
 use core::consensus::reward;
 use core::core::KernelFeatures;
-use core::core::{Output, OutputFeatures, ProofMessageElements, TxKernel};
+use core::core::{Output, OutputFeatures, TxKernel};
 use libtx::error::Error;
 use libtx::{aggsig, proof};
 use util::{kernel_sig_msg, secp, static_secp_instance, LOGGER};
@@ -35,18 +35,10 @@ where
 {
 	let value = reward(fees);
 	let commit = keychain.commit(value, key_id)?;
-	let msg = ProofMessageElements::new(value, key_id);
 
 	trace!(LOGGER, "Block reward - Pedersen Commit is: {:?}", commit,);
 
-	let rproof = proof::create(
-		keychain,
-		value,
-		key_id,
-		commit,
-		None,
-		msg.to_proof_message(),
-	)?;
+	let rproof = proof::create(keychain, value, key_id, commit, None)?;
 
 	let output = Output {
 		features: OutputFeatures::COINBASE_OUTPUT,

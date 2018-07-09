@@ -261,12 +261,7 @@ impl Slate {
 		// double check the fee amount included in the partial tx
 		// we don't necessarily want to just trust the sender
 		// we could just overwrite the fee here (but we won't) due to the sig
-		let fee = tx_fee(
-			self.tx.inputs.len(),
-			self.tx.outputs.len(),
-			self.tx.input_proofs_count(),
-			None,
-		);
+		let fee = tx_fee(self.tx.inputs.len(), self.tx.outputs.len(), None);
 		if fee > self.tx.fee() {
 			return Err(ErrorKind::Fee(
 				format!("Fee Dispute Error: {}, {}", self.tx.fee(), fee,).to_string(),
@@ -371,7 +366,7 @@ impl Slate {
 
 			// sum the input/output commitments on the final tx
 			let overage = final_tx.fee() as i64;
-			let tx_excess = final_tx.sum_commitments(overage, None)?;
+			let tx_excess = final_tx.sum_commitments(overage)?;
 
 			// subtract the kernel_excess (built from kernel_offset)
 			let offset_excess = keychain

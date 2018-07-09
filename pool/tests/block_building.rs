@@ -55,11 +55,15 @@ fn test_transaction_pool_block_building() {
 		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
 
 		let mut txhashset = chain.txhashset.write().unwrap();
-		txhashset::extending(&mut txhashset, |extension| extension.apply_block(&block)).unwrap();
+		let mut batch = chain.store.batch().unwrap();
+		txhashset::extending(&mut txhashset, &mut batch, |extension| {
+			extension.apply_block(&block)
+		}).unwrap();
 
 		let tip = Tip::from_block(&block.header);
-		chain.store.save_block_header(&block.header).unwrap();
-		chain.store.save_head(&tip).unwrap();
+		batch.save_block_header(&block.header).unwrap();
+		batch.save_head(&tip).unwrap();
+		batch.commit().unwrap();
 
 		block.header
 	};
@@ -126,11 +130,13 @@ fn test_transaction_pool_block_building() {
 	}.unwrap();
 
 	{
+		let mut batch = chain.store.batch().unwrap();
 		let mut txhashset = chain.txhashset.write().unwrap();
-		txhashset::extending(&mut txhashset, |extension| {
+		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			extension.apply_block(&block)?;
 			Ok(())
 		}).unwrap();
+		batch.commit().unwrap();
 	}
 
 	// Now reconcile the transaction pool with the new block

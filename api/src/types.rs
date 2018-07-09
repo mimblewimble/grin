@@ -16,7 +16,7 @@ use std::sync::Arc;
 
 use chain;
 use core::core::hash::Hashed;
-use core::core::pmmr::MerkleProof;
+use core::core::merkle_proof::MerkleProof;
 use core::{core, ser};
 use p2p;
 use serde;
@@ -162,22 +162,25 @@ pub struct Output {
 impl Output {
 	pub fn new(commit: &pedersen::Commitment) -> Output {
 		Output {
-			commit: PrintableCommitment(commit.clone()),
+			commit: PrintableCommitment {
+				commit: commit.clone(),
+			},
 		}
 	}
 }
 
 #[derive(Debug, Clone)]
-pub struct PrintableCommitment(pedersen::Commitment);
+pub struct PrintableCommitment {
+	pub commit: pedersen::Commitment,
+}
 
 impl PrintableCommitment {
 	pub fn commit(&self) -> pedersen::Commitment {
-		self.0.clone()
+		self.commit.clone()
 	}
 
 	pub fn to_vec(&self) -> Vec<u8> {
-		let commit = self.0;
-		commit.0.to_vec()
+		self.commit.0.to_vec()
 	}
 }
 
@@ -212,9 +215,9 @@ impl<'de> serde::de::Visitor<'de> for PrintableCommitmentVisitor {
 	where
 		E: serde::de::Error,
 	{
-		Ok(PrintableCommitment(pedersen::Commitment::from_vec(
-			util::from_hex(String::from(v)).unwrap(),
-		)))
+		Ok(PrintableCommitment {
+			commit: pedersen::Commitment::from_vec(util::from_hex(String::from(v)).unwrap()),
+		})
 	}
 }
 
@@ -479,6 +482,8 @@ pub struct BlockHeaderPrintable {
 	pub kernel_root: String,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
+	/// Size of the cuckoo graph
+	pub cuckoo_size: u8,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: u64,
 	/// Total kernel offset since genesis block
@@ -497,6 +502,7 @@ impl BlockHeaderPrintable {
 			range_proof_root: util::to_hex(h.range_proof_root.to_vec()),
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),
 			nonce: h.nonce,
+			cuckoo_size: h.pow.cuckoo_sizeshift,
 			total_difficulty: h.total_difficulty.to_num(),
 			total_kernel_offset: h.total_kernel_offset.to_hex(),
 		}

@@ -89,7 +89,9 @@ impl AppendOnlyFile {
 	pub fn rewind(&mut self, file_pos: u64) {
 		if self.buffer.is_empty() {
 			// rewinding from clean state, no buffer, not already rewound anything
-			self.buffer_start_bak = self.buffer_start;
+			if self.buffer_start_bak == 0 {
+				self.buffer_start_bak = self.buffer_start;
+			}
 			self.buffer_start = file_pos as usize;
 		} else {
 			// rewinding (within) the buffer

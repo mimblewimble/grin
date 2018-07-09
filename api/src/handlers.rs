@@ -57,11 +57,6 @@ impl Handler for IndexHandler {
 	}
 }
 
-struct HandlerResult {
-	with_status: status::Status,
-	with_body: String,
-}
-
 // Supports retrieval of multiple outputs in a single request -
 // GET /v1/chain/outputs/byids?id=xxx,yyy,zzz
 // GET /v1/chain/outputs/byids?id=xxx&id=yyy&id=zzz
@@ -163,11 +158,7 @@ impl OutputHandler {
 	}
 
 	// returns outputs for a specified range of blocks
-	fn outputs_block_batch(
-		&self,
-		req: &mut Request,
-		result: &mut HandlerResult,
-	) -> Vec<BlockOutputs> {
+	fn outputs_block_batch(&self, req: &mut Request) -> Vec<BlockOutputs> {
 		let mut commitments: Vec<Commitment> = vec![];
 		let mut start_height = 1;
 		let mut end_height = 1;
@@ -185,28 +176,12 @@ impl OutputHandler {
 			}
 			if let Some(heights) = params.get("start_height") {
 				for height in heights {
-					start_height = match height.parse() {
-						Ok(h) => h,
-						_ => {
-							result.with_status = status::BadRequest;
-							result.with_body =
-								String::from("start_height parse error. check request format");
-							return vec![];
-						}
-					}
+					start_height = height.parse().unwrap();
 				}
 			}
 			if let Some(heights) = params.get("end_height") {
 				for height in heights {
-					end_height = match height.parse() {
-						Ok(h) => h,
-						_ => {
-							result.with_status = status::BadRequest;
-							result.with_body =
-								String::from("end_height parse error. check request format");
-							return vec![];
-						}
-					}
+					end_height = height.parse().unwrap();
 				}
 			}
 			if let Some(_) = params.get("include_rp") {
@@ -242,21 +217,10 @@ impl Handler for OutputHandler {
 		if *path_elems.last().unwrap() == "" {
 			path_elems.pop();
 		}
-
-		let mut result = HandlerResult {
-			with_status: status::Ok,
-			with_body: String::new(),
-		};
-
-		let response = match *path_elems.last().unwrap() {
+		match *path_elems.last().unwrap() {
 			"byids" => json_response(&self.outputs_by_ids(req)),
-			"byheight" => json_response(&self.outputs_block_batch(req, &mut result)),
+			"byheight" => json_response(&self.outputs_block_batch(req)),
 			_ => Ok(Response::with((status::BadRequest, ""))),
-		};
-
-		match result.with_status {
-			status::Ok => response,
-			_ => Ok(Response::with((result.with_status, result.with_body))),
 		}
 	}
 }
@@ -532,21 +496,6 @@ impl Handler for ChainValidationHandler {
 	}
 }
 
-/// Temporary - fix header by height index.
-/// POST /v1/chain/height-index
-pub struct HeaderByHeightHandler {
-	pub chain: Weak<chain::Chain>,
-}
-
-impl Handler for HeaderByHeightHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-		match w(&self.chain).rebuild_header_by_height() {
-			Ok(_) => Ok(Response::with((status::Ok, ""))),
-			Err(_) => Ok(Response::with((status::InternalServerError, ""))),
-		}
-	}
-}
-
 /// Chain compaction handler. Trigger a compaction of the chain state to regain
 /// storage space.
 /// GET /v1/chain/compact
@@ -769,9 +718,6 @@ pub fn start_rest_apis<T>(
 			let chain_compact_handler = ChainCompactHandler {
 				chain: chain.clone(),
 			};
-			let header_height_handler = HeaderByHeightHandler {
-				chain: chain.clone(),
-			};
 			let chain_validation_handler = ChainValidationHandler {
 				chain: chain.clone(),
 			};
@@ -831,7 +777,6 @@ pub fn start_rest_apis<T>(
 				chain_compact: get "/chain/compact" => chain_compact_handler,
 				chain_validate: get "/chain/validate" => chain_validation_handler,
 				chain_outputs: get "/chain/outputs/*" => output_handler,
-				header_height: post "/chain/height-index" => header_height_handler,
 				status: get "/status" => status_handler,
 				txhashset_roots: get "/txhashset/*" => txhashset_handler,
 				pool_info: get "/pool" => pool_info_handler,

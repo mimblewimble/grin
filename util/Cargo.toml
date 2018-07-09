@@ -1,6 +1,6 @@
 [package]
 name = "grin_util"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 workspace = ".."
 publish = false
@@ -20,6 +20,6 @@ zip = "0.4"
 
 [dependencies.secp256k1zkp]
 git = "https://github.com/mimblewimble/rust-secp256k1-zkp"
-tag = "grin_integration_19"
+branch = "testnet3"
 #path = "../../rust-secp256k1-zkp"
 features = ["bullet-proof-sizing"]

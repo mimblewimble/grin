@@ -39,8 +39,8 @@ db_root = ".grin"
 #UserTesting - For regular user testing (cuckoo 16)
 #Testnet1 - Testnet1 genesis block (cuckoo 16)
 #Testnet2 - Testnet2 genesis block (cuckoo 30)
-#
-chain_type = "Testnet2"
+
+chain_type = "Testnet3"
 
 #The chain validation mode, defines how often (if at all) we
 #want to run a full chain validation. Can be:
@@ -125,7 +125,7 @@ stratum_server_addr = "127.0.0.1:13416"
 
 #The amount of time, in seconds, to attempt to mine on a particular
 #header before stopping and re-collecting transactions from the pool
-attempt_time_per_block = 90
+attempt_time_per_block = 15
 
 #The minimum acceptable share difficulty to request from miners
 minimum_share_difficulty = 1

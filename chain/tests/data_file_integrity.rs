@@ -16,6 +16,7 @@ extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
@@ -24,8 +25,8 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
-use chain::types::{NoopAdapter, Tip};
 use chain::Chain;
+use chain::types::{NoopAdapter, Tip};
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};
 use core::global::{self, ChainTypes};
@@ -43,8 +44,10 @@ fn setup(dir_name: &str) -> Chain {
 	clean_output_dir(dir_name);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();
+	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
+		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,
@@ -52,8 +55,10 @@ fn setup(dir_name: &str) -> Chain {
 }
 
 fn reload_chain(dir_name: &str) -> Chain {
+	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
+		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis::genesis_dev(),
 		pow::verify_size,
@@ -82,7 +87,7 @@ fn data_files() {
 				&mut b.header,
 				difficulty,
 				global::proofsize(),
-				global::sizeshift(),
+				global::min_sizeshift(),
 			).unwrap();
 
 			let _bhash = b.hash();
@@ -92,15 +97,6 @@ fn data_files() {
 
 			let head = Tip::from_block(&b.header);
 
-			// Check we have block markers for the last block and the block previous
-			let cur_pmmr_md = chain
-				.get_block_marker(&head.last_block_h)
-				.expect("block marker does not exist");
-			chain
-				.get_block_marker(&head.prev_block_h)
-				.expect("prev block marker does not exist");
-
-			println!("Cur_pmmr_md: {:?}", cur_pmmr_md);
 			chain.validate(false).unwrap();
 		}
 	}

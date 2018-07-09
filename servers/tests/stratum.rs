@@ -87,7 +87,7 @@ fn basic_stratum_server() {
 	workers.remove(4);
 
 	// Swallow the genesis block
-	thread::sleep(time::Duration::from_secs(1)); // Wait for the server to broadcast
+	thread::sleep(time::Duration::from_secs(5)); // Wait for the server to broadcast
 	let mut response = String::new();
 	for n in 0..workers.len() {
 		let _result = workers[n].read_line(&mut response);

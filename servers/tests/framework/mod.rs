@@ -220,7 +220,7 @@ impl LocalServerContainer {
 				"starting test Miner on port {}",
 				self.config.p2p_server_port
 			);
-			s.start_test_miner(Some(self.config.coinbase_wallet_address.clone()));
+			s.start_test_miner(wallet_url);
 		}
 
 		for p in &mut self.peer_list {
@@ -274,7 +274,7 @@ impl LocalServerContainer {
 				)
 			});
 
-		wallet::controller::foreign_listener(wallet, &self.wallet_config.api_listen_addr())
+		wallet::controller::foreign_listener(Box::new(wallet), &self.wallet_config.api_listen_addr())
 			.unwrap_or_else(|e| {
 				panic!(
 					"Error creating wallet listener: {:?} Config: {:?}",
@@ -330,7 +330,7 @@ impl LocalServerContainer {
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		let _ =
-			wallet::controller::owner_single_use(&mut wallet, |api| {
+			wallet::controller::owner_single_use(Box::new(wallet), |api| {
 				let result = api.issue_send_tx(
 					amount,
 					minimum_confirmations,

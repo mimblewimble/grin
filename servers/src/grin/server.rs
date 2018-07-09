@@ -35,6 +35,7 @@ use mining::stratumserver;
 use mining::test_miner::Miner;
 use p2p;
 use pool;
+use store;
 use util::LOGGER;
 
 /// Grin server holding internal structures.
@@ -123,6 +124,7 @@ impl Server {
 		let genesis = match config.chain_type {
 			global::ChainTypes::Testnet1 => genesis::genesis_testnet1(),
 			global::ChainTypes::Testnet2 => genesis::genesis_testnet2(),
+			global::ChainTypes::Testnet3 => genesis::genesis_testnet3(),
 			global::ChainTypes::AutomatedTesting => genesis::genesis_dev(),
 			global::ChainTypes::UserTesting => genesis::genesis_dev(),
 			global::ChainTypes::Mainnet => genesis::genesis_testnet2(), //TODO: Fix, obviously
@@ -130,8 +132,10 @@ impl Server {
 
 		info!(LOGGER, "Starting server, genesis block: {}", genesis.hash());
 
+		let db_env = Arc::new(store::new_env(config.db_root.clone()));
 		let shared_chain = Arc::new(chain::Chain::init(
 			config.db_root.clone(),
+			db_env.clone(),
 			chain_adapter.clone(),
 			genesis.clone(),
 			pow::verify_size,
@@ -156,7 +160,7 @@ impl Server {
 		};
 
 		let p2p_server = Arc::new(p2p::Server::new(
-			config.db_root.clone(),
+			db_env,
 			config.capabilities,
 			config.p2p_config.clone(),
 			net_adapter.clone(),
@@ -263,7 +267,7 @@ impl Server {
 
 	/// Start a minimal "stratum" mining service on a separate thread
 	pub fn start_stratum_server(&self, config: StratumServerConfig) {
-		let cuckoo_size = global::sizeshift();
+		let cuckoo_size = global::min_sizeshift();
 		let proof_size = global::proofsize();
 		let sync_state = self.sync_state.clone();
 

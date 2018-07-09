@@ -263,8 +263,6 @@ pub trait ChainAdapter: Sync + Send {
 	fn txhashset_write(
 		&self,
 		h: Hash,
-		rewind_to_output: u64,
-		rewind_to_kernel: u64,
 		txhashset_data: File,
 		peer_addr: SocketAddr,
 	) -> bool;

@@ -25,14 +25,14 @@ use util::LOGGER;
 
 /// Receive a transaction, modifying the slate accordingly (which can then be
 /// sent back to sender for posting)
-pub fn receive_tx<T, K>(wallet: &mut T, slate: &mut Slate) -> Result<(), Error>
+pub fn receive_tx<T: ?Sized, K>(wallet: &mut T, slate: &mut Slate) -> Result<(), Error>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
 {
 	// create an output using the amount in the slate
 	let (_, mut context, receiver_create_fn) =
-		selection::build_recipient_output_with_slate(wallet, slate).unwrap();
+		selection::build_recipient_output_with_slate(wallet, slate)?;
 
 	// fill public keys
 	let _ = slate.fill_round_1(
@@ -53,7 +53,7 @@ where
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
-pub fn create_send_tx<T, K>(
+pub fn create_send_tx<T: ?Sized, K>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
@@ -72,7 +72,7 @@ where
 	K: Keychain,
 {
 	// Get lock height
-	let current_height = wallet.get_chain_height(wallet.node_url())?;
+	let current_height = wallet.get_chain_height()?;
 	// ensure outputs we're selecting are up to date
 	updater::refresh_outputs(wallet)?;
 
@@ -110,7 +110,7 @@ where
 }
 
 /// Complete a transaction as the sender
-pub fn complete_tx<T, K>(
+pub fn complete_tx<T: ?Sized, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
 	context: &sigcontext::Context,
@@ -129,7 +129,7 @@ where
 }
 
 /// Issue a burn tx
-pub fn issue_burn_tx<T, K>(
+pub fn issue_burn_tx<T: ?Sized, K>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
@@ -144,29 +144,26 @@ where
 	// &Identifier::zero());
 	let keychain = wallet.keychain().clone();
 
-	let current_height = wallet.get_chain_height(wallet.node_url())?;
+	let current_height = wallet.get_chain_height()?;
 
 	let _ = updater::refresh_outputs(wallet);
 
 	let key_id = keychain.root_key_id();
 
 	// select some spendable coins from the wallet
-	let coins = wallet.read_wallet(|wallet_data| {
-		Ok(wallet_data.select_coins(
-			key_id.clone(),
-			amount,
-			current_height,
-			minimum_confirmations,
-			max_outputs,
-			false,
-		))
-	})?;
+	let coins = wallet.select_coins(
+		key_id.clone(),
+		amount,
+		current_height,
+		minimum_confirmations,
+		max_outputs,
+		false,
+	);
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
-	let fee = tx_fee(coins.len(), 2, selection::coins_proof_count(&coins), None);
-	let (mut parts, _, _) =
-		selection::inputs_and_change(&coins, wallet, current_height, amount, fee)?;
+	let fee = tx_fee(coins.len(), 2, None);
+	let (mut parts, _, _) = selection::inputs_and_change(&coins, wallet, amount, fee)?;
 
 	//TODO: If we end up using this, create change output here
 

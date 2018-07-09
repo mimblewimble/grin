@@ -1,6 +1,6 @@
 [package]
 name = "grin_store"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 workspace = ".."
 publish = false
@@ -10,9 +10,10 @@ byteorder = "1"
 croaring = "=0.3.2"
 env_logger = "0.5"
 libc = "0.2"
+failure = "0.1"
+failure_derive = "0.1"
+lmdb-zero = "0.4.4"
 memmap = { git = "https://github.com/danburkert/memmap-rs", tag = "0.6.2" }
-rand = "0.3"
-rocksdb = "0.10"
 serde = "1"
 serde_derive = "1"
 slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
@@ -22,3 +23,4 @@ grin_util = { path = "../util" }
 
 [dev-dependencies]
 time = "0.1"
+rand = "0.3"

@@ -16,6 +16,7 @@ extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_store as store;
 extern crate grin_wallet as wallet;
 extern crate rand;
 extern crate time;
@@ -23,7 +24,8 @@ extern crate time;
 use std::fs;
 use std::sync::Arc;
 
-use chain::types::{Error, NoopAdapter};
+use chain::types::NoopAdapter;
+use chain::{Error, ErrorKind};
 use core::core::target::Difficulty;
 use core::core::{transaction, OutputIdentifier};
 use core::global::{self, ChainTypes};
@@ -43,8 +45,10 @@ fn test_coinbase_maturity() {
 
 	let genesis_block = pow::mine_genesis_block().unwrap();
 
+	let db_env = Arc::new(store::new_env(".grin".to_string()));
 	let chain = chain::Chain::init(
 		".grin".to_string(),
+		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,
@@ -70,7 +74,7 @@ fn test_coinbase_maturity() {
 		&mut block.header,
 		difficulty,
 		global::proofsize(),
-		global::sizeshift(),
+		global::min_sizeshift(),
 	).unwrap();
 
 	assert_eq!(block.outputs.len(), 1);
@@ -103,7 +107,7 @@ fn test_coinbase_maturity() {
 	// this is not a valid tx as the coinbase output cannot be spent yet
 	let coinbase_txn = build::transaction(
 		vec![
-			build::coinbase_input(amount, block_hash, merkle_proof.clone(), key_id1.clone()),
+			build::coinbase_input(amount, key_id1.clone()),
 			build::output(amount - 2, key_id2.clone()),
 			build::with_fee(2),
 		],
@@ -123,15 +127,18 @@ fn test_coinbase_maturity() {
 	// Confirm the tx attempting to spend the coinbase output
 	// is not valid at the current block height given the current chain state.
 	match chain.verify_coinbase_maturity(&coinbase_txn) {
-		Err(Error::Transaction(transaction::Error::ImmatureCoinbase)) => {}
-		_ => panic!("Expected transaction error with immature coinbase."),
+		Ok(_) => {}
+		Err(e) => match e.kind() {
+			ErrorKind::ImmatureCoinbase => {}
+			_ => panic!("Expected transaction error with immature coinbase."),
+		},
 	}
 
 	pow::pow_size(
 		&mut block.header,
 		difficulty,
 		global::proofsize(),
-		global::sizeshift(),
+		global::min_sizeshift(),
 	).unwrap();
 
 	// mine enough blocks to increase the height sufficiently for
@@ -154,7 +161,7 @@ fn test_coinbase_maturity() {
 			&mut block.header,
 			difficulty,
 			global::proofsize(),
-			global::sizeshift(),
+			global::min_sizeshift(),
 		).unwrap();
 
 		chain.process_block(block, chain::Options::MINE).unwrap();
@@ -181,7 +188,7 @@ fn test_coinbase_maturity() {
 		&mut block.header,
 		difficulty,
 		global::proofsize(),
-		global::sizeshift(),
+		global::min_sizeshift(),
 	).unwrap();
 
 	let result = chain.process_block(block, chain::Options::MINE);

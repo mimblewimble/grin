@@ -22,7 +22,9 @@ use time;
 use cursive::direction::Orientation;
 use cursive::theme::BaseColor::{Black, Blue, Cyan, White};
 use cursive::theme::Color::Dark;
-use cursive::theme::PaletteColor::{Background, Highlight, HighlightInactive, Primary, Shadow, View};
+use cursive::theme::PaletteColor::{
+	Background, Highlight, HighlightInactive, Primary, Shadow, View,
+};
 use cursive::theme::{BaseColor, BorderStyle, Color, Theme};
 use cursive::traits::Identifiable;
 use cursive::utils::markup::StyledString;

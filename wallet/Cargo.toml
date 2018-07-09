@@ -1,6 +1,6 @@
 [package]
 name = "grin_wallet"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 workspace = '..'
 publish = false
@@ -30,8 +30,10 @@ urlencoded = "0.5"
 grin_api = { path = "../api" }
 grin_core = { path = "../core" }
 grin_keychain = { path = "../keychain" }
+grin_store = { path = "../store" }
 grin_util = { path = "../util" }
 
 [dev-dependencies]
 grin_chain = { path = "../chain" }
+grin_store = { path = "../store" }
 time = "0.1"

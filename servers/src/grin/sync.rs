@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use std::{cmp, thread};
 use time;
@@ -72,11 +72,19 @@ pub fn run_sync(
 		.spawn(move || {
 			let mut si = SyncInfo::new();
 
-			// initial sleep to give us time to peer with some nodes
-			if !skip_sync_wait {
+			{
+				// Initial sleep to give us time to peer with some nodes.
+				// Note: Even if we have "skip_sync_wait" we need to wait a
+				// short period of time for tests to do the right thing.
+				let wait_secs = if skip_sync_wait {
+					3
+				} else {
+					30
+				};
+
 				awaiting_peers.store(true, Ordering::Relaxed);
 				let mut n = 0;
-				while peers.more_work_peers().len() < 4 && n < 30 {
+				while peers.more_work_peers().len() < 4 && n < wait_secs {
 					thread::sleep(Duration::from_secs(1));
 					n += 1;
 				}
@@ -305,7 +313,7 @@ fn needs_syncing(
 					);
 
 					let _ = chain.reset_head();
-					return (false, 0);
+					return (false, most_work_height);
 				}
 			}
 		} else {
@@ -460,7 +468,7 @@ mod test {
 		assert_eq!(
 			get_locator_heights(10000),
 			vec![
-				10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0,
+				10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0
 			]
 		);
 	}

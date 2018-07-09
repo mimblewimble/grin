@@ -13,6 +13,7 @@
 // limitations under the License.
 
 //! Implementation specific error types
+use api;
 use keychain;
 use libtx;
 use libwallet;
@@ -64,7 +65,7 @@ pub enum ErrorKind {
 
 	/// Error when contacting a node through its API
 	#[fail(display = "Node API error")]
-	Node,
+	Node(api::ErrorKind),
 
 	/// Error originating from hyper.
 	#[fail(display = "Hyper error")]
@@ -103,7 +104,19 @@ impl Fail for Error {
 
 impl Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		Display::fmt(&self.inner, f)
+		let cause = match self.cause() {
+			Some(c) => format!("{}", c),
+			None => String::from("Unknown"),
+		};
+		let backtrace = match self.backtrace() {
+			Some(b) => format!("{}", b),
+			None => String::from("Unknown"),
+		};
+		let output = format!(
+			"{} \n Cause: {} \n Backtrace: {}",
+			self.inner, cause, backtrace
+		);
+		Display::fmt(&output, f)
 	}
 }
 
@@ -133,6 +146,14 @@ impl From<ErrorKind> for Error {
 impl From<Context<ErrorKind>> for Error {
 	fn from(inner: Context<ErrorKind>) -> Error {
 		Error { inner: inner }
+	}
+}
+
+impl From<api::Error> for Error {
+	fn from(error: api::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::Node(error.kind().clone())),
+		}
 	}
 }
 

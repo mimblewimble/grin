@@ -29,7 +29,7 @@ use common::adapters::PoolToChainAdapter;
 use common::stats::{StratumStats, WorkerStats};
 use common::types::{StratumServerConfig, SyncState};
 use core::core::{Block, BlockHeader};
-use core::{consensus, pow};
+use core::{pow, global};
 use keychain;
 use mining::mine_block;
 use pool;
@@ -76,7 +76,7 @@ struct LoginParams {
 struct SubmitParams {
 	height: u64,
 	nonce: u64,
-	pow: Vec<u32>,
+	pow: Vec<u64>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -306,9 +306,7 @@ impl StratumServer {
 
 					// Call the handler function for requested method
 					let response = match request.method.as_str() {
-						"login" => {
-								self.handle_login(request.params, &mut workers_l[num])
-						}
+						"login" => self.handle_login(request.params, &mut workers_l[num]),
 						"submit" => {
 							let res = self.handle_submit(
 								request.params,
@@ -316,8 +314,10 @@ impl StratumServer {
 								&mut stratum_stats.worker_stats[worker_stats_id],
 							);
 							// this key_id has been used now, reset
-							self.current_key_id = None;
-							res
+							if let Ok((_, true)) = res {
+								self.current_key_id = None;
+							}
+							res.map(|(v, _)| v)
 						}
 						"keepalive" => self.handle_keepalive(),
 						"getjobtemplate" => {
@@ -435,7 +435,7 @@ impl StratumServer {
 		params: Option<Value>,
 		worker: &mut Worker,
 		worker_stats: &mut WorkerStats,
-	) -> Result<Value, Value> {
+	) -> Result<(Value, bool), Value> {
 		// Validate parameters
 		let params: SubmitParams = match params {
 			Some(val) => serde_json::from_value(val).unwrap(),
@@ -450,6 +450,7 @@ impl StratumServer {
 
 		let mut b: Block;
 		let share_difficulty: u64;
+		let mut share_is_block = false;
 		if params.height == self.current_block.header.height {
 			// Reconstruct the block header with this nonce and pow added
 			b = self.current_block.clone();
@@ -492,12 +493,14 @@ impl StratumServer {
 						message: "Failed to validate solution".to_string(),
 					};
 					return Err(serde_json::to_value(e).unwrap());
+				} else {
+					share_is_block = true;
 				}
 			// Success case falls through to be logged
 			} else {
 				// This is a low-difficulty share, not a full solution
 				// Do some validation but dont submit
-				if !pow::verify_size(&b.header, consensus::DEFAULT_SIZESHIFT) {
+				if !pow::verify_size(&b.header, global::min_sizeshift()) {
 					// Return error status
 					error!(
 						LOGGER,
@@ -544,7 +547,7 @@ impl StratumServer {
 			submitted_by,
 		);
 		worker_stats.num_accepted += 1;
-		return Ok(serde_json::to_value("ok".to_string()).unwrap());
+		return Ok((serde_json::to_value("ok".to_string()).unwrap(), share_is_block));
 	} // handle submit a solution
 
 	// Purge dead/sick workers - remove all workers marked in error state

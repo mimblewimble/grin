@@ -19,17 +19,32 @@ use std::collections::HashMap;
 use std::fmt;
 
 use serde;
+use serde_json;
 
 use failure::ResultExt;
 
 use core::core::hash::Hash;
-use core::core::pmmr::MerkleProof;
+use core::ser;
+
 use keychain::{Identifier, Keychain};
 
 use libtx::slate::Slate;
 use libwallet::error::{Error, ErrorKind};
 
 use util::secp::pedersen;
+
+/// Combined trait to allow dynamic wallet dispatch
+pub trait WalletInst<K>: WalletBackend<K> + WalletClient + Send + Sync + 'static
+where
+	K: Keychain,
+{
+}
+impl<T, K> WalletInst<K> for T
+where
+	T: WalletBackend<K> + WalletClient + Send + Sync + 'static,
+	K: Keychain,
+{
+}
 
 /// TODO:
 /// Wallets should implement this backend for their storage. All functions
@@ -48,36 +63,17 @@ where
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut K;
 
-	/// Return the outputs directly
-	fn outputs(&mut self) -> &mut HashMap<String, OutputData>;
+	/// Iterate over all output data stored by the backend
+	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a>;
 
-	/// Allows for reading wallet data (read-only)
-	fn read_wallet<T, F>(&mut self, f: F) -> Result<T, Error>
-	where
-		F: FnOnce(&mut Self) -> Result<T, Error>;
+	/// Get output data by id
+	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
 
-	/// Get all outputs from a wallet impl (probably with some sort
-	/// of query param), read+write. Implementor should save
-	/// any changes to its data and perform any locking needed
-	fn with_wallet<T, F>(&mut self, f: F) -> Result<T, Error>
-	where
-		F: FnOnce(&mut Self) -> T;
-
-	/// Add an output
-	fn add_output(&mut self, out: OutputData);
-
-	/// Delete an output
-	fn delete_output(&mut self, id: &Identifier);
-
-	/// Lock an output
-	fn lock_output(&mut self, out: &OutputData);
-
-	/// get a single output
-	fn get_output(&self, key_id: &Identifier) -> Option<&OutputData>;
+	/// Create a new write batch to update or remove output data
+	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, Error>;
 
 	/// Next child ID when we want to create a new output
-	/// Should also increment index
-	fn next_child(&mut self, root_key_id: Identifier) -> u32;
+	fn next_child<'a>(&mut self, root_key_id: Identifier) -> Result<u32, Error>;
 
 	/// Return current details
 	fn details(&mut self) -> &mut WalletDetails;
@@ -97,6 +93,32 @@ where
 	fn restore(&mut self) -> Result<(), Error>;
 }
 
+/// Batch trait to update the output data backend atomically. Trying to use a
+/// batch after commit MAY result in a panic. Due to this being a trait, the
+/// commit method can't take ownership.
+pub trait WalletOutputBatch {
+	/// Add or update data about an output to the backend
+	fn save(&mut self, out: OutputData) -> Result<(), Error>;
+
+	/// Get wallet details
+	fn details(&mut self) -> &mut WalletDetails;
+
+	/// Gets output data by id
+	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
+
+	/// Iterate over all output data in batch
+	fn iter<'b>(&'b self) -> Box<Iterator<Item = OutputData> + 'b>;
+
+	/// Delete data about an output to the backend
+	fn delete(&mut self, id: &Identifier) -> Result<(), Error>;
+
+	/// Save an output as locked in the backend
+	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error>;
+
+	/// Write the wallet data to backend file
+	fn commit(&self) -> Result<(), Error>;
+}
+
 /// Encapsulate all communication functions. No functions within libwallet
 /// should care about communication details
 pub trait WalletClient {
@@ -104,51 +126,47 @@ pub trait WalletClient {
 	fn node_url(&self) -> &str;
 
 	/// Call the wallet API to create a coinbase transaction
-	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, Error>;
+	fn create_coinbase(&self, block_fees: &BlockFees) -> Result<CbData, Error>;
 
 	/// Send a transaction slate to another listening wallet and return result
 	/// TODO: Probably need a slate wrapper type
-	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, Error>;
+	fn send_tx_slate(&self, addr: &str, slate: &Slate) -> Result<Slate, Error>;
 
 	/// Posts a transaction to a grin node
-	fn post_tx(&self, dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error>;
+	fn post_tx(&self, tx: &TxWrapper, fluff: bool) -> Result<(), Error>;
 
 	/// retrieves the current tip from the specified grin node
-	fn get_chain_height(&self, addr: &str) -> Result<u64, Error>;
+	fn get_chain_height(&self) -> Result<u64, Error>;
 
 	/// retrieve a list of outputs from the specified grin node
 	/// need "by_height" and "by_id" variants
 	fn get_outputs_from_node(
 		&self,
-		addr: &str,
 		wallet_outputs: Vec<pedersen::Commitment>,
 	) -> Result<HashMap<pedersen::Commitment, String>, Error>;
 
-	/// Get any missing block hashes from node
-	fn get_missing_block_hashes_from_node(
+	/// Get a list of outputs from the node by traversing the UTXO
+	/// set in PMMR index order.
+	/// Returns
+	/// (last available output index, last insertion index retrieved,
+	/// outputs(commit, proof, is_coinbase))
+	fn get_outputs_by_pmmr_index(
 		&self,
-		addr: &str,
-		height: u64,
-		wallet_outputs: Vec<pedersen::Commitment>,
+		start_height: u64,
+		max_outputs: u64,
 	) -> Result<
 		(
-			HashMap<pedersen::Commitment, (u64, BlockIdentifier)>,
-			HashMap<pedersen::Commitment, MerkleProofWrapper>,
+			u64,
+			u64,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
 		),
 		Error,
 	>;
-
-	/// retrieve merkle proof for a commit from a node
-	fn get_merkle_proof_for_commit(
-		&self,
-		addr: &str,
-		commit: &str,
-	) -> Result<MerkleProofWrapper, Error>;
 }
 
 /// Information about an output that's being tracked by the wallet. Must be
-/// enough to reconstruct the commitment associated with the output when the
-/// root private key is known.*/
+/// enough to reconstruct the commitment associated with the ouput when the
+/// root private key is known.
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct OutputData {
@@ -168,10 +186,19 @@ pub struct OutputData {
 	pub lock_height: u64,
 	/// Is this a coinbase output? Is it subject to coinbase locktime?
 	pub is_coinbase: bool,
-	/// Hash of the block this output originated from.
-	pub block: Option<BlockIdentifier>,
-	/// Merkle proof
-	pub merkle_proof: Option<MerkleProofWrapper>,
+}
+
+impl ser::Writeable for OutputData {
+	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_bytes(&serde_json::to_vec(self).map_err(|_| ser::Error::CorruptedData)?)
+	}
+}
+
+impl ser::Readable for OutputData {
+	fn read(reader: &mut ser::Reader) -> Result<OutputData, ser::Error> {
+		let data = reader.read_vec()?;
+		serde_json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
+	}
 }
 
 impl OutputData {
@@ -203,14 +230,6 @@ impl OutputData {
 		if [OutputStatus::Spent, OutputStatus::Locked].contains(&self.status) {
 			return false;
 		} else if self.status == OutputStatus::Unconfirmed && self.is_coinbase {
-			return false;
-		} else if self.is_coinbase && self.block.is_none() {
-			// if we do not have a block hash for coinbase output we cannot spent it
-			// block index got compacted before we refreshed our wallet?
-			return false;
-		} else if self.is_coinbase && self.merkle_proof.is_none() {
-			// if we do not have a Merkle proof for coinbase output we cannot spent it
-			// block index got compacted before we refreshed our wallet?
 			return false;
 		} else if self.lock_height > current_height {
 			return false;
@@ -266,53 +285,6 @@ impl fmt::Display for OutputStatus {
 			OutputStatus::Locked => write!(f, "Locked"),
 			OutputStatus::Spent => write!(f, "Spent"),
 		}
-	}
-}
-
-/// Wrapper for a merkle proof
-#[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
-pub struct MerkleProofWrapper(pub MerkleProof);
-
-impl MerkleProofWrapper {
-	/// Create
-	pub fn merkle_proof(&self) -> MerkleProof {
-		self.0.clone()
-	}
-}
-
-impl serde::ser::Serialize for MerkleProofWrapper {
-	fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-	where
-		S: serde::ser::Serializer,
-	{
-		serializer.serialize_str(&self.0.to_hex())
-	}
-}
-
-impl<'de> serde::de::Deserialize<'de> for MerkleProofWrapper {
-	fn deserialize<D>(deserializer: D) -> Result<MerkleProofWrapper, D::Error>
-	where
-		D: serde::de::Deserializer<'de>,
-	{
-		deserializer.deserialize_str(MerkleProofWrapperVisitor)
-	}
-}
-
-struct MerkleProofWrapperVisitor;
-
-impl<'de> serde::de::Visitor<'de> for MerkleProofWrapperVisitor {
-	type Value = MerkleProofWrapper;
-
-	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-		formatter.write_str("a merkle proof")
-	}
-
-	fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-	where
-		E: serde::de::Error,
-	{
-		let merkle_proof = MerkleProof::from_hex(s).unwrap();
-		Ok(MerkleProofWrapper(merkle_proof))
 	}
 }
 

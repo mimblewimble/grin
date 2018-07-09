@@ -23,11 +23,14 @@ use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
 use core::global;
+use error::{Error, ErrorKind};
 use grin_store;
 use store;
 use txhashset;
-use types::{BlockSums, ChainStore, Error, Options, Tip};
+use types::{Options, Tip};
 use util::LOGGER;
+
+use failure::ResultExt;
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.
@@ -35,7 +38,7 @@ pub struct BlockContext {
 	/// The options
 	pub opts: Options,
 	/// The store
-	pub store: Arc<ChainStore>,
+	pub store: Arc<store::ChainStore>,
 	/// The head
 	pub head: Tip,
 	/// The POW verification function
@@ -45,9 +48,9 @@ pub struct BlockContext {
 }
 
 /// Runs the block processing pipeline, including validation and finding a
-/// place for the new block in the chain. Returns the new
-/// chain head if updated.
-pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Error> {
+/// place for the new block in the chain. Returns the new chain head if
+/// updated.
+pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
@@ -60,9 +63,9 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		b.outputs.len(),
 		b.kernels.len(),
 	);
-	check_known(b.hash(), &mut ctx)?;
+	check_known(b.hash(), ctx)?;
 
-	validate_header(&b.header, &mut ctx)?;
+	validate_header(&b.header, ctx)?;
 
 	// now check we actually have the previous block in the store
 	// not just the header but the block itself
@@ -75,17 +78,17 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		match ctx.store.block_exists(&b.header.previous) {
 			Ok(true) => {}
 			Ok(false) => {
-				return Err(Error::Orphan);
+				return Err(ErrorKind::Orphan.into());
 			}
 			Err(e) => {
-				return Err(Error::StoreErr(e, "pipe get previous".to_owned()));
+				return Err(ErrorKind::StoreErr(e, "pipe get previous".to_owned()).into());
 			}
 		}
 	}
 
 	// validate the block itself
-	// we can do this now before interact with the txhashset
-	validate_block(b, &mut ctx)?;
+	// we can do this now before interacting with the txhashset
+	let _sums = validate_block(b, ctx)?;
 
 	// header and block both valid, and we have a previous block
 	// so take the lock on the txhashset
@@ -93,13 +96,13 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 	let mut txhashset = local_txhashset.write().unwrap();
 
 	// update head now that we're in the lock
-	ctx.head = ctx.store
-		.head()
-		.map_err(|e| Error::StoreErr(e, "pipe reload head".to_owned()))?;
+	ctx.head = ctx.store.head()?;
+
+	let mut batch = ctx.store.batch()?;
 
 	// start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
-	let result = txhashset::extending(&mut txhashset, |mut extension| {
+	txhashset::extending(&mut txhashset, &mut batch, |mut extension| {
 		// First we rewind the txhashset extension if necessary
 		// to put it into a consistent state for validating the block.
 		// We can skip this step if the previous header is the latest header we saw.
@@ -108,30 +111,33 @@ pub fn process_block(b: &Block, mut ctx: BlockContext) -> Result<Option<Tip>, Er
 		}
 		validate_block_via_txhashset(b, &mut extension)?;
 
-		trace!(
-			LOGGER,
-			"pipe: process_block: {} at {} is valid, save and append.",
-			b.hash(),
-			b.header.height,
-		);
-
-		add_block(b, &mut ctx)?;
-		let h = update_head(b, &mut ctx)?;
-		if h.is_none() {
+		if !block_has_more_work(b, &ctx.head) {
 			extension.force_rollback();
 		}
-		Ok(h)
-	});
+		Ok(())
+	})?;
 
-	result
+	trace!(
+		LOGGER,
+		"pipe: process_block: {} at {} is valid, save and append.",
+		b.hash(),
+		b.header.height,
+	);
+	add_block(b, ctx.store.clone(), &mut batch)?;
+	let res = update_head(b, &ctx, &mut batch);
+	if res.is_ok() {
+		batch.commit()?;
+	}
+	res
 }
 
 /// Process the block header.
 /// This is only ever used during sync and uses a context based on sync_head.
 pub fn sync_block_header(
 	bh: &BlockHeader,
-	mut sync_ctx: BlockContext,
-	mut header_ctx: BlockContext,
+	sync_ctx: &mut BlockContext,
+	header_ctx: &mut BlockContext,
+	batch: &mut store::Batch,
 ) -> Result<Option<Tip>, Error> {
 	debug!(
 		LOGGER,
@@ -140,20 +146,20 @@ pub fn sync_block_header(
 		bh.height
 	);
 
-	validate_header(&bh, &mut sync_ctx)?;
-	add_block_header(bh, &mut sync_ctx)?;
+	validate_header(&bh, sync_ctx)?;
+	add_block_header(bh, batch)?;
 
 	// now update the header_head (if new header with most work) and the sync_head
 	// (always)
-	update_header_head(bh, &mut header_ctx)?;
-	update_sync_head(bh, &mut sync_ctx)
+	update_header_head(bh, header_ctx, batch)?;
+	update_sync_head(bh, sync_ctx, batch)
 }
 
 /// Process block header as part of "header first" block propagation.
 /// We validate the header but we do not store it or update header head based
 /// on this. We will update these once we get the block back after requesting
 /// it.
-pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<(), Error> {
+pub fn process_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	debug!(
 		LOGGER,
 		"pipe: process_block_header at {} [{}]",
@@ -161,8 +167,8 @@ pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<(
 		bh.hash()
 	); // keep this
 
-	check_header_known(bh.hash(), &mut ctx)?;
-	validate_header(&bh, &mut ctx)
+	check_header_known(bh.hash(), ctx)?;
+	validate_header(&bh, ctx)
 }
 
 /// Quick in-memory check to fast-reject any block header we've already handled
@@ -171,13 +177,13 @@ pub fn process_block_header(bh: &BlockHeader, mut ctx: BlockContext) -> Result<(
 fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	// TODO ring buffer of the last few blocks that came through here
 	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
-		return Err(Error::Unfit("already known".to_string()));
+		return Err(ErrorKind::Unfit("already known".to_string()).into());
 	}
 	if let Ok(h) = ctx.store.get_block_header(&bh) {
 		// there is a window where a block header can be saved but the chain head not
 		// updated yet, we plug that window here by re-accepting the block
 		if h.total_difficulty <= ctx.head.total_difficulty {
-			return Err(Error::Unfit("already in store".to_string()));
+			return Err(ErrorKind::Unfit("already in store".to_string()).into());
 		}
 	}
 	Ok(())
@@ -188,13 +194,13 @@ fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	// TODO ring buffer of the last few blocks that came through here
 	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
-		return Err(Error::Unfit("already known".to_string()));
+		return Err(ErrorKind::Unfit("already known".to_string()).into());
 	}
 	if let Ok(b) = ctx.store.get_block(&bh) {
 		// there is a window where a block can be saved but the chain head not
 		// updated yet, we plug that window here by re-accepting the block
 		if b.header.total_difficulty <= ctx.head.total_difficulty {
-			return Err(Error::Unfit("already in store".to_string()));
+			return Err(ErrorKind::Unfit("already in store".to_string()).into());
 		}
 	}
 	Ok(())
@@ -211,7 +217,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			LOGGER,
 			"Invalid block header version received ({}), maybe update Grin?", header.version
 		);
-		return Err(Error::InvalidBlockVersion(header.version));
+		return Err(ErrorKind::InvalidBlockVersion(header.version).into());
 	}
 
 	// TODO: remove CI check from here somehow
@@ -221,47 +227,45 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	{
 		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
 		// TODO add warning in p2p code if local time is too different from peers
-		return Err(Error::InvalidBlockTime);
+		return Err(ErrorKind::InvalidBlockTime.into());
 	}
 
 	if !ctx.opts.contains(Options::SKIP_POW) {
-		let n = global::sizeshift();
-		if !(ctx.pow_verifier)(header, n) {
+		if global::min_sizeshift() > header.pow.cuckoo_sizeshift {
+			return Err(ErrorKind::LowSizeshift.into());
+		}
+		if !(ctx.pow_verifier)(header, header.pow.cuckoo_sizeshift) {
 			error!(
 				LOGGER,
-				"pipe: validate_header failed for cuckoo shift size {}", n
+				"pipe: validate_header failed for cuckoo shift size {}",
+				header.pow.cuckoo_sizeshift,
 			);
-			return Err(Error::InvalidPow);
-		}
-		if header.height % 500 == 0 {
-			debug!(
-				LOGGER,
-				"Validating header validated, using cuckoo shift size {}", n
-			);
+			return Err(ErrorKind::InvalidPow.into());
 		}
 	}
 
 	// first I/O cost, better as late as possible
 	let prev = match ctx.store.get_block_header(&header.previous) {
-		Ok(prev) => Ok(prev),
-		Err(grin_store::Error::NotFoundErr) => Err(Error::Orphan),
-		Err(e) => Err(Error::StoreErr(
-			e,
-			format!("previous header {}", header.previous),
-		)),
-	}?;
+		Ok(prev) => prev,
+		Err(grin_store::Error::NotFoundErr(_)) => return Err(ErrorKind::Orphan.into()),
+		Err(e) => {
+			return Err(
+				ErrorKind::StoreErr(e, format!("previous header {}", header.previous)).into(),
+			)
+		}
+	};
 
 	// make sure this header has a height exactly one higher than the previous
 	// header
 	if header.height != prev.height + 1 {
-		return Err(Error::InvalidBlockHeight);
+		return Err(ErrorKind::InvalidBlockHeight.into());
 	}
 
 	// TODO - get rid of the automated testing mode check here somehow
 	if header.timestamp <= prev.timestamp && !global::is_automated_testing_mode() {
 		// prevent time warp attacks and some timestamp manipulations by forcing strict
 		// time progression (but not in CI mode)
-		return Err(Error::InvalidBlockTime);
+		return Err(ErrorKind::InvalidBlockTime.into());
 	}
 
 	// verify the proof of work and related parameters
@@ -272,27 +276,27 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	// as the target difficulty
 	if !ctx.opts.contains(Options::SKIP_POW) {
 		if header.total_difficulty.clone() <= prev.total_difficulty.clone() {
-			return Err(Error::DifficultyTooLow);
+			return Err(ErrorKind::DifficultyTooLow.into());
 		}
 
 		let target_difficulty = header.total_difficulty.clone() - prev.total_difficulty.clone();
 
 		if header.pow.to_difficulty() < target_difficulty {
-			return Err(Error::DifficultyTooLow);
+			return Err(ErrorKind::DifficultyTooLow.into());
 		}
 
 		// explicit check to ensure we are not below the minimum difficulty
 		// we will also check difficulty based on next_difficulty later on
 		if target_difficulty < Difficulty::one() {
-			return Err(Error::DifficultyTooLow);
+			return Err(ErrorKind::DifficultyTooLow.into());
 		}
 
 		// explicit check to ensure total_difficulty has increased by exactly
 		// the _network_ difficulty of the previous block
 		// (during testnet1 we use _block_ difficulty here)
 		let diff_iter = store::DifficultyIter::from(header.previous, ctx.store.clone());
-		let network_difficulty =
-			consensus::next_difficulty(diff_iter).map_err(|e| Error::Other(e.to_string()))?;
+		let network_difficulty = consensus::next_difficulty(diff_iter)
+			.context(ErrorKind::Other("network difficulty".to_owned()))?;
 		if target_difficulty != network_difficulty.clone() {
 			error!(
 				LOGGER,
@@ -300,7 +304,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 				target_difficulty.to_num(),
 				prev.total_difficulty.to_num() + network_difficulty.to_num()
 			);
-			return Err(Error::WrongTotalDifficulty);
+			return Err(ErrorKind::WrongTotalDifficulty.into());
 		}
 	}
 
@@ -308,25 +312,9 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 }
 
 fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	// If this is the first block then we have no previous block sums stored.
-	let block_sums = if b.header.height == 1 {
-		BlockSums::default()
-	} else {
-		ctx.store.get_block_sums(&b.header.previous)?
-	};
-
-	let (new_output_sum, new_kernel_sum) =
-		b.validate(&block_sums.output_sum, &block_sums.kernel_sum)
-			.map_err(&Error::InvalidBlockProof)?;
-
-	ctx.store.save_block_sums(
-		&b.hash(),
-		&BlockSums {
-			output_sum: new_output_sum,
-			kernel_sum: new_kernel_sum,
-		},
-	)?;
-
+	let prev = ctx.store.get_block_header(&b.header.previous)?;
+	b.validate(&prev.total_kernel_offset, &prev.total_kernel_sum)
+		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }
 
@@ -343,7 +331,8 @@ fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Re
 	ext.apply_block(&b)?;
 
 	let roots = ext.roots();
-	if roots.output_root != b.header.output_root || roots.rproof_root != b.header.range_proof_root
+	if roots.output_root != b.header.output_root
+		|| roots.rproof_root != b.header.range_proof_root
 		|| roots.kernel_root != b.header.kernel_root
 	{
 		ext.dump(false);
@@ -367,130 +356,107 @@ fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Re
 			b.header.kernel_root,
 		);
 
-		return Err(Error::InvalidRoot);
+		return Err(ErrorKind::InvalidRoot.into());
+	}
+	let sizes = ext.sizes();
+	if b.header.output_mmr_size != sizes.0 || b.header.kernel_mmr_size != sizes.2 {
+		return Err(ErrorKind::InvalidMMRSize.into());
 	}
 
 	Ok(())
 }
 
 /// Officially adds the block to our chain.
-fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	ctx.store
+fn add_block(
+	b: &Block,
+	store: Arc<store::ChainStore>,
+	batch: &mut store::Batch,
+) -> Result<(), Error> {
+	batch
 		.save_block(b)
-		.map_err(|e| Error::StoreErr(e, "pipe save block".to_owned()))?;
-	ctx.store
-		.save_block_input_bitmap(&b)
-		.map_err(|e| Error::StoreErr(e, "pipe save block input bitmap".to_owned()))?;
+		.map_err(|e| ErrorKind::StoreErr(e, "pipe save block".to_owned()))?;
+	let bitmap = store.build_and_cache_block_input_bitmap(&b)?;
+	batch.save_block_input_bitmap(&b.hash(), &bitmap)?;
 	Ok(())
 }
 
 /// Officially adds the block header to our header chain.
-fn add_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	ctx.store
+fn add_block_header(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
+	batch
 		.save_block_header(bh)
-		.map_err(|e| Error::StoreErr(e, "pipe save header".to_owned()))
+		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header".to_owned()).into())
 }
 
 /// Directly updates the head if we've just appended a new block to it or handle
 /// the situation where we've just added enough work to have a fork with more
 /// work than the head.
-fn update_head(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+fn update_head(b: &Block, ctx: &BlockContext, batch: &store::Batch) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
 	// when extending the head), update it
-	let tip = Tip::from_block(&b.header);
-	if tip.total_difficulty > ctx.head.total_difficulty {
+	if block_has_more_work(b, &ctx.head) {
 		// update the block height index
-		ctx.store
+		batch
 			.setup_height(&b.header, &ctx.head)
-			.map_err(|e| Error::StoreErr(e, "pipe setup height".to_owned()))?;
+			.map_err(|e| ErrorKind::StoreErr(e, "pipe setup height".to_owned()))?;
 
 		// in sync mode, only update the "body chain", otherwise update both the
 		// "header chain" and "body chain", updating the header chain in sync resets
 		// all additional "future" headers we've received
+		let tip = Tip::from_block(&b.header);
 		if ctx.opts.contains(Options::SYNC) {
-			ctx.store
+			batch
 				.save_body_head(&tip)
-				.map_err(|e| Error::StoreErr(e, "pipe save body".to_owned()))?;
+				.map_err(|e| ErrorKind::StoreErr(e, "pipe save body".to_owned()))?;
 		} else {
-			ctx.store
+			batch
 				.save_head(&tip)
-				.map_err(|e| Error::StoreErr(e, "pipe save head".to_owned()))?;
+				.map_err(|e| ErrorKind::StoreErr(e, "pipe save head".to_owned()))?;
 		}
-		ctx.head = tip.clone();
-		if b.header.height % 100 == 0 {
-			info!(
-				LOGGER,
-				"pipe: chain head reached {} @ {} [{}]",
-				b.header.height,
-				b.header.total_difficulty,
-				b.hash()
-			);
-		} else {
-			debug!(
-				LOGGER,
-				"pipe: chain head reached {} @ {} [{}]",
-				b.header.height,
-				b.header.total_difficulty,
-				b.hash()
-			);
-		}
+		debug!(
+			LOGGER,
+			"pipe: chain head {} @ {}",
+			b.hash(),
+			b.header.height
+		);
 		Ok(Some(tip))
 	} else {
 		Ok(None)
 	}
 }
 
+// Whether the provided block totals more work than the chain tip
+fn block_has_more_work(b: &Block, tip: &Tip) -> bool {
+	let block_tip = Tip::from_block(&b.header);
+	block_tip.total_difficulty > tip.total_difficulty
+}
+
 /// Update the sync head so we can keep syncing from where we left off.
-fn update_sync_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+fn update_sync_head(
+	bh: &BlockHeader,
+	ctx: &mut BlockContext,
+	batch: &mut store::Batch,
+) -> Result<Option<Tip>, Error> {
 	let tip = Tip::from_block(bh);
-	ctx.store
+	batch
 		.save_sync_head(&tip)
-		.map_err(|e| Error::StoreErr(e, "pipe save sync head".to_owned()))?;
+		.map_err(|e| ErrorKind::StoreErr(e, "pipe save sync head".to_owned()))?;
 	ctx.head = tip.clone();
-	if bh.height % 100 == 0 {
-		info!(
-			LOGGER,
-			"sync head {} @ {} [{}]",
-			bh.total_difficulty,
-			bh.height,
-			bh.hash()
-		);
-	} else {
-		debug!(
-			LOGGER,
-			"sync head {} @ {} [{}]",
-			bh.total_difficulty,
-			bh.height,
-			bh.hash()
-		);
-	}
+	debug!(LOGGER, "sync head {} @ {}", bh.hash(), bh.height);
 	Ok(Some(tip))
 }
 
-fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+fn update_header_head(
+	bh: &BlockHeader,
+	ctx: &mut BlockContext,
+	batch: &mut store::Batch,
+) -> Result<Option<Tip>, Error> {
 	let tip = Tip::from_block(bh);
 	if tip.total_difficulty > ctx.head.total_difficulty {
-		ctx.store
+		batch
 			.save_header_head(&tip)
-			.map_err(|e| Error::StoreErr(e, "pipe save header head".to_owned()))?;
+			.map_err(|e| ErrorKind::StoreErr(e, "pipe save header head".to_owned()))?;
 		ctx.head = tip.clone();
-		if bh.height % 100 == 0 {
-			info!(
-				LOGGER,
-				"header head {} @ {} [{}]",
-				bh.total_difficulty,
-				bh.height,
-				bh.hash()
-			);
-		} else {
-			debug!(
-				LOGGER,
-				"header head {} @ {} [{}]",
-				bh.total_difficulty,
-				bh.height,
-				bh.hash()
-			);
-		}
+		debug!(LOGGER, "header head {} @ {}", bh.hash(), bh.height);
 		Ok(Some(tip))
 	} else {
 		Ok(None)
@@ -503,7 +469,7 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 /// the expected state.
 pub fn rewind_and_apply_fork(
 	b: &Block,
-	store: Arc<ChainStore>,
+	store: Arc<store::ChainStore>,
 	ext: &mut txhashset::Extension,
 ) -> Result<(), Error> {
 	// extending a fork, first identify the block where forking occurred
@@ -546,7 +512,7 @@ pub fn rewind_and_apply_fork(
 	for (_, h) in fork_hashes {
 		let fb = store
 			.get_block(&h)
-			.map_err(|e| Error::StoreErr(e, format!("getting forked blocks")))?;
+			.map_err(|e| ErrorKind::StoreErr(e, format!("getting forked blocks")))?;
 		ext.apply_block(&fb)?;
 	}
 	Ok(())

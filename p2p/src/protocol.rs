@@ -215,8 +215,6 @@ impl MessageHandler for Protocol {
 						&TxHashSetArchive {
 							height: sm_req.height as u64,
 							hash: sm_req.hash,
-							rewind_to_output: txhashset.output_index,
-							rewind_to_kernel: txhashset.kernel_index,
 							bytes: file_sz,
 						},
 					);
@@ -231,11 +229,9 @@ impl MessageHandler for Protocol {
 				let sm_arch: TxHashSetArchive = msg.body()?;
 				debug!(
 					LOGGER,
-					"handle_payload: txhashset archive for {} at {} rewind to {}/{}",
+					"handle_payload: txhashset archive for {} at {}",
 					sm_arch.hash,
 					sm_arch.height,
-					sm_arch.rewind_to_output,
-					sm_arch.rewind_to_kernel
 				);
 
 				let mut tmp = env::temp_dir();
@@ -249,8 +245,6 @@ impl MessageHandler for Protocol {
 				let tmp_zip = File::open(tmp)?;
 				self.adapter.txhashset_write(
 					sm_arch.hash,
-					sm_arch.rewind_to_output,
-					sm_arch.rewind_to_kernel,
 					tmp_zip,
 					self.addr,
 				);

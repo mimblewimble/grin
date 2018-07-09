@@ -81,6 +81,7 @@ impl TUIStatusListener for TUIStatusView {
 				"Waiting for peers".to_string()
 			} else {
 				match stats.sync_status {
+					SyncStatus::Initial => "Initializing".to_string(),
 					SyncStatus::NoSync => "Running".to_string(),
 					SyncStatus::HeaderSync {
 						current_height,

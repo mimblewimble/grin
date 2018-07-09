@@ -12,12 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::fs::{self, File};
 /// Wrappers around the `zip-rs` library to compress and decompress zip
 /// bzip2 archives.
-
 use std::io;
 use std::path::Path;
-use std::fs::{self, File};
 use walkdir::WalkDir;
 
 use zip_rs;

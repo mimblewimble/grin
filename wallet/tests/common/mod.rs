@@ -13,8 +13,8 @@
 // limitations under the License.
 
 //! Common functions to facilitate wallet, walletlib and transaction testing
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
@@ -28,9 +28,10 @@ use core::core::hash::Hashed;
 use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::{consensus, global, pow};
 use keychain::ExtKeychain;
-use wallet::file_wallet::{FileWallet, WalletConfig};
+use wallet::WalletConfig;
+use wallet::file_wallet::FileWallet;
 use wallet::libwallet::internal::updater;
-use wallet::libwallet::types::{BlockFees, BlockIdentifier, MerkleProofWrapper, OutputStatus,
+use wallet::libwallet::types::{BlockFees, BlockIdentifier, OutputStatus,
                                WalletBackend};
 use wallet::libwallet::{Error, ErrorKind};
 
@@ -78,40 +79,36 @@ where
 	T: WalletBackend<K>,
 	K: keychain::Keychain,
 {
-	let ret_val = wallet.read_wallet(|wallet_data| {
-		let mut unspent_total = 0;
-		let mut unspent_but_locked_total = 0;
-		let mut unconfirmed_total = 0;
-		let mut locked_total = 0;
-		let keychain = wallet_data.keychain().clone();
-		for out in wallet_data
-			.outputs()
-			.values()
-			.filter(|out| out.root_key_id == keychain.root_key_id())
-		{
-			if out.status == OutputStatus::Unspent {
-				unspent_total += out.value;
-				if out.lock_height > height {
-					unspent_but_locked_total += out.value;
-				}
-			}
-			if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
-				unconfirmed_total += out.value;
-			}
-			if out.status == OutputStatus::Locked {
-				locked_total += out.value;
+	let mut unspent_total = 0;
+	let mut unspent_but_locked_total = 0;
+	let mut unconfirmed_total = 0;
+	let mut locked_total = 0;
+	let keychain = wallet.keychain().clone();
+	for out in wallet
+		.iter()
+		.filter(|out| out.root_key_id == keychain.root_key_id())
+	{
+		if out.status == OutputStatus::Unspent {
+			unspent_total += out.value;
+			if out.lock_height > height {
+				unspent_but_locked_total += out.value;
 			}
 		}
+		if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
+			unconfirmed_total += out.value;
+		}
+		if out.status == OutputStatus::Locked {
+			locked_total += out.value;
+		}
+	}
 
-		Ok((
-			unspent_total + unconfirmed_total,        //total
-			unconfirmed_total,                        //amount_awaiting_confirmation
-			unspent_but_locked_total,                 // confirmed but locked
-			unspent_total - unspent_but_locked_total, // currently spendable
-			locked_total,                             // locked total
-		))
-	});
-	ret_val
+	Ok((
+		unspent_total + unconfirmed_total,        //total
+		unconfirmed_total,                        //amount_awaiting_confirmation
+		unspent_but_locked_total,                 // confirmed but locked
+		unspent_total - unspent_but_locked_total, // currently spendable
+		locked_total,                             // locked total
+	))
 }
 
 /// Get an output from the chain locally and present it back as an API output
@@ -150,7 +147,7 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: (Out
 		&mut b.header,
 		difficulty,
 		global::proofsize(),
-		global::sizeshift(),
+		global::min_sizeshift(),
 	).unwrap();
 	chain.process_block(b, chain::Options::MINE).unwrap();
 	chain.validate(false).unwrap();
@@ -179,20 +176,10 @@ where
 		}
 	};
 	add_block_with_reward(chain, txs, coinbase_tx.clone());
-	// build merkle proof and block identifier and save in wallet
-	let output_id = OutputIdentifier::from_output(&coinbase_tx.0.clone());
-	let m_proof = chain.get_merkle_proof(&output_id, &chain.head_header().unwrap());
-	let block_id = Some(BlockIdentifier(chain.head_header().unwrap().hash()));
-	let _ = wallet.with_wallet(|wallet_data| {
-		if let Entry::Occupied(mut output) = wallet_data
-			.outputs()
-			.entry(fees.key_id.as_ref().unwrap().to_hex())
-		{
-			let output = output.get_mut();
-			output.block = block_id;
-			output.merkle_proof = Some(MerkleProofWrapper(m_proof.unwrap()));
-		}
-	});
+	let output = wallet.get(&fees.key_id.unwrap()).unwrap();
+	let mut batch = wallet.batch().unwrap();
+	batch.save(output).unwrap();
+	batch.commit().unwrap();
 }
 
 /// adds many block rewards to a wallet, no transactions
