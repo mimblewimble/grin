@@ -18,7 +18,7 @@ you can start mining by building and running grin-miner against your running Gri
 ## Requirements
 
 - rust 1.26+ (use [rustup]((https://www.rustup.rs/))- i.e. `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
-- clang (clanglib or clang-devel or libclang-dev)
+- clang 5+ (clanglib or clang-devel or libclang-dev)
 - ncurses and libs (ncurses, ncursesw5)
 - zlib libs (zlib1g-dev or zlib-devel)
 - linux-headers (reported needed on Alpine linux)
