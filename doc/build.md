@@ -27,8 +27,8 @@ you can start mining by building and running grin-miner against your running Gri
 
 ```sh
 git clone https://github.com/mimblewimble/grin.git
-git checkout milestone/testnet3
 cd grin
+git checkout milestone/testnet3
 cargo build --release
 ```
 
