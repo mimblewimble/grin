@@ -479,6 +479,8 @@ pub struct BlockHeaderPrintable {
 	pub kernel_root: String,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
+	/// Cuckoo size
+	pub cuckoo_size: u8,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: u64,
 	/// Total kernel offset since genesis block
@@ -497,6 +499,7 @@ impl BlockHeaderPrintable {
 			range_proof_root: util::to_hex(h.range_proof_root.to_vec()),
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),
 			nonce: h.nonce,
+			cuckoo_size: h.pow.cuckoo_sizeshift,
 			total_difficulty: h.total_difficulty.to_num(),
 			total_kernel_offset: h.total_kernel_offset.to_hex(),
 		}
