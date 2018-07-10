@@ -14,7 +14,6 @@
 
 //! Common functions to facilitate wallet, walletlib and transaction testing
 use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
@@ -24,23 +23,26 @@ extern crate grin_wallet as wallet;
 extern crate time;
 
 use chain::Chain;
-use core::core::hash::Hashed;
 use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::{consensus, global, pow};
 use keychain::ExtKeychain;
-use wallet::{HTTPWalletClient, WalletConfig};
 use wallet::file_wallet::FileWallet;
 use wallet::libwallet::internal::updater;
-use wallet::libwallet::types::{BlockFees, BlockIdentifier, OutputStatus,
-                               WalletBackend, WalletClient};
+use wallet::libwallet::types::{BlockFees, OutputStatus, WalletBackend, WalletClient};
 use wallet::libwallet::{Error, ErrorKind};
+use wallet::WalletConfig;
 
 use util;
 use util::secp::pedersen;
 
+pub mod testclient;
+
 /// Mostly for testing, refreshes output state against a local chain instance
 /// instead of via an http API call
-pub fn refresh_output_state_local<T, C, K>(wallet: &mut T, chain: &chain::Chain) -> Result<(), Error>
+pub fn refresh_output_state_local<T, C, K>(
+	wallet: &mut T,
+	chain: &chain::Chain,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -198,7 +200,10 @@ where
 }
 
 /// Create a new wallet in a particular directory
-pub fn create_wallet(dir: &str, client: HTTPWalletClient) -> FileWallet<HTTPWalletClient, ExtKeychain> {
+pub fn create_wallet<C>(dir: &str, client: C) -> FileWallet<C, ExtKeychain>
+where
+	C: WalletClient,
+{
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
 	wallet::WalletSeed::init_file(&wallet_config).expect("Failed to create wallet seed file.");

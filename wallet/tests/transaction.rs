@@ -26,17 +26,18 @@ extern crate time;
 extern crate uuid;
 
 mod common;
+use common::testclient::TestWalletClient;
 
 use std::fs;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-use chain::Chain;
 use chain::types::NoopAdapter;
+use chain::Chain;
 use core::global::ChainTypes;
 use core::{global, pow};
 use util::LOGGER;
-use wallet::HTTPWalletClient;
 use wallet::libwallet::internal::selection;
+use wallet::HTTPWalletClient;
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -58,12 +59,59 @@ fn setup(test_dir: &str, chain_dir: &str) -> Chain {
 	).unwrap()
 }
 
-/// Build and test new version of sending API
+/// Exercises the Transaction API fully with a test WalletClient operating
+/// directly on a chain instance
+#[test]
+fn transaction_api() {
+	let test_dir = "test_output/transaction_api";
+	clean_output_dir(test_dir);
+	let mut client: TestWalletClient<keychain::ExtKeychain> =
+		TestWalletClient::new("test_output/transaction_api/.grin");
+	let chain = client.chain.clone();
+	// First define recipient
+	let mut wallet2 = common::create_wallet("test_output/transaction_api/wallet2", client.clone());
+	let mut filled_client = client.clone();
+	let wallet2_ref = Arc::new(Mutex::new(Box::new(wallet2)));
+
+	// then define wallet 1 with client that has recipient wallet 2 filled
+	filled_client.set_tx_recipient(wallet2_ref);
+	let mut wallet1 = common::create_wallet("test_output/transaction_api/wallet1", filled_client);
+	let wallet1_ref = Arc::new(Mutex::new(Box::new(wallet1)));
+
+	{
+		let mut w1 = wallet1_ref.lock().unwrap();
+		common::award_blocks_to_wallet(&chain, &mut **w1, 10);
+	}
+	// assert wallet contents
+
+	// and a single use api for a send command
+	let sender_res = wallet::controller::owner_single_use(wallet1_ref, |sender_api| {
+		let send_tx_res = sender_api.issue_send_tx(
+			60,   // amount
+			2,    // minimum confirmations
+			"",   // dest (will be test client callback)
+			500,  // max outputs
+			true, // select all outputs
+			true, // fluff
+		);
+		if let Err(e) = send_tx_res {
+			println!("Error issuing send tx: {}", e);
+		}
+		Ok(())
+	});
+	if let Err(e) = sender_res {
+		println!("Error starting sender API: {}", e);
+	}
+}
+
+/// Build and test new version of sending API (more manually than the above
+/// test, bypasses the wallet API)j
 #[test]
 fn build_transaction() {
 	let client = HTTPWalletClient::new("");
 	let chain = setup("test_output", "build_transaction_2/.grin");
-	let mut wallet1 = common::create_wallet("test_output/build_transaction_2/wallet1", client.clone());
+	let mut wallet1 =
+		common::create_wallet("test_output/build_transaction_2/wallet1", client.clone());
 	let mut wallet2 = common::create_wallet("test_output/build_transaction_2/wallet2", client);
 	common::award_blocks_to_wallet(&chain, &mut wallet1, 10);
 	// Wallet 1 has 600 Grins, wallet 2 has 0. Create a transaction that sends
