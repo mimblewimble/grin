@@ -473,9 +473,7 @@ impl StratumServer {
 			return Err(serde_json::to_value(e).unwrap());
 		}
 		// Find the correct version of the block to match this header
-		let b: Option<&Block> = self.current_block_versions
-			.get(params.job_id as usize)
-			.clone();
+		let b: Option<&Block> = self.current_block_versions.get(params.job_id as usize);
 		if b.is_none() {
 			// Return error status
 			error!(
