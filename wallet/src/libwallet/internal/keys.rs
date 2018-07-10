@@ -15,12 +15,13 @@
 //! Wallet key management functions
 use keychain::{Identifier, Keychain};
 use libwallet::error::Error;
-use libwallet::types::WalletBackend;
+use libwallet::types::{WalletBackend, WalletClient};
 
 /// Get next available key in the wallet
-pub fn next_available_key<T: ?Sized, K>(wallet: &mut T) -> Result<(Identifier, u32), Error>
+pub fn next_available_key<T: ?Sized, C, K>(wallet: &mut T) -> Result<(Identifier, u32), Error>
 where
-	T: WalletBackend<K>,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	let root_key_id = wallet.keychain().root_key_id();
@@ -30,12 +31,13 @@ where
 }
 
 /// Retrieve an existing key from a wallet
-pub fn retrieve_existing_key<T: ?Sized, K>(
+pub fn retrieve_existing_key<T: ?Sized, C, K>(
 	wallet: &T,
 	key_id: Identifier,
 ) -> Result<(Identifier, u32), Error>
 where
-	T: WalletBackend<K>,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	let existing = wallet.get(&key_id)?;

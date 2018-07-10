@@ -53,7 +53,8 @@ use core::core::amount_to_hr_string;
 use core::global;
 use tui::ui;
 use util::{init_logger, LoggingConfig, LOGGER};
-use wallet::{libwallet, wallet_db_exists, FileWallet, LMDBBackend, WalletConfig, WalletInst};
+use wallet::{libwallet, wallet_db_exists, FileWallet, 
+             HTTPWalletClient, LMDBBackend, WalletConfig, WalletInst};
 
 // include build information
 pub mod built_info {
@@ -553,9 +554,10 @@ fn instantiate_wallet(
 	wallet_config: WalletConfig,
 	passphrase: &str,
 	use_db: bool,
-) -> Box<WalletInst<keychain::ExtKeychain>> {
+) -> Box<WalletInst<HTTPWalletClient, keychain::ExtKeychain>> {
+	let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr);
 	if use_db {
-		let db_wallet = LMDBBackend::new(wallet_config.clone(), "").unwrap_or_else(|e| {
+		let db_wallet = LMDBBackend::new(wallet_config.clone(), "", client).unwrap_or_else(|e| {
 			panic!(
 				"Error creating DB wallet: {} Config: {:?}",
 				e, wallet_config
@@ -564,7 +566,7 @@ fn instantiate_wallet(
 		info!(LOGGER, "Using LMDB Backend for wallet");
 		Box::new(db_wallet)
 	} else {
-		let file_wallet = FileWallet::new(wallet_config.clone(), passphrase)
+		let file_wallet = FileWallet::new(wallet_config.clone(), passphrase, client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {} Config: {:?}", e, wallet_config));
 		info!(LOGGER, "Using File Backend for wallet");
 		Box::new(file_wallet)
@@ -603,7 +605,8 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 		wallet::WalletSeed::init_file(&wallet_config).expect("Failed to init wallet seed file.");
 		info!(LOGGER, "Wallet seed file created");
 		if use_db {
-			let _: LMDBBackend<keychain::ExtKeychain> = LMDBBackend::new(wallet_config.clone(), "")
+			let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr);
+			let _: LMDBBackend<HTTPWalletClient, keychain::ExtKeychain> = LMDBBackend::new(wallet_config.clone(), "", client)
 				.unwrap_or_else(|e| {
 					panic!(
 						"Error creating DB wallet: {} Config: {:?}",

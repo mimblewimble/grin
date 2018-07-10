@@ -32,7 +32,7 @@ use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
 use libwallet::types::{
-	BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient, WalletInfo, WalletInst,
+	BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient, WalletInfo
 };
 use libwallet::{Error, ErrorKind};
 
@@ -40,10 +40,11 @@ use util::LOGGER;
 
 /// Instantiate wallet Owner API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
-pub fn owner_single_use<F, T: ?Sized, K>(wallet: Box<T>, f: F) -> Result<(), Error>
+pub fn owner_single_use<F, T: ?Sized, C, K>(wallet: Box<T>, f: F) -> Result<(), Error>
 where
-	T: WalletBackend<K> + WalletClient,
-	F: FnOnce(&mut APIOwner<T, K>) -> Result<(), Error>,
+	T: WalletBackend<C, K>,
+	F: FnOnce(&mut APIOwner<T, C, K>) -> Result<(), Error>,
+	C: WalletClient,
 	K: Keychain,
 {
 	let mut w = wallet;
@@ -55,10 +56,11 @@ where
 
 /// Instantiate wallet Foreign API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
-pub fn foreign_single_use<F, T: ?Sized, K>(wallet: &mut Box<T>, f: F) -> Result<(), Error>
+pub fn foreign_single_use<F, T: ?Sized, C, K>(wallet: &mut Box<T>, f: F) -> Result<(), Error>
 where
-	T: WalletBackend<K> + WalletClient,
-	F: FnOnce(&mut APIForeign<T, K>) -> Result<(), Error>,
+	T: WalletBackend<C, K>,
+	F: FnOnce(&mut APIForeign<T, C, K>) -> Result<(), Error>,
+	C: WalletClient,
 	K: Keychain,
 {
 	wallet.open_with_credentials()?;
@@ -69,11 +71,12 @@ where
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
-pub fn owner_listener<T: ?Sized, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
+pub fn owner_listener<T: ?Sized, C, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
 where
-	T: WalletInst<K>,
-	OwnerAPIGetHandler<T, K>: Handler,
-	OwnerAPIPostHandler<T, K>: Handler,
+	T: WalletBackend<C, K>,
+	OwnerAPIGetHandler<T, C, K>: Handler,
+	OwnerAPIPostHandler<T, C, K>: Handler,
+	C: WalletClient,
 	K: Keychain,
 {
 	let wallet_arc = Arc::new(Mutex::new(wallet));
@@ -101,10 +104,11 @@ where
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
-pub fn foreign_listener<T: ?Sized, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
+pub fn foreign_listener<T: ?Sized, C, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
 where
-	T: WalletInst<K>,
-	ForeignAPIHandler<T, K>: Handler,
+	T: WalletBackend<C, K>,
+	ForeignAPIHandler<T, C, K>: Handler,
+	C: WalletClient,
 	K: Keychain,
 {
 	let api_handler = ForeignAPIHandler::new(Arc::new(Mutex::new(wallet)));
@@ -126,33 +130,37 @@ where
 }
 /// API Handler/Wrapper for owner functions
 
-pub struct OwnerAPIGetHandler<T: ?Sized, K>
+pub struct OwnerAPIGetHandler<T: ?Sized, C, K>
 where
-	T: WalletBackend<K> + WalletClient,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Wallet instance
 	pub wallet: Arc<Mutex<Box<T>>>,
 	phantom: PhantomData<K>,
+	phantom_c: PhantomData<C>,
 }
 
-impl<T: ?Sized, K> OwnerAPIGetHandler<T, K>
+impl<T: ?Sized, C, K> OwnerAPIGetHandler<T, C, K>
 where
-	T: WalletBackend<K> + WalletClient,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Create a new owner API handler for GET methods
-	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> OwnerAPIGetHandler<T, K> {
+	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> OwnerAPIGetHandler<T, C, K> {
 		OwnerAPIGetHandler {
 			wallet,
 			phantom: PhantomData,
+			phantom_c: PhantomData,
 		}
 	}
 
 	fn retrieve_outputs(
 		&self,
 		req: &mut Request,
-		api: &mut APIOwner<T, K>,
+		api: &mut APIOwner<T, C, K>,
 	) -> Result<(bool, Vec<OutputData>), Error> {
 		let mut update_from_node = false;
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
@@ -166,7 +174,7 @@ where
 	fn retrieve_summary_info(
 		&self,
 		req: &mut Request,
-		api: &mut APIOwner<T, K>,
+		api: &mut APIOwner<T, C, K>,
 	) -> Result<(bool, WalletInfo), Error> {
 		let mut update_from_node = false;
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
@@ -180,12 +188,12 @@ where
 	fn node_height(
 		&self,
 		_req: &mut Request,
-		api: &mut APIOwner<T, K>,
+		api: &mut APIOwner<T, C, K>,
 	) -> Result<(u64, bool), Error> {
 		api.node_height()
 	}
 
-	fn handle_request(&self, req: &mut Request, api: &mut APIOwner<T, K>) -> IronResult<Response> {
+	fn handle_request(&self, req: &mut Request, api: &mut APIOwner<T, C, K>) -> IronResult<Response> {
 		let url = req.url.clone();
 		let path_elems = url.path();
 		match *path_elems.last().unwrap() {
@@ -203,9 +211,10 @@ where
 	}
 }
 
-impl<T: ?Sized, K> Handler for OwnerAPIGetHandler<T, K>
+impl<T: ?Sized, C, K> Handler for OwnerAPIGetHandler<T, C, K>
 where
-	T: WalletBackend<K> + WalletClient + Send + Sync + 'static,
+	T: WalletBackend<C, K> + Send + Sync + 'static,
+	C: WalletClient + 'static,
 	K: Keychain + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
@@ -235,30 +244,34 @@ where
 }
 
 /// Handles all owner API POST requests
-pub struct OwnerAPIPostHandler<T: ?Sized, K>
+pub struct OwnerAPIPostHandler<T: ?Sized, C, K>
 where
-	T: WalletBackend<K>,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Wallet instance
 	pub wallet: Arc<Mutex<Box<T>>>,
 	phantom: PhantomData<K>,
+	phantom_c: PhantomData<C>,
 }
 
-impl<T: ?Sized, K> OwnerAPIPostHandler<T, K>
+impl<T: ?Sized, C, K> OwnerAPIPostHandler<T, C, K>
 where
-	T: WalletBackend<K> + WalletClient,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	/// New POST handler
-	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> OwnerAPIPostHandler<T, K> {
+	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> OwnerAPIPostHandler<T, C, K> {
 		OwnerAPIPostHandler {
 			wallet,
 			phantom: PhantomData,
+			phantom_c: PhantomData,
 		}
 	}
 
-	fn issue_send_tx(&self, req: &mut Request, api: &mut APIOwner<T, K>) -> Result<(), Error> {
+	fn issue_send_tx(&self, req: &mut Request, api: &mut APIOwner<T, C, K>) -> Result<(), Error> {
 		let struct_body = req.get::<bodyparser::Struct<SendTXArgs>>();
 		match struct_body {
 			Ok(Some(args)) => api.issue_send_tx(
@@ -284,12 +297,12 @@ where
 		}
 	}
 
-	fn issue_burn_tx(&self, _req: &mut Request, api: &mut APIOwner<T, K>) -> Result<(), Error> {
+	fn issue_burn_tx(&self, _req: &mut Request, api: &mut APIOwner<T, C, K>) -> Result<(), Error> {
 		// TODO: Args
 		api.issue_burn_tx(60, 10, 1000)
 	}
 
-	fn handle_request(&self, req: &mut Request, api: &mut APIOwner<T, K>) -> Result<String, Error> {
+	fn handle_request(&self, req: &mut Request, api: &mut APIOwner<T, C, K>) -> Result<String, Error> {
 		let url = req.url.clone();
 		let path_elems = url.path();
 		match *path_elems.last().unwrap() {
@@ -323,9 +336,10 @@ where
 	}
 }
 
-impl<T: ?Sized, K> Handler for OwnerAPIPostHandler<T, K>
+impl<T: ?Sized, C, K> Handler for OwnerAPIPostHandler<T, C, K>
 where
-	T: WalletBackend<K> + WalletClient + Send + Sync + 'static,
+	T: WalletBackend<C, K> + Send + Sync + 'static,
+	C: WalletClient + 'static,
 	K: Keychain + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
@@ -373,33 +387,37 @@ impl Handler for OwnerAPIOptionsHandler where {
 }
 /// API Handler/Wrapper for foreign functions
 
-pub struct ForeignAPIHandler<T: ?Sized, K>
+pub struct ForeignAPIHandler<T: ?Sized, C, K>
 where
-	T: WalletBackend<K> + WalletClient,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Wallet instance
 	pub wallet: Arc<Mutex<Box<T>>>,
 	phantom: PhantomData<K>,
+	phantom_c: PhantomData<C>,
 }
 
-impl<T: ?Sized, K> ForeignAPIHandler<T, K>
+impl<T: ?Sized, C, K> ForeignAPIHandler<T, C, K>
 where
-	T: WalletBackend<K> + WalletClient,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	/// create a new api handler
-	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> ForeignAPIHandler<T, K> {
+	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> ForeignAPIHandler<T, C, K> {
 		ForeignAPIHandler {
 			wallet,
 			phantom: PhantomData,
+			phantom_c: PhantomData,
 		}
 	}
 
 	fn build_coinbase(
 		&self,
 		req: &mut Request,
-		api: &mut APIForeign<T, K>,
+		api: &mut APIForeign<T, C, K>,
 	) -> Result<CbData, Error> {
 		let struct_body = req.get::<bodyparser::Struct<BlockFees>>();
 		match struct_body {
@@ -419,7 +437,7 @@ where
 		}
 	}
 
-	fn receive_tx(&self, req: &mut Request, api: &mut APIForeign<T, K>) -> Result<Slate, Error> {
+	fn receive_tx(&self, req: &mut Request, api: &mut APIForeign<T, C, K>) -> Result<Slate, Error> {
 		let struct_body = req.get::<bodyparser::Struct<Slate>>();
 		if let Ok(Some(mut slate)) = struct_body {
 			api.receive_tx(&mut slate)?;
@@ -432,7 +450,7 @@ where
 	fn handle_request(
 		&self,
 		req: &mut Request,
-		api: &mut APIForeign<T, K>,
+		api: &mut APIForeign<T, C, K>,
 	) -> IronResult<Response> {
 		let url = req.url.clone();
 		let path_elems = url.path();
@@ -448,9 +466,10 @@ where
 		}
 	}
 }
-impl<T: ?Sized, K> Handler for ForeignAPIHandler<T, K>
+impl<T: ?Sized, C, K> Handler for ForeignAPIHandler<T, C, K>
 where
-	T: WalletBackend<K> + WalletClient + Send + Sync + 'static,
+	T: WalletBackend<C, K> + Send + Sync + 'static,
+	C: WalletClient + Send + Sync + 'static,
 	K: Keychain + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {

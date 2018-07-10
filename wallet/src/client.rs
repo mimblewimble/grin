@@ -28,10 +28,188 @@ use tokio_core::reactor;
 
 use api;
 use error::{Error, ErrorKind};
+use libwallet;
 use libtx::slate::Slate;
 use util::secp::pedersen;
 use util::{self, LOGGER};
 
+#[derive(Clone)]
+pub struct HTTPWalletClient {
+	node_url: String,
+}
+
+impl HTTPWalletClient {
+	/// Create a new client that will communicate with the given grin node
+	pub fn new(node_url:&str) -> HTTPWalletClient {
+		HTTPWalletClient {
+			node_url: node_url.to_owned(),
+		}
+	}
+}
+
+impl WalletClient for HTTPWalletClient {
+	fn node_url(&self) -> &str {
+		&self.node_url
+	}
+
+	/// Call the wallet API to create a coinbase output for the given block_fees.
+	/// Will retry based on default "retry forever with backoff" behavior.
+	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, libwallet::Error> {
+		let url = format!("{}/v1/wallet/foreign/build_coinbase", dest);
+		match single_create_coinbase(&url, &block_fees) {
+			Err(e) => {
+				error!(
+					LOGGER,
+					"Failed to get coinbase from {}. Run grin wallet listen?", url
+				);
+				error!(LOGGER, "Underlying Error: {}", e.cause().unwrap());
+				error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
+				Err(libwallet::ErrorKind::ClientCallback("Failed to get coinbase"))?
+			}
+			Ok(res) => Ok(res),
+		}
+	}
+
+	/// Send the slate to a listening wallet instance
+	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+		if &dest[..4] != "http" {
+			let err_str = format!(
+				"dest formatted as {} but send -d expected stdout or http://IP:port",
+				dest
+			);
+			error!(LOGGER, "{}", err_str,);
+			Err(libwallet::ErrorKind::Uri)?
+		}
+		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
+		debug!(LOGGER, "Posting transaction slate to {}", url);
+
+		let mut core = reactor::Core::new()
+			.context(libwallet::ErrorKind::ClientCallback("Sending transaction: Initialise API"))?;
+		let client = hyper::Client::new(&core.handle());
+
+		let url_pool = url.to_owned();
+
+		let mut req = Request::new(
+			Method::Post,
+			url_pool.parse::<hyper::Uri>()
+			.context(libwallet::ErrorKind::ClientCallback("Sending transaction: parsing URL"))?
+		);
+		req.headers_mut().set(ContentType::json());
+		let json = serde_json::to_string(&slate)
+			.context(libwallet::ErrorKind::ClientCallback("Sending transaction: parsing response"))?;
+		req.set_body(json);
+
+		let work = client.request(req).and_then(|res| {
+			res.body().concat2().and_then(move |body| {
+				let slate: Slate =
+					serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+				Ok(slate)
+			})
+		});
+		let res = core.run(work)
+			.context(libwallet::ErrorKind::ClientCallback("Sending transaction: posting request"))?;
+		Ok(res)
+	}
+
+
+	/// Posts a transaction to a grin node
+	fn post_tx(&self, tx: &TxWrapper, fluff: bool) -> Result<(), libwallet::Error> {
+		let url;
+		let dest = self.node_url();
+		if fluff {
+			url = format!("{}/v1/pool/push?fluff", dest);
+		} else {
+			url = format!("{}/v1/pool/push", dest);
+		}
+		api::client::post(url.as_str(), tx)
+			.context(libwallet::ErrorKind::ClientCallback("Posting transaction to node"))?;
+		Ok(())
+	}
+
+	/// Return the chain tip from a given node
+	fn get_chain_height(&self) -> Result<u64, libwallet::Error> {
+		let addr = self.node_url();
+		let url = format!("{}/v1/chain", addr);
+		let res = api::client::get::<api::Tip>(url.as_str())
+			.context(libwallet::ErrorKind::ClientCallback("Getting chain height from node"))?;
+		Ok(res.height)
+	}
+
+	/// Retrieve outputs from node
+	fn get_outputs_from_node(
+		&self,
+		wallet_outputs: Vec<pedersen::Commitment>,
+	) -> Result<HashMap<pedersen::Commitment, String>, libwallet::Error> {
+		let addr = self.node_url();
+		// build the necessary query params -
+		// ?id=xxx&id=yyy&id=zzz
+		let query_params: Vec<String> = wallet_outputs
+			.iter()
+			.map(|commit| format!("id={}", util::to_hex(commit.as_ref().to_vec())))
+			.collect();
+
+		// build a map of api outputs by commit so we can look them up efficiently
+		let mut api_outputs: HashMap<pedersen::Commitment, String> = HashMap::new();
+
+		for query_chunk in query_params.chunks(1000) {
+			let url = format!("{}/v1/chain/outputs/byids?{}", addr, query_chunk.join("&"),);
+
+			match api::client::get::<Vec<api::Output>>(url.as_str()) {
+				Ok(outputs) => for out in outputs {
+					api_outputs.insert(out.commit.commit(), util::to_hex(out.commit.to_vec()));
+				},
+				Err(e) => {
+					// if we got anything other than 200 back from server, don't attempt to refresh
+					// the wallet data after
+					return Err(libwallet::ErrorKind::ClientCallback("Error from server"))?;
+				}
+			}
+		}
+		Ok(api_outputs)
+	}
+
+	fn get_outputs_by_pmmr_index(
+		&self,
+		start_height: u64,
+		max_outputs: u64,
+	) -> Result<
+		(
+			u64,
+			u64,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+		),
+		libwallet::Error,
+	> {
+		let addr = self.node_url();
+		let query_param = format!("start_index={}&max={}", start_height, max_outputs);
+
+		let url = format!("{}/v1/txhashset/outputs?{}", addr, query_param,);
+
+		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool)> = Vec::new();
+
+		match api::client::get::<api::OutputListing>(url.as_str()) {
+			Ok(o) => {
+				for out in o.outputs {
+					let is_coinbase = match out.output_type {
+						api::OutputType::Coinbase => true,
+						api::OutputType::Transaction => false,
+					};
+					api_outputs.push((out.commit, out.range_proof().unwrap(), is_coinbase));
+				}
+
+				Ok((o.highest_index, o.last_retrieved_index, api_outputs))
+			}
+			Err(e) => {
+				// if we got anything other than 200 back from server, bye
+				error!(
+					LOGGER,
+					"get_outputs_by_pmmr_index: unable to contact API {}. Error: {}", addr, e
+				);
+				Err(libwallet::ErrorKind::ClientCallback("unable to contact api"))?
+			}
+		}
+	}
+}
 /// Call the wallet API to create a coinbase output for the given block_fees.
 /// Will retry based on default "retry forever with backoff" behavior.
 pub fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
@@ -44,47 +222,10 @@ pub fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Err
 			);
 			error!(LOGGER, "Underlying Error: {}", e.cause().unwrap());
 			error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
-			Err(e)
+			Err(e)?
 		}
 		Ok(res) => Ok(res),
 	}
-}
-
-/// Send the slate to a listening wallet instance
-pub fn send_tx_slate(dest: &str, slate: &Slate) -> Result<Slate, Error> {
-	if &dest[..4] != "http" {
-		let err_str = format!(
-			"dest formatted as {} but send -d expected stdout or http://IP:port",
-			dest
-		);
-		error!(LOGGER, "{}", err_str,);
-		Err(ErrorKind::Uri)?
-	}
-	let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
-	debug!(LOGGER, "Posting transaction slate to {}", url);
-
-	let mut core = reactor::Core::new().context(ErrorKind::Hyper)?;
-	let client = hyper::Client::new(&core.handle());
-
-	let url_pool = url.to_owned();
-
-	let mut req = Request::new(
-		Method::Post,
-		url_pool.parse::<hyper::Uri>().context(ErrorKind::Hyper)?,
-	);
-	req.headers_mut().set(ContentType::json());
-	let json = serde_json::to_string(&slate).context(ErrorKind::Hyper)?;
-	req.set_body(json);
-
-	let work = client.request(req).and_then(|res| {
-		res.body().concat2().and_then(move |body| {
-			let slate: Slate =
-				serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-			Ok(slate)
-		})
-	});
-	let res = core.run(work).context(ErrorKind::Hyper)?;
-	Ok(res)
 }
 
 /// Makes a single request to the wallet API to create a new coinbase output.
@@ -116,94 +257,3 @@ fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, E
 	Ok(res)
 }
 
-/// Posts a transaction to a grin node
-pub fn post_tx(dest: &str, tx: &TxWrapper, fluff: bool) -> Result<(), Error> {
-	let url;
-	if fluff {
-		url = format!("{}/v1/pool/push?fluff", dest);
-	} else {
-		url = format!("{}/v1/pool/push", dest);
-	}
-	api::client::post(url.as_str(), tx)?;
-	Ok(())
-}
-
-/// Return the chain tip from a given node
-pub fn get_chain_height(addr: &str) -> Result<u64, Error> {
-	let url = format!("{}/v1/chain", addr);
-	let res = api::client::get::<api::Tip>(url.as_str())?;
-	Ok(res.height)
-}
-
-/// Retrieve outputs from node
-pub fn get_outputs_from_node(
-	addr: &str,
-	wallet_outputs: Vec<pedersen::Commitment>,
-) -> Result<HashMap<pedersen::Commitment, String>, Error> {
-	// build the necessary query params -
-	// ?id=xxx&id=yyy&id=zzz
-	let query_params: Vec<String> = wallet_outputs
-		.iter()
-		.map(|commit| format!("id={}", util::to_hex(commit.as_ref().to_vec())))
-		.collect();
-
-	// build a map of api outputs by commit so we can look them up efficiently
-	let mut api_outputs: HashMap<pedersen::Commitment, String> = HashMap::new();
-
-	for query_chunk in query_params.chunks(1000) {
-		let url = format!("{}/v1/chain/outputs/byids?{}", addr, query_chunk.join("&"),);
-
-		match api::client::get::<Vec<api::Output>>(url.as_str()) {
-			Ok(outputs) => for out in outputs {
-				api_outputs.insert(out.commit.commit(), util::to_hex(out.commit.to_vec()));
-			},
-			Err(e) => {
-				// if we got anything other than 200 back from server, don't attempt to refresh
-				// the wallet data after
-				return Err(e)?;
-			}
-		}
-	}
-	Ok(api_outputs)
-}
-
-pub fn get_outputs_by_pmmr_index(
-	addr: &str,
-	start_height: u64,
-	max_outputs: u64,
-) -> Result<
-	(
-		u64,
-		u64,
-		Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
-	),
-	Error,
-> {
-	let query_param = format!("start_index={}&max={}", start_height, max_outputs);
-
-	let url = format!("{}/v1/txhashset/outputs?{}", addr, query_param,);
-
-	let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool)> = Vec::new();
-
-	match api::client::get::<api::OutputListing>(url.as_str()) {
-		Ok(o) => {
-			for out in o.outputs {
-				let is_coinbase = match out.output_type {
-					api::OutputType::Coinbase => true,
-					api::OutputType::Transaction => false,
-				};
-				api_outputs.push((out.commit, out.range_proof().unwrap(), is_coinbase));
-			}
-
-			Ok((o.highest_index, o.last_retrieved_index, api_outputs))
-		}
-		Err(e) => {
-			// if we got anything other than 200 back from server, bye
-			error!(
-				LOGGER,
-				"get_outputs_by_pmmr_index: unable to contact API {}. Error: {}", addr, e
-			);
-			Err(e)?
-		}
-	}
-}

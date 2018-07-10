@@ -27,7 +27,7 @@ use std::default::Default;
 use std::sync::{Arc, Mutex};
 use std::{fs, thread, time};
 
-use wallet::{FileWallet, WalletConfig};
+use wallet::{HTTPWalletClient, FileWallet, WalletConfig};
 
 /// Just removes all results from previous runs
 pub fn clean_all_output(test_name_dir: &str) {
@@ -262,12 +262,14 @@ impl LocalServerContainer {
 		let _ = fs::create_dir_all(self.wallet_config.clone().data_file_dir);
 		let r = wallet::WalletSeed::init_file(&self.wallet_config);
 
+		let client = HTTPWalletClient::new(&self.wallet_config.check_node_api_http_addr);
+
 		if let Err(e) = r {
 			//panic!("Error initting wallet seed: {}", e);
 		}
 
-		let wallet: FileWallet<keychain::ExtKeychain> =
-			FileWallet::new(self.wallet_config.clone(), "").unwrap_or_else(|e| {
+		let wallet: FileWallet<HTTPWalletClient, keychain::ExtKeychain> =
+			FileWallet::new(self.wallet_config.clone(), "", client).unwrap_or_else(|e| {
 				panic!(
 					"Error creating wallet: {:?} Config: {:?}",
 					e, self.wallet_config
@@ -300,7 +302,8 @@ impl LocalServerContainer {
 		let keychain: keychain::ExtKeychain = wallet_seed
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
-		let mut wallet = FileWallet::new(config.clone(), "")
+		let client = HTTPWalletClient::new(&config.check_node_api_http_addr);
+		let mut wallet = FileWallet::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		let _ = wallet::libwallet::internal::updater::refresh_outputs(&mut wallet);
@@ -324,9 +327,11 @@ impl LocalServerContainer {
 		let keychain: keychain::ExtKeychain = wallet_seed
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
+
+		let client = HTTPWalletClient::new(&config.check_node_api_http_addr);
 		let max_outputs = 500;
 
-		let mut wallet = FileWallet::new(config.clone(), "")
+		let mut wallet = FileWallet::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		let _ =
