@@ -89,6 +89,11 @@ pub struct JobTemplate {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct BlockFound {
+	height: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct WorkerStatus {
 	id: String,
 	height: u64,
@@ -539,6 +544,17 @@ impl StratumServer {
 				LOGGER,
 				"(Server ID: {}) Solution Found for block {} - Yay!!!", self.id, params.height
 			);
+			// Announce it to the worker
+			let block_found_value_json = serde_json::to_string(&BlockFound{height: params.height}).unwrap();
+			let block_found_value: Value = serde_json::from_str(&block_found_value_json).unwrap();
+			let block_found = RpcRequest {
+				id: String::from("Stratum"),
+				jsonrpc: String::from("2.0"),
+				method: String::from("blockfound"),
+				params: Some(block_found_value),
+			};
+			let block_found_json = serde_json::to_string(&block_found).unwrap();
+			worker.write_message(block_found_json.clone());
 		} else {
 			// Do some validation but dont submit
 			if !pow::verify_size(&b.header, global::min_sizeshift()) {
