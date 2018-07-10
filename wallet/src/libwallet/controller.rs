@@ -19,6 +19,10 @@ use api::ApiServer;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
+use api::handlers::handle;
+use std::net::SocketAddr;
+
+
 use bodyparser;
 use iron::prelude::{IronError, IronResult, Plugin, Request, Response};
 use iron::{status, Handler, Headers};
@@ -85,9 +89,9 @@ where
 		owner_post: post "/wallet/owner/*" => api_post_handler,
 	);
 
-	let mut apis = ApiServer::new("/v1".to_string());
-	apis.register_handler(router);
-	match apis.start(addr) {
+	let mut apis = ApiServer::new();
+    let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
+	match apis.start(socket_addr, &handle) {
 		Err(e) => error!(
 			LOGGER,
 			"Failed to start Grin wallet owner API listener: {}.", e
@@ -112,9 +116,9 @@ where
 		receive_tx: post "/wallet/foreign/*" => api_handler,
 	);
 
-	let mut apis = ApiServer::new("/v1".to_string());
-	apis.register_handler(router);
-	match apis.start(addr) {
+	let mut apis = ApiServer::new();
+    let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
+	match apis.start(socket_addr, &handle) {
 		Err(e) => error!(
 			LOGGER,
 			"Failed to start Grin wallet foreign listener: {}.", e
