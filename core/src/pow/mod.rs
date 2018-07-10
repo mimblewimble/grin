@@ -98,7 +98,8 @@ pub fn pow_size(
 		}
 
 		// otherwise increment the nonce
-		bh.nonce += 1;
+		let (res, _) = bh.nonce.overflowing_add(1);
+		bh.nonce = res;
 
 		// and if we're back where we started, update the time (changes the hash as
 		// well)
