@@ -186,6 +186,9 @@ pub struct ServerConfig {
 	/// Whether to run the web wallet owner listener
 	pub run_wallet_owner_api: Option<bool>,
 
+	/// Whether to use the DB wallet backend implementation
+	pub use_db_wallet: Option<bool>,
+
 	/// Whether to run the test miner (internal, cuckoo 16)
 	pub run_test_miner: Option<bool>,
 
@@ -212,6 +215,7 @@ impl Default for ServerConfig {
 			run_tui: None,
 			run_wallet_listener: Some(false),
 			run_wallet_owner_api: Some(false),
+			use_db_wallet: Some(false),
 			run_test_miner: Some(false),
 			test_miner_wallet_url: None,
 		}
@@ -323,9 +327,7 @@ impl SyncState {
 
 		debug!(
 			LOGGER,
-			"sync_state: sync_status: {:?} -> {:?}",
-			*status,
-			new_status,
+			"sync_state: sync_status: {:?} -> {:?}", *status, new_status,
 		);
 
 		*status = new_status;

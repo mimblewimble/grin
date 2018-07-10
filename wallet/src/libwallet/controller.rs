@@ -31,29 +31,31 @@ use failure::Fail;
 use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
-use libwallet::types::{BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient,
-                       WalletInfo};
+use libwallet::types::{
+	BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient, WalletInfo, WalletInst,
+};
 use libwallet::{Error, ErrorKind};
 
 use util::LOGGER;
 
 /// Instantiate wallet Owner API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
-pub fn owner_single_use<F, T, K>(wallet: &mut T, f: F) -> Result<(), Error>
+pub fn owner_single_use<F, T: ?Sized, K>(wallet: Box<T>, f: F) -> Result<(), Error>
 where
 	T: WalletBackend<K> + WalletClient,
 	F: FnOnce(&mut APIOwner<T, K>) -> Result<(), Error>,
 	K: Keychain,
 {
-	wallet.open_with_credentials()?;
-	f(&mut APIOwner::new(wallet))?;
-	wallet.close()?;
+	let mut w = wallet;
+	w.open_with_credentials()?;
+	f(&mut APIOwner::new(&mut w))?;
+	w.close()?;
 	Ok(())
 }
 
 /// Instantiate wallet Foreign API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
-pub fn foreign_single_use<F, T, K>(wallet: &mut T, f: F) -> Result<(), Error>
+pub fn foreign_single_use<F, T: ?Sized, K>(wallet: &mut Box<T>, f: F) -> Result<(), Error>
 where
 	T: WalletBackend<K> + WalletClient,
 	F: FnOnce(&mut APIForeign<T, K>) -> Result<(), Error>,
@@ -67,9 +69,9 @@ where
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
-pub fn owner_listener<T, K>(wallet: T, addr: &str) -> Result<(), Error>
+pub fn owner_listener<T: ?Sized, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
 where
-	T: WalletBackend<K> + WalletClient,
+	T: WalletInst<K>,
 	OwnerAPIGetHandler<T, K>: Handler,
 	OwnerAPIPostHandler<T, K>: Handler,
 	K: Keychain,
@@ -99,9 +101,9 @@ where
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
-pub fn foreign_listener<T, K>(wallet: T, addr: &str) -> Result<(), Error>
+pub fn foreign_listener<T: ?Sized, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
 where
-	T: WalletBackend<K> + WalletClient,
+	T: WalletInst<K>,
 	ForeignAPIHandler<T, K>: Handler,
 	K: Keychain,
 {
@@ -124,23 +126,23 @@ where
 }
 /// API Handler/Wrapper for owner functions
 
-pub struct OwnerAPIGetHandler<T, K>
+pub struct OwnerAPIGetHandler<T: ?Sized, K>
 where
-	T: WalletBackend<K>,
+	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
 	/// Wallet instance
-	pub wallet: Arc<Mutex<T>>,
+	pub wallet: Arc<Mutex<Box<T>>>,
 	phantom: PhantomData<K>,
 }
 
-impl<T, K> OwnerAPIGetHandler<T, K>
+impl<T: ?Sized, K> OwnerAPIGetHandler<T, K>
 where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
 	/// Create a new owner API handler for GET methods
-	pub fn new(wallet: Arc<Mutex<T>>) -> OwnerAPIGetHandler<T, K> {
+	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> OwnerAPIGetHandler<T, K> {
 		OwnerAPIGetHandler {
 			wallet,
 			phantom: PhantomData,
@@ -201,7 +203,7 @@ where
 	}
 }
 
-impl<T, K> Handler for OwnerAPIGetHandler<T, K>
+impl<T: ?Sized, K> Handler for OwnerAPIGetHandler<T, K>
 where
 	T: WalletBackend<K> + WalletClient + Send + Sync + 'static,
 	K: Keychain + 'static,
@@ -215,7 +217,8 @@ where
 			error!(LOGGER, "Error opening wallet: {:?}", e);
 			IronError::new(Fail::compat(e), status::BadRequest)
 		})?;
-		let mut api = APIOwner::new(&mut *wallet);
+		let mut w = wallet;
+		let mut api = APIOwner::new(&mut w);
 		let mut resp_json = self.handle_request(req, &mut api);
 		if !resp_json.is_err() {
 			resp_json
@@ -232,23 +235,23 @@ where
 }
 
 /// Handles all owner API POST requests
-pub struct OwnerAPIPostHandler<T, K>
+pub struct OwnerAPIPostHandler<T: ?Sized, K>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
 {
 	/// Wallet instance
-	pub wallet: Arc<Mutex<T>>,
+	pub wallet: Arc<Mutex<Box<T>>>,
 	phantom: PhantomData<K>,
 }
 
-impl<T, K> OwnerAPIPostHandler<T, K>
+impl<T: ?Sized, K> OwnerAPIPostHandler<T, K>
 where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
 	/// New POST handler
-	pub fn new(wallet: Arc<Mutex<T>>) -> OwnerAPIPostHandler<T, K> {
+	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> OwnerAPIPostHandler<T, K> {
 		OwnerAPIPostHandler {
 			wallet,
 			phantom: PhantomData,
@@ -320,7 +323,7 @@ where
 	}
 }
 
-impl<T, K> Handler for OwnerAPIPostHandler<T, K>
+impl<T: ?Sized, K> Handler for OwnerAPIPostHandler<T, K>
 where
 	T: WalletBackend<K> + WalletClient + Send + Sync + 'static,
 	K: Keychain + 'static,
@@ -329,12 +332,15 @@ where
 		// every request should open with stored credentials,
 		// do its thing and then de-init whatever secrets have been
 		// stored
+		{
+			let mut wallet = self.wallet.lock().unwrap();
+			wallet.open_with_credentials().map_err(|e| {
+				error!(LOGGER, "Error opening wallet: {:?}", e);
+				IronError::new(Fail::compat(e), status::BadRequest)
+			})?;
+		}
 		let mut wallet = self.wallet.lock().unwrap();
-		wallet.open_with_credentials().map_err(|e| {
-			error!(LOGGER, "Error opening wallet: {:?}", e);
-			IronError::new(Fail::compat(e), status::BadRequest)
-		})?;
-		let mut api = APIOwner::new(&mut *wallet);
+		let mut api = APIOwner::new(&mut wallet);
 		let resp = match self.handle_request(req, &mut api) {
 			Ok(r) => self.create_ok_response(&r),
 			Err(e) => {
@@ -367,23 +373,23 @@ impl Handler for OwnerAPIOptionsHandler where {
 }
 /// API Handler/Wrapper for foreign functions
 
-pub struct ForeignAPIHandler<T, K>
+pub struct ForeignAPIHandler<T: ?Sized, K>
 where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
 	/// Wallet instance
-	pub wallet: Arc<Mutex<T>>,
+	pub wallet: Arc<Mutex<Box<T>>>,
 	phantom: PhantomData<K>,
 }
 
-impl<T, K> ForeignAPIHandler<T, K>
+impl<T: ?Sized, K> ForeignAPIHandler<T, K>
 where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
 {
 	/// create a new api handler
-	pub fn new(wallet: Arc<Mutex<T>>) -> ForeignAPIHandler<T, K> {
+	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> ForeignAPIHandler<T, K> {
 		ForeignAPIHandler {
 			wallet,
 			phantom: PhantomData,
@@ -442,7 +448,7 @@ where
 		}
 	}
 }
-impl<T, K> Handler for ForeignAPIHandler<T, K>
+impl<T: ?Sized, K> Handler for ForeignAPIHandler<T, K>
 where
 	T: WalletBackend<K> + WalletClient + Send + Sync + 'static,
 	K: Keychain + 'static,
@@ -451,12 +457,15 @@ where
 		// every request should open with stored credentials,
 		// do its thing and then de-init whatever secrets have been
 		// stored
+		{
+			let mut wallet = self.wallet.lock().unwrap();
+			wallet.open_with_credentials().map_err(|e| {
+				error!(LOGGER, "Error opening wallet: {:?}", e);
+				IronError::new(Fail::compat(e), status::BadRequest)
+			})?;
+		}
 		let mut wallet = self.wallet.lock().unwrap();
-		wallet.open_with_credentials().map_err(|e| {
-			error!(LOGGER, "Error opening wallet: {:?}", e);
-			IronError::new(Fail::compat(e), status::BadRequest)
-		})?;
-		let mut api = APIForeign::new(&mut *wallet);
+		let mut api = APIForeign::new(&mut wallet);
 		let resp_json = self.handle_request(req, &mut api);
 		api.wallet
 			.close()

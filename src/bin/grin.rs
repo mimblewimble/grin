@@ -40,8 +40,8 @@ pub mod tui;
 
 use std::env::current_dir;
 use std::process::exit;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
@@ -51,10 +51,9 @@ use daemonize::Daemonize;
 use config::GlobalConfig;
 use core::core::amount_to_hr_string;
 use core::global;
-use keychain::ExtKeychain;
 use tui::ui;
 use util::{init_logger, LoggingConfig, LOGGER};
-use wallet::{libwallet, FileWallet};
+use wallet::{libwallet, wallet_db_exists, FileWallet, LMDBBackend, WalletConfig, WalletInst};
 
 // include build information
 pub mod built_info {
@@ -296,8 +295,11 @@ fn main() {
 			.about("basic wallet contents summary"))
 
 		.subcommand(SubCommand::with_name("init")
-			.about("Initialize a new wallet seed file."))
-
+			.about("Initialize a new wallet seed file.")
+			.arg(Arg::with_name("db")
+				.help("Use database backend. (Default: false)")
+				.short("d")
+				.long("db")))
 		.subcommand(SubCommand::with_name("restore")
 			.about("Attempt to restore wallet contents from the chain using seed and password. \
 				NOTE: Backup wallet.* and run `wallet listen` before running restore.")))
@@ -437,19 +439,14 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 	}
 
 	if let Some(true) = server_config.run_wallet_listener {
+		let use_db = server_config.use_db_wallet == Some(true);
 		let mut wallet_config = global_config.members.as_ref().unwrap().wallet.clone();
-		if let Err(_) = wallet::WalletSeed::from_file(&wallet_config) {
-			wallet::WalletSeed::init_file(&wallet_config)
-				.expect("Failed to create wallet seed file.");
-		};
+		init_wallet_seed(wallet_config.clone());
 
 		let _ = thread::Builder::new()
 			.name("wallet_listener".to_string())
 			.spawn(move || {
-				let wallet: FileWallet<keychain::ExtKeychain> =
-					FileWallet::new(wallet_config.clone(), "").unwrap_or_else(|e| {
-						panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
-					});
+				let wallet = instantiate_wallet(wallet_config.clone(), "", use_db);
 				wallet::controller::foreign_listener(wallet, &wallet_config.api_listen_addr())
 					.unwrap_or_else(|e| {
 						panic!(
@@ -460,19 +457,14 @@ fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalCon
 			});
 	}
 	if let Some(true) = server_config.run_wallet_owner_api {
+		let use_db = server_config.use_db_wallet == Some(true);
 		let mut wallet_config = global_config.members.unwrap().wallet;
-		if let Err(_) = wallet::WalletSeed::from_file(&wallet_config) {
-			wallet::WalletSeed::init_file(&wallet_config)
-				.expect("Failed to create wallet seed file.");
-		};
+		init_wallet_seed(wallet_config.clone());
 
 		let _ = thread::Builder::new()
 			.name("wallet_owner_listener".to_string())
 			.spawn(move || {
-				let wallet: FileWallet<ExtKeychain> = FileWallet::new(wallet_config.clone(), "")
-					.unwrap_or_else(|e| {
-						panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
-					});
+				let wallet = instantiate_wallet(wallet_config.clone(), "", use_db);
 				wallet::controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
 					panic!(
 						"Error creating wallet api listener: {:?} Config: {:?}",
@@ -551,6 +543,34 @@ fn client_command(client_args: &ArgMatches, global_config: GlobalConfig) {
 	}
 }
 
+fn init_wallet_seed(wallet_config: WalletConfig) {
+	if let Err(_) = wallet::WalletSeed::from_file(&wallet_config) {
+		wallet::WalletSeed::init_file(&wallet_config).expect("Failed to create wallet seed file.");
+	};
+}
+
+fn instantiate_wallet(
+	wallet_config: WalletConfig,
+	passphrase: &str,
+	use_db: bool,
+) -> Box<WalletInst<keychain::ExtKeychain>> {
+	if use_db {
+		let db_wallet = LMDBBackend::new(wallet_config.clone(), "").unwrap_or_else(|e| {
+			panic!(
+				"Error creating DB wallet: {} Config: {:?}",
+				e, wallet_config
+			);
+		});
+		info!(LOGGER, "Using LMDB Backend for wallet");
+		Box::new(db_wallet)
+	} else {
+		let file_wallet = FileWallet::new(wallet_config.clone(), passphrase)
+			.unwrap_or_else(|e| panic!("Error creating wallet: {} Config: {:?}", e, wallet_config));
+		info!(LOGGER, "Using File Backend for wallet");
+		Box::new(file_wallet)
+	}
+}
+
 fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 	// just get defaults from the global config
 	let mut wallet_config = global_config.members.unwrap().wallet;
@@ -574,8 +594,26 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 
 	// Derive the keychain based on seed from seed file and specified passphrase.
 	// Generate the initial wallet seed if we are running "wallet init".
-	if let ("init", Some(_)) = wallet_args.subcommand() {
+	if let ("init", Some(init_args)) = wallet_args.subcommand() {
+		let mut use_db = false;
+		if init_args.is_present("db") {
+			info!(LOGGER, "Use db");
+			use_db = true;
+		}
 		wallet::WalletSeed::init_file(&wallet_config).expect("Failed to init wallet seed file.");
+		info!(LOGGER, "Wallet seed file created");
+		if use_db {
+			let _: LMDBBackend<keychain::ExtKeychain> = LMDBBackend::new(wallet_config.clone(), "")
+				.unwrap_or_else(|e| {
+					panic!(
+						"Error creating DB wallet: {} Config: {:?}",
+						e, wallet_config
+					);
+				});
+			info!(LOGGER, "Wallet database backend created");
+		}
+		// give logging thread a moment to catch up
+		thread::sleep(Duration::from_millis(200));
 		// we are done here with creating the wallet, so just return
 		return;
 	}
@@ -584,12 +622,12 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 		.value_of("pass")
 		.expect("Failed to read passphrase.");
 
+	// use database if one exists, otherwise use file
+	let use_db = wallet_db_exists(wallet_config.clone());
+
 	// Handle listener startup commands
 	{
-		let wallet: FileWallet<keychain::ExtKeychain> =
-			FileWallet::new(wallet_config.clone(), passphrase).unwrap_or_else(|e| {
-				panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
-			});
+		let wallet = instantiate_wallet(wallet_config.clone(), passphrase, use_db);
 		match wallet_args.subcommand() {
 			("listen", Some(listen_args)) => {
 				if let Some(port) = listen_args.value_of("port") {
@@ -617,11 +655,8 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 
 	// Handle single-use (command line) owner commands
 	{
-		let mut wallet: FileWallet<keychain::ExtKeychain> =
-			FileWallet::new(wallet_config.clone(), passphrase).unwrap_or_else(|e| {
-				panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
-			});
-		let _res = wallet::controller::owner_single_use(&mut wallet, |api| {
+		let wallet = instantiate_wallet(wallet_config.clone(), passphrase, use_db);
+		let _res = wallet::controller::owner_single_use(wallet, |api| {
 			match wallet_args.subcommand() {
 				("send", Some(send_args)) => {
 					let amount = send_args

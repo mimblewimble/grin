@@ -15,7 +15,7 @@
 //! Selection of inputs for building transactions
 
 use keychain::{Identifier, Keychain};
-use libtx::{build, tx_fee, slate::Slate};
+use libtx::{build, slate::Slate, tx_fee};
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::{keys, sigcontext};
 use libwallet::types::*;
@@ -25,7 +25,7 @@ use libwallet::types::*;
 /// and saves the private wallet identifiers of our selected outputs
 /// into our transaction context
 
-pub fn build_send_tx_slate<T, K>(
+pub fn build_send_tx_slate<T: ?Sized, K>(
 	wallet: &mut T,
 	num_participants: usize,
 	amount: u64,
@@ -122,7 +122,7 @@ where
 /// returning the key of the fresh output and a closure
 /// that actually performs the addition of the output to the
 /// wallet
-pub fn build_recipient_output_with_slate<T, K>(
+pub fn build_recipient_output_with_slate<T: ?Sized, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
 ) -> Result<
@@ -182,7 +182,7 @@ where
 /// Builds a transaction to send to someone from the HD seed associated with the
 /// wallet and the amount to send. Handles reading through the wallet data file,
 /// selecting outputs to spend and building the change.
-pub fn select_send_tx<T, K>(
+pub fn select_send_tx<T: ?Sized, K>(
 	wallet: &mut T,
 	amount: u64,
 	current_height: u64,
@@ -287,7 +287,7 @@ where
 }
 
 /// Selects inputs and change for a transaction
-pub fn inputs_and_change<T, K>(
+pub fn inputs_and_change<T: ?Sized, K>(
 	coins: &Vec<OutputData>,
 	wallet: &mut T,
 	amount: u64,
@@ -313,10 +313,7 @@ where
 	for coin in coins {
 		let key_id = wallet.keychain().derive_key_id(coin.n_child)?;
 		if coin.is_coinbase {
-			parts.push(build::coinbase_input(
-				coin.value,
-				key_id,
-			));
+			parts.push(build::coinbase_input(coin.value, key_id));
 		} else {
 			parts.push(build::input(coin.value, key_id));
 		}

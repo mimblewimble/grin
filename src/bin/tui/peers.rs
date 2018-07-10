@@ -18,11 +18,11 @@ use std::cmp::Ordering;
 
 use servers::{PeerStats, ServerStats};
 
-use cursive::Cursive;
 use cursive::direction::Orientation;
 use cursive::traits::{Boxable, Identifiable};
 use cursive::view::View;
 use cursive::views::{BoxView, Dialog, LinearLayout, TextView};
+use cursive::Cursive;
 
 use tui::constants::{TABLE_PEER_STATUS, VIEW_PEER_SYNC};
 use tui::table::{TableView, TableViewItem};

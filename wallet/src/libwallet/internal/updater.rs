@@ -26,13 +26,17 @@ use libtx::reward;
 use libwallet;
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
-use libwallet::types::{BlockFees, CbData, OutputData, OutputStatus, WalletBackend, WalletClient,
-                       WalletInfo};
+use libwallet::types::{
+	BlockFees, CbData, OutputData, OutputStatus, WalletBackend, WalletClient, WalletInfo,
+};
 use util::secp::pedersen;
 use util::{self, LOGGER};
 
 /// Retrieve all of the outputs (doesn't attempt to update from node)
-pub fn retrieve_outputs<T, K>(wallet: &mut T, show_spent: bool) -> Result<Vec<OutputData>, Error>
+pub fn retrieve_outputs<T: ?Sized, K>(
+	wallet: &mut T,
+	show_spent: bool,
+) -> Result<Vec<OutputData>, Error>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
@@ -57,7 +61,7 @@ where
 
 /// Refreshes the outputs in a wallet with the latest information
 /// from a node
-pub fn refresh_outputs<T, K>(wallet: &mut T) -> Result<(), Error>
+pub fn refresh_outputs<T: ?Sized, K>(wallet: &mut T) -> Result<(), Error>
 where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
@@ -69,7 +73,7 @@ where
 
 /// build a local map of wallet outputs keyed by commit
 /// and a list of outputs we want to query the node for
-pub fn map_wallet_outputs<T, K>(
+pub fn map_wallet_outputs<T: ?Sized, K>(
 	wallet: &mut T,
 ) -> Result<HashMap<pedersen::Commitment, Identifier>, Error>
 where
@@ -90,7 +94,7 @@ where
 }
 
 /// Apply refreshed API output data to the wallet
-pub fn apply_api_outputs<T, K>(
+pub fn apply_api_outputs<T: ?Sized, K>(
 	wallet: &mut T,
 	wallet_outputs: &HashMap<pedersen::Commitment, Identifier>,
 	api_outputs: &HashMap<pedersen::Commitment, String>,
@@ -125,7 +129,7 @@ where
 
 /// Builds a single api query to retrieve the latest output data from the node.
 /// So we can refresh the local wallet outputs.
-fn refresh_output_state<T, K>(wallet: &mut T, height: u64) -> Result<(), Error>
+fn refresh_output_state<T: ?Sized, K>(wallet: &mut T, height: u64) -> Result<(), Error>
 where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
@@ -144,7 +148,7 @@ where
 	Ok(())
 }
 
-fn clean_old_unconfirmed<T, K>(wallet: &mut T, height: u64) -> Result<(), Error>
+fn clean_old_unconfirmed<T: ?Sized, K>(wallet: &mut T, height: u64) -> Result<(), Error>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
@@ -168,7 +172,7 @@ where
 
 /// Retrieve summary info about the wallet
 /// caller should refresh first if desired
-pub fn retrieve_info<T, K>(wallet: &mut T) -> Result<WalletInfo, Error>
+pub fn retrieve_info<T: ?Sized, K>(wallet: &mut T) -> Result<WalletInfo, Error>
 where
 	T: WalletBackend<K> + WalletClient,
 	K: Keychain,
@@ -209,7 +213,7 @@ where
 }
 
 /// Build a coinbase output and insert into wallet
-pub fn build_coinbase<T, K>(wallet: &mut T, block_fees: &BlockFees) -> Result<CbData, Error>
+pub fn build_coinbase<T: ?Sized, K>(wallet: &mut T, block_fees: &BlockFees) -> Result<CbData, Error>
 where
 	T: WalletBackend<K>,
 	K: Keychain,
@@ -234,7 +238,7 @@ where
 
 //TODO: Split up the output creation and the wallet insertion
 /// Build a coinbase output and the corresponding kernel
-pub fn receive_coinbase<T, K>(
+pub fn receive_coinbase<T: ?Sized, K>(
 	wallet: &mut T,
 	block_fees: &BlockFees,
 ) -> Result<(Output, TxKernel, BlockFees), Error>
