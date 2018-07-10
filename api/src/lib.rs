@@ -19,7 +19,6 @@ extern crate grin_pool as pool;
 extern crate grin_store as store;
 extern crate grin_util as util;
 
-
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;
@@ -45,5 +44,5 @@ mod rest;
 mod types;
 
 pub use handlers::start_rest_apis;
-pub use types::*;
 pub use rest::*;
+pub use types::*;

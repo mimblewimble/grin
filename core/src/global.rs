@@ -17,8 +17,11 @@
 //! should be used sparingly.
 
 use consensus::TargetError;
-use consensus::{BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_SIZESHIFT,
-                DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE};
+use consensus::{
+	BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_MIN_SIZESHIFT,
+	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
+	REFERENCE_SIZESHIFT,
+};
 use core::target::Difficulty;
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
@@ -30,13 +33,13 @@ use std::sync::RwLock;
 /// by users
 
 /// Automated testing sizeshift
-pub const AUTOMATED_TESTING_SIZESHIFT: u8 = 10;
+pub const AUTOMATED_TESTING_MIN_SIZESHIFT: u8 = 10;
 
 /// Automated testing proof size
 pub const AUTOMATED_TESTING_PROOF_SIZE: usize = 4;
 
 /// User testing sizeshift
-pub const USER_TESTING_SIZESHIFT: u8 = 16;
+pub const USER_TESTING_MIN_SIZESHIFT: u8 = 16;
 
 /// User testing proof size
 pub const USER_TESTING_PROOF_SIZE: usize = 42;
@@ -56,22 +59,24 @@ pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
 /// Testnet 2 initial block difficulty, high to see how it goes
 pub const TESTNET2_INITIAL_DIFFICULTY: u64 = 1000;
 
+/// Testnet 3 initial block difficulty, moderately high, taking into account
+/// a 30x Cuckoo adjustment factor
+pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
+
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum ChainTypes {
 	/// For CI testing
 	AutomatedTesting,
-
 	/// For User testing
 	UserTesting,
-
 	/// First test network
 	Testnet1,
-
 	/// Second test network
 	Testnet2,
-
+	/// Third test network
+	Testnet3,
 	/// Main production network
 	Mainnet,
 }
@@ -94,15 +99,27 @@ pub fn set_mining_mode(mode: ChainTypes) {
 	*param_ref = mode;
 }
 
-/// The sizeshift
-pub fn sizeshift() -> u8 {
+/// The minimum acceptable sizeshift
+pub fn min_sizeshift() -> u8 {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
-		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_SIZESHIFT,
-		ChainTypes::UserTesting => USER_TESTING_SIZESHIFT,
-		ChainTypes::Testnet1 => USER_TESTING_SIZESHIFT,
-		ChainTypes::Testnet2 => DEFAULT_SIZESHIFT,
-		ChainTypes::Mainnet => DEFAULT_SIZESHIFT,
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_SIZESHIFT,
+		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
+		ChainTypes::Testnet1 => USER_TESTING_MIN_SIZESHIFT,
+		_ => DEFAULT_MIN_SIZESHIFT,
+	}
+}
+
+/// Reference sizeshift used to compute factor on higher Cuckoo graph sizes,
+/// while the min_sizeshift can be changed on a soft fork, changing
+/// ref_sizeshift is a hard fork.
+pub fn ref_sizeshift() -> u8 {
+	let param_ref = CHAIN_TYPE.read().unwrap();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_SIZESHIFT,
+		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
+		ChainTypes::Testnet1 => USER_TESTING_MIN_SIZESHIFT,
+		_ => REFERENCE_SIZESHIFT,
 	}
 }
 
@@ -112,9 +129,7 @@ pub fn proofsize() -> usize {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
 		ChainTypes::UserTesting => USER_TESTING_PROOF_SIZE,
-		ChainTypes::Testnet1 => PROOFSIZE,
-		ChainTypes::Testnet2 => PROOFSIZE,
-		ChainTypes::Mainnet => PROOFSIZE,
+		_ => PROOFSIZE,
 	}
 }
 
@@ -124,9 +139,7 @@ pub fn coinbase_maturity() -> u64 {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
 		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
-		ChainTypes::Testnet1 => COINBASE_MATURITY,
-		ChainTypes::Testnet2 => COINBASE_MATURITY,
-		ChainTypes::Mainnet => COINBASE_MATURITY,
+		_ => COINBASE_MATURITY,
 	}
 }
 
@@ -138,6 +151,7 @@ pub fn initial_block_difficulty() -> u64 {
 		ChainTypes::UserTesting => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet1 => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet2 => TESTNET2_INITIAL_DIFFICULTY,
+		ChainTypes::Testnet3 => TESTNET3_INITIAL_DIFFICULTY,
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
 	}
 }
@@ -148,9 +162,7 @@ pub fn cut_through_horizon() -> u32 {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => TESTING_CUT_THROUGH_HORIZON,
 		ChainTypes::UserTesting => TESTING_CUT_THROUGH_HORIZON,
-		ChainTypes::Testnet1 => CUT_THROUGH_HORIZON,
-		ChainTypes::Testnet2 => CUT_THROUGH_HORIZON,
-		ChainTypes::Mainnet => CUT_THROUGH_HORIZON,
+		_ => CUT_THROUGH_HORIZON,
 	}
 }
 
@@ -169,7 +181,9 @@ pub fn is_user_testing_mode() -> bool {
 /// Are we in production mode (a live public network)?
 pub fn is_production_mode() -> bool {
 	let param_ref = CHAIN_TYPE.read().unwrap();
-	ChainTypes::Testnet1 == *param_ref || ChainTypes::Testnet2 == *param_ref
+	ChainTypes::Testnet1 == *param_ref
+		|| ChainTypes::Testnet2 == *param_ref
+		|| ChainTypes::Testnet3 == *param_ref
 		|| ChainTypes::Mainnet == *param_ref
 }
 
@@ -222,7 +236,6 @@ where
 				live_intervals[i].0 = live_intervals[i].0 - live_intervals[i - 1].0;
 			}
 		}
-		//
 		// Remove genesis "interval"
 		if live_intervals.len() > 1 {
 			live_intervals.remove(0);
@@ -232,14 +245,11 @@ where
 		}
 		let mut interval_index = live_intervals.len() - 1;
 		let mut last_ts = last_n.first().as_ref().unwrap().as_ref().unwrap().0;
-		// fill in simulated blocks, repeating whatever pattern we've obtained from
-		// real data
-		// if we have, say, 15 blocks so far with intervals of I1..I15, then
-		// the 71-15=56 pre genesis blocks will have
-		// intervals/difficulties I1..I15 I1..I15 I1..I15 I1..I11
+		let last_diff = live_intervals[live_intervals.len()-1].1;
+		// fill in simulated blocks with values from the previous real block
+
 		for _ in 0..block_count_difference {
-			last_ts = last_ts.saturating_sub(live_intervals[interval_index].0);
-			let last_diff = &live_intervals[interval_index].1;
+			last_ts = last_ts.saturating_sub(live_intervals[live_intervals.len()-1].0);
 			last_n.insert(0, Ok((last_ts, last_diff.clone())));
 			interval_index = match interval_index {
 				0 => live_intervals.len() - 1,

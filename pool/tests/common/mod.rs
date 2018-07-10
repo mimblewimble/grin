@@ -19,6 +19,7 @@ extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_pool as pool;
+extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
@@ -30,30 +31,31 @@ use std::sync::{Arc, RwLock};
 
 use core::core::{BlockHeader, Transaction};
 
-use chain::store::ChainKVStore;
+use chain::store::ChainStore;
 use chain::txhashset;
 use chain::txhashset::TxHashSet;
 use core::core::hash::Hashed;
-use core::core::pmmr::MerkleProof;
+use core::core::merkle_proof::MerkleProof;
 use pool::*;
 
 use keychain::Keychain;
 use wallet::libtx;
 
-use pool::types::*;
 use pool::TransactionPool;
+use pool::types::*;
 
 #[derive(Clone)]
 pub struct ChainAdapter {
 	pub txhashset: Arc<RwLock<TxHashSet>>,
-	pub store: Arc<ChainKVStore>,
+	pub store: Arc<ChainStore>,
 }
 
 impl ChainAdapter {
 	pub fn init(db_root: String) -> Result<ChainAdapter, String> {
 		let target_dir = format!("target/{}", db_root);
-		let chain_store = ChainKVStore::new(target_dir.clone())
-			.map_err(|e| format!("failed to init chain_store, {}", e))?;
+		let db_env = Arc::new(store::new_env(target_dir.clone()));
+		let chain_store =
+			ChainStore::new(db_env).map_err(|e| format!("failed to init chain_store, {:?}", e))?;
 		let store = Arc::new(chain_store);
 		let txhashset = TxHashSet::open(target_dir.clone(), store.clone(), None)
 			.map_err(|e| format!("failed to init txhashset, {}", e))?;
@@ -124,8 +126,6 @@ where
 		let key_id = keychain.derive_key_id(header.height as u32).unwrap();
 		tx_elements.push(libtx::build::coinbase_input(
 			coinbase_reward,
-			header.hash(),
-			MerkleProof::default(),
 			key_id,
 		));
 	}

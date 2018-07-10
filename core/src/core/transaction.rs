@@ -17,20 +17,19 @@
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::collections::HashSet;
-use std::io::Cursor;
 use std::{error, fmt};
 
-use util::secp::pedersen::{Commitment, ProofMessage, RangeProof};
+use util::secp::pedersen::{Commitment, RangeProof};
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
 
 use consensus::{self, VerifySortOrder};
-use core::hash::{Hash, Hashed, ZERO_HASH};
-use core::pmmr::MerkleProof;
-use core::{committed, global, BlockHeader, Committed};
+use core::hash::Hashed;
+use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
-use ser::{self, read_and_verify_sorted, ser_vec, PMMRable, Readable, Reader, Writeable,
-          WriteableSorted, Writer};
+use ser::{
+	self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted, Writer,
+};
 use util;
 
 bitflags! {
@@ -65,9 +64,6 @@ pub enum Error {
 	RangeProof,
 	/// Error originating from an invalid Merkle proof
 	MerkleProof,
-	/// Error originating from an input attempting to spend an immature
-	/// coinbase output
-	ImmatureCoinbase,
 	/// Returns if the value hidden within the a RangeProof message isn't
 	/// repeated 3 times, indicating it's incorrect
 	InvalidProofMessage,
@@ -255,7 +251,9 @@ pub struct Transaction {
 /// PartialEq
 impl PartialEq for Transaction {
 	fn eq(&self, tx: &Transaction) -> bool {
-		self.inputs == tx.inputs && self.outputs == tx.outputs && self.kernels == tx.kernels
+		self.inputs == tx.inputs
+			&& self.outputs == tx.outputs
+			&& self.kernels == tx.kernels
 			&& self.offset == tx.offset
 	}
 }
@@ -295,7 +293,8 @@ impl Readable for Transaction {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
-		if input_len > consensus::MAX_TX_INPUTS || output_len > consensus::MAX_TX_OUTPUTS
+		if input_len > consensus::MAX_TX_INPUTS
+			|| output_len > consensus::MAX_TX_OUTPUTS
 			|| kernel_len > consensus::MAX_TX_KERNELS
 		{
 			return Err(ser::Error::CorruptedData);
@@ -432,7 +431,7 @@ impl Transaction {
 		}
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
-		self.verify_kernel_sums(self.overage(), self.offset, None, None)?;
+		self.verify_kernel_sums(self.overage(), self.offset)?;
 		self.verify_rangeproofs()?;
 		self.verify_kernel_signatures()?;
 
@@ -441,25 +440,12 @@ impl Transaction {
 
 	/// Calculate transaction weight
 	pub fn tx_weight(&self) -> u32 {
-		Transaction::weight(
-			self.inputs.len(),
-			self.outputs.len(),
-			self.input_proofs_count(),
-		)
-	}
-
-	/// Collect input's Merkle proofs
-	pub fn input_proofs_count(&self) -> usize {
-		self.inputs
-			.iter()
-			.filter(|i| i.merkle_proof.is_some())
-			.count()
+		Transaction::weight(self.inputs.len(), self.outputs.len())
 	}
 
 	/// Calculate transaction weight from transaction details
-	pub fn weight(input_len: usize, output_len: usize, proof_len: usize) -> u32 {
-		let mut tx_weight =
-			-1 * (input_len as i32) + (4 * output_len as i32) + (proof_len as i32) + 1;
+	pub fn weight(input_len: usize, output_len: usize) -> u32 {
+		let mut tx_weight = -1 * (input_len as i32) + (4 * output_len as i32) + 1;
 		if tx_weight < 1 {
 			tx_weight = 1;
 		}
@@ -559,7 +545,7 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 
 	// We need to check sums here as aggregation/cut-through
 	// may have created an invalid tx.
-	tx.verify_kernel_sums(tx.overage(), tx.offset, None, None)?;
+	tx.verify_kernel_sums(tx.overage(), tx.offset)?;
 
 	Ok(tx)
 }
@@ -639,13 +625,6 @@ pub struct Input {
 	pub features: OutputFeatures,
 	/// The commit referencing the output being spent.
 	pub commit: Commitment,
-	/// The hash of the block the output originated from.
-	/// Currently we only care about this for coinbase outputs.
-	pub block_hash: Option<Hash>,
-	/// The Merkle Proof that shows the output being spent by this input
-	/// existed and was unspent at the time of this block (proof of inclusion
-	/// in output_root)
-	pub merkle_proof: Option<MerkleProof>,
 }
 
 hashable_ord!(Input);
@@ -666,17 +645,6 @@ impl Writeable for Input {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
 		self.commit.write(writer)?;
-
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-				let block_hash = &self.block_hash.unwrap_or(ZERO_HASH);
-				let merkle_proof = self.merkle_proof();
-
-				writer.write_fixed_bytes(block_hash)?;
-				merkle_proof.write(writer)?;
-			}
-		}
-
 		Ok(())
 	}
 }
@@ -690,13 +658,7 @@ impl Readable for Input {
 
 		let commit = Commitment::read(reader)?;
 
-		if features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			let block_hash = Some(Hash::read(reader)?);
-			let merkle_proof = Some(MerkleProof::read(reader)?);
-			Ok(Input::new(features, commit, block_hash, merkle_proof))
-		} else {
-			Ok(Input::new(features, commit, None, None))
-		}
+		Ok(Input::new(features, commit))
 	}
 }
 
@@ -707,18 +669,8 @@ impl Readable for Input {
 impl Input {
 	/// Build a new input from the data required to identify and verify an
 	/// output being spent.
-	pub fn new(
-		features: OutputFeatures,
-		commit: Commitment,
-		block_hash: Option<Hash>,
-		merkle_proof: Option<MerkleProof>,
-	) -> Input {
-		Input {
-			features,
-			commit,
-			block_hash,
-			merkle_proof,
-		}
+	pub fn new(features: OutputFeatures, commit: Commitment) -> Input {
+		Input { features, commit }
 	}
 
 	/// The input commitment which _partially_ identifies the output being
@@ -727,79 +679,6 @@ impl Input {
 	/// calculate lock_height for coinbase outputs).
 	pub fn commitment(&self) -> Commitment {
 		self.commit
-	}
-
-	/// Convenience function to return the (optional) block_hash for this input.
-	/// Will return the default hash if we do not have one.
-	pub fn block_hash(&self) -> Hash {
-		self.block_hash.unwrap_or_else(Hash::default)
-	}
-
-	/// Convenience function to return the (optional) merkle_proof for this
-	/// input. Will return the "empty" Merkle proof if we do not have one.
-	/// We currently only care about the Merkle proof for inputs spending
-	/// coinbase outputs.
-	pub fn merkle_proof(&self) -> MerkleProof {
-		let merkle_proof = self.merkle_proof.clone();
-		merkle_proof.unwrap_or_else(MerkleProof::empty)
-	}
-
-	/// Verify the maturity of an output being spent by an input.
-	/// Only relevant for spending coinbase outputs currently (locked for 1,000
-	/// confirmations).
-	///
-	/// The proof associates the output with the root by its hash (and pos) in
-	/// the MMR. The proof shows the output existed and was unspent at the
-	/// time the output_root was built. The root associates the proof with a
-	/// specific block header with that output_root. So the proof shows the
-	/// output was unspent at the time of the block and is at least as old as
-	/// that block (may be older).
-	///
-	/// We can verify maturity of the output being spent by -
-	///
-	/// * verifying the Merkle Proof produces the correct root for the given
-	/// hash (from MMR) * verifying the root matches the output_root in the
-	/// block_header * verifying the hash matches the node hash in the Merkle
-	/// Proof * finally verify maturity rules based on height of the block
-	/// header
-	///
-	pub fn verify_maturity(
-		&self,
-		hash: Hash,
-		header: &BlockHeader,
-		height: u64,
-	) -> Result<(), Error> {
-		if self.features.contains(OutputFeatures::COINBASE_OUTPUT) {
-			let block_hash = self.block_hash();
-			let merkle_proof = self.merkle_proof();
-
-			// Check we are dealing with the correct block header
-			if block_hash != header.hash() {
-				return Err(Error::MerkleProof);
-			}
-
-			// Is our Merkle Proof valid? Does node hash up consistently to the root?
-			if !merkle_proof.verify() {
-				return Err(Error::MerkleProof);
-			}
-
-			// Is the root the correct root for the given block header?
-			if merkle_proof.root != header.output_root {
-				return Err(Error::MerkleProof);
-			}
-
-			// Does the hash from the MMR actually match the one in the Merkle Proof?
-			if merkle_proof.node != hash {
-				return Err(Error::MerkleProof);
-			}
-
-			// Finally has the output matured sufficiently now we know the block?
-			let lock_height = header.height + global::coinbase_maturity();
-			if lock_height > height {
-				return Err(Error::ImmatureCoinbase);
-			}
-		}
-		Ok(())
 	}
 }
 
@@ -978,117 +857,10 @@ impl Readable for OutputIdentifier {
 	}
 }
 
-/// A structure which contains fields that are to be committed to within
-/// an Output's range (bullet) proof.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct ProofMessageElements {
-	/// The amount, stored to allow for wallet reconstruction as
-	/// rewinding isn't supported in bulletproofs just yet
-	/// This is going to be written 3 times, to facilitate checking
-	/// values on rewind
-	/// Note that rewinding with only the nonce will give you back
-	/// the first 32 bytes of the message. To get the second
-	/// 32 bytes, you need to provide the correct blinding factor as well
-	value: u64,
-	/// another copy of the value, to check on rewind
-	value_copy_1: u64,
-	/// another copy of the value
-	value_copy_2: u64,
-	/// the first 8 bytes of the blinding factor, used to avoid having to grind
-	/// through a proof each time you want to check against key possibilities
-	bf_first_8: Vec<u8>,
-	/// unused portion of message, used to test whether we have both nonce
-	/// and blinding correct
-	zeroes: Vec<u8>,
-}
-
-impl Writeable for ProofMessageElements {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u64(self.value)?;
-		writer.write_u64(self.value_copy_1)?;
-		writer.write_u64(self.value_copy_2)?;
-		writer.write_fixed_bytes(&self.bf_first_8)?;
-		for i in 0..32 {
-			let _ = writer.write_u8(self.zeroes[i]);
-		}
-		Ok(())
-	}
-}
-
-impl Readable for ProofMessageElements {
-	fn read(reader: &mut Reader) -> Result<ProofMessageElements, ser::Error> {
-		// if the value isn't repeated 3 times, it's most likely not the value,
-		// so reject
-		Ok(ProofMessageElements {
-			value: reader.read_u64()?,
-			value_copy_1: reader.read_u64()?,
-			value_copy_2: reader.read_u64()?,
-			bf_first_8: reader.read_fixed_bytes(8)?,
-			zeroes: reader.read_fixed_bytes(32)?,
-		})
-	}
-}
-
-impl ProofMessageElements {
-	/// Create a new proof message
-	pub fn new(value: u64, blinding: &keychain::Identifier) -> ProofMessageElements {
-		ProofMessageElements {
-			value: value,
-			value_copy_1: value,
-			value_copy_2: value,
-			bf_first_8: blinding.to_bytes()[0..8].to_vec(),
-			zeroes: [0u8; 32].to_vec(),
-		}
-	}
-
-	/// Return the value if it's valid, an error otherwise
-	pub fn value(&self) -> Result<u64, Error> {
-		if self.value == self.value_copy_1 && self.value == self.value_copy_2 {
-			Ok(self.value)
-		} else {
-			Err(Error::InvalidProofMessage)
-		}
-	}
-
-	/// Compare given identifier with first 8 bytes of what's stored
-	pub fn compare_bf_first_8(&self, in_id: &keychain::Identifier) -> bool {
-		let in_id_vec = in_id.to_bytes()[0..8].to_vec();
-		for i in 0..8 {
-			if in_id_vec[i] != self.bf_first_8[i] {
-				return false;
-			}
-		}
-		true
-	}
-
-	/// Whether our remainder is zero (as it should be if the BF and nonce used
-	/// to unwind are correct
-	pub fn zeroes_correct(&self) -> bool {
-		for i in 0..self.zeroes.len() {
-			if self.zeroes[i] != 0 {
-				return false;
-			}
-		}
-		true
-	}
-
-	/// Serialize and return a ProofMessage
-	pub fn to_proof_message(&self) -> ProofMessage {
-		ProofMessage::from_bytes(&ser_vec(self).unwrap())
-	}
-
-	/// Deserialize and return the message elements
-	pub fn from_proof_message(
-		proof_message: &ProofMessage,
-	) -> Result<ProofMessageElements, ser::Error> {
-		let mut c = Cursor::new(proof_message.as_bytes());
-		ser::deserialize::<ProofMessageElements>(&mut c)
-	}
-}
-
 #[cfg(test)]
 mod test {
 	use super::*;
+	use core::hash::Hash;
 	use core::id::{ShortId, ShortIdentifiable};
 	use keychain::{ExtKeychain, Keychain};
 	use util::secp;
@@ -1160,8 +932,6 @@ mod test {
 		let input = Input {
 			features: OutputFeatures::DEFAULT_OUTPUT,
 			commit: commit,
-			block_hash: None,
-			merkle_proof: None,
 		};
 
 		let block_hash = Hash::from_hex(
@@ -1178,8 +948,6 @@ mod test {
 		let input = Input {
 			features: OutputFeatures::COINBASE_OUTPUT,
 			commit: commit,
-			block_hash: None,
-			merkle_proof: None,
 		};
 
 		let short_id = input.short_id(&block_hash, nonce);

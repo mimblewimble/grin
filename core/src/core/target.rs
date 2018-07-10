@@ -25,6 +25,7 @@ use std::ops::{Add, Div, Mul, Sub};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::cmp::max;
 
+use core::global;
 use core::hash::Hash;
 use ser::{self, Readable, Reader, Writeable, Writer};
 
@@ -53,12 +54,16 @@ impl Difficulty {
 	}
 
 	/// Computes the difficulty from a hash. Divides the maximum target by the
-	/// provided hash.
-	pub fn from_hash(h: &Hash) -> Difficulty {
+	/// provided hash and applies the Cuckoo sizeshift adjustment factor (see
+	/// https://lists.launchpad.net/mimblewimble/msg00494.html).
+	pub fn from_hash_and_shift(h: &Hash, shift: u8) -> Difficulty {
 		let max_target = <u64>::max_value();
 		let num = h.to_u64();
+		// Adjust the difficulty based on a 2^(N-M)*(N-1) factor, with M being
+		// the minimum sizeshift and N the provided sizeshift
+		let adjust_factor = (1 << (shift - global::ref_sizeshift()) as u64) * (shift as u64 - 1);
 		Difficulty {
-			num: max_target / max(num, 1),
+			num: (max_target / max(num, adjust_factor)) * adjust_factor,
 		}
 	}
 

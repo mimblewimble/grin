@@ -72,6 +72,10 @@ pub enum ErrorKind {
 	#[fail(display = "Transaction error")]
 	Transaction(transaction::Error),
 
+	/// API Error
+	#[fail(display = "Client Callback Error: {}", _0)]
+	ClientCallback(&'static str),
+
 	/// Secp Error
 	#[fail(display = "Secp error")]
 	Secp,
@@ -79,6 +83,10 @@ pub enum ErrorKind {
 	/// Callback implementation error conversion
 	#[fail(display = "Trait Implementation error")]
 	CallbackImpl(&'static str),
+
+	/// Wallet backend error
+	#[fail(display = "Wallet store error")]
+	Backend(String),
 
 	/// Callback implementation error conversion
 	#[fail(display = "Restore Error")]

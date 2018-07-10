@@ -20,8 +20,7 @@
 use std::cmp;
 use std::collections::HashSet;
 
-use blake2;
-
+use core::BlockHeader;
 use core::Proof;
 use pow::siphash::siphash24;
 
@@ -54,16 +53,14 @@ impl Cuckoo {
 	/// Initializes a new Cuckoo Cycle setup, using the provided byte array to
 	/// generate a seed. In practice for PoW applications the byte array is a
 	/// serialized block header.
-	pub fn new(header: &[u8], sizeshift: u8) -> Cuckoo {
+	pub fn from_hash(header_hash: &[u8], sizeshift: u8) -> Cuckoo {
 		let size = 1 << sizeshift;
-		let hashed = blake2::blake2b::blake2b(32, &[], header);
-		let hashed = hashed.as_bytes();
 		Cuckoo {
 			v: [
-				u8_to_u64(hashed, 0),
-				u8_to_u64(hashed, 8),
-				u8_to_u64(hashed, 16),
-				u8_to_u64(hashed, 24),
+				u8_to_u64(header_hash, 0),
+				u8_to_u64(header_hash, 8),
+				u8_to_u64(header_hash, 16),
+				u8_to_u64(header_hash, 24),
 			],
 			size: size,
 			mask: (1 << sizeshift) / 2 - 1,
@@ -90,9 +87,9 @@ impl Cuckoo {
 	/// Assuming increasing nonces all smaller than easiness, verifies the
 	/// nonces form a cycle in a Cuckoo graph. Each nonce generates an edge, we
 	/// build the nodes on both side of that edge and count the connections.
-	pub fn verify(&self, proof: Proof, ease: u64) -> bool {
+	pub fn verify(&self, proof: &Proof, ease: u64) -> bool {
 		let easiness = ease * (self.size as u64) / 100;
-		let nonces = proof.to_u64s();
+		let nonces = &proof.nonces;
 		let mut us = vec![0; proof.proof_size()];
 		let mut vs = vec![0; proof.proof_size()];
 		for n in 0..proof.proof_size() {
@@ -149,6 +146,7 @@ pub struct Miner {
 	proof_size: usize,
 	cuckoo: Cuckoo,
 	graph: Vec<u32>,
+	sizeshift: u8,
 }
 
 /// What type of cycle we have found?
@@ -162,17 +160,23 @@ enum CycleSol {
 }
 
 impl Miner {
-	/// Creates a new miner
-	pub fn new(header: &[u8], ease: u32, proof_size: usize, sizeshift: u8) -> Miner {
-		let cuckoo = Cuckoo::new(header, sizeshift);
+	/// Creates a new miner for the provided block header
+	pub fn new(header: &BlockHeader, ease: u32, proof_size: usize, sizeshift: u8) -> Miner {
+		Miner::from_hash(header.pre_pow_hash().as_ref(), ease, proof_size, sizeshift)
+	}
+
+	/// Creates a new miner directly from a hash
+	pub fn from_hash(header_hash: &[u8], ease: u32, proof_size: usize, sizeshift: u8) -> Miner {
+		let cuckoo = Cuckoo::from_hash(header_hash, sizeshift);
 		let size = 1 << sizeshift;
 		let graph = vec![0; size + 1];
 		let easiness = (ease as u64) * (size as u64) / 100;
 		Miner {
-			easiness: easiness,
-			cuckoo: cuckoo,
-			graph: graph,
-			proof_size: proof_size,
+			easiness,
+			cuckoo,
+			graph,
+			proof_size,
+			sizeshift,
 		}
 	}
 
@@ -194,7 +198,9 @@ impl Miner {
 			let sol = self.find_sol(nu, &us, nv, &vs);
 			match sol {
 				CycleSol::ValidProof(res) => {
-					return Ok(Proof::new(res.to_vec()));
+					let mut proof = Proof::new(map_vec!(res.to_vec(), |&n| n as u64));
+					proof.cuckoo_sizeshift = self.sizeshift;
+					return Ok(proof);
 				}
 				CycleSol::InvalidCycle(_) => continue,
 				CycleSol::NoCycle => {
@@ -298,31 +304,37 @@ impl Miner {
 
 /// Utility to transform a 8 bytes of a byte array into a u64.
 fn u8_to_u64(p: &[u8], i: usize) -> u64 {
-	(p[i] as u64) | (p[i + 1] as u64) << 8 | (p[i + 2] as u64) << 16 | (p[i + 3] as u64) << 24
-		| (p[i + 4] as u64) << 32 | (p[i + 5] as u64) << 40 | (p[i + 6] as u64) << 48
+	(p[i] as u64)
+		| (p[i + 1] as u64) << 8
+		| (p[i + 2] as u64) << 16
+		| (p[i + 3] as u64) << 24
+		| (p[i + 4] as u64) << 32
+		| (p[i + 5] as u64) << 40
+		| (p[i + 6] as u64) << 48
 		| (p[i + 7] as u64) << 56
 }
 
 #[cfg(test)]
 mod test {
 	use super::*;
+	use blake2;
 	use core::Proof;
 
-	static V1: [u32; 42] = [
+	static V1: [u64; 42] = [
 		0x3bbd, 0x4e96, 0x1013b, 0x1172b, 0x1371b, 0x13e6a, 0x1aaa6, 0x1b575, 0x1e237, 0x1ee88,
 		0x22f94, 0x24223, 0x25b4f, 0x2e9f3, 0x33b49, 0x34063, 0x3454a, 0x3c081, 0x3d08e, 0x3d863,
 		0x4285a, 0x42f22, 0x43122, 0x4b853, 0x4cd0c, 0x4f280, 0x557d5, 0x562cf, 0x58e59, 0x59a62,
 		0x5b568, 0x644b9, 0x657e9, 0x66337, 0x6821c, 0x7866f, 0x7e14b, 0x7ec7c, 0x7eed7, 0x80643,
 		0x8628c, 0x8949e,
 	];
-	static V2: [u32; 42] = [
+	static V2: [u64; 42] = [
 		0x5e3a, 0x8a8b, 0x103d8, 0x1374b, 0x14780, 0x16110, 0x1b571, 0x1c351, 0x1c826, 0x28228,
 		0x2909f, 0x29516, 0x2c1c4, 0x334eb, 0x34cdd, 0x38a2c, 0x3ad23, 0x45ac5, 0x46afe, 0x50f43,
 		0x51ed6, 0x52ddd, 0x54a82, 0x5a46b, 0x5dbdb, 0x60f6f, 0x60fcd, 0x61c78, 0x63899, 0x64dab,
 		0x6affc, 0x6b569, 0x72639, 0x73987, 0x78806, 0x7b98e, 0x7c7d7, 0x7ddd4, 0x7fa88, 0x8277c,
 		0x832d9, 0x8ba6f,
 	];
-	static V3: [u32; 42] = [
+	static V3: [u64; 42] = [
 		0x308b, 0x9004, 0x91fc, 0x983e, 0x9d67, 0xa293, 0xb4cb, 0xb6c8, 0xccc8, 0xdddc, 0xf04d,
 		0x1372f, 0x16ec9, 0x17b61, 0x17d03, 0x1e3bc, 0x1fb0f, 0x29e6e, 0x2a2ca, 0x2a719, 0x3a078,
 		0x3b7cc, 0x3c71d, 0x40daa, 0x43e17, 0x46adc, 0x4b359, 0x4c3aa, 0x4ce92, 0x4d06e, 0x51140,
@@ -330,7 +342,7 @@ mod test {
 		0x7f400,
 	];
 	// cuckoo28 at 50% edges of letter 'u'
-	static V4: [u32; 42] = [
+	static V4: [u64; 42] = [
 		0xf7243, 0x11f130, 0x193812, 0x23b565, 0x279ac3, 0x69b270, 0xe0778f, 0xef51fc, 0x10bf6e8,
 		0x13ccf7d, 0x1551177, 0x1b6cfd2, 0x1f872c3, 0x2075681, 0x2e23ccc, 0x2e4c0aa, 0x2f607f1,
 		0x3007eeb, 0x3407e9a, 0x35423f9, 0x39e48bf, 0x45e3bf6, 0x46aa484, 0x47c0fe1, 0x4b1d5a6,
@@ -339,26 +351,51 @@ mod test {
 		0x701f37b,
 	];
 
+	fn blake2(data: &[u8]) -> blake2::blake2b::Blake2bResult {
+		blake2::blake2b::blake2b(32, &[], data)
+	}
+
 	/// Find a 42-cycle on Cuckoo20 at 75% easiness and verify against a few
 	/// known cycle proofs
 	/// generated by other implementations.
 	#[test]
 	fn mine20_vectors() {
-		let nonces1 = Miner::new(&[49], 75, 42, 20).mine().unwrap();
-		assert_eq!(Proof::new(V1.to_vec()), nonces1);
+		let nonces1 = Miner::from_hash(blake2(&[49]).as_bytes(), 75, 42, 20)
+			.mine()
+			.unwrap();
+		let mut proof = Proof::new(V1.to_vec());
+		proof.cuckoo_sizeshift = 20;
+		assert_eq!(proof, nonces1);
 
-		let nonces2 = Miner::new(&[50], 70, 42, 20).mine().unwrap();
-		assert_eq!(Proof::new(V2.to_vec()), nonces2);
+		let nonces2 = Miner::from_hash(blake2(&[50]).as_bytes(), 70, 42, 20)
+			.mine()
+			.unwrap();
+		let mut proof = Proof::new(V2.to_vec());
+		proof.cuckoo_sizeshift = 20;
+		assert_eq!(proof, nonces2);
 
-		let nonces3 = Miner::new(&[51], 70, 42, 20).mine().unwrap();
-		assert_eq!(Proof::new(V3.to_vec()), nonces3);
+		let nonces3 = Miner::from_hash(blake2(&[51]).as_bytes(), 70, 42, 20)
+			.mine()
+			.unwrap();
+		let mut proof = Proof::new(V3.to_vec());
+		proof.cuckoo_sizeshift = 20;
+		assert_eq!(proof, nonces3);
 	}
 
 	#[test]
 	fn validate20_vectors() {
-		assert!(Cuckoo::new(&[49], 20).verify(Proof::new(V1.to_vec().clone()), 75));
-		assert!(Cuckoo::new(&[50], 20).verify(Proof::new(V2.to_vec().clone()), 70));
-		assert!(Cuckoo::new(&[51], 20).verify(Proof::new(V3.to_vec().clone()), 70));
+		assert!(
+			Cuckoo::from_hash(blake2(&[49]).as_bytes(), 20)
+				.verify(&Proof::new(V1.to_vec().clone()), 75)
+		);
+		assert!(
+			Cuckoo::from_hash(blake2(&[50]).as_bytes(), 20)
+				.verify(&Proof::new(V2.to_vec().clone()), 70)
+		);
+		assert!(
+			Cuckoo::from_hash(blake2(&[51]).as_bytes(), 20)
+				.verify(&Proof::new(V3.to_vec().clone()), 70)
+		);
 	}
 
 	/// Just going to disable this for now, as it's painful to try and get a
@@ -368,19 +405,24 @@ mod test {
 	fn validate28_vectors() {
 		let mut test_header = [0; 32];
 		test_header[0] = 24;
-		assert!(Cuckoo::new(&test_header, 28).verify(Proof::new(V4.to_vec().clone()), 50));
+		assert!(Cuckoo::from_hash(&test_header, 28).verify(&Proof::new(V4.to_vec().clone()), 50));
 	}
 
 	#[test]
 	fn validate_fail() {
 		// edge checks
-		assert!(!Cuckoo::new(&[49], 20).verify(Proof::new(vec![0; 42]), 75));
-		assert!(!Cuckoo::new(&[49], 20).verify(Proof::new(vec![0xffff; 42]), 75));
+		assert!(
+			!Cuckoo::from_hash(blake2(&[49]).as_bytes(), 20).verify(&Proof::new(vec![0; 42]), 75)
+		);
+		assert!(!Cuckoo::from_hash(blake2(&[49]).as_bytes(), 20)
+			.verify(&Proof::new(vec![0xffff; 42]), 75));
 		// wrong data for proof
-		assert!(!Cuckoo::new(&[50], 20).verify(Proof::new(V1.to_vec().clone()), 75));
+		assert!(!Cuckoo::from_hash(blake2(&[50]).as_bytes(), 20)
+			.verify(&Proof::new(V1.to_vec().clone()), 75));
 		let mut test_header = [0; 32];
 		test_header[0] = 24;
-		assert!(!Cuckoo::new(&test_header, 20).verify(Proof::new(V4.to_vec().clone()), 50));
+		assert!(!Cuckoo::from_hash(blake2(&test_header).as_bytes(), 20)
+			.verify(&Proof::new(V4.to_vec().clone()), 50));
 	}
 
 	#[test]
@@ -388,14 +430,14 @@ mod test {
 		// cuckoo20
 		for n in 1..5 {
 			let h = [n; 32];
-			let nonces = Miner::new(&h, 75, 42, 20).mine().unwrap();
-			assert!(Cuckoo::new(&h, 20).verify(nonces, 75));
+			let nonces = Miner::from_hash(&h, 75, 42, 20).mine().unwrap();
+			assert!(Cuckoo::from_hash(&h, 20).verify(&nonces, 75));
 		}
 		// cuckoo18
 		for n in 1..5 {
 			let h = [n; 32];
-			let nonces = Miner::new(&h, 75, 42, 18).mine().unwrap();
-			assert!(Cuckoo::new(&h, 18).verify(nonces, 75));
+			let nonces = Miner::from_hash(&h, 75, 42, 18).mine().unwrap();
+			assert!(Cuckoo::from_hash(&h, 18).verify(&nonces, 75));
 		}
 	}
 }

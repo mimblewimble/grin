@@ -44,6 +44,7 @@ If you decide to use a persistent storage (e.g. ```-v grin:/usr/src/grin```) you
 ```sh
 git clone https://github.com/mimblewimble/grin.git
 cd grin
+git checkout milestone/testnet3
 cargo build --release
 ```
 

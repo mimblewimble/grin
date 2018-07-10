@@ -54,7 +54,11 @@ pub const BLOCK_TIME_SEC: u64 = 60;
 pub const PROOFSIZE: usize = 42;
 
 /// Default Cuckoo Cycle size shift used for mining and validating.
-pub const DEFAULT_SIZESHIFT: u8 = 30;
+pub const DEFAULT_MIN_SIZESHIFT: u8 = 30;
+
+/// Original reference sizeshift to compute difficulty factors for higher
+/// Cuckoo graph sizes, changing this would hard fork
+pub const REFERENCE_SIZESHIFT: u8 = 30;
 
 /// Default Cuckoo Cycle easiness, high enough to have good likeliness to find
 /// a solution.
@@ -99,7 +103,8 @@ pub const MAX_TX_KERNELS: u64 = 2048;
 
 /// Whether a block exceeds the maximum acceptable weight
 pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) -> bool {
-	input_len * BLOCK_INPUT_WEIGHT + output_len * BLOCK_OUTPUT_WEIGHT
+	input_len * BLOCK_INPUT_WEIGHT
+		+ output_len * BLOCK_OUTPUT_WEIGHT
 		+ kernel_len * BLOCK_KERNEL_WEIGHT > MAX_BLOCK_WEIGHT || input_len > MAX_BLOCK_INPUTS
 }
 
@@ -155,14 +160,20 @@ pub const DAMP_FACTOR: u64 = 3;
 pub const INITIAL_DIFFICULTY: u64 = 1_000_000;
 
 /// Consensus errors
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Fail)]
 pub enum Error {
 	/// Inputs/outputs/kernels must be sorted lexicographically.
 	SortError,
 }
 
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "Sort Error")
+	}
+}
+
 /// Error when computing the next difficulty adjustment.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Fail)]
 pub struct TargetError(pub String);
 
 impl fmt::Display for TargetError {
@@ -204,7 +215,7 @@ where
 	let earliest_ts = window_earliest[MEDIAN_TIME_INDEX as usize];
 
 	// Obtain the median window for the latest time period
-	// i.e. the last  MEDIAN_TIME_WINDOW elements
+	// i.e. the last MEDIAN_TIME_WINDOW elements
 	let mut window_latest: Vec<u64> = diff_data
 		.iter()
 		.skip(DIFFICULTY_ADJUST_WINDOW as usize)
@@ -239,10 +250,7 @@ where
 		ts_damp
 	};
 
-	// AVOID BREAKING CONSENSUS FOR NOW WITH OLD DOUBLE TRUNCATION CALC
-	let difficulty = (diff_sum / DIFFICULTY_ADJUST_WINDOW) * BLOCK_TIME_WINDOW / adj_ts;
-	// EVENTUALLY BREAK CONSENSUS WITH THIS IMPROVED SINGLE TRUNCATION DIFF CALC
-	// let difficulty = diff_sum * BLOCK_TIME_SEC / adj_ts;
+	let difficulty = diff_sum * BLOCK_TIME_SEC / adj_ts;
 
 	Ok(Difficulty::from_num(max(difficulty, 1)))
 }

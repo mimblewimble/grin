@@ -15,13 +15,16 @@
 //! Basic TUI to better output the overall system status and status
 //! of various subsystems
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use time;
 
 use cursive::direction::Orientation;
 use cursive::theme::BaseColor::{Black, Blue, Cyan, White};
 use cursive::theme::Color::Dark;
-use cursive::theme::PaletteColor::{Background, Highlight, HighlightInactive, Primary, Shadow, View};
+use cursive::theme::PaletteColor::{
+	Background, Highlight, HighlightInactive, Primary, Shadow, View,
+};
 use cursive::theme::{BaseColor, BorderStyle, Color, Theme};
 use cursive::traits::Identifiable;
 use cursive::utils::markup::StyledString;
@@ -33,6 +36,7 @@ use servers::Server;
 use tui::constants::ROOT_STACK;
 use tui::types::{TUIStatusListener, UIMessage};
 use tui::{menu, mining, peers, status, version};
+use util::LOGGER;
 
 use built_info;
 
@@ -161,15 +165,21 @@ impl Controller {
 		})
 	}
 	/// Run the controller
-	pub fn run(&mut self, server: Arc<Server>) {
+	pub fn run(&mut self, server: Arc<Server>, running: Arc<AtomicBool>) {
 		let stat_update_interval = 1;
 		let mut next_stat_update = time::get_time().sec + stat_update_interval;
 		while self.ui.step() {
+			if !running.load(Ordering::SeqCst) {
+				warn!(LOGGER, "Received SIGINT (Ctrl+C).");
+				server.stop();
+				self.ui.stop();
+			}
 			while let Some(message) = self.rx.try_iter().next() {
 				match message {
 					ControllerMessage::Shutdown => {
 						server.stop();
 						self.ui.stop();
+						running.store(false, Ordering::SeqCst)
 						/*self.ui
 							.ui_tx
 							.send(UIMessage::UpdateOutput("update".to_string()))
@@ -177,6 +187,7 @@ impl Controller {
 					}
 				}
 			}
+
 			if time::get_time().sec > next_stat_update {
 				let stats = server.get_server_stats().unwrap();
 				self.ui.ui_tx.send(UIMessage::UpdateStatus(stats)).unwrap();

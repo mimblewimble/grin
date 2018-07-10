@@ -23,34 +23,39 @@ use core::ser;
 use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::internal::{tx, updater};
-use libwallet::types::{BlockFees, CbData, OutputData, TxWrapper, WalletBackend, WalletClient,
-                       WalletInfo};
+use libwallet::types::{
+	BlockFees, CbData, OutputData, TxWrapper, WalletBackend, WalletClient, WalletInfo,
+};
 use libwallet::Error;
 use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to
 /// the wallet/keychain that they're acting upon
-pub struct APIOwner<'a, W, K>
+pub struct APIOwner<'a, W: ?Sized, C, K>
 where
-	W: 'a + WalletBackend<K> + WalletClient,
+	W: 'a + WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
 	/// perhaps)
-	pub wallet: &'a mut W,
+	pub wallet: &'a mut Box<W>,
 	phantom: PhantomData<K>,
+	phantom_c: PhantomData<C>,
 }
 
-impl<'a, W, K> APIOwner<'a, W, K>
+impl<'a, W: ?Sized, C, K> APIOwner<'a, W, C, K>
 where
-	W: 'a + WalletBackend<K> + WalletClient,
+	W: 'a + WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Create new API instance
-	pub fn new(wallet_in: &'a mut W) -> APIOwner<'a, W, K> {
+	pub fn new(wallet_in: &'a mut Box<W>) -> APIOwner<'a, W, C, K> {
 		APIOwner {
 			wallet: wallet_in,
 			phantom: PhantomData,
+			phantom_c: PhantomData,
 		}
 	}
 
@@ -67,7 +72,7 @@ where
 		}
 		Ok((
 			validated,
-			updater::retrieve_outputs(self.wallet, include_spent)?,
+			updater::retrieve_outputs(&mut **self.wallet, include_spent)?,
 		))
 	}
 
@@ -80,7 +85,7 @@ where
 		if refresh_from_node {
 			validated = self.update_outputs();
 		}
-		let wallet_info = updater::retrieve_info(self.wallet)?;
+		let wallet_info = updater::retrieve_info(&mut **self.wallet)?;
 		Ok((validated, wallet_info))
 	}
 
@@ -95,30 +100,30 @@ where
 		fluff: bool,
 	) -> Result<(), Error> {
 		let (slate, context, lock_fn) = tx::create_send_tx(
-			self.wallet,
+			&mut **self.wallet,
 			amount,
 			minimum_confirmations,
 			max_outputs,
 			selection_strategy_is_use_all,
 		)?;
 
-		let mut slate = match self.wallet.send_tx_slate(dest, &slate) {
+		let mut slate = match self.wallet.client().send_tx_slate(dest, &slate) {
 			Ok(s) => s,
 			Err(e) => {
 				error!(
 					LOGGER,
-					"Communication with receiver failed on SenderInitiation send. Aborting transaction"
+					"Communication with receiver failed on SenderInitiation send. Aborting transaction {:?}",
+					e,
 				);
 				return Err(e)?;
 			}
 		};
 
-		tx::complete_tx(self.wallet, &mut slate, &context)?;
+		tx::complete_tx(&mut **self.wallet, &mut slate, &context)?;
 
 		// All good here, so let's post it
 		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
-		self.wallet
-			.post_tx(self.wallet.node_url(), &TxWrapper { tx_hex: tx_hex }, fluff)?;
+		self.wallet.client().post_tx(&TxWrapper { tx_hex: tx_hex }, fluff)?;
 
 		// All good here, lock our inputs
 		lock_fn(self.wallet)?;
@@ -132,10 +137,14 @@ where
 		minimum_confirmations: u64,
 		max_outputs: usize,
 	) -> Result<(), Error> {
-		let tx_burn = tx::issue_burn_tx(self.wallet, amount, minimum_confirmations, max_outputs)?;
+		let tx_burn = tx::issue_burn_tx(
+			&mut **self.wallet,
+			amount,
+			minimum_confirmations,
+			max_outputs,
+		)?;
 		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
-		self.wallet
-			.post_tx(self.wallet.node_url(), &TxWrapper { tx_hex: tx_hex }, false)?;
+		self.wallet.client().post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
 		Ok(())
 	}
 
@@ -146,7 +155,7 @@ where
 
 	/// Retrieve current height from node
 	pub fn node_height(&mut self) -> Result<(u64, bool), Error> {
-		match self.wallet.get_chain_height(self.wallet.node_url()) {
+		match self.wallet.client().get_chain_height() {
 			Ok(height) => Ok((height, true)),
 			Err(_) => {
 				let outputs = self.retrieve_outputs(true, false)?;
@@ -161,7 +170,7 @@ where
 
 	/// Attempt to update outputs in wallet, return whether it was successful
 	fn update_outputs(&mut self) -> bool {
-		match updater::refresh_outputs(self.wallet) {
+		match updater::refresh_outputs(&mut **self.wallet) {
 			Ok(_) => true,
 			Err(_) => false,
 		}
@@ -170,37 +179,41 @@ where
 
 /// Wrapper around external API functions, intended to communicate
 /// with other parties
-pub struct APIForeign<'a, W, K>
+pub struct APIForeign<'a, W: ?Sized, C, K>
 where
-	W: 'a + WalletBackend<K> + WalletClient,
+	W: 'a + WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
 	/// perhaps)
-	pub wallet: &'a mut W,
+	pub wallet: &'a mut Box<W>,
 	phantom: PhantomData<K>,
+	phantom_c: PhantomData<C>,
 }
 
-impl<'a, W, K> APIForeign<'a, W, K>
+impl<'a, W: ?Sized, C, K> APIForeign<'a, W, C, K>
 where
-	W: 'a + WalletBackend<K> + WalletClient,
+	W: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	/// Create new API instance
-	pub fn new(wallet_in: &'a mut W) -> APIForeign<'a, W, K> {
+	pub fn new(wallet_in: &'a mut Box<W>) -> APIForeign<W, C, K> {
 		APIForeign {
 			wallet: wallet_in,
 			phantom: PhantomData,
+			phantom_c: PhantomData,
 		}
 	}
 
 	/// Build a new (potential) coinbase transaction in the wallet
 	pub fn build_coinbase(&mut self, block_fees: &BlockFees) -> Result<CbData, Error> {
-		updater::build_coinbase(self.wallet, block_fees)
+		updater::build_coinbase(&mut **self.wallet, block_fees)
 	}
 
 	/// Receive a transaction from a sender
 	pub fn receive_tx(&mut self, slate: &mut Slate) -> Result<(), Error> {
-		tx::receive_tx(self.wallet, slate)
+		tx::receive_tx(&mut **self.wallet, slate)
 	}
 }
