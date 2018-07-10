@@ -89,11 +89,6 @@ pub struct JobTemplate {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct BlockFound {
-	hash: String,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
 pub struct WorkerStatus {
 	id: String,
 	height: u64,
@@ -544,12 +539,6 @@ impl StratumServer {
 				LOGGER,
 				"(Server ID: {}) Solution Found for block {} - Yay!!!", self.id, params.height
 			);
-			worker_stats.num_accepted += 1;
-			let block_found = BlockFound {
-				hash: b.hash().to_hex(),
-			};
-			let block_found_json = serde_json::to_string(&block_found).unwrap();
-			return Ok((serde_json::to_value(block_found_json).unwrap(), share_is_block))
 		} else {
 			// Do some validation but dont submit
 			if !pow::verify_size(&b.header, global::min_sizeshift()) {
@@ -587,7 +576,13 @@ impl StratumServer {
 			submitted_by,
 		);
 		worker_stats.num_accepted += 1;
-		return Ok((serde_json::to_value("ok".to_string()).unwrap(), share_is_block));
+		let submit_response;
+		if share_is_block {
+			submit_response = format!("blockfound - {}", b.hash().to_hex());
+		} else {
+			submit_response = "ok".to_string();
+		}
+		return Ok((serde_json::to_value(submit_response).unwrap(), share_is_block));
 	} // handle submit a solution
 
 	// Purge dead/sick workers - remove all workers marked in error state
