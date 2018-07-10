@@ -32,12 +32,11 @@ const PMMR_LEAF_FILE: &'static str = "pmmr_leaf.bin";
 const PMMR_PRUN_FILE: &'static str = "pmmr_prun.bin";
 
 /// The list of PMMR_Files for internal purposes
-pub const PMMR_FILES: [&str; 5] = [
+pub const PMMR_FILES: [&str; 4] = [
 	PMMR_HASH_FILE,
 	PMMR_DATA_FILE,
 	PMMR_LEAF_FILE,
-	PMMR_RM_LOG_FILE,
-	PMMR_PRUNED_FILE,
+	PMMR_PRUN_FILE,
 ];
 
 /// PMMR persistent backend implementation. Relies on multiple facilities to

@@ -285,7 +285,7 @@ where
 		Ok(elmt_pos)
 	}
 
-	/// Saves a snaphost of the MMR tagged with the block hash.
+	/// Saves a snapshot of the MMR tagged with the block hash.
 	/// Specifically - snapshots the utxo file as we need this rewound before
 	/// sending the txhashset zip file to another node for fast-sync.
 	pub fn snapshot(&mut self, header: &BlockHeader) -> Result<(), String> {
