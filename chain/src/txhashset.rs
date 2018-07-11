@@ -1054,10 +1054,10 @@ impl<'a> Extension<'a> {
 
 /// Packages the txhashset data files into a zip and returns a Read to the
 /// resulting file
-pub fn zip_read(root_dir: String) -> Result<File, Error> {
+pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 	let zip_path = Path::new(&root_dir).join(TXHASHSET_ZIP);
-	check_files(&txhashset_path)?;
+	check_files(&txhashset_path, header)?;
 	// create the zip archive
 	{
 		zip::compress(&txhashset_path, &File::create(zip_path.clone())?)
@@ -1071,16 +1071,17 @@ pub fn zip_read(root_dir: String) -> Result<File, Error> {
 
 /// Extract the txhashset data from a zip file and writes the content into the
 /// txhashset storage dir
-pub fn zip_write(root_dir: String, txhashset_data: File) -> Result<(), Error> {
+pub fn zip_write(root_dir: String, txhashset_data: File, header: &BlockHeader) -> Result<(), Error> {
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
-	check_files(&txhashset_path)?;
+	check_files(&txhashset_path, header)?;
 
 	fs::create_dir_all(txhashset_path.clone())?;
-	zip::decompress(txhashset_data, &txhashset_path).map_err(|ze| Error::Other(ze.to_string()))
+	zip::decompress(txhashset_data, &txhashset_path)
+		.map_err(|ze| ErrorKind::Other(ze.to_string()).into())
 }
 
 /// Check that the txhashset directory does not contains unexpected files
-fn check_files(txhashset_path: &PathBuf) -> Result<(), Error> {
+fn check_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Result<(), Error> {
 	let subdirectories_expected: HashSet<_> = [OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR]
 		.iter()
 		.cloned()
@@ -1101,16 +1102,18 @@ fn check_files(txhashset_path: &PathBuf) -> Result<(), Error> {
 		.cloned()
 		.collect();
 	if !dir_difference.is_empty() {
-		return Err(Error::Other(
+		return Err(ErrorKind::Other(
 			"Unexpected file(s) found in txhashset folder".to_string(),
-		));
+		).into());
 	}
 
 	// Checking now every subdirectory
 	let pmmr_files_expected: HashSet<_> = PMMR_FILES
 		.iter()
 		.cloned()
-		.map(|s| String::from(s))
+		.map(|s| if s.contains(PMMR_FILES[2]) {
+		format!("{}.{}", s, header.hash())}
+		else {String::from(s) })
 		.collect();
 	let subdirectories = fs::read_dir(txhashset_path).unwrap();
 	for subdirectory in subdirectories {
@@ -1130,9 +1133,9 @@ fn check_files(txhashset_path: &PathBuf) -> Result<(), Error> {
 			.cloned()
 			.collect();
 		if !difference.is_empty() {
-			return Err(Error::Other(
+			return Err(ErrorKind::Other(
 				"Unexpected file(s) found in txhashset folder".to_string(),
-			));
+			).into());
 		}
 	}
 	Ok(())
