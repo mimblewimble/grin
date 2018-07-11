@@ -15,12 +15,16 @@
 //! Common functions to facilitate wallet, walletlib and transaction testing
 use std::collections::HashMap;
 
+extern crate failure;
 extern crate grin_api as api;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_wallet as wallet;
+extern crate serde_json;
 extern crate time;
+
+use std::sync::{Arc, Mutex};
 
 use chain::Chain;
 use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
@@ -68,6 +72,19 @@ where
 	let height = chain.head().unwrap().height;
 	updater::apply_api_outputs(wallet, &wallet_outputs, &api_outputs, height)?;
 	Ok(())
+}
+
+pub fn refresh_output_state_local_boxed<T, C, K>(
+	wallet: Arc<Mutex<Box<T>>>,
+	chain: &Chain,
+) -> Result<(), Error>
+where
+	T: WalletBackend<C, K>,
+	C: WalletClient,
+	K: keychain::Keychain,
+{
+	let mut w = wallet.lock().unwrap();
+	refresh_output_state_local(&mut **w, chain)
 }
 
 /// Return the spendable wallet balance from the local chain
@@ -187,6 +204,20 @@ where
 	batch.commit().unwrap();
 }
 
+/// Award a blocks to a wallet directly
+pub fn award_blocks_to_wallet_boxed<T, C, K>(
+	chain: &Chain,
+	wallet: Arc<Mutex<Box<T>>>,
+	number: usize,
+) where
+	T: WalletBackend<C, K>,
+	C: WalletClient,
+	K: keychain::Keychain,
+{
+	let mut w = wallet.lock().unwrap();
+	award_blocks_to_wallet(chain, &mut **w, number);
+}
+
 /// adds many block rewards to a wallet, no transactions
 pub fn award_blocks_to_wallet<T, C, K>(chain: &Chain, wallet: &mut T, num_rewards: usize)
 where
@@ -198,15 +229,13 @@ where
 		award_block_to_wallet(chain, vec![], wallet);
 	}
 }
-
-/// Create a new wallet in a particular directory
-pub fn create_wallet<C>(dir: &str, client: C) -> FileWallet<C, ExtKeychain>
+pub fn create_file_wallet<C>(dir: &str, client: C) -> FileWallet<C, ExtKeychain>
 where
 	C: WalletClient,
 {
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
-	wallet::WalletSeed::init_file(&wallet_config).expect("Failed to create wallet seed file.");
+	let _ = wallet::WalletSeed::init_file(&wallet_config);
 	let mut wallet = FileWallet::new(wallet_config.clone(), "", client)
 		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
 	wallet.open_with_credentials().unwrap_or_else(|e| {
@@ -216,4 +245,14 @@ where
 		)
 	});
 	wallet
+}
+/// Create a new wallet in a particular directory
+pub fn create_file_wallet_boxed<C>(
+	dir: &str,
+	client: C,
+) -> Arc<Mutex<Box<FileWallet<C, ExtKeychain>>>>
+where
+	C: WalletClient,
+{
+	Arc::new(Mutex::new(Box::new(create_file_wallet(dir, client))))
 }

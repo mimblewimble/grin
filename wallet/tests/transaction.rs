@@ -26,18 +26,21 @@ extern crate time;
 extern crate uuid;
 
 mod common;
-use common::testclient::TestWalletClient;
+use common::testclient::{LocalWalletClient, WalletProxy};
 
 use std::fs;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
 use chain::types::NoopAdapter;
 use chain::Chain;
 use core::global::ChainTypes;
 use core::{global, pow};
+use keychain::ExtKeychain;
 use util::LOGGER;
 use wallet::libwallet::internal::selection;
-use wallet::HTTPWalletClient;
+use wallet::{FileWallet, HTTPWalletClient};
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -64,35 +67,49 @@ fn setup(test_dir: &str, chain_dir: &str) -> Chain {
 #[test]
 fn transaction_api() {
 	let test_dir = "test_output/transaction_api";
+	util::init_test_logger();
 	clean_output_dir(test_dir);
-	let mut client: TestWalletClient<keychain::ExtKeychain> =
-		TestWalletClient::new("test_output/transaction_api/.grin");
-	let chain = client.chain.clone();
-	// First define recipient
-	let mut wallet2 = common::create_wallet("test_output/transaction_api/wallet2", client.clone());
-	let mut filled_client = client.clone();
-	let wallet2_ref = Arc::new(Mutex::new(Box::new(wallet2)));
+	// Create a new proxy to simulate server and wallet responses
+	let mut wallet_proxy: WalletProxy<
+		FileWallet<LocalWalletClient, ExtKeychain>,
+		LocalWalletClient,
+		ExtKeychain,
+	> = WalletProxy::new(test_dir);
+	let chain = wallet_proxy.chain.clone();
 
-	// then define wallet 1 with client that has recipient wallet 2 filled
-	filled_client.set_tx_recipient(wallet2_ref);
-	let mut wallet1 = common::create_wallet("test_output/transaction_api/wallet1", filled_client);
-	let wallet1_ref = Arc::new(Mutex::new(Box::new(wallet1)));
+	// Create a new wallet test client, and set its queues to communicate with the
+	// proxy
+	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
+	let wallet1 =
+		common::create_file_wallet_boxed("test_output/transaction_api/wallet1", client.clone());
+	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone());
 
-	{
-		let mut w1 = wallet1_ref.lock().unwrap();
-		common::award_blocks_to_wallet(&chain, &mut **w1, 10);
-	}
+	// define recipient wallet, add to proxy
+	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
+	let wallet2 =
+		common::create_file_wallet_boxed("test_output/transaction_api/wallet2", client.clone());
+	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone());
+
+	// Set the wallet proxy listener running
+	thread::spawn(move || {
+		if let Err(e) = wallet_proxy.run() {
+			error!(LOGGER, "Wallet Proxy error: {}", e);
+		}
+	});
+
+	// mine a few blocks
+	common::award_blocks_to_wallet_boxed(&chain, wallet1.clone(), 10);
+
 	// assert wallet contents
-
 	// and a single use api for a send command
-	let sender_res = wallet::controller::owner_single_use(wallet1_ref, |sender_api| {
+	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
 		let send_tx_res = sender_api.issue_send_tx(
-			60,   // amount
-			2,    // minimum confirmations
-			"",   // dest (will be test client callback)
-			500,  // max outputs
-			true, // select all outputs
-			true, // fluff
+			60,        // amount
+			2,         // minimum confirmations
+			"wallet2", // dest
+			500,       // max outputs
+			true,      // select all outputs
+			true,      // fluff
 		);
 		if let Err(e) = send_tx_res {
 			println!("Error issuing send tx: {}", e);
@@ -102,17 +119,32 @@ fn transaction_api() {
 	if let Err(e) = sender_res {
 		println!("Error starting sender API: {}", e);
 	}
+
+	// Wallets keychains will have been closed by the above API calls.. reopen them
+	// with credentials to perform further testing
+	//common::award_blocks_to_wallet_boxed(&chain, wallet1.clone(), 2);
+
+	/*// Refresh wallets
+	if let Err(e) = common::refresh_output_state_local_boxed(wallet1.clone(), &chain) {
+		panic!("Error refreshing output state for wallet1 {:?}", e);
+	}
+	if let Err(e) = common::refresh_output_state_local_boxed(wallet2.clone(), &chain) {
+		panic!("Error refreshing output state for wallet2 {:?}", e);
+	}*/
+
+	// let logging finish
+	thread::sleep(Duration::from_millis(200));
 }
 
 /// Build and test new version of sending API (more manually than the above
-/// test, bypasses the wallet API)j
+/// test, bypasses the wallet API)
 #[test]
 fn build_transaction() {
 	let client = HTTPWalletClient::new("");
 	let chain = setup("test_output", "build_transaction_2/.grin");
 	let mut wallet1 =
-		common::create_wallet("test_output/build_transaction_2/wallet1", client.clone());
-	let mut wallet2 = common::create_wallet("test_output/build_transaction_2/wallet2", client);
+		common::create_file_wallet("test_output/build_transaction_2/wallet1", client.clone());
+	let mut wallet2 = common::create_file_wallet("test_output/build_transaction_2/wallet2", client);
 	common::award_blocks_to_wallet(&chain, &mut wallet1, 10);
 	// Wallet 1 has 600 Grins, wallet 2 has 0. Create a transaction that sends
 	// 300 Grins from wallet 1 to wallet 2, using libtx

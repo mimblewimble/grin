@@ -102,35 +102,45 @@ where
 		selection_strategy_is_use_all: bool,
 		fluff: bool,
 	) -> Result<(), Error> {
-		let mut w = self.wallet.lock().unwrap();
-		let (slate, context, lock_fn) = tx::create_send_tx(
-			&mut **w,
-			amount,
-			minimum_confirmations,
-			max_outputs,
-			selection_strategy_is_use_all,
-		)?;
+		let client;
+		let mut slate_out: Slate;
+		let lock_fn_out;
+		{
+			let mut w = self.wallet.lock().unwrap();
+			client = w.client().clone();
+			let (slate, context, lock_fn) = tx::create_send_tx(
+				&mut **w,
+				amount,
+				minimum_confirmations,
+				max_outputs,
+				selection_strategy_is_use_all,
+			)?;
 
-		let mut slate = match w.client().send_tx_slate(dest, &slate) {
-			Ok(s) => s,
-			Err(e) => {
-				error!(
+			lock_fn_out = lock_fn;
+			slate_out = match w.client().send_tx_slate(dest, &slate) {
+				Ok(s) => s,
+				Err(e) => {
+					error!(
 					LOGGER,
 					"Communication with receiver failed on SenderInitiation send. Aborting transaction {:?}",
 					e,
 				);
-				return Err(e)?;
-			}
-		};
+					return Err(e)?;
+				}
+			};
 
-		tx::complete_tx(&mut **w, &mut slate, &context)?;
+			tx::complete_tx(&mut **w, &mut slate_out, &context)?;
+		}
 
 		// All good here, so let's post it
-		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
-		w.client().post_tx(&TxWrapper { tx_hex: tx_hex }, fluff)?;
+		let tx_hex = util::to_hex(ser::ser_vec(&slate_out.tx).unwrap());
+		client.post_tx(&TxWrapper { tx_hex: tx_hex }, fluff)?;
 
-		// All good here, lock our inputs
-		lock_fn(&mut **w)?;
+		{
+			// Post was fine, lock our inputs
+			let mut w = self.wallet.lock().unwrap();
+			lock_fn_out(&mut **w)?;
+		}
 		Ok(())
 	}
 
