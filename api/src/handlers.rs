@@ -510,6 +510,30 @@ impl Handler for ChainCompactHandler {
 	}
 }
 
+/// Gets block headers given either a hash or height.
+/// GET /v1/headers/<hash>
+/// GET /v1/headers/<height>
+///
+pub struct HeaderHandler {
+	pub chain: Weak<chain::Chain>,
+}
+
+impl HeaderHandler {
+	fn get_header(&self, input: String) -> Result<BlockHeaderPrintable, Error> {
+		if let Ok(height) = input.parse() {
+			match w(&self.chain).get_header_by_height(height) {
+				Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
+				Err(_) => return Err(ErrorKind::NotFound)?,
+			}
+		}
+		check_block_param(&input)?;
+		let vec = util::from_hex(input).unwrap();
+		let h = Hash::from_vec(&vec);
+		let header = w(&self.chain).get_block_header(&h).context(ErrorKind::NotFound)?;
+		Ok(BlockHeaderPrintable::from_header(&header))
+	}
+}
+
 /// Gets block details given either a hash or height.
 /// GET /v1/blocks/<hash>
 /// GET /v1/blocks/<height>
@@ -542,6 +566,13 @@ impl BlockHandler {
 				Err(_) => return Err(ErrorKind::NotFound)?,
 			}
 		}
+		check_block_param(&input)?;
+		let vec = util::from_hex(input).unwrap();
+		Ok(Hash::from_vec(&vec))
+	}
+}
+
+fn check_block_param(input: &String) -> Result<(), Error> {
 		lazy_static! {
 			static ref RE: Regex = Regex::new(r"[0-9a-fA-F]{64}").unwrap();
 		}
@@ -550,9 +581,7 @@ impl BlockHandler {
 				"Not a valid hash or height.".to_owned(),
 			))?;
 		}
-		let vec = util::from_hex(input).unwrap();
-		Ok(Hash::from_vec(&vec))
-	}
+		return Ok(())
 }
 
 impl Handler for BlockHandler {
@@ -582,6 +611,20 @@ impl Handler for BlockHandler {
 				.map_err(|e| IronError::new(Fail::compat(e), status::InternalServerError))?;
 			json_response(&b)
 		}
+	}
+}
+
+impl Handler for HeaderHandler {
+	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+		let url = req.url.clone();
+		let mut path_elems = url.path();
+		if *path_elems.last().unwrap() == "" {
+			path_elems.pop();
+		}
+		let el = *path_elems.last().unwrap();
+		let h = self.get_header(el.to_string())
+			.map_err(|e| IronError::new(Fail::compat(e), status::InternalServerError))?;
+		json_response(&h)
 	}
 }
 
@@ -712,6 +755,9 @@ pub fn start_rest_apis<T>(
 			let block_handler = BlockHandler {
 				chain: chain.clone(),
 			};
+			let header_handler = HeaderHandler {
+				chain: chain.clone(),
+			};
 			let chain_tip_handler = ChainHandler {
 				chain: chain.clone(),
 			};
@@ -773,6 +819,7 @@ pub fn start_rest_apis<T>(
 			let router = router!(
 				index: get "/" => index_handler,
 				blocks: get "/blocks/*" => block_handler,
+				headers: get "/headers/*" => header_handler,
 				chain_tip: get "/chain" => chain_tip_handler,
 				chain_compact: get "/chain/compact" => chain_compact_handler,
 				chain_validate: get "/chain/validate" => chain_validation_handler,
