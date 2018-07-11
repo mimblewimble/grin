@@ -443,7 +443,7 @@ impl NetToChainAdapter {
 					_ => {
 						debug!(
 							LOGGER,
-							"adapter: process_block: block {} refused by chain: {:?}", bhash, e
+							"adapter: process_block: block {} refused by chain: {}", bhash, e
 						);
 						true
 					}
