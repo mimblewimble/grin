@@ -29,65 +29,47 @@ mod common;
 use common::testclient::{LocalWalletClient, WalletProxy};
 
 use std::fs;
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use chain::types::NoopAdapter;
-use chain::Chain;
+use core::global;
 use core::global::ChainTypes;
-use core::{global, pow};
 use keychain::ExtKeychain;
 use util::LOGGER;
-use wallet::libwallet::internal::selection;
-use wallet::{FileWallet, HTTPWalletClient};
+use wallet::libwallet::types::WalletClient;
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
 }
 
-fn setup(test_dir: &str, chain_dir: &str) -> Chain {
+fn setup(test_dir: &str) {
 	util::init_test_logger();
 	clean_output_dir(test_dir);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let genesis_block = pow::mine_genesis_block().unwrap();
-	let dir_name = format!("{}/{}", test_dir, chain_dir);
-	let db_env = Arc::new(store::new_env(dir_name.to_string()));
-	chain::Chain::init(
-		dir_name.to_string(),
-		db_env,
-		Arc::new(NoopAdapter {}),
-		genesis_block,
-		pow::verify_size,
-	).unwrap()
 }
 
 /// Exercises the Transaction API fully with a test WalletClient operating
 /// directly on a chain instance
-#[test]
-fn transaction_api() {
-	let test_dir = "test_output/transaction_api";
-	util::init_test_logger();
-	clean_output_dir(test_dir);
+/// Callable with any type of wallet
+fn basic_transaction_api<C: 'static, K: 'static>(test_dir: &str)
+where
+	C: WalletClient,
+	K: keychain::Keychain,
+{
+	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
-	let mut wallet_proxy: WalletProxy<
-		FileWallet<LocalWalletClient, ExtKeychain>,
-		LocalWalletClient,
-		ExtKeychain,
-	> = WalletProxy::new(test_dir);
+	let mut wallet_proxy: WalletProxy<C, K> = WalletProxy::new(test_dir);
 	let chain = wallet_proxy.chain.clone();
 
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
 	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1 =
-		common::create_file_wallet_boxed("test_output/transaction_api/wallet1", client.clone());
+	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client.clone());
 	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone());
 
 	// define recipient wallet, add to proxy
 	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	let wallet2 =
-		common::create_file_wallet_boxed("test_output/transaction_api/wallet2", client.clone());
+	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client.clone());
 	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
@@ -97,14 +79,40 @@ fn transaction_api() {
 		}
 	});
 
+	// few values to keep things shorter
+	let reward = core::consensus::REWARD;
+	let cm = global::coinbase_maturity();
 	// mine a few blocks
-	common::award_blocks_to_wallet_boxed(&chain, wallet1.clone(), 10);
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 10);
+
+	// Check wallet 1 contents are as expected
+	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), false, |api| {
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		debug!(
+			LOGGER,
+			"Wallet 1 Info Pre-Transaction, after {} blocks: {:?}",
+			wallet1_info.last_confirmed_height,
+			wallet1_info
+		);
+		assert!(wallet1_refreshed);
+		assert_eq!(
+			wallet1_info.amount_currently_spendable,
+			(wallet1_info.last_confirmed_height - cm) * reward
+		);
+		assert_eq!(wallet1_info.amount_immature, cm * reward);
+		Ok(())
+	});
+	if let Err(e) = sender_res {
+		println!("Error starting sender API: {}", e);
+	}
 
 	// assert wallet contents
 	// and a single use api for a send command
-	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
+	let amount = 60_000_000_000;
+	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), false, |sender_api| {
+		// note this will increment the block count as part of the transaction "Posting"
 		let send_tx_res = sender_api.issue_send_tx(
-			60,        // amount
+			amount,    // amount
 			2,         // minimum confirmations
 			"wallet2", // dest
 			500,       // max outputs
@@ -120,172 +128,75 @@ fn transaction_api() {
 		println!("Error starting sender API: {}", e);
 	}
 
-	// Wallets keychains will have been closed by the above API calls.. reopen them
-	// with credentials to perform further testing
-	//common::award_blocks_to_wallet_boxed(&chain, wallet1.clone(), 2);
-
-	/*// Refresh wallets
-	if let Err(e) = common::refresh_output_state_local_boxed(wallet1.clone(), &chain) {
-		panic!("Error refreshing output state for wallet1 {:?}", e);
+	// Check wallet 1 contents are as expected
+	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), false, |api| {
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		debug!(
+			LOGGER,
+			"Wallet 1 Info Post Transaction, after {} blocks: {:?}",
+			wallet1_info.last_confirmed_height,
+			wallet1_info
+		);
+		let fee = wallet::libtx::tx_fee(
+			wallet1_info.last_confirmed_height as usize - 1 - cm as usize,
+			2,
+			None,
+		);
+		assert!(wallet1_refreshed);
+		// wallet 1 recieved fees, so amount should be the same
+		assert_eq!(
+			wallet1_info.total,
+			amount * wallet1_info.last_confirmed_height - amount
+		);
+		assert_eq!(
+			wallet1_info.amount_currently_spendable,
+			(wallet1_info.last_confirmed_height - cm) * reward - amount - fee
+		);
+		assert_eq!(wallet1_info.amount_immature, cm * reward + fee);
+		Ok(())
+	});
+	if let Err(e) = sender_res {
+		println!("Error starting sender API: {}", e);
 	}
-	if let Err(e) = common::refresh_output_state_local_boxed(wallet2.clone(), &chain) {
-		panic!("Error refreshing output state for wallet2 {:?}", e);
-	}*/
+
+	// mine a few more blocks
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
+
+	// refresh wallets and retrieve info/tests for each wallet after maturity
+	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), false, |api| {
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		debug!(LOGGER, "Wallet 1 Info: {:?}", wallet1_info);
+		assert!(wallet1_refreshed);
+		assert_eq!(
+			wallet1_info.total,
+			amount * wallet1_info.last_confirmed_height - amount
+		);
+		assert_eq!(
+			wallet1_info.amount_currently_spendable,
+			(wallet1_info.last_confirmed_height - cm - 1) * reward
+		);
+		Ok(())
+	});
+	if let Err(e) = sender_res {
+		println!("Error starting sender API: {}", e);
+	}
+
+	let sender_res = wallet::controller::owner_single_use(wallet2.clone(), false, |api| {
+		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		assert!(wallet2_refreshed);
+		assert_eq!(wallet2_info.amount_currently_spendable, amount);
+		Ok(())
+	});
+	if let Err(e) = sender_res {
+		println!("Error starting sender API: {}", e);
+	}
 
 	// let logging finish
 	thread::sleep(Duration::from_millis(200));
 }
 
-/// Build and test new version of sending API (more manually than the above
-/// test, bypasses the wallet API)
 #[test]
-fn build_transaction() {
-	let client = HTTPWalletClient::new("");
-	let chain = setup("test_output", "build_transaction_2/.grin");
-	let mut wallet1 =
-		common::create_file_wallet("test_output/build_transaction_2/wallet1", client.clone());
-	let mut wallet2 = common::create_file_wallet("test_output/build_transaction_2/wallet2", client);
-	common::award_blocks_to_wallet(&chain, &mut wallet1, 10);
-	// Wallet 1 has 600 Grins, wallet 2 has 0. Create a transaction that sends
-	// 300 Grins from wallet 1 to wallet 2, using libtx
-
-	// Get lock height
-	let chain_tip = chain.head().unwrap();
-	let amount = 300_000_000_000;
-	let min_confirmations = 3;
-
-	// ensure outputs we're selecting are up to date
-	let res = common::refresh_output_state_local(&mut wallet1, &chain);
-
-	if let Err(e) = res {
-		panic!("Unable to refresh sender wallet outputs: {}", e);
-	}
-
-	// TRANSACTION WORKFLOW STARTS HERE
-	// Sender selects outputs into a new slate and save our corresponding IDs in
-	// a transaction context. The secret key in our transaction context will be
-	// randomly selected. This returns the public slate, and a closure that locks
-	// our inputs and outputs once we're convinced the transaction exchange went
-	// according to plan
-	// This function is just a big helper to do all of that, in theory
-	// this process can be split up in any way
-	let (mut slate, mut sender_context, sender_lock_fn) = selection::build_send_tx_slate(
-		&mut wallet1,
-		2,
-		amount,
-		chain_tip.height,
-		min_confirmations,
-		chain_tip.height,
-		1000,
-		true,
-	).unwrap();
-
-	// Generate a kernel offset and subtract from our context's secret key. Store
-	// the offset in the slate's transaction kernel, and adds our public key
-	// information to the slate
-	let _ = slate
-		.fill_round_1(
-			wallet1.keychain.as_ref().unwrap(),
-			&mut sender_context.sec_key,
-			&sender_context.sec_nonce,
-			0,
-		)
-		.unwrap();
-
-	debug!(LOGGER, "Transaction Slate after step 1: sender initiation");
-	debug!(LOGGER, "-----------------------------------------");
-	debug!(LOGGER, "{:?}", slate);
-
-	// Now, just like the sender did, recipient is going to select a target output,
-	// add it to the transaction, and keep track of the corresponding wallet
-	// Identifier Again, this is a helper to do that, which returns a closure that
-	// creates the output when we're satisfied the process was successful
-	let (_, mut recp_context, receiver_create_fn) =
-		selection::build_recipient_output_with_slate(&mut wallet2, &mut slate).unwrap();
-
-	let _ = slate
-		.fill_round_1(
-			wallet2.keychain.as_ref().unwrap(),
-			&mut recp_context.sec_key,
-			&recp_context.sec_nonce,
-			1,
-		)
-		.unwrap();
-
-	// recipient can proceed to round 2 now
-	let _ = receiver_create_fn(&mut wallet2);
-
-	let _ = slate
-		.fill_round_2(
-			wallet1.keychain.as_ref().unwrap(),
-			&recp_context.sec_key,
-			&recp_context.sec_nonce,
-			1,
-		)
-		.unwrap();
-
-	debug!(
-		LOGGER,
-		"Transaction Slate after step 2: receiver initiation"
-	);
-	debug!(LOGGER, "-----------------------------------------");
-	debug!(LOGGER, "{:?}", slate);
-
-	// SENDER Part 3: Sender confirmation
-	let _ = slate
-		.fill_round_2(
-			wallet1.keychain.as_ref().unwrap(),
-			&sender_context.sec_key,
-			&sender_context.sec_nonce,
-			0,
-		)
-		.unwrap();
-
-	debug!(LOGGER, "PartialTx after step 3: sender confirmation");
-	debug!(LOGGER, "--------------------------------------------");
-	debug!(LOGGER, "{:?}", slate);
-
-	// Final transaction can be built by anyone at this stage
-	let res = slate.finalize(wallet1.keychain.as_ref().unwrap());
-
-	if let Err(e) = res {
-		panic!("Error creating final tx: {:?}", e);
-	}
-
-	debug!(LOGGER, "Final transaction is:");
-	debug!(LOGGER, "--------------------------------------------");
-	debug!(LOGGER, "{:?}", slate.tx);
-
-	// All okay, lock sender's outputs
-	let _ = sender_lock_fn(&mut wallet1);
-
-	// Insert this transaction into a new block, then mine till confirmation
-	common::award_block_to_wallet(&chain, vec![&slate.tx], &mut wallet1);
-	common::award_blocks_to_wallet(&chain, &mut wallet1, 5);
-
-	// Refresh wallets
-	let res = common::refresh_output_state_local(&mut wallet2, &chain);
-	if let Err(e) = res {
-		panic!("Error refreshing output state for wallet: {:?}", e);
-	}
-
-	// check recipient wallet
-	let chain_tip = chain.head().unwrap();
-	let balances = common::get_wallet_balances(&mut wallet2, chain_tip.height).unwrap();
-
-	assert_eq!(balances.3, 300_000_000_000);
-
-	// check sender wallet
-	let res = common::refresh_output_state_local(&mut wallet1, &chain);
-	if let Err(e) = res {
-		panic!("Error refreshing output state for wallet: {:?}", e);
-	}
-	let balances = common::get_wallet_balances(&mut wallet1, chain_tip.height).unwrap();
-	println!("tip height: {:?}", chain_tip.height);
-	println!("Sender balances: {:?}", balances);
-	// num blocks * grins per block, and wallet1 mined the fee
-	assert_eq!(
-		balances.3,
-		(chain_tip.height - min_confirmations) * 60_000_000_000 - amount
-	);
+fn file_wallet_basic_transaction_api() {
+	let test_dir = "test_output/basic_transaction_api";
+	basic_transaction_api::<LocalWalletClient, ExtKeychain>(test_dir);
 }

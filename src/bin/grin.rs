@@ -665,7 +665,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			passphrase,
 			use_db,
 		)));
-		let _res = wallet::controller::owner_single_use(wallet, |api| {
+		let _res = wallet::controller::owner_single_use(wallet, true, |api| {
 			match wallet_args.subcommand() {
 				("send", Some(send_args)) => {
 					let amount = send_args

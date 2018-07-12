@@ -61,9 +61,8 @@ pub struct WalletProxyMessage {
 
 /// communicates with a chain instance or other wallet
 /// listener APIs via message queues
-pub struct WalletProxy<W, C, K>
+pub struct WalletProxy<C, K>
 where
-	W: WalletBackend<C, K>,
 	C: WalletClient,
 	K: Keychain,
 {
@@ -72,7 +71,13 @@ where
 	/// handle to chain itself
 	pub chain: Arc<Chain>,
 	/// list of interested wallets
-	pub wallets: HashMap<String, (Sender<WalletProxyMessage>, Arc<Mutex<Box<W>>>)>,
+	pub wallets: HashMap<
+		String,
+		(
+			Sender<WalletProxyMessage>,
+			Arc<Mutex<Box<WalletInst<LocalWalletClient, K>>>>,
+		),
+	>,
 	/// simulate json send to another client
 	/// address, method, payload (simulate HTTP request)
 	pub tx: Sender<WalletProxyMessage>,
@@ -86,9 +91,8 @@ where
 	phantom_k: PhantomData<K>,
 }
 
-impl<W, C, K> WalletProxy<W, C, K>
+impl<C, K> WalletProxy<C, K>
 where
-	W: WalletBackend<C, K>,
 	C: WalletClient,
 	K: Keychain,
 {
@@ -124,7 +128,7 @@ where
 		&mut self,
 		addr: &str,
 		tx: Sender<WalletProxyMessage>,
-		wallet: Arc<Mutex<Box<W>>>,
+		wallet: Arc<Mutex<Box<WalletInst<LocalWalletClient, K>>>>,
 	) {
 		self.wallets.insert(addr.to_owned(), (tx, wallet));
 	}
@@ -166,12 +170,7 @@ where
 
 	/// post transaction to the chain (and mine it, taking the reward)
 	fn post_tx(&mut self, m: WalletProxyMessage) -> Result<WalletProxyMessage, libwallet::Error> {
-		let mut dest_wallet = self.wallets
-			.get_mut(&m.sender_id)
-			.unwrap()
-			.1
-			.lock()
-			.unwrap();
+		let dest_wallet = self.wallets.get_mut(&m.sender_id).unwrap().1.clone();
 		let wrapper: TxWrapper = serde_json::from_str(&m.body).context(
 			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper"),
 		)?;
@@ -184,7 +183,7 @@ where
 			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper: tx"),
 		)?;
 
-		common::award_block_to_wallet(&self.chain, vec![&tx], &mut **dest_wallet);
+		common::award_block_to_wallet(&self.chain, vec![&tx], dest_wallet)?;
 
 		Ok(WalletProxyMessage {
 			sender_id: "node".to_owned(),
@@ -205,7 +204,7 @@ where
 		}
 		let w = dest_wallet.unwrap().1.clone();
 		let mut slate = serde_json::from_str(&m.body).unwrap();
-		libwallet::controller::foreign_single_use(w.clone(), |listener_api| {
+		libwallet::controller::foreign_single_use(w.clone(), false, |listener_api| {
 			listener_api.receive_tx(&mut slate)?;
 			Ok(())
 		})?;
@@ -241,8 +240,10 @@ where
 		for o in split {
 			let c = util::from_hex(String::from(o)).unwrap();
 			let commit = Commitment::from_vec(c);
-			let out = common::get_output_local(&self.chain.clone(), &commit).unwrap();
-			outputs.push(out);
+			let out = common::get_output_local(&self.chain.clone(), &commit);
+			if let Some(o) = out {
+				outputs.push(o);
+			}
 		}
 		Ok(WalletProxyMessage {
 			sender_id: "node".to_owned(),

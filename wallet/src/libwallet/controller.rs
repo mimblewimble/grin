@@ -40,7 +40,11 @@ use util::LOGGER;
 
 /// Instantiate wallet Owner API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
-pub fn owner_single_use<F, T: ?Sized, C, K>(wallet: Arc<Mutex<Box<T>>>, f: F) -> Result<(), Error>
+pub fn owner_single_use<F, T: ?Sized, C, K>(
+	wallet: Arc<Mutex<Box<T>>>,
+	close_on_return: bool,
+	f: F,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	F: FnOnce(&mut APIOwner<T, C, K>) -> Result<(), Error>,
@@ -52,7 +56,7 @@ where
 		w.open_with_credentials()?;
 	}
 	f(&mut APIOwner::new(wallet.clone()))?;
-	{
+	if close_on_return {
 		let mut w = wallet.lock().unwrap();
 		w.close()?;
 	}
@@ -61,7 +65,11 @@ where
 
 /// Instantiate wallet Foreign API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
-pub fn foreign_single_use<F, T: ?Sized, C, K>(wallet: Arc<Mutex<Box<T>>>, f: F) -> Result<(), Error>
+pub fn foreign_single_use<F, T: ?Sized, C, K>(
+	wallet: Arc<Mutex<Box<T>>>,
+	close_on_return: bool,
+	f: F,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	F: FnOnce(&mut APIForeign<T, C, K>) -> Result<(), Error>,
@@ -73,7 +81,7 @@ where
 		w.open_with_credentials()?;
 	}
 	f(&mut APIForeign::new(wallet.clone()))?;
-	{
+	if close_on_return {
 		let mut w = wallet.lock().unwrap();
 		w.close()?;
 	}
@@ -301,13 +309,13 @@ where
 			Ok(None) => {
 				error!(LOGGER, "Missing request body: issue_send_tx");
 				Err(ErrorKind::GenericError(
-					"Invalid request body: issue_send_tx",
+					"Invalid request body: issue_send_tx".to_owned(),
 				))?
 			}
 			Err(e) => {
 				error!(LOGGER, "Invalid request body: issue_send_tx {:?}", e);
 				Err(ErrorKind::GenericError(
-					"Invalid request body: issue_send_tx",
+					"Invalid request body: issue_send_tx".to_owned(),
 				))?
 			}
 		}
@@ -329,7 +337,7 @@ where
 			"issue_send_tx" => json_response_pretty(&self.issue_send_tx(req, api)?),
 			"issue_burn_tx" => json_response_pretty(&self.issue_burn_tx(req, api)?),
 			_ => Err(ErrorKind::GenericError(
-				"Unknown error handling post request",
+				"Unknown error handling post request".to_owned(),
 			))?,
 		}
 	}
@@ -444,13 +452,13 @@ where
 			Ok(None) => {
 				error!(LOGGER, "Missing request body: build_coinbase");
 				Err(ErrorKind::GenericError(
-					"Invalid request body: build_coinbase",
+					"Invalid request body: build_coinbase".to_owned(),
 				))?
 			}
 			Err(e) => {
 				error!(LOGGER, "Invalid request body: build_coinbase: {:?}", e);
 				Err(ErrorKind::GenericError(
-					"Invalid request body: build_coinbase",
+					"Invalid request body: build_coinbase".to_owned(),
 				))?
 			}
 		}
@@ -462,7 +470,9 @@ where
 			api.receive_tx(&mut slate)?;
 			Ok(slate.clone())
 		} else {
-			Err(ErrorKind::GenericError("Invalid request body: receive_tx"))?
+			Err(ErrorKind::GenericError(
+				"Invalid request body: receive_tx".to_owned(),
+			))?
 		}
 	}
 
