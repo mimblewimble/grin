@@ -335,7 +335,7 @@ impl LocalServerContainer {
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		let _ =
-			wallet::controller::owner_single_use(Box::new(wallet), |api| {
+			wallet::controller::owner_single_use(Arc::new(Mutex::new(Box::new(wallet))), |api| {
 				let result = api.issue_send_tx(
 					amount,
 					minimum_confirmations,
