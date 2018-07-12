@@ -12,112 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Common functions to facilitate wallet, walletlib and transaction testing
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
-
+extern crate failure;
 extern crate grin_api as api;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_wallet as wallet;
+extern crate serde_json;
 extern crate time;
 
+use std::sync::{Arc, Mutex};
+
 use chain::Chain;
-use core::core::hash::Hashed;
-use core::core::{Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
-use core::{consensus, global, pow};
-use keychain::ExtKeychain;
-use wallet::{HTTPWalletClient, WalletConfig};
+use core::core::{OutputFeatures, OutputIdentifier, Transaction};
+use core::{consensus, global, pow, ser};
 use wallet::file_wallet::FileWallet;
-use wallet::libwallet::internal::updater;
-use wallet::libwallet::types::{BlockFees, BlockIdentifier, OutputStatus,
-                               WalletBackend, WalletClient};
-use wallet::libwallet::{Error, ErrorKind};
+use wallet::libwallet;
+use wallet::libwallet::types::{BlockFees, CbData, WalletClient, WalletInst};
+use wallet::lmdb_wallet::LMDBBackend;
+use wallet::WalletConfig;
 
 use util;
 use util::secp::pedersen;
 
-/// Mostly for testing, refreshes output state against a local chain instance
-/// instead of via an http API call
-pub fn refresh_output_state_local<T, C, K>(wallet: &mut T, chain: &chain::Chain) -> Result<(), Error>
-where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
-	K: keychain::Keychain,
-{
-	let wallet_outputs = updater::map_wallet_outputs(wallet)?;
-	let chain_outputs: Vec<Option<api::Output>> = wallet_outputs
-		.keys()
-		.map(|k| match get_output_local(chain, &k) {
-			Err(_) => None,
-			Ok(k) => Some(k),
-		})
-		.collect();
-	let mut api_outputs: HashMap<pedersen::Commitment, String> = HashMap::new();
-	for out in chain_outputs {
-		match out {
-			Some(o) => {
-				api_outputs.insert(o.commit.commit(), util::to_hex(o.commit.to_vec()));
-			}
-			None => {}
-		}
-	}
-	let height = chain.head().unwrap().height;
-	updater::apply_api_outputs(wallet, &wallet_outputs, &api_outputs, height)?;
-	Ok(())
-}
+pub mod testclient;
 
-/// Return the spendable wallet balance from the local chain
-/// (0:total, 1:amount_awaiting_confirmation, 2:confirmed but locked,
-/// 3:currently_spendable, 4:locked total) TODO: Should be a wallet lib
-/// function with nicer return values
-pub fn get_wallet_balances<T, C, K>(
-	wallet: &mut T,
-	height: u64,
-) -> Result<(u64, u64, u64, u64, u64), Error>
-where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
-	K: keychain::Keychain,
-{
-	let mut unspent_total = 0;
-	let mut unspent_but_locked_total = 0;
-	let mut unconfirmed_total = 0;
-	let mut locked_total = 0;
-	let keychain = wallet.keychain().clone();
-	for out in wallet
-		.iter()
-		.filter(|out| out.root_key_id == keychain.root_key_id())
-	{
-		if out.status == OutputStatus::Unspent {
-			unspent_total += out.value;
-			if out.lock_height > height {
-				unspent_but_locked_total += out.value;
-			}
-		}
-		if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
-			unconfirmed_total += out.value;
-		}
-		if out.status == OutputStatus::Locked {
-			locked_total += out.value;
-		}
-	}
-
-	Ok((
-		unspent_total + unconfirmed_total,        //total
-		unconfirmed_total,                        //amount_awaiting_confirmation
-		unspent_but_locked_total,                 // confirmed but locked
-		unspent_total - unspent_but_locked_total, // currently spendable
-		locked_total,                             // locked total
-	))
+/// types of backends tests should iterate through
+#[derive(Clone)]
+pub enum BackendType {
+	/// File
+	FileBackend,
+	/// LMDB
+	LMDBBackend,
 }
 
 /// Get an output from the chain locally and present it back as an API output
-fn get_output_local(
-	chain: &chain::Chain,
-	commit: &pedersen::Commitment,
-) -> Result<api::Output, Error> {
+fn get_output_local(chain: &chain::Chain, commit: &pedersen::Commitment) -> Option<api::Output> {
 	let outputs = [
 		OutputIdentifier::new(OutputFeatures::DEFAULT_OUTPUT, commit),
 		OutputIdentifier::new(OutputFeatures::COINBASE_OUTPUT, commit),
@@ -125,23 +55,25 @@ fn get_output_local(
 
 	for x in outputs.iter() {
 		if let Ok(_) = chain.is_unspent(&x) {
-			return Ok(api::Output::new(&commit));
+			return Some(api::Output::new(&commit));
 		}
 	}
-	Err(ErrorKind::GenericError(
-		"Can't get output from local instance of chain",
-	))?
+	None
 }
 
 /// Adds a block with a given reward to the chain and mines it
-pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: (Output, TxKernel)) {
+pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbData) {
 	let prev = chain.head_header().unwrap();
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+	let out_bin = util::from_hex(reward.output).unwrap();
+	let kern_bin = util::from_hex(reward.kernel).unwrap();
+	let output = ser::deserialize(&mut &out_bin[..]).unwrap();
+	let kernel = ser::deserialize(&mut &kern_bin[..]).unwrap();
 	let mut b = core::core::Block::new(
 		&prev,
 		txs.into_iter().cloned().collect(),
 		difficulty.clone(),
-		reward,
+		(output, kernel),
 	).unwrap();
 	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
 	chain.set_txhashset_roots(&mut b, false).unwrap();
@@ -158,57 +90,82 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: (Out
 /// adds a reward output to a wallet, includes that reward in a block, mines
 /// the block and adds it to the chain, with option transactions included.
 /// Helpful for building up precise wallet balances for testing.
-pub fn award_block_to_wallet<T, C, K>(chain: &Chain, txs: Vec<&Transaction>, wallet: &mut T)
+pub fn award_block_to_wallet<C, K>(
+	chain: &Chain,
+	txs: Vec<&Transaction>,
+	wallet: Arc<Mutex<Box<WalletInst<C, K>>>>,
+) -> Result<(), libwallet::Error>
 where
-	T: WalletBackend<C, K>,
 	C: WalletClient,
 	K: keychain::Keychain,
 {
+	// build block fees
 	let prev = chain.head_header().unwrap();
 	let fee_amt = txs.iter().map(|tx| tx.fee()).sum();
-	let fees = BlockFees {
+	let block_fees = BlockFees {
 		fees: fee_amt,
 		key_id: None,
 		height: prev.height + 1,
 	};
-	let coinbase_tx = wallet::libwallet::internal::updater::receive_coinbase(wallet, &fees);
-	let (coinbase_tx, fees) = match coinbase_tx {
-		Ok(t) => ((t.0, t.1), t.2),
-		Err(e) => {
-			panic!("Unable to create block reward: {:?}", e);
-		}
-	};
-	add_block_with_reward(chain, txs, coinbase_tx.clone());
-	let output = wallet.get(&fees.key_id.unwrap()).unwrap();
-	let mut batch = wallet.batch().unwrap();
-	batch.save(output).unwrap();
-	batch.commit().unwrap();
+	// build coinbase (via api) and add block
+	libwallet::controller::foreign_single_use(wallet.clone(), |api| {
+		let coinbase_tx = api.build_coinbase(&block_fees)?;
+		add_block_with_reward(chain, txs, coinbase_tx.clone());
+		Ok(())
+	})?;
+	Ok(())
 }
 
-/// adds many block rewards to a wallet, no transactions
-pub fn award_blocks_to_wallet<T, C, K>(chain: &Chain, wallet: &mut T, num_rewards: usize)
+/// Award a blocks to a wallet directly
+pub fn award_blocks_to_wallet<C, K>(
+	chain: &Chain,
+	wallet: Arc<Mutex<Box<WalletInst<C, K>>>>,
+	number: usize,
+) -> Result<(), libwallet::Error>
 where
-	T: WalletBackend<C, K>,
 	C: WalletClient,
 	K: keychain::Keychain,
 {
-	for _ in 0..num_rewards {
-		award_block_to_wallet(chain, vec![], wallet);
+	for _ in 0..number {
+		award_block_to_wallet(chain, vec![], wallet.clone())?;
 	}
+	Ok(())
 }
 
-/// Create a new wallet in a particular directory
-pub fn create_wallet(dir: &str, client: HTTPWalletClient) -> FileWallet<HTTPWalletClient, ExtKeychain> {
+/// dispatch a wallet (extend later to optionally dispatch a db wallet)
+pub fn create_wallet<C, K>(
+	dir: &str,
+	client: C,
+	backend_type: BackendType,
+) -> Arc<Mutex<Box<WalletInst<C, K>>>>
+where
+	C: WalletClient + 'static,
+	K: keychain::Keychain + 'static,
+{
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
-	wallet::WalletSeed::init_file(&wallet_config).expect("Failed to create wallet seed file.");
-	let mut wallet = FileWallet::new(wallet_config.clone(), "", client)
-		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
+	let _ = wallet::WalletSeed::init_file(&wallet_config);
+	let mut wallet: Box<WalletInst<C, K>> = match backend_type {
+		BackendType::FileBackend => {
+			let mut wallet: FileWallet<C, K> = FileWallet::new(wallet_config.clone(), "", client)
+				.unwrap_or_else(|e| {
+					panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+				});
+			Box::new(wallet)
+		}
+		BackendType::LMDBBackend => {
+			let mut wallet: LMDBBackend<C, K> = LMDBBackend::new(wallet_config.clone(), "", client)
+				.unwrap_or_else(|e| {
+					panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+				});
+			Box::new(wallet)
+		}
+	};
 	wallet.open_with_credentials().unwrap_or_else(|e| {
 		panic!(
 			"Error initializing wallet: {:?} Config: {:?}",
 			e, wallet_config
 		)
 	});
-	wallet
+	Arc::new(Mutex::new(wallet))
 }

@@ -250,6 +250,10 @@ impl ChainAdapter for DummyAdapter {
 		unimplemented!()
 	}
 
+	fn txhashset_receive_ready(&self) -> bool {
+		false
+	}
+
 	fn txhashset_write(
 		&self,
 		_h: Hash,

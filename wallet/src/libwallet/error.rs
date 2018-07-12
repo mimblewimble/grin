@@ -134,7 +134,7 @@ pub enum ErrorKind {
 
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
-	GenericError(&'static str),
+	GenericError(String),
 }
 
 impl Display for Error {

@@ -41,7 +41,7 @@ pub mod tui;
 use std::env::current_dir;
 use std::process::exit;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -53,8 +53,10 @@ use core::core::amount_to_hr_string;
 use core::global;
 use tui::ui;
 use util::{init_logger, LoggingConfig, LOGGER};
-use wallet::{libwallet, wallet_db_exists, FileWallet, 
-             HTTPWalletClient, LMDBBackend, WalletConfig, WalletInst};
+use wallet::{
+	libwallet, wallet_db_exists, FileWallet, HTTPWalletClient, LMDBBackend, WalletConfig,
+	WalletInst,
+};
 
 // include build information
 pub mod built_info {
@@ -606,8 +608,8 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 		info!(LOGGER, "Wallet seed file created");
 		if use_db {
 			let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr);
-			let _: LMDBBackend<HTTPWalletClient, keychain::ExtKeychain> = LMDBBackend::new(wallet_config.clone(), "", client)
-				.unwrap_or_else(|e| {
+			let _: LMDBBackend<HTTPWalletClient, keychain::ExtKeychain> =
+				LMDBBackend::new(wallet_config.clone(), "", client).unwrap_or_else(|e| {
 					panic!(
 						"Error creating DB wallet: {} Config: {:?}",
 						e, wallet_config
@@ -657,126 +659,145 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 	}
 
 	// Handle single-use (command line) owner commands
-	{
-		let wallet = instantiate_wallet(wallet_config.clone(), passphrase, use_db);
-		let _res = wallet::controller::owner_single_use(wallet, |api| {
-			match wallet_args.subcommand() {
-				("send", Some(send_args)) => {
-					let amount = send_args
-						.value_of("amount")
-						.expect("Amount to send required");
-					let amount = core::core::amount_from_hr_string(amount)
-						.expect("Could not parse amount as a number with optional decimal point.");
-					let minimum_confirmations: u64 = send_args
-						.value_of("minimum_confirmations")
-						.unwrap()
-						.parse()
-						.expect("Could not parse minimum_confirmations as a whole number.");
-					let selection_strategy = send_args
-						.value_of("selection_strategy")
-						.expect("Selection strategy required");
-					let dest = send_args
-						.value_of("dest")
-						.expect("Destination wallet address required");
-					let mut fluff = false;
-					if send_args.is_present("fluff") {
-						fluff = true;
-					}
-					let max_outputs = 500;
-					let result = api.issue_send_tx(
-						amount,
-						minimum_confirmations,
-						dest,
-						max_outputs,
-						selection_strategy == "all",
-						fluff,
+	let wallet = Arc::new(Mutex::new(instantiate_wallet(
+				wallet_config.clone(),
+				passphrase,
+				use_db,
+				)));
+	let res = wallet::controller::owner_single_use(wallet, |api| {
+		match wallet_args.subcommand() {
+			("send", Some(send_args)) => {
+				let amount = send_args
+					.value_of("amount")
+					.expect("Amount to send required");
+				let amount = core::core::amount_from_hr_string(amount)
+					.expect("Could not parse amount as a number with optional decimal point.");
+				let minimum_confirmations: u64 = send_args
+					.value_of("minimum_confirmations")
+					.unwrap()
+					.parse()
+					.expect("Could not parse minimum_confirmations as a whole number.");
+				let selection_strategy = send_args
+					.value_of("selection_strategy")
+					.expect("Selection strategy required");
+				let dest = send_args
+					.value_of("dest")
+					.expect("Destination wallet address required");
+				let mut fluff = false;
+				if send_args.is_present("fluff") {
+					fluff = true;
+				}
+				let max_outputs = 500;
+				let result = api.issue_send_tx(
+					amount,
+					minimum_confirmations,
+					dest,
+					max_outputs,
+					selection_strategy == "all",
 					);
-					match result {
-						Ok(_) => {
-							info!(
-								LOGGER,
-								"Tx sent: {} grin to {} (strategy '{}')",
-								amount_to_hr_string(amount),
-								dest,
-								selection_strategy,
+				let slate = match result {
+					Ok(s) => {
+						info!(
+							LOGGER,
+							"Tx created: {} grin to {} (strategy '{}')",
+							amount_to_hr_string(amount),
+							dest,
+							selection_strategy,
 							);
-							Ok(())
-						}
-						Err(e) => {
-							error!(LOGGER, "Tx not sent: {:?}", e);
-							match e.kind() {
-								// user errors, don't backtrace
-								libwallet::ErrorKind::NotEnoughFunds { .. } => {}
-								libwallet::ErrorKind::FeeDispute { .. } => {}
-								libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
-								_ => {
-									// otherwise give full dump
-									error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
-								}
-							};
-							Err(e)
-						}
+						s
+					}
+					Err(e) => {
+						error!(LOGGER, "Tx not created: {:?}", e);
+						match e.kind() {
+							// user errors, don't backtrace
+							libwallet::ErrorKind::NotEnoughFunds { .. } => {}
+							libwallet::ErrorKind::FeeDispute { .. } => {}
+							libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
+							_ => {
+								// otherwise give full dump
+								error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
+							}
+						};
+						panic!();
+					}
+				};
+				let result = api.post_tx(&slate, fluff);
+				match result {
+					Ok(_) => {
+						info!(
+							LOGGER,
+							"Tx sent",
+							);
+						Ok(())
+					}
+					Err(e) => {
+						error!(LOGGER, "Tx not sent: {:?}", e);
+						Err(e)
 					}
 				}
-				("burn", Some(send_args)) => {
-					let amount = send_args
-						.value_of("amount")
-						.expect("Amount to burn required");
-					let amount = core::core::amount_from_hr_string(amount)
-						.expect("Could not parse amount as number with optional decimal point.");
-					let minimum_confirmations: u64 = send_args
-						.value_of("minimum_confirmations")
-						.unwrap()
-						.parse()
-						.expect("Could not parse minimum_confirmations as a whole number.");
-					let max_outputs = 500;
-					api.issue_burn_tx(amount, minimum_confirmations, max_outputs)
-						.unwrap_or_else(|e| {
-							panic!("Error burning tx: {:?} Config: {:?}", e, wallet_config)
-						});
-					Ok(())
-				}
-				("info", Some(_)) => {
-					let (validated, wallet_info) =
-						api.retrieve_summary_info(true).unwrap_or_else(|e| {
-							panic!(
-								"Error getting wallet info: {:?} Config: {:?}",
-								e, wallet_config
-							)
-						});
-					wallet::display::info(&wallet_info, validated);
-					Ok(())
-				}
-				("outputs", Some(_)) => {
-					let (height, validated) = api.node_height()?;
-					let (_, outputs) = api.retrieve_outputs(show_spent, true)?;
-					let _res =
-						wallet::display::outputs(height, validated, outputs).unwrap_or_else(|e| {
-							panic!(
-								"Error getting wallet outputs: {:?} Config: {:?}",
-								e, wallet_config
-							)
-						});
-					Ok(())
-				}
-				("restore", Some(_)) => {
-					let result = api.restore();
-					match result {
-						Ok(_) => {
-							info!(LOGGER, "Wallet restore complete",);
-							Ok(())
-						}
-						Err(e) => {
-							error!(LOGGER, "Wallet restore failed: {:?}", e);
-							error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
-							Err(e)
-						}
-					}
-				}
-				_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
 			}
-		});
-	}
+			("burn", Some(send_args)) => {
+				let amount = send_args
+					.value_of("amount")
+					.expect("Amount to burn required");
+				let amount = core::core::amount_from_hr_string(amount)
+					.expect("Could not parse amount as number with optional decimal point.");
+				let minimum_confirmations: u64 = send_args
+					.value_of("minimum_confirmations")
+					.unwrap()
+					.parse()
+					.expect("Could not parse minimum_confirmations as a whole number.");
+				let max_outputs = 500;
+				api.issue_burn_tx(amount, minimum_confirmations, max_outputs)
+					.unwrap_or_else(|e| {
+						panic!("Error burning tx: {:?} Config: {:?}", e, wallet_config)
+					});
+				Ok(())
+			}
+			("info", Some(_)) => {
+				let (validated, wallet_info) =
+					api.retrieve_summary_info(true).unwrap_or_else(|e| {
+						panic!(
+							"Error getting wallet info: {:?} Config: {:?}",
+							e, wallet_config
+							)
+					});
+				wallet::display::info(&wallet_info, validated);
+				Ok(())
+			}
+			("outputs", Some(_)) => {
+				let (height, validated) = api.node_height()?;
+				let (_, outputs) = api.retrieve_outputs(show_spent, true)?;
+				let _res =
+					wallet::display::outputs(height, validated, outputs).unwrap_or_else(|e| {
+						panic!(
+							"Error getting wallet outputs: {:?} Config: {:?}",
+							e, wallet_config
+							)
+					});
+				Ok(())
+			}
+			("restore", Some(_)) => {
+				let result = api.restore();
+				match result {
+					Ok(_) => {
+						info!(LOGGER, "Wallet restore complete",);
+						Ok(())
+					}
+					Err(e) => {
+						error!(LOGGER, "Wallet restore failed: {:?}", e);
+						error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
+						Err(e)
+					}
+				}
+			}
+			_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
+		}
+	});
 	// we need to give log output a chance to catch up before exiting
 	thread::sleep(Duration::from_millis(100));
+
+	if res.is_err() {
+		exit(1);
+	}
 }

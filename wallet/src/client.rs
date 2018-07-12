@@ -28,8 +28,8 @@ use tokio_core::reactor;
 
 use api;
 use error::{Error, ErrorKind};
-use libwallet;
 use libtx::slate::Slate;
+use libwallet;
 use util::secp::pedersen;
 use util::{self, LOGGER};
 
@@ -40,7 +40,7 @@ pub struct HTTPWalletClient {
 
 impl HTTPWalletClient {
 	/// Create a new client that will communicate with the given grin node
-	pub fn new(node_url:&str) -> HTTPWalletClient {
+	pub fn new(node_url: &str) -> HTTPWalletClient {
 		HTTPWalletClient {
 			node_url: node_url.to_owned(),
 		}
@@ -52,9 +52,14 @@ impl WalletClient for HTTPWalletClient {
 		&self.node_url
 	}
 
-	/// Call the wallet API to create a coinbase output for the given block_fees.
-	/// Will retry based on default "retry forever with backoff" behavior.
-	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, libwallet::Error> {
+	/// Call the wallet API to create a coinbase output for the given
+	/// block_fees. Will retry based on default "retry forever with backoff"
+	/// behavior.
+	fn create_coinbase(
+		&self,
+		dest: &str,
+		block_fees: &BlockFees,
+	) -> Result<CbData, libwallet::Error> {
 		let url = format!("{}/v1/wallet/foreign/build_coinbase", dest);
 		match single_create_coinbase(&url, &block_fees) {
 			Err(e) => {
@@ -64,7 +69,9 @@ impl WalletClient for HTTPWalletClient {
 				);
 				error!(LOGGER, "Underlying Error: {}", e.cause().unwrap());
 				error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
-				Err(libwallet::ErrorKind::ClientCallback("Failed to get coinbase"))?
+				Err(libwallet::ErrorKind::ClientCallback(
+					"Failed to get coinbase",
+				))?
 			}
 			Ok(res) => Ok(res),
 		}
@@ -83,34 +90,40 @@ impl WalletClient for HTTPWalletClient {
 		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
 		debug!(LOGGER, "Posting transaction slate to {}", url);
 
-		let mut core = reactor::Core::new()
-			.context(libwallet::ErrorKind::ClientCallback("Sending transaction: Initialise API"))?;
+		let mut core = reactor::Core::new().context(libwallet::ErrorKind::ClientCallback(
+			"Sending transaction: Initialise API",
+		))?;
 		let client = hyper::Client::new(&core.handle());
 
 		let url_pool = url.to_owned();
 
 		let mut req = Request::new(
 			Method::Post,
-			url_pool.parse::<hyper::Uri>()
-			.context(libwallet::ErrorKind::ClientCallback("Sending transaction: parsing URL"))?
+			url_pool
+				.parse::<hyper::Uri>()
+				.context(libwallet::ErrorKind::ClientCallback(
+					"Sending transaction: parsing URL",
+				))?,
 		);
 		req.headers_mut().set(ContentType::json());
-		let json = serde_json::to_string(&slate)
-			.context(libwallet::ErrorKind::ClientCallback("Sending transaction: parsing response"))?;
+		let json = serde_json::to_string(&slate).context(libwallet::ErrorKind::ClientCallback(
+			"Sending transaction: parsing response",
+		))?;
 		req.set_body(json);
 
 		let work = client.request(req).and_then(|res| {
 			res.body().concat2().and_then(move |body| {
-				let slate: Slate =
-					serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+				let slate: Slate = serde_json::from_slice(&body)
+					.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 				Ok(slate)
 			})
 		});
 		let res = core.run(work)
-			.context(libwallet::ErrorKind::ClientCallback("Sending transaction: posting request"))?;
+			.context(libwallet::ErrorKind::ClientCallback(
+				"Sending transaction: posting request",
+			))?;
 		Ok(res)
 	}
-
 
 	/// Posts a transaction to a grin node
 	fn post_tx(&self, tx: &TxWrapper, fluff: bool) -> Result<(), libwallet::Error> {
@@ -121,8 +134,9 @@ impl WalletClient for HTTPWalletClient {
 		} else {
 			url = format!("{}/v1/pool/push", dest);
 		}
-		api::client::post(url.as_str(), tx)
-			.context(libwallet::ErrorKind::ClientCallback("Posting transaction to node"))?;
+		api::client::post(url.as_str(), tx).context(libwallet::ErrorKind::ClientCallback(
+			"Posting transaction to node",
+		))?;
 		Ok(())
 	}
 
@@ -130,8 +144,9 @@ impl WalletClient for HTTPWalletClient {
 	fn get_chain_height(&self) -> Result<u64, libwallet::Error> {
 		let addr = self.node_url();
 		let url = format!("{}/v1/chain", addr);
-		let res = api::client::get::<api::Tip>(url.as_str())
-			.context(libwallet::ErrorKind::ClientCallback("Getting chain height from node"))?;
+		let res = api::client::get::<api::Tip>(url.as_str()).context(
+			libwallet::ErrorKind::ClientCallback("Getting chain height from node"),
+		)?;
 		Ok(res.height)
 	}
 
@@ -205,7 +220,9 @@ impl WalletClient for HTTPWalletClient {
 					LOGGER,
 					"get_outputs_by_pmmr_index: unable to contact API {}. Error: {}", addr, e
 				);
-				Err(libwallet::ErrorKind::ClientCallback("unable to contact api"))?
+				Err(libwallet::ErrorKind::ClientCallback(
+					"unable to contact api",
+				))?
 			}
 		}
 	}
@@ -230,8 +247,9 @@ pub fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Err
 
 /// Makes a single request to the wallet API to create a new coinbase output.
 fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
-	let mut core =
-		reactor::Core::new().context(ErrorKind::GenericError("Could not create reactor"))?;
+	let mut core = reactor::Core::new().context(ErrorKind::GenericError(
+		"Could not create reactor".to_owned(),
+	))?;
 	let client = hyper::Client::new(&core.handle());
 
 	let mut req = Request::new(
@@ -253,7 +271,6 @@ fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, E
 	});
 
 	let res = core.run(work)
-		.context(ErrorKind::GenericError("Could not run core"))?;
+		.context(ErrorKind::GenericError("Could not run core".to_owned()))?;
 	Ok(res)
 }
-

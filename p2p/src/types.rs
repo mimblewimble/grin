@@ -256,6 +256,12 @@ pub trait ChainAdapter: Sync + Send {
 	/// at the provided block hash.
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead>;
 
+	/// Whether the node is ready to accept a new txhashset. If this isn't the
+	/// case, the archive is provided without being requested and likely an
+	/// attack attempt. This should be checked *before* downloading the whole
+	/// state data.
+	fn txhashset_receive_ready(&self) -> bool;
+
 	/// Writes a reading view on a txhashset state that's been provided to us.
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
