@@ -14,6 +14,7 @@
 
 //! Mining Stratum Server
 use bufstream::BufStream;
+use serde;
 use serde_json;
 use serde_json::Value;
 use std::error::Error;
@@ -418,16 +419,7 @@ impl StratumServer {
 
 	// Handle LOGIN message
 	fn handle_login(&self, params: Option<Value>, worker: &mut Worker) -> Result<Value, Value> {
-		let params: LoginParams = match params {
-			Some(val) => serde_json::from_value(val).unwrap(),
-			None => {
-				let e = RpcError {
-					code: -32600,
-					message: "Invalid Request".to_string(),
-				};
-				return Err(serde_json::to_value(e).unwrap());
-			}
-		};
+		let params: LoginParams = parse_params(params)?;
 		worker.login = Some(params.login);
 		// XXX TODO Future - Validate password?
 		worker.agent = params.agent;
@@ -446,17 +438,10 @@ impl StratumServer {
 		worker: &mut Worker,
 		worker_stats: &mut WorkerStats,
 	) -> Result<(Value, bool), Value> {
+
 		// Validate parameters
-		let params: SubmitParams = match params {
-			Some(val) => serde_json::from_value(val).unwrap(),
-			None => {
-				let e = RpcError {
-					code: -32600,
-					message: "Invalid Request".to_string(),
-				};
-				return Err(serde_json::to_value(e).unwrap());
-			}
-		};
+		let params: SubmitParams = parse_params(params)?;
+		
 		let share_difficulty: u64;
 		let mut share_is_block = false;
 		if params.height != self.current_block_versions.last().unwrap().header.height {
@@ -777,3 +762,22 @@ impl StratumServer {
 		} // Main Loop
 	} // fn run_loop()
 } // StratumServer
+
+
+// Utility function to parse a JSON RPC parameter object, returning a proper
+// error if things go wrong.
+fn parse_params<T>(params: Option<Value>) -> Result<T, Value>
+where
+	for<'de> T: serde::Deserialize<'de>
+{
+	params
+		.and_then(|v| serde_json::from_value(v).ok())
+		.ok_or_else(|| {
+			let e = RpcError {
+				code: -32600,
+				message: "Invalid Request".to_string(),
+			};
+			serde_json::to_value(e).unwrap()
+		})
+}
+
