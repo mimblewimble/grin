@@ -339,7 +339,6 @@ impl LocalServerContainer {
 		let _ =
 			wallet::controller::owner_single_use(
 				Arc::new(Mutex::new(Box::new(wallet))),
-				true,
 				|api| {
 					let result = api.issue_send_tx(
 						amount,
@@ -347,7 +346,6 @@ impl LocalServerContainer {
 						dest,
 						max_outputs,
 						selection_strategy == "all",
-						fluff,
 					);
 					match result {
 						Ok(_) => println!(

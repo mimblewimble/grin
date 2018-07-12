@@ -89,7 +89,7 @@ fn basic_transaction_api(test_dir: &str, backend_type: common::BackendType) {
 	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 10);
 
 	// Check wallet 1 contents are as expected
-	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), false, |api| {
+	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
 		debug!(
 			LOGGER,
@@ -112,27 +112,31 @@ fn basic_transaction_api(test_dir: &str, backend_type: common::BackendType) {
 	// assert wallet contents
 	// and a single use api for a send command
 	let amount = 60_000_000_000;
-	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), false, |sender_api| {
+	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
 		// note this will increment the block count as part of the transaction "Posting"
-		let send_tx_res = sender_api.issue_send_tx(
+		let issue_tx_res = sender_api.issue_send_tx(
 			amount,    // amount
 			2,         // minimum confirmations
 			"wallet2", // dest
 			500,       // max outputs
 			true,      // select all outputs
-			true,      // fluff
 		);
-		if let Err(e) = send_tx_res {
-			println!("Error issuing send tx: {}", e);
+		if issue_tx_res.is_err() {
+			panic!("Error issuing send tx: {}", issue_tx_res.err().unwrap());
 		}
+		let post_res = sender_api.post_tx(&issue_tx_res.unwrap(), false);
+		if post_res.is_err() {
+			panic!("Error posting tx: {}", post_res.err().unwrap());
+		}
+
 		Ok(())
 	});
 	if let Err(e) = sender_res {
-		println!("Error starting sender API: {}", e);
+		panic!("Error starting sender API: {}", e);
 	}
 
 	// Check wallet 1 contents are as expected
-	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), false, |api| {
+	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
 		debug!(
 			LOGGER,
@@ -166,7 +170,7 @@ fn basic_transaction_api(test_dir: &str, backend_type: common::BackendType) {
 	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
 
 	// refresh wallets and retrieve info/tests for each wallet after maturity
-	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), false, |api| {
+	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
 		debug!(LOGGER, "Wallet 1 Info: {:?}", wallet1_info);
 		assert!(wallet1_refreshed);
@@ -184,7 +188,7 @@ fn basic_transaction_api(test_dir: &str, backend_type: common::BackendType) {
 		println!("Error starting sender API: {}", e);
 	}
 
-	let sender_res = wallet::controller::owner_single_use(wallet2.clone(), false, |api| {
+	let sender_res = wallet::controller::owner_single_use(wallet2.clone(), |api| {
 		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
 		assert!(wallet2_refreshed);
 		assert_eq!(wallet2_info.amount_currently_spendable, amount);

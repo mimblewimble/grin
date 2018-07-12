@@ -665,7 +665,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			passphrase,
 			use_db,
 		)));
-		let _res = wallet::controller::owner_single_use(wallet, true, |api| {
+		let _res = wallet::controller::owner_single_use(wallet, |api| {
 			match wallet_args.subcommand() {
 				("send", Some(send_args)) => {
 					let amount = send_args
@@ -695,21 +695,20 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 						dest,
 						max_outputs,
 						selection_strategy == "all",
-						fluff,
 					);
-					match result {
-						Ok(_) => {
+					let slate = match result {
+						Ok(s) => {
 							info!(
 								LOGGER,
-								"Tx sent: {} grin to {} (strategy '{}')",
+								"Tx created: {} grin to {} (strategy '{}')",
 								amount_to_hr_string(amount),
 								dest,
 								selection_strategy,
 							);
-							Ok(())
+							s
 						}
 						Err(e) => {
-							error!(LOGGER, "Tx not sent: {:?}", e);
+							error!(LOGGER, "Tx not created: {:?}", e);
 							match e.kind() {
 								// user errors, don't backtrace
 								libwallet::ErrorKind::NotEnoughFunds { .. } => {}
@@ -720,6 +719,20 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 									error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
 								}
 							};
+							panic!();
+						}
+					};
+					let result = api.post_tx(&slate, fluff);
+					match result {
+						Ok(_) => {
+							info!(
+								LOGGER,
+								"Tx sent",
+							);
+							Ok(())
+						}
+						Err(e) => {
+							error!(LOGGER, "Tx not sent: {:?}", e);
 							Err(e)
 						}
 					}

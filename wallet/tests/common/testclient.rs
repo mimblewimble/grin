@@ -204,7 +204,7 @@ where
 		}
 		let w = dest_wallet.unwrap().1.clone();
 		let mut slate = serde_json::from_str(&m.body).unwrap();
-		libwallet::controller::foreign_single_use(w.clone(), false, |listener_api| {
+		libwallet::controller::foreign_single_use(w.clone(), |listener_api| {
 			listener_api.receive_tx(&mut slate)?;
 			Ok(())
 		})?;

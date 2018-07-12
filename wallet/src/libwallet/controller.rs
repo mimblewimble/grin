@@ -42,7 +42,6 @@ use util::LOGGER;
 /// Return a function containing a loaded API context to call
 pub fn owner_single_use<F, T: ?Sized, C, K>(
 	wallet: Arc<Mutex<Box<T>>>,
-	close_on_return: bool,
 	f: F,
 ) -> Result<(), Error>
 where
@@ -51,15 +50,7 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	{
-		let mut w = wallet.lock().unwrap();
-		w.open_with_credentials()?;
-	}
 	f(&mut APIOwner::new(wallet.clone()))?;
-	if close_on_return {
-		let mut w = wallet.lock().unwrap();
-		w.close()?;
-	}
 	Ok(())
 }
 
@@ -67,7 +58,6 @@ where
 /// Return a function containing a loaded API context to call
 pub fn foreign_single_use<F, T: ?Sized, C, K>(
 	wallet: Arc<Mutex<Box<T>>>,
-	close_on_return: bool,
 	f: F,
 ) -> Result<(), Error>
 where
@@ -76,15 +66,7 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	{
-		let mut w = wallet.lock().unwrap();
-		w.open_with_credentials()?;
-	}
 	f(&mut APIForeign::new(wallet.clone()))?;
-	if close_on_return {
-		let mut w = wallet.lock().unwrap();
-		w.close()?;
-	}
 	Ok(())
 }
 
@@ -241,16 +223,6 @@ where
 	K: Keychain + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		// every request should open with stored credentials,
-		// do its thing and then de-init whatever secrets have been
-		// stored
-		{
-			let mut wallet = self.wallet.lock().unwrap();
-			wallet.open_with_credentials().map_err(|e| {
-				error!(LOGGER, "Error opening wallet: {:?}", e);
-				IronError::new(Fail::compat(e), status::BadRequest)
-			})?;
-		}
 		let mut api = APIOwner::new(self.wallet.clone());
 		let mut resp_json = self.handle_request(req, &mut api);
 		if !resp_json.is_err() {
@@ -260,9 +232,6 @@ where
 				.headers
 				.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
 		}
-		let mut w = self.wallet.lock().unwrap();
-		w.close()
-			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
 		resp_json
 	}
 }
@@ -295,7 +264,7 @@ where
 		}
 	}
 
-	fn issue_send_tx(&self, req: &mut Request, api: &mut APIOwner<T, C, K>) -> Result<(), Error> {
+	fn issue_send_tx(&self, req: &mut Request, api: &mut APIOwner<T, C, K>) -> Result<Slate, Error> {
 		let struct_body = req.get::<bodyparser::Struct<SendTXArgs>>();
 		match struct_body {
 			Ok(Some(args)) => api.issue_send_tx(
@@ -304,7 +273,6 @@ where
 				&args.dest,
 				args.max_outputs,
 				args.selection_strategy_is_use_all,
-				args.fluff,
 			),
 			Ok(None) => {
 				error!(LOGGER, "Missing request body: issue_send_tx");
@@ -371,16 +339,6 @@ where
 	K: Keychain + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		// every request should open with stored credentials,
-		// do its thing and then de-init whatever secrets have been
-		// stored
-		{
-			let mut wallet = self.wallet.lock().unwrap();
-			wallet.open_with_credentials().map_err(|e| {
-				error!(LOGGER, "Error opening wallet: {:?}", e);
-				IronError::new(Fail::compat(e), status::BadRequest)
-			})?;
-		}
 		let mut api = APIOwner::new(self.wallet.clone());
 		let resp = match self.handle_request(req, &mut api) {
 			Ok(r) => self.create_ok_response(&r),
@@ -389,9 +347,6 @@ where
 				self.create_error_response(e)
 			}
 		};
-		let mut w = self.wallet.lock().unwrap();
-		w.close()
-			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
 		resp
 	}
 }
@@ -502,24 +457,8 @@ where
 	K: Keychain + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		// every request should open with stored credentials,
-		// do its thing and then de-init whatever secrets have been
-		// stored
-		{
-			let mut wallet = self.wallet.lock().unwrap();
-			wallet.open_with_credentials().map_err(|e| {
-				error!(LOGGER, "Error opening wallet: {:?}", e);
-				IronError::new(Fail::compat(e), status::BadRequest)
-			})?;
-		}
 		let mut api = APIForeign::new(self.wallet.clone());
 		let resp_json = self.handle_request(req, &mut *api);
-		{
-			let mut wallet = self.wallet.lock().unwrap();
-			wallet
-				.close()
-				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
-		}
 		resp_json
 	}
 }

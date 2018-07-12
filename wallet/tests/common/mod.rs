@@ -108,7 +108,7 @@ where
 		height: prev.height + 1,
 	};
 	// build coinbase (via api) and add block
-	libwallet::controller::foreign_single_use(wallet.clone(), false, |api| {
+	libwallet::controller::foreign_single_use(wallet.clone(), |api| {
 		let coinbase_tx = api.build_coinbase(&block_fees)?;
 		add_block_with_reward(chain, txs, coinbase_tx.clone());
 		Ok(())
