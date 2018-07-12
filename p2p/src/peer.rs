@@ -428,6 +428,10 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.txhashset_read(h)
 	}
 
+	fn txhashset_receive_ready(&self) -> bool {
+		self.adapter.txhashset_receive_ready()
+	}
+
 	fn txhashset_write(
 		&self,
 		h: Hash,
