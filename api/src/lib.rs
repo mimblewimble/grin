@@ -41,7 +41,7 @@ extern crate tokio;
 extern crate tokio_core;
 
 pub mod client;
-pub mod handlers;
+mod handlers;
 mod rest;
 mod router;
 mod types;
