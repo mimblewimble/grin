@@ -36,7 +36,6 @@ use core::global;
 use core::global::ChainTypes;
 use keychain::ExtKeychain;
 use util::LOGGER;
-use wallet::libwallet::types::WalletClient;
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -51,25 +50,29 @@ fn setup(test_dir: &str) {
 /// Exercises the Transaction API fully with a test WalletClient operating
 /// directly on a chain instance
 /// Callable with any type of wallet
-fn basic_transaction_api<C: 'static, K: 'static>(test_dir: &str)
-where
-	C: WalletClient,
-	K: keychain::Keychain,
-{
+fn basic_transaction_api(test_dir: &str, backend_type: common::BackendType) {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
-	let mut wallet_proxy: WalletProxy<C, K> = WalletProxy::new(test_dir);
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
 	let chain = wallet_proxy.chain.clone();
 
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
 	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client.clone());
+	let wallet1 = common::create_wallet(
+		&format!("{}/wallet1", test_dir),
+		client.clone(),
+		backend_type.clone(),
+	);
 	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone());
 
 	// define recipient wallet, add to proxy
 	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client.clone());
+	let wallet2 = common::create_wallet(
+		&format!("{}/wallet2", test_dir),
+		client.clone(),
+		backend_type.clone(),
+	);
 	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
@@ -197,6 +200,14 @@ where
 
 #[test]
 fn file_wallet_basic_transaction_api() {
-	let test_dir = "test_output/basic_transaction_api";
-	basic_transaction_api::<LocalWalletClient, ExtKeychain>(test_dir);
+	let test_dir = "test_output/basic_transaction_api_file";
+	basic_transaction_api(test_dir, common::BackendType::FileBackend);
+}
+
+// not yet ready
+#[ignore]
+#[test]
+fn db_wallet_basic_transaction_api() {
+	let test_dir = "test_output/basic_transaction_api_db";
+	basic_transaction_api(test_dir, common::BackendType::LMDBBackend);
 }

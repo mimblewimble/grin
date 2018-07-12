@@ -28,13 +28,23 @@ use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::{consensus, global, pow, ser};
 use wallet::file_wallet::FileWallet;
 use wallet::libwallet;
-use wallet::libwallet::types::{BlockFees, CbData, WalletBackend, WalletClient, WalletInst};
+use wallet::libwallet::types::{BlockFees, CbData, WalletClient, WalletInst};
+use wallet::lmdb_wallet::LMDBBackend;
 use wallet::WalletConfig;
 
 use util;
 use util::secp::pedersen;
 
 pub mod testclient;
+
+/// types of backends tests should iterate through
+#[derive(Clone)]
+pub enum BackendType {
+	/// File
+	FileBackend,
+	/// LMDB
+	LMDBBackend,
+}
 
 /// Get an output from the chain locally and present it back as an API output
 fn get_output_local(chain: &chain::Chain, commit: &pedersen::Commitment) -> Option<api::Output> {
@@ -123,7 +133,11 @@ where
 }
 
 /// dispatch a wallet (extend later to optionally dispatch a db wallet)
-pub fn create_wallet<C, K>(dir: &str, client: C) -> Arc<Mutex<Box<WalletInst<C, K>>>>
+pub fn create_wallet<C, K>(
+	dir: &str,
+	client: C,
+	backend_type: BackendType,
+) -> Arc<Mutex<Box<WalletInst<C, K>>>>
 where
 	C: WalletClient + 'static,
 	K: keychain::Keychain + 'static,
@@ -131,13 +145,27 @@ where
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
 	let _ = wallet::WalletSeed::init_file(&wallet_config);
-	let mut wallet: FileWallet<C, K> = FileWallet::new(wallet_config.clone(), "", client)
-		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
+	let mut wallet: Box<WalletInst<C, K>> = match backend_type {
+		BackendType::FileBackend => {
+			let mut wallet: FileWallet<C, K> = FileWallet::new(wallet_config.clone(), "", client)
+				.unwrap_or_else(|e| {
+					panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+				});
+			Box::new(wallet)
+		}
+		BackendType::LMDBBackend => {
+			let mut wallet: LMDBBackend<C, K> = LMDBBackend::new(wallet_config.clone(), "", client)
+				.unwrap_or_else(|e| {
+					panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+				});
+			Box::new(wallet)
+		}
+	};
 	wallet.open_with_credentials().unwrap_or_else(|e| {
 		panic!(
 			"Error initializing wallet: {:?} Config: {:?}",
 			e, wallet_config
 		)
 	});
-	Arc::new(Mutex::new(Box::new(wallet)))
+	Arc::new(Mutex::new(wallet))
 }
