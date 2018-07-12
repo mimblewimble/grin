@@ -233,6 +233,9 @@ impl MessageHandler for Protocol {
 					sm_arch.hash,
 					sm_arch.height,
 				);
+				if !self.adapter.txhashset_receive_ready() {
+					return Err(Error::BadMessage);
+				}
 
 				let mut tmp = env::temp_dir();
 				tmp.push("txhashset.zip");

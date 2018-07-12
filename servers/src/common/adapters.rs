@@ -24,7 +24,7 @@ use std::thread;
 use std::time::Instant;
 
 use chain::{self, ChainAdapter, Options, Tip};
-use common::types::{ChainValidationMode, ServerConfig, SyncState};
+use common::types::{ChainValidationMode, ServerConfig, SyncState, SyncStatus};
 use core::core;
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
@@ -320,6 +320,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
+	fn txhashset_receive_ready(&self) -> bool {
+		self.sync_state.status() == SyncStatus::TxHashsetDownload
+	}
+
 	/// Writes a reading view on a txhashset state that's been provided to us.
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
@@ -330,7 +334,6 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		txhashset_data: File,
 		_peer_addr: SocketAddr,
 	) -> bool {
-		// TODO check whether we should accept any txhashset now
 		if let Err(e) =
 			w(&self.chain).txhashset_write(h, txhashset_data, self.sync_state.as_ref())
 		{
