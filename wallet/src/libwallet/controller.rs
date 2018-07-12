@@ -32,7 +32,7 @@ use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
 use libwallet::types::{
-	BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient, WalletInfo
+	BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
 
@@ -40,32 +40,33 @@ use util::LOGGER;
 
 /// Instantiate wallet Owner API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
-pub fn owner_single_use<F, T: ?Sized, C, K>(wallet: Box<T>, f: F) -> Result<(), Error>
+pub fn owner_single_use<F, T: ?Sized, C, K>(
+	wallet: Arc<Mutex<Box<T>>>,
+	f: F,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	F: FnOnce(&mut APIOwner<T, C, K>) -> Result<(), Error>,
 	C: WalletClient,
 	K: Keychain,
 {
-	let mut w = wallet;
-	w.open_with_credentials()?;
-	f(&mut APIOwner::new(&mut w))?;
-	w.close()?;
+	f(&mut APIOwner::new(wallet.clone()))?;
 	Ok(())
 }
 
 /// Instantiate wallet Foreign API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
-pub fn foreign_single_use<F, T: ?Sized, C, K>(wallet: &mut Box<T>, f: F) -> Result<(), Error>
+pub fn foreign_single_use<F, T: ?Sized, C, K>(
+	wallet: Arc<Mutex<Box<T>>>,
+	f: F,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	F: FnOnce(&mut APIForeign<T, C, K>) -> Result<(), Error>,
 	C: WalletClient,
 	K: Keychain,
 {
-	wallet.open_with_credentials()?;
-	f(&mut APIForeign::new(wallet))?;
-	wallet.close()?;
+	f(&mut APIForeign::new(wallet.clone()))?;
 	Ok(())
 }
 
@@ -193,7 +194,11 @@ where
 		api.node_height()
 	}
 
-	fn handle_request(&self, req: &mut Request, api: &mut APIOwner<T, C, K>) -> IronResult<Response> {
+	fn handle_request(
+		&self,
+		req: &mut Request,
+		api: &mut APIOwner<T, C, K>,
+	) -> IronResult<Response> {
 		let url = req.url.clone();
 		let path_elems = url.path();
 		match *path_elems.last().unwrap() {
@@ -218,16 +223,7 @@ where
 	K: Keychain + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		// every request should open with stored credentials,
-		// do its thing and then de-init whatever secrets have been
-		// stored
-		let mut wallet = self.wallet.lock().unwrap();
-		wallet.open_with_credentials().map_err(|e| {
-			error!(LOGGER, "Error opening wallet: {:?}", e);
-			IronError::new(Fail::compat(e), status::BadRequest)
-		})?;
-		let mut w = wallet;
-		let mut api = APIOwner::new(&mut w);
+		let mut api = APIOwner::new(self.wallet.clone());
 		let mut resp_json = self.handle_request(req, &mut api);
 		if !resp_json.is_err() {
 			resp_json
@@ -236,9 +232,6 @@ where
 				.headers
 				.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
 		}
-		api.wallet
-			.close()
-			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
 		resp_json
 	}
 }
@@ -271,7 +264,7 @@ where
 		}
 	}
 
-	fn issue_send_tx(&self, req: &mut Request, api: &mut APIOwner<T, C, K>) -> Result<(), Error> {
+	fn issue_send_tx(&self, req: &mut Request, api: &mut APIOwner<T, C, K>) -> Result<Slate, Error> {
 		let struct_body = req.get::<bodyparser::Struct<SendTXArgs>>();
 		match struct_body {
 			Ok(Some(args)) => api.issue_send_tx(
@@ -280,18 +273,17 @@ where
 				&args.dest,
 				args.max_outputs,
 				args.selection_strategy_is_use_all,
-				args.fluff,
 			),
 			Ok(None) => {
 				error!(LOGGER, "Missing request body: issue_send_tx");
 				Err(ErrorKind::GenericError(
-					"Invalid request body: issue_send_tx",
+					"Invalid request body: issue_send_tx".to_owned(),
 				))?
 			}
 			Err(e) => {
 				error!(LOGGER, "Invalid request body: issue_send_tx {:?}", e);
 				Err(ErrorKind::GenericError(
-					"Invalid request body: issue_send_tx",
+					"Invalid request body: issue_send_tx".to_owned(),
 				))?
 			}
 		}
@@ -302,14 +294,18 @@ where
 		api.issue_burn_tx(60, 10, 1000)
 	}
 
-	fn handle_request(&self, req: &mut Request, api: &mut APIOwner<T, C, K>) -> Result<String, Error> {
+	fn handle_request(
+		&self,
+		req: &mut Request,
+		api: &mut APIOwner<T, C, K>,
+	) -> Result<String, Error> {
 		let url = req.url.clone();
 		let path_elems = url.path();
 		match *path_elems.last().unwrap() {
 			"issue_send_tx" => json_response_pretty(&self.issue_send_tx(req, api)?),
 			"issue_burn_tx" => json_response_pretty(&self.issue_burn_tx(req, api)?),
 			_ => Err(ErrorKind::GenericError(
-				"Unknown error handling post request",
+				"Unknown error handling post request".to_owned(),
 			))?,
 		}
 	}
@@ -343,18 +339,7 @@ where
 	K: Keychain + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		// every request should open with stored credentials,
-		// do its thing and then de-init whatever secrets have been
-		// stored
-		{
-			let mut wallet = self.wallet.lock().unwrap();
-			wallet.open_with_credentials().map_err(|e| {
-				error!(LOGGER, "Error opening wallet: {:?}", e);
-				IronError::new(Fail::compat(e), status::BadRequest)
-			})?;
-		}
-		let mut wallet = self.wallet.lock().unwrap();
-		let mut api = APIOwner::new(&mut wallet);
+		let mut api = APIOwner::new(self.wallet.clone());
 		let resp = match self.handle_request(req, &mut api) {
 			Ok(r) => self.create_ok_response(&r),
 			Err(e) => {
@@ -362,9 +347,6 @@ where
 				self.create_error_response(e)
 			}
 		};
-		api.wallet
-			.close()
-			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
 		resp
 	}
 }
@@ -425,13 +407,13 @@ where
 			Ok(None) => {
 				error!(LOGGER, "Missing request body: build_coinbase");
 				Err(ErrorKind::GenericError(
-					"Invalid request body: build_coinbase",
+					"Invalid request body: build_coinbase".to_owned(),
 				))?
 			}
 			Err(e) => {
 				error!(LOGGER, "Invalid request body: build_coinbase: {:?}", e);
 				Err(ErrorKind::GenericError(
-					"Invalid request body: build_coinbase",
+					"Invalid request body: build_coinbase".to_owned(),
 				))?
 			}
 		}
@@ -443,7 +425,9 @@ where
 			api.receive_tx(&mut slate)?;
 			Ok(slate.clone())
 		} else {
-			Err(ErrorKind::GenericError("Invalid request body: receive_tx"))?
+			Err(ErrorKind::GenericError(
+				"Invalid request body: receive_tx".to_owned(),
+			))?
 		}
 	}
 
@@ -473,22 +457,8 @@ where
 	K: Keychain + 'static,
 {
 	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		// every request should open with stored credentials,
-		// do its thing and then de-init whatever secrets have been
-		// stored
-		{
-			let mut wallet = self.wallet.lock().unwrap();
-			wallet.open_with_credentials().map_err(|e| {
-				error!(LOGGER, "Error opening wallet: {:?}", e);
-				IronError::new(Fail::compat(e), status::BadRequest)
-			})?;
-		}
-		let mut wallet = self.wallet.lock().unwrap();
-		let mut api = APIForeign::new(&mut wallet);
-		let resp_json = self.handle_request(req, &mut api);
-		api.wallet
-			.close()
-			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
+		let mut api = APIForeign::new(self.wallet.clone());
+		let resp_json = self.handle_request(req, &mut *api);
 		resp_json
 	}
 }

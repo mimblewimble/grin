@@ -78,8 +78,8 @@ impl WalletSeed {
 	}
 
 	fn from_hex(hex: &str) -> Result<WalletSeed, Error> {
-		let bytes =
-			util::from_hex(hex.to_string()).context(ErrorKind::GenericError("Invalid hex"))?;
+		let bytes = util::from_hex(hex.to_string())
+			.context(ErrorKind::GenericError("Invalid hex".to_owned()))?;
 		Ok(WalletSeed::from_bytes(&bytes))
 	}
 

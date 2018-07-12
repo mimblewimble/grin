@@ -177,13 +177,12 @@ where
 		self.keychain = Some(keychain.context(libwallet::ErrorKind::CallbackImpl(
 			"Error deriving keychain",
 		))?);
-		// Just blow up password for now after it's been used
-		self.passphrase = String::from("");
 		Ok(())
 	}
 
 	/// Close wallet and remove any stored credentials (TBD)
 	fn close(&mut self) -> Result<(), libwallet::Error> {
+		debug!(LOGGER, "Closing wallet keychain");
 		self.keychain = None;
 		Ok(())
 	}

@@ -27,7 +27,7 @@ use std::default::Default;
 use std::sync::{Arc, Mutex};
 use std::{fs, thread, time};
 
-use wallet::{HTTPWalletClient, FileWallet, WalletConfig};
+use wallet::{FileWallet, HTTPWalletClient, WalletConfig};
 
 /// Just removes all results from previous runs
 pub fn clean_all_output(test_name_dir: &str) {
@@ -276,13 +276,15 @@ impl LocalServerContainer {
 				)
 			});
 
-		wallet::controller::foreign_listener(Box::new(wallet), &self.wallet_config.api_listen_addr())
-			.unwrap_or_else(|e| {
-				panic!(
-					"Error creating wallet listener: {:?} Config: {:?}",
-					e, self.wallet_config
-				)
-			});
+		wallet::controller::foreign_listener(
+			Box::new(wallet),
+			&self.wallet_config.api_listen_addr(),
+		).unwrap_or_else(|e| {
+			panic!(
+				"Error creating wallet listener: {:?} Config: {:?}",
+				e, self.wallet_config
+			)
+		});
 
 		self.wallet_is_running = true;
 	}
@@ -335,28 +337,30 @@ impl LocalServerContainer {
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		let _ =
-			wallet::controller::owner_single_use(Box::new(wallet), |api| {
-				let result = api.issue_send_tx(
-					amount,
-					minimum_confirmations,
-					dest,
-					max_outputs,
-					selection_strategy == "all",
-					fluff,
-				);
-				match result {
-					Ok(_) => println!(
-						"Tx sent: {} grin to {} (strategy '{}')",
-						core::core::amount_to_hr_string(amount),
+			wallet::controller::owner_single_use(
+				Arc::new(Mutex::new(Box::new(wallet))),
+				|api| {
+					let result = api.issue_send_tx(
+						amount,
+						minimum_confirmations,
 						dest,
-						selection_strategy,
-					),
-					Err(e) => {
-						println!("Tx not sent to {}: {:?}", dest, e);
-					}
-				};
-				Ok(())
-			}).unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
+						max_outputs,
+						selection_strategy == "all",
+					);
+					match result {
+						Ok(_) => println!(
+							"Tx sent: {} grin to {} (strategy '{}')",
+							core::core::amount_to_hr_string(amount),
+							dest,
+							selection_strategy,
+						),
+						Err(e) => {
+							println!("Tx not sent to {}: {:?}", dest, e);
+						}
+					};
+					Ok(())
+				},
+			).unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 	}
 
 	/// Stops the running wallet server
