@@ -21,8 +21,7 @@ use std::collections::HashMap;
 use std::io;
 
 use futures::{Future, Stream};
-use hyper::header::ContentType;
-use hyper::{self, Method, Request};
+use hyper::{self, ContentType, Method, Request};
 use serde_json;
 use tokio_core::reactor;
 

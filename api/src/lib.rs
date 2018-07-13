@@ -48,4 +48,5 @@ mod types;
 
 pub use handlers::start_rest_apis;
 pub use rest::*;
+pub use router::*;
 pub use types::*;

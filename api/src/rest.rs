@@ -87,14 +87,14 @@ impl From<Context<ErrorKind>> for Error {
 
 /// HTTP server allowing the registration of ApiEndpoint implementations.
 pub struct ApiServer {
-    rt: Option<Runtime>,
+	rt: Option<Runtime>,
 }
 
 impl ApiServer {
 	/// Creates a new ApiServer that will serve ApiEndpoint implementations
 	/// under the root URL.
 	pub fn new() -> ApiServer {
-		ApiServer {rt: None}
+		ApiServer { rt: None }
 	}
 
 	/// Starts the ApiServer at the provided address.
@@ -106,17 +106,17 @@ impl ApiServer {
 			.serve(move || service_fn_ok(f))
 			.map_err(|e| eprintln!("server error: {}", e));
 
-	    self.rt = Some( Runtime::new().unwrap());
-	    if let Some(ref mut rt) = self.rt {
-	         rt.block_on(server);
-	    }
-	    Ok(())
+		self.rt = Some(Runtime::new().unwrap());
+		if let Some(ref mut rt) = self.rt {
+			rt.block_on(server);
+		}
+		Ok(())
 	}
 
 	/// Stops the API server
 	pub fn stop(&mut self) {
-	    if let Some(rt) = self.rt.take() {
-	        rt.shutdown_now().wait().unwrap();
-	    }
+		if let Some(rt) = self.rt.take() {
+			rt.shutdown_now().wait().unwrap();
+		}
 	}
 }

@@ -15,13 +15,12 @@
 //! Controller for wallet.. instantiates and handles listeners (or single-run
 //! invocations) as needed.
 //! Still experimental
-use api::ApiServer;
+use api::{ApiServer, Router};
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 use bodyparser;
-use iron::prelude::{IronError, IronResult, Plugin, Request, Response};
-use iron::{status, Handler, Headers};
+use hyper::{Body, Method, Request, Response, StatusCode};
 use serde::Serialize;
 use serde_json;
 use urlencoded::UrlEncodedQuery;
@@ -64,38 +63,45 @@ where
 	Ok(())
 }
 
+static mut OWNER_ROUTER: Option<Router> = None;
+
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
 pub fn owner_listener<T: ?Sized, C, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
-	OwnerAPIGetHandler<T, C, K>: Handler,
-	OwnerAPIPostHandler<T, C, K>: Handler,
+	OwnerAPIHandler<T, C, K>: Handler,
 	C: WalletClient,
 	K: Keychain,
 {
 	let wallet_arc = Arc::new(Mutex::new(wallet));
-	let api_get_handler = OwnerAPIGetHandler::new(wallet_arc.clone());
-	let api_post_handler = OwnerAPIPostHandler::new(wallet_arc);
-	let api_options_handler = OwnerAPIOptionsHandler {};
+	let api_handler = OwnerAPIHandler::new(wallet_arc);
 
-	let router = router!(
-		owner_options: options "/wallet/owner/*" => api_options_handler,
-		owner_get: get "/wallet/owner/*" => api_get_handler,
-		owner_post: post "/wallet/owner/*" => api_post_handler,
-	);
+	let mut router = Router::new();
+	router.add_route("/v1/wallet/owner/**", api_handler);
+	unsafe {
+		OWNER_ROUTER = Some(router);
+	}
 
-	let mut apis = ApiServer::new("/v1".to_string());
-	apis.register_handler(router);
-	match apis.start(addr) {
-		Err(e) => error!(
-			LOGGER,
-			"Failed to start Grin wallet owner API listener: {}.", e
-		),
-		Ok(_) => info!(LOGGER, "Grin wallet owner API listener started at {}", addr),
-	};
+	let mut apis = ApiServer::new();
+	info!(LOGGER, "Starting HTTP Owner API server at {}.", addr);
+	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
+	apis.start(socket_addr, &handle_owner).unwrap_or_else(|e| {
+		error!(LOGGER, "Failed to start API HTTP server: {}.", e);
+	});
 	Ok(())
 }
+
+pub fn handle_owner(req: Request<Body>) -> Response<Body> {
+	unsafe {
+		match OWNER_ROUTER {
+			Some(ref h) => h.handle(req),
+			None => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+		}
+	}
+}
+
+static mut FOREIGN_ROUTER: Option<Router> = None;
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
@@ -108,24 +114,35 @@ where
 {
 	let api_handler = ForeignAPIHandler::new(Arc::new(Mutex::new(wallet)));
 
-	let router = router!(
-		receive_tx: post "/wallet/foreign/*" => api_handler,
-	);
+	let mut router = Router::new();
+	router.add_route("/v1/wallet/foreign/**", api_handler);
 
-	let mut apis = ApiServer::new("/v1".to_string());
-	apis.register_handler(router);
-	match apis.start(addr) {
-		Err(e) => error!(
-			LOGGER,
-			"Failed to start Grin wallet foreign listener: {}.", e
-		),
-		Ok(_) => info!(LOGGER, "Grin wallet foreign listener started at {}", addr),
-	};
+	unsafe {
+		FOREIGN_ROUTER = Some(router);
+	}
+
+	let mut apis = ApiServer::new();
+	info!(LOGGER, "Starting HTTP Foreign API server at {}.", addr);
+	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
+	apis.start(socket_addr, &handle_foreign)
+		.unwrap_or_else(|e| {
+			error!(LOGGER, "Failed to start API HTTP server: {}.", e);
+		});
+
 	Ok(())
+}
+
+pub fn handle_foreign(req: Request<Body>) -> Response<Body> {
+	unsafe {
+		match FOREIGN_ROUTER {
+			Some(ref h) => h.handle(req),
+			None => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+		}
+	}
 }
 /// API Handler/Wrapper for owner functions
 
-pub struct OwnerAPIGetHandler<T: ?Sized, C, K>
+pub struct OwnerAPIHandler<T: ?Sized, C, K>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -137,15 +154,15 @@ where
 	phantom_c: PhantomData<C>,
 }
 
-impl<T: ?Sized, C, K> OwnerAPIGetHandler<T, C, K>
+impl<T: ?Sized, C, K> OwnerAPIHandler<T, C, K>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
 	K: Keychain,
 {
 	/// Create a new owner API handler for GET methods
-	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> OwnerAPIGetHandler<T, C, K> {
-		OwnerAPIGetHandler {
+	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> OwnerAPIHandler<T, C, K> {
+		OwnerAPIHandler {
 			wallet,
 			phantom: PhantomData,
 			phantom_c: PhantomData,
@@ -154,7 +171,7 @@ where
 
 	fn retrieve_outputs(
 		&self,
-		req: &mut Request,
+		req: &mut Request<Body>,
 		api: &mut APIOwner<T, C, K>,
 	) -> Result<(bool, Vec<OutputData>), Error> {
 		let mut update_from_node = false;
@@ -168,7 +185,7 @@ where
 
 	fn retrieve_summary_info(
 		&self,
-		req: &mut Request,
+		req: &mut Request<Body>,
 		api: &mut APIOwner<T, C, K>,
 	) -> Result<(bool, WalletInfo), Error> {
 		let mut update_from_node = false;
@@ -182,85 +199,30 @@ where
 
 	fn node_height(
 		&self,
-		_req: &mut Request,
+		_req: &mut Request<Body>,
 		api: &mut APIOwner<T, C, K>,
 	) -> Result<(u64, bool), Error> {
 		api.node_height()
 	}
 
-	fn handle_request(
+	fn handle_get_request(
 		&self,
-		req: &mut Request,
+		req: &mut Request<Body>,
 		api: &mut APIOwner<T, C, K>,
-	) -> IronResult<Response> {
+	) -> Result<Response<Body>, Error> {
 		let url = req.url.clone();
 		let path_elems = url.path();
 		match *path_elems.last().unwrap() {
-			"retrieve_outputs" => json_response(&self.retrieve_outputs(req, api)
-				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
-			"retrieve_summary_info" => json_response(&self.retrieve_summary_info(req, api)
-				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
-			"node_height" => json_response(&self.node_height(req, api)
-				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
-			_ => Err(IronError::new(
-				Fail::compat(ErrorKind::Hyper),
-				status::BadRequest,
-			)),
-		}
-	}
-}
-
-impl<T: ?Sized, C, K> Handler for OwnerAPIGetHandler<T, C, K>
-where
-	T: WalletBackend<C, K> + Send + Sync + 'static,
-	C: WalletClient + 'static,
-	K: Keychain + 'static,
-{
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let mut api = APIOwner::new(self.wallet.clone());
-		let mut resp_json = self.handle_request(req, &mut api);
-		if !resp_json.is_err() {
-			resp_json
-				.as_mut()
-				.unwrap()
-				.headers
-				.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
-		}
-		resp_json
-	}
-}
-
-/// Handles all owner API POST requests
-pub struct OwnerAPIPostHandler<T: ?Sized, C, K>
-where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
-	K: Keychain,
-{
-	/// Wallet instance
-	pub wallet: Arc<Mutex<Box<T>>>,
-	phantom: PhantomData<K>,
-	phantom_c: PhantomData<C>,
-}
-
-impl<T: ?Sized, C, K> OwnerAPIPostHandler<T, C, K>
-where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
-	K: Keychain,
-{
-	/// New POST handler
-	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> OwnerAPIPostHandler<T, C, K> {
-		OwnerAPIPostHandler {
-			wallet,
-			phantom: PhantomData,
-			phantom_c: PhantomData,
+			"retrieve_outputs" => json_response(&self.retrieve_outputs(req, api)?),
+			"retrieve_summary_info" => json_response(&self.retrieve_summary_info(req, api)?),
+			"node_height" => json_response(&self.node_height(req, api)?),
+			_ => response(StatusCode::BAD_REQUEST, ""),
 		}
 	}
 
 	fn issue_send_tx(
 		&self,
-		req: &mut Request,
+		req: &mut Request<Body>,
 		api: &mut APIOwner<T, C, K>,
 	) -> Result<Slate, Error> {
 		let struct_body = req.get::<bodyparser::Struct<SendTXArgs>>();
@@ -287,12 +249,16 @@ where
 		}
 	}
 
-	fn issue_burn_tx(&self, _req: &mut Request, api: &mut APIOwner<T, C, K>) -> Result<(), Error> {
+	fn issue_burn_tx(
+		&self,
+		_req: &mut Request<Body>,
+		api: &mut APIOwner<T, C, K>,
+	) -> Result<(), Error> {
 		// TODO: Args
 		api.issue_burn_tx(60, 10, 1000)
 	}
 
-	fn handle_request(
+	fn handle_post_request(
 		&self,
 		req: &mut Request,
 		api: &mut APIOwner<T, C, K>,
@@ -308,7 +274,7 @@ where
 		}
 	}
 
-	fn create_error_response(&self, e: Error) -> IronResult<Response> {
+	fn create_error_response(&self, e: Error) -> Response<Body> {
 		let mut headers = Headers::new();
 		headers.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
 		headers.set_raw(
@@ -321,7 +287,7 @@ where
 		Ok(r)
 	}
 
-	fn create_ok_response(&self, json: &str) -> IronResult<Response> {
+	fn create_ok_response(&self, json: &str) -> Response<Body> {
 		let mut headers = Headers::new();
 		headers.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
 		let mut r = Response::with((status::Ok, json));
@@ -330,13 +296,26 @@ where
 	}
 }
 
-impl<T: ?Sized, C, K> Handler for OwnerAPIPostHandler<T, C, K>
+impl<T: ?Sized, C, K> Handler for OwnerAPIHandler<T, C, K>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
 	C: WalletClient + 'static,
 	K: Keychain + 'static,
 {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+	fn get(&self, req: Request<Body>) -> Response<Body> {
+		let mut api = APIOwner::new(self.wallet.clone());
+		let mut resp_json = self.handle_get_request(req, &mut api);
+		if !resp_json.is_err() {
+			resp_json
+				.as_mut()
+				.unwrap()
+				.headers
+				.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
+		}
+		resp_json
+	}
+
+	fn post(&self, req: Request<Body>) -> Response<Body> {
 		let mut api = APIOwner::new(self.wallet.clone());
 		let resp = match self.handle_request(req, &mut api) {
 			Ok(r) => self.create_ok_response(&r),
@@ -347,13 +326,8 @@ where
 		};
 		resp
 	}
-}
 
-/// Options handler
-pub struct OwnerAPIOptionsHandler {}
-
-impl Handler for OwnerAPIOptionsHandler where {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+	fn options(&self, _req: Request<Body>) -> Response<Body> {
 		let mut resp_json = Ok(Response::with((status::Ok, "{}")));
 		let mut headers = Headers::new();
 		headers.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
@@ -365,6 +339,7 @@ impl Handler for OwnerAPIOptionsHandler where {
 		resp_json
 	}
 }
+
 /// API Handler/Wrapper for foreign functions
 
 pub struct ForeignAPIHandler<T: ?Sized, C, K>
@@ -396,7 +371,7 @@ where
 
 	fn build_coinbase(
 		&self,
-		req: &mut Request,
+		req: &Request<Body>,
 		api: &mut APIForeign<T, C, K>,
 	) -> Result<CbData, Error> {
 		let struct_body = req.get::<bodyparser::Struct<BlockFees>>();
@@ -417,7 +392,11 @@ where
 		}
 	}
 
-	fn receive_tx(&self, req: &mut Request, api: &mut APIForeign<T, C, K>) -> Result<Slate, Error> {
+	fn receive_tx(
+		&self,
+		req: &Request<Body>,
+		api: &mut APIForeign<T, C, K>,
+	) -> Result<Slate, Error> {
 		let struct_body = req.get::<bodyparser::Struct<Slate>>();
 		if let Ok(Some(mut slate)) = struct_body {
 			api.receive_tx(&mut slate)?;
@@ -431,20 +410,14 @@ where
 
 	fn handle_request(
 		&self,
-		req: &mut Request,
+		req: &Request<Body>,
 		api: &mut APIForeign<T, C, K>,
-	) -> IronResult<Response> {
-		let url = req.url.clone();
-		let path_elems = url.path();
-		match *path_elems.last().unwrap() {
-			"build_coinbase" => json_response(&self.build_coinbase(req, api)
-				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
-			"receive_tx" => json_response(&self.receive_tx(req, api)
-				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?),
-			_ => Err(IronError::new(
-				Fail::compat(ErrorKind::Hyper),
-				status::BadRequest,
-			)),
+	) -> Result<Response<Body>, Error> {
+		let mut path_elems = req.uri().path().trim_right_matches("/").rsplit("/");
+		match *path_elems.next().unwrap() {
+			"build_coinbase" => json_response(&self.build_coinbase(req, api)?),
+			"receive_tx" => json_response(&self.receive_tx(req, api)?),
+			_ => response(StatusCode::BAD_REQUEST, "unknown action"),
 		}
 	}
 }
@@ -454,32 +427,38 @@ where
 	C: WalletClient + Send + Sync + 'static,
 	K: Keychain + 'static,
 {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+	fn post(&self, req: Request<Body>) -> Response<Body> {
 		let mut api = APIForeign::new(self.wallet.clone());
 		let resp_json = self.handle_request(req, &mut *api);
 		resp_json
 	}
 }
 
-// Utility to serialize a struct into JSON and produce a sensible IronResult
+// Utility to serialize a struct into JSON and produce a sensible Response
 // out of it.
-fn json_response<T>(s: &T) -> IronResult<Response>
+fn json_response<T>(s: &T) -> Response<Body>
 where
 	T: Serialize,
 {
 	match serde_json::to_string(s) {
-		Ok(json) => Ok(Response::with((status::Ok, json))),
-		Err(_) => Ok(Response::with((status::InternalServerError, ""))),
+		Ok(json) => response(StatusCode::OK, json),
+		Err(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
 	}
 }
 
 // pretty-printed version of above
-fn json_response_pretty<T>(s: &T) -> Result<String, Error>
+fn json_response_pretty<T>(s: &T) -> Response<Body>
 where
 	T: Serialize,
 {
 	match serde_json::to_string_pretty(s) {
-		Ok(json) => Ok(json),
-		Err(_) => Err(ErrorKind::Format)?,
+		Ok(json) => response(StatusCode::OK, json),
+		Err(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
 	}
+}
+
+fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
+	let mut resp = Response::new(text.into());
+	*resp.status_mut() = status;
+	resp
 }

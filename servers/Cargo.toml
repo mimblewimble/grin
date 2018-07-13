@@ -6,7 +6,7 @@ workspace = ".."
 publish = false
 
 [dependencies]
-hyper = "0.10"
+hyper = "0.12"
 itertools = "0.7"
 lmdb-zero = "0.4.4"
 rand = "0.3"

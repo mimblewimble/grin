@@ -36,9 +36,6 @@ extern crate failure;
 extern crate failure_derive;
 extern crate futures;
 extern crate hyper;
-extern crate iron;
-#[macro_use]
-extern crate router;
 extern crate tokio_core;
 extern crate tokio_retry;
 
