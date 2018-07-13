@@ -24,6 +24,7 @@ use serde_json;
 use urlencoded::UrlEncodedQuery;
 
 use chain;
+use store;
 use core::core::hash::{Hash, Hashed};
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::ser;
@@ -513,7 +514,6 @@ impl Handler for ChainCompactHandler {
 /// Gets block headers given either a hash or height.
 /// GET /v1/headers/<hash>
 /// GET /v1/headers/<height>
-///
 pub struct HeaderHandler {
 	pub chain: Weak<chain::Chain>,
 }
@@ -526,13 +526,50 @@ impl HeaderHandler {
 				Err(_) => return Err(ErrorKind::NotFound)?,
 			}
 		}
-		check_block_param(&input)?;
+		check_hash_param(&input)?;
 		let vec = util::from_hex(input).unwrap();
 		let h = Hash::from_vec(&vec);
 		let header = w(&self.chain).get_block_header(&h).context(ErrorKind::NotFound)?;
 		Ok(BlockHeaderPrintable::from_header(&header))
 	}
 }
+
+/// Gets block headers by the range of height
+/// GET /v1/headers?start_height=200&max=100
+pub struct HeaderRangeHandler {
+	pub chain: Weak<chain::Chain>,
+}
+
+impl HeaderRangeHandler {
+	fn get_header_by_range(&self, start_height: u64, max: u64) -> Result<Vec<BlockHeaderPrintable>, Error> {
+		let head = w(&self.chain).head().unwrap();
+
+		if start_height > head.height {
+			Err(ErrorKind::NotFound)?
+		}
+
+		let mut end_height = start_height + max;
+		if end_height > head.height {
+			end_height = head.height;
+		}
+
+		(start_height..end_height)
+			.map(|h| w(&self.chain).get_header_by_height(h))
+			.map(|res| {
+				res.map(|h| BlockHeaderPrintable::from_header(&h))
+			})
+			.collect::<Result<Vec<_>, _>>()
+			.map_err(|err| 
+				if let chain::ErrorKind::StoreErr(store::Error::NotFoundErr(_), _) = err.kind() {
+					Error::from(ErrorKind::NotFound)
+				}
+				else {
+					Error::from(ErrorKind::Internal(err.to_string()))
+				}
+			)
+	}
+}
+
 
 /// Gets block details given either a hash or height.
 /// GET /v1/blocks/<hash>
@@ -566,13 +603,13 @@ impl BlockHandler {
 				Err(_) => return Err(ErrorKind::NotFound)?,
 			}
 		}
-		check_block_param(&input)?;
+		check_hash_param(&input)?;
 		let vec = util::from_hex(input).unwrap();
 		Ok(Hash::from_vec(&vec))
 	}
 }
 
-fn check_block_param(input: &String) -> Result<(), Error> {
+fn check_hash_param(input: &String) -> Result<(), Error> {
 		lazy_static! {
 			static ref RE: Regex = Regex::new(r"[0-9a-fA-F]{64}").unwrap();
 		}
@@ -622,8 +659,43 @@ impl Handler for HeaderHandler {
 			path_elems.pop();
 		}
 		let el = *path_elems.last().unwrap();
-		let h = self.get_header(el.to_string())
-			.map_err(|e| IronError::new(Fail::compat(e), status::InternalServerError))?;
+		let param = el.to_string();
+		let header_id = if let Ok(height) = param.parse() {
+			height
+		} else {
+			check_hash_param(&param)
+				.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
+			param
+		};
+		let h = self.get_header(header_id)
+			.map_err(|e| match e.kind() {
+				ErrorKind::NotFound => IronError::new(Fail::compat(e), status::NotFound),
+				_ => IronError::new(Fail::compat(e), status::InternalServerError),
+			})?;
+		json_response(&h)
+	}
+}
+
+impl Handler for HeaderRangeHandler {
+	fn handle(&self, req: &mut Request) -> IronResult<Response> {
+		let mut max = 30;
+		let mut start_height = 1;
+
+		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+				max = params.get("max").map(|maxes| {
+					maxes.iter().filter_map(|m| str::parse(m).ok()).next()
+				}).unwrap_or(Some(30)).unwrap();
+
+				start_height = params.get("start_height").map(|start_heights| {
+					start_heights.iter().filter_map(|si| str::parse(si).ok()).next().unwrap()
+				}).unwrap_or(1);
+		}
+
+		let h = self.get_header_by_range(start_height, max)
+			.map_err(|e| match e.kind() {
+					ErrorKind::NotFound => IronError::new(Fail::compat(e), status::NotFound),
+					_ => IronError::new(Fail::compat(e), status::InternalServerError),
+			})?;
 		json_response(&h)
 	}
 }
@@ -758,6 +830,9 @@ pub fn start_rest_apis<T>(
 			let header_handler = HeaderHandler {
 				chain: chain.clone(),
 			};
+			let header_range_handler = HeaderRangeHandler {
+				chain: chain.clone(),
+			};
 			let chain_tip_handler = ChainHandler {
 				chain: chain.clone(),
 			};
@@ -795,6 +870,9 @@ pub fn start_rest_apis<T>(
 
 			let route_list = vec![
 				"get blocks".to_string(),
+				"get headers/hash".to_string(),
+				"get headers/height".to_string(),
+				"get headers?start_height=1&max=100".to_string(),
 				"get chain".to_string(),
 				"get chain/compact".to_string(),
 				"get chain/validate".to_string(),
@@ -819,7 +897,8 @@ pub fn start_rest_apis<T>(
 			let router = router!(
 				index: get "/" => index_handler,
 				blocks: get "/blocks/*" => block_handler,
-				headers: get "/headers/*" => header_handler,
+				headers_range: get "/headers" => header_range_handler,
+				headers: get "/headers/:id" => header_handler,
 				chain_tip: get "/chain" => chain_tip_handler,
 				chain_compact: get "/chain/compact" => chain_compact_handler,
 				chain_validate: get "/chain/validate" => chain_validation_handler,
