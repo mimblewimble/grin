@@ -40,10 +40,7 @@ use util::LOGGER;
 
 /// Instantiate wallet Owner API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
-pub fn owner_single_use<F, T: ?Sized, C, K>(
-	wallet: Arc<Mutex<Box<T>>>,
-	f: F,
-) -> Result<(), Error>
+pub fn owner_single_use<F, T: ?Sized, C, K>(wallet: Arc<Mutex<Box<T>>>, f: F) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	F: FnOnce(&mut APIOwner<T, C, K>) -> Result<(), Error>,
@@ -56,10 +53,7 @@ where
 
 /// Instantiate wallet Foreign API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
-pub fn foreign_single_use<F, T: ?Sized, C, K>(
-	wallet: Arc<Mutex<Box<T>>>,
-	f: F,
-) -> Result<(), Error>
+pub fn foreign_single_use<F, T: ?Sized, C, K>(wallet: Arc<Mutex<Box<T>>>, f: F) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	F: FnOnce(&mut APIForeign<T, C, K>) -> Result<(), Error>,
@@ -264,7 +258,11 @@ where
 		}
 	}
 
-	fn issue_send_tx(&self, req: &mut Request, api: &mut APIOwner<T, C, K>) -> Result<Slate, Error> {
+	fn issue_send_tx(
+		&self,
+		req: &mut Request,
+		api: &mut APIOwner<T, C, K>,
+	) -> Result<Slate, Error> {
 		let struct_body = req.get::<bodyparser::Struct<SendTXArgs>>();
 		match struct_body {
 			Ok(Some(args)) => api.issue_send_tx(

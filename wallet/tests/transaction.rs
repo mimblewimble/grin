@@ -208,8 +208,6 @@ fn file_wallet_basic_transaction_api() {
 	basic_transaction_api(test_dir, common::BackendType::FileBackend);
 }
 
-// not yet ready
-#[ignore]
 #[test]
 fn db_wallet_basic_transaction_api() {
 	let test_dir = "test_output/basic_transaction_api_db";
