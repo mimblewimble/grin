@@ -339,6 +339,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		txhashset_data: File,
 		_peer_addr: SocketAddr,
 	) -> bool {
+		// check status again after download, in case 2 txhashsets made it somehow
+		if self.sync_state.status() != SyncStatus::TxHashsetDownload {
+			return true;
+		}
+		
 		if let Err(e) =
 			w(&self.chain).txhashset_write(h, txhashset_data, self.sync_state.as_ref())
 		{

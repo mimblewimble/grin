@@ -130,7 +130,6 @@ pub struct Chain {
 
 	head: Arc<Mutex<Tip>>,
 	orphans: Arc<OrphanBlockPool>,
-	txhashset_lock: Arc<Mutex<bool>>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 
 	// POW verification function
@@ -177,7 +176,6 @@ impl Chain {
 			adapter: adapter,
 			head: Arc::new(Mutex::new(head)),
 			orphans: Arc::new(OrphanBlockPool::new()),
-			txhashset_lock: Arc::new(Mutex::new(false)),
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			pow_verifier: pow_verifier,
 		})
@@ -529,7 +527,6 @@ impl Chain {
 	where
 		T: TxHashsetWriteStatus,
 	{
-		let _ = self.txhashset_lock.lock().unwrap();
 		status.on_setup();
 		let head = self.head().unwrap();
 		let header_head = self.get_header_head().unwrap();
