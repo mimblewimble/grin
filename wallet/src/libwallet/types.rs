@@ -82,18 +82,7 @@ where
 	fn next_child<'a>(&mut self, root_key_id: Identifier) -> Result<u32, Error>;
 
 	/// Return current details
-	fn details(&mut self) -> &mut WalletDetails;
-
-	/// Select spendable coins from the wallet
-	fn select_coins(
-		&self,
-		root_key_id: Identifier,
-		amount: u64,
-		current_height: u64,
-		minimum_confirmations: u64,
-		max_outputs: usize,
-		select_all: bool,
-	) -> Vec<OutputData>;
+	fn details(&mut self, root_key_id: Identifier) -> Result<WalletDetails, Error>;
 
 	/// Attempt to restore the contents of a wallet from seed
 	fn restore(&mut self) -> Result<(), Error>;
@@ -106,17 +95,14 @@ pub trait WalletOutputBatch {
 	/// Add or update data about an output to the backend
 	fn save(&mut self, out: OutputData) -> Result<(), Error>;
 
-	/// Get wallet details
-	fn details(&mut self) -> &mut WalletDetails;
-
 	/// Gets output data by id
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
 
-	/// Iterate over all output data in batch
-	fn iter<'b>(&'b self) -> Box<Iterator<Item = OutputData> + 'b>;
-
 	/// Delete data about an output to the backend
 	fn delete(&mut self, id: &Identifier) -> Result<(), Error>;
+
+	/// save wallet details
+	fn save_details(&mut self, r: Identifier, w: WalletDetails) -> Result<(), Error>;
 
 	/// Save an output as locked in the backend
 	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error>;

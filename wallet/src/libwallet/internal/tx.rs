@@ -152,11 +152,9 @@ where
 
 	let _ = updater::refresh_outputs(wallet);
 
-	let key_id = keychain.root_key_id();
-
 	// select some spendable coins from the wallet
-	let coins = wallet.select_coins(
-		key_id.clone(),
+	let (_, coins) = selection::select_coins(
+		wallet,
 		amount,
 		current_height,
 		minimum_confirmations,

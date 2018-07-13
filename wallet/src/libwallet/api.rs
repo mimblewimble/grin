@@ -67,7 +67,6 @@ where
 		include_spent: bool,
 		refresh_from_node: bool,
 	) -> Result<(bool, Vec<OutputData>), Error> {
-
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 
@@ -120,7 +119,7 @@ where
 		let client;
 		let mut slate_out: Slate;
 		let lock_fn_out;
-		
+
 		client = w.client().clone();
 		let (slate, context, lock_fn) = tx::create_send_tx(
 			&mut **w,
@@ -196,7 +195,7 @@ where
 			Ok(height) => {
 				w.close()?;
 				Ok((height, true))
-			},
+			}
 			Err(_) => {
 				let outputs = self.retrieve_outputs(true, false)?;
 				let height = match outputs.1.iter().map(|out| out.height).max() {
@@ -210,7 +209,7 @@ where
 	}
 
 	/// Attempt to update outputs in wallet, return whether it was successful
-	fn update_outputs(&self, w: &mut W ) -> bool {
+	fn update_outputs(&self, w: &mut W) -> bool {
 		match updater::refresh_outputs(&mut *w) {
 			Ok(_) => true,
 			Err(_) => false,
@@ -255,7 +254,6 @@ where
 		let res = updater::build_coinbase(&mut **w, block_fees);
 		w.close()?;
 		res
-		
 	}
 
 	/// Receive a transaction from a sender

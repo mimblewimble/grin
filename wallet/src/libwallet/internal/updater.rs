@@ -112,6 +112,8 @@ where
 	// api output (if it exists) and refresh it in-place in the wallet.
 	// Note: minimizing the time we spend holding the wallet lock.
 	{
+		let root_key_id = wallet.keychain().root_key_id();
+		let mut details = wallet.details(root_key_id.clone())?;
 		let mut batch = wallet.batch()?;
 		for (commit, id) in wallet_outputs.iter() {
 			if let Ok(mut output) = batch.get(id) {
@@ -123,8 +125,8 @@ where
 			}
 		}
 		{
-			let details = batch.details();
 			details.last_confirmed_height = height;
+			batch.save_details(root_key_id, details)?;
 		}
 		batch.commit()?;
 	}
@@ -184,7 +186,8 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	let current_height = wallet.details().last_confirmed_height;
+	let root_key_id = wallet.keychain().root_key_id();
+	let current_height = wallet.details(root_key_id.clone())?.last_confirmed_height;
 	let keychain = wallet.keychain().clone();
 	let outputs = wallet
 		.iter()
@@ -220,7 +223,10 @@ where
 }
 
 /// Build a coinbase output and insert into wallet
-pub fn build_coinbase<T: ?Sized, C, K>(wallet: &mut T, block_fees: &BlockFees) -> Result<CbData, Error>
+pub fn build_coinbase<T: ?Sized, C, K>(
+	wallet: &mut T,
+	block_fees: &BlockFees,
+) -> Result<CbData, Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,

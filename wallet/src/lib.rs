@@ -56,10 +56,12 @@ pub mod libwallet;
 pub mod lmdb_wallet;
 mod types;
 
+pub use client::{create_coinbase, HTTPWalletClient};
 pub use error::{Error, ErrorKind};
 pub use file_wallet::FileWallet;
-pub use client::{create_coinbase, HTTPWalletClient};
 pub use libwallet::controller;
-pub use libwallet::types::{BlockFees, CbData, WalletBackend, WalletClient, WalletInfo, WalletInst};
+pub use libwallet::types::{
+	BlockFees, CbData, WalletBackend, WalletClient, WalletInfo, WalletInst,
+};
 pub use lmdb_wallet::{wallet_db_exists, LMDBBackend};
 pub use types::{WalletConfig, WalletSeed};

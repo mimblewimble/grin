@@ -20,6 +20,8 @@ use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::{keys, sigcontext};
 use libwallet::types::*;
 
+use util::LOGGER;
+
 /// Initialize a transaction on the sender side, returns a corresponding
 /// libwallet transaction slate with the appropriate inputs selected,
 /// and saves the private wallet identifiers of our selected outputs
@@ -211,26 +213,14 @@ where
 	let key_id = wallet.keychain().root_key_id();
 
 	// select some spendable coins from the wallet
-	let mut coins = wallet.select_coins(
-		key_id.clone(),
+	let (max_outputs, mut coins) = select_coins(
+		wallet,
 		amount,
 		current_height,
 		minimum_confirmations,
 		max_outputs,
 		selection_strategy_is_use_all,
 	);
-
-	// Get the maximum number of outputs in the wallet
-	let max_outputs = wallet
-		.select_coins(
-			key_id.clone(),
-			amount,
-			current_height,
-			minimum_confirmations,
-			max_outputs,
-			true,
-		)
-		.len();
 
 	// sender is responsible for setting the fee on the partial tx
 	// recipient should double check the fee calculation and not blindly trust the
@@ -265,14 +255,14 @@ where
 			}
 
 			// select some spendable coins from the wallet
-			coins = wallet.select_coins(
-				key_id.clone(),
+			coins = select_coins(
+				wallet,
 				amount_with_fee,
 				current_height,
 				minimum_confirmations,
 				max_outputs,
 				selection_strategy_is_use_all,
-			);
+			).1;
 			fee = tx_fee(coins.len(), 2, None);
 			total = coins.iter().map(|c| c.value).sum();
 			amount_with_fee = amount + fee;
@@ -333,4 +323,106 @@ where
 	}
 
 	Ok((parts, change, change_derivation))
+}
+
+/// Select spendable coins from a wallet.
+/// Default strategy is to spend the maximum number of outputs (up to
+/// max_outputs). Alternative strategy is to spend smallest outputs first
+/// but only as many as necessary. When we introduce additional strategies
+/// we should pass something other than a bool in.
+/// TODO: Possibly move this into another trait to be owned by a wallet?
+
+pub fn select_coins<T: ?Sized, C, K>(
+	wallet: &mut T,
+	amount: u64,
+	current_height: u64,
+	minimum_confirmations: u64,
+	max_outputs: usize,
+	select_all: bool,
+) -> (usize, Vec<OutputData>)
+//    max_outputs_available, Outputs
+where
+	T: WalletBackend<C, K>,
+	C: WalletClient,
+	K: Keychain,
+{
+	// first find all eligible outputs based on number of confirmations
+	let root_key_id = wallet.keychain().root_key_id();
+	let mut eligible = wallet
+		.iter()
+		.filter(|out| {
+			out.root_key_id == root_key_id
+				&& out.eligible_to_spend(current_height, minimum_confirmations)
+		})
+		.collect::<Vec<OutputData>>();
+
+	let max_available = eligible.len();
+
+	// sort eligible outputs by increasing value
+	eligible.sort_by_key(|out| out.value);
+
+	// use a sliding window to identify potential sets of possible outputs to spend
+	// Case of amount > total amount of max_outputs(500):
+	// The limit exists because by default, we always select as many inputs as
+	// possible in a transaction, to reduce both the Output set and the fees.
+	// But that only makes sense up to a point, hence the limit to avoid being too
+	// greedy. But if max_outputs(500) is actually not enough to cover the whole
+	// amount, the wallet should allow going over it to satisfy what the user
+	// wants to send. So the wallet considers max_outputs more of a soft limit.
+	if eligible.len() > max_outputs {
+		for window in eligible.windows(max_outputs) {
+			let windowed_eligibles = window.iter().cloned().collect::<Vec<_>>();
+			if let Some(outputs) = select_from(amount, select_all, windowed_eligibles) {
+				return (max_available, outputs);
+			}
+		}
+		// Not exist in any window of which total amount >= amount.
+		// Then take coins from the smallest one up to the total amount of selected
+		// coins = the amount.
+		if let Some(outputs) = select_from(amount, false, eligible.clone()) {
+			debug!(
+				LOGGER,
+				"Extending maximum number of outputs. {} outputs selected.",
+				outputs.len()
+			);
+			return (max_available, outputs);
+		}
+	} else {
+		if let Some(outputs) = select_from(amount, select_all, eligible.clone()) {
+			return (max_available, outputs);
+		}
+	}
+
+	// we failed to find a suitable set of outputs to spend,
+	// so return the largest amount we can so we can provide guidance on what is
+	// possible
+	eligible.reverse();
+	(
+		max_available,
+		eligible.iter().take(max_outputs).cloned().collect(),
+	)
+}
+
+fn select_from(amount: u64, select_all: bool, outputs: Vec<OutputData>) -> Option<Vec<OutputData>> {
+	let total = outputs.iter().fold(0, |acc, x| acc + x.value);
+	if total >= amount {
+		if select_all {
+			return Some(outputs.iter().cloned().collect());
+		} else {
+			let mut selected_amount = 0;
+			return Some(
+				outputs
+					.iter()
+					.take_while(|out| {
+						let res = selected_amount < amount;
+						selected_amount += out.value;
+						res
+					})
+					.cloned()
+					.collect(),
+			);
+		}
+	} else {
+		None
+	}
 }
