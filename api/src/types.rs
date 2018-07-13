@@ -484,6 +484,7 @@ pub struct BlockHeaderPrintable {
 	pub nonce: u64,
 	/// Size of the cuckoo graph
 	pub cuckoo_size: u8,
+	pub cuckoo_solution: Vec<u64>,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: u64,
 	/// Total kernel offset since genesis block
@@ -503,6 +504,7 @@ impl BlockHeaderPrintable {
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),
 			nonce: h.nonce,
 			cuckoo_size: h.pow.cuckoo_sizeshift,
+			cuckoo_solution: h.pow.nonces.clone(),
 			total_difficulty: h.total_difficulty.to_num(),
 			total_kernel_offset: h.total_kernel_offset.to_hex(),
 		}
