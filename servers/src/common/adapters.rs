@@ -119,7 +119,12 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			// push the freshly hydrated block through the chain pipeline
 			self.process_block(block, addr)
 		} else {
-			// TODO - do we need to validate the header here?
+
+			// check at least the header is valid before hydrating
+			if let Err(e) = w(&self.chain).process_block_header(&cb.header, self.chain_opts()) {
+				debug!(LOGGER, "Invalid compact block header {}: {}", cb.hash(), e);
+				return !e.is_bad_data();
+			}
 
 			let txs = {
 				let tx_pool = self.tx_pool.read().unwrap();
