@@ -25,7 +25,7 @@ use lmdb;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::target::Difficulty;
-use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
+use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel, TxKernelEntry};
 use core::global;
 use error::{Error, ErrorKind};
 use grin_store::Error::NotFoundErr;
@@ -721,7 +721,7 @@ impl Chain {
 	}
 
 	/// as above, for kernels
-	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<(Hash, TxKernel)> {
+	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<(Hash, TxKernelEntry)> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset.last_n_kernel(distance)
 	}

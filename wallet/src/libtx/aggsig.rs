@@ -15,7 +15,7 @@
 //! interface into the underlying secp library
 use keychain::{BlindingFactor, Identifier, Keychain};
 use libtx::error::{Error, ErrorKind};
-use util::kernel_sig_msg;
+use core::core::transaction::kernel_sig_msg;
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::Commitment;
 use util::secp::{self, aggsig, Message, Secp256k1, Signature};
@@ -35,9 +35,10 @@ pub fn calculate_partial_sig(
 	nonce_sum: &PublicKey,
 	fee: u64,
 	lock_height: u64,
+	rel_kernel: Option<Commitment>,
 ) -> Result<Signature, Error> {
 	// Add public nonces kR*G + kS*G
-	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
+	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height, rel_kernel))?;
 
 	//Now calculate signature using message M=fee, nonce in e=nonce_sum
 	let sig = aggsig::sign_single(
@@ -59,8 +60,9 @@ pub fn verify_partial_sig(
 	pubkey: &PublicKey,
 	fee: u64,
 	lock_height: u64,
+	rel_kernel: Option<Commitment>,
 ) -> Result<(), Error> {
-	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
+	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height, rel_kernel))?;
 	if !verify_single(secp, sig, &msg, Some(&pub_nonce_sum), pubkey, true) {
 		Err(ErrorKind::Signature(
 			"Signature validation error".to_string(),
@@ -109,8 +111,9 @@ pub fn verify_sig_build_msg(
 	pubkey: &PublicKey,
 	fee: u64,
 	lock_height: u64,
+	rel_kernel: Option<Commitment>,
 ) -> Result<(), Error> {
-	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
+	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height, rel_kernel))?;
 	if !verify_single(secp, sig, &msg, None, pubkey, true) {
 		Err(ErrorKind::Signature(
 			"Signature validation error".to_string(),

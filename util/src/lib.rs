@@ -54,7 +54,6 @@ pub mod types;
 pub use types::{LogLevel, LoggingConfig};
 
 // other utils
-use byteorder::{BigEndian, ByteOrder};
 use std::cell::{Ref, RefCell};
 #[allow(unused_imports)]
 use std::ops::Deref;
@@ -106,12 +105,4 @@ impl<T> OneTime<T> {
 	pub fn borrow(&self) -> Ref<T> {
 		Ref::map(self.inner.borrow(), |o| o.as_ref().unwrap())
 	}
-}
-
-/// Construct msg bytes from tx fee and lock_height
-pub fn kernel_sig_msg(fee: u64, lock_height: u64) -> [u8; 32] {
-	let mut bytes = [0; 32];
-	BigEndian::write_u64(&mut bytes[16..24], fee);
-	BigEndian::write_u64(&mut bytes[24..], lock_height);
-	bytes
 }

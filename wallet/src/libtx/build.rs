@@ -25,7 +25,8 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use util::{kernel_sig_msg, secp};
+use util::secp;
+use core::core::transaction::kernel_sig_msg;
 
 use core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use keychain::{self, BlindSum, BlindingFactor, Identifier, Keychain};
@@ -223,7 +224,7 @@ where
 
 	let kern = {
 		let mut kern = tx.kernels_mut().remove(0);
-		let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
+		let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height, kern.rel_kernel))?;
 
 		let skey = blind_sum.secret_key(&keychain.secp())?;
 		kern.excess = keychain.secp().commit(0, skey)?;
@@ -258,7 +259,7 @@ where
 	let k1 = split.blind_1;
 	let k2 = split.blind_2;
 
-	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
+	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height, kern.rel_kernel))?;
 
 	// generate kernel excess and excess_sig using the split key k1
 	let skey = k1.secret_key(&keychain.secp())?;

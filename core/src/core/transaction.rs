@@ -19,6 +19,8 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::{error, fmt};
 
+use byteorder::{BigEndian, ByteOrder};
+
 use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;
 use core::{committed, Committed};
@@ -27,7 +29,7 @@ use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};
 use util;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::secp::{self, Message, Signature};
-use util::{kernel_sig_msg, static_secp_instance};
+use util::{static_secp_instance};
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -37,6 +39,8 @@ bitflags! {
 		const DEFAULT_KERNEL = 0b00000000;
 		/// Kernel matching a coinbase output
 		const COINBASE_KERNEL = 0b00000001;
+
+		const RELATIVE_LOCK_HEIGHT_KERNEL = 0b00000010;
 	}
 }
 
@@ -141,6 +145,10 @@ pub struct TxKernel {
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
 	pub excess_sig: Signature,
+
+	/// Optional referenced kernel for relative lock height.
+	/// Lock height is absolute if rel_kernel is None.
+	pub rel_kernel: Option<Commitment>,
 }
 
 hashable_ord!(TxKernel);
@@ -165,6 +173,15 @@ impl Writeable for TxKernel {
 			[write_fixed_bytes, &self.excess]
 		);
 		self.excess_sig.write(writer)?;
+
+		// Kernels always include their optional rel_kernel if it is present.
+		// Note: in contrast to a tx_kernel_entry that writes a fixed number of bytes out
+		// and always excludes the optional rel_kernel.
+		if self.features.contains(KernelFeatures::RELATIVE_LOCK_HEIGHT_KERNEL) {
+			let rel_kernel = self.rel_kernel.expect("missing relative kernel");
+			writer.write_fixed_bytes(&rel_kernel)?;
+		}
+
 		Ok(())
 	}
 }
@@ -179,6 +196,7 @@ impl Readable for TxKernel {
 			lock_height: reader.read_u64()?,
 			excess: Commitment::read(reader)?,
 			excess_sig: Signature::read(reader)?,
+			rel_kernel: None,
 		})
 	}
 }
@@ -193,7 +211,10 @@ impl TxKernel {
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self) -> Result<(), secp::Error> {
-		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
+		let msg = Message::from_slice(
+			&kernel_sig_msg(self.fee, self.lock_height, self.rel_kernel),
+		)?;
+
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
 		let sig = &self.excess_sig;
@@ -213,6 +234,7 @@ impl TxKernel {
 			lock_height: 0,
 			excess: Commitment::from_vec(vec![0; 33]),
 			excess_sig: Signature::from_raw_data(&[0; 64]).unwrap(),
+			rel_kernel: None,
 		}
 	}
 
@@ -230,10 +252,71 @@ impl TxKernel {
 	}
 }
 
-impl PMMRable for TxKernel {
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TxKernelEntry {
+	pub kernel: TxKernel
+}
+
+impl Writeable for TxKernelEntry {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		ser_multiwrite!(
+			writer,
+			[write_u8, self.kernel.features.bits()],
+			[write_u64, self.kernel.fee],
+			[write_u64, self.kernel.lock_height],
+			[write_fixed_bytes, &self.kernel.excess]
+		);
+		self.kernel.excess_sig.write(writer)?;
+
+		// TODO - rewrite this, kind of clunky...
+		// The hash of a kernel includes the rel_kernel if we have one.
+		if writer.serialization_mode() == ser::SerializationMode::Hash {
+			if self.kernel.features.contains(KernelFeatures::RELATIVE_LOCK_HEIGHT_KERNEL) {
+				let rel_kernel = self.kernel.rel_kernel.expect("missing relative kernel");
+				writer.write_fixed_bytes(&rel_kernel)?;
+			}
+		}
+
+		Ok(())
+	}
+}
+
+impl Readable for TxKernelEntry {
+	fn read(reader: &mut Reader) -> Result<TxKernelEntry, ser::Error> {
+		let features =
+			KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
+		let kernel = TxKernel {
+			features: features,
+			fee: reader.read_u64()?,
+			lock_height: reader.read_u64()?,
+			excess: Commitment::read(reader)?,
+			excess_sig: Signature::read(reader)?,
+			rel_kernel: None,
+		};
+		Ok(TxKernelEntry{
+			kernel
+		})
+	}
+}
+
+impl TxKernelEntry {
+	pub fn from_kernel(kernel: &TxKernel) -> TxKernelEntry {
+		TxKernelEntry{
+			kernel: kernel.clone()
+		}
+	}
+}
+
+impl PMMRable for TxKernelEntry {
 	fn len() -> usize {
 		17 + // features plus fee and lock_height
 			secp::constants::PEDERSEN_COMMITMENT_SIZE + secp::constants::AGG_SIGNATURE_SIZE
+	}
+}
+
+impl PMMRable for Commitment {
+	fn len() -> usize {
+		secp::constants::PEDERSEN_COMMITMENT_SIZE
 	}
 }
 
@@ -1204,6 +1287,7 @@ mod test {
 			excess: commit,
 			excess_sig: sig.clone(),
 			fee: 10,
+			rel_kernel: None,
 		};
 
 		let mut vec = vec![];
@@ -1222,6 +1306,7 @@ mod test {
 			excess: commit,
 			excess_sig: sig.clone(),
 			fee: 10,
+			rel_kernel: None,
 		};
 
 		let mut vec = vec![];
@@ -1276,5 +1361,19 @@ mod test {
 
 		let short_id = input.short_id(&block_hash, nonce);
 		assert_eq!(short_id, ShortId::from_hex("2df325971ab0").unwrap());
+	}
+}
+
+/// Construct msg bytes from tx fee, lock_height and
+/// the optional relative kernel.
+pub fn kernel_sig_msg(fee: u64, lock_height: u64, rel_kernel: Option<Commitment>) -> [u8; 32] {
+	let mut bytes = [0; 32];
+	BigEndian::write_u64(&mut bytes[16..24], fee);
+	BigEndian::write_u64(&mut bytes[24..], lock_height);
+
+	if let Some(rel_kernel) = rel_kernel {
+		(fee, lock_height, rel_kernel).hash().0
+	} else {
+		bytes
 	}
 }

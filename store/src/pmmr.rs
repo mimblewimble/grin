@@ -19,6 +19,7 @@ use croaring::Bitmap;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::{self, family, Backend};
+use core::core::pmmr_extra::ExtraBackend;
 use core::core::BlockHeader;
 use core::ser::{self, PMMRable};
 use leaf_set::LeafSet;
@@ -38,6 +39,38 @@ pub const PMMR_FILES: [&str; 4] = [
 	PMMR_LEAF_FILE,
 	PMMR_PRUN_FILE,
 ];
+
+pub struct PMMRExtraBackend<T>
+where
+	T: PMMRable,
+{
+	data_dir: String,
+	_marker: marker::PhantomData<T>,
+}
+
+impl<T> ExtraBackend<T> for PMMRExtraBackend<T>
+where
+	T: PMMRable + ::std::fmt::Debug,
+{
+	fn get(&self, position: u64) -> Option<T> {
+		panic!("not yet implemented...");
+	}
+}
+
+impl<T> PMMRExtraBackend<T>
+where
+	T: PMMRable,
+{
+	pub fn new(
+		data_dir: String,
+	) -> io::Result<PMMRExtraBackend<T>> {
+		panic!("not yet implemented");
+	}
+
+	pub fn unpruned_size(&self) -> io::Result<u64> {
+		panic!("not yet implemented");
+	}
+}
 
 /// PMMR persistent backend implementation. Relies on multiple facilities to
 /// handle writing, reading and pruning.

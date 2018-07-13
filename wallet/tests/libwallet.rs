@@ -125,6 +125,7 @@ fn aggsig_sender_receiver_interaction() {
 			&receiver_pub_excess,
 			0,
 			0,
+			None,
 		);
 		assert!(!sig_verifies.is_err());
 	}
@@ -154,6 +155,7 @@ fn aggsig_sender_receiver_interaction() {
 			&sender_pub_excess,
 			0,
 			0,
+			None,
 		);
 		assert!(!sig_verifies.is_err());
 	}
@@ -196,7 +198,7 @@ fn aggsig_sender_receiver_interaction() {
 
 		// Receiver check the final signature verifies
 		let sig_verifies =
-			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, 0, 0);
+			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, 0, 0, None);
 		assert!(!sig_verifies.is_err());
 	}
 
@@ -322,6 +324,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&receiver_pub_excess,
 			0,
 			0,
+			None,
 		);
 		assert!(!sig_verifies.is_err());
 	}
@@ -351,6 +354,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&sender_pub_excess,
 			0,
 			0,
+			None,
 		);
 		assert!(!sig_verifies.is_err());
 	}
@@ -392,7 +396,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 
 		// Receiver check the final signature verifies
 		let sig_verifies =
-			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, 0, 0);
+			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, 0, 0, None);
 		assert!(!sig_verifies.is_err());
 	}
 

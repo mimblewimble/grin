@@ -29,15 +29,17 @@ use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::pmmr::{self, PMMR};
+use core::core::pmmr_extra::PMMRExtra;
 use core::core::{
-	Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel,
+	Block, BlockHeader, Input, KernelFeatures, Output, OutputFeatures,
+	OutputIdentifier, Transaction, TxKernel, TxKernelEntry,
 };
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
 
 use error::{Error, ErrorKind};
 use grin_store;
-use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
+use grin_store::pmmr::{PMMRBackend, PMMR_FILES, PMMRExtraBackend};
 use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
 use types::{TxHashSetRoots, TxHashsetWriteStatus};
@@ -47,7 +49,35 @@ const TXHASHSET_SUBDIR: &'static str = "txhashset";
 const OUTPUT_SUBDIR: &'static str = "output";
 const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
 const KERNEL_SUBDIR: &'static str = "kernel";
+const KERNEL_EXTRA_SUBDIR: &'static str = "kernel_extra";
 const TXHASHSET_ZIP: &'static str = "txhashset_snapshot.zip";
+
+struct PMMRExtraDataHandle<T>
+where
+	T: PMMRable,
+{
+	backend: PMMRExtraBackend<T>,
+	last_pos: u64,
+}
+
+impl<T> PMMRExtraDataHandle<T>
+where
+	T: PMMRable + ::std::fmt::Debug,
+{
+	fn new(
+		root_dir: String,
+		file_name: &str,
+	) -> Result<PMMRExtraDataHandle<T>, Error> {
+		let path = Path::new(&root_dir).join(TXHASHSET_SUBDIR).join(file_name);
+		fs::create_dir_all(path.clone())?;
+		let backend = PMMRExtraBackend::new(path.to_str().unwrap().to_string())?;
+		let last_pos = backend.unpruned_size()?;
+		Ok(PMMRExtraDataHandle {
+			backend,
+			last_pos,
+		})
+	}
+}
 
 struct PMMRHandle<T>
 where
@@ -69,11 +99,11 @@ where
 	) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(&root_dir).join(TXHASHSET_SUBDIR).join(file_name);
 		fs::create_dir_all(path.clone())?;
-		let be = PMMRBackend::new(path.to_str().unwrap().to_string(), prunable, header)?;
-		let sz = be.unpruned_size()?;
+		let backend = PMMRBackend::new(path.to_str().unwrap().to_string(), prunable, header)?;
+		let last_pos = backend.unpruned_size()?;
 		Ok(PMMRHandle {
-			backend: be,
-			last_pos: sz,
+			backend,
+			last_pos,
 		})
 	}
 }
@@ -91,7 +121,8 @@ where
 pub struct TxHashSet {
 	output_pmmr_h: PMMRHandle<OutputIdentifier>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
-	kernel_pmmr_h: PMMRHandle<TxKernel>,
+	kernel_pmmr_h: PMMRHandle<TxKernelEntry>,
+	kernel_extra_h: PMMRExtraDataHandle<Commitment>,
 
 	// chain store used as index of commitments to MMR positions
 	commit_index: Arc<ChainStore>,
@@ -104,25 +135,11 @@ impl TxHashSet {
 		commit_index: Arc<ChainStore>,
 		header: Option<&BlockHeader>,
 	) -> Result<TxHashSet, Error> {
-		let output_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, OUTPUT_SUBDIR]
-			.iter()
-			.collect();
-		fs::create_dir_all(output_file_path.clone())?;
-
-		let rproof_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, RANGE_PROOF_SUBDIR]
-			.iter()
-			.collect();
-		fs::create_dir_all(rproof_file_path.clone())?;
-
-		let kernel_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, KERNEL_SUBDIR]
-			.iter()
-			.collect();
-		fs::create_dir_all(kernel_file_path.clone())?;
-
 		Ok(TxHashSet {
 			output_pmmr_h: PMMRHandle::new(root_dir.clone(), OUTPUT_SUBDIR, true, header)?,
 			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR, true, header)?,
 			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR, false, None)?,
+			kernel_extra_h: PMMRExtraDataHandle::new(root_dir.clone(), KERNEL_EXTRA_SUBDIR)?,
 			commit_index,
 		})
 	}
@@ -168,8 +185,8 @@ impl TxHashSet {
 	}
 
 	/// as above, for kernels
-	pub fn last_n_kernel(&mut self, distance: u64) -> Vec<(Hash, TxKernel)> {
-		let kernel_pmmr: PMMR<TxKernel, _> =
+	pub fn last_n_kernel(&mut self, distance: u64) -> Vec<(Hash, TxKernelEntry)> {
+		let kernel_pmmr: PMMR<TxKernelEntry, _> =
 			PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 		kernel_pmmr.get_last_n_insertions(distance)
 	}
@@ -209,7 +226,7 @@ impl TxHashSet {
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		let rproof_pmmr: PMMR<RangeProof, _> =
 			PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
-		let kernel_pmmr: PMMR<TxKernel, _> =
+		let kernel_pmmr: PMMR<TxKernelEntry, _> =
 			PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 		(output_pmmr.root(), rproof_pmmr.root(), kernel_pmmr.root())
 	}
@@ -375,7 +392,8 @@ where
 pub struct Extension<'a> {
 	output_pmmr: PMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
-	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
+	kernel_pmmr: PMMR<'a, TxKernelEntry, PMMRBackend<TxKernelEntry>>,
+	kernel_pmmr_extra: PMMRExtra<'a, Commitment, PMMRExtraBackend<Commitment>>,
 
 	commit_index: Arc<ChainStore>,
 	new_output_commits: HashMap<Commitment, u64>,
@@ -408,8 +426,8 @@ impl<'a> Committed for Extension<'a> {
 		let mut commitments = vec![];
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
-				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
-					commitments.push(kernel.excess);
+				if let Some(entry) = self.kernel_pmmr.get_data(n) {
+					commitments.push(entry.kernel.excess);
 				}
 			}
 		}
@@ -436,6 +454,10 @@ impl<'a> Extension<'a> {
 			kernel_pmmr: PMMR::at(
 				&mut trees.kernel_pmmr_h.backend,
 				trees.kernel_pmmr_h.last_pos,
+			),
+			kernel_pmmr_extra: PMMRExtra::at(
+				&mut trees.kernel_extra_h.backend,
+				trees.kernel_extra_h.last_pos,
 			),
 			commit_index,
 			new_output_commits: HashMap::new(),
@@ -688,11 +710,20 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	// Push kernels in their MMR and file
 	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
-		// push kernels in their MMR and file
+		let entry = TxKernelEntry::from_kernel(kernel);
+
 		self.kernel_pmmr
-			.push(kernel.clone())
+			.push(entry)
 			.map_err(&ErrorKind::TxHashSetErr)?;
+
+		// Now push optional data to the relevant file.
+		// The MMR stores fixed size entries so we must store
+		// variable size data somewhere else.
+		if kernel.features.contains(KernelFeatures::RELATIVE_LOCK_HEIGHT_KERNEL) {
+			debug!(LOGGER, "apply_kernel: storing optional relative_kernel not yet implemented!!!");
+		}
 
 		Ok(())
 	}
@@ -949,6 +980,18 @@ impl<'a> Extension<'a> {
 		)
 	}
 
+	fn get_kernel(&self, pos: u64) -> Option<TxKernel> {
+		let entry = self.kernel_pmmr.get_data(pos);
+		if let Some(kernel) = entry.and_then(|x| Some(x.kernel)) {
+			if kernel.features.contains(KernelFeatures::RELATIVE_LOCK_HEIGHT_KERNEL) {
+				// let rel_kernel = self.kernel_extra.foo
+			}
+			Some(kernel)
+		} else {
+			None
+		}
+	}
+
 	fn verify_kernel_signatures(&self, status: &TxHashsetWriteStatus) -> Result<(), Error> {
 		let now = Instant::now();
 
@@ -956,7 +999,8 @@ impl<'a> Extension<'a> {
 		let total_kernels = pmmr::n_leaves(self.kernel_pmmr.unpruned_size());
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
-				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
+				let entry = self.kernel_pmmr.get_data(n);
+				if let Some(kernel) = entry.and_then(|x| Some(x.kernel)) {
 					kernel.verify()?;
 					kern_count += 1;
 				}

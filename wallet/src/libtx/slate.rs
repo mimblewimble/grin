@@ -25,6 +25,7 @@ use libtx::error::{Error, ErrorKind};
 use libtx::{aggsig, build, tx_fee};
 
 use util::secp::key::{PublicKey, SecretKey};
+use util::secp::pedersen::Commitment;
 use util::secp::Signature;
 use util::{secp, LOGGER};
 
@@ -81,6 +82,8 @@ pub struct Slate {
 	pub height: u64,
 	/// Lock height
 	pub lock_height: u64,
+	/// Optional referenced kernel for relative lock height.
+	pub rel_kernel: Option<Commitment>,
 	/// Participant data, each participant in the transaction will
 	/// insert their public data here. For now, 0 is sender and 1
 	/// is receiver, though this will change for multi-party
@@ -98,6 +101,7 @@ impl Slate {
 			fee: 0,
 			height: 0,
 			lock_height: 0,
+			rel_kernel: None,
 			participant_data: vec![],
 		}
 	}
@@ -162,6 +166,7 @@ impl Slate {
 			&self.pub_nonce_sum(keychain.secp())?,
 			self.fee,
 			self.lock_height,
+			self.rel_kernel,
 		)?;
 		self.participant_data[participant_id].part_sig = Some(sig_part);
 		Ok(())
@@ -304,6 +309,7 @@ impl Slate {
 					&p.public_blind_excess,
 					self.fee,
 					self.lock_height,
+					self.rel_kernel,
 				)?;
 			}
 		}
@@ -348,6 +354,7 @@ impl Slate {
 			&final_pubkey,
 			self.fee,
 			self.lock_height,
+			self.rel_kernel,
 		)?;
 
 		Ok(final_sig)
