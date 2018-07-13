@@ -352,10 +352,6 @@ fn needs_syncing(
 /// Even if sync_head is significantly out of date we will "reset" it once we
 /// start getting headers back from a peer.
 ///
-/// TODO - this gets *expensive* with a large header chain to iterate over
-/// as we need to get each block header from the db
-/// can we add a get_block_header_by_height(height, hash) ???
-///
 fn get_locator(chain: Arc<chain::Chain>) -> Result<Vec<Hash>, Error> {
 	let tip = chain.get_sync_head()?;
 	let heights = get_locator_heights(tip.height);
