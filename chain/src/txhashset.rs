@@ -39,7 +39,8 @@ use core::ser::{PMMRIndexHashable, PMMRable};
 
 use error::{Error, ErrorKind};
 use grin_store;
-use grin_store::pmmr::{PMMRBackend, PMMR_FILES, PMMRExtraBackend};
+use grin_store::pmmr::{PMMRBackend, PMMR_Files};
+use grin_store::pmmr_extra::PMMRExtraBackend;
 use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
 use types::{TxHashSetRoots, TxHashsetWriteStatus};
@@ -57,7 +58,6 @@ where
 	T: PMMRable,
 {
 	backend: PMMRExtraBackend<T>,
-	last_pos: u64,
 }
 
 impl<T> PMMRExtraDataHandle<T>
@@ -71,10 +71,8 @@ where
 		let path = Path::new(&root_dir).join(TXHASHSET_SUBDIR).join(file_name);
 		fs::create_dir_all(path.clone())?;
 		let backend = PMMRExtraBackend::new(path.to_str().unwrap().to_string())?;
-		let last_pos = backend.unpruned_size()?;
 		Ok(PMMRExtraDataHandle {
 			backend,
-			last_pos,
 		})
 	}
 }
@@ -310,6 +308,7 @@ where
 	trees.output_pmmr_h.backend.discard();
 	trees.rproof_pmmr_h.backend.discard();
 	trees.kernel_pmmr_h.backend.discard();
+	trees.kernel_extra_h.backend.discard();
 
 	trace!(LOGGER, "TxHashSet (readonly) extension done.");
 
@@ -361,6 +360,7 @@ where
 			trees.output_pmmr_h.backend.discard();
 			trees.rproof_pmmr_h.backend.discard();
 			trees.kernel_pmmr_h.backend.discard();
+			trees.kernel_extra_h.backend.discard();
 			Err(e)
 		}
 		Ok(r) => {
@@ -369,12 +369,14 @@ where
 				trees.output_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
+				trees.kernel_extra_h.backend.discard();
 			} else {
 				trace!(LOGGER, "Committing txhashset extension. sizes {:?}", sizes);
 				child_batch.commit()?;
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
+				trees.kernel_extra_h.backend.sync()?;
 				trees.output_pmmr_h.last_pos = sizes.0;
 				trees.rproof_pmmr_h.last_pos = sizes.1;
 				trees.kernel_pmmr_h.last_pos = sizes.2;
@@ -457,7 +459,6 @@ impl<'a> Extension<'a> {
 			),
 			kernel_pmmr_extra: PMMRExtra::at(
 				&mut trees.kernel_extra_h.backend,
-				trees.kernel_extra_h.last_pos,
 			),
 			commit_index,
 			new_output_commits: HashMap::new(),
@@ -833,6 +834,9 @@ impl<'a> Extension<'a> {
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.kernel_pmmr
 			.rewind(kernel_pos, &Bitmap::create())
+			.map_err(&ErrorKind::TxHashSetErr)?;
+		self.kernel_pmmr_extra
+			.rewind(kernel_pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}

@@ -27,6 +27,18 @@ where
 	T: PMMRable,
 {
 	fn get(&self, position: u64) -> Option<T>;
+
+	fn rewind(&mut self, position: u64) -> Result<(), String>;
+}
+
+pub struct PMMRExtra<'a, T, B>
+where
+	T: PMMRable,
+	B: 'a + ExtraBackend<T>,
+{
+	backend: &'a mut B,
+	// only needed to parameterise Backend
+	_marker: marker::PhantomData<T>,
 }
 
 impl<'a, T, B> PMMRExtra<'a, T, B>
@@ -36,29 +48,22 @@ where
 {
 	pub fn new(backend: &'a mut B) -> PMMRExtra<T, B> {
 		PMMRExtra {
-			last_pos: 0,
-			backend: backend,
+			backend,
 			_marker: marker::PhantomData,
 		}
 	}
 
-	pub fn at(backend: &'a mut B, last_pos: u64) -> PMMRExtra<T, B> {
+	pub fn at(backend: &'a mut B) -> PMMRExtra<T, B> {
 		PMMRExtra {
-			last_pos: last_pos,
-			backend: backend,
+			backend,
 			_marker: marker::PhantomData,
 		}
 	}
-}
 
-pub struct PMMRExtra<'a, T, B>
-where
-	T: PMMRable,
-	B: 'a + ExtraBackend<T>,
-{
-	/// The last position in the PMMR
-	pub last_pos: u64,
-	backend: &'a mut B,
-	// only needed to parameterise Backend
-	_marker: marker::PhantomData<T>,
+	/// Rewind the PMMR to a previous position, as if all push operations after
+	/// that had been canceled. Expects a position in the PMMR to rewind to.
+	pub fn rewind(&mut self, pos: u64) -> Result<(), String> {
+		self.backend.rewind(pos)?;
+		Ok(())
+	}
 }
