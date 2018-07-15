@@ -22,6 +22,7 @@ use libwallet::internal::{selection, updater};
 use libwallet::types::{Context, TxLogEntryType, WalletBackend, WalletClient};
 use libwallet::{Error, ErrorKind};
 use util::LOGGER;
+use util::secp_static;
 
 /// Receive a transaction, modifying the slate accordingly (which can then be
 /// sent back to sender for posting)
@@ -73,6 +74,7 @@ where
 	updater::refresh_outputs(wallet)?;
 
 	let lock_height = current_height;
+	let rel_kernel = Some(secp_static::commit_to_zero_value());
 
 	// Sender selects outputs into a new slate and save our corresponding keys in
 	// a transaction context. The secret key in our transaction context will be
@@ -88,6 +90,7 @@ where
 		current_height,
 		minimum_confirmations,
 		lock_height,
+		rel_kernel,
 		max_outputs,
 		num_change_outputs,
 		selection_strategy_is_use_all,

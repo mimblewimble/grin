@@ -33,17 +33,13 @@ pub fn calculate_partial_sig(
 	sec_key: &SecretKey,
 	sec_nonce: &SecretKey,
 	nonce_sum: &PublicKey,
-	fee: u64,
-	lock_height: u64,
-	rel_kernel: Option<Commitment>,
+	msg: &Message,
 ) -> Result<Signature, Error> {
 	// Add public nonces kR*G + kS*G
-	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height, rel_kernel))?;
-
 	//Now calculate signature using message M=fee, nonce in e=nonce_sum
 	let sig = aggsig::sign_single(
 		secp,
-		&msg,
+		msg,
 		sec_key,
 		Some(sec_nonce),
 		Some(nonce_sum),
@@ -58,12 +54,9 @@ pub fn verify_partial_sig(
 	sig: &Signature,
 	pub_nonce_sum: &PublicKey,
 	pubkey: &PublicKey,
-	fee: u64,
-	lock_height: u64,
-	rel_kernel: Option<Commitment>,
+	msg: &Message,
 ) -> Result<(), Error> {
-	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height, rel_kernel))?;
-	if !verify_single(secp, sig, &msg, Some(&pub_nonce_sum), pubkey, true) {
+	if !verify_single(secp, sig, msg, Some(&pub_nonce_sum), pubkey, true) {
 		Err(ErrorKind::Signature(
 			"Signature validation error".to_string(),
 		))?
@@ -109,12 +102,9 @@ pub fn verify_sig_build_msg(
 	secp: &Secp256k1,
 	sig: &Signature,
 	pubkey: &PublicKey,
-	fee: u64,
-	lock_height: u64,
-	rel_kernel: Option<Commitment>,
+	msg: &Message,
 ) -> Result<(), Error> {
-	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height, rel_kernel))?;
-	if !verify_single(secp, sig, &msg, None, pubkey, true) {
+	if !verify_single(secp, sig, msg, None, pubkey, true) {
 		Err(ErrorKind::Signature(
 			"Signature validation error".to_string(),
 		))?

@@ -86,14 +86,8 @@ where
 	/// Syncs all files to disk. A call to sync is required to ensure all the
 	/// data has been successfully written to disk.
 	pub fn sync(&mut self) -> io::Result<()> {
-		if let Err(e) = self.data_file.flush() {
-			return Err(io::Error::new(
-				io::ErrorKind::Interrupted,
-				format!("Could not write to log data storage, disk full? {:?}", e),
-			));
-		}
+		self.data_file.flush()?;
 		self.leaf_set.flush()?;
-
 		Ok(())
 	}
 

@@ -32,6 +32,7 @@ use core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use keychain::{self, BlindSum, BlindingFactor, Identifier, Keychain};
 use libtx::{aggsig, proof};
 use util::LOGGER;
+use util::secp::pedersen::Commitment;
 
 /// Context information available to transaction combinators.
 pub struct Context<'a, K: 'a>
@@ -133,6 +134,18 @@ where
 	Box::new(
 		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			(tx, kern.with_lock_height(lock_height), sum)
+		},
+	)
+}
+
+/// Sets a relative lock_height on the transaction being built.
+pub fn with_relative_lock_height<K>(lock_height: u64, rel_kernel: Commitment) -> Box<Append<K>>
+where
+	K: Keychain,
+{
+	Box::new(
+		move |_build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
+			(tx, kern.with_relative_lock_height(lock_height, rel_kernel), sum)
 		},
 	)
 }

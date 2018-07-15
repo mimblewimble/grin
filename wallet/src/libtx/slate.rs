@@ -20,6 +20,7 @@ use uuid::Uuid;
 
 use core::core::committed::Committed;
 use core::core::{amount_to_hr_string, Transaction};
+use core::core::transaction::kernel_sig_msg;
 use keychain::{BlindSum, BlindingFactor, Keychain};
 use libtx::error::{Error, ErrorKind};
 use libtx::{aggsig, build, tx_fee};
@@ -159,14 +160,15 @@ impl Slate {
 		self.check_fees()?;
 
 		self.verify_part_sigs(keychain.secp())?;
+		let msg = secp::Message::from_slice(
+			&kernel_sig_msg(self.fee, self.lock_height, self.rel_kernel)
+		)?;
 		let sig_part = aggsig::calculate_partial_sig(
 			keychain.secp(),
 			sec_key,
 			sec_nonce,
 			&self.pub_nonce_sum(keychain.secp())?,
-			self.fee,
-			self.lock_height,
-			self.rel_kernel,
+			&msg,
 		)?;
 		self.participant_data[participant_id].part_sig = Some(sig_part);
 		Ok(())
@@ -302,14 +304,15 @@ impl Slate {
 		// collect public nonces
 		for p in self.participant_data.iter() {
 			if p.is_complete() {
+				let msg = secp::Message::from_slice(
+					&kernel_sig_msg(self.fee, self.lock_height, self.rel_kernel)
+				)?;
 				aggsig::verify_partial_sig(
 					secp,
 					p.part_sig.as_ref().unwrap(),
 					&self.pub_nonce_sum(secp)?,
 					&p.public_blind_excess,
-					self.fee,
-					self.lock_height,
-					self.rel_kernel,
+					&msg,
 				)?;
 			}
 		}
@@ -348,13 +351,14 @@ impl Slate {
 		// Calculate the final public key (for our own sanity check)
 
 		// Check our final sig verifies
+		let msg = secp::Message::from_slice(
+			&kernel_sig_msg(self.fee, self.lock_height, self.rel_kernel)
+		)?;
 		aggsig::verify_sig_build_msg(
 			&keychain.secp(),
 			&final_sig,
 			&final_pubkey,
-			self.fee,
-			self.lock_height,
-			self.rel_kernel,
+			&msg,
 		)?;
 
 		Ok(final_sig)
@@ -377,11 +381,6 @@ impl Slate {
 
 		// build the final excess based on final tx and offset
 		let final_excess = {
-			// TODO - do we need to verify rangeproofs here?
-			for x in final_tx.outputs() {
-				x.verify_proof()?;
-			}
-
 			// sum the input/output commitments on the final tx
 			let overage = final_tx.fee() as i64;
 			let tx_excess = final_tx.sum_commitments(overage)?;

@@ -20,9 +20,10 @@ extern crate grin_wallet as wallet;
 extern crate rand;
 extern crate uuid;
 
+use core::core::transaction::kernel_sig_msg;
 use keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
 use util::secp::key::{PublicKey, SecretKey};
-use util::{kernel_sig_msg, secp};
+use util::{secp, secp_static};
 use wallet::libtx::{aggsig, proof};
 use wallet::libwallet::types::Context;
 
@@ -216,7 +217,7 @@ fn aggsig_sender_receiver_interaction() {
 }
 
 #[test]
-fn aggsig_sender_receiver_interaction_offset() {
+fn aggsig_sender_receiver_interaction() {
 	let sender_keychain = ExtKeychain::from_random_seed().unwrap();
 	let receiver_keychain = ExtKeychain::from_random_seed().unwrap();
 
@@ -256,6 +257,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 
 	let s_cx;
 	let mut rx_cx;
+
 	// sender starts the tx interaction
 	let (sender_pub_excess, _sender_pub_nonce) = {
 		let keychain = sender_keychain.clone();
@@ -282,6 +284,13 @@ fn aggsig_sender_receiver_interaction_offset() {
 		s_cx.get_public_keys(&keychain.secp())
 	};
 
+	// Setup fees and lock_height here as we will refer to them
+	// several times during the test.
+	let fees = 50;
+	let lock_height = 10;
+	let rel_kernel = Some(secp_static::commit_to_zero_value());
+	let msg = secp::Message::from_slice(&kernel_sig_msg(fees, lock_height, rel_kernel)).unwrap();
+
 	// receiver receives partial tx
 	let pub_nonce_sum;
 	let (receiver_pub_excess, _receiver_pub_nonce, sig_part) = {
@@ -307,8 +316,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&rx_cx.sec_key,
 			&rx_cx.sec_nonce,
 			&pub_nonce_sum,
-			0,
-			0,
+			&msg,
 		).unwrap();
 		(pub_excess, pub_nonce, sig_part)
 	};
@@ -322,9 +330,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&sig_part,
 			&pub_nonce_sum,
 			&receiver_pub_excess,
-			0,
-			0,
-			None,
+			&msg,
 		);
 		assert!(!sig_verifies.is_err());
 	}
@@ -337,8 +343,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&s_cx.sec_key,
 			&s_cx.sec_nonce,
 			&pub_nonce_sum,
-			0,
-			0,
+			&msg,
 		).unwrap();
 		sig_part
 	};
@@ -352,9 +357,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&sender_sig_part,
 			&pub_nonce_sum,
 			&sender_pub_excess,
-			0,
-			0,
-			None,
+			&msg,
 		);
 		assert!(!sig_verifies.is_err());
 	}
@@ -367,8 +370,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&rx_cx.sec_key,
 			&rx_cx.sec_nonce,
 			&pub_nonce_sum,
-			0,
-			0,
+			&msg,
 		).unwrap();
 
 		// Receiver now generates final signature from the two parts
@@ -396,7 +398,12 @@ fn aggsig_sender_receiver_interaction_offset() {
 
 		// Receiver check the final signature verifies
 		let sig_verifies =
-			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, 0, 0, None);
+			aggsig::verify_sig_build_msg(
+				&keychain.secp(),
+				&final_sig,
+				&final_pubkey,
+				&msg,
+			);
 		assert!(!sig_verifies.is_err());
 	}
 
@@ -404,10 +411,12 @@ fn aggsig_sender_receiver_interaction_offset() {
 	{
 		let keychain = ExtKeychain::from_random_seed().unwrap();
 
-		let msg = secp::Message::from_slice(&kernel_sig_msg(0, 0)).unwrap();
-
-		let sig_verifies =
-			aggsig::verify_single_from_commit(&keychain.secp(), &final_sig, &msg, &kernel_excess);
+		let sig_verifies = aggsig::verify_single_from_commit(
+			&keychain.secp(),
+			&final_sig,
+			&msg,
+			&kernel_excess,
+		);
 
 		assert!(!sig_verifies.is_err());
 	}

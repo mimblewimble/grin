@@ -19,6 +19,7 @@ use croaring::Bitmap;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::{self, family, Backend};
+use core::core::pmmr_extra::ExtraBackend;
 use core::core::BlockHeader;
 use core::ser::{self, PMMRable};
 use leaf_set::LeafSet;

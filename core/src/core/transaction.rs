@@ -174,9 +174,6 @@ impl Writeable for TxKernel {
 		);
 		self.excess_sig.write(writer)?;
 
-		// Kernels always include their optional rel_kernel if it is present.
-		// Note: in contrast to a tx_kernel_entry that writes a fixed number of bytes out
-		// and always excludes the optional rel_kernel.
 		if self.features.contains(KernelFeatures::RELATIVE_LOCK_HEIGHT_KERNEL) {
 			let rel_kernel = self.rel_kernel.expect("missing relative kernel");
 			writer.write_fixed_bytes(&rel_kernel)?;
@@ -190,14 +187,21 @@ impl Readable for TxKernel {
 	fn read(reader: &mut Reader) -> Result<TxKernel, ser::Error> {
 		let features =
 			KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
-		Ok(TxKernel {
+		let mut kernel = TxKernel {
 			features: features,
 			fee: reader.read_u64()?,
 			lock_height: reader.read_u64()?,
 			excess: Commitment::read(reader)?,
 			excess_sig: Signature::read(reader)?,
 			rel_kernel: None,
-		})
+		};
+
+		if features.contains(KernelFeatures::RELATIVE_LOCK_HEIGHT_KERNEL) {
+			let rel_kernel = Commitment::read(reader)?;
+			kernel.rel_kernel = Some(rel_kernel);
+		}
+
+		Ok(kernel)
 	}
 }
 
@@ -247,6 +251,17 @@ impl TxKernel {
 	pub fn with_lock_height(self, lock_height: u64) -> TxKernel {
 		TxKernel {
 			lock_height: lock_height,
+			..self
+		}
+	}
+
+	/// Builds a new tx kernel with relative lock_height against the referenced kernel.
+	pub fn with_relative_lock_height(self, lock_height: u64, rel_kernel: Commitment) -> TxKernel {
+		println!("with_relative_lock_height {}, {:?}", lock_height, rel_kernel);
+		TxKernel {
+			features: KernelFeatures::RELATIVE_LOCK_HEIGHT_KERNEL,
+			lock_height: lock_height,
+			rel_kernel: Some(rel_kernel),
 			..self
 		}
 	}

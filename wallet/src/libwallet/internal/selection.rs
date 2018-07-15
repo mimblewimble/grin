@@ -19,6 +19,8 @@ use libtx::{build, slate::Slate, tx_fee};
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
 use libwallet::types::*;
+use util::secp::pedersen::Commitment;
+use util::secp_static;
 
 use util::LOGGER;
 
@@ -34,6 +36,7 @@ pub fn build_send_tx_slate<T: ?Sized, C, K>(
 	current_height: u64,
 	minimum_confirmations: u64,
 	lock_height: u64,
+	rel_kernel: Option<Commitment>,
 	max_outputs: usize,
 	change_outputs: usize,
 	selection_strategy_is_use_all: bool,
@@ -49,6 +52,7 @@ where
 		current_height,
 		minimum_confirmations,
 		lock_height,
+		rel_kernel,
 		max_outputs,
 		change_outputs,
 		selection_strategy_is_use_all,
@@ -59,6 +63,7 @@ where
 	slate.amount = amount;
 	slate.height = current_height;
 	slate.lock_height = lock_height;
+	slate.rel_kernel = rel_kernel;
 	slate.fee = fee;
 	let slate_id = slate.id.clone();
 
@@ -211,6 +216,7 @@ pub fn select_send_tx<T: ?Sized, C, K>(
 	current_height: u64,
 	minimum_confirmations: u64,
 	lock_height: u64,
+	rel_kernel: Option<Commitment>,
 	max_outputs: usize,
 	change_outputs: usize,
 	selection_strategy_is_use_all: bool,
@@ -305,7 +311,11 @@ where
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
-	parts.push(build::with_lock_height(lock_height));
+	if let Some(rel_kernel) = rel_kernel {
+		parts.push(build::with_relative_lock_height(lock_height, rel_kernel));
+	} else {
+		parts.push(build::with_lock_height(lock_height));
+	}
 
 	Ok((parts, coins, change_amounts_derivations, amount, fee))
 }
