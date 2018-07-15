@@ -715,7 +715,7 @@ impl<'a> Extension<'a> {
 	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
 		let entry = TxKernelEntry::from_kernel(kernel);
 
-		self.kernel_pmmr
+		let kernel_pos = self.kernel_pmmr
 			.push(entry)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
@@ -723,7 +723,9 @@ impl<'a> Extension<'a> {
 		// The MMR stores fixed size entries so we must store
 		// variable size data somewhere else.
 		if kernel.features.contains(KernelFeatures::RELATIVE_LOCK_HEIGHT_KERNEL) {
-			debug!(LOGGER, "apply_kernel: storing optional relative_kernel not yet implemented!!!");
+			self.kernel_pmmr_extra
+				.append(kernel_pos, kernel.rel_kernel.expect("missing rel_kernel"))
+				.map_err(&ErrorKind::TxHashSetErr)?;
 		}
 
 		Ok(())
@@ -988,6 +990,7 @@ impl<'a> Extension<'a> {
 		let entry = self.kernel_pmmr.get_data(pos);
 		if let Some(kernel) = entry.and_then(|x| Some(x.kernel)) {
 			if kernel.features.contains(KernelFeatures::RELATIVE_LOCK_HEIGHT_KERNEL) {
+				error!(LOGGER, "***** reading rel_kernels not yet implemented!!!");
 				// let rel_kernel = self.kernel_extra.foo
 			}
 			Some(kernel)
@@ -1003,8 +1006,7 @@ impl<'a> Extension<'a> {
 		let total_kernels = pmmr::n_leaves(self.kernel_pmmr.unpruned_size());
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
-				let entry = self.kernel_pmmr.get_data(n);
-				if let Some(kernel) = entry.and_then(|x| Some(x.kernel)) {
+				if let Some(kernel) = self.get_kernel(n) {
 					kernel.verify()?;
 					kern_count += 1;
 				}

@@ -45,6 +45,14 @@ impl<T> ExtraBackend<T> for PMMRExtraBackend<T>
 where
 	T: PMMRable + ::std::fmt::Debug,
 {
+	fn append(&mut self, position: u64, entry: T) -> Result<(), String> {
+		assert!(position > self.max_pos(), "extra backend strictly append only");
+
+		self.data_file.append(&mut ser::ser_vec(&entry).unwrap());
+		self.leaf_set.add(position);
+		Ok(())
+	}
+
 	fn get(&self, position: u64) -> Option<T> {
 		panic!("not yet implemented...");
 	}

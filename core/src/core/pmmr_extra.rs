@@ -26,6 +26,8 @@ pub trait ExtraBackend<T>
 where
 	T: PMMRable,
 {
+	fn append(&mut self, position: u64, entry: T) -> Result<(), String>;
+
 	fn get(&self, position: u64) -> Option<T>;
 
 	fn rewind(&mut self, position: u64) -> Result<(), String>;
@@ -59,6 +61,12 @@ where
 			_marker: marker::PhantomData,
 		}
 	}
+
+	pub fn append(&mut self, pos: u64, entry: T) -> Result<(), String> {
+		self.backend.append(pos, entry)?;
+		Ok(())
+	}
+
 
 	/// Rewind the PMMR to a previous position, as if all push operations after
 	/// that had been canceled. Expects a position in the PMMR to rewind to.
