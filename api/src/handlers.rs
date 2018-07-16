@@ -135,6 +135,7 @@ impl OutputHandler {
 						w(&self.chain),
 						Some(&header),
 						include_proof,
+						None,
 					)
 				})
 				.collect();
@@ -281,7 +282,7 @@ impl TxHashSetHandler {
 			outputs: outputs
 				.2
 				.iter()
-				.map(|x| OutputPrintable::from_output(x, w(&self.chain), None, true))
+				.map(|x| OutputPrintable::from_output(&x.1, w(&self.chain), None, true, Some(x.0)))
 				.collect(),
 		}
 	}
@@ -302,6 +303,7 @@ impl TxHashSetHandler {
 			proof: None,
 			proof_hash: "".to_string(),
 			merkle_proof: Some(merkle_proof),
+			mmr_index: None,
 		})
 	}
 }

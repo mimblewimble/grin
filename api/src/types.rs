@@ -237,6 +237,9 @@ pub struct OutputPrintable {
 	pub proof_hash: String,
 
 	pub merkle_proof: Option<MerkleProof>,
+
+	pub mmr_index: Option<u64>,
+
 }
 
 impl OutputPrintable {
@@ -245,6 +248,7 @@ impl OutputPrintable {
 		chain: Arc<chain::Chain>,
 		block_header: Option<&core::BlockHeader>,
 		include_proof: bool,
+		mmr_index: Option<u64>,
 	) -> OutputPrintable {
 		let output_type = if output
 			.features
@@ -284,6 +288,7 @@ impl OutputPrintable {
 			proof,
 			proof_hash: util::to_hex(output.proof.hash().to_vec()),
 			merkle_proof,
+			mmr_index,
 		}
 	}
 
@@ -322,6 +327,7 @@ impl serde::ser::Serialize for OutputPrintable {
 
 		let hex_merkle_proof = &self.merkle_proof.clone().map(|x| x.to_hex());
 		state.serialize_field("merkle_proof", &hex_merkle_proof)?;
+		state.serialize_field("mmr_index", &self.mmr_index)?;
 
 		state.end()
 	}
@@ -341,6 +347,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 			Proof,
 			ProofHash,
 			MerkleProof,
+			PmmrIndex,
 		}
 
 		struct OutputPrintableVisitor;
@@ -362,6 +369,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 				let mut proof = None;
 				let mut proof_hash = None;
 				let mut merkle_proof = None;
+				let mut mmr_index = None;
 
 				while let Some(key) = map.next_key()? {
 					match key {
@@ -399,6 +407,10 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 								}
 							}
 						}
+						Field::PmmrIndex => {
+							no_dup!(mmr_index);
+							mmr_index = map.next_value()?
+						}
 					}
 				}
 
@@ -409,12 +421,13 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 					proof: proof,
 					proof_hash: proof_hash.unwrap(),
 					merkle_proof: merkle_proof,
+					mmr_index: mmr_index,
 				})
 			}
 		}
 
 		const FIELDS: &'static [&'static str] =
-			&["output_type", "commit", "spent", "proof", "proof_hash"];
+			&["output_type", "commit", "spent", "proof", "proof_hash", "mmr_index"];
 		deserializer.deserialize_struct("OutputPrintable", FIELDS, OutputPrintableVisitor)
 	}
 }
@@ -553,6 +566,7 @@ impl BlockPrintable {
 					chain.clone(),
 					Some(&block.header),
 					include_proof,
+					None,
 				)
 			})
 			.collect();
@@ -592,7 +606,7 @@ impl CompactBlockPrintable {
 		let block = chain.get_block(&cb.hash()).unwrap();
 		let out_full = cb.out_full
 			.iter()
-			.map(|x| OutputPrintable::from_output(x, chain.clone(), Some(&block.header), false))
+			.map(|x| OutputPrintable::from_output(x, chain.clone(), Some(&block.header), false, None))
 			.collect();
 		let kern_full = cb.kern_full
 			.iter()
@@ -649,7 +663,8 @@ mod test {
 			 \"spent\":false,\
 			 \"proof\":null,\
 			 \"proof_hash\":\"ed6ba96009b86173bade6a9227ed60422916593fa32dd6d78b25b7a4eeef4946\",\
-			 \"merkle_proof\":null\
+			 \"merkle_proof\":null,\
+			 \"mmr_index\":null\
 			 }";
 		let deserialized: OutputPrintable = serde_json::from_str(&hex_output).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
