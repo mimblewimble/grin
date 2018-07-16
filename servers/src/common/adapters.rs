@@ -25,7 +25,7 @@ use std::time::Instant;
 
 use chain::{self, ChainAdapter, Options, Tip};
 use common::types::{ChainValidationMode, ServerConfig, SyncState, SyncStatus};
-use core::core;
+use core::{core, global};
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
@@ -426,9 +426,18 @@ impl NetToChainAdapter {
 	// pushing the new block through the chain pipeline
 	// remembering to reset the head if we have a bad block
 	fn process_block(&self, b: core::Block, addr: SocketAddr) -> bool {
+		let chain = w(&self.chain);
+		if !self.archive_mode {
+			let head = chain.head().unwrap();
+			// we have a fast sync'd node and are sent a block older than our horizon,
+			// only sync can do something with that
+			if b.header.height < head.height.saturating_sub(global::cut_through_horizon() as u64) {
+				return true;
+			}
+		}
+
 		let prev_hash = b.header.previous;
 		let bhash = b.hash();
-		let chain = w(&self.chain);
 		match chain.process_block(b, self.chain_opts()) {
 			Ok((tip, _)) => {
 				self.validate_chain(bhash);
