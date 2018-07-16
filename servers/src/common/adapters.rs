@@ -68,6 +68,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
+		// nothing much we can do with a new transaction while syncing
+		if self.sync_state.is_syncing() {
+			return;
+		}
+
 		let source = pool::TxSource {
 			debug_name: "p2p".to_string(),
 			identifier: "?.?.?.?".to_string(),
