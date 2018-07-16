@@ -75,6 +75,12 @@ pub enum Error {
 	/// Validation error relating to cut-through (tx is spending its own
 	/// output).
 	CutThrough,
+	/// Validation error relating to output features.
+	/// It is invalid for a transaction to contain a coinbase output, for example.
+	InvalidOutputFeatures,
+	/// Validation error relating to kernel features.
+	/// It is invalid for a transaction to contain a coinbase kernel, for example.
+	InvalidKernelFeatures,
 }
 
 impl error::Error for Error {
@@ -429,6 +435,7 @@ impl Transaction {
 		if self.inputs.len() > consensus::MAX_BLOCK_INPUTS {
 			return Err(Error::TooManyInputs);
 		}
+		self.verify_features()?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 		self.verify_kernel_sums(self.overage(), self.offset)?;
@@ -469,6 +476,26 @@ impl Transaction {
 			{
 				return Err(Error::CutThrough);
 			}
+		}
+		Ok(())
+	}
+
+	fn verify_features(&self) -> Result<(), Error> {
+		self.verify_output_features()?;
+		self.verify_kernel_features()?;
+		Ok(())
+	}
+
+	fn verify_output_features(&self) -> Result<(), Error> {
+		if self.outputs.iter().any(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT)) {
+			return Err(Error::InvalidOutputFeatures);
+		}
+		Ok(())
+	}
+
+	fn verify_kernel_features(&self) -> Result<(), Error> {
+		if self.kernels.iter().any(|x| x.features.contains(KernelFeatures::COINBASE_KERNEL)) {
+			return Err(Error::InvalidKernelFeatures);
 		}
 		Ok(())
 	}
