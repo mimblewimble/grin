@@ -25,7 +25,7 @@ use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::internal::{tx, updater};
 use libwallet::types::{
-	BlockFees, CbData, OutputData, TxWrapper, WalletBackend, WalletClient, WalletInfo,
+	BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend, WalletClient, WalletInfo,
 };
 use libwallet::Error;
 use util::{self, LOGGER};
@@ -84,6 +84,23 @@ where
 		res
 	}
 
+	/// Attempt to update outputs and retrieve tranasactions
+	/// Return (whether the outputs were validated against a node, OutputData)
+	pub fn retrieve_txs(&self, refresh_from_node: bool) -> Result<(bool, Vec<TxLogEntry>), Error> {
+		let mut w = self.wallet.lock().unwrap();
+		w.open_with_credentials()?;
+
+		let mut validated = false;
+		if refresh_from_node {
+			validated = self.update_outputs(&mut w);
+		}
+
+		let res = Ok((validated, updater::retrieve_txs(&mut **w)?));
+
+		w.close()?;
+		res
+	}
+
 	/// Retrieve summary info for wallet
 	pub fn retrieve_summary_info(
 		&mut self,
@@ -130,7 +147,7 @@ where
 		)?;
 
 		lock_fn_out = lock_fn;
-		slate_out = match w.client().send_tx_slate(dest, &slate) {
+		slate_out = match client.send_tx_slate(dest, &slate) {
 			Ok(s) => s,
 			Err(e) => {
 				error!(
@@ -188,11 +205,14 @@ where
 
 	/// Retrieve current height from node
 	pub fn node_height(&mut self) -> Result<(u64, bool), Error> {
-		let mut w = self.wallet.lock().unwrap();
-		w.open_with_credentials()?;
-		let res = w.client().get_chain_height();
+		let res = {
+			let mut w = self.wallet.lock().unwrap();
+			w.open_with_credentials()?;
+			w.client().get_chain_height()
+		};
 		match res {
 			Ok(height) => {
+				let mut w = self.wallet.lock().unwrap();
 				w.close()?;
 				Ok((height, true))
 			}
@@ -202,6 +222,7 @@ where
 					Some(height) => height,
 					None => 0,
 				};
+				let mut w = self.wallet.lock().unwrap();
 				w.close()?;
 				Ok((height, false))
 			}

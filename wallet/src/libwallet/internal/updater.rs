@@ -27,7 +27,8 @@ use libwallet;
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
 use libwallet::types::{
-	BlockFees, CbData, OutputData, OutputStatus, WalletBackend, WalletClient, WalletInfo,
+	BlockFees, CbData, OutputData, OutputStatus, TxLogEntry, TxLogEntryType, WalletBackend,
+	WalletClient, WalletInfo,
 };
 use util::secp::pedersen;
 use util::{self, LOGGER};
@@ -60,6 +61,18 @@ where
 	Ok(outputs)
 }
 
+/// Retrieve all of the transaction entries
+pub fn retrieve_txs<T: ?Sized, C, K>(wallet: &mut T) -> Result<Vec<TxLogEntry>, Error>
+where
+	T: WalletBackend<C, K>,
+	C: WalletClient,
+	K: Keychain,
+{
+	// just read the wallet here, no need for a write lock
+	let mut txs = wallet.tx_log_iter().collect::<Vec<_>>();
+	txs.sort_by_key(|tx| tx.creation_ts);
+	Ok(txs)
+}
 /// Refreshes the outputs in a wallet with the latest information
 /// from a node
 pub fn refresh_outputs<T: ?Sized, C, K>(wallet: &mut T) -> Result<(), Error>
@@ -118,7 +131,21 @@ where
 		for (commit, id) in wallet_outputs.iter() {
 			if let Ok(mut output) = batch.get(id) {
 				match api_outputs.get(&commit) {
-					Some(_) => output.mark_unspent(),
+					Some(_) => {
+						// if this is a coinbase tx being confirmed, it's recordable in tx log
+						if output.is_coinbase && output.status == OutputStatus::Unconfirmed {
+							let log_id = batch.next_tx_log_id(root_key_id.clone())?;
+							let mut t = TxLogEntry::new(TxLogEntryType::ConfirmedCoinbase, log_id);
+							t.confirmed = true;
+							t.amount_credited = output.value;
+							t.amount_debited = 0;
+							t.num_outputs = 1;
+							t.update_confirmation_ts();
+							output.tx_log_entry = Some(log_id);
+							batch.save_tx_log_entry(t)?;
+						}
+						output.mark_unspent();
+					}
 					None => output.mark_spent(),
 				};
 				batch.save(output)?;
@@ -284,6 +311,7 @@ where
 			height: height,
 			lock_height: lock_height,
 			is_coinbase: true,
+			tx_log_entry: None,
 		})?;
 		batch.commit()?;
 	}

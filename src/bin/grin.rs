@@ -292,7 +292,10 @@ fn main() {
 				.takes_value(true)))
 
 		.subcommand(SubCommand::with_name("outputs")
-			.about("raw wallet info (list of outputs)"))
+			.about("raw wallet output info (list of outputs)"))
+
+		.subcommand(SubCommand::with_name("txs")
+			.about("display list of transactions"))
 
 		.subcommand(SubCommand::with_name("info")
 			.about("basic wallet contents summary"))
@@ -660,10 +663,10 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 
 	// Handle single-use (command line) owner commands
 	let wallet = Arc::new(Mutex::new(instantiate_wallet(
-				wallet_config.clone(),
-				passphrase,
-				use_db,
-				)));
+		wallet_config.clone(),
+		passphrase,
+		use_db,
+	)));
 	let res = wallet::controller::owner_single_use(wallet, |api| {
 		match wallet_args.subcommand() {
 			("send", Some(send_args)) => {
@@ -694,7 +697,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					dest,
 					max_outputs,
 					selection_strategy == "all",
-					);
+				);
 				let slate = match result {
 					Ok(s) => {
 						info!(
@@ -703,7 +706,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 							amount_to_hr_string(amount),
 							dest,
 							selection_strategy,
-							);
+						);
 						s
 					}
 					Err(e) => {
@@ -724,10 +727,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				let result = api.post_tx(&slate, fluff);
 				match result {
 					Ok(_) => {
-						info!(
-							LOGGER,
-							"Tx sent",
-							);
+						info!(LOGGER, "Tx sent",);
 						Ok(())
 					}
 					Err(e) => {
@@ -760,21 +760,32 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 						panic!(
 							"Error getting wallet info: {:?} Config: {:?}",
 							e, wallet_config
-							)
+						)
 					});
 				wallet::display::info(&wallet_info, validated);
 				Ok(())
 			}
 			("outputs", Some(_)) => {
-				let (height, validated) = api.node_height()?;
-				let (_, outputs) = api.retrieve_outputs(show_spent, true)?;
+				let (height, _) = api.node_height()?;
+				let (validated, outputs) = api.retrieve_outputs(show_spent, true)?;
 				let _res =
 					wallet::display::outputs(height, validated, outputs).unwrap_or_else(|e| {
 						panic!(
 							"Error getting wallet outputs: {:?} Config: {:?}",
 							e, wallet_config
-							)
+						)
 					});
+				Ok(())
+			}
+			("txs", Some(_)) => {
+				let (height, _) = api.node_height()?;
+				let (validated, txs) = api.retrieve_txs(true)?;
+				let _res = wallet::display::txs(height, validated, txs).unwrap_or_else(|e| {
+					panic!(
+						"Error getting wallet outputs: {:?} Config: {:?}",
+						e, wallet_config
+					)
+				});
 				Ok(())
 			}
 			("restore", Some(_)) => {

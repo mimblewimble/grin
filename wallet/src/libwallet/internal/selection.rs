@@ -65,6 +65,7 @@ where
 	slate.height = current_height;
 	slate.lock_height = lock_height;
 	slate.fee = fee;
+	let slate_id = slate.id.clone();
 
 	let keychain = wallet.keychain().clone();
 
@@ -95,14 +96,24 @@ where
 	// so we avoid accidental double spend attempt.
 	let update_sender_wallet_fn = move |wallet: &mut T| {
 		let mut batch = wallet.batch()?;
+		let log_id = batch.next_tx_log_id(root_key_id.clone())?;
+		let mut t = TxLogEntry::new(TxLogEntryType::TxSent, log_id);
+		t.tx_slate_id = Some(slate_id);
+		let mut amount_debited = 0;
+		t.num_inputs = lock_inputs.len();
 		for id in lock_inputs {
 			let mut coin = batch.get(&id).unwrap();
+			coin.tx_log_entry = Some(log_id);
+			amount_debited = amount_debited + coin.value;
 			batch.lock_output(&mut coin)?;
 		}
+		t.amount_debited = amount_debited;
+
 		// write the output representing our change
 		if let Some(d) = change_derivation {
 			let change_id = keychain.derive_key_id(change_derivation.unwrap()).unwrap();
-
+			t.amount_credited = change as u64;
+			t.num_outputs = 1;
 			batch.save(OutputData {
 				root_key_id: root_key_id,
 				key_id: change_id.clone(),
@@ -112,8 +123,10 @@ where
 				height: current_height,
 				lock_height: 0,
 				is_coinbase: false,
+				tx_log_entry: Some(log_id),
 			})?;
 		}
+		batch.save_tx_log_entry(t)?;
 		batch.commit()?;
 		Ok(())
 	};
@@ -150,6 +163,7 @@ where
 	let amount = slate.amount;
 	let height = slate.height;
 
+	let slate_id = slate.id.clone();
 	let blinding =
 		slate.add_transaction_elements(&keychain, vec![build::output(amount, key_id.clone())])?;
 
@@ -167,6 +181,11 @@ where
 	// (up to the caller to decide when to do)
 	let wallet_add_fn = move |wallet: &mut T| {
 		let mut batch = wallet.batch()?;
+		let log_id = batch.next_tx_log_id(root_key_id.clone())?;
+		let mut t = TxLogEntry::new(TxLogEntryType::TxReceived, log_id);
+		t.tx_slate_id = Some(slate_id);
+		t.amount_credited = amount;
+		t.num_outputs = 1;
 		batch.save(OutputData {
 			root_key_id: root_key_id,
 			key_id: key_id_inner,
@@ -176,7 +195,9 @@ where
 			height: height,
 			lock_height: 0,
 			is_coinbase: false,
+			tx_log_entry: Some(log_id),
 		})?;
+		batch.save_tx_log_entry(t)?;
 		batch.commit()?;
 		Ok(())
 	};
@@ -210,8 +231,6 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	let key_id = wallet.keychain().root_key_id();
-
 	// select some spendable coins from the wallet
 	let (max_outputs, mut coins) = select_coins(
 		wallet,

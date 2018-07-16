@@ -25,6 +25,7 @@ extern crate serde_derive;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
+extern crate chrono;
 extern crate term;
 extern crate urlencoded;
 extern crate uuid;
