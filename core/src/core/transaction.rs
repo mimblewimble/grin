@@ -211,13 +211,15 @@ impl TxKernel {
 		self.excess
 	}
 
+	pub fn msg_to_sign(&self) -> Result<secp::Message, secp::Error> {
+		kernel_sig_msg(self.fee, self.lock_height, self.rel_kernel)
+	}
+
 	/// Verify the transaction proof validity. Entails handling the commitment
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
 	pub fn verify(&self) -> Result<(), secp::Error> {
-		let msg = Message::from_slice(
-			&kernel_sig_msg(self.fee, self.lock_height, self.rel_kernel),
-		)?;
+		let msg = self.msg_to_sign()?;
 
 		let secp = static_secp_instance();
 		let secp = secp.lock().unwrap();
@@ -1379,16 +1381,29 @@ mod test {
 	}
 }
 
-/// Construct msg bytes from tx fee, lock_height and
+/// Construct msg from tx fee, lock_height and
 /// the optional relative kernel.
-pub fn kernel_sig_msg(fee: u64, lock_height: u64, rel_kernel: Option<Commitment>) -> [u8; 32] {
-	let mut bytes = [0; 32];
-	BigEndian::write_u64(&mut bytes[16..24], fee);
-	BigEndian::write_u64(&mut bytes[24..], lock_height);
+pub fn kernel_sig_msg(
+	fee: u64,
+	lock_height: u64,
+	rel_kernel: Option<Commitment>,
+) -> Result<secp::Message, secp::Error> {
+	// We *should* have been hashing this and using the hash as the msg.
+	// TODO - we should switch over to using the hash as the msg.
+	// We need to do this for "relative lock height" msgs to fit them in 32 bytes.
+	// Consider doing this at some block height as a migration policy.
+	// Soft/hard fork?
+	// Gets complicated for historical signature verification?
 
-	if let Some(rel_kernel) = rel_kernel {
+	let bytes = if let Some(rel_kernel) = rel_kernel {
 		(fee, lock_height, rel_kernel).hash().0
 	} else {
+		let mut bytes = [0; 32];
+		BigEndian::write_u64(&mut bytes[16..24], fee);
+		BigEndian::write_u64(&mut bytes[24..], lock_height);
 		bytes
-	}
+	};
+
+	let msg = secp::Message::from_slice(&bytes)?;
+	Ok(msg)
 }

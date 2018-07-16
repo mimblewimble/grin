@@ -107,6 +107,11 @@ impl Slate {
 		}
 	}
 
+	fn msg_to_sign(&self) -> Result<secp::Message, Error> {
+		let msg = kernel_sig_msg(self.fee, self.lock_height, self.rel_kernel)?;
+		Ok(msg)
+	}
+
 	/// Adds selected inputs and outputs to the slate's transaction
 	/// Returns blinding factor
 	pub fn add_transaction_elements<K>(
@@ -160,15 +165,12 @@ impl Slate {
 		self.check_fees()?;
 
 		self.verify_part_sigs(keychain.secp())?;
-		let msg = secp::Message::from_slice(
-			&kernel_sig_msg(self.fee, self.lock_height, self.rel_kernel)
-		)?;
 		let sig_part = aggsig::calculate_partial_sig(
 			keychain.secp(),
 			sec_key,
 			sec_nonce,
 			&self.pub_nonce_sum(keychain.secp())?,
-			&msg,
+			&self.msg_to_sign()?,
 		)?;
 		self.participant_data[participant_id].part_sig = Some(sig_part);
 		Ok(())
@@ -304,15 +306,12 @@ impl Slate {
 		// collect public nonces
 		for p in self.participant_data.iter() {
 			if p.is_complete() {
-				let msg = secp::Message::from_slice(
-					&kernel_sig_msg(self.fee, self.lock_height, self.rel_kernel)
-				)?;
 				aggsig::verify_partial_sig(
 					secp,
 					p.part_sig.as_ref().unwrap(),
 					&self.pub_nonce_sum(secp)?,
 					&p.public_blind_excess,
-					&msg,
+					&self.msg_to_sign()?,
 				)?;
 			}
 		}
@@ -351,14 +350,11 @@ impl Slate {
 		// Calculate the final public key (for our own sanity check)
 
 		// Check our final sig verifies
-		let msg = secp::Message::from_slice(
-			&kernel_sig_msg(self.fee, self.lock_height, self.rel_kernel)
-		)?;
 		aggsig::verify_sig_build_msg(
 			&keychain.secp(),
 			&final_sig,
 			&final_pubkey,
-			&msg,
+			&self.msg_to_sign()?,
 		)?;
 
 		Ok(final_sig)

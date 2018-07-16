@@ -284,12 +284,12 @@ fn aggsig_sender_receiver_interaction() {
 		s_cx.get_public_keys(&keychain.secp())
 	};
 
-	// Setup fees and lock_height here as we will refer to them
-	// several times during the test.
+	// Construct the kernel msg to be signed based on
+	// some fee and lock_height values.
 	let fees = 50;
 	let lock_height = 10;
 	let rel_kernel = Some(secp_static::commit_to_zero_value());
-	let msg = secp::Message::from_slice(&kernel_sig_msg(fees, lock_height, rel_kernel)).unwrap();
+	let msg = kernel_sig_msg(fees, lock_height, rel_kernel).unwrap();
 
 	// receiver receives partial tx
 	let pub_nonce_sum;

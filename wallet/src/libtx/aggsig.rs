@@ -15,7 +15,6 @@
 //! interface into the underlying secp library
 use keychain::{BlindingFactor, Identifier, Keychain};
 use libtx::error::{Error, ErrorKind};
-use core::core::transaction::kernel_sig_msg;
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::Commitment;
 use util::secp::{self, aggsig, Message, Secp256k1, Signature};
