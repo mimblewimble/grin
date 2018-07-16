@@ -579,12 +579,17 @@ impl NetToChainAdapter {
 /// blockchain accepted a new block, asking the pool to update its state and
 /// the network to broadcast the block
 pub struct ChainToPoolAndNetAdapter {
+	sync_state: Arc<SyncState>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 }
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
 	fn block_accepted(&self, b: &core::Block, opts: Options) {
+		if self.sync_state.is_syncing() {
+			return;
+		}
+
 		debug!(LOGGER, "adapter: block_accepted: {:?}", b.hash());
 
 		if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
@@ -638,10 +643,12 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 impl ChainToPoolAndNetAdapter {
 	/// Construct a ChainToPoolAndNetAdapter instance.
 	pub fn new(
+		sync_state: Arc<SyncState>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
-			tx_pool: tx_pool,
+			sync_state,
+			tx_pool,
 			peers: OneTime::new(),
 		}
 	}

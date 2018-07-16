@@ -239,29 +239,17 @@ impl Chain {
 				}
 
 				// notifying other parts of the system of the update
-				if !opts.contains(Options::SYNC) {
-					// broadcast the block
-					let adapter = self.adapter.clone();
-					adapter.block_accepted(&b, opts);
-				}
+				self.adapter.block_accepted(&b, opts);
+
 				Ok((Some(tip.clone()), Some(b)))
 			}
 			Ok(None) => {
 				// block got accepted but we did not extend the head
 				// so its on a fork (or is the start of a new fork)
 				// broadcast the block out so everyone knows about the fork
-				//
-				// TODO - This opens us to an amplification attack on blocks
-				// mined at a low difficulty. We should suppress really old blocks
-				// or less relevant blocks somehow.
-				// We should also probably consider banning nodes that send us really old
-				// blocks.
-				//
-				if !opts.contains(Options::SYNC) {
 					// broadcast the block
-					let adapter = self.adapter.clone();
-					adapter.block_accepted(&b, opts);
-				}
+				self.adapter.block_accepted(&b, opts);
+
 				Ok((None, Some(b)))
 			}
 			Err(e) => {
