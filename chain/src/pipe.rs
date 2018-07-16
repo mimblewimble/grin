@@ -206,7 +206,6 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 /// First level of block validation that only needs to act on the block header
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
-/// TODO require only the block header (with length information)
 fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {
@@ -309,6 +308,13 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 }
 
 fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+	if ctx.store.block_exists(&b.hash())? {
+		if b.header.height < ctx.head.height.saturating_sub(50) {
+			return Err(ErrorKind::OldBlock.into());
+		} else {
+			return Err(ErrorKind::Unfit("already known".to_string()).into());
+		}
+	}
 	let prev = ctx.store.get_block_header(&b.header.previous)?;
 	b.validate(&prev.total_kernel_offset, &prev.total_kernel_sum)
 		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
