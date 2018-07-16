@@ -14,6 +14,7 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
+use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 
 use time;
@@ -45,6 +46,10 @@ pub struct BlockContext {
 	pub pow_verifier: fn(&BlockHeader, u8) -> bool,
 	/// MMR sum tree states
 	pub txhashset: Arc<RwLock<txhashset::TxHashSet>>,
+	/// Recently processed blocks to avoid double-processing
+	pub block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
+	/// Recently processed headers to avoid double-processing
+	pub header_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
 }
 
 /// Runs the block processing pipeline, including validation and finding a
@@ -175,16 +180,12 @@ pub fn process_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<
 /// recently. Keeps duplicates from the network in check.
 /// ctx here is specific to the header_head (tip of the header chain)
 fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
-	// TODO ring buffer of the last few blocks that came through here
 	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
 		return Err(ErrorKind::Unfit("already known".to_string()).into());
 	}
-	if let Ok(h) = ctx.store.get_block_header(&bh) {
-		// there is a window where a block header can be saved but the chain head not
-		// updated yet, we plug that window here by re-accepting the block
-		if h.total_difficulty <= ctx.head.total_difficulty {
-			return Err(ErrorKind::Unfit("already in store".to_string()).into());
-		}
+	let cache = ctx.block_hashes_cache.read().unwrap();
+	if cache.contains(&bh) {
+		return Err(ErrorKind::Unfit("already known".to_string()).into());
 	}
 	Ok(())
 }
@@ -192,16 +193,12 @@ fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 /// Quick in-memory check to fast-reject any block we've already handled
 /// recently. Keeps duplicates from the network in check.
 fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
-	// TODO ring buffer of the last few blocks that came through here
 	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
 		return Err(ErrorKind::Unfit("already known".to_string()).into());
 	}
-	if let Ok(b) = ctx.store.get_block(&bh) {
-		// there is a window where a block can be saved but the chain head not
-		// updated yet, we plug that window here by re-accepting the block
-		if b.header.total_difficulty <= ctx.head.total_difficulty {
-			return Err(ErrorKind::Unfit("already in store".to_string()).into());
-		}
+	let cache = ctx.header_hashes_cache.read().unwrap();
+	if cache.contains(&bh) {
+		return Err(ErrorKind::Unfit("already known".to_string()).into());
 	}
 	Ok(())
 }
@@ -209,7 +206,6 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 /// First level of block validation that only needs to act on the block header
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
-/// TODO require only the block header (with length information)
 fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {
@@ -312,6 +308,13 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 }
 
 fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+	if ctx.store.block_exists(&b.hash())? {
+		if b.header.height < ctx.head.height.saturating_sub(50) {
+			return Err(ErrorKind::OldBlock.into());
+		} else {
+			return Err(ErrorKind::Unfit("already known".to_string()).into());
+		}
+	}
 	let prev = ctx.store.get_block_header(&b.header.previous)?;
 	b.validate(&prev.total_kernel_offset, &prev.total_kernel_sum)
 		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
