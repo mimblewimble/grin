@@ -489,6 +489,12 @@ pub struct BlockHeaderPrintable {
 	pub total_difficulty: u64,
 	/// Total kernel offset since genesis block
 	pub total_kernel_offset: String,
+	/// Total accumulated sum of kernel commitments since genesis block.
+	pub total_kernel_sum: PrintableCommitment,
+	/// Total size of the output MMR after applying this block
+	pub output_mmr_size: u64,
+	/// Total size of the kernel MMR after applying this block
+	pub kernel_mmr_size: u64,
 }
 
 impl BlockHeaderPrintable {
@@ -507,6 +513,9 @@ impl BlockHeaderPrintable {
 			cuckoo_solution: h.pow.nonces.clone(),
 			total_difficulty: h.total_difficulty.to_num(),
 			total_kernel_offset: h.total_kernel_offset.to_hex(),
+			total_kernel_sum: PrintableCommitment { commit: h.total_kernel_sum },
+			output_mmr_size: h.output_mmr_size,
+			kernel_mmr_size: h.kernel_mmr_size,
 		}
 	}
 }
