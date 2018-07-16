@@ -15,7 +15,7 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -41,6 +41,9 @@ pub const MAX_ORPHAN_SIZE: usize = 200;
 
 /// When evicting, very old orphans are evicted first
 const MAX_ORPHAN_AGE_SECS: u64 = 300;
+
+/// Number of recent hashes we keep to de-duplicate block or header sends
+const HASHES_CACHE_SIZE: usize = 50;
 
 #[derive(Debug, Clone)]
 struct Orphan {
@@ -131,6 +134,10 @@ pub struct Chain {
 	head: Arc<Mutex<Tip>>,
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
+	// Recently processed blocks to avoid double-processing
+	block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
+	// Recently processed headers to avoid double-processing
+	header_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
 
 	// POW verification function
 	pow_verifier: fn(&BlockHeader, u8) -> bool,
@@ -178,6 +185,8 @@ impl Chain {
 			orphans: Arc::new(OrphanBlockPool::new()),
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			pow_verifier: pow_verifier,
+			block_hashes_cache: Arc::new(RwLock::new(VecDeque::with_capacity(HASHES_CACHE_SIZE))),
+			header_hashes_cache: Arc::new(RwLock::new(VecDeque::with_capacity(HASHES_CACHE_SIZE))),
 		})
 	}
 
@@ -213,6 +222,12 @@ impl Chain {
 		let mut ctx = self.ctx_from_head(head, opts)?;
 
 		let res = pipe::process_block(&b, &mut ctx);
+		
+		{
+			let mut cache = self.block_hashes_cache.write().unwrap();
+			cache.push_front(b.hash());
+			cache.truncate(HASHES_CACHE_SIZE);
+		}
 
 		match res {
 			Ok(Some(ref tip)) => {
@@ -302,7 +317,13 @@ impl Chain {
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
 		let header_head = self.get_header_head()?;
 		let mut ctx = self.ctx_from_head(header_head, opts)?;
-		pipe::process_block_header(bh, &mut ctx)
+		let res = pipe::process_block_header(bh, &mut ctx);
+		{
+			let mut cache = self.header_hashes_cache.write().unwrap();
+			cache.push_front(bh.hash());
+			cache.truncate(HASHES_CACHE_SIZE);
+		}
+		res
 	}
 
 	/// Attempt to add a new header to the header chain.
@@ -326,6 +347,8 @@ impl Chain {
 			store: self.store.clone(),
 			head: head,
 			pow_verifier: self.pow_verifier,
+			block_hashes_cache: self.block_hashes_cache.clone(),
+			header_hashes_cache: self.header_hashes_cache.clone(),
 			txhashset: self.txhashset.clone(),
 		})
 	}
