@@ -30,7 +30,8 @@ If you decide to use a persistent storage (e.g. ```-v grin:/usr/src/grin```) you
 
 ## Requirements
 
-- rust 1.24+ (use [rustup]((https://www.rustup.rs/))- i.e. `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
+- rust 1.26+ (use [rustup]((https://www.rustup.rs/))- i.e. `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
+  - if rust is already installed, you can simply update version with `rustup update`
 - rocksdb + libs for compiling rocksdb:
   - clang (clanglib or clang-devel or libclang-dev)
   - llvm (Fedora llvm-devel, Debian llvm-dev)
