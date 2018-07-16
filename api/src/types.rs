@@ -347,7 +347,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 			Proof,
 			ProofHash,
 			MerkleProof,
-			PmmrIndex,
+			MmrIndex,
 		}
 
 		struct OutputPrintableVisitor;
@@ -407,7 +407,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 								}
 							}
 						}
-						Field::PmmrIndex => {
+						Field::MmrIndex => {
 							no_dup!(mmr_index);
 							mmr_index = map.next_value()?
 						}
@@ -641,6 +641,17 @@ pub struct OutputListing {
 	pub last_retrieved_index: u64,
 	/// A printable version of the outputs
 	pub outputs: Vec<OutputPrintable>,
+}
+
+// For traversing all block headers
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct HeaderListing {
+	/// The last available output index
+	pub tip_height: u64,
+	/// The last insertion index retrieved
+	pub last_retrieved_height: u64,
+	/// A printable version of the outputs
+	pub headers: Vec<BlockHeaderPrintable>,
 }
 
 #[derive(Serialize, Deserialize)]

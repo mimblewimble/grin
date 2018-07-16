@@ -176,6 +176,23 @@ pub trait WalletClient: Sync + Send + Clone {
 		),
 		Error,
 	>;
+
+	/// Get a list of output mmr size for headers
+	/// Returns
+	/// (tip height, last height retrieved,
+	/// (height, output_mmr_size)
+	fn get_block_output_mmr_size(
+		&self,
+		start_height: u64,
+		max_headers: u64,
+	) -> Result<
+		(
+			u64,
+			u64,
+			Vec<(u64, u64)>,
+		),
+		Error,
+	>;
 }
 
 /// Information about an output that's being tracked by the wallet. Must be

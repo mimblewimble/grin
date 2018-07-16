@@ -543,7 +543,7 @@ pub struct HeaderRangeHandler {
 }
 
 impl HeaderRangeHandler {
-	fn get_header_by_range(&self, start_height: u64, max: u64) -> Result<Vec<BlockHeaderPrintable>, Error> {
+	fn get_header_by_range(&self, start_height: u64, max: u64) -> Result<HeaderListing, Error> {
 		let head = w(&self.chain).head().unwrap();
 
 		if start_height > head.height {
@@ -555,7 +555,7 @@ impl HeaderRangeHandler {
 			end_height = head.height;
 		}
 
-		(start_height..end_height)
+		let headers = (start_height..end_height)
 			.map(|h| w(&self.chain).get_header_by_height(h))
 			.map(|res| {
 				res.map(|h| BlockHeaderPrintable::from_header(&h))
@@ -568,7 +568,13 @@ impl HeaderRangeHandler {
 				else {
 					Error::from(ErrorKind::Internal(err.to_string()))
 				}
-			)
+			)?;
+
+		Ok(HeaderListing {
+			tip_height: head.height,
+			last_retrieved_height: headers.last().unwrap().height,
+			headers,
+		})
 	}
 }
 
