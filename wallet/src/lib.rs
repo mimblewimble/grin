@@ -55,6 +55,7 @@ pub mod file_wallet;
 pub mod libtx;
 pub mod libwallet;
 pub mod lmdb_wallet;
+mod db_migrate;
 mod types;
 
 pub use client::{create_coinbase, HTTPWalletClient};
@@ -66,3 +67,6 @@ pub use libwallet::types::{
 };
 pub use lmdb_wallet::{wallet_db_exists, LMDBBackend};
 pub use types::{WalletConfig, WalletSeed};
+
+// temporary
+pub use db_migrate::{migrate, needs_migrate};

@@ -44,7 +44,6 @@ where
 	K: Keychain,
 {
 	let root_key_id = wallet.keychain().clone().root_key_id();
-
 	// just read the wallet here, no need for a write lock
 	let mut outputs = wallet
 		.iter()
@@ -127,6 +126,17 @@ where
 	{
 		let root_key_id = wallet.keychain().root_key_id();
 		let mut details = wallet.details(root_key_id.clone())?;
+		// If the server height is less than our confirmed height, don't apply
+		// these changes as the chain is syncing, incorrect or forking
+		if height < details.last_confirmed_height {
+			warn!(LOGGER, 
+						"Not updating outputs as the height of the node's chain is less than the last reported wallet update height."
+					);
+			warn!(LOGGER, 
+						"Please wait for sync on node to complete or fork to resolve and try again."
+					);
+			return Ok(());
+		}
 		let mut batch = wallet.batch()?;
 		for (commit, id) in wallet_outputs.iter() {
 			if let Ok(mut output) = batch.get(id) {
