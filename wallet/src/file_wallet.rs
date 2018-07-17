@@ -99,6 +99,14 @@ impl<'a> WalletOutputBatch for FileBatch<'a> {
 		Ok(())
 	}
 
+	fn iter(&self) -> Box<Iterator<Item = OutputData>> {
+		unimplemented!()
+	}
+
+	fn tx_log_iter(&self) -> Box<Iterator<Item = TxLogEntry>> {
+		unimplemented!()
+	}
+
 	fn commit(&self) -> Result<(), libwallet::Error> {
 		let mut data_file = File::create(self.data_file_path.clone())
 			.context(libwallet::ErrorKind::CallbackImpl("Could not create"))?;

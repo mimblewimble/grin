@@ -53,10 +53,7 @@ use core::core::amount_to_hr_string;
 use core::global;
 use tui::ui;
 use util::{init_logger, LoggingConfig, LOGGER};
-use wallet::{
-	libwallet, HTTPWalletClient, LMDBBackend, WalletConfig,
-	WalletInst,
-};
+use wallet::{libwallet, HTTPWalletClient, LMDBBackend, WalletConfig, WalletInst};
 
 // include build information
 pub mod built_info {
@@ -557,7 +554,7 @@ fn instantiate_wallet(
 	if wallet::needs_migrate(&wallet_config.data_file_dir) {
 		// Migrate wallet automatically
 		warn!(LOGGER, "Migrating legacy File-Based wallet to LMDB Format");
-		if let Err(e) = wallet::migrate(&wallet_config.data_file_dir, passphrase){
+		if let Err(e) = wallet::migrate(&wallet_config.data_file_dir, passphrase) {
 			error!(LOGGER, "Error while trying to migrate wallet: {:?}", e);
 			error!(LOGGER, "Please ensure your file wallet files exist and are not corrupted, and that your password is correct");
 			panic!();

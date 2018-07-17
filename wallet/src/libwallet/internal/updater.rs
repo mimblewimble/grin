@@ -129,12 +129,15 @@ where
 		// If the server height is less than our confirmed height, don't apply
 		// these changes as the chain is syncing, incorrect or forking
 		if height < details.last_confirmed_height {
-			warn!(LOGGER, 
-						"Not updating outputs as the height of the node's chain is less than the last reported wallet update height."
-					);
-			warn!(LOGGER, 
-						"Please wait for sync on node to complete or fork to resolve and try again."
-					);
+			warn!(
+				LOGGER,
+				"Not updating outputs as the height of the node's chain \
+				 is less than the last reported wallet update height."
+			);
+			warn!(
+				LOGGER,
+				"Please wait for sync on node to complete or fork to resolve and try again."
+			);
 			return Ok(());
 		}
 		let mut batch = wallet.batch()?;
@@ -153,6 +156,19 @@ where
 							t.update_confirmation_ts();
 							output.tx_log_entry = Some(log_id);
 							batch.save_tx_log_entry(t)?;
+						}
+						// also mark the transaction in which this output is involved as confirmed
+						// note that one involved input/output confirmation SHOULD be enough
+						// to reliably confirm the tx
+						if !output.is_coinbase && output.status == OutputStatus::Unconfirmed {
+							let tx = batch
+								.tx_log_iter()
+								.find(|t| Some(t.id) == output.tx_log_entry);
+							if let Some(mut t) = tx {
+								t.update_confirmation_ts();
+								t.confirmed = true;
+								batch.save_tx_log_entry(t)?;
+							}
 						}
 						output.mark_unspent();
 					}

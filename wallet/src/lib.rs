@@ -49,13 +49,13 @@ extern crate grin_store as store;
 extern crate grin_util as util;
 
 mod client;
+mod db_migrate;
 pub mod display;
 mod error;
 pub mod file_wallet;
 pub mod libtx;
 pub mod libwallet;
 pub mod lmdb_wallet;
-mod db_migrate;
 mod types;
 
 pub use client::{create_coinbase, HTTPWalletClient};

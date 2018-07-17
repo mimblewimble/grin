@@ -75,7 +75,6 @@ where
 			validated = self.update_outputs(&mut w);
 		}
 
-
 		let res = Ok((
 			validated,
 			updater::retrieve_outputs(&mut **w, include_spent)?,

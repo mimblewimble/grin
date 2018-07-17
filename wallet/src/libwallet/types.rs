@@ -108,6 +108,9 @@ pub trait WalletOutputBatch {
 	/// Gets output data by id
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
 
+	/// Iterate over all output data stored by the backend
+	fn iter(&self) -> Box<Iterator<Item = OutputData>>;
+
 	/// Delete data about an output to the backend
 	fn delete(&mut self, id: &Identifier) -> Result<(), Error>;
 
@@ -116,6 +119,9 @@ pub trait WalletOutputBatch {
 
 	/// get next tx log entry
 	fn next_tx_log_id(&mut self, root_key_id: Identifier) -> Result<u32, Error>;
+
+	/// Iterate over all output data stored by the backend
+	fn tx_log_iter(&self) -> Box<Iterator<Item = TxLogEntry>>;
 
 	/// save a tx log entry
 	fn save_tx_log_entry(&self, t: TxLogEntry) -> Result<(), Error>;

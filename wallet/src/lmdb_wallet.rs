@@ -206,6 +206,17 @@ where
 		).map_err(|e| e.into())
 	}
 
+	fn iter(&self) -> Box<Iterator<Item = OutputData>> {
+		Box::new(
+			self.db
+				.borrow()
+				.as_ref()
+				.unwrap()
+				.iter(&[OUTPUT_PREFIX])
+				.unwrap(),
+		)
+	}
+
 	fn delete(&mut self, id: &Identifier) -> Result<(), Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
 		self.db.borrow().as_ref().unwrap().delete(&key)?;
@@ -225,6 +236,17 @@ where
 			.unwrap()
 			.put_ser(&tx_id_key, &last_tx_log_id)?;
 		Ok(last_tx_log_id)
+	}
+
+	fn tx_log_iter(&self) -> Box<Iterator<Item = TxLogEntry>> {
+		Box::new(
+			self.db
+				.borrow()
+				.as_ref()
+				.unwrap()
+				.iter(&[TX_LOG_ENTRY_PREFIX])
+				.unwrap(),
+		)
 	}
 
 	fn save_details(&mut self, root_key_id: Identifier, d: WalletDetails) -> Result<(), Error> {

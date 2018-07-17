@@ -191,6 +191,12 @@ impl<'a> Batch<'a> {
 		self.store.get(key)
 	}
 
+	/// Produces an iterator of `Readable` types moving forward from the
+	/// provided key.
+	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<SerIterator<T>, Error> {
+		self.store.iter(from)
+	}
+
 	/// Gets a `Readable` value from the db, provided its key, taking the
 	/// content of the current batch into account.
 	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
