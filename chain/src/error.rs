@@ -51,6 +51,9 @@ pub enum ErrorKind {
 	/// The proof of work is invalid
 	#[fail(display = "Invalid PoW")]
 	InvalidPow,
+	/// Peer abusively sending us an old block we already have
+	#[fail(display = "Invalid PoW")]
+	OldBlock,
 	/// The block doesn't sum correctly or a tx signature is invalid
 	#[fail(display = "Invalid Block Proof")]
 	InvalidBlockProof(block::Error),

@@ -25,7 +25,7 @@ use std::time::Instant;
 
 use chain::{self, ChainAdapter, Options, Tip};
 use common::types::{ChainValidationMode, ServerConfig, SyncState, SyncStatus};
-use core::core;
+use core::{core, global};
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
@@ -68,6 +68,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
+		// nothing much we can do with a new transaction while syncing
+		if self.sync_state.is_syncing() {
+			return;
+		}
+
 		let source = pool::TxSource {
 			debug_name: "p2p".to_string(),
 			identifier: "?.?.?.?".to_string(),
@@ -339,6 +344,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		txhashset_data: File,
 		_peer_addr: SocketAddr,
 	) -> bool {
+		// check status again after download, in case 2 txhashsets made it somehow
+		if self.sync_state.status() != SyncStatus::TxHashsetDownload {
+			return true;
+		}
+		
 		if let Err(e) =
 			w(&self.chain).txhashset_write(h, txhashset_data, self.sync_state.as_ref())
 		{
@@ -416,9 +426,18 @@ impl NetToChainAdapter {
 	// pushing the new block through the chain pipeline
 	// remembering to reset the head if we have a bad block
 	fn process_block(&self, b: core::Block, addr: SocketAddr) -> bool {
+		let chain = w(&self.chain);
+		if !self.archive_mode {
+			let head = chain.head().unwrap();
+			// we have a fast sync'd node and are sent a block older than our horizon,
+			// only sync can do something with that
+			if b.header.height < head.height.saturating_sub(global::cut_through_horizon() as u64) {
+				return true;
+			}
+		}
+
 		let prev_hash = b.header.previous;
 		let bhash = b.hash();
-		let chain = w(&self.chain);
 		match chain.process_block(b, self.chain_opts()) {
 			Ok((tip, _)) => {
 				self.validate_chain(bhash);
@@ -574,12 +593,17 @@ impl NetToChainAdapter {
 /// blockchain accepted a new block, asking the pool to update its state and
 /// the network to broadcast the block
 pub struct ChainToPoolAndNetAdapter {
+	sync_state: Arc<SyncState>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 }
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
 	fn block_accepted(&self, b: &core::Block, opts: Options) {
+		if self.sync_state.is_syncing() {
+			return;
+		}
+
 		debug!(LOGGER, "adapter: block_accepted: {:?}", b.hash());
 
 		if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
@@ -633,10 +657,12 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 impl ChainToPoolAndNetAdapter {
 	/// Construct a ChainToPoolAndNetAdapter instance.
 	pub fn new(
+		sync_state: Arc<SyncState>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
-			tx_pool: tx_pool,
+			sync_state,
+			tx_pool,
 			peers: OneTime::new(),
 		}
 	}

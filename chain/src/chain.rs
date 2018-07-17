@@ -15,7 +15,7 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -41,6 +41,9 @@ pub const MAX_ORPHAN_SIZE: usize = 200;
 
 /// When evicting, very old orphans are evicted first
 const MAX_ORPHAN_AGE_SECS: u64 = 300;
+
+/// Number of recent hashes we keep to de-duplicate block or header sends
+const HASHES_CACHE_SIZE: usize = 50;
 
 #[derive(Debug, Clone)]
 struct Orphan {
@@ -130,8 +133,11 @@ pub struct Chain {
 
 	head: Arc<Mutex<Tip>>,
 	orphans: Arc<OrphanBlockPool>,
-	txhashset_lock: Arc<Mutex<bool>>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
+	// Recently processed blocks to avoid double-processing
+	block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
+	// Recently processed headers to avoid double-processing
+	header_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
 
 	// POW verification function
 	pow_verifier: fn(&BlockHeader, u8) -> bool,
@@ -177,9 +183,10 @@ impl Chain {
 			adapter: adapter,
 			head: Arc::new(Mutex::new(head)),
 			orphans: Arc::new(OrphanBlockPool::new()),
-			txhashset_lock: Arc::new(Mutex::new(false)),
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			pow_verifier: pow_verifier,
+			block_hashes_cache: Arc::new(RwLock::new(VecDeque::with_capacity(HASHES_CACHE_SIZE))),
+			header_hashes_cache: Arc::new(RwLock::new(VecDeque::with_capacity(HASHES_CACHE_SIZE))),
 		})
 	}
 
@@ -215,6 +222,12 @@ impl Chain {
 		let mut ctx = self.ctx_from_head(head, opts)?;
 
 		let res = pipe::process_block(&b, &mut ctx);
+		
+		{
+			let mut cache = self.block_hashes_cache.write().unwrap();
+			cache.push_front(b.hash());
+			cache.truncate(HASHES_CACHE_SIZE);
+		}
 
 		match res {
 			Ok(Some(ref tip)) => {
@@ -226,29 +239,17 @@ impl Chain {
 				}
 
 				// notifying other parts of the system of the update
-				if !opts.contains(Options::SYNC) {
-					// broadcast the block
-					let adapter = self.adapter.clone();
-					adapter.block_accepted(&b, opts);
-				}
+				self.adapter.block_accepted(&b, opts);
+
 				Ok((Some(tip.clone()), Some(b)))
 			}
 			Ok(None) => {
 				// block got accepted but we did not extend the head
 				// so its on a fork (or is the start of a new fork)
 				// broadcast the block out so everyone knows about the fork
-				//
-				// TODO - This opens us to an amplification attack on blocks
-				// mined at a low difficulty. We should suppress really old blocks
-				// or less relevant blocks somehow.
-				// We should also probably consider banning nodes that send us really old
-				// blocks.
-				//
-				if !opts.contains(Options::SYNC) {
 					// broadcast the block
-					let adapter = self.adapter.clone();
-					adapter.block_accepted(&b, opts);
-				}
+				self.adapter.block_accepted(&b, opts);
+
 				Ok((None, Some(b)))
 			}
 			Err(e) => {
@@ -304,7 +305,13 @@ impl Chain {
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
 		let header_head = self.get_header_head()?;
 		let mut ctx = self.ctx_from_head(header_head, opts)?;
-		pipe::process_block_header(bh, &mut ctx)
+		let res = pipe::process_block_header(bh, &mut ctx);
+		{
+			let mut cache = self.header_hashes_cache.write().unwrap();
+			cache.push_front(bh.hash());
+			cache.truncate(HASHES_CACHE_SIZE);
+		}
+		res
 	}
 
 	/// Attempt to add a new header to the header chain.
@@ -328,6 +335,8 @@ impl Chain {
 			store: self.store.clone(),
 			head: head,
 			pow_verifier: self.pow_verifier,
+			block_hashes_cache: self.block_hashes_cache.clone(),
+			header_hashes_cache: self.header_hashes_cache.clone(),
 			txhashset: self.txhashset.clone(),
 		})
 	}
@@ -529,7 +538,6 @@ impl Chain {
 	where
 		T: TxHashsetWriteStatus,
 	{
-		let _ = self.txhashset_lock.lock().unwrap();
 		status.on_setup();
 		let head = self.head().unwrap();
 		let header_head = self.get_header_head().unwrap();
