@@ -986,12 +986,14 @@ impl<'a> Extension<'a> {
 		)
 	}
 
+	// Retrieves both the kernel from the kernel MMR and the extra data from
+	// the kernel extra file if necessary.
 	fn get_kernel(&self, pos: u64) -> Option<TxKernel> {
 		let entry = self.kernel_pmmr.get_data(pos);
-		if let Some(kernel) = entry.and_then(|x| Some(x.kernel)) {
+		if let Some(mut kernel) = entry.and_then(|x| Some(x.kernel)) {
 			if kernel.features.contains(KernelFeatures::RELATIVE_LOCK_HEIGHT_KERNEL) {
-				error!(LOGGER, "***** reading rel_kernels not yet implemented!!!");
-				// let rel_kernel = self.kernel_extra.foo
+				let rel_kernel = self.kernel_pmmr_extra.get(pos).expect("missing extra data");
+				kernel.rel_kernel = Some(rel_kernel);
 			}
 			Some(kernel)
 		} else {

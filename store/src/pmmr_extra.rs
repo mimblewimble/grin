@@ -54,7 +54,21 @@ where
 	}
 
 	fn get(&self, position: u64) -> Option<T> {
-		panic!("not yet implemented...");
+		let rank = self.leaf_set.rank(position);
+		let record_len = T::len();
+		let file_offset = ((rank - 1) as usize) * record_len;
+		let data = self.data_file.read(file_offset, record_len);
+		match ser::deserialize(&mut &data[..]) {
+			Ok(h) => Some(h),
+			Err(e) => {
+				error!(
+					LOGGER,
+					"Corrupted storage, could not read an entry from data store: {:?}", e
+				);
+				return None;
+			}
+		}
+
 	}
 
 	fn rewind(

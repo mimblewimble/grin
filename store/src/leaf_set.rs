@@ -214,4 +214,8 @@ impl LeafSet {
 	pub fn cardinality(&self) -> u64 {
 		self.bitmap.cardinality()
 	}
+
+	pub fn rank(&self, pos: u64) -> u64 {
+		self.bitmap.rank(pos as u32)
+	}
 }

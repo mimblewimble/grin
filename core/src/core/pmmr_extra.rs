@@ -19,6 +19,7 @@ use croaring::Bitmap;
 use core::hash::Hash;
 use core::merkle_proof::MerkleProof;
 use core::BlockHeader;
+use core::pmmr::is_leaf;
 use ser::{PMMRIndexHashable, PMMRable};
 use util::LOGGER;
 
@@ -63,10 +64,16 @@ where
 	}
 
 	pub fn append(&mut self, pos: u64, entry: T) -> Result<(), String> {
+		assert!(is_leaf(pos), "extra data only supported for leaf pos");
 		self.backend.append(pos, entry)?;
 		Ok(())
 	}
 
+	/// Get the "extra" data at provided position in the MMR.
+	pub fn get(&self, pos: u64) -> Option<T> {
+		assert!(is_leaf(pos), "extra data only supported for leaf pos");
+		self.backend.get(pos)
+	}
 
 	/// Rewind the PMMR to a previous position, as if all push operations after
 	/// that had been canceled. Expects a position in the PMMR to rewind to.
