@@ -65,11 +65,6 @@ run_tui = true
 #Whether to run the wallet listener with the server by default
 run_wallet_listener = true
 
-#whether to use the database backend storage for the default listener wallet
-#true = lmdb storage
-#false = files storage
-use_db_wallet = false
-
 # Whether to run the web-wallet API (will only run on localhost)
 run_wallet_owner_api = true
 

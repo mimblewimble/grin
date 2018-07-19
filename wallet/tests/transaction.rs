@@ -36,6 +36,8 @@ use core::global;
 use core::global::ChainTypes;
 use keychain::ExtKeychain;
 use util::LOGGER;
+use wallet::libtx::slate::Slate;
+use wallet::libwallet;
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -50,7 +52,10 @@ fn setup(test_dir: &str) {
 /// Exercises the Transaction API fully with a test WalletClient operating
 /// directly on a chain instance
 /// Callable with any type of wallet
-fn basic_transaction_api(test_dir: &str, backend_type: common::BackendType) {
+fn basic_transaction_api(
+	test_dir: &str,
+	backend_type: common::BackendType,
+) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
@@ -89,7 +94,7 @@ fn basic_transaction_api(test_dir: &str, backend_type: common::BackendType) {
 	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 10);
 
 	// Check wallet 1 contents are as expected
-	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), |api| {
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
 		debug!(
 			LOGGER,
@@ -104,39 +109,67 @@ fn basic_transaction_api(test_dir: &str, backend_type: common::BackendType) {
 		);
 		assert_eq!(wallet1_info.amount_immature, cm * reward);
 		Ok(())
-	});
-	if let Err(e) = sender_res {
-		println!("Error starting sender API: {}", e);
-	}
+	})?;
 
 	// assert wallet contents
 	// and a single use api for a send command
 	let amount = 60_000_000_000;
-	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
+	let mut slate = Slate::blank(1);
+	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
 		// note this will increment the block count as part of the transaction "Posting"
-		let issue_tx_res = sender_api.issue_send_tx(
+		slate = sender_api.issue_send_tx(
 			amount,    // amount
 			2,         // minimum confirmations
 			"wallet2", // dest
 			500,       // max outputs
 			true,      // select all outputs
-		);
-		if issue_tx_res.is_err() {
-			panic!("Error issuing send tx: {}", issue_tx_res.err().unwrap());
-		}
-		let post_res = sender_api.post_tx(&issue_tx_res.unwrap(), false);
-		if post_res.is_err() {
-			panic!("Error posting tx: {}", post_res.err().unwrap());
-		}
-
+		)?;
 		Ok(())
-	});
-	if let Err(e) = sender_res {
-		panic!("Error starting sender API: {}", e);
-	}
+	})?;
+
+	// Check transaction log for wallet 1
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		let (_, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (refreshed, txs) = api.retrieve_txs(true)?;
+		assert!(refreshed);
+		let fee = wallet::libtx::tx_fee(
+			wallet1_info.last_confirmed_height as usize - cm as usize,
+			2,
+			None,
+		);
+		// we should have a transaction entry for this slate
+		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
+		assert!(tx.is_some());
+		let tx = tx.unwrap();
+		assert!(!tx.confirmed);
+		assert!(tx.confirmation_ts.is_none());
+		assert_eq!(tx.amount_debited - tx.amount_credited, fee + amount);
+		Ok(())
+	})?;
+
+	// Check transaction log for wallet 2
+	wallet::controller::owner_single_use(wallet2.clone(), |api| {
+		let (refreshed, txs) = api.retrieve_txs(true)?;
+		assert!(refreshed);
+		// we should have a transaction entry for this slate
+		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
+		assert!(tx.is_some());
+		let tx = tx.unwrap();
+		assert!(!tx.confirmed);
+		assert!(tx.confirmation_ts.is_none());
+		assert_eq!(amount, tx.amount_credited);
+		assert_eq!(0, tx.amount_debited);
+		Ok(())
+	})?;
+
+	// post transaction
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		api.post_tx(&slate, false)?;
+		Ok(())
+	})?;
 
 	// Check wallet 1 contents are as expected
-	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), |api| {
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
 		debug!(
 			LOGGER,
@@ -160,17 +193,24 @@ fn basic_transaction_api(test_dir: &str, backend_type: common::BackendType) {
 			(wallet1_info.last_confirmed_height - cm) * reward - amount - fee
 		);
 		assert_eq!(wallet1_info.amount_immature, cm * reward + fee);
+
+		// check tx log entry is confirmed
+		let (refreshed, txs) = api.retrieve_txs(true)?;
+		assert!(refreshed);
+		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
+		assert!(tx.is_some());
+		let tx = tx.unwrap();
+		assert!(tx.confirmed);
+		assert!(tx.confirmation_ts.is_some());
+
 		Ok(())
-	});
-	if let Err(e) = sender_res {
-		println!("Error starting sender API: {}", e);
-	}
+	})?;
 
 	// mine a few more blocks
 	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
 
 	// refresh wallets and retrieve info/tests for each wallet after maturity
-	let sender_res = wallet::controller::owner_single_use(wallet1.clone(), |api| {
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
 		debug!(LOGGER, "Wallet 1 Info: {:?}", wallet1_info);
 		assert!(wallet1_refreshed);
@@ -183,33 +223,40 @@ fn basic_transaction_api(test_dir: &str, backend_type: common::BackendType) {
 			(wallet1_info.last_confirmed_height - cm - 1) * reward
 		);
 		Ok(())
-	});
-	if let Err(e) = sender_res {
-		println!("Error starting sender API: {}", e);
-	}
+	})?;
 
-	let sender_res = wallet::controller::owner_single_use(wallet2.clone(), |api| {
+	wallet::controller::owner_single_use(wallet2.clone(), |api| {
 		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
 		assert!(wallet2_refreshed);
 		assert_eq!(wallet2_info.amount_currently_spendable, amount);
+
+		// check tx log entry is confirmed
+		let (refreshed, txs) = api.retrieve_txs(true)?;
+		assert!(refreshed);
+		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
+		assert!(tx.is_some());
+		let tx = tx.unwrap();
+		assert!(tx.confirmed);
+		assert!(tx.confirmation_ts.is_some());
 		Ok(())
-	});
-	if let Err(e) = sender_res {
-		println!("Error starting sender API: {}", e);
-	}
+	})?;
 
 	// let logging finish
 	thread::sleep(Duration::from_millis(200));
+	Ok(())
 }
 
+#[ignore]
 #[test]
 fn file_wallet_basic_transaction_api() {
 	let test_dir = "test_output/basic_transaction_api_file";
-	basic_transaction_api(test_dir, common::BackendType::FileBackend);
+	let _ = basic_transaction_api(test_dir, common::BackendType::FileBackend);
 }
 
 #[test]
 fn db_wallet_basic_transaction_api() {
 	let test_dir = "test_output/basic_transaction_api_db";
-	basic_transaction_api(test_dir, common::BackendType::LMDBBackend);
+	if let Err(e) = basic_transaction_api(test_dir, common::BackendType::LMDBBackend) {
+		println!("Libwallet Error: {}", e);
+	}
 }

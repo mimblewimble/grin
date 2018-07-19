@@ -26,6 +26,7 @@ tokio-core = "0.1"
 tokio-retry = "0.1"
 uuid = { version = "0.6", features = ["serde", "v4"] }
 urlencoded = "0.5"
+chrono = { version = "0.4", features = ["serde"] }
 
 grin_api = { path = "../api" }
 grin_core = { path = "../core" }

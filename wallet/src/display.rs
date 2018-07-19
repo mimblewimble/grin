@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use core::core::{self, amount_to_hr_string};
-use libwallet::types::{OutputData, WalletInfo};
+use libwallet::types::{OutputData, TxLogEntry, WalletInfo};
 use libwallet::Error;
 use prettytable;
 use std::io::prelude::Write;
@@ -38,7 +38,8 @@ pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<OutputData>) -> Re
 		bMG->"Status",
 		bMG->"Is Coinbase?",
 		bMG->"Num. of Confirmations",
-		bMG->"Value"
+		bMG->"Value",
+		bMG->"Transaction"
 	]);
 
 	for out in outputs {
@@ -50,6 +51,10 @@ pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<OutputData>) -> Re
 		let is_coinbase = format!("{}", out.is_coinbase);
 		let num_confirmations = format!("{}", out.num_confirmations(cur_height));
 		let value = format!("{}", core::amount_to_hr_string(out.value));
+		let tx = match out.tx_log_entry {
+			None => "None".to_owned(),
+			Some(t) => t.to_string(),
+		};
 		table.add_row(row![
 			bFC->key_id,
 			bFC->n_child,
@@ -58,7 +63,8 @@ pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<OutputData>) -> Re
 			bFR->status,
 			bFY->is_coinbase,
 			bFB->num_confirmations,
-			bFG->value
+			bFG->value,
+			bFC->tx,
 		]);
 	}
 
@@ -76,6 +82,74 @@ pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<OutputData>) -> Re
 	Ok(())
 }
 
+/// Display transaction log in a pretty way
+pub fn txs(cur_height: u64, validated: bool, txs: Vec<TxLogEntry>) -> Result<(), Error> {
+	let title = format!("Transaction Log - Block Height: {}", cur_height);
+	println!();
+	let mut t = term::stdout().unwrap();
+	t.fg(term::color::MAGENTA).unwrap();
+	writeln!(t, "{}", title).unwrap();
+	t.reset().unwrap();
+
+	let mut table = table!();
+
+	table.set_titles(row![
+		bMG->"Id",
+		bMG->"Type",
+		bMG->"Shared Transaction Id",
+		bMG->"Creation Time",
+		bMG->"Confirmed?",
+		bMG->"Confirmation Time",
+		bMG->"Num. Inputs",
+		bMG->"Num. Outputs",
+		bMG->"Amount Credited",
+		bMG->"Amount Debited",
+	]);
+
+	for t in txs {
+		let id = format!("{}", t.id);
+		let slate_id = match t.tx_slate_id {
+			Some(m) => format!("{}", m),
+			None => "None".to_owned(),
+		};
+		let entry_type = format!("{}", t.tx_type);
+		let creation_ts = format!("{}", t.creation_ts);
+		let confirmation_ts = match t.confirmation_ts {
+			Some(m) => format!("{}", m),
+			None => "None".to_owned(),
+		};
+		let confirmed = format!("{}", t.confirmed);
+		let amount_credited = format!("{}", t.amount_credited);
+		let num_inputs = format!("{}", t.num_inputs);
+		let num_outputs = format!("{}", t.num_outputs);
+		let amount_debited = format!("{}", t.amount_debited);
+		table.add_row(row![
+			bFC->id,
+			bFC->entry_type,
+			bFC->slate_id,
+			bFB->creation_ts,
+			bFC->confirmed,
+			bFB->confirmation_ts,
+			bFC->num_inputs,
+			bFC->num_outputs,
+			bFG->amount_credited,
+			bFR->amount_debited,
+		]);
+	}
+
+	table.set_format(*prettytable::format::consts::FORMAT_NO_COLSEP);
+	table.printstd();
+	println!();
+
+	if !validated {
+		println!(
+			"\nWARNING: Wallet failed to verify data. \
+			 The above is from local cache and possibly invalid! \
+			 (is your `grin server` offline or broken?)"
+		);
+	}
+	Ok(())
+}
 /// Display summary info in a pretty way
 pub fn info(wallet_info: &WalletInfo, validated: bool) {
 	println!(
