@@ -15,17 +15,18 @@
 //! Controller for wallet.. instantiates and handles listeners (or single-run
 //! invocations) as needed.
 //! Still experimental
-use api::{ApiServer, Router};
+use api::{ApiServer, Handler, Router};
+use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
-use bodyparser;
-use hyper::{Body, Method, Request, Response, StatusCode};
-use serde::Serialize;
+use futures::Stream;
+use hyper::header::HeaderMap;
+use hyper::{Body, Request, Response, StatusCode};
+use serde::{Deserialize, Serialize};
 use serde_json;
-use urlencoded::UrlEncodedQuery;
-
-use failure::Fail;
+use tokio_core::reactor::Core;
 
 use keychain::Keychain;
 use libtx::slate::Slate;
@@ -34,6 +35,7 @@ use libwallet::types::{
 	BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
+use url::form_urlencoded;
 
 use util::LOGGER;
 
@@ -69,16 +71,18 @@ static mut OWNER_ROUTER: Option<Router> = None;
 /// port and wrapping the calls
 pub fn owner_listener<T: ?Sized, C, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
 where
-	T: WalletBackend<C, K>,
+	T: WalletBackend<C, K> + 'static,
 	OwnerAPIHandler<T, C, K>: Handler,
-	C: WalletClient,
-	K: Keychain,
+	C: WalletClient + 'static,
+	K: Keychain + 'static,
 {
 	let wallet_arc = Arc::new(Mutex::new(wallet));
 	let api_handler = OwnerAPIHandler::new(wallet_arc);
 
 	let mut router = Router::new();
-	router.add_route("/v1/wallet/owner/**", api_handler);
+	router
+		.add_route("/v1/wallet/owner/**", Box::new(api_handler))
+		.map_err(|_e| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 	unsafe {
 		OWNER_ROUTER = Some(router);
 	}
@@ -107,15 +111,17 @@ static mut FOREIGN_ROUTER: Option<Router> = None;
 /// port and wrapping the calls
 pub fn foreign_listener<T: ?Sized, C, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
 where
-	T: WalletBackend<C, K>,
+	T: WalletBackend<C, K> + 'static,
 	ForeignAPIHandler<T, C, K>: Handler,
-	C: WalletClient,
-	K: Keychain,
+	C: WalletClient + 'static,
+	K: Keychain + 'static,
 {
 	let api_handler = ForeignAPIHandler::new(Arc::new(Mutex::new(wallet)));
 
 	let mut router = Router::new();
-	router.add_route("/v1/wallet/foreign/**", api_handler);
+	router
+		.add_route("/v1/wallet/foreign/**", Box::new(api_handler))
+		.map_err(|_e| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 
 	unsafe {
 		FOREIGN_ROUTER = Some(router);
@@ -171,35 +177,25 @@ where
 
 	fn retrieve_outputs(
 		&self,
-		req: &mut Request<Body>,
+		req: &Request<Body>,
 		api: &mut APIOwner<T, C, K>,
 	) -> Result<(bool, Vec<OutputData>), Error> {
-		let mut update_from_node = false;
-		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
-			if let Some(_) = params.get("refresh") {
-				update_from_node = true;
-			}
-		}
-		api.retrieve_outputs(false, update_from_node, None)
+		let update_from_node = param_exists(req, "refresh");
+		api.retrieve_outputs(false, update_from_node)
 	}
 
 	fn retrieve_summary_info(
 		&self,
-		req: &mut Request<Body>,
+		req: &Request<Body>,
 		api: &mut APIOwner<T, C, K>,
 	) -> Result<(bool, WalletInfo), Error> {
-		let mut update_from_node = false;
-		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
-			if let Some(_) = params.get("refresh") {
-				update_from_node = true;
-			}
-		}
+		let update_from_node = param_exists(req, "refresh");
 		api.retrieve_summary_info(update_from_node)
 	}
 
 	fn node_height(
 		&self,
-		_req: &mut Request<Body>,
+		_req: &Request<Body>,
 		api: &mut APIOwner<T, C, K>,
 	) -> Result<(u64, bool), Error> {
 		api.node_height()
@@ -207,92 +203,61 @@ where
 
 	fn handle_get_request(
 		&self,
-		req: &mut Request<Body>,
+		req: &Request<Body>,
 		api: &mut APIOwner<T, C, K>,
 	) -> Result<Response<Body>, Error> {
-		let url = req.url.clone();
-		let path_elems = url.path();
-		match *path_elems.last().unwrap() {
+		Ok(match req.uri()
+			.path()
+			.trim_right_matches("/")
+			.rsplit("/")
+			.next()
+			.unwrap()
+		{
 			"retrieve_outputs" => json_response(&self.retrieve_outputs(req, api)?),
 			"retrieve_summary_info" => json_response(&self.retrieve_summary_info(req, api)?),
 			"node_height" => json_response(&self.node_height(req, api)?),
 			_ => response(StatusCode::BAD_REQUEST, ""),
-		}
+		})
 	}
 
 	fn issue_send_tx(
 		&self,
-		req: &mut Request<Body>,
+		req: Request<Body>,
 		api: &mut APIOwner<T, C, K>,
 	) -> Result<Slate, Error> {
-		let struct_body = req.get::<bodyparser::Struct<SendTXArgs>>();
-		match struct_body {
-			Ok(Some(args)) => api.issue_send_tx(
-				args.amount,
-				args.minimum_confirmations,
-				&args.dest,
-				args.max_outputs,
-				args.selection_strategy_is_use_all,
-			),
-			Ok(None) => {
-				error!(LOGGER, "Missing request body: issue_send_tx");
-				Err(ErrorKind::GenericError(
-					"Invalid request body: issue_send_tx".to_owned(),
-				))?
-			}
-			Err(e) => {
-				error!(LOGGER, "Invalid request body: issue_send_tx {:?}", e);
-				Err(ErrorKind::GenericError(
-					"Invalid request body: issue_send_tx".to_owned(),
-				))?
-			}
-		}
+		let args: SendTXArgs = parse_body(req)?;
+		api.issue_send_tx(
+			args.amount,
+			args.minimum_confirmations,
+			&args.dest,
+			args.max_outputs,
+			args.selection_strategy_is_use_all,
+		)
 	}
 
-	fn issue_burn_tx(
-		&self,
-		_req: &mut Request<Body>,
-		api: &mut APIOwner<T, C, K>,
-	) -> Result<(), Error> {
+	fn issue_burn_tx(&self, _req: Request<Body>, api: &mut APIOwner<T, C, K>) -> Result<(), Error> {
 		// TODO: Args
 		api.issue_burn_tx(60, 10, 1000)
 	}
 
 	fn handle_post_request(
 		&self,
-		req: &mut Request,
+		req: Request<Body>,
 		api: &mut APIOwner<T, C, K>,
-	) -> Result<String, Error> {
-		let url = req.url.clone();
-		let path_elems = url.path();
-		match *path_elems.last().unwrap() {
+	) -> Result<Response<Body>, Error> {
+		Ok(match req.uri()
+			.path()
+			.trim_right_matches("/")
+			.rsplit("/")
+			.next()
+			.unwrap()
+		{
 			"issue_send_tx" => json_response_pretty(&self.issue_send_tx(req, api)?),
 			"issue_burn_tx" => json_response_pretty(&self.issue_burn_tx(req, api)?),
 			_ => Err(ErrorKind::GenericError(
 				"Unknown error handling post request".to_owned(),
 			))?,
-		}
-	}
-
-	fn create_error_response(&self, e: Error) -> Response<Body> {
-		let mut headers = Headers::new();
-		headers.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
-		headers.set_raw(
-			"access-control-allow-headers",
-			vec![b"Content-Type".to_vec()],
-		);
-		let message = format!("{}", e.kind());
-		let mut r = Response::with((status::InternalServerError, message));
-		r.headers = headers;
-		Ok(r)
-	}
-
-	fn create_ok_response(&self, json: &str) -> Response<Body> {
-		let mut headers = Headers::new();
-		headers.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
-		let mut r = Response::with((status::Ok, json));
-		r.headers = headers;
-		Ok(r)
+		})
 	}
 }
 
@@ -304,39 +269,28 @@ where
 {
 	fn get(&self, req: Request<Body>) -> Response<Body> {
 		let mut api = APIOwner::new(self.wallet.clone());
-		let mut resp_json = self.handle_get_request(req, &mut api);
-		if !resp_json.is_err() {
-			resp_json
-				.as_mut()
-				.unwrap()
-				.headers
-				.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
+		match self.handle_get_request(&req, &mut api) {
+			Ok(r) => r,
+			Err(e) => {
+				error!(LOGGER, "Request Error: {:?}", e);
+				create_error_response(e)
+			}
 		}
-		resp_json
 	}
 
 	fn post(&self, req: Request<Body>) -> Response<Body> {
 		let mut api = APIOwner::new(self.wallet.clone());
-		let resp = match self.handle_request(req, &mut api) {
-			Ok(r) => self.create_ok_response(&r),
+		match self.handle_post_request(req, &mut api) {
+			Ok(r) => r,
 			Err(e) => {
 				error!(LOGGER, "Request Error: {:?}", e);
-				self.create_error_response(e)
+				create_error_response(e)
 			}
-		};
-		resp
+		}
 	}
 
 	fn options(&self, _req: Request<Body>) -> Response<Body> {
-		let mut resp_json = Ok(Response::with((status::Ok, "{}")));
-		let mut headers = Headers::new();
-		headers.set_raw("access-control-allow-origin", vec![b"*".to_vec()]);
-		headers.set_raw(
-			"access-control-allow-headers",
-			vec![b"Content-Type".to_vec()],
-		);
-		resp_json.as_mut().unwrap().headers = headers;
-		resp_json
+		create_ok_response("{}")
 	}
 }
 
@@ -371,54 +325,39 @@ where
 
 	fn build_coinbase(
 		&self,
-		req: &Request<Body>,
+		req: Request<Body>,
 		api: &mut APIForeign<T, C, K>,
 	) -> Result<CbData, Error> {
-		let struct_body = req.get::<bodyparser::Struct<BlockFees>>();
-		match struct_body {
-			Ok(Some(block_fees)) => api.build_coinbase(&block_fees),
-			Ok(None) => {
-				error!(LOGGER, "Missing request body: build_coinbase");
-				Err(ErrorKind::GenericError(
-					"Invalid request body: build_coinbase".to_owned(),
-				))?
-			}
-			Err(e) => {
-				error!(LOGGER, "Invalid request body: build_coinbase: {:?}", e);
-				Err(ErrorKind::GenericError(
-					"Invalid request body: build_coinbase".to_owned(),
-				))?
-			}
-		}
+		let block_fees = parse_body(req)?;
+		api.build_coinbase(&block_fees)
 	}
 
 	fn receive_tx(
 		&self,
-		req: &Request<Body>,
+		req: Request<Body>,
 		api: &mut APIForeign<T, C, K>,
 	) -> Result<Slate, Error> {
-		let struct_body = req.get::<bodyparser::Struct<Slate>>();
-		if let Ok(Some(mut slate)) = struct_body {
-			api.receive_tx(&mut slate)?;
-			Ok(slate.clone())
-		} else {
-			Err(ErrorKind::GenericError(
-				"Invalid request body: receive_tx".to_owned(),
-			))?
-		}
+		let mut slate = parse_body(req)?;
+		api.receive_tx(&mut slate)?;
+		Ok(slate.clone())
 	}
 
 	fn handle_request(
 		&self,
-		req: &Request<Body>,
+		req: Request<Body>,
 		api: &mut APIForeign<T, C, K>,
 	) -> Result<Response<Body>, Error> {
-		let mut path_elems = req.uri().path().trim_right_matches("/").rsplit("/");
-		match *path_elems.next().unwrap() {
+		Ok(match req.uri()
+			.path()
+			.trim_right_matches("/")
+			.rsplit("/")
+			.next()
+			.unwrap()
+		{
 			"build_coinbase" => json_response(&self.build_coinbase(req, api)?),
 			"receive_tx" => json_response(&self.receive_tx(req, api)?),
 			_ => response(StatusCode::BAD_REQUEST, "unknown action"),
-		}
+		})
 	}
 }
 impl<T: ?Sized, C, K> Handler for ForeignAPIHandler<T, C, K>
@@ -429,8 +368,10 @@ where
 {
 	fn post(&self, req: Request<Body>) -> Response<Body> {
 		let mut api = APIForeign::new(self.wallet.clone());
-		let resp_json = self.handle_request(req, &mut *api);
-		resp_json
+		match self.handle_request(req, &mut *api) {
+			Ok(r) => r,
+			Err(e) => create_error_response(e),
+		}
 	}
 }
 
@@ -457,8 +398,57 @@ where
 	}
 }
 
+fn create_error_response(e: Error) -> Response<Body> {
+	Response::builder()
+		.status(StatusCode::INTERNAL_SERVER_ERROR)
+		.header("access-control-allow-origin", "*")
+		.header("access-control-allow-headers", "Content-Type")
+		.body(format!("{}", e.kind()).into())
+		.unwrap()
+}
+
+fn create_ok_response(json: &str) -> Response<Body> {
+	Response::builder()
+		.status(StatusCode::OK)
+		.header("access-control-allow-origin", "*")
+		.body(json.to_string().into())
+		.unwrap()
+}
+
 fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
-	let mut resp = Response::new(text.into());
-	*resp.status_mut() = status;
-	resp
+	Response::builder()
+		.status(status)
+		.header("access-control-allow-origin", "*")
+		.body(text.into())
+		.unwrap()
+	//let mut resp = Response::new(text.into());
+	//*resp.status_mut() = status;
+	//resp
+}
+
+fn param_exists(req: &Request<Body>, param: &str) -> bool {
+	if let Some(query_string) = req.uri().query() {
+		let params = form_urlencoded::parse(query_string.as_bytes())
+			.into_owned()
+			.fold(HashMap::new(), |mut hm, (k, v)| {
+				hm.entry(k).or_insert(vec![]).push(v);
+				hm
+			});
+		return params.get(param).is_some();
+	}
+	false
+}
+
+fn parse_body<T>(req: Request<Body>) -> Result<T, Error>
+where
+	for<'de> T: Deserialize<'de>,
+{
+	let mut event_loop = Core::new().unwrap();
+	let task = req.into_body().concat2();
+	let body = event_loop
+		.run(task)
+		.map_err(|_e| ErrorKind::GenericError("Failed to read request body".to_owned()))?;
+	let obj: T = serde_json::from_reader(&body.to_vec()[..])
+		.map_err(|_e| ErrorKind::GenericError("Invalid request body".to_owned()))?;
+	Ok(obj)
 }

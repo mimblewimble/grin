@@ -66,7 +66,7 @@ struct NodeId(usize);
 
 const MAX_CHILDREN: usize = 16;
 
-type HandlerObj = Box<Handler + Sync + Send>;
+type HandlerObj = Box<Handler>;
 
 #[derive(Clone)]
 struct Node {

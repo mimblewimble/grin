@@ -18,13 +18,11 @@
 //! To use it, just have your service(s) implement the ApiEndpoint trait and
 //! register them on a ApiServer.
 
-use hyper::rt::{run, Future};
+use hyper::rt::Future;
 use hyper::service::service_fn_ok;
 use hyper::{Body, Request, Response, Server};
 use std::fmt::{self, Display};
-use std::mem;
 use std::net::SocketAddr;
-use std::string::ToString;
 use tokio::runtime::Runtime;
 
 use failure::{Backtrace, Context, Fail};
@@ -108,7 +106,9 @@ impl ApiServer {
 
 		self.rt = Some(Runtime::new().unwrap());
 		if let Some(ref mut rt) = self.rt {
-			rt.block_on(server);
+			if rt.block_on(server).is_err() {
+				return Err("tokio block_on error".to_owned());
+			}
 		}
 		Ok(())
 	}

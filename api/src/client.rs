@@ -20,7 +20,7 @@ use http::uri::{InvalidUri, Uri};
 use hyper;
 use hyper::header::{ACCEPT, USER_AGENT};
 use hyper::rt::{Future, Stream};
-use hyper::{Client, Request};
+use hyper::{Body, Client, Request};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -46,46 +46,19 @@ where
 		.header(USER_AGENT, "grin-client")
 		.header(ACCEPT, "application/json")
 		.body(hyper::Body::empty())
-		.map_err(|e| ErrorKind::RequestError("Bad request".to_owned()))?;
+		.map_err(|_e| ErrorKind::RequestError("Bad request".to_owned()))?;
 
-	let mut event_loop = Core::new().unwrap();
-
-	let client = Client::new();
-
-	let task = client
-		.request(req)
-		.map_err(|e| ErrorKind::RequestError("Cannot make request".to_owned()))
-		.and_then(|resp| {
-			if !resp.status().is_success() {
-				Either::A(err(ErrorKind::RequestError(
-					"Wrong response code".to_owned(),
-				)))
-			} else {
-				Either::B(
-					resp.into_body()
-						.map_err(|e| {
-							ErrorKind::RequestError("Cannot read response body".to_owned())
-						})
-						.concat2()
-						.and_then(|ch| ok(String::from_utf8_lossy(&ch.to_vec()).to_string())),
-				)
-			}
-		});
-
-	let data = event_loop.run(task)?;
-	serde_json::from_str(&data).map_err(|e| {
-		e.context(ErrorKind::ResponseError("Cannot parse response".to_owned()))
-			.into()
-	})
+	send_request(req)
 }
 
 /// Helper function to easily issue a HTTP POST request with the provided JSON
 /// object as body on a given URL that returns a JSON object. Handles request
 /// building, JSON serialization and deserialization, and response code
 /// checking.
-pub fn post<IN>(url: &str, input: &IN) -> Result<(), Error>
+pub fn post<IN, OUT>(url: &str, input: &IN) -> Result<OUT, Error>
 where
 	IN: Serialize,
+	for<'de> OUT: Deserialize<'de>,
 {
 	let json = serde_json::to_string(input).context(ErrorKind::Internal(
 		"Could not serialize data to JSON".to_owned(),
@@ -104,26 +77,40 @@ where
 			e.context(ErrorKind::RequestError("Bad request".to_owned()))
 				.into()
 		})?;
+	send_request(req)
+}
 
+fn send_request<T>(req: Request<Body>) -> Result<T, Error>
+where
+	for<'de> T: Deserialize<'de>,
+{
 	let mut event_loop = Core::new().unwrap();
 
 	let client = Client::new();
 
 	let task = client
 		.request(req)
-		.map_err(|e| {
-			e.context(ErrorKind::RequestError("Cannot make request".to_owned()))
-				.into()
-		})
+		.map_err(|_e| ErrorKind::RequestError("Cannot make request".to_owned()))
 		.and_then(|resp| {
 			if !resp.status().is_success() {
 				Either::A(err(ErrorKind::RequestError(
 					"Wrong response code".to_owned(),
-				).into()))
+				)))
 			} else {
-				Either::B(ok(()))
+				Either::B(
+					resp.into_body()
+						.map_err(|_e| {
+							ErrorKind::RequestError("Cannot read response body".to_owned())
+						})
+						.concat2()
+						.and_then(|ch| ok(String::from_utf8_lossy(&ch.to_vec()).to_string())),
+				)
 			}
 		});
 
-	event_loop.run(task)
+	let data = event_loop.run(task)?;
+	serde_json::from_str(&data).map_err(|e| {
+		e.context(ErrorKind::ResponseError("Cannot parse response".to_owned()))
+			.into()
+	})
 }

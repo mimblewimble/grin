@@ -23,8 +23,8 @@ term = "0.5"
 tokio-core = "0.1"
 tokio-retry = "0.1"
 uuid = { version = "0.6", features = ["serde", "v4"] }
-urlencoded = "0.5"
 chrono = { version = "0.4", features = ["serde"] }
+url = "1.7.0"
 
 grin_api = { path = "../api" }
 grin_core = { path = "../core" }

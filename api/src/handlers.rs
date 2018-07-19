@@ -13,16 +13,13 @@
 // limitations under the License.
 
 use std::collections::HashMap;
-use std::io;
-use std::io::Read;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 
-use failure::{Fail, ResultExt};
+use failure::ResultExt;
 use futures::Stream;
-use hyper;
-use hyper::{Body, Method, Request, Response, StatusCode};
+use hyper::{Body, Request, Response, StatusCode};
 use rest::{Error, ErrorKind};
 use serde::Serialize;
 use serde_json;
@@ -60,7 +57,7 @@ struct IndexHandler {
 impl IndexHandler {}
 
 impl Handler for IndexHandler {
-	fn get(&self, req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> Response<Body> {
 		json_response_pretty(&self.list)
 	}
 }
@@ -398,7 +395,7 @@ pub struct PeersConnectedHandler {
 }
 
 impl Handler for PeersConnectedHandler {
-	fn get(&self, req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> Response<Body> {
 		let mut peers = vec![];
 		for p in &w(&self.peers).connected_peers() {
 			let p = p.read().unwrap();
@@ -449,10 +446,7 @@ impl Handler for PeerHandler {
 			"unban" => {
 				if let Ok(addr) = path_elems.next().unwrap().parse() {
 					w(&self.peers).unban_peer(&addr);
-					Response::builder()
-						.status(StatusCode::OK)
-						.body(Body::empty())
-						.unwrap()
+					response(StatusCode::OK, "")
 				} else {
 					response(StatusCode::BAD_REQUEST, "bad address to unban")
 				}
@@ -476,7 +470,7 @@ impl StatusHandler {
 }
 
 impl Handler for StatusHandler {
-	fn get(&self, req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> Response<Body> {
 		json_response(&self.get_status())
 	}
 }
@@ -494,7 +488,7 @@ impl ChainHandler {
 }
 
 impl Handler for ChainHandler {
-	fn get(&self, req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> Response<Body> {
 		json_response(&self.get_tip())
 	}
 }
@@ -506,7 +500,7 @@ pub struct ChainValidationHandler {
 }
 
 impl Handler for ChainValidationHandler {
-	fn get(&self, req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> Response<Body> {
 		// TODO - read skip_rproofs from query params
 		w(&self.chain).validate(true).unwrap();
 		response(StatusCode::OK, "")
@@ -521,7 +515,7 @@ pub struct ChainCompactHandler {
 }
 
 impl Handler for ChainCompactHandler {
-	fn get(&self, req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> Response<Body> {
 		w(&self.chain).compact().unwrap();
 		response(StatusCode::OK, "")
 	}
@@ -649,16 +643,25 @@ impl Handler for BlockHandler {
 }
 
 impl Handler for HeaderHandler {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let url = req.url.clone();
-		let mut path_elems = url.path();
-		if *path_elems.last().unwrap() == "" {
-			path_elems.pop();
+	fn get(&self, req: Request<Body>) -> Response<Body> {
+		let el = req.uri()
+			.path()
+			.trim_right_matches("/")
+			.rsplit("/")
+			.next()
+			.unwrap();
+
+		match self.get_header(el.to_string()) {
+			Ok(h) => json_response(&h),
+			Err(_) => {
+				error!(
+					LOGGER,
+					"header_handler: can not get header {}",
+					el.to_string()
+				);
+				response(StatusCode::INTERNAL_SERVER_ERROR, "")
+			}
 		}
-		let el = *path_elems.last().unwrap();
-		let h = self.get_header(el.to_string())
-			.map_err(|e| IronError::new(Fail::compat(e), status::InternalServerError))?;
-		json_response(&h)
 	}
 }
 
@@ -671,7 +674,7 @@ impl<T> Handler for PoolInfoHandler<T>
 where
 	T: pool::BlockChain + Send + Sync + 'static,
 {
-	fn get(&self, req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> Response<Body> {
 		let pool_arc = w(&self.tx_pool);
 		let pool = pool_arc.read().unwrap();
 
@@ -713,13 +716,13 @@ where
 		let task = req.into_body().concat2();
 		let body = event_loop
 			.run(task)
-			.map_err(|e| ErrorKind::RequestError("Bad request".to_owned()))?;
+			.map_err(|_e| ErrorKind::RequestError("Bad request".to_owned()))?;
 		let wrapper: TxWrapper = serde_json::from_reader(&body.to_vec()[..])
-			.map_err(|e| ErrorKind::RequestError("Bad request".to_owned()))?;
+			.map_err(|_e| ErrorKind::RequestError("Bad request".to_owned()))?;
 		let tx_bin = util::from_hex(wrapper.tx_hex)
-			.map_err(|e| ErrorKind::RequestError("Bad request".to_owned()))?;
+			.map_err(|_e| ErrorKind::RequestError("Bad request".to_owned()))?;
 		let tx: Transaction = ser::deserialize(&mut &tx_bin[..])
-			.map_err(|e| ErrorKind::RequestError("Bad request".to_owned()))?;
+			.map_err(|_e| ErrorKind::RequestError("Bad request".to_owned()))?;
 
 		let source = pool::TxSource {
 			debug_name: "push-api".to_string(),
@@ -739,7 +742,7 @@ where
 				.write()
 				.unwrap()
 				.add_to_pool(source, tx, !fluff)
-				.map_err(|e| ErrorKind::RequestError("Bad request".to_owned()).into())
+				.map_err(|_e| ErrorKind::RequestError("Bad request".to_owned()).into())
 		};
 		res
 	}
@@ -810,14 +813,9 @@ pub fn start_rest_apis<T>(
 	let _ = thread::Builder::new()
 		.name("apis".to_string())
 		.spawn(move || {
-			// build handlers and register them under the appropriate endpoint
-			let output_handler = OutputHandler {
-				chain: chain.clone(),
-			};
 			let mut apis = ApiServer::new();
 
-			let router = build_router(addr.clone(), chain, tx_pool, peers)
-				.expect("unbale to build API router");
+			let router = build_router(chain, tx_pool, peers).expect("unbale to build API router");
 			unsafe {
 				ROUTER = Some(router);
 			}
@@ -840,7 +838,6 @@ pub fn handle(req: Request<Body>) -> Response<Body> {
 }
 
 pub fn build_router<T>(
-	addr: String,
 	chain: Weak<chain::Chain>,
 	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
 	peers: Weak<p2p::Peers>,
@@ -878,6 +875,9 @@ where
 	let block_handler = BlockHandler {
 		chain: chain.clone(),
 	};
+	let header_handler = HeaderHandler {
+		chain: chain.clone(),
+	};
 	let chain_tip_handler = ChainHandler {
 		chain: chain.clone(),
 	};
@@ -913,6 +913,7 @@ where
 	let mut router = Router::new();
 	router.add_route("/v1", Box::new(index_handler))?;
 	router.add_route("/v1/blocks/*", Box::new(block_handler))?;
+	router.add_route("/v1/headers/*", Box::new(header_handler))?;
 	router.add_route("/v1/chain", Box::new(chain_tip_handler))?;
 	router.add_route("/v1/chain/outputs/*", Box::new(output_handler))?;
 	router.add_route("/v1/chain/compact", Box::new(chain_compact_handler))?;

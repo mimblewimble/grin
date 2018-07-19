@@ -27,7 +27,7 @@ extern crate serde_json;
 extern crate slog;
 extern crate chrono;
 extern crate term;
-extern crate urlencoded;
+extern crate url;
 extern crate uuid;
 
 extern crate bodyparser;
