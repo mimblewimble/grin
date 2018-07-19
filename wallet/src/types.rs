@@ -29,7 +29,7 @@ use util::LOGGER;
 
 pub const SEED_FILE: &'static str = "wallet.seed";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WalletConfig {
 	// Right now the decision to run or not a wallet is based on the command.
 	// This may change in the near-future.

@@ -90,7 +90,7 @@ impl<T> From<mpsc::TrySendError<T>> for Error {
 }
 
 /// Configuration for the peer-to-peer server.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct P2PConfig {
 	pub host: IpAddr,
 	pub port: u16,
@@ -115,9 +115,9 @@ impl Default for P2PConfig {
 			port: 13414,
 			peers_allow: None,
 			peers_deny: None,
-			ban_window: Some(BAN_WINDOW),
-			peer_max_count: Some(PEER_MAX_COUNT),
-			peer_min_preferred_count: Some(PEER_MIN_PREFERRED_COUNT),
+			ban_window: None,
+			peer_max_count: None,
+			peer_min_preferred_count: None,
 		}
 	}
 }
@@ -266,12 +266,7 @@ pub trait ChainAdapter: Sync + Send {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	fn txhashset_write(
-		&self,
-		h: Hash,
-		txhashset_data: File,
-		peer_addr: SocketAddr,
-	) -> bool;
+	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: SocketAddr) -> bool;
 }
 
 /// Additional methods required by the protocol that don't need to be
