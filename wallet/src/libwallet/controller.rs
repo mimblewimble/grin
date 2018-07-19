@@ -22,7 +22,6 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use futures::Stream;
-use hyper::header::HeaderMap;
 use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -31,9 +30,7 @@ use tokio_core::reactor::Core;
 use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
-use libwallet::types::{
-	BlockFees, CbData, OutputData, SendTXArgs, WalletBackend, WalletClient, WalletInfo,
-};
+use libwallet::types::{CbData, OutputData, SendTXArgs, WalletBackend, WalletClient, WalletInfo};
 use libwallet::{Error, ErrorKind};
 use url::form_urlencoded;
 
@@ -96,7 +93,7 @@ where
 	Ok(())
 }
 
-pub fn handle_owner(req: Request<Body>) -> Response<Body> {
+fn handle_owner(req: Request<Body>) -> Response<Body> {
 	unsafe {
 		match OWNER_ROUTER {
 			Some(ref h) => h.handle(req),
@@ -138,7 +135,7 @@ where
 	Ok(())
 }
 
-pub fn handle_foreign(req: Request<Body>) -> Response<Body> {
+fn handle_foreign(req: Request<Body>) -> Response<Body> {
 	unsafe {
 		match FOREIGN_ROUTER {
 			Some(ref h) => h.handle(req),

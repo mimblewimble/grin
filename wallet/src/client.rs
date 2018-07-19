@@ -19,8 +19,6 @@ use failure::ResultExt;
 use libwallet::types::*;
 use std::collections::HashMap;
 
-use futures::{Future, Stream};
-
 use api;
 use error::{Error, ErrorKind};
 use libtx::slate::Slate;
@@ -41,9 +39,6 @@ impl HTTPWalletClient {
 		}
 	}
 }
-
-static JSON_CONTENT_TYPE: &str = "application/json";
-static CONTENT_TYPE_HEADER: &str = "Content-Type";
 
 impl WalletClient for HTTPWalletClient {
 	fn node_url(&self) -> &str {
@@ -142,7 +137,7 @@ impl WalletClient for HTTPWalletClient {
 				Ok(outputs) => for out in outputs {
 					api_outputs.insert(out.commit.commit(), util::to_hex(out.commit.to_vec()));
 				},
-				Err(e) => {
+				Err(_) => {
 					// if we got anything other than 200 back from server, don't attempt to refresh
 					// the wallet data after
 					return Err(libwallet::ErrorKind::ClientCallback("Error from server"))?;
