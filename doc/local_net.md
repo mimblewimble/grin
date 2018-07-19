@@ -6,7 +6,7 @@ For a basic example simulating a single node network, create a directory called 
 
 You'll need a config file - the easiest is to copy over the `grin.toml` file from the root grin directory into the `node1` directory you just made.
 
-Before running your mining server, a wallet server needs to be set up and listening so that the mining server knows where to send mining rewards. This can all be configured in the `grin.toml` file. We will use the defaults, with the wallet listener running on port 13415.
+Before running your mining server, a wallet server needs to be set up and listening so that the mining server knows where to send mining rewards. This can all be configured in the `grin.toml` file. We will use the defaults, with the wallet listener automatically started on port 13415.
 
 See [wallet](wallet.md) for more info on the various Grin wallet commands and options.
 
@@ -24,10 +24,18 @@ Now, start up the grin server:
 	
     node1$ grin server run
 
-This creates a new `.grin` database directory in the current directory, and begins mining new blocks (with no transactions, for now). Note this starts two services listening on two default ports,
-port 13414 for the peer-to-peer (P2P) service which keeps all nodes synchronized, and 13413 for the Rest API service used to verify transactions and post new transactions to the pool (for example). These ports can be configured via command line switches, or via a `grin.toml` file in the working directory.
+This creates a new `.grin` database directory in the current directory, and begins mining new blocks (with no transactions, for now). Note this starts two services listening on two default ports: 
+
+* **13414** for the peer-to-peer (P2P) service which keeps all nodes synchronized
+* **13413** for the Rest API service used to verify transactions and post new transactions to the pool (for example)
+
+These ports can be configured via command line switches, or via a `grin.toml` file in the working directory.
 
 Let the mining server find a few blocks, then stop (just ctrl-c) the grin server. You'll notice grin has created a database directory (.grin) in which the blockchain and peer data is stored. There should also be a wallet.dat file in the current directory, which contains a few coinbase mining rewards created each time the server mines a new block.
+
+Alternatively, if mining at Cuckoo 30 is desired, you can utilize the `grin-miner` instead of the test miner (Cuckoo 16). After starting the grin server, open another terminal, navigate to the `grin-miner` directory, and start up the grin miner (we will again use the default configuration):
+
+    grin-miner$ grin-miner
 
 ## Advanced Example
 
