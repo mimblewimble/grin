@@ -188,15 +188,15 @@ fn test_p2p() {
 	let base_addr = server_config_one.base_addr;
 	let api_server_port = server_config_one.api_server_port;
 
-	// Check that when we get peer connected the peer is here
-	let peers_connected = get_connected_peers(&base_addr, api_server_port);
-	assert!(peers_connected.is_ok());
-	assert_eq!(peers_connected.unwrap().len(), 1);
-
 	// Check that peer all is also working
 	let mut peers_all = get_all_peers(&base_addr, api_server_port);
 	assert!(peers_all.is_ok());
 	assert_eq!(peers_all.unwrap().len(), 1);
+
+	// Check that when we get peer connected the peer is here
+	let peers_connected = get_connected_peers(&base_addr, api_server_port);
+	assert!(peers_connected.is_ok());
+	assert_eq!(peers_connected.unwrap().len(), 1);
 
 	// Check that the peer status is Healthy
 	let addr = format!(

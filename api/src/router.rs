@@ -217,34 +217,83 @@ mod tests {
 
 	use super::*;
 
+	struct HandlerImpl(u16);
+
+	impl Handler for HandlerImpl {
+		fn get(&self, _req: Request<Body>) -> Response<Body> {
+			Response::builder()
+				.status(self.0)
+				.body(Body::default())
+				.unwrap()
+		}
+	}
+
 	#[test]
 	fn test_add_route() {
 		let mut routes = Router::new();
-		routes.add_route("/v1/users", 1).unwrap();
-		assert!(routes.add_route("/v1/users", 2).is_err());
-		routes.add_route("/v1/users/xxx", 3).unwrap();
-		routes.add_route("/v1/users/xxx/yyy", 3).unwrap();
-		routes.add_route("/v1/zzz/*", 3).unwrap();
-		assert!(routes.add_route("/v1/zzz/ccc", 2).is_err());
-		routes.add_route("/v1/zzz/*/zzz", 6).unwrap();
+		routes
+			.add_route("/v1/users", Box::new(HandlerImpl(1)))
+			.unwrap();
+		assert!(
+			routes
+				.add_route("/v1/users", Box::new(HandlerImpl(2)))
+				.is_err()
+		);
+		routes
+			.add_route("/v1/users/xxx", Box::new(HandlerImpl(3)))
+			.unwrap();
+		routes
+			.add_route("/v1/users/xxx/yyy", Box::new(HandlerImpl(3)))
+			.unwrap();
+		routes
+			.add_route("/v1/zzz/*", Box::new(HandlerImpl(3)))
+			.unwrap();
+		assert!(
+			routes
+				.add_route("/v1/zzz/ccc", Box::new(HandlerImpl(2)))
+				.is_err()
+		);
+		routes
+			.add_route("/v1/zzz/*/zzz", Box::new(HandlerImpl(6)))
+			.unwrap();
 	}
 
 	#[test]
 	fn test_get() {
 		let mut routes = Router::new();
-		routes.add_route("/v1/users", 1).unwrap();
-		routes.add_route("/v1/users/xxx", 3).unwrap();
-		routes.add_route("/v1/users/xxx/yyy", 3).unwrap();
-		routes.add_route("/v1/zzz/*", 3).unwrap();
-		routes.add_route("/v1/zzz/*/zzz", 6).unwrap();
+		routes
+			.add_route("/v1/users", Box::new(HandlerImpl(101)))
+			.unwrap();
+		routes
+			.add_route("/v1/users/xxx", Box::new(HandlerImpl(103)))
+			.unwrap();
+		routes
+			.add_route("/v1/users/xxx/yyy", Box::new(HandlerImpl(103)))
+			.unwrap();
+		routes
+			.add_route("/v1/zzz/*", Box::new(HandlerImpl(103)))
+			.unwrap();
+		routes
+			.add_route("/v1/zzz/*/zzz", Box::new(HandlerImpl(106)))
+			.unwrap();
 
-		assert_eq!(routes.get("/v1/users").unwrap(), Arc::new(1));
-		assert_eq!(routes.get("/v1/users/xxx").unwrap(), Arc::new(3));
+		let call_handler = |url| {
+			routes
+				.get(url)
+				.unwrap()
+				.get(Request::new(Body::default()))
+				.status()
+				.as_u16()
+		};
+
+		assert_eq!(call_handler("/v1/users"), 101);
+		assert_eq!(call_handler("/v1/users/xxx"), 103);
 		assert!(routes.get("/v1/users/yyy").is_err());
-		assert_eq!(routes.get("/v1/users/xxx/yyy").unwrap(), Arc::new(3));
+		assert_eq!(call_handler("/v1/users/xxx/yyy"), 103);
 		assert!(routes.get("/v1/zzz").is_err());
-		assert_eq!(routes.get("/v1/zzz/1").unwrap(), Arc::new(3));
-		assert_eq!(routes.get("/v1/zzz/2").unwrap(), Arc::new(3));
-		assert_eq!(routes.get("/v1/zzz/2/zzz").unwrap(), Arc::new(6));
+		assert_eq!(call_handler("/v1/zzz/1"), 103);
+		assert_eq!(call_handler("/v1/zzz/2"), 103);
+		assert_eq!(call_handler("/v1/zzz/2/zzz"), 106);
 	}
+
 }

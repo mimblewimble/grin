@@ -337,30 +337,27 @@ impl LocalServerContainer {
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		let _ =
-			wallet::controller::owner_single_use(
-				Arc::new(Mutex::new(Box::new(wallet))),
-				|api| {
-					let result = api.issue_send_tx(
-						amount,
-						minimum_confirmations,
+			wallet::controller::owner_single_use(Arc::new(Mutex::new(Box::new(wallet))), |api| {
+				let result = api.issue_send_tx(
+					amount,
+					minimum_confirmations,
+					dest,
+					max_outputs,
+					selection_strategy == "all",
+				);
+				match result {
+					Ok(_) => println!(
+						"Tx sent: {} grin to {} (strategy '{}')",
+						core::core::amount_to_hr_string(amount),
 						dest,
-						max_outputs,
-						selection_strategy == "all",
-					);
-					match result {
-						Ok(_) => println!(
-							"Tx sent: {} grin to {} (strategy '{}')",
-							core::core::amount_to_hr_string(amount),
-							dest,
-							selection_strategy,
-						),
-						Err(e) => {
-							println!("Tx not sent to {}: {:?}", dest, e);
-						}
-					};
-					Ok(())
-				},
-			).unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
+						selection_strategy,
+					),
+					Err(e) => {
+						println!("Tx not sent to {}: {:?}", dest, e);
+					}
+				};
+				Ok(())
+			}).unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 	}
 
 	/// Stops the running wallet server
