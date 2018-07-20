@@ -197,7 +197,7 @@ impl Chain {
 		b: Block,
 		opts: Options,
 	) -> Result<(Option<Tip>, Option<Block>), Error> {
-		let res = self.process_block_no_orphans(b, opts);
+		let res = self.process_block_no_orphans(b, opts, false);
 		match res {
 			Ok((t, b)) => {
 				// We accepted a block, so see if we can accept any orphans
@@ -217,13 +217,14 @@ impl Chain {
 		&self,
 		b: Block,
 		opts: Options,
+		from_cache: bool,
 	) -> Result<(Option<Tip>, Option<Block>), Error> {
 		let head = self.store.head()?;
 		let mut ctx = self.ctx_from_head(head, opts)?;
 
-		let res = pipe::process_block(&b, &mut ctx);
-		
-		{
+		let res = pipe::process_block(&b, &mut ctx, from_cache);
+
+		if !from_cache{
 			let mut cache = self.block_hashes_cache.write().unwrap();
 			cache.push_front(b.hash());
 			cache.truncate(HASHES_CACHE_SIZE);
@@ -350,7 +351,7 @@ impl Chain {
 	pub fn check_orphans(&self, mut height: u64) {
 		trace!(
 			LOGGER,
-			"chain: check_orphans at {}, # orphans {}",
+			"chain: doing check_orphans at {}, # orphans {}",
 			height,
 			self.orphans.len(),
 		);
@@ -358,7 +359,14 @@ impl Chain {
 		loop {
 			if let Some(orphans) = self.orphans.remove_by_height(&height) {
 				for orphan in orphans {
-					let res = self.process_block_no_orphans(orphan.block, orphan.opts);
+					trace!(
+						LOGGER,
+						"chain: got block {} at {} from orphans. # orphans remaining {}",
+						orphan.block.hash(),
+						height,
+						self.orphans.len(),
+					);
+					let res = self.process_block_no_orphans(orphan.block, orphan.opts, true);
 					if let Ok((_, Some(b))) = res {
 						// We accepted a block, so see if we can accept any orphans
 						height = b.header.height + 1;
@@ -370,6 +378,12 @@ impl Chain {
 				break;
 			}
 		}
+		trace!(
+			LOGGER,
+			"chain: done check_orphans at {}. # remaining orphans {}",
+			height,
+			self.orphans.len(),
+		);
 	}
 
 	/// For the given commitment find the unspent output and return the
