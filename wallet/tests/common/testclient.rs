@@ -430,7 +430,7 @@ impl WalletClient for LocalWalletClient {
     (
       u64,
       u64,
-      Vec<(u64, u64)>,
+      Vec<(u64, u64, String)>,
     ),
     libwallet::Error,
   > {

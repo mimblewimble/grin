@@ -11,19 +11,23 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 //! Functions to restore a wallet's outputs from just the master seed
 
 #![allow(unreachable_code)]
 
+use chrono::prelude::*;
+use chrono::{DateTime, Utc};
 use core::global;
 use keychain::{Identifier, Keychain};
 use libtx::proof;
 use libwallet::types::*;
-use libwallet::Error;
+use libwallet::{Error, ErrorKind};
 use util::secp::{key::SecretKey, pedersen};
 use util::LOGGER;
 use std::time::{Duration, Instant};
 use libwallet::internal::updater;
+use store::{self, to_key};
 
 /// Utility struct for return values from below
 struct OutputResult {
@@ -45,6 +49,8 @@ struct OutputResult {
 	pub blinding: SecretKey,
 	///
 	pub mmr_index: u64,
+	///
+	pub confirmation_ts: Option<DateTime<Utc>>,
 }
 
 fn identify_utxo_outputs<T, C, K>(
@@ -76,7 +82,7 @@ where
 
 		info!(
 			LOGGER,
-			"Output found: {:?}, amount: {:?}, coinbase: {:?}, mmr_index: {}", commit, info.value, is_coinbase, mmr_index
+			"Output found: {:?}, amount: {:?}, coinbase: {:?}, mmr: {}", commit, info.value, is_coinbase, mmr_index
 		);
 
 		wallet_outputs.push(OutputResult {
@@ -89,6 +95,7 @@ where
 			is_coinbase: is_coinbase,
 			blinding: info.blinding,
 			mmr_index: mmr_index,
+			confirmation_ts: None,
 		});
 	}
 	Ok(wallet_outputs)
@@ -100,7 +107,7 @@ fn populate_child_indices<T, C, K>(
 	wallet: &mut T,
 	outputs: &mut Vec<OutputResult>,
 	max_derivations: u32,
-) -> Result<(), Error>
+) -> Result<Option<u32>, Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -143,7 +150,7 @@ where
 			);
 		}
 	}
-	Ok(())
+	Ok(found_child_indices.last().cloned())
 }
 
 /// Restore a wallet
@@ -161,7 +168,7 @@ where
 	if !is_empty {
 		error!(
 			LOGGER,
-			"Not restoring. Please back up and remove existing wallet.dat first."
+			"Not restoring. Please back up and remove existing 'wallet_data' directory first."
 		);
 		return Ok(());
 	}
@@ -199,10 +206,19 @@ where
 		result_vec.len(),
 	);
 
+	if result_vec.len() == 0 {
+		info!(
+			LOGGER,
+			"No wallet_outputs are identfied as belonging to this wallet.",
+		);
+		return Ok(());
+	}
+
+	let mut last_confirmed_height;
 	{
 		let batch_size = 1000;
 		let mut start_height = 1;
-		let mut cur_block_mmr = (0, 0); // (height, mmr_size)
+		let mut cur_block_mmr = (0, 0, "".to_owned()); // (height, mmr_size)
 		let mut result_iter = result_vec.iter_mut().peekable();
 
 		'outer: loop {
@@ -215,6 +231,7 @@ where
 			let (tip_height, last_retrieved_height, headers) = wallet
 				.client()
 				.get_block_output_mmr_size(start_height, batch_size)?;
+
 			info!(
 				LOGGER,
 				"Retrieved {} headers for mmr_size, up to height {}. (Tip height: {})",
@@ -222,39 +239,35 @@ where
 				last_retrieved_height,
 				tip_height,
 			);
-			start_height = last_retrieved_height + 1;
 
-			let mut header_iter = headers.iter();
+			// warning! early update for `continue`
+			start_height = last_retrieved_height + 1;
+			last_confirmed_height = last_retrieved_height;
+
+			let mut header_iter = headers.into_iter();
 			'inner: loop {
 				if let Some(output) = result_iter.peek() {
 					// mmr_index starts with 1
 					while output.mmr_index > cur_block_mmr.1 {
 						if let Some(h) = header_iter.next() {
-							cur_block_mmr = *h;
-							debug!(
-								LOGGER,
-								"HEADER height({}) mmr_size({}) mmr_index({})", cur_block_mmr.0, cur_block_mmr.1, output.mmr_index
-							);
+							cur_block_mmr = h;
 						} else {
 							// no more header
-							debug!(
-								LOGGER,
-								"no more header continue to 'outer loop..."
-							);
+							/* debug!(LOGGER, "no more header continue to 'outer loop..."); */
 							continue 'outer;
 						}
 					}
 				} else {
 					// no more result
-					debug!(
-						LOGGER,
-						"breaking 'outer"	,
-					);
+					/* debug!( LOGGER, "breaking 'outer"	,); */
 					break 'outer;
 				}
 
 				let out = result_iter.next().unwrap();
 				out.height = cur_block_mmr.0;
+				let dt = DateTime::parse_from_rfc3339(&cur_block_mmr.2)
+					.map_err(|e| ErrorKind::GenericError(e.to_string()))?;
+				out.confirmation_ts = Some(DateTime::from_utc(dt.naive_utc(), Utc));
 
 				out.lock_height = if out.is_coinbase {
 					out.height + global::coinbase_maturity()
@@ -264,37 +277,60 @@ where
 
 				info!(
 					LOGGER,
-					"Found height({}), {:?}, mmr({}|{}), cb({})",
+					"Found height: {}, {:?}, mmr: {}/{}, cb: {} ts: {}",
 					out.height,
 					out.commit,
 					out.mmr_index,
 					cur_block_mmr.1,
 					out.is_coinbase,
+					out.confirmation_ts.unwrap().to_rfc3339(),
 				);
 			}
 			panic!("should not reach here!");
 		}
 	}
 
-	populate_child_indices(wallet, &mut result_vec, max_derivations)?;
+	let last_child_index = populate_child_indices(wallet, &mut result_vec, max_derivations)?.unwrap();
+	let root_key_id = wallet.keychain().clone().root_key_id();
 
 	// Now save what we have
 	{
-		// Now save what we have
-		let root_key_id = wallet.keychain().root_key_id();
 		let mut batch = wallet.batch()?;
+		batch.save_details(root_key_id.clone(), 
+			WalletDetails {
+				last_confirmed_height,
+				last_child_index,
+			}
+		)?;
+
 		for output in result_vec {
 			if output.key_id.is_some() && output.n_child.is_some() {
+				let log_id = batch.next_tx_log_id(root_key_id.clone())?;
+				let mut t = TxLogEntry::new(
+					if output.is_coinbase {
+						TxLogEntryType::ConfirmedCoinbase
+					} else {
+						TxLogEntryType::TxReceived
+					}, log_id);
+				t.num_outputs = if output.is_coinbase {1} else {0};
+				t.creation_ts = output.confirmation_ts.unwrap();;
+				t.confirmation_ts = output.confirmation_ts;
+				t.confirmed = true;
+				t.amount_debited = 0;
+				t.amount_credited = output.value;
+
+				batch.save_tx_log_entry(t)?;
+
 				let _ = batch.save(OutputData {
 					root_key_id: root_key_id.clone(),
 					key_id: output.key_id.unwrap(),
 					n_child: output.n_child.unwrap(),
 					value: output.value,
-					status: OutputStatus::Unconfirmed,
+					status: OutputStatus::Unspent,
 					height: output.height,
 					lock_height: output.lock_height,
 					is_coinbase: output.is_coinbase,
-					tx_log_entry: None,
+					tx_log_entry: Some(log_id),
 				});
 			} else {
 				warn!(
@@ -306,10 +342,5 @@ where
 		}
 		batch.commit()?;
 	}
-	info!(
-		LOGGER,
-		"Refreshing outputs"
-	);
-	updater::refresh_outputs(wallet)?;
 	Ok(())
 }

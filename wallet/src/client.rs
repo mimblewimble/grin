@@ -191,7 +191,7 @@ impl WalletClient for HTTPWalletClient {
 		(
 			u64,
 			u64,
-			Vec<(u64, u64)>,
+			Vec<(u64, u64, String)>, // height, mmr_size, timestamp
 		),
 		libwallet::Error,
 	> {
@@ -199,12 +199,12 @@ impl WalletClient for HTTPWalletClient {
 		let query_param = format!("start_height={}&max={}", start_height, max_headers);
 
 		let url = format!("{}/v1/headers?{}", addr, query_param,);
-		let mut api_outputs: Vec<(u64, u64)> = Vec::new();
+		let mut api_outputs: Vec<(u64, u64, String)> = Vec::new();
 
 		match api::client::get::<api::HeaderListing>(url.as_str()) {
 			Ok(o) => {
 				for h in o.headers {
-					api_outputs.push((h.height, h.output_mmr_size));
+					api_outputs.push((h.height, h.output_mmr_size, h.timestamp));
 				}
 
 				Ok((o.tip_height, o.last_retrieved_height, api_outputs))
