@@ -292,7 +292,20 @@ fn main() {
 			.about("raw wallet output info (list of outputs)"))
 
 		.subcommand(SubCommand::with_name("txs")
-			.about("display list of transactions"))
+			.about("Display transaction information")
+			.arg(Arg::with_name("id")
+				.help("If specified, display transaction with given ID and all associated Inputs/Outputs")
+				.short("i")
+				.long("id")
+				.takes_value(true)))
+
+		.subcommand(SubCommand::with_name("cancel")
+			.about("Cancels an previously created transaction, freeing previously locked outputs for use again")
+			.arg(Arg::with_name("id")
+				.help("The ID of the transaction to cancel")
+				.short("i")
+				.long("id")
+				.takes_value(true)))
 
 		.subcommand(SubCommand::with_name("info")
 			.about("basic wallet contents summary"))
@@ -754,7 +767,7 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 			}
 			("outputs", Some(_)) => {
 				let (height, _) = api.node_height()?;
-				let (validated, outputs) = api.retrieve_outputs(show_spent, true)?;
+				let (validated, outputs) = api.retrieve_outputs(show_spent, true, None)?;
 				let _res =
 					wallet::display::outputs(height, validated, outputs).unwrap_or_else(|e| {
 						panic!(
@@ -764,16 +777,54 @@ fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					});
 				Ok(())
 			}
-			("txs", Some(_)) => {
+			("txs", Some(txs_args)) => {
+				let tx_id = match txs_args.value_of("id") {
+					None => None,
+					Some(tx) => match tx.parse() {
+						Ok(t) => Some(t),
+						Err(_) => panic!("Unable to parse argument 'id' as a number"),
+					},
+				};
 				let (height, _) = api.node_height()?;
-				let (validated, txs) = api.retrieve_txs(true)?;
-				let _res = wallet::display::txs(height, validated, txs).unwrap_or_else(|e| {
-					panic!(
-						"Error getting wallet outputs: {:?} Config: {:?}",
-						e, wallet_config
-					)
-				});
+				let (validated, txs) = api.retrieve_txs(true, tx_id)?;
+				let include_status = !tx_id.is_some();
+				let _res = wallet::display::txs(height, validated, txs, include_status)
+					.unwrap_or_else(|e| {
+						panic!(
+							"Error getting wallet outputs: {} Config: {:?}",
+							e, wallet_config
+						)
+					});
+				// if given a particular transaction id, also get and display associated
+				// inputs/outputs
+				if tx_id.is_some() {
+					let (_, outputs) = api.retrieve_outputs(true, false, tx_id)?;
+					let _res =
+						wallet::display::outputs(height, validated, outputs).unwrap_or_else(|e| {
+							panic!(
+								"Error getting wallet outputs: {} Config: {:?}",
+								e, wallet_config
+							)
+						});
+				};
 				Ok(())
+			}
+			("cancel", Some(tx_args)) => {
+				let tx_id = tx_args
+					.value_of("id")
+					.expect("'id' argument (-i) is required.");
+				let tx_id = tx_id.parse().expect("Could not parse id parameter.");
+				let result = api.cancel_tx(tx_id);
+				match result {
+					Ok(_) => {
+						info!(LOGGER, "Transaction {} Cancelled", tx_id);
+						Ok(())
+					}
+					Err(e) => {
+						error!(LOGGER, "TX Cancellation failed: {}", e);
+						Err(e)
+					}
+				}
 			}
 			("restore", Some(_)) => {
 				let result = api.restore();

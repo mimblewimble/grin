@@ -83,7 +83,12 @@ pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<OutputData>) -> Re
 }
 
 /// Display transaction log in a pretty way
-pub fn txs(cur_height: u64, validated: bool, txs: Vec<TxLogEntry>) -> Result<(), Error> {
+pub fn txs(
+	cur_height: u64,
+	validated: bool,
+	txs: Vec<TxLogEntry>,
+	include_status: bool,
+) -> Result<(), Error> {
 	let title = format!("Transaction Log - Block Height: {}", cur_height);
 	println!();
 	let mut t = term::stdout().unwrap();
@@ -104,6 +109,8 @@ pub fn txs(cur_height: u64, validated: bool, txs: Vec<TxLogEntry>) -> Result<(),
 		bMG->"Num. Outputs",
 		bMG->"Amount Credited",
 		bMG->"Amount Debited",
+		bMG->"Fee",
+		bMG->"Net Difference",
 	]);
 
 	for t in txs {
@@ -119,10 +126,22 @@ pub fn txs(cur_height: u64, validated: bool, txs: Vec<TxLogEntry>) -> Result<(),
 			None => "None".to_owned(),
 		};
 		let confirmed = format!("{}", t.confirmed);
-		let amount_credited = format!("{}", t.amount_credited);
 		let num_inputs = format!("{}", t.num_inputs);
 		let num_outputs = format!("{}", t.num_outputs);
-		let amount_debited = format!("{}", t.amount_debited);
+		let amount_debited_str = core::amount_to_hr_string(t.amount_debited);
+		let amount_credited_str = core::amount_to_hr_string(t.amount_credited);
+		let fee = match t.fee {
+			Some(f) => format!("{}", core::amount_to_hr_string(f)),
+			None => "None".to_owned(),
+		};
+		let net_diff = if t.amount_credited >= t.amount_debited {
+			core::amount_to_hr_string(t.amount_credited - t.amount_debited)
+		} else {
+			format!(
+				"-{}",
+				core::amount_to_hr_string(t.amount_debited - t.amount_credited)
+			)
+		};
 		table.add_row(row![
 			bFC->id,
 			bFC->entry_type,
@@ -132,8 +151,10 @@ pub fn txs(cur_height: u64, validated: bool, txs: Vec<TxLogEntry>) -> Result<(),
 			bFB->confirmation_ts,
 			bFC->num_inputs,
 			bFC->num_outputs,
-			bFG->amount_credited,
-			bFR->amount_debited,
+			bFG->amount_credited_str,
+			bFR->amount_debited_str,
+			bFR->fee,
+			bFY->net_diff,
 		]);
 	}
 
@@ -141,7 +162,7 @@ pub fn txs(cur_height: u64, validated: bool, txs: Vec<TxLogEntry>) -> Result<(),
 	table.printstd();
 	println!();
 
-	if !validated {
+	if !validated && include_status {
 		println!(
 			"\nWARNING: Wallet failed to verify data. \
 			 The above is from local cache and possibly invalid! \

@@ -37,6 +37,7 @@ use util::{self, LOGGER};
 pub fn retrieve_outputs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	show_spent: bool,
+	tx_id: Option<u32>,
 ) -> Result<Vec<OutputData>, Error>
 where
 	T: WalletBackend<C, K>,
@@ -56,19 +57,38 @@ where
 			}
 		})
 		.collect::<Vec<_>>();
+	// only include outputs with a given tx_id if provided
+	if let Some(id) = tx_id {
+		outputs = outputs
+			.into_iter()
+			.filter(|out| out.tx_log_entry == Some(id))
+			.collect::<Vec<_>>();
+	}
 	outputs.sort_by_key(|out| out.n_child);
 	Ok(outputs)
 }
 
-/// Retrieve all of the transaction entries
-pub fn retrieve_txs<T: ?Sized, C, K>(wallet: &mut T) -> Result<Vec<TxLogEntry>, Error>
+/// Retrieve all of the transaction entries, or a particular entry
+pub fn retrieve_txs<T: ?Sized, C, K>(
+	wallet: &mut T,
+	tx_id: Option<u32>,
+) -> Result<Vec<TxLogEntry>, Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
 	K: Keychain,
 {
 	// just read the wallet here, no need for a write lock
-	let mut txs = wallet.tx_log_iter().collect::<Vec<_>>();
+	let mut txs = if let Some(id) = tx_id {
+		let tx = wallet.tx_log_iter().find(|t| t.id == id);
+		if let Some(t) = tx {
+			vec![t]
+		} else {
+			vec![]
+		}
+	} else {
+		wallet.tx_log_iter().collect::<Vec<_>>()
+	};
 	txs.sort_by_key(|tx| tx.creation_ts);
 	Ok(txs)
 }
@@ -106,6 +126,40 @@ where
 		wallet_outputs.insert(commit, out.key_id.clone());
 	}
 	Ok(wallet_outputs)
+}
+
+/// Cancel transaction and associated outputs
+pub fn cancel_tx_and_outputs<T: ?Sized, C, K>(
+	wallet: &mut T,
+	tx: TxLogEntry,
+	outputs: Vec<OutputData>,
+) -> Result<(), libwallet::Error>
+where
+	T: WalletBackend<C, K>,
+	C: WalletClient,
+	K: Keychain,
+{
+	let mut batch = wallet.batch()?;
+	for mut o in outputs {
+		// unlock locked outputs
+		if o.status == OutputStatus::Unconfirmed {
+			batch.delete(&o.key_id)?;
+		}
+		if o.status == OutputStatus::Locked {
+			o.status = OutputStatus::Unconfirmed;
+			batch.save(o)?;
+		}
+	}
+	let mut tx = tx.clone();
+	if tx.tx_type == TxLogEntryType::TxSent {
+		tx.tx_type = TxLogEntryType::TxSentCancelled;
+	}
+	if tx.tx_type == TxLogEntryType::TxReceived {
+		tx.tx_type = TxLogEntryType::TxReceivedCancelled;
+	}
+	batch.save_tx_log_entry(tx)?;
+	batch.commit()?;
+	Ok(())
 }
 
 /// Apply refreshed API output data to the wallet
