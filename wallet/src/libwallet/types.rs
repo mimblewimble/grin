@@ -431,7 +431,7 @@ impl Default for WalletDetails {
 }
 
 /// Types of transactions that can be contained within a TXLog entry
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum TxLogEntryType {
 	/// A coinbase transaction becomes confirmed
 	ConfirmedCoinbase,
@@ -439,6 +439,10 @@ pub enum TxLogEntryType {
 	TxReceived,
 	/// Inputs locked + change outputs when a transaction is created
 	TxSent,
+	/// Received transaction that was rolled back by user
+	TxReceivedCancelled,
+	/// Sent transaction that was rolled back by user
+	TxSentCancelled,
 }
 
 impl fmt::Display for TxLogEntryType {
@@ -447,6 +451,8 @@ impl fmt::Display for TxLogEntryType {
 			TxLogEntryType::ConfirmedCoinbase => write!(f, "Confirmed Coinbase"),
 			TxLogEntryType::TxReceived => write!(f, "Recieved Tx"),
 			TxLogEntryType::TxSent => write!(f, "Sent Tx"),
+			TxLogEntryType::TxReceivedCancelled => write!(f, "Received Tx - Cancelled"),
+			TxLogEntryType::TxSentCancelled => write!(f, "Send Tx - Cancelled"),
 		}
 	}
 }
@@ -480,6 +486,8 @@ pub struct TxLogEntry {
 	pub amount_credited: u64,
 	/// Amount debited via this transaction
 	pub amount_debited: u64,
+	/// Fee
+	pub fee: Option<u64>,
 }
 
 impl ser::Writeable for TxLogEntry {
@@ -509,6 +517,7 @@ impl TxLogEntry {
 			amount_debited: 0,
 			num_inputs: 0,
 			num_outputs: 0,
+			fee: None,
 		}
 	}
 

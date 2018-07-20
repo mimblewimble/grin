@@ -163,7 +163,7 @@ where
 				update_from_node = true;
 			}
 		}
-		api.retrieve_outputs(false, update_from_node)
+		api.retrieve_outputs(false, update_from_node, None)
 	}
 
 	fn retrieve_summary_info(

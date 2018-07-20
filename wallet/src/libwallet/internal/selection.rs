@@ -99,6 +99,7 @@ where
 		let log_id = batch.next_tx_log_id(root_key_id.clone())?;
 		let mut t = TxLogEntry::new(TxLogEntryType::TxSent, log_id);
 		t.tx_slate_id = Some(slate_id);
+		t.fee = Some(fee);
 		let mut amount_debited = 0;
 		t.num_inputs = lock_inputs.len();
 		for id in lock_inputs {

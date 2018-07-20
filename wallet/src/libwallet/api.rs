@@ -27,7 +27,7 @@ use libwallet::internal::{tx, updater};
 use libwallet::types::{
 	BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend, WalletClient, WalletInfo,
 };
-use libwallet::Error;
+use libwallet::{Error, ErrorKind};
 use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to
@@ -62,10 +62,12 @@ where
 
 	/// Attempt to update and retrieve outputs
 	/// Return (whether the outputs were validated against a node, OutputData)
+	/// if tx_id is some then only retrieve outputs for associated transaction
 	pub fn retrieve_outputs(
 		&self,
 		include_spent: bool,
 		refresh_from_node: bool,
+		tx_id: Option<u32>,
 	) -> Result<(bool, Vec<OutputData>), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
@@ -77,7 +79,7 @@ where
 
 		let res = Ok((
 			validated,
-			updater::retrieve_outputs(&mut **w, include_spent)?,
+			updater::retrieve_outputs(&mut **w, include_spent, tx_id)?,
 		));
 
 		w.close()?;
@@ -86,7 +88,11 @@ where
 
 	/// Attempt to update outputs and retrieve tranasactions
 	/// Return (whether the outputs were validated against a node, OutputData)
-	pub fn retrieve_txs(&self, refresh_from_node: bool) -> Result<(bool, Vec<TxLogEntry>), Error> {
+	pub fn retrieve_txs(
+		&self,
+		refresh_from_node: bool,
+		tx_id: Option<u32>,
+	) -> Result<(bool, Vec<TxLogEntry>), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 
@@ -95,7 +101,7 @@ where
 			validated = self.update_outputs(&mut w);
 		}
 
-		let res = Ok((validated, updater::retrieve_txs(&mut **w)?));
+		let res = Ok((validated, updater::retrieve_txs(&mut **w, tx_id)?));
 
 		w.close()?;
 		res
@@ -167,6 +173,24 @@ where
 		Ok(slate_out)
 	}
 
+	/// Roll back a transaction and all associated outputs with a given
+	/// transaction id This means delete all change outputs, (or recipient
+	/// output if you're recipient), and unlock all locked outputs associated
+	/// with the transaction used when a transaction is created but never
+	/// posted
+	pub fn cancel_tx(&mut self, tx_id: u32) -> Result<(), Error> {
+		let mut w = self.wallet.lock().unwrap();
+		w.open_with_credentials()?;
+		if !self.update_outputs(&mut w) {
+			return Err(ErrorKind::TransactionCancellationError(
+				"Can't contact running Grin node. Not Cancelling.",
+			))?;
+		}
+		tx::cancel_tx(&mut **w, tx_id)?;
+		w.close()?;
+		Ok(())
+	}
+
 	/// Issue a burn TX
 	pub fn issue_burn_tx(
 		&mut self,
@@ -217,7 +241,7 @@ where
 				Ok((height, true))
 			}
 			Err(_) => {
-				let outputs = self.retrieve_outputs(true, false)?;
+				let outputs = self.retrieve_outputs(true, false, None)?;
 				let height = match outputs.1.iter().map(|out| out.height).max() {
 					Some(height) => height,
 					None => 0,

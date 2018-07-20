@@ -132,6 +132,18 @@ pub enum ErrorKind {
 	#[fail(display = "Wallet seed doesn't exist error")]
 	WalletSeedDoesntExist,
 
+	/// Transaction doesn't exist
+	#[fail(display = "Transaction {} doesn't exist", _0)]
+	TransactionDoesntExist(u32),
+
+	/// Transaction already rolled back
+	#[fail(display = "Transaction {} cannot be cancelled", _0)]
+	TransactionNotCancellable(u32),
+
+	/// Cancellation error
+	#[fail(display = "Cancellation Error: {}", _0)]
+	TransactionCancellationError(&'static str),
+
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
 	GenericError(String),
