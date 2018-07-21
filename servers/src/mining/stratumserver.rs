@@ -328,7 +328,7 @@ impl StratumServer {
 						"getjobtemplate" => {
 							if self.sync_state.is_syncing() {
 								let e = RpcError {
-									code: -32701,
+									code: -32000,
 									message: "Node is syncing - Please wait".to_string(),
 								};
 								Err(serde_json::to_value(e).unwrap())
