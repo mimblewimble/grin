@@ -44,6 +44,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use std::path::{PathBuf, Path};
+use std::env;
 
 use clap::{App, Arg, ArgMatches, SubCommand};
 use daemonize::Daemonize;
@@ -332,6 +334,21 @@ fn main() {
 	let mut global_config = GlobalConfig::new(None).unwrap_or_else(|e| {
 		panic!("Error parsing config file: {}", e);
 	});
+
+	let db_root = &global_config
+		.members
+		.clone()
+		.unwrap()
+		.server.db_root;
+
+	if Path::new(db_root).is_relative() {
+		if db_root != config::GRIN_HOME {
+			panic!("Please specify either a full path or `{}` for `db_root` in the configuration file", config::GRIN_HOME)
+    }
+    let mut home_path = PathBuf::from(env::var_os("HOME").expect("$HOME not set."));
+    home_path.push(config::GRIN_HOME);
+		global_config.members.as_mut().unwrap().server.db_root = home_path.to_str().unwrap().to_string();
+	}
 
 	if global_config.using_config_file {
 		// initialize the logger

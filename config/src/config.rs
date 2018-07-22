@@ -29,7 +29,7 @@ use wallet::WalletConfig;
 /// the config file location
 
 const CONFIG_FILE_NAME: &'static str = "grin.toml";
-const GRIN_HOME: &'static str = ".grin";
+pub const GRIN_HOME: &'static str = ".grin";
 
 /// Returns the defaults, as strewn throughout the code
 
