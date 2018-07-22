@@ -183,24 +183,63 @@ impl WalletClient for HTTPWalletClient {
 		Ok(api_outputs)
 	}
 
-	fn get_outputs_by_pmmr_index(
+	fn get_block_output_mmr_size(
 		&self,
 		start_height: u64,
+		max_headers: u64,
+	) -> Result<
+		(
+			u64,
+			u64,
+			Vec<(u64, u64, String)>, // height, mmr_size, timestamp
+		),
+		libwallet::Error,
+	> {
+		let addr = self.node_url();
+		let query_param = format!("start_height={}&max={}", start_height, max_headers);
+
+		let url = format!("{}/v1/headers?{}", addr, query_param,);
+		let mut api_outputs: Vec<(u64, u64, String)> = Vec::new();
+
+		match api::client::get::<api::HeaderListing>(url.as_str()) {
+			Ok(o) => {
+				for h in o.headers {
+					api_outputs.push((h.height, h.output_mmr_size, h.timestamp));
+				}
+
+				Ok((o.tip_height, o.last_retrieved_height, api_outputs))
+			}
+			Err(e) => {
+				// if we got anything other than 200 back from server, bye
+				error!(
+					LOGGER,
+					"get_headers: unable to contact API {}. Error: {}", addr, e
+				);
+				Err(libwallet::ErrorKind::ClientCallback(
+					"unable to contact api",
+				))?
+			}
+		}
+	}
+
+	fn get_outputs_by_pmmr_index(
+		&self,
+		start_index: u64,
 		max_outputs: u64,
 	) -> Result<
 		(
 			u64,
 			u64,
-			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)>,
 		),
 		libwallet::Error,
 	> {
 		let addr = self.node_url();
-		let query_param = format!("start_index={}&max={}", start_height, max_outputs);
+		let query_param = format!("start_index={}&max={}", start_index, max_outputs);
 
 		let url = format!("{}/v1/txhashset/outputs?{}", addr, query_param,);
 
-		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool)> = Vec::new();
+		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)> = Vec::new();
 
 		match api::client::get::<api::OutputListing>(url.as_str()) {
 			Ok(o) => {
@@ -209,7 +248,7 @@ impl WalletClient for HTTPWalletClient {
 						api::OutputType::Coinbase => true,
 						api::OutputType::Transaction => false,
 					};
-					api_outputs.push((out.commit, out.range_proof().unwrap(), is_coinbase));
+					api_outputs.push((out.commit, out.range_proof().unwrap(), is_coinbase, out.mmr_index.unwrap()));
 				}
 
 				Ok((o.highest_index, o.last_retrieved_index, api_outputs))

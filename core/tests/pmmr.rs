@@ -512,22 +512,22 @@ fn check_elements_from_insertion_index() {
 	let res = pmmr.elements_from_insertion_index(1, 100);
 	assert_eq!(res.0, 100);
 	assert_eq!(res.1.len(), 100);
-	assert_eq!(res.1[0].0[3], 1);
-	assert_eq!(res.1[99].0[3], 100);
+	assert_eq!((res.1[0].1).0[3], 1);
+	assert_eq!((res.1[99].1).0[3], 100);
 
 	// middle of pack
 	let res = pmmr.elements_from_insertion_index(351, 70);
 	assert_eq!(res.0, 420);
 	assert_eq!(res.1.len(), 70);
-	assert_eq!(res.1[0].0[3], 351);
-	assert_eq!(res.1[69].0[3], 420);
+	assert_eq!((res.1[0].1).0[3], 351);
+	assert_eq!((res.1[69].1).0[3], 420);
 
 	// past the end
 	let res = pmmr.elements_from_insertion_index(650, 1000);
 	assert_eq!(res.0, 999);
 	assert_eq!(res.1.len(), 350);
-	assert_eq!(res.1[0].0[3], 650);
-	assert_eq!(res.1[349].0[3], 999);
+	assert_eq!((res.1[0].1).0[3], 650);
+	assert_eq!((res.1[349].1).0[3], 999);
 
 	// pruning a few nodes should get consistent results
 	pmmr.prune(pmmr::insertion_to_pmmr_index(650)).unwrap();
@@ -538,6 +538,6 @@ fn check_elements_from_insertion_index() {
 	let res = pmmr.elements_from_insertion_index(650, 1000);
 	assert_eq!(res.0, 999);
 	assert_eq!(res.1.len(), 345);
-	assert_eq!(res.1[0].0[3], 652);
-	assert_eq!(res.1[344].0[3], 999);
+	assert_eq!((res.1[0].1).0[3], 652);
+	assert_eq!((res.1[344].1).0[3], 999);
 }

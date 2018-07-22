@@ -415,10 +415,25 @@ impl WalletClient for LocalWalletClient {
 		(
 			u64,
 			u64,
-			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)>,
 		),
 		libwallet::Error,
 	> {
+		unimplemented!();
+	}
+
+  fn get_block_output_mmr_size(
+    &self,
+    start_height: u64,
+    max_headers: u64,
+  ) -> Result<
+    (
+      u64,
+      u64,
+      Vec<(u64, u64, String)>,
+    ),
+    libwallet::Error,
+  > {
 		unimplemented!();
 	}
 }

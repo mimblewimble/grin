@@ -181,7 +181,7 @@ impl TxHashSet {
 		&mut self,
 		start_index: u64,
 		max_count: u64,
-	) -> (u64, Vec<OutputIdentifier>) {
+	) -> (u64, Vec<(u64, OutputIdentifier)>) {
 		let output_pmmr: PMMR<OutputIdentifier, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		output_pmmr.elements_from_insertion_index(start_index, max_count)
@@ -197,7 +197,7 @@ impl TxHashSet {
 		&mut self,
 		start_index: u64,
 		max_count: u64,
-	) -> (u64, Vec<RangeProof>) {
+	) -> (u64, Vec<(u64, RangeProof)>) {
 		let rproof_pmmr: PMMR<RangeProof, _> =
 			PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
 		rproof_pmmr.elements_from_insertion_index(start_index, max_count)

@@ -409,7 +409,7 @@ where
 	/// Helper function which returns un-pruned nodes from the insertion index
 	/// forward
 	/// returns last insertion index returned along with data
-	pub fn elements_from_insertion_index(&self, mut index: u64, max_count: u64) -> (u64, Vec<T>) {
+	pub fn elements_from_insertion_index(&self, mut index: u64, max_count: u64) -> (u64, Vec<(u64, T)>) {
 		let mut return_vec = vec![];
 		if index == 0 {
 			index = 1;
@@ -418,7 +418,7 @@ where
 		let mut pmmr_index = insertion_to_pmmr_index(index);
 		while return_vec.len() < max_count as usize && pmmr_index <= self.last_pos {
 			if let Some(t) = self.get_data(pmmr_index) {
-				return_vec.push(t);
+				return_vec.push((pmmr_index, t));
 				return_index = index;
 			}
 			index += 1;
