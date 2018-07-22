@@ -21,6 +21,7 @@ use serde_json;
 use tokio_core::reactor;
 use tokio_retry::strategy::FibonacciBackoff;
 use tokio_retry::Retry;
+use uuid::Uuid;
 
 use failure::ResultExt;
 
@@ -31,7 +32,9 @@ use error::{Error, ErrorKind};
 
 use libwallet;
 
-use libwallet::types::{OutputData, WalletBackend, WalletClient, WalletDetails, WalletOutputBatch};
+use libwallet::types::{
+	OutputData, TxLogEntry, WalletBackend, WalletClient, WalletDetails, WalletOutputBatch,
+};
 
 use types::{WalletConfig, WalletSeed};
 
@@ -78,6 +81,15 @@ impl<'a> WalletOutputBatch for FileBatch<'a> {
 		Ok(())
 	}
 
+	fn next_tx_log_id(&mut self, _root_key_id: Identifier) -> Result<u32, libwallet::Error> {
+		Ok(0)
+	}
+
+	fn save_tx_log_entry(&self, _t: TxLogEntry) -> Result<(), libwallet::Error> {
+		// not implemented for file wallets
+		Ok(())
+	}
+
 	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), libwallet::Error> {
 		if let Some(out_to_lock) = self.outputs.get_mut(&out.key_id.to_hex()) {
 			if out_to_lock.value == out.value {
@@ -85,6 +97,14 @@ impl<'a> WalletOutputBatch for FileBatch<'a> {
 			}
 		}
 		Ok(())
+	}
+
+	fn iter(&self) -> Box<Iterator<Item = OutputData>> {
+		unimplemented!()
+	}
+
+	fn tx_log_iter(&self) -> Box<Iterator<Item = TxLogEntry>> {
+		unimplemented!()
 	}
 
 	fn commit(&self) -> Result<(), libwallet::Error> {
@@ -141,6 +161,8 @@ pub struct FileWallet<C, K> {
 	passphrase: String,
 	/// List of outputs
 	pub outputs: HashMap<String, OutputData>,
+	/// Tx log
+	pub tx_log: Vec<TxLogEntry>,
 	/// Details
 	pub details: WalletDetails,
 	/// Data file path
@@ -192,6 +214,14 @@ where
 		Box::new(self.outputs.values().cloned())
 	}
 
+	fn get_tx_log_entry(&self, _u: &Uuid) -> Result<Option<TxLogEntry>, libwallet::Error> {
+		Ok(None)
+	}
+
+	fn tx_log_iter<'a>(&'a self) -> Box<Iterator<Item = TxLogEntry> + 'a> {
+		Box::new(self.tx_log.iter().cloned())
+	}
+
 	fn get(&self, id: &Identifier) -> Result<OutputData, libwallet::Error> {
 		self.outputs
 			.get(&id.to_hex())
@@ -240,7 +270,6 @@ where
 		Ok(details.last_child_index)
 	}
 
-	/// Return current metadata
 	fn details(&mut self, _root_key_id: Identifier) -> Result<WalletDetails, libwallet::Error> {
 		self.batch()?;
 		Ok(self.details.clone())
@@ -265,6 +294,7 @@ where
 			config: config.clone(),
 			passphrase: String::from(passphrase),
 			outputs: HashMap::new(),
+			tx_log: Vec::new(),
 			details: WalletDetails::default(),
 			data_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, DAT_FILE),
 			backup_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, BCK_FILE),

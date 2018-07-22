@@ -17,9 +17,10 @@ use std::sync::Arc;
 use std::{fs, path};
 
 use failure::ResultExt;
+use uuid::Uuid;
 
 use keychain::{Identifier, Keychain};
-use store::{self, option_to_not_found, to_key};
+use store::{self, option_to_not_found, to_key, u64_to_key};
 
 use libwallet::types::*;
 use libwallet::{internal, Error, ErrorKind};
@@ -30,6 +31,8 @@ pub const DB_DIR: &'static str = "wallet_data";
 const OUTPUT_PREFIX: u8 = 'o' as u8;
 const DERIV_PREFIX: u8 = 'd' as u8;
 const CONFIRMED_HEIGHT_PREFIX: u8 = 'c' as u8;
+const TX_LOG_ENTRY_PREFIX: u8 = 't' as u8;
+const TX_LOG_ID_PREFIX: u8 = 'i' as u8;
 
 impl From<store::Error> for Error {
 	fn from(error: store::Error) -> Error {
@@ -120,6 +123,15 @@ where
 		Box::new(self.db.iter(&[OUTPUT_PREFIX]).unwrap())
 	}
 
+	fn get_tx_log_entry(&self, u: &Uuid) -> Result<Option<TxLogEntry>, Error> {
+		let key = to_key(TX_LOG_ENTRY_PREFIX, &mut u.as_bytes().to_vec());
+		self.db.get_ser(&key).map_err(|e| e.into())
+	}
+
+	fn tx_log_iter<'a>(&'a self) -> Box<Iterator<Item = TxLogEntry> + 'a> {
+		Box::new(self.db.iter(&[TX_LOG_ENTRY_PREFIX]).unwrap())
+	}
+
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, Error> {
 		Ok(Box::new(Batch {
 			_store: self,
@@ -194,10 +206,47 @@ where
 		).map_err(|e| e.into())
 	}
 
+	fn iter(&self) -> Box<Iterator<Item = OutputData>> {
+		Box::new(
+			self.db
+				.borrow()
+				.as_ref()
+				.unwrap()
+				.iter(&[OUTPUT_PREFIX])
+				.unwrap(),
+		)
+	}
+
 	fn delete(&mut self, id: &Identifier) -> Result<(), Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
 		self.db.borrow().as_ref().unwrap().delete(&key)?;
 		Ok(())
+	}
+
+	fn next_tx_log_id(&mut self, root_key_id: Identifier) -> Result<u32, Error> {
+		let tx_id_key = to_key(TX_LOG_ID_PREFIX, &mut root_key_id.to_bytes().to_vec());
+		let mut last_tx_log_id = match self.db.borrow().as_ref().unwrap().get_ser(&tx_id_key)? {
+			Some(t) => t,
+			None => 0,
+		};
+		last_tx_log_id = last_tx_log_id + 1;
+		self.db
+			.borrow()
+			.as_ref()
+			.unwrap()
+			.put_ser(&tx_id_key, &last_tx_log_id)?;
+		Ok(last_tx_log_id)
+	}
+
+	fn tx_log_iter(&self) -> Box<Iterator<Item = TxLogEntry>> {
+		Box::new(
+			self.db
+				.borrow()
+				.as_ref()
+				.unwrap()
+				.iter(&[TX_LOG_ENTRY_PREFIX])
+				.unwrap(),
+		)
 	}
 
 	fn save_details(&mut self, root_key_id: Identifier, d: WalletDetails) -> Result<(), Error> {
@@ -216,6 +265,12 @@ where
 			.as_ref()
 			.unwrap()
 			.put_ser(&height_key, &d.last_confirmed_height)?;
+		Ok(())
+	}
+
+	fn save_tx_log_entry(&self, t: TxLogEntry) -> Result<(), Error> {
+		let tx_log_key = u64_to_key(TX_LOG_ENTRY_PREFIX, t.id as u64);
+		self.db.borrow().as_ref().unwrap().put_ser(&tx_log_key, &t)?;
 		Ok(())
 	}
 

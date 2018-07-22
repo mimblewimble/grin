@@ -213,6 +213,7 @@ where
 				height: output.height,
 				lock_height: output.lock_height,
 				is_coinbase: output.is_coinbase,
+				tx_log_entry: None,
 			});
 		} else {
 			warn!(

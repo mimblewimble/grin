@@ -25,9 +25,9 @@ use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::internal::{tx, updater};
 use libwallet::types::{
-	BlockFees, CbData, OutputData, TxWrapper, WalletBackend, WalletClient, WalletInfo,
+	BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend, WalletClient, WalletInfo,
 };
-use libwallet::Error;
+use libwallet::{Error, ErrorKind};
 use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to
@@ -62,10 +62,12 @@ where
 
 	/// Attempt to update and retrieve outputs
 	/// Return (whether the outputs were validated against a node, OutputData)
+	/// if tx_id is some then only retrieve outputs for associated transaction
 	pub fn retrieve_outputs(
 		&self,
 		include_spent: bool,
 		refresh_from_node: bool,
+		tx_id: Option<u32>,
 	) -> Result<(bool, Vec<OutputData>), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
@@ -77,8 +79,29 @@ where
 
 		let res = Ok((
 			validated,
-			updater::retrieve_outputs(&mut **w, include_spent)?,
+			updater::retrieve_outputs(&mut **w, include_spent, tx_id)?,
 		));
+
+		w.close()?;
+		res
+	}
+
+	/// Attempt to update outputs and retrieve tranasactions
+	/// Return (whether the outputs were validated against a node, OutputData)
+	pub fn retrieve_txs(
+		&self,
+		refresh_from_node: bool,
+		tx_id: Option<u32>,
+	) -> Result<(bool, Vec<TxLogEntry>), Error> {
+		let mut w = self.wallet.lock().unwrap();
+		w.open_with_credentials()?;
+
+		let mut validated = false;
+		if refresh_from_node {
+			validated = self.update_outputs(&mut w);
+		}
+
+		let res = Ok((validated, updater::retrieve_txs(&mut **w, tx_id)?));
 
 		w.close()?;
 		res
@@ -130,7 +153,7 @@ where
 		)?;
 
 		lock_fn_out = lock_fn;
-		slate_out = match w.client().send_tx_slate(dest, &slate) {
+		slate_out = match client.send_tx_slate(dest, &slate) {
 			Ok(s) => s,
 			Err(e) => {
 				error!(
@@ -148,6 +171,24 @@ where
 		lock_fn_out(&mut **w)?;
 		w.close()?;
 		Ok(slate_out)
+	}
+
+	/// Roll back a transaction and all associated outputs with a given
+	/// transaction id This means delete all change outputs, (or recipient
+	/// output if you're recipient), and unlock all locked outputs associated
+	/// with the transaction used when a transaction is created but never
+	/// posted
+	pub fn cancel_tx(&mut self, tx_id: u32) -> Result<(), Error> {
+		let mut w = self.wallet.lock().unwrap();
+		w.open_with_credentials()?;
+		if !self.update_outputs(&mut w) {
+			return Err(ErrorKind::TransactionCancellationError(
+				"Can't contact running Grin node. Not Cancelling.",
+			))?;
+		}
+		tx::cancel_tx(&mut **w, tx_id)?;
+		w.close()?;
+		Ok(())
 	}
 
 	/// Issue a burn TX
@@ -188,20 +229,24 @@ where
 
 	/// Retrieve current height from node
 	pub fn node_height(&mut self) -> Result<(u64, bool), Error> {
-		let mut w = self.wallet.lock().unwrap();
-		w.open_with_credentials()?;
-		let res = w.client().get_chain_height();
+		let res = {
+			let mut w = self.wallet.lock().unwrap();
+			w.open_with_credentials()?;
+			w.client().get_chain_height()
+		};
 		match res {
 			Ok(height) => {
+				let mut w = self.wallet.lock().unwrap();
 				w.close()?;
 				Ok((height, true))
 			}
 			Err(_) => {
-				let outputs = self.retrieve_outputs(true, false)?;
+				let outputs = self.retrieve_outputs(true, false, None)?;
 				let height = match outputs.1.iter().map(|out| out.height).max() {
 					Some(height) => height,
 					None => 0,
 				};
+				let mut w = self.wallet.lock().unwrap();
 				w.close()?;
 				Ok((height, false))
 			}

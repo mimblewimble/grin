@@ -19,7 +19,7 @@ use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
 use libwallet::internal::{selection, sigcontext, updater};
-use libwallet::types::{WalletBackend, WalletClient};
+use libwallet::types::{TxLogEntryType, WalletBackend, WalletClient};
 use libwallet::{Error, ErrorKind};
 use util::LOGGER;
 
@@ -128,6 +128,30 @@ where
 	if let Err(e) = res {
 		Err(ErrorKind::LibTX(e.kind()))?
 	}
+	Ok(())
+}
+
+/// Rollback outputs associated with a transaction in the wallet
+pub fn cancel_tx<T: ?Sized, C, K>(wallet: &mut T, tx_id: u32) -> Result<(), Error>
+where
+	T: WalletBackend<C, K>,
+	C: WalletClient,
+	K: Keychain,
+{
+	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id))?;
+	if tx_vec.len() != 1 {
+		return Err(ErrorKind::TransactionDoesntExist(tx_id))?;
+	}
+	let tx = tx_vec[0].clone();
+	if tx.tx_type != TxLogEntryType::TxSent && tx.tx_type != TxLogEntryType::TxReceived {
+		return Err(ErrorKind::TransactionNotCancellable(tx_id))?;
+	}
+	if tx.confirmed == true {
+		return Err(ErrorKind::TransactionNotCancellable(tx_id))?;
+	}
+	// get outputs associated with tx
+	let outputs = updater::retrieve_outputs(wallet, false, Some(tx_id))?;
+	updater::cancel_tx_and_outputs(wallet, tx, outputs)?;
 	Ok(())
 }
 
