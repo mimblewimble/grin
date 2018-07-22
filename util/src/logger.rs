@@ -77,8 +77,14 @@ lazy_static! {
 			let file_decorator = slog_term::PlainDecorator::new(file);
 			let file_drain = slog_term::FullFormat::new(file_decorator).build().fuse();
 			let file_drain = LevelFilter::new(file_drain, slog_level_file).fuse();
-			let file_drain_final = slog_async::Async::new(file_drain).build().fuse();
-
+			let file_drain_final = slog_async::Async::new(file_drain)
+				.overflow_strategy(
+						if slog_level_file == Level::Trace {
+							slog_async::OverflowStrategy::Block
+						} else {
+							slog_async::OverflowStrategy::DropAndReport // Default
+						}
+				).build().fuse();
 			let composite_drain = Duplicate::new(terminal_drain, file_drain_final).fuse();
 
 			Logger::root(composite_drain, o!())
