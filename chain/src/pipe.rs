@@ -55,7 +55,7 @@ pub struct BlockContext {
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain. Returns the new chain head if
 /// updated.
-pub fn process_block(b: &Block, ctx: &mut BlockContext, from_cache: bool,) -> Result<Option<Tip>, Error> {
+pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
@@ -68,9 +68,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext, from_cache: bool,) -> Re
 		b.outputs.len(),
 		b.kernels.len(),
 	);
-	if !from_cache {
-		check_known(b.hash(), ctx)?;
-	}
+	check_known(b.hash(), ctx)?;
 
 	validate_header(&b.header, ctx)?;
 

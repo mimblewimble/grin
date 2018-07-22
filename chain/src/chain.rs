@@ -43,7 +43,7 @@ pub const MAX_ORPHAN_SIZE: usize = 200;
 const MAX_ORPHAN_AGE_SECS: u64 = 300;
 
 /// Number of recent hashes we keep to de-duplicate block or header sends
-const HASHES_CACHE_SIZE: usize = 50;
+const HASHES_CACHE_SIZE: usize = 200;
 
 #[derive(Debug, Clone)]
 struct Orphan {
@@ -197,7 +197,7 @@ impl Chain {
 		b: Block,
 		opts: Options,
 	) -> Result<(Option<Tip>, Option<Block>), Error> {
-		let res = self.process_block_no_orphans(b, opts, false);
+		let res = self.process_block_no_orphans(b, opts);
 		match res {
 			Ok((t, b)) => {
 				// We accepted a block, so see if we can accept any orphans
@@ -217,18 +217,20 @@ impl Chain {
 		&self,
 		b: Block,
 		opts: Options,
-		from_cache: bool,
 	) -> Result<(Option<Tip>, Option<Block>), Error> {
 		let head = self.store.head()?;
+		let bhash = b.hash();
 		let mut ctx = self.ctx_from_head(head, opts)?;
 
-		let res = pipe::process_block(&b, &mut ctx, from_cache);
+		let res = pipe::process_block(&b, &mut ctx);
 
-		if !from_cache{
+		let add_to_hash_cache = || {
+			// only add to hash cache below if block is definitively accepted
+			// or rejected
 			let mut cache = self.block_hashes_cache.write().unwrap();
-			cache.push_front(b.hash());
+			cache.push_front(bhash);
 			cache.truncate(HASHES_CACHE_SIZE);
-		}
+		};
 
 		match res {
 			Ok(Some(ref tip)) => {
@@ -238,6 +240,7 @@ impl Chain {
 					let mut head = chain_head.lock().unwrap();
 					*head = tip.clone();
 				}
+				add_to_hash_cache();
 
 				// notifying other parts of the system of the update
 				self.adapter.block_accepted(&b, opts);
@@ -245,6 +248,8 @@ impl Chain {
 				Ok((Some(tip.clone()), Some(b)))
 			}
 			Ok(None) => {
+				add_to_hash_cache();
+
 				// block got accepted but we did not extend the head
 				// so its on a fork (or is the start of a new fork)
 				// broadcast the block out so everyone knows about the fork
@@ -295,6 +300,7 @@ impl Chain {
 							b.header.height,
 							e
 						);
+						add_to_hash_cache();
 						Err(ErrorKind::Other(format!("{:?}", e).to_owned()).into())
 					}
 				}
@@ -366,7 +372,7 @@ impl Chain {
 						height,
 						self.orphans.len(),
 					);
-					let res = self.process_block_no_orphans(orphan.block, orphan.opts, true);
+					let res = self.process_block_no_orphans(orphan.block, orphan.opts);
 					if let Ok((_, Some(b))) = res {
 						// We accepted a block, so see if we can accept any orphans
 						height = b.header.height + 1;
