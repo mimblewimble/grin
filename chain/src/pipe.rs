@@ -48,14 +48,12 @@ pub struct BlockContext {
 	pub txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	/// Recently processed blocks to avoid double-processing
 	pub block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
-	/// Recently processed headers to avoid double-processing
-	pub header_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
 }
 
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain. Returns the new chain head if
 /// updated.
-pub fn process_block(b: &Block, ctx: &mut BlockContext, from_cache: bool,) -> Result<Option<Tip>, Error> {
+pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
@@ -68,9 +66,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext, from_cache: bool,) -> Re
 		b.outputs.len(),
 		b.kernels.len(),
 	);
-	if !from_cache {
-		check_known(b.hash(), ctx)?;
-	}
+	check_known(b.hash(), ctx)?;
 
 	validate_header(&b.header, ctx)?;
 
@@ -184,10 +180,6 @@ pub fn process_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<
 fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
 		return Err(ErrorKind::Unfit("already known".to_string()).into());
-	}
-	let cache = ctx.header_hashes_cache.read().unwrap();
-	if cache.contains(&bh) {
-		return Err(ErrorKind::Unfit("already known in cache".to_string()).into());
 	}
 	Ok(())
 }
