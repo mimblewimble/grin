@@ -52,7 +52,7 @@ pub enum ErrorKind {
 	#[fail(display = "Invalid PoW")]
 	InvalidPow,
 	/// Peer abusively sending us an old block we already have
-	#[fail(display = "Invalid PoW")]
+	#[fail(display = "Old Block")]
 	OldBlock,
 	/// The block doesn't sum correctly or a tx signature is invalid
 	#[fail(display = "Invalid Block Proof")]
