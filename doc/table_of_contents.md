@@ -15,6 +15,7 @@
 - [merkle_proof graph](merkle_proof/merkle_proof.png) - Example merkle proof with pruning applied
 - [pruning](pruning.md) - Technical explanation of pruning
 - [rangeproofs](rangeproofs.md) - Technical explanation of range proofs
+- [stratum](stratum.md) - Technical explanation of Grin Stratum RPC protocol
 - [transaction UML](transaction/aggregating transaction without lock_height) - UML of an interactive transaction
 
 ## Build and use
