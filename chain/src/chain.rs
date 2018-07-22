@@ -136,8 +136,6 @@ pub struct Chain {
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	// Recently processed blocks to avoid double-processing
 	block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
-	// Recently processed headers to avoid double-processing
-	header_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
 
 	// POW verification function
 	pow_verifier: fn(&BlockHeader, u8) -> bool,
@@ -186,7 +184,6 @@ impl Chain {
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			pow_verifier: pow_verifier,
 			block_hashes_cache: Arc::new(RwLock::new(VecDeque::with_capacity(HASHES_CACHE_SIZE))),
-			header_hashes_cache: Arc::new(RwLock::new(VecDeque::with_capacity(HASHES_CACHE_SIZE))),
 		})
 	}
 
@@ -313,11 +310,6 @@ impl Chain {
 		let header_head = self.get_header_head()?;
 		let mut ctx = self.ctx_from_head(header_head, opts)?;
 		let res = pipe::process_block_header(bh, &mut ctx);
-		{
-			let mut cache = self.header_hashes_cache.write().unwrap();
-			cache.push_front(bh.hash());
-			cache.truncate(HASHES_CACHE_SIZE);
-		}
 		res
 	}
 
@@ -343,7 +335,6 @@ impl Chain {
 			head: head,
 			pow_verifier: self.pow_verifier,
 			block_hashes_cache: self.block_hashes_cache.clone(),
-			header_hashes_cache: self.header_hashes_cache.clone(),
 			txhashset: self.txhashset.clone(),
 		})
 	}

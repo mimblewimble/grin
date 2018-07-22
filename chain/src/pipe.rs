@@ -48,8 +48,6 @@ pub struct BlockContext {
 	pub txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	/// Recently processed blocks to avoid double-processing
 	pub block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
-	/// Recently processed headers to avoid double-processing
-	pub header_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
 }
 
 /// Runs the block processing pipeline, including validation and finding a
@@ -182,10 +180,6 @@ pub fn process_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<
 fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
 		return Err(ErrorKind::Unfit("already known".to_string()).into());
-	}
-	let cache = ctx.header_hashes_cache.read().unwrap();
-	if cache.contains(&bh) {
-		return Err(ErrorKind::Unfit("already known in cache".to_string()).into());
 	}
 	Ok(())
 }
