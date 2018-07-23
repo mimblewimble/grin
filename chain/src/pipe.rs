@@ -28,6 +28,7 @@ use error::{Error, ErrorKind};
 use grin_store;
 use store;
 use txhashset;
+use chain::{OrphanBlockPool};
 use types::{Options, Tip};
 use util::LOGGER;
 
@@ -48,6 +49,8 @@ pub struct BlockContext {
 	pub txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	/// Recently processed blocks to avoid double-processing
 	pub block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
+	/// Recent orphan blocks to avoid double-processing
+	pub orphans: Arc<OrphanBlockPool>,
 }
 
 /// Runs the block processing pipeline, including validation and finding a
@@ -193,6 +196,9 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	let cache = ctx.block_hashes_cache.read().unwrap();
 	if cache.contains(&bh) {
 		return Err(ErrorKind::Unfit("already known in cache".to_string()).into());
+	}
+	if ctx.orphans.contains(&bh) {
+		return Err(ErrorKind::Unfit("already known in orphans".to_string()).into());
 	}
 	Ok(())
 }
