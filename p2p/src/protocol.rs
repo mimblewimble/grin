@@ -229,24 +229,45 @@ impl MessageHandler for Protocol {
 				let sm_arch: TxHashSetArchive = msg.body()?;
 				debug!(
 					LOGGER,
-					"handle_payload: txhashset archive for {} at {}",
+					"handle_payload: txhashset archive for {} at {}. size={}",
 					sm_arch.hash,
 					sm_arch.height,
+					sm_arch.bytes,
 				);
 				if !self.adapter.txhashset_receive_ready() {
+					error!(
+						LOGGER,
+						"handle_payload: txhashset archive received but SyncStatus not on TxHashsetDownload",
+					);
 					return Err(Error::BadMessage);
 				}
 
 				let mut tmp = env::temp_dir();
 				tmp.push("txhashset.zip");
-				{
-					let mut tmp_zip = File::create(tmp.clone())?;
+				let mut save_txhashset_to_file = |file| -> Result<(), Error>  {
+					let mut tmp_zip = File::create(file)?;
 					msg.copy_attachment(sm_arch.bytes as usize, &mut tmp_zip)?;
 					tmp_zip.sync_all()?;
+					Ok(())
+				};
+
+				if let Err(e) = save_txhashset_to_file(tmp.clone()){
+					error!(
+						LOGGER,
+						"handle_payload: txhashset archive save to file fail. err={:?}",
+						e
+					);
+					return Err(e);
 				}
 
+				trace!(
+					LOGGER,
+					"handle_payload: txhashset archive save to file {:?} success",
+					tmp,
+				);
+
 				let tmp_zip = File::open(tmp)?;
-				self.adapter.txhashset_write(
+				let res = self.adapter.txhashset_write(
 					sm_arch.hash,
 					tmp_zip,
 					self.addr,
@@ -254,9 +275,10 @@ impl MessageHandler for Protocol {
 
 				debug!(
 					LOGGER,
-					"handle_payload: txhashset archive for {} at {}, DONE",
+					"handle_payload: txhashset archive for {} at {}, DONE. Data Ok: {}",
 					sm_arch.hash,
-					sm_arch.height
+					sm_arch.height,
+					res
 				);
 
 				Ok(None)
