@@ -21,22 +21,19 @@ use serde_json;
 use tokio_core::reactor;
 use tokio_retry::strategy::FibonacciBackoff;
 use tokio_retry::Retry;
+use uuid::Uuid;
 
 use failure::ResultExt;
 
 use keychain::{self, Identifier, Keychain};
-use util::secp::pedersen;
 use util::LOGGER;
 
 use error::{Error, ErrorKind};
 
-use client;
-use libtx::slate::Slate;
 use libwallet;
 
 use libwallet::types::{
-	BlockFees, CbData, OutputData, TxWrapper, WalletBackend, WalletClient, WalletDetails,
-	WalletOutputBatch,
+	OutputData, TxLogEntry, WalletBackend, WalletClient, WalletDetails, WalletOutputBatch,
 };
 
 use types::{WalletConfig, WalletSeed};
@@ -52,7 +49,7 @@ struct FileBatch<'a> {
 	/// List of outputs
 	outputs: &'a mut HashMap<String, OutputData>,
 	/// Wallet Details
-	details: &'a mut WalletDetails,
+	details: WalletDetails,
 	/// Data file path
 	data_file_path: String,
 	/// Details file path
@@ -67,10 +64,6 @@ impl<'a> WalletOutputBatch for FileBatch<'a> {
 		Ok(())
 	}
 
-	fn details(&mut self) -> &mut WalletDetails {
-		&mut self.details
-	}
-
 	fn get(&self, id: &Identifier) -> Result<OutputData, libwallet::Error> {
 		self.outputs
 			.get(&id.to_hex())
@@ -78,12 +71,22 @@ impl<'a> WalletOutputBatch for FileBatch<'a> {
 			.ok_or(libwallet::ErrorKind::Backend("not found".to_string()).into())
 	}
 
-	fn iter<'b>(&'b self) -> Box<Iterator<Item = OutputData> + 'b> {
-		Box::new(self.outputs.values().cloned())
-	}
-
 	fn delete(&mut self, id: &Identifier) -> Result<(), libwallet::Error> {
 		let _ = self.outputs.remove(&id.to_hex());
+		Ok(())
+	}
+
+	fn save_details(&mut self, _r: Identifier, w: WalletDetails) -> Result<(), libwallet::Error> {
+		self.details = w;
+		Ok(())
+	}
+
+	fn next_tx_log_id(&mut self, _root_key_id: Identifier) -> Result<u32, libwallet::Error> {
+		Ok(0)
+	}
+
+	fn save_tx_log_entry(&self, _t: TxLogEntry) -> Result<(), libwallet::Error> {
+		// not implemented for file wallets
 		Ok(())
 	}
 
@@ -94,6 +97,14 @@ impl<'a> WalletOutputBatch for FileBatch<'a> {
 			}
 		}
 		Ok(())
+	}
+
+	fn iter(&self) -> Box<Iterator<Item = OutputData>> {
+		unimplemented!()
+	}
+
+	fn tx_log_iter(&self) -> Box<Iterator<Item = TxLogEntry>> {
+		unimplemented!()
 	}
 
 	fn commit(&self) -> Result<(), libwallet::Error> {
@@ -150,6 +161,8 @@ pub struct FileWallet<C, K> {
 	passphrase: String,
 	/// List of outputs
 	pub outputs: HashMap<String, OutputData>,
+	/// Tx log
+	pub tx_log: Vec<TxLogEntry>,
 	/// Details
 	pub details: WalletDetails,
 	/// Data file path
@@ -201,6 +214,14 @@ where
 		Box::new(self.outputs.values().cloned())
 	}
 
+	fn get_tx_log_entry(&self, _u: &Uuid) -> Result<Option<TxLogEntry>, libwallet::Error> {
+		Ok(None)
+	}
+
+	fn tx_log_iter<'a>(&'a self) -> Box<Iterator<Item = TxLogEntry> + 'a> {
+		Box::new(self.tx_log.iter().cloned())
+	}
+
 	fn get(&self, id: &Identifier) -> Result<OutputData, libwallet::Error> {
 		self.outputs
 			.get(&id.to_hex())
@@ -219,7 +240,7 @@ where
 
 		Ok(Box::new(FileBatch {
 			outputs: &mut self.outputs,
-			details: &mut self.details,
+			details: self.details.clone(),
 			data_file_path: self.data_file_path.clone(),
 			details_file_path: self.details_file_path.clone(),
 			lock_file_path: self.lock_file_path.clone(),
@@ -231,94 +252,27 @@ where
 		&'a mut self,
 		root_key_id: keychain::Identifier,
 	) -> Result<u32, libwallet::Error> {
+		let mut details = self.details(root_key_id.clone())?;
+		let mut max_n = 0;
+		for out in self.iter() {
+			if max_n < out.n_child && out.root_key_id == root_key_id {
+				max_n = out.n_child;
+			}
+		}
 		let mut batch = self.batch()?;
-		{
-			let mut max_n = 0;
-			for out in batch.iter() {
-				if max_n < out.n_child && out.root_key_id == root_key_id {
-					max_n = out.n_child;
-				}
-			}
-			let details = batch.details();
-			if details.last_child_index <= max_n {
-				details.last_child_index = max_n + 1;
-			} else {
-				details.last_child_index += 1;
-			}
-		}
-		batch.commit()?;
-		Ok(batch.details().last_child_index)
-	}
-
-	/// Select spendable coins from the wallet.
-	/// Default strategy is to spend the maximum number of outputs (up to
-	/// max_outputs). Alternative strategy is to spend smallest outputs first
-	/// but only as many as necessary. When we introduce additional strategies
-	/// we should pass something other than a bool in.
-	fn select_coins(
-		&self,
-		root_key_id: keychain::Identifier,
-		amount: u64,
-		current_height: u64,
-		minimum_confirmations: u64,
-		max_outputs: usize,
-		select_all: bool,
-	) -> Vec<OutputData> {
-		// first find all eligible outputs based on number of confirmations
-		let mut eligible = self.outputs
-			.values()
-			.filter(|out| {
-				out.root_key_id == root_key_id
-					&& out.eligible_to_spend(current_height, minimum_confirmations)
-			})
-			.cloned()
-			.collect::<Vec<OutputData>>();
-
-		// sort eligible outputs by increasing value
-		eligible.sort_by_key(|out| out.value);
-
-		// use a sliding window to identify potential sets of possible outputs to spend
-		// Case of amount > total amount of max_outputs(500):
-		// The limit exists because by default, we always select as many inputs as
-		// possible in a transaction, to reduce both the Output set and the fees.
-		// But that only makes sense up to a point, hence the limit to avoid being too
-		// greedy. But if max_outputs(500) is actually not enough to cover the whole
-		// amount, the wallet should allow going over it to satisfy what the user
-		// wants to send. So the wallet considers max_outputs more of a soft limit.
-		if eligible.len() > max_outputs {
-			for window in eligible.windows(max_outputs) {
-				let windowed_eligibles = window.iter().cloned().collect::<Vec<_>>();
-				if let Some(outputs) = self.select_from(amount, select_all, windowed_eligibles) {
-					return outputs;
-				}
-			}
-			// Not exist in any window of which total amount >= amount.
-			// Then take coins from the smallest one up to the total amount of selected
-			// coins = the amount.
-			if let Some(outputs) = self.select_from(amount, false, eligible.clone()) {
-				debug!(
-					LOGGER,
-					"Extending maximum number of outputs. {} outputs selected.",
-					outputs.len()
-				);
-				return outputs;
-			}
+		if details.last_child_index <= max_n {
+			details.last_child_index = max_n + 1;
 		} else {
-			if let Some(outputs) = self.select_from(amount, select_all, eligible.clone()) {
-				return outputs;
-			}
+			details.last_child_index += 1;
 		}
-
-		// we failed to find a suitable set of outputs to spend,
-		// so return the largest amount we can so we can provide guidance on what is
-		// possible
-		eligible.reverse();
-		eligible.iter().take(max_outputs).cloned().collect()
+		batch.save_details(root_key_id.clone(), details.clone())?;
+		batch.commit()?;
+		Ok(details.last_child_index)
 	}
 
-	/// Return current metadata
-	fn details(&mut self) -> &mut WalletDetails {
-		&mut self.details
+	fn details(&mut self, _root_key_id: Identifier) -> Result<WalletDetails, libwallet::Error> {
+		self.batch()?;
+		Ok(self.details.clone())
 	}
 
 	/// Restore wallet contents
@@ -340,6 +294,7 @@ where
 			config: config.clone(),
 			passphrase: String::from(passphrase),
 			outputs: HashMap::new(),
+			tx_log: Vec::new(),
 			details: WalletDetails::default(),
 			data_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, DAT_FILE),
 			backup_file_path: format!("{}{}{}", config.data_file_dir, MAIN_SEPARATOR, BCK_FILE),
@@ -454,36 +409,5 @@ where
 			.write_all(res_json.into_bytes().as_slice())
 			.context(ErrorKind::FileWallet(&"Error writing wallet details file"))
 			.map_err(|e| e.into())
-	}
-
-	// Select the full list of outputs if we are using the select_all strategy.
-	// Otherwise select just enough outputs to cover the desired amount.
-	fn select_from(
-		&self,
-		amount: u64,
-		select_all: bool,
-		outputs: Vec<OutputData>,
-	) -> Option<Vec<OutputData>> {
-		let total = outputs.iter().fold(0, |acc, x| acc + x.value);
-		if total >= amount {
-			if select_all {
-				return Some(outputs.iter().cloned().collect());
-			} else {
-				let mut selected_amount = 0;
-				return Some(
-					outputs
-						.iter()
-						.take_while(|out| {
-							let res = selected_amount < amount;
-							selected_amount += out.value;
-							res
-						})
-						.cloned()
-						.collect(),
-				);
-			}
-		} else {
-			None
-		}
 	}
 }

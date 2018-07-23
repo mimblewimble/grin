@@ -27,7 +27,8 @@ use libwallet;
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
 use libwallet::types::{
-	BlockFees, CbData, OutputData, OutputStatus, WalletBackend, WalletClient, WalletInfo,
+	BlockFees, CbData, OutputData, OutputStatus, TxLogEntry, TxLogEntryType, WalletBackend,
+	WalletClient, WalletInfo,
 };
 use util::secp::pedersen;
 use util::{self, LOGGER};
@@ -36,6 +37,7 @@ use util::{self, LOGGER};
 pub fn retrieve_outputs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	show_spent: bool,
+	tx_id: Option<u32>,
 ) -> Result<Vec<OutputData>, Error>
 where
 	T: WalletBackend<C, K>,
@@ -43,7 +45,6 @@ where
 	K: Keychain,
 {
 	let root_key_id = wallet.keychain().clone().root_key_id();
-
 	// just read the wallet here, no need for a write lock
 	let mut outputs = wallet
 		.iter()
@@ -56,10 +57,41 @@ where
 			}
 		})
 		.collect::<Vec<_>>();
+	// only include outputs with a given tx_id if provided
+	if let Some(id) = tx_id {
+		outputs = outputs
+			.into_iter()
+			.filter(|out| out.tx_log_entry == Some(id))
+			.collect::<Vec<_>>();
+	}
 	outputs.sort_by_key(|out| out.n_child);
 	Ok(outputs)
 }
 
+/// Retrieve all of the transaction entries, or a particular entry
+pub fn retrieve_txs<T: ?Sized, C, K>(
+	wallet: &mut T,
+	tx_id: Option<u32>,
+) -> Result<Vec<TxLogEntry>, Error>
+where
+	T: WalletBackend<C, K>,
+	C: WalletClient,
+	K: Keychain,
+{
+	// just read the wallet here, no need for a write lock
+	let mut txs = if let Some(id) = tx_id {
+		let tx = wallet.tx_log_iter().find(|t| t.id == id);
+		if let Some(t) = tx {
+			vec![t]
+		} else {
+			vec![]
+		}
+	} else {
+		wallet.tx_log_iter().collect::<Vec<_>>()
+	};
+	txs.sort_by_key(|tx| tx.creation_ts);
+	Ok(txs)
+}
 /// Refreshes the outputs in a wallet with the latest information
 /// from a node
 pub fn refresh_outputs<T: ?Sized, C, K>(wallet: &mut T) -> Result<(), Error>
@@ -96,6 +128,40 @@ where
 	Ok(wallet_outputs)
 }
 
+/// Cancel transaction and associated outputs
+pub fn cancel_tx_and_outputs<T: ?Sized, C, K>(
+	wallet: &mut T,
+	tx: TxLogEntry,
+	outputs: Vec<OutputData>,
+) -> Result<(), libwallet::Error>
+where
+	T: WalletBackend<C, K>,
+	C: WalletClient,
+	K: Keychain,
+{
+	let mut batch = wallet.batch()?;
+	for mut o in outputs {
+		// unlock locked outputs
+		if o.status == OutputStatus::Unconfirmed {
+			batch.delete(&o.key_id)?;
+		}
+		if o.status == OutputStatus::Locked {
+			o.status = OutputStatus::Unconfirmed;
+			batch.save(o)?;
+		}
+	}
+	let mut tx = tx.clone();
+	if tx.tx_type == TxLogEntryType::TxSent {
+		tx.tx_type = TxLogEntryType::TxSentCancelled;
+	}
+	if tx.tx_type == TxLogEntryType::TxReceived {
+		tx.tx_type = TxLogEntryType::TxReceivedCancelled;
+	}
+	batch.save_tx_log_entry(tx)?;
+	batch.commit()?;
+	Ok(())
+}
+
 /// Apply refreshed API output data to the wallet
 pub fn apply_api_outputs<T: ?Sized, C, K>(
 	wallet: &mut T,
@@ -112,19 +178,62 @@ where
 	// api output (if it exists) and refresh it in-place in the wallet.
 	// Note: minimizing the time we spend holding the wallet lock.
 	{
+		let root_key_id = wallet.keychain().root_key_id();
+		let mut details = wallet.details(root_key_id.clone())?;
+		// If the server height is less than our confirmed height, don't apply
+		// these changes as the chain is syncing, incorrect or forking
+		if height < details.last_confirmed_height {
+			warn!(
+				LOGGER,
+				"Not updating outputs as the height of the node's chain \
+				 is less than the last reported wallet update height."
+			);
+			warn!(
+				LOGGER,
+				"Please wait for sync on node to complete or fork to resolve and try again."
+			);
+			return Ok(());
+		}
 		let mut batch = wallet.batch()?;
 		for (commit, id) in wallet_outputs.iter() {
 			if let Ok(mut output) = batch.get(id) {
 				match api_outputs.get(&commit) {
-					Some(_) => output.mark_unspent(),
+					Some(_) => {
+						// if this is a coinbase tx being confirmed, it's recordable in tx log
+						if output.is_coinbase && output.status == OutputStatus::Unconfirmed {
+							let log_id = batch.next_tx_log_id(root_key_id.clone())?;
+							let mut t = TxLogEntry::new(TxLogEntryType::ConfirmedCoinbase, log_id);
+							t.confirmed = true;
+							t.amount_credited = output.value;
+							t.amount_debited = 0;
+							t.num_outputs = 1;
+							t.update_confirmation_ts();
+							output.tx_log_entry = Some(log_id);
+							batch.save_tx_log_entry(t)?;
+						}
+						// also mark the transaction in which this output is involved as confirmed
+						// note that one involved input/output confirmation SHOULD be enough
+						// to reliably confirm the tx
+						if !output.is_coinbase && output.status == OutputStatus::Unconfirmed {
+							let tx = batch
+								.tx_log_iter()
+								.find(|t| Some(t.id) == output.tx_log_entry);
+							if let Some(mut t) = tx {
+								t.update_confirmation_ts();
+								t.confirmed = true;
+								batch.save_tx_log_entry(t)?;
+							}
+						}
+						output.mark_unspent();
+					}
 					None => output.mark_spent(),
 				};
 				batch.save(output)?;
 			}
 		}
 		{
-			let details = batch.details();
 			details.last_confirmed_height = height;
+			batch.save_details(root_key_id, details)?;
 		}
 		batch.commit()?;
 	}
@@ -184,7 +293,8 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	let current_height = wallet.details().last_confirmed_height;
+	let root_key_id = wallet.keychain().root_key_id();
+	let current_height = wallet.details(root_key_id.clone())?.last_confirmed_height;
 	let keychain = wallet.keychain().clone();
 	let outputs = wallet
 		.iter()
@@ -220,7 +330,10 @@ where
 }
 
 /// Build a coinbase output and insert into wallet
-pub fn build_coinbase<T: ?Sized, C, K>(wallet: &mut T, block_fees: &BlockFees) -> Result<CbData, Error>
+pub fn build_coinbase<T: ?Sized, C, K>(
+	wallet: &mut T,
+	block_fees: &BlockFees,
+) -> Result<CbData, Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -278,6 +391,7 @@ where
 			height: height,
 			lock_height: lock_height,
 			is_coinbase: true,
+			tx_log_entry: None,
 		})?;
 		batch.commit()?;
 	}

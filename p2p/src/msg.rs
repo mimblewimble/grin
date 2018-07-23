@@ -626,15 +626,8 @@ impl Writeable for Ping {
 
 impl Readable for Ping {
 	fn read(reader: &mut Reader) -> Result<Ping, ser::Error> {
-		// TODO - once everyone is sending total_difficulty we can clean this up
-		let total_difficulty = match Difficulty::read(reader) {
-			Ok(diff) => diff,
-			Err(_) => Difficulty::zero(),
-		};
-		let height = match reader.read_u64() {
-			Ok(h) => h,
-			Err(_) => 0,
-		};
+		let total_difficulty = Difficulty::read(reader)?;
+		let height = reader.read_u64()?;
 		Ok(Ping {
 			total_difficulty,
 			height,
@@ -660,15 +653,8 @@ impl Writeable for Pong {
 
 impl Readable for Pong {
 	fn read(reader: &mut Reader) -> Result<Pong, ser::Error> {
-		// TODO - once everyone is sending total_difficulty we can clean this up
-		let total_difficulty = match Difficulty::read(reader) {
-			Ok(diff) => diff,
-			Err(_) => Difficulty::zero(),
-		};
-		let height = match reader.read_u64() {
-			Ok(h) => h,
-			Err(_) => 0,
-		};
+		let total_difficulty = Difficulty::read(reader)?;
+		let height = reader.read_u64()?;
 		Ok(Pong {
 			total_difficulty,
 			height,

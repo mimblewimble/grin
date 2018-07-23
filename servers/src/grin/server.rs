@@ -119,7 +119,12 @@ impl Server {
 			pool_net_adapter.clone(),
 		)));
 
-		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(tx_pool.clone()));
+		let sync_state = Arc::new(SyncState::new());
+
+		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(
+				sync_state.clone(),
+				tx_pool.clone(),
+			));
 
 		let genesis = match config.chain_type {
 			global::ChainTypes::Testnet1 => genesis::genesis_testnet1(),
@@ -143,7 +148,6 @@ impl Server {
 
 		pool_adapter.set_chain(Arc::downgrade(&shared_chain));
 
-		let sync_state = Arc::new(SyncState::new());
 		let awaiting_peers = Arc::new(AtomicBool::new(false));
 
 		let net_adapter = Arc::new(NetToChainAdapter::new(

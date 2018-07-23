@@ -238,7 +238,11 @@ where
 		//let mut api_outputs: HashMap<pedersen::Commitment, String> = HashMap::new();
 		let mut outputs: Vec<api::Output> = vec![];
 		for o in split {
-			let c = util::from_hex(String::from(o)).unwrap();
+			let o_str = String::from(o);
+			if o_str.len() == 0 {
+				continue;
+			}
+			let c = util::from_hex(o_str).unwrap();
 			let commit = Commitment::from_vec(c);
 			let out = common::get_output_local(&self.chain.clone(), &commit);
 			if let Some(o) = out {

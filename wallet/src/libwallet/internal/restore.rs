@@ -172,8 +172,9 @@ where
 	let mut start_index = 1;
 	let mut result_vec: Vec<OutputResult> = vec![];
 	loop {
-		let (highest_index, last_retrieved_index, outputs) =
-			wallet.client().get_outputs_by_pmmr_index(start_index, batch_size)?;
+		let (highest_index, last_retrieved_index, outputs) = wallet
+			.client()
+			.get_outputs_by_pmmr_index(start_index, batch_size)?;
 		info!(
 			LOGGER,
 			"Retrieved {} outputs, up to index {}. (Highest index: {})",
@@ -212,6 +213,7 @@ where
 				height: output.height,
 				lock_height: output.lock_height,
 				is_coinbase: output.is_coinbase,
+				tx_log_entry: None,
 			});
 		} else {
 			warn!(

@@ -15,6 +15,7 @@
 //! Types and traits that should be provided by a wallet
 //! implementation
 
+use chrono::prelude::*;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -22,6 +23,7 @@ use serde;
 use serde_json;
 
 use failure::ResultExt;
+use uuid::Uuid;
 
 use core::core::hash::Hash;
 use core::ser;
@@ -75,6 +77,12 @@ where
 	/// Get output data by id
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
 
+	/// Get an (Optional) tx log entry by uuid
+	fn get_tx_log_entry(&self, uuid: &Uuid) -> Result<Option<TxLogEntry>, Error>;
+
+	/// Iterate over all output data stored by the backend
+	fn tx_log_iter<'a>(&'a self) -> Box<Iterator<Item = TxLogEntry> + 'a>;
+
 	/// Create a new write batch to update or remove output data
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, Error>;
 
@@ -82,18 +90,7 @@ where
 	fn next_child<'a>(&mut self, root_key_id: Identifier) -> Result<u32, Error>;
 
 	/// Return current details
-	fn details(&mut self) -> &mut WalletDetails;
-
-	/// Select spendable coins from the wallet
-	fn select_coins(
-		&self,
-		root_key_id: Identifier,
-		amount: u64,
-		current_height: u64,
-		minimum_confirmations: u64,
-		max_outputs: usize,
-		select_all: bool,
-	) -> Vec<OutputData>;
+	fn details(&mut self, root_key_id: Identifier) -> Result<WalletDetails, Error>;
 
 	/// Attempt to restore the contents of a wallet from seed
 	fn restore(&mut self) -> Result<(), Error>;
@@ -102,21 +99,32 @@ where
 /// Batch trait to update the output data backend atomically. Trying to use a
 /// batch after commit MAY result in a panic. Due to this being a trait, the
 /// commit method can't take ownership.
+/// TODO: Should these be split into separate batch objects, for outputs,
+/// tx_log entries and meta/details?
 pub trait WalletOutputBatch {
 	/// Add or update data about an output to the backend
 	fn save(&mut self, out: OutputData) -> Result<(), Error>;
 
-	/// Get wallet details
-	fn details(&mut self) -> &mut WalletDetails;
-
 	/// Gets output data by id
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
 
-	/// Iterate over all output data in batch
-	fn iter<'b>(&'b self) -> Box<Iterator<Item = OutputData> + 'b>;
+	/// Iterate over all output data stored by the backend
+	fn iter(&self) -> Box<Iterator<Item = OutputData>>;
 
 	/// Delete data about an output to the backend
 	fn delete(&mut self, id: &Identifier) -> Result<(), Error>;
+
+	/// save wallet details
+	fn save_details(&mut self, r: Identifier, w: WalletDetails) -> Result<(), Error>;
+
+	/// get next tx log entry
+	fn next_tx_log_id(&mut self, root_key_id: Identifier) -> Result<u32, Error>;
+
+	/// Iterate over all output data stored by the backend
+	fn tx_log_iter(&self) -> Box<Iterator<Item = TxLogEntry>>;
+
+	/// save a tx log entry
+	fn save_tx_log_entry(&self, t: TxLogEntry) -> Result<(), Error>;
 
 	/// Save an output as locked in the backend
 	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error>;
@@ -192,6 +200,8 @@ pub struct OutputData {
 	pub lock_height: u64,
 	/// Is this a coinbase output? Is it subject to coinbase locktime?
 	pub is_coinbase: bool,
+	/// Optional corresponding internal entry in tx entry log
+	pub tx_log_entry: Option<u32>,
 }
 
 impl ser::Writeable for OutputData {
@@ -219,6 +229,9 @@ impl OutputData {
 	/// so we do not actually know how many confirmations this output had (and
 	/// never will).
 	pub fn num_confirmations(&self, current_height: u64) -> u64 {
+		if self.height >= current_height {
+			return 0;
+		}
 		if self.status == OutputStatus::Unconfirmed {
 			0
 		} else if self.height == 0 {
@@ -414,6 +427,103 @@ impl Default for WalletDetails {
 			last_confirmed_height: 0,
 			last_child_index: 0,
 		}
+	}
+}
+
+/// Types of transactions that can be contained within a TXLog entry
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+pub enum TxLogEntryType {
+	/// A coinbase transaction becomes confirmed
+	ConfirmedCoinbase,
+	/// Outputs created when a transaction is received
+	TxReceived,
+	/// Inputs locked + change outputs when a transaction is created
+	TxSent,
+	/// Received transaction that was rolled back by user
+	TxReceivedCancelled,
+	/// Sent transaction that was rolled back by user
+	TxSentCancelled,
+}
+
+impl fmt::Display for TxLogEntryType {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		match *self {
+			TxLogEntryType::ConfirmedCoinbase => write!(f, "Confirmed Coinbase"),
+			TxLogEntryType::TxReceived => write!(f, "Recieved Tx"),
+			TxLogEntryType::TxSent => write!(f, "Sent Tx"),
+			TxLogEntryType::TxReceivedCancelled => write!(f, "Received Tx - Cancelled"),
+			TxLogEntryType::TxSentCancelled => write!(f, "Send Tx - Cancelled"),
+		}
+	}
+}
+
+/// Optional transaction information, recorded when an event happens
+/// to add or remove funds from a wallet. One Transaction log entry
+/// maps to one or many outputs
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TxLogEntry {
+	/// Local id for this transaction (distinct from a slate transaction id)
+	pub id: u32,
+	/// Slate transaction this entry is associated with, if any
+	pub tx_slate_id: Option<Uuid>,
+	/// Transaction type (as above)
+	pub tx_type: TxLogEntryType,
+	/// Time this tx entry was created
+	/// #[serde(with = "tx_date_format")]
+	pub creation_ts: DateTime<Utc>,
+	/// Time this tx was confirmed (by this wallet)
+	/// #[serde(default, with = "opt_tx_date_format")]
+	pub confirmation_ts: Option<DateTime<Utc>>,
+	/// Whether the inputs+outputs involved in this transaction have been
+	/// confirmed (In all cases either all outputs involved in a tx should be
+	/// confirmed, or none should be; otherwise there's a deeper problem)
+	pub confirmed: bool,
+	/// number of inputs involved in TX
+	pub num_inputs: usize,
+	/// number of outputs involved in TX
+	pub num_outputs: usize,
+	/// Amount credited via this transaction
+	pub amount_credited: u64,
+	/// Amount debited via this transaction
+	pub amount_debited: u64,
+	/// Fee
+	pub fee: Option<u64>,
+}
+
+impl ser::Writeable for TxLogEntry {
+	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_bytes(&serde_json::to_vec(self).map_err(|_| ser::Error::CorruptedData)?)
+	}
+}
+
+impl ser::Readable for TxLogEntry {
+	fn read(reader: &mut ser::Reader) -> Result<TxLogEntry, ser::Error> {
+		let data = reader.read_vec()?;
+		serde_json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
+	}
+}
+
+impl TxLogEntry {
+	/// Return a new blank with TS initialised with next entry
+	pub fn new(t: TxLogEntryType, id: u32) -> Self {
+		TxLogEntry {
+			tx_type: t,
+			id: id,
+			tx_slate_id: None,
+			creation_ts: Utc::now(),
+			confirmation_ts: None,
+			confirmed: false,
+			amount_credited: 0,
+			amount_debited: 0,
+			num_inputs: 0,
+			num_outputs: 0,
+			fee: None,
+		}
+	}
+
+	/// Update confirmation TS with now
+	pub fn update_confirmation_ts(&mut self) {
+		self.confirmation_ts = Some(Utc::now());
 	}
 }
 
