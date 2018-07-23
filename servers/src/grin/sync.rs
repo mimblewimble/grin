@@ -119,8 +119,14 @@ pub fn run_sync(
 
 					// run the header sync every 10s
 					if si.header_sync_due(&header_head) {
-						header_sync(peers.clone(), chain.clone());
-						sync_state.update(SyncStatus::HeaderSync{current_height: header_head.height, highest_height: si.highest_height});
+						let status = sync_state.status();
+						match status{
+							SyncStatus::TxHashsetDownload => (),
+							_ => {
+								header_sync(peers.clone(), chain.clone());
+								sync_state.update(SyncStatus::HeaderSync{current_height: header_head.height, highest_height: si.highest_height});
+							}
+						};
 					}
 
 					if fast_sync_enabled {
@@ -252,12 +258,6 @@ fn fast_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, header_head: &chain::T
 
 	if let Some(peer) = peers.most_work_peer() {
 		if let Ok(p) = peer.try_read() {
-			debug!(
-				LOGGER,
-				"Header head before txhashset request: {} / {}",
-				header_head.height,
-				header_head.last_block_h
-			);
 
 			// ask for txhashset at 90% of horizon, this still leaves time for download
 			// and validation to happen and stay within horizon
@@ -265,7 +265,16 @@ fn fast_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, header_head: &chain::T
 			for _ in 0..(horizon - horizon / 10) {
 				txhashset_head = chain.get_block_header(&txhashset_head.previous).unwrap();
 			}
-			p.send_txhashset_request(txhashset_head.height, txhashset_head.hash())
+			let bhash = txhashset_head.hash();
+			debug!(
+				LOGGER,
+				"fast_sync: before txhashset request, header head: {} / {}, txhashset_head: {} / {}",
+				header_head.height,
+				header_head.last_block_h,
+				txhashset_head.height,
+				bhash
+			);
+			p.send_txhashset_request(txhashset_head.height, bhash)
 				.unwrap();
 		}
 	}
