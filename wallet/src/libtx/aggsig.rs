@@ -70,6 +70,7 @@ pub fn verify_partial_sig(
 }
 
 /// Just a simple sig, creates its own nonce, etc
+#[allow(deprecated)]
 pub fn sign_from_key_id<K>(
 	secp: &Secp256k1,
 	k: &K,
@@ -143,6 +144,7 @@ pub fn add_signatures(
 }
 
 /// Just a simple sig, creates its own nonce, etc
+#[allow(deprecated)]
 pub fn sign_with_blinding(
 	secp: &Secp256k1,
 	msg: &Message,
