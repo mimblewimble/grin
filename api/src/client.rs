@@ -36,6 +36,7 @@ pub fn get<'a, T>(url: &'a str) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de>,
 {
+	println!("GET {}", url);
 	let uri = url.parse::<Uri>().map_err::<Error, _>(|e: InvalidUri| {
 		e.context(ErrorKind::Argument(format!("Invalid url {}", url)))
 			.into()
@@ -48,7 +49,7 @@ where
 		.body(hyper::Body::empty())
 		.map_err(|_e| ErrorKind::RequestError("Bad request".to_owned()))?;
 
-	send_request(req)
+	handle_request(req)
 }
 
 /// Helper function to easily issue a HTTP POST request with the provided JSON
@@ -60,6 +61,28 @@ where
 	IN: Serialize,
 	for<'de> OUT: Deserialize<'de>,
 {
+	let req = create_post_request(url, input)?;
+	handle_request(req)
+}
+
+/// Helper function to easily issue a HTTP POST request with the provided JSON
+/// object as body on a given URL that returns nothing. Handles request
+/// building, JSON serialization, and response code
+/// checking.
+pub fn post_no_ret<IN>(url: &str, input: &IN) -> Result<(), Error>
+where
+	IN: Serialize,
+{
+	let req = create_post_request(url, input)?;
+	send_request(req)?;
+	Ok(())
+}
+
+fn create_post_request<IN>(url: &str, input: &IN) -> Result<Request<Body>, Error>
+where
+	IN: Serialize,
+{
+	println!("POST {}", url);
 	let json = serde_json::to_string(input).context(ErrorKind::Internal(
 		"Could not serialize data to JSON".to_owned(),
 	))?;
@@ -67,8 +90,8 @@ where
 		e.context(ErrorKind::Argument(format!("Invalid url {}", url)))
 			.into()
 	})?;
-	let req = Request::builder()
-		.method("GET")
+	Request::builder()
+		.method("POST")
 		.uri(uri)
 		.header(USER_AGENT, "grin-client")
 		.header(ACCEPT, "application/json")
@@ -76,16 +99,23 @@ where
 		.map_err::<Error, _>(|e| {
 			e.context(ErrorKind::RequestError("Bad request".to_owned()))
 				.into()
-		})?;
-	send_request(req)
+		})
 }
 
-fn send_request<T>(req: Request<Body>) -> Result<T, Error>
+fn handle_request<T>(req: Request<Body>) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de>,
 {
-	let mut event_loop = Core::new().unwrap();
+	let data = send_request(req)?;
+	serde_json::from_str(&data).map_err(|e| {
+		println!("failed to parse json: {:?}", e);
+		e.context(ErrorKind::ResponseError("Cannot parse response".to_owned()))
+			.into()
+	})
+}
 
+fn send_request(req: Request<Body>) -> Result<String, Error> {
+	let mut event_loop = Core::new().unwrap();
 	let client = Client::new();
 
 	let task = client
@@ -93,6 +123,7 @@ where
 		.map_err(|_e| ErrorKind::RequestError("Cannot make request".to_owned()))
 		.and_then(|resp| {
 			if !resp.status().is_success() {
+				println!("Response code {}", resp.status());
 				Either::A(err(ErrorKind::RequestError(
 					"Wrong response code".to_owned(),
 				)))
@@ -108,9 +139,5 @@ where
 			}
 		});
 
-	let data = event_loop.run(task)?;
-	serde_json::from_str(&data).map_err(|e| {
-		e.context(ErrorKind::ResponseError("Cannot parse response".to_owned()))
-			.into()
-	})
+	Ok(event_loop.run(task)?)
 }

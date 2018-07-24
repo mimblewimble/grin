@@ -178,7 +178,7 @@ where
 		api: &mut APIOwner<T, C, K>,
 	) -> Result<(bool, Vec<OutputData>), Error> {
 		let update_from_node = param_exists(req, "refresh");
-		api.retrieve_outputs(false, update_from_node)
+		api.retrieve_outputs(false, update_from_node, None)
 	}
 
 	fn retrieve_summary_info(

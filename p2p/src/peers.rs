@@ -27,8 +27,10 @@ use util::LOGGER;
 
 use peer::Peer;
 use store::{PeerData, PeerStore, State};
-use types::{Capabilities, ChainAdapter, Direction, Error, NetAdapter, P2PConfig, ReasonForBan,
-            TxHashSetRead, MAX_PEER_ADDRS};
+use types::{
+	Capabilities, ChainAdapter, Direction, Error, NetAdapter, P2PConfig, ReasonForBan,
+	TxHashSetRead, MAX_PEER_ADDRS,
+};
 
 pub struct Peers {
 	pub adapter: Arc<ChainAdapter>,
@@ -615,17 +617,8 @@ impl ChainAdapter for Peers {
 		self.adapter.txhashset_receive_ready()
 	}
 
-	fn txhashset_write(
-		&self,
-		h: Hash,
-		txhashset_data: File,
-		peer_addr: SocketAddr,
-	) -> bool {
-		if !self.adapter.txhashset_write(
-			h,
-			txhashset_data,
-			peer_addr,
-		) {
+	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: SocketAddr) -> bool {
+		if !self.adapter.txhashset_write(h, txhashset_data, peer_addr) {
 			debug!(
 				LOGGER,
 				"Received a bad txhashset data from {}, the peer will be banned", &peer_addr

@@ -54,7 +54,7 @@ impl Default for LoggingConfig {
 	fn default() -> LoggingConfig {
 		LoggingConfig {
 			log_to_stdout: true,
-			stdout_log_level: LogLevel::Debug,
+			stdout_log_level: LogLevel::Trace,
 			log_to_file: false,
 			file_log_level: LogLevel::Trace,
 			log_file_path: String::from("grin.log"),

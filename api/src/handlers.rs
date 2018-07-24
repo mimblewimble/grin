@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock, Weak};
 use std::thread;
@@ -429,7 +431,10 @@ impl Handler for PeerHandler {
 				Err(_) => response(StatusCode::BAD_REQUEST, ""),
 			}
 		} else {
-			response(StatusCode::BAD_REQUEST, "")
+			response(
+				StatusCode::BAD_REQUEST,
+				format!("url unrecognized: {}", req.uri().path()),
+			)
 		}
 	}
 	fn post(&self, req: Request<Body>) -> Response<Body> {
@@ -786,13 +791,14 @@ where
 	}
 }
 
-fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
+fn response<T: Into<Body> + Debug>(status: StatusCode, text: T) -> Response<Body> {
+	println!("-> status: {}, text: {:?}", status, text);
 	let mut resp = Response::new(text.into());
 	*resp.status_mut() = status;
 	resp
 }
 
-static mut ROUTER: Option<Router> = None;
+thread_local!( static ROUTER: RefCell<Option<Router>> = RefCell::new(None) );
 
 /// Start all server HTTP handlers. Register all of them with Router
 /// and runs the corresponding HTTP server.
@@ -815,26 +821,27 @@ pub fn start_rest_apis<T>(
 		.spawn(move || {
 			let mut apis = ApiServer::new();
 
-			let router = build_router(chain, tx_pool, peers).expect("unbale to build API router");
-			unsafe {
-				ROUTER = Some(router);
-			}
+			ROUTER.with(|router| {
+				*router.borrow_mut() =
+					Some(build_router(chain, tx_pool, peers).expect("unbale to build API router"));
 
-			info!(LOGGER, "Starting HTTP API server at {}.", addr);
-			let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-			apis.start(socket_addr, &handle).unwrap_or_else(|e| {
-				error!(LOGGER, "Failed to start API HTTP server: {}.", e);
+				info!(LOGGER, "Starting HTTP API server at {}.", addr);
+				let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
+				apis.start(socket_addr, &handle).unwrap_or_else(|e| {
+					error!(LOGGER, "Failed to start API HTTP server: {}.", e);
+				});
 			});
 		});
 }
 
 pub fn handle(req: Request<Body>) -> Response<Body> {
-	unsafe {
-		match ROUTER {
-			Some(ref h) => h.handle(req),
-			None => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+	ROUTER.with(|router| match *router.borrow() {
+		Some(ref h) => h.handle(req),
+		None => {
+			println!("No router configured");
+			response(StatusCode::INTERNAL_SERVER_ERROR, "No router configured")
 		}
-	}
+	})
 }
 
 pub fn build_router<T>(
@@ -911,7 +918,7 @@ where
 	};
 
 	let mut router = Router::new();
-	router.add_route("/v1", Box::new(index_handler))?;
+	router.add_route("/v1/", Box::new(index_handler))?;
 	router.add_route("/v1/blocks/*", Box::new(block_handler))?;
 	router.add_route("/v1/headers/*", Box::new(header_handler))?;
 	router.add_route("/v1/chain", Box::new(chain_tip_handler))?;
