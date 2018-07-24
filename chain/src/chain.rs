@@ -52,7 +52,7 @@ struct Orphan {
 	added: Instant,
 }
 
-struct OrphanBlockPool {
+pub struct OrphanBlockPool {
 	// blocks indexed by their hash
 	orphans: RwLock<HashMap<Hash, Orphan>>,
 	// additional index of height -> hash
@@ -117,7 +117,7 @@ impl OrphanBlockPool {
 			.map(|hs| hs.iter().filter_map(|h| orphans.remove(h)).collect())
 	}
 
-	fn contains(&self, hash: &Hash) -> bool {
+	pub fn contains(&self, hash: &Hash) -> bool {
 		let orphans = self.orphans.read().unwrap();
 		orphans.contains_key(hash)
 	}
@@ -336,6 +336,7 @@ impl Chain {
 			pow_verifier: self.pow_verifier,
 			block_hashes_cache: self.block_hashes_cache.clone(),
 			txhashset: self.txhashset.clone(),
+			orphans: self.orphans.clone(),
 		})
 	}
 
@@ -378,7 +379,7 @@ impl Chain {
 		trace!(
 			LOGGER,
 			"chain: done check_orphans at {}. # remaining orphans {}",
-			height,
+			height-1,
 			self.orphans.len(),
 		);
 	}
