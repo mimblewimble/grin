@@ -320,7 +320,7 @@ fn main() {
 		panic!("Error parsing config file: {}", e);
 	});
 
-	if let Some(file_path) = global_config.config_file_path.clone() {
+	if let Some(file_path) = &global_config.config_file_path {
 		info!(
 			LOGGER,
 			"Found configuration file at {}",

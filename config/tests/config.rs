@@ -7,9 +7,9 @@ use config::GlobalConfig;
 #[test]
 fn file_config_equal_to_defaults() {
 	let x = true;
-	let mut global_config_without_file = GlobalConfig::default();
+	let global_config_without_file = GlobalConfig::default();
 
-	let mut global_config_with_file = GlobalConfig::new(Some("../grin.toml")).unwrap_or_else(|e| {
+	let global_config_with_file = GlobalConfig::new(Some("../grin.toml")).unwrap_or_else(|e| {
 		panic!("Error parsing config file: {}", e);
 	});
 
