@@ -158,12 +158,22 @@ where
 		api: &mut APIOwner<T, C, K>,
 	) -> Result<(bool, Vec<OutputData>), Error> {
 		let mut update_from_node = false;
+		let mut id = None;
+		let mut show_spent = false;
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
 			if let Some(_) = params.get("refresh") {
 				update_from_node = true;
 			}
+			if let Some(_) = params.get("show_spent") {
+				show_spent = true;
+			}
+			if let Some(ids) = params.get("tx_id") {
+				for i in ids {
+					id = Some(i.parse().unwrap());
+				}
+			}
 		}
-		api.retrieve_outputs(false, update_from_node, None)
+		api.retrieve_outputs(show_spent, update_from_node, id)
 	}
 
 	fn retrieve_txs(
@@ -171,13 +181,19 @@ where
 		req: &mut Request,
 		api: &mut APIOwner<T, C, K>,
 	) -> Result<(bool, Vec<TxLogEntry>), Error> {
+		let mut id = None;
 		let mut update_from_node = false;
 		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
 			if let Some(_) = params.get("refresh") {
 				update_from_node = true;
 			}
+			if let Some(ids) = params.get("id") {
+				for i in ids {
+					id = Some(i.parse().unwrap());
+				}
+			}
 		}
-		api.retrieve_txs(update_from_node, None)
+		api.retrieve_txs(update_from_node, id)
 	}
 
 	fn retrieve_summary_info(
