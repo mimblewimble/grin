@@ -22,7 +22,7 @@ use rand::{thread_rng, Rng};
 use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use time;
+use chrono::prelude::{Utc};
 use util::LOGGER;
 
 use peer::Peer;
@@ -87,7 +87,7 @@ impl Peers {
 				dandelion_relay
 					.write()
 					.unwrap()
-					.insert(time::now_utc().to_timespec().sec, peer.clone());
+					.insert(Utc::now().timestamp(), peer.clone());
 				debug!(
 					LOGGER,
 					"Successfully updated Dandelion relay to: {}",
@@ -262,7 +262,7 @@ impl Peers {
 		}
 
 		if let Err(e) =
-			self.update_last_banned(peer_addr.clone(), time::now_utc().to_timespec().sec)
+			self.update_last_banned(peer_addr.clone(), Utc::now().timestamp())
 		{
 			error!(
 				LOGGER,

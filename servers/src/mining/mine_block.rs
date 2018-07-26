@@ -20,7 +20,7 @@ use rand::{self, Rng};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
-use time;
+use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 
 use chain;
 use common::adapters::PoolToChainAdapter;
@@ -139,8 +139,8 @@ fn build_block(
 	// prepare the block header timestamp
 	let head = chain.head_header()?;
 
-	let mut now_sec = time::get_time().sec;
-	let head_sec = head.timestamp.to_timespec().sec;
+	let mut now_sec = Utc::now().timestamp();
+	let head_sec = head.timestamp.timestamp();
 	if now_sec <= head_sec {
 		now_sec = head_sec + 1;
 	}
@@ -172,7 +172,7 @@ fn build_block(
 
 	let mut rng = rand::OsRng::new().unwrap();
 	b.header.nonce = rng.gen();
-	b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
+	b.header.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_sec, 0), Utc);;
 
 	let b_difficulty = (b.header.total_difficulty.clone() - head.total_difficulty.clone()).to_num();
 	debug!(

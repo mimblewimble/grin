@@ -19,7 +19,7 @@ extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_wallet as wallet;
 extern crate serde_json;
-extern crate time;
+extern crate chrono;
 
 use std::sync::{Arc, Mutex};
 
