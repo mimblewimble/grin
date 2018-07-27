@@ -173,7 +173,7 @@ impl WalletClient for HTTPWalletClient {
 				Ok(outputs) => for out in outputs {
 					api_outputs.insert(out.commit.commit(), util::to_hex(out.commit.to_vec()));
 				},
-				Err(e) => {
+				Err(_) => {
 					// if we got anything other than 200 back from server, don't attempt to refresh
 					// the wallet data after
 					return Err(libwallet::ErrorKind::ClientCallback("Error from server"))?;
