@@ -1,7 +1,12 @@
+use futures::future;
+use futures::future::{err, ok, Either};
+use hyper;
+use hyper::rt::{Future, Stream};
 use hyper::{Body, Method, Request, Response, StatusCode};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use tokio_core::reactor::Core;
 use util::LOGGER;
 
 lazy_static! {
@@ -9,40 +14,42 @@ lazy_static! {
 	static ref WILDCARD_STOP_HASH: u64 = calculate_hash(&"**");
 }
 
+pub type ResponseFuture = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
+
 pub trait Handler {
-	fn get(&self, _req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn post(&self, _req: Request<Body>) -> Response<Body> {
+	fn post(&self, _req: Request<Body>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn put(&self, _req: Request<Body>) -> Response<Body> {
+	fn put(&self, _req: Request<Body>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn patch(&self, _req: Request<Body>) -> Response<Body> {
+	fn patch(&self, _req: Request<Body>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn delete(&self, _req: Request<Body>) -> Response<Body> {
+	fn delete(&self, _req: Request<Body>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn head(&self, _req: Request<Body>) -> Response<Body> {
+	fn head(&self, _req: Request<Body>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn options(&self, _req: Request<Body>) -> Response<Body> {
+	fn options(&self, _req: Request<Body>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn trace(&self, _req: Request<Body>) -> Response<Body> {
+	fn trace(&self, _req: Request<Body>) -> ResponseFuture {
 		not_found()
 	}
 
-	fn connect(&self, _req: Request<Body>) -> Response<Body> {
+	fn connect(&self, _req: Request<Body>) -> ResponseFuture {
 		not_found()
 	}
 }
@@ -143,7 +150,7 @@ impl Router {
 		self.node(node_id).value().ok_or(RouterError::NoValue)
 	}
 
-	pub fn handle(&self, req: Request<Body>) -> Response<Body> {
+	pub fn handle(&self, req: Request<Body>) -> ResponseFuture {
 		match self.get(req.uri().path()) {
 			Err(_) => not_found(),
 			Ok(h) => match req.method() {
@@ -192,10 +199,10 @@ impl Node {
 	}
 }
 
-pub fn not_found() -> Response<Body> {
+pub fn not_found() -> ResponseFuture {
 	let mut response = Response::new(Body::empty());
 	*response.status_mut() = StatusCode::NOT_FOUND;
-	response
+	Box::new(future::ok(response))
 }
 
 fn calculate_hash<T: Hash>(t: &T) -> u64 {
@@ -220,11 +227,13 @@ mod tests {
 	struct HandlerImpl(u16);
 
 	impl Handler for HandlerImpl {
-		fn get(&self, _req: Request<Body>) -> Response<Body> {
-			Response::builder()
-				.status(self.0)
-				.body(Body::default())
-				.unwrap()
+		fn get(&self, _req: Request<Body>) -> ResponseFuture {
+			Box::new(future::ok(
+				Response::builder()
+					.status(self.0)
+					.body(Body::default())
+					.unwrap(),
+			))
 		}
 	}
 
@@ -278,12 +287,13 @@ mod tests {
 			.unwrap();
 
 		let call_handler = |url| {
-			routes
+			let mut event_loop = Core::new().unwrap();
+			let task = routes
 				.get(url)
 				.unwrap()
 				.get(Request::new(Body::default()))
-				.status()
-				.as_u16()
+				.and_then(|resp| ok(resp.status().as_u16()));
+			event_loop.run(task).unwrap()
 		};
 
 		assert_eq!(call_handler("/v1/users"), 101);

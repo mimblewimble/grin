@@ -36,6 +36,7 @@ extern crate failure;
 extern crate failure_derive;
 extern crate futures;
 extern crate hyper;
+extern crate tokio;
 extern crate tokio_core;
 extern crate tokio_retry;
 

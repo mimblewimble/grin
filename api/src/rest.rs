@@ -19,14 +19,16 @@
 //! register them on a ApiServer.
 
 use hyper::rt::Future;
-use hyper::service::service_fn_ok;
+use hyper::service::service_fn;
 use hyper::{Body, Request, Response, Server};
 use std::fmt::{self, Display};
 use std::net::SocketAddr;
 //use tokio::runtime::Runtime;
+use router::ResponseFuture;
 use tokio::runtime::current_thread::Runtime;
 
 use failure::{Backtrace, Context, Fail};
+use util::LOGGER;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
 #[derive(Debug)]
@@ -99,10 +101,10 @@ impl ApiServer {
 	/// Starts the ApiServer at the provided address.
 	pub fn start<F>(&mut self, addr: SocketAddr, f: &'static F) -> Result<(), String>
 	where
-		F: Fn(Request<Body>) -> Response<Body> + Send + Sync + 'static,
+		F: Fn(Request<Body>) -> ResponseFuture + Send + Sync + 'static,
 	{
 		let server = Server::bind(&addr)
-			.serve(move || service_fn_ok(f))
+			.serve(move || service_fn(f))
 			.map_err(|e| eprintln!("server error: {}", e));
 
 		let mut rt = Runtime::new().unwrap();

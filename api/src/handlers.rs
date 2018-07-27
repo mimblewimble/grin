@@ -20,10 +20,12 @@ use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 
 use failure::ResultExt;
+use futures::future::{err, ok};
+use futures::Future;
 use futures::Stream;
 use hyper::{Body, Request, Response, StatusCode};
 use rest::{Error, ErrorKind};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json;
 use tokio_core::reactor::Core;
 
@@ -36,7 +38,7 @@ use p2p::types::ReasonForBan;
 use pool;
 use regex::Regex;
 use rest::*;
-use router::{Handler, Router, RouterError};
+use router::{Handler, ResponseFuture, Router, RouterError};
 use types::*;
 use url::form_urlencoded;
 use util;
@@ -59,7 +61,7 @@ struct IndexHandler {
 impl IndexHandler {}
 
 impl Handler for IndexHandler {
-	fn get(&self, _req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		json_response_pretty(&self.list)
 	}
 }
@@ -225,7 +227,7 @@ impl OutputHandler {
 }
 
 impl Handler for OutputHandler {
-	fn get(&self, req: Request<Body>) -> Response<Body> {
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
 		match req.uri()
 			.path()
 			.trim_right_matches("/")
@@ -321,7 +323,7 @@ impl TxHashSetHandler {
 }
 
 impl Handler for TxHashSetHandler {
-	fn get(&self, req: Request<Body>) -> Response<Body> {
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
 		let mut start_index = 1;
 		let mut max = 100;
 		let mut id = "".to_owned();
@@ -386,7 +388,7 @@ pub struct PeersAllHandler {
 }
 
 impl Handler for PeersAllHandler {
-	fn get(&self, _req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		let peers = &w(&self.peers).all_peers();
 		json_response_pretty(&peers)
 	}
@@ -397,7 +399,7 @@ pub struct PeersConnectedHandler {
 }
 
 impl Handler for PeersConnectedHandler {
-	fn get(&self, _req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		let mut peers = vec![];
 		for p in &w(&self.peers).connected_peers() {
 			let p = p.read().unwrap();
@@ -417,7 +419,7 @@ pub struct PeerHandler {
 }
 
 impl Handler for PeerHandler {
-	fn get(&self, req: Request<Body>) -> Response<Body> {
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
 		if let Ok(addr) = req.uri()
 			.path()
 			.trim_right_matches("/")
@@ -437,7 +439,7 @@ impl Handler for PeerHandler {
 			)
 		}
 	}
-	fn post(&self, req: Request<Body>) -> Response<Body> {
+	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		let mut path_elems = req.uri().path().trim_right_matches("/").rsplit("/");
 		match path_elems.next().unwrap() {
 			"ban" => {
@@ -475,7 +477,7 @@ impl StatusHandler {
 }
 
 impl Handler for StatusHandler {
-	fn get(&self, _req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		json_response(&self.get_status())
 	}
 }
@@ -493,7 +495,7 @@ impl ChainHandler {
 }
 
 impl Handler for ChainHandler {
-	fn get(&self, _req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		json_response(&self.get_tip())
 	}
 }
@@ -505,7 +507,7 @@ pub struct ChainValidationHandler {
 }
 
 impl Handler for ChainValidationHandler {
-	fn get(&self, _req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		// TODO - read skip_rproofs from query params
 		w(&self.chain).validate(true).unwrap();
 		response(StatusCode::OK, "")
@@ -520,7 +522,7 @@ pub struct ChainCompactHandler {
 }
 
 impl Handler for ChainCompactHandler {
-	fn get(&self, _req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		w(&self.chain).compact().unwrap();
 		response(StatusCode::OK, "")
 	}
@@ -603,7 +605,7 @@ fn check_block_param(input: &String) -> Result<(), Error> {
 }
 
 impl Handler for BlockHandler {
-	fn get(&self, req: Request<Body>) -> Response<Body> {
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
 		let el = req.uri()
 			.path()
 			.trim_right_matches("/")
@@ -648,7 +650,7 @@ impl Handler for BlockHandler {
 }
 
 impl Handler for HeaderHandler {
-	fn get(&self, req: Request<Body>) -> Response<Body> {
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
 		let el = req.uri()
 			.path()
 			.trim_right_matches("/")
@@ -677,9 +679,9 @@ struct PoolInfoHandler<T> {
 
 impl<T> Handler for PoolInfoHandler<T>
 where
-	T: pool::BlockChain + Send + Sync + 'static,
+	T: pool::BlockChain + Send + Sync,
 {
-	fn get(&self, _req: Request<Body>) -> Response<Body> {
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		let pool_arc = w(&self.tx_pool);
 		let pool = pool_arc.read().unwrap();
 
@@ -702,9 +704,9 @@ struct PoolPushHandler<T> {
 
 impl<T> PoolPushHandler<T>
 where
-	T: pool::BlockChain,
+	T: pool::BlockChain + Send + Sync,
 {
-	fn update_pool(&self, req: Request<Body>) -> Result<(), Error> {
+	fn update_pool(&self, req: Request<Body>) -> Box<Future<Item = (), Error = Error> + Send> {
 		let params = match req.uri().query() {
 			Some(query_string) => form_urlencoded::parse(query_string.as_bytes())
 				.into_owned()
@@ -717,60 +719,52 @@ where
 
 		let fluff = params.get("fluff").is_some();
 
-		let mut event_loop = Core::new().unwrap();
-		let task = req.into_body().concat2();
-		let body = event_loop
-			.run(task)
-			.map_err(|_e| ErrorKind::RequestError("Bad request".to_owned()))?;
-		let wrapper: TxWrapper = serde_json::from_reader(&body.to_vec()[..])
-			.map_err(|_e| ErrorKind::RequestError("Bad request".to_owned()))?;
-		let tx_bin = util::from_hex(wrapper.tx_hex)
-			.map_err(|_e| ErrorKind::RequestError("Bad request".to_owned()))?;
-		let tx: Transaction = ser::deserialize(&mut &tx_bin[..])
-			.map_err(|_e| ErrorKind::RequestError("Bad request".to_owned()))?;
+		Box::new(parse_body(req).and_then(move |wrapper: TxWrapper| {
+			let tx_bin = match util::from_hex(wrapper.tx_hex) {
+				Ok(w) => w,
+				Err(_) => return err(ErrorKind::RequestError("Bad request".to_owned()).into()),
+			};
+			let tx: Transaction = match ser::deserialize(&mut &tx_bin[..]) {
+				Ok(tx) => tx,
+				Err(_) => return err(ErrorKind::RequestError("Bad request".to_owned()).into()),
+			};
+			let source = pool::TxSource {
+				debug_name: "push-api".to_string(),
+				identifier: "?.?.?.?".to_string(),
+			};
+			info!(
+				LOGGER,
+				"Pushing transaction with {} inputs and {} outputs to pool.",
+				tx.inputs.len(),
+				tx.outputs.len()
+			);
 
-		let source = pool::TxSource {
-			debug_name: "push-api".to_string(),
-			identifier: "?.?.?.?".to_string(),
-		};
-		info!(
-			LOGGER,
-			"Pushing transaction with {} inputs and {} outputs to pool.",
-			tx.inputs.len(),
-			tx.outputs.len()
-		);
-
-		//  Push to tx pool.
-		let pool_arc = w(&self.tx_pool);
-		let res = {
-			pool_arc
-				.write()
-				.unwrap()
-				.add_to_pool(source, tx, !fluff)
-				.map_err(|_e| ErrorKind::RequestError("Bad request".to_owned()).into())
-		};
-		res
+			//  Push to tx pool.
+			let pool_arc = w(&self.tx_pool);
+			match pool_arc.write().unwrap().add_to_pool(source, tx, !fluff) {
+				Ok(_) => ok(()),
+				Err(_) => err(ErrorKind::RequestError("Bad request".to_owned()).into()),
+			}
+		}))
 	}
 }
 
 impl<T> Handler for PoolPushHandler<T>
 where
-	T: pool::BlockChain + Send + Sync + 'static,
+	T: pool::BlockChain + Send + Sync,
 {
-	fn get(&self, req: Request<Body>) -> Response<Body> {
-		match self.update_pool(req) {
-			Ok(()) => response(StatusCode::OK, ""),
-			Err(e) => {
-				debug!(LOGGER, "error - {:?}", e);
-				response(StatusCode::BAD_REQUEST, "")
-			}
-		}
+	fn post(&self, req: Request<Body>) -> ResponseFuture {
+		Box::new(
+			self.update_pool(req)
+				.and_then(|_| ok(just_response(StatusCode::OK, "")))
+				.or_else(|_| ok(just_response(StatusCode::BAD_REQUEST, ""))),
+		)
 	}
 }
 
 // Utility to serialize a struct into JSON and produce a sensible Response
 // out of it.
-fn json_response<T>(s: &T) -> Response<Body>
+fn json_response<T>(s: &T) -> ResponseFuture
 where
 	T: Serialize,
 {
@@ -781,7 +775,7 @@ where
 }
 
 // pretty-printed version of above
-fn json_response_pretty<T>(s: &T) -> Response<Body>
+fn json_response_pretty<T>(s: &T) -> ResponseFuture
 where
 	T: Serialize,
 {
@@ -791,8 +785,12 @@ where
 	}
 }
 
-fn response<T: Into<Body> + Debug>(status: StatusCode, text: T) -> Response<Body> {
-	println!("-> status: {}, text: {:?}", status, text);
+fn response<T: Into<Body> + Debug>(status: StatusCode, text: T) -> ResponseFuture {
+	Box::new(ok(just_response(status, text)))
+}
+
+fn just_response<T: Into<Body> + Debug>(status: StatusCode, text: T) -> Response<Body> {
+	debug!(LOGGER, "HTTP API -> status: {}, text: {:?}", status, text);
 	let mut resp = Response::new(text.into());
 	*resp.status_mut() = status;
 	resp
@@ -834,14 +832,29 @@ pub fn start_rest_apis<T>(
 		});
 }
 
-pub fn handle(req: Request<Body>) -> Response<Body> {
+pub fn handle(req: Request<Body>) -> ResponseFuture {
 	ROUTER.with(|router| match *router.borrow() {
 		Some(ref h) => h.handle(req),
 		None => {
-			println!("No router configured");
+			error!(LOGGER, "No HTTP API router configured");
 			response(StatusCode::INTERNAL_SERVER_ERROR, "No router configured")
 		}
 	})
+}
+
+fn parse_body<T>(req: Request<Body>) -> Box<Future<Item = T, Error = Error> + Send>
+where
+	for<'de> T: Deserialize<'de> + Send + 'static,
+{
+	Box::new(
+		req.into_body()
+			.concat2()
+			.map_err(|_e| ErrorKind::RequestError("Failed to read request".to_owned()).into())
+			.and_then(|body| match serde_json::from_reader(&body.to_vec()[..]) {
+				Ok(obj) => ok(obj),
+				Err(e) => err(ErrorKind::RequestError("Invalid request body".to_owned()).into()),
+			}),
+	)
 }
 
 pub fn build_router<T>(

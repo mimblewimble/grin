@@ -15,16 +15,21 @@
 //! Controller for wallet.. instantiates and handles listeners (or single-run
 //! invocations) as needed.
 //! Still experimental
-use api::{ApiServer, Handler, Router};
+use api::{ApiServer, Handler, ResponseFuture, Router};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
+use tokio::runtime::current_thread::Runtime;
 
+use futures::future::{err, ok};
+use futures::Future;
 use futures::Stream;
 use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json;
+use tokio::prelude::future::FutureResult;
 use tokio_core::reactor::Core;
 
 use keychain::Keychain;
@@ -62,13 +67,13 @@ where
 	Ok(())
 }
 
-static mut OWNER_ROUTER: Option<Router> = None;
+thread_local!(static OWNER_ROUTER: RefCell<Option<Router>> = RefCell::new(None));
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
 pub fn owner_listener<T: ?Sized, C, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
 where
-	T: WalletBackend<C, K> + 'static,
+	T: WalletBackend<C, K> + Send + Sync + 'static,
 	OwnerAPIHandler<T, C, K>: Handler,
 	C: WalletClient + 'static,
 	K: Keychain + 'static,
@@ -76,40 +81,43 @@ where
 	let wallet_arc = Arc::new(Mutex::new(wallet));
 	let api_handler = OwnerAPIHandler::new(wallet_arc);
 
-	let mut router = Router::new();
-	router
+	let mut orouter = Router::new();
+	orouter
 		.add_route("/v1/wallet/owner/**", Box::new(api_handler))
 		.map_err(|_e| ErrorKind::GenericError("Router failed to add route".to_string()))?;
-	unsafe {
-		OWNER_ROUTER = Some(router);
-	}
 
-	let mut apis = ApiServer::new();
-	info!(LOGGER, "Starting HTTP Owner API server at {}.", addr);
-	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	apis.start(socket_addr, &handle_owner).unwrap_or_else(|e| {
-		error!(LOGGER, "Failed to start API HTTP server: {}.", e);
+	OWNER_ROUTER.with(move |router| {
+		*router.borrow_mut() = Some(orouter);
+		let mut apis = ApiServer::new();
+		info!(LOGGER, "Starting HTTP Owner API server at {}.", addr);
+		let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
+		apis.start(socket_addr, &handle_owner).unwrap_or_else(|e| {
+			error!(LOGGER, "Failed to start API HTTP server: {}.", e);
+		})
 	});
 	Ok(())
 }
 
-fn handle_owner(req: Request<Body>) -> Response<Body> {
-	unsafe {
-		match OWNER_ROUTER {
-			Some(ref h) => h.handle(req),
-			None => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+fn handle_owner(req: Request<Body>) -> ResponseFuture {
+	OWNER_ROUTER.with(|router| match *router.borrow() {
+		Some(ref h) => h.handle(req),
+		None => {
+			error!(LOGGER, "No HTTP API router configured");
+			Box::new(ok(response(
+				StatusCode::INTERNAL_SERVER_ERROR,
+				"No router configured",
+			)))
 		}
-	}
+	})
 }
 
-static mut FOREIGN_ROUTER: Option<Router> = None;
+thread_local!(static FOREIGN_ROUTER:  RefCell<Option<Router>> = RefCell::new(None));
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
 pub fn foreign_listener<T: ?Sized, C, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
 where
-	T: WalletBackend<C, K> + 'static,
-	ForeignAPIHandler<T, C, K>: Handler,
+	T: WalletBackend<C, K> + Send + Sync + 'static,
 	C: WalletClient + 'static,
 	K: Keychain + 'static,
 {
@@ -120,36 +128,41 @@ where
 		.add_route("/v1/wallet/foreign/**", Box::new(api_handler))
 		.map_err(|_e| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 
-	unsafe {
-		FOREIGN_ROUTER = Some(router);
-	}
-
-	let mut apis = ApiServer::new();
-	info!(LOGGER, "Starting HTTP Foreign API server at {}.", addr);
-	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	apis.start(socket_addr, &handle_foreign)
-		.unwrap_or_else(|e| {
-			error!(LOGGER, "Failed to start API HTTP server: {}.", e);
-		});
+	FOREIGN_ROUTER.with(move |frouter| {
+		*frouter.borrow_mut() = Some(router);
+		let mut apis = ApiServer::new();
+		info!(LOGGER, "Starting HTTP Foreign API server at {}.", addr);
+		let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
+		apis.start(socket_addr, &handle_foreign)
+			.unwrap_or_else(|e| {
+				error!(LOGGER, "Failed to start API HTTP server: {}.", e);
+			});
+	});
 
 	Ok(())
 }
 
-fn handle_foreign(req: Request<Body>) -> Response<Body> {
-	unsafe {
-		match FOREIGN_ROUTER {
-			Some(ref h) => h.handle(req),
-			None => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+fn handle_foreign(req: Request<Body>) -> ResponseFuture {
+	FOREIGN_ROUTER.with(|router| match *router.borrow() {
+		Some(ref h) => h.handle(req),
+		None => {
+			error!(LOGGER, "No HTTP API router configured");
+			Box::new(ok(response(
+				StatusCode::INTERNAL_SERVER_ERROR,
+				"No router configured",
+			)))
 		}
-	}
+	})
 }
-/// API Handler/Wrapper for owner functions
 
+type WalletResponseFuture = Box<Future<Item = Response<Body>, Error = Error> + Send>;
+
+/// API Handler/Wrapper for owner functions
 pub struct OwnerAPIHandler<T: ?Sized, C, K>
 where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
-	K: Keychain,
+	T: WalletBackend<C, K> + Send + Sync + 'static,
+	C: WalletClient + 'static,
+	K: Keychain + 'static,
 {
 	/// Wallet instance
 	pub wallet: Arc<Mutex<Box<T>>>,
@@ -159,9 +172,9 @@ where
 
 impl<T: ?Sized, C, K> OwnerAPIHandler<T, C, K>
 where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
-	K: Keychain,
+	T: WalletBackend<C, K> + Send + Sync + 'static,
+	C: WalletClient + 'static,
+	K: Keychain + 'static,
 {
 	/// Create a new owner API handler for GET methods
 	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> OwnerAPIHandler<T, C, K> {
@@ -175,7 +188,7 @@ where
 	fn retrieve_outputs(
 		&self,
 		req: &Request<Body>,
-		api: &mut APIOwner<T, C, K>,
+		api: APIOwner<T, C, K>,
 	) -> Result<(bool, Vec<OutputData>), Error> {
 		let update_from_node = param_exists(req, "refresh");
 		api.retrieve_outputs(false, update_from_node, None)
@@ -184,7 +197,7 @@ where
 	fn retrieve_summary_info(
 		&self,
 		req: &Request<Body>,
-		api: &mut APIOwner<T, C, K>,
+		mut api: APIOwner<T, C, K>,
 	) -> Result<(bool, WalletInfo), Error> {
 		let update_from_node = param_exists(req, "refresh");
 		api.retrieve_summary_info(update_from_node)
@@ -193,16 +206,13 @@ where
 	fn node_height(
 		&self,
 		_req: &Request<Body>,
-		api: &mut APIOwner<T, C, K>,
+		mut api: APIOwner<T, C, K>,
 	) -> Result<(u64, bool), Error> {
 		api.node_height()
 	}
 
-	fn handle_get_request(
-		&self,
-		req: &Request<Body>,
-		api: &mut APIOwner<T, C, K>,
-	) -> Result<Response<Body>, Error> {
+	fn handle_get_request(&self, req: &Request<Body>) -> Result<Response<Body>, Error> {
+		let api = APIOwner::new(self.wallet.clone());
 		Ok(match req.uri()
 			.path()
 			.trim_right_matches("/")
@@ -220,41 +230,52 @@ where
 	fn issue_send_tx(
 		&self,
 		req: Request<Body>,
-		api: &mut APIOwner<T, C, K>,
-	) -> Result<Slate, Error> {
-		let args: SendTXArgs = parse_body(req)?;
-		api.issue_send_tx(
-			args.amount,
-			args.minimum_confirmations,
-			&args.dest,
-			args.max_outputs,
-			args.selection_strategy_is_use_all,
-		)
+		mut api: APIOwner<T, C, K>,
+	) -> Box<Future<Item = Slate, Error = Error> + Send> {
+		Box::new(parse_body(req).and_then(move |args: SendTXArgs| {
+			api.issue_send_tx(
+				args.amount,
+				args.minimum_confirmations,
+				&args.dest,
+				args.max_outputs,
+				args.selection_strategy_is_use_all,
+			)
+		}))
 	}
 
-	fn issue_burn_tx(&self, _req: Request<Body>, api: &mut APIOwner<T, C, K>) -> Result<(), Error> {
-		// TODO: Args
-		api.issue_burn_tx(60, 10, 1000)
-	}
-
-	fn handle_post_request(
+	fn issue_burn_tx(
 		&self,
-		req: Request<Body>,
-		api: &mut APIOwner<T, C, K>,
-	) -> Result<Response<Body>, Error> {
-		Ok(match req.uri()
+		_req: Request<Body>,
+		mut api: APIOwner<T, C, K>,
+	) -> Box<Future<Item = (), Error = Error> + Send> {
+		// TODO: Args
+		Box::new(match api.issue_burn_tx(60, 10, 1000) {
+			Ok(_) => ok(()),
+			Err(e) => err(e),
+		})
+	}
+
+	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
+		let api = APIOwner::new(self.wallet.clone());
+		match req.uri()
 			.path()
 			.trim_right_matches("/")
 			.rsplit("/")
 			.next()
 			.unwrap()
 		{
-			"issue_send_tx" => json_response_pretty(&self.issue_send_tx(req, api)?),
-			"issue_burn_tx" => json_response_pretty(&self.issue_burn_tx(req, api)?),
-			_ => Err(ErrorKind::GenericError(
+			"issue_send_tx" => Box::new(
+				self.issue_send_tx(req, api)
+					.and_then(|slate| ok(json_response_pretty(&slate))),
+			),
+			"issue_burn_tx" => Box::new(
+				self.issue_burn_tx(req, api)
+					.and_then(|_| ok(response(StatusCode::OK, ""))),
+			),
+			_ => Box::new(err(ErrorKind::GenericError(
 				"Unknown error handling post request".to_owned(),
-			))?,
-		})
+			).into())),
+		}
 	}
 }
 
@@ -264,30 +285,29 @@ where
 	C: WalletClient + 'static,
 	K: Keychain + 'static,
 {
-	fn get(&self, req: Request<Body>) -> Response<Body> {
-		let mut api = APIOwner::new(self.wallet.clone());
-		match self.handle_get_request(&req, &mut api) {
-			Ok(r) => r,
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
+		match self.handle_get_request(&req) {
+			Ok(r) => Box::new(ok(r)),
 			Err(e) => {
 				error!(LOGGER, "Request Error: {:?}", e);
-				create_error_response(e)
+				Box::new(ok(create_error_response(e)))
 			}
 		}
 	}
 
-	fn post(&self, req: Request<Body>) -> Response<Body> {
-		let mut api = APIOwner::new(self.wallet.clone());
-		match self.handle_post_request(req, &mut api) {
-			Ok(r) => r,
-			Err(e) => {
-				error!(LOGGER, "Request Error: {:?}", e);
-				create_error_response(e)
-			}
-		}
+	fn post(&self, req: Request<Body>) -> ResponseFuture {
+		Box::new(
+			self.handle_post_request(req)
+				.and_then(|r| ok(r))
+				.or_else(|e| {
+					error!(LOGGER, "Request Error: {:?}", e);
+					ok(create_error_response(e))
+				}),
+		)
 	}
 
-	fn options(&self, _req: Request<Body>) -> Response<Body> {
-		create_ok_response("{}")
+	fn options(&self, _req: Request<Body>) -> ResponseFuture {
+		Box::new(ok(create_ok_response("{}")))
 	}
 }
 
@@ -295,9 +315,9 @@ where
 
 pub struct ForeignAPIHandler<T: ?Sized, C, K>
 where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
-	K: Keychain,
+	T: WalletBackend<C, K> + Send + Sync + 'static,
+	C: WalletClient + 'static,
+	K: Keychain + 'static,
 {
 	/// Wallet instance
 	pub wallet: Arc<Mutex<Box<T>>>,
@@ -307,9 +327,9 @@ where
 
 impl<T: ?Sized, C, K> ForeignAPIHandler<T, C, K>
 where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
-	K: Keychain,
+	T: WalletBackend<C, K> + Send + Sync + 'static,
+	C: WalletClient + 'static,
+	K: Keychain + 'static,
 {
 	/// create a new api handler
 	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> ForeignAPIHandler<T, C, K> {
@@ -323,38 +343,41 @@ where
 	fn build_coinbase(
 		&self,
 		req: Request<Body>,
-		api: &mut APIForeign<T, C, K>,
-	) -> Result<CbData, Error> {
-		let block_fees = parse_body(req)?;
-		api.build_coinbase(&block_fees)
+		mut api: APIForeign<T, C, K>,
+	) -> Box<Future<Item = CbData, Error = Error> + Send> {
+		Box::new(parse_body(req).and_then(move |block_fees| api.build_coinbase(&block_fees)))
 	}
 
 	fn receive_tx(
 		&self,
 		req: Request<Body>,
-		api: &mut APIForeign<T, C, K>,
-	) -> Result<Slate, Error> {
-		let mut slate = parse_body(req)?;
-		api.receive_tx(&mut slate)?;
-		Ok(slate.clone())
+		mut api: APIForeign<T, C, K>,
+	) -> Box<Future<Item = Slate, Error = Error> + Send> {
+		Box::new(parse_body(req).and_then(move |mut slate| {
+			api.receive_tx(&mut slate);
+			ok(slate.clone())
+		}))
 	}
 
-	fn handle_request(
-		&self,
-		req: Request<Body>,
-		api: &mut APIForeign<T, C, K>,
-	) -> Result<Response<Body>, Error> {
-		Ok(match req.uri()
+	fn handle_request(&self, req: Request<Body>) -> WalletResponseFuture {
+		let api = *APIForeign::new(self.wallet.clone());
+		match req.uri()
 			.path()
 			.trim_right_matches("/")
 			.rsplit("/")
 			.next()
 			.unwrap()
 		{
-			"build_coinbase" => json_response(&self.build_coinbase(req, api)?),
-			"receive_tx" => json_response(&self.receive_tx(req, api)?),
-			_ => response(StatusCode::BAD_REQUEST, "unknown action"),
-		})
+			"build_coinbase" => Box::new(
+				self.build_coinbase(req, api)
+					.and_then(|res| ok(json_response(&res))),
+			),
+			"receive_tx" => Box::new(
+				self.receive_tx(req, api)
+					.and_then(|res| ok(json_response(&res))),
+			),
+			_ => Box::new(ok(response(StatusCode::BAD_REQUEST, "unknown action"))),
+		}
 	}
 }
 impl<T: ?Sized, C, K> Handler for ForeignAPIHandler<T, C, K>
@@ -363,12 +386,11 @@ where
 	C: WalletClient + Send + Sync + 'static,
 	K: Keychain + 'static,
 {
-	fn post(&self, req: Request<Body>) -> Response<Body> {
-		let mut api = APIForeign::new(self.wallet.clone());
-		match self.handle_request(req, &mut *api) {
-			Ok(r) => r,
-			Err(e) => create_error_response(e),
-		}
+	fn post(&self, req: Request<Body>) -> ResponseFuture {
+		Box::new(self.handle_request(req).and_then(|r| ok(r)).or_else(|e| {
+			error!(LOGGER, "Request Error: {:?}", e);
+			ok(create_error_response(e))
+		}))
 	}
 }
 
@@ -436,16 +458,17 @@ fn param_exists(req: &Request<Body>, param: &str) -> bool {
 	false
 }
 
-fn parse_body<T>(req: Request<Body>) -> Result<T, Error>
+fn parse_body<T>(req: Request<Body>) -> Box<Future<Item = T, Error = Error> + Send>
 where
-	for<'de> T: Deserialize<'de>,
+	for<'de> T: Deserialize<'de> + Send + 'static,
 {
-	let mut event_loop = Core::new().unwrap();
-	let task = req.into_body().concat2();
-	let body = event_loop
-		.run(task)
-		.map_err(|_e| ErrorKind::GenericError("Failed to read request body".to_owned()))?;
-	let obj: T = serde_json::from_reader(&body.to_vec()[..])
-		.map_err(|_e| ErrorKind::GenericError("Invalid request body".to_owned()))?;
-	Ok(obj)
+	Box::new(
+		req.into_body()
+			.concat2()
+			.map_err(|_e| ErrorKind::GenericError("Failed to read request".to_owned()).into())
+			.and_then(|body| match serde_json::from_reader(&body.to_vec()[..]) {
+				Ok(obj) => ok(obj),
+				Err(e) => err(ErrorKind::GenericError("Invalid request body".to_owned()).into()),
+			}),
+	)
 }

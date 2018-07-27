@@ -28,6 +28,7 @@ use futures::future::{err, ok, Either};
 use tokio_core::reactor::Core;
 
 use rest::{Error, ErrorKind};
+use util::LOGGER;
 
 /// Helper function to easily issue a HTTP GET request against a given URL that
 /// returns a JSON object. Handles request building, JSON deserialization and
@@ -36,7 +37,7 @@ pub fn get<'a, T>(url: &'a str) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de>,
 {
-	println!("GET {}", url);
+	debug!(LOGGER, "HTTP client: GET {}", url);
 	let uri = url.parse::<Uri>().map_err::<Error, _>(|e: InvalidUri| {
 		e.context(ErrorKind::Argument(format!("Invalid url {}", url)))
 			.into()
@@ -82,7 +83,7 @@ fn create_post_request<IN>(url: &str, input: &IN) -> Result<Request<Body>, Error
 where
 	IN: Serialize,
 {
-	println!("POST {}", url);
+	debug!(LOGGER, "HTTP client: POST {}", url);
 	let json = serde_json::to_string(input).context(ErrorKind::Internal(
 		"Could not serialize data to JSON".to_owned(),
 	))?;
@@ -108,7 +109,7 @@ where
 {
 	let data = send_request(req)?;
 	serde_json::from_str(&data).map_err(|e| {
-		println!("failed to parse json: {:?}", e);
+		error!(LOGGER, "HTTP client: failed to parse json: {:?}", e);
 		e.context(ErrorKind::ResponseError("Cannot parse response".to_owned()))
 			.into()
 	})
@@ -123,7 +124,6 @@ fn send_request(req: Request<Body>) -> Result<String, Error> {
 		.map_err(|_e| ErrorKind::RequestError("Cannot make request".to_owned()))
 		.and_then(|resp| {
 			if !resp.status().is_success() {
-				println!("Response code {}", resp.status());
 				Either::A(err(ErrorKind::RequestError(
 					"Wrong response code".to_owned(),
 				)))
