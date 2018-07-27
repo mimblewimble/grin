@@ -719,33 +719,37 @@ where
 
 		let fluff = params.get("fluff").is_some();
 
-		Box::new(parse_body(req).and_then(move |wrapper: TxWrapper| {
-			let tx_bin = match util::from_hex(wrapper.tx_hex) {
-				Ok(w) => w,
-				Err(_) => return err(ErrorKind::RequestError("Bad request".to_owned()).into()),
-			};
-			let tx: Transaction = match ser::deserialize(&mut &tx_bin[..]) {
-				Ok(tx) => tx,
-				Err(_) => return err(ErrorKind::RequestError("Bad request".to_owned()).into()),
-			};
-			let source = pool::TxSource {
-				debug_name: "push-api".to_string(),
-				identifier: "?.?.?.?".to_string(),
-			};
-			info!(
-				LOGGER,
-				"Pushing transaction with {} inputs and {} outputs to pool.",
-				tx.inputs.len(),
-				tx.outputs.len()
-			);
+		Box::new(
+			parse_body(req)
+				.and_then(move |wrapper: TxWrapper| {
+					util::from_hex(wrapper.tx_hex)
+						.map_err(|_| ErrorKind::RequestError("Bad request".to_owned()).into())
+				})
+				.and_then(move |tx_bin| {
+					ser::deserialize(&mut &tx_bin[..])
+						.map_err(|_| ErrorKind::RequestError("Bad request".to_owned()).into())
+				})
+				.and_then(move |tx: Transaction| {
+					let source = pool::TxSource {
+						debug_name: "push-api".to_string(),
+						identifier: "?.?.?.?".to_string(),
+					};
+					info!(
+						LOGGER,
+						"Pushing transaction with {} inputs and {} outputs to pool.",
+						tx.inputs.len(),
+						tx.outputs.len()
+					);
 
-			//  Push to tx pool.
-			let pool_arc = w(&self.tx_pool);
-			match pool_arc.write().unwrap().add_to_pool(source, tx, !fluff) {
-				Ok(_) => ok(()),
-				Err(_) => err(ErrorKind::RequestError("Bad request".to_owned()).into()),
-			}
-		}))
+					//  Push to tx pool.
+					let pool_arc = w(&self.tx_pool);
+					pool_arc
+						.write()
+						.unwrap()
+						.add_to_pool(source, tx, !fluff)
+						.map_err(|e| ErrorKind::RequestError("Bad request".to_owned()).into())
+				}),
+		)
 	}
 }
 

@@ -232,7 +232,7 @@ where
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
-		Box::new(parse_body(req).and_then(move |args: SendTXArgs| {
+		Box::new(move parse_body(req).and_then(move |args: SendTXArgs| {
 			api.issue_send_tx(
 				args.amount,
 				args.minimum_confirmations,
@@ -249,10 +249,11 @@ where
 		mut api: APIOwner<T, C, K>,
 	) -> Box<Future<Item = (), Error = Error> + Send> {
 		// TODO: Args
-		Box::new(match api.issue_burn_tx(60, 10, 1000) {
-			Ok(_) => ok(()),
-			Err(e) => err(e),
-		})
+		Box::new(api.issue_burn_tx(60, 10, 1000) )
+		//Box::new(match api.issue_burn_tx(60, 10, 1000) {
+		//	Ok(_) => ok(()),
+		//	Err(e) => err(e),
+		//})
 	}
 
 	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
