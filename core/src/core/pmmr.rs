@@ -601,78 +601,43 @@ pub fn insertion_to_pmmr_index(mut sz: u64) -> u64 {
 	2 * sz - sz.count_ones() as u64 + 1
 }
 
+
+/// number of nodes in a mountain with given 0-based peak index
+pub fn peak_size(pidx: u64) -> u64 {
+	(2 << pidx) - 1
+}
+
+/// return (peak_map, peak_map_size, pos_height) of given 0-based node pos prior to its addition
+/// Example: on input 4 returns (0b11, 2, 0) as mmr state before adding 4 was
+///    2
+///   / \
+///  0   1  3
+/// with 0b11 indicating presence of peaks of index 0 and 1.
+pub fn peak_map_size_height(mut pos: u64) -> (u64, u64, u64) {
+        let mut peak_size = 1;
+        let mut map_size  = 0;
+	while peak_size <= pos {
+		peak_size = peak_size << 1 | 1;
+                map_size += 1;
+	}
+	let mut bitmap = 0;
+	while peak_size != 0 {
+                bitmap = bitmap << 1;
+		if pos >= peak_size {
+			pos -= peak_size;
+			bitmap |= 1;
+		}
+		peak_size >>= 1;
+	}
+        (bitmap, map_size, pos)
+}
+
 /// The height of a node in a full binary tree from its postorder traversal
 /// index. This function is the base on which all others, as well as the MMR,
 /// are built.
-///
-/// We first start by noticing that the insertion order of a node in a MMR [1]
-/// is identical to the height of a node in a binary tree traversed in
-/// postorder. Specifically, we want to be able to generate the following
-/// sequence:
-///
-/// //    [0, 0, 1, 0, 0, 1, 2, 0, 0, 1, 0, 0, 1, 2, 3, 0, 0, 1, ...]
-///
-/// Which turns out to start as the heights in the (left, right, top)
-/// -postorder- traversal of the following tree:
-///
-/// //               3
-/// //             /   \
-/// //           /       \
-/// //         /           \
-/// //        2             2
-/// //      /  \          /  \
-/// //     /    \        /    \
-/// //    1      1      1      1
-/// //   / \    / \    / \    / \
-/// //  0   0  0   0  0   0  0   0
-///
-/// If we extend this tree up to a height of 4, we can continue the sequence,
-/// and for an infinitely high tree, we get the infinite sequence of heights
-/// in the MMR.
-///
-/// So to generate the MMR height sequence, we want a function that, given an
-/// index in that sequence, gets us the height in the tree. This allows us to
-/// build the sequence not only to infinite, but also at any index, without the
-/// need to materialize the beginning of the sequence.
-///
-/// To see how to get the height of a node at any position in the postorder
-/// traversal sequence of heights, we start by rewriting the previous tree with
-/// each the position of every node written in binary:
-///
-///
-/// //                  1111
-/// //                 /   \
-/// //               /       \
-/// //             /           \
-/// //           /               \
-/// //        111                1110
-/// //       /   \              /    \
-/// //      /     \            /      \
-/// //     11      110        1010     1101
-/// //    / \      / \       /  \      / \
-/// //   1   10  100  101  1000 1001 1011 1100
-///
-/// The height of a node is the number of 1 digits on the leftmost branch of
-/// the tree, minus 1. For example, 1111 has 4 ones, so its height is `4-1=3`.
-///
-/// To get the height of any node (say 1101), we need to travel left in the
-/// tree, get the leftmost node and count the ones. To travel left, we just
-/// need to subtract the position by it's most significant bit, mins one. For
-/// example to get from 1101 to 110 we subtract it by (1000-1) (`13-(8-1)=5`).
-/// Then to to get 110 to 11, we subtract it by (100-1) ('6-(4-1)=3`).
-///
-/// By applying this operation recursively, until we get a number that, in
-/// binary, is all ones, and then counting the ones, we can get the height of
-/// any node, from its postorder traversal position. Which is the order in which
-/// nodes are added in a MMR.
-///
-/// [1]  https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md
+
 pub fn bintree_postorder_height(num: u64) -> u64 {
-	let mut h = num;
-	while !all_ones(h) {
-		h = bintree_jump_left(h);
-	}
-	most_significant_pos(h) - 1
+	peak_map_size_height(num - 1).2
 }
 
 /// Is this position a leaf in the MMR?
@@ -686,6 +651,8 @@ pub fn is_leaf(pos: u64) -> bool {
 /// Calculates the positions of the parent and sibling of the node at the
 /// provided position.
 pub fn family(pos: u64) -> (u64, u64) {
+	let (peak_map, map_size, height) = peak_map_size_height(pos - 1);
+
 	let pos_height = bintree_postorder_height(pos);
 	let next_height = bintree_postorder_height(pos + 1);
 	if next_height > pos_height {
@@ -719,18 +686,6 @@ pub fn path(pos: u64, last_pos: u64) -> Vec<u64> {
 	}
 	path
 }
-
-// TODO - this is simpler, test it is actually correct?
-// pub fn path(pos: u64, last_pos: u64) -> Vec<u64> {
-// 	let mut path = vec![];
-// 	let mut current = pos;
-// 	while current <= last_pos {
-// 		path.push(current);
-// 		let (parent, _) = family(current);
-// 		current = parent;
-// 	}
-// 	path
-// }
 
 /// For a given starting position calculate the parent and sibling positions
 /// for the branch/path from that position to the peak of the tree.

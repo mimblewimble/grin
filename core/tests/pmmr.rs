@@ -35,6 +35,18 @@ fn some_all_ones() {
 }
 
 #[test]
+fn some_peak_mpa() {
+	assert_eq!(pmmr::peak_map_size_height(0), (  0b0, 0, 0));
+	assert_eq!(pmmr::peak_map_size_height(1), (  0b1, 1, 0));
+	assert_eq!(pmmr::peak_map_size_height(2), (  0b1, 1, 1));
+	assert_eq!(pmmr::peak_map_size_height(3), ( 0b10, 2, 0));
+	assert_eq!(pmmr::peak_map_size_height(4), ( 0b11, 2, 0));
+	assert_eq!(pmmr::peak_map_size_height(5), ( 0b11, 2, 1));
+	assert_eq!(pmmr::peak_map_size_height(6), ( 0b11, 2, 2));
+	assert_eq!(pmmr::peak_map_size_height(7), (0b100, 3, 0));
+}
+
+#[test]
 fn some_most_signif() {
 	assert_eq!(pmmr::most_significant_pos(0), 0);
 	assert_eq!(pmmr::most_significant_pos(1), 1);
