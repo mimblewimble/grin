@@ -19,8 +19,8 @@
 - [transaction UML](transaction/aggregating transaction without lock_height) - UML of an interactive transaction
 
 ## Build and use
-- [build](build.md) - Explaining how to build and run the Grin binaries
-- [usage](usage.md) - Explaining how to use grin in Testnet1
+- [build](build.md) - Explains how to build and run the Grin binaries
+- [gcloud instance](build-gcloud.md) - Explains how to set up a Grin node running on a Google Cloud instance 24/7 at no cost.
 - [local_net](local_net.md) - Technical explanation of how to test Grin locally, simulating several peers, for full integration testing and network simulations
 - [wallet](wallet.md) - Explains the wallet design and `grin wallet` sub-commands
 
