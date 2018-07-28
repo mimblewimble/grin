@@ -57,6 +57,18 @@ Replaced by `listen` (see above). The `receive` command might later be recycled 
 
 (tbd)
 
+### grin wallet txs
+
+`grin wallet txs` displays a log of all transactions to the wallet including:
+- tx id
+- time stamps
+- debit/credit amounts
+- number of outputs
+- confirmed status
+and more.
+
+More info about a particular transaction can be revealed by `grin wallet txs -i n` where `n` is an integer corresponding to the tx id.
+
 ### grin wallet burn
 
 *TESTING ONLY*: Burns the provided amount to a known key. Similar to send but burns an output to allow single-party
