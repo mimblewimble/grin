@@ -327,7 +327,7 @@ fn main() {
 			file_path.to_str().unwrap()
 		);
 	} else {
-		info!(LOGGER, "configuration file not found");
+		info!(LOGGER, "configuration file not found, using default");
 	}
 
 	// initialize the logger
