@@ -7,10 +7,10 @@ Thanks to Google Cloud's [Always Free](https://cloud.google.com/free/docs/freque
 
 The only requirement is that you are willing to sign up for a Google Cloud account and that you have a valid credit or debit card (which will not be charged).
 
-**NOTE: This is for testing purposes only. The node is free to run, but if you make mistakes in the configuration you may incur charges to your card. Make sure you monitor your account and billing status regularly whilst running your instance to avoid any unpleasant surprises.**
+**NOTE: This is for testing purposes only. The node is free to run, but if you make mistakes in the configuration you may incur charges. Make sure you monitor your account and billing status regularly whilst running your instance to avoid any unpleasant surprises.**
 
 ## Google Cloud Set up
-1. Visit http://cloud.google.com and set up an account as an individual. This will require a debit or credit card, they do a reserve $1 on your card to ensure it's valid. As part of signing up you also get $300 in free trial credit to spend within 12 months.
+1. Visit http://cloud.google.com and set up an account as an individual. This will require a debit or credit card, they do a $1 reserve charge on your card to ensure it's valid. As part of signing up you also get $300 in free trial credit to spend within 12 months.
 2. In order to qualify for [Always Free](https://cloud.google.com/free/docs/frequently-asked-questions#always-free) you need to have an upgraded account. So ensure you [upgrade](https://cloud.google.com/free/docs/frequently-asked-questions#what-is-upgrade). Note that this means that you will start to be charged automatically if your spend beyond the $300 in free trial credit. As you will not exceed the [Always Free limits](https://cloud.google.com/free/docs/always-free-usage-limits) here, this point is moot, but keep it in mind for any other projects you use this account for.
 3. Launch a [Cloud Shell](https://cloud.google.com/shell/) console from your browser, or install the [Google Cloud SDK](https://cloud.google.com/sdk/) to run Cloud Shell from your local terminal.
 
@@ -62,7 +62,7 @@ Building takes ~60 minutes on the `grin-node1` instance. Slow, but it's free. Go
 
 ## Syncing the Grin node
 
-When the build has completed, move `grin.toml` to the release directory, and launch the grin node:
+When the build has completed, move `grin.toml` to the release directory, and launch the Grin node:
 ```
 mv grin.toml target/release
 cd target/release
@@ -88,7 +88,7 @@ cd grin/target/release
 nano grin.toml
 ```
 
-Esit, save, and exit `grin.toml`, and then launch your grin node again:
+Edit, save, and exit `grin.toml`, and then launch your grin node again:
 ```
 RUST_BACKTRACE=1 ./grin
 ```
@@ -97,7 +97,7 @@ You're now ready to receive grins. Try asking the GrinGod faucet for some. In a 
 ```
 curl gringod.info
 ```
-To check on your wallet, run:
+To check on the balance of your wallet, run:
 ```
 RUST_BACKTRACE=1 ./grin wallet info
 ```
@@ -106,8 +106,10 @@ And to view the transaction log:
 RUST_BACKTRACE=1 ./grin wallet txs
 ```
 Now you can receive grins from any other wallet on the network, simply give them your `http://EXTERNAL_IP:13415` where EXTERNAL_IP is the external IP assigned to your instance by Google, which you obtained at the beginning of this section.
-Note: Your external IP is [ephemeral](https://cloud.google.com/compute/docs/ip-addresses/#ephemeraladdress) by default, so the moment you shut down or delete your instance, it will be released and you may not get the same assigned to you the next time you take an instance live. You can optionally choose to [assign a static IP](https://cloud.google.com/compute/docs/ip-addresses/reserve-static-external-ip-address) if you want to avoid, but that's beyond the scope of this document.
+
+_Note: Your external IP is [ephemeral](https://cloud.google.com/compute/docs/ip-addresses/#ephemeraladdress) by default, so the moment you shut down or delete your instance, it will be released and you may not get the same assigned to you the next time you take an instance live. You can optionally choose to [assign a static IP](https://cloud.google.com/compute/docs/ip-addresses/reserve-static-external-ip-address) if you want to avoid, but that's beyond the scope of this document._
 
 ## Future sections:
+* Updating your node
 * Mining from your local set up to your Google Cloud node wallet
 * Connecting to [Grin-Pool](https://github.com/grin-pool/grin-pool)
