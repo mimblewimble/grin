@@ -85,9 +85,7 @@ impl From<Context<ErrorKind>> for Error {
 }
 
 /// HTTP server allowing the registration of ApiEndpoint implementations.
-pub struct ApiServer {
-	//rt: Option<Runtime>,
-}
+pub struct ApiServer {}
 
 impl ApiServer {
 	/// Creates a new ApiServer that will serve ApiEndpoint implementations
@@ -106,16 +104,16 @@ impl ApiServer {
 			.map_err(|e| eprintln!("server error: {}", e));
 
 		let mut rt = Runtime::new().unwrap();
-		//if let Some(ref mut rt) = self.rt {
 		if rt.block_on(server).is_err() {
 			return Err("tokio block_on error".to_owned());
 		}
-		//	}
 		Ok(())
 	}
 
 	/// Stops the API server
 	pub fn stop(&mut self) {
+		// TODO implement proper stop, the following method doesn't
+		// work for current_thread runtime.
 		//	if let Some(rt) = self.rt.take() {
 		//		rt.shutdown_now().wait().unwrap();
 		//	}

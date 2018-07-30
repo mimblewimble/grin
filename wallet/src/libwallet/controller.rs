@@ -23,8 +23,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 
 use futures::future::{err, ok};
-use futures::Future;
-use futures::Stream;
+use futures::{Future, Stream};
 use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -81,7 +80,7 @@ where
 	let mut orouter = Router::new();
 	orouter
 		.add_route("/v1/wallet/owner/**", Box::new(api_handler))
-		.map_err(|_e| ErrorKind::GenericError("Router failed to add route".to_string()))?;
+		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 
 	OWNER_ROUTER.with(move |router| {
 		*router.borrow_mut() = Some(orouter);
@@ -123,7 +122,7 @@ where
 	let mut router = Router::new();
 	router
 		.add_route("/v1/wallet/foreign/**", Box::new(api_handler))
-		.map_err(|_e| ErrorKind::GenericError("Router failed to add route".to_string()))?;
+		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 
 	FOREIGN_ROUTER.with(move |frouter| {
 		*frouter.borrow_mut() = Some(router);
@@ -464,7 +463,7 @@ where
 	Box::new(
 		req.into_body()
 			.concat2()
-			.map_err(|_e| ErrorKind::GenericError("Failed to read request".to_owned()).into())
+			.map_err(|_| ErrorKind::GenericError("Failed to read request".to_owned()).into())
 			.and_then(|body| match serde_json::from_reader(&body.to_vec()[..]) {
 				Ok(obj) => ok(obj),
 				Err(_) => err(ErrorKind::GenericError("Invalid request body".to_owned()).into()),

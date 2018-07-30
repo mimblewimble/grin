@@ -221,6 +221,8 @@ fn generate_path(route: &str) -> Vec<u64> {
 mod tests {
 
 	use super::*;
+	use tokio::prelude::future::ok;
+	use tokio_core::reactor::Core;
 
 	struct HandlerImpl(u16);
 

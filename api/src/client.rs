@@ -15,9 +15,7 @@
 //! High level JSON/HTTP client API
 
 use failure::{Fail, ResultExt};
-//use http::uri::InvalidUri;
 use http::uri::{InvalidUri, Uri};
-use hyper;
 use hyper::header::{ACCEPT, USER_AGENT};
 use hyper::rt::{Future, Stream};
 use hyper::{Body, Client, Request};
@@ -28,7 +26,6 @@ use futures::future::{err, ok, Either};
 use tokio_core::reactor::Core;
 
 use rest::{Error, ErrorKind};
-use util::LOGGER;
 
 /// Helper function to easily issue a HTTP GET request against a given URL that
 /// returns a JSON object. Handles request building, JSON deserialization and
@@ -37,7 +34,6 @@ pub fn get<'a, T>(url: &'a str) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de>,
 {
-	debug!(LOGGER, "HTTP client: GET {}", url);
 	let uri = url.parse::<Uri>().map_err::<Error, _>(|e: InvalidUri| {
 		e.context(ErrorKind::Argument(format!("Invalid url {}", url)))
 			.into()
@@ -47,7 +43,7 @@ where
 		.uri(uri)
 		.header(USER_AGENT, "grin-client")
 		.header(ACCEPT, "application/json")
-		.body(hyper::Body::empty())
+		.body(Body::empty())
 		.map_err(|_e| ErrorKind::RequestError("Bad request".to_owned()))?;
 
 	handle_request(req)
@@ -83,7 +79,6 @@ fn create_post_request<IN>(url: &str, input: &IN) -> Result<Request<Body>, Error
 where
 	IN: Serialize,
 {
-	debug!(LOGGER, "HTTP client: POST {}", url);
 	let json = serde_json::to_string(input).context(ErrorKind::Internal(
 		"Could not serialize data to JSON".to_owned(),
 	))?;
@@ -109,7 +104,6 @@ where
 {
 	let data = send_request(req)?;
 	serde_json::from_str(&data).map_err(|e| {
-		error!(LOGGER, "HTTP client: failed to parse json: {:?}", e);
 		e.context(ErrorKind::ResponseError("Cannot parse response".to_owned()))
 			.into()
 	})

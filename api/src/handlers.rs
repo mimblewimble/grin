@@ -21,8 +21,7 @@ use std::thread;
 
 use failure::ResultExt;
 use futures::future::{err, ok};
-use futures::Future;
-use futures::Stream;
+use futures::{Future, Stream};
 use hyper::{Body, Request, Response, StatusCode};
 use rest::{Error, ErrorKind};
 use serde::{Deserialize, Serialize};
@@ -873,7 +872,6 @@ where
 		"get chain/compact".to_string(),
 		"get chain/validate".to_string(),
 		"get chain/outputs".to_string(),
-		"post chain/height-index".to_string(),
 		"get status".to_string(),
 		"get txhashset/roots".to_string(),
 		"get txhashset/lastoutputs?n=10".to_string(),
