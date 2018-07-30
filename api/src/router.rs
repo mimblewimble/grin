@@ -1,12 +1,10 @@
 use futures::future;
-use futures::future::{err, ok, Either};
 use hyper;
-use hyper::rt::{Future, Stream};
+use hyper::rt::Future;
 use hyper::{Body, Method, Request, Response, StatusCode};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use tokio_core::reactor::Core;
 use util::LOGGER;
 
 lazy_static! {

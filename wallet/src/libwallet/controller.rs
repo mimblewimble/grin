@@ -21,7 +21,6 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
-use tokio::runtime::current_thread::Runtime;
 
 use futures::future::{err, ok};
 use futures::Future;
@@ -29,8 +28,6 @@ use futures::Stream;
 use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json;
-use tokio::prelude::future::FutureResult;
-use tokio_core::reactor::Core;
 
 use keychain::Keychain;
 use libtx::slate::Slate;
@@ -232,7 +229,7 @@ where
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
-		Box::new(move parse_body(req).and_then(move |args: SendTXArgs| {
+		Box::new(parse_body(req).and_then(move |args: SendTXArgs| {
 			api.issue_send_tx(
 				args.amount,
 				args.minimum_confirmations,
@@ -249,11 +246,10 @@ where
 		mut api: APIOwner<T, C, K>,
 	) -> Box<Future<Item = (), Error = Error> + Send> {
 		// TODO: Args
-		Box::new(api.issue_burn_tx(60, 10, 1000) )
-		//Box::new(match api.issue_burn_tx(60, 10, 1000) {
-		//	Ok(_) => ok(()),
-		//	Err(e) => err(e),
-		//})
+		Box::new(match api.issue_burn_tx(60, 10, 1000) {
+			Ok(_) => ok(()),
+			Err(e) => err(e),
+		})
 	}
 
 	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
@@ -354,10 +350,12 @@ where
 		req: Request<Body>,
 		mut api: APIForeign<T, C, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
-		Box::new(parse_body(req).and_then(move |mut slate| {
-			api.receive_tx(&mut slate);
-			ok(slate.clone())
-		}))
+		Box::new(
+			parse_body(req).and_then(move |mut slate| match api.receive_tx(&mut slate) {
+				Ok(_) => ok(slate.clone()),
+				Err(e) => err(e),
+			}),
+		)
 	}
 
 	fn handle_request(&self, req: Request<Body>) -> WalletResponseFuture {
@@ -469,7 +467,7 @@ where
 			.map_err(|_e| ErrorKind::GenericError("Failed to read request".to_owned()).into())
 			.and_then(|body| match serde_json::from_reader(&body.to_vec()[..]) {
 				Ok(obj) => ok(obj),
-				Err(e) => err(ErrorKind::GenericError("Invalid request body".to_owned()).into()),
+				Err(_) => err(ErrorKind::GenericError("Invalid request body".to_owned()).into()),
 			}),
 	)
 }

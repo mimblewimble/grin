@@ -20,15 +20,13 @@
 
 use hyper::rt::Future;
 use hyper::service::service_fn;
-use hyper::{Body, Request, Response, Server};
+use hyper::{Body, Request, Server};
+use router::ResponseFuture;
 use std::fmt::{self, Display};
 use std::net::SocketAddr;
-//use tokio::runtime::Runtime;
-use router::ResponseFuture;
 use tokio::runtime::current_thread::Runtime;
 
 use failure::{Backtrace, Context, Fail};
-use util::LOGGER;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
 #[derive(Debug)]

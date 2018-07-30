@@ -27,7 +27,6 @@ use hyper::{Body, Request, Response, StatusCode};
 use rest::{Error, ErrorKind};
 use serde::{Deserialize, Serialize};
 use serde_json;
-use tokio_core::reactor::Core;
 
 use chain;
 use core::core::hash::{Hash, Hashed};
@@ -704,7 +703,7 @@ struct PoolPushHandler<T> {
 
 impl<T> PoolPushHandler<T>
 where
-	T: pool::BlockChain + Send + Sync,
+	T: pool::BlockChain + Send + Sync + 'static,
 {
 	fn update_pool(&self, req: Request<Body>) -> Box<Future<Item = (), Error = Error> + Send> {
 		let params = match req.uri().query() {
@@ -718,6 +717,7 @@ where
 		};
 
 		let fluff = params.get("fluff").is_some();
+		let pool_arc = w(&self.tx_pool).clone();
 
 		Box::new(
 			parse_body(req)
@@ -742,12 +742,10 @@ where
 					);
 
 					//  Push to tx pool.
-					let pool_arc = w(&self.tx_pool);
-					pool_arc
-						.write()
-						.unwrap()
+					let mut tx_pool = pool_arc.write().unwrap();
+					tx_pool
 						.add_to_pool(source, tx, !fluff)
-						.map_err(|e| ErrorKind::RequestError("Bad request".to_owned()).into())
+						.map_err(|_| ErrorKind::RequestError("Bad request".to_owned()).into())
 				}),
 		)
 	}
@@ -755,7 +753,7 @@ where
 
 impl<T> Handler for PoolPushHandler<T>
 where
-	T: pool::BlockChain + Send + Sync,
+	T: pool::BlockChain + Send + Sync + 'static,
 {
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		Box::new(
@@ -856,7 +854,7 @@ where
 			.map_err(|_e| ErrorKind::RequestError("Failed to read request".to_owned()).into())
 			.and_then(|body| match serde_json::from_reader(&body.to_vec()[..]) {
 				Ok(obj) => ok(obj),
-				Err(e) => err(ErrorKind::RequestError("Invalid request body".to_owned()).into()),
+				Err(_) => err(ErrorKind::RequestError("Invalid request body".to_owned()).into()),
 			}),
 	)
 }
