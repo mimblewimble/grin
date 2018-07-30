@@ -11,7 +11,7 @@ byteorder = "1"
 lmdb-zero = "0.4.4"
 failure = "0.1"
 failure_derive = "0.1"
-croaring = { git = "https://github.com/fastgrin/croaring-rs.git", tag = "0.3.5-grin" }
+croaring = { git = "https://github.com/fastgrin/croaring-rs.git", tag = "0.3.5-grin-integration-0730-2" }
 slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
 serde = "1"
 serde_derive = "1"
