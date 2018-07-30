@@ -32,9 +32,8 @@ If you decide to use a persistent storage (e.g. ```-v grin:/usr/src/grin```) you
 
 - rust 1.26+ (use [rustup]((https://www.rustup.rs/))- i.e. `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
   - if rust is already installed, you can simply update version with `rustup update`
-- rocksdb + libs for compiling rocksdb:
-  - clang (clanglib or clang-devel or libclang-dev)
-  - llvm (Fedora llvm-devel, Debian llvm-dev)
+- clang (clanglib or clang-devel or libclang-dev)
+- cmake
 - ncurses and libs (ncurses, ncursesw5)
 - zlib libs (zlib1g-dev or zlib-devel)
 - linux-headers (reported needed on Alpine linux)
@@ -57,6 +56,10 @@ Rust (cargo) can build grin for many platforms, so in theory running `grin`
 as a validating node on your low powered device might be possible.
 To cross-compile `grin` on a x86 Linux platform and produce ARM binaries,
 say, for a Raspberry Pi.
+
+### Run a node on Google Cloud for free
+
+It's possible to set up a VPS instance on Google Cloud that runs a Grin node for free 24/7. See [instructions](build-gcloud.md).
 
 ### Build errors
 
