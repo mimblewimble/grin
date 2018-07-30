@@ -253,16 +253,16 @@ dependencies = [
 [[package]]
 name = "croaring"
 version = "0.3.5"
-source = "git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin#2141c49f690c6db1c7c3701d9ce7bc2070a46ae8"
+source = "git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin-integration-0730-2#c35401e3a1a96420c4a32c0d761b1a7c52173ef3"
 dependencies = [
- "croaring-sys 0.3.5 (git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin)",
+ "croaring-sys 0.3.5 (git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin-integration-0730-2)",
  "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "croaring-sys"
 version = "0.3.5"
-source = "git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin#2141c49f690c6db1c7c3701d9ce7bc2070a46ae8"
+source = "git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin-integration-0730-2#c35401e3a1a96420c4a32c0d761b1a7c52173ef3"
 dependencies = [
  "gcc 0.3.54 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -550,7 +550,7 @@ version = "0.3.0"
 dependencies = [
  "bitflags 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "croaring 0.3.5 (git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin)",
+ "croaring 0.3.5 (git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin-integration-0730-2)",
  "env_logger 0.5.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -588,7 +588,7 @@ dependencies = [
  "bitflags 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "croaring 0.3.5 (git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin)",
+ "croaring 0.3.5 (git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin-integration-0730-2)",
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "grin_keychain 0.3.0",
@@ -692,7 +692,7 @@ name = "grin_store"
 version = "0.3.0"
 dependencies = [
  "byteorder 1.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "croaring 0.3.5 (git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin)",
+ "croaring 0.3.5 (git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin-integration-0730-2)",
  "env_logger 0.5.10 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2202,8 +2202,8 @@ dependencies = [
 "checksum conduit-mime-types 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)" = "95ca30253581af809925ef68c2641cc140d6183f43e12e0af4992d53768bd7b8"
 "checksum constant_time_eq 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)" = "8ff012e225ce166d4422e0e78419d901719760f62ae2b7969ca6b564d1b54a9e"
 "checksum crc 1.8.1 (registry+https://github.com/rust-lang/crates.io-index)" = "d663548de7f5cca343f1e0a48d14dcfb0e9eb4e079ec58883b7251539fa10aeb"
-"checksum croaring 0.3.5 (git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin)" = "<none>"
-"checksum croaring-sys 0.3.5 (git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin)" = "<none>"
+"checksum croaring 0.3.5 (git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin-integration-0730-2)" = "<none>"
+"checksum croaring-sys 0.3.5 (git+https://github.com/fastgrin/croaring-rs.git?tag=0.3.5-grin-integration-0730-2)" = "<none>"
 "checksum crossbeam-deque 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "fe8153ef04a7594ded05b427ffad46ddeaf22e63fd48d42b3e1e3bb4db07cae7"
 "checksum crossbeam-epoch 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2af0e75710d6181e234c8ecc79f14a97907850a541b13b0be1dd10992f2e4620"
 "checksum crossbeam-utils 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "d636a8b3bcc1b409d7ffd3facef8f21dcb4009626adbd0c5e6c4305c07253c7b"
