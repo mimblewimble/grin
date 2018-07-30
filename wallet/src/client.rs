@@ -98,7 +98,7 @@ impl WalletClient for HTTPWalletClient {
 		} else {
 			url = format!("{}/v1/pool/push", dest);
 		}
-		api::client::post(url.as_str(), tx).context(libwallet::ErrorKind::ClientCallback(
+		api::client::post_no_ret(url.as_str(), tx).context(libwallet::ErrorKind::ClientCallback(
 			"Posting transaction to node",
 		))?;
 		Ok(())
