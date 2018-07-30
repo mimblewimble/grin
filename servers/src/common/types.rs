@@ -126,7 +126,7 @@ impl Default for Seeding {
 
 /// Full server configuration, aggregating configurations required for the
 /// different components.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ServerConfig {
 	/// Directory under which the rocksdb stores will be created
 	pub db_root: String,
@@ -200,7 +200,7 @@ impl Default for ServerConfig {
 	fn default() -> ServerConfig {
 		ServerConfig {
 			db_root: ".grin".to_string(),
-			api_http_addr: "0.0.0.0:13413".to_string(),
+			api_http_addr: "127.0.0.1:13413".to_string(),
 			capabilities: p2p::Capabilities::FULL_NODE,
 			seeding_type: Seeding::default(),
 			seeds: None,
@@ -211,11 +211,11 @@ impl Default for ServerConfig {
 			archive_mode: None,
 			chain_validation_mode: ChainValidationMode::default(),
 			pool_config: pool::PoolConfig::default(),
-			skip_sync_wait: None,
-			run_tui: None,
-			run_wallet_listener: Some(false),
-			run_wallet_owner_api: Some(false),
-			use_db_wallet: Some(false),
+			skip_sync_wait: Some(false),
+			run_tui: Some(true),
+			run_wallet_listener: Some(true),
+			run_wallet_owner_api: Some(true),
+			use_db_wallet: None,
 			run_test_miner: Some(false),
 			test_miner_wallet_url: None,
 		}
@@ -223,7 +223,7 @@ impl Default for ServerConfig {
 }
 
 /// Stratum (Mining server) configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StratumServerConfig {
 	/// Run a stratum mining server (the only way to communicate to mine this
 	/// node via grin-miner
@@ -250,12 +250,12 @@ pub struct StratumServerConfig {
 impl Default for StratumServerConfig {
 	fn default() -> StratumServerConfig {
 		StratumServerConfig {
-			wallet_listener_url: "http://localhost:13415".to_string(),
+			wallet_listener_url: "http://127.0.0.1:13415".to_string(),
 			burn_reward: false,
-			attempt_time_per_block: <u32>::max_value(),
+			attempt_time_per_block: 15,
 			minimum_share_difficulty: 1,
-			enable_stratum_server: None,
-			stratum_server_addr: None,
+			enable_stratum_server: Some(true),
+			stratum_server_addr: Some("127.0.0.1:13416".to_string()),
 		}
 	}
 }

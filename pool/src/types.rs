@@ -35,7 +35,7 @@ const DANDELION_STEM_PROBABILITY: usize = 90;
 
 /// Configuration for "Dandelion".
 /// Note: shared between p2p and pool.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DandelionConfig {
 	/// Choose new Dandelion relay peer every n secs.
 	#[serde = "default_dandelion_relay_secs"]
@@ -81,7 +81,7 @@ fn default_dandelion_stem_probability() -> Option<usize> {
 }
 
 /// Transaction pool configuration
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct PoolConfig {
 	/// Base fee for a transaction to be accepted by the pool. The transaction
 	/// weight is computed from its number of inputs, outputs and kernels and

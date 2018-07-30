@@ -149,7 +149,7 @@ api_listen_interface = "127.0.0.1"
 api_listen_port = 13415
 
 # Where the wallet should find a running node
-check_node_api_http_addr = "http://localhost:13413"
+check_node_api_http_addr = "http://127.0.0.1:13413"
 
 # Where to find wallet files (seed, data, etc)
 data_file_dir = "."
