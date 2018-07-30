@@ -1023,11 +1023,11 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	// Special handling to make sure the whole kernel set matches each of its
-	// roots in each block header, without truncation. We go back header by
-	// header, rewind and check each root. This fixes a potential weakness in
-	// fast sync where a reorg past the horizon could allow a whole rewrite of
-	// the kernel set.
+	/// Special handling to make sure the whole kernel set matches each of its
+	/// roots in each block header, without truncation. We go back header by
+	/// header, rewind and check each root. This fixes a potential weakness in
+	/// fast sync where a reorg past the horizon could allow a whole rewrite of
+	/// the kernel set.
 	pub fn validate_kernel_history(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		assert!(self.rollback, "verified kernel history on writeable txhashset extension");
 

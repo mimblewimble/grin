@@ -52,7 +52,7 @@ use config::GlobalConfig;
 use core::core::amount_to_hr_string;
 use core::global;
 use tui::ui;
-use util::{init_logger, LoggingConfig, LOGGER};
+use util::{init_logger, LOGGER};
 use wallet::{libwallet, HTTPWalletClient, LMDBBackend, WalletConfig, WalletInst};
 
 // include build information
@@ -333,33 +333,39 @@ fn main() {
 		panic!("Error parsing config file: {}", e);
 	});
 
-	if global_config.using_config_file {
-		// initialize the logger
-		let mut log_conf = global_config
+	if let Some(file_path) = &global_config.config_file_path {
+		info!(
+			LOGGER,
+			"Found configuration file at {}",
+			file_path.to_str().unwrap()
+		);
+	} else {
+		info!(LOGGER, "configuration file not found, using default");
+	}
+
+	// initialize the logger
+	let mut log_conf = global_config
+		.members
+		.as_mut()
+		.unwrap()
+		.logging
+		.clone()
+		.unwrap();
+	let run_tui = global_config.members.as_mut().unwrap().server.run_tui;
+	if run_tui.is_some() && run_tui.unwrap() && args.subcommand().0 != "wallet" {
+		log_conf.log_to_stdout = false;
+		log_conf.tui_running = Some(true);
+	}
+	init_logger(Some(log_conf));
+	global::set_mining_mode(
+		global_config
 			.members
 			.as_mut()
 			.unwrap()
-			.logging
+			.server
 			.clone()
-			.unwrap();
-		let run_tui = global_config.members.as_mut().unwrap().server.run_tui;
-		if run_tui.is_some() && run_tui.unwrap() && args.subcommand().0 != "wallet" {
-			log_conf.log_to_stdout = false;
-			log_conf.tui_running = Some(true);
-		}
-		init_logger(Some(log_conf));
-		global::set_mining_mode(
-			global_config
-				.members
-				.as_mut()
-				.unwrap()
-				.server
-				.clone()
-				.chain_type,
-		);
-	} else {
-		init_logger(Some(LoggingConfig::default()));
-	}
+			.chain_type,
+	);
 
 	log_build_info();
 
@@ -383,14 +389,7 @@ fn main() {
 		// this could possibly become the way to configure most things
 		// with most command line options being phased out
 		_ => {
-			if global_config.using_config_file {
-				server_command(None, global_config);
-			} else {
-				// won't attempt to just start with defaults,
-				// and will reject
-				println!("Unknown command, and no configuration file was found.");
-				println!("Use 'grin help' for a list of all commands.");
-			}
+			server_command(None, global_config);
 		}
 	}
 }
@@ -400,29 +399,15 @@ fn main() {
 /// arguments
 /// to build a proper configuration and runs Grin with that configuration.
 fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalConfig) {
-	if global_config.using_config_file {
-		info!(
-			LOGGER,
-			"Starting the Grin server from configuration file at {}",
-			global_config
-				.config_file_path
-				.as_ref()
-				.unwrap()
-				.to_str()
-				.unwrap()
-		);
-		global::set_mining_mode(
-			global_config
-				.members
-				.as_mut()
-				.unwrap()
-				.server
-				.clone()
-				.chain_type,
-		);
-	} else {
-		panic!("No configuration found.");
-	}
+	global::set_mining_mode(
+		global_config
+			.members
+			.as_mut()
+			.unwrap()
+			.server
+			.clone()
+			.chain_type,
+	);
 
 	// just get defaults from the global config
 	let mut server_config = global_config.members.as_ref().unwrap().server.clone();
