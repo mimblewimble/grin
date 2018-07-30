@@ -19,10 +19,11 @@ extern crate grin_keychain as keychain;
 extern crate grin_store as store;
 extern crate grin_wallet as wallet;
 extern crate rand;
-extern crate time;
+extern crate chrono;
 
 use std::fs;
 use std::sync::Arc;
+use chrono::Duration;
 
 use chain::types::NoopAdapter;
 use chain::{Error, ErrorKind};
@@ -64,7 +65,7 @@ fn test_coinbase_maturity() {
 
 	let reward = libtx::reward::output(&keychain, &key_id1, 0, prev.height).unwrap();
 	let mut block = core::core::Block::new(&prev, vec![], Difficulty::one(), reward).unwrap();
-	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
@@ -118,7 +119,7 @@ fn test_coinbase_maturity() {
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward = libtx::reward::output(&keychain, &key_id3, fees, prev.height).unwrap();
 	let mut block = core::core::Block::new(&prev, txs, Difficulty::one(), reward).unwrap();
-	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
@@ -151,7 +152,7 @@ fn test_coinbase_maturity() {
 
 		let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
 		let mut block = core::core::Block::new(&prev, vec![], Difficulty::one(), reward).unwrap();
-		block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+		block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
@@ -178,7 +179,7 @@ fn test_coinbase_maturity() {
 	let reward = libtx::reward::output(&keychain, &key_id4, fees, prev.height).unwrap();
 	let mut block = core::core::Block::new(&prev, txs, Difficulty::one(), reward).unwrap();
 
-	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 

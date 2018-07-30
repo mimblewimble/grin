@@ -22,5 +22,5 @@ grin_core = { path = "../core" }
 grin_util = { path = "../util" }
 
 [dev-dependencies]
-time = "0.1"
+chrono = "0.4.4"
 rand = "0.3"

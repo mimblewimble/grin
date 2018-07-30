@@ -18,7 +18,7 @@ use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
-use time;
+use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 
 use consensus::{self, exceeds_weight, reward, VerifySortOrder, REWARD};
 use core::committed::{self, Committed};
@@ -114,7 +114,7 @@ pub struct BlockHeader {
 	/// Hash of the block previous to this in the chain.
 	pub previous: Hash,
 	/// Timestamp at which the block was built.
-	pub timestamp: time::Tm,
+	pub timestamp: DateTime<Utc>,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
 	/// Merklish root of all the commitments in the TxHashSet
@@ -147,7 +147,7 @@ impl Default for BlockHeader {
 			version: 1,
 			height: 0,
 			previous: ZERO_HASH,
-			timestamp: time::at_utc(time::Timespec { sec: 0, nsec: 0 }),
+			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
 			total_difficulty: Difficulty::one(),
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
@@ -198,10 +198,7 @@ impl Readable for BlockHeader {
 			version,
 			height,
 			previous,
-			timestamp: time::at_utc(time::Timespec {
-				sec: timestamp,
-				nsec: 0,
-			}),
+			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc),
 			total_difficulty,
 			output_root,
 			range_proof_root,
@@ -224,7 +221,7 @@ impl BlockHeader {
 			[write_u16, self.version],
 			[write_u64, self.height],
 			[write_fixed_bytes, &self.previous],
-			[write_i64, self.timestamp.to_timespec().sec],
+			[write_i64, self.timestamp.timestamp()],
 			[write_u64, self.total_difficulty.to_num()],
 			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
@@ -612,10 +609,7 @@ impl Block {
 		Ok(Block {
 			header: BlockHeader {
 				height: prev.height + 1,
-				timestamp: time::Tm {
-					tm_nsec: 0,
-					..time::now_utc()
-				},
+				timestamp: Utc::now(),
 				previous: prev.hash(),
 				total_difficulty: difficulty + prev.total_difficulty,
 				total_kernel_offset,

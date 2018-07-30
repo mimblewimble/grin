@@ -33,7 +33,7 @@ extern crate serde_derive;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
-extern crate time;
+extern crate chrono;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;

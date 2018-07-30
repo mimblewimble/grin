@@ -31,13 +31,14 @@
 extern crate blake2_rfc as blake2;
 extern crate rand;
 extern crate serde;
-extern crate time;
+extern crate chrono;
 
 extern crate grin_util as util;
 
 pub mod cuckoo;
 mod siphash;
 
+use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use consensus;
 use core::target::Difficulty;
 use core::{Block, BlockHeader};
@@ -57,7 +58,7 @@ pub fn mine_genesis_block() -> Result<Block, Error> {
 	let mut gen = genesis::genesis_testnet2();
 	if global::is_user_testing_mode() || global::is_automated_testing_mode() {
 		gen = genesis::genesis_dev();
-		gen.header.timestamp = time::now();
+		gen.header.timestamp = Utc::now();
 	}
 
 	// total_difficulty on the genesis header *is* the difficulty of that block
@@ -104,7 +105,7 @@ pub fn pow_size(
 		// and if we're back where we started, update the time (changes the hash as
 		// well)
 		if bh.nonce == start_nonce {
-			bh.timestamp = time::at_utc(time::Timespec { sec: 0, nsec: 0 });
+			bh.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc);
 		}
 	}
 }

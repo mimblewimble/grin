@@ -14,3 +14,6 @@ grin_servers = { path = "../servers" }
 grin_p2p = { path = "../p2p" }
 grin_util = { path = "../util" }
 grin_wallet = { path = "../wallet"}
+
+[dev-dependencies]
+pretty_assertions = "0.5.1"

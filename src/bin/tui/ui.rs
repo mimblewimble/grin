@@ -17,7 +17,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
-use time;
+use chrono::prelude::{Utc};
 
 use cursive::direction::Orientation;
 use cursive::theme::BaseColor::{Black, Blue, Cyan, White};
@@ -167,7 +167,7 @@ impl Controller {
 	/// Run the controller
 	pub fn run(&mut self, server: Arc<Server>, running: Arc<AtomicBool>) {
 		let stat_update_interval = 1;
-		let mut next_stat_update = time::get_time().sec + stat_update_interval;
+		let mut next_stat_update = Utc::now().timestamp() + stat_update_interval;
 		while self.ui.step() {
 			if !running.load(Ordering::SeqCst) {
 				warn!(LOGGER, "Received SIGINT (Ctrl+C).");
@@ -188,10 +188,10 @@ impl Controller {
 				}
 			}
 
-			if time::get_time().sec > next_stat_update {
+			if Utc::now().timestamp() > next_stat_update {
 				let stats = server.get_server_stats().unwrap();
 				self.ui.ui_tx.send(UIMessage::UpdateStatus(stats)).unwrap();
-				next_stat_update = time::get_time().sec + stat_update_interval;
+				next_stat_update = Utc::now().timestamp() + stat_update_interval;
 			}
 		}
 	}

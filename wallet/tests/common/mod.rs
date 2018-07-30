@@ -19,9 +19,10 @@ extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_wallet as wallet;
 extern crate serde_json;
-extern crate time;
+extern crate chrono;
 
 use std::sync::{Arc, Mutex};
+use chrono::Duration;
 
 use chain::Chain;
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
@@ -75,7 +76,7 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbDa
 		difficulty.clone(),
 		(output, kernel),
 	).unwrap();
-	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+	b.header.timestamp = prev.timestamp + Duration::seconds(60);
 	chain.set_txhashset_roots(&mut b, false).unwrap();
 	pow::pow_size(
 		&mut b.header,

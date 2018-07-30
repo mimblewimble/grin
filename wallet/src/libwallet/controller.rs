@@ -31,7 +31,9 @@ use serde_json;
 use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
-use libwallet::types::{CbData, OutputData, SendTXArgs, WalletBackend, WalletClient, WalletInfo};
+use libwallet::types::{
+	BlockFees, CbData, OutputData, SendTXArgs, TxLogEntry, WalletBackend, WalletClient, WalletInfo,
+};
 use libwallet::{Error, ErrorKind};
 use url::form_urlencoded;
 
@@ -186,8 +188,44 @@ where
 		req: &Request<Body>,
 		api: APIOwner<T, C, K>,
 	) -> Result<(bool, Vec<OutputData>), Error> {
-		let update_from_node = param_exists(req, "refresh");
-		api.retrieve_outputs(false, update_from_node, None)
+		let mut update_from_node = false;
+		let mut id = None;
+		let mut show_spent = false;
+		let params = parse_params(req);
+
+		if let Some(_) = params.get("refresh") {
+			update_from_node = true;
+		}
+		if let Some(_) = params.get("show_spent") {
+			show_spent = true;
+		}
+		if let Some(ids) = params.get("tx_id") {
+			for i in ids {
+				id = Some(i.parse().unwrap());
+			}
+		}
+		api.retrieve_outputs(show_spent, update_from_node, id)
+	}
+
+	fn retrieve_txs(
+		&self,
+		req: &Request<Body>,
+		api: APIOwner<T, C, K>,
+	) -> Result<(bool, Vec<TxLogEntry>), Error> {
+		let mut id = None;
+		let mut update_from_node = false;
+
+		let params = parse_params(req);
+
+		if let Some(_) = params.get("refresh") {
+			update_from_node = true;
+		}
+		if let Some(ids) = params.get("id") {
+			for i in ids {
+				id = Some(i.parse().unwrap());
+			}
+		}
+		api.retrieve_txs(update_from_node, id)
 	}
 
 	fn retrieve_summary_info(
@@ -219,6 +257,7 @@ where
 			"retrieve_outputs" => json_response(&self.retrieve_outputs(req, api)?),
 			"retrieve_summary_info" => json_response(&self.retrieve_summary_info(req, api)?),
 			"node_height" => json_response(&self.node_height(req, api)?),
+			"retrieve_txs" => json_response(&self.retrieve_txs(req, api)?),
 			_ => response(StatusCode::BAD_REQUEST, ""),
 		})
 	}
@@ -443,17 +482,20 @@ fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
 	//resp
 }
 
-fn param_exists(req: &Request<Body>, param: &str) -> bool {
-	if let Some(query_string) = req.uri().query() {
-		let params = form_urlencoded::parse(query_string.as_bytes())
+fn parse_params(req: &Request<Body>) -> HashMap<String, Vec<String>> {
+	match req.uri().query() {
+		Some(query_string) => form_urlencoded::parse(query_string.as_bytes())
 			.into_owned()
 			.fold(HashMap::new(), |mut hm, (k, v)| {
 				hm.entry(k).or_insert(vec![]).push(v);
 				hm
-			});
-		return params.get(param).is_some();
+			}),
+		None => HashMap::new(),
 	}
-	false
+}
+
+fn param_exists(req: &Request<Body>, param: &str) -> bool {
+	parse_params(req).get(param).is_some()
 }
 
 fn parse_body<T>(req: Request<Body>) -> Box<Future<Item = T, Error = Error> + Send>

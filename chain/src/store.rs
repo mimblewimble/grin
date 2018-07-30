@@ -447,7 +447,7 @@ impl Iterator for DifficultyIter {
 				.map_or(Difficulty::zero(), |x| x.total_difficulty);
 			let difficulty = header.total_difficulty - prev_difficulty;
 
-			Some(Ok((header.timestamp.to_timespec().sec as u64, difficulty)))
+			Some(Ok((header.timestamp.timestamp() as u64, difficulty)))
 		} else {
 			return None;
 		}

@@ -38,5 +38,6 @@ env:
     - TEST_DIR=keychain
     - TEST_DIR=core
     - TEST_DIR=util
+    - TEST_DIR=config
 
 script: cd $TEST_DIR && cargo test --release
