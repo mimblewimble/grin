@@ -16,6 +16,7 @@ extern crate grin_core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
+extern crate chrono;
 
 pub mod common;
 
@@ -29,6 +30,7 @@ use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFe
 use grin_core::{global, ser};
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::time::Instant;
+use chrono::Duration;
 use util::{secp, secp_static};
 use wallet::libtx::build::{self, input, output, with_fee};
 
@@ -213,11 +215,16 @@ fn serialize_deserialize_block() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let prev = BlockHeader::default();
 	let key_id = keychain.derive_key_id(1).unwrap();
-	let b = new_block(vec![], &keychain, &prev, &key_id);
+	let mut b = new_block(vec![], &keychain, &prev, &key_id);
 
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
 	let b2: Block = ser::deserialize(&mut &vec[..]).unwrap();
+
+	// After header serialization, timestamp will lose 'nanos' info, that's the designed behavior.
+	// To suppress 'nanos' difference caused assertion fail, we force b.header also lose 'nanos'.
+	let origin_ts = b.header.timestamp;
+	b.header.timestamp = origin_ts - Duration::nanoseconds(origin_ts.timestamp_subsec_nanos() as i64);
 
 	assert_eq!(b.header, b2.header);
 	assert_eq!(b.inputs, b2.inputs);

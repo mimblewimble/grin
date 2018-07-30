@@ -17,7 +17,8 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 
-use time;
+use chrono::prelude::{Utc};
+use chrono::Duration;
 
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
@@ -218,7 +219,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 	// TODO: remove CI check from here somehow
 	if header.timestamp
-		> time::now_utc() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
+		> Utc::now() + Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
 		&& !global::is_automated_testing_mode()
 	{
 		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)

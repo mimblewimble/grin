@@ -39,7 +39,7 @@ extern crate siphasher;
 #[macro_use]
 extern crate slog;
 extern crate failure;
-extern crate time;
+extern crate chrono;
 #[macro_use]
 extern crate failure_derive;
 

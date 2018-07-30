@@ -38,7 +38,7 @@ extern crate serde;
 extern crate serde_derive;
 #[macro_use]
 extern crate slog;
-extern crate time;
+extern crate chrono;
 
 mod conn;
 pub mod handshake;

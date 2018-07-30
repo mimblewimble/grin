@@ -15,7 +15,7 @@ croaring = "=0.3.2"
 slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
 serde = "1"
 serde_derive = "1"
-time = "0.1"
+chrono = "0.4.4"
 lru-cache = "0.1"
 
 grin_core = { path = "../core" }

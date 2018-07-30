@@ -14,9 +14,10 @@
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::Duration;
+use std::time;
 use std::{cmp, thread};
-use time;
+use chrono::prelude::{DateTime, Utc};
+use chrono::Duration;
 
 use chain;
 use common::types::{Error, SyncState, SyncStatus};
@@ -85,7 +86,7 @@ pub fn run_sync(
 				awaiting_peers.store(true, Ordering::Relaxed);
 				let mut n = 0;
 				while peers.more_work_peers().len() < 4 && n < wait_secs {
-					thread::sleep(Duration::from_secs(1));
+					thread::sleep(time::Duration::from_secs(1));
 					n += 1;
 				}
 				awaiting_peers.store(false, Ordering::Relaxed);
@@ -146,7 +147,7 @@ pub fn run_sync(
 					sync_state.update(SyncStatus::NoSync);
 				}
 
-				thread::sleep(Duration::from_secs(1));
+				thread::sleep(time::Duration::from_secs(1));
 
 				if stop.load(Ordering::Relaxed) {
 					break;
@@ -399,15 +400,15 @@ fn get_locator_heights(height: u64) -> Vec<u64> {
 
 // Utility struct to group what information the main sync loop has to track
 struct SyncInfo {
-	prev_body_sync: (time::Tm, u64),
-	prev_header_sync: (time::Tm, u64),
-	prev_fast_sync: Option<time::Tm>,
+	prev_body_sync: (DateTime<Utc>, u64),
+	prev_header_sync: (DateTime<Utc>, u64),
+	prev_fast_sync: Option<DateTime<Utc>>,
 	highest_height: u64,
 }
 
 impl SyncInfo {
 	fn new() -> SyncInfo {
-		let now = time::now_utc();
+		let now = Utc::now();
 		SyncInfo {
 			prev_body_sync: (now.clone(), 0),
 			prev_header_sync: (now.clone(), 0),
@@ -417,11 +418,11 @@ impl SyncInfo {
 	}
 
 	fn header_sync_due(&mut self, header_head: &chain::Tip) -> bool {
-		let now = time::now_utc();
+		let now = Utc::now();
 		let (prev_ts, prev_height) = self.prev_header_sync;
 
 		if header_head.height >= prev_height + (p2p::MAX_BLOCK_HEADERS as u64) - 4
-			|| now - prev_ts > time::Duration::seconds(10)
+			|| now - prev_ts > Duration::seconds(10)
 		{
 			self.prev_header_sync = (now, header_head.height);
 			return true;
@@ -430,10 +431,10 @@ impl SyncInfo {
 	}
 
 	fn body_sync_due(&mut self, head: &chain::Tip) -> bool {
-		let now = time::now_utc();
+		let now = Utc::now();
 		let (prev_ts, prev_height) = self.prev_body_sync;
 
-		if head.height >= prev_height + 96 || now - prev_ts > time::Duration::seconds(5) {
+		if head.height >= prev_height + 96 || now - prev_ts > Duration::seconds(5) {
 			self.prev_body_sync = (now, head.height);
 			return true;
 		}
@@ -443,7 +444,7 @@ impl SyncInfo {
 	// For now this is a one-time thing (it can be slow) at initial startup.
 	fn fast_sync_due(&mut self) -> bool {
 		if let None = self.prev_fast_sync {
-			let now = time::now_utc();
+			let now = Utc::now();
 			self.prev_fast_sync = Some(now);
 			true
 		} else {
