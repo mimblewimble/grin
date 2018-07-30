@@ -18,7 +18,7 @@
 //! valid chain state.
 
 use std::sync::Arc;
-use time;
+use chrono::prelude::{Utc};
 
 use core::core::hash::Hashed;
 use core::core::{transaction, Block, CompactBlock, Transaction};
@@ -119,7 +119,7 @@ where
 		let entry = PoolEntry {
 			state: PoolEntryState::Fresh,
 			src,
-			tx_at: time::now_utc().to_timespec(),
+			tx_at: Utc::now(),
 			tx: tx.clone(),
 		};
 

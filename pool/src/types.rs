@@ -16,7 +16,7 @@
 //! and its top-level members.
 
 use std::{error, fmt};
-use time::Timespec;
+use chrono::prelude::{DateTime, Utc};
 
 use core::consensus;
 use core::core::transaction::{self, Transaction};
@@ -119,7 +119,7 @@ pub struct PoolEntry {
 	/// Info on where this tx originated from.
 	pub src: TxSource,
 	/// Timestamp of when this tx was originally added to the pool.
-	pub tx_at: Timespec,
+	pub tx_at: DateTime<Utc>,
 	/// The transaction itself.
 	pub tx: Transaction,
 }

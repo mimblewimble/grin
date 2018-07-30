@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
-use time::now_utc;
+use chrono::prelude::{Utc};
 
 use core::core::hash::Hashed;
 use core::core::transaction;
@@ -200,7 +200,7 @@ fn process_expired_entries<T>(
 where
 	T: BlockChain + Send + Sync + 'static,
 {
-	let now = now_utc().to_timespec().sec;
+	let now = Utc::now().timestamp();
 	let embargo_sec = dandelion_config.embargo_secs.unwrap() + rand::thread_rng().gen_range(0, 31);
 	let cutoff = now - embargo_sec as i64;
 
@@ -211,7 +211,7 @@ where
 			.stempool
 			.entries
 			.iter()
-			.filter(|x| x.tx_at.sec < cutoff)
+			.filter(|x| x.tx_at.timestamp() < cutoff)
 		{
 			debug!(
 				LOGGER,

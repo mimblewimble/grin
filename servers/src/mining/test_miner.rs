@@ -1,3 +1,4 @@
+
 // Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +20,7 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
-use time;
+use chrono::prelude::{Utc};
 
 use chain;
 use common::adapters::PoolToChainAdapter;
@@ -81,7 +82,7 @@ impl Miner {
 	) -> Option<Proof> {
 		// look for a pow for at most 2 sec on the same block (to give a chance to new
 		// transactions) and as long as the head hasn't changed
-		let deadline = time::get_time().sec + attempt_time_per_block as i64;
+		let deadline = Utc::now().timestamp() + attempt_time_per_block as i64;
 
 		debug!(
 			LOGGER,
@@ -96,7 +97,7 @@ impl Miner {
 		let mut iter_count = 0;
 
 		let mut sol = None;
-		while head.hash() == *latest_hash && time::get_time().sec < deadline {
+		while head.hash() == *latest_hash && Utc::now().timestamp() < deadline {
 			if let Ok(proof) = cuckoo::Miner::new(
 				&b.header,
 				consensus::EASINESS,
