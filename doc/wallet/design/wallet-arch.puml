@@ -1,0 +1,104 @@
+@startuml grin-wallet-overview 
+skinparam componentStyle uml2
+
+title 
+**Grin Wallet Design Overview (Draft)**
+Yeastplume - May 25th 2018
+end title
+
+[Grin Node] as grin_node
+
+folder "Common Services Provided by Grin" as services {
+	component external_api [
+		**External API**
+		am_I_alive?()
+		what's_my_version?()
+		receive()
+	]
+
+	component internal_api [
+		**Internal API**
+		update_outputs()
+		get_balance()
+		control_listener()?
+		send()
+		etc...
+
+	]
+	[Wallet Server Core] as wallet_server_core
+	[Transaction API (libWallet)] as libwallet
+	() "Backend Trait" as wallet_data_backend_trait
+	() "Keychain Trait" as wallet_keychain_trait
+	() "Internal HTTP(S) Interface" as internal_http
+	() "External HTTP(S) Interface" as external_http
+	component internal_client [
+		**Grin Node Client**
+	]
+	component external_client [
+		**External Client**
+		send()
+	]
+}
+
+package Instantiation {
+	component loader [
+		**Service Controller**
+		instantiate libs
+		start services
+		control listeners
+	]
+}
+
+loader <--> services
+
+package "Provided by Wallet Implementations" {
+	database "Wallet Impl" as wallet_data
+	database "Key Impl" as key_data
+}
+
+'package "Provided as reference implementation" {
+	[Pure JS Wallet Client Implementation] as js_client
+	[Command Line Wallet Client] as cl_client
+	component web_server [
+			V. Light Rust Web Server
+			(Provided by default - localhost only)
+			(Serve up pure JS client)
+	]
+'}
+
+web_server <--> loader
+js_client <-- web_server
+cl_client <--> internal_api
+cl_client <--> loader
+
+[External Wallets] as external_wallets
+
+wallet_server_core --> wallet_data_backend_trait
+wallet_server_core --> wallet_keychain_trait
+wallet_data_backend_trait <--> wallet_data
+wallet_data_backend_trait <--> libwallet
+wallet_keychain_trait <--> key_data
+wallet_keychain_trait <--> libwallet
+
+wallet_server_core <--> libwallet
+wallet_server_core <--> internal_client
+
+external_api --> wallet_server_core
+internal_api --> wallet_server_core
+internal_client --> wallet_server_core
+external_client --> wallet_server_core
+
+js_client <--> internal_http
+internal_http <--> internal_api
+external_wallets <--> external_http
+external_client <--> external_wallets
+internal_client <--> grin_node
+external_http <--> external_api
+
+'layout fix
+grin_node -[hidden]- wallet_data
+
+
+
+
+@enduml
