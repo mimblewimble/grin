@@ -48,7 +48,6 @@ impl Default for GlobalConfig {
 	fn default() -> GlobalConfig {
 		GlobalConfig {
 			config_file_path: None,
-			using_config_file: false,
 			members: Some(ConfigMembers::default()),
 		}
 	}
@@ -112,7 +111,7 @@ impl GlobalConfig {
 			)));
 		}
 
-		// Try to parse the config file if it exists explode if it does exist but
+		// Try to parse the config file if it exists, explode if it does exist but
 		// something's wrong with it
 		return_value.read_config()
 	}
@@ -128,7 +127,6 @@ impl GlobalConfig {
 				// Put the struct back together, because the config
 				// file was flattened a bit
 				gc.server.stratum_mining_config = gc.mining_server.clone();
-				self.using_config_file = true;
 				self.members = Some(gc);
 				return Ok(self);
 			}
