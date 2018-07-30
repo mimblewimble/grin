@@ -19,7 +19,7 @@ extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
-extern crate time;
+extern crate chrono;
 
 use std::fs;
 use std::sync::Arc;
