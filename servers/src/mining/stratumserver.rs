@@ -23,7 +23,7 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, SystemTime};
 use std::{cmp, thread};
-use time;
+use chrono::prelude::{Utc};
 
 use chain;
 use common::adapters::PoolToChainAdapter;
@@ -711,7 +711,7 @@ impl StratumServer {
 			// or We are rebuilding the current one to include new transactions
 			// and we're not synching
 			// and there is at least one worker connected
-			if (current_hash != latest_hash || time::get_time().sec >= deadline) && !mining_stopped
+			if (current_hash != latest_hash || Utc::now().timestamp() >= deadline) && !mining_stopped
 				&& num_workers > 0
 			{
 				let mut wallet_listener_url: Option<String> = None;
@@ -741,7 +741,7 @@ impl StratumServer {
 					self.current_difficulty,
 				);
 				// set a new deadline for rebuilding with fresh transactions
-				deadline = time::get_time().sec + attempt_time_per_block as i64;
+				deadline = Utc::now().timestamp() + attempt_time_per_block as i64;
 
 				{
 					let mut stratum_stats = stratum_stats.write().unwrap();

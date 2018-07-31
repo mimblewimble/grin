@@ -498,7 +498,7 @@ impl BlockHeaderPrintable {
 			version: h.version,
 			height: h.height,
 			previous: util::to_hex(h.previous.to_vec()),
-			timestamp: h.timestamp.rfc3339().to_string(),
+			timestamp: h.timestamp.to_rfc3339(),
 			output_root: util::to_hex(h.output_root.to_vec()),
 			range_proof_root: util::to_hex(h.range_proof_root.to_vec()),
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),

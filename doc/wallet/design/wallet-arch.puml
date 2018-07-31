@@ -1,0 +1,110 @@
+@startuml grin-wallet-overview 
+skinparam componentStyle uml2
+
+[Grin Node] as grin_node
+
+folder "Provided by Grin" as services {
+	component foreign_api [
+		**Foreign API**
+		External-Facing functions
+		- receive_tx, build coinbase
+	]
+
+	component owner_api [
+		**Owner API**
+		Functions used by wallet owner only
+		- retrieve outputs, retrieve txs,
+		  get balances, send, etc. . .
+
+	]
+	component libtx [
+        **Transaction Library (libTx)**
+        Lower-Level transaction functions
+        - Build transaction (via Slate), sign,
+         build reward, fees, etc. . .
+	]
+	component libwallet [
+        **Wallet Library (libWallet)	**
+        - Higher level wallet functions (select coins,
+          update wallet from node, etc)
+        - Service Controller
+            (instantiate libs, start listeners)
+	]
+	() "Owner HTTP Listener (localhost only)" as owner_http
+	() "Foreign HTTP Listener" as foreign_http
+	() "Owner Single-Use" as owner_single
+	() "Foreign Single-Use" as foreign_single
+}
+
+' Trait definitions
+package "Traits Implemented by Wallets" as traits {
+	database "WalletBackend" as wallet_backend
+	database "KeyChain" as keychain
+	component "WalletClient" as wallet_client
+}
+
+note left of wallet_client
+    - Communication layer implementation
+    - Handles underlying communication with grin node
+       or other wallets
+    - HTTP implementation provided currently, (Other,
+       more secure protocols possible.)
+end note
+
+note bottom of keychain
+    - Handles all key derivation operations
+end note
+
+note bottom of wallet_backend
+    - Implements underlying storage for wallet data
+    - LMDB  storage provided in default client, others
+      possible (Flat-file, other DBs, etc)
+end note
+
+libtx <--> traits
+libwallet <--> traits
+
+note right of traits
+    **Default Wallet simply a struct that provides**
+    **implementations for these 3 traits**
+end note
+
+' Client Side
+'package "Provided as reference implementation" {
+	[Pure JS Wallet Client Implementation] as js_client
+	[Command Line Wallet Client] as cl_client
+	component web_server [
+			V. Light Rust Web Server - Serve static files (TBD)
+			(Provided by default - localhost only)
+			(Serve up pure JS client)
+	]
+'}
+
+[External Wallets] as external_wallets
+[External Wallets] as external_wallets_2
+
+wallet_client <--> grin_node
+wallet_client <--> external_wallets_2
+
+web_server <--> owner_http
+js_client <-- web_server
+cl_client <--> owner_single
+cl_client <--> foreign_single
+
+owner_single <--> owner_api
+foreign_single <--> foreign_api
+
+libwallet <--> libtx
+
+foreign_api --> libwallet
+owner_api --> libwallet
+
+js_client <--> owner_http
+owner_http <--> owner_api
+external_wallets <--> foreign_http
+foreign_http <--> foreign_api
+
+'layout fix
+'grin_node -[hidden]- wallet_backend
+
+@enduml

@@ -17,7 +17,8 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 
-use time;
+use chrono::prelude::{Utc};
+use chrono::Duration;
 
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
@@ -28,6 +29,7 @@ use error::{Error, ErrorKind};
 use grin_store;
 use store;
 use txhashset;
+use chain::{OrphanBlockPool};
 use types::{Options, Tip};
 use util::LOGGER;
 
@@ -48,6 +50,8 @@ pub struct BlockContext {
 	pub txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	/// Recently processed blocks to avoid double-processing
 	pub block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
+	/// Recent orphan blocks to avoid double-processing
+	pub orphans: Arc<OrphanBlockPool>,
 }
 
 /// Runs the block processing pipeline, including validation and finding a
@@ -194,6 +198,9 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	if cache.contains(&bh) {
 		return Err(ErrorKind::Unfit("already known in cache".to_string()).into());
 	}
+	if ctx.orphans.contains(&bh) {
+		return Err(ErrorKind::Unfit("already known in orphans".to_string()).into());
+	}
 	Ok(())
 }
 
@@ -212,7 +219,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 	// TODO: remove CI check from here somehow
 	if header.timestamp
-		> time::now_utc() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
+		> Utc::now() + Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
 		&& !global::is_automated_testing_mode()
 	{
 		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
@@ -290,9 +297,9 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		if target_difficulty != network_difficulty.clone() {
 			error!(
 				LOGGER,
-				"validate_header: BANNABLE OFFENCE: header cumulative difficulty {} != {}",
+				"validate_header: BANNABLE OFFENCE: header target difficulty {} != {}",
 				target_difficulty.to_num(),
-				prev.total_difficulty.to_num() + network_difficulty.to_num()
+				network_difficulty.to_num()
 			);
 			return Err(ErrorKind::WrongTotalDifficulty.into());
 		}
