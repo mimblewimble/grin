@@ -333,16 +333,6 @@ fn main() {
 		panic!("Error parsing config file: {}", e);
 	});
 
-	if let Some(file_path) = &global_config.config_file_path {
-		info!(
-			LOGGER,
-			"Found configuration file at {}",
-			file_path.to_str().unwrap()
-		);
-	} else {
-		info!(LOGGER, "configuration file not found, using default");
-	}
-
 	// initialize the logger
 	let mut log_conf = global_config
 		.members
@@ -368,6 +358,16 @@ fn main() {
 	);
 
 	log_build_info();
+
+	if let Some(file_path) = &global_config.config_file_path {
+		info!(
+			LOGGER,
+			"Found configuration file at {}",
+			file_path.to_str().unwrap()
+		);
+	} else {
+		info!(LOGGER, "configuration file not found, using default");
+	}
 
 	match args.subcommand() {
 		// server commands and options
