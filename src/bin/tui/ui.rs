@@ -15,9 +15,9 @@
 //! Basic TUI to better output the overall system status and status
 //! of various subsystems
 
+use chrono::prelude::Utc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
-use chrono::prelude::{Utc};
 
 use cursive::direction::Orientation;
 use cursive::theme::BaseColor::{Black, Blue, Cyan, White};
