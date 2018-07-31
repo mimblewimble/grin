@@ -29,7 +29,7 @@ pub fn genesis_dev() -> core::Block {
 		header: core::BlockHeader {
 			height: 0,
 			previous: core::hash::Hash([0xff; 32]),
-			timestamp: Utc.ymd(1997, 7, 4).and_hms(0, 0, 0),
+			timestamp: Utc.ymd(1997, 8, 4).and_hms(0, 0, 0),
 			nonce: global::get_genesis_nonce(),
 			..Default::default()
 		},
@@ -46,7 +46,7 @@ pub fn genesis_testnet1() -> core::Block {
 		header: core::BlockHeader {
 			height: 0,
 			previous: core::hash::Hash([0xff; 32]),
-			timestamp: Utc.ymd(2017, 10, 16).and_hms(20, 0, 0),
+			timestamp: Utc.ymd(2017, 11, 16).and_hms(20, 0, 0),
 			nonce: 28205,
 			pow: core::Proof::new(vec![
 				0x21e, 0x7a2, 0xeae, 0x144e, 0x1b1c, 0x1fbd, 0x203a, 0x214b, 0x293b, 0x2b74,
@@ -69,7 +69,7 @@ pub fn genesis_testnet2() -> core::Block {
 		header: core::BlockHeader {
 			height: 0,
 			previous: core::hash::Hash([0xff; 32]),
-			timestamp: Utc.ymd(2018, 2, 26).and_hms(16, 0, 0),
+			timestamp: Utc.ymd(2018, 3, 26).and_hms(16, 0, 0),
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
 			nonce: 1060,
 			pow: core::Proof::new(vec![
@@ -94,7 +94,7 @@ pub fn genesis_testnet3() -> core::Block {
 		header: core::BlockHeader {
 			height: 0,
 			previous: core::hash::Hash([0xff; 32]),
-			timestamp: Utc.ymd(2018, 6, 8).and_hms(18, 0, 0),
+			timestamp: Utc.ymd(2018, 7, 8).and_hms(18, 0, 0),
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
 			nonce: 4956988373127691,
 			pow: core::Proof::new(vec![
@@ -121,7 +121,7 @@ pub fn genesis_main() -> core::Block {
 		header: core::BlockHeader {
 			height: 0,
 			previous: core::hash::Hash([0xff; 32]),
-			timestamp: Utc.ymd(2018, 7, 14).and_hms(0, 0, 0),
+			timestamp: Utc.ymd(2018, 8, 14).and_hms(0, 0, 0),
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
 			nonce: global::get_genesis_nonce(),
 			pow: core::Proof::zero(consensus::PROOFSIZE),
