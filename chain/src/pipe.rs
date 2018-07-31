@@ -297,9 +297,9 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		if target_difficulty != network_difficulty.clone() {
 			error!(
 				LOGGER,
-				"validate_header: BANNABLE OFFENCE: header cumulative difficulty {} != {}",
+				"validate_header: BANNABLE OFFENCE: header target difficulty {} != {}",
 				target_difficulty.to_num(),
-				prev.total_difficulty.to_num() + network_difficulty.to_num()
+				network_difficulty.to_num()
 			);
 			return Err(ErrorKind::WrongTotalDifficulty.into());
 		}
