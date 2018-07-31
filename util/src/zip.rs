@@ -98,3 +98,28 @@ where
 	}
 	Ok(())
 }
+
+pub fn copy_dir_to(src: &Path, dst: &Path) -> io::Result<u64> {
+	let mut counter = 0u64;
+	if !dst.is_dir() {
+		fs::create_dir(dst)?
+	}
+
+	for entry_result in src.read_dir()? {
+		let entry = entry_result?;
+		let file_type = entry.file_type()?;
+		let count = copy_to(&entry.path(), &file_type, &dst.join(entry.file_name()))?;
+		counter +=count;
+	}
+	Ok((counter))
+}
+
+fn copy_to(src: &Path, src_type: &fs::FileType, dst: &Path) -> io::Result<u64> {
+	if src_type.is_file() {
+		fs::copy(src,dst)
+	} else if src_type.is_dir() {
+		copy_dir_to(src, dst)
+	} else {
+		return Err(io::Error::new(io::ErrorKind::Other, format!("Could not copy: {}", src.display())))
+	}
+}

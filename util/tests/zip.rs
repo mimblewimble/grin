@@ -13,11 +13,13 @@
 // limitations under the License.
 
 extern crate grin_util as util;
+extern crate walkdir;
 
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::Path;
 use util::zip;
+use walkdir::WalkDir;
 
 #[test]
 fn zip_unzip() {
@@ -25,7 +27,7 @@ fn zip_unzip() {
 	let zip_name = "./target/tmp/zipped.zip";
 
 	fs::create_dir_all(root.join("./to_zip/sub")).unwrap();
-	write_files(&root).unwrap();
+	write_files("to_zip".to_string(),&root).unwrap();
 
 	let zip_file = File::create(zip_name).unwrap();
 	zip::compress(&root.join("./to_zip"), &zip_file).unwrap();
@@ -48,12 +50,40 @@ fn zip_unzip() {
 	assert!(lorem.metadata().unwrap().len() == 55);
 }
 
-fn write_files(root: &Path) -> io::Result<()> {
-	let mut file = File::create(root.join("to_zip/foo.txt"))?;
+#[test]
+fn copy_dir() {
+	let root = Path::new("./target/tmp2");
+	fs::create_dir_all(root.join("./original/sub")).unwrap();
+	fs::create_dir_all(root.join("./original/sub2")).unwrap();
+	write_files("original".to_string(),&root).unwrap();
+	let original_path = Path::new("./target/tmp2/original");
+	let copy_path = Path::new("./target/tmp2/copy");
+	zip::copy_dir_to(original_path, copy_path).unwrap();
+	let original_files = list_files("./target/tmp2/original".to_string());
+	let copied_files = list_files("./target/tmp2/copy".to_string());
+	for i in 1..5 {
+		assert_eq!(copied_files[i],original_files[i]);
+	}
+	fs::remove_dir_all(root).unwrap();
+}
+
+fn write_files(dir_name: String, root: &Path) -> io::Result<()> {
+	let mut file = File::create(root.join(dir_name.clone() + "/foo.txt"))?;
 	file.write_all(b"Hello, world!")?;
-	let mut file = File::create(root.join("to_zip/bar.txt"))?;
+	let mut file = File::create(root.join(dir_name.clone() + "/bar.txt"))?;
 	file.write_all(b"Goodbye, world!")?;
-	let mut file = File::create(root.join("to_zip/sub/lorem"))?;
+	let mut file = File::create(root.join(dir_name.clone() + "/sub/lorem"))?;
 	file.write_all(b"Lorem ipsum dolor sit amet, consectetur adipiscing elit")?;
 	Ok(())
+}
+
+fn list_files(path: String) -> Vec<String> {
+ 	let mut files_vec: Vec<String> = vec![];
+	for entry in WalkDir::new(Path::new(&path)).into_iter().filter_map(|e| e.ok()) {
+		match entry.file_name().to_str(){
+			Some(path_str) => files_vec.push(path_str.to_string()),
+			None => println!("Could not read optional type"),
+		}
+	}
+	return files_vec;
 }
