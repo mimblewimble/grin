@@ -56,7 +56,7 @@ pub fn ban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
 		config.api_http_addr,
 		peer_addr.to_string()
 	);
-	match api::client::post(url.as_str(), &params).map_err(|e| Error::API(e)) {
+	match api::client::post_no_ret(url.as_str(), &params).map_err(|e| Error::API(e)) {
 		Ok(_) => writeln!(e, "Successfully banned peer {}", peer_addr.to_string()).unwrap(),
 		Err(_) => writeln!(e, "Failed to ban peer {}", peer_addr).unwrap(),
 	};
@@ -71,7 +71,7 @@ pub fn unban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
 		config.api_http_addr,
 		peer_addr.to_string()
 	);
-	match api::client::post(url.as_str(), &params).map_err(|e| Error::API(e)) {
+	match api::client::post_no_ret(url.as_str(), &params).map_err(|e| Error::API(e)) {
 		Ok(_) => writeln!(e, "Successfully unbanned peer {}", peer_addr).unwrap(),
 		Err(_) => writeln!(e, "Failed to unban peer {}", peer_addr).unwrap(),
 	};

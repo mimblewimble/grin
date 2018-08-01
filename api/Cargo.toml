@@ -6,19 +6,21 @@ workspace = ".."
 publish = false
 
 [dependencies]
-failure = "0.1"
-failure_derive = "0.1"
-hyper = "0.10"
-iron = "0.5"
+failure = "0.1.1"
+failure_derive = "0.1.1"
+hyper = "0.12"
 lazy_static = "1"
 mount = "0.3"
 regex = "1"
-router = "0.5"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
 slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
-urlencoded = "0.5" # 0.6+ lacks trait `plugin::Plugin<iron::Request<'_, '_>>`
+tokio = "0.1.7"
+tokio-core = "0.1.17"
+http = "0.1.5"
+futures = "0.1.21"
+url = "1.7.0"
 
 grin_core = { path = "../core" }
 grin_chain = { path = "../chain" }

@@ -16,7 +16,6 @@
 //! a mining worker implementation
 //!
 
-use std::io::Read;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::str;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,7 +25,7 @@ use std::time;
 use chrono::prelude::{Utc};
 use chrono::Duration;
 
-use hyper;
+use api;
 
 use p2p;
 use pool::DandelionConfig;
@@ -35,7 +34,7 @@ use util::LOGGER;
 const SEEDS_URL: &'static str = "http://grin-tech.org/seeds.txt";
 // DNS Seeds with contact email associated
 const DNS_SEEDS: &'static [&'static str] = &[
-	"t3.seed.grin-tech.org",   // igno.peverell@protonmail.com
+	"t3.seed.grin-tech.org", // igno.peverell@protonmail.com
 ];
 
 pub fn connect_and_monitor(
@@ -268,22 +267,7 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 /// http. Easy method until we have a set of DNS names we can rely on.
 pub fn web_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 	Box::new(|| {
-		let client = hyper::Client::new();
-		debug!(LOGGER, "Retrieving seed nodes from {}", &SEEDS_URL);
-
-		// http get, filtering out non 200 results
-		let mut res = client
-			.get(SEEDS_URL)
-			.send()
-			.expect("Failed to resolve seeds.");
-		if res.status != hyper::Ok {
-			panic!("Failed to resolve seeds, got status {}.", res.status);
-		}
-		let mut buf = vec![];
-		res.read_to_end(&mut buf)
-			.expect("Could not read seed list.");
-
-		let text = str::from_utf8(&buf[..]).expect("Corrupted seed list.");
+		let text: String = api::client::get(SEEDS_URL).expect("Failed to resolve seeds");
 		let addrs = text.split_whitespace()
 			.map(|s| s.parse().unwrap())
 			.collect::<Vec<_>>();

@@ -18,31 +18,34 @@ extern crate grin_p2p as p2p;
 extern crate grin_pool as pool;
 extern crate grin_store as store;
 extern crate grin_util as util;
+extern crate url;
 
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;
 extern crate hyper;
-extern crate iron;
 #[macro_use]
 extern crate lazy_static;
 extern crate mount;
 extern crate regex;
-#[macro_use]
-extern crate router;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
-extern crate urlencoded;
+extern crate futures;
+extern crate http;
+extern crate tokio;
+extern crate tokio_core;
 
 pub mod client;
 mod handlers;
 mod rest;
+mod router;
 mod types;
 
 pub use handlers::start_rest_apis;
 pub use rest::*;
+pub use router::*;
 pub use types::*;
