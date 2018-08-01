@@ -258,3 +258,18 @@ output would have been deleted, and any outputs that were locked for the transac
 Be sure to use this command with caution, as there are many edge cases and possible attacks that still need to be dealt with, particularly if you're
 the recipient of a transaction. For the time being please be 100% certain that the relevant transaction is never, ever going to be posted before
 running `grin wallet cancel`
+
+##### restore
+
+**NB the wallet restore command still needs some development work.. you may have issues with a restored wallet for the time being. If you're just trying,
+to unlock outputs locked by failed test transactions, use the `cancel` command above**
+
+It is possible to restore a wallet from nothing but the seed file. To do this, ensure you're in an empty directory with nothing but the wallet seed file, 
+(and not mining into it with your grin node) and run the command:
+
+```
+grin wallet restore
+```
+
+Note this operation can potentially take a long time. (More detail will be filled in about this operation after further development).
+
