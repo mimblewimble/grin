@@ -192,6 +192,7 @@ fn write_file (db_root: String) {
 
 fn txhashset_contains_expected_files(path_buf: PathBuf) -> bool {
 	let list_zip_files = file::list_files(path_buf.into_os_string().into_string().unwrap());
+	println!("{:?}", list_zip_files);
 	if list_zip_files[1] == "output" && list_zip_files[2] == "pmmr_hash.bin" && list_zip_files[3] == "pmmr_data.bin" && list_zip_files[4] == "rangeproof" && list_zip_files[5] == "pmmr_hash.bin" && list_zip_files[6] == "pmmr_data.bin" && list_zip_files[7] == "kernel" && list_zip_files[8] == "pmmr_hash.bin" && list_zip_files[9] == "pmmr_data.bin" {
 		true
 	} else {
