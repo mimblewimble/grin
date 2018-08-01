@@ -18,36 +18,24 @@ extern crate walkdir;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::Path;
-use util::zip;
+use util::file;
 use walkdir::WalkDir;
 
 #[test]
-fn zip_unzip() {
-	let root = Path::new("./target/tmp");
-	let zip_name = "./target/tmp/zipped.zip";
-
-	fs::create_dir_all(root.join("./to_zip/sub")).unwrap();
-	write_files("to_zip".to_string(),&root).unwrap();
-
-	let zip_file = File::create(zip_name).unwrap();
-	zip::compress(&root.join("./to_zip"), &zip_file).unwrap();
-	zip_file.sync_all().unwrap();
-
-	let zip_path = Path::new(zip_name);
-	assert!(zip_path.exists());
-	assert!(zip_path.is_file());
-	assert!(zip_path.metadata().unwrap().len() > 300);
-
-	fs::create_dir_all(root.join("./dezipped")).unwrap();
-	let zip_file = File::open(zip_name).unwrap();
-	zip::decompress(zip_file, &root.join("./dezipped")).unwrap();
-
-	assert!(root.join("to_zip/foo.txt").is_file());
-	assert!(root.join("to_zip/bar.txt").is_file());
-	assert!(root.join("to_zip/sub").is_dir());
-	let lorem = root.join("to_zip/sub/lorem");
-	assert!(lorem.is_file());
-	assert!(lorem.metadata().unwrap().len() == 55);
+fn copy_dir() {
+	let root = Path::new("./target/tmp2");
+	fs::create_dir_all(root.join("./original/sub")).unwrap();
+	fs::create_dir_all(root.join("./original/sub2")).unwrap();
+	write_files("original".to_string(),&root).unwrap();
+	let original_path = Path::new("./target/tmp2/original");
+	let copy_path = Path::new("./target/tmp2/copy");
+	file::copy_dir_to(original_path, copy_path).unwrap();
+	let original_files = file::list_files("./target/tmp2/original".to_string());
+	let copied_files = file::list_files("./target/tmp2/copy".to_string());
+	for i in 1..5 {
+		assert_eq!(copied_files[i],original_files[i]);
+	}
+	fs::remove_dir_all(root).unwrap();
 }
 
 fn write_files(dir_name: String, root: &Path) -> io::Result<()> {
