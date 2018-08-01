@@ -20,8 +20,10 @@ use std::sync::Arc;
 use conn::{Message, MessageHandler, Response};
 use core::core;
 use core::core::hash::{Hash, Hashed};
-use msg::{BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr,
-          TxHashSetArchive, TxHashSetRequest, Type};
+use msg::{
+	BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr, TxHashSetArchive,
+	TxHashSetRequest, Type,
+};
 use rand::{self, Rng};
 use types::{Error, NetAdapter};
 use util::LOGGER;
@@ -241,21 +243,19 @@ impl MessageHandler for Protocol {
 					);
 					return Err(Error::BadMessage);
 				}
-
 				let mut tmp = env::temp_dir();
 				tmp.push("txhashset.zip");
-				let mut save_txhashset_to_file = |file| -> Result<(), Error>  {
+				let mut save_txhashset_to_file = |file| -> Result<(), Error> {
 					let mut tmp_zip = File::create(file)?;
 					msg.copy_attachment(sm_arch.bytes as usize, &mut tmp_zip)?;
 					tmp_zip.sync_all()?;
 					Ok(())
 				};
 
-				if let Err(e) = save_txhashset_to_file(tmp.clone()){
+				if let Err(e) = save_txhashset_to_file(tmp.clone()) {
 					error!(
 						LOGGER,
-						"handle_payload: txhashset archive save to file fail. err={:?}",
-						e
+						"handle_payload: txhashset archive save to file fail. err={:?}", e
 					);
 					return Err(e);
 				}
@@ -267,11 +267,8 @@ impl MessageHandler for Protocol {
 				);
 
 				let tmp_zip = File::open(tmp)?;
-				let res = self.adapter.txhashset_write(
-					sm_arch.hash,
-					tmp_zip,
-					self.addr,
-				);
+				let res = self.adapter
+					.txhashset_write(sm_arch.hash, tmp_zip, self.addr);
 
 				debug!(
 					LOGGER,

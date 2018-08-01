@@ -188,15 +188,19 @@ fn test_p2p() {
 	let base_addr = server_config_one.base_addr;
 	let api_server_port = server_config_one.api_server_port;
 
-	// Check that when we get peer connected the peer is here
-	let peers_connected = get_connected_peers(&base_addr, api_server_port);
-	assert!(peers_connected.is_ok());
-	assert_eq!(peers_connected.unwrap().len(), 1);
-
 	// Check that peer all is also working
 	let mut peers_all = get_all_peers(&base_addr, api_server_port);
 	assert!(peers_all.is_ok());
-	assert_eq!(peers_all.unwrap().len(), 1);
+	let pall = peers_all.unwrap();
+	println!("Peers: {:?}", &pall);
+	assert_eq!(pall.len(), 1);
+
+	// Check that when we get peer connected the peer is here
+	let peers_connected = get_connected_peers(&base_addr, api_server_port);
+	assert!(peers_connected.is_ok());
+	let pc = peers_connected.unwrap();
+	println!("Peers connected: {:?}", &pc);
+	assert_eq!(pc.len(), 1);
 
 	// Check that the peer status is Healthy
 	let addr = format!(
@@ -431,7 +435,7 @@ pub fn ban_peer(base_addr: &String, api_server_port: u16, peer_addr: &String) ->
 		"http://{}:{}/v1/peers/{}/ban",
 		base_addr, api_server_port, peer_addr
 	);
-	api::client::post(url.as_str(), &"").map_err(|e| Error::API(e))
+	api::client::post_no_ret(url.as_str(), &"").map_err(|e| Error::API(e))
 }
 
 pub fn unban_peer(
@@ -443,7 +447,7 @@ pub fn unban_peer(
 		"http://{}:{}/v1/peers/{}/unban",
 		base_addr, api_server_port, peer_addr
 	);
-	api::client::post(url.as_str(), &"").map_err(|e| Error::API(e))
+	api::client::post_no_ret(url.as_str(), &"").map_err(|e| Error::API(e))
 }
 
 pub fn get_peer(
@@ -455,7 +459,10 @@ pub fn get_peer(
 		"http://{}:{}/v1/peers/{}",
 		base_addr, api_server_port, peer_addr
 	);
-	api::client::get::<p2p::PeerData>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<p2p::PeerData>(url.as_str()).map_err(|e| {
+		println!("got error {:}", e);
+		Error::API(e)
+	})
 }
 
 pub fn get_connected_peers(

@@ -18,13 +18,6 @@
 use failure::ResultExt;
 use libwallet::types::*;
 use std::collections::HashMap;
-use std::io;
-
-use futures::{Future, Stream};
-use hyper::header::ContentType;
-use hyper::{self, Method, Request};
-use serde_json;
-use tokio_core::reactor;
 
 use api;
 use error::{Error, ErrorKind};
@@ -90,38 +83,9 @@ impl WalletClient for HTTPWalletClient {
 		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
 		debug!(LOGGER, "Posting transaction slate to {}", url);
 
-		let mut core = reactor::Core::new().context(libwallet::ErrorKind::ClientCallback(
-			"Sending transaction: Initialise API",
-		))?;
-		let client = hyper::Client::new(&core.handle());
-
-		let url_pool = url.to_owned();
-
-		let mut req = Request::new(
-			Method::Post,
-			url_pool
-				.parse::<hyper::Uri>()
-				.context(libwallet::ErrorKind::ClientCallback(
-					"Sending transaction: parsing URL",
-				))?,
-		);
-		req.headers_mut().set(ContentType::json());
-		let json = serde_json::to_string(&slate).context(libwallet::ErrorKind::ClientCallback(
-			"Sending transaction: parsing response",
-		))?;
-		req.set_body(json);
-
-		let work = client.request(req).and_then(|res| {
-			res.body().concat2().and_then(move |body| {
-				let slate: Slate = serde_json::from_slice(&body)
-					.map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-				Ok(slate)
-			})
-		});
-		let res = core.run(work)
-			.context(libwallet::ErrorKind::ClientCallback(
-				"Sending transaction: posting request",
-			))?;
+		let res = api::client::post(url.as_str(), slate).context(
+			libwallet::ErrorKind::ClientCallback("Posting transaction slate"),
+		)?;
 		Ok(res)
 	}
 
@@ -134,7 +98,7 @@ impl WalletClient for HTTPWalletClient {
 		} else {
 			url = format!("{}/v1/pool/push", dest);
 		}
-		api::client::post(url.as_str(), tx).context(libwallet::ErrorKind::ClientCallback(
+		api::client::post_no_ret(url.as_str(), tx).context(libwallet::ErrorKind::ClientCallback(
 			"Posting transaction to node",
 		))?;
 		Ok(())
@@ -247,30 +211,8 @@ pub fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Err
 
 /// Makes a single request to the wallet API to create a new coinbase output.
 fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
-	let mut core = reactor::Core::new().context(ErrorKind::GenericError(
-		"Could not create reactor".to_owned(),
+	let res = api::client::post(url, block_fees).context(ErrorKind::GenericError(
+		"Posting create coinbase".to_string(),
 	))?;
-	let client = hyper::Client::new(&core.handle());
-
-	let mut req = Request::new(
-		Method::Post,
-		url.parse::<hyper::Uri>().context(ErrorKind::Uri)?,
-	);
-	req.headers_mut().set(ContentType::json());
-	let json = serde_json::to_string(&block_fees).context(ErrorKind::Format)?;
-	trace!(LOGGER, "Sending coinbase request: {:?}", json);
-	req.set_body(json);
-
-	let work = client.request(req).and_then(|res| {
-		res.body().concat2().and_then(move |body| {
-			trace!(LOGGER, "Returned Body: {:?}", body);
-			let coinbase: CbData =
-				serde_json::from_slice(&body).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-			Ok(coinbase)
-		})
-	});
-
-	let res = core.run(work)
-		.context(ErrorKind::GenericError("Could not run core".to_owned()))?;
 	Ok(res)
 }
