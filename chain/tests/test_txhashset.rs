@@ -17,18 +17,19 @@ extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_store as store;
 extern crate grin_wallet as wallet;
+extern crate grin_util as util;
 
 use std::fs::{self, File, OpenOptions};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use chain::store::ChainStore;
 use chain::txhashset;
 use chain::types::Tip;
-use core::core::merkle_proof::MerkleProof;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
 use keychain::{ExtKeychain, Keychain};
+use util::file;
 use wallet::libtx::{build, reward};
 
 fn clean_output_dir(dir_name: &str) {
@@ -145,20 +146,56 @@ fn test_unexpected_zip() {
 	let chain_store = ChainStore::new(db_env).unwrap();
 	let store = Arc::new(chain_store);
 	txhashset::TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
-
 	// First check if everything works out of the box
 	assert!(txhashset::zip_read(db_root.clone(), &BlockHeader::default()).is_ok());
 	let zip_path = Path::new(&db_root).join("txhashset_snapshot.zip");
 	let zip_file = File::open(&zip_path).unwrap();
 	assert!(txhashset::zip_write(db_root.clone(), zip_file, &BlockHeader::default()).is_ok());
+	// Remove temp txhashset dir
+	fs::remove_dir_all(Path::new(&db_root).join("txhashset_zip")).unwrap();
+	// Then add strange files in the original txhashset folder
+	write_file(db_root.clone());
+	assert!(txhashset::zip_read(db_root.clone(), &BlockHeader::default()).is_ok());
+	// Check that the temp dir dos not contains the strange files
+	let txhashset_zip_path = Path::new(&db_root).join("txhashset_zip");
+	assert!(txhashset_contains_expected_files(txhashset_zip_path.clone()));
+	fs::remove_dir_all(Path::new(&db_root).join("txhashset_zip")).unwrap();
 
-	// Then add a strange file
+	let zip_file = File::open(zip_path).unwrap();
+	assert!(txhashset::zip_write(db_root.clone(), zip_file, &BlockHeader::default()).is_ok());
+	// Check that the txhashset dir dos not contains the strange files
+	let txhashset_zip_path = Path::new(&db_root).join("txhashset");
+	assert!(txhashset_contains_expected_files(txhashset_zip_path.clone()));
+	fs::remove_dir_all(Path::new(&db_root).join("txhashset")).unwrap();
+}
+
+fn write_file (db_root: String) {
 	OpenOptions::new()
 		.create(true)
 		.write(true)
-		.open(Path::new(&db_root).join("txhashset").join("strange"));
-	// Expect r/w to have an error
-	assert!(txhashset::zip_read(db_root.clone(), &BlockHeader::default()).is_err());
-	let zip_file = File::open(zip_path).unwrap();
-	assert!(txhashset::zip_write(db_root.clone(), zip_file, &BlockHeader::default()).is_err());
+		.open(Path::new(&db_root).join("txhashset").join("kernel").join("strange0")).unwrap();
+	OpenOptions::new()
+		.create(true)
+		.write(true)
+		.open(Path::new(&db_root).join("txhashset").join("strange1")).unwrap();
+	fs::create_dir(Path::new(&db_root).join("txhashset").join("strange_dir")).unwrap();
+	OpenOptions::new()
+		.create(true)
+		.write(true)
+		.open(Path::new(&db_root).join("txhashset").join("strange_dir").join("strange2")).unwrap();
+	fs::create_dir(Path::new(&db_root).join("txhashset").join("strange_dir").join("strange_subdir")).unwrap();
+	OpenOptions::new()
+		.create(true)
+		.write(true)
+		.open(Path::new(&db_root).join("txhashset").join("strange_dir").join("strange_subdir").join("strange3")).unwrap();
+}
+
+fn txhashset_contains_expected_files(path_buf: PathBuf) -> bool {
+	let list_zip_files = file::list_files(path_buf.into_os_string().into_string().unwrap());
+	if list_zip_files[1] == "output" && list_zip_files[2] == "pmmr_hash.bin" && list_zip_files[3] == "pmmr_data.bin" && list_zip_files[4] == "rangeproof" && list_zip_files[5] == "pmmr_hash.bin" && list_zip_files[6] == "pmmr_data.bin" && list_zip_files[7] == "kernel" && list_zip_files[8] == "pmmr_hash.bin" && list_zip_files[9] == "pmmr_data.bin" {
+		true
+	} else {
+		false
+	}
+	
 }

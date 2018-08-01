@@ -41,7 +41,7 @@ use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
 use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
 use types::{TxHashSetRoots, TxHashsetWriteStatus};
-use util::{secp_static, zip, LOGGER};
+use util::{file, secp_static, zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
 const OUTPUT_SUBDIR: &'static str = "output";
@@ -1057,10 +1057,20 @@ impl<'a> Extension<'a> {
 pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 	let zip_path = Path::new(&root_dir).join(TXHASHSET_ZIP);
-	check_files(&txhashset_path, header)?;
 	// create the zip archive
 	{
-		zip::compress(&txhashset_path, &File::create(zip_path.clone())?)
+		// Temp txhashset directory
+		let temp_txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR.to_string() + "_zip");
+		// Remove temp dir if it exist
+		if temp_txhashset_path.exists() {
+			fs::remove_dir_all(&temp_txhashset_path)?;
+		}
+		// Copy file to another dir
+		file::copy_dir_to(&txhashset_path,&temp_txhashset_path)?;
+		// Check and remove file that are not supposed to be there
+		check_and_remove_files(&temp_txhashset_path, header)?;
+		// Compress zip
+		zip::compress(&temp_txhashset_path, &File::create(zip_path.clone())?)
 			.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
 	}
 
@@ -1073,22 +1083,22 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 /// txhashset storage dir
 pub fn zip_write(root_dir: String, txhashset_data: File, header: &BlockHeader) -> Result<(), Error> {
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
-	check_files(&txhashset_path, header)?;
-
 	fs::create_dir_all(txhashset_path.clone())?;
 	zip::decompress(txhashset_data, &txhashset_path)
-		.map_err(|ze| ErrorKind::Other(ze.to_string()).into())
+		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
+	check_and_remove_files(&txhashset_path, header)
 }
 
-/// Check that the txhashset directory does not contains unexpected files
-fn check_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Result<(), Error> {
+/// Check a txhashset directory and remove any unexpected
+fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Result<(), Error> {
+	// First compare the subdirectories
 	let subdirectories_expected: HashSet<_> = [OUTPUT_SUBDIR, KERNEL_SUBDIR, RANGE_PROOF_SUBDIR]
 		.iter()
 		.cloned()
 		.map(|s| String::from(s))
 		.collect();
-	let subdirectories_found: HashSet<_> = fs::read_dir(txhashset_path)
-		.unwrap()
+
+	let subdirectories_found: HashSet<_> = fs::read_dir(txhashset_path)?
 		.filter_map(|entry| {
 			entry.ok().and_then(|e| {
 				e.path()
@@ -1097,28 +1107,34 @@ fn check_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Result<(), Err
 			})
 		})
 		.collect();
+
 	let dir_difference: Vec<String> = subdirectories_found
 		.difference(&subdirectories_expected)
 		.cloned()
 		.collect();
+
+	// Removing unexpected directories if needed
 	if !dir_difference.is_empty() {
-		return Err(ErrorKind::Other(
-			"Unexpected file(s) found in txhashset folder".to_string(),
-		).into());
+		debug!(LOGGER, "Unexpected folder(s) found in txhashset folder, removing.");
+		for diff in dir_difference {
+			let diff_path = txhashset_path.join(diff);
+			file::delete(diff_path)?;
+		}
 	}
 
-	// Checking now every subdirectory
+	// Then compare the files found in the subdirectories
 	let pmmr_files_expected: HashSet<_> = PMMR_FILES
 		.iter()
 		.cloned()
-		.map(|s| if s.contains(PMMR_FILES[2]) {
+		.map(|s| if s.contains("pmmr_leaf.bin") {
 		format!("{}.{}", s, header.hash())}
 		else {String::from(s) })
 		.collect();
-	let subdirectories = fs::read_dir(txhashset_path).unwrap();
+
+	let subdirectories = fs::read_dir(txhashset_path)?;
 	for subdirectory in subdirectories {
-		let subdirectory_path = subdirectory.unwrap().path();
-		let pmmr_files = fs::read_dir(subdirectory_path).unwrap();
+		let subdirectory_path = subdirectory?.path();
+		let pmmr_files = fs::read_dir(&subdirectory_path)?;
 		let pmmr_files_found: HashSet<_> = pmmr_files
 			.filter_map(|entry| {
 				entry.ok().and_then(|e| {
@@ -1133,9 +1149,11 @@ fn check_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Result<(), Err
 			.cloned()
 			.collect();
 		if !difference.is_empty() {
-			return Err(ErrorKind::Other(
-				"Unexpected file(s) found in txhashset folder".to_string(),
-			).into());
+			debug!(LOGGER, "Unexpected file(s) found in txhashset subfolder {:?}, removing.", &subdirectory_path);
+			for diff in difference {
+				let diff_path = subdirectory_path.join(diff);
+				file::delete(diff_path)?;
+			}
 		}
 	}
 	Ok(())
