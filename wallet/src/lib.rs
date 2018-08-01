@@ -30,7 +30,6 @@ extern crate term;
 extern crate url;
 extern crate uuid;
 
-extern crate bodyparser;
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;
