@@ -157,12 +157,20 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 					debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
 					self.process_block(block, addr)
 				} else {
-					debug!(
-						LOGGER,
-						"adapter: block invalid after hydration, requesting full block"
-					);
-					self.request_block(&cb.header, &addr);
-					true
+					if self.sync_state.status() == SyncStatus::NoSync {
+						debug!(
+							LOGGER,
+							"adapter: block invalid after hydration, requesting full block"
+						);
+						self.request_block(&cb.header, &addr);
+						true
+					} else {
+						debug!(
+							LOGGER,
+							"adapter: block invalid after hydration, ignoring it, cause still syncing"
+						);
+						true
+					}
 				}
 			} else {
 				debug!(
