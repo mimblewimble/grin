@@ -22,7 +22,7 @@
 - [build](build.md) - Explaining how to build and run the Grin binaries
 - [usage](usage.md) - Explaining how to use grin in Testnet1
 - [local_net](local_net.md) - Technical explanation of how to test Grin locally, simulating several peers, for full integration testing and network simulations
-- [wallet](wallet.md) - Explains the wallet design and `grin wallet` sub-commands
+- [wallet](wallet/usage.md) - Explains the wallet design and `grin wallet` sub-commands
 
 # External (wiki)
 - [FAQ](https://github.com/mimblewimble/docs/wiki/FAQ) - Frequently Asked Questions
