@@ -7,7 +7,6 @@ publish = false
 
 [dependencies]
 blake2-rfc = "0.2"
-bodyparser = "0.7"
 byteorder = "1"
 failure = "0.1"
 failure_derive = "0.1"

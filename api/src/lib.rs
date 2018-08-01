@@ -26,7 +26,6 @@ extern crate failure_derive;
 extern crate hyper;
 #[macro_use]
 extern crate lazy_static;
-extern crate mount;
 extern crate regex;
 extern crate serde;
 #[macro_use]
