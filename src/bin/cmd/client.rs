@@ -12,13 +12,50 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate term;
+/// Grin client commands processing
 
 use std::net::SocketAddr;
 
+use clap::ArgMatches;
+
 use api;
+use config::GlobalConfig;
 use p2p;
 use servers::ServerConfig;
+use term;
+
+pub fn client_command(client_args: &ArgMatches, global_config: GlobalConfig) {
+	// just get defaults from the global config
+	let server_config = global_config.members.unwrap().server;
+
+	match client_args.subcommand() {
+		("status", Some(_)) => {
+			show_status(&server_config);
+		}
+		("listconnectedpeers", Some(_)) => {
+			list_connected_peers(&server_config);
+		}
+		("ban", Some(peer_args)) => {
+			let peer = peer_args.value_of("peer").unwrap();
+
+			if let Ok(addr) = peer.parse() {
+				ban_peer(&server_config, &addr);
+			} else {
+				panic!("Invalid peer address format");
+			}
+		}
+		("unban", Some(peer_args)) => {
+			let peer = peer_args.value_of("peer").unwrap();
+
+			if let Ok(addr) = peer.parse() {
+				unban_peer(&server_config, &addr);
+			} else {
+				panic!("Invalid peer address format");
+			}
+		}
+		_ => panic!("Unknown client command, use 'grin help client' for details"),
+	}
+}
 
 pub fn show_status(config: &ServerConfig) {
 	println!();
