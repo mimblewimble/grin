@@ -126,7 +126,9 @@ fn build_request<'a>(
 			None => Body::empty(),
 			Some(json) => json.into(),
 		})
-		.map_err(|_e| ErrorKind::RequestError("Bad request".to_owned()).into())
+		.map_err(|e| {
+			ErrorKind::RequestError(format!("Bad request {} {}: {}", method, url, e)).into()
+		})
 }
 
 fn create_post_request<IN>(url: &str, input: &IN) -> Result<Request<Body>, Error>
@@ -167,7 +169,7 @@ fn send_request_async(req: Request<Body>) -> Box<Future<Item = String, Error = E
 	Box::new(
 		client
 			.request(req)
-			.map_err(|_e| ErrorKind::RequestError("Cannot make request".to_owned()).into())
+			.map_err(|e| ErrorKind::RequestError(format!("Cannot make request: {}", e)).into())
 			.and_then(|resp| {
 				if !resp.status().is_success() {
 					Either::A(err(ErrorKind::RequestError(
@@ -176,8 +178,8 @@ fn send_request_async(req: Request<Body>) -> Box<Future<Item = String, Error = E
 				} else {
 					Either::B(
 						resp.into_body()
-							.map_err(|_| {
-								ErrorKind::RequestError("Cannot read response body".to_owned())
+							.map_err(|e| {
+								ErrorKind::RequestError(format!("Cannot read response body: {}", e))
 									.into()
 							})
 							.concat2()
