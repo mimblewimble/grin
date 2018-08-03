@@ -529,7 +529,7 @@ impl Chain {
 		}
 
 		// prepares the zip and return the corresponding Read
-		let txhashset_reader = txhashset::zip_read(self.db_root.clone())?;
+		let txhashset_reader = txhashset::zip_read(self.db_root.clone(), &header)?;
 		Ok((
 			header.output_mmr_size,
 			header.kernel_mmr_size,
@@ -558,7 +558,7 @@ impl Chain {
 		}
 
 		let header = self.store.get_block_header(&h)?;
-		txhashset::zip_write(self.db_root.clone(), txhashset_data)?;
+		txhashset::zip_write(self.db_root.clone(), txhashset_data, &header)?;
 
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
