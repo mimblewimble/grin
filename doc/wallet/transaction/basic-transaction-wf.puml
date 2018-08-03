@@ -67,11 +67,10 @@ note left of sender
 	6: Calculate public key for **s**: **xG** = **xRG** + **xSG**
 	7: Verify **s** against excess values in final transaction using **xG**
 	8: Create Transaction Kernel Containing:
-		 Signature **s**
-		 Public key **xG**
+		 Excess signature **s**
+		 Public excess **xG**
 		 **fee**
 		 **lock_height**
-		 excess value **oS**
 end note
 sender -> sender: Create final transaction **tx** from **Slate**
 sender -> grin_node: Post **tx** to mempool
