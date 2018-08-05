@@ -17,17 +17,20 @@
 //! vs. functions to interact with someone else)
 //! Still experimental, not sure this is the best way to do this
 
+use std::fs::File;
+use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
 use core::ser;
 use keychain::Keychain;
 use libtx::slate::Slate;
-use libwallet::internal::{tx, updater};
+use libwallet::internal::{tx, updater, selection, sigcontext};
 use libwallet::types::{
 	BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend, WalletClient, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
+use toml;
 use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to
@@ -171,6 +174,107 @@ where
 		lock_fn_out(&mut **w)?;
 		w.close()?;
 		Ok(slate_out)
+	}
+
+	/// Write a transaction to send to file so a user can transmit it to the
+	/// receiver in whichever way they see fit (aka carrier pigeon mode).
+	pub fn file_send_tx(
+		&mut self,
+		amount: u64,
+		minimum_confirmations: u64,
+		dest: &str,
+		max_outputs: usize,
+		selection_strategy_is_use_all: bool,
+	) -> Result<(), Error> {
+		let mut w = self.wallet.lock().unwrap();
+		w.open_with_credentials()?;
+
+		let (slate, context, lock_fn) = tx::create_send_tx(
+			&mut **w,
+			amount,
+			minimum_confirmations,
+			max_outputs,
+			selection_strategy_is_use_all,
+		)?;
+
+		let mut pub_tx = File::create(dest)?;
+		pub_tx.write_all(toml::to_string_pretty(&slate).unwrap().as_bytes())?;
+		let mut priv_tx = File::create(dest.to_owned() + ".private")?;
+		priv_tx.write_all(toml::to_string_pretty(&context).unwrap().as_bytes())?;
+
+		// lock our inputs
+		lock_fn(&mut **w)?;
+		w.close()?;
+		Ok(())
+	}
+
+	/// A sender provided a transaction file with appropriate public keys and
+	/// metadata. Complete the receivers' end of it to generate another file
+	/// to send back.
+	pub fn file_receive_tx(
+		&mut self,
+		source: &str,
+	) -> Result<(), Error> {
+
+		let mut pub_tx_f = File::open(source)?;
+		let mut content = String::new();
+		pub_tx_f.read_to_string(&mut content)?;
+		let mut slate: Slate = toml::from_str(&content).map_err(|_| ErrorKind::TOMLFormat("Invalid transaction file".to_owned()))?;
+
+		let mut wallet = self.wallet.lock().unwrap();
+		wallet.open_with_credentials()?;
+
+		// create an output using the amount in the slate
+		let (_, mut context, receiver_create_fn) =
+			selection::build_recipient_output_with_slate(&mut **wallet, &mut slate)?;
+
+		// fill public keys
+		let _ = slate.fill_round_1(
+			wallet.keychain(),
+			&mut context.sec_key,
+			&context.sec_nonce,
+			1,
+			)?;
+
+		// perform partial sig
+		let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)?;
+
+		// save to file
+		let mut pub_tx = File::create(source.to_owned() + ".response")?;
+		pub_tx.write_all(toml::to_string_pretty(&slate).unwrap().as_bytes())?;
+
+		// Save output in wallet
+		let _ = receiver_create_fn(&mut wallet);
+		Ok(())
+	}
+
+	/// Sender finalization of the transaction. Takes the file returned by the
+	/// sender as well as the private file generate on the first send step.
+	/// Builds the complete transaction and sends it to a grin node for
+	/// propagation.
+	pub fn file_finalize_tx(
+		&mut self,
+		private_tx_file: &str,
+		receiver_file: &str,
+	) -> Result<(), Error> {
+
+		let mut pub_tx_f = File::open(receiver_file)?;
+		let mut content = String::new();
+		pub_tx_f.read_to_string(&mut content)?;
+		let mut slate: Slate = toml::from_str(&content).map_err(|_| ErrorKind::TOMLFormat("Invalid transaction file".to_owned()))?;
+
+		let mut priv_tx_f = File::open(private_tx_file)?;
+		let mut content = String::new();
+		priv_tx_f.read_to_string(&mut content)?;
+		let context: sigcontext::Context = toml::from_str(&content).map_err(|_| ErrorKind::TOMLFormat("Invalid private transaction file".to_owned()))?;
+
+		let mut w = self.wallet.lock().unwrap();
+		w.open_with_credentials()?;
+
+		tx::complete_tx(&mut **w, &mut slate, &context)?;
+
+		w.close()?;
+		Ok(())
 	}
 
 	/// Roll back a transaction and all associated outputs with a given

@@ -14,6 +14,7 @@
 
 //! Functions for building partial transactions to be passed
 //! around during an interactive wallet exchange
+
 use rand::thread_rng;
 use uuid::Uuid;
 

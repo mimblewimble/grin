@@ -13,12 +13,15 @@
 // limitations under the License.
 
 //! Error types for libwallet
-use keychain;
-use libtx;
+
 use std::fmt::{self, Display};
+use std::io;
+
+use failure::{Backtrace, Context, Fail};
 
 use core::core::transaction;
-use failure::{Backtrace, Context, Fail};
+use keychain;
+use libtx;
 
 /// Error definition
 #[derive(Debug, Fail)]
@@ -95,6 +98,10 @@ pub enum ErrorKind {
 	/// An error in the format of the JSON structures exchanged by the wallet
 	#[fail(display = "JSON format error")]
 	Format,
+
+	/// An error in the format of the TOML structures exchanged by the wallet
+	#[fail(display = "TOML format error")]
+	TOMLFormat(String),
 
 	/// IO Error
 	#[fail(display = "I/O error")]
@@ -181,6 +188,14 @@ impl From<ErrorKind> for Error {
 impl From<Context<ErrorKind>> for Error {
 	fn from(inner: Context<ErrorKind>) -> Error {
 		Error { inner: inner }
+	}
+}
+
+impl From<io::Error> for Error {
+	fn from(error: io::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::IO),
+		}
 	}
 }
 

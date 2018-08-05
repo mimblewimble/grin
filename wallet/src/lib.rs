@@ -38,6 +38,7 @@ extern crate hyper;
 extern crate tokio;
 extern crate tokio_core;
 extern crate tokio_retry;
+extern crate toml;
 
 extern crate grin_api as api;
 extern crate grin_core as core;
