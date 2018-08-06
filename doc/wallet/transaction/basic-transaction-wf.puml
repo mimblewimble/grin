@@ -15,21 +15,22 @@ note left of sender
 	1: Create Transaction **UUID** (for reference and maintaining correct state)
 	2: Set **lock_height** for transaction kernel (current chain height)
 	3: Select **inputs** using desired selection strategy
-	4: Create **change_output** 
-	5: Select blinding factor for **change_output**
-	6: Create lock function **sF** that locks **inputs** and stores **change_output** in wallet
+	4: Calculate sum **inputs** blinding factors **xI**
+	5: Create **change_output**
+	6: Select blinding factor **xC** for **change_output**
+	7: Create lock function **sF** that locks **inputs** and stores **change_output** in wallet
 	   and identifying wallet transaction log entry **TS** linking **inputs + outputs**
 	   (Not executed at this point)
 end note
 note left of sender
-	7: Calculate **tx_weight**: MAX(-1 * **num_inputs** + 4 * **num_change_outputs** + 1, 1)
+	8: Calculate **tx_weight**: MAX(-1 * **num_inputs** + 4 * (**num_change_outputs** + 1), 1)
 		(+1 covers a single output on the receiver's side)
-	8: Calculate **fee**:  **tx_weight** * 1_000_000 nG
-	9: Calculate total blinding excess sum for all inputs and outputs **xS** (private scalar)
-	10: Select a random nonce **kS1** (private scalar)
-	11: Subtract random value **oS** from **kS1** to create kernel offset **oS**. Calculate **kS** = **kS1** - **oS**
-	12: Multiply **xS** and **kS** by generator G to create public curve points **xSG** and **kSG**
-	13: Add values to **Slate** for passing to other participants: **UUID, inputs, change_outputs,**
+	9: Calculate **fee**:  **tx_weight** * 1_000_000 nG
+	10: Calculate total blinding excess sum for all inputs and outputs **xS1** = **xC** - **xI** (private scalar)
+	11: Select a random nonce **kS** (private scalar)
+	12: Subtract random kernel offset **oS** from **xS1**. Calculate **xS** = **xS1** - **oS**
+	13: Multiply **xS** and **kS** by generator G to create public curve points **xSG** and **kSG**
+	14: Add values to **Slate** for passing to other participants: **UUID, inputs, change_outputs,**
 	    **fee, amount, lock_height, kSG, xSG, oS**
 end note
 sender -> recipient: **Slate**
@@ -67,11 +68,10 @@ note left of sender
 	6: Calculate public key for **s**: **xG** = **xRG** + **xSG**
 	7: Verify **s** against excess values in final transaction using **xG**
 	8: Create Transaction Kernel Containing:
-		 Signature **s**
-		 Public key **xG**
+		 Excess signature **s**
+		 Public excess **xG**
 		 **fee**
 		 **lock_height**
-		 excess value **oS**
 end note
 sender -> sender: Create final transaction **tx** from **Slate**
 sender -> grin_node: Post **tx** to mempool
