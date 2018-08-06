@@ -286,6 +286,8 @@ pub enum SyncStatus {
 	},
 	/// Finalizing the new state
 	TxHashsetSave,
+	/// Restarting download the various txhashsets
+	TxHashsetDownloadRestart,
 	/// Downloading blocks
 	BodySync {
 		current_height: u64,
