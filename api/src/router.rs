@@ -5,7 +5,6 @@ use hyper::{Body, Method, Request, Response, StatusCode};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
-use util::LOGGER;
 
 lazy_static! {
 	static ref WILDCARD_HASH: u64 = calculate_hash(&"*");
