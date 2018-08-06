@@ -141,7 +141,6 @@ impl Router {
 		for key in keys {
 			node_id = self.find(node_id, key).ok_or(RouterError::RouteNotFound)?;
 			if self.node(node_id).key == *WILDCARD_STOP_HASH {
-				debug!(LOGGER, "ROUTER stop card");
 				break;
 			}
 		}
