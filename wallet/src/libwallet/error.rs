@@ -99,10 +99,6 @@ pub enum ErrorKind {
 	#[fail(display = "JSON format error")]
 	Format,
 
-	/// An error in the format of the TOML structures exchanged by the wallet
-	#[fail(display = "TOML format error")]
-	TOMLFormat(String),
-
 	/// IO Error
 	#[fail(display = "I/O error")]
 	IO,
@@ -192,7 +188,7 @@ impl From<Context<ErrorKind>> for Error {
 }
 
 impl From<io::Error> for Error {
-	fn from(error: io::Error) -> Error {
+	fn from(_error: io::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::IO),
 		}

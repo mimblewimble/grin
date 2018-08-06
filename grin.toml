@@ -63,10 +63,10 @@ skip_sync_wait = false
 run_tui = true
 
 #Whether to run the wallet listener with the server by default
-run_wallet_listener = true
+run_wallet_listener = false
 
 # Whether to run the web-wallet API (will only run on localhost)
-run_wallet_owner_api = true
+run_wallet_owner_api = false
 
 #Whether to run a test miner. This is only for developer testing (chaintype
 #usertesting) at cuckoo 16, and will only mine into the default wallet port.
@@ -149,7 +149,7 @@ api_listen_interface = "127.0.0.1"
 api_listen_port = 13415
 
 # Where the wallet should find a running node
-check_node_api_http_addr = "http://127.0.0.1:13413"
+check_node_api_http_addr = "http://167.99.228.15:13413"
 
 # Where to find wallet files (seed, data, etc)
 data_file_dir = "."

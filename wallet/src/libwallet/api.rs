@@ -22,6 +22,8 @@ use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 
+use serde_json as json;
+
 use core::ser;
 use keychain::Keychain;
 use libtx::slate::Slate;
@@ -30,7 +32,6 @@ use libwallet::types::{
 	BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend, WalletClient, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
-use toml;
 use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to
@@ -198,9 +199,11 @@ where
 		)?;
 
 		let mut pub_tx = File::create(dest)?;
-		pub_tx.write_all(toml::to_string_pretty(&slate).unwrap().as_bytes())?;
+		pub_tx.write_all(json::to_string(&slate).unwrap().as_bytes())?;
+		pub_tx.sync_all()?;
 		let mut priv_tx = File::create(dest.to_owned() + ".private")?;
-		priv_tx.write_all(toml::to_string_pretty(&context).unwrap().as_bytes())?;
+		priv_tx.write_all(json::to_string(&context).unwrap().as_bytes())?;
+		priv_tx.sync_all()?;
 
 		// lock our inputs
 		lock_fn(&mut **w)?;
@@ -219,7 +222,7 @@ where
 		let mut pub_tx_f = File::open(source)?;
 		let mut content = String::new();
 		pub_tx_f.read_to_string(&mut content)?;
-		let mut slate: Slate = toml::from_str(&content).map_err(|_| ErrorKind::TOMLFormat("Invalid transaction file".to_owned()))?;
+		let mut slate: Slate = json::from_str(&content).map_err(|_| ErrorKind::Format)?;
 
 		let mut wallet = self.wallet.lock().unwrap();
 		wallet.open_with_credentials()?;
@@ -241,7 +244,7 @@ where
 
 		// save to file
 		let mut pub_tx = File::create(source.to_owned() + ".response")?;
-		pub_tx.write_all(toml::to_string_pretty(&slate).unwrap().as_bytes())?;
+		pub_tx.write_all(json::to_string_pretty(&slate).unwrap().as_bytes())?;
 
 		// Save output in wallet
 		let _ = receiver_create_fn(&mut wallet);
@@ -256,17 +259,17 @@ where
 		&mut self,
 		private_tx_file: &str,
 		receiver_file: &str,
-	) -> Result<(), Error> {
+	) -> Result<Slate, Error> {
 
 		let mut pub_tx_f = File::open(receiver_file)?;
 		let mut content = String::new();
 		pub_tx_f.read_to_string(&mut content)?;
-		let mut slate: Slate = toml::from_str(&content).map_err(|_| ErrorKind::TOMLFormat("Invalid transaction file".to_owned()))?;
+		let mut slate: Slate = json::from_str(&content).map_err(|_| ErrorKind::Format)?;
 
 		let mut priv_tx_f = File::open(private_tx_file)?;
 		let mut content = String::new();
 		priv_tx_f.read_to_string(&mut content)?;
-		let context: sigcontext::Context = toml::from_str(&content).map_err(|_| ErrorKind::TOMLFormat("Invalid private transaction file".to_owned()))?;
+		let context: sigcontext::Context = json::from_str(&content).map_err(|_| ErrorKind::Format)?;
 
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
@@ -274,7 +277,7 @@ where
 		tx::complete_tx(&mut **w, &mut slate, &context)?;
 
 		w.close()?;
-		Ok(())
+		Ok(slate)
 	}
 
 	/// Roll back a transaction and all associated outputs with a given

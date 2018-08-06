@@ -22,7 +22,6 @@ term = "0.5"
 tokio = "0.1.7"
 tokio-core = "0.1"
 tokio-retry = "0.1"
-toml = "0.4.6"
 uuid = { version = "0.6", features = ["serde", "v4"] }
 url = "1.7.0"
 chrono = { version = "0.4.4", features = ["serde"] }
