@@ -16,8 +16,11 @@
 //! specific to the FileWallet
 
 use failure::ResultExt;
+use futures::{stream, Stream};
+
 use libwallet::types::*;
 use std::collections::HashMap;
+use tokio::runtime::Runtime;
 
 use api;
 use error::{Error, ErrorKind};
@@ -129,19 +132,27 @@ impl WalletClient for HTTPWalletClient {
 
 		// build a map of api outputs by commit so we can look them up efficiently
 		let mut api_outputs: HashMap<pedersen::Commitment, String> = HashMap::new();
+		let mut tasks = Vec::new();
 
-		for query_chunk in query_params.chunks(1000) {
+		for query_chunk in query_params.chunks(500) {
 			let url = format!("{}/v1/chain/outputs/byids?{}", addr, query_chunk.join("&"),);
+			tasks.push(api::client::get_async::<Vec<api::Output>>(url.as_str()));
+		}
 
-			match api::client::get::<Vec<api::Output>>(url.as_str()) {
-				Ok(outputs) => for out in outputs {
-					api_outputs.insert(out.commit.commit(), util::to_hex(out.commit.to_vec()));
-				},
-				Err(_) => {
-					// if we got anything other than 200 back from server, don't attempt to refresh
-					// the wallet data after
-					return Err(libwallet::ErrorKind::ClientCallback("Error from server"))?;
-				}
+		let task = stream::futures_unordered(tasks).collect();
+
+		let mut rt = Runtime::new().unwrap();
+		let results = match rt.block_on(task) {
+			Ok(outputs) => outputs,
+			Err(e) => {
+				error!(LOGGER, "Outputs by id failed: {}", e);
+				return Err(libwallet::ErrorKind::ClientCallback("Error from server"))?;
+			}
+		};
+
+		for res in results {
+			for out in res {
+				api_outputs.insert(out.commit.commit(), util::to_hex(out.commit.to_vec()));
 			}
 		}
 		Ok(api_outputs)
