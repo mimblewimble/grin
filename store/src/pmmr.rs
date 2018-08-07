@@ -40,38 +40,6 @@ pub const PMMR_FILES: [&str; 4] = [
 	PMMR_PRUN_FILE,
 ];
 
-pub struct PMMRExtraBackend<T>
-where
-	T: PMMRable,
-{
-	data_dir: String,
-	_marker: marker::PhantomData<T>,
-}
-
-impl<T> ExtraBackend<T> for PMMRExtraBackend<T>
-where
-	T: PMMRable + ::std::fmt::Debug,
-{
-	fn get(&self, position: u64) -> Option<T> {
-		panic!("not yet implemented...");
-	}
-}
-
-impl<T> PMMRExtraBackend<T>
-where
-	T: PMMRable,
-{
-	pub fn new(
-		data_dir: String,
-	) -> io::Result<PMMRExtraBackend<T>> {
-		panic!("not yet implemented");
-	}
-
-	pub fn unpruned_size(&self) -> io::Result<u64> {
-		panic!("not yet implemented");
-	}
-}
-
 /// PMMR persistent backend implementation. Relies on multiple facilities to
 /// handle writing, reading and pruning.
 ///
