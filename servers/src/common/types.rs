@@ -296,6 +296,7 @@ pub enum SyncStatus {
 /// Current sync state. Encapsulates the current SyncStatus.
 pub struct SyncState {
 	current: RwLock<SyncStatus>,
+	sync_error: RwLock<Result<String, String>>,
 }
 
 impl SyncState {
@@ -303,6 +304,7 @@ impl SyncState {
 	pub fn new() -> SyncState {
 		SyncState {
 			current: RwLock::new(SyncStatus::Initial),
+			sync_error: RwLock::new(Ok("None".to_owned())),
 		}
 	}
 
@@ -332,6 +334,24 @@ impl SyncState {
 
 		*status = new_status;
 	}
+
+	/// Communicate sync error
+	pub fn set_sync_error(&self, error: Error){
+		let mut sync_error = self.sync_error.write().unwrap();
+		*sync_error = Err(format!("{:?}", error));
+	}
+
+	/// Get sync error
+	pub fn sync_error(&self) -> Result<String, String> {
+		self.sync_error.read().unwrap().clone()
+	}
+
+	/// Clear sync error
+	pub fn clear_sync_error(&self){
+		let mut sync_error = self.sync_error.write().unwrap();
+		*sync_error = Ok("None".to_owned());
+	}
+
 }
 
 impl chain::TxHashsetWriteStatus for SyncState {

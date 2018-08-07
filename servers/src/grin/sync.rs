@@ -120,17 +120,24 @@ pub fn run_sync(
 
 					// run the header sync every 10s
 					if si.header_sync_due(&header_head) {
+						header_sync(peers.clone(), chain.clone());
+
 						let status = sync_state.status();
 						match status{
 							SyncStatus::TxHashsetDownload => (),
 							_ => {
-								header_sync(peers.clone(), chain.clone());
 								sync_state.update(SyncStatus::HeaderSync{current_height: header_head.height, highest_height: si.highest_height});
 							}
 						};
 					}
 
 					if fast_sync_enabled {
+						if let Err(e) = sync_state.sync_error(){
+							error!(LOGGER, "fast_sync: error = {}. restart fast sync", e );
+							sync_state.clear_sync_error();
+							si.fast_sync_reset();
+						}
+
 						// run fast sync if applicable, every 5 min
 						if header_head.height == si.highest_height && si.fast_sync_due() {
 							fast_sync(peers.clone(), chain.clone(), &header_head);
@@ -451,6 +458,11 @@ impl SyncInfo {
 			false
 		}
 	}
+
+	fn fast_sync_reset(&mut self) {
+		self.prev_fast_sync = None;
+	}
+
 }
 
 #[cfg(test)]
