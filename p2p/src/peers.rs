@@ -22,13 +22,15 @@ use rand::{thread_rng, Rng};
 use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use time;
+use chrono::prelude::{Utc};
 use util::LOGGER;
 
 use peer::Peer;
 use store::{PeerData, PeerStore, State};
-use types::{Capabilities, ChainAdapter, Direction, Error, NetAdapter, P2PConfig, ReasonForBan,
-            TxHashSetRead, MAX_PEER_ADDRS};
+use types::{
+	Capabilities, ChainAdapter, Direction, Error, NetAdapter, P2PConfig, ReasonForBan,
+	TxHashSetRead, MAX_PEER_ADDRS,
+};
 
 pub struct Peers {
 	pub adapter: Arc<ChainAdapter>,
@@ -87,7 +89,7 @@ impl Peers {
 				dandelion_relay
 					.write()
 					.unwrap()
-					.insert(time::now_utc().to_timespec().sec, peer.clone());
+					.insert(Utc::now().timestamp(), peer.clone());
 				debug!(
 					LOGGER,
 					"Successfully updated Dandelion relay to: {}",
@@ -262,7 +264,7 @@ impl Peers {
 		}
 
 		if let Err(e) =
-			self.update_last_banned(peer_addr.clone(), time::now_utc().to_timespec().sec)
+			self.update_last_banned(peer_addr.clone(), Utc::now().timestamp())
 		{
 			error!(
 				LOGGER,
@@ -615,17 +617,8 @@ impl ChainAdapter for Peers {
 		self.adapter.txhashset_receive_ready()
 	}
 
-	fn txhashset_write(
-		&self,
-		h: Hash,
-		txhashset_data: File,
-		peer_addr: SocketAddr,
-	) -> bool {
-		if !self.adapter.txhashset_write(
-			h,
-			txhashset_data,
-			peer_addr,
-		) {
+	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: SocketAddr) -> bool {
+		if !self.adapter.txhashset_write(h, txhashset_data, peer_addr) {
 			debug!(
 				LOGGER,
 				"Received a bad txhashset data from {}, the peer will be banned", &peer_addr

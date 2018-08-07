@@ -20,10 +20,11 @@ extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
-extern crate time;
+extern crate chrono;
 
 use std::fs;
 use std::sync::Arc;
+use chrono::Duration;
 
 use chain::Chain;
 use chain::types::{NoopAdapter, Tip};
@@ -79,7 +80,7 @@ fn data_files() {
 			let pk = keychain.derive_key_id(n as u32).unwrap();
 			let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
 			let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
-			b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+			b.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 			chain.set_txhashset_roots(&mut b, false).unwrap();
 
@@ -162,7 +163,7 @@ fn _prepare_block_nosum(
 		Err(e) => panic!("{:?}", e),
 		Ok(b) => b,
 	};
-	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+	b.header.timestamp = prev.timestamp + Duration::seconds(60);
 	b.header.total_difficulty = Difficulty::from_num(diff);
 	b
 }

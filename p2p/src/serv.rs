@@ -254,12 +254,7 @@ impl ChainAdapter for DummyAdapter {
 		false
 	}
 
-	fn txhashset_write(
-		&self,
-		_h: Hash,
-		_txhashset_data: File,
-		_peer_addr: SocketAddr,
-	) -> bool {
+	fn txhashset_write(&self, _h: Hash, _txhashset_data: File, _peer_addr: SocketAddr) -> bool {
 		false
 	}
 }

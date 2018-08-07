@@ -258,8 +258,16 @@ where
 		})?;
 	}
 
-	// Check if we need to use a change address
-	if total > amount_with_fee {
+	// The amount with fee is more than the total values of our max outputs
+	if total < amount_with_fee && coins.len() == max_outputs {
+		return Err(ErrorKind::NotEnoughFunds {
+			available: total,
+			needed: amount_with_fee as u64,
+		})?;
+	}
+
+	// We need to add a change address or amount with fee is more than total
+	if total != amount_with_fee {
 		fee = tx_fee(coins.len(), 2, None);
 		amount_with_fee = amount + fee;
 

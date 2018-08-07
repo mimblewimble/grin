@@ -27,18 +27,15 @@ extern crate serde_json;
 extern crate slog;
 extern crate chrono;
 extern crate term;
-extern crate urlencoded;
+extern crate url;
 extern crate uuid;
 
-extern crate bodyparser;
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;
 extern crate futures;
 extern crate hyper;
-extern crate iron;
-#[macro_use]
-extern crate router;
+extern crate tokio;
 extern crate tokio_core;
 extern crate tokio_retry;
 

@@ -14,13 +14,14 @@
 //! core consensus.rs tests (separated to de-clutter consensus.rs)
 #[macro_use]
 extern crate grin_core as core;
-extern crate time;
+extern crate chrono;
 
 use core::consensus::{next_difficulty, valid_header_version, TargetError,
                       DIFFICULTY_ADJUST_WINDOW, MEDIAN_TIME_WINDOW,
                       UPPER_TIME_BOUND, BLOCK_TIME_WINDOW, DAMP_FACTOR, MEDIAN_TIME_INDEX};
 use core::core::target::Difficulty;
 use std::fmt::{self, Display};
+use chrono::prelude::{Utc};
 use core::global;
 
 /// Last n blocks for difficulty calculation purposes
@@ -84,7 +85,7 @@ fn repeat(
 ) -> Vec<Result<(u64, Difficulty), TargetError>> {
 	let cur_time = match cur_time {
 		Some(t) => t,
-		None => time::get_time().sec as u64,
+		None => Utc::now().timestamp() as u64,
 	};
 	// watch overflow here, length shouldn't be ridiculous anyhow
 	assert!(len < std::usize::MAX as u64);
@@ -101,15 +102,15 @@ fn create_chain_sim(diff: u64)
 	-> Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)> {
 	println!(
 		"adding create: {}, {}",
-		time::get_time().sec,
+		Utc::now().timestamp(),
 		Difficulty::from_num(diff)
 	);
 	let return_vec = vec![
-		Ok((time::get_time().sec as u64, Difficulty::from_num(diff))),
+		Ok((Utc::now().timestamp() as u64, Difficulty::from_num(diff))),
 	];
 	let diff_stats = get_diff_stats(&return_vec);
 	vec![
-		(Ok((time::get_time().sec as u64, Difficulty::from_num(diff))), diff_stats),
+		(Ok((Utc::now().timestamp() as u64, Difficulty::from_num(diff))), diff_stats),
 	]
 }
 
@@ -413,7 +414,7 @@ fn adjustment_scenarios() {
 #[test]
 fn next_target_adjustment() {
 	global::set_mining_mode(global::ChainTypes::AutomatedTesting);
-	let cur_time = time::get_time().sec as u64;
+	let cur_time = Utc::now().timestamp() as u64;
 
 	assert_eq!(
 		next_difficulty(vec![Ok((cur_time, Difficulty::one()))]).unwrap(),

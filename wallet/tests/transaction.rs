@@ -22,7 +22,7 @@ extern crate rand;
 #[macro_use]
 extern crate slog;
 extern crate serde;
-extern crate time;
+extern crate chrono;
 extern crate uuid;
 
 mod common;

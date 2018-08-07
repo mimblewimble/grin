@@ -16,16 +16,16 @@
 //! a mining worker implementation
 //!
 
-use std::io::Read;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::str;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread;
-use std::time::Duration;
-use time::{self, now_utc};
+use std::time;
+use chrono::prelude::{Utc};
+use chrono::Duration;
 
-use hyper;
+use api;
 
 use p2p;
 use pool::DandelionConfig;
@@ -34,7 +34,7 @@ use util::LOGGER;
 const SEEDS_URL: &'static str = "http://grin-tech.org/seeds.txt";
 // DNS Seeds with contact email associated
 const DNS_SEEDS: &'static [&'static str] = &[
-	"t3.seed.grin-tech.org",   // igno.peverell@protonmail.com
+	"t3.seed.grin-tech.org", // igno.peverell@protonmail.com
 ];
 
 pub fn connect_and_monitor(
@@ -56,11 +56,11 @@ pub fn connect_and_monitor(
 			// check seeds first
 			connect_to_seeds(peers.clone(), tx.clone(), seed_list);
 
-			let mut prev = time::now_utc() - time::Duration::seconds(60);
+			let mut prev = Utc::now() - Duration::seconds(60);
 			loop {
-				let current_time = time::now_utc();
+				let current_time = Utc::now();
 
-				if current_time - prev > time::Duration::seconds(20) {
+				if current_time - prev > Duration::seconds(20) {
 					// try to connect to any address sent to the channel
 					listen_for_addrs(peers.clone(), p2p_server.clone(), capabilities, &rx);
 
@@ -77,7 +77,7 @@ pub fn connect_and_monitor(
 					prev = current_time;
 				}
 
-				thread::sleep(Duration::from_secs(1));
+				thread::sleep(time::Duration::from_secs(1));
 
 				if stop.load(Ordering::Relaxed) {
 					break;
@@ -101,7 +101,7 @@ fn monitor_peers(
 	for x in peers.all_peers() {
 		match x.flags {
 			p2p::State::Banned => {
-				let interval = now_utc().to_timespec().sec - x.last_banned;
+				let interval = Utc::now().timestamp() - x.last_banned;
 				// Unban peer
 				if interval >= config.ban_window() {
 					peers.unban_peer(&x.addr);
@@ -166,7 +166,7 @@ fn update_dandelion_relay(peers: Arc<p2p::Peers>, dandelion_config: DandelionCon
 		peers.update_dandelion_relay();
 	} else {
 		for last_added in dandelion_relay.keys() {
-			let dandelion_interval = now_utc().to_timespec().sec - last_added;
+			let dandelion_interval = Utc::now().timestamp() - last_added;
 			if dandelion_interval >= dandelion_config.relay_secs.unwrap() as i64 {
 				debug!(LOGGER, "monitor_peers: updating expired dandelion relay");
 				peers.update_dandelion_relay();
@@ -267,22 +267,7 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 /// http. Easy method until we have a set of DNS names we can rely on.
 pub fn web_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 	Box::new(|| {
-		let client = hyper::Client::new();
-		debug!(LOGGER, "Retrieving seed nodes from {}", &SEEDS_URL);
-
-		// http get, filtering out non 200 results
-		let mut res = client
-			.get(SEEDS_URL)
-			.send()
-			.expect("Failed to resolve seeds.");
-		if res.status != hyper::Ok {
-			panic!("Failed to resolve seeds, got status {}.", res.status);
-		}
-		let mut buf = vec![];
-		res.read_to_end(&mut buf)
-			.expect("Could not read seed list.");
-
-		let text = str::from_utf8(&buf[..]).expect("Corrupted seed list.");
+		let text: String = api::client::get(SEEDS_URL).expect("Failed to resolve seeds");
 		let addrs = text.split_whitespace()
 			.map(|s| s.parse().unwrap())
 			.collect::<Vec<_>>();
