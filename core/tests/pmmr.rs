@@ -25,7 +25,7 @@ use core::ser::PMMRIndexHashable;
 use vec_backend::{TestElem, VecBackend};
 
 #[test]
-fn some_peak_mpa() {
+fn some_peak_map() {
 	assert_eq!(pmmr::peak_map_height(0), (  0b0, 0));
 	assert_eq!(pmmr::peak_map_height(1), (  0b1, 0));
 	assert_eq!(pmmr::peak_map_height(2), (  0b1, 1));

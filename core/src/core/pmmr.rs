@@ -15,7 +15,9 @@
 //! Persistent and prunable Merkle Mountain Range implementation. For a high
 //! level description of MMRs, see:
 //!
-//! https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md
+//! https://github.
+//! com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.
+//! md
 //!
 //! This implementation is built in two major parts:
 //!
@@ -63,11 +65,7 @@ where
 	/// to rewind to as well as bitmaps representing the positions added and
 	/// removed since the rewind position. These are what we will "undo"
 	/// during the rewind.
-	fn rewind(
-		&mut self,
-		position: u64,
-		rewind_rm_pos: &Bitmap,
-	) -> Result<(), String>;
+	fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String>;
 
 	/// Get a Hash by insertion position.
 	fn get_hash(&self, position: u64) -> Option<Hash>;
@@ -251,12 +249,12 @@ where
 
 		let (peak_map, height) = peak_map_height(pos - 1);
 		if height != 0 {
-			return Err(format!("bad mmr size {}", pos-1));
+			return Err(format!("bad mmr size {}", pos - 1));
 		}
 		// hash with all immediately preceding peaks, as indicated by peak map
 		let mut peak = 1;
 		while (peak_map & peak) != 0 {
-			let left_sibling = pos + 1 - 2*peak;;
+			let left_sibling = pos + 1 - 2 * peak;
 			let left_hash = self.backend
 				.get_from_file(left_sibling)
 				.ok_or("missing left sibling in tree, should not have been pruned")?;
@@ -284,11 +282,7 @@ where
 	/// that had been canceled. Expects a position in the PMMR to rewind and
 	/// bitmaps representing the positions added and removed that we want to
 	/// "undo".
-	pub fn rewind(
-		&mut self,
-		position: u64,
-		rewind_rm_pos: &Bitmap,
-	) -> Result<(), String> {
+	pub fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String> {
 		// Identify which actual position we should rewind to as the provided
 		// position is a leaf. We traverse the MMR to inclue any parent(s) that
 		// need to be included for the MMR to be valid.
@@ -403,15 +397,13 @@ where
 			let height = bintree_postorder_height(n);
 			if height > 0 {
 				if let Some(hash) = self.get_hash(n) {
-					let left_pos  = n - (1 << height);
+					let left_pos = n - (1 << height);
 					let right_pos = n - 1;
 					// using get_from_file here for the children (they may have been "removed")
 					if let Some(left_child_hs) = self.get_from_file(left_pos) {
 						if let Some(right_child_hs) = self.get_from_file(right_pos) {
 							// hash the two child nodes together with parent_pos and compare
-							if (left_child_hs, right_child_hs).hash_with_index(n - 1)
-								!= hash
-							{
+							if (left_child_hs, right_child_hs).hash_with_index(n - 1) != hash {
 								return Err(format!(
 									"Invalid MMR, hash of parent at {} does \
 									 not match children.",
@@ -504,12 +496,12 @@ where
 /// side of the range, and navigates toward lower siblings toward the right
 /// of the range.
 pub fn peaks(num: u64) -> Vec<u64> {
-        let mut peak_size = 1;
+	let mut peak_size = 1;
 	while peak_size < num {
 		peak_size = peak_size << 1 | 1;
 	}
-        let mut num_left = num;
-        let mut sum_prev_peaks = 0;
+	let mut num_left = num;
+	let mut sum_prev_peaks = 0;
 	let mut peaks = vec![];
 	while peak_size != 0 {
 		if num_left >= peak_size {
@@ -520,7 +512,7 @@ pub fn peaks(num: u64) -> Vec<u64> {
 		peak_size >>= 1;
 	}
 	if num_left > 0 {
-		return vec![]
+		return vec![];
 	}
 	peaks
 }
@@ -528,20 +520,20 @@ pub fn peaks(num: u64) -> Vec<u64> {
 /// The number of leaves in a MMR of the provided size.
 pub fn n_leaves(size: u64) -> u64 {
 	let (sizes, height) = peak_sizes_height(size);
-	let nleaves = sizes
-		.iter()
-		.map(|n| (n+1)/2 as u64)
-		.sum();
-	if height == 0 { nleaves } else { nleaves + 1 }
+	let nleaves = sizes.iter().map(|n| (n + 1) / 2 as u64).sum();
+	if height == 0 {
+		nleaves
+	} else {
+		nleaves + 1
+	}
 }
 
 /// Returns the pmmr index of the nth inserted element
 pub fn insertion_to_pmmr_index(mut sz: u64) -> u64 {
-	//1 based pmmrs
+	// 1 based pmmrs
 	sz -= 1;
 	2 * sz - sz.count_ones() as u64 + 1
 }
-
 
 /// sizes of peaks and height of next node in mmr of given size
 /// Example: on input 5 returns ([3,1], 1) as mmr state before adding 5 was
@@ -549,7 +541,7 @@ pub fn insertion_to_pmmr_index(mut sz: u64) -> u64 {
 ///   / \
 ///  0   1   3   4
 pub fn peak_sizes_height(size: u64) -> (Vec<u64>, u64) {
-        let mut peak_size = 1; // start at arbitrary 2-power minus 1
+	let mut peak_size = 1; // start at arbitrary 2-power minus 1
 	while peak_size < size {
 		peak_size = 2 * peak_size + 1;
 	}
@@ -565,27 +557,32 @@ pub fn peak_sizes_height(size: u64) -> (Vec<u64>, u64) {
 	(sizes, size_left)
 }
 
-/// return (peak_map, pos_height) of given 0-based node pos prior to its addition
+/// return (peak_map, pos_height) of given 0-based node pos prior to its
+/// addition
 /// Example: on input 4 returns (0b11, 0) as mmr state before adding 4 was
 ///    2
 ///   / \
 ///  0   1   3
-/// with 0b11 indicating presence of peaks of index 0 and 1.
+/// with 0b11 indicating presence of peaks of height 0 and 1.
+/// NOTE:
+/// the peak map also encodes the path taken from the root to the added node
+/// since the path turns left (resp. right) if-and-only-if
+/// a peak at that height is absent (resp. present)
 pub fn peak_map_height(mut pos: u64) -> (u64, u64) {
-        let mut peak_size = 1;
+	let mut peak_size = 1;
 	while peak_size <= pos {
 		peak_size = peak_size << 1 | 1;
 	}
 	let mut bitmap = 0;
 	while peak_size != 0 {
-                bitmap = bitmap << 1;
+		bitmap = bitmap << 1;
 		if pos >= peak_size {
 			pos -= peak_size;
 			bitmap |= 1;
 		}
 		peak_size >>= 1;
 	}
-        (bitmap, pos)
+	(bitmap, pos)
 }
 
 /// The height of a node in a full binary tree from its postorder traversal
@@ -609,7 +606,11 @@ pub fn is_leaf(pos: u64) -> bool {
 pub fn family(pos: u64) -> (u64, u64) {
 	let (peak_map, height) = peak_map_height(pos - 1);
 	let peak = 1 << height;
-	if (peak_map & peak) != 0 { (pos+1, pos+1 - 2*peak) } else { (pos+2*peak, pos+2*peak - 1) }
+	if (peak_map & peak) != 0 {
+		(pos + 1, pos + 1 - 2 * peak)
+	} else {
+		(pos + 2 * peak, pos + 2 * peak - 1)
+	}
 }
 
 /// Is the node at this pos the "left" sibling of its parent?
@@ -630,7 +631,7 @@ pub fn path(pos: u64, last_pos: u64) -> Vec<u64> {
 	let mut current = pos;
 	while current <= last_pos {
 		path.push(current);
-		current += if (peak_map & peak) != 0 { 1 } else { 2*peak };
+		current += if (peak_map & peak) != 0 { 1 } else { 2 * peak };
 		peak <<= 1;
 	}
 	path
@@ -650,9 +651,9 @@ pub fn family_branch(pos: u64, last_pos: u64) -> Vec<(u64, u64)> {
 	while current < last_pos {
 		if (peak_map & peak) != 0 {
 			current += 1;
-			sibling = current - 2*peak;
+			sibling = current - 2 * peak;
 		} else {
-			current += 2*peak;
+			current += 2 * peak;
 			sibling = current - 1;
 		};
 		if current > last_pos {
