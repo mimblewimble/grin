@@ -244,7 +244,7 @@ where
 
 		// save to file
 		let mut pub_tx = File::create(source.to_owned() + ".response")?;
-		pub_tx.write_all(json::to_string_pretty(&slate).unwrap().as_bytes())?;
+		pub_tx.write_all(json::to_string(&slate).unwrap().as_bytes())?;
 
 		// Save output in wallet
 		let _ = receiver_create_fn(&mut wallet);
