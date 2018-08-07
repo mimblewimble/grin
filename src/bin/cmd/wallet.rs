@@ -160,48 +160,85 @@ pub fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				let dest = send_args
 					.value_of("dest")
 					.expect("Destination wallet address required");
-				let mut fluff = false;
-				if send_args.is_present("fluff") {
-					fluff = true;
-				}
+				let fluff = send_args.is_present("fluff");
 				let max_outputs = 500;
-				let result = api.issue_send_tx(
-					amount,
-					minimum_confirmations,
-					dest,
-					max_outputs,
-					selection_strategy == "all",
-				);
-				let slate = match result {
-					Ok(s) => {
-						info!(
-							LOGGER,
-							"Tx created: {} grin to {} (strategy '{}')",
-							core::amount_to_hr_string(amount),
-							dest,
-							selection_strategy,
-						);
-						s
+				if dest.starts_with("http") {
+					let result = api.issue_send_tx(
+						amount,
+						minimum_confirmations,
+						dest,
+						max_outputs,
+						selection_strategy == "all",
+					);
+					let slate = match result {
+						Ok(s) => {
+							info!(
+								LOGGER,
+								"Tx created: {} grin to {} (strategy '{}')",
+								core::amount_to_hr_string(amount),
+								dest,
+								selection_strategy,
+							);
+							s
+						}
+						Err(e) => {
+							error!(LOGGER, "Tx not created: {:?}", e);
+							match e.kind() {
+								// user errors, don't backtrace
+								libwallet::ErrorKind::NotEnoughFunds { .. } => {}
+								libwallet::ErrorKind::FeeDispute { .. } => {}
+								libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
+								_ => {
+									// otherwise give full dump
+									error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
+								}
+							};
+							panic!();
+						}
+					};
+					let result = api.post_tx(&slate, fluff);
+					match result {
+						Ok(_) => {
+							info!(LOGGER, "Tx sent",);
+							Ok(())
+						}
+						Err(e) => {
+							error!(LOGGER, "Tx not sent: {:?}", e);
+							Err(e)
+						}
 					}
-					Err(e) => {
-						error!(LOGGER, "Tx not created: {:?}", e);
-						match e.kind() {
-							// user errors, don't backtrace
-							libwallet::ErrorKind::NotEnoughFunds { .. } => {}
-							libwallet::ErrorKind::FeeDispute { .. } => {}
-							libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
-							_ => {
-								// otherwise give full dump
-								error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
-							}
-						};
-						panic!();
-					}
-				};
+				} else {
+					api.file_send_tx(
+						amount,
+						minimum_confirmations,
+						dest,
+						max_outputs,
+						selection_strategy == "all",
+					).expect("Send failed");
+					Ok(())
+				}
+			}
+			("receive", Some(send_args)) => {
+				let tx_file = send_args
+					.value_of("input")
+					.expect("Transaction file required");
+				api.file_receive_tx(tx_file).expect("Receive failed");
+				Ok(())
+			}
+			("finalize", Some(send_args)) => {
+				let fluff = send_args.is_present("fluff");
+				let tx_file = send_args
+					.value_of("input")
+					.expect("Receiver's transaction file required");
+				let priv_file = send_args
+					.value_of("private")
+					.expect("Private transaction file required");
+				let slate = api.file_finalize_tx(priv_file, tx_file).expect("Finalize failed");
+
 				let result = api.post_tx(&slate, fluff);
 				match result {
 					Ok(_) => {
-						info!(LOGGER, "Tx sent",);
+						info!(LOGGER, "Tx sent");
 						Ok(())
 					}
 					Err(e) => {

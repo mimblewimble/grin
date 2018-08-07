@@ -17,7 +17,7 @@ use libtx::aggsig;
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::{self, Secp256k1};
 
-#[derive(Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 /// Holds the context for a single aggsig transaction
 pub struct Context {
 	/// Secret key (of which public is shared)
