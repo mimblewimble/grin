@@ -67,6 +67,7 @@ fn too_large_block() {
 #[test]
 // block with no inputs/outputs/kernels
 // no fees, no reward, no coinbase
+// will be invalid (must have single coinbase output to be valid)
 fn very_empty_block() {
 	let b = Block {
 		header: BlockHeader::default(),
@@ -77,7 +78,7 @@ fn very_empty_block() {
 
 	assert_eq!(
 		b.verify_coinbase(),
-		Err(Error::Secp(secp::Error::IncorrectCommitSum))
+		Err(Error::CoinbaseOutputCount),
 	);
 }
 
@@ -144,8 +145,8 @@ fn empty_block_with_coinbase_is_valid() {
 		.collect::<Vec<_>>();
 	assert_eq!(coinbase_kernels.len(), 1);
 
-	// the block should be valid here (single coinbase output with corresponding
-	// txn kernel)
+	// the block should be valid here
+	// single coinbase output with corresponding tx kernel
 	assert!(b.validate(&BlindingFactor::zero(), &zero_commit).is_ok());
 }
 
@@ -169,14 +170,14 @@ fn remove_coinbase_output_flag() {
 		.features
 		.remove(OutputFeatures::COINBASE_OUTPUT);
 
-	assert_eq!(b.verify_coinbase(), Err(Error::CoinbaseSumMismatch));
+	assert_eq!(b.verify_coinbase(), Err(Error::CoinbaseOutputCount));
 	assert!(
 		b.verify_kernel_sums(b.header.overage(), b.header.total_kernel_offset())
 			.is_ok()
 	);
 	assert_eq!(
 		b.validate(&BlindingFactor::zero(), &zero_commit),
-		Err(Error::CoinbaseSumMismatch)
+		Err(Error::CoinbaseOutputCount),
 	);
 }
 
@@ -201,12 +202,12 @@ fn remove_coinbase_kernel_flag() {
 
 	assert_eq!(
 		b.verify_coinbase(),
-		Err(Error::Secp(secp::Error::IncorrectCommitSum))
+		Err(Error::CoinbaseKernelCount),
 	);
 
 	assert_eq!(
 		b.validate(&BlindingFactor::zero(), &zero_commit),
-		Err(Error::Secp(secp::Error::IncorrectCommitSum))
+		Err(Error::CoinbaseKernelCount),
 	);
 }
 
