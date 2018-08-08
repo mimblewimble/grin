@@ -337,8 +337,7 @@ impl SyncState {
 
 	/// Communicate sync error
 	pub fn set_sync_error(&self, error: Error){
-		let clone = Arc::clone(&self.sync_error);
-		*clone.write().unwrap() = Some(error);
+		*self.sync_error.write().unwrap() = Some(error);
 	}
 
 	/// Get sync error
@@ -348,8 +347,7 @@ impl SyncState {
 
 	/// Clear sync error
 	pub fn clear_sync_error(&self){
-		let clone = Arc::clone(&self.sync_error);
-		*clone.write().unwrap() = None;
+		*self.sync_error.write().unwrap() = None;
 	}
 
 }
