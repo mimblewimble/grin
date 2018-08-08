@@ -15,7 +15,7 @@
 //! Server types
 
 use std::convert::From;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use api;
 use chain;
@@ -296,7 +296,7 @@ pub enum SyncStatus {
 /// Current sync state. Encapsulates the current SyncStatus.
 pub struct SyncState {
 	current: RwLock<SyncStatus>,
-	sync_error: RwLock<Result<String, String>>,
+	sync_error: Arc<RwLock<Option<Error>>>,
 }
 
 impl SyncState {
@@ -304,7 +304,7 @@ impl SyncState {
 	pub fn new() -> SyncState {
 		SyncState {
 			current: RwLock::new(SyncStatus::Initial),
-			sync_error: RwLock::new(Ok("None".to_owned())),
+			sync_error: Arc::new(RwLock::new(None)),
 		}
 	}
 
@@ -337,19 +337,19 @@ impl SyncState {
 
 	/// Communicate sync error
 	pub fn set_sync_error(&self, error: Error){
-		let mut sync_error = self.sync_error.write().unwrap();
-		*sync_error = Err(format!("{:?}", error));
+		let clone = Arc::clone(&self.sync_error);
+		*clone.write().unwrap() = Some(error);
 	}
 
 	/// Get sync error
-	pub fn sync_error(&self) -> Result<String, String> {
-		self.sync_error.read().unwrap().clone()
+	pub fn sync_error(&self) -> Arc<RwLock<Option<Error>>> {
+		Arc::clone(&self.sync_error)
 	}
 
 	/// Clear sync error
 	pub fn clear_sync_error(&self){
-		let mut sync_error = self.sync_error.write().unwrap();
-		*sync_error = Ok("None".to_owned());
+		let clone = Arc::clone(&self.sync_error);
+		*clone.write().unwrap() = None;
 	}
 
 }
