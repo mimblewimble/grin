@@ -24,7 +24,7 @@ use std::thread;
 use std::time::Instant;
 
 use chain::{self, ChainAdapter, Options, Tip};
-use common::types::{ChainValidationMode, ServerConfig, SyncState, SyncStatus};
+use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
 use core::{core, global};
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
@@ -361,7 +361,9 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			w(&self.chain).txhashset_write(h, txhashset_data, self.sync_state.as_ref())
 		{
 			error!(LOGGER, "Failed to save txhashset archive: {}", e);
-			!e.is_bad_data()
+			let is_good_data = !e.is_bad_data();
+			self.sync_state.set_sync_error(types::Error::Chain(e));
+			is_good_data
 		} else {
 			info!(LOGGER, "Received valid txhashset data for {}.", h);
 			true

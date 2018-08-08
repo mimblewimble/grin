@@ -66,6 +66,7 @@ pub enum Error {
 		peer: Hash,
 	},
 	Send(String),
+	PeerException,
 }
 
 impl From<ser::Error> for Error {
