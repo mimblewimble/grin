@@ -123,6 +123,9 @@ impl TUIStatusListener for TUIStatusView {
 					SyncStatus::TxHashsetSave => {
 						"Finalizing chain state for fast sync, step 3/4".to_string()
 					}
+					SyncStatus::TxHashsetDownloadRestart => {
+						"Fast sync failed, preparing for another attempt, step 2/4".to_string()
+					}
 					SyncStatus::BodySync {
 						current_height,
 						highest_height,

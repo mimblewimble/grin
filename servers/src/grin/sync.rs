@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time;
-use std::{cmp, thread};
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time;
+use std::{cmp, thread};
 
 use chain;
 use common::types::{Error, SyncState, SyncStatus};
@@ -77,11 +77,7 @@ pub fn run_sync(
 				// Initial sleep to give us time to peer with some nodes.
 				// Note: Even if we have "skip_sync_wait" we need to wait a
 				// short period of time for tests to do the right thing.
-				let wait_secs = if skip_sync_wait {
-					3
-				} else {
-					30
-				};
+				let wait_secs = if skip_sync_wait { 3 } else { 30 };
 
 				awaiting_peers.store(true, Ordering::Relaxed);
 				let mut n = 0;
@@ -121,18 +117,23 @@ pub fn run_sync(
 					// run the header sync every 10s
 					if si.header_sync_due(&header_head) {
 						let status = sync_state.status();
-						match status{
+						match status {
 							SyncStatus::TxHashsetDownload => (),
 							_ => {
 								header_sync(peers.clone(), chain.clone());
-								sync_state.update(SyncStatus::HeaderSync{current_height: header_head.height, highest_height: si.highest_height});
+								sync_state.update(SyncStatus::HeaderSync {
+									current_height: header_head.height,
+									highest_height: si.highest_height,
+								});
 							}
 						};
 					}
 
 					if fast_sync_enabled {
 						// run fast sync if applicable, every 5 min
-						if header_head.height == si.highest_height && si.fast_sync_due() {
+						if header_head.height == si.highest_height
+							&& si.fast_sync_due(sync_state.status())
+						{
 							fast_sync(peers.clone(), chain.clone(), &header_head);
 							sync_state.update(SyncStatus::TxHashsetDownload);
 						}
@@ -140,7 +141,10 @@ pub fn run_sync(
 						// run the body_sync every 5s
 						if si.body_sync_due(&head) {
 							body_sync(peers.clone(), chain.clone());
-							sync_state.update(SyncStatus::BodySync{current_height: head.height, highest_height: si.highest_height});
+							sync_state.update(SyncStatus::BodySync {
+								current_height: head.height,
+								highest_height: si.highest_height,
+							});
 						}
 					}
 				} else {
@@ -259,7 +263,6 @@ fn fast_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, header_head: &chain::T
 
 	if let Some(peer) = peers.most_work_peer() {
 		if let Ok(p) = peer.try_read() {
-
 			// ask for txhashset at 90% of horizon, this still leaves time for download
 			// and validation to happen and stay within horizon
 			let mut txhashset_head = chain.get_block_header(&header_head.prev_block_h).unwrap();
@@ -442,13 +445,26 @@ impl SyncInfo {
 	}
 
 	// For now this is a one-time thing (it can be slow) at initial startup.
-	fn fast_sync_due(&mut self) -> bool {
-		if let None = self.prev_fast_sync {
-			let now = Utc::now();
+	fn fast_sync_due(&mut self, status: SyncStatus) -> bool {
+		let now = Utc::now();
+		if status == SyncStatus::TxHashsetDownloadRestart {
+			debug!(LOGGER, "Previous fast sync failed, attempting to recover");
 			self.prev_fast_sync = Some(now);
-			true
-		} else {
-			false
+			return true;
+		}
+		match self.prev_fast_sync {
+			None => {
+				self.prev_fast_sync = Some(now);
+				true
+			}
+			Some(prev) => {
+				if status == SyncStatus::TxHashsetDownload && now - prev > Duration::minutes(10) {
+					debug!(LOGGER, "Previous fast sync stalled, attempting to recover");
+					true
+				} else {
+					false
+				}
+			}
 		}
 	}
 }
@@ -474,7 +490,7 @@ mod test {
 		assert_eq!(
 			get_locator_heights(10000),
 			vec![
-				10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0
+				10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0,
 			]
 		);
 	}
