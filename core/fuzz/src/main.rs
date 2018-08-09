@@ -1,11 +1,14 @@
 extern crate grin_core;
 extern crate grin_keychain;
+extern crate grin_wallet;
 
-use grin_core::core::build::{input, output, transaction_with_offset, with_fee};
 use grin_core::core::target::Difficulty;
 use grin_core::core::{Block, BlockHeader, CompactBlock, Transaction};
 use grin_core::ser;
-use grin_keychain::keychain::Keychain;
+use grin_keychain::keychain::ExtKeychain;
+use grin_keychain::Keychain;
+use grin_wallet::libtx::build::{input, output, transaction_with_offset, with_fee};
+use grin_wallet::libtx::reward;
 use std::fs::{self, File};
 use std::path::Path;
 
@@ -18,12 +21,16 @@ fn main() {
 fn generate<W: ser::Writeable>(target: &str, obj: W) -> Result<(), ser::Error> {
 	let dir_path = Path::new("corpus").join(target);
 	if !dir_path.is_dir() {
-		fs::create_dir(&dir_path).map_err(|e| ser::Error::IOErr(e))?;
+		fs::create_dir_all(&dir_path).map_err(|e| {
+			println!("fail: {}", e);
+			ser::Error::IOErr("can't create corpus directory".to_owned(), e.kind())
+		})?;
 	}
 
 	let pattern_path = dir_path.join("pattern");
 	if !pattern_path.exists() {
-		let mut file = File::create(&pattern_path).map_err(|e| ser::Error::IOErr(e))?;
+		let mut file = File::create(&pattern_path)
+			.map_err(|e| ser::Error::IOErr("can't create a pattern file".to_owned(), e.kind()))?;
 		ser::serialize(&mut file, &obj)
 	} else {
 		Ok(())
@@ -31,19 +38,19 @@ fn generate<W: ser::Writeable>(target: &str, obj: W) -> Result<(), ser::Error> {
 }
 
 fn block() -> Block {
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
 
-	let mut tx1 = tx();
-	let mut tx2 = tx();
+	let mut txs = Vec::new();
+	for _ in 1..10 {
+		txs.push(tx());
+	}
 
-	Block::new(
-		&BlockHeader::default(),
-		vec![&mut tx1, &mut tx2],
-		&keychain,
-		&key_id,
-		Difficulty::one(),
-	).unwrap()
+	let header = BlockHeader::default();
+
+	let reward = reward::output(&keychain, &key_id, 0, header.height).unwrap();
+
+	Block::new(&header, txs, Difficulty::one(), reward).unwrap()
 }
 
 fn compact_block() -> CompactBlock {
@@ -57,7 +64,7 @@ fn compact_block() -> CompactBlock {
 }
 
 fn tx() -> Transaction {
-	let keychain = Keychain::from_random_seed().unwrap();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = keychain.derive_key_id(1).unwrap();
 	let key_id2 = keychain.derive_key_id(2).unwrap();
 	let key_id3 = keychain.derive_key_id(3).unwrap();
