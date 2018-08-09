@@ -18,6 +18,7 @@ use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
+use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 
 use consensus::{self, exceeds_weight, reward, VerifySortOrder, REWARD};
@@ -190,7 +191,7 @@ impl Readable for BlockHeader {
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 		let pow = Proof::read(reader)?;
 
-		if timestamp > (1 << 55) || timestamp < -(1 << 55) {
+		if timestamp > MAX_DATE.and_hms(0,0,0).timestamp() || timestamp <MIN_DATE.and_hms(0,0,0).timestamp(){
 			return Err(ser::Error::CorruptedData);
 		}
 
