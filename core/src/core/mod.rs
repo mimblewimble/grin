@@ -123,6 +123,9 @@ impl Proof {
 impl Readable for Proof {
 	fn read(reader: &mut Reader) -> Result<Proof, Error> {
 		let cuckoo_sizeshift = reader.read_u8()?;
+		if cuckoo_sizeshift == 0  ||  cuckoo_sizeshift > 64 {
+			return Err(Error::CorruptedData);
+		}
 
 		let mut nonces = Vec::with_capacity(global::proofsize());
 		let nonce_bits = cuckoo_sizeshift as usize - 1;
