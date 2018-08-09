@@ -573,11 +573,18 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	new_outputs.sort();
 	kernels.sort();
 
+	// build a new aggregate tx from the following -
+	//   * cut-through inputs
+	//   * cut-through outputs
+	//   * full set of tx kernels
+	//   * sum of all kernel offsets
 	let tx = Transaction::new(new_inputs, new_outputs, kernels).with_offset(total_kernel_offset);
 
-	// We need to check sums here as aggregation/cut-through
-	// may have created an invalid tx.
-	tx.verify_kernel_sums(tx.overage(), tx.offset)?;
+	// Now validate the aggregate tx to ensure we have not built something invalid.
+	// The resulting tx could be invalid for a variety of reasons -
+	//   * tx too large (too many inputs|outputs|kernels)
+	//   * cut-through may have invalidated the sums
+	tx.validate()?;
 
 	Ok(tx)
 }
@@ -641,8 +648,11 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	outputs.sort();
 	kernels.sort();
 
-	let mut tx = Transaction::new(inputs, outputs, kernels);
-	tx.offset = total_kernel_offset;
+	// Build a new tx from the above data.
+	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
+
+	// Now validate the resulting tx to ensure we have not built something invalid.
+	tx.validate()?;
 
 	Ok(tx)
 }
