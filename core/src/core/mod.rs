@@ -123,7 +123,7 @@ impl Proof {
 impl Readable for Proof {
 	fn read(reader: &mut Reader) -> Result<Proof, Error> {
 		let cuckoo_sizeshift = reader.read_u8()?;
-		if cuckoo_sizeshift == 0  ||  cuckoo_sizeshift > 64 {
+		if cuckoo_sizeshift == 0 || cuckoo_sizeshift > 64 {
 			return Err(Error::CorruptedData);
 		}
 

@@ -449,11 +449,7 @@ impl<'a> Extension<'a> {
 		kernel_pos: u64,
 		rewind_rm_pos: &Bitmap,
 	) -> Result<(), Error> {
-		self.rewind_to_pos(
-			output_pos,
-			kernel_pos,
-			rewind_rm_pos,
-		)?;
+		self.rewind_to_pos(output_pos, kernel_pos, rewind_rm_pos)?;
 		Ok(())
 	}
 
@@ -466,7 +462,10 @@ impl<'a> Extension<'a> {
 	/// new tx).
 	pub fn apply_raw_tx(&mut self, tx: &Transaction) -> Result<(), Error> {
 		// This should *never* be called on a writeable extension...
-		assert!(self.rollback, "applied raw_tx to writeable txhashset extension");
+		assert!(
+			self.rollback,
+			"applied raw_tx to writeable txhashset extension"
+		);
 
 		// Checkpoint the MMR positions before we apply the new tx,
 		// anything goes wrong we will rewind to these positions.
@@ -474,7 +473,8 @@ impl<'a> Extension<'a> {
 		let kernel_pos = self.kernel_pmmr.unpruned_size();
 
 		// Build bitmap of output pos spent (as inputs) by this tx for rewind.
-		let rewind_rm_pos = tx.inputs
+		let rewind_rm_pos = tx
+			.inputs
 			.iter()
 			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
 			.map(|x| x as u32)
@@ -671,7 +671,8 @@ impl<'a> Extension<'a> {
 			}
 		}
 		// push new outputs in their MMR and save them in the index
-		let pos = self.output_pmmr
+		let pos = self
+			.output_pmmr
 			.push(OutputIdentifier::from_output(out))
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.batch.save_output_pos(&out.commitment(), pos)?;
@@ -716,7 +717,8 @@ impl<'a> Extension<'a> {
 
 		// then calculate the Merkle Proof based on the known pos
 		let pos = self.batch.get_output_pos(&output.commit)?;
-		let merkle_proof = self.output_pmmr
+		let merkle_proof = self
+			.output_pmmr
 			.merkle_proof(pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
@@ -1028,7 +1030,10 @@ impl<'a> Extension<'a> {
 	/// fast sync where a reorg past the horizon could allow a whole rewrite of
 	/// the kernel set.
 	pub fn validate_kernel_history(&mut self, header: &BlockHeader) -> Result<(), Error> {
-		assert!(self.rollback, "verified kernel history on writeable txhashset extension");
+		assert!(
+			self.rollback,
+			"verified kernel history on writeable txhashset extension"
+		);
 
 		let mut current = header.clone();
 		loop {
@@ -1049,7 +1054,6 @@ impl<'a> Extension<'a> {
 		}
 		Ok(())
 	}
-
 }
 
 /// Packages the txhashset data files into a zip and returns a Read to the
@@ -1066,7 +1070,7 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 			fs::remove_dir_all(&temp_txhashset_path)?;
 		}
 		// Copy file to another dir
-		file::copy_dir_to(&txhashset_path,&temp_txhashset_path)?;
+		file::copy_dir_to(&txhashset_path, &temp_txhashset_path)?;
 		// Check and remove file that are not supposed to be there
 		check_and_remove_files(&temp_txhashset_path, header)?;
 		// Compress zip
@@ -1081,7 +1085,11 @@ pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
 
 /// Extract the txhashset data from a zip file and writes the content into the
 /// txhashset storage dir
-pub fn zip_write(root_dir: String, txhashset_data: File, header: &BlockHeader) -> Result<(), Error> {
+pub fn zip_write(
+	root_dir: String,
+	txhashset_data: File,
+	header: &BlockHeader,
+) -> Result<(), Error> {
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 	fs::create_dir_all(txhashset_path.clone())?;
 	zip::decompress(txhashset_data, &txhashset_path)
@@ -1115,7 +1123,10 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 
 	// Removing unexpected directories if needed
 	if !dir_difference.is_empty() {
-		debug!(LOGGER, "Unexpected folder(s) found in txhashset folder, removing.");
+		debug!(
+			LOGGER,
+			"Unexpected folder(s) found in txhashset folder, removing."
+		);
 		for diff in dir_difference {
 			let diff_path = txhashset_path.join(diff);
 			file::delete(diff_path)?;
@@ -1126,9 +1137,13 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 	let pmmr_files_expected: HashSet<_> = PMMR_FILES
 		.iter()
 		.cloned()
-		.map(|s| if s.contains("pmmr_leaf.bin") {
-		format!("{}.{}", s, header.hash())}
-		else {String::from(s) })
+		.map(|s| {
+			if s.contains("pmmr_leaf.bin") {
+				format!("{}.{}", s, header.hash())
+			} else {
+				String::from(s)
+			}
+		})
 		.collect();
 
 	let subdirectories = fs::read_dir(txhashset_path)?;
@@ -1149,7 +1164,11 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 			.cloned()
 			.collect();
 		if !difference.is_empty() {
-			debug!(LOGGER, "Unexpected file(s) found in txhashset subfolder {:?}, removing.", &subdirectory_path);
+			debug!(
+				LOGGER,
+				"Unexpected file(s) found in txhashset subfolder {:?}, removing.",
+				&subdirectory_path
+			);
 			for diff in difference {
 				let diff_path = subdirectory_path.join(diff);
 				file::delete(diff_path)?;
