@@ -318,8 +318,7 @@ impl Readable for Transaction {
 		// Treat any validation issues as data corruption.
 		// An example of this would be reading a tx
 		// that exceeded the allowed number of inputs.
-		tx.validate()
-			.map_err(|_| ser::Error::CorruptedData)?;
+		tx.validate().map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(tx)
 	}
@@ -488,7 +487,8 @@ impl Transaction {
 	// Verify that no input is spending an output from the same block.
 	fn verify_cut_through(&self) -> Result<(), Error> {
 		for inp in &self.inputs {
-			if self.outputs
+			if self
+				.outputs
 				.iter()
 				.any(|out| out.commitment() == inp.commitment())
 			{
@@ -509,7 +509,11 @@ impl Transaction {
 
 	// Verify we have no outputs tagged as COINBASE_OUTPUT.
 	fn verify_output_features(&self) -> Result<(), Error> {
-		if self.outputs.iter().any(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT)) {
+		if self
+			.outputs
+			.iter()
+			.any(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
+		{
 			return Err(Error::InvalidOutputFeatures);
 		}
 		Ok(())
@@ -517,7 +521,11 @@ impl Transaction {
 
 	// Verify we have no kernels tagged as COINBASE_KERNEL.
 	fn verify_kernel_features(&self) -> Result<(), Error> {
-		if self.kernels.iter().any(|x| x.features.contains(KernelFeatures::COINBASE_KERNEL)) {
+		if self
+			.kernels
+			.iter()
+			.any(|x| x.features.contains(KernelFeatures::COINBASE_KERNEL))
+		{
 			return Err(Error::InvalidKernelFeatures);
 		}
 		Ok(())

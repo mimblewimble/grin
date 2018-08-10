@@ -228,7 +228,8 @@ impl<W: ser::Writeable> Hashed for W {
 
 impl<T: Writeable> consensus::VerifySortOrder<T> for Vec<T> {
 	fn verify_sort_order(&self) -> Result<(), consensus::Error> {
-		if self.iter()
+		if self
+			.iter()
 			.map(|item| item.hash())
 			.collect::<Vec<_>>()
 			.windows(2)
