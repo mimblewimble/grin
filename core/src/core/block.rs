@@ -45,7 +45,13 @@ pub enum Error {
 	InvalidTotalKernelSum,
 	/// Same as above but for the coinbase part of a block, including reward
 	CoinbaseSumMismatch,
-	/// Too many inputs, outputs or kernels in the block
+	/// Restrict number of block inputs.
+	TooManyInputs,
+	/// Restrict number of block outputs.
+	TooManyOutputs,
+	/// Retrict number of block kernels.
+	TooManyKernels,
+	/// Block weight (based on inputs|outputs|kernels) exceeded.
 	WeightExceeded,
 	/// Kernel not valid due to lock_height exceeding block header height
 	KernelLockHeight(u64),
@@ -399,6 +405,13 @@ impl Readable for Block {
 		let outputs = read_and_verify_sorted(reader, output_len)?;
 		let kernels = read_and_verify_sorted(reader, kernel_len)?;
 
+		// TODO - we do not verify the input|output|kernel counts here.
+		// I think should call block.validate() as part of a call to read()
+		// but block.validate() as it stands currently requires the previous sums etc.
+		// So there is no easy way to do this in isolation.
+		// Maybe we need two variations of validate() where one handles the validation
+		// rules that *can* be done in isolation.
+
 		Ok(Block {
 			header: header,
 			inputs: inputs,
@@ -694,7 +707,11 @@ impl Block {
 		prev_kernel_offset: &BlindingFactor,
 		prev_kernel_sum: &Commitment,
 	) -> Result<(Commitment), Error> {
+		// Verify we do not exceed the max number of inputs|outputs|kernels
+		// and that the "weight" based on these does not exceed the max permitted weight.
+		self.verify_size()?;
 		self.verify_weight()?;
+
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 		self.verify_coinbase()?;
@@ -725,6 +742,21 @@ impl Block {
 		self.verify_rangeproofs()?;
 		self.verify_kernel_signatures()?;
 		Ok(kernel_sum)
+	}
+
+	// Verify the tx is not too big in terms of
+	// number of inputs|outputs|kernels.
+	fn verify_size(&self) -> Result<(), Error> {
+		if self.inputs.len() > consensus::MAX_BLOCK_INPUTS {
+			return Err(Error::TooManyInputs);
+		}
+		if self.outputs.len() > consensus::MAX_BLOCK_OUTPUTS {
+			return Err(Error::TooManyOutputs);
+		}
+		if self.kernels.len() > consensus::MAX_BLOCK_KERNELS {
+			return Err(Error::TooManyKernels);
+		}
+		Ok(())
 	}
 
 	fn verify_weight(&self) -> Result<(), Error> {

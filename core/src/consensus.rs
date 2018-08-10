@@ -90,11 +90,20 @@ pub const MAX_BLOCK_WEIGHT: usize = 80_000;
 
 /// Reused consistently for various max lengths below.
 /// Max transaction is effectively a full block of data.
+/// Soft fork down when too high.
+/// Likely we will need to tweak these all individually, but using a single constant for now.
 const MAX_INP_OUT_KERN_LEN: usize = 300_000;
 
-/// Maximum inputs for a block (issue#261)
-/// Hundreds of inputs + 1 output might be slow to validate (issue#258)
-pub const MAX_BLOCK_INPUTS: usize = MAX_INP_OUT_KERN_LEN; // soft fork down when too_high
+/// Maximum inputs for a block.
+pub const MAX_BLOCK_INPUTS: usize = MAX_INP_OUT_KERN_LEN;
+
+/// Maximum outputs for a block (max tx + single output for coinbase).
+/// This is just a starting point - need to discuss this further.
+pub const MAX_BLOCK_OUTPUTS: usize = MAX_INP_OUT_KERN_LEN + 1;
+
+/// Maximum kernels for a block (max tx + single output for coinbase).
+/// This is just a starting point - need to discuss this further.
+pub const MAX_BLOCK_KERNELS: usize = MAX_INP_OUT_KERN_LEN + 1;
 
 /// Maximum inputs in a transaction.
 pub const MAX_TX_INPUTS: usize = MAX_INP_OUT_KERN_LEN;
@@ -107,9 +116,11 @@ pub const MAX_TX_KERNELS: usize = MAX_INP_OUT_KERN_LEN;
 
 /// Whether a block exceeds the maximum acceptable weight
 pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) -> bool {
-	input_len * BLOCK_INPUT_WEIGHT
-		+ output_len * BLOCK_OUTPUT_WEIGHT
-		+ kernel_len * BLOCK_KERNEL_WEIGHT > MAX_BLOCK_WEIGHT || input_len > MAX_BLOCK_INPUTS
+	let weight =
+		input_len * BLOCK_INPUT_WEIGHT +
+		output_len * BLOCK_OUTPUT_WEIGHT +
+		kernel_len * BLOCK_KERNEL_WEIGHT;
+	weight > MAX_BLOCK_WEIGHT
 }
 
 /// Fork every 250,000 blocks for first 2 years, simple number and just a
