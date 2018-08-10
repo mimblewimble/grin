@@ -54,8 +54,12 @@ pub enum Error {
 	/// The sum of output minus input commitments does not
 	/// match the sum of kernel commitments
 	KernelSumMismatch,
-	/// Restrict number of incoming inputs
+	/// Restrict number of tx inputs.
 	TooManyInputs,
+	/// Restrict number of tx outputs.
+	TooManyOutputs,
+	/// Retrict number of tx kernels.
+	TooManyKernels,
 	/// Underlying consensus error (currently for sort order)
 	ConsensusError(consensus::Error),
 	/// Error originating from an invalid lock-height
@@ -299,23 +303,25 @@ impl Readable for Transaction {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
-		if input_len > consensus::MAX_TX_INPUTS
-			|| output_len > consensus::MAX_TX_OUTPUTS
-			|| kernel_len > consensus::MAX_TX_KERNELS
-		{
-			return Err(ser::Error::CorruptedData);
-		}
-
 		let inputs = read_and_verify_sorted(reader, input_len)?;
 		let outputs = read_and_verify_sorted(reader, output_len)?;
 		let kernels = read_and_verify_sorted(reader, kernel_len)?;
 
-		Ok(Transaction {
+		let tx = Transaction {
 			offset,
 			inputs,
 			outputs,
 			kernels,
-		})
+		};
+
+		// Now validate the tx.
+		// Treat any validation issues as data corruption.
+		// An example of this would be reading a tx
+		// that exceeded the allowed number of inputs.
+		tx.validate()
+			.map_err(|_| ser::Error::CorruptedData)?;
+
+		Ok(tx)
 	}
 }
 
@@ -428,20 +434,32 @@ impl Transaction {
 		Ok(())
 	}
 
+	// Verify the tx is not too big in terms of
+	// number of inputs|outputs|kernels.
+	fn verify_size(&self) -> Result<(), Error> {
+		if self.inputs.len() > consensus::MAX_TX_INPUTS {
+			return Err(Error::TooManyInputs);
+		}
+		if self.outputs.len() > consensus::MAX_TX_OUTPUTS {
+			return Err(Error::TooManyOutputs);
+		}
+		if self.kernels.len() > consensus::MAX_TX_KERNELS {
+			return Err(Error::TooManyKernels);
+		}
+		Ok(())
+	}
+
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
 	pub fn validate(&self) -> Result<(), Error> {
-		if self.inputs.len() > consensus::MAX_BLOCK_INPUTS {
-			return Err(Error::TooManyInputs);
-		}
 		self.verify_features()?;
+		self.verify_size()?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 		self.verify_kernel_sums(self.overage(), self.offset)?;
 		self.verify_rangeproofs()?;
 		self.verify_kernel_signatures()?;
-
 		Ok(())
 	}
 

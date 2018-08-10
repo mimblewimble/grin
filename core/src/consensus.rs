@@ -88,18 +88,22 @@ pub const BLOCK_KERNEL_WEIGHT: usize = 2;
 /// Total maximum block weight
 pub const MAX_BLOCK_WEIGHT: usize = 80_000;
 
+/// Reused consistently for various max lengths below.
+/// Max transaction is effectively a full block of data.
+const MAX_INP_OUT_KERN_LEN: usize = 300_000;
+
 /// Maximum inputs for a block (issue#261)
 /// Hundreds of inputs + 1 output might be slow to validate (issue#258)
-pub const MAX_BLOCK_INPUTS: usize = 300_000; // soft fork down when too_high
+pub const MAX_BLOCK_INPUTS: usize = MAX_INP_OUT_KERN_LEN; // soft fork down when too_high
 
-/// Maximum inputs for a transaction
-pub const MAX_TX_INPUTS: u64 = 2048;
+/// Maximum inputs in a transaction.
+pub const MAX_TX_INPUTS: usize = MAX_INP_OUT_KERN_LEN;
 
-/// Maximum outputs for a transaction
-pub const MAX_TX_OUTPUTS: u64 = 500; // wallet uses 500 as max
+/// Maximum outputs in a transaction.
+pub const MAX_TX_OUTPUTS: usize = MAX_INP_OUT_KERN_LEN;
 
-/// Maximum kernels for a transaction
-pub const MAX_TX_KERNELS: u64 = 2048;
+/// Maximum kernels in a transaction.
+pub const MAX_TX_KERNELS: usize = MAX_INP_OUT_KERN_LEN;
 
 /// Whether a block exceeds the maximum acceptable weight
 pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) -> bool {
