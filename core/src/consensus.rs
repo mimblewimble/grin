@@ -114,15 +114,6 @@ pub const MAX_TX_OUTPUTS: usize = MAX_INP_OUT_KERN_LEN;
 /// Maximum kernels in a transaction.
 pub const MAX_TX_KERNELS: usize = MAX_INP_OUT_KERN_LEN;
 
-/// Whether a block exceeds the maximum acceptable weight
-pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) -> bool {
-	let weight =
-		input_len * BLOCK_INPUT_WEIGHT +
-		output_len * BLOCK_OUTPUT_WEIGHT +
-		kernel_len * BLOCK_KERNEL_WEIGHT;
-	weight > MAX_BLOCK_WEIGHT
-}
-
 /// Fork every 250,000 blocks for first 2 years, simple number and just a
 /// little less than 6 months.
 pub const HARD_FORK_INTERVAL: u64 = 250_000;

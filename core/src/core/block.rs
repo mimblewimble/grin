@@ -21,7 +21,7 @@ use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
 
-use consensus::{self, exceeds_weight, reward, VerifySortOrder, REWARD};
+use consensus::{self, reward, VerifySortOrder, REWARD};
 use core::committed::{self, Committed};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
@@ -760,7 +760,12 @@ impl Block {
 	}
 
 	fn verify_weight(&self) -> Result<(), Error> {
-		if exceeds_weight(self.inputs.len(), self.outputs.len(), self.kernels.len()) {
+		let weight =
+			self.inputs.len() * consensus::BLOCK_INPUT_WEIGHT +
+			self.outputs.len() * consensus::BLOCK_OUTPUT_WEIGHT +
+			self.kernels.len() * consensus::BLOCK_KERNEL_WEIGHT;
+
+		if weight > consensus::MAX_BLOCK_WEIGHT {
 			return Err(Error::WeightExceeded);
 		}
 		Ok(())
