@@ -197,7 +197,8 @@ impl ChainStore {
 	// the full block from the db (if the block is found).
 	// (bool, Bitmap) : (false if bitmap was built and not found in db)
 	fn get_block_input_bitmap_db(&self, bh: &Hash) -> Result<(bool, Bitmap), Error> {
-		if let Ok(Some(bytes)) = self.db
+		if let Ok(Some(bytes)) = self
+			.db
 			.get(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
 		{
 			Ok((true, Bitmap::deserialize(&bytes)))
@@ -442,7 +443,8 @@ impl Iterator for DifficultyIter {
 		if let Some(header) = self.header.clone() {
 			self.prev_header = self.store.get_block_header(&header.previous).ok();
 
-			let prev_difficulty = self.prev_header
+			let prev_difficulty = self
+				.prev_header
 				.clone()
 				.map_or(Difficulty::zero(), |x| x.total_difficulty);
 			let difficulty = header.total_difficulty - prev_difficulty;

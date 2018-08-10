@@ -250,7 +250,7 @@ impl Chain {
 				// block got accepted but we did not extend the head
 				// so its on a fork (or is the start of a new fork)
 				// broadcast the block out so everyone knows about the fork
-					// broadcast the block
+				// broadcast the block
 				self.adapter.block_accepted(&b, opts);
 
 				Ok((None, Some(b)))
@@ -379,7 +379,7 @@ impl Chain {
 		trace!(
 			LOGGER,
 			"chain: done check_orphans at {}. # remaining orphans {}",
-			height-1,
+			height - 1,
 			self.orphans.len(),
 		);
 	}
@@ -541,12 +541,7 @@ impl Chain {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	pub fn txhashset_write<T>(
-		&self,
-		h: Hash,
-		txhashset_data: File,
-		status: &T,
-	) -> Result<(), Error>
+	pub fn txhashset_write<T>(&self, h: Hash, txhashset_data: File, status: &T) -> Result<(), Error>
 	where
 		T: TxHashsetWriteStatus,
 	{
@@ -566,7 +561,10 @@ impl Chain {
 		// Validate against a read-only extension first.
 		// The kernel history validation requires a read-only extension
 		// due to the internal rewind behavior.
-		debug!(LOGGER, "chain: txhashset_write: rewinding and validating (read-only)");
+		debug!(
+			LOGGER,
+			"chain: txhashset_write: rewinding and validating (read-only)"
+		);
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.rewind(&header, &header)?;
 			extension.validate(&header, false, status)?;
@@ -579,7 +577,10 @@ impl Chain {
 		})?;
 
 		// all good, prepare a new batch and update all the required records
-		debug!(LOGGER, "chain: txhashset_write: rewinding a 2nd time (writeable)");
+		debug!(
+			LOGGER,
+			"chain: txhashset_write: rewinding a 2nd time (writeable)"
+		);
 		let mut batch = self.store.batch()?;
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			extension.rewind(&header, &header)?;
@@ -587,7 +588,10 @@ impl Chain {
 			Ok(())
 		})?;
 
-		debug!(LOGGER, "chain: txhashset_write: finished validating and rebuilding");
+		debug!(
+			LOGGER,
+			"chain: txhashset_write: finished validating and rebuilding"
+		);
 
 		status.on_save();
 		// replace the chain txhashset with the newly built one
@@ -605,7 +609,10 @@ impl Chain {
 		}
 		batch.commit()?;
 
-		debug!(LOGGER, "chain: txhashset_write: finished committing the batch (head etc.)");
+		debug!(
+			LOGGER,
+			"chain: txhashset_write: finished committing the batch (head etc.)"
+		);
 
 		self.check_orphans(header.height + 1);
 
