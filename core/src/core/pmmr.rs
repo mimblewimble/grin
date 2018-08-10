@@ -64,11 +64,7 @@ where
 	/// to rewind to as well as bitmaps representing the positions added and
 	/// removed since the rewind position. These are what we will "undo"
 	/// during the rewind.
-	fn rewind(
-		&mut self,
-		position: u64,
-		rewind_rm_pos: &Bitmap,
-	) -> Result<(), String>;
+	fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String>;
 
 	/// Get a Hash by insertion position.
 	fn get_hash(&self, position: u64) -> Option<Hash>;
@@ -268,7 +264,8 @@ where
 		while bintree_postorder_height(pos + 1) > height {
 			let left_sibling = bintree_jump_left_sibling(pos);
 
-			let left_hash = self.backend
+			let left_hash = self
+				.backend
 				.get_from_file(left_sibling)
 				.ok_or("missing left sibling in tree, should not have been pruned")?;
 
@@ -297,11 +294,7 @@ where
 	/// that had been canceled. Expects a position in the PMMR to rewind and
 	/// bitmaps representing the positions added and removed that we want to
 	/// "undo".
-	pub fn rewind(
-		&mut self,
-		position: u64,
-		rewind_rm_pos: &Bitmap,
-	) -> Result<(), String> {
+	pub fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String> {
 		// Identify which actual position we should rewind to as the provided
 		// position is a leaf. We traverse the MMR to inclue any parent(s) that
 		// need to be included for the MMR to be valid.

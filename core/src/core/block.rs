@@ -14,12 +14,12 @@
 
 //! Blocks and blockheaders
 
+use chrono::naive::{MAX_DATE, MIN_DATE};
+use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
-use chrono::naive::{MAX_DATE, MIN_DATE};
-use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 
 use consensus::{self, exceeds_weight, reward, VerifySortOrder, REWARD};
 use core::committed::{self, Committed};
@@ -191,7 +191,9 @@ impl Readable for BlockHeader {
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 		let pow = Proof::read(reader)?;
 
-		if timestamp > MAX_DATE.and_hms(0,0,0).timestamp() || timestamp <MIN_DATE.and_hms(0,0,0).timestamp(){
+		if timestamp > MAX_DATE.and_hms(0, 0, 0).timestamp()
+			|| timestamp < MIN_DATE.and_hms(0, 0, 0).timestamp()
+		{
 			return Err(ser::Error::CorruptedData);
 		}
 
@@ -512,7 +514,8 @@ impl Block {
 		let header = self.header.clone();
 		let nonce = thread_rng().next_u64();
 
-		let mut out_full = self.outputs
+		let mut out_full = self
+			.outputs
 			.iter()
 			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.cloned()
@@ -644,12 +647,14 @@ impl Block {
 	/// we do not want to cut-through (all coinbase must be preserved)
 	///
 	pub fn cut_through(self) -> Block {
-		let in_set = self.inputs
+		let in_set = self
+			.inputs
 			.iter()
 			.map(|inp| inp.commitment())
 			.collect::<HashSet<_>>();
 
-		let out_set = self.outputs
+		let out_set = self
+			.outputs
 			.iter()
 			.filter(|out| !out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.map(|out| out.commitment())
@@ -657,12 +662,14 @@ impl Block {
 
 		let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
 
-		let new_inputs = self.inputs
+		let new_inputs = self
+			.inputs
 			.into_iter()
 			.filter(|inp| !to_cut_through.contains(&inp.commitment()))
 			.collect::<Vec<_>>();
 
-		let new_outputs = self.outputs
+		let new_outputs = self
+			.outputs
 			.into_iter()
 			.filter(|out| !to_cut_through.contains(&out.commitment()))
 			.collect::<Vec<_>>();
@@ -738,7 +745,8 @@ impl Block {
 	// Verify that no input is spending an output from the same block.
 	fn verify_cut_through(&self) -> Result<(), Error> {
 		for inp in &self.inputs {
-			if self.outputs
+			if self
+				.outputs
 				.iter()
 				.any(|out| out.commitment() == inp.commitment())
 			{
@@ -781,12 +789,14 @@ impl Block {
 	/// Check the sum of coinbase-marked outputs match
 	/// the sum of coinbase-marked kernels accounting for fees.
 	pub fn verify_coinbase(&self) -> Result<(), Error> {
-		let cb_outs = self.outputs
+		let cb_outs = self
+			.outputs
 			.iter()
 			.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.collect::<Vec<&Output>>();
 
-		let cb_kerns = self.kernels
+		let cb_kerns = self
+			.kernels
 			.iter()
 			.filter(|kernel| kernel.features.contains(KernelFeatures::COINBASE_KERNEL))
 			.collect::<Vec<&TxKernel>>();
@@ -801,10 +811,7 @@ impl Block {
 				vec![over_commit],
 			)?;
 
-			let kerns_sum = secp.commit_sum(
-				cb_kerns.iter().map(|x| x.excess).collect(),
-				vec![],
-			)?;
+			let kerns_sum = secp.commit_sum(cb_kerns.iter().map(|x| x.excess).collect(), vec![])?;
 
 			// Verify the kernel sum equals the output sum accounting for block fees.
 			if kerns_sum != out_adjust_sum {

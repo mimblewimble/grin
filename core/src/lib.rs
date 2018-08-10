@@ -38,8 +38,8 @@ extern crate serde_derive;
 extern crate siphasher;
 #[macro_use]
 extern crate slog;
-extern crate failure;
 extern crate chrono;
+extern crate failure;
 #[macro_use]
 extern crate failure_derive;
 

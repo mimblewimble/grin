@@ -29,9 +29,9 @@
 #![warn(missing_docs)]
 
 extern crate blake2_rfc as blake2;
+extern crate chrono;
 extern crate rand;
 extern crate serde;
-extern crate chrono;
 
 extern crate grin_util as util;
 
