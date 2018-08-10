@@ -104,7 +104,7 @@ where
 			stem_txs.len()
 		);
 
-		let agg_tx = transaction::aggregate(stem_txs)?;
+		let agg_tx = transaction::aggregate(stem_txs, None)?;
 
 		let res = tx_pool.adapter.stem_tx_accepted(&agg_tx);
 		if res.is_err() {
@@ -144,7 +144,7 @@ where
 			stem_txs.len()
 		);
 
-		let agg_tx = transaction::aggregate(stem_txs)?;
+		let agg_tx = transaction::aggregate(stem_txs, None)?;
 
 		let src = TxSource {
 			debug_name: "fluff".to_string(),

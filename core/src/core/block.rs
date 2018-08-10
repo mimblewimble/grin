@@ -553,55 +553,19 @@ impl Block {
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
 	) -> Result<Block, Error> {
-		let mut kernels = vec![];
-		let mut inputs = vec![];
-		let mut outputs = vec![];
 
-		// we will sum these together at the end
-		// to give us the overall offset for the block
-		let mut kernel_offsets = vec![];
+		// A block is just a big transaction, aggregate as such. Note that
+		// aggregate also runs validation and duplicate commitment checks.
+		let agg_tx = transaction::aggregate(txs, Some((reward_out, reward_kern)))?;
 
-		// iterate over the all the txs
-		// build the kernel for each
-		// and collect all the kernels, inputs and outputs
-		// to build the block (which we can sort of think of as one big tx?)
-		for tx in txs {
-			// validate each transaction and gather their kernels
-			// tx has an offset k2 where k = k1 + k2
-			// and the tx is signed using k1
-			// the kernel excess is k1G
-			// we will sum all the offsets later and store the total offset
-			// on the block_header
-			tx.validate()?;
-
-			// we will sum these later to give a single aggregate offset
-			kernel_offsets.push(tx.offset);
-
-			// add all tx inputs/outputs/kernels to the block
-			kernels.extend(tx.kernels.into_iter());
-			inputs.extend(tx.inputs.into_iter());
-			outputs.extend(tx.outputs.into_iter());
-		}
-
-		// include the reward kernel and output
-		kernels.push(reward_kern);
-		outputs.push(reward_out);
-
-		// now sort everything so the block is built deterministically
-		inputs.sort();
-		outputs.sort();
-		kernels.sort();
-
-		// now sum the kernel_offsets up to give us
-		// an aggregate offset for the entire block
-		kernel_offsets.push(prev.total_kernel_offset);
-		let total_kernel_offset = committed::sum_kernel_offsets(kernel_offsets, vec![])?;
+		// Now add the kernel offset of the previous block for a total
+		let total_kernel_offset = committed::sum_kernel_offsets(vec![agg_tx.offset, prev.total_kernel_offset], vec![])?;
 
 		let total_kernel_sum = {
 			let zero_commit = secp_static::commit_to_zero_value();
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			let mut excesses = map_vec!(kernels, |x| x.excess());
+			let mut excesses = map_vec!(agg_tx.kernels, |x| x.excess());
 			excesses.push(prev.total_kernel_sum);
 			excesses.retain(|x| *x != zero_commit);
 			secp.commit_sum(excesses, vec![])?
@@ -617,9 +581,9 @@ impl Block {
 				total_kernel_sum,
 				..Default::default()
 			},
-			inputs,
-			outputs,
-			kernels,
+			inputs: agg_tx.inputs,
+			outputs: agg_tx.outputs,
+			kernels: agg_tx.kernels,
 		}.cut_through())
 	}
 
