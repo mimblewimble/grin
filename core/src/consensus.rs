@@ -96,23 +96,6 @@ pub const BLOCK_KERNEL_WEIGHT: usize = 2;
 /// and one kernel, should be around 5_326_667 bytes.
 pub const MAX_BLOCK_WEIGHT: usize = 80_000;
 
-/// Reused consistently for various max lengths below.
-/// Max transaction is effectively a full block of data.
-/// Soft fork down when too high.
-/// Likely we will need to tweak these all individually, but using a single constant for now.
-const MAX_INP_OUT_KERN_LEN: usize = 300_000;
-
-/// Maximum inputs for a block.
-pub const MAX_BLOCK_INPUTS: usize = MAX_INP_OUT_KERN_LEN;
-
-/// Maximum outputs for a block (max tx + single output for coinbase).
-/// This is just a starting point - need to discuss this further.
-pub const MAX_BLOCK_OUTPUTS: usize = MAX_INP_OUT_KERN_LEN + 1;
-
-/// Maximum kernels for a block (max tx + single output for coinbase).
-/// This is just a starting point - need to discuss this further.
-pub const MAX_BLOCK_KERNELS: usize = MAX_INP_OUT_KERN_LEN + 1;
-
 /// Fork every 250,000 blocks for first 2 years, simple number and just a
 /// little less than 6 months.
 pub const HARD_FORK_INTERVAL: u64 = 250_000;

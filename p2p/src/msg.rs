@@ -20,9 +20,9 @@ use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpSt
 use std::{thread, time};
 
 use core::consensus;
-use core::core::BlockHeader;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
+use core::core::BlockHeader;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::{Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};
@@ -733,11 +733,7 @@ pub struct TxHashSetArchive {
 impl Writeable for TxHashSetArchive {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.hash.write(writer)?;
-		ser_multiwrite!(
-			writer,
-			[write_u64, self.height],
-			[write_u64, self.bytes]
-		);
+		ser_multiwrite!(writer, [write_u64, self.height], [write_u64, self.bytes]);
 		Ok(())
 	}
 }
