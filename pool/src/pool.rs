@@ -18,6 +18,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use core::consensus;
 use core::core::hash::Hashed;
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
@@ -70,10 +71,21 @@ where
 
 	/// Take the first num_to_fetch txs based on insertion order.
 	pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<Transaction> {
-		self.entries
+		// clone the vec, not the transactions
+		let mut entries = self.entries.iter().collect::<Vec<&_>>();;
+		// sort by fees over weight, multiplying by 1000 to keep some precision
+		// don't think we'll ever see a >max_u64/1000 fee transaction
+		entries.sort_unstable_by_key(|e| e.tx.fee() * 1000 / e.tx.tx_weight() as u64);
+
+		// accumulate as long as we're not above the block weight
+		let mut weight = 0;
+		entries
 			.iter()
-			.take(num_to_fetch as usize)
-			.map(|x| x.tx.clone())
+			.take_while(|e| {
+				weight += e.tx.block_weight();
+				weight < consensus::MAX_BLOCK_WEIGHT
+			})
+			.map(|e| e.tx.clone())
 			.collect()
 	}
 
