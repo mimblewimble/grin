@@ -54,12 +54,8 @@ pub enum Error {
 	/// The sum of output minus input commitments does not
 	/// match the sum of kernel commitments
 	KernelSumMismatch,
-	/// Restrict number of tx inputs.
-	TooManyInputs,
-	/// Restrict number of tx outputs.
-	TooManyOutputs,
-	/// Retrict number of tx kernels.
-	TooManyKernels,
+	/// Restrict tx total weight.
+	TooHeavy,
 	/// Underlying consensus error (currently for sort order)
 	ConsensusError(consensus::Error),
 	/// Error originating from an invalid lock-height
@@ -433,17 +429,16 @@ impl Transaction {
 		Ok(())
 	}
 
-	// Verify the tx is not too big in terms of
-	// number of inputs|outputs|kernels.
+	// Verify the tx is not too big in terms of number of inputs|outputs|kernels.
 	fn verify_size(&self) -> Result<(), Error> {
-		if self.inputs.len() > consensus::MAX_TX_INPUTS {
-			return Err(Error::TooManyInputs);
-		}
-		if self.outputs.len() > consensus::MAX_TX_OUTPUTS {
-			return Err(Error::TooManyOutputs);
-		}
-		if self.kernels.len() > consensus::MAX_TX_KERNELS {
-			return Err(Error::TooManyKernels);
+		// check the tx as if it was a block, with an additional output and
+		// kernel for reward
+		let tx_block_weight = self.inputs.len() * consensus::BLOCK_INPUT_WEIGHT +
+			(self.outputs.len() + 1) * consensus::BLOCK_OUTPUT_WEIGHT +
+			(self.kernels.len() + 1) * consensus::BLOCK_KERNEL_WEIGHT;
+
+		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
+			return Err(Error::TooHeavy);
 		}
 		Ok(())
 	}

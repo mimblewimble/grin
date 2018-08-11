@@ -105,15 +105,6 @@ pub const MAX_BLOCK_OUTPUTS: usize = MAX_INP_OUT_KERN_LEN + 1;
 /// This is just a starting point - need to discuss this further.
 pub const MAX_BLOCK_KERNELS: usize = MAX_INP_OUT_KERN_LEN + 1;
 
-/// Maximum inputs in a transaction.
-pub const MAX_TX_INPUTS: usize = MAX_INP_OUT_KERN_LEN;
-
-/// Maximum outputs in a transaction.
-pub const MAX_TX_OUTPUTS: usize = MAX_INP_OUT_KERN_LEN;
-
-/// Maximum kernels in a transaction.
-pub const MAX_TX_KERNELS: usize = MAX_INP_OUT_KERN_LEN;
-
 /// Fork every 250,000 blocks for first 2 years, simple number and just a
 /// little less than 6 months.
 pub const HARD_FORK_INTERVAL: u64 = 250_000;
