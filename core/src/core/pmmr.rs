@@ -15,7 +15,9 @@
 //! Persistent and prunable Merkle Mountain Range implementation. For a high
 //! level description of MMRs, see:
 //!
-//! https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md
+//! https://github.
+//! com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.
+//! md
 //!
 //! This implementation is built in two major parts:
 //!
@@ -27,8 +29,7 @@
 //! tree. This allows us, with a few primitive, to get the height of any node
 //! in the MMR from its position in the sequence, as well as calculate the
 //! position of siblings, parents, etc. As all those functions only rely on
-//! binary operations, they're extremely fast. For more information, see the
-//! doc on bintree_jump_left_sibling.
+//! binary operations, they're extremely fast.
 //! 2. The implementation of a prunable MMR tree using the above. Each leaf
 //! is required to be Writeable (which implements Hashed). Tree roots can be
 //! trivially and efficiently calculated without materializing the full tree.
@@ -220,16 +221,6 @@ where
 
 		let mmr_size = self.unpruned_size();
 
-		// Edge case: an MMR with a single entry in it
-		// this entry is a leaf, a peak and the root itself
-		// and there are no siblings to hash with
-		if mmr_size == 1 {
-			return Ok(MerkleProof {
-				mmr_size,
-				path: vec![],
-			});
-		}
-
 		let family_branch = family_branch(pos, self.last_pos);
 
 		let mut path = family_branch
@@ -254,24 +245,22 @@ where
 		let mut current_hash = elmt.hash_with_index(elmt_pos - 1);
 
 		let mut to_append = vec![(current_hash, Some(elmt))];
-		let mut height = 0;
 		let mut pos = elmt_pos;
 
-		// we look ahead one position in the MMR, if the expected node has a higher
-		// height it means we have to build a higher peak by hashing with a previous
-		// sibling. we do it iteratively in case the new peak itself allows the
-		// creation of another parent.
-		while bintree_postorder_height(pos + 1) > height {
-			let left_sibling = bintree_jump_left_sibling(pos);
-
+		let (peak_map, height) = peak_map_height(pos - 1);
+		if height != 0 {
+			return Err(format!("bad mmr size {}", pos - 1));
+		}
+		// hash with all immediately preceding peaks, as indicated by peak map
+		let mut peak = 1;
+		while (peak_map & peak) != 0 {
+			let left_sibling = pos + 1 - 2 * peak;
 			let left_hash = self
 				.backend
 				.get_from_file(left_sibling)
 				.ok_or("missing left sibling in tree, should not have been pruned")?;
-
-			height += 1;
+			peak *= 2;
 			pos += 1;
-
 			current_hash = (left_hash, current_hash).hash_with_index(pos - 1);
 			to_append.push((current_hash, None));
 		}
@@ -367,34 +356,16 @@ where
 	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, T)> {
 		let mut return_vec = vec![];
 		let mut last_leaf = self.last_pos;
-		let size = self.unpruned_size();
-		// Special case that causes issues in bintree functions,
-		// just return
-		if size == 1 {
-			return_vec.push((
-				self.backend.get_hash(last_leaf).unwrap(),
-				self.backend.get_data(last_leaf).unwrap(),
-			));
-			return return_vec;
-		}
-		// if size is even, we're already at the bottom, otherwise
-		// we need to traverse down to it (reverse post-order direction)
-		if size % 2 == 1 {
-			last_leaf = bintree_rightmost(self.last_pos);
-		}
 		for _ in 0..n as u64 {
 			if last_leaf == 0 {
 				break;
 			}
-			if bintree_postorder_height(last_leaf) > 0 {
-				last_leaf = bintree_rightmost(last_leaf);
-			}
+			last_leaf = bintree_rightmost(last_leaf);
 			return_vec.push((
 				self.backend.get_hash(last_leaf).unwrap(),
 				self.backend.get_data(last_leaf).unwrap(),
 			));
-
-			last_leaf = bintree_jump_left_sibling(last_leaf);
+			last_leaf -= 1;
 		}
 		return_vec
 	}
@@ -424,21 +395,16 @@ where
 	pub fn validate(&self) -> Result<(), String> {
 		// iterate on all parent nodes
 		for n in 1..(self.last_pos + 1) {
-			if bintree_postorder_height(n) > 0 {
+			let height = bintree_postorder_height(n);
+			if height > 0 {
 				if let Some(hash) = self.get_hash(n) {
-					// take the left and right children, if they exist
-					let left_pos =
-						bintree_move_down_left(n).ok_or("left_pos not found".to_string())?;
-					let right_pos = bintree_jump_right_sibling(left_pos);
-
+					let left_pos = n - (1 << height);
+					let right_pos = n - 1;
 					// using get_from_file here for the children (they may have been "removed")
 					if let Some(left_child_hs) = self.get_from_file(left_pos) {
 						if let Some(right_child_hs) = self.get_from_file(right_pos) {
 							// hash the two child nodes together with parent_pos and compare
-							let (parent_pos, _) = family(left_pos);
-							if (left_child_hs, right_child_hs).hash_with_index(parent_pos - 1)
-								!= hash
-							{
+							if (left_child_hs, right_child_hs).hash_with_index(n - 1) != hash {
 								return Err(format!(
 									"Invalid MMR, hash of parent at {} does \
 									 not match children.",
@@ -526,146 +492,106 @@ where
 	}
 }
 
-/// Gets the postorder traversal index of all peaks in a MMR given the last
-/// node's position. Starts with the top peak, which is always on the left
+/// Gets the postorder traversal index of all peaks in a MMR given its size.
+/// Starts with the top peak, which is always on the left
 /// side of the range, and navigates toward lower siblings toward the right
 /// of the range.
 pub fn peaks(num: u64) -> Vec<u64> {
-	if num == 0 {
-		return vec![];
+	let mut peak_size = 1;
+	while peak_size < num {
+		peak_size = peak_size << 1 | 1;
 	}
-
-	// detecting an invalid mountain range, when siblings exist but no parent
-	// exists
-	if bintree_postorder_height(num + 1) > bintree_postorder_height(num) {
-		return vec![];
-	}
-
-	// our top peak is always on the leftmost side of the tree and leftmost trees
-	// have for index a binary values with all 1s (i.e. 11, 111, 1111, etc.)
-	let mut top = 1;
-	while (top - 1) <= num {
-		top <<= 1;
-	}
-	top = (top >> 1) - 1;
-	if top == 0 {
-		return vec![1];
-	}
-
-	let mut peaks = vec![top];
-
-	// going down the range, next peaks are right neighbors of the top. if one
-	// doesn't exist yet, we go down to a smaller peak to the left
-	let mut peak = top;
-	'outer: loop {
-		peak = bintree_jump_right_sibling(peak);
-		while peak > num {
-			match bintree_move_down_left(peak) {
-				Some(p) => peak = p,
-				None => break 'outer,
-			}
+	let mut num_left = num;
+	let mut sum_prev_peaks = 0;
+	let mut peaks = vec![];
+	while peak_size != 0 {
+		if num_left >= peak_size {
+			peaks.push(sum_prev_peaks + peak_size);
+			sum_prev_peaks += peak_size;
+			num_left -= peak_size;
 		}
-		peaks.push(peak);
+		peak_size >>= 1;
 	}
-
+	if num_left > 0 {
+		return vec![];
+	}
 	peaks
 }
 
-/// The number of leaves nodes in a MMR of the provided size. Uses peaks to
-/// get the positions of all full binary trees and uses the height of these
-pub fn n_leaves(mut sz: u64) -> u64 {
-	if sz == 0 {
-		return 0;
+/// The number of leaves in a MMR of the provided size.
+pub fn n_leaves(size: u64) -> u64 {
+	let (sizes, height) = peak_sizes_height(size);
+	let nleaves = sizes.iter().map(|n| (n + 1) / 2 as u64).sum();
+	if height == 0 {
+		nleaves
+	} else {
+		nleaves + 1
 	}
-
-	while bintree_postorder_height(sz + 1) > 0 {
-		sz += 1;
-	}
-	peaks(sz)
-		.iter()
-		.map(|n| (1 << bintree_postorder_height(*n)) as u64)
-		.sum()
 }
 
 /// Returns the pmmr index of the nth inserted element
 pub fn insertion_to_pmmr_index(mut sz: u64) -> u64 {
-	//1 based pmmrs
+	// 1 based pmmrs
 	sz -= 1;
 	2 * sz - sz.count_ones() as u64 + 1
+}
+
+/// sizes of peaks and height of next node in mmr of given size
+/// Example: on input 5 returns ([3,1], 1) as mmr state before adding 5 was
+///    2
+///   / \
+///  0   1   3   4
+pub fn peak_sizes_height(size: u64) -> (Vec<u64>, u64) {
+	let mut peak_size = 1; // start at arbitrary 2-power minus 1
+	while peak_size < size {
+		peak_size = 2 * peak_size + 1;
+	}
+	let mut sizes = vec![];
+	let mut size_left = size;
+	while peak_size != 0 {
+		if size_left >= peak_size {
+			sizes.push(peak_size);
+			size_left -= peak_size;
+		}
+		peak_size /= 2;
+	}
+	(sizes, size_left)
+}
+
+/// return (peak_map, pos_height) of given 0-based node pos prior to its
+/// addition
+/// Example: on input 4 returns (0b11, 0) as mmr state before adding 4 was
+///    2
+///   / \
+///  0   1   3
+/// with 0b11 indicating presence of peaks of height 0 and 1.
+/// NOTE:
+/// the peak map also encodes the path taken from the root to the added node
+/// since the path turns left (resp. right) if-and-only-if
+/// a peak at that height is absent (resp. present)
+pub fn peak_map_height(mut pos: u64) -> (u64, u64) {
+	let mut peak_size = 1;
+	while peak_size <= pos {
+		peak_size = peak_size << 1 | 1;
+	}
+	let mut bitmap = 0;
+	while peak_size != 0 {
+		bitmap = bitmap << 1;
+		if pos >= peak_size {
+			pos -= peak_size;
+			bitmap |= 1;
+		}
+		peak_size >>= 1;
+	}
+	(bitmap, pos)
 }
 
 /// The height of a node in a full binary tree from its postorder traversal
 /// index. This function is the base on which all others, as well as the MMR,
 /// are built.
-///
-/// We first start by noticing that the insertion order of a node in a MMR [1]
-/// is identical to the height of a node in a binary tree traversed in
-/// postorder. Specifically, we want to be able to generate the following
-/// sequence:
-///
-/// //    [0, 0, 1, 0, 0, 1, 2, 0, 0, 1, 0, 0, 1, 2, 3, 0, 0, 1, ...]
-///
-/// Which turns out to start as the heights in the (left, right, top)
-/// -postorder- traversal of the following tree:
-///
-/// //               3
-/// //             /   \
-/// //           /       \
-/// //         /           \
-/// //        2             2
-/// //      /  \          /  \
-/// //     /    \        /    \
-/// //    1      1      1      1
-/// //   / \    / \    / \    / \
-/// //  0   0  0   0  0   0  0   0
-///
-/// If we extend this tree up to a height of 4, we can continue the sequence,
-/// and for an infinitely high tree, we get the infinite sequence of heights
-/// in the MMR.
-///
-/// So to generate the MMR height sequence, we want a function that, given an
-/// index in that sequence, gets us the height in the tree. This allows us to
-/// build the sequence not only to infinite, but also at any index, without the
-/// need to materialize the beginning of the sequence.
-///
-/// To see how to get the height of a node at any position in the postorder
-/// traversal sequence of heights, we start by rewriting the previous tree with
-/// each the position of every node written in binary:
-///
-///
-/// //                  1111
-/// //                 /   \
-/// //               /       \
-/// //             /           \
-/// //           /               \
-/// //        111                1110
-/// //       /   \              /    \
-/// //      /     \            /      \
-/// //     11      110        1010     1101
-/// //    / \      / \       /  \      / \
-/// //   1   10  100  101  1000 1001 1011 1100
-///
-/// The height of a node is the number of 1 digits on the leftmost branch of
-/// the tree, minus 1. For example, 1111 has 4 ones, so its height is `4-1=3`.
-///
-/// To get the height of any node (say 1101), we need to travel left in the
-/// tree, get the leftmost node and count the ones. To travel left, we just
-/// need to subtract the position by it's most significant bit, mins one. For
-/// example to get from 1101 to 110 we subtract it by (1000-1) (`13-(8-1)=5`).
-/// Then to to get 110 to 11, we subtract it by (100-1) ('6-(4-1)=3`).
-///
-/// By applying this operation recursively, until we get a number that, in
-/// binary, is all ones, and then counting the ones, we can get the height of
-/// any node, from its postorder traversal position. Which is the order in which
-/// nodes are added in a MMR.
-///
-/// [1]  https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md
+
 pub fn bintree_postorder_height(num: u64) -> u64 {
-	let mut h = num;
-	while !all_ones(h) {
-		h = bintree_jump_left(h);
-	}
-	most_significant_pos(h) - 1
+	peak_map_height(num - 1).1
 }
 
 /// Is this position a leaf in the MMR?
@@ -679,23 +605,20 @@ pub fn is_leaf(pos: u64) -> bool {
 /// Calculates the positions of the parent and sibling of the node at the
 /// provided position.
 pub fn family(pos: u64) -> (u64, u64) {
-	let pos_height = bintree_postorder_height(pos);
-	let next_height = bintree_postorder_height(pos + 1);
-	if next_height > pos_height {
-		let sibling = bintree_jump_left_sibling(pos);
-		let parent = pos + 1;
-		(parent, sibling)
+	let (peak_map, height) = peak_map_height(pos - 1);
+	let peak = 1 << height;
+	if (peak_map & peak) != 0 {
+		(pos + 1, pos + 1 - 2 * peak)
 	} else {
-		let sibling = bintree_jump_right_sibling(pos);
-		let parent = sibling + 1;
-		(parent, sibling)
+		(pos + 2 * peak, pos + 2 * peak - 1)
 	}
 }
 
 /// Is the node at this pos the "left" sibling of its parent?
 pub fn is_left_sibling(pos: u64) -> bool {
-	let (_, sibling_pos) = family(pos);
-	sibling_pos > pos
+	let (peak_map, height) = peak_map_height(pos - 1);
+	let peak = 1 << height;
+	(peak_map & peak) == 0
 }
 
 /// Returns the path from the specified position up to its
@@ -703,27 +626,17 @@ pub fn is_left_sibling(pos: u64) -> bool {
 /// The size (and therefore the set of peaks) of the MMR
 /// is defined by last_pos.
 pub fn path(pos: u64, last_pos: u64) -> Vec<u64> {
+	let (peak_map, height) = peak_map_height(pos - 1);
+	let mut peak = 1 << height;
 	let mut path = vec![];
 	let mut current = pos;
 	while current <= last_pos {
 		path.push(current);
-		let (parent, _) = family(current);
-		current = parent;
+		current += if (peak_map & peak) != 0 { 1 } else { 2 * peak };
+		peak <<= 1;
 	}
 	path
 }
-
-// TODO - this is simpler, test it is actually correct?
-// pub fn path(pos: u64, last_pos: u64) -> Vec<u64> {
-// 	let mut path = vec![];
-// 	let mut current = pos;
-// 	while current <= last_pos {
-// 		path.push(current);
-// 		let (parent, _) = family(current);
-// 		current = parent;
-// 	}
-// 	path
-// }
 
 /// For a given starting position calculate the parent and sibling positions
 /// for the branch/path from that position to the peak of the tree.
@@ -731,65 +644,29 @@ pub fn path(pos: u64, last_pos: u64) -> Vec<u64> {
 pub fn family_branch(pos: u64, last_pos: u64) -> Vec<(u64, u64)> {
 	// loop going up the tree, from node to parent, as long as we stay inside
 	// the tree (as defined by last_pos).
+	let (peak_map, height) = peak_map_height(pos - 1);
+	let mut peak = 1 << height;
 	let mut branch = vec![];
 	let mut current = pos;
-	while current + 1 <= last_pos {
-		let (parent, sibling) = family(current);
-		if parent > last_pos {
+	let mut sibling;
+	while current < last_pos {
+		if (peak_map & peak) != 0 {
+			current += 1;
+			sibling = current - 2 * peak;
+		} else {
+			current += 2 * peak;
+			sibling = current - 1;
+		};
+		if current > last_pos {
 			break;
 		}
-		branch.push((parent, sibling));
-
-		current = parent;
+		branch.push((current, sibling));
+		peak <<= 1;
 	}
 	branch
 }
 
-/// Calculates the position of the top-left child of a parent node in the
-/// postorder traversal of a full binary tree.
-fn bintree_move_down_left(num: u64) -> Option<u64> {
-	let height = bintree_postorder_height(num);
-	if height == 0 {
-		return None;
-	}
-	Some(num - (1 << height))
-}
-
 /// Gets the position of the rightmost node (i.e. leaf) relative to the current
 fn bintree_rightmost(num: u64) -> u64 {
-	let height = bintree_postorder_height(num);
-	if height == 0 {
-		return 0;
-	}
-	num - height
-}
-
-/// Calculates the position of the right sibling of a node a subtree in the
-/// postorder traversal of a full binary tree.
-fn bintree_jump_right_sibling(num: u64) -> u64 {
-	num + (1 << (bintree_postorder_height(num) + 1)) - 1
-}
-
-/// Calculates the position of the left sibling of a node a subtree in the
-/// postorder traversal of a full binary tree.
-fn bintree_jump_left_sibling(num: u64) -> u64 {
-	num - ((1 << (bintree_postorder_height(num) + 1)) - 1)
-}
-
-/// Calculates the position of of a node to the left of the provided one when
-/// jumping from the largest rightmost tree to its left equivalent in the
-/// postorder traversal of a full binary tree.
-fn bintree_jump_left(num: u64) -> u64 {
-	num - ((1 << (most_significant_pos(num) - 1)) - 1)
-}
-
-/// Check if the binary representation of a number is all ones.
-pub fn all_ones(num: u64) -> bool {
-	let ones = num.count_ones();
-	num.leading_zeros() + ones == 64 && ones > 0
-}
-
-/// Get the position of the most significant bit in a number.
-pub fn most_significant_pos(num: u64) -> u64 {
-	64 - u64::from(num.leading_zeros())
+	num - bintree_postorder_height(num)
 }
