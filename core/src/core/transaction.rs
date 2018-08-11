@@ -433,9 +433,9 @@ impl Transaction {
 	fn verify_size(&self) -> Result<(), Error> {
 		// check the tx as if it was a block, with an additional output and
 		// kernel for reward
-		let tx_block_weight = self.inputs.len() * consensus::BLOCK_INPUT_WEIGHT +
-			(self.outputs.len() + 1) * consensus::BLOCK_OUTPUT_WEIGHT +
-			(self.kernels.len() + 1) * consensus::BLOCK_KERNEL_WEIGHT;
+		let tx_block_weight = self.inputs.len() * consensus::BLOCK_INPUT_WEIGHT
+			+ (self.outputs.len() + 1) * consensus::BLOCK_OUTPUT_WEIGHT
+			+ (self.kernels.len() + 1) * consensus::BLOCK_KERNEL_WEIGHT;
 
 		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
 			return Err(Error::TooHeavy);
@@ -482,8 +482,7 @@ impl Transaction {
 	// Verify that no input is spending an output from the same block.
 	fn verify_cut_through(&self) -> Result<(), Error> {
 		for inp in &self.inputs {
-			if self
-				.outputs
+			if self.outputs
 				.iter()
 				.any(|out| out.commitment() == inp.commitment())
 			{
@@ -504,8 +503,7 @@ impl Transaction {
 
 	// Verify we have no outputs tagged as COINBASE_OUTPUT.
 	fn verify_output_features(&self) -> Result<(), Error> {
-		if self
-			.outputs
+		if self.outputs
 			.iter()
 			.any(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
 		{
@@ -516,8 +514,7 @@ impl Transaction {
 
 	// Verify we have no kernels tagged as COINBASE_KERNEL.
 	fn verify_kernel_features(&self) -> Result<(), Error> {
-		if self
-			.kernels
+		if self.kernels
 			.iter()
 			.any(|x| x.features.contains(KernelFeatures::COINBASE_KERNEL))
 		{

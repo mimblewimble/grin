@@ -45,12 +45,8 @@ pub enum Error {
 	InvalidTotalKernelSum,
 	/// Same as above but for the coinbase part of a block, including reward
 	CoinbaseSumMismatch,
-	/// Restrict number of block inputs.
-	TooManyInputs,
-	/// Restrict number of block outputs.
-	TooManyOutputs,
-	/// Retrict number of block kernels.
-	TooManyKernels,
+	/// Restrict block total weight.
+	TooHeavy,
 	/// Block weight (based on inputs|outputs|kernels) exceeded.
 	WeightExceeded,
 	/// Kernel not valid due to lock_height exceeding block header height
@@ -710,7 +706,6 @@ impl Block {
 		// Verify we do not exceed the max number of inputs|outputs|kernels
 		// and that the "weight" based on these does not exceed the max permitted weight.
 		self.verify_size()?;
-		self.verify_weight()?;
 
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
@@ -744,29 +739,15 @@ impl Block {
 		Ok(kernel_sum)
 	}
 
-	// Verify the tx is not too big in terms of
-	// number of inputs|outputs|kernels.
+	// Verify the block is not too big in terms of number of inputs|outputs|kernels.
 	fn verify_size(&self) -> Result<(), Error> {
-		if self.inputs.len() > consensus::MAX_BLOCK_INPUTS {
-			return Err(Error::TooManyInputs);
-		}
-		if self.outputs.len() > consensus::MAX_BLOCK_OUTPUTS {
-			return Err(Error::TooManyOutputs);
-		}
-		if self.kernels.len() > consensus::MAX_BLOCK_KERNELS {
-			return Err(Error::TooManyKernels);
-		}
-		Ok(())
-	}
-
-	fn verify_weight(&self) -> Result<(), Error> {
-		let weight =
+		let tx_block_weight = 
 			self.inputs.len() * consensus::BLOCK_INPUT_WEIGHT +
 			self.outputs.len() * consensus::BLOCK_OUTPUT_WEIGHT +
 			self.kernels.len() * consensus::BLOCK_KERNEL_WEIGHT;
 
-		if weight > consensus::MAX_BLOCK_WEIGHT {
-			return Err(Error::WeightExceeded);
+		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
+			return Err(Error::TooHeavy);
 		}
 		Ok(())
 	}
