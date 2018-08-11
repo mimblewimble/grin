@@ -30,7 +30,7 @@ printf "[pre_commit] rustfmt "
 for file in $(git diff --name-only --cached); do
 	if [ ${file: -3} == ".rs" ]; then
 		# first collect all the files that need reformatting
-		rustfmt --unstable-options --skip-children --write-mode=diff $file &>/dev/null
+		rustfmt --check $file &>/dev/null
 		if [ $? != 0 ]; then
 			problem_files+=($file)
 			result=1
@@ -40,7 +40,7 @@ done
 
 # now reformat all the files that need reformatting
 for file in ${problem_files[@]}; do
-	rustfmt --unstable-options --skip-children --write-mode=overwrite $file
+	rustfmt $file
 done
 
 # and let the user know what just happened (and which files were affected)

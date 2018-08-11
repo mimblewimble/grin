@@ -17,9 +17,10 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 
-use chrono::prelude::{Utc};
+use chrono::prelude::Utc;
 use chrono::Duration;
 
+use chain::OrphanBlockPool;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
@@ -29,7 +30,6 @@ use error::{Error, ErrorKind};
 use grin_store;
 use store;
 use txhashset;
-use chain::{OrphanBlockPool};
 use types::{Options, Tip};
 use util::LOGGER;
 
@@ -218,8 +218,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	// TODO: remove CI check from here somehow
-	if header.timestamp
-		> Utc::now() + Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
+	if header.timestamp > Utc::now() + Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
 		&& !global::is_automated_testing_mode()
 	{
 		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)

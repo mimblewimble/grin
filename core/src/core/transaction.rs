@@ -54,8 +54,12 @@ pub enum Error {
 	/// The sum of output minus input commitments does not
 	/// match the sum of kernel commitments
 	KernelSumMismatch,
-	/// Restrict number of incoming inputs
+	/// Restrict number of tx inputs.
 	TooManyInputs,
+	/// Restrict number of tx outputs.
+	TooManyOutputs,
+	/// Retrict number of tx kernels.
+	TooManyKernels,
 	/// Underlying consensus error (currently for sort order)
 	ConsensusError(consensus::Error),
 	/// Error originating from an invalid lock-height
@@ -299,23 +303,24 @@ impl Readable for Transaction {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
-		if input_len > consensus::MAX_TX_INPUTS
-			|| output_len > consensus::MAX_TX_OUTPUTS
-			|| kernel_len > consensus::MAX_TX_KERNELS
-		{
-			return Err(ser::Error::CorruptedData);
-		}
-
 		let inputs = read_and_verify_sorted(reader, input_len)?;
 		let outputs = read_and_verify_sorted(reader, output_len)?;
 		let kernels = read_and_verify_sorted(reader, kernel_len)?;
 
-		Ok(Transaction {
+		let tx = Transaction {
 			offset,
 			inputs,
 			outputs,
 			kernels,
-		})
+		};
+
+		// Now validate the tx.
+		// Treat any validation issues as data corruption.
+		// An example of this would be reading a tx
+		// that exceeded the allowed number of inputs.
+		tx.validate().map_err(|_| ser::Error::CorruptedData)?;
+
+		Ok(tx)
 	}
 }
 
@@ -428,20 +433,32 @@ impl Transaction {
 		Ok(())
 	}
 
+	// Verify the tx is not too big in terms of
+	// number of inputs|outputs|kernels.
+	fn verify_size(&self) -> Result<(), Error> {
+		if self.inputs.len() > consensus::MAX_TX_INPUTS {
+			return Err(Error::TooManyInputs);
+		}
+		if self.outputs.len() > consensus::MAX_TX_OUTPUTS {
+			return Err(Error::TooManyOutputs);
+		}
+		if self.kernels.len() > consensus::MAX_TX_KERNELS {
+			return Err(Error::TooManyKernels);
+		}
+		Ok(())
+	}
+
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
 	pub fn validate(&self) -> Result<(), Error> {
-		if self.inputs.len() > consensus::MAX_BLOCK_INPUTS {
-			return Err(Error::TooManyInputs);
-		}
 		self.verify_features()?;
+		self.verify_size()?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 		self.verify_kernel_sums(self.overage(), self.offset)?;
 		self.verify_rangeproofs()?;
 		self.verify_kernel_signatures()?;
-
 		Ok(())
 	}
 
@@ -470,7 +487,8 @@ impl Transaction {
 	// Verify that no input is spending an output from the same block.
 	fn verify_cut_through(&self) -> Result<(), Error> {
 		for inp in &self.inputs {
-			if self.outputs
+			if self
+				.outputs
 				.iter()
 				.any(|out| out.commitment() == inp.commitment())
 			{
@@ -491,7 +509,11 @@ impl Transaction {
 
 	// Verify we have no outputs tagged as COINBASE_OUTPUT.
 	fn verify_output_features(&self) -> Result<(), Error> {
-		if self.outputs.iter().any(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT)) {
+		if self
+			.outputs
+			.iter()
+			.any(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
+		{
 			return Err(Error::InvalidOutputFeatures);
 		}
 		Ok(())
@@ -499,7 +521,11 @@ impl Transaction {
 
 	// Verify we have no kernels tagged as COINBASE_KERNEL.
 	fn verify_kernel_features(&self) -> Result<(), Error> {
-		if self.kernels.iter().any(|x| x.features.contains(KernelFeatures::COINBASE_KERNEL)) {
+		if self
+			.kernels
+			.iter()
+			.any(|x| x.features.contains(KernelFeatures::COINBASE_KERNEL))
+		{
 			return Err(Error::InvalidKernelFeatures);
 		}
 		Ok(())
@@ -573,11 +599,18 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	new_outputs.sort();
 	kernels.sort();
 
+	// build a new aggregate tx from the following -
+	//   * cut-through inputs
+	//   * cut-through outputs
+	//   * full set of tx kernels
+	//   * sum of all kernel offsets
 	let tx = Transaction::new(new_inputs, new_outputs, kernels).with_offset(total_kernel_offset);
 
-	// We need to check sums here as aggregation/cut-through
-	// may have created an invalid tx.
-	tx.verify_kernel_sums(tx.overage(), tx.offset)?;
+	// Now validate the aggregate tx to ensure we have not built something invalid.
+	// The resulting tx could be invalid for a variety of reasons -
+	//   * tx too large (too many inputs|outputs|kernels)
+	//   * cut-through may have invalidated the sums
+	tx.validate()?;
 
 	Ok(tx)
 }
@@ -641,8 +674,11 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	outputs.sort();
 	kernels.sort();
 
-	let mut tx = Transaction::new(inputs, outputs, kernels);
-	tx.offset = total_kernel_offset;
+	// Build a new tx from the above data.
+	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
+
+	// Now validate the resulting tx to ensure we have not built something invalid.
+	tx.validate()?;
 
 	Ok(tx)
 }

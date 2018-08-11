@@ -414,15 +414,21 @@ mod test {
 		assert!(
 			!Cuckoo::from_hash(blake2(&[49]).as_bytes(), 20).verify(&Proof::new(vec![0; 42]), 75)
 		);
-		assert!(!Cuckoo::from_hash(blake2(&[49]).as_bytes(), 20)
-			.verify(&Proof::new(vec![0xffff; 42]), 75));
+		assert!(
+			!Cuckoo::from_hash(blake2(&[49]).as_bytes(), 20)
+				.verify(&Proof::new(vec![0xffff; 42]), 75)
+		);
 		// wrong data for proof
-		assert!(!Cuckoo::from_hash(blake2(&[50]).as_bytes(), 20)
-			.verify(&Proof::new(V1.to_vec().clone()), 75));
+		assert!(
+			!Cuckoo::from_hash(blake2(&[50]).as_bytes(), 20)
+				.verify(&Proof::new(V1.to_vec().clone()), 75)
+		);
 		let mut test_header = [0; 32];
 		test_header[0] = 24;
-		assert!(!Cuckoo::from_hash(blake2(&test_header).as_bytes(), 20)
-			.verify(&Proof::new(V4.to_vec().clone()), 50));
+		assert!(
+			!Cuckoo::from_hash(blake2(&test_header).as_bytes(), 20)
+				.verify(&Proof::new(V4.to_vec().clone()), 50)
+		);
 	}
 
 	#[test]
