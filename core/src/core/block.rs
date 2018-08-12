@@ -523,7 +523,8 @@ impl Block {
 		let header = self.header.clone();
 		let nonce = thread_rng().next_u64();
 
-		let mut out_full = self.outputs
+		let mut out_full = self
+			.outputs
 			.iter()
 			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.cloned()
@@ -564,13 +565,13 @@ impl Block {
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
 	) -> Result<Block, Error> {
-
 		// A block is just a big transaction, aggregate as such. Note that
 		// aggregate also runs validation and duplicate commitment checks.
 		let agg_tx = transaction::aggregate(txs, Some((reward_out, reward_kern)))?;
 
 		// Now add the kernel offset of the previous block for a total
-		let total_kernel_offset = committed::sum_kernel_offsets(vec![agg_tx.offset, prev.total_kernel_offset], vec![])?;
+		let total_kernel_offset =
+			committed::sum_kernel_offsets(vec![agg_tx.offset, prev.total_kernel_offset], vec![])?;
 
 		let total_kernel_sum = {
 			let zero_commit = secp_static::commit_to_zero_value();
@@ -619,12 +620,14 @@ impl Block {
 	/// we do not want to cut-through (all coinbase must be preserved)
 	///
 	pub fn cut_through(self) -> Block {
-		let in_set = self.inputs
+		let in_set = self
+			.inputs
 			.iter()
 			.map(|inp| inp.commitment())
 			.collect::<HashSet<_>>();
 
-		let out_set = self.outputs
+		let out_set = self
+			.outputs
 			.iter()
 			.filter(|out| !out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.map(|out| out.commitment())
@@ -632,12 +635,14 @@ impl Block {
 
 		let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
 
-		let new_inputs = self.inputs
+		let new_inputs = self
+			.inputs
 			.into_iter()
 			.filter(|inp| !to_cut_through.contains(&inp.commitment()))
 			.collect::<Vec<_>>();
 
-		let new_outputs = self.outputs
+		let new_outputs = self
+			.outputs
 			.into_iter()
 			.filter(|out| !to_cut_through.contains(&out.commitment()))
 			.collect::<Vec<_>>();
@@ -721,7 +726,8 @@ impl Block {
 	// Verify that no input is spending an output from the same block.
 	fn verify_cut_through(&self) -> Result<(), Error> {
 		for inp in &self.inputs {
-			if self.outputs
+			if self
+				.outputs
 				.iter()
 				.any(|out| out.commitment() == inp.commitment())
 			{
@@ -764,12 +770,14 @@ impl Block {
 	/// Check the sum of coinbase-marked outputs match
 	/// the sum of coinbase-marked kernels accounting for fees.
 	pub fn verify_coinbase(&self) -> Result<(), Error> {
-		let cb_outs = self.outputs
+		let cb_outs = self
+			.outputs
 			.iter()
 			.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.collect::<Vec<&Output>>();
 
-		let cb_kerns = self.kernels
+		let cb_kerns = self
+			.kernels
 			.iter()
 			.filter(|kernel| kernel.features.contains(KernelFeatures::COINBASE_KERNEL))
 			.collect::<Vec<&TxKernel>>();

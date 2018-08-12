@@ -487,7 +487,8 @@ impl Transaction {
 	// Verify that no input is spending an output from the same block.
 	fn verify_cut_through(&self) -> Result<(), Error> {
 		for inp in &self.inputs {
-			if self.outputs
+			if self
+				.outputs
 				.iter()
 				.any(|out| out.commitment() == inp.commitment())
 			{
@@ -508,7 +509,8 @@ impl Transaction {
 
 	// Verify we have no outputs tagged as COINBASE_OUTPUT.
 	fn verify_output_features(&self) -> Result<(), Error> {
-		if self.outputs
+		if self
+			.outputs
 			.iter()
 			.any(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
 		{
@@ -519,7 +521,8 @@ impl Transaction {
 
 	// Verify we have no kernels tagged as COINBASE_KERNEL.
 	fn verify_kernel_features(&self) -> Result<(), Error> {
-		if self.kernels
+		if self
+			.kernels
 			.iter()
 			.any(|x| x.features.contains(KernelFeatures::COINBASE_KERNEL))
 		{
@@ -534,9 +537,8 @@ impl Transaction {
 /// block building.
 pub fn aggregate(
 	transactions: Vec<Transaction>,
-	reward: Option<(Output, TxKernel)>
+	reward: Option<(Output, TxKernel)>,
 ) -> Result<Transaction, Error> {
-
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
@@ -561,9 +563,7 @@ pub fn aggregate(
 
 	// assemble output commitments set, checking they're all unique
 	let mut out_set = HashSet::new();
-	let all_uniq = {
-		outputs.iter().all(|o| out_set.insert(o.commitment()))
-	};
+	let all_uniq = { outputs.iter().all(|o| out_set.insert(o.commitment())) };
 	if !all_uniq {
 		return Err(Error::AggregationError);
 	}

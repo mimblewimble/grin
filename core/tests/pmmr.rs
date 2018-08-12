@@ -26,13 +26,13 @@ use vec_backend::{TestElem, VecBackend};
 
 #[test]
 fn some_peak_map() {
-	assert_eq!(pmmr::peak_map_height(0), (  0b0, 0));
-	assert_eq!(pmmr::peak_map_height(1), (  0b1, 0));
-	assert_eq!(pmmr::peak_map_height(2), (  0b1, 1));
-	assert_eq!(pmmr::peak_map_height(3), ( 0b10, 0));
-	assert_eq!(pmmr::peak_map_height(4), ( 0b11, 0));
-	assert_eq!(pmmr::peak_map_height(5), ( 0b11, 1));
-	assert_eq!(pmmr::peak_map_height(6), ( 0b11, 2));
+	assert_eq!(pmmr::peak_map_height(0), (0b0, 0));
+	assert_eq!(pmmr::peak_map_height(1), (0b1, 0));
+	assert_eq!(pmmr::peak_map_height(2), (0b1, 1));
+	assert_eq!(pmmr::peak_map_height(3), (0b10, 0));
+	assert_eq!(pmmr::peak_map_height(4), (0b11, 0));
+	assert_eq!(pmmr::peak_map_height(5), (0b11, 1));
+	assert_eq!(pmmr::peak_map_height(6), (0b11, 2));
 	assert_eq!(pmmr::peak_map_height(7), (0b100, 0));
 }
 
