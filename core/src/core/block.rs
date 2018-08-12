@@ -45,12 +45,8 @@ pub enum Error {
 	InvalidTotalKernelSum,
 	/// Same as above but for the coinbase part of a block, including reward
 	CoinbaseSumMismatch,
-	/// Restrict number of block inputs.
-	TooManyInputs,
-	/// Restrict number of block outputs.
-	TooManyOutputs,
-	/// Retrict number of block kernels.
-	TooManyKernels,
+	/// Restrict block total weight.
+	TooHeavy,
 	/// Block weight (based on inputs|outputs|kernels) exceeded.
 	WeightExceeded,
 	/// Kernel not valid due to lock_height exceeding block header height
@@ -527,8 +523,7 @@ impl Block {
 		let header = self.header.clone();
 		let nonce = thread_rng().next_u64();
 
-		let mut out_full = self
-			.outputs
+		let mut out_full = self.outputs
 			.iter()
 			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.cloned()
@@ -624,14 +619,12 @@ impl Block {
 	/// we do not want to cut-through (all coinbase must be preserved)
 	///
 	pub fn cut_through(self) -> Block {
-		let in_set = self
-			.inputs
+		let in_set = self.inputs
 			.iter()
 			.map(|inp| inp.commitment())
 			.collect::<HashSet<_>>();
 
-		let out_set = self
-			.outputs
+		let out_set = self.outputs
 			.iter()
 			.filter(|out| !out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.map(|out| out.commitment())
@@ -639,14 +632,12 @@ impl Block {
 
 		let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
 
-		let new_inputs = self
-			.inputs
+		let new_inputs = self.inputs
 			.into_iter()
 			.filter(|inp| !to_cut_through.contains(&inp.commitment()))
 			.collect::<Vec<_>>();
 
-		let new_outputs = self
-			.outputs
+		let new_outputs = self.outputs
 			.into_iter()
 			.filter(|out| !to_cut_through.contains(&out.commitment()))
 			.collect::<Vec<_>>();
@@ -673,7 +664,6 @@ impl Block {
 	) -> Result<(Commitment), Error> {
 		// Verify we do not exceed the max number of inputs|outputs|kernels
 		// and that the "weight" based on these does not exceed the max permitted weight.
-		self.verify_size()?;
 		self.verify_weight()?;
 
 		self.verify_sorted()?;
@@ -708,29 +698,14 @@ impl Block {
 		Ok(kernel_sum)
 	}
 
-	// Verify the tx is not too big in terms of
-	// number of inputs|outputs|kernels.
-	fn verify_size(&self) -> Result<(), Error> {
-		if self.inputs.len() > consensus::MAX_BLOCK_INPUTS {
-			return Err(Error::TooManyInputs);
-		}
-		if self.outputs.len() > consensus::MAX_BLOCK_OUTPUTS {
-			return Err(Error::TooManyOutputs);
-		}
-		if self.kernels.len() > consensus::MAX_BLOCK_KERNELS {
-			return Err(Error::TooManyKernels);
-		}
-		Ok(())
-	}
-
+	// Verify the block is not too big in terms of number of inputs|outputs|kernels.
 	fn verify_weight(&self) -> Result<(), Error> {
-		let weight =
-			self.inputs.len() * consensus::BLOCK_INPUT_WEIGHT +
-			self.outputs.len() * consensus::BLOCK_OUTPUT_WEIGHT +
-			self.kernels.len() * consensus::BLOCK_KERNEL_WEIGHT;
+		let tx_block_weight = self.inputs.len() * consensus::BLOCK_INPUT_WEIGHT
+			+ self.outputs.len() * consensus::BLOCK_OUTPUT_WEIGHT
+			+ self.kernels.len() * consensus::BLOCK_KERNEL_WEIGHT;
 
-		if weight > consensus::MAX_BLOCK_WEIGHT {
-			return Err(Error::WeightExceeded);
+		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
+			return Err(Error::TooHeavy);
 		}
 		Ok(())
 	}
@@ -746,8 +721,7 @@ impl Block {
 	// Verify that no input is spending an output from the same block.
 	fn verify_cut_through(&self) -> Result<(), Error> {
 		for inp in &self.inputs {
-			if self
-				.outputs
+			if self.outputs
 				.iter()
 				.any(|out| out.commitment() == inp.commitment())
 			{
@@ -790,14 +764,12 @@ impl Block {
 	/// Check the sum of coinbase-marked outputs match
 	/// the sum of coinbase-marked kernels accounting for fees.
 	pub fn verify_coinbase(&self) -> Result<(), Error> {
-		let cb_outs = self
-			.outputs
+		let cb_outs = self.outputs
 			.iter()
 			.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.collect::<Vec<&Output>>();
 
-		let cb_kerns = self
-			.kernels
+		let cb_kerns = self.kernels
 			.iter()
 			.filter(|kernel| kernel.features.contains(KernelFeatures::COINBASE_KERNEL))
 			.collect::<Vec<&TxKernel>>();

@@ -25,23 +25,15 @@ use core::ser::PMMRIndexHashable;
 use vec_backend::{TestElem, VecBackend};
 
 #[test]
-fn some_all_ones() {
-	for n in vec![1, 7, 255] {
-		assert!(pmmr::all_ones(n), "{} should be all ones", n);
-	}
-	for n in vec![0, 6, 9, 128] {
-		assert!(!pmmr::all_ones(n), "{} should not be all ones", n);
-	}
-}
-
-#[test]
-fn some_most_signif() {
-	assert_eq!(pmmr::most_significant_pos(0), 0);
-	assert_eq!(pmmr::most_significant_pos(1), 1);
-	assert_eq!(pmmr::most_significant_pos(6), 3);
-	assert_eq!(pmmr::most_significant_pos(7), 3);
-	assert_eq!(pmmr::most_significant_pos(8), 4);
-	assert_eq!(pmmr::most_significant_pos(128), 8);
+fn some_peak_map() {
+	assert_eq!(pmmr::peak_map_height(0), (  0b0, 0));
+	assert_eq!(pmmr::peak_map_height(1), (  0b1, 0));
+	assert_eq!(pmmr::peak_map_height(2), (  0b1, 1));
+	assert_eq!(pmmr::peak_map_height(3), ( 0b10, 0));
+	assert_eq!(pmmr::peak_map_height(4), ( 0b11, 0));
+	assert_eq!(pmmr::peak_map_height(5), ( 0b11, 1));
+	assert_eq!(pmmr::peak_map_height(6), ( 0b11, 2));
+	assert_eq!(pmmr::peak_map_height(7), (0b100, 0));
 }
 
 #[test]
@@ -447,46 +439,6 @@ fn pmmr_prune() {
 	}
 	assert_eq!(ba.elems.len(), 16);
 	assert_eq!(ba.remove_list.len(), 9);
-}
-
-#[test]
-fn check_all_ones() {
-	for i in 0..1000000 {
-		assert_eq!(old_all_ones(i), pmmr::all_ones(i));
-	}
-}
-
-// Check if the binary representation of a number is all ones.
-fn old_all_ones(num: u64) -> bool {
-	if num == 0 {
-		return false;
-	}
-	let mut bit = 1;
-	while num >= bit {
-		if num & bit == 0 {
-			return false;
-		}
-		bit = bit << 1;
-	}
-	true
-}
-
-#[test]
-fn check_most_significant_pos() {
-	for i in 0u64..1000000 {
-		assert_eq!(old_most_significant_pos(i), pmmr::most_significant_pos(i));
-	}
-}
-
-// Get the position of the most significant bit in a number.
-fn old_most_significant_pos(num: u64) -> u64 {
-	let mut pos = 0;
-	let mut bit = 1;
-	while num >= bit {
-		bit = bit << 1;
-		pos += 1;
-	}
-	pos
 }
 
 #[test]
