@@ -700,7 +700,7 @@ impl Block {
 	) -> Result<(Commitment), Error> {
 		// Verify we do not exceed the max number of inputs|outputs|kernels
 		// and that the "weight" based on these does not exceed the max permitted weight.
-		self.verify_size()?;
+		self.verify_weight()?;
 
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
@@ -735,7 +735,7 @@ impl Block {
 	}
 
 	// Verify the block is not too big in terms of number of inputs|outputs|kernels.
-	fn verify_size(&self) -> Result<(), Error> {
+	fn verify_weight(&self) -> Result<(), Error> {
 		let tx_block_weight = self.inputs.len() * consensus::BLOCK_INPUT_WEIGHT
 			+ self.outputs.len() * consensus::BLOCK_OUTPUT_WEIGHT
 			+ self.kernels.len() * consensus::BLOCK_KERNEL_WEIGHT;

@@ -430,7 +430,7 @@ impl Transaction {
 	}
 
 	// Verify the tx is not too big in terms of number of inputs|outputs|kernels.
-	fn verify_size(&self) -> Result<(), Error> {
+	fn verify_weight(&self) -> Result<(), Error> {
 		// check the tx as if it was a block, with an additional output and
 		// kernel for reward
 		let tx_block_weight = self.inputs.len() * consensus::BLOCK_INPUT_WEIGHT
@@ -448,7 +448,7 @@ impl Transaction {
 	/// output.
 	pub fn validate(&self) -> Result<(), Error> {
 		self.verify_features()?;
-		self.verify_size()?;
+		self.verify_weight()?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 		self.verify_kernel_sums(self.overage(), self.offset)?;
