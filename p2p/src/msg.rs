@@ -19,10 +19,10 @@ use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
 use std::{thread, time};
 
-use core::consensus::{MAX_MSG_LEN, MAX_TX_INPUTS, MAX_TX_KERNELS, MAX_TX_OUTPUTS};
-use core::core::BlockHeader;
+use core::consensus;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
+use core::core::BlockHeader;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::{Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};
@@ -39,6 +39,10 @@ const MAGIC: [u8; 2] = [0x1e, 0xc5];
 
 /// Size in bytes of a message header
 pub const HEADER_LEN: u64 = 11;
+
+/// Max theoretical size of a block filled with outputs.
+const MAX_BLOCK_SIZE: u64 =
+	(consensus::MAX_BLOCK_WEIGHT / consensus::BLOCK_OUTPUT_WEIGHT * 708) as u64;
 
 /// Types of messages.
 /// Note: Values here are *important* so we should only add new values at the
@@ -82,11 +86,11 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::Header => 365,
 		Type::Headers => 2 + 365 * MAX_BLOCK_HEADERS as u64,
 		Type::GetBlock => 32,
-		Type::Block => MAX_MSG_LEN,
+		Type::Block => MAX_BLOCK_SIZE,
 		Type::GetCompactBlock => 32,
-		Type::CompactBlock => MAX_MSG_LEN / 10,
-		Type::StemTransaction => (1000 * MAX_TX_INPUTS + 710 * MAX_TX_OUTPUTS + 114 * MAX_TX_KERNELS) as u64,
-		Type::Transaction => (1000 * MAX_TX_INPUTS + 710 * MAX_TX_OUTPUTS + 114 * MAX_TX_KERNELS) as u64,
+		Type::CompactBlock => MAX_BLOCK_SIZE / 10,
+		Type::StemTransaction => MAX_BLOCK_SIZE,
+		Type::Transaction => MAX_BLOCK_SIZE,
 		Type::TxHashSetRequest => 40,
 		Type::TxHashSetArchive => 64,
 		Type::BanReason => 64,
@@ -729,11 +733,7 @@ pub struct TxHashSetArchive {
 impl Writeable for TxHashSetArchive {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.hash.write(writer)?;
-		ser_multiwrite!(
-			writer,
-			[write_u64, self.height],
-			[write_u64, self.bytes]
-		);
+		ser_multiwrite!(writer, [write_u64, self.height], [write_u64, self.bytes]);
 		Ok(())
 	}
 }
