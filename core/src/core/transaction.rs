@@ -447,9 +447,6 @@ impl Transaction {
 	/// excess value against the signature as well as range proofs for each
 	/// output.
 	pub fn validate(&self, as_block: bool) -> Result<(), Error> {
-		if self.inputs.len() > consensus::MAX_BLOCK_INPUTS {
-			return Err(Error::TooManyInputs);
-		}
 		if !as_block {
 			self.verify_features()?;
 			self.verify_weight()?;
