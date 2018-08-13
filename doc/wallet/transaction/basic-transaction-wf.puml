@@ -81,7 +81,7 @@ recipient --> sender: "Ok" - **UUID**
 sender -> sender: Execute wallet lock function **sF**
 ...Await confirmation...
 recipient -> grin_node: Confirm **receiver_output**
-recipient -> recipient: Change status of **reciever_output** to "Confirmed"
+recipient -> recipient: Change status of **receiver_output** to "Confirmed"
 sender -> grin_node: Confirm **change_output**
 sender -> sender: Change status of **inputs** to "Spent"
 sender -> sender: Change status of **change_output** to "Confirmed"

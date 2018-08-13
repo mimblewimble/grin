@@ -262,7 +262,7 @@ where
 pub struct LocalWalletClient {
 	/// wallet identifier for the proxy queue
 	pub id: String,
-	/// proxy's tx queue (recieve messsages from other wallets or node
+	/// proxy's tx queue (receive messsages from other wallets or node
 	pub proxy_tx: Arc<Mutex<Sender<WalletProxyMessage>>>,
 	/// my rx queue
 	pub rx: Arc<Mutex<Receiver<WalletProxyMessage>>>,

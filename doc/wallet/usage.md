@@ -182,7 +182,7 @@ Spent outputs are not shown by default. To show them, provide the `-s` flag.
 
 ### txs
 
-Every time an operation is performed in your wallet (recieve coinbase, send, receive), an entry is added to an internal transaction log 
+Every time an operation is performed in your wallet (receive coinbase, send, receive), an entry is added to an internal transaction log 
 containing vital information about the transaction. Because the Mimblewimble chain contains no identifying information whatsoever,
 this transaction log is necessary in order to allow your wallet to keep track of what was sent and received. To view the contents of the
 transaction log, use the `txs`
@@ -204,7 +204,7 @@ Transaction Log - Block Height: 49
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------                                                                                    
  5   Confirmed Coinbase   None                                  2018-07-20 19:46:45.658864074 UTC  true        2018-07-20 19:46:45.658864821 UTC  0            1             60.000000000     0.000000000     None         60.000000000                                                                                       
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------                                                                                    
- 6   Recieved Tx          03715cf6-f29b-4a3a-bda5-b02cba6bf0d9  2018-07-20 19:46:46.120244904 UTC  false       None                               0            1             60.000000000     0.000000000     None         60.000000000                                                                                       
+ 6   Received Tx          03715cf6-f29b-4a3a-bda5-b02cba6bf0d9  2018-07-20 19:46:46.120244904 UTC  false       None                               0            1             60.000000000     0.000000000     None         60.000000000                                                                                       
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ 
 ```
 
@@ -216,7 +216,7 @@ Transaction Log - Block Height: 49
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Id  Type         Shared Transaction Id                 Creation Time                      Confirmed?  Confirmation Time  Num. Inputs  Num. Outputs  Amount Credited  Amount Debited  Fee   Net Difference 
 ===========================================================================================================================================================================================================
- 6   Recieved Tx  03715cf6-f29b-4a3a-bda5-b02cba6bf0d9  2018-07-20 19:46:46.120244904 UTC  false       None               0            1             60.000000000     0.000000000     None  60.000000000 
+ 6   Received Tx  03715cf6-f29b-4a3a-bda5-b02cba6bf0d9  2018-07-20 19:46:46.120244904 UTC  false       None               0            1             60.000000000     0.000000000     None  60.000000000
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 

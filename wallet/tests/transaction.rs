@@ -186,7 +186,7 @@ fn basic_transaction_api(
 			None,
 		);
 		assert!(wallet1_refreshed);
-		// wallet 1 recieved fees, so amount should be the same
+		// wallet 1 received fees, so amount should be the same
 		assert_eq!(
 			wallet1_info.total,
 			amount * wallet1_info.last_confirmed_height - amount
