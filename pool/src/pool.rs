@@ -87,7 +87,7 @@ where
 			return Ok(None);
 		}
 
-		let tx = transaction::aggregate(txs)?;
+		let tx = transaction::aggregate(txs, None)?;
 		Ok(Some(tx))
 	}
 
@@ -142,20 +142,10 @@ where
 			// If we have nothing to aggregate then simply return the tx itself.
 			entry.tx.clone()
 		} else {
-			// Create a single aggregated tx from the existing pool txs (to check pool is
-			// valid).
-			let agg_tx = transaction::aggregate(txs)?;
-
-			// Then check new tx would not introduce a duplicate output in the pool.
-			for x in &entry.tx.outputs {
-				if agg_tx.outputs.contains(&x) {
-					return Err(PoolError::DuplicateCommitment);
-				}
-			}
-
-			// Finally aggregate the new tx with everything in the pool (with any extra
-			// txs).
-			transaction::aggregate(vec![agg_tx, entry.tx.clone()])?
+			// Create a single aggregated tx from the existing pool txs and the
+			// new entry
+			txs.push(entry.tx.clone());
+			transaction::aggregate(txs, None)?
 		};
 
 		// Validate aggregated tx against the current chain state (via txhashset

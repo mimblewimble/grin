@@ -293,7 +293,7 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		tx.validate().unwrap();
+		tx.validate(false).unwrap();
 	}
 
 	#[test]
@@ -313,7 +313,7 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		tx.validate().unwrap();
+		tx.validate(false).unwrap();
 	}
 
 	#[test]
@@ -327,6 +327,6 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		tx.validate().unwrap();
+		tx.validate(false).unwrap();
 	}
 }

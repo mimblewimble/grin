@@ -314,7 +314,7 @@ impl Readable for Transaction {
 		// Treat any validation issues as data corruption.
 		// An example of this would be reading a tx
 		// that exceeded the allowed number of inputs.
-		tx.validate().map_err(|_| ser::Error::CorruptedData)?;
+		tx.validate(false).map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(tx)
 	}
@@ -446,12 +446,14 @@ impl Transaction {
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self) -> Result<(), Error> {
-		self.verify_features()?;
-		self.verify_weight()?;
+	pub fn validate(&self, as_block: bool) -> Result<(), Error> {
+		if !as_block {
+			self.verify_features()?;
+			self.verify_weight()?;
+			self.verify_kernel_sums(self.overage(), self.offset)?;
+		}
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
-		self.verify_kernel_sums(self.overage(), self.offset)?;
 		self.verify_rangeproofs()?;
 		self.verify_kernel_signatures()?;
 		Ok(())
@@ -482,7 +484,8 @@ impl Transaction {
 	// Verify that no input is spending an output from the same block.
 	fn verify_cut_through(&self) -> Result<(), Error> {
 		for inp in &self.inputs {
-			if self.outputs
+			if self
+				.outputs
 				.iter()
 				.any(|out| out.commitment() == inp.commitment())
 			{
@@ -503,7 +506,8 @@ impl Transaction {
 
 	// Verify we have no outputs tagged as COINBASE_OUTPUT.
 	fn verify_output_features(&self) -> Result<(), Error> {
-		if self.outputs
+		if self
+			.outputs
 			.iter()
 			.any(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
 		{
@@ -514,7 +518,8 @@ impl Transaction {
 
 	// Verify we have no kernels tagged as COINBASE_KERNEL.
 	fn verify_kernel_features(&self) -> Result<(), Error> {
-		if self.kernels
+		if self
+			.kernels
 			.iter()
 			.any(|x| x.features.contains(KernelFeatures::COINBASE_KERNEL))
 		{
@@ -525,8 +530,12 @@ impl Transaction {
 }
 
 /// Aggregate a vec of transactions into a multi-kernel transaction with
-/// cut_through
-pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
+/// cut_through. Optionally allows passing a reward output and kernel for
+/// block building.
+pub fn aggregate(
+	transactions: Vec<Transaction>,
+	reward: Option<(Output, TxKernel)>,
+) -> Result<Transaction, Error> {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
@@ -543,35 +552,22 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 		outputs.append(&mut transaction.outputs);
 		kernels.append(&mut transaction.kernels);
 	}
+	let as_block = reward.is_some();
+	if let Some((out, kernel)) = reward {
+		outputs.push(out);
+		kernels.push(kernel);
+	}
 
-	// now sum the kernel_offsets up to give us an aggregate offset for the
-	// transaction
-	let total_kernel_offset = {
-		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
-		let mut keys = kernel_offsets
-			.into_iter()
-			.filter(|x| *x != BlindingFactor::zero())
-			.filter_map(|x| x.secret_key(&secp).ok())
-			.collect::<Vec<_>>();
-
-		if keys.is_empty() {
-			BlindingFactor::zero()
-		} else {
-			let sum = secp.blind_sum(keys, vec![])?;
-			BlindingFactor::from_secret_key(sum)
-		}
-	};
+	// assemble output commitments set, checking they're all unique
+	let mut out_set = HashSet::new();
+	let all_uniq = { outputs.iter().all(|o| out_set.insert(o.commitment())) };
+	if !all_uniq {
+		return Err(Error::AggregationError);
+	}
 
 	let in_set = inputs
 		.iter()
 		.map(|inp| inp.commitment())
-		.collect::<HashSet<_>>();
-
-	let out_set = outputs
-		.iter()
-		.filter(|out| !out.features.contains(OutputFeatures::COINBASE_OUTPUT))
-		.map(|out| out.commitment())
 		.collect::<HashSet<_>>();
 
 	let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
@@ -591,6 +587,10 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	new_outputs.sort();
 	kernels.sort();
 
+	// now sum the kernel_offsets up to give us an aggregate offset for the
+	// transaction
+	let total_kernel_offset = committed::sum_kernel_offsets(kernel_offsets, vec![])?;
+
 	// build a new aggregate tx from the following -
 	//   * cut-through inputs
 	//   * cut-through outputs
@@ -602,7 +602,7 @@ pub fn aggregate(transactions: Vec<Transaction>) -> Result<Transaction, Error> {
 	// The resulting tx could be invalid for a variety of reasons -
 	//   * tx too large (too many inputs|outputs|kernels)
 	//   * cut-through may have invalidated the sums
-	tx.validate()?;
+	tx.validate(as_block)?;
 
 	Ok(tx)
 }
@@ -618,7 +618,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	// transaction
 	let mut kernel_offsets = vec![];
 
-	let tx = aggregate(txs)?;
+	let tx = aggregate(txs, None)?;
 
 	for mk_input in mk_tx.inputs {
 		if !tx.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
@@ -670,7 +670,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
 
 	// Now validate the resulting tx to ensure we have not built something invalid.
-	tx.validate()?;
+	tx.validate(false)?;
 
 	Ok(tx)
 }
