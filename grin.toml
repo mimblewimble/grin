@@ -130,7 +130,7 @@ attempt_time_per_block = 15
 #The minimum acceptable share difficulty to request from miners
 minimum_share_difficulty = 1
 
-#the wallet reciever to which coinbase rewards will be sent
+#the wallet receiver to which coinbase rewards will be sent
 wallet_listener_url = "http://127.0.0.1:13415"
 
 #whether to ignore the reward (mostly for testing)
