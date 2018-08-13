@@ -83,18 +83,18 @@ pub const BLOCK_KERNEL_WEIGHT: usize = 2;
 
 /// Total maximum block weight. At current sizes, this means a maximum
 /// theoretical size of:
-/// * `(674 + 33 + 1) * 8_000 = 5_664_000` for a block with only outputs
-/// * `(1 + 8 + 8 + 33 + 64) * 40_000 = 4_560_000` for a block with only kernels
-/// * `(1 + 33) * 80_000 = 2_720_000` for a block with only inputs
+/// * `(674 + 33 + 1) * 4_000 = 2_832_000` for a block with only outputs
+/// * `(1 + 8 + 8 + 33 + 64) * 20_000 = 2_280_000` for a block with only kernels
+/// * `(1 + 33) * 40_000 = 1_360_000` for a block with only inputs
 ///
 /// Given that a block needs to have at least one kernel for the coinbase,
-/// and one kernel for the transaction, practical maximum size is 5_663_520,
+/// and one kernel for the transaction, practical maximum size is 2_831_440,
 /// (ignoring the edge case of a miner producting a block with all coinbase
 /// outputs and a single kernel).
 ///
 /// A more "standard" block, filled with transactions of 2 inputs, 2 outputs
-/// and one kernel, should be around 5_326_667 bytes.
-pub const MAX_BLOCK_WEIGHT: usize = 80_000;
+/// and one kernel, should be around 2_663_333 bytes.
+pub const MAX_BLOCK_WEIGHT: usize = 40_000;
 
 /// Fork every 250,000 blocks for first 2 years, simple number and just a
 /// little less than 6 months.
