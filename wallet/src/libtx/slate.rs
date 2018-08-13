@@ -388,7 +388,7 @@ impl Slate {
 		final_tx.kernels[0].verify()?;
 
 		// confirm the overall transaction is valid (including the updated kernel)
-		let _ = final_tx.validate()?;
+		let _ = final_tx.validate(false)?;
 
 		self.tx = final_tx;
 		Ok(())
