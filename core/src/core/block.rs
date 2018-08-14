@@ -620,32 +620,9 @@ impl Block {
 	/// we do not want to cut-through (all coinbase must be preserved)
 	///
 	pub fn cut_through(self) -> Block {
-		let in_set = self
-			.inputs
-			.iter()
-			.map(|inp| inp.commitment())
-			.collect::<HashSet<_>>();
-
-		let out_set = self
-			.outputs
-			.iter()
-			.filter(|out| !out.features.contains(OutputFeatures::COINBASE_OUTPUT))
-			.map(|out| out.commitment())
-			.collect::<HashSet<_>>();
-
-		let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
-
-		let new_inputs = self
-			.inputs
-			.into_iter()
-			.filter(|inp| !to_cut_through.contains(&inp.commitment()))
-			.collect::<Vec<_>>();
-
-		let new_outputs = self
-			.outputs
-			.into_iter()
-			.filter(|out| !to_cut_through.contains(&out.commitment()))
-			.collect::<Vec<_>>();
+		let mut inputs = self.inputs.clone();
+		let mut outputs = self.outputs.clone();
+		transaction::cut_through(&mut inputs, &mut outputs);
 
 		Block {
 			header: BlockHeader {
@@ -653,8 +630,8 @@ impl Block {
 				total_difficulty: self.header.total_difficulty,
 				..self.header
 			},
-			inputs: new_inputs,
-			outputs: new_outputs,
+			inputs: inputs,
+			outputs: outputs,
 			kernels: self.kernels,
 		}
 	}

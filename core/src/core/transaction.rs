@@ -529,6 +529,44 @@ impl Transaction {
 	}
 }
 
+/// Matches any output with a potential spending input, eliminating them
+/// from the Vec. Provides a simple way to cut-through a block or aggregated
+/// transaction. The elimination is stable with respect to the order of inputs
+/// and outputs.
+pub fn cut_through(
+	inputs: &mut Vec<Input>,
+	outputs: &mut Vec<Output>
+) -> Result<(), Error> {
+	// assemble output commitments set, checking they're all unique
+	let mut out_set = HashSet::new();
+	let all_uniq = { outputs.iter().all(|o| out_set.insert(o.commitment())) };
+	if !all_uniq {
+		return Err(Error::AggregationError);
+	}
+
+	let in_set = inputs
+		.iter()
+		.map(|inp| inp.commitment())
+		.collect::<HashSet<_>>();
+
+	let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
+
+	let mut new_inputs = inputs
+		.into_iter()
+		.filter(|inp| !to_cut_through.contains(&inp.commitment()))
+		.collect::<Vec<_>>();
+
+	let mut new_outputs = outputs
+		.into_iter()
+		.filter(|out| !to_cut_through.contains(&out.commitment()))
+		.collect::<Vec<_>>();
+
+	// sort them lexicographically
+	new_inputs.sort();
+	new_outputs.sort();
+	Ok(())
+}
+
 /// Aggregate a vec of transactions into a multi-kernel transaction with
 /// cut_through. Optionally allows passing a reward output and kernel for
 /// block building.
@@ -557,35 +595,9 @@ pub fn aggregate(
 		outputs.push(out);
 		kernels.push(kernel);
 	}
-
-	// assemble output commitments set, checking they're all unique
-	let mut out_set = HashSet::new();
-	let all_uniq = { outputs.iter().all(|o| out_set.insert(o.commitment())) };
-	if !all_uniq {
-		return Err(Error::AggregationError);
-	}
-
-	let in_set = inputs
-		.iter()
-		.map(|inp| inp.commitment())
-		.collect::<HashSet<_>>();
-
-	let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
-
-	let mut new_inputs = inputs
-		.into_iter()
-		.filter(|inp| !to_cut_through.contains(&inp.commitment()))
-		.collect::<Vec<_>>();
-
-	let mut new_outputs = outputs
-		.into_iter()
-		.filter(|out| !to_cut_through.contains(&out.commitment()))
-		.collect::<Vec<_>>();
-
-	// sort them lexicographically
-	new_inputs.sort();
-	new_outputs.sort();
 	kernels.sort();
+
+	cut_through(&mut inputs, &mut outputs);
 
 	// now sum the kernel_offsets up to give us an aggregate offset for the
 	// transaction
@@ -596,7 +608,7 @@ pub fn aggregate(
 	//   * cut-through outputs
 	//   * full set of tx kernels
 	//   * sum of all kernel offsets
-	let tx = Transaction::new(new_inputs, new_outputs, kernels).with_offset(total_kernel_offset);
+	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
 
 	// Now validate the aggregate tx to ensure we have not built something invalid.
 	// The resulting tx could be invalid for a variety of reasons -
