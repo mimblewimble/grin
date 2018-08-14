@@ -474,28 +474,27 @@ impl<'a> Extension<'a> {
 
 		// Build bitmap of output pos spent (as inputs) by this tx for rewind.
 		let rewind_rm_pos = tx
-			.body
-			.inputs
+			.inputs()
 			.iter()
 			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
 			.map(|x| x as u32)
 			.collect();
 
-		for ref output in &tx.body.outputs {
+		for ref output in tx.outputs() {
 			if let Err(e) = self.apply_output(output) {
 				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
 				return Err(e);
 			}
 		}
 
-		for ref input in &tx.body.inputs {
+		for ref input in tx.inputs() {
 			if let Err(e) = self.apply_input(input) {
 				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
 				return Err(e);
 			}
 		}
 
-		for ref kernel in &tx.body.kernels {
+		for ref kernel in tx.kernels() {
 			if let Err(e) = self.apply_kernel(kernel) {
 				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
 				return Err(e);
@@ -592,15 +591,15 @@ impl<'a> Extension<'a> {
 		// A block is not valid if it has not been fully cut-through.
 		// So we can safely apply outputs first (we will not spend these in the same
 		// block).
-		for out in &b.body.outputs {
+		for out in b.outputs() {
 			self.apply_output(out)?;
 		}
 
-		for input in &b.body.inputs {
+		for input in b.inputs() {
 			self.apply_input(input)?;
 		}
 
-		for kernel in &b.body.kernels {
+		for kernel in b.kernels() {
 			self.apply_kernel(kernel)?;
 		}
 

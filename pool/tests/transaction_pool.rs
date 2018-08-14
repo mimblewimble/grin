@@ -173,7 +173,7 @@ fn test_the_transaction_pool() {
 			.aggregate_transaction()
 			.unwrap()
 			.unwrap();
-		assert_eq!(agg_tx.body.kernels.len(), 2);
+		assert_eq!(agg_tx.kernels().len(), 2);
 		write_pool
 			.add_to_pool(test_source(), agg_tx, false)
 			.unwrap();
@@ -196,7 +196,7 @@ fn test_the_transaction_pool() {
 			.unwrap();
 		assert_eq!(write_pool.total_size(), 3);
 		let entry = write_pool.txpool.entries.last().unwrap();
-		assert_eq!(entry.tx.body.kernels.len(), 1);
+		assert_eq!(entry.tx.kernels().len(), 1);
 		assert_eq!(entry.src.debug_name, "deagg");
 	}
 

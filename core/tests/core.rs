@@ -48,8 +48,8 @@ fn simple_tx_ser_deser() {
 	ser::serialize(&mut vec, &tx).expect("serialization failed");
 	let dtx: Transaction = ser::deserialize(&mut &vec[..]).unwrap();
 	assert_eq!(dtx.fee(), 2);
-	assert_eq!(dtx.body.inputs.len(), 2);
-	assert_eq!(dtx.body.outputs.len(), 1);
+	assert_eq!(dtx.inputs().len(), 2);
+	assert_eq!(dtx.outputs().len(), 1);
 	assert_eq!(tx.hash(), dtx.hash());
 }
 
@@ -109,8 +109,8 @@ fn build_tx_kernel() {
 	tx.validate(false).unwrap();
 
 	// check the kernel is also itself valid
-	assert_eq!(tx.body.kernels.len(), 1);
-	let kern = &tx.body.kernels[0];
+	assert_eq!(tx.kernels().len(), 1);
+	let kern = &tx.kernels()[0];
 	kern.verify().unwrap();
 
 	assert_eq!(kern.features, KernelFeatures::DEFAULT_KERNEL);
@@ -319,9 +319,9 @@ fn hash_output() {
 		],
 		&keychain,
 	).unwrap();
-	let h = tx.body.outputs[0].hash();
+	let h = tx.outputs()[0].hash();
 	assert!(h != ZERO_HASH);
-	let h2 = tx.body.outputs[1].hash();
+	let h2 = tx.outputs()[1].hash();
 	assert!(h != h2);
 }
 
@@ -335,7 +335,7 @@ fn blind_tx() {
 	// with a bullet proof causes painful errors
 
 	// checks that the range proof on our blind output is sufficiently hiding
-	let Output { proof, .. } = btx.body.outputs[0];
+	let Output { proof, .. } = btx.outputs()[0];
 
 	let secp = static_secp_instance();
 	let secp = secp.lock().unwrap();

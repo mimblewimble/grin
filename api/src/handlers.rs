@@ -134,8 +134,7 @@ impl OutputHandler {
 		// in the period between accepting the block and refreshing the wallet
 		if let Ok(block) = w(&self.chain).get_block(&header.hash()) {
 			let outputs = block
-				.body
-				.outputs
+				.outputs()
 				.iter()
 				.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
 				.map(|output| {
@@ -742,8 +741,8 @@ where
 					info!(
 						LOGGER,
 						"Pushing transaction with {} inputs and {} outputs to pool.",
-						tx.body.inputs.len(),
-						tx.body.outputs.len()
+						tx.inputs().len(),
+						tx.outputs().len()
 					);
 
 					//  Push to tx pool.

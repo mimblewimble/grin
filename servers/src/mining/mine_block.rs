@@ -178,8 +178,8 @@ fn build_block(
 	debug!(
 		LOGGER,
 		"Built new block with {} inputs and {} outputs, network difficulty: {}, cumulative difficulty {}",
-		b.body.inputs.len(),
-		b.body.outputs.len(),
+		b.inputs().len(),
+		b.outputs().len(),
 		b_difficulty,
 		b.header.clone().total_difficulty.to_num(),
 	);

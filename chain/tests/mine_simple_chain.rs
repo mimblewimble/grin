@@ -94,7 +94,7 @@ fn mine_empty_chain() {
 		let block = chain.get_block(&header.hash()).unwrap();
 		assert_eq!(block.header.height, n);
 		assert_eq!(block.hash(), bhash);
-		assert_eq!(block.body.outputs.len(), 1);
+		assert_eq!(block.outputs().len(), 1);
 
 		// now check the block height index
 		let header_by_height = chain.get_header_by_height(n).unwrap();
@@ -243,7 +243,7 @@ fn spend_in_fork_and_compact() {
 	// so we can spend the coinbase later
 	let b = prepare_block(&kc, &fork_head, &chain, 2);
 	let block_hash = b.hash();
-	let out_id = OutputIdentifier::from_output(&b.body.outputs[0]);
+	let out_id = OutputIdentifier::from_output(&b.outputs()[0]);
 	assert!(out_id.features.contains(OutputFeatures::COINBASE_OUTPUT));
 	fork_head = b.header.clone();
 	chain
@@ -313,12 +313,12 @@ fn spend_in_fork_and_compact() {
 	assert_eq!(head.hash(), prev_main.hash());
 	assert!(
 		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx2.body.outputs[0]))
+			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
 			.is_ok()
 	);
 	assert!(
 		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx1.body.outputs[0]))
+			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
 			.is_err()
 	);
 
@@ -336,12 +336,12 @@ fn spend_in_fork_and_compact() {
 	assert_eq!(head.hash(), prev_fork.hash());
 	assert!(
 		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx2.body.outputs[0]))
+			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
 			.is_ok()
 	);
 	assert!(
 		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx1.body.outputs[0]))
+			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
 			.is_err()
 	);
 

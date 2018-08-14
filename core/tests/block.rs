@@ -108,8 +108,8 @@ fn block_with_cut_through() {
 	// output) and should still be valid
 	println!("3");
 	b.validate(&BlindingFactor::zero(), &zero_commit).unwrap();
-	assert_eq!(b.body.inputs.len(), 3);
-	assert_eq!(b.body.outputs.len(), 3);
+	assert_eq!(b.inputs().len(), 3);
+	assert_eq!(b.outputs().len(), 3);
 	println!("4");
 }
 
@@ -121,13 +121,12 @@ fn empty_block_with_coinbase_is_valid() {
 	let key_id = keychain.derive_key_id(1).unwrap();
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 
-	assert_eq!(b.body.inputs.len(), 0);
-	assert_eq!(b.body.outputs.len(), 1);
-	assert_eq!(b.body.kernels.len(), 1);
+	assert_eq!(b.inputs().len(), 0);
+	assert_eq!(b.outputs().len(), 1);
+	assert_eq!(b.kernels().len(), 1);
 
 	let coinbase_outputs = b
-		.body
-		.outputs
+		.outputs()
 		.iter()
 		.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 		.map(|o| o.clone())
@@ -135,8 +134,7 @@ fn empty_block_with_coinbase_is_valid() {
 	assert_eq!(coinbase_outputs.len(), 1);
 
 	let coinbase_kernels = b
-		.body
-		.kernels
+		.kernels()
 		.iter()
 		.filter(|out| out.features.contains(KernelFeatures::COINBASE_KERNEL))
 		.map(|o| o.clone())
@@ -160,11 +158,11 @@ fn remove_coinbase_output_flag() {
 	let mut b = new_block(vec![], &keychain, &prev, &key_id);
 
 	assert!(
-		b.body.outputs[0]
+		b.outputs()[0]
 			.features
 			.contains(OutputFeatures::COINBASE_OUTPUT)
 	);
-	b.body.outputs[0]
+	b.outputs_mut()[0]
 		.features
 		.remove(OutputFeatures::COINBASE_OUTPUT);
 
@@ -190,11 +188,11 @@ fn remove_coinbase_kernel_flag() {
 	let mut b = new_block(vec![], &keychain, &prev, &key_id);
 
 	assert!(
-		b.body.kernels[0]
+		b.kernels()[0]
 			.features
 			.contains(KernelFeatures::COINBASE_KERNEL)
 	);
-	b.body.kernels[0]
+	b.kernels_mut()[0]
 		.features
 		.remove(KernelFeatures::COINBASE_KERNEL);
 
@@ -227,9 +225,9 @@ fn serialize_deserialize_block() {
 		origin_ts - Duration::nanoseconds(origin_ts.timestamp_subsec_nanos() as i64);
 
 	assert_eq!(b.header, b2.header);
-	assert_eq!(b.body.inputs, b2.body.inputs);
-	assert_eq!(b.body.outputs, b2.body.outputs);
-	assert_eq!(b.body.kernels, b2.body.kernels);
+	assert_eq!(b.inputs(), b2.inputs());
+	assert_eq!(b.outputs(), b2.outputs());
+	assert_eq!(b.kernels(), b2.kernels());
 }
 
 #[test]
@@ -341,11 +339,11 @@ fn compact_block_hash_with_nonce() {
 	// correctly in both of the compact_blocks
 	assert_eq!(
 		cb1.kern_ids[0],
-		tx.body.kernels[0].short_id(&cb1.hash(), cb1.nonce)
+		tx.kernels()[0].short_id(&cb1.hash(), cb1.nonce)
 	);
 	assert_eq!(
 		cb2.kern_ids[0],
-		tx.body.kernels[0].short_id(&cb2.hash(), cb2.nonce)
+		tx.kernels()[0].short_id(&cb2.hash(), cb2.nonce)
 	);
 }
 
@@ -364,8 +362,7 @@ fn convert_block_to_compact_block() {
 
 	assert_eq!(
 		cb.kern_ids[0],
-		b.body
-			.kernels
+		b.kernels()
 			.iter()
 			.find(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
 			.unwrap()
@@ -382,8 +379,8 @@ fn hydrate_empty_compact_block() {
 	let cb = b.as_compact_block();
 	let hb = Block::hydrate_from(cb, vec![]);
 	assert_eq!(hb.header, b.header);
-	assert_eq!(hb.body.outputs, b.body.outputs);
-	assert_eq!(hb.body.kernels, b.body.kernels);
+	assert_eq!(hb.outputs(), b.outputs());
+	assert_eq!(hb.kernels(), b.kernels());
 }
 
 #[test]

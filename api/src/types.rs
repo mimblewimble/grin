@@ -532,14 +532,12 @@ impl BlockPrintable {
 		include_proof: bool,
 	) -> BlockPrintable {
 		let inputs = block
-			.body
-			.inputs
+			.inputs()
 			.iter()
 			.map(|x| util::to_hex(x.commitment().0.to_vec()))
 			.collect();
 		let outputs = block
-			.body
-			.outputs
+			.outputs()
 			.iter()
 			.map(|output| {
 				OutputPrintable::from_output(
@@ -551,8 +549,7 @@ impl BlockPrintable {
 			})
 			.collect();
 		let kernels = block
-			.body
-			.kernels
+			.kernels()
 			.iter()
 			.map(|kernel| TxKernelPrintable::from_txkernel(kernel))
 			.collect();

@@ -78,8 +78,8 @@ fn test_coinbase_maturity() {
 		global::min_sizeshift(),
 	).unwrap();
 
-	assert_eq!(block.body.outputs.len(), 1);
-	let coinbase_output = block.body.outputs[0];
+	assert_eq!(block.outputs().len(), 1);
+	let coinbase_output = block.outputs()[0];
 	assert!(
 		coinbase_output
 			.features

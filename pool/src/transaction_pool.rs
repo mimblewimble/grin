@@ -69,10 +69,10 @@ where
 
 	fn add_to_txpool(&mut self, mut entry: PoolEntry) -> Result<(), PoolError> {
 		// First deaggregate the tx based on current txpool txs.
-		if entry.tx.body.kernels.len() > 1 {
+		if entry.tx.kernels().len() > 1 {
 			let txs = self
 				.txpool
-				.find_matching_transactions(entry.tx.body.kernels.clone());
+				.find_matching_transactions(entry.tx.kernels().clone());
 			if !txs.is_empty() {
 				entry.tx = transaction::deaggregate(entry.tx, txs)?;
 				entry.src.debug_name = "deagg".to_string();
@@ -101,7 +101,7 @@ where
 			LOGGER,
 			"pool: add_to_pool: {:?}, kernels - {}, stem? {}",
 			tx.hash(),
-			tx.body.kernels.len(),
+			tx.kernels().len(),
 			stem,
 		);
 

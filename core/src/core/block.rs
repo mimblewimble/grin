@@ -27,8 +27,8 @@ use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
 use core::target::Difficulty;
 use core::{
-	transaction, Commitment, KernelFeatures, Output, OutputFeatures, Proof, ShortId, Transaction,
-	TransactionBody, TxKernel,
+	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId,
+	Transaction, TransactionBody, TxKernel,
 };
 use global;
 use keychain::{self, BlindingFactor};
@@ -351,7 +351,7 @@ pub struct Block {
 	/// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,
 	/// The body - inputs/outputs/kernels
-	pub body: TransactionBody,
+	body: TransactionBody,
 }
 
 /// Implementation of Writeable for a block, defines how to write the block to a
@@ -452,9 +452,10 @@ impl Block {
 
 		// collect all the inputs, outputs and kernels from the txs
 		for tx in txs {
-			all_inputs.extend(tx.body.inputs);
-			all_outputs.extend(tx.body.outputs);
-			all_kernels.extend(tx.body.kernels);
+			let tb: TransactionBody = tx.into();
+			all_inputs.extend(tb.inputs);
+			all_outputs.extend(tb.outputs);
+			all_kernels.extend(tb.kernels);
 		}
 
 		// include the coinbase output(s) and kernel(s) from the compact_block
@@ -548,7 +549,7 @@ impl Block {
 			let zero_commit = secp_static::commit_to_zero_value();
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			let mut excesses = map_vec!(agg_tx.body.kernels, |x| x.excess());
+			let mut excesses = map_vec!(agg_tx.kernels(), |x| x.excess());
 			excesses.push(prev.total_kernel_sum);
 			excesses.retain(|x| *x != zero_commit);
 			secp.commit_sum(excesses, vec![])?
@@ -564,12 +565,38 @@ impl Block {
 				total_kernel_sum,
 				..Default::default()
 			},
-			body: TransactionBody::new(
-				agg_tx.body.inputs,
-				agg_tx.body.outputs,
-				agg_tx.body.kernels,
-			),
+			body: agg_tx.into(),
 		}.cut_through())
+	}
+
+	/// Get inputs
+	pub fn inputs(&self) -> &Vec<Input> {
+		&self.body.inputs
+	}
+
+	/// Get inputs mutable
+	pub fn inputs_mut(&mut self) -> &mut Vec<Input> {
+		&mut self.body.inputs
+	}
+
+	/// Get outputs
+	pub fn outputs(&self) -> &Vec<Output> {
+		&self.body.outputs
+	}
+
+	/// Get outputs mutable
+	pub fn outputs_mut(&mut self) -> &mut Vec<Output> {
+		&mut self.body.outputs
+	}
+
+	/// Get kernels
+	pub fn kernels(&self) -> &Vec<TxKernel> {
+		&self.body.kernels
+	}
+
+	/// Get kernels mut
+	pub fn kernels_mut(&mut self) -> &mut Vec<TxKernel> {
+		&mut self.body.kernels
 	}
 
 	/// Blockhash, computed using only the POW

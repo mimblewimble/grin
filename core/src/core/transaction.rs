@@ -510,13 +510,19 @@ pub struct Transaction {
 	/// excess is k1G after splitting the key k = k1 + k2
 	pub offset: BlindingFactor,
 	/// The transaction body - inputs/outputs/kernels
-	pub body: TransactionBody,
+	body: TransactionBody,
 }
 
 /// PartialEq
 impl PartialEq for Transaction {
 	fn eq(&self, tx: &Transaction) -> bool {
 		self.body == tx.body && self.offset == tx.offset
+	}
+}
+
+impl Into<TransactionBody> for Transaction {
+	fn into(self) -> TransactionBody {
+		self.body
 	}
 }
 
@@ -612,6 +618,36 @@ impl Transaction {
 			body: self.body.with_output(output),
 			..self
 		}
+	}
+
+	/// Get inputs
+	pub fn inputs(&self) -> &Vec<Input> {
+		&self.body.inputs
+	}
+
+	/// Get inputs mutable
+	pub fn inputs_mut(&mut self) -> &mut Vec<Input> {
+		&mut self.body.inputs
+	}
+
+	/// Get outputs
+	pub fn outputs(&self) -> &Vec<Output> {
+		&self.body.outputs
+	}
+
+	/// Get outputs mutable
+	pub fn outputs_mut(&mut self) -> &mut Vec<Output> {
+		&mut self.body.outputs
+	}
+
+	/// Get kernels
+	pub fn kernels(&self) -> &Vec<TxKernel> {
+		&self.body.kernels
+	}
+
+	/// Get kernels mut
+	pub fn kernels_mut(&mut self) -> &mut Vec<TxKernel> {
+		&mut self.body.kernels
 	}
 
 	/// Total fee for a transaction is the sum of fees of all kernels.

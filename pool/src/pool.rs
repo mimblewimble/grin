@@ -53,7 +53,7 @@ where
 		let mut txs = vec![];
 
 		for x in &self.entries {
-			for kernel in &x.tx.body.kernels {
+			for kernel in x.tx.kernels() {
 				// rehash each kernel to calculate the block specific short_id
 				let short_id = kernel.short_id(&cb.hash(), cb.nonce);
 
@@ -190,20 +190,8 @@ where
 	fn remaining_transactions(&self, block: &Block) -> Vec<Transaction> {
 		self.entries
 			.iter()
-			.filter(|x| {
-				!x.tx
-					.body
-					.kernels
-					.iter()
-					.any(|y| block.body.kernels.contains(y))
-			})
-			.filter(|x| {
-				!x.tx
-					.body
-					.inputs
-					.iter()
-					.any(|y| block.body.inputs.contains(y))
-			})
+			.filter(|x| !x.tx.kernels().iter().any(|y| block.kernels().contains(y)))
+			.filter(|x| !x.tx.inputs().iter().any(|y| block.inputs().contains(y)))
 			.map(|x| x.tx.clone())
 			.collect()
 	}
@@ -218,13 +206,7 @@ where
 
 		// Check each transaction in the pool
 		for entry in &self.entries {
-			let entry_kernel_set = entry
-				.tx
-				.body
-				.kernels
-				.iter()
-				.cloned()
-				.collect::<HashSet<_>>();
+			let entry_kernel_set = entry.tx.kernels().iter().cloned().collect::<HashSet<_>>();
 			if entry_kernel_set.is_subset(&kernel_set) {
 				found_txs.push(entry.tx.clone());
 			}
