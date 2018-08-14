@@ -239,16 +239,16 @@ dependencies = [
 
 [[package]]
 name = "croaring"
-version = "0.3.2"
+version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
- "croaring-sys 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "croaring-sys 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
 name = "croaring-sys"
-version = "0.3.5"
+version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "bindgen 0.37.4 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -540,7 +540,7 @@ dependencies = [
  "bitflags 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "croaring 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "croaring 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.5.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -579,7 +579,7 @@ dependencies = [
  "blake2-rfc 0.2.18 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "croaring 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "croaring 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "grin_keychain 0.3.0",
@@ -682,7 +682,7 @@ version = "0.3.0"
 dependencies = [
  "byteorder 1.2.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "chrono 0.4.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "croaring 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "croaring 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.5.11 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "failure_derive 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1970,8 +1970,8 @@ dependencies = [
 "checksum cmake 0.1.31 (registry+https://github.com/rust-lang/crates.io-index)" = "95470235c31c726d72bf2e1f421adc1e65b9d561bf5529612cbe1a72da1467b3"
 "checksum constant_time_eq 0.1.3 (registry+https://github.com/rust-lang/crates.io-index)" = "8ff012e225ce166d4422e0e78419d901719760f62ae2b7969ca6b564d1b54a9e"
 "checksum crc 1.8.1 (registry+https://github.com/rust-lang/crates.io-index)" = "d663548de7f5cca343f1e0a48d14dcfb0e9eb4e079ec58883b7251539fa10aeb"
-"checksum croaring 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6492a6db70229be82255d139a58be62096e7f7b337c3d8559e255705bd7c5ad9"
-"checksum croaring-sys 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)" = "a32bd0c169f409b0211e0dccff476d89be02dc28a7d9e1e61b2fece8f557a7bd"
+"checksum croaring 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)" = "38961600edf0408acc371eb2359901f5ed2e634dde8537fc9a05e88fb26cde0e"
+"checksum croaring-sys 0.3.6 (registry+https://github.com/rust-lang/crates.io-index)" = "48a344ef01931b3106d6083c08fefc16e2b0b9d2de695a49a7437e56607cfda1"
 "checksum crossbeam-deque 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "fe8153ef04a7594ded05b427ffad46ddeaf22e63fd48d42b3e1e3bb4db07cae7"
 "checksum crossbeam-epoch 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2af0e75710d6181e234c8ecc79f14a97907850a541b13b0be1dd10992f2e4620"
 "checksum crossbeam-utils 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "d636a8b3bcc1b409d7ffd3facef8f21dcb4009626adbd0c5e6c4305c07253c7b"
