@@ -146,6 +146,13 @@ pub struct PeerStats {
 	pub direction: String,
 }
 
+impl StratumStats {
+	/// Calculate network hashrate
+	pub fn network_hashrate(&self) -> f64 {
+		42.0 * (self.network_difficulty as f64 / (self.cuckoo_size - 1) as f64) / 60.0
+	}
+}
+
 impl PeerStats {
 	/// Convert from a peer directly
 	pub fn from_peer(peer: &p2p::Peer) -> PeerStats {
