@@ -533,10 +533,7 @@ impl Transaction {
 /// from the Vec. Provides a simple way to cut-through a block or aggregated
 /// transaction. The elimination is stable with respect to the order of inputs
 /// and outputs.
-pub fn cut_through(
-	inputs: &mut Vec<Input>,
-	outputs: &mut Vec<Output>
-) -> Result<(), Error> {
+pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result<(), Error> {
 	// assemble output commitments set, checking they're all unique
 	let mut out_set = HashSet::new();
 	let all_uniq = { outputs.iter().all(|o| out_set.insert(o.commitment())) };
