@@ -7,7 +7,7 @@ publish = false
 
 [dependencies]
 byteorder = "1"
-croaring = "=0.3.2"
+croaring = "=0.3"
 env_logger = "0.5"
 libc = "0.2"
 failure = "0.1"
