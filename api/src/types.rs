@@ -292,7 +292,8 @@ impl OutputPrintable {
 	}
 
 	pub fn range_proof(&self) -> Result<pedersen::RangeProof, ser::Error> {
-		let proof_str = self.proof
+		let proof_str = self
+			.proof
 			.clone()
 			.ok_or_else(|| ser::Error::HexError(format!("output range_proof missing")))
 			.unwrap();
@@ -531,11 +532,13 @@ impl BlockPrintable {
 		include_proof: bool,
 	) -> BlockPrintable {
 		let inputs = block
+			.body
 			.inputs
 			.iter()
 			.map(|x| util::to_hex(x.commitment().0.to_vec()))
 			.collect();
 		let outputs = block
+			.body
 			.outputs
 			.iter()
 			.map(|output| {
@@ -548,6 +551,7 @@ impl BlockPrintable {
 			})
 			.collect();
 		let kernels = block
+			.body
 			.kernels
 			.iter()
 			.map(|kernel| TxKernelPrintable::from_txkernel(kernel))
@@ -581,11 +585,13 @@ impl CompactBlockPrintable {
 		chain: Arc<chain::Chain>,
 	) -> CompactBlockPrintable {
 		let block = chain.get_block(&cb.hash()).unwrap();
-		let out_full = cb.out_full
+		let out_full = cb
+			.out_full
 			.iter()
 			.map(|x| OutputPrintable::from_output(x, chain.clone(), Some(&block.header), false))
 			.collect();
-		let kern_full = cb.kern_full
+		let kern_full = cb
+			.kern_full
 			.iter()
 			.map(|x| TxKernelPrintable::from_txkernel(x))
 			.collect();

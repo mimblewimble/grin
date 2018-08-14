@@ -157,6 +157,7 @@ impl ChainStore {
 
 	pub fn build_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
 		let bitmap = block
+			.body
 			.inputs
 			.iter()
 			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())

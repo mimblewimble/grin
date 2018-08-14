@@ -134,6 +134,7 @@ impl OutputHandler {
 		// in the period between accepting the block and refreshing the wallet
 		if let Ok(block) = w(&self.chain).get_block(&header.hash()) {
 			let outputs = block
+				.body
 				.outputs
 				.iter()
 				.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
@@ -226,7 +227,8 @@ impl OutputHandler {
 
 impl Handler for OutputHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		match req.uri()
+		match req
+			.uri()
 			.path()
 			.trim_right_matches("/")
 			.rsplit("/")
@@ -362,7 +364,8 @@ impl Handler for TxHashSetHandler {
 				}
 			}
 		}
-		match req.uri()
+		match req
+			.uri()
 			.path()
 			.trim_right()
 			.trim_right_matches("/")
@@ -418,7 +421,8 @@ pub struct PeerHandler {
 
 impl Handler for PeerHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		if let Ok(addr) = req.uri()
+		if let Ok(addr) = req
+			.uri()
 			.path()
 			.trim_right_matches("/")
 			.rsplit("/")
@@ -604,7 +608,8 @@ fn check_block_param(input: &String) -> Result<(), Error> {
 
 impl Handler for BlockHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let el = req.uri()
+		let el = req
+			.uri()
 			.path()
 			.trim_right_matches("/")
 			.rsplit("/")
@@ -649,7 +654,8 @@ impl Handler for BlockHandler {
 
 impl Handler for HeaderHandler {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let el = req.uri()
+		let el = req
+			.uri()
 			.path()
 			.trim_right_matches("/")
 			.rsplit("/")
@@ -736,8 +742,8 @@ where
 					info!(
 						LOGGER,
 						"Pushing transaction with {} inputs and {} outputs to pool.",
-						tx.inputs.len(),
-						tx.outputs.len()
+						tx.body.inputs.len(),
+						tx.body.outputs.len()
 					);
 
 					//  Push to tx pool.
