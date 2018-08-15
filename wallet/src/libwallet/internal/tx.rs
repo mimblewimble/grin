@@ -50,12 +50,7 @@ where
 	debug!(LOGGER, "receive_tx: 3");
 
 	// perform partial sig
-	let _ = slate.fill_round_2(
-		wallet.keychain(),
-		&context.sec_key,
-		&context.sec_nonce,
-		1,
-	)?;
+	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)?;
 
 	debug!(LOGGER, "receive_tx: 4");
 

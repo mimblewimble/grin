@@ -157,7 +157,7 @@ impl Slate {
 		self.check_fees()?;
 
 		debug!(LOGGER, "fill_round_2: 1");
-		
+
 		self.verify_part_sigs(keychain.secp())?;
 		let sig_part = aggsig::calculate_partial_sig(
 			keychain.secp(),

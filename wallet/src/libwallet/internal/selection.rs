@@ -225,9 +225,9 @@ pub fn select_send_tx<T: ?Sized, C, K>(
 	(
 		Vec<Box<build::Append<K>>>,
 		Vec<OutputData>,
-		Vec<(u64, u32)>,    // change amounts and derivations
-		u64,                // amount
-		u64,                // fee
+		Vec<(u64, u32)>, // change amounts and derivations
+		u64,             // amount
+		u64,             // fee
 	),
 	Error,
 >
@@ -355,18 +355,21 @@ where
 	let mut change_amounts_derivations = vec![];
 
 	if change == 0 {
-		warn!(LOGGER, "inputs_and_change: change value is zero. Is this safe?");
+		warn!(
+			LOGGER,
+			"inputs_and_change: change value is zero. Is this safe?"
+		);
 	} else {
-		warn!(LOGGER,
-			"inputs_and_change: change: {}, building {} change outputs",
-			change,
-			num_change_outputs,
+		warn!(
+			LOGGER,
+			"inputs_and_change: change: {}, building {} change outputs", change, num_change_outputs,
 		);
 
 		let part_change = change / num_change_outputs as u64;
 		let remainder_change = change % part_change;
 
-		warn!(LOGGER,
+		warn!(
+			LOGGER,
 			"inputs_and_change: part_change: {}, remainder_change: {}",
 			part_change,
 			remainder_change,
