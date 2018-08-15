@@ -474,7 +474,7 @@ impl Block {
 	/// Hydrate a block from a compact block.
 	/// Note: caller must validate the block themselves, we do not validate it
 	/// here.
-	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Block {
+	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Result<Block, Error> {
 		trace!(
 			LOGGER,
 			"block: hydrate_from: {}, {} txs",
@@ -583,7 +583,7 @@ impl Block {
 			secp.commit_sum(excesses, vec![])?
 		};
 
-		Ok(Block {
+		Block {
 			header: BlockHeader {
 				height: prev.height + 1,
 				timestamp: Utc::now(),
@@ -596,7 +596,7 @@ impl Block {
 			inputs: agg_tx.inputs,
 			outputs: agg_tx.outputs,
 			kernels: agg_tx.kernels,
-		}.cut_through())
+		}.cut_through()
 	}
 
 	/// Blockhash, computed using only the POW
@@ -619,12 +619,12 @@ impl Block {
 	/// is a transaction spending a previous coinbase
 	/// we do not want to cut-through (all coinbase must be preserved)
 	///
-	pub fn cut_through(self) -> Block {
+	pub fn cut_through(self) -> Result<Block, Error> {
 		let mut inputs = self.inputs.clone();
 		let mut outputs = self.outputs.clone();
-		transaction::cut_through(&mut inputs, &mut outputs);
+		transaction::cut_through(&mut inputs, &mut outputs)?;
 
-		Block {
+		Ok(Block {
 			header: BlockHeader {
 				pow: self.header.pow,
 				total_difficulty: self.header.total_difficulty,
@@ -633,7 +633,7 @@ impl Block {
 			inputs: inputs,
 			outputs: outputs,
 			kernels: self.kernels,
-		}
+		})
 	}
 
 	/// Validates all the elements in a block that can be checked without

@@ -119,10 +119,16 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		);
 
 		if cb.kern_ids.is_empty() {
-			let block = core::Block::hydrate_from(cb, vec![]);
 
+			let cbh = cb.hash();
 			// push the freshly hydrated block through the chain pipeline
-			self.process_block(block, addr)
+			match core::Block::hydrate_from(cb, vec![]) {
+				Ok(block) => self.process_block(block, addr),
+				Err(e) => {
+					debug!(LOGGER, "Invalid hydrated block {}: {}", cbh, e);
+					return false;
+				}
+			}
 		} else {
 
 			// check at least the header is valid before hydrating
@@ -143,7 +149,13 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			// 2) we hydrate an invalid block (txs legit missing from our pool)
 			// 3) we hydrate an invalid block (peer sent us a "bad" compact block) - [TBD]
 
-			let block = core::Block::hydrate_from(cb.clone(), txs);
+			let block = match core::Block::hydrate_from(cb.clone(), txs) {
+				Ok(block) => block,
+				Err(e) => {
+					debug!(LOGGER, "Invalid hydrated block {}: {}", cb.hash(), e);
+					return false;
+				}
+			};
 
 			let chain = self.chain
 				.upgrade()

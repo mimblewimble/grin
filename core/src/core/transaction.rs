@@ -550,19 +550,11 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 
 	let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
 
-	let mut new_inputs = inputs
-		.into_iter()
-		.filter(|inp| !to_cut_through.contains(&inp.commitment()))
-		.collect::<Vec<_>>();
-
-	let mut new_outputs = outputs
-		.into_iter()
-		.filter(|out| !to_cut_through.contains(&out.commitment()))
-		.collect::<Vec<_>>();
-
-	// sort them lexicographically
-	new_inputs.sort();
-	new_outputs.sort();
+	// filter and sort
+	inputs.retain(|inp| !to_cut_through.contains(&inp.commitment()));
+	outputs.retain(|out| !to_cut_through.contains(&out.commitment()));
+	inputs.sort();
+	outputs.sort();
 	Ok(())
 }
 
@@ -573,6 +565,7 @@ pub fn aggregate(
 	transactions: Vec<Transaction>,
 	reward: Option<(Output, TxKernel)>,
 ) -> Result<Transaction, Error> {
+
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
@@ -596,7 +589,7 @@ pub fn aggregate(
 	}
 	kernels.sort();
 
-	cut_through(&mut inputs, &mut outputs);
+	cut_through(&mut inputs, &mut outputs)?;
 
 	// now sum the kernel_offsets up to give us an aggregate offset for the
 	// transaction
