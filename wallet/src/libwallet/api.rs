@@ -139,6 +139,7 @@ where
 		minimum_confirmations: u64,
 		dest: &str,
 		max_outputs: usize,
+		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
 	) -> Result<Slate, Error> {
 		let mut w = self.wallet.lock().unwrap();
@@ -154,6 +155,7 @@ where
 			amount,
 			minimum_confirmations,
 			max_outputs,
+			num_change_outputs,
 			selection_strategy_is_use_all,
 		)?;
 
@@ -186,6 +188,7 @@ where
 		minimum_confirmations: u64,
 		dest: &str,
 		max_outputs: usize,
+		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
 	) -> Result<(), Error> {
 		let mut w = self.wallet.lock().unwrap();
@@ -196,6 +199,7 @@ where
 			amount,
 			minimum_confirmations,
 			max_outputs,
+			num_change_outputs,
 			selection_strategy_is_use_all,
 		)?;
 

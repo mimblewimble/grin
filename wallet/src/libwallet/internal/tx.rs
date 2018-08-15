@@ -31,9 +31,13 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
+	debug!(LOGGER, "receive_tx: 1");
+
 	// create an output using the amount in the slate
 	let (_, mut context, receiver_create_fn) =
 		selection::build_recipient_output_with_slate(wallet, slate)?;
+
+	debug!(LOGGER, "receive_tx: 2");
 
 	// fill public keys
 	let _ = slate.fill_round_1(
@@ -43,11 +47,22 @@ where
 		1,
 	)?;
 
+	debug!(LOGGER, "receive_tx: 3");
+
 	// perform partial sig
-	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)?;
+	let _ = slate.fill_round_2(
+		wallet.keychain(),
+		&context.sec_key,
+		&context.sec_nonce,
+		1,
+	)?;
+
+	debug!(LOGGER, "receive_tx: 4");
 
 	// Save output in wallet
 	let _ = receiver_create_fn(wallet);
+
+	debug!(LOGGER, "receive_tx: 5");
 
 	Ok(())
 }
@@ -59,6 +74,7 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 	amount: u64,
 	minimum_confirmations: u64,
 	max_outputs: usize,
+	num_change_outputs: usize,
 	selection_strategy_is_use_all: bool,
 ) -> Result<
 	(
@@ -95,6 +111,7 @@ where
 		minimum_confirmations,
 		lock_height,
 		max_outputs,
+		num_change_outputs,
 		selection_strategy_is_use_all,
 	)?;
 
@@ -190,7 +207,9 @@ where
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
 	let fee = tx_fee(coins.len(), 2, None);
-	let (mut parts, _, _) = selection::inputs_and_change(&coins, wallet, amount, fee)?;
+	let num_change_outputs = 1;
+	let (mut parts, _) =
+		selection::inputs_and_change(&coins, wallet, amount, fee, num_change_outputs)?;
 
 	//TODO: If we end up using this, create change output here
 
