@@ -217,7 +217,7 @@ mod test {
 		let tx1 = build::transaction(vec![build::output(105, key_id1.clone())], &keychain).unwrap();
 		let tx2 = build::transaction(vec![build::input(105, key_id1.clone())], &keychain).unwrap();
 
-		assert_eq!(tx1.outputs[0].features, tx2.inputs[0].features);
-		assert_eq!(tx1.outputs[0].commitment(), tx2.inputs[0].commitment());
+		assert_eq!(tx1.outputs()[0].features, tx2.inputs()[0].features);
+		assert_eq!(tx1.outputs()[0].commitment(), tx2.inputs()[0].commitment());
 	}
 }

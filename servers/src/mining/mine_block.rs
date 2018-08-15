@@ -15,12 +15,12 @@
 //! Build a block to mine: gathers transactions from the pool, assembles
 //! them into a block and returns it.
 
+use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use itertools::Itertools;
 use rand::{self, Rng};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
-use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 
 use chain;
 use common::adapters::PoolToChainAdapter;
@@ -178,8 +178,8 @@ fn build_block(
 	debug!(
 		LOGGER,
 		"Built new block with {} inputs and {} outputs, network difficulty: {}, cumulative difficulty {}",
-		b.inputs.len(),
-		b.outputs.len(),
+		b.inputs().len(),
+		b.outputs().len(),
 		b_difficulty,
 		b.header.clone().total_difficulty.to_num(),
 	);

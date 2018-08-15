@@ -30,6 +30,7 @@ pub enum Error {
 	Secp(secp::Error),
 	/// Kernel sums do not equal output sums.
 	KernelSumMismatch,
+	/// Committed overage (fee or reward) is invalid
 	InvalidValue,
 }
 
