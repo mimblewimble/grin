@@ -21,14 +21,14 @@ use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
 
-use consensus::{self, reward, VerifySortOrder, REWARD};
+use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::id::ShortIdentifiable;
 use core::target::Difficulty;
 use core::{
 	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId,
-	Transaction, TxKernel,
+	Transaction, TransactionBody, TxKernel,
 };
 use global;
 use keychain::{self, BlindingFactor};
@@ -350,13 +350,8 @@ impl Readable for CompactBlock {
 pub struct Block {
 	/// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,
-	/// List of transaction inputs
-	pub inputs: Vec<Input>,
-	/// List of transaction outputs
-	pub outputs: Vec<Output>,
-	/// List of kernels with associated proofs (note these are offset from
-	/// tx_kernels)
-	pub kernels: Vec<TxKernel>,
+	/// The body - inputs/outputs/kernels
+	body: TransactionBody,
 }
 
 /// Implementation of Writeable for a block, defines how to write the block to a
@@ -367,22 +362,7 @@ impl Writeable for Block {
 		self.header.write(writer)?;
 
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			ser_multiwrite!(
-				writer,
-				[write_u64, self.inputs.len() as u64],
-				[write_u64, self.outputs.len() as u64],
-				[write_u64, self.kernels.len() as u64]
-			);
-
-			let mut inputs = self.inputs.clone();
-			let mut outputs = self.outputs.clone();
-			let mut kernels = self.kernels.clone();
-
-			// Consensus rule that everything is sorted in lexicographical order on the
-			// wire.
-			inputs.write_sorted(writer)?;
-			outputs.write_sorted(writer)?;
-			kernels.write_sorted(writer)?;
+			self.body.write(writer)?;
 		}
 		Ok(())
 	}
@@ -394,25 +374,11 @@ impl Readable for Block {
 	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
 		let header = BlockHeader::read(reader)?;
 
-		let (input_len, output_len, kernel_len) =
-			ser_multiread!(reader, read_u64, read_u64, read_u64);
-
-		let inputs = read_and_verify_sorted(reader, input_len)?;
-		let outputs = read_and_verify_sorted(reader, output_len)?;
-		let kernels = read_and_verify_sorted(reader, kernel_len)?;
-
-		// TODO - we do not verify the input|output|kernel counts here.
-		// I think should call block.validate() as part of a call to read()
-		// but block.validate() as it stands currently requires the previous sums etc.
-		// So there is no easy way to do this in isolation.
-		// Maybe we need two variations of validate() where one handles the validation
-		// rules that *can* be done in isolation.
-
+		let body = TransactionBody::read(reader)?;
+		body.validate(true).map_err(|_| ser::Error::CorruptedData)?;
 		Ok(Block {
 			header: header,
-			inputs: inputs,
-			outputs: outputs,
-			kernels: kernels,
+			body: body,
 		})
 	}
 }
@@ -421,15 +387,15 @@ impl Readable for Block {
 /// Pedersen commitment.
 impl Committed for Block {
 	fn inputs_committed(&self) -> Vec<Commitment> {
-		self.inputs.iter().map(|x| x.commitment()).collect()
+		self.body.inputs_committed()
 	}
 
 	fn outputs_committed(&self) -> Vec<Commitment> {
-		self.outputs.iter().map(|x| x.commitment()).collect()
+		self.body.outputs_committed()
 	}
 
 	fn kernels_committed(&self) -> Vec<Commitment> {
-		self.kernels.iter().map(|x| x.excess()).collect()
+		self.body.kernels_committed()
 	}
 }
 
@@ -438,9 +404,7 @@ impl Default for Block {
 	fn default() -> Block {
 		Block {
 			header: Default::default(),
-			inputs: vec![],
-			outputs: vec![],
-			kernels: vec![],
+			body: Default::default(),
 		}
 	}
 }
@@ -488,9 +452,10 @@ impl Block {
 
 		// collect all the inputs, outputs and kernels from the txs
 		for tx in txs {
-			all_inputs.extend(tx.inputs);
-			all_outputs.extend(tx.outputs);
-			all_kernels.extend(tx.kernels);
+			let tb: TransactionBody = tx.into();
+			all_inputs.extend(tb.inputs);
+			all_outputs.extend(tb.outputs);
+			all_kernels.extend(tb.kernels);
 		}
 
 		// include the coinbase output(s) and kernel(s) from the compact_block
@@ -512,9 +477,7 @@ impl Block {
 		// leave it to the caller to actually validate the block
 		Block {
 			header: cb.header,
-			inputs: all_inputs,
-			outputs: all_outputs,
-			kernels: all_kernels,
+			body: TransactionBody::new(all_inputs, all_outputs, all_kernels),
 		}.cut_through()
 	}
 
@@ -524,6 +487,7 @@ impl Block {
 		let nonce = thread_rng().next_u64();
 
 		let mut out_full = self
+			.body
 			.outputs
 			.iter()
 			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
@@ -533,7 +497,7 @@ impl Block {
 		let mut kern_full = vec![];
 		let mut kern_ids = vec![];
 
-		for k in &self.kernels {
+		for k in self.kernels() {
 			if k.features.contains(KernelFeatures::COINBASE_KERNEL) {
 				kern_full.push(k.clone());
 			} else {
@@ -552,6 +516,14 @@ impl Block {
 			out_full,
 			kern_full,
 			kern_ids,
+		}
+	}
+
+	/// Build a new empty block from a specified header
+	pub fn with_header(header: BlockHeader) -> Block {
+		Block {
+			header: header,
+			..Default::default()
 		}
 	}
 
@@ -577,7 +549,7 @@ impl Block {
 			let zero_commit = secp_static::commit_to_zero_value();
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			let mut excesses = map_vec!(agg_tx.kernels, |x| x.excess());
+			let mut excesses = map_vec!(agg_tx.kernels(), |x| x.excess());
 			excesses.push(prev.total_kernel_sum);
 			excesses.retain(|x| *x != zero_commit);
 			secp.commit_sum(excesses, vec![])?
@@ -593,10 +565,38 @@ impl Block {
 				total_kernel_sum,
 				..Default::default()
 			},
-			inputs: agg_tx.inputs,
-			outputs: agg_tx.outputs,
-			kernels: agg_tx.kernels,
+			body: agg_tx.into(),
 		}.cut_through())
+	}
+
+	/// Get inputs
+	pub fn inputs(&self) -> &Vec<Input> {
+		&self.body.inputs
+	}
+
+	/// Get inputs mutable
+	pub fn inputs_mut(&mut self) -> &mut Vec<Input> {
+		&mut self.body.inputs
+	}
+
+	/// Get outputs
+	pub fn outputs(&self) -> &Vec<Output> {
+		&self.body.outputs
+	}
+
+	/// Get outputs mutable
+	pub fn outputs_mut(&mut self) -> &mut Vec<Output> {
+		&mut self.body.outputs
+	}
+
+	/// Get kernels
+	pub fn kernels(&self) -> &Vec<TxKernel> {
+		&self.body.kernels
+	}
+
+	/// Get kernels mut
+	pub fn kernels_mut(&mut self) -> &mut Vec<TxKernel> {
+		&mut self.body.kernels
 	}
 
 	/// Blockhash, computed using only the POW
@@ -606,7 +606,7 @@ impl Block {
 
 	/// Sum of all fees (inputs less outputs) in the block
 	pub fn total_fees(&self) -> u64 {
-		self.kernels.iter().map(|p| p.fee).sum()
+		self.body.kernels.iter().map(|p| p.fee).sum()
 	}
 
 	/// Matches any output with a potential spending input, eliminating them
@@ -621,12 +621,14 @@ impl Block {
 	///
 	pub fn cut_through(self) -> Block {
 		let in_set = self
+			.body
 			.inputs
 			.iter()
 			.map(|inp| inp.commitment())
 			.collect::<HashSet<_>>();
 
 		let out_set = self
+			.body
 			.outputs
 			.iter()
 			.filter(|out| !out.features.contains(OutputFeatures::COINBASE_OUTPUT))
@@ -636,12 +638,14 @@ impl Block {
 		let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
 
 		let new_inputs = self
+			.body
 			.inputs
 			.into_iter()
 			.filter(|inp| !to_cut_through.contains(&inp.commitment()))
 			.collect::<Vec<_>>();
 
 		let new_outputs = self
+			.body
 			.outputs
 			.into_iter()
 			.filter(|out| !to_cut_through.contains(&out.commitment()))
@@ -653,9 +657,7 @@ impl Block {
 				total_difficulty: self.header.total_difficulty,
 				..self.header
 			},
-			inputs: new_inputs,
-			outputs: new_outputs,
-			kernels: self.kernels,
+			body: TransactionBody::new(new_inputs, new_outputs, self.body.kernels),
 		}
 	}
 
@@ -667,17 +669,13 @@ impl Block {
 		prev_kernel_offset: &BlindingFactor,
 		prev_kernel_sum: &Commitment,
 	) -> Result<(Commitment), Error> {
-		// Verify we do not exceed the max number of inputs|outputs|kernels
-		// and that the "weight" based on these does not exceed the max permitted weight.
-		self.verify_weight()?;
+		self.body.validate(true)?;
 
-		self.verify_sorted()?;
-		self.verify_cut_through()?;
-		self.verify_coinbase()?;
 		self.verify_kernel_lock_heights()?;
+		self.verify_coinbase()?;
 
 		// take the kernel offset for this block (block offset minus previous) and
-		// verify outputs and kernel sums
+		// verify.body.outputs and kernel sums
 		let block_kernel_offset = if self.header.total_kernel_offset() == prev_kernel_offset.clone()
 		{
 			// special case when the sum hasn't changed (typically an empty block),
@@ -698,85 +696,22 @@ impl Block {
 			return Err(Error::InvalidTotalKernelSum);
 		}
 
-		self.verify_rangeproofs()?;
-		self.verify_kernel_signatures()?;
 		Ok(kernel_sum)
 	}
 
-	// Verify the block is not too big in terms of number of inputs|outputs|kernels.
-	fn verify_weight(&self) -> Result<(), Error> {
-		let tx_block_weight = self.inputs.len() * consensus::BLOCK_INPUT_WEIGHT
-			+ self.outputs.len() * consensus::BLOCK_OUTPUT_WEIGHT
-			+ self.kernels.len() * consensus::BLOCK_KERNEL_WEIGHT;
-
-		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
-			return Err(Error::TooHeavy);
-		}
-		Ok(())
-	}
-
-	// Verify that inputs|outputs|kernels are all sorted in lexicographical order.
-	fn verify_sorted(&self) -> Result<(), Error> {
-		self.inputs.verify_sort_order()?;
-		self.outputs.verify_sort_order()?;
-		self.kernels.verify_sort_order()?;
-		Ok(())
-	}
-
-	// Verify that no input is spending an output from the same block.
-	fn verify_cut_through(&self) -> Result<(), Error> {
-		for inp in &self.inputs {
-			if self
-				.outputs
-				.iter()
-				.any(|out| out.commitment() == inp.commitment())
-			{
-				return Err(Error::CutThrough);
-			}
-		}
-		Ok(())
-	}
-
-	fn verify_kernel_lock_heights(&self) -> Result<(), Error> {
-		for k in &self.kernels {
-			// check we have no kernels with lock_heights greater than current height
-			// no tx can be included in a block earlier than its lock_height
-			if k.lock_height > self.header.height {
-				return Err(Error::KernelLockHeight(k.lock_height));
-			}
-		}
-		Ok(())
-	}
-
-	/// Verify the kernel signatures.
-	/// Note: this is expensive.
-	fn verify_kernel_signatures(&self) -> Result<(), Error> {
-		for x in &self.kernels {
-			x.verify()?;
-		}
-		Ok(())
-	}
-
-	/// Verify all the output rangeproofs.
-	/// Note: this is expensive.
-	fn verify_rangeproofs(&self) -> Result<(), Error> {
-		for x in &self.outputs {
-			x.verify_proof()?;
-		}
-		Ok(())
-	}
-
-	/// Validate the coinbase outputs generated by miners.
+	/// Validate the coinbase.body.outputs generated by miners.
 	/// Check the sum of coinbase-marked outputs match
 	/// the sum of coinbase-marked kernels accounting for fees.
 	pub fn verify_coinbase(&self) -> Result<(), Error> {
 		let cb_outs = self
+			.body
 			.outputs
 			.iter()
 			.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 			.collect::<Vec<&Output>>();
 
 		let cb_kerns = self
+			.body
 			.kernels
 			.iter()
 			.filter(|kernel| kernel.features.contains(KernelFeatures::COINBASE_KERNEL))
@@ -800,6 +735,17 @@ impl Block {
 			}
 		}
 
+		Ok(())
+	}
+
+	fn verify_kernel_lock_heights(&self) -> Result<(), Error> {
+		for k in &self.body.kernels {
+			// check we have no kernels with lock_heights greater than current height
+			// no tx can be included in a block earlier than its lock_height
+			if k.lock_height > self.header.height {
+				return Err(Error::KernelLockHeight(k.lock_height));
+			}
+		}
 		Ok(())
 	}
 }

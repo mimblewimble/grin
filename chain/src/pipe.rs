@@ -66,9 +66,9 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		"pipe: process_block {} at {} with {} inputs, {} outputs, {} kernels",
 		b.hash(),
 		b.header.height,
-		b.inputs.len(),
-		b.outputs.len(),
-		b.kernels.len(),
+		b.inputs().len(),
+		b.outputs().len(),
+		b.kernels().len(),
 	);
 	check_known(b.hash(), ctx)?;
 
@@ -328,7 +328,7 @@ fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
 	// First check we are not attempting to spend any coinbase outputs
 	// before they have matured sufficiently.
-	ext.verify_coinbase_maturity(&b.inputs, b.header.height)?;
+	ext.verify_coinbase_maturity(&b.inputs(), b.header.height)?;
 
 	// apply the new block to the MMR trees and check the new root hashes
 	ext.apply_block(&b)?;

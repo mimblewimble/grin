@@ -43,7 +43,7 @@ bitflags! {
 	}
 }
 
-/// Errors thrown by Block validation
+/// Errors thrown by Transaction validation
 #[derive(Clone, Eq, Debug, PartialEq)]
 pub enum Error {
 	/// Underlying Secp256k1 error (signature validation or invalid public key
@@ -240,35 +240,28 @@ impl PMMRable for TxKernel {
 	}
 }
 
-/// A transaction
+/// TransactionBody is acommon abstraction for transaction and block
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Transaction {
+pub struct TransactionBody {
 	/// List of inputs spent by the transaction.
 	pub inputs: Vec<Input>,
 	/// List of outputs the transaction produces.
 	pub outputs: Vec<Output>,
 	/// List of kernels that make up this transaction (usually a single kernel).
 	pub kernels: Vec<TxKernel>,
-	/// The kernel "offset" k2
-	/// excess is k1G after splitting the key k = k1 + k2
-	pub offset: BlindingFactor,
 }
 
 /// PartialEq
-impl PartialEq for Transaction {
-	fn eq(&self, tx: &Transaction) -> bool {
-		self.inputs == tx.inputs
-			&& self.outputs == tx.outputs
-			&& self.kernels == tx.kernels
-			&& self.offset == tx.offset
+impl PartialEq for TransactionBody {
+	fn eq(&self, l: &TransactionBody) -> bool {
+		self.inputs == l.inputs && self.outputs == l.outputs && self.kernels == l.kernels
 	}
 }
 
-/// Implementation of Writeable for a fully blinded transaction, defines how to
-/// write the transaction as binary.
-impl Writeable for Transaction {
+/// Implementation of Writeable for a body, defines how to
+/// write the body as binary.
+impl Writeable for TransactionBody {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.offset.write(writer)?;
 		ser_multiwrite!(
 			writer,
 			[write_u64, self.inputs.len() as u64],
@@ -290,12 +283,10 @@ impl Writeable for Transaction {
 	}
 }
 
-/// Implementation of Readable for a transaction, defines how to read a full
-/// transaction from a binary stream.
-impl Readable for Transaction {
-	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
-		let offset = BlindingFactor::read(reader)?;
-
+/// Implementation of Readable for a body, defines how to read a
+/// body from a binary stream.
+impl Readable for TransactionBody {
+	fn read(reader: &mut Reader) -> Result<TransactionBody, ser::Error> {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
@@ -303,24 +294,17 @@ impl Readable for Transaction {
 		let outputs = read_and_verify_sorted(reader, output_len)?;
 		let kernels = read_and_verify_sorted(reader, kernel_len)?;
 
-		let tx = Transaction {
-			offset,
+		let body = TransactionBody {
 			inputs,
 			outputs,
 			kernels,
 		};
 
-		// Now validate the tx.
-		// Treat any validation issues as data corruption.
-		// An example of this would be reading a tx
-		// that exceeded the allowed number of inputs.
-		tx.validate(false).map_err(|_| ser::Error::CorruptedData)?;
-
-		Ok(tx)
+		Ok(body)
 	}
 }
 
-impl Committed for Transaction {
+impl Committed for TransactionBody {
 	fn inputs_committed(&self) -> Vec<Commitment> {
 		self.inputs.iter().map(|x| x.commitment()).collect()
 	}
@@ -334,17 +318,16 @@ impl Committed for Transaction {
 	}
 }
 
-impl Default for Transaction {
-	fn default() -> Transaction {
-		Transaction::empty()
+impl Default for TransactionBody {
+	fn default() -> TransactionBody {
+		TransactionBody::empty()
 	}
 }
 
-impl Transaction {
+impl TransactionBody {
 	/// Creates a new empty transaction (no inputs or outputs, zero fee).
-	pub fn empty() -> Transaction {
-		Transaction {
-			offset: BlindingFactor::zero(),
+	pub fn empty() -> TransactionBody {
+		TransactionBody {
 			inputs: vec![],
 			outputs: vec![],
 			kernels: vec![],
@@ -353,49 +336,43 @@ impl Transaction {
 
 	/// Creates a new transaction initialized with
 	/// the provided inputs, outputs, kernels
-	pub fn new(inputs: Vec<Input>, outputs: Vec<Output>, kernels: Vec<TxKernel>) -> Transaction {
-		Transaction {
-			offset: BlindingFactor::zero(),
+	pub fn new(
+		inputs: Vec<Input>,
+		outputs: Vec<Output>,
+		kernels: Vec<TxKernel>,
+	) -> TransactionBody {
+		TransactionBody {
 			inputs: inputs,
 			outputs: outputs,
 			kernels: kernels,
 		}
 	}
 
-	/// Creates a new transaction using this transaction as a template
-	/// and with the specified offset.
-	pub fn with_offset(self, offset: BlindingFactor) -> Transaction {
-		Transaction {
-			offset: offset,
-			..self
-		}
-	}
-
-	/// Builds a new transaction with the provided inputs added. Existing
+	/// Builds a new body with the provided inputs added. Existing
 	/// inputs, if any, are kept intact.
-	pub fn with_input(self, input: Input) -> Transaction {
+	pub fn with_input(self, input: Input) -> TransactionBody {
 		let mut new_ins = self.inputs;
 		new_ins.push(input);
 		new_ins.sort();
-		Transaction {
+		TransactionBody {
 			inputs: new_ins,
 			..self
 		}
 	}
 
-	/// Builds a new transaction with the provided output added. Existing
+	/// Builds a new TransactionBody with the provided output added. Existing
 	/// outputs, if any, are kept intact.
-	pub fn with_output(self, output: Output) -> Transaction {
+	pub fn with_output(self, output: Output) -> TransactionBody {
 		let mut new_outs = self.outputs;
 		new_outs.push(output);
 		new_outs.sort();
-		Transaction {
+		TransactionBody {
 			outputs: new_outs,
 			..self
 		}
 	}
 
-	/// Total fee for a transaction is the sum of fees of all kernels.
+	/// Total fee for a TransactionBody is the sum of fees of all kernels.
 	pub fn fee(&self) -> u64 {
 		self.kernels
 			.iter()
@@ -406,7 +383,21 @@ impl Transaction {
 		self.fee() as i64
 	}
 
-	/// Lock height of a transaction is the max lock height of the kernels.
+	/// Calculate transaction weight
+	pub fn body_weight(&self) -> u32 {
+		TransactionBody::weight(self.inputs.len(), self.outputs.len())
+	}
+
+	/// Calculate transaction weight from transaction details
+	pub fn weight(input_len: usize, output_len: usize) -> u32 {
+		let mut body_weight = -1 * (input_len as i32) + (4 * output_len as i32) + 1;
+		if body_weight < 1 {
+			body_weight = 1;
+		}
+		body_weight as u32
+	}
+
+	/// Lock height of a body is the max lock height of the kernels.
 	pub fn lock_height(&self) -> u64 {
 		self.kernels
 			.iter()
@@ -431,48 +422,19 @@ impl Transaction {
 		Ok(())
 	}
 
-	// Verify the tx is not too big in terms of number of inputs|outputs|kernels.
-	fn verify_weight(&self) -> Result<(), Error> {
-		// check the tx as if it was a block, with an additional output and
+	// Verify the body is not too big in terms of number of inputs|outputs|kernels.
+	fn verify_weight(&self, with_reward: bool) -> Result<(), Error> {
+		// if as_block check the body as if it was a block, with an additional output and
 		// kernel for reward
+		let reserve = if with_reward { 0 } else { 1 };
 		let tx_block_weight = self.inputs.len() * consensus::BLOCK_INPUT_WEIGHT
-			+ (self.outputs.len() + 1) * consensus::BLOCK_OUTPUT_WEIGHT
-			+ (self.kernels.len() + 1) * consensus::BLOCK_KERNEL_WEIGHT;
+			+ (self.outputs.len() + reserve) * consensus::BLOCK_OUTPUT_WEIGHT
+			+ (self.kernels.len() + reserve) * consensus::BLOCK_KERNEL_WEIGHT;
 
 		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
 			return Err(Error::TooHeavy);
 		}
 		Ok(())
-	}
-
-	/// Validates all relevant parts of a fully built transaction. Checks the
-	/// excess value against the signature as well as range proofs for each
-	/// output.
-	pub fn validate(&self, as_block: bool) -> Result<(), Error> {
-		if !as_block {
-			self.verify_features()?;
-			self.verify_weight()?;
-			self.verify_kernel_sums(self.overage(), self.offset)?;
-		}
-		self.verify_sorted()?;
-		self.verify_cut_through()?;
-		self.verify_rangeproofs()?;
-		self.verify_kernel_signatures()?;
-		Ok(())
-	}
-
-	/// Calculate transaction weight
-	pub fn tx_weight(&self) -> u32 {
-		Transaction::weight(self.inputs.len(), self.outputs.len())
-	}
-
-	/// Calculate transaction weight from transaction details
-	pub fn weight(input_len: usize, output_len: usize) -> u32 {
-		let mut tx_weight = -1 * (input_len as i32) + (4 * output_len as i32) + 1;
-		if tx_weight < 1 {
-			tx_weight = 1;
-		}
-		tx_weight as u32
 	}
 
 	// Verify that inputs|outputs|kernels are all sorted in lexicographical order.
@@ -497,10 +459,10 @@ impl Transaction {
 		Ok(())
 	}
 
-	// Verify we have no invalid outputs or kernels in the transaction
-	// due to invalid features.
-	// Specifically, a transaction cannot contain a coinbase output or a coinbase kernel.
-	fn verify_features(&self) -> Result<(), Error> {
+	/// Verify we have no invalid outputs or kernels in the transaction
+	/// due to invalid features.
+	/// Specifically, a transaction cannot contain a coinbase output or a coinbase kernel.
+	pub fn verify_features(&self) -> Result<(), Error> {
 		self.verify_output_features()?;
 		self.verify_kernel_features()?;
 		Ok(())
@@ -529,6 +491,202 @@ impl Transaction {
 		}
 		Ok(())
 	}
+
+	/// Validates all relevant parts of a transaction body. Checks the
+	/// excess value against the signature as well as range proofs for each
+	/// output.
+	pub fn validate(&self, with_reward: bool) -> Result<(), Error> {
+		self.verify_weight(with_reward)?;
+		self.verify_sorted()?;
+		self.verify_cut_through()?;
+		self.verify_rangeproofs()?;
+		self.verify_kernel_signatures()?;
+		Ok(())
+	}
+}
+
+/// A transaction
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Transaction {
+	/// The kernel "offset" k2
+	/// excess is k1G after splitting the key k = k1 + k2
+	pub offset: BlindingFactor,
+	/// The transaction body - inputs/outputs/kernels
+	body: TransactionBody,
+}
+
+/// PartialEq
+impl PartialEq for Transaction {
+	fn eq(&self, tx: &Transaction) -> bool {
+		self.body == tx.body && self.offset == tx.offset
+	}
+}
+
+impl Into<TransactionBody> for Transaction {
+	fn into(self) -> TransactionBody {
+		self.body
+	}
+}
+
+/// Implementation of Writeable for a fully blinded transaction, defines how to
+/// write the transaction as binary.
+impl Writeable for Transaction {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.offset.write(writer)?;
+		self.body.write(writer)?;
+		Ok(())
+	}
+}
+
+/// Implementation of Readable for a transaction, defines how to read a full
+/// transaction from a binary stream.
+impl Readable for Transaction {
+	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
+		let offset = BlindingFactor::read(reader)?;
+
+		let body = TransactionBody::read(reader)?;
+		let tx = Transaction { offset, body };
+
+		// Now validate the tx.
+		// Treat any validation issues as data corruption.
+		// An example of this would be reading a tx
+		// that exceeded the allowed number of inputs.
+		tx.validate(false).map_err(|_| ser::Error::CorruptedData)?;
+
+		Ok(tx)
+	}
+}
+
+impl Committed for Transaction {
+	fn inputs_committed(&self) -> Vec<Commitment> {
+		self.body.inputs_committed()
+	}
+
+	fn outputs_committed(&self) -> Vec<Commitment> {
+		self.body.outputs_committed()
+	}
+
+	fn kernels_committed(&self) -> Vec<Commitment> {
+		self.body.kernels_committed()
+	}
+}
+
+impl Default for Transaction {
+	fn default() -> Transaction {
+		Transaction::empty()
+	}
+}
+
+impl Transaction {
+	/// Creates a new empty transaction (no inputs or outputs, zero fee).
+	pub fn empty() -> Transaction {
+		Transaction {
+			offset: BlindingFactor::zero(),
+			body: Default::default(),
+		}
+	}
+
+	/// Creates a new transaction initialized with
+	/// the provided inputs, outputs, kernels
+	pub fn new(inputs: Vec<Input>, outputs: Vec<Output>, kernels: Vec<TxKernel>) -> Transaction {
+		Transaction {
+			offset: BlindingFactor::zero(),
+			body: TransactionBody::new(inputs, outputs, kernels),
+		}
+	}
+
+	/// Creates a new transaction using this transaction as a template
+	/// and with the specified offset.
+	pub fn with_offset(self, offset: BlindingFactor) -> Transaction {
+		Transaction {
+			offset: offset,
+			..self
+		}
+	}
+
+	/// Builds a new transaction with the provided inputs added. Existing
+	/// inputs, if any, are kept intact.
+	pub fn with_input(self, input: Input) -> Transaction {
+		Transaction {
+			body: self.body.with_input(input),
+			..self
+		}
+	}
+
+	/// Builds a new transaction with the provided output added. Existing
+	/// outputs, if any, are kept intact.
+	pub fn with_output(self, output: Output) -> Transaction {
+		Transaction {
+			body: self.body.with_output(output),
+			..self
+		}
+	}
+
+	/// Get inputs
+	pub fn inputs(&self) -> &Vec<Input> {
+		&self.body.inputs
+	}
+
+	/// Get inputs mutable
+	pub fn inputs_mut(&mut self) -> &mut Vec<Input> {
+		&mut self.body.inputs
+	}
+
+	/// Get outputs
+	pub fn outputs(&self) -> &Vec<Output> {
+		&self.body.outputs
+	}
+
+	/// Get outputs mutable
+	pub fn outputs_mut(&mut self) -> &mut Vec<Output> {
+		&mut self.body.outputs
+	}
+
+	/// Get kernels
+	pub fn kernels(&self) -> &Vec<TxKernel> {
+		&self.body.kernels
+	}
+
+	/// Get kernels mut
+	pub fn kernels_mut(&mut self) -> &mut Vec<TxKernel> {
+		&mut self.body.kernels
+	}
+
+	/// Total fee for a transaction is the sum of fees of all kernels.
+	pub fn fee(&self) -> u64 {
+		self.body.fee()
+	}
+
+	fn overage(&self) -> i64 {
+		self.body.overage()
+	}
+
+	/// Lock height of a transaction is the max lock height of the kernels.
+	pub fn lock_height(&self) -> u64 {
+		self.body.lock_height()
+	}
+
+	/// Validates all relevant parts of a fully built transaction. Checks the
+	/// excess value against the signature as well as range proofs for each
+	/// output.
+	pub fn validate(&self, with_reward: bool) -> Result<(), Error> {
+		self.body.validate(with_reward)?;
+		if !with_reward {
+			self.body.verify_features()?;
+			self.verify_kernel_sums(self.overage(), self.offset)?;
+		}
+		Ok(())
+	}
+
+	/// Calculate transaction weight
+	pub fn tx_weight(&self) -> u32 {
+		self.body.body_weight()
+	}
+
+	/// Calculate transaction weight from transaction details
+	pub fn weight(input_len: usize, output_len: usize) -> u32 {
+		TransactionBody::weight(input_len, output_len)
+	}
 }
 
 /// Aggregate a vec of transactions into a multi-kernel transaction with
@@ -550,11 +708,11 @@ pub fn aggregate(
 		// we will sum these later to give a single aggregate offset
 		kernel_offsets.push(transaction.offset);
 
-		inputs.append(&mut transaction.inputs);
-		outputs.append(&mut transaction.outputs);
-		kernels.append(&mut transaction.kernels);
+		inputs.append(&mut transaction.body.inputs);
+		outputs.append(&mut transaction.body.outputs);
+		kernels.append(&mut transaction.body.kernels);
 	}
-	let as_block = reward.is_some();
+	let with_reward = reward.is_some();
 	if let Some((out, kernel)) = reward {
 		outputs.push(out);
 		kernels.push(kernel);
@@ -604,7 +762,7 @@ pub fn aggregate(
 	// The resulting tx could be invalid for a variety of reasons -
 	//   * tx too large (too many inputs|outputs|kernels)
 	//   * cut-through may have invalidated the sums
-	tx.validate(as_block)?;
+	tx.validate(with_reward)?;
 
 	Ok(tx)
 }
@@ -622,18 +780,18 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 
 	let tx = aggregate(txs, None)?;
 
-	for mk_input in mk_tx.inputs {
-		if !tx.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
+	for mk_input in mk_tx.body.inputs {
+		if !tx.body.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
 			inputs.push(mk_input);
 		}
 	}
-	for mk_output in mk_tx.outputs {
-		if !tx.outputs.contains(&mk_output) && !outputs.contains(&mk_output) {
+	for mk_output in mk_tx.body.outputs {
+		if !tx.body.outputs.contains(&mk_output) && !outputs.contains(&mk_output) {
 			outputs.push(mk_output);
 		}
 	}
-	for mk_kernel in mk_tx.kernels {
-		if !tx.kernels.contains(&mk_kernel) && !kernels.contains(&mk_kernel) {
+	for mk_kernel in mk_tx.body.kernels {
+		if !tx.body.kernels.contains(&mk_kernel) && !kernels.contains(&mk_kernel) {
 			kernels.push(mk_kernel);
 		}
 	}

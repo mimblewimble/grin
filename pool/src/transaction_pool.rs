@@ -17,8 +17,8 @@
 //! resulting tx pool can be added to the current chain state to produce a
 //! valid chain state.
 
+use chrono::prelude::Utc;
 use std::sync::Arc;
-use chrono::prelude::{Utc};
 
 use core::core::hash::Hashed;
 use core::core::{transaction, Block, CompactBlock, Transaction};
@@ -69,9 +69,10 @@ where
 
 	fn add_to_txpool(&mut self, mut entry: PoolEntry) -> Result<(), PoolError> {
 		// First deaggregate the tx based on current txpool txs.
-		if entry.tx.kernels.len() > 1 {
-			let txs = self.txpool
-				.find_matching_transactions(entry.tx.kernels.clone());
+		if entry.tx.kernels().len() > 1 {
+			let txs = self
+				.txpool
+				.find_matching_transactions(entry.tx.kernels().clone());
 			if !txs.is_empty() {
 				entry.tx = transaction::deaggregate(entry.tx, txs)?;
 				entry.src.debug_name = "deagg".to_string();
@@ -100,7 +101,7 @@ where
 			LOGGER,
 			"pool: add_to_pool: {:?}, kernels - {}, stem? {}",
 			tx.hash(),
-			tx.kernels.len(),
+			tx.kernels().len(),
 			stem,
 		);
 
