@@ -565,7 +565,6 @@ pub fn aggregate(
 	transactions: Vec<Transaction>,
 	reward: Option<(Output, TxKernel)>,
 ) -> Result<Transaction, Error> {
-
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
@@ -998,9 +997,9 @@ mod test {
 			commit: commit,
 		};
 
-		let block_hash =
-			Hash::from_hex("3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673")
-				.unwrap();
+		let block_hash = Hash::from_hex(
+			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
+		).unwrap();
 
 		let nonce = 0;
 

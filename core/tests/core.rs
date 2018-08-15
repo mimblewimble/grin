@@ -28,8 +28,9 @@ use grin_core::core::{aggregate, deaggregate, KernelFeatures, Output, Transactio
 use grin_core::ser;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use util::{secp_static, static_secp_instance};
-use wallet::libtx::build::{self, initial_tx, input, output, with_excess, with_fee,
-                           with_lock_height};
+use wallet::libtx::build::{
+	self, initial_tx, input, output, with_excess, with_fee, with_lock_height,
+};
 
 #[test]
 fn simple_tx_ser() {
@@ -145,7 +146,10 @@ fn multi_kernel_transaction_deaggregation() {
 	assert!(tx3.validate(false).is_ok());
 	assert!(tx4.validate(false).is_ok());
 
-	let tx1234 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone()], None).unwrap();
+	let tx1234 = aggregate(
+		vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone()],
+		None,
+	).unwrap();
 	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], None).unwrap();
 	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()], None).unwrap();
 
@@ -220,13 +224,16 @@ fn multi_kernel_transaction_deaggregation_4() {
 	assert!(tx4.validate(false).is_ok());
 	assert!(tx5.validate(false).is_ok());
 
-	let tx12345 = aggregate(vec![
-		tx1.clone(),
-		tx2.clone(),
-		tx3.clone(),
-		tx4.clone(),
-		tx5.clone(),
-	], None).unwrap();
+	let tx12345 = aggregate(
+		vec![
+			tx1.clone(),
+			tx2.clone(),
+			tx3.clone(),
+			tx4.clone(),
+			tx5.clone(),
+		],
+		None,
+	).unwrap();
 	assert!(tx12345.validate(false).is_ok());
 
 	let deaggregated_tx5 = deaggregate(
@@ -251,13 +258,16 @@ fn multi_kernel_transaction_deaggregation_5() {
 	assert!(tx4.validate(false).is_ok());
 	assert!(tx5.validate(false).is_ok());
 
-	let tx12345 = aggregate(vec![
-		tx1.clone(),
-		tx2.clone(),
-		tx3.clone(),
-		tx4.clone(),
-		tx5.clone(),
-	], None).unwrap();
+	let tx12345 = aggregate(
+		vec![
+			tx1.clone(),
+			tx2.clone(),
+			tx3.clone(),
+			tx4.clone(),
+			tx5.clone(),
+		],
+		None,
+	).unwrap();
 	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], None).unwrap();
 	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()], None).unwrap();
 

@@ -12,25 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate chrono;
 extern crate grin_core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
-extern crate chrono;
 
 pub mod common;
 
+use chrono::Duration;
 use common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
 use grin_core::consensus::{BLOCK_OUTPUT_WEIGHT, MAX_BLOCK_WEIGHT};
-use grin_core::core::Committed;
 use grin_core::core::block::Error;
 use grin_core::core::hash::Hashed;
 use grin_core::core::id::{ShortId, ShortIdentifiable};
+use grin_core::core::Committed;
 use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
 use grin_core::{global, ser};
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::time::Instant;
-use chrono::Duration;
 use util::{secp, secp_static};
 use wallet::libtx::build::{self, input, output, with_fee};
 
@@ -130,14 +130,16 @@ fn empty_block_with_coinbase_is_valid() {
 	assert_eq!(b.outputs.len(), 1);
 	assert_eq!(b.kernels.len(), 1);
 
-	let coinbase_outputs = b.outputs
+	let coinbase_outputs = b
+		.outputs
 		.iter()
 		.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 		.map(|o| o.clone())
 		.collect::<Vec<_>>();
 	assert_eq!(coinbase_outputs.len(), 1);
 
-	let coinbase_kernels = b.kernels
+	let coinbase_kernels = b
+		.kernels
 		.iter()
 		.filter(|out| out.features.contains(KernelFeatures::COINBASE_KERNEL))
 		.map(|o| o.clone())
@@ -224,7 +226,8 @@ fn serialize_deserialize_block() {
 	// After header serialization, timestamp will lose 'nanos' info, that's the designed behavior.
 	// To suppress 'nanos' difference caused assertion fail, we force b.header also lose 'nanos'.
 	let origin_ts = b.header.timestamp;
-	b.header.timestamp = origin_ts - Duration::nanoseconds(origin_ts.timestamp_subsec_nanos() as i64);
+	b.header.timestamp =
+		origin_ts - Duration::nanoseconds(origin_ts.timestamp_subsec_nanos() as i64);
 
 	assert_eq!(b.header, b2.header);
 	assert_eq!(b.inputs, b2.inputs);
