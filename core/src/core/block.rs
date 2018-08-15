@@ -438,7 +438,7 @@ impl Block {
 	/// Hydrate a block from a compact block.
 	/// Note: caller must validate the block themselves, we do not validate it
 	/// here.
-	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Block {
+	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Result<Block, Error> {
 		trace!(
 			LOGGER,
 			"block: hydrate_from: {}, {} txs",
@@ -555,7 +555,7 @@ impl Block {
 			secp.commit_sum(excesses, vec![])?
 		};
 
-		Ok(Block {
+		Block {
 			header: BlockHeader {
 				height: prev.height + 1,
 				timestamp: Utc::now(),
@@ -566,7 +566,7 @@ impl Block {
 				..Default::default()
 			},
 			body: agg_tx.into(),
-		}.cut_through())
+		}.cut_through()
 	}
 
 	/// Get inputs
@@ -619,46 +619,19 @@ impl Block {
 	/// is a transaction spending a previous coinbase
 	/// we do not want to cut-through (all coinbase must be preserved)
 	///
-	pub fn cut_through(self) -> Block {
-		let in_set = self
-			.body
-			.inputs
-			.iter()
-			.map(|inp| inp.commitment())
-			.collect::<HashSet<_>>();
+	pub fn cut_through(self) -> Result<Block, Error> {
+		let mut inputs = self.inputs().clone();
+		let mut outputs = self.outputs().clone();
+		transaction::cut_through(&mut inputs, &mut outputs)?;
 
-		let out_set = self
-			.body
-			.outputs
-			.iter()
-			.filter(|out| !out.features.contains(OutputFeatures::COINBASE_OUTPUT))
-			.map(|out| out.commitment())
-			.collect::<HashSet<_>>();
-
-		let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
-
-		let new_inputs = self
-			.body
-			.inputs
-			.into_iter()
-			.filter(|inp| !to_cut_through.contains(&inp.commitment()))
-			.collect::<Vec<_>>();
-
-		let new_outputs = self
-			.body
-			.outputs
-			.into_iter()
-			.filter(|out| !to_cut_through.contains(&out.commitment()))
-			.collect::<Vec<_>>();
-
-		Block {
+		Ok(Block {
 			header: BlockHeader {
 				pow: self.header.pow,
 				total_difficulty: self.header.total_difficulty,
 				..self.header
 			},
-			body: TransactionBody::new(new_inputs, new_outputs, self.body.kernels),
-		}
+			body: TransactionBody::new(inputs, outputs, self.body.kernels),
+		})
 	}
 
 	/// Validates all the elements in a block that can be checked without

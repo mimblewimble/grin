@@ -377,7 +377,7 @@ fn hydrate_empty_compact_block() {
 	let key_id = keychain.derive_key_id(1).unwrap();
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let cb = b.as_compact_block();
-	let hb = Block::hydrate_from(cb, vec![]);
+	let hb = Block::hydrate_from(cb, vec![]).unwrap();
 	assert_eq!(hb.header, b.header);
 	assert_eq!(hb.outputs(), b.outputs());
 	assert_eq!(hb.kernels(), b.kernels());

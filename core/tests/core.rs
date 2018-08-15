@@ -406,6 +406,7 @@ fn reward_empty_block() {
 	let b = new_block(vec![], &keychain, &previous_header, &key_id);
 
 	b.cut_through()
+		.unwrap()
 		.validate(&BlindingFactor::zero(), &zero_commit)
 		.unwrap();
 }
@@ -425,6 +426,7 @@ fn reward_with_tx_block() {
 	let block = new_block(vec![&mut tx1], &keychain, &previous_header, &key_id);
 	block
 		.cut_through()
+		.unwrap()
 		.validate(&BlindingFactor::zero(), &zero_commit)
 		.unwrap();
 }

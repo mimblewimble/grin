@@ -25,11 +25,11 @@ use std::time::Instant;
 
 use chain::{self, ChainAdapter, Options, Tip};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
-use core::{core, global};
 use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::transaction::Transaction;
+use core::{core, global};
 use p2p;
 use pool;
 use store;
@@ -119,12 +119,16 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		);
 
 		if cb.kern_ids.is_empty() {
-			let block = core::Block::hydrate_from(cb, vec![]);
-
+			let cbh = cb.hash();
 			// push the freshly hydrated block through the chain pipeline
-			self.process_block(block, addr)
+			match core::Block::hydrate_from(cb, vec![]) {
+				Ok(block) => self.process_block(block, addr),
+				Err(e) => {
+					debug!(LOGGER, "Invalid hydrated block {}: {}", cbh, e);
+					return false;
+				}
+			}
 		} else {
-
 			// check at least the header is valid before hydrating
 			if let Err(e) = w(&self.chain).process_block_header(&cb.header, self.chain_opts()) {
 				debug!(LOGGER, "Invalid compact block header {}: {}", cb.hash(), e);
@@ -143,9 +147,16 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			// 2) we hydrate an invalid block (txs legit missing from our pool)
 			// 3) we hydrate an invalid block (peer sent us a "bad" compact block) - [TBD]
 
-			let block = core::Block::hydrate_from(cb.clone(), txs);
+			let block = match core::Block::hydrate_from(cb.clone(), txs) {
+				Ok(block) => block,
+				Err(e) => {
+					debug!(LOGGER, "Invalid hydrated block {}: {}", cb.hash(), e);
+					return false;
+				}
+			};
 
-			let chain = self.chain
+			let chain = self
+				.chain
 				.upgrade()
 				.expect("failed to upgrade weak ref to chain");
 
@@ -346,19 +357,13 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	fn txhashset_write(
-		&self,
-		h: Hash,
-		txhashset_data: File,
-		_peer_addr: SocketAddr,
-	) -> bool {
+	fn txhashset_write(&self, h: Hash, txhashset_data: File, _peer_addr: SocketAddr) -> bool {
 		// check status again after download, in case 2 txhashsets made it somehow
 		if self.sync_state.status() != SyncStatus::TxHashsetDownload {
 			return true;
 		}
-		
-		if let Err(e) =
-			w(&self.chain).txhashset_write(h, txhashset_data, self.sync_state.as_ref())
+
+		if let Err(e) = w(&self.chain).txhashset_write(h, txhashset_data, self.sync_state.as_ref())
 		{
 			error!(LOGGER, "Failed to save txhashset archive: {}", e);
 			let is_good_data = !e.is_bad_data();
@@ -441,7 +446,11 @@ impl NetToChainAdapter {
 			let head = chain.head().unwrap();
 			// we have a fast sync'd node and are sent a block older than our horizon,
 			// only sync can do something with that
-			if b.header.height < head.height.saturating_sub(global::cut_through_horizon() as u64) {
+			if b.header.height
+				< head
+					.height
+					.saturating_sub(global::cut_through_horizon() as u64)
+			{
 				return true;
 			}
 		}
