@@ -38,7 +38,7 @@ pub fn retrieve_outputs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	show_spent: bool,
 	tx_id: Option<u32>,
-) -> Result<Vec<OutputData>, Error>
+) -> Result<Vec<(OutputData, pedersen::Commitment)>, Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -65,7 +65,12 @@ where
 			.collect::<Vec<_>>();
 	}
 	outputs.sort_by_key(|out| out.n_child);
-	Ok(outputs)
+	debug!(LOGGER, "about to build commitments for all outputs...");
+	let res = outputs.iter().map(|out| {
+		debug!(LOGGER, "output!!!");
+		(out.clone(), wallet.keychain().commit(out.value, &out.key_id).unwrap())
+	}).collect();
+	Ok(res)
 }
 
 /// Retrieve all of the transaction entries, or a particular entry

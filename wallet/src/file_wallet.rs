@@ -27,6 +27,7 @@ use failure::ResultExt;
 
 use keychain::{self, Identifier, Keychain};
 use util::LOGGER;
+use util::secp::pedersen;
 
 use error::{Error, ErrorKind};
 
@@ -227,6 +228,10 @@ where
 			.get(&id.to_hex())
 			.map(|o| o.clone())
 			.ok_or(libwallet::ErrorKind::Backend("not found".to_string()).into())
+	}
+
+	fn get_commitment(&self, id: &Identifier) -> Result<pedersen::Commitment, libwallet::Error> {
+		unimplemented!("tbd");
 	}
 
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, libwallet::Error> {

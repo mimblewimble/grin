@@ -18,9 +18,10 @@ use libwallet::Error;
 use prettytable;
 use std::io::prelude::Write;
 use term;
+use util::secp::pedersen;
 
 /// Display outputs in a pretty way
-pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<OutputData>) -> Result<(), Error> {
+pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<(OutputData, pedersen::Commitment)>) -> Result<(), Error> {
 	let title = format!("Wallet Outputs - Block Height: {}", cur_height);
 	println!();
 	let mut t = term::stdout().unwrap();
@@ -31,8 +32,7 @@ pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<OutputData>) -> Re
 	let mut table = table!();
 
 	table.set_titles(row![
-		bMG->"Key Id",
-		bMG->"Child Key Index",
+		bMG->"Commitment",
 		bMG->"Block Height",
 		bMG->"Locked Until",
 		bMG->"Status",
@@ -42,9 +42,8 @@ pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<OutputData>) -> Re
 		bMG->"Transaction"
 	]);
 
-	for out in outputs {
-		let key_id = format!("{}", out.key_id);
-		let n_child = format!("{}", out.n_child);
+	for (out, commit) in outputs {
+		let commit = format!("{:?}", commit);
 		let height = format!("{}", out.height);
 		let lock_height = format!("{}", out.lock_height);
 		let status = format!("{:?}", out.status);
@@ -56,8 +55,7 @@ pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<OutputData>) -> Re
 			Some(t) => t.to_string(),
 		};
 		table.add_row(row![
-			bFC->key_id,
-			bFC->n_child,
+			bFC->commit,
 			bFB->height,
 			bFB->lock_height,
 			bFR->status,

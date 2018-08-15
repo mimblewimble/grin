@@ -32,6 +32,7 @@ use libwallet::types::{
 	BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend, WalletClient, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
+use util::secp::pedersen;
 use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to
@@ -72,7 +73,7 @@ where
 		include_spent: bool,
 		refresh_from_node: bool,
 		tx_id: Option<u32>,
-	) -> Result<(bool, Vec<OutputData>), Error> {
+	) -> Result<(bool, Vec<(OutputData, pedersen::Commitment)>), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 
@@ -349,7 +350,7 @@ where
 			}
 			Err(_) => {
 				let outputs = self.retrieve_outputs(true, false, None)?;
-				let height = match outputs.1.iter().map(|out| out.height).max() {
+				let height = match outputs.1.iter().map(|(out, _)| out.height).max() {
 					Some(height) => height,
 					None => 0,
 				};

@@ -25,9 +25,11 @@ use store::{self, option_to_not_found, to_key, u64_to_key};
 use libwallet::types::*;
 use libwallet::{internal, Error, ErrorKind};
 use types::{WalletConfig, WalletSeed};
+use util::secp::pedersen;
 
 pub const DB_DIR: &'static str = "wallet_data";
 
+const COMMITMENT_PREFIX: u8 = 'c' as u8;
 const OUTPUT_PREFIX: u8 = 'o' as u8;
 const DERIV_PREFIX: u8 = 'd' as u8;
 const CONFIRMED_HEIGHT_PREFIX: u8 = 'c' as u8;
@@ -117,6 +119,31 @@ where
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
 		option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id)).map_err(|e| e.into())
+	}
+
+	// TODO - lazily generate these as needed (treat db as cache here)
+	fn get_commitment(&self, id: &Identifier) -> Result<pedersen::Commitment, Error> {
+		let key = to_key(COMMITMENT_PREFIX, &mut id.to_bytes().to_vec());
+
+		let res: Result<pedersen::Commitment, Error> =
+			option_to_not_found(
+				self.db.get_ser(&key),
+				&format!("Key Id: {}", id)
+			).map_err(|e| e.into());
+
+		if let Ok(commit) = res {
+			return Ok(commit);
+		}
+
+		panic!("tbd");
+
+		// try and retrieve commitment from db
+		// if not found -
+		// retrieve the output data from db
+		// generate new commitment based on output data
+		// save it in db
+		// return it
+
 	}
 
 	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a> {

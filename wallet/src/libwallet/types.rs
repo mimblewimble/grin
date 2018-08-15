@@ -77,6 +77,8 @@ where
 	/// Get output data by id
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
 
+	fn get_commitment(&self, id: &Identifier) -> Result<pedersen::Commitment, Error>;
+
 	/// Get an (Optional) tx log entry by uuid
 	fn get_tx_log_entry(&self, uuid: &Uuid) -> Result<Option<TxLogEntry>, Error>;
 

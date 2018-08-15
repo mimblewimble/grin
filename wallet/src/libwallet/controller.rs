@@ -38,6 +38,7 @@ use libwallet::{Error, ErrorKind};
 use url::form_urlencoded;
 
 use util::LOGGER;
+use util::secp::pedersen;
 
 /// Instantiate wallet Owner API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
@@ -187,7 +188,7 @@ where
 		&self,
 		req: &Request<Body>,
 		api: APIOwner<T, C, K>,
-	) -> Result<(bool, Vec<OutputData>), Error> {
+	) -> Result<(bool, Vec<(OutputData, pedersen::Commitment)>), Error> {
 		let mut update_from_node = false;
 		let mut id = None;
 		let mut show_spent = false;

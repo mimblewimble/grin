@@ -150,7 +150,8 @@ where
 		return Err(ErrorKind::TransactionNotCancellable(tx_id))?;
 	}
 	// get outputs associated with tx
-	let outputs = updater::retrieve_outputs(wallet, false, Some(tx_id))?;
+	let res = updater::retrieve_outputs(wallet, false, Some(tx_id))?;
+	let outputs = res.iter().map(|(out, _)| out).cloned().collect();
 	updater::cancel_tx_and_outputs(wallet, tx, outputs)?;
 	Ok(())
 }
