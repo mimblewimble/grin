@@ -20,8 +20,8 @@ extern crate grin_pool as pool;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-extern crate rand;
 extern crate chrono;
+extern crate rand;
 
 pub mod common;
 
@@ -29,8 +29,10 @@ use std::sync::{Arc, RwLock};
 
 use chain::types::Tip;
 use chain::{txhashset, ChainStore};
-use common::{clean_output_dir, test_setup, test_source, test_transaction,
-             test_transaction_spending_coinbase, ChainAdapter};
+use common::{
+	clean_output_dir, test_setup, test_source, test_transaction,
+	test_transaction_spending_coinbase, ChainAdapter,
+};
 use core::core::target::Difficulty;
 use core::core::{transaction, Block, BlockHeader};
 use keychain::{ExtKeychain, Keychain};
@@ -171,7 +173,7 @@ fn test_the_transaction_pool() {
 			.aggregate_transaction()
 			.unwrap()
 			.unwrap();
-		assert_eq!(agg_tx.kernels.len(), 2);
+		assert_eq!(agg_tx.kernels().len(), 2);
 		write_pool
 			.add_to_pool(test_source(), agg_tx, false)
 			.unwrap();
@@ -194,7 +196,7 @@ fn test_the_transaction_pool() {
 			.unwrap();
 		assert_eq!(write_pool.total_size(), 3);
 		let entry = write_pool.txpool.entries.last().unwrap();
-		assert_eq!(entry.tx.kernels.len(), 1);
+		assert_eq!(entry.tx.kernels().len(), 1);
 		assert_eq!(entry.src.debug_name, "deagg");
 	}
 

@@ -28,8 +28,9 @@ use grin_core::core::{aggregate, deaggregate, KernelFeatures, Output, Transactio
 use grin_core::ser;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use util::{secp_static, static_secp_instance};
-use wallet::libtx::build::{self, initial_tx, input, output, with_excess, with_fee,
-                           with_lock_height};
+use wallet::libtx::build::{
+	self, initial_tx, input, output, with_excess, with_fee, with_lock_height,
+};
 
 #[test]
 fn simple_tx_ser() {
@@ -47,8 +48,8 @@ fn simple_tx_ser_deser() {
 	ser::serialize(&mut vec, &tx).expect("serialization failed");
 	let dtx: Transaction = ser::deserialize(&mut &vec[..]).unwrap();
 	assert_eq!(dtx.fee(), 2);
-	assert_eq!(dtx.inputs.len(), 2);
-	assert_eq!(dtx.outputs.len(), 1);
+	assert_eq!(dtx.inputs().len(), 2);
+	assert_eq!(dtx.outputs().len(), 1);
 	assert_eq!(tx.hash(), dtx.hash());
 }
 
@@ -108,8 +109,8 @@ fn build_tx_kernel() {
 	tx.validate(false).unwrap();
 
 	// check the kernel is also itself valid
-	assert_eq!(tx.kernels.len(), 1);
-	let kern = &tx.kernels[0];
+	assert_eq!(tx.kernels().len(), 1);
+	let kern = &tx.kernels()[0];
 	kern.verify().unwrap();
 
 	assert_eq!(kern.features, KernelFeatures::DEFAULT_KERNEL);
@@ -145,7 +146,10 @@ fn multi_kernel_transaction_deaggregation() {
 	assert!(tx3.validate(false).is_ok());
 	assert!(tx4.validate(false).is_ok());
 
-	let tx1234 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone()], None).unwrap();
+	let tx1234 = aggregate(
+		vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone()],
+		None,
+	).unwrap();
 	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], None).unwrap();
 	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()], None).unwrap();
 
@@ -220,13 +224,16 @@ fn multi_kernel_transaction_deaggregation_4() {
 	assert!(tx4.validate(false).is_ok());
 	assert!(tx5.validate(false).is_ok());
 
-	let tx12345 = aggregate(vec![
-		tx1.clone(),
-		tx2.clone(),
-		tx3.clone(),
-		tx4.clone(),
-		tx5.clone(),
-	], None).unwrap();
+	let tx12345 = aggregate(
+		vec![
+			tx1.clone(),
+			tx2.clone(),
+			tx3.clone(),
+			tx4.clone(),
+			tx5.clone(),
+		],
+		None,
+	).unwrap();
 	assert!(tx12345.validate(false).is_ok());
 
 	let deaggregated_tx5 = deaggregate(
@@ -251,13 +258,16 @@ fn multi_kernel_transaction_deaggregation_5() {
 	assert!(tx4.validate(false).is_ok());
 	assert!(tx5.validate(false).is_ok());
 
-	let tx12345 = aggregate(vec![
-		tx1.clone(),
-		tx2.clone(),
-		tx3.clone(),
-		tx4.clone(),
-		tx5.clone(),
-	], None).unwrap();
+	let tx12345 = aggregate(
+		vec![
+			tx1.clone(),
+			tx2.clone(),
+			tx3.clone(),
+			tx4.clone(),
+			tx5.clone(),
+		],
+		None,
+	).unwrap();
 	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], None).unwrap();
 	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()], None).unwrap();
 
@@ -309,9 +319,9 @@ fn hash_output() {
 		],
 		&keychain,
 	).unwrap();
-	let h = tx.outputs[0].hash();
+	let h = tx.outputs()[0].hash();
 	assert!(h != ZERO_HASH);
-	let h2 = tx.outputs[1].hash();
+	let h2 = tx.outputs()[1].hash();
 	assert!(h != h2);
 }
 
@@ -325,7 +335,7 @@ fn blind_tx() {
 	// with a bullet proof causes painful errors
 
 	// checks that the range proof on our blind output is sufficiently hiding
-	let Output { proof, .. } = btx.outputs[0];
+	let Output { proof, .. } = btx.outputs()[0];
 
 	let secp = static_secp_instance();
 	let secp = secp.lock().unwrap();

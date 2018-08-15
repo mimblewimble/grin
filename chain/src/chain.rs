@@ -421,7 +421,7 @@ impl Chain {
 		let height = self.next_block_height()?;
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.verify_coinbase_maturity(&tx.inputs, height)?;
+			extension.verify_coinbase_maturity(&tx.inputs(), height)?;
 			Ok(())
 		})
 	}

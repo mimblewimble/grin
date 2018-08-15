@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate chrono;
 extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
@@ -19,11 +20,10 @@ extern crate grin_keychain as keychain;
 extern crate grin_store as store;
 extern crate grin_wallet as wallet;
 extern crate rand;
-extern crate chrono;
 
+use chrono::Duration;
 use std::fs;
 use std::sync::Arc;
-use chrono::Duration;
 
 use chain::types::NoopAdapter;
 use chain::{Error, ErrorKind};
@@ -78,8 +78,8 @@ fn test_coinbase_maturity() {
 		global::min_sizeshift(),
 	).unwrap();
 
-	assert_eq!(block.outputs.len(), 1);
-	let coinbase_output = block.outputs[0];
+	assert_eq!(block.outputs().len(), 1);
+	let coinbase_output = block.outputs()[0];
 	assert!(
 		coinbase_output
 			.features
