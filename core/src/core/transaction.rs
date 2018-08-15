@@ -397,7 +397,9 @@ impl Transaction {
 
 	/// Total fee for a transaction is the sum of fees of all kernels.
 	pub fn fee(&self) -> u64 {
-		self.kernels.iter().fold(0, |acc, ref x| acc + x.fee)
+		self.kernels
+			.iter()
+			.fold(0, |acc, ref x| acc.saturating_add(x.fee))
 	}
 
 	fn overage(&self) -> i64 {
@@ -994,9 +996,9 @@ mod test {
 			commit: commit,
 		};
 
-		let block_hash = Hash::from_hex(
-			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
-		).unwrap();
+		let block_hash =
+			Hash::from_hex("3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673")
+				.unwrap();
 
 		let nonce = 0;
 

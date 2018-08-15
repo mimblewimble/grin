@@ -30,6 +30,7 @@ pub enum Error {
 	Secp(secp::Error),
 	/// Kernel sums do not equal output sums.
 	KernelSumMismatch,
+	InvalidValue,
 }
 
 impl From<secp::Error> for Error {
@@ -89,7 +90,8 @@ pub trait Committed {
 			let over_commit = {
 				let secp = static_secp_instance();
 				let secp = secp.lock().unwrap();
-				secp.commit_value(overage.abs() as u64).unwrap()
+				let overage_abs = overage.checked_abs().ok_or_else(|| Error::InvalidValue)? as u64;
+				secp.commit_value(overage_abs).unwrap()
 			};
 			if overage < 0 {
 				input_commits.push(over_commit);
