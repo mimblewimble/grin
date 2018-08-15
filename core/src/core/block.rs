@@ -47,7 +47,7 @@ pub enum Error {
 	CoinbaseSumMismatch,
 	/// Restrict block total weight.
 	TooHeavy,
-	/// Block weight (based on.body.inputs.body.outputs.body.kernels) exceeded.
+	/// Block weight (based on inputs|outputs|kernels) exceeded.
 	WeightExceeded,
 	/// Kernel not valid due to lock_height exceeding block header height
 	KernelLockHeight(u64),
@@ -497,7 +497,7 @@ impl Block {
 		let mut kern_full = vec![];
 		let mut kern_ids = vec![];
 
-		for k in &self.body.kernels {
+		for k in self.kernels() {
 			if k.features.contains(KernelFeatures::COINBASE_KERNEL) {
 				kern_full.push(k.clone());
 			} else {
