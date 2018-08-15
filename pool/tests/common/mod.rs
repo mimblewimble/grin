@@ -23,8 +23,8 @@ extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-extern crate rand;
 extern crate chrono;
+extern crate rand;
 
 use std::fs;
 use std::sync::{Arc, RwLock};
@@ -41,8 +41,8 @@ use pool::*;
 use keychain::Keychain;
 use wallet::libtx;
 
-use pool::TransactionPool;
 use pool::types::*;
+use pool::TransactionPool;
 
 #[derive(Clone)]
 pub struct ChainAdapter {
@@ -124,10 +124,7 @@ where
 	// single input spending a single coinbase (deterministic key_id aka height)
 	{
 		let key_id = keychain.derive_key_id(header.height as u32).unwrap();
-		tx_elements.push(libtx::build::coinbase_input(
-			coinbase_reward,
-			key_id,
-		));
+		tx_elements.push(libtx::build::coinbase_input(coinbase_reward, key_id));
 	}
 
 	for output_value in output_values {
