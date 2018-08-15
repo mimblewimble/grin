@@ -21,7 +21,11 @@ use term;
 use util::secp::pedersen;
 
 /// Display outputs in a pretty way
-pub fn outputs(cur_height: u64, validated: bool, outputs: Vec<(OutputData, pedersen::Commitment)>) -> Result<(), Error> {
+pub fn outputs(
+	cur_height: u64,
+	validated: bool,
+	outputs: Vec<(OutputData, pedersen::Commitment)>,
+) -> Result<(), Error> {
 	let title = format!("Wallet Outputs - Block Height: {}", cur_height);
 	println!();
 	let mut t = term::stdout().unwrap();

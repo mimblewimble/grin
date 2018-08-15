@@ -66,10 +66,16 @@ where
 	}
 	outputs.sort_by_key(|out| out.n_child);
 	debug!(LOGGER, "about to build commitments for all outputs...");
-	let res = outputs.iter().map(|out| {
-		debug!(LOGGER, "output!!!");
-		(out.clone(), wallet.keychain().commit(out.value, &out.key_id).unwrap())
-	}).collect();
+	let res = outputs
+		.iter()
+		.map(|out| {
+			debug!(LOGGER, "output!!!");
+			(
+				out.clone(),
+				wallet.keychain().commit(out.value, &out.key_id).unwrap(),
+			)
+		})
+		.collect();
 	Ok(res)
 }
 

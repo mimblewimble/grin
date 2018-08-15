@@ -27,7 +27,7 @@ use serde_json as json;
 use core::ser;
 use keychain::Keychain;
 use libtx::slate::Slate;
-use libwallet::internal::{tx, updater, selection, sigcontext};
+use libwallet::internal::{selection, sigcontext, tx, updater};
 use libwallet::types::{
 	BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend, WalletClient, WalletInfo,
 };
@@ -215,11 +215,7 @@ where
 	/// A sender provided a transaction file with appropriate public keys and
 	/// metadata. Complete the receivers' end of it to generate another file
 	/// to send back.
-	pub fn file_receive_tx(
-		&mut self,
-		source: &str,
-	) -> Result<(), Error> {
-
+	pub fn file_receive_tx(&mut self, source: &str) -> Result<(), Error> {
 		let mut pub_tx_f = File::open(source)?;
 		let mut content = String::new();
 		pub_tx_f.read_to_string(&mut content)?;
@@ -238,7 +234,7 @@ where
 			&mut context.sec_key,
 			&context.sec_nonce,
 			1,
-			)?;
+		)?;
 
 		// perform partial sig
 		let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)?;
@@ -261,7 +257,6 @@ where
 		private_tx_file: &str,
 		receiver_file: &str,
 	) -> Result<Slate, Error> {
-
 		let mut pub_tx_f = File::open(receiver_file)?;
 		let mut content = String::new();
 		pub_tx_f.read_to_string(&mut content)?;

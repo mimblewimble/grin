@@ -26,8 +26,8 @@ use uuid::Uuid;
 use failure::ResultExt;
 
 use keychain::{self, Identifier, Keychain};
-use util::LOGGER;
 use util::secp::pedersen;
+use util::LOGGER;
 
 use error::{Error, ErrorKind};
 
@@ -331,7 +331,8 @@ where
 		let mut core = reactor::Core::new().unwrap();
 		let retry_strategy = FibonacciBackoff::from_millis(1000).take(10);
 		let retry_future = Retry::spawn(core.handle(), retry_strategy, action);
-		let retry_result = core.run(retry_future)
+		let retry_result = core
+			.run(retry_future)
 			.context(libwallet::ErrorKind::CallbackImpl(
 				"Failed to acquire lock file",
 			));

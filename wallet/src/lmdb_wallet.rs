@@ -126,10 +126,8 @@ where
 		let key = to_key(COMMITMENT_PREFIX, &mut id.to_bytes().to_vec());
 
 		let res: Result<pedersen::Commitment, Error> =
-			option_to_not_found(
-				self.db.get_ser(&key),
-				&format!("Key Id: {}", id)
-			).map_err(|e| e.into());
+			option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id))
+				.map_err(|e| e.into());
 
 		if let Ok(commit) = res {
 			return Ok(commit);
@@ -143,7 +141,6 @@ where
 		// generate new commitment based on output data
 		// save it in db
 		// return it
-
 	}
 
 	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a> {

@@ -47,8 +47,7 @@ where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
 	C: WalletClient,
 	K: Keychain,
-{
-}
+{}
 
 /// TODO:
 /// Wallets should implement this backend for their storage. All functions
