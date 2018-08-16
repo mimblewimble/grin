@@ -315,7 +315,7 @@ fn tx_rollback(test_dir: &str, backend_type: common::BackendType) -> Result<(), 
 		let mut unconfirmed_count = 0;
 		// get the tx entry, check outputs are as expected
 		let (_, outputs) = api.retrieve_outputs(true, false, Some(tx.unwrap().id))?;
-		for o in outputs.clone() {
+		for (o, _) in outputs.clone() {
 			if o.status == OutputStatus::Locked {
 				locked_count = locked_count + 1;
 			}
@@ -339,7 +339,7 @@ fn tx_rollback(test_dir: &str, backend_type: common::BackendType) -> Result<(), 
 		assert!(tx.is_some());
 		// get the tx entry, check outputs are as expected
 		let (_, outputs) = api.retrieve_outputs(true, false, Some(tx.unwrap().id))?;
-		for o in outputs.clone() {
+		for (o, _) in outputs.clone() {
 			if o.status == OutputStatus::Unconfirmed {
 				unconfirmed_count = unconfirmed_count + 1;
 			}
