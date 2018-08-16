@@ -597,8 +597,15 @@ impl ChainAdapter for Peers {
 		}
 	}
 
-	fn headers_received(&self, headers: Vec<core::BlockHeader>, peer_addr: SocketAddr) {
-		self.adapter.headers_received(headers, peer_addr)
+	fn headers_received(&self, headers: Vec<core::BlockHeader>, peer_addr: SocketAddr) -> bool {
+		if !self.adapter.headers_received(headers, peer_addr) {
+			// if the peer sent us a block header that's intrinsically bad
+			// they are either mistaken or malevolent, both of which require a ban
+			self.ban_peer(&peer_addr, ReasonForBan::BadBlockHeader);
+			false
+		} else {
+			true
+		}
 	}
 
 	fn locate_headers(&self, hs: Vec<Hash>) -> Vec<core::BlockHeader> {

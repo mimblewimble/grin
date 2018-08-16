@@ -412,7 +412,7 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.header_received(bh, addr)
 	}
 
-	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr) {
+	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr) -> bool {
 		self.adapter.headers_received(bh, addr)
 	}
 
