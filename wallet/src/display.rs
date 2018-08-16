@@ -120,9 +120,9 @@ pub fn txs(
 			None => "None".to_owned(),
 		};
 		let entry_type = format!("{}", t.tx_type);
-		let creation_ts = format!("{}", t.creation_ts);
+		let creation_ts = format!("{}", t.creation_ts.format("%Y-%m-%d %H:%M:%S"));
 		let confirmation_ts = match t.confirmation_ts {
-			Some(m) => format!("{}", m),
+			Some(m) => format!("{}", m.format("%Y-%m-%d %H:%M:%S")),
 			None => "None".to_owned(),
 		};
 		let confirmed = format!("{}", t.confirmed);
