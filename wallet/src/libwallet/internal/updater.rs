@@ -45,6 +45,7 @@ where
 	K: Keychain,
 {
 	let root_key_id = wallet.keychain().clone().root_key_id();
+
 	// just read the wallet here, no need for a write lock
 	let mut outputs = wallet
 		.iter()
@@ -57,6 +58,7 @@ where
 			}
 		})
 		.collect::<Vec<_>>();
+
 	// only include outputs with a given tx_id if provided
 	if let Some(id) = tx_id {
 		outputs = outputs
@@ -64,16 +66,14 @@ where
 			.filter(|out| out.tx_log_entry == Some(id))
 			.collect::<Vec<_>>();
 	}
+
 	outputs.sort_by_key(|out| out.n_child);
-	debug!(LOGGER, "about to build commitments for all outputs...");
+
 	let res = outputs
-		.iter()
+		.into_iter()
 		.map(|out| {
-			debug!(LOGGER, "output!!!");
-			(
-				out.clone(),
-				wallet.keychain().commit(out.value, &out.key_id).unwrap(),
-			)
+			let commit = wallet.get_commitment(&out.key_id).unwrap();
+			(out, commit)
 		})
 		.collect();
 	Ok(res)

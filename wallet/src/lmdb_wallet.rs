@@ -121,26 +121,30 @@ where
 		option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id)).map_err(|e| e.into())
 	}
 
-	// TODO - lazily generate these as needed (treat db as cache here)
-	fn get_commitment(&self, id: &Identifier) -> Result<pedersen::Commitment, Error> {
+	fn get_commitment(&mut self, id: &Identifier) -> Result<pedersen::Commitment, Error> {
 		let key = to_key(COMMITMENT_PREFIX, &mut id.to_bytes().to_vec());
 
 		let res: Result<pedersen::Commitment, Error> =
 			option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id))
 				.map_err(|e| e.into());
 
+		// "cache hit" and return the commitment
 		if let Ok(commit) = res {
-			return Ok(commit);
+			Ok(commit)
+		} else {
+			let out = self.get(id)?;
+
+			// Save the output data back to the db
+			// which builds and saves the associated commitment.
+			{
+				let mut batch = self.batch()?;
+				batch.save(out)?;
+				batch.commit()?;
+			}
+
+			// Now retrieve the saved commitment and return it.
+			option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id)).map_err(|e| e.into())
 		}
-
-		panic!("tbd");
-
-		// try and retrieve commitment from db
-		// if not found -
-		// retrieve the output data from db
-		// generate new commitment based on output data
-		// save it in db
-		// return it
 	}
 
 	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a> {
@@ -156,10 +160,11 @@ where
 		Box::new(self.db.iter(&[TX_LOG_ENTRY_PREFIX]).unwrap())
 	}
 
-	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, Error> {
+	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch<K> + 'a>, Error> {
 		Ok(Box::new(Batch {
 			_store: self,
 			db: RefCell::new(Some(self.db.batch()?)),
+			keychain: self.keychain.clone(),
 		}))
 	}
 
@@ -208,17 +213,34 @@ where
 {
 	_store: &'a LMDBBackend<C, K>,
 	db: RefCell<Option<store::Batch<'a>>>,
+	/// Keychain
+	keychain: Option<K>,
 }
 
 #[allow(missing_docs)]
-impl<'a, C, K> WalletOutputBatch for Batch<'a, C, K>
+impl<'a, C, K> WalletOutputBatch<K> for Batch<'a, C, K>
 where
 	C: WalletClient,
 	K: Keychain,
 {
+	fn keychain(&mut self) -> &mut K {
+		self.keychain.as_mut().unwrap()
+	}
+
 	fn save(&mut self, out: OutputData) -> Result<(), Error> {
-		let key = to_key(OUTPUT_PREFIX, &mut out.key_id.to_bytes().to_vec());
-		self.db.borrow().as_ref().unwrap().put_ser(&key, &out)?;
+		// Save the output data to the db.
+		{
+			let key = to_key(OUTPUT_PREFIX, &mut out.key_id.to_bytes().to_vec());
+			self.db.borrow().as_ref().unwrap().put_ser(&key, &out)?;
+		}
+
+		// Save the associated output commitment.
+		{
+			let key = to_key(COMMITMENT_PREFIX, &mut out.key_id.to_bytes().to_vec());
+			let commit = self.keychain().commit(out.value, &out.key_id)?;
+			self.db.borrow().as_ref().unwrap().put_ser(&key, &commit)?;
+		}
+
 		Ok(())
 	}
 
@@ -242,8 +264,18 @@ where
 	}
 
 	fn delete(&mut self, id: &Identifier) -> Result<(), Error> {
-		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
-		self.db.borrow().as_ref().unwrap().delete(&key)?;
+		// Delete the output data.
+		{
+			let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
+			let _ = self.db.borrow().as_ref().unwrap().delete(&key);
+		}
+
+		// Delete the associated output commitment.
+		{
+			let key = to_key(COMMITMENT_PREFIX, &mut id.to_bytes().to_vec());
+			let _ = self.db.borrow().as_ref().unwrap().delete(&key);
+		}
+
 		Ok(())
 	}
 

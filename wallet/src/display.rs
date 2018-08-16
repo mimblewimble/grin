@@ -18,6 +18,7 @@ use libwallet::Error;
 use prettytable;
 use std::io::prelude::Write;
 use term;
+use util;
 use util::secp::pedersen;
 
 /// Display outputs in a pretty way
@@ -36,18 +37,18 @@ pub fn outputs(
 	let mut table = table!();
 
 	table.set_titles(row![
-		bMG->"Commitment",
+		bMG->"Output Commitment",
 		bMG->"Block Height",
 		bMG->"Locked Until",
 		bMG->"Status",
-		bMG->"Is Coinbase?",
-		bMG->"Num. of Confirmations",
+		bMG->"Coinbase?",
+		bMG->"# Confirms",
 		bMG->"Value",
-		bMG->"Transaction"
+		bMG->"Tx"
 	]);
 
 	for (out, commit) in outputs {
-		let commit = format!("{:?}", commit);
+		let commit = format!("{}", util::to_hex(commit.as_ref().to_vec()));
 		let height = format!("{}", out.height);
 		let lock_height = format!("{}", out.lock_height);
 		let status = format!("{:?}", out.status);
@@ -55,7 +56,7 @@ pub fn outputs(
 		let num_confirmations = format!("{}", out.num_confirmations(cur_height));
 		let value = format!("{}", core::amount_to_hr_string(out.value));
 		let tx = match out.tx_log_entry {
-			None => "None".to_owned(),
+			None => "".to_owned(),
 			Some(t) => t.to_string(),
 		};
 		table.add_row(row![
