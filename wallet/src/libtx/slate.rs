@@ -276,8 +276,8 @@ impl Slate {
 		if fee > self.amount + self.fee {
 			let reason = format!(
 				"Rejected the transfer because transaction fee ({}) exceeds received amount ({}).",
-				amount_to_hr_string(fee),
-				amount_to_hr_string(self.amount + self.fee)
+				amount_to_hr_string(fee, false),
+				amount_to_hr_string(self.amount + self.fee, false)
 			);
 			info!(LOGGER, "{}", reason);
 			return Err(ErrorKind::Fee(reason.to_string()))?;
