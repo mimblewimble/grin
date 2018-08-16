@@ -48,7 +48,8 @@ const LOCK_FILE: &'static str = "wallet.lock";
 
 #[derive(Debug)]
 struct FileBatch<'a, K: 'a>
-	where K: Keychain,
+where
+	K: Keychain,
 {
 	/// List of outputs
 	outputs: &'a mut HashMap<String, OutputData>,
@@ -65,7 +66,8 @@ struct FileBatch<'a, K: 'a>
 }
 
 impl<'a, K> WalletOutputBatch<K> for FileBatch<'a, K>
-	where K: Keychain,
+where
+	K: Keychain,
 {
 	fn keychain(&mut self) -> &mut K {
 		unimplemented!();
@@ -147,7 +149,8 @@ impl<'a, K> WalletOutputBatch<K> for FileBatch<'a, K>
 }
 
 impl<'a, K> Drop for FileBatch<'a, K>
-	where K: Keychain,
+where
+	K: Keychain,
 {
 	fn drop(&mut self) {
 		// delete the lock file
@@ -243,7 +246,10 @@ where
 			.ok_or(libwallet::ErrorKind::Backend("not found".to_string()).into())
 	}
 
-	fn get_commitment(&mut self, _id: &Identifier) -> Result<pedersen::Commitment, libwallet::Error> {
+	fn get_commitment(
+		&mut self,
+		_id: &Identifier,
+	) -> Result<pedersen::Commitment, libwallet::Error> {
 		unimplemented!();
 	}
 

@@ -143,7 +143,8 @@ where
 			}
 
 			// Now retrieve the saved commitment and return it.
-			option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id)).map_err(|e| e.into())
+			option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id))
+				.map_err(|e| e.into())
 		}
 	}
 
