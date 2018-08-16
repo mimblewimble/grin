@@ -23,6 +23,7 @@
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+extern crate dirs;
 extern crate toml;
 
 extern crate grin_p2p as p2p;

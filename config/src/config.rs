@@ -14,6 +14,7 @@
 
 //! Configuration file management
 
+use dirs;
 use std::env;
 use std::fs::File;
 use std::io::Read;
@@ -74,7 +75,7 @@ impl GlobalConfig {
 			return Ok(());
 		}
 		// Then look in {user_home}/.grin
-		let config_path = env::home_dir();
+		let config_path = dirs::home_dir();
 		if let Some(mut p) = config_path {
 			p.push(GRIN_HOME);
 			p.push(CONFIG_FILE_NAME);
@@ -167,7 +168,8 @@ impl GlobalConfig {
 
 	/// Enable mining
 	pub fn stratum_enabled(&mut self) -> bool {
-		return self.members
+		return self
+			.members
 			.as_mut()
 			.unwrap()
 			.mining_server

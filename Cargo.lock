@@ -337,6 +337,15 @@ version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
+name = "dirs"
+version = "1.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "libc 0.2.42 (registry+https://github.com/rust-lang/crates.io-index)",
+ "winapi 0.3.5 (registry+https://github.com/rust-lang/crates.io-index)",
+]
+
+[[package]]
 name = "dtoa"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -561,6 +570,7 @@ dependencies = [
 name = "grin_config"
 version = "0.3.0"
 dependencies = [
+ "dirs 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "grin_p2p 0.3.0",
  "grin_servers 0.3.0",
  "grin_util 0.3.0",
@@ -1980,6 +1990,7 @@ dependencies = [
 "checksum cursive 0.8.2-alpha.0 (git+https://github.com/yeastplume/Cursive?tag=grin_integration_1)" = "<none>"
 "checksum daemonize 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "4093d27eb267d617f03c2ee25d4c3ca525b89a76154001954a11984508ffbde5"
 "checksum difference 2.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "524cbf6897b527295dff137cec09ecf3a05f4fddffd7dfcd1585403449e74198"
+"checksum dirs 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)" = "f679c09c1cf5428702cc10f6846c56e4e23420d3a88bcc9335b17c630a7b710b"
 "checksum dtoa 0.4.3 (registry+https://github.com/rust-lang/crates.io-index)" = "6d301140eb411af13d3115f9a562c85cc6b541ade9dfa314132244aaee7489dd"
 "checksum either 1.5.0 (registry+https://github.com/rust-lang/crates.io-index)" = "3be565ca5c557d7f59e7cfcf1844f9e3033650c929c6566f511e8005f205c1d0"
 "checksum encode_unicode 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "c088ec0ed2282dcd054f2c124c0327f953563e6c75fdc6ff5141779596289830"
