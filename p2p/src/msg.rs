@@ -607,7 +607,7 @@ impl Readable for Headers {
 		let mut headers: Vec<BlockHeader> = Vec::with_capacity(len as usize);
 		for n in 0..len as usize {
 			let header = BlockHeader::read(reader)?;
-			if n > 0 && header.height != headers[n-1].height + 1 {
+			if n > 0 && header.height != headers[n - 1].height + 1 {
 				return Err(ser::Error::CorruptedData);
 			}
 			headers.push(header);

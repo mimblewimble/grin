@@ -244,14 +244,19 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		let last_h = bhs.last().unwrap().hash();
 		if let Ok(_) = w(&self.chain).get_block_header(&last_h) {
 			info!(LOGGER, "All known, ignoring");
-			return true
+			return true;
 		}
 
 		// try to add each header to our header chain
 		for bh in bhs {
 			let res = w(&self.chain).sync_block_header(&bh, self.chain_opts());
 			if let &Err(ref e) = &res {
-				debug!(LOGGER, "Block header {} refused by chain: {:?}", bh.hash(), e);
+				debug!(
+					LOGGER,
+					"Block header {} refused by chain: {:?}",
+					bh.hash(),
+					e
+				);
 
 				if e.is_bad_data() {
 					return false;
