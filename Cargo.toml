@@ -45,3 +45,6 @@ tag = "grin_integration_1"
 
 [build-dependencies]
 built = "0.3"
+reqwest = "0.7"
+flate2 = "1.0"
+tar = "0.4"
