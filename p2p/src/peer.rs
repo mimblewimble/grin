@@ -23,8 +23,9 @@ use core::core::target::Difficulty;
 use handshake::Handshake;
 use msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest};
 use protocol::Protocol;
-use types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerInfo, ReasonForBan,
-            TxHashSetRead};
+use types::{
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerInfo, ReasonForBan, TxHashSetRead,
+};
 use util::LOGGER;
 
 const MAX_TRACK_SIZE: usize = 30;
@@ -160,7 +161,8 @@ impl Peer {
 	/// Send the ban reason before banning
 	pub fn send_ban_reason(&self, ban_reason: ReasonForBan) {
 		let ban_reason_msg = BanReason { ban_reason };
-		match self.connection
+		match self
+			.connection
 			.as_ref()
 			.unwrap()
 			.send(ban_reason_msg, msg::Type::BanReason)
@@ -412,7 +414,7 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.header_received(bh, addr)
 	}
 
-	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr) {
+	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr) -> bool {
 		self.adapter.headers_received(bh, addr)
 	}
 
@@ -432,17 +434,8 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.txhashset_receive_ready()
 	}
 
-	fn txhashset_write(
-		&self,
-		h: Hash,
-		txhashset_data: File,
-		peer_addr: SocketAddr,
-	) -> bool {
-		self.adapter.txhashset_write(
-			h,
-			txhashset_data,
-			peer_addr,
-		)
+	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: SocketAddr) -> bool {
+		self.adapter.txhashset_write(h, txhashset_data, peer_addr)
 	}
 }
 

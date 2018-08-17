@@ -239,7 +239,9 @@ impl ChainAdapter for DummyAdapter {
 	fn block_received(&self, _: core::Block, _: SocketAddr) -> bool {
 		true
 	}
-	fn headers_received(&self, _: Vec<core::BlockHeader>, _: SocketAddr) {}
+	fn headers_received(&self, _: Vec<core::BlockHeader>, _: SocketAddr) -> bool {
+		true
+	}
 	fn locate_headers(&self, _: Vec<Hash>) -> Vec<core::BlockHeader> {
 		vec![]
 	}
