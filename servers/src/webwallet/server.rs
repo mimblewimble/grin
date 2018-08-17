@@ -99,7 +99,10 @@ pub fn start_webwallet_server() {
 			let server = Server::bind(&addr)
 				.serve(|| future::ok::<_, Error>(MainService::new()))
 				.map_err(|e| eprintln!("server error: {}", e));
-			warn!(LOGGER, "Grin Web-Wallet Application is running at http://{}/", addr);
+			warn!(
+				LOGGER,
+				"Grin Web-Wallet Application is running at http://{}/", addr
+			);
 			rt::run(server);
 		});
 }
