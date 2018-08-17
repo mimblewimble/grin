@@ -9,7 +9,7 @@ publish = false
 bitflags = "1"
 blake2-rfc = "0.2"
 byteorder = "1"
-croaring = "=0.3"
+croaring = { git = "https://github.com/fastgrin/croaring-rs.git", tag = "0.3.5-grin-integration-0730-2" }
 failure = "0.1"
 failure_derive = "0.1"
 lazy_static = "1"
