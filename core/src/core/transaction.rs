@@ -993,6 +993,19 @@ impl Output {
 			Err(e) => Err(e),
 		}
 	}
+
+	/// Batch validates the range proofs using the commitments
+	pub fn batch_verify_proofs(
+		commits: &Vec<Commitment>,
+		proofs: &Vec<RangeProof>,
+	) -> Result<(), secp::Error> {
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
+		match secp.verify_bullet_proof_multi(commits.clone(), proofs.clone(), None) {
+			Ok(_) => Ok(()),
+			Err(e) => Err(e),
+		}
+	}
 }
 
 /// An output_identifier can be build from either an input _or_ an output and

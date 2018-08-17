@@ -989,20 +989,27 @@ impl<'a> Extension<'a> {
 	{
 		let now = Instant::now();
 
+		let mut commits:Vec<Commitment> = vec![];
+		let mut proofs:Vec<RangeProof> = vec![];
+
 		let mut proof_count = 0;
 		let total_rproofs = pmmr::n_leaves(self.output_pmmr.unpruned_size());
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
 				if let Some(out) = self.output_pmmr.get_data(n) {
 					if let Some(rp) = self.rproof_pmmr.get_data(n) {
-						out.into_output(rp).verify_proof()?;
+						commits.push(out.commit);
+						proofs.push(rp);
 					} else {
 						// TODO - rangeproof not found
 						return Err(ErrorKind::OutputNotFound.into());
 					}
 					proof_count += 1;
 
-					if proof_count % 500 == 0 {
+					if proofs.len() >= 1000 {
+						Output::batch_verify_proofs(&commits, &proofs)?;
+						commits.clear();
+						proofs.clear();
 						debug!(
 							LOGGER,
 							"txhashset: verify_rangeproofs: verified {} rangeproofs", proof_count,
@@ -1014,6 +1021,18 @@ impl<'a> Extension<'a> {
 				status.on_validation(0, 0, proof_count, total_rproofs);
 			}
 		}
+
+		// remaining part which not full of 1000 range proofs
+		if proofs.len() > 0 {
+			Output::batch_verify_proofs(&commits, &proofs)?;
+			commits.clear();
+			proofs.clear();
+			debug!(
+				LOGGER,
+				"txhashset: verify_rangeproofs: verified {} rangeproofs", proof_count,
+			);
+		}
+
 		debug!(
 			LOGGER,
 			"txhashset: verified {} rangeproofs, pmmr size {}, took {}s",
