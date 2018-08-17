@@ -474,27 +474,27 @@ impl<'a> Extension<'a> {
 
 		// Build bitmap of output pos spent (as inputs) by this tx for rewind.
 		let rewind_rm_pos = tx
-			.inputs
+			.inputs()
 			.iter()
 			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
 			.map(|x| x as u32)
 			.collect();
 
-		for ref output in &tx.outputs {
+		for ref output in tx.outputs() {
 			if let Err(e) = self.apply_output(output) {
 				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
 				return Err(e);
 			}
 		}
 
-		for ref input in &tx.inputs {
+		for ref input in tx.inputs() {
 			if let Err(e) = self.apply_input(input) {
 				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
 				return Err(e);
 			}
 		}
 
-		for ref kernel in &tx.kernels {
+		for ref kernel in tx.kernels() {
 			if let Err(e) = self.apply_kernel(kernel) {
 				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
 				return Err(e);
@@ -591,15 +591,15 @@ impl<'a> Extension<'a> {
 		// A block is not valid if it has not been fully cut-through.
 		// So we can safely apply outputs first (we will not spend these in the same
 		// block).
-		for out in &b.outputs {
+		for out in b.outputs() {
 			self.apply_output(out)?;
 		}
 
-		for input in &b.inputs {
+		for input in b.inputs() {
 			self.apply_input(input)?;
 		}
 
-		for kernel in &b.kernels {
+		for kernel in b.kernels() {
 			self.apply_kernel(kernel)?;
 		}
 
@@ -989,20 +989,27 @@ impl<'a> Extension<'a> {
 	{
 		let now = Instant::now();
 
+		let mut commits:Vec<Commitment> = vec![];
+		let mut proofs:Vec<RangeProof> = vec![];
+
 		let mut proof_count = 0;
 		let total_rproofs = pmmr::n_leaves(self.output_pmmr.unpruned_size());
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
 				if let Some(out) = self.output_pmmr.get_data(n) {
 					if let Some(rp) = self.rproof_pmmr.get_data(n) {
-						out.into_output(rp).verify_proof()?;
+						commits.push(out.commit);
+						proofs.push(rp);
 					} else {
 						// TODO - rangeproof not found
 						return Err(ErrorKind::OutputNotFound.into());
 					}
 					proof_count += 1;
 
-					if proof_count % 500 == 0 {
+					if proofs.len() >= 1000 {
+						Output::batch_verify_proofs(&commits, &proofs)?;
+						commits.clear();
+						proofs.clear();
 						debug!(
 							LOGGER,
 							"txhashset: verify_rangeproofs: verified {} rangeproofs", proof_count,
@@ -1014,6 +1021,18 @@ impl<'a> Extension<'a> {
 				status.on_validation(0, 0, proof_count, total_rproofs);
 			}
 		}
+
+		// remaining part which not full of 1000 range proofs
+		if proofs.len() > 0 {
+			Output::batch_verify_proofs(&commits, &proofs)?;
+			commits.clear();
+			proofs.clear();
+			debug!(
+				LOGGER,
+				"txhashset: verify_rangeproofs: verified {} rangeproofs", proof_count,
+			);
+		}
+
 		debug!(
 			LOGGER,
 			"txhashset: verified {} rangeproofs, pmmr size {}, took {}s",
@@ -1113,8 +1132,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 					.file_name()
 					.and_then(|n| n.to_str().map(|s| String::from(s)))
 			})
-		})
-		.collect();
+		}).collect();
 
 	let dir_difference: Vec<String> = subdirectories_found
 		.difference(&subdirectories_expected)
@@ -1143,8 +1161,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 			} else {
 				String::from(s)
 			}
-		})
-		.collect();
+		}).collect();
 
 	let subdirectories = fs::read_dir(txhashset_path)?;
 	for subdirectory in subdirectories {
@@ -1157,8 +1174,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 						.file_name()
 						.and_then(|n| n.to_str().map(|s| String::from(s)))
 				})
-			})
-			.collect();
+			}).collect();
 		let difference: Vec<String> = pmmr_files_found
 			.difference(&pmmr_files_expected)
 			.cloned()

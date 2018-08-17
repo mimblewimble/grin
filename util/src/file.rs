@@ -16,16 +16,18 @@ use std::io;
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
-pub fn delete(path_buf: PathBuf) ->  io::Result<()>{
+/// Delete a directory or file
+pub fn delete(path_buf: PathBuf) -> io::Result<()> {
 	if path_buf.is_dir() {
 		fs::remove_dir_all(path_buf)
 	} else if path_buf.is_file() {
 		fs::remove_file(path_buf)
 	} else {
-        Ok(())
-    }
-}		
+		Ok(())
+	}
+}
 
+/// Copy directory, create destination if needed
 pub fn copy_dir_to(src: &Path, dst: &Path) -> io::Result<u64> {
 	let mut counter = 0u64;
 	if !dst.is_dir() {
@@ -36,15 +38,19 @@ pub fn copy_dir_to(src: &Path, dst: &Path) -> io::Result<u64> {
 		let entry = entry_result?;
 		let file_type = entry.file_type()?;
 		let count = copy_to(&entry.path(), &file_type, &dst.join(entry.file_name()))?;
-		counter +=count;
+		counter += count;
 	}
 	Ok(counter)
 }
 
+/// List directory
 pub fn list_files(path: String) -> Vec<String> {
- 	let mut files_vec: Vec<String> = vec![];
-	for entry in WalkDir::new(Path::new(&path)).into_iter().filter_map(|e| e.ok()) {
-		match entry.file_name().to_str(){
+	let mut files_vec: Vec<String> = vec![];
+	for entry in WalkDir::new(Path::new(&path))
+		.into_iter()
+		.filter_map(|e| e.ok())
+	{
+		match entry.file_name().to_str() {
 			Some(path_str) => files_vec.push(path_str.to_string()),
 			None => println!("Could not read optional type"),
 		}
@@ -54,11 +60,13 @@ pub fn list_files(path: String) -> Vec<String> {
 
 fn copy_to(src: &Path, src_type: &fs::FileType, dst: &Path) -> io::Result<u64> {
 	if src_type.is_file() {
-		fs::copy(src,dst)
+		fs::copy(src, dst)
 	} else if src_type.is_dir() {
 		copy_dir_to(src, dst)
 	} else {
-		return Err(io::Error::new(io::ErrorKind::Other, format!("Could not copy: {}", src.display())))
+		return Err(io::Error::new(
+			io::ErrorKind::Other,
+			format!("Could not copy: {}", src.display()),
+		));
 	}
 }
-

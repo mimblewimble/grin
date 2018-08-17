@@ -54,7 +54,7 @@ where
 		let mut txs = vec![];
 
 		for x in &self.entries {
-			for kernel in &x.tx.kernels {
+			for kernel in x.tx.kernels() {
 				// rehash each kernel to calculate the block specific short_id
 				let short_id = kernel.short_id(&cb.hash(), cb.nonce);
 
@@ -99,7 +99,7 @@ where
 			return Ok(None);
 		}
 
-		let tx = transaction::aggregate(txs)?;
+		let tx = transaction::aggregate(txs, None)?;
 		Ok(Some(tx))
 	}
 
@@ -109,7 +109,8 @@ where
 		to_state: PoolEntryState,
 		extra_tx: Option<Transaction>,
 	) -> Result<Vec<Transaction>, PoolError> {
-		let entries = &mut self.entries
+		let entries = &mut self
+			.entries
 			.iter_mut()
 			.filter(|x| x.state == from_state)
 			.collect::<Vec<_>>();
@@ -154,20 +155,10 @@ where
 			// If we have nothing to aggregate then simply return the tx itself.
 			entry.tx.clone()
 		} else {
-			// Create a single aggregated tx from the existing pool txs (to check pool is
-			// valid).
-			let agg_tx = transaction::aggregate(txs)?;
-
-			// Then check new tx would not introduce a duplicate output in the pool.
-			for x in &entry.tx.outputs {
-				if agg_tx.outputs.contains(&x) {
-					return Err(PoolError::DuplicateCommitment);
-				}
-			}
-
-			// Finally aggregate the new tx with everything in the pool (with any extra
-			// txs).
-			transaction::aggregate(vec![agg_tx, entry.tx.clone()])?
+			// Create a single aggregated tx from the existing pool txs and the
+			// new entry
+			txs.push(entry.tx.clone());
+			transaction::aggregate(txs, None)?
 		};
 
 		// Validate aggregated tx against the current chain state (via txhashset
@@ -211,8 +202,8 @@ where
 	fn remaining_transactions(&self, block: &Block) -> Vec<Transaction> {
 		self.entries
 			.iter()
-			.filter(|x| !x.tx.kernels.iter().any(|y| block.kernels.contains(y)))
-			.filter(|x| !x.tx.inputs.iter().any(|y| block.inputs.contains(y)))
+			.filter(|x| !x.tx.kernels().iter().any(|y| block.kernels().contains(y)))
+			.filter(|x| !x.tx.inputs().iter().any(|y| block.inputs().contains(y)))
 			.map(|x| x.tx.clone())
 			.collect()
 	}
@@ -227,7 +218,7 @@ where
 
 		// Check each transaction in the pool
 		for entry in &self.entries {
-			let entry_kernel_set = entry.tx.kernels.iter().cloned().collect::<HashSet<_>>();
+			let entry_kernel_set = entry.tx.kernels().iter().cloned().collect::<HashSet<_>>();
 			if entry_kernel_set.is_subset(&kernel_set) {
 				found_txs.push(entry.tx.clone());
 			}

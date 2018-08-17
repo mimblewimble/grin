@@ -19,10 +19,10 @@ use std::sync::{Arc, RwLock};
 
 use rand::{thread_rng, Rng};
 
+use chrono::prelude::Utc;
 use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use chrono::prelude::{Utc};
 use util::LOGGER;
 
 use peer::Peer;
@@ -111,7 +111,8 @@ impl Peers {
 
 	/// Get vec of peers we are currently connected to.
 	pub fn connected_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
-		let mut res = self.peers
+		let mut res = self
+			.peers
 			.read()
 			.unwrap()
 			.values()
@@ -263,9 +264,7 @@ impl Peers {
 			error!(LOGGER, "Couldn't ban {}: {:?}", peer_addr, e);
 		}
 
-		if let Err(e) =
-			self.update_last_banned(peer_addr.clone(), Utc::now().timestamp())
-		{
+		if let Err(e) = self.update_last_banned(peer_addr.clone(), Utc::now().timestamp()) {
 			error!(
 				LOGGER,
 				"Couldn't update last_banned time {}: {:?}", peer_addr, e
@@ -597,8 +596,15 @@ impl ChainAdapter for Peers {
 		}
 	}
 
-	fn headers_received(&self, headers: Vec<core::BlockHeader>, peer_addr: SocketAddr) {
-		self.adapter.headers_received(headers, peer_addr)
+	fn headers_received(&self, headers: Vec<core::BlockHeader>, peer_addr: SocketAddr) -> bool {
+		if !self.adapter.headers_received(headers, peer_addr) {
+			// if the peer sent us a block header that's intrinsically bad
+			// they are either mistaken or malevolent, both of which require a ban
+			self.ban_peer(&peer_addr, ReasonForBan::BadBlockHeader);
+			false
+		} else {
+			true
+		}
 	}
 
 	fn locate_headers(&self, hs: Vec<Hash>) -> Vec<core::BlockHeader> {

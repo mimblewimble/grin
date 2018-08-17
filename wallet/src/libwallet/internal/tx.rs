@@ -150,7 +150,8 @@ where
 		return Err(ErrorKind::TransactionNotCancellable(tx_id))?;
 	}
 	// get outputs associated with tx
-	let outputs = updater::retrieve_outputs(wallet, false, Some(tx_id))?;
+	let res = updater::retrieve_outputs(wallet, false, Some(tx_id))?;
+	let outputs = res.iter().map(|(out, _)| out).cloned().collect();
 	updater::cancel_tx_and_outputs(wallet, tx, outputs)?;
 	Ok(())
 }
@@ -198,7 +199,7 @@ where
 
 	// finalize the burn transaction and send
 	let tx_burn = build::transaction(parts, &keychain)?;
-	tx_burn.validate()?;
+	tx_burn.validate(false)?;
 	Ok(tx_burn)
 }
 
@@ -217,7 +218,7 @@ mod test {
 		let tx1 = build::transaction(vec![build::output(105, key_id1.clone())], &keychain).unwrap();
 		let tx2 = build::transaction(vec![build::input(105, key_id1.clone())], &keychain).unwrap();
 
-		assert_eq!(tx1.outputs[0].features, tx2.inputs[0].features);
-		assert_eq!(tx1.outputs[0].commitment(), tx2.inputs[0].commitment());
+		assert_eq!(tx1.outputs()[0].features, tx2.inputs()[0].features);
+		assert_eq!(tx1.outputs()[0].commitment(), tx2.inputs()[0].commitment());
 	}
 }

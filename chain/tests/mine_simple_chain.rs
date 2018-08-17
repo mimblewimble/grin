@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate chrono;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
@@ -19,14 +20,13 @@ extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
-extern crate chrono;
 
+use chrono::Duration;
 use std::fs;
 use std::sync::Arc;
-use chrono::Duration;
 
-use chain::Chain;
 use chain::types::NoopAdapter;
+use chain::Chain;
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
@@ -74,12 +74,7 @@ fn mine_empty_chain() {
 			global::min_sizeshift()
 		};
 		b.header.pow.cuckoo_sizeshift = sizeshift;
-		pow::pow_size(
-			&mut b.header,
-			difficulty,
-			global::proofsize(),
-			sizeshift,
-		).unwrap();
+		pow::pow_size(&mut b.header, difficulty, global::proofsize(), sizeshift).unwrap();
 		b.header.pow.cuckoo_sizeshift = sizeshift;
 
 		let bhash = b.hash();
@@ -99,7 +94,7 @@ fn mine_empty_chain() {
 		let block = chain.get_block(&header.hash()).unwrap();
 		assert_eq!(block.header.height, n);
 		assert_eq!(block.hash(), bhash);
-		assert_eq!(block.outputs.len(), 1);
+		assert_eq!(block.outputs().len(), 1);
 
 		// now check the block height index
 		let header_by_height = chain.get_header_by_height(n).unwrap();
@@ -248,7 +243,7 @@ fn spend_in_fork_and_compact() {
 	// so we can spend the coinbase later
 	let b = prepare_block(&kc, &fork_head, &chain, 2);
 	let block_hash = b.hash();
-	let out_id = OutputIdentifier::from_output(&b.outputs[0]);
+	let out_id = OutputIdentifier::from_output(&b.outputs()[0]);
 	assert!(out_id.features.contains(OutputFeatures::COINBASE_OUTPUT));
 	fork_head = b.header.clone();
 	chain
@@ -269,10 +264,7 @@ fn spend_in_fork_and_compact() {
 
 	let tx1 = build::transaction(
 		vec![
-			build::coinbase_input(
-				consensus::REWARD,
-				kc.derive_key_id(2).unwrap(),
-			),
+			build::coinbase_input(consensus::REWARD, kc.derive_key_id(2).unwrap()),
 			build::output(consensus::REWARD - 20000, kc.derive_key_id(30).unwrap()),
 			build::with_fee(20000),
 		],
@@ -321,12 +313,12 @@ fn spend_in_fork_and_compact() {
 	assert_eq!(head.hash(), prev_main.hash());
 	assert!(
 		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs[0]))
+			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
 			.is_ok()
 	);
 	assert!(
 		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs[0]))
+			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
 			.is_err()
 	);
 
@@ -344,12 +336,12 @@ fn spend_in_fork_and_compact() {
 	assert_eq!(head.hash(), prev_fork.hash());
 	assert!(
 		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs[0]))
+			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
 			.is_ok()
 	);
 	assert!(
 		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs[0]))
+			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
 			.is_err()
 	);
 
