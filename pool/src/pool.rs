@@ -15,7 +15,7 @@
 //! Transaction pool implementation.
 //! Used for both the txpool and stempool layers in the pool.
 
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use core::consensus;
@@ -104,7 +104,10 @@ where
 		}
 
 		// then flatten the buckets using aggregate (with cut-through)
-		let mut flat_txs: Vec<Transaction> = tx_buckets.into_iter().filter_map(|bucket| transaction::aggregate(bucket, None).ok()).collect();
+		let mut flat_txs: Vec<Transaction> = tx_buckets
+			.into_iter()
+			.filter_map(|bucket| transaction::aggregate(bucket, None).ok())
+			.collect();
 
 		// sort by fees over weight, multiplying by 1000 to keep some precision
 		// don't think we'll ever see a >max_u64/1000 fee transaction
@@ -119,7 +122,9 @@ where
 
 		// make sure those txs are all valid together, no Error expected
 		// passing None
-		self.blockchain.validate_raw_txs(flat_txs, None).expect("should never happen")
+		self.blockchain
+			.validate_raw_txs(flat_txs, None)
+			.expect("should never happen")
 	}
 
 	pub fn all_transactions(&self) -> Vec<Transaction> {

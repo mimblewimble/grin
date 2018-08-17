@@ -439,7 +439,11 @@ impl TransactionBody {
 		// if as_block check the body as if it was a block, with an additional output and
 		// kernel for reward
 		let reserve = if with_reward { 0 } else { 1 };
-		let tx_block_weight = TransactionBody::weight_as_block(self.inputs.len(), self.outputs.len() + reserve, self.kernels.len() + reserve) as usize;
+		let tx_block_weight = TransactionBody::weight_as_block(
+			self.inputs.len(),
+			self.outputs.len() + reserve,
+			self.kernels.len() + reserve,
+		) as usize;
 
 		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
 			return Err(Error::TooHeavy);

@@ -36,7 +36,12 @@ pub use libtx::error::{Error, ErrorKind};
 const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
 
 /// Transaction fee calculation
-pub fn tx_fee(input_len: usize, output_len: usize, kernel_len: usize, base_fee: Option<u64>) -> u64 {
+pub fn tx_fee(
+	input_len: usize,
+	output_len: usize,
+	kernel_len: usize,
+	base_fee: Option<u64>,
+) -> u64 {
 	let use_base_fee = match base_fee {
 		Some(bf) => bf,
 		None => DEFAULT_BASE_FEE,
