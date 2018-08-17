@@ -30,6 +30,8 @@ use std::env;
 use std::io::Error;
 use std::thread;
 
+use util::LOGGER;
+
 /// Future returned from `MainService`.
 enum MainFuture {
 	Root,
@@ -65,7 +67,7 @@ impl MainService {
 		// Set up directory relative to executable for the time being
 		let mut exe_path = env::current_exe().unwrap();
 		exe_path.pop();
-		exe_path.push("web-wallet");
+		exe_path.push("grin-wallet");
 		MainService {
 			static_: Static::new(exe_path),
 		}
@@ -93,11 +95,11 @@ pub fn start_webwallet_server() {
 	let _ = thread::Builder::new()
 		.name("webwallet_server".to_string())
 		.spawn(move || {
-			let addr = ([127, 0, 0, 1], 3000).into();
+			let addr = ([127, 0, 0, 1], 13421).into();
 			let server = Server::bind(&addr)
 				.serve(|| future::ok::<_, Error>(MainService::new()))
 				.map_err(|e| eprintln!("server error: {}", e));
-			eprintln!("Doc server running on http://{}/", addr);
+			warn!(LOGGER, "Grin Web-Wallet Application is running at http://{}/", addr);
 			rt::run(server);
 		});
 }
