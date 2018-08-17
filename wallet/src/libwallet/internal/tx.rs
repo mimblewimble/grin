@@ -31,13 +31,9 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	debug!(LOGGER, "receive_tx: 1");
-
 	// create an output using the amount in the slate
 	let (_, mut context, receiver_create_fn) =
 		selection::build_recipient_output_with_slate(wallet, slate)?;
-
-	debug!(LOGGER, "receive_tx: 2");
 
 	// fill public keys
 	let _ = slate.fill_round_1(
@@ -47,17 +43,11 @@ where
 		1,
 	)?;
 
-	debug!(LOGGER, "receive_tx: 3");
-
 	// perform partial sig
 	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)?;
 
-	debug!(LOGGER, "receive_tx: 4");
-
 	// Save output in wallet
 	let _ = receiver_create_fn(wallet);
-
-	debug!(LOGGER, "receive_tx: 5");
 
 	Ok(())
 }
