@@ -28,7 +28,8 @@ use std::{thread, time};
 use core::core::hash::Hashed;
 use core::global::{self, ChainTypes};
 
-use framework::{config, stratum_config, LocalServerContainerConfig, LocalServerContainerPool,
+use framework::{config, stratum_config, stop_all_servers,
+								LocalServerContainerConfig, LocalServerContainerPool,
                 LocalServerContainerPoolConfig};
 
 /// Testing the frameworks by starting a fresh server, creating a genesis
@@ -59,7 +60,8 @@ fn basic_genesis_mine() {
 	server_config.burn_mining_rewards = true;
 
 	pool.create_server(&mut server_config);
-	pool.run_all_servers();
+	let servers = pool.run_all_servers();
+	stop_all_servers(servers);
 }
 
 /// Creates 5 servers, first being a seed and check that through peer address
@@ -106,7 +108,8 @@ fn simulate_seeding() {
 
 	// pool.connect_all_peers();
 
-	let _ = pool.run_all_servers();
+	let servers = pool.run_all_servers();
+	stop_all_servers(servers);
 }
 
 /// Create 1 server, start it mining, then connect 4 other peers mining and
@@ -160,7 +163,8 @@ fn simulate_parallel_mining() {
 
 	// pool.connect_all_peers();
 
-	let _ = pool.run_all_servers();
+	let servers = pool.run_all_servers();
+	stop_all_servers(servers);
 
 	// Check mining difficulty here?, though I'd think it's more valuable
 	// to simply output it. Can at least see the evolution of the difficulty target

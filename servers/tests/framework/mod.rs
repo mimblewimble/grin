@@ -24,6 +24,7 @@ extern crate grin_wallet as wallet;
 extern crate blake2_rfc as blake2;
 
 use std::default::Default;
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::{fs, thread, time};
 
@@ -175,7 +176,7 @@ impl LocalServerContainer {
 		})
 	}
 
-	pub fn run_server(&mut self, duration_in_seconds: u64) -> servers::ServerStats {
+	pub fn run_server(&mut self, duration_in_seconds: u64) -> servers::Server {
 		let api_addr = format!("{}:{}", self.config.base_addr, self.config.api_server_port);
 
 		let mut seeding_type = servers::Seeding::None;
@@ -232,7 +233,7 @@ impl LocalServerContainer {
 			self.stop_wallet();
 		}
 
-		s.get_server_stats().unwrap()
+		s
 	}
 
 	/// Starts a wallet daemon to receive and returns the
@@ -507,7 +508,7 @@ impl LocalServerContainerPool {
 	/// once they've all been run
 	///
 
-	pub fn run_all_servers(self) -> Vec<servers::ServerStats> {
+	pub fn run_all_servers(self) -> Arc<Mutex<Vec<servers::Server>>> {
 		let run_length = self.config.run_length_in_seconds;
 		let mut handles = vec![];
 
@@ -543,9 +544,9 @@ impl LocalServerContainerPool {
 				}
 			}
 		}
+
 		// return a much simplified version of the results
-		let return_vec = return_containers.lock().unwrap();
-		return_vec.clone()
+		return_containers.clone()
 	}
 
 	pub fn connect_all_peers(&mut self) {
@@ -564,6 +565,13 @@ impl LocalServerContainerPool {
 				}
 			}
 		}
+	}
+}
+
+pub fn stop_all_servers(servers: Arc<Mutex<Vec<servers::Server>>>) {
+	let locked_servs = servers.lock().unwrap();
+	for s in locked_servs.deref() {
+		s.stop();
 	}
 }
 
