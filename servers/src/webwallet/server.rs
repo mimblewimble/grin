@@ -15,11 +15,6 @@
 //! Integrated static file server to serve up a pre-compiled web-wallet
 //! application locally
 
-// This example serves the docs from `target/doc/`.
-//
-// Run `cargo doc && cargo run --example doc_server`, then
-// point your browser to http://localhost:3000/
-
 use futures::{future, Async::*, Future, Poll};
 use http::response::Builder as ResponseBuilder;
 use http::{header, Request, Response, StatusCode};
