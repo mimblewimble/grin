@@ -22,7 +22,10 @@
 #![warn(missing_docs)]
 
 extern crate bufstream;
+extern crate futures;
+extern crate http;
 extern crate hyper;
+extern crate hyper_staticfile;
 extern crate itertools;
 extern crate jsonrpc_core;
 extern crate lmdb_zero as lmdb;
@@ -48,7 +51,9 @@ extern crate grin_wallet as wallet;
 pub mod common;
 mod grin;
 mod mining;
+mod webwallet;
 
 pub use common::stats::{DiffBlock, PeerStats, ServerStats, StratumStats, WorkerStats};
 pub use common::types::{Seeding, ServerConfig, StratumServerConfig};
 pub use grin::server::Server;
+pub use webwallet::server::start_webwallet_server;

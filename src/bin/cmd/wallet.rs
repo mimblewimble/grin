@@ -25,6 +25,7 @@ use config::GlobalConfig;
 use core::core;
 use grin_wallet::{self, libwallet, controller, display};
 use grin_wallet::{HTTPWalletClient, LMDBBackend, WalletConfig, WalletInst, WalletSeed};
+use servers::start_webwallet_server;
 use keychain;
 use util::LOGGER;
 
@@ -125,6 +126,16 @@ pub fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 					});
 			}
 			("owner_api", Some(_api_args)) => {
+				controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
+					panic!(
+						"Error creating wallet api listener: {:?} Config: {:?}",
+						e, wallet_config
+					)
+				});
+			},
+			("web", Some(_api_args)) => {
+				// start owner listener and run static file server
+				start_webwallet_server();
 				controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
 					panic!(
 						"Error creating wallet api listener: {:?} Config: {:?}",
