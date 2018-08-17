@@ -15,6 +15,7 @@
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Write;
+use std::marker;
 use std::path::{Path, MAIN_SEPARATOR};
 
 use serde_json;
@@ -26,6 +27,7 @@ use uuid::Uuid;
 use failure::ResultExt;
 
 use keychain::{self, Identifier, Keychain};
+use util::secp::pedersen;
 use util::LOGGER;
 
 use error::{Error, ErrorKind};
@@ -45,7 +47,10 @@ const BCK_FILE: &'static str = "wallet.bck";
 const LOCK_FILE: &'static str = "wallet.lock";
 
 #[derive(Debug)]
-struct FileBatch<'a> {
+struct FileBatch<'a, K: 'a>
+where
+	K: Keychain,
+{
 	/// List of outputs
 	outputs: &'a mut HashMap<String, OutputData>,
 	/// Wallet Details
@@ -56,9 +61,18 @@ struct FileBatch<'a> {
 	details_file_path: String,
 	/// lock file path
 	lock_file_path: String,
+	/// PhantomData for our K: Keychain.
+	_marker: marker::PhantomData<K>,
 }
 
-impl<'a> WalletOutputBatch for FileBatch<'a> {
+impl<'a, K> WalletOutputBatch<K> for FileBatch<'a, K>
+where
+	K: Keychain,
+{
+	fn keychain(&mut self) -> &mut K {
+		unimplemented!();
+	}
+
 	fn save(&mut self, out: OutputData) -> Result<(), libwallet::Error> {
 		let _ = self.outputs.insert(out.key_id.to_hex(), out);
 		Ok(())
@@ -134,7 +148,10 @@ impl<'a> WalletOutputBatch for FileBatch<'a> {
 	}
 }
 
-impl<'a> Drop for FileBatch<'a> {
+impl<'a, K> Drop for FileBatch<'a, K>
+where
+	K: Keychain,
+{
 	fn drop(&mut self) {
 		// delete the lock file
 		if let Err(e) = fs::remove_dir(&self.lock_file_path) {
@@ -229,7 +246,14 @@ where
 			.ok_or(libwallet::ErrorKind::Backend("not found".to_string()).into())
 	}
 
-	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, libwallet::Error> {
+	fn get_commitment(
+		&mut self,
+		_id: &Identifier,
+	) -> Result<pedersen::Commitment, libwallet::Error> {
+		unimplemented!();
+	}
+
+	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch<K> + 'a>, libwallet::Error> {
 		self.lock()?;
 
 		// We successfully acquired the lock - so do what needs to be done.
@@ -244,6 +268,7 @@ where
 			data_file_path: self.data_file_path.clone(),
 			details_file_path: self.details_file_path.clone(),
 			lock_file_path: self.lock_file_path.clone(),
+			_marker: marker::PhantomData,
 		}))
 	}
 
@@ -326,7 +351,8 @@ where
 		let mut core = reactor::Core::new().unwrap();
 		let retry_strategy = FibonacciBackoff::from_millis(1000).take(10);
 		let retry_future = Retry::spawn(core.handle(), retry_strategy, action);
-		let retry_result = core.run(retry_future)
+		let retry_result = core
+			.run(retry_future)
 			.context(libwallet::ErrorKind::CallbackImpl(
 				"Failed to acquire lock file",
 			));

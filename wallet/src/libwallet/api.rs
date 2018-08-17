@@ -27,11 +27,12 @@ use serde_json as json;
 use core::ser;
 use keychain::Keychain;
 use libtx::slate::Slate;
-use libwallet::internal::{tx, updater, selection, sigcontext};
+use libwallet::internal::{selection, sigcontext, tx, updater};
 use libwallet::types::{
 	BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend, WalletClient, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
+use util::secp::pedersen;
 use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to
@@ -72,7 +73,7 @@ where
 		include_spent: bool,
 		refresh_from_node: bool,
 		tx_id: Option<u32>,
-	) -> Result<(bool, Vec<OutputData>), Error> {
+	) -> Result<(bool, Vec<(OutputData, pedersen::Commitment)>), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 
@@ -214,11 +215,7 @@ where
 	/// A sender provided a transaction file with appropriate public keys and
 	/// metadata. Complete the receivers' end of it to generate another file
 	/// to send back.
-	pub fn file_receive_tx(
-		&mut self,
-		source: &str,
-	) -> Result<(), Error> {
-
+	pub fn file_receive_tx(&mut self, source: &str) -> Result<(), Error> {
 		let mut pub_tx_f = File::open(source)?;
 		let mut content = String::new();
 		pub_tx_f.read_to_string(&mut content)?;
@@ -237,7 +234,7 @@ where
 			&mut context.sec_key,
 			&context.sec_nonce,
 			1,
-			)?;
+		)?;
 
 		// perform partial sig
 		let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)?;
@@ -260,7 +257,6 @@ where
 		private_tx_file: &str,
 		receiver_file: &str,
 	) -> Result<Slate, Error> {
-
 		let mut pub_tx_f = File::open(receiver_file)?;
 		let mut content = String::new();
 		pub_tx_f.read_to_string(&mut content)?;
@@ -349,7 +345,7 @@ where
 			}
 			Err(_) => {
 				let outputs = self.retrieve_outputs(true, false, None)?;
-				let height = match outputs.1.iter().map(|out| out.height).max() {
+				let height = match outputs.1.iter().map(|(out, _)| out.height).max() {
 					Some(height) => height,
 					None => 0,
 				};

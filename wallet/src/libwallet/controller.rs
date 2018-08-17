@@ -37,6 +37,7 @@ use libwallet::types::{
 use libwallet::{Error, ErrorKind};
 use url::form_urlencoded;
 
+use util::secp::pedersen;
 use util::LOGGER;
 
 /// Instantiate wallet Owner API for a single-use (command line) call
@@ -187,7 +188,7 @@ where
 		&self,
 		req: &Request<Body>,
 		api: APIOwner<T, C, K>,
-	) -> Result<(bool, Vec<OutputData>), Error> {
+	) -> Result<(bool, Vec<(OutputData, pedersen::Commitment)>), Error> {
 		let mut update_from_node = false;
 		let mut id = None;
 		let mut show_spent = false;
@@ -247,7 +248,8 @@ where
 
 	fn handle_get_request(&self, req: &Request<Body>) -> Result<Response<Body>, Error> {
 		let api = APIOwner::new(self.wallet.clone());
-		Ok(match req.uri()
+		Ok(match req
+			.uri()
 			.path()
 			.trim_right_matches("/")
 			.rsplit("/")
@@ -292,7 +294,8 @@ where
 
 	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
 		let api = APIOwner::new(self.wallet.clone());
-		match req.uri()
+		match req
+			.uri()
 			.path()
 			.trim_right_matches("/")
 			.rsplit("/")
@@ -398,7 +401,8 @@ where
 
 	fn handle_request(&self, req: Request<Body>) -> WalletResponseFuture {
 		let api = *APIForeign::new(self.wallet.clone());
-		match req.uri()
+		match req
+			.uri()
 			.path()
 			.trim_right_matches("/")
 			.rsplit("/")

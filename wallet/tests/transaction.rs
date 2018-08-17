@@ -21,8 +21,8 @@ extern crate grin_wallet as wallet;
 extern crate rand;
 #[macro_use]
 extern crate slog;
-extern crate serde;
 extern crate chrono;
+extern crate serde;
 extern crate uuid;
 
 mod common;
@@ -315,7 +315,7 @@ fn tx_rollback(test_dir: &str, backend_type: common::BackendType) -> Result<(), 
 		let mut unconfirmed_count = 0;
 		// get the tx entry, check outputs are as expected
 		let (_, outputs) = api.retrieve_outputs(true, false, Some(tx.unwrap().id))?;
-		for o in outputs.clone() {
+		for (o, _) in outputs.clone() {
 			if o.status == OutputStatus::Locked {
 				locked_count = locked_count + 1;
 			}
@@ -339,7 +339,7 @@ fn tx_rollback(test_dir: &str, backend_type: common::BackendType) -> Result<(), 
 		assert!(tx.is_some());
 		// get the tx entry, check outputs are as expected
 		let (_, outputs) = api.retrieve_outputs(true, false, Some(tx.unwrap().id))?;
-		for o in outputs.clone() {
+		for (o, _) in outputs.clone() {
 			if o.status == OutputStatus::Unconfirmed {
 				unconfirmed_count = unconfirmed_count + 1;
 			}
@@ -362,7 +362,8 @@ fn tx_rollback(test_dir: &str, backend_type: common::BackendType) -> Result<(), 
 		let res = api.cancel_tx(1);
 		assert!(res.is_err());
 		let (_, txs) = api.retrieve_txs(true, None)?;
-		let tx = txs.iter()
+		let tx = txs
+			.iter()
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
 		api.cancel_tx(tx.id)?;
@@ -383,7 +384,8 @@ fn tx_rollback(test_dir: &str, backend_type: common::BackendType) -> Result<(), 
 	// Wallet 2 rolls back
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
 		let (_, txs) = api.retrieve_txs(true, None)?;
-		let tx = txs.iter()
+		let tx = txs
+			.iter()
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
 		api.cancel_tx(tx.id)?;
