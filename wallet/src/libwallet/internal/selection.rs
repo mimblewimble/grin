@@ -355,9 +355,15 @@ where
 	let mut change_amounts_derivations = vec![];
 
 	if change == 0 {
-		debug!(LOGGER, "No change (sending exactly amount + fee), no change outputs to build");
+		debug!(
+			LOGGER,
+			"No change (sending exactly amount + fee), no change outputs to build"
+		);
 	} else {
-		debug!(LOGGER, "Building change outputs: total change: {} ({} outputs)", change, num_change_outputs);
+		debug!(
+			LOGGER,
+			"Building change outputs: total change: {} ({} outputs)", change, num_change_outputs
+		);
 
 		let part_change = change / num_change_outputs as u64;
 		let remainder_change = change % part_change;
