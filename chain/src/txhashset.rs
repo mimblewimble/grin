@@ -1132,8 +1132,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 					.file_name()
 					.and_then(|n| n.to_str().map(|s| String::from(s)))
 			})
-		})
-		.collect();
+		}).collect();
 
 	let dir_difference: Vec<String> = subdirectories_found
 		.difference(&subdirectories_expected)
@@ -1162,8 +1161,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 			} else {
 				String::from(s)
 			}
-		})
-		.collect();
+		}).collect();
 
 	let subdirectories = fs::read_dir(txhashset_path)?;
 	for subdirectory in subdirectories {
@@ -1176,8 +1174,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 						.file_name()
 						.and_then(|n| n.to_str().map(|s| String::from(s)))
 				})
-			})
-			.collect();
+			}).collect();
 		let difference: Vec<String> = pmmr_files_found
 			.difference(&pmmr_files_expected)
 			.cloned()
