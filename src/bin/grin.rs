@@ -179,6 +179,9 @@ fn main() {
 		.subcommand(SubCommand::with_name("owner_api")
 			.about("Runs the wallet's local web API."))
 
+		.subcommand(SubCommand::with_name("web")
+			.about("Runs the local web wallet which can be accessed through a browser"))
+
 		.subcommand(SubCommand::with_name("send")
 			.about("Builds a transaction to send coins and sends it to the specified \
 			 listener directly.")
@@ -352,5 +355,3 @@ fn main() {
 		}
 	}
 }
-
-
