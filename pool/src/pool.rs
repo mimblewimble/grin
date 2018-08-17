@@ -15,7 +15,7 @@
 //! Transaction pool implementation.
 //! Used for both the txpool and stempool layers in the pool.
 
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 use std::sync::Arc;
 
 use core::consensus;
@@ -71,22 +71,55 @@ where
 
 	/// Take the first num_to_fetch txs based on insertion order.
 	pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<Transaction> {
-		// clone the vec, not the transactions
-		let mut entries = self.entries.iter().collect::<Vec<&_>>();;
+		// first, group dependent transactions in buckets (vectors), each bucket
+		// is therefore independent from the others
+		// this relies on the entries Vec having parent transactions first
+		let mut tx_buckets = vec![];
+		let mut output_commits = HashMap::new();
+
+		for (n, entry) in self.entries.iter().enumerate() {
+			// check the commits index to find parents and their position
+			// picking the last one for bucket (so all parents come first)
+			let mut insert_pos = 0;
+			for input in entry.tx.inputs() {
+				if let Some(pos) = output_commits.get(&input.commitment()) {
+					if *pos > insert_pos {
+						insert_pos = *pos;
+					}
+				}
+			}
+			if insert_pos == 0 {
+				// no parent, just add to the end in its own bucket
+				insert_pos = tx_buckets.len();
+				tx_buckets.push(vec![entry.tx.clone()]);
+			} else {
+				// parent found, add to its bucket
+				tx_buckets[insert_pos].push(entry.tx.clone());
+			}
+
+			// update the commits index
+			for out in entry.tx.outputs() {
+				output_commits.insert(out.commitment(), insert_pos);
+			}
+		}
+
+		// then flatten the buckets using aggregate (with cut-through)
+		let mut flat_txs: Vec<Transaction> = tx_buckets.into_iter().filter_map(|bucket| transaction::aggregate(bucket, None).ok()).collect();
+
 		// sort by fees over weight, multiplying by 1000 to keep some precision
 		// don't think we'll ever see a >max_u64/1000 fee transaction
-		entries.sort_unstable_by_key(|e| e.tx.fee() * 1000 / e.tx.tx_weight() as u64);
+		flat_txs.sort_unstable_by_key(|tx| tx.fee() * 1000 / tx.tx_weight() as u64);
 
 		// accumulate as long as we're not above the block weight
 		let mut weight = 0;
-		entries
-			.iter()
-			.take_while(|e| {
-				weight += e.tx.block_weight();
-				weight < consensus::MAX_BLOCK_WEIGHT
-			})
-			.map(|e| e.tx.clone())
-			.collect()
+		flat_txs.retain(|tx| {
+			weight += tx.tx_weight_as_block() as usize;
+			weight < consensus::MAX_BLOCK_WEIGHT
+		});
+
+		// make sure those txs are all valid together, no Error expected
+		// passing None
+		self.blockchain.validate_raw_txs(flat_txs, None).expect("should never happen")
 	}
 
 	pub fn all_transactions(&self) -> Vec<Transaction> {

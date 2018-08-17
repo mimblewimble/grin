@@ -247,7 +247,7 @@ where
 	// sender
 	let mut fee;
 	// First attempt to spend without change
-	fee = tx_fee(coins.len(), 1, None);
+	fee = tx_fee(coins.len(), 1, 1, None);
 	let mut total: u64 = coins.iter().map(|c| c.value).sum();
 	let mut amount_with_fee = amount + fee;
 
@@ -268,7 +268,7 @@ where
 
 	// We need to add a change address or amount with fee is more than total
 	if total != amount_with_fee {
-		fee = tx_fee(coins.len(), 2, None);
+		fee = tx_fee(coins.len(), 2, 1, None);
 		amount_with_fee = amount + fee;
 
 		// Here check if we have enough outputs for the amount including fee otherwise
@@ -291,7 +291,7 @@ where
 				max_outputs,
 				selection_strategy_is_use_all,
 			).1;
-			fee = tx_fee(coins.len(), 2, None);
+			fee = tx_fee(coins.len(), 2, 1, None);
 			total = coins.iter().map(|c| c.value).sum();
 			amount_with_fee = amount + fee;
 		}
