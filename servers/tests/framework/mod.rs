@@ -349,7 +349,7 @@ impl LocalServerContainer {
 				match result {
 					Ok(_) => println!(
 						"Tx sent: {} grin to {} (strategy '{}')",
-						core::core::amount_to_hr_string(amount),
+						core::core::amount_to_hr_string(amount, false),
 						dest,
 						selection_strategy,
 					),

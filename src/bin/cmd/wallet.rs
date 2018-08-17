@@ -175,7 +175,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 							info!(
 								LOGGER,
 								"Tx created: {} grin to {} (strategy '{}')",
-								core::amount_to_hr_string(amount),
+								core::amount_to_hr_string(amount, false),
 								dest,
 								selection_strategy,
 							);
