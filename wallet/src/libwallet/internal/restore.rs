@@ -156,12 +156,12 @@ where
 {
 	let max_derivations = 1_000_000;
 
-	// Don't proceed if wallet.dat has anything in it
+	// Don't proceed if wallet_data has anything in it
 	let is_empty = wallet.iter().next().is_none();
 	if !is_empty {
 		error!(
 			LOGGER,
-			"Not restoring. Please back up and remove existing wallet.dat first."
+			"Not restoring. Please back up and remove existing wallet_data directory first."
 		);
 		return Ok(());
 	}
