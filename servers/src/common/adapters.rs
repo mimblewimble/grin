@@ -228,7 +228,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		true
 	}
 
-	fn headers_received(&self, bhs: Vec<core::BlockHeader>, addr: SocketAddr) {
+	fn headers_received(&self, bhs: Vec<core::BlockHeader>, addr: SocketAddr) -> bool {
 		info!(
 			LOGGER,
 			"Received block headers {:?} from {}",
@@ -236,52 +236,34 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			addr,
 		);
 
+		if bhs.len() == 0 {
+			return false;
+		}
+
+		// headers will just set us backward if even the last is unknown
+		let last_h = bhs.last().unwrap().hash();
+		if let Ok(_) = w(&self.chain).get_block_header(&last_h) {
+			info!(LOGGER, "All known, ignoring");
+			return true;
+		}
+
 		// try to add each header to our header chain
-		let mut added_hs = vec![];
 		for bh in bhs {
 			let res = w(&self.chain).sync_block_header(&bh, self.chain_opts());
-			match res {
-				Ok(_) => {
-					added_hs.push(bh.hash());
-				}
-				Err(e) => {
-					match e.kind() {
-						chain::ErrorKind::Unfit(s) => {
-							info!(
-								LOGGER,
-								"Received unfit block header {} at {}: {}.",
-								bh.hash(),
-								bh.height,
-								s
-							);
-						}
-						chain::ErrorKind::StoreErr(e, explanation) => {
-							error!(
-								LOGGER,
-								"Store error processing block header {}: in {} {:?}",
-								bh.hash(),
-								explanation,
-								e
-							);
-							return;
-						}
-						_ => {
-							info!(LOGGER, "Invalid block header {}: {:?}.", bh.hash(), e);
-							// TODO penalize peer somehow
-						}
-					}
+			if let &Err(ref e) = &res {
+				debug!(
+					LOGGER,
+					"Block header {} refused by chain: {:?}",
+					bh.hash(),
+					e
+				);
+
+				if e.is_bad_data() {
+					return false;
 				}
 			}
 		}
-
-		let header_head = w(&self.chain).get_header_head().unwrap();
-		info!(
-			LOGGER,
-			"Added {} headers to the header chain. Last: {} at {}.",
-			added_hs.len(),
-			header_head.last_block_h,
-			header_head.height,
-		);
+		true
 	}
 
 	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {

@@ -604,9 +604,13 @@ impl Readable for Headers {
 		if (len as u32) > MAX_BLOCK_HEADERS + 1 {
 			return Err(ser::Error::TooLargeReadErr);
 		}
-		let mut headers = Vec::with_capacity(len as usize);
-		for _ in 0..len {
-			headers.push(BlockHeader::read(reader)?);
+		let mut headers: Vec<BlockHeader> = Vec::with_capacity(len as usize);
+		for n in 0..len as usize {
+			let header = BlockHeader::read(reader)?;
+			if n > 0 && header.height != headers[n - 1].height + 1 {
+				return Err(ser::Error::CorruptedData);
+			}
+			headers.push(header);
 		}
 		Ok(Headers { headers: headers })
 	}
