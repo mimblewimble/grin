@@ -93,10 +93,9 @@ where
 {
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			debug!(LOGGER, "Building an output: {}, {}", value, key_id,);
-
 			let commit = build.keychain.commit(value, &key_id).unwrap();
-			trace!(LOGGER, "Builder - Pedersen Commit is: {:?}", commit,);
+
+			debug!(LOGGER, "Building an output: {}, {:?}", value, commit);
 
 			let rproof = proof::create(build.keychain, value, &key_id, commit, None).unwrap();
 

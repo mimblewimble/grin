@@ -355,27 +355,15 @@ where
 	let mut change_amounts_derivations = vec![];
 
 	if change == 0 {
-		warn!(
-			LOGGER,
-			"inputs_and_change: change value is zero. Is this safe?"
-		);
+		debug!(LOGGER, "No change (sending exactly amount + fee), no change outputs to build");
 	} else {
-		warn!(
-			LOGGER,
-			"inputs_and_change: change: {}, building {} change outputs", change, num_change_outputs,
-		);
+		debug!(LOGGER, "Building change outputs: total change: {} ({} outputs)", change, num_change_outputs);
 
 		let part_change = change / num_change_outputs as u64;
 		let remainder_change = change % part_change;
 
-		warn!(
-			LOGGER,
-			"inputs_and_change: part_change: {}, remainder_change: {}",
-			part_change,
-			remainder_change,
-		);
-
 		for x in 0..num_change_outputs {
+			// n-1 equal change_outputs and a final one accounting for any remainder
 			let change_amount = if x == (num_change_outputs - 1) {
 				part_change + remainder_change
 			} else {
