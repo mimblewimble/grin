@@ -26,9 +26,9 @@ use http::{header, Request, Response, StatusCode};
 use hyper::service::Service;
 use hyper::{rt, Body, Server};
 use hyper_staticfile::{Static, StaticFuture};
+use std::env;
 use std::io::Error;
 use std::thread;
-use std::env;
 
 /// Future returned from `MainService`.
 enum MainFuture {
