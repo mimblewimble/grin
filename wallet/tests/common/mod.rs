@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate chrono;
 extern crate failure;
 extern crate grin_api as api;
 extern crate grin_chain as chain;
@@ -19,10 +20,9 @@ extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_wallet as wallet;
 extern crate serde_json;
-extern crate chrono;
 
-use std::sync::{Arc, Mutex};
 use chrono::Duration;
+use std::sync::{Arc, Mutex};
 
 use chain::Chain;
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};

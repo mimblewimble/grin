@@ -47,8 +47,7 @@ where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
 	C: WalletClient,
 	K: Keychain,
-{
-}
+{}
 
 /// TODO:
 /// Wallets should implement this backend for their storage. All functions
@@ -77,6 +76,9 @@ where
 	/// Get output data by id
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
 
+	/// Get associated output commitment by id.
+	fn get_commitment(&mut self, id: &Identifier) -> Result<pedersen::Commitment, Error>;
+
 	/// Get an (Optional) tx log entry by uuid
 	fn get_tx_log_entry(&self, uuid: &Uuid) -> Result<Option<TxLogEntry>, Error>;
 
@@ -84,7 +86,7 @@ where
 	fn tx_log_iter<'a>(&'a self) -> Box<Iterator<Item = TxLogEntry> + 'a>;
 
 	/// Create a new write batch to update or remove output data
-	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, Error>;
+	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch<K> + 'a>, Error>;
 
 	/// Next child ID when we want to create a new output
 	fn next_child<'a>(&mut self, root_key_id: Identifier) -> Result<u32, Error>;
@@ -101,7 +103,13 @@ where
 /// commit method can't take ownership.
 /// TODO: Should these be split into separate batch objects, for outputs,
 /// tx_log entries and meta/details?
-pub trait WalletOutputBatch {
+pub trait WalletOutputBatch<K>
+where
+	K: Keychain,
+{
+	/// Return the keychain being used
+	fn keychain(&mut self) -> &mut K;
+
 	/// Add or update data about an output to the backend
 	fn save(&mut self, out: OutputData) -> Result<(), Error>;
 
@@ -111,7 +119,7 @@ pub trait WalletOutputBatch {
 	/// Iterate over all output data stored by the backend
 	fn iter(&self) -> Box<Iterator<Item = OutputData>>;
 
-	/// Delete data about an output to the backend
+	/// Delete data about an output from the backend
 	fn delete(&mut self, id: &Identifier) -> Result<(), Error>;
 
 	/// save wallet details
