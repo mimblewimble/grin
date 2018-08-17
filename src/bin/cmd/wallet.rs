@@ -170,16 +170,20 @@ pub fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				let dest = send_args
 					.value_of("dest")
 					.expect("Destination wallet address required");
+				let change_outputs = send_args
+					.value_of("change_outputs")
+					.unwrap()
+					.parse()
+					.expect("Failed to parse number of change outputs.");
 				let fluff = send_args.is_present("fluff");
 				let max_outputs = 500;
-				let num_change_outputs = 3;
 				if dest.starts_with("http") {
 					let result = api.issue_send_tx(
 						amount,
 						minimum_confirmations,
 						dest,
 						max_outputs,
-						num_change_outputs,
+						change_outputs,
 						selection_strategy == "all",
 					);
 					let slate = match result {
@@ -225,7 +229,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 						minimum_confirmations,
 						dest,
 						max_outputs,
-						num_change_outputs,
+						change_outputs,
 						selection_strategy == "all",
 					).expect("Send failed");
 					Ok(())
