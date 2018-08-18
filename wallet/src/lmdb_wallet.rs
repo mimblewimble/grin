@@ -29,7 +29,7 @@ use util::secp::pedersen;
 
 pub const DB_DIR: &'static str = "wallet_data";
 
-const COMMITMENT_PREFIX: u8 = 'c' as u8;
+const COMMITMENT_PREFIX: u8 = 'C' as u8;
 const OUTPUT_PREFIX: u8 = 'o' as u8;
 const DERIV_PREFIX: u8 = 'd' as u8;
 const CONFIRMED_HEIGHT_PREFIX: u8 = 'c' as u8;
