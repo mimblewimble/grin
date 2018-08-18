@@ -123,6 +123,7 @@ fn basic_transaction_api(
 			2,         // minimum confirmations
 			"wallet2", // dest
 			500,       // max outputs
+			1,         // num change outputs
 			true,      // select all outputs
 		)?;
 		Ok(())
@@ -298,6 +299,7 @@ fn tx_rollback(test_dir: &str, backend_type: common::BackendType) -> Result<(), 
 			2,         // minimum confirmations
 			"wallet2", // dest
 			500,       // max outputs
+			1,         // num change outputs
 			true,      // select all outputs
 		)?;
 		Ok(())
