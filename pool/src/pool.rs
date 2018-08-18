@@ -27,7 +27,8 @@ use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 use util::LOGGER;
 
 // max weight leaving minimum space for a coinbase
-const MAX_MINEABLE_WEIGHT: usize = consensus::MAX_BLOCK_WEIGHT - consensus::BLOCK_OUTPUT_WEIGHT - consensus::BLOCK_KERNEL_WEIGHT;
+const MAX_MINEABLE_WEIGHT: usize =
+	consensus::MAX_BLOCK_WEIGHT - consensus::BLOCK_OUTPUT_WEIGHT - consensus::BLOCK_KERNEL_WEIGHT;
 
 // longest chain of dependent transactions that can be included in a block
 const MAX_TX_CHAIN: usize = 20;
@@ -81,7 +82,11 @@ where
 	pub fn prepare_mineable_transactions(&self) -> Vec<Transaction> {
 		let tx_buckets = self.bucket_transactions();
 		for (n, b) in tx_buckets.iter().enumerate() {
-			println!("{} : {:?}", n, b.iter().map(|tx| tx.hash()).collect::<Vec<_>>());
+			println!(
+				"{} : {:?}",
+				n,
+				b.iter().map(|tx| tx.hash()).collect::<Vec<_>>()
+			);
 		}
 
 		// flatten buckets using aggregate (with cut-through)

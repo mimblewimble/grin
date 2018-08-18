@@ -20,8 +20,8 @@ extern crate grin_pool as pool;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-extern crate rand;
 extern crate chrono;
+extern crate rand;
 
 pub mod common;
 
@@ -29,8 +29,8 @@ use std::sync::{Arc, RwLock};
 
 use core::core::{Block, BlockHeader};
 
-use chain::types::Tip;
 use chain::txhashset;
+use chain::types::Tip;
 use core::core::target::Difficulty;
 
 use keychain::{ExtKeychain, Keychain};
