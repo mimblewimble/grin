@@ -30,7 +30,7 @@ use std::sync::{Arc, RwLock};
 use core::core::{Block, BlockHeader};
 
 use chain::types::Tip;
-use chain::{txhashset, ChainStore};
+use chain::txhashset;
 use core::core::target::Difficulty;
 
 use keychain::{ExtKeychain, Keychain};
@@ -40,6 +40,7 @@ use common::*;
 
 #[test]
 fn test_transaction_pool_block_building() {
+	util::init_test_logger();
 	let keychain: ExtKeychain = Keychain::from_random_seed().unwrap();
 
 	let db_root = ".grin_block_building".to_string();
@@ -118,9 +119,9 @@ fn test_transaction_pool_block_building() {
 
 	let txs = {
 		let read_pool = pool.read().unwrap();
-		read_pool.prepare_mineable_transactions(4)
+		read_pool.prepare_mineable_transactions()
 	};
-	assert_eq!(txs.len(), 4);
+	assert_eq!(txs.len(), 1);
 
 	let block = {
 		let key_id = keychain.derive_key_id(2).unwrap();
@@ -145,8 +146,6 @@ fn test_transaction_pool_block_building() {
 		let mut write_pool = pool.write().unwrap();
 		write_pool.reconcile_block(&block).unwrap();
 
-		assert_eq!(write_pool.total_size(), 2);
-		assert_eq!(write_pool.txpool.entries[0].tx, child_tx_1);
-		assert_eq!(write_pool.txpool.entries[1].tx, child_tx_2);
+		assert_eq!(write_pool.total_size(), 0);
 	}
 }

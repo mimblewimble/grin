@@ -136,6 +136,7 @@ fn basic_transaction_api(
 		let fee = wallet::libtx::tx_fee(
 			wallet1_info.last_confirmed_height as usize - cm as usize,
 			2,
+			1,
 			None,
 		);
 		// we should have a transaction entry for this slate
@@ -183,6 +184,7 @@ fn basic_transaction_api(
 		let fee = wallet::libtx::tx_fee(
 			wallet1_info.last_confirmed_height as usize - 1 - cm as usize,
 			2,
+			1,
 			None,
 		);
 		assert!(wallet1_refreshed);

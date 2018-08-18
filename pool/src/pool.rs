@@ -26,6 +26,12 @@ use core::core::{Block, CompactBlock, Transaction, TxKernel};
 use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 use util::LOGGER;
 
+// max weight leaving minimum space for a coinbase
+const MAX_MINEABLE_WEIGHT: usize = consensus::MAX_BLOCK_WEIGHT - consensus::BLOCK_OUTPUT_WEIGHT - consensus::BLOCK_KERNEL_WEIGHT;
+
+// longest chain of dependent transactions that can be included in a block
+const MAX_TX_CHAIN: usize = 20;
+
 pub struct Pool<T> {
 	/// Entries in the pool (tx + info + timer) in simple insertion order.
 	pub entries: Vec<PoolEntry>,
@@ -65,48 +71,26 @@ where
 				}
 			}
 		}
-
 		txs
 	}
 
-	/// Take the first num_to_fetch txs based on insertion order.
-	pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<Transaction> {
-		// first, group dependent transactions in buckets (vectors), each bucket
-		// is therefore independent from the others
-		// this relies on the entries Vec having parent transactions first
-		let mut tx_buckets = vec![];
-		let mut output_commits = HashMap::new();
-
-		for (n, entry) in self.entries.iter().enumerate() {
-			// check the commits index to find parents and their position
-			// picking the last one for bucket (so all parents come first)
-			let mut insert_pos = 0;
-			for input in entry.tx.inputs() {
-				if let Some(pos) = output_commits.get(&input.commitment()) {
-					if *pos > insert_pos {
-						insert_pos = *pos;
-					}
-				}
-			}
-			if insert_pos == 0 {
-				// no parent, just add to the end in its own bucket
-				insert_pos = tx_buckets.len();
-				tx_buckets.push(vec![entry.tx.clone()]);
-			} else {
-				// parent found, add to its bucket
-				tx_buckets[insert_pos].push(entry.tx.clone());
-			}
-
-			// update the commits index
-			for out in entry.tx.outputs() {
-				output_commits.insert(out.commitment(), insert_pos);
-			}
+	/// Take pool transactions, filtering and ordering them in a way that's
+	/// appropriate to put in a mined block. Aggregates chains of dependent
+	/// transactions, orders by fee over weight and ensures to total weight
+	/// doesn't exceed block limits.
+	pub fn prepare_mineable_transactions(&self) -> Vec<Transaction> {
+		let tx_buckets = self.bucket_transactions();
+		for (n, b) in tx_buckets.iter().enumerate() {
+			println!("{} : {:?}", n, b.iter().map(|tx| tx.hash()).collect::<Vec<_>>());
 		}
 
-		// then flatten the buckets using aggregate (with cut-through)
+		// flatten buckets using aggregate (with cut-through)
 		let mut flat_txs: Vec<Transaction> = tx_buckets
 			.into_iter()
-			.filter_map(|bucket| transaction::aggregate(bucket, None).ok())
+			.filter_map(|mut bucket| {
+				bucket.truncate(MAX_TX_CHAIN);
+				transaction::aggregate(bucket, None).ok()
+			})
 			.collect();
 
 		// sort by fees over weight, multiplying by 1000 to keep some precision
@@ -117,11 +101,11 @@ where
 		let mut weight = 0;
 		flat_txs.retain(|tx| {
 			weight += tx.tx_weight_as_block() as usize;
-			weight < consensus::MAX_BLOCK_WEIGHT
+			weight < MAX_MINEABLE_WEIGHT
 		});
 
-		// make sure those txs are all valid together, no Error expected
-		// passing None
+		// make sure those txs are all valid together, no Error is expected
+		// when passing None
 		self.blockchain
 			.validate_raw_txs(flat_txs, None)
 			.expect("should never happen")
@@ -231,6 +215,41 @@ where
 		);
 
 		Ok(())
+	}
+
+	// Group dependent transactions in buckets (vectors), each bucket
+	// is therefore independent from the others. Relies on the entries
+	// Vec having parent transactions first (should always be the case)
+	fn bucket_transactions(&self) -> Vec<Vec<Transaction>> {
+		let mut tx_buckets = vec![];
+		let mut output_commits = HashMap::new();
+
+		for entry in &self.entries {
+			// check the commits index to find parents and their position
+			// picking the last one for bucket (so all parents come first)
+			let mut insert_pos: i32 = -1;
+			for input in entry.tx.inputs() {
+				if let Some(pos) = output_commits.get(&input.commitment()) {
+					if *pos > insert_pos {
+						insert_pos = *pos;
+					}
+				}
+			}
+			if insert_pos == -1 {
+				// no parent, just add to the end in its own bucket
+				insert_pos = tx_buckets.len() as i32;
+				tx_buckets.push(vec![entry.tx.clone()]);
+			} else {
+				// parent found, add to its bucket
+				tx_buckets[insert_pos as usize].push(entry.tx.clone());
+			}
+
+			// update the commits index
+			for out in entry.tx.outputs() {
+				output_commits.insert(out.commitment(), insert_pos);
+			}
+		}
+		tx_buckets
 	}
 
 	// Filter txs in the pool based on the latest block.
