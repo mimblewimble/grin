@@ -36,9 +36,6 @@ use mining::mine_block;
 use pool;
 use util::LOGGER;
 
-// Max number of transactions this miner will assemble in a block
-const MAX_TX: u32 = 5000;
-
 // ----------------------------------------
 // http://www.jsonrpc.org/specification
 // RPC Methods
@@ -727,7 +724,6 @@ impl StratumServer {
 					&self.chain,
 					&self.tx_pool,
 					self.current_key_id.clone(),
-					MAX_TX.clone(),
 					wallet_listener_url,
 				);
 				self.current_difficulty = (new_block.header.total_difficulty.clone()

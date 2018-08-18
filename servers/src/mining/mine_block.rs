@@ -78,7 +78,6 @@ pub fn get_block(
 	chain: &Arc<chain::Chain>,
 	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	key_id: Option<Identifier>,
-	max_tx: u32,
 	wallet_listener_url: Option<String>,
 ) -> (core::Block, BlockFees) {
 	let wallet_retry_interval = 5;
@@ -87,7 +86,6 @@ pub fn get_block(
 		chain,
 		tx_pool,
 		key_id.clone(),
-		max_tx,
 		wallet_listener_url.clone(),
 	);
 	while let Err(e) = result {
@@ -120,7 +118,6 @@ pub fn get_block(
 			chain,
 			tx_pool,
 			key_id.clone(),
-			max_tx,
 			wallet_listener_url.clone(),
 		);
 	}
@@ -133,7 +130,6 @@ fn build_block(
 	chain: &Arc<chain::Chain>,
 	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	key_id: Option<Identifier>,
-	max_tx: u32,
 	wallet_listener_url: Option<String>,
 ) -> Result<(core::Block, BlockFees), Error> {
 	// prepare the block header timestamp
@@ -153,7 +149,7 @@ fn build_block(
 	let txs = tx_pool
 		.read()
 		.unwrap()
-		.prepare_mineable_transactions(max_tx);
+		.prepare_mineable_transactions();
 
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();

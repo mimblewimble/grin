@@ -33,9 +33,6 @@ use mining::mine_block;
 use pool;
 use util::LOGGER;
 
-// Max number of transactions this miner will assemble in a block
-const MAX_TX: u32 = 5000;
-
 pub struct Miner {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
@@ -153,7 +150,6 @@ impl Miner {
 				&self.chain,
 				&self.tx_pool,
 				key_id.clone(),
-				MAX_TX.clone(),
 				wallet_listener_url.clone(),
 			);
 
