@@ -14,6 +14,7 @@
 
 use std::env;
 use std::fs::File;
+use std::io::BufWriter;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -246,9 +247,9 @@ impl MessageHandler for Protocol {
 				let mut tmp = env::temp_dir();
 				tmp.push("txhashset.zip");
 				let mut save_txhashset_to_file = |file| -> Result<(), Error> {
-					let mut tmp_zip = File::create(file)?;
+					let mut tmp_zip = BufWriter::new(File::create(file)?);
 					msg.copy_attachment(sm_arch.bytes as usize, &mut tmp_zip)?;
-					tmp_zip.sync_all()?;
+					tmp_zip.into_inner().unwrap().sync_all()?;
 					Ok(())
 				};
 
