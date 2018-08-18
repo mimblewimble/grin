@@ -553,6 +553,8 @@ pub struct SendTXArgs {
 	pub dest: String,
 	/// Max number of outputs
 	pub max_outputs: usize,
+	/// Number of change outputs to generate
+	pub num_change_outputs: usize,
 	/// whether to use all outputs (combine)
 	pub selection_strategy_is_use_all: bool,
 	/// dandelion control

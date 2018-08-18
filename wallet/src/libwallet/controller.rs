@@ -275,6 +275,7 @@ where
 				args.minimum_confirmations,
 				&args.dest,
 				args.max_outputs,
+				args.num_change_outputs,
 				args.selection_strategy_is_use_all,
 			)
 		}))

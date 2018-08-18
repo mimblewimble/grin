@@ -59,6 +59,7 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 	amount: u64,
 	minimum_confirmations: u64,
 	max_outputs: usize,
+	num_change_outputs: usize,
 	selection_strategy_is_use_all: bool,
 ) -> Result<
 	(
@@ -95,6 +96,7 @@ where
 		minimum_confirmations,
 		lock_height,
 		max_outputs,
+		num_change_outputs,
 		selection_strategy_is_use_all,
 	)?;
 
@@ -190,7 +192,9 @@ where
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
 	let fee = tx_fee(coins.len(), 2, None);
-	let (mut parts, _, _) = selection::inputs_and_change(&coins, wallet, amount, fee)?;
+	let num_change_outputs = 1;
+	let (mut parts, _) =
+		selection::inputs_and_change(&coins, wallet, amount, fee, num_change_outputs)?;
 
 	//TODO: If we end up using this, create change output here
 
