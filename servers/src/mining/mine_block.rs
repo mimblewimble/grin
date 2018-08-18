@@ -82,12 +82,7 @@ pub fn get_block(
 ) -> (core::Block, BlockFees) {
 	let wallet_retry_interval = 5;
 	// get the latest chain state and build a block on top of it
-	let mut result = build_block(
-		chain,
-		tx_pool,
-		key_id.clone(),
-		wallet_listener_url.clone(),
-	);
+	let mut result = build_block(chain, tx_pool, key_id.clone(), wallet_listener_url.clone());
 	while let Err(e) = result {
 		match e {
 			self::Error::Chain(c) => match c.kind() {
@@ -114,12 +109,7 @@ pub fn get_block(
 			}
 		}
 		thread::sleep(Duration::from_millis(100));
-		result = build_block(
-			chain,
-			tx_pool,
-			key_id.clone(),
-			wallet_listener_url.clone(),
-		);
+		result = build_block(chain, tx_pool, key_id.clone(), wallet_listener_url.clone());
 	}
 	return result.unwrap();
 }
@@ -146,10 +136,7 @@ fn build_block(
 	let difficulty = consensus::next_difficulty(diff_iter).unwrap();
 
 	// extract current transaction from the pool
-	let txs = tx_pool
-		.read()
-		.unwrap()
-		.prepare_mineable_transactions();
+	let txs = tx_pool.read().unwrap().prepare_mineable_transactions();
 
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();

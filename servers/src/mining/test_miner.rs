@@ -1,4 +1,3 @@
-
 // Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +17,9 @@
 //! header with its proof-of-work.  Any valid mined blocks are submitted to the
 //! network.
 
+use chrono::prelude::Utc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
-use chrono::prelude::{Utc};
 
 use chain;
 use common::adapters::PoolToChainAdapter;
