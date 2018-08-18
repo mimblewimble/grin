@@ -336,7 +336,7 @@ impl SyncState {
 	}
 
 	/// Communicate sync error
-	pub fn set_sync_error(&self, error: Error){
+	pub fn set_sync_error(&self, error: Error) {
 		*self.sync_error.write().unwrap() = Some(error);
 	}
 
@@ -346,10 +346,9 @@ impl SyncState {
 	}
 
 	/// Clear sync error
-	pub fn clear_sync_error(&self){
+	pub fn clear_sync_error(&self) {
 		*self.sync_error.write().unwrap() = None;
 	}
-
 }
 
 impl chain::TxHashsetWriteStatus for SyncState {
