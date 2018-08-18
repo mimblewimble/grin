@@ -214,7 +214,7 @@ impl Default for ServerConfig {
 			skip_sync_wait: Some(false),
 			run_tui: Some(true),
 			run_wallet_listener: Some(true),
-			run_wallet_owner_api: Some(true),
+			run_wallet_owner_api: Some(false),
 			use_db_wallet: None,
 			run_test_miner: Some(false),
 			test_miner_wallet_url: None,
