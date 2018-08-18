@@ -332,7 +332,9 @@ impl LocalServerContainer {
 			.expect("Failed to derive keychain from seed file and passphrase.");
 
 		let client = HTTPWalletClient::new(&config.check_node_api_http_addr);
+
 		let max_outputs = 500;
+		let change_outputs = 1;
 
 		let mut wallet = FileWallet::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
@@ -344,6 +346,7 @@ impl LocalServerContainer {
 					minimum_confirmations,
 					dest,
 					max_outputs,
+					change_outputs,
 					selection_strategy == "all",
 				);
 				match result {
