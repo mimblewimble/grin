@@ -81,13 +81,6 @@ where
 	/// doesn't exceed block limits.
 	pub fn prepare_mineable_transactions(&self) -> Vec<Transaction> {
 		let tx_buckets = self.bucket_transactions();
-		for (n, b) in tx_buckets.iter().enumerate() {
-			println!(
-				"{} : {:?}",
-				n,
-				b.iter().map(|tx| tx.hash()).collect::<Vec<_>>()
-			);
-		}
 
 		// flatten buckets using aggregate (with cut-through)
 		let mut flat_txs: Vec<Transaction> = tx_buckets
