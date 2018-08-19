@@ -84,14 +84,20 @@ impl MessageHandler for Protocol {
 			}
 
 			Type::Transaction => {
-				debug!(LOGGER, "handle_payload: received tx: msg_len: {}", msg.header.msg_len);
+				debug!(
+					LOGGER,
+					"handle_payload: received tx: msg_len: {}", msg.header.msg_len
+				);
 				let tx: core::Transaction = msg.body()?;
 				adapter.transaction_received(tx, false);
 				Ok(None)
 			}
 
 			Type::StemTransaction => {
-				debug!(LOGGER, "handle_payload: received stem tx: msg_len: {}", msg.header.msg_len);
+				debug!(
+					LOGGER,
+					"handle_payload: received stem tx: msg_len: {}", msg.header.msg_len
+				);
 				let tx: core::Transaction = msg.body()?;
 				adapter.transaction_received(tx, true);
 				Ok(None)
@@ -109,7 +115,10 @@ impl MessageHandler for Protocol {
 			}
 
 			Type::Block => {
-				debug!(LOGGER, "handle_payload: received block: msg_len: {}", msg.header.msg_len);
+				debug!(
+					LOGGER,
+					"handle_payload: received block: msg_len: {}", msg.header.msg_len
+				);
 				let b: core::Block = msg.body()?;
 				let bh = b.hash();
 
@@ -147,7 +156,10 @@ impl MessageHandler for Protocol {
 			}
 
 			Type::CompactBlock => {
-				debug!(LOGGER, "handle_payload: received compact block: msg_len: {}", msg.header.msg_len);
+				debug!(
+					LOGGER,
+					"handle_payload: received compact block: msg_len: {}", msg.header.msg_len
+				);
 				let b: core::CompactBlock = msg.body()?;
 				let bh = b.hash();
 
@@ -161,10 +173,9 @@ impl MessageHandler for Protocol {
 				let headers = adapter.locate_headers(loc.hashes);
 
 				// serialize and send all the headers over
-				Ok(Some(msg.respond(
-					Type::Headers,
-					Headers { headers: headers },
-				)))
+				Ok(Some(
+					msg.respond(Type::Headers, Headers { headers: headers }),
+				))
 			}
 
 			// "header first" block propagation - if we have not yet seen this block
@@ -268,7 +279,8 @@ impl MessageHandler for Protocol {
 				);
 
 				let tmp_zip = File::open(tmp)?;
-				let res = self.adapter
+				let res = self
+					.adapter
 					.txhashset_write(sm_arch.hash, tmp_zip, self.addr);
 
 				debug!(
