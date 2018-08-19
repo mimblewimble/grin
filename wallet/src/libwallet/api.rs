@@ -25,6 +25,7 @@ use std::sync::{Arc, Mutex};
 use serde_json as json;
 
 use core::ser;
+use core::core::hash::Hashed;
 use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::internal::{selection, sigcontext, tx, updater};
@@ -321,8 +322,14 @@ where
 			let mut w = self.wallet.lock().unwrap();
 			w.client().clone()
 		};
-		client.post_tx(&TxWrapper { tx_hex: tx_hex }, fluff)?;
-		Ok(())
+		let res = client.post_tx(&TxWrapper { tx_hex: tx_hex }, fluff);
+		if let Err(e) = res {
+			error!(LOGGER, "api: post_tx: failed with error: {}", e);
+			Err(e)
+		} else {
+			debug!(LOGGER, "api: post_tx: successfully posted tx: {}, fluff? {}", slate.tx.hash(), fluff);
+			Ok(())
+		}
 	}
 
 	/// Attempt to restore contents of wallet
@@ -414,6 +421,13 @@ where
 		w.open_with_credentials()?;
 		let res = tx::receive_tx(&mut **w, slate);
 		w.close()?;
-		res
+
+		if let Err(e) = res {
+			error!(LOGGER, "api: receive_tx: failed with error: {}", e);
+			Err(e)
+		} else {
+			debug!(LOGGER, "api: receive_tx: successfully received tx: {}", slate.tx.hash());
+			Ok(())
+		}
 	}
 }
