@@ -735,9 +735,10 @@ where
 					};
 					info!(
 						LOGGER,
-						"Pushing transaction with {} inputs and {} outputs to pool.",
+						"Pushing transaction, inputs: {}, outputs: {}, kernels: {}, to pool.",
 						tx.inputs().len(),
-						tx.outputs().len()
+						tx.outputs().len(),
+						tx.kernels().len(),
 					);
 
 					//  Push to tx pool.

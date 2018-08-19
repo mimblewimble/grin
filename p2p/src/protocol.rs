@@ -84,12 +84,14 @@ impl MessageHandler for Protocol {
 			}
 
 			Type::Transaction => {
+				debug!(LOGGER, "handle_payload: received tx: msg_len: {}", msg.header.msg_len);
 				let tx: core::Transaction = msg.body()?;
 				adapter.transaction_received(tx, false);
 				Ok(None)
 			}
 
 			Type::StemTransaction => {
+				debug!(LOGGER, "handle_payload: received stem tx: msg_len: {}", msg.header.msg_len);
 				let tx: core::Transaction = msg.body()?;
 				adapter.transaction_received(tx, true);
 				Ok(None)
@@ -107,10 +109,9 @@ impl MessageHandler for Protocol {
 			}
 
 			Type::Block => {
+				debug!(LOGGER, "handle_payload: received block: msg_len: {}", msg.header.msg_len);
 				let b: core::Block = msg.body()?;
 				let bh = b.hash();
-
-				trace!(LOGGER, "handle_payload: Block {}", bh);
 
 				adapter.block_received(b, self.addr);
 				Ok(None)
@@ -118,7 +119,6 @@ impl MessageHandler for Protocol {
 
 			Type::GetCompactBlock => {
 				let h: Hash = msg.body()?;
-				debug!(LOGGER, "handle_payload: GetCompactBlock: {}", h);
 
 				if let Some(b) = adapter.get_block(h) {
 					let cb = b.as_compact_block();
@@ -147,9 +147,9 @@ impl MessageHandler for Protocol {
 			}
 
 			Type::CompactBlock => {
+				debug!(LOGGER, "handle_payload: received compact block: msg_len: {}", msg.header.msg_len);
 				let b: core::CompactBlock = msg.body()?;
 				let bh = b.hash();
-				debug!(LOGGER, "handle_payload: CompactBlock: {}", bh);
 
 				adapter.compact_block_received(b, self.addr);
 				Ok(None)

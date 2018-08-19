@@ -129,10 +129,13 @@ where
 	) -> Result<(), PoolError> {
 		debug!(
 			LOGGER,
-			"pool [{}]: add_to_pool: {}, {:?}",
+			"pool [{}]: add_to_pool: {}, {:?}, inputs: {}, outputs: {}, kernels: {}",
 			self.name,
 			entry.tx.hash(),
 			entry.src,
+			entry.tx.inputs().len(),
+			entry.tx.outputs().len(),
+			entry.tx.kernels().len(),
 		);
 
 		// Combine all the txs from the pool with any extra txs provided.
