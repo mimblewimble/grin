@@ -191,7 +191,7 @@ where
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
-	let fee = tx_fee(coins.len(), 2, None);
+	let fee = tx_fee(coins.len(), 2, 1, None);
 	let num_change_outputs = 1;
 	let (mut parts, _) =
 		selection::inputs_and_change(&coins, wallet, amount, fee, num_change_outputs)?;

@@ -15,15 +15,23 @@
 //! Transaction pool implementation.
 //! Used for both the txpool and stempool layers in the pool.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use core::consensus;
 use core::core::hash::Hashed;
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
 use core::core::{Block, CompactBlock, Transaction, TxKernel};
 use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 use util::LOGGER;
+
+// max weight leaving minimum space for a coinbase
+const MAX_MINEABLE_WEIGHT: usize =
+	consensus::MAX_BLOCK_WEIGHT - consensus::BLOCK_OUTPUT_WEIGHT - consensus::BLOCK_KERNEL_WEIGHT;
+
+// longest chain of dependent transactions that can be included in a block
+const MAX_TX_CHAIN: usize = 20;
 
 pub struct Pool<T> {
 	/// Entries in the pool (tx + info + timer) in simple insertion order.
@@ -64,17 +72,41 @@ where
 				}
 			}
 		}
-
 		txs
 	}
 
-	/// Take the first num_to_fetch txs based on insertion order.
-	pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<Transaction> {
-		self.entries
-			.iter()
-			.take(num_to_fetch as usize)
-			.map(|x| x.tx.clone())
-			.collect()
+	/// Take pool transactions, filtering and ordering them in a way that's
+	/// appropriate to put in a mined block. Aggregates chains of dependent
+	/// transactions, orders by fee over weight and ensures to total weight
+	/// doesn't exceed block limits.
+	pub fn prepare_mineable_transactions(&self) -> Vec<Transaction> {
+		let tx_buckets = self.bucket_transactions();
+
+		// flatten buckets using aggregate (with cut-through)
+		let mut flat_txs: Vec<Transaction> = tx_buckets
+			.into_iter()
+			.filter_map(|mut bucket| {
+				bucket.truncate(MAX_TX_CHAIN);
+				transaction::aggregate(bucket, None).ok()
+			})
+			.collect();
+
+		// sort by fees over weight, multiplying by 1000 to keep some precision
+		// don't think we'll ever see a >max_u64/1000 fee transaction
+		flat_txs.sort_unstable_by_key(|tx| tx.fee() * 1000 / tx.tx_weight() as u64);
+
+		// accumulate as long as we're not above the block weight
+		let mut weight = 0;
+		flat_txs.retain(|tx| {
+			weight += tx.tx_weight_as_block() as usize;
+			weight < MAX_MINEABLE_WEIGHT
+		});
+
+		// make sure those txs are all valid together, no Error is expected
+		// when passing None
+		self.blockchain
+			.validate_raw_txs(flat_txs, None)
+			.expect("should never happen")
 	}
 
 	pub fn all_transactions(&self) -> Vec<Transaction> {
@@ -184,6 +216,41 @@ where
 		);
 
 		Ok(())
+	}
+
+	// Group dependent transactions in buckets (vectors), each bucket
+	// is therefore independent from the others. Relies on the entries
+	// Vec having parent transactions first (should always be the case)
+	fn bucket_transactions(&self) -> Vec<Vec<Transaction>> {
+		let mut tx_buckets = vec![];
+		let mut output_commits = HashMap::new();
+
+		for entry in &self.entries {
+			// check the commits index to find parents and their position
+			// picking the last one for bucket (so all parents come first)
+			let mut insert_pos: i32 = -1;
+			for input in entry.tx.inputs() {
+				if let Some(pos) = output_commits.get(&input.commitment()) {
+					if *pos > insert_pos {
+						insert_pos = *pos;
+					}
+				}
+			}
+			if insert_pos == -1 {
+				// no parent, just add to the end in its own bucket
+				insert_pos = tx_buckets.len() as i32;
+				tx_buckets.push(vec![entry.tx.clone()]);
+			} else {
+				// parent found, add to its bucket
+				tx_buckets[insert_pos as usize].push(entry.tx.clone());
+			}
+
+			// update the commits index
+			for out in entry.tx.outputs() {
+				output_commits.insert(out.commitment(), insert_pos);
+			}
+		}
+		tx_buckets
 	}
 
 	// Filter txs in the pool based on the latest block.

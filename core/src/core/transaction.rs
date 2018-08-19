@@ -385,16 +385,28 @@ impl TransactionBody {
 
 	/// Calculate transaction weight
 	pub fn body_weight(&self) -> u32 {
-		TransactionBody::weight(self.inputs.len(), self.outputs.len())
+		TransactionBody::weight(self.inputs.len(), self.outputs.len(), self.kernels.len())
+	}
+
+	/// Calculate weight of transaction using block weighing
+	pub fn body_weight_as_block(&self) -> u32 {
+		TransactionBody::weight_as_block(self.inputs.len(), self.outputs.len(), self.kernels.len())
 	}
 
 	/// Calculate transaction weight from transaction details
-	pub fn weight(input_len: usize, output_len: usize) -> u32 {
-		let mut body_weight = -1 * (input_len as i32) + (4 * output_len as i32) + 1;
+	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> u32 {
+		let mut body_weight = -1 * (input_len as i32) + (4 * output_len as i32) + kernel_len as i32;
 		if body_weight < 1 {
 			body_weight = 1;
 		}
 		body_weight as u32
+	}
+
+	/// Calculate transaction weight using block weighing from transaction details
+	pub fn weight_as_block(input_len: usize, output_len: usize, kernel_len: usize) -> u32 {
+		(input_len * consensus::BLOCK_INPUT_WEIGHT
+			+ output_len * consensus::BLOCK_OUTPUT_WEIGHT
+			+ kernel_len * consensus::BLOCK_KERNEL_WEIGHT) as u32
 	}
 
 	/// Lock height of a body is the max lock height of the kernels.
@@ -427,9 +439,11 @@ impl TransactionBody {
 		// if as_block check the body as if it was a block, with an additional output and
 		// kernel for reward
 		let reserve = if with_reward { 0 } else { 1 };
-		let tx_block_weight = self.inputs.len() * consensus::BLOCK_INPUT_WEIGHT
-			+ (self.outputs.len() + reserve) * consensus::BLOCK_OUTPUT_WEIGHT
-			+ (self.kernels.len() + reserve) * consensus::BLOCK_KERNEL_WEIGHT;
+		let tx_block_weight = TransactionBody::weight_as_block(
+			self.inputs.len(),
+			self.outputs.len() + reserve,
+			self.kernels.len() + reserve,
+		) as usize;
 
 		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
 			return Err(Error::TooHeavy);
@@ -683,9 +697,14 @@ impl Transaction {
 		self.body.body_weight()
 	}
 
+	/// Calculate transaction weight as a block
+	pub fn tx_weight_as_block(&self) -> u32 {
+		self.body.body_weight_as_block()
+	}
+
 	/// Calculate transaction weight from transaction details
-	pub fn weight(input_len: usize, output_len: usize) -> u32 {
-		TransactionBody::weight(input_len, output_len)
+	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> u32 {
+		TransactionBody::weight(input_len, output_len, kernel_len)
 	}
 }
 
@@ -720,9 +739,14 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 /// cut_through. Optionally allows passing a reward output and kernel for
 /// block building.
 pub fn aggregate(
-	transactions: Vec<Transaction>,
+	mut transactions: Vec<Transaction>,
 	reward: Option<(Output, TxKernel)>,
 ) -> Result<Transaction, Error> {
+	// convenience short-circuiting
+	if reward.is_none() && transactions.len() == 1 {
+		return Ok(transactions.pop().unwrap());
+	}
+
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];

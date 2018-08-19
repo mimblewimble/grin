@@ -1,4 +1,3 @@
-
 // Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +17,9 @@
 //! header with its proof-of-work.  Any valid mined blocks are submitted to the
 //! network.
 
+use chrono::prelude::Utc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
-use chrono::prelude::{Utc};
 
 use chain;
 use common::adapters::PoolToChainAdapter;
@@ -32,9 +31,6 @@ use core::{consensus, global};
 use mining::mine_block;
 use pool;
 use util::LOGGER;
-
-// Max number of transactions this miner will assemble in a block
-const MAX_TX: u32 = 5000;
 
 pub struct Miner {
 	config: StratumServerConfig,
@@ -153,7 +149,6 @@ impl Miner {
 				&self.chain,
 				&self.tx_pool,
 				key_id.clone(),
-				MAX_TX.clone(),
 				wallet_listener_url.clone(),
 			);
 

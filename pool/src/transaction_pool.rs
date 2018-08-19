@@ -174,7 +174,7 @@ where
 
 	/// Returns a vector of transactions from the txpool so we can build a
 	/// block from them.
-	pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<Transaction> {
-		self.txpool.prepare_mineable_transactions(num_to_fetch)
+	pub fn prepare_mineable_transactions(&self) -> Vec<Transaction> {
+		self.txpool.prepare_mineable_transactions()
 	}
 }
