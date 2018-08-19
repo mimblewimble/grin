@@ -148,7 +148,8 @@ impl OutputHandler {
 			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
 			.map(|output| {
 				OutputPrintable::from_output(output, w(&self.chain), Some(&header), include_proof)
-			}).collect();
+			})
+			.collect();
 
 		Ok(BlockOutputs {
 			header: BlockHeaderInfo::from_header(&header),
@@ -725,19 +726,22 @@ where
 				.and_then(move |wrapper: TxWrapper| {
 					util::from_hex(wrapper.tx_hex)
 						.map_err(|_| ErrorKind::RequestError("Bad request".to_owned()).into())
-				}).and_then(move |tx_bin| {
+				})
+				.and_then(move |tx_bin| {
 					ser::deserialize(&mut &tx_bin[..])
 						.map_err(|_| ErrorKind::RequestError("Bad request".to_owned()).into())
-				}).and_then(move |tx: Transaction| {
+				})
+				.and_then(move |tx: Transaction| {
 					let source = pool::TxSource {
 						debug_name: "push-api".to_string(),
 						identifier: "?.?.?.?".to_string(),
 					};
 					info!(
 						LOGGER,
-						"Pushing transaction with {} inputs and {} outputs to pool.",
+						"Pushing transaction, inputs: {}, outputs: {}, kernels: {}, to pool.",
 						tx.inputs().len(),
-						tx.outputs().len()
+						tx.outputs().len(),
+						tx.kernels().len(),
 					);
 
 					//  Push to tx pool.
