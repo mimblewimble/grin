@@ -153,6 +153,7 @@ impl Slate {
 		K: Keychain,
 	{
 		self.check_fees()?;
+
 		self.verify_part_sigs(keychain.secp())?;
 		let sig_part = aggsig::calculate_partial_sig(
 			keychain.secp(),

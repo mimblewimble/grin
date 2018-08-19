@@ -78,14 +78,16 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			identifier: "?.?.?.?".to_string(),
 		};
 
+		let h = tx.hash();
+
 		debug!(
 			LOGGER,
-			"Received tx {} from {:?}, going to process.",
-			tx.hash(),
-			source,
+			"Received tx {}, inputs: {}, outputs: {}, kernels: {}, going to process.",
+			h,
+			tx.inputs().len(),
+			tx.outputs().len(),
+			tx.kernels().len(),
 		);
-
-		let h = tx.hash();
 
 		let res = {
 			let mut tx_pool = self.tx_pool.write().unwrap();
@@ -100,10 +102,13 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
 		debug!(
 			LOGGER,
-			"Received block {} at {} from {}, going to process.",
+			"Received block {} at {} from {}, inputs: {}, outputs: {}, kernels: {}, going to process.",
 			b.hash(),
 			b.header.height,
 			addr,
+			b.inputs().len(),
+			b.outputs().len(),
+			b.kernels().len(),
 		);
 		self.process_block(b, addr)
 	}
@@ -112,10 +117,13 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		let bhash = cb.hash();
 		debug!(
 			LOGGER,
-			"Received compact_block {} at {} from {}, going to process.",
+			"Received compact_block {} at {} from {}, outputs: {}, kernels: {}, kern_ids: {}, going to process.",
 			bhash,
 			cb.header.height,
 			addr,
+			cb.out_full.len(),
+			cb.kern_full.len(),
+			cb.kern_ids.len(),
 		);
 
 		if cb.kern_ids.is_empty() {
