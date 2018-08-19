@@ -220,7 +220,7 @@ where
 
 			max_child_index = if max_child_index >= output.n_child.unwrap() {
 				max_child_index
-			}else{
+			} else {
 				output.n_child.unwrap()
 			};
 		} else {
@@ -232,9 +232,9 @@ where
 		}
 	}
 
-	if max_child_index>0 {
+	if max_child_index > 0 {
 		let details = WalletDetails {
-			last_child_index: max_child_index+1,
+			last_child_index: max_child_index + 1,
 			last_confirmed_height: current_chain_height,
 		};
 		batch.save_details(root_key_id.clone(), details)?;
