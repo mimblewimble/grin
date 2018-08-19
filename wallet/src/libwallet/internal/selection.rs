@@ -254,7 +254,7 @@ where
 	// TODO - Does this not potentially reveal the senders private key?
 	//
 	// First attempt to spend without change
-	let mut fee = tx_fee(coins.len(), 1, None);
+	let mut fee = tx_fee(coins.len(), 1, 1, None);
 	let mut total: u64 = coins.iter().map(|c| c.value).sum();
 	let mut amount_with_fee = amount + fee;
 
@@ -277,7 +277,7 @@ where
 
 	// We need to add a change address or amount with fee is more than total
 	if total != amount_with_fee {
-		fee = tx_fee(coins.len(), num_outputs, None);
+		fee = tx_fee(coins.len(), num_outputs, 1, None);
 		amount_with_fee = amount + fee;
 
 		// Here check if we have enough outputs for the amount including fee otherwise
@@ -300,7 +300,7 @@ where
 				max_outputs,
 				selection_strategy_is_use_all,
 			);
-			fee = tx_fee(coins.len(), num_outputs, None);
+			fee = tx_fee(coins.len(), num_outputs, 1, None);
 			total = coins.iter().map(|c| c.value).sum();
 			amount_with_fee = amount + fee;
 		}
