@@ -201,7 +201,9 @@ where
 
 	// Now save what we have
 	let root_key_id = wallet.keychain().root_key_id();
+	let current_chain_height = wallet.client().get_chain_height()?;
 	let mut batch = wallet.batch()?;
+	let mut max_child_index = 0;
 	for output in result_vec {
 		if output.key_id.is_some() && output.n_child.is_some() {
 			let _ = batch.save(OutputData {
@@ -215,6 +217,12 @@ where
 				is_coinbase: output.is_coinbase,
 				tx_log_entry: None,
 			});
+
+			max_child_index = if max_child_index >= output.n_child.unwrap() {
+				max_child_index
+			} else {
+				output.n_child.unwrap()
+			};
 		} else {
 			warn!(
 				LOGGER,
@@ -223,6 +231,15 @@ where
 			);
 		}
 	}
+
+	if max_child_index > 0 {
+		let details = WalletDetails {
+			last_child_index: max_child_index + 1,
+			last_confirmed_height: current_chain_height,
+		};
+		batch.save_details(root_key_id.clone(), details)?;
+	}
+
 	batch.commit()?;
 	Ok(())
 }
