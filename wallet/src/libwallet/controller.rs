@@ -398,7 +398,7 @@ where
 				Err(e) => {
 					error!(LOGGER, "receive_tx: failed with error: {}", e);
 					err(e)
-				},
+				}
 			}),
 		)
 	}

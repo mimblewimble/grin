@@ -18,8 +18,8 @@
 use chrono::prelude::{DateTime, Utc};
 
 use core::consensus;
-use core::core::hash::Hash;
 use core::core::block::BlockHeader;
+use core::core::hash::Hash;
 use core::core::transaction::{self, Transaction};
 
 /// Dandelion relay timer

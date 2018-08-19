@@ -140,7 +140,9 @@ where
 		if candidate_txs.is_empty() {
 			return Ok(vec![]);
 		}
-		let valid_txs = self.blockchain.validate_raw_txs(candidate_txs, extra_tx, block_hash)?;
+		let valid_txs = self
+			.blockchain
+			.validate_raw_txs(candidate_txs, extra_tx, block_hash)?;
 
 		// Update state on all entries included in final vec of valid txs.
 		for x in &mut entries.iter_mut() {
@@ -189,7 +191,8 @@ where
 
 		// Validate aggregated tx against a known chain state (via txhashset
 		// extension).
-		self.blockchain.validate_raw_txs(vec![], Some(agg_tx), block_hash)?;
+		self.blockchain
+			.validate_raw_txs(vec![], Some(agg_tx), block_hash)?;
 
 		// If we get here successfully then we can safely add the entry to the pool.
 		self.entries.push(entry);
@@ -211,7 +214,9 @@ where
 
 		// Go through the candidate txs and keep everything that validates incrementally
 		// against a known chain state, accounting for the "extra tx" as necessary.
-		let valid_txs = self.blockchain.validate_raw_txs(candidate_txs, extra_tx, block_hash)?;
+		let valid_txs = self
+			.blockchain
+			.validate_raw_txs(candidate_txs, extra_tx, block_hash)?;
 		self.entries.retain(|x| valid_txs.contains(&x.tx));
 
 		debug!(

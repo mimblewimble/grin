@@ -741,7 +741,10 @@ impl PoolToChainAdapter {
 impl pool::BlockChain for PoolToChainAdapter {
 	fn chain_head(&self) -> Result<BlockHeader, pool::PoolError> {
 		wo(&self.chain).head_header().map_err(|e| {
-			pool::PoolError::Other(format!("Chain adapter failed to retrieve chain head: {:?}", e))
+			pool::PoolError::Other(format!(
+				"Chain adapter failed to retrieve chain head: {:?}",
+				e
+			))
 		})
 	}
 
@@ -751,9 +754,11 @@ impl pool::BlockChain for PoolToChainAdapter {
 		pre_tx: Option<Transaction>,
 		block_hash: &Hash,
 	) -> Result<(Vec<Transaction>), pool::PoolError> {
-		wo(&self.chain).validate_raw_txs(txs, pre_tx, block_hash).map_err(|e| {
-			pool::PoolError::Other(format!("Chain adapter failed to validate_raw_txs: {:?}", e))
-		})
+		wo(&self.chain)
+			.validate_raw_txs(txs, pre_tx, block_hash)
+			.map_err(|e| {
+				pool::PoolError::Other(format!("Chain adapter failed to validate_raw_txs: {:?}", e))
+			})
 	}
 
 	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), pool::PoolError> {

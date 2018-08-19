@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use chrono::prelude::Utc;
 use rand::{self, Rng};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
-use chrono::prelude::{Utc};
 
 use core::core::hash::Hashed;
 use core::core::transaction;

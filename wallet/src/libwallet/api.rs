@@ -24,8 +24,8 @@ use std::sync::{Arc, Mutex};
 
 use serde_json as json;
 
-use core::ser;
 use core::core::hash::Hashed;
+use core::ser;
 use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::internal::{selection, sigcontext, tx, updater};
@@ -327,7 +327,12 @@ where
 			error!(LOGGER, "api: post_tx: failed with error: {}", e);
 			Err(e)
 		} else {
-			debug!(LOGGER, "api: post_tx: successfully posted tx: {}, fluff? {}", slate.tx.hash(), fluff);
+			debug!(
+				LOGGER,
+				"api: post_tx: successfully posted tx: {}, fluff? {}",
+				slate.tx.hash(),
+				fluff
+			);
 			Ok(())
 		}
 	}
@@ -426,7 +431,11 @@ where
 			error!(LOGGER, "api: receive_tx: failed with error: {}", e);
 			Err(e)
 		} else {
-			debug!(LOGGER, "api: receive_tx: successfully received tx: {}", slate.tx.hash());
+			debug!(
+				LOGGER,
+				"api: receive_tx: successfully received tx: {}",
+				slate.tx.hash()
+			);
 			Ok(())
 		}
 	}
