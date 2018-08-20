@@ -179,6 +179,12 @@ where
 
 		// Combine all the txs from the pool with any extra txs provided.
 		let mut txs = self.all_transactions();
+
+		// Quick check to see if we have seen this tx before.
+		if txs.contains(&entry.tx) {
+			return Err(PoolError::DuplicateTx);
+		}
+
 		txs.extend(extra_txs);
 
 		let agg_tx = if txs.is_empty() {
