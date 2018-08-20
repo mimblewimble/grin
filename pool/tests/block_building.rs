@@ -31,6 +31,7 @@ use core::core::{Block, BlockHeader};
 
 use chain::txhashset;
 use chain::types::Tip;
+use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 
 use keychain::{ExtKeychain, Keychain};
@@ -52,12 +53,23 @@ fn test_transaction_pool_block_building() {
 	let add_block = |height, txs| {
 		let key_id = keychain.derive_key_id(height as u32).unwrap();
 		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
-		let block = Block::new(&BlockHeader::default(), txs, Difficulty::one(), reward).unwrap();
+		let mut block = Block::new(&BlockHeader::default(), txs, Difficulty::one(), reward).unwrap();
 
 		let mut txhashset = chain.txhashset.write().unwrap();
 		let mut batch = chain.store.batch().unwrap();
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
-			extension.apply_block(&block)
+			extension.apply_block(&block)?;
+
+			// Now set the roots and sizes as necessary on the block header.
+			let roots = extension.roots();
+			block.header.output_root = roots.output_root;
+			block.header.range_proof_root = roots.rproof_root;
+			block.header.kernel_root = roots.kernel_root;
+			let sizes = extension.sizes();
+			block.header.output_mmr_size = sizes.0;
+			block.header.kernel_mmr_size = sizes.2;
+
+			Ok(())
 		}).unwrap();
 
 		let tip = Tip::from_block(&block.header);
@@ -91,21 +103,21 @@ fn test_transaction_pool_block_building() {
 
 		// Add the three root txs to the pool.
 		write_pool
-			.add_to_pool(test_source(), root_tx_1, false)
+			.add_to_pool(test_source(), root_tx_1, false, &header.hash())
 			.unwrap();
 		write_pool
-			.add_to_pool(test_source(), root_tx_2, false)
+			.add_to_pool(test_source(), root_tx_2, false, &header.hash())
 			.unwrap();
 		write_pool
-			.add_to_pool(test_source(), root_tx_3, false)
+			.add_to_pool(test_source(), root_tx_3, false, &header.hash())
 			.unwrap();
 
 		// Now add the two child txs to the pool.
 		write_pool
-			.add_to_pool(test_source(), child_tx_1.clone(), false)
+			.add_to_pool(test_source(), child_tx_1.clone(), false, &header.hash())
 			.unwrap();
 		write_pool
-			.add_to_pool(test_source(), child_tx_2.clone(), false)
+			.add_to_pool(test_source(), child_tx_2.clone(), false, &header.hash())
 			.unwrap();
 
 		assert_eq!(write_pool.total_size(), 5);
@@ -118,7 +130,7 @@ fn test_transaction_pool_block_building() {
 	// children should have been aggregated into parents
 	assert_eq!(txs.len(), 3);
 
-	let block = {
+	let mut block = {
 		let key_id = keychain.derive_key_id(2).unwrap();
 		let fees = txs.iter().map(|tx| tx.fee()).sum();
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
@@ -130,8 +142,22 @@ fn test_transaction_pool_block_building() {
 		let mut txhashset = chain.txhashset.write().unwrap();
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			extension.apply_block(&block)?;
+
+			// Now set the roots and sizes as necessary on the block header.
+			let roots = extension.roots();
+			block.header.output_root = roots.output_root;
+			block.header.range_proof_root = roots.rproof_root;
+			block.header.kernel_root = roots.kernel_root;
+			let sizes = extension.sizes();
+			block.header.output_mmr_size = sizes.0;
+			block.header.kernel_mmr_size = sizes.2;
+
 			Ok(())
 		}).unwrap();
+
+		let tip = Tip::from_block(&block.header);
+		batch.save_block_header(&block.header).unwrap();
+		batch.save_head(&tip).unwrap();
 		batch.commit().unwrap();
 	}
 
