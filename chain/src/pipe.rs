@@ -370,10 +370,7 @@ fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Re
 }
 
 /// Officially adds the block to our chain.
-fn add_block(
-	b: &Block,
-	batch: &mut store::Batch,
-) -> Result<(), Error> {
+fn add_block(b: &Block, batch: &mut store::Batch) -> Result<(), Error> {
 	batch
 		.save_block(b)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save block".to_owned()))?;

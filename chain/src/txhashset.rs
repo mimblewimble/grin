@@ -234,8 +234,12 @@ impl TxHashSet {
 
 		let batch = self.commit_index.batch()?;
 
-		let rewind_rm_pos =
-			input_pos_to_rewind(self.commit_index.clone(), &horizon_header, &head_header, &batch)?;
+		let rewind_rm_pos = input_pos_to_rewind(
+			self.commit_index.clone(),
+			&horizon_header,
+			&head_header,
+			&batch,
+		)?;
 
 		{
 			let clean_output_index = |commit: &[u8]| {
@@ -756,8 +760,12 @@ impl<'a> Extension<'a> {
 		// undone during rewind).
 		// Rewound output pos will be removed from the MMR.
 		// Rewound input (spent) pos will be added back to the MMR.
-		let rewind_rm_pos =
-			input_pos_to_rewind(self.commit_index.clone(), block_header, &head_header, &self.batch)?;
+		let rewind_rm_pos = input_pos_to_rewind(
+			self.commit_index.clone(),
+			block_header,
+			&head_header,
+			&self.batch,
+		)?;
 
 		self.rewind_to_pos(
 			block_header.output_mmr_size,
@@ -1204,7 +1212,12 @@ fn input_pos_to_rewind(
 	let mut current = head_header.hash();
 
 	if head_header.height < block_header.height {
-		debug!(LOGGER, "input_pos_to_rewind: {} < {}, nothing to rewind", head_header.height, block_header.height);
+		debug!(
+			LOGGER,
+			"input_pos_to_rewind: {} < {}, nothing to rewind",
+			head_header.height,
+			block_header.height
+		);
 		return Ok(bitmap);
 	}
 
