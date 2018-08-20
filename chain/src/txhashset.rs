@@ -741,10 +741,7 @@ impl<'a> Extension<'a> {
 
 	/// Rewinds the MMRs to the provided block, rewinding to the last output pos
 	/// and last kernel pos of that block.
-	pub fn rewind(
-		&mut self,
-		block_header: &BlockHeader,
-	) -> Result<(), Error> {
+	pub fn rewind(&mut self, block_header: &BlockHeader) -> Result<(), Error> {
 		trace!(
 			LOGGER,
 			"Rewind to header {} @ {}",
@@ -989,8 +986,8 @@ impl<'a> Extension<'a> {
 	{
 		let now = Instant::now();
 
-		let mut commits:Vec<Commitment> = vec![];
-		let mut proofs:Vec<RangeProof> = vec![];
+		let mut commits: Vec<Commitment> = vec![];
+		let mut proofs: Vec<RangeProof> = vec![];
 
 		let mut proof_count = 0;
 		let total_rproofs = pmmr::n_leaves(self.output_pmmr.unpruned_size());
@@ -1132,7 +1129,8 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 					.file_name()
 					.and_then(|n| n.to_str().map(|s| String::from(s)))
 			})
-		}).collect();
+		})
+		.collect();
 
 	let dir_difference: Vec<String> = subdirectories_found
 		.difference(&subdirectories_expected)
@@ -1161,7 +1159,8 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 			} else {
 				String::from(s)
 			}
-		}).collect();
+		})
+		.collect();
 
 	let subdirectories = fs::read_dir(txhashset_path)?;
 	for subdirectory in subdirectories {
@@ -1174,7 +1173,8 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 						.file_name()
 						.and_then(|n| n.to_str().map(|s| String::from(s)))
 				})
-			}).collect();
+			})
+			.collect();
 		let difference: Vec<String> = pmmr_files_found
 			.difference(&pmmr_files_expected)
 			.cloned()
