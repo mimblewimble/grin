@@ -30,6 +30,13 @@ pub fn to_hex(bytes: Vec<u8>) -> String {
 
 /// Decode a hex string into bytes.
 pub fn from_hex(hex_str: String) -> Result<Vec<u8>, num::ParseIntError> {
+	if hex_str.len() % 2 == 1 {
+		// TODO: other way to instantiate a ParseIntError?
+		let err = ("QQQ").parse::<u64>();
+		if let Err(e) = err {
+			return Err(e);
+		}
+	}
 	let hex_trim = if &hex_str[..2] == "0x" {
 		hex_str[2..].to_owned()
 	} else {

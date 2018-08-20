@@ -50,6 +50,31 @@ fn w<T>(weak: &Weak<T>) -> Arc<T> {
 	weak.upgrade().unwrap()
 }
 
+/// Retrieves an output from the chain given a commit id (a tiny bit iteratively)
+fn get_output(chain: &Weak<chain::Chain>, id: &str) -> Result<(Output, OutputIdentifier), Error> {
+	let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
+		"Not a valid commitment: {}",
+		id
+	)))?;
+	let commit = Commitment::from_vec(c);
+
+	// We need the features here to be able to generate the necessary hash
+	// to compare against the hash in the output MMR.
+	// For now we can just try both (but this probably needs to be part of the api
+	// params)
+	let outputs = [
+		OutputIdentifier::new(OutputFeatures::DEFAULT_OUTPUT, &commit),
+		OutputIdentifier::new(OutputFeatures::COINBASE_OUTPUT, &commit),
+	];
+
+	for x in outputs.iter() {
+		if let Ok(_) = w(chain).is_unspent(&x) {
+			return Ok((Output::new(&commit), x.clone()));
+		}
+	}
+	Err(ErrorKind::NotFound)?
+}
+
 // RESTful index of available api endpoints
 // GET /v1/
 struct IndexHandler {
@@ -74,27 +99,8 @@ struct OutputHandler {
 
 impl OutputHandler {
 	fn get_output(&self, id: &str) -> Result<Output, Error> {
-		let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
-			"Not a valid commitment: {}",
-			id
-		)))?;
-		let commit = Commitment::from_vec(c);
-
-		// We need the features here to be able to generate the necessary hash
-		// to compare against the hash in the output MMR.
-		// For now we can just try both (but this probably needs to be part of the api
-		// params)
-		let outputs = [
-			OutputIdentifier::new(OutputFeatures::DEFAULT_OUTPUT, &commit),
-			OutputIdentifier::new(OutputFeatures::COINBASE_OUTPUT, &commit),
-		];
-
-		for x in outputs.iter() {
-			if let Ok(_) = w(&self.chain).is_unspent(&x) {
-				return Ok(Output::new(&commit));
-			}
-		}
-		Err(ErrorKind::NotFound)?
+		let res = get_output(&self.chain, id)?;
+		Ok(res.0)
 	}
 
 	fn outputs_by_ids(&self, req: &Request<Body>) -> Result<Vec<Output>, Error> {
@@ -551,9 +557,10 @@ impl Handler for ChainCompactHandler {
 	}
 }
 
-/// Gets block headers given either a hash or height.
+/// Gets block headers given either a hash or height or an output commit.
 /// GET /v1/headers/<hash>
 /// GET /v1/headers/<height>
+/// GET /v1/headers/<output commit>
 ///
 pub struct HeaderHandler {
 	pub chain: Weak<chain::Chain>,
@@ -561,6 +568,10 @@ pub struct HeaderHandler {
 
 impl HeaderHandler {
 	fn get_header(&self, input: String) -> Result<BlockHeaderPrintable, Error> {
+		// will fail quick if the provided isn't a commitment
+		if let Ok(h) = self.get_header_for_output(input.clone()) {
+			return Ok(h);
+		}
 		if let Ok(height) = input.parse() {
 			match w(&self.chain).get_header_by_height(height) {
 				Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
@@ -576,11 +587,20 @@ impl HeaderHandler {
 			.context(ErrorKind::NotFound)?;
 		Ok(BlockHeaderPrintable::from_header(&header))
 	}
+
+	fn get_header_for_output(&self, commit_id: String) -> Result<BlockHeaderPrintable, Error> {
+		let oid = get_output(&self.chain, &commit_id)?.1;
+		match w(&self.chain).get_header_for_output(&oid) {
+			Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
+			Err(_) => return Err(ErrorKind::NotFound)?,
+		}
+	}
 }
 
-/// Gets block details given either a hash or height.
+/// Gets block details given either a hash or an unspent commit
 /// GET /v1/blocks/<hash>
 /// GET /v1/blocks/<height>
+/// GET /v1/blocks/<commit>
 ///
 /// Optionally return results as "compact blocks" by passing "?compact" query
 /// param GET /v1/blocks/<hash>?compact
