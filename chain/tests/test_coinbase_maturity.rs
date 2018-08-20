@@ -26,7 +26,7 @@ use std::fs;
 use std::sync::Arc;
 
 use chain::types::NoopAdapter;
-use chain::{Error, ErrorKind};
+use chain::ErrorKind;
 use core::core::target::Difficulty;
 use core::core::{transaction, OutputIdentifier};
 use core::global::{self, ChainTypes};
@@ -86,16 +86,9 @@ fn test_coinbase_maturity() {
 			.contains(transaction::OutputFeatures::COINBASE_OUTPUT)
 	);
 
-	let out_id = OutputIdentifier::from_output(&coinbase_output);
-
-	// we will need this later when we want to spend the coinbase output
-	let block_hash = block.hash();
-
 	chain
 		.process_block(block.clone(), chain::Options::MINE)
 		.unwrap();
-
-	let merkle_proof = chain.get_merkle_proof(&out_id, &block.header).unwrap();
 
 	let prev = chain.head_header().unwrap();
 

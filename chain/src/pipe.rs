@@ -490,7 +490,6 @@ pub fn rewind_and_apply_fork(
 		}
 	}
 
-	let head_header = store.head_header()?;
 	let forked_header = store.get_block_header(&current)?;
 
 	trace!(
@@ -503,7 +502,7 @@ pub fn rewind_and_apply_fork(
 	);
 
 	// rewind the sum trees up to the forking block
-	ext.rewind(&forked_header, &head_header)?;
+	ext.rewind(&forked_header)?;
 
 	trace!(
 		LOGGER,

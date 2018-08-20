@@ -410,13 +410,12 @@ impl Chain {
 		pre_tx: Option<Transaction>,
 		block_hash: &Hash,
 	) -> Result<Vec<Transaction>, Error> {
-		// Get headers so we can rewind chain state correctly.
+		// Get header so we can rewind chain state correctly.
 		let header = self.store.get_block_header(block_hash)?;
-		let head_header = self.store.head_header()?;
 
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.rewind(&header, &head_header)?;
+			extension.rewind(&header)?;
 			let valid_txs = extension.validate_raw_txs(txs, pre_tx)?;
 			Ok(valid_txs)
 		})
@@ -459,7 +458,7 @@ impl Chain {
 		// latest block header. Rewind the extension to the specified header to
 		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.rewind(&header, &header)?;
+			extension.rewind(&header)?;
 			extension.validate(&header, skip_rproofs, &NoStatus)?;
 			Ok(())
 		})
@@ -525,11 +524,10 @@ impl Chain {
 		// The fast sync client does *not* have the necessary data
 		// to rewind after receiving the txhashset zip.
 		let header = self.store.get_block_header(&h)?;
-		let head_header = self.store.head_header()?;
 		{
 			let mut txhashset = self.txhashset.write().unwrap();
 			txhashset::extending_readonly(&mut txhashset, |extension| {
-				extension.rewind(&header, &head_header)?;
+				extension.rewind(&header)?;
 				extension.snapshot(&header)?;
 				Ok(())
 			})?;
@@ -573,7 +571,7 @@ impl Chain {
 			"chain: txhashset_write: rewinding and validating (read-only)"
 		);
 		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.rewind(&header, &header)?;
+			extension.rewind(&header)?;
 			extension.validate(&header, false, status)?;
 
 			// Now validate kernel sums at each historical header height
@@ -590,7 +588,7 @@ impl Chain {
 		);
 		let mut batch = self.store.batch()?;
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
-			extension.rewind(&header, &header)?;
+			extension.rewind(&header)?;
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
@@ -856,7 +854,6 @@ fn setup_head(
 	match head_res {
 		Ok(h) => {
 			head = h;
-			let head_header = store.head_header()?;
 			loop {
 				// Use current chain tip if we have one.
 				// Note: We are rewinding and validating against a writeable extension.
@@ -865,7 +862,7 @@ fn setup_head(
 				let header = store.get_block_header(&head.last_block_h)?;
 
 				let res = txhashset::extending(txhashset, &mut batch, |extension| {
-					extension.rewind(&header, &head_header)?;
+					extension.rewind(&header)?;
 					extension.validate_roots(&header)?;
 					debug!(
 						LOGGER,

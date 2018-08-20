@@ -83,11 +83,10 @@ impl BlockChain for ChainAdapter {
 			.store
 			.get_block_header(&block_hash)
 			.map_err(|_| PoolError::Other(format!("failed to get header")))?;
-		let head_header = self.chain_head()?;
 
 		let mut txhashset = self.txhashset.write().unwrap();
 		let res = txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.rewind(&header, &head_header)?;
+			extension.rewind(&header)?;
 			let valid_txs = extension.validate_raw_txs(txs, pre_tx)?;
 			Ok(valid_txs)
 		}).map_err(|e| PoolError::Other(format!("Error: test chain adapter: {:?}", e)))?;

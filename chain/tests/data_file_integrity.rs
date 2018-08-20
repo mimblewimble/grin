@@ -96,8 +96,6 @@ fn data_files() {
 				.process_block(b.clone(), chain::Options::MINE)
 				.unwrap();
 
-			let head = Tip::from_block(&b.header);
-
 			chain.validate(false).unwrap();
 		}
 	}

@@ -712,8 +712,7 @@ impl<'a> Extension<'a> {
 		);
 
 		// rewind to the specified block for a consistent view
-		let head_header = self.commit_index.head_header()?;
-		self.rewind(block_header, &head_header)?;
+		self.rewind(block_header)?;
 
 		// then calculate the Merkle Proof based on the known pos
 		let pos = self.batch.get_output_pos(&output.commit)?;
@@ -745,7 +744,6 @@ impl<'a> Extension<'a> {
 	pub fn rewind(
 		&mut self,
 		block_header: &BlockHeader,
-		head_header: &BlockHeader,
 	) -> Result<(), Error> {
 		trace!(
 			LOGGER,
@@ -754,6 +752,8 @@ impl<'a> Extension<'a> {
 			block_header.hash(),
 		);
 
+		let head_header = self.commit_index.head_header()?;
+
 		// We need to build bitmaps of added and removed output positions
 		// so we can correctly rewind all operations applied to the output MMR
 		// after the position we are rewinding to (these operations will be
@@ -761,7 +761,7 @@ impl<'a> Extension<'a> {
 		// Rewound output pos will be removed from the MMR.
 		// Rewound input (spent) pos will be added back to the MMR.
 		let rewind_rm_pos =
-			input_pos_to_rewind(self.commit_index.clone(), block_header, head_header)?;
+			input_pos_to_rewind(self.commit_index.clone(), block_header, &head_header)?;
 		if !rewind_rm_pos.0 {
 			self.batch
 				.save_block_input_bitmap(&head_header.hash(), &rewind_rm_pos.1)?;
