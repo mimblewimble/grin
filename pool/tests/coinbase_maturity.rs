@@ -20,18 +20,19 @@ extern crate grin_pool as pool;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-extern crate rand;
 extern crate chrono;
+extern crate rand;
 
 pub mod common;
 
 use std::sync::{Arc, RwLock};
 
 use common::{test_source, test_transaction};
-use core::core::Transaction;
+use core::core::hash::Hash;
+use core::core::{BlockHeader, Transaction};
 use keychain::{ExtKeychain, Keychain};
-use pool::TransactionPool;
 use pool::types::{BlockChain, NoopAdapter, PoolConfig, PoolError};
+use pool::TransactionPool;
 
 pub fn test_setup(
 	chain: &Arc<CoinbaseMaturityErrorChainAdapter>,
@@ -56,14 +57,17 @@ impl CoinbaseMaturityErrorChainAdapter {
 }
 
 impl BlockChain for CoinbaseMaturityErrorChainAdapter {
+	fn chain_head(&self) -> Result<BlockHeader, PoolError> {
+		unimplemented!();
+	}
+
 	fn validate_raw_txs(
 		&self,
 		_txs: Vec<Transaction>,
 		_pre_tx: Option<Transaction>,
+		_block_hash: &Hash,
 	) -> Result<Vec<Transaction>, PoolError> {
-		Err(PoolError::Other(
-			"not implemented, not a real chain adapter...".to_string(),
-		))
+		unimplemented!();
 	}
 
 	// Returns an ImmatureCoinbase for every tx we pass in.
@@ -90,7 +94,7 @@ fn test_coinbase_maturity() {
 	{
 		let mut write_pool = pool.write().unwrap();
 		let tx = test_transaction(&keychain, vec![50], vec![49]);
-		match write_pool.add_to_pool(test_source(), tx.clone(), true) {
+		match write_pool.add_to_pool(test_source(), tx.clone(), true, &Hash::default()) {
 			Err(PoolError::ImmatureCoinbase) => {}
 			_ => panic!("Expected an immature coinbase error here."),
 		}

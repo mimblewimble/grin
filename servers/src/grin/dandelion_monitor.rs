@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use chrono::prelude::Utc;
 use rand::{self, Rng};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
-use chrono::prelude::{Utc};
 
 use core::core::hash::Hashed;
 use core::core::transaction;
@@ -90,11 +90,14 @@ where
 {
 	let mut tx_pool = tx_pool.write().unwrap();
 
+	let header = tx_pool.blockchain.chain_head()?;
+
 	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
 	let stem_txs = tx_pool.stempool.select_valid_transactions(
 		PoolEntryState::ToStem,
 		PoolEntryState::Stemmed,
 		txpool_tx,
+		&header.hash(),
 	)?;
 
 	if stem_txs.len() > 0 {
@@ -118,7 +121,7 @@ where
 				identifier: "?.?.?.?".to_string(),
 			};
 
-			tx_pool.add_to_pool(src, agg_tx, false)?;
+			tx_pool.add_to_pool(src, agg_tx, false, &header.hash())?;
 		}
 	}
 	Ok(())
@@ -130,11 +133,14 @@ where
 {
 	let mut tx_pool = tx_pool.write().unwrap();
 
+	let header = tx_pool.blockchain.chain_head()?;
+
 	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
 	let stem_txs = tx_pool.stempool.select_valid_transactions(
 		PoolEntryState::ToFluff,
 		PoolEntryState::Fluffed,
 		txpool_tx,
+		&header.hash(),
 	)?;
 
 	if stem_txs.len() > 0 {
@@ -151,7 +157,7 @@ where
 			identifier: "?.?.?.?".to_string(),
 		};
 
-		tx_pool.add_to_pool(src, agg_tx, false)?;
+		tx_pool.add_to_pool(src, agg_tx, false, &header.hash())?;
 	}
 	Ok(())
 }
@@ -231,12 +237,14 @@ where
 
 		{
 			let mut tx_pool = tx_pool.write().unwrap();
+			let header = tx_pool.blockchain.chain_head()?;
+
 			for entry in expired_entries {
 				let src = TxSource {
 					debug_name: "embargo_expired".to_string(),
 					identifier: "?.?.?.?".to_string(),
 				};
-				match tx_pool.add_to_pool(src, entry.tx, false) {
+				match tx_pool.add_to_pool(src, entry.tx, false, &header.hash()) {
 					Ok(_) => debug!(
 						LOGGER,
 						"dand_mon: embargo expired, fluffed tx successfully."

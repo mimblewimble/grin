@@ -395,7 +395,10 @@ where
 		Box::new(
 			parse_body(req).and_then(move |mut slate| match api.receive_tx(&mut slate) {
 				Ok(_) => ok(slate.clone()),
-				Err(e) => err(e),
+				Err(e) => {
+					error!(LOGGER, "receive_tx: failed with error: {}", e);
+					err(e)
+				}
 			}),
 		)
 	}

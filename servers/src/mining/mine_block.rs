@@ -167,6 +167,7 @@ fn build_block(
 		b.header.clone().total_difficulty.to_num(),
 	);
 
+	// Now set txhashset roots and sizes on the header of the block being built.
 	let roots_result = chain.set_txhashset_roots(&mut b, false);
 
 	match roots_result {

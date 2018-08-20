@@ -27,12 +27,13 @@ pub mod common;
 
 use std::sync::{Arc, RwLock};
 
+use chain::txhashset;
 use chain::types::Tip;
-use chain::{txhashset, ChainStore};
 use common::{
 	clean_output_dir, test_setup, test_source, test_transaction,
 	test_transaction_spending_coinbase, ChainAdapter,
 };
+use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::core::{transaction, Block, BlockHeader};
 use keychain::{ExtKeychain, Keychain};
@@ -53,12 +54,24 @@ fn test_the_transaction_pool() {
 		let height = 1;
 		let key_id = keychain.derive_key_id(height as u32).unwrap();
 		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
-		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
+		let mut block =
+			Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
 
 		let mut txhashset = chain.txhashset.write().unwrap();
 		let mut batch = chain.store.batch().unwrap();
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
-			extension.apply_block(&block)
+			extension.apply_block(&block)?;
+
+			// Now set the roots and sizes as necessary on the block header.
+			let roots = extension.roots();
+			block.header.output_root = roots.output_root;
+			block.header.range_proof_root = roots.rproof_root;
+			block.header.kernel_root = roots.kernel_root;
+			let sizes = extension.sizes();
+			block.header.output_mmr_size = sizes.0;
+			block.header.kernel_mmr_size = sizes.2;
+
+			Ok(())
 		}).unwrap();
 
 		let tip = Tip::from_block(&block.header);
@@ -86,7 +99,7 @@ fn test_the_transaction_pool() {
 	{
 		let mut write_pool = pool.write().unwrap();
 		write_pool
-			.add_to_pool(test_source(), initial_tx, false)
+			.add_to_pool(test_source(), initial_tx, false, &header.hash())
 			.unwrap();
 		assert_eq!(write_pool.total_size(), 1);
 	}
@@ -105,14 +118,14 @@ fn test_the_transaction_pool() {
 
 		// First, add a simple tx to the pool in "stem" mode.
 		write_pool
-			.add_to_pool(test_source(), tx1.clone(), true)
+			.add_to_pool(test_source(), tx1.clone(), true, &header.hash())
 			.unwrap();
 		assert_eq!(write_pool.total_size(), 1);
 		assert_eq!(write_pool.stempool.size(), 1);
 
 		// Add another tx spending outputs from the previous tx.
 		write_pool
-			.add_to_pool(test_source(), tx2.clone(), true)
+			.add_to_pool(test_source(), tx2.clone(), true, &header.hash())
 			.unwrap();
 		assert_eq!(write_pool.total_size(), 1);
 		assert_eq!(write_pool.stempool.size(), 2);
@@ -125,7 +138,7 @@ fn test_the_transaction_pool() {
 		let mut write_pool = pool.write().unwrap();
 		assert!(
 			write_pool
-				.add_to_pool(test_source(), tx1.clone(), true)
+				.add_to_pool(test_source(), tx1.clone(), true, &header.hash())
 				.is_err()
 		);
 	}
@@ -135,14 +148,22 @@ fn test_the_transaction_pool() {
 	{
 		let tx1a = test_transaction(&keychain, vec![500, 600], vec![499, 599]);
 		let mut write_pool = pool.write().unwrap();
-		assert!(write_pool.add_to_pool(test_source(), tx1a, true).is_err());
+		assert!(
+			write_pool
+				.add_to_pool(test_source(), tx1a, true, &header.hash())
+				.is_err()
+		);
 	}
 
 	// Test adding a tx attempting to spend a non-existent output.
 	{
 		let bad_tx = test_transaction(&keychain, vec![10_001], vec![10_000]);
 		let mut write_pool = pool.write().unwrap();
-		assert!(write_pool.add_to_pool(test_source(), bad_tx, true).is_err());
+		assert!(
+			write_pool
+				.add_to_pool(test_source(), bad_tx, true, &header.hash())
+				.is_err()
+		);
 	}
 
 	// Test adding a tx that would result in a duplicate output (conflicts with
@@ -152,14 +173,22 @@ fn test_the_transaction_pool() {
 	{
 		let tx = test_transaction(&keychain, vec![900], vec![498]);
 		let mut write_pool = pool.write().unwrap();
-		assert!(write_pool.add_to_pool(test_source(), tx, true).is_err());
+		assert!(
+			write_pool
+				.add_to_pool(test_source(), tx, true, &header.hash())
+				.is_err()
+		);
 	}
 
 	// Confirm the tx pool correctly identifies an invalid tx (already spent).
 	{
 		let mut write_pool = pool.write().unwrap();
 		let tx3 = test_transaction(&keychain, vec![500], vec![497]);
-		assert!(write_pool.add_to_pool(test_source(), tx3, true).is_err());
+		assert!(
+			write_pool
+				.add_to_pool(test_source(), tx3, true, &header.hash())
+				.is_err()
+		);
 		assert_eq!(write_pool.total_size(), 1);
 		assert_eq!(write_pool.stempool.size(), 2);
 	}
@@ -175,7 +204,7 @@ fn test_the_transaction_pool() {
 			.unwrap();
 		assert_eq!(agg_tx.kernels().len(), 2);
 		write_pool
-			.add_to_pool(test_source(), agg_tx, false)
+			.add_to_pool(test_source(), agg_tx, false, &header.hash())
 			.unwrap();
 		assert_eq!(write_pool.total_size(), 2);
 	}
@@ -192,7 +221,7 @@ fn test_the_transaction_pool() {
 		// tx4 is the "new" part of this aggregated tx that we care about
 		let agg_tx = transaction::aggregate(vec![tx1.clone(), tx2.clone(), tx4], None).unwrap();
 		write_pool
-			.add_to_pool(test_source(), agg_tx, false)
+			.add_to_pool(test_source(), agg_tx, false, &header.hash())
 			.unwrap();
 		assert_eq!(write_pool.total_size(), 3);
 		let entry = write_pool.txpool.entries.last().unwrap();
@@ -211,14 +240,19 @@ fn test_the_transaction_pool() {
 		// check we cannot add a double spend to the stempool
 		assert!(
 			write_pool
-				.add_to_pool(test_source(), double_spend_tx.clone(), true)
+				.add_to_pool(test_source(), double_spend_tx.clone(), true, &header.hash())
 				.is_err()
 		);
 
 		// check we cannot add a double spend to the txpool
 		assert!(
 			write_pool
-				.add_to_pool(test_source(), double_spend_tx.clone(), false)
+				.add_to_pool(
+					test_source(),
+					double_spend_tx.clone(),
+					false,
+					&header.hash()
+				)
 				.is_err()
 		);
 	}

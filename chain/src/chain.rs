@@ -399,7 +399,8 @@ impl Chain {
 		Ok(bh.height + 1)
 	}
 
-	/// Validate a vec of "raw" transactions against the current chain state.
+	/// Validate a vec of "raw" transactions against a known chain state
+	/// at the block with the specified block hash.
 	/// Specifying a "pre_tx" if we need to adjust the state, for example when
 	/// validating the txs in the stempool we adjust the state based on the
 	/// txpool.
@@ -407,9 +408,15 @@ impl Chain {
 		&self,
 		txs: Vec<Transaction>,
 		pre_tx: Option<Transaction>,
+		block_hash: &Hash,
 	) -> Result<Vec<Transaction>, Error> {
+		// Get headers so we can rewind chain state correctly.
+		let header = self.store.get_block_header(block_hash)?;
+		let head_header = self.store.head_header()?;
+
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset::extending_readonly(&mut txhashset, |extension| {
+			extension.rewind(&header, &head_header)?;
 			let valid_txs = extension.validate_raw_txs(txs, pre_tx)?;
 			Ok(valid_txs)
 		})
