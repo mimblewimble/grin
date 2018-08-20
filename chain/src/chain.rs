@@ -25,9 +25,7 @@ use lmdb;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::target::Difficulty;
-use core::core::{
-	Block, BlockHeader, Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel,
-};
+use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use error::{Error, ErrorKind};
 use grin_store::Error::NotFoundErr;
@@ -396,7 +394,7 @@ impl Chain {
 		let res = txhashset.is_unspent(output_ref);
 		match res {
 			Err(e) => Err(e),
-			Ok((h, p)) => Ok(h),
+			Ok((h, _)) => Ok(h),
 		}
 	}
 
