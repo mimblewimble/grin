@@ -20,7 +20,7 @@ use std::sync::Arc;
 
 use conn::{Message, MessageHandler, Response};
 use core::core;
-use core::core::hash::{Hash, Hashed};
+use core::core::hash::Hash;
 use msg::{
 	BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr, TxHashSetArchive,
 	TxHashSetRequest, Type,
@@ -120,7 +120,6 @@ impl MessageHandler for Protocol {
 					"handle_payload: received block: msg_len: {}", msg.header.msg_len
 				);
 				let b: core::Block = msg.body()?;
-				let bh = b.hash();
 
 				adapter.block_received(b, self.addr);
 				Ok(None)
@@ -161,7 +160,6 @@ impl MessageHandler for Protocol {
 					"handle_payload: received compact block: msg_len: {}", msg.header.msg_len
 				);
 				let b: core::CompactBlock = msg.body()?;
-				let bh = b.hash();
 
 				adapter.compact_block_received(b, self.addr);
 				Ok(None)
