@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time;
-use std::{cmp, thread};
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time;
+use std::{cmp, thread};
 
 use chain;
 use common::types::{Error, SyncState, SyncStatus};
@@ -237,8 +237,7 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 			// only ask for blocks that we have not yet processed
 			// either successfully stored or in our orphan list
 			!chain.get_block(x).is_ok() && !chain.is_orphan(x)
-		})
-		.take(block_count)
+		}).take(block_count)
 		.collect::<Vec<_>>();
 
 	if hashes_to_get.len() > 0 {
@@ -284,12 +283,15 @@ fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 	}
 }
 
-fn fast_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, header_head: &chain::Tip) -> Result<(), p2p::Error> {
+fn fast_sync(
+	peers: Arc<Peers>,
+	chain: Arc<chain::Chain>,
+	header_head: &chain::Tip,
+) -> Result<(), p2p::Error> {
 	let horizon = global::cut_through_horizon() as u64;
 
 	if let Some(peer) = peers.most_work_peer() {
 		if let Ok(p) = peer.try_read() {
-
 			// ask for txhashset at 90% of horizon, this still leaves time for download
 			// and validation to happen and stay within horizon
 			let mut txhashset_head = chain.get_block_header(&header_head.prev_block_h).unwrap();
@@ -306,11 +308,7 @@ fn fast_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, header_head: &chain::T
 				bhash
 			);
 			if let Err(e) = p.send_txhashset_request(txhashset_head.height, bhash) {
-				error!(
-					LOGGER,
-					"fast_sync: send_txhashset_request err! {:?}",
-					e
-				);
+				error!(LOGGER, "fast_sync: send_txhashset_request err! {:?}", e);
 				return Err(e);
 			}
 			return Ok(());
@@ -480,20 +478,20 @@ impl SyncInfo {
 	}
 
 	// For now this is a one-time thing (it can be slow) at initial startup.
-	fn fast_sync_due(&mut self) -> (bool,bool) {
+	fn fast_sync_due(&mut self) -> (bool, bool) {
 		let now = Utc::now();
 		let mut download_timeout = false;
 
 		match self.prev_fast_sync {
 			None => {
 				self.prev_fast_sync = Some(now);
-				(true,download_timeout)
+				(true, download_timeout)
 			}
 			Some(prev) => {
 				if now - prev > Duration::minutes(10) {
 					download_timeout = true;
 				}
-				(false,download_timeout)
+				(false, download_timeout)
 			}
 		}
 	}
@@ -501,7 +499,6 @@ impl SyncInfo {
 	fn fast_sync_reset(&mut self) {
 		self.prev_fast_sync = None;
 	}
-
 }
 
 #[cfg(test)]
@@ -524,9 +521,7 @@ mod test {
 		// headers
 		assert_eq!(
 			get_locator_heights(10000),
-			vec![
-				10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0
-			]
+			vec![10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0]
 		);
 	}
 }
