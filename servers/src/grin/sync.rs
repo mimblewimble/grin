@@ -458,10 +458,11 @@ impl SyncInfo {
 	fn header_sync_due(&mut self, header_head: &chain::Tip) -> bool {
 		let now = Utc::now();
 		let (prev_ts, prev_height) = self.prev_header_sync;
+		
+		let all_headers_received = header_head.height >= prev_height + (p2p::MAX_BLOCK_HEADERS as u64) - 4;
+		let stalling = header_head.height == prev_height && now - prev_ts > Duration::seconds(10);
 
-		if header_head.height >= prev_height + (p2p::MAX_BLOCK_HEADERS as u64) - 4
-			|| now - prev_ts > Duration::seconds(10)
-		{
+		if all_headers_received || stalling {
 			self.prev_header_sync = (now, header_head.height);
 			return true;
 		}
