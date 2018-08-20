@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use core::consensus;
-use core::core::hash::Hashed;
+use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
 use core::core::{Block, CompactBlock, Transaction, TxKernel};
@@ -80,6 +80,8 @@ where
 	/// transactions, orders by fee over weight and ensures to total weight
 	/// doesn't exceed block limits.
 	pub fn prepare_mineable_transactions(&self) -> Vec<Transaction> {
+		let header = self.blockchain.chain_head().unwrap();
+
 		let tx_buckets = self.bucket_transactions();
 
 		// flatten buckets using aggregate (with cut-through)
@@ -105,7 +107,7 @@ where
 		// make sure those txs are all valid together, no Error is expected
 		// when passing None
 		self.blockchain
-			.validate_raw_txs(flat_txs, None)
+			.validate_raw_txs(flat_txs, None, &header.hash())
 			.expect("should never happen")
 	}
 
@@ -128,6 +130,7 @@ where
 		from_state: PoolEntryState,
 		to_state: PoolEntryState,
 		extra_tx: Option<Transaction>,
+		block_hash: &Hash,
 	) -> Result<Vec<Transaction>, PoolError> {
 		let entries = &mut self
 			.entries
@@ -139,7 +142,9 @@ where
 		if candidate_txs.is_empty() {
 			return Ok(vec![]);
 		}
-		let valid_txs = self.blockchain.validate_raw_txs(candidate_txs, extra_tx)?;
+		let valid_txs = self
+			.blockchain
+			.validate_raw_txs(candidate_txs, extra_tx, block_hash)?;
 
 		// Update state on all entries included in final vec of valid txs.
 		for x in &mut entries.iter_mut() {
@@ -158,16 +163,18 @@ where
 		&mut self,
 		entry: PoolEntry,
 		extra_txs: Vec<Transaction>,
+		block_hash: &Hash,
 	) -> Result<(), PoolError> {
 		debug!(
 			LOGGER,
-			"pool [{}]: add_to_pool: {}, {:?}, inputs: {}, outputs: {}, kernels: {}",
+			"pool [{}]: add_to_pool: {}, {:?}, inputs: {}, outputs: {}, kernels: {} (at block {})",
 			self.name,
 			entry.tx.hash(),
 			entry.src,
 			entry.tx.inputs().len(),
 			entry.tx.outputs().len(),
 			entry.tx.kernels().len(),
+			block_hash,
 		);
 
 		// Combine all the txs from the pool with any extra txs provided.
@@ -184,9 +191,10 @@ where
 			transaction::aggregate(txs, None)?
 		};
 
-		// Validate aggregated tx against the current chain state (via txhashset
+		// Validate aggregated tx against a known chain state (via txhashset
 		// extension).
-		self.blockchain.validate_raw_txs(vec![], Some(agg_tx))?;
+		self.blockchain
+			.validate_raw_txs(vec![], Some(agg_tx), block_hash)?;
 
 		// If we get here successfully then we can safely add the entry to the pool.
 		self.entries.push(entry);
@@ -194,7 +202,11 @@ where
 		Ok(())
 	}
 
-	pub fn reconcile(&mut self, extra_tx: Option<Transaction>) -> Result<(), PoolError> {
+	pub fn reconcile(
+		&mut self,
+		extra_tx: Option<Transaction>,
+		block_hash: &Hash,
+	) -> Result<(), PoolError> {
 		let candidate_txs = self.all_transactions();
 		let existing_len = candidate_txs.len();
 
@@ -203,8 +215,10 @@ where
 		}
 
 		// Go through the candidate txs and keep everything that validates incrementally
-		// against the current chain state, accounting for the "extra tx" as necessary.
-		let valid_txs = self.blockchain.validate_raw_txs(candidate_txs, extra_tx)?;
+		// against a known chain state, accounting for the "extra tx" as necessary.
+		let valid_txs = self
+			.blockchain
+			.validate_raw_txs(candidate_txs, extra_tx, block_hash)?;
 		self.entries.retain(|x| valid_txs.contains(&x.tx));
 
 		debug!(

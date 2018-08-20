@@ -116,8 +116,6 @@ impl OutputHandler {
 			}
 		}
 
-		debug!(LOGGER, "outputs_by_ids: {:?}", commitments);
-
 		let mut outputs: Vec<Output> = vec![];
 		for x in commitments {
 			if let Ok(output) = self.get_output(&x) {
@@ -738,7 +736,8 @@ where
 					};
 					info!(
 						LOGGER,
-						"Pushing transaction, inputs: {}, outputs: {}, kernels: {}, to pool.",
+						"Pushing transaction {} to pool (inputs: {}, outputs: {}, kernels: {})",
+						tx.hash(),
 						tx.inputs().len(),
 						tx.outputs().len(),
 						tx.kernels().len(),
@@ -746,9 +745,13 @@ where
 
 					//  Push to tx pool.
 					let mut tx_pool = pool_arc.write().unwrap();
+					let header = tx_pool.blockchain.chain_head().unwrap();
 					tx_pool
-						.add_to_pool(source, tx, !fluff)
-						.map_err(|_| ErrorKind::RequestError("Bad request".to_owned()).into())
+						.add_to_pool(source, tx, !fluff, &header.hash())
+						.map_err(|e| {
+							error!(LOGGER, "update_pool: failed with error: {:?}", e);
+							ErrorKind::RequestError("Bad request".to_owned()).into()
+						})
 				}),
 		)
 	}

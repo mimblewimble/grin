@@ -20,11 +20,10 @@
 use chrono::prelude::Utc;
 use std::sync::Arc;
 
-use core::core::hash::Hashed;
+use core::core::hash::Hash;
 use core::core::{transaction, Block, CompactBlock, Transaction};
 use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
-use util::LOGGER;
 
 /// Transaction pool implementation.
 pub struct TransactionPool<T> {
@@ -57,17 +56,17 @@ where
 		}
 	}
 
-	fn add_to_stempool(&mut self, entry: PoolEntry) -> Result<(), PoolError> {
+	fn add_to_stempool(&mut self, entry: PoolEntry, block_hash: &Hash) -> Result<(), PoolError> {
 		// Add tx to stempool (passing in all txs from txpool to validate against).
 		self.stempool
-			.add_to_pool(entry.clone(), self.txpool.all_transactions())?;
+			.add_to_pool(entry.clone(), self.txpool.all_transactions(), block_hash)?;
 
 		// Note: we do not notify the adapter here,
 		// we let the dandelion monitor handle this.
 		Ok(())
 	}
 
-	fn add_to_txpool(&mut self, mut entry: PoolEntry) -> Result<(), PoolError> {
+	fn add_to_txpool(&mut self, mut entry: PoolEntry, block_hash: &Hash) -> Result<(), PoolError> {
 		// First deaggregate the tx based on current txpool txs.
 		if entry.tx.kernels().len() > 1 {
 			let txs = self
@@ -78,12 +77,12 @@ where
 				entry.src.debug_name = "deagg".to_string();
 			}
 		}
-		self.txpool.add_to_pool(entry.clone(), vec![])?;
+		self.txpool.add_to_pool(entry.clone(), vec![], block_hash)?;
 
 		// We now need to reconcile the stempool based on the new state of the txpool.
 		// Some stempool txs may no longer be valid and we need to evict them.
 		let txpool_tx = self.txpool.aggregate_transaction()?;
-		self.stempool.reconcile(txpool_tx)?;
+		self.stempool.reconcile(txpool_tx, block_hash)?;
 
 		self.adapter.tx_accepted(&entry.tx);
 		Ok(())
@@ -96,6 +95,7 @@ where
 		src: TxSource,
 		tx: Transaction,
 		stem: bool,
+		block_hash: &Hash,
 	) -> Result<(), PoolError> {
 		// Do we have the capacity to accept this transaction?
 		self.is_acceptable(&tx)?;
@@ -117,9 +117,9 @@ where
 		};
 
 		if stem {
-			self.add_to_stempool(entry)?;
+			self.add_to_stempool(entry, block_hash)?;
 		} else {
-			self.add_to_txpool(entry)?;
+			self.add_to_txpool(entry, block_hash)?;
 		}
 		Ok(())
 	}
@@ -129,12 +129,12 @@ where
 	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
 		// First reconcile the txpool.
 		self.txpool.reconcile_block(block)?;
-		self.txpool.reconcile(None)?;
+		self.txpool.reconcile(None, &block.hash())?;
 
 		// Then reconcile the stempool, accounting for the txpool txs.
 		let txpool_tx = self.txpool.aggregate_transaction()?;
 		self.stempool.reconcile_block(block)?;
-		self.stempool.reconcile(txpool_tx)?;
+		self.stempool.reconcile(txpool_tx, &block.hash())?;
 
 		Ok(())
 	}

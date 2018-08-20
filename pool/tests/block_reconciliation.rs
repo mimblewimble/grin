@@ -20,19 +20,22 @@ extern crate grin_pool as pool;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-extern crate rand;
 extern crate chrono;
+extern crate rand;
 
 pub mod common;
 
 use std::sync::{Arc, RwLock};
 
+use core::core::hash::Hashed;
 use core::core::{Block, BlockHeader};
 
+use chain::txhashset;
 use chain::types::Tip;
-use chain::{txhashset, ChainStore};
-use common::{clean_output_dir, test_setup, test_source, test_transaction,
-             test_transaction_spending_coinbase, ChainAdapter};
+use common::{
+	clean_output_dir, test_setup, test_source, test_transaction,
+	test_transaction_spending_coinbase, ChainAdapter,
+};
 use core::core::target::Difficulty;
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
@@ -51,12 +54,24 @@ fn test_transaction_pool_block_reconciliation() {
 		let height = 1;
 		let key_id = keychain.derive_key_id(height as u32).unwrap();
 		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
-		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
+		let mut block =
+			Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
 
 		let mut batch = chain.store.batch().unwrap();
 		let mut txhashset = chain.txhashset.write().unwrap();
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
-			extension.apply_block(&block)
+			extension.apply_block(&block)?;
+
+			// Now set the roots and sizes as necessary on the block header.
+			let roots = extension.roots();
+			block.header.output_root = roots.output_root;
+			block.header.range_proof_root = roots.rproof_root;
+			block.header.kernel_root = roots.kernel_root;
+			let sizes = extension.sizes();
+			block.header.output_mmr_size = sizes.0;
+			block.header.kernel_mmr_size = sizes.2;
+
+			Ok(())
 		}).unwrap();
 
 		let tip = Tip::from_block(&block.header);
@@ -78,13 +93,23 @@ fn test_transaction_pool_block_reconciliation() {
 		let key_id = keychain.derive_key_id(2).unwrap();
 		let fees = initial_tx.fee();
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
-		let block = Block::new(&header, vec![initial_tx], Difficulty::one(), reward).unwrap();
+		let mut block = Block::new(&header, vec![initial_tx], Difficulty::one(), reward).unwrap();
 
 		let mut batch = chain.store.batch().unwrap();
 		{
 			let mut txhashset = chain.txhashset.write().unwrap();
 			txhashset::extending(&mut txhashset, &mut batch, |extension| {
 				extension.apply_block(&block)?;
+
+				// Now set the roots and sizes as necessary on the block header.
+				let roots = extension.roots();
+				block.header.output_root = roots.output_root;
+				block.header.range_proof_root = roots.rproof_root;
+				block.header.kernel_root = roots.kernel_root;
+				let sizes = extension.sizes();
+				block.header.output_mmr_size = sizes.0;
+				block.header.kernel_mmr_size = sizes.2;
+
 				Ok(())
 			}).unwrap();
 		}
@@ -153,7 +178,7 @@ fn test_transaction_pool_block_reconciliation() {
 
 		for tx in &txs_to_add {
 			write_pool
-				.add_to_pool(test_source(), tx.clone(), false)
+				.add_to_pool(test_source(), tx.clone(), false, &header.hash())
 				.unwrap();
 		}
 
@@ -177,13 +202,23 @@ fn test_transaction_pool_block_reconciliation() {
 		let key_id = keychain.derive_key_id(3).unwrap();
 		let fees = block_txs.iter().map(|tx| tx.fee()).sum();
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
-		let block = Block::new(&header, block_txs, Difficulty::one(), reward).unwrap();
+		let mut block = Block::new(&header, block_txs, Difficulty::one(), reward).unwrap();
 
 		{
 			let mut batch = chain.store.batch().unwrap();
 			let mut txhashset = chain.txhashset.write().unwrap();
 			txhashset::extending(&mut txhashset, &mut batch, |extension| {
 				extension.apply_block(&block)?;
+
+				// Now set the roots and sizes as necessary on the block header.
+				let roots = extension.roots();
+				block.header.output_root = roots.output_root;
+				block.header.range_proof_root = roots.rproof_root;
+				block.header.kernel_root = roots.kernel_root;
+				let sizes = extension.sizes();
+				block.header.output_mmr_size = sizes.0;
+				block.header.kernel_mmr_size = sizes.2;
+
 				Ok(())
 			}).unwrap();
 			batch.commit().unwrap();

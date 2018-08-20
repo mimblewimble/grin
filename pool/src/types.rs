@@ -15,10 +15,11 @@
 //! The primary module containing the implementations of the transaction pool
 //! and its top-level members.
 
-use std::{error, fmt};
 use chrono::prelude::{DateTime, Utc};
 
 use core::consensus;
+use core::core::block::BlockHeader;
+use core::core::hash::Hash;
 use core::core::transaction::{self, Transaction};
 
 /// Dandelion relay timer
@@ -183,30 +184,15 @@ impl From<transaction::Error> for PoolError {
 	}
 }
 
-impl error::Error for PoolError {
-	fn description(&self) -> &str {
-		match *self {
-			_ => "some kind of pool error",
-		}
-	}
-}
-
-impl fmt::Display for PoolError {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match *self {
-			_ => write!(f, "some kind of pool error"),
-		}
-	}
-}
-
 /// Interface that the pool requires from a blockchain implementation.
 pub trait BlockChain {
-	/// Validate a vec of txs against the current chain state after applying the
-	/// pre_tx to the chain state.
+	/// Validate a vec of txs against known chain state at specific block
+	/// after applying the pre_tx to the chain state.
 	fn validate_raw_txs(
 		&self,
 		txs: Vec<transaction::Transaction>,
 		pre_tx: Option<transaction::Transaction>,
+		block_hash: &Hash,
 	) -> Result<Vec<transaction::Transaction>, PoolError>;
 
 	/// Verify any coinbase outputs being spent
@@ -216,6 +202,8 @@ pub trait BlockChain {
 	/// Verify any coinbase outputs being spent
 	/// have matured sufficiently.
 	fn verify_tx_lock_height(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
+
+	fn chain_head(&self) -> Result<BlockHeader, PoolError>;
 }
 
 /// Bridge between the transaction pool and the rest of the system. Handles

@@ -78,12 +78,13 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			identifier: "?.?.?.?".to_string(),
 		};
 
-		let h = tx.hash();
+		let tx_hash = tx.hash();
+		let block_hash = w(&self.chain).head_header().unwrap().hash();
 
 		debug!(
 			LOGGER,
 			"Received tx {}, inputs: {}, outputs: {}, kernels: {}, going to process.",
-			h,
+			tx_hash,
 			tx.inputs().len(),
 			tx.outputs().len(),
 			tx.kernels().len(),
@@ -91,11 +92,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		let res = {
 			let mut tx_pool = self.tx_pool.write().unwrap();
-			tx_pool.add_to_pool(source, tx, stem)
+			tx_pool.add_to_pool(source, tx, stem, &block_hash)
 		};
 
 		if let Err(e) = res {
-			debug!(LOGGER, "Transaction {} rejected: {:?}", h, e);
+			debug!(LOGGER, "Transaction {} rejected: {:?}", tx_hash, e);
 		}
 	}
 
@@ -738,14 +739,26 @@ impl PoolToChainAdapter {
 }
 
 impl pool::BlockChain for PoolToChainAdapter {
+	fn chain_head(&self) -> Result<BlockHeader, pool::PoolError> {
+		wo(&self.chain).head_header().map_err(|e| {
+			pool::PoolError::Other(format!(
+				"Chain adapter failed to retrieve chain head: {:?}",
+				e
+			))
+		})
+	}
+
 	fn validate_raw_txs(
 		&self,
 		txs: Vec<Transaction>,
 		pre_tx: Option<Transaction>,
+		block_hash: &Hash,
 	) -> Result<(Vec<Transaction>), pool::PoolError> {
-		wo(&self.chain).validate_raw_txs(txs, pre_tx).map_err(|_| {
-			pool::PoolError::Other("Chain adapter failed to validate_raw_txs.".to_string())
-		})
+		wo(&self.chain)
+			.validate_raw_txs(txs, pre_tx, block_hash)
+			.map_err(|e| {
+				pool::PoolError::Other(format!("Chain adapter failed to validate_raw_txs: {:?}", e))
+			})
 	}
 
 	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
