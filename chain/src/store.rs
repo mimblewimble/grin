@@ -155,64 +155,6 @@ impl ChainStore {
 		)
 	}
 
-	pub fn build_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
-		let bitmap = block
-			.inputs()
-			.iter()
-			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
-			.map(|x| x as u32)
-			.collect();
-		Ok(bitmap)
-	}
-
-	pub fn build_and_cache_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
-		let bitmap = self.build_block_input_bitmap(block)?;
-		let mut cache = self.block_input_bitmap_cache.write().unwrap();
-		cache.insert(block.hash(), bitmap.serialize());
-		Ok(bitmap)
-	}
-
-	pub fn get_block_input_bitmap(&self, bh: &Hash) -> Result<(bool, Bitmap), Error> {
-		{
-			let mut cache = self.block_input_bitmap_cache.write().unwrap();
-
-			// cache hit - return the value from the cache
-			if let Some(bytes) = cache.get_mut(bh) {
-				return Ok((true, Bitmap::deserialize(&bytes)));
-			}
-		}
-
-		// cache miss - get it from db and cache it for next time
-		// if we found one in db
-		let res = self.get_block_input_bitmap_db(bh);
-		if let Ok((found, bitmap)) = res {
-			let mut cache = self.block_input_bitmap_cache.write().unwrap();
-			cache.insert(*bh, bitmap.serialize());
-			return Ok((found, bitmap));
-		}
-		res
-	}
-
-	// Get the block input bitmap from the db or build the bitmap from
-	// the full block from the db (if the block is found).
-	// (bool, Bitmap) : (false if bitmap was built and not found in db)
-	fn get_block_input_bitmap_db(&self, bh: &Hash) -> Result<(bool, Bitmap), Error> {
-		if let Ok(Some(bytes)) = self
-			.db
-			.get(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
-		{
-			Ok((true, Bitmap::deserialize(&bytes)))
-		} else {
-			match self.get_block(bh) {
-				Ok(block) => {
-					let bitmap = self.build_and_cache_block_input_bitmap(&block)?;
-					Ok((false, bitmap))
-				}
-				Err(e) => Err(e),
-			}
-		}
-	}
-
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch, Error> {
 		Ok(Batch {
@@ -335,7 +277,7 @@ impl<'a> Batch<'a> {
 		)
 	}
 
-	pub fn save_block_input_bitmap(&self, bh: &Hash, bm: &Bitmap) -> Result<(), Error> {
+	fn save_block_input_bitmap(&self, bh: &Hash, bm: &Bitmap) -> Result<(), Error> {
 		self.db.put(
 			&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec())[..],
 			bm.serialize(),
@@ -379,6 +321,64 @@ impl<'a> Batch<'a> {
 			}
 		}
 		Ok(())
+	}
+
+	fn build_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
+		let bitmap = block
+			.inputs()
+			.iter()
+			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
+			.map(|x| x as u32)
+			.collect();
+		Ok(bitmap)
+	}
+
+	pub fn build_and_cache_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
+		// Build the bitmap.
+		let bitmap = self.build_block_input_bitmap(block)?;
+
+		// Save the bitmap to the db (via the batch).
+		self.save_block_input_bitmap(&block.hash(), &bitmap)?;
+
+		// Finally cache it locally for use later.
+		let mut cache = self.store.block_input_bitmap_cache.write().unwrap();
+		cache.insert(block.hash(), bitmap.serialize());
+
+		Ok(bitmap)
+	}
+
+	pub fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
+		{
+			let mut cache = self.store.block_input_bitmap_cache.write().unwrap();
+
+			// cache hit - return the value from the cache
+			if let Some(bytes) = cache.get_mut(bh) {
+				return Ok(Bitmap::deserialize(&bytes));
+			}
+		}
+
+		// cache miss - get it from db (build it, store it and cache it as necessary)
+		self.get_block_input_bitmap_db(bh)
+	}
+
+	// Get the block input bitmap from the db or build the bitmap from
+	// the full block from the db (if the block is found).
+	// (bool, Bitmap) : (false if bitmap was built and not found in db)
+	fn get_block_input_bitmap_db(&self, bh: &Hash) -> Result<Bitmap, Error> {
+		if let Ok(Some(bytes)) = self
+			.db
+			.get(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
+		{
+			Ok(Bitmap::deserialize(&bytes))
+		} else {
+			match self.get_block(bh) {
+				Ok(block) => {
+					let bitmap = self.build_and_cache_block_input_bitmap(&block)?;
+					Ok(bitmap)
+				}
+				Err(e) => Err(e),
+			}
+		}
 	}
 
 	/// Commits this batch. If it's a child batch, it will be merged with the
