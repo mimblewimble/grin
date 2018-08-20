@@ -596,7 +596,6 @@ impl HeaderHandler {
 			Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
 			Err(_) => return Err(ErrorKind::NotFound)?,
 		}
-		
 	}
 }
 
