@@ -37,18 +37,20 @@ pub struct Peers {
 	store: PeerStore,
 	peers: RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>,
 	dandelion_relay: RwLock<HashMap<i64, Arc<RwLock<Peer>>>>,
+	config: P2PConfig,
 }
 
 unsafe impl Send for Peers {}
 unsafe impl Sync for Peers {}
 
 impl Peers {
-	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>, _config: P2PConfig) -> Peers {
+	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>, config: P2PConfig) -> Peers {
 		Peers {
 			adapter,
 			store,
 			peers: RwLock::new(HashMap::new()),
 			dandelion_relay: RwLock::new(HashMap::new()),
+			config,
 		}
 	}
 
@@ -501,6 +503,10 @@ impl Peers {
 			let peer = peer.read().unwrap();
 			peer.stop();
 		}
+	}
+
+	pub fn enough_peers(&self) -> bool {
+		self.connected_peers().len() >= self.config.peer_min_preferred_count() as usize
 	}
 }
 

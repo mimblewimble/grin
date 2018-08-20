@@ -68,122 +68,147 @@ pub fn run_sync(
 	stop: Arc<AtomicBool>,
 ) {
 	let chain = chain.clone();
-	let _ = thread::Builder::new()
-		.name("sync".to_string())
-		.spawn(move || {
-			let mut si = SyncInfo::new();
-
-			{
-				// Initial sleep to give us time to peer with some nodes.
-				// Note: Even if we have "skip_sync_wait" we need to wait a
-				// short period of time for tests to do the right thing.
-				let wait_secs = if skip_sync_wait {
-					3
-				} else {
-					30
-				};
-
-				awaiting_peers.store(true, Ordering::Relaxed);
-				let mut n = 0;
-				while peers.more_work_peers().len() < 4 && n < wait_secs {
-					thread::sleep(time::Duration::from_secs(1));
-					n += 1;
-				}
-				awaiting_peers.store(false, Ordering::Relaxed);
-			}
-
-			// fast sync has 3 "states":
-			// * syncing headers
-			// * once all headers are sync'd, requesting the txhashset state
-			// * once we have the state, get blocks after that
-			//
-			// full sync gets rid of the middle step and just starts from
-			// the genesis state
-
-			loop {
-				let horizon = global::cut_through_horizon() as u64;
+	let _ =
+		thread::Builder::new()
+			.name("sync".to_string())
+			.spawn(move || {
+				let mut si = SyncInfo::new();
 				let head = chain.head().unwrap();
 				let header_head = chain.get_header_head().unwrap();
 
-				// is syncing generally needed when we compare our state with others
-				let (syncing, most_work_height) =
-					needs_syncing(sync_state.as_ref(), peers.clone(), chain.clone());
+				{
+					// Initial sleep to give us time to peer with some nodes.
+					// Note: Even if we have "skip_sync_wait" we need to wait a
+					// short period of time for tests to do the right thing.
+					let wait_secs = if skip_sync_wait { 3 } else { 30 };
 
-				if most_work_height > 0 {
-					// we can occasionally get a most work height of 0 if read locks fail
-					si.highest_height = most_work_height;
-				}
-
-				if syncing {
-					let fast_sync_enabled =
-						!archive_mode && si.highest_height.saturating_sub(head.height) > horizon;
-
-					// run the header sync every 10s
-					if si.header_sync_due(&header_head) {
-						header_sync(peers.clone(), chain.clone());
-
-						let status = sync_state.status();
-						match status{
-							SyncStatus::TxHashsetDownload => (),
-							_ => {
-								sync_state.update(SyncStatus::HeaderSync{current_height: header_head.height, highest_height: si.highest_height});
-							}
-						};
+					awaiting_peers.store(true, Ordering::Relaxed);
+					let mut n = 0;
+					const MIN_PEERS: usize = 3;
+					loop {
+						let wp = peers.more_work_peers();
+						// exit loop when:
+						// * we have more than MIN_PEERS more work peers
+						// * we are synced, grin was quickly restarted
+						// * timeout
+						if wp.len() > MIN_PEERS
+							|| (wp.len() == 0
+								&& peers.enough_peers() && head.total_difficulty
+								> Difficulty::zero())
+							|| n > wait_secs
+						{
+							break;
+						}
+						thread::sleep(time::Duration::from_secs(1));
+						n += 1;
 					}
 
-					if fast_sync_enabled {
+					awaiting_peers.store(false, Ordering::Relaxed);
+				}
 
-						// check sync error
-						{
-							let mut sync_error_need_clear = false;
-							{
-								let clone = sync_state.sync_error();
-								if let Some(ref sync_error) = *clone.read().unwrap() {
-									error!(LOGGER, "fast_sync: error = {:?}. restart fast sync", sync_error);
-									si.fast_sync_reset();
-									sync_error_need_clear = true;
+				// fast sync has 3 "states":
+				// * syncing headers
+				// * once all headers are sync'd, requesting the txhashset state
+				// * once we have the state, get blocks after that
+				//
+				// full sync gets rid of the middle step and just starts from
+				// the genesis state
+
+				loop {
+					let horizon = global::cut_through_horizon() as u64;
+
+					// is syncing generally needed when we compare our state with others
+					let (syncing, most_work_height) =
+						needs_syncing(sync_state.as_ref(), peers.clone(), chain.clone());
+
+					if most_work_height > 0 {
+						// we can occasionally get a most work height of 0 if read locks fail
+						si.highest_height = most_work_height;
+					}
+
+					if syncing {
+						let fast_sync_enabled = !archive_mode
+							&& si.highest_height.saturating_sub(head.height) > horizon;
+
+						// run the header sync every 10s
+						if si.header_sync_due(&header_head) {
+							header_sync(peers.clone(), chain.clone());
+
+							let status = sync_state.status();
+							match status {
+								SyncStatus::TxHashsetDownload => (),
+								_ => {
+									sync_state.update(SyncStatus::HeaderSync {
+										current_height: header_head.height,
+										highest_height: si.highest_height,
+									});
 								}
-								drop(clone);
-							}
-							if sync_error_need_clear {
-								sync_state.clear_sync_error();
-							}
+							};
 						}
 
-						// run fast sync if applicable, normally only run one-time, except restart in error
-						if header_head.height == si.highest_height {
-							let (go,download_timeout) = si.fast_sync_due();
-
-							if go {
-								if let Err(e) = fast_sync(peers.clone(), chain.clone(), &header_head) {
-									sync_state.set_sync_error(Error::P2P(e));
+						if fast_sync_enabled {
+							// check sync error
+							{
+								let mut sync_error_need_clear = false;
+								{
+									let clone = sync_state.sync_error();
+									if let Some(ref sync_error) = *clone.read().unwrap() {
+										error!(
+											LOGGER,
+											"fast_sync: error = {:?}. restart fast sync",
+											sync_error
+										);
+										si.fast_sync_reset();
+										sync_error_need_clear = true;
+									}
+									drop(clone);
 								}
-								sync_state.update(SyncStatus::TxHashsetDownload);
+								if sync_error_need_clear {
+									sync_state.clear_sync_error();
+								}
 							}
 
-							if SyncStatus::TxHashsetDownload == sync_state.status() && download_timeout {
-								error!(LOGGER, "fast_sync: TxHashsetDownload status timeout in 10 minutes!");
-								sync_state.set_sync_error(Error::P2P(p2p::Error::Timeout));
+							// run fast sync if applicable, normally only run one-time, except restart in error
+							if header_head.height == si.highest_height {
+								let (go, download_timeout) = si.fast_sync_due();
+
+								if go {
+									if let Err(e) =
+										fast_sync(peers.clone(), chain.clone(), &header_head)
+									{
+										sync_state.set_sync_error(Error::P2P(e));
+									}
+									sync_state.update(SyncStatus::TxHashsetDownload);
+								}
+
+								if SyncStatus::TxHashsetDownload == sync_state.status()
+									&& download_timeout
+								{
+									error!(LOGGER, "fast_sync: TxHashsetDownload status timeout in 10 minutes!");
+									sync_state.set_sync_error(Error::P2P(p2p::Error::Timeout));
+								}
+							}
+						} else {
+							// run the body_sync every 5s
+							if si.body_sync_due(&head) {
+								body_sync(peers.clone(), chain.clone());
+								sync_state.update(SyncStatus::BodySync {
+									current_height: head.height,
+									highest_height: si.highest_height,
+								});
 							}
 						}
 					} else {
-						// run the body_sync every 5s
-						if si.body_sync_due(&head) {
-							body_sync(peers.clone(), chain.clone());
-							sync_state.update(SyncStatus::BodySync{current_height: head.height, highest_height: si.highest_height});
-						}
+						sync_state.update(SyncStatus::NoSync);
 					}
-				} else {
-					sync_state.update(SyncStatus::NoSync);
-				}
 
-				thread::sleep(time::Duration::from_secs(1));
+					thread::sleep(time::Duration::from_secs(1));
 
-				if stop.load(Ordering::Relaxed) {
-					break;
+					if stop.load(Ordering::Relaxed) {
+						break;
+					}
 				}
-			}
-		});
+			});
 }
 
 fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
