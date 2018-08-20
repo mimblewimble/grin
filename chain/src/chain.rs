@@ -391,7 +391,11 @@ impl Chain {
 	/// work) fork.
 	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Hash, Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
-		txhashset.is_unspent(output_ref)
+		let res = txhashset.is_unspent(output_ref);
+		match res {
+			Err(e) => Err(e),
+			Ok((h, p)) => Ok(h),
+		}
 	}
 
 	fn next_block_height(&self) -> Result<u64, Error> {
@@ -795,6 +799,36 @@ impl Chain {
 		self.store
 			.get_header_by_height(height)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get header by height".to_owned()).into())
+	}
+
+	/// Gets the block header in which a given output appears in the txhashset
+	pub fn get_header_for_output(
+		&self,
+		output_ref: &OutputIdentifier,
+	) -> Result<BlockHeader, Error> {
+		let mut txhashset = self.txhashset.write().unwrap();
+		let (_, pos) = txhashset.is_unspent(output_ref)?;
+		let mut min = 1;
+		let mut max = {
+			let h = self.head.lock().unwrap();
+			h.height
+		};
+
+		loop {
+			let search_height = max - (max - min) / 2;
+			let h = self.get_header_by_height(search_height)?;
+			let h_prev = self.get_header_by_height(search_height - 1)?;
+			if pos > h.output_mmr_size {
+				min = search_height;
+			} else if pos < h_prev.output_mmr_size {
+				max = search_height;
+			} else {
+				if pos == h_prev.output_mmr_size {
+					return Ok(h_prev);
+				}
+				return Ok(h);
+			}
+		}
 	}
 
 	/// Verifies the given block header is actually on the current chain.
