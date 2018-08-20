@@ -174,6 +174,8 @@ pub enum PoolError {
 	LowFeeTransaction(u64),
 	/// Attempt to add a duplicate output to the pool.
 	DuplicateCommitment,
+	/// Attempt to add a duplicate tx to the pool.
+	DuplicateTx,
 	/// Other kinds of error (not yet pulled out into meaningful errors).
 	Other(String),
 }
