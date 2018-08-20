@@ -168,7 +168,7 @@ impl Server {
 					&self.handshake,
 					self.peers.clone(),
 				)?;
-				let added = self.peers.add_connected(peer);
+				let added = self.peers.add_connected(peer)?;
 				{
 					let mut peer = added.write().unwrap();
 					peer.start(stream);
@@ -193,7 +193,7 @@ impl Server {
 			&self.handshake,
 			self.peers.clone(),
 		)?;
-		let added = self.peers.add_connected(peer);
+		let added = self.peers.add_connected(peer)?;
 		let mut peer = added.write().unwrap();
 		peer.start(stream);
 		Ok(())
