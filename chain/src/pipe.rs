@@ -371,9 +371,12 @@ fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Re
 
 /// Officially adds the block to our chain.
 fn add_block(b: &Block, batch: &mut store::Batch) -> Result<(), Error> {
+	// Save the block itself to the db (via the batch).
 	batch
 		.save_block(b)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save block".to_owned()))?;
+
+	// Build the block_input_bitmap, save to the db (via the batch) and cache locally.
 	batch.build_and_cache_block_input_bitmap(&b)?;
 	Ok(())
 }
