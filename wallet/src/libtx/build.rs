@@ -95,7 +95,7 @@ where
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			let commit = build.keychain.commit(value, &key_id).unwrap();
 
-			debug!(LOGGER, "Building an output: {}, {:?}", value, commit);
+			debug!(LOGGER, "Building output: {}, {:?}", value, commit);
 
 			let rproof = proof::create(build.keychain, value, &key_id, commit, None).unwrap();
 

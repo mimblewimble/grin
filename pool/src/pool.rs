@@ -80,6 +80,8 @@ where
 	/// transactions, orders by fee over weight and ensures to total weight
 	/// doesn't exceed block limits.
 	pub fn prepare_mineable_transactions(&self) -> Vec<Transaction> {
+		let header = self.blockchain.chain_head().unwrap();
+
 		let tx_buckets = self.bucket_transactions();
 
 		// flatten buckets using aggregate (with cut-through)
@@ -105,7 +107,7 @@ where
 		// make sure those txs are all valid together, no Error is expected
 		// when passing None
 		self.blockchain
-			.validate_raw_txs(flat_txs, None)
+			.validate_raw_txs(flat_txs, None, &header.hash())
 			.expect("should never happen")
 	}
 
