@@ -29,8 +29,8 @@ extern crate rand;
 use std::fs;
 use std::sync::{Arc, RwLock};
 
-use core::core::{BlockHeader, Transaction};
 use core::core::hash::Hash;
+use core::core::{BlockHeader, Transaction};
 
 use chain::store::ChainStore;
 use chain::txhashset;
@@ -68,7 +68,8 @@ impl ChainAdapter {
 
 impl BlockChain for ChainAdapter {
 	fn chain_head(&self) -> Result<BlockHeader, PoolError> {
-		self.store.head_header()
+		self.store
+			.head_header()
 			.map_err(|_| PoolError::Other(format!("failed to get chain head")))
 	}
 
@@ -78,7 +79,9 @@ impl BlockChain for ChainAdapter {
 		pre_tx: Option<Transaction>,
 		block_hash: &Hash,
 	) -> Result<Vec<Transaction>, PoolError> {
-		let header = self.store.get_block_header(&block_hash)
+		let header = self
+			.store
+			.get_block_header(&block_hash)
 			.map_err(|_| PoolError::Other(format!("failed to get header")))?;
 		let head_header = self.chain_head()?;
 

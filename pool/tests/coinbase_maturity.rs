@@ -20,8 +20,8 @@ extern crate grin_pool as pool;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-extern crate rand;
 extern crate chrono;
+extern crate rand;
 
 pub mod common;
 
@@ -31,8 +31,8 @@ use common::{test_source, test_transaction};
 use core::core::hash::Hash;
 use core::core::{BlockHeader, Transaction};
 use keychain::{ExtKeychain, Keychain};
-use pool::TransactionPool;
 use pool::types::{BlockChain, NoopAdapter, PoolConfig, PoolError};
+use pool::TransactionPool;
 
 pub fn test_setup(
 	chain: &Arc<CoinbaseMaturityErrorChainAdapter>,

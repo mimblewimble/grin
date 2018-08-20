@@ -20,20 +20,22 @@ extern crate grin_pool as pool;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-extern crate rand;
 extern crate chrono;
+extern crate rand;
 
 pub mod common;
 
 use std::sync::{Arc, RwLock};
 
-use core::core::{Block, BlockHeader};
 use core::core::hash::Hashed;
+use core::core::{Block, BlockHeader};
 
-use chain::types::Tip;
 use chain::txhashset;
-use common::{clean_output_dir, test_setup, test_source, test_transaction,
-             test_transaction_spending_coinbase, ChainAdapter};
+use chain::types::Tip;
+use common::{
+	clean_output_dir, test_setup, test_source, test_transaction,
+	test_transaction_spending_coinbase, ChainAdapter,
+};
 use core::core::target::Difficulty;
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
@@ -52,7 +54,8 @@ fn test_transaction_pool_block_reconciliation() {
 		let height = 1;
 		let key_id = keychain.derive_key_id(height as u32).unwrap();
 		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
-		let mut block = Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
+		let mut block =
+			Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
 
 		let mut batch = chain.store.batch().unwrap();
 		let mut txhashset = chain.txhashset.write().unwrap();
@@ -215,7 +218,7 @@ fn test_transaction_pool_block_reconciliation() {
 				let sizes = extension.sizes();
 				block.header.output_mmr_size = sizes.0;
 				block.header.kernel_mmr_size = sizes.2;
-				
+
 				Ok(())
 			}).unwrap();
 			batch.commit().unwrap();

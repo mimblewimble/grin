@@ -27,8 +27,8 @@ pub mod common;
 
 use std::sync::{Arc, RwLock};
 
-use chain::types::Tip;
 use chain::txhashset;
+use chain::types::Tip;
 use common::{
 	clean_output_dir, test_setup, test_source, test_transaction,
 	test_transaction_spending_coinbase, ChainAdapter,
@@ -54,7 +54,8 @@ fn test_the_transaction_pool() {
 		let height = 1;
 		let key_id = keychain.derive_key_id(height as u32).unwrap();
 		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
-		let mut block = Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
+		let mut block =
+			Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
 
 		let mut txhashset = chain.txhashset.write().unwrap();
 		let mut batch = chain.store.batch().unwrap();
@@ -147,14 +148,22 @@ fn test_the_transaction_pool() {
 	{
 		let tx1a = test_transaction(&keychain, vec![500, 600], vec![499, 599]);
 		let mut write_pool = pool.write().unwrap();
-		assert!(write_pool.add_to_pool(test_source(), tx1a, true, &header.hash()).is_err());
+		assert!(
+			write_pool
+				.add_to_pool(test_source(), tx1a, true, &header.hash())
+				.is_err()
+		);
 	}
 
 	// Test adding a tx attempting to spend a non-existent output.
 	{
 		let bad_tx = test_transaction(&keychain, vec![10_001], vec![10_000]);
 		let mut write_pool = pool.write().unwrap();
-		assert!(write_pool.add_to_pool(test_source(), bad_tx, true, &header.hash()).is_err());
+		assert!(
+			write_pool
+				.add_to_pool(test_source(), bad_tx, true, &header.hash())
+				.is_err()
+		);
 	}
 
 	// Test adding a tx that would result in a duplicate output (conflicts with
@@ -164,14 +173,22 @@ fn test_the_transaction_pool() {
 	{
 		let tx = test_transaction(&keychain, vec![900], vec![498]);
 		let mut write_pool = pool.write().unwrap();
-		assert!(write_pool.add_to_pool(test_source(), tx, true, &header.hash()).is_err());
+		assert!(
+			write_pool
+				.add_to_pool(test_source(), tx, true, &header.hash())
+				.is_err()
+		);
 	}
 
 	// Confirm the tx pool correctly identifies an invalid tx (already spent).
 	{
 		let mut write_pool = pool.write().unwrap();
 		let tx3 = test_transaction(&keychain, vec![500], vec![497]);
-		assert!(write_pool.add_to_pool(test_source(), tx3, true, &header.hash()).is_err());
+		assert!(
+			write_pool
+				.add_to_pool(test_source(), tx3, true, &header.hash())
+				.is_err()
+		);
 		assert_eq!(write_pool.total_size(), 1);
 		assert_eq!(write_pool.stempool.size(), 2);
 	}
@@ -230,7 +247,12 @@ fn test_the_transaction_pool() {
 		// check we cannot add a double spend to the txpool
 		assert!(
 			write_pool
-				.add_to_pool(test_source(), double_spend_tx.clone(), false, &header.hash())
+				.add_to_pool(
+					test_source(),
+					double_spend_tx.clone(),
+					false,
+					&header.hash()
+				)
 				.is_err()
 		);
 	}
