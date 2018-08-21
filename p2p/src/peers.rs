@@ -279,9 +279,7 @@ impl Peers {
 					error!(LOGGER, "Couldn't unban {}: peer is not banned", peer_addr);
 				}
 			}
-			Err(e) => {
-				error!(LOGGER, "Couldn't unban {}: {:?}", peer_addr, e);
-			}
+			Err(e) => error!(LOGGER, "Couldn't unban {}: {:?}", peer_addr, e),
 		};
 	}
 
