@@ -27,7 +27,9 @@ use grin_core::core::block::Error;
 use grin_core::core::hash::Hashed;
 use grin_core::core::id::{ShortId, ShortIdentifiable};
 use grin_core::core::Committed;
-use grin_core::core::{Block, BlockHeader, CompactBlock, CompactBlockBody, KernelFeatures, OutputFeatures};
+use grin_core::core::{
+	Block, BlockHeader, CompactBlock, CompactBlockBody, KernelFeatures, OutputFeatures,
+};
 use grin_core::{global, ser};
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::time::Instant;
@@ -404,7 +406,7 @@ fn serialize_deserialize_compact_block() {
 			out_full: vec![],
 			kern_full: vec![],
 			kern_ids: vec![ShortId::zero()],
-		}
+		},
 	};
 
 	let mut vec = Vec::new();

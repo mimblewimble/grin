@@ -21,16 +21,14 @@ use std::{error, fmt};
 
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::secp::{self, Message, Signature};
-use util::{kernel_sig_msg, static_secp_instance};
 use util::LOGGER;
+use util::{kernel_sig_msg, static_secp_instance};
 
 use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
-use ser::{
-	self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, Writer,
-};
+use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, Writer};
 use util;
 
 bitflags! {
@@ -585,7 +583,10 @@ impl Readable for Transaction {
 		// An example of this would be reading a tx
 		// that exceeded the allowed number of inputs.
 		tx.validate(false).map_err(|e| {
-			error!(LOGGER, "tx: read: tx validation failed, treating as corrupted data: {:?}", e);
+			error!(
+				LOGGER,
+				"tx: read: tx validation failed, treating as corrupted data: {:?}", e
+			);
 			ser::Error::CorruptedData
 		})?;
 
