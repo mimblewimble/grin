@@ -63,6 +63,26 @@ fn get_output_local(chain: &chain::Chain, commit: &pedersen::Commitment) -> Opti
 	None
 }
 
+/// get output listing traversing pmmr from local
+fn get_outputs_by_pmmr_index_local(
+	chain: Arc<chain::Chain>,
+	start_index: u64,
+	max: u64,
+) -> api::OutputListing {
+	let outputs = chain
+		.unspent_outputs_by_insertion_index(start_index, max)
+		.unwrap();
+	api::OutputListing {
+		last_retrieved_index: outputs.0,
+		highest_index: outputs.1,
+		outputs: outputs
+			.2
+			.iter()
+			.map(|x| api::OutputPrintable::from_output(x, chain.clone(), None, true))
+			.collect(),
+	}
+}
+
 /// Adds a block with a given reward to the chain and mines it
 pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbData) {
 	let prev = chain.head_header().unwrap();
