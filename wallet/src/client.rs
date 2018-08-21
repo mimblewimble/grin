@@ -121,7 +121,7 @@ impl WalletClient for HTTPWalletClient {
 	fn get_outputs_from_node(
 		&self,
 		wallet_outputs: Vec<pedersen::Commitment>,
-	) -> Result<HashMap<pedersen::Commitment, String>, libwallet::Error> {
+	) -> Result<HashMap<pedersen::Commitment, (String, u64)>, libwallet::Error> {
 		let addr = self.node_url();
 		// build the necessary query params -
 		// ?id=xxx&id=yyy&id=zzz
@@ -131,7 +131,7 @@ impl WalletClient for HTTPWalletClient {
 			.collect();
 
 		// build a map of api outputs by commit so we can look them up efficiently
-		let mut api_outputs: HashMap<pedersen::Commitment, String> = HashMap::new();
+		let mut api_outputs: HashMap<pedersen::Commitment, (String, u64)> = HashMap::new();
 		let mut tasks = Vec::new();
 
 		for query_chunk in query_params.chunks(500) {
@@ -152,7 +152,10 @@ impl WalletClient for HTTPWalletClient {
 
 		for res in results {
 			for out in res {
-				api_outputs.insert(out.commit.commit(), util::to_hex(out.commit.to_vec()));
+				api_outputs.insert(
+					out.commit.commit(),
+					(util::to_hex(out.commit.to_vec()), out.height),
+				);
 			}
 		}
 		Ok(api_outputs)
