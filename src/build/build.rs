@@ -25,11 +25,31 @@ use std::fs::{self, File};
 use std::io::prelude::*;
 use std::io::Read;
 use std::path::{self, Path, PathBuf};
+use std::process::Command;
+
 use tar::Archive;
 
 const WEB_WALLET_TAG: &str = "0.3.0.1";
 
 fn main() {
+	// Setting up git hooks in the project: rustfmt and so on.
+	let git_hooks = format!(
+		"git config core.hooksPath {}",
+		PathBuf::from("./.hooks").to_str().unwrap()
+	);
+
+	if cfg!(target_os = "windows") {
+		Command::new("cmd")
+			.args(&["/C", &git_hooks])
+			.output()
+			.expect("failed to execute git config for hooks");
+	} else {
+		Command::new("sh")
+			.args(&["-c", &git_hooks])
+			.output()
+			.expect("failed to execute git config for hooks");
+	}
+
 	// build and versioning information
 	let mut opts = built::Options::default();
 	opts.set_dependencies(true);
