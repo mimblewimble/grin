@@ -661,6 +661,7 @@ mod test {
 			 \"spent\":false,\
 			 \"proof\":null,\
 			 \"proof_hash\":\"ed6ba96009b86173bade6a9227ed60422916593fa32dd6d78b25b7a4eeef4946\",\
+			 \"block_height\":0,\
 			 \"merkle_proof\":null\
 			 }";
 		let deserialized: OutputPrintable = serde_json::from_str(&hex_output).unwrap();
@@ -671,7 +672,10 @@ mod test {
 	#[test]
 	fn serialize_output() {
 		let hex_commit =
-			"{\"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\"}";
+			"{\
+			 \"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
+			 \"height\":0\
+			 }";
 		let deserialized: Output = serde_json::from_str(&hex_commit).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
 		assert_eq!(serialized, hex_commit);
