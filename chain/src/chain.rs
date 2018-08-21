@@ -323,6 +323,7 @@ impl Chain {
 		let mut batch = self.store.batch()?;
 		let res = pipe::sync_block_header(bh, &mut sync_ctx, &mut header_ctx, &mut batch);
 		if res.is_ok() {
+			batch.save_header_height(bh)?;
 			batch.commit()?;
 		}
 		res

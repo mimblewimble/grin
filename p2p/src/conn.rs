@@ -27,7 +27,7 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::{cmp, thread, time};
 
 use core::ser;
-use msg::{read_body, read_exact, read_header, write_all, write_to_buf, MsgHeader, Type};
+use msg::{read_body, read_exact, read_header, write_all, write_to_buf, MsgHeader, Type, Headers};
 use types::Error;
 use util::LOGGER;
 
@@ -70,6 +70,67 @@ impl<'a> Message<'a> {
 		T: ser::Readable,
 	{
 		read_body(&self.header, self.conn)
+	}
+
+	/// Read the Headers streaming body from the underlying connection
+	pub fn headers_streaming_body(
+		&mut self,
+		headers_num: u64,
+		total_read: &mut u64,
+		header_size: &mut u64,
+	) -> Result<Headers, Error> {
+
+		if headers_num == 0 || self.header.msg_len <= *total_read {
+			return Err(Error::Connection(io::Error::new(
+				io::ErrorKind::InvalidInput,
+				"headers_streaming_body",
+			)));
+		}
+
+		if *total_read == 0 {
+			// read the Vec size for the stream
+			let mut size = vec![0u8; 2];
+			read_exact(self.conn, &mut size, 20000, true)?;
+			*total_read += 2;
+			let total_headers = size[0] as u64 * 256 + size[1] as u64;
+
+			if total_headers == 0 || total_headers > 10_000 {
+				return Err(Error::Connection(io::Error::new(
+					io::ErrorKind::InvalidData,
+					"headers_streaming_body",
+				)));
+			}
+			*header_size = (self.header.msg_len - 2) / total_headers;
+		}
+
+		if *header_size < 128 || *header_size > 1024 {
+			return Err(Error::Connection(io::Error::new(
+				io::ErrorKind::InvalidData,
+				"headers_streaming_body",
+			)));
+		}
+		let mut read_size = headers_num * *header_size;
+
+		if *total_read + read_size > self.header.msg_len {
+			read_size = self.header.msg_len - *total_read;
+		}
+
+		let mut body = vec![0u8; 2 + read_size as usize];
+		let final_headers_num = read_size / *header_size;
+		body[0] = (final_headers_num >> 8) as u8;
+		body[1] = (final_headers_num & 0x00ff) as u8;
+
+		trace!(
+			LOGGER,
+			"headers_streaming_body - read_exact: size={}, headers_num={}, total_read={}",
+			read_size,
+			final_headers_num,
+			*total_read
+		);
+
+		read_exact(self.conn, &mut body[2..], 20000, true)?;
+		*total_read += read_size;
+		ser::deserialize(&mut &body[..]).map_err(From::from)
 	}
 
 	pub fn copy_attachment(&mut self, len: usize, writer: &mut Write) -> Result<(), Error> {

@@ -189,8 +189,13 @@ impl MessageHandler for Protocol {
 			}
 
 			Type::Headers => {
-				let headers: Headers = msg.body()?;
-				adapter.headers_received(headers.headers, self.addr);
+				let mut total_read: u64 = 0;
+				let mut header_size: u64 = 0;
+				while total_read < msg.header.msg_len {
+					let headers: Headers =
+						msg.headers_streaming_body(8, &mut total_read, &mut header_size)?;
+					adapter.headers_received(headers.headers, self.addr);
+				}
 				Ok(None)
 			}
 
