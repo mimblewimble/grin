@@ -87,6 +87,14 @@ pub fn run_sync(
 					const MIN_PEERS: usize = 3;
 					loop {
 						let wp = peers.more_work_peers();
+
+						debug!(
+							LOGGER,
+							"wp len {}, enough {}, n {}",
+							wp.len(),
+							peers.enough_peers(),
+							n
+						);
 						// exit loop when:
 						// * we have more than MIN_PEERS more work peers
 						// * we are synced, grin was quickly restarted

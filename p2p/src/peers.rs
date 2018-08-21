@@ -506,7 +506,7 @@ impl Peers {
 	}
 
 	pub fn enough_peers(&self) -> bool {
-		self.connected_peers().len() >= self.config.peer_min_preferred_count() as usize
+		self.peer_count() >= self.config.peer_min_preferred_count()
 	}
 }
 
