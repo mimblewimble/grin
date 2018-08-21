@@ -52,10 +52,7 @@ fn setup(test_dir: &str) {
 
 /// Build up 2 wallets, perform a few transactions on them
 /// Then attempt to restore them in separate directories and check contents are the same
-fn restore(
-	test_dir: &str,
-	backend_type: common::BackendType,
-) -> Result<(), libwallet::Error> {
+fn restore(test_dir: &str, backend_type: common::BackendType) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
@@ -127,12 +124,12 @@ fn restore(
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
 		// note this will increment the block count as part of the transaction "Posting"
 		slate = sender_api.issue_send_tx(
-			amount*2,    // amount
-			2,         // minimum confirmations
-			"wallet3", // dest
-			500,       // max outputs
-			1,         // num change outputs
-			true,      // select all outputs
+			amount * 2, // amount
+			2,          // minimum confirmations
+			"wallet3",  // dest
+			500,        // max outputs
+			1,          // num change outputs
+			true,       // select all outputs
 		)?;
 		sender_api.post_tx(&slate, false)?;
 		Ok(())
