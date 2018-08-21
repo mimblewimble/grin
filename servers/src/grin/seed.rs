@@ -16,14 +16,14 @@
 //! a mining worker implementation
 //!
 
+use chrono::prelude::Utc;
+use chrono::Duration;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::str;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time;
-use chrono::prelude::{Utc};
-use chrono::Duration;
 
 use api;
 
@@ -152,7 +152,7 @@ fn monitor_peers(
 	// find some peers from our db
 	// and queue them up for a connection attempt
 	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::UNKNOWN, 100);
-	for p in peers {
+	for p in peers.into_iter().take(config.peer_max_count() as usize) {
 		debug!(LOGGER, "monitor_peers: queue to soon try {}", p.addr);
 		tx.send(p.addr).unwrap();
 	}
@@ -249,8 +249,7 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 						.map(|mut addr| {
 							addr.set_port(13414);
 							addr
-						})
-						.filter(|addr| !temp_addresses.contains(addr))
+						}).filter(|addr| !temp_addresses.contains(addr))
 						.collect()),
 				),
 				Err(e) => debug!(
@@ -268,7 +267,8 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 pub fn web_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 	Box::new(|| {
 		let text: String = api::client::get(SEEDS_URL).expect("Failed to resolve seeds");
-		let addrs = text.split_whitespace()
+		let addrs = text
+			.split_whitespace()
 			.map(|s| s.parse().unwrap())
 			.collect::<Vec<_>>();
 		debug!(LOGGER, "Retrieved seed addresses: {:?}", addrs);
