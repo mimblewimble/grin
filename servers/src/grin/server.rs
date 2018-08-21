@@ -197,6 +197,7 @@ impl Server {
 				Some(peers_preferred) => seed::preferred_peers(peers_preferred),
 				None => None,
 			};
+			warn!(LOGGER, "peers_preferred {:?}", peers_preferred);
 
 			seed::connect_and_monitor(
 				p2p_server.clone(),

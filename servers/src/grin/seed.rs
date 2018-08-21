@@ -170,7 +170,7 @@ fn monitor_peers(
 				}
 			}
 		}
-		None => debug!(LOGGER, "No preferred peers"),
+		None => debug!(LOGGER, "monitor_peers: no preferred peers"),
 	}
 
 	// find some peers from our db
@@ -205,7 +205,7 @@ fn connect_to_seeds_and_preferred_peers(
 	peers: Arc<p2p::Peers>,
 	tx: mpsc::Sender<SocketAddr>,
 	seed_list: Box<Fn() -> Vec<SocketAddr>>,
-	preferred_peers_list: Option<Vec<SocketAddr>>,
+	peers_preferred_list: Option<Vec<SocketAddr>>,
 ) {
 	// check if we have some peers in db
 	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::FULL_HIST, 100);
@@ -218,7 +218,7 @@ fn connect_to_seeds_and_preferred_peers(
 	};
 
 	// If we have preferred peers add them to the connection
-	match preferred_peers_list {
+	match peers_preferred_list {
 		Some(mut peers_preferred) => peer_addrs.append(&mut peers_preferred),
 		None => debug!(LOGGER, "No preferred peers"),
 	};
