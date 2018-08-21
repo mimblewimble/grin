@@ -601,12 +601,12 @@ impl CompactBlockPrintable {
 	) -> CompactBlockPrintable {
 		let block = chain.get_block(&cb.hash()).unwrap();
 		let out_full = cb
-			.out_full
+			.out_full()
 			.iter()
 			.map(|x| OutputPrintable::from_output(x, chain.clone(), Some(&block.header), false))
 			.collect();
 		let kern_full = cb
-			.kern_full
+			.kern_full()
 			.iter()
 			.map(|x| TxKernelPrintable::from_txkernel(x))
 			.collect();
@@ -614,7 +614,7 @@ impl CompactBlockPrintable {
 			header: BlockHeaderPrintable::from_header(&cb.header),
 			out_full,
 			kern_full,
-			kern_ids: cb.kern_ids.iter().map(|x| x.to_hex()).collect(),
+			kern_ids: cb.kern_ids().iter().map(|x| x.to_hex()).collect(),
 		}
 	}
 }

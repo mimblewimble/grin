@@ -139,7 +139,7 @@ impl MessageHandler for Protocol {
 					// either the block or the compact block
 					let mut rng = rand::thread_rng();
 
-					if cb.kern_ids.is_empty() && rng.gen() {
+					if cb.kern_ids().is_empty() && rng.gen() {
 						debug!(
 							LOGGER,
 							"handle_payload: GetCompactBlock: empty block, sending full block",

@@ -22,13 +22,14 @@ use std::{error, fmt};
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
+use util::LOGGER;
 
 use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
 use ser::{
-	self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, WriteableSorted, Writer,
+	self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, Writer,
 };
 use util;
 
@@ -240,7 +241,7 @@ impl PMMRable for TxKernel {
 	}
 }
 
-/// TransactionBody is acommon abstraction for transaction and block
+/// TransactionBody is a common abstraction for transaction and block
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TransactionBody {
 	/// List of inputs spent by the transaction.
@@ -269,15 +270,9 @@ impl Writeable for TransactionBody {
 			[write_u64, self.kernels.len() as u64]
 		);
 
-		// Consensus rule that everything is sorted in lexicographical order on the
-		// wire.
-		let mut inputs = self.inputs.clone();
-		let mut outputs = self.outputs.clone();
-		let mut kernels = self.kernels.clone();
-
-		inputs.write_sorted(writer)?;
-		outputs.write_sorted(writer)?;
-		kernels.write_sorted(writer)?;
+		self.inputs.write(writer)?;
+		self.outputs.write(writer)?;
+		self.kernels.write(writer)?;
 
 		Ok(())
 	}
@@ -290,9 +285,18 @@ impl Readable for TransactionBody {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
-		let inputs = read_and_verify_sorted(reader, input_len)?;
-		let outputs = read_and_verify_sorted(reader, output_len)?;
-		let kernels = read_and_verify_sorted(reader, kernel_len)?;
+		let inputs = read_and_verify_sorted(reader, input_len).map_err(|e| {
+			error!(LOGGER, "tx body: read: inputs: {:?}", e);
+			e
+		})?;
+		let outputs = read_and_verify_sorted(reader, output_len).map_err(|e| {
+			error!(LOGGER, "tx body: read: outputs: {:?}", e);
+			e
+		})?;
+		let kernels = read_and_verify_sorted(reader, kernel_len).map_err(|e| {
+			error!(LOGGER, "tx body: read: kernels: {:?}", e);
+			e
+		})?;
 
 		let body = TransactionBody {
 			inputs,
@@ -350,6 +354,7 @@ impl TransactionBody {
 
 	/// Builds a new body with the provided inputs added. Existing
 	/// inputs, if any, are kept intact.
+	/// Sort order is maintained.
 	pub fn with_input(self, input: Input) -> TransactionBody {
 		let mut new_ins = self.inputs;
 		new_ins.push(input);
@@ -362,12 +367,26 @@ impl TransactionBody {
 
 	/// Builds a new TransactionBody with the provided output added. Existing
 	/// outputs, if any, are kept intact.
+	/// Sort order is maintained.
 	pub fn with_output(self, output: Output) -> TransactionBody {
 		let mut new_outs = self.outputs;
 		new_outs.push(output);
 		new_outs.sort();
 		TransactionBody {
 			outputs: new_outs,
+			..self
+		}
+	}
+
+	/// Builds a new TransactionBody with the provided kernel added. Existing
+	/// kernels, if any, are kept intact.
+	/// Sort order is maintained.
+	pub fn with_kernel(self, kernel: TxKernel) -> TransactionBody {
+		let mut new_kerns = self.kernels;
+		new_kerns.push(kernel);
+		new_kerns.sort();
+		TransactionBody {
+			kernels: new_kerns,
 			..self
 		}
 	}
@@ -565,7 +584,10 @@ impl Readable for Transaction {
 		// Treat any validation issues as data corruption.
 		// An example of this would be reading a tx
 		// that exceeded the allowed number of inputs.
-		tx.validate(false).map_err(|_| ser::Error::CorruptedData)?;
+		tx.validate(false).map_err(|e| {
+			error!(LOGGER, "tx: read: tx validation failed, treating as corrupted data: {:?}", e);
+			ser::Error::CorruptedData
+		})?;
 
 		Ok(tx)
 	}
@@ -620,6 +642,7 @@ impl Transaction {
 
 	/// Builds a new transaction with the provided inputs added. Existing
 	/// inputs, if any, are kept intact.
+	/// Sort order is maintained.
 	pub fn with_input(self, input: Input) -> Transaction {
 		Transaction {
 			body: self.body.with_input(input),
@@ -629,9 +652,20 @@ impl Transaction {
 
 	/// Builds a new transaction with the provided output added. Existing
 	/// outputs, if any, are kept intact.
+	/// Sort order is maintained.
 	pub fn with_output(self, output: Output) -> Transaction {
 		Transaction {
 			body: self.body.with_output(output),
+			..self
+		}
+	}
+
+	/// Builds a new transaction with the provided output added. Existing
+	/// outputs, if any, are kept intact.
+	/// Sort order is maintained.
+	pub fn with_kernel(self, kernel: TxKernel) -> Transaction {
+		Transaction {
+			body: self.body.with_kernel(kernel),
 			..self
 		}
 	}
@@ -768,9 +802,12 @@ pub fn aggregate(
 		outputs.push(out);
 		kernels.push(kernel);
 	}
-	kernels.sort();
 
+	// Sort inputs and outputs during cut_through.
 	cut_through(&mut inputs, &mut outputs)?;
+
+	// Now sort kernels.
+	kernels.sort();
 
 	// now sum the kernel_offsets up to give us an aggregate offset for the
 	// transaction

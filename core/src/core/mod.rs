@@ -15,6 +15,7 @@
 //! Core types
 
 pub mod block;
+pub mod compact_block;
 pub mod committed;
 pub mod hash;
 pub mod id;
@@ -32,6 +33,7 @@ use std::{fmt, iter};
 use util::secp::pedersen::Commitment;
 
 pub use self::block::*;
+pub use self::compact_block::*;
 pub use self::committed::Committed;
 pub use self::id::ShortId;
 pub use self::transaction::*;

@@ -27,7 +27,7 @@ use grin_core::core::block::Error;
 use grin_core::core::hash::Hashed;
 use grin_core::core::id::{ShortId, ShortIdentifiable};
 use grin_core::core::Committed;
-use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
+use grin_core::core::{Block, BlockHeader, CompactBlock, CompactBlockBody, KernelFeatures, OutputFeatures};
 use grin_core::{global, ser};
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::time::Instant;
@@ -345,16 +345,16 @@ fn compact_block_hash_with_nonce() {
 	assert_eq!(b.hash(), cb1.hash());
 	assert_eq!(cb1.hash(), cb2.hash());
 
-	assert!(cb1.kern_ids[0] != cb2.kern_ids[0]);
+	assert!(cb1.kern_ids()[0] != cb2.kern_ids()[0]);
 
 	// check we can identify the specified kernel from the short_id
 	// correctly in both of the compact_blocks
 	assert_eq!(
-		cb1.kern_ids[0],
+		cb1.kern_ids()[0],
 		tx.kernels()[0].short_id(&cb1.hash(), cb1.nonce)
 	);
 	assert_eq!(
-		cb2.kern_ids[0],
+		cb2.kern_ids()[0],
 		tx.kernels()[0].short_id(&cb2.hash(), cb2.nonce)
 	);
 }
@@ -368,12 +368,12 @@ fn convert_block_to_compact_block() {
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 	let cb = b.as_compact_block();
 
-	assert_eq!(cb.out_full.len(), 1);
-	assert_eq!(cb.kern_full.len(), 1);
-	assert_eq!(cb.kern_ids.len(), 1);
+	assert_eq!(cb.out_full().len(), 1);
+	assert_eq!(cb.kern_full().len(), 1);
+	assert_eq!(cb.kern_ids().len(), 1);
 
 	assert_eq!(
-		cb.kern_ids[0],
+		cb.kern_ids()[0],
 		b.kernels()
 			.iter()
 			.find(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
@@ -400,9 +400,11 @@ fn serialize_deserialize_compact_block() {
 	let b = CompactBlock {
 		header: BlockHeader::default(),
 		nonce: 0,
-		out_full: vec![],
-		kern_full: vec![],
-		kern_ids: vec![ShortId::zero()],
+		body: CompactBlockBody {
+			out_full: vec![],
+			kern_full: vec![],
+			kern_ids: vec![ShortId::zero()],
+		}
 	};
 
 	let mut vec = Vec::new();
@@ -410,5 +412,5 @@ fn serialize_deserialize_compact_block() {
 	let b2: CompactBlock = ser::deserialize(&mut &vec[..]).unwrap();
 
 	assert_eq!(b.header, b2.header);
-	assert_eq!(b.kern_ids, b2.kern_ids);
+	assert_eq!(b.kern_ids(), b2.kern_ids());
 }

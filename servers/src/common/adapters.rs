@@ -122,12 +122,12 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			bhash,
 			cb.header.height,
 			addr,
-			cb.out_full.len(),
-			cb.kern_full.len(),
-			cb.kern_ids.len(),
+			cb.out_full().len(),
+			cb.kern_full().len(),
+			cb.kern_ids().len(),
 		);
 
-		if cb.kern_ids.is_empty() {
+		if cb.kern_ids().is_empty() {
 			let cbh = cb.hash();
 			// push the freshly hydrated block through the chain pipeline
 			match core::Block::hydrate_from(cb, vec![]) {
@@ -635,10 +635,9 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			// propagate compact block out if we mined the block
 			// but broadcast full block if we have no txs
 			let cb = b.as_compact_block();
-			if cb.kern_ids.is_empty() {
-				// in the interest of testing all code paths
-				// randomly decide how we send an empty block out
-				// TODO - lock this down once we are comfortable it works...
+			if cb.kern_ids().is_empty() {
+				// In the interest of exercising all code paths
+				// randomly decide how we send an empty block out.
 				let mut rng = rand::thread_rng();
 				if rng.gen() {
 					wo(&self.peers).broadcast_block(&b);
