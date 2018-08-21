@@ -27,7 +27,7 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::{cmp, thread, time};
 
 use core::ser;
-use msg::{read_body, read_exact, read_header, write_all, write_to_buf, MsgHeader, Type, Headers};
+use msg::{read_body, read_exact, read_header, write_all, write_to_buf, Headers, MsgHeader, Type};
 use types::Error;
 use util::LOGGER;
 
@@ -79,7 +79,6 @@ impl<'a> Message<'a> {
 		total_read: &mut u64,
 		header_size: &mut u64,
 	) -> Result<Headers, Error> {
-
 		if headers_num == 0 || self.header.msg_len <= *total_read {
 			return Err(Error::Connection(io::Error::new(
 				io::ErrorKind::InvalidInput,
