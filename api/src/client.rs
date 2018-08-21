@@ -90,7 +90,8 @@ where
 	IN: Serialize,
 {
 	let req = create_post_request(url, input)?;
-	send_request(req)?;
+	let resp = send_request(req)?;
+	println!("Resp: {}", resp);
 	Ok(())
 }
 

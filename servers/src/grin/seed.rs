@@ -153,8 +153,12 @@ fn monitor_peers(
 
 	// find some peers from our db
 	// and queue them up for a connection attempt
-	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::UNKNOWN, 100);
-	for p in peers {
+	let new_peers = peers.find_peers(
+		p2p::State::Healthy,
+		p2p::Capabilities::UNKNOWN,
+		config.peer_max_count() as usize,
+	);
+	for p in new_peers.iter().filter(|p| !peers.is_known(&p.addr)) {
 		debug!(LOGGER, "monitor_peers: queue to soon try {}", p.addr);
 		tx.send(p.addr).unwrap();
 	}

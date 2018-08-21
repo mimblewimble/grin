@@ -114,6 +114,7 @@ impl Peers {
 			.read()
 			.unwrap()
 			.values()
+			.filter(|p| p.read().unwrap().is_connected())
 			.cloned()
 			.collect::<Vec<_>>();
 		thread_rng().shuffle(&mut res);
@@ -127,7 +128,8 @@ impl Peers {
 			.filter(|x| match x.try_read() {
 				Ok(peer) => peer.info.direction == Direction::Outbound,
 				Err(_) => false,
-			}).collect::<Vec<_>>();
+			})
+			.collect::<Vec<_>>();
 		res
 	}
 
@@ -156,7 +158,8 @@ impl Peers {
 			.filter(|x| match x.try_read() {
 				Ok(peer) => peer.info.total_difficulty > total_difficulty,
 				Err(_) => false,
-			}).collect::<Vec<_>>();
+			})
+			.collect::<Vec<_>>();
 
 		thread_rng().shuffle(&mut max_peers);
 		max_peers
@@ -180,7 +183,8 @@ impl Peers {
 						&& peer.info.capabilities.contains(Capabilities::FULL_HIST)
 				}
 				Err(_) => false,
-			}).collect::<Vec<_>>();
+			})
+			.collect::<Vec<_>>();
 
 		thread_rng().shuffle(&mut max_peers);
 		max_peers
@@ -209,7 +213,8 @@ impl Peers {
 			.map(|x| match x.try_read() {
 				Ok(peer) => peer.info.total_difficulty.clone(),
 				Err(_) => Difficulty::zero(),
-			}).max()
+			})
+			.max()
 			.unwrap();
 
 		let mut max_peers = peers
@@ -217,7 +222,8 @@ impl Peers {
 			.filter(|x| match x.try_read() {
 				Ok(peer) => peer.info.total_difficulty == max_total_difficulty,
 				Err(_) => false,
-			}).collect::<Vec<_>>();
+			})
+			.collect::<Vec<_>>();
 
 		thread_rng().shuffle(&mut max_peers);
 		max_peers
@@ -267,13 +273,15 @@ impl Peers {
 			Ok(_) => {
 				if self.is_banned(*peer_addr) {
 					if let Err(e) = self.update_state(*peer_addr, State::Healthy) {
-						error!(LOGGER, "Couldn't unban {}: {:?}", peer_addr, e)
+						error!(LOGGER, "Couldn't unban {}: {:?}", peer_addr, e);
 					}
 				} else {
-					error!(LOGGER, "Couldn't unban {}: peer is not banned", peer_addr)
+					error!(LOGGER, "Couldn't unban {}: peer is not banned", peer_addr);
 				}
 			}
-			Err(e) => error!(LOGGER, "Couldn't unban {}: {:?}", peer_addr, e),
+			Err(e) => {
+				error!(LOGGER, "Couldn't unban {}: {:?}", peer_addr, e);
+			}
 		};
 	}
 
@@ -484,7 +492,8 @@ impl Peers {
 				.map(|x| {
 					let p = x.read().unwrap();
 					p.info.addr.clone()
-				}).collect::<Vec<_>>()
+				})
+				.collect::<Vec<_>>()
 		};
 
 		// now remove them taking a short-lived write lock each time

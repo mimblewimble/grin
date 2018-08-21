@@ -16,8 +16,8 @@ use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
-use rand::Rng;
 use rand::os::OsRng;
+use rand::Rng;
 
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
@@ -144,6 +144,7 @@ impl Handshake {
 			// check the nonce to see if we are trying to connect to ourselves
 			let nonces = self.nonces.read().unwrap();
 			if nonces.contains(&hand.nonce) {
+				println!("xxx: peer with self");
 				return Err(Error::PeerWithSelf);
 			}
 		}
@@ -158,6 +159,8 @@ impl Handshake {
 			height: 0,
 			direction: Direction::Inbound,
 		};
+
+		println!("accept peer: {:?}", &peer_info);
 
 		// At this point we know the published ip and port of the peer
 		// so check if we are configured to explicitly allow or deny it.
