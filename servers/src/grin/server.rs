@@ -23,8 +23,9 @@ use std::{thread, time};
 
 use api;
 use chain;
-use common::adapters::{ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter,
-                       PoolToNetAdapter};
+use common::adapters::{
+	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
+};
 use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
 use common::types::{Error, Seeding, ServerConfig, StratumServerConfig, SyncState};
 use core::core::hash::Hashed;
@@ -122,9 +123,9 @@ impl Server {
 		let sync_state = Arc::new(SyncState::new());
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(
-				sync_state.clone(),
-				tx_pool.clone(),
-			));
+			sync_state.clone(),
+			tx_pool.clone(),
+		));
 
 		let genesis = match config.chain_type {
 			global::ChainTypes::Testnet1 => genesis::genesis_testnet1(),
@@ -191,11 +192,18 @@ impl Server {
 				Seeding::WebStatic => seed::web_seeds(),
 				_ => unreachable!(),
 			};
+
+			let peers_preferred = match config.peers_preferred.clone() {
+				Some(peers_preferred) => seed::preferred_peers(peers_preferred),
+				None => None,
+			};
+
 			seed::connect_and_monitor(
 				p2p_server.clone(),
 				config.capabilities,
 				config.dandelion_config.clone(),
 				seeder,
+				peers_preferred,
 				stop.clone(),
 			);
 		}
@@ -284,12 +292,7 @@ impl Server {
 		let _ = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
-				stratum_server.run_loop(
-					stratum_stats,
-					cuckoo_size as u32,
-					proof_size,
-					sync_state,
-				);
+				stratum_server.run_loop(stratum_stats, cuckoo_size as u32, proof_size, sync_state);
 			});
 	}
 

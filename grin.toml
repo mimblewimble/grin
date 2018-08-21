@@ -33,6 +33,9 @@ db_root = ".grin"
 #
 #seeds = ["192.168.0.1:13414","192.168.0.2:13414"]
 
+#A list of preferred peers to connect to
+#preferred_peers = ["192.168.0.1:13414","192.168.0.2:13414"]
+
 #The chain type, which defines the genesis block and the set of cuckoo
 #parameters used for mining. Can be:
 #AutomatedTesting - For CI builds and instant blockchain creation

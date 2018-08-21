@@ -206,7 +206,7 @@ pub struct PeerInfo {
 }
 
 /// The full txhashset data along with indexes required for a consumer to
-/// rewind to a consistant requested state.
+/// rewind to a consistent requested state.
 pub struct TxHashSetRead {
 	/// Output tree index the receiver should rewind to
 	pub output_index: u64,

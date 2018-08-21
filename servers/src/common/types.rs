@@ -154,6 +154,10 @@ pub struct ServerConfig {
 	pub seeds: Option<Vec<String>>,
 
 	/// TODO - move this into p2p_config?
+	/// The list of preferred peers that we will try to connect to
+	pub peers_preferred: Option<Vec<String>>,
+
+	/// TODO - move this into p2p_config?
 	/// Capabilities expose by this node, also conditions which other peers this
 	/// node will have an affinity toward when connection.
 	pub capabilities: p2p::Capabilities,
@@ -204,6 +208,7 @@ impl Default for ServerConfig {
 			capabilities: p2p::Capabilities::FULL_NODE,
 			seeding_type: Seeding::default(),
 			seeds: None,
+			peers_preferred: None,
 			p2p_config: p2p::P2PConfig::default(),
 			dandelion_config: pool::DandelionConfig::default(),
 			stratum_mining_config: Some(StratumServerConfig::default()),
