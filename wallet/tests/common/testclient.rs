@@ -379,7 +379,7 @@ impl WalletClient for LocalWalletClient {
 	fn get_outputs_from_node(
 		&self,
 		wallet_outputs: Vec<pedersen::Commitment>,
-	) -> Result<HashMap<pedersen::Commitment, String>, libwallet::Error> {
+	) -> Result<HashMap<pedersen::Commitment, (String, u64)>, libwallet::Error> {
 		let query_params: Vec<String> = wallet_outputs
 			.iter()
 			.map(|commit| format!("{}", util::to_hex(commit.as_ref().to_vec())))
@@ -400,9 +400,12 @@ impl WalletClient for LocalWalletClient {
 		let r = self.rx.lock().unwrap();
 		let m = r.recv().unwrap();
 		let outputs: Vec<api::Output> = serde_json::from_str(&m.body).unwrap();
-		let mut api_outputs: HashMap<pedersen::Commitment, String> = HashMap::new();
+		let mut api_outputs: HashMap<pedersen::Commitment, (String, u64)> = HashMap::new();
 		for out in outputs {
-			api_outputs.insert(out.commit.commit(), util::to_hex(out.commit.to_vec()));
+			api_outputs.insert(
+				out.commit.commit(),
+				(util::to_hex(out.commit.to_vec()), out.height),
+			);
 		}
 		Ok(api_outputs)
 	}

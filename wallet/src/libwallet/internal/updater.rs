@@ -177,7 +177,7 @@ where
 pub fn apply_api_outputs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	wallet_outputs: &HashMap<pedersen::Commitment, Identifier>,
-	api_outputs: &HashMap<pedersen::Commitment, String>,
+	api_outputs: &HashMap<pedersen::Commitment, (String, u64)>,
 	height: u64,
 ) -> Result<(), libwallet::Error>
 where
@@ -209,7 +209,7 @@ where
 		for (commit, id) in wallet_outputs.iter() {
 			if let Ok(mut output) = batch.get(id) {
 				match api_outputs.get(&commit) {
-					Some(_) => {
+					Some(o) => {
 						// if this is a coinbase tx being confirmed, it's recordable in tx log
 						if output.is_coinbase && output.status == OutputStatus::Unconfirmed {
 							let log_id = batch.next_tx_log_id(root_key_id.clone())?;
@@ -235,6 +235,7 @@ where
 								batch.save_tx_log_entry(t)?;
 							}
 						}
+						output.height = o.1;
 						output.mark_unspent();
 					}
 					None => output.mark_spent(),
