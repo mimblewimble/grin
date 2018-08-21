@@ -456,8 +456,7 @@ impl WalletClient for LocalWalletClient {
 		let m = r.recv().unwrap();
 		let o: api::OutputListing = serde_json::from_str(&m.body).unwrap();
 
-		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool)> =
-			Vec::new();
+		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool)> = Vec::new();
 
 		for out in o.outputs {
 			let is_coinbase = match out.output_type {

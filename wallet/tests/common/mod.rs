@@ -63,9 +63,14 @@ fn get_output_local(chain: &chain::Chain, commit: &pedersen::Commitment) -> Opti
 }
 
 /// get output listing traversing pmmr from local
-fn get_outputs_by_pmmr_index_local(chain: Arc<chain::Chain>, start_index: u64, max: u64) -> api::OutputListing {
+fn get_outputs_by_pmmr_index_local(
+	chain: Arc<chain::Chain>,
+	start_index: u64,
+	max: u64,
+) -> api::OutputListing {
 	let outputs = chain
-		.unspent_outputs_by_insertion_index(start_index, max).unwrap();
+		.unspent_outputs_by_insertion_index(start_index, max)
+		.unwrap();
 	api::OutputListing {
 		last_retrieved_index: outputs.0,
 		highest_index: outputs.1,

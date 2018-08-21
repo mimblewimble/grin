@@ -49,7 +49,11 @@ fn setup(test_dir: &str) {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 }
 
-fn restore_wallet(base_dir: &str, wallet_dir: &str, backend_type: common::BackendType) -> Result<(), libwallet::Error> {
+fn restore_wallet(
+	base_dir: &str,
+	wallet_dir: &str,
+	backend_type: common::BackendType,
+) -> Result<(), libwallet::Error> {
 	let source_seed = format!("{}/{}/wallet.seed", base_dir, wallet_dir);
 	let dest_dir = format!("{}/{}_restore", base_dir, wallet_dir);
 	fs::create_dir_all(dest_dir.clone())?;
@@ -59,11 +63,7 @@ fn restore_wallet(base_dir: &str, wallet_dir: &str, backend_type: common::Backen
 	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(base_dir);
 	let client = LocalWalletClient::new(wallet_dir, wallet_proxy.tx.clone());
 
-	let wallet = common::create_wallet(
-		&dest_dir,
-		client.clone(),
-		backend_type.clone(),
-	);
+	let wallet = common::create_wallet(&dest_dir, client.clone(), backend_type.clone());
 
 	wallet_proxy.add_wallet(wallet_dir, client.get_send_instance(), wallet.clone());
 
@@ -83,7 +83,10 @@ fn restore_wallet(base_dir: &str, wallet_dir: &str, backend_type: common::Backen
 	Ok(())
 }
 
-fn perform_restore(test_dir: &str, backend_type: common::BackendType) -> Result<(), libwallet::Error> {
+fn perform_restore(
+	test_dir: &str,
+	backend_type: common::BackendType,
+) -> Result<(), libwallet::Error> {
 	restore_wallet(test_dir, "wallet1", backend_type.clone())?;
 	//restore_wallet(test_dir, "wallet2", backend_type.clone())?;
 	//restore_wallet(test_dir, "wallet3", backend_type)?;
@@ -92,7 +95,10 @@ fn perform_restore(test_dir: &str, backend_type: common::BackendType) -> Result<
 
 /// Build up 2 wallets, perform a few transactions on them
 /// Then attempt to restore them in separate directories and check contents are the same
-fn setup_restore(test_dir: &str, backend_type: common::BackendType) -> Result<(), libwallet::Error> {
+fn setup_restore(
+	test_dir: &str,
+	backend_type: common::BackendType,
+) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
@@ -206,7 +212,6 @@ fn setup_restore(test_dir: &str, backend_type: common::BackendType) -> Result<()
 		let _ = api.retrieve_summary_info(true)?;
 		Ok(())
 	})?;
-
 
 	// let logging finish
 	thread::sleep(Duration::from_millis(200));
