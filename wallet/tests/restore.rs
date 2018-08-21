@@ -74,22 +74,87 @@ fn restore_wallet(
 		}
 	});
 
-	// perform the restore
+	// perform the restore and update wallet info
 	wallet::controller::owner_single_use(wallet.clone(), |api| {
 		let _ = api.restore()?;
+		let _ = api.retrieve_summary_info(true)?;
 		Ok(())
 	})?;
 
 	Ok(())
 }
 
-fn perform_restore(
-	test_dir: &str,
+fn compare_wallet_restore(
+	base_dir: &str,
+	wallet_dir: &str,
 	backend_type: common::BackendType,
 ) -> Result<(), libwallet::Error> {
-	restore_wallet(test_dir, "wallet1", backend_type.clone())?;
-	//restore_wallet(test_dir, "wallet2", backend_type.clone())?;
-	//restore_wallet(test_dir, "wallet3", backend_type)?;
+	let restore_name = format!("{}_restore", wallet_dir);
+	let source_dir = format!("{}/{}", base_dir, wallet_dir);
+	let dest_dir = format!("{}/{}", base_dir, restore_name);
+
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(base_dir);
+
+	let client = LocalWalletClient::new(wallet_dir, wallet_proxy.tx.clone());
+	let wallet_source = common::create_wallet(&source_dir, client.clone(), backend_type.clone());
+	wallet_proxy.add_wallet(
+		&wallet_dir,
+		client.get_send_instance(),
+		wallet_source.clone(),
+	);
+
+	let client = LocalWalletClient::new(&restore_name, wallet_proxy.tx.clone());
+	let wallet_dest = common::create_wallet(&dest_dir, client.clone(), backend_type.clone());
+	wallet_proxy.add_wallet(
+		&restore_name,
+		client.get_send_instance(),
+		wallet_dest.clone(),
+	);
+
+	// Set the wallet proxy listener running
+	thread::spawn(move || {
+		if let Err(e) = wallet_proxy.run() {
+			error!(LOGGER, "Wallet Proxy error: {}", e);
+		}
+	});
+
+	let mut src_info: Option<libwallet::types::WalletInfo> = None;
+	let mut dest_info: Option<libwallet::types::WalletInfo> = None;
+
+	let mut src_txs: Option<Vec<libwallet::types::TxLogEntry>> = None;
+	let mut dest_txs: Option<Vec<libwallet::types::TxLogEntry>> = None;
+
+	// Overall wallet info should be the same
+	wallet::controller::owner_single_use(wallet_source.clone(), |api| {
+		src_info = Some(api.retrieve_summary_info(true)?.1);
+		src_txs = Some(api.retrieve_txs(true, None)?.1);
+		Ok(())
+	})?;
+
+	wallet::controller::owner_single_use(wallet_dest.clone(), |api| {
+		dest_info = Some(api.retrieve_summary_info(true)?.1);
+		dest_txs = Some(api.retrieve_txs(true, None)?.1);
+		Ok(())
+	})?;
+
+	// Info should all be the same
+	assert_eq!(src_info, dest_info);
+
+	// Net differences in TX logs should be the same
+	let src_sum: i64 = src_txs
+		.unwrap()
+		.iter()
+		.map(|t| t.amount_credited as i64 - t.amount_debited as i64)
+		.sum();
+
+	let dest_sum: i64 = dest_txs
+		.unwrap()
+		.iter()
+		.map(|t| t.amount_credited as i64 - t.amount_debited as i64)
+		.sum();
+
+	assert_eq!(src_sum, dest_sum);
+
 	Ok(())
 }
 
@@ -213,8 +278,19 @@ fn setup_restore(
 		Ok(())
 	})?;
 
-	// let logging finish
-	thread::sleep(Duration::from_millis(200));
+	Ok(())
+}
+
+fn perform_restore(
+	test_dir: &str,
+	backend_type: common::BackendType,
+) -> Result<(), libwallet::Error> {
+	restore_wallet(test_dir, "wallet1", backend_type.clone())?;
+	compare_wallet_restore(test_dir, "wallet1", backend_type.clone())?;
+	restore_wallet(test_dir, "wallet2", backend_type.clone())?;
+	compare_wallet_restore(test_dir, "wallet2", backend_type.clone())?;
+	restore_wallet(test_dir, "wallet3", backend_type.clone())?;
+	compare_wallet_restore(test_dir, "wallet3", backend_type)?;
 	Ok(())
 }
 
@@ -227,4 +303,6 @@ fn db_wallet_restore() {
 	if let Err(e) = perform_restore(test_dir, common::BackendType::LMDBBackend) {
 		println!("Perform restore: Libwallet Error: {}", e);
 	}
+	// let logging finish
+	thread::sleep(Duration::from_millis(200));
 }

@@ -436,7 +436,7 @@ impl WalletClient for LocalWalletClient {
 		(
 			u64,
 			u64,
-			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)>,
 		),
 		libwallet::Error,
 	> {
@@ -459,14 +459,20 @@ impl WalletClient for LocalWalletClient {
 		let m = r.recv().unwrap();
 		let o: api::OutputListing = serde_json::from_str(&m.body).unwrap();
 
-		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool)> = Vec::new();
+		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)> =
+			Vec::new();
 
 		for out in o.outputs {
 			let is_coinbase = match out.output_type {
 				api::OutputType::Coinbase => true,
 				api::OutputType::Transaction => false,
 			};
-			api_outputs.push((out.commit, out.range_proof().unwrap(), is_coinbase));
+			api_outputs.push((
+				out.commit,
+				out.range_proof().unwrap(),
+				is_coinbase,
+				out.block_height.unwrap(),
+			));
 		}
 		Ok((o.highest_index, o.last_retrieved_index, api_outputs))
 	}
