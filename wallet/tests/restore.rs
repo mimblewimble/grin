@@ -38,7 +38,6 @@ use keychain::ExtKeychain;
 use util::LOGGER;
 use wallet::libtx::slate::Slate;
 use wallet::libwallet;
-use wallet::libwallet::types::OutputStatus;
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -50,9 +49,50 @@ fn setup(test_dir: &str) {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 }
 
+fn restore_wallet(base_dir: &str, wallet_dir: &str, backend_type: common::BackendType) -> Result<(), libwallet::Error> {
+	let source_seed = format!("{}/{}/wallet.seed", base_dir, wallet_dir);
+	let dest_dir = format!("{}/{}_restore", base_dir, wallet_dir);
+	fs::create_dir_all(dest_dir.clone())?;
+	let dest_seed = format!("{}/wallet.seed", dest_dir);
+	fs::copy(source_seed, dest_seed)?;
+
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(base_dir);
+	let client = LocalWalletClient::new(wallet_dir, wallet_proxy.tx.clone());
+
+	let wallet = common::create_wallet(
+		&dest_dir,
+		client.clone(),
+		backend_type.clone(),
+	);
+
+	wallet_proxy.add_wallet(wallet_dir, client.get_send_instance(), wallet.clone());
+
+	// Set the wallet proxy listener running
+	thread::spawn(move || {
+		if let Err(e) = wallet_proxy.run() {
+			error!(LOGGER, "Wallet Proxy error: {}", e);
+		}
+	});
+
+	// perform the restore
+	wallet::controller::owner_single_use(wallet.clone(), |api| {
+		let _ = api.restore()?;
+		Ok(())
+	})?;
+
+	Ok(())
+}
+
+fn perform_restore(test_dir: &str, backend_type: common::BackendType) -> Result<(), libwallet::Error> {
+	restore_wallet(test_dir, "wallet1", backend_type.clone())?;
+	//restore_wallet(test_dir, "wallet2", backend_type.clone())?;
+	//restore_wallet(test_dir, "wallet3", backend_type)?;
+	Ok(())
+}
+
 /// Build up 2 wallets, perform a few transactions on them
 /// Then attempt to restore them in separate directories and check contents are the same
-fn restore(test_dir: &str, backend_type: common::BackendType) -> Result<(), libwallet::Error> {
+fn setup_restore(test_dir: &str, backend_type: common::BackendType) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
@@ -84,7 +124,7 @@ fn restore(test_dir: &str, backend_type: common::BackendType) -> Result<(), libw
 		client.clone(),
 		backend_type.clone(),
 	);
-	wallet_proxy.add_wallet("wallet3", client.get_send_instance(), wallet2.clone());
+	wallet_proxy.add_wallet("wallet3", client.get_send_instance(), wallet3.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -93,9 +133,6 @@ fn restore(test_dir: &str, backend_type: common::BackendType) -> Result<(), libw
 		}
 	});
 
-	// few values to keep things shorter
-	let reward = core::consensus::REWARD;
-	let cm = global::coinbase_maturity();
 	// mine a few blocks
 	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 10);
 
@@ -138,6 +175,39 @@ fn restore(test_dir: &str, backend_type: common::BackendType) -> Result<(), libw
 	// mine a few more blocks
 	let _ = common::award_blocks_to_wallet(&chain, wallet3.clone(), 10);
 
+	// Wallet3 to wallet 2
+	wallet::controller::owner_single_use(wallet3.clone(), |sender_api| {
+		// note this will increment the block count as part of the transaction "Posting"
+		slate = sender_api.issue_send_tx(
+			amount * 3, // amount
+			2,          // minimum confirmations
+			"wallet2",  // dest
+			500,        // max outputs
+			1,          // num change outputs
+			true,       // select all outputs
+		)?;
+		sender_api.post_tx(&slate, false)?;
+		Ok(())
+	})?;
+
+	// mine a few more blocks
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 5);
+
+	// update everyone
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		let _ = api.retrieve_summary_info(true)?;
+		Ok(())
+	})?;
+	wallet::controller::owner_single_use(wallet2.clone(), |api| {
+		let _ = api.retrieve_summary_info(true)?;
+		Ok(())
+	})?;
+	wallet::controller::owner_single_use(wallet3.clone(), |api| {
+		let _ = api.retrieve_summary_info(true)?;
+		Ok(())
+	})?;
+
+
 	// let logging finish
 	thread::sleep(Duration::from_millis(200));
 	Ok(())
@@ -146,7 +216,10 @@ fn restore(test_dir: &str, backend_type: common::BackendType) -> Result<(), libw
 #[test]
 fn db_wallet_restore() {
 	let test_dir = "test_output/wallet_restore_db";
-	if let Err(e) = restore(test_dir, common::BackendType::LMDBBackend) {
-		println!("Libwallet Error: {}", e);
+	if let Err(e) = setup_restore(test_dir, common::BackendType::LMDBBackend) {
+		println!("Set up restore: Libwallet Error: {}", e);
+	}
+	if let Err(e) = perform_restore(test_dir, common::BackendType::LMDBBackend) {
+		println!("Perform restore: Libwallet Error: {}", e);
 	}
 }
