@@ -157,14 +157,17 @@ pub enum OutputType {
 pub struct Output {
 	/// The output commitment representing the amount
 	pub commit: PrintableCommitment,
+	/// Height of the block which contains the output
+	pub height: u64,
 }
 
 impl Output {
-	pub fn new(commit: &pedersen::Commitment) -> Output {
+	pub fn new(commit: &pedersen::Commitment, height: u64) -> Output {
 		Output {
 			commit: PrintableCommitment {
 				commit: commit.clone(),
 			},
+			height: height,
 		}
 	}
 }
@@ -235,7 +238,9 @@ pub struct OutputPrintable {
 	pub proof: Option<String>,
 	/// Rangeproof hash (as hex string)
 	pub proof_hash: String,
-
+	/// Block height at which the output is found
+	pub block_height: Option<u64>,
+	/// Merkle Proof
 	pub merkle_proof: Option<MerkleProof>,
 }
 
@@ -257,6 +262,10 @@ impl OutputPrintable {
 
 		let out_id = core::OutputIdentifier::from_output(&output);
 		let spent = chain.is_unspent(&out_id).is_err();
+		let block_height = match spent {
+			true => None,
+			false => Some(chain.get_header_for_output(&out_id).unwrap().height),
+		};
 
 		let proof = if include_proof {
 			Some(util::to_hex(output.proof.proof.to_vec()))
@@ -283,6 +292,7 @@ impl OutputPrintable {
 			spent,
 			proof,
 			proof_hash: util::to_hex(output.proof.hash().to_vec()),
+			block_height,
 			merkle_proof,
 		}
 	}
@@ -320,6 +330,7 @@ impl serde::ser::Serialize for OutputPrintable {
 		state.serialize_field("spent", &self.spent)?;
 		state.serialize_field("proof", &self.proof)?;
 		state.serialize_field("proof_hash", &self.proof_hash)?;
+		state.serialize_field("block_height", &self.block_height)?;
 
 		let hex_merkle_proof = &self.merkle_proof.clone().map(|x| x.to_hex());
 		state.serialize_field("merkle_proof", &hex_merkle_proof)?;
@@ -341,6 +352,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 			Spent,
 			Proof,
 			ProofHash,
+			BlockHeight,
 			MerkleProof,
 		}
 
@@ -362,6 +374,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 				let mut spent = None;
 				let mut proof = None;
 				let mut proof_hash = None;
+				let mut block_height = None;
 				let mut merkle_proof = None;
 
 				while let Some(key) = map.next_key()? {
@@ -390,6 +403,10 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 							no_dup!(proof_hash);
 							proof_hash = Some(map.next_value()?)
 						}
+						Field::BlockHeight => {
+							no_dup!(block_height);
+							block_height = Some(map.next_value()?)
+						}
 						Field::MerkleProof => {
 							no_dup!(merkle_proof);
 							if let Some(hex) = map.next_value::<Option<String>>()? {
@@ -409,6 +426,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 					spent: spent.unwrap(),
 					proof: proof,
 					proof_hash: proof_hash.unwrap(),
+					block_height: block_height,
 					merkle_proof: merkle_proof,
 				})
 			}
@@ -643,6 +661,7 @@ mod test {
 			 \"spent\":false,\
 			 \"proof\":null,\
 			 \"proof_hash\":\"ed6ba96009b86173bade6a9227ed60422916593fa32dd6d78b25b7a4eeef4946\",\
+			 \"block_height\":0,\
 			 \"merkle_proof\":null\
 			 }";
 		let deserialized: OutputPrintable = serde_json::from_str(&hex_output).unwrap();
@@ -653,7 +672,10 @@ mod test {
 	#[test]
 	fn serialize_output() {
 		let hex_commit =
-			"{\"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\"}";
+			"{\
+			 \"commit\":\"083eafae5d61a85ab07b12e1a51b3918d8e6de11fc6cde641d54af53608aa77b9f\",\
+			 \"height\":0\
+			 }";
 		let deserialized: Output = serde_json::from_str(&hex_commit).unwrap();
 		let serialized = serde_json::to_string(&deserialized).unwrap();
 		assert_eq!(serialized, hex_commit);

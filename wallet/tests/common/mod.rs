@@ -56,7 +56,8 @@ fn get_output_local(chain: &chain::Chain, commit: &pedersen::Commitment) -> Opti
 
 	for x in outputs.iter() {
 		if let Ok(_) = chain.is_unspent(&x) {
-			return Some(api::Output::new(&commit));
+			let block_height = chain.get_header_for_output(&x).unwrap().height;
+			return Some(api::Output::new(&commit, block_height));
 		}
 	}
 	None
