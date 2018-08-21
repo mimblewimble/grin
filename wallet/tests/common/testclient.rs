@@ -145,6 +145,7 @@ where
 			let resp = match m.method.as_ref() {
 				"get_chain_height" => self.get_chain_height(m)?,
 				"get_outputs_from_node" => self.get_outputs_from_node(m)?,
+				"get_outputs_by_pmmr_index" => self.get_outputs_by_pmmr_index(m)?,
 				"send_tx_slate" => self.send_tx_slate(m)?,
 				"post_tx" => self.post_tx(m)?,
 				_ => panic!("Unknown Wallet Proxy Message"),
@@ -254,6 +255,23 @@ where
 			dest: m.sender_id,
 			method: m.method,
 			body: serde_json::to_string(&outputs).unwrap(),
+		})
+	}
+
+	/// get api outputs
+	fn get_outputs_by_pmmr_index(
+		&mut self,
+		m: WalletProxyMessage,
+	) -> Result<WalletProxyMessage, libwallet::Error> {
+		let split = m.body.split(",").collect::<Vec<&str>>();
+		let start_index = split[0].parse::<u64>().unwrap();
+		let max = split[1].parse::<u64>().unwrap();
+		let ol = common::get_outputs_by_pmmr_index_local(self.chain.clone(), start_index, max);
+		Ok(WalletProxyMessage {
+			sender_id: "node".to_owned(),
+			dest: m.sender_id,
+			method: m.method,
+			body: serde_json::to_string(&ol).unwrap(),
 		})
 	}
 }
@@ -412,16 +430,50 @@ impl WalletClient for LocalWalletClient {
 
 	fn get_outputs_by_pmmr_index(
 		&self,
-		_start_height: u64,
-		_max_outputs: u64,
+		start_height: u64,
+		max_outputs: u64,
 	) -> Result<
 		(
 			u64,
 			u64,
-			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)>,
 		),
 		libwallet::Error,
 	> {
-		unimplemented!();
+		// start index, max
+		let query_str = format!("{},{}", start_height, max_outputs);
+		let m = WalletProxyMessage {
+			sender_id: self.id.clone(),
+			dest: self.node_url().to_owned(),
+			method: "get_outputs_by_pmmr_index".to_owned(),
+			body: query_str,
+		};
+		{
+			let p = self.proxy_tx.lock().unwrap();
+			p.send(m).context(libwallet::ErrorKind::ClientCallback(
+				"Get outputs from node by PMMR index send",
+			))?;
+		}
+
+		let r = self.rx.lock().unwrap();
+		let m = r.recv().unwrap();
+		let o: api::OutputListing = serde_json::from_str(&m.body).unwrap();
+
+		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)> =
+			Vec::new();
+
+		for out in o.outputs {
+			let is_coinbase = match out.output_type {
+				api::OutputType::Coinbase => true,
+				api::OutputType::Transaction => false,
+			};
+			api_outputs.push((
+				out.commit,
+				out.range_proof().unwrap(),
+				is_coinbase,
+				out.block_height.unwrap(),
+			));
+		}
+		Ok((o.highest_index, o.last_retrieved_index, api_outputs))
 	}
 }

@@ -171,7 +171,7 @@ pub trait WalletClient: Sync + Send + Clone {
 	/// set in PMMR index order.
 	/// Returns
 	/// (last available output index, last insertion index retrieved,
-	/// outputs(commit, proof, is_coinbase))
+	/// outputs(commit, proof, is_coinbase, height))
 	fn get_outputs_by_pmmr_index(
 		&self,
 		start_height: u64,
@@ -180,7 +180,7 @@ pub trait WalletClient: Sync + Send + Clone {
 		(
 			u64,
 			u64,
-			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)>,
 		),
 		Error,
 	>;
@@ -399,7 +399,7 @@ pub struct CbData {
 
 /// a contained wallet info struct, so automated tests can parse wallet info
 /// can add more fields here over time as needed
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Eq, PartialEq, Deserialize, Debug, Clone)]
 pub struct WalletInfo {
 	/// height from which info was taken
 	pub last_confirmed_height: u64,
