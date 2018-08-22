@@ -283,18 +283,9 @@ impl Readable for TransactionBody {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
-		let inputs = read_and_verify_sorted(reader, input_len).map_err(|e| {
-			error!(LOGGER, "tx body: read: inputs: {:?}", e);
-			e
-		})?;
-		let outputs = read_and_verify_sorted(reader, output_len).map_err(|e| {
-			error!(LOGGER, "tx body: read: outputs: {:?}", e);
-			e
-		})?;
-		let kernels = read_and_verify_sorted(reader, kernel_len).map_err(|e| {
-			error!(LOGGER, "tx body: read: kernels: {:?}", e);
-			e
-		})?;
+		let inputs = read_and_verify_sorted(reader, input_len)?;
+		let outputs = read_and_verify_sorted(reader, output_len)?;
+		let kernels = read_and_verify_sorted(reader, kernel_len)?;
 
 		let body = TransactionBody {
 			inputs,
