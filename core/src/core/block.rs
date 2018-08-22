@@ -396,21 +396,19 @@ impl Block {
 		}
 
 		// convert the sets to vecs
-		let mut all_inputs = Vec::from_iter(all_inputs);
-		let mut all_outputs = Vec::from_iter(all_outputs);
-		let mut all_kernels = Vec::from_iter(all_kernels);
+		let all_inputs = Vec::from_iter(all_inputs);
+		let all_outputs = Vec::from_iter(all_outputs);
+		let all_kernels = Vec::from_iter(all_kernels);
 
-		// sort them all lexicographically
-		all_inputs.sort();
-		all_outputs.sort();
-		all_kernels.sort();
+		// Initialize a tx body and sort everything.
+		let body = TransactionBody::init(all_inputs, all_outputs, all_kernels, false)?;
 
-		// finally return the full block
-		// Note: we have not actually validated the block here
-		// leave it to the caller to actually validate the block
+		// Finally return the full block.
+		// Note: we have not actually validated the block here,
+		// caller must validate the block.
 		Block {
-			header: header,
-			body: TransactionBody::new(all_inputs, all_outputs, all_kernels),
+			header,
+			body,
 		}.cut_through()
 	}
 
@@ -522,13 +520,14 @@ impl Block {
 		let mut outputs = self.outputs().clone();
 		transaction::cut_through(&mut inputs, &mut outputs)?;
 
+		let kernels = self.kernels().clone();
+
+		// Initialize tx body and sort everything.
+		let body = TransactionBody::init(inputs, outputs, kernels, false)?;
+
 		Ok(Block {
-			header: BlockHeader {
-				pow: self.header.pow,
-				total_difficulty: self.header.total_difficulty,
-				..self.header
-			},
-			body: TransactionBody::new(inputs, outputs, self.body.kernels),
+			header: self.header,
+			body,
 		})
 	}
 

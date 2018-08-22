@@ -127,20 +127,20 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			cb.kern_ids().len(),
 		);
 
+		let cb_hash = cb.hash();
 		if cb.kern_ids().is_empty() {
-			let cbh = cb.hash();
 			// push the freshly hydrated block through the chain pipeline
 			match core::Block::hydrate_from(cb, vec![]) {
 				Ok(block) => self.process_block(block, addr),
 				Err(e) => {
-					debug!(LOGGER, "Invalid hydrated block {}: {}", cbh, e);
+					debug!(LOGGER, "Invalid hydrated block {}: {}", cb_hash, e);
 					return false;
 				}
 			}
 		} else {
 			// check at least the header is valid before hydrating
 			if let Err(e) = w(&self.chain).process_block_header(&cb.header, self.chain_opts()) {
-				debug!(LOGGER, "Invalid compact block header {}: {}", cb.hash(), e);
+				debug!(LOGGER, "Invalid compact block header {}: {}", cb_hash, e);
 				return !e.is_bad_data();
 			}
 

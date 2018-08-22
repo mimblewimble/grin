@@ -20,7 +20,7 @@
 //! `serialize` or `deserialize` functions on them as appropriate.
 
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use consensus::{self, VerifySortOrder};
+use consensus;
 use core::hash::{Hash, Hashed};
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use std::io::{self, Read, Write};
@@ -205,12 +205,8 @@ pub trait Writeable {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error>;
 }
 
-/// Reads a collection of serialized items into a Vec
-/// and verifies they are lexicographically ordered.
-///
-/// A consensus rule requires everything is sorted lexicographically to avoid
-/// leaking any information through specific ordering of items.
-pub fn read_and_verify_sorted<T>(reader: &mut Reader, count: u64) -> Result<Vec<T>, Error>
+/// Reads multiple serialized items into a Vec.
+pub fn read_multi<T>(reader: &mut Reader, count: u64) -> Result<Vec<T>, Error>
 where
 	T: Readable + Hashed + Writeable,
 {
@@ -219,7 +215,6 @@ where
 		return Err(Error::TooLargeReadErr);
 	}
 	let result: Vec<T> = try!((0..count).map(|_| T::read(reader)).collect());
-	result.verify_sort_order()?;
 	Ok(result)
 }
 

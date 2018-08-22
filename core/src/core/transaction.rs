@@ -19,17 +19,15 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::{error, fmt};
 
-use util::secp::pedersen::{Commitment, RangeProof};
-use util::secp::{self, Message, Signature};
-use util::LOGGER;
-use util::{kernel_sig_msg, static_secp_instance};
-
 use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
-use ser::{self, read_and_verify_sorted, PMMRable, Readable, Reader, Writeable, Writer};
+use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};
 use util;
+use util::secp::pedersen::{Commitment, RangeProof};
+use util::secp::{self, Message, Signature};
+use util::{kernel_sig_msg, static_secp_instance};
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -283,15 +281,17 @@ impl Readable for TransactionBody {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
-		let inputs = read_and_verify_sorted(reader, input_len)?;
-		let outputs = read_and_verify_sorted(reader, output_len)?;
-		let kernels = read_and_verify_sorted(reader, kernel_len)?;
+		// TODO at this point we know how many input, outputs and kernels
+		// we are about to read. We may want to call a variant of
+		// verify_weight() here as a quick early check.
 
-		let body = TransactionBody {
-			inputs,
-			outputs,
-			kernels,
-		};
+		let inputs = read_multi(reader, input_len)?;
+		let outputs = read_multi(reader, output_len)?;
+		let kernels = read_multi(reader, kernel_len)?;
+
+		// Initialize tx body and verify everything is sorted.
+		let body = TransactionBody::init(inputs, outputs, kernels, true)
+			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(body)
 	}
@@ -327,17 +327,38 @@ impl TransactionBody {
 		}
 	}
 
-	/// Creates a new transaction initialized with
-	/// the provided inputs, outputs, kernels
-	pub fn new(
+	/// Sort the inputs|outputs|kernels.
+	pub fn sort(&mut self) {
+		self.inputs.sort();
+		self.outputs.sort();
+		self.kernels.sort();
+	}
+
+	/// Creates a new transaction body initialized with
+	/// the provided inputs, outputs and kernels.
+	/// Guarantees inputs, outputs, kernels are sorted lexicographically.
+	pub fn init(
 		inputs: Vec<Input>,
 		outputs: Vec<Output>,
 		kernels: Vec<TxKernel>,
-	) -> TransactionBody {
-		TransactionBody {
+		verify_sorted: bool,
+	) -> Result<TransactionBody, Error> {
+		let body = TransactionBody {
 			inputs: inputs,
 			outputs: outputs,
 			kernels: kernels,
+		};
+
+		if verify_sorted {
+			// If we are verifying sort order then verify and
+			// return an error if not sorted lexicographically.
+			body.verify_sorted()?;
+			Ok(body)
+		} else {
+			// If we are not verifying sort order then sort in place and return.
+			let mut body = body;
+			body.sort();
+			Ok(body)
 		}
 	}
 
@@ -565,21 +586,18 @@ impl Writeable for Transaction {
 impl Readable for Transaction {
 	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
 		let offset = BlindingFactor::read(reader)?;
-
 		let body = TransactionBody::read(reader)?;
-		let tx = Transaction { offset, body };
+		let tx = Transaction {
+			offset,
+			body,
+		};
 
 		// Now validate the tx.
 		// Treat any validation issues as data corruption.
 		// An example of this would be reading a tx
 		// that exceeded the allowed number of inputs.
-		tx.validate(false).map_err(|e| {
-			error!(
-				LOGGER,
-				"tx: read: tx validation failed, treating as corrupted data: {:?}", e
-			);
-			ser::Error::CorruptedData
-		})?;
+		tx.validate(false)
+			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(tx)
 	}
@@ -617,9 +635,15 @@ impl Transaction {
 	/// Creates a new transaction initialized with
 	/// the provided inputs, outputs, kernels
 	pub fn new(inputs: Vec<Input>, outputs: Vec<Output>, kernels: Vec<TxKernel>) -> Transaction {
+		let offset = BlindingFactor::zero();
+
+		// Initialize a new tx body and sort everything.
+		let body = TransactionBody::init(inputs, outputs, kernels, false)
+			.expect("sorting, not verifying");
+
 		Transaction {
-			offset: BlindingFactor::zero(),
-			body: TransactionBody::new(inputs, outputs, kernels),
+			offset,
+			body,
 		}
 	}
 

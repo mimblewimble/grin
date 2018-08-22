@@ -21,7 +21,7 @@ use core::block::{Block, BlockHeader, Error};
 use core::hash::Hashed;
 use core::id::ShortIdentifiable;
 use core::{KernelFeatures, Output, OutputFeatures, ShortId, TxKernel};
-use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, Writer};
+use ser::{self, read_multi, Readable, Reader, Writeable, Writer};
 
 /// Container for full (full) outputs and kernels and kern_ids for a compact block.
 #[derive(Debug, Clone)]
@@ -36,6 +36,38 @@ pub struct CompactBlockBody {
 }
 
 impl CompactBlockBody {
+	fn init(
+		out_full: Vec<Output>,
+		kern_full: Vec<TxKernel>,
+		kern_ids: Vec<ShortId>,
+		verify_sorted: bool,
+	) -> Result<Self, Error> {
+		let body = CompactBlockBody {
+			out_full,
+			kern_full,
+			kern_ids,
+		};
+
+		if verify_sorted {
+			// If we are verifying sort order then verify and
+			// return an error if not sorted lexicographically.
+			body.verify_sorted()?;
+			Ok(body)
+		} else {
+			// If we are not verifying sort order then sort in place and return.
+			let mut body = body;
+			body.sort();
+			Ok(body)
+		}
+	}
+
+	/// Sort everything.
+	fn sort(&mut self) {
+		self.out_full.sort();
+		self.kern_full.sort();
+		self.kern_ids.sort();
+	}
+
 	fn validate(&self) -> Result<(), Error> {
 		self.verify_sorted()?;
 		Ok(())
@@ -55,15 +87,15 @@ impl Readable for CompactBlockBody {
 		let (out_full_len, kern_full_len, kern_id_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
-		let out_full = read_and_verify_sorted(reader, out_full_len as u64)?;
-		let kern_full = read_and_verify_sorted(reader, kern_full_len as u64)?;
-		let kern_ids = read_and_verify_sorted(reader, kern_id_len)?;
+		let out_full = read_multi(reader, out_full_len)?;
+		let kern_full = read_multi(reader, kern_full_len)?;
+		let kern_ids = read_multi(reader, kern_id_len)?;
 
-		Ok(CompactBlockBody {
-			out_full,
-			kern_full,
-			kern_ids,
-		})
+		// Initialize compact block body, verifying sort order.
+		let body = CompactBlockBody::init(out_full, kern_full, kern_ids, true)
+			.map_err(|_| ser::Error::CorruptedData)?;
+
+		Ok(body)
 	}
 }
 
@@ -132,7 +164,7 @@ impl From<Block> for CompactBlock {
 		let header = block.header.clone();
 		let nonce = thread_rng().next_u64();
 
-		let mut out_full = block
+		let out_full = block
 			.outputs()
 			.iter()
 			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
@@ -150,19 +182,14 @@ impl From<Block> for CompactBlock {
 			}
 		}
 
-		// sort everything
-		out_full.sort();
-		kern_full.sort();
-		kern_ids.sort();
+		// Initialize a compact block body and sort everything.
+		let body = CompactBlockBody::init(out_full, kern_full, kern_ids, false)
+			.expect("sorting, not verifying");
 
 		CompactBlock {
 			header,
 			nonce,
-			body: CompactBlockBody {
-				out_full,
-				kern_full,
-				kern_ids,
-			},
+			body,
 		}
 	}
 }
@@ -189,8 +216,8 @@ impl Readable for CompactBlock {
 	fn read(reader: &mut Reader) -> Result<CompactBlock, ser::Error> {
 		let header = BlockHeader::read(reader)?;
 		let nonce = reader.read_u64()?;
-
 		let body = CompactBlockBody::read(reader)?;
+
 		let cb = CompactBlock {
 			header,
 			nonce,
