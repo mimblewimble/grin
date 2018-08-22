@@ -587,17 +587,13 @@ impl Readable for Transaction {
 	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
 		let offset = BlindingFactor::read(reader)?;
 		let body = TransactionBody::read(reader)?;
-		let tx = Transaction {
-			offset,
-			body,
-		};
+		let tx = Transaction { offset, body };
 
 		// Now validate the tx.
 		// Treat any validation issues as data corruption.
 		// An example of this would be reading a tx
 		// that exceeded the allowed number of inputs.
-		tx.validate(false)
-			.map_err(|_| ser::Error::CorruptedData)?;
+		tx.validate(false).map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(tx)
 	}
@@ -638,13 +634,10 @@ impl Transaction {
 		let offset = BlindingFactor::zero();
 
 		// Initialize a new tx body and sort everything.
-		let body = TransactionBody::init(inputs, outputs, kernels, false)
-			.expect("sorting, not verifying");
+		let body =
+			TransactionBody::init(inputs, outputs, kernels, false).expect("sorting, not verifying");
 
-		Transaction {
-			offset,
-			body,
-		}
+		Transaction { offset, body }
 	}
 
 	/// Creates a new transaction using this transaction as a template

@@ -27,9 +27,7 @@ use grin_core::core::block::Error;
 use grin_core::core::hash::Hashed;
 use grin_core::core::id::ShortIdentifiable;
 use grin_core::core::Committed;
-use grin_core::core::{
-	Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures,
-};
+use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
 use grin_core::{global, ser};
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use std::time::Instant;

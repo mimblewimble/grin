@@ -406,10 +406,7 @@ impl Block {
 		// Finally return the full block.
 		// Note: we have not actually validated the block here,
 		// caller must validate the block.
-		Block {
-			header,
-			body,
-		}.cut_through()
+		Block { header, body }.cut_through()
 	}
 
 	/// Build a new empty block from a specified header
