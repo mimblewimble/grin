@@ -140,7 +140,12 @@ impl Peers {
 
 	/// Number of peers we're currently connected to.
 	pub fn peer_count(&self) -> u32 {
-		self.peers.read().unwrap().len() as u32
+		self.peers
+			.read()
+			.unwrap()
+			.values()
+			.filter(|p| p.read().unwrap().is_connected())
+			.count() as u32
 	}
 
 	// Return vec of connected peers that currently advertise more work
