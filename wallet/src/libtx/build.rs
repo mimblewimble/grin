@@ -196,7 +196,7 @@ where
 	K: Keychain,
 {
 	let mut ctx = Context { keychain };
-	let (mut tx, kern, sum) = elems.iter().fold(
+	let (tx, kern, sum) = elems.iter().fold(
 		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
 		|acc, elem| elem(&mut ctx, acc),
 	);
@@ -204,7 +204,8 @@ where
 
 	// we only support building a tx with a single kernel via build::transaction()
 	assert!(tx.kernels().is_empty());
-	tx.kernels_mut().push(kern);
+
+	let tx = tx.with_kernel(kern);
 
 	Ok((tx, blind_sum))
 }
@@ -220,14 +221,19 @@ where
 	let (mut tx, blind_sum) = partial_transaction(elems, keychain)?;
 	assert_eq!(tx.kernels().len(), 1);
 
-	let mut kern = tx.kernels_mut().remove(0);
-	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
+	let kern = {
+		let mut kern = tx.kernels_mut().remove(0);
+		let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
 
-	let skey = blind_sum.secret_key(&keychain.secp())?;
-	kern.excess = keychain.secp().commit(0, skey)?;
-	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &blind_sum).unwrap();
+		let skey = blind_sum.secret_key(&keychain.secp())?;
+		kern.excess = keychain.secp().commit(0, skey)?;
+		kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &blind_sum).unwrap();
+		kern
+	};
 
-	tx.kernels_mut().push(kern);
+	// Now build a new tx with this single kernel.
+	let tx = tx.with_kernel(kern);
+	assert_eq!(tx.kernels().len(), 1);
 
 	Ok(tx)
 }
@@ -264,7 +270,8 @@ where
 	tx.offset = k2.clone();
 
 	assert!(tx.kernels().is_empty());
-	tx.kernels_mut().push(kern);
+	let tx = tx.with_kernel(kern);
+	assert_eq!(tx.kernels().len(), 1);
 
 	Ok(tx)
 }

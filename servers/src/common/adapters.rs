@@ -25,10 +25,10 @@ use std::time::Instant;
 
 use chain::{self, ChainAdapter, Options, Tip};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
-use core::core::block::BlockHeader;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::transaction::Transaction;
+use core::core::{BlockHeader, CompactBlock};
 use core::{core, global};
 use p2p;
 use pool;
@@ -122,25 +122,25 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			bhash,
 			cb.header.height,
 			addr,
-			cb.out_full.len(),
-			cb.kern_full.len(),
-			cb.kern_ids.len(),
+			cb.out_full().len(),
+			cb.kern_full().len(),
+			cb.kern_ids().len(),
 		);
 
-		if cb.kern_ids.is_empty() {
-			let cbh = cb.hash();
+		let cb_hash = cb.hash();
+		if cb.kern_ids().is_empty() {
 			// push the freshly hydrated block through the chain pipeline
 			match core::Block::hydrate_from(cb, vec![]) {
 				Ok(block) => self.process_block(block, addr),
 				Err(e) => {
-					debug!(LOGGER, "Invalid hydrated block {}: {}", cbh, e);
+					debug!(LOGGER, "Invalid hydrated block {}: {}", cb_hash, e);
 					return false;
 				}
 			}
 		} else {
 			// check at least the header is valid before hydrating
 			if let Err(e) = w(&self.chain).process_block_header(&cb.header, self.chain_opts()) {
-				debug!(LOGGER, "Invalid compact block header {}: {}", cb.hash(), e);
+				debug!(LOGGER, "Invalid compact block header {}: {}", cb_hash, e);
 				return !e.is_bad_data();
 			}
 
@@ -634,11 +634,10 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		if opts.contains(Options::MINE) {
 			// propagate compact block out if we mined the block
 			// but broadcast full block if we have no txs
-			let cb = b.as_compact_block();
-			if cb.kern_ids.is_empty() {
-				// in the interest of testing all code paths
-				// randomly decide how we send an empty block out
-				// TODO - lock this down once we are comfortable it works...
+			let cb: CompactBlock = b.clone().into();
+			if cb.kern_ids().is_empty() {
+				// In the interest of exercising all code paths
+				// randomly decide how we send an empty block out.
 				let mut rng = rand::thread_rng();
 				if rng.gen() {
 					wo(&self.peers).broadcast_block(&b);
@@ -657,7 +656,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			if rng.gen() {
 				wo(&self.peers).broadcast_header(&b.header);
 			} else {
-				let cb = b.as_compact_block();
+				let cb = b.clone().into();
 				wo(&self.peers).broadcast_compact_block(&cb);
 			}
 		}
