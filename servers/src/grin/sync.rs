@@ -415,12 +415,13 @@ fn get_locator(chain: Arc<chain::Chain>) -> Result<Vec<Hash>, Error> {
 
 	debug!(LOGGER, "sync: locator heights: {:?}", heights);
 
-	let mut locator: Vec<Hash> = vec![];
-	for height in heights {
-		let current = chain.get_header_by_height(height);
-		if let Ok(header) = current {
+	let mut locator = vec![];
+	let mut current = chain.get_block_header(&tip.last_block_h);
+	while let Ok(header) = current {
+		if heights.contains(&header.height) {
 			locator.push(header.hash());
 		}
+		current = chain.get_block_header(&header.previous);
 	}
 
 	debug!(LOGGER, "sync: locator: {:?}", locator);
