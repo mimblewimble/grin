@@ -16,7 +16,6 @@
 
 use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
-use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
@@ -25,7 +24,6 @@ use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
-use core::id::ShortIdentifiable;
 use core::target::Difficulty;
 use core::{
 	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, Transaction,
@@ -376,6 +374,8 @@ impl Block {
 			txs.len(),
 		);
 
+		let header = cb.header.clone();
+
 		let mut all_inputs = HashSet::new();
 		let mut all_outputs = HashSet::new();
 		let mut all_kernels = HashSet::new();
@@ -390,7 +390,7 @@ impl Block {
 
 		// include the coinbase output(s) and kernel(s) from the compact_block
 		{
-			let body: CompactBlockBody = cb.body.into();
+			let body: CompactBlockBody = cb.into();
 			all_outputs.extend(body.out_full);
 			all_kernels.extend(body.kern_full);
 		}
@@ -409,49 +409,9 @@ impl Block {
 		// Note: we have not actually validated the block here
 		// leave it to the caller to actually validate the block
 		Block {
-			header: cb.header,
+			header: header,
 			body: TransactionBody::new(all_inputs, all_outputs, all_kernels),
 		}.cut_through()
-	}
-
-	/// Generate the compact block representation.
-	pub fn as_compact_block(&self) -> CompactBlock {
-		let header = self.header.clone();
-		let nonce = thread_rng().next_u64();
-
-		let mut out_full = self
-			.body
-			.outputs
-			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
-			.cloned()
-			.collect::<Vec<_>>();
-
-		let mut kern_full = vec![];
-		let mut kern_ids = vec![];
-
-		for k in self.kernels() {
-			if k.features.contains(KernelFeatures::COINBASE_KERNEL) {
-				kern_full.push(k.clone());
-			} else {
-				kern_ids.push(k.short_id(&header.hash(), nonce));
-			}
-		}
-
-		// sort everything
-		out_full.sort();
-		kern_full.sort();
-		kern_ids.sort();
-
-		CompactBlock {
-			header,
-			nonce,
-			body: CompactBlockBody {
-				out_full,
-				kern_full,
-				kern_ids,
-			},
-		}
 	}
 
 	/// Build a new empty block from a specified header

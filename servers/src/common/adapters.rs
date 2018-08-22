@@ -25,7 +25,7 @@ use std::time::Instant;
 
 use chain::{self, ChainAdapter, Options, Tip};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
-use core::core::block::BlockHeader;
+use core::core::{CompactBlock, BlockHeader};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::transaction::Transaction;
@@ -634,7 +634,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		if opts.contains(Options::MINE) {
 			// propagate compact block out if we mined the block
 			// but broadcast full block if we have no txs
-			let cb = b.as_compact_block();
+			let cb: CompactBlock = b.clone().into();
 			if cb.kern_ids().is_empty() {
 				// In the interest of exercising all code paths
 				// randomly decide how we send an empty block out.
@@ -656,7 +656,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			if rng.gen() {
 				wo(&self.peers).broadcast_header(&b.header);
 			} else {
-				let cb = b.as_compact_block();
+				let cb = b.clone().into();
 				wo(&self.peers).broadcast_compact_block(&cb);
 			}
 		}

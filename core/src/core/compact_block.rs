@@ -14,9 +14,13 @@
 
 //! Compact Blocks.
 
+use rand::{thread_rng, Rng};
+
 use consensus::VerifySortOrder;
-use core::block::{BlockHeader, Error};
-use core::{Output, ShortId, TxKernel};
+use core::block::{Block, BlockHeader, Error};
+use core::{KernelFeatures, Output, OutputFeatures, ShortId, TxKernel};
+use core::hash::Hashed;
+use core::id::ShortIdentifiable;
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, Writer};
 
 /// Container for full (full) outputs and kernels and kern_ids for a compact block.
@@ -98,7 +102,7 @@ pub struct CompactBlock {
 	/// Nonce for connection specific short_ids
 	pub nonce: u64,
 	/// Container for out_full, kern_full and kern_ids in the compact block.
-	pub body: CompactBlockBody,
+	body: CompactBlockBody,
 }
 
 impl CompactBlock {
@@ -120,6 +124,46 @@ impl CompactBlock {
 	/// Get full (coinbase) outputs
 	pub fn out_full(&self) -> &Vec<Output> {
 		&self.body.out_full
+	}
+}
+
+impl From<Block> for CompactBlock {
+	fn from(block: Block) -> Self {
+		let header = block.header.clone();
+		let nonce = thread_rng().next_u64();
+
+		let mut out_full = block
+			.outputs()
+			.iter()
+			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
+			.cloned()
+			.collect::<Vec<_>>();
+
+		let mut kern_full = vec![];
+		let mut kern_ids = vec![];
+
+		for k in block.kernels() {
+			if k.features.contains(KernelFeatures::COINBASE_KERNEL) {
+				kern_full.push(k.clone());
+			} else {
+				kern_ids.push(k.short_id(&header.hash(), nonce));
+			}
+		}
+
+		// sort everything
+		out_full.sort();
+		kern_full.sort();
+		kern_ids.sort();
+
+		CompactBlock {
+			header,
+			nonce,
+			body: CompactBlockBody {
+				out_full,
+				kern_full,
+				kern_ids,
+			},
+		}
 	}
 }
 
