@@ -555,10 +555,13 @@ impl Block {
 			secp.commit_sum(excesses, vec![])?
 		};
 
+		let now = Utc::now().timestamp();
+		let timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now, 0), Utc);
+
 		Block {
 			header: BlockHeader {
 				height: prev.height + 1,
-				timestamp: Utc::now(),
+				timestamp,
 				previous: prev.hash(),
 				total_difficulty: difficulty + prev.total_difficulty,
 				total_kernel_offset,

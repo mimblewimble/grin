@@ -208,22 +208,34 @@ fn remove_coinbase_kernel_flag() {
 }
 
 #[test]
-fn serialize_deserialize_block() {
+fn serialize_deserialize_block_header() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let prev = BlockHeader::default();
 	let key_id = keychain.derive_key_id(1).unwrap();
-	let mut b = new_block(vec![], &keychain, &prev, &key_id);
+	let b = new_block(vec![], &keychain, &prev, &key_id);
+	let header1 = b.header;
+
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, &header1).expect("serialization failed");
+	let header2: BlockHeader = ser::deserialize(&mut &vec[..]).unwrap();
+
+	assert_eq!(header1.hash(), header2.hash());
+	assert_eq!(header1, header2);
+}
+
+#[test]
+fn serialize_deserialize_block() {
+	let tx1 = tx1i2o();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let prev = BlockHeader::default();
+	let key_id = keychain.derive_key_id(1).unwrap();
+	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
 	let b2: Block = ser::deserialize(&mut &vec[..]).unwrap();
 
-	// After header serialization, timestamp will lose 'nanos' info, that's the designed behavior.
-	// To suppress 'nanos' difference caused assertion fail, we force b.header also lose 'nanos'.
-	let origin_ts = b.header.timestamp;
-	b.header.timestamp =
-		origin_ts - Duration::nanoseconds(origin_ts.timestamp_subsec_nanos() as i64);
-
+	assert_eq!(b.hash(), b2.hash());
 	assert_eq!(b.header, b2.header);
 	assert_eq!(b.inputs(), b2.inputs());
 	assert_eq!(b.outputs(), b2.outputs());
