@@ -267,7 +267,7 @@ fn simulate_fast_sync() {
 	let s1 = servers::Server::new(framework::config(2000, "grin-fast", 2000)).unwrap();
 	s1.start_test_miner(None);
 
-	while s1.head().height < 21 {
+	while s1.head().height < 20 {
 		thread::sleep(time::Duration::from_millis(1_000));
 	}
 
@@ -275,9 +275,12 @@ fn simulate_fast_sync() {
 	conf.archive_mode = Some(false);
 
 	let s2 = servers::Server::new(conf).unwrap();
-	while s2.head().height < 21 {
+
+	while s2.header_head().height < 1 {
+		s2.ping_peers();
 		thread::sleep(time::Duration::from_millis(1_000));
 	}
+	s1.stop_test_miner();
 
 	// Get the current header from s1.
 	let s1_header = s1.chain.head_header().unwrap();
