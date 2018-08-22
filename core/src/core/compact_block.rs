@@ -18,9 +18,9 @@ use rand::{thread_rng, Rng};
 
 use consensus::VerifySortOrder;
 use core::block::{Block, BlockHeader, Error};
-use core::{KernelFeatures, Output, OutputFeatures, ShortId, TxKernel};
 use core::hash::Hashed;
 use core::id::ShortIdentifiable;
+use core::{KernelFeatures, Output, OutputFeatures, ShortId, TxKernel};
 use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, Writer};
 
 /// Container for full (full) outputs and kernels and kern_ids for a compact block.

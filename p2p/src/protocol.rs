@@ -20,8 +20,8 @@ use std::sync::Arc;
 
 use conn::{Message, MessageHandler, Response};
 use core::core;
-use core::core::CompactBlock;
 use core::core::hash::Hash;
+use core::core::CompactBlock;
 use msg::{
 	BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr, TxHashSetArchive,
 	TxHashSetRequest, Type,

@@ -25,10 +25,10 @@ use std::time::Instant;
 
 use chain::{self, ChainAdapter, Options, Tip};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
-use core::core::{CompactBlock, BlockHeader};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::transaction::Transaction;
+use core::core::{BlockHeader, CompactBlock};
 use core::{core, global};
 use p2p;
 use pool;
