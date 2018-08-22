@@ -21,6 +21,7 @@ use std::sync::Arc;
 use conn::{Message, MessageHandler, Response};
 use core::core;
 use core::core::hash::Hash;
+use core::core::CompactBlock;
 use msg::{
 	BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr, TxHashSetArchive,
 	TxHashSetRequest, Type,
@@ -129,17 +130,13 @@ impl MessageHandler for Protocol {
 				let h: Hash = msg.body()?;
 
 				if let Some(b) = adapter.get_block(h) {
-					let cb = b.as_compact_block();
-
-					// serialize and send the block over in compact representation
-
 					// if we have txs in the block send a compact block
 					// but if block is empty -
 					// to allow us to test all code paths, randomly choose to send
 					// either the block or the compact block
 					let mut rng = rand::thread_rng();
 
-					if cb.kern_ids.is_empty() && rng.gen() {
+					if b.kernels().len() == 1 && rng.gen() {
 						debug!(
 							LOGGER,
 							"handle_payload: GetCompactBlock: empty block, sending full block",
@@ -147,6 +144,7 @@ impl MessageHandler for Protocol {
 
 						Ok(Some(msg.respond(Type::Block, b)))
 					} else {
+						let cb: CompactBlock = b.into();
 						Ok(Some(msg.respond(Type::CompactBlock, cb)))
 					}
 				} else {

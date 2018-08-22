@@ -619,7 +619,7 @@ impl BlockHandler {
 	fn get_compact_block(&self, h: &Hash) -> Result<CompactBlockPrintable, Error> {
 		let block = w(&self.chain).get_block(h).context(ErrorKind::NotFound)?;
 		Ok(CompactBlockPrintable::from_compact_block(
-			&block.as_compact_block(),
+			&block.into(),
 			w(&self.chain),
 		))
 	}

@@ -16,23 +16,22 @@
 
 use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
-use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
 
 use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
+use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
-use core::id::ShortIdentifiable;
 use core::target::Difficulty;
 use core::{
-	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId,
-	Transaction, TransactionBody, TxKernel,
+	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, Transaction,
+	TransactionBody, TxKernel,
 };
 use global;
 use keychain::{self, BlindingFactor};
-use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
+use ser::{self, Readable, Reader, Writeable, Writer};
 use util::{secp, secp_static, static_secp_instance, LOGGER};
 
 /// Errors thrown by Block validation
@@ -268,80 +267,6 @@ impl BlockHeader {
 	}
 }
 
-/// Compact representation of a full block.
-/// Each input/output/kernel is represented as a short_id.
-/// A node is reasonably likely to have already seen all tx data (tx broadcast
-/// before block) and can go request missing tx data from peers if necessary to
-/// hydrate a compact block into a full block.
-#[derive(Debug, Clone)]
-pub struct CompactBlock {
-	/// The header with metadata and commitments to the rest of the data
-	pub header: BlockHeader,
-	/// Nonce for connection specific short_ids
-	pub nonce: u64,
-	/// List of full outputs - specifically the coinbase output(s)
-	pub out_full: Vec<Output>,
-	/// List of full kernels - specifically the coinbase kernel(s)
-	pub kern_full: Vec<TxKernel>,
-	/// List of transaction kernels, excluding those in the full list
-	/// (short_ids)
-	pub kern_ids: Vec<ShortId>,
-}
-
-/// Implementation of Writeable for a compact block, defines how to write the
-/// block to a binary writer. Differentiates between writing the block for the
-/// purpose of full serialization and the one of just extracting a hash.
-impl Writeable for CompactBlock {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.header.write(writer)?;
-
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			writer.write_u64(self.nonce)?;
-
-			ser_multiwrite!(
-				writer,
-				[write_u64, self.out_full.len() as u64],
-				[write_u64, self.kern_full.len() as u64],
-				[write_u64, self.kern_ids.len() as u64]
-			);
-
-			let mut out_full = self.out_full.clone();
-			let mut kern_full = self.kern_full.clone();
-			let mut kern_ids = self.kern_ids.clone();
-
-			// Consensus rule that everything is sorted in lexicographical order on the
-			// wire.
-			out_full.write_sorted(writer)?;
-			kern_full.write_sorted(writer)?;
-			kern_ids.write_sorted(writer)?;
-		}
-		Ok(())
-	}
-}
-
-/// Implementation of Readable for a compact block, defines how to read a
-/// compact block from a binary stream.
-impl Readable for CompactBlock {
-	fn read(reader: &mut Reader) -> Result<CompactBlock, ser::Error> {
-		let header = BlockHeader::read(reader)?;
-
-		let (nonce, out_full_len, kern_full_len, kern_id_len) =
-			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
-
-		let out_full = read_and_verify_sorted(reader, out_full_len as u64)?;
-		let kern_full = read_and_verify_sorted(reader, kern_full_len as u64)?;
-		let kern_ids = read_and_verify_sorted(reader, kern_id_len)?;
-
-		Ok(CompactBlock {
-			header,
-			nonce,
-			out_full,
-			kern_full,
-			kern_ids,
-		})
-	}
-}
-
 /// A block as expressed in the MimbleWimble protocol. The reward is
 /// non-explicit, assumed to be deducible from block height (similar to
 /// bitcoin's schedule) and expressed as a global transaction fee (added v.H),
@@ -375,7 +300,10 @@ impl Readable for Block {
 		let header = BlockHeader::read(reader)?;
 
 		let body = TransactionBody::read(reader)?;
+
+		// Now validate the body and treat any validation error as corrupted data.
 		body.validate(true).map_err(|_| ser::Error::CorruptedData)?;
+
 		Ok(Block {
 			header: header,
 			body: body,
@@ -446,6 +374,8 @@ impl Block {
 			txs.len(),
 		);
 
+		let header = cb.header.clone();
+
 		let mut all_inputs = HashSet::new();
 		let mut all_outputs = HashSet::new();
 		let mut all_kernels = HashSet::new();
@@ -459,64 +389,24 @@ impl Block {
 		}
 
 		// include the coinbase output(s) and kernel(s) from the compact_block
-		all_outputs.extend(cb.out_full);
-		all_kernels.extend(cb.kern_full);
+		{
+			let body: CompactBlockBody = cb.into();
+			all_outputs.extend(body.out_full);
+			all_kernels.extend(body.kern_full);
+		}
 
 		// convert the sets to vecs
-		let mut all_inputs = Vec::from_iter(all_inputs);
-		let mut all_outputs = Vec::from_iter(all_outputs);
-		let mut all_kernels = Vec::from_iter(all_kernels);
+		let all_inputs = Vec::from_iter(all_inputs);
+		let all_outputs = Vec::from_iter(all_outputs);
+		let all_kernels = Vec::from_iter(all_kernels);
 
-		// sort them all lexicographically
-		all_inputs.sort();
-		all_outputs.sort();
-		all_kernels.sort();
+		// Initialize a tx body and sort everything.
+		let body = TransactionBody::init(all_inputs, all_outputs, all_kernels, false)?;
 
-		// finally return the full block
-		// Note: we have not actually validated the block here
-		// leave it to the caller to actually validate the block
-		Block {
-			header: cb.header,
-			body: TransactionBody::new(all_inputs, all_outputs, all_kernels),
-		}.cut_through()
-	}
-
-	/// Generate the compact block representation.
-	pub fn as_compact_block(&self) -> CompactBlock {
-		let header = self.header.clone();
-		let nonce = thread_rng().next_u64();
-
-		let mut out_full = self
-			.body
-			.outputs
-			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
-			.cloned()
-			.collect::<Vec<_>>();
-
-		let mut kern_full = vec![];
-		let mut kern_ids = vec![];
-
-		for k in self.kernels() {
-			if k.features.contains(KernelFeatures::COINBASE_KERNEL) {
-				kern_full.push(k.clone());
-			} else {
-				kern_ids.push(k.short_id(&header.hash(), nonce));
-			}
-		}
-
-		// sort all the lists
-		out_full.sort();
-		kern_full.sort();
-		kern_ids.sort();
-
-		CompactBlock {
-			header,
-			nonce,
-			out_full,
-			kern_full,
-			kern_ids,
-		}
+		// Finally return the full block.
+		// Note: we have not actually validated the block here,
+		// caller must validate the block.
+		Block { header, body }.cut_through()
 	}
 
 	/// Build a new empty block from a specified header
@@ -627,13 +517,14 @@ impl Block {
 		let mut outputs = self.outputs().clone();
 		transaction::cut_through(&mut inputs, &mut outputs)?;
 
+		let kernels = self.kernels().clone();
+
+		// Initialize tx body and sort everything.
+		let body = TransactionBody::init(inputs, outputs, kernels, false)?;
+
 		Ok(Block {
-			header: BlockHeader {
-				pow: self.header.pow,
-				total_difficulty: self.header.total_difficulty,
-				..self.header
-			},
-			body: TransactionBody::new(inputs, outputs, self.body.kernels),
+			header: self.header,
+			body,
 		})
 	}
 

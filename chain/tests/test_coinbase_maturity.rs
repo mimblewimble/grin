@@ -28,7 +28,7 @@ use std::sync::Arc;
 use chain::types::NoopAdapter;
 use chain::ErrorKind;
 use core::core::target::Difficulty;
-use core::core::{transaction, OutputIdentifier};
+use core::core::transaction;
 use core::global::{self, ChainTypes};
 use core::{consensus, pow};
 use keychain::{ExtKeychain, Keychain};
