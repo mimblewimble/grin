@@ -14,16 +14,18 @@
 
 use std::env;
 use std::fs::File;
-use std::io::BufWriter;
-use std::net::SocketAddr;
+use std::io::{self, BufWriter};
+use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
 
 use conn::{Message, MessageHandler, Response};
 use core::core;
 use core::core::hash::Hash;
+use core::ser;
+
 use msg::{
-	BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr, TxHashSetArchive,
-	TxHashSetRequest, Type,
+	read_exact, BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr,
+	TxHashSetArchive, TxHashSetRequest, Type,
 };
 use rand::{self, Rng};
 use types::{Error, NetAdapter};
@@ -37,6 +39,60 @@ pub struct Protocol {
 impl Protocol {
 	pub fn new(adapter: Arc<NetAdapter>, addr: SocketAddr) -> Protocol {
 		Protocol { adapter, addr }
+	}
+
+	/// Read the Headers Vec size from the underlying connection, and calculate the header_size of one Header
+	pub fn headers_header_size(conn: &mut TcpStream, msg_len: u64) -> Result<u64, Error> {
+		let mut size = vec![0u8; 2];
+		// read size of Vec<BlockHeader>
+		read_exact(conn, &mut size, 20000, true)?;
+
+		let total_headers = size[0] as u64 * 256 + size[1] as u64;
+		if total_headers == 0 || total_headers > 10_000 {
+			return Err(Error::Connection(io::Error::new(
+				io::ErrorKind::InvalidData,
+				"headers_streaming_body",
+			)));
+		}
+		let header_size = (msg_len - 2) / total_headers;
+
+		if header_size < 128 || header_size > 1024 {
+			return Err(Error::Connection(io::Error::new(
+				io::ErrorKind::InvalidData,
+				"headers_streaming_body",
+			)));
+		}
+		return Ok(header_size);
+	}
+
+	/// Read the Headers streaming body from the underlying connection
+	pub fn headers_streaming_body(
+		conn: &mut TcpStream, // (i) underlying connection
+		msg_len: u64,         // (i) length of whole 'Headers'
+		headers_num: u64,     // (i) how many BlockHeader(s) do you want to read
+		total_read: &mut u64, // (i/o) how many bytes already read on this 'Headers' message
+		header_size: u64,     // (i) size of single BlockHeader
+	) -> Result<Headers, Error> {
+		if headers_num == 0 || msg_len <= *total_read || *total_read < 2 {
+			return Err(Error::Connection(io::Error::new(
+				io::ErrorKind::InvalidInput,
+				"headers_streaming_body",
+			)));
+		}
+
+		let mut read_size = headers_num * header_size;
+		if *total_read + read_size > msg_len {
+			read_size = msg_len - *total_read;
+		}
+
+		let mut body = vec![0u8; 2 + read_size as usize]; // reserved '2' for Vec<> size
+		let final_headers_num = read_size / header_size;
+		body[0] = (final_headers_num >> 8) as u8;
+		body[1] = (final_headers_num & 0x00ff) as u8;
+
+		read_exact(conn, &mut body[2..], 20000, true)?;
+		*total_read += read_size;
+		ser::deserialize(&mut &body[..]).map_err(From::from)
 	}
 }
 
@@ -189,11 +245,19 @@ impl MessageHandler for Protocol {
 			}
 
 			Type::Headers => {
-				let mut total_read: u64 = 0;
-				let mut header_size: u64 = 0;
+				let conn = &mut msg.get_conn();
+
+				let header_size: u64 = Protocol::headers_header_size(conn, msg.header.msg_len)?;
+				let mut total_read: u64 = 2;
+
 				while total_read < msg.header.msg_len {
-					let headers: Headers =
-						msg.headers_streaming_body(8, &mut total_read, &mut header_size)?;
+					let headers: Headers = Protocol::headers_streaming_body(
+						conn,
+						msg.header.msg_len,
+						8,
+						&mut total_read,
+						header_size,
+					)?;
 					adapter.headers_received(headers.headers, self.addr);
 				}
 				Ok(None)
