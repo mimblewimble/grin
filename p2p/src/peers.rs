@@ -37,6 +37,7 @@ pub struct Peers {
 	store: PeerStore,
 	peers: RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>,
 	dandelion_relay: RwLock<HashMap<i64, Arc<RwLock<Peer>>>>,
+	headers_lock: RwLock<bool>,
 }
 
 unsafe impl Send for Peers {}
@@ -49,6 +50,7 @@ impl Peers {
 			store,
 			peers: RwLock::new(HashMap::new()),
 			dandelion_relay: RwLock::new(HashMap::new()),
+			headers_lock: RwLock::new(false),
 		}
 	}
 
@@ -127,7 +129,8 @@ impl Peers {
 			.filter(|x| match x.try_read() {
 				Ok(peer) => peer.info.direction == Direction::Outbound,
 				Err(_) => false,
-			}).collect::<Vec<_>>();
+			})
+			.collect::<Vec<_>>();
 		res
 	}
 
@@ -156,7 +159,8 @@ impl Peers {
 			.filter(|x| match x.try_read() {
 				Ok(peer) => peer.info.total_difficulty > total_difficulty,
 				Err(_) => false,
-			}).collect::<Vec<_>>();
+			})
+			.collect::<Vec<_>>();
 
 		thread_rng().shuffle(&mut max_peers);
 		max_peers
@@ -180,7 +184,8 @@ impl Peers {
 						&& peer.info.capabilities.contains(Capabilities::FULL_HIST)
 				}
 				Err(_) => false,
-			}).collect::<Vec<_>>();
+			})
+			.collect::<Vec<_>>();
 
 		thread_rng().shuffle(&mut max_peers);
 		max_peers
@@ -209,7 +214,8 @@ impl Peers {
 			.map(|x| match x.try_read() {
 				Ok(peer) => peer.info.total_difficulty.clone(),
 				Err(_) => Difficulty::zero(),
-			}).max()
+			})
+			.max()
 			.unwrap();
 
 		let mut max_peers = peers
@@ -217,7 +223,8 @@ impl Peers {
 			.filter(|x| match x.try_read() {
 				Ok(peer) => peer.info.total_difficulty == max_total_difficulty,
 				Err(_) => false,
-			}).collect::<Vec<_>>();
+			})
+			.collect::<Vec<_>>();
 
 		thread_rng().shuffle(&mut max_peers);
 		max_peers
@@ -484,7 +491,8 @@ impl Peers {
 				.map(|x| {
 					let p = x.read().unwrap();
 					p.info.addr.clone()
-				}).collect::<Vec<_>>()
+				})
+				.collect::<Vec<_>>()
 		};
 
 		// now remove them taking a short-lived write lock each time
@@ -501,6 +509,10 @@ impl Peers {
 			let peer = peer.read().unwrap();
 			peer.stop();
 		}
+	}
+
+	pub fn is_headers_receiving(&self) -> bool {
+		self.headers_lock.try_read().is_err()
 	}
 }
 
@@ -563,6 +575,16 @@ impl ChainAdapter for Peers {
 	}
 
 	fn headers_received(&self, headers: Vec<core::BlockHeader>, peer_addr: SocketAddr) -> bool {
+		let _lock = match self.headers_lock.try_write() {
+			Ok(l) => l,
+			Err(_) => {
+				info!(
+					LOGGER,
+					"Received headers while processing previous batch, ignoring"
+				);
+				return true;
+			}
+		};
 		if !self.adapter.headers_received(headers, peer_addr) {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
