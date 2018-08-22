@@ -138,8 +138,6 @@ pub fn read_exact(
 		if !buf.is_empty() {
 			thread::sleep(sleep_time);
 			count += 1;
-		} else {
-			break;
 		}
 		if count > timeout {
 			return Err(io::Error::new(
