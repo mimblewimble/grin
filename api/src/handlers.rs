@@ -69,7 +69,8 @@ fn get_output(chain: &Weak<chain::Chain>, id: &str) -> Result<(Output, OutputIde
 
 	for x in outputs.iter() {
 		if let Ok(_) = w(chain).is_unspent(&x) {
-			return Ok((Output::new(&commit), x.clone()));
+			let block_height = w(chain).get_header_for_output(&x).unwrap().height;
+			return Ok((Output::new(&commit, block_height), x.clone()));
 		}
 	}
 	Err(ErrorKind::NotFound)?
@@ -320,6 +321,7 @@ impl TxHashSetHandler {
 			spent: false,
 			proof: None,
 			proof_hash: "".to_string(),
+			block_height: None,
 			merkle_proof: Some(merkle_proof),
 		})
 	}
@@ -617,7 +619,7 @@ impl BlockHandler {
 	fn get_compact_block(&self, h: &Hash) -> Result<CompactBlockPrintable, Error> {
 		let block = w(&self.chain).get_block(h).context(ErrorKind::NotFound)?;
 		Ok(CompactBlockPrintable::from_compact_block(
-			&block.as_compact_block(),
+			&block.into(),
 			w(&self.chain),
 		))
 	}
