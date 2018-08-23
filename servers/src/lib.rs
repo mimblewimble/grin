@@ -54,6 +54,6 @@ mod mining;
 mod webwallet;
 
 pub use common::stats::{DiffBlock, PeerStats, ServerStats, StratumStats, WorkerStats};
-pub use common::types::{Seeding, ServerConfig, StratumServerConfig};
+pub use common::types::{ServerConfig, StratumServerConfig};
 pub use grin::server::Server;
 pub use webwallet::server::start_webwallet_server;

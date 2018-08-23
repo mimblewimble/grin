@@ -179,11 +179,11 @@ impl LocalServerContainer {
 	pub fn run_server(&mut self, duration_in_seconds: u64) -> servers::Server {
 		let api_addr = format!("{}:{}", self.config.base_addr, self.config.api_server_port);
 
-		let mut seeding_type = servers::Seeding::None;
+		let mut seeding_type = p2p::Seeding::None;
 		let mut seeds = Vec::new();
 
 		if self.config.seed_addr.len() > 0 {
-			seeding_type = servers::Seeding::List;
+			seeding_type = p2p::Seeding::List;
 			seeds = vec![self.config.seed_addr.to_string()];
 		}
 
