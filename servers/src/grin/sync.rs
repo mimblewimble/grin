@@ -439,7 +439,7 @@ fn get_locator_heights(height: u64) -> Vec<u64> {
 // Utility struct to group what information the main sync loop has to track
 struct SyncInfo {
 	prev_body_sync: (DateTime<Utc>, u64),
-	prev_header_sync: (DateTime<Utc>, u64),
+	prev_header_sync: (DateTime<Utc>, u64, u64),
 	prev_fast_sync: Option<DateTime<Utc>>,
 	highest_height: u64,
 }
@@ -449,7 +449,7 @@ impl SyncInfo {
 		let now = Utc::now();
 		SyncInfo {
 			prev_body_sync: (now.clone(), 0),
-			prev_header_sync: (now.clone(), 0),
+			prev_header_sync: (now.clone(), 0, 0),
 			prev_fast_sync: None,
 			highest_height: 0,
 		}
@@ -457,15 +457,23 @@ impl SyncInfo {
 
 	fn header_sync_due(&mut self, header_head: &chain::Tip) -> bool {
 		let now = Utc::now();
-		let (prev_ts, prev_height) = self.prev_header_sync;
+		let (timeout, latest_height, prev_height) = self.prev_header_sync;
+		
+		// received all necessary headers, can ask for more
+		let all_headers_received = header_head.height >= prev_height + (p2p::MAX_BLOCK_HEADERS as u64) - 4;
+		// no headers processed and we're past timeout, need to ask for more
+		let stalling = header_head.height == latest_height && now > timeout;
 
-		if header_head.height >= prev_height + (p2p::MAX_BLOCK_HEADERS as u64) - 4
-			|| now - prev_ts > Duration::seconds(10)
-		{
-			self.prev_header_sync = (now, header_head.height);
-			return true;
+		if all_headers_received || stalling {
+			self.prev_header_sync = (now + Duration::seconds(10), header_head.height, header_head.height);
+			true
+		} else {
+			// resetting the timeout as long as we progress
+			if header_head.height > latest_height {
+				self.prev_header_sync = (now + Duration::seconds(2), header_head.height, prev_height);
+			}
+			false
 		}
-		false
 	}
 
 	fn body_sync_due(&mut self, head: &chain::Tip) -> bool {

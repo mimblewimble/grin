@@ -264,6 +264,14 @@ impl Server {
 		Ok(())
 	}
 
+	/// Ping all peers, mostly useful for tests to have connected peers share
+	/// their heights
+	pub fn ping_peers(&self)-> Result<(), Error> {
+		let head = self.chain.head()?;
+		self.p2p.peers.check_all(head.total_difficulty, head.height);
+		Ok(())
+	}
+
 	/// Number of peers
 	pub fn peer_count(&self) -> u32 {
 		self.p2p.peers.peer_count()
@@ -424,6 +432,11 @@ impl Server {
 	/// Stop the server.
 	pub fn stop(&self) {
 		self.p2p.stop();
+		self.stop.store(true, Ordering::Relaxed);
+	}
+
+	/// Stops the test miner without stopping the p2p layer
+	pub fn stop_test_miner(&self) {
 		self.stop.store(true, Ordering::Relaxed);
 	}
 }
