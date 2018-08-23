@@ -457,9 +457,18 @@ impl TransactionBody {
 	/// Verify all the output rangeproofs.
 	/// Note: this is expensive.
 	fn verify_rangeproofs(&self) -> Result<(), Error> {
-		for x in &self.outputs {
-			x.verify_proof()?;
+		let mut commits: Vec<Commitment> = vec![];
+		let mut proofs: Vec<RangeProof> = vec![];
+		if self.outputs.len() == 0 {
+			return Ok(());
 		}
+		// unfortunately these have to be aligned in memory for the underlying
+		// libsecp call
+		for x in &self.outputs {
+			commits.push(x.commit.clone());
+			proofs.push(x.proof.clone());
+		}
+		Output::batch_verify_proofs(&commits, &proofs)?;
 		Ok(())
 	}
 
