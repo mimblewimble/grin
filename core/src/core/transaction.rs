@@ -459,6 +459,9 @@ impl TransactionBody {
 	fn verify_rangeproofs(&self) -> Result<(), Error> {
 		let mut commits: Vec<Commitment> = vec![];
 		let mut proofs: Vec<RangeProof> = vec![];
+		if self.outputs.len() == 0 {
+			return Ok(());
+		}
 		// unfortunately these have to be aligned in memory for the underlying
 		// libsecp call
 		for x in &self.outputs {
