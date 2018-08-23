@@ -280,6 +280,13 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 }
 
 fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
+	if peers.is_headers_receiving() {
+		info!(
+			LOGGER,
+			"Headers processing in progress, canceling the current attempt"
+		);
+		return;
+	}
 	if let Ok(header_head) = chain.get_header_head() {
 		let difficulty = header_head.total_difficulty;
 

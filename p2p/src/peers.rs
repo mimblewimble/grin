@@ -37,6 +37,7 @@ pub struct Peers {
 	store: PeerStore,
 	peers: RwLock<HashMap<SocketAddr, Arc<RwLock<Peer>>>>,
 	dandelion_relay: RwLock<HashMap<i64, Arc<RwLock<Peer>>>>,
+	headers_lock: RwLock<bool>,
 }
 
 unsafe impl Send for Peers {}
@@ -49,6 +50,7 @@ impl Peers {
 			store,
 			peers: RwLock::new(HashMap::new()),
 			dandelion_relay: RwLock::new(HashMap::new()),
+			headers_lock: RwLock::new(false),
 		}
 	}
 
@@ -514,6 +516,10 @@ impl Peers {
 			peer.stop();
 		}
 	}
+
+	pub fn is_headers_receiving(&self) -> bool {
+		self.headers_lock.try_read().is_err()
+	}
 }
 
 impl ChainAdapter for Peers {
@@ -575,6 +581,16 @@ impl ChainAdapter for Peers {
 	}
 
 	fn headers_received(&self, headers: Vec<core::BlockHeader>, peer_addr: SocketAddr) -> bool {
+		let _lock = match self.headers_lock.try_write() {
+			Ok(l) => l,
+			Err(_) => {
+				info!(
+					LOGGER,
+					"Received headers while processing previous batch, ignoring"
+				);
+				return true;
+			}
+		};
 		if !self.adapter.headers_received(headers, peer_addr) {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
