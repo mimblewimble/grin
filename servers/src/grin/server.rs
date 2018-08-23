@@ -193,11 +193,10 @@ impl Server {
 				_ => unreachable!(),
 			};
 
-			let peers_preferred = match config.peers_preferred.clone() {
+			let peers_preferred = match config.p2p_config.peers_preferred.clone() {
 				Some(peers_preferred) => seed::preferred_peers(peers_preferred),
 				None => None,
 			};
-			warn!(LOGGER, "peers_preferred {:?}", peers_preferred);
 
 			seed::connect_and_monitor(
 				p2p_server.clone(),
@@ -275,7 +274,7 @@ impl Server {
 
 	/// Ping all peers, mostly useful for tests to have connected peers share
 	/// their heights
-	pub fn ping_peers(&self)-> Result<(), Error> {
+	pub fn ping_peers(&self) -> Result<(), Error> {
 		let head = self.chain.head()?;
 		self.p2p.peers.check_all(head.total_difficulty, head.height);
 		Ok(())

@@ -100,6 +100,9 @@ pub struct P2PConfig {
 
 	pub peers_deny: Option<Vec<String>>,
 
+	/// The list of preferred peers that we will try to connect to
+	pub peers_preferred: Option<Vec<String>>,
+
 	pub ban_window: Option<i64>,
 
 	pub peer_max_count: Option<u32>,
@@ -116,6 +119,7 @@ impl Default for P2PConfig {
 			port: 13414,
 			peers_allow: None,
 			peers_deny: None,
+			peers_preferred: None,
 			ban_window: None,
 			peer_max_count: None,
 			peer_min_preferred_count: None,
