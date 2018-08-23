@@ -26,7 +26,7 @@ use chrono::Duration;
 use std::fs;
 use std::sync::Arc;
 
-use chain::types::{NoopAdapter, Tip};
+use chain::types::NoopAdapter;
 use chain::Chain;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};

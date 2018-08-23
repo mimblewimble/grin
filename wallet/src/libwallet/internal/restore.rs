@@ -43,7 +43,7 @@ struct OutputResult {
 
 fn identify_utxo_outputs<T, C, K>(
 	wallet: &mut T,
-	outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+	outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)>,
 ) -> Result<Vec<OutputResult>, Error>
 where
 	T: WalletBackend<C, K>,
@@ -57,10 +57,9 @@ where
 		"Scanning {} outputs in the current Grin utxo set",
 		outputs.len(),
 	);
-	let current_chain_height = wallet.client().get_chain_height()?;
 
 	for output in outputs.iter() {
-		let (commit, proof, is_coinbase) = output;
+		let (commit, proof, is_coinbase, height) = output;
 		// attempt to unwind message from the RP and get a value
 		// will fail if it's not ours
 		let info = proof::rewind(wallet.keychain(), *commit, None, *proof)?;
@@ -74,11 +73,10 @@ where
 			"Output found: {:?}, amount: {:?}", commit, info.value
 		);
 
-		let height = current_chain_height;
 		let lock_height = if *is_coinbase {
-			height + global::coinbase_maturity()
+			*height + global::coinbase_maturity()
 		} else {
-			height
+			*height
 		};
 
 		wallet_outputs.push(OutputResult {
@@ -86,7 +84,7 @@ where
 			key_id: None,
 			n_child: None,
 			value: info.value,
-			height: height,
+			height: *height,
 			lock_height: lock_height,
 			is_coinbase: *is_coinbase,
 			blinding: info.blinding,
@@ -206,6 +204,16 @@ where
 	let mut max_child_index = 0;
 	for output in result_vec {
 		if output.key_id.is_some() && output.n_child.is_some() {
+			let mut tx_log_entry = None;
+			if !output.is_coinbase {
+				let log_id = batch.next_tx_log_id(root_key_id.clone())?;
+				// also keep tx log updated so everything still tallies
+				let mut t = TxLogEntry::new(TxLogEntryType::TxReceived, log_id);
+				t.amount_credited = output.value;
+				t.num_outputs = 1;
+				tx_log_entry = Some(log_id);
+				let _ = batch.save_tx_log_entry(t);
+			}
 			let _ = batch.save(OutputData {
 				root_key_id: root_key_id.clone(),
 				key_id: output.key_id.unwrap(),
@@ -215,7 +223,7 @@ where
 				height: output.height,
 				lock_height: output.lock_height,
 				is_coinbase: output.is_coinbase,
-				tx_log_entry: None,
+				tx_log_entry: tx_log_entry,
 			});
 
 			max_child_index = if max_child_index >= output.n_child.unwrap() {

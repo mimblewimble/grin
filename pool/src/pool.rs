@@ -66,7 +66,7 @@ where
 				let short_id = kernel.short_id(&cb.hash(), cb.nonce);
 
 				// if any kernel matches then keep the tx for later
-				if cb.kern_ids.contains(&short_id) {
+				if cb.kern_ids().contains(&short_id) {
 					txs.push(x.tx.clone());
 					break;
 				}

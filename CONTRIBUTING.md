@@ -37,11 +37,16 @@ There is a basic git [pre-commit](../.hooks/pre-commit) hook in the repo.
 The pre-commit hook will not prevent commits if style issues are present but it will
 indicate any files that need formatting.
 
-To enable this, create a symlink in `.git/hooks` (note the relative path) -
-
+This pre-commit hook will be **automatically** configured in this project, once you run `cargo build` for the 1st time.
+  
+Or you can config it manually with the following command without building, and check it:
 ```
-cd .git/hooks
-ln -s -f ../../.hooks/pre-commit
+git config core.hooksPath ./.hooks
+git config --list | grep hook
+```
+The output will be:
+```
+core.hookspath=./.hooks
 ```
 
 ## Running rustfmt
