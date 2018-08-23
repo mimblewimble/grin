@@ -97,6 +97,8 @@ pub fn run_sync(
 				// full sync gets rid of the middle step and just starts from
 				// the genesis state
 
+				let mut prev_locators: Vec<(u64, Hash)> = vec![];
+
 				loop {
 					let horizon = global::cut_through_horizon() as u64;
 					let head = chain.head().unwrap();
@@ -117,7 +119,7 @@ pub fn run_sync(
 
 						// run the header sync every 10s
 						if si.header_sync_due(&header_head) {
-							header_sync(peers.clone(), chain.clone());
+							header_sync(peers.clone(), chain.clone(), &mut prev_locators);
 
 							let status = sync_state.status();
 							match status {
@@ -279,7 +281,7 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 	}
 }
 
-fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
+fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, prev_locators: &mut Vec<(u64, Hash)>) {
 	if let Ok(header_head) = chain.get_header_head() {
 		let difficulty = header_head.total_difficulty;
 
@@ -287,7 +289,7 @@ fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 			if let Ok(p) = peer.try_read() {
 				let peer_difficulty = p.info.total_difficulty.clone();
 				if peer_difficulty > difficulty {
-					request_headers(&p, chain.clone());
+					request_headers(&p, chain.clone(), prev_locators);
 				}
 			}
 		}
@@ -329,8 +331,8 @@ fn fast_sync(
 }
 
 /// Request some block headers from a peer to advance us.
-fn request_headers(peer: &Peer, chain: Arc<chain::Chain>) {
-	if let Ok(locator) = get_locator(chain) {
+fn request_headers(peer: &Peer, chain: Arc<chain::Chain>, prev_locators: &mut Vec<(u64, Hash)>) {
+	if let Ok(locator) = get_locator(chain, prev_locators) {
 		debug!(
 			LOGGER,
 			"sync: request_headers: asking {} for headers, {:?}", peer.info.addr, locator,
@@ -409,20 +411,68 @@ fn needs_syncing(
 /// Even if sync_head is significantly out of date we will "reset" it once we
 /// start getting headers back from a peer.
 ///
-fn get_locator(chain: Arc<chain::Chain>) -> Result<Vec<Hash>, Error> {
+fn get_locator(
+	chain: Arc<chain::Chain>,
+	prev_locators: &mut Vec<(u64, Hash)>,
+) -> Result<Vec<Hash>, Error> {
+	let reuse_locators = prev_locators;
+	let mut reuse_heights: Vec<u64> = vec![];
+	let mut this_height = 0;
+
 	let tip = chain.get_sync_head()?;
 	let heights = get_locator_heights(tip.height);
 
-	debug!(LOGGER, "sync: locator heights: {:?}", heights);
+	debug!(LOGGER, "sync: locator heights : {:?}", heights);
 
 	let mut locator = vec![];
 	let mut current = chain.get_block_header(&tip.last_block_h);
 	while let Ok(header) = current {
 		if heights.contains(&header.height) {
 			locator.push(header.hash());
+			reuse_heights.push(header.height);
+			if reuse_locators.len() > 0
+				&& tip.height - header.height + 1 >= p2p::MAX_BLOCK_HEADERS as u64 - 1
+			{
+				this_height = header.height;
+				break;
+			}
 		}
 		current = chain.get_block_header(&header.previous);
 	}
+
+	// reuse remaining part of locators
+	if this_height > 0 {
+		let this_height_index = heights.iter().position(|&r| r == this_height).unwrap();
+		let next_height = heights[this_height_index + 1];
+
+		reuse_locators.sort_by(|a, b| a.0.cmp(&b.0).reverse());
+
+		let mut reuse_index = reuse_locators
+			.iter()
+			.position(|&r| r.0 <= next_height)
+			.unwrap();
+		if reuse_index > 0 {
+			reuse_index -= 1;
+		}
+		for (height, hash) in &*reuse_locators {
+			if *height > reuse_locators[reuse_index].0 {
+				continue;
+			}
+			locator.push(hash.clone());
+			reuse_heights.push(*height);
+			if reuse_heights.len() >= (p2p::MAX_LOCATORS as usize) - 1 {
+				break;
+			}
+		}
+	}
+
+	// update for next call
+	debug!(LOGGER, "sync: locator heights': {:?}", reuse_heights);
+	reuse_locators.clear();
+	*reuse_locators = reuse_heights
+		.into_iter()
+		.zip(locator.clone().into_iter())
+		.collect();
 
 	debug!(LOGGER, "sync: locator: {:?}", locator);
 
