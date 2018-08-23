@@ -467,19 +467,25 @@ impl SyncInfo {
 	fn header_sync_due(&mut self, header_head: &chain::Tip) -> bool {
 		let now = Utc::now();
 		let (timeout, latest_height, prev_height) = self.prev_header_sync;
-		
+
 		// received all necessary headers, can ask for more
-		let all_headers_received = header_head.height >= prev_height + (p2p::MAX_BLOCK_HEADERS as u64) - 4;
+		let all_headers_received =
+			header_head.height >= prev_height + (p2p::MAX_BLOCK_HEADERS as u64) - 4;
 		// no headers processed and we're past timeout, need to ask for more
 		let stalling = header_head.height == latest_height && now > timeout;
 
 		if all_headers_received || stalling {
-			self.prev_header_sync = (now + Duration::seconds(10), header_head.height, header_head.height);
+			self.prev_header_sync = (
+				now + Duration::seconds(10),
+				header_head.height,
+				header_head.height,
+			);
 			true
 		} else {
 			// resetting the timeout as long as we progress
 			if header_head.height > latest_height {
-				self.prev_header_sync = (now + Duration::seconds(2), header_head.height, prev_height);
+				self.prev_header_sync =
+					(now + Duration::seconds(2), header_head.height, prev_height);
 			}
 			false
 		}
