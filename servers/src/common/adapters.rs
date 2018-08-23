@@ -164,8 +164,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				}
 			};
 
-			let chain = self
-				.chain
+			let chain = self.chain
 				.upgrade()
 				.expect("failed to upgrade weak ref to chain");
 
@@ -438,8 +437,7 @@ impl NetToChainAdapter {
 			// we have a fast sync'd node and are sent a block older than our horizon,
 			// only sync can do something with that
 			if b.header.height
-				< head
-					.height
+				< head.height
 					.saturating_sub(global::cut_through_horizon() as u64)
 			{
 				return true;

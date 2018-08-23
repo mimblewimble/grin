@@ -109,8 +109,7 @@ impl Peers {
 
 	/// Get vec of peers we are currently connected to.
 	pub fn connected_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
-		let mut res = self
-			.peers
+		let mut res = self.peers
 			.read()
 			.unwrap()
 			.values()
