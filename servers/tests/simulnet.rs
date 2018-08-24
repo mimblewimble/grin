@@ -440,7 +440,7 @@ fn replicate_tx_fluff_failure() {
 				2,                        // minimum confirmations
 				"http://127.0.0.1:33001", // dest
 				500,                      // max outputs
-				1000,                       // num change outputs
+				1000,                     // num change outputs
 				true,                     // select all outputs
 			).unwrap();
 		api.post_tx(&slate, false).unwrap();
