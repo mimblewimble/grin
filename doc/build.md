@@ -6,39 +6,19 @@ Longer term, most platforms will likely be supported to some extent.
 Grin's programming language `rust` has build targets for most platforms.
 
 What's working so far?
-* Linux x86_64 and MacOS [grin + mining + development]
+* Linux x86\_64 and MacOS [grin + mining + development]
 * Not Windows 10 yet [grin kind-of builds. No mining yet. Help wanted!]
-
-## Mining in Grin
-
-Please note that all mining functions for Grin have moved into a separate, standalone package called
-[grin_miner](https://github.com/mimblewimble/grin-miner). Once your Grin code node is up and running,
-you can start mining by building and running grin-miner against your running Grin node.
-
-## Docker
-
-        # Build using all available cores
-        docker build -t grin .
-
-        # run in foreground
-        docker run -it -v grin:/usr/src/grin grin
-
-        # or in background
-        docker run -it -d -v grin:/usr/src/grin grin
-
-If you decide to use a persistent storage (e.g. ```-v grin:/usr/src/grin```) you will need grin.toml configuration file in it.
 
 ## Requirements
 
 - rust 1.26+ (use [rustup]((https://www.rustup.rs/))- i.e. `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
   - if rust is already installed, you can simply update version with `rustup update`
-- rocksdb + libs for compiling rocksdb:
-  - clang (clanglib or clang-devel or libclang-dev)
-  - llvm (Fedora llvm-devel, Debian llvm-dev)
+- clang (clanglib or clang-devel or libclang-dev)
 - ncurses and libs (ncurses, ncursesw5)
 - zlib libs (zlib1g-dev or zlib-devel)
+- pkc-config
+- libssl-dev
 - linux-headers (reported needed on Alpine linux)
-
 
 ## Build steps
 
@@ -50,13 +30,11 @@ cargo build --release
 
 Grin can also be built in debug mode (without the `--release` flag) but this will render fast sync prohibitively slow due to the large overhead of cryptographic operations.
 
+## Mining in Grin
 
-### Cross-platform builds
-
-Rust (cargo) can build grin for many platforms, so in theory running `grin`
-as a validating node on your low powered device might be possible.
-To cross-compile `grin` on a x86 Linux platform and produce ARM binaries,
-say, for a Raspberry Pi.
+Please note that all mining functions for Grin have moved into a separate, standalone package called
+[grin_miner](https://github.com/mimblewimble/grin-miner). Once your Grin code node is up and running,
+you can start mining by building and running grin-miner against your running Grin node.
 
 ### Build errors
 
@@ -66,7 +44,7 @@ See [Troubleshooting](https://github.com/mimblewimble/docs/wiki/Troubleshooting)
 
 A successful build gets you:
 
- - `target/debug/grin` - the main grin binary
+ - `target/release/grin` - the main grin binary
 
 Grin is still sensitive to the directory from which it's run. Make sure you
 always run it within a directory that contains a `grin.toml` configuration and
@@ -82,10 +60,6 @@ export PATH=/path/to/grin/dir/target/debug:$PATH
 ```
 
 You can then run `grin` directly (try `grin help` for more options).
-
-*Important Note*: if you used Grin in testnet1, running the wallet listener
-manually isn't required anymore. Grin will create a seed file and run the
-listener automatically on start.
 
 # Configuration
 
@@ -117,3 +91,24 @@ grin client help
 The wiki page [How to use grin](https://github.com/mimblewimble/docs/wiki/How-to-use-grin)
 and linked pages have more information on what features we have,
 troubleshooting, etc.
+
+## Docker
+
+        # Build using all available cores
+        docker build -t grin .
+
+        # run in foreground
+        docker run -it -v grin:/usr/src/grin grin
+
+        # or in background
+        docker run -it -d -v grin:/usr/src/grin grin
+
+If you decide to use a persistent storage (e.g. ```-v grin:/usr/src/grin```) you will need grin.toml configuration file in it.
+
+### Cross-platform builds
+
+Rust (cargo) can build grin for many platforms, so in theory running `grin`
+as a validating node on your low powered device might be possible.
+To cross-compile `grin` on a x86 Linux platform and produce ARM binaries,
+say, for a Raspberry Pi.
+
