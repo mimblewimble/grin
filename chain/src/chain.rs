@@ -197,7 +197,8 @@ impl Chain {
 		opts: Options,
 		batch_verifier: Arc<RwLock<V>>,
 	) -> Result<(Option<Tip>, Option<Block>), Error>
-		where V: BatchVerifier
+	where
+		V: BatchVerifier,
 	{
 		let res = self.process_block_no_orphans(b, opts, batch_verifier.clone());
 		match res {
@@ -221,7 +222,8 @@ impl Chain {
 		opts: Options,
 		batch_verifier: Arc<RwLock<V>>,
 	) -> Result<(Option<Tip>, Option<Block>), Error>
-		where V: BatchVerifier,
+	where
+		V: BatchVerifier,
 	{
 		let head = self.store.head()?;
 		let bhash = b.hash();
@@ -355,7 +357,8 @@ impl Chain {
 
 	/// Check for orphans, once a block is successfully added
 	pub fn check_orphans<V>(&self, mut height: u64, batch_verifier: Arc<RwLock<V>>)
-		where V: BatchVerifier
+	where
+		V: BatchVerifier,
 	{
 		trace!(
 			LOGGER,
@@ -374,7 +377,11 @@ impl Chain {
 						height,
 						self.orphans.len(),
 					);
-					let res = self.process_block_no_orphans(orphan.block, orphan.opts, batch_verifier.clone());
+					let res = self.process_block_no_orphans(
+						orphan.block,
+						orphan.opts,
+						batch_verifier.clone(),
+					);
 					if let Ok((_, Some(b))) = res {
 						// We accepted a block, so see if we can accept any orphans
 						height = b.header.height + 1;
@@ -569,7 +576,7 @@ impl Chain {
 	) -> Result<(), Error>
 	where
 		T: TxHashsetWriteStatus,
-		V: BatchVerifier
+		V: BatchVerifier,
 	{
 		status.on_setup();
 		let head = self.head().unwrap();

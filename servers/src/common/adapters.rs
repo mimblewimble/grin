@@ -25,9 +25,9 @@ use std::time::Instant;
 
 use chain::{self, ChainAdapter, Options, Tip};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
+use core::core::batch_verifier::BatchVerifier;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use core::core::batch_verifier::BatchVerifier;
 use core::core::transaction::Transaction;
 use core::core::{BlockHeader, CompactBlock};
 use core::{core, global};
@@ -50,8 +50,7 @@ fn wo<T>(weak_one: &OneTime<Weak<T>>) -> Arc<T> {
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
-pub struct NetToChainAdapter<V>
-{
+pub struct NetToChainAdapter<V> {
 	sync_state: Arc<SyncState>,
 	archive_mode: bool,
 	chain: Weak<chain::Chain>,
@@ -62,7 +61,8 @@ pub struct NetToChainAdapter<V>
 }
 
 impl<V> p2p::ChainAdapter for NetToChainAdapter<V>
-	where V: BatchVerifier + Sync + Send
+where
+	V: BatchVerifier + Sync + Send,
 {
 	fn total_difficulty(&self) -> Difficulty {
 		w(&self.chain).total_difficulty()
@@ -169,13 +169,18 @@ impl<V> p2p::ChainAdapter for NetToChainAdapter<V>
 				}
 			};
 
-			let chain = self.chain
+			let chain = self
+				.chain
 				.upgrade()
 				.expect("failed to upgrade weak ref to chain");
 
 			if let Ok(prev) = chain.get_block_header(&cb.header.previous) {
 				if block
-					.validate(&prev.total_kernel_offset, &prev.total_kernel_sum, self.batch_verifier.clone())
+					.validate(
+						&prev.total_kernel_offset,
+						&prev.total_kernel_sum,
+						self.batch_verifier.clone(),
+					)
 					.is_ok()
 				{
 					debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
@@ -358,9 +363,12 @@ impl<V> p2p::ChainAdapter for NetToChainAdapter<V>
 			return true;
 		}
 
-		if let Err(e) = w(&self.chain)
-			.txhashset_write(h, txhashset_data, self.sync_state.as_ref(), self.batch_verifier.clone())
-		{
+		if let Err(e) = w(&self.chain).txhashset_write(
+			h,
+			txhashset_data,
+			self.sync_state.as_ref(),
+			self.batch_verifier.clone(),
+		) {
 			error!(LOGGER, "Failed to save txhashset archive: {}", e);
 			let is_good_data = !e.is_bad_data();
 			self.sync_state.set_sync_error(types::Error::Chain(e));
@@ -373,7 +381,8 @@ impl<V> p2p::ChainAdapter for NetToChainAdapter<V>
 }
 
 impl<V> NetToChainAdapter<V>
-	where V: BatchVerifier
+where
+	V: BatchVerifier,
 {
 	/// Construct a new NetToChainAdapter instance
 	pub fn new(
@@ -447,7 +456,8 @@ impl<V> NetToChainAdapter<V>
 			// we have a fast sync'd node and are sent a block older than our horizon,
 			// only sync can do something with that
 			if b.header.height
-				< head.height
+				< head
+					.height
 					.saturating_sub(global::cut_through_horizon() as u64)
 			{
 				return true;
@@ -617,7 +627,8 @@ pub struct ChainToPoolAndNetAdapter<V> {
 }
 
 impl<V> ChainAdapter for ChainToPoolAndNetAdapter<V>
-	where V: BatchVerifier
+where
+	V: BatchVerifier,
 {
 	fn block_accepted(&self, b: &core::Block, opts: Options) {
 		if self.sync_state.is_syncing() {
@@ -674,7 +685,8 @@ impl<V> ChainAdapter for ChainToPoolAndNetAdapter<V>
 }
 
 impl<V> ChainToPoolAndNetAdapter<V>
-	where V: BatchVerifier
+where
+	V: BatchVerifier,
 {
 	/// Construct a ChainToPoolAndNetAdapter instance.
 	pub fn new(

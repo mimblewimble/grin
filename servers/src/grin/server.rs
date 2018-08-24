@@ -60,8 +60,7 @@ pub struct Server {
 	stop: Arc<AtomicBool>,
 }
 
-impl Server
-{
+impl Server {
 	/// Instantiates and starts a new server. Optionally takes a callback
 	/// for the server to send an ARC copy of itself, to allow another process
 	/// to poll info about the server status
@@ -101,8 +100,7 @@ impl Server
 	}
 
 	/// Instantiates a new server associated with the provided future reactor.
-	pub fn new(mut config: ServerConfig) -> Result<Server, Error>
-	{
+	pub fn new(mut config: ServerConfig) -> Result<Server, Error> {
 		// Defaults to None (optional) in config file.
 		// This translates to false here.
 		let archive_mode = match config.archive_mode {
@@ -433,7 +431,8 @@ impl Server
 			}
 		};
 
-		let peer_stats = self.p2p
+		let peer_stats = self
+			.p2p
 			.peers
 			.connected_peers()
 			.into_iter()

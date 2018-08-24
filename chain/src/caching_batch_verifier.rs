@@ -14,16 +14,15 @@
 
 //! For "cache aware" batch verifying of rangeproofs and kernel signatures.
 
-use core::core::{Output, TxKernel};
 use core::core::batch_verifier::{self, BatchVerifier};
+use core::core::{Output, TxKernel};
 use util::secp::pedersen::{Commitment, RangeProof};
-
 
 pub struct CachingBatchVerifier {}
 
 impl CachingBatchVerifier {
 	pub fn new() -> CachingBatchVerifier {
-		CachingBatchVerifier{}
+		CachingBatchVerifier {}
 	}
 }
 
@@ -47,10 +46,7 @@ impl BatchVerifier for CachingBatchVerifier {
 		Ok(())
 	}
 
-	fn verify_kernel_signatures(
-		&self,
-		items: &Vec<TxKernel>,
-	) -> Result<(), batch_verifier::Error> {
+	fn verify_kernel_signatures(&self, items: &Vec<TxKernel>) -> Result<(), batch_verifier::Error> {
 		for x in items {
 			x.verify()?;
 		}

@@ -24,9 +24,9 @@ use std::sync::{Arc, RwLock};
 use chain;
 use common::adapters::PoolToChainAdapter;
 use common::types::StratumServerConfig;
+use core::core::batch_verifier::BatchVerifier;
 use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader, Proof};
-use core::core::batch_verifier::BatchVerifier;
 use core::pow::cuckoo;
 use core::{consensus, global};
 use mining::mine_block;
@@ -46,7 +46,8 @@ pub struct Miner<V> {
 }
 
 impl<V> Miner<V>
-	where V: BatchVerifier
+where
+	V: BatchVerifier,
 {
 	/// Creates a new Miner. Needs references to the chain state and its
 	/// storage.
@@ -175,7 +176,9 @@ impl<V> Miner<V>
 					self.debug_output_id,
 					b.hash()
 				);
-				let res = self.chain.process_block(b, chain::Options::MINE, self.batch_verifier.clone());
+				let res =
+					self.chain
+						.process_block(b, chain::Options::MINE, self.batch_verifier.clone());
 				if let Err(e) = res {
 					error!(
 						LOGGER,

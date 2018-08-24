@@ -25,9 +25,9 @@ use std::time::Duration;
 use chain;
 use common::adapters::PoolToChainAdapter;
 use common::types::Error;
+use core::core::batch_verifier::BatchVerifier;
 use core::ser::{self, AsFixedBytes};
 use core::{consensus, core};
-use core::core::batch_verifier::BatchVerifier;
 use keychain::{ExtKeychain, Identifier, Keychain};
 use pool;
 use util::{self, LOGGER};
@@ -82,7 +82,8 @@ pub fn get_block<V>(
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
 ) -> (core::Block, BlockFees)
-	where V: BatchVerifier
+where
+	V: BatchVerifier,
 {
 	let wallet_retry_interval = 5;
 	// get the latest chain state and build a block on top of it
@@ -139,7 +140,8 @@ fn build_block<V>(
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
 ) -> Result<(core::Block, BlockFees), Error>
-	where V: BatchVerifier
+where
+	V: BatchVerifier,
 {
 	// prepare the block header timestamp
 	let head = chain.head_header()?;
@@ -170,7 +172,11 @@ fn build_block<V>(
 	let mut b = core::Block::with_reward(&head, txs, output, kernel, difficulty.clone())?;
 
 	// making sure we're not spending time mining a useless block
-	b.validate(&head.total_kernel_offset, &head.total_kernel_sum, batch_verifier)?;
+	b.validate(
+		&head.total_kernel_offset,
+		&head.total_kernel_sum,
+		batch_verifier,
+	)?;
 
 	let mut rng = rand::OsRng::new().unwrap();
 	b.header.nonce = rng.gen();

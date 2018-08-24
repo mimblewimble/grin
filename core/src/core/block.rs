@@ -28,8 +28,8 @@ use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use core::{
-	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, SimpleBatchVerifier, Transaction,
-	TransactionBody, TxKernel,
+	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof,
+	SimpleBatchVerifier, Transaction, TransactionBody, TxKernel,
 };
 use global;
 use keychain::{self, BlindingFactor};
@@ -555,7 +555,8 @@ impl Block {
 		prev_kernel_sum: &Commitment,
 		verifier: Arc<RwLock<V>>,
 	) -> Result<(Commitment), Error>
-		where V: BatchVerifier
+	where
+		V: BatchVerifier,
 	{
 		self.body.validate(true, verifier)?;
 

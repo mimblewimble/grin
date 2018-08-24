@@ -17,13 +17,13 @@
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::collections::HashSet;
-use std::{error, fmt};
 use std::sync::{Arc, RwLock};
+use std::{error, fmt};
 
 use consensus::{self, VerifySortOrder};
+use core::batch_verifier::{self, BatchVerifier};
 use core::hash::Hashed;
 use core::{committed, Committed};
-use core::batch_verifier::{self, BatchVerifier};
 use keychain::{self, BlindingFactor};
 use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};
 use util;
@@ -81,7 +81,7 @@ pub enum Error {
 	/// It is invalid for a transaction to contain a coinbase kernel, for example.
 	InvalidKernelFeatures,
 	/// Error from batch verification.
-	BatchVerifier(batch_verifier::Error)
+	BatchVerifier(batch_verifier::Error),
 }
 
 impl error::Error for Error {
@@ -541,14 +541,9 @@ impl TransactionBody {
 	/// Validates all relevant parts of a transaction body. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate<V>(
-		&self,
-		with_reward: bool,
-		verifier: Arc<RwLock<V>>,
-	)
-	-> Result<(), Error>
+	pub fn validate<V>(&self, with_reward: bool, verifier: Arc<RwLock<V>>) -> Result<(), Error>
 	where
-		V: ?Sized + BatchVerifier
+		V: ?Sized + BatchVerifier,
 	{
 		self.verify_weight(with_reward)?;
 		self.verify_sorted()?;
@@ -754,12 +749,9 @@ impl Transaction {
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate<V>(
-		&self,
-		with_reward: bool,
-		verifier: Arc<RwLock<V>>,
-	) -> Result<(), Error>
-		where V: ?Sized + BatchVerifier
+	pub fn validate<V>(&self, with_reward: bool, verifier: Arc<RwLock<V>>) -> Result<(), Error>
+	where
+		V: ?Sized + BatchVerifier,
 	{
 		self.body.validate(with_reward, verifier)?;
 
@@ -1202,7 +1194,7 @@ pub struct SimpleBatchVerifier {}
 
 impl SimpleBatchVerifier {
 	pub fn new() -> SimpleBatchVerifier {
-		SimpleBatchVerifier{}
+		SimpleBatchVerifier {}
 	}
 }
 
@@ -1226,17 +1218,13 @@ impl BatchVerifier for SimpleBatchVerifier {
 		Ok(())
 	}
 
-	fn verify_kernel_signatures(
-		&self,
-		items: &Vec<TxKernel>,
-	) -> Result<(), batch_verifier::Error> {
+	fn verify_kernel_signatures(&self, items: &Vec<TxKernel>) -> Result<(), batch_verifier::Error> {
 		for x in items {
 			x.verify()?;
 		}
 		Ok(())
 	}
 }
-
 
 #[cfg(test)]
 mod test {

@@ -13,7 +13,6 @@
 // limitations under the License.
 
 /// Grin client commands processing
-
 use std::net::SocketAddr;
 
 use clap::ArgMatches;

@@ -29,8 +29,8 @@ use chain;
 use common::adapters::PoolToChainAdapter;
 use common::stats::{StratumStats, WorkerStats};
 use common::types::{StratumServerConfig, SyncState};
-use core::core::Block;
 use core::core::batch_verifier::BatchVerifier;
+use core::core::Block;
 use core::{global, pow};
 use keychain;
 use mining::mine_block;
@@ -241,7 +241,8 @@ pub struct StratumServer<V> {
 }
 
 impl<V> StratumServer<V>
-	where V: BatchVerifier
+where
+	V: BatchVerifier,
 {
 	/// Creates a new Stratum Server.
 	pub fn new(
@@ -503,7 +504,11 @@ impl<V> StratumServer<V>
 		// If the difficulty is high enough, submit it (which also validates it)
 		if share_difficulty >= self.current_difficulty {
 			// This is a full solution, submit it to the network
-			let res = self.chain.process_block(b.clone(), chain::Options::MINE, self.batch_verifier.clone());
+			let res = self.chain.process_block(
+				b.clone(),
+				chain::Options::MINE,
+				self.batch_verifier.clone(),
+			);
 			if let Err(e) = res {
 				// Return error status
 				error!(

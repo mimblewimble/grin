@@ -15,12 +15,12 @@
 //! Functions for building partial transactions to be passed
 //! around during an interactive wallet exchange
 
-use std::sync::{Arc, RwLock};
 use rand::thread_rng;
+use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 
-use core::core::SimpleBatchVerifier;
 use core::core::committed::Committed;
+use core::core::SimpleBatchVerifier;
 use core::core::{amount_to_hr_string, Transaction};
 use keychain::{BlindSum, BlindingFactor, Keychain};
 use libtx::error::{Error, ErrorKind};
