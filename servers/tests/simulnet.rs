@@ -440,15 +440,15 @@ fn replicate_tx_fluff_failure() {
 				2,                        // minimum confirmations
 				"http://127.0.0.1:33001", // dest
 				500,                      // max outputs
-				10,                       // num change outputs
+				1000,                       // num change outputs
 				true,                     // select all outputs
 			).unwrap();
-		api.post_tx(&slate, true).unwrap();
+		api.post_tx(&slate, false).unwrap();
 		Ok(())
 	}).unwrap();
 
 	// Give some time for propagation and mining
-	thread::sleep(time::Duration::from_secs(15));
+	thread::sleep(time::Duration::from_secs(200));
 
 	// get another instance of wallet (to check contents)
 	let wallet2 = create_wallet("target/tmp/tx_fluff/wallet2", client2.clone());
