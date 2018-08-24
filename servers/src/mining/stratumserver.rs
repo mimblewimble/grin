@@ -30,6 +30,7 @@ use common::adapters::PoolToChainAdapter;
 use common::stats::{StratumStats, WorkerStats};
 use common::types::{StratumServerConfig, SyncState};
 use core::core::Block;
+use core::core::batch_verifier::BatchVerifier;
 use core::{global, pow};
 use keychain;
 use mining::mine_block;
@@ -225,11 +226,12 @@ impl Worker {
 // ----------------------------------------
 // Grin Stratum Server
 
-pub struct StratumServer {
+pub struct StratumServer<V> {
 	id: String,
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
+	batch_verifier: Arc<RwLock<V>>,
 	current_block_versions: Vec<Block>,
 	current_difficulty: u64,
 	minimum_share_difficulty: u64,
@@ -238,19 +240,23 @@ pub struct StratumServer {
 	sync_state: Arc<SyncState>,
 }
 
-impl StratumServer {
+impl<V> StratumServer<V>
+	where V: BatchVerifier
+{
 	/// Creates a new Stratum Server.
 	pub fn new(
 		config: StratumServerConfig,
-		chain_ref: Arc<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	) -> StratumServer {
+		chain: Arc<chain::Chain>,
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
+		batch_verifier: Arc<RwLock<V>>,
+	) -> StratumServer<V> {
 		StratumServer {
 			id: String::from("StratumServer"),
 			minimum_share_difficulty: config.minimum_share_difficulty,
-			config: config,
-			chain: chain_ref,
-			tx_pool: tx_pool,
+			config,
+			chain,
+			tx_pool,
+			batch_verifier,
 			current_block_versions: Vec::new(),
 			current_difficulty: <u64>::max_value(),
 			current_key_id: None,
@@ -497,7 +503,7 @@ impl StratumServer {
 		// If the difficulty is high enough, submit it (which also validates it)
 		if share_difficulty >= self.current_difficulty {
 			// This is a full solution, submit it to the network
-			let res = self.chain.process_block(b.clone(), chain::Options::MINE);
+			let res = self.chain.process_block(b.clone(), chain::Options::MINE, self.batch_verifier.clone());
 			if let Err(e) = res {
 				// Return error status
 				error!(
@@ -726,6 +732,7 @@ impl StratumServer {
 				let (new_block, block_fees) = mine_block::get_block(
 					&self.chain,
 					&self.tx_pool,
+					self.batch_verifier.clone(),
 					self.current_key_id.clone(),
 					wallet_listener_url,
 				);

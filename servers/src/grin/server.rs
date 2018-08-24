@@ -23,11 +23,13 @@ use std::{thread, time};
 
 use api;
 use chain;
+use chain::caching_batch_verifier::CachingBatchVerifier;
 use common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
 use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
 use common::types::{Error, ServerConfig, StratumServerConfig, SyncState};
+use core::core::batch_verifier::BatchVerifier;
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::{consensus, genesis, global, pow};
@@ -48,7 +50,8 @@ pub struct Server {
 	/// data store access
 	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, CachingBatchVerifier>>>,
+	batch_verifier: Arc<RwLock<CachingBatchVerifier>>,
 	/// Whether we're currently syncing
 	sync_state: Arc<SyncState>,
 	/// To be passed around to collect stats and info
@@ -57,7 +60,8 @@ pub struct Server {
 	stop: Arc<AtomicBool>,
 }
 
-impl Server {
+impl Server
+{
 	/// Instantiates and starts a new server. Optionally takes a callback
 	/// for the server to send an ARC copy of itself, to allow another process
 	/// to poll info about the server status
@@ -97,7 +101,8 @@ impl Server {
 	}
 
 	/// Instantiates a new server associated with the provided future reactor.
-	pub fn new(mut config: ServerConfig) -> Result<Server, Error> {
+	pub fn new(mut config: ServerConfig) -> Result<Server, Error>
+	{
 		// Defaults to None (optional) in config file.
 		// This translates to false here.
 		let archive_mode = match config.archive_mode {
@@ -120,11 +125,14 @@ impl Server {
 
 		let stop = Arc::new(AtomicBool::new(false));
 
+		let batch_verifier = Arc::new(RwLock::new(CachingBatchVerifier::new()));
+
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		let pool_net_adapter = Arc::new(PoolToNetAdapter::new());
 		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(
 			config.pool_config.clone(),
 			pool_adapter.clone(),
+			batch_verifier.clone(),
 			pool_net_adapter.clone(),
 		)));
 
@@ -164,6 +172,7 @@ impl Server {
 			archive_mode,
 			Arc::downgrade(&shared_chain),
 			tx_pool.clone(),
+			batch_verifier.clone(),
 			config.clone(),
 		));
 
@@ -263,16 +272,17 @@ impl Server {
 
 		warn!(LOGGER, "Grin server started.");
 		Ok(Server {
-			config: config,
+			config,
 			p2p: p2p_server,
 			chain: shared_chain,
-			tx_pool: tx_pool,
+			tx_pool,
+			batch_verifier,
 			sync_state,
 			state_info: ServerStateInfo {
 				awaiting_peers: awaiting_peers,
 				..Default::default()
 			},
-			stop: stop,
+			stop,
 		})
 	}
 
@@ -305,6 +315,7 @@ impl Server {
 			config.clone(),
 			self.chain.clone(),
 			self.tx_pool.clone(),
+			self.batch_verifier.clone(),
 		);
 		let stratum_stats = self.state_info.stratum_stats.clone();
 		let _ = thread::Builder::new()
@@ -337,6 +348,7 @@ impl Server {
 			config.clone(),
 			self.chain.clone(),
 			self.tx_pool.clone(),
+			self.batch_verifier.clone(),
 			self.stop.clone(),
 		);
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));

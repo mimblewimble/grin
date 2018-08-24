@@ -17,42 +17,52 @@
 //! resulting tx pool can be added to the current chain state to produce a
 //! valid chain state.
 
-use chrono::prelude::Utc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, RwLock};
 
+use chrono::prelude::Utc;
+
+use core::core::batch_verifier::BatchVerifier;
 use core::core::hash::Hash;
-use core::core::{transaction, Block, CompactBlock, Transaction};
+use core::core::{transaction, Block, CompactBlock, Output, Transaction, TxKernel};
 use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
 
 /// Transaction pool implementation.
-pub struct TransactionPool<T> {
+pub struct TransactionPool<T, V> {
 	/// Pool Config
 	pub config: PoolConfig,
 
 	/// Our transaction pool.
-	pub txpool: Pool<T>,
+	pub txpool: Pool<T, V>,
 	/// Our Dandelion "stempool".
-	pub stempool: Pool<T>,
+	pub stempool: Pool<T, V>,
 
 	/// The blockchain
 	pub blockchain: Arc<T>,
+	pub batch_verifier: Arc<RwLock<V>>,
 	/// The pool adapter
 	pub adapter: Arc<PoolAdapter>,
 }
 
-impl<T> TransactionPool<T>
+impl<T, V> TransactionPool<T, V>
 where
 	T: BlockChain,
+	V: BatchVerifier,
 {
 	/// Create a new transaction pool
-	pub fn new(config: PoolConfig, chain: Arc<T>, adapter: Arc<PoolAdapter>) -> TransactionPool<T> {
+	pub fn new(
+		config: PoolConfig,
+		chain: Arc<T>,
+		batch_verifier: Arc<RwLock<V>>,
+		adapter: Arc<PoolAdapter>,
+	) -> TransactionPool<T, V> {
 		TransactionPool {
-			config: config,
-			txpool: Pool::new(chain.clone(), format!("txpool")),
-			stempool: Pool::new(chain.clone(), format!("stempool")),
+			config,
+			txpool: Pool::new(chain.clone(), batch_verifier.clone(), format!("txpool")),
+			stempool: Pool::new(chain.clone(), batch_verifier.clone(), format!("stempool")),
 			blockchain: chain,
-			adapter: adapter,
+			batch_verifier,
+			adapter,
 		}
 	}
 
@@ -101,7 +111,7 @@ where
 		self.is_acceptable(&tx)?;
 
 		// Make sure the transaction is valid before anything else.
-		tx.validate(false).map_err(|e| PoolError::InvalidTx(e))?;
+		tx.validate(false, self.batch_verifier.clone()).map_err(|e| PoolError::InvalidTx(e))?;
 
 		// Check the tx lock_time is valid based on current chain state.
 		self.blockchain.verify_tx_lock_height(&tx)?;

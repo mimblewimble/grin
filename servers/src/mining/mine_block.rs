@@ -27,6 +27,7 @@ use common::adapters::PoolToChainAdapter;
 use common::types::Error;
 use core::ser::{self, AsFixedBytes};
 use core::{consensus, core};
+use core::core::batch_verifier::BatchVerifier;
 use keychain::{ExtKeychain, Identifier, Keychain};
 use pool;
 use util::{self, LOGGER};
@@ -74,15 +75,24 @@ impl ser::Writer for HeaderPrePowWriter {
 // Ensure a block suitable for mining is built and returned
 // If a wallet listener URL is not provided the reward will be "burnt"
 // Warning: This call does not return until/unless a new block can be built
-pub fn get_block(
+pub fn get_block<V>(
 	chain: &Arc<chain::Chain>,
-	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
+	batch_verifier: Arc<RwLock<V>>,
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
-) -> (core::Block, BlockFees) {
+) -> (core::Block, BlockFees)
+	where V: BatchVerifier
+{
 	let wallet_retry_interval = 5;
 	// get the latest chain state and build a block on top of it
-	let mut result = build_block(chain, tx_pool, key_id.clone(), wallet_listener_url.clone());
+	let mut result = build_block(
+		chain,
+		tx_pool,
+		batch_verifier.clone(),
+		key_id.clone(),
+		wallet_listener_url.clone(),
+	);
 	while let Err(e) = result {
 		match e {
 			self::Error::Chain(c) => match c.kind() {
@@ -109,19 +119,28 @@ pub fn get_block(
 			}
 		}
 		thread::sleep(Duration::from_millis(100));
-		result = build_block(chain, tx_pool, key_id.clone(), wallet_listener_url.clone());
+		result = build_block(
+			chain,
+			tx_pool,
+			batch_verifier.clone(),
+			key_id.clone(),
+			wallet_listener_url.clone(),
+		);
 	}
 	return result.unwrap();
 }
 
 /// Builds a new block with the chain head as previous and eligible
 /// transactions from the pool.
-fn build_block(
+fn build_block<V>(
 	chain: &Arc<chain::Chain>,
-	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
+	batch_verifier: Arc<RwLock<V>>,
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
-) -> Result<(core::Block, BlockFees), Error> {
+) -> Result<(core::Block, BlockFees), Error>
+	where V: BatchVerifier
+{
 	// prepare the block header timestamp
 	let head = chain.head_header()?;
 
@@ -151,7 +170,7 @@ fn build_block(
 	let mut b = core::Block::with_reward(&head, txs, output, kernel, difficulty.clone())?;
 
 	// making sure we're not spending time mining a useless block
-	b.validate(&head.total_kernel_offset, &head.total_kernel_sum)?;
+	b.validate(&head.total_kernel_offset, &head.total_kernel_sum, batch_verifier)?;
 
 	let mut rng = rand::OsRng::new().unwrap();
 	b.header.nonce = rng.gen();

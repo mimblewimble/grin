@@ -15,10 +15,13 @@
 //! The primary module containing the implementations of the transaction pool
 //! and its top-level members.
 
+use std::sync::{Arc, RwLock};
+
 use chrono::prelude::{DateTime, Utc};
 
 use core::consensus;
-use core::core::block::BlockHeader;
+use core::core::batch_verifier::BatchVerifier;
+use core::core::{BlockHeader, Output, TxKernel};
 use core::core::hash::Hash;
 use core::core::transaction::{self, Transaction};
 
@@ -187,7 +190,8 @@ impl From<transaction::Error> for PoolError {
 }
 
 /// Interface that the pool requires from a blockchain implementation.
-pub trait BlockChain {
+pub trait BlockChain
+{
 	/// Validate a vec of txs against known chain state at specific block
 	/// after applying the pre_tx to the chain state.
 	fn validate_raw_txs(

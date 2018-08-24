@@ -27,6 +27,7 @@ use chain::{self, ChainAdapter, Options, Tip};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
+use core::core::batch_verifier::BatchVerifier;
 use core::core::transaction::Transaction;
 use core::core::{BlockHeader, CompactBlock};
 use core::{core, global};
@@ -49,16 +50,20 @@ fn wo<T>(weak_one: &OneTime<Weak<T>>) -> Arc<T> {
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
-pub struct NetToChainAdapter {
+pub struct NetToChainAdapter<V>
+{
 	sync_state: Arc<SyncState>,
 	archive_mode: bool,
 	chain: Weak<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
+	batch_verifier: Arc<RwLock<V>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 }
 
-impl p2p::ChainAdapter for NetToChainAdapter {
+impl<V> p2p::ChainAdapter for NetToChainAdapter<V>
+	where V: BatchVerifier + Sync + Send
+{
 	fn total_difficulty(&self) -> Difficulty {
 		w(&self.chain).total_difficulty()
 	}
@@ -170,7 +175,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 			if let Ok(prev) = chain.get_block_header(&cb.header.previous) {
 				if block
-					.validate(&prev.total_kernel_offset, &prev.total_kernel_sum)
+					.validate(&prev.total_kernel_offset, &prev.total_kernel_sum, self.batch_verifier.clone())
 					.is_ok()
 				{
 					debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
@@ -353,7 +358,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			return true;
 		}
 
-		if let Err(e) = w(&self.chain).txhashset_write(h, txhashset_data, self.sync_state.as_ref())
+		if let Err(e) = w(&self.chain)
+			.txhashset_write(h, txhashset_data, self.sync_state.as_ref(), self.batch_verifier.clone())
 		{
 			error!(LOGGER, "Failed to save txhashset archive: {}", e);
 			let is_good_data = !e.is_bad_data();
@@ -366,20 +372,24 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 }
 
-impl NetToChainAdapter {
+impl<V> NetToChainAdapter<V>
+	where V: BatchVerifier
+{
 	/// Construct a new NetToChainAdapter instance
 	pub fn new(
 		sync_state: Arc<SyncState>,
 		archive_mode: bool,
 		chain_ref: Weak<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
+		batch_verifier: Arc<RwLock<V>>,
 		config: ServerConfig,
-	) -> NetToChainAdapter {
+	) -> NetToChainAdapter<V> {
 		NetToChainAdapter {
 			sync_state,
 			archive_mode,
 			chain: chain_ref,
 			tx_pool,
+			batch_verifier,
 			peers: OneTime::new(),
 			config,
 		}
@@ -446,7 +456,7 @@ impl NetToChainAdapter {
 
 		let prev_hash = b.header.previous;
 		let bhash = b.hash();
-		match chain.process_block(b, self.chain_opts()) {
+		match chain.process_block(b, self.chain_opts(), self.batch_verifier.clone()) {
 			Ok((tip, _)) => {
 				self.validate_chain(bhash);
 				self.check_compact(tip);
@@ -600,13 +610,15 @@ impl NetToChainAdapter {
 /// Implementation of the ChainAdapter for the network. Gets notified when the
 /// blockchain accepted a new block, asking the pool to update its state and
 /// the network to broadcast the block
-pub struct ChainToPoolAndNetAdapter {
+pub struct ChainToPoolAndNetAdapter<V> {
 	sync_state: Arc<SyncState>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 }
 
-impl ChainAdapter for ChainToPoolAndNetAdapter {
+impl<V> ChainAdapter for ChainToPoolAndNetAdapter<V>
+	where V: BatchVerifier
+{
 	fn block_accepted(&self, b: &core::Block, opts: Options) {
 		if self.sync_state.is_syncing() {
 			return;
@@ -661,12 +673,14 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 	}
 }
 
-impl ChainToPoolAndNetAdapter {
+impl<V> ChainToPoolAndNetAdapter<V>
+	where V: BatchVerifier
+{
 	/// Construct a ChainToPoolAndNetAdapter instance.
 	pub fn new(
 		sync_state: Arc<SyncState>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
-	) -> ChainToPoolAndNetAdapter {
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
+	) -> ChainToPoolAndNetAdapter<V> {
 		ChainToPoolAndNetAdapter {
 			sync_state,
 			tx_pool,

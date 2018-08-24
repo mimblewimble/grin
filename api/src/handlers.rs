@@ -28,8 +28,10 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 
 use chain;
+use core::core::batch_verifier::BatchVerifier;
 use core::core::hash::{Hash, Hashed};
-use core::core::{OutputFeatures, OutputIdentifier, Transaction};
+use core::core::transaction;
+use core::core::{OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::ser;
 use p2p;
 use p2p::types::ReasonForBan;
@@ -694,13 +696,14 @@ impl Handler for HeaderHandler {
 }
 
 // Get basic information about the transaction pool.
-struct PoolInfoHandler<T> {
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+struct PoolInfoHandler<T, V> {
+	tx_pool: Weak<RwLock<pool::TransactionPool<T, V>>>,
 }
 
-impl<T> Handler for PoolInfoHandler<T>
+impl<T, V> Handler for PoolInfoHandler<T, V>
 where
 	T: pool::BlockChain + Send + Sync,
+	V: BatchVerifier + Send + Sync,
 {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		let pool_arc = w(&self.tx_pool);
@@ -719,13 +722,14 @@ struct TxWrapper {
 }
 
 // Push new transaction to our local transaction pool.
-struct PoolPushHandler<T> {
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+struct PoolPushHandler<T, V> {
+	tx_pool: Weak<RwLock<pool::TransactionPool<T, V>>>,
 }
 
-impl<T> PoolPushHandler<T>
+impl<T, V> PoolPushHandler<T, V>
 where
 	T: pool::BlockChain + Send + Sync + 'static,
+	V: BatchVerifier + Send + Sync + 'static,
 {
 	fn update_pool(&self, req: Request<Body>) -> Box<Future<Item = (), Error = Error> + Send> {
 		let params = match req.uri().query() {
@@ -779,9 +783,10 @@ where
 	}
 }
 
-impl<T> Handler for PoolPushHandler<T>
+impl<T, V> Handler for PoolPushHandler<T, V>
 where
 	T: pool::BlockChain + Send + Sync + 'static,
+	V: BatchVerifier + Send + Sync + 'static,
 {
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		Box::new(
@@ -861,13 +866,14 @@ thread_local!( static ROUTER: RefCell<Option<Router>> = RefCell::new(None) );
 /// weak references. Note that this likely means a crash if the handlers are
 /// used after a server shutdown (which should normally never happen,
 /// except during tests).
-pub fn start_rest_apis<T>(
+pub fn start_rest_apis<T, V>(
 	addr: String,
 	chain: Weak<chain::Chain>,
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+	tx_pool: Weak<RwLock<pool::TransactionPool<T, V>>>,
 	peers: Weak<p2p::Peers>,
 ) where
 	T: pool::BlockChain + Send + Sync + 'static,
+	V: BatchVerifier + Send + Sync + 'static,
 {
 	let _ = thread::Builder::new()
 		.name("apis".to_string())
@@ -912,13 +918,14 @@ where
 	)
 }
 
-pub fn build_router<T>(
+pub fn build_router<T, V>(
 	chain: Weak<chain::Chain>,
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+	tx_pool: Weak<RwLock<pool::TransactionPool<T, V>>>,
 	peers: Weak<p2p::Peers>,
 ) -> Result<Router, RouterError>
 where
 	T: pool::BlockChain + Send + Sync + 'static,
+	V: BatchVerifier + Send + Sync + 'static,
 {
 	let route_list = vec![
 		"get blocks".to_string(),

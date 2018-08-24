@@ -16,13 +16,14 @@
 //! Used for both the txpool and stempool layers in the pool.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use core::consensus;
+use core::core::batch_verifier::BatchVerifier;
 use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
-use core::core::{Block, CompactBlock, Transaction, TxKernel};
+use core::core::{Block, CompactBlock, Output, Transaction, TxKernel};
 use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 use util::LOGGER;
 
@@ -33,22 +34,26 @@ const MAX_MINEABLE_WEIGHT: usize =
 // longest chain of dependent transactions that can be included in a block
 const MAX_TX_CHAIN: usize = 20;
 
-pub struct Pool<T> {
+pub struct Pool<T, V> {
 	/// Entries in the pool (tx + info + timer) in simple insertion order.
 	pub entries: Vec<PoolEntry>,
 	/// The blockchain
 	pub blockchain: Arc<T>,
+	/// The batch verifier
+	pub batch_verifier: Arc<RwLock<V>>,
 	pub name: String,
 }
 
-impl<T> Pool<T>
+impl<T, V> Pool<T, V>
 where
 	T: BlockChain,
+	V: BatchVerifier,
 {
-	pub fn new(chain: Arc<T>, name: String) -> Pool<T> {
+	pub fn new(chain: Arc<T>, batch_verifier: Arc<RwLock<V>>, name: String) -> Pool<T, V> {
 		Pool {
 			entries: vec![],
 			blockchain: chain.clone(),
+			batch_verifier: batch_verifier.clone(),
 			name,
 		}
 	}

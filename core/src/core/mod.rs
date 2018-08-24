@@ -14,6 +14,7 @@
 
 //! Core types
 
+pub mod batch_verifier;
 pub mod block;
 pub mod committed;
 pub mod compact_block;

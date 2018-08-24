@@ -19,6 +19,7 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
+use core::core::batch_verifier::BatchVerifier;
 use core::core::hash::Hashed;
 use core::core::transaction;
 use pool::{BlockChain, DandelionConfig, PoolEntryState, PoolError, TransactionPool, TxSource};
@@ -32,12 +33,13 @@ use util::LOGGER;
 /// stempool and test if the timer is expired for each transaction. In that case
 /// the transaction will be sent in fluff phase (to multiple peers) instead of
 /// sending only to the peer relay.
-pub fn monitor_transactions<T>(
+pub fn monitor_transactions<T, V>(
 	dandelion_config: DandelionConfig,
-	tx_pool: Arc<RwLock<TransactionPool<T>>>,
+	tx_pool: Arc<RwLock<TransactionPool<T, V>>>,
 	stop: Arc<AtomicBool>,
 ) where
 	T: BlockChain + Send + Sync + 'static,
+	V: BatchVerifier + Send + Sync + 'static,
 {
 	debug!(LOGGER, "Started Dandelion transaction monitor.");
 
@@ -84,9 +86,10 @@ pub fn monitor_transactions<T>(
 		});
 }
 
-fn process_stem_phase<T>(tx_pool: Arc<RwLock<TransactionPool<T>>>) -> Result<(), PoolError>
+fn process_stem_phase<T, V>(tx_pool: Arc<RwLock<TransactionPool<T, V>>>) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
+	V: BatchVerifier + Send + Sync + 'static,
 {
 	let mut tx_pool = tx_pool.write().unwrap();
 
@@ -127,9 +130,10 @@ where
 	Ok(())
 }
 
-fn process_fluff_phase<T>(tx_pool: Arc<RwLock<TransactionPool<T>>>) -> Result<(), PoolError>
+fn process_fluff_phase<T, V>(tx_pool: Arc<RwLock<TransactionPool<T, V>>>) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
+	V: BatchVerifier + Send + Sync + 'static,
 {
 	let mut tx_pool = tx_pool.write().unwrap();
 
@@ -162,12 +166,13 @@ where
 	Ok(())
 }
 
-fn process_fresh_entries<T>(
+fn process_fresh_entries<T, V>(
 	dandelion_config: DandelionConfig,
-	tx_pool: Arc<RwLock<TransactionPool<T>>>,
+	tx_pool: Arc<RwLock<TransactionPool<T, V>>>,
 ) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
+	V: BatchVerifier + Send + Sync + 'static,
 {
 	let mut tx_pool = tx_pool.write().unwrap();
 
@@ -199,12 +204,13 @@ where
 	Ok(())
 }
 
-fn process_expired_entries<T>(
+fn process_expired_entries<T, V>(
 	dandelion_config: DandelionConfig,
-	tx_pool: Arc<RwLock<TransactionPool<T>>>,
+	tx_pool: Arc<RwLock<TransactionPool<T, V>>>,
 ) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
+	V: BatchVerifier + Send + Sync + 'static,
 {
 	let now = Utc::now().timestamp();
 	let embargo_sec = dandelion_config.embargo_secs.unwrap() + rand::thread_rng().gen_range(0, 31);

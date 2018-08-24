@@ -26,16 +26,18 @@ use common::adapters::PoolToChainAdapter;
 use common::types::StratumServerConfig;
 use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader, Proof};
+use core::core::batch_verifier::BatchVerifier;
 use core::pow::cuckoo;
 use core::{consensus, global};
 use mining::mine_block;
 use pool;
 use util::LOGGER;
 
-pub struct Miner {
+pub struct Miner<V> {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
+	batch_verifier: Arc<RwLock<V>>,
 	stop: Arc<AtomicBool>,
 
 	// Just to hold the port we're on, so this miner can be identified
@@ -43,21 +45,25 @@ pub struct Miner {
 	debug_output_id: String,
 }
 
-impl Miner {
+impl<V> Miner<V>
+	where V: BatchVerifier
+{
 	/// Creates a new Miner. Needs references to the chain state and its
 	/// storage.
 	pub fn new(
 		config: StratumServerConfig,
-		chain_ref: Arc<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		chain: Arc<chain::Chain>,
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
+		batch_verifier: Arc<RwLock<V>>,
 		stop: Arc<AtomicBool>,
-	) -> Miner {
+	) -> Miner<V> {
 		Miner {
-			config: config,
-			chain: chain_ref,
-			tx_pool: tx_pool,
+			config,
+			chain,
+			tx_pool,
+			batch_verifier,
 			debug_output_id: String::from("none"),
-			stop: stop,
+			stop,
 		}
 	}
 
@@ -148,6 +154,7 @@ impl Miner {
 			let (mut b, block_fees) = mine_block::get_block(
 				&self.chain,
 				&self.tx_pool,
+				self.batch_verifier.clone(),
 				key_id.clone(),
 				wallet_listener_url.clone(),
 			);
@@ -168,7 +175,7 @@ impl Miner {
 					self.debug_output_id,
 					b.hash()
 				);
-				let res = self.chain.process_block(b, chain::Options::MINE);
+				let res = self.chain.process_block(b, chain::Options::MINE, self.batch_verifier.clone());
 				if let Err(e) = res {
 					error!(
 						LOGGER,

@@ -18,10 +18,12 @@ use std::cmp::max;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::{error, fmt};
+use std::sync::{Arc, RwLock};
 
 use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;
 use core::{committed, Committed};
+use core::batch_verifier::{self, BatchVerifier};
 use keychain::{self, BlindingFactor};
 use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};
 use util;
@@ -78,6 +80,8 @@ pub enum Error {
 	/// Validation error relating to kernel features.
 	/// It is invalid for a transaction to contain a coinbase kernel, for example.
 	InvalidKernelFeatures,
+	/// Error from batch verification.
+	BatchVerifier(batch_verifier::Error)
 }
 
 impl error::Error for Error {
@@ -99,6 +103,12 @@ impl fmt::Display for Error {
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
 		Error::Secp(e)
+	}
+}
+
+impl From<batch_verifier::Error> for Error {
+	fn from(e: batch_verifier::Error) -> Error {
+		Error::BatchVerifier(e)
 	}
 }
 
@@ -445,33 +455,6 @@ impl TransactionBody {
 			.fold(0, |acc, ref x| max(acc, x.lock_height))
 	}
 
-	/// Verify the kernel signatures.
-	/// Note: this is expensive.
-	fn verify_kernel_signatures(&self) -> Result<(), Error> {
-		for x in &self.kernels {
-			x.verify()?;
-		}
-		Ok(())
-	}
-
-	/// Verify all the output rangeproofs.
-	/// Note: this is expensive.
-	fn verify_rangeproofs(&self) -> Result<(), Error> {
-		let mut commits: Vec<Commitment> = vec![];
-		let mut proofs: Vec<RangeProof> = vec![];
-		if self.outputs.len() == 0 {
-			return Ok(());
-		}
-		// unfortunately these have to be aligned in memory for the underlying
-		// libsecp call
-		for x in &self.outputs {
-			commits.push(x.commit.clone());
-			proofs.push(x.proof.clone());
-		}
-		Output::batch_verify_proofs(&commits, &proofs)?;
-		Ok(())
-	}
-
 	// Verify the body is not too big in terms of number of inputs|outputs|kernels.
 	fn verify_weight(&self, with_reward: bool) -> Result<(), Error> {
 		// if as_block check the body as if it was a block, with an additional output and
@@ -558,12 +541,23 @@ impl TransactionBody {
 	/// Validates all relevant parts of a transaction body. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self, with_reward: bool) -> Result<(), Error> {
+	pub fn validate<V>(
+		&self,
+		with_reward: bool,
+		verifier: Arc<RwLock<V>>,
+	)
+	-> Result<(), Error>
+	where
+		V: ?Sized + BatchVerifier
+	{
 		self.verify_weight(with_reward)?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
-		self.verify_rangeproofs()?;
-		self.verify_kernel_signatures()?;
+
+		let v = verifier.write().unwrap();
+		v.verify_rangeproofs(&self.outputs)?;
+		v.verify_kernel_signatures(&self.kernels)?;
+
 		Ok(())
 	}
 }
@@ -760,8 +754,15 @@ impl Transaction {
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self, with_reward: bool) -> Result<(), Error> {
-		self.body.validate(with_reward)?;
+	pub fn validate<V>(
+		&self,
+		with_reward: bool,
+		verifier: Arc<RwLock<V>>,
+	) -> Result<(), Error>
+		where V: ?Sized + BatchVerifier
+	{
+		self.body.validate(with_reward, verifier)?;
+
 		if !with_reward {
 			self.body.verify_features()?;
 			self.verify_kernel_sums(self.overage(), self.offset)?;
@@ -867,7 +868,8 @@ pub fn aggregate(
 	// The resulting tx could be invalid for a variety of reasons -
 	//   * tx too large (too many inputs|outputs|kernels)
 	//   * cut-through may have invalidated the sums
-	tx.validate(with_reward)?;
+	let verifier = Arc::new(RwLock::new(SimpleBatchVerifier::new()));
+	tx.validate(with_reward, verifier)?;
 
 	Ok(tx)
 }
@@ -935,7 +937,8 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
 
 	// Now validate the resulting tx to ensure we have not built something invalid.
-	tx.validate(false)?;
+	let verifier = Arc::new(RwLock::new(SimpleBatchVerifier::new()));
+	tx.validate(false, verifier)?;
 
 	Ok(tx)
 }
@@ -1194,6 +1197,46 @@ impl Readable for OutputIdentifier {
 		})
 	}
 }
+
+pub struct SimpleBatchVerifier {}
+
+impl SimpleBatchVerifier {
+	pub fn new() -> SimpleBatchVerifier {
+		SimpleBatchVerifier{}
+	}
+}
+
+impl BatchVerifier for SimpleBatchVerifier {
+	fn verify_rangeproofs(&self, items: &Vec<Output>) -> Result<(), batch_verifier::Error> {
+		let mut commits: Vec<Commitment> = vec![];
+		let mut proofs: Vec<RangeProof> = vec![];
+
+		if items.len() == 0 {
+			return Ok(());
+		}
+
+		// unfortunately these have to be aligned in memory for the underlying
+		// libsecp call
+		for x in items {
+			commits.push(x.commit.clone());
+			proofs.push(x.proof.clone());
+		}
+
+		Output::batch_verify_proofs(&commits, &proofs)?;
+		Ok(())
+	}
+
+	fn verify_kernel_signatures(
+		&self,
+		items: &Vec<TxKernel>,
+	) -> Result<(), batch_verifier::Error> {
+		for x in items {
+			x.verify()?;
+		}
+		Ok(())
+	}
+}
+
 
 #[cfg(test)]
 mod test {

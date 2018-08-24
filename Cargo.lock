@@ -554,6 +554,7 @@ dependencies = [
  "daemonize 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "flate2 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "grin_api 0.3.0",
+ "grin_chain 0.3.0",
  "grin_config 0.3.0",
  "grin_core 0.3.0",
  "grin_keychain 0.3.0",

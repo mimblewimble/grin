@@ -20,11 +20,13 @@ use std::sync::{Arc, RwLock};
 use chrono::prelude::Utc;
 use chrono::Duration;
 
+use core::core::batch_verifier::BatchVerifier;
+use caching_batch_verifier::CachingBatchVerifier;
 use chain::OrphanBlockPool;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use core::core::{Block, BlockHeader};
+use core::core::{Block, BlockHeader, Output, TxKernel};
 use core::global;
 use error::{Error, ErrorKind};
 use grin_store;
@@ -37,7 +39,8 @@ use failure::ResultExt;
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.
-pub struct BlockContext {
+pub struct BlockContext
+{
 	/// The options
 	pub opts: Options,
 	/// The store
@@ -57,7 +60,13 @@ pub struct BlockContext {
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain. Returns the new chain head if
 /// updated.
-pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+pub fn process_block<V>(
+	b: &Block,
+	ctx: &mut BlockContext,
+	batch_verifier: Arc<RwLock<V>>
+) -> Result<Option<Tip>, Error>
+	where V: BatchVerifier,
+{
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
@@ -95,7 +104,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 
 	// validate the block itself
 	// we can do this now before interacting with the txhashset
-	let _sums = validate_block(b, ctx)?;
+	let _sums = validate_block(b, ctx, batch_verifier)?;
 
 	// header and block both valid, and we have a previous block
 	// so take the lock on the txhashset
@@ -145,7 +154,8 @@ pub fn sync_block_header(
 	sync_ctx: &mut BlockContext,
 	header_ctx: &mut BlockContext,
 	batch: &mut store::Batch,
-) -> Result<Option<Tip>, Error> {
+) -> Result<Option<Tip>, Error>
+{
 	debug!(
 		LOGGER,
 		"pipe: sync_block_header: {} at {}",
@@ -166,7 +176,11 @@ pub fn sync_block_header(
 /// We validate the header but we do not store it or update header head based
 /// on this. We will update these once we get the block back after requesting
 /// it.
-pub fn process_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+pub fn process_block_header(
+	bh: &BlockHeader,
+	ctx: &mut BlockContext,
+) -> Result<(), Error>
+{
 	debug!(
 		LOGGER,
 		"pipe: process_block_header at {} [{}]",
@@ -181,7 +195,8 @@ pub fn process_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<
 /// Quick in-memory check to fast-reject any block header we've already handled
 /// recently. Keeps duplicates from the network in check.
 /// ctx here is specific to the header_head (tip of the header chain)
-fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
+fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error>
+{
 	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
 		return Err(ErrorKind::Unfit("already known".to_string()).into());
 	}
@@ -307,7 +322,13 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	Ok(())
 }
 
-fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+fn validate_block<V>(
+	b: &Block,
+	ctx: &mut BlockContext,
+	batch_verifier: Arc<RwLock<V>>,
+) -> Result<(), Error>
+	where V: BatchVerifier
+{
 	if ctx.store.block_exists(&b.hash())? {
 		if b.header.height < ctx.head.height.saturating_sub(50) {
 			return Err(ErrorKind::OldBlock.into());
@@ -316,7 +337,7 @@ fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 		}
 	}
 	let prev = ctx.store.get_block_header(&b.header.previous)?;
-	b.validate(&prev.total_kernel_offset, &prev.total_kernel_sum)
+	b.validate(&prev.total_kernel_offset, &prev.total_kernel_sum, batch_verifier)
 		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }

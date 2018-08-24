@@ -43,6 +43,7 @@ extern crate grin_util as util;
 
 mod chain;
 mod error;
+pub mod caching_batch_verifier;
 pub mod pipe;
 pub mod store;
 pub mod txhashset;

@@ -19,14 +19,16 @@ use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
+use std::sync::{Arc, RwLock};
 
 use consensus::{self, reward, REWARD};
+use core::batch_verifier::BatchVerifier;
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use core::{
-	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, Transaction,
+	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, SimpleBatchVerifier, Transaction,
 	TransactionBody, TxKernel,
 };
 use global;
@@ -547,12 +549,15 @@ impl Block {
 	/// Validates all the elements in a block that can be checked without
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
-	pub fn validate(
+	pub fn validate<V>(
 		&self,
 		prev_kernel_offset: &BlindingFactor,
 		prev_kernel_sum: &Commitment,
-	) -> Result<(Commitment), Error> {
-		self.body.validate(true)?;
+		verifier: Arc<RwLock<V>>,
+	) -> Result<(Commitment), Error>
+		where V: BatchVerifier
+	{
+		self.body.validate(true, verifier)?;
 
 		self.verify_kernel_lock_heights()?;
 		self.verify_coinbase()?;
