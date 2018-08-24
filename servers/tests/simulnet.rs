@@ -15,6 +15,7 @@
 extern crate grin_api as api;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
+extern crate grin_keychain as keychain;
 extern crate grin_p2p as p2p;
 extern crate grin_servers as servers;
 extern crate grin_util as util;
@@ -23,14 +24,23 @@ extern crate grin_wallet as wallet;
 mod framework;
 
 use std::default::Default;
+use std::sync::{Arc, Mutex};
 use std::{thread, time};
 
 use core::core::hash::Hashed;
 use core::global::{self, ChainTypes};
 
-use framework::{config, stratum_config, stop_all_servers,
-								LocalServerContainerConfig, LocalServerContainerPool,
-                LocalServerContainerPoolConfig};
+use wallet::controller;
+use wallet::libtx::slate::Slate;
+use wallet::libwallet::types::{WalletBackend, WalletClient, WalletInst};
+use wallet::lmdb_wallet::LMDBBackend;
+use wallet::HTTPWalletClient;
+use wallet::WalletConfig;
+
+use framework::{
+	config, stop_all_servers, stratum_config, LocalServerContainerConfig, LocalServerContainerPool,
+	LocalServerContainerPoolConfig,
+};
 
 /// Testing the frameworks by starting a fresh server, creating a genesis
 /// Block and mining into a wallet for a bit
@@ -336,4 +346,117 @@ fn simulate_fast_sync_double() {
 	}
 	s1.stop();
 	s2.stop();
+}
+
+pub fn create_wallet(
+	dir: &str,
+	client: HTTPWalletClient,
+) -> Box<WalletInst<HTTPWalletClient, keychain::ExtKeychain>> {
+	let mut wallet_config = WalletConfig::default();
+	wallet_config.data_file_dir = String::from(dir);
+	let _ = wallet::WalletSeed::init_file(&wallet_config);
+	let mut wallet: LMDBBackend<HTTPWalletClient, keychain::ExtKeychain> =
+		LMDBBackend::new(wallet_config.clone(), "", client).unwrap_or_else(|e| {
+			panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+		});
+	wallet.open_with_credentials().unwrap_or_else(|e| {
+		panic!(
+			"Error initializing wallet: {:?} Config: {:?}",
+			e, wallet_config
+		)
+	});
+	Box::new(wallet)
+}
+
+/// Intended to replicate https://github.com/mimblewimble/grin/issues/1325
+#[ignore]
+#[test]
+fn replicate_tx_fluff_failure() {
+	util::init_test_logger();
+	global::set_mining_mode(ChainTypes::UserTesting);
+	framework::clean_all_output("tx_fluff");
+
+	// Create Wallet 1 (Mining Input) and start it listening
+	// Wallet 1 post to another node, just for fun
+	let client1 = HTTPWalletClient::new("http://127.0.0.1:23003");
+	let wallet1 = create_wallet("target/tmp/tx_fluff/wallet1", client1.clone());
+	let wallet1_handle = thread::spawn(move || {
+		controller::foreign_listener(wallet1, "127.0.0.1:33000")
+			.unwrap_or_else(|e| panic!("Error creating wallet1 listener: {:?}", e,));
+	});
+
+	// Create Wallet 2 (Recipient) and launch
+	let client2 = HTTPWalletClient::new("http://127.0.0.1:23001");
+	let wallet2 = create_wallet("target/tmp/tx_fluff/wallet2", client2.clone());
+	let wallet2_handle = thread::spawn(move || {
+		controller::foreign_listener(wallet2, "127.0.0.1:33001")
+			.unwrap_or_else(|e| panic!("Error creating wallet2 listener: {:?}", e,));
+	});
+
+	// Server 1 (mines into wallet 1)
+	let mut s1_config = framework::config(3000, "tx_fluff", 3000);
+	s1_config.test_miner_wallet_url = Some("http://127.0.0.1:33000".to_owned());
+	s1_config.dandelion_config.embargo_secs = Some(10);
+	s1_config.dandelion_config.patience_secs = Some(1);
+	s1_config.dandelion_config.relay_secs = Some(1);
+	let s1 = servers::Server::new(s1_config.clone()).unwrap();
+	// Mine off of server 1
+	s1.start_test_miner(s1_config.test_miner_wallet_url);
+	thread::sleep(time::Duration::from_secs(5));
+
+	// Server 2 (another node)
+	let mut s2_config = framework::config(3001, "tx_fluff", 3001);
+	s2_config.p2p_config.seeds = Some(vec!["127.0.0.1:13000".to_owned()]);
+	s2_config.dandelion_config.embargo_secs = Some(10);
+	s2_config.dandelion_config.patience_secs = Some(1);
+	s2_config.dandelion_config.relay_secs = Some(1);
+	let s2 = servers::Server::new(s2_config.clone()).unwrap();
+
+	let dl_nodes = 5;
+
+	for i in 0..dl_nodes {
+		// (create some stem nodes)
+		let mut s_config = framework::config(3002 + i, "tx_fluff", 3002 + i);
+		s_config.p2p_config.seeds = Some(vec!["127.0.0.1:13000".to_owned()]);
+		s_config.dandelion_config.embargo_secs = Some(10);
+		s_config.dandelion_config.patience_secs = Some(1);
+		s_config.dandelion_config.relay_secs = Some(1);
+		let _ = servers::Server::new(s_config.clone()).unwrap();
+	}
+
+	thread::sleep(time::Duration::from_secs(10));
+
+	// get another instance of wallet1 (to update contents and perform a send)
+	let wallet1 = create_wallet("target/tmp/tx_fluff/wallet1", client1.clone());
+	let wallet1 = Arc::new(Mutex::new(wallet1));
+
+	let amount = 30_000_000_000;
+	let mut slate = Slate::blank(1);
+
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		slate =
+			api.issue_send_tx(
+				amount,                   // amount
+				2,                        // minimum confirmations
+				"http://127.0.0.1:33001", // dest
+				500,                      // max outputs
+				10,                       // num change outputs
+				true,                     // select all outputs
+			).unwrap();
+		api.post_tx(&slate, true).unwrap();
+		Ok(())
+	}).unwrap();
+
+	// Give some time for propagation and mining
+	thread::sleep(time::Duration::from_secs(15));
+
+	// get another instance of wallet (to check contents)
+	let wallet2 = create_wallet("target/tmp/tx_fluff/wallet2", client2.clone());
+
+	let wallet2 = Arc::new(Mutex::new(wallet2));
+	wallet::controller::owner_single_use(wallet2.clone(), |api| {
+		let res = api.retrieve_summary_info(true).unwrap();
+		assert_eq!(res.1.amount_currently_spendable, amount);
+		Ok(())
+	}).unwrap();
 }
