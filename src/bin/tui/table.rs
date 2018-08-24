@@ -41,8 +41,10 @@
 //! Adapted from https://github.com/behnam/rust-cursive-table-view
 //! A basic table view implementation for [cursive](https://crates.io/crates/cursive).
 
-#![deny(missing_docs, missing_copy_implementations, trivial_casts, trivial_numeric_casts,
-        unsafe_code, unused_import_braces, unused_qualifications)]
+#![deny(
+	missing_docs, missing_copy_implementations, trivial_casts, trivial_numeric_casts, unsafe_code,
+	unused_import_braces, unused_qualifications
+)]
 
 // Crate Dependencies ---------------------------------------------------------
 extern crate cursive;
