@@ -19,8 +19,8 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
-use core::core::ok_verifier::OKVerifier;
 use core::core::hash::Hashed;
+use core::core::ok_verifier::OKVerifier;
 use core::core::transaction;
 use pool::{BlockChain, DandelionConfig, PoolEntryState, PoolError, TransactionPool, TxSource};
 use util::LOGGER;

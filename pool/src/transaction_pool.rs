@@ -21,8 +21,8 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use chrono::prelude::Utc;
 
-use core::core::ok_verifier::OKVerifier;
 use core::core::hash::Hash;
+use core::core::ok_verifier::OKVerifier;
 use core::core::{transaction, Block, CompactBlock, Output, Transaction, TxKernel};
 use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};

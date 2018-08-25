@@ -23,9 +23,9 @@ use std::time::{Duration, Instant};
 use lmdb;
 
 use caching_ok_verifier::CachingOKVerifier;
-use core::core::ok_verifier::OKVerifier;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
+use core::core::ok_verifier::OKVerifier;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;

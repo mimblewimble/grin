@@ -14,13 +14,13 @@
 
 //! Core types
 
-pub mod ok_verifier;
 pub mod block;
 pub mod committed;
 pub mod compact_block;
 pub mod hash;
 pub mod id;
 pub mod merkle_proof;
+pub mod ok_verifier;
 pub mod pmmr;
 pub mod target;
 pub mod transaction;

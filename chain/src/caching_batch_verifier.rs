@@ -16,8 +16,8 @@
 
 use core::core::ok_verifier::{self, OKVerifier};
 use core::core::{Output, TxKernel};
-use util::LOGGER;
 use util::secp::pedersen::{Commitment, RangeProof};
+use util::LOGGER;
 
 pub struct CachingOKVerifier {}
 
@@ -29,7 +29,11 @@ impl CachingOKVerifier {
 
 impl OKVerifier for CachingOKVerifier {
 	fn verify_rangeproofs(&self, items: &Vec<Output>) -> Result<(), ok_verifier::Error> {
-		warn!(LOGGER, "caching_ok_verifier: verify_rangeproofs: {}", items.len());
+		warn!(
+			LOGGER,
+			"caching_ok_verifier: verify_rangeproofs: {}",
+			items.len()
+		);
 
 		let mut commits: Vec<Commitment> = vec![];
 		let mut proofs: Vec<RangeProof> = vec![];
@@ -50,7 +54,11 @@ impl OKVerifier for CachingOKVerifier {
 	}
 
 	fn verify_kernel_signatures(&self, items: &Vec<TxKernel>) -> Result<(), ok_verifier::Error> {
-		warn!(LOGGER, "caching_ok_verifier: verify_kernel_signatures: {}", items.len());
+		warn!(
+			LOGGER,
+			"caching_ok_verifier: verify_kernel_signatures: {}",
+			items.len()
+		);
 
 		for x in items {
 			x.verify()?;

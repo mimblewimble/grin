@@ -22,10 +22,10 @@ use std::iter::FromIterator;
 use std::sync::{Arc, RwLock};
 
 use consensus::{self, reward, REWARD};
-use core::ok_verifier::OKVerifier;
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
+use core::ok_verifier::OKVerifier;
 use core::target::Difficulty;
 use core::{
 	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof,

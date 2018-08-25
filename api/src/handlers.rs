@@ -28,8 +28,8 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 
 use chain;
-use core::core::ok_verifier::OKVerifier;
 use core::core::hash::{Hash, Hashed};
+use core::core::ok_verifier::OKVerifier;
 use core::core::transaction;
 use core::core::{OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::ser;

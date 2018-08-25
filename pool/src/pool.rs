@@ -19,9 +19,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
 use core::consensus;
-use core::core::ok_verifier::OKVerifier;
 use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortIdentifiable;
+use core::core::ok_verifier::OKVerifier;
 use core::core::transaction;
 use core::core::{Block, CompactBlock, Output, Transaction, TxKernel};
 use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};

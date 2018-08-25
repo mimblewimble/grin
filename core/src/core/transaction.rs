@@ -21,15 +21,15 @@ use std::sync::{Arc, RwLock};
 use std::{error, fmt};
 
 use consensus::{self, VerifySortOrder};
-use core::ok_verifier::{self, OKVerifier};
 use core::hash::Hashed;
+use core::ok_verifier::{self, OKVerifier};
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
 use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};
 use util;
-use util::LOGGER;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::secp::{self, Message, Signature};
+use util::LOGGER;
 use util::{kernel_sig_msg, static_secp_instance};
 
 bitflags! {
@@ -1205,7 +1205,11 @@ impl SimpleOKVerifier {
 
 impl OKVerifier for SimpleOKVerifier {
 	fn verify_rangeproofs(&self, items: &Vec<Output>) -> Result<(), ok_verifier::Error> {
-		warn!(LOGGER, "simple_ok_verifier: verify_rangeproofs: {}", items.len());
+		warn!(
+			LOGGER,
+			"simple_ok_verifier: verify_rangeproofs: {}",
+			items.len()
+		);
 
 		let mut commits: Vec<Commitment> = vec![];
 		let mut proofs: Vec<RangeProof> = vec![];
@@ -1226,7 +1230,11 @@ impl OKVerifier for SimpleOKVerifier {
 	}
 
 	fn verify_kernel_signatures(&self, items: &Vec<TxKernel>) -> Result<(), ok_verifier::Error> {
-		warn!(LOGGER, "simple_ok_verifier: verify_kernel_signatures: {}", items.len());
+		warn!(
+			LOGGER,
+			"simple_ok_verifier: verify_kernel_signatures: {}",
+			items.len()
+		);
 
 		for x in items {
 			x.verify()?;
