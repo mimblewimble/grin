@@ -17,10 +17,10 @@
 
 use lru_cache::LruCache;
 
-use core::{Output, TxKernel};
 use core::hash::{Hash, Hashed};
-use util::secp::pedersen::{Commitment, RangeProof};
+use core::{Output, TxKernel};
 use util::secp;
+use util::secp::pedersen::{Commitment, RangeProof};
 use util::LOGGER;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -128,15 +128,9 @@ impl OKVerifier for CachingOKVerifier {
 			let key = x.proof.hash();
 
 			if self.verified_rangeproof_cache.contains_key(&key) {
-				warn!(
-					LOGGER,
-					"caching_ok_verifier: rangeproof cache hit",
-				);
+				warn!(LOGGER, "caching_ok_verifier: rangeproof cache hit",);
 			} else {
-				warn!(
-					LOGGER,
-					"caching_ok_verifier: rangeproof cache miss",
-				);
+				warn!(LOGGER, "caching_ok_verifier: rangeproof cache miss",);
 				commits.push(x.commit.clone());
 				proofs.push(x.proof.clone());
 				proof_keys.push(key.clone());
@@ -173,15 +167,9 @@ impl OKVerifier for CachingOKVerifier {
 		for x in items {
 			let key = x.hash();
 			if self.verified_kernel_sig_cache.contains_key(&key) {
-				warn!(
-					LOGGER,
-					"caching_ok_verifier: kernel sig cache hit",
-				);
+				warn!(LOGGER, "caching_ok_verifier: kernel sig cache hit",);
 			} else {
-				warn!(
-					LOGGER,
-					"caching_ok_verifier: kernel sig cache miss",
-				);
+				warn!(LOGGER, "caching_ok_verifier: kernel sig cache miss",);
 				let res = x.verify();
 				if let Err(e) = res {
 					return Err(Error::Secp(e));

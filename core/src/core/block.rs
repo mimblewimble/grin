@@ -28,8 +28,8 @@ use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::ok_verifier::{DeserializationOKVerifier, OKVerifier, SimpleOKVerifier};
 use core::target::Difficulty;
 use core::{
-	transaction, Commitment, Input, KernelFeatures, Output,
-	OutputFeatures, Proof, Transaction, TransactionBody, TxKernel,
+	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, Transaction,
+	TransactionBody, TxKernel,
 };
 use global;
 use keychain::{self, BlindingFactor};
