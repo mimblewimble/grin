@@ -19,6 +19,7 @@ use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
+use std::mem;
 
 use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
@@ -140,6 +141,39 @@ pub struct BlockHeader {
 	pub nonce: u64,
 	/// Proof of work data.
 	pub pow: Proof,
+}
+
+/// Ser size of fixed part of a BlockHeader, i.e. without pow
+fn fixed_size_of_ser_blockheader() -> usize {
+	let mut size: usize = 0;
+	size += mem::size_of::<u16>(); // version
+	size += mem::size_of::<u64>(); // height
+	size += mem::size_of::<Hash>(); // previous
+	size += mem::size_of::<u64>(); // timestamp
+	size += mem::size_of::<Difficulty>(); // total_difficulty
+	size += mem::size_of::<Hash>(); // output_root
+	size += mem::size_of::<Hash>(); // range_proof_root
+	size += mem::size_of::<Hash>(); // kernel_root
+	size += mem::size_of::<BlindingFactor>(); // total_kernel_offset
+	size += mem::size_of::<Commitment>(); // total_kernel_sum
+	size += mem::size_of::<u64>(); // output_mmr_size
+	size += mem::size_of::<u64>(); // kernel_mmr_size
+	size += mem::size_of::<u64>(); // nonce
+	size
+}
+
+/// Ser size of this header
+pub fn size_of_ser_blockheader(cuckoo_sizeshift: usize) -> usize {
+	let mut size = fixed_size_of_ser_blockheader();
+
+	size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
+	let nonce_bits = cuckoo_sizeshift as usize - 1;
+	let bitvec_len = 42 * nonce_bits;
+	size += bitvec_len / 8; // pow.nonces
+	if bitvec_len % 8 != 0 {
+		size += 1;
+	}
+	size
 }
 
 impl Default for BlockHeader {
@@ -264,6 +298,20 @@ impl BlockHeader {
 	/// Total kernel offset for the chain state up to and including this block.
 	pub fn total_kernel_offset(&self) -> BlindingFactor {
 		self.total_kernel_offset
+	}
+
+	/// Ser size of this header
+	pub fn size_of_ser(&self) -> usize {
+		let mut size = fixed_size_of_ser_blockheader();
+
+		size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
+		let nonce_bits = self.pow.cuckoo_sizeshift as usize - 1;
+		let bitvec_len = 42 * nonce_bits;
+		size += bitvec_len / 8; // pow.nonces
+		if bitvec_len % 8 != 0 {
+			size += 1;
+		}
+		size
 	}
 }
 
