@@ -28,8 +28,8 @@ use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::ok_verifier::OKVerifier;
 use core::target::Difficulty;
 use core::{
-	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof,
-	DeserializationOKVerifier, SimpleOKVerifier, Transaction, TransactionBody, TxKernel,
+	transaction, Commitment, DeserializationOKVerifier, Input, KernelFeatures, Output,
+	OutputFeatures, Proof, SimpleOKVerifier, Transaction, TransactionBody, TxKernel,
 };
 use global;
 use keychain::{self, BlindingFactor};
@@ -358,8 +358,14 @@ impl Block {
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
 		let verifier = Arc::new(RwLock::new(SimpleOKVerifier::new()));
-		let mut block =
-			Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty, verifier)?;
+		let mut block = Block::with_reward(
+			prev,
+			txs,
+			reward_output.0,
+			reward_output.1,
+			difficulty,
+			verifier,
+		)?;
 
 		// Now set the pow on the header so block hashing works as expected.
 		{
@@ -435,7 +441,8 @@ impl Block {
 		difficulty: Difficulty,
 		verifier: Arc<RwLock<V>>,
 	) -> Result<Block, Error>
-		where V: OKVerifier
+	where
+		V: OKVerifier,
 	{
 		// A block is just a big transaction, aggregate as such. Note that
 		// aggregate also runs validation and duplicate commitment checks.

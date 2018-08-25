@@ -818,7 +818,8 @@ pub fn aggregate<V>(
 	reward: Option<(Output, TxKernel)>,
 	verifier: Arc<RwLock<V>>,
 ) -> Result<Transaction, Error>
-	where V: OKVerifier
+where
+	V: OKVerifier,
 {
 	// convenience short-circuiting
 	if reward.is_none() && transactions.len() == 1 {
@@ -880,7 +881,8 @@ pub fn deaggregate<V>(
 	txs: Vec<Transaction>,
 	verifier: Arc<RwLock<V>>,
 ) -> Result<Transaction, Error>
-	where V: OKVerifier
+where
+	V: OKVerifier,
 {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
@@ -1219,7 +1221,10 @@ impl OKVerifier for DeserializationOKVerifier {
 
 	fn verify_kernel_signatures(&self, items: &Vec<TxKernel>) -> Result<(), ok_verifier::Error> {
 		// no-op - we skip kernel signature verification during deserialization.
-		warn!(LOGGER, "verify_kernel_signatures: skipped during deserialization");
+		warn!(
+			LOGGER,
+			"verify_kernel_signatures: skipped during deserialization"
+		);
 		Ok(())
 	}
 }
