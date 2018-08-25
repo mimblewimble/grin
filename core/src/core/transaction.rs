@@ -22,14 +22,13 @@ use std::{error, fmt};
 
 use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;
-use core::ok_verifier::{self, OKVerifier};
+use core::ok_verifier::{self, OKVerifier, DeserializationOKVerifier};
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
 use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};
 use util;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::secp::{self, Message, Signature};
-use util::LOGGER;
 use util::{kernel_sig_msg, static_secp_instance};
 
 bitflags! {
@@ -553,7 +552,7 @@ impl TransactionBody {
 		// Now use the provided output/kernel verifier to verify
 		// outputs rangeproofs and kernel signatures.
 		{
-			let v = verifier.write().unwrap();
+			let mut v = verifier.write().unwrap();
 			v.verify_rangeproofs(&self.outputs)?;
 			v.verify_kernel_signatures(&self.kernels)?;
 		}
@@ -1201,79 +1200,6 @@ impl Readable for OutputIdentifier {
 			commit: Commitment::read(reader)?,
 			features: features,
 		})
-	}
-}
-
-pub struct DeserializationOKVerifier {}
-
-impl DeserializationOKVerifier {
-	pub fn new() -> DeserializationOKVerifier {
-		DeserializationOKVerifier {}
-	}
-}
-
-impl OKVerifier for DeserializationOKVerifier {
-	fn verify_rangeproofs(&self, items: &Vec<Output>) -> Result<(), ok_verifier::Error> {
-		// no-op - we skip rangeproof verification during deserialization.
-		warn!(LOGGER, "verify_rangeproofs: skipped during deserialization");
-		Ok(())
-	}
-
-	fn verify_kernel_signatures(&self, items: &Vec<TxKernel>) -> Result<(), ok_verifier::Error> {
-		// no-op - we skip kernel signature verification during deserialization.
-		warn!(
-			LOGGER,
-			"verify_kernel_signatures: skipped during deserialization"
-		);
-		Ok(())
-	}
-}
-
-pub struct SimpleOKVerifier {}
-
-impl SimpleOKVerifier {
-	pub fn new() -> SimpleOKVerifier {
-		SimpleOKVerifier {}
-	}
-}
-
-impl OKVerifier for SimpleOKVerifier {
-	fn verify_rangeproofs(&self, items: &Vec<Output>) -> Result<(), ok_verifier::Error> {
-		warn!(
-			LOGGER,
-			"simple_ok_verifier: verify_rangeproofs: {}",
-			items.len()
-		);
-
-		let mut commits: Vec<Commitment> = vec![];
-		let mut proofs: Vec<RangeProof> = vec![];
-
-		if items.len() == 0 {
-			return Ok(());
-		}
-
-		// unfortunately these have to be aligned in memory for the underlying
-		// libsecp call
-		for x in items {
-			commits.push(x.commit.clone());
-			proofs.push(x.proof.clone());
-		}
-
-		Output::batch_verify_proofs(&commits, &proofs)?;
-		Ok(())
-	}
-
-	fn verify_kernel_signatures(&self, items: &Vec<TxKernel>) -> Result<(), ok_verifier::Error> {
-		warn!(
-			LOGGER,
-			"simple_ok_verifier: verify_kernel_signatures: {}",
-			items.len()
-		);
-
-		for x in items {
-			x.verify()?;
-		}
-		Ok(())
 	}
 }
 

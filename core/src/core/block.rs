@@ -25,11 +25,11 @@ use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
-use core::ok_verifier::OKVerifier;
+use core::ok_verifier::{DeserializationOKVerifier, OKVerifier, SimpleOKVerifier};
 use core::target::Difficulty;
 use core::{
-	transaction, Commitment, DeserializationOKVerifier, Input, KernelFeatures, Output,
-	OutputFeatures, Proof, SimpleOKVerifier, Transaction, TransactionBody, TxKernel,
+	transaction, Commitment, Input, KernelFeatures, Output,
+	OutputFeatures, Proof, Transaction, TransactionBody, TxKernel,
 };
 use global;
 use keychain::{self, BlindingFactor};

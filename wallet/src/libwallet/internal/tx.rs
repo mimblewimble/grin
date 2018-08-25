@@ -16,7 +16,7 @@
 
 use std::sync::{Arc, RwLock};
 
-use core::core::SimpleOKVerifier;
+use core::core::ok_verifier::SimpleOKVerifier;
 use core::core::Transaction;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;

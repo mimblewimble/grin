@@ -23,14 +23,13 @@ use std::{thread, time};
 
 use api;
 use chain;
-use chain::caching_ok_verifier::CachingOKVerifier;
 use common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
 use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
 use common::types::{Error, ServerConfig, StratumServerConfig, SyncState};
+use core::core::ok_verifier::CachingOKVerifier;
 use core::core::hash::Hashed;
-use core::core::ok_verifier::OKVerifier;
 use core::core::target::Difficulty;
 use core::{consensus, genesis, global, pow};
 use grin::{dandelion_monitor, seed, sync};

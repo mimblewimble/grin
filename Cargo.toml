@@ -26,7 +26,6 @@ slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_tra
 term = "0.5"
 
 grin_api = { path = "./api" }
-grin_chain = { path = "./chain" }
 grin_config = { path = "./config" }
 grin_core = { path = "./core" }
 grin_keychain = { path = "./keychain" }

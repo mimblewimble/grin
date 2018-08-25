@@ -28,7 +28,6 @@ extern crate slog;
 extern crate term;
 
 extern crate grin_api as api;
-extern crate grin_chain as chain;
 extern crate grin_config as config;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;

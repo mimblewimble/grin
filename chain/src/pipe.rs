@@ -20,11 +20,10 @@ use std::sync::{Arc, RwLock};
 use chrono::prelude::Utc;
 use chrono::Duration;
 
-use caching_ok_verifier::CachingOKVerifier;
 use chain::OrphanBlockPool;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
-use core::core::ok_verifier::OKVerifier;
+use core::core::ok_verifier::{CachingOKVerifier, OKVerifier};
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Output, TxKernel};
 use core::global;

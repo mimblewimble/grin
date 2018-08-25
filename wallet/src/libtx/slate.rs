@@ -20,7 +20,7 @@ use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 
 use core::core::committed::Committed;
-use core::core::SimpleOKVerifier;
+use core::core::ok_verifier::SimpleOKVerifier;
 use core::core::{amount_to_hr_string, Transaction};
 use keychain::{BlindSum, BlindingFactor, Keychain};
 use libtx::error::{Error, ErrorKind};
