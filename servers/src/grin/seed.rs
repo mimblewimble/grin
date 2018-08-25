@@ -16,14 +16,14 @@
 //! a mining worker implementation
 //!
 
+use chrono::prelude::Utc;
+use chrono::Duration;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::str;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread;
 use std::time;
-use chrono::prelude::{Utc};
-use chrono::Duration;
 
 use api;
 
@@ -60,7 +60,9 @@ pub fn connect_and_monitor(
 			loop {
 				let current_time = Utc::now();
 
-				if current_time - prev > Duration::seconds(20) {
+				if peers.peer_count() < p2p_server.config.peer_min_preferred_count()
+					|| current_time - prev > Duration::seconds(20)
+				{
 					// try to connect to any address sent to the channel
 					listen_for_addrs(peers.clone(), p2p_server.clone(), capabilities, &rx);
 
@@ -122,7 +124,7 @@ fn monitor_peers(
 		LOGGER,
 		"monitor_peers: {} connected ({} most_work). \
 		 all {} = {} healthy + {} banned + {} defunct",
-		peers.connected_peers().len(),
+		peers.peer_count(),
 		peers.most_work_peers().len(),
 		total_count,
 		healthy_count,
@@ -151,8 +153,12 @@ fn monitor_peers(
 
 	// find some peers from our db
 	// and queue them up for a connection attempt
-	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::UNKNOWN, 100);
-	for p in peers {
+	let new_peers = peers.find_peers(
+		p2p::State::Healthy,
+		p2p::Capabilities::UNKNOWN,
+		config.peer_max_count() as usize,
+	);
+	for p in new_peers.iter().filter(|p| !peers.is_known(&p.addr)) {
 		debug!(LOGGER, "monitor_peers: queue to soon try {}", p.addr);
 		tx.send(p.addr).unwrap();
 	}
@@ -268,7 +274,8 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 pub fn web_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 	Box::new(|| {
 		let text: String = api::client::get(SEEDS_URL).expect("Failed to resolve seeds");
-		let addrs = text.split_whitespace()
+		let addrs = text
+			.split_whitespace()
 			.map(|s| s.parse().unwrap())
 			.collect::<Vec<_>>();
 		debug!(LOGGER, "Retrieved seed addresses: {:?}", addrs);
