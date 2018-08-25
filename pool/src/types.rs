@@ -20,7 +20,7 @@ use std::sync::{Arc, RwLock};
 use chrono::prelude::{DateTime, Utc};
 
 use core::consensus;
-use core::core::batch_verifier::BatchVerifier;
+use core::core::ok_verifier::OKVerifier;
 use core::core::hash::Hash;
 use core::core::transaction::{self, Transaction};
 use core::core::{BlockHeader, Output, TxKernel};

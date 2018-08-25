@@ -22,14 +22,14 @@ use std::iter::FromIterator;
 use std::sync::{Arc, RwLock};
 
 use consensus::{self, reward, REWARD};
-use core::batch_verifier::BatchVerifier;
+use core::ok_verifier::OKVerifier;
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use core::{
 	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof,
-	SimpleBatchVerifier, Transaction, TransactionBody, TxKernel,
+	SimpleOKVerifier, Transaction, TransactionBody, TxKernel,
 };
 use global;
 use keychain::{self, BlindingFactor};
@@ -556,7 +556,7 @@ impl Block {
 		verifier: Arc<RwLock<V>>,
 	) -> Result<(Commitment), Error>
 	where
-		V: BatchVerifier,
+		V: OKVerifier,
 	{
 		self.body.validate(true, verifier)?;
 

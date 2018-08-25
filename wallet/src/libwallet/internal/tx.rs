@@ -16,7 +16,7 @@
 
 use std::sync::{Arc, RwLock};
 
-use core::core::SimpleBatchVerifier;
+use core::core::SimpleOKVerifier;
 use core::core::Transaction;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
@@ -206,7 +206,7 @@ where
 
 	// finalize the burn transaction and send
 	let tx_burn = build::transaction(parts, &keychain)?;
-	let verifier = Arc::new(RwLock::new(SimpleBatchVerifier::new()));
+	let verifier = Arc::new(RwLock::new(SimpleOKVerifier::new()));
 	tx_burn.validate(false, verifier)?;
 	Ok(tx_burn)
 }

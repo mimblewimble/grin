@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! A trait for something that verifies other things.
-//! We can use this to pass a "caching verifier" into the block validation processing.
+//! OKVerifier trait for batch verifying outputs and kernels.
+//! We pass a "caching verifier" into the block validation processing with this.
 
 use core::{Output, TxKernel};
 use util::secp;
@@ -31,7 +31,7 @@ impl From<secp::Error> for Error {
 	}
 }
 
-pub trait BatchVerifier {
+pub trait OKVerifier {
 	fn verify_rangeproofs(&self, items: &Vec<Output>) -> Result<(), Error>;
 
 	fn verify_kernel_signatures(&self, items: &Vec<TxKernel>) -> Result<(), Error>;

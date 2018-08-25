@@ -29,7 +29,7 @@ use chain;
 use common::adapters::PoolToChainAdapter;
 use common::stats::{StratumStats, WorkerStats};
 use common::types::{StratumServerConfig, SyncState};
-use core::core::batch_verifier::BatchVerifier;
+use core::core::ok_verifier::OKVerifier;
 use core::core::Block;
 use core::{global, pow};
 use keychain;
@@ -231,7 +231,7 @@ pub struct StratumServer<V> {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-	batch_verifier: Arc<RwLock<V>>,
+	ok_verifier: Arc<RwLock<V>>,
 	current_block_versions: Vec<Block>,
 	current_difficulty: u64,
 	minimum_share_difficulty: u64,
@@ -242,14 +242,14 @@ pub struct StratumServer<V> {
 
 impl<V> StratumServer<V>
 where
-	V: BatchVerifier,
+	V: OKVerifier,
 {
 	/// Creates a new Stratum Server.
 	pub fn new(
 		config: StratumServerConfig,
 		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-		batch_verifier: Arc<RwLock<V>>,
+		ok_verifier: Arc<RwLock<V>>,
 	) -> StratumServer<V> {
 		StratumServer {
 			id: String::from("StratumServer"),
@@ -257,7 +257,7 @@ where
 			config,
 			chain,
 			tx_pool,
-			batch_verifier,
+			ok_verifier,
 			current_block_versions: Vec::new(),
 			current_difficulty: <u64>::max_value(),
 			current_key_id: None,
@@ -507,7 +507,7 @@ where
 			let res = self.chain.process_block(
 				b.clone(),
 				chain::Options::MINE,
-				self.batch_verifier.clone(),
+				self.ok_verifier.clone(),
 			);
 			if let Err(e) = res {
 				// Return error status
@@ -737,7 +737,7 @@ where
 				let (new_block, block_fees) = mine_block::get_block(
 					&self.chain,
 					&self.tx_pool,
-					self.batch_verifier.clone(),
+					self.ok_verifier.clone(),
 					self.current_key_id.clone(),
 					wallet_listener_url,
 				);

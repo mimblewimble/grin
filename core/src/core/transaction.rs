@@ -21,12 +21,13 @@ use std::sync::{Arc, RwLock};
 use std::{error, fmt};
 
 use consensus::{self, VerifySortOrder};
-use core::batch_verifier::{self, BatchVerifier};
+use core::ok_verifier::{self, OKVerifier};
 use core::hash::Hashed;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
 use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};
 use util;
+use util::LOGGER;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
@@ -81,7 +82,7 @@ pub enum Error {
 	/// It is invalid for a transaction to contain a coinbase kernel, for example.
 	InvalidKernelFeatures,
 	/// Error from batch verification.
-	BatchVerifier(batch_verifier::Error),
+	OKVerifier(ok_verifier::Error),
 }
 
 impl error::Error for Error {
@@ -106,9 +107,9 @@ impl From<secp::Error> for Error {
 	}
 }
 
-impl From<batch_verifier::Error> for Error {
-	fn from(e: batch_verifier::Error) -> Error {
-		Error::BatchVerifier(e)
+impl From<ok_verifier::Error> for Error {
+	fn from(e: ok_verifier::Error) -> Error {
+		Error::OKVerifier(e)
 	}
 }
 
@@ -543,15 +544,19 @@ impl TransactionBody {
 	/// output.
 	pub fn validate<V>(&self, with_reward: bool, verifier: Arc<RwLock<V>>) -> Result<(), Error>
 	where
-		V: ?Sized + BatchVerifier,
+		V: ?Sized + OKVerifier,
 	{
 		self.verify_weight(with_reward)?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 
-		let v = verifier.write().unwrap();
-		v.verify_rangeproofs(&self.outputs)?;
-		v.verify_kernel_signatures(&self.kernels)?;
+		// Now use the provided output/kernel verifier to verify
+		// outputs rangeproofs and kernel signatures.
+		{
+			let v = verifier.write().unwrap();
+			v.verify_rangeproofs(&self.outputs)?;
+			v.verify_kernel_signatures(&self.kernels)?;
+		}
 
 		Ok(())
 	}
@@ -751,7 +756,7 @@ impl Transaction {
 	/// output.
 	pub fn validate<V>(&self, with_reward: bool, verifier: Arc<RwLock<V>>) -> Result<(), Error>
 	where
-		V: ?Sized + BatchVerifier,
+		V: ?Sized + OKVerifier,
 	{
 		self.body.validate(with_reward, verifier)?;
 
@@ -860,7 +865,7 @@ pub fn aggregate(
 	// The resulting tx could be invalid for a variety of reasons -
 	//   * tx too large (too many inputs|outputs|kernels)
 	//   * cut-through may have invalidated the sums
-	let verifier = Arc::new(RwLock::new(SimpleBatchVerifier::new()));
+	let verifier = Arc::new(RwLock::new(SimpleOKVerifier::new()));
 	tx.validate(with_reward, verifier)?;
 
 	Ok(tx)
@@ -929,7 +934,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
 
 	// Now validate the resulting tx to ensure we have not built something invalid.
-	let verifier = Arc::new(RwLock::new(SimpleBatchVerifier::new()));
+	let verifier = Arc::new(RwLock::new(SimpleOKVerifier::new()));
 	tx.validate(false, verifier)?;
 
 	Ok(tx)
@@ -1190,16 +1195,18 @@ impl Readable for OutputIdentifier {
 	}
 }
 
-pub struct SimpleBatchVerifier {}
+pub struct SimpleOKVerifier {}
 
-impl SimpleBatchVerifier {
-	pub fn new() -> SimpleBatchVerifier {
-		SimpleBatchVerifier {}
+impl SimpleOKVerifier {
+	pub fn new() -> SimpleOKVerifier {
+		SimpleOKVerifier {}
 	}
 }
 
-impl BatchVerifier for SimpleBatchVerifier {
-	fn verify_rangeproofs(&self, items: &Vec<Output>) -> Result<(), batch_verifier::Error> {
+impl OKVerifier for SimpleOKVerifier {
+	fn verify_rangeproofs(&self, items: &Vec<Output>) -> Result<(), ok_verifier::Error> {
+		warn!(LOGGER, "simple_ok_verifier: verify_rangeproofs: {}", items.len());
+
 		let mut commits: Vec<Commitment> = vec![];
 		let mut proofs: Vec<RangeProof> = vec![];
 
@@ -1218,7 +1225,9 @@ impl BatchVerifier for SimpleBatchVerifier {
 		Ok(())
 	}
 
-	fn verify_kernel_signatures(&self, items: &Vec<TxKernel>) -> Result<(), batch_verifier::Error> {
+	fn verify_kernel_signatures(&self, items: &Vec<TxKernel>) -> Result<(), ok_verifier::Error> {
+		warn!(LOGGER, "simple_ok_verifier: verify_kernel_signatures: {}", items.len());
+
 		for x in items {
 			x.verify()?;
 		}

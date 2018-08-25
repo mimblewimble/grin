@@ -19,7 +19,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
 use core::consensus;
-use core::core::batch_verifier::BatchVerifier;
+use core::core::ok_verifier::OKVerifier;
 use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
@@ -40,20 +40,20 @@ pub struct Pool<T, V> {
 	/// The blockchain
 	pub blockchain: Arc<T>,
 	/// The batch verifier
-	pub batch_verifier: Arc<RwLock<V>>,
+	pub ok_verifier: Arc<RwLock<V>>,
 	pub name: String,
 }
 
 impl<T, V> Pool<T, V>
 where
 	T: BlockChain,
-	V: BatchVerifier,
+	V: OKVerifier,
 {
-	pub fn new(chain: Arc<T>, batch_verifier: Arc<RwLock<V>>, name: String) -> Pool<T, V> {
+	pub fn new(chain: Arc<T>, ok_verifier: Arc<RwLock<V>>, name: String) -> Pool<T, V> {
 		Pool {
 			entries: vec![],
 			blockchain: chain.clone(),
-			batch_verifier: batch_verifier.clone(),
+			ok_verifier: ok_verifier.clone(),
 			name,
 		}
 	}

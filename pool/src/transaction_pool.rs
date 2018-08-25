@@ -21,7 +21,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use chrono::prelude::Utc;
 
-use core::core::batch_verifier::BatchVerifier;
+use core::core::ok_verifier::OKVerifier;
 use core::core::hash::Hash;
 use core::core::{transaction, Block, CompactBlock, Output, Transaction, TxKernel};
 use pool::Pool;
@@ -39,7 +39,7 @@ pub struct TransactionPool<T, V> {
 
 	/// The blockchain
 	pub blockchain: Arc<T>,
-	pub batch_verifier: Arc<RwLock<V>>,
+	pub ok_verifier: Arc<RwLock<V>>,
 	/// The pool adapter
 	pub adapter: Arc<PoolAdapter>,
 }
@@ -47,21 +47,21 @@ pub struct TransactionPool<T, V> {
 impl<T, V> TransactionPool<T, V>
 where
 	T: BlockChain,
-	V: BatchVerifier,
+	V: OKVerifier,
 {
 	/// Create a new transaction pool
 	pub fn new(
 		config: PoolConfig,
 		chain: Arc<T>,
-		batch_verifier: Arc<RwLock<V>>,
+		ok_verifier: Arc<RwLock<V>>,
 		adapter: Arc<PoolAdapter>,
 	) -> TransactionPool<T, V> {
 		TransactionPool {
 			config,
-			txpool: Pool::new(chain.clone(), batch_verifier.clone(), format!("txpool")),
-			stempool: Pool::new(chain.clone(), batch_verifier.clone(), format!("stempool")),
+			txpool: Pool::new(chain.clone(), ok_verifier.clone(), format!("txpool")),
+			stempool: Pool::new(chain.clone(), ok_verifier.clone(), format!("stempool")),
 			blockchain: chain,
-			batch_verifier,
+			ok_verifier,
 			adapter,
 		}
 	}
@@ -111,7 +111,7 @@ where
 		self.is_acceptable(&tx)?;
 
 		// Make sure the transaction is valid before anything else.
-		tx.validate(false, self.batch_verifier.clone())
+		tx.validate(false, self.ok_verifier.clone())
 			.map_err(|e| PoolError::InvalidTx(e))?;
 
 		// Check the tx lock_time is valid based on current chain state.

@@ -20,10 +20,10 @@ use std::sync::{Arc, RwLock};
 use chrono::prelude::Utc;
 use chrono::Duration;
 
-use caching_batch_verifier::CachingBatchVerifier;
+use caching_ok_verifier::CachingOKVerifier;
 use chain::OrphanBlockPool;
 use core::consensus;
-use core::core::batch_verifier::BatchVerifier;
+use core::core::ok_verifier::OKVerifier;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Output, TxKernel};
@@ -62,10 +62,10 @@ pub struct BlockContext {
 pub fn process_block<V>(
 	b: &Block,
 	ctx: &mut BlockContext,
-	batch_verifier: Arc<RwLock<V>>,
+	ok_verifier: Arc<RwLock<V>>,
 ) -> Result<Option<Tip>, Error>
 where
-	V: BatchVerifier,
+	V: OKVerifier,
 {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
@@ -104,7 +104,7 @@ where
 
 	// validate the block itself
 	// we can do this now before interacting with the txhashset
-	let _sums = validate_block(b, ctx, batch_verifier)?;
+	let _sums = validate_block(b, ctx, ok_verifier)?;
 
 	// header and block both valid, and we have a previous block
 	// so take the lock on the txhashset
@@ -319,10 +319,10 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 fn validate_block<V>(
 	b: &Block,
 	ctx: &mut BlockContext,
-	batch_verifier: Arc<RwLock<V>>,
+	ok_verifier: Arc<RwLock<V>>,
 ) -> Result<(), Error>
 where
-	V: BatchVerifier,
+	V: OKVerifier,
 {
 	if ctx.store.block_exists(&b.hash())? {
 		if b.header.height < ctx.head.height.saturating_sub(50) {
@@ -335,7 +335,7 @@ where
 	b.validate(
 		&prev.total_kernel_offset,
 		&prev.total_kernel_sum,
-		batch_verifier,
+		ok_verifier,
 	).map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }

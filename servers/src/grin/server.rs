@@ -23,13 +23,13 @@ use std::{thread, time};
 
 use api;
 use chain;
-use chain::caching_batch_verifier::CachingBatchVerifier;
+use chain::caching_ok_verifier::CachingOKVerifier;
 use common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
 use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
 use common::types::{Error, ServerConfig, StratumServerConfig, SyncState};
-use core::core::batch_verifier::BatchVerifier;
+use core::core::ok_verifier::OKVerifier;
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::{consensus, genesis, global, pow};
@@ -50,8 +50,8 @@ pub struct Server {
 	/// data store access
 	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, CachingBatchVerifier>>>,
-	batch_verifier: Arc<RwLock<CachingBatchVerifier>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, CachingOKVerifier>>>,
+	ok_verifier: Arc<RwLock<CachingOKVerifier>>,
 	/// Whether we're currently syncing
 	sync_state: Arc<SyncState>,
 	/// To be passed around to collect stats and info
@@ -123,14 +123,14 @@ impl Server {
 
 		let stop = Arc::new(AtomicBool::new(false));
 
-		let batch_verifier = Arc::new(RwLock::new(CachingBatchVerifier::new()));
+		let ok_verifier = Arc::new(RwLock::new(CachingOKVerifier::new()));
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		let pool_net_adapter = Arc::new(PoolToNetAdapter::new());
 		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(
 			config.pool_config.clone(),
 			pool_adapter.clone(),
-			batch_verifier.clone(),
+			ok_verifier.clone(),
 			pool_net_adapter.clone(),
 		)));
 
@@ -170,7 +170,7 @@ impl Server {
 			archive_mode,
 			Arc::downgrade(&shared_chain),
 			tx_pool.clone(),
-			batch_verifier.clone(),
+			ok_verifier.clone(),
 			config.clone(),
 		));
 
@@ -274,7 +274,7 @@ impl Server {
 			p2p: p2p_server,
 			chain: shared_chain,
 			tx_pool,
-			batch_verifier,
+			ok_verifier,
 			sync_state,
 			state_info: ServerStateInfo {
 				awaiting_peers: awaiting_peers,
@@ -313,7 +313,7 @@ impl Server {
 			config.clone(),
 			self.chain.clone(),
 			self.tx_pool.clone(),
-			self.batch_verifier.clone(),
+			self.ok_verifier.clone(),
 		);
 		let stratum_stats = self.state_info.stratum_stats.clone();
 		let _ = thread::Builder::new()
@@ -346,7 +346,7 @@ impl Server {
 			config.clone(),
 			self.chain.clone(),
 			self.tx_pool.clone(),
-			self.batch_verifier.clone(),
+			self.ok_verifier.clone(),
 			self.stop.clone(),
 		);
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));

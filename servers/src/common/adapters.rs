@@ -25,7 +25,7 @@ use std::time::Instant;
 
 use chain::{self, ChainAdapter, Options, Tip};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
-use core::core::batch_verifier::BatchVerifier;
+use core::core::ok_verifier::OKVerifier;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::transaction::Transaction;
@@ -55,14 +55,14 @@ pub struct NetToChainAdapter<V> {
 	archive_mode: bool,
 	chain: Weak<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-	batch_verifier: Arc<RwLock<V>>,
+	ok_verifier: Arc<RwLock<V>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 }
 
 impl<V> p2p::ChainAdapter for NetToChainAdapter<V>
 where
-	V: BatchVerifier + Sync + Send,
+	V: OKVerifier + Sync + Send,
 {
 	fn total_difficulty(&self) -> Difficulty {
 		w(&self.chain).total_difficulty()
@@ -179,7 +179,7 @@ where
 					.validate(
 						&prev.total_kernel_offset,
 						&prev.total_kernel_sum,
-						self.batch_verifier.clone(),
+						self.ok_verifier.clone(),
 					)
 					.is_ok()
 				{
@@ -367,7 +367,7 @@ where
 			h,
 			txhashset_data,
 			self.sync_state.as_ref(),
-			self.batch_verifier.clone(),
+			self.ok_verifier.clone(),
 		) {
 			error!(LOGGER, "Failed to save txhashset archive: {}", e);
 			let is_good_data = !e.is_bad_data();
@@ -382,7 +382,7 @@ where
 
 impl<V> NetToChainAdapter<V>
 where
-	V: BatchVerifier,
+	V: OKVerifier,
 {
 	/// Construct a new NetToChainAdapter instance
 	pub fn new(
@@ -390,7 +390,7 @@ where
 		archive_mode: bool,
 		chain_ref: Weak<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-		batch_verifier: Arc<RwLock<V>>,
+		ok_verifier: Arc<RwLock<V>>,
 		config: ServerConfig,
 	) -> NetToChainAdapter<V> {
 		NetToChainAdapter {
@@ -398,7 +398,7 @@ where
 			archive_mode,
 			chain: chain_ref,
 			tx_pool,
-			batch_verifier,
+			ok_verifier,
 			peers: OneTime::new(),
 			config,
 		}
@@ -466,7 +466,7 @@ where
 
 		let prev_hash = b.header.previous;
 		let bhash = b.hash();
-		match chain.process_block(b, self.chain_opts(), self.batch_verifier.clone()) {
+		match chain.process_block(b, self.chain_opts(), self.ok_verifier.clone()) {
 			Ok((tip, _)) => {
 				self.validate_chain(bhash);
 				self.check_compact(tip);
@@ -628,7 +628,7 @@ pub struct ChainToPoolAndNetAdapter<V> {
 
 impl<V> ChainAdapter for ChainToPoolAndNetAdapter<V>
 where
-	V: BatchVerifier,
+	V: OKVerifier,
 {
 	fn block_accepted(&self, b: &core::Block, opts: Options) {
 		if self.sync_state.is_syncing() {
@@ -686,7 +686,7 @@ where
 
 impl<V> ChainToPoolAndNetAdapter<V>
 where
-	V: BatchVerifier,
+	V: OKVerifier,
 {
 	/// Construct a ChainToPoolAndNetAdapter instance.
 	pub fn new(

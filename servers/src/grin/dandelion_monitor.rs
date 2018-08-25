@@ -19,7 +19,7 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
-use core::core::batch_verifier::BatchVerifier;
+use core::core::ok_verifier::OKVerifier;
 use core::core::hash::Hashed;
 use core::core::transaction;
 use pool::{BlockChain, DandelionConfig, PoolEntryState, PoolError, TransactionPool, TxSource};
@@ -39,7 +39,7 @@ pub fn monitor_transactions<T, V>(
 	stop: Arc<AtomicBool>,
 ) where
 	T: BlockChain + Send + Sync + 'static,
-	V: BatchVerifier + Send + Sync + 'static,
+	V: OKVerifier + Send + Sync + 'static,
 {
 	debug!(LOGGER, "Started Dandelion transaction monitor.");
 
@@ -89,7 +89,7 @@ pub fn monitor_transactions<T, V>(
 fn process_stem_phase<T, V>(tx_pool: Arc<RwLock<TransactionPool<T, V>>>) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
-	V: BatchVerifier + Send + Sync + 'static,
+	V: OKVerifier + Send + Sync + 'static,
 {
 	let mut tx_pool = tx_pool.write().unwrap();
 
@@ -133,7 +133,7 @@ where
 fn process_fluff_phase<T, V>(tx_pool: Arc<RwLock<TransactionPool<T, V>>>) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
-	V: BatchVerifier + Send + Sync + 'static,
+	V: OKVerifier + Send + Sync + 'static,
 {
 	let mut tx_pool = tx_pool.write().unwrap();
 
@@ -172,7 +172,7 @@ fn process_fresh_entries<T, V>(
 ) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
-	V: BatchVerifier + Send + Sync + 'static,
+	V: OKVerifier + Send + Sync + 'static,
 {
 	let mut tx_pool = tx_pool.write().unwrap();
 
@@ -210,7 +210,7 @@ fn process_expired_entries<T, V>(
 ) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
-	V: BatchVerifier + Send + Sync + 'static,
+	V: OKVerifier + Send + Sync + 'static,
 {
 	let now = Utc::now().timestamp();
 	let embargo_sec = dandelion_config.embargo_secs.unwrap() + rand::thread_rng().gen_range(0, 31);

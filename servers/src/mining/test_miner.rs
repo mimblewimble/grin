@@ -24,7 +24,7 @@ use std::sync::{Arc, RwLock};
 use chain;
 use common::adapters::PoolToChainAdapter;
 use common::types::StratumServerConfig;
-use core::core::batch_verifier::BatchVerifier;
+use core::core::ok_verifier::OKVerifier;
 use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader, Proof};
 use core::pow::cuckoo;
@@ -37,7 +37,7 @@ pub struct Miner<V> {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-	batch_verifier: Arc<RwLock<V>>,
+	ok_verifier: Arc<RwLock<V>>,
 	stop: Arc<AtomicBool>,
 
 	// Just to hold the port we're on, so this miner can be identified
@@ -47,7 +47,7 @@ pub struct Miner<V> {
 
 impl<V> Miner<V>
 where
-	V: BatchVerifier,
+	V: OKVerifier,
 {
 	/// Creates a new Miner. Needs references to the chain state and its
 	/// storage.
@@ -55,14 +55,14 @@ where
 		config: StratumServerConfig,
 		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-		batch_verifier: Arc<RwLock<V>>,
+		ok_verifier: Arc<RwLock<V>>,
 		stop: Arc<AtomicBool>,
 	) -> Miner<V> {
 		Miner {
 			config,
 			chain,
 			tx_pool,
-			batch_verifier,
+			ok_verifier,
 			debug_output_id: String::from("none"),
 			stop,
 		}
@@ -155,7 +155,7 @@ where
 			let (mut b, block_fees) = mine_block::get_block(
 				&self.chain,
 				&self.tx_pool,
-				self.batch_verifier.clone(),
+				self.ok_verifier.clone(),
 				key_id.clone(),
 				wallet_listener_url.clone(),
 			);
@@ -178,7 +178,7 @@ where
 				);
 				let res =
 					self.chain
-						.process_block(b, chain::Options::MINE, self.batch_verifier.clone());
+						.process_block(b, chain::Options::MINE, self.ok_verifier.clone());
 				if let Err(e) = res {
 					error!(
 						LOGGER,

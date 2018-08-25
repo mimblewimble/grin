@@ -25,7 +25,7 @@ use std::time::Duration;
 use chain;
 use common::adapters::PoolToChainAdapter;
 use common::types::Error;
-use core::core::batch_verifier::BatchVerifier;
+use core::core::ok_verifier::OKVerifier;
 use core::ser::{self, AsFixedBytes};
 use core::{consensus, core};
 use keychain::{ExtKeychain, Identifier, Keychain};
@@ -78,19 +78,19 @@ impl ser::Writer for HeaderPrePowWriter {
 pub fn get_block<V>(
 	chain: &Arc<chain::Chain>,
 	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-	batch_verifier: Arc<RwLock<V>>,
+	ok_verifier: Arc<RwLock<V>>,
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
 ) -> (core::Block, BlockFees)
 where
-	V: BatchVerifier,
+	V: OKVerifier,
 {
 	let wallet_retry_interval = 5;
 	// get the latest chain state and build a block on top of it
 	let mut result = build_block(
 		chain,
 		tx_pool,
-		batch_verifier.clone(),
+		ok_verifier.clone(),
 		key_id.clone(),
 		wallet_listener_url.clone(),
 	);
@@ -123,7 +123,7 @@ where
 		result = build_block(
 			chain,
 			tx_pool,
-			batch_verifier.clone(),
+			ok_verifier.clone(),
 			key_id.clone(),
 			wallet_listener_url.clone(),
 		);
@@ -136,12 +136,12 @@ where
 fn build_block<V>(
 	chain: &Arc<chain::Chain>,
 	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-	batch_verifier: Arc<RwLock<V>>,
+	ok_verifier: Arc<RwLock<V>>,
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
 ) -> Result<(core::Block, BlockFees), Error>
 where
-	V: BatchVerifier,
+	V: OKVerifier,
 {
 	// prepare the block header timestamp
 	let head = chain.head_header()?;
@@ -175,7 +175,7 @@ where
 	b.validate(
 		&head.total_kernel_offset,
 		&head.total_kernel_sum,
-		batch_verifier,
+		ok_verifier,
 	)?;
 
 	let mut rng = rand::OsRng::new().unwrap();

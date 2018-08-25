@@ -41,7 +41,7 @@ extern crate grin_keychain as keychain;
 extern crate grin_store;
 extern crate grin_util as util;
 
-pub mod caching_batch_verifier;
+pub mod caching_ok_verifier;
 mod chain;
 mod error;
 pub mod pipe;
