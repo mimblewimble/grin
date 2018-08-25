@@ -52,12 +52,6 @@ impl SimpleOKVerifier {
 
 impl OKVerifier for SimpleOKVerifier {
 	fn verify_rangeproofs(&mut self, items: &Vec<Output>) -> Result<(), Error> {
-		warn!(
-			LOGGER,
-			"simple_ok_verifier: verify_rangeproofs: {}",
-			items.len()
-		);
-
 		let mut commits: Vec<Commitment> = vec![];
 		let mut proofs: Vec<RangeProof> = vec![];
 
@@ -77,12 +71,6 @@ impl OKVerifier for SimpleOKVerifier {
 	}
 
 	fn verify_kernel_signatures(&mut self, items: &Vec<TxKernel>) -> Result<(), Error> {
-		warn!(
-			LOGGER,
-			"simple_ok_verifier: verify_kernel_signatures: {}",
-			items.len()
-		);
-
 		for x in items {
 			x.verify()?;
 		}
@@ -100,20 +88,14 @@ impl CachingOKVerifier {
 	/// They need to be *at least* large enough to cover a maxed out block.
 	pub fn new() -> CachingOKVerifier {
 		CachingOKVerifier {
-			verified_rangeproof_cache: LruCache::new(10_000),
-			verified_kernel_sig_cache: LruCache::new(10_000),
+			verified_rangeproof_cache: LruCache::new(50_000),
+			verified_kernel_sig_cache: LruCache::new(50_000),
 		}
 	}
 }
 
 impl OKVerifier for CachingOKVerifier {
 	fn verify_rangeproofs(&mut self, items: &Vec<Output>) -> Result<(), Error> {
-		warn!(
-			LOGGER,
-			"caching_ok_verifier: verify_rangeproofs: {}",
-			items.len()
-		);
-
 		// Just return immediately if we have nothing to verify.
 		if items.len() == 0 {
 			return Ok(());
@@ -124,13 +106,15 @@ impl OKVerifier for CachingOKVerifier {
 		let mut proof_keys: Vec<Hash> = vec![];
 
 		for x in items {
-			// Note: cache key here is the hash of the rangeproof itself (not the output).
+			// Note: cache key here is the hash of the rangeproof itself.
+			// We cannot use the hash of the output as this does not include
+			// the rangeproof by design.
 			let key = x.proof.hash();
 
 			if self.verified_rangeproof_cache.contains_key(&key) {
-				warn!(LOGGER, "caching_ok_verifier: rangeproof cache hit",);
+				// warn!(LOGGER, "caching_ok_verifier: rangeproof cache hit",);
 			} else {
-				warn!(LOGGER, "caching_ok_verifier: rangeproof cache miss",);
+				// warn!(LOGGER, "caching_ok_verifier: rangeproof cache miss",);
 				commits.push(x.commit.clone());
 				proofs.push(x.proof.clone());
 				proof_keys.push(key.clone());
@@ -153,12 +137,6 @@ impl OKVerifier for CachingOKVerifier {
 	}
 
 	fn verify_kernel_signatures(&mut self, items: &Vec<TxKernel>) -> Result<(), Error> {
-		warn!(
-			LOGGER,
-			"caching_ok_verifier: verify_kernel_signatures: {}",
-			items.len()
-		);
-
 		// Just return immediately if we have nothing to verify.
 		if items.len() == 0 {
 			return Ok(());
@@ -166,10 +144,7 @@ impl OKVerifier for CachingOKVerifier {
 
 		for x in items {
 			let key = x.hash();
-			if self.verified_kernel_sig_cache.contains_key(&key) {
-				warn!(LOGGER, "caching_ok_verifier: kernel sig cache hit",);
-			} else {
-				warn!(LOGGER, "caching_ok_verifier: kernel sig cache miss",);
+			if !self.verified_kernel_sig_cache.contains_key(&key) {
 				let res = x.verify();
 				if let Err(e) = res {
 					return Err(Error::Secp(e));
@@ -191,18 +166,13 @@ impl DeserializationOKVerifier {
 }
 
 impl OKVerifier for DeserializationOKVerifier {
+	// Skip rangeproof verification during deserialization.
 	fn verify_rangeproofs(&mut self, items: &Vec<Output>) -> Result<(), Error> {
-		// no-op - we skip rangeproof verification during deserialization.
-		warn!(LOGGER, "verify_rangeproofs: skipped during deserialization");
 		Ok(())
 	}
 
+	// Skip kernel signature verification during deserialization.
 	fn verify_kernel_signatures(&mut self, items: &Vec<TxKernel>) -> Result<(), Error> {
-		// no-op - we skip kernel signature verification during deserialization.
-		warn!(
-			LOGGER,
-			"verify_kernel_signatures: skipped during deserialization"
-		);
 		Ok(())
 	}
 }
