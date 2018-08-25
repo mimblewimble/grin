@@ -425,6 +425,14 @@ fn get_locator(
 	let heights = get_locator_heights(tip.height);
 	let mut new_heights: Vec<u64> = vec![];
 
+	// for security, clear history_locators[] in any case of header chain rollback
+	if history_locators.len() > 0
+		&& tip.height
+			!= history_locators[history_locators.len() - 1].0 + p2p::MAX_BLOCK_HEADERS as u64 - 1
+	{
+		history_locators.clear();
+	}
+
 	debug!(LOGGER, "sync: locator heights : {:?}", heights);
 
 	let mut locator: Vec<Hash> = vec![];
