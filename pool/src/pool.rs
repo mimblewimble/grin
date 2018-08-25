@@ -94,7 +94,7 @@ where
 			.into_iter()
 			.filter_map(|mut bucket| {
 				bucket.truncate(MAX_TX_CHAIN);
-				transaction::aggregate(bucket, None).ok()
+				transaction::aggregate(bucket, None, self.ok_verifier.clone()).ok()
 			})
 			.collect();
 
@@ -126,7 +126,7 @@ where
 			return Ok(None);
 		}
 
-		let tx = transaction::aggregate(txs, None)?;
+		let tx = transaction::aggregate(txs, None, self.ok_verifier.clone())?;
 		Ok(Some(tx))
 	}
 
@@ -199,7 +199,7 @@ where
 			// Create a single aggregated tx from the existing pool txs and the
 			// new entry
 			txs.push(entry.tx.clone());
-			transaction::aggregate(txs, None)?
+			transaction::aggregate(txs, None, self.ok_verifier.clone())?
 		};
 
 		// Validate aggregated tx against a known chain state (via txhashset

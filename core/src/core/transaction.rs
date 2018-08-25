@@ -813,10 +813,13 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 /// Aggregate a vec of transactions into a multi-kernel transaction with
 /// cut_through. Optionally allows passing a reward output and kernel for
 /// block building.
-pub fn aggregate(
+pub fn aggregate<V>(
 	mut transactions: Vec<Transaction>,
 	reward: Option<(Output, TxKernel)>,
-) -> Result<Transaction, Error> {
+	verifier: Arc<RwLock<V>>,
+) -> Result<Transaction, Error>
+	where V: OKVerifier
+{
 	// convenience short-circuiting
 	if reward.is_none() && transactions.len() == 1 {
 		return Ok(transactions.pop().unwrap());
@@ -865,7 +868,6 @@ pub fn aggregate(
 	// The resulting tx could be invalid for a variety of reasons -
 	//   * tx too large (too many inputs|outputs|kernels)
 	//   * cut-through may have invalidated the sums
-	let verifier = Arc::new(RwLock::new(SimpleOKVerifier::new()));
 	tx.validate(with_reward, verifier)?;
 
 	Ok(tx)
@@ -873,7 +875,13 @@ pub fn aggregate(
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
-pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transaction, Error> {
+pub fn deaggregate<V>(
+	mk_tx: Transaction,
+	txs: Vec<Transaction>,
+	verifier: Arc<RwLock<V>>,
+) -> Result<Transaction, Error>
+	where V: OKVerifier
+{
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
@@ -882,7 +890,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	// transaction
 	let mut kernel_offsets = vec![];
 
-	let tx = aggregate(txs, None)?;
+	let tx = aggregate(txs, None, verifier.clone())?;
 
 	for mk_input in mk_tx.body.inputs {
 		if !tx.body.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
@@ -934,7 +942,6 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
 
 	// Now validate the resulting tx to ensure we have not built something invalid.
-	let verifier = Arc::new(RwLock::new(SimpleOKVerifier::new()));
 	tx.validate(false, verifier)?;
 
 	Ok(tx)
@@ -1192,6 +1199,28 @@ impl Readable for OutputIdentifier {
 			commit: Commitment::read(reader)?,
 			features: features,
 		})
+	}
+}
+
+pub struct DeserializationOKVerifier {}
+
+impl DeserializationOKVerifier {
+	pub fn new() -> DeserializationOKVerifier {
+		DeserializationOKVerifier {}
+	}
+}
+
+impl OKVerifier for DeserializationOKVerifier {
+	fn verify_rangeproofs(&self, items: &Vec<Output>) -> Result<(), ok_verifier::Error> {
+		// no-op - we skip rangeproof verification during deserialization.
+		warn!(LOGGER, "verify_rangeproofs: skipped during deserialization");
+		Ok(())
+	}
+
+	fn verify_kernel_signatures(&self, items: &Vec<TxKernel>) -> Result<(), ok_verifier::Error> {
+		// no-op - we skip kernel signature verification during deserialization.
+		warn!(LOGGER, "verify_kernel_signatures: skipped during deserialization");
+		Ok(())
 	}
 }
 

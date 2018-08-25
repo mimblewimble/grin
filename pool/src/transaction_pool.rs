@@ -83,7 +83,7 @@ where
 				.txpool
 				.find_matching_transactions(entry.tx.kernels().clone());
 			if !txs.is_empty() {
-				entry.tx = transaction::deaggregate(entry.tx, txs)?;
+				entry.tx = transaction::deaggregate(entry.tx, txs, self.ok_verifier.clone())?;
 				entry.src.debug_name = "deagg".to_string();
 			}
 		}

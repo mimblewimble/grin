@@ -169,7 +169,14 @@ where
 	};
 
 	let (output, kernel, block_fees) = get_coinbase(wallet_listener_url, block_fees)?;
-	let mut b = core::Block::with_reward(&head, txs, output, kernel, difficulty.clone())?;
+	let mut b = core::Block::with_reward(
+		&head,
+		txs,
+		output,
+		kernel,
+		difficulty.clone(),
+		ok_verifier.clone(),
+	)?;
 
 	// making sure we're not spending time mining a useless block
 	b.validate(

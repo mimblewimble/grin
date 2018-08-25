@@ -372,11 +372,6 @@ impl Slate {
 
 		// build the final excess based on final tx and offset
 		let final_excess = {
-			// TODO - do we need to verify rangeproofs here?
-			for x in final_tx.outputs() {
-				x.verify_proof()?;
-			}
-
 			// sum the input/output commitments on the final tx
 			let overage = final_tx.fee() as i64;
 			let tx_excess = final_tx.sum_commitments(overage)?;

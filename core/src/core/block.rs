@@ -29,7 +29,7 @@ use core::ok_verifier::OKVerifier;
 use core::target::Difficulty;
 use core::{
 	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof,
-	SimpleOKVerifier, Transaction, TransactionBody, TxKernel,
+	DeserializationOKVerifier, SimpleOKVerifier, Transaction, TransactionBody, TxKernel,
 };
 use global;
 use keychain::{self, BlindingFactor};
@@ -357,8 +357,9 @@ impl Block {
 		difficulty: Difficulty,
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
+		let verifier = Arc::new(RwLock::new(SimpleOKVerifier::new()));
 		let mut block =
-			Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
+			Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty, verifier)?;
 
 		// Now set the pow on the header so block hashing works as expected.
 		{
@@ -426,16 +427,19 @@ impl Block {
 	/// Builds a new block ready to mine from the header of the previous block,
 	/// a vector of transactions and the reward information. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
-	pub fn with_reward(
+	pub fn with_reward<V>(
 		prev: &BlockHeader,
 		txs: Vec<Transaction>,
 		reward_out: Output,
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
-	) -> Result<Block, Error> {
+		verifier: Arc<RwLock<V>>,
+	) -> Result<Block, Error>
+		where V: OKVerifier
+	{
 		// A block is just a big transaction, aggregate as such. Note that
 		// aggregate also runs validation and duplicate commitment checks.
-		let agg_tx = transaction::aggregate(txs, Some((reward_out, reward_kern)))?;
+		let agg_tx = transaction::aggregate(txs, Some((reward_out, reward_kern)), verifier)?;
 
 		// Now add the kernel offset of the previous block for a total
 		let total_kernel_offset =

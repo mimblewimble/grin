@@ -36,6 +36,7 @@ use util::LOGGER;
 pub fn monitor_transactions<T, V>(
 	dandelion_config: DandelionConfig,
 	tx_pool: Arc<RwLock<TransactionPool<T, V>>>,
+	ok_verifier: Arc<RwLock<V>>,
 	stop: Arc<AtomicBool>,
 ) where
 	T: BlockChain + Send + Sync + 'static,
@@ -60,14 +61,14 @@ pub fn monitor_transactions<T, V>(
 				// Step 1: find all "ToStem" entries in stempool from last run.
 				// Aggregate them up to give a single (valid) aggregated tx and propagate it
 				// to the next Dandelion relay along the stem.
-				if process_stem_phase(tx_pool.clone()).is_err() {
+				if process_stem_phase(tx_pool.clone(), ok_verifier.clone()).is_err() {
 					error!(LOGGER, "dand_mon: Problem with stem phase.");
 				}
 
 				// Step 2: find all "ToFluff" entries in stempool from last run.
 				// Aggregate them up to give a single (valid) aggregated tx and (re)add it
 				// to our pool with stem=false (which will then broadcast it).
-				if process_fluff_phase(tx_pool.clone()).is_err() {
+				if process_fluff_phase(tx_pool.clone(), ok_verifier.clone()).is_err() {
 					error!(LOGGER, "dand_mon: Problem with fluff phase.");
 				}
 
@@ -86,7 +87,10 @@ pub fn monitor_transactions<T, V>(
 		});
 }
 
-fn process_stem_phase<T, V>(tx_pool: Arc<RwLock<TransactionPool<T, V>>>) -> Result<(), PoolError>
+fn process_stem_phase<T, V>(
+	tx_pool: Arc<RwLock<TransactionPool<T, V>>>,
+	ok_verifier: Arc<RwLock<V>>,
+) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
 	V: OKVerifier + Send + Sync + 'static,
@@ -110,7 +114,7 @@ where
 			stem_txs.len()
 		);
 
-		let agg_tx = transaction::aggregate(stem_txs, None)?;
+		let agg_tx = transaction::aggregate(stem_txs, None, ok_verifier.clone())?;
 
 		let res = tx_pool.adapter.stem_tx_accepted(&agg_tx);
 		if res.is_err() {
@@ -130,7 +134,10 @@ where
 	Ok(())
 }
 
-fn process_fluff_phase<T, V>(tx_pool: Arc<RwLock<TransactionPool<T, V>>>) -> Result<(), PoolError>
+fn process_fluff_phase<T, V>(
+	tx_pool: Arc<RwLock<TransactionPool<T, V>>>,
+	ok_verifier: Arc<RwLock<V>>,
+) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
 	V: OKVerifier + Send + Sync + 'static,
@@ -154,7 +161,7 @@ where
 			stem_txs.len()
 		);
 
-		let agg_tx = transaction::aggregate(stem_txs, None)?;
+		let agg_tx = transaction::aggregate(stem_txs, None, ok_verifier.clone())?;
 
 		let src = TxSource {
 			debug_name: "fluff".to_string(),

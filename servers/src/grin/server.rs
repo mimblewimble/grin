@@ -265,6 +265,7 @@ impl Server {
 		dandelion_monitor::monitor_transactions(
 			config.dandelion_config.clone(),
 			tx_pool.clone(),
+			ok_verifier.clone(),
 			stop.clone(),
 		);
 
