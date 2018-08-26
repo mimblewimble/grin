@@ -331,8 +331,8 @@ fn headers_header_size(conn: &mut TcpStream, msg_len: u64) -> Result<u64, Error>
 	let average_header_size = (msg_len - 2) / total_headers;
 
 	// support size of Cuckoo: from Cuckoo 30 to Cuckoo 36
-	let minimum_size = core::size_of_ser_blockheader(30);
-	let maximum_size = core::size_of_ser_blockheader(36);
+	let minimum_size = core::serialized_size_of_header(30);
+	let maximum_size = core::serialized_size_of_header(36);
 	if average_header_size < minimum_size as u64 || average_header_size > maximum_size as u64 {
 		return Err(Error::Connection(io::Error::new(
 			io::ErrorKind::InvalidData,
@@ -397,7 +397,7 @@ fn headers_streaming_body(
 	// remaining data
 	let mut deserialized_size = 2; // for Vec<> size
 	for header in &headers.headers {
-		deserialized_size += header.size_of_ser();
+		deserialized_size += header.serialized_size();
 	}
 	*reserved = body[deserialized_size..].to_vec();
 

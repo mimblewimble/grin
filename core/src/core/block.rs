@@ -143,8 +143,8 @@ pub struct BlockHeader {
 	pub pow: Proof,
 }
 
-/// Ser size of fixed part of a BlockHeader, i.e. without pow
-fn fixed_size_of_ser_blockheader() -> usize {
+/// Serialized size of fixed part of a BlockHeader, i.e. without pow
+fn fixed_size_of_serialized_header() -> usize {
 	let mut size: usize = 0;
 	size += mem::size_of::<u16>(); // version
 	size += mem::size_of::<u64>(); // height
@@ -162,9 +162,9 @@ fn fixed_size_of_ser_blockheader() -> usize {
 	size
 }
 
-/// Ser size of this header
-pub fn size_of_ser_blockheader(cuckoo_sizeshift: usize) -> usize {
-	let mut size = fixed_size_of_ser_blockheader();
+/// Serialized size of a BlockHeader
+pub fn serialized_size_of_header(cuckoo_sizeshift: usize) -> usize {
+	let mut size = fixed_size_of_serialized_header();
 
 	size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
 	let nonce_bits = cuckoo_sizeshift as usize - 1;
@@ -300,9 +300,9 @@ impl BlockHeader {
 		self.total_kernel_offset
 	}
 
-	/// Ser size of this header
-	pub fn size_of_ser(&self) -> usize {
-		let mut size = fixed_size_of_ser_blockheader();
+	/// Serialized size of this header
+	pub fn serialized_size(&self) -> usize {
+		let mut size = fixed_size_of_serialized_header();
 
 		size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
 		let nonce_bits = self.pow.cuckoo_sizeshift as usize - 1;
