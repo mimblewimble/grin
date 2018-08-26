@@ -32,6 +32,7 @@ use keychain::{Identifier, Keychain};
 
 use libtx::slate::Slate;
 use libwallet::error::{Error, ErrorKind};
+use libwallet::internal::sigcontext::Context;
 
 use util::secp::pedersen;
 
@@ -81,6 +82,9 @@ where
 
 	/// Get an (Optional) tx log entry by uuid
 	fn get_tx_log_entry(&self, uuid: &Uuid) -> Result<Option<TxLogEntry>, Error>;
+
+	/// Retrieves the private context associated with a given slate id
+	fn get_private_context(&mut self, slate_id: &[u8]) -> Result<Context, Error>;
 
 	/// Iterate over all output data stored by the backend
 	fn tx_log_iter<'a>(&'a self) -> Box<Iterator<Item = TxLogEntry> + 'a>;
@@ -136,6 +140,12 @@ where
 
 	/// Save an output as locked in the backend
 	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error>;
+
+	/// Saves the private context associated with a slate id
+	fn save_private_context(&mut self, slate_id: &[u8], ctx: &Context) -> Result<(), Error>;
+
+	/// Delete the private context associated with the slate id
+	fn delete_private_context(&mut self, slate_id: &[u8]) -> Result<(), Error>;
 
 	/// Write the wallet data to backend file
 	fn commit(&self) -> Result<(), Error>;

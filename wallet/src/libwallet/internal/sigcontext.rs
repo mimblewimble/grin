@@ -11,7 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 //! Signature context holder helper (may be removed or replaced eventually)
+
+use serde_json as json;
+
+use core::ser;
 use keychain::Identifier;
 use libtx::aggsig;
 use util::secp::key::{PublicKey, SecretKey};
@@ -80,5 +85,18 @@ impl Context {
 			PublicKey::from_secret_key(secp, &self.sec_key).unwrap(),
 			PublicKey::from_secret_key(secp, &self.sec_nonce).unwrap(),
 		)
+	}
+}
+
+impl ser::Writeable for Context {
+	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_bytes(&json::to_vec(self).map_err(|_| ser::Error::CorruptedData)?)
+	}
+}
+
+impl ser::Readable for Context {
+	fn read(reader: &mut ser::Reader) -> Result<Context, ser::Error> {
+		let data = reader.read_vec()?;
+		json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
 	}
 }
