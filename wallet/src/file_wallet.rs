@@ -35,7 +35,7 @@ use error::{Error, ErrorKind};
 use libwallet;
 
 use libwallet::types::{
-	OutputData, TxLogEntry, WalletBackend, WalletClient, WalletDetails, WalletOutputBatch, Context,
+	Context, OutputData, TxLogEntry, WalletBackend, WalletClient, WalletDetails, WalletOutputBatch,
 };
 
 use types::{WalletConfig, WalletSeed};
@@ -121,7 +121,11 @@ where
 		unimplemented!()
 	}
 
-	fn save_private_context(&mut self, _slate_id: &[u8], _ctx: &Context) -> Result<(), libwallet::Error> {
+	fn save_private_context(
+		&mut self,
+		_slate_id: &[u8],
+		_ctx: &Context,
+	) -> Result<(), libwallet::Error> {
 		unimplemented!()
 	}
 

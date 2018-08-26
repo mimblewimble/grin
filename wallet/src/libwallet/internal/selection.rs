@@ -37,14 +37,7 @@ pub fn build_send_tx_slate<T: ?Sized, C, K>(
 	max_outputs: usize,
 	change_outputs: usize,
 	selection_strategy_is_use_all: bool,
-) -> Result<
-	(
-		Slate,
-		Context,
-		impl FnOnce(&mut T) -> Result<(), Error>,
-	),
-	Error,
->
+) -> Result<(Slate, Context, impl FnOnce(&mut T) -> Result<(), Error>), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,

@@ -19,7 +19,7 @@ use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
 use libwallet::internal::{selection, updater};
-use libwallet::types::{TxLogEntryType, WalletBackend, WalletClient, Context};
+use libwallet::types::{Context, TxLogEntryType, WalletBackend, WalletClient};
 use libwallet::{Error, ErrorKind};
 use util::LOGGER;
 
@@ -61,14 +61,7 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 	max_outputs: usize,
 	num_change_outputs: usize,
 	selection_strategy_is_use_all: bool,
-) -> Result<
-	(
-		Slate,
-		Context,
-		impl FnOnce(&mut T) -> Result<(), Error>,
-	),
-	Error,
->
+) -> Result<(Slate, Context, impl FnOnce(&mut T) -> Result<(), Error>), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,

@@ -163,7 +163,7 @@ where
 	}
 
 	fn get_private_context(&mut self, slate_id: &[u8]) -> Result<Context, Error> {
-		let ctx_key =to_key(PRIVATE_TX_CONTEXT_PREFIX, &mut slate_id.to_vec());
+		let ctx_key = to_key(PRIVATE_TX_CONTEXT_PREFIX, &mut slate_id.to_vec());
 		option_to_not_found(
 			self.db.get_ser(&ctx_key),
 			&format!("Slate id: {:x?}", slate_id.to_vec()),
@@ -353,7 +353,12 @@ where
 
 	fn delete_private_context(&mut self, slate_id: &[u8]) -> Result<(), Error> {
 		let ctx_key = to_key(PRIVATE_TX_CONTEXT_PREFIX, &mut slate_id.to_vec());
-		self.db.borrow().as_ref().unwrap().delete(&ctx_key).map_err(|e| e.into())
+		self.db
+			.borrow()
+			.as_ref()
+			.unwrap()
+			.delete(&ctx_key)
+			.map_err(|e| e.into())
 	}
 
 	fn commit(&self) -> Result<(), Error> {
