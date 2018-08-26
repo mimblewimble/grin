@@ -305,7 +305,8 @@ impl Readable for Block {
 		// Treat any validation issues as data corruption.
 		// An example of this would be reading a block
 		// that exceeded the allowed number of inputs.
-		body.validate_read(true).map_err(|_| ser::Error::CorruptedData)?;
+		body.validate_read(true)
+			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(Block {
 			header: header,
