@@ -301,8 +301,12 @@ impl Readable for Block {
 
 		let body = TransactionBody::read(reader)?;
 
-		// Now validate the body and treat any validation error as corrupted data.
-		body.validate(true).map_err(|_| ser::Error::CorruptedData)?;
+		// Now "lightweight" validation of the block.
+		// Treat any validation issues as data corruption.
+		// An example of this would be reading a block
+		// that exceeded the allowed number of inputs.
+		body.validate_read(true)
+			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(Block {
 			header: header,
@@ -526,6 +530,18 @@ impl Block {
 			header: self.header,
 			body,
 		})
+	}
+
+	/// "Lightweight" validation that we can perform quickly during read/deserialization.
+	/// Subset of full validation that skips expensive verification steps, specifically -
+	/// * rangeproof verification (on the body)
+	/// * kernel signature verification (on the body)
+	/// * coinbase sum verification
+	/// * kernel sum verification
+	pub fn validate_read(&self) -> Result<(), Error> {
+		self.body.validate_read(true)?;
+		self.verify_kernel_lock_heights()?;
+		Ok(())
 	}
 
 	/// Validates all the elements in a block that can be checked without

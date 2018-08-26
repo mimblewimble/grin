@@ -544,6 +544,17 @@ impl TransactionBody {
 		Ok(())
 	}
 
+	/// "Lightweight" validation that we can perform quickly during read/deserialization.
+	/// Subset of full validation that skips expensive verification steps, specifically -
+	/// * rangeproof verification
+	/// * kernel signature verification
+	pub fn validate_read(&self, with_reward: bool) -> Result<(), Error> {
+		self.verify_weight(with_reward)?;
+		self.verify_sorted()?;
+		self.verify_cut_through()?;
+		Ok(())
+	}
+
 	/// Validates all relevant parts of a transaction body. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
@@ -598,11 +609,12 @@ impl Readable for Transaction {
 		let body = TransactionBody::read(reader)?;
 		let tx = Transaction { offset, body };
 
-		// Now validate the tx.
+		// Now "lightweight" validation of the tx.
 		// Treat any validation issues as data corruption.
 		// An example of this would be reading a tx
 		// that exceeded the allowed number of inputs.
-		tx.validate(false).map_err(|_| ser::Error::CorruptedData)?;
+		tx.validate_read(false)
+			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(tx)
 	}
@@ -730,6 +742,19 @@ impl Transaction {
 	/// Lock height of a transaction is the max lock height of the kernels.
 	pub fn lock_height(&self) -> u64 {
 		self.body.lock_height()
+	}
+
+	/// "Lightweight" validation that we can perform quickly during read/deserialization.
+	/// Subset of full validation that skips expensive verification steps, specifically -
+	/// * rangeproof verification (on the body)
+	/// * kernel signature verification (on the body)
+	/// * kernel sum verification
+	pub fn validate_read(&self, with_reward: bool) -> Result<(), Error> {
+		self.body.validate_read(with_reward)?;
+		if !with_reward {
+			self.body.verify_features()?;
+		}
+		Ok(())
 	}
 
 	/// Validates all relevant parts of a fully built transaction. Checks the
