@@ -18,8 +18,8 @@ use core::core::Transaction;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
-use libwallet::internal::{selection, sigcontext, updater};
-use libwallet::types::{TxLogEntryType, WalletBackend, WalletClient};
+use libwallet::internal::{selection, updater};
+use libwallet::types::{TxLogEntryType, WalletBackend, WalletClient, Context};
 use libwallet::{Error, ErrorKind};
 use util::LOGGER;
 
@@ -64,7 +64,7 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 ) -> Result<
 	(
 		Slate,
-		sigcontext::Context,
+		Context,
 		impl FnOnce(&mut T) -> Result<(), Error>,
 	),
 	Error,
@@ -117,7 +117,7 @@ where
 pub fn complete_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
-	context: &sigcontext::Context,
+	context: &Context,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,

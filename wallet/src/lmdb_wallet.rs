@@ -24,7 +24,6 @@ use store::{self, option_to_not_found, to_key, u64_to_key};
 
 use libwallet::types::*;
 use libwallet::{internal, Error, ErrorKind};
-use libwallet::internal::sigcontext::Context;
 use types::{WalletConfig, WalletSeed};
 use util::secp::pedersen;
 

@@ -24,7 +24,7 @@ use keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
 use util::secp::key::{PublicKey, SecretKey};
 use util::{kernel_sig_msg, secp};
 use wallet::libtx::{aggsig, proof};
-use wallet::libwallet::internal::sigcontext;
+use wallet::libwallet::types::Context;
 
 use rand::thread_rng;
 
@@ -76,7 +76,7 @@ fn aggsig_sender_receiver_interaction() {
 
 		let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
 
-		s_cx = sigcontext::Context::new(&keychain.secp(), blind);
+		s_cx = Context::new(&keychain.secp(), blind);
 		s_cx.get_public_keys(&keychain.secp())
 	};
 
@@ -89,7 +89,7 @@ fn aggsig_sender_receiver_interaction() {
 		// let blind = blind_sum.secret_key(&keychain.secp())?;
 		let blind = keychain.derived_key(&key_id).unwrap();
 
-		rx_cx = sigcontext::Context::new(&keychain.secp(), blind);
+		rx_cx = Context::new(&keychain.secp(), blind);
 		let (pub_excess, pub_nonce) = rx_cx.get_public_keys(&keychain.secp());
 		rx_cx.add_output(&key_id);
 
@@ -270,7 +270,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 
 		let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
 
-		s_cx = sigcontext::Context::new(&keychain.secp(), blind);
+		s_cx = Context::new(&keychain.secp(), blind);
 		s_cx.get_public_keys(&keychain.secp())
 	};
 
@@ -282,7 +282,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 
 		let blind = keychain.derived_key(&key_id).unwrap();
 
-		rx_cx = sigcontext::Context::new(&keychain.secp(), blind);
+		rx_cx = Context::new(&keychain.secp(), blind);
 		let (pub_excess, pub_nonce) = rx_cx.get_public_keys(&keychain.secp());
 		rx_cx.add_output(&key_id);
 

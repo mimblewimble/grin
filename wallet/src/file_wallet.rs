@@ -33,10 +33,9 @@ use util::LOGGER;
 use error::{Error, ErrorKind};
 
 use libwallet;
-use libwallet::internal::sigcontext::Context;
 
 use libwallet::types::{
-	OutputData, TxLogEntry, WalletBackend, WalletClient, WalletDetails, WalletOutputBatch,
+	OutputData, TxLogEntry, WalletBackend, WalletClient, WalletDetails, WalletOutputBatch, Context,
 };
 
 use types::{WalletConfig, WalletSeed};
