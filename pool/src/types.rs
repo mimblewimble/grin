@@ -15,15 +15,12 @@
 //! The primary module containing the implementations of the transaction pool
 //! and its top-level members.
 
-use std::sync::{Arc, RwLock};
-
 use chrono::prelude::{DateTime, Utc};
 
 use core::consensus;
 use core::core::hash::Hash;
 use core::core::transaction::{self, Transaction};
-use core::core::verifier_cache::VerifierCache;
-use core::core::{BlockHeader, Output, TxKernel};
+use core::core::BlockHeader;
 
 /// Dandelion relay timer
 const DANDELION_RELAY_SECS: u64 = 600;

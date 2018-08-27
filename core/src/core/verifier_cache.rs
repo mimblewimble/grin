@@ -19,9 +19,6 @@ use lru_cache::LruCache;
 
 use core::hash::{Hash, Hashed};
 use core::{Output, TxKernel};
-use util::secp;
-use util::secp::pedersen::{Commitment, RangeProof};
-use util::LOGGER;
 
 pub trait VerifierCache: Sync + Send {
 	fn is_kernel_sig_verified(&mut self, kernel: &TxKernel) -> bool;

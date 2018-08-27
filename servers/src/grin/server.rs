@@ -50,6 +50,8 @@ pub struct Server {
 	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	/// Shared cache for verification results when
+	/// verifying rangeproof and kernel signatures.
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 	/// Whether we're currently syncing
 	sync_state: Arc<SyncState>,
@@ -122,6 +124,8 @@ impl Server {
 
 		let stop = Arc::new(AtomicBool::new(false));
 
+		// Shared cache for verification results.
+		// We cache rangeproof verification and kernel signature verification.
 		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());

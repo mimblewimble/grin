@@ -18,6 +18,9 @@ extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
+use std::time::Instant;
+use std::sync::{Arc, RwLock};
+
 pub mod common;
 
 use chrono::Duration;
@@ -28,11 +31,16 @@ use grin_core::core::hash::Hashed;
 use grin_core::core::id::ShortIdentifiable;
 use grin_core::core::Committed;
 use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
+use grin_core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use grin_core::{global, ser};
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
-use std::time::Instant;
 use util::{secp, secp_static};
 use wallet::libtx::build::{self, input, output, with_fee};
+
+
+fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
+	Arc::new(RwLock::new(LruVerifierCache::new()))
+}
 
 // Too slow for now #[test]
 // TODO: make this fast enough or add similar but faster test?
@@ -61,7 +69,7 @@ fn too_large_block() {
 	let prev = BlockHeader::default();
 	let key_id = keychain.derive_key_id(1).unwrap();
 	let b = new_block(vec![&tx], &keychain, &prev, &key_id);
-	assert!(b.validate(&BlindingFactor::zero(), &zero_commit).is_err());
+	assert!(b.validate(&BlindingFactor::zero(), &zero_commit, verifier_cache()).is_err());
 }
 
 #[test]
@@ -107,7 +115,7 @@ fn block_with_cut_through() {
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
 	println!("3");
-	b.validate(&BlindingFactor::zero(), &zero_commit).unwrap();
+	b.validate(&BlindingFactor::zero(), &zero_commit, verifier_cache()).unwrap();
 	assert_eq!(b.inputs().len(), 3);
 	assert_eq!(b.outputs().len(), 3);
 	println!("4");
@@ -143,7 +151,7 @@ fn empty_block_with_coinbase_is_valid() {
 
 	// the block should be valid here (single coinbase output with corresponding
 	// txn kernel)
-	assert!(b.validate(&BlindingFactor::zero(), &zero_commit).is_ok());
+	assert!(b.validate(&BlindingFactor::zero(), &zero_commit, verifier_cache()).is_ok());
 }
 
 #[test]
@@ -172,7 +180,7 @@ fn remove_coinbase_output_flag() {
 			.is_ok()
 	);
 	assert_eq!(
-		b.validate(&BlindingFactor::zero(), &zero_commit),
+		b.validate(&BlindingFactor::zero(), &zero_commit, verifier_cache()),
 		Err(Error::CoinbaseSumMismatch)
 	);
 }
@@ -202,7 +210,7 @@ fn remove_coinbase_kernel_flag() {
 	);
 
 	assert_eq!(
-		b.validate(&BlindingFactor::zero(), &zero_commit),
+		b.validate(&BlindingFactor::zero(), &zero_commit, verifier_cache()),
 		Err(Error::Secp(secp::Error::IncorrectCommitSum))
 	);
 }

@@ -22,7 +22,7 @@ use std::{error, fmt};
 
 use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;
-use core::verifier_cache::{self, VerifierCache};
+use core::verifier_cache::VerifierCache;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
 use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};

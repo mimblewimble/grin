@@ -29,9 +29,7 @@ use serde_json;
 
 use chain;
 use core::core::hash::{Hash, Hashed};
-use core::core::transaction;
-use core::core::verifier_cache::VerifierCache;
-use core::core::{OutputFeatures, OutputIdentifier, Transaction, TxKernel};
+use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::ser;
 use p2p;
 use p2p::types::ReasonForBan;

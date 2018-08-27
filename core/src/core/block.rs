@@ -357,14 +357,14 @@ impl Block {
 		difficulty: Difficulty,
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
-		let verifier = Arc::new(RwLock::new(LruVerifierCache::new()));
+		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 		let mut block = Block::with_reward(
 			prev,
 			txs,
 			reward_output.0,
 			reward_output.1,
 			difficulty,
-			verifier,
+			verifier_cache,
 		)?;
 
 		// Now set the pow on the header so block hashing works as expected.

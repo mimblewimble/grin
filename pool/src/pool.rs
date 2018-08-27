@@ -23,7 +23,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{Block, CompactBlock, Output, Transaction, TxKernel};
+use core::core::{Block, CompactBlock, Transaction, TxKernel};
 use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 use util::LOGGER;
 

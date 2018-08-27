@@ -17,13 +17,13 @@
 //! resulting tx pool can be added to the current chain state to produce a
 //! valid chain state.
 
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, RwLock};
 
 use chrono::prelude::Utc;
 
 use core::core::hash::Hash;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{transaction, Block, CompactBlock, Output, Transaction, TxKernel};
+use core::core::{transaction, Block, CompactBlock, Transaction};
 use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
 
