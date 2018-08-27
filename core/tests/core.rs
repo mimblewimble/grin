@@ -26,8 +26,8 @@ use common::{new_block, tx1i1o, tx1i2o, tx2i1o};
 use grin_core::core::block::BlockHeader;
 use grin_core::core::block::Error::KernelLockHeight;
 use grin_core::core::hash::{Hashed, ZERO_HASH};
-use grin_core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction};
 use grin_core::core::verifier_cache::{LruVerifierCache, VerifierCache};
+use grin_core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction};
 use grin_core::ser;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use util::{secp_static, static_secp_instance};
@@ -189,7 +189,11 @@ fn multi_kernel_transaction_deaggregation_2() {
 	assert!(tx2.validate(false, vc.clone()).is_ok());
 	assert!(tx3.validate(false, vc.clone()).is_ok());
 
-	let tx123 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone()], None, vc.clone()).unwrap();
+	let tx123 = aggregate(
+		vec![tx1.clone(), tx2.clone(), tx3.clone()],
+		None,
+		vc.clone(),
+	).unwrap();
 	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], None, vc.clone()).unwrap();
 
 	assert!(tx123.validate(false, vc.clone()).is_ok());
@@ -212,7 +216,11 @@ fn multi_kernel_transaction_deaggregation_3() {
 	assert!(tx2.validate(false, vc.clone()).is_ok());
 	assert!(tx3.validate(false, vc.clone()).is_ok());
 
-	let tx123 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone()], None, vc.clone()).unwrap();
+	let tx123 = aggregate(
+		vec![tx1.clone(), tx2.clone(), tx3.clone()],
+		None,
+		vc.clone(),
+	).unwrap();
 	let tx13 = aggregate(vec![tx1.clone(), tx3.clone()], None, vc.clone()).unwrap();
 	let tx2 = aggregate(vec![tx2.clone()], None, vc.clone()).unwrap();
 
@@ -294,7 +302,11 @@ fn multi_kernel_transaction_deaggregation_5() {
 
 	assert!(tx12345.validate(false, vc.clone()).is_ok());
 
-	let deaggregated_tx5 = deaggregate(tx12345.clone(), vec![tx12.clone(), tx34.clone()], vc.clone()).unwrap();
+	let deaggregated_tx5 = deaggregate(
+		tx12345.clone(),
+		vec![tx12.clone(), tx34.clone()],
+		vc.clone(),
+	).unwrap();
 	assert!(deaggregated_tx5.validate(false, vc.clone()).is_ok());
 	assert_eq!(tx5, deaggregated_tx5);
 }
@@ -476,7 +488,8 @@ fn simple_block() {
 		&key_id,
 	);
 
-	b.validate(&BlindingFactor::zero(), &zero_commit, vc.clone()).unwrap();
+	b.validate(&BlindingFactor::zero(), &zero_commit, vc.clone())
+		.unwrap();
 }
 
 #[test]
@@ -506,7 +519,8 @@ fn test_block_with_timelocked_tx() {
 	let previous_header = BlockHeader::default();
 
 	let b = new_block(vec![&tx1], &keychain, &previous_header, &key_id3.clone());
-	b.validate(&BlindingFactor::zero(), &zero_commit, vc.clone()).unwrap();
+	b.validate(&BlindingFactor::zero(), &zero_commit, vc.clone())
+		.unwrap();
 
 	// now try adding a timelocked tx where lock height is greater than current
 	// block height
