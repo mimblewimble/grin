@@ -41,7 +41,11 @@ pub struct TransactionPool {
 
 impl TransactionPool {
 	/// Create a new transaction pool
-	pub fn new(config: PoolConfig, chain: Arc<BlockChain>, adapter: Arc<PoolAdapter>) -> TransactionPool {
+	pub fn new(
+		config: PoolConfig,
+		chain: Arc<BlockChain>,
+		adapter: Arc<PoolAdapter>,
+	) -> TransactionPool {
 		TransactionPool {
 			config: config,
 			txpool: Pool::new(chain.clone(), format!("txpool")),

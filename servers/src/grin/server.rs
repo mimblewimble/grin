@@ -421,7 +421,8 @@ impl Server {
 			}
 		};
 
-		let peer_stats = self.p2p
+		let peer_stats = self
+			.p2p
 			.peers
 			.connected_peers()
 			.into_iter()

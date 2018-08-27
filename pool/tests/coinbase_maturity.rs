@@ -34,9 +34,7 @@ use keychain::{ExtKeychain, Keychain};
 use pool::types::{BlockChain, NoopAdapter, PoolConfig, PoolError};
 use pool::TransactionPool;
 
-pub fn test_setup(
-	chain: CoinbaseMaturityErrorChainAdapter,
-) -> TransactionPool {
+pub fn test_setup(chain: CoinbaseMaturityErrorChainAdapter) -> TransactionPool {
 	TransactionPool::new(
 		PoolConfig {
 			accept_fee_base: 0,

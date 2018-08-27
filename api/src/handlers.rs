@@ -856,8 +856,8 @@ pub fn start_rest_apis(
 	addr: String,
 	chain: Weak<chain::Chain>,
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
-	peers: Weak<p2p::Peers>)
-{
+	peers: Weak<p2p::Peers>,
+) {
 	let _ = thread::Builder::new()
 		.name("apis".to_string())
 		.spawn(move || {
@@ -905,8 +905,7 @@ pub fn build_router(
 	chain: Weak<chain::Chain>,
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
-) -> Result<Router, RouterError>
-{
+) -> Result<Router, RouterError> {
 	let route_list = vec![
 		"get blocks".to_string(),
 		"get chain".to_string(),

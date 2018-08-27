@@ -157,8 +157,7 @@ fn process_fluff_phase(tx_pool: Arc<RwLock<TransactionPool>>) -> Result<(), Pool
 fn process_fresh_entries(
 	dandelion_config: DandelionConfig,
 	tx_pool: Arc<RwLock<TransactionPool>>,
-) -> Result<(), PoolError>
-{
+) -> Result<(), PoolError> {
 	let mut tx_pool = tx_pool.write().unwrap();
 
 	let mut rng = rand::thread_rng();
