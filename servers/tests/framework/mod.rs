@@ -179,11 +179,11 @@ impl LocalServerContainer {
 	pub fn run_server(&mut self, duration_in_seconds: u64) -> servers::Server {
 		let api_addr = format!("{}:{}", self.config.base_addr, self.config.api_server_port);
 
-		let mut seeding_type = servers::Seeding::None;
+		let mut seeding_type = p2p::Seeding::None;
 		let mut seeds = Vec::new();
 
 		if self.config.seed_addr.len() > 0 {
-			seeding_type = servers::Seeding::List;
+			seeding_type = p2p::Seeding::List;
 			seeds = vec![self.config.seed_addr.to_string()];
 		}
 
@@ -192,10 +192,10 @@ impl LocalServerContainer {
 			db_root: format!("{}/.grin", self.working_dir),
 			p2p_config: p2p::P2PConfig {
 				port: self.config.p2p_server_port,
+				seeds: Some(seeds),
+				seeding_type: seeding_type,
 				..p2p::P2PConfig::default()
 			},
-			seeds: Some(seeds),
-			seeding_type: seeding_type,
 			chain_type: core::global::ChainTypes::AutomatedTesting,
 			skip_sync_wait: Some(true),
 			stratum_mining_config: None,
@@ -585,10 +585,10 @@ pub fn config(n: u16, test_name_dir: &str, seed_n: u16) -> servers::ServerConfig
 		db_root: format!("target/tmp/{}/grin-sync-{}", test_name_dir, n),
 		p2p_config: p2p::P2PConfig {
 			port: 10000 + n,
+			seeding_type: p2p::Seeding::List,
+			seeds: Some(vec![format!("127.0.0.1:{}", 10000 + seed_n)]),
 			..p2p::P2PConfig::default()
 		},
-		seeding_type: servers::Seeding::List,
-		seeds: Some(vec![format!("127.0.0.1:{}", 10000 + seed_n)]),
 		chain_type: core::global::ChainTypes::AutomatedTesting,
 		archive_mode: Some(true),
 		skip_sync_wait: Some(true),

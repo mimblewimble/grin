@@ -96,9 +96,23 @@ pub struct P2PConfig {
 	pub host: IpAddr,
 	pub port: u16,
 
+	/// Method used to get the list of seed nodes for initial bootstrap.
+	#[serde(default)]
+	pub seeding_type: Seeding,
+
+	/// The list of seed nodes, if using Seeding as a seed type
+	pub seeds: Option<Vec<String>>,
+
+	/// Capabilities expose by this node, also conditions which other peers this
+	/// node will have an affinity toward when connection.
+	pub capabilities: Capabilities,
+
 	pub peers_allow: Option<Vec<String>>,
 
 	pub peers_deny: Option<Vec<String>>,
+
+	/// The list of preferred peers that we will try to connect to
+	pub peers_preferred: Option<Vec<String>>,
 
 	pub ban_window: Option<i64>,
 
@@ -114,8 +128,12 @@ impl Default for P2PConfig {
 		P2PConfig {
 			host: ipaddr,
 			port: 13414,
+			capabilities: Capabilities::FULL_NODE,
+			seeding_type: Seeding::default(),
+			seeds: None,
 			peers_allow: None,
 			peers_deny: None,
+			peers_preferred: None,
 			ban_window: None,
 			peer_max_count: None,
 			peer_min_preferred_count: None,
@@ -148,6 +166,27 @@ impl P2PConfig {
 			Some(n) => n,
 			None => PEER_MIN_PREFERRED_COUNT,
 		}
+	}
+}
+
+/// Type of seeding the server will use to find other peers on the network.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum Seeding {
+	/// No seeding, mostly for tests that programmatically connect
+	None,
+	/// A list of seed addresses provided to the server
+	List,
+	/// Automatically download a text file with a list of server addresses
+	WebStatic,
+	/// Automatically get a list of seeds from multiple DNS
+	DNSSeed,
+	/// Mostly for tests, where connections are initiated programmatically
+	Programmatic,
+}
+
+impl Default for Seeding {
+	fn default() -> Seeding {
+		Seeding::DNSSeed
 	}
 }
 
@@ -206,7 +245,7 @@ pub struct PeerInfo {
 }
 
 /// The full txhashset data along with indexes required for a consumer to
-/// rewind to a consistant requested state.
+/// rewind to a consistent requested state.
 pub struct TxHashSetRead {
 	/// Output tree index the receiver should rewind to
 	pub output_index: u64,

@@ -25,14 +25,6 @@ api_http_addr = "127.0.0.1:13413"
 
 db_root = ".grin"
 
-#How to seed this server, can be None, List, WebStatic or DNSSeed
-#
-#seeding_type = "None"
-
-#If seeding_type = List, the list of peers to connect to.
-#
-#seeds = ["192.168.0.1:13414","192.168.0.2:13414"]
-
 #The chain type, which defines the genesis block and the set of cuckoo
 #parameters used for mining. Can be:
 #AutomatedTesting - For CI builds and instant blockchain creation
@@ -50,10 +42,6 @@ chain_type = "Testnet3"
 
 #run the node in "full archive" mode (default is fast-sync, pruned node)
 #archive_mode = false
-
-#7 = Bit flags for FULL_NODE, this structure needs to be changed
-#internally to make it more configurable
-capabilities = [7]
 
 #skip waiting for sync on startup, (optional param, mostly for testing)
 skip_sync_wait = false
@@ -98,11 +86,25 @@ stem_probability = 90
 host = "0.0.0.0"
 port = 13414
 
+#How to seed this server, can be None, List, WebStatic or DNSSeed
+#
+#seeding_type = "None"
+
+#If seeding_type = List, the list of peers to connect to.
+#
+#seeds = ["192.168.0.1:13414","192.168.0.2:13414"]
+
+#7 = Bit flags for FULL_NODE, this structure needs to be changed
+#internally to make it more configurable
+capabilities = [7]
+
 #hardcoded peer lists for allow/deny
 #will *only* connect to peers in allow list
 #peers_allow = ["192.168.0.1:13414", "192.168.0.2:13414"]
 #will *never* connect to peers in deny list
 #peers_deny = ["192.168.0.3:13414", "192.168.0.4:13414"]
+#a list of preferred peers to connect to
+#peers_preferred = ["192.168.0.1:13414","192.168.0.2:13414"]
 
 #how long a banned peer should stay banned
 #ban_window = 10800

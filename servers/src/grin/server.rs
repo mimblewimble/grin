@@ -23,10 +23,11 @@ use std::{thread, time};
 
 use api;
 use chain;
-use common::adapters::{ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter,
-                       PoolToNetAdapter};
+use common::adapters::{
+	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
+};
 use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
-use common::types::{Error, Seeding, ServerConfig, StratumServerConfig, SyncState};
+use common::types::{Error, ServerConfig, StratumServerConfig, SyncState};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::{consensus, genesis, global, pow};
@@ -105,8 +106,16 @@ impl Server {
 		};
 
 		// If archive mode is enabled then the flags should contains the FULL_HIST flag
-		if archive_mode && !config.capabilities.contains(p2p::Capabilities::FULL_HIST) {
-			config.capabilities.insert(p2p::Capabilities::FULL_HIST);
+		if archive_mode
+			&& !config
+				.p2p_config
+				.capabilities
+				.contains(p2p::Capabilities::FULL_HIST)
+		{
+			config
+				.p2p_config
+				.capabilities
+				.insert(p2p::Capabilities::FULL_HIST);
 		}
 
 		let stop = Arc::new(AtomicBool::new(false));
@@ -122,9 +131,9 @@ impl Server {
 		let sync_state = Arc::new(SyncState::new());
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(
-				sync_state.clone(),
-				tx_pool.clone(),
-			));
+			sync_state.clone(),
+			tx_pool.clone(),
+		));
 
 		let genesis = match config.chain_type {
 			global::ChainTypes::Testnet1 => genesis::genesis_testnet1(),
@@ -165,7 +174,7 @@ impl Server {
 
 		let p2p_server = Arc::new(p2p::Server::new(
 			db_env,
-			config.capabilities,
+			config.p2p_config.capabilities,
 			config.p2p_config.clone(),
 			net_adapter.clone(),
 			genesis.hash(),
@@ -177,25 +186,34 @@ impl Server {
 		pool_net_adapter.init(Arc::downgrade(&p2p_server.peers));
 		net_adapter.init(Arc::downgrade(&p2p_server.peers));
 
-		if config.seeding_type.clone() != Seeding::Programmatic {
-			let seeder = match config.seeding_type.clone() {
-				Seeding::None => {
+		if config.p2p_config.seeding_type.clone() != p2p::Seeding::Programmatic {
+			let seeder = match config.p2p_config.seeding_type.clone() {
+				p2p::Seeding::None => {
 					warn!(
 						LOGGER,
 						"No seed configured, will stay solo until connected to"
 					);
 					seed::predefined_seeds(vec![])
 				}
-				Seeding::List => seed::predefined_seeds(config.seeds.as_mut().unwrap().clone()),
-				Seeding::DNSSeed => seed::dns_seeds(),
-				Seeding::WebStatic => seed::web_seeds(),
+				p2p::Seeding::List => {
+					seed::predefined_seeds(config.p2p_config.seeds.as_mut().unwrap().clone())
+				}
+				p2p::Seeding::DNSSeed => seed::dns_seeds(),
+				p2p::Seeding::WebStatic => seed::web_seeds(),
 				_ => unreachable!(),
 			};
+
+			let peers_preferred = match config.p2p_config.peers_preferred.clone() {
+				Some(peers_preferred) => seed::preferred_peers(peers_preferred),
+				None => None,
+			};
+
 			seed::connect_and_monitor(
 				p2p_server.clone(),
-				config.capabilities,
+				config.p2p_config.capabilities,
 				config.dandelion_config.clone(),
 				seeder,
+				peers_preferred,
 				stop.clone(),
 			);
 		}
@@ -266,7 +284,7 @@ impl Server {
 
 	/// Ping all peers, mostly useful for tests to have connected peers share
 	/// their heights
-	pub fn ping_peers(&self)-> Result<(), Error> {
+	pub fn ping_peers(&self) -> Result<(), Error> {
 		let head = self.chain.head()?;
 		self.p2p.peers.check_all(head.total_difficulty, head.height);
 		Ok(())
@@ -292,12 +310,7 @@ impl Server {
 		let _ = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
-				stratum_server.run_loop(
-					stratum_stats,
-					cuckoo_size as u32,
-					proof_size,
-					sync_state,
-				);
+				stratum_server.run_loop(stratum_stats, cuckoo_size as u32, proof_size, sync_state);
 			});
 	}
 

@@ -171,9 +171,10 @@ impl MessageHandler for Protocol {
 				let headers = adapter.locate_headers(loc.hashes);
 
 				// serialize and send all the headers over
-				Ok(Some(
-					msg.respond(Type::Headers, Headers { headers: headers }),
-				))
+				Ok(Some(msg.respond(
+					Type::Headers,
+					Headers { headers: headers },
+				)))
 			}
 
 			// "header first" block propagation - if we have not yet seen this block
@@ -292,8 +293,7 @@ impl MessageHandler for Protocol {
 				);
 
 				let tmp_zip = File::open(tmp)?;
-				let res = self
-					.adapter
+				let res = self.adapter
 					.txhashset_write(sm_arch.hash, tmp_zip, self.addr);
 
 				debug!(
