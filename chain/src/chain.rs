@@ -367,10 +367,7 @@ impl Chain {
 						height,
 						self.orphans.len(),
 					);
-					let res = self.process_block_no_orphans(
-						orphan.block,
-						orphan.opts,
-					);
+					let res = self.process_block_no_orphans(orphan.block, orphan.opts);
 					if let Ok((_, Some(b))) = res {
 						// We accepted a block, so see if we can accept any orphans
 						height = b.header.height + 1;
@@ -556,14 +553,9 @@ impl Chain {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	pub fn txhashset_write<T>(
-		&self,
-		h: Hash,
-		txhashset_data: File,
-		status: &T,
-	) -> Result<(), Error>
+	pub fn txhashset_write<T>(&self, h: Hash, txhashset_data: File, status: &T) -> Result<(), Error>
 	where
-		T: TxHashsetWriteStatus
+		T: TxHashsetWriteStatus,
 	{
 		status.on_setup();
 		let head = self.head().unwrap();

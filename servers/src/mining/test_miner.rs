@@ -173,9 +173,7 @@ impl Miner {
 					self.debug_output_id,
 					b.hash()
 				);
-				let res =
-					self.chain
-						.process_block(b, chain::Options::MINE);
+				let res = self.chain.process_block(b, chain::Options::MINE);
 				if let Err(e) = res {
 					error!(
 						LOGGER,

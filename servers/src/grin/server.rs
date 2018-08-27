@@ -30,7 +30,7 @@ use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStat
 use common::types::{Error, ServerConfig, StratumServerConfig, SyncState};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
-use core::core::verifier_cache::{VerifierCache, LruVerifierCache};
+use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use core::{consensus, genesis, global, pow};
 use grin::{dandelion_monitor, seed, sync};
 use mining::stratumserver;

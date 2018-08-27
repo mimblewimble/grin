@@ -360,11 +360,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			return true;
 		}
 
-		if let Err(e) = w(&self.chain).txhashset_write(
-			h,
-			txhashset_data,
-			self.sync_state.as_ref(),
-		) {
+		if let Err(e) = w(&self.chain).txhashset_write(h, txhashset_data, self.sync_state.as_ref())
+		{
 			error!(LOGGER, "Failed to save txhashset archive: {}", e);
 			let is_good_data = !e.is_bad_data();
 			self.sync_state.set_sync_error(types::Error::Chain(e));

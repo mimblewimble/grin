@@ -533,7 +533,11 @@ impl TransactionBody {
 	/// Validates all relevant parts of a transaction body. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self, with_reward: bool, verifier: Arc<RwLock<VerifierCache>>) -> Result<(), Error> {
+	pub fn validate(
+		&self,
+		with_reward: bool,
+		verifier: Arc<RwLock<VerifierCache>>,
+	) -> Result<(), Error> {
 		self.verify_weight(with_reward)?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
@@ -787,7 +791,11 @@ impl Transaction {
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self, with_reward: bool, verifier: Arc<RwLock<VerifierCache>>) -> Result<(), Error> {
+	pub fn validate(
+		&self,
+		with_reward: bool,
+		verifier: Arc<RwLock<VerifierCache>>,
+	) -> Result<(), Error> {
 		self.body.validate(with_reward, verifier)?;
 
 		if !with_reward {
