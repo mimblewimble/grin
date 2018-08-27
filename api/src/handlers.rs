@@ -29,7 +29,7 @@ use serde_json;
 
 use chain;
 use core::core::hash::{Hash, Hashed};
-use core::core::ok_verifier::OKVerifier;
+use core::core::verifier_cache::VerifierCache;
 use core::core::transaction;
 use core::core::{OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 use core::ser;
@@ -703,7 +703,7 @@ struct PoolInfoHandler<T, V> {
 impl<T, V> Handler for PoolInfoHandler<T, V>
 where
 	T: pool::BlockChain + Send + Sync,
-	V: OKVerifier + Send + Sync,
+	V: VerifierCache + Send + Sync,
 {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		let pool_arc = w(&self.tx_pool);
@@ -729,7 +729,7 @@ struct PoolPushHandler<T, V> {
 impl<T, V> PoolPushHandler<T, V>
 where
 	T: pool::BlockChain + Send + Sync + 'static,
-	V: OKVerifier + Send + Sync + 'static,
+	V: VerifierCache + Send + Sync + 'static,
 {
 	fn update_pool(&self, req: Request<Body>) -> Box<Future<Item = (), Error = Error> + Send> {
 		let params = match req.uri().query() {
@@ -786,7 +786,7 @@ where
 impl<T, V> Handler for PoolPushHandler<T, V>
 where
 	T: pool::BlockChain + Send + Sync + 'static,
-	V: OKVerifier + Send + Sync + 'static,
+	V: VerifierCache + Send + Sync + 'static,
 {
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		Box::new(
@@ -873,7 +873,7 @@ pub fn start_rest_apis<T, V>(
 	peers: Weak<p2p::Peers>,
 ) where
 	T: pool::BlockChain + Send + Sync + 'static,
-	V: OKVerifier + Send + Sync + 'static,
+	V: VerifierCache + Send + Sync + 'static,
 {
 	let _ = thread::Builder::new()
 		.name("apis".to_string())
@@ -925,7 +925,7 @@ pub fn build_router<T, V>(
 ) -> Result<Router, RouterError>
 where
 	T: pool::BlockChain + Send + Sync + 'static,
-	V: OKVerifier + Send + Sync + 'static,
+	V: VerifierCache + Send + Sync + 'static,
 {
 	let route_list = vec![
 		"get blocks".to_string(),

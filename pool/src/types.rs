@@ -21,7 +21,7 @@ use chrono::prelude::{DateTime, Utc};
 
 use core::consensus;
 use core::core::hash::Hash;
-use core::core::ok_verifier::OKVerifier;
+use core::core::verifier_cache::VerifierCache;
 use core::core::transaction::{self, Transaction};
 use core::core::{BlockHeader, Output, TxKernel};
 

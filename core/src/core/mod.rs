@@ -20,7 +20,7 @@ pub mod compact_block;
 pub mod hash;
 pub mod id;
 pub mod merkle_proof;
-pub mod ok_verifier;
+pub mod verifier_cache;
 pub mod pmmr;
 pub mod target;
 pub mod transaction;

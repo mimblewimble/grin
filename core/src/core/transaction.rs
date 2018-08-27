@@ -22,7 +22,7 @@ use std::{error, fmt};
 
 use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;
-use core::ok_verifier::{self, DeserializationOKVerifier, OKVerifier};
+use core::verifier_cache::{self, VerifierCache};
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
 use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};
@@ -80,8 +80,6 @@ pub enum Error {
 	/// Validation error relating to kernel features.
 	/// It is invalid for a transaction to contain a coinbase kernel, for example.
 	InvalidKernelFeatures,
-	/// Error from batch verification.
-	OKVerifier(ok_verifier::Error),
 }
 
 impl error::Error for Error {
@@ -103,12 +101,6 @@ impl fmt::Display for Error {
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
 		Error::Secp(e)
-	}
-}
-
-impl From<ok_verifier::Error> for Error {
-	fn from(e: ok_verifier::Error) -> Error {
-		Error::OKVerifier(e)
 	}
 }
 
@@ -543,20 +535,63 @@ impl TransactionBody {
 	/// output.
 	pub fn validate<V>(&self, with_reward: bool, verifier: Arc<RwLock<V>>) -> Result<(), Error>
 	where
-		V: ?Sized + OKVerifier,
+		V: ?Sized + VerifierCache,
 	{
 		self.verify_weight(with_reward)?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 
-		// Now use the provided output/kernel verifier to verify
-		// outputs rangeproofs and kernel signatures.
-		{
-			let mut v = verifier.write().unwrap();
-			v.verify_rangeproofs(&self.outputs)?;
-			v.verify_kernel_signatures(&self.kernels)?;
+		// TODO
+		// move verify_rangeproofs() and verify_kernel_signatures()
+		// back in here
+		// but we need something in util that will let us call with
+		// a vec of outputs and a cache
+		// given a vec of outputs filter into smaller vec based on cached values
+		// read cache for multiple outputs
+		// write cache for multiple outputs etc.
+
+		// Find all the outputs that have not yet been (rangeproof) verified.
+		let outputs: Vec<&Output> = {
+			let mut verifier = verifier.write().unwrap();
+			self.outputs.iter().filter(|x| {
+				!verifier.is_rangeproof_verified(x)
+			}).collect()
+		};
+
+		// Now batch verify all unverified rangeproofs
+		if outputs.len() > 0 {
+			let mut commits = vec![];
+			let mut proofs = vec![];
+			for x in &outputs {
+				commits.push(x.commit);
+				proofs.push(x.proof);
+			}
+			Output::batch_verify_proofs(&commits, &proofs)?;
 		}
 
+		// Find all the kernels that have not yet been verified.
+		let kernels: Vec<&TxKernel> = {
+			let mut verifier = verifier.write().unwrap();
+			self.kernels.iter().filter(|x| {
+				!verifier.is_kernel_sig_verified(x)
+			}).collect()
+		};
+
+		// Verify the unverified tx kernels.
+		for x in &kernels {
+			x.verify()?;
+		}
+
+		// Cache the successful verification results for the new outputs and kernels.
+		{
+			let mut verifier = verifier.write().unwrap();
+			for x in &outputs {
+				verifier.add_rangeproof_verified(x);
+			}
+			for x in &kernels {
+				verifier.add_kernel_sig_verified(x);
+			}
+		}
 		Ok(())
 	}
 }
@@ -755,7 +790,7 @@ impl Transaction {
 	/// output.
 	pub fn validate<V>(&self, with_reward: bool, verifier: Arc<RwLock<V>>) -> Result<(), Error>
 	where
-		V: ?Sized + OKVerifier,
+		V: ?Sized + VerifierCache,
 	{
 		self.body.validate(with_reward, verifier)?;
 
@@ -818,7 +853,7 @@ pub fn aggregate<V>(
 	verifier: Arc<RwLock<V>>,
 ) -> Result<Transaction, Error>
 where
-	V: OKVerifier,
+	V: VerifierCache,
 {
 	// convenience short-circuiting
 	if reward.is_none() && transactions.len() == 1 {
@@ -881,7 +916,7 @@ pub fn deaggregate<V>(
 	verifier: Arc<RwLock<V>>,
 ) -> Result<Transaction, Error>
 where
-	V: OKVerifier,
+	V: VerifierCache,
 {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];

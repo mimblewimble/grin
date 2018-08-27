@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use chrono::prelude::Utc;
 
 use core::core::hash::Hash;
-use core::core::ok_verifier::OKVerifier;
+use core::core::verifier_cache::VerifierCache;
 use core::core::{transaction, Block, CompactBlock, Output, Transaction, TxKernel};
 use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
@@ -39,7 +39,7 @@ pub struct TransactionPool<T, V> {
 
 	/// The blockchain
 	pub blockchain: Arc<T>,
-	pub ok_verifier: Arc<RwLock<V>>,
+	pub verifier_cache: Arc<RwLock<V>>,
 	/// The pool adapter
 	pub adapter: Arc<PoolAdapter>,
 }
@@ -47,21 +47,21 @@ pub struct TransactionPool<T, V> {
 impl<T, V> TransactionPool<T, V>
 where
 	T: BlockChain,
-	V: OKVerifier,
+	V: VerifierCache,
 {
 	/// Create a new transaction pool
 	pub fn new(
 		config: PoolConfig,
 		chain: Arc<T>,
-		ok_verifier: Arc<RwLock<V>>,
+		verifier_cache: Arc<RwLock<V>>,
 		adapter: Arc<PoolAdapter>,
 	) -> TransactionPool<T, V> {
 		TransactionPool {
 			config,
-			txpool: Pool::new(chain.clone(), ok_verifier.clone(), format!("txpool")),
-			stempool: Pool::new(chain.clone(), ok_verifier.clone(), format!("stempool")),
+			txpool: Pool::new(chain.clone(), verifier_cache.clone(), format!("txpool")),
+			stempool: Pool::new(chain.clone(), verifier_cache.clone(), format!("stempool")),
 			blockchain: chain,
-			ok_verifier,
+			verifier_cache,
 			adapter,
 		}
 	}
@@ -83,7 +83,7 @@ where
 				.txpool
 				.find_matching_transactions(entry.tx.kernels().clone());
 			if !txs.is_empty() {
-				entry.tx = transaction::deaggregate(entry.tx, txs, self.ok_verifier.clone())?;
+				entry.tx = transaction::deaggregate(entry.tx, txs, self.verifier_cache.clone())?;
 				entry.src.debug_name = "deagg".to_string();
 			}
 		}
@@ -111,7 +111,7 @@ where
 		self.is_acceptable(&tx)?;
 
 		// Make sure the transaction is valid before anything else.
-		tx.validate(false, self.ok_verifier.clone())
+		tx.validate(false, self.verifier_cache.clone())
 			.map_err(|e| PoolError::InvalidTx(e))?;
 
 		// Check the tx lock_time is valid based on current chain state.

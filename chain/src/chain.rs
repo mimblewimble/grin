@@ -24,7 +24,7 @@ use lmdb;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
-use core::core::ok_verifier::{CachingOKVerifier, OKVerifier};
+use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
@@ -194,17 +194,17 @@ impl Chain {
 		&self,
 		b: Block,
 		opts: Options,
-		ok_verifier: Arc<RwLock<V>>,
+		verifier_cache: Arc<RwLock<V>>,
 	) -> Result<(Option<Tip>, Option<Block>), Error>
 	where
-		V: OKVerifier,
+		V: VerifierCache,
 	{
-		let res = self.process_block_no_orphans(b, opts, ok_verifier.clone());
+		let res = self.process_block_no_orphans(b, opts, verifier_cache.clone());
 		match res {
 			Ok((t, b)) => {
 				// We accepted a block, so see if we can accept any orphans
 				if let Some(ref b) = b {
-					self.check_orphans(b.header.height + 1, ok_verifier.clone());
+					self.check_orphans(b.header.height + 1, verifier_cache.clone());
 				}
 				Ok((t, b))
 			}
@@ -219,16 +219,16 @@ impl Chain {
 		&self,
 		b: Block,
 		opts: Options,
-		ok_verifier: Arc<RwLock<V>>,
+		verifier_cache: Arc<RwLock<V>>,
 	) -> Result<(Option<Tip>, Option<Block>), Error>
 	where
-		V: OKVerifier,
+		V: VerifierCache,
 	{
 		let head = self.store.head()?;
 		let bhash = b.hash();
 		let mut ctx = self.ctx_from_head(head, opts)?;
 
-		let res = pipe::process_block(&b, &mut ctx, ok_verifier);
+		let res = pipe::process_block(&b, &mut ctx, verifier_cache);
 
 		let add_to_hash_cache = || {
 			// only add to hash cache below if block is definitively accepted
@@ -355,9 +355,9 @@ impl Chain {
 	}
 
 	/// Check for orphans, once a block is successfully added
-	pub fn check_orphans<V>(&self, mut height: u64, ok_verifier: Arc<RwLock<V>>)
+	pub fn check_orphans<V>(&self, mut height: u64, verifier_cache: Arc<RwLock<V>>)
 	where
-		V: OKVerifier,
+		V: VerifierCache,
 	{
 		trace!(
 			LOGGER,
@@ -379,7 +379,7 @@ impl Chain {
 					let res = self.process_block_no_orphans(
 						orphan.block,
 						orphan.opts,
-						ok_verifier.clone(),
+						verifier_cache.clone(),
 					);
 					if let Ok((_, Some(b))) = res {
 						// We accepted a block, so see if we can accept any orphans
@@ -571,11 +571,11 @@ impl Chain {
 		h: Hash,
 		txhashset_data: File,
 		status: &T,
-		ok_verifier: Arc<RwLock<V>>,
+		verifier_cache: Arc<RwLock<V>>,
 	) -> Result<(), Error>
 	where
 		T: TxHashsetWriteStatus,
-		V: OKVerifier,
+		V: VerifierCache,
 	{
 		status.on_setup();
 		let head = self.head().unwrap();
@@ -646,7 +646,7 @@ impl Chain {
 			"chain: txhashset_write: finished committing the batch (head etc.)"
 		);
 
-		self.check_orphans(header.height + 1, ok_verifier);
+		self.check_orphans(header.height + 1, verifier_cache);
 
 		status.on_done();
 		Ok(())

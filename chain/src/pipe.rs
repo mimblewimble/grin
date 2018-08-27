@@ -23,7 +23,7 @@ use chrono::Duration;
 use chain::OrphanBlockPool;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
-use core::core::ok_verifier::{CachingOKVerifier, OKVerifier};
+use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Output, TxKernel};
 use core::global;
@@ -61,10 +61,10 @@ pub struct BlockContext {
 pub fn process_block<V>(
 	b: &Block,
 	ctx: &mut BlockContext,
-	ok_verifier: Arc<RwLock<V>>,
+	verifier_cache: Arc<RwLock<V>>,
 ) -> Result<Option<Tip>, Error>
 where
-	V: OKVerifier,
+	V: VerifierCache,
 {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
@@ -103,7 +103,7 @@ where
 
 	// validate the block itself
 	// we can do this now before interacting with the txhashset
-	let _sums = validate_block(b, ctx, ok_verifier)?;
+	let _sums = validate_block(b, ctx, verifier_cache)?;
 
 	// header and block both valid, and we have a previous block
 	// so take the lock on the txhashset
@@ -318,10 +318,10 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 fn validate_block<V>(
 	b: &Block,
 	ctx: &mut BlockContext,
-	ok_verifier: Arc<RwLock<V>>,
+	verifier_cache: Arc<RwLock<V>>,
 ) -> Result<(), Error>
 where
-	V: OKVerifier,
+	V: VerifierCache,
 {
 	if ctx.store.block_exists(&b.hash())? {
 		if b.header.height < ctx.head.height.saturating_sub(50) {
@@ -334,7 +334,7 @@ where
 	b.validate(
 		&prev.total_kernel_offset,
 		&prev.total_kernel_sum,
-		ok_verifier,
+		verifier_cache,
 	).map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }

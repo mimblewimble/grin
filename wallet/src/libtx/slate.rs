@@ -20,7 +20,7 @@ use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 
 use core::core::committed::Committed;
-use core::core::ok_verifier::SimpleOKVerifier;
+use core::core::verifier_cache::LruVerifierCache;
 use core::core::{amount_to_hr_string, Transaction};
 use keychain::{BlindSum, BlindingFactor, Keychain};
 use libtx::error::{Error, ErrorKind};
@@ -395,7 +395,7 @@ impl Slate {
 		final_tx.kernels()[0].verify()?;
 
 		// confirm the overall transaction is valid (including the updated kernel)
-		let verifier = Arc::new(RwLock::new(SimpleOKVerifier::new()));
+		let verifier = Arc::new(RwLock::new(LruVerifierCache::new()));
 		let _ = final_tx.validate(false, verifier)?;
 
 		self.tx = final_tx;

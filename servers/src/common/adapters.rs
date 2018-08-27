@@ -26,7 +26,7 @@ use std::time::Instant;
 use chain::{self, ChainAdapter, Options, Tip};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
 use core::core::hash::{Hash, Hashed};
-use core::core::ok_verifier::OKVerifier;
+use core::core::verifier_cache::VerifierCache;
 use core::core::target::Difficulty;
 use core::core::transaction::Transaction;
 use core::core::{BlockHeader, CompactBlock};
@@ -55,14 +55,14 @@ pub struct NetToChainAdapter<V> {
 	archive_mode: bool,
 	chain: Weak<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-	ok_verifier: Arc<RwLock<V>>,
+	verifier_cache: Arc<RwLock<V>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 }
 
 impl<V> p2p::ChainAdapter for NetToChainAdapter<V>
 where
-	V: OKVerifier + Sync + Send,
+	V: VerifierCache + Sync + Send,
 {
 	fn total_difficulty(&self) -> Difficulty {
 		w(&self.chain).total_difficulty()
@@ -179,7 +179,7 @@ where
 					.validate(
 						&prev.total_kernel_offset,
 						&prev.total_kernel_sum,
-						self.ok_verifier.clone(),
+						self.verifier_cache.clone(),
 					)
 					.is_ok()
 				{
@@ -367,7 +367,7 @@ where
 			h,
 			txhashset_data,
 			self.sync_state.as_ref(),
-			self.ok_verifier.clone(),
+			self.verifier_cache.clone(),
 		) {
 			error!(LOGGER, "Failed to save txhashset archive: {}", e);
 			let is_good_data = !e.is_bad_data();
@@ -382,7 +382,7 @@ where
 
 impl<V> NetToChainAdapter<V>
 where
-	V: OKVerifier,
+	V: VerifierCache,
 {
 	/// Construct a new NetToChainAdapter instance
 	pub fn new(
@@ -390,7 +390,7 @@ where
 		archive_mode: bool,
 		chain_ref: Weak<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-		ok_verifier: Arc<RwLock<V>>,
+		verifier_cache: Arc<RwLock<V>>,
 		config: ServerConfig,
 	) -> NetToChainAdapter<V> {
 		NetToChainAdapter {
@@ -398,7 +398,7 @@ where
 			archive_mode,
 			chain: chain_ref,
 			tx_pool,
-			ok_verifier,
+			verifier_cache,
 			peers: OneTime::new(),
 			config,
 		}
@@ -466,7 +466,7 @@ where
 
 		let prev_hash = b.header.previous;
 		let bhash = b.hash();
-		match chain.process_block(b, self.chain_opts(), self.ok_verifier.clone()) {
+		match chain.process_block(b, self.chain_opts(), self.verifier_cache.clone()) {
 			Ok((tip, _)) => {
 				self.validate_chain(bhash);
 				self.check_compact(tip);
@@ -628,7 +628,7 @@ pub struct ChainToPoolAndNetAdapter<V> {
 
 impl<V> ChainAdapter for ChainToPoolAndNetAdapter<V>
 where
-	V: OKVerifier,
+	V: VerifierCache,
 {
 	fn block_accepted(&self, b: &core::Block, opts: Options) {
 		if self.sync_state.is_syncing() {
@@ -686,7 +686,7 @@ where
 
 impl<V> ChainToPoolAndNetAdapter<V>
 where
-	V: OKVerifier,
+	V: VerifierCache,
 {
 	/// Construct a ChainToPoolAndNetAdapter instance.
 	pub fn new(

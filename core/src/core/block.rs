@@ -25,7 +25,7 @@ use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
-use core::ok_verifier::{DeserializationOKVerifier, OKVerifier, SimpleOKVerifier};
+use core::verifier_cache::{VerifierCache, LruVerifierCache};
 use core::target::Difficulty;
 use core::{
 	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, Transaction,
@@ -357,7 +357,7 @@ impl Block {
 		difficulty: Difficulty,
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
-		let verifier = Arc::new(RwLock::new(SimpleOKVerifier::new()));
+		let verifier = Arc::new(RwLock::new(LruVerifierCache::new()));
 		let mut block = Block::with_reward(
 			prev,
 			txs,
@@ -442,7 +442,7 @@ impl Block {
 		verifier: Arc<RwLock<V>>,
 	) -> Result<Block, Error>
 	where
-		V: OKVerifier,
+		V: VerifierCache,
 	{
 		// A block is just a big transaction, aggregate as such. Note that
 		// aggregate also runs validation and duplicate commitment checks.
@@ -567,7 +567,7 @@ impl Block {
 		verifier: Arc<RwLock<V>>,
 	) -> Result<(Commitment), Error>
 	where
-		V: OKVerifier,
+		V: VerifierCache,
 	{
 		self.body.validate(true, verifier)?;
 

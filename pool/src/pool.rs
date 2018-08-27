@@ -21,7 +21,7 @@ use std::sync::{Arc, RwLock};
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortIdentifiable;
-use core::core::ok_verifier::OKVerifier;
+use core::core::verifier_cache::VerifierCache;
 use core::core::transaction;
 use core::core::{Block, CompactBlock, Output, Transaction, TxKernel};
 use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
@@ -40,20 +40,20 @@ pub struct Pool<T, V> {
 	/// The blockchain
 	pub blockchain: Arc<T>,
 	/// The batch verifier
-	pub ok_verifier: Arc<RwLock<V>>,
+	pub verifier_cache: Arc<RwLock<V>>,
 	pub name: String,
 }
 
 impl<T, V> Pool<T, V>
 where
 	T: BlockChain,
-	V: OKVerifier,
+	V: VerifierCache,
 {
-	pub fn new(chain: Arc<T>, ok_verifier: Arc<RwLock<V>>, name: String) -> Pool<T, V> {
+	pub fn new(chain: Arc<T>, verifier_cache: Arc<RwLock<V>>, name: String) -> Pool<T, V> {
 		Pool {
 			entries: vec![],
 			blockchain: chain.clone(),
-			ok_verifier: ok_verifier.clone(),
+			verifier_cache: verifier_cache.clone(),
 			name,
 		}
 	}
@@ -94,7 +94,7 @@ where
 			.into_iter()
 			.filter_map(|mut bucket| {
 				bucket.truncate(MAX_TX_CHAIN);
-				transaction::aggregate(bucket, None, self.ok_verifier.clone()).ok()
+				transaction::aggregate(bucket, None, self.verifier_cache.clone()).ok()
 			})
 			.collect();
 
@@ -126,7 +126,7 @@ where
 			return Ok(None);
 		}
 
-		let tx = transaction::aggregate(txs, None, self.ok_verifier.clone())?;
+		let tx = transaction::aggregate(txs, None, self.verifier_cache.clone())?;
 		Ok(Some(tx))
 	}
 
@@ -199,7 +199,7 @@ where
 			// Create a single aggregated tx from the existing pool txs and the
 			// new entry
 			txs.push(entry.tx.clone());
-			transaction::aggregate(txs, None, self.ok_verifier.clone())?
+			transaction::aggregate(txs, None, self.verifier_cache.clone())?
 		};
 
 		// Validate aggregated tx against a known chain state (via txhashset
