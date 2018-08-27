@@ -21,8 +21,8 @@ use chrono::prelude::{DateTime, Utc};
 
 use core::consensus;
 use core::core::hash::Hash;
-use core::core::verifier_cache::VerifierCache;
 use core::core::transaction::{self, Transaction};
+use core::core::verifier_cache::VerifierCache;
 use core::core::{BlockHeader, Output, TxKernel};
 
 /// Dandelion relay timer

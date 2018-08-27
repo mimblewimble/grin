@@ -25,8 +25,8 @@ use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
-use core::verifier_cache::{VerifierCache, LruVerifierCache};
 use core::target::Difficulty;
+use core::verifier_cache::{LruVerifierCache, VerifierCache};
 use core::{
 	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, Transaction,
 	TransactionBody, TxKernel,

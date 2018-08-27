@@ -553,9 +553,10 @@ impl TransactionBody {
 		// Find all the outputs that have not yet been (rangeproof) verified.
 		let outputs: Vec<&Output> = {
 			let mut verifier = verifier.write().unwrap();
-			self.outputs.iter().filter(|x| {
-				!verifier.is_rangeproof_verified(x)
-			}).collect()
+			self.outputs
+				.iter()
+				.filter(|x| !verifier.is_rangeproof_verified(x))
+				.collect()
 		};
 
 		// Now batch verify all unverified rangeproofs
@@ -572,9 +573,10 @@ impl TransactionBody {
 		// Find all the kernels that have not yet been verified.
 		let kernels: Vec<&TxKernel> = {
 			let mut verifier = verifier.write().unwrap();
-			self.kernels.iter().filter(|x| {
-				!verifier.is_kernel_sig_verified(x)
-			}).collect()
+			self.kernels
+				.iter()
+				.filter(|x| !verifier.is_kernel_sig_verified(x))
+				.collect()
 		};
 
 		// Verify the unverified tx kernels.

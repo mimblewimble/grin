@@ -504,9 +504,11 @@ where
 		// If the difficulty is high enough, submit it (which also validates it)
 		if share_difficulty >= self.current_difficulty {
 			// This is a full solution, submit it to the network
-			let res =
-				self.chain
-					.process_block(b.clone(), chain::Options::MINE, self.verifier_cache.clone());
+			let res = self.chain.process_block(
+				b.clone(),
+				chain::Options::MINE,
+				self.verifier_cache.clone(),
+			);
 			if let Err(e) = res {
 				// Return error status
 				error!(

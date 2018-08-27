@@ -48,18 +48,26 @@ impl LruVerifierCache {
 
 impl VerifierCache for LruVerifierCache {
 	fn is_kernel_sig_verified(&mut self, kernel: &TxKernel) -> bool {
-		*self.kernel_sig_verification_cache.get_mut(&kernel.hash()).unwrap_or(&mut false)
+		*self
+			.kernel_sig_verification_cache
+			.get_mut(&kernel.hash())
+			.unwrap_or(&mut false)
 	}
 
 	fn is_rangeproof_verified(&mut self, output: &Output) -> bool {
-		*self.rangeproof_verification_cache.get_mut(&output.proof.hash()).unwrap_or(&mut false)
+		*self
+			.rangeproof_verification_cache
+			.get_mut(&output.proof.hash())
+			.unwrap_or(&mut false)
 	}
 
 	fn add_kernel_sig_verified(&mut self, kernel: &TxKernel) {
-		self.kernel_sig_verification_cache.insert(kernel.hash(), true);
+		self.kernel_sig_verification_cache
+			.insert(kernel.hash(), true);
 	}
 
 	fn add_rangeproof_verified(&mut self, output: &Output) {
-		self.rangeproof_verification_cache.insert(output.proof.hash(), true);
+		self.rangeproof_verification_cache
+			.insert(output.proof.hash(), true);
 	}
 }

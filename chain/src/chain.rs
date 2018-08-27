@@ -24,8 +24,8 @@ use lmdb;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
-use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use core::core::target::Difficulty;
+use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use error::{Error, ErrorKind};
