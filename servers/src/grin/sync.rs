@@ -425,10 +425,10 @@ fn get_locator(
 	let heights = get_locator_heights(tip.height);
 	let mut new_heights: Vec<u64> = vec![];
 
-	// for security, clear history_locators[] in any case of header chain rollback
+	// for security, clear history_locators[] in any case of header chain rollback,
+	// the easiest way is to check whether the sync head and the header head are identical.
 	if history_locators.len() > 0
-		&& tip.height
-			!= history_locators[history_locators.len() - 1].0 + p2p::MAX_BLOCK_HEADERS as u64 - 1
+		&& tip.hash() != chain.get_header_head()?.hash()
 	{
 		history_locators.clear();
 	}
