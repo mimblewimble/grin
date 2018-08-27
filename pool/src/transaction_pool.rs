@@ -28,34 +28,33 @@ use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
 
 /// Transaction pool implementation.
-pub struct TransactionPool<T, V> {
+pub struct TransactionPool<T> {
 	/// Pool Config
 	pub config: PoolConfig,
 
 	/// Our transaction pool.
-	pub txpool: Pool<T, V>,
+	pub txpool: Pool<T>,
 	/// Our Dandelion "stempool".
-	pub stempool: Pool<T, V>,
+	pub stempool: Pool<T>,
 
 	/// The blockchain
 	pub blockchain: Arc<T>,
-	pub verifier_cache: Arc<RwLock<V>>,
+	pub verifier_cache: Arc<RwLock<VerifierCache>>,
 	/// The pool adapter
 	pub adapter: Arc<PoolAdapter>,
 }
 
-impl<T, V> TransactionPool<T, V>
+impl<T> TransactionPool<T>
 where
 	T: BlockChain,
-	V: VerifierCache,
 {
 	/// Create a new transaction pool
 	pub fn new(
 		config: PoolConfig,
 		chain: Arc<T>,
-		verifier_cache: Arc<RwLock<V>>,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
 		adapter: Arc<PoolAdapter>,
-	) -> TransactionPool<T, V> {
+	) -> TransactionPool<T> {
 		TransactionPool {
 			config,
 			txpool: Pool::new(chain.clone(), verifier_cache.clone(), format!("txpool")),

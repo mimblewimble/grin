@@ -50,20 +50,17 @@ fn wo<T>(weak_one: &OneTime<Weak<T>>) -> Arc<T> {
 /// Implementation of the NetAdapter for the blockchain. Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
-pub struct NetToChainAdapter<V> {
+pub struct NetToChainAdapter {
 	sync_state: Arc<SyncState>,
 	archive_mode: bool,
 	chain: Weak<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-	verifier_cache: Arc<RwLock<V>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 }
 
-impl<V> p2p::ChainAdapter for NetToChainAdapter<V>
-where
-	V: VerifierCache + Sync + Send,
-{
+impl p2p::ChainAdapter for NetToChainAdapter {
 	fn total_difficulty(&self) -> Difficulty {
 		w(&self.chain).total_difficulty()
 	}
@@ -367,7 +364,6 @@ where
 			h,
 			txhashset_data,
 			self.sync_state.as_ref(),
-			self.verifier_cache.clone(),
 		) {
 			error!(LOGGER, "Failed to save txhashset archive: {}", e);
 			let is_good_data = !e.is_bad_data();
@@ -380,19 +376,16 @@ where
 	}
 }
 
-impl<V> NetToChainAdapter<V>
-where
-	V: VerifierCache,
-{
+impl NetToChainAdapter {
 	/// Construct a new NetToChainAdapter instance
 	pub fn new(
 		sync_state: Arc<SyncState>,
 		archive_mode: bool,
 		chain_ref: Weak<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-		verifier_cache: Arc<RwLock<V>>,
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
 		config: ServerConfig,
-	) -> NetToChainAdapter<V> {
+	) -> NetToChainAdapter {
 		NetToChainAdapter {
 			sync_state,
 			archive_mode,
@@ -466,7 +459,7 @@ where
 
 		let prev_hash = b.header.previous;
 		let bhash = b.hash();
-		match chain.process_block(b, self.chain_opts(), self.verifier_cache.clone()) {
+		match chain.process_block(b, self.chain_opts()) {
 			Ok((tip, _)) => {
 				self.validate_chain(bhash);
 				self.check_compact(tip);
@@ -620,16 +613,13 @@ where
 /// Implementation of the ChainAdapter for the network. Gets notified when the
 /// blockchain accepted a new block, asking the pool to update its state and
 /// the network to broadcast the block
-pub struct ChainToPoolAndNetAdapter<V> {
+pub struct ChainToPoolAndNetAdapter {
 	sync_state: Arc<SyncState>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 }
 
-impl<V> ChainAdapter for ChainToPoolAndNetAdapter<V>
-where
-	V: VerifierCache,
-{
+impl ChainAdapter for ChainToPoolAndNetAdapter {
 	fn block_accepted(&self, b: &core::Block, opts: Options) {
 		if self.sync_state.is_syncing() {
 			return;
@@ -684,15 +674,12 @@ where
 	}
 }
 
-impl<V> ChainToPoolAndNetAdapter<V>
-where
-	V: VerifierCache,
-{
+impl ChainToPoolAndNetAdapter {
 	/// Construct a ChainToPoolAndNetAdapter instance.
 	pub fn new(
 		sync_state: Arc<SyncState>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-	) -> ChainToPoolAndNetAdapter<V> {
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
 			sync_state,
 			tx_pool,

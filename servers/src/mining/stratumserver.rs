@@ -226,12 +226,12 @@ impl Worker {
 // ----------------------------------------
 // Grin Stratum Server
 
-pub struct StratumServer<V> {
+pub struct StratumServer {
 	id: String,
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-	verifier_cache: Arc<RwLock<V>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	current_block_versions: Vec<Block>,
 	current_difficulty: u64,
 	minimum_share_difficulty: u64,
@@ -240,17 +240,14 @@ pub struct StratumServer<V> {
 	sync_state: Arc<SyncState>,
 }
 
-impl<V> StratumServer<V>
-where
-	V: VerifierCache,
-{
+impl StratumServer {
 	/// Creates a new Stratum Server.
 	pub fn new(
 		config: StratumServerConfig,
 		chain: Arc<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-		verifier_cache: Arc<RwLock<V>>,
-	) -> StratumServer<V> {
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
+	) -> StratumServer {
 		StratumServer {
 			id: String::from("StratumServer"),
 			minimum_share_difficulty: config.minimum_share_difficulty,
@@ -507,7 +504,6 @@ where
 			let res = self.chain.process_block(
 				b.clone(),
 				chain::Options::MINE,
-				self.verifier_cache.clone(),
 			);
 			if let Err(e) = res {
 				// Return error status

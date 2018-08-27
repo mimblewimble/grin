@@ -23,7 +23,7 @@ use util::secp;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::LOGGER;
 
-pub trait VerifierCache {
+pub trait VerifierCache: Sync + Send {
 	fn is_kernel_sig_verified(&mut self, kernel: &TxKernel) -> bool;
 	fn is_rangeproof_verified(&mut self, output: &Output) -> bool;
 	fn add_kernel_sig_verified(&mut self, kernel: &TxKernel);
@@ -34,6 +34,9 @@ pub struct LruVerifierCache {
 	kernel_sig_verification_cache: LruCache<Hash, bool>,
 	rangeproof_verification_cache: LruCache<Hash, bool>,
 }
+
+unsafe impl Sync for LruVerifierCache {}
+unsafe impl Send for LruVerifierCache {}
 
 impl LruVerifierCache {
 	/// TODO how big should these caches be?

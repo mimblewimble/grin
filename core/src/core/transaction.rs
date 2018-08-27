@@ -533,10 +533,7 @@ impl TransactionBody {
 	/// Validates all relevant parts of a transaction body. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate<V>(&self, with_reward: bool, verifier: Arc<RwLock<V>>) -> Result<(), Error>
-	where
-		V: ?Sized + VerifierCache,
-	{
+	pub fn validate(&self, with_reward: bool, verifier: Arc<RwLock<VerifierCache>>) -> Result<(), Error> {
 		self.verify_weight(with_reward)?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
@@ -790,10 +787,7 @@ impl Transaction {
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate<V>(&self, with_reward: bool, verifier: Arc<RwLock<V>>) -> Result<(), Error>
-	where
-		V: ?Sized + VerifierCache,
-	{
+	pub fn validate(&self, with_reward: bool, verifier: Arc<RwLock<VerifierCache>>) -> Result<(), Error> {
 		self.body.validate(with_reward, verifier)?;
 
 		if !with_reward {
@@ -849,14 +843,11 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 /// Aggregate a vec of transactions into a multi-kernel transaction with
 /// cut_through. Optionally allows passing a reward output and kernel for
 /// block building.
-pub fn aggregate<V>(
+pub fn aggregate(
 	mut transactions: Vec<Transaction>,
 	reward: Option<(Output, TxKernel)>,
-	verifier: Arc<RwLock<V>>,
-) -> Result<Transaction, Error>
-where
-	V: VerifierCache,
-{
+	verifier: Arc<RwLock<VerifierCache>>,
+) -> Result<Transaction, Error> {
 	// convenience short-circuiting
 	if reward.is_none() && transactions.len() == 1 {
 		return Ok(transactions.pop().unwrap());
@@ -912,14 +903,11 @@ where
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
-pub fn deaggregate<V>(
+pub fn deaggregate(
 	mk_tx: Transaction,
 	txs: Vec<Transaction>,
-	verifier: Arc<RwLock<V>>,
-) -> Result<Transaction, Error>
-where
-	V: VerifierCache,
-{
+	verifier: Arc<RwLock<VerifierCache>>,
+) -> Result<Transaction, Error> {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];

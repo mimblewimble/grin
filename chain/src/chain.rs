@@ -137,7 +137,7 @@ pub struct Chain {
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	// Recently processed blocks to avoid double-processing
 	block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
-
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader, u8) -> bool,
 }
@@ -155,6 +155,7 @@ impl Chain {
 		adapter: Arc<ChainAdapter>,
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader, u8) -> bool,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainStore::new(db_env)?;
 
@@ -183,28 +184,25 @@ impl Chain {
 			head: Arc::new(Mutex::new(head)),
 			orphans: Arc::new(OrphanBlockPool::new()),
 			txhashset: Arc::new(RwLock::new(txhashset)),
-			pow_verifier: pow_verifier,
+			pow_verifier,
+			verifier_cache,
 			block_hashes_cache: Arc::new(RwLock::new(VecDeque::with_capacity(HASHES_CACHE_SIZE))),
 		})
 	}
 
 	/// Processes a single block, then checks for orphans, processing
 	/// those as well if they're found
-	pub fn process_block<V>(
+	pub fn process_block(
 		&self,
 		b: Block,
 		opts: Options,
-		verifier_cache: Arc<RwLock<V>>,
-	) -> Result<(Option<Tip>, Option<Block>), Error>
-	where
-		V: VerifierCache,
-	{
-		let res = self.process_block_no_orphans(b, opts, verifier_cache.clone());
+	) -> Result<(Option<Tip>, Option<Block>), Error> {
+		let res = self.process_block_no_orphans(b, opts);
 		match res {
 			Ok((t, b)) => {
 				// We accepted a block, so see if we can accept any orphans
 				if let Some(ref b) = b {
-					self.check_orphans(b.header.height + 1, verifier_cache.clone());
+					self.check_orphans(b.header.height + 1);
 				}
 				Ok((t, b))
 			}
@@ -215,20 +213,16 @@ impl Chain {
 	/// Attempt to add a new block to the chain. Returns the new chain tip if it
 	/// has been added to the longest chain, None if it's added to an (as of
 	/// now) orphan chain.
-	pub fn process_block_no_orphans<V>(
+	pub fn process_block_no_orphans(
 		&self,
 		b: Block,
 		opts: Options,
-		verifier_cache: Arc<RwLock<V>>,
-	) -> Result<(Option<Tip>, Option<Block>), Error>
-	where
-		V: VerifierCache,
-	{
+	) -> Result<(Option<Tip>, Option<Block>), Error> {
 		let head = self.store.head()?;
 		let bhash = b.hash();
 		let mut ctx = self.ctx_from_head(head, opts)?;
 
-		let res = pipe::process_block(&b, &mut ctx, verifier_cache);
+		let res = pipe::process_block(&b, &mut ctx, self.verifier_cache.clone());
 
 		let add_to_hash_cache = || {
 			// only add to hash cache below if block is definitively accepted
@@ -355,10 +349,7 @@ impl Chain {
 	}
 
 	/// Check for orphans, once a block is successfully added
-	pub fn check_orphans<V>(&self, mut height: u64, verifier_cache: Arc<RwLock<V>>)
-	where
-		V: VerifierCache,
-	{
+	pub fn check_orphans(&self, mut height: u64) {
 		trace!(
 			LOGGER,
 			"chain: doing check_orphans at {}, # orphans {}",
@@ -379,7 +370,6 @@ impl Chain {
 					let res = self.process_block_no_orphans(
 						orphan.block,
 						orphan.opts,
-						verifier_cache.clone(),
 					);
 					if let Ok((_, Some(b))) = res {
 						// We accepted a block, so see if we can accept any orphans
@@ -566,16 +556,14 @@ impl Chain {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	pub fn txhashset_write<T, V>(
+	pub fn txhashset_write<T>(
 		&self,
 		h: Hash,
 		txhashset_data: File,
 		status: &T,
-		verifier_cache: Arc<RwLock<V>>,
 	) -> Result<(), Error>
 	where
-		T: TxHashsetWriteStatus,
-		V: VerifierCache,
+		T: TxHashsetWriteStatus
 	{
 		status.on_setup();
 		let head = self.head().unwrap();
@@ -646,7 +634,7 @@ impl Chain {
 			"chain: txhashset_write: finished committing the batch (head etc.)"
 		);
 
-		self.check_orphans(header.height + 1, verifier_cache);
+		self.check_orphans(header.height + 1);
 
 		status.on_done();
 		Ok(())

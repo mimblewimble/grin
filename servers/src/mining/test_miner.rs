@@ -33,11 +33,11 @@ use mining::mine_block;
 use pool;
 use util::LOGGER;
 
-pub struct Miner<V> {
+pub struct Miner {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-	verifier_cache: Arc<RwLock<V>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	stop: Arc<AtomicBool>,
 
 	// Just to hold the port we're on, so this miner can be identified
@@ -45,19 +45,16 @@ pub struct Miner<V> {
 	debug_output_id: String,
 }
 
-impl<V> Miner<V>
-where
-	V: VerifierCache,
-{
+impl Miner {
 	/// Creates a new Miner. Needs references to the chain state and its
 	/// storage.
 	pub fn new(
 		config: StratumServerConfig,
 		chain: Arc<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-		verifier_cache: Arc<RwLock<V>>,
+		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
 		stop: Arc<AtomicBool>,
-	) -> Miner<V> {
+	) -> Miner {
 		Miner {
 			config,
 			chain,
@@ -178,7 +175,7 @@ where
 				);
 				let res =
 					self.chain
-						.process_block(b, chain::Options::MINE, self.verifier_cache.clone());
+						.process_block(b, chain::Options::MINE);
 				if let Err(e) = res {
 					error!(
 						LOGGER,

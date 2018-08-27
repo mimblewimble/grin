@@ -75,16 +75,13 @@ impl ser::Writer for HeaderPrePowWriter {
 // Ensure a block suitable for mining is built and returned
 // If a wallet listener URL is not provided the reward will be "burnt"
 // Warning: This call does not return until/unless a new block can be built
-pub fn get_block<V>(
+pub fn get_block(
 	chain: &Arc<chain::Chain>,
-	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-	verifier_cache: Arc<RwLock<V>>,
+	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
-) -> (core::Block, BlockFees)
-where
-	V: VerifierCache,
-{
+) -> (core::Block, BlockFees) {
 	let wallet_retry_interval = 5;
 	// get the latest chain state and build a block on top of it
 	let mut result = build_block(
@@ -133,16 +130,13 @@ where
 
 /// Builds a new block with the chain head as previous and eligible
 /// transactions from the pool.
-fn build_block<V>(
+fn build_block(
 	chain: &Arc<chain::Chain>,
-	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, V>>>,
-	verifier_cache: Arc<RwLock<V>>,
+	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
-) -> Result<(core::Block, BlockFees), Error>
-where
-	V: VerifierCache,
-{
+) -> Result<(core::Block, BlockFees), Error> {
 	// prepare the block header timestamp
 	let head = chain.head_header()?;
 

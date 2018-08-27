@@ -58,14 +58,11 @@ pub struct BlockContext {
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain. Returns the new chain head if
 /// updated.
-pub fn process_block<V>(
+pub fn process_block(
 	b: &Block,
 	ctx: &mut BlockContext,
-	verifier_cache: Arc<RwLock<V>>,
-) -> Result<Option<Tip>, Error>
-where
-	V: VerifierCache,
-{
+	verifier_cache: Arc<RwLock<VerifierCache>>,
+) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
@@ -315,14 +312,11 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	Ok(())
 }
 
-fn validate_block<V>(
+fn validate_block(
 	b: &Block,
 	ctx: &mut BlockContext,
-	verifier_cache: Arc<RwLock<V>>,
-) -> Result<(), Error>
-where
-	V: VerifierCache,
-{
+	verifier_cache: Arc<RwLock<VerifierCache>>,
+) -> Result<(), Error> {
 	if ctx.store.block_exists(&b.hash())? {
 		if b.header.height < ctx.head.height.saturating_sub(50) {
 			return Err(ErrorKind::OldBlock.into());

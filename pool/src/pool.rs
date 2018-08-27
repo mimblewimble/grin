@@ -34,22 +34,21 @@ const MAX_MINEABLE_WEIGHT: usize =
 // longest chain of dependent transactions that can be included in a block
 const MAX_TX_CHAIN: usize = 20;
 
-pub struct Pool<T, V> {
+pub struct Pool<T> {
 	/// Entries in the pool (tx + info + timer) in simple insertion order.
 	pub entries: Vec<PoolEntry>,
 	/// The blockchain
 	pub blockchain: Arc<T>,
 	/// The batch verifier
-	pub verifier_cache: Arc<RwLock<V>>,
+	pub verifier_cache: Arc<RwLock<VerifierCache>>,
 	pub name: String,
 }
 
-impl<T, V> Pool<T, V>
+impl<T> Pool<T>
 where
 	T: BlockChain,
-	V: VerifierCache,
 {
-	pub fn new(chain: Arc<T>, verifier_cache: Arc<RwLock<V>>, name: String) -> Pool<T, V> {
+	pub fn new(chain: Arc<T>, verifier_cache: Arc<RwLock<VerifierCache>>, name: String) -> Pool<T> {
 		Pool {
 			entries: vec![],
 			blockchain: chain.clone(),

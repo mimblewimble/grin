@@ -30,7 +30,7 @@ use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStat
 use common::types::{Error, ServerConfig, StratumServerConfig, SyncState};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
-use core::core::verifier_cache::LruVerifierCache;
+use core::core::verifier_cache::{VerifierCache, LruVerifierCache};
 use core::{consensus, genesis, global, pow};
 use grin::{dandelion_monitor, seed, sync};
 use mining::stratumserver;
@@ -49,8 +49,8 @@ pub struct Server {
 	/// data store access
 	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter, LruVerifierCache>>>,
-	verifier_cache: Arc<RwLock<LruVerifierCache>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	/// Whether we're currently syncing
 	sync_state: Arc<SyncState>,
 	/// To be passed around to collect stats and info
@@ -158,6 +158,7 @@ impl Server {
 			chain_adapter.clone(),
 			genesis.clone(),
 			pow::verify_size,
+			verifier_cache.clone(),
 		)?);
 
 		pool_adapter.set_chain(Arc::downgrade(&shared_chain));

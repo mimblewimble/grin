@@ -433,17 +433,14 @@ impl Block {
 	/// Builds a new block ready to mine from the header of the previous block,
 	/// a vector of transactions and the reward information. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
-	pub fn with_reward<V>(
+	pub fn with_reward(
 		prev: &BlockHeader,
 		txs: Vec<Transaction>,
 		reward_out: Output,
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
-		verifier: Arc<RwLock<V>>,
-	) -> Result<Block, Error>
-	where
-		V: VerifierCache,
-	{
+		verifier: Arc<RwLock<VerifierCache>>,
+	) -> Result<Block, Error> {
 		// A block is just a big transaction, aggregate as such. Note that
 		// aggregate also runs validation and duplicate commitment checks.
 		let agg_tx = transaction::aggregate(txs, Some((reward_out, reward_kern)), verifier)?;
@@ -560,15 +557,12 @@ impl Block {
 	/// Validates all the elements in a block that can be checked without
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
-	pub fn validate<V>(
+	pub fn validate(
 		&self,
 		prev_kernel_offset: &BlindingFactor,
 		prev_kernel_sum: &Commitment,
-		verifier: Arc<RwLock<V>>,
-	) -> Result<(Commitment), Error>
-	where
-		V: VerifierCache,
-	{
+		verifier: Arc<RwLock<VerifierCache>>,
+	) -> Result<(Commitment), Error> {
 		self.body.validate(true, verifier)?;
 
 		self.verify_kernel_lock_heights()?;

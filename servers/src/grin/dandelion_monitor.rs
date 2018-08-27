@@ -33,14 +33,13 @@ use util::LOGGER;
 /// stempool and test if the timer is expired for each transaction. In that case
 /// the transaction will be sent in fluff phase (to multiple peers) instead of
 /// sending only to the peer relay.
-pub fn monitor_transactions<T, V>(
+pub fn monitor_transactions<T>(
 	dandelion_config: DandelionConfig,
-	tx_pool: Arc<RwLock<TransactionPool<T, V>>>,
-	verifier_cache: Arc<RwLock<V>>,
+	tx_pool: Arc<RwLock<TransactionPool<T>>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	stop: Arc<AtomicBool>,
 ) where
 	T: BlockChain + Send + Sync + 'static,
-	V: VerifierCache + Send + Sync + 'static,
 {
 	debug!(LOGGER, "Started Dandelion transaction monitor.");
 
@@ -87,13 +86,12 @@ pub fn monitor_transactions<T, V>(
 		});
 }
 
-fn process_stem_phase<T, V>(
-	tx_pool: Arc<RwLock<TransactionPool<T, V>>>,
-	verifier_cache: Arc<RwLock<V>>,
+fn process_stem_phase<T>(
+	tx_pool: Arc<RwLock<TransactionPool<T>>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 ) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
-	V: VerifierCache + Send + Sync + 'static,
 {
 	let mut tx_pool = tx_pool.write().unwrap();
 
@@ -134,13 +132,12 @@ where
 	Ok(())
 }
 
-fn process_fluff_phase<T, V>(
-	tx_pool: Arc<RwLock<TransactionPool<T, V>>>,
-	verifier_cache: Arc<RwLock<V>>,
+fn process_fluff_phase<T>(
+	tx_pool: Arc<RwLock<TransactionPool<T>>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 ) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
-	V: VerifierCache + Send + Sync + 'static,
 {
 	let mut tx_pool = tx_pool.write().unwrap();
 
@@ -173,13 +170,12 @@ where
 	Ok(())
 }
 
-fn process_fresh_entries<T, V>(
+fn process_fresh_entries<T>(
 	dandelion_config: DandelionConfig,
-	tx_pool: Arc<RwLock<TransactionPool<T, V>>>,
+	tx_pool: Arc<RwLock<TransactionPool<T>>>,
 ) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
-	V: VerifierCache + Send + Sync + 'static,
 {
 	let mut tx_pool = tx_pool.write().unwrap();
 
@@ -211,13 +207,12 @@ where
 	Ok(())
 }
 
-fn process_expired_entries<T, V>(
+fn process_expired_entries<T>(
 	dandelion_config: DandelionConfig,
-	tx_pool: Arc<RwLock<TransactionPool<T, V>>>,
+	tx_pool: Arc<RwLock<TransactionPool<T>>>,
 ) -> Result<(), PoolError>
 where
 	T: BlockChain + Send + Sync + 'static,
-	V: VerifierCache + Send + Sync + 'static,
 {
 	let now = Utc::now().timestamp();
 	let embargo_sec = dandelion_config.embargo_secs.unwrap() + rand::thread_rng().gen_range(0, 31);
