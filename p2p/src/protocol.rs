@@ -19,10 +19,8 @@ use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
 
 use conn::{Message, MessageHandler, Response};
-use core::core;
-use core::core::hash::Hash;
-use core::core::CompactBlock;
-use core::ser;
+use core::core::{self, hash::Hash, CompactBlock};
+use core::{global, ser};
 
 use msg::{
 	read_exact, BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr,
@@ -171,10 +169,9 @@ impl MessageHandler for Protocol {
 				let headers = adapter.locate_headers(loc.hashes);
 
 				// serialize and send all the headers over
-				Ok(Some(msg.respond(
-					Type::Headers,
-					Headers { headers: headers },
-				)))
+				Ok(Some(
+					msg.respond(Type::Headers, Headers { headers: headers }),
+				))
 			}
 
 			// "header first" block propagation - if we have not yet seen this block
@@ -293,7 +290,8 @@ impl MessageHandler for Protocol {
 				);
 
 				let tmp_zip = File::open(tmp)?;
-				let res = self.adapter
+				let res = self
+					.adapter
 					.txhashset_write(sm_arch.hash, tmp_zip, self.addr);
 
 				debug!(
@@ -331,8 +329,8 @@ fn headers_header_size(conn: &mut TcpStream, msg_len: u64) -> Result<u64, Error>
 	let average_header_size = (msg_len - 2) / total_headers;
 
 	// support size of Cuckoo: from Cuckoo 30 to Cuckoo 36
-	let minimum_size = core::serialized_size_of_header(30);
-	let maximum_size = core::serialized_size_of_header(36);
+	let minimum_size = core::serialized_size_of_header(global::min_sizeshift());
+	let maximum_size = core::serialized_size_of_header(global::min_sizeshift() + 6);
 	if average_header_size < minimum_size as u64 || average_header_size > maximum_size as u64 {
 		return Err(Error::Connection(io::Error::new(
 			io::ErrorKind::InvalidData,

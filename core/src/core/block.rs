@@ -163,7 +163,7 @@ fn fixed_size_of_serialized_header() -> usize {
 }
 
 /// Serialized size of a BlockHeader
-pub fn serialized_size_of_header(cuckoo_sizeshift: usize) -> usize {
+pub fn serialized_size_of_header(cuckoo_sizeshift: u8) -> usize {
 	let mut size = fixed_size_of_serialized_header();
 
 	size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
