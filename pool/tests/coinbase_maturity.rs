@@ -34,15 +34,13 @@ use keychain::{ExtKeychain, Keychain};
 use pool::types::{BlockChain, NoopAdapter, PoolConfig, PoolError};
 use pool::TransactionPool;
 
-pub fn test_setup(
-	chain: &Arc<CoinbaseMaturityErrorChainAdapter>,
-) -> TransactionPool<CoinbaseMaturityErrorChainAdapter> {
+pub fn test_setup(chain: CoinbaseMaturityErrorChainAdapter) -> TransactionPool {
 	TransactionPool::new(
 		PoolConfig {
 			accept_fee_base: 0,
 			max_pool_size: 50,
 		},
-		chain.clone(),
+		Arc::new(chain.clone()),
 		Arc::new(NoopAdapter {}),
 	)
 }
@@ -89,7 +87,7 @@ fn test_coinbase_maturity() {
 	// Mocking this up with an adapter that will raise an error for coinbase
 	// maturity.
 	let chain = CoinbaseMaturityErrorChainAdapter::new();
-	let pool = RwLock::new(test_setup(&Arc::new(chain.clone())));
+	let pool = RwLock::new(test_setup(chain));
 
 	{
 		let mut write_pool = pool.write().unwrap();

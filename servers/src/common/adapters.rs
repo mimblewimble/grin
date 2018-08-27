@@ -53,7 +53,7 @@ pub struct NetToChainAdapter {
 	sync_state: Arc<SyncState>,
 	archive_mode: bool,
 	chain: Weak<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 }
@@ -164,7 +164,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				}
 			};
 
-			let chain = self.chain
+			let chain = self
+				.chain
 				.upgrade()
 				.expect("failed to upgrade weak ref to chain");
 
@@ -372,7 +373,7 @@ impl NetToChainAdapter {
 		sync_state: Arc<SyncState>,
 		archive_mode: bool,
 		chain_ref: Weak<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::TransactionPool>>,
 		config: ServerConfig,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
@@ -437,7 +438,8 @@ impl NetToChainAdapter {
 			// we have a fast sync'd node and are sent a block older than our horizon,
 			// only sync can do something with that
 			if b.header.height
-				< head.height
+				< head
+					.height
 					.saturating_sub(global::cut_through_horizon() as u64)
 			{
 				return true;
@@ -602,7 +604,7 @@ impl NetToChainAdapter {
 /// the network to broadcast the block
 pub struct ChainToPoolAndNetAdapter {
 	sync_state: Arc<SyncState>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 }
 
@@ -665,7 +667,7 @@ impl ChainToPoolAndNetAdapter {
 	/// Construct a ChainToPoolAndNetAdapter instance.
 	pub fn new(
 		sync_state: Arc<SyncState>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
 			sync_state,

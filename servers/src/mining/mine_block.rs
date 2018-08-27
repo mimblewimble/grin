@@ -23,7 +23,6 @@ use std::thread;
 use std::time::Duration;
 
 use chain;
-use common::adapters::PoolToChainAdapter;
 use common::types::Error;
 use core::ser::{self, AsFixedBytes};
 use core::{consensus, core};
@@ -76,7 +75,7 @@ impl ser::Writer for HeaderPrePowWriter {
 // Warning: This call does not return until/unless a new block can be built
 pub fn get_block(
 	chain: &Arc<chain::Chain>,
-	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: &Arc<RwLock<pool::TransactionPool>>,
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
 ) -> (core::Block, BlockFees) {
@@ -118,7 +117,7 @@ pub fn get_block(
 /// transactions from the pool.
 fn build_block(
 	chain: &Arc<chain::Chain>,
-	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: &Arc<RwLock<pool::TransactionPool>>,
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
 ) -> Result<(core::Block, BlockFees), Error> {

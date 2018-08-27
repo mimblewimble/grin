@@ -48,7 +48,7 @@ pub struct Server {
 	/// data store access
 	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	/// Whether we're currently syncing
 	sync_state: Arc<SyncState>,
 	/// To be passed around to collect stats and info
@@ -421,7 +421,8 @@ impl Server {
 			}
 		};
 
-		let peer_stats = self.p2p
+		let peer_stats = self
+			.p2p
 			.peers
 			.connected_peers()
 			.into_iter()

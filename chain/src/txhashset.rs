@@ -866,15 +866,12 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Validate the txhashset state against the provided block header.
-	pub fn validate<T>(
+	pub fn validate(
 		&mut self,
 		header: &BlockHeader,
 		skip_rproofs: bool,
-		status: &T,
-	) -> Result<((Commitment, Commitment)), Error>
-	where
-		T: TxHashsetWriteStatus,
-	{
+		status: &TxHashsetWriteStatus,
+	) -> Result<((Commitment, Commitment)), Error> {
 		self.validate_mmrs()?;
 		self.validate_roots(header)?;
 
@@ -952,10 +949,7 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	fn verify_kernel_signatures<T>(&self, status: &T) -> Result<(), Error>
-	where
-		T: TxHashsetWriteStatus,
-	{
+	fn verify_kernel_signatures(&self, status: &TxHashsetWriteStatus) -> Result<(), Error> {
 		let now = Instant::now();
 
 		let mut kern_count = 0;
@@ -983,10 +977,7 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn verify_rangeproofs<T>(&self, status: &T) -> Result<(), Error>
-	where
-		T: TxHashsetWriteStatus,
-	{
+	fn verify_rangeproofs(&self, status: &TxHashsetWriteStatus) -> Result<(), Error> {
 		let now = Instant::now();
 
 		let mut commits: Vec<Commitment> = vec![];
