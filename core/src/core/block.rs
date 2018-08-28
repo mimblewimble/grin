@@ -432,9 +432,12 @@ impl Block {
 		difficulty: Difficulty,
 	) -> Result<Block, Error> {
 		// A block is just a big transaction, aggregate as such.
-		// Note that aggregate also runs transaction validation
+		// Note that aggregation also runs transaction validation
 		// and duplicate commitment checks.
 		let mut agg_tx = transaction::aggregate(txs)?;
+		// Now add the reward output and reward kernel to the aggregate tx.
+		// At this point the tx is technically invalid,
+		// but the tx body is valid if we account for the reward (i.e. as a block).
 		agg_tx = agg_tx.with_output(reward_out).with_kernel(reward_kern);
 
 		// Now add the kernel offset of the previous block for a total
