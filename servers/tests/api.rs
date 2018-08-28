@@ -422,7 +422,7 @@ fn get_ids_from_block_outputs(block_outputs: Vec<api::BlockOutputs>) -> Vec<Stri
 			ids.push(util::to_hex(output.clone().commit.0.to_vec()));
 		}
 	}
-	ids
+	ids.into_iter().take(100).collect()
 }
 
 pub fn ban_peer(base_addr: &String, api_server_port: u16, peer_addr: &String) -> Result<(), Error> {

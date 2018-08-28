@@ -33,6 +33,7 @@ const COMMITMENT_PREFIX: u8 = 'C' as u8;
 const OUTPUT_PREFIX: u8 = 'o' as u8;
 const DERIV_PREFIX: u8 = 'd' as u8;
 const CONFIRMED_HEIGHT_PREFIX: u8 = 'c' as u8;
+const PRIVATE_TX_CONTEXT_PREFIX: u8 = 'p' as u8;
 const TX_LOG_ENTRY_PREFIX: u8 = 't' as u8;
 const TX_LOG_ID_PREFIX: u8 = 'i' as u8;
 
@@ -159,6 +160,14 @@ where
 
 	fn tx_log_iter<'a>(&'a self) -> Box<Iterator<Item = TxLogEntry> + 'a> {
 		Box::new(self.db.iter(&[TX_LOG_ENTRY_PREFIX]).unwrap())
+	}
+
+	fn get_private_context(&mut self, slate_id: &[u8]) -> Result<Context, Error> {
+		let ctx_key = to_key(PRIVATE_TX_CONTEXT_PREFIX, &mut slate_id.to_vec());
+		option_to_not_found(
+			self.db.get_ser(&ctx_key),
+			&format!("Slate id: {:x?}", slate_id.to_vec()),
+		).map_err(|e| e.into())
 	}
 
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch<K> + 'a>, Error> {
@@ -334,6 +343,22 @@ where
 	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error> {
 		out.lock();
 		self.save(out.clone())
+	}
+
+	fn save_private_context(&mut self, slate_id: &[u8], ctx: &Context) -> Result<(), Error> {
+		let ctx_key = to_key(PRIVATE_TX_CONTEXT_PREFIX, &mut slate_id.to_vec());
+		self.db.borrow().as_ref().unwrap().put_ser(&ctx_key, &ctx)?;
+		Ok(())
+	}
+
+	fn delete_private_context(&mut self, slate_id: &[u8]) -> Result<(), Error> {
+		let ctx_key = to_key(PRIVATE_TX_CONTEXT_PREFIX, &mut slate_id.to_vec());
+		self.db
+			.borrow()
+			.as_ref()
+			.unwrap()
+			.delete(&ctx_key)
+			.map_err(|e| e.into())
 	}
 
 	fn commit(&self) -> Result<(), Error> {

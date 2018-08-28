@@ -54,7 +54,7 @@ pub struct NetToChainAdapter {
 	sync_state: Arc<SyncState>,
 	archive_mode: bool,
 	chain: Weak<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
@@ -220,7 +220,12 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		let res = w(&self.chain).process_block_header(&bh, self.chain_opts());
 
 		if let &Err(ref e) = &res {
-			debug!(LOGGER, "Block header {} refused by chain: {:?}", bhash, e);
+			debug!(
+				LOGGER,
+				"Block header {} refused by chain: {:?}",
+				bhash,
+				e.kind()
+			);
 			if e.is_bad_data() {
 				debug!(
 					LOGGER,
@@ -379,7 +384,7 @@ impl NetToChainAdapter {
 		sync_state: Arc<SyncState>,
 		archive_mode: bool,
 		chain_ref: Weak<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::TransactionPool>>,
 		verifier_cache: Arc<RwLock<VerifierCache>>,
 		config: ServerConfig,
 	) -> NetToChainAdapter {
@@ -488,7 +493,9 @@ impl NetToChainAdapter {
 					_ => {
 						debug!(
 							LOGGER,
-							"adapter: process_block: block {} refused by chain: {}", bhash, e
+							"adapter: process_block: block {} refused by chain: {}",
+							bhash,
+							e.kind()
 						);
 						true
 					}
@@ -612,7 +619,7 @@ impl NetToChainAdapter {
 /// the network to broadcast the block
 pub struct ChainToPoolAndNetAdapter {
 	sync_state: Arc<SyncState>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 }
 
@@ -675,7 +682,7 @@ impl ChainToPoolAndNetAdapter {
 	/// Construct a ChainToPoolAndNetAdapter instance.
 	pub fn new(
 		sync_state: Arc<SyncState>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	) -> ChainToPoolAndNetAdapter {
 		ChainToPoolAndNetAdapter {
 			sync_state,

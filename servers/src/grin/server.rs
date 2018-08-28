@@ -49,7 +49,7 @@ pub struct Server {
 	/// data store access
 	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	/// Shared cache for verification results when
 	/// verifying rangeproof and kernel signatures.
 	verifier_cache: Arc<RwLock<VerifierCache>>,

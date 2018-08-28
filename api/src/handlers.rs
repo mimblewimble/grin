@@ -694,14 +694,11 @@ impl Handler for HeaderHandler {
 }
 
 // Get basic information about the transaction pool.
-struct PoolInfoHandler<T> {
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+struct PoolInfoHandler {
+	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 }
 
-impl<T> Handler for PoolInfoHandler<T>
-where
-	T: pool::BlockChain + Send + Sync,
-{
+impl Handler for PoolInfoHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		let pool_arc = w(&self.tx_pool);
 		let pool = pool_arc.read().unwrap();
@@ -719,14 +716,11 @@ struct TxWrapper {
 }
 
 // Push new transaction to our local transaction pool.
-struct PoolPushHandler<T> {
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+struct PoolPushHandler {
+	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 }
 
-impl<T> PoolPushHandler<T>
-where
-	T: pool::BlockChain + Send + Sync + 'static,
-{
+impl PoolPushHandler {
 	fn update_pool(&self, req: Request<Body>) -> Box<Future<Item = (), Error = Error> + Send> {
 		let params = match req.uri().query() {
 			Some(query_string) => form_urlencoded::parse(query_string.as_bytes())
@@ -779,10 +773,7 @@ where
 	}
 }
 
-impl<T> Handler for PoolPushHandler<T>
-where
-	T: pool::BlockChain + Send + Sync + 'static,
-{
+impl Handler for PoolPushHandler {
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		Box::new(
 			self.update_pool(req)
@@ -861,14 +852,12 @@ thread_local!( static ROUTER: RefCell<Option<Router>> = RefCell::new(None) );
 /// weak references. Note that this likely means a crash if the handlers are
 /// used after a server shutdown (which should normally never happen,
 /// except during tests).
-pub fn start_rest_apis<T>(
+pub fn start_rest_apis(
 	addr: String,
 	chain: Weak<chain::Chain>,
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
-) where
-	T: pool::BlockChain + Send + Sync + 'static,
-{
+) {
 	let _ = thread::Builder::new()
 		.name("apis".to_string())
 		.spawn(move || {
@@ -912,14 +901,11 @@ where
 	)
 }
 
-pub fn build_router<T>(
+pub fn build_router(
 	chain: Weak<chain::Chain>,
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
-) -> Result<Router, RouterError>
-where
-	T: pool::BlockChain + Send + Sync + 'static,
-{
+) -> Result<Router, RouterError> {
 	let route_list = vec![
 		"get blocks".to_string(),
 		"get chain".to_string(),

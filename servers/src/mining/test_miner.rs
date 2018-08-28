@@ -22,7 +22,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 
 use chain;
-use common::adapters::PoolToChainAdapter;
 use common::types::StratumServerConfig;
 use core::core::hash::{Hash, Hashed};
 use core::core::verifier_cache::VerifierCache;
@@ -36,7 +35,7 @@ use util::LOGGER;
 pub struct Miner {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 	stop: Arc<AtomicBool>,
 
@@ -51,7 +50,7 @@ impl Miner {
 	pub fn new(
 		config: StratumServerConfig,
 		chain: Arc<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::TransactionPool>>,
 		verifier_cache: Arc<RwLock<VerifierCache>>,
 		stop: Arc<AtomicBool>,
 	) -> Miner {
