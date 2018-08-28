@@ -144,7 +144,7 @@ impl Server {
 	/// we're already connected to the provided address.
 	pub fn connect(&self, addr: &SocketAddr) -> Result<Arc<RwLock<Peer>>, Error> {
 		if Peer::is_denied(&self.config, &addr) {
-			debug!(LOGGER, "Peer {} denied, not connecting.", addr);
+			debug!(LOGGER, "connect_peer: peer {} denied, not connecting.", addr);
 			return Err(Error::ConnectionClose);
 		}
 
@@ -154,7 +154,13 @@ impl Server {
 			return Ok(p);
 		}
 
-		trace!(LOGGER, "connect_peer: connecting to {}", addr);
+		trace!(
+			LOGGER,
+			"connect_peer: {}:{} connecting to {}",
+			self.config.host,
+			self.config.port,
+			addr
+		);
 		match TcpStream::connect_timeout(addr, Duration::from_secs(10)) {
 			Ok(mut stream) => {
 				let addr = SocketAddr::new(self.config.host, self.config.port);
@@ -176,7 +182,14 @@ impl Server {
 				Ok(added)
 			}
 			Err(e) => {
-				debug!(LOGGER, "Could not connect to {}: {:?}", addr, e);
+				debug!(
+					LOGGER,
+					"connect_peer: {}:{} could not connect to {}: {:?}",
+					self.config.host,
+					self.config.port,
+					addr,
+					e
+				);
 				Err(Error::Connection(e))
 			}
 		}
