@@ -427,9 +427,7 @@ fn get_locator(
 
 	// for security, clear history_locators[] in any case of header chain rollback,
 	// the easiest way is to check whether the sync head and the header head are identical.
-	if history_locators.len() > 0
-		&& tip.hash() != chain.get_header_head()?.hash()
-	{
+	if history_locators.len() > 0 && tip.hash() != chain.get_header_head()?.hash() {
 		history_locators.clear();
 	}
 
