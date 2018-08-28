@@ -102,7 +102,7 @@ fn process_stem_phase(tx_pool: Arc<RwLock<TransactionPool>>) -> Result<(), PoolE
 			stem_txs.len()
 		);
 
-		let agg_tx = transaction::aggregate(stem_txs, None)?;
+		let agg_tx = transaction::aggregate(stem_txs)?;
 
 		let res = tx_pool.adapter.stem_tx_accepted(&agg_tx);
 		if res.is_err() {
@@ -142,7 +142,7 @@ fn process_fluff_phase(tx_pool: Arc<RwLock<TransactionPool>>) -> Result<(), Pool
 			stem_txs.len()
 		);
 
-		let agg_tx = transaction::aggregate(stem_txs, None)?;
+		let agg_tx = transaction::aggregate(stem_txs)?;
 
 		let src = TxSource {
 			debug_name: "fluff".to_string(),
