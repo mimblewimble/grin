@@ -395,8 +395,8 @@ impl Slate {
 		final_tx.kernels()[0].verify()?;
 
 		// confirm the overall transaction is valid (including the updated kernel)
-		let verifier = Arc::new(RwLock::new(LruVerifierCache::new()));
-		let _ = final_tx.validate(false, verifier)?;
+		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+		let _ = final_tx.validate(verifier_cache)?;
 
 		self.tx = final_tx;
 		Ok(())

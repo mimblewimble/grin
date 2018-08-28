@@ -199,8 +199,8 @@ where
 
 	// finalize the burn transaction and send
 	let tx_burn = build::transaction(parts, &keychain)?;
-	let verifier = Arc::new(RwLock::new(LruVerifierCache::new()));
-	tx_burn.validate(false, verifier)?;
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	tx_burn.validate(verifier_cache)?;
 	Ok(tx_burn)
 }
 

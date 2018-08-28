@@ -107,7 +107,7 @@ fn process_stem_phase(
 			stem_txs.len()
 		);
 
-		let agg_tx = transaction::aggregate(stem_txs, None, verifier_cache.clone())?;
+		let agg_tx = transaction::aggregate(stem_txs, verifier_cache.clone())?;
 
 		let res = tx_pool.adapter.stem_tx_accepted(&agg_tx);
 		if res.is_err() {
@@ -150,7 +150,7 @@ fn process_fluff_phase(
 			stem_txs.len()
 		);
 
-		let agg_tx = transaction::aggregate(stem_txs, None, verifier_cache.clone())?;
+		let agg_tx = transaction::aggregate(stem_txs, verifier_cache.clone())?;
 
 		let src = TxSource {
 			debug_name: "fluff".to_string(),
