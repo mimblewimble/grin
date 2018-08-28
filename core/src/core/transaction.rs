@@ -613,8 +613,7 @@ impl Readable for Transaction {
 		// Treat any validation issues as data corruption.
 		// An example of this would be reading a tx
 		// that exceeded the allowed number of inputs.
-		tx.validate_read()
-			.map_err(|_| ser::Error::CorruptedData)?;
+		tx.validate_read().map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(tx)
 	}

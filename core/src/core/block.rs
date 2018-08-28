@@ -435,9 +435,7 @@ impl Block {
 		// Note that aggregate also runs transaction validation
 		// and duplicate commitment checks.
 		let mut agg_tx = transaction::aggregate(txs)?;
-		agg_tx = agg_tx
-			.with_output(reward_out)
-			.with_kernel(reward_kern);
+		agg_tx = agg_tx.with_output(reward_out).with_kernel(reward_kern);
 
 		// Now add the kernel offset of the previous block for a total
 		let total_kernel_offset =
