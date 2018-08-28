@@ -17,7 +17,7 @@
 use keychain::{Identifier, Keychain};
 use libtx::{build, slate::Slate, tx_fee};
 use libwallet::error::{Error, ErrorKind};
-use libwallet::internal::{keys, sigcontext};
+use libwallet::internal::keys;
 use libwallet::types::*;
 
 use util::LOGGER;
@@ -37,14 +37,7 @@ pub fn build_send_tx_slate<T: ?Sized, C, K>(
 	max_outputs: usize,
 	change_outputs: usize,
 	selection_strategy_is_use_all: bool,
-) -> Result<
-	(
-		Slate,
-		sigcontext::Context,
-		impl FnOnce(&mut T) -> Result<(), Error>,
-	),
-	Error,
->
+) -> Result<(Slate, Context, impl FnOnce(&mut T) -> Result<(), Error>), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -74,7 +67,7 @@ where
 	let blinding = slate.add_transaction_elements(&keychain, elems)?;
 
 	// Create our own private context
-	let mut context = sigcontext::Context::new(
+	let mut context = Context::new(
 		wallet.keychain().secp(),
 		blinding.secret_key(&keychain.secp()).unwrap(),
 	);
@@ -149,7 +142,7 @@ pub fn build_recipient_output_with_slate<T: ?Sized, C, K>(
 ) -> Result<
 	(
 		Identifier,
-		sigcontext::Context,
+		Context,
 		impl FnOnce(&mut T) -> Result<(), Error>,
 	),
 	Error,
@@ -173,7 +166,7 @@ where
 		slate.add_transaction_elements(&keychain, vec![build::output(amount, key_id.clone())])?;
 
 	// Add blinding sum to our context
-	let mut context = sigcontext::Context::new(
+	let mut context = Context::new(
 		keychain.secp(),
 		blinding
 			.secret_key(wallet.keychain().clone().secp())

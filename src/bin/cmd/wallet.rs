@@ -247,12 +247,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
 				let tx_file = send_args
 					.value_of("input")
 					.expect("Receiver's transaction file required");
-				let priv_file = send_args
-					.value_of("private")
-					.expect("Private transaction file required");
-				let slate = api
-					.file_finalize_tx(priv_file, tx_file)
-					.expect("Finalize failed");
+				let slate = api.file_finalize_tx(tx_file).expect("Finalize failed");
 
 				let result = api.post_tx(&slate, fluff);
 				match result {
