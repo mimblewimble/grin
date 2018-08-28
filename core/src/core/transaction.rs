@@ -810,7 +810,9 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 /// Aggregate a vec of txs into a multi-kernel tx with cut_through.
 pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	// convenience short-circuiting
-	if txs.len() == 1 {
+	if txs.is_empty() {
+		return Ok(Transaction::empty());
+	} else if txs.len() == 1 {
 		return Ok(txs.pop().unwrap());
 	}
 
