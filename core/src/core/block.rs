@@ -14,24 +14,24 @@
 
 //! Blocks and blockheaders
 
-use rand::{thread_rng, Rng};
+use chrono::naive::{MAX_DATE, MIN_DATE};
+use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
-use time;
 
-use consensus::{self, exceeds_weight, reward, VerifySortOrder, REWARD};
+use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
+use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
-use core::id::ShortIdentifiable;
 use core::target::Difficulty;
 use core::{
-	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId,
-	Transaction, TxKernel,
+	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, Transaction,
+	TransactionBody, TxKernel,
 };
 use global;
 use keychain::{self, BlindingFactor};
-use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
+use ser::{self, Readable, Reader, Writeable, Writer};
 use util::{secp, secp_static, static_secp_instance, LOGGER};
 
 /// Errors thrown by Block validation
@@ -44,7 +44,9 @@ pub enum Error {
 	InvalidTotalKernelSum,
 	/// Same as above but for the coinbase part of a block, including reward
 	CoinbaseSumMismatch,
-	/// Too many inputs, outputs or kernels in the block
+	/// Restrict block total weight.
+	TooHeavy,
+	/// Block weight (based on inputs|outputs|kernels) exceeded.
 	WeightExceeded,
 	/// Kernel not valid due to lock_height exceeding block header height
 	KernelLockHeight(u64),
@@ -114,7 +116,7 @@ pub struct BlockHeader {
 	/// Hash of the block previous to this in the chain.
 	pub previous: Hash,
 	/// Timestamp at which the block was built.
-	pub timestamp: time::Tm,
+	pub timestamp: DateTime<Utc>,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
 	/// Merklish root of all the commitments in the TxHashSet
@@ -147,7 +149,7 @@ impl Default for BlockHeader {
 			version: 1,
 			height: 0,
 			previous: ZERO_HASH,
-			timestamp: time::at_utc(time::Timespec { sec: 0, nsec: 0 }),
+			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
 			total_difficulty: Difficulty::one(),
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
@@ -190,7 +192,9 @@ impl Readable for BlockHeader {
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 		let pow = Proof::read(reader)?;
 
-		if timestamp > (1 << 55) || timestamp < -(1 << 55) {
+		if timestamp > MAX_DATE.and_hms(0, 0, 0).timestamp()
+			|| timestamp < MIN_DATE.and_hms(0, 0, 0).timestamp()
+		{
 			return Err(ser::Error::CorruptedData);
 		}
 
@@ -198,10 +202,7 @@ impl Readable for BlockHeader {
 			version,
 			height,
 			previous,
-			timestamp: time::at_utc(time::Timespec {
-				sec: timestamp,
-				nsec: 0,
-			}),
+			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc),
 			total_difficulty,
 			output_root,
 			range_proof_root,
@@ -224,7 +225,7 @@ impl BlockHeader {
 			[write_u16, self.version],
 			[write_u64, self.height],
 			[write_fixed_bytes, &self.previous],
-			[write_i64, self.timestamp.to_timespec().sec],
+			[write_i64, self.timestamp.timestamp()],
 			[write_u64, self.total_difficulty.to_num()],
 			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
@@ -266,80 +267,6 @@ impl BlockHeader {
 	}
 }
 
-/// Compact representation of a full block.
-/// Each input/output/kernel is represented as a short_id.
-/// A node is reasonably likely to have already seen all tx data (tx broadcast
-/// before block) and can go request missing tx data from peers if necessary to
-/// hydrate a compact block into a full block.
-#[derive(Debug, Clone)]
-pub struct CompactBlock {
-	/// The header with metadata and commitments to the rest of the data
-	pub header: BlockHeader,
-	/// Nonce for connection specific short_ids
-	pub nonce: u64,
-	/// List of full outputs - specifically the coinbase output(s)
-	pub out_full: Vec<Output>,
-	/// List of full kernels - specifically the coinbase kernel(s)
-	pub kern_full: Vec<TxKernel>,
-	/// List of transaction kernels, excluding those in the full list
-	/// (short_ids)
-	pub kern_ids: Vec<ShortId>,
-}
-
-/// Implementation of Writeable for a compact block, defines how to write the
-/// block to a binary writer. Differentiates between writing the block for the
-/// purpose of full serialization and the one of just extracting a hash.
-impl Writeable for CompactBlock {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.header.write(writer)?;
-
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			writer.write_u64(self.nonce)?;
-
-			ser_multiwrite!(
-				writer,
-				[write_u64, self.out_full.len() as u64],
-				[write_u64, self.kern_full.len() as u64],
-				[write_u64, self.kern_ids.len() as u64]
-			);
-
-			let mut out_full = self.out_full.clone();
-			let mut kern_full = self.kern_full.clone();
-			let mut kern_ids = self.kern_ids.clone();
-
-			// Consensus rule that everything is sorted in lexicographical order on the
-			// wire.
-			out_full.write_sorted(writer)?;
-			kern_full.write_sorted(writer)?;
-			kern_ids.write_sorted(writer)?;
-		}
-		Ok(())
-	}
-}
-
-/// Implementation of Readable for a compact block, defines how to read a
-/// compact block from a binary stream.
-impl Readable for CompactBlock {
-	fn read(reader: &mut Reader) -> Result<CompactBlock, ser::Error> {
-		let header = BlockHeader::read(reader)?;
-
-		let (nonce, out_full_len, kern_full_len, kern_id_len) =
-			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
-
-		let out_full = read_and_verify_sorted(reader, out_full_len as u64)?;
-		let kern_full = read_and_verify_sorted(reader, kern_full_len as u64)?;
-		let kern_ids = read_and_verify_sorted(reader, kern_id_len)?;
-
-		Ok(CompactBlock {
-			header,
-			nonce,
-			out_full,
-			kern_full,
-			kern_ids,
-		})
-	}
-}
-
 /// A block as expressed in the MimbleWimble protocol. The reward is
 /// non-explicit, assumed to be deducible from block height (similar to
 /// bitcoin's schedule) and expressed as a global transaction fee (added v.H),
@@ -348,13 +275,8 @@ impl Readable for CompactBlock {
 pub struct Block {
 	/// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,
-	/// List of transaction inputs
-	pub inputs: Vec<Input>,
-	/// List of transaction outputs
-	pub outputs: Vec<Output>,
-	/// List of kernels with associated proofs (note these are offset from
-	/// tx_kernels)
-	pub kernels: Vec<TxKernel>,
+	/// The body - inputs/outputs/kernels
+	body: TransactionBody,
 }
 
 /// Implementation of Writeable for a block, defines how to write the block to a
@@ -365,22 +287,7 @@ impl Writeable for Block {
 		self.header.write(writer)?;
 
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			ser_multiwrite!(
-				writer,
-				[write_u64, self.inputs.len() as u64],
-				[write_u64, self.outputs.len() as u64],
-				[write_u64, self.kernels.len() as u64]
-			);
-
-			let mut inputs = self.inputs.clone();
-			let mut outputs = self.outputs.clone();
-			let mut kernels = self.kernels.clone();
-
-			// Consensus rule that everything is sorted in lexicographical order on the
-			// wire.
-			inputs.write_sorted(writer)?;
-			outputs.write_sorted(writer)?;
-			kernels.write_sorted(writer)?;
+			self.body.write(writer)?;
 		}
 		Ok(())
 	}
@@ -392,18 +299,18 @@ impl Readable for Block {
 	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
 		let header = BlockHeader::read(reader)?;
 
-		let (input_len, output_len, kernel_len) =
-			ser_multiread!(reader, read_u64, read_u64, read_u64);
+		let body = TransactionBody::read(reader)?;
 
-		let inputs = read_and_verify_sorted(reader, input_len)?;
-		let outputs = read_and_verify_sorted(reader, output_len)?;
-		let kernels = read_and_verify_sorted(reader, kernel_len)?;
+		// Now "lightweight" validation of the block.
+		// Treat any validation issues as data corruption.
+		// An example of this would be reading a block
+		// that exceeded the allowed number of inputs.
+		body.validate_read(true)
+			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(Block {
 			header: header,
-			inputs: inputs,
-			outputs: outputs,
-			kernels: kernels,
+			body: body,
 		})
 	}
 }
@@ -412,15 +319,15 @@ impl Readable for Block {
 /// Pedersen commitment.
 impl Committed for Block {
 	fn inputs_committed(&self) -> Vec<Commitment> {
-		self.inputs.iter().map(|x| x.commitment()).collect()
+		self.body.inputs_committed()
 	}
 
 	fn outputs_committed(&self) -> Vec<Commitment> {
-		self.outputs.iter().map(|x| x.commitment()).collect()
+		self.body.outputs_committed()
 	}
 
 	fn kernels_committed(&self) -> Vec<Commitment> {
-		self.kernels.iter().map(|x| x.excess()).collect()
+		self.body.kernels_committed()
 	}
 }
 
@@ -429,9 +336,7 @@ impl Default for Block {
 	fn default() -> Block {
 		Block {
 			header: Default::default(),
-			inputs: vec![],
-			outputs: vec![],
-			kernels: vec![],
+			body: Default::default(),
 		}
 	}
 }
@@ -465,7 +370,7 @@ impl Block {
 	/// Hydrate a block from a compact block.
 	/// Note: caller must validate the block themselves, we do not validate it
 	/// here.
-	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Block {
+	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Result<Block, Error> {
 		trace!(
 			LOGGER,
 			"block: hydrate_from: {}, {} txs",
@@ -473,75 +378,46 @@ impl Block {
 			txs.len(),
 		);
 
+		let header = cb.header.clone();
+
 		let mut all_inputs = HashSet::new();
 		let mut all_outputs = HashSet::new();
 		let mut all_kernels = HashSet::new();
 
 		// collect all the inputs, outputs and kernels from the txs
 		for tx in txs {
-			all_inputs.extend(tx.inputs);
-			all_outputs.extend(tx.outputs);
-			all_kernels.extend(tx.kernels);
+			let tb: TransactionBody = tx.into();
+			all_inputs.extend(tb.inputs);
+			all_outputs.extend(tb.outputs);
+			all_kernels.extend(tb.kernels);
 		}
 
 		// include the coinbase output(s) and kernel(s) from the compact_block
-		all_outputs.extend(cb.out_full);
-		all_kernels.extend(cb.kern_full);
-
-		// convert the sets to vecs
-		let mut all_inputs = Vec::from_iter(all_inputs);
-		let mut all_outputs = Vec::from_iter(all_outputs);
-		let mut all_kernels = Vec::from_iter(all_kernels);
-
-		// sort them all lexicographically
-		all_inputs.sort();
-		all_outputs.sort();
-		all_kernels.sort();
-
-		// finally return the full block
-		// Note: we have not actually validated the block here
-		// leave it to the caller to actually validate the block
-		Block {
-			header: cb.header,
-			inputs: all_inputs,
-			outputs: all_outputs,
-			kernels: all_kernels,
-		}.cut_through()
-	}
-
-	/// Generate the compact block representation.
-	pub fn as_compact_block(&self) -> CompactBlock {
-		let header = self.header.clone();
-		let nonce = thread_rng().next_u64();
-
-		let mut out_full = self.outputs
-			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
-			.cloned()
-			.collect::<Vec<_>>();
-
-		let mut kern_full = vec![];
-		let mut kern_ids = vec![];
-
-		for k in &self.kernels {
-			if k.features.contains(KernelFeatures::COINBASE_KERNEL) {
-				kern_full.push(k.clone());
-			} else {
-				kern_ids.push(k.short_id(&header.hash(), nonce));
-			}
+		{
+			let body: CompactBlockBody = cb.into();
+			all_outputs.extend(body.out_full);
+			all_kernels.extend(body.kern_full);
 		}
 
-		// sort all the lists
-		out_full.sort();
-		kern_full.sort();
-		kern_ids.sort();
+		// convert the sets to vecs
+		let all_inputs = Vec::from_iter(all_inputs);
+		let all_outputs = Vec::from_iter(all_outputs);
+		let all_kernels = Vec::from_iter(all_kernels);
 
-		CompactBlock {
-			header,
-			nonce,
-			out_full,
-			kern_full,
-			kern_ids,
+		// Initialize a tx body and sort everything.
+		let body = TransactionBody::init(all_inputs, all_outputs, all_kernels, false)?;
+
+		// Finally return the full block.
+		// Note: we have not actually validated the block here,
+		// caller must validate the block.
+		Block { header, body }.cut_through()
+	}
+
+	/// Build a new empty block from a specified header
+	pub fn with_header(header: BlockHeader) -> Block {
+		Block {
+			header: header,
+			..Default::default()
 		}
 	}
 
@@ -555,77 +431,77 @@ impl Block {
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
 	) -> Result<Block, Error> {
-		let mut kernels = vec![];
-		let mut inputs = vec![];
-		let mut outputs = vec![];
+		// A block is just a big transaction, aggregate as such.
+		// Note that aggregation also runs transaction validation
+		// and duplicate commitment checks.
+		let mut agg_tx = transaction::aggregate(txs)?;
+		// Now add the reward output and reward kernel to the aggregate tx.
+		// At this point the tx is technically invalid,
+		// but the tx body is valid if we account for the reward (i.e. as a block).
+		agg_tx = agg_tx.with_output(reward_out).with_kernel(reward_kern);
 
-		// we will sum these together at the end
-		// to give us the overall offset for the block
-		let mut kernel_offsets = vec![];
-
-		// iterate over the all the txs
-		// build the kernel for each
-		// and collect all the kernels, inputs and outputs
-		// to build the block (which we can sort of think of as one big tx?)
-		for tx in txs {
-			// validate each transaction and gather their kernels
-			// tx has an offset k2 where k = k1 + k2
-			// and the tx is signed using k1
-			// the kernel excess is k1G
-			// we will sum all the offsets later and store the total offset
-			// on the block_header
-			tx.validate()?;
-
-			// we will sum these later to give a single aggregate offset
-			kernel_offsets.push(tx.offset);
-
-			// add all tx inputs/outputs/kernels to the block
-			kernels.extend(tx.kernels.into_iter());
-			inputs.extend(tx.inputs.into_iter());
-			outputs.extend(tx.outputs.into_iter());
-		}
-
-		// include the reward kernel and output
-		kernels.push(reward_kern);
-		outputs.push(reward_out);
-
-		// now sort everything so the block is built deterministically
-		inputs.sort();
-		outputs.sort();
-		kernels.sort();
-
-		// now sum the kernel_offsets up to give us
-		// an aggregate offset for the entire block
-		kernel_offsets.push(prev.total_kernel_offset);
-		let total_kernel_offset = committed::sum_kernel_offsets(kernel_offsets, vec![])?;
+		// Now add the kernel offset of the previous block for a total
+		let total_kernel_offset =
+			committed::sum_kernel_offsets(vec![agg_tx.offset, prev.total_kernel_offset], vec![])?;
 
 		let total_kernel_sum = {
 			let zero_commit = secp_static::commit_to_zero_value();
 			let secp = static_secp_instance();
 			let secp = secp.lock().unwrap();
-			let mut excesses = map_vec!(kernels, |x| x.excess());
+			let mut excesses = map_vec!(agg_tx.kernels(), |x| x.excess());
 			excesses.push(prev.total_kernel_sum);
 			excesses.retain(|x| *x != zero_commit);
 			secp.commit_sum(excesses, vec![])?
 		};
 
-		Ok(Block {
+		let now = Utc::now().timestamp();
+		let timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now, 0), Utc);
+
+		// Now build the block with all the above information.
+		// Note: We have not validated the block here.
+		// Caller must validate the block as necessary.
+		Block {
 			header: BlockHeader {
 				height: prev.height + 1,
-				timestamp: time::Tm {
-					tm_nsec: 0,
-					..time::now_utc()
-				},
+				timestamp,
 				previous: prev.hash(),
 				total_difficulty: difficulty + prev.total_difficulty,
 				total_kernel_offset,
 				total_kernel_sum,
 				..Default::default()
 			},
-			inputs,
-			outputs,
-			kernels,
-		}.cut_through())
+			body: agg_tx.into(),
+		}.cut_through()
+	}
+
+	/// Get inputs
+	pub fn inputs(&self) -> &Vec<Input> {
+		&self.body.inputs
+	}
+
+	/// Get inputs mutable
+	pub fn inputs_mut(&mut self) -> &mut Vec<Input> {
+		&mut self.body.inputs
+	}
+
+	/// Get outputs
+	pub fn outputs(&self) -> &Vec<Output> {
+		&self.body.outputs
+	}
+
+	/// Get outputs mutable
+	pub fn outputs_mut(&mut self) -> &mut Vec<Output> {
+		&mut self.body.outputs
+	}
+
+	/// Get kernels
+	pub fn kernels(&self) -> &Vec<TxKernel> {
+		&self.body.kernels
+	}
+
+	/// Get kernels mut
+	pub fn kernels_mut(&mut self) -> &mut Vec<TxKernel> {
+		&mut self.body.kernels
 	}
 
 	/// Blockhash, computed using only the POW
@@ -635,7 +511,7 @@ impl Block {
 
 	/// Sum of all fees (inputs less outputs) in the block
 	pub fn total_fees(&self) -> u64 {
-		self.kernels.iter().map(|p| p.fee).sum()
+		self.body.kernels.iter().map(|p| p.fee).sum()
 	}
 
 	/// Matches any output with a potential spending input, eliminating them
@@ -648,40 +524,32 @@ impl Block {
 	/// is a transaction spending a previous coinbase
 	/// we do not want to cut-through (all coinbase must be preserved)
 	///
-	pub fn cut_through(self) -> Block {
-		let in_set = self.inputs
-			.iter()
-			.map(|inp| inp.commitment())
-			.collect::<HashSet<_>>();
+	pub fn cut_through(self) -> Result<Block, Error> {
+		let mut inputs = self.inputs().clone();
+		let mut outputs = self.outputs().clone();
+		transaction::cut_through(&mut inputs, &mut outputs)?;
 
-		let out_set = self.outputs
-			.iter()
-			.filter(|out| !out.features.contains(OutputFeatures::COINBASE_OUTPUT))
-			.map(|out| out.commitment())
-			.collect::<HashSet<_>>();
+		let kernels = self.kernels().clone();
 
-		let to_cut_through = in_set.intersection(&out_set).collect::<HashSet<_>>();
+		// Initialize tx body and sort everything.
+		let body = TransactionBody::init(inputs, outputs, kernels, false)?;
 
-		let new_inputs = self.inputs
-			.into_iter()
-			.filter(|inp| !to_cut_through.contains(&inp.commitment()))
-			.collect::<Vec<_>>();
+		Ok(Block {
+			header: self.header,
+			body,
+		})
+	}
 
-		let new_outputs = self.outputs
-			.into_iter()
-			.filter(|out| !to_cut_through.contains(&out.commitment()))
-			.collect::<Vec<_>>();
-
-		Block {
-			header: BlockHeader {
-				pow: self.header.pow,
-				total_difficulty: self.header.total_difficulty,
-				..self.header
-			},
-			inputs: new_inputs,
-			outputs: new_outputs,
-			kernels: self.kernels,
-		}
+	/// "Lightweight" validation that we can perform quickly during read/deserialization.
+	/// Subset of full validation that skips expensive verification steps, specifically -
+	/// * rangeproof verification (on the body)
+	/// * kernel signature verification (on the body)
+	/// * coinbase sum verification
+	/// * kernel sum verification
+	pub fn validate_read(&self) -> Result<(), Error> {
+		self.body.validate_read(true)?;
+		self.verify_kernel_lock_heights()?;
+		Ok(())
 	}
 
 	/// Validates all the elements in a block that can be checked without
@@ -692,14 +560,13 @@ impl Block {
 		prev_kernel_offset: &BlindingFactor,
 		prev_kernel_sum: &Commitment,
 	) -> Result<(Commitment), Error> {
-		self.verify_weight()?;
-		self.verify_sorted()?;
-		self.verify_cut_through()?;
-		self.verify_coinbase()?;
+		self.body.validate(true)?;
+
 		self.verify_kernel_lock_heights()?;
+		self.verify_coinbase()?;
 
 		// take the kernel offset for this block (block offset minus previous) and
-		// verify outputs and kernel sums
+		// verify.body.outputs and kernel sums
 		let block_kernel_offset = if self.header.total_kernel_offset() == prev_kernel_offset.clone()
 		{
 			// special case when the sum hasn't changed (typically an empty block),
@@ -720,101 +587,55 @@ impl Block {
 			return Err(Error::InvalidTotalKernelSum);
 		}
 
-		self.verify_rangeproofs()?;
-		self.verify_kernel_signatures()?;
 		Ok(kernel_sum)
 	}
 
-	fn verify_weight(&self) -> Result<(), Error> {
-		if exceeds_weight(self.inputs.len(), self.outputs.len(), self.kernels.len()) {
-			return Err(Error::WeightExceeded);
-		}
-		Ok(())
-	}
+	/// Validate the coinbase.body.outputs generated by miners.
+	/// Check the sum of coinbase-marked outputs match
+	/// the sum of coinbase-marked kernels accounting for fees.
+	pub fn verify_coinbase(&self) -> Result<(), Error> {
+		let cb_outs = self
+			.body
+			.outputs
+			.iter()
+			.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
+			.collect::<Vec<&Output>>();
 
-	// Verify that inputs|outputs|kernels are all sorted in lexicographical order.
-	fn verify_sorted(&self) -> Result<(), Error> {
-		self.inputs.verify_sort_order()?;
-		self.outputs.verify_sort_order()?;
-		self.kernels.verify_sort_order()?;
-		Ok(())
-	}
+		let cb_kerns = self
+			.body
+			.kernels
+			.iter()
+			.filter(|kernel| kernel.features.contains(KernelFeatures::COINBASE_KERNEL))
+			.collect::<Vec<&TxKernel>>();
 
-	// Verify that no input is spending an output from the same block.
-	fn verify_cut_through(&self) -> Result<(), Error> {
-		for inp in &self.inputs {
-			if self.outputs
-				.iter()
-				.any(|out| out.commitment() == inp.commitment())
-			{
-				return Err(Error::CutThrough);
+		{
+			let secp = static_secp_instance();
+			let secp = secp.lock().unwrap();
+			let over_commit = secp.commit_value(reward(self.total_fees()))?;
+
+			let out_adjust_sum = secp.commit_sum(
+				cb_outs.iter().map(|x| x.commitment()).collect(),
+				vec![over_commit],
+			)?;
+
+			let kerns_sum = secp.commit_sum(cb_kerns.iter().map(|x| x.excess).collect(), vec![])?;
+
+			// Verify the kernel sum equals the output sum accounting for block fees.
+			if kerns_sum != out_adjust_sum {
+				return Err(Error::CoinbaseSumMismatch);
 			}
 		}
+
 		Ok(())
 	}
 
 	fn verify_kernel_lock_heights(&self) -> Result<(), Error> {
-		for k in &self.kernels {
+		for k in &self.body.kernels {
 			// check we have no kernels with lock_heights greater than current height
 			// no tx can be included in a block earlier than its lock_height
 			if k.lock_height > self.header.height {
 				return Err(Error::KernelLockHeight(k.lock_height));
 			}
-		}
-		Ok(())
-	}
-
-	/// Verify the kernel signatures.
-	/// Note: this is expensive.
-	fn verify_kernel_signatures(&self) -> Result<(), Error> {
-		for x in &self.kernels {
-			x.verify()?;
-		}
-		Ok(())
-	}
-
-	/// Verify all the output rangeproofs.
-	/// Note: this is expensive.
-	fn verify_rangeproofs(&self) -> Result<(), Error> {
-		for x in &self.outputs {
-			x.verify_proof()?;
-		}
-		Ok(())
-	}
-
-	/// Validate the coinbase outputs generated by miners. Entails 2 main
-	/// checks:
-	///
-	/// * That the sum of all coinbase-marked outputs equal the supply.
-	/// * That the sum of blinding factors for all coinbase-marked outputs match
-	///   the coinbase-marked kernels.
-	pub fn verify_coinbase(&self) -> Result<(), Error> {
-		let cb_outs = self.outputs
-			.iter()
-			.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
-			.collect::<Vec<&Output>>();
-
-		let cb_kerns = self.kernels
-			.iter()
-			.filter(|kernel| kernel.features.contains(KernelFeatures::COINBASE_KERNEL))
-			.collect::<Vec<&TxKernel>>();
-
-		let over_commit;
-		let out_adjust_sum;
-		let kerns_sum;
-		{
-			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
-			over_commit = secp.commit_value(reward(self.total_fees()))?;
-			out_adjust_sum = secp.commit_sum(
-				cb_outs.iter().map(|x| x.commitment()).collect(),
-				vec![over_commit],
-			)?;
-			kerns_sum = secp.commit_sum(cb_kerns.iter().map(|x| x.excess).collect(), vec![])?;
-		}
-
-		if kerns_sum != out_adjust_sum {
-			return Err(Error::CoinbaseSumMismatch);
 		}
 		Ok(())
 	}

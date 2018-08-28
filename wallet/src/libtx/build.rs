@@ -93,10 +93,9 @@ where
 {
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			debug!(LOGGER, "Building an output: {}, {}", value, key_id,);
-
 			let commit = build.keychain.commit(value, &key_id).unwrap();
-			trace!(LOGGER, "Builder - Pedersen Commit is: {:?}", commit,);
+
+			debug!(LOGGER, "Building output: {}, {:?}", value, commit);
 
 			let rproof = proof::create(build.keychain, value, &key_id, commit, None).unwrap();
 
@@ -170,8 +169,8 @@ pub fn initial_tx<K>(mut tx: Transaction) -> Box<Append<K>>
 where
 	K: Keychain,
 {
-	assert_eq!(tx.kernels.len(), 1);
-	let kern = tx.kernels.remove(0);
+	assert_eq!(tx.kernels().len(), 1);
+	let kern = tx.kernels_mut().remove(0);
 	Box::new(
 		move |_build, (_, _, sum)| -> (Transaction, TxKernel, BlindSum) {
 			(tx.clone(), kern.clone(), sum)
@@ -197,15 +196,16 @@ where
 	K: Keychain,
 {
 	let mut ctx = Context { keychain };
-	let (mut tx, kern, sum) = elems.iter().fold(
+	let (tx, kern, sum) = elems.iter().fold(
 		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
 		|acc, elem| elem(&mut ctx, acc),
 	);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 
 	// we only support building a tx with a single kernel via build::transaction()
-	assert!(tx.kernels.is_empty());
-	tx.kernels.push(kern);
+	assert!(tx.kernels().is_empty());
+
+	let tx = tx.with_kernel(kern);
 
 	Ok((tx, blind_sum))
 }
@@ -219,16 +219,21 @@ where
 	K: Keychain,
 {
 	let (mut tx, blind_sum) = partial_transaction(elems, keychain)?;
-	assert_eq!(tx.kernels.len(), 1);
+	assert_eq!(tx.kernels().len(), 1);
 
-	let mut kern = tx.kernels.remove(0);
-	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
+	let kern = {
+		let mut kern = tx.kernels_mut().remove(0);
+		let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
 
-	let skey = blind_sum.secret_key(&keychain.secp())?;
-	kern.excess = keychain.secp().commit(0, skey)?;
-	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &blind_sum).unwrap();
+		let skey = blind_sum.secret_key(&keychain.secp())?;
+		kern.excess = keychain.secp().commit(0, skey)?;
+		kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &blind_sum).unwrap();
+		kern
+	};
 
-	tx.kernels.push(kern);
+	// Now build a new tx with this single kernel.
+	let tx = tx.with_kernel(kern);
+	assert_eq!(tx.kernels().len(), 1);
 
 	Ok(tx)
 }
@@ -264,8 +269,9 @@ where
 	// commitments will sum correctly when including the offset
 	tx.offset = k2.clone();
 
-	assert!(tx.kernels.is_empty());
-	tx.kernels.push(kern);
+	assert!(tx.kernels().is_empty());
+	let tx = tx.with_kernel(kern);
+	assert_eq!(tx.kernels().len(), 1);
 
 	Ok(tx)
 }

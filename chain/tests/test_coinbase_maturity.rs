@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate chrono;
 extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
@@ -19,15 +20,15 @@ extern crate grin_keychain as keychain;
 extern crate grin_store as store;
 extern crate grin_wallet as wallet;
 extern crate rand;
-extern crate time;
 
+use chrono::Duration;
 use std::fs;
 use std::sync::Arc;
 
 use chain::types::NoopAdapter;
-use chain::{Error, ErrorKind};
+use chain::ErrorKind;
 use core::core::target::Difficulty;
-use core::core::{transaction, OutputIdentifier};
+use core::core::transaction;
 use core::global::{self, ChainTypes};
 use core::{consensus, pow};
 use keychain::{ExtKeychain, Keychain};
@@ -64,7 +65,7 @@ fn test_coinbase_maturity() {
 
 	let reward = libtx::reward::output(&keychain, &key_id1, 0, prev.height).unwrap();
 	let mut block = core::core::Block::new(&prev, vec![], Difficulty::one(), reward).unwrap();
-	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
@@ -77,24 +78,17 @@ fn test_coinbase_maturity() {
 		global::min_sizeshift(),
 	).unwrap();
 
-	assert_eq!(block.outputs.len(), 1);
-	let coinbase_output = block.outputs[0];
+	assert_eq!(block.outputs().len(), 1);
+	let coinbase_output = block.outputs()[0];
 	assert!(
 		coinbase_output
 			.features
 			.contains(transaction::OutputFeatures::COINBASE_OUTPUT)
 	);
 
-	let out_id = OutputIdentifier::from_output(&coinbase_output);
-
-	// we will need this later when we want to spend the coinbase output
-	let block_hash = block.hash();
-
 	chain
 		.process_block(block.clone(), chain::Options::MINE)
 		.unwrap();
-
-	let merkle_proof = chain.get_merkle_proof(&out_id, &block.header).unwrap();
 
 	let prev = chain.head_header().unwrap();
 
@@ -118,7 +112,7 @@ fn test_coinbase_maturity() {
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward = libtx::reward::output(&keychain, &key_id3, fees, prev.height).unwrap();
 	let mut block = core::core::Block::new(&prev, txs, Difficulty::one(), reward).unwrap();
-	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
@@ -151,7 +145,7 @@ fn test_coinbase_maturity() {
 
 		let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
 		let mut block = core::core::Block::new(&prev, vec![], Difficulty::one(), reward).unwrap();
-		block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+		block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
@@ -178,7 +172,7 @@ fn test_coinbase_maturity() {
 	let reward = libtx::reward::output(&keychain, &key_id4, fees, prev.height).unwrap();
 	let mut block = core::core::Block::new(&prev, txs, Difficulty::one(), reward).unwrap();
 
-	block.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 

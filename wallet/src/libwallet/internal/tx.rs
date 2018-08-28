@@ -18,8 +18,8 @@ use core::core::Transaction;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
-use libwallet::internal::{selection, sigcontext, updater};
-use libwallet::types::{TxLogEntryType, WalletBackend, WalletClient};
+use libwallet::internal::{selection, updater};
+use libwallet::types::{Context, TxLogEntryType, WalletBackend, WalletClient};
 use libwallet::{Error, ErrorKind};
 use util::LOGGER;
 
@@ -59,15 +59,9 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 	amount: u64,
 	minimum_confirmations: u64,
 	max_outputs: usize,
+	num_change_outputs: usize,
 	selection_strategy_is_use_all: bool,
-) -> Result<
-	(
-		Slate,
-		sigcontext::Context,
-		impl FnOnce(&mut T) -> Result<(), Error>,
-	),
-	Error,
->
+) -> Result<(Slate, Context, impl FnOnce(&mut T) -> Result<(), Error>), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -95,6 +89,7 @@ where
 		minimum_confirmations,
 		lock_height,
 		max_outputs,
+		num_change_outputs,
 		selection_strategy_is_use_all,
 	)?;
 
@@ -115,7 +110,7 @@ where
 pub fn complete_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
-	context: &sigcontext::Context,
+	context: &Context,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
@@ -150,7 +145,8 @@ where
 		return Err(ErrorKind::TransactionNotCancellable(tx_id))?;
 	}
 	// get outputs associated with tx
-	let outputs = updater::retrieve_outputs(wallet, false, Some(tx_id))?;
+	let res = updater::retrieve_outputs(wallet, false, Some(tx_id))?;
+	let outputs = res.iter().map(|(out, _)| out).cloned().collect();
 	updater::cancel_tx_and_outputs(wallet, tx, outputs)?;
 	Ok(())
 }
@@ -188,8 +184,10 @@ where
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
-	let fee = tx_fee(coins.len(), 2, None);
-	let (mut parts, _, _) = selection::inputs_and_change(&coins, wallet, amount, fee)?;
+	let fee = tx_fee(coins.len(), 2, 1, None);
+	let num_change_outputs = 1;
+	let (mut parts, _) =
+		selection::inputs_and_change(&coins, wallet, amount, fee, num_change_outputs)?;
 
 	//TODO: If we end up using this, create change output here
 
@@ -217,7 +215,7 @@ mod test {
 		let tx1 = build::transaction(vec![build::output(105, key_id1.clone())], &keychain).unwrap();
 		let tx2 = build::transaction(vec![build::input(105, key_id1.clone())], &keychain).unwrap();
 
-		assert_eq!(tx1.outputs[0].features, tx2.inputs[0].features);
-		assert_eq!(tx1.outputs[0].commitment(), tx2.inputs[0].commitment());
+		assert_eq!(tx1.outputs()[0].features, tx2.inputs()[0].features);
+		assert_eq!(tx1.outputs()[0].commitment(), tx2.inputs()[0].commitment());
 	}
 }

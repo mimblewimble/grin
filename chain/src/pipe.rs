@@ -17,8 +17,10 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 
-use time;
+use chrono::prelude::Utc;
+use chrono::Duration;
 
+use chain::OrphanBlockPool;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
@@ -48,6 +50,8 @@ pub struct BlockContext {
 	pub txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	/// Recently processed blocks to avoid double-processing
 	pub block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
+	/// Recent orphan blocks to avoid double-processing
+	pub orphans: Arc<OrphanBlockPool>,
 }
 
 /// Runs the block processing pipeline, including validation and finding a
@@ -62,9 +66,9 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		"pipe: process_block {} at {} with {} inputs, {} outputs, {} kernels",
 		b.hash(),
 		b.header.height,
-		b.inputs.len(),
-		b.outputs.len(),
-		b.kernels.len(),
+		b.inputs().len(),
+		b.outputs().len(),
+		b.kernels().len(),
 	);
 	check_known(b.hash(), ctx)?;
 
@@ -126,7 +130,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		b.hash(),
 		b.header.height,
 	);
-	add_block(b, ctx.store.clone(), &mut batch)?;
+	add_block(b, &mut batch)?;
 	let res = update_head(b, &ctx, &mut batch);
 	if res.is_ok() {
 		batch.commit()?;
@@ -194,6 +198,9 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	if cache.contains(&bh) {
 		return Err(ErrorKind::Unfit("already known in cache".to_string()).into());
 	}
+	if ctx.orphans.contains(&bh) {
+		return Err(ErrorKind::Unfit("already known in orphans".to_string()).into());
+	}
 	Ok(())
 }
 
@@ -211,8 +218,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	// TODO: remove CI check from here somehow
-	if header.timestamp
-		> time::now_utc() + time::Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
+	if header.timestamp > Utc::now() + Duration::seconds(12 * (consensus::BLOCK_TIME_SEC as i64))
 		&& !global::is_automated_testing_mode()
 	{
 		// refuse blocks more than 12 blocks intervals in future (as in bitcoin)
@@ -290,9 +296,9 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		if target_difficulty != network_difficulty.clone() {
 			error!(
 				LOGGER,
-				"validate_header: BANNABLE OFFENCE: header cumulative difficulty {} != {}",
+				"validate_header: BANNABLE OFFENCE: header target difficulty {} != {}",
 				target_difficulty.to_num(),
-				prev.total_difficulty.to_num() + network_difficulty.to_num()
+				network_difficulty.to_num()
 			);
 			return Err(ErrorKind::WrongTotalDifficulty.into());
 		}
@@ -322,7 +328,7 @@ fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
 	// First check we are not attempting to spend any coinbase outputs
 	// before they have matured sufficiently.
-	ext.verify_coinbase_maturity(&b.inputs, b.header.height)?;
+	ext.verify_coinbase_maturity(&b.inputs(), b.header.height)?;
 
 	// apply the new block to the MMR trees and check the new root hashes
 	ext.apply_block(&b)?;
@@ -364,16 +370,14 @@ fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Re
 }
 
 /// Officially adds the block to our chain.
-fn add_block(
-	b: &Block,
-	store: Arc<store::ChainStore>,
-	batch: &mut store::Batch,
-) -> Result<(), Error> {
+fn add_block(b: &Block, batch: &mut store::Batch) -> Result<(), Error> {
+	// Save the block itself to the db (via the batch).
 	batch
 		.save_block(b)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save block".to_owned()))?;
-	let bitmap = store.build_and_cache_block_input_bitmap(&b)?;
-	batch.save_block_input_bitmap(&b.hash(), &bitmap)?;
+
+	// Build the block_input_bitmap, save to the db (via the batch) and cache locally.
+	batch.build_and_cache_block_input_bitmap(&b)?;
 	Ok(())
 }
 
@@ -484,7 +488,6 @@ pub fn rewind_and_apply_fork(
 		}
 	}
 
-	let head_header = store.head_header()?;
 	let forked_header = store.get_block_header(&current)?;
 
 	trace!(
@@ -497,7 +500,7 @@ pub fn rewind_and_apply_fork(
 	);
 
 	// rewind the sum trees up to the forking block
-	ext.rewind(&forked_header, &head_header)?;
+	ext.rewind(&forked_header)?;
 
 	trace!(
 		LOGGER,

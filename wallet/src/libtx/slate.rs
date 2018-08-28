@@ -14,6 +14,7 @@
 
 //! Functions for building partial transactions to be passed
 //! around during an interactive wallet exchange
+
 use rand::thread_rng;
 use uuid::Uuid;
 
@@ -112,7 +113,7 @@ impl Slate {
 		K: Keychain,
 	{
 		// Append to the exiting transaction
-		if self.tx.kernels.len() != 0 {
+		if self.tx.kernels().len() != 0 {
 			elems.insert(0, build::initial_tx(self.tx.clone()));
 		}
 		let (tx, blind) = build::partial_transaction(elems, keychain)?;
@@ -152,6 +153,7 @@ impl Slate {
 		K: Keychain,
 	{
 		self.check_fees()?;
+
 		self.verify_part_sigs(keychain.secp())?;
 		let sig_part = aggsig::calculate_partial_sig(
 			keychain.secp(),
@@ -178,7 +180,8 @@ impl Slate {
 
 	/// Return the sum of public nonces
 	fn pub_nonce_sum(&self, secp: &secp::Secp256k1) -> Result<PublicKey, Error> {
-		let pub_nonces = self.participant_data
+		let pub_nonces = self
+			.participant_data
 			.iter()
 			.map(|p| &p.public_nonce)
 			.collect();
@@ -190,7 +193,8 @@ impl Slate {
 
 	/// Return the sum of public blinding factors
 	fn pub_blind_sum(&self, secp: &secp::Secp256k1) -> Result<PublicKey, Error> {
-		let pub_blinds = self.participant_data
+		let pub_blinds = self
+			.participant_data
 			.iter()
 			.map(|p| &p.public_blind_excess)
 			.collect();
@@ -249,9 +253,11 @@ impl Slate {
 		// the aggsig context with the "split" key
 		self.tx.offset =
 			BlindingFactor::from_secret_key(SecretKey::new(&keychain.secp(), &mut thread_rng()));
-		let blind_offset = keychain.blind_sum(&BlindSum::new()
-			.add_blinding_factor(BlindingFactor::from_secret_key(sec_key.clone()))
-			.sub_blinding_factor(self.tx.offset))?;
+		let blind_offset = keychain.blind_sum(
+			&BlindSum::new()
+				.add_blinding_factor(BlindingFactor::from_secret_key(sec_key.clone()))
+				.sub_blinding_factor(self.tx.offset),
+		)?;
 		*sec_key = blind_offset.secret_key(&keychain.secp())?;
 		Ok(())
 	}
@@ -261,7 +267,12 @@ impl Slate {
 		// double check the fee amount included in the partial tx
 		// we don't necessarily want to just trust the sender
 		// we could just overwrite the fee here (but we won't) due to the sig
-		let fee = tx_fee(self.tx.inputs.len(), self.tx.outputs.len(), None);
+		let fee = tx_fee(
+			self.tx.inputs().len(),
+			self.tx.outputs().len(),
+			self.tx.kernels().len(),
+			None,
+		);
 		if fee > self.tx.fee() {
 			return Err(ErrorKind::Fee(
 				format!("Fee Dispute Error: {}, {}", self.tx.fee(), fee,).to_string(),
@@ -271,8 +282,8 @@ impl Slate {
 		if fee > self.amount + self.fee {
 			let reason = format!(
 				"Rejected the transfer because transaction fee ({}) exceeds received amount ({}).",
-				amount_to_hr_string(fee),
-				amount_to_hr_string(self.amount + self.fee)
+				amount_to_hr_string(fee, false),
+				amount_to_hr_string(self.amount + self.fee, false)
 			);
 			info!(LOGGER, "{}", reason);
 			return Err(ErrorKind::Fee(reason.to_string()))?;
@@ -360,7 +371,7 @@ impl Slate {
 		// build the final excess based on final tx and offset
 		let final_excess = {
 			// TODO - do we need to verify rangeproofs here?
-			for x in &final_tx.outputs {
+			for x in final_tx.outputs() {
 				x.verify_proof()?;
 			}
 
@@ -378,13 +389,13 @@ impl Slate {
 		};
 
 		// update the tx kernel to reflect the offset excess and sig
-		assert_eq!(final_tx.kernels.len(), 1);
-		final_tx.kernels[0].excess = final_excess.clone();
-		final_tx.kernels[0].excess_sig = final_sig.clone();
+		assert_eq!(final_tx.kernels().len(), 1);
+		final_tx.kernels_mut()[0].excess = final_excess.clone();
+		final_tx.kernels_mut()[0].excess_sig = final_sig.clone();
 
 		// confirm the kernel verifies successfully before proceeding
 		debug!(LOGGER, "Validating final transaction");
-		final_tx.kernels[0].verify()?;
+		final_tx.kernels()[0].verify()?;
 
 		// confirm the overall transaction is valid (including the updated kernel)
 		let _ = final_tx.validate()?;

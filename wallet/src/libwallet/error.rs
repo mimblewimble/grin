@@ -13,12 +13,15 @@
 // limitations under the License.
 
 //! Error types for libwallet
-use keychain;
-use libtx;
+
 use std::fmt::{self, Display};
+use std::io;
+
+use failure::{Backtrace, Context, Fail};
 
 use core::core::transaction;
-use failure::{Backtrace, Context, Fail};
+use keychain;
+use libtx;
 
 /// Error definition
 #[derive(Debug, Fail)]
@@ -181,6 +184,14 @@ impl From<ErrorKind> for Error {
 impl From<Context<ErrorKind>> for Error {
 	fn from(inner: Context<ErrorKind>) -> Error {
 		Error { inner: inner }
+	}
+}
+
+impl From<io::Error> for Error {
+	fn from(_error: io::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::IO),
+		}
 	}
 }
 

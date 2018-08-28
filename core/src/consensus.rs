@@ -72,10 +72,6 @@ pub const EASINESS: u32 = 50;
 /// easier to reason about.
 pub const CUT_THROUGH_HORIZON: u32 = 48 * 3600 / (BLOCK_TIME_SEC as u32);
 
-/// The maximum size we're willing to accept for any message. Enforced by the
-/// peer-to-peer networking layer only for DoS protection.
-pub const MAX_MSG_LEN: u64 = 20_000_000;
-
 /// Weight of an input when counted against the max block weight capacity
 pub const BLOCK_INPUT_WEIGHT: usize = 1;
 
@@ -85,28 +81,20 @@ pub const BLOCK_OUTPUT_WEIGHT: usize = 10;
 /// Weight of a kernel when counted against the max block weight capacity
 pub const BLOCK_KERNEL_WEIGHT: usize = 2;
 
-/// Total maximum block weight
-pub const MAX_BLOCK_WEIGHT: usize = 80_000;
-
-/// Maximum inputs for a block (issue#261)
-/// Hundreds of inputs + 1 output might be slow to validate (issue#258)
-pub const MAX_BLOCK_INPUTS: usize = 300_000; // soft fork down when too_high
-
-/// Maximum inputs for a transaction
-pub const MAX_TX_INPUTS: u64 = 2048;
-
-/// Maximum outputs for a transaction
-pub const MAX_TX_OUTPUTS: u64 = 500; // wallet uses 500 as max
-
-/// Maximum kernels for a transaction
-pub const MAX_TX_KERNELS: u64 = 2048;
-
-/// Whether a block exceeds the maximum acceptable weight
-pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) -> bool {
-	input_len * BLOCK_INPUT_WEIGHT
-		+ output_len * BLOCK_OUTPUT_WEIGHT
-		+ kernel_len * BLOCK_KERNEL_WEIGHT > MAX_BLOCK_WEIGHT || input_len > MAX_BLOCK_INPUTS
-}
+/// Total maximum block weight. At current sizes, this means a maximum
+/// theoretical size of:
+/// * `(674 + 33 + 1) * 4_000 = 2_832_000` for a block with only outputs
+/// * `(1 + 8 + 8 + 33 + 64) * 20_000 = 2_280_000` for a block with only kernels
+/// * `(1 + 33) * 40_000 = 1_360_000` for a block with only inputs
+///
+/// Given that a block needs to have at least one kernel for the coinbase,
+/// and one kernel for the transaction, practical maximum size is 2_831_440,
+/// (ignoring the edge case of a miner producting a block with all coinbase
+/// outputs and a single kernel).
+///
+/// A more "standard" block, filled with transactions of 2 inputs, 2 outputs
+/// and one kernel, should be around 2_663_333 bytes.
+pub const MAX_BLOCK_WEIGHT: usize = 40_000;
 
 /// Fork every 250,000 blocks for first 2 years, simple number and just a
 /// little less than 6 months.

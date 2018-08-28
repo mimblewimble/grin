@@ -24,7 +24,7 @@ use keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
 use util::secp::key::{PublicKey, SecretKey};
 use util::{kernel_sig_msg, secp};
 use wallet::libtx::{aggsig, proof};
-use wallet::libwallet::internal::sigcontext;
+use wallet::libwallet::types::Context;
 
 use rand::thread_rng;
 
@@ -46,9 +46,11 @@ fn aggsig_sender_receiver_interaction() {
 
 		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let blinding_factor = keychain
-			.blind_sum(&BlindSum::new()
-				.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
-				.add_blinding_factor(BlindingFactor::from_secret_key(skey2)))
+			.blind_sum(
+				&BlindSum::new()
+					.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
+					.add_blinding_factor(BlindingFactor::from_secret_key(skey2)),
+			)
 			.unwrap();
 
 		keychain
@@ -76,7 +78,7 @@ fn aggsig_sender_receiver_interaction() {
 
 		let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
 
-		s_cx = sigcontext::Context::new(&keychain.secp(), blind);
+		s_cx = Context::new(&keychain.secp(), blind);
 		s_cx.get_public_keys(&keychain.secp())
 	};
 
@@ -89,7 +91,7 @@ fn aggsig_sender_receiver_interaction() {
 		// let blind = blind_sum.secret_key(&keychain.secp())?;
 		let blind = keychain.derived_key(&key_id).unwrap();
 
-		rx_cx = sigcontext::Context::new(&keychain.secp(), blind);
+		rx_cx = Context::new(&keychain.secp(), blind);
 		let (pub_excess, pub_nonce) = rx_cx.get_public_keys(&keychain.secp());
 		rx_cx.add_output(&key_id);
 
@@ -234,12 +236,14 @@ fn aggsig_sender_receiver_interaction_offset() {
 
 		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let blinding_factor = keychain
-			.blind_sum(&BlindSum::new()
+			.blind_sum(
+				&BlindSum::new()
 				.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
 				.add_blinding_factor(BlindingFactor::from_secret_key(skey2))
 				// subtract the kernel offset here like as would when
 				// verifying a kernel signature
-				.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)))
+				.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)),
+			)
 			.unwrap();
 
 		keychain
@@ -261,16 +265,18 @@ fn aggsig_sender_receiver_interaction_offset() {
 		// dealing with an input here so we need to negate the blinding_factor
 		// rather than use it as is
 		let blinding_factor = keychain
-			.blind_sum(&BlindSum::new()
+			.blind_sum(
+				&BlindSum::new()
 				.sub_blinding_factor(BlindingFactor::from_secret_key(skey))
 				// subtract the kernel offset to create an aggsig context
 				// with our "split" key
-				.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)))
+				.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)),
+			)
 			.unwrap();
 
 		let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
 
-		s_cx = sigcontext::Context::new(&keychain.secp(), blind);
+		s_cx = Context::new(&keychain.secp(), blind);
 		s_cx.get_public_keys(&keychain.secp())
 	};
 
@@ -282,7 +288,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 
 		let blind = keychain.derived_key(&key_id).unwrap();
 
-		rx_cx = sigcontext::Context::new(&keychain.secp(), blind);
+		rx_cx = Context::new(&keychain.secp(), blind);
 		let (pub_excess, pub_nonce) = rx_cx.get_public_keys(&keychain.secp());
 		rx_cx.add_output(&key_id);
 

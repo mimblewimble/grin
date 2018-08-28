@@ -38,13 +38,14 @@ pub fn retrieve_outputs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	show_spent: bool,
 	tx_id: Option<u32>,
-) -> Result<Vec<OutputData>, Error>
+) -> Result<Vec<(OutputData, pedersen::Commitment)>, Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
 	K: Keychain,
 {
 	let root_key_id = wallet.keychain().clone().root_key_id();
+
 	// just read the wallet here, no need for a write lock
 	let mut outputs = wallet
 		.iter()
@@ -57,6 +58,7 @@ where
 			}
 		})
 		.collect::<Vec<_>>();
+
 	// only include outputs with a given tx_id if provided
 	if let Some(id) = tx_id {
 		outputs = outputs
@@ -64,8 +66,17 @@ where
 			.filter(|out| out.tx_log_entry == Some(id))
 			.collect::<Vec<_>>();
 	}
+
 	outputs.sort_by_key(|out| out.n_child);
-	Ok(outputs)
+
+	let res = outputs
+		.into_iter()
+		.map(|out| {
+			let commit = wallet.get_commitment(&out.key_id).unwrap();
+			(out, commit)
+		})
+		.collect();
+	Ok(res)
 }
 
 /// Retrieve all of the transaction entries, or a particular entry
@@ -166,7 +177,7 @@ where
 pub fn apply_api_outputs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	wallet_outputs: &HashMap<pedersen::Commitment, Identifier>,
-	api_outputs: &HashMap<pedersen::Commitment, String>,
+	api_outputs: &HashMap<pedersen::Commitment, (String, u64)>,
 	height: u64,
 ) -> Result<(), libwallet::Error>
 where
@@ -198,7 +209,7 @@ where
 		for (commit, id) in wallet_outputs.iter() {
 			if let Ok(mut output) = batch.get(id) {
 				match api_outputs.get(&commit) {
-					Some(_) => {
+					Some(o) => {
 						// if this is a coinbase tx being confirmed, it's recordable in tx log
 						if output.is_coinbase && output.status == OutputStatus::Unconfirmed {
 							let log_id = batch.next_tx_log_id(root_key_id.clone())?;
@@ -224,6 +235,7 @@ where
 								batch.save_tx_log_entry(t)?;
 							}
 						}
+						output.height = o.1;
 						output.mark_unspent();
 					}
 					None => output.mark_spent(),

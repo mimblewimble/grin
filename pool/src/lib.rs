@@ -31,7 +31,7 @@ extern crate serde;
 extern crate serde_derive;
 #[macro_use]
 extern crate slog;
-extern crate time;
+extern crate chrono;
 
 mod pool;
 pub mod transaction_pool;

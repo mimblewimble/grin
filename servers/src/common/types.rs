@@ -15,7 +15,7 @@
 //! Server types
 
 use std::convert::From;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use api;
 use chain;
@@ -103,30 +103,9 @@ impl Default for ChainValidationMode {
 	}
 }
 
-/// Type of seeding the server will use to find other peers on the network.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum Seeding {
-	/// No seeding, mostly for tests that programmatically connect
-	None,
-	/// A list of seed addresses provided to the server
-	List,
-	/// Automatically download a text file with a list of server addresses
-	WebStatic,
-	/// Automatically get a list of seeds from multiple DNS
-	DNSSeed,
-	/// Mostly for tests, where connections are initiated programmatically
-	Programmatic,
-}
-
-impl Default for Seeding {
-	fn default() -> Seeding {
-		Seeding::DNSSeed
-	}
-}
-
 /// Full server configuration, aggregating configurations required for the
 /// different components.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ServerConfig {
 	/// Directory under which the rocksdb stores will be created
 	pub db_root: String,
@@ -144,19 +123,6 @@ pub struct ServerConfig {
 	/// Automatically run full chain validation during normal block processing?
 	#[serde(default)]
 	pub chain_validation_mode: ChainValidationMode,
-
-	/// Method used to get the list of seed nodes for initial bootstrap.
-	#[serde(default)]
-	pub seeding_type: Seeding,
-
-	/// TODO - move this into p2p_config?
-	/// The list of seed nodes, if using Seeding as a seed type
-	pub seeds: Option<Vec<String>>,
-
-	/// TODO - move this into p2p_config?
-	/// Capabilities expose by this node, also conditions which other peers this
-	/// node will have an affinity toward when connection.
-	pub capabilities: p2p::Capabilities,
 
 	/// Configuration for the peer-to-peer server
 	pub p2p_config: p2p::P2PConfig,
@@ -200,10 +166,7 @@ impl Default for ServerConfig {
 	fn default() -> ServerConfig {
 		ServerConfig {
 			db_root: ".grin".to_string(),
-			api_http_addr: "0.0.0.0:13413".to_string(),
-			capabilities: p2p::Capabilities::FULL_NODE,
-			seeding_type: Seeding::default(),
-			seeds: None,
+			api_http_addr: "127.0.0.1:13413".to_string(),
 			p2p_config: p2p::P2PConfig::default(),
 			dandelion_config: pool::DandelionConfig::default(),
 			stratum_mining_config: Some(StratumServerConfig::default()),
@@ -211,11 +174,11 @@ impl Default for ServerConfig {
 			archive_mode: None,
 			chain_validation_mode: ChainValidationMode::default(),
 			pool_config: pool::PoolConfig::default(),
-			skip_sync_wait: None,
-			run_tui: None,
-			run_wallet_listener: Some(false),
+			skip_sync_wait: Some(false),
+			run_tui: Some(true),
+			run_wallet_listener: Some(true),
 			run_wallet_owner_api: Some(false),
-			use_db_wallet: Some(false),
+			use_db_wallet: None,
 			run_test_miner: Some(false),
 			test_miner_wallet_url: None,
 		}
@@ -223,7 +186,7 @@ impl Default for ServerConfig {
 }
 
 /// Stratum (Mining server) configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct StratumServerConfig {
 	/// Run a stratum mining server (the only way to communicate to mine this
 	/// node via grin-miner
@@ -250,12 +213,12 @@ pub struct StratumServerConfig {
 impl Default for StratumServerConfig {
 	fn default() -> StratumServerConfig {
 		StratumServerConfig {
-			wallet_listener_url: "http://localhost:13415".to_string(),
+			wallet_listener_url: "http://127.0.0.1:13415".to_string(),
 			burn_reward: false,
-			attempt_time_per_block: <u32>::max_value(),
+			attempt_time_per_block: 15,
 			minimum_share_difficulty: 1,
-			enable_stratum_server: None,
-			stratum_server_addr: None,
+			enable_stratum_server: Some(true),
+			stratum_server_addr: Some("127.0.0.1:13416".to_string()),
 		}
 	}
 }
@@ -296,6 +259,7 @@ pub enum SyncStatus {
 /// Current sync state. Encapsulates the current SyncStatus.
 pub struct SyncState {
 	current: RwLock<SyncStatus>,
+	sync_error: Arc<RwLock<Option<Error>>>,
 }
 
 impl SyncState {
@@ -303,6 +267,7 @@ impl SyncState {
 	pub fn new() -> SyncState {
 		SyncState {
 			current: RwLock::new(SyncStatus::Initial),
+			sync_error: Arc::new(RwLock::new(None)),
 		}
 	}
 
@@ -331,6 +296,21 @@ impl SyncState {
 		);
 
 		*status = new_status;
+	}
+
+	/// Communicate sync error
+	pub fn set_sync_error(&self, error: Error) {
+		*self.sync_error.write().unwrap() = Some(error);
+	}
+
+	/// Get sync error
+	pub fn sync_error(&self) -> Arc<RwLock<Option<Error>>> {
+		Arc::clone(&self.sync_error)
+	}
+
+	/// Clear sync error
+	pub fn clear_sync_error(&self) {
+		*self.sync_error.write().unwrap() = None;
 	}
 }
 

@@ -24,6 +24,7 @@ extern crate grin_wallet as wallet;
 extern crate blake2_rfc as blake2;
 
 use std::default::Default;
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::{fs, thread, time};
 
@@ -32,9 +33,8 @@ use wallet::{FileWallet, HTTPWalletClient, WalletConfig};
 /// Just removes all results from previous runs
 pub fn clean_all_output(test_name_dir: &str) {
 	let target_dir = format!("target/tmp/{}", test_name_dir);
-	let result = fs::remove_dir_all(target_dir);
-	if let Err(e) = result {
-		println!("{}", e);
+	if let Err(e) = fs::remove_dir_all(target_dir) {
+		println!("can't remove output from previous test :{}, may be ok", e);
 	}
 }
 
@@ -153,10 +153,10 @@ pub struct LocalServerContainer {
 impl LocalServerContainer {
 	/// Create a new local server container with defaults, with the given name
 	/// all related files will be created in the directory
-	/// target/tmp/test_servers/{name}
+	/// target/tmp/{name}
 
 	pub fn new(config: LocalServerContainerConfig) -> Result<LocalServerContainer, Error> {
-		let working_dir = format!("target/tmp/test_servers/{}", config.name);
+		let working_dir = format!("target/tmp/{}", config.name);
 		let mut wallet_config = WalletConfig::default();
 
 		wallet_config.api_listen_port = config.wallet_port;
@@ -175,14 +175,14 @@ impl LocalServerContainer {
 		})
 	}
 
-	pub fn run_server(&mut self, duration_in_seconds: u64) -> servers::ServerStats {
+	pub fn run_server(&mut self, duration_in_seconds: u64) -> servers::Server {
 		let api_addr = format!("{}:{}", self.config.base_addr, self.config.api_server_port);
 
-		let mut seeding_type = servers::Seeding::None;
+		let mut seeding_type = p2p::Seeding::None;
 		let mut seeds = Vec::new();
 
 		if self.config.seed_addr.len() > 0 {
-			seeding_type = servers::Seeding::List;
+			seeding_type = p2p::Seeding::List;
 			seeds = vec![self.config.seed_addr.to_string()];
 		}
 
@@ -191,10 +191,10 @@ impl LocalServerContainer {
 			db_root: format!("{}/.grin", self.working_dir),
 			p2p_config: p2p::P2PConfig {
 				port: self.config.p2p_server_port,
+				seeds: Some(seeds),
+				seeding_type: seeding_type,
 				..p2p::P2PConfig::default()
 			},
-			seeds: Some(seeds),
-			seeding_type: seeding_type,
 			chain_type: core::global::ChainTypes::AutomatedTesting,
 			skip_sync_wait: Some(true),
 			stratum_mining_config: None,
@@ -232,7 +232,7 @@ impl LocalServerContainer {
 			self.stop_wallet();
 		}
 
-		s.get_server_stats().unwrap()
+		s
 	}
 
 	/// Starts a wallet daemon to receive and returns the
@@ -331,36 +331,36 @@ impl LocalServerContainer {
 			.expect("Failed to derive keychain from seed file and passphrase.");
 
 		let client = HTTPWalletClient::new(&config.check_node_api_http_addr);
+
 		let max_outputs = 500;
+		let change_outputs = 1;
 
 		let mut wallet = FileWallet::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		let _ =
-			wallet::controller::owner_single_use(
-				Arc::new(Mutex::new(Box::new(wallet))),
-				|api| {
-					let result = api.issue_send_tx(
-						amount,
-						minimum_confirmations,
+			wallet::controller::owner_single_use(Arc::new(Mutex::new(Box::new(wallet))), |api| {
+				let result = api.issue_send_tx(
+					amount,
+					minimum_confirmations,
+					dest,
+					max_outputs,
+					change_outputs,
+					selection_strategy == "all",
+				);
+				match result {
+					Ok(_) => println!(
+						"Tx sent: {} grin to {} (strategy '{}')",
+						core::core::amount_to_hr_string(amount, false),
 						dest,
-						max_outputs,
-						selection_strategy == "all",
-					);
-					match result {
-						Ok(_) => println!(
-							"Tx sent: {} grin to {} (strategy '{}')",
-							core::core::amount_to_hr_string(amount),
-							dest,
-							selection_strategy,
-						),
-						Err(e) => {
-							println!("Tx not sent to {}: {:?}", dest, e);
-						}
-					};
-					Ok(())
-				},
-			).unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
+						selection_strategy,
+					),
+					Err(e) => {
+						println!("Tx not sent to {}: {:?}", dest, e);
+					}
+				};
+				Ok(())
+			}).unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 	}
 
 	/// Stops the running wallet server
@@ -510,7 +510,7 @@ impl LocalServerContainerPool {
 	/// once they've all been run
 	///
 
-	pub fn run_all_servers(self) -> Vec<servers::ServerStats> {
+	pub fn run_all_servers(self) -> Arc<Mutex<Vec<servers::Server>>> {
 		let run_length = self.config.run_length_in_seconds;
 		let mut handles = vec![];
 
@@ -546,9 +546,9 @@ impl LocalServerContainerPool {
 				}
 			}
 		}
+
 		// return a much simplified version of the results
-		let return_vec = return_containers.lock().unwrap();
-		return_vec.clone()
+		return_containers.clone()
 	}
 
 	pub fn connect_all_peers(&mut self) {
@@ -570,6 +570,13 @@ impl LocalServerContainerPool {
 	}
 }
 
+pub fn stop_all_servers(servers: Arc<Mutex<Vec<servers::Server>>>) {
+	let locked_servs = servers.lock().unwrap();
+	for s in locked_servs.deref() {
+		s.stop();
+	}
+}
+
 /// Create and return a ServerConfig
 pub fn config(n: u16, test_name_dir: &str, seed_n: u16) -> servers::ServerConfig {
 	servers::ServerConfig {
@@ -577,10 +584,10 @@ pub fn config(n: u16, test_name_dir: &str, seed_n: u16) -> servers::ServerConfig
 		db_root: format!("target/tmp/{}/grin-sync-{}", test_name_dir, n),
 		p2p_config: p2p::P2PConfig {
 			port: 10000 + n,
+			seeding_type: p2p::Seeding::List,
+			seeds: Some(vec![format!("127.0.0.1:{}", 10000 + seed_n)]),
 			..p2p::P2PConfig::default()
 		},
-		seeding_type: servers::Seeding::List,
-		seeds: Some(vec![format!("127.0.0.1:{}", 10000 + seed_n)]),
 		chain_type: core::global::ChainTypes::AutomatedTesting,
 		archive_mode: Some(true),
 		skip_sync_wait: Some(true),

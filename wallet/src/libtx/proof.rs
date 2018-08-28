@@ -83,7 +83,8 @@ where
 	K: Keychain,
 {
 	let nonce = create_nonce(k, &commit)?;
-	let proof_message = k.secp()
+	let proof_message = k
+		.secp()
 		.rewind_bullet_proof(commit, nonce, extra_data, proof);
 	let proof_info = match proof_message {
 		Ok(p) => p,

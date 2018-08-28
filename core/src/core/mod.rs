@@ -16,6 +16,7 @@
 
 pub mod block;
 pub mod committed;
+pub mod compact_block;
 pub mod hash;
 pub mod id;
 pub mod merkle_proof;
@@ -33,6 +34,7 @@ use util::secp::pedersen::Commitment;
 
 pub use self::block::*;
 pub use self::committed::Committed;
+pub use self::compact_block::*;
 pub use self::id::ShortId;
 pub use self::transaction::*;
 use core::hash::Hashed;
@@ -123,6 +125,9 @@ impl Proof {
 impl Readable for Proof {
 	fn read(reader: &mut Reader) -> Result<Proof, Error> {
 		let cuckoo_sizeshift = reader.read_u8()?;
+		if cuckoo_sizeshift == 0 || cuckoo_sizeshift > 64 {
+			return Err(Error::CorruptedData);
+		}
 
 		let mut nonces = Vec::with_capacity(global::proofsize());
 		let nonce_bits = cuckoo_sizeshift as usize - 1;
@@ -202,10 +207,20 @@ pub fn amount_from_hr_string(amount: &str) -> Result<u64, ParseFloatError> {
 
 /// Common method for converting an amount to a human-readable string
 
-pub fn amount_to_hr_string(amount: u64) -> String {
+pub fn amount_to_hr_string(amount: u64, truncate: bool) -> String {
 	let amount = (amount as f64 / GRIN_BASE as f64) as f64;
 	let places = (GRIN_BASE as f64).log(10.0) as usize + 1;
-	format!("{:.*}", places, amount)
+	let hr = format!("{:.*}", places, amount);
+
+	if truncate {
+		let nzeros = hr.chars().rev().take_while(|x| x == &'0').count();
+		if nzeros < places {
+			return hr.trim_right_matches('0').to_string();
+		} else {
+			return format!("{}0", hr.trim_right_matches('0'));
+		}
+	}
+	hr
 }
 
 #[cfg(test)]
@@ -226,11 +241,16 @@ mod test {
 
 	#[test]
 	pub fn test_hr_to_amount() {
-		assert!("50.123456789" == amount_to_hr_string(50123456789));
-		assert!("0.000000050" == amount_to_hr_string(50));
-		assert!("0.000000001" == amount_to_hr_string(1));
-		assert!("500.000000000" == amount_to_hr_string(500_000_000_000));
-		assert!("5000000000.000000000" == amount_to_hr_string(5_000_000_000_000_000_000));
+		assert!("50.123456789" == amount_to_hr_string(50123456789, false));
+		assert!("50.123456789" == amount_to_hr_string(50123456789, true));
+		assert!("0.000000050" == amount_to_hr_string(50, false));
+		assert!("0.00000005" == amount_to_hr_string(50, true));
+		assert!("0.000000001" == amount_to_hr_string(1, false));
+		assert!("0.000000001" == amount_to_hr_string(1, true));
+		assert!("500.000000000" == amount_to_hr_string(500_000_000_000, false));
+		assert!("500.0" == amount_to_hr_string(500_000_000_000, true));
+		assert!("5000000000.000000000" == amount_to_hr_string(5_000_000_000_000_000_000, false));
+		assert!("5000000000.0" == amount_to_hr_string(5_000_000_000_000_000_000, true));
 	}
 
 }

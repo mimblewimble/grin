@@ -20,8 +20,8 @@ extern crate grin_pool as pool;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
+extern crate chrono;
 extern crate rand;
-extern crate time;
 
 pub mod common;
 
@@ -29,8 +29,9 @@ use std::sync::{Arc, RwLock};
 
 use core::core::{Block, BlockHeader};
 
+use chain::txhashset;
 use chain::types::Tip;
-use chain::{txhashset, ChainStore};
+use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 
 use keychain::{ExtKeychain, Keychain};
@@ -40,6 +41,7 @@ use common::*;
 
 #[test]
 fn test_transaction_pool_block_building() {
+	util::init_test_logger();
 	let keychain: ExtKeychain = Keychain::from_random_seed().unwrap();
 
 	let db_root = ".grin_block_building".to_string();
@@ -48,16 +50,26 @@ fn test_transaction_pool_block_building() {
 
 	// Initialize the chain/txhashset with an initial block
 	// so we have a non-empty UTXO set.
-	let header = {
-		let height = 1;
+	let add_block = |height, txs| {
 		let key_id = keychain.derive_key_id(height as u32).unwrap();
 		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
-		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
+		let mut block = Block::new(&BlockHeader::default(), txs, Difficulty::one(), reward).unwrap();
 
 		let mut txhashset = chain.txhashset.write().unwrap();
 		let mut batch = chain.store.batch().unwrap();
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
-			extension.apply_block(&block)
+			extension.apply_block(&block)?;
+
+			// Now set the roots and sizes as necessary on the block header.
+			let roots = extension.roots();
+			block.header.output_root = roots.output_root;
+			block.header.range_proof_root = roots.rproof_root;
+			block.header.kernel_root = roots.kernel_root;
+			let sizes = extension.sizes();
+			block.header.output_mmr_size = sizes.0;
+			block.header.kernel_mmr_size = sizes.2;
+
+			Ok(())
 		}).unwrap();
 
 		let tip = Tip::from_block(&block.header);
@@ -67,6 +79,7 @@ fn test_transaction_pool_block_building() {
 
 		block.header
 	};
+	let header = add_block(1, vec![]);
 
 	// Initialize a new pool with our chain adapter.
 	let pool = RwLock::new(test_setup(&Arc::new(chain.clone())));
@@ -75,14 +88,8 @@ fn test_transaction_pool_block_building() {
 	// Provides us with some useful outputs to test with.
 	let initial_tx = test_transaction_spending_coinbase(&keychain, &header, vec![10, 20, 30, 40]);
 
-	// Add this tx to the pool (stem=false, direct to txpool).
-	{
-		let mut write_pool = pool.write().unwrap();
-		write_pool
-			.add_to_pool(test_source(), initial_tx, false)
-			.unwrap();
-		assert_eq!(write_pool.total_size(), 1);
-	}
+	// Mine that initial tx so we can spend it with multiple txs
+	let header = add_block(2, vec![initial_tx]);
 
 	let root_tx_1 = test_transaction(&keychain, vec![10, 20], vec![24]);
 	let root_tx_2 = test_transaction(&keychain, vec![30], vec![28]);
@@ -96,33 +103,34 @@ fn test_transaction_pool_block_building() {
 
 		// Add the three root txs to the pool.
 		write_pool
-			.add_to_pool(test_source(), root_tx_1, false)
+			.add_to_pool(test_source(), root_tx_1, false, &header.hash())
 			.unwrap();
 		write_pool
-			.add_to_pool(test_source(), root_tx_2, false)
+			.add_to_pool(test_source(), root_tx_2, false, &header.hash())
 			.unwrap();
 		write_pool
-			.add_to_pool(test_source(), root_tx_3, false)
+			.add_to_pool(test_source(), root_tx_3, false, &header.hash())
 			.unwrap();
 
 		// Now add the two child txs to the pool.
 		write_pool
-			.add_to_pool(test_source(), child_tx_1.clone(), false)
+			.add_to_pool(test_source(), child_tx_1.clone(), false, &header.hash())
 			.unwrap();
 		write_pool
-			.add_to_pool(test_source(), child_tx_2.clone(), false)
+			.add_to_pool(test_source(), child_tx_2.clone(), false, &header.hash())
 			.unwrap();
 
-		assert_eq!(write_pool.total_size(), 6);
+		assert_eq!(write_pool.total_size(), 5);
 	}
 
 	let txs = {
 		let read_pool = pool.read().unwrap();
-		read_pool.prepare_mineable_transactions(4)
+		read_pool.prepare_mineable_transactions()
 	};
-	assert_eq!(txs.len(), 4);
+	// children should have been aggregated into parents
+	assert_eq!(txs.len(), 3);
 
-	let block = {
+	let mut block = {
 		let key_id = keychain.derive_key_id(2).unwrap();
 		let fees = txs.iter().map(|tx| tx.fee()).sum();
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
@@ -134,8 +142,22 @@ fn test_transaction_pool_block_building() {
 		let mut txhashset = chain.txhashset.write().unwrap();
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			extension.apply_block(&block)?;
+
+			// Now set the roots and sizes as necessary on the block header.
+			let roots = extension.roots();
+			block.header.output_root = roots.output_root;
+			block.header.range_proof_root = roots.rproof_root;
+			block.header.kernel_root = roots.kernel_root;
+			let sizes = extension.sizes();
+			block.header.output_mmr_size = sizes.0;
+			block.header.kernel_mmr_size = sizes.2;
+
 			Ok(())
 		}).unwrap();
+
+		let tip = Tip::from_block(&block.header);
+		batch.save_block_header(&block.header).unwrap();
+		batch.save_head(&tip).unwrap();
 		batch.commit().unwrap();
 	}
 
@@ -145,8 +167,6 @@ fn test_transaction_pool_block_building() {
 		let mut write_pool = pool.write().unwrap();
 		write_pool.reconcile_block(&block).unwrap();
 
-		assert_eq!(write_pool.total_size(), 2);
-		assert_eq!(write_pool.txpool.entries[0].tx, child_tx_1);
-		assert_eq!(write_pool.txpool.entries[1].tx, child_tx_2);
+		assert_eq!(write_pool.total_size(), 0);
 	}
 }

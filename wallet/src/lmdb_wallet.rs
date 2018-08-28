@@ -25,12 +25,15 @@ use store::{self, option_to_not_found, to_key, u64_to_key};
 use libwallet::types::*;
 use libwallet::{internal, Error, ErrorKind};
 use types::{WalletConfig, WalletSeed};
+use util::secp::pedersen;
 
 pub const DB_DIR: &'static str = "wallet_data";
 
+const COMMITMENT_PREFIX: u8 = 'C' as u8;
 const OUTPUT_PREFIX: u8 = 'o' as u8;
 const DERIV_PREFIX: u8 = 'd' as u8;
 const CONFIRMED_HEIGHT_PREFIX: u8 = 'c' as u8;
+const PRIVATE_TX_CONTEXT_PREFIX: u8 = 'p' as u8;
 const TX_LOG_ENTRY_PREFIX: u8 = 't' as u8;
 const TX_LOG_ID_PREFIX: u8 = 'i' as u8;
 
@@ -119,6 +122,33 @@ where
 		option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id)).map_err(|e| e.into())
 	}
 
+	fn get_commitment(&mut self, id: &Identifier) -> Result<pedersen::Commitment, Error> {
+		let key = to_key(COMMITMENT_PREFIX, &mut id.to_bytes().to_vec());
+
+		let res: Result<pedersen::Commitment, Error> =
+			option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id))
+				.map_err(|e| e.into());
+
+		// "cache hit" and return the commitment
+		if let Ok(commit) = res {
+			Ok(commit)
+		} else {
+			let out = self.get(id)?;
+
+			// Save the output data back to the db
+			// which builds and saves the associated commitment.
+			{
+				let mut batch = self.batch()?;
+				batch.save(out)?;
+				batch.commit()?;
+			}
+
+			// Now retrieve the saved commitment and return it.
+			option_to_not_found(self.db.get_ser(&key), &format!("Key Id: {}", id))
+				.map_err(|e| e.into())
+		}
+	}
+
 	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a> {
 		Box::new(self.db.iter(&[OUTPUT_PREFIX]).unwrap())
 	}
@@ -132,10 +162,19 @@ where
 		Box::new(self.db.iter(&[TX_LOG_ENTRY_PREFIX]).unwrap())
 	}
 
-	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch + 'a>, Error> {
+	fn get_private_context(&mut self, slate_id: &[u8]) -> Result<Context, Error> {
+		let ctx_key = to_key(PRIVATE_TX_CONTEXT_PREFIX, &mut slate_id.to_vec());
+		option_to_not_found(
+			self.db.get_ser(&ctx_key),
+			&format!("Slate id: {:x?}", slate_id.to_vec()),
+		).map_err(|e| e.into())
+	}
+
+	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch<K> + 'a>, Error> {
 		Ok(Box::new(Batch {
 			_store: self,
 			db: RefCell::new(Some(self.db.batch()?)),
+			keychain: self.keychain.clone(),
 		}))
 	}
 
@@ -184,17 +223,34 @@ where
 {
 	_store: &'a LMDBBackend<C, K>,
 	db: RefCell<Option<store::Batch<'a>>>,
+	/// Keychain
+	keychain: Option<K>,
 }
 
 #[allow(missing_docs)]
-impl<'a, C, K> WalletOutputBatch for Batch<'a, C, K>
+impl<'a, C, K> WalletOutputBatch<K> for Batch<'a, C, K>
 where
 	C: WalletClient,
 	K: Keychain,
 {
+	fn keychain(&mut self) -> &mut K {
+		self.keychain.as_mut().unwrap()
+	}
+
 	fn save(&mut self, out: OutputData) -> Result<(), Error> {
-		let key = to_key(OUTPUT_PREFIX, &mut out.key_id.to_bytes().to_vec());
-		self.db.borrow().as_ref().unwrap().put_ser(&key, &out)?;
+		// Save the output data to the db.
+		{
+			let key = to_key(OUTPUT_PREFIX, &mut out.key_id.to_bytes().to_vec());
+			self.db.borrow().as_ref().unwrap().put_ser(&key, &out)?;
+		}
+
+		// Save the associated output commitment.
+		{
+			let key = to_key(COMMITMENT_PREFIX, &mut out.key_id.to_bytes().to_vec());
+			let commit = self.keychain().commit(out.value, &out.key_id)?;
+			self.db.borrow().as_ref().unwrap().put_ser(&key, &commit)?;
+		}
+
 		Ok(())
 	}
 
@@ -218,8 +274,18 @@ where
 	}
 
 	fn delete(&mut self, id: &Identifier) -> Result<(), Error> {
-		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
-		self.db.borrow().as_ref().unwrap().delete(&key)?;
+		// Delete the output data.
+		{
+			let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
+			let _ = self.db.borrow().as_ref().unwrap().delete(&key);
+		}
+
+		// Delete the associated output commitment.
+		{
+			let key = to_key(COMMITMENT_PREFIX, &mut id.to_bytes().to_vec());
+			let _ = self.db.borrow().as_ref().unwrap().delete(&key);
+		}
+
 		Ok(())
 	}
 
@@ -277,6 +343,22 @@ where
 	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error> {
 		out.lock();
 		self.save(out.clone())
+	}
+
+	fn save_private_context(&mut self, slate_id: &[u8], ctx: &Context) -> Result<(), Error> {
+		let ctx_key = to_key(PRIVATE_TX_CONTEXT_PREFIX, &mut slate_id.to_vec());
+		self.db.borrow().as_ref().unwrap().put_ser(&ctx_key, &ctx)?;
+		Ok(())
+	}
+
+	fn delete_private_context(&mut self, slate_id: &[u8]) -> Result<(), Error> {
+		let ctx_key = to_key(PRIVATE_TX_CONTEXT_PREFIX, &mut slate_id.to_vec());
+		self.db
+			.borrow()
+			.as_ref()
+			.unwrap()
+			.delete(&ctx_key)
+			.map_err(|e| e.into())
 	}
 
 	fn commit(&self) -> Result<(), Error> {

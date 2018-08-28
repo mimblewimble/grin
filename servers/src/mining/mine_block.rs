@@ -15,15 +15,14 @@
 //! Build a block to mine: gathers transactions from the pool, assembles
 //! them into a block and returns it.
 
+use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use itertools::Itertools;
 use rand::{self, Rng};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
-use time;
 
 use chain;
-use common::adapters::PoolToChainAdapter;
 use common::types::Error;
 use core::ser::{self, AsFixedBytes};
 use core::{consensus, core};
@@ -76,20 +75,13 @@ impl ser::Writer for HeaderPrePowWriter {
 // Warning: This call does not return until/unless a new block can be built
 pub fn get_block(
 	chain: &Arc<chain::Chain>,
-	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: &Arc<RwLock<pool::TransactionPool>>,
 	key_id: Option<Identifier>,
-	max_tx: u32,
 	wallet_listener_url: Option<String>,
 ) -> (core::Block, BlockFees) {
 	let wallet_retry_interval = 5;
 	// get the latest chain state and build a block on top of it
-	let mut result = build_block(
-		chain,
-		tx_pool,
-		key_id.clone(),
-		max_tx,
-		wallet_listener_url.clone(),
-	);
+	let mut result = build_block(chain, tx_pool, key_id.clone(), wallet_listener_url.clone());
 	while let Err(e) = result {
 		match e {
 			self::Error::Chain(c) => match c.kind() {
@@ -116,13 +108,7 @@ pub fn get_block(
 			}
 		}
 		thread::sleep(Duration::from_millis(100));
-		result = build_block(
-			chain,
-			tx_pool,
-			key_id.clone(),
-			max_tx,
-			wallet_listener_url.clone(),
-		);
+		result = build_block(chain, tx_pool, key_id.clone(), wallet_listener_url.clone());
 	}
 	return result.unwrap();
 }
@@ -131,16 +117,15 @@ pub fn get_block(
 /// transactions from the pool.
 fn build_block(
 	chain: &Arc<chain::Chain>,
-	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: &Arc<RwLock<pool::TransactionPool>>,
 	key_id: Option<Identifier>,
-	max_tx: u32,
 	wallet_listener_url: Option<String>,
 ) -> Result<(core::Block, BlockFees), Error> {
 	// prepare the block header timestamp
 	let head = chain.head_header()?;
 
-	let mut now_sec = time::get_time().sec;
-	let head_sec = head.timestamp.to_timespec().sec;
+	let mut now_sec = Utc::now().timestamp();
+	let head_sec = head.timestamp.timestamp();
 	if now_sec <= head_sec {
 		now_sec = head_sec + 1;
 	}
@@ -150,10 +135,7 @@ fn build_block(
 	let difficulty = consensus::next_difficulty(diff_iter).unwrap();
 
 	// extract current transaction from the pool
-	let txs = tx_pool
-		.read()
-		.unwrap()
-		.prepare_mineable_transactions(max_tx);
+	let txs = tx_pool.read().unwrap().prepare_mineable_transactions();
 
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
@@ -172,18 +154,19 @@ fn build_block(
 
 	let mut rng = rand::OsRng::new().unwrap();
 	b.header.nonce = rng.gen();
-	b.header.timestamp = time::at_utc(time::Timespec::new(now_sec, 0));
+	b.header.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_sec, 0), Utc);;
 
 	let b_difficulty = (b.header.total_difficulty.clone() - head.total_difficulty.clone()).to_num();
 	debug!(
 		LOGGER,
 		"Built new block with {} inputs and {} outputs, network difficulty: {}, cumulative difficulty {}",
-		b.inputs.len(),
-		b.outputs.len(),
+		b.inputs().len(),
+		b.outputs().len(),
 		b_difficulty,
 		b.header.clone().total_difficulty.to_num(),
 	);
 
+	// Now set txhashset roots and sizes on the header of the block being built.
 	let roots_result = chain.set_txhashset_roots(&mut b, false);
 
 	match roots_result {

@@ -168,7 +168,7 @@ impl Server {
 					&self.handshake,
 					self.peers.clone(),
 				)?;
-				let added = self.peers.add_connected(peer);
+				let added = self.peers.add_connected(peer)?;
 				{
 					let mut peer = added.write().unwrap();
 					peer.start(stream);
@@ -193,7 +193,7 @@ impl Server {
 			&self.handshake,
 			self.peers.clone(),
 		)?;
-		let added = self.peers.add_connected(peer);
+		let added = self.peers.add_connected(peer)?;
 		let mut peer = added.write().unwrap();
 		peer.start(stream);
 		Ok(())
@@ -239,7 +239,9 @@ impl ChainAdapter for DummyAdapter {
 	fn block_received(&self, _: core::Block, _: SocketAddr) -> bool {
 		true
 	}
-	fn headers_received(&self, _: Vec<core::BlockHeader>, _: SocketAddr) {}
+	fn headers_received(&self, _: Vec<core::BlockHeader>, _: SocketAddr) -> bool {
+		true
+	}
 	fn locate_headers(&self, _: Vec<Hash>) -> Vec<core::BlockHeader> {
 		vec![]
 	}
@@ -254,12 +256,7 @@ impl ChainAdapter for DummyAdapter {
 		false
 	}
 
-	fn txhashset_write(
-		&self,
-		_h: Hash,
-		_txhashset_data: File,
-		_peer_addr: SocketAddr,
-	) -> bool {
+	fn txhashset_write(&self, _h: Hash, _txhashset_data: File, _peer_addr: SocketAddr) -> bool {
 		false
 	}
 }

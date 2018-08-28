@@ -21,8 +21,8 @@ extern crate grin_wallet as wallet;
 extern crate rand;
 #[macro_use]
 extern crate slog;
+extern crate chrono;
 extern crate serde;
-extern crate time;
 extern crate uuid;
 
 mod common;
@@ -123,6 +123,7 @@ fn basic_transaction_api(
 			2,         // minimum confirmations
 			"wallet2", // dest
 			500,       // max outputs
+			1,         // num change outputs
 			true,      // select all outputs
 		)?;
 		Ok(())
@@ -136,6 +137,7 @@ fn basic_transaction_api(
 		let fee = wallet::libtx::tx_fee(
 			wallet1_info.last_confirmed_height as usize - cm as usize,
 			2,
+			1,
 			None,
 		);
 		// we should have a transaction entry for this slate
@@ -183,10 +185,11 @@ fn basic_transaction_api(
 		let fee = wallet::libtx::tx_fee(
 			wallet1_info.last_confirmed_height as usize - 1 - cm as usize,
 			2,
+			1,
 			None,
 		);
 		assert!(wallet1_refreshed);
-		// wallet 1 recieved fees, so amount should be the same
+		// wallet 1 received fees, so amount should be the same
 		assert_eq!(
 			wallet1_info.total,
 			amount * wallet1_info.last_confirmed_height - amount
@@ -298,6 +301,7 @@ fn tx_rollback(test_dir: &str, backend_type: common::BackendType) -> Result<(), 
 			2,         // minimum confirmations
 			"wallet2", // dest
 			500,       // max outputs
+			1,         // num change outputs
 			true,      // select all outputs
 		)?;
 		Ok(())
@@ -315,7 +319,7 @@ fn tx_rollback(test_dir: &str, backend_type: common::BackendType) -> Result<(), 
 		let mut unconfirmed_count = 0;
 		// get the tx entry, check outputs are as expected
 		let (_, outputs) = api.retrieve_outputs(true, false, Some(tx.unwrap().id))?;
-		for o in outputs.clone() {
+		for (o, _) in outputs.clone() {
 			if o.status == OutputStatus::Locked {
 				locked_count = locked_count + 1;
 			}
@@ -339,7 +343,7 @@ fn tx_rollback(test_dir: &str, backend_type: common::BackendType) -> Result<(), 
 		assert!(tx.is_some());
 		// get the tx entry, check outputs are as expected
 		let (_, outputs) = api.retrieve_outputs(true, false, Some(tx.unwrap().id))?;
-		for o in outputs.clone() {
+		for (o, _) in outputs.clone() {
 			if o.status == OutputStatus::Unconfirmed {
 				unconfirmed_count = unconfirmed_count + 1;
 			}
@@ -362,7 +366,8 @@ fn tx_rollback(test_dir: &str, backend_type: common::BackendType) -> Result<(), 
 		let res = api.cancel_tx(1);
 		assert!(res.is_err());
 		let (_, txs) = api.retrieve_txs(true, None)?;
-		let tx = txs.iter()
+		let tx = txs
+			.iter()
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
 		api.cancel_tx(tx.id)?;
@@ -383,7 +388,8 @@ fn tx_rollback(test_dir: &str, backend_type: common::BackendType) -> Result<(), 
 	// Wallet 2 rolls back
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
 		let (_, txs) = api.retrieve_txs(true, None)?;
-		let tx = txs.iter()
+		let tx = txs
+			.iter()
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
 		api.cancel_tx(tx.id)?;

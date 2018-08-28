@@ -83,7 +83,7 @@ pub enum ChainTypes {
 
 impl Default for ChainTypes {
 	fn default() -> ChainTypes {
-		ChainTypes::UserTesting
+		ChainTypes::Testnet3
 	}
 }
 
@@ -245,11 +245,11 @@ where
 		}
 		let mut interval_index = live_intervals.len() - 1;
 		let mut last_ts = last_n.first().as_ref().unwrap().as_ref().unwrap().0;
-		let last_diff = live_intervals[live_intervals.len()-1].1;
+		let last_diff = live_intervals[live_intervals.len() - 1].1;
 		// fill in simulated blocks with values from the previous real block
 
 		for _ in 0..block_count_difference {
-			last_ts = last_ts.saturating_sub(live_intervals[live_intervals.len()-1].0);
+			last_ts = last_ts.saturating_sub(live_intervals[live_intervals.len() - 1].0);
 			last_n.insert(0, Ok((last_ts, last_diff.clone())));
 			interval_index = match interval_index {
 				0 => live_intervals.len() - 1,

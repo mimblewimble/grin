@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate chrono;
 extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
@@ -20,13 +21,13 @@ extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
-extern crate time;
 
+use chrono::Duration;
 use std::fs;
 use std::sync::Arc;
 
+use chain::types::NoopAdapter;
 use chain::Chain;
-use chain::types::{NoopAdapter, Tip};
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader, Transaction};
 use core::global::{self, ChainTypes};
@@ -79,7 +80,7 @@ fn data_files() {
 			let pk = keychain.derive_key_id(n as u32).unwrap();
 			let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
 			let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
-			b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+			b.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 			chain.set_txhashset_roots(&mut b, false).unwrap();
 
@@ -94,8 +95,6 @@ fn data_files() {
 			chain
 				.process_block(b.clone(), chain::Options::MINE)
 				.unwrap();
-
-			let head = Tip::from_block(&b.header);
 
 			chain.validate(false).unwrap();
 		}
@@ -162,7 +161,7 @@ fn _prepare_block_nosum(
 		Err(e) => panic!("{:?}", e),
 		Ok(b) => b,
 	};
-	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+	b.header.timestamp = prev.timestamp + Duration::seconds(60);
 	b.header.total_difficulty = Difficulty::from_num(diff);
 	b
 }

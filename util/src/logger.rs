@@ -88,7 +88,7 @@ lazy_static! {
 	};
 }
 
-/// Initialises the logger with the given configuration
+/// Initialize the logger with the given configuration
 pub fn init_logger(config: Option<LoggingConfig>) {
 	if let Some(c) = config {
 		let mut config_ref = LOGGING_CONFIG.lock().unwrap();
@@ -107,8 +107,11 @@ pub fn init_test_logger() {
 	if *was_init_ref.deref() {
 		return;
 	}
+	let mut logger = LoggingConfig::default();
+	logger.log_to_file = false;
+	logger.stdout_log_level = LogLevel::Debug;
 	let mut config_ref = LOGGING_CONFIG.lock().unwrap();
-	*config_ref = LoggingConfig::default();
+	*config_ref = logger;
 	*was_init_ref = true;
 }
 

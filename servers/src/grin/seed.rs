@@ -16,16 +16,16 @@
 //! a mining worker implementation
 //!
 
-use std::io::Read;
+use chrono::prelude::Utc;
+use chrono::Duration;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::str;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::thread;
-use std::time::Duration;
-use time::{self, now_utc};
+use std::time;
 
-use hyper;
+use api;
 
 use p2p;
 use pool::DandelionConfig;
@@ -34,7 +34,7 @@ use util::LOGGER;
 const SEEDS_URL: &'static str = "http://grin-tech.org/seeds.txt";
 // DNS Seeds with contact email associated
 const DNS_SEEDS: &'static [&'static str] = &[
-	"t3.seed.grin-tech.org",   // igno.peverell@protonmail.com
+	"t3.seed.grin-tech.org", // igno.peverell@protonmail.com
 ];
 
 pub fn connect_and_monitor(
@@ -42,6 +42,7 @@ pub fn connect_and_monitor(
 	capabilities: p2p::Capabilities,
 	dandelion_config: DandelionConfig,
 	seed_list: Box<Fn() -> Vec<SocketAddr> + Send>,
+	preferred_peers: Option<Vec<SocketAddr>>,
 	stop: Arc<AtomicBool>,
 ) {
 	let _ = thread::Builder::new()
@@ -54,13 +55,20 @@ pub fn connect_and_monitor(
 			let (tx, rx) = mpsc::channel();
 
 			// check seeds first
-			connect_to_seeds(peers.clone(), tx.clone(), seed_list);
+			connect_to_seeds_and_preferred_peers(
+				peers.clone(),
+				tx.clone(),
+				seed_list,
+				preferred_peers.clone(),
+			);
 
-			let mut prev = time::now_utc() - time::Duration::seconds(60);
+			let mut prev = Utc::now() - Duration::seconds(60);
 			loop {
-				let current_time = time::now_utc();
+				let current_time = Utc::now();
 
-				if current_time - prev > time::Duration::seconds(20) {
+				if peers.peer_count() < p2p_server.config.peer_min_preferred_count()
+					|| current_time - prev > Duration::seconds(20)
+				{
 					// try to connect to any address sent to the channel
 					listen_for_addrs(peers.clone(), p2p_server.clone(), capabilities, &rx);
 
@@ -70,6 +78,7 @@ pub fn connect_and_monitor(
 						p2p_server.config.clone(),
 						capabilities,
 						tx.clone(),
+						preferred_peers.clone(),
 					);
 
 					update_dandelion_relay(peers.clone(), dandelion_config.clone());
@@ -77,7 +86,7 @@ pub fn connect_and_monitor(
 					prev = current_time;
 				}
 
-				thread::sleep(Duration::from_secs(1));
+				thread::sleep(time::Duration::from_secs(1));
 
 				if stop.load(Ordering::Relaxed) {
 					break;
@@ -91,6 +100,7 @@ fn monitor_peers(
 	config: p2p::P2PConfig,
 	capabilities: p2p::Capabilities,
 	tx: mpsc::Sender<SocketAddr>,
+	preferred_peers_list: Option<Vec<SocketAddr>>,
 ) {
 	// regularly check if we need to acquire more peers  and if so, gets
 	// them from db
@@ -101,7 +111,7 @@ fn monitor_peers(
 	for x in peers.all_peers() {
 		match x.flags {
 			p2p::State::Banned => {
-				let interval = now_utc().to_timespec().sec - x.last_banned;
+				let interval = Utc::now().timestamp() - x.last_banned;
 				// Unban peer
 				if interval >= config.ban_window() {
 					peers.unban_peer(&x.addr);
@@ -122,7 +132,7 @@ fn monitor_peers(
 		LOGGER,
 		"monitor_peers: {} connected ({} most_work). \
 		 all {} = {} healthy + {} banned + {} defunct",
-		peers.connected_peers().len(),
+		peers.peer_count(),
 		peers.most_work_peers().len(),
 		total_count,
 		healthy_count,
@@ -140,19 +150,39 @@ fn monitor_peers(
 
 	// loop over connected peers
 	// ask them for their list of peers
+	let mut connected_peers: Vec<SocketAddr> = vec![];
 	for p in peers.connected_peers() {
 		if let Ok(p) = p.try_read() {
 			debug!(LOGGER, "monitor_peers: ask {} for more peers", p.info.addr);
 			let _ = p.send_peer_request(capabilities);
+			connected_peers.push(p.info.addr)
 		} else {
 			warn!(LOGGER, "monitor_peers: failed to get read lock on peer");
 		}
 	}
 
+	// Attempt to connect to preferred peers if there is some
+	match preferred_peers_list {
+		Some(preferred_peers) => {
+			for mut p in preferred_peers {
+				if !connected_peers.is_empty() {
+					if connected_peers.contains(&p) {
+						tx.send(p).unwrap();
+					}
+				}
+			}
+		}
+		None => debug!(LOGGER, "monitor_peers: no preferred peers"),
+	}
+
 	// find some peers from our db
 	// and queue them up for a connection attempt
-	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::UNKNOWN, 100);
-	for p in peers {
+	let new_peers = peers.find_peers(
+		p2p::State::Healthy,
+		p2p::Capabilities::UNKNOWN,
+		config.peer_max_count() as usize,
+	);
+	for p in new_peers.iter().filter(|p| !peers.is_known(&p.addr)) {
 		debug!(LOGGER, "monitor_peers: queue to soon try {}", p.addr);
 		tx.send(p.addr).unwrap();
 	}
@@ -166,7 +196,7 @@ fn update_dandelion_relay(peers: Arc<p2p::Peers>, dandelion_config: DandelionCon
 		peers.update_dandelion_relay();
 	} else {
 		for last_added in dandelion_relay.keys() {
-			let dandelion_interval = now_utc().to_timespec().sec - last_added;
+			let dandelion_interval = Utc::now().timestamp() - last_added;
 			if dandelion_interval >= dandelion_config.relay_secs.unwrap() as i64 {
 				debug!(LOGGER, "monitor_peers: updating expired dandelion relay");
 				peers.update_dandelion_relay();
@@ -177,19 +207,26 @@ fn update_dandelion_relay(peers: Arc<p2p::Peers>, dandelion_config: DandelionCon
 
 // Check if we have any pre-existing peer in db. If so, start with those,
 // otherwise use the seeds provided.
-fn connect_to_seeds(
+fn connect_to_seeds_and_preferred_peers(
 	peers: Arc<p2p::Peers>,
 	tx: mpsc::Sender<SocketAddr>,
 	seed_list: Box<Fn() -> Vec<SocketAddr>>,
+	peers_preferred_list: Option<Vec<SocketAddr>>,
 ) {
 	// check if we have some peers in db
 	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::FULL_HIST, 100);
 
 	// if so, get their addresses, otherwise use our seeds
-	let peer_addrs = if peers.len() > 3 {
+	let mut peer_addrs = if peers.len() > 3 {
 		peers.iter().map(|p| p.addr).collect::<Vec<_>>()
 	} else {
 		seed_list()
+	};
+
+	// If we have preferred peers add them to the connection
+	match peers_preferred_list {
+		Some(mut peers_preferred) => peer_addrs.append(&mut peers_preferred),
+		None => debug!(LOGGER, "No preferred peers"),
 	};
 
 	if peer_addrs.len() == 0 {
@@ -267,22 +304,7 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 /// http. Easy method until we have a set of DNS names we can rely on.
 pub fn web_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 	Box::new(|| {
-		let client = hyper::Client::new();
-		debug!(LOGGER, "Retrieving seed nodes from {}", &SEEDS_URL);
-
-		// http get, filtering out non 200 results
-		let mut res = client
-			.get(SEEDS_URL)
-			.send()
-			.expect("Failed to resolve seeds.");
-		if res.status != hyper::Ok {
-			panic!("Failed to resolve seeds, got status {}.", res.status);
-		}
-		let mut buf = vec![];
-		res.read_to_end(&mut buf)
-			.expect("Could not read seed list.");
-
-		let text = str::from_utf8(&buf[..]).expect("Corrupted seed list.");
+		let text: String = api::client::get(SEEDS_URL).expect("Failed to resolve seeds");
 		let addrs = text.split_whitespace()
 			.map(|s| s.parse().unwrap())
 			.collect::<Vec<_>>();
@@ -300,4 +322,19 @@ pub fn predefined_seeds(addrs_str: Vec<String>) -> Box<Fn() -> Vec<SocketAddr> +
 			.map(|s| s.parse().unwrap())
 			.collect::<Vec<_>>()
 	})
+}
+
+/// Convenience function when the seed list is immediately known. Mostly used
+/// for tests.
+pub fn preferred_peers(addrs_str: Vec<String>) -> Option<Vec<SocketAddr>> {
+	if addrs_str.is_empty() {
+		None
+	} else {
+		Some(
+			addrs_str
+				.iter()
+				.map(|s| s.parse().unwrap())
+				.collect::<Vec<_>>(),
+		)
+	}
 }

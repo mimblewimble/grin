@@ -36,12 +36,11 @@ use util::{init_test_logger, LOGGER};
 
 #[test]
 fn simple_server_wallet() {
+	init_test_logger();
 	info!(LOGGER, "starting simple_server_wallet");
 	let test_name_dir = "test_servers";
 	core::global::set_mining_mode(core::global::ChainTypes::AutomatedTesting);
 	framework::clean_all_output(test_name_dir);
-
-	init_test_logger();
 
 	// Run a separate coinbase wallet for coinbase transactions
 	let mut coinbase_config = LocalServerContainerConfig::default();
@@ -144,13 +143,12 @@ fn simple_server_wallet() {
 /// Creates 2 servers and test P2P API
 #[test]
 fn test_p2p() {
+	init_test_logger();
 	info!(LOGGER, "starting test_p2p");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "test_servers";
 	framework::clean_all_output(test_name_dir);
-
-	init_test_logger();
 
 	// Spawn server and let it run for a bit
 	let mut server_config_one = LocalServerContainerConfig::default();
@@ -188,15 +186,17 @@ fn test_p2p() {
 	let base_addr = server_config_one.base_addr;
 	let api_server_port = server_config_one.api_server_port;
 
-	// Check that when we get peer connected the peer is here
-	let peers_connected = get_connected_peers(&base_addr, api_server_port);
-	assert!(peers_connected.is_ok());
-	assert_eq!(peers_connected.unwrap().len(), 1);
-
 	// Check that peer all is also working
 	let mut peers_all = get_all_peers(&base_addr, api_server_port);
 	assert!(peers_all.is_ok());
-	assert_eq!(peers_all.unwrap().len(), 1);
+	let pall = peers_all.unwrap();
+	assert_eq!(pall.len(), 2);
+
+	// Check that when we get peer connected the peer is here
+	let peers_connected = get_connected_peers(&base_addr, api_server_port);
+	assert!(peers_connected.is_ok());
+	let pc = peers_connected.unwrap();
+	assert_eq!(pc.len(), 1);
 
 	// Check that the peer status is Healthy
 	let addr = format!(
@@ -220,7 +220,7 @@ fn test_p2p() {
 	// Check from peer all
 	peers_all = get_all_peers(&base_addr, api_server_port);
 	assert!(peers_all.is_ok());
-	assert_eq!(peers_all.unwrap().len(), 1);
+	assert_eq!(peers_all.unwrap().len(), 2);
 
 	// Unban
 	let unban_result = unban_peer(&base_addr, api_server_port, &addr);
@@ -229,7 +229,7 @@ fn test_p2p() {
 	// Check from peer connected
 	let peers_connected = get_connected_peers(&base_addr, api_server_port);
 	assert!(peers_connected.is_ok());
-	assert_eq!(peers_connected.unwrap().len(), 1);
+	assert_eq!(peers_connected.unwrap().len(), 0);
 
 	// Check its status is healthy with get peer
 	let peer = get_peer(&base_addr, api_server_port, &addr);
@@ -323,7 +323,6 @@ fn get_outputs_by_ids2(
 		ids_string = ids_string + "?id=" + &id;
 	}
 	let ids_string = String::from(&ids_string[1..ids_string.len()]);
-	println!("{}", ids_string);
 	let url = format!(
 		"http://{}:{}/v1/chain/outputs/byids?{}",
 		base_addr, api_server_port, ids_string
@@ -423,7 +422,7 @@ fn get_ids_from_block_outputs(block_outputs: Vec<api::BlockOutputs>) -> Vec<Stri
 			ids.push(util::to_hex(output.clone().commit.0.to_vec()));
 		}
 	}
-	ids
+	ids.into_iter().take(100).collect()
 }
 
 pub fn ban_peer(base_addr: &String, api_server_port: u16, peer_addr: &String) -> Result<(), Error> {
@@ -431,7 +430,7 @@ pub fn ban_peer(base_addr: &String, api_server_port: u16, peer_addr: &String) ->
 		"http://{}:{}/v1/peers/{}/ban",
 		base_addr, api_server_port, peer_addr
 	);
-	api::client::post(url.as_str(), &"").map_err(|e| Error::API(e))
+	api::client::post_no_ret(url.as_str(), &"").map_err(|e| Error::API(e))
 }
 
 pub fn unban_peer(
@@ -443,7 +442,7 @@ pub fn unban_peer(
 		"http://{}:{}/v1/peers/{}/unban",
 		base_addr, api_server_port, peer_addr
 	);
-	api::client::post(url.as_str(), &"").map_err(|e| Error::API(e))
+	api::client::post_no_ret(url.as_str(), &"").map_err(|e| Error::API(e))
 }
 
 pub fn get_peer(

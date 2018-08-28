@@ -17,12 +17,11 @@
 //! header with its proof-of-work.  Any valid mined blocks are submitted to the
 //! network.
 
+use chrono::prelude::Utc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
-use time;
 
 use chain;
-use common::adapters::PoolToChainAdapter;
 use common::types::StratumServerConfig;
 use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader, Proof};
@@ -32,13 +31,10 @@ use mining::mine_block;
 use pool;
 use util::LOGGER;
 
-// Max number of transactions this miner will assemble in a block
-const MAX_TX: u32 = 5000;
-
 pub struct Miner {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	stop: Arc<AtomicBool>,
 
 	// Just to hold the port we're on, so this miner can be identified
@@ -52,7 +48,7 @@ impl Miner {
 	pub fn new(
 		config: StratumServerConfig,
 		chain_ref: Arc<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		tx_pool: Arc<RwLock<pool::TransactionPool>>,
 		stop: Arc<AtomicBool>,
 	) -> Miner {
 		Miner {
@@ -81,7 +77,7 @@ impl Miner {
 	) -> Option<Proof> {
 		// look for a pow for at most 2 sec on the same block (to give a chance to new
 		// transactions) and as long as the head hasn't changed
-		let deadline = time::get_time().sec + attempt_time_per_block as i64;
+		let deadline = Utc::now().timestamp() + attempt_time_per_block as i64;
 
 		debug!(
 			LOGGER,
@@ -96,7 +92,7 @@ impl Miner {
 		let mut iter_count = 0;
 
 		let mut sol = None;
-		while head.hash() == *latest_hash && time::get_time().sec < deadline {
+		while head.hash() == *latest_hash && Utc::now().timestamp() < deadline {
 			if let Ok(proof) = cuckoo::Miner::new(
 				&b.header,
 				consensus::EASINESS,
@@ -152,7 +148,6 @@ impl Miner {
 				&self.chain,
 				&self.tx_pool,
 				key_id.clone(),
-				MAX_TX.clone(),
 				wallet_listener_url.clone(),
 			);
 

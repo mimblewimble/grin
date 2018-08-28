@@ -9,7 +9,7 @@ publish = false
 bitflags = "1"
 blake2-rfc = "0.2"
 byteorder = "1"
-croaring = "=0.3.2"
+croaring = "=0.3"
 failure = "0.1"
 failure_derive = "0.1"
 lazy_static = "1"
@@ -19,7 +19,7 @@ serde = "1"
 serde_derive = "1"
 siphasher = "0.2"
 slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
-time = "0.1"
+chrono = "0.4.4"
 
 grin_keychain = { path = "../keychain" }
 grin_util = { path = "../util" }

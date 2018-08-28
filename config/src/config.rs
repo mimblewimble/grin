@@ -14,6 +14,7 @@
 
 //! Configuration file management
 
+use dirs;
 use std::env;
 use std::fs::File;
 use std::io::Read;
@@ -48,7 +49,6 @@ impl Default for GlobalConfig {
 	fn default() -> GlobalConfig {
 		GlobalConfig {
 			config_file_path: None,
-			using_config_file: false,
 			members: Some(ConfigMembers::default()),
 		}
 	}
@@ -75,7 +75,7 @@ impl GlobalConfig {
 			return Ok(());
 		}
 		// Then look in {user_home}/.grin
-		let config_path = env::home_dir();
+		let config_path = dirs::home_dir();
 		if let Some(mut p) = config_path {
 			p.push(GRIN_HOME);
 			p.push(CONFIG_FILE_NAME);
@@ -112,7 +112,7 @@ impl GlobalConfig {
 			)));
 		}
 
-		// Try to parse the config file if it exists explode if it does exist but
+		// Try to parse the config file if it exists, explode if it does exist but
 		// something's wrong with it
 		return_value.read_config()
 	}
@@ -128,7 +128,6 @@ impl GlobalConfig {
 				// Put the struct back together, because the config
 				// file was flattened a bit
 				gc.server.stratum_mining_config = gc.mining_server.clone();
-				self.using_config_file = true;
 				self.members = Some(gc);
 				return Ok(self);
 			}
@@ -169,7 +168,8 @@ impl GlobalConfig {
 
 	/// Enable mining
 	pub fn stratum_enabled(&mut self) -> bool {
-		return self.members
+		return self
+			.members
 			.as_mut()
 			.unwrap()
 			.mining_server

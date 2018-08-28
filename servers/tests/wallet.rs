@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate router;
 #[macro_use]
 extern crate slog;
 
@@ -59,7 +58,6 @@ fn basic_wallet_transactions() {
 	let coinbase_wallet_config = { coinbase_wallet.lock().unwrap().wallet_config.clone() };
 
 	let coinbase_seed = LocalServerContainer::get_wallet_seed(&coinbase_wallet_config);
-
 	let _ = thread::spawn(move || {
 		let mut w = coinbase_wallet.lock().unwrap();
 		w.run_wallet(0);
@@ -72,7 +70,6 @@ fn basic_wallet_transactions() {
 	let target_wallet = Arc::new(Mutex::new(LocalServerContainer::new(recp_config).unwrap()));
 	let target_wallet_cloned = target_wallet.clone();
 	let recp_wallet_config = { target_wallet.lock().unwrap().wallet_config.clone() };
-
 	let recp_seed = LocalServerContainer::get_wallet_seed(&recp_wallet_config);
 	//Start up a second wallet, to receive
 	let _ = thread::spawn(move || {
@@ -80,16 +77,16 @@ fn basic_wallet_transactions() {
 		w.run_wallet(0);
 	});
 
+	let mut server_config = LocalServerContainerConfig::default();
+	server_config.name = String::from("server_one");
+	server_config.p2p_server_port = 30000;
+	server_config.api_server_port = 30001;
+	server_config.start_miner = true;
+	server_config.start_wallet = false;
+	server_config.coinbase_wallet_address =
+		String::from(format!("http://{}:{}", server_config.base_addr, 10002));
 	// Spawn server and let it run for a bit
 	let _ = thread::spawn(move || {
-		let mut server_config = LocalServerContainerConfig::default();
-		server_config.name = String::from("server_one");
-		server_config.p2p_server_port = 30000;
-		server_config.api_server_port = 30001;
-		server_config.start_miner = true;
-		server_config.start_wallet = false;
-		server_config.coinbase_wallet_address =
-			String::from(format!("http://{}:{}", server_config.base_addr, 10002));
 		let mut server_one = LocalServerContainer::new(server_config).unwrap();
 		server_one.run_server(120);
 	});

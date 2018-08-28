@@ -162,8 +162,14 @@ impl fmt::Display for Identifier {
 	}
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct BlindingFactor([u8; SECRET_KEY_SIZE]);
+
+impl fmt::Debug for BlindingFactor {
+	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> fmt::Result {
+		write!(f, "{}", self.to_hex())
+	}
+}
 
 impl AsRef<[u8]> for BlindingFactor {
 	fn as_ref(&self) -> &[u8] {
@@ -297,8 +303,8 @@ mod test {
 	use rand::thread_rng;
 
 	use types::BlindingFactor;
-	use util::secp::Secp256k1;
 	use util::secp::key::{SecretKey, ZERO_KEY};
+	use util::secp::Secp256k1;
 
 	#[test]
 	fn split_blinding_factor() {

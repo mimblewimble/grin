@@ -16,9 +16,9 @@ extern crate croaring;
 
 use croaring::Bitmap;
 
-use core::core::BlockHeader;
 use core::core::hash::Hash;
 use core::core::pmmr::Backend;
+use core::core::BlockHeader;
 use core::ser;
 use core::ser::{PMMRable, Readable, Reader, Writeable, Writer};
 
@@ -118,11 +118,7 @@ where
 		Ok(())
 	}
 
-	fn rewind(
-		&mut self,
-		position: u64,
-		_rewind_rm_pos: &Bitmap,
-	) -> Result<(), String> {
+	fn rewind(&mut self, position: u64, _rewind_rm_pos: &Bitmap) -> Result<(), String> {
 		self.elems = self.elems[0..(position as usize) + 1].to_vec();
 		Ok(())
 	}

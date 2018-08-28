@@ -79,7 +79,7 @@ pub enum ErrorKind {
 	#[fail(display = "Already Spent: {:?}", _0)]
 	AlreadySpent(Commitment),
 	/// An output with that commitment already exists (should be unique)
-	#[fail(display = "Dupliate Commitment: {:?}", _0)]
+	#[fail(display = "Duplicate Commitment: {:?}", _0)]
 	DuplicateCommitment(Commitment),
 	/// Attempt to spend a coinbase output before it sufficiently matures.
 	#[fail(display = "Attempt to spend immature coinbase")]

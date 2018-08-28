@@ -17,7 +17,7 @@
 use keychain::{Identifier, Keychain};
 use libtx::{build, slate::Slate, tx_fee};
 use libwallet::error::{Error, ErrorKind};
-use libwallet::internal::{keys, sigcontext};
+use libwallet::internal::keys;
 use libwallet::types::*;
 
 use util::LOGGER;
@@ -35,27 +35,22 @@ pub fn build_send_tx_slate<T: ?Sized, C, K>(
 	minimum_confirmations: u64,
 	lock_height: u64,
 	max_outputs: usize,
+	change_outputs: usize,
 	selection_strategy_is_use_all: bool,
-) -> Result<
-	(
-		Slate,
-		sigcontext::Context,
-		impl FnOnce(&mut T) -> Result<(), Error>,
-	),
-	Error,
->
+) -> Result<(Slate, Context, impl FnOnce(&mut T) -> Result<(), Error>), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
 	K: Keychain,
 {
-	let (elems, inputs, change, change_derivation, amount, fee) = select_send_tx(
+	let (elems, inputs, change_amounts_derivations, amount, fee) = select_send_tx(
 		wallet,
 		amount,
 		current_height,
 		minimum_confirmations,
 		lock_height,
 		max_outputs,
+		change_outputs,
 		selection_strategy_is_use_all,
 	)?;
 
@@ -70,8 +65,9 @@ where
 	let keychain = wallet.keychain().clone();
 
 	let blinding = slate.add_transaction_elements(&keychain, elems)?;
+
 	// Create our own private context
-	let mut context = sigcontext::Context::new(
+	let mut context = Context::new(
 		wallet.keychain().secp(),
 		blinding.secret_key(&keychain.secp()).unwrap(),
 	);
@@ -81,9 +77,9 @@ where
 		context.add_input(&input.key_id);
 	}
 
-	// Store change output
-	if change_derivation.is_some() {
-		let change_id = keychain.derive_key_id(change_derivation.unwrap()).unwrap();
+	// Store change output(s)
+	for (_, derivation) in &change_amounts_derivations {
+		let change_id = keychain.derive_key_id(derivation.clone()).unwrap();
 		context.add_output(&change_id);
 	}
 
@@ -108,18 +104,19 @@ where
 			amount_debited = amount_debited + coin.value;
 			batch.lock_output(&mut coin)?;
 		}
+
 		t.amount_debited = amount_debited;
 
 		// write the output representing our change
-		if let Some(d) = change_derivation {
-			let change_id = keychain.derive_key_id(change_derivation.unwrap()).unwrap();
-			t.amount_credited = change as u64;
-			t.num_outputs = 1;
+		for (change_amount, change_derivation) in &change_amounts_derivations {
+			let change_id = keychain.derive_key_id(change_derivation.clone()).unwrap();
+			t.num_outputs += 1;
+			t.amount_credited += change_amount;
 			batch.save(OutputData {
-				root_key_id: root_key_id,
+				root_key_id: root_key_id.clone(),
 				key_id: change_id.clone(),
-				n_child: d,
-				value: change as u64,
+				n_child: change_derivation.clone(),
+				value: change_amount.clone(),
 				status: OutputStatus::Unconfirmed,
 				height: current_height,
 				lock_height: 0,
@@ -145,7 +142,7 @@ pub fn build_recipient_output_with_slate<T: ?Sized, C, K>(
 ) -> Result<
 	(
 		Identifier,
-		sigcontext::Context,
+		Context,
 		impl FnOnce(&mut T) -> Result<(), Error>,
 	),
 	Error,
@@ -169,7 +166,7 @@ where
 		slate.add_transaction_elements(&keychain, vec![build::output(amount, key_id.clone())])?;
 
 	// Add blinding sum to our context
-	let mut context = sigcontext::Context::new(
+	let mut context = Context::new(
 		keychain.secp(),
 		blinding
 			.secret_key(wallet.keychain().clone().secp())
@@ -215,15 +212,15 @@ pub fn select_send_tx<T: ?Sized, C, K>(
 	minimum_confirmations: u64,
 	lock_height: u64,
 	max_outputs: usize,
+	change_outputs: usize,
 	selection_strategy_is_use_all: bool,
 ) -> Result<
 	(
 		Vec<Box<build::Append<K>>>,
 		Vec<OutputData>,
-		u64,         //change
-		Option<u32>, //change derivation
-		u64,         // amount
-		u64,         // fee
+		Vec<(u64, u32)>, // change amounts and derivations
+		u64,             // amount
+		u64,             // fee
 	),
 	Error,
 >
@@ -233,7 +230,7 @@ where
 	K: Keychain,
 {
 	// select some spendable coins from the wallet
-	let (max_outputs, mut coins) = select_coins(
+	let (max_outputs, coins) = select_coins(
 		wallet,
 		amount,
 		current_height,
@@ -245,9 +242,12 @@ where
 	// sender is responsible for setting the fee on the partial tx
 	// recipient should double check the fee calculation and not blindly trust the
 	// sender
-	let mut fee;
+
+	// TODO - Is it safe to spend without a change output? (1 input -> 1 output)
+	// TODO - Does this not potentially reveal the senders private key?
+	//
 	// First attempt to spend without change
-	fee = tx_fee(coins.len(), 1, None);
+	let mut fee = tx_fee(coins.len(), 1, 1, None);
 	let mut total: u64 = coins.iter().map(|c| c.value).sum();
 	let mut amount_with_fee = amount + fee;
 
@@ -258,9 +258,19 @@ where
 		})?;
 	}
 
-	// Check if we need to use a change address
-	if total > amount_with_fee {
-		fee = tx_fee(coins.len(), 2, None);
+	// The amount with fee is more than the total values of our max outputs
+	if total < amount_with_fee && coins.len() == max_outputs {
+		return Err(ErrorKind::NotEnoughFunds {
+			available: total,
+			needed: amount_with_fee as u64,
+		})?;
+	}
+
+	let num_outputs = change_outputs + 1;
+
+	// We need to add a change address or amount with fee is more than total
+	if total != amount_with_fee {
+		fee = tx_fee(coins.len(), num_outputs, 1, None);
 		amount_with_fee = amount + fee;
 
 		// Here check if we have enough outputs for the amount including fee otherwise
@@ -275,28 +285,29 @@ where
 			}
 
 			// select some spendable coins from the wallet
-			coins = select_coins(
+			let (_, coins) = select_coins(
 				wallet,
 				amount_with_fee,
 				current_height,
 				minimum_confirmations,
 				max_outputs,
 				selection_strategy_is_use_all,
-			).1;
-			fee = tx_fee(coins.len(), 2, None);
+			);
+			fee = tx_fee(coins.len(), num_outputs, 1, None);
 			total = coins.iter().map(|c| c.value).sum();
 			amount_with_fee = amount + fee;
 		}
 	}
 
 	// build transaction skeleton with inputs and change
-	let (mut parts, change, change_derivation) = inputs_and_change(&coins, wallet, amount, fee)?;
+	let (mut parts, change_amounts_derivations) =
+		inputs_and_change(&coins, wallet, amount, fee, change_outputs)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
 	parts.push(build::with_lock_height(lock_height));
 
-	Ok((parts, coins, change, change_derivation, amount, fee))
+	Ok((parts, coins, change_amounts_derivations, amount, fee))
 }
 
 /// Selects inputs and change for a transaction
@@ -305,7 +316,8 @@ pub fn inputs_and_change<T: ?Sized, C, K>(
 	wallet: &mut T,
 	amount: u64,
 	fee: u64,
-) -> Result<(Vec<Box<build::Append<K>>>, u64, Option<u32>), Error>
+	num_change_outputs: usize,
+) -> Result<(Vec<Box<build::Append<K>>>, Vec<(u64, u32)>), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -332,17 +344,42 @@ where
 			parts.push(build::input(coin.value, key_id));
 		}
 	}
-	let mut change_derivation = None;
-	if change != 0 {
-		let keychain = wallet.keychain().clone();
-		let root_key_id = keychain.root_key_id();
-		change_derivation = Some(wallet.next_child(root_key_id.clone()).unwrap());
-		let change_k = keychain.derive_key_id(change_derivation.unwrap()).unwrap();
 
-		parts.push(build::output(change, change_k.clone()));
+	let mut change_amounts_derivations = vec![];
+
+	if change == 0 {
+		debug!(
+			LOGGER,
+			"No change (sending exactly amount + fee), no change outputs to build"
+		);
+	} else {
+		debug!(
+			LOGGER,
+			"Building change outputs: total change: {} ({} outputs)", change, num_change_outputs
+		);
+
+		let part_change = change / num_change_outputs as u64;
+		let remainder_change = change % part_change;
+
+		for x in 0..num_change_outputs {
+			// n-1 equal change_outputs and a final one accounting for any remainder
+			let change_amount = if x == (num_change_outputs - 1) {
+				part_change + remainder_change
+			} else {
+				part_change
+			};
+
+			let keychain = wallet.keychain().clone();
+			let root_key_id = keychain.root_key_id();
+			let change_derivation = wallet.next_child(root_key_id.clone()).unwrap();
+			let change_key = keychain.derive_key_id(change_derivation).unwrap();
+
+			change_amounts_derivations.push((change_amount, change_derivation));
+			parts.push(build::output(change_amount, change_key));
+		}
 	}
 
-	Ok((parts, change, change_derivation))
+	Ok((parts, change_amounts_derivations))
 }
 
 /// Select spendable coins from a wallet.

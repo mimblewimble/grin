@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate chrono;
 extern crate failure;
 extern crate grin_api as api;
 extern crate grin_chain as chain;
@@ -19,8 +20,8 @@ extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_wallet as wallet;
 extern crate serde_json;
-extern crate time;
 
+use chrono::Duration;
 use std::sync::{Arc, Mutex};
 
 use chain::Chain;
@@ -55,10 +56,31 @@ fn get_output_local(chain: &chain::Chain, commit: &pedersen::Commitment) -> Opti
 
 	for x in outputs.iter() {
 		if let Ok(_) = chain.is_unspent(&x) {
-			return Some(api::Output::new(&commit));
+			let block_height = chain.get_header_for_output(&x).unwrap().height;
+			return Some(api::Output::new(&commit, block_height));
 		}
 	}
 	None
+}
+
+/// get output listing traversing pmmr from local
+fn get_outputs_by_pmmr_index_local(
+	chain: Arc<chain::Chain>,
+	start_index: u64,
+	max: u64,
+) -> api::OutputListing {
+	let outputs = chain
+		.unspent_outputs_by_insertion_index(start_index, max)
+		.unwrap();
+	api::OutputListing {
+		last_retrieved_index: outputs.0,
+		highest_index: outputs.1,
+		outputs: outputs
+			.2
+			.iter()
+			.map(|x| api::OutputPrintable::from_output(x, chain.clone(), None, true))
+			.collect(),
+	}
 }
 
 /// Adds a block with a given reward to the chain and mines it
@@ -75,7 +97,7 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbDa
 		difficulty.clone(),
 		(output, kernel),
 	).unwrap();
-	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+	b.header.timestamp = prev.timestamp + Duration::seconds(60);
 	chain.set_txhashset_roots(&mut b, false).unwrap();
 	pow::pow_size(
 		&mut b.header,

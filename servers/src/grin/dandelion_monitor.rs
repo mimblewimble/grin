@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use chrono::prelude::Utc;
 use rand::{self, Rng};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
-use time::now_utc;
 
 use core::core::hash::Hashed;
 use core::core::transaction;
-use pool::{BlockChain, DandelionConfig, PoolEntryState, PoolError, TransactionPool, TxSource};
+use pool::{DandelionConfig, PoolEntryState, PoolError, TransactionPool, TxSource};
 use util::LOGGER;
 
 /// A process to monitor transactions in the stempool.
@@ -32,13 +32,11 @@ use util::LOGGER;
 /// stempool and test if the timer is expired for each transaction. In that case
 /// the transaction will be sent in fluff phase (to multiple peers) instead of
 /// sending only to the peer relay.
-pub fn monitor_transactions<T>(
+pub fn monitor_transactions(
 	dandelion_config: DandelionConfig,
-	tx_pool: Arc<RwLock<TransactionPool<T>>>,
+	tx_pool: Arc<RwLock<TransactionPool>>,
 	stop: Arc<AtomicBool>,
-) where
-	T: BlockChain + Send + Sync + 'static,
-{
+) {
 	debug!(LOGGER, "Started Dandelion transaction monitor.");
 
 	let _ = thread::Builder::new()
@@ -84,17 +82,17 @@ pub fn monitor_transactions<T>(
 		});
 }
 
-fn process_stem_phase<T>(tx_pool: Arc<RwLock<TransactionPool<T>>>) -> Result<(), PoolError>
-where
-	T: BlockChain + Send + Sync + 'static,
-{
+fn process_stem_phase(tx_pool: Arc<RwLock<TransactionPool>>) -> Result<(), PoolError> {
 	let mut tx_pool = tx_pool.write().unwrap();
+
+	let header = tx_pool.blockchain.chain_head()?;
 
 	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
 	let stem_txs = tx_pool.stempool.select_valid_transactions(
 		PoolEntryState::ToStem,
 		PoolEntryState::Stemmed,
 		txpool_tx,
+		&header.hash(),
 	)?;
 
 	if stem_txs.len() > 0 {
@@ -118,23 +116,23 @@ where
 				identifier: "?.?.?.?".to_string(),
 			};
 
-			tx_pool.add_to_pool(src, agg_tx, false)?;
+			tx_pool.add_to_pool(src, agg_tx, false, &header.hash())?;
 		}
 	}
 	Ok(())
 }
 
-fn process_fluff_phase<T>(tx_pool: Arc<RwLock<TransactionPool<T>>>) -> Result<(), PoolError>
-where
-	T: BlockChain + Send + Sync + 'static,
-{
+fn process_fluff_phase(tx_pool: Arc<RwLock<TransactionPool>>) -> Result<(), PoolError> {
 	let mut tx_pool = tx_pool.write().unwrap();
+
+	let header = tx_pool.blockchain.chain_head()?;
 
 	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
 	let stem_txs = tx_pool.stempool.select_valid_transactions(
 		PoolEntryState::ToFluff,
 		PoolEntryState::Fluffed,
 		txpool_tx,
+		&header.hash(),
 	)?;
 
 	if stem_txs.len() > 0 {
@@ -151,18 +149,15 @@ where
 			identifier: "?.?.?.?".to_string(),
 		};
 
-		tx_pool.add_to_pool(src, agg_tx, false)?;
+		tx_pool.add_to_pool(src, agg_tx, false, &header.hash())?;
 	}
 	Ok(())
 }
 
-fn process_fresh_entries<T>(
+fn process_fresh_entries(
 	dandelion_config: DandelionConfig,
-	tx_pool: Arc<RwLock<TransactionPool<T>>>,
-) -> Result<(), PoolError>
-where
-	T: BlockChain + Send + Sync + 'static,
-{
+	tx_pool: Arc<RwLock<TransactionPool>>,
+) -> Result<(), PoolError> {
 	let mut tx_pool = tx_pool.write().unwrap();
 
 	let mut rng = rand::thread_rng();
@@ -193,14 +188,11 @@ where
 	Ok(())
 }
 
-fn process_expired_entries<T>(
+fn process_expired_entries(
 	dandelion_config: DandelionConfig,
-	tx_pool: Arc<RwLock<TransactionPool<T>>>,
-) -> Result<(), PoolError>
-where
-	T: BlockChain + Send + Sync + 'static,
-{
-	let now = now_utc().to_timespec().sec;
+	tx_pool: Arc<RwLock<TransactionPool>>,
+) -> Result<(), PoolError> {
+	let now = Utc::now().timestamp();
 	let embargo_sec = dandelion_config.embargo_secs.unwrap() + rand::thread_rng().gen_range(0, 31);
 	let cutoff = now - embargo_sec as i64;
 
@@ -211,7 +203,7 @@ where
 			.stempool
 			.entries
 			.iter()
-			.filter(|x| x.tx_at.sec < cutoff)
+			.filter(|x| x.tx_at.timestamp() < cutoff)
 		{
 			debug!(
 				LOGGER,
@@ -231,12 +223,14 @@ where
 
 		{
 			let mut tx_pool = tx_pool.write().unwrap();
+			let header = tx_pool.blockchain.chain_head()?;
+
 			for entry in expired_entries {
 				let src = TxSource {
 					debug_name: "embargo_expired".to_string(),
 					identifier: "?.?.?.?".to_string(),
 				};
-				match tx_pool.add_to_pool(src, entry.tx, false) {
+				match tx_pool.add_to_pool(src, entry.tx, false, &header.hash()) {
 					Ok(_) => debug!(
 						LOGGER,
 						"dand_mon: embargo expired, fluffed tx successfully."

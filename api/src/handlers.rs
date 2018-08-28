@@ -12,16 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::Read;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::net::SocketAddr;
 use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 
-use failure::{Fail, ResultExt};
-use iron::prelude::{IronError, IronResult, Plugin, Request, Response};
-use iron::{status, Handler};
-use serde::Serialize;
+use failure::ResultExt;
+use futures::future::{err, ok};
+use futures::{Future, Stream};
+use hyper::{Body, Request, Response, StatusCode};
+use rest::{Error, ErrorKind};
+use serde::{Deserialize, Serialize};
 use serde_json;
-use urlencoded::UrlEncodedQuery;
 
 use chain;
 use core::core::hash::{Hash, Hashed};
@@ -31,16 +35,45 @@ use p2p;
 use p2p::types::ReasonForBan;
 use pool;
 use regex::Regex;
-use rest::{ApiServer, Error, ErrorKind};
+use rest::*;
+use router::{Handler, ResponseFuture, Router, RouterError};
 use types::*;
+use url::form_urlencoded;
+use util;
 use util::secp::pedersen::Commitment;
-use util::{self, LOGGER};
+use util::LOGGER;
 
 // All handlers use `Weak` references instead of `Arc` to avoid cycles that
 // can never be destroyed. These 2 functions are simple helpers to reduce the
 // boilerplate of dealing with `Weak`.
 fn w<T>(weak: &Weak<T>) -> Arc<T> {
 	weak.upgrade().unwrap()
+}
+
+/// Retrieves an output from the chain given a commit id (a tiny bit iteratively)
+fn get_output(chain: &Weak<chain::Chain>, id: &str) -> Result<(Output, OutputIdentifier), Error> {
+	let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
+		"Not a valid commitment: {}",
+		id
+	)))?;
+	let commit = Commitment::from_vec(c);
+
+	// We need the features here to be able to generate the necessary hash
+	// to compare against the hash in the output MMR.
+	// For now we can just try both (but this probably needs to be part of the api
+	// params)
+	let outputs = [
+		OutputIdentifier::new(OutputFeatures::DEFAULT_OUTPUT, &commit),
+		OutputIdentifier::new(OutputFeatures::COINBASE_OUTPUT, &commit),
+	];
+
+	for x in outputs.iter() {
+		if let Ok(_) = w(chain).is_unspent(&x) {
+			let block_height = w(chain).get_header_for_output(&x).unwrap().height;
+			return Ok((Output::new(&commit, block_height), x.clone()));
+		}
+	}
+	Err(ErrorKind::NotFound)?
 }
 
 // RESTful index of available api endpoints
@@ -52,7 +85,7 @@ struct IndexHandler {
 impl IndexHandler {}
 
 impl Handler for IndexHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		json_response_pretty(&self.list)
 	}
 }
@@ -67,50 +100,36 @@ struct OutputHandler {
 
 impl OutputHandler {
 	fn get_output(&self, id: &str) -> Result<Output, Error> {
-		let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
-			"Not a valid commitment: {}",
-			id
-		)))?;
-		let commit = Commitment::from_vec(c);
-
-		// We need the features here to be able to generate the necessary hash
-		// to compare against the hash in the output MMR.
-		// For now we can just try both (but this probably needs to be part of the api
-		// params)
-		let outputs = [
-			OutputIdentifier::new(OutputFeatures::DEFAULT_OUTPUT, &commit),
-			OutputIdentifier::new(OutputFeatures::COINBASE_OUTPUT, &commit),
-		];
-
-		for x in outputs.iter() {
-			if let Ok(_) = w(&self.chain).is_unspent(&x) {
-				return Ok(Output::new(&commit));
-			}
-		}
-		Err(ErrorKind::NotFound)?
+		let res = get_output(&self.chain, id)?;
+		Ok(res.0)
 	}
 
-	fn outputs_by_ids(&self, req: &mut Request) -> Vec<Output> {
-		let mut commitments: Vec<&str> = vec![];
-		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
-			if let Some(ids) = params.get("id") {
-				for id in ids {
-					for id in id.split(",") {
-						commitments.push(id.clone());
-					}
+	fn outputs_by_ids(&self, req: &Request<Body>) -> Result<Vec<Output>, Error> {
+		let mut commitments: Vec<String> = vec![];
+
+		let query = match req.uri().query() {
+			Some(q) => q,
+			None => return Err(ErrorKind::RequestError("no query string".to_owned()))?,
+		};
+		let params = form_urlencoded::parse(query.as_bytes())
+			.into_owned()
+			.collect::<Vec<(String, String)>>();
+
+		for (k, id) in params {
+			if k == "id" {
+				for id in id.split(",") {
+					commitments.push(id.to_owned());
 				}
 			}
 		}
 
-		debug!(LOGGER, "outputs_by_ids: {:?}", commitments);
-
 		let mut outputs: Vec<Output> = vec![];
 		for x in commitments {
-			if let Ok(output) = self.get_output(x) {
+			if let Ok(output) = self.get_output(&x) {
 				outputs.push(output);
 			}
 		}
-		outputs
+		Ok(outputs)
 	}
 
 	fn outputs_at_height(
@@ -118,75 +137,76 @@ impl OutputHandler {
 		block_height: u64,
 		commitments: Vec<Commitment>,
 		include_proof: bool,
-	) -> BlockOutputs {
-		let header = w(&self.chain).get_header_by_height(block_height).unwrap();
+	) -> Result<BlockOutputs, Error> {
+		let header = w(&self.chain)
+			.get_header_by_height(block_height)
+			.map_err(|_| ErrorKind::NotFound)?;
 
 		// TODO - possible to compact away blocks we care about
 		// in the period between accepting the block and refreshing the wallet
-		if let Ok(block) = w(&self.chain).get_block(&header.hash()) {
-			let outputs = block
-				.outputs
-				.iter()
-				.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
-				.map(|output| {
-					OutputPrintable::from_output(
-						output,
-						w(&self.chain),
-						Some(&header),
-						include_proof,
-					)
-				})
-				.collect();
+		let block = w(&self.chain)
+			.get_block(&header.hash())
+			.map_err(|_| ErrorKind::NotFound)?;
+		let outputs = block
+			.outputs()
+			.iter()
+			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
+			.map(|output| {
+				OutputPrintable::from_output(output, w(&self.chain), Some(&header), include_proof)
+			})
+			.collect();
 
-			BlockOutputs {
-				header: BlockHeaderInfo::from_header(&header),
-				outputs: outputs,
-			}
-		} else {
-			debug!(
-				LOGGER,
-				"could not find block {:?} at height {}, maybe compacted?",
-				&header.hash(),
-				block_height,
-			);
-
-			BlockOutputs {
-				header: BlockHeaderInfo::from_header(&header),
-				outputs: vec![],
-			}
-		}
+		Ok(BlockOutputs {
+			header: BlockHeaderInfo::from_header(&header),
+			outputs: outputs,
+		})
 	}
 
 	// returns outputs for a specified range of blocks
-	fn outputs_block_batch(&self, req: &mut Request) -> Vec<BlockOutputs> {
+	fn outputs_block_batch(&self, req: &Request<Body>) -> Result<Vec<BlockOutputs>, Error> {
 		let mut commitments: Vec<Commitment> = vec![];
 		let mut start_height = 1;
 		let mut end_height = 1;
 		let mut include_rp = false;
 
-		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
-			if let Some(ids) = params.get("id") {
-				for id in ids {
-					for id in id.split(",") {
-						if let Ok(x) = util::from_hex(String::from(id)) {
-							commitments.push(Commitment::from_vec(x));
-						}
+		let query = match req.uri().query() {
+			Some(q) => q,
+			None => return Err(ErrorKind::RequestError("no query string".to_owned()))?,
+		};
+
+		let params = form_urlencoded::parse(query.as_bytes()).into_owned().fold(
+			HashMap::new(),
+			|mut hm, (k, v)| {
+				hm.entry(k).or_insert(vec![]).push(v);
+				hm
+			},
+		);
+
+		if let Some(ids) = params.get("id") {
+			for id in ids {
+				for id in id.split(",") {
+					if let Ok(x) = util::from_hex(String::from(id)) {
+						commitments.push(Commitment::from_vec(x));
 					}
 				}
 			}
-			if let Some(heights) = params.get("start_height") {
-				for height in heights {
-					start_height = height.parse().unwrap();
-				}
+		}
+		if let Some(heights) = params.get("start_height") {
+			for height in heights {
+				start_height = height
+					.parse()
+					.map_err(|_| ErrorKind::RequestError("invalid start_height".to_owned()))?;
 			}
-			if let Some(heights) = params.get("end_height") {
-				for height in heights {
-					end_height = height.parse().unwrap();
-				}
+		}
+		if let Some(heights) = params.get("end_height") {
+			for height in heights {
+				end_height = height
+					.parse()
+					.map_err(|_| ErrorKind::RequestError("invalid end_height".to_owned()))?;
 			}
-			if let Some(_) = params.get("include_rp") {
-				include_rp = true;
-			}
+		}
+		if let Some(_) = params.get("include_rp") {
+			include_rp = true;
 		}
 
 		debug!(
@@ -200,27 +220,27 @@ impl OutputHandler {
 
 		let mut return_vec = vec![];
 		for i in (start_height..=end_height).rev() {
-			let res = self.outputs_at_height(i, commitments.clone(), include_rp);
-			if res.outputs.len() > 0 {
-				return_vec.push(res);
+			if let Ok(res) = self.outputs_at_height(i, commitments.clone(), include_rp) {
+				if res.outputs.len() > 0 {
+					return_vec.push(res);
+				}
 			}
 		}
 
-		return_vec
+		Ok(return_vec)
 	}
 }
 
 impl Handler for OutputHandler {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let url = req.url.clone();
-		let mut path_elems = url.path();
-		if *path_elems.last().unwrap() == "" {
-			path_elems.pop();
-		}
-		match *path_elems.last().unwrap() {
-			"byids" => json_response(&self.outputs_by_ids(req)),
-			"byheight" => json_response(&self.outputs_block_batch(req)),
-			_ => Ok(Response::with((status::BadRequest, ""))),
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
+		let command = match req.uri().path().trim_right_matches("/").rsplit("/").next() {
+			Some(c) => c,
+			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+		};
+		match command {
+			"byids" => result_to_response(self.outputs_by_ids(&req)),
+			"byheight" => result_to_response(self.outputs_block_batch(&req)),
+			_ => response(StatusCode::BAD_REQUEST, ""),
 		}
 	}
 }
@@ -266,15 +286,15 @@ impl TxHashSetHandler {
 	}
 
 	// allows traversal of utxo set
-	fn outputs(&self, start_index: u64, mut max: u64) -> OutputListing {
+	fn outputs(&self, start_index: u64, mut max: u64) -> Result<OutputListing, Error> {
 		//set a limit here
 		if max > 1000 {
 			max = 1000;
 		}
 		let outputs = w(&self.chain)
 			.unspent_outputs_by_insertion_index(start_index, max)
-			.unwrap();
-		OutputListing {
+			.context(ErrorKind::NotFound)?;
+		Ok(OutputListing {
 			last_retrieved_index: outputs.0,
 			highest_index: outputs.1,
 			outputs: outputs
@@ -282,7 +302,7 @@ impl TxHashSetHandler {
 				.iter()
 				.map(|x| OutputPrintable::from_output(x, w(&self.chain), None, true))
 				.collect(),
-		}
+		})
 	}
 
 	// return a dummy output with merkle proof for position filled out
@@ -293,31 +313,35 @@ impl TxHashSetHandler {
 			id
 		)))?;
 		let commit = Commitment::from_vec(c);
-		let merkle_proof = chain::Chain::get_merkle_proof_for_pos(&w(&self.chain), commit).unwrap();
+		let merkle_proof = chain::Chain::get_merkle_proof_for_pos(&w(&self.chain), commit)
+			.map_err(|_| ErrorKind::NotFound)?;
 		Ok(OutputPrintable {
 			output_type: OutputType::Coinbase,
 			commit: Commitment::from_vec(vec![]),
 			spent: false,
 			proof: None,
 			proof_hash: "".to_string(),
+			block_height: None,
 			merkle_proof: Some(merkle_proof),
 		})
 	}
 }
 
 impl Handler for TxHashSetHandler {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let url = req.url.clone();
-		let mut path_elems = url.path();
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
 		let mut start_index = 1;
 		let mut max = 100;
-		let mut id = "";
-		if *path_elems.last().unwrap() == "" {
-			path_elems.pop();
-		}
+		let mut id = "".to_owned();
+
 		// TODO: probably need to set a reasonable max limit here
 		let mut last_n = 10;
-		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
+		if let Some(query_string) = req.uri().query() {
+			let params = form_urlencoded::parse(query_string.as_bytes())
+				.into_owned()
+				.fold(HashMap::new(), |mut hm, (k, v)| {
+					hm.entry(k).or_insert(vec![]).push(v);
+					hm
+				});
 			if let Some(nums) = params.get("n") {
 				for num in nums {
 					if let Ok(n) = str::parse(num) {
@@ -340,19 +364,31 @@ impl Handler for TxHashSetHandler {
 				}
 			}
 			if let Some(ids) = params.get("id") {
-				for i in ids {
-					id = i;
+				if !ids.is_empty() {
+					id = ids.last().unwrap().to_owned();
 				}
 			}
 		}
-		match *path_elems.last().unwrap() {
+		let command = match req
+			.uri()
+			.path()
+			.trim_right()
+			.trim_right_matches("/")
+			.rsplit("/")
+			.next()
+		{
+			Some(c) => c,
+			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+		};
+
+		match command {
 			"roots" => json_response_pretty(&self.get_roots()),
 			"lastoutputs" => json_response_pretty(&self.get_last_n_output(last_n)),
 			"lastrangeproofs" => json_response_pretty(&self.get_last_n_rangeproof(last_n)),
 			"lastkernels" => json_response_pretty(&self.get_last_n_kernel(last_n)),
-			"outputs" => json_response_pretty(&self.outputs(start_index, max)),
-			"merkleproof" => json_response_pretty(&self.get_merkle_proof_for_output(id).unwrap()),
-			_ => Ok(Response::with((status::BadRequest, ""))),
+			"outputs" => result_to_response(self.outputs(start_index, max)),
+			"merkleproof" => result_to_response(self.get_merkle_proof_for_output(&id)),
+			_ => response(StatusCode::BAD_REQUEST, ""),
 		}
 	}
 }
@@ -362,7 +398,7 @@ pub struct PeersAllHandler {
 }
 
 impl Handler for PeersAllHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		let peers = &w(&self.peers).all_peers();
 		json_response_pretty(&peers)
 	}
@@ -373,7 +409,7 @@ pub struct PeersConnectedHandler {
 }
 
 impl Handler for PeersConnectedHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		let mut peers = vec![];
 		for p in &w(&self.peers).connected_peers() {
 			let p = p.read().unwrap();
@@ -385,63 +421,57 @@ impl Handler for PeersConnectedHandler {
 }
 
 /// Peer operations
+/// GET /v1/peers/10.12.12.13
 /// POST /v1/peers/10.12.12.13/ban
 /// POST /v1/peers/10.12.12.13/unban
-pub struct PeerPostHandler {
+pub struct PeerHandler {
 	pub peers: Weak<p2p::Peers>,
 }
 
-impl Handler for PeerPostHandler {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let url = req.url.clone();
-		let mut path_elems = url.path();
-		if *path_elems.last().unwrap() == "" {
-			path_elems.pop();
-		}
-		match *path_elems.last().unwrap() {
-			"ban" => {
-				path_elems.pop();
-				if let Ok(addr) = path_elems.last().unwrap().parse() {
-					w(&self.peers).ban_peer(&addr, ReasonForBan::ManualBan);
-					Ok(Response::with((status::Ok, "")))
-				} else {
-					Ok(Response::with((status::BadRequest, "")))
-				}
-			}
-			"unban" => {
-				path_elems.pop();
-				if let Ok(addr) = path_elems.last().unwrap().parse() {
-					w(&self.peers).unban_peer(&addr);
-					Ok(Response::with((status::Ok, "")))
-				} else {
-					Ok(Response::with((status::BadRequest, "")))
-				}
-			}
-			_ => Ok(Response::with((status::BadRequest, ""))),
-		}
-	}
-}
-
-/// Get details about a given peer
-pub struct PeerGetHandler {
-	pub peers: Weak<p2p::Peers>,
-}
-
-impl Handler for PeerGetHandler {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let url = req.url.clone();
-		let mut path_elems = url.path();
-		if *path_elems.last().unwrap() == "" {
-			path_elems.pop();
-		}
-		if let Ok(addr) = path_elems.last().unwrap().parse() {
+impl Handler for PeerHandler {
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
+		let command = match req.uri().path().trim_right_matches("/").rsplit("/").next() {
+			Some(c) => c,
+			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+		};
+		if let Ok(addr) = command.parse() {
 			match w(&self.peers).get_peer(addr) {
 				Ok(peer) => json_response(&peer),
-				Err(_) => Ok(Response::with((status::BadRequest, ""))),
+				Err(_) => response(StatusCode::NOT_FOUND, "peer not found"),
 			}
 		} else {
-			Ok(Response::with((status::BadRequest, "")))
+			response(
+				StatusCode::BAD_REQUEST,
+				format!("peer address unrecognized: {}", req.uri().path()),
+			)
 		}
+	}
+	fn post(&self, req: Request<Body>) -> ResponseFuture {
+		let mut path_elems = req.uri().path().trim_right_matches("/").rsplit("/");
+		let command = match path_elems.next() {
+			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			Some(c) => c,
+		};
+		let addr = match path_elems.next() {
+			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			Some(a) => match a.parse() {
+				Err(e) => {
+					return response(
+						StatusCode::BAD_REQUEST,
+						format!("invalid peer address: {}", e),
+					)
+				}
+				Ok(addr) => addr,
+			},
+		};
+
+		match command {
+			"ban" => w(&self.peers).ban_peer(&addr, ReasonForBan::ManualBan),
+			"unban" => w(&self.peers).unban_peer(&addr),
+			_ => return response(StatusCode::BAD_REQUEST, "invalid command"),
+		};
+
+		response(StatusCode::OK, "")
 	}
 }
 
@@ -453,14 +483,20 @@ pub struct StatusHandler {
 }
 
 impl StatusHandler {
-	fn get_status(&self) -> Status {
-		Status::from_tip_and_peers(w(&self.chain).head().unwrap(), w(&self.peers).peer_count())
+	fn get_status(&self) -> Result<Status, Error> {
+		let head = w(&self.chain)
+			.head()
+			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
+		Ok(Status::from_tip_and_peers(
+			head,
+			w(&self.peers).peer_count(),
+		))
 	}
 }
 
 impl Handler for StatusHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-		json_response(&self.get_status())
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
+		result_to_response(self.get_status())
 	}
 }
 
@@ -471,14 +507,17 @@ pub struct ChainHandler {
 }
 
 impl ChainHandler {
-	fn get_tip(&self) -> Tip {
-		Tip::from_tip(w(&self.chain).head().unwrap())
+	fn get_tip(&self) -> Result<Tip, Error> {
+		let head = w(&self.chain)
+			.head()
+			.map_err(|e| ErrorKind::Internal(format!("can't get head: {}", e)))?;
+		Ok(Tip::from_tip(head))
 	}
 }
 
 impl Handler for ChainHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-		json_response(&self.get_tip())
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
+		result_to_response(self.get_tip())
 	}
 }
 
@@ -489,10 +528,15 @@ pub struct ChainValidationHandler {
 }
 
 impl Handler for ChainValidationHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		// TODO - read skip_rproofs from query params
-		w(&self.chain).validate(true).unwrap();
-		Ok(Response::with((status::Ok, "{}")))
+		match w(&self.chain).validate(true) {
+			Ok(_) => response(StatusCode::OK, ""),
+			Err(e) => response(
+				StatusCode::INTERNAL_SERVER_ERROR,
+				format!("validate failed: {}", e),
+			),
+		}
 	}
 }
 
@@ -504,15 +548,21 @@ pub struct ChainCompactHandler {
 }
 
 impl Handler for ChainCompactHandler {
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
-		w(&self.chain).compact().unwrap();
-		Ok(Response::with((status::Ok, "{}")))
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
+		match w(&self.chain).compact() {
+			Ok(_) => response(StatusCode::OK, ""),
+			Err(e) => response(
+				StatusCode::INTERNAL_SERVER_ERROR,
+				format!("compact failed: {}", e),
+			),
+		}
 	}
 }
 
-/// Gets block headers given either a hash or height.
+/// Gets block headers given either a hash or height or an output commit.
 /// GET /v1/headers/<hash>
 /// GET /v1/headers/<height>
+/// GET /v1/headers/<output commit>
 ///
 pub struct HeaderHandler {
 	pub chain: Weak<chain::Chain>,
@@ -520,6 +570,10 @@ pub struct HeaderHandler {
 
 impl HeaderHandler {
 	fn get_header(&self, input: String) -> Result<BlockHeaderPrintable, Error> {
+		// will fail quick if the provided isn't a commitment
+		if let Ok(h) = self.get_header_for_output(input.clone()) {
+			return Ok(h);
+		}
 		if let Ok(height) = input.parse() {
 			match w(&self.chain).get_header_by_height(height) {
 				Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
@@ -527,16 +581,28 @@ impl HeaderHandler {
 			}
 		}
 		check_block_param(&input)?;
-		let vec = util::from_hex(input).unwrap();
+		let vec = util::from_hex(input)
+			.map_err(|e| ErrorKind::Argument(format!("invalid input: {}", e)))?;
 		let h = Hash::from_vec(&vec);
-		let header = w(&self.chain).get_block_header(&h).context(ErrorKind::NotFound)?;
+		let header = w(&self.chain)
+			.get_block_header(&h)
+			.context(ErrorKind::NotFound)?;
 		Ok(BlockHeaderPrintable::from_header(&header))
+	}
+
+	fn get_header_for_output(&self, commit_id: String) -> Result<BlockHeaderPrintable, Error> {
+		let oid = get_output(&self.chain, &commit_id)?.1;
+		match w(&self.chain).get_header_for_output(&oid) {
+			Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
+			Err(_) => return Err(ErrorKind::NotFound)?,
+		}
 	}
 }
 
-/// Gets block details given either a hash or height.
+/// Gets block details given either a hash or an unspent commit
 /// GET /v1/blocks/<hash>
 /// GET /v1/blocks/<height>
+/// GET /v1/blocks/<commit>
 ///
 /// Optionally return results as "compact blocks" by passing "?compact" query
 /// param GET /v1/blocks/<hash>?compact
@@ -553,7 +619,7 @@ impl BlockHandler {
 	fn get_compact_block(&self, h: &Hash) -> Result<CompactBlockPrintable, Error> {
 		let block = w(&self.chain).get_block(h).context(ErrorKind::NotFound)?;
 		Ok(CompactBlockPrintable::from_compact_block(
-			&block.as_compact_block(),
+			&block.into(),
 			w(&self.chain),
 		))
 	}
@@ -567,77 +633,73 @@ impl BlockHandler {
 			}
 		}
 		check_block_param(&input)?;
-		let vec = util::from_hex(input).unwrap();
+		let vec = util::from_hex(input)
+			.map_err(|e| ErrorKind::Argument(format!("invalid input: {}", e)))?;
 		Ok(Hash::from_vec(&vec))
 	}
 }
 
 fn check_block_param(input: &String) -> Result<(), Error> {
-		lazy_static! {
-			static ref RE: Regex = Regex::new(r"[0-9a-fA-F]{64}").unwrap();
-		}
-		if !RE.is_match(&input) {
-			return Err(ErrorKind::Argument(
-				"Not a valid hash or height.".to_owned(),
-			))?;
-		}
-		return Ok(())
+	lazy_static! {
+		static ref RE: Regex = Regex::new(r"[0-9a-fA-F]{64}").unwrap();
+	}
+	if !RE.is_match(&input) {
+		return Err(ErrorKind::Argument(
+			"Not a valid hash or height.".to_owned(),
+		))?;
+	}
+	return Ok(());
 }
 
 impl Handler for BlockHandler {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let url = req.url.clone();
-		let mut path_elems = url.path();
-		if *path_elems.last().unwrap() == "" {
-			path_elems.pop();
-		}
-		let el = *path_elems.last().unwrap();
-		let h = self.parse_input(el.to_string())
-			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
+		let el = match req.uri().path().trim_right_matches("/").rsplit("/").next() {
+			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			Some(el) => el,
+		};
 
-		let mut compact = false;
-		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
-			if let Some(_) = params.get("compact") {
-				compact = true;
+		let h = match self.parse_input(el.to_string()) {
+			Err(e) => {
+				return response(
+					StatusCode::BAD_REQUEST,
+					format!("failed to parse input: {}", e),
+				)
 			}
-		}
+			Ok(h) => h,
+		};
 
-		if compact {
-			let b = self.get_compact_block(&h)
-				.map_err(|e| IronError::new(Fail::compat(e), status::InternalServerError))?;
-			json_response(&b)
+		if let Some(param) = req.uri().query() {
+			if param == "compact" {
+				result_to_response(self.get_compact_block(&h))
+			} else {
+				response(
+					StatusCode::BAD_REQUEST,
+					format!("unsupported query parameter: {}", param),
+				)
+			}
 		} else {
-			let b = self.get_block(&h)
-				.map_err(|e| IronError::new(Fail::compat(e), status::InternalServerError))?;
-			json_response(&b)
+			result_to_response(self.get_block(&h))
 		}
 	}
 }
 
 impl Handler for HeaderHandler {
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let url = req.url.clone();
-		let mut path_elems = url.path();
-		if *path_elems.last().unwrap() == "" {
-			path_elems.pop();
-		}
-		let el = *path_elems.last().unwrap();
-		let h = self.get_header(el.to_string())
-			.map_err(|e| IronError::new(Fail::compat(e), status::InternalServerError))?;
-		json_response(&h)
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
+		let el = match req.uri().path().trim_right_matches("/").rsplit("/").next() {
+			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			Some(el) => el,
+		};
+		result_to_response(self.get_header(el.to_string()))
 	}
 }
 
 // Get basic information about the transaction pool.
-struct PoolInfoHandler<T> {
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+struct PoolInfoHandler {
+	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 }
 
-impl<T> Handler for PoolInfoHandler<T>
-where
-	T: pool::BlockChain + Send + Sync + 'static,
-{
-	fn handle(&self, _req: &mut Request) -> IronResult<Response> {
+impl Handler for PoolInfoHandler {
+	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		let pool_arc = w(&self.tx_pool);
 		let pool = pool_arc.read().unwrap();
 
@@ -654,82 +716,135 @@ struct TxWrapper {
 }
 
 // Push new transaction to our local transaction pool.
-struct PoolPushHandler<T> {
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+struct PoolPushHandler {
+	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 }
 
-impl<T> Handler for PoolPushHandler<T>
-where
-	T: pool::BlockChain + Send + Sync + 'static,
-{
-	fn handle(&self, req: &mut Request) -> IronResult<Response> {
-		let wrapper: TxWrapper = serde_json::from_reader(req.body.by_ref())
-			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
-
-		let tx_bin = util::from_hex(wrapper.tx_hex)
-			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
-
-		let tx: Transaction = ser::deserialize(&mut &tx_bin[..])
-			.map_err(|e| IronError::new(Fail::compat(e), status::BadRequest))?;
-
-		let source = pool::TxSource {
-			debug_name: "push-api".to_string(),
-			identifier: "?.?.?.?".to_string(),
-		};
-		info!(
-			LOGGER,
-			"Pushing transaction with {} inputs and {} outputs to pool.",
-			tx.inputs.len(),
-			tx.outputs.len()
-		);
-
-		let mut fluff = false;
-		if let Ok(params) = req.get_ref::<UrlEncodedQuery>() {
-			if let Some(_) = params.get("fluff") {
-				fluff = true;
-			}
-		}
-
-		//  Push to tx pool.
-		let res = {
-			let pool_arc = w(&self.tx_pool);
-			let mut tx_pool = pool_arc.write().unwrap();
-			tx_pool.add_to_pool(source, tx, !fluff)
+impl PoolPushHandler {
+	fn update_pool(&self, req: Request<Body>) -> Box<Future<Item = (), Error = Error> + Send> {
+		let params = match req.uri().query() {
+			Some(query_string) => form_urlencoded::parse(query_string.as_bytes())
+				.into_owned()
+				.fold(HashMap::new(), |mut hm, (k, v)| {
+					hm.entry(k).or_insert(vec![]).push(v);
+					hm
+				}),
+			None => HashMap::new(),
 		};
 
-		match res {
-			Ok(()) => Ok(Response::with(status::Ok)),
-			Err(e) => {
-				debug!(LOGGER, "error - {:?}", e);
-				Err(IronError::new(Fail::compat(e), status::BadRequest))
-			}
-		}
+		let fluff = params.get("fluff").is_some();
+		let pool_arc = w(&self.tx_pool).clone();
+
+		Box::new(
+			parse_body(req)
+				.and_then(move |wrapper: TxWrapper| {
+					util::from_hex(wrapper.tx_hex)
+						.map_err(|_| ErrorKind::RequestError("Bad request".to_owned()).into())
+				})
+				.and_then(move |tx_bin| {
+					ser::deserialize(&mut &tx_bin[..])
+						.map_err(|_| ErrorKind::RequestError("Bad request".to_owned()).into())
+				})
+				.and_then(move |tx: Transaction| {
+					let source = pool::TxSource {
+						debug_name: "push-api".to_string(),
+						identifier: "?.?.?.?".to_string(),
+					};
+					info!(
+						LOGGER,
+						"Pushing transaction {} to pool (inputs: {}, outputs: {}, kernels: {})",
+						tx.hash(),
+						tx.inputs().len(),
+						tx.outputs().len(),
+						tx.kernels().len(),
+					);
+
+					//  Push to tx pool.
+					let mut tx_pool = pool_arc.write().unwrap();
+					let header = tx_pool.blockchain.chain_head().unwrap();
+					tx_pool
+						.add_to_pool(source, tx, !fluff, &header.hash())
+						.map_err(|e| {
+							error!(LOGGER, "update_pool: failed with error: {:?}", e);
+							ErrorKind::RequestError("Bad request".to_owned()).into()
+						})
+				}),
+		)
 	}
 }
 
-// Utility to serialize a struct into JSON and produce a sensible IronResult
+impl Handler for PoolPushHandler {
+	fn post(&self, req: Request<Body>) -> ResponseFuture {
+		Box::new(
+			self.update_pool(req)
+				.and_then(|_| ok(just_response(StatusCode::OK, "")))
+				.or_else(|e| {
+					ok(just_response(
+						StatusCode::INTERNAL_SERVER_ERROR,
+						format!("failed: {}", e),
+					))
+				}),
+		)
+	}
+}
+
+// Utility to serialize a struct into JSON and produce a sensible Response
 // out of it.
-fn json_response<T>(s: &T) -> IronResult<Response>
+fn json_response<T>(s: &T) -> ResponseFuture
 where
 	T: Serialize,
 {
 	match serde_json::to_string(s) {
-		Ok(json) => Ok(Response::with((status::Ok, json))),
-		Err(_) => Ok(Response::with((status::InternalServerError, ""))),
+		Ok(json) => response(StatusCode::OK, json),
+		Err(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
+	}
+}
+
+fn result_to_response<T>(res: Result<T, Error>) -> ResponseFuture
+where
+	T: Serialize,
+{
+	match res {
+		Ok(s) => json_response_pretty(&s),
+		Err(e) => match e.kind() {
+			ErrorKind::Argument(msg) => response(StatusCode::BAD_REQUEST, msg.clone()),
+			ErrorKind::RequestError(msg) => response(StatusCode::BAD_REQUEST, msg.clone()),
+			ErrorKind::NotFound => response(StatusCode::NOT_FOUND, ""),
+			ErrorKind::Internal(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+			ErrorKind::ResponseError(msg) => {
+				response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
+			}
+		},
 	}
 }
 
 // pretty-printed version of above
-fn json_response_pretty<T>(s: &T) -> IronResult<Response>
+fn json_response_pretty<T>(s: &T) -> ResponseFuture
 where
 	T: Serialize,
 {
 	match serde_json::to_string_pretty(s) {
-		Ok(json) => Ok(Response::with((status::Ok, json))),
-		Err(_) => Ok(Response::with((status::InternalServerError, ""))),
+		Ok(json) => response(StatusCode::OK, json),
+		Err(e) => response(
+			StatusCode::INTERNAL_SERVER_ERROR,
+			format!("can't create json response: {}", e),
+		),
 	}
 }
-/// Start all server HTTP handlers. Register all of them with Iron
+
+fn response<T: Into<Body> + Debug>(status: StatusCode, text: T) -> ResponseFuture {
+	Box::new(ok(just_response(status, text)))
+}
+
+fn just_response<T: Into<Body> + Debug>(status: StatusCode, text: T) -> Response<Body> {
+	let mut resp = Response::new(text.into());
+	*resp.status_mut() = status;
+	resp
+}
+
+thread_local!( static ROUTER: RefCell<Option<Router>> = RefCell::new(None) );
+
+/// Start all server HTTP handlers. Register all of them with Router
 /// and runs the corresponding HTTP server.
 ///
 /// Hyper currently has a bug that prevents clean shutdown. In order
@@ -737,109 +852,138 @@ where
 /// weak references. Note that this likely means a crash if the handlers are
 /// used after a server shutdown (which should normally never happen,
 /// except during tests).
-pub fn start_rest_apis<T>(
+pub fn start_rest_apis(
 	addr: String,
 	chain: Weak<chain::Chain>,
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
-) where
-	T: pool::BlockChain + Send + Sync + 'static,
-{
+) {
 	let _ = thread::Builder::new()
 		.name("apis".to_string())
 		.spawn(move || {
-			// build handlers and register them under the appropriate endpoint
-			let output_handler = OutputHandler {
-				chain: chain.clone(),
-			};
-			let block_handler = BlockHandler {
-				chain: chain.clone(),
-			};
-			let header_handler = HeaderHandler {
-				chain: chain.clone(),
-			};
-			let chain_tip_handler = ChainHandler {
-				chain: chain.clone(),
-			};
-			let chain_compact_handler = ChainCompactHandler {
-				chain: chain.clone(),
-			};
-			let chain_validation_handler = ChainValidationHandler {
-				chain: chain.clone(),
-			};
-			let status_handler = StatusHandler {
-				chain: chain.clone(),
-				peers: peers.clone(),
-			};
-			let txhashset_handler = TxHashSetHandler {
-				chain: chain.clone(),
-			};
-			let pool_info_handler = PoolInfoHandler {
-				tx_pool: tx_pool.clone(),
-			};
-			let pool_push_handler = PoolPushHandler {
-				tx_pool: tx_pool.clone(),
-			};
-			let peers_all_handler = PeersAllHandler {
-				peers: peers.clone(),
-			};
-			let peers_connected_handler = PeersConnectedHandler {
-				peers: peers.clone(),
-			};
-			let peer_post_handler = PeerPostHandler {
-				peers: peers.clone(),
-			};
-			let peer_get_handler = PeerGetHandler {
-				peers: peers.clone(),
-			};
+			let mut apis = ApiServer::new();
 
-			let route_list = vec![
-				"get blocks".to_string(),
-				"get chain".to_string(),
-				"get chain/compact".to_string(),
-				"get chain/validate".to_string(),
-				"get chain/outputs".to_string(),
-				"post chain/height-index".to_string(),
-				"get status".to_string(),
-				"get txhashset/roots".to_string(),
-				"get txhashset/lastoutputs?n=10".to_string(),
-				"get txhashset/lastrangeproofs".to_string(),
-				"get txhashset/lastkernels".to_string(),
-				"get txhashset/outputs?start_index=1&max=100".to_string(),
-				"get pool".to_string(),
-				"post pool/push".to_string(),
-				"post peers/a.b.c.d:p/ban".to_string(),
-				"post peers/a.b.c.d:p/unban".to_string(),
-				"get peers/all".to_string(),
-				"get peers/connected".to_string(),
-				"get peers/a.b.c.d".to_string(),
-			];
-			let index_handler = IndexHandler { list: route_list };
+			ROUTER.with(|router| {
+				*router.borrow_mut() =
+					Some(build_router(chain, tx_pool, peers).expect("unbale to build API router"));
 
-			let router = router!(
-				index: get "/" => index_handler,
-				blocks: get "/blocks/*" => block_handler,
-				headers: get "/headers/*" => header_handler,
-				chain_tip: get "/chain" => chain_tip_handler,
-				chain_compact: get "/chain/compact" => chain_compact_handler,
-				chain_validate: get "/chain/validate" => chain_validation_handler,
-				chain_outputs: get "/chain/outputs/*" => output_handler,
-				status: get "/status" => status_handler,
-				txhashset_roots: get "/txhashset/*" => txhashset_handler,
-				pool_info: get "/pool" => pool_info_handler,
-				pool_push: post "/pool/push" => pool_push_handler,
-				peers_all: get "/peers/all" => peers_all_handler,
-				peers_connected: get "/peers/connected" => peers_connected_handler,
-				peer: post "/peers/*" => peer_post_handler,
-				peer: get "/peers/*" => peer_get_handler
-			);
-
-			let mut apis = ApiServer::new("/v1".to_string());
-			apis.register_handler(router);
-
-			info!(LOGGER, "Starting HTTP API server at {}.", addr);
-			apis.start(&addr[..]).unwrap_or_else(|e| {
-				error!(LOGGER, "Failed to start API HTTP server: {}.", e);
+				info!(LOGGER, "Starting HTTP API server at {}.", addr);
+				let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
+				apis.start(socket_addr, &handle).unwrap_or_else(|e| {
+					error!(LOGGER, "Failed to start API HTTP server: {}.", e);
+				});
 			});
 		});
+}
+
+pub fn handle(req: Request<Body>) -> ResponseFuture {
+	ROUTER.with(|router| match *router.borrow() {
+		Some(ref h) => h.handle(req),
+		None => {
+			error!(LOGGER, "No HTTP API router configured");
+			response(StatusCode::INTERNAL_SERVER_ERROR, "No router configured")
+		}
+	})
+}
+
+fn parse_body<T>(req: Request<Body>) -> Box<Future<Item = T, Error = Error> + Send>
+where
+	for<'de> T: Deserialize<'de> + Send + 'static,
+{
+	Box::new(
+		req.into_body()
+			.concat2()
+			.map_err(|_e| ErrorKind::RequestError("Failed to read request".to_owned()).into())
+			.and_then(|body| match serde_json::from_reader(&body.to_vec()[..]) {
+				Ok(obj) => ok(obj),
+				Err(_) => err(ErrorKind::RequestError("Invalid request body".to_owned()).into()),
+			}),
+	)
+}
+
+pub fn build_router(
+	chain: Weak<chain::Chain>,
+	tx_pool: Weak<RwLock<pool::TransactionPool>>,
+	peers: Weak<p2p::Peers>,
+) -> Result<Router, RouterError> {
+	let route_list = vec![
+		"get blocks".to_string(),
+		"get chain".to_string(),
+		"get chain/compact".to_string(),
+		"get chain/validate".to_string(),
+		"get chain/outputs".to_string(),
+		"get status".to_string(),
+		"get txhashset/roots".to_string(),
+		"get txhashset/lastoutputs?n=10".to_string(),
+		"get txhashset/lastrangeproofs".to_string(),
+		"get txhashset/lastkernels".to_string(),
+		"get txhashset/outputs?start_index=1&max=100".to_string(),
+		"get pool".to_string(),
+		"post pool/push".to_string(),
+		"post peers/a.b.c.d:p/ban".to_string(),
+		"post peers/a.b.c.d:p/unban".to_string(),
+		"get peers/all".to_string(),
+		"get peers/connected".to_string(),
+		"get peers/a.b.c.d".to_string(),
+	];
+	let index_handler = IndexHandler { list: route_list };
+
+	let output_handler = OutputHandler {
+		chain: chain.clone(),
+	};
+
+	let block_handler = BlockHandler {
+		chain: chain.clone(),
+	};
+	let header_handler = HeaderHandler {
+		chain: chain.clone(),
+	};
+	let chain_tip_handler = ChainHandler {
+		chain: chain.clone(),
+	};
+	let chain_compact_handler = ChainCompactHandler {
+		chain: chain.clone(),
+	};
+	let chain_validation_handler = ChainValidationHandler {
+		chain: chain.clone(),
+	};
+	let status_handler = StatusHandler {
+		chain: chain.clone(),
+		peers: peers.clone(),
+	};
+	let txhashset_handler = TxHashSetHandler {
+		chain: chain.clone(),
+	};
+	let pool_info_handler = PoolInfoHandler {
+		tx_pool: tx_pool.clone(),
+	};
+	let pool_push_handler = PoolPushHandler {
+		tx_pool: tx_pool.clone(),
+	};
+	let peers_all_handler = PeersAllHandler {
+		peers: peers.clone(),
+	};
+	let peers_connected_handler = PeersConnectedHandler {
+		peers: peers.clone(),
+	};
+	let peer_handler = PeerHandler {
+		peers: peers.clone(),
+	};
+
+	let mut router = Router::new();
+	router.add_route("/v1/", Box::new(index_handler))?;
+	router.add_route("/v1/blocks/*", Box::new(block_handler))?;
+	router.add_route("/v1/headers/*", Box::new(header_handler))?;
+	router.add_route("/v1/chain", Box::new(chain_tip_handler))?;
+	router.add_route("/v1/chain/outputs/*", Box::new(output_handler))?;
+	router.add_route("/v1/chain/compact", Box::new(chain_compact_handler))?;
+	router.add_route("/v1/chain/validate", Box::new(chain_validation_handler))?;
+	router.add_route("/v1/txhashset/*", Box::new(txhashset_handler))?;
+	router.add_route("/v1/status", Box::new(status_handler))?;
+	router.add_route("/v1/pool", Box::new(pool_info_handler))?;
+	router.add_route("/v1/pool/push", Box::new(pool_push_handler))?;
+	router.add_route("/v1/peers/all", Box::new(peers_all_handler))?;
+	router.add_route("/v1/peers/connected", Box::new(peers_connected_handler))?;
+	router.add_route("/v1/peers/**", Box::new(peer_handler))?;
+	Ok(router)
 }
