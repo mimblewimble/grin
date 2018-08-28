@@ -158,10 +158,7 @@ fn monitor_peers(
 		if let Ok(p) = p.try_read() {
 			debug!(
 				LOGGER,
-				"monitor_peers: {}:{} ask {} for more peers",
-				config.host,
-				config.port,
-				p.info.addr,
+				"monitor_peers: {}:{} ask {} for more peers", config.host, config.port, p.info.addr,
 			);
 			let _ = p.send_peer_request(capabilities);
 			connected_peers.push(p.info.addr)
@@ -194,10 +191,7 @@ fn monitor_peers(
 	for p in new_peers.iter().filter(|p| !peers.is_known(&p.addr)) {
 		debug!(
 			LOGGER,
-			"monitor_peers: on {}:{}, queue to soon try {}",
-			config.host,
-			config.port,
-			p.addr,
+			"monitor_peers: on {}:{}, queue to soon try {}", config.host, config.port, p.addr,
 		);
 		tx.send(p.addr).unwrap();
 	}
@@ -300,11 +294,15 @@ fn listen_for_addrs(
 								);
 								let _ = peers_c.update_state(addr, p2p::State::Defunct);
 
-								// don't retry if connection refused
-								if let p2p::Error::Connection(io_err) = e {
-									if io::ErrorKind::ConnectionRefused == io_err.kind() {
-										break;
+								// don't retry if connection refused or PeerWithSelf
+								match e {
+									p2p::Error::Connection(io_err) => {
+										if io::ErrorKind::ConnectionRefused == io_err.kind() {
+											break;
+										}
 									}
+									p2p::Error::PeerWithSelf => break,
+									_ => continue,
 								}
 							}
 						}
@@ -360,7 +358,8 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 pub fn web_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 	Box::new(|| {
 		let text: String = api::client::get(SEEDS_URL).expect("Failed to resolve seeds");
-		let addrs = text.split_whitespace()
+		let addrs = text
+			.split_whitespace()
 			.map(|s| s.parse().unwrap())
 			.collect::<Vec<_>>();
 		debug!(LOGGER, "Retrieved seed addresses: {:?}", addrs);

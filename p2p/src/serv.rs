@@ -144,8 +144,18 @@ impl Server {
 	/// we're already connected to the provided address.
 	pub fn connect(&self, addr: &SocketAddr) -> Result<Arc<RwLock<Peer>>, Error> {
 		if Peer::is_denied(&self.config, &addr) {
-			debug!(LOGGER, "connect_peer: peer {} denied, not connecting.", addr);
+			debug!(
+				LOGGER,
+				"connect_peer: peer {} denied, not connecting.", addr
+			);
 			return Err(Error::ConnectionClose);
+		}
+
+		if self.config.port == addr.port()
+			&& (addr.ip().is_loopback() || addr.ip() == self.config.host)
+		{
+			debug!(LOGGER, "connect_peer: peer {} denied, PeerWithSelf.", addr);
+			return Err(Error::PeerWithSelf);
 		}
 
 		if let Some(p) = self.peers.get_connected_peer(addr) {
