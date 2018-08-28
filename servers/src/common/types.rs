@@ -166,7 +166,7 @@ pub struct ServerConfig {
 impl Default for ServerConfig {
 	fn default() -> ServerConfig {
 		ServerConfig {
-			db_root: ".grin".to_string(),
+			db_root: "chain".to_string(),
 			api_http_addr: "127.0.0.1:13413".to_string(),
 			p2p_config: p2p::P2PConfig::default(),
 			dandelion_config: pool::DandelionConfig::default(),

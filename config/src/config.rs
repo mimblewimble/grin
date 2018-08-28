@@ -14,9 +14,8 @@
 
 //! Configuration file management
 
-use dirs;
 use std::env;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::prelude::*;
 use std::io::Read;
 use std::path::PathBuf;
@@ -33,6 +32,48 @@ use wallet::WalletConfig;
 
 const CONFIG_FILE_NAME: &'static str = "grin.toml";
 const GRIN_HOME: &'static str = ".grin";
+
+/// Handles setup and detection of paths, which configuration to use
+/// etc
+pub fn initial_setup(config_file_path: Option<&str>) -> Result<GlobalConfig, ConfigError> {
+	// Just attempt to load and error if there's an issue
+	if let Some(p) = config_file_path {
+		GlobalConfig::new(p)
+	} else {
+		// Check if grin dir exists
+		let grin_path = {
+			match env::home_dir() {
+				Some(mut p) => {
+					p.push(GRIN_HOME);
+					p
+				}
+				None => {
+					let mut pb = PathBuf::new();
+					pb.push(GRIN_HOME);
+					pb
+				}
+			}
+		};
+		// Create if the default path doesn't exist
+		if !grin_path.exists() {
+			fs::create_dir_all(grin_path.clone())?;
+		}
+		// Get path to defalut config file
+		let mut config_path = grin_path.clone();
+		config_path.push(CONFIG_FILE_NAME);
+
+		// Spit it out if it doesn't exist
+		if !config_path.exists() {
+			let mut default_config = GlobalConfig::default();
+			// need to update server chain path
+			let mut chain_path = grin_path.clone();
+			default_config.members.as_mut().unwrap().server.db_root =
+				chain_path.to_str().unwrap().to_owned();
+			default_config.write_to_file(config_path.to_str().unwrap())?;
+		}
+		GlobalConfig::new(config_path.to_str().unwrap())
+	}
+}
 
 /// Returns the defaults, as strewn throughout the code
 
@@ -56,54 +97,10 @@ impl Default for GlobalConfig {
 }
 
 impl GlobalConfig {
-	/// Need to decide on rules where to read the config file from,
-	/// but will take a stab at logic for now
-
-	fn derive_config_location(&mut self) -> Result<(), ConfigError> {
-		// First, check working directory
-		let mut config_path = env::current_dir().unwrap();
-		config_path.push(CONFIG_FILE_NAME);
-		if config_path.exists() {
-			self.config_file_path = Some(config_path);
-			return Ok(());
-		}
-		// Next, look in directory of executable
-		let mut config_path = env::current_exe().unwrap();
-		config_path.pop();
-		config_path.push(CONFIG_FILE_NAME);
-		if config_path.exists() {
-			self.config_file_path = Some(config_path);
-			return Ok(());
-		}
-		// Then look in {user_home}/.grin
-		let config_path = dirs::home_dir();
-		if let Some(mut p) = config_path {
-			p.push(GRIN_HOME);
-			p.push(CONFIG_FILE_NAME);
-			if p.exists() {
-				self.config_file_path = Some(p);
-				return Ok(());
-			}
-		}
-
-		// Give up
-		Err(ConfigError::FileNotFoundError(String::from("")))
-	}
-
-	/// Takes the path to a config file, or if NONE, tries to determine a config
-	/// file based on rules in derive_config_location
-	pub fn new(file_path: Option<&str>) -> Result<GlobalConfig, ConfigError> {
+	/// Requires the path to a config file
+	pub fn new(file_path: &str) -> Result<GlobalConfig, ConfigError> {
 		let mut return_value = GlobalConfig::default();
-		if let Some(fp) = file_path {
-			return_value.config_file_path = Some(PathBuf::from(&fp));
-		} else {
-			let _result = return_value.derive_config_location();
-		}
-
-		// No attempt at a config file, just return defaults
-		if let None = return_value.config_file_path {
-			return Ok(return_value);
-		}
+		return_value.config_file_path = Some(PathBuf::from(&file_path));
 
 		// Config file path is given but not valid
 		let config_file = return_value.config_file_path.clone().unwrap();

@@ -41,7 +41,6 @@ pub mod tui;
 
 use clap::{App, Arg, SubCommand};
 
-use config::GlobalConfig;
 use core::global;
 use util::{init_logger, LOGGER};
 
@@ -76,38 +75,16 @@ fn log_build_info() {
 	trace!(LOGGER, "{}", deps);
 }
 
-fn init_config() -> GlobalConfig {
-	// load a global config object,
-	// then modify that object with any switches
-	// found so that the switches override the
-	// global config file
-
-	// This will return a global config object,
-	// which will either contain defaults for all // of the config structures or a
-	// configuration
-	// read from a config file
-
-	let mut global_config = GlobalConfig::new(None).unwrap_or_else(|e| {
-		panic!("Error parsing config file: {}", e);
-	});
-
-	let mut default_config = GlobalConfig::default();
-
-	default_config
-		.write_to_file("config_out.toml")
-		.unwrap_or_else(|e| {
-			panic!("Error writing config file: {}", e);
-		});
-
-	global_config
-}
-
 fn main() {
 	let args = App::new("Grin")
 		.version(crate_version!())
 		.author("The Grin Team")
 		.about("Lightweight implementation of the MimbleWimble protocol.")
-
+    .arg(Arg::with_name("config_file")
+         .short("c")
+         .long("config_file")
+         .help("Path to a grin.toml configuration file")
+         .takes_value(true))
     // specification of all the server commands and options
     .subcommand(SubCommand::with_name("server")
                 .about("Control the Grin server")
@@ -308,7 +285,10 @@ fn main() {
 
 	.get_matches();
 
-	let mut global_config = init_config();
+	let config = args.value_of("config_file");
+	let mut global_config = config::initial_setup(config).unwrap_or_else(|e| {
+		panic!("Error loading configuration: {}", e);
+	});
 
 	// initialize the logger
 	let mut log_conf = global_config
