@@ -109,7 +109,8 @@ impl Peers {
 
 	/// Get vec of peers we are currently connected to.
 	pub fn connected_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
-		let mut res = self.peers
+		let mut res = self
+			.peers
 			.read()
 			.unwrap()
 			.values()
@@ -252,13 +253,6 @@ impl Peers {
 	pub fn ban_peer(&self, peer_addr: &SocketAddr, ban_reason: ReasonForBan) {
 		if let Err(e) = self.update_state(*peer_addr, State::Banned) {
 			error!(LOGGER, "Couldn't ban {}: {:?}", peer_addr, e);
-		}
-
-		if let Err(e) = self.update_last_banned(*peer_addr, Utc::now().timestamp()) {
-			error!(
-				LOGGER,
-				"Couldn't update last_banned time {}: {:?}", peer_addr, e
-			);
 		}
 
 		if let Some(peer) = self.get_connected_peer(peer_addr) {
@@ -440,13 +434,6 @@ impl Peers {
 	pub fn update_state(&self, peer_addr: SocketAddr, new_state: State) -> Result<(), Error> {
 		self.store
 			.update_state(peer_addr, new_state)
-			.map_err(From::from)
-	}
-
-	/// Updates the last banned time of a peer in store
-	pub fn update_last_banned(&self, peer_addr: SocketAddr, last_banned: i64) -> Result<(), Error> {
-		self.store
-			.update_last_banned(peer_addr, last_banned)
 			.map_err(From::from)
 	}
 
