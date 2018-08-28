@@ -33,9 +33,8 @@ use wallet::{FileWallet, HTTPWalletClient, WalletConfig};
 /// Just removes all results from previous runs
 pub fn clean_all_output(test_name_dir: &str) {
 	let target_dir = format!("target/tmp/{}", test_name_dir);
-	let result = fs::remove_dir_all(target_dir);
-	if let Err(e) = result {
-		println!("{}", e);
+	if let Err(e) = fs::remove_dir_all(target_dir) {
+		println!("can't remove output from previous test :{}, may be ok", e);
 	}
 }
 
@@ -154,10 +153,10 @@ pub struct LocalServerContainer {
 impl LocalServerContainer {
 	/// Create a new local server container with defaults, with the given name
 	/// all related files will be created in the directory
-	/// target/tmp/test_servers/{name}
+	/// target/tmp/{name}
 
 	pub fn new(config: LocalServerContainerConfig) -> Result<LocalServerContainer, Error> {
-		let working_dir = format!("target/tmp/test_servers/{}", config.name);
+		let working_dir = format!("target/tmp/{}", config.name);
 		let mut wallet_config = WalletConfig::default();
 
 		wallet_config.api_listen_port = config.wallet_port;

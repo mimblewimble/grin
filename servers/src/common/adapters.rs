@@ -214,7 +214,12 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		let res = w(&self.chain).process_block_header(&bh, self.chain_opts());
 
 		if let &Err(ref e) = &res {
-			debug!(LOGGER, "Block header {} refused by chain: {:?}", bhash, e);
+			debug!(
+				LOGGER,
+				"Block header {} refused by chain: {:?}",
+				bhash,
+				e.kind()
+			);
 			if e.is_bad_data() {
 				debug!(
 					LOGGER,
@@ -480,7 +485,9 @@ impl NetToChainAdapter {
 					_ => {
 						debug!(
 							LOGGER,
-							"adapter: process_block: block {} refused by chain: {}", bhash, e
+							"adapter: process_block: block {} refused by chain: {}",
+							bhash,
+							e.kind()
 						);
 						true
 					}
