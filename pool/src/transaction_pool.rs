@@ -100,7 +100,7 @@ impl TransactionPool {
 		self.is_acceptable(&tx)?;
 
 		// Make sure the transaction is valid before anything else.
-		tx.validate(false).map_err(|e| PoolError::InvalidTx(e))?;
+		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
 		// Check the tx lock_time is valid based on current chain state.
 		self.blockchain.verify_tx_lock_height(&tx)?;

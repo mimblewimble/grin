@@ -196,7 +196,7 @@ where
 
 	// finalize the burn transaction and send
 	let tx_burn = build::transaction(parts, &keychain)?;
-	tx_burn.validate(false)?;
+	tx_burn.validate()?;
 	Ok(tx_burn)
 }
 

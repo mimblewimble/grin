@@ -431,9 +431,14 @@ impl Block {
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
 	) -> Result<Block, Error> {
-		// A block is just a big transaction, aggregate as such. Note that
-		// aggregate also runs validation and duplicate commitment checks.
-		let agg_tx = transaction::aggregate(txs, Some((reward_out, reward_kern)))?;
+		// A block is just a big transaction, aggregate as such.
+		// Note that aggregation also runs transaction validation
+		// and duplicate commitment checks.
+		let mut agg_tx = transaction::aggregate(txs)?;
+		// Now add the reward output and reward kernel to the aggregate tx.
+		// At this point the tx is technically invalid,
+		// but the tx body is valid if we account for the reward (i.e. as a block).
+		agg_tx = agg_tx.with_output(reward_out).with_kernel(reward_kern);
 
 		// Now add the kernel offset of the previous block for a total
 		let total_kernel_offset =
@@ -452,6 +457,9 @@ impl Block {
 		let now = Utc::now().timestamp();
 		let timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now, 0), Utc);
 
+		// Now build the block with all the above information.
+		// Note: We have not validated the block here.
+		// Caller must validate the block as necessary.
 		Block {
 			header: BlockHeader {
 				height: prev.height + 1,

@@ -613,8 +613,7 @@ impl Readable for Transaction {
 		// Treat any validation issues as data corruption.
 		// An example of this would be reading a tx
 		// that exceeded the allowed number of inputs.
-		tx.validate_read(false)
-			.map_err(|_| ser::Error::CorruptedData)?;
+		tx.validate_read().map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(tx)
 	}
@@ -749,23 +748,19 @@ impl Transaction {
 	/// * rangeproof verification (on the body)
 	/// * kernel signature verification (on the body)
 	/// * kernel sum verification
-	pub fn validate_read(&self, with_reward: bool) -> Result<(), Error> {
-		self.body.validate_read(with_reward)?;
-		if !with_reward {
-			self.body.verify_features()?;
-		}
+	pub fn validate_read(&self) -> Result<(), Error> {
+		self.body.validate_read(false)?;
+		self.body.verify_features()?;
 		Ok(())
 	}
 
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self, with_reward: bool) -> Result<(), Error> {
-		self.body.validate(with_reward)?;
-		if !with_reward {
-			self.body.verify_features()?;
-			self.verify_kernel_sums(self.overage(), self.offset)?;
-		}
+	pub fn validate(&self) -> Result<(), Error> {
+		self.body.validate(false)?;
+		self.body.verify_features()?;
+		self.verify_kernel_sums(self.overage(), self.offset)?;
 		Ok(())
 	}
 
@@ -812,16 +807,13 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 	Ok(())
 }
 
-/// Aggregate a vec of transactions into a multi-kernel transaction with
-/// cut_through. Optionally allows passing a reward output and kernel for
-/// block building.
-pub fn aggregate(
-	mut transactions: Vec<Transaction>,
-	reward: Option<(Output, TxKernel)>,
-) -> Result<Transaction, Error> {
+/// Aggregate a vec of txs into a multi-kernel tx with cut_through.
+pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	// convenience short-circuiting
-	if reward.is_none() && transactions.len() == 1 {
-		return Ok(transactions.pop().unwrap());
+	if txs.is_empty() {
+		return Ok(Transaction::empty());
+	} else if txs.len() == 1 {
+		return Ok(txs.pop().unwrap());
 	}
 
 	let mut inputs: Vec<Input> = vec![];
@@ -832,18 +824,13 @@ pub fn aggregate(
 	// transaction
 	let mut kernel_offsets: Vec<BlindingFactor> = vec![];
 
-	for mut transaction in transactions {
+	for mut tx in txs {
 		// we will sum these later to give a single aggregate offset
-		kernel_offsets.push(transaction.offset);
+		kernel_offsets.push(tx.offset);
 
-		inputs.append(&mut transaction.body.inputs);
-		outputs.append(&mut transaction.body.outputs);
-		kernels.append(&mut transaction.body.kernels);
-	}
-	let with_reward = reward.is_some();
-	if let Some((out, kernel)) = reward {
-		outputs.push(out);
-		kernels.push(kernel);
+		inputs.append(&mut tx.body.inputs);
+		outputs.append(&mut tx.body.outputs);
+		kernels.append(&mut tx.body.kernels);
 	}
 
 	// Sort inputs and outputs during cut_through.
@@ -867,7 +854,7 @@ pub fn aggregate(
 	// The resulting tx could be invalid for a variety of reasons -
 	//   * tx too large (too many inputs|outputs|kernels)
 	//   * cut-through may have invalidated the sums
-	tx.validate(with_reward)?;
+	tx.validate()?;
 
 	Ok(tx)
 }
@@ -883,7 +870,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	// transaction
 	let mut kernel_offsets = vec![];
 
-	let tx = aggregate(txs, None)?;
+	let tx = aggregate(txs)?;
 
 	for mk_input in mk_tx.body.inputs {
 		if !tx.body.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
@@ -935,8 +922,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
 
 	// Now validate the resulting tx to ensure we have not built something invalid.
-	tx.validate(false)?;
-
+	tx.validate()?;
 	Ok(tx)
 }
 

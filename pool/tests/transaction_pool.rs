@@ -219,7 +219,7 @@ fn test_the_transaction_pool() {
 		let tx4 = test_transaction(&keychain, vec![800], vec![799]);
 		// tx1 and tx2 are already in the txpool (in aggregated form)
 		// tx4 is the "new" part of this aggregated tx that we care about
-		let agg_tx = transaction::aggregate(vec![tx1.clone(), tx2.clone(), tx4], None).unwrap();
+		let agg_tx = transaction::aggregate(vec![tx1.clone(), tx2.clone(), tx4]).unwrap();
 		write_pool
 			.add_to_pool(test_source(), agg_tx, false, &header.hash())
 			.unwrap();
