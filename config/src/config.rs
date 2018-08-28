@@ -67,6 +67,7 @@ pub fn initial_setup(config_file_path: Option<&str>) -> Result<GlobalConfig, Con
 			let mut default_config = GlobalConfig::default();
 			// need to update server chain path
 			let mut chain_path = grin_path.clone();
+			chain_path.push("chain_data");
 			default_config.members.as_mut().unwrap().server.db_root =
 				chain_path.to_str().unwrap().to_owned();
 			default_config.write_to_file(config_path.to_str().unwrap())?;

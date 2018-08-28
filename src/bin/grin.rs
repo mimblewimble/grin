@@ -85,7 +85,10 @@ fn main() {
          .long("config_file")
          .help("Path to a grin.toml configuration file")
          .takes_value(true))
-    // specification of all the server commands and options
+    // specification of the config file output command and options
+    .subcommand(SubCommand::with_name("config")
+                .about("Generate a configuration grin.toml file in the current directory"))
+     // specification of all the server commands and options
     .subcommand(SubCommand::with_name("server")
                 .about("Control the Grin server")
                 .arg(Arg::with_name("port")
@@ -284,6 +287,15 @@ fn main() {
 				NOTE: Backup wallet.* and run `wallet listen` before running restore.")))
 
 	.get_matches();
+
+	match args.subcommand() {
+		// If it's just a config command, do it and exit
+		("config", Some(_config_args)) => {
+			cmd::config_command();
+			return;
+		}
+		_ => {}
+	}
 
 	let config = args.value_of("config_file");
 	let mut global_config = config::initial_setup(config).unwrap_or_else(|e| {
