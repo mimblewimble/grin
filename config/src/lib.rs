@@ -20,11 +20,10 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate dirs;
 extern crate toml;
+extern crate dirs;
 
 extern crate grin_p2p as p2p;
 extern crate grin_servers as servers;
@@ -33,5 +32,6 @@ extern crate grin_wallet as wallet;
 
 pub mod config;
 pub mod types;
+mod comments;
 
 pub use types::{ConfigError, ConfigMembers, GlobalConfig};

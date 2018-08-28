@@ -76,6 +76,30 @@ fn log_build_info() {
 	trace!(LOGGER, "{}", deps);
 }
 
+fn init_config() -> GlobalConfig {
+	// load a global config object,
+	// then modify that object with any switches
+	// found so that the switches override the
+	// global config file
+
+	// This will return a global config object,
+	// which will either contain defaults for all // of the config structures or a
+	// configuration
+	// read from a config file
+
+	let mut global_config = GlobalConfig::new(None).unwrap_or_else(|e| {
+		panic!("Error parsing config file: {}", e);
+	});
+
+	let mut default_config = GlobalConfig::default();
+
+	default_config.write_to_file("config_out.toml").unwrap_or_else(|e| {
+		panic!("Error writing config file: {}", e);
+	});
+
+	global_config
+}
+
 fn main() {
 	let args = App::new("Grin")
 		.version(crate_version!())
@@ -282,19 +306,7 @@ fn main() {
 
 	.get_matches();
 
-	// load a global config object,
-	// then modify that object with any switches
-	// found so that the switches override the
-	// global config file
-
-	// This will return a global config object,
-	// which will either contain defaults for all // of the config structures or a
-	// configuration
-	// read from a config file
-
-	let mut global_config = GlobalConfig::new(None).unwrap_or_else(|e| {
-		panic!("Error parsing config file: {}", e);
-	});
+	let mut global_config = init_config();
 
 	// initialize the logger
 	let mut log_conf = global_config

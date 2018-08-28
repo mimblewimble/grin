@@ -18,13 +18,15 @@ use dirs;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use std::io::prelude::*;
 use std::path::PathBuf;
 use toml;
 
-use servers::{ServerConfig, StratumServerConfig};
+use servers::ServerConfig;
 use types::{ConfigError, ConfigMembers, GlobalConfig};
 use util::LoggingConfig;
 use wallet::WalletConfig;
+use comments::insert_comments;
 
 /// The default file name to use when trying to derive
 /// the config file location
@@ -38,7 +40,6 @@ impl Default for ConfigMembers {
 	fn default() -> ConfigMembers {
 		ConfigMembers {
 			server: ServerConfig::default(),
-			mining_server: Some(StratumServerConfig::default()),
 			logging: Some(LoggingConfig::default()),
 			wallet: WalletConfig::default(),
 		}
@@ -124,10 +125,7 @@ impl GlobalConfig {
 		file.read_to_string(&mut contents)?;
 		let decoded: Result<ConfigMembers, toml::de::Error> = toml::from_str(&contents);
 		match decoded {
-			Ok(mut gc) => {
-				// Put the struct back together, because the config
-				// file was flattened a bit
-				gc.server.stratum_mining_config = gc.mining_server.clone();
+			Ok(gc) => {
 				self.members = Some(gc);
 				return Ok(self);
 			}
@@ -147,6 +145,20 @@ impl GlobalConfig {
 		}
 	}
 
+	/// Enable mining
+	pub fn stratum_enabled(&mut self) -> bool {
+		return self
+			.members
+			.as_mut()
+			.unwrap()
+			.server
+			.stratum_mining_config
+			.as_mut()
+			.unwrap()
+			.enable_stratum_server
+			.unwrap();
+	}
+
 	/// Serialize config
 	pub fn ser_config(&mut self) -> Result<String, ConfigError> {
 		let encoded: Result<String, toml::ser::Error> =
@@ -162,20 +174,13 @@ impl GlobalConfig {
 		}
 	}
 
-	/*pub fn wallet_enabled(&mut self) -> bool {
-        return self.members.as_mut().unwrap().wallet.as_mut().unwrap().enable_wallet;
-    }*/
-
-	/// Enable mining
-	pub fn stratum_enabled(&mut self) -> bool {
-		return self
-			.members
-			.as_mut()
-			.unwrap()
-			.mining_server
-			.as_mut()
-			.unwrap()
-			.enable_stratum_server
-			.unwrap();
+	/// Write configuration to a file
+	pub fn write_to_file(&mut self, name: &str) -> Result<(), ConfigError> {
+		let conf_out = self.ser_config()?;
+		let conf_out = insert_comments(conf_out);
+		let mut file = File::create(name)?;
+		file.write_all(conf_out.as_bytes())?;
+		Ok(())
 	}
+
 }

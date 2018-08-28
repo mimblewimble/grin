@@ -116,27 +116,13 @@ pub struct ServerConfig {
 	/// Setup the server for tests, testnet or mainnet
 	#[serde(default)]
 	pub chain_type: ChainTypes,
-
-	/// Whether this node is a full archival node or a fast-sync, pruned node
-	pub archive_mode: Option<bool>,
-
+	
 	/// Automatically run full chain validation during normal block processing?
 	#[serde(default)]
 	pub chain_validation_mode: ChainValidationMode,
 
-	/// Configuration for the peer-to-peer server
-	pub p2p_config: p2p::P2PConfig,
-
-	/// Configuration for the mining daemon
-	pub stratum_mining_config: Option<StratumServerConfig>,
-
-	/// Transaction pool configuration
-	#[serde(default)]
-	pub pool_config: pool::PoolConfig,
-
-	/// Dandelion configuration
-	#[serde(default)]
-	pub dandelion_config: pool::DandelionConfig,
+	/// Whether this node is a full archival node or a fast-sync, pruned node
+	pub archive_mode: Option<bool>,
 
 	/// Whether to skip the sync timeout on startup
 	/// (To assist testing on solo chains)
@@ -160,6 +146,22 @@ pub struct ServerConfig {
 
 	/// Test miner wallet URL
 	pub test_miner_wallet_url: Option<String>,
+
+	/// Configuration for the peer-to-peer server
+	pub p2p_config: p2p::P2PConfig,
+
+	/// Transaction pool configuration
+	#[serde(default)]
+	pub pool_config: pool::PoolConfig,
+
+	/// Dandelion configuration
+	#[serde(default)]
+	pub dandelion_config: pool::DandelionConfig,
+
+	/// Configuration for the mining daemon
+	#[serde(default)]
+	pub stratum_mining_config: Option<StratumServerConfig>,
+
 }
 
 impl Default for ServerConfig {
@@ -171,7 +173,7 @@ impl Default for ServerConfig {
 			dandelion_config: pool::DandelionConfig::default(),
 			stratum_mining_config: Some(StratumServerConfig::default()),
 			chain_type: ChainTypes::default(),
-			archive_mode: None,
+			archive_mode: Some(false),
 			chain_validation_mode: ChainValidationMode::default(),
 			pool_config: pool::PoolConfig::default(),
 			skip_sync_wait: Some(false),

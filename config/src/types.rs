@@ -18,7 +18,7 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use servers::{ServerConfig, StratumServerConfig};
+use servers::ServerConfig;
 use util::LoggingConfig;
 use wallet::WalletConfig;
 
@@ -92,11 +92,8 @@ pub struct ConfigMembers {
 	/// Server config
 	#[serde(default)]
 	pub server: ServerConfig,
-	/// Mining config
-	pub mining_server: Option<StratumServerConfig>,
 	/// Logging config
 	pub logging: Option<LoggingConfig>,
-
 	/// Wallet config. May eventually need to be moved to its own thing. Or not.
 	/// Depends on whether we end up starting the wallet in its own process but
 	/// with the same lifecycle as the server.
