@@ -93,9 +93,11 @@ fn init_config() -> GlobalConfig {
 
 	let mut default_config = GlobalConfig::default();
 
-	default_config.write_to_file("config_out.toml").unwrap_or_else(|e| {
-		panic!("Error writing config file: {}", e);
-	});
+	default_config
+		.write_to_file("config_out.toml")
+		.unwrap_or_else(|e| {
+			panic!("Error writing config file: {}", e);
+		});
 
 	global_config
 }

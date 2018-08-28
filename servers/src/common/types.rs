@@ -116,7 +116,7 @@ pub struct ServerConfig {
 	/// Setup the server for tests, testnet or mainnet
 	#[serde(default)]
 	pub chain_type: ChainTypes,
-	
+
 	/// Automatically run full chain validation during normal block processing?
 	#[serde(default)]
 	pub chain_validation_mode: ChainValidationMode,
@@ -161,7 +161,6 @@ pub struct ServerConfig {
 	/// Configuration for the mining daemon
 	#[serde(default)]
 	pub stratum_mining_config: Option<StratumServerConfig>,
-
 }
 
 impl Default for ServerConfig {

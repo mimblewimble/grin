@@ -447,7 +447,6 @@ fn get_key(line: &str) -> String {
 	} else {
 		return "NOT_FOUND".to_owned();
 	}
-
 }
 
 pub fn insert_comments(orig: String) -> String {

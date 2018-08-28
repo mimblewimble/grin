@@ -22,16 +22,16 @@
 
 #[macro_use]
 extern crate serde_derive;
-extern crate toml;
 extern crate dirs;
+extern crate toml;
 
 extern crate grin_p2p as p2p;
 extern crate grin_servers as servers;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
+mod comments;
 pub mod config;
 pub mod types;
-mod comments;
 
 pub use types::{ConfigError, ConfigMembers, GlobalConfig};

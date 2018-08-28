@@ -17,16 +17,16 @@
 use dirs;
 use std::env;
 use std::fs::File;
-use std::io::Read;
 use std::io::prelude::*;
+use std::io::Read;
 use std::path::PathBuf;
 use toml;
 
+use comments::insert_comments;
 use servers::ServerConfig;
 use types::{ConfigError, ConfigMembers, GlobalConfig};
 use util::LoggingConfig;
 use wallet::WalletConfig;
-use comments::insert_comments;
 
 /// The default file name to use when trying to derive
 /// the config file location
@@ -182,5 +182,4 @@ impl GlobalConfig {
 		file.write_all(conf_out.as_bytes())?;
 		Ok(())
 	}
-
 }
