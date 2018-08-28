@@ -208,7 +208,7 @@ fn main() {
 				.default_value("1")
 				.takes_value(true))
 			.arg(Arg::with_name("dest")
-				.help("Send the transaction to the provided server")
+				.help("Send the transaction to the provided server (start with http://) or save as file.")
 				.short("d")
 				.long("dest")
 				.takes_value(true))
