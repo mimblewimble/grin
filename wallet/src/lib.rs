@@ -63,7 +63,7 @@ pub use libwallet::types::{
 	BlockFees, CbData, WalletBackend, WalletClient, WalletInfo, WalletInst,
 };
 pub use lmdb_wallet::{wallet_db_exists, LMDBBackend};
-pub use types::{WalletConfig, WalletSeed};
+pub use types::{WalletConfig, WalletSeed, SEED_FILE};
 
 // temporary
 pub use db_migrate::{migrate, needs_migrate};

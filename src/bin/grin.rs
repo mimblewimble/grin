@@ -331,7 +331,6 @@ fn main() {
 			}
 			let mut l = w.members.as_mut().unwrap().logging.clone().unwrap();
 			l.tui_running = Some(false);
-			println!("{:?}", l);
 			init_logger(Some(l));
 			warn!(
 				LOGGER,

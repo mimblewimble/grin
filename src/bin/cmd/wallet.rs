@@ -17,6 +17,7 @@ use std::process::exit;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use std::path::PathBuf;
 
 use clap::ArgMatches;
 
@@ -28,17 +29,21 @@ use keychain;
 use servers::start_webwallet_server;
 use util::LOGGER;
 
-pub fn init_wallet_seed(wallet_config: WalletConfig) {
+pub fn _init_wallet_seed(wallet_config: WalletConfig) {
 	if let Err(_) = WalletSeed::from_file(&wallet_config) {
 		WalletSeed::init_file(&wallet_config).expect("Failed to create wallet seed file.");
 	};
 }
 
 pub fn seed_exists(wallet_config: WalletConfig) -> bool {
-	if let Err(_) = WalletSeed::from_file(&wallet_config) {
-		return false;
-	};
-	true
+	let mut data_file_dir = PathBuf::new();
+	data_file_dir.push(wallet_config.data_file_dir);
+	data_file_dir.push(grin_wallet::SEED_FILE);
+	if data_file_dir.exists() {
+		true
+	} else {
+		false
+	}
 }
 pub fn instantiate_wallet(
 	wallet_config: WalletConfig,
