@@ -159,7 +159,7 @@ where
 	if !is_empty {
 		error!(
 			LOGGER,
-			"Not restoring. Please back up and remove existing wallet_data directory first."
+			"Not restoring. Please back up and remove existing db directory first."
 		);
 		return Ok(());
 	}

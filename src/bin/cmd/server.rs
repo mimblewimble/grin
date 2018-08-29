@@ -123,7 +123,7 @@ pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: Globa
 		}
 	}
 
-	if let Some(true) = server_config.run_wallet_listener {
+	/*if let Some(true) = server_config.run_wallet_listener {
 		let mut wallet_config = global_config.members.as_ref().unwrap().wallet.clone();
 		wallet::init_wallet_seed(wallet_config.clone());
 		let wallet = wallet::instantiate_wallet(wallet_config.clone(), "");
@@ -155,7 +155,7 @@ pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: Globa
 					)
 				});
 			});
-	}
+	}*/
 
 	// start the server in the different run modes (interactive or daemon)
 	if let Some(a) = server_args {

@@ -94,9 +94,23 @@ pub struct ConfigMembers {
 	pub server: ServerConfig,
 	/// Logging config
 	pub logging: Option<LoggingConfig>,
-	/// Wallet config. May eventually need to be moved to its own thing. Or not.
-	/// Depends on whether we end up starting the wallet in its own process but
-	/// with the same lifecycle as the server.
+}
+
+/// Wallet should be split into a separate configuration file
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct GlobalWalletConfig {
+	/// Keep track of the file we've read
+	pub config_file_path: Option<PathBuf>,
+	/// Wallet members
+	pub members: Option<GlobalWalletConfigMembers>,
+}
+
+/// Wallet internal members
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct GlobalWalletConfigMembers {
+	/// Wallet configuration
 	#[serde(default)]
 	pub wallet: WalletConfig,
+	/// Logging config
+	pub logging: Option<LoggingConfig>,
 }

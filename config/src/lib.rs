@@ -34,5 +34,5 @@ mod comments;
 pub mod config;
 pub mod types;
 
-pub use config::initial_setup;
-pub use types::{ConfigError, ConfigMembers, GlobalConfig};
+pub use config::{initial_setup_server, initial_setup_wallet};
+pub use types::{ConfigError, ConfigMembers, GlobalConfig, GlobalWalletConfig};

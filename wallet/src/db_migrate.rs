@@ -36,7 +36,7 @@ use store::{self, to_key};
 const DETAIL_FILE: &'static str = "wallet.det";
 const DAT_FILE: &'static str = "wallet.dat";
 const SEED_FILE: &'static str = "wallet.seed";
-const DB_DIR: &'static str = "wallet_data";
+const DB_DIR: &'static str = "db";
 const OUTPUT_PREFIX: u8 = 'o' as u8;
 const DERIV_PREFIX: u8 = 'd' as u8;
 const CONFIRMED_HEIGHT_PREFIX: u8 = 'c' as u8;

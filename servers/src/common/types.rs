@@ -177,7 +177,7 @@ impl Default for ServerConfig {
 			pool_config: pool::PoolConfig::default(),
 			skip_sync_wait: Some(false),
 			run_tui: Some(true),
-			run_wallet_listener: Some(true),
+			run_wallet_listener: Some(false),
 			run_wallet_owner_api: Some(false),
 			use_db_wallet: None,
 			run_test_miner: Some(false),
@@ -218,7 +218,7 @@ impl Default for StratumServerConfig {
 			burn_reward: false,
 			attempt_time_per_block: 15,
 			minimum_share_difficulty: 1,
-			enable_stratum_server: Some(true),
+			enable_stratum_server: Some(false),
 			stratum_server_addr: Some("127.0.0.1:13416".to_string()),
 		}
 	}
