@@ -41,9 +41,9 @@ pub mod tui;
 
 use clap::{App, Arg, SubCommand};
 
+use config::config::{SERVER_CONFIG_FILE_NAME, WALLET_CONFIG_FILE_NAME};
 use core::global;
 use util::{init_logger, LOGGER};
-use config::config::{SERVER_CONFIG_FILE_NAME, WALLET_CONFIG_FILE_NAME};
 
 // include build information
 pub mod built_info {

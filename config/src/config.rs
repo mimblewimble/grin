@@ -23,7 +23,9 @@ use toml;
 
 use comments::insert_comments;
 use servers::ServerConfig;
-use types::{ConfigError, ConfigMembers, GlobalConfig, GlobalWalletConfigMembers, GlobalWalletConfig};
+use types::{
+	ConfigError, ConfigMembers, GlobalConfig, GlobalWalletConfig, GlobalWalletConfigMembers,
+};
 use util::LoggingConfig;
 use wallet::WalletConfig;
 
@@ -66,7 +68,7 @@ fn check_config_current_dir(path: &str) -> Option<PathBuf> {
 		Ok(c) => c,
 		Err(_) => {
 			return None;
-		},
+		}
 	};
 	c.push(path);
 	if c.exists() {
@@ -211,13 +213,16 @@ impl GlobalConfig {
 		// need to update server chain path
 		let mut chain_path = grin_home.clone();
 		chain_path.push(GRIN_CHAIN_DIR);
-		self.members.as_mut().unwrap().server.db_root =
-			chain_path.to_str().unwrap().to_owned();
+		self.members.as_mut().unwrap().server.db_root = chain_path.to_str().unwrap().to_owned();
 		let mut log_path = grin_home.clone();
 		log_path.push(SERVER_LOG_FILE_NAME);
-		self.members.as_mut().unwrap()
-			.logging.as_mut().unwrap().log_file_path =
-			log_path.to_str().unwrap().to_owned();
+		self.members
+			.as_mut()
+			.unwrap()
+			.logging
+			.as_mut()
+			.unwrap()
+			.log_file_path = log_path.to_str().unwrap().to_owned();
 	}
 
 	/// Enable mining
@@ -314,9 +319,13 @@ impl GlobalWalletConfig {
 			wallet_path.to_str().unwrap().to_owned();
 		let mut log_path = wallet_home.clone();
 		log_path.push(WALLET_LOG_FILE_NAME);
-		self.members.as_mut().unwrap()
-			.logging.as_mut().unwrap().log_file_path =
-			log_path.to_str().unwrap().to_owned();
+		self.members
+			.as_mut()
+			.unwrap()
+			.logging
+			.as_mut()
+			.unwrap()
+			.log_file_path = log_path.to_str().unwrap().to_owned();
 	}
 
 	/// Serialize config
