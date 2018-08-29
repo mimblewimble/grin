@@ -31,6 +31,7 @@ use std::sync::{Arc, RwLock};
 
 use core::core::hash::Hash;
 use core::core::{BlockHeader, Transaction};
+use core::core::verifier_cache::VerifierCache;
 
 use chain::store::ChainStore;
 use chain::txhashset;
@@ -105,13 +106,17 @@ impl BlockChain for ChainAdapter {
 	}
 }
 
-pub fn test_setup(chain: &Arc<ChainAdapter>) -> TransactionPool {
+pub fn test_setup(
+	chain: Arc<BlockChain>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
+) -> TransactionPool {
 	TransactionPool::new(
 		PoolConfig {
 			accept_fee_base: 0,
 			max_pool_size: 50,
 		},
 		chain.clone(),
+		verifier_cache.clone(),
 		Arc::new(NoopAdapter {}),
 	)
 }

@@ -134,10 +134,12 @@ fn transaction_cut_through() {
 	assert!(tx1.validate(verifier_cache()).is_ok());
 	assert!(tx2.validate(verifier_cache()).is_ok());
 
-	// now build a "cut_through" tx from tx1 and tx2
-	let tx3 = aggregate(vec![tx1, tx2], None, verifier_cache()).unwrap();
+	let vc = verifier_cache();
 
-	assert!(tx3.validate(verifier_cache()).is_ok());
+	// now build a "cut_through" tx from tx1 and tx2
+	let tx3 = aggregate(vec![tx1, tx2], vc.clone()).unwrap();
+
+	assert!(tx3.validate(vc.clone()).is_ok());
 }
 
 // Attempt to deaggregate a multi-kernel transaction in a different way
@@ -157,11 +159,10 @@ fn multi_kernel_transaction_deaggregation() {
 
 	let tx1234 = aggregate(
 		vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone()],
-		None,
 		vc.clone(),
 	).unwrap();
-	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], None, vc.clone()).unwrap();
-	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()], None, vc.clone()).unwrap();
+	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], vc.clone()).unwrap();
+	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()], vc.clone()).unwrap();
 
 	assert!(tx1234.validate(vc.clone()).is_ok());
 	assert!(tx12.validate(vc.clone()).is_ok());
@@ -173,7 +174,7 @@ fn multi_kernel_transaction_deaggregation() {
 
 	let deaggregated_tx12 = deaggregate(tx1234.clone(), vec![tx34.clone()], vc.clone()).unwrap();
 
-	assert!(deaggregated_tx12.validate().is_ok());
+	assert!(deaggregated_tx12.validate(vc.clone()).is_ok());
 	assert_eq!(tx12, deaggregated_tx12);
 }
 
@@ -191,10 +192,9 @@ fn multi_kernel_transaction_deaggregation_2() {
 
 	let tx123 = aggregate(
 		vec![tx1.clone(), tx2.clone(), tx3.clone()],
-		None,
 		vc.clone(),
 	).unwrap();
-	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], None, vc.clone()).unwrap();
+	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], vc.clone()).unwrap();
 
 	assert!(tx123.validate(vc.clone()).is_ok());
 	assert!(tx12.validate(vc.clone()).is_ok());
@@ -218,11 +218,10 @@ fn multi_kernel_transaction_deaggregation_3() {
 
 	let tx123 = aggregate(
 		vec![tx1.clone(), tx2.clone(), tx3.clone()],
-		None,
 		vc.clone(),
 	).unwrap();
-	let tx13 = aggregate(vec![tx1.clone(), tx3.clone()], None, vc.clone()).unwrap();
-	let tx2 = aggregate(vec![tx2.clone()], None, vc.clone()).unwrap();
+	let tx13 = aggregate(vec![tx1.clone(), tx3.clone()], vc.clone()).unwrap();
+	let tx2 = aggregate(vec![tx2.clone()], vc.clone()).unwrap();
 
 	assert!(tx123.validate(vc.clone()).is_ok());
 	assert!(tx2.validate(vc.clone()).is_ok());
@@ -256,7 +255,6 @@ fn multi_kernel_transaction_deaggregation_4() {
 			tx4.clone(),
 			tx5.clone(),
 		],
-		None,
 		vc.clone(),
 	).unwrap();
 	assert!(tx12345.validate(vc.clone()).is_ok());
@@ -294,11 +292,10 @@ fn multi_kernel_transaction_deaggregation_5() {
 			tx4.clone(),
 			tx5.clone(),
 		],
-		None,
 		vc.clone(),
 	).unwrap();
-	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], None, vc.clone()).unwrap();
-	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()], None, vc.clone()).unwrap();
+	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], vc.clone()).unwrap();
+	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()], vc.clone()).unwrap();
 
 	assert!(tx12345.validate(vc.clone()).is_ok());
 
@@ -323,7 +320,7 @@ fn basic_transaction_deaggregation() {
 	assert!(tx2.validate(vc.clone()).is_ok());
 
 	// now build a "cut_through" tx from tx1 and tx2
-	let tx3 = aggregate(vec![tx1.clone(), tx2.clone()], None, vc.clone()).unwrap();
+	let tx3 = aggregate(vec![tx1.clone(), tx2.clone()], vc.clone()).unwrap();
 
 	assert!(tx3.validate(vc.clone()).is_ok());
 
