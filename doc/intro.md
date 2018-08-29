@@ -205,9 +205,8 @@ which then validates that:
   (because only a valid public key, matching the private key, will check against
   the signature).
 
-Hence, _what_ is being signed does not even matter (it can just be an empty string "").
-That signature, attached to every transaction, together with some additional data (like mining
-fees), is called a _transaction kernel_ and will be checked by all validators.
+This signature, attached to every transaction, together with some additional data (like mining
+fees), is called a _transaction kernel_ and is checked by all validators.
 
 ### Some Finer Points
 
@@ -222,14 +221,13 @@ Grin, so if you're in a hurry, feel free to jump straight to
 Let's say you only want to send 2 coins to Carol from the 3 you received from
 Alice. To do this you would send the remaining 1 coin back to yourself as change.
 You generate another private key (say 12) as a blinding factor to
-protect your change output.
+protect your change output. Carol uses her own private key as before.
 
-Carol uses her own private key as before:
+    Change output:     12*G + 1*H
+    Carol's output:    113*G + 2*H
 
-    Your change:  12*G + 1*H
-    Carol:        113*G + 2*H
-
-What ends up on the blockchain is something very similar to before:
+What ends up on the blockchain is something very similar to before.
+And the signature is again built with the excess value, 97 in this example.
 
     (12*G + 1*H) + (113*G + 2*H) - (28*G + 3*H) = 97*G + 0*H
 
