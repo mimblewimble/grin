@@ -159,23 +159,23 @@ blinding factor (note that in practice, the blinding factor being a private key,
 extremely large number). Somewhere on the blockchain, the following output appears and
 should only be spendable by you:
 
-    X = 113*G + 3*H
+    X = 28*G + 3*H
 
 _X_, the result of the addition, is visible by everyone. The value 3 is only known to you and Alice,
-and 113 is only known to you.
+and 28 is only known to you.
 
-To transfer those 3 coins again, the protocol requires 113 to be known somehow.
+To transfer those 3 coins again, the protocol requires 28 to be known somehow.
 To demonstrate how this works, let's say you want to transfer those 3 same coins to Carol.
 You need to build a simple transaction such that:
 
     Xi => Y
 
 Where _Xi_ is an input that spends your _X_ output and Y is Carol's output. There is no way to build
-such a transaction and balance it without knowing your private key of 113. Indeed, if Carol
+such a transaction and balance it without knowing your private key of 28. Indeed, if Carol
 is to balance this transaction, she needs to know both the value sent and your private key
 so that:
 
-    Y - Xi = (113*G + 3*H) - (113*G + 3*H) = 0*G + 0*H
+    Y - Xi = (28*G + 3*H) - (28*G + 3*H) = 0*G + 0*H
 
 By checking that everything has been zeroed out, we can again make sure that
 no new money has been created.
@@ -184,19 +184,19 @@ Wait! Stop! Now you know the private key in Carol's output (which, in this case,
 be the same as yours to balance out) and so you could
 steal the money back from Carol!
 
-To solve this, we allow Carol to add another value of her choosing. She picks 28, and
+To solve this, we allow Carol to add another value of her choosing. She picks 113, and
 what ends up on the blockchain is:
 
-    Y - Xi = ((113+28)*G + 3*H) - (113*G + 3*H) = 28*G + 0*H
+	Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
 
 Now the transaction doesn't sum to zero anymore, we have an _excess value_ on _G_
-(28), which is the result of the summation of all blinding factors. But because `28*G` is
-a valid public key on the elliptic curve _G_, with private key 28,
+(85), which is the result of the summation of all blinding factors. But because `85*G` is
+a valid public key on the elliptic curve _G_, with private key 85,
 for any x and y, only if `y = 0` is `x*G + y*H` a valid public key on _G_.
 
 So all the protocol needs to verify is that (`Y - Xi`) is a valid public key on _G_ and that
-the transaction author knows the private key (28 in our transaction with Carol). The
-simplest way to do so is to require an ECDSA signature built with the excess value (28),
+the transaction author knows the private key (85 in our transaction with Carol). The
+simplest way to do so is to require an ECDSA signature built with the excess value (85),
 which then validates that:
 
 * The author of the transaction knows the excess value (which is also the
@@ -219,27 +219,28 @@ Grin, so if you're in a hurry, feel free to jump straight to
 
 #### Change
 
-In the above example, you had to share your private key (the blinding factor) with
-Carol. In general, even though private keys should never be reused, this isn't
-generally very desirable. Practically, this isn't an issue because transactions
-include a change output.
-
 Let's say you only want to send 2 coins to Carol from the 3 you received from
-Alice. You simply generate another private key (say 42) as a blinding factor to
+Alice. You want to send the remaining 1 coin back to yourself as a change output.
+You would generate another private key (say 12) as a blinding factor to
 protect your change output, and tell Carol you're sending her 2 coins and that
-for her transaction to be balanced she should use 113-42 as sum of blinding
-factors.
+for her transaction to be balanced she should use 28 - 12 = 16 as the sum of blinding
+factors. Note Carol does not know the individual blinding factors for either the coins being spent
+or the coins returned as change.
 
-Then Carol adds her own excess value of 28 (for example) and we get as outputs:
+Then Carol adds her own excess value of 113 (for example) and we get as outputs:
 
-    Your change:  42*G + 1*H
-    Carol:        (113-42+28)*G + 2*H
+    Your change:  12*G + 1*H
+    Carol:        113*G + 2*H
+
+We also provide Carol with the summation of blinding factors:
+
+    28 - 12 = 16
 
 The final sum that all validators end up doing looks like:
 
-    (42*G + 1*H) + (99*G + 2*H) - (113*G + 3*H) = 28*G + 0*H
+    (12*G + 1*H) + (113*G + 2*H) - (28*G + 3*H) = 97*G + 0*H
 
-Carol generates a signature with `28*G` as public key, as described in the previous
+Carol generates a signature with `97*G` as public key, as described in the previous
 section, to prove that the value is zero and that she was given the summation of blinding
 factors for the input and change. The signature is included in the _transaction kernel_
 which will be checked by all transaction validators.
