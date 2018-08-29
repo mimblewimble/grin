@@ -151,10 +151,12 @@ impl Server {
 			return Err(Error::ConnectionClose);
 		}
 
+		// check ip and port to see if we are trying to connect to ourselves
+		// todo: this can't detect all cases of PeerWithSelf, for example config.host is '0.0.0.0'
+		//
 		if self.config.port == addr.port()
 			&& (addr.ip().is_loopback() || addr.ip() == self.config.host)
 		{
-			debug!(LOGGER, "connect_peer: peer {} denied, PeerWithSelf.", addr);
 			return Err(Error::PeerWithSelf);
 		}
 
@@ -166,7 +168,7 @@ impl Server {
 
 		trace!(
 			LOGGER,
-			"connect_peer: {}:{} connecting to {}",
+			"connect_peer: on {}:{}. connecting to {}",
 			self.config.host,
 			self.config.port,
 			addr
@@ -194,7 +196,7 @@ impl Server {
 			Err(e) => {
 				debug!(
 					LOGGER,
-					"connect_peer: {}:{} could not connect to {}: {:?}",
+					"connect_peer: on {}:{}. Could not connect to {}: {:?}",
 					self.config.host,
 					self.config.port,
 					addr,

@@ -272,7 +272,7 @@ fn listen_for_addrs(
 							Ok(p) => {
 								trace!(
 									LOGGER,
-									"connect_and_req: from {}:{} to {}, ok. attempting send_peer_request",
+									"connect_and_req: on {}:{}. connect to {} ok. attempting send_peer_request",
 									p2p_c.config.host,
 									p2p_c.config.port,
 									addr
@@ -286,7 +286,7 @@ fn listen_for_addrs(
 							Err(e) => {
 								debug!(
 									LOGGER,
-									"connect_and_req: from {}:{} to {}, is Defunct. {:?}",
+									"connect_and_req: on {}:{}. connect to {} is Defunct. {:?}",
 									p2p_c.config.host,
 									p2p_c.config.port,
 									addr,
@@ -315,7 +315,7 @@ fn listen_for_addrs(
 						}
 						debug!(
 							LOGGER,
-							"connect_and_req: from {}:{} to {}, retrying {}",
+							"connect_and_req: on {}:{}. connect to {} retrying {}",
 							p2p_c.config.host,
 							p2p_c.config.port,
 							addr,

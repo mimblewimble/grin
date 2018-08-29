@@ -225,7 +225,7 @@ impl LocalServerContainer {
 
 		for p in &mut self.peer_list {
 			println!("{} connecting to peer: {}", self.config.p2p_server_port, p);
-			s.connect_peer(p.parse().unwrap()).unwrap();
+			let _ = s.connect_peer(p.parse().unwrap());
 		}
 
 		if self.wallet_is_running {
