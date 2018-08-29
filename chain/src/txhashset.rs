@@ -39,7 +39,7 @@ use core::ser::{PMMRIndexHashable, PMMRable};
 
 use error::{Error, ErrorKind};
 use grin_store;
-use grin_store::pmmr::{PMMRBackend, PMMR_Files};
+use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
 use grin_store::pmmr_extra::PMMRExtraBackend;
 use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
