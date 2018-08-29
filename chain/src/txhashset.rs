@@ -31,8 +31,8 @@ use core::core::merkle_proof::MerkleProof;
 use core::core::pmmr::{self, PMMR};
 use core::core::pmmr_extra::PMMRExtra;
 use core::core::{
-	Block, BlockHeader, Input, KernelFeatures, Output, OutputFeatures,
-	OutputIdentifier, Transaction, TxKernel, TxKernelEntry,
+	Block, BlockHeader, Input, KernelFeatures, Output, OutputFeatures, OutputIdentifier,
+	Transaction, TxKernel, TxKernelEntry,
 };
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
@@ -64,16 +64,11 @@ impl<T> PMMRExtraDataHandle<T>
 where
 	T: PMMRable + ::std::fmt::Debug,
 {
-	fn new(
-		root_dir: String,
-		file_name: &str,
-	) -> Result<PMMRExtraDataHandle<T>, Error> {
+	fn new(root_dir: String, file_name: &str) -> Result<PMMRExtraDataHandle<T>, Error> {
 		let path = Path::new(&root_dir).join(TXHASHSET_SUBDIR).join(file_name);
 		fs::create_dir_all(path.clone())?;
 		let backend = PMMRExtraBackend::new(path.to_str().unwrap().to_string())?;
-		Ok(PMMRExtraDataHandle {
-			backend,
-		})
+		Ok(PMMRExtraDataHandle { backend })
 	}
 }
 
@@ -99,10 +94,7 @@ where
 		fs::create_dir_all(path.clone())?;
 		let backend = PMMRBackend::new(path.to_str().unwrap().to_string(), prunable, header)?;
 		let last_pos = backend.unpruned_size()?;
-		Ok(PMMRHandle {
-			backend,
-			last_pos,
-		})
+		Ok(PMMRHandle { backend, last_pos })
 	}
 }
 
@@ -457,9 +449,7 @@ impl<'a> Extension<'a> {
 				&mut trees.kernel_pmmr_h.backend,
 				trees.kernel_pmmr_h.last_pos,
 			),
-			kernel_pmmr_extra: PMMRExtra::at(
-				&mut trees.kernel_extra_h.backend,
-			),
+			kernel_pmmr_extra: PMMRExtra::at(&mut trees.kernel_extra_h.backend),
 			commit_index,
 			new_output_commits: HashMap::new(),
 			rollback: false,
@@ -715,14 +705,18 @@ impl<'a> Extension<'a> {
 	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
 		let entry = TxKernelEntry::from_kernel(kernel);
 
-		let kernel_pos = self.kernel_pmmr
+		let kernel_pos = self
+			.kernel_pmmr
 			.push(entry)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
 		// Now push optional data to the relevant file.
 		// The MMR stores fixed size entries so we must store
 		// variable size data somewhere else.
-		if kernel.features.contains(KernelFeatures::RELATIVE_LOCK_HEIGHT_KERNEL) {
+		if kernel
+			.features
+			.contains(KernelFeatures::RELATIVE_LOCK_HEIGHT_KERNEL)
+		{
 			self.kernel_pmmr_extra
 				.append(kernel_pos, kernel.rel_kernel.expect("missing rel_kernel"))
 				.map_err(&ErrorKind::TxHashSetErr)?;
@@ -991,7 +985,10 @@ impl<'a> Extension<'a> {
 	fn get_kernel(&self, pos: u64) -> Option<TxKernel> {
 		let entry = self.kernel_pmmr.get_data(pos);
 		if let Some(mut kernel) = entry.and_then(|x| Some(x.kernel)) {
-			if kernel.features.contains(KernelFeatures::RELATIVE_LOCK_HEIGHT_KERNEL) {
+			if kernel
+				.features
+				.contains(KernelFeatures::RELATIVE_LOCK_HEIGHT_KERNEL)
+			{
 				let rel_kernel = self.kernel_pmmr_extra.get(pos).expect("missing extra data");
 				kernel.rel_kernel = Some(rel_kernel);
 			}
