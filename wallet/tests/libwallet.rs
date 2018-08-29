@@ -29,7 +29,6 @@ use wallet::libwallet::types::Context;
 
 use rand::thread_rng;
 
-
 #[test]
 fn aggsig_sender_receiver_interaction() {
 	let sender_keychain = ExtKeychain::from_random_seed().unwrap();
@@ -212,12 +211,7 @@ fn aggsig_sender_receiver_interaction() {
 
 		// Receiver check the final signature verifies
 		let sig_verifies =
-			aggsig::verify_sig_build_msg(
-				&keychain.secp(),
-				&final_sig,
-				&final_pubkey,
-				&msg,
-			);
+			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, &msg);
 		assert!(!sig_verifies.is_err());
 	}
 
@@ -225,12 +219,8 @@ fn aggsig_sender_receiver_interaction() {
 	{
 		let keychain = ExtKeychain::from_random_seed().unwrap();
 
-		let sig_verifies = aggsig::verify_single_from_commit(
-			&keychain.secp(),
-			&final_sig,
-			&msg,
-			&kernel_excess,
-		);
+		let sig_verifies =
+			aggsig::verify_single_from_commit(&keychain.secp(), &final_sig, &msg, &kernel_excess);
 
 		assert!(!sig_verifies.is_err());
 	}
