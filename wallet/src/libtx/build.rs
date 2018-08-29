@@ -285,7 +285,6 @@ mod test {
 	use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 	use keychain::ExtKeychain;
 
-
 	fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
 		Arc::new(RwLock::new(LruVerifierCache::new()))
 	}

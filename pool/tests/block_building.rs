@@ -56,7 +56,8 @@ fn test_transaction_pool_block_building() {
 	let add_block = |height, txs| {
 		let key_id = keychain.derive_key_id(height as u32).unwrap();
 		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
-		let mut block = Block::new(&BlockHeader::default(), txs, Difficulty::one(), reward).unwrap();
+		let mut block =
+			Block::new(&BlockHeader::default(), txs, Difficulty::one(), reward).unwrap();
 
 		let mut txhashset = chain.txhashset.write().unwrap();
 		let mut batch = chain.store.batch().unwrap();

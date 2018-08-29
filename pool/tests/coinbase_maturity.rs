@@ -29,8 +29,8 @@ use std::sync::{Arc, RwLock};
 
 use common::{test_setup, test_source, test_transaction};
 use core::core::hash::Hash;
-use core::core::{BlockHeader, Transaction};
 use core::core::verifier_cache::LruVerifierCache;
+use core::core::{BlockHeader, Transaction};
 use keychain::{ExtKeychain, Keychain};
 use pool::types::{BlockChain, PoolError};
 

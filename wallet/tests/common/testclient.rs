@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, RwLock, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
 
@@ -34,10 +34,10 @@ use common::failure::ResultExt;
 
 use chain::types::NoopAdapter;
 use chain::Chain;
+use core::core::verifier_cache::LruVerifierCache;
 use core::core::Transaction;
 use core::global::{set_mining_mode, ChainTypes};
 use core::{pow, ser};
-use core::core::verifier_cache::LruVerifierCache;
 use keychain::Keychain;
 
 use util::secp::pedersen;

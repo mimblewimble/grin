@@ -190,10 +190,7 @@ fn multi_kernel_transaction_deaggregation_2() {
 	assert!(tx2.validate(vc.clone()).is_ok());
 	assert!(tx3.validate(vc.clone()).is_ok());
 
-	let tx123 = aggregate(
-		vec![tx1.clone(), tx2.clone(), tx3.clone()],
-		vc.clone(),
-	).unwrap();
+	let tx123 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone()], vc.clone()).unwrap();
 	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], vc.clone()).unwrap();
 
 	assert!(tx123.validate(vc.clone()).is_ok());
@@ -216,10 +213,7 @@ fn multi_kernel_transaction_deaggregation_3() {
 	assert!(tx2.validate(vc.clone()).is_ok());
 	assert!(tx3.validate(vc.clone()).is_ok());
 
-	let tx123 = aggregate(
-		vec![tx1.clone(), tx2.clone(), tx3.clone()],
-		vc.clone(),
-	).unwrap();
+	let tx123 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone()], vc.clone()).unwrap();
 	let tx13 = aggregate(vec![tx1.clone(), tx3.clone()], vc.clone()).unwrap();
 	let tx2 = aggregate(vec![tx2.clone()], vc.clone()).unwrap();
 

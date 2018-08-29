@@ -30,8 +30,8 @@ use std::fs;
 use std::sync::{Arc, RwLock};
 
 use core::core::hash::Hash;
-use core::core::{BlockHeader, Transaction};
 use core::core::verifier_cache::VerifierCache;
+use core::core::{BlockHeader, Transaction};
 
 use chain::store::ChainStore;
 use chain::txhashset;
