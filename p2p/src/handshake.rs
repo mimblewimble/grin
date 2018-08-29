@@ -13,8 +13,10 @@
 // limitations under the License.
 
 use std::collections::VecDeque;
+use std::io;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
+use std::{thread, time};
 
 use rand::os::OsRng;
 use rand::Rng;
@@ -127,7 +129,25 @@ impl Handshake {
 		total_difficulty: Difficulty,
 		conn: &mut TcpStream,
 	) -> Result<PeerInfo, Error> {
-		let hand: Hand = read_message(conn, Type::Hand)?;
+		let mut hand: Result<Hand,Error>;
+		let mut time_spent = 0;
+		loop {
+			hand = read_message(conn, Type::Hand);
+			if let Err(ref e) = hand {
+				if let Error::Connection(ref ee) = e {
+					if io::ErrorKind::WouldBlock == ee.kind() {
+						thread::sleep(time::Duration::from_millis(1));
+						time_spent += 1;
+						if time_spent > 10 {
+							break;
+						}
+						continue;
+					}
+				}
+			}
+			break;
+		}
+		let hand: Hand = hand?;
 
 		// all the reasons we could refuse this connection for
 		if hand.version != PROTOCOL_VERSION {
