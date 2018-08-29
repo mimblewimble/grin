@@ -195,13 +195,12 @@ a valid public key on the elliptic curve _G_, with private key 85,
 for any x and y, only if `y = 0` is `x*G + y*H` a valid public key on _G_.
 
 So all the protocol needs to verify is that (`Y - Xi`) is a valid public key on _G_ and that
-the transaction author knows the private key (85 in our transaction with Carol). The
+the transacting parties collectively know the private key (85 in our transaction with Carol). The
 simplest way to do so is to require a signature built with the excess value (85),
 which then validates that:
 
-* The author of the transaction knows the excess value (which is also the
-  private key for the output)
-* The sum of the transaction's outputs, minus the inputs, adds to a zero value
+* The transacting parties collectively know the private key, and
+* The sum of the transaction outputs, minus the inputs, sum to a zero value
   (because only a valid public key, matching the private key, will check against
   the signature).
 
