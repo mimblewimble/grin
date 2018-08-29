@@ -105,7 +105,7 @@ impl BlockChain for ChainAdapter {
 	}
 }
 
-pub fn test_setup(chain: &Arc<ChainAdapter>) -> TransactionPool<ChainAdapter> {
+pub fn test_setup(chain: &Arc<ChainAdapter>) -> TransactionPool {
 	TransactionPool::new(
 		PoolConfig {
 			accept_fee_base: 0,

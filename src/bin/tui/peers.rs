@@ -80,15 +80,14 @@ pub struct TUIPeerView;
 
 impl TUIStatusListener for TUIPeerView {
 	fn create() -> Box<View> {
-		let table_view =
-			TableView::<PeerStats, PeerColumn>::new()
-				.column(PeerColumn::Address, "Address", |c| c.width_percent(20))
-				.column(PeerColumn::State, "State", |c| c.width_percent(20))
-				.column(PeerColumn::Direction, "Direction", |c| c.width_percent(20))
-				.column(PeerColumn::TotalDifficulty, "Total Difficulty", |c| {
-					c.width_percent(20)
-				})
-				.column(PeerColumn::Version, "Version", |c| c.width_percent(20));
+		let table_view = TableView::<PeerStats, PeerColumn>::new()
+			.column(PeerColumn::Address, "Address", |c| c.width_percent(20))
+			.column(PeerColumn::State, "State", |c| c.width_percent(20))
+			.column(PeerColumn::Direction, "Direction", |c| c.width_percent(20))
+			.column(PeerColumn::TotalDifficulty, "Total Difficulty", |c| {
+				c.width_percent(20)
+			})
+			.column(PeerColumn::Version, "Version", |c| c.width_percent(20));
 		let peer_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
 				.child(

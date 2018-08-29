@@ -26,27 +26,26 @@ use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
 
 /// Transaction pool implementation.
-pub struct TransactionPool<T> {
+pub struct TransactionPool {
 	/// Pool Config
 	pub config: PoolConfig,
-
 	/// Our transaction pool.
-	pub txpool: Pool<T>,
+	pub txpool: Pool,
 	/// Our Dandelion "stempool".
-	pub stempool: Pool<T>,
-
+	pub stempool: Pool,
 	/// The blockchain
-	pub blockchain: Arc<T>,
+	pub blockchain: Arc<BlockChain>,
 	/// The pool adapter
 	pub adapter: Arc<PoolAdapter>,
 }
 
-impl<T> TransactionPool<T>
-where
-	T: BlockChain,
-{
+impl TransactionPool {
 	/// Create a new transaction pool
-	pub fn new(config: PoolConfig, chain: Arc<T>, adapter: Arc<PoolAdapter>) -> TransactionPool<T> {
+	pub fn new(
+		config: PoolConfig,
+		chain: Arc<BlockChain>,
+		adapter: Arc<PoolAdapter>,
+	) -> TransactionPool {
 		TransactionPool {
 			config: config,
 			txpool: Pool::new(chain.clone(), format!("txpool")),
@@ -101,7 +100,7 @@ where
 		self.is_acceptable(&tx)?;
 
 		// Make sure the transaction is valid before anything else.
-		tx.validate(false).map_err(|e| PoolError::InvalidTx(e))?;
+		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
 
 		// Check the tx lock_time is valid based on current chain state.
 		self.blockchain.verify_tx_lock_height(&tx)?;

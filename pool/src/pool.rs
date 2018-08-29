@@ -33,19 +33,16 @@ const MAX_MINEABLE_WEIGHT: usize =
 // longest chain of dependent transactions that can be included in a block
 const MAX_TX_CHAIN: usize = 20;
 
-pub struct Pool<T> {
+pub struct Pool {
 	/// Entries in the pool (tx + info + timer) in simple insertion order.
 	pub entries: Vec<PoolEntry>,
 	/// The blockchain
-	pub blockchain: Arc<T>,
+	pub blockchain: Arc<BlockChain>,
 	pub name: String,
 }
 
-impl<T> Pool<T>
-where
-	T: BlockChain,
-{
-	pub fn new(chain: Arc<T>, name: String) -> Pool<T> {
+impl Pool {
+	pub fn new(chain: Arc<BlockChain>, name: String) -> Pool {
 		Pool {
 			entries: vec![],
 			blockchain: chain.clone(),
@@ -89,7 +86,7 @@ where
 			.into_iter()
 			.filter_map(|mut bucket| {
 				bucket.truncate(MAX_TX_CHAIN);
-				transaction::aggregate(bucket, None).ok()
+				transaction::aggregate(bucket).ok()
 			})
 			.collect();
 
@@ -121,7 +118,7 @@ where
 			return Ok(None);
 		}
 
-		let tx = transaction::aggregate(txs, None)?;
+		let tx = transaction::aggregate(txs)?;
 		Ok(Some(tx))
 	}
 
@@ -194,7 +191,7 @@ where
 			// Create a single aggregated tx from the existing pool txs and the
 			// new entry
 			txs.push(entry.tx.clone());
-			transaction::aggregate(txs, None)?
+			transaction::aggregate(txs)?
 		};
 
 		// Validate aggregated tx against a known chain state (via txhashset

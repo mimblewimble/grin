@@ -550,10 +550,12 @@ impl Chain {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	pub fn txhashset_write<T>(&self, h: Hash, txhashset_data: File, status: &T) -> Result<(), Error>
-	where
-		T: TxHashsetWriteStatus,
-	{
+	pub fn txhashset_write(
+		&self,
+		h: Hash,
+		txhashset_data: File,
+		status: &TxHashsetWriteStatus,
+	) -> Result<(), Error> {
 		status.on_setup();
 		let head = self.head().unwrap();
 		let header_head = self.get_header_head().unwrap();

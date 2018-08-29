@@ -28,7 +28,7 @@ use core::core::hash::Hashed;
 use core::ser;
 use keychain::Keychain;
 use libtx::slate::Slate;
-use libwallet::internal::{selection, sigcontext, tx, updater};
+use libwallet::internal::{selection, tx, updater};
 use libwallet::types::{
 	BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend, WalletClient, WalletInfo,
 };
@@ -207,9 +207,12 @@ where
 		let mut pub_tx = File::create(dest)?;
 		pub_tx.write_all(json::to_string(&slate).unwrap().as_bytes())?;
 		pub_tx.sync_all()?;
-		let mut priv_tx = File::create(dest.to_owned() + ".private")?;
-		priv_tx.write_all(json::to_string(&context).unwrap().as_bytes())?;
-		priv_tx.sync_all()?;
+
+		{
+			let mut batch = w.batch()?;
+			batch.save_private_context(slate.id.as_bytes(), &context)?;
+			batch.commit()?;
+		}
 
 		// lock our inputs
 		lock_fn(&mut **w)?;
@@ -259,23 +262,24 @@ where
 	/// propagation.
 	pub fn file_finalize_tx(
 		&mut self,
-		private_tx_file: &str,
 		receiver_file: &str,
 	) -> Result<Slate, Error> {
+
 		let mut pub_tx_f = File::open(receiver_file)?;
 		let mut content = String::new();
 		pub_tx_f.read_to_string(&mut content)?;
 		let mut slate: Slate = json::from_str(&content).map_err(|_| ErrorKind::Format)?;
 
-		let mut priv_tx_f = File::open(private_tx_file)?;
-		let mut content = String::new();
-		priv_tx_f.read_to_string(&mut content)?;
-		let context: sigcontext::Context = json::from_str(&content).map_err(|_| ErrorKind::Format)?;
-
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 
+		let context = w.get_private_context(slate.id.as_bytes())?;
 		tx::complete_tx(&mut **w, &mut slate, &context)?;
+		{
+			let mut batch = w.batch()?;
+			batch.delete_private_context(slate.id.as_bytes())?;
+			batch.commit()?;
+		}
 
 		w.close()?;
 		Ok(slate)
