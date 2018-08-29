@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::path::PathBuf;
 /// Wallet commands processing
 use std::process::exit;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use std::path::PathBuf;
 
 use clap::ArgMatches;
 
