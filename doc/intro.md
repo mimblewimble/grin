@@ -184,19 +184,19 @@ Wait! Stop! Now you know the private key in Carol's output (which, in this case,
 be the same as yours to balance out) and so you could
 steal the money back from Carol!
 
-To solve this, we allow Carol to add another value of her choosing. She picks 113, and
-what ends up on the blockchain is:
+To solve this, Carol uses a private key of her choosing.
+She picks 113 say, and what ends up on the blockchain is:
 
 	Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
 
-Now the transaction doesn't sum to zero anymore, we have an _excess value_ on _G_
+Now the transaction no longer sums to zero and we have an _excess value_ on _G_
 (85), which is the result of the summation of all blinding factors. But because `85*G` is
 a valid public key on the elliptic curve _G_, with private key 85,
 for any x and y, only if `y = 0` is `x*G + y*H` a valid public key on _G_.
 
 So all the protocol needs to verify is that (`Y - Xi`) is a valid public key on _G_ and that
 the transaction author knows the private key (85 in our transaction with Carol). The
-simplest way to do so is to require an ECDSA signature built with the excess value (85),
+simplest way to do so is to require a signature built with the excess value (85),
 which then validates that:
 
 * The author of the transaction knows the excess value (which is also the
@@ -205,9 +205,9 @@ which then validates that:
   (because only a valid public key, matching the private key, will check against
   the signature).
 
-Hence, what is being signed does not even matter (it can just be an empty string "").
+Hence, _what_ is being signed does not even matter (it can just be an empty string "").
 That signature, attached to every transaction, together with some additional data (like mining
-fees), is called a _transaction kernel_.
+fees), is called a _transaction kernel_ and will be checked by all validators.
 
 ### Some Finer Points
 
@@ -220,30 +220,18 @@ Grin, so if you're in a hurry, feel free to jump straight to
 #### Change
 
 Let's say you only want to send 2 coins to Carol from the 3 you received from
-Alice. You want to send the remaining 1 coin back to yourself as a change output.
-You would generate another private key (say 12) as a blinding factor to
-protect your change output, and tell Carol you're sending her 2 coins and that
-for her transaction to be balanced she should use 28 - 12 = 16 as the sum of blinding
-factors. Note Carol does not know the individual blinding factors for either the coins being spent
-or the coins returned as change.
+Alice. To do this you would send the remaining 1 coin back to yourself as change.
+You generate another private key (say 12) as a blinding factor to
+protect your change output.
 
-Then Carol adds her own excess value of 113 (for example) and we get as outputs:
+Carol uses her own private key as before:
 
     Your change:  12*G + 1*H
     Carol:        113*G + 2*H
 
-We also provide Carol with the summation of blinding factors:
-
-    28 - 12 = 16
-
-The final sum that all validators end up doing looks like:
+What ends up on the blockchain is something very similar to before:
 
     (12*G + 1*H) + (113*G + 2*H) - (28*G + 3*H) = 97*G + 0*H
-
-Carol generates a signature with `97*G` as public key, as described in the previous
-section, to prove that the value is zero and that she was given the summation of blinding
-factors for the input and change. The signature is included in the _transaction kernel_
-which will be checked by all transaction validators.
 
 
 #### Range Proofs
@@ -255,7 +243,7 @@ create new funds in every transaction.
 For example, one could create a transaction with an input of 2 and outputs of 5
 and -3 and still obtain a well-balanced transaction, following the definition in
 the previous sections. This can't be easily detected because even if _x_ is
-negative, the corresponding point `x.H` on the ECDSA curve looks like any other.
+negative, the corresponding point `x.H` on the curve looks like any other.
 
 To solve this problem, MimbleWimble leverages another cryptographic concept (also
 coming from Confidential Transactions) called
