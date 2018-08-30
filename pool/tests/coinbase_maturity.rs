@@ -27,23 +27,12 @@ pub mod common;
 
 use std::sync::{Arc, RwLock};
 
-use common::{test_source, test_transaction};
+use common::{test_setup, test_source, test_transaction};
 use core::core::hash::Hash;
+use core::core::verifier_cache::LruVerifierCache;
 use core::core::{BlockHeader, Transaction};
 use keychain::{ExtKeychain, Keychain};
-use pool::types::{BlockChain, NoopAdapter, PoolConfig, PoolError};
-use pool::TransactionPool;
-
-pub fn test_setup(chain: CoinbaseMaturityErrorChainAdapter) -> TransactionPool {
-	TransactionPool::new(
-		PoolConfig {
-			accept_fee_base: 0,
-			max_pool_size: 50,
-		},
-		Arc::new(chain.clone()),
-		Arc::new(NoopAdapter {}),
-	)
-}
+use pool::types::{BlockChain, PoolError};
 
 #[derive(Clone)]
 pub struct CoinbaseMaturityErrorChainAdapter {}
@@ -86,8 +75,9 @@ fn test_coinbase_maturity() {
 
 	// Mocking this up with an adapter that will raise an error for coinbase
 	// maturity.
-	let chain = CoinbaseMaturityErrorChainAdapter::new();
-	let pool = RwLock::new(test_setup(chain));
+	let chain = Arc::new(CoinbaseMaturityErrorChainAdapter::new());
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	let pool = RwLock::new(test_setup(chain, verifier_cache));
 
 	{
 		let mut write_pool = pool.write().unwrap();

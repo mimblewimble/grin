@@ -19,12 +19,14 @@ use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
+use std::sync::{Arc, RwLock};
 
 use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::target::Difficulty;
+use core::verifier_cache::{LruVerifierCache, VerifierCache};
 use core::{
 	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, Transaction,
 	TransactionBody, TxKernel,
@@ -355,8 +357,15 @@ impl Block {
 		difficulty: Difficulty,
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
-		let mut block =
-			Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
+		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+		let mut block = Block::with_reward(
+			prev,
+			txs,
+			reward_output.0,
+			reward_output.1,
+			difficulty,
+			verifier_cache,
+		)?;
 
 		// Now set the pow on the header so block hashing works as expected.
 		{
@@ -430,11 +439,12 @@ impl Block {
 		reward_out: Output,
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
+		verifier: Arc<RwLock<VerifierCache>>,
 	) -> Result<Block, Error> {
 		// A block is just a big transaction, aggregate as such.
 		// Note that aggregation also runs transaction validation
 		// and duplicate commitment checks.
-		let mut agg_tx = transaction::aggregate(txs)?;
+		let mut agg_tx = transaction::aggregate(txs, verifier)?;
 		// Now add the reward output and reward kernel to the aggregate tx.
 		// At this point the tx is technically invalid,
 		// but the tx body is valid if we account for the reward (i.e. as a block).
@@ -559,8 +569,9 @@ impl Block {
 		&self,
 		prev_kernel_offset: &BlindingFactor,
 		prev_kernel_sum: &Commitment,
+		verifier: Arc<RwLock<VerifierCache>>,
 	) -> Result<(Commitment), Error> {
-		self.body.validate(true)?;
+		self.body.validate(true, verifier)?;
 
 		self.verify_kernel_lock_heights()?;
 		self.verify_coinbase()?;

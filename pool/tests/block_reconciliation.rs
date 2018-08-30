@@ -37,6 +37,7 @@ use common::{
 	test_transaction_spending_coinbase, ChainAdapter,
 };
 use core::core::target::Difficulty;
+use core::core::verifier_cache::LruVerifierCache;
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
 
@@ -47,6 +48,8 @@ fn test_transaction_pool_block_reconciliation() {
 	let db_root = ".grin_block_reconciliation".to_string();
 	clean_output_dir(db_root.clone());
 	let chain = ChainAdapter::init(db_root.clone()).unwrap();
+
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 	// Initialize the chain/txhashset with an initial block
 	// so we have a non-empty UTXO set.
@@ -83,7 +86,7 @@ fn test_transaction_pool_block_reconciliation() {
 	};
 
 	// Initialize a new pool with our chain adapter.
-	let pool = RwLock::new(test_setup(&Arc::new(chain.clone())));
+	let pool = RwLock::new(test_setup(Arc::new(chain.clone()), verifier_cache.clone()));
 
 	// Now create tx to spend that first coinbase (now matured).
 	// Provides us with some useful outputs to test with.

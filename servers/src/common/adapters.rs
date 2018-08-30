@@ -28,6 +28,7 @@ use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStat
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::transaction::Transaction;
+use core::core::verifier_cache::VerifierCache;
 use core::core::{BlockHeader, CompactBlock};
 use core::{core, global};
 use p2p;
@@ -54,6 +55,7 @@ pub struct NetToChainAdapter {
 	archive_mode: bool,
 	chain: Weak<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 }
@@ -171,7 +173,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 			if let Ok(prev) = chain.get_block_header(&cb.header.previous) {
 				if block
-					.validate(&prev.total_kernel_offset, &prev.total_kernel_sum)
+					.validate(
+						&prev.total_kernel_offset,
+						&prev.total_kernel_sum,
+						self.verifier_cache.clone(),
+					)
 					.is_ok()
 				{
 					debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
@@ -379,6 +385,7 @@ impl NetToChainAdapter {
 		archive_mode: bool,
 		chain_ref: Weak<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
 		config: ServerConfig,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
@@ -386,6 +393,7 @@ impl NetToChainAdapter {
 			archive_mode,
 			chain: chain_ref,
 			tx_pool,
+			verifier_cache,
 			peers: OneTime::new(),
 			config,
 		}

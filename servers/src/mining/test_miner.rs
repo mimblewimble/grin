@@ -24,6 +24,7 @@ use std::sync::{Arc, RwLock};
 use chain;
 use common::types::StratumServerConfig;
 use core::core::hash::{Hash, Hashed};
+use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader, Proof};
 use core::pow::cuckoo;
 use core::{consensus, global};
@@ -35,6 +36,7 @@ pub struct Miner {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	stop: Arc<AtomicBool>,
 
 	// Just to hold the port we're on, so this miner can be identified
@@ -47,16 +49,18 @@ impl Miner {
 	/// storage.
 	pub fn new(
 		config: StratumServerConfig,
-		chain_ref: Arc<chain::Chain>,
+		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
 		stop: Arc<AtomicBool>,
 	) -> Miner {
 		Miner {
-			config: config,
-			chain: chain_ref,
-			tx_pool: tx_pool,
+			config,
+			chain,
+			tx_pool,
+			verifier_cache,
 			debug_output_id: String::from("none"),
-			stop: stop,
+			stop,
 		}
 	}
 
@@ -147,6 +151,7 @@ impl Miner {
 			let (mut b, block_fees) = mine_block::get_block(
 				&self.chain,
 				&self.tx_pool,
+				self.verifier_cache.clone(),
 				key_id.clone(),
 				wallet_listener_url.clone(),
 			);

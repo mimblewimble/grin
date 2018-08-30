@@ -28,6 +28,7 @@ use std::{cmp, thread};
 use chain;
 use common::stats::{StratumStats, WorkerStats};
 use common::types::{StratumServerConfig, SyncState};
+use core::core::verifier_cache::VerifierCache;
 use core::core::Block;
 use core::{global, pow};
 use keychain;
@@ -229,6 +230,7 @@ pub struct StratumServer {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	current_block_versions: Vec<Block>,
 	current_difficulty: u64,
 	minimum_share_difficulty: u64,
@@ -241,15 +243,17 @@ impl StratumServer {
 	/// Creates a new Stratum Server.
 	pub fn new(
 		config: StratumServerConfig,
-		chain_ref: Arc<chain::Chain>,
+		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
 	) -> StratumServer {
 		StratumServer {
 			id: String::from("StratumServer"),
 			minimum_share_difficulty: config.minimum_share_difficulty,
-			config: config,
-			chain: chain_ref,
-			tx_pool: tx_pool,
+			config,
+			chain,
+			tx_pool,
+			verifier_cache,
 			current_block_versions: Vec::new(),
 			current_difficulty: <u64>::max_value(),
 			current_key_id: None,
@@ -725,6 +729,7 @@ impl StratumServer {
 				let (new_block, block_fees) = mine_block::get_block(
 					&self.chain,
 					&self.tx_pool,
+					self.verifier_cache.clone(),
 					self.current_key_id.clone(),
 					wallet_listener_url,
 				);

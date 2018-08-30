@@ -279,8 +279,15 @@ where
 // Just a simple test, most exhaustive tests in the core mod.rs.
 #[cfg(test)]
 mod test {
+	use std::sync::{Arc, RwLock};
+
 	use super::*;
+	use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 	use keychain::ExtKeychain;
+
+	fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
+		Arc::new(RwLock::new(LruVerifierCache::new()))
+	}
 
 	#[test]
 	fn blind_simple_tx() {
@@ -288,6 +295,8 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
+
+		let vc = verifier_cache();
 
 		let tx = transaction(
 			vec![
@@ -299,7 +308,7 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		tx.validate().unwrap();
+		tx.validate(vc.clone()).unwrap();
 	}
 
 	#[test]
@@ -308,6 +317,8 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
+
+		let vc = verifier_cache();
 
 		let tx = transaction_with_offset(
 			vec![
@@ -319,7 +330,7 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		tx.validate().unwrap();
+		tx.validate(vc.clone()).unwrap();
 	}
 
 	#[test]
@@ -328,11 +339,13 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
+		let vc = verifier_cache();
+
 		let tx = transaction(
 			vec![input(6, key_id1), output(2, key_id2), with_fee(4)],
 			&keychain,
 		).unwrap();
 
-		tx.validate().unwrap();
+		tx.validate(vc.clone()).unwrap();
 	}
 }
