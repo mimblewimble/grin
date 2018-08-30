@@ -320,6 +320,10 @@ fn headers_header_size(conn: &mut TcpStream, msg_len: u64) -> Result<u64, Error>
 	read_exact(conn, &mut size, 20000, true)?;
 
 	let total_headers = size[0] as u64 * 256 + size[1] as u64;
+	debug!(
+		LOGGER,
+		"headers_header_size - size of Vec: {}", total_headers
+	);
 	if total_headers == 0 || total_headers > 10_000 {
 		return Err(Error::Connection(io::Error::new(
 			io::ErrorKind::InvalidData,
