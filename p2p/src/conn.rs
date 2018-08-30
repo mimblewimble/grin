@@ -200,7 +200,7 @@ fn poll<H>(
 			let mut retry_send = Err(());
 			loop {
 				// check the read end
-				if let Some(h) = try_break!(error_tx, read_header(conn)) {
+				if let Some(h) = try_break!(error_tx, read_header(conn, None)) {
 					let msg = Message::from_header(h, conn);
 					trace!(
 						LOGGER,
