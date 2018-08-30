@@ -320,14 +320,10 @@ fn headers_header_size(conn: &mut TcpStream, msg_len: u64) -> Result<u64, Error>
 	read_exact(conn, &mut size, 20000, true)?;
 
 	let total_headers = size[0] as u64 * 256 + size[1] as u64;
-	debug!(
-		LOGGER,
-		"headers_header_size - size of Vec: {}", total_headers
-	);
 	if total_headers == 0 || total_headers > 10_000 {
 		return Err(Error::Connection(io::Error::new(
 			io::ErrorKind::InvalidData,
-			"headers_streaming_body",
+			"headers_header_size",
 		)));
 	}
 	let average_header_size = (msg_len - 2) / total_headers;
@@ -336,9 +332,17 @@ fn headers_header_size(conn: &mut TcpStream, msg_len: u64) -> Result<u64, Error>
 	let minimum_size = core::serialized_size_of_header(global::min_sizeshift());
 	let maximum_size = core::serialized_size_of_header(global::min_sizeshift() + 6);
 	if average_header_size < minimum_size as u64 || average_header_size > maximum_size as u64 {
+		debug!(
+			LOGGER,
+			"headers_header_size - size of Vec: {}, average_header_size: {}, min: {}, max: {}",
+			total_headers,
+			average_header_size,
+			minimum_size,
+			maximum_size,
+		);
 		return Err(Error::Connection(io::Error::new(
 			io::ErrorKind::InvalidData,
-			"headers_streaming_body",
+			"headers_header_size",
 		)));
 	}
 	return Ok(maximum_size as u64);

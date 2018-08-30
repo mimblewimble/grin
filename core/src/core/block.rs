@@ -168,7 +168,7 @@ pub fn serialized_size_of_header(cuckoo_sizeshift: u8) -> usize {
 
 	size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
 	let nonce_bits = cuckoo_sizeshift as usize - 1;
-	let bitvec_len = 42 * nonce_bits;
+	let bitvec_len = global::proofsize() * nonce_bits;
 	size += bitvec_len / 8; // pow.nonces
 	if bitvec_len % 8 != 0 {
 		size += 1;
