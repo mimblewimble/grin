@@ -26,6 +26,7 @@ use cursive::theme::PaletteColor::{
 	Background, Highlight, HighlightInactive, Primary, Shadow, View,
 };
 use cursive::theme::{BaseColor, BorderStyle, Color, Theme};
+use cursive::traits::Boxable;
 use cursive::traits::Identifiable;
 use cursive::utils::markup::StyledString;
 use cursive::views::{LinearLayout, Panel, StackView, TextView, ViewBox};
@@ -64,7 +65,7 @@ impl UI {
 	pub fn new(controller_tx: mpsc::Sender<ControllerMessage>) -> UI {
 		let (ui_tx, ui_rx) = mpsc::channel::<UIMessage>();
 		let mut grin_ui = UI {
-			cursive: Cursive::new(),
+			cursive: Cursive::default(),
 			ui_tx: ui_tx,
 			ui_rx: ui_rx,
 			controller_tx: controller_tx,
@@ -83,7 +84,8 @@ impl UI {
 			.layer(mining_view)
 			.layer(peer_view)
 			.layer(status_view)
-			.with_id(ROOT_STACK);
+			.with_id(ROOT_STACK)
+			.full_height();
 
 		let mut title_string = StyledString::new();
 		title_string.append(StyledString::styled(
@@ -92,7 +94,7 @@ impl UI {
 		));
 
 		let main_layer = LinearLayout::new(Orientation::Vertical)
-			.child(Panel::new(TextView::new(title_string)))
+			.child(Panel::new(TextView::new(title_string).full_width()))
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(Panel::new(ViewBox::new(main_menu)))
@@ -103,7 +105,7 @@ impl UI {
 		let mut theme = grin_ui.cursive.current_theme().clone();
 		modify_theme(&mut theme);
 		grin_ui.cursive.set_theme(theme);
-		grin_ui.cursive.add_layer(main_layer);
+		grin_ui.cursive.add_fullscreen_layer(main_layer);
 
 		// Configure a callback (shutdown, for the first test)
 		let controller_tx_clone = grin_ui.controller_tx.clone();
