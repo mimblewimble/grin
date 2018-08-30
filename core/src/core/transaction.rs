@@ -27,9 +27,9 @@ use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
 use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};
 use util;
-use util::LOGGER;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::secp::{self, Message, Signature};
+use util::LOGGER;
 use util::{kernel_sig_msg, static_secp_instance};
 
 bitflags! {
