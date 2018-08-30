@@ -24,11 +24,12 @@ extern crate rand;
 
 use chrono::Duration;
 use std::fs;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use chain::types::NoopAdapter;
 use chain::Chain;
 use core::core::target::Difficulty;
+use core::core::verifier_cache::LruVerifierCache;
 use core::core::{Block, BlockHeader, Transaction};
 use core::global::{self, ChainTypes};
 use core::pow;
@@ -45,6 +46,7 @@ fn setup(dir_name: &str) -> Chain {
 	clean_output_dir(dir_name);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
@@ -52,10 +54,12 @@ fn setup(dir_name: &str) -> Chain {
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,
+		verifier_cache,
 	).unwrap()
 }
 
 fn reload_chain(dir_name: &str) -> Chain {
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
@@ -63,6 +67,7 @@ fn reload_chain(dir_name: &str) -> Chain {
 		Arc::new(NoopAdapter {}),
 		genesis::genesis_dev(),
 		pow::verify_size,
+		verifier_cache,
 	).unwrap()
 }
 

@@ -25,6 +25,7 @@ use lmdb;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::target::Difficulty;
+use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use error::{Error, ErrorKind};
@@ -136,7 +137,7 @@ pub struct Chain {
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	// Recently processed blocks to avoid double-processing
 	block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
-
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader, u8) -> bool,
 }
@@ -154,6 +155,7 @@ impl Chain {
 		adapter: Arc<ChainAdapter>,
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader, u8) -> bool,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainStore::new(db_env)?;
 
@@ -182,7 +184,8 @@ impl Chain {
 			head: Arc::new(Mutex::new(head)),
 			orphans: Arc::new(OrphanBlockPool::new()),
 			txhashset: Arc::new(RwLock::new(txhashset)),
-			pow_verifier: pow_verifier,
+			pow_verifier,
+			verifier_cache,
 			block_hashes_cache: Arc::new(RwLock::new(VecDeque::with_capacity(HASHES_CACHE_SIZE))),
 		})
 	}
@@ -219,7 +222,7 @@ impl Chain {
 		let bhash = b.hash();
 		let mut ctx = self.ctx_from_head(head, opts)?;
 
-		let res = pipe::process_block(&b, &mut ctx);
+		let res = pipe::process_block(&b, &mut ctx, self.verifier_cache.clone());
 
 		let add_to_hash_cache = || {
 			// only add to hash cache below if block is definitively accepted

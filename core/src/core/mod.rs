@@ -23,6 +23,7 @@ pub mod merkle_proof;
 pub mod pmmr;
 pub mod target;
 pub mod transaction;
+pub mod verifier_cache;
 
 use consensus::GRIN_BASE;
 #[allow(dead_code)]

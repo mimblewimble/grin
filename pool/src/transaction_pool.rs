@@ -17,10 +17,12 @@
 //! resulting tx pool can be added to the current chain state to produce a
 //! valid chain state.
 
+use std::sync::{Arc, RwLock};
+
 use chrono::prelude::Utc;
-use std::sync::Arc;
 
 use core::core::hash::Hash;
+use core::core::verifier_cache::VerifierCache;
 use core::core::{transaction, Block, CompactBlock, Transaction};
 use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
@@ -35,6 +37,7 @@ pub struct TransactionPool {
 	pub stempool: Pool,
 	/// The blockchain
 	pub blockchain: Arc<BlockChain>,
+	pub verifier_cache: Arc<RwLock<VerifierCache>>,
 	/// The pool adapter
 	pub adapter: Arc<PoolAdapter>,
 }
@@ -44,14 +47,16 @@ impl TransactionPool {
 	pub fn new(
 		config: PoolConfig,
 		chain: Arc<BlockChain>,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
 		adapter: Arc<PoolAdapter>,
 	) -> TransactionPool {
 		TransactionPool {
-			config: config,
-			txpool: Pool::new(chain.clone(), format!("txpool")),
-			stempool: Pool::new(chain.clone(), format!("stempool")),
+			config,
+			txpool: Pool::new(chain.clone(), verifier_cache.clone(), format!("txpool")),
+			stempool: Pool::new(chain.clone(), verifier_cache.clone(), format!("stempool")),
 			blockchain: chain,
-			adapter: adapter,
+			verifier_cache,
+			adapter,
 		}
 	}
 
@@ -72,7 +77,7 @@ impl TransactionPool {
 				.txpool
 				.find_matching_transactions(entry.tx.kernels().clone());
 			if !txs.is_empty() {
-				entry.tx = transaction::deaggregate(entry.tx, txs)?;
+				entry.tx = transaction::deaggregate(entry.tx, txs, self.verifier_cache.clone())?;
 				entry.src.debug_name = "deagg".to_string();
 			}
 		}
@@ -100,7 +105,8 @@ impl TransactionPool {
 		self.is_acceptable(&tx)?;
 
 		// Make sure the transaction is valid before anything else.
-		tx.validate().map_err(|e| PoolError::InvalidTx(e))?;
+		tx.validate(self.verifier_cache.clone())
+			.map_err(|e| PoolError::InvalidTx(e))?;
 
 		// Check the tx lock_time is valid based on current chain state.
 		self.blockchain.verify_tx_lock_height(&tx)?;

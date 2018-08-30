@@ -20,7 +20,7 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
 
@@ -34,6 +34,7 @@ use common::failure::ResultExt;
 
 use chain::types::NoopAdapter;
 use chain::Chain;
+use core::core::verifier_cache::LruVerifierCache;
 use core::core::Transaction;
 use core::global::{set_mining_mode, ChainTypes};
 use core::{pow, ser};
@@ -100,6 +101,7 @@ where
 	pub fn new(chain_dir: &str) -> Self {
 		set_mining_mode(ChainTypes::AutomatedTesting);
 		let genesis_block = pow::mine_genesis_block().unwrap();
+		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 		let dir_name = format!("{}/.grin", chain_dir);
 		let db_env = Arc::new(store::new_env(dir_name.to_string()));
 		let c = Chain::init(
@@ -108,6 +110,7 @@ where
 			Arc::new(NoopAdapter {}),
 			genesis_block,
 			pow::verify_size,
+			verifier_cache,
 		).unwrap();
 		let (tx, rx) = channel();
 		let retval = WalletProxy {

@@ -21,6 +21,7 @@ use std::time::Duration;
 
 use core::core::hash::Hashed;
 use core::core::transaction;
+use core::core::verifier_cache::VerifierCache;
 use pool::{DandelionConfig, PoolEntryState, PoolError, TransactionPool, TxSource};
 use util::LOGGER;
 
@@ -35,6 +36,7 @@ use util::LOGGER;
 pub fn monitor_transactions(
 	dandelion_config: DandelionConfig,
 	tx_pool: Arc<RwLock<TransactionPool>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	stop: Arc<AtomicBool>,
 ) {
 	debug!(LOGGER, "Started Dandelion transaction monitor.");
@@ -56,14 +58,14 @@ pub fn monitor_transactions(
 				// Step 1: find all "ToStem" entries in stempool from last run.
 				// Aggregate them up to give a single (valid) aggregated tx and propagate it
 				// to the next Dandelion relay along the stem.
-				if process_stem_phase(tx_pool.clone()).is_err() {
+				if process_stem_phase(tx_pool.clone(), verifier_cache.clone()).is_err() {
 					error!(LOGGER, "dand_mon: Problem with stem phase.");
 				}
 
 				// Step 2: find all "ToFluff" entries in stempool from last run.
 				// Aggregate them up to give a single (valid) aggregated tx and (re)add it
 				// to our pool with stem=false (which will then broadcast it).
-				if process_fluff_phase(tx_pool.clone()).is_err() {
+				if process_fluff_phase(tx_pool.clone(), verifier_cache.clone()).is_err() {
 					error!(LOGGER, "dand_mon: Problem with fluff phase.");
 				}
 
@@ -82,7 +84,10 @@ pub fn monitor_transactions(
 		});
 }
 
-fn process_stem_phase(tx_pool: Arc<RwLock<TransactionPool>>) -> Result<(), PoolError> {
+fn process_stem_phase(
+	tx_pool: Arc<RwLock<TransactionPool>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
+) -> Result<(), PoolError> {
 	let mut tx_pool = tx_pool.write().unwrap();
 
 	let header = tx_pool.blockchain.chain_head()?;
@@ -102,7 +107,7 @@ fn process_stem_phase(tx_pool: Arc<RwLock<TransactionPool>>) -> Result<(), PoolE
 			stem_txs.len()
 		);
 
-		let agg_tx = transaction::aggregate(stem_txs)?;
+		let agg_tx = transaction::aggregate(stem_txs, verifier_cache.clone())?;
 
 		let res = tx_pool.adapter.stem_tx_accepted(&agg_tx);
 		if res.is_err() {
@@ -122,7 +127,10 @@ fn process_stem_phase(tx_pool: Arc<RwLock<TransactionPool>>) -> Result<(), PoolE
 	Ok(())
 }
 
-fn process_fluff_phase(tx_pool: Arc<RwLock<TransactionPool>>) -> Result<(), PoolError> {
+fn process_fluff_phase(
+	tx_pool: Arc<RwLock<TransactionPool>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
+) -> Result<(), PoolError> {
 	let mut tx_pool = tx_pool.write().unwrap();
 
 	let header = tx_pool.blockchain.chain_head()?;
@@ -142,7 +150,7 @@ fn process_fluff_phase(tx_pool: Arc<RwLock<TransactionPool>>) -> Result<(), Pool
 			stem_txs.len()
 		);
 
-		let agg_tx = transaction::aggregate(stem_txs)?;
+		let agg_tx = transaction::aggregate(stem_txs, verifier_cache.clone())?;
 
 		let src = TxSource {
 			debug_name: "fluff".to_string(),

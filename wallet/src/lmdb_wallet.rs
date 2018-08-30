@@ -27,7 +27,7 @@ use libwallet::{internal, Error, ErrorKind};
 use types::{WalletConfig, WalletSeed};
 use util::secp::pedersen;
 
-pub const DB_DIR: &'static str = "wallet_data";
+pub const DB_DIR: &'static str = "db";
 
 const COMMITMENT_PREFIX: u8 = 'C' as u8;
 const OUTPUT_PREFIX: u8 = 'o' as u8;

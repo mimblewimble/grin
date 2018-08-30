@@ -35,6 +35,7 @@ use common::{
 };
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
+use core::core::verifier_cache::LruVerifierCache;
 use core::core::{transaction, Block, BlockHeader};
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
@@ -47,6 +48,8 @@ fn test_the_transaction_pool() {
 	let db_root = ".grin_transaction_pool".to_string();
 	clean_output_dir(db_root.clone());
 	let chain = ChainAdapter::init(db_root.clone()).unwrap();
+
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 	// Initialize the chain/txhashset with a few blocks,
 	// so we have a non-empty UTXO set.
@@ -83,7 +86,7 @@ fn test_the_transaction_pool() {
 	};
 
 	// Initialize a new pool with our chain adapter.
-	let pool = RwLock::new(test_setup(&Arc::new(chain.clone())));
+	let pool = RwLock::new(test_setup(Arc::new(chain.clone()), verifier_cache.clone()));
 
 	// Now create tx to spend a coinbase, giving us some useful outputs for testing
 	// with.
@@ -219,7 +222,9 @@ fn test_the_transaction_pool() {
 		let tx4 = test_transaction(&keychain, vec![800], vec![799]);
 		// tx1 and tx2 are already in the txpool (in aggregated form)
 		// tx4 is the "new" part of this aggregated tx that we care about
-		let agg_tx = transaction::aggregate(vec![tx1.clone(), tx2.clone(), tx4]).unwrap();
+		let agg_tx =
+			transaction::aggregate(vec![tx1.clone(), tx2.clone(), tx4], verifier_cache.clone())
+				.unwrap();
 		write_pool
 			.add_to_pool(test_source(), agg_tx, false, &header.hash())
 			.unwrap();

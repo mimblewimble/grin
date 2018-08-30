@@ -16,12 +16,13 @@
 //! Used for both the txpool and stempool layers in the pool.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
+use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, CompactBlock, Transaction, TxKernel};
 use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 use util::LOGGER;
@@ -38,14 +39,20 @@ pub struct Pool {
 	pub entries: Vec<PoolEntry>,
 	/// The blockchain
 	pub blockchain: Arc<BlockChain>,
+	pub verifier_cache: Arc<RwLock<VerifierCache>>,
 	pub name: String,
 }
 
 impl Pool {
-	pub fn new(chain: Arc<BlockChain>, name: String) -> Pool {
+	pub fn new(
+		chain: Arc<BlockChain>,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
+		name: String,
+	) -> Pool {
 		Pool {
 			entries: vec![],
 			blockchain: chain.clone(),
+			verifier_cache: verifier_cache.clone(),
 			name,
 		}
 	}
@@ -86,7 +93,7 @@ impl Pool {
 			.into_iter()
 			.filter_map(|mut bucket| {
 				bucket.truncate(MAX_TX_CHAIN);
-				transaction::aggregate(bucket).ok()
+				transaction::aggregate(bucket, self.verifier_cache.clone()).ok()
 			})
 			.collect();
 
@@ -118,7 +125,7 @@ impl Pool {
 			return Ok(None);
 		}
 
-		let tx = transaction::aggregate(txs)?;
+		let tx = transaction::aggregate(txs, self.verifier_cache.clone())?;
 		Ok(Some(tx))
 	}
 
@@ -191,7 +198,7 @@ impl Pool {
 			// Create a single aggregated tx from the existing pool txs and the
 			// new entry
 			txs.push(entry.tx.clone());
-			transaction::aggregate(txs)?
+			transaction::aggregate(txs, self.verifier_cache.clone())?
 		};
 
 		// Validate aggregated tx against a known chain state (via txhashset

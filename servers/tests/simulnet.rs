@@ -105,6 +105,9 @@ fn simulate_seeding() {
 
 	pool.create_server(&mut server_config);
 
+	// wait the seed server fully start up before start remaining servers
+	thread::sleep(time::Duration::from_millis(1_000));
+
 	// point next servers at first seed
 	server_config.is_seeding = false;
 	server_config.seed_addr = String::from(format!(
@@ -116,10 +119,27 @@ fn simulate_seeding() {
 		pool.create_server(&mut server_config);
 	}
 
-	// pool.connect_all_peers();
-
 	let servers = pool.run_all_servers();
+	thread::sleep(time::Duration::from_secs(5));
+
+	// Check they all end up connected.
+	let url = format!("http://{}:{}/v1/peers/all", &server_config.base_addr, 30020);
+	let peers_all = api::client::get::<Vec<p2p::PeerData>>(url.as_str());
+	assert!(peers_all.is_ok());
+	assert_eq!(
+		peers_all
+			.unwrap()
+			.iter()
+			.filter(|x| x.flags == p2p::State::Healthy)
+			.collect::<Vec<&p2p::PeerData>>()
+			.len(),
+		4
+	);
+
 	stop_all_servers(servers);
+
+	// wait servers fully stop before start next automated test
+	thread::sleep(time::Duration::from_millis(1_000));
 }
 
 /// Create 1 server, start it mining, then connect 4 other peers mining and

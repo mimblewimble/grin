@@ -23,12 +23,13 @@ extern crate rand;
 
 use chrono::Duration;
 use std::fs;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use chain::types::NoopAdapter;
 use chain::Chain;
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
+use core::core::verifier_cache::LruVerifierCache;
 use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
 use core::global::ChainTypes;
 use core::{consensus, global, pow};
@@ -42,6 +43,7 @@ fn clean_output_dir(dir_name: &str) {
 fn setup(dir_name: &str, genesis: Block) -> Chain {
 	util::init_test_logger();
 	clean_output_dir(dir_name);
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
@@ -49,6 +51,7 @@ fn setup(dir_name: &str, genesis: Block) -> Chain {
 		Arc::new(NoopAdapter {}),
 		genesis,
 		pow::verify_size,
+		verifier_cache,
 	).unwrap()
 }
 
@@ -486,12 +489,14 @@ fn actual_diff_iter_output() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();
 	let db_env = Arc::new(store::new_env(".grin".to_string()));
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	let chain = chain::Chain::init(
 		"../.grin".to_string(),
 		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,
+		verifier_cache,
 	).unwrap();
 	let iter = chain.difficulty_iter();
 	let mut last_time = 0;

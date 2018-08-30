@@ -14,6 +14,9 @@
 
 //! Transaction building functions
 
+use std::sync::{Arc, RwLock};
+
+use core::core::verifier_cache::LruVerifierCache;
 use core::core::Transaction;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
@@ -196,7 +199,8 @@ where
 
 	// finalize the burn transaction and send
 	let tx_burn = build::transaction(parts, &keychain)?;
-	tx_burn.validate()?;
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	tx_burn.validate(verifier_cache)?;
 	Ok(tx_burn)
 }
 

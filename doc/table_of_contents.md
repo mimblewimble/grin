@@ -14,14 +14,12 @@
 - [merkle](merkle.md) - Technical explanation of grin's favorite kind of merkle trees
 - [merkle_proof graph](merkle_proof/merkle_proof.png) - Example merkle proof with pruning applied
 - [pruning](pruning.md) - Technical explanation of pruning
-- [rangeproofs](rangeproofs.md) - Technical explanation of range proofs
 - [stratum](stratum.md) - Technical explanation of Grin Stratum RPC protocol
 - [transaction UML](transaction/aggregating transaction without lock_height) - UML of an interactive transaction
 
 ## Build and use
 - [build](build.md) - Explaining how to build and run the Grin binaries
-- [usage](usage.md) - Explaining how to use grin in Testnet1
-- [local_net](local_net.md) - Technical explanation of how to test Grin locally, simulating several peers, for full integration testing and network simulations
+- [usage](usage.md) - Explaining how to use grin in Testnet3
 - [wallet](wallet/usage.md) - Explains the wallet design and `grin wallet` sub-commands
 
 # External (wiki)
