@@ -27,6 +27,7 @@ use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
 use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};
 use util;
+use util::LOGGER;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::secp::{self, Message, Signature};
 use util::{kernel_sig_msg, static_secp_instance};
@@ -542,25 +543,13 @@ impl TransactionBody {
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
 
-		// TODO
-		// move verify_rangeproofs() and verify_kernel_signatures()
-		// back in here
-		// but we need something in util that will let us call with
-		// a vec of outputs and a cache
-		// given a vec of outputs filter into smaller vec based on cached values
-		// read cache for multiple outputs
-		// write cache for multiple outputs etc.
-
-		// Find all the outputs that have not yet been (rangeproof) verified.
-		let outputs: Vec<&Output> = {
+		// Find all the outputs that have not had their rangeproofs verified.
+		let outputs = {
 			let mut verifier = verifier.write().unwrap();
-			self.outputs
-				.iter()
-				.filter(|x| !verifier.is_rangeproof_verified(x))
-				.collect()
+			verifier.filter_rangeproof_unverified(&self.outputs)
 		};
 
-		// Now batch verify all unverified rangeproofs
+		// Now batch verify all those unverified rangeproofs
 		if outputs.len() > 0 {
 			let mut commits = vec![];
 			let mut proofs = vec![];
@@ -572,15 +561,14 @@ impl TransactionBody {
 		}
 
 		// Find all the kernels that have not yet been verified.
-		let kernels: Vec<&TxKernel> = {
+		let kernels = {
 			let mut verifier = verifier.write().unwrap();
-			self.kernels
-				.iter()
-				.filter(|x| !verifier.is_kernel_sig_verified(x))
-				.collect()
+			verifier.filter_kernel_sig_unverified(&self.kernels)
 		};
 
 		// Verify the unverified tx kernels.
+		// No ability to batch verify these right now
+		// so just do them individually.
 		for x in &kernels {
 			x.verify()?;
 		}
@@ -588,12 +576,8 @@ impl TransactionBody {
 		// Cache the successful verification results for the new outputs and kernels.
 		{
 			let mut verifier = verifier.write().unwrap();
-			for x in &outputs {
-				verifier.add_rangeproof_verified(x);
-			}
-			for x in &kernels {
-				verifier.add_kernel_sig_verified(x);
-			}
+			verifier.add_rangeproof_verified(outputs);
+			verifier.add_kernel_sig_verified(kernels);
 		}
 		Ok(())
 	}
