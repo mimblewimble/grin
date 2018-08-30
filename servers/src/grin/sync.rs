@@ -189,7 +189,7 @@ pub fn run_sync(
 						sync_state.update(SyncStatus::NoSync);
 					}
 
-					thread::sleep(time::Duration::from_secs(1));
+					thread::sleep(time::Duration::from_millis(10));
 
 					if stop.load(Ordering::Relaxed) {
 						break;

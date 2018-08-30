@@ -64,6 +64,11 @@ impl<'a> Message<'a> {
 		Message { header, conn }
 	}
 
+	/// Get the TcpStream
+	pub fn get_conn(&mut self) -> TcpStream {
+		return self.conn.try_clone().unwrap();
+	}
+
 	/// Read the message body from the underlying connection
 	pub fn body<T>(&mut self) -> Result<T, Error>
 	where
