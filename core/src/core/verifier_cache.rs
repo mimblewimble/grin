@@ -21,13 +21,26 @@ use core::hash::{Hash, Hashed};
 use core::{Output, TxKernel};
 use util::LOGGER;
 
+/// Verifier cache for caching expensive verification results.
+/// Specifically the following -
+///   * kernel signature verification
+///   * output rangeproof verification
 pub trait VerifierCache: Sync + Send {
+	/// Takes a vec of tx kernels and returns those kernels
+	/// that have not yet been verified.
 	fn filter_kernel_sig_unverified(&mut self, kernels: &Vec<TxKernel>) -> Vec<TxKernel>;
+	/// Takes a vec of tx outputs and returns those outputs
+	/// that have not yet had their rangeproofs verified.
 	fn filter_rangeproof_unverified(&mut self, outputs: &Vec<Output>) -> Vec<Output>;
+	/// Adds a vec of tx kernels to the cache (used in conjunction with the the filter above).
 	fn add_kernel_sig_verified(&mut self, kernels: Vec<TxKernel>);
+	/// Adds a vec of outputs to the cache (used in conjunction with the the filter above).
 	fn add_rangeproof_verified(&mut self, outputs: Vec<Output>);
 }
 
+/// An implementation of verifier_cache using lru_cache.
+/// Caches tx kernels by kernel hash.
+/// Caches outputs by output rangeproof hash (rangeproofs are committed to separately).
 pub struct LruVerifierCache {
 	kernel_sig_verification_cache: LruCache<Hash, bool>,
 	rangeproof_verification_cache: LruCache<Hash, bool>,
