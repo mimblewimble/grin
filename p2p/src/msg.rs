@@ -188,9 +188,13 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<(
 /// Read a header from the provided connection without blocking if the
 /// underlying stream is async. Typically headers will be polled for, so
 /// we do not want to block.
-pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
+pub fn read_header(conn: &mut TcpStream, msg_type: Option<Type>) -> Result<MsgHeader, Error> {
 	let mut head = vec![0u8; HEADER_LEN as usize];
-	read_exact(conn, &mut head, 10000, false)?;
+	if Some(Type::Hand) == msg_type {
+		read_exact(conn, &mut head, 10, true)?;
+	} else {
+		read_exact(conn, &mut head, 10000, false)?;
+	}
 	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
 	let max_len = max_msg_size(header.msg_type);
 	// TODO 4x the limits for now to leave ourselves space to change things
@@ -220,7 +224,7 @@ pub fn read_message<T>(conn: &mut TcpStream, msg_type: Type) -> Result<T, Error>
 where
 	T: Readable,
 {
-	let header = read_header(conn)?;
+	let header = read_header(conn, Some(msg_type))?;
 	if header.msg_type != msg_type {
 		return Err(Error::BadMessage);
 	}
