@@ -306,7 +306,7 @@ impl BlockHeader {
 
 		size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
 		let nonce_bits = self.pow.cuckoo_sizeshift as usize - 1;
-		let bitvec_len = 42 * nonce_bits;
+		let bitvec_len = global::proofsize() * nonce_bits;
 		size += bitvec_len / 8; // pow.nonces
 		if bitvec_len % 8 != 0 {
 			size += 1;
