@@ -260,11 +260,7 @@ where
 	/// sender as well as the private file generate on the first send step.
 	/// Builds the complete transaction and sends it to a grin node for
 	/// propagation.
-	pub fn file_finalize_tx(
-		&mut self,
-		receiver_file: &str,
-	) -> Result<Slate, Error> {
-
+	pub fn file_finalize_tx(&mut self, receiver_file: &str) -> Result<Slate, Error> {
 		let mut pub_tx_f = File::open(receiver_file)?;
 		let mut content = String::new();
 		pub_tx_f.read_to_string(&mut content)?;
