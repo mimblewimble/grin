@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::path::PathBuf;
 /// Wallet commands processing
 use std::process::exit;
 use std::sync::{Arc, Mutex};
@@ -20,7 +21,7 @@ use std::time::Duration;
 
 use clap::ArgMatches;
 
-use config::GlobalConfig;
+use config::GlobalWalletConfig;
 use core::core;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{HTTPWalletClient, LMDBBackend, WalletConfig, WalletInst, WalletSeed};
@@ -28,12 +29,22 @@ use keychain;
 use servers::start_webwallet_server;
 use util::LOGGER;
 
-pub fn init_wallet_seed(wallet_config: WalletConfig) {
+pub fn _init_wallet_seed(wallet_config: WalletConfig) {
 	if let Err(_) = WalletSeed::from_file(&wallet_config) {
 		WalletSeed::init_file(&wallet_config).expect("Failed to create wallet seed file.");
 	};
 }
 
+pub fn seed_exists(wallet_config: WalletConfig) -> bool {
+	let mut data_file_dir = PathBuf::new();
+	data_file_dir.push(wallet_config.data_file_dir);
+	data_file_dir.push(grin_wallet::SEED_FILE);
+	if data_file_dir.exists() {
+		true
+	} else {
+		false
+	}
+}
 pub fn instantiate_wallet(
 	wallet_config: WalletConfig,
 	passphrase: &str,
@@ -49,7 +60,7 @@ pub fn instantiate_wallet(
 			warn!(LOGGER, "Migration successful. Using LMDB Wallet backend");
 		}
 		warn!(LOGGER, "Please check the results of the migration process using `grin wallet info` and `grin wallet outputs`");
-		warn!(LOGGER, "If anything went wrong, you can try again by deleting the `wallet_data` directory and running a wallet command");
+		warn!(LOGGER, "If anything went wrong, you can try again by deleting the `db` directory and running a wallet command");
 		warn!(LOGGER, "If all is okay, you can move/backup/delete all files in the wallet directory EXCEPT FOR wallet.seed");
 	}
 	let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr);
@@ -63,9 +74,9 @@ pub fn instantiate_wallet(
 	Box::new(db_wallet)
 }
 
-pub fn wallet_command(wallet_args: &ArgMatches, global_config: GlobalConfig) {
+pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 	// just get defaults from the global config
-	let mut wallet_config = global_config.members.unwrap().wallet;
+	let mut wallet_config = config.members.unwrap().wallet;
 
 	if wallet_args.is_present("external") {
 		wallet_config.api_listen_interface = "0.0.0.0".to_string();

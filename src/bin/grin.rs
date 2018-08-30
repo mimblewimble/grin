@@ -41,7 +41,7 @@ pub mod tui;
 
 use clap::{App, Arg, SubCommand};
 
-use config::GlobalConfig;
+use config::config::{SERVER_CONFIG_FILE_NAME, WALLET_CONFIG_FILE_NAME};
 use core::global;
 use util::{init_logger, LOGGER};
 
@@ -81,10 +81,14 @@ fn main() {
 		.version(crate_version!())
 		.author("The Grin Team")
 		.about("Lightweight implementation of the MimbleWimble protocol.")
-
     // specification of all the server commands and options
     .subcommand(SubCommand::with_name("server")
                 .about("Control the Grin server")
+                .arg(Arg::with_name("config_file")
+                     .short("c")
+                     .long("config_file")
+                     .help("Path to a grin-server.toml configuration file")
+                     .takes_value(true))
                 .arg(Arg::with_name("port")
                      .short("p")
                      .long("port")
@@ -104,7 +108,9 @@ fn main() {
                      .short("w")
                      .long("wallet_url")
                      .help("The wallet listener to which mining rewards will be sent")
-                	.takes_value(true))
+                     .takes_value(true))
+                .subcommand(SubCommand::with_name("config")
+                            .about("Generate a configuration grin-server.toml file in the current directory"))
                 .subcommand(SubCommand::with_name("start")
                             .about("Start the Grin server as a daemon"))
                 .subcommand(SubCommand::with_name("stop")
@@ -274,85 +280,114 @@ fn main() {
 			.about("basic wallet contents summary"))
 
 		.subcommand(SubCommand::with_name("init")
-			.about("Initialize a new wallet seed file and database."))
+			.about("Initialize a new wallet seed file and database.")
+			.arg(Arg::with_name("here")
+				.short("h")
+				.long("here")
+				.help("Create wallet files in the current directory instead of the default ~/.grin directory")
+				.takes_value(false)))
 
 		.subcommand(SubCommand::with_name("restore")
 			.about("Attempt to restore wallet contents from the chain using seed and password. \
 				NOTE: Backup wallet.* and run `wallet listen` before running restore.")))
 
 	.get_matches();
+	let mut wallet_config = None;
+	let mut node_config = None;
 
-	// load a global config object,
-	// then modify that object with any switches
-	// found so that the switches override the
-	// global config file
-
-	// This will return a global config object,
-	// which will either contain defaults for all // of the config structures or a
-	// configuration
-	// read from a config file
-
-	let mut global_config = GlobalConfig::new(None).unwrap_or_else(|e| {
-		panic!("Error parsing config file: {}", e);
-	});
-
-	// initialize the logger
-	let mut log_conf = global_config
-		.members
-		.as_mut()
-		.unwrap()
-		.logging
-		.clone()
-		.unwrap();
-	let run_tui = global_config.members.as_mut().unwrap().server.run_tui;
-	if run_tui.is_some() && run_tui.unwrap() && args.subcommand().0 != "wallet" {
-		log_conf.log_to_stdout = false;
-		log_conf.tui_running = Some(true);
+	// Deal with configuration file creation
+	match args.subcommand() {
+		("server", Some(server_args)) => {
+			// If it's just a server config command, do it and exit
+			if let ("config", Some(_)) = server_args.subcommand() {
+				cmd::config_command_server(SERVER_CONFIG_FILE_NAME);
+				return;
+			}
+		}
+		("wallet", Some(wallet_args)) => {
+			// wallet init command should spit out its config file then continue
+			// (if desired)
+			if let ("init", Some(init_args)) = wallet_args.subcommand() {
+				if init_args.is_present("here") {
+					cmd::config_command_wallet(WALLET_CONFIG_FILE_NAME);
+				}
+			}
+		}
+		_ => {}
 	}
-	init_logger(Some(log_conf));
-	global::set_mining_mode(
-		global_config
-			.members
-			.as_mut()
-			.unwrap()
-			.server
-			.clone()
-			.chain_type,
-	);
+
+	match args.subcommand() {
+		// If it's a wallet command, try and load a wallet config file
+		("wallet", Some(wallet_args)) => {
+			let mut w = config::initial_setup_wallet().unwrap_or_else(|e| {
+				panic!("Error loading wallet configuration: {}", e);
+			});
+			if !cmd::seed_exists(w.members.as_ref().unwrap().wallet.clone()) {
+				if let ("init", Some(_)) = wallet_args.subcommand() {
+				} else {
+					println!("Wallet seed file doesn't exist. Run `grin wallet -p [password] init` first");
+					return;
+				}
+			}
+			let mut l = w.members.as_mut().unwrap().logging.clone().unwrap();
+			l.tui_running = Some(false);
+			init_logger(Some(l));
+			warn!(
+				LOGGER,
+				"Using wallet configuration file at {}",
+				w.config_file_path.as_ref().unwrap().to_str().unwrap()
+			);
+			wallet_config = Some(w);
+		}
+		// Otherwise load up the node config as usual
+		_ => {
+			let mut s = config::initial_setup_server().unwrap_or_else(|e| {
+				panic!("Error loading server configuration: {}", e);
+			});
+			let mut l = s.members.as_mut().unwrap().logging.clone().unwrap();
+			let run_tui = s.members.as_mut().unwrap().server.run_tui;
+			if let Some(true) = run_tui {
+				l.log_to_stdout = false;
+				l.tui_running = Some(true);
+			}
+			init_logger(Some(l));
+			global::set_mining_mode(s.members.as_mut().unwrap().server.clone().chain_type);
+			if let Some(file_path) = &s.config_file_path {
+				info!(
+					LOGGER,
+					"Using configuration file at {}",
+					file_path.to_str().unwrap()
+				);
+			} else {
+				info!(LOGGER, "Node configuration file not found, using default");
+			}
+			node_config = Some(s);
+		}
+	}
 
 	log_build_info();
-
-	if let Some(file_path) = &global_config.config_file_path {
-		info!(
-			LOGGER,
-			"Found configuration file at {}",
-			file_path.to_str().unwrap()
-		);
-	} else {
-		info!(LOGGER, "configuration file not found, using default");
-	}
 
 	match args.subcommand() {
 		// server commands and options
 		("server", Some(server_args)) => {
-			cmd::server_command(Some(server_args), global_config);
+			cmd::server_command(Some(server_args), node_config.unwrap());
 		}
 
 		// client commands and options
 		("client", Some(client_args)) => {
-			cmd::client_command(client_args, global_config);
+			cmd::client_command(client_args, node_config.unwrap());
 		}
 
 		// client commands and options
 		("wallet", Some(wallet_args)) => {
-			cmd::wallet_command(wallet_args, global_config);
+			cmd::wallet_command(wallet_args, wallet_config.unwrap());
 		}
 
 		// If nothing is specified, try to just use the config file instead
 		// this could possibly become the way to configure most things
 		// with most command line options being phased out
 		_ => {
-			cmd::server_command(None, global_config);
+			cmd::server_command(None, node_config.unwrap());
 		}
 	}
 }

@@ -65,19 +65,21 @@ impl Server {
 	where
 		F: FnMut(Arc<Server>),
 	{
-		let mut mining_config = config.stratum_mining_config.clone();
+		let mining_config = config.stratum_mining_config.clone();
 		let enable_test_miner = config.run_test_miner;
 		let test_miner_wallet_url = config.test_miner_wallet_url.clone();
 		let serv = Arc::new(Server::new(config)?);
 
-		let enable_stratum_server = mining_config.as_mut().unwrap().enable_stratum_server;
-		if let Some(s) = enable_stratum_server {
-			if s {
-				{
-					let mut stratum_stats = serv.state_info.stratum_stats.write().unwrap();
-					stratum_stats.is_enabled = true;
+		if let Some(c) = mining_config {
+			let enable_stratum_server = c.enable_stratum_server;
+			if let Some(s) = enable_stratum_server {
+				if s {
+					{
+						let mut stratum_stats = serv.state_info.stratum_stats.write().unwrap();
+						stratum_stats.is_enabled = true;
+					}
+					serv.start_stratum_server(c.clone());
 				}
-				serv.start_stratum_server(mining_config.clone().unwrap());
 			}
 		}
 
