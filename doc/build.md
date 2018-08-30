@@ -19,6 +19,8 @@ What's working so far?
 - pkc-config
 - libssl-dev
 - linux-headers (reported needed on Alpine linux)
+- pkg-config (reported on Ubuntu)
+- libssl-dev (reported on various builds) 
 
 ## Build steps
 
@@ -27,8 +29,7 @@ git clone https://github.com/mimblewimble/grin.git
 cd grin
 cargo build --release
 ```
-
-Grin can also be built in debug mode (without the `--release` flag) but this will render fast sync prohibitively slow due to the large overhead of cryptographic operations.
+Grin can also be built in debug mode (without the `--release` flag, but using the `--debug` or the `--verbose` flag) but this will render fast sync prohibitively slow due to the large overhead of cryptographic operations.
 
 ## Mining in Grin
 
@@ -58,6 +59,7 @@ While testing, put the grin binary on your path like this:
 ```
 export PATH=/path/to/grin/dir/target/debug:$PATH
 ```
+Where path/to/grin/dir is your absolute path to the root directory of your Grin installation. 
 
 You can then run `grin` directly (try `grin help` for more options).
 
