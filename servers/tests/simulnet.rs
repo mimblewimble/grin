@@ -124,7 +124,7 @@ fn simulate_seeding() {
 
 	// Check they all end up connected.
 	let url = format!("http://{}:{}/v1/peers/all", &server_config.base_addr, 30020);
-	let peers_all = api::client::get::<Vec<p2p::PeerData>>(url.as_str()).map_err(|e| Error::API(e));
+	let peers_all = api::client::get::<Vec<p2p::PeerData>>(url.as_str());
 	assert!(peers_all.is_ok());
 	assert_eq!(
 		peers_all
@@ -479,11 +479,4 @@ fn replicate_tx_fluff_failure() {
 		assert_eq!(res.1.amount_currently_spendable, amount);
 		Ok(())
 	}).unwrap();
-}
-
-/// Error type wrapping underlying module errors.
-#[derive(Debug)]
-enum Error {
-	/// Error originating from HTTP API calls.
-	API(api::Error),
 }
