@@ -103,27 +103,6 @@ impl Default for ChainValidationMode {
 	}
 }
 
-/// Type of seeding the server will use to find other peers on the network.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub enum Seeding {
-	/// No seeding, mostly for tests that programmatically connect
-	None,
-	/// A list of seed addresses provided to the server
-	List,
-	/// Automatically download a text file with a list of server addresses
-	WebStatic,
-	/// Automatically get a list of seeds from multiple DNS
-	DNSSeed,
-	/// Mostly for tests, where connections are initiated programmatically
-	Programmatic,
-}
-
-impl Default for Seeding {
-	fn default() -> Seeding {
-		Seeding::DNSSeed
-	}
-}
-
 /// Full server configuration, aggregating configurations required for the
 /// different components.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -138,39 +117,12 @@ pub struct ServerConfig {
 	#[serde(default)]
 	pub chain_type: ChainTypes,
 
-	/// Whether this node is a full archival node or a fast-sync, pruned node
-	pub archive_mode: Option<bool>,
-
 	/// Automatically run full chain validation during normal block processing?
 	#[serde(default)]
 	pub chain_validation_mode: ChainValidationMode,
 
-	/// Method used to get the list of seed nodes for initial bootstrap.
-	#[serde(default)]
-	pub seeding_type: Seeding,
-
-	/// TODO - move this into p2p_config?
-	/// The list of seed nodes, if using Seeding as a seed type
-	pub seeds: Option<Vec<String>>,
-
-	/// TODO - move this into p2p_config?
-	/// Capabilities expose by this node, also conditions which other peers this
-	/// node will have an affinity toward when connection.
-	pub capabilities: p2p::Capabilities,
-
-	/// Configuration for the peer-to-peer server
-	pub p2p_config: p2p::P2PConfig,
-
-	/// Configuration for the mining daemon
-	pub stratum_mining_config: Option<StratumServerConfig>,
-
-	/// Transaction pool configuration
-	#[serde(default)]
-	pub pool_config: pool::PoolConfig,
-
-	/// Dandelion configuration
-	#[serde(default)]
-	pub dandelion_config: pool::DandelionConfig,
+	/// Whether this node is a full archival node or a fast-sync, pruned node
+	pub archive_mode: Option<bool>,
 
 	/// Whether to skip the sync timeout on startup
 	/// (To assist testing on solo chains)
@@ -194,26 +146,38 @@ pub struct ServerConfig {
 
 	/// Test miner wallet URL
 	pub test_miner_wallet_url: Option<String>,
+
+	/// Configuration for the peer-to-peer server
+	pub p2p_config: p2p::P2PConfig,
+
+	/// Transaction pool configuration
+	#[serde(default)]
+	pub pool_config: pool::PoolConfig,
+
+	/// Dandelion configuration
+	#[serde(default)]
+	pub dandelion_config: pool::DandelionConfig,
+
+	/// Configuration for the mining daemon
+	#[serde(default)]
+	pub stratum_mining_config: Option<StratumServerConfig>,
 }
 
 impl Default for ServerConfig {
 	fn default() -> ServerConfig {
 		ServerConfig {
-			db_root: ".grin".to_string(),
+			db_root: "grin_chain".to_string(),
 			api_http_addr: "127.0.0.1:13413".to_string(),
-			capabilities: p2p::Capabilities::FULL_NODE,
-			seeding_type: Seeding::default(),
-			seeds: None,
 			p2p_config: p2p::P2PConfig::default(),
 			dandelion_config: pool::DandelionConfig::default(),
 			stratum_mining_config: Some(StratumServerConfig::default()),
 			chain_type: ChainTypes::default(),
-			archive_mode: None,
+			archive_mode: Some(false),
 			chain_validation_mode: ChainValidationMode::default(),
 			pool_config: pool::PoolConfig::default(),
 			skip_sync_wait: Some(false),
 			run_tui: Some(true),
-			run_wallet_listener: Some(true),
+			run_wallet_listener: Some(false),
 			run_wallet_owner_api: Some(false),
 			use_db_wallet: None,
 			run_test_miner: Some(false),
@@ -254,7 +218,7 @@ impl Default for StratumServerConfig {
 			burn_reward: false,
 			attempt_time_per_block: 15,
 			minimum_share_difficulty: 1,
-			enable_stratum_server: Some(true),
+			enable_stratum_server: Some(false),
 			stratum_server_addr: Some("127.0.0.1:13416".to_string()),
 		}
 	}

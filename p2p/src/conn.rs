@@ -64,6 +64,11 @@ impl<'a> Message<'a> {
 		Message { header, conn }
 	}
 
+	/// Get the TcpStream
+	pub fn get_conn(&mut self) -> TcpStream {
+		return self.conn.try_clone().unwrap();
+	}
+
 	/// Read the message body from the underlying connection
 	pub fn body<T>(&mut self) -> Result<T, Error>
 	where
@@ -200,7 +205,7 @@ fn poll<H>(
 			let mut retry_send = Err(());
 			loop {
 				// check the read end
-				if let Some(h) = try_break!(error_tx, read_header(conn)) {
+				if let Some(h) = try_break!(error_tx, read_header(conn, None)) {
 					let msg = Message::from_header(h, conn);
 					trace!(
 						LOGGER,

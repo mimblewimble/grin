@@ -121,7 +121,7 @@ impl WalletClient for HTTPWalletClient {
 	fn get_outputs_from_node(
 		&self,
 		wallet_outputs: Vec<pedersen::Commitment>,
-	) -> Result<HashMap<pedersen::Commitment, String>, libwallet::Error> {
+	) -> Result<HashMap<pedersen::Commitment, (String, u64)>, libwallet::Error> {
 		let addr = self.node_url();
 		// build the necessary query params -
 		// ?id=xxx&id=yyy&id=zzz
@@ -131,7 +131,7 @@ impl WalletClient for HTTPWalletClient {
 			.collect();
 
 		// build a map of api outputs by commit so we can look them up efficiently
-		let mut api_outputs: HashMap<pedersen::Commitment, String> = HashMap::new();
+		let mut api_outputs: HashMap<pedersen::Commitment, (String, u64)> = HashMap::new();
 		let mut tasks = Vec::new();
 
 		for query_chunk in query_params.chunks(500) {
@@ -152,7 +152,10 @@ impl WalletClient for HTTPWalletClient {
 
 		for res in results {
 			for out in res {
-				api_outputs.insert(out.commit.commit(), util::to_hex(out.commit.to_vec()));
+				api_outputs.insert(
+					out.commit.commit(),
+					(util::to_hex(out.commit.to_vec()), out.height),
+				);
 			}
 		}
 		Ok(api_outputs)
@@ -166,7 +169,7 @@ impl WalletClient for HTTPWalletClient {
 		(
 			u64,
 			u64,
-			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)>,
 		),
 		libwallet::Error,
 	> {
@@ -175,7 +178,8 @@ impl WalletClient for HTTPWalletClient {
 
 		let url = format!("{}/v1/txhashset/outputs?{}", addr, query_param,);
 
-		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool)> = Vec::new();
+		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)> =
+			Vec::new();
 
 		match api::client::get::<api::OutputListing>(url.as_str()) {
 			Ok(o) => {
@@ -184,7 +188,12 @@ impl WalletClient for HTTPWalletClient {
 						api::OutputType::Coinbase => true,
 						api::OutputType::Transaction => false,
 					};
-					api_outputs.push((out.commit, out.range_proof().unwrap(), is_coinbase));
+					api_outputs.push((
+						out.commit,
+						out.range_proof().unwrap(),
+						is_coinbase,
+						out.block_height.unwrap(),
+					));
 				}
 
 				Ok((o.highest_index, o.last_retrieved_index, api_outputs))

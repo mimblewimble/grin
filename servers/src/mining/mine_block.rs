@@ -23,8 +23,8 @@ use std::thread;
 use std::time::Duration;
 
 use chain;
-use common::adapters::PoolToChainAdapter;
 use common::types::Error;
+use core::core::verifier_cache::VerifierCache;
 use core::ser::{self, AsFixedBytes};
 use core::{consensus, core};
 use keychain::{ExtKeychain, Identifier, Keychain};
@@ -76,9 +76,9 @@ impl ser::Writer for HeaderPrePowWriter {
 // Warning: This call does not return until/unless a new block can be built
 pub fn get_block(
 	chain: &Arc<chain::Chain>,
-	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: &Arc<RwLock<pool::TransactionPool>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	key_id: Option<Identifier>,
-	max_tx: u32,
 	wallet_listener_url: Option<String>,
 ) -> (core::Block, BlockFees) {
 	let wallet_retry_interval = 5;
@@ -86,8 +86,8 @@ pub fn get_block(
 	let mut result = build_block(
 		chain,
 		tx_pool,
+		verifier_cache.clone(),
 		key_id.clone(),
-		max_tx,
 		wallet_listener_url.clone(),
 	);
 	while let Err(e) = result {
@@ -119,8 +119,8 @@ pub fn get_block(
 		result = build_block(
 			chain,
 			tx_pool,
+			verifier_cache.clone(),
 			key_id.clone(),
-			max_tx,
 			wallet_listener_url.clone(),
 		);
 	}
@@ -131,9 +131,9 @@ pub fn get_block(
 /// transactions from the pool.
 fn build_block(
 	chain: &Arc<chain::Chain>,
-	tx_pool: &Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: &Arc<RwLock<pool::TransactionPool>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	key_id: Option<Identifier>,
-	max_tx: u32,
 	wallet_listener_url: Option<String>,
 ) -> Result<(core::Block, BlockFees), Error> {
 	// prepare the block header timestamp
@@ -150,10 +150,7 @@ fn build_block(
 	let difficulty = consensus::next_difficulty(diff_iter).unwrap();
 
 	// extract current transaction from the pool
-	let txs = tx_pool
-		.read()
-		.unwrap()
-		.prepare_mineable_transactions(max_tx);
+	let txs = tx_pool.read().unwrap().prepare_mineable_transactions();
 
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
@@ -165,10 +162,21 @@ fn build_block(
 	};
 
 	let (output, kernel, block_fees) = get_coinbase(wallet_listener_url, block_fees)?;
-	let mut b = core::Block::with_reward(&head, txs, output, kernel, difficulty.clone())?;
+	let mut b = core::Block::with_reward(
+		&head,
+		txs,
+		output,
+		kernel,
+		difficulty.clone(),
+		verifier_cache.clone(),
+	)?;
 
 	// making sure we're not spending time mining a useless block
-	b.validate(&head.total_kernel_offset, &head.total_kernel_sum)?;
+	b.validate(
+		&head.total_kernel_offset,
+		&head.total_kernel_sum,
+		verifier_cache,
+	)?;
 
 	let mut rng = rand::OsRng::new().unwrap();
 	b.header.nonce = rng.gen();
@@ -184,6 +192,7 @@ fn build_block(
 		b.header.clone().total_difficulty.to_num(),
 	);
 
+	// Now set txhashset roots and sizes on the header of the block being built.
 	let roots_result = chain.set_txhashset_roots(&mut b, false);
 
 	match roots_result {

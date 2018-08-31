@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time;
-use std::{cmp, thread};
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::time;
+use std::{cmp, thread};
 
 use chain;
 use common::types::{Error, SyncState, SyncStatus};
@@ -68,122 +68,134 @@ pub fn run_sync(
 	stop: Arc<AtomicBool>,
 ) {
 	let chain = chain.clone();
-	let _ = thread::Builder::new()
-		.name("sync".to_string())
-		.spawn(move || {
-			let mut si = SyncInfo::new();
+	let _ =
+		thread::Builder::new()
+			.name("sync".to_string())
+			.spawn(move || {
+				let mut si = SyncInfo::new();
 
-			{
-				// Initial sleep to give us time to peer with some nodes.
-				// Note: Even if we have "skip_sync_wait" we need to wait a
-				// short period of time for tests to do the right thing.
-				let wait_secs = if skip_sync_wait {
-					3
-				} else {
-					30
-				};
+				{
+					// Initial sleep to give us time to peer with some nodes.
+					// Note: Even if we have "skip_sync_wait" we need to wait a
+					// short period of time for tests to do the right thing.
+					let wait_secs = if skip_sync_wait { 3 } else { 30 };
 
-				awaiting_peers.store(true, Ordering::Relaxed);
-				let mut n = 0;
-				while peers.more_work_peers().len() < 4 && n < wait_secs {
-					thread::sleep(time::Duration::from_secs(1));
-					n += 1;
-				}
-				awaiting_peers.store(false, Ordering::Relaxed);
-			}
-
-			// fast sync has 3 "states":
-			// * syncing headers
-			// * once all headers are sync'd, requesting the txhashset state
-			// * once we have the state, get blocks after that
-			//
-			// full sync gets rid of the middle step and just starts from
-			// the genesis state
-
-			loop {
-				let horizon = global::cut_through_horizon() as u64;
-				let head = chain.head().unwrap();
-				let header_head = chain.get_header_head().unwrap();
-
-				// is syncing generally needed when we compare our state with others
-				let (syncing, most_work_height) =
-					needs_syncing(sync_state.as_ref(), peers.clone(), chain.clone());
-
-				if most_work_height > 0 {
-					// we can occasionally get a most work height of 0 if read locks fail
-					si.highest_height = most_work_height;
+					awaiting_peers.store(true, Ordering::Relaxed);
+					let mut n = 0;
+					while peers.more_work_peers().len() < 4 && n < wait_secs {
+						thread::sleep(time::Duration::from_secs(1));
+						n += 1;
+					}
+					awaiting_peers.store(false, Ordering::Relaxed);
 				}
 
-				if syncing {
-					let fast_sync_enabled =
-						!archive_mode && si.highest_height.saturating_sub(head.height) > horizon;
+				// fast sync has 3 "states":
+				// * syncing headers
+				// * once all headers are sync'd, requesting the txhashset state
+				// * once we have the state, get blocks after that
+				//
+				// full sync gets rid of the middle step and just starts from
+				// the genesis state
 
-					// run the header sync every 10s
-					if si.header_sync_due(&header_head) {
-						header_sync(peers.clone(), chain.clone());
+				let mut history_locators: Vec<(u64, Hash)> = vec![];
 
-						let status = sync_state.status();
-						match status{
-							SyncStatus::TxHashsetDownload => (),
-							_ => {
-								sync_state.update(SyncStatus::HeaderSync{current_height: header_head.height, highest_height: si.highest_height});
-							}
-						};
+				loop {
+					let horizon = global::cut_through_horizon() as u64;
+					let head = chain.head().unwrap();
+					let header_head = chain.get_header_head().unwrap();
+
+					// is syncing generally needed when we compare our state with others
+					let (syncing, most_work_height) =
+						needs_syncing(sync_state.as_ref(), peers.clone(), chain.clone());
+
+					if most_work_height > 0 {
+						// we can occasionally get a most work height of 0 if read locks fail
+						si.highest_height = most_work_height;
 					}
 
-					if fast_sync_enabled {
+					if syncing {
+						let fast_sync_enabled = !archive_mode
+							&& si.highest_height.saturating_sub(head.height) > horizon;
 
-						// check sync error
-						{
-							let mut sync_error_need_clear = false;
-							{
-								let clone = sync_state.sync_error();
-								if let Some(ref sync_error) = *clone.read().unwrap() {
-									error!(LOGGER, "fast_sync: error = {:?}. restart fast sync", sync_error);
-									si.fast_sync_reset();
-									sync_error_need_clear = true;
+						// run the header sync every 10s
+						if si.header_sync_due(&header_head) {
+							header_sync(peers.clone(), chain.clone(), &mut history_locators);
+
+							let status = sync_state.status();
+							match status {
+								SyncStatus::TxHashsetDownload => (),
+								_ => {
+									sync_state.update(SyncStatus::HeaderSync {
+										current_height: header_head.height,
+										highest_height: si.highest_height,
+									});
 								}
-								drop(clone);
-							}
-							if sync_error_need_clear {
-								sync_state.clear_sync_error();
-							}
+							};
 						}
 
-						// run fast sync if applicable, normally only run one-time, except restart in error
-						if header_head.height == si.highest_height {
-							let (go,download_timeout) = si.fast_sync_due();
-
-							if go {
-								if let Err(e) = fast_sync(peers.clone(), chain.clone(), &header_head) {
-									sync_state.set_sync_error(Error::P2P(e));
+						if fast_sync_enabled {
+							// check sync error
+							{
+								let mut sync_error_need_clear = false;
+								{
+									let clone = sync_state.sync_error();
+									if let Some(ref sync_error) = *clone.read().unwrap() {
+										error!(
+											LOGGER,
+											"fast_sync: error = {:?}. restart fast sync",
+											sync_error
+										);
+										si.fast_sync_reset();
+										sync_error_need_clear = true;
+									}
+									drop(clone);
 								}
-								sync_state.update(SyncStatus::TxHashsetDownload);
+								if sync_error_need_clear {
+									sync_state.clear_sync_error();
+								}
 							}
 
-							if SyncStatus::TxHashsetDownload == sync_state.status() && download_timeout {
-								error!(LOGGER, "fast_sync: TxHashsetDownload status timeout in 10 minutes!");
-								sync_state.set_sync_error(Error::P2P(p2p::Error::Timeout));
+							// run fast sync if applicable, normally only run one-time, except restart in error
+							if header_head.height == si.highest_height {
+								let (go, download_timeout) = si.fast_sync_due();
+
+								if go {
+									if let Err(e) =
+										fast_sync(peers.clone(), chain.clone(), &header_head)
+									{
+										sync_state.set_sync_error(Error::P2P(e));
+									}
+									sync_state.update(SyncStatus::TxHashsetDownload);
+								}
+
+								if SyncStatus::TxHashsetDownload == sync_state.status()
+									&& download_timeout
+								{
+									error!(LOGGER, "fast_sync: TxHashsetDownload status timeout in 10 minutes!");
+									sync_state.set_sync_error(Error::P2P(p2p::Error::Timeout));
+								}
+							}
+						} else {
+							// run the body_sync every 5s
+							if si.body_sync_due(&head) {
+								body_sync(peers.clone(), chain.clone());
+								sync_state.update(SyncStatus::BodySync {
+									current_height: head.height,
+									highest_height: si.highest_height,
+								});
 							}
 						}
 					} else {
-						// run the body_sync every 5s
-						if si.body_sync_due(&head) {
-							body_sync(peers.clone(), chain.clone());
-							sync_state.update(SyncStatus::BodySync{current_height: head.height, highest_height: si.highest_height});
-						}
+						sync_state.update(SyncStatus::NoSync);
 					}
-				} else {
-					sync_state.update(SyncStatus::NoSync);
-				}
 
-				thread::sleep(time::Duration::from_secs(1));
+					thread::sleep(time::Duration::from_millis(10));
 
-				if stop.load(Ordering::Relaxed) {
-					break;
+					if stop.load(Ordering::Relaxed) {
+						break;
+					}
 				}
-			}
-		});
+			});
 }
 
 fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
@@ -269,7 +281,11 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 	}
 }
 
-fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
+fn header_sync(
+	peers: Arc<Peers>,
+	chain: Arc<chain::Chain>,
+	history_locators: &mut Vec<(u64, Hash)>,
+) {
 	if let Ok(header_head) = chain.get_header_head() {
 		let difficulty = header_head.total_difficulty;
 
@@ -277,19 +293,22 @@ fn header_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 			if let Ok(p) = peer.try_read() {
 				let peer_difficulty = p.info.total_difficulty.clone();
 				if peer_difficulty > difficulty {
-					request_headers(&p, chain.clone());
+					request_headers(&p, chain.clone(), history_locators);
 				}
 			}
 		}
 	}
 }
 
-fn fast_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, header_head: &chain::Tip) -> Result<(), p2p::Error> {
+fn fast_sync(
+	peers: Arc<Peers>,
+	chain: Arc<chain::Chain>,
+	header_head: &chain::Tip,
+) -> Result<(), p2p::Error> {
 	let horizon = global::cut_through_horizon() as u64;
 
 	if let Some(peer) = peers.most_work_peer() {
 		if let Ok(p) = peer.try_read() {
-
 			// ask for txhashset at 90% of horizon, this still leaves time for download
 			// and validation to happen and stay within horizon
 			let mut txhashset_head = chain.get_block_header(&header_head.prev_block_h).unwrap();
@@ -306,11 +325,7 @@ fn fast_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, header_head: &chain::T
 				bhash
 			);
 			if let Err(e) = p.send_txhashset_request(txhashset_head.height, bhash) {
-				error!(
-					LOGGER,
-					"fast_sync: send_txhashset_request err! {:?}",
-					e
-				);
+				error!(LOGGER, "fast_sync: send_txhashset_request err! {:?}", e);
 				return Err(e);
 			}
 			return Ok(());
@@ -320,8 +335,8 @@ fn fast_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, header_head: &chain::T
 }
 
 /// Request some block headers from a peer to advance us.
-fn request_headers(peer: &Peer, chain: Arc<chain::Chain>) {
-	if let Ok(locator) = get_locator(chain) {
+fn request_headers(peer: &Peer, chain: Arc<chain::Chain>, history_locators: &mut Vec<(u64, Hash)>) {
+	if let Ok(locator) = get_locator(chain, history_locators) {
 		debug!(
 			LOGGER,
 			"sync: request_headers: asking {} for headers, {:?}", peer.info.addr, locator,
@@ -400,19 +415,113 @@ fn needs_syncing(
 /// Even if sync_head is significantly out of date we will "reset" it once we
 /// start getting headers back from a peer.
 ///
-fn get_locator(chain: Arc<chain::Chain>) -> Result<Vec<Hash>, Error> {
+fn get_locator(
+	chain: Arc<chain::Chain>,
+	history_locators: &mut Vec<(u64, Hash)>,
+) -> Result<Vec<Hash>, Error> {
+	let mut this_height = 0;
+
 	let tip = chain.get_sync_head()?;
 	let heights = get_locator_heights(tip.height);
+	let mut new_heights: Vec<u64> = vec![];
 
-	debug!(LOGGER, "sync: locator heights: {:?}", heights);
+	// for security, clear history_locators[] in any case of header chain rollback,
+	// the easiest way is to check whether the sync head and the header head are identical.
+	if history_locators.len() > 0 && tip.hash() != chain.get_header_head()?.hash() {
+		history_locators.clear();
+	}
 
-	let mut locator = vec![];
+	debug!(LOGGER, "sync: locator heights : {:?}", heights);
+
+	let mut locator: Vec<Hash> = vec![];
 	let mut current = chain.get_block_header(&tip.last_block_h);
 	while let Ok(header) = current {
 		if heights.contains(&header.height) {
 			locator.push(header.hash());
+			new_heights.push(header.height);
+			if history_locators.len() > 0
+				&& tip.height - header.height + 1 >= p2p::MAX_BLOCK_HEADERS as u64 - 1
+			{
+				this_height = header.height;
+				break;
+			}
 		}
 		current = chain.get_block_header(&header.previous);
+	}
+
+	// update history locators
+	{
+		let mut tmp: Vec<(u64, Hash)> = vec![];
+		*&mut tmp = new_heights
+			.clone()
+			.into_iter()
+			.zip(locator.clone().into_iter())
+			.collect();
+		tmp.reverse();
+		if history_locators.len() > 0 && tmp[0].0 == 0 {
+			tmp = tmp[1..].to_vec();
+		}
+		history_locators.append(&mut tmp);
+	}
+
+	// reuse remaining part of locator from history
+	if this_height > 0 {
+		let this_height_index = heights.iter().position(|&r| r == this_height).unwrap();
+		let next_height = heights[this_height_index + 1];
+
+		let reuse_index = history_locators
+			.iter()
+			.position(|&r| r.0 >= next_height)
+			.unwrap();
+		let mut tmp = history_locators[..reuse_index + 1].to_vec();
+		tmp.reverse();
+		for (height, hash) in &mut tmp {
+			if *height == 0 {
+				break;
+			}
+
+			// check the locator to make sure the gap >= 2^n, where n = index of heights Vec
+			if this_height >= *height + 2u64.pow(locator.len() as u32) {
+				locator.push(hash.clone());
+				this_height = *height;
+				new_heights.push(this_height);
+			}
+			if locator.len() >= (p2p::MAX_LOCATORS as usize) - 1 {
+				break;
+			}
+		}
+
+		// push height 0 if it's not there
+		if new_heights[new_heights.len() - 1] != 0 {
+			locator.push(history_locators[history_locators.len() - 1].1.clone());
+			new_heights.push(0);
+		}
+	}
+
+	debug!(LOGGER, "sync: locator heights': {:?}", new_heights);
+
+	// shrink history_locators properly
+	if heights.len() > 1 {
+		let shrink_height = heights[heights.len() - 2];
+		let mut shrunk_size = 0;
+		let shrink_index = history_locators
+			.iter()
+			.position(|&r| r.0 > shrink_height)
+			.unwrap();
+		if shrink_index > 100 {
+			// shrink but avoid trivial shrinking
+			let mut shrunk = history_locators[shrink_index..].to_vec();
+			shrunk_size = shrink_index;
+			history_locators.clear();
+			history_locators.push((0, locator[locator.len() - 1]));
+			history_locators.append(&mut shrunk);
+		}
+		debug!(
+			LOGGER,
+			"sync: history locators: len={}, shrunk={}",
+			history_locators.len(),
+			shrunk_size
+		);
 	}
 
 	debug!(LOGGER, "sync: locator: {:?}", locator);
@@ -422,7 +531,7 @@ fn get_locator(chain: Arc<chain::Chain>) -> Result<Vec<Hash>, Error> {
 
 // current height back to 0 decreasing in powers of 2
 fn get_locator_heights(height: u64) -> Vec<u64> {
-	let mut current = height.clone();
+	let mut current = height;
 	let mut heights = vec![];
 	while current > 0 {
 		heights.push(current);
@@ -439,7 +548,7 @@ fn get_locator_heights(height: u64) -> Vec<u64> {
 // Utility struct to group what information the main sync loop has to track
 struct SyncInfo {
 	prev_body_sync: (DateTime<Utc>, u64),
-	prev_header_sync: (DateTime<Utc>, u64),
+	prev_header_sync: (DateTime<Utc>, u64, u64),
 	prev_fast_sync: Option<DateTime<Utc>>,
 	highest_height: u64,
 }
@@ -449,7 +558,7 @@ impl SyncInfo {
 		let now = Utc::now();
 		SyncInfo {
 			prev_body_sync: (now.clone(), 0),
-			prev_header_sync: (now.clone(), 0),
+			prev_header_sync: (now.clone(), 0, 0),
 			prev_fast_sync: None,
 			highest_height: 0,
 		}
@@ -457,15 +566,29 @@ impl SyncInfo {
 
 	fn header_sync_due(&mut self, header_head: &chain::Tip) -> bool {
 		let now = Utc::now();
-		let (prev_ts, prev_height) = self.prev_header_sync;
+		let (timeout, latest_height, prev_height) = self.prev_header_sync;
 
-		if header_head.height >= prev_height + (p2p::MAX_BLOCK_HEADERS as u64) - 4
-			|| now - prev_ts > Duration::seconds(10)
-		{
-			self.prev_header_sync = (now, header_head.height);
-			return true;
+		// received all necessary headers, can ask for more
+		let all_headers_received =
+			header_head.height >= prev_height + (p2p::MAX_BLOCK_HEADERS as u64) - 4;
+		// no headers processed and we're past timeout, need to ask for more
+		let stalling = header_head.height == latest_height && now > timeout;
+
+		if all_headers_received || stalling {
+			self.prev_header_sync = (
+				now + Duration::seconds(10),
+				header_head.height,
+				header_head.height,
+			);
+			true
+		} else {
+			// resetting the timeout as long as we progress
+			if header_head.height > latest_height {
+				self.prev_header_sync =
+					(now + Duration::seconds(2), header_head.height, prev_height);
+			}
+			false
 		}
-		false
 	}
 
 	fn body_sync_due(&mut self, head: &chain::Tip) -> bool {
@@ -480,20 +603,20 @@ impl SyncInfo {
 	}
 
 	// For now this is a one-time thing (it can be slow) at initial startup.
-	fn fast_sync_due(&mut self) -> (bool,bool) {
+	fn fast_sync_due(&mut self) -> (bool, bool) {
 		let now = Utc::now();
 		let mut download_timeout = false;
 
 		match self.prev_fast_sync {
 			None => {
 				self.prev_fast_sync = Some(now);
-				(true,download_timeout)
+				(true, download_timeout)
 			}
 			Some(prev) => {
 				if now - prev > Duration::minutes(10) {
 					download_timeout = true;
 				}
-				(false,download_timeout)
+				(false, download_timeout)
 			}
 		}
 	}
@@ -501,7 +624,6 @@ impl SyncInfo {
 	fn fast_sync_reset(&mut self) {
 		self.prev_fast_sync = None;
 	}
-
 }
 
 #[cfg(test)]
@@ -525,7 +647,7 @@ mod test {
 		assert_eq!(
 			get_locator_heights(10000),
 			vec![
-				10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0
+				10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0,
 			]
 		);
 	}

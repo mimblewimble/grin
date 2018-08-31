@@ -13,7 +13,6 @@
 // limitations under the License.
 
 /// Grin server commands processing
-
 use std::env::current_dir;
 use std::process::exit;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -21,14 +20,15 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use ctrlc;
 use clap::ArgMatches;
+use ctrlc;
 use daemonize::Daemonize;
 
 use cmd::wallet;
 use config::GlobalConfig;
 use core::global;
 use grin_wallet::controller;
+use p2p::Seeding;
 use servers;
 use tui::ui;
 use util::LOGGER;
@@ -118,12 +118,12 @@ pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: Globa
 		}
 
 		if let Some(seeds) = a.values_of("seed") {
-			server_config.seeding_type = servers::Seeding::List;
-			server_config.seeds = Some(seeds.map(|s| s.to_string()).collect());
+			server_config.p2p_config.seeding_type = Seeding::List;
+			server_config.p2p_config.seeds = Some(seeds.map(|s| s.to_string()).collect());
 		}
 	}
 
-	if let Some(true) = server_config.run_wallet_listener {
+	/*if let Some(true) = server_config.run_wallet_listener {
 		let mut wallet_config = global_config.members.as_ref().unwrap().wallet.clone();
 		wallet::init_wallet_seed(wallet_config.clone());
 		let wallet = wallet::instantiate_wallet(wallet_config.clone(), "");
@@ -155,7 +155,7 @@ pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: Globa
 					)
 				});
 			});
-	}
+	}*/
 
 	// start the server in the different run modes (interactive or daemon)
 	if let Some(a) = server_args {
@@ -192,4 +192,3 @@ pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: Globa
 		start_server(server_config);
 	}
 }
-

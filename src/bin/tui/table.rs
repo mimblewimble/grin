@@ -41,8 +41,10 @@
 //! Adapted from https://github.com/behnam/rust-cursive-table-view
 //! A basic table view implementation for [cursive](https://crates.io/crates/cursive).
 
-#![deny(missing_docs, missing_copy_implementations, trivial_casts, trivial_numeric_casts,
-        unsafe_code, unused_import_braces, unused_qualifications)]
+#![deny(
+	missing_docs, missing_copy_implementations, trivial_casts, trivial_numeric_casts, unsafe_code,
+	unused_import_braces, unused_qualifications
+)]
 
 // Crate Dependencies ---------------------------------------------------------
 extern crate cursive;
@@ -664,7 +666,8 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 	fn column_select(&mut self) {
 		let next = self.active_column();
 		let column = self.columns[next].column;
-		let current = self.columns
+		let current = self
+			.columns
 			.iter()
 			.position(|c| c.order != Ordering::Equal)
 			.unwrap_or(0);
@@ -736,10 +739,10 @@ impl<T: TableViewItem<H> + 'static, H: Eq + Hash + Copy + Clone + 'static> View
 		let column_count = self.columns.len();
 
 		// Split up all columns into sized / unsized groups
-		let (mut sized, mut usized): (Vec<&mut TableColumn<H>>, Vec<&mut TableColumn<H>>) =
-			self.columns
-				.iter_mut()
-				.partition(|c| c.requested_width.is_some());
+		let (mut sized, mut usized): (Vec<&mut TableColumn<H>>, Vec<&mut TableColumn<H>>) = self
+			.columns
+			.iter_mut()
+			.partition(|c| c.requested_width.is_some());
 
 		// Subtract one for the separators between our columns (that's column_count - 1)
 		let mut available_width = size.x.saturating_sub(column_count.saturating_sub(1) * 3);

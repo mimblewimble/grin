@@ -35,7 +35,7 @@ use error::{Error, ErrorKind};
 use libwallet;
 
 use libwallet::types::{
-	OutputData, TxLogEntry, WalletBackend, WalletClient, WalletDetails, WalletOutputBatch,
+	Context, OutputData, TxLogEntry, WalletBackend, WalletClient, WalletDetails, WalletOutputBatch,
 };
 
 use types::{WalletConfig, WalletSeed};
@@ -118,6 +118,18 @@ where
 	}
 
 	fn tx_log_iter(&self) -> Box<Iterator<Item = TxLogEntry>> {
+		unimplemented!()
+	}
+
+	fn save_private_context(
+		&mut self,
+		_slate_id: &[u8],
+		_ctx: &Context,
+	) -> Result<(), libwallet::Error> {
+		unimplemented!()
+	}
+
+	fn delete_private_context(&mut self, _slate_id: &[u8]) -> Result<(), libwallet::Error> {
 		unimplemented!()
 	}
 
@@ -237,6 +249,10 @@ where
 
 	fn tx_log_iter<'a>(&'a self) -> Box<Iterator<Item = TxLogEntry> + 'a> {
 		Box::new(self.tx_log.iter().cloned())
+	}
+
+	fn get_private_context(&mut self, _slate_id: &[u8]) -> Result<Context, libwallet::Error> {
+		unimplemented!()
 	}
 
 	fn get(&self, id: &Identifier) -> Result<OutputData, libwallet::Error> {

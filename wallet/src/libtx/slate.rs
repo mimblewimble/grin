@@ -16,9 +16,11 @@
 //! around during an interactive wallet exchange
 
 use rand::thread_rng;
+use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 
 use core::core::committed::Committed;
+use core::core::verifier_cache::LruVerifierCache;
 use core::core::{amount_to_hr_string, Transaction};
 use keychain::{BlindSum, BlindingFactor, Keychain};
 use libtx::error::{Error, ErrorKind};
@@ -267,7 +269,12 @@ impl Slate {
 		// double check the fee amount included in the partial tx
 		// we don't necessarily want to just trust the sender
 		// we could just overwrite the fee here (but we won't) due to the sig
-		let fee = tx_fee(self.tx.inputs().len(), self.tx.outputs().len(), None);
+		let fee = tx_fee(
+			self.tx.inputs().len(),
+			self.tx.outputs().len(),
+			self.tx.kernels().len(),
+			None,
+		);
 		if fee > self.tx.fee() {
 			return Err(ErrorKind::Fee(
 				format!("Fee Dispute Error: {}, {}", self.tx.fee(), fee,).to_string(),
@@ -365,11 +372,6 @@ impl Slate {
 
 		// build the final excess based on final tx and offset
 		let final_excess = {
-			// TODO - do we need to verify rangeproofs here?
-			for x in final_tx.outputs() {
-				x.verify_proof()?;
-			}
-
 			// sum the input/output commitments on the final tx
 			let overage = final_tx.fee() as i64;
 			let tx_excess = final_tx.sum_commitments(overage)?;
@@ -393,7 +395,8 @@ impl Slate {
 		final_tx.kernels()[0].verify()?;
 
 		// confirm the overall transaction is valid (including the updated kernel)
-		let _ = final_tx.validate(false)?;
+		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+		let _ = final_tx.validate(verifier_cache)?;
 
 		self.tx = final_tx;
 		Ok(())

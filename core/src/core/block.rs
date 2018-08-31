@@ -16,23 +16,25 @@
 
 use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
-use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
+use std::mem;
+use std::sync::{Arc, RwLock};
 
 use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
+use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
-use core::id::ShortIdentifiable;
 use core::target::Difficulty;
+use core::verifier_cache::{LruVerifierCache, VerifierCache};
 use core::{
-	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, ShortId,
-	Transaction, TransactionBody, TxKernel,
+	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, Transaction,
+	TransactionBody, TxKernel,
 };
 use global;
 use keychain::{self, BlindingFactor};
-use ser::{self, read_and_verify_sorted, Readable, Reader, Writeable, WriteableSorted, Writer};
+use ser::{self, Readable, Reader, Writeable, Writer};
 use util::{secp, secp_static, static_secp_instance, LOGGER};
 
 /// Errors thrown by Block validation
@@ -141,6 +143,39 @@ pub struct BlockHeader {
 	pub nonce: u64,
 	/// Proof of work data.
 	pub pow: Proof,
+}
+
+/// Serialized size of fixed part of a BlockHeader, i.e. without pow
+fn fixed_size_of_serialized_header() -> usize {
+	let mut size: usize = 0;
+	size += mem::size_of::<u16>(); // version
+	size += mem::size_of::<u64>(); // height
+	size += mem::size_of::<Hash>(); // previous
+	size += mem::size_of::<u64>(); // timestamp
+	size += mem::size_of::<Difficulty>(); // total_difficulty
+	size += mem::size_of::<Hash>(); // output_root
+	size += mem::size_of::<Hash>(); // range_proof_root
+	size += mem::size_of::<Hash>(); // kernel_root
+	size += mem::size_of::<BlindingFactor>(); // total_kernel_offset
+	size += mem::size_of::<Commitment>(); // total_kernel_sum
+	size += mem::size_of::<u64>(); // output_mmr_size
+	size += mem::size_of::<u64>(); // kernel_mmr_size
+	size += mem::size_of::<u64>(); // nonce
+	size
+}
+
+/// Serialized size of a BlockHeader
+pub fn serialized_size_of_header(cuckoo_sizeshift: u8) -> usize {
+	let mut size = fixed_size_of_serialized_header();
+
+	size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
+	let nonce_bits = cuckoo_sizeshift as usize - 1;
+	let bitvec_len = global::proofsize() * nonce_bits;
+	size += bitvec_len / 8; // pow.nonces
+	if bitvec_len % 8 != 0 {
+		size += 1;
+	}
+	size
 }
 
 impl Default for BlockHeader {
@@ -266,79 +301,19 @@ impl BlockHeader {
 	pub fn total_kernel_offset(&self) -> BlindingFactor {
 		self.total_kernel_offset
 	}
-}
 
-/// Compact representation of a full block.
-/// Each input/output/kernel is represented as a short_id.
-/// A node is reasonably likely to have already seen all tx data (tx broadcast
-/// before block) and can go request missing tx data from peers if necessary to
-/// hydrate a compact block into a full block.
-#[derive(Debug, Clone)]
-pub struct CompactBlock {
-	/// The header with metadata and commitments to the rest of the data
-	pub header: BlockHeader,
-	/// Nonce for connection specific short_ids
-	pub nonce: u64,
-	/// List of full outputs - specifically the coinbase output(s)
-	pub out_full: Vec<Output>,
-	/// List of full kernels - specifically the coinbase kernel(s)
-	pub kern_full: Vec<TxKernel>,
-	/// List of transaction kernels, excluding those in the full list
-	/// (short_ids)
-	pub kern_ids: Vec<ShortId>,
-}
+	/// Serialized size of this header
+	pub fn serialized_size(&self) -> usize {
+		let mut size = fixed_size_of_serialized_header();
 
-/// Implementation of Writeable for a compact block, defines how to write the
-/// block to a binary writer. Differentiates between writing the block for the
-/// purpose of full serialization and the one of just extracting a hash.
-impl Writeable for CompactBlock {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.header.write(writer)?;
-
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			writer.write_u64(self.nonce)?;
-
-			ser_multiwrite!(
-				writer,
-				[write_u64, self.out_full.len() as u64],
-				[write_u64, self.kern_full.len() as u64],
-				[write_u64, self.kern_ids.len() as u64]
-			);
-
-			let mut out_full = self.out_full.clone();
-			let mut kern_full = self.kern_full.clone();
-			let mut kern_ids = self.kern_ids.clone();
-
-			// Consensus rule that everything is sorted in lexicographical order on the
-			// wire.
-			out_full.write_sorted(writer)?;
-			kern_full.write_sorted(writer)?;
-			kern_ids.write_sorted(writer)?;
+		size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
+		let nonce_bits = self.pow.cuckoo_sizeshift as usize - 1;
+		let bitvec_len = global::proofsize() * nonce_bits;
+		size += bitvec_len / 8; // pow.nonces
+		if bitvec_len % 8 != 0 {
+			size += 1;
 		}
-		Ok(())
-	}
-}
-
-/// Implementation of Readable for a compact block, defines how to read a
-/// compact block from a binary stream.
-impl Readable for CompactBlock {
-	fn read(reader: &mut Reader) -> Result<CompactBlock, ser::Error> {
-		let header = BlockHeader::read(reader)?;
-
-		let (nonce, out_full_len, kern_full_len, kern_id_len) =
-			ser_multiread!(reader, read_u64, read_u64, read_u64, read_u64);
-
-		let out_full = read_and_verify_sorted(reader, out_full_len as u64)?;
-		let kern_full = read_and_verify_sorted(reader, kern_full_len as u64)?;
-		let kern_ids = read_and_verify_sorted(reader, kern_id_len)?;
-
-		Ok(CompactBlock {
-			header,
-			nonce,
-			out_full,
-			kern_full,
-			kern_ids,
-		})
+		size
 	}
 }
 
@@ -375,7 +350,14 @@ impl Readable for Block {
 		let header = BlockHeader::read(reader)?;
 
 		let body = TransactionBody::read(reader)?;
-		body.validate(true).map_err(|_| ser::Error::CorruptedData)?;
+
+		// Now "lightweight" validation of the block.
+		// Treat any validation issues as data corruption.
+		// An example of this would be reading a block
+		// that exceeded the allowed number of inputs.
+		body.validate_read(true)
+			.map_err(|_| ser::Error::CorruptedData)?;
+
 		Ok(Block {
 			header: header,
 			body: body,
@@ -423,8 +405,15 @@ impl Block {
 		difficulty: Difficulty,
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
-		let mut block =
-			Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
+		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+		let mut block = Block::with_reward(
+			prev,
+			txs,
+			reward_output.0,
+			reward_output.1,
+			difficulty,
+			verifier_cache,
+		)?;
 
 		// Now set the pow on the header so block hashing works as expected.
 		{
@@ -446,6 +435,8 @@ impl Block {
 			txs.len(),
 		);
 
+		let header = cb.header.clone();
+
 		let mut all_inputs = HashSet::new();
 		let mut all_outputs = HashSet::new();
 		let mut all_kernels = HashSet::new();
@@ -459,64 +450,24 @@ impl Block {
 		}
 
 		// include the coinbase output(s) and kernel(s) from the compact_block
-		all_outputs.extend(cb.out_full);
-		all_kernels.extend(cb.kern_full);
+		{
+			let body: CompactBlockBody = cb.into();
+			all_outputs.extend(body.out_full);
+			all_kernels.extend(body.kern_full);
+		}
 
 		// convert the sets to vecs
-		let mut all_inputs = Vec::from_iter(all_inputs);
-		let mut all_outputs = Vec::from_iter(all_outputs);
-		let mut all_kernels = Vec::from_iter(all_kernels);
+		let all_inputs = Vec::from_iter(all_inputs);
+		let all_outputs = Vec::from_iter(all_outputs);
+		let all_kernels = Vec::from_iter(all_kernels);
 
-		// sort them all lexicographically
-		all_inputs.sort();
-		all_outputs.sort();
-		all_kernels.sort();
+		// Initialize a tx body and sort everything.
+		let body = TransactionBody::init(all_inputs, all_outputs, all_kernels, false)?;
 
-		// finally return the full block
-		// Note: we have not actually validated the block here
-		// leave it to the caller to actually validate the block
-		Block {
-			header: cb.header,
-			body: TransactionBody::new(all_inputs, all_outputs, all_kernels),
-		}.cut_through()
-	}
-
-	/// Generate the compact block representation.
-	pub fn as_compact_block(&self) -> CompactBlock {
-		let header = self.header.clone();
-		let nonce = thread_rng().next_u64();
-
-		let mut out_full = self
-			.body
-			.outputs
-			.iter()
-			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
-			.cloned()
-			.collect::<Vec<_>>();
-
-		let mut kern_full = vec![];
-		let mut kern_ids = vec![];
-
-		for k in self.kernels() {
-			if k.features.contains(KernelFeatures::COINBASE_KERNEL) {
-				kern_full.push(k.clone());
-			} else {
-				kern_ids.push(k.short_id(&header.hash(), nonce));
-			}
-		}
-
-		// sort all the lists
-		out_full.sort();
-		kern_full.sort();
-		kern_ids.sort();
-
-		CompactBlock {
-			header,
-			nonce,
-			out_full,
-			kern_full,
-			kern_ids,
-		}
+		// Finally return the full block.
+		// Note: we have not actually validated the block here,
+		// caller must validate the block.
+		Block { header, body }.cut_through()
 	}
 
 	/// Build a new empty block from a specified header
@@ -536,10 +487,16 @@ impl Block {
 		reward_out: Output,
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
+		verifier: Arc<RwLock<VerifierCache>>,
 	) -> Result<Block, Error> {
-		// A block is just a big transaction, aggregate as such. Note that
-		// aggregate also runs validation and duplicate commitment checks.
-		let agg_tx = transaction::aggregate(txs, Some((reward_out, reward_kern)))?;
+		// A block is just a big transaction, aggregate as such.
+		// Note that aggregation also runs transaction validation
+		// and duplicate commitment checks.
+		let mut agg_tx = transaction::aggregate(txs, verifier)?;
+		// Now add the reward output and reward kernel to the aggregate tx.
+		// At this point the tx is technically invalid,
+		// but the tx body is valid if we account for the reward (i.e. as a block).
+		agg_tx = agg_tx.with_output(reward_out).with_kernel(reward_kern);
 
 		// Now add the kernel offset of the previous block for a total
 		let total_kernel_offset =
@@ -555,10 +512,16 @@ impl Block {
 			secp.commit_sum(excesses, vec![])?
 		};
 
+		let now = Utc::now().timestamp();
+		let timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now, 0), Utc);
+
+		// Now build the block with all the above information.
+		// Note: We have not validated the block here.
+		// Caller must validate the block as necessary.
 		Block {
 			header: BlockHeader {
 				height: prev.height + 1,
-				timestamp: Utc::now(),
+				timestamp,
 				previous: prev.hash(),
 				total_difficulty: difficulty + prev.total_difficulty,
 				total_kernel_offset,
@@ -624,14 +587,27 @@ impl Block {
 		let mut outputs = self.outputs().clone();
 		transaction::cut_through(&mut inputs, &mut outputs)?;
 
+		let kernels = self.kernels().clone();
+
+		// Initialize tx body and sort everything.
+		let body = TransactionBody::init(inputs, outputs, kernels, false)?;
+
 		Ok(Block {
-			header: BlockHeader {
-				pow: self.header.pow,
-				total_difficulty: self.header.total_difficulty,
-				..self.header
-			},
-			body: TransactionBody::new(inputs, outputs, self.body.kernels),
+			header: self.header,
+			body,
 		})
+	}
+
+	/// "Lightweight" validation that we can perform quickly during read/deserialization.
+	/// Subset of full validation that skips expensive verification steps, specifically -
+	/// * rangeproof verification (on the body)
+	/// * kernel signature verification (on the body)
+	/// * coinbase sum verification
+	/// * kernel sum verification
+	pub fn validate_read(&self) -> Result<(), Error> {
+		self.body.validate_read(true)?;
+		self.verify_kernel_lock_heights()?;
+		Ok(())
 	}
 
 	/// Validates all the elements in a block that can be checked without
@@ -641,8 +617,9 @@ impl Block {
 		&self,
 		prev_kernel_offset: &BlindingFactor,
 		prev_kernel_sum: &Commitment,
+		verifier: Arc<RwLock<VerifierCache>>,
 	) -> Result<(Commitment), Error> {
-		self.body.validate(true)?;
+		self.body.validate(true, verifier)?;
 
 		self.verify_kernel_lock_heights()?;
 		self.verify_coinbase()?;

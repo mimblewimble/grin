@@ -14,6 +14,7 @@
 
 //! Mining Stratum Server
 use bufstream::BufStream;
+use chrono::prelude::Utc;
 use serde;
 use serde_json;
 use serde_json::Value;
@@ -23,21 +24,17 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, SystemTime};
 use std::{cmp, thread};
-use chrono::prelude::{Utc};
 
 use chain;
-use common::adapters::PoolToChainAdapter;
 use common::stats::{StratumStats, WorkerStats};
 use common::types::{StratumServerConfig, SyncState};
+use core::core::verifier_cache::VerifierCache;
 use core::core::Block;
-use core::{pow, global};
+use core::{global, pow};
 use keychain;
 use mining::mine_block;
 use pool;
 use util::LOGGER;
-
-// Max number of transactions this miner will assemble in a block
-const MAX_TX: u32 = 5000;
 
 // ----------------------------------------
 // http://www.jsonrpc.org/specification
@@ -232,7 +229,8 @@ pub struct StratumServer {
 	id: String,
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	current_block_versions: Vec<Block>,
 	current_difficulty: u64,
 	minimum_share_difficulty: u64,
@@ -245,15 +243,17 @@ impl StratumServer {
 	/// Creates a new Stratum Server.
 	pub fn new(
 		config: StratumServerConfig,
-		chain_ref: Arc<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		chain: Arc<chain::Chain>,
+		tx_pool: Arc<RwLock<pool::TransactionPool>>,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
 	) -> StratumServer {
 		StratumServer {
 			id: String::from("StratumServer"),
 			minimum_share_difficulty: config.minimum_share_difficulty,
-			config: config,
-			chain: chain_ref,
-			tx_pool: tx_pool,
+			config,
+			chain,
+			tx_pool,
+			verifier_cache,
 			current_block_versions: Vec::new(),
 			current_difficulty: <u64>::max_value(),
 			current_key_id: None,
@@ -438,10 +438,9 @@ impl StratumServer {
 		worker: &mut Worker,
 		worker_stats: &mut WorkerStats,
 	) -> Result<(Value, bool), Value> {
-
 		// Validate parameters
 		let params: SubmitParams = parse_params(params)?;
-		
+
 		let share_difficulty: u64;
 		let mut share_is_block = false;
 		if params.height != self.current_block_versions.last().unwrap().header.height {
@@ -567,7 +566,10 @@ impl StratumServer {
 		} else {
 			submit_response = "ok".to_string();
 		}
-		return Ok((serde_json::to_value(submit_response).unwrap(), share_is_block));
+		return Ok((
+			serde_json::to_value(submit_response).unwrap(),
+			share_is_block,
+		));
 	} // handle submit a solution
 
 	// Purge dead/sick workers - remove all workers marked in error state
@@ -711,7 +713,8 @@ impl StratumServer {
 			// or We are rebuilding the current one to include new transactions
 			// and we're not synching
 			// and there is at least one worker connected
-			if (current_hash != latest_hash || Utc::now().timestamp() >= deadline) && !mining_stopped
+			if (current_hash != latest_hash || Utc::now().timestamp() >= deadline)
+				&& !mining_stopped
 				&& num_workers > 0
 			{
 				let mut wallet_listener_url: Option<String> = None;
@@ -726,8 +729,8 @@ impl StratumServer {
 				let (new_block, block_fees) = mine_block::get_block(
 					&self.chain,
 					&self.tx_pool,
+					self.verifier_cache.clone(),
 					self.current_key_id.clone(),
-					MAX_TX.clone(),
 					wallet_listener_url,
 				);
 				self.current_difficulty = (new_block.header.total_difficulty.clone()
@@ -763,12 +766,11 @@ impl StratumServer {
 	} // fn run_loop()
 } // StratumServer
 
-
 // Utility function to parse a JSON RPC parameter object, returning a proper
 // error if things go wrong.
 fn parse_params<T>(params: Option<Value>) -> Result<T, Value>
 where
-	for<'de> T: serde::Deserialize<'de>
+	for<'de> T: serde::Deserialize<'de>,
 {
 	params
 		.and_then(|v| serde_json::from_value(v).ok())
@@ -780,4 +782,3 @@ where
 			serde_json::to_value(e).unwrap()
 		})
 }
-

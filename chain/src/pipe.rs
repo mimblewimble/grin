@@ -24,6 +24,7 @@ use chain::OrphanBlockPool;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
+use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader};
 use core::global;
 use error::{Error, ErrorKind};
@@ -57,7 +58,11 @@ pub struct BlockContext {
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain. Returns the new chain head if
 /// updated.
-pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+pub fn process_block(
+	b: &Block,
+	ctx: &mut BlockContext,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
+) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
@@ -95,7 +100,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 
 	// validate the block itself
 	// we can do this now before interacting with the txhashset
-	let _sums = validate_block(b, ctx)?;
+	let _sums = validate_block(b, ctx, verifier_cache)?;
 
 	// header and block both valid, and we have a previous block
 	// so take the lock on the txhashset
@@ -130,7 +135,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		b.hash(),
 		b.header.height,
 	);
-	add_block(b, ctx.store.clone(), &mut batch)?;
+	add_block(b, &mut batch)?;
 	let res = update_head(b, &ctx, &mut batch);
 	if res.is_ok() {
 		batch.commit()?;
@@ -307,7 +312,11 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	Ok(())
 }
 
-fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+fn validate_block(
+	b: &Block,
+	ctx: &mut BlockContext,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
+) -> Result<(), Error> {
 	if ctx.store.block_exists(&b.hash())? {
 		if b.header.height < ctx.head.height.saturating_sub(50) {
 			return Err(ErrorKind::OldBlock.into());
@@ -316,8 +325,11 @@ fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 		}
 	}
 	let prev = ctx.store.get_block_header(&b.header.previous)?;
-	b.validate(&prev.total_kernel_offset, &prev.total_kernel_sum)
-		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
+	b.validate(
+		&prev.total_kernel_offset,
+		&prev.total_kernel_sum,
+		verifier_cache,
+	).map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }
 
@@ -370,16 +382,14 @@ fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Re
 }
 
 /// Officially adds the block to our chain.
-fn add_block(
-	b: &Block,
-	store: Arc<store::ChainStore>,
-	batch: &mut store::Batch,
-) -> Result<(), Error> {
+fn add_block(b: &Block, batch: &mut store::Batch) -> Result<(), Error> {
+	// Save the block itself to the db (via the batch).
 	batch
 		.save_block(b)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save block".to_owned()))?;
-	let bitmap = store.build_and_cache_block_input_bitmap(&b)?;
-	batch.save_block_input_bitmap(&b.hash(), &bitmap)?;
+
+	// Build the block_input_bitmap, save to the db (via the batch) and cache locally.
+	batch.build_and_cache_block_input_bitmap(&b)?;
 	Ok(())
 }
 
@@ -490,7 +500,6 @@ pub fn rewind_and_apply_fork(
 		}
 	}
 
-	let head_header = store.head_header()?;
 	let forked_header = store.get_block_header(&current)?;
 
 	trace!(
@@ -503,7 +512,7 @@ pub fn rewind_and_apply_fork(
 	);
 
 	// rewind the sum trees up to the forking block
-	ext.rewind(&forked_header, &head_header)?;
+	ext.rewind(&forked_header)?;
 
 	trace!(
 		LOGGER,

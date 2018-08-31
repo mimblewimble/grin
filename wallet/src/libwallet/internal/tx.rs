@@ -14,12 +14,15 @@
 
 //! Transaction building functions
 
+use std::sync::{Arc, RwLock};
+
+use core::core::verifier_cache::LruVerifierCache;
 use core::core::Transaction;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
-use libwallet::internal::{selection, sigcontext, updater};
-use libwallet::types::{TxLogEntryType, WalletBackend, WalletClient};
+use libwallet::internal::{selection, updater};
+use libwallet::types::{Context, TxLogEntryType, WalletBackend, WalletClient};
 use libwallet::{Error, ErrorKind};
 use util::LOGGER;
 
@@ -61,14 +64,7 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 	max_outputs: usize,
 	num_change_outputs: usize,
 	selection_strategy_is_use_all: bool,
-) -> Result<
-	(
-		Slate,
-		sigcontext::Context,
-		impl FnOnce(&mut T) -> Result<(), Error>,
-	),
-	Error,
->
+) -> Result<(Slate, Context, impl FnOnce(&mut T) -> Result<(), Error>), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -117,7 +113,7 @@ where
 pub fn complete_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
-	context: &sigcontext::Context,
+	context: &Context,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
@@ -191,7 +187,7 @@ where
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
-	let fee = tx_fee(coins.len(), 2, None);
+	let fee = tx_fee(coins.len(), 2, 1, None);
 	let num_change_outputs = 1;
 	let (mut parts, _) =
 		selection::inputs_and_change(&coins, wallet, amount, fee, num_change_outputs)?;
@@ -203,7 +199,8 @@ where
 
 	// finalize the burn transaction and send
 	let tx_burn = build::transaction(parts, &keychain)?;
-	tx_burn.validate(false)?;
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	tx_burn.validate(verifier_cache)?;
 	Ok(tx_burn)
 }
 

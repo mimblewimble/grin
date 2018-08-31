@@ -48,7 +48,7 @@ After checking out grin, building and using, these are the folders you'll have:
   Low-level rust utilities.
 - wallet
 	Simple command line wallet implementation. Will generate:
-  - wallet.dat - your "outputs", that once confirmed and matured, can be spent with the [`grin wallet send`](wallet.md) command. (locally created, _not_ in git)
+  - wallet_data - a database storing your "outputs", that once confirmed and matured, can be spent with the [`grin wallet send`](wallet.md) command. (locally created, _not_ in git)
   - wallet.seed - your secret wallet seed. (locally created, _not_ in git)
 
 ## grin dependencies

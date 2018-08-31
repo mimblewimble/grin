@@ -50,6 +50,32 @@ fn w<T>(weak: &Weak<T>) -> Arc<T> {
 	weak.upgrade().unwrap()
 }
 
+/// Retrieves an output from the chain given a commit id (a tiny bit iteratively)
+fn get_output(chain: &Weak<chain::Chain>, id: &str) -> Result<(Output, OutputIdentifier), Error> {
+	let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
+		"Not a valid commitment: {}",
+		id
+	)))?;
+	let commit = Commitment::from_vec(c);
+
+	// We need the features here to be able to generate the necessary hash
+	// to compare against the hash in the output MMR.
+	// For now we can just try both (but this probably needs to be part of the api
+	// params)
+	let outputs = [
+		OutputIdentifier::new(OutputFeatures::DEFAULT_OUTPUT, &commit),
+		OutputIdentifier::new(OutputFeatures::COINBASE_OUTPUT, &commit),
+	];
+
+	for x in outputs.iter() {
+		if let Ok(_) = w(chain).is_unspent(&x) {
+			let block_height = w(chain).get_header_for_output(&x).unwrap().height;
+			return Ok((Output::new(&commit, block_height), x.clone()));
+		}
+	}
+	Err(ErrorKind::NotFound)?
+}
+
 // RESTful index of available api endpoints
 // GET /v1/
 struct IndexHandler {
@@ -74,27 +100,8 @@ struct OutputHandler {
 
 impl OutputHandler {
 	fn get_output(&self, id: &str) -> Result<Output, Error> {
-		let c = util::from_hex(String::from(id)).context(ErrorKind::Argument(format!(
-			"Not a valid commitment: {}",
-			id
-		)))?;
-		let commit = Commitment::from_vec(c);
-
-		// We need the features here to be able to generate the necessary hash
-		// to compare against the hash in the output MMR.
-		// For now we can just try both (but this probably needs to be part of the api
-		// params)
-		let outputs = [
-			OutputIdentifier::new(OutputFeatures::DEFAULT_OUTPUT, &commit),
-			OutputIdentifier::new(OutputFeatures::COINBASE_OUTPUT, &commit),
-		];
-
-		for x in outputs.iter() {
-			if let Ok(_) = w(&self.chain).is_unspent(&x) {
-				return Ok(Output::new(&commit));
-			}
-		}
-		Err(ErrorKind::NotFound)?
+		let res = get_output(&self.chain, id)?;
+		Ok(res.0)
 	}
 
 	fn outputs_by_ids(&self, req: &Request<Body>) -> Result<Vec<Output>, Error> {
@@ -115,8 +122,6 @@ impl OutputHandler {
 				}
 			}
 		}
-
-		debug!(LOGGER, "outputs_by_ids: {:?}", commitments);
 
 		let mut outputs: Vec<Output> = vec![];
 		for x in commitments {
@@ -148,7 +153,8 @@ impl OutputHandler {
 			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
 			.map(|output| {
 				OutputPrintable::from_output(output, w(&self.chain), Some(&header), include_proof)
-			}).collect();
+			})
+			.collect();
 
 		Ok(BlockOutputs {
 			header: BlockHeaderInfo::from_header(&header),
@@ -315,6 +321,7 @@ impl TxHashSetHandler {
 			spent: false,
 			proof: None,
 			proof_hash: "".to_string(),
+			block_height: None,
 			merkle_proof: Some(merkle_proof),
 		})
 	}
@@ -552,9 +559,10 @@ impl Handler for ChainCompactHandler {
 	}
 }
 
-/// Gets block headers given either a hash or height.
+/// Gets block headers given either a hash or height or an output commit.
 /// GET /v1/headers/<hash>
 /// GET /v1/headers/<height>
+/// GET /v1/headers/<output commit>
 ///
 pub struct HeaderHandler {
 	pub chain: Weak<chain::Chain>,
@@ -562,6 +570,10 @@ pub struct HeaderHandler {
 
 impl HeaderHandler {
 	fn get_header(&self, input: String) -> Result<BlockHeaderPrintable, Error> {
+		// will fail quick if the provided isn't a commitment
+		if let Ok(h) = self.get_header_for_output(input.clone()) {
+			return Ok(h);
+		}
 		if let Ok(height) = input.parse() {
 			match w(&self.chain).get_header_by_height(height) {
 				Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
@@ -577,11 +589,20 @@ impl HeaderHandler {
 			.context(ErrorKind::NotFound)?;
 		Ok(BlockHeaderPrintable::from_header(&header))
 	}
+
+	fn get_header_for_output(&self, commit_id: String) -> Result<BlockHeaderPrintable, Error> {
+		let oid = get_output(&self.chain, &commit_id)?.1;
+		match w(&self.chain).get_header_for_output(&oid) {
+			Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
+			Err(_) => return Err(ErrorKind::NotFound)?,
+		}
+	}
 }
 
-/// Gets block details given either a hash or height.
+/// Gets block details given either a hash or an unspent commit
 /// GET /v1/blocks/<hash>
 /// GET /v1/blocks/<height>
+/// GET /v1/blocks/<commit>
 ///
 /// Optionally return results as "compact blocks" by passing "?compact" query
 /// param GET /v1/blocks/<hash>?compact
@@ -598,7 +619,7 @@ impl BlockHandler {
 	fn get_compact_block(&self, h: &Hash) -> Result<CompactBlockPrintable, Error> {
 		let block = w(&self.chain).get_block(h).context(ErrorKind::NotFound)?;
 		Ok(CompactBlockPrintable::from_compact_block(
-			&block.as_compact_block(),
+			&block.into(),
 			w(&self.chain),
 		))
 	}
@@ -673,14 +694,11 @@ impl Handler for HeaderHandler {
 }
 
 // Get basic information about the transaction pool.
-struct PoolInfoHandler<T> {
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+struct PoolInfoHandler {
+	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 }
 
-impl<T> Handler for PoolInfoHandler<T>
-where
-	T: pool::BlockChain + Send + Sync,
-{
+impl Handler for PoolInfoHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		let pool_arc = w(&self.tx_pool);
 		let pool = pool_arc.read().unwrap();
@@ -698,14 +716,11 @@ struct TxWrapper {
 }
 
 // Push new transaction to our local transaction pool.
-struct PoolPushHandler<T> {
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+struct PoolPushHandler {
+	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 }
 
-impl<T> PoolPushHandler<T>
-where
-	T: pool::BlockChain + Send + Sync + 'static,
-{
+impl PoolPushHandler {
 	fn update_pool(&self, req: Request<Body>) -> Box<Future<Item = (), Error = Error> + Send> {
 		let params = match req.uri().query() {
 			Some(query_string) => form_urlencoded::parse(query_string.as_bytes())
@@ -725,35 +740,40 @@ where
 				.and_then(move |wrapper: TxWrapper| {
 					util::from_hex(wrapper.tx_hex)
 						.map_err(|_| ErrorKind::RequestError("Bad request".to_owned()).into())
-				}).and_then(move |tx_bin| {
+				})
+				.and_then(move |tx_bin| {
 					ser::deserialize(&mut &tx_bin[..])
 						.map_err(|_| ErrorKind::RequestError("Bad request".to_owned()).into())
-				}).and_then(move |tx: Transaction| {
+				})
+				.and_then(move |tx: Transaction| {
 					let source = pool::TxSource {
 						debug_name: "push-api".to_string(),
 						identifier: "?.?.?.?".to_string(),
 					};
 					info!(
 						LOGGER,
-						"Pushing transaction with {} inputs and {} outputs to pool.",
+						"Pushing transaction {} to pool (inputs: {}, outputs: {}, kernels: {})",
+						tx.hash(),
 						tx.inputs().len(),
-						tx.outputs().len()
+						tx.outputs().len(),
+						tx.kernels().len(),
 					);
 
 					//  Push to tx pool.
 					let mut tx_pool = pool_arc.write().unwrap();
+					let header = tx_pool.blockchain.chain_head().unwrap();
 					tx_pool
-						.add_to_pool(source, tx, !fluff)
-						.map_err(|_| ErrorKind::RequestError("Bad request".to_owned()).into())
+						.add_to_pool(source, tx, !fluff, &header.hash())
+						.map_err(|e| {
+							error!(LOGGER, "update_pool: failed with error: {:?}", e);
+							ErrorKind::RequestError("Bad request".to_owned()).into()
+						})
 				}),
 		)
 	}
 }
 
-impl<T> Handler for PoolPushHandler<T>
-where
-	T: pool::BlockChain + Send + Sync + 'static,
-{
+impl Handler for PoolPushHandler {
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		Box::new(
 			self.update_pool(req)
@@ -832,14 +852,12 @@ thread_local!( static ROUTER: RefCell<Option<Router>> = RefCell::new(None) );
 /// weak references. Note that this likely means a crash if the handlers are
 /// used after a server shutdown (which should normally never happen,
 /// except during tests).
-pub fn start_rest_apis<T>(
+pub fn start_rest_apis(
 	addr: String,
 	chain: Weak<chain::Chain>,
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
-) where
-	T: pool::BlockChain + Send + Sync + 'static,
-{
+) {
 	let _ = thread::Builder::new()
 		.name("apis".to_string())
 		.spawn(move || {
@@ -883,14 +901,11 @@ where
 	)
 }
 
-pub fn build_router<T>(
+pub fn build_router(
 	chain: Weak<chain::Chain>,
-	tx_pool: Weak<RwLock<pool::TransactionPool<T>>>,
+	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
-) -> Result<Router, RouterError>
-where
-	T: pool::BlockChain + Send + Sync + 'static,
-{
+) -> Result<Router, RouterError> {
 	let route_list = vec![
 		"get blocks".to_string(),
 		"get chain".to_string(),

@@ -17,73 +17,76 @@
 //! resulting tx pool can be added to the current chain state to produce a
 //! valid chain state.
 
-use chrono::prelude::Utc;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
-use core::core::hash::Hashed;
+use chrono::prelude::Utc;
+
+use core::core::hash::Hash;
+use core::core::verifier_cache::VerifierCache;
 use core::core::{transaction, Block, CompactBlock, Transaction};
 use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
-use util::LOGGER;
 
 /// Transaction pool implementation.
-pub struct TransactionPool<T> {
+pub struct TransactionPool {
 	/// Pool Config
 	pub config: PoolConfig,
-
 	/// Our transaction pool.
-	pub txpool: Pool<T>,
+	pub txpool: Pool,
 	/// Our Dandelion "stempool".
-	pub stempool: Pool<T>,
-
+	pub stempool: Pool,
 	/// The blockchain
-	pub blockchain: Arc<T>,
+	pub blockchain: Arc<BlockChain>,
+	pub verifier_cache: Arc<RwLock<VerifierCache>>,
 	/// The pool adapter
 	pub adapter: Arc<PoolAdapter>,
 }
 
-impl<T> TransactionPool<T>
-where
-	T: BlockChain,
-{
+impl TransactionPool {
 	/// Create a new transaction pool
-	pub fn new(config: PoolConfig, chain: Arc<T>, adapter: Arc<PoolAdapter>) -> TransactionPool<T> {
+	pub fn new(
+		config: PoolConfig,
+		chain: Arc<BlockChain>,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
+		adapter: Arc<PoolAdapter>,
+	) -> TransactionPool {
 		TransactionPool {
-			config: config,
-			txpool: Pool::new(chain.clone(), format!("txpool")),
-			stempool: Pool::new(chain.clone(), format!("stempool")),
+			config,
+			txpool: Pool::new(chain.clone(), verifier_cache.clone(), format!("txpool")),
+			stempool: Pool::new(chain.clone(), verifier_cache.clone(), format!("stempool")),
 			blockchain: chain,
-			adapter: adapter,
+			verifier_cache,
+			adapter,
 		}
 	}
 
-	fn add_to_stempool(&mut self, entry: PoolEntry) -> Result<(), PoolError> {
+	fn add_to_stempool(&mut self, entry: PoolEntry, block_hash: &Hash) -> Result<(), PoolError> {
 		// Add tx to stempool (passing in all txs from txpool to validate against).
 		self.stempool
-			.add_to_pool(entry.clone(), self.txpool.all_transactions())?;
+			.add_to_pool(entry.clone(), self.txpool.all_transactions(), block_hash)?;
 
 		// Note: we do not notify the adapter here,
 		// we let the dandelion monitor handle this.
 		Ok(())
 	}
 
-	fn add_to_txpool(&mut self, mut entry: PoolEntry) -> Result<(), PoolError> {
+	fn add_to_txpool(&mut self, mut entry: PoolEntry, block_hash: &Hash) -> Result<(), PoolError> {
 		// First deaggregate the tx based on current txpool txs.
 		if entry.tx.kernels().len() > 1 {
 			let txs = self
 				.txpool
 				.find_matching_transactions(entry.tx.kernels().clone());
 			if !txs.is_empty() {
-				entry.tx = transaction::deaggregate(entry.tx, txs)?;
+				entry.tx = transaction::deaggregate(entry.tx, txs, self.verifier_cache.clone())?;
 				entry.src.debug_name = "deagg".to_string();
 			}
 		}
-		self.txpool.add_to_pool(entry.clone(), vec![])?;
+		self.txpool.add_to_pool(entry.clone(), vec![], block_hash)?;
 
 		// We now need to reconcile the stempool based on the new state of the txpool.
 		// Some stempool txs may no longer be valid and we need to evict them.
 		let txpool_tx = self.txpool.aggregate_transaction()?;
-		self.stempool.reconcile(txpool_tx)?;
+		self.stempool.reconcile(txpool_tx, block_hash)?;
 
 		self.adapter.tx_accepted(&entry.tx);
 		Ok(())
@@ -96,20 +99,14 @@ where
 		src: TxSource,
 		tx: Transaction,
 		stem: bool,
+		block_hash: &Hash,
 	) -> Result<(), PoolError> {
-		debug!(
-			LOGGER,
-			"pool: add_to_pool: {:?}, kernels - {}, stem? {}",
-			tx.hash(),
-			tx.kernels().len(),
-			stem,
-		);
-
 		// Do we have the capacity to accept this transaction?
 		self.is_acceptable(&tx)?;
 
 		// Make sure the transaction is valid before anything else.
-		tx.validate(false).map_err(|e| PoolError::InvalidTx(e))?;
+		tx.validate(self.verifier_cache.clone())
+			.map_err(|e| PoolError::InvalidTx(e))?;
 
 		// Check the tx lock_time is valid based on current chain state.
 		self.blockchain.verify_tx_lock_height(&tx)?;
@@ -125,9 +122,9 @@ where
 		};
 
 		if stem {
-			self.add_to_stempool(entry)?;
+			self.add_to_stempool(entry, block_hash)?;
 		} else {
-			self.add_to_txpool(entry)?;
+			self.add_to_txpool(entry, block_hash)?;
 		}
 		Ok(())
 	}
@@ -137,12 +134,12 @@ where
 	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
 		// First reconcile the txpool.
 		self.txpool.reconcile_block(block)?;
-		self.txpool.reconcile(None)?;
+		self.txpool.reconcile(None, &block.hash())?;
 
 		// Then reconcile the stempool, accounting for the txpool txs.
 		let txpool_tx = self.txpool.aggregate_transaction()?;
 		self.stempool.reconcile_block(block)?;
-		self.stempool.reconcile(txpool_tx)?;
+		self.stempool.reconcile(txpool_tx, &block.hash())?;
 
 		Ok(())
 	}
@@ -182,7 +179,7 @@ where
 
 	/// Returns a vector of transactions from the txpool so we can build a
 	/// block from them.
-	pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<Transaction> {
-		self.txpool.prepare_mineable_transactions(num_to_fetch)
+	pub fn prepare_mineable_transactions(&self) -> Vec<Transaction> {
+		self.txpool.prepare_mineable_transactions()
 	}
 }

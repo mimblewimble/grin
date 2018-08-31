@@ -30,10 +30,12 @@ use core::ser;
 
 use keychain::{Identifier, Keychain};
 
+use libtx::aggsig;
 use libtx::slate::Slate;
 use libwallet::error::{Error, ErrorKind};
 
-use util::secp::pedersen;
+use util::secp::key::{PublicKey, SecretKey};
+use util::secp::{self, pedersen, Secp256k1};
 
 /// Combined trait to allow dynamic wallet dispatch
 pub trait WalletInst<C, K>: WalletBackend<C, K> + Send + Sync + 'static
@@ -81,6 +83,9 @@ where
 
 	/// Get an (Optional) tx log entry by uuid
 	fn get_tx_log_entry(&self, uuid: &Uuid) -> Result<Option<TxLogEntry>, Error>;
+
+	/// Retrieves the private context associated with a given slate id
+	fn get_private_context(&mut self, slate_id: &[u8]) -> Result<Context, Error>;
 
 	/// Iterate over all output data stored by the backend
 	fn tx_log_iter<'a>(&'a self) -> Box<Iterator<Item = TxLogEntry> + 'a>;
@@ -137,6 +142,12 @@ where
 	/// Save an output as locked in the backend
 	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error>;
 
+	/// Saves the private context associated with a slate id
+	fn save_private_context(&mut self, slate_id: &[u8], ctx: &Context) -> Result<(), Error>;
+
+	/// Delete the private context associated with the slate id
+	fn delete_private_context(&mut self, slate_id: &[u8]) -> Result<(), Error>;
+
 	/// Write the wallet data to backend file
 	fn commit(&self) -> Result<(), Error>;
 }
@@ -165,13 +176,13 @@ pub trait WalletClient: Sync + Send + Clone {
 	fn get_outputs_from_node(
 		&self,
 		wallet_outputs: Vec<pedersen::Commitment>,
-	) -> Result<HashMap<pedersen::Commitment, String>, Error>;
+	) -> Result<HashMap<pedersen::Commitment, (String, u64)>, Error>;
 
 	/// Get a list of outputs from the node by traversing the UTXO
 	/// set in PMMR index order.
 	/// Returns
 	/// (last available output index, last insertion index retrieved,
-	/// outputs(commit, proof, is_coinbase))
+	/// outputs(commit, proof, is_coinbase, height))
 	fn get_outputs_by_pmmr_index(
 		&self,
 		start_height: u64,
@@ -180,7 +191,7 @@ pub trait WalletClient: Sync + Send + Clone {
 		(
 			u64,
 			u64,
-			Vec<(pedersen::Commitment, pedersen::RangeProof, bool)>,
+			Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)>,
 		),
 		Error,
 	>;
@@ -315,6 +326,85 @@ impl fmt::Display for OutputStatus {
 	}
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+/// Holds the context for a single aggsig transaction
+pub struct Context {
+	/// Secret key (of which public is shared)
+	pub sec_key: SecretKey,
+	/// Secret nonce (of which public is shared)
+	/// (basically a SecretKey)
+	pub sec_nonce: SecretKey,
+	/// store my outputs between invocations
+	pub output_ids: Vec<Identifier>,
+	/// store my inputs
+	pub input_ids: Vec<Identifier>,
+	/// store the calculated fee
+	pub fee: u64,
+}
+
+impl Context {
+	/// Create a new context with defaults
+	pub fn new(secp: &secp::Secp256k1, sec_key: SecretKey) -> Context {
+		Context {
+			sec_key: sec_key,
+			sec_nonce: aggsig::create_secnonce(secp).unwrap(),
+			input_ids: vec![],
+			output_ids: vec![],
+			fee: 0,
+		}
+	}
+}
+
+impl Context {
+	/// Tracks an output contributing to my excess value (if it needs to
+	/// be kept between invocations
+	pub fn add_output(&mut self, output_id: &Identifier) {
+		self.output_ids.push(output_id.clone());
+	}
+
+	/// Returns all stored outputs
+	pub fn get_outputs(&self) -> Vec<Identifier> {
+		self.output_ids.clone()
+	}
+
+	/// Tracks IDs of my inputs into the transaction
+	/// be kept between invocations
+	pub fn add_input(&mut self, input_id: &Identifier) {
+		self.input_ids.push(input_id.clone());
+	}
+
+	/// Returns all stored input identifiers
+	pub fn get_inputs(&self) -> Vec<Identifier> {
+		self.input_ids.clone()
+	}
+
+	/// Returns private key, private nonce
+	pub fn get_private_keys(&self) -> (SecretKey, SecretKey) {
+		(self.sec_key.clone(), self.sec_nonce.clone())
+	}
+
+	/// Returns public key, public nonce
+	pub fn get_public_keys(&self, secp: &Secp256k1) -> (PublicKey, PublicKey) {
+		(
+			PublicKey::from_secret_key(secp, &self.sec_key).unwrap(),
+			PublicKey::from_secret_key(secp, &self.sec_nonce).unwrap(),
+		)
+	}
+}
+
+impl ser::Writeable for Context {
+	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_bytes(&serde_json::to_vec(self).map_err(|_| ser::Error::CorruptedData)?)
+	}
+}
+
+impl ser::Readable for Context {
+	fn read(reader: &mut ser::Reader) -> Result<Context, ser::Error> {
+		let data = reader.read_vec()?;
+		serde_json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
+	}
+}
+
 /// Block Identifier
 #[derive(Debug, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct BlockIdentifier(pub Hash);
@@ -399,7 +489,7 @@ pub struct CbData {
 
 /// a contained wallet info struct, so automated tests can parse wallet info
 /// can add more fields here over time as needed
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Eq, PartialEq, Deserialize, Debug, Clone)]
 pub struct WalletInfo {
 	/// height from which info was taken
 	pub last_confirmed_height: u64,

@@ -23,12 +23,13 @@ extern crate rand;
 
 use chrono::Duration;
 use std::fs;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use chain::types::NoopAdapter;
-use chain::{Error, ErrorKind};
+use chain::ErrorKind;
 use core::core::target::Difficulty;
-use core::core::{transaction, OutputIdentifier};
+use core::core::transaction;
+use core::core::verifier_cache::LruVerifierCache;
 use core::global::{self, ChainTypes};
 use core::{consensus, pow};
 use keychain::{ExtKeychain, Keychain};
@@ -46,6 +47,8 @@ fn test_coinbase_maturity() {
 
 	let genesis_block = pow::mine_genesis_block().unwrap();
 
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+
 	let db_env = Arc::new(store::new_env(".grin".to_string()));
 	let chain = chain::Chain::init(
 		".grin".to_string(),
@@ -53,6 +56,7 @@ fn test_coinbase_maturity() {
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,
+		verifier_cache,
 	).unwrap();
 
 	let prev = chain.head_header().unwrap();
@@ -86,16 +90,9 @@ fn test_coinbase_maturity() {
 			.contains(transaction::OutputFeatures::COINBASE_OUTPUT)
 	);
 
-	let out_id = OutputIdentifier::from_output(&coinbase_output);
-
-	// we will need this later when we want to spend the coinbase output
-	let block_hash = block.hash();
-
 	chain
 		.process_block(block.clone(), chain::Options::MINE)
 		.unwrap();
-
-	let merkle_proof = chain.get_merkle_proof(&out_id, &block.header).unwrap();
 
 	let prev = chain.head_header().unwrap();
 

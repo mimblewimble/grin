@@ -23,12 +23,13 @@ extern crate rand;
 
 use chrono::Duration;
 use std::fs;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use chain::types::NoopAdapter;
 use chain::Chain;
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
+use core::core::verifier_cache::LruVerifierCache;
 use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
 use core::global::ChainTypes;
 use core::{consensus, global, pow};
@@ -42,6 +43,7 @@ fn clean_output_dir(dir_name: &str) {
 fn setup(dir_name: &str, genesis: Block) -> Chain {
 	util::init_test_logger();
 	clean_output_dir(dir_name);
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
@@ -49,6 +51,7 @@ fn setup(dir_name: &str, genesis: Block) -> Chain {
 		Arc::new(NoopAdapter {}),
 		genesis,
 		pow::verify_size,
+		verifier_cache,
 	).unwrap()
 }
 
@@ -242,15 +245,12 @@ fn spend_in_fork_and_compact() {
 	// mine the first block and keep track of the block_hash
 	// so we can spend the coinbase later
 	let b = prepare_block(&kc, &fork_head, &chain, 2);
-	let block_hash = b.hash();
 	let out_id = OutputIdentifier::from_output(&b.outputs()[0]);
 	assert!(out_id.features.contains(OutputFeatures::COINBASE_OUTPUT));
 	fork_head = b.header.clone();
 	chain
 		.process_block(b.clone(), chain::Options::SKIP_POW)
 		.unwrap();
-
-	let merkle_proof = chain.get_merkle_proof(&out_id, &b.header).unwrap();
 
 	// now mine three further blocks
 	for n in 3..6 {
@@ -362,6 +362,55 @@ fn spend_in_fork_and_compact() {
 	}
 }
 
+/// Test ability to retrieve block headers for a given output
+#[test]
+fn output_header_mappings() {
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let chain = setup(
+		".grin_header_for_output",
+		pow::mine_genesis_block().unwrap(),
+	);
+	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let mut reward_outputs = vec![];
+
+	for n in 1..15 {
+		let prev = chain.head_header().unwrap();
+		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+		let pk = keychain.derive_key_id(n as u32).unwrap();
+		let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
+		reward_outputs.push(reward.0.clone());
+		let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
+		b.header.timestamp = prev.timestamp + Duration::seconds(60);
+
+		chain.set_txhashset_roots(&mut b, false).unwrap();
+
+		let sizeshift = if n == 2 {
+			global::min_sizeshift() + 1
+		} else {
+			global::min_sizeshift()
+		};
+		b.header.pow.cuckoo_sizeshift = sizeshift;
+		pow::pow_size(&mut b.header, difficulty, global::proofsize(), sizeshift).unwrap();
+		b.header.pow.cuckoo_sizeshift = sizeshift;
+
+		chain.process_block(b, chain::Options::MINE).unwrap();
+
+		let header_for_output = chain
+			.get_header_for_output(&OutputIdentifier::from_output(&reward_outputs[n - 1]))
+			.unwrap();
+		assert_eq!(header_for_output.height, n as u64);
+
+		chain.validate(false).unwrap();
+	}
+
+	// Check all output positions are as expected
+	for n in 1..15 {
+		let header_for_output = chain
+			.get_header_for_output(&OutputIdentifier::from_output(&reward_outputs[n - 1]))
+			.unwrap();
+		assert_eq!(header_for_output.height, n as u64);
+	}
+}
 fn prepare_block<K>(kc: &K, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block
 where
 	K: Keychain,
@@ -440,12 +489,14 @@ fn actual_diff_iter_output() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();
 	let db_env = Arc::new(store::new_env(".grin".to_string()));
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	let chain = chain::Chain::init(
 		"../.grin".to_string(),
 		db_env,
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,
+		verifier_cache,
 	).unwrap();
 	let iter = chain.difficulty_iter();
 	let mut last_time = 0;

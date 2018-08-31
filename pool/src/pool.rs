@@ -15,32 +15,44 @@
 //! Transaction pool implementation.
 //! Used for both the txpool and stempool layers in the pool.
 
-use std::collections::HashSet;
-use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, RwLock};
 
-use core::core::hash::Hashed;
+use core::consensus;
+use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
+use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, CompactBlock, Transaction, TxKernel};
 use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 use util::LOGGER;
 
-pub struct Pool<T> {
+// max weight leaving minimum space for a coinbase
+const MAX_MINEABLE_WEIGHT: usize =
+	consensus::MAX_BLOCK_WEIGHT - consensus::BLOCK_OUTPUT_WEIGHT - consensus::BLOCK_KERNEL_WEIGHT;
+
+// longest chain of dependent transactions that can be included in a block
+const MAX_TX_CHAIN: usize = 20;
+
+pub struct Pool {
 	/// Entries in the pool (tx + info + timer) in simple insertion order.
 	pub entries: Vec<PoolEntry>,
 	/// The blockchain
-	pub blockchain: Arc<T>,
+	pub blockchain: Arc<BlockChain>,
+	pub verifier_cache: Arc<RwLock<VerifierCache>>,
 	pub name: String,
 }
 
-impl<T> Pool<T>
-where
-	T: BlockChain,
-{
-	pub fn new(chain: Arc<T>, name: String) -> Pool<T> {
+impl Pool {
+	pub fn new(
+		chain: Arc<BlockChain>,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
+		name: String,
+	) -> Pool {
 		Pool {
 			entries: vec![],
 			blockchain: chain.clone(),
+			verifier_cache: verifier_cache.clone(),
 			name,
 		}
 	}
@@ -58,23 +70,49 @@ where
 				let short_id = kernel.short_id(&cb.hash(), cb.nonce);
 
 				// if any kernel matches then keep the tx for later
-				if cb.kern_ids.contains(&short_id) {
+				if cb.kern_ids().contains(&short_id) {
 					txs.push(x.tx.clone());
 					break;
 				}
 			}
 		}
-
 		txs
 	}
 
-	/// Take the first num_to_fetch txs based on insertion order.
-	pub fn prepare_mineable_transactions(&self, num_to_fetch: u32) -> Vec<Transaction> {
-		self.entries
-			.iter()
-			.take(num_to_fetch as usize)
-			.map(|x| x.tx.clone())
-			.collect()
+	/// Take pool transactions, filtering and ordering them in a way that's
+	/// appropriate to put in a mined block. Aggregates chains of dependent
+	/// transactions, orders by fee over weight and ensures to total weight
+	/// doesn't exceed block limits.
+	pub fn prepare_mineable_transactions(&self) -> Vec<Transaction> {
+		let header = self.blockchain.chain_head().unwrap();
+
+		let tx_buckets = self.bucket_transactions();
+
+		// flatten buckets using aggregate (with cut-through)
+		let mut flat_txs: Vec<Transaction> = tx_buckets
+			.into_iter()
+			.filter_map(|mut bucket| {
+				bucket.truncate(MAX_TX_CHAIN);
+				transaction::aggregate(bucket, self.verifier_cache.clone()).ok()
+			})
+			.collect();
+
+		// sort by fees over weight, multiplying by 1000 to keep some precision
+		// don't think we'll ever see a >max_u64/1000 fee transaction
+		flat_txs.sort_unstable_by_key(|tx| tx.fee() * 1000 / tx.tx_weight() as u64);
+
+		// accumulate as long as we're not above the block weight
+		let mut weight = 0;
+		flat_txs.retain(|tx| {
+			weight += tx.tx_weight_as_block() as usize;
+			weight < MAX_MINEABLE_WEIGHT
+		});
+
+		// make sure those txs are all valid together, no Error is expected
+		// when passing None
+		self.blockchain
+			.validate_raw_txs(flat_txs, None, &header.hash())
+			.expect("should never happen")
 	}
 
 	pub fn all_transactions(&self) -> Vec<Transaction> {
@@ -87,7 +125,7 @@ where
 			return Ok(None);
 		}
 
-		let tx = transaction::aggregate(txs, None)?;
+		let tx = transaction::aggregate(txs, self.verifier_cache.clone())?;
 		Ok(Some(tx))
 	}
 
@@ -96,6 +134,7 @@ where
 		from_state: PoolEntryState,
 		to_state: PoolEntryState,
 		extra_tx: Option<Transaction>,
+		block_hash: &Hash,
 	) -> Result<Vec<Transaction>, PoolError> {
 		let entries = &mut self
 			.entries
@@ -107,7 +146,9 @@ where
 		if candidate_txs.is_empty() {
 			return Ok(vec![]);
 		}
-		let valid_txs = self.blockchain.validate_raw_txs(candidate_txs, extra_tx)?;
+		let valid_txs = self
+			.blockchain
+			.validate_raw_txs(candidate_txs, extra_tx, block_hash)?;
 
 		// Update state on all entries included in final vec of valid txs.
 		for x in &mut entries.iter_mut() {
@@ -126,17 +167,28 @@ where
 		&mut self,
 		entry: PoolEntry,
 		extra_txs: Vec<Transaction>,
+		block_hash: &Hash,
 	) -> Result<(), PoolError> {
 		debug!(
 			LOGGER,
-			"pool [{}]: add_to_pool: {}, {:?}",
+			"pool [{}]: add_to_pool: {}, {:?}, inputs: {}, outputs: {}, kernels: {} (at block {})",
 			self.name,
 			entry.tx.hash(),
 			entry.src,
+			entry.tx.inputs().len(),
+			entry.tx.outputs().len(),
+			entry.tx.kernels().len(),
+			block_hash,
 		);
 
 		// Combine all the txs from the pool with any extra txs provided.
 		let mut txs = self.all_transactions();
+
+		// Quick check to see if we have seen this tx before.
+		if txs.contains(&entry.tx) {
+			return Err(PoolError::DuplicateTx);
+		}
+
 		txs.extend(extra_txs);
 
 		let agg_tx = if txs.is_empty() {
@@ -146,12 +198,13 @@ where
 			// Create a single aggregated tx from the existing pool txs and the
 			// new entry
 			txs.push(entry.tx.clone());
-			transaction::aggregate(txs, None)?
+			transaction::aggregate(txs, self.verifier_cache.clone())?
 		};
 
-		// Validate aggregated tx against the current chain state (via txhashset
+		// Validate aggregated tx against a known chain state (via txhashset
 		// extension).
-		self.blockchain.validate_raw_txs(vec![], Some(agg_tx))?;
+		self.blockchain
+			.validate_raw_txs(vec![], Some(agg_tx), block_hash)?;
 
 		// If we get here successfully then we can safely add the entry to the pool.
 		self.entries.push(entry);
@@ -159,7 +212,11 @@ where
 		Ok(())
 	}
 
-	pub fn reconcile(&mut self, extra_tx: Option<Transaction>) -> Result<(), PoolError> {
+	pub fn reconcile(
+		&mut self,
+		extra_tx: Option<Transaction>,
+		block_hash: &Hash,
+	) -> Result<(), PoolError> {
 		let candidate_txs = self.all_transactions();
 		let existing_len = candidate_txs.len();
 
@@ -168,8 +225,10 @@ where
 		}
 
 		// Go through the candidate txs and keep everything that validates incrementally
-		// against the current chain state, accounting for the "extra tx" as necessary.
-		let valid_txs = self.blockchain.validate_raw_txs(candidate_txs, extra_tx)?;
+		// against a known chain state, accounting for the "extra tx" as necessary.
+		let valid_txs = self
+			.blockchain
+			.validate_raw_txs(candidate_txs, extra_tx, block_hash)?;
 		self.entries.retain(|x| valid_txs.contains(&x.tx));
 
 		debug!(
@@ -181,6 +240,41 @@ where
 		);
 
 		Ok(())
+	}
+
+	// Group dependent transactions in buckets (vectors), each bucket
+	// is therefore independent from the others. Relies on the entries
+	// Vec having parent transactions first (should always be the case)
+	fn bucket_transactions(&self) -> Vec<Vec<Transaction>> {
+		let mut tx_buckets = vec![];
+		let mut output_commits = HashMap::new();
+
+		for entry in &self.entries {
+			// check the commits index to find parents and their position
+			// picking the last one for bucket (so all parents come first)
+			let mut insert_pos: i32 = -1;
+			for input in entry.tx.inputs() {
+				if let Some(pos) = output_commits.get(&input.commitment()) {
+					if *pos > insert_pos {
+						insert_pos = *pos;
+					}
+				}
+			}
+			if insert_pos == -1 {
+				// no parent, just add to the end in its own bucket
+				insert_pos = tx_buckets.len() as i32;
+				tx_buckets.push(vec![entry.tx.clone()]);
+			} else {
+				// parent found, add to its bucket
+				tx_buckets[insert_pos as usize].push(entry.tx.clone());
+			}
+
+			// update the commits index
+			for out in entry.tx.outputs() {
+				output_commits.insert(out.commitment(), insert_pos);
+			}
+		}
+		tx_buckets
 	}
 
 	// Filter txs in the pool based on the latest block.

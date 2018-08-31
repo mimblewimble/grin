@@ -95,7 +95,7 @@ where
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			let commit = build.keychain.commit(value, &key_id).unwrap();
 
-			debug!(LOGGER, "Building an output: {}, {:?}", value, commit);
+			debug!(LOGGER, "Building output: {}, {:?}", value, commit);
 
 			let rproof = proof::create(build.keychain, value, &key_id, commit, None).unwrap();
 
@@ -196,7 +196,7 @@ where
 	K: Keychain,
 {
 	let mut ctx = Context { keychain };
-	let (mut tx, kern, sum) = elems.iter().fold(
+	let (tx, kern, sum) = elems.iter().fold(
 		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
 		|acc, elem| elem(&mut ctx, acc),
 	);
@@ -204,7 +204,8 @@ where
 
 	// we only support building a tx with a single kernel via build::transaction()
 	assert!(tx.kernels().is_empty());
-	tx.kernels_mut().push(kern);
+
+	let tx = tx.with_kernel(kern);
 
 	Ok((tx, blind_sum))
 }
@@ -220,14 +221,19 @@ where
 	let (mut tx, blind_sum) = partial_transaction(elems, keychain)?;
 	assert_eq!(tx.kernels().len(), 1);
 
-	let mut kern = tx.kernels_mut().remove(0);
-	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
+	let kern = {
+		let mut kern = tx.kernels_mut().remove(0);
+		let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
 
-	let skey = blind_sum.secret_key(&keychain.secp())?;
-	kern.excess = keychain.secp().commit(0, skey)?;
-	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &blind_sum).unwrap();
+		let skey = blind_sum.secret_key(&keychain.secp())?;
+		kern.excess = keychain.secp().commit(0, skey)?;
+		kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &blind_sum).unwrap();
+		kern
+	};
 
-	tx.kernels_mut().push(kern);
+	// Now build a new tx with this single kernel.
+	let tx = tx.with_kernel(kern);
+	assert_eq!(tx.kernels().len(), 1);
 
 	Ok(tx)
 }
@@ -264,7 +270,8 @@ where
 	tx.offset = k2.clone();
 
 	assert!(tx.kernels().is_empty());
-	tx.kernels_mut().push(kern);
+	let tx = tx.with_kernel(kern);
+	assert_eq!(tx.kernels().len(), 1);
 
 	Ok(tx)
 }
@@ -272,8 +279,15 @@ where
 // Just a simple test, most exhaustive tests in the core mod.rs.
 #[cfg(test)]
 mod test {
+	use std::sync::{Arc, RwLock};
+
 	use super::*;
+	use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 	use keychain::ExtKeychain;
+
+	fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
+		Arc::new(RwLock::new(LruVerifierCache::new()))
+	}
 
 	#[test]
 	fn blind_simple_tx() {
@@ -281,6 +295,8 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
+
+		let vc = verifier_cache();
 
 		let tx = transaction(
 			vec![
@@ -292,7 +308,7 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		tx.validate(false).unwrap();
+		tx.validate(vc.clone()).unwrap();
 	}
 
 	#[test]
@@ -301,6 +317,8 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 		let key_id3 = keychain.derive_key_id(3).unwrap();
+
+		let vc = verifier_cache();
 
 		let tx = transaction_with_offset(
 			vec![
@@ -312,7 +330,7 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		tx.validate(false).unwrap();
+		tx.validate(vc.clone()).unwrap();
 	}
 
 	#[test]
@@ -321,11 +339,13 @@ mod test {
 		let key_id1 = keychain.derive_key_id(1).unwrap();
 		let key_id2 = keychain.derive_key_id(2).unwrap();
 
+		let vc = verifier_cache();
+
 		let tx = transaction(
 			vec![input(6, key_id1), output(2, key_id2), with_fee(4)],
 			&keychain,
 		).unwrap();
 
-		tx.validate(false).unwrap();
+		tx.validate(vc.clone()).unwrap();
 	}
 }

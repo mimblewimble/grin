@@ -23,12 +23,14 @@ use std::{thread, time};
 
 use api;
 use chain;
-use common::adapters::{ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter,
-                       PoolToNetAdapter};
+use common::adapters::{
+	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
+};
 use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
-use common::types::{Error, Seeding, ServerConfig, StratumServerConfig, SyncState};
+use common::types::{Error, ServerConfig, StratumServerConfig, SyncState};
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
+use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use core::{consensus, genesis, global, pow};
 use grin::{dandelion_monitor, seed, sync};
 use mining::stratumserver;
@@ -47,7 +49,10 @@ pub struct Server {
 	/// data store access
 	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool>>,
+	/// Shared cache for verification results when
+	/// verifying rangeproof and kernel signatures.
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	/// Whether we're currently syncing
 	sync_state: Arc<SyncState>,
 	/// To be passed around to collect stats and info
@@ -64,19 +69,21 @@ impl Server {
 	where
 		F: FnMut(Arc<Server>),
 	{
-		let mut mining_config = config.stratum_mining_config.clone();
+		let mining_config = config.stratum_mining_config.clone();
 		let enable_test_miner = config.run_test_miner;
 		let test_miner_wallet_url = config.test_miner_wallet_url.clone();
 		let serv = Arc::new(Server::new(config)?);
 
-		let enable_stratum_server = mining_config.as_mut().unwrap().enable_stratum_server;
-		if let Some(s) = enable_stratum_server {
-			if s {
-				{
-					let mut stratum_stats = serv.state_info.stratum_stats.write().unwrap();
-					stratum_stats.is_enabled = true;
+		if let Some(c) = mining_config {
+			let enable_stratum_server = c.enable_stratum_server;
+			if let Some(s) = enable_stratum_server {
+				if s {
+					{
+						let mut stratum_stats = serv.state_info.stratum_stats.write().unwrap();
+						stratum_stats.is_enabled = true;
+					}
+					serv.start_stratum_server(c.clone());
 				}
-				serv.start_stratum_server(mining_config.clone().unwrap());
 			}
 		}
 
@@ -105,26 +112,39 @@ impl Server {
 		};
 
 		// If archive mode is enabled then the flags should contains the FULL_HIST flag
-		if archive_mode && !config.capabilities.contains(p2p::Capabilities::FULL_HIST) {
-			config.capabilities.insert(p2p::Capabilities::FULL_HIST);
+		if archive_mode
+			&& !config
+				.p2p_config
+				.capabilities
+				.contains(p2p::Capabilities::FULL_HIST)
+		{
+			config
+				.p2p_config
+				.capabilities
+				.insert(p2p::Capabilities::FULL_HIST);
 		}
 
 		let stop = Arc::new(AtomicBool::new(false));
+
+		// Shared cache for verification results.
+		// We cache rangeproof verification and kernel signature verification.
+		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
 		let pool_adapter = Arc::new(PoolToChainAdapter::new());
 		let pool_net_adapter = Arc::new(PoolToNetAdapter::new());
 		let tx_pool = Arc::new(RwLock::new(pool::TransactionPool::new(
 			config.pool_config.clone(),
 			pool_adapter.clone(),
+			verifier_cache.clone(),
 			pool_net_adapter.clone(),
 		)));
 
 		let sync_state = Arc::new(SyncState::new());
 
 		let chain_adapter = Arc::new(ChainToPoolAndNetAdapter::new(
-				sync_state.clone(),
-				tx_pool.clone(),
-			));
+			sync_state.clone(),
+			tx_pool.clone(),
+		));
 
 		let genesis = match config.chain_type {
 			global::ChainTypes::Testnet1 => genesis::genesis_testnet1(),
@@ -144,6 +164,7 @@ impl Server {
 			chain_adapter.clone(),
 			genesis.clone(),
 			pow::verify_size,
+			verifier_cache.clone(),
 		)?);
 
 		pool_adapter.set_chain(Arc::downgrade(&shared_chain));
@@ -155,6 +176,7 @@ impl Server {
 			archive_mode,
 			Arc::downgrade(&shared_chain),
 			tx_pool.clone(),
+			verifier_cache.clone(),
 			config.clone(),
 		));
 
@@ -165,7 +187,7 @@ impl Server {
 
 		let p2p_server = Arc::new(p2p::Server::new(
 			db_env,
-			config.capabilities,
+			config.p2p_config.capabilities,
 			config.p2p_config.clone(),
 			net_adapter.clone(),
 			genesis.hash(),
@@ -177,25 +199,34 @@ impl Server {
 		pool_net_adapter.init(Arc::downgrade(&p2p_server.peers));
 		net_adapter.init(Arc::downgrade(&p2p_server.peers));
 
-		if config.seeding_type.clone() != Seeding::Programmatic {
-			let seeder = match config.seeding_type.clone() {
-				Seeding::None => {
+		if config.p2p_config.seeding_type.clone() != p2p::Seeding::Programmatic {
+			let seeder = match config.p2p_config.seeding_type.clone() {
+				p2p::Seeding::None => {
 					warn!(
 						LOGGER,
 						"No seed configured, will stay solo until connected to"
 					);
 					seed::predefined_seeds(vec![])
 				}
-				Seeding::List => seed::predefined_seeds(config.seeds.as_mut().unwrap().clone()),
-				Seeding::DNSSeed => seed::dns_seeds(),
-				Seeding::WebStatic => seed::web_seeds(),
+				p2p::Seeding::List => {
+					seed::predefined_seeds(config.p2p_config.seeds.as_mut().unwrap().clone())
+				}
+				p2p::Seeding::DNSSeed => seed::dns_seeds(),
+				p2p::Seeding::WebStatic => seed::web_seeds(),
 				_ => unreachable!(),
 			};
+
+			let peers_preferred = match config.p2p_config.peers_preferred.clone() {
+				Some(peers_preferred) => seed::preferred_peers(peers_preferred),
+				None => None,
+			};
+
 			seed::connect_and_monitor(
 				p2p_server.clone(),
-				config.capabilities,
+				config.p2p_config.capabilities,
 				config.dandelion_config.clone(),
 				seeder,
+				peers_preferred,
 				stop.clone(),
 			);
 		}
@@ -240,27 +271,37 @@ impl Server {
 		dandelion_monitor::monitor_transactions(
 			config.dandelion_config.clone(),
 			tx_pool.clone(),
+			verifier_cache.clone(),
 			stop.clone(),
 		);
 
 		warn!(LOGGER, "Grin server started.");
 		Ok(Server {
-			config: config,
+			config,
 			p2p: p2p_server,
 			chain: shared_chain,
-			tx_pool: tx_pool,
+			tx_pool,
+			verifier_cache,
 			sync_state,
 			state_info: ServerStateInfo {
 				awaiting_peers: awaiting_peers,
 				..Default::default()
 			},
-			stop: stop,
+			stop,
 		})
 	}
 
 	/// Asks the server to connect to a peer at the provided network address.
 	pub fn connect_peer(&self, addr: SocketAddr) -> Result<(), Error> {
 		self.p2p.connect(&addr)?;
+		Ok(())
+	}
+
+	/// Ping all peers, mostly useful for tests to have connected peers share
+	/// their heights
+	pub fn ping_peers(&self) -> Result<(), Error> {
+		let head = self.chain.head()?;
+		self.p2p.peers.check_all(head.total_difficulty, head.height);
 		Ok(())
 	}
 
@@ -279,17 +320,13 @@ impl Server {
 			config.clone(),
 			self.chain.clone(),
 			self.tx_pool.clone(),
+			self.verifier_cache.clone(),
 		);
 		let stratum_stats = self.state_info.stratum_stats.clone();
 		let _ = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
-				stratum_server.run_loop(
-					stratum_stats,
-					cuckoo_size as u32,
-					proof_size,
-					sync_state,
-				);
+				stratum_server.run_loop(stratum_stats, cuckoo_size as u32, proof_size, sync_state);
 			});
 	}
 
@@ -316,6 +353,7 @@ impl Server {
 			config.clone(),
 			self.chain.clone(),
 			self.tx_pool.clone(),
+			self.verifier_cache.clone(),
 			self.stop.clone(),
 		);
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));
@@ -400,7 +438,8 @@ impl Server {
 			}
 		};
 
-		let peer_stats = self.p2p
+		let peer_stats = self
+			.p2p
 			.peers
 			.connected_peers()
 			.into_iter()
@@ -424,6 +463,11 @@ impl Server {
 	/// Stop the server.
 	pub fn stop(&self) {
 		self.p2p.stop();
+		self.stop.store(true, Ordering::Relaxed);
+	}
+
+	/// Stops the test miner without stopping the p2p layer
+	pub fn stop_test_miner(&self) {
 		self.stop.store(true, Ordering::Relaxed);
 	}
 }

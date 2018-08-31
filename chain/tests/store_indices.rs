@@ -23,7 +23,7 @@ extern crate rand;
 use std::fs;
 use std::sync::Arc;
 
-use chain::{ChainStore, Tip};
+use chain::Tip;
 use core::core::hash::Hashed;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
