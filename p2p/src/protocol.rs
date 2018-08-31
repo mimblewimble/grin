@@ -17,6 +17,7 @@ use std::fs::File;
 use std::io::{self, BufWriter};
 use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
+use std::time;
 
 use conn::{Message, MessageHandler, Response};
 use core::core::{self, hash::Hash, CompactBlock};
@@ -317,7 +318,7 @@ impl MessageHandler for Protocol {
 fn headers_header_size(conn: &mut TcpStream, msg_len: u64) -> Result<u64, Error> {
 	let mut size = vec![0u8; 2];
 	// read size of Vec<BlockHeader>
-	read_exact(conn, &mut size, 20000, true)?;
+	read_exact(conn, &mut size, time::Duration::from_millis(10), true)?;
 
 	let total_headers = size[0] as u64 * 256 + size[1] as u64;
 	if total_headers == 0 || total_headers > 10_000 {
@@ -391,7 +392,7 @@ fn headers_streaming_body(
 	// 3rd part
 	let mut read_body = vec![0u8; read_size as usize];
 	if read_size > 0 {
-		read_exact(conn, &mut read_body, 20000, true)?;
+		read_exact(conn, &mut read_body, time::Duration::from_secs(20), true)?;
 		*total_read += read_size;
 	}
 	body.append(&mut read_body);

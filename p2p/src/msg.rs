@@ -112,11 +112,11 @@ fn max_msg_size(msg_type: Type) -> u64 {
 pub fn read_exact(
 	conn: &mut TcpStream,
 	mut buf: &mut [u8],
-	timeout: u32,
+	timeout: time::Duration,
 	block_on_empty: bool,
 ) -> io::Result<()> {
-	let sleep_time = time::Duration::from_millis(1);
-	let mut count = 0;
+	let sleep_time = time::Duration::from_micros(10);
+	let mut count = time::Duration::new(0, 0);
 
 	let mut read = 0;
 	loop {
@@ -137,7 +137,7 @@ pub fn read_exact(
 		}
 		if !buf.is_empty() {
 			thread::sleep(sleep_time);
-			count += 1;
+			count += sleep_time;
 		} else {
 			break;
 		}
@@ -152,9 +152,9 @@ pub fn read_exact(
 }
 
 /// Same as `read_exact` but for writing.
-pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<()> {
-	let sleep_time = time::Duration::from_millis(1);
-	let mut count = 0;
+pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: time::Duration) -> io::Result<()> {
+	let sleep_time = time::Duration::from_micros(10);
+	let mut count = time::Duration::new(0, 0);
 
 	while !buf.is_empty() {
 		match conn.write(buf) {
@@ -171,7 +171,7 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<(
 		}
 		if !buf.is_empty() {
 			thread::sleep(sleep_time);
-			count += 1;
+			count += sleep_time;
 		} else {
 			break;
 		}
@@ -191,9 +191,9 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<(
 pub fn read_header(conn: &mut TcpStream, msg_type: Option<Type>) -> Result<MsgHeader, Error> {
 	let mut head = vec![0u8; HEADER_LEN as usize];
 	if Some(Type::Hand) == msg_type {
-		read_exact(conn, &mut head, 10, true)?;
+		read_exact(conn, &mut head, time::Duration::from_millis(10), true)?;
 	} else {
-		read_exact(conn, &mut head, 10000, false)?;
+		read_exact(conn, &mut head, time::Duration::from_secs(10), false)?;
 	}
 	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
 	let max_len = max_msg_size(header.msg_type);
@@ -215,7 +215,7 @@ where
 	T: Readable,
 {
 	let mut body = vec![0u8; h.msg_len as usize];
-	read_exact(conn, &mut body, 20000, true)?;
+	read_exact(conn, &mut body, time::Duration::from_secs(20), true)?;
 	ser::deserialize(&mut &body[..]).map_err(From::from)
 }
 
