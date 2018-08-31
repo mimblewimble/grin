@@ -357,7 +357,7 @@ impl Chain {
 			self.orphans.len(),
 		);
 		// Is there an orphan in our orphans that we can now process?
-		loop {
+		'outer: loop {
 			if let Some(orphans) = self.orphans.remove_by_height(&height) {
 				for orphan in orphans {
 					trace!(
@@ -371,13 +371,11 @@ impl Chain {
 					if let Ok((_, Some(b))) = res {
 						// We accepted a block, so see if we can accept any orphans
 						height = b.header.height + 1;
-					} else {
-						break;
+						continue 'outer;
 					}
 				}
-			} else {
-				break;
 			}
+			break;
 		}
 		trace!(
 			LOGGER,
