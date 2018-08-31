@@ -123,18 +123,13 @@ fn simulate_seeding() {
 	thread::sleep(time::Duration::from_secs(5));
 
 	// Check they all end up connected.
-	let url = format!("http://{}:{}/v1/peers/all", &server_config.base_addr, 30020);
-	let peers_all = api::client::get::<Vec<p2p::PeerData>>(url.as_str());
-	assert!(peers_all.is_ok());
-	assert_eq!(
-		peers_all
-			.unwrap()
-			.iter()
-			.filter(|x| x.flags == p2p::State::Healthy)
-			.collect::<Vec<&p2p::PeerData>>()
-			.len(),
-		4
+	let url = format!(
+		"http://{}:{}/v1/peers/connected",
+		&server_config.base_addr, 30020
 	);
+	let peers_all = api::client::get::<Vec<p2p::PeerInfo>>(url.as_str());
+	assert!(peers_all.is_ok());
+	assert_eq!(peers_all.unwrap().len(), 4);
 
 	stop_all_servers(servers);
 
