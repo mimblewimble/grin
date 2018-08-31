@@ -126,8 +126,12 @@ fn test_transaction_deser() {
 		0x85, 0xf8, 0xf0, 0x02, 0x56, 0x13, 0xbc, 0x72, 0xab, 0xf6, 0xe9, 0xf4,
 	];
 	let tx: Result<Transaction, ser::Error> = ser::deserialize(&mut d.as_ref());
-	println!("tx={:?}", tx);
-	if !tx.is_err() {
-		panic!("Transaction deserialize should have error for this test.");
+	println!("tx={:#?}", tx);
+	assert!(tx.is_ok(), "transaction deserialize wasn't ok!");
+	if let Ok(tx) = tx {
+		let result = tx.validate(false);
+		if !result.is_err() {
+			panic!("Transaction validation should have error for this test.");
+		}
 	}
 }
