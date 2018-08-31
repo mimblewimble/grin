@@ -16,3 +16,8 @@ serde_json = "1"
 uuid = { version = "0.6", features = ["serde", "v4"] }
 
 grin_util = { path = "../util" }
+
+[dev-dependencies]
+#Just for testing that BIP32 derivations work, rust-crypto not included anywhere else
+#in the final build
+rust-crypto = "0.2"

@@ -35,14 +35,11 @@
 use serde;
 use std::default::Default;
 use std::io::Cursor;
+use std::marker::PhantomData;
 use std::str::FromStr;
 use std::{error, fmt};
 
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use crypto::digest::Digest;
-use crypto::hmac::Hmac;
-use crypto::mac::Mac;
-use crypto::ripemd160::Ripemd160;
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::{self, Secp256k1};
 
@@ -69,9 +66,26 @@ impl Default for Fingerprint {
 	}
 }
 
+/// Allow different implementations of hash functions used in BIP32 Derivations
+/// Grin uses blake2 everywhere but the spec calls for SHA512/Ripemd160, so allow
+/// this in future and allow us to unit test against published BIP32 test vectors
+/// The function names refer to the place of the hash in the reference BIP32 spec,
+/// not what the actual implementation is
+
+trait BIP32Hasher {
+	fn init_sha512(&mut self, seed: &[u8]);
+	fn append_sha512(&mut self, value: &[u8]);
+	fn result_sha512(&self) -> [u8; 64];
+	fn sha_256(&self, input: &[u8]) -> [u8; 32];
+	fn ripemd_160(&self, input: &[u8]) -> [u8; 20];
+}
+
 /// Extended private key
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct ExtendedPrivKey {
+pub struct ExtendedPrivKey<H>
+where
+	H: BIP32Hasher,
+{
 	/// The network this key is to be used on
 	pub network: [u8; 4],
 	/// How many derivations this key is from the master (which is 0)
@@ -84,11 +98,16 @@ pub struct ExtendedPrivKey {
 	pub secret_key: SecretKey,
 	/// Chain code
 	pub chain_code: ChainCode,
+	/// Boo!
+	pub _p: PhantomData<H>,
 }
 
 /// Extended public key
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct ExtendedPubKey {
+pub struct ExtendedPubKey<H>
+where
+	H: BIP32Hasher,
+{
 	/// The network this key is to be used on
 	pub network: [u8; 4],
 	/// How many derivations this key is from the master (which is 0)
@@ -101,6 +120,8 @@ pub struct ExtendedPubKey {
 	pub public_key: PublicKey,
 	/// Chain code
 	pub chain_code: ChainCode,
+	/// Public Boo!
+	pub _p: PhantomData<H>,
 }
 
 /// A child number for a derived key
@@ -266,13 +287,19 @@ impl From<secp::Error> for Error {
 	}
 }
 
-impl ExtendedPrivKey {
+impl<H> ExtendedPrivKey<H>
+where
+	H: BIP32Hasher,
+{
 	/// Construct a new master key from a seed value
-	pub fn new_master(secp: &Secp256k1, seed: &[u8]) -> Result<ExtendedPrivKey, Error> {
-		let mut result = [0; 64];
-		let mut hmac = Hmac::new(Sha512::new(), b"Bitcoin seed");
-		hmac.input(seed);
-		hmac.raw_result(&mut result);
+	pub fn new_master(
+		secp: &Secp256k1,
+		hasher: H,
+		seed: &[u8],
+	) -> Result<ExtendedPrivKey<H>, Error> {
+		hasher.init_sha512(b"Bitcoin seed");
+		hasher.append_sha512(seed);
+		let mut result = hasher.result_sha512();
 
 		Ok(ExtendedPrivKey {
 			network: GRIN_NETWORK.clone(),
@@ -281,6 +308,7 @@ impl ExtendedPrivKey {
 			child_number: ChildNumber::from_normal_idx(0),
 			secret_key: SecretKey::from_slice(secp, &result[..32]).map_err(Error::Ecdsa)?,
 			chain_code: ChainCode::from(&result[32..]),
+			_p: PhantomData,
 		})
 	}
 
@@ -288,82 +316,83 @@ impl ExtendedPrivKey {
 	pub fn derive_priv(
 		&self,
 		secp: &Secp256k1,
+		hasher: H,
 		cnums: &[ChildNumber],
-	) -> Result<ExtendedPrivKey, Error> {
-		let mut sk: ExtendedPrivKey = *self;
+	) -> Result<ExtendedPrivKey<H>, Error> {
+		let mut sk: ExtendedPrivKey<H> = *self;
 		for cnum in cnums {
-			sk = sk.ckd_priv(secp, *cnum)?;
+			sk = sk.ckd_priv(secp, hasher, *cnum)?;
 		}
 		Ok(sk)
 	}
 
 	/// Private->Private child key derivation
-	pub fn ckd_priv(&self, secp: &Secp256k1, i: ChildNumber) -> Result<ExtendedPrivKey, Error> {
-		let mut result = [0; 64];
-		let mut hmac = Hmac::new(Sha512::new(), &self.chain_code[..]);
+	pub fn ckd_priv(&self, secp: &Secp256k1, hasher: H, i: ChildNumber) -> Result<ExtendedPrivKey<H>, Error> {
+		hasher.init_sha512(&self.chain_code[..]);
 		let mut be_n = [0; 4];
 		match i {
 			ChildNumber::Normal { .. } => {
 				// Non-hardened key: compute public data and use that
-				hmac.input(&PublicKey::from_secret_key(secp, &self.secret_key).serialize()[..]);
+				hasher.append_sha512(&PublicKey::from_secret_key(secp, &self.secret_key)?.serialize()[..]);
 			}
 			ChildNumber::Hardened { .. } => {
 				// Hardened key: use only secret data to prevent public derivation
-				hmac.input(&[0u8]);
-				hmac.input(&self.secret_key[..]);
+				hasher.append_sha512(&[0u8]);
+				hasher.append_sha512(&self.secret_key[..]);
 			}
 		}
 		BigEndian::write_u32(&mut be_n, u32::from(i));
 
-		hmac.input(&be_n);
-		hmac.raw_result(&mut result);
+		hasher.append_sha512(&be_n);
+		let mut result = hasher.result_sha512();
 		let mut sk = SecretKey::from_slice(secp, &result[..32]).map_err(Error::Ecdsa)?;
 		sk.add_assign(secp, &self.secret_key).map_err(Error::Ecdsa)?;
 
 		Ok(ExtendedPrivKey {
 			network: self.network,
 			depth: self.depth + 1,
-			parent_fingerprint: self.fingerprint(secp),
+			parent_fingerprint: self.fingerprint(secp, hasher),
 			child_number: i,
 			secret_key: sk,
 			chain_code: ChainCode::from(&result[32..]),
+			_p: PhantomData,
 		})
 	}
 
 	/// Returns the HASH160 of the chaincode
-	pub fn identifier(&self, secp: &Secp256k1) -> [u8; 20] {
+	pub fn identifier(&self, secp: &Secp256k1, hasher: H) -> [u8; 20] {
 		let mut sha2_res = [0; 32];
 		let mut ripemd_res = [0; 20];
 		// Compute extended public key
 		let pk = ExtendedPubKey::from_private(secp, self);
 		// Do SHA256 of just the ECDSA pubkey
-		let mut sha2 = Sha256::new();
-		sha2.input(&pk.public_key.serialize()[..]);
-		sha2.result(&mut sha2_res);
+		let mut sha2_res = hasher.sha_256(&pk.public_key.serialize()[..]);
 		// do RIPEMD160
-		let mut ripemd = Ripemd160::new();
-		ripemd.input(&sha2_res);
-		ripemd.result(&mut ripemd_res);
+		let mut ripemd_res = hasher.ripemd_160(&sha2_res);
 		// Return
 		ripemd_res
 	}
 
 	/// Returns the first four bytes of the identifier
-	pub fn fingerprint(&self, secp: &Secp256k1) -> Fingerprint {
-		Fingerprint::from(&self.identifier(secp)[0..4])
+	pub fn fingerprint(&self, secp: &Secp256k1, hasher: H) -> Fingerprint {
+		Fingerprint::from(&self.identifier(secp, hasher)[0..4])
 	}
 }
 
-impl ExtendedPubKey {
+impl<H> ExtendedPubKey<H>
+where
+	H: BIP32Hasher,
+{
 	/// Derives a public key from a private key
-	pub fn from_private(secp: &Secp256k1, sk: &ExtendedPrivKey) -> ExtendedPubKey {
+	pub fn from_private(secp: &Secp256k1, sk: &ExtendedPrivKey<H>) -> ExtendedPubKey<H> {
 		ExtendedPubKey {
 			network: sk.network,
 			depth: sk.depth,
 			parent_fingerprint: sk.parent_fingerprint,
 			child_number: sk.child_number,
-			public_key: PublicKey::from_secret_key(secp, &sk.secret_key),
+			public_key: PublicKey::from_secret_key(secp, &sk.secret_key).unwrap(),
 			chain_code: sk.chain_code,
+			_p: PhantomData,
 		}
 	}
 
@@ -371,32 +400,33 @@ impl ExtendedPubKey {
 	pub fn derive_pub(
 		&self,
 		secp: &Secp256k1,
+		hasher: H,
 		cnums: &[ChildNumber],
-	) -> Result<ExtendedPubKey, Error> {
-		let mut pk: ExtendedPubKey = *self;
+	) -> Result<ExtendedPubKey<H>, Error> {
+		let mut pk: ExtendedPubKey<H> = *self;
 		for cnum in cnums {
-			pk = pk.ckd_pub(secp, *cnum)?
+			pk = pk.ckd_pub(secp, hasher, *cnum)?
 		}
 		Ok(pk)
 	}
 
 	/// Compute the scalar tweak added to this key to get a child key
-	pub fn ckd_pub_tweak<C>(
+	pub fn ckd_pub_tweak(
 		&self,
-		secp: &Secp256k1<C>,
+		secp: &Secp256k1,
+		hasher: H,
 		i: ChildNumber,
 	) -> Result<(SecretKey, ChainCode), Error> {
 		match i {
 			ChildNumber::Hardened { .. } => Err(Error::CannotDeriveFromHardenedKey),
 			ChildNumber::Normal { index: n } => {
-				let mut hmac = Hmac::new(Sha512::new(), &self.chain_code[..]);
-				hmac.input(&self.public_key.serialize()[..]);
+				hasher.init_sha512(&self.chain_code[..]);
+				hasher.append_sha512(&self.public_key.serialize()[..]);
 				let mut be_n = [0; 4];
 				BigEndian::write_u32(&mut be_n, n);
-				hmac.input(&be_n);
+				hasher.append_sha512(&be_n);
 
-				let mut result = [0; 64];
-				hmac.raw_result(&mut result);
+				let mut result = hasher.result_sha512();
 
 				let secret_key = SecretKey::from_slice(secp, &result[..32])?;
 				let chain_code = ChainCode::from(&result[32..]);
@@ -406,51 +436,44 @@ impl ExtendedPubKey {
 	}
 
 	/// Public->Public child key derivation
-	pub fn ckd_pub(&self, secp: &Secp256k1, i: ChildNumber) -> Result<ExtendedPubKey, Error> {
-		let (sk, chain_code) = self.ckd_pub_tweak(secp, i)?;
+	pub fn ckd_pub(&self, secp: &Secp256k1, hasher: H, i: ChildNumber) -> Result<ExtendedPubKey<H>, Error> {
+		let (sk, chain_code) = self.ckd_pub_tweak(secp, hasher, i)?;
 		let mut pk = self.public_key.clone();
 		pk.add_exp_assign(secp, &sk).map_err(Error::Ecdsa)?;
 
 		Ok(ExtendedPubKey {
 			network: self.network,
 			depth: self.depth + 1,
-			parent_fingerprint: self.fingerprint(),
+			parent_fingerprint: self.fingerprint(hasher),
 			child_number: i,
 			public_key: pk,
 			chain_code: chain_code,
+			_p: PhantomData,
 		})
 	}
 
 	/// Returns the HASH160 of the chaincode
-	pub fn identifier(&self) -> [u8; 20] {
-		let mut sha2_res = [0; 32];
-		let mut ripemd_res = [0; 20];
+	pub fn identifier(&self, hasher: H) -> [u8; 20] {
 		// Do SHA256 of just the ECDSA pubkey
-		let mut sha2 = Sha256::new();
-		sha2.input(&self.public_key.serialize()[..]);
-		sha2.result(&mut sha2_res);
+		let mut sha2_res = hasher.sha_256(&self.public_key.serialize()[..]);
 		// do RIPEMD160
-		let mut ripemd = Ripemd160::new();
-		ripemd.input(&sha2_res);
-		ripemd.result(&mut ripemd_res);
+		let mut ripemd_res = hasher.ripemd_160(&sha2_res);
 		// Return
 		ripemd_res
 	}
 
 	/// Returns the first four bytes of the identifier
-	pub fn fingerprint(&self) -> Fingerprint {
-		Fingerprint::from(&self.identifier()[0..4])
+	pub fn fingerprint(&self, hasher: H) -> Fingerprint {
+		Fingerprint::from(&self.identifier(hasher)[0..4])
 	}
 }
-impl fmt::Display for ExtendedPrivKey {
+impl<H> fmt::Display for ExtendedPrivKey<H>
+	where
+	H: BIP32Hasher
+	{
 	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
 		let mut ret = [0; 78];
-		ret[0..4].copy_from_slice(
-			&match self.network {
-				Network::Bitcoin => [0x04, 0x88, 0xAD, 0xE4],
-				Network::Testnet | Network::Regtest => [0x04, 0x35, 0x83, 0x94],
-			}[..],
-		);
+		ret[0..4].copy_from_slice(&self.network[0..4]);
 		ret[4] = self.depth as u8;
 		ret[5..9].copy_from_slice(&self.parent_fingerprint[..]);
 
@@ -463,10 +486,13 @@ impl fmt::Display for ExtendedPrivKey {
 	}
 }
 
-impl FromStr for ExtendedPrivKey {
+impl<H> FromStr for ExtendedPrivKey<H>
+	where
+	H: BIP32Hasher
+	{
 	type Err = base58::Error;
 
-	fn from_str(inp: &str) -> Result<ExtendedPrivKey, base58::Error> {
+	fn from_str(inp: &str) -> Result<ExtendedPrivKey<H>, base58::Error> {
 		let s = Secp256k1::without_caps();
 		let data = base58::from_check(inp)?;
 
@@ -485,14 +511,18 @@ impl FromStr for ExtendedPrivKey {
 			chain_code: ChainCode::from(&data[13..45]),
 			secret_key: SecretKey::from_slice(&s, &data[46..78])
 				.map_err(|e| base58::Error::Other(e.to_string()))?,
+			_p: PhantomData,
 		})
 	}
 }
 
-impl fmt::Display for ExtendedPubKey {
+impl<H> fmt::Display for ExtendedPubKey<H>
+	where
+	H: BIP32Hasher
+	{
 	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
 		let mut ret = [0; 78];
-		ret[0..4].copy_from_slice(self.network);
+		ret[0..4].copy_from_slice(&self.network[0..4]);
 		ret[4] = self.depth as u8;
 		ret[5..9].copy_from_slice(&self.parent_fingerprint[..]);
 
@@ -504,10 +534,13 @@ impl fmt::Display for ExtendedPubKey {
 	}
 }
 
-impl FromStr for ExtendedPubKey {
+impl<H> FromStr for ExtendedPubKey<H>
+	where
+	H: BIP32Hasher
+	{
 	type Err = base58::Error;
 
-	fn from_str(inp: &str) -> Result<ExtendedPubKey, base58::Error> {
+	fn from_str(inp: &str) -> Result<ExtendedPubKey<H>, base58::Error> {
 		let s = Secp256k1::without_caps();
 		let data = base58::from_check(inp)?;
 
@@ -526,12 +559,21 @@ impl FromStr for ExtendedPubKey {
 			chain_code: ChainCode::from(&data[13..45]),
 			public_key: PublicKey::from_slice(&s, &data[45..78])
 				.map_err(|e| base58::Error::Other(e.to_string()))?,
+			_p: PhantomData,
 		})
 	}
 }
 
 #[cfg(test)]
 mod tests {
+	extern crate crypto;
+
+	use extkey_bip32::tests::crypto::digest::Digest;
+	use extkey_bip32::tests::crypto::hmac::Hmac;
+	use extkey_bip32::tests::crypto::mac::Mac;
+	use extkey_bip32::tests::crypto::ripemd160::Ripemd160;
+	use extkey_bip32::tests::crypto::sha2::{Sha256, Sha512};
+
 	use std::str::FromStr;
 	use std::string::ToString;
 
@@ -542,6 +584,49 @@ mod tests {
 	use super::Error;
 	use super::{ChildNumber, ExtendedPrivKey, ExtendedPubKey};
 
+	use super::BIP32Hasher;
+
+	struct BIP32ReferenceHasher {
+		hmac_sha512: Hmac<Sha512>,
+	}
+
+	impl BIP32ReferenceHasher {
+		/// New empty hasher
+		pub fn new() -> BIP32ReferenceHasher {
+			BIP32ReferenceHasher {
+				hmac_sha512: Hmac::new(Sha512::new(), &[0u8]),
+			}
+		}
+	}
+
+	impl BIP32Hasher for BIP32ReferenceHasher {
+		fn init_sha512(&mut self, seed: &[u8]) {
+			self.hmac_sha512 = Hmac::new(Sha512::new(), seed);
+		}
+		fn append_sha512(&mut self, value: &[u8]){
+			self.hmac_sha512.input(value);
+		}
+		fn result_sha512(&self) -> [u8; 64] {
+			let mut result = [0; 64];
+			self.hmac_sha512.raw_result(&mut result);
+			result
+		}
+		fn sha_256(&self, input: &[u8]) -> [u8; 32] {
+			let mut sha2_res = [0; 32];
+			let mut sha2 = Sha256::new();
+			sha2.input(input);
+			sha2.result(&mut sha2_res);
+			sha2_res
+		}
+		fn ripemd_160(&self, input: &[u8]) -> [u8; 20] {
+			let mut ripemd_res = [0; 20];
+			let mut ripemd = Ripemd160::new();
+			ripemd.input(input);
+			ripemd.result(&mut ripemd_res);
+			ripemd_res
+		}
+	}
+
 	fn test_path(
 		secp: &Secp256k1,
 		seed: &[u8],
@@ -549,12 +634,13 @@ mod tests {
 		expected_sk: &str,
 		expected_pk: &str,
 	) {
-		let mut sk = ExtendedPrivKey::new_master(secp, seed).unwrap();
+		let h = BIP32ReferenceHasher::new();
+		let mut sk = ExtendedPrivKey::new_master(secp, h, seed).unwrap();
 		let mut pk = ExtendedPubKey::from_private(secp, &sk);
 
 		// Check derivation convenience method for ExtendedPrivKey
 		assert_eq!(
-			&sk.derive_priv(secp, path).unwrap().to_string()[..],
+			&sk.derive_priv(secp, h, path).unwrap().to_string()[..],
 			expected_sk
 		);
 
@@ -562,28 +648,28 @@ mod tests {
 		// appropriately if any ChildNumber is hardened
 		if path.iter().any(|cnum| cnum.is_hardened()) {
 			assert_eq!(
-				pk.derive_pub(secp, path),
+				pk.derive_pub(secp, h, path),
 				Err(Error::CannotDeriveFromHardenedKey)
 			);
 		} else {
 			assert_eq!(
-				&pk.derive_pub(secp, path).unwrap().to_string()[..],
+				&pk.derive_pub(secp, h, path).unwrap().to_string()[..],
 				expected_pk
 			);
 		}
 
 		// Derive keys, checking hardened and non-hardened derivation one-by-one
 		for &num in path.iter() {
-			sk = sk.ckd_priv(secp, num).unwrap();
+			sk = sk.ckd_priv(secp, h, num).unwrap();
 			match num {
 				Normal { .. } => {
-					let pk2 = pk.ckd_pub(secp, num).unwrap();
+					let pk2 = pk.ckd_pub(secp, h, num).unwrap();
 					pk = ExtendedPubKey::from_private(secp, &sk);
 					assert_eq!(pk, pk2);
 				}
 				Hardened { .. } => {
 					assert_eq!(
-						pk.ckd_pub(secp, num),
+						pk.ckd_pub(secp, h, num),
 						Err(Error::CannotDeriveFromHardenedKey)
 					);
 					pk = ExtendedPubKey::from_private(secp, &sk);
@@ -604,7 +690,7 @@ mod tests {
 	#[test]
 	fn test_vector_1() {
 		let secp = Secp256k1::new();
-		let seed = from_hex("000102030405060708090a0b0c0d0e0f").unwrap();
+		let seed = from_hex("000102030405060708090a0b0c0d0e0f".to_owned()).unwrap();
 
 		// m
 		test_path(&secp, &seed, &[],
@@ -640,7 +726,7 @@ mod tests {
 	#[test]
 	fn test_vector_2() {
 		let secp = Secp256k1::new();
-		let seed = from_hex("fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542").unwrap();
+		let seed = from_hex("fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a29f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542".to_owned()).unwrap();
 
 		// m
 		test_path(&secp, &seed, &[],
@@ -676,7 +762,7 @@ mod tests {
 	#[test]
 	fn test_vector_3() {
 		let secp = Secp256k1::new();
-		let seed = from_hex("4b381541583be4423346c643850da4b320e46a87ae3d2a4e6da11eba819cd4acba45d239319ac14f863b8d5ab5a0d0c64d2e8a1e7d1457df2e5a3c51c73235be").unwrap();
+		let seed = from_hex("4b381541583be4423346c643850da4b320e46a87ae3d2a4e6da11eba819cd4acba45d239319ac14f863b8d5ab5a0d0c64d2e8a1e7d1457df2e5a3c51c73235be".to_owned()).unwrap();
 
 		// m
 		test_path(&secp, &seed, &[],

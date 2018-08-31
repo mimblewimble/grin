@@ -15,8 +15,8 @@
 use blake2::blake2b::blake2b;
 use byteorder::{BigEndian, ByteOrder};
 use types::{Error, Identifier};
-use util::secp::Secp256k1;
 use util::secp::key::SecretKey;
+use util::secp::Secp256k1;
 
 #[derive(Debug, Clone)]
 pub struct ChildKey {
@@ -119,8 +119,8 @@ mod test {
 
 	use super::{ExtendedKey, Identifier};
 	use util;
-	use util::secp::Secp256k1;
 	use util::secp::key::SecretKey;
+	use util::secp::Secp256k1;
 
 	fn from_hex(hex_str: &str) -> Vec<u8> {
 		util::from_hex(hex_str.to_string()).unwrap()
