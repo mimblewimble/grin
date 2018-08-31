@@ -327,13 +327,20 @@ where
 	}
 
 	/// Private->Private child key derivation
-	pub fn ckd_priv(&self, secp: &Secp256k1, hasher: H, i: ChildNumber) -> Result<ExtendedPrivKey<H>, Error> {
+	pub fn ckd_priv(
+		&self,
+		secp: &Secp256k1,
+		hasher: H,
+		i: ChildNumber,
+	) -> Result<ExtendedPrivKey<H>, Error> {
 		hasher.init_sha512(&self.chain_code[..]);
 		let mut be_n = [0; 4];
 		match i {
 			ChildNumber::Normal { .. } => {
 				// Non-hardened key: compute public data and use that
-				hasher.append_sha512(&PublicKey::from_secret_key(secp, &self.secret_key)?.serialize()[..]);
+				hasher.append_sha512(
+					&PublicKey::from_secret_key(secp, &self.secret_key)?.serialize()[..],
+				);
 			}
 			ChildNumber::Hardened { .. } => {
 				// Hardened key: use only secret data to prevent public derivation
@@ -436,7 +443,12 @@ where
 	}
 
 	/// Public->Public child key derivation
-	pub fn ckd_pub(&self, secp: &Secp256k1, hasher: H, i: ChildNumber) -> Result<ExtendedPubKey<H>, Error> {
+	pub fn ckd_pub(
+		&self,
+		secp: &Secp256k1,
+		hasher: H,
+		i: ChildNumber,
+	) -> Result<ExtendedPubKey<H>, Error> {
 		let (sk, chain_code) = self.ckd_pub_tweak(secp, hasher, i)?;
 		let mut pk = self.public_key.clone();
 		pk.add_exp_assign(secp, &sk).map_err(Error::Ecdsa)?;
@@ -468,9 +480,9 @@ where
 	}
 }
 impl<H> fmt::Display for ExtendedPrivKey<H>
-	where
-	H: BIP32Hasher
-	{
+where
+	H: BIP32Hasher,
+{
 	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
 		let mut ret = [0; 78];
 		ret[0..4].copy_from_slice(&self.network[0..4]);
@@ -487,9 +499,9 @@ impl<H> fmt::Display for ExtendedPrivKey<H>
 }
 
 impl<H> FromStr for ExtendedPrivKey<H>
-	where
-	H: BIP32Hasher
-	{
+where
+	H: BIP32Hasher,
+{
 	type Err = base58::Error;
 
 	fn from_str(inp: &str) -> Result<ExtendedPrivKey<H>, base58::Error> {
@@ -517,9 +529,9 @@ impl<H> FromStr for ExtendedPrivKey<H>
 }
 
 impl<H> fmt::Display for ExtendedPubKey<H>
-	where
-	H: BIP32Hasher
-	{
+where
+	H: BIP32Hasher,
+{
 	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
 		let mut ret = [0; 78];
 		ret[0..4].copy_from_slice(&self.network[0..4]);
@@ -535,9 +547,9 @@ impl<H> fmt::Display for ExtendedPubKey<H>
 }
 
 impl<H> FromStr for ExtendedPubKey<H>
-	where
-	H: BIP32Hasher
-	{
+where
+	H: BIP32Hasher,
+{
 	type Err = base58::Error;
 
 	fn from_str(inp: &str) -> Result<ExtendedPubKey<H>, base58::Error> {
@@ -603,7 +615,7 @@ mod tests {
 		fn init_sha512(&mut self, seed: &[u8]) {
 			self.hmac_sha512 = Hmac::new(Sha512::new(), seed);
 		}
-		fn append_sha512(&mut self, value: &[u8]){
+		fn append_sha512(&mut self, value: &[u8]) {
 			self.hmac_sha512.input(value);
 		}
 		fn result_sha512(&self) -> [u8; 64] {
