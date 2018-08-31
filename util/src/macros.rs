@@ -1,4 +1,3 @@
-
 // Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -158,105 +157,106 @@ macro_rules! impl_array_newtype {
 
 #[macro_export]
 macro_rules! impl_array_newtype_encodable {
-    ($thing:ident, $ty:ty, $len:expr) => {
-        #[cfg(feature = "serde")]
-        impl<'de> $crate::serde::Deserialize<'de> for $thing {
-            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-            where
-                D: $crate::serde::Deserializer<'de>,
-            {
-                use $crate::std::fmt::{self, Formatter};
+	($thing:ident, $ty:ty, $len:expr) => {
+		#[cfg(feature = "serde")]
+		impl<'de> $crate::serde::Deserialize<'de> for $thing {
+			fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+			where
+				D: $crate::serde::Deserializer<'de>,
+			{
+				use $crate::std::fmt::{self, Formatter};
 
-                struct Visitor;
-                impl<'de> $crate::serde::de::Visitor<'de> for Visitor {
-                    type Value = $thing;
+				struct Visitor;
+				impl<'de> $crate::serde::de::Visitor<'de> for Visitor {
+					type Value = $thing;
 
-                    fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
-                        formatter.write_str("a fixed size array")
-                    }
+					fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
+						formatter.write_str("a fixed size array")
+					}
 
-                    #[inline]
-                    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-                    where
-                        A: $crate::serde::de::SeqAccess<'de>,
-                    {
-                        let mut ret: [$ty; $len] = [0; $len];
-                        for item in ret.iter_mut() {
-                            *item = match seq.next_element()? {
-                                Some(c) => c,
-                                None => return Err($crate::serde::de::Error::custom("end of stream"))
-                            };
-                        }
-                        Ok($thing(ret))
-                    }
-                }
+					#[inline]
+					fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+					where
+						A: $crate::serde::de::SeqAccess<'de>,
+					{
+						let mut ret: [$ty; $len] = [0; $len];
+						for item in ret.iter_mut() {
+							*item = match seq.next_element()? {
+								Some(c) => c,
+								None => {
+									return Err($crate::serde::de::Error::custom("end of stream"))
+								}
+							};
+						}
+						Ok($thing(ret))
+					}
+				}
 
-                deserializer.deserialize_seq(Visitor)
-            }
-        }
+				deserializer.deserialize_seq(Visitor)
+			}
+		}
 
-        #[cfg(feature = "serde")]
-        impl $crate::serde::Serialize for $thing {
-            fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-            where
-                S: $crate::serde::Serializer,
-            {
-                let &$thing(ref dat) = self;
-                (&dat[..]).serialize(serializer)
-            }
-        }
-    }
+		#[cfg(feature = "serde")]
+		impl $crate::serde::Serialize for $thing {
+			fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+			where
+				S: $crate::serde::Serializer,
+			{
+				let &$thing(ref dat) = self;
+				(&dat[..]).serialize(serializer)
+			}
+		}
+	};
 }
 
 #[macro_export]
 macro_rules! impl_array_newtype_show {
-    ($thing:ident) => {
-        impl ::std::fmt::Debug for $thing {
-            fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                write!(f, concat!(stringify!($thing), "({:?})"), &self[..])
-            }
-        }
-    }
+	($thing:ident) => {
+		impl ::std::fmt::Debug for $thing {
+			fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+				write!(f, concat!(stringify!($thing), "({:?})"), &self[..])
+			}
+		}
+	};
 }
 
 #[macro_export]
 macro_rules! impl_index_newtype {
-    ($thing:ident, $ty:ty) => {
-        impl ::std::ops::Index<::std::ops::Range<usize>> for $thing {
-            type Output = [$ty];
+	($thing:ident, $ty:ty) => {
+		impl ::std::ops::Index<::std::ops::Range<usize>> for $thing {
+			type Output = [$ty];
 
-            #[inline]
-            fn index(&self, index: ::std::ops::Range<usize>) -> &[$ty] {
-                &self.0[index]
-            }
-        }
+			#[inline]
+			fn index(&self, index: ::std::ops::Range<usize>) -> &[$ty] {
+				&self.0[index]
+			}
+		}
 
-        impl ::std::ops::Index<::std::ops::RangeTo<usize>> for $thing {
-            type Output = [$ty];
+		impl ::std::ops::Index<::std::ops::RangeTo<usize>> for $thing {
+			type Output = [$ty];
 
-            #[inline]
-            fn index(&self, index: ::std::ops::RangeTo<usize>) -> &[$ty] {
-                &self.0[index]
-            }
-        }
+			#[inline]
+			fn index(&self, index: ::std::ops::RangeTo<usize>) -> &[$ty] {
+				&self.0[index]
+			}
+		}
 
-        impl ::std::ops::Index<::std::ops::RangeFrom<usize>> for $thing {
-            type Output = [$ty];
+		impl ::std::ops::Index<::std::ops::RangeFrom<usize>> for $thing {
+			type Output = [$ty];
 
-            #[inline]
-            fn index(&self, index: ::std::ops::RangeFrom<usize>) -> &[$ty] {
-                &self.0[index]
-            }
-        }
+			#[inline]
+			fn index(&self, index: ::std::ops::RangeFrom<usize>) -> &[$ty] {
+				&self.0[index]
+			}
+		}
 
-        impl ::std::ops::Index<::std::ops::RangeFull> for $thing {
-            type Output = [$ty];
+		impl ::std::ops::Index<::std::ops::RangeFull> for $thing {
+			type Output = [$ty];
 
-            #[inline]
-            fn index(&self, _: ::std::ops::RangeFull) -> &[$ty] {
-                &self.0[..]
-            }
-        }
-
-    }
+			#[inline]
+			fn index(&self, _: ::std::ops::RangeFull) -> &[$ty] {
+				&self.0[..]
+			}
+		}
+	};
 }

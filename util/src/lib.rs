@@ -64,10 +64,10 @@ use std::ops::Deref;
 mod hex;
 pub use hex::*;
 
-/// Compress and decompress zip bz2 archives
-pub mod zip;
 /// File util
 pub mod file;
+/// Compress and decompress zip bz2 archives
+pub mod zip;
 
 /// Encapsulation of a RefCell<Option<T>> for one-time initialization after
 /// construction. This implementation will purposefully fail hard if not used
