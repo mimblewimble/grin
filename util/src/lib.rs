@@ -53,6 +53,8 @@ pub use secp_static::static_secp_instance;
 pub mod types;
 pub use types::{LogLevel, LoggingConfig};
 
+pub mod macros;
+
 // other utils
 use byteorder::{BigEndian, ByteOrder};
 use std::cell::{Ref, RefCell};
