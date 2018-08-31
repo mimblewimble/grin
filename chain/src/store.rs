@@ -158,8 +158,10 @@ impl ChainStore {
 
 	pub fn get_kernel_height(&self, kernel: &TxKernel) -> Result<u64, Error> {
 		option_to_not_found(
-			self.db
-				.get_ser(&to_key(KERNEL_HEIGHT_PREFIX, &mut kernel.excess.as_ref().to_vec())),
+			self.db.get_ser(&to_key(
+				KERNEL_HEIGHT_PREFIX,
+				&mut kernel.excess.as_ref().to_vec(),
+			)),
 			&format!("Kernel height for: {:?}", kernel),
 		)
 	}
@@ -282,8 +284,10 @@ impl<'a> Batch<'a> {
 
 	pub fn get_kernel_height(&self, kernel: &TxKernel) -> Result<u64, Error> {
 		option_to_not_found(
-			self.db
-				.get_ser(&to_key(KERNEL_HEIGHT_PREFIX, &mut kernel.excess.as_ref().to_vec())),
+			self.db.get_ser(&to_key(
+				KERNEL_HEIGHT_PREFIX,
+				&mut kernel.excess.as_ref().to_vec(),
+			)),
 			&format!("Kernel height for: {:?}", kernel),
 		)
 	}
@@ -294,8 +298,10 @@ impl<'a> Batch<'a> {
 	}
 
 	pub fn delete_kernel_height(&self, kernel: &TxKernel) -> Result<(), Error> {
-		self.db
-			.delete(&to_key(KERNEL_HEIGHT_PREFIX, &mut kernel.excess.as_ref().to_vec()))
+		self.db.delete(&to_key(
+			KERNEL_HEIGHT_PREFIX,
+			&mut kernel.excess.as_ref().to_vec(),
+		))
 	}
 
 	pub fn get_block_header_db(&self, h: &Hash) -> Result<BlockHeader, Error> {

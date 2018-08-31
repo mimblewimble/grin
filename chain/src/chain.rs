@@ -625,7 +625,6 @@ impl Chain {
 			batch.save_body_head(&head)?;
 			batch.save_header_height(&header)?;
 			batch.build_by_height_index(&header, true)?;
-
 		}
 
 		batch.commit()?;
@@ -893,13 +892,15 @@ fn setup_kernel_height_index(
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
 	let header = store.head_header()?;
-	let kernel = txhashset::extending_readonly(txhashset, |extension| {
-		extension.kernel_for_block_height(1)
-	});
+	let kernel =
+		txhashset::extending_readonly(txhashset, |extension| extension.kernel_for_block_height(1));
 
 	if let Ok(kernel) = kernel {
 		if let Err(_) = store.get_kernel_height(&kernel) {
-			warn!(LOGGER, "***** backfilling kernel height index from chain init...");
+			warn!(
+				LOGGER,
+				"***** backfilling kernel height index from chain init..."
+			);
 			let mut batch = store.batch()?;
 			txhashset::extending(txhashset, &mut batch, |extension| {
 				extension.rebuild_kernel_height_index(header)?;

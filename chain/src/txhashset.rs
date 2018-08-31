@@ -489,7 +489,7 @@ impl<'a> Extension<'a> {
 			match self.apply_output(output) {
 				Ok(pos) => {
 					self.new_output_commits.insert(output.commitment(), pos);
-				},
+				}
 				Err(e) => {
 					self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
 					return Err(e);
@@ -612,7 +612,8 @@ impl<'a> Extension<'a> {
 
 		for kernel in b.kernels() {
 			self.apply_kernel(kernel)?;
-			self.new_kernel_heights.insert(kernel.clone(), b.header.height);
+			self.new_kernel_heights
+				.insert(kernel.clone(), b.header.height);
 		}
 
 		Ok(())
@@ -822,7 +823,8 @@ impl<'a> Extension<'a> {
 		if let Some(pos) = self.new_output_commits.get(commit) {
 			Ok(*pos)
 		} else {
-			self.commit_index.get_output_pos(commit)
+			self.commit_index
+				.get_output_pos(commit)
 				.map_err(|e| ErrorKind::StoreErr(e, format!("output not found")).into())
 		}
 	}
@@ -924,7 +926,10 @@ impl<'a> Extension<'a> {
 	/// (Re)build the index of kernel to block height.
 	/// We call this during fast-sync once we have the full kernel MMR.
 	pub fn rebuild_kernel_height_index(&self, header: BlockHeader) -> Result<(), Error> {
-		debug!(LOGGER, "txhashset: rebuild_kernel_height_index: from height: {}", header.height);
+		debug!(
+			LOGGER,
+			"txhashset: rebuild_kernel_height_index: from height: {}", header.height
+		);
 
 		let mut curr = header;
 
