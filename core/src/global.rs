@@ -50,6 +50,12 @@ pub const AUTOMATED_TESTING_COINBASE_MATURITY: u64 = 3;
 /// User testing coinbase maturity
 pub const USER_TESTING_COINBASE_MATURITY: u64 = 3;
 
+/// Old coinbase maturity
+/// TODO: obsolete for mainnet together with maturity code below
+pub const OLD_COINBASE_MATURITY: u64 = 1_000;
+/// soft-fork around Sep 17 2018 on testnet3
+pub const COINBASE_MATURITY_FORK_HEIGHT: u64 = 100_000;
+
 /// Testing cut through horizon in blocks
 pub const TESTING_CUT_THROUGH_HORIZON: u32 = 20;
 
@@ -133,13 +139,14 @@ pub fn proofsize() -> usize {
 	}
 }
 
-/// Coinbase maturity
-pub fn coinbase_maturity() -> u64 {
+/// Coinbase maturity for coinbases to be spent at given height
+pub fn coinbase_maturity(height: u64) -> u64 {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
 		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
-		_ => COINBASE_MATURITY,
+		_ => if height < COINBASE_MATURITY_FORK_HEIGHT { OLD_COINBASE_MATURITY }
+                     else { COINBASE_MATURITY },
 	}
 }
 
