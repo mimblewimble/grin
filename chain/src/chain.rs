@@ -164,7 +164,11 @@ impl Chain {
 		// open the txhashset, creating a new one if necessary
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
+		// Setup the chain head.
 		setup_head(genesis, store.clone(), &mut txhashset)?;
+
+		// Setup the kernel height index (introduced later, may not exist on all nodes).
+		setup_kernel_height_index(store.clone(), &mut txhashset)?;
 
 		// Now reload the chain head (either existing head or genesis from above)
 		let head = store.head()?;
@@ -599,6 +603,7 @@ impl Chain {
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			extension.rewind(&header)?;
 			extension.rebuild_index()?;
+			extension.rebuild_kernel_height_index(header.clone())?;
 			Ok(())
 		})?;
 
@@ -620,7 +625,9 @@ impl Chain {
 			batch.save_body_head(&head)?;
 			batch.save_header_height(&header)?;
 			batch.build_by_height_index(&header, true)?;
+
 		}
+
 		batch.commit()?;
 
 		debug!(
@@ -879,6 +886,30 @@ impl Chain {
 			.block_exists(&h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain block exists".to_owned()).into())
 	}
+}
+
+fn setup_kernel_height_index(
+	store: Arc<store::ChainStore>,
+	txhashset: &mut txhashset::TxHashSet,
+) -> Result<(), Error> {
+	let header = store.head_header()?;
+	let kernel = txhashset::extending_readonly(txhashset, |extension| {
+		extension.kernel_for_block_height(1)
+	});
+
+	if let Ok(kernel) = kernel {
+		if let Err(_) = store.get_kernel_height(&kernel) {
+			warn!(LOGGER, "***** backfilling kernel height index from chain init...");
+			let mut batch = store.batch()?;
+			txhashset::extending(txhashset, &mut batch, |extension| {
+				extension.rebuild_kernel_height_index(header)?;
+				Ok(())
+			})?;
+			batch.commit()?;
+			warn!(LOGGER, "***** ...DONE backfilling");
+		}
+	}
+	Ok(())
 }
 
 fn setup_head(
