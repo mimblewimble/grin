@@ -145,6 +145,7 @@ Example:
 
 A message initiated by the Stratum server.
 Stratum server will send job automatically to connected miners.
+The miner SHOULD interrupt current job if job_id = 0, and SHOULD replace the current job with this one after the current graph is complete.
 
 #### Request
 
