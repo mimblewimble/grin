@@ -350,41 +350,59 @@ impl Chain {
 
 	/// Check for orphans, once a block is successfully added
 	pub fn check_orphans(&self, mut height: u64) {
-		trace!(
-			LOGGER,
-			"chain: doing check_orphans at {}, # orphans {}",
-			height,
-			self.orphans.len(),
-		);
+		let initial_height = height;
+
 		// Is there an orphan in our orphans that we can now process?
 		loop {
+			trace!(
+				LOGGER,
+				"check_orphans: at {}, # orphans {}",
+				height,
+				self.orphans.len(),
+			);
+
+			let mut orphan_accepted = false;
+			let mut height_accepted = height;
+
 			if let Some(orphans) = self.orphans.remove_by_height(&height) {
-				for orphan in orphans {
-					trace!(
+				let orphans_len = orphans.len();
+				for (i, orphan) in orphans.into_iter().enumerate() {
+					debug!(
 						LOGGER,
-						"chain: got block {} at {} from orphans. # orphans remaining {}",
+						"check_orphans: get block {} at {}{}",
 						orphan.block.hash(),
 						height,
-						self.orphans.len(),
+						if orphans_len > 1 {
+							format!(", no.{} of {} orphans", i, orphans_len)
+						} else {
+							String::new()
+						},
 					);
 					let res = self.process_block_no_orphans(orphan.block, orphan.opts);
 					if let Ok((_, Some(b))) = res {
-						// We accepted a block, so see if we can accept any orphans
-						height = b.header.height + 1;
-					} else {
-						break;
+						orphan_accepted = true;
+						height_accepted = b.header.height;
 					}
 				}
-			} else {
-				break;
+
+				if orphan_accepted {
+					// We accepted a block, so see if we can accept any orphans
+					height = height_accepted + 1;
+					continue;
+				}
 			}
+			break;
 		}
-		trace!(
-			LOGGER,
-			"chain: done check_orphans at {}. # remaining orphans {}",
-			height - 1,
-			self.orphans.len(),
-		);
+
+		if initial_height != height {
+			debug!(
+				LOGGER,
+				"check_orphans: {} blocks accepted since height {}, remaining # orphans {}",
+				height - initial_height,
+				initial_height,
+				self.orphans.len(),
+			);
+		}
 	}
 
 	/// For the given commitment find the unspent output and return the
