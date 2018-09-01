@@ -68,8 +68,8 @@ pub fn connect_and_monitor(
 			loop {
 				let current_time = Utc::now();
 
-				// make 4 attempts to get peers as quick as possible with
-				// epxonential backoff
+				// make several attempts to get peers as quick as possible with
+				// exponential backoff
 				if (peers.peer_count() < p2p_server.config.peer_min_preferred_count()
 					&& current_time - prev > Duration::seconds(start_wait_base.pow(start_attempt)))
 					|| current_time - prev > Duration::seconds(20)
