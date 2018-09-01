@@ -20,7 +20,7 @@ extern crate grin_wallet as wallet;
 
 pub mod common;
 
-use grin_core::core::{Output, OutputFeatures};
+use grin_core::core::{Output, OutputFeatures, Transaction};
 use grin_core::ser;
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx::proof;
