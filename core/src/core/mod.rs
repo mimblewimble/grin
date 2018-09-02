@@ -222,7 +222,7 @@ pub fn amount_from_hr_string(amount: &str) -> Result<u64, Error> {
 		),
 		Some(pos) => {
 			let (gs, tail) = amount.split_at(pos);
-			(parse_grins(gs)?, parse_ngrins(&tail[1..])?)
+			(parse_grins(gs)?, parse_ngrins_pad(&tail[1..])?)
 		}
 	};
 	Ok(grins * GRIN_BASE + ngrins)
@@ -249,16 +249,30 @@ fn parse_ngrins(amount: &str) -> Result<u64, Error> {
 	Ok(res)
 }
 
+lazy_static! {
+	static ref WIDTH: usize = (GRIN_BASE as f64).log(10.0) as usize + 1;
+}
+
+fn parse_ngrins_pad(amount: &str) -> Result<u64, Error> {
+	if amount.len() > *WIDTH {
+		return Ok(0);
+	}
+	let padded = format!("{:0<width$}", amount, width = WIDTH);
+	padded
+		.parse::<u64>()
+		.map_err(|_| Error::InvalidAmountString)
+}
+
 /// Common method for converting an amount to a human-readable string
 
 pub fn amount_to_hr_string(amount: u64, truncate: bool) -> String {
-	let amount = (amount as f64 / GRIN_BASE as f64) as f64;
-	let places = (GRIN_BASE as f64).log(10.0) as usize + 1;
-	let hr = format!("{:.*}", places, amount);
+	let gs = amount / GRIN_BASE;
+	let ns = amount - gs * GRIN_BASE;
+	let hr = format!("{}.{:0>width$}", gs, ns, width = WIDTH);
 
 	if truncate {
 		let nzeros = hr.chars().rev().take_while(|x| x == &'0').count();
-		if nzeros < places {
+		if nzeros < *WIDTH {
 			return hr.trim_right_matches('0').to_string();
 		} else {
 			return format!("{}0", hr.trim_right_matches('0'));
