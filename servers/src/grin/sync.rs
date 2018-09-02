@@ -30,6 +30,20 @@ use util::LOGGER;
 
 pub struct Syncer {}
 
+struct BodySyncInfo {
+	body_sync_hashes: Vec<Hash>,
+	last_body_received: Option<DateTime<Utc>>,
+	num_hashes_to_get: usize,
+}
+
+impl BodySyncInfo {
+	fn reset(&mut self) {
+		self.body_sync_hashes.clear();
+		self.last_body_received = None;
+		self.num_hashes_to_get = 0;
+	}
+}
+
 impl Syncer {
 	pub fn new() -> Syncer {
 		Syncer {}
@@ -98,6 +112,11 @@ pub fn run_sync(
 				// the genesis state
 
 				let mut history_locators: Vec<(u64, Hash)> = vec![];
+				let mut body_sync_info = BodySyncInfo {
+					body_sync_hashes: vec![],
+					last_body_received: None,
+					num_hashes_to_get: 0,
+				};
 
 				loop {
 					let horizon = global::cut_through_horizon() as u64;
@@ -177,8 +196,8 @@ pub fn run_sync(
 							}
 						} else {
 							// run the body_sync every 5s
-							if si.body_sync_due(&head) {
-								body_sync(peers.clone(), chain.clone());
+							if si.body_sync_due(&head, chain.clone(), &mut body_sync_info) {
+								body_sync(peers.clone(), chain.clone(), &mut body_sync_info);
 								sync_state.update(SyncStatus::BodySync {
 									current_height: head.height,
 									highest_height: si.highest_height,
@@ -198,11 +217,46 @@ pub fn run_sync(
 			});
 }
 
-fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
+fn body_no_more(chain: Arc<chain::Chain>, body_sync_info: &mut BodySyncInfo) -> bool {
+	let hashes_not_get = body_sync_info
+		.body_sync_hashes
+		.iter()
+		.filter(|x| !chain.get_block(*x).is_ok() && !chain.is_orphan(*x))
+		.collect::<Vec<_>>();
+
+	if let Some(prev_ts) = body_sync_info.last_body_received {
+		if hashes_not_get.len() == body_sync_info.num_hashes_to_get
+			&& Utc::now() - prev_ts > Duration::milliseconds(200)
+		{
+			debug!(
+				LOGGER,
+				"body_sync: {}/{} blocks received, and no more in 200ms",
+				body_sync_info.body_sync_hashes.len() - hashes_not_get.len(),
+				body_sync_info.body_sync_hashes.len(),
+			);
+			return true;
+		}
+	}
+
+	if body_sync_info.num_hashes_to_get != hashes_not_get.len() {
+		body_sync_info.num_hashes_to_get = hashes_not_get.len();
+		body_sync_info.last_body_received = Some(Utc::now());
+	}
+
+	if hashes_not_get.len() == 0 {
+		true
+	} else {
+		false
+	}
+}
+
+fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, body_sync_info: &mut BodySyncInfo) {
 	let horizon = global::cut_through_horizon() as u64;
 	let body_head: chain::Tip = chain.head().unwrap();
 	let header_head: chain::Tip = chain.get_header_head().unwrap();
 	let sync_head: chain::Tip = chain.get_sync_head().unwrap();
+
+	body_sync_info.reset();
 
 	debug!(
 		LOGGER,
@@ -274,10 +328,14 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 				if let Ok(peer) = peer.try_read() {
 					if let Err(e) = peer.send_block_request(*hash) {
 						debug!(LOGGER, "Skipped request to {}: {:?}", peer.info.addr, e);
+					} else {
+						body_sync_info.body_sync_hashes.push(hash.clone());
 					}
 				}
 			}
 		}
+
+		body_sync_info.num_hashes_to_get = body_sync_info.body_sync_hashes.len();
 	}
 }
 
@@ -591,11 +649,19 @@ impl SyncInfo {
 		}
 	}
 
-	fn body_sync_due(&mut self, head: &chain::Tip) -> bool {
+	fn body_sync_due(
+		&mut self,
+		head: &chain::Tip,
+		chain: Arc<chain::Chain>,
+		body_sync_info: &mut BodySyncInfo,
+	) -> bool {
 		let now = Utc::now();
 		let (prev_ts, prev_height) = self.prev_body_sync;
 
-		if head.height >= prev_height + 96 || now - prev_ts > Duration::seconds(5) {
+		if head.height >= prev_height + 96
+			|| now - prev_ts > Duration::seconds(5)
+			|| body_no_more(chain, body_sync_info)
+		{
 			self.prev_body_sync = (now, head.height);
 			return true;
 		}
