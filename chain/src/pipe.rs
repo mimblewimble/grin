@@ -416,16 +416,9 @@ fn apply_block_to_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Result
 
 	// Check the output and rangeproof MMR sizes here against the header.
 	let (output_mmr_size, _, kernel_mmr_size) = ext.sizes();
-<<<<<<< HEAD
 	if b.header.output_mmr_size != output_mmr_size || b.header.kernel_mmr_size != kernel_mmr_size {
 		return Err(ErrorKind::InvalidMMRSize.into());
 	}
-=======
-	if b.header.output_mmr_size != output_mmr_size ||
-		b.header.kernel_mmr_size != kernel_mmr_size {
-			return Err(ErrorKind::InvalidMMRSize.into());
-		}
->>>>>>> document what we do during pipe::apply_block()
 
 	Ok(())
 }
