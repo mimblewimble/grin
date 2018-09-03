@@ -101,6 +101,12 @@ impl TransactionPool {
 		stem: bool,
 		block_hash: &Hash,
 	) -> Result<(), PoolError> {
+		// Quick check to deal with common case of seeing the *same* tx
+		// broadcast from multiple peers simultaneously.
+		if !stem && self.txpool.contains_tx(&tx) {
+			return Err(PoolError::DuplicateTx);
+		}
+
 		// Do we have the capacity to accept this transaction?
 		self.is_acceptable(&tx)?;
 
