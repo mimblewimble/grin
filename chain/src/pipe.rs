@@ -98,17 +98,18 @@ pub fn process_block(
 	// Check our header itself is actually valid before proceeding any further.
 	validate_header(&b.header, ctx)?;
 
-	// Check if we have *this* block in the store.
-	check_known_store(b.hash(), ctx)?;
-
 	// Check if are processing the "next" block relative to the current chain head.
 	if is_next_block(b, ctx) {
 		// If this is the "next" block then either -
 		//   * common case where we process blocks sequentially.
 		//   * special case where this is the first fast sync full block
-		// Either way we can proceed.
+		// Either way we can proceed (and we know the block is new and unprocessed).
 	} else {
-		// Check we actually have the previous block in the store.
+		// Check we have *this* block in the store.
+		// Stop if we have processed this block previously (it is in the store).
+		check_known_store(b.hash(), ctx)?;
+
+		// Check we have the *previous* block in the store.
 		// Note: not just the header but the full block itself.
 		// We cannot assume we can use the chain head for this
 		// as we may be dealing with a fork (with less work currently).
@@ -126,24 +127,28 @@ pub fn process_block(
 				return Err(ErrorKind::StoreErr(e, "pipe get previous".to_owned()).into());
 			}
 		}
-	}
 
-	// ***EXPERIMENTAL***
-	// If we are processing an "old" block then
-	// we can quickly check if it already exists
-	// on our current longest chain.
-	// First check the header matches via current height index.
-	// Then peek directly into the MMRs at the appropriate pos.
-	// We can avoid a full rewind in this case.
-	if b.header.height <= ctx.head.height {
-		// Use current "header by height" index to look at current most work chain.
-		let local_header = ctx.store.get_header_by_height(b.header.height)?;
+		// ***EXPERIMENTAL***
+		// If we are processing an "old" block then
+		// we can quickly check if it already exists
+		// on our current longest chain (we have already processes it).
+		// First check the header matches via current height index.
+		// Then peek directly into the MMRs at the appropriate pos.
+		// We can avoid a full rewind in this case.
+		if b.header.height <= ctx.head.height {
+			// Use current "header by height" index to look at current most work chain.
+			let local_header = ctx.store.get_header_by_height(b.header.height)?;
 
-		// Check the header at our height matches the header of the block we are processing.
-		if local_header.hash() == b.header.hash() {
-			// TODO - peek in the MMR (the data file and kernel MMR?)
-			// If everything matches then we "already know" this block.
-			// return Err(ErrorKind::Unfit("already known on most work chain".to_string()).into());
+			// Check the header at our height matches the header of the block we are processing.
+			if local_header.hash() == b.header.hash() {
+
+				// let res = txhashset::extending_readonly(&mut txhashset, |mut extension| {
+				// 	// TODO - peek in the MMR (the data file and kernel MMR?)
+				// 	// If everything matches then we "already know" this block.
+				// 	// return Err(ErrorKind::Unfit("already known on most work chain".to_string()).into());
+				// 	Ok(())
+				// })?;
+			}
 		}
 	}
 
