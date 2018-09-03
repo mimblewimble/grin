@@ -26,10 +26,12 @@ extern crate serde_json;
 #[macro_use]
 extern crate slog;
 extern crate uuid;
+extern crate crypto;
 
 pub mod extkey;
 pub mod extkey_bip32;
 mod types;
+mod base58;
 
 pub mod keychain;
 pub use keychain::ExtKeychain;
