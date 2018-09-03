@@ -369,7 +369,8 @@ impl Handler for TxHashSetHandler {
 				}
 			}
 		}
-		let command = match req.uri()
+		let command = match req
+			.uri()
 			.path()
 			.trim_right()
 			.trim_right_matches("/")

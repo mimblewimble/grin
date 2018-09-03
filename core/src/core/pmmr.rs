@@ -255,7 +255,8 @@ where
 		let mut peak = 1;
 		while (peak_map & peak) != 0 {
 			let left_sibling = pos + 1 - 2 * peak;
-			let left_hash = self.backend
+			let left_hash = self
+				.backend
 				.get_from_file(left_sibling)
 				.ok_or("missing left sibling in tree, should not have been pruned")?;
 			peak *= 2;

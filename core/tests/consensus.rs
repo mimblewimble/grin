@@ -307,13 +307,12 @@ fn repeat_offs(
 	diff: u64,
 	len: u64,
 ) -> Vec<Result<(u64, Difficulty), TargetError>> {
-	map_vec!(
-		repeat(interval, diff, len, Some(from)),
-		|e| match e.clone() {
+	map_vec!(repeat(interval, diff, len, Some(from)), |e| {
+		match e.clone() {
 			Err(e) => Err(e),
 			Ok((t, d)) => Ok((t, d)),
 		}
-	)
+	})
 }
 
 /// Checks different next_target adjustments and difficulty boundaries
