@@ -40,12 +40,10 @@ use std::{error, fmt};
 
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use util::secp::key::{PublicKey, SecretKey};
-use util::secp::{self, Secp256k1};
+use util::secp::{self, Secp256k1, ContextFlag};
+
 
 use base58;
-
-/// G,R,I,N
-const GRIN_NETWORK: [u8; 4] = [0x47, 0x52, 0x49, 0x4E];
 
 /// A chain code
 pub struct ChainCode([u8; 32]);
@@ -72,6 +70,8 @@ impl Default for Fingerprint {
 /// not what the actual implementation is
 
 pub trait BIP32Hasher {
+	fn network_priv() -> [u8; 4];
+	fn network_pub() -> [u8; 4];
 	fn master_seed() -> [u8; 12];
 	fn init_sha512(&mut self, seed: &[u8]);
 	fn append_sha512(&mut self, value: &[u8]);
@@ -292,7 +292,7 @@ impl ExtendedPrivKey {
 		let result = hasher.result_sha512();
 
 		Ok(ExtendedPrivKey {
-			network: GRIN_NETWORK.clone(),
+			network: H::network_priv(),
 			depth: 0,
 			parent_fingerprint: Default::default(),
 			child_number: ChildNumber::from_normal_idx(0),
@@ -366,9 +366,9 @@ impl ExtendedPrivKey {
 	where
 		H: BIP32Hasher,
 	{
-		let secp = Secp256k1::without_caps();
+		let secp = Secp256k1::with_caps(ContextFlag::SignOnly);
 		// Compute extended public key
-		let pk: ExtendedPubKey = ExtendedPubKey::from_private(&secp, self);
+		let pk: ExtendedPubKey = ExtendedPubKey::from_private::<H>(&secp, self);
 		// Do SHA256 of just the ECDSA pubkey
 		let sha2_res = hasher.sha_256(&pk.public_key.serialize_vec(&secp, true)[..]);
 		// do RIPEMD160
@@ -388,9 +388,12 @@ impl ExtendedPrivKey {
 
 impl ExtendedPubKey {
 	/// Derives a public key from a private key
-	pub fn from_private(secp: &Secp256k1, sk: &ExtendedPrivKey) -> ExtendedPubKey {
+	pub fn from_private<H>(secp: &Secp256k1, sk: &ExtendedPrivKey) -> ExtendedPubKey
+	where
+		H: BIP32Hasher,
+	{
 		ExtendedPubKey {
-			network: sk.network,
+			network: H::network_pub(),
 			depth: sk.depth,
 			parent_fingerprint: sk.parent_fingerprint,
 			child_number: sk.child_number,
@@ -616,6 +619,14 @@ mod tests {
 	}
 
 	impl BIP32Hasher for BIP32ReferenceHasher {
+		fn network_priv() -> [u8;4] {
+			// bitcoin network (xprv) (for test vectors)
+			[0x04, 0x88, 0xAD, 0xE4]
+		}
+		fn network_pub() -> [u8;4] {
+			// bitcoin network (xpub) (for test vectors)
+			[0x04, 0x88, 0xB2, 0x1E]
+		}
 		fn master_seed() -> [u8; 12] {
 			b"Bitcoin seed".to_owned()
 		}
@@ -655,7 +666,7 @@ mod tests {
 	) {
 		let mut h = BIP32ReferenceHasher::new();
 		let mut sk = ExtendedPrivKey::new_master(secp, &mut h, seed).unwrap();
-		let mut pk = ExtendedPubKey::from_private(secp, &sk);
+		let mut pk = ExtendedPubKey::from_private::<BIP32ReferenceHasher>(secp, &sk);
 
 		// Check derivation convenience method for ExtendedPrivKey
 		assert_eq!(
@@ -683,7 +694,7 @@ mod tests {
 			match num {
 				Normal { .. } => {
 					let pk2 = pk.ckd_pub(secp, &mut h, num).unwrap();
-					pk = ExtendedPubKey::from_private(secp, &sk);
+					pk = ExtendedPubKey::from_private::<BIP32ReferenceHasher>(secp, &sk);
 					assert_eq!(pk, pk2);
 				}
 				Hardened { .. } => {
@@ -691,7 +702,7 @@ mod tests {
 						pk.ckd_pub(secp, &mut h, num),
 						Err(Error::CannotDeriveFromHardenedKey)
 					);
-					pk = ExtendedPubKey::from_private(secp, &sk);
+					pk = ExtendedPubKey::from_private::<BIP32ReferenceHasher>(secp, &sk);
 				}
 			}
 		}
