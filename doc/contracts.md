@@ -54,7 +54,7 @@ can be used to construct a variety of contracts using "simple" arithmetic.
 
 ## (Absolute) Timelocked Transactions
 
-Analogus to Bitcoin [nLockTime](https://en.bitcoin.it/wiki/Timelock#nLockTime).
+Analogous to Bitcoin [nLockTime](https://en.bitcoin.it/wiki/Timelock#nLockTime).
 
 A transaction can be time-locked with a few simple modifications:
 
@@ -250,7 +250,7 @@ can compute `sr' - sr` to get `x`.
 ### Notes on the Bitcoin setup
 
 Prior to completing the atomic swap, Bob needs to know Alice's public key. Bob
-would then create an outpout on the Bitcoin blockchain with a 2-of-2 multisig
+would then create an output on the Bitcoin blockchain with a 2-of-2 multisig
 similar to `alice_pubkey secret_pubkey 2 OP_CHECKMULTISIG`. This should be
 wrapped in an `OP_IF` so Bob can get his money back after an agreed-upon time
 and all of this can even be wrapped in a P2SH. Here `secret_pubkey` is `x*G`

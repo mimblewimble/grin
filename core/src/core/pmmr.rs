@@ -285,7 +285,7 @@ where
 	/// "undo".
 	pub fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String> {
 		// Identify which actual position we should rewind to as the provided
-		// position is a leaf. We traverse the MMR to inclue any parent(s) that
+		// position is a leaf. We traverse the MMR to include any parent(s) that
 		// need to be included for the MMR to be valid.
 		let mut pos = position;
 		while bintree_postorder_height(pos + 1) > 0 {

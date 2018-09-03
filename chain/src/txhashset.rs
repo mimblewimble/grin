@@ -577,7 +577,7 @@ impl<'a> Extension<'a> {
 			let cutoff_header = self.commit_index.get_header_by_height(cutoff_height)?;
 			let cutoff_pos = cutoff_header.output_mmr_size;
 
-			// If any output pos exceeed the cutoff_pos
+			// If any output pos exceed the cutoff_pos
 			// we know they have not yet sufficiently matured.
 			if pos > cutoff_pos {
 				return Err(ErrorKind::ImmatureCoinbase.into());

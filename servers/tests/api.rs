@@ -131,9 +131,9 @@ fn simple_server_wallet() {
 	assert!(last_10_rangeproofs.is_ok());
 	let last_5_rangeproofs = get_txhashset_lastrangeproofs(&base_addr, api_server_port, 5);
 	assert!(last_5_rangeproofs.is_ok());
-	let last_10_kernels = gettxhashset_lastkernels(&base_addr, api_server_port, 0);
+	let last_10_kernels = get_txhashset_lastkernels(&base_addr, api_server_port, 0);
 	assert!(last_10_kernels.is_ok());
-	let last_5_kernels = gettxhashset_lastkernels(&base_addr, api_server_port, 5);
+	let last_5_kernels = get_txhashset_lastkernels(&base_addr, api_server_port, 5);
 	assert!(last_5_kernels.is_ok());
 
 	//let some more mining happen, make sure nothing pukes
@@ -392,7 +392,7 @@ fn get_txhashset_lastrangeproofs(
 	api::client::get::<Vec<api::TxHashSetNode>>(url.as_str()).map_err(|e| Error::API(e))
 }
 
-fn gettxhashset_lastkernels(
+fn get_txhashset_lastkernels(
 	base_addr: &String,
 	api_server_port: u16,
 	n: u64,

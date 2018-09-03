@@ -26,7 +26,7 @@ further technical details.
 
 There is also a [podcast with Mike from Monero Monitor](https://moneromonitor.com/episodes/2017-09-26-Episode-014.html)
 in which John Tromp talks at length about Cuckoo Cycle; recommended listening for anyone wanting
-more background on Cuckoo Cycle, including more technical detail, the history of the algorihm's development
+more background on Cuckoo Cycle, including more technical detail, the history of the algorithm's development
 and some of the motivations behind it.
 
 ## Cycles in a Graph

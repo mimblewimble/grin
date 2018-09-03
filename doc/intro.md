@@ -428,7 +428,6 @@ only by adding or removing an output. Doing so would cause the summation of all
 blinding factors in the transaction kernels to differ from the summation of blinding
 factors in the outputs.
 
-
 ## Conclusion
 
 In this document we covered the basic principles that underlie a MimbleWimble

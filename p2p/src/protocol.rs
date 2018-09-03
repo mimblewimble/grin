@@ -355,7 +355,7 @@ fn headers_streaming_body(
 	msg_len: u64,           // (i) length of whole 'Headers'
 	headers_num: u64,       // (i) how many BlockHeader(s) do you want to read
 	total_read: &mut u64,   // (i/o) how many bytes already read on this 'Headers' message
-	reserved: &mut Vec<u8>, // (i/o) reserved part of previous read, which's not a whole header
+	reserved: &mut Vec<u8>, // (i/o) reserved part of previous read, which is not a whole header
 	max_header_size: u64,   // (i) maximum possible size of single BlockHeader
 ) -> Result<Headers, Error> {
 	if headers_num == 0 || msg_len < *total_read || *total_read < 2 {

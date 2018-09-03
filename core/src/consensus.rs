@@ -89,7 +89,7 @@ pub const BLOCK_KERNEL_WEIGHT: usize = 2;
 ///
 /// Given that a block needs to have at least one kernel for the coinbase,
 /// and one kernel for the transaction, practical maximum size is 2_831_440,
-/// (ignoring the edge case of a miner producting a block with all coinbase
+/// (ignoring the edge case of a miner producing a block with all coinbase
 /// outputs and a single kernel).
 ///
 /// A more "standard" block, filled with transactions of 2 inputs, 2 outputs

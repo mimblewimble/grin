@@ -203,7 +203,7 @@ pub fn get_genesis_nonce() -> u64 {
 	}
 }
 
-/// Converts an iterator of block difficulty data to more a more mangeable
+/// Converts an iterator of block difficulty data to more a more manageable
 /// vector and pads if needed (which will) only be needed for the first few
 /// blocks after genesis
 

@@ -419,7 +419,7 @@ fn pmmr_prune() {
 	assert_eq!(ba.elems.len(), 16);
 	assert_eq!(ba.remove_list.len(), 4);
 
-	// TODO - no longeer true (leaves only now) - pruning all leaves under level >1
+	// TODO - no longer true (leaves only now) - pruning all leaves under level >1
 	// removes all subtree
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);

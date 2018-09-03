@@ -24,10 +24,8 @@ use clap::ArgMatches;
 use ctrlc;
 use daemonize::Daemonize;
 
-use cmd::wallet;
 use config::GlobalConfig;
 use core::global;
-use grin_wallet::controller;
 use p2p::Seeding;
 use servers;
 use tui::ui;

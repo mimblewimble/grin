@@ -15,7 +15,7 @@
 //! Comments for configuration + injection into output .toml
 use std::collections::HashMap;
 
-/// maps entries to Comments that should preceed them
+/// maps entries to Comments that should precede them
 fn comments() -> HashMap<String, String> {
 	let mut retval = HashMap::new();
 	retval.insert(

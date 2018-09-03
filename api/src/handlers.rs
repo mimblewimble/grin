@@ -865,7 +865,7 @@ pub fn start_rest_apis(
 
 			ROUTER.with(|router| {
 				*router.borrow_mut() =
-					Some(build_router(chain, tx_pool, peers).expect("unbale to build API router"));
+					Some(build_router(chain, tx_pool, peers).expect("unable to build API router"));
 
 				info!(LOGGER, "Starting HTTP API server at {}.", addr);
 				let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
