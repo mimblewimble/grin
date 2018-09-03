@@ -63,10 +63,15 @@ pub fn connect_and_monitor(
 			);
 
 			let mut prev = Utc::now() - Duration::seconds(60);
+			let mut start_attempt = 0;
+			let start_wait_base: i64 = 2;
 			loop {
 				let current_time = Utc::now();
 
-				if peers.peer_count() < p2p_server.config.peer_min_preferred_count()
+				// make several attempts to get peers as quick as possible with
+				// exponential backoff
+				if (peers.peer_count() < p2p_server.config.peer_min_preferred_count()
+					&& current_time - prev > Duration::seconds(start_wait_base.pow(start_attempt)))
 					|| current_time - prev > Duration::seconds(20)
 				{
 					// try to connect to any address sent to the channel
@@ -84,6 +89,9 @@ pub fn connect_and_monitor(
 					update_dandelion_relay(peers.clone(), dandelion_config.clone());
 
 					prev = current_time;
+					if start_attempt < 6 {
+						start_attempt += 1;
+					}
 				}
 
 				thread::sleep(time::Duration::from_secs(1));
@@ -305,7 +313,8 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 pub fn web_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 	Box::new(|| {
 		let text: String = api::client::get(SEEDS_URL).expect("Failed to resolve seeds");
-		let addrs = text.split_whitespace()
+		let addrs = text
+			.split_whitespace()
 			.map(|s| s.parse().unwrap())
 			.collect::<Vec<_>>();
 		debug!(LOGGER, "Retrieved seed addresses: {:?}", addrs);
