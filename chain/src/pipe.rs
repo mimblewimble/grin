@@ -181,13 +181,6 @@ pub fn process_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<
 		bh.hash()
 	); // keep this
 
-	// First thing we do is take a write lock on the txhashset.
-	// We may receive the same block (and/or header) from multiple peers simultaneously.
-	// We want to process the first one fully to avoid redundant work
-	// processing the duplicates.
-	let txhashset = ctx.txhashset.clone();
-	let _ = txhashset.write().unwrap();
-
 	check_header_known(bh.hash(), ctx)?;
 	validate_header(&bh, ctx)
 }
