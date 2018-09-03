@@ -275,9 +275,7 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 // Check if this block is in the store already.
 fn check_known_store(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	match ctx.store.block_exists(&bh) {
-		Ok(true) => {
-			Err(ErrorKind::Unfit("already known in store".to_string()).into())
-		}
+		Ok(true) => Err(ErrorKind::Unfit("already known in store".to_string()).into()),
 		Ok(false) => {
 			// Not yet processed this block, we can proceed.
 			Ok(())
