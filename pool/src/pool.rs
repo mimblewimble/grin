@@ -57,6 +57,11 @@ impl Pool {
 		}
 	}
 
+	/// Does the transaction pool contain an entry for the given transaction?
+	pub fn contains_tx(&self, tx: &Transaction) -> bool {
+		self.entries.iter().any(|x| x.tx.hash() == tx.hash())
+	}
+
 	/// Query the tx pool for all known txs based on kernel short_ids
 	/// from the provided compact_block.
 	/// Note: does not validate that we return the full set of required txs.
