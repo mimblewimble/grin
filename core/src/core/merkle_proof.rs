@@ -82,7 +82,7 @@ impl MerkleProof {
 		util::to_hex(vec)
 	}
 
-	/// Convert hex string represenation back to a Merkle proof instance
+	/// Convert hex string representation back to a Merkle proof instance
 	pub fn from_hex(hex: &str) -> Result<MerkleProof, String> {
 		let bytes = util::from_hex(hex.to_string()).unwrap();
 		let res = ser::deserialize(&mut &bytes[..])
@@ -106,7 +106,7 @@ impl MerkleProof {
 	}
 
 	/// Consumes the Merkle proof while verifying it.
-	/// The proof can no longer beused by the caller after dong this.
+	/// The proof can no longer be used by the caller after dong this.
 	/// Caller must clone() the proof first.
 	fn verify_consume(
 		&mut self,

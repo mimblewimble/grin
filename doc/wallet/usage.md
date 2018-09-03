@@ -57,7 +57,7 @@ spend any generated outputs. The password is specified with `-p`
 ## Basic Wallet Commands
 
 `grin wallet --help` will display usage info and all flags.
-`grin wallet help [command]` will deplay flags specific to the command, e.g `grin wallet help listen`
+`grin wallet help [command]` will display flags specific to the command, e.g `grin wallet help listen`
 
 ### init
 

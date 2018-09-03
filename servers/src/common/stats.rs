@@ -138,7 +138,7 @@ pub struct PeerStats {
 	pub addr: String,
 	/// version running
 	pub version: u32,
-	/// difficulty repored by peer
+	/// difficulty reported by peer
 	pub total_difficulty: u64,
 	/// height reported by peer on ping
 	pub height: u64,

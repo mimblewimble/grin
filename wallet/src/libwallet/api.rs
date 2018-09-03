@@ -92,7 +92,7 @@ where
 		res
 	}
 
-	/// Attempt to update outputs and retrieve tranasactions
+	/// Attempt to update outputs and retrieve transactions
 	/// Return (whether the outputs were validated against a node, OutputData)
 	pub fn retrieve_txs(
 		&self,

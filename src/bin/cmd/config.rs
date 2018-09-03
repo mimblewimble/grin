@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Grin configuation file output command
+/// Grin configuration file output command
 use config::{GlobalConfig, GlobalWalletConfig};
 use std::env;
 

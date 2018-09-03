@@ -476,8 +476,7 @@ impl<'a> Extension<'a> {
 		let kernel_pos = self.kernel_pmmr.unpruned_size();
 
 		// Build bitmap of output pos spent (as inputs) by this tx for rewind.
-		let rewind_rm_pos = tx
-			.inputs()
+		let rewind_rm_pos = tx.inputs()
 			.iter()
 			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
 			.map(|x| x as u32)
@@ -577,7 +576,7 @@ impl<'a> Extension<'a> {
 			let cutoff_header = self.commit_index.get_header_by_height(cutoff_height)?;
 			let cutoff_pos = cutoff_header.output_mmr_size;
 
-			// If any output pos exceeed the cutoff_pos
+			// If any output pos exceed the cutoff_pos
 			// we know they have not yet sufficiently matured.
 			if pos > cutoff_pos {
 				return Err(ErrorKind::ImmatureCoinbase.into());
@@ -674,8 +673,7 @@ impl<'a> Extension<'a> {
 			}
 		}
 		// push new outputs in their MMR and save them in the index
-		let pos = self
-			.output_pmmr
+		let pos = self.output_pmmr
 			.push(OutputIdentifier::from_output(out))
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.batch.save_output_pos(&out.commitment(), pos)?;
@@ -719,8 +717,7 @@ impl<'a> Extension<'a> {
 
 		// then calculate the Merkle Proof based on the known pos
 		let pos = self.batch.get_output_pos(&output.commit)?;
-		let merkle_proof = self
-			.output_pmmr
+		let merkle_proof = self.output_pmmr
 			.merkle_proof(pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 

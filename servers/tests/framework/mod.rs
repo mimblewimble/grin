@@ -70,7 +70,7 @@ pub struct LocalServerContainerConfig {
 	// Whether we're going to mine
 	pub start_miner: bool,
 
-	// time in millis by which to artifically slow down the mining loop
+	// time in millis by which to artificially slow down the mining loop
 	// in this container
 	pub miner_slowdown_in_millis: u64,
 
@@ -265,7 +265,7 @@ impl LocalServerContainer {
 		let client = HTTPWalletClient::new(&self.wallet_config.check_node_api_http_addr);
 
 		if let Err(e) = r {
-			//panic!("Error initting wallet seed: {}", e);
+			//panic!("Error initializing wallet seed: {}", e);
 		}
 
 		let wallet: FileWallet<HTTPWalletClient, keychain::ExtKeychain> =
