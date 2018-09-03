@@ -214,15 +214,10 @@ pub fn amount_from_hr_string(amount: &str) -> Result<u64, Error> {
 		return Err(Error::InvalidAmountString);
 	}
 	let (grins, ngrins) = match amount.find('.') {
-		None => (
-			amount
-				.parse::<u64>()
-				.map_err(|_| Error::InvalidAmountString)?,
-			0,
-		),
+		None => (parse_grins(amount)?, 0),
 		Some(pos) => {
 			let (gs, tail) = amount.split_at(pos);
-			(parse_grins(gs)?, parse_ngrins_pad(&tail[1..])?)
+			(parse_grins(gs)?, parse_ngrins(&tail[1..])?)
 		}
 	};
 	Ok(grins * GRIN_BASE + ngrins)
@@ -238,27 +233,17 @@ fn parse_grins(amount: &str) -> Result<u64, Error> {
 	}
 }
 
-fn parse_ngrins(amount: &str) -> Result<u64, Error> {
-	let mut b = GRIN_BASE / 10;
-	let mut res = 0;
-	for c in amount.chars() {
-		let d = c.to_digit(10).ok_or(Error::InvalidAmountString)?;
-		res += (d as u64) * b;
-		b /= 10;
-	}
-	Ok(res)
-}
-
 lazy_static! {
 	static ref WIDTH: usize = (GRIN_BASE as f64).log(10.0) as usize + 1;
 }
 
-fn parse_ngrins_pad(amount: &str) -> Result<u64, Error> {
-	if amount.len() > *WIDTH {
-		return Ok(0);
-	}
-	let padded = format!("{:0<width$}", amount, width = WIDTH);
-	padded
+fn parse_ngrins(amount: &str) -> Result<u64, Error> {
+	let amount = if amount.len() > *WIDTH {
+		&amount[..*WIDTH]
+	} else {
+		amount
+	};
+	format!("{:0<width$}", amount, width = WIDTH)
 		.parse::<u64>()
 		.map_err(|_| Error::InvalidAmountString)
 }
@@ -266,10 +251,8 @@ fn parse_ngrins_pad(amount: &str) -> Result<u64, Error> {
 /// Common method for converting an amount to a human-readable string
 
 pub fn amount_to_hr_string(amount: u64, truncate: bool) -> String {
-	let gs = amount / GRIN_BASE;
-	let ns = amount - gs * GRIN_BASE;
-	let hr = format!("{}.{:0>width$}", gs, ns, width = WIDTH);
-
+	let amount = (amount as f64 / GRIN_BASE as f64) as f64;
+	let hr = format!("{:.*}", WIDTH, amount);
 	if truncate {
 		let nzeros = hr.chars().rev().take_while(|x| x == &'0').count();
 		if nzeros < *WIDTH {
@@ -288,6 +271,7 @@ mod test {
 	#[test]
 	pub fn test_amount_from_hr() {
 		assert!(50123456789 == amount_from_hr_string("50.123456789").unwrap());
+		assert!(50123456789 == amount_from_hr_string("50.1234567899").unwrap());
 		assert!(50 == amount_from_hr_string(".000000050").unwrap());
 		assert!(1 == amount_from_hr_string(".000000001").unwrap());
 		assert!(0 == amount_from_hr_string(".0000000009").unwrap());
@@ -296,6 +280,7 @@ mod test {
 			5_000_000_000_000_000_000 == amount_from_hr_string("5000000000.00000000000").unwrap()
 		);
 		assert!(66_600_000_000 == amount_from_hr_string("66.6").unwrap());
+		assert!(66_000_000_000 == amount_from_hr_string("66.").unwrap());
 	}
 
 	#[test]
