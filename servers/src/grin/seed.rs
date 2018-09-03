@@ -174,9 +174,11 @@ fn monitor_peers(
 		Some(preferred_peers) => {
 			for mut p in preferred_peers {
 				if !connected_peers.is_empty() {
-					if connected_peers.contains(&p) {
+					if !connected_peers.contains(&p) {
 						tx.send(p).unwrap();
 					}
+				} else {
+					tx.send(p).unwrap();
 				}
 			}
 		}
