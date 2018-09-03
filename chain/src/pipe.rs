@@ -75,6 +75,14 @@ pub fn process_block(
 		b.outputs().len(),
 		b.kernels().len(),
 	);
+
+	// First thing we do is take a write lock on the txhashset.
+	// We may receive the same block from multiple peers simultaneously.
+	// We want to process the first one fully to avoid redundant work
+	// processing the duplicates.
+	let txhashset = ctx.txhashset.clone();
+	let mut txhashset = txhashset.write().unwrap();
+
 	check_known(b.hash(), ctx)?;
 
 	validate_header(&b.header, ctx)?;
@@ -99,13 +107,7 @@ pub fn process_block(
 	}
 
 	// validate the block itself
-	// we can do this now before interacting with the txhashset
 	let _sums = validate_block(b, ctx, verifier_cache)?;
-
-	// header and block both valid, and we have a previous block
-	// so take the lock on the txhashset
-	let local_txhashset = ctx.txhashset.clone();
-	let mut txhashset = local_txhashset.write().unwrap();
 
 	// update head now that we're in the lock
 	ctx.head = ctx.store.head()?;
