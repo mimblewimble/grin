@@ -98,6 +98,9 @@ pub fn process_block(
 	// Check our header itself is actually valid before proceeding any further.
 	validate_header(&b.header, ctx)?;
 
+	// Check if we have *this* block in the store.
+	check_known_store(b.hash(), ctx)?;
+
 	// Check if are processing the "next" block relative to the current chain head.
 	if is_next_block(b, ctx) {
 		// If this is the "next" block then either -
@@ -122,6 +125,25 @@ pub fn process_block(
 			Err(e) => {
 				return Err(ErrorKind::StoreErr(e, "pipe get previous".to_owned()).into());
 			}
+		}
+	}
+
+	// ***EXPERIMENTAL***
+	// If we are processing an "old" block then
+	// we can quickly check if it already exists
+	// on our current longest chain.
+	// First check the header matches via current height index.
+	// Then peek directly into the MMRs at the appropriate pos.
+	// We can avoid a full rewind in this case.
+	if b.header.height <= ctx.head.height {
+		// Use current "header by height" index to look at current most work chain.
+		let local_header = ctx.store.get_header_by_height(b.header.height)?;
+
+		// Check the header at our height matches the header of the block we are processing.
+		if local_header.hash() == b.header.hash() {
+			// TODO - peek in the MMR (the data file and kernel MMR?)
+			// If everything matches then we "already know" this block.
+			// return Err(ErrorKind::Unfit("already known on most work chain".to_string()).into());
 		}
 	}
 
@@ -248,6 +270,22 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 		return Err(ErrorKind::Unfit("already known in orphans".to_string()).into());
 	}
 	Ok(())
+}
+
+// Check if this block is in the store already.
+fn check_known_store(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
+	match ctx.store.block_exists(&bh) {
+		Ok(true) => {
+			Err(ErrorKind::Unfit("already known in store".to_string()).into())
+		}
+		Ok(false) => {
+			// Not yet processed this block, we can proceed.
+			Ok(())
+		}
+		Err(e) => {
+			return Err(ErrorKind::StoreErr(e, "pipe get this block".to_owned()).into());
+		}
+	}
 }
 
 /// First level of block validation that only needs to act on the block header
