@@ -233,20 +233,20 @@ impl BodySyncInfo {
 				if tip.last_block_h == self.prev_tip.last_block_h
 					&& chain.orphans_len() + chain.orphans_evicted_len() == self.prev_orphans_len
 					&& Utc::now() - prev_ts > Duration::milliseconds(200)
-					{
-						let hashes_not_get = self
-							.body_sync_hashes
-							.iter()
-							.filter(|x| !chain.get_block(*x).is_ok() && !chain.is_orphan(*x))
-							.collect::<Vec<_>>();
-						debug!(
-							LOGGER,
-							"body_sync: {}/{} blocks received, and no more in 200ms",
-							self.body_sync_hashes.len() - hashes_not_get.len(),
-							self.body_sync_hashes.len(),
-						);
-						return true;
-					}
+				{
+					let hashes_not_get = self
+						.body_sync_hashes
+						.iter()
+						.filter(|x| !chain.get_block(*x).is_ok() && !chain.is_orphan(*x))
+						.collect::<Vec<_>>();
+					debug!(
+						LOGGER,
+						"body_sync: {}/{} blocks received, and no more in 200ms",
+						self.body_sync_hashes.len() - hashes_not_get.len(),
+						self.body_sync_hashes.len(),
+					);
+					return true;
+				}
 			}
 			None => {
 				if Utc::now() - self.sync_start_ts > Duration::milliseconds(1000) {
@@ -262,11 +262,11 @@ impl BodySyncInfo {
 
 		if tip.last_block_h != self.prev_tip.last_block_h
 			|| chain.orphans_len() + chain.orphans_evicted_len() != self.prev_orphans_len
-			{
-				self.prev_tip = tip;
-				self.prev_body_received = Some(Utc::now());
-				self.prev_orphans_len = chain.orphans_len() + chain.orphans_evicted_len();
-			}
+		{
+			self.prev_tip = tip;
+			self.prev_body_received = Some(Utc::now());
+			self.prev_orphans_len = chain.orphans_len() + chain.orphans_evicted_len();
+		}
 
 		return false;
 	}
