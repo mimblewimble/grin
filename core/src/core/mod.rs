@@ -28,7 +28,6 @@ pub mod verifier_cache;
 use consensus::GRIN_BASE;
 #[allow(dead_code)]
 use rand::{thread_rng, Rng};
-use std::num::ParseFloatError;
 use std::{fmt, iter};
 
 use util::secp::pedersen::Commitment;
@@ -40,7 +39,7 @@ pub use self::id::ShortId;
 pub use self::transaction::*;
 use core::hash::Hashed;
 use global;
-use ser::{self, Error, Readable, Reader, Writeable, Writer};
+use ser::{self, Readable, Reader, Writeable, Writer};
 
 /// A Cuckoo Cycle proof of work, consisting of the shift to get the graph
 /// size (i.e. 31 for Cuckoo31 with a 2^31 or 1<<31 graph size) and the nonces
@@ -124,10 +123,10 @@ impl Proof {
 }
 
 impl Readable for Proof {
-	fn read(reader: &mut Reader) -> Result<Proof, Error> {
+	fn read(reader: &mut Reader) -> Result<Proof, ser::Error> {
 		let cuckoo_sizeshift = reader.read_u8()?;
 		if cuckoo_sizeshift == 0 || cuckoo_sizeshift > 64 {
-			return Err(Error::CorruptedData);
+			return Err(ser::Error::CorruptedData);
 		}
 
 		let mut nonces = Vec::with_capacity(global::proofsize());
@@ -152,7 +151,7 @@ impl Readable for Proof {
 }
 
 impl Writeable for Proof {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			writer.write_u8(self.cuckoo_sizeshift)?;
 		}
@@ -198,24 +197,65 @@ impl BitVec {
 	}
 }
 
+/// Common errors
+#[derive(Fail, Debug)]
+pub enum Error {
+	/// Human readable represenation of amount is invalid
+	#[fail(display = "Amount string was invalid")]
+	InvalidAmountString,
+}
+
 /// Common method for parsing an amount from human-readable, and converting
 /// to internally-compatible u64
 
-pub fn amount_from_hr_string(amount: &str) -> Result<u64, ParseFloatError> {
-	let amount = amount.parse::<f64>()?;
-	Ok((amount * GRIN_BASE as f64) as u64)
+pub fn amount_from_hr_string(amount: &str) -> Result<u64, Error> {
+	// no i18n yet, make sure we use '.' as the separator
+	if amount.find(',').is_some() {
+		return Err(Error::InvalidAmountString);
+	}
+	let (grins, ngrins) = match amount.find('.') {
+		None => (parse_grins(amount)?, 0),
+		Some(pos) => {
+			let (gs, tail) = amount.split_at(pos);
+			(parse_grins(gs)?, parse_ngrins(&tail[1..])?)
+		}
+	};
+	Ok(grins * GRIN_BASE + ngrins)
+}
+
+fn parse_grins(amount: &str) -> Result<u64, Error> {
+	if amount == "" {
+		Ok(0)
+	} else {
+		amount
+			.parse::<u64>()
+			.map_err(|_| Error::InvalidAmountString)
+	}
+}
+
+lazy_static! {
+	static ref WIDTH: usize = (GRIN_BASE as f64).log(10.0) as usize + 1;
+}
+
+fn parse_ngrins(amount: &str) -> Result<u64, Error> {
+	let amount = if amount.len() > *WIDTH {
+		&amount[..*WIDTH]
+	} else {
+		amount
+	};
+	format!("{:0<width$}", amount, width = WIDTH)
+		.parse::<u64>()
+		.map_err(|_| Error::InvalidAmountString)
 }
 
 /// Common method for converting an amount to a human-readable string
 
 pub fn amount_to_hr_string(amount: u64, truncate: bool) -> String {
 	let amount = (amount as f64 / GRIN_BASE as f64) as f64;
-	let places = (GRIN_BASE as f64).log(10.0) as usize + 1;
-	let hr = format!("{:.*}", places, amount);
-
+	let hr = format!("{:.*}", WIDTH, amount);
 	if truncate {
 		let nzeros = hr.chars().rev().take_while(|x| x == &'0').count();
-		if nzeros < places {
+		if nzeros < *WIDTH {
 			return hr.trim_right_matches('0').to_string();
 		} else {
 			return format!("{}0", hr.trim_right_matches('0'));
@@ -229,8 +269,9 @@ mod test {
 	use super::*;
 
 	#[test]
-	pub fn test_amount_to_hr() {
+	pub fn test_amount_from_hr() {
 		assert!(50123456789 == amount_from_hr_string("50.123456789").unwrap());
+		assert!(50123456789 == amount_from_hr_string("50.1234567899").unwrap());
 		assert!(50 == amount_from_hr_string(".000000050").unwrap());
 		assert!(1 == amount_from_hr_string(".000000001").unwrap());
 		assert!(0 == amount_from_hr_string(".0000000009").unwrap());
@@ -238,10 +279,12 @@ mod test {
 		assert!(
 			5_000_000_000_000_000_000 == amount_from_hr_string("5000000000.00000000000").unwrap()
 		);
+		assert!(66_600_000_000 == amount_from_hr_string("66.6").unwrap());
+		assert!(66_000_000_000 == amount_from_hr_string("66.").unwrap());
 	}
 
 	#[test]
-	pub fn test_hr_to_amount() {
+	pub fn test_amount_to_hr() {
 		assert!("50.123456789" == amount_to_hr_string(50123456789, false));
 		assert!("50.123456789" == amount_to_hr_string(50123456789, true));
 		assert!("0.000000050" == amount_to_hr_string(50, false));
@@ -252,6 +295,7 @@ mod test {
 		assert!("500.0" == amount_to_hr_string(500_000_000_000, true));
 		assert!("5000000000.000000000" == amount_to_hr_string(5_000_000_000_000_000_000, false));
 		assert!("5000000000.0" == amount_to_hr_string(5_000_000_000_000_000_000, true));
+		assert!("66.6" == amount_to_hr_string(66600000000, true));
 	}
 
 }
