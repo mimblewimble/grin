@@ -30,20 +30,6 @@ use util::LOGGER;
 
 pub struct Syncer {}
 
-struct BodySyncInfo {
-	body_sync_hashes: Vec<Hash>,
-	last_body_received: Option<DateTime<Utc>>,
-	num_hashes_to_get: usize,
-}
-
-impl BodySyncInfo {
-	fn reset(&mut self) {
-		self.body_sync_hashes.clear();
-		self.last_body_received = None;
-		self.num_hashes_to_get = 0;
-	}
-}
-
 impl Syncer {
 	pub fn new() -> Syncer {
 		Syncer {}
@@ -113,9 +99,11 @@ pub fn run_sync(
 
 				let mut history_locators: Vec<(u64, Hash)> = vec![];
 				let mut body_sync_info = BodySyncInfo {
+					sync_start_ts: Utc::now(),
 					body_sync_hashes: vec![],
-					last_body_received: None,
-					num_hashes_to_get: 0,
+					prev_body_received: None,
+					prev_tip: chain.head().unwrap(),
+					prev_orphans_len: 0,
 				};
 
 				loop {
@@ -217,36 +205,70 @@ pub fn run_sync(
 			});
 }
 
-fn body_no_more(chain: Arc<chain::Chain>, body_sync_info: &mut BodySyncInfo) -> bool {
-	let hashes_not_get = body_sync_info
-		.body_sync_hashes
-		.iter()
-		.filter(|x| !chain.get_block(*x).is_ok() && !chain.is_orphan(*x))
-		.collect::<Vec<_>>();
+struct BodySyncInfo {
+	sync_start_ts: DateTime<Utc>,
+	body_sync_hashes: Vec<Hash>,
+	prev_body_received: Option<DateTime<Utc>>,
+	prev_tip: chain::Tip,
+	prev_orphans_len: usize,
+}
 
-	if let Some(prev_ts) = body_sync_info.last_body_received {
-		if hashes_not_get.len() == body_sync_info.num_hashes_to_get
-			&& Utc::now() - prev_ts > Duration::milliseconds(200)
-		{
-			debug!(
-				LOGGER,
-				"body_sync: {}/{} blocks received, and no more in 200ms",
-				body_sync_info.body_sync_hashes.len() - hashes_not_get.len(),
-				body_sync_info.body_sync_hashes.len(),
-			);
-			return true;
+impl BodySyncInfo {
+	fn reset(&mut self) {
+		self.body_sync_hashes.clear();
+		self.prev_body_received = None;
+	}
+
+	fn reset_start(&mut self, chain: Arc<chain::Chain>) {
+		self.prev_tip = chain.head().unwrap();
+		self.prev_orphans_len = chain.orphans_len() + chain.orphans_evicted_len();
+		self.sync_start_ts = Utc::now();
+	}
+
+	fn body_no_more(&mut self, chain: Arc<chain::Chain>) -> bool {
+		let tip = chain.head().unwrap();
+
+		match self.prev_body_received {
+			Some(prev_ts) => {
+				if tip.last_block_h == self.prev_tip.last_block_h
+					&& chain.orphans_len() + chain.orphans_evicted_len() == self.prev_orphans_len
+					&& Utc::now() - prev_ts > Duration::milliseconds(200)
+					{
+						let hashes_not_get = self
+							.body_sync_hashes
+							.iter()
+							.filter(|x| !chain.get_block(*x).is_ok() && !chain.is_orphan(*x))
+							.collect::<Vec<_>>();
+						debug!(
+							LOGGER,
+							"body_sync: {}/{} blocks received, and no more in 200ms",
+							self.body_sync_hashes.len() - hashes_not_get.len(),
+							self.body_sync_hashes.len(),
+						);
+						return true;
+					}
+			}
+			None => {
+				if Utc::now() - self.sync_start_ts > Duration::milliseconds(1000) {
+					debug!(
+						LOGGER,
+						"body_sync: 0/{} blocks received in 1s",
+						self.body_sync_hashes.len(),
+					);
+					return true;
+				}
+			}
 		}
-	}
 
-	if body_sync_info.num_hashes_to_get != hashes_not_get.len() {
-		body_sync_info.num_hashes_to_get = hashes_not_get.len();
-		body_sync_info.last_body_received = Some(Utc::now());
-	}
+		if tip.last_block_h != self.prev_tip.last_block_h
+			|| chain.orphans_len() + chain.orphans_evicted_len() != self.prev_orphans_len
+			{
+				self.prev_tip = tip;
+				self.prev_body_received = Some(Utc::now());
+				self.prev_orphans_len = chain.orphans_len() + chain.orphans_evicted_len();
+			}
 
-	if hashes_not_get.len() == 0 {
-		true
-	} else {
-		false
+		return false;
 	}
 }
 
@@ -334,9 +356,9 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, body_sync_info: &mut B
 				}
 			}
 		}
-
-		body_sync_info.num_hashes_to_get = body_sync_info.body_sync_hashes.len();
 	}
+
+	body_sync_info.reset_start(chain);
 }
 
 fn header_sync(
@@ -660,7 +682,7 @@ impl SyncInfo {
 
 		if head.height >= prev_height + 96
 			|| now - prev_ts > Duration::seconds(5)
-			|| body_no_more(chain, body_sync_info)
+			|| body_sync_info.body_no_more(chain)
 		{
 			self.prev_body_sync = (now, head.height);
 			return true;
