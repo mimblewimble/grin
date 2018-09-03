@@ -40,8 +40,7 @@ use std::{error, fmt};
 
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use util::secp::key::{PublicKey, SecretKey};
-use util::secp::{self, Secp256k1, ContextFlag};
-
+use util::secp::{self, ContextFlag, Secp256k1};
 
 use base58;
 
@@ -619,11 +618,11 @@ mod tests {
 	}
 
 	impl BIP32Hasher for BIP32ReferenceHasher {
-		fn network_priv() -> [u8;4] {
+		fn network_priv() -> [u8; 4] {
 			// bitcoin network (xprv) (for test vectors)
 			[0x04, 0x88, 0xAD, 0xE4]
 		}
-		fn network_pub() -> [u8;4] {
+		fn network_pub() -> [u8; 4] {
 			// bitcoin network (xpub) (for test vectors)
 			[0x04, 0x88, 0xB2, 0x1E]
 		}
