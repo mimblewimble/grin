@@ -64,7 +64,7 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 	max_outputs: usize,
 	num_change_outputs: usize,
 	selection_strategy_is_use_all: bool,
-) -> Result<(Slate, Context, impl FnOnce(&mut T) -> Result<(), Error>), Error>
+) -> Result<(Slate, Context, impl FnOnce(&mut T, &str) -> Result<(), Error>), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,

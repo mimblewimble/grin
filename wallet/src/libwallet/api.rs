@@ -21,6 +21,7 @@ use std::fs::File;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
+use failure::ResultExt;
 
 use serde_json as json;
 
@@ -174,9 +175,10 @@ where
 		};
 
 		tx::complete_tx(&mut **w, &mut slate_out, &context)?;
+		let tx_json = json::to_string(&slate_out.tx).context(ErrorKind::Format)?;
 
 		// lock our inputs
-		lock_fn_out(&mut **w)?;
+		lock_fn_out(&mut **w, &tx_json)?;
 		w.close()?;
 		Ok(slate_out)
 	}
@@ -214,8 +216,10 @@ where
 			batch.commit()?;
 		}
 
+		let tx_json = json::to_string(&slate.tx).context(ErrorKind::Format)?;
+
 		// lock our inputs
-		lock_fn(&mut **w)?;
+		lock_fn(&mut **w, &tx_json)?;
 		w.close()?;
 		Ok(())
 	}
