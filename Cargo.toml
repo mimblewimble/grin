@@ -41,6 +41,6 @@ grin_wallet = { path = "./wallet" }
 
 [build-dependencies]
 built = "0.3"
-reqwest = "0.7"
+reqwest = "0.8"
 flate2 = "1.0"
 tar = "0.4"
