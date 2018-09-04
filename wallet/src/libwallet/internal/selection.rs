@@ -97,13 +97,13 @@ where
 
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
-	let update_sender_wallet_fn = move |wallet: &mut T, tx_json: &str| {
+	let update_sender_wallet_fn = move |wallet: &mut T, tx_hex: &str| {
 		let mut batch = wallet.batch()?;
 		let log_id = batch.next_tx_log_id(root_key_id.clone())?;
 		let mut t = TxLogEntry::new(TxLogEntryType::TxSent, log_id);
 		t.tx_slate_id = Some(slate_id);
 		t.fee = Some(fee);
-		t.tx_json = Some(tx_json.to_owned());
+		t.tx_hex = Some(tx_hex.to_owned());
 		let mut amount_debited = 0;
 		t.num_inputs = lock_inputs.len();
 		for id in lock_inputs {

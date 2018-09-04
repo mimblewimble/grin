@@ -161,6 +161,22 @@ where
 	Ok(())
 }
 
+/// Retrieve the associated stored finalised json Transaction for a given transaction Id
+/// as well as whether it's been confirmed
+pub fn retrieve_tx_hex<T: ?Sized, C, K>(wallet: &mut T, tx_id: u32) -> Result<(bool, Option<String>), Error>
+where
+	T: WalletBackend<C, K>,
+	C: WalletClient,
+	K: Keychain,
+{
+	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id))?;
+	if tx_vec.len() != 1 {
+		return Err(ErrorKind::TransactionDoesntExist(tx_id))?;
+	}
+	let tx = tx_vec[0].clone();
+	Ok((tx.confirmed, tx.tx_hex))
+}
+
 /// Issue a burn tx
 pub fn issue_burn_tx<T: ?Sized, C, K>(
 	wallet: &mut T,

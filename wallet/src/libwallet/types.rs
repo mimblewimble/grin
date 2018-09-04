@@ -26,7 +26,6 @@ use failure::ResultExt;
 use uuid::Uuid;
 
 use core::core::hash::Hash;
-use core::core::Transaction;
 use core::ser;
 
 use keychain::{Identifier, Keychain};
@@ -588,7 +587,7 @@ pub struct TxLogEntry {
 	/// Fee
 	pub fee: Option<u64>,
 	/// The transaction json itself, stored for reference or resending
-	pub tx_json: Option<String>,
+	pub tx_hex: Option<String>,
 }
 
 impl ser::Writeable for TxLogEntry {
@@ -619,7 +618,7 @@ impl TxLogEntry {
 			num_inputs: 0,
 			num_outputs: 0,
 			fee: None,
-			tx_json: None,
+			tx_hex: None,
 		}
 	}
 

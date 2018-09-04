@@ -147,6 +147,15 @@ pub enum ErrorKind {
 	#[fail(display = "Cancellation Error: {}", _0)]
 	TransactionCancellationError(&'static str),
 
+	/// Attempt to repost a transaction that's already confirmed
+	#[fail(display = "Transaction already confirmed error")]
+	TransactionAlreadyConfirmed,
+
+	/// Attempt to repost a transaction that's not completed and stored
+	#[fail(display = "Transaction building not completed: {}", _0)]
+	TransactionBuildingNotCompleted(u32),
+
+	
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
 	GenericError(String),

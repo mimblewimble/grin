@@ -146,7 +146,7 @@ pub fn txs(
 				core::amount_to_hr_string(t.amount_debited - t.amount_credited, true)
 			)
 		};
-		let tx_data = match t.tx_json {
+		let tx_data = match t.tx_hex {
 			Some(_) => format!("Exists"),
 			None => "None".to_owned(),
 		};

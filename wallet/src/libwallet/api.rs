@@ -17,7 +17,6 @@
 //! vs. functions to interact with someone else)
 //! Still experimental, not sure this is the best way to do this
 
-use failure::ResultExt;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
@@ -175,10 +174,10 @@ where
 		};
 
 		tx::complete_tx(&mut **w, &mut slate_out, &context)?;
-		let tx_json = json::to_string(&slate_out.tx).context(ErrorKind::Format)?;
+		let tx_hex = util::to_hex(ser::ser_vec(&slate_out.tx).unwrap());
 
 		// lock our inputs
-		lock_fn_out(&mut **w, &tx_json)?;
+		lock_fn_out(&mut **w, &tx_hex)?;
 		w.close()?;
 		Ok(slate_out)
 	}
@@ -216,10 +215,10 @@ where
 			batch.commit()?;
 		}
 
-		let tx_json = json::to_string(&slate.tx).context(ErrorKind::Format)?;
+		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
 
 		// lock our inputs
-		lock_fn(&mut **w, &tx_json)?;
+		lock_fn(&mut **w, &tx_hex)?;
 		w.close()?;
 		Ok(())
 	}
@@ -335,6 +334,37 @@ where
 				LOGGER,
 				"api: post_tx: successfully posted tx: {}, fluff? {}",
 				slate.tx.hash(),
+				fluff
+			);
+			Ok(())
+		}
+	}
+
+	/// (Re)Posts a transaction that's already been stored to the chain
+	pub fn post_stored_tx(&self, tx_id: u32, fluff: bool) -> Result<(), Error> {
+		let mut w = self.wallet.lock().unwrap();
+		w.open_with_credentials()?;
+		let client = w.client().clone();
+		let (confirmed, tx_hex) = tx::retrieve_tx_hex(&mut **w, tx_id)?;
+		if confirmed {
+			error!(LOGGER, "api: repost_tx: transaction at {} is confirmed. NOT resending.", tx_id);
+			return Err(ErrorKind::TransactionAlreadyConfirmed)?;
+		}
+		if tx_hex.is_none() {
+			error!(LOGGER, "api: repost_tx: completed transaction at {} does not exist.", tx_id);
+			return Err(ErrorKind::TransactionBuildingNotCompleted(tx_id))?;
+		}
+
+		let res = client.post_tx(&TxWrapper { tx_hex: tx_hex.unwrap() }, fluff);
+		w.close()?;
+		if let Err(e) = res {
+			error!(LOGGER, "api: repost_tx: failed with error: {}", e);
+			Err(e)
+		} else {
+			debug!(
+				LOGGER,
+				"api: repost_tx: successfully posted tx at: {}, fluff? {}",
+				tx_id,
 				fluff
 			);
 			Ok(())
