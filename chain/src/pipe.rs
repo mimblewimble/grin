@@ -148,6 +148,12 @@ pub fn process_block(
 			rewind_and_apply_fork(b, ctx.store.clone(), extension)?;
 		}
 
+		// Check any coinbase being spent have matured sufficiently.
+		// This needs to be done within the context of a potentially
+		// rewound txhashset extension to reflect chain state prior
+		// to applying the new block.
+		verify_coinbase_maturity(b, &mut extension)?;
+
 		// Apply the block to the txhashset state.
 		// Validate the txhashset roots and sizes against the block header.
 		// Block is invalid if there are any discrepencies.
@@ -452,20 +458,20 @@ fn validate_block(
 	Ok(())
 }
 
+/// Verify the block is not attempting to spend coinbase outputs
+/// before they have sufficiently matured.
+/// Note: requires a txhashset extension.
+fn verify_coinbase_maturity(block: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+	ext.verify_coinbase_maturity(&block.inputs(), block.header.height)?;
+	Ok(())
+}
+
 /// Fully validate the block by applying it to the txhashset extension.
 /// Check both the txhashset roots and sizes are correct after applying the block.
-fn apply_block_to_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
-	// First check we are not attempting to spend any coinbase outputs
-	// before they have matured sufficiently.
-	// TODO - this step is ill-fitting here - where should this live?
-	ext.verify_coinbase_maturity(&b.inputs(), b.header.height)?;
-
-	// Apply the new block to the MMRs
-	// and validate the roots and sizes against the block header.
-	ext.apply_block(&b)?;
-	ext.validate_roots(&b.header)?;
-	ext.validate_sizes(&b.header)?;
-
+fn apply_block_to_txhashset(block: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+	ext.apply_block(block)?;
+	ext.validate_roots(&block.header)?;
+	ext.validate_sizes(&block.header)?;
 	Ok(())
 }
 
