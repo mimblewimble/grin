@@ -57,9 +57,11 @@ pub struct BlockContext {
 
 // Check if this block is the next block *immediately*
 // after our current chain head.
-fn is_next_block(b: &Block, ctx: &mut BlockContext) -> bool {
-	b.header.previous == ctx.head.last_block_h
+fn is_next_block(header: &BlockHeader, ctx: &mut BlockContext) -> bool {
+	header.previous == ctx.head.last_block_h
 }
+
+
 
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain. Returns the new chain head if
@@ -93,13 +95,14 @@ pub fn process_block(
 	ctx.head = ctx.store.head()?;
 
 	// Check if we have recently processed this block (via block_hashes_cache).
-	check_known(b.hash(), ctx)?;
+	// Fast in-memory check.
+	check_known(&b.header, ctx)?;
 
 	// Check our header itself is actually valid before proceeding any further.
 	validate_header(&b.header, ctx)?;
 
 	// Check if are processing the "next" block relative to the current chain head.
-	if is_next_block(b, ctx) {
+	if is_next_block(&b.header, ctx) {
 		// If this is the "next" block then either -
 		//   * common case where we process blocks sequentially.
 		//   * special case where this is the first fast sync full block
@@ -107,49 +110,20 @@ pub fn process_block(
 	} else {
 		// Check we have *this* block in the store.
 		// Stop if we have processed this block previously (it is in the store).
-		check_known_store(b.hash(), ctx)?;
+		// This is more expensive than the earlier check_known() as we hit the store.
+		check_known_store(&b.header, ctx)?;
 
+		// Check existing MMR (via rewind) to see if this block is known to us already.
+		// This should catch old blocks before we check to see if they appear to be
+		// orphaned due to compacting/pruning on a fast-sync node.
+		// This is more expensive than check_known_store() as we rewind the txhashset.
+		// But we only incur the cost of the rewind if this is an earlier block on the same chain.
+		check_known_mmr(&b.header, ctx, &mut txhashset)?;
+
+		// At this point it looks like this is a new block that we have not yet processed.
 		// Check we have the *previous* block in the store.
-		// Note: not just the header but the full block itself.
-		// We cannot assume we can use the chain head for this
-		// as we may be dealing with a fork (with less work currently).
-		match ctx.store.block_exists(&b.header.previous) {
-			Ok(true) => {
-				// We have the previous block in the store, so we can proceed.
-			}
-			Ok(false) => {
-				// We do not have the previous block in the store.
-				// We have not yet processed the previous block so
-				// this block is an orphan (for now).
-				return Err(ErrorKind::Orphan.into());
-			}
-			Err(e) => {
-				return Err(ErrorKind::StoreErr(e, "pipe get previous".to_owned()).into());
-			}
-		}
-
-		// ***EXPERIMENTAL***
-		// If we are processing an "old" block then
-		// we can quickly check if it already exists
-		// on our current longest chain (we have already processes it).
-		// First check the header matches via current height index.
-		// Then peek directly into the MMRs at the appropriate pos.
-		// We can avoid a full rewind in this case.
-		if b.header.height <= ctx.head.height {
-			// Use current "header by height" index to look at current most work chain.
-			let local_header = ctx.store.get_header_by_height(b.header.height)?;
-
-			// Check the header at our height matches the header of the block we are processing.
-			if local_header.hash() == b.header.hash() {
-
-				// let res = txhashset::extending_readonly(&mut txhashset, |mut extension| {
-				// 	// TODO - peek in the MMR (the data file and kernel MMR?)
-				// 	// If everything matches then we "already know" this block.
-				// 	// return Err(ErrorKind::Unfit("already known on most work chain".to_string()).into());
-				// 	Ok(())
-				// })?;
-			}
-		}
+		// If we do not then treat this block as an orphan.
+		check_prev_store(&b.header, ctx)?;
 	}
 
 	// Validate the block itself.
@@ -167,7 +141,7 @@ pub fn process_block(
 		// First we rewind the txhashset extension if necessary
 		// to put it into a consistent state for validating the block.
 		// We can skip this step if the previous header is the latest header we saw.
-		if is_next_block(b, ctx) {
+		if is_next_block(&b.header, ctx) {
 			// No need to rewind if we are processing the next block.
 		} else {
 			// Rewind the re-apply blocks on the forked chain to
@@ -183,7 +157,7 @@ pub fn process_block(
 
 		// If applying this block does not increase the work on the chain then
 		// we know we have not yet updated the chain to produce a new chain head.
-		if !block_has_more_work(b, &ctx.head) {
+		if !block_has_more_work(&b.header, &ctx.head) {
 			extension.force_rollback();
 		}
 
@@ -263,7 +237,8 @@ fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 
 /// Quick in-memory check to fast-reject any block we've already handled
 /// recently. Keeps duplicates from the network in check.
-fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
+fn check_known(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	let bh = header.hash();
 	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
 		return Err(ErrorKind::Unfit("already known".to_string()).into());
 	}
@@ -278,8 +253,8 @@ fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 }
 
 // Check if this block is in the store already.
-fn check_known_store(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
-	match ctx.store.block_exists(&bh) {
+fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	match ctx.store.block_exists(&header.hash()) {
 		Ok(true) => Err(ErrorKind::Unfit("already known in store".to_string()).into()),
 		Ok(false) => {
 			// Not yet processed this block, we can proceed.
@@ -289,6 +264,74 @@ fn check_known_store(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 			return Err(ErrorKind::StoreErr(e, "pipe get this block".to_owned()).into());
 		}
 	}
+}
+
+// Check we have the *previous* block in the store.
+// Note: not just the header but the full block itself.
+// We cannot assume we can use the chain head for this
+// as we may be dealing with a fork (with less work currently).
+fn check_prev_store(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	match ctx.store.block_exists(&header.previous) {
+		Ok(true) => {
+			// We have the previous block in the store, so we can proceed.
+			Ok(())
+		}
+		Ok(false) => {
+			// We do not have the previous block in the store.
+			// We have not yet processed the previous block so
+			// this block is an orphan (for now).
+			Err(ErrorKind::Orphan.into())
+		}
+		Err(e) => {
+			Err(ErrorKind::StoreErr(e, "pipe get previous".to_owned()).into())
+		}
+	}
+}
+
+// If we are processing an "old" block then
+// we can quickly check if it already exists
+// on our current longest chain (we have already processes it).
+// First check the header matches via current height index.
+// Then peek directly into the MMRs at the appropriate pos.
+// We can avoid a full rewind in this case.
+fn check_known_mmr(
+	header: &BlockHeader,
+	ctx: &mut BlockContext,
+	write_txhashset: &mut txhashset::TxHashSet,
+) -> Result<(), Error> {
+	// No point checking the MMR if this block is not earlier in the chain.
+	if header.height > ctx.head.height {
+		return Ok(());
+	}
+
+	// Use "header by height" index to look at current most work chain.
+	// Header is not "known if the header differs at the given height.
+	let local_header = ctx.store.get_header_by_height(header.height)?;
+	if local_header.hash() != header.hash() {
+		return Ok(());
+	}
+
+	// Rewind the txhashset to the given block and validate
+	// roots and sizes against the header.
+	// If everything matches then this is a "known" block
+	// and we do not need to spend any more effort
+	txhashset::extending_readonly(write_txhashset, |extension| {
+		extension.rewind(header)?;
+
+		// We want to return an error here (block already known)
+		// if we *successfully validate the MMR roots and sizes.
+		if extension.validate_roots(header).is_ok()
+			&& extension.validate_sizes(header).is_ok()
+		{
+			return Err(ErrorKind::Unfit("already known on most work chain".to_string()).into());
+		}
+
+		// If we get here then we have *not* seen this block before
+		// and we should continue processing the block.
+		Ok(())
+	})?;
+
+	Ok(())
 }
 
 /// First level of block validation that only needs to act on the block header
@@ -423,43 +466,11 @@ fn apply_block_to_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Result
 	// TODO - this step is ill-fitting here - where should this live?
 	ext.verify_coinbase_maturity(&b.inputs(), b.header.height)?;
 
-	// apply the new block to the MMR trees and check the new root hashes
+	// Apply the new block to the MMRs
+	// and validate the roots and sizes against the block header.
 	ext.apply_block(&b)?;
-
-	let roots = ext.roots();
-	if roots.output_root != b.header.output_root
-		|| roots.rproof_root != b.header.range_proof_root
-		|| roots.kernel_root != b.header.kernel_root
-	{
-		ext.dump(false);
-
-		debug!(
-			LOGGER,
-			"validate_block_via_txhashset: output roots - {:?}, {:?}",
-			roots.output_root,
-			b.header.output_root,
-		);
-		debug!(
-			LOGGER,
-			"validate_block_via_txhashset: rproof roots - {:?}, {:?}",
-			roots.rproof_root,
-			b.header.range_proof_root,
-		);
-		debug!(
-			LOGGER,
-			"validate_block_via_txhashset: kernel roots - {:?}, {:?}",
-			roots.kernel_root,
-			b.header.kernel_root,
-		);
-
-		return Err(ErrorKind::InvalidRoot.into());
-	}
-
-	// Check the output and rangeproof MMR sizes here against the header.
-	let (output_mmr_size, _, kernel_mmr_size) = ext.sizes();
-	if b.header.output_mmr_size != output_mmr_size || b.header.kernel_mmr_size != kernel_mmr_size {
-		return Err(ErrorKind::InvalidMMRSize.into());
-	}
+	ext.validate_roots(&b.header)?;
+	ext.validate_sizes(&b.header)?;
 
 	Ok(())
 }
@@ -489,7 +500,7 @@ fn add_block_header(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Er
 fn update_head(b: &Block, ctx: &BlockContext, batch: &store::Batch) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
 	// when extending the head), update it
-	if block_has_more_work(b, &ctx.head) {
+	if block_has_more_work(&b.header, &ctx.head) {
 		// update the block height index
 		batch
 			.setup_height(&b.header, &ctx.head)
@@ -521,8 +532,8 @@ fn update_head(b: &Block, ctx: &BlockContext, batch: &store::Batch) -> Result<Op
 }
 
 // Whether the provided block totals more work than the chain tip
-fn block_has_more_work(b: &Block, tip: &Tip) -> bool {
-	let block_tip = Tip::from_block(&b.header);
+fn block_has_more_work(header: &BlockHeader, tip: &Tip) -> bool {
+	let block_tip = Tip::from_block(header);
 	block_tip.total_difficulty > tip.total_difficulty
 }
 
