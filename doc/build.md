@@ -13,7 +13,7 @@ What's working so far?
 
 - rust 1.26+ (use [rustup]((https://www.rustup.rs/))- i.e. `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
   - if rust is already installed, you can simply update version with `rustup update`
-- clang (clanglib or clang-devel or libclang-dev)
+- clang
 - ncurses and libs (ncurses, ncursesw5)
 - zlib libs (zlib1g-dev or zlib-devel)
 - pkc-config
