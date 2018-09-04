@@ -465,11 +465,13 @@ fn validate_block(
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 ) -> Result<(), Error> {
 	let prev = ctx.store.get_block_header(&block.header.previous)?;
-	block.validate(
-		&prev.total_kernel_offset,
-		&prev.total_kernel_sum,
-		verifier_cache,
-	).map_err(|e| ErrorKind::InvalidBlockProof(e))?;
+	block
+		.validate(
+			&prev.total_kernel_offset,
+			&prev.total_kernel_sum,
+			verifier_cache,
+		)
+		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }
 
