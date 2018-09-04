@@ -96,6 +96,9 @@ pub fn process_block(
 	// Fast in-memory check.
 	check_known(&b.header, ctx)?;
 
+	// Check if this block is already know due it being in the current set of orphan blocks.
+	check_known_orphans(&b.header, ctx)?;
+
 	// Check our header itself is actually valid before proceeding any further.
 	validate_header(&b.header, ctx)?;
 
@@ -244,22 +247,37 @@ fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 fn check_known(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	let bh = header.hash();
 	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
-		return Err(ErrorKind::Unfit("already known".to_string()).into());
+		return Err(ErrorKind::Unfit("already known in head".to_string()).into());
 	}
+
 	let cache = ctx.block_hashes_cache.read().unwrap();
 	if cache.contains(&bh) {
 		return Err(ErrorKind::Unfit("already known in cache".to_string()).into());
 	}
-	if ctx.orphans.contains(&bh) {
-		return Err(ErrorKind::Unfit("already known in orphans".to_string()).into());
-	}
 	Ok(())
+}
+
+fn check_known_orphans(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	if ctx.orphans.contains(&header.hash()) {
+		Err(ErrorKind::Unfit("already known in orphans".to_string()).into())
+	} else {
+		Ok(())
+	}
 }
 
 // Check if this block is in the store already.
 fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	match ctx.store.block_exists(&header.hash()) {
-		Ok(true) => Err(ErrorKind::Unfit("already known in store".to_string()).into()),
+		Ok(true) => {
+			if header.height < ctx.head.height.saturating_sub(50) {
+				// TODO - we flag this as an "abusive peer" but only in the case
+				// where we have the full block in our store.
+				// So this is not a particularly exhaustive check.
+				Err(ErrorKind::OldBlock.into())
+			} else {
+				Err(ErrorKind::Unfit("already known in store".to_string()).into())
+			}
+		}
 		Ok(false) => {
 			// Not yet processed this block, we can proceed.
 			Ok(())
@@ -323,6 +341,10 @@ fn check_known_mmr(
 		// We want to return an error here (block already known)
 		// if we *successfully validate the MMR roots and sizes.
 		if extension.validate_roots(header).is_ok() && extension.validate_sizes(header).is_ok() {
+			// TODO - determine if block is more than 50 blocks old
+			// and return specific OldBlock error.
+			// Or pull OldBlock (abusive peer) out into separate processing step.
+
 			return Err(ErrorKind::Unfit("already known on most work chain".to_string()).into());
 		}
 
@@ -438,19 +460,12 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 }
 
 fn validate_block(
-	b: &Block,
+	block: &Block,
 	ctx: &mut BlockContext,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 ) -> Result<(), Error> {
-	if ctx.store.block_exists(&b.hash())? {
-		if b.header.height < ctx.head.height.saturating_sub(50) {
-			return Err(ErrorKind::OldBlock.into());
-		} else {
-			return Err(ErrorKind::Unfit("already known".to_string()).into());
-		}
-	}
-	let prev = ctx.store.get_block_header(&b.header.previous)?;
-	b.validate(
+	let prev = ctx.store.get_block_header(&block.header.previous)?;
+	block.validate(
 		&prev.total_kernel_offset,
 		&prev.total_kernel_sum,
 		verifier_cache,
