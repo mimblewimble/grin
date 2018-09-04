@@ -17,11 +17,11 @@
 //! vs. functions to interact with someone else)
 //! Still experimental, not sure this is the best way to do this
 
+use failure::ResultExt;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
-use failure::ResultExt;
 
 use serde_json as json;
 
