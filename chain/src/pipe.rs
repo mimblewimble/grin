@@ -61,8 +61,6 @@ fn is_next_block(header: &BlockHeader, ctx: &mut BlockContext) -> bool {
 	header.previous == ctx.head.last_block_h
 }
 
-
-
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain. Returns the new chain head if
 /// updated.
@@ -282,9 +280,7 @@ fn check_prev_store(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), 
 			// this block is an orphan (for now).
 			Err(ErrorKind::Orphan.into())
 		}
-		Err(e) => {
-			Err(ErrorKind::StoreErr(e, "pipe get previous".to_owned()).into())
-		}
+		Err(e) => Err(ErrorKind::StoreErr(e, "pipe get previous".to_owned()).into()),
 	}
 }
 
@@ -320,9 +316,7 @@ fn check_known_mmr(
 
 		// We want to return an error here (block already known)
 		// if we *successfully validate the MMR roots and sizes.
-		if extension.validate_roots(header).is_ok()
-			&& extension.validate_sizes(header).is_ok()
-		{
+		if extension.validate_roots(header).is_ok() && extension.validate_sizes(header).is_ok() {
 			return Err(ErrorKind::Unfit("already known on most work chain".to_string()).into());
 		}
 

@@ -852,9 +852,7 @@ impl<'a> Extension<'a> {
 		}
 
 		let (output_mmr_size, _, kernel_mmr_size) = self.sizes();
-		if output_mmr_size != header.output_mmr_size
-			|| kernel_mmr_size != header.kernel_mmr_size
-		{
+		if output_mmr_size != header.output_mmr_size || kernel_mmr_size != header.kernel_mmr_size {
 			Err(ErrorKind::InvalidMMRSize.into())
 		} else {
 			Ok(())
