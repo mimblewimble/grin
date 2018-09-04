@@ -144,8 +144,20 @@ impl Server {
 	/// we're already connected to the provided address.
 	pub fn connect(&self, addr: &SocketAddr) -> Result<Arc<RwLock<Peer>>, Error> {
 		if Peer::is_denied(&self.config, &addr) {
-			debug!(LOGGER, "Peer {} denied, not connecting.", addr);
+			debug!(
+				LOGGER,
+				"connect_peer: peer {} denied, not connecting.", addr
+			);
 			return Err(Error::ConnectionClose);
+		}
+
+		// check ip and port to see if we are trying to connect to ourselves
+		// todo: this can't detect all cases of PeerWithSelf, for example config.host is '0.0.0.0'
+		//
+		if self.config.port == addr.port()
+			&& (addr.ip().is_loopback() || addr.ip() == self.config.host)
+		{
+			return Err(Error::PeerWithSelf);
 		}
 
 		if let Some(p) = self.peers.get_connected_peer(addr) {
@@ -154,7 +166,13 @@ impl Server {
 			return Ok(p);
 		}
 
-		trace!(LOGGER, "connect_peer: connecting to {}", addr);
+		trace!(
+			LOGGER,
+			"connect_peer: on {}:{}. connecting to {}",
+			self.config.host,
+			self.config.port,
+			addr
+		);
 		match TcpStream::connect_timeout(addr, Duration::from_secs(10)) {
 			Ok(mut stream) => {
 				let addr = SocketAddr::new(self.config.host, self.config.port);
@@ -176,7 +194,14 @@ impl Server {
 				Ok(added)
 			}
 			Err(e) => {
-				debug!(LOGGER, "Could not connect to {}: {:?}", addr, e);
+				debug!(
+					LOGGER,
+					"connect_peer: on {}:{}. Could not connect to {}: {:?}",
+					self.config.host,
+					self.config.port,
+					addr,
+					e
+				);
 				Err(Error::Connection(e))
 			}
 		}
