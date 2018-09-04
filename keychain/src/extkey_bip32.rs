@@ -25,11 +25,10 @@
 // If not, see <http://creativecommons.org/publicdomain/zero/1.0/>.
 //
 
-//! BIP32 Implementation, Modified from above to integrate into grin
-//! and allow for different hashing algorithms
-//!
 //! Implementation of BIP32 hierarchical deterministic wallets, as defined
 //! at https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki
+//! Modified from above to integrate into grin and allow for different
+//! hashing algorithms if desired
 
 #[cfg(feature = "serde")]
 use serde;
@@ -41,6 +40,12 @@ use std::{error, fmt};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::{self, ContextFlag, Secp256k1};
+
+use crypto::digest::Digest;
+use crypto::hmac::Hmac;
+use crypto::mac::Mac;
+use crypto::ripemd160::Ripemd160;
+use crypto::sha2::{Sha256, Sha512};
 
 use base58;
 
@@ -77,6 +82,59 @@ pub trait BIP32Hasher {
 	fn result_sha512(&mut self) -> [u8; 64];
 	fn sha_256(&self, input: &[u8]) -> [u8; 32];
 	fn ripemd_160(&self, input: &[u8]) -> [u8; 20];
+}
+
+/// Implementation of the above that uses the standard BIP32 Hash algorithms
+pub struct BIP32ReferenceHasher {
+	hmac_sha512: Hmac<Sha512>,
+}
+
+impl BIP32ReferenceHasher {
+	/// New empty hasher
+	pub fn new() -> BIP32ReferenceHasher {
+		BIP32ReferenceHasher {
+			hmac_sha512: Hmac::new(Sha512::new(), &[0u8]),
+		}
+	}
+}
+
+impl BIP32Hasher for BIP32ReferenceHasher {
+	fn network_priv() -> [u8; 4] {
+		// bitcoin network (xprv) (for test vectors)
+		[0x04, 0x88, 0xAD, 0xE4]
+	}
+	fn network_pub() -> [u8; 4] {
+		// bitcoin network (xpub) (for test vectors)
+		[0x04, 0x88, 0xB2, 0x1E]
+	}
+	fn master_seed() -> [u8; 12] {
+		b"Bitcoin seed".to_owned()
+	}
+	fn init_sha512(&mut self, seed: &[u8]) {
+		self.hmac_sha512 = Hmac::new(Sha512::new(), seed);
+	}
+	fn append_sha512(&mut self, value: &[u8]) {
+		self.hmac_sha512.input(value);
+	}
+	fn result_sha512(&mut self) -> [u8; 64] {
+		let mut result = [0; 64];
+		self.hmac_sha512.raw_result(&mut result);
+		result
+	}
+	fn sha_256(&self, input: &[u8]) -> [u8; 32] {
+		let mut sha2_res = [0; 32];
+		let mut sha2 = Sha256::new();
+		sha2.input(input);
+		sha2.result(&mut sha2_res);
+		sha2_res
+	}
+	fn ripemd_160(&self, input: &[u8]) -> [u8; 20] {
+		let mut ripemd_res = [0; 20];
+		let mut ripemd = Ripemd160::new();
+		ripemd.input(input);
+		ripemd.result(&mut ripemd_res);
+		ripemd_res
+	}
 }
 
 /// Extended private key
@@ -586,12 +644,6 @@ impl FromStr for ExtendedPubKey {
 mod tests {
 	extern crate crypto;
 
-	use extkey_bip32::tests::crypto::digest::Digest;
-	use extkey_bip32::tests::crypto::hmac::Hmac;
-	use extkey_bip32::tests::crypto::mac::Mac;
-	use extkey_bip32::tests::crypto::ripemd160::Ripemd160;
-	use extkey_bip32::tests::crypto::sha2::{Sha256, Sha512};
-
 	use std::str::FromStr;
 	use std::string::ToString;
 
@@ -602,59 +654,7 @@ mod tests {
 	use super::Error;
 	use super::{ChildNumber, ExtendedPrivKey, ExtendedPubKey};
 
-	use super::BIP32Hasher;
-
-	struct BIP32ReferenceHasher {
-		hmac_sha512: Hmac<Sha512>,
-	}
-
-	impl BIP32ReferenceHasher {
-		/// New empty hasher
-		pub fn new() -> BIP32ReferenceHasher {
-			BIP32ReferenceHasher {
-				hmac_sha512: Hmac::new(Sha512::new(), &[0u8]),
-			}
-		}
-	}
-
-	impl BIP32Hasher for BIP32ReferenceHasher {
-		fn network_priv() -> [u8; 4] {
-			// bitcoin network (xprv) (for test vectors)
-			[0x04, 0x88, 0xAD, 0xE4]
-		}
-		fn network_pub() -> [u8; 4] {
-			// bitcoin network (xpub) (for test vectors)
-			[0x04, 0x88, 0xB2, 0x1E]
-		}
-		fn master_seed() -> [u8; 12] {
-			b"Bitcoin seed".to_owned()
-		}
-		fn init_sha512(&mut self, seed: &[u8]) {
-			self.hmac_sha512 = Hmac::new(Sha512::new(), seed);
-		}
-		fn append_sha512(&mut self, value: &[u8]) {
-			self.hmac_sha512.input(value);
-		}
-		fn result_sha512(&mut self) -> [u8; 64] {
-			let mut result = [0; 64];
-			self.hmac_sha512.raw_result(&mut result);
-			result
-		}
-		fn sha_256(&self, input: &[u8]) -> [u8; 32] {
-			let mut sha2_res = [0; 32];
-			let mut sha2 = Sha256::new();
-			sha2.input(input);
-			sha2.result(&mut sha2_res);
-			sha2_res
-		}
-		fn ripemd_160(&self, input: &[u8]) -> [u8; 20] {
-			let mut ripemd_res = [0; 20];
-			let mut ripemd = Ripemd160::new();
-			ripemd.input(input);
-			ripemd.result(&mut ripemd_res);
-			ripemd_res
-		}
-	}
+	use super::BIP32ReferenceHasher;
 
 	fn test_path(
 		secp: &Secp256k1,
