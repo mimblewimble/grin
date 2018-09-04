@@ -347,15 +347,26 @@ where
 		let client = w.client().clone();
 		let (confirmed, tx_hex) = tx::retrieve_tx_hex(&mut **w, tx_id)?;
 		if confirmed {
-			error!(LOGGER, "api: repost_tx: transaction at {} is confirmed. NOT resending.", tx_id);
+			error!(
+				LOGGER,
+				"api: repost_tx: transaction at {} is confirmed. NOT resending.", tx_id
+			);
 			return Err(ErrorKind::TransactionAlreadyConfirmed)?;
 		}
 		if tx_hex.is_none() {
-			error!(LOGGER, "api: repost_tx: completed transaction at {} does not exist.", tx_id);
+			error!(
+				LOGGER,
+				"api: repost_tx: completed transaction at {} does not exist.", tx_id
+			);
 			return Err(ErrorKind::TransactionBuildingNotCompleted(tx_id))?;
 		}
 
-		let res = client.post_tx(&TxWrapper { tx_hex: tx_hex.unwrap() }, fluff);
+		let res = client.post_tx(
+			&TxWrapper {
+				tx_hex: tx_hex.unwrap(),
+			},
+			fluff,
+		);
 		w.close()?;
 		if let Err(e) = res {
 			error!(LOGGER, "api: repost_tx: failed with error: {}", e);
@@ -363,9 +374,7 @@ where
 		} else {
 			debug!(
 				LOGGER,
-				"api: repost_tx: successfully posted tx at: {}, fluff? {}",
-				tx_id,
-				fluff
+				"api: repost_tx: successfully posted tx at: {}, fluff? {}", tx_id, fluff
 			);
 			Ok(())
 		}

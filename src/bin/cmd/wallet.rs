@@ -345,7 +345,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 			}
 			("repost", Some(repost_args)) => {
 				let tx_id: u32 = match repost_args.value_of("id") {
-					None => panic!("Transaction of a completed but unconfirmed transaction required"),
+					None => {
+						panic!("Transaction of a completed but unconfirmed transaction required")
+					}
 					Some(tx) => match tx.parse() {
 						Ok(t) => t,
 						Err(_) => {

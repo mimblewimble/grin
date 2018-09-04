@@ -163,7 +163,10 @@ where
 
 /// Retrieve the associated stored finalised json Transaction for a given transaction Id
 /// as well as whether it's been confirmed
-pub fn retrieve_tx_hex<T: ?Sized, C, K>(wallet: &mut T, tx_id: u32) -> Result<(bool, Option<String>), Error>
+pub fn retrieve_tx_hex<T: ?Sized, C, K>(
+	wallet: &mut T,
+	tx_id: u32,
+) -> Result<(bool, Option<String>), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,

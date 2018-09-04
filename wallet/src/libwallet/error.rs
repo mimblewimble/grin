@@ -155,7 +155,6 @@ pub enum ErrorKind {
 	#[fail(display = "Transaction building not completed: {}", _0)]
 	TransactionBuildingNotCompleted(u32),
 
-	
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
 	GenericError(String),
