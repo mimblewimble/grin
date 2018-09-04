@@ -74,7 +74,7 @@ where
 		);
 
 		let lock_height = if *is_coinbase {
-			*height + global::coinbase_maturity()
+			*height + global::coinbase_maturity(*height) // ignores on/off spendability around soft fork height
 		} else {
 			*height
 		};
