@@ -19,8 +19,8 @@ use std::io;
 
 use failure::{Backtrace, Context, Fail};
 
-use core::core::transaction;
 use core;
+use core::core::transaction;
 use keychain;
 use libtx;
 

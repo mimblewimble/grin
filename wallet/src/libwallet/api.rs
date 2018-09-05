@@ -369,7 +369,6 @@ where
 		tx_file.write_all(json::to_string(&tx).unwrap().as_bytes())?;
 		tx_file.sync_all()?;
 		Ok(())
-
 	}
 
 	/// (Re)Posts a transaction that's already been stored to the chain

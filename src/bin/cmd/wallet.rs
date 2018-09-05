@@ -371,7 +371,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 								Err(e)
 							}
 						}
-					},
+					}
 					Some(f) => {
 						let result = api.dump_stored_tx(tx_id, f);
 						match result {
