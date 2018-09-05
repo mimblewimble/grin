@@ -837,9 +837,26 @@ impl<'a> Extension<'a> {
 			|| roots.rproof_root != header.range_proof_root
 			|| roots.kernel_root != header.kernel_root
 		{
-			return Err(ErrorKind::InvalidRoot.into());
+			Err(ErrorKind::InvalidRoot.into())
+		} else {
+			Ok(())
 		}
-		Ok(())
+	}
+
+	/// Validate the output and kernel MMR sizes against the block header.
+	pub fn validate_sizes(&self, header: &BlockHeader) -> Result<(), Error> {
+		// If we are validating the genesis block then we have no outputs or
+		// kernels. So we are done here.
+		if header.height == 0 {
+			return Ok(());
+		}
+
+		let (output_mmr_size, _, kernel_mmr_size) = self.sizes();
+		if output_mmr_size != header.output_mmr_size || kernel_mmr_size != header.kernel_mmr_size {
+			Err(ErrorKind::InvalidMMRSize.into())
+		} else {
+			Ok(())
+		}
 	}
 
 	fn validate_mmrs(&self) -> Result<(), Error> {
@@ -874,6 +891,7 @@ impl<'a> Extension<'a> {
 	) -> Result<((Commitment, Commitment)), Error> {
 		self.validate_mmrs()?;
 		self.validate_roots(header)?;
+		self.validate_sizes(header)?;
 
 		if header.height == 0 {
 			let zero_commit = secp_static::commit_to_zero_value();
