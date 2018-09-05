@@ -342,10 +342,15 @@ where
 
 	/// (Re)Posts a transaction that's already been stored to the chain
 	pub fn post_stored_tx(&self, tx_id: u32, fluff: bool) -> Result<(), Error> {
-		let mut w = self.wallet.lock().unwrap();
-		w.open_with_credentials()?;
-		let client = w.client().clone();
-		let (confirmed, tx_hex) = tx::retrieve_tx_hex(&mut **w, tx_id)?;
+		let client;
+		let (confirmed, tx_hex) = {
+			let mut w = self.wallet.lock().unwrap();
+			w.open_with_credentials()?;
+			client = w.client().clone();
+			let res = tx::retrieve_tx_hex(&mut **w, tx_id)?;
+			w.close()?;
+			res
+		};
 		if confirmed {
 			error!(
 				LOGGER,
@@ -367,7 +372,6 @@ where
 			},
 			fluff,
 		);
-		w.close()?;
 		if let Err(e) = res {
 			error!(LOGGER, "api: repost_tx: failed with error: {}", e);
 			Err(e)

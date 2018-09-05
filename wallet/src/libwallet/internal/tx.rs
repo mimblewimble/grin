@@ -161,7 +161,7 @@ where
 	Ok(())
 }
 
-/// Retrieve the associated stored finalised json Transaction for a given transaction Id
+/// Retrieve the associated stored finalised hex Transaction for a given transaction Id
 /// as well as whether it's been confirmed
 pub fn retrieve_tx_hex<T: ?Sized, C, K>(
 	wallet: &mut T,
