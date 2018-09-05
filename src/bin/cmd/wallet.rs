@@ -22,7 +22,7 @@ use std::time::Duration;
 use clap::ArgMatches;
 
 use config::GlobalWalletConfig;
-use core::{global, core};
+use core::{core, global};
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{HTTPWalletClient, LMDBBackend, WalletConfig, WalletInst, WalletSeed};
 use keychain;
