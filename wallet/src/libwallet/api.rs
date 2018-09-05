@@ -25,6 +25,7 @@ use std::sync::{Arc, Mutex};
 use serde_json as json;
 
 use core::core::hash::Hashed;
+use core::core::Transaction;
 use core::ser;
 use keychain::Keychain;
 use libtx::slate::Slate;
@@ -338,6 +339,37 @@ where
 			);
 			Ok(())
 		}
+	}
+
+	/// Writes stored transaction data to a given file
+	pub fn dump_stored_tx(&self, tx_id: u32, dest: &str) -> Result<(), Error> {
+		let (confirmed, tx_hex) = {
+			let mut w = self.wallet.lock().unwrap();
+			w.open_with_credentials()?;
+			let res = tx::retrieve_tx_hex(&mut **w, tx_id)?;
+			w.close()?;
+			res
+		};
+		if confirmed {
+			warn!(
+				LOGGER,
+				"api: dump_stored_tx: transaction at {} is already confirmed.", tx_id
+			);
+		}
+		if tx_hex.is_none() {
+			error!(
+				LOGGER,
+				"api: dump_stored_tx: completed transaction at {} does not exist.", tx_id
+			);
+			return Err(ErrorKind::TransactionBuildingNotCompleted(tx_id))?;
+		}
+		let tx_bin = util::from_hex(tx_hex.unwrap()).unwrap();
+		let tx = ser::deserialize::<Transaction>(&mut &tx_bin[..])?;
+		let mut tx_file = File::create(dest)?;
+		tx_file.write_all(json::to_string(&tx).unwrap().as_bytes())?;
+		tx_file.sync_all()?;
+		Ok(())
+
 	}
 
 	/// (Re)Posts a transaction that's already been stored to the chain

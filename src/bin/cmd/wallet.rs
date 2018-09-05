@@ -358,21 +358,33 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				};
 				let dump_file = repost_args.value_of("dumpfile");
 				let fluff = repost_args.is_present("fluff");
-				if let None = dump_file {
-					let result = api.post_stored_tx(tx_id, fluff);
-					match result {
-						Ok(_) => {
-							info!(LOGGER, "Reposted transaction at {}", tx_id);
-							Ok(())
+				match dump_file {
+					None => {
+						let result = api.post_stored_tx(tx_id, fluff);
+						match result {
+							Ok(_) => {
+								info!(LOGGER, "Reposted transaction at {}", tx_id);
+								Ok(())
+							}
+							Err(e) => {
+								error!(LOGGER, "Tranasction reposting failed: {}", e);
+								Err(e)
+							}
 						}
-						Err(e) => {
-							error!(LOGGER, "Tranasction reposting failed: {}", e);
-							Err(e)
+					},
+					Some(f) => {
+						let result = api.dump_stored_tx(tx_id, f);
+						match result {
+							Ok(_) => {
+								warn!(LOGGER, "Dumped transaction data for tx {} to {}", tx_id, f);
+								Ok(())
+							}
+							Err(e) => {
+								error!(LOGGER, "Tranasction reposting failed: {}", e);
+								Err(e)
+							}
 						}
 					}
-				} else {
-					// Dump to file here
-					Ok(())
 				}
 			}
 			("cancel", Some(tx_args)) => {

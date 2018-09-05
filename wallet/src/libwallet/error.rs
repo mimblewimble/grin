@@ -20,6 +20,7 @@ use std::io;
 use failure::{Backtrace, Context, Fail};
 
 use core::core::transaction;
+use core;
 use keychain;
 use libtx;
 
@@ -98,6 +99,10 @@ pub enum ErrorKind {
 	/// An error in the format of the JSON structures exchanged by the wallet
 	#[fail(display = "JSON format error")]
 	Format,
+
+	/// Other serialization errors
+	#[fail(display = "Ser/Deserialization error")]
+	Deser(core::ser::Error),
 
 	/// IO Error
 	#[fail(display = "I/O error")]
@@ -223,6 +228,14 @@ impl From<transaction::Error> for Error {
 	fn from(error: transaction::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::Transaction(error)),
+		}
+	}
+}
+
+impl From<core::ser::Error> for Error {
+	fn from(error: core::ser::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::Deser(error)),
 		}
 	}
 }
