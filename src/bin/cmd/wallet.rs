@@ -22,7 +22,7 @@ use std::time::Duration;
 use clap::ArgMatches;
 
 use config::GlobalWalletConfig;
-use core::core;
+use core::{core, global};
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{HTTPWalletClient, LMDBBackend, WalletConfig, WalletInst, WalletSeed};
 use keychain;
@@ -77,6 +77,10 @@ pub fn instantiate_wallet(
 pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 	// just get defaults from the global config
 	let mut wallet_config = config.members.unwrap().wallet;
+
+	if let Some(t) = wallet_config.chain_type.clone() {
+		global::set_mining_mode(t);
+	}
 
 	if wallet_args.is_present("external") {
 		wallet_config.api_listen_interface = "0.0.0.0".to_string();
