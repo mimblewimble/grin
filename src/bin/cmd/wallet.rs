@@ -343,6 +343,50 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				};
 				Ok(())
 			}
+			("repost", Some(repost_args)) => {
+				let tx_id: u32 = match repost_args.value_of("id") {
+					None => {
+						error!(LOGGER, "Transaction of a completed but unconfirmed transaction required (specify with --id=[id])");
+						panic!();
+					}
+					Some(tx) => match tx.parse() {
+						Ok(t) => t,
+						Err(_) => {
+							panic!("Unable to parse argument 'id' as a number");
+						}
+					},
+				};
+				let dump_file = repost_args.value_of("dumpfile");
+				let fluff = repost_args.is_present("fluff");
+				match dump_file {
+					None => {
+						let result = api.post_stored_tx(tx_id, fluff);
+						match result {
+							Ok(_) => {
+								info!(LOGGER, "Reposted transaction at {}", tx_id);
+								Ok(())
+							}
+							Err(e) => {
+								error!(LOGGER, "Tranasction reposting failed: {}", e);
+								Err(e)
+							}
+						}
+					}
+					Some(f) => {
+						let result = api.dump_stored_tx(tx_id, f);
+						match result {
+							Ok(_) => {
+								warn!(LOGGER, "Dumped transaction data for tx {} to {}", tx_id, f);
+								Ok(())
+							}
+							Err(e) => {
+								error!(LOGGER, "Tranasction reposting failed: {}", e);
+								Err(e)
+							}
+						}
+					}
+				}
+			}
 			("cancel", Some(tx_args)) => {
 				let tx_id = tx_args
 					.value_of("id")

@@ -37,7 +37,14 @@ pub fn build_send_tx_slate<T: ?Sized, C, K>(
 	max_outputs: usize,
 	change_outputs: usize,
 	selection_strategy_is_use_all: bool,
-) -> Result<(Slate, Context, impl FnOnce(&mut T) -> Result<(), Error>), Error>
+) -> Result<
+	(
+		Slate,
+		Context,
+		impl FnOnce(&mut T, &str) -> Result<(), Error>,
+	),
+	Error,
+>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -90,12 +97,13 @@ where
 
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
-	let update_sender_wallet_fn = move |wallet: &mut T| {
+	let update_sender_wallet_fn = move |wallet: &mut T, tx_hex: &str| {
 		let mut batch = wallet.batch()?;
 		let log_id = batch.next_tx_log_id(root_key_id.clone())?;
 		let mut t = TxLogEntry::new(TxLogEntryType::TxSent, log_id);
 		t.tx_slate_id = Some(slate_id);
 		t.fee = Some(fee);
+		t.tx_hex = Some(tx_hex.to_owned());
 		let mut amount_debited = 0;
 		t.num_inputs = lock_inputs.len();
 		for id in lock_inputs {

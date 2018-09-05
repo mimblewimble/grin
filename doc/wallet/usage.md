@@ -270,6 +270,22 @@ Be sure to use this command with caution, as there are many edge cases and possi
 the recipient of a transaction. For the time being please be 100% certain that the relevant transaction is never, ever going to be posted before
 running `grin wallet cancel`
 
+##### repost
+
+If you're the sender of a posted transaction that doesn't confirm on the chain (due to a fork or full transaction pool), you can repost the copy of it that grin automatically stores in your wallet data whenever a transaction is finalized. This doesn't need to communicate with the recipient again, it just re-posts a transaction created during a previous `send` attempt.  
+
+To do this, look up the transaction id using the `grin wallet txs` command, and using the id (say 3 in this example,) enter:
+
+`grin wallet repost -i 3`
+
+This will attempt to repost the transaction to the chain. Note this won't attempt to send if the transaction is already marked as 'confirmed' within the wallet.
+
+You can also use the `repost` command to dump the transaction in a raw json format with the `-m` (duMp) switch, e.g:
+
+`grin wallet repost -i 3 -m tx_3.json`
+
+This will create a file called tx_3.json containing your raw transaction data. Note that this formatting in the file isn't yet very user-readable.
+
 ##### restore
 
 If for some reason the wallet cancel commands above don't work, or you need to restore from a backed up `wallet.seed` file and password, you can perform a full wallet restore.

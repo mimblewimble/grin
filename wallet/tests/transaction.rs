@@ -247,6 +247,61 @@ fn basic_transaction_api(
 		Ok(())
 	})?;
 
+	// Send another transaction, but don't post to chain immediately and use
+	// the stored transaction instead
+	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
+		// note this will increment the block count as part of the transaction "Posting"
+		slate = sender_api.issue_send_tx(
+			amount * 2, // amount
+			2,          // minimum confirmations
+			"wallet2",  // dest
+			500,        // max outputs
+			1,          // num change outputs
+			true,       // select all outputs
+		)?;
+		Ok(())
+	})?;
+
+	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
+		let (refreshed, _wallet1_info) = sender_api.retrieve_summary_info(true)?;
+		assert!(refreshed);
+		let (_, txs) = sender_api.retrieve_txs(true, None)?;
+
+		// find the transaction
+		let tx = txs
+			.iter()
+			.find(|t| t.tx_slate_id == Some(slate.id))
+			.unwrap();
+		sender_api.post_stored_tx(tx.id, false)?;
+		let (_, wallet1_info) = sender_api.retrieve_summary_info(true)?;
+		// should be mined now
+		assert_eq!(
+			wallet1_info.total,
+			amount * wallet1_info.last_confirmed_height - amount * 3
+		);
+		Ok(())
+	})?;
+
+	// mine a few more blocks
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
+
+	// check wallet2 has stored transaction
+	wallet::controller::owner_single_use(wallet2.clone(), |api| {
+		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		assert!(wallet2_refreshed);
+		assert_eq!(wallet2_info.amount_currently_spendable, amount * 3);
+
+		// check tx log entry is confirmed
+		let (refreshed, txs) = api.retrieve_txs(true, None)?;
+		assert!(refreshed);
+		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
+		assert!(tx.is_some());
+		let tx = tx.unwrap();
+		assert!(tx.confirmed);
+		assert!(tx.confirmation_ts.is_some());
+		Ok(())
+	})?;
+
 	// let logging finish
 	thread::sleep(Duration::from_millis(200));
 	Ok(())

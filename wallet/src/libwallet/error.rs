@@ -19,6 +19,7 @@ use std::io;
 
 use failure::{Backtrace, Context, Fail};
 
+use core;
 use core::core::transaction;
 use keychain;
 use libtx;
@@ -99,6 +100,10 @@ pub enum ErrorKind {
 	#[fail(display = "JSON format error")]
 	Format,
 
+	/// Other serialization errors
+	#[fail(display = "Ser/Deserialization error")]
+	Deser(core::ser::Error),
+
 	/// IO Error
 	#[fail(display = "I/O error")]
 	IO,
@@ -146,6 +151,14 @@ pub enum ErrorKind {
 	/// Cancellation error
 	#[fail(display = "Cancellation Error: {}", _0)]
 	TransactionCancellationError(&'static str),
+
+	/// Attempt to repost a transaction that's already confirmed
+	#[fail(display = "Transaction already confirmed error")]
+	TransactionAlreadyConfirmed,
+
+	/// Attempt to repost a transaction that's not completed and stored
+	#[fail(display = "Transaction building not completed: {}", _0)]
+	TransactionBuildingNotCompleted(u32),
 
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
@@ -215,6 +228,14 @@ impl From<transaction::Error> for Error {
 	fn from(error: transaction::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::Transaction(error)),
+		}
+	}
+}
+
+impl From<core::ser::Error> for Error {
+	fn from(error: core::ser::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::Deser(error)),
 		}
 	}
 }

@@ -64,7 +64,14 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 	max_outputs: usize,
 	num_change_outputs: usize,
 	selection_strategy_is_use_all: bool,
-) -> Result<(Slate, Context, impl FnOnce(&mut T) -> Result<(), Error>), Error>
+) -> Result<
+	(
+		Slate,
+		Context,
+		impl FnOnce(&mut T, &str) -> Result<(), Error>,
+	),
+	Error,
+>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -152,6 +159,25 @@ where
 	let outputs = res.iter().map(|(out, _)| out).cloned().collect();
 	updater::cancel_tx_and_outputs(wallet, tx, outputs)?;
 	Ok(())
+}
+
+/// Retrieve the associated stored finalised hex Transaction for a given transaction Id
+/// as well as whether it's been confirmed
+pub fn retrieve_tx_hex<T: ?Sized, C, K>(
+	wallet: &mut T,
+	tx_id: u32,
+) -> Result<(bool, Option<String>), Error>
+where
+	T: WalletBackend<C, K>,
+	C: WalletClient,
+	K: Keychain,
+{
+	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id))?;
+	if tx_vec.len() != 1 {
+		return Err(ErrorKind::TransactionDoesntExist(tx_id))?;
+	}
+	let tx = tx_vec[0].clone();
+	Ok((tx.confirmed, tx.tx_hex))
 }
 
 /// Issue a burn tx
