@@ -21,14 +21,13 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"[server]".to_string(),
 		"
-# Sample Server Configuration File for Grin
+# Generated Server Configuration File for Grin
 #
 # When running the grin executable without specifying any command line
-# arguments, it will look for this file in three places, in the following
+# arguments, it will look for this file in two places, in the following
 # order:
 #
 # -The working directory
-# -The directory in which the executable resides
 # -[user home]/.grin
 #
 
@@ -62,7 +61,7 @@ fn comments() -> HashMap<String, String> {
 		"chain_type".to_string(),
 		"
 #The chain type, which defines the genesis block and the set of cuckoo
-#parameters used for mining. Can be:
+#parameters used for mining as well as wallet output coinbase maturity. Can be:
 #AutomatedTesting - For CI builds and instant blockchain creation
 #UserTesting - For regular user testing (cuckoo 16)
 #Testnet1 - Testnet1 genesis block (cuckoo 16)

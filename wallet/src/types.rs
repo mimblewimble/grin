@@ -21,6 +21,7 @@ use std::path::MAIN_SEPARATOR;
 use blake2;
 use rand::{thread_rng, Rng};
 
+use core::global::ChainTypes;
 use error::{Error, ErrorKind};
 use failure::ResultExt;
 use keychain::Keychain;
@@ -31,10 +32,8 @@ pub const SEED_FILE: &'static str = "wallet.seed";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WalletConfig {
-	// Right now the decision to run or not a wallet is based on the command.
-	// This may change in the near-future.
-	// pub enable_wallet: bool,
-
+	// Chain parameters (default to Testnet3 if none at the moment)
+	pub chain_type: Option<ChainTypes>,
 	// The api interface/ip_address that this api server (i.e. this wallet) will run
 	// by default this is 127.0.0.1 (and will not accept connections from external clients)
 	pub api_listen_interface: String,
@@ -50,7 +49,7 @@ pub struct WalletConfig {
 impl Default for WalletConfig {
 	fn default() -> WalletConfig {
 		WalletConfig {
-			// enable_wallet: false,
+			chain_type: Some(ChainTypes::Testnet3),
 			api_listen_interface: "127.0.0.1".to_string(),
 			api_listen_port: 13415,
 			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
