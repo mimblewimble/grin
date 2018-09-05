@@ -18,9 +18,9 @@
 use chrono::prelude::{DateTime, Utc};
 
 use core::consensus;
-use core::core::block::BlockHeader;
 use core::core::hash::Hash;
 use core::core::transaction::{self, Transaction};
+use core::core::BlockHeader;
 
 /// Dandelion relay timer
 const DANDELION_RELAY_SECS: u64 = 600;
@@ -187,7 +187,7 @@ impl From<transaction::Error> for PoolError {
 }
 
 /// Interface that the pool requires from a blockchain implementation.
-pub trait BlockChain {
+pub trait BlockChain: Sync + Send {
 	/// Validate a vec of txs against known chain state at specific block
 	/// after applying the pre_tx to the chain state.
 	fn validate_raw_txs(

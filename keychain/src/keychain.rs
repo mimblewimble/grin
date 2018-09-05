@@ -104,17 +104,21 @@ impl Keychain for ExtKeychain {
 			.filter_map(|k| self.derived_key(&k).ok())
 			.collect();
 
-		pos_keys.extend(&blind_sum
-			.positive_blinding_factors
-			.iter()
-			.filter_map(|b| b.secret_key(&self.secp).ok())
-			.collect::<Vec<SecretKey>>());
+		pos_keys.extend(
+			&blind_sum
+				.positive_blinding_factors
+				.iter()
+				.filter_map(|b| b.secret_key(&self.secp).ok())
+				.collect::<Vec<SecretKey>>(),
+		);
 
-		neg_keys.extend(&blind_sum
-			.negative_blinding_factors
-			.iter()
-			.filter_map(|b| b.secret_key(&self.secp).ok())
-			.collect::<Vec<SecretKey>>());
+		neg_keys.extend(
+			&blind_sum
+				.negative_blinding_factors
+				.iter()
+				.filter_map(|b| b.secret_key(&self.secp).ok())
+				.collect::<Vec<SecretKey>>(),
+		);
 
 		let sum = self.secp.blind_sum(pos_keys, neg_keys)?;
 		Ok(BlindingFactor::from_secret_key(sum))
@@ -287,9 +291,11 @@ mod test {
 		// in the same way (convenience function)
 		assert_eq!(
 			keychain
-				.blind_sum(&BlindSum::new()
-					.add_blinding_factor(BlindingFactor::from_secret_key(skey1))
-					.add_blinding_factor(BlindingFactor::from_secret_key(skey2)))
+				.blind_sum(
+					&BlindSum::new()
+						.add_blinding_factor(BlindingFactor::from_secret_key(skey1))
+						.add_blinding_factor(BlindingFactor::from_secret_key(skey2))
+				)
 				.unwrap(),
 			BlindingFactor::from_secret_key(skey3),
 		);

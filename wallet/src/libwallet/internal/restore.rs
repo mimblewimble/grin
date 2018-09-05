@@ -74,7 +74,7 @@ where
 		);
 
 		let lock_height = if *is_coinbase {
-			*height + global::coinbase_maturity()
+			*height + global::coinbase_maturity(*height) // ignores on/off spendability around soft fork height
 		} else {
 			*height
 		};
@@ -159,7 +159,7 @@ where
 	if !is_empty {
 		error!(
 			LOGGER,
-			"Not restoring. Please back up and remove existing wallet_data directory first."
+			"Not restoring. Please back up and remove existing db directory first."
 		);
 		return Ok(());
 	}

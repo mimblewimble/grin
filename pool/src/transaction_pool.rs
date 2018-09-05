@@ -17,42 +17,46 @@
 //! resulting tx pool can be added to the current chain state to produce a
 //! valid chain state.
 
+use std::sync::{Arc, RwLock};
+
 use chrono::prelude::Utc;
-use std::sync::Arc;
 
 use core::core::hash::Hash;
+use core::core::verifier_cache::VerifierCache;
 use core::core::{transaction, Block, CompactBlock, Transaction};
 use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
 
 /// Transaction pool implementation.
-pub struct TransactionPool<T> {
+pub struct TransactionPool {
 	/// Pool Config
 	pub config: PoolConfig,
-
 	/// Our transaction pool.
-	pub txpool: Pool<T>,
+	pub txpool: Pool,
 	/// Our Dandelion "stempool".
-	pub stempool: Pool<T>,
-
+	pub stempool: Pool,
 	/// The blockchain
-	pub blockchain: Arc<T>,
+	pub blockchain: Arc<BlockChain>,
+	pub verifier_cache: Arc<RwLock<VerifierCache>>,
 	/// The pool adapter
 	pub adapter: Arc<PoolAdapter>,
 }
 
-impl<T> TransactionPool<T>
-where
-	T: BlockChain,
-{
+impl TransactionPool {
 	/// Create a new transaction pool
-	pub fn new(config: PoolConfig, chain: Arc<T>, adapter: Arc<PoolAdapter>) -> TransactionPool<T> {
+	pub fn new(
+		config: PoolConfig,
+		chain: Arc<BlockChain>,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
+		adapter: Arc<PoolAdapter>,
+	) -> TransactionPool {
 		TransactionPool {
-			config: config,
-			txpool: Pool::new(chain.clone(), format!("txpool")),
-			stempool: Pool::new(chain.clone(), format!("stempool")),
+			config,
+			txpool: Pool::new(chain.clone(), verifier_cache.clone(), format!("txpool")),
+			stempool: Pool::new(chain.clone(), verifier_cache.clone(), format!("stempool")),
 			blockchain: chain,
-			adapter: adapter,
+			verifier_cache,
+			adapter,
 		}
 	}
 
@@ -73,7 +77,7 @@ where
 				.txpool
 				.find_matching_transactions(entry.tx.kernels().clone());
 			if !txs.is_empty() {
-				entry.tx = transaction::deaggregate(entry.tx, txs)?;
+				entry.tx = transaction::deaggregate(entry.tx, txs, self.verifier_cache.clone())?;
 				entry.src.debug_name = "deagg".to_string();
 			}
 		}
@@ -97,11 +101,18 @@ where
 		stem: bool,
 		block_hash: &Hash,
 	) -> Result<(), PoolError> {
+		// Quick check to deal with common case of seeing the *same* tx
+		// broadcast from multiple peers simultaneously.
+		if !stem && self.txpool.contains_tx(&tx) {
+			return Err(PoolError::DuplicateTx);
+		}
+
 		// Do we have the capacity to accept this transaction?
 		self.is_acceptable(&tx)?;
 
 		// Make sure the transaction is valid before anything else.
-		tx.validate(false).map_err(|e| PoolError::InvalidTx(e))?;
+		tx.validate(self.verifier_cache.clone())
+			.map_err(|e| PoolError::InvalidTx(e))?;
 
 		// Check the tx lock_time is valid based on current chain state.
 		self.blockchain.verify_tx_lock_height(&tx)?;

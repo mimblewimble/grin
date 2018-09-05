@@ -14,12 +14,15 @@
 
 //! Transaction building functions
 
+use std::sync::{Arc, RwLock};
+
+use core::core::verifier_cache::LruVerifierCache;
 use core::core::Transaction;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
-use libwallet::internal::{selection, sigcontext, updater};
-use libwallet::types::{TxLogEntryType, WalletBackend, WalletClient};
+use libwallet::internal::{selection, updater};
+use libwallet::types::{Context, TxLogEntryType, WalletBackend, WalletClient};
 use libwallet::{Error, ErrorKind};
 use util::LOGGER;
 
@@ -64,8 +67,8 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 ) -> Result<
 	(
 		Slate,
-		sigcontext::Context,
-		impl FnOnce(&mut T) -> Result<(), Error>,
+		Context,
+		impl FnOnce(&mut T, &str) -> Result<(), Error>,
 	),
 	Error,
 >
@@ -117,7 +120,7 @@ where
 pub fn complete_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
-	context: &sigcontext::Context,
+	context: &Context,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
@@ -156,6 +159,25 @@ where
 	let outputs = res.iter().map(|(out, _)| out).cloned().collect();
 	updater::cancel_tx_and_outputs(wallet, tx, outputs)?;
 	Ok(())
+}
+
+/// Retrieve the associated stored finalised hex Transaction for a given transaction Id
+/// as well as whether it's been confirmed
+pub fn retrieve_tx_hex<T: ?Sized, C, K>(
+	wallet: &mut T,
+	tx_id: u32,
+) -> Result<(bool, Option<String>), Error>
+where
+	T: WalletBackend<C, K>,
+	C: WalletClient,
+	K: Keychain,
+{
+	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id))?;
+	if tx_vec.len() != 1 {
+		return Err(ErrorKind::TransactionDoesntExist(tx_id))?;
+	}
+	let tx = tx_vec[0].clone();
+	Ok((tx.confirmed, tx.tx_hex))
 }
 
 /// Issue a burn tx
@@ -203,7 +225,8 @@ where
 
 	// finalize the burn transaction and send
 	let tx_burn = build::transaction(parts, &keychain)?;
-	tx_burn.validate(false)?;
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	tx_burn.validate(verifier_cache)?;
 	Ok(tx_burn)
 }
 

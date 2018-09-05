@@ -285,7 +285,7 @@ where
 	/// "undo".
 	pub fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String> {
 		// Identify which actual position we should rewind to as the provided
-		// position is a leaf. We traverse the MMR to inclue any parent(s) that
+		// position is a leaf. We traverse the MMR to include any parent(s) that
 		// need to be included for the MMR to be valid.
 		let mut pos = position;
 		while bintree_postorder_height(pos + 1) > 0 {
@@ -352,7 +352,8 @@ where
 	}
 
 	/// Helper function to get the last N nodes inserted, i.e. the last
-	/// n nodes along the bottom of the tree
+	/// n nodes along the bottom of the tree.
+	/// May return less than n items if the MMR has been pruned/compacted.
 	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, T)> {
 		let mut return_vec = vec![];
 		let mut last_leaf = self.last_pos;
@@ -361,10 +362,12 @@ where
 				break;
 			}
 			last_leaf = bintree_rightmost(last_leaf);
-			return_vec.push((
-				self.backend.get_hash(last_leaf).unwrap(),
-				self.backend.get_data(last_leaf).unwrap(),
-			));
+
+			if let Some(hash) = self.backend.get_hash(last_leaf) {
+				if let Some(data) = self.backend.get_data(last_leaf) {
+					return_vec.push((hash, data));
+				}
+			}
 			last_leaf -= 1;
 		}
 		return_vec

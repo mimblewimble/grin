@@ -383,7 +383,7 @@ where
 	let root_key_id = wallet.keychain().root_key_id();
 
 	let height = block_fees.height;
-	let lock_height = height + global::coinbase_maturity();
+	let lock_height = height + global::coinbase_maturity(height); // ignores on/off spendability around soft fork height
 	let key_id = block_fees.key_id();
 
 	let (key_id, derivation) = match key_id {

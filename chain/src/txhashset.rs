@@ -565,19 +565,19 @@ impl<'a> Extension<'a> {
 			.unwrap_or(0);
 
 		if pos > 0 {
-			// If we have not yet reached 1,000 blocks then
+			// If we have not yet reached 1,000 / 1,440 blocks then
 			// we can fail immediately as coinbase cannot be mature.
-			if height < global::coinbase_maturity() {
+			if height < global::coinbase_maturity(height) {
 				return Err(ErrorKind::ImmatureCoinbase.into());
 			}
 
 			// Find the "cutoff" pos in the output MMR based on the
 			// header from 1,000 blocks ago.
-			let cutoff_height = height.checked_sub(global::coinbase_maturity()).unwrap_or(0);
+			let cutoff_height = height.checked_sub(global::coinbase_maturity(height)).unwrap_or(0);
 			let cutoff_header = self.commit_index.get_header_by_height(cutoff_height)?;
 			let cutoff_pos = cutoff_header.output_mmr_size;
 
-			// If any output pos exceeed the cutoff_pos
+			// If any output pos exceed the cutoff_pos
 			// we know they have not yet sufficiently matured.
 			if pos > cutoff_pos {
 				return Err(ErrorKind::ImmatureCoinbase.into());
@@ -837,9 +837,26 @@ impl<'a> Extension<'a> {
 			|| roots.rproof_root != header.range_proof_root
 			|| roots.kernel_root != header.kernel_root
 		{
-			return Err(ErrorKind::InvalidRoot.into());
+			Err(ErrorKind::InvalidRoot.into())
+		} else {
+			Ok(())
 		}
-		Ok(())
+	}
+
+	/// Validate the output and kernel MMR sizes against the block header.
+	pub fn validate_sizes(&self, header: &BlockHeader) -> Result<(), Error> {
+		// If we are validating the genesis block then we have no outputs or
+		// kernels. So we are done here.
+		if header.height == 0 {
+			return Ok(());
+		}
+
+		let (output_mmr_size, _, kernel_mmr_size) = self.sizes();
+		if output_mmr_size != header.output_mmr_size || kernel_mmr_size != header.kernel_mmr_size {
+			Err(ErrorKind::InvalidMMRSize.into())
+		} else {
+			Ok(())
+		}
 	}
 
 	fn validate_mmrs(&self) -> Result<(), Error> {
@@ -866,17 +883,15 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Validate the txhashset state against the provided block header.
-	pub fn validate<T>(
+	pub fn validate(
 		&mut self,
 		header: &BlockHeader,
 		skip_rproofs: bool,
-		status: &T,
-	) -> Result<((Commitment, Commitment)), Error>
-	where
-		T: TxHashsetWriteStatus,
-	{
+		status: &TxHashsetWriteStatus,
+	) -> Result<((Commitment, Commitment)), Error> {
 		self.validate_mmrs()?;
 		self.validate_roots(header)?;
+		self.validate_sizes(header)?;
 
 		if header.height == 0 {
 			let zero_commit = secp_static::commit_to_zero_value();
@@ -952,10 +967,7 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	fn verify_kernel_signatures<T>(&self, status: &T) -> Result<(), Error>
-	where
-		T: TxHashsetWriteStatus,
-	{
+	fn verify_kernel_signatures(&self, status: &TxHashsetWriteStatus) -> Result<(), Error> {
 		let now = Instant::now();
 
 		let mut kern_count = 0;
@@ -983,10 +995,7 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn verify_rangeproofs<T>(&self, status: &T) -> Result<(), Error>
-	where
-		T: TxHashsetWriteStatus,
-	{
+	fn verify_rangeproofs(&self, status: &TxHashsetWriteStatus) -> Result<(), Error> {
 		let now = Instant::now();
 
 		let mut commits: Vec<Commitment> = vec![];

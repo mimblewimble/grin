@@ -14,5 +14,7 @@ serde = "1"
 serde_derive = "1"
 serde_json = "1"
 uuid = { version = "0.6", features = ["serde", "v4"] }
+#only used for hashing
+rust-crypto = "0.2"
 
 grin_util = { path = "../util" }

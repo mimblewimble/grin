@@ -25,10 +25,11 @@ use std::sync::{Arc, Mutex};
 use serde_json as json;
 
 use core::core::hash::Hashed;
+use core::core::Transaction;
 use core::ser;
 use keychain::Keychain;
 use libtx::slate::Slate;
-use libwallet::internal::{selection, sigcontext, tx, updater};
+use libwallet::internal::{selection, tx, updater};
 use libwallet::types::{
 	BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend, WalletClient, WalletInfo,
 };
@@ -92,7 +93,7 @@ where
 		res
 	}
 
-	/// Attempt to update outputs and retrieve tranasactions
+	/// Attempt to update outputs and retrieve transactions
 	/// Return (whether the outputs were validated against a node, OutputData)
 	pub fn retrieve_txs(
 		&self,
@@ -174,9 +175,10 @@ where
 		};
 
 		tx::complete_tx(&mut **w, &mut slate_out, &context)?;
+		let tx_hex = util::to_hex(ser::ser_vec(&slate_out.tx).unwrap());
 
 		// lock our inputs
-		lock_fn_out(&mut **w)?;
+		lock_fn_out(&mut **w, &tx_hex)?;
 		w.close()?;
 		Ok(slate_out)
 	}
@@ -207,12 +209,17 @@ where
 		let mut pub_tx = File::create(dest)?;
 		pub_tx.write_all(json::to_string(&slate).unwrap().as_bytes())?;
 		pub_tx.sync_all()?;
-		let mut priv_tx = File::create(dest.to_owned() + ".private")?;
-		priv_tx.write_all(json::to_string(&context).unwrap().as_bytes())?;
-		priv_tx.sync_all()?;
+
+		{
+			let mut batch = w.batch()?;
+			batch.save_private_context(slate.id.as_bytes(), &context)?;
+			batch.commit()?;
+		}
+
+		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
 
 		// lock our inputs
-		lock_fn(&mut **w)?;
+		lock_fn(&mut **w, &tx_hex)?;
 		w.close()?;
 		Ok(())
 	}
@@ -257,25 +264,22 @@ where
 	/// sender as well as the private file generate on the first send step.
 	/// Builds the complete transaction and sends it to a grin node for
 	/// propagation.
-	pub fn file_finalize_tx(
-		&mut self,
-		private_tx_file: &str,
-		receiver_file: &str,
-	) -> Result<Slate, Error> {
+	pub fn file_finalize_tx(&mut self, receiver_file: &str) -> Result<Slate, Error> {
 		let mut pub_tx_f = File::open(receiver_file)?;
 		let mut content = String::new();
 		pub_tx_f.read_to_string(&mut content)?;
 		let mut slate: Slate = json::from_str(&content).map_err(|_| ErrorKind::Format)?;
 
-		let mut priv_tx_f = File::open(private_tx_file)?;
-		let mut content = String::new();
-		priv_tx_f.read_to_string(&mut content)?;
-		let context: sigcontext::Context = json::from_str(&content).map_err(|_| ErrorKind::Format)?;
-
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 
+		let context = w.get_private_context(slate.id.as_bytes())?;
 		tx::complete_tx(&mut **w, &mut slate, &context)?;
+		{
+			let mut batch = w.batch()?;
+			batch.delete_private_context(slate.id.as_bytes())?;
+			batch.commit()?;
+		}
 
 		w.close()?;
 		Ok(slate)
@@ -332,6 +336,80 @@ where
 				"api: post_tx: successfully posted tx: {}, fluff? {}",
 				slate.tx.hash(),
 				fluff
+			);
+			Ok(())
+		}
+	}
+
+	/// Writes stored transaction data to a given file
+	pub fn dump_stored_tx(&self, tx_id: u32, dest: &str) -> Result<(), Error> {
+		let (confirmed, tx_hex) = {
+			let mut w = self.wallet.lock().unwrap();
+			w.open_with_credentials()?;
+			let res = tx::retrieve_tx_hex(&mut **w, tx_id)?;
+			w.close()?;
+			res
+		};
+		if confirmed {
+			warn!(
+				LOGGER,
+				"api: dump_stored_tx: transaction at {} is already confirmed.", tx_id
+			);
+		}
+		if tx_hex.is_none() {
+			error!(
+				LOGGER,
+				"api: dump_stored_tx: completed transaction at {} does not exist.", tx_id
+			);
+			return Err(ErrorKind::TransactionBuildingNotCompleted(tx_id))?;
+		}
+		let tx_bin = util::from_hex(tx_hex.unwrap()).unwrap();
+		let tx = ser::deserialize::<Transaction>(&mut &tx_bin[..])?;
+		let mut tx_file = File::create(dest)?;
+		tx_file.write_all(json::to_string(&tx).unwrap().as_bytes())?;
+		tx_file.sync_all()?;
+		Ok(())
+	}
+
+	/// (Re)Posts a transaction that's already been stored to the chain
+	pub fn post_stored_tx(&self, tx_id: u32, fluff: bool) -> Result<(), Error> {
+		let client;
+		let (confirmed, tx_hex) = {
+			let mut w = self.wallet.lock().unwrap();
+			w.open_with_credentials()?;
+			client = w.client().clone();
+			let res = tx::retrieve_tx_hex(&mut **w, tx_id)?;
+			w.close()?;
+			res
+		};
+		if confirmed {
+			error!(
+				LOGGER,
+				"api: repost_tx: transaction at {} is confirmed. NOT resending.", tx_id
+			);
+			return Err(ErrorKind::TransactionAlreadyConfirmed)?;
+		}
+		if tx_hex.is_none() {
+			error!(
+				LOGGER,
+				"api: repost_tx: completed transaction at {} does not exist.", tx_id
+			);
+			return Err(ErrorKind::TransactionBuildingNotCompleted(tx_id))?;
+		}
+
+		let res = client.post_tx(
+			&TxWrapper {
+				tx_hex: tx_hex.unwrap(),
+			},
+			fluff,
+		);
+		if let Err(e) = res {
+			error!(LOGGER, "api: repost_tx: failed with error: {}", e);
+			Err(e)
+		} else {
+			debug!(
+				LOGGER,
+				"api: repost_tx: successfully posted tx at: {}, fluff? {}", tx_id, fluff
 			);
 			Ok(())
 		}

@@ -19,12 +19,15 @@ use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
+use std::mem;
+use std::sync::{Arc, RwLock};
 
 use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::target::Difficulty;
+use core::verifier_cache::{LruVerifierCache, VerifierCache};
 use core::{
 	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, Transaction,
 	TransactionBody, TxKernel,
@@ -198,6 +201,39 @@ pub struct BlockHeader {
 	pub pow: ProofOfWork,
 }
 
+/// Serialized size of fixed part of a BlockHeader, i.e. without pow
+fn fixed_size_of_serialized_header() -> usize {
+	let mut size: usize = 0;
+	size += mem::size_of::<u16>(); // version
+	size += mem::size_of::<u64>(); // height
+	size += mem::size_of::<Hash>(); // previous
+	size += mem::size_of::<u64>(); // timestamp
+	size += mem::size_of::<Difficulty>(); // total_difficulty
+	size += mem::size_of::<Hash>(); // output_root
+	size += mem::size_of::<Hash>(); // range_proof_root
+	size += mem::size_of::<Hash>(); // kernel_root
+	size += mem::size_of::<BlindingFactor>(); // total_kernel_offset
+	size += mem::size_of::<Commitment>(); // total_kernel_sum
+	size += mem::size_of::<u64>(); // output_mmr_size
+	size += mem::size_of::<u64>(); // kernel_mmr_size
+	size += mem::size_of::<u64>(); // nonce
+	size
+}
+
+/// Serialized size of a BlockHeader
+pub fn serialized_size_of_header(cuckoo_sizeshift: u8) -> usize {
+	let mut size = fixed_size_of_serialized_header();
+
+	size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
+	let nonce_bits = cuckoo_sizeshift as usize - 1;
+	let bitvec_len = global::proofsize() * nonce_bits;
+	size += bitvec_len / 8; // pow.nonces
+	if bitvec_len % 8 != 0 {
+		size += 1;
+	}
+	size
+}
+
 impl Default for BlockHeader {
 	fn default() -> BlockHeader {
 		BlockHeader {
@@ -318,6 +354,20 @@ impl BlockHeader {
 	pub fn total_kernel_offset(&self) -> BlindingFactor {
 		self.total_kernel_offset
 	}
+
+	/// Serialized size of this header
+	pub fn serialized_size(&self) -> usize {
+		let mut size = fixed_size_of_serialized_header();
+
+		size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
+		let nonce_bits = self.pow.cuckoo_sizeshift as usize - 1;
+		let bitvec_len = global::proofsize() * nonce_bits;
+		size += bitvec_len / 8; // pow.nonces
+		if bitvec_len % 8 != 0 {
+			size += 1;
+		}
+		size
+	}
 }
 
 /// A block as expressed in the MimbleWimble protocol. The reward is
@@ -354,8 +404,12 @@ impl Readable for Block {
 
 		let body = TransactionBody::read(reader)?;
 
-		// Now validate the body and treat any validation error as corrupted data.
-		body.validate(true).map_err(|_| ser::Error::CorruptedData)?;
+		// Now "lightweight" validation of the block.
+		// Treat any validation issues as data corruption.
+		// An example of this would be reading a block
+		// that exceeded the allowed number of inputs.
+		body.validate_read(true)
+			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(Block {
 			header: header,
@@ -404,8 +458,15 @@ impl Block {
 		difficulty: Difficulty,
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
-		let mut block =
-			Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
+		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+		let mut block = Block::with_reward(
+			prev,
+			txs,
+			reward_output.0,
+			reward_output.1,
+			difficulty,
+			verifier_cache,
+		)?;
 
 		// Now set the pow on the header so block hashing works as expected.
 		{
@@ -479,10 +540,16 @@ impl Block {
 		reward_out: Output,
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
+		verifier: Arc<RwLock<VerifierCache>>,
 	) -> Result<Block, Error> {
-		// A block is just a big transaction, aggregate as such. Note that
-		// aggregate also runs validation and duplicate commitment checks.
-		let agg_tx = transaction::aggregate(txs, Some((reward_out, reward_kern)))?;
+		// A block is just a big transaction, aggregate as such.
+		// Note that aggregation also runs transaction validation
+		// and duplicate commitment checks.
+		let mut agg_tx = transaction::aggregate(txs, verifier)?;
+		// Now add the reward output and reward kernel to the aggregate tx.
+		// At this point the tx is technically invalid,
+		// but the tx body is valid if we account for the reward (i.e. as a block).
+		agg_tx = agg_tx.with_output(reward_out).with_kernel(reward_kern);
 
 		// Now add the kernel offset of the previous block for a total
 		let total_kernel_offset =
@@ -501,6 +568,9 @@ impl Block {
 		let now = Utc::now().timestamp();
 		let timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now, 0), Utc);
 
+		// Now build the block with all the above information.
+		// Note: We have not validated the block here.
+		// Caller must validate the block as necessary.
 		Block {
 			header: BlockHeader {
 				height: prev.height + 1,
@@ -584,6 +654,18 @@ impl Block {
 		})
 	}
 
+	/// "Lightweight" validation that we can perform quickly during read/deserialization.
+	/// Subset of full validation that skips expensive verification steps, specifically -
+	/// * rangeproof verification (on the body)
+	/// * kernel signature verification (on the body)
+	/// * coinbase sum verification
+	/// * kernel sum verification
+	pub fn validate_read(&self) -> Result<(), Error> {
+		self.body.validate_read(true)?;
+		self.verify_kernel_lock_heights()?;
+		Ok(())
+	}
+
 	/// Validates all the elements in a block that can be checked without
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
@@ -591,8 +673,9 @@ impl Block {
 		&self,
 		prev_kernel_offset: &BlindingFactor,
 		prev_kernel_sum: &Commitment,
+		verifier: Arc<RwLock<VerifierCache>>,
 	) -> Result<(Commitment), Error> {
-		self.body.validate(true)?;
+		self.body.validate(true, verifier)?;
 
 		self.verify_kernel_lock_heights()?;
 		self.verify_coinbase()?;

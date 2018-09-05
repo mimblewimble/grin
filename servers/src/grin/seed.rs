@@ -18,6 +18,7 @@
 
 use chrono::prelude::Utc;
 use chrono::Duration;
+use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::str;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -63,10 +64,15 @@ pub fn connect_and_monitor(
 			);
 
 			let mut prev = Utc::now() - Duration::seconds(60);
+			let mut start_attempt = 0;
+			let start_wait_base: i64 = 2;
 			loop {
 				let current_time = Utc::now();
 
-				if peers.peer_count() < p2p_server.config.peer_min_preferred_count()
+				// make several attempts to get peers as quick as possible with
+				// exponential backoff
+				if (peers.peer_count() < p2p_server.config.peer_min_preferred_count()
+					&& current_time - prev > Duration::seconds(start_wait_base.pow(start_attempt)))
 					|| current_time - prev > Duration::seconds(20)
 				{
 					// try to connect to any address sent to the channel
@@ -84,6 +90,9 @@ pub fn connect_and_monitor(
 					update_dandelion_relay(peers.clone(), dandelion_config.clone());
 
 					prev = current_time;
+					if start_attempt < 6 {
+						start_attempt += 1;
+					}
 				}
 
 				thread::sleep(time::Duration::from_secs(1));
@@ -130,8 +139,10 @@ fn monitor_peers(
 
 	debug!(
 		LOGGER,
-		"monitor_peers: {} connected ({} most_work). \
+		"monitor_peers: on {}:{}, {} connected ({} most_work). \
 		 all {} = {} healthy + {} banned + {} defunct",
+		config.host,
+		config.port,
 		peers.peer_count(),
 		peers.most_work_peers().len(),
 		total_count,
@@ -153,7 +164,10 @@ fn monitor_peers(
 	let mut connected_peers: Vec<SocketAddr> = vec![];
 	for p in peers.connected_peers() {
 		if let Ok(p) = p.try_read() {
-			debug!(LOGGER, "monitor_peers: ask {} for more peers", p.info.addr);
+			debug!(
+				LOGGER,
+				"monitor_peers: {}:{} ask {} for more peers", config.host, config.port, p.info.addr,
+			);
 			let _ = p.send_peer_request(capabilities);
 			connected_peers.push(p.info.addr)
 		} else {
@@ -166,9 +180,11 @@ fn monitor_peers(
 		Some(preferred_peers) => {
 			for mut p in preferred_peers {
 				if !connected_peers.is_empty() {
-					if connected_peers.contains(&p) {
+					if !connected_peers.contains(&p) {
 						tx.send(p).unwrap();
 					}
+				} else {
+					tx.send(p).unwrap();
 				}
 			}
 		}
@@ -183,7 +199,10 @@ fn monitor_peers(
 		config.peer_max_count() as usize,
 	);
 	for p in new_peers.iter().filter(|p| !peers.is_known(&p.addr)) {
-		debug!(LOGGER, "monitor_peers: queue to soon try {}", p.addr);
+		debug!(
+			LOGGER,
+			"monitor_peers: on {}:{}, queue to soon try {}", config.host, config.port, p.addr,
+		);
 		tx.send(p.addr).unwrap();
 	}
 }
@@ -256,18 +275,62 @@ fn listen_for_addrs(
 			let _ = thread::Builder::new()
 				.name("peer_connect".to_string())
 				.spawn(move || {
-					let connect_peer = p2p_c.connect(&addr);
-					match connect_peer {
-						Ok(p) => {
-							trace!(LOGGER, "connect_and_req: ok. attempting send_peer_request");
-							if let Ok(p) = p.try_read() {
-								let _ = p.send_peer_request(capab);
+					let mut connect_retry_count = 0;
+					loop {
+						let connect_peer = p2p_c.connect(&addr);
+						match connect_peer {
+							Ok(p) => {
+								trace!(
+									LOGGER,
+									"connect_and_req: on {}:{}. connect to {} ok. attempting send_peer_request",
+									p2p_c.config.host,
+									p2p_c.config.port,
+									addr
+								);
+								if let Ok(p) = p.try_read() {
+									let _ = p.send_peer_request(capab);
+								}
+								let _ = peers_c.update_state(addr, p2p::State::Healthy);
+								break;
+							}
+							Err(e) => {
+								debug!(
+									LOGGER,
+									"connect_and_req: on {}:{}. connect to {} is Defunct. {:?}",
+									p2p_c.config.host,
+									p2p_c.config.port,
+									addr,
+									e,
+								);
+								let _ = peers_c.update_state(addr, p2p::State::Defunct);
+
+								// don't retry if connection refused or PeerWithSelf
+								match e {
+									p2p::Error::Connection(io_err) => {
+										if io::ErrorKind::ConnectionRefused == io_err.kind() {
+											break;
+										}
+									}
+									p2p::Error::PeerWithSelf => break,
+									_ => continue,
+								}
 							}
 						}
-						Err(e) => {
-							debug!(LOGGER, "connect_and_req: {} is Defunct; {:?}", addr, e);
-							let _ = peers_c.update_state(addr, p2p::State::Defunct);
+
+						// retry for 3 times
+						thread::sleep(time::Duration::from_secs(1));
+						connect_retry_count += 1;
+						if connect_retry_count >= 3 {
+							break;
 						}
+						debug!(
+							LOGGER,
+							"connect_and_req: on {}:{}. connect to {} retrying {}",
+							p2p_c.config.host,
+							p2p_c.config.port,
+							addr,
+							connect_retry_count,
+						);
 					}
 				});
 		}
@@ -305,7 +368,8 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 pub fn web_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 	Box::new(|| {
 		let text: String = api::client::get(SEEDS_URL).expect("Failed to resolve seeds");
-		let addrs = text.split_whitespace()
+		let addrs = text
+			.split_whitespace()
 			.map(|s| s.parse().unwrap())
 			.collect::<Vec<_>>();
 		debug!(LOGGER, "Retrieved seed addresses: {:?}", addrs);

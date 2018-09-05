@@ -17,7 +17,7 @@
 use keychain::{Identifier, Keychain};
 use libtx::{build, slate::Slate, tx_fee};
 use libwallet::error::{Error, ErrorKind};
-use libwallet::internal::{keys, sigcontext};
+use libwallet::internal::keys;
 use libwallet::types::*;
 
 use util::LOGGER;
@@ -40,8 +40,8 @@ pub fn build_send_tx_slate<T: ?Sized, C, K>(
 ) -> Result<
 	(
 		Slate,
-		sigcontext::Context,
-		impl FnOnce(&mut T) -> Result<(), Error>,
+		Context,
+		impl FnOnce(&mut T, &str) -> Result<(), Error>,
 	),
 	Error,
 >
@@ -74,7 +74,7 @@ where
 	let blinding = slate.add_transaction_elements(&keychain, elems)?;
 
 	// Create our own private context
-	let mut context = sigcontext::Context::new(
+	let mut context = Context::new(
 		wallet.keychain().secp(),
 		blinding.secret_key(&keychain.secp()).unwrap(),
 	);
@@ -97,12 +97,13 @@ where
 
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
-	let update_sender_wallet_fn = move |wallet: &mut T| {
+	let update_sender_wallet_fn = move |wallet: &mut T, tx_hex: &str| {
 		let mut batch = wallet.batch()?;
 		let log_id = batch.next_tx_log_id(root_key_id.clone())?;
 		let mut t = TxLogEntry::new(TxLogEntryType::TxSent, log_id);
 		t.tx_slate_id = Some(slate_id);
 		t.fee = Some(fee);
+		t.tx_hex = Some(tx_hex.to_owned());
 		let mut amount_debited = 0;
 		t.num_inputs = lock_inputs.len();
 		for id in lock_inputs {
@@ -149,7 +150,7 @@ pub fn build_recipient_output_with_slate<T: ?Sized, C, K>(
 ) -> Result<
 	(
 		Identifier,
-		sigcontext::Context,
+		Context,
 		impl FnOnce(&mut T) -> Result<(), Error>,
 	),
 	Error,
@@ -173,7 +174,7 @@ where
 		slate.add_transaction_elements(&keychain, vec![build::output(amount, key_id.clone())])?;
 
 	// Add blinding sum to our context
-	let mut context = sigcontext::Context::new(
+	let mut context = Context::new(
 		keychain.secp(),
 		blinding
 			.secret_key(wallet.keychain().clone().secp())

@@ -24,6 +24,7 @@ use chain::OrphanBlockPool;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
+use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader};
 use core::global;
 use error::{Error, ErrorKind};
@@ -54,10 +55,20 @@ pub struct BlockContext {
 	pub orphans: Arc<OrphanBlockPool>,
 }
 
+// Check if this block is the next block *immediately*
+// after our current chain head.
+fn is_next_block(header: &BlockHeader, ctx: &mut BlockContext) -> bool {
+	header.previous == ctx.head.last_block_h
+}
+
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain. Returns the new chain head if
 /// updated.
-pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+pub fn process_block(
+	b: &Block,
+	ctx: &mut BlockContext,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
+) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
@@ -70,57 +81,98 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		b.outputs().len(),
 		b.kernels().len(),
 	);
-	check_known(b.hash(), ctx)?;
 
-	validate_header(&b.header, ctx)?;
+	// First thing we do is take a write lock on the txhashset.
+	// We may receive the same block from multiple peers simultaneously.
+	// We want to process the first one fully to avoid redundant work
+	// processing the duplicates.
+	let txhashset = ctx.txhashset.clone();
+	let mut txhashset = txhashset.write().unwrap();
 
-	// now check we actually have the previous block in the store
-	// not just the header but the block itself
-	// short circuit the test first both for performance (in-mem vs db access)
-	// but also for the specific case of the first fast sync full block
-	if b.header.previous != ctx.head.last_block_h {
-		// we cannot assume we can use the chain head for this as we may be dealing
-		// with a fork we cannot use heights here as the fork may have jumped in
-		// height
-		match ctx.store.block_exists(&b.header.previous) {
-			Ok(true) => {}
-			Ok(false) => {
-				return Err(ErrorKind::Orphan.into());
-			}
-			Err(e) => {
-				return Err(ErrorKind::StoreErr(e, "pipe get previous".to_owned()).into());
-			}
-		}
-	}
-
-	// validate the block itself
-	// we can do this now before interacting with the txhashset
-	let _sums = validate_block(b, ctx)?;
-
-	// header and block both valid, and we have a previous block
-	// so take the lock on the txhashset
-	let local_txhashset = ctx.txhashset.clone();
-	let mut txhashset = local_txhashset.write().unwrap();
-
-	// update head now that we're in the lock
+	// Update head now that we are in the lock.
 	ctx.head = ctx.store.head()?;
 
-	let mut batch = ctx.store.batch()?;
+	// Fast in-memory checks to avoid re-processing a block we recently processed.
+	{
+		// Check if we have recently processed this block (via ctx chain head).
+		check_known_head(&b.header, ctx)?;
 
-	// start a chain extension unit of work dependent on the success of the
+		// Check if we have recently processed this block (via block_hashes_cache).
+		check_known_cache(&b.header, ctx)?;
+
+		// Check if this block is already know due it being in the current set of orphan blocks.
+		check_known_orphans(&b.header, ctx)?;
+	}
+
+	// Check our header itself is actually valid before proceeding any further.
+	validate_header(&b.header, ctx)?;
+
+	// Check if are processing the "next" block relative to the current chain head.
+	if is_next_block(&b.header, ctx) {
+		// If this is the "next" block then either -
+		//   * common case where we process blocks sequentially.
+		//   * special case where this is the first fast sync full block
+		// Either way we can proceed (and we know the block is new and unprocessed).
+	} else {
+		// Check we have *this* block in the store.
+		// Stop if we have processed this block previously (it is in the store).
+		// This is more expensive than the earlier check_known() as we hit the store.
+		check_known_store(&b.header, ctx)?;
+
+		// Check existing MMR (via rewind) to see if this block is known to us already.
+		// This should catch old blocks before we check to see if they appear to be
+		// orphaned due to compacting/pruning on a fast-sync node.
+		// This is more expensive than check_known_store() as we rewind the txhashset.
+		// But we only incur the cost of the rewind if this is an earlier block on the same chain.
+		check_known_mmr(&b.header, ctx, &mut txhashset)?;
+
+		// At this point it looks like this is a new block that we have not yet processed.
+		// Check we have the *previous* block in the store.
+		// If we do not then treat this block as an orphan.
+		check_prev_store(&b.header, ctx)?;
+	}
+
+	// Validate the block itself.
+	// Taking advantage of the verifier_cache for
+	// rangeproofs and kernel signatures.
+	validate_block(b, ctx, verifier_cache)?;
+
+	// Begin a new batch as we may begin modifying the db at this point.
+	let store = ctx.store.clone();
+	let mut batch = store.batch()?;
+
+	// Start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
 	txhashset::extending(&mut txhashset, &mut batch, |mut extension| {
 		// First we rewind the txhashset extension if necessary
 		// to put it into a consistent state for validating the block.
 		// We can skip this step if the previous header is the latest header we saw.
-		if b.header.previous != ctx.head.last_block_h {
+		if is_next_block(&b.header, ctx) {
+			// No need to rewind if we are processing the next block.
+		} else {
+			// Rewind the re-apply blocks on the forked chain to
+			// put the txhashset in the correct forked state
+			// (immediately prior to this new block).
 			rewind_and_apply_fork(b, ctx.store.clone(), extension)?;
 		}
-		validate_block_via_txhashset(b, &mut extension)?;
 
-		if !block_has_more_work(b, &ctx.head) {
+		// Check any coinbase being spent have matured sufficiently.
+		// This needs to be done within the context of a potentially
+		// rewound txhashset extension to reflect chain state prior
+		// to applying the new block.
+		verify_coinbase_maturity(b, &mut extension)?;
+
+		// Apply the block to the txhashset state.
+		// Validate the txhashset roots and sizes against the block header.
+		// Block is invalid if there are any discrepencies.
+		apply_block_to_txhashset(b, &mut extension)?;
+
+		// If applying this block does not increase the work on the chain then
+		// we know we have not yet updated the chain to produce a new chain head.
+		if !block_has_more_work(&b.header, &ctx.head) {
 			extension.force_rollback();
 		}
+
 		Ok(())
 	})?;
 
@@ -130,12 +182,19 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		b.hash(),
 		b.header.height,
 	);
+
+	// Add the newly accepted block and header to our index.
 	add_block(b, &mut batch)?;
-	let res = update_head(b, &ctx, &mut batch);
-	if res.is_ok() {
-		batch.commit()?;
-	}
-	res
+
+	// Update the chain head in the index (if necessary)
+	let res = update_head(b, &ctx, &mut batch)?;
+
+	// Commit the batch to store all updates to the db/index.
+	batch.commit()?;
+
+	// Return the new chain tip if we added work, or
+	// None if this block has not added work.
+	Ok(res)
 }
 
 /// Process the block header.
@@ -188,19 +247,125 @@ fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	Ok(())
 }
 
-/// Quick in-memory check to fast-reject any block we've already handled
-/// recently. Keeps duplicates from the network in check.
-fn check_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
+/// Quick in-memory check to fast-reject any block handled recently.
+/// Keeps duplicates from the network in check.
+/// Checks against the last_block_h and prev_block_h of the chain head.
+fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	let bh = header.hash();
 	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
-		return Err(ErrorKind::Unfit("already known".to_string()).into());
+		return Err(ErrorKind::Unfit("already known in head".to_string()).into());
 	}
+	Ok(())
+}
+
+/// Quick in-memory check to fast-reject any block handled recently.
+/// Keeps duplicates from the network in check.
+/// Checks against the cache of recently processed block hashes.
+fn check_known_cache(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	let cache = ctx.block_hashes_cache.read().unwrap();
-	if cache.contains(&bh) {
+	if cache.contains(&header.hash()) {
 		return Err(ErrorKind::Unfit("already known in cache".to_string()).into());
 	}
-	if ctx.orphans.contains(&bh) {
-		return Err(ErrorKind::Unfit("already known in orphans".to_string()).into());
+	Ok(())
+}
+
+/// Check if this block is in the set of known orphans.
+fn check_known_orphans(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	if ctx.orphans.contains(&header.hash()) {
+		Err(ErrorKind::Unfit("already known in orphans".to_string()).into())
+	} else {
+		Ok(())
 	}
+}
+
+// Check if this block is in the store already.
+fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	match ctx.store.block_exists(&header.hash()) {
+		Ok(true) => {
+			if header.height < ctx.head.height.saturating_sub(50) {
+				// TODO - we flag this as an "abusive peer" but only in the case
+				// where we have the full block in our store.
+				// So this is not a particularly exhaustive check.
+				Err(ErrorKind::OldBlock.into())
+			} else {
+				Err(ErrorKind::Unfit("already known in store".to_string()).into())
+			}
+		}
+		Ok(false) => {
+			// Not yet processed this block, we can proceed.
+			Ok(())
+		}
+		Err(e) => {
+			return Err(ErrorKind::StoreErr(e, "pipe get this block".to_owned()).into());
+		}
+	}
+}
+
+// Check we have the *previous* block in the store.
+// Note: not just the header but the full block itself.
+// We cannot assume we can use the chain head for this
+// as we may be dealing with a fork (with less work currently).
+fn check_prev_store(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	match ctx.store.block_exists(&header.previous) {
+		Ok(true) => {
+			// We have the previous block in the store, so we can proceed.
+			Ok(())
+		}
+		Ok(false) => {
+			// We do not have the previous block in the store.
+			// We have not yet processed the previous block so
+			// this block is an orphan (for now).
+			Err(ErrorKind::Orphan.into())
+		}
+		Err(e) => Err(ErrorKind::StoreErr(e, "pipe get previous".to_owned()).into()),
+	}
+}
+
+// If we are processing an "old" block then
+// we can quickly check if it already exists
+// on our current longest chain (we have already processes it).
+// First check the header matches via current height index.
+// Then peek directly into the MMRs at the appropriate pos.
+// We can avoid a full rewind in this case.
+fn check_known_mmr(
+	header: &BlockHeader,
+	ctx: &mut BlockContext,
+	write_txhashset: &mut txhashset::TxHashSet,
+) -> Result<(), Error> {
+	// No point checking the MMR if this block is not earlier in the chain.
+	if header.height > ctx.head.height {
+		return Ok(());
+	}
+
+	// Use "header by height" index to look at current most work chain.
+	// Header is not "known if the header differs at the given height.
+	let local_header = ctx.store.get_header_by_height(header.height)?;
+	if local_header.hash() != header.hash() {
+		return Ok(());
+	}
+
+	// Rewind the txhashset to the given block and validate
+	// roots and sizes against the header.
+	// If everything matches then this is a "known" block
+	// and we do not need to spend any more effort
+	txhashset::extending_readonly(write_txhashset, |extension| {
+		extension.rewind(header)?;
+
+		// We want to return an error here (block already known)
+		// if we *successfully validate the MMR roots and sizes.
+		if extension.validate_roots(header).is_ok() && extension.validate_sizes(header).is_ok() {
+			// TODO - determine if block is more than 50 blocks old
+			// and return specific OldBlock error.
+			// Or pull OldBlock (abusive peer) out into separate processing step.
+
+			return Err(ErrorKind::Unfit("already known on most work chain".to_string()).into());
+		}
+
+		// If we get here then we have *not* seen this block before
+		// and we should continue processing the block.
+		Ok(())
+	})?;
+
 	Ok(())
 }
 
@@ -307,65 +472,36 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	Ok(())
 }
 
-fn validate_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	if ctx.store.block_exists(&b.hash())? {
-		if b.header.height < ctx.head.height.saturating_sub(50) {
-			return Err(ErrorKind::OldBlock.into());
-		} else {
-			return Err(ErrorKind::Unfit("already known".to_string()).into());
-		}
-	}
-	let prev = ctx.store.get_block_header(&b.header.previous)?;
-	b.validate(&prev.total_kernel_offset, &prev.total_kernel_sum)
+fn validate_block(
+	block: &Block,
+	ctx: &mut BlockContext,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
+) -> Result<(), Error> {
+	let prev = ctx.store.get_block_header(&block.header.previous)?;
+	block
+		.validate(
+			&prev.total_kernel_offset,
+			&prev.total_kernel_sum,
+			verifier_cache,
+		)
 		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }
 
-/// Fully validate the block by applying it to the txhashset extension
-/// and checking the roots.
-/// Rewind and reapply forked blocks if necessary to put the txhashset extension
-/// in the correct state to accept the block.
-fn validate_block_via_txhashset(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
-	// First check we are not attempting to spend any coinbase outputs
-	// before they have matured sufficiently.
-	ext.verify_coinbase_maturity(&b.inputs(), b.header.height)?;
+/// Verify the block is not attempting to spend coinbase outputs
+/// before they have sufficiently matured.
+/// Note: requires a txhashset extension.
+fn verify_coinbase_maturity(block: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+	ext.verify_coinbase_maturity(&block.inputs(), block.header.height)?;
+	Ok(())
+}
 
-	// apply the new block to the MMR trees and check the new root hashes
-	ext.apply_block(&b)?;
-
-	let roots = ext.roots();
-	if roots.output_root != b.header.output_root
-		|| roots.rproof_root != b.header.range_proof_root
-		|| roots.kernel_root != b.header.kernel_root
-	{
-		ext.dump(false);
-
-		debug!(
-			LOGGER,
-			"validate_block_via_txhashset: output roots - {:?}, {:?}",
-			roots.output_root,
-			b.header.output_root,
-		);
-		debug!(
-			LOGGER,
-			"validate_block_via_txhashset: rproof roots - {:?}, {:?}",
-			roots.rproof_root,
-			b.header.range_proof_root,
-		);
-		debug!(
-			LOGGER,
-			"validate_block_via_txhashset: kernel roots - {:?}, {:?}",
-			roots.kernel_root,
-			b.header.kernel_root,
-		);
-
-		return Err(ErrorKind::InvalidRoot.into());
-	}
-	let sizes = ext.sizes();
-	if b.header.output_mmr_size != sizes.0 || b.header.kernel_mmr_size != sizes.2 {
-		return Err(ErrorKind::InvalidMMRSize.into());
-	}
-
+/// Fully validate the block by applying it to the txhashset extension.
+/// Check both the txhashset roots and sizes are correct after applying the block.
+fn apply_block_to_txhashset(block: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+	ext.apply_block(block)?;
+	ext.validate_roots(&block.header)?;
+	ext.validate_sizes(&block.header)?;
 	Ok(())
 }
 
@@ -394,7 +530,7 @@ fn add_block_header(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Er
 fn update_head(b: &Block, ctx: &BlockContext, batch: &store::Batch) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
 	// when extending the head), update it
-	if block_has_more_work(b, &ctx.head) {
+	if block_has_more_work(&b.header, &ctx.head) {
 		// update the block height index
 		batch
 			.setup_height(&b.header, &ctx.head)
@@ -426,8 +562,8 @@ fn update_head(b: &Block, ctx: &BlockContext, batch: &store::Batch) -> Result<Op
 }
 
 // Whether the provided block totals more work than the chain tip
-fn block_has_more_work(b: &Block, tip: &Tip) -> bool {
-	let block_tip = Tip::from_block(&b.header);
+fn block_has_more_work(header: &BlockHeader, tip: &Tip) -> bool {
+	let block_tip = Tip::from_block(header);
 	block_tip.total_difficulty > tip.total_difficulty
 }
 
@@ -499,7 +635,7 @@ pub fn rewind_and_apply_fork(
 		b.header.hash()
 	);
 
-	// rewind the sum trees up to the forking block
+	// Rewind the txhashset state back to the block where we forked from the most work chain.
 	ext.rewind(&forked_header)?;
 
 	trace!(
@@ -508,7 +644,7 @@ pub fn rewind_and_apply_fork(
 		fork_hashes,
 	);
 
-	// apply all forked blocks, including this new one
+	// Now re-apply all blocks on this fork.
 	for (_, h) in fork_hashes {
 		let fb = store
 			.get_block(&h)

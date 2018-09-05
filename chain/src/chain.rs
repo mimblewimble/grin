@@ -25,6 +25,7 @@ use lmdb;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::target::Difficulty;
+use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use error::{Error, ErrorKind};
@@ -136,7 +137,7 @@ pub struct Chain {
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	// Recently processed blocks to avoid double-processing
 	block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
-
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader, u8) -> bool,
 }
@@ -154,6 +155,7 @@ impl Chain {
 		adapter: Arc<ChainAdapter>,
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader, u8) -> bool,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainStore::new(db_env)?;
 
@@ -182,7 +184,8 @@ impl Chain {
 			head: Arc::new(Mutex::new(head)),
 			orphans: Arc::new(OrphanBlockPool::new()),
 			txhashset: Arc::new(RwLock::new(txhashset)),
-			pow_verifier: pow_verifier,
+			pow_verifier,
+			verifier_cache,
 			block_hashes_cache: Arc::new(RwLock::new(VecDeque::with_capacity(HASHES_CACHE_SIZE))),
 		})
 	}
@@ -219,7 +222,7 @@ impl Chain {
 		let bhash = b.hash();
 		let mut ctx = self.ctx_from_head(head, opts)?;
 
-		let res = pipe::process_block(&b, &mut ctx);
+		let res = pipe::process_block(&b, &mut ctx, self.verifier_cache.clone());
 
 		let add_to_hash_cache = || {
 			// only add to hash cache below if block is definitively accepted
@@ -347,41 +350,59 @@ impl Chain {
 
 	/// Check for orphans, once a block is successfully added
 	pub fn check_orphans(&self, mut height: u64) {
-		trace!(
-			LOGGER,
-			"chain: doing check_orphans at {}, # orphans {}",
-			height,
-			self.orphans.len(),
-		);
+		let initial_height = height;
+
 		// Is there an orphan in our orphans that we can now process?
 		loop {
+			trace!(
+				LOGGER,
+				"check_orphans: at {}, # orphans {}",
+				height,
+				self.orphans.len(),
+			);
+
+			let mut orphan_accepted = false;
+			let mut height_accepted = height;
+
 			if let Some(orphans) = self.orphans.remove_by_height(&height) {
-				for orphan in orphans {
-					trace!(
+				let orphans_len = orphans.len();
+				for (i, orphan) in orphans.into_iter().enumerate() {
+					debug!(
 						LOGGER,
-						"chain: got block {} at {} from orphans. # orphans remaining {}",
+						"check_orphans: get block {} at {}{}",
 						orphan.block.hash(),
 						height,
-						self.orphans.len(),
+						if orphans_len > 1 {
+							format!(", no.{} of {} orphans", i, orphans_len)
+						} else {
+							String::new()
+						},
 					);
 					let res = self.process_block_no_orphans(orphan.block, orphan.opts);
 					if let Ok((_, Some(b))) = res {
-						// We accepted a block, so see if we can accept any orphans
-						height = b.header.height + 1;
-					} else {
-						break;
+						orphan_accepted = true;
+						height_accepted = b.header.height;
 					}
 				}
-			} else {
-				break;
+
+				if orphan_accepted {
+					// We accepted a block, so see if we can accept any orphans
+					height = height_accepted + 1;
+					continue;
+				}
 			}
+			break;
 		}
-		trace!(
-			LOGGER,
-			"chain: done check_orphans at {}. # remaining orphans {}",
-			height - 1,
-			self.orphans.len(),
-		);
+
+		if initial_height != height {
+			debug!(
+				LOGGER,
+				"check_orphans: {} blocks accepted since height {}, remaining # orphans {}",
+				height - initial_height,
+				initial_height,
+				self.orphans.len(),
+			);
+		}
 	}
 
 	/// For the given commitment find the unspent output and return the
@@ -550,10 +571,12 @@ impl Chain {
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	pub fn txhashset_write<T>(&self, h: Hash, txhashset_data: File, status: &T) -> Result<(), Error>
-	where
-		T: TxHashsetWriteStatus,
-	{
+	pub fn txhashset_write(
+		&self,
+		h: Hash,
+		txhashset_data: File,
+		status: &TxHashsetWriteStatus,
+	) -> Result<(), Error> {
 		status.on_setup();
 		let head = self.head().unwrap();
 		let header_head = self.get_header_head().unwrap();

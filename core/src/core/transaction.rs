@@ -17,10 +17,12 @@
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::collections::HashSet;
+use std::sync::{Arc, RwLock};
 use std::{error, fmt};
 
 use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;
+use core::verifier_cache::VerifierCache;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
 use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};
@@ -445,33 +447,6 @@ impl TransactionBody {
 			.fold(0, |acc, ref x| max(acc, x.lock_height))
 	}
 
-	/// Verify the kernel signatures.
-	/// Note: this is expensive.
-	fn verify_kernel_signatures(&self) -> Result<(), Error> {
-		for x in &self.kernels {
-			x.verify()?;
-		}
-		Ok(())
-	}
-
-	/// Verify all the output rangeproofs.
-	/// Note: this is expensive.
-	fn verify_rangeproofs(&self) -> Result<(), Error> {
-		let mut commits: Vec<Commitment> = vec![];
-		let mut proofs: Vec<RangeProof> = vec![];
-		if self.outputs.len() == 0 {
-			return Ok(());
-		}
-		// unfortunately these have to be aligned in memory for the underlying
-		// libsecp call
-		for x in &self.outputs {
-			commits.push(x.commit.clone());
-			proofs.push(x.proof.clone());
-		}
-		Output::batch_verify_proofs(&commits, &proofs)?;
-		Ok(())
-	}
-
 	// Verify the body is not too big in terms of number of inputs|outputs|kernels.
 	fn verify_weight(&self, with_reward: bool) -> Result<(), Error> {
 		// if as_block check the body as if it was a block, with an additional output and
@@ -544,15 +519,65 @@ impl TransactionBody {
 		Ok(())
 	}
 
-	/// Validates all relevant parts of a transaction body. Checks the
-	/// excess value against the signature as well as range proofs for each
-	/// output.
-	pub fn validate(&self, with_reward: bool) -> Result<(), Error> {
+	/// "Lightweight" validation that we can perform quickly during read/deserialization.
+	/// Subset of full validation that skips expensive verification steps, specifically -
+	/// * rangeproof verification
+	/// * kernel signature verification
+	pub fn validate_read(&self, with_reward: bool) -> Result<(), Error> {
 		self.verify_weight(with_reward)?;
 		self.verify_sorted()?;
 		self.verify_cut_through()?;
-		self.verify_rangeproofs()?;
-		self.verify_kernel_signatures()?;
+		Ok(())
+	}
+
+	/// Validates all relevant parts of a transaction body. Checks the
+	/// excess value against the signature as well as range proofs for each
+	/// output.
+	pub fn validate(
+		&self,
+		with_reward: bool,
+		verifier: Arc<RwLock<VerifierCache>>,
+	) -> Result<(), Error> {
+		self.verify_weight(with_reward)?;
+		self.verify_sorted()?;
+		self.verify_cut_through()?;
+
+		// Find all the outputs that have not had their rangeproofs verified.
+		let outputs = {
+			let mut verifier = verifier.write().unwrap();
+			verifier.filter_rangeproof_unverified(&self.outputs)
+		};
+
+		// Now batch verify all those unverified rangeproofs
+		if outputs.len() > 0 {
+			let mut commits = vec![];
+			let mut proofs = vec![];
+			for x in &outputs {
+				commits.push(x.commit);
+				proofs.push(x.proof);
+			}
+			Output::batch_verify_proofs(&commits, &proofs)?;
+		}
+
+		// Find all the kernels that have not yet been verified.
+		let kernels = {
+			let mut verifier = verifier.write().unwrap();
+			verifier.filter_kernel_sig_unverified(&self.kernels)
+		};
+
+		// Verify the unverified tx kernels.
+		// No ability to batch verify these right now
+		// so just do them individually.
+		for x in &kernels {
+			x.verify()?;
+		}
+
+		// Cache the successful verification results for the new outputs and kernels.
+		{
+			let mut verifier = verifier.write().unwrap();
+			verifier.add_rangeproof_verified(outputs);
+			verifier.add_kernel_sig_verified(kernels);
+		}
 		Ok(())
 	}
 }
@@ -598,11 +623,11 @@ impl Readable for Transaction {
 		let body = TransactionBody::read(reader)?;
 		let tx = Transaction { offset, body };
 
-		// Now validate the tx.
+		// Now "lightweight" validation of the tx.
 		// Treat any validation issues as data corruption.
 		// An example of this would be reading a tx
 		// that exceeded the allowed number of inputs.
-		tx.validate(false).map_err(|_| ser::Error::CorruptedData)?;
+		tx.validate_read().map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(tx)
 	}
@@ -732,15 +757,24 @@ impl Transaction {
 		self.body.lock_height()
 	}
 
+	/// "Lightweight" validation that we can perform quickly during read/deserialization.
+	/// Subset of full validation that skips expensive verification steps, specifically -
+	/// * rangeproof verification (on the body)
+	/// * kernel signature verification (on the body)
+	/// * kernel sum verification
+	pub fn validate_read(&self) -> Result<(), Error> {
+		self.body.validate_read(false)?;
+		self.body.verify_features()?;
+		Ok(())
+	}
+
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self, with_reward: bool) -> Result<(), Error> {
-		self.body.validate(with_reward)?;
-		if !with_reward {
-			self.body.verify_features()?;
-			self.verify_kernel_sums(self.overage(), self.offset)?;
-		}
+	pub fn validate(&self, verifier: Arc<RwLock<VerifierCache>>) -> Result<(), Error> {
+		self.body.validate(false, verifier)?;
+		self.body.verify_features()?;
+		self.verify_kernel_sums(self.overage(), self.offset)?;
 		Ok(())
 	}
 
@@ -787,16 +821,16 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 	Ok(())
 }
 
-/// Aggregate a vec of transactions into a multi-kernel transaction with
-/// cut_through. Optionally allows passing a reward output and kernel for
-/// block building.
+/// Aggregate a vec of txs into a multi-kernel tx with cut_through.
 pub fn aggregate(
-	mut transactions: Vec<Transaction>,
-	reward: Option<(Output, TxKernel)>,
+	mut txs: Vec<Transaction>,
+	verifier: Arc<RwLock<VerifierCache>>,
 ) -> Result<Transaction, Error> {
 	// convenience short-circuiting
-	if reward.is_none() && transactions.len() == 1 {
-		return Ok(transactions.pop().unwrap());
+	if txs.is_empty() {
+		return Ok(Transaction::empty());
+	} else if txs.len() == 1 {
+		return Ok(txs.pop().unwrap());
 	}
 
 	let mut inputs: Vec<Input> = vec![];
@@ -807,18 +841,13 @@ pub fn aggregate(
 	// transaction
 	let mut kernel_offsets: Vec<BlindingFactor> = vec![];
 
-	for mut transaction in transactions {
+	for mut tx in txs {
 		// we will sum these later to give a single aggregate offset
-		kernel_offsets.push(transaction.offset);
+		kernel_offsets.push(tx.offset);
 
-		inputs.append(&mut transaction.body.inputs);
-		outputs.append(&mut transaction.body.outputs);
-		kernels.append(&mut transaction.body.kernels);
-	}
-	let with_reward = reward.is_some();
-	if let Some((out, kernel)) = reward {
-		outputs.push(out);
-		kernels.push(kernel);
+		inputs.append(&mut tx.body.inputs);
+		outputs.append(&mut tx.body.outputs);
+		kernels.append(&mut tx.body.kernels);
 	}
 
 	// Sort inputs and outputs during cut_through.
@@ -842,14 +871,18 @@ pub fn aggregate(
 	// The resulting tx could be invalid for a variety of reasons -
 	//   * tx too large (too many inputs|outputs|kernels)
 	//   * cut-through may have invalidated the sums
-	tx.validate(with_reward)?;
+	tx.validate(verifier)?;
 
 	Ok(tx)
 }
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
-pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transaction, Error> {
+pub fn deaggregate(
+	mk_tx: Transaction,
+	txs: Vec<Transaction>,
+	verifier: Arc<RwLock<VerifierCache>>,
+) -> Result<Transaction, Error> {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
@@ -858,7 +891,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	// transaction
 	let mut kernel_offsets = vec![];
 
-	let tx = aggregate(txs, None)?;
+	let tx = aggregate(txs, verifier.clone())?;
 
 	for mk_input in mk_tx.body.inputs {
 		if !tx.body.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
@@ -910,8 +943,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
 
 	// Now validate the resulting tx to ensure we have not built something invalid.
-	tx.validate(false)?;
-
+	tx.validate(verifier)?;
 	Ok(tx)
 }
 

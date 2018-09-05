@@ -33,9 +33,8 @@ use wallet::{FileWallet, HTTPWalletClient, WalletConfig};
 /// Just removes all results from previous runs
 pub fn clean_all_output(test_name_dir: &str) {
 	let target_dir = format!("target/tmp/{}", test_name_dir);
-	let result = fs::remove_dir_all(target_dir);
-	if let Err(e) = result {
-		println!("{}", e);
+	if let Err(e) = fs::remove_dir_all(target_dir) {
+		println!("can't remove output from previous test :{}, may be ok", e);
 	}
 }
 
@@ -71,7 +70,7 @@ pub struct LocalServerContainerConfig {
 	// Whether we're going to mine
 	pub start_miner: bool,
 
-	// time in millis by which to artifically slow down the mining loop
+	// time in millis by which to artificially slow down the mining loop
 	// in this container
 	pub miner_slowdown_in_millis: u64,
 
@@ -154,10 +153,10 @@ pub struct LocalServerContainer {
 impl LocalServerContainer {
 	/// Create a new local server container with defaults, with the given name
 	/// all related files will be created in the directory
-	/// target/tmp/test_servers/{name}
+	/// target/tmp/{name}
 
 	pub fn new(config: LocalServerContainerConfig) -> Result<LocalServerContainer, Error> {
-		let working_dir = format!("target/tmp/test_servers/{}", config.name);
+		let working_dir = format!("target/tmp/{}", config.name);
 		let mut wallet_config = WalletConfig::default();
 
 		wallet_config.api_listen_port = config.wallet_port;
@@ -226,7 +225,7 @@ impl LocalServerContainer {
 
 		for p in &mut self.peer_list {
 			println!("{} connecting to peer: {}", self.config.p2p_server_port, p);
-			s.connect_peer(p.parse().unwrap()).unwrap();
+			let _ = s.connect_peer(p.parse().unwrap());
 		}
 
 		if self.wallet_is_running {
@@ -266,7 +265,7 @@ impl LocalServerContainer {
 		let client = HTTPWalletClient::new(&self.wallet_config.check_node_api_http_addr);
 
 		if let Err(e) = r {
-			//panic!("Error initting wallet seed: {}", e);
+			//panic!("Error initializing wallet seed: {}", e);
 		}
 
 		let wallet: FileWallet<HTTPWalletClient, keychain::ExtKeychain> =

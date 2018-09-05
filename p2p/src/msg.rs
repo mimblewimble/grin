@@ -112,11 +112,11 @@ fn max_msg_size(msg_type: Type) -> u64 {
 pub fn read_exact(
 	conn: &mut TcpStream,
 	mut buf: &mut [u8],
-	timeout: u32,
+	timeout: time::Duration,
 	block_on_empty: bool,
 ) -> io::Result<()> {
-	let sleep_time = time::Duration::from_millis(1);
-	let mut count = 0;
+	let sleep_time = time::Duration::from_micros(10);
+	let mut count = time::Duration::new(0, 0);
 
 	let mut read = 0;
 	loop {
@@ -137,7 +137,7 @@ pub fn read_exact(
 		}
 		if !buf.is_empty() {
 			thread::sleep(sleep_time);
-			count += 1;
+			count += sleep_time;
 		} else {
 			break;
 		}
@@ -152,9 +152,9 @@ pub fn read_exact(
 }
 
 /// Same as `read_exact` but for writing.
-pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<()> {
-	let sleep_time = time::Duration::from_millis(1);
-	let mut count = 0;
+pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: time::Duration) -> io::Result<()> {
+	let sleep_time = time::Duration::from_micros(10);
+	let mut count = time::Duration::new(0, 0);
 
 	while !buf.is_empty() {
 		match conn.write(buf) {
@@ -171,7 +171,7 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<(
 		}
 		if !buf.is_empty() {
 			thread::sleep(sleep_time);
-			count += 1;
+			count += sleep_time;
 		} else {
 			break;
 		}
@@ -188,9 +188,13 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<(
 /// Read a header from the provided connection without blocking if the
 /// underlying stream is async. Typically headers will be polled for, so
 /// we do not want to block.
-pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
+pub fn read_header(conn: &mut TcpStream, msg_type: Option<Type>) -> Result<MsgHeader, Error> {
 	let mut head = vec![0u8; HEADER_LEN as usize];
-	read_exact(conn, &mut head, 10000, false)?;
+	if Some(Type::Hand) == msg_type {
+		read_exact(conn, &mut head, time::Duration::from_millis(10), true)?;
+	} else {
+		read_exact(conn, &mut head, time::Duration::from_secs(10), false)?;
+	}
 	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
 	let max_len = max_msg_size(header.msg_type);
 	// TODO 4x the limits for now to leave ourselves space to change things
@@ -211,7 +215,7 @@ where
 	T: Readable,
 {
 	let mut body = vec![0u8; h.msg_len as usize];
-	read_exact(conn, &mut body, 20000, true)?;
+	read_exact(conn, &mut body, time::Duration::from_secs(20), true)?;
 	ser::deserialize(&mut &body[..]).map_err(From::from)
 }
 
@@ -220,7 +224,7 @@ pub fn read_message<T>(conn: &mut TcpStream, msg_type: Type) -> Result<T, Error>
 where
 	T: Readable,
 {
-	let header = read_header(conn)?;
+	let header = read_header(conn, Some(msg_type))?;
 	if header.msg_type != msg_type {
 		return Err(Error::BadMessage);
 	}

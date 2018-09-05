@@ -142,7 +142,7 @@ impl Default for P2PConfig {
 }
 
 /// Note certain fields are options just so they don't have to be
-/// included in grin.toml, but we don't want them to ever return none
+/// included in grin-server.toml, but we don't want them to ever return none
 impl P2PConfig {
 	/// return ban window
 	pub fn ban_window(&self) -> i64 {

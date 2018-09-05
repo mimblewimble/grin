@@ -105,6 +105,9 @@ fn simulate_seeding() {
 
 	pool.create_server(&mut server_config);
 
+	// wait the seed server fully start up before start remaining servers
+	thread::sleep(time::Duration::from_millis(1_000));
+
 	// point next servers at first seed
 	server_config.is_seeding = false;
 	server_config.seed_addr = String::from(format!(
@@ -116,10 +119,22 @@ fn simulate_seeding() {
 		pool.create_server(&mut server_config);
 	}
 
-	// pool.connect_all_peers();
-
 	let servers = pool.run_all_servers();
+	thread::sleep(time::Duration::from_secs(5));
+
+	// Check they all end up connected.
+	let url = format!(
+		"http://{}:{}/v1/peers/connected",
+		&server_config.base_addr, 30020
+	);
+	let peers_all = api::client::get::<Vec<p2p::PeerInfo>>(url.as_str());
+	assert!(peers_all.is_ok());
+	assert_eq!(peers_all.unwrap().len(), 4);
+
 	stop_all_servers(servers);
+
+	// wait servers fully stop before start next automated test
+	thread::sleep(time::Duration::from_millis(1_000));
 }
 
 /// Create 1 server, start it mining, then connect 4 other peers mining and
@@ -208,6 +223,8 @@ fn simulate_block_propagation() {
 
 	// monitor for a change of head on a different server and check whether
 	// chain height has changed
+	let mut success = false;
+	let mut time_spent = 0;
 	loop {
 		let mut count = 0;
 		for n in 0..5 {
@@ -216,13 +233,22 @@ fn simulate_block_propagation() {
 			}
 		}
 		if count == 5 {
+			success = true;
 			break;
 		}
 		thread::sleep(time::Duration::from_millis(1_000));
+		time_spent += 1;
+		if time_spent >= 60 {
+			break;
+		}
 	}
 	for n in 0..5 {
 		servers[n].stop();
 	}
+	assert_eq!(true, success);
+
+	// wait servers fully stop before start next automated test
+	thread::sleep(time::Duration::from_millis(1_000));
 }
 
 /// Creates 2 different disconnected servers, mine a few blocks on one, connect
@@ -248,8 +274,14 @@ fn simulate_full_sync() {
 	let s1_header = s1.chain.head_header().unwrap();
 
 	// Wait for s2 to sync up to and including the header from s1.
+	let mut time_spent = 0;
 	while s2.head().height < s1_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
+		time_spent += 1;
+		if time_spent >= 60 {
+			println!("sync fail. s2.head().height: {}, s1_header.height: {}", s2.head().height, s1_header.height);
+			break;
+		}
 	}
 
 	// Confirm both s1 and s2 see a consistent header at that height.
@@ -259,6 +291,9 @@ fn simulate_full_sync() {
 	// Stop our servers cleanly.
 	s1.stop();
 	s2.stop();
+
+	// wait servers fully stop before start next automated test
+	thread::sleep(time::Duration::from_millis(1_000));
 }
 
 /// Creates 2 different disconnected servers, mine a few blocks on one, connect
@@ -307,6 +342,9 @@ fn simulate_fast_sync() {
 	// Stop our servers cleanly.
 	s1.stop();
 	s2.stop();
+
+	// wait servers fully stop before start next automated test
+	thread::sleep(time::Duration::from_millis(1_000));
 }
 
 // #[test]
@@ -346,6 +384,9 @@ fn simulate_fast_sync_double() {
 	}
 	s1.stop();
 	s2.stop();
+
+	// wait servers fully stop before start next automated test
+	thread::sleep(time::Duration::from_millis(1_000));
 }
 
 pub fn create_wallet(

@@ -68,7 +68,8 @@ impl CompactBlockBody {
 		self.kern_ids.sort();
 	}
 
-	fn validate(&self) -> Result<(), Error> {
+	/// "Lightweight" validation.
+	fn validate_read(&self) -> Result<(), Error> {
 		self.verify_sorted()?;
 		Ok(())
 	}
@@ -138,8 +139,9 @@ pub struct CompactBlock {
 }
 
 impl CompactBlock {
-	fn validate(&self) -> Result<(), Error> {
-		self.body.validate()?;
+	/// "Lightweight" validation.
+	fn validate_read(&self) -> Result<(), Error> {
+		self.body.validate_read()?;
 		Ok(())
 	}
 
@@ -225,7 +227,7 @@ impl Readable for CompactBlock {
 		};
 
 		// Now validate the compact block and treat any validation error as corrupted data.
-		cb.validate().map_err(|_| ser::Error::CorruptedData)?;
+		cb.validate_read().map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(cb)
 	}

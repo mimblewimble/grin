@@ -64,6 +64,11 @@ impl<'a> Message<'a> {
 		Message { header, conn }
 	}
 
+	/// Get the TcpStream
+	pub fn get_conn(&mut self) -> TcpStream {
+		return self.conn.try_clone().unwrap();
+	}
+
 	/// Read the message body from the underlying connection
 	pub fn body<T>(&mut self) -> Result<T, Error>
 	where
@@ -77,7 +82,12 @@ impl<'a> Message<'a> {
 		while written < len {
 			let read_len = cmp::min(8000, len - written);
 			let mut buf = vec![0u8; read_len];
-			read_exact(&mut self.conn, &mut buf[..], 10000, true)?;
+			read_exact(
+				&mut self.conn,
+				&mut buf[..],
+				time::Duration::from_secs(10),
+				true,
+			)?;
 			writer.write_all(&mut buf)?;
 			written += read_len;
 		}
@@ -112,13 +122,13 @@ impl<'a> Response<'a> {
 		let mut msg =
 			ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64)).unwrap();
 		msg.append(&mut self.body);
-		write_all(&mut self.conn, &msg[..], 10000)?;
+		write_all(&mut self.conn, &msg[..], time::Duration::from_secs(10))?;
 		if let Some(mut file) = self.attachment {
 			let mut buf = [0u8; 8000];
 			loop {
 				match file.read(&mut buf[..]) {
 					Ok(0) => break,
-					Ok(n) => write_all(&mut self.conn, &buf[..n], 10000)?,
+					Ok(n) => write_all(&mut self.conn, &buf[..n], time::Duration::from_secs(10))?,
 					Err(e) => return Err(From::from(e)),
 				}
 			}
@@ -200,7 +210,7 @@ fn poll<H>(
 			let mut retry_send = Err(());
 			loop {
 				// check the read end
-				if let Some(h) = try_break!(error_tx, read_header(conn)) {
+				if let Some(h) = try_break!(error_tx, read_header(conn, None)) {
 					let msg = Message::from_header(h, conn);
 					trace!(
 						LOGGER,

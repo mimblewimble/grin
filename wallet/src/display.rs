@@ -114,6 +114,7 @@ pub fn txs(
 		bMG->"Amount Debited",
 		bMG->"Fee",
 		bMG->"Net Difference",
+		bMG->"Tx Data",
 	]);
 
 	for t in txs {
@@ -145,6 +146,10 @@ pub fn txs(
 				core::amount_to_hr_string(t.amount_debited - t.amount_credited, true)
 			)
 		};
+		let tx_data = match t.tx_hex {
+			Some(_) => format!("Exists"),
+			None => "None".to_owned(),
+		};
 		table.add_row(row![
 			bFC->id,
 			bFC->entry_type,
@@ -158,6 +163,7 @@ pub fn txs(
 			bFR->amount_debited_str,
 			bFR->fee,
 			bFY->net_diff,
+			bFb->tx_data,
 		]);
 	}
 

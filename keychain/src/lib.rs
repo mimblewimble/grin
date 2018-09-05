@@ -16,6 +16,7 @@
 
 extern crate blake2_rfc as blake2;
 extern crate byteorder;
+#[macro_use]
 extern crate grin_util as util;
 extern crate rand;
 extern crate serde;
@@ -24,9 +25,12 @@ extern crate serde_derive;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
+extern crate crypto;
 extern crate uuid;
 
+mod base58;
 pub mod extkey;
+pub mod extkey_bip32;
 mod types;
 
 pub mod keychain;

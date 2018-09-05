@@ -42,7 +42,7 @@ impl Difficulty {
 		Difficulty { num: 0 }
 	}
 
-	/// Difficulty of one, which is the minumum difficulty
+	/// Difficulty of one, which is the minimum difficulty
 	/// (when the hash equals the max target)
 	pub fn one() -> Difficulty {
 		Difficulty { num: 1 }

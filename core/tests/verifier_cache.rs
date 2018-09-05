@@ -12,21 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Transaction integration tests
+extern crate chrono;
 extern crate grin_core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
+use std::sync::{Arc, RwLock};
+
 pub mod common;
 
-use grin_core::core::{Output, OutputFeatures, Transaction};
-use grin_core::ser;
+use grin_core::core::verifier_cache::{LruVerifierCache, VerifierCache};
+use grin_core::core::{Output, OutputFeatures};
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx::proof;
 
+fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
+	Arc::new(RwLock::new(LruVerifierCache::new()))
+}
+
 #[test]
-fn test_output_ser_deser() {
+fn test_verifier_cache_rangeproofs() {
+	let cache = verifier_cache();
+
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain.derive_key_id(1).unwrap();
 	let commit = keychain.commit(5, &key_id).unwrap();
@@ -38,11 +46,23 @@ fn test_output_ser_deser() {
 		proof: proof,
 	};
 
-	let mut vec = vec![];
-	ser::serialize(&mut vec, &out).expect("serialized failed");
-	let dout: Output = ser::deserialize(&mut &vec[..]).unwrap();
+	// Check our output is not verified according to the cache.
+	{
+		let mut cache = cache.write().unwrap();
+		let unverified = cache.filter_rangeproof_unverified(&vec![out]);
+		assert_eq!(unverified, vec![out]);
+	}
 
-	assert_eq!(dout.features, OutputFeatures::DEFAULT_OUTPUT);
-	assert_eq!(dout.commit, out.commit);
-	assert_eq!(dout.proof, out.proof);
+	// Add our output to the cache.
+	{
+		let mut cache = cache.write().unwrap();
+		cache.add_rangeproof_verified(vec![out]);
+	}
+
+	// Check it shows as verified according to the cache.
+	{
+		let mut cache = cache.write().unwrap();
+		let unverified = cache.filter_rangeproof_unverified(&vec![out]);
+		assert_eq!(unverified, vec![]);
+	}
 }
