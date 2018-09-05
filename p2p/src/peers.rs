@@ -109,7 +109,8 @@ impl Peers {
 
 	/// Get vec of peers we are currently connected to.
 	pub fn connected_peers(&self) -> Vec<Arc<RwLock<Peer>>> {
-		let mut res = self.peers
+		let mut res = self
+			.peers
 			.read()
 			.unwrap()
 			.values()
@@ -317,7 +318,7 @@ impl Peers {
 		debug!(
 			LOGGER,
 			"broadcast_block: {} @ {} [{}] was sent to {} peers.",
-			b.header.total_difficulty,
+			b.header.pow.total_difficulty,
 			b.header.height,
 			b.hash(),
 			count,
@@ -335,7 +336,7 @@ impl Peers {
 			LOGGER,
 			"broadcast_compact_block: {}, {} at {}, to {} peers, done.",
 			b.hash(),
-			b.header.total_difficulty,
+			b.header.pow.total_difficulty,
 			b.header.height,
 			count,
 		);
@@ -352,7 +353,7 @@ impl Peers {
 			LOGGER,
 			"broadcast_header: {}, {} at {}, to {} peers, done.",
 			bh.hash(),
-			bh.total_difficulty,
+			bh.pow.total_difficulty,
 			bh.height,
 			count,
 		);

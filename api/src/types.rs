@@ -521,10 +521,10 @@ impl BlockHeaderPrintable {
 			output_root: util::to_hex(h.output_root.to_vec()),
 			range_proof_root: util::to_hex(h.range_proof_root.to_vec()),
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),
-			nonce: h.nonce,
-			cuckoo_size: h.pow.cuckoo_sizeshift,
-			cuckoo_solution: h.pow.nonces.clone(),
-			total_difficulty: h.total_difficulty.to_num(),
+			nonce: h.pow.nonce,
+			cuckoo_size: h.pow.cuckoo_sizeshift(),
+			cuckoo_solution: h.pow.proof.nonces.clone(),
+			total_difficulty: h.pow.total_difficulty.to_num(),
 			total_kernel_offset: h.total_kernel_offset.to_hex(),
 		}
 	}

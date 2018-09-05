@@ -473,8 +473,8 @@ impl StratumServer {
 		}
 		let mut b: Block = b.unwrap().clone();
 		// Reconstruct the block header with this nonce and pow added
-		b.header.nonce = params.nonce;
-		b.header.pow.nonces = params.pow;
+		b.header.pow.nonce = params.nonce;
+		b.header.pow.proof.nonces = params.pow;
 		// Get share difficulty
 		share_difficulty = b.header.pow.to_difficulty().to_num();
 		// If the difficulty is too low its an error
@@ -529,7 +529,7 @@ impl StratumServer {
 					"(Server ID: {}) Failed to validate share at height {} with nonce {} using job_id {}",
 					self.id,
 					params.height,
-					b.header.nonce,
+					b.header.pow.nonce,
 					params.job_id,
 				);
 				worker_stats.num_rejected += 1;
@@ -551,7 +551,7 @@ impl StratumServer {
 			self.id,
 			b.hash(),
 			b.header.height,
-			b.header.nonce,
+			b.header.pow.nonce,
 			share_difficulty,
 			self.current_difficulty,
 			submitted_by,
@@ -729,9 +729,8 @@ impl StratumServer {
 					self.current_key_id.clone(),
 					wallet_listener_url,
 				);
-				self.current_difficulty = (new_block.header.total_difficulty.clone()
-					- head.total_difficulty.clone())
-					.to_num();
+				self.current_difficulty =
+					(new_block.header.total_difficulty() - head.total_difficulty).to_num();
 				self.current_key_id = block_fees.key_id();
 				current_hash = latest_hash;
 				// set the minimum acceptable share difficulty for this block

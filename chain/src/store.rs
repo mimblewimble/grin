@@ -446,8 +446,8 @@ impl Iterator for DifficultyIter {
 			let prev_difficulty = self
 				.prev_header
 				.clone()
-				.map_or(Difficulty::zero(), |x| x.total_difficulty);
-			let difficulty = header.total_difficulty - prev_difficulty;
+				.map_or(Difficulty::zero(), |x| x.total_difficulty());
+			let difficulty = header.total_difficulty() - prev_difficulty;
 
 			Some(Ok((header.timestamp.timestamp() as u64, difficulty)))
 		} else {

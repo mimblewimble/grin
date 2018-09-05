@@ -106,6 +106,66 @@ impl fmt::Display for Error {
 	}
 }
 
+/// Block header information pertaining to the proof of work
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProofOfWork {
+	/// Total accumulated difficulty since genesis block
+	pub total_difficulty: Difficulty,
+	/// Nonce increment used to mine this block.
+	pub nonce: u64,
+	/// Proof of work data.
+	pub proof: Proof,
+}
+
+impl Default for ProofOfWork {
+	fn default() -> ProofOfWork {
+		let proof_size = global::proofsize();
+		ProofOfWork {
+			total_difficulty: Difficulty::one(),
+			nonce: 0,
+			proof: Proof::zero(proof_size),
+		}
+	}
+}
+
+/// Serialization of a proof of work
+impl Writeable for ProofOfWork {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			ser_multiwrite!(
+				writer,
+				[write_u64, self.total_difficulty.to_num()],
+				[write_u64, self.nonce]
+			);
+		}
+
+		self.proof.write(writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for ProofOfWork {
+	fn read(reader: &mut Reader) -> Result<ProofOfWork, ser::Error> {
+		Ok(ProofOfWork {
+			total_difficulty: Difficulty::read(reader)?,
+			nonce: reader.read_u64()?,
+			proof: Proof::read(reader)?,
+		})
+	}
+}
+
+impl ProofOfWork {
+	/// Maximum difficulty this proof of work can achieve
+	pub fn to_difficulty(&self) -> Difficulty {
+		self.proof.to_difficulty()
+	}
+
+	/// The shift used for the cuckoo cycle size on this proof
+	pub fn cuckoo_sizeshift(&self) -> u8 {
+		self.proof.cuckoo_sizeshift
+	}
+}
+
 /// Block header, fairly standard compared to other blockchains.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BlockHeader {
@@ -117,8 +177,6 @@ pub struct BlockHeader {
 	pub previous: Hash,
 	/// Timestamp at which the block was built.
 	pub timestamp: DateTime<Utc>,
-	/// Total accumulated difficulty since genesis block
-	pub total_difficulty: Difficulty,
 	/// Merklish root of all the commitments in the TxHashSet
 	pub output_root: Hash,
 	/// Merklish root of all range proofs in the TxHashSet
@@ -136,21 +194,17 @@ pub struct BlockHeader {
 	pub output_mmr_size: u64,
 	/// Total size of the kernel MMR after applying this block
 	pub kernel_mmr_size: u64,
-	/// Nonce increment used to mine this block.
-	pub nonce: u64,
-	/// Proof of work data.
-	pub pow: Proof,
+	/// Proof of work and related
+	pub pow: ProofOfWork,
 }
 
 impl Default for BlockHeader {
 	fn default() -> BlockHeader {
-		let proof_size = global::proofsize();
 		BlockHeader {
 			version: 1,
 			height: 0,
 			previous: ZERO_HASH,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
-			total_difficulty: Difficulty::one(),
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
@@ -158,8 +212,7 @@ impl Default for BlockHeader {
 			total_kernel_sum: Commitment::from_vec(vec![0; 33]),
 			output_mmr_size: 0,
 			kernel_mmr_size: 0,
-			nonce: 0,
-			pow: Proof::zero(proof_size),
+			pow: ProofOfWork::default(),
 		}
 	}
 }
@@ -169,9 +222,9 @@ impl Writeable for BlockHeader {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			self.write_pre_pow(writer)?;
+		} else {
+			self.pow.write(writer)?;
 		}
-
-		self.pow.write(writer)?;
 		Ok(())
 	}
 }
@@ -182,15 +235,13 @@ impl Readable for BlockHeader {
 		let (version, height) = ser_multiread!(reader, read_u16, read_u64);
 		let previous = Hash::read(reader)?;
 		let timestamp = reader.read_i64()?;
-		let total_difficulty = Difficulty::read(reader)?;
 		let output_root = Hash::read(reader)?;
 		let range_proof_root = Hash::read(reader)?;
 		let kernel_root = Hash::read(reader)?;
 		let total_kernel_offset = BlindingFactor::read(reader)?;
 		let total_kernel_sum = Commitment::read(reader)?;
-		let (output_mmr_size, kernel_mmr_size, nonce) =
-			ser_multiread!(reader, read_u64, read_u64, read_u64);
-		let pow = Proof::read(reader)?;
+		let (output_mmr_size, kernel_mmr_size) = ser_multiread!(reader, read_u64, read_u64);
+		let pow = ProofOfWork::read(reader)?;
 
 		if timestamp > MAX_DATE.and_hms(0, 0, 0).timestamp()
 			|| timestamp < MIN_DATE.and_hms(0, 0, 0).timestamp()
@@ -203,7 +254,6 @@ impl Readable for BlockHeader {
 			height,
 			previous,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc),
-			total_difficulty,
 			output_root,
 			range_proof_root,
 			kernel_root,
@@ -211,7 +261,6 @@ impl Readable for BlockHeader {
 			total_kernel_sum,
 			output_mmr_size,
 			kernel_mmr_size,
-			nonce,
 			pow,
 		})
 	}
@@ -226,19 +275,18 @@ impl BlockHeader {
 			[write_u64, self.height],
 			[write_fixed_bytes, &self.previous],
 			[write_i64, self.timestamp.timestamp()],
-			[write_u64, self.total_difficulty.to_num()],
 			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
 			[write_fixed_bytes, &self.kernel_root],
 			[write_fixed_bytes, &self.total_kernel_offset],
 			[write_fixed_bytes, &self.total_kernel_sum],
 			[write_u64, self.output_mmr_size],
-			[write_u64, self.kernel_mmr_size],
-			[write_u64, self.nonce]
+			[write_u64, self.kernel_mmr_size]
 		);
+		self.pow.write(writer)?;
 		Ok(())
 	}
-	///
+
 	/// Returns the pre-pow hash, as the post-pow hash
 	/// should just be the hash of the POW
 	pub fn pre_pow_hash(&self) -> Hash {
@@ -247,6 +295,11 @@ impl BlockHeader {
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
+	}
+
+	/// Total difficulty accumulated by the proof of work on this header
+	pub fn total_difficulty(&self) -> Difficulty {
+		self.pow.total_difficulty.clone()
 	}
 
 	/// The "overage" to use when verifying the kernel sums.
@@ -357,7 +410,7 @@ impl Block {
 		// Now set the pow on the header so block hashing works as expected.
 		{
 			let proof_size = global::proofsize();
-			block.header.pow = Proof::random(proof_size);
+			block.header.pow.proof = Proof::random(proof_size);
 		}
 
 		Ok(block)
@@ -453,9 +506,12 @@ impl Block {
 				height: prev.height + 1,
 				timestamp,
 				previous: prev.hash(),
-				total_difficulty: difficulty + prev.total_difficulty,
 				total_kernel_offset,
 				total_kernel_sum,
+				pow: ProofOfWork {
+					total_difficulty: difficulty + prev.pow.total_difficulty,
+					..Default::default()
+				},
 				..Default::default()
 			},
 			body: agg_tx.into(),

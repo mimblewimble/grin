@@ -50,7 +50,7 @@ use pow::cuckoo::{Cuckoo, Error};
 /// satisfies the requirements of the header.
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u8) -> bool {
 	Cuckoo::from_hash(bh.pre_pow_hash().as_ref(), cuckoo_sz)
-		.verify(&bh.pow, consensus::EASINESS as u64)
+		.verify(&bh.pow.proof, consensus::EASINESS as u64)
 }
 
 /// Mines a genesis block using the internal miner
@@ -62,7 +62,7 @@ pub fn mine_genesis_block() -> Result<Block, Error> {
 	}
 
 	// total_difficulty on the genesis header *is* the difficulty of that block
-	let genesis_difficulty = gen.header.total_difficulty.clone();
+	let genesis_difficulty = gen.header.pow.total_difficulty.clone();
 
 	let sz = global::min_sizeshift();
 	let proof_size = global::proofsize();
@@ -80,11 +80,11 @@ pub fn pow_size(
 	proof_size: usize,
 	sz: u8,
 ) -> Result<(), Error> {
-	let start_nonce = bh.nonce;
+	let start_nonce = bh.pow.nonce;
 
 	// set the nonce for faster solution finding in user testing
 	if bh.height == 0 && global::is_user_testing_mode() {
-		bh.nonce = global::get_genesis_nonce();
+		bh.pow.nonce = global::get_genesis_nonce();
 	}
 
 	// try to find a cuckoo cycle on that header hash
@@ -93,18 +93,18 @@ pub fn pow_size(
 		// diff, we're all good
 		if let Ok(proof) = cuckoo::Miner::new(bh, consensus::EASINESS, proof_size, sz).mine() {
 			if proof.to_difficulty() >= diff {
-				bh.pow = proof.clone();
+				bh.pow.proof = proof.clone();
 				return Ok(());
 			}
 		}
 
 		// otherwise increment the nonce
-		let (res, _) = bh.nonce.overflowing_add(1);
-		bh.nonce = res;
+		let (res, _) = bh.pow.nonce.overflowing_add(1);
+		bh.pow.nonce = res;
 
 		// and if we're back where we started, update the time (changes the hash as
 		// well)
-		if bh.nonce == start_nonce {
+		if bh.pow.nonce == start_nonce {
 			bh.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc);
 		}
 	}
@@ -122,15 +122,15 @@ mod test {
 	#[test]
 	fn genesis_pow() {
 		let mut b = genesis::genesis_dev();
-		b.header.nonce = 485;
+		b.header.pow.nonce = 485;
 		pow_size(
 			&mut b.header,
 			Difficulty::one(),
 			global::proofsize(),
 			global::min_sizeshift(),
 		).unwrap();
-		assert!(b.header.nonce != 310);
-		assert!(b.header.pow.to_difficulty() >= Difficulty::one());
+		assert!(b.header.pow.nonce != 310);
+		assert!(b.header.pow.proof.to_difficulty() >= Difficulty::one());
 		assert!(verify_size(&b.header, global::min_sizeshift()));
 	}
 }

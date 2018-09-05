@@ -78,7 +78,7 @@ impl Tip {
 			height: bh.height,
 			last_block_h: bh.hash(),
 			prev_block_h: bh.previous,
-			total_difficulty: bh.total_difficulty.clone(),
+			total_difficulty: bh.total_difficulty(),
 		}
 	}
 }
