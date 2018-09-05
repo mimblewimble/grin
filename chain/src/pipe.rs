@@ -89,15 +89,20 @@ pub fn process_block(
 	let txhashset = ctx.txhashset.clone();
 	let mut txhashset = txhashset.write().unwrap();
 
-	// update head now that we're in the lock
+	// Update head now that we are in the lock.
 	ctx.head = ctx.store.head()?;
 
-	// Check if we have recently processed this block (via block_hashes_cache).
-	// Fast in-memory check.
-	check_known(&b.header, ctx)?;
+	// Fast in-memory checks to avoid re-processing a block we recently processed.
+	{
+		// Check if we have recently processed this block (via ctx chain head).
+		check_known_head(&b.header, ctx)?;
 
-	// Check if this block is already know due it being in the current set of orphan blocks.
-	check_known_orphans(&b.header, ctx)?;
+		// Check if we have recently processed this block (via block_hashes_cache).
+		check_known_cache(&b.header, ctx)?;
+
+		// Check if this block is already know due it being in the current set of orphan blocks.
+		check_known_orphans(&b.header, ctx)?;
+	}
 
 	// Check our header itself is actually valid before proceeding any further.
 	validate_header(&b.header, ctx)?;
@@ -242,21 +247,29 @@ fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 	Ok(())
 }
 
-/// Quick in-memory check to fast-reject any block we've already handled
-/// recently. Keeps duplicates from the network in check.
-fn check_known(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+/// Quick in-memory check to fast-reject any block handled recently.
+/// Keeps duplicates from the network in check.
+/// Checks against the last_block_h and prev_block_h of the chain head.
+fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	let bh = header.hash();
 	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
 		return Err(ErrorKind::Unfit("already known in head".to_string()).into());
 	}
+	Ok(())
+}
 
+/// Quick in-memory check to fast-reject any block handled recently.
+/// Keeps duplicates from the network in check.
+/// Checks against the cache of recently processed block hashes.
+fn check_known_cache(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	let cache = ctx.block_hashes_cache.read().unwrap();
-	if cache.contains(&bh) {
+	if cache.contains(&header.hash()) {
 		return Err(ErrorKind::Unfit("already known in cache".to_string()).into());
 	}
 	Ok(())
 }
 
+/// Check if this block is in the set of known orphans.
 fn check_known_orphans(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	if ctx.orphans.contains(&header.hash()) {
 		Err(ErrorKind::Unfit("already known in orphans".to_string()).into())
