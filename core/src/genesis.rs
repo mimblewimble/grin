@@ -42,10 +42,10 @@ pub fn genesis_dev() -> core::Block {
 pub fn genesis_testnet1() -> core::Block {
 	core::Block::with_header(core::BlockHeader {
 		height: 0,
-		previous: core::hash::Hash([0xff; 32]),
 		timestamp: Utc.ymd(2017, 11, 16).and_hms(20, 0, 0),
 		pow: core::ProofOfWork {
 			total_difficulty: Difficulty::one(),
+			scaling_difficulty: 1,
 			nonce: 28205,
 			proof: core::Proof::new(vec![
 				0x21e, 0x7a2, 0xeae, 0x144e, 0x1b1c, 0x1fbd, 0x203a, 0x214b, 0x293b, 0x2b74,
@@ -67,6 +67,7 @@ pub fn genesis_testnet2() -> core::Block {
 		timestamp: Utc.ymd(2018, 3, 26).and_hms(16, 0, 0),
 		pow: core::ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
+			scaling_difficulty: 1,
 			nonce: 1060,
 			proof: core::Proof::new(vec![
 				0x1940730, 0x333b9d0, 0x4739d6f, 0x4c6cfb1, 0x6e3d6c3, 0x74408a3, 0x7ba2bd2,
@@ -89,6 +90,7 @@ pub fn genesis_testnet3() -> core::Block {
 		timestamp: Utc.ymd(2018, 7, 8).and_hms(18, 0, 0),
 		pow: core::ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
+			scaling_difficulty: 1,
 			nonce: 4956988373127691,
 			proof: core::Proof::new(vec![
 				0xa420dc, 0xc8ffee, 0x10e433e, 0x1de9428, 0x2ed4cea, 0x52d907b, 0x5af0e3f,
@@ -112,6 +114,7 @@ pub fn genesis_main() -> core::Block {
 		timestamp: Utc.ymd(2018, 8, 14).and_hms(0, 0, 0),
 		pow: core::ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
+			scaling_difficulty: 1,
 			nonce: global::get_genesis_nonce(),
 			proof: core::Proof::zero(consensus::PROOFSIZE),
 		},

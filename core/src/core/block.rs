@@ -114,6 +114,8 @@ impl fmt::Display for Error {
 pub struct ProofOfWork {
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
+	/// Difficulty scaling factor between the different proofs of work
+	pub scaling_difficulty: u64,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Proof of work data.
@@ -125,6 +127,7 @@ impl Default for ProofOfWork {
 		let proof_size = global::proofsize();
 		ProofOfWork {
 			total_difficulty: Difficulty::one(),
+			scaling_difficulty: 1,
 			nonce: 0,
 			proof: Proof::zero(proof_size),
 		}
@@ -138,6 +141,7 @@ impl Writeable for ProofOfWork {
 			ser_multiwrite!(
 				writer,
 				[write_u64, self.total_difficulty.to_num()],
+				[write_u64, self.scaling_difficulty],
 				[write_u64, self.nonce]
 			);
 		}
@@ -151,6 +155,7 @@ impl Readable for ProofOfWork {
 	fn read(reader: &mut Reader) -> Result<ProofOfWork, ser::Error> {
 		Ok(ProofOfWork {
 			total_difficulty: Difficulty::read(reader)?,
+			scaling_difficulty: reader.read_u64()?,
 			nonce: reader.read_u64()?,
 			proof: Proof::read(reader)?,
 		})
@@ -360,7 +365,7 @@ impl BlockHeader {
 		let mut size = fixed_size_of_serialized_header();
 
 		size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
-		let nonce_bits = self.pow.cuckoo_sizeshift as usize - 1;
+		let nonce_bits = self.pow.cuckoo_sizeshift() as usize - 1;
 		let bitvec_len = global::proofsize() * nonce_bits;
 		size += bitvec_len / 8; // pow.nonces
 		if bitvec_len % 8 != 0 {
