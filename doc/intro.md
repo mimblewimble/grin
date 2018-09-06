@@ -154,7 +154,7 @@ In the previous section we introduced a private key as a blinding factor to obsc
 transaction's values. The second insight of MimbleWimble is that this private
 key can be leveraged to prove ownership of the value.
 
-Alice sends you 3 coins and to obscure that amount, you chose 113 as your
+Alice sends you 3 coins and to obscure that amount, you chose 28 as your
 blinding factor (note that in practice, the blinding factor being a private key, it's an
 extremely large number). Somewhere on the blockchain, the following output appears and
 should only be spendable by you:
