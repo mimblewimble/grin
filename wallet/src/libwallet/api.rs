@@ -264,32 +264,7 @@ where
 	/// sender as well as the private file generate on the first send step.
 	/// Builds the complete transaction and sends it to a grin node for
 	/// propagation.
-	pub fn file_finalize_tx(&mut self, receiver_file: &str) -> Result<Slate, Error> {
-		let mut pub_tx_f = File::open(receiver_file)?;
-		let mut content = String::new();
-		pub_tx_f.read_to_string(&mut content)?;
-		let mut slate: Slate = json::from_str(&content).map_err(|_| ErrorKind::Format)?;
-
-		let mut w = self.wallet.lock().unwrap();
-		w.open_with_credentials()?;
-
-		let context = w.get_private_context(slate.id.as_bytes())?;
-		tx::complete_tx(&mut **w, &mut slate, &context)?;
-		{
-			let mut batch = w.batch()?;
-			batch.delete_private_context(slate.id.as_bytes())?;
-			batch.commit()?;
-		}
-
-		w.close()?;
-		Ok(slate)
-	}
-
-	/// Sender finalization of the transaction. Takes the slate returned by the
-	/// sender as well as the private file generate on the first send step.
-	/// Builds the complete transaction and sends it to a grin node for
-	/// propagation.
-	pub fn api_finalize_tx(&mut self, mut slate: Slate) -> Result<Slate, Error> {
+	pub fn file_finalize_tx(&mut self, mut slate: Slate) -> Result<Slate, Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 

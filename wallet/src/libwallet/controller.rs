@@ -288,7 +288,7 @@ where
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(move |slate: Slate| {
 			debug!(LOGGER, "Finalizing transaction");
-			api.api_finalize_tx(slate)
+			api.file_finalize_tx(slate)
 		}))
 	}
 
