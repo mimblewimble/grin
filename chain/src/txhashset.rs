@@ -379,6 +379,7 @@ pub struct Extension<'a> {
 
 	commit_index: Arc<ChainStore>,
 	new_output_commits: HashMap<Commitment, u64>,
+	new_kernel_heights: HashMap<TxKernel, u64>,
 	rollback: bool,
 
 	/// Batch in which the extension occurs, public so it can be used within
@@ -439,6 +440,7 @@ impl<'a> Extension<'a> {
 			),
 			commit_index,
 			new_output_commits: HashMap::new(),
+			new_kernel_heights: HashMap::new(),
 			rollback: false,
 			batch,
 		}
@@ -484,9 +486,14 @@ impl<'a> Extension<'a> {
 			.collect();
 
 		for ref output in tx.outputs() {
-			if let Err(e) = self.apply_output(output) {
-				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
-				return Err(e);
+			match self.apply_output(output) {
+				Ok(pos) => {
+					self.new_output_commits.insert(output.commitment(), pos);
+				}
+				Err(e) => {
+					self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
+					return Err(e);
+				}
 			}
 		}
 
@@ -595,7 +602,8 @@ impl<'a> Extension<'a> {
 		// So we can safely apply outputs first (we will not spend these in the same
 		// block).
 		for out in b.outputs() {
-			self.apply_output(out)?;
+			let pos = self.apply_output(out)?;
+			self.new_output_commits.insert(out.commitment(), pos);
 		}
 
 		for input in b.inputs() {
@@ -604,15 +612,22 @@ impl<'a> Extension<'a> {
 
 		for kernel in b.kernels() {
 			self.apply_kernel(kernel)?;
+			self.new_kernel_heights
+				.insert(kernel.clone(), b.header.height);
 		}
 
 		Ok(())
 	}
 
-	// Store all new output pos in the index.
+	// Store the following in the index -
+	// * new output pos
+	// * new kernel heights
 	fn save_indexes(&self) -> Result<(), Error> {
 		for (commit, pos) in &self.new_output_commits {
 			self.batch.save_output_pos(commit, *pos)?;
+		}
+		for (kernel, height) in &self.new_kernel_heights {
+			self.batch.save_kernel_height(kernel, *height)?;
 		}
 		Ok(())
 	}
@@ -655,7 +670,7 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn apply_output(&mut self, out: &Output) -> Result<(), Error> {
+	fn apply_output(&mut self, out: &Output) -> Result<(u64), Error> {
 		let commit = out.commitment();
 
 		if let Ok(pos) = self.batch.get_output_pos(&commit) {
@@ -679,13 +694,12 @@ impl<'a> Extension<'a> {
 			.push(OutputIdentifier::from_output(out))
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.batch.save_output_pos(&out.commitment(), pos)?;
-		self.new_output_commits.insert(out.commitment(), pos);
 
 		// push range proofs in their MMR and file
 		self.rproof_pmmr
 			.push(out.proof)
 			.map_err(&ErrorKind::TxHashSetErr)?;
-		Ok(())
+		Ok(pos)
 	}
 
 	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
@@ -693,7 +707,6 @@ impl<'a> Extension<'a> {
 		self.kernel_pmmr
 			.push(kernel.clone())
 			.map_err(&ErrorKind::TxHashSetErr)?;
-
 		Ok(())
 	}
 
@@ -806,11 +819,24 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, grin_store::Error> {
+	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		if let Some(pos) = self.new_output_commits.get(commit) {
 			Ok(*pos)
 		} else {
-			self.commit_index.get_output_pos(commit)
+			self.commit_index
+				.get_output_pos(commit)
+				.map_err(|e| ErrorKind::StoreErr(e, format!("output not found")).into())
+		}
+	}
+
+	/// Returns a kernel (one of possibly multiple kernels) at the specified block height.
+	pub fn kernel_for_block_height(&self, height: u64) -> Result<TxKernel, Error> {
+		let header = self.commit_index.get_header_by_height(height)?;
+		let pos = pmmr::n_leaves(header.kernel_mmr_size);
+		if let Some(kernel) = self.kernel_pmmr.get_data(pos) {
+			Ok(kernel)
+		} else {
+			Err(ErrorKind::TxHashSetErr(format!("kernel not found")).into())
 		}
 	}
 
@@ -915,13 +941,51 @@ impl<'a> Extension<'a> {
 		Ok((output_sum, kernel_sum))
 	}
 
+	/// (Re)build the index of kernel to block height.
+	/// We call this during fast-sync once we have the full kernel MMR.
+	pub fn rebuild_kernel_height_index(&self, header: BlockHeader) -> Result<(), Error> {
+		debug!(
+			LOGGER,
+			"txhashset: rebuild_kernel_height_index: from height: {}", header.height
+		);
+
+		let mut curr = header;
+
+		loop {
+			let prev_size = if curr.height > 1 {
+				let prev = self.commit_index.get_block_header(&curr.previous)?;
+				prev.kernel_mmr_size
+			} else {
+				0
+			};
+
+			let mut pos = curr.kernel_mmr_size;
+			while pos > prev_size {
+				if pmmr::is_leaf(pos) {
+					if let Some(kernel) = self.kernel_pmmr.get_data(pos) {
+						self.batch.save_kernel_height(&kernel, curr.height)?;
+					}
+				}
+				pos -= 1;
+			}
+			if prev_size == 0 {
+				break;
+			}
+			curr = self.commit_index.get_block_header(&curr.previous)?;
+		}
+
+		debug!(LOGGER, "txhashset: rebuild_kernel_height_index: done");
+
+		Ok(())
+	}
+
 	/// Rebuild the index of MMR positions to the corresponding Output and
 	/// kernel by iterating over the whole MMR data. This is a costly operation
 	/// performed only when we receive a full new chain state.
 	pub fn rebuild_index(&self) -> Result<(), Error> {
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
 			// non-pruned leaves only
-			if pmmr::bintree_postorder_height(n) == 0 {
+			if pmmr::is_leaf(n) {
 				if let Some(out) = self.output_pmmr.get_data(n) {
 					self.batch.save_output_pos(&out.commit, n)?;
 				}

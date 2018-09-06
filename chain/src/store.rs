@@ -25,7 +25,7 @@ use util::secp::pedersen::Commitment;
 use core::consensus::TargetError;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use core::core::{Block, BlockHeader};
+use core::core::{Block, BlockHeader, TxKernel};
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, u64_to_key, Error};
 use types::Tip;
@@ -40,6 +40,7 @@ const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = 'B' as u8;
+const KERNEL_HEIGHT_PREFIX: u8 = 'k' as u8;
 
 /// All chain-related database operations
 pub struct ChainStore {
@@ -155,6 +156,16 @@ impl ChainStore {
 		)
 	}
 
+	pub fn get_kernel_height(&self, kernel: &TxKernel) -> Result<u64, Error> {
+		option_to_not_found(
+			self.db.get_ser(&to_key(
+				KERNEL_HEIGHT_PREFIX,
+				&mut kernel.excess.as_ref().to_vec(),
+			)),
+			&format!("Kernel height for: {:?}", kernel),
+		)
+	}
+
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch, Error> {
 		Ok(Batch {
@@ -256,6 +267,13 @@ impl<'a> Batch<'a> {
 		)
 	}
 
+	pub fn save_kernel_height(&self, kernel: &TxKernel, height: u64) -> Result<(), Error> {
+		self.db.put_ser(
+			&to_key(KERNEL_HEIGHT_PREFIX, &mut kernel.excess.as_ref().to_vec())[..],
+			&height,
+		)
+	}
+
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		option_to_not_found(
 			self.db
@@ -264,9 +282,26 @@ impl<'a> Batch<'a> {
 		)
 	}
 
+	pub fn get_kernel_height(&self, kernel: &TxKernel) -> Result<u64, Error> {
+		option_to_not_found(
+			self.db.get_ser(&to_key(
+				KERNEL_HEIGHT_PREFIX,
+				&mut kernel.excess.as_ref().to_vec(),
+			)),
+			&format!("Kernel height for: {:?}", kernel),
+		)
+	}
+
 	pub fn delete_output_pos(&self, commit: &[u8]) -> Result<(), Error> {
 		self.db
 			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
+	}
+
+	pub fn delete_kernel_height(&self, kernel: &TxKernel) -> Result<(), Error> {
+		self.db.delete(&to_key(
+			KERNEL_HEIGHT_PREFIX,
+			&mut kernel.excess.as_ref().to_vec(),
+		))
 	}
 
 	pub fn get_block_header_db(&self, h: &Hash) -> Result<BlockHeader, Error> {
