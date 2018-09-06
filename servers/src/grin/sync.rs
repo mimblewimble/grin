@@ -249,10 +249,10 @@ impl BodySyncInfo {
 				}
 			}
 			None => {
-				if Utc::now() - self.sync_start_ts > Duration::milliseconds(1000) {
+				if Utc::now() - self.sync_start_ts > Duration::seconds(5) {
 					debug!(
 						LOGGER,
-						"body_sync: 0/{} blocks received in 1s",
+						"body_sync: 0/{} blocks received in 5s",
 						self.body_sync_hashes.len(),
 					);
 					return true;
