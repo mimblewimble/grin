@@ -107,24 +107,6 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
-		"run_wallet_listener".to_string(),
-		"
-#Whether to run the wallet listener with the server by default
-"
-			.to_string(),
-	);
-
-	retval.insert(
-		"run_wallet_owner_api".to_string(),
-		"
-# Whether to run the web-wallet API (will only run on localhost)
-# grin wallet web will run this automatically, so this should
-# only be set to true for test/development purposes
-"
-			.to_string(),
-	);
-
-	retval.insert(
 		"run_test_miner".to_string(),
 		"
 #Whether to run a test miner. This is only for developer testing (chaintype
