@@ -281,6 +281,17 @@ where
 		}))
 	}
 
+	fn finalize_tx(
+		&self,
+		req: Request<Body>,
+		mut api: APIOwner<T, C, K>,
+	) -> Box<Future<Item = Slate, Error = Error> + Send> {
+		Box::new(parse_body(req).and_then(move |slate: Slate| {
+			debug!(LOGGER, "Finalizing transaction");
+			api.file_finalize_tx(slate)
+		}))
+	}
+
 	fn issue_burn_tx(
 		&self,
 		_req: Request<Body>,
@@ -305,6 +316,10 @@ where
 		{
 			"issue_send_tx" => Box::new(
 				self.issue_send_tx(req, api)
+					.and_then(|slate| ok(json_response_pretty(&slate))),
+			),
+			"finalize_tx" => Box::new(
+				self.finalize_tx(req, api)
 					.and_then(|slate| ok(json_response_pretty(&slate))),
 			),
 			"issue_burn_tx" => Box::new(

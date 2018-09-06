@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use serde_json as json;
+use std::fs::File;
+use std::io::Read;
 use std::path::PathBuf;
 /// Wallet commands processing
 use std::process::exit;
@@ -262,7 +265,12 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				let tx_file = send_args
 					.value_of("input")
 					.expect("Receiver's transaction file required");
-				let slate = api.file_finalize_tx(tx_file).expect("Finalize failed");
+				let mut pub_tx_f = File::open(tx_file)?;
+				let mut content = String::new();
+				pub_tx_f.read_to_string(&mut content)?;
+				let mut slate_in: grin_wallet::libtx::slate::Slate = json::from_str(&content)
+					.map_err(|_| grin_wallet::libwallet::ErrorKind::Format)?;
+				let slate = api.file_finalize_tx(slate_in).expect("Finalize failed");
 
 				let result = api.post_tx(&slate, fluff);
 				match result {
