@@ -642,6 +642,8 @@ pub struct SendTXArgs {
 	pub amount: u64,
 	/// minimum confirmations
 	pub minimum_confirmations: u64,
+	/// payment method
+	pub method: String,
 	/// destination url
 	pub dest: String,
 	/// Max number of outputs

@@ -270,14 +270,29 @@ where
 		mut api: APIOwner<T, C, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(move |args: SendTXArgs| {
-			api.issue_send_tx(
-				args.amount,
-				args.minimum_confirmations,
-				&args.dest,
-				args.max_outputs,
-				args.num_change_outputs,
-				args.selection_strategy_is_use_all,
-			)
+			if args.method == "http" {
+				api.issue_send_tx(
+					args.amount,
+					args.minimum_confirmations,
+					&args.dest,
+					args.max_outputs,
+					args.num_change_outputs,
+					args.selection_strategy_is_use_all,
+				)
+			} else if args.method == "file" {
+				api.file_send_tx(
+					false,
+					args.amount,
+					args.minimum_confirmations,
+					&args.dest,
+					args.max_outputs,
+					args.num_change_outputs,
+					args.selection_strategy_is_use_all,
+				)
+			} else {
+				error!(LOGGER, "unsupported payment method: {}", args.method);
+				return Err(ErrorKind::ClientCallback("unsupported payment method"))?;
+			}
 		}))
 	}
 

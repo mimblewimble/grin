@@ -187,13 +187,14 @@ where
 	/// receiver in whichever way they see fit (aka carrier pigeon mode).
 	pub fn file_send_tx(
 		&mut self,
+		write_to_disk: bool,
 		amount: u64,
 		minimum_confirmations: u64,
 		dest: &str,
 		max_outputs: usize,
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
-	) -> Result<(), Error> {
+	) -> Result<Slate, Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 
@@ -205,10 +206,11 @@ where
 			num_change_outputs,
 			selection_strategy_is_use_all,
 		)?;
-
-		let mut pub_tx = File::create(dest)?;
-		pub_tx.write_all(json::to_string(&slate).unwrap().as_bytes())?;
-		pub_tx.sync_all()?;
+		if write_to_disk {
+			let mut pub_tx = File::create(dest)?;
+			pub_tx.write_all(json::to_string(&slate).unwrap().as_bytes())?;
+			pub_tx.sync_all()?;
+		}
 
 		{
 			let mut batch = w.batch()?;
@@ -221,7 +223,7 @@ where
 		// lock our inputs
 		lock_fn(&mut **w, &tx_hex)?;
 		w.close()?;
-		Ok(())
+		Ok(slate)
 	}
 
 	/// A sender provided a transaction file with appropriate public keys and

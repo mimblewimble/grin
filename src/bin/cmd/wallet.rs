@@ -182,6 +182,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				let selection_strategy = send_args
 					.value_of("selection_strategy")
 					.expect("Selection strategy required");
+				let method = send_args
+					.value_of("method")
+					.expect("Payment method required");
 				let dest = send_args
 					.value_of("dest")
 					.expect("Destination wallet address required");
@@ -192,7 +195,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					.expect("Failed to parse number of change outputs.");
 				let fluff = send_args.is_present("fluff");
 				let max_outputs = 500;
-				if dest.starts_with("http") {
+				if method == "http" {
 					let result = api.issue_send_tx(
 						amount,
 						minimum_confirmations,
@@ -238,8 +241,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 							Err(e)
 						}
 					}
-				} else {
+				} else if method == "file" {
 					api.file_send_tx(
+						true,
 						amount,
 						minimum_confirmations,
 						dest,
@@ -248,6 +252,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						selection_strategy == "all",
 					).expect("Send failed");
 					Ok(())
+				} else {
+					error!(LOGGER, "unsupported payment method: {}", method);
+					panic!();
 				}
 			}
 			("receive", Some(send_args)) => {
