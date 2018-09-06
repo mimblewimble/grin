@@ -138,12 +138,7 @@ impl Default for ProofOfWork {
 impl Writeable for ProofOfWork {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			ser_multiwrite!(
-				writer,
-				[write_u64, self.total_difficulty.to_num()],
-				[write_u64, self.scaling_difficulty],
-				[write_u64, self.nonce]
-			);
+			self.write_pre_pow(writer)?;
 		}
 
 		self.proof.write(writer)?;
@@ -163,6 +158,17 @@ impl Readable for ProofOfWork {
 }
 
 impl ProofOfWork {
+	/// Write the pre-hash portion of the header
+	pub fn write_pre_pow<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		ser_multiwrite!(
+			writer,
+			[write_u64, self.total_difficulty.to_num()],
+			[write_u64, self.scaling_difficulty],
+			[write_u64, self.nonce]
+		);
+		Ok(())
+	}
+
 	/// Maximum difficulty this proof of work can achieve
 	pub fn to_difficulty(&self) -> Difficulty {
 		self.proof.to_difficulty()
@@ -263,9 +269,8 @@ impl Writeable for BlockHeader {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			self.write_pre_pow(writer)?;
-		} else {
-			self.pow.write(writer)?;
 		}
+		self.pow.write(writer)?;
 		Ok(())
 	}
 }
@@ -324,7 +329,6 @@ impl BlockHeader {
 			[write_u64, self.output_mmr_size],
 			[write_u64, self.kernel_mmr_size]
 		);
-		self.pow.write(writer)?;
 		Ok(())
 	}
 
@@ -333,6 +337,7 @@ impl BlockHeader {
 	pub fn pre_pow_hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
 		self.write_pre_pow(&mut hasher).unwrap();
+		self.pow.write_pre_pow(&mut hasher).unwrap();
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
