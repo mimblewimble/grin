@@ -132,12 +132,6 @@ pub struct ServerConfig {
 	/// if enabled, this will disable logging to stdout
 	pub run_tui: Option<bool>,
 
-	/// Whether to run the wallet listener with the server by default
-	pub run_wallet_listener: Option<bool>,
-
-	/// Whether to run the web wallet owner listener
-	pub run_wallet_owner_api: Option<bool>,
-
 	/// Whether to use the DB wallet backend implementation
 	pub use_db_wallet: Option<bool>,
 
@@ -177,8 +171,6 @@ impl Default for ServerConfig {
 			pool_config: pool::PoolConfig::default(),
 			skip_sync_wait: Some(false),
 			run_tui: Some(true),
-			run_wallet_listener: Some(false),
-			run_wallet_owner_api: Some(false),
 			use_db_wallet: None,
 			run_test_miner: Some(false),
 			test_miner_wallet_url: None,
