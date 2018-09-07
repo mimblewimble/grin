@@ -1141,7 +1141,7 @@ impl OutputIdentifier {
 		}
 	}
 
-	/// Our commitment.
+	/// Commitment for the output.
 	pub fn commitment(&self) -> Commitment {
 		self.commit
 	}

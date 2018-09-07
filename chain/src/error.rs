@@ -78,9 +78,12 @@ pub enum ErrorKind {
 	/// One of the inputs in the block has already been spent
 	#[fail(display = "Already Spent: {:?}", _0)]
 	AlreadySpent(Commitment),
-	/// An output with that commitment already exists (should be unique)
+	/// An output with that commitment already exists (must be unique)
 	#[fail(display = "Duplicate Commitment: {:?}", _0)]
 	DuplicateCommitment(Commitment),
+	/// An kernel with that excess already exists (must be unique)
+	#[fail(display = "Duplicate Kernel Excess: {:?}", _0)]
+	DuplicateKernelExcess(Commitment),
 	/// Attempt to spend a coinbase output before it sufficiently matures.
 	#[fail(display = "Attempt to spend immature coinbase")]
 	ImmatureCoinbase,

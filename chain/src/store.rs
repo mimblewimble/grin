@@ -39,6 +39,7 @@ const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
+const KERNEL_POS_PREFIX: u8 = 'k' as u8;
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = 'B' as u8;
 
 /// All chain-related database operations
@@ -155,6 +156,14 @@ impl ChainStore {
 		)
 	}
 
+	pub fn get_kernel_pos(&self, excess: &Commitment) -> Result<u64, Error> {
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())),
+			&format!("Kernel position for: {:?}", excess),
+		)
+	}
+
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch, Error> {
 		Ok(Batch {
@@ -256,20 +265,35 @@ impl<'a> Batch<'a> {
 		)
 	}
 
+	pub fn save_kernel_pos(&self, excess: &Commitment, pos: u64) -> Result<(), Error> {
+		self.db.put_ser(
+			&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())[..],
+			&pos,
+		)
+	}
+
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())),
-			&format!("Output position for commit: {:?}", commit),
+			&format!("Output position for: {:?}", commit),
 		)
 	}
 
-	pub fn delete_output_pos(&self, commit: &[u8]) -> Result<(), Error> {
-		self.db
-			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
+	pub fn get_kernel_pos(&self, excess: &Commitment) -> Result<u64, Error> {
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(KERNEL_POS_PREFIX, &mut excess.as_ref().to_vec())),
+			&format!("Kernel position for: {:?}", excess),
+		)
 	}
 
-	pub fn get_block_header_db(&self, h: &Hash) -> Result<BlockHeader, Error> {
+	pub fn delete_output_pos(&self, commit: &Commitment) -> Result<(), Error> {
+		self.db
+			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec()))
+	}
+
+	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
@@ -384,7 +408,8 @@ impl<'a> Batch<'a> {
 	/// Commits this batch. If it's a child batch, it will be merged with the
 	/// parent, otherwise the batch is written to db.
 	pub fn commit(self) -> Result<(), Error> {
-		self.db.commit()
+		self.db.commit()?;
+		Ok(())
 	}
 
 	/// Creates a child of this batch. It will be merged with its parent on

@@ -15,7 +15,7 @@
 //! Utility structs to handle the 3 hashtrees (output, range proof,
 //! kernel) more conveniently and transactionally.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -150,6 +150,21 @@ impl TxHashSet {
 		}
 	}
 
+	/// Returns a kernel (one of possibly multiple kernels) at the specified block height.
+	pub fn kernel_for_block_height(&mut self, height: u64) -> Result<TxKernel, Error> {
+		let header = self.commit_index.get_header_by_height(height)?;
+		let pos = pmmr::bintree_rightmost(header.kernel_mmr_size);
+
+		let kernel_pmmr: PMMR<TxKernel, _> =
+			PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
+
+		if let Some(kernel) = kernel_pmmr.get_data(pos) {
+			Ok(kernel)
+		} else {
+			Err(ErrorKind::TxHashSetErr(format!("kernel not found")).into())
+		}
+	}
+
 	/// returns the last N nodes inserted into the tree (i.e. the 'bottom'
 	/// nodes at level 0
 	/// TODO: These need to return the actual data from the flat-files instead
@@ -243,7 +258,8 @@ impl TxHashSet {
 
 		{
 			let clean_output_index = |commit: &[u8]| {
-				let _ = batch.delete_output_pos(commit);
+				// jump through some hoops to treat the bytes correctly as commitments...
+				let _ = batch.delete_output_pos(&Commitment::from_vec(commit.to_vec()));
 			};
 
 			self.output_pmmr_h.backend.check_compact(
@@ -329,9 +345,6 @@ where
 		res = inner(&mut extension);
 
 		rollback = extension.rollback;
-		if res.is_ok() && !rollback {
-			extension.save_indexes()?;
-		}
 		sizes = extension.sizes();
 	}
 
@@ -378,7 +391,6 @@ pub struct Extension<'a> {
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 
 	commit_index: Arc<ChainStore>,
-	new_output_commits: HashMap<Commitment, u64>,
 	rollback: bool,
 
 	/// Batch in which the extension occurs, public so it can be used within
@@ -438,7 +450,6 @@ impl<'a> Extension<'a> {
 				trees.kernel_pmmr_h.last_pos,
 			),
 			commit_index,
-			new_output_commits: HashMap::new(),
 			rollback: false,
 			batch,
 		}
@@ -479,14 +490,22 @@ impl<'a> Extension<'a> {
 		let rewind_rm_pos = tx
 			.inputs()
 			.iter()
-			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
+			.filter_map(|x| self.batch.get_output_pos(&x.commitment()).ok())
 			.map(|x| x as u32)
 			.collect();
 
 		for ref output in tx.outputs() {
-			if let Err(e) = self.apply_output(output) {
-				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
-				return Err(e);
+			match self.apply_output(output) {
+				Ok(pos) => {
+					self.batch.save_output_pos(&output.commitment(), pos)?;
+					// We will rollback the batch later, but assert it works
+					// as we expect while we have it open.
+					assert_eq!(self.batch.get_output_pos(&output.commitment()), Ok(pos));
+				}
+				Err(e) => {
+					self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
+					return Err(e);
+				}
 			}
 		}
 
@@ -498,9 +517,15 @@ impl<'a> Extension<'a> {
 		}
 
 		for ref kernel in tx.kernels() {
-			if let Err(e) = self.apply_kernel(kernel) {
-				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
-				return Err(e);
+			match self.apply_kernel(kernel) {
+				Ok(pos) => {
+					self.batch.save_kernel_pos(&kernel.excess(), pos)?;
+					assert_eq!(self.batch.get_kernel_pos(&kernel.excess()), Ok(pos));
+				}
+				Err(e) => {
+					self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
+					return Err(e);
+				}
 			}
 		}
 
@@ -593,33 +618,30 @@ impl<'a> Extension<'a> {
 	/// applied in order of the provided Vec. If pruning is enabled, inputs also
 	/// prune MMR data.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
-		// A block is not valid if it has not been fully cut-through.
-		// So we can safely apply outputs first (we will not spend these in the same
-		// block).
 		for out in b.outputs() {
-			self.apply_output(out)?;
+			let pos = self.apply_output(out)?;
+
+			// Update the output_pos index for the new output.
+			self.batch.save_output_pos(&out.commitment(), pos)?;
 		}
 
 		for input in b.inputs() {
 			self.apply_input(input)?;
+			// Note: we do not modify the output_pos index here.
+			// We cleanup the index as part of compacting.
 		}
 
 		for kernel in b.kernels() {
-			self.apply_kernel(kernel)?;
+			let pos = self.apply_kernel(kernel)?;
+
+			// Update kernel_pos index for the new kernel.
+			self.batch.save_kernel_pos(&kernel.excess(), pos)?;
 		}
 
 		Ok(())
 	}
 
-	// Store all new output pos in the index.
-	fn save_indexes(&self) -> Result<(), Error> {
-		for (commit, pos) in &self.new_output_commits {
-			self.batch.save_output_pos(commit, *pos)?;
-		}
-		Ok(())
-	}
-
-	fn apply_input(&mut self, input: &Input) -> Result<(), Error> {
+	fn apply_input(&mut self, input: &Input) -> Result<u64, Error> {
 		let commit = input.commitment();
 		let pos_res = self.batch.get_output_pos(&commit);
 		if let Ok(pos) = pos_res {
@@ -647,19 +669,27 @@ impl<'a> Extension<'a> {
 					self.rproof_pmmr
 						.prune(pos)
 						.map_err(|s| ErrorKind::TxHashSetErr(s))?;
+					Ok(pos)
 				}
-				Ok(false) => return Err(ErrorKind::AlreadySpent(commit).into()),
-				Err(s) => return Err(ErrorKind::TxHashSetErr(s).into()),
+				Ok(false) => Err(ErrorKind::AlreadySpent(commit).into()),
+				Err(s) => Err(ErrorKind::TxHashSetErr(s).into()),
 			}
 		} else {
-			return Err(ErrorKind::AlreadySpent(commit).into());
+			Err(ErrorKind::AlreadySpent(commit).into())
 		}
-		Ok(())
 	}
 
-	fn apply_output(&mut self, out: &Output) -> Result<(), Error> {
+	// Checks output is not already in the output MMR
+	// by looking for the pos in the output_pos index
+	// and then checking the output at that pos is actually a match.
+	// Pushes the new output onto the right hand side of the MMR.
+	// Returns the pos of the new output.
+	fn apply_output(&mut self, out: &Output) -> Result<u64, Error> {
 		let commit = out.commitment();
 
+		// Look for the pos in the output_pos index, then find the output at this pos.
+		// We need to check the output commitment actually matches at the given pos
+		// for this to be a duplicate.
 		if let Ok(pos) = self.batch.get_output_pos(&commit) {
 			if let Some(out_mmr) = self.output_pmmr.get_data(pos) {
 				if out_mmr.commitment() == commit {
@@ -667,28 +697,49 @@ impl<'a> Extension<'a> {
 				}
 			}
 		}
-		// push new outputs in their MMR and save them in the index
-		let pos = self
+
+		// Push the commitment to the output MMR.
+		let output_pos = self
 			.output_pmmr
 			.push(OutputIdentifier::from_output(out))
 			.map_err(&ErrorKind::TxHashSetErr)?;
-		self.batch.save_output_pos(&out.commitment(), pos)?;
-		self.new_output_commits.insert(out.commitment(), pos);
 
-		// push range proofs in their MMR and file
-		self.rproof_pmmr
+		// Push the rangeproofs to the rangeproof MMR.
+		let rproof_pos = self
+			.rproof_pmmr
 			.push(out.proof)
 			.map_err(&ErrorKind::TxHashSetErr)?;
-		Ok(())
+
+		// The output and rproof MMRs should be exactly the same size
+		// and we should have inserted to both in exactly the same pos.
+		assert_eq!(output_pos, rproof_pos);
+		Ok(output_pos)
 	}
 
-	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
+	// Checks this kernel excess is unique (via the MMR and the kernel_pos index).
+	// Pushes the kernel excess onto the MMR.
+	// Returns the MMR pos of the new kernel excess.
+	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<u64, Error> {
+		let excess = kernel.excess();
+
+		// Look the pos up in the kernel_pos index, then look the hash up via this pos.
+		// We need to check the hash actually matches at the given pos
+		// for this to be a duplicate.
+		if let Ok(pos) = self.batch.get_kernel_pos(&excess) {
+			if let Some(hash) = self.kernel_pmmr.get_hash(pos) {
+				if hash == kernel.hash_with_index(pos - 1) {
+					return Err(ErrorKind::DuplicateKernelExcess(excess).into());
+				}
+			}
+		}
+
 		// push kernels in their MMR and file
-		self.kernel_pmmr
+		let pos = self
+			.kernel_pmmr
 			.push(kernel.clone())
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
-		Ok(())
+		Ok(pos)
 	}
 
 	/// Build a Merkle proof for the given output and the block by
@@ -783,11 +834,6 @@ impl<'a> Extension<'a> {
 			kernel_pos,
 		);
 
-		// Remember to "rewind" our new_output_commits
-		// in case we are rewinding state that has not yet
-		// been sync'd to disk.
-		self.new_output_commits.retain(|_, &mut v| v <= output_pos);
-
 		self.output_pmmr
 			.rewind(output_pos, rewind_rm_pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
@@ -798,14 +844,6 @@ impl<'a> Extension<'a> {
 			.rewind(kernel_pos, &Bitmap::create())
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
-	}
-
-	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, grin_store::Error> {
-		if let Some(pos) = self.new_output_commits.get(commit) {
-			Ok(*pos)
-		} else {
-			self.commit_index.get_output_pos(commit)
-		}
 	}
 
 	/// Current root hashes and sums (if applicable) for the Output, range proof
@@ -912,18 +950,35 @@ impl<'a> Extension<'a> {
 		Ok((output_sum, kernel_sum))
 	}
 
-	/// Rebuild the index of MMR positions to the corresponding Output and
-	/// kernel by iterating over the whole MMR data. This is a costly operation
+	/// Rebuild the output_pos index by iterating
+	/// over the MMR data file. This is a costly operation
 	/// performed only when we receive a full new chain state.
-	pub fn rebuild_index(&self) -> Result<(), Error> {
+	pub fn rebuild_output_pos_index(&self) -> Result<(), Error> {
+		debug!(LOGGER, "txhashset: rebuilding the output_pos index (MMR size {})...", self.output_pmmr.unpruned_size());
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
-			// non-pruned leaves only
-			if pmmr::bintree_postorder_height(n) == 0 {
+			if pmmr::is_leaf(n) {
 				if let Some(out) = self.output_pmmr.get_data(n) {
-					self.batch.save_output_pos(&out.commit, n)?;
+					self.batch.save_output_pos(&out.commitment(), n)?;
 				}
 			}
 		}
+		debug!(LOGGER, "txhashset: ...done rebuilding output_pos index");
+		Ok(())
+	}
+
+	/// Rebuild the kernel_pos index by iterating
+	/// over the MMR data file. This is a costly operation
+	/// performed only when we receive a full new chain state.
+	pub fn rebuild_kernel_pos_index(&self) -> Result<(), Error> {
+		debug!(LOGGER, "txhashset: rebuilding the kernel_pos index (MMR size {})...", self.kernel_pmmr.unpruned_size());
+		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
+			if pmmr::is_leaf(n) {
+				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
+					self.batch.save_kernel_pos(&kernel.excess(), n)?;
+				}
+			}
+		}
+		debug!(LOGGER, "txhashset: ...done rebuilding kernel_pos index");
 		Ok(())
 	}
 
