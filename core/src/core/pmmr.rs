@@ -594,7 +594,9 @@ pub fn peak_map_height(mut pos: u64) -> (u64, u64) {
 /// are built.
 
 pub fn bintree_postorder_height(num: u64) -> u64 {
-	if num == 0 { return 0; }
+	if num == 0 {
+		return 0;
+	}
 	peak_map_height(num - 1).1
 }
 
