@@ -219,7 +219,6 @@ fn fixed_size_of_serialized_header() -> usize {
 	size += mem::size_of::<u64>(); // height
 	size += mem::size_of::<Hash>(); // previous
 	size += mem::size_of::<u64>(); // timestamp
-	size += mem::size_of::<Difficulty>(); // total_difficulty
 	size += mem::size_of::<Hash>(); // output_root
 	size += mem::size_of::<Hash>(); // range_proof_root
 	size += mem::size_of::<Hash>(); // kernel_root
@@ -227,6 +226,8 @@ fn fixed_size_of_serialized_header() -> usize {
 	size += mem::size_of::<Commitment>(); // total_kernel_sum
 	size += mem::size_of::<u64>(); // output_mmr_size
 	size += mem::size_of::<u64>(); // kernel_mmr_size
+	size += mem::size_of::<Difficulty>(); // total_difficulty
+	size += mem::size_of::<u64>(); // scaling_difficulty
 	size += mem::size_of::<u64>(); // nonce
 	size
 }
