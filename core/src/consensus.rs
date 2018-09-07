@@ -105,16 +105,16 @@ pub const HARD_FORK_INTERVAL: u64 = 250_000;
 /// 6 months interval scheduled hard forks for the first 2 years.
 pub fn valid_header_version(height: u64, version: u16) -> bool {
 	// uncomment below as we go from hard fork to hard fork
-	if height <= HARD_FORK_INTERVAL && version == 1 {
-		true
-	/* } else if height <= 2 * HARD_FORK_INTERVAL && version == 2 {
-		true */
-	/* } else if height <= 3 * HARD_FORK_INTERVAL && version == 3 {
-		true */
-	/* } else if height <= 4 * HARD_FORK_INTERVAL && version == 4 {
-		true */
-	/* } else if height > 4 * HARD_FORK_INTERVAL && version > 4 {
-		true */
+	if height < HEADER_V2_HARD_FORK {
+		version == 1
+	} else if height < HARD_FORK_INTERVAL {
+		version == 2
+	} else if height < 2 * HARD_FORK_INTERVAL {
+		version == 3
+	/* } else if height < 3 * HARD_FORK_INTERVAL {
+		version == 4 */
+	/* } else if height >= 4 * HARD_FORK_INTERVAL {
+		version > 4 */
 	} else {
 		false
 	}
@@ -249,3 +249,5 @@ pub trait VerifySortOrder<T> {
 	/// Verify a collection of items is sorted as required.
 	fn verify_sort_order(&self) -> Result<(), Error>;
 }
+
+pub const HEADER_V2_HARD_FORK: u64 = 95_000;

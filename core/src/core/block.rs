@@ -134,38 +134,40 @@ impl Default for ProofOfWork {
 	}
 }
 
-/// Serialization of a proof of work
-impl Writeable for ProofOfWork {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+impl ProofOfWork {
+	/// Read implementation, can't define as trait impl as we need a version
+	fn read(ver: u16, reader: &mut Reader) -> Result<ProofOfWork, ser::Error> {
+		let (total_difficulty, scaling_difficulty) = if ver == 1 {
+			// read earlier in the header on older versions
+			(Difficulty::one(), 1)
+		} else {
+			(Difficulty::read(reader)?, reader.read_u64()?)
+		};
+		let nonce = reader.read_u64()?;
+		let proof = Proof::read(reader)?;
+		Ok(ProofOfWork { total_difficulty, scaling_difficulty, nonce, proof})
+	}
+
+	/// Write implementation, can't define as trait impl as we need a version
+	fn write<W: Writer>(&self, ver: u16, writer: &mut W) -> Result<(), ser::Error> {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			self.write_pre_pow(writer)?;
+			self.write_pre_pow(ver, writer)?;
 		}
 
 		self.proof.write(writer)?;
 		Ok(())
 	}
-}
 
-impl Readable for ProofOfWork {
-	fn read(reader: &mut Reader) -> Result<ProofOfWork, ser::Error> {
-		Ok(ProofOfWork {
-			total_difficulty: Difficulty::read(reader)?,
-			scaling_difficulty: reader.read_u64()?,
-			nonce: reader.read_u64()?,
-			proof: Proof::read(reader)?,
-		})
-	}
-}
-
-impl ProofOfWork {
 	/// Write the pre-hash portion of the header
-	pub fn write_pre_pow<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		ser_multiwrite!(
-			writer,
-			[write_u64, self.total_difficulty.to_num()],
-			[write_u64, self.scaling_difficulty],
-			[write_u64, self.nonce]
-		);
+	pub fn write_pre_pow<W: Writer>(&self, ver: u16, writer: &mut W) -> Result<(), ser::Error> {
+		if ver > 1 {
+			ser_multiwrite!(
+				writer,
+				[write_u64, self.total_difficulty.to_num()],
+				[write_u64, self.scaling_difficulty]
+			);
+		}
+		writer.write_u64(self.nonce)?;
 		Ok(())
 	}
 
@@ -213,7 +215,7 @@ pub struct BlockHeader {
 }
 
 /// Serialized size of fixed part of a BlockHeader, i.e. without pow
-fn fixed_size_of_serialized_header() -> usize {
+fn fixed_size_of_serialized_header(version: u16) -> usize {
 	let mut size: usize = 0;
 	size += mem::size_of::<u16>(); // version
 	size += mem::size_of::<u64>(); // height
@@ -227,14 +229,16 @@ fn fixed_size_of_serialized_header() -> usize {
 	size += mem::size_of::<u64>(); // output_mmr_size
 	size += mem::size_of::<u64>(); // kernel_mmr_size
 	size += mem::size_of::<Difficulty>(); // total_difficulty
-	size += mem::size_of::<u64>(); // scaling_difficulty
+	if version >= 2 {
+		size += mem::size_of::<u64>(); // scaling_difficulty
+	}
 	size += mem::size_of::<u64>(); // nonce
 	size
 }
 
 /// Serialized size of a BlockHeader
-pub fn serialized_size_of_header(cuckoo_sizeshift: u8) -> usize {
-	let mut size = fixed_size_of_serialized_header();
+pub fn serialized_size_of_header(version: u16, cuckoo_sizeshift: u8) -> usize {
+	let mut size = fixed_size_of_serialized_header(version);
 
 	size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
 	let nonce_bits = cuckoo_sizeshift as usize - 1;
@@ -271,7 +275,7 @@ impl Writeable for BlockHeader {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			self.write_pre_pow(writer)?;
 		}
-		self.pow.write(writer)?;
+		self.pow.write(self.version, writer)?;
 		Ok(())
 	}
 }
@@ -282,13 +286,20 @@ impl Readable for BlockHeader {
 		let (version, height) = ser_multiread!(reader, read_u16, read_u64);
 		let previous = Hash::read(reader)?;
 		let timestamp = reader.read_i64()?;
+		let mut total_difficulty = None;
+		if version == 1 {
+			total_difficulty = Some(Difficulty::read(reader)?);
+		}
 		let output_root = Hash::read(reader)?;
 		let range_proof_root = Hash::read(reader)?;
 		let kernel_root = Hash::read(reader)?;
 		let total_kernel_offset = BlindingFactor::read(reader)?;
 		let total_kernel_sum = Commitment::read(reader)?;
 		let (output_mmr_size, kernel_mmr_size) = ser_multiread!(reader, read_u64, read_u64);
-		let pow = ProofOfWork::read(reader)?;
+		let mut pow = ProofOfWork::read(version, reader)?;
+		if version == 1 {
+			pow.total_difficulty = total_difficulty.unwrap();
+		}
 
 		if timestamp > MAX_DATE.and_hms(0, 0, 0).timestamp()
 			|| timestamp < MIN_DATE.and_hms(0, 0, 0).timestamp()
@@ -321,7 +332,14 @@ impl BlockHeader {
 			[write_u16, self.version],
 			[write_u64, self.height],
 			[write_fixed_bytes, &self.previous],
-			[write_i64, self.timestamp.timestamp()],
+			[write_i64, self.timestamp.timestamp()]
+		);
+		if self.version == 1 {
+			// written as part of the ProofOfWork in later versions
+			writer.write_u64(self.pow.total_difficulty.to_num())?;
+		}
+		ser_multiwrite!(
+			writer,
 			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
 			[write_fixed_bytes, &self.kernel_root],
@@ -338,7 +356,7 @@ impl BlockHeader {
 	pub fn pre_pow_hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
 		self.write_pre_pow(&mut hasher).unwrap();
-		self.pow.write_pre_pow(&mut hasher).unwrap();
+		self.pow.write_pre_pow(self.version, &mut hasher).unwrap();
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
@@ -368,7 +386,7 @@ impl BlockHeader {
 
 	/// Serialized size of this header
 	pub fn serialized_size(&self) -> usize {
-		let mut size = fixed_size_of_serialized_header();
+		let mut size = fixed_size_of_serialized_header(self.version);
 
 		size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
 		let nonce_bits = self.pow.cuckoo_sizeshift() as usize - 1;
@@ -579,11 +597,18 @@ impl Block {
 		let now = Utc::now().timestamp();
 		let timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now, 0), Utc);
 
+		let version = if prev.height + 1 < consensus::HEADER_V2_HARD_FORK {
+			1
+		} else {
+			2
+		};
+
 		// Now build the block with all the above information.
 		// Note: We have not validated the block here.
 		// Caller must validate the block as necessary.
 		Block {
 			header: BlockHeader {
+				version,
 				height: prev.height + 1,
 				timestamp,
 				previous: prev.hash(),
