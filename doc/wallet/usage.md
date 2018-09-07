@@ -144,6 +144,12 @@ Outputs in your wallet will appear as unconfirmed or locked until the transactio
 
 Other flags here are:
 
+* `-m` 'Method', which can be 'http' or 'file'. In the first case, the transaction will be sent to the IP address which follows the `-d` flag. In the second case, Grin wallet will generate a partial transaction file under the file name specified in the `-d` flag. This file needs to be signed by the recipient using the `grin wallet receive -i filename` command and finalize by the sender using the `grin wallet finalize -i filename.response` command. To create a partial transaction file, use:
+
+ ```
+[host]$ grin wallet send -d "transaction" -m file 60.00
+```
+
 * `-s` 'Selection strategy', which can be 'all' or 'smallest'. Since it's advantageous for outputs to be removed from the Grin chain,
 the default strategy for selecting inputs in Step 1 above is to use as many outputs as possible to consolidate your balance into a 
 couple of outputs. This also drastically reduces your wallet size, so everyone wins. The downside is that the entire contents of
