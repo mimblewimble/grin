@@ -954,7 +954,11 @@ impl<'a> Extension<'a> {
 	/// over the MMR data file. This is a costly operation
 	/// performed only when we receive a full new chain state.
 	pub fn rebuild_output_pos_index(&self) -> Result<(), Error> {
-		debug!(LOGGER, "txhashset: rebuilding the output_pos index (MMR size {})...", self.output_pmmr.unpruned_size());
+		debug!(
+			LOGGER,
+			"txhashset: rebuilding the output_pos index (MMR size {})...",
+			self.output_pmmr.unpruned_size()
+		);
 		for n in 1..self.output_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
 				if let Some(out) = self.output_pmmr.get_data(n) {
@@ -970,7 +974,11 @@ impl<'a> Extension<'a> {
 	/// over the MMR data file. This is a costly operation
 	/// performed only when we receive a full new chain state.
 	pub fn rebuild_kernel_pos_index(&self) -> Result<(), Error> {
-		debug!(LOGGER, "txhashset: rebuilding the kernel_pos index (MMR size {})...", self.kernel_pmmr.unpruned_size());
+		debug!(
+			LOGGER,
+			"txhashset: rebuilding the kernel_pos index (MMR size {})...",
+			self.kernel_pmmr.unpruned_size()
+		);
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
 				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
