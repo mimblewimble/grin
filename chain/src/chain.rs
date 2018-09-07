@@ -181,6 +181,8 @@ impl Chain {
 
 		setup_head(genesis, store.clone(), &mut txhashset)?;
 
+		// Node may not have a kernel_pos index as this was introduced later.
+		// Build the index if missing.
 		build_missing_indices(store.clone(), &mut txhashset)?;
 
 		// Now reload the chain head (either existing head or genesis from above)
@@ -950,6 +952,7 @@ fn build_missing_indices(
 				extension.rebuild_kernel_pos_index()?;
 				Ok(())
 			})?;
+			batch.commit()?;
 		}
 	}
 	Ok(())
