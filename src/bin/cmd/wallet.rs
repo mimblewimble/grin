@@ -199,50 +199,58 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				let fluff = send_args.is_present("fluff");
 				let max_outputs = 500;
 				if method == "http" {
-					let result = api.issue_send_tx(
-						amount,
-						minimum_confirmations,
-						dest,
-						max_outputs,
-						change_outputs,
-						selection_strategy == "all",
-					);
-					let slate = match result {
-						Ok(s) => {
-							info!(
-								LOGGER,
-								"Tx created: {} grin to {} (strategy '{}')",
-								core::amount_to_hr_string(amount, false),
-								dest,
-								selection_strategy,
-							);
-							s
+					if dest.starts_with("http://") {
+						let result = api.issue_send_tx(
+							amount,
+							minimum_confirmations,
+							dest,
+							max_outputs,
+							change_outputs,
+							selection_strategy == "all",
+						);
+						let slate = match result {
+							Ok(s) => {
+								info!(
+									LOGGER,
+									"Tx created: {} grin to {} (strategy '{}')",
+									core::amount_to_hr_string(amount, false),
+									dest,
+									selection_strategy,
+								);
+								s
+							}
+							Err(e) => {
+								error!(LOGGER, "Tx not created: {:?}", e);
+								match e.kind() {
+									// user errors, don't backtrace
+									libwallet::ErrorKind::NotEnoughFunds { .. } => {}
+									libwallet::ErrorKind::FeeDispute { .. } => {}
+									libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
+									_ => {
+										// otherwise give full dump
+										error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
+									}
+								};
+								panic!();
+							}
+						};
+						let result = api.post_tx(&slate, fluff);
+						match result {
+							Ok(_) => {
+								info!(LOGGER, "Tx sent",);
+								Ok(())
+							}
+							Err(e) => {
+								error!(LOGGER, "Tx not sent: {:?}", e);
+								Err(e)
+							}
 						}
-						Err(e) => {
-							error!(LOGGER, "Tx not created: {:?}", e);
-							match e.kind() {
-								// user errors, don't backtrace
-								libwallet::ErrorKind::NotEnoughFunds { .. } => {}
-								libwallet::ErrorKind::FeeDispute { .. } => {}
-								libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
-								_ => {
-									// otherwise give full dump
-									error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
-								}
-							};
-							panic!();
-						}
-					};
-					let result = api.post_tx(&slate, fluff);
-					match result {
-						Ok(_) => {
-							info!(LOGGER, "Tx sent",);
-							Ok(())
-						}
-						Err(e) => {
-							error!(LOGGER, "Tx not sent: {:?}", e);
-							Err(e)
-						}
+					} else {
+						error!(
+							LOGGER,
+							"HTTP Destination should start with http://: {}", dest
+						);
+						panic!();
 					}
 				} else if method == "file" {
 					api.send_tx(
