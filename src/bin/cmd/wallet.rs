@@ -169,7 +169,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 		wallet_config.clone(),
 		passphrase,
 	)));
-	let res = controller::owner_single_use(wallet, |api| {
+	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {
 			("send", Some(send_args)) => {
 				let amount = send_args
@@ -245,7 +245,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						}
 					}
 				} else if method == "file" {
-					api.file_send_tx(
+					api.send_tx(
 						true,
 						amount,
 						minimum_confirmations,
@@ -261,11 +261,18 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				}
 			}
 			("receive", Some(send_args)) => {
-				let tx_file = send_args
-					.value_of("input")
-					.expect("Transaction file required");
-				api.file_receive_tx(tx_file).expect("Receive failed");
-				Ok(())
+				let mut receive_result: Result<(), grin_wallet::libwallet::Error> = Ok(());
+				let res = controller::foreign_single_use(wallet, |api| {
+					let tx_file = send_args
+						.value_of("input")
+						.expect("Transaction file required");
+					receive_result = api.file_receive_tx(tx_file);
+					Ok(())
+				});
+				if res.is_err() {
+					exit(1);
+				}
+				receive_result
 			}
 			("finalize", Some(send_args)) => {
 				let fluff = send_args.is_present("fluff");
@@ -275,9 +282,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				let mut pub_tx_f = File::open(tx_file)?;
 				let mut content = String::new();
 				pub_tx_f.read_to_string(&mut content)?;
-				let mut slate_in: grin_wallet::libtx::slate::Slate = json::from_str(&content)
+				let mut slate: grin_wallet::libtx::slate::Slate = json::from_str(&content)
 					.map_err(|_| grin_wallet::libwallet::ErrorKind::Format)?;
-				let slate = api.file_finalize_tx(slate_in).expect("Finalize failed");
+				let _ = api.finalize_tx(&mut slate).expect("Finalize failed");
 
 				let result = api.post_tx(&slate, fluff);
 				match result {

@@ -280,7 +280,7 @@ where
 					args.selection_strategy_is_use_all,
 				)
 			} else if args.method == "file" {
-				api.file_send_tx(
+				api.send_tx(
 					false,
 					args.amount,
 					args.minimum_confirmations,
@@ -301,10 +301,15 @@ where
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
-		Box::new(parse_body(req).and_then(move |slate: Slate| {
-			debug!(LOGGER, "Finalizing transaction");
-			api.file_finalize_tx(slate)
-		}))
+		Box::new(
+			parse_body(req).and_then(move |mut slate| match api.finalize_tx(&mut slate) {
+				Ok(_) => ok(slate.clone()),
+				Err(e) => {
+					error!(LOGGER, "finalize_tx: failed with error: {}", e);
+					err(e)
+				}
+			}),
+		)
 	}
 
 	fn issue_burn_tx(
