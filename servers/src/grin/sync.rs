@@ -80,9 +80,24 @@ pub fn run_sync(
 					// short period of time for tests to do the right thing.
 					let wait_secs = if skip_sync_wait { 3 } else { 30 };
 
+					let head = chain.head().unwrap();
+
 					awaiting_peers.store(true, Ordering::Relaxed);
 					let mut n = 0;
-					while peers.more_work_peers().len() < 4 && n < wait_secs {
+					const MIN_PEERS: usize = 3;
+					loop {
+						let wp = peers.more_work_peers();
+						// exit loop when:
+						// * we have more than MIN_PEERS more_work peers
+						// * we are synced already, e.g. grin was quickly restarted
+						// * timeout
+						if wp.len() > MIN_PEERS
+							|| (wp.len() == 0
+								&& peers.enough_peers()
+								&& head.total_difficulty > Difficulty::zero()) || n > wait_secs
+						{
+							break;
+						}
 						thread::sleep(time::Duration::from_secs(1));
 						n += 1;
 					}
