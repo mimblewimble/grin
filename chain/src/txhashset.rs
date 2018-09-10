@@ -691,8 +691,8 @@ impl<'a> Extension<'a> {
 		// We need to check the output commitment actually matches at the given pos
 		// for this to be a duplicate.
 		if let Ok(pos) = self.batch.get_output_pos(&commit) {
-			if let Some(out_mmr) = self.output_pmmr.get_data(pos) {
-				if out_mmr.commitment() == commit {
+			if let Some(mmr_out) = self.output_pmmr.get_data(pos) {
+				if mmr_out.commitment() == commit {
 					return Err(ErrorKind::DuplicateCommitment(commit).into());
 				}
 			}
