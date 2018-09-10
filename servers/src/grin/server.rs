@@ -165,6 +165,7 @@ impl Server {
 			genesis.clone(),
 			pow::verify_size,
 			verifier_cache.clone(),
+			archive_mode,
 		)?);
 
 		pool_adapter.set_chain(Arc::downgrade(&shared_chain));

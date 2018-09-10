@@ -140,6 +140,7 @@ pub struct Chain {
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader, u8) -> bool,
+	archive_mode: bool,
 }
 
 unsafe impl Sync for Chain {}
@@ -156,6 +157,7 @@ impl Chain {
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader, u8) -> bool,
 		verifier_cache: Arc<RwLock<VerifierCache>>,
+		archive_mode: bool,
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainStore::new(db_env)?;
 
@@ -187,6 +189,7 @@ impl Chain {
 			pow_verifier,
 			verifier_cache,
 			block_hashes_cache: Arc::new(RwLock::new(VecDeque::with_capacity(HASHES_CACHE_SIZE))),
+			archive_mode,
 		})
 	}
 
@@ -664,6 +667,14 @@ impl Chain {
 	/// Meanwhile, the chain will not be able to accept new blocks. It should
 	/// therefore be called judiciously.
 	pub fn compact(&self) -> Result<(), Error> {
+		if self.archive_mode {
+			debug!(
+				LOGGER,
+				"Blockchain compaction disabled, node running in archive mode."
+			);
+			return Ok(());
+		}
+
 		debug!(LOGGER, "Starting blockchain compaction.");
 		// Compact the txhashset via the extension.
 		{

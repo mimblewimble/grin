@@ -52,6 +52,7 @@ fn setup(dir_name: &str, genesis: Block) -> Chain {
 		genesis,
 		pow::verify_size,
 		verifier_cache,
+		false,
 	).unwrap()
 }
 
@@ -497,6 +498,7 @@ fn actual_diff_iter_output() {
 		genesis_block,
 		pow::verify_size,
 		verifier_cache,
+		false,
 	).unwrap();
 	let iter = chain.difficulty_iter();
 	let mut last_time = 0;

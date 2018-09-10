@@ -55,6 +55,7 @@ fn setup(dir_name: &str) -> Chain {
 		genesis_block,
 		pow::verify_size,
 		verifier_cache,
+		false,
 	).unwrap()
 }
 
@@ -68,6 +69,7 @@ fn reload_chain(dir_name: &str) -> Chain {
 		genesis::genesis_dev(),
 		pow::verify_size,
 		verifier_cache,
+		false,
 	).unwrap()
 }
 
