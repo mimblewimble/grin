@@ -157,11 +157,7 @@ where
 	}
 
 	/// Rewind the PMMR backend to the given position.
-	fn rewind(
-		&mut self,
-		position: u64,
-		rewind_rm_pos: &Bitmap,
-	) -> Result<(), String> {
+	fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String> {
 		// First rewind the leaf_set with the necessary added and removed positions.
 		if self.prunable {
 			self.leaf_set.rewind(position, rewind_rm_pos);
@@ -226,7 +222,6 @@ where
 		prunable: bool,
 		header: Option<&BlockHeader>,
 	) -> io::Result<PMMRBackend<T>> {
-
 		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		let data_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
 
@@ -423,18 +418,12 @@ where
 		Ok(true)
 	}
 
-	fn pos_to_rm(
-		&self,
-		cutoff_pos: u64,
-		rewind_rm_pos: &Bitmap,
-	) -> (Bitmap, Bitmap) {
+	fn pos_to_rm(&self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) -> (Bitmap, Bitmap) {
 		let mut expanded = Bitmap::create();
 
-		let leaf_pos_to_rm = self.leaf_set.removed_pre_cutoff(
-			cutoff_pos,
-			rewind_rm_pos,
-			&self.prune_list,
-		);
+		let leaf_pos_to_rm =
+			self.leaf_set
+				.removed_pre_cutoff(cutoff_pos, rewind_rm_pos, &self.prune_list);
 
 		for x in leaf_pos_to_rm.iter() {
 			expanded.add(x);
