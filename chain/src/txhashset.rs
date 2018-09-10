@@ -679,7 +679,7 @@ impl<'a> Extension<'a> {
 		}
 	}
 
-	// Checks output is not already in the output MMR
+	// Checks commitment is not already in the output MMR
 	// by looking for the pos in the output_pos index
 	// and then checking the output at that pos is actually a match.
 	// Pushes the new output onto the right hand side of the MMR.
@@ -712,7 +712,9 @@ impl<'a> Extension<'a> {
 
 		// The output and rproof MMRs should be exactly the same size
 		// and we should have inserted to both in exactly the same pos.
+		assert_eq!(self.output_pmmr.unpruned_size(), self.kernel_pmmr.unpruned_size());
 		assert_eq!(output_pos, rproof_pos);
+
 		Ok(output_pos)
 	}
 
@@ -726,8 +728,8 @@ impl<'a> Extension<'a> {
 		// We need to check the hash actually matches at the given pos
 		// for this to be a duplicate.
 		if let Ok(pos) = self.batch.get_kernel_pos(&excess) {
-			if let Some(hash) = self.kernel_pmmr.get_hash(pos) {
-				if hash == kernel.hash_with_index(pos - 1) {
+			if let Some(mmr_kernel) = self.kernel_pmmr.get_data(pos) {
+				if mmr_kernel.excess() == excess {
 					return Err(ErrorKind::DuplicateKernelExcess(excess).into());
 				}
 			}
