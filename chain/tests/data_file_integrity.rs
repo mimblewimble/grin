@@ -169,6 +169,6 @@ fn _prepare_block_nosum(
 		Ok(b) => b,
 	};
 	b.header.timestamp = prev.timestamp + Duration::seconds(60);
-	b.header.total_difficulty = Difficulty::from_num(diff);
+	b.header.pow.total_difficulty = Difficulty::from_num(diff);
 	b
 }

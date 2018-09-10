@@ -392,14 +392,14 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	if !ctx.opts.contains(Options::SKIP_POW) {
-		if global::min_sizeshift() > header.pow.cuckoo_sizeshift {
+		if global::min_sizeshift() > header.pow.cuckoo_sizeshift() {
 			return Err(ErrorKind::LowSizeshift.into());
 		}
-		if !(ctx.pow_verifier)(header, header.pow.cuckoo_sizeshift) {
+		if !(ctx.pow_verifier)(header, header.pow.cuckoo_sizeshift()) {
 			error!(
 				LOGGER,
 				"pipe: validate_header failed for cuckoo shift size {}",
-				header.pow.cuckoo_sizeshift,
+				header.pow.cuckoo_sizeshift()
 			);
 			return Err(ErrorKind::InvalidPow.into());
 		}
@@ -436,11 +436,11 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	// check the pow hash shows a difficulty at least as large
 	// as the target difficulty
 	if !ctx.opts.contains(Options::SKIP_POW) {
-		if header.total_difficulty.clone() <= prev.total_difficulty.clone() {
+		if header.total_difficulty() <= prev.total_difficulty() {
 			return Err(ErrorKind::DifficultyTooLow.into());
 		}
 
-		let target_difficulty = header.total_difficulty.clone() - prev.total_difficulty.clone();
+		let target_difficulty = header.total_difficulty() - prev.total_difficulty();
 
 		if header.pow.to_difficulty() < target_difficulty {
 			return Err(ErrorKind::DifficultyTooLow.into());

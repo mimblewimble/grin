@@ -89,7 +89,7 @@ impl Miner {
 			self.debug_output_id,
 			global::min_sizeshift(),
 			attempt_time_per_block,
-			b.header.total_difficulty,
+			b.header.total_difficulty(),
 			b.header.height,
 			latest_hash
 		);
@@ -105,14 +105,13 @@ impl Miner {
 			).mine()
 			{
 				let proof_diff = proof.to_difficulty();
-				if proof_diff >= (b.header.total_difficulty.clone() - head.total_difficulty.clone())
-				{
+				if proof_diff >= (b.header.total_difficulty() - head.total_difficulty()) {
 					sol = Some(proof);
 					break;
 				}
 			}
 
-			b.header.nonce += 1;
+			b.header.pow.nonce += 1;
 			*latest_hash = self.chain.head().unwrap().last_block_h;
 			iter_count += 1;
 		}
@@ -165,7 +164,7 @@ impl Miner {
 
 			// we found a solution, push our block through the chain processing pipeline
 			if let Some(proof) = sol {
-				b.header.pow = proof;
+				b.header.pow.proof = proof;
 				info!(
 					LOGGER,
 					"(Server ID: {}) Found valid proof of work, adding block {}.",

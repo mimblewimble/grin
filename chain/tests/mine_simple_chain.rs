@@ -77,9 +77,9 @@ fn mine_empty_chain() {
 		} else {
 			global::min_sizeshift()
 		};
-		b.header.pow.cuckoo_sizeshift = sizeshift;
+		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
 		pow::pow_size(&mut b.header, difficulty, global::proofsize(), sizeshift).unwrap();
-		b.header.pow.cuckoo_sizeshift = sizeshift;
+		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
 
 		let bhash = b.hash();
 		chain.process_block(b, chain::Options::MINE).unwrap();
@@ -390,9 +390,9 @@ fn output_header_mappings() {
 		} else {
 			global::min_sizeshift()
 		};
-		b.header.pow.cuckoo_sizeshift = sizeshift;
+		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
 		pow::pow_size(&mut b.header, difficulty, global::proofsize(), sizeshift).unwrap();
-		b.header.pow.cuckoo_sizeshift = sizeshift;
+		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
 
 		chain.process_block(b, chain::Options::MINE).unwrap();
 
@@ -479,8 +479,8 @@ where
 		Ok(b) => b,
 	};
 	b.header.timestamp = prev.timestamp + Duration::seconds(60);
-	b.header.total_difficulty = prev.total_difficulty.clone() + Difficulty::from_num(diff);
-	b.header.pow = core::core::Proof::random(proof_size);
+	b.header.pow.total_difficulty = prev.total_difficulty() + Difficulty::from_num(diff);
+	b.header.pow.proof = core::core::Proof::random(proof_size);
 	b
 }
 

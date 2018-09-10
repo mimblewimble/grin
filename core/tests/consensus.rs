@@ -498,12 +498,14 @@ fn next_target_adjustment() {
 }
 
 #[test]
-fn hard_fork_1() {
+fn hard_forks() {
 	assert!(valid_header_version(0, 1));
 	assert!(valid_header_version(10, 1));
 	assert!(!valid_header_version(10, 2));
-	assert!(valid_header_version(250_000, 1));
-	assert!(!valid_header_version(250_001, 1));
+	assert!(valid_header_version(100_000, 2));
+	assert!(valid_header_version(249_999, 2));
+	assert!(valid_header_version(250_000, 3));
+	assert!(!valid_header_version(250_000, 1));
 	assert!(!valid_header_version(500_000, 1));
 	assert!(!valid_header_version(250_001, 2));
 }

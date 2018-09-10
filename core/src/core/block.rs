@@ -109,6 +109,79 @@ impl fmt::Display for Error {
 	}
 }
 
+/// Block header information pertaining to the proof of work
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProofOfWork {
+	/// Total accumulated difficulty since genesis block
+	pub total_difficulty: Difficulty,
+	/// Difficulty scaling factor between the different proofs of work
+	pub scaling_difficulty: u64,
+	/// Nonce increment used to mine this block.
+	pub nonce: u64,
+	/// Proof of work data.
+	pub proof: Proof,
+}
+
+impl Default for ProofOfWork {
+	fn default() -> ProofOfWork {
+		let proof_size = global::proofsize();
+		ProofOfWork {
+			total_difficulty: Difficulty::one(),
+			scaling_difficulty: 1,
+			nonce: 0,
+			proof: Proof::zero(proof_size),
+		}
+	}
+}
+
+impl ProofOfWork {
+	/// Read implementation, can't define as trait impl as we need a version
+	fn read(ver: u16, reader: &mut Reader) -> Result<ProofOfWork, ser::Error> {
+		let (total_difficulty, scaling_difficulty) = if ver == 1 {
+			// read earlier in the header on older versions
+			(Difficulty::one(), 1)
+		} else {
+			(Difficulty::read(reader)?, reader.read_u64()?)
+		};
+		let nonce = reader.read_u64()?;
+		let proof = Proof::read(reader)?;
+		Ok(ProofOfWork { total_difficulty, scaling_difficulty, nonce, proof})
+	}
+
+	/// Write implementation, can't define as trait impl as we need a version
+	fn write<W: Writer>(&self, ver: u16, writer: &mut W) -> Result<(), ser::Error> {
+		if writer.serialization_mode() != ser::SerializationMode::Hash {
+			self.write_pre_pow(ver, writer)?;
+		}
+
+		self.proof.write(writer)?;
+		Ok(())
+	}
+
+	/// Write the pre-hash portion of the header
+	pub fn write_pre_pow<W: Writer>(&self, ver: u16, writer: &mut W) -> Result<(), ser::Error> {
+		if ver > 1 {
+			ser_multiwrite!(
+				writer,
+				[write_u64, self.total_difficulty.to_num()],
+				[write_u64, self.scaling_difficulty]
+			);
+		}
+		writer.write_u64(self.nonce)?;
+		Ok(())
+	}
+
+	/// Maximum difficulty this proof of work can achieve
+	pub fn to_difficulty(&self) -> Difficulty {
+		self.proof.to_difficulty()
+	}
+
+	/// The shift used for the cuckoo cycle size on this proof
+	pub fn cuckoo_sizeshift(&self) -> u8 {
+		self.proof.cuckoo_sizeshift
+	}
+}
+
 /// Block header, fairly standard compared to other blockchains.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BlockHeader {
@@ -120,8 +193,6 @@ pub struct BlockHeader {
 	pub previous: Hash,
 	/// Timestamp at which the block was built.
 	pub timestamp: DateTime<Utc>,
-	/// Total accumulated difficulty since genesis block
-	pub total_difficulty: Difficulty,
 	/// Merklish root of all the commitments in the TxHashSet
 	pub output_root: Hash,
 	/// Merklish root of all range proofs in the TxHashSet
@@ -139,20 +210,17 @@ pub struct BlockHeader {
 	pub output_mmr_size: u64,
 	/// Total size of the kernel MMR after applying this block
 	pub kernel_mmr_size: u64,
-	/// Nonce increment used to mine this block.
-	pub nonce: u64,
-	/// Proof of work data.
-	pub pow: Proof,
+	/// Proof of work and related
+	pub pow: ProofOfWork,
 }
 
 /// Serialized size of fixed part of a BlockHeader, i.e. without pow
-fn fixed_size_of_serialized_header() -> usize {
+fn fixed_size_of_serialized_header(version: u16) -> usize {
 	let mut size: usize = 0;
 	size += mem::size_of::<u16>(); // version
 	size += mem::size_of::<u64>(); // height
 	size += mem::size_of::<Hash>(); // previous
 	size += mem::size_of::<u64>(); // timestamp
-	size += mem::size_of::<Difficulty>(); // total_difficulty
 	size += mem::size_of::<Hash>(); // output_root
 	size += mem::size_of::<Hash>(); // range_proof_root
 	size += mem::size_of::<Hash>(); // kernel_root
@@ -160,13 +228,17 @@ fn fixed_size_of_serialized_header() -> usize {
 	size += mem::size_of::<Commitment>(); // total_kernel_sum
 	size += mem::size_of::<u64>(); // output_mmr_size
 	size += mem::size_of::<u64>(); // kernel_mmr_size
+	size += mem::size_of::<Difficulty>(); // total_difficulty
+	if version >= 2 {
+		size += mem::size_of::<u64>(); // scaling_difficulty
+	}
 	size += mem::size_of::<u64>(); // nonce
 	size
 }
 
 /// Serialized size of a BlockHeader
-pub fn serialized_size_of_header(cuckoo_sizeshift: u8) -> usize {
-	let mut size = fixed_size_of_serialized_header();
+pub fn serialized_size_of_header(version: u16, cuckoo_sizeshift: u8) -> usize {
+	let mut size = fixed_size_of_serialized_header(version);
 
 	size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
 	let nonce_bits = cuckoo_sizeshift as usize - 1;
@@ -180,13 +252,11 @@ pub fn serialized_size_of_header(cuckoo_sizeshift: u8) -> usize {
 
 impl Default for BlockHeader {
 	fn default() -> BlockHeader {
-		let proof_size = global::proofsize();
 		BlockHeader {
 			version: 1,
 			height: 0,
 			previous: ZERO_HASH,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
-			total_difficulty: Difficulty::one(),
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
@@ -194,8 +264,7 @@ impl Default for BlockHeader {
 			total_kernel_sum: Commitment::from_vec(vec![0; 33]),
 			output_mmr_size: 0,
 			kernel_mmr_size: 0,
-			nonce: 0,
-			pow: Proof::zero(proof_size),
+			pow: ProofOfWork::default(),
 		}
 	}
 }
@@ -206,8 +275,7 @@ impl Writeable for BlockHeader {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			self.write_pre_pow(writer)?;
 		}
-
-		self.pow.write(writer)?;
+		self.pow.write(self.version, writer)?;
 		Ok(())
 	}
 }
@@ -218,15 +286,20 @@ impl Readable for BlockHeader {
 		let (version, height) = ser_multiread!(reader, read_u16, read_u64);
 		let previous = Hash::read(reader)?;
 		let timestamp = reader.read_i64()?;
-		let total_difficulty = Difficulty::read(reader)?;
+		let mut total_difficulty = None;
+		if version == 1 {
+			total_difficulty = Some(Difficulty::read(reader)?);
+		}
 		let output_root = Hash::read(reader)?;
 		let range_proof_root = Hash::read(reader)?;
 		let kernel_root = Hash::read(reader)?;
 		let total_kernel_offset = BlindingFactor::read(reader)?;
 		let total_kernel_sum = Commitment::read(reader)?;
-		let (output_mmr_size, kernel_mmr_size, nonce) =
-			ser_multiread!(reader, read_u64, read_u64, read_u64);
-		let pow = Proof::read(reader)?;
+		let (output_mmr_size, kernel_mmr_size) = ser_multiread!(reader, read_u64, read_u64);
+		let mut pow = ProofOfWork::read(version, reader)?;
+		if version == 1 {
+			pow.total_difficulty = total_difficulty.unwrap();
+		}
 
 		if timestamp > MAX_DATE.and_hms(0, 0, 0).timestamp()
 			|| timestamp < MIN_DATE.and_hms(0, 0, 0).timestamp()
@@ -239,7 +312,6 @@ impl Readable for BlockHeader {
 			height,
 			previous,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc),
-			total_difficulty,
 			output_root,
 			range_proof_root,
 			kernel_root,
@@ -247,7 +319,6 @@ impl Readable for BlockHeader {
 			total_kernel_sum,
 			output_mmr_size,
 			kernel_mmr_size,
-			nonce,
 			pow,
 		})
 	}
@@ -261,28 +332,39 @@ impl BlockHeader {
 			[write_u16, self.version],
 			[write_u64, self.height],
 			[write_fixed_bytes, &self.previous],
-			[write_i64, self.timestamp.timestamp()],
-			[write_u64, self.total_difficulty.to_num()],
+			[write_i64, self.timestamp.timestamp()]
+		);
+		if self.version == 1 {
+			// written as part of the ProofOfWork in later versions
+			writer.write_u64(self.pow.total_difficulty.to_num())?;
+		}
+		ser_multiwrite!(
+			writer,
 			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
 			[write_fixed_bytes, &self.kernel_root],
 			[write_fixed_bytes, &self.total_kernel_offset],
 			[write_fixed_bytes, &self.total_kernel_sum],
 			[write_u64, self.output_mmr_size],
-			[write_u64, self.kernel_mmr_size],
-			[write_u64, self.nonce]
+			[write_u64, self.kernel_mmr_size]
 		);
 		Ok(())
 	}
-	///
+
 	/// Returns the pre-pow hash, as the post-pow hash
 	/// should just be the hash of the POW
 	pub fn pre_pow_hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
 		self.write_pre_pow(&mut hasher).unwrap();
+		self.pow.write_pre_pow(self.version, &mut hasher).unwrap();
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
+	}
+
+	/// Total difficulty accumulated by the proof of work on this header
+	pub fn total_difficulty(&self) -> Difficulty {
+		self.pow.total_difficulty.clone()
 	}
 
 	/// The "overage" to use when verifying the kernel sums.
@@ -304,10 +386,10 @@ impl BlockHeader {
 
 	/// Serialized size of this header
 	pub fn serialized_size(&self) -> usize {
-		let mut size = fixed_size_of_serialized_header();
+		let mut size = fixed_size_of_serialized_header(self.version);
 
 		size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
-		let nonce_bits = self.pow.cuckoo_sizeshift as usize - 1;
+		let nonce_bits = self.pow.cuckoo_sizeshift() as usize - 1;
 		let bitvec_len = global::proofsize() * nonce_bits;
 		size += bitvec_len / 8; // pow.nonces
 		if bitvec_len % 8 != 0 {
@@ -418,7 +500,7 @@ impl Block {
 		// Now set the pow on the header so block hashing works as expected.
 		{
 			let proof_size = global::proofsize();
-			block.header.pow = Proof::random(proof_size);
+			block.header.pow.proof = Proof::random(proof_size);
 		}
 
 		Ok(block)
@@ -515,17 +597,27 @@ impl Block {
 		let now = Utc::now().timestamp();
 		let timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now, 0), Utc);
 
+		let version = if prev.height + 1 < consensus::HEADER_V2_HARD_FORK {
+			1
+		} else {
+			2
+		};
+
 		// Now build the block with all the above information.
 		// Note: We have not validated the block here.
 		// Caller must validate the block as necessary.
 		Block {
 			header: BlockHeader {
+				version,
 				height: prev.height + 1,
 				timestamp,
 				previous: prev.hash(),
-				total_difficulty: difficulty + prev.total_difficulty,
 				total_kernel_offset,
 				total_kernel_sum,
+				pow: ProofOfWork {
+					total_difficulty: difficulty + prev.pow.total_difficulty,
+					..Default::default()
+				},
 				..Default::default()
 			},
 			body: agg_tx.into(),
