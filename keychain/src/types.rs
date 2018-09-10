@@ -21,8 +21,8 @@ use std::cmp::min;
 use std::{error, fmt};
 
 use blake2::blake2b::blake2b;
-use serde::{de, ser};
-use extkey_bip32::{self, ChildNumber, ExtendedPrivKey, Fingerprint}; //TODO: Convert errors to use ErrorKind
+use extkey_bip32::{self, ChildNumber, ExtendedPrivKey, Fingerprint};
+use serde::{de, ser}; //TODO: Convert errors to use ErrorKind
 
 use util;
 use util::secp::constants::SECRET_KEY_SIZE;
@@ -294,20 +294,22 @@ impl BlindSum {
 /// Encapsulates a max 4-level deep BIP32 path, which is the
 /// most we can currently fit into a rangeproof message
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct ExtKeychainPath{
+pub struct ExtKeychainPath {
 	pub depth: usize,
-	pub path: [extkey_bip32::ChildNumber;4]
+	pub path: [extkey_bip32::ChildNumber; 4],
 }
 
 impl ExtKeychainPath {
 	/// Return a new chain path with given derivation and depth
-	pub fn new(depth: usize, d0: u32, d1: u32, d2: u32, d3: u32) -> ExtKeychainPath{
+	pub fn new(depth: usize, d0: u32, d1: u32, d2: u32, d3: u32) -> ExtKeychainPath {
 		ExtKeychainPath {
 			depth: depth,
-			path: [ChildNumber::from(d0),
-			       ChildNumber::from(d1),
-			       ChildNumber::from(d2),
-			       ChildNumber::from(d3)],
+			path: [
+				ChildNumber::from(d0),
+				ChildNumber::from(d1),
+				ChildNumber::from(d2),
+				ChildNumber::from(d3),
+			],
 		}
 	}
 }

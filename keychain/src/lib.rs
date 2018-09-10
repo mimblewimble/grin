@@ -34,5 +34,7 @@ pub mod extkey_bip32;
 mod types;
 
 pub mod keychain;
-pub use keychain::{ExtKeychain};
-pub use types::{BlindSum, BlindingFactor, ExtKeychainPath, Error, Identifier, Keychain, IDENTIFIER_SIZE};
+pub use keychain::ExtKeychain;
+pub use types::{
+	BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain, IDENTIFIER_SIZE,
+};

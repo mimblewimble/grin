@@ -18,8 +18,8 @@ use rand::{thread_rng, Rng};
 
 use blake2;
 
-use extkey_bip32::{ExtendedPrivKey, Fingerprint, BIP32GrinHasher};
-use types::{BlindSum, BlindingFactor, ExtKeychainPath, Error, Keychain};
+use extkey_bip32::{BIP32GrinHasher, ExtendedPrivKey, Fingerprint};
+use types::{BlindSum, BlindingFactor, Error, ExtKeychainPath, Keychain};
 use util::logger::LOGGER;
 use util::secp::key::SecretKey;
 use util::secp::pedersen::Commitment;
@@ -75,26 +75,26 @@ impl Keychain for ExtKeychain {
 			.positive_key_ids
 			.iter()
 			.filter_map(|k| {
-					let res = self.derive_key_id(&k);
-					if let Ok(s) = res {
-						Some(s.secret_key)
-					} else {
-						None
-					}
-				})
+				let res = self.derive_key_id(&k);
+				if let Ok(s) = res {
+					Some(s.secret_key)
+				} else {
+					None
+				}
+			})
 			.collect();
 
 		let mut neg_keys: Vec<SecretKey> = blind_sum
 			.negative_key_ids
 			.iter()
 			.filter_map(|k| {
-					let res = self.derive_key_id(&k);
-					if let Ok(s) = res {
-						Some(s.secret_key)
-					} else {
-						None
-					}
-				})
+				let res = self.derive_key_id(&k);
+				if let Ok(s) = res {
+					Some(s.secret_key)
+				} else {
+					None
+				}
+			})
 			.collect();
 
 		pos_keys.extend(
