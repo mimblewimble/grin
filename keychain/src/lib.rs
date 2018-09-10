@@ -30,7 +30,7 @@ extern crate serde_json;
 extern crate sha2;
 extern crate uuid;
 #[macro_use]
-extern crate lazy_static; 
+extern crate lazy_static;
 
 mod base58;
 pub mod extkey_bip32;
