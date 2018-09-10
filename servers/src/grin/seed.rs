@@ -35,7 +35,9 @@ use util::LOGGER;
 const SEEDS_URL: &'static str = "http://grin-tech.org/seeds.txt";
 // DNS Seeds with contact email associated
 const DNS_SEEDS: &'static [&'static str] = &[
-	"t3.seed.grin-tech.org", // igno.peverell@protonmail.com
+	"t3.seed.grin-tech.org",    // igno.peverell@protonmail.com
+	"seed.grin.lesceller.com",  // q.lesceller@gmail.com
+	"t3.grin-seed.prokapi.com", // info@prokapi.com
 ];
 
 pub fn connect_and_monitor(
@@ -359,6 +361,7 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 				),
 			}
 		}
+		debug!(LOGGER, "Retrieved seed addresses: {:?}", addresses);
 		addresses
 	})
 }
@@ -367,6 +370,7 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 /// http. Easy method until we have a set of DNS names we can rely on.
 pub fn web_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 	Box::new(|| {
+		debug!(LOGGER, "Retrieving seed nodes from {}", SEEDS_URL);
 		let text: String = api::client::get(SEEDS_URL).expect("Failed to resolve seeds");
 		let addrs = text
 			.split_whitespace()
