@@ -198,7 +198,7 @@ fn main() {
 				.help("Minimum number of confirmations required for an output to be spendable.")
 				.short("c")
 				.long("min_conf")
-				.default_value("1")
+				.default_value("10")
 				.takes_value(true))
 			.arg(Arg::with_name("selection_strategy")
 				.help("Coin/Output selection strategy.")
@@ -259,7 +259,7 @@ fn main() {
 				.help("Minimum number of confirmations required for an output to be spendable.")
 				.short("c")
 				.long("min_conf")
-				.default_value("1")
+				.default_value("10")
 				.takes_value(true)))
 
 		.subcommand(SubCommand::with_name("outputs")
