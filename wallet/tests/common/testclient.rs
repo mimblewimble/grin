@@ -111,6 +111,7 @@ where
 			genesis_block,
 			pow::verify_size,
 			verifier_cache,
+			false,
 		).unwrap();
 		let (tx, rx) = channel();
 		let retval = WalletProxy {
