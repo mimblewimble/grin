@@ -668,7 +668,10 @@ impl Chain {
 	/// therefore be called judiciously.
 	pub fn compact(&self) -> Result<(), Error> {
 		if self.archive_mode {
-			debug!(LOGGER, "Blockchain compaction disabled, node running in archive mode.");
+			debug!(
+				LOGGER,
+				"Blockchain compaction disabled, node running in archive mode."
+			);
 			return Ok(());
 		}
 
