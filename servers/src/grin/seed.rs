@@ -312,7 +312,7 @@ fn listen_for_addrs(
 										}
 									}
 									p2p::Error::PeerWithSelf => break,
-									_ => continue,
+									_ => (),
 								}
 							}
 						}
