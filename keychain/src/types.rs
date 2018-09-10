@@ -22,6 +22,7 @@ use std::{error, fmt};
 
 use blake2::blake2b::blake2b;
 use serde::{de, ser};
+use extkey_bip32::{self, ChildNumber, ExtendedPrivKey, Fingerprint}; //TODO: Convert errors to use ErrorKind
 
 use util;
 use util::secp::constants::SECRET_KEY_SIZE;
@@ -35,7 +36,7 @@ pub const IDENTIFIER_SIZE: usize = 10;
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Error {
 	Secp(secp::Error),
-	KeyDerivation(String),
+	KeyDerivation(extkey_bip32::Error),
 	Transaction(String),
 	RangeProof(String),
 }
@@ -43,6 +44,12 @@ pub enum Error {
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
 		Error::Secp(e)
+	}
+}
+
+impl From<extkey_bip32::Error> for Error {
+	fn from(e: extkey_bip32::Error) -> Error {
+		Error::KeyDerivation(e)
 	}
 }
 
@@ -244,8 +251,8 @@ pub struct SplitBlindingFactor {
 /// factor as well as the "sign" with which they should be combined.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BlindSum {
-	pub positive_key_ids: Vec<Identifier>,
-	pub negative_key_ids: Vec<Identifier>,
+	pub positive_key_ids: Vec<ExtKeychainPath>,
+	pub negative_key_ids: Vec<ExtKeychainPath>,
 	pub positive_blinding_factors: Vec<BlindingFactor>,
 	pub negative_blinding_factors: Vec<BlindingFactor>,
 }
@@ -261,13 +268,13 @@ impl BlindSum {
 		}
 	}
 
-	pub fn add_key_id(mut self, key_id: Identifier) -> BlindSum {
-		self.positive_key_ids.push(key_id);
+	pub fn add_key_id(mut self, path: ExtKeychainPath) -> BlindSum {
+		self.positive_key_ids.push(path);
 		self
 	}
 
-	pub fn sub_key_id(mut self, key_id: Identifier) -> BlindSum {
-		self.negative_key_ids.push(key_id);
+	pub fn sub_key_id(mut self, path: ExtKeychainPath) -> BlindSum {
+		self.negative_key_ids.push(path);
 		self
 	}
 
@@ -284,16 +291,35 @@ impl BlindSum {
 	}
 }
 
+/// Encapsulates a max 4-level deep BIP32 path, which is the
+/// most we can currently fit into a rangeproof message
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct ExtKeychainPath{
+	pub depth: usize,
+	pub path: [extkey_bip32::ChildNumber;4]
+}
+
+impl ExtKeychainPath {
+	/// Return a new chain path with given derivation and depth
+	pub fn new(depth: usize, d0: u32, d1: u32, d2: u32, d3: u32) -> ExtKeychainPath{
+		ExtKeychainPath {
+			depth: depth,
+			path: [ChildNumber::from(d0),
+			       ChildNumber::from(d1),
+			       ChildNumber::from(d2),
+			       ChildNumber::from(d3)],
+		}
+	}
+}
+
 pub trait Keychain: Sync + Send + Clone {
 	fn from_seed(seed: &[u8]) -> Result<Self, Error>;
 	fn from_random_seed() -> Result<Self, Error>;
-	fn root_key_id(&self) -> Identifier;
-	fn derive_key_id(&self, derivation: u32) -> Result<Identifier, Error>;
-	fn derived_key(&self, key_id: &Identifier) -> Result<SecretKey, Error>;
-	fn commit(&self, amount: u64, key_id: &Identifier) -> Result<Commitment, Error>;
-	fn commit_with_key_index(&self, amount: u64, derivation: u32) -> Result<Commitment, Error>;
+	fn root_key_id(&self) -> Fingerprint;
+	fn derive_key_id(&self, derivation: &ExtKeychainPath) -> Result<ExtendedPrivKey, Error>;
+	fn commit(&self, amount: u64, derivation: &ExtKeychainPath) -> Result<Commitment, Error>;
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
-	fn sign(&self, msg: &Message, key_id: &Identifier) -> Result<Signature, Error>;
+	fn sign(&self, msg: &Message, derivation: &ExtKeychainPath) -> Result<Signature, Error>;
 	fn sign_with_blinding(&self, &Message, &BlindingFactor) -> Result<Signature, Error>;
 	fn secp(&self) -> &Secp256k1;
 }

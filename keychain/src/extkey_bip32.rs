@@ -85,30 +85,30 @@ pub trait BIP32Hasher {
 }
 
 /// Implementation of the above that uses the standard BIP32 Hash algorithms
-pub struct BIP32ReferenceHasher {
+pub struct BIP32GrinHasher {
 	hmac_sha512: Hmac<Sha512>,
 }
 
-impl BIP32ReferenceHasher {
+impl BIP32GrinHasher {
 	/// New empty hasher
-	pub fn new() -> BIP32ReferenceHasher {
-		BIP32ReferenceHasher {
+	pub fn new() -> BIP32GrinHasher {
+		BIP32GrinHasher {
 			hmac_sha512: Hmac::new(Sha512::new(), &[0u8]),
 		}
 	}
 }
 
-impl BIP32Hasher for BIP32ReferenceHasher {
+impl BIP32Hasher for BIP32GrinHasher {
 	fn network_priv() -> [u8; 4] {
-		// bitcoin network (xprv) (for test vectors)
+		// xprv
 		[0x04, 0x88, 0xAD, 0xE4]
 	}
 	fn network_pub() -> [u8; 4] {
-		// bitcoin network (xpub) (for test vectors)
+		// xpub
 		[0x04, 0x88, 0xB2, 0x1E]
 	}
 	fn master_seed() -> [u8; 12] {
-		b"Bitcoin seed".to_owned()
+		b"IamVoldemort".to_owned()
 	}
 	fn init_sha512(&mut self, seed: &[u8]) {
 		self.hmac_sha512 = Hmac::new(Sha512::new(), seed);
@@ -652,9 +652,66 @@ mod tests {
 
 	use super::ChildNumber::{Hardened, Normal};
 	use super::Error;
-	use super::{ChildNumber, ExtendedPrivKey, ExtendedPubKey};
+	use super::{BIP32Hasher, ChildNumber, ExtendedPrivKey, ExtendedPubKey};
 
-	use super::BIP32ReferenceHasher;
+	use crypto::digest::Digest;
+	use crypto::hmac::Hmac;
+	use crypto::mac::Mac;
+	use crypto::ripemd160::Ripemd160;
+	use crypto::sha2::{Sha256, Sha512};
+
+	/// Implementation of the above that uses the standard BIP32 Hash algorithms
+	pub struct BIP32ReferenceHasher {
+		hmac_sha512: Hmac<Sha512>,
+	}
+
+	impl BIP32ReferenceHasher {
+		/// New empty hasher
+		pub fn new() -> BIP32ReferenceHasher {
+			BIP32ReferenceHasher {
+				hmac_sha512: Hmac::new(Sha512::new(), &[0u8]),
+			}
+		}
+	}
+
+	impl BIP32Hasher for BIP32ReferenceHasher {
+		fn network_priv() -> [u8; 4] {
+			// bitcoin network (xprv) (for test vectors)
+			[0x04, 0x88, 0xAD, 0xE4]
+		}
+		fn network_pub() -> [u8; 4] {
+			// bitcoin network (xpub) (for test vectors)
+			[0x04, 0x88, 0xB2, 0x1E]
+		}
+		fn master_seed() -> [u8; 12] {
+			b"Bitcoin seed".to_owned()
+		}
+		fn init_sha512(&mut self, seed: &[u8]) {
+			self.hmac_sha512 = Hmac::new(Sha512::new(), seed);
+		}
+		fn append_sha512(&mut self, value: &[u8]) {
+			self.hmac_sha512.input(value);
+		}
+		fn result_sha512(&mut self) -> [u8; 64] {
+			let mut result = [0; 64];
+			self.hmac_sha512.raw_result(&mut result);
+			result
+		}
+		fn sha_256(&self, input: &[u8]) -> [u8; 32] {
+			let mut sha2_res = [0; 32];
+			let mut sha2 = Sha256::new();
+			sha2.input(input);
+			sha2.result(&mut sha2_res);
+			sha2_res
+		}
+		fn ripemd_160(&self, input: &[u8]) -> [u8; 20] {
+			let mut ripemd_res = [0; 20];
+			let mut ripemd = Ripemd160::new();
+			ripemd.input(input);
+			ripemd.result(&mut ripemd_res);
+			ripemd_res
+		}
+	}
 
 	fn test_path(
 		secp: &Secp256k1,
