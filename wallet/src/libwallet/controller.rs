@@ -28,6 +28,7 @@ use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
+use core::core::Transaction;
 use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
@@ -229,6 +230,35 @@ where
 		api.retrieve_txs(update_from_node, id)
 	}
 
+	fn dump_stored_tx(
+		&self,
+		req: &Request<Body>,
+		api: APIOwner<T, C, K>,
+	) -> Result<Transaction, Error> {
+		let params = parse_params(req);
+		if let Some(id_string) = params.get("id") {
+			match id_string[0].parse() {
+				Ok(id) => match api.dump_stored_tx(id, false, "") {
+					Ok(tx) => Ok(tx),
+					Err(e) => {
+						error!(LOGGER, "dump_stored_tx: failed with error: {}", e);
+						Err(e)
+					}
+				},
+				Err(e) => {
+					error!(LOGGER, "dump_stored_tx: could not parse id: {}", e);
+					Err(ErrorKind::TransactionDumpError(
+						"dump_stored_tx: cannot dump transaction. Could not parse id in request.",
+					).into())
+				}
+			}
+		} else {
+			Err(ErrorKind::TransactionDumpError(
+				"dump_stored_tx: Cannot dump transaction. Missing id param in request.",
+			).into())
+		}
+	}
+
 	fn retrieve_summary_info(
 		&self,
 		req: &Request<Body>,
@@ -260,6 +290,7 @@ where
 			"retrieve_summary_info" => json_response(&self.retrieve_summary_info(req, api)?),
 			"node_height" => json_response(&self.node_height(req, api)?),
 			"retrieve_txs" => json_response(&self.retrieve_txs(req, api)?),
+			"dump_stored_tx" => json_response(&self.dump_stored_tx(req, api)?),
 			_ => response(StatusCode::BAD_REQUEST, ""),
 		})
 	}

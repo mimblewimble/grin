@@ -303,7 +303,12 @@ where
 	}
 
 	/// Writes stored transaction data to a given file
-	pub fn dump_stored_tx(&self, tx_id: u32, dest: &str) -> Result<(), Error> {
+	pub fn dump_stored_tx(
+		&self,
+		tx_id: u32,
+		write_to_disk: bool,
+		dest: &str,
+	) -> Result<Transaction, Error> {
 		let (confirmed, tx_hex) = {
 			let mut w = self.wallet.lock().unwrap();
 			w.open_with_credentials()?;
@@ -326,10 +331,12 @@ where
 		}
 		let tx_bin = util::from_hex(tx_hex.unwrap()).unwrap();
 		let tx = ser::deserialize::<Transaction>(&mut &tx_bin[..])?;
-		let mut tx_file = File::create(dest)?;
-		tx_file.write_all(json::to_string(&tx).unwrap().as_bytes())?;
-		tx_file.sync_all()?;
-		Ok(())
+		if write_to_disk {
+			let mut tx_file = File::create(dest)?;
+			tx_file.write_all(json::to_string(&tx).unwrap().as_bytes())?;
+			tx_file.sync_all()?;
+		}
+		Ok(tx)
 	}
 
 	/// (Re)Posts a transaction that's already been stored to the chain
