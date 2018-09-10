@@ -224,7 +224,7 @@ where
 	pub fn new(
 		data_dir: String,
 		prunable: bool,
-		header: Option<&BlockHeader>
+		header: Option<&BlockHeader>,
 	) -> io::Result<PMMRBackend<T>> {
 
 		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
@@ -239,8 +239,8 @@ where
 			LeafSet::copy_snapshot(leaf_set_path.clone(), leaf_snapshot_path.clone())?;
 		}
 
-		let prune_list = PruneList::open(format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
 		let leaf_set = LeafSet::open(leaf_set_path.clone())?;
+		let prune_list = PruneList::open(format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
 
 		Ok(PMMRBackend {
 			data_dir,
@@ -303,6 +303,8 @@ where
 				format!("Could not write to log data storage, disk full? {:?}", e),
 			));
 		}
+
+		// Flush the leaf_set to disk.
 		self.leaf_set.flush()?;
 
 		Ok(())

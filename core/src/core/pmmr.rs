@@ -669,7 +669,13 @@ pub fn family_branch(pos: u64, last_pos: u64) -> Vec<(u64, u64)> {
 	branch
 }
 
-/// Gets the position of the rightmost node (i.e. leaf) relative to the current
+/// Gets the position of the rightmost node (i.e. leaf) beneath the provided subtree root.
 fn bintree_rightmost(num: u64) -> u64 {
 	num - bintree_postorder_height(num)
+}
+
+/// Gets the position of the rightmost node (i.e. leaf) beneath the provided subtree root.
+pub fn bintree_leftmost(num: u64) -> u64 {
+	let height = bintree_postorder_height(num);
+	num + 2 - (2<<height)
 }

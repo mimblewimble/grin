@@ -869,7 +869,10 @@ impl<'a> Extension<'a> {
 
 		debug!(
 			LOGGER,
-			"txhashset: validated the output|rproof|kernel mmrs, took {}s",
+			"txhashset: validated the output {}, rproof {}, kernel {} mmrs, took {}s",
+			self.output_pmmr.unpruned_size(),
+			self.rproof_pmmr.unpruned_size(),
+			self.kernel_pmmr.unpruned_size(),
 			now.elapsed().as_secs(),
 		);
 
@@ -1224,6 +1227,9 @@ fn input_pos_to_rewind(
 		return Ok(bitmap);
 	}
 
+	//
+	// TODO - rework this loop to use Bitmap::fast_or() on a vec of bitmaps.
+	//
 	loop {
 		if current == block_header.hash() {
 			break;
