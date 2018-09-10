@@ -312,6 +312,35 @@ where
 		)
 	}
 
+	fn cancel_tx(
+		&self,
+		req: Request<Body>,
+		mut api: APIOwner<T, C, K>,
+	) -> Box<Future<Item = (), Error = Error> + Send> {
+		let params = parse_params(&req);
+		if let Some(id_string) = params.get("id") {
+			Box::new(match id_string[0].parse() {
+				Ok(id) => match api.cancel_tx(id) {
+					Ok(_) => ok(()),
+					Err(e) => {
+						error!(LOGGER, "finalize_tx: failed with error: {}", e);
+						err(e)
+					}
+				},
+				Err(e) => {
+					error!(LOGGER, "finalize_tx: could not parse id: {}", e);
+					err(ErrorKind::TransactionCancellationError(
+						"finalize_tx: cannot cancel transaction. Could not parse id in request.",
+					).into())
+				}
+			})
+		} else {
+			Box::new(err(ErrorKind::TransactionCancellationError(
+				"finalize_tx: Cannot cancel transaction. Missing id param in request.",
+			).into()))
+		}
+	}
+
 	fn issue_burn_tx(
 		&self,
 		_req: Request<Body>,
@@ -341,6 +370,10 @@ where
 			"finalize_tx" => Box::new(
 				self.finalize_tx(req, api)
 					.and_then(|slate| ok(json_response_pretty(&slate))),
+			),
+			"cancel_tx" => Box::new(
+				self.cancel_tx(req, api)
+					.and_then(|_| ok(response(StatusCode::OK, ""))),
 			),
 			"issue_burn_tx" => Box::new(
 				self.issue_burn_tx(req, api)
