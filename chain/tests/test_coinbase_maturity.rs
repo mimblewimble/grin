@@ -57,6 +57,7 @@ fn test_coinbase_maturity() {
 		genesis_block,
 		pow::verify_size,
 		verifier_cache,
+		false,
 	).unwrap();
 
 	let prev = chain.head_header().unwrap();

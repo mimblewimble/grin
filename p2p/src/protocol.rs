@@ -329,9 +329,10 @@ fn headers_header_size(conn: &mut TcpStream, msg_len: u64) -> Result<u64, Error>
 	}
 	let average_header_size = (msg_len - 2) / total_headers;
 
-	// support size of Cuckoo: from Cuckoo 30 to Cuckoo 36
-	let minimum_size = core::serialized_size_of_header(global::min_sizeshift());
-	let maximum_size = core::serialized_size_of_header(global::min_sizeshift() + 6);
+	// support size of Cuckoo: from Cuckoo 30 to Cuckoo 36, with version 2
+	// having slightly larger headers
+	let minimum_size = core::serialized_size_of_header(1, global::min_sizeshift());
+	let maximum_size = core::serialized_size_of_header(2, global::min_sizeshift() + 6);
 	if average_header_size < minimum_size as u64 || average_header_size > maximum_size as u64 {
 		debug!(
 			LOGGER,

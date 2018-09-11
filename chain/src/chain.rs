@@ -17,6 +17,7 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::fs::File;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -59,6 +60,8 @@ pub struct OrphanBlockPool {
 	// additional index of height -> hash
 	// so we can efficiently identify a child block (ex-orphan) after processing a block
 	height_idx: RwLock<HashMap<u64, Vec<Hash>>>,
+	// accumulated number of evicted block because of MAX_ORPHAN_SIZE limitation
+	evicted: AtomicUsize,
 }
 
 impl OrphanBlockPool {
@@ -66,12 +69,17 @@ impl OrphanBlockPool {
 		OrphanBlockPool {
 			orphans: RwLock::new(HashMap::new()),
 			height_idx: RwLock::new(HashMap::new()),
+			evicted: AtomicUsize::new(0),
 		}
 	}
 
 	fn len(&self) -> usize {
 		let orphans = self.orphans.read().unwrap();
 		orphans.len()
+	}
+
+	fn len_evicted(&self) -> usize {
+		self.evicted.load(Ordering::Relaxed)
 	}
 
 	fn add(&self, orphan: Orphan) {
@@ -86,6 +94,8 @@ impl OrphanBlockPool {
 		}
 
 		if orphans.len() > MAX_ORPHAN_SIZE {
+			let old_len = orphans.len();
+
 			// evict too old
 			orphans.retain(|_, ref mut x| {
 				x.added.elapsed() < Duration::from_secs(MAX_ORPHAN_AGE_SECS)
@@ -105,6 +115,9 @@ impl OrphanBlockPool {
 			}
 			// cleanup index
 			height_idx.retain(|_, ref mut xs| xs.iter().any(|x| orphans.contains_key(&x)));
+
+			self.evicted
+				.fetch_add(old_len - orphans.len(), Ordering::Relaxed);
 		}
 	}
 
@@ -140,6 +153,7 @@ pub struct Chain {
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader, u8) -> bool,
+	archive_mode: bool,
 }
 
 unsafe impl Sync for Chain {}
@@ -156,6 +170,7 @@ impl Chain {
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader, u8) -> bool,
 		verifier_cache: Arc<RwLock<VerifierCache>>,
+		archive_mode: bool,
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainStore::new(db_env)?;
 
@@ -187,6 +202,7 @@ impl Chain {
 			pow_verifier,
 			verifier_cache,
 			block_hashes_cache: Arc::new(RwLock::new(VecDeque::with_capacity(HASHES_CACHE_SIZE))),
+			archive_mode,
 		})
 	}
 
@@ -276,9 +292,14 @@ impl Chain {
 
 						debug!(
 							LOGGER,
-							"process_block: orphan: {:?}, # orphans {}",
+							"process_block: orphan: {:?}, # orphans {}{}",
 							block_hash,
 							self.orphans.len(),
+							if self.orphans.len_evicted() > 0 {
+								format!(", # evicted {}", self.orphans.len_evicted())
+							} else {
+								String::new()
+							},
 						);
 						Err(ErrorKind::Orphan.into())
 					}
@@ -346,6 +367,11 @@ impl Chain {
 	/// Check if hash is for a known orphan.
 	pub fn is_orphan(&self, hash: &Hash) -> bool {
 		self.orphans.contains(hash)
+	}
+
+	/// Get the OrphanBlockPool accumulated evicted number of blocks
+	pub fn orphans_evicted_len(&self) -> usize {
+		self.orphans.len_evicted()
 	}
 
 	/// Check for orphans, once a block is successfully added
@@ -664,6 +690,14 @@ impl Chain {
 	/// Meanwhile, the chain will not be able to accept new blocks. It should
 	/// therefore be called judiciously.
 	pub fn compact(&self) -> Result<(), Error> {
+		if self.archive_mode {
+			debug!(
+				LOGGER,
+				"Blockchain compaction disabled, node running in archive mode."
+			);
+			return Ok(());
+		}
+
 		debug!(LOGGER, "Starting blockchain compaction.");
 		// Compact the txhashset via the extension.
 		{

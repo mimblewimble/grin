@@ -185,15 +185,16 @@ where
 
 	/// Write a transaction to send to file so a user can transmit it to the
 	/// receiver in whichever way they see fit (aka carrier pigeon mode).
-	pub fn file_send_tx(
+	pub fn send_tx(
 		&mut self,
+		write_to_disk: bool,
 		amount: u64,
 		minimum_confirmations: u64,
 		dest: &str,
 		max_outputs: usize,
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
-	) -> Result<(), Error> {
+	) -> Result<Slate, Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 
@@ -205,10 +206,11 @@ where
 			num_change_outputs,
 			selection_strategy_is_use_all,
 		)?;
-
-		let mut pub_tx = File::create(dest)?;
-		pub_tx.write_all(json::to_string(&slate).unwrap().as_bytes())?;
-		pub_tx.sync_all()?;
+		if write_to_disk {
+			let mut pub_tx = File::create(dest)?;
+			pub_tx.write_all(json::to_string(&slate).unwrap().as_bytes())?;
+			pub_tx.sync_all()?;
+		}
 
 		{
 			let mut batch = w.batch()?;
@@ -221,60 +223,19 @@ where
 		// lock our inputs
 		lock_fn(&mut **w, &tx_hex)?;
 		w.close()?;
-		Ok(())
-	}
-
-	/// A sender provided a transaction file with appropriate public keys and
-	/// metadata. Complete the receivers' end of it to generate another file
-	/// to send back.
-	pub fn file_receive_tx(&mut self, source: &str) -> Result<(), Error> {
-		let mut pub_tx_f = File::open(source)?;
-		let mut content = String::new();
-		pub_tx_f.read_to_string(&mut content)?;
-		let mut slate: Slate = json::from_str(&content).map_err(|_| ErrorKind::Format)?;
-
-		let mut wallet = self.wallet.lock().unwrap();
-		wallet.open_with_credentials()?;
-
-		// create an output using the amount in the slate
-		let (_, mut context, receiver_create_fn) =
-			selection::build_recipient_output_with_slate(&mut **wallet, &mut slate)?;
-
-		// fill public keys
-		let _ = slate.fill_round_1(
-			wallet.keychain(),
-			&mut context.sec_key,
-			&context.sec_nonce,
-			1,
-		)?;
-
-		// perform partial sig
-		let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)?;
-
-		// save to file
-		let mut pub_tx = File::create(source.to_owned() + ".response")?;
-		pub_tx.write_all(json::to_string(&slate).unwrap().as_bytes())?;
-
-		// Save output in wallet
-		let _ = receiver_create_fn(&mut wallet);
-		Ok(())
+		Ok(slate)
 	}
 
 	/// Sender finalization of the transaction. Takes the file returned by the
 	/// sender as well as the private file generate on the first send step.
 	/// Builds the complete transaction and sends it to a grin node for
 	/// propagation.
-	pub fn file_finalize_tx(&mut self, receiver_file: &str) -> Result<Slate, Error> {
-		let mut pub_tx_f = File::open(receiver_file)?;
-		let mut content = String::new();
-		pub_tx_f.read_to_string(&mut content)?;
-		let mut slate: Slate = json::from_str(&content).map_err(|_| ErrorKind::Format)?;
-
+	pub fn finalize_tx(&mut self, slate: &mut Slate) -> Result<(), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 
 		let context = w.get_private_context(slate.id.as_bytes())?;
-		tx::complete_tx(&mut **w, &mut slate, &context)?;
+		tx::complete_tx(&mut **w, slate, &context)?;
 		{
 			let mut batch = w.batch()?;
 			batch.delete_private_context(slate.id.as_bytes())?;
@@ -282,7 +243,7 @@ where
 		}
 
 		w.close()?;
-		Ok(slate)
+		Ok(())
 	}
 
 	/// Roll back a transaction and all associated outputs with a given
@@ -342,7 +303,12 @@ where
 	}
 
 	/// Writes stored transaction data to a given file
-	pub fn dump_stored_tx(&self, tx_id: u32, dest: &str) -> Result<(), Error> {
+	pub fn dump_stored_tx(
+		&self,
+		tx_id: u32,
+		write_to_disk: bool,
+		dest: &str,
+	) -> Result<Transaction, Error> {
 		let (confirmed, tx_hex) = {
 			let mut w = self.wallet.lock().unwrap();
 			w.open_with_credentials()?;
@@ -365,10 +331,12 @@ where
 		}
 		let tx_bin = util::from_hex(tx_hex.unwrap()).unwrap();
 		let tx = ser::deserialize::<Transaction>(&mut &tx_bin[..])?;
-		let mut tx_file = File::create(dest)?;
-		tx_file.write_all(json::to_string(&tx).unwrap().as_bytes())?;
-		tx_file.sync_all()?;
-		Ok(())
+		if write_to_disk {
+			let mut tx_file = File::create(dest)?;
+			tx_file.write_all(json::to_string(&tx).unwrap().as_bytes())?;
+			tx_file.sync_all()?;
+		}
+		Ok(tx)
 	}
 
 	/// (Re)Posts a transaction that's already been stored to the chain
@@ -496,6 +464,42 @@ where
 		let res = updater::build_coinbase(&mut **w, block_fees);
 		w.close()?;
 		res
+	}
+
+	/// A sender provided a transaction file with appropriate public keys and
+	/// metadata. Complete the receivers' end of it to generate another file
+	/// to send back.
+	pub fn file_receive_tx(&mut self, source: &str) -> Result<(), Error> {
+		let mut pub_tx_f = File::open(source)?;
+		let mut content = String::new();
+		pub_tx_f.read_to_string(&mut content)?;
+		let mut slate: Slate = json::from_str(&content).map_err(|_| ErrorKind::Format)?;
+
+		let mut wallet = self.wallet.lock().unwrap();
+		wallet.open_with_credentials()?;
+
+		// create an output using the amount in the slate
+		let (_, mut context, receiver_create_fn) =
+			selection::build_recipient_output_with_slate(&mut **wallet, &mut slate)?;
+
+		// fill public keys
+		let _ = slate.fill_round_1(
+			wallet.keychain(),
+			&mut context.sec_key,
+			&context.sec_nonce,
+			1,
+		)?;
+
+		// perform partial sig
+		let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)?;
+
+		// save to file
+		let mut pub_tx = File::create(source.to_owned() + ".response")?;
+		pub_tx.write_all(json::to_string(&slate).unwrap().as_bytes())?;
+
+		// Save output in wallet
+		let _ = receiver_create_fn(&mut wallet);
+		Ok(())
 	}
 
 	/// Receive a transaction from a sender

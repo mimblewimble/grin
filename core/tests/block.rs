@@ -25,7 +25,7 @@ pub mod common;
 
 use chrono::Duration;
 use common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
-use grin_core::consensus::{BLOCK_OUTPUT_WEIGHT, MAX_BLOCK_WEIGHT};
+use grin_core::consensus::{self, BLOCK_OUTPUT_WEIGHT, MAX_BLOCK_WEIGHT};
 use grin_core::core::block::Error;
 use grin_core::core::hash::Hashed;
 use grin_core::core::id::ShortIdentifiable;
@@ -435,4 +435,27 @@ fn serialize_deserialize_compact_block() {
 
 	assert_eq!(cb1.header, cb2.header);
 	assert_eq!(cb1.kern_ids(), cb2.kern_ids());
+}
+
+#[test]
+fn empty_block_v2_switch() {
+	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let mut prev = BlockHeader::default();
+	prev.height = consensus::HEADER_V2_HARD_FORK - 1;
+	let key_id = keychain.derive_key_id(1).unwrap();
+	let b = new_block(vec![], &keychain, &prev, &key_id);
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, &b).expect("serialization failed");
+	let target_len = 1_260;
+	assert_eq!(b.header.version, 2);
+	assert_eq!(vec.len(), target_len);
+
+	// another try right before v2
+	prev.height = consensus::HEADER_V2_HARD_FORK - 2;
+	let b = new_block(vec![], &keychain, &prev, &key_id);
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, &b).expect("serialization failed");
+	let target_len = 1_252;
+	assert_eq!(b.header.version, 1);
+	assert_eq!(vec.len(), target_len);
 }

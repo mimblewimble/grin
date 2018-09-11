@@ -179,17 +179,17 @@ fn build_block(
 	)?;
 
 	let mut rng = rand::OsRng::new().unwrap();
-	b.header.nonce = rng.gen();
+	b.header.pow.nonce = rng.gen();
 	b.header.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_sec, 0), Utc);;
 
-	let b_difficulty = (b.header.total_difficulty.clone() - head.total_difficulty.clone()).to_num();
+	let b_difficulty = (b.header.total_difficulty() - head.total_difficulty()).to_num();
 	debug!(
 		LOGGER,
 		"Built new block with {} inputs and {} outputs, network difficulty: {}, cumulative difficulty {}",
 		b.inputs().len(),
 		b.outputs().len(),
 		b_difficulty,
-		b.header.clone().total_difficulty.to_num(),
+		b.header.total_difficulty().to_num(),
 	);
 
 	// Now set txhashset roots and sizes on the header of the block being built.

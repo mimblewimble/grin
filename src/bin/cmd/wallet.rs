@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use serde_json as json;
+use std::fs::File;
+use std::io::Read;
 use std::path::PathBuf;
 /// Wallet commands processing
 use std::process::exit;
@@ -166,7 +169,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 		wallet_config.clone(),
 		passphrase,
 	)));
-	let res = controller::owner_single_use(wallet, |api| {
+	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {
 			("send", Some(send_args)) => {
 				let amount = send_args
@@ -182,6 +185,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				let selection_strategy = send_args
 					.value_of("selection_strategy")
 					.expect("Selection strategy required");
+				let method = send_args
+					.value_of("method")
+					.expect("Payment method required");
 				let dest = send_args
 					.value_of("dest")
 					.expect("Destination wallet address required");
@@ -192,54 +198,63 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					.expect("Failed to parse number of change outputs.");
 				let fluff = send_args.is_present("fluff");
 				let max_outputs = 500;
-				if dest.starts_with("http") {
-					let result = api.issue_send_tx(
-						amount,
-						minimum_confirmations,
-						dest,
-						max_outputs,
-						change_outputs,
-						selection_strategy == "all",
-					);
-					let slate = match result {
-						Ok(s) => {
-							info!(
-								LOGGER,
-								"Tx created: {} grin to {} (strategy '{}')",
-								core::amount_to_hr_string(amount, false),
-								dest,
-								selection_strategy,
-							);
-							s
+				if method == "http" {
+					if dest.starts_with("http://") {
+						let result = api.issue_send_tx(
+							amount,
+							minimum_confirmations,
+							dest,
+							max_outputs,
+							change_outputs,
+							selection_strategy == "all",
+						);
+						let slate = match result {
+							Ok(s) => {
+								info!(
+									LOGGER,
+									"Tx created: {} grin to {} (strategy '{}')",
+									core::amount_to_hr_string(amount, false),
+									dest,
+									selection_strategy,
+								);
+								s
+							}
+							Err(e) => {
+								error!(LOGGER, "Tx not created: {:?}", e);
+								match e.kind() {
+									// user errors, don't backtrace
+									libwallet::ErrorKind::NotEnoughFunds { .. } => {}
+									libwallet::ErrorKind::FeeDispute { .. } => {}
+									libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
+									_ => {
+										// otherwise give full dump
+										error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
+									}
+								};
+								panic!();
+							}
+						};
+						let result = api.post_tx(&slate, fluff);
+						match result {
+							Ok(_) => {
+								info!(LOGGER, "Tx sent",);
+								Ok(())
+							}
+							Err(e) => {
+								error!(LOGGER, "Tx not sent: {:?}", e);
+								Err(e)
+							}
 						}
-						Err(e) => {
-							error!(LOGGER, "Tx not created: {:?}", e);
-							match e.kind() {
-								// user errors, don't backtrace
-								libwallet::ErrorKind::NotEnoughFunds { .. } => {}
-								libwallet::ErrorKind::FeeDispute { .. } => {}
-								libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
-								_ => {
-									// otherwise give full dump
-									error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
-								}
-							};
-							panic!();
-						}
-					};
-					let result = api.post_tx(&slate, fluff);
-					match result {
-						Ok(_) => {
-							info!(LOGGER, "Tx sent",);
-							Ok(())
-						}
-						Err(e) => {
-							error!(LOGGER, "Tx not sent: {:?}", e);
-							Err(e)
-						}
+					} else {
+						error!(
+							LOGGER,
+							"HTTP Destination should start with http://: {}", dest
+						);
+						panic!();
 					}
-				} else {
-					api.file_send_tx(
+				} else if method == "file" {
+					api.send_tx(
+						true,
 						amount,
 						minimum_confirmations,
 						dest,
@@ -248,21 +263,36 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						selection_strategy == "all",
 					).expect("Send failed");
 					Ok(())
+				} else {
+					error!(LOGGER, "unsupported payment method: {}", method);
+					panic!();
 				}
 			}
 			("receive", Some(send_args)) => {
-				let tx_file = send_args
-					.value_of("input")
-					.expect("Transaction file required");
-				api.file_receive_tx(tx_file).expect("Receive failed");
-				Ok(())
+				let mut receive_result: Result<(), grin_wallet::libwallet::Error> = Ok(());
+				let res = controller::foreign_single_use(wallet, |api| {
+					let tx_file = send_args
+						.value_of("input")
+						.expect("Transaction file required");
+					receive_result = api.file_receive_tx(tx_file);
+					Ok(())
+				});
+				if res.is_err() {
+					exit(1);
+				}
+				receive_result
 			}
 			("finalize", Some(send_args)) => {
 				let fluff = send_args.is_present("fluff");
 				let tx_file = send_args
 					.value_of("input")
 					.expect("Receiver's transaction file required");
-				let slate = api.file_finalize_tx(tx_file).expect("Finalize failed");
+				let mut pub_tx_f = File::open(tx_file)?;
+				let mut content = String::new();
+				pub_tx_f.read_to_string(&mut content)?;
+				let mut slate: grin_wallet::libtx::slate::Slate = json::from_str(&content)
+					.map_err(|_| grin_wallet::libwallet::ErrorKind::Format)?;
+				let _ = api.finalize_tx(&mut slate).expect("Finalize failed");
 
 				let result = api.post_tx(&slate, fluff);
 				match result {
@@ -377,7 +407,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						}
 					}
 					Some(f) => {
-						let result = api.dump_stored_tx(tx_id, f);
+						let result = api.dump_stored_tx(tx_id, true, f);
 						match result {
 							Ok(_) => {
 								warn!(LOGGER, "Dumped transaction data for tx {} to {}", tx_id, f);

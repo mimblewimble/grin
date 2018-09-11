@@ -28,6 +28,7 @@ use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
+use core::core::Transaction;
 use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
@@ -229,6 +230,35 @@ where
 		api.retrieve_txs(update_from_node, id)
 	}
 
+	fn dump_stored_tx(
+		&self,
+		req: &Request<Body>,
+		api: APIOwner<T, C, K>,
+	) -> Result<Transaction, Error> {
+		let params = parse_params(req);
+		if let Some(id_string) = params.get("id") {
+			match id_string[0].parse() {
+				Ok(id) => match api.dump_stored_tx(id, false, "") {
+					Ok(tx) => Ok(tx),
+					Err(e) => {
+						error!(LOGGER, "dump_stored_tx: failed with error: {}", e);
+						Err(e)
+					}
+				},
+				Err(e) => {
+					error!(LOGGER, "dump_stored_tx: could not parse id: {}", e);
+					Err(ErrorKind::TransactionDumpError(
+						"dump_stored_tx: cannot dump transaction. Could not parse id in request.",
+					).into())
+				}
+			}
+		} else {
+			Err(ErrorKind::TransactionDumpError(
+				"dump_stored_tx: Cannot dump transaction. Missing id param in request.",
+			).into())
+		}
+	}
+
 	fn retrieve_summary_info(
 		&self,
 		req: &Request<Body>,
@@ -260,6 +290,7 @@ where
 			"retrieve_summary_info" => json_response(&self.retrieve_summary_info(req, api)?),
 			"node_height" => json_response(&self.node_height(req, api)?),
 			"retrieve_txs" => json_response(&self.retrieve_txs(req, api)?),
+			"dump_stored_tx" => json_response(&self.dump_stored_tx(req, api)?),
 			_ => response(StatusCode::BAD_REQUEST, ""),
 		})
 	}
@@ -270,15 +301,75 @@ where
 		mut api: APIOwner<T, C, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(move |args: SendTXArgs| {
-			api.issue_send_tx(
-				args.amount,
-				args.minimum_confirmations,
-				&args.dest,
-				args.max_outputs,
-				args.num_change_outputs,
-				args.selection_strategy_is_use_all,
-			)
+			if args.method == "http" {
+				api.issue_send_tx(
+					args.amount,
+					args.minimum_confirmations,
+					&args.dest,
+					args.max_outputs,
+					args.num_change_outputs,
+					args.selection_strategy_is_use_all,
+				)
+			} else if args.method == "file" {
+				api.send_tx(
+					false,
+					args.amount,
+					args.minimum_confirmations,
+					&args.dest,
+					args.max_outputs,
+					args.num_change_outputs,
+					args.selection_strategy_is_use_all,
+				)
+			} else {
+				error!(LOGGER, "unsupported payment method: {}", args.method);
+				return Err(ErrorKind::ClientCallback("unsupported payment method"))?;
+			}
 		}))
+	}
+
+	fn finalize_tx(
+		&self,
+		req: Request<Body>,
+		mut api: APIOwner<T, C, K>,
+	) -> Box<Future<Item = Slate, Error = Error> + Send> {
+		Box::new(
+			parse_body(req).and_then(move |mut slate| match api.finalize_tx(&mut slate) {
+				Ok(_) => ok(slate.clone()),
+				Err(e) => {
+					error!(LOGGER, "finalize_tx: failed with error: {}", e);
+					err(e)
+				}
+			}),
+		)
+	}
+
+	fn cancel_tx(
+		&self,
+		req: Request<Body>,
+		mut api: APIOwner<T, C, K>,
+	) -> Box<Future<Item = (), Error = Error> + Send> {
+		let params = parse_params(&req);
+		if let Some(id_string) = params.get("id") {
+			Box::new(match id_string[0].parse() {
+				Ok(id) => match api.cancel_tx(id) {
+					Ok(_) => ok(()),
+					Err(e) => {
+						error!(LOGGER, "finalize_tx: failed with error: {}", e);
+						err(e)
+					}
+				},
+				Err(e) => {
+					error!(LOGGER, "finalize_tx: could not parse id: {}", e);
+					err(ErrorKind::TransactionCancellationError(
+						"finalize_tx: cannot cancel transaction. Could not parse id in request.",
+					).into())
+				}
+			})
+		} else {
+			Box::new(err(ErrorKind::TransactionCancellationError(
+				"finalize_tx: Cannot cancel transaction. Missing id param in request.",
+			).into()))
+		}
 	}
 
 	fn issue_burn_tx(
@@ -306,6 +397,14 @@ where
 			"issue_send_tx" => Box::new(
 				self.issue_send_tx(req, api)
 					.and_then(|slate| ok(json_response_pretty(&slate))),
+			),
+			"finalize_tx" => Box::new(
+				self.finalize_tx(req, api)
+					.and_then(|slate| ok(json_response_pretty(&slate))),
+			),
+			"cancel_tx" => Box::new(
+				self.cancel_tx(req, api)
+					.and_then(|_| ok(response(StatusCode::OK, ""))),
 			),
 			"issue_burn_tx" => Box::new(
 				self.issue_burn_tx(req, api)

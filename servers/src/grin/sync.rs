@@ -113,6 +113,13 @@ pub fn run_sync(
 				// the genesis state
 
 				let mut history_locators: Vec<(u64, Hash)> = vec![];
+				let mut body_sync_info = BodySyncInfo {
+					sync_start_ts: Utc::now(),
+					body_sync_hashes: vec![],
+					prev_body_received: None,
+					prev_tip: chain.head().unwrap(),
+					prev_orphans_len: 0,
+				};
 
 				loop {
 					let horizon = global::cut_through_horizon() as u64;
@@ -192,8 +199,8 @@ pub fn run_sync(
 							}
 						} else {
 							// run the body_sync every 5s
-							if si.body_sync_due(&head) {
-								body_sync(peers.clone(), chain.clone());
+							if si.body_sync_due(&head, chain.clone(), &mut body_sync_info) {
+								body_sync(peers.clone(), chain.clone(), &mut body_sync_info);
 								sync_state.update(SyncStatus::BodySync {
 									current_height: head.height,
 									highest_height: si.highest_height,
@@ -213,11 +220,80 @@ pub fn run_sync(
 			});
 }
 
-fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
+struct BodySyncInfo {
+	sync_start_ts: DateTime<Utc>,
+	body_sync_hashes: Vec<Hash>,
+	prev_body_received: Option<DateTime<Utc>>,
+	prev_tip: chain::Tip,
+	prev_orphans_len: usize,
+}
+
+impl BodySyncInfo {
+	fn reset(&mut self) {
+		self.body_sync_hashes.clear();
+		self.prev_body_received = None;
+	}
+
+	fn reset_start(&mut self, chain: Arc<chain::Chain>) {
+		self.prev_tip = chain.head().unwrap();
+		self.prev_orphans_len = chain.orphans_len() + chain.orphans_evicted_len();
+		self.sync_start_ts = Utc::now();
+	}
+
+	fn body_no_more(&mut self, chain: Arc<chain::Chain>) -> bool {
+		let tip = chain.head().unwrap();
+
+		match self.prev_body_received {
+			Some(prev_ts) => {
+				if tip.last_block_h == self.prev_tip.last_block_h
+					&& chain.orphans_len() + chain.orphans_evicted_len() == self.prev_orphans_len
+					&& Utc::now() - prev_ts > Duration::milliseconds(200)
+				{
+					let hashes_not_get = self
+						.body_sync_hashes
+						.iter()
+						.filter(|x| !chain.get_block(*x).is_ok() && !chain.is_orphan(*x))
+						.collect::<Vec<_>>();
+					debug!(
+						LOGGER,
+						"body_sync: {}/{} blocks received, and no more in 200ms",
+						self.body_sync_hashes.len() - hashes_not_get.len(),
+						self.body_sync_hashes.len(),
+					);
+					return true;
+				}
+			}
+			None => {
+				if Utc::now() - self.sync_start_ts > Duration::seconds(5) {
+					debug!(
+						LOGGER,
+						"body_sync: 0/{} blocks received in 5s",
+						self.body_sync_hashes.len(),
+					);
+					return true;
+				}
+			}
+		}
+
+		if tip.last_block_h != self.prev_tip.last_block_h
+			|| chain.orphans_len() + chain.orphans_evicted_len() != self.prev_orphans_len
+		{
+			self.prev_tip = tip;
+			self.prev_body_received = Some(Utc::now());
+			self.prev_orphans_len = chain.orphans_len() + chain.orphans_evicted_len();
+		}
+
+		return false;
+	}
+}
+
+fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, body_sync_info: &mut BodySyncInfo) {
 	let horizon = global::cut_through_horizon() as u64;
 	let body_head: chain::Tip = chain.head().unwrap();
 	let header_head: chain::Tip = chain.get_header_head().unwrap();
 	let sync_head: chain::Tip = chain.get_sync_head().unwrap();
+
+	body_sync_info.reset();
 
 	debug!(
 		LOGGER,
@@ -289,11 +365,15 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>) {
 				if let Ok(peer) = peer.try_read() {
 					if let Err(e) = peer.send_block_request(*hash) {
 						debug!(LOGGER, "Skipped request to {}: {:?}", peer.info.addr, e);
+					} else {
+						body_sync_info.body_sync_hashes.push(hash.clone());
 					}
 				}
 			}
 		}
 	}
+
+	body_sync_info.reset_start(chain);
 }
 
 fn header_sync(
@@ -606,11 +686,19 @@ impl SyncInfo {
 		}
 	}
 
-	fn body_sync_due(&mut self, head: &chain::Tip) -> bool {
+	fn body_sync_due(
+		&mut self,
+		head: &chain::Tip,
+		chain: Arc<chain::Chain>,
+		body_sync_info: &mut BodySyncInfo,
+	) -> bool {
 		let now = Utc::now();
 		let (prev_ts, prev_height) = self.prev_body_sync;
 
-		if head.height >= prev_height + 96 || now - prev_ts > Duration::seconds(5) {
+		if head.height >= prev_height + 96
+			|| now - prev_ts > Duration::seconds(5)
+			|| body_sync_info.body_no_more(chain)
+		{
 			self.prev_body_sync = (now, head.height);
 			return true;
 		}

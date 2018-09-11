@@ -152,6 +152,10 @@ pub enum ErrorKind {
 	#[fail(display = "Cancellation Error: {}", _0)]
 	TransactionCancellationError(&'static str),
 
+	/// Cancellation error
+	#[fail(display = "Tx dump Error: {}", _0)]
+	TransactionDumpError(&'static str),
+
 	/// Attempt to repost a transaction that's already confirmed
 	#[fail(display = "Transaction already confirmed error")]
 	TransactionAlreadyConfirmed,
