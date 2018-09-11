@@ -121,7 +121,12 @@ pub fn read_exact(
 	let mut read = 0;
 	loop {
 		match conn.read(buf) {
-			Ok(0) => break,
+			Ok(0) => {
+				return Err(io::Error::new(
+					io::ErrorKind::ConnectionAborted,
+					"read_exact",
+				));
+			}
 			Ok(n) => {
 				let tmp = buf;
 				buf = &mut tmp[n..];
