@@ -401,7 +401,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 								Ok(())
 							}
 							Err(e) => {
-								error!(LOGGER, "Tranasction reposting failed: {}", e);
+								error!(LOGGER, "Transaction reposting failed: {}", e);
 								Err(e)
 							}
 						}
@@ -414,7 +414,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 								Ok(())
 							}
 							Err(e) => {
-								error!(LOGGER, "Tranasction reposting failed: {}", e);
+								error!(LOGGER, "Transaction reposting failed: {}", e);
 								Err(e)
 							}
 						}
