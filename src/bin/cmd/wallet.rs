@@ -407,7 +407,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						}
 					}
 					Some(f) => {
-						let result = api.dump_stored_tx(tx_id, f);
+						let result = api.dump_stored_tx(tx_id, true, f);
 						match result {
 							Ok(_) => {
 								warn!(LOGGER, "Dumped transaction data for tx {} to {}", tx_id, f);
