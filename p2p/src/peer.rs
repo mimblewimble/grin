@@ -35,13 +35,15 @@ const MAX_TRACK_SIZE: usize = 30;
 ///   which has different 3 states: {Healthy, Banned, Defunct}.
 ///   For example: 'Disconnected' state here could still be 'Healthy' and could reconnect in next loop.
 enum State {
-    Connected,
-    Disconnected,
-    Banned,     // Banned from Peers side, by ban_peer().
-                //   This could happen when error in block (or compact block) received, header(s) received,
-                //   or txhashset received.
-    ToBeBanned,	// In case of Error::Serialization and not banned from Peers side, by ban_peer().
-                //   This `Error::Serialization` error could happen in such as Hand/Shake, Ping/Pong, etc.
+	Connected,
+	Disconnected,
+	Banned,
+	// Banned from Peers side, by ban_peer().
+	//   This could happen when error in block (or compact block) received, header(s) received,
+	//   or txhashset received.
+	ToBeBanned,
+	// It's the case of Error::Serialization and not banned from Peers side, by ban_peer().
+	//   This `Error::Serialization` error could happen in such as Hand/Shake, Ping/Pong, etc.
 }
 
 pub struct Peer {
@@ -175,7 +177,8 @@ impl Peer {
 	/// Send the ban reason before banning
 	pub fn send_ban_reason(&self, ban_reason: ReasonForBan) {
 		let ban_reason_msg = BanReason { ban_reason };
-		match self.connection
+		match self
+			.connection
 			.as_ref()
 			.unwrap()
 			.send(ban_reason_msg, msg::Type::BanReason)
