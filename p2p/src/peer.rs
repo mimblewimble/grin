@@ -31,10 +31,17 @@ use util::LOGGER;
 const MAX_TRACK_SIZE: usize = 30;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Remind: don't mix up this 'State' with that 'State' in p2p/src/store.rs,
+///   which has different 3 states: {Healthy, Banned, Defunct}.
+///   For example: 'Disconnected' state here could still be 'Healthy' and could reconnect in next loop.
 enum State {
-	Connected,
-	Disconnected,
-	Banned,
+    Connected,
+    Disconnected,
+    Banned,     // Banned from Peers side, by ban_peer().
+                //   This could happen when error in block (or compact block) received, header(s) received,
+                //   or txhashset received.
+    ToBeBanned,	// In case of Error::Serialization and not banned from Peers side, by ban_peer().
+                //   This `Error::Serialization` error could happen in such as Hand/Shake, Ping/Pong, etc.
 }
 
 pub struct Peer {
@@ -137,6 +144,13 @@ impl Peer {
 		let _ = self.check_connection();
 		let state = self.state.read().unwrap();
 		*state == State::Banned
+	}
+
+	/// Whether this peer is to be banned. Refer to 'ToBeBanned' comments.
+	pub fn to_be_banned(&self) -> bool {
+		let _ = self.check_connection();
+		let state = self.state.read().unwrap();
+		*state == State::ToBeBanned
 	}
 
 	/// Set this peer status to banned
@@ -329,11 +343,18 @@ impl Peer {
 		match self.connection.as_ref().unwrap().error_channel.try_recv() {
 			Ok(Error::Serialization(e)) => {
 				let mut state = self.state.write().unwrap();
-				*state = State::Banned;
-				info!(
-					LOGGER,
-					"Client {} corrupted, ban ({:?}).", self.info.addr, e
-				);
+				if State::Banned != *state {
+					*state = State::ToBeBanned;
+					info!(
+						LOGGER,
+						"Client {} corrupted, will ban ({:?}).", self.info.addr, e
+					);
+				} else {
+					info!(
+						LOGGER,
+						"Client {} corrupted, but already banned ({:?}).", self.info.addr, e
+					);
+				}
 				false
 			}
 			Ok(e) => {

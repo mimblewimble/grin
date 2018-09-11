@@ -229,6 +229,7 @@ enum_from_primitive! {
 		BadBlockHeader = 3,
 		BadTxHashSet = 4,
 		ManualBan = 5,
+		BadOthers = 6,	// Others: Hand, Shake, Ping, Pong, GetPeerAddrs, PeerAddrs, Etc.
 	}
 }
 
