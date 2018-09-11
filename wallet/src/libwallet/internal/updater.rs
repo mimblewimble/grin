@@ -104,7 +104,10 @@ where
 }
 /// Refreshes the outputs in a wallet with the latest information
 /// from a node
-pub fn refresh_outputs<T: ?Sized, C, K>(wallet: &mut T, parent_key_id: &Identifier) -> Result<(), Error>
+pub fn refresh_outputs<T: ?Sized, C, K>(
+	wallet: &mut T,
+	parent_key_id: &Identifier,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -254,7 +257,11 @@ where
 
 /// Builds a single api query to retrieve the latest output data from the node.
 /// So we can refresh the local wallet outputs.
-fn refresh_output_state<T: ?Sized, C, K>(wallet: &mut T, height: u64, parent_key_id: &Identifier) -> Result<(), Error>
+fn refresh_output_state<T: ?Sized, C, K>(
+	wallet: &mut T,
+	height: u64,
+	parent_key_id: &Identifier,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -299,7 +306,10 @@ where
 
 /// Retrieve summary info about the wallet
 /// caller should refresh first if desired
-pub fn retrieve_info<T: ?Sized, C, K>(wallet: &mut T, parent_key_id: &Identifier) -> Result<WalletInfo, Error>
+pub fn retrieve_info<T: ?Sized, C, K>(
+	wallet: &mut T,
+	parent_key_id: &Identifier,
+) -> Result<WalletInfo, Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -351,7 +361,8 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	let (out, kern, block_fees) = receive_coinbase(wallet, block_fees, parent_key_id).context(ErrorKind::Node)?;
+	let (out, kern, block_fees) =
+		receive_coinbase(wallet, block_fees, parent_key_id).context(ErrorKind::Node)?;
 
 	let out_bin = ser::ser_vec(&out).context(ErrorKind::Node)?;
 

@@ -18,7 +18,10 @@ use libwallet::error::Error;
 use libwallet::types::{WalletBackend, WalletClient};
 
 /// Get next available key in the wallet for a given parent
-pub fn next_available_key<T: ?Sized, C, K>(wallet: &mut T, parent_key: &Identifier) -> Result<Identifier, Error>
+pub fn next_available_key<T: ?Sized, C, K>(
+	wallet: &mut T,
+	parent_key: &Identifier,
+) -> Result<Identifier, Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,

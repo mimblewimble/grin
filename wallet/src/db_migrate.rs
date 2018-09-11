@@ -27,8 +27,8 @@ use failure::ResultExt;
 
 use serde_json;
 
-use libwallet::types::WalletDetails;
 use libwallet::types::OutputData;
+use libwallet::types::WalletDetails;
 use store::{self, to_key};
 
 const DETAIL_FILE: &'static str = "wallet.det";

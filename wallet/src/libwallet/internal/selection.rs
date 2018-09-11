@@ -60,7 +60,7 @@ where
 		max_outputs,
 		change_outputs,
 		selection_strategy_is_use_all,
-		&parent_key_id
+		&parent_key_id,
 	)?;
 
 	// Create public slate
@@ -227,8 +227,8 @@ pub fn select_send_tx<T: ?Sized, C, K>(
 		Vec<Box<build::Append<K>>>,
 		Vec<OutputData>,
 		Vec<(u64, Identifier)>, // change amounts and derivations
-		u64,             // amount
-		u64,             // fee
+		u64,                    // amount
+		u64,                    // fee
 	),
 	Error,
 >

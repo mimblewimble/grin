@@ -27,7 +27,7 @@ use serde_json as json;
 use core::core::hash::Hashed;
 use core::core::Transaction;
 use core::ser;
-use keychain::{Keychain, Identifier};
+use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libwallet::internal::{selection, tx, updater};
 use libwallet::types::{
@@ -281,7 +281,13 @@ where
 	) -> Result<(), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
-		let tx_burn = tx::issue_burn_tx(&mut **w, amount, minimum_confirmations, max_outputs, parent_key_id)?;
+		let tx_burn = tx::issue_burn_tx(
+			&mut **w,
+			amount,
+			minimum_confirmations,
+			max_outputs,
+			parent_key_id,
+		)?;
 		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
 		w.client().post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
 		w.close()?;
@@ -516,7 +522,11 @@ where
 	}
 
 	/// Receive a transaction from a sender
-	pub fn receive_tx(&mut self, slate: &mut Slate, parent_key_id: &Identifier) -> Result<(), Error> {
+	pub fn receive_tx(
+		&mut self,
+		slate: &mut Slate,
+		parent_key_id: &Identifier,
+	) -> Result<(), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 		let res = tx::receive_tx(&mut **w, slate, parent_key_id);

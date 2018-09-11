@@ -19,7 +19,7 @@ use std::{fs, path};
 use failure::ResultExt;
 use uuid::Uuid;
 
-use keychain::{Identifier, Keychain, ChildNumber};
+use keychain::{ChildNumber, Identifier, Keychain};
 use store::{self, option_to_not_found, to_key, u64_to_key};
 
 use libwallet::types::*;
@@ -338,7 +338,7 @@ where
 			.as_ref()
 			.unwrap()
 			.put_ser(&deriv_key, &child_n)?;
-			Ok(())
+		Ok(())
 	}
 
 	fn save_tx_log_entry(&self, t: TxLogEntry) -> Result<(), Error> {

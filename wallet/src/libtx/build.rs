@@ -292,9 +292,9 @@ mod test {
 	#[test]
 	fn blind_simple_tx() {
 		let keychain = ExtKeychain::from_random_seed().unwrap();
-		let key_id1 = ExtKeychainPath::new(1,1,0,0,0).to_identifier();
-		let key_id2 = ExtKeychainPath::new(1,2,0,0,0).to_identifier();
-		let key_id3 = ExtKeychainPath::new(1,3,0,0,0).to_identifier();
+		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
+		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
+		let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
 
 		let vc = verifier_cache();
 
@@ -314,9 +314,9 @@ mod test {
 	#[test]
 	fn blind_simple_tx_with_offset() {
 		let keychain = ExtKeychain::from_random_seed().unwrap();
-		let key_id1 = ExtKeychainPath::new(1,1,0,0,0).to_identifier();
-		let key_id2 = ExtKeychainPath::new(1,2,0,0,0).to_identifier();
-		let key_id3 = ExtKeychainPath::new(1,3,0,0,0).to_identifier();
+		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
+		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
+		let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
 
 		let vc = verifier_cache();
 
@@ -336,8 +336,8 @@ mod test {
 	#[test]
 	fn blind_simpler_tx() {
 		let keychain = ExtKeychain::from_random_seed().unwrap();
-		let key_id1 = ExtKeychainPath::new(1,1,0,0,0).to_identifier();
-		let key_id2 = ExtKeychainPath::new(1,2,0,0,0).to_identifier();
+		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
+		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
 
 		let vc = verifier_cache();
 

@@ -50,7 +50,7 @@ impl Keychain for ExtKeychain {
 	}
 
 	fn root_key_id() -> Identifier {
-		ExtKeychainPath::new(0,0,0,0,0).to_identifier()
+		ExtKeychainPath::new(0, 0, 0, 0, 0).to_identifier()
 	}
 
 	fn derive_key(&self, id: &Identifier) -> Result<ExtendedPrivKey, Error> {

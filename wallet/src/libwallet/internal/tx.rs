@@ -28,7 +28,11 @@ use util::LOGGER;
 
 /// Receive a transaction, modifying the slate accordingly (which can then be
 /// sent back to sender for posting)
-pub fn receive_tx<T: ?Sized, C, K>(wallet: &mut T, slate: &mut Slate, parent_key_id: &Identifier) -> Result<(), Error>
+pub fn receive_tx<T: ?Sized, C, K>(
+	wallet: &mut T,
+	slate: &mut Slate,
+	parent_key_id: &Identifier,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -220,8 +224,14 @@ where
 
 	let fee = tx_fee(coins.len(), 2, 1, None);
 	let num_change_outputs = 1;
-	let (mut parts, _) =
-		selection::inputs_and_change(&coins, wallet, amount, fee, num_change_outputs, parent_key_id)?;
+	let (mut parts, _) = selection::inputs_and_change(
+		&coins,
+		wallet,
+		amount,
+		fee,
+		num_change_outputs,
+		parent_key_id,
+	)?;
 
 	//TODO: If we end up using this, create change output here
 
@@ -245,7 +255,7 @@ mod test {
 	// based on the public key and amount begin spent
 	fn output_commitment_equals_input_commitment_on_spend() {
 		let keychain = ExtKeychain::from_random_seed().unwrap();
-		let key_id1 = ExtKeychainPath::new(1,1,0,0,0).to_identifier();
+		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 
 		let tx1 = build::transaction(vec![build::output(105, key_id1.clone())], &keychain).unwrap();
 		let tx2 = build::transaction(vec![build::input(105, key_id1.clone())], &keychain).unwrap();
