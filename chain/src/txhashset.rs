@@ -573,7 +573,9 @@ impl<'a> Extension<'a> {
 
 			// Find the "cutoff" pos in the output MMR based on the
 			// header from 1,000 blocks ago.
-			let cutoff_height = height.checked_sub(global::coinbase_maturity(height)).unwrap_or(0);
+			let cutoff_height = height
+				.checked_sub(global::coinbase_maturity(height))
+				.unwrap_or(0);
 			let cutoff_header = self.commit_index.get_header_by_height(cutoff_height)?;
 			let cutoff_pos = cutoff_header.output_mmr_size;
 
@@ -659,16 +661,8 @@ impl<'a> Extension<'a> {
 		let commit = out.commitment();
 
 		if let Ok(pos) = self.batch.get_output_pos(&commit) {
-			// we need to check whether the commitment is in the current MMR view
-			// as well as the index doesn't support rewind and is non-authoritative
-			// (non-historical node will have a much smaller one)
-			// note that this doesn't show the commitment *never* existed, just
-			// that this is not an existing unspent commitment right now
-			if let Some(hash) = self.output_pmmr.get_hash(pos) {
-				// Check the hash matches what we expect.
-				// We may be on a fork which may result in the entry at that pos being
-				// different to the one we expect.
-				if hash == OutputIdentifier::from_output(out).hash_with_index(pos - 1) {
+			if let Some(out_mmr) = self.output_pmmr.get_data(pos) {
+				if out_mmr.commitment() == commit {
 					return Err(ErrorKind::DuplicateCommitment(commit).into());
 				}
 			}
