@@ -268,6 +268,7 @@ impl StratumServer {
 		// Serialize the block header into pre and post nonce strings
 		let mut pre_pow_writer = mine_block::HeaderPrePowWriter::default();
 		bh.write_pre_pow(&mut pre_pow_writer).unwrap();
+		bh.pow.write_pre_pow(bh.version, &mut pre_pow_writer).unwrap();
 		let pre = pre_pow_writer.as_hex_string(false);
 		let job_template = JobTemplate {
 			height: bh.height,
