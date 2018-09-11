@@ -172,7 +172,7 @@ pub struct ExtendedPubKey {
 }
 
 /// A child number for a derived key
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum ChildNumber {
 	/// Non-hardened key
 	Normal {

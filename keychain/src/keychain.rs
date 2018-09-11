@@ -59,7 +59,7 @@ impl Keychain for ExtKeychain {
 		let mut h = BIP32GrinHasher::new();
 		let mut sk = self.master;
 		for i in 0..p.depth {
-			sk = sk.ckd_priv(&self.secp, &mut h, p.path[i])?;
+			sk = sk.ckd_priv(&self.secp, &mut h, p.path[i as usize])?;
 		}
 		Ok(sk)
 	}

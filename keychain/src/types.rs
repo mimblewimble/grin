@@ -14,6 +14,7 @@
 
 use rand::thread_rng;
 use std::cmp::min;
+use std::io::Cursor;
 /// Keychain trait and its main supporting types. The Identifier is a
 /// semi-opaque structure (just bytes) to track keys within the Keychain.
 /// BlindingFactor is a useful wrapper around a private key to help with
@@ -30,8 +31,10 @@ use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::Commitment;
 use util::secp::{self, Message, Secp256k1, Signature};
 
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+
 // Size of an identifier in bytes
-pub const IDENTIFIER_SIZE: usize = 10;
+pub const IDENTIFIER_SIZE: usize = 17;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Error {
@@ -111,6 +114,15 @@ impl<'de> de::Visitor<'de> for IdentifierVisitor {
 impl Identifier {
 	pub fn zero() -> Identifier {
 		Identifier::from_bytes(&[0; IDENTIFIER_SIZE])
+	}
+
+	pub fn from_path(path: &ExtKeychainPath) -> Identifier {
+		//TODO: convert crate to error kind
+		path.to_identifier()
+	}
+
+	pub fn to_path(&self) -> ExtKeychainPath {
+		ExtKeychainPath::from_identifier(&self)
 	}
 
 	pub fn from_bytes(bytes: &[u8]) -> Identifier {
@@ -293,15 +305,15 @@ impl BlindSum {
 
 /// Encapsulates a max 4-level deep BIP32 path, which is the
 /// most we can currently fit into a rangeproof message
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Deserialize)]
 pub struct ExtKeychainPath {
-	pub depth: usize,
+	pub depth: u8,
 	pub path: [extkey_bip32::ChildNumber; 4],
 }
 
 impl ExtKeychainPath {
 	/// Return a new chain path with given derivation and depth
-	pub fn new(depth: usize, d0: u32, d1: u32, d2: u32, d3: u32) -> ExtKeychainPath {
+	pub fn new(depth: u8, d0: u32, d1: u32, d2: u32, d3: u32) -> ExtKeychainPath {
 		ExtKeychainPath {
 			depth: depth,
 			path: [
@@ -311,6 +323,37 @@ impl ExtKeychainPath {
 				ChildNumber::from(d3),
 			],
 		}
+	}
+
+	/// from an Indentifier [manual deserialization]
+	pub fn from_identifier(id: &Identifier) -> ExtKeychainPath {
+		let mut rdr = Cursor::new(id.0.to_vec());
+		ExtKeychainPath {
+			depth: rdr.read_u8().unwrap(),
+			path: [
+				ChildNumber::from(rdr.read_u32::<BigEndian>().unwrap()),
+				ChildNumber::from(rdr.read_u32::<BigEndian>().unwrap()),
+				ChildNumber::from(rdr.read_u32::<BigEndian>().unwrap()),
+				ChildNumber::from(rdr.read_u32::<BigEndian>().unwrap()),
+			],
+		}
+	}
+
+	/// to an Indentifier [manual serialization]
+	pub fn to_identifier(&self) -> Identifier {
+		let mut wtr = vec![];
+		wtr.write_u8(self.depth).unwrap();
+		wtr.write_u32::<BigEndian>(<u32>::from(self.path[0]))
+			.unwrap();
+		wtr.write_u32::<BigEndian>(<u32>::from(self.path[1]))
+			.unwrap();
+		wtr.write_u32::<BigEndian>(<u32>::from(self.path[2]))
+			.unwrap();
+		wtr.write_u32::<BigEndian>(<u32>::from(self.path[3]))
+			.unwrap();
+		let mut retval = [0u8; IDENTIFIER_SIZE];
+		retval.copy_from_slice(&wtr[0..IDENTIFIER_SIZE]);
+		Identifier(retval)
 	}
 }
 
@@ -330,7 +373,7 @@ pub trait Keychain: Sync + Send + Clone {
 mod test {
 	use rand::thread_rng;
 
-	use types::BlindingFactor;
+	use types::{BlindingFactor, ExtKeychainPath, Identifier};
 	use util::secp::key::{SecretKey, ZERO_KEY};
 	use util::secp::Secp256k1;
 
@@ -360,5 +403,28 @@ mod test {
 		let _ = skey_out.add_assign(&secp, &skey_zero).unwrap();
 
 		assert_eq!(skey_in, skey_out);
+	}
+
+	// Check path identifiers
+	#[test]
+	fn path_identifier() {
+		let path = ExtKeychainPath::new(4, 1, 2, 3, 4);
+		let id = Identifier::from_path(&path);
+		let ret_path = id.to_path();
+		assert_eq!(path, ret_path);
+
+		let path = ExtKeychainPath::new(
+			1,
+			<u32>::max_value(),
+			<u32>::max_value(),
+			3,
+			<u32>::max_value(),
+		);
+		let id = Identifier::from_path(&path);
+		let ret_path = id.to_path();
+		assert_eq!(path, ret_path);
+
+		println!("id: {:?}", id);
+		println!("ret_path {:?}", ret_path);
 	}
 }
