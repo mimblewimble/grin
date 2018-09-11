@@ -93,11 +93,11 @@ where
 	/// Create a new write batch to update or remove output data
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch<K> + 'a>, Error>;
 
-	/// Next child ID when we want to create a new output
-	fn next_child<'a>(&mut self, root_key_id: Identifier) -> Result<u32, Error>;
+	/// Next child ID when we want to create a new output, based on a given parent
+	fn next_child<'a>(&mut self, parent_key_id: &Identifier) -> Result<Identifier, Error>;
 
 	/// Return current details
-	fn details(&mut self, root_key_id: Identifier) -> Result<WalletDetails, Error>;
+	fn details(&mut self, parent_key_id: Identifier) -> Result<WalletDetails, Error>;
 
 	/// Attempt to restore the contents of a wallet from seed
 	fn restore(&mut self) -> Result<(), Error>;
@@ -129,6 +129,9 @@ where
 
 	/// save wallet details
 	fn save_details(&mut self, r: Identifier, w: WalletDetails) -> Result<(), Error>;
+
+	/// Save last stored child index of a given parent
+	fn save_child_index(&mut self, parent_id: &Identifier, child_n: u32) -> Result<(), Error>;
 
 	/// get next tx log entry
 	fn next_tx_log_id(&mut self, root_key_id: Identifier) -> Result<u32, Error>;
@@ -515,15 +518,12 @@ pub struct WalletDetails {
 	/// The last block height at which the wallet data
 	/// was confirmed against a node
 	pub last_confirmed_height: u64,
-	/// The last child index used
-	pub last_child_index: u32,
 }
 
 impl Default for WalletDetails {
 	fn default() -> WalletDetails {
 		WalletDetails {
 			last_confirmed_height: 0,
-			last_child_index: 0,
 		}
 	}
 }

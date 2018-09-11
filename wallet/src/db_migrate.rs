@@ -28,8 +28,6 @@ use failure::ResultExt;
 use serde_json;
 
 use libwallet::types::WalletDetails;
-use types::WalletSeed;
-
 use libwallet::types::OutputData;
 use store::{self, to_key};
 
@@ -40,52 +38,6 @@ const DB_DIR: &'static str = "db";
 const OUTPUT_PREFIX: u8 = 'o' as u8;
 const DERIV_PREFIX: u8 = 'd' as u8;
 const CONFIRMED_HEIGHT_PREFIX: u8 = 'c' as u8;
-
-// determine whether we have wallet files but no file wallet
-pub fn needs_migrate(data_dir: &str) -> bool {
-	let db_path = Path::new(data_dir).join(DB_DIR);
-	let data_path = Path::new(data_dir).join(DAT_FILE);
-	if !db_path.exists() && data_path.exists() {
-		return true;
-	}
-	false
-}
-
-pub fn migrate(data_dir: &str, pwd: &str) -> Result<(), Error> {
-	let data_file_path = format!("{}{}{}", data_dir, MAIN_SEPARATOR, DAT_FILE);
-	let details_file_path = format!("{}{}{}", data_dir, MAIN_SEPARATOR, DETAIL_FILE);
-	let seed_file_path = format!("{}{}{}", data_dir, MAIN_SEPARATOR, SEED_FILE);
-	let outputs = read_outputs(&data_file_path)?;
-	let details = read_details(&details_file_path)?;
-
-	let mut file = File::open(seed_file_path).context(ErrorKind::IO)?;
-	let mut buffer = String::new();
-	file.read_to_string(&mut buffer).context(ErrorKind::IO)?;
-	let wallet_seed = WalletSeed::from_hex(&buffer)?;
-	let keychain: ExtKeychain = wallet_seed.derive_keychain(pwd)?;
-	let root_key_id = keychain.root_key_id();
-
-	//open db
-	let db_path = Path::new(data_dir).join(DB_DIR);
-	let lmdb_env = Arc::new(store::new_env(db_path.to_str().unwrap().to_string()));
-
-	// open store
-	let store = store::Store::open(lmdb_env, DB_DIR);
-	let batch = store.batch().unwrap();
-
-	// write
-	for out in outputs {
-		save_output(&batch, out.clone())?;
-	}
-	save_details(&batch, root_key_id, details)?;
-
-	let res = batch.commit();
-	if let Err(e) = res {
-		panic!("Unable to commit db: {:?}", e);
-	}
-
-	Ok(())
-}
 
 /// save output in db
 fn save_output(batch: &store::Batch, out: OutputData) -> Result<(), Error> {
@@ -105,17 +57,10 @@ fn save_details(
 	root_key_id: Identifier,
 	d: WalletDetails,
 ) -> Result<(), Error> {
-	let deriv_key = to_key(DERIV_PREFIX, &mut root_key_id.to_bytes().to_vec());
 	let height_key = to_key(
 		CONFIRMED_HEIGHT_PREFIX,
 		&mut root_key_id.to_bytes().to_vec(),
 	);
-	if let Err(e) = batch.put_ser(&deriv_key, &d.last_child_index) {
-		Err(ErrorKind::GenericError(format!(
-			"Error saving last_child_index: {:?}",
-			e
-		)))?;
-	}
 	if let Err(e) = batch.put_ser(&height_key, &d.last_confirmed_height) {
 		Err(ErrorKind::GenericError(format!(
 			"Error saving last_confirmed_height: {:?}",
@@ -141,10 +86,4 @@ fn read_details(details_file_path: &str) -> Result<WalletDetails, Error> {
 	serde_json::from_reader(details_file)
 		.context(ErrorKind::Format)
 		.map_err(|e| e.into())
-}
-
-#[ignore]
-#[test]
-fn migrate_db() {
-	let _ = migrate("test_wallet", "");
 }

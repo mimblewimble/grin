@@ -22,7 +22,7 @@ use std::io::Cursor;
 use std::{error, fmt};
 
 use blake2::blake2b::blake2b;
-use extkey_bip32::{self, ChildNumber, ExtendedPrivKey, Fingerprint};
+use extkey_bip32::{self, ChildNumber, ExtendedPrivKey};
 use serde::{de, ser}; //TODO: Convert errors to use ErrorKind
 
 use util;
@@ -339,7 +339,7 @@ impl ExtKeychainPath {
 		}
 	}
 
-	/// to an Indentifier [manual serialization]
+	/// to an Identifier [manual serialization]
 	pub fn to_identifier(&self) -> Identifier {
 		let mut wtr = vec![];
 		wtr.write_u8(self.depth).unwrap();
@@ -355,16 +355,25 @@ impl ExtKeychainPath {
 		retval.copy_from_slice(&wtr[0..IDENTIFIER_SIZE]);
 		Identifier(retval)
 	}
+
+	/// Last part of the path (for last n_child)
+	pub fn last_path_index(&self) -> u32 {
+		if self.depth == 0 {
+			0
+		} else {
+			<u32>::from(self.path[self.depth as usize - 1])
+		}
+	}
 }
 
 pub trait Keychain: Sync + Send + Clone {
 	fn from_seed(seed: &[u8]) -> Result<Self, Error>;
 	fn from_random_seed() -> Result<Self, Error>;
-	fn root_key_id(&self) -> Fingerprint;
-	fn derive_key_id(&self, derivation: &ExtKeychainPath) -> Result<ExtendedPrivKey, Error>;
-	fn commit(&self, amount: u64, derivation: &ExtKeychainPath) -> Result<Commitment, Error>;
+	fn root_key_id() -> Identifier;
+	fn derive_key(&self, id: &Identifier) -> Result<ExtendedPrivKey, Error>;
+	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error>;
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
-	fn sign(&self, msg: &Message, derivation: &ExtKeychainPath) -> Result<Signature, Error>;
+	fn sign(&self, msg: &Message, id: &Identifier) -> Result<Signature, Error>;
 	fn sign_with_blinding(&self, &Message, &BlindingFactor) -> Result<Signature, Error>;
 	fn secp(&self) -> &Secp256k1;
 }

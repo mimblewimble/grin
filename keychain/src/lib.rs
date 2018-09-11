@@ -35,6 +35,7 @@ mod types;
 
 pub mod keychain;
 pub use keychain::ExtKeychain;
+pub use extkey_bip32::ChildNumber;
 pub use types::{
 	BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain, IDENTIFIER_SIZE,
 };

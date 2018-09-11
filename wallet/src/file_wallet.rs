@@ -292,7 +292,7 @@ where
 	fn next_child<'a>(
 		&'a mut self,
 		root_key_id: keychain::Identifier,
-	) -> Result<u32, libwallet::Error> {
+	) -> Result<keychain::Identifier, libwallet::Error> {
 		let mut details = self.details(root_key_id.clone())?;
 		let mut max_n = 0;
 		for out in self.iter() {

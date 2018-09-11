@@ -19,7 +19,7 @@ use std::{fs, path};
 use failure::ResultExt;
 use uuid::Uuid;
 
-use keychain::{Identifier, Keychain};
+use keychain::{Identifier, Keychain, ChildNumber};
 use store::{self, option_to_not_found, to_key, u64_to_key};
 
 use libwallet::types::*;
@@ -178,22 +178,26 @@ where
 		}))
 	}
 
-	fn next_child<'a>(&mut self, root_key_id: Identifier) -> Result<u32, Error> {
-		let mut details = self.details(root_key_id.clone())?;
+	fn next_child<'a>(&mut self, parent_key_id: &Identifier) -> Result<Identifier, Error> {
+		let mut deriv_idx = {
+			let batch = self.db.batch()?;
+			let deriv_key = to_key(DERIV_PREFIX, &mut parent_key_id.to_bytes().to_vec());
+			match batch.get_ser(&deriv_key)? {
+				Some(idx) => idx,
+				None => 0,
+			}
+		};
+		let mut return_path = parent_key_id.to_path();
+		return_path.depth = return_path.depth + 1;
+		return_path.path[return_path.depth as usize] = ChildNumber::from(deriv_idx);
+		deriv_idx = deriv_idx + 1;
 		let mut batch = self.batch()?;
-		details.last_child_index = details.last_child_index + 1;
-		batch.save_details(root_key_id, details.clone())?;
-		batch.commit()?;
-		Ok(details.last_child_index + 1)
+		batch.save_child_index(parent_key_id, deriv_idx)?;
+		Ok(Identifier::from_path(&return_path))
 	}
 
 	fn details(&mut self, root_key_id: Identifier) -> Result<WalletDetails, Error> {
 		let batch = self.db.batch()?;
-		let deriv_key = to_key(DERIV_PREFIX, &mut root_key_id.to_bytes().to_vec());
-		let deriv_idx = match batch.get_ser(&deriv_key)? {
-			Some(idx) => idx,
-			None => 0,
-		};
 		let height_key = to_key(
 			CONFIRMED_HEIGHT_PREFIX,
 			&mut root_key_id.to_bytes().to_vec(),
@@ -203,7 +207,6 @@ where
 			None => 0,
 		};
 		Ok(WalletDetails {
-			last_child_index: deriv_idx,
 			last_confirmed_height: last_confirmed_height,
 		})
 	}
@@ -316,7 +319,6 @@ where
 	}
 
 	fn save_details(&mut self, root_key_id: Identifier, d: WalletDetails) -> Result<(), Error> {
-		let deriv_key = to_key(DERIV_PREFIX, &mut root_key_id.to_bytes().to_vec());
 		let height_key = to_key(
 			CONFIRMED_HEIGHT_PREFIX,
 			&mut root_key_id.to_bytes().to_vec(),
@@ -325,13 +327,18 @@ where
 			.borrow()
 			.as_ref()
 			.unwrap()
-			.put_ser(&deriv_key, &d.last_child_index)?;
+			.put_ser(&height_key, &d.last_confirmed_height)?;
+		Ok(())
+	}
+
+	fn save_child_index(&mut self, parent_id: &Identifier, child_n: u32) -> Result<(), Error> {
+		let deriv_key = to_key(DERIV_PREFIX, &mut parent_id.to_bytes().to_vec());
 		self.db
 			.borrow()
 			.as_ref()
 			.unwrap()
-			.put_ser(&height_key, &d.last_confirmed_height)?;
-		Ok(())
+			.put_ser(&deriv_key, &child_n)?;
+			Ok(())
 	}
 
 	fn save_tx_log_entry(&self, t: TxLogEntry) -> Result<(), Error> {

@@ -194,6 +194,7 @@ where
 		let mut id = None;
 		let mut show_spent = false;
 		let params = parse_params(req);
+		let root_key_id = K::root_key_id();
 
 		if let Some(_) = params.get("refresh") {
 			update_from_node = true;
@@ -206,7 +207,7 @@ where
 				id = Some(i.parse().unwrap());
 			}
 		}
-		api.retrieve_outputs(show_spent, update_from_node, id)
+		api.retrieve_outputs(show_spent, update_from_node, id, &root_key_id)
 	}
 
 	fn retrieve_txs(
@@ -214,6 +215,7 @@ where
 		req: &Request<Body>,
 		api: APIOwner<T, C, K>,
 	) -> Result<(bool, Vec<TxLogEntry>), Error> {
+		let root_key_id = K::root_key_id();
 		let mut id = None;
 		let mut update_from_node = false;
 
@@ -227,7 +229,7 @@ where
 				id = Some(i.parse().unwrap());
 			}
 		}
-		api.retrieve_txs(update_from_node, id)
+		api.retrieve_txs(update_from_node, id, &root_key_id)
 	}
 
 	fn dump_stored_tx(
@@ -264,8 +266,9 @@ where
 		req: &Request<Body>,
 		mut api: APIOwner<T, C, K>,
 	) -> Result<(bool, WalletInfo), Error> {
+		let root_key_id = K::root_key_id();
 		let update_from_node = param_exists(req, "refresh");
-		api.retrieve_summary_info(update_from_node)
+		api.retrieve_summary_info(update_from_node, &root_key_id)
 	}
 
 	fn node_height(
@@ -300,6 +303,7 @@ where
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
+		let root_key_id = K::root_key_id();
 		Box::new(parse_body(req).and_then(move |args: SendTXArgs| {
 			if args.method == "http" {
 				api.issue_send_tx(
@@ -309,6 +313,7 @@ where
 					args.max_outputs,
 					args.num_change_outputs,
 					args.selection_strategy_is_use_all,
+					&root_key_id,
 				)
 			} else if args.method == "file" {
 				api.send_tx(
@@ -319,6 +324,7 @@ where
 					args.max_outputs,
 					args.num_change_outputs,
 					args.selection_strategy_is_use_all,
+					&root_key_id,
 				)
 			} else {
 				error!(LOGGER, "unsupported payment method: {}", args.method);
@@ -348,26 +354,27 @@ where
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
 	) -> Box<Future<Item = (), Error = Error> + Send> {
+		let root_key_id = K::root_key_id();
 		let params = parse_params(&req);
 		if let Some(id_string) = params.get("id") {
 			Box::new(match id_string[0].parse() {
-				Ok(id) => match api.cancel_tx(id) {
+				Ok(id) => match api.cancel_tx(id, &root_key_id) {
 					Ok(_) => ok(()),
 					Err(e) => {
-						error!(LOGGER, "finalize_tx: failed with error: {}", e);
+						error!(LOGGER, "cancel_tx: failed with error: {}", e);
 						err(e)
 					}
 				},
 				Err(e) => {
-					error!(LOGGER, "finalize_tx: could not parse id: {}", e);
+					error!(LOGGER, "cancel_tx: could not parse id: {}", e);
 					err(ErrorKind::TransactionCancellationError(
-						"finalize_tx: cannot cancel transaction. Could not parse id in request.",
+						"cancel_tx: cannot cancel transaction. Could not parse id in request.",
 					).into())
 				}
 			})
 		} else {
 			Box::new(err(ErrorKind::TransactionCancellationError(
-				"finalize_tx: Cannot cancel transaction. Missing id param in request.",
+				"cancel_tx: Cannot cancel transaction. Missing id param in request.",
 			).into()))
 		}
 	}
@@ -378,7 +385,8 @@ where
 		mut api: APIOwner<T, C, K>,
 	) -> Box<Future<Item = (), Error = Error> + Send> {
 		// TODO: Args
-		Box::new(match api.issue_burn_tx(60, 10, 1000) {
+		let root_key_id = K::root_key_id();
+		Box::new(match api.issue_burn_tx(60, 10, 1000, &root_key_id) {
 			Ok(_) => ok(()),
 			Err(e) => err(e),
 		})
@@ -491,8 +499,9 @@ where
 		req: Request<Body>,
 		mut api: APIForeign<T, C, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
+		let root_key_id = K::root_key_id();
 		Box::new(
-			parse_body(req).and_then(move |mut slate| match api.receive_tx(&mut slate) {
+			parse_body(req).and_then(move |mut slate| match api.receive_tx(&mut slate, &root_key_id) {
 				Ok(_) => ok(slate.clone()),
 				Err(e) => {
 					error!(LOGGER, "receive_tx: failed with error: {}", e);

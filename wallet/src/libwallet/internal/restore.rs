@@ -112,10 +112,10 @@ where
 	);
 
 	// keep track of child keys we've already found, and avoid some EC ops
-	let mut found_child_indices: Vec<u32> = vec![];
+	let found_child_indices: Vec<u32> = vec![];
 	for output in outputs.iter_mut() {
 		let mut found = false;
-		for i in 1..max_derivations {
+		/*for i in 1..max_derivations {
 			// seems to be a bug allowing multiple child keys at the moment
 			/*if found_child_indices.contains(&i){
 				continue;
@@ -140,7 +140,7 @@ where
 				LOGGER,
 				"Unable to find child key index for: {:?}", output.commit,
 			);
-		}
+		}*/
 	}
 	Ok(())
 }
@@ -198,7 +198,7 @@ where
 	populate_child_indices(wallet, &mut result_vec, max_derivations)?;
 
 	// Now save what we have
-	let root_key_id = wallet.keychain().root_key_id();
+	let root_key_id = K::root_key_id();
 	let current_chain_height = wallet.client().get_chain_height()?;
 	let mut batch = wallet.batch()?;
 	let mut max_child_index = 0;
@@ -242,7 +242,6 @@ where
 
 	if max_child_index > 0 {
 		let details = WalletDetails {
-			last_child_index: max_child_index + 1,
 			last_confirmed_height: current_chain_height,
 		};
 		batch.save_details(root_key_id.clone(), details)?;

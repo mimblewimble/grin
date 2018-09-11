@@ -18,9 +18,8 @@ use rand::{thread_rng, Rng};
 
 use blake2;
 
-use extkey_bip32::{BIP32GrinHasher, ExtendedPrivKey, Fingerprint};
-use types::{BlindSum, BlindingFactor, Error, ExtKeychainPath, Keychain};
-use util::logger::LOGGER;
+use extkey_bip32::{BIP32GrinHasher, ExtendedPrivKey};
+use types::{BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain};
 use util::secp::key::SecretKey;
 use util::secp::pedersen::Commitment;
 use util::secp::{self, Message, Secp256k1, Signature};
@@ -50,13 +49,13 @@ impl Keychain for ExtKeychain {
 		ExtKeychain::from_seed(seed.as_bytes())
 	}
 
-	fn root_key_id(&self) -> Fingerprint {
-		let mut h = BIP32GrinHasher::new();
-		self.master.fingerprint(&mut h)
+	fn root_key_id() -> Identifier {
+		ExtKeychainPath::new(0,0,0,0,0).to_identifier()
 	}
 
-	fn derive_key_id(&self, p: &ExtKeychainPath) -> Result<ExtendedPrivKey, Error> {
+	fn derive_key(&self, id: &Identifier) -> Result<ExtendedPrivKey, Error> {
 		let mut h = BIP32GrinHasher::new();
+		let p = id.to_path();
 		let mut sk = self.master;
 		for i in 0..p.depth {
 			sk = sk.ckd_priv(&self.secp, &mut h, p.path[i as usize])?;
@@ -64,8 +63,8 @@ impl Keychain for ExtKeychain {
 		Ok(sk)
 	}
 
-	fn commit(&self, amount: u64, derivation: &ExtKeychainPath) -> Result<Commitment, Error> {
-		let key = self.derive_key_id(derivation)?;
+	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error> {
+		let key = self.derive_key(id)?;
 		let commit = self.secp.commit(amount, key.secret_key)?;
 		Ok(commit)
 	}
@@ -75,7 +74,7 @@ impl Keychain for ExtKeychain {
 			.positive_key_ids
 			.iter()
 			.filter_map(|k| {
-				let res = self.derive_key_id(&k);
+				let res = self.derive_key(&Identifier::from_path(&k));
 				if let Ok(s) = res {
 					Some(s.secret_key)
 				} else {
@@ -88,7 +87,7 @@ impl Keychain for ExtKeychain {
 			.negative_key_ids
 			.iter()
 			.filter_map(|k| {
-				let res = self.derive_key_id(&k);
+				let res = self.derive_key(&Identifier::from_path(&k));
 				if let Ok(s) = res {
 					Some(s.secret_key)
 				} else {
@@ -117,8 +116,8 @@ impl Keychain for ExtKeychain {
 		Ok(BlindingFactor::from_secret_key(sum))
 	}
 
-	fn sign(&self, msg: &Message, path: &ExtKeychainPath) -> Result<Signature, Error> {
-		let skey = self.derive_key_id(path)?;
+	fn sign(&self, msg: &Message, id: &Identifier) -> Result<Signature, Error> {
+		let skey = self.derive_key(id)?;
 		let sig = self.secp.sign(msg, &skey.secret_key)?;
 		Ok(sig)
 	}
@@ -151,19 +150,17 @@ mod test {
 		let secp = keychain.secp();
 
 		let path = ExtKeychainPath::new(1, 1, 0, 0, 0);
-
-		// use the keychain to derive a "key_id" based on the underlying seed
-		let _key_id = keychain.derive_key_id(&path).unwrap();
+		let key_id = path.to_identifier();
 
 		let msg_bytes = [0; 32];
 		let msg = secp::Message::from_slice(&msg_bytes[..]).unwrap();
 
 		// now create a zero commitment using the key on the keychain associated with
 		// the key_id
-		let commit = keychain.commit(0, &path).unwrap();
+		let commit = keychain.commit(0, &key_id).unwrap();
 
 		// now check we can use our key to verify a signature from this zero commitment
-		let sig = keychain.sign(&msg, &path).unwrap();
+		let sig = keychain.sign(&msg, &key_id).unwrap();
 		secp.verify_from_commit(&msg, &sig, &commit).unwrap();
 	}
 
