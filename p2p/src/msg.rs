@@ -118,10 +118,19 @@ pub fn read_exact(
 	let sleep_time = time::Duration::from_micros(10);
 	let mut count = time::Duration::new(0, 0);
 
+	let exact = buf.len();
 	let mut read = 0;
 	loop {
 		match conn.read(buf) {
-			Ok(0) => break,
+			Ok(0) => {
+				if read < exact {
+					return Err(io::Error::new(
+						io::ErrorKind::ConnectionAborted,
+						"read_exact",
+					));
+				}
+				break;
+			}
 			Ok(n) => {
 				let tmp = buf;
 				buf = &mut tmp[n..];
