@@ -30,7 +30,7 @@ use chain::txhashset;
 use chain::types::Tip;
 use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
-use keychain::{ExtKeychain, Keychain};
+use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 use util::file;
 use wallet::libtx::{build, reward};
 
@@ -51,12 +51,12 @@ fn test_some_raw_txs() {
 	let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
 
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let key_id1 = keychain.derive_key_id(1).unwrap();
-	let key_id2 = keychain.derive_key_id(2).unwrap();
-	let key_id3 = keychain.derive_key_id(3).unwrap();
-	let key_id4 = keychain.derive_key_id(4).unwrap();
-	let key_id5 = keychain.derive_key_id(5).unwrap();
-	let key_id6 = keychain.derive_key_id(6).unwrap();
+	let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
+	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
+	let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
+	let key_id4 = ExtKeychainPath::new(1, 4, 0, 0, 0).to_identifier();
+	let key_id5 = ExtKeychainPath::new(1, 5, 0, 0, 0).to_identifier();
+	let key_id6 = ExtKeychainPath::new(1, 6, 0, 0, 0).to_identifier();
 
 	// Create a simple block with a single coinbase output
 	// so we have something to spend.
