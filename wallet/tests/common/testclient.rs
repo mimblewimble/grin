@@ -210,8 +210,8 @@ where
 		if let None = dest_wallet {
 			panic!("Unknown wallet destination for send_tx_slate: {:?}", m);
 		}
+		let parent_id = dest_wallet.as_ref().unwrap().2.clone();
 		let w = dest_wallet.unwrap().1.clone();
-		let parent_id = dest_wallet.unwrap().2.clone();
 		let mut slate = serde_json::from_str(&m.body).unwrap();
 		libwallet::controller::foreign_single_use(w.clone(), |listener_api| {
 			listener_api.receive_tx(&mut slate, &parent_id)?;
