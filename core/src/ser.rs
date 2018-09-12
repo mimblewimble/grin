@@ -403,8 +403,14 @@ impl Writeable for Signature {
 
 /// Utility wrapper for an underlying byte Writer. Defines higher level methods
 /// to write numbers, byte vectors, hashes, etc.
-struct BinWriter<'a> {
+pub struct BinWriter<'a> {
 	sink: &'a mut Write,
+}
+
+impl<'a> BinWriter<'a> {
+	pub fn new(write: &'a mut Write) -> BinWriter<'a> {
+		BinWriter{sink: write}
+	}
 }
 
 impl<'a> Writer for BinWriter<'a> {
