@@ -242,7 +242,7 @@ fn serialize_deserialize_block() {
 	let tx1 = tx1i2o();
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let prev = BlockHeader::default();
-	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0 ,0);
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 
 	let mut vec = Vec::new();
