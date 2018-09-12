@@ -89,7 +89,6 @@ fn data_files() {
 			let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
 			b.header.timestamp = prev.timestamp + Duration::seconds(60);
 
-
 			chain.set_txhashset_roots(&mut b, false).unwrap();
 
 			pow::pow_size(
