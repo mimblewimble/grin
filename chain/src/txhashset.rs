@@ -712,7 +712,10 @@ impl<'a> Extension<'a> {
 
 		// The output and rproof MMRs should be exactly the same size
 		// and we should have inserted to both in exactly the same pos.
-		assert_eq!(self.output_pmmr.unpruned_size(), self.kernel_pmmr.unpruned_size());
+		assert_eq!(
+			self.output_pmmr.unpruned_size(),
+			self.rproof_pmmr.unpruned_size()
+		);
 		assert_eq!(output_pos, rproof_pos);
 
 		Ok(output_pos)
