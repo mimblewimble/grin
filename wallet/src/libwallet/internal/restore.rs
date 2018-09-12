@@ -241,10 +241,7 @@ where
 	}
 
 	if max_child_index > 0 {
-		let details = WalletDetails {
-			last_confirmed_height: current_chain_height,
-		};
-		batch.save_details(root_key_id.clone(), details)?;
+		batch.save_last_confirmed_height(&root_key_id, current_chain_height)?;
 	}
 
 	batch.commit()?;

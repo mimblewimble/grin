@@ -188,27 +188,30 @@ where
 			}
 		};
 		let mut return_path = parent_key_id.to_path();
-		return_path.depth = return_path.depth + 1;
-		return_path.path[return_path.depth as usize] = ChildNumber::from(deriv_idx);
+		return_path.depth = return_path.depth;
+		if return_path.depth == 0 {
+			return Err(ErrorKind::InvalidBIP32Depth.into());
+		}
+		return_path.path[return_path.depth as usize - 1] = ChildNumber::from(deriv_idx);
 		deriv_idx = deriv_idx + 1;
 		let mut batch = self.batch()?;
 		batch.save_child_index(parent_key_id, deriv_idx)?;
+		batch.commit()?;
 		Ok(Identifier::from_path(&return_path))
 	}
 
-	fn details(&mut self, root_key_id: Identifier) -> Result<WalletDetails, Error> {
+	fn last_confirmed_height<'a>(&mut self, parent_key_id: &Identifier) -> Result<u64, Error>{
 		let batch = self.db.batch()?;
 		let height_key = to_key(
 			CONFIRMED_HEIGHT_PREFIX,
-			&mut root_key_id.to_bytes().to_vec(),
+			&mut parent_key_id.to_bytes().to_vec(),
 		);
 		let last_confirmed_height = match batch.get_ser(&height_key)? {
 			Some(h) => h,
-			None => 0,
+			none => 0,
 		};
-		Ok(WalletDetails {
-			last_confirmed_height: last_confirmed_height,
-		})
+		Ok(last_confirmed_height)
+
 	}
 
 	fn restore(&mut self) -> Result<(), Error> {
@@ -318,16 +321,16 @@ where
 		)
 	}
 
-	fn save_details(&mut self, root_key_id: Identifier, d: WalletDetails) -> Result<(), Error> {
+	fn save_last_confirmed_height(&mut self, parent_key_id: &Identifier, height: u64) -> Result<(), Error>{
 		let height_key = to_key(
 			CONFIRMED_HEIGHT_PREFIX,
-			&mut root_key_id.to_bytes().to_vec(),
+			&mut parent_key_id.to_bytes().to_vec(),
 		);
 		self.db
 			.borrow()
 			.as_ref()
 			.unwrap()
-			.put_ser(&height_key, &d.last_confirmed_height)?;
+			.put_ser(&height_key, &height)?;
 		Ok(())
 	}
 

@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use serde_json;
 
 use core::core::Transaction;
-use keychain::Keychain;
+use keychain::{Keychain, ExtKeychain};
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
 use libwallet::types::{
@@ -491,7 +491,8 @@ where
 		req: Request<Body>,
 		mut api: APIForeign<T, C, K>,
 	) -> Box<Future<Item = CbData, Error = Error> + Send> {
-		Box::new(parse_body(req).and_then(move |block_fees| api.build_coinbase(&block_fees)))
+		let parent_key_id = ExtKeychain::root_key_id();
+		Box::new(parse_body(req).and_then(move |block_fees| api.build_coinbase(&parent_key_id, &block_fees)))
 	}
 
 	fn receive_tx(

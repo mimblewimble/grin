@@ -96,8 +96,8 @@ where
 	/// Next child ID when we want to create a new output, based on a given parent
 	fn next_child<'a>(&mut self, parent_key_id: &Identifier) -> Result<Identifier, Error>;
 
-	/// Return current details
-	fn details(&mut self, parent_key_id: Identifier) -> Result<WalletDetails, Error>;
+	/// last verified height of outputs directly descending from the given parent key
+	fn last_confirmed_height<'a>(&mut self, parent_key_id: &Identifier) -> Result<u64, Error>;
 
 	/// Attempt to restore the contents of a wallet from seed
 	fn restore(&mut self) -> Result<(), Error>;
@@ -127,11 +127,11 @@ where
 	/// Delete data about an output from the backend
 	fn delete(&mut self, id: &Identifier) -> Result<(), Error>;
 
-	/// save wallet details
-	fn save_details(&mut self, r: Identifier, w: WalletDetails) -> Result<(), Error>;
-
 	/// Save last stored child index of a given parent
-	fn save_child_index(&mut self, parent_id: &Identifier, child_n: u32) -> Result<(), Error>;
+	fn save_child_index(&mut self, parent_key_id: &Identifier, child_n: u32) -> Result<(), Error>;
+
+	/// Save last confirmed height of outputs for a given parent
+	fn save_last_confirmed_height(&mut self, parent_key_id: &Identifier, height: u64) -> Result<(), Error>;
 
 	/// get next tx log entry
 	fn next_tx_log_id(&mut self, root_key_id: Identifier) -> Result<u32, Error>;
@@ -506,26 +506,6 @@ pub struct WalletInfo {
 	pub amount_currently_spendable: u64,
 	/// amount locked via previous transactions
 	pub amount_locked: u64,
-}
-
-/// Separate data for a wallet, containing fields
-/// that are needed but not necessarily represented
-/// via simple rows of OutputData
-/// If a wallet is restored from seed this is obvious
-/// lost and re-populated as well as possible
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct WalletDetails {
-	/// The last block height at which the wallet data
-	/// was confirmed against a node
-	pub last_confirmed_height: u64,
-}
-
-impl Default for WalletDetails {
-	fn default() -> WalletDetails {
-		WalletDetails {
-			last_confirmed_height: 0,
-		}
-	}
 }
 
 /// Types of transactions that can be contained within a TXLog entry

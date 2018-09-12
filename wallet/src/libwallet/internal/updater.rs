@@ -192,11 +192,10 @@ where
 	// api output (if it exists) and refresh it in-place in the wallet.
 	// Note: minimizing the time we spend holding the wallet lock.
 	{
-		let root_key_id = K::root_key_id();
-		let mut details = wallet.details(root_key_id.clone())?;
+		let last_confirmed_height = wallet.last_confirmed_height(parent_key_id)?;
 		// If the server height is less than our confirmed height, don't apply
 		// these changes as the chain is syncing, incorrect or forking
-		if height < details.last_confirmed_height {
+		if height < last_confirmed_height {
 			warn!(
 				LOGGER,
 				"Not updating outputs as the height of the node's chain \
@@ -247,8 +246,7 @@ where
 			}
 		}
 		{
-			details.last_confirmed_height = height;
-			batch.save_details(root_key_id, details)?;
+			batch.save_last_confirmed_height(parent_key_id, height)?;
 		}
 		batch.commit()?;
 	}
@@ -315,8 +313,7 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	let current_height = wallet.details(parent_key_id.clone())?.last_confirmed_height;
-	let keychain = wallet.keychain().clone();
+	let current_height = wallet.last_confirmed_height(parent_key_id)?;
 	let outputs = wallet
 		.iter()
 		.filter(|out| out.root_key_id == *parent_key_id);

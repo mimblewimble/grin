@@ -27,6 +27,7 @@ use std::sync::{Arc, Mutex};
 use chain::Chain;
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::{consensus, global, pow, ser};
+use keychain::Identifier;
 use wallet::libwallet;
 use wallet::libwallet::types::{BlockFees, CbData, WalletClient, WalletInst};
 use wallet::lmdb_wallet::LMDBBackend;
@@ -115,6 +116,7 @@ pub fn award_block_to_wallet<C, K>(
 	chain: &Chain,
 	txs: Vec<&Transaction>,
 	wallet: Arc<Mutex<Box<WalletInst<C, K>>>>,
+	parent_key_id: &Identifier,
 ) -> Result<(), libwallet::Error>
 where
 	C: WalletClient,
@@ -130,7 +132,7 @@ where
 	};
 	// build coinbase (via api) and add block
 	libwallet::controller::foreign_single_use(wallet.clone(), |api| {
-		let coinbase_tx = api.build_coinbase(&block_fees)?;
+		let coinbase_tx = api.build_coinbase(parent_key_id, &block_fees)?;
 		add_block_with_reward(chain, txs, coinbase_tx.clone());
 		Ok(())
 	})?;
@@ -141,6 +143,7 @@ where
 pub fn award_blocks_to_wallet<C, K>(
 	chain: &Chain,
 	wallet: Arc<Mutex<Box<WalletInst<C, K>>>>,
+	parent_key_id: &Identifier,
 	number: usize,
 ) -> Result<(), libwallet::Error>
 where
@@ -148,7 +151,7 @@ where
 	K: keychain::Keychain,
 {
 	for _ in 0..number {
-		award_block_to_wallet(chain, vec![], wallet.clone())?;
+		award_block_to_wallet(chain, vec![], wallet.clone(), parent_key_id)?;
 	}
 	Ok(())
 }

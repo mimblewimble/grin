@@ -92,8 +92,8 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	// few values to keep things shorter
 	let reward = core::consensus::REWARD;
 	let cm = global::coinbase_maturity(0); // assume all testing precedes soft fork height
-										// mine a few blocks
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 10);
+	// mine a few blocks
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), &wallet1_parent_id, 10);
 
 	// Check wallet 1 contents are as expected
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
@@ -217,7 +217,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 
 	// mine a few more blocks
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), &wallet1_parent_id, 3);
 
 	// refresh wallets and retrieve info/tests for each wallet after maturity
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
@@ -291,7 +291,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 
 	// mine a few more blocks
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), &wallet1_parent_id, 3);
 
 	// check wallet2 has stored transaction
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
@@ -358,7 +358,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	let reward = core::consensus::REWARD;
 	let cm = global::coinbase_maturity(0); // assume all testing precedes soft fork height
 										// mine a few blocks
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 5);
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), &wallet1_parent_id, 5);
 
 	let amount = 30_000_000_000;
 	let mut slate = Slate::blank(1);
@@ -429,7 +429,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 
 	// wallet 1 is bold and doesn't ever post the transaction mine a few more blocks
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 5);
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), &wallet1_parent_id, 5);
 
 	// Wallet 1 decides to roll back instead
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {

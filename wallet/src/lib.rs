@@ -46,7 +46,6 @@ extern crate grin_store as store;
 extern crate grin_util as util;
 
 mod client;
-mod db_migrate;
 pub mod display;
 mod error;
 pub mod libtx;
