@@ -37,7 +37,7 @@ use wallet::lmdb_wallet::LMDBBackend;
 use wallet::HTTPWalletClient;
 use wallet::WalletConfig;
 
-use keychain::{Keychain, ExtKeychain};
+use keychain::{ExtKeychain, Keychain};
 
 use framework::{
 	config, stop_all_servers, LocalServerContainerConfig, LocalServerContainerPool,
@@ -281,7 +281,11 @@ fn simulate_full_sync() {
 		thread::sleep(time::Duration::from_millis(1_000));
 		time_spent += 1;
 		if time_spent >= 60 {
-			println!("sync fail. s2.head().height: {}, s1_header.height: {}", s2.head().height, s1_header.height);
+			println!(
+				"sync fail. s2.head().height: {}, s1_header.height: {}",
+				s2.head().height,
+				s1_header.height
+			);
 			break;
 		}
 	}
@@ -487,7 +491,7 @@ fn replicate_tx_fluff_failure() {
 				500,                      // max outputs
 				1000,                     // num change outputs
 				true,                     // select all outputs
-				&wallet1_parent_id
+				&wallet1_parent_id,
 			).unwrap();
 		api.post_tx(&slate, false).unwrap();
 		Ok(())

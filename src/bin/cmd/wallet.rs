@@ -28,7 +28,7 @@ use config::GlobalWalletConfig;
 use core::{core, global};
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{HTTPWalletClient, LMDBBackend, WalletConfig, WalletInst, WalletSeed};
-use keychain::{self, Keychain, ExtKeychain};
+use keychain::{self, ExtKeychain, Keychain};
 use servers::start_webwallet_server;
 use util::LOGGER;
 
@@ -53,12 +53,13 @@ pub fn instantiate_wallet(
 	passphrase: &str,
 ) -> Box<WalletInst<HTTPWalletClient, keychain::ExtKeychain>> {
 	let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr);
-	let db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, client).unwrap_or_else(|e| {
-		panic!(
-			"Error creating DB wallet: {} Config: {:?}",
-			e, wallet_config
-		);
-	});
+	let db_wallet =
+		LMDBBackend::new(wallet_config.clone(), passphrase, client).unwrap_or_else(|e| {
+			panic!(
+				"Error creating DB wallet: {} Config: {:?}",
+				e, wallet_config
+			);
+		});
 	info!(LOGGER, "Using LMDB Backend for wallet");
 	Box::new(db_wallet)
 }
@@ -316,8 +317,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				Ok(())
 			}
 			("info", Some(_)) => {
-				let (validated, wallet_info) =
-					api.retrieve_summary_info(true, &parent_key_id).unwrap_or_else(|e| {
+				let (validated, wallet_info) = api
+					.retrieve_summary_info(true, &parent_key_id)
+					.unwrap_or_else(|e| {
 						panic!(
 							"Error getting wallet info: {:?} Config: {:?}",
 							e, wallet_config
@@ -328,7 +330,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 			}
 			("outputs", Some(_)) => {
 				let (height, _) = api.node_height()?;
-				let (validated, outputs) = api.retrieve_outputs(show_spent, true, None, &parent_key_id)?;
+				let (validated, outputs) =
+					api.retrieve_outputs(show_spent, true, None, &parent_key_id)?;
 				let _res = display::outputs(height, validated, outputs).unwrap_or_else(|e| {
 					panic!(
 						"Error getting wallet outputs: {:?} Config: {:?}",

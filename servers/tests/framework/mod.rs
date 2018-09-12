@@ -28,8 +28,8 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::{fs, thread, time};
 
+use framework::keychain::{ExtKeychain, Keychain};
 use wallet::{HTTPWalletClient, LMDBBackend, WalletConfig};
-use framework::keychain::{Keychain, ExtKeychain};
 
 /// Just removes all results from previous runs
 pub fn clean_all_output(test_name_dir: &str) {
