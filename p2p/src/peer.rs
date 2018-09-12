@@ -255,6 +255,29 @@ impl Peer {
 		}
 	}
 
+	pub fn send_tx_kernels(&self, tx: &core::Transaction) -> Result<(), Error> {
+		if !self.tracking_adapter.has(tx.hash()) {
+			let kernels = tx.kernels().into_iter().map(|x|x.excess()).collect::<Vec<_>>();
+			debug!(LOGGER, "Send tx_kernels {:?} (tx {}) to {}",
+				kernels,
+				tx.hash(),
+				self.info.addr,
+			);
+			self.connection
+				.as_ref()
+				.unwrap()
+				.send(kernels, msg::Type::TxKernels)
+		} else {
+			debug!(
+				LOGGER,
+				"Not sending tx_kernels for tx {} to {} (already seen)",
+				tx.hash(),
+				self.info.addr,
+			);
+			Ok(())
+		}
+	}
+
 	/// Sends the provided stem transaction to the remote peer.
 	/// Note: tracking adapter is ignored for stem transactions (while under
 	/// embargo).

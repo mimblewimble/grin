@@ -395,6 +395,17 @@ impl Peers {
 		);
 	}
 
+	pub fn broadcast_tx_kernels(&self, tx: &core::Transaction) {
+		let count = self.broadcast("transaction", |p| p.send_tx_kernels(tx));
+		trace!(
+			LOGGER,
+			"broadcast_tx_kernels: {:?} (tx {}), to {} peers, done.",
+			tx.kernels().into_iter().map(|x|x.excess()).collect::<Vec<_>>(),
+			tx.hash(),
+			count,
+		);
+	}
+
 	/// Ping all our connected peers. Always automatically expects a pong back
 	/// or disconnects. This acts as a liveness test.
 	pub fn check_all(&self, total_difficulty: Difficulty, height: u64) {

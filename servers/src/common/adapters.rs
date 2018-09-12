@@ -69,6 +69,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		w(&self.chain).head().unwrap().height
 	}
 
+	// TODO tx_kernels_received()
+	// lookup exact match in txpool
+	// then lookup partial match (matched part and unmatched part)
+	// if exact match then nothing to do, already seen it
+	// if partial match, some kernels are not yet known -
+	// go request the transaction for the unknown kernel set
+	
+
 	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
 		// nothing much we can do with a new transaction while syncing
 		if self.sync_state.is_syncing() {
@@ -711,7 +719,9 @@ impl pool::PoolAdapter for PoolToNetAdapter {
 			.map_err(|_| pool::PoolError::DandelionError)?;
 		Ok(())
 	}
+
 	fn tx_accepted(&self, tx: &core::Transaction) {
+		wo(&self.peers).broadcast_tx_kernels(tx);
 		wo(&self.peers).broadcast_transaction(tx);
 	}
 }

@@ -26,6 +26,7 @@ use core::core::BlockHeader;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::{Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};
+use util::secp::pedersen::Commitment;
 use util::LOGGER;
 
 /// Current latest version of the protocol
@@ -69,6 +70,8 @@ enum_from_primitive! {
 		TxHashSetRequest = 16,
 		TxHashSetArchive = 17,
 		BanReason = 18,
+		GetTransaction = 20,
+		TxKernels = 19,
 	}
 }
 
@@ -94,6 +97,9 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::TxHashSetRequest => 40,
 		Type::TxHashSetArchive => 64,
 		Type::BanReason => 64,
+		// TODO - size these correctly
+		Type::GetTransaction => MAX_BLOCK_SIZE,
+		Type::TxKernels => MAX_BLOCK_SIZE,
 	}
 }
 
@@ -622,6 +628,35 @@ impl Readable for Headers {
 			headers.push(header);
 		}
 		Ok(Headers { headers: headers })
+	}
+}
+
+pub struct TxKernels {
+	pub kernels: Vec<Commitment>,
+}
+
+impl Writeable for TxKernels {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u16(self.kernels.len() as u16)?;
+		for x in &self.kernels {
+			x.write(writer)?
+		}
+		Ok(())
+	}
+}
+
+impl Readable for TxKernels {
+	fn read(reader: &mut Reader) -> Result<TxKernels, ser::Error> {
+		let len = reader.read_u16()?;
+		// TODO - length validation
+		if len > 100 {
+			return Err(ser::Error::TooLargeReadErr);
+		}
+		let mut kernels = Vec::with_capacity(len as usize);
+		for _ in 0..len {
+			kernels.push(Commitment::read(reader)?);
+		}
+		Ok(TxKernels { kernels })
 	}
 }
 

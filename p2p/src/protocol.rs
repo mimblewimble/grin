@@ -85,6 +85,16 @@ impl MessageHandler for Protocol {
 				Ok(None)
 			}
 
+			Type::TxKernels => {
+				debug!(
+					LOGGER,
+					"handle_payload: received tx_kernels: msg_len: {}", msg.header.msg_len
+				);
+				let kernels: Vec<pedersen::Commitment> = msg.body()?;
+				adapter.tx_kernels_received(kernels);
+				Ok(None)
+			}
+
 			Type::Transaction => {
 				debug!(
 					LOGGER,
