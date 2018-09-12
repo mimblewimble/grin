@@ -143,7 +143,11 @@ where
 }
 
 /// Rollback outputs associated with a transaction in the wallet
-pub fn cancel_tx<T: ?Sized, C, K>(wallet: &mut T, parent_key_id: &Identifier, tx_id: u32) -> Result<(), Error>
+pub fn cancel_tx<T: ?Sized, C, K>(
+	wallet: &mut T,
+	parent_key_id: &Identifier,
+	tx_id: u32,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
