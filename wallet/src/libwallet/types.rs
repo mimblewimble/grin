@@ -131,7 +131,11 @@ where
 	fn save_child_index(&mut self, parent_key_id: &Identifier, child_n: u32) -> Result<(), Error>;
 
 	/// Save last confirmed height of outputs for a given parent
-	fn save_last_confirmed_height(&mut self, parent_key_id: &Identifier, height: u64) -> Result<(), Error>;
+	fn save_last_confirmed_height(
+		&mut self,
+		parent_key_id: &Identifier,
+		height: u64,
+	) -> Result<(), Error>;
 
 	/// get next tx log entry
 	fn next_tx_log_id(&mut self, root_key_id: Identifier) -> Result<u32, Error>;

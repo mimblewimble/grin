@@ -200,7 +200,7 @@ where
 		Ok(Identifier::from_path(&return_path))
 	}
 
-	fn last_confirmed_height<'a>(&mut self, parent_key_id: &Identifier) -> Result<u64, Error>{
+	fn last_confirmed_height<'a>(&mut self, parent_key_id: &Identifier) -> Result<u64, Error> {
 		let batch = self.db.batch()?;
 		let height_key = to_key(
 			CONFIRMED_HEIGHT_PREFIX,
@@ -211,7 +211,6 @@ where
 			none => 0,
 		};
 		Ok(last_confirmed_height)
-
 	}
 
 	fn restore(&mut self) -> Result<(), Error> {
@@ -321,7 +320,11 @@ where
 		)
 	}
 
-	fn save_last_confirmed_height(&mut self, parent_key_id: &Identifier, height: u64) -> Result<(), Error>{
+	fn save_last_confirmed_height(
+		&mut self,
+		parent_key_id: &Identifier,
+		height: u64,
+	) -> Result<(), Error> {
 		let height_key = to_key(
 			CONFIRMED_HEIGHT_PREFIX,
 			&mut parent_key_id.to_bytes().to_vec(),

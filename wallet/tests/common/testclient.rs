@@ -178,7 +178,13 @@ where
 
 	/// post transaction to the chain (and mine it, taking the reward)
 	fn post_tx(&mut self, m: WalletProxyMessage) -> Result<WalletProxyMessage, libwallet::Error> {
-		let parent_id = self.wallets.get_mut(&m.sender_id).as_ref().unwrap().2.clone();
+		let parent_id = self
+			.wallets
+			.get_mut(&m.sender_id)
+			.as_ref()
+			.unwrap()
+			.2
+			.clone();
 		let dest_wallet = self.wallets.get_mut(&m.sender_id).unwrap().1.clone();
 		let wrapper: TxWrapper = serde_json::from_str(&m.body).context(
 			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper"),

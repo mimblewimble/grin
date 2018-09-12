@@ -473,7 +473,11 @@ where
 	}
 
 	/// Build a new (potential) coinbase transaction in the wallet
-	pub fn build_coinbase(&mut self, parent_key_id: &Identifier, block_fees: &BlockFees) -> Result<CbData, Error> {
+	pub fn build_coinbase(
+		&mut self,
+		parent_key_id: &Identifier,
+		block_fees: &BlockFees,
+	) -> Result<CbData, Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 		let res = updater::build_coinbase(&mut **w, block_fees, parent_key_id);
