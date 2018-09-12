@@ -57,8 +57,8 @@ fn test_a_small_bitmap() {
 	let serialized_buffer = bitmap.serialize();
 
 	// we can store 3 pos in a roaring bitmap in 22 bytes
-	// this is compared to storing them as a vec of u64 values which would be 8 * 3
-	// = 32 bytes
+	// this is compared to storing them as a vec of u32 values which would be 4 * 3
+	// = 12 bytes
 	assert_eq!(serialized_buffer.len(), 22);
 }
 
@@ -88,8 +88,8 @@ fn test_a_big_bitmap() {
 	let mut bitmap: Bitmap = (1..1_000_000).collect();
 	let serialized_buffer = bitmap.serialize();
 
-	// we can also store 1,000 pos in 2,014 bytes
-	// a vec of u64s here would be 8,000 bytes
+	// we can also store 1,000,000 pos in 131,208 bytes
+	// a vec of u32s here would be 4,000,000 bytes
 	assert_eq!(serialized_buffer.len(), 131_208);
 
 	// but note we can optimize this heavily to get down to 230 bytes...
