@@ -56,7 +56,7 @@ pub struct LMDBBackend<C, K> {
 	/// passphrase: TODO better ways of dealing with this other than storing
 	passphrase: String,
 	/// Keychain
-	keychain: Option<K>,
+	pub keychain: Option<K>,
 	/// client
 	client: C,
 }

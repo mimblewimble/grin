@@ -32,13 +32,15 @@ use core::global::{self, ChainTypes};
 
 use wallet::controller;
 use wallet::libtx::slate::Slate;
-use wallet::libwallet::types::{WalletBackend, WalletClient, WalletInst};
+use wallet::libwallet::types::{WalletBackend, WalletInst};
 use wallet::lmdb_wallet::LMDBBackend;
 use wallet::HTTPWalletClient;
 use wallet::WalletConfig;
 
+use keychain::{Keychain, ExtKeychain};
+
 use framework::{
-	config, stop_all_servers, stratum_config, LocalServerContainerConfig, LocalServerContainerPool,
+	config, stop_all_servers, LocalServerContainerConfig, LocalServerContainerPool,
 	LocalServerContainerPoolConfig,
 };
 
@@ -322,7 +324,7 @@ fn simulate_fast_sync() {
 	let s2 = servers::Server::new(conf).unwrap();
 
 	while s2.header_head().height < 1 {
-		s2.ping_peers();
+		let _ = s2.ping_peers();
 		thread::sleep(time::Duration::from_millis(1_000));
 	}
 	s1.stop_test_miner();
@@ -347,7 +349,8 @@ fn simulate_fast_sync() {
 	thread::sleep(time::Duration::from_millis(1_000));
 }
 
-// #[test]
+#[ignore]
+#[test]
 fn simulate_fast_sync_double() {
 	util::init_test_logger();
 
@@ -421,7 +424,7 @@ fn replicate_tx_fluff_failure() {
 	// Wallet 1 post to another node, just for fun
 	let client1 = HTTPWalletClient::new("http://127.0.0.1:23003");
 	let wallet1 = create_wallet("target/tmp/tx_fluff/wallet1", client1.clone());
-	let wallet1_handle = thread::spawn(move || {
+	let _wallet1_handle = thread::spawn(move || {
 		controller::foreign_listener(wallet1, "127.0.0.1:33000")
 			.unwrap_or_else(|e| panic!("Error creating wallet1 listener: {:?}", e,));
 	});
@@ -429,7 +432,7 @@ fn replicate_tx_fluff_failure() {
 	// Create Wallet 2 (Recipient) and launch
 	let client2 = HTTPWalletClient::new("http://127.0.0.1:23001");
 	let wallet2 = create_wallet("target/tmp/tx_fluff/wallet2", client2.clone());
-	let wallet2_handle = thread::spawn(move || {
+	let _wallet2_handle = thread::spawn(move || {
 		controller::foreign_listener(wallet2, "127.0.0.1:33001")
 			.unwrap_or_else(|e| panic!("Error creating wallet2 listener: {:?}", e,));
 	});
@@ -451,7 +454,7 @@ fn replicate_tx_fluff_failure() {
 	s2_config.dandelion_config.embargo_secs = Some(10);
 	s2_config.dandelion_config.patience_secs = Some(1);
 	s2_config.dandelion_config.relay_secs = Some(1);
-	let s2 = servers::Server::new(s2_config.clone()).unwrap();
+	let _s2 = servers::Server::new(s2_config.clone()).unwrap();
 
 	let dl_nodes = 5;
 
@@ -470,6 +473,7 @@ fn replicate_tx_fluff_failure() {
 	// get another instance of wallet1 (to update contents and perform a send)
 	let wallet1 = create_wallet("target/tmp/tx_fluff/wallet1", client1.clone());
 	let wallet1 = Arc::new(Mutex::new(wallet1));
+	let wallet1_parent_id = ExtKeychain::derive_key_id(2, 0, 0, 0, 0);
 
 	let amount = 30_000_000_000;
 	let mut slate = Slate::blank(1);
@@ -483,6 +487,7 @@ fn replicate_tx_fluff_failure() {
 				500,                      // max outputs
 				1000,                     // num change outputs
 				true,                     // select all outputs
+				&wallet1_parent_id
 			).unwrap();
 		api.post_tx(&slate, false).unwrap();
 		Ok(())
@@ -493,10 +498,11 @@ fn replicate_tx_fluff_failure() {
 
 	// get another instance of wallet (to check contents)
 	let wallet2 = create_wallet("target/tmp/tx_fluff/wallet2", client2.clone());
+	let wallet2_parent_id = ExtKeychain::derive_key_id(2, 0, 0, 0, 0);
 
 	let wallet2 = Arc::new(Mutex::new(wallet2));
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let res = api.retrieve_summary_info(true).unwrap();
+		let res = api.retrieve_summary_info(true, &wallet2_parent_id).unwrap();
 		assert_eq!(res.1.amount_currently_spendable, amount);
 		Ok(())
 	}).unwrap();
