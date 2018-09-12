@@ -213,7 +213,7 @@ fn comments() -> HashMap<String, String> {
 #until we get to at least this number
 #peer_min_preferred_count = 8
 
-#How to seed this server, can be None, List, WebStatic or DNSSeed
+#How to seed this server, can be None, List or DNSSeed
 "
 			.to_string(),
 	);
