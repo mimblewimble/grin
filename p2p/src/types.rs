@@ -176,8 +176,6 @@ pub enum Seeding {
 	None,
 	/// A list of seed addresses provided to the server
 	List,
-	/// Automatically download a text file with a list of server addresses
-	WebStatic,
 	/// Automatically get a list of seeds from multiple DNS
 	DNSSeed,
 	/// Mostly for tests, where connections are initiated programmatically

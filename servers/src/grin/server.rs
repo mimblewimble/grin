@@ -213,7 +213,6 @@ impl Server {
 					seed::predefined_seeds(config.p2p_config.seeds.as_mut().unwrap().clone())
 				}
 				p2p::Seeding::DNSSeed => seed::dns_seeds(),
-				p2p::Seeding::WebStatic => seed::web_seeds(),
 				_ => unreachable!(),
 			};
 
