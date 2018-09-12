@@ -257,8 +257,14 @@ impl Peer {
 
 	pub fn send_tx_kernels(&self, tx: &core::Transaction) -> Result<(), Error> {
 		if !self.tracking_adapter.has(tx.hash()) {
-			let kernels = tx.kernels().into_iter().map(|x|x.excess()).collect::<Vec<_>>();
-			debug!(LOGGER, "Send tx_kernels {:?} (tx {}) to {}",
+			let kernels = tx
+				.kernels()
+				.into_iter()
+				.map(|x| x.excess())
+				.collect::<Vec<_>>();
+			debug!(
+				LOGGER,
+				"Send tx_kernels {:?} (tx {}) to {}",
 				kernels,
 				tx.hash(),
 				self.info.addr,

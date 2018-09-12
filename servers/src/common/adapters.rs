@@ -75,7 +75,6 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	// if exact match then nothing to do, already seen it
 	// if partial match, some kernels are not yet known -
 	// go request the transaction for the unknown kernel set
-	
 
 	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
 		// nothing much we can do with a new transaction while syncing

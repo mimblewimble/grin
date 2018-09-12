@@ -400,7 +400,10 @@ impl Peers {
 		trace!(
 			LOGGER,
 			"broadcast_tx_kernels: {:?} (tx {}), to {} peers, done.",
-			tx.kernels().into_iter().map(|x|x.excess()).collect::<Vec<_>>(),
+			tx.kernels()
+				.into_iter()
+				.map(|x| x.excess())
+				.collect::<Vec<_>>(),
 			tx.hash(),
 			count,
 		);
