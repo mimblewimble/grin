@@ -54,7 +54,7 @@ fn test_transaction_pool_block_building() {
 	// Initialize the chain/txhashset with an initial block
 	// so we have a non-empty UTXO set.
 	let add_block = |height, txs| {
-		let key_id = keychain.derive_key_id(height as u32).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, height as u32, 0, 0, 0);
 		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
 		let mut block =
 			Block::new(&BlockHeader::default(), txs, Difficulty::one(), reward).unwrap();
@@ -135,7 +135,7 @@ fn test_transaction_pool_block_building() {
 	assert_eq!(txs.len(), 3);
 
 	let mut block = {
-		let key_id = keychain.derive_key_id(2).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 		let fees = txs.iter().map(|tx| tx.fee()).sum();
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
 		Block::new(&header, txs, Difficulty::one(), reward)
