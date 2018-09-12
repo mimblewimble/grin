@@ -32,7 +32,6 @@ use p2p;
 use pool::DandelionConfig;
 use util::LOGGER;
 
-const SEEDS_URL: &'static str = "http://grin-tech.org/seeds.txt";
 // DNS Seeds with contact email associated
 const DNS_SEEDS: &'static [&'static str] = &[
 	"t3.seed.grin-tech.org",    // igno.peverell@protonmail.com
@@ -363,21 +362,6 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 		}
 		debug!(LOGGER, "Retrieved seed addresses: {:?}", addresses);
 		addresses
-	})
-}
-
-/// Extract the list of seeds from a pre-defined text file available through
-/// http. Easy method until we have a set of DNS names we can rely on.
-pub fn web_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
-	Box::new(|| {
-		debug!(LOGGER, "Retrieving seed nodes from {}", SEEDS_URL);
-		let text: String = api::client::get(SEEDS_URL).expect("Failed to resolve seeds");
-		let addrs = text
-			.split_whitespace()
-			.map(|s| s.parse().unwrap())
-			.collect::<Vec<_>>();
-		debug!(LOGGER, "Retrieved seed addresses: {:?}", addrs);
-		addrs
 	})
 }
 
