@@ -191,33 +191,11 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"seeding_type".to_string(),
 		"
-#How to seed this server, can be None, List, WebStatic or DNSSeed
 #If the seeding type is List, the list of peers to connect to can
 #be specified as follows:
 #seeds = [\"192.168.0.1:13414\",\"192.168.0.2:13414\"]
-"
-			.to_string(),
-	);
 
-	retval.insert(
-		"seeds".to_string(),
-		"
-#If seeding_type = List, the list of peers to connect to.
-"
-			.to_string(),
-	);
-
-	retval.insert(
-		"[server.p2p_config.capabilities]".to_string(),
-		"#7 = Bit flags for FULL_NODE, this structure needs to be changed
-#internally to make it more configurable
-"
-			.to_string(),
-	);
-
-	retval.insert(
-		"[server.pool_config]".to_string(),
-		"#hardcoded peer lists for allow/deny
+#hardcoded peer lists for allow/deny
 #will *only* connect to peers in allow list
 #peers_allow = [\"192.168.0.1:13414\", \"192.168.0.2:13414\"]
 #will *never* connect to peers in deny list
@@ -235,6 +213,22 @@ fn comments() -> HashMap<String, String> {
 #until we get to at least this number
 #peer_min_preferred_count = 8
 
+#How to seed this server, can be None, List or DNSSeed
+"
+			.to_string(),
+	);
+
+	retval.insert(
+		"[server.p2p_config.capabilities]".to_string(),
+		"#7 = Bit flags for FULL_NODE, this structure needs to be changed
+#internally to make it more configurable
+"
+			.to_string(),
+	);
+
+	retval.insert(
+		"[server.pool_config]".to_string(),
+		"
 #########################################
 ### MEMPOOL CONFIGURATION             ###
 #########################################

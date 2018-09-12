@@ -16,7 +16,7 @@ What's working so far?
 - clang
 - ncurses and libs (ncurses, ncursesw5)
 - zlib libs (zlib1g-dev or zlib-devel)
-- pkc-config
+- pkg-config
 - libssl-dev
 - linux-headers (reported needed on Alpine linux)
 

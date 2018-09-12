@@ -1141,6 +1141,11 @@ impl OutputIdentifier {
 		}
 	}
 
+	/// Our commitment.
+	pub fn commitment(&self) -> Commitment {
+		self.commit
+	}
+
 	/// Build an output_identifier from an existing output.
 	pub fn from_output(output: &Output) -> OutputIdentifier {
 		OutputIdentifier {
