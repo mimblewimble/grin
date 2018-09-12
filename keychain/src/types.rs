@@ -370,6 +370,7 @@ pub trait Keychain: Sync + Send + Clone {
 	fn from_seed(seed: &[u8]) -> Result<Self, Error>;
 	fn from_random_seed() -> Result<Self, Error>;
 	fn root_key_id() -> Identifier;
+	fn derive_key_id(depth: u8, d1: u32, d2: u32, d3: u32, d4: u32) -> Identifier;
 	fn derive_key(&self, id: &Identifier) -> Result<ExtendedPrivKey, Error>;
 	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error>;
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;

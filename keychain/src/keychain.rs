@@ -53,6 +53,10 @@ impl Keychain for ExtKeychain {
 		ExtKeychainPath::new(0, 0, 0, 0, 0).to_identifier()
 	}
 
+	fn derive_key_id(depth: u8, d1: u32, d2: u32, d3: u32, d4: u32) -> Identifier {
+		ExtKeychainPath::new(depth, d1, d2, d3, d4).to_identifier()
+	}
+
 	fn derive_key(&self, id: &Identifier) -> Result<ExtendedPrivKey, Error> {
 		let mut h = BIP32GrinHasher::new();
 		let p = id.to_path();

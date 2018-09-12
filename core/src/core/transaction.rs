@@ -1218,7 +1218,7 @@ mod test {
 	#[test]
 	fn test_kernel_ser_deser() {
 		let keychain = ExtKeychain::from_random_seed().unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain.commit(5, &key_id).unwrap();
 
 		// just some bytes for testing ser/deser
@@ -1263,10 +1263,10 @@ mod test {
 	#[test]
 	fn commit_consistency() {
 		let keychain = ExtKeychain::from_seed(&[0; 32]).unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		let commit = keychain.commit(1003, &key_id).unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		let commit_2 = keychain.commit(1003, &key_id).unwrap();
 
@@ -1276,7 +1276,7 @@ mod test {
 	#[test]
 	fn input_short_id() {
 		let keychain = ExtKeychain::from_seed(&[0; 32]).unwrap();
-		let key_id = keychain.derive_key_id(1).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 		let commit = keychain.commit(5, &key_id).unwrap();
 
 		let input = Input {
@@ -1291,7 +1291,7 @@ mod test {
 		let nonce = 0;
 
 		let short_id = input.short_id(&block_hash, nonce);
-		assert_eq!(short_id, ShortId::from_hex("28fea5a693af").unwrap());
+		assert_eq!(short_id, ShortId::from_hex("df31d96e3cdb").unwrap());
 
 		// now generate the short_id for a *very* similar output (single feature flag
 		// different) and check it generates a different short_id
@@ -1301,6 +1301,6 @@ mod test {
 		};
 
 		let short_id = input.short_id(&block_hash, nonce);
-		assert_eq!(short_id, ShortId::from_hex("2df325971ab0").unwrap());
+		assert_eq!(short_id, ShortId::from_hex("784fc5afd5d9").unwrap());
 	}
 }
