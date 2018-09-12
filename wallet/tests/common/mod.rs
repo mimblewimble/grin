@@ -154,10 +154,7 @@ where
 }
 
 /// dispatch a db wallet
-pub fn create_wallet<C, K>(
-	dir: &str,
-	client: C,
-) -> Arc<Mutex<Box<WalletInst<C, K>>>>
+pub fn create_wallet<C, K>(dir: &str, client: C) -> Arc<Mutex<Box<WalletInst<C, K>>>>
 where
 	C: WalletClient + 'static,
 	K: keychain::Keychain + 'static,

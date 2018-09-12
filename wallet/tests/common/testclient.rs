@@ -38,7 +38,7 @@ use core::core::verifier_cache::LruVerifierCache;
 use core::core::Transaction;
 use core::global::{set_mining_mode, ChainTypes};
 use core::{pow, ser};
-use keychain::{Keychain, Identifier};
+use keychain::{Identifier, Keychain};
 
 use util::secp::pedersen;
 use wallet::libtx::slate::Slate;
@@ -136,7 +136,8 @@ where
 		wallet: Arc<Mutex<Box<WalletInst<LocalWalletClient, K>>>>,
 		parent_key_id: Identifier,
 	) {
-		self.wallets.insert(addr.to_owned(), (tx, wallet, parent_key_id));
+		self.wallets
+			.insert(addr.to_owned(), (tx, wallet, parent_key_id));
 	}
 
 	/// Run the incoming message queue and respond more or less
