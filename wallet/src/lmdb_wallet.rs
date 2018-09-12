@@ -188,10 +188,7 @@ where
 			}
 		};
 		let mut return_path = parent_key_id.to_path();
-		return_path.depth = return_path.depth;
-		if return_path.depth == 0 {
-			return Err(ErrorKind::InvalidBIP32Depth.into());
-		}
+		return_path.depth = return_path.depth + 1;
 		return_path.path[return_path.depth as usize - 1] = ChildNumber::from(deriv_idx);
 		deriv_idx = deriv_idx + 1;
 		let mut batch = self.batch()?;
@@ -208,7 +205,7 @@ where
 		);
 		let last_confirmed_height = match batch.get_ser(&height_key)? {
 			Some(h) => h,
-			none => 0,
+			None => 0,
 		};
 		Ok(last_confirmed_height)
 	}
