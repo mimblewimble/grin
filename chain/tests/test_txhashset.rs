@@ -81,7 +81,7 @@ fn test_some_raw_txs() {
 	let coinbase_reward = 60_000_000_000;
 
 	// tx1 spends the original coinbase output from the block
-	let tx1 = build::transaction_with_offset(
+	let tx1 = build::transaction(
 		vec![
 			build::coinbase_input(
 				coinbase_reward,
@@ -95,7 +95,7 @@ fn test_some_raw_txs() {
 
 	// tx2 attempts to "double spend" the coinbase output from the block (conflicts
 	// with tx1)
-	let tx2 = build::transaction_with_offset(
+	let tx2 = build::transaction(
 		vec![
 			build::coinbase_input(
 				coinbase_reward,
@@ -107,7 +107,7 @@ fn test_some_raw_txs() {
 	).unwrap();
 
 	// tx3 spends one output from tx1
-	let tx3 = build::transaction_with_offset(
+	let tx3 = build::transaction(
 		vec![
 			build::input(100, key_id2.clone()),
 			build::output(90, key_id5.clone()),
@@ -116,7 +116,7 @@ fn test_some_raw_txs() {
 	).unwrap();
 
 	// tx4 spends the other output from tx1 and the output from tx3
-	let tx4 = build::transaction_with_offset(
+	let tx4 = build::transaction(
 		vec![
 			build::input(150, key_id3.clone()),
 			build::input(90, key_id5.clone()),

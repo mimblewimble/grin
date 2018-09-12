@@ -7,7 +7,7 @@ use grin_core::core::{Block, BlockHeader, CompactBlock, Transaction};
 use grin_core::ser;
 use grin_keychain::keychain::ExtKeychain;
 use grin_keychain::Keychain;
-use grin_wallet::libtx::build::{input, output, transaction_with_offset, with_fee};
+use grin_wallet::libtx::build::{input, output, transaction, with_fee};
 use grin_wallet::libtx::reward;
 use std::fs::{self, File};
 use std::path::Path;
@@ -69,7 +69,7 @@ fn tx() -> Transaction {
 	let key_id2 = keychain.derive_key_id(2).unwrap();
 	let key_id3 = keychain.derive_key_id(3).unwrap();
 
-	transaction_with_offset(
+	transaction(
 		vec![
 			input(10, key_id1),
 			input(11, key_id2),

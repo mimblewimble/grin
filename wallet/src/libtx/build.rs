@@ -218,35 +218,6 @@ pub fn transaction<K>(
 where
 	K: Keychain,
 {
-	let (mut tx, blind_sum) = partial_transaction(elems, keychain)?;
-	assert_eq!(tx.kernels().len(), 1);
-
-	let kern = {
-		let mut kern = tx.kernels_mut().remove(0);
-		let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
-
-		let skey = blind_sum.secret_key(&keychain.secp())?;
-		kern.excess = keychain.secp().commit(0, skey)?;
-		kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &blind_sum).unwrap();
-		kern
-	};
-
-	// Now build a new tx with this single kernel.
-	let tx = tx.with_kernel(kern);
-	assert_eq!(tx.kernels().len(), 1);
-
-	Ok(tx)
-}
-
-/// Builds a complete transaction, splitting the key and
-/// setting the excess, excess_sig and tx offset as necessary.
-pub fn transaction_with_offset<K>(
-	elems: Vec<Box<Append<K>>>,
-	keychain: &K,
-) -> Result<Transaction, keychain::Error>
-where
-	K: Keychain,
-{
 	let mut ctx = Context { keychain };
 	let (mut tx, mut kern, sum) = elems.iter().fold(
 		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
@@ -254,21 +225,24 @@ where
 	);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 
+	// Split the key so we can generate an offset for the tx.
 	let split = blind_sum.split(&keychain.secp())?;
 	let k1 = split.blind_1;
 	let k2 = split.blind_2;
 
+	// Construct the message to be signed.
 	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
 
-	// generate kernel excess and excess_sig using the split key k1
+	// Generate kernel excess and excess_sig using the split key k1.
 	let skey = k1.secret_key(&keychain.secp())?;
 	kern.excess = ctx.keychain.secp().commit(0, skey)?;
 	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &k1).unwrap();
 
-	// store the kernel offset (k2) on the tx itself
-	// commitments will sum correctly when including the offset
+	// Store the kernel offset (k2) on the tx.
+	// Commitments will sum correctly when accounting for the offset.
 	tx.offset = k2.clone();
 
+	// Set the kernel on the tx (assert this is now a single-kernel tx).
 	assert!(tx.kernels().is_empty());
 	let tx = tx.with_kernel(kern);
 	assert_eq!(tx.kernels().len(), 1);
@@ -320,7 +294,7 @@ mod test {
 
 		let vc = verifier_cache();
 
-		let tx = transaction_with_offset(
+		let tx = transaction(
 			vec![
 				input(10, key_id1),
 				input(12, key_id2),
