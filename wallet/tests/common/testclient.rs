@@ -38,7 +38,7 @@ use core::core::verifier_cache::LruVerifierCache;
 use core::core::Transaction;
 use core::global::{set_mining_mode, ChainTypes};
 use core::{pow, ser};
-use keychain::Keychain;
+use keychain::{Keychain, Identifier};
 
 use util::secp::pedersen;
 use wallet::libtx::slate::Slate;
@@ -77,6 +77,7 @@ where
 		(
 			Sender<WalletProxyMessage>,
 			Arc<Mutex<Box<WalletInst<LocalWalletClient, K>>>>,
+			Identifier,
 		),
 	>,
 	/// simulate json send to another client
@@ -133,8 +134,9 @@ where
 		addr: &str,
 		tx: Sender<WalletProxyMessage>,
 		wallet: Arc<Mutex<Box<WalletInst<LocalWalletClient, K>>>>,
+		parent_key_id: Identifier,
 	) {
-		self.wallets.insert(addr.to_owned(), (tx, wallet));
+		self.wallets.insert(addr.to_owned(), (tx, wallet, parent_key_id));
 	}
 
 	/// Run the incoming message queue and respond more or less
@@ -208,9 +210,10 @@ where
 			panic!("Unknown wallet destination for send_tx_slate: {:?}", m);
 		}
 		let w = dest_wallet.unwrap().1.clone();
+		let parent_id = dest_wallet.unwrap().2.clone();
 		let mut slate = serde_json::from_str(&m.body).unwrap();
 		libwallet::controller::foreign_single_use(w.clone(), |listener_api| {
-			listener_api.receive_tx(&mut slate)?;
+			listener_api.receive_tx(&mut slate, &parent_id)?;
 			Ok(())
 		})?;
 		Ok(WalletProxyMessage {

@@ -49,7 +49,6 @@ mod client;
 mod db_migrate;
 pub mod display;
 mod error;
-//pub mod file_wallet;
 pub mod libtx;
 pub mod libwallet;
 pub mod lmdb_wallet;
@@ -57,7 +56,6 @@ mod types;
 
 pub use client::{create_coinbase, HTTPWalletClient};
 pub use error::{Error, ErrorKind};
-//pub use file_wallet::FileWallet;
 pub use libwallet::controller;
 pub use libwallet::types::{
 	BlockFees, CbData, WalletBackend, WalletClient, WalletInfo, WalletInst,

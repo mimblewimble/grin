@@ -27,7 +27,6 @@ use std::sync::{Arc, Mutex};
 use chain::Chain;
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::{consensus, global, pow, ser};
-use wallet::file_wallet::FileWallet;
 use wallet::libwallet;
 use wallet::libwallet::types::{BlockFees, CbData, WalletClient, WalletInst};
 use wallet::lmdb_wallet::LMDBBackend;
@@ -154,11 +153,10 @@ where
 	Ok(())
 }
 
-/// dispatch a wallet (extend later to optionally dispatch a db wallet)
+/// dispatch a db wallet
 pub fn create_wallet<C, K>(
 	dir: &str,
 	client: C,
-	backend_type: BackendType,
 ) -> Arc<Mutex<Box<WalletInst<C, K>>>>
 where
 	C: WalletClient + 'static,
@@ -167,21 +165,12 @@ where
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
 	let _ = wallet::WalletSeed::init_file(&wallet_config);
-	let mut wallet: Box<WalletInst<C, K>> = match backend_type {
-		BackendType::FileBackend => {
-			let mut wallet: FileWallet<C, K> = FileWallet::new(wallet_config.clone(), "", client)
-				.unwrap_or_else(|e| {
-					panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
-				});
-			Box::new(wallet)
-		}
-		BackendType::LMDBBackend => {
-			let mut wallet: LMDBBackend<C, K> = LMDBBackend::new(wallet_config.clone(), "", client)
-				.unwrap_or_else(|e| {
-					panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
-				});
-			Box::new(wallet)
-		}
+	let mut wallet: Box<WalletInst<C, K>> = {
+		let mut wallet: LMDBBackend<C, K> = LMDBBackend::new(wallet_config.clone(), "", client)
+			.unwrap_or_else(|e| {
+				panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
+			});
+		Box::new(wallet)
 	};
 	wallet.open_with_credentials().unwrap_or_else(|e| {
 		panic!(

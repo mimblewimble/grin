@@ -36,13 +36,9 @@ fn aggsig_sender_receiver_interaction() {
 	// Calculate the kernel excess here for convenience.
 	// Normally this would happen during transaction building.
 	let kernel_excess = {
-		let skey1 = sender_keychain
-			.derived_key(&sender_keychain.derive_key_id(1).unwrap())
-			.unwrap();
-
-		let skey2 = receiver_keychain
-			.derived_key(&receiver_keychain.derive_key_id(1).unwrap())
-			.unwrap();
+		let id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+		let skey1 = sender_keychain.derive_key(&id1).unwrap().secret_key;
+		let skey2 = receiver_keychain.derive_key(&id1).unwrap().secret_key;
 
 		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let blinding_factor = keychain
@@ -64,10 +60,8 @@ fn aggsig_sender_receiver_interaction() {
 	// sender starts the tx interaction
 	let (sender_pub_excess, _sender_pub_nonce) = {
 		let keychain = sender_keychain.clone();
-
-		let skey = keychain
-			.derived_key(&keychain.derive_key_id(1).unwrap())
-			.unwrap();
+		let id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+		let skey = keychain.derive_key(&id1).unwrap().secret_key;
 
 		// dealing with an input here so we need to negate the blinding_factor
 		// rather than use it as is
@@ -86,10 +80,10 @@ fn aggsig_sender_receiver_interaction() {
 	// receiver receives partial tx
 	let (receiver_pub_excess, _receiver_pub_nonce, rx_sig_part) = {
 		let keychain = receiver_keychain.clone();
-		let key_id = keychain.derive_key_id(1).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		// let blind = blind_sum.secret_key(&keychain.secp())?;
-		let blind = keychain.derived_key(&key_id).unwrap();
+		let blind = keychain.derive_key(&key_id).unwrap().secret_key;
 
 		rx_cx = Context::new(&keychain.secp(), blind);
 		let (pub_excess, pub_nonce) = rx_cx.get_public_keys(&keychain.secp());
@@ -226,13 +220,9 @@ fn aggsig_sender_receiver_interaction_offset() {
 	// Calculate the kernel excess here for convenience.
 	// Normally this would happen during transaction building.
 	let kernel_excess = {
-		let skey1 = sender_keychain
-			.derived_key(&sender_keychain.derive_key_id(1).unwrap())
-			.unwrap();
-
-		let skey2 = receiver_keychain
-			.derived_key(&receiver_keychain.derive_key_id(1).unwrap())
-			.unwrap();
+		let id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+		let skey1 = sender_keychain.derive_key(&id1).unwrap().secret_key;
+		let skey2 = receiver_keychain.derive_key(&id1).unwrap().secret_key;
 
 		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let blinding_factor = keychain
@@ -257,10 +247,8 @@ fn aggsig_sender_receiver_interaction_offset() {
 	// sender starts the tx interaction
 	let (sender_pub_excess, _sender_pub_nonce) = {
 		let keychain = sender_keychain.clone();
-
-		let skey = keychain
-			.derived_key(&keychain.derive_key_id(1).unwrap())
-			.unwrap();
+		let id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+		let skey = keychain.derive_key(&id1).unwrap().secret_key;
 
 		// dealing with an input here so we need to negate the blinding_factor
 		// rather than use it as is
@@ -284,9 +272,9 @@ fn aggsig_sender_receiver_interaction_offset() {
 	let pub_nonce_sum;
 	let (receiver_pub_excess, _receiver_pub_nonce, sig_part) = {
 		let keychain = receiver_keychain.clone();
-		let key_id = keychain.derive_key_id(1).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
-		let blind = keychain.derived_key(&key_id).unwrap();
+		let blind = keychain.derive_key(&key_id).unwrap().secret_key;
 
 		rx_cx = Context::new(&keychain.secp(), blind);
 		let (pub_excess, pub_nonce) = rx_cx.get_public_keys(&keychain.secp());
@@ -412,8 +400,8 @@ fn aggsig_sender_receiver_interaction_offset() {
 #[test]
 fn test_rewind_range_proof() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let key_id = keychain.derive_key_id(1).unwrap();
-	let key_id2 = keychain.derive_key_id(2).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 	let commit = keychain.commit(5, &key_id).unwrap();
 	let extra_data = [99u8; 64];
 
