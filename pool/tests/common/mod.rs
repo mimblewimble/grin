@@ -38,7 +38,7 @@ use chain::txhashset;
 use chain::txhashset::TxHashSet;
 use pool::*;
 
-use keychain::{Keychain, ExtKeychain};
+use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
 
 use pool::types::*;
