@@ -206,7 +206,7 @@ where
 		if output.key_id.is_some() && output.n_child.is_some() {
 			let mut tx_log_entry = None;
 			if !output.is_coinbase {
-				let log_id = batch.next_tx_log_id(root_key_id.clone())?;
+				let log_id = batch.next_tx_log_id(&root_key_id)?;
 				// also keep tx log updated so everything still tallies
 				let mut t = TxLogEntry::new(TxLogEntryType::TxReceived, log_id);
 				t.amount_credited = output.value;

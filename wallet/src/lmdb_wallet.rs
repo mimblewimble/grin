@@ -291,8 +291,8 @@ where
 		Ok(())
 	}
 
-	fn next_tx_log_id(&mut self, root_key_id: Identifier) -> Result<u32, Error> {
-		let tx_id_key = to_key(TX_LOG_ID_PREFIX, &mut root_key_id.to_bytes().to_vec());
+	fn next_tx_log_id(&mut self, parent_key_id: &Identifier) -> Result<u32, Error> {
+		let tx_id_key = to_key(TX_LOG_ID_PREFIX, &mut parent_key_id.to_bytes().to_vec());
 		let mut last_tx_log_id = match self.db.borrow().as_ref().unwrap().get_ser(&tx_id_key)? {
 			Some(t) => t,
 			None => 0,

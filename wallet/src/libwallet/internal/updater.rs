@@ -214,7 +214,7 @@ where
 					Some(o) => {
 						// if this is a coinbase tx being confirmed, it's recordable in tx log
 						if output.is_coinbase && output.status == OutputStatus::Unconfirmed {
-							let log_id = batch.next_tx_log_id(parent_key_id.clone())?;
+							let log_id = batch.next_tx_log_id(parent_key_id)?;
 							let mut t = TxLogEntry::new(TxLogEntryType::ConfirmedCoinbase, log_id);
 							t.confirmed = true;
 							t.amount_credited = output.value;

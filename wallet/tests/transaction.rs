@@ -327,7 +327,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
 	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1_parent_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let wallet1_parent_id = ExtKeychain::derive_key_id(2, 0, 0, 0, 0);
 	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client.clone());
 	wallet_proxy.add_wallet(
 		"wallet1",
@@ -338,7 +338,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// define recipient wallet, add to proxy
 	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	let wallet2_parent_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let wallet2_parent_id = ExtKeychain::derive_key_id(2, 0, 0, 0, 0);
 	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client.clone());
 	wallet_proxy.add_wallet(
 		"wallet2",
@@ -378,7 +378,8 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Check transaction log for wallet 1
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (refreshed, _wallet1_info) = api.retrieve_summary_info(true, &wallet1_parent_id)?;
+		let (refreshed, wallet1_info) = api.retrieve_summary_info(true, &wallet1_parent_id)?;
+		println!("last confirmed height: {}", wallet1_info.last_confirmed_height);
 		assert!(refreshed);
 		let (_, txs) = api.retrieve_txs(true, None, &wallet1_parent_id)?;
 		// we should have a transaction entry for this slate
@@ -444,7 +445,9 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 		api.cancel_tx(tx.id, &wallet1_parent_id)?;
 		let (refreshed, wallet1_info) = api.retrieve_summary_info(true, &wallet1_parent_id)?;
 		assert!(refreshed);
+		println!("last confirmed height: {}", wallet1_info.last_confirmed_height);
 		// check all eligible inputs should be now be spendable
+		println!("cm: {}", cm);
 		assert_eq!(
 			wallet1_info.amount_currently_spendable,
 			(wallet1_info.last_confirmed_height - cm) * reward

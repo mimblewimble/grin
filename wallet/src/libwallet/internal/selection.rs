@@ -98,7 +98,7 @@ where
 	// so we avoid accidental double spend attempt.
 	let update_sender_wallet_fn = move |wallet: &mut T, tx_hex: &str| {
 		let mut batch = wallet.batch()?;
-		let log_id = batch.next_tx_log_id(parent_key_id.clone())?;
+		let log_id = batch.next_tx_log_id(&parent_key_id)?;
 		let mut t = TxLogEntry::new(TxLogEntryType::TxSent, log_id);
 		t.tx_slate_id = Some(slate_id);
 		t.fee = Some(fee);
@@ -186,7 +186,7 @@ where
 	// (up to the caller to decide when to do)
 	let wallet_add_fn = move |wallet: &mut T| {
 		let mut batch = wallet.batch()?;
-		let log_id = batch.next_tx_log_id(parent_key_id.clone())?;
+		let log_id = batch.next_tx_log_id(&parent_key_id)?;
 		let mut t = TxLogEntry::new(TxLogEntryType::TxReceived, log_id);
 		t.tx_slate_id = Some(slate_id);
 		t.amount_credited = amount;

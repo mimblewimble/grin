@@ -137,8 +137,8 @@ where
 		height: u64,
 	) -> Result<(), Error>;
 
-	/// get next tx log entry
-	fn next_tx_log_id(&mut self, root_key_id: Identifier) -> Result<u32, Error>;
+	/// get next tx log entry for the parent
+	fn next_tx_log_id(&mut self, parent_key_id: &Identifier) -> Result<u32, Error>;
 
 	/// Iterate over all output data stored by the backend
 	fn tx_log_iter(&self) -> Box<Iterator<Item = TxLogEntry>>;

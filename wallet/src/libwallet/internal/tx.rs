@@ -143,13 +143,12 @@ where
 }
 
 /// Rollback outputs associated with a transaction in the wallet
-pub fn cancel_tx<T: ?Sized, C, K>(wallet: &mut T, tx_id: u32) -> Result<(), Error>
+pub fn cancel_tx<T: ?Sized, C, K>(wallet: &mut T, parent_key_id: &Identifier, tx_id: u32) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
 	K: Keychain,
 {
-	let root_key_id = K::root_key_id();
 	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id))?;
 	if tx_vec.len() != 1 {
 		return Err(ErrorKind::TransactionDoesntExist(tx_id))?;
@@ -162,7 +161,7 @@ where
 		return Err(ErrorKind::TransactionNotCancellable(tx_id))?;
 	}
 	// get outputs associated with tx
-	let res = updater::retrieve_outputs(wallet, false, Some(tx_id), &root_key_id)?;
+	let res = updater::retrieve_outputs(wallet, false, Some(tx_id), &parent_key_id)?;
 	let outputs = res.iter().map(|(out, _)| out).cloned().collect();
 	updater::cancel_tx_and_outputs(wallet, tx, outputs)?;
 	Ok(())

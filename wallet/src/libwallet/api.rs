@@ -266,7 +266,7 @@ where
 				"Can't contact running Grin node. Not Cancelling.",
 			))?;
 		}
-		tx::cancel_tx(&mut **w, tx_id)?;
+		tx::cancel_tx(&mut **w, parent_key_id, tx_id)?;
 		w.close()?;
 		Ok(())
 	}
