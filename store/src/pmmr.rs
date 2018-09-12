@@ -157,11 +157,7 @@ where
 	}
 
 	/// Rewind the PMMR backend to the given position.
-	fn rewind(
-		&mut self,
-		position: u64,
-		rewind_rm_pos: &Bitmap,
-	) -> Result<(), String> {
+	fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String> {
 		// First rewind the leaf_set with the necessary added and removed positions.
 		if self.prunable {
 			self.leaf_set.rewind(position, rewind_rm_pos);
@@ -224,9 +220,8 @@ where
 	pub fn new(
 		data_dir: String,
 		prunable: bool,
-		header: Option<&BlockHeader>
+		header: Option<&BlockHeader>,
 	) -> io::Result<PMMRBackend<T>> {
-
 		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		let data_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
 
@@ -239,8 +234,8 @@ where
 			LeafSet::copy_snapshot(leaf_set_path.clone(), leaf_snapshot_path.clone())?;
 		}
 
-		let prune_list = PruneList::open(format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
 		let leaf_set = LeafSet::open(leaf_set_path.clone())?;
+		let prune_list = PruneList::open(format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
 
 		Ok(PMMRBackend {
 			data_dir,
@@ -303,6 +298,8 @@ where
 				format!("Could not write to log data storage, disk full? {:?}", e),
 			));
 		}
+
+		// Flush the leaf_set to disk.
 		self.leaf_set.flush()?;
 
 		Ok(())
@@ -421,18 +418,12 @@ where
 		Ok(true)
 	}
 
-	fn pos_to_rm(
-		&self,
-		cutoff_pos: u64,
-		rewind_rm_pos: &Bitmap,
-	) -> (Bitmap, Bitmap) {
+	fn pos_to_rm(&self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) -> (Bitmap, Bitmap) {
 		let mut expanded = Bitmap::create();
 
-		let leaf_pos_to_rm = self.leaf_set.removed_pre_cutoff(
-			cutoff_pos,
-			rewind_rm_pos,
-			&self.prune_list,
-		);
+		let leaf_pos_to_rm =
+			self.leaf_set
+				.removed_pre_cutoff(cutoff_pos, rewind_rm_pos, &self.prune_list);
 
 		for x in leaf_pos_to_rm.iter() {
 			expanded.add(x);

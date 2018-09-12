@@ -56,6 +56,32 @@ fn first_100_mmr_heights() {
 	}
 }
 
+// The pos of the rightmost leaf for the provided MMR size (last leaf in subtree).
+#[test]
+fn test_bintree_rightmost() {
+	assert_eq!(pmmr::bintree_rightmost(0), 0);
+	assert_eq!(pmmr::bintree_rightmost(1), 1);
+	assert_eq!(pmmr::bintree_rightmost(2), 2);
+	assert_eq!(pmmr::bintree_rightmost(3), 2);
+	assert_eq!(pmmr::bintree_rightmost(4), 4);
+	assert_eq!(pmmr::bintree_rightmost(5), 5);
+	assert_eq!(pmmr::bintree_rightmost(6), 5);
+	assert_eq!(pmmr::bintree_rightmost(7), 5);
+}
+
+// The pos of the leftmost leaf for the provided MMR size (first leaf in subtree).
+#[test]
+fn test_bintree_leftmost() {
+	assert_eq!(pmmr::bintree_leftmost(0), 0);
+	assert_eq!(pmmr::bintree_leftmost(1), 1);
+	assert_eq!(pmmr::bintree_leftmost(2), 2);
+	assert_eq!(pmmr::bintree_leftmost(3), 1);
+	assert_eq!(pmmr::bintree_leftmost(4), 4);
+	assert_eq!(pmmr::bintree_leftmost(5), 5);
+	assert_eq!(pmmr::bintree_leftmost(6), 4);
+	assert_eq!(pmmr::bintree_leftmost(7), 1);
+}
+
 #[test]
 fn test_n_leaves() {
 	// make sure we handle an empty MMR correctly

@@ -594,6 +594,9 @@ pub fn peak_map_height(mut pos: u64) -> (u64, u64) {
 /// are built.
 
 pub fn bintree_postorder_height(num: u64) -> u64 {
+	if num == 0 {
+		return 0;
+	}
 	peak_map_height(num - 1).1
 }
 
@@ -669,7 +672,13 @@ pub fn family_branch(pos: u64, last_pos: u64) -> Vec<(u64, u64)> {
 	branch
 }
 
-/// Gets the position of the rightmost node (i.e. leaf) relative to the current
-fn bintree_rightmost(num: u64) -> u64 {
+/// Gets the position of the rightmost node (i.e. leaf) beneath the provided subtree root.
+pub fn bintree_rightmost(num: u64) -> u64 {
 	num - bintree_postorder_height(num)
+}
+
+/// Gets the position of the rightmost node (i.e. leaf) beneath the provided subtree root.
+pub fn bintree_leftmost(num: u64) -> u64 {
+	let height = bintree_postorder_height(num);
+	num + 2 - (2 << height)
 }
