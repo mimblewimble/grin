@@ -34,7 +34,7 @@ use std::time::Duration;
 
 use core::global;
 use core::global::ChainTypes;
-use keychain::{Keychain, ExtKeychain};
+use keychain::{ExtKeychain, Keychain};
 use util::LOGGER;
 use wallet::libtx::slate::Slate;
 use wallet::libwallet;
@@ -49,10 +49,7 @@ fn setup(test_dir: &str) {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 }
 
-fn restore_wallet(
-	base_dir: &str,
-	wallet_dir: &str,
-) -> Result<(), libwallet::Error> {
+fn restore_wallet(base_dir: &str, wallet_dir: &str) -> Result<(), libwallet::Error> {
 	let source_seed = format!("{}/{}/wallet.seed", base_dir, wallet_dir);
 	let dest_dir = format!("{}/{}_restore", base_dir, wallet_dir);
 	fs::create_dir_all(dest_dir.clone())?;
@@ -65,7 +62,12 @@ fn restore_wallet(
 	let wallet = common::create_wallet(&dest_dir, client.clone());
 	let parent_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
-	wallet_proxy.add_wallet(wallet_dir, client.get_send_instance(), wallet.clone(), parent_id.clone());
+	wallet_proxy.add_wallet(
+		wallet_dir,
+		client.get_send_instance(),
+		wallet.clone(),
+		parent_id.clone(),
+	);
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -84,10 +86,7 @@ fn restore_wallet(
 	Ok(())
 }
 
-fn compare_wallet_restore(
-	base_dir: &str,
-	wallet_dir: &str,
-) -> Result<(), libwallet::Error> {
+fn compare_wallet_restore(base_dir: &str, wallet_dir: &str) -> Result<(), libwallet::Error> {
 	let restore_name = format!("{}_restore", wallet_dir);
 	let source_dir = format!("{}/{}", base_dir, wallet_dir);
 	let dest_dir = format!("{}/{}", base_dir, restore_name);
@@ -163,9 +162,7 @@ fn compare_wallet_restore(
 
 /// Build up 2 wallets, perform a few transactions on them
 /// Then attempt to restore them in separate directories and check contents are the same
-fn setup_restore(
-	test_dir: &str,
-) -> Result<(), libwallet::Error> {
+fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
@@ -175,29 +172,35 @@ fn setup_restore(
 	// proxy
 	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
 	let wallet1_parent_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let wallet1 = common::create_wallet(
-		&format!("{}/wallet1", test_dir),
-		client.clone(),
+	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client.clone());
+	wallet_proxy.add_wallet(
+		"wallet1",
+		client.get_send_instance(),
+		wallet1.clone(),
+		wallet1_parent_id.clone(),
 	);
-	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone(), wallet1_parent_id.clone());
 
 	// define recipient wallet, add to proxy
 	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
 	let wallet2_parent_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let wallet2 = common::create_wallet(
-		&format!("{}/wallet2", test_dir),
-		client.clone(),
+	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client.clone());
+	wallet_proxy.add_wallet(
+		"wallet2",
+		client.get_send_instance(),
+		wallet2.clone(),
+		wallet2_parent_id.clone(),
 	);
-	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone(), wallet2_parent_id.clone());
 
 	// Another wallet
 	let client = LocalWalletClient::new("wallet3", wallet_proxy.tx.clone());
 	let wallet3_parent_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let wallet3 = common::create_wallet(
-		&format!("{}/wallet3", test_dir),
-		client.clone(),
+	let wallet3 = common::create_wallet(&format!("{}/wallet3", test_dir), client.clone());
+	wallet_proxy.add_wallet(
+		"wallet3",
+		client.get_send_instance(),
+		wallet3.clone(),
+		wallet3_parent_id.clone(),
 	);
-	wallet_proxy.add_wallet("wallet3", client.get_send_instance(), wallet3.clone(), wallet3_parent_id.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -286,9 +289,7 @@ fn setup_restore(
 	Ok(())
 }
 
-fn perform_restore(
-	test_dir: &str,
-) -> Result<(), libwallet::Error> {
+fn perform_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 	restore_wallet(test_dir, "wallet1")?;
 	compare_wallet_restore(test_dir, "wallet1")?;
 	restore_wallet(test_dir, "wallet2")?;

@@ -34,7 +34,7 @@ use std::time::Duration;
 
 use core::global;
 use core::global::ChainTypes;
-use keychain::{Keychain, ExtKeychain};
+use keychain::{ExtKeychain, Keychain};
 use util::LOGGER;
 use wallet::libtx::slate::Slate;
 use wallet::libwallet;
@@ -53,9 +53,7 @@ fn setup(test_dir: &str) {
 /// Exercises the Transaction API fully with a test WalletClient operating
 /// directly on a chain instance
 /// Callable with any type of wallet
-fn basic_transaction_api(
-	test_dir: &str,
-) -> Result<(), libwallet::Error> {
+fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
@@ -65,20 +63,24 @@ fn basic_transaction_api(
 	// proxy
 	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
 	let wallet1_parent_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let wallet1 = common::create_wallet(
-		&format!("{}/wallet1", test_dir),
-		client.clone(),
+	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client.clone());
+	wallet_proxy.add_wallet(
+		"wallet1",
+		client.get_send_instance(),
+		wallet1.clone(),
+		wallet1_parent_id.clone(),
 	);
-	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone(), wallet1_parent_id.clone());
 
 	// define recipient wallet, add to proxy
 	let wallet2_parent_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	let wallet2 = common::create_wallet(
-		&format!("{}/wallet2", test_dir),
-		client.clone(),
+	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client.clone());
+	wallet_proxy.add_wallet(
+		"wallet2",
+		client.get_send_instance(),
+		wallet2.clone(),
+		wallet2_parent_id.clone(),
 	);
-	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone(), wallet2_parent_id.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -90,12 +92,13 @@ fn basic_transaction_api(
 	// few values to keep things shorter
 	let reward = core::consensus::REWARD;
 	let cm = global::coinbase_maturity(0); // assume all testing precedes soft fork height
-	// mine a few blocks
+										// mine a few blocks
 	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 10);
 
 	// Check wallet 1 contents are as expected
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, &wallet1_parent_id)?;
+		let (wallet1_refreshed, wallet1_info) =
+			api.retrieve_summary_info(true, &wallet1_parent_id)?;
 		debug!(
 			LOGGER,
 			"Wallet 1 Info Pre-Transaction, after {} blocks: {:?}",
@@ -175,7 +178,8 @@ fn basic_transaction_api(
 
 	// Check wallet 1 contents are as expected
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, &wallet1_parent_id)?;
+		let (wallet1_refreshed, wallet1_info) =
+			api.retrieve_summary_info(true, &wallet1_parent_id)?;
 		debug!(
 			LOGGER,
 			"Wallet 1 Info Post Transaction, after {} blocks: {:?}",
@@ -217,7 +221,8 @@ fn basic_transaction_api(
 
 	// refresh wallets and retrieve info/tests for each wallet after maturity
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, &wallet1_parent_id)?;
+		let (wallet1_refreshed, wallet1_info) =
+			api.retrieve_summary_info(true, &wallet1_parent_id)?;
 		debug!(LOGGER, "Wallet 1 Info: {:?}", wallet1_info);
 		assert!(wallet1_refreshed);
 		assert_eq!(
@@ -232,7 +237,8 @@ fn basic_transaction_api(
 	})?;
 
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true, &wallet2_parent_id)?;
+		let (wallet2_refreshed, wallet2_info) =
+			api.retrieve_summary_info(true, &wallet2_parent_id)?;
 		assert!(wallet2_refreshed);
 		assert_eq!(wallet2_info.amount_currently_spendable, amount);
 
@@ -258,13 +264,14 @@ fn basic_transaction_api(
 			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
-			&wallet1_parent_id
+			&wallet1_parent_id,
 		)?;
 		Ok(())
 	})?;
 
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
-		let (refreshed, _wallet1_info) = sender_api.retrieve_summary_info(true, &wallet1_parent_id)?;
+		let (refreshed, _wallet1_info) =
+			sender_api.retrieve_summary_info(true, &wallet1_parent_id)?;
 		assert!(refreshed);
 		let (_, txs) = sender_api.retrieve_txs(true, None, &wallet1_parent_id)?;
 
@@ -288,7 +295,8 @@ fn basic_transaction_api(
 
 	// check wallet2 has stored transaction
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true, &wallet1_parent_id)?;
+		let (wallet2_refreshed, wallet2_info) =
+			api.retrieve_summary_info(true, &wallet1_parent_id)?;
 		assert!(wallet2_refreshed);
 		assert_eq!(wallet2_info.amount_currently_spendable, amount * 3);
 
@@ -320,20 +328,24 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	// proxy
 	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
 	let wallet1_parent_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let wallet1 = common::create_wallet(
-		&format!("{}/wallet1", test_dir),
-		client.clone(),
+	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client.clone());
+	wallet_proxy.add_wallet(
+		"wallet1",
+		client.get_send_instance(),
+		wallet1.clone(),
+		wallet1_parent_id.clone(),
 	);
-	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone(), wallet1_parent_id.clone());
 
 	// define recipient wallet, add to proxy
 	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
 	let wallet2_parent_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
-	let wallet2 = common::create_wallet(
-		&format!("{}/wallet2", test_dir),
-		client.clone(),
+	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client.clone());
+	wallet_proxy.add_wallet(
+		"wallet2",
+		client.get_send_instance(),
+		wallet2.clone(),
+		wallet2_parent_id.clone(),
 	);
-	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone(), wallet2_parent_id.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -345,7 +357,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	// few values to keep things shorter
 	let reward = core::consensus::REWARD;
 	let cm = global::coinbase_maturity(0); // assume all testing precedes soft fork height
-	// mine a few blocks
+										// mine a few blocks
 	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 5);
 
 	let amount = 30_000_000_000;
@@ -375,7 +387,8 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 		let mut locked_count = 0;
 		let mut unconfirmed_count = 0;
 		// get the tx entry, check outputs are as expected
-		let (_, outputs) = api.retrieve_outputs(true, false, Some(tx.unwrap().id), &wallet1_parent_id)?;
+		let (_, outputs) =
+			api.retrieve_outputs(true, false, Some(tx.unwrap().id), &wallet1_parent_id)?;
 		for (o, _) in outputs.clone() {
 			if o.status == OutputStatus::Locked {
 				locked_count = locked_count + 1;
@@ -399,7 +412,8 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
 		assert!(tx.is_some());
 		// get the tx entry, check outputs are as expected
-		let (_, outputs) = api.retrieve_outputs(true, false, Some(tx.unwrap().id), &wallet2_parent_id)?;
+		let (_, outputs) =
+			api.retrieve_outputs(true, false, Some(tx.unwrap().id), &wallet2_parent_id)?;
 		for (o, _) in outputs.clone() {
 			if o.status == OutputStatus::Unconfirmed {
 				unconfirmed_count = unconfirmed_count + 1;
