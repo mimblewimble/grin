@@ -37,6 +37,7 @@
 //! either be a simple Vec or a database.
 
 use std::marker;
+use std::u64;
 
 use croaring::Bitmap;
 
@@ -573,10 +574,10 @@ pub fn peak_sizes_height(size: u64) -> (Vec<u64>, u64) {
 /// since the path turns left (resp. right) if-and-only-if
 /// a peak at that height is absent (resp. present)
 pub fn peak_map_height(mut pos: u64) -> (u64, u64) {
-	let mut peak_size = 1;
-	while peak_size <= pos {
-		peak_size = peak_size << 1 | 1;
+	if pos == 0 {
+		return (0, 0);
 	}
+	let mut peak_size = u64::MAX >> pos.leading_zeros();
 	let mut bitmap = 0;
 	while peak_size != 0 {
 		bitmap = bitmap << 1;
