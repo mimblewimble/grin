@@ -37,8 +37,6 @@ use wallet::lmdb_wallet::LMDBBackend;
 use wallet::HTTPWalletClient;
 use wallet::WalletConfig;
 
-use keychain::{ExtKeychain, Keychain};
-
 use framework::{
 	config, stop_all_servers, LocalServerContainerConfig, LocalServerContainerPool,
 	LocalServerContainerPoolConfig,
@@ -477,7 +475,6 @@ fn replicate_tx_fluff_failure() {
 	// get another instance of wallet1 (to update contents and perform a send)
 	let wallet1 = create_wallet("target/tmp/tx_fluff/wallet1", client1.clone());
 	let wallet1 = Arc::new(Mutex::new(wallet1));
-	let wallet1_parent_id = ExtKeychain::derive_key_id(2, 0, 0, 0, 0);
 
 	let amount = 30_000_000_000;
 	let mut slate = Slate::blank(1);
@@ -491,7 +488,6 @@ fn replicate_tx_fluff_failure() {
 				500,                      // max outputs
 				1000,                     // num change outputs
 				true,                     // select all outputs
-				&wallet1_parent_id,
 			).unwrap();
 		api.post_tx(&slate, false).unwrap();
 		Ok(())
@@ -502,11 +498,10 @@ fn replicate_tx_fluff_failure() {
 
 	// get another instance of wallet (to check contents)
 	let wallet2 = create_wallet("target/tmp/tx_fluff/wallet2", client2.clone());
-	let wallet2_parent_id = ExtKeychain::derive_key_id(2, 0, 0, 0, 0);
 
 	let wallet2 = Arc::new(Mutex::new(wallet2));
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let res = api.retrieve_summary_info(true, &wallet2_parent_id).unwrap();
+		let res = api.retrieve_summary_info(true).unwrap();
 		assert_eq!(res.1.amount_currently_spendable, amount);
 		Ok(())
 	}).unwrap();

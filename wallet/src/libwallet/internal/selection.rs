@@ -161,7 +161,7 @@ where
 	K: Keychain,
 {
 	// Create a potential output for this transaction
-	let key_id = keys::next_available_key(wallet, &parent_key_id).unwrap();
+	let key_id = keys::next_available_key(wallet).unwrap();
 
 	let keychain = wallet.keychain().clone();
 	let key_id_inner = key_id.clone();
@@ -380,7 +380,7 @@ where
 			};
 
 			let keychain = wallet.keychain().clone();
-			let change_key = wallet.next_child(parent_key_id).unwrap();
+			let change_key = wallet.next_child().unwrap();
 
 			change_amounts_derivations.push((change_amount, change_key.clone()));
 			parts.push(build::output(change_amount, change_key));

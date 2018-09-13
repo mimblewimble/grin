@@ -19,7 +19,7 @@ use std::{fs, path};
 use failure::ResultExt;
 use uuid::Uuid;
 
-use keychain::{ChildNumber, Identifier, Keychain};
+use keychain::{ChildNumber, ExtKeychain, Identifier, Keychain};
 use store::{self, option_to_not_found, to_key, u64_to_key};
 
 use libwallet::types::*;
@@ -57,6 +57,8 @@ pub struct LMDBBackend<C, K> {
 	passphrase: String,
 	/// Keychain
 	pub keychain: Option<K>,
+	/// Parent path to use by default for output operations
+	parent_key_id: Identifier,
 	/// client
 	client: C,
 }
@@ -73,8 +75,16 @@ impl<C, K> LMDBBackend<C, K> {
 			config: config.clone(),
 			passphrase: String::from(passphrase),
 			keychain: None,
+			parent_key_id: LMDBBackend::<C, K>::default_path(),
 			client: client,
 		})
+	}
+
+	fn default_path() -> Identifier {
+		// return the default parent wallet path, corresponding to the default account
+		// in the BIP32 spec. Parent is account 0 at level 2, child output identifiers
+		// are all at level 3
+		ExtKeychain::derive_key_id(2, 0, 0, 0, 0)
 	}
 
 	/// Just test to see if database files exist in the current directory. If
@@ -116,6 +126,16 @@ where
 	fn client(&mut self) -> &mut C {
 		&mut self.client
 	}
+
+	/// set parent path
+	fn set_parent_key_id(&mut self, id: Identifier) {
+		self.parent_key_id = id;
+	}
+
+	fn parent_key_id(&mut self) -> Identifier {
+		self.parent_key_id.clone()
+	}
+	
 
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());
@@ -178,30 +198,31 @@ where
 		}))
 	}
 
-	fn next_child<'a>(&mut self, parent_key_id: &Identifier) -> Result<Identifier, Error> {
+	fn next_child<'a>(&mut self) -> Result<Identifier, Error> {
+		let parent_key_id = self.parent_key_id.clone();
 		let mut deriv_idx = {
 			let batch = self.db.batch()?;
-			let deriv_key = to_key(DERIV_PREFIX, &mut parent_key_id.to_bytes().to_vec());
+			let deriv_key = to_key(DERIV_PREFIX, &mut self.parent_key_id.to_bytes().to_vec());
 			match batch.get_ser(&deriv_key)? {
 				Some(idx) => idx,
 				None => 0,
 			}
 		};
-		let mut return_path = parent_key_id.to_path();
+		let mut return_path = self.parent_key_id.to_path();
 		return_path.depth = return_path.depth + 1;
 		return_path.path[return_path.depth as usize - 1] = ChildNumber::from(deriv_idx);
 		deriv_idx = deriv_idx + 1;
 		let mut batch = self.batch()?;
-		batch.save_child_index(parent_key_id, deriv_idx)?;
+		batch.save_child_index(&parent_key_id, deriv_idx)?;
 		batch.commit()?;
 		Ok(Identifier::from_path(&return_path))
 	}
 
-	fn last_confirmed_height<'a>(&mut self, parent_key_id: &Identifier) -> Result<u64, Error> {
+	fn last_confirmed_height<'a>(&mut self) -> Result<u64, Error> {
 		let batch = self.db.batch()?;
 		let height_key = to_key(
 			CONFIRMED_HEIGHT_PREFIX,
-			&mut parent_key_id.to_bytes().to_vec(),
+			&mut self.parent_key_id.to_bytes().to_vec(),
 		);
 		let last_confirmed_height = match batch.get_ser(&height_key)? {
 			Some(h) => h,

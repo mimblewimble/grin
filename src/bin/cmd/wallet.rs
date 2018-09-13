@@ -28,7 +28,7 @@ use config::GlobalWalletConfig;
 use core::{core, global};
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{HTTPWalletClient, LMDBBackend, WalletConfig, WalletInst, WalletSeed};
-use keychain::{self, ExtKeychain, Keychain};
+use keychain;
 use servers::start_webwallet_server;
 use util::LOGGER;
 
@@ -156,9 +156,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 		wallet_config.clone(),
 		passphrase,
 	)));
-	// For now, just set the parent to the default BIP32 Path (will make this selectable)
-	// m/0/0 is the parent, m/0/0/k will be generated outputs
-	let parent_key_id = ExtKeychain::derive_key_id(2, 0, 0, 0, 0);
 	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {
 			("send", Some(send_args)) => {
@@ -197,7 +194,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 							max_outputs,
 							change_outputs,
 							selection_strategy == "all",
-							&parent_key_id,
 						);
 						let slate = match result {
 							Ok(s) => {
@@ -252,7 +248,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						max_outputs,
 						change_outputs,
 						selection_strategy == "all",
-						&parent_key_id,
 					).expect("Send failed");
 					Ok(())
 				} else {
@@ -310,7 +305,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					.parse()
 					.expect("Could not parse minimum_confirmations as a whole number.");
 				let max_outputs = 500;
-				api.issue_burn_tx(amount, minimum_confirmations, max_outputs, &parent_key_id)
+				api.issue_burn_tx(amount, minimum_confirmations, max_outputs)
 					.unwrap_or_else(|e| {
 						panic!("Error burning tx: {:?} Config: {:?}", e, wallet_config)
 					});
@@ -318,7 +313,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 			}
 			("info", Some(_)) => {
 				let (validated, wallet_info) = api
-					.retrieve_summary_info(true, &parent_key_id)
+					.retrieve_summary_info(true)
 					.unwrap_or_else(|e| {
 						panic!(
 							"Error getting wallet info: {:?} Config: {:?}",
@@ -331,7 +326,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 			("outputs", Some(_)) => {
 				let (height, _) = api.node_height()?;
 				let (validated, outputs) =
-					api.retrieve_outputs(show_spent, true, None, &parent_key_id)?;
+					api.retrieve_outputs(show_spent, true, None)?;
 				let _res = display::outputs(height, validated, outputs).unwrap_or_else(|e| {
 					panic!(
 						"Error getting wallet outputs: {:?} Config: {:?}",
@@ -349,7 +344,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					},
 				};
 				let (height, _) = api.node_height()?;
-				let (validated, txs) = api.retrieve_txs(true, tx_id, &parent_key_id)?;
+				let (validated, txs) = api.retrieve_txs(true, tx_id)?;
 				let include_status = !tx_id.is_some();
 				let _res =
 					display::txs(height, validated, txs, include_status).unwrap_or_else(|e| {
@@ -361,7 +356,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				// if given a particular transaction id, also get and display associated
 				// inputs/outputs
 				if tx_id.is_some() {
-					let (_, outputs) = api.retrieve_outputs(true, false, tx_id, &parent_key_id)?;
+					let (_, outputs) = api.retrieve_outputs(true, false, tx_id)?;
 					let _res = display::outputs(height, validated, outputs).unwrap_or_else(|e| {
 						panic!(
 							"Error getting wallet outputs: {} Config: {:?}",
@@ -420,7 +415,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					.value_of("id")
 					.expect("'id' argument (-i) is required.");
 				let tx_id = tx_id.parse().expect("Could not parse id parameter.");
-				let result = api.cancel_tx(tx_id, &parent_key_id);
+				let result = api.cancel_tx(tx_id);
 				match result {
 					Ok(_) => {
 						info!(LOGGER, "Transaction {} Cancelled", tx_id);

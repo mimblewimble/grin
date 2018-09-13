@@ -38,7 +38,7 @@ use core::core::verifier_cache::LruVerifierCache;
 use core::core::Transaction;
 use core::global::{set_mining_mode, ChainTypes};
 use core::{pow, ser};
-use keychain::{Identifier, Keychain};
+use keychain::Keychain;
 
 use util::secp::pedersen;
 use wallet::libtx::slate::Slate;
@@ -77,7 +77,6 @@ where
 		(
 			Sender<WalletProxyMessage>,
 			Arc<Mutex<Box<WalletInst<LocalWalletClient, K>>>>,
-			Identifier,
 		),
 	>,
 	/// simulate json send to another client
@@ -134,10 +133,9 @@ where
 		addr: &str,
 		tx: Sender<WalletProxyMessage>,
 		wallet: Arc<Mutex<Box<WalletInst<LocalWalletClient, K>>>>,
-		parent_key_id: Identifier,
 	) {
 		self.wallets
-			.insert(addr.to_owned(), (tx, wallet, parent_key_id));
+			.insert(addr.to_owned(), (tx, wallet));
 	}
 
 	/// Run the incoming message queue and respond more or less
@@ -178,13 +176,6 @@ where
 
 	/// post transaction to the chain (and mine it, taking the reward)
 	fn post_tx(&mut self, m: WalletProxyMessage) -> Result<WalletProxyMessage, libwallet::Error> {
-		let parent_id = self
-			.wallets
-			.get_mut(&m.sender_id)
-			.as_ref()
-			.unwrap()
-			.2
-			.clone();
 		let dest_wallet = self.wallets.get_mut(&m.sender_id).unwrap().1.clone();
 		let wrapper: TxWrapper = serde_json::from_str(&m.body).context(
 			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper"),
@@ -198,7 +189,7 @@ where
 			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper: tx"),
 		)?;
 
-		common::award_block_to_wallet(&self.chain, vec![&tx], dest_wallet, &parent_id)?;
+		common::award_block_to_wallet(&self.chain, vec![&tx], dest_wallet)?;
 
 		Ok(WalletProxyMessage {
 			sender_id: "node".to_owned(),
@@ -217,11 +208,10 @@ where
 		if let None = dest_wallet {
 			panic!("Unknown wallet destination for send_tx_slate: {:?}", m);
 		}
-		let parent_id = dest_wallet.as_ref().unwrap().2.clone();
 		let w = dest_wallet.unwrap().1.clone();
 		let mut slate = serde_json::from_str(&m.body).unwrap();
 		libwallet::controller::foreign_single_use(w.clone(), |listener_api| {
-			listener_api.receive_tx(&mut slate, &parent_id)?;
+			listener_api.receive_tx(&mut slate)?;
 			Ok(())
 		})?;
 		Ok(WalletProxyMessage {

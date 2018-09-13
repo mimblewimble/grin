@@ -72,6 +72,13 @@ where
 	/// Return the client being used
 	fn client(&mut self) -> &mut C;
 
+	/// The BIP32 path of the parent path to use for all output-related
+	/// functions, (essentially 'accounts' within a wallet.
+	fn set_parent_key_id(&mut self, Identifier);
+
+	/// return the parent path
+	fn parent_key_id(&mut self) -> Identifier;
+
 	/// Iterate over all output data stored by the backend
 	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a>;
 
@@ -93,11 +100,11 @@ where
 	/// Create a new write batch to update or remove output data
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch<K> + 'a>, Error>;
 
-	/// Next child ID when we want to create a new output, based on a given parent
-	fn next_child<'a>(&mut self, parent_key_id: &Identifier) -> Result<Identifier, Error>;
+	/// Next child ID when we want to create a new output, based on current parent
+	fn next_child<'a>(&mut self) -> Result<Identifier, Error>;
 
 	/// last verified height of outputs directly descending from the given parent key
-	fn last_confirmed_height<'a>(&mut self, parent_key_id: &Identifier) -> Result<u64, Error>;
+	fn last_confirmed_height<'a>(&mut self) -> Result<u64, Error>;
 
 	/// Attempt to restore the contents of a wallet from seed
 	fn restore(&mut self) -> Result<(), Error>;

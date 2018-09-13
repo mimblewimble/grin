@@ -28,7 +28,7 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::{fs, thread, time};
 
-use framework::keychain::{ExtKeychain, Keychain};
+use framework::keychain::Keychain;
 use wallet::{HTTPWalletClient, LMDBBackend, WalletConfig};
 
 /// Just removes all results from previous runs
@@ -339,7 +339,6 @@ impl LocalServerContainer {
 
 		let mut wallet = LMDBBackend::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
-		let parent_id = ExtKeychain::derive_key_id(2, 0, 0, 0, 0);
 		wallet.keychain = Some(keychain);
 		let _ =
 			wallet::controller::owner_single_use(Arc::new(Mutex::new(Box::new(wallet))), |api| {
@@ -350,7 +349,6 @@ impl LocalServerContainer {
 					max_outputs,
 					change_outputs,
 					selection_strategy == "all",
-					&parent_id,
 				);
 				match result {
 					Ok(_) => println!(

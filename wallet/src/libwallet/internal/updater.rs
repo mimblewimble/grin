@@ -192,7 +192,7 @@ where
 	// api output (if it exists) and refresh it in-place in the wallet.
 	// Note: minimizing the time we spend holding the wallet lock.
 	{
-		let last_confirmed_height = wallet.last_confirmed_height(parent_key_id)?;
+		let last_confirmed_height = wallet.last_confirmed_height()?;
 		// If the server height is less than our confirmed height, don't apply
 		// these changes as the chain is syncing, incorrect or forking
 		if height < last_confirmed_height {
@@ -313,7 +313,7 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	let current_height = wallet.last_confirmed_height(parent_key_id)?;
+	let current_height = wallet.last_confirmed_height()?;
 	let outputs = wallet
 		.iter()
 		.filter(|out| out.root_key_id == *parent_key_id);
@@ -351,7 +351,6 @@ where
 pub fn build_coinbase<T: ?Sized, C, K>(
 	wallet: &mut T,
 	block_fees: &BlockFees,
-	parent_key_id: &Identifier,
 ) -> Result<CbData, Error>
 where
 	T: WalletBackend<C, K>,
@@ -359,7 +358,7 @@ where
 	K: Keychain,
 {
 	let (out, kern, block_fees) =
-		receive_coinbase(wallet, block_fees, parent_key_id).context(ErrorKind::Node)?;
+		receive_coinbase(wallet, block_fees).context(ErrorKind::Node)?;
 
 	let out_bin = ser::ser_vec(&out).context(ErrorKind::Node)?;
 
@@ -382,7 +381,6 @@ where
 pub fn receive_coinbase<T: ?Sized, C, K>(
 	wallet: &mut T,
 	block_fees: &BlockFees,
-	parent_key_id: &Identifier,
 ) -> Result<(Output, TxKernel, BlockFees), Error>
 where
 	T: WalletBackend<C, K>,
@@ -392,17 +390,18 @@ where
 	let height = block_fees.height;
 	let lock_height = height + global::coinbase_maturity(height); // ignores on/off spendability around soft fork height
 	let key_id = block_fees.key_id();
+	let parent_key_id = wallet.parent_key_id();
 
 	let key_id = match key_id {
 		Some(key_id) => keys::retrieve_existing_key(wallet, key_id)?.0,
-		None => keys::next_available_key(wallet, parent_key_id)?,
+		None => keys::next_available_key(wallet)?,
 	};
 
 	{
 		// Now acquire the wallet lock and write the new output.
 		let mut batch = wallet.batch()?;
 		batch.save(OutputData {
-			root_key_id: parent_key_id.clone(),
+			root_key_id: parent_key_id,
 			key_id: key_id.clone(),
 			n_child: key_id.to_path().last_path_index(),
 			value: reward(block_fees.fees),
