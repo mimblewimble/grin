@@ -15,8 +15,10 @@ Grin 项目的主要目的和特性如下:
 * 简单的设计使得日后的代码审查和维护变得容易。
 * 社区驱动。采用一种抗拒ASIC的挖矿算法(Cuckoo Cycle算法)，借此来鼓励去中心化的挖矿。
 
-# Tongue Tying for Everyone （备注：MimbleWimble 出自《哈利波特》中的一句咒语，详见：[Tongue-Tying Curse](http://harrypotter.wikia.com/wiki/Tongue-Tying_Curse)）
+# Tongue Tying for Everyone
 
+**备注**：MimbleWimble 出自《哈利波特》中的一句咒语，详见：[Tongue-Tying Curse](http://harrypotter.wikia.com/wiki/Tongue-Tying_Curse)，这个标题的涵义应该是希望所有读到这篇介绍的人都可以来为这个开放社区做点贡献，真心希望如此。
+ 
 本文针对的读者是已经了解过区块链并了解一些基本的密码学知识的人群。我们尝试解释MimbleWimble的技术构建，以及它如何应用于Grin。我们希望这篇介绍能够浅显易懂，我们的目的是鼓励您对Grin产生兴趣，并加入Grin的开放社区，以任何您可能的方式对其做出贡献。
 
 为了实现这个目标，我们将介绍一个主要概念：Grin是一个MimbleWimble实现。我们将从椭圆曲线密码（ECC）的简短描述开始，这是Grin的重要基础。然后描述MimbleWimble区块链交易和区块的所有关键要素。
