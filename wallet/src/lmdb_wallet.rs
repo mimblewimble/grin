@@ -20,7 +20,7 @@ use failure::ResultExt;
 use uuid::Uuid;
 
 use keychain::{ChildNumber, ExtKeychain, Identifier, Keychain};
-use store::{self, option_to_not_found, to_key, u64_to_key, to_key_u64};
+use store::{self, option_to_not_found, to_key, to_key_u64, u64_to_key};
 
 use libwallet::types::*;
 use libwallet::{internal, Error, ErrorKind};
@@ -73,11 +73,14 @@ impl<C, K> LMDBBackend<C, K> {
 		let store = store::Store::open(lmdb_env, DB_DIR);
 
 		// Make sure default wallet derivation path always exists
-		let default_account = AcctPathMapping{
+		let default_account = AcctPathMapping {
 			label: "default".to_owned(),
-			path: LMDBBackend::<C,K>::default_path(),
+			path: LMDBBackend::<C, K>::default_path(),
 		};
-		let acct_key = to_key(ACCOUNT_PATH_MAPPING_PREFIX, &mut default_account.label.as_bytes().to_vec());
+		let acct_key = to_key(
+			ACCOUNT_PATH_MAPPING_PREFIX,
+			&mut default_account.label.as_bytes().to_vec(),
+		);
 
 		{
 			let batch = store.batch()?;
@@ -217,11 +220,11 @@ where
 		).map_err(|e| e.into())
 	}
 
-	fn acct_path_iter<'a>(&'a self) -> Box<Iterator<Item = AcctPathMapping> + 'a>{
+	fn acct_path_iter<'a>(&'a self) -> Box<Iterator<Item = AcctPathMapping> + 'a> {
 		Box::new(self.db.iter(&[ACCOUNT_PATH_MAPPING_PREFIX]).unwrap())
 	}
 
-	fn get_acct_path(&self, label: String) -> Result<Option<AcctPathMapping>, Error>{
+	fn get_acct_path(&self, label: String) -> Result<Option<AcctPathMapping>, Error> {
 		let acct_key = to_key(ACCOUNT_PATH_MAPPING_PREFIX, &mut label.as_bytes().to_vec());
 		self.db.get_ser(&acct_key).map_err(|e| e.into())
 	}
@@ -359,7 +362,7 @@ where
 			.as_ref()
 			.unwrap()
 			.put_ser(&tx_id_key, &last_tx_log_id)?;
-			println!("Last ID: {}", last_tx_log_id);
+		println!("Last ID: {}", last_tx_log_id);
 		Ok(last_tx_log_id)
 	}
 
@@ -402,14 +405,25 @@ where
 	}
 
 	fn save_tx_log_entry(&self, t: TxLogEntry, parent_id: &Identifier) -> Result<(), Error> {
-		let tx_log_key = to_key_u64(TX_LOG_ID_PREFIX, &mut parent_id.to_bytes().to_vec(), t.id as u64);
+		let tx_log_key = to_key_u64(
+			TX_LOG_ID_PREFIX,
+			&mut parent_id.to_bytes().to_vec(),
+			t.id as u64,
+		);
 		self.db.borrow().as_ref().unwrap().put_ser(&tx_log_key, &t)?;
 		Ok(())
 	}
 
-	fn save_acct_path(&mut self, mapping: AcctPathMapping) -> Result<(), Error>{
-		let acct_key = to_key(ACCOUNT_PATH_MAPPING_PREFIX, &mut mapping.label.as_bytes().to_vec());
-		self.db.borrow().as_ref().unwrap().put_ser(&acct_key, &mapping)?;
+	fn save_acct_path(&mut self, mapping: AcctPathMapping) -> Result<(), Error> {
+		let acct_key = to_key(
+			ACCOUNT_PATH_MAPPING_PREFIX,
+			&mut mapping.label.as_bytes().to_vec(),
+		);
+		self.db
+			.borrow()
+			.as_ref()
+			.unwrap()
+			.put_ser(&acct_key, &mapping)?;
 		Ok(())
 	}
 

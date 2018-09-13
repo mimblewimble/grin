@@ -98,7 +98,8 @@ where
 			vec![]
 		}
 	} else {
-		wallet.tx_log_iter()
+		wallet
+			.tx_log_iter()
 			.filter(|t| {
 				println!("t.parent_key_id: {:?}", t.parent_key_id);
 				t.parent_key_id == *parent_key_id
@@ -223,7 +224,11 @@ where
 						// if this is a coinbase tx being confirmed, it's recordable in tx log
 						if output.is_coinbase && output.status == OutputStatus::Unconfirmed {
 							let log_id = batch.next_tx_log_id(parent_key_id)?;
-							let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::ConfirmedCoinbase, log_id);
+							let mut t = TxLogEntry::new(
+								parent_key_id.clone(),
+								TxLogEntryType::ConfirmedCoinbase,
+								log_id,
+							);
 							t.confirmed = true;
 							t.amount_credited = output.value;
 							t.amount_debited = 0;

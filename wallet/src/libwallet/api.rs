@@ -31,7 +31,8 @@ use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libwallet::internal::{keys, selection, tx, updater};
 use libwallet::types::{
-	AcctPathMapping, BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend, WalletClient, WalletInfo,
+	AcctPathMapping, BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend,
+	WalletClient, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
 use util::secp::pedersen;
@@ -111,7 +112,10 @@ where
 			validated = self.update_outputs(&mut w);
 		}
 
-		let res = Ok((validated, updater::retrieve_txs(&mut **w, tx_id, &parent_key_id)?));
+		let res = Ok((
+			validated,
+			updater::retrieve_txs(&mut **w, tx_id, &parent_key_id)?,
+		));
 
 		w.close()?;
 		res
@@ -139,18 +143,13 @@ where
 	}
 
 	/// Return list of existing account -> Path mappings
-	pub fn accounts(
-		&mut self,
-	) -> Result<Vec<AcctPathMapping>, Error> {
+	pub fn accounts(&mut self) -> Result<Vec<AcctPathMapping>, Error> {
 		let mut w = self.wallet.lock().unwrap();
 		keys::accounts(&mut **w)
 	}
 
 	/// Create a new account path
-	pub fn new_account_path(
-		&mut self,
-		label: &str,
-	) -> Result<Identifier, Error> {
+	pub fn new_account_path(&mut self, label: &str) -> Result<Identifier, Error> {
 		let mut w = self.wallet.lock().unwrap();
 		keys::new_acct_path(&mut **w, label)
 	}

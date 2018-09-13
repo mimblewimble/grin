@@ -106,7 +106,6 @@ where
 	/// Gets an account path for a given label
 	fn get_acct_path(&self, label: String) -> Result<Option<AcctPathMapping>, Error>;
 
-
 	/// Create a new write batch to update or remove output data
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch<K> + 'a>, Error>;
 

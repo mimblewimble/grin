@@ -13,7 +13,7 @@
 // limitations under the License.
 
 //! Wallet key management functions
-use keychain::{ChildNumber, Identifier, Keychain, ExtKeychain};
+use keychain::{ChildNumber, ExtKeychain, Identifier, Keychain};
 use libwallet::error::{Error, ErrorKind};
 use libwallet::types::{AcctPathMapping, WalletBackend, WalletClient};
 
@@ -70,8 +70,9 @@ where
 	// so find the highest of those, then increment (to conform with external/internal
 	// derivation chains in BIP32 spec)
 
-	let highest_entry = wallet.acct_path_iter()
-		.max_by(|a, b| <u32>::from(a.path.to_path().path[0]).cmp(&<u32>::from(b.path.to_path().path[0])));
+	let highest_entry = wallet.acct_path_iter().max_by(|a, b| {
+		<u32>::from(a.path.to_path().path[0]).cmp(&<u32>::from(b.path.to_path().path[0]))
+	});
 
 	let return_id = {
 		if let Some(e) = highest_entry {
