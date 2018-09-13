@@ -23,7 +23,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortIdentifiable;
 use core::core::transaction;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{Block, CompactBlock, Transaction, TxKernel};
+use core::core::{Block, CompactBlock, CompactTransaction, Transaction, TxKernel};
 use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 use util::LOGGER;
 
@@ -60,6 +60,24 @@ impl Pool {
 	/// Does the transaction pool contain an entry for the given transaction?
 	pub fn contains_tx(&self, tx: &Transaction) -> bool {
 		self.entries.iter().any(|x| x.tx.hash() == tx.hash())
+	}
+
+	pub fn retrieve_transactions_for_compact_transaction(&self, compact_tx: &CompactTransaction) -> Vec<Transaction> {
+		let mut txs = vec![];
+
+		for x in &self.entries {
+			for kernel in x.tx.kernels() {
+				// rehash each kernel to calculate the block specific short_id
+				let short_id = kernel.short_id(&compact_tx.hash(), compact_tx.nonce);
+
+				// if any kernel matches then keep the tx for later
+				if compact_tx.kern_ids().contains(&short_id) {
+					txs.push(x.tx.clone());
+					break;
+				}
+			}
+		}
+		txs
 	}
 
 	/// Query the tx pool for all known txs based on kernel short_ids

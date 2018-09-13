@@ -22,6 +22,7 @@ use std::time;
 use conn::{Message, MessageHandler, Response};
 use core::core::{self, hash::Hash, CompactBlock};
 use core::{global, ser};
+use util::secp::pedersen;
 
 use msg::{
 	read_exact, BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr,
@@ -85,20 +86,34 @@ impl MessageHandler for Protocol {
 				Ok(None)
 			}
 
-			Type::TxKernels => {
+			Type::CompactTransaction => {
 				debug!(
 					LOGGER,
-					"handle_payload: received tx_kernels: msg_len: {}", msg.header.msg_len
+					"handle_payload: CompactTransaction: msg_len: {}", msg.header.msg_len
 				);
-				let kernels: Vec<pedersen::Commitment> = msg.body()?;
-				adapter.tx_kernels_received(kernels);
+				let compact_tx: core::CompactTransaction = msg.body()?;
+				adapter.compact_transaction_received(compact_tx, self.addr);
+				Ok(None)
+			}
+
+			Type::GetTransaction => {
+				debug!(
+					LOGGER,
+					"handle_payload: GetTransaction: msg_len: {}", msg.header.msg_len
+				);
+				let compact_tx: core::CompactTransaction = msg.body()?;
+
+				let tx = adapter.get_transaction(compact_tx);
+				if let Some(tx) = tx {
+					return Ok(Some(msg.respond(Type::Transaction, tx)));
+				}
 				Ok(None)
 			}
 
 			Type::Transaction => {
 				debug!(
 					LOGGER,
-					"handle_payload: received tx: msg_len: {}", msg.header.msg_len
+					"handle_payload: Transaction: msg_len: {}", msg.header.msg_len
 				);
 				let tx: core::Transaction = msg.body()?;
 				adapter.transaction_received(tx, false);
@@ -108,7 +123,7 @@ impl MessageHandler for Protocol {
 			Type::StemTransaction => {
 				debug!(
 					LOGGER,
-					"handle_payload: received stem tx: msg_len: {}", msg.header.msg_len
+					"handle_payload: StemTransaction: msg_len: {}", msg.header.msg_len
 				);
 				let tx: core::Transaction = msg.body()?;
 				adapter.transaction_received(tx, true);
@@ -129,7 +144,7 @@ impl MessageHandler for Protocol {
 			Type::Block => {
 				debug!(
 					LOGGER,
-					"handle_payload: received block: msg_len: {}", msg.header.msg_len
+					"handle_payload: Block: msg_len: {}", msg.header.msg_len
 				);
 				let b: core::Block = msg.body()?;
 

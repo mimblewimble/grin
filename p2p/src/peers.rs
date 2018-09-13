@@ -23,6 +23,7 @@ use chrono::prelude::Utc;
 use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
+use util::secp::pedersen;
 use util::LOGGER;
 
 use peer::Peer;
@@ -395,16 +396,12 @@ impl Peers {
 		);
 	}
 
-	pub fn broadcast_tx_kernels(&self, tx: &core::Transaction) {
-		let count = self.broadcast("transaction", |p| p.send_tx_kernels(tx));
+	pub fn broadcast_compact_transaction(&self, compact_tx: &core::CompactTransaction) {
+		let count = self.broadcast("transaction", |p| p.send_compact_transaction(compact_tx));
 		trace!(
 			LOGGER,
-			"broadcast_tx_kernels: {:?} (tx {}), to {} peers, done.",
-			tx.kernels()
-				.into_iter()
-				.map(|x| x.excess())
-				.collect::<Vec<_>>(),
-			tx.hash(),
+			"broadcast_compact_transaction: {:?}, to {} peers, done.",
+			compact_tx,
 			count,
 		);
 	}
@@ -541,6 +538,10 @@ impl ChainAdapter for Peers {
 		self.adapter.transaction_received(tx, stem)
 	}
 
+	fn compact_transaction_received(&self, compact_tx: core::CompactTransaction, addr: SocketAddr) {
+		self.adapter.compact_transaction_received(compact_tx, addr)
+	}
+
 	fn block_received(&self, b: core::Block, peer_addr: SocketAddr) -> bool {
 		let hash = b.hash();
 		if !self.adapter.block_received(b, peer_addr) {
@@ -603,6 +604,10 @@ impl ChainAdapter for Peers {
 
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
+	}
+
+	fn get_transaction(&self, compact_tx: core::CompactTransaction) -> Option<core::Transaction> {
+		self.adapter.get_transaction(compact_tx)
 	}
 
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {

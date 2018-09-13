@@ -29,6 +29,7 @@ use peer::Peer;
 use peers::Peers;
 use store::PeerStore;
 use types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, TxHashSetRead};
+use util::secp::pedersen;
 use util::LOGGER;
 
 /// P2P server implementation, handling bootstrapping to find and connect to
@@ -254,23 +255,27 @@ impl ChainAdapter for DummyAdapter {
 	fn total_height(&self) -> u64 {
 		0
 	}
-	fn transaction_received(&self, _: core::Transaction, _stem: bool) {}
+	fn transaction_received(&self, _tx: core::Transaction, _stem: bool) {}
+	fn compact_transaction_received(&self, _compact_tx: core::CompactTransaction, _addr: SocketAddr) {}
 	fn compact_block_received(&self, _cb: core::CompactBlock, _addr: SocketAddr) -> bool {
 		true
 	}
 	fn header_received(&self, _bh: core::BlockHeader, _addr: SocketAddr) -> bool {
 		true
 	}
-	fn block_received(&self, _: core::Block, _: SocketAddr) -> bool {
+	fn block_received(&self, _b: core::Block, _addr: SocketAddr) -> bool {
 		true
 	}
-	fn headers_received(&self, _: Vec<core::BlockHeader>, _: SocketAddr) -> bool {
+	fn headers_received(&self, _bh: Vec<core::BlockHeader>, _: SocketAddr) -> bool {
 		true
 	}
-	fn locate_headers(&self, _: Vec<Hash>) -> Vec<core::BlockHeader> {
+	fn locate_headers(&self, _h: Vec<Hash>) -> Vec<core::BlockHeader> {
 		vec![]
 	}
-	fn get_block(&self, _: Hash) -> Option<core::Block> {
+	fn get_block(&self, _h: Hash) -> Option<core::Block> {
+		None
+	}
+	fn get_transaction(&self, _compact_tx: core::CompactTransaction) -> Option<core::Transaction> {
 		None
 	}
 	fn txhashset_read(&self, _h: Hash) -> Option<TxHashSetRead> {

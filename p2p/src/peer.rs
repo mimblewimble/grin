@@ -26,6 +26,7 @@ use protocol::Protocol;
 use types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerInfo, ReasonForBan, TxHashSetRead,
 };
+use util::secp::pedersen;
 use util::LOGGER;
 
 const MAX_TRACK_SIZE: usize = 30;
@@ -255,29 +256,23 @@ impl Peer {
 		}
 	}
 
-	pub fn send_tx_kernels(&self, tx: &core::Transaction) -> Result<(), Error> {
-		if !self.tracking_adapter.has(tx.hash()) {
-			let kernels = tx
-				.kernels()
-				.into_iter()
-				.map(|x| x.excess())
-				.collect::<Vec<_>>();
+	pub fn send_compact_transaction(&self, compact_tx: &core::CompactTransaction) -> Result<(), Error> {
+		if !self.tracking_adapter.has(compact_tx.tx_hash) {
 			debug!(
 				LOGGER,
-				"Send tx_kernels {:?} (tx {}) to {}",
-				kernels,
-				tx.hash(),
+				"Send {:?} to {}",
+				compact_tx,
 				self.info.addr,
 			);
 			self.connection
 				.as_ref()
 				.unwrap()
-				.send(kernels, msg::Type::TxKernels)
+				.send(compact_tx, msg::Type::CompactTransaction)
 		} else {
 			debug!(
 				LOGGER,
-				"Not sending tx_kernels for tx {} to {} (already seen)",
-				tx.hash(),
+				"Not sending {:?} to {} (already seen)",
+				compact_tx,
 				self.info.addr,
 			);
 			Ok(())
@@ -314,6 +309,17 @@ impl Peer {
 			.as_ref()
 			.unwrap()
 			.send(&h, msg::Type::GetBlock)
+	}
+
+	pub fn send_transaction_request(&self, compact_tx: &core::CompactTransaction) -> Result<(), Error> {
+		debug!(
+			LOGGER,
+			"Requesting full tx for {:?} from peer {}.", compact_tx, self.info.addr
+		);
+		self.connection
+			.as_ref()
+			.unwrap()
+			.send(compact_tx, msg::Type::GetTransaction)
 	}
 
 	/// Sends a request for a specific compact block by hash
@@ -430,6 +436,11 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.transaction_received(tx, stem)
 	}
 
+	fn compact_transaction_received(&self, compact_tx: core::CompactTransaction, addr: SocketAddr) {
+		// Do not track this, we don't know if its a valid tx or not until we see the full tx.
+		self.adapter.compact_transaction_received(compact_tx, addr)
+	}
+
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
 		self.push(b.hash());
 		self.adapter.block_received(b, addr)
@@ -455,6 +466,10 @@ impl ChainAdapter for TrackingAdapter {
 
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
+	}
+
+	fn get_transaction(&self, compact_tx: core::CompactTransaction) -> Option<core::Transaction> {
+		self.adapter.get_transaction(compact_tx)
 	}
 
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {

@@ -22,6 +22,7 @@ use core::core::hash::Hash;
 use core::core::target::Difficulty;
 use core::{core, ser};
 use grin_store;
+use util::secp::pedersen;
 
 /// Maximum number of block headers a peer should ever send
 pub const MAX_BLOCK_HEADERS: u32 = 512;
@@ -266,6 +267,8 @@ pub trait ChainAdapter: Sync + Send {
 	/// A valid transaction has been received from one of our peers
 	fn transaction_received(&self, tx: core::Transaction, stem: bool);
 
+	fn compact_transaction_received(&self, compact_tx: core::CompactTransaction, addr: SocketAddr);
+
 	/// A block has been received from one of our peers. Returns true if the
 	/// block could be handled properly and is not deemed defective by the
 	/// chain. Returning false means the block will never be valid and
@@ -288,6 +291,8 @@ pub trait ChainAdapter: Sync + Send {
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
+
+	fn get_transaction(&self, compact_tx: core::CompactTransaction) -> Option<core::Transaction>;
 
 	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistant state

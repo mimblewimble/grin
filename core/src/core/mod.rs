@@ -17,6 +17,7 @@
 pub mod block;
 pub mod committed;
 pub mod compact_block;
+pub mod compact_transaction;
 pub mod hash;
 pub mod id;
 pub mod merkle_proof;
@@ -37,6 +38,7 @@ pub use self::committed::Committed;
 pub use self::compact_block::*;
 pub use self::id::ShortId;
 pub use self::transaction::*;
+pub use self::compact_transaction::*;
 use core::hash::Hashed;
 use global;
 use ser::{self, Readable, Reader, Writeable, Writer};

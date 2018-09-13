@@ -70,8 +70,8 @@ enum_from_primitive! {
 		TxHashSetRequest = 16,
 		TxHashSetArchive = 17,
 		BanReason = 18,
-		GetTransaction = 20,
-		TxKernels = 19,
+		GetTransaction = 19,
+		CompactTransaction = 20,
 	}
 }
 
@@ -99,7 +99,7 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::BanReason => 64,
 		// TODO - size these correctly
 		Type::GetTransaction => MAX_BLOCK_SIZE,
-		Type::TxKernels => MAX_BLOCK_SIZE,
+		Type::CompactTransaction => MAX_BLOCK_SIZE,
 	}
 }
 
@@ -628,35 +628,6 @@ impl Readable for Headers {
 			headers.push(header);
 		}
 		Ok(Headers { headers: headers })
-	}
-}
-
-pub struct TxKernels {
-	pub kernels: Vec<Commitment>,
-}
-
-impl Writeable for TxKernels {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u16(self.kernels.len() as u16)?;
-		for x in &self.kernels {
-			x.write(writer)?
-		}
-		Ok(())
-	}
-}
-
-impl Readable for TxKernels {
-	fn read(reader: &mut Reader) -> Result<TxKernels, ser::Error> {
-		let len = reader.read_u16()?;
-		// TODO - length validation
-		if len > 100 {
-			return Err(ser::Error::TooLargeReadErr);
-		}
-		let mut kernels = Vec::with_capacity(len as usize);
-		for _ in 0..len {
-			kernels.push(Commitment::read(reader)?);
-		}
-		Ok(TxKernels { kernels })
 	}
 }
 

@@ -23,7 +23,7 @@ use core::id::ShortIdentifiable;
 use core::{KernelFeatures, Output, OutputFeatures, ShortId, TxKernel};
 use ser::{self, read_multi, Readable, Reader, Writeable, Writer};
 
-/// Container for full (full) outputs and kernels and kern_ids for a compact block.
+/// Container for (full) outputs and kernels and kern_ids (short_ids) for a compact block.
 #[derive(Debug, Clone)]
 pub struct CompactBlockBody {
 	/// List of full outputs - specifically the coinbase output(s)
