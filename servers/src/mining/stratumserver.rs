@@ -30,11 +30,11 @@ use common::stats::{StratumStats, WorkerStats};
 use common::types::{StratumServerConfig, SyncState};
 use core::core::verifier_cache::VerifierCache;
 use core::core::Block;
-use core::{global, pow};
+use core::{global, pow, ser};
 use keychain;
 use mining::mine_block;
 use pool;
-use util::LOGGER;
+use util::{LOGGER, self};
 
 // ----------------------------------------
 // http://www.jsonrpc.org/specification
@@ -266,15 +266,17 @@ impl StratumServer {
 	fn build_block_template(&self) -> JobTemplate {
 		let bh = self.current_block_versions.last().unwrap().header.clone();
 		// Serialize the block header into pre and post nonce strings
-		let mut pre_pow_writer = mine_block::HeaderPrePowWriter::default();
-		bh.write_pre_pow(&mut pre_pow_writer).unwrap();
-		bh.pow.write_pre_pow(bh.version, &mut pre_pow_writer).unwrap();
-		let pre = pre_pow_writer.as_hex_string(false);
+		let mut header_buf = vec![];
+		{
+			let mut writer = ser::BinWriter::new(&mut header_buf);
+			bh.write_pre_pow(&mut writer).unwrap();
+		}
+		let pre_pow = util::to_hex(header_buf);
 		let job_template = JobTemplate {
 			height: bh.height,
 			job_id: (self.current_block_versions.len() - 1) as u64,
 			difficulty: self.minimum_share_difficulty,
-			pre_pow: pre,
+			pre_pow,
 		};
 		return job_template;
 	}
