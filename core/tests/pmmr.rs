@@ -15,9 +15,13 @@
 //! PMMR tests
 #[macro_use]
 extern crate grin_core as core;
+extern crate chrono;
 extern crate croaring;
 
 mod vec_backend;
+
+use chrono::prelude::Utc;
+use std::u64;
 
 use core::core::hash::Hash;
 use core::core::pmmr::{self, PMMR};
@@ -34,6 +38,26 @@ fn some_peak_map() {
 	assert_eq!(pmmr::peak_map_height(5), (0b11, 1));
 	assert_eq!(pmmr::peak_map_height(6), (0b11, 2));
 	assert_eq!(pmmr::peak_map_height(7), (0b100, 0));
+	assert_eq!(pmmr::peak_map_height(u64::MAX), ((u64::MAX >> 1) + 1, 0));
+	assert_eq!(pmmr::peak_map_height(u64::MAX - 1), (u64::MAX >> 1, 63));
+}
+
+#[ignore]
+#[test]
+fn bench_peak_map() {
+	let nano_to_millis = 1.0 / 1_000_000.0;
+
+	let increments = vec![1000_000u64, 10_000_000u64, 100_000_000u64];
+
+	for v in increments {
+		let start = Utc::now().timestamp_nanos();
+		for i in 0..v {
+			let _ = pmmr::peak_map_height(i);
+		}
+		let fin = Utc::now().timestamp_nanos();
+		let dur_ms = (fin - start) as f64 * nano_to_millis;
+		println!("{:9?} peak_map_height() in {:9.3?}ms", v, dur_ms);
+	}
 }
 
 #[test]
