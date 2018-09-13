@@ -446,13 +446,19 @@ impl Peers {
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up
-		for peer in self.connected_peers() {
+		for peer in self.peers.read().unwrap().values() {
 			let peer_inner = peer.read().unwrap();
 			if peer_inner.is_banned() {
-				debug!(LOGGER, "cleaning {:?}, peer banned", peer_inner.info.addr);
+				debug!(
+					LOGGER,
+					"clean_peers {:?}, peer banned", peer_inner.info.addr
+				);
 				rm.push(peer.clone());
 			} else if !peer_inner.is_connected() {
-				debug!(LOGGER, "cleaning {:?}, not connected", peer_inner.info.addr);
+				debug!(
+					LOGGER,
+					"clean_peers {:?}, not connected", peer_inner.info.addr
+				);
 				rm.push(peer.clone());
 			}
 		}
