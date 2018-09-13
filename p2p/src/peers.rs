@@ -460,13 +460,6 @@ impl Peers {
 					"clean_peers {:?}, not connected", peer_inner.info.addr
 				);
 				rm.push(peer.clone());
-			} else if peer_inner.to_be_banned() {
-				debug!(
-					LOGGER,
-					"clean_peers {:?}, peer banned now", peer_inner.info.addr
-				);
-				self.ban_peer(&peer_inner.info.addr, ReasonForBan::BadOthers);
-				rm.push(peer.clone());
 			}
 		}
 

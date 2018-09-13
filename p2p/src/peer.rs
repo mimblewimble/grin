@@ -41,9 +41,6 @@ enum State {
 	// Banned from Peers side, by ban_peer().
 	//   This could happen when error in block (or compact block) received, header(s) received,
 	//   or txhashset received.
-	ToBeBanned,
-	// It's the case of Error::Serialization and not banned from Peers side, by ban_peer().
-	//   This `Error::Serialization` error could happen in such as Hand/Shake, Ping/Pong, etc.
 }
 
 pub struct Peer {
@@ -134,31 +131,17 @@ impl Peer {
 
 	/// Whether this peer is still connected.
 	pub fn is_connected(&self) -> bool {
-		if !self.check_connection() {
-			return false;
-		}
-		let state = self.state.read().unwrap();
-		*state == State::Connected
+		self.check_connection()
 	}
 
 	/// Whether this peer has been banned.
 	pub fn is_banned(&self) -> bool {
-		let _ = self.check_connection();
-		let state = self.state.read().unwrap();
-		*state == State::Banned
-	}
-
-	/// Whether this peer is to be banned. Refer to 'ToBeBanned' comments.
-	pub fn to_be_banned(&self) -> bool {
-		let _ = self.check_connection();
-		let state = self.state.read().unwrap();
-		*state == State::ToBeBanned
+		State::Banned == *self.state.read().unwrap()
 	}
 
 	/// Set this peer status to banned
 	pub fn set_banned(&self) {
-		let mut state = self.state.write().unwrap();
-		*state = State::Banned;
+		*self.state.write().unwrap() = State::Banned;
 	}
 
 	/// Send a ping to the remote peer, providing our local difficulty and
@@ -343,30 +326,26 @@ impl Peer {
 	}
 
 	fn check_connection(&self) -> bool {
+		let mut state = self.state.write().unwrap();
 		match self.connection.as_ref().unwrap().error_channel.try_recv() {
 			Ok(Error::Serialization(e)) => {
-				let mut state = self.state.write().unwrap();
 				if State::Banned != *state {
-					*state = State::ToBeBanned;
+					*state = State::Disconnected;
 					info!(
 						LOGGER,
-						"Client {} corrupted, will ban ({:?}).", self.info.addr, e
+						"Client {} corrupted, will disconnect ({:?}).", self.info.addr, e
 					);
-				} else {
-					info!(
-						LOGGER,
-						"Client {} corrupted, but already banned ({:?}).", self.info.addr, e
-					);
+					self.stop();
 				}
 				false
 			}
 			Ok(e) => {
-				let mut state = self.state.write().unwrap();
 				*state = State::Disconnected;
 				debug!(LOGGER, "Client {} connection lost: {:?}", self.info.addr, e);
+				self.stop();
 				false
 			}
-			Err(_) => true,
+			Err(_) => State::Connected == *state,
 		}
 	}
 }
