@@ -3,7 +3,7 @@ Grin Code of Conduct
 
 Contact: [grinmods@googlegroups.com](mailto:grinmods@googlegroups.com)
 
-We are commited to providing a friendly, safe, and welcoming environment for all contributors.
+We are committed to providing a friendly, safe, and welcoming environment for all contributors.
 
 Treat every member of the Grin community with respect, kindness, and tactfulness. When differences arise, assume others have good intentions and offer critiques by proposing positive, credible alternatives. Focus on grin rather than divisive topics.
 
