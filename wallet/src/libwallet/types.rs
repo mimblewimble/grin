@@ -28,7 +28,7 @@ use uuid::Uuid;
 use core::core::hash::Hash;
 use core::ser;
 
-use keychain::{Identifier, Keychain};
+use keychain::{ExtKeychain, Identifier, Keychain};
 
 use libtx::aggsig;
 use libtx::slate::Slate;
@@ -72,6 +72,9 @@ where
 	/// Return the client being used
 	fn client(&mut self) -> &mut C;
 
+	/// Set parent key id by stored account name
+	fn set_parent_key_id_by_name(&mut self, label: &str) -> Result<(), Error>;
+
 	/// The BIP32 path of the parent path to use for all output-related
 	/// functions, (essentially 'accounts' within a wallet.
 	fn set_parent_key_id(&mut self, Identifier);
@@ -96,6 +99,13 @@ where
 
 	/// Iterate over all output data stored by the backend
 	fn tx_log_iter<'a>(&'a self) -> Box<Iterator<Item = TxLogEntry> + 'a>;
+
+	/// Iterate over all stored account paths
+	fn acct_path_iter<'a>(&'a self) -> Box<Iterator<Item = AcctPathMapping> + 'a>;
+
+	/// Gets an account path for a given label
+	fn get_acct_path(&self, label: String) -> Result<Option<AcctPathMapping>, Error>;
+
 
 	/// Create a new write batch to update or remove output data
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch<K> + 'a>, Error>;
@@ -147,11 +157,17 @@ where
 	/// get next tx log entry for the parent
 	fn next_tx_log_id(&mut self, parent_key_id: &Identifier) -> Result<u32, Error>;
 
-	/// Iterate over all output data stored by the backend
+	/// Iterate over tx log data stored by the backend
 	fn tx_log_iter(&self) -> Box<Iterator<Item = TxLogEntry>>;
 
 	/// save a tx log entry
-	fn save_tx_log_entry(&self, t: TxLogEntry) -> Result<(), Error>;
+	fn save_tx_log_entry(&self, t: TxLogEntry, parent_id: &Identifier) -> Result<(), Error>;
+
+	/// save an account label -> path mapping
+	fn save_acct_path(&mut self, mapping: AcctPathMapping) -> Result<(), Error>;
+
+	/// Iterate over account names stored in backend
+	fn acct_path_iter(&self) -> Box<Iterator<Item = AcctPathMapping>>;
 
 	/// Save an output as locked in the backend
 	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error>;
@@ -551,6 +567,8 @@ impl fmt::Display for TxLogEntryType {
 /// maps to one or many outputs
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TxLogEntry {
+	/// BIP32 account path used for creating this tx
+	pub parent_key_id: Identifier,
 	/// Local id for this transaction (distinct from a slate transaction id)
 	pub id: u32,
 	/// Slate transaction this entry is associated with, if any
@@ -596,8 +614,9 @@ impl ser::Readable for TxLogEntry {
 
 impl TxLogEntry {
 	/// Return a new blank with TS initialised with next entry
-	pub fn new(t: TxLogEntryType, id: u32) -> Self {
+	pub fn new(parent_key_id: Identifier, t: TxLogEntryType, id: u32) -> Self {
 		TxLogEntry {
+			parent_key_id: parent_key_id,
 			tx_type: t,
 			id: id,
 			tx_slate_id: None,
@@ -616,6 +635,28 @@ impl TxLogEntry {
 	/// Update confirmation TS with now
 	pub fn update_confirmation_ts(&mut self) {
 		self.confirmation_ts = Some(Utc::now());
+	}
+}
+
+/// Map of named accounts to BIP32 paths
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AcctPathMapping {
+	/// label used by user
+	pub label: String,
+	/// Corresponding parent BIP32 derivation path
+	pub path: Identifier,
+}
+
+impl ser::Writeable for AcctPathMapping {
+	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_bytes(&serde_json::to_vec(self).map_err(|_| ser::Error::CorruptedData)?)
+	}
+}
+
+impl ser::Readable for AcctPathMapping {
+	fn read(reader: &mut ser::Reader) -> Result<AcctPathMapping, ser::Error> {
+		let data = reader.read_vec()?;
+		serde_json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
 	}
 }
 

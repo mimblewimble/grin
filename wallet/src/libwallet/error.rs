@@ -168,6 +168,14 @@ pub enum ErrorKind {
 	#[fail(display = "Invalid BIP32 Depth (must be 1 or greater)")]
 	InvalidBIP32Depth,
 
+	/// Attempt to add an account that exists
+	#[fail(display = "Account Label '{}' already exists", _0)]
+	AccountLabelAlreadyExists(String),
+
+	/// Reference unknown account label
+	#[fail(display = "Unknown Account Label '{}'", _0)]
+	UnknownAccountLabel(String),
+
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
 	GenericError(String),

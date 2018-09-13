@@ -99,7 +99,7 @@ where
 	let update_sender_wallet_fn = move |wallet: &mut T, tx_hex: &str| {
 		let mut batch = wallet.batch()?;
 		let log_id = batch.next_tx_log_id(&parent_key_id)?;
-		let mut t = TxLogEntry::new(TxLogEntryType::TxSent, log_id);
+		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxSent, log_id);
 		t.tx_slate_id = Some(slate_id);
 		t.fee = Some(fee);
 		t.tx_hex = Some(tx_hex.to_owned());
@@ -131,7 +131,7 @@ where
 				tx_log_entry: Some(log_id),
 			})?;
 		}
-		batch.save_tx_log_entry(t)?;
+		batch.save_tx_log_entry(t, &parent_key_id)?;
 		batch.commit()?;
 		Ok(())
 	};
@@ -187,7 +187,7 @@ where
 	let wallet_add_fn = move |wallet: &mut T| {
 		let mut batch = wallet.batch()?;
 		let log_id = batch.next_tx_log_id(&parent_key_id)?;
-		let mut t = TxLogEntry::new(TxLogEntryType::TxReceived, log_id);
+		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxReceived, log_id);
 		t.tx_slate_id = Some(slate_id);
 		t.amount_credited = amount;
 		t.num_outputs = 1;
@@ -202,7 +202,7 @@ where
 			is_coinbase: false,
 			tx_log_entry: Some(log_id),
 		})?;
-		batch.save_tx_log_entry(t)?;
+		batch.save_tx_log_entry(t, &parent_key_id)?;
 		batch.commit()?;
 		Ok(())
 	};

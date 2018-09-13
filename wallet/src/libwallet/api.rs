@@ -27,11 +27,11 @@ use serde_json as json;
 use core::core::hash::Hashed;
 use core::core::Transaction;
 use core::ser;
-use keychain::Keychain;
+use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
-use libwallet::internal::{selection, tx, updater};
+use libwallet::internal::{keys, selection, tx, updater};
 use libwallet::types::{
-	BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend, WalletClient, WalletInfo,
+	AcctPathMapping, BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend, WalletClient, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
 use util::secp::pedersen;
@@ -104,13 +104,14 @@ where
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
+		println!("w.parent_key_id: {:?}", parent_key_id);
 
 		let mut validated = false;
 		if refresh_from_node {
 			validated = self.update_outputs(&mut w);
 		}
 
-		let res = Ok((validated, updater::retrieve_txs(&mut **w, tx_id)?));
+		let res = Ok((validated, updater::retrieve_txs(&mut **w, tx_id, &parent_key_id)?));
 
 		w.close()?;
 		res
@@ -135,6 +136,23 @@ where
 
 		w.close()?;
 		res
+	}
+
+	/// Return list of existing account -> Path mappings
+	pub fn accounts(
+		&mut self,
+	) -> Result<Vec<AcctPathMapping>, Error> {
+		let mut w = self.wallet.lock().unwrap();
+		keys::accounts(&mut **w)
+	}
+
+	/// Create a new account path
+	pub fn new_account_path(
+		&mut self,
+		label: &str,
+	) -> Result<Identifier, Error> {
+		let mut w = self.wallet.lock().unwrap();
+		keys::new_acct_path(&mut **w, label)
 	}
 
 	/// Issues a send transaction and sends to recipient
@@ -327,7 +345,8 @@ where
 		let (confirmed, tx_hex) = {
 			let mut w = self.wallet.lock().unwrap();
 			w.open_with_credentials()?;
-			let res = tx::retrieve_tx_hex(&mut **w, tx_id)?;
+			let parent_key_id = w.parent_key_id();
+			let res = tx::retrieve_tx_hex(&mut **w, &parent_key_id, tx_id)?;
 			w.close()?;
 			res
 		};
@@ -360,8 +379,9 @@ where
 		let (confirmed, tx_hex) = {
 			let mut w = self.wallet.lock().unwrap();
 			w.open_with_credentials()?;
+			let parent_key_id = w.parent_key_id();
 			client = w.client().clone();
-			let res = tx::retrieve_tx_hex(&mut **w, tx_id)?;
+			let res = tx::retrieve_tx_hex(&mut **w, &parent_key_id, tx_id)?;
 			w.close()?;
 			res
 		};

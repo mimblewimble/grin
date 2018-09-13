@@ -153,7 +153,7 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id))?;
+	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), &parent_key_id)?;
 	if tx_vec.len() != 1 {
 		return Err(ErrorKind::TransactionDoesntExist(tx_id))?;
 	}
@@ -167,7 +167,7 @@ where
 	// get outputs associated with tx
 	let res = updater::retrieve_outputs(wallet, false, Some(tx_id), &parent_key_id)?;
 	let outputs = res.iter().map(|(out, _)| out).cloned().collect();
-	updater::cancel_tx_and_outputs(wallet, tx, outputs)?;
+	updater::cancel_tx_and_outputs(wallet, tx, outputs, parent_key_id)?;
 	Ok(())
 }
 
@@ -175,6 +175,7 @@ where
 /// as well as whether it's been confirmed
 pub fn retrieve_tx_hex<T: ?Sized, C, K>(
 	wallet: &mut T,
+	parent_key_id: &Identifier,
 	tx_id: u32,
 ) -> Result<(bool, Option<String>), Error>
 where
@@ -182,7 +183,7 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id))?;
+	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), parent_key_id)?;
 	if tx_vec.len() != 1 {
 		return Err(ErrorKind::TransactionDoesntExist(tx_id))?;
 	}

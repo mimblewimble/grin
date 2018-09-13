@@ -264,7 +264,6 @@ where
 		req: &Request<Body>,
 		mut api: APIOwner<T, C, K>,
 	) -> Result<(bool, WalletInfo), Error> {
-		let root_key_id = K::root_key_id();
 		let update_from_node = param_exists(req, "refresh");
 		api.retrieve_summary_info(update_from_node)
 	}

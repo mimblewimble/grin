@@ -208,11 +208,11 @@ where
 			if !output.is_coinbase {
 				let log_id = batch.next_tx_log_id(&root_key_id)?;
 				// also keep tx log updated so everything still tallies
-				let mut t = TxLogEntry::new(TxLogEntryType::TxReceived, log_id);
+				let mut t = TxLogEntry::new(root_key_id.clone(), TxLogEntryType::TxReceived, log_id);
 				t.amount_credited = output.value;
 				t.num_outputs = 1;
 				tx_log_entry = Some(log_id);
-				let _ = batch.save_tx_log_entry(t);
+				let _ = batch.save_tx_log_entry(t, &root_key_id);
 			}
 			let _ = batch.save(OutputData {
 				root_key_id: root_key_id.clone(),

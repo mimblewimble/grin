@@ -82,6 +82,7 @@ where
 pub fn retrieve_txs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	tx_id: Option<u32>,
+	parent_key_id: &Identifier,
 ) -> Result<Vec<TxLogEntry>, Error>
 where
 	T: WalletBackend<C, K>,
@@ -97,7 +98,12 @@ where
 			vec![]
 		}
 	} else {
-		wallet.tx_log_iter().collect::<Vec<_>>()
+		wallet.tx_log_iter()
+			.filter(|t| {
+				println!("t.parent_key_id: {:?}", t.parent_key_id);
+				t.parent_key_id == *parent_key_id
+			})
+			.collect::<Vec<_>>()
 	};
 	txs.sort_by_key(|tx| tx.creation_ts);
 	Ok(txs)
@@ -146,6 +152,7 @@ pub fn cancel_tx_and_outputs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	tx: TxLogEntry,
 	outputs: Vec<OutputData>,
+	parent_key_id: &Identifier,
 ) -> Result<(), libwallet::Error>
 where
 	T: WalletBackend<C, K>,
@@ -153,6 +160,7 @@ where
 	K: Keychain,
 {
 	let mut batch = wallet.batch()?;
+
 	for mut o in outputs {
 		// unlock locked outputs
 		if o.status == OutputStatus::Unconfirmed {
@@ -170,7 +178,7 @@ where
 	if tx.tx_type == TxLogEntryType::TxReceived {
 		tx.tx_type = TxLogEntryType::TxReceivedCancelled;
 	}
-	batch.save_tx_log_entry(tx)?;
+	batch.save_tx_log_entry(tx, parent_key_id)?;
 	batch.commit()?;
 	Ok(())
 }
@@ -215,14 +223,14 @@ where
 						// if this is a coinbase tx being confirmed, it's recordable in tx log
 						if output.is_coinbase && output.status == OutputStatus::Unconfirmed {
 							let log_id = batch.next_tx_log_id(parent_key_id)?;
-							let mut t = TxLogEntry::new(TxLogEntryType::ConfirmedCoinbase, log_id);
+							let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::ConfirmedCoinbase, log_id);
 							t.confirmed = true;
 							t.amount_credited = output.value;
 							t.amount_debited = 0;
 							t.num_outputs = 1;
 							t.update_confirmation_ts();
 							output.tx_log_entry = Some(log_id);
-							batch.save_tx_log_entry(t)?;
+							batch.save_tx_log_entry(t, &parent_key_id)?;
 						}
 						// also mark the transaction in which this output is involved as confirmed
 						// note that one involved input/output confirmation SHOULD be enough
@@ -234,7 +242,7 @@ where
 							if let Some(mut t) = tx {
 								t.update_confirmation_ts();
 								t.confirmed = true;
-								batch.save_tx_log_entry(t)?;
+								batch.save_tx_log_entry(t, &parent_key_id)?;
 							}
 						}
 						output.height = o.1;

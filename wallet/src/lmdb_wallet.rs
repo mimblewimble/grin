@@ -20,7 +20,7 @@ use failure::ResultExt;
 use uuid::Uuid;
 
 use keychain::{ChildNumber, ExtKeychain, Identifier, Keychain};
-use store::{self, option_to_not_found, to_key, u64_to_key};
+use store::{self, option_to_not_found, to_key, u64_to_key, to_key_u64};
 
 use libwallet::types::*;
 use libwallet::{internal, Error, ErrorKind};
@@ -36,6 +36,7 @@ const CONFIRMED_HEIGHT_PREFIX: u8 = 'c' as u8;
 const PRIVATE_TX_CONTEXT_PREFIX: u8 = 'p' as u8;
 const TX_LOG_ENTRY_PREFIX: u8 = 't' as u8;
 const TX_LOG_ID_PREFIX: u8 = 'i' as u8;
+const ACCOUNT_PATH_MAPPING_PREFIX: u8 = 'a' as u8;
 
 impl From<store::Error> for Error {
 	fn from(error: store::Error) -> Error {
@@ -69,15 +70,30 @@ impl<C, K> LMDBBackend<C, K> {
 		fs::create_dir_all(&db_path).expect("Couldn't create wallet backend directory!");
 
 		let lmdb_env = Arc::new(store::new_env(db_path.to_str().unwrap().to_string()));
-		let db = store::Store::open(lmdb_env, DB_DIR);
-		Ok(LMDBBackend {
-			db,
+		let store = store::Store::open(lmdb_env, DB_DIR);
+
+		// Make sure default wallet derivation path always exists
+		let default_account = AcctPathMapping{
+			label: "default".to_owned(),
+			path: LMDBBackend::<C,K>::default_path(),
+		};
+		let acct_key = to_key(ACCOUNT_PATH_MAPPING_PREFIX, &mut default_account.label.as_bytes().to_vec());
+
+		{
+			let batch = store.batch()?;
+			batch.put_ser(&acct_key, &default_account)?;
+			batch.commit()?;
+		}
+
+		let res = LMDBBackend {
+			db: store,
 			config: config.clone(),
 			passphrase: String::from(passphrase),
 			keychain: None,
 			parent_key_id: LMDBBackend::<C, K>::default_path(),
 			client: client,
-		})
+		};
+		Ok(res)
 	}
 
 	fn default_path() -> Identifier {
@@ -125,6 +141,18 @@ where
 	/// Return the client being used
 	fn client(&mut self) -> &mut C {
 		&mut self.client
+	}
+
+	/// Set parent path by account name
+	fn set_parent_key_id_by_name(&mut self, label: &str) -> Result<(), Error> {
+		let label = label.to_owned();
+		let res = self.acct_path_iter().find(|l| l.label == label);
+		if let Some(a) = res {
+			self.set_parent_key_id(a.path);
+			Ok(())
+		} else {
+			return Err(ErrorKind::UnknownAccountLabel(label.clone()).into());
+		}
 	}
 
 	/// set parent path
@@ -187,6 +215,15 @@ where
 			self.db.get_ser(&ctx_key),
 			&format!("Slate id: {:x?}", slate_id.to_vec()),
 		).map_err(|e| e.into())
+	}
+
+	fn acct_path_iter<'a>(&'a self) -> Box<Iterator<Item = AcctPathMapping> + 'a>{
+		Box::new(self.db.iter(&[ACCOUNT_PATH_MAPPING_PREFIX]).unwrap())
+	}
+
+	fn get_acct_path(&self, label: String) -> Result<Option<AcctPathMapping>, Error>{
+		let acct_key = to_key(ACCOUNT_PATH_MAPPING_PREFIX, &mut label.as_bytes().to_vec());
+		self.db.get_ser(&acct_key).map_err(|e| e.into())
 	}
 
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch<K> + 'a>, Error> {
@@ -317,12 +354,12 @@ where
 			Some(t) => t,
 			None => 0,
 		};
-		last_tx_log_id = last_tx_log_id + 1;
 		self.db
 			.borrow()
 			.as_ref()
 			.unwrap()
 			.put_ser(&tx_id_key, &last_tx_log_id)?;
+			println!("Last ID: {}", last_tx_log_id);
 		Ok(last_tx_log_id)
 	}
 
@@ -364,10 +401,27 @@ where
 		Ok(())
 	}
 
-	fn save_tx_log_entry(&self, t: TxLogEntry) -> Result<(), Error> {
-		let tx_log_key = u64_to_key(TX_LOG_ENTRY_PREFIX, t.id as u64);
+	fn save_tx_log_entry(&self, t: TxLogEntry, parent_id: &Identifier) -> Result<(), Error> {
+		let tx_log_key = to_key_u64(TX_LOG_ID_PREFIX, &mut parent_id.to_bytes().to_vec(), t.id as u64);
 		self.db.borrow().as_ref().unwrap().put_ser(&tx_log_key, &t)?;
 		Ok(())
+	}
+
+	fn save_acct_path(&mut self, mapping: AcctPathMapping) -> Result<(), Error>{
+		let acct_key = to_key(ACCOUNT_PATH_MAPPING_PREFIX, &mut mapping.label.as_bytes().to_vec());
+		self.db.borrow().as_ref().unwrap().put_ser(&acct_key, &mapping)?;
+		Ok(())
+	}
+
+	fn acct_path_iter(&self) -> Box<Iterator<Item = AcctPathMapping>> {
+		Box::new(
+			self.db
+				.borrow()
+				.as_ref()
+				.unwrap()
+				.iter(&[ACCOUNT_PATH_MAPPING_PREFIX])
+				.unwrap(),
+		)
 	}
 
 	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error> {
