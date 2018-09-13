@@ -23,20 +23,14 @@ use core::id::{ShortId, ShortIdentifiable};
 use core::{KernelFeatures, Output, OutputFeatures, Transaction, TxKernel};
 use ser::{self, read_multi, Readable, Reader, Writeable, Writer};
 
-
 #[derive(Debug, Clone)]
 pub struct CompactTransactionBody {
 	pub kern_ids: Vec<ShortId>,
 }
 
 impl CompactTransactionBody {
-	fn init(
-		kern_ids: Vec<ShortId>,
-		verify_sorted: bool,
-	) -> Result<Self, Error> {
-		let body = CompactTransactionBody {
-			kern_ids,
-		};
+	fn init(kern_ids: Vec<ShortId>, verify_sorted: bool) -> Result<Self, Error> {
+		let body = CompactTransactionBody { kern_ids };
 
 		if verify_sorted {
 			// If we are verifying sort order then verify and
@@ -75,8 +69,8 @@ impl Readable for CompactTransactionBody {
 		let kern_ids = read_multi(reader, kern_id_len)?;
 
 		// Initialize transaction block body, verifying sort order.
-		let body = CompactTransactionBody::init(kern_ids, true)
-			.map_err(|_| ser::Error::CorruptedData)?;
+		let body =
+			CompactTransactionBody::init(kern_ids, true).map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(body)
 	}
@@ -139,8 +133,7 @@ impl From<Transaction> for CompactTransaction {
 		}
 
 		// Initialize a compact transaction body and sort everything.
-		let body = CompactTransactionBody::init(kern_ids, false)
-			.expect("sorting, not verifying");
+		let body = CompactTransactionBody::init(kern_ids, false).expect("sorting, not verifying");
 
 		CompactTransaction {
 			tx_hash,
@@ -173,7 +166,9 @@ impl Readable for CompactTransaction {
 		};
 
 		// Now validate the compact transaction and treat any validation error as corrupted data.
-		compact_tx.validate_read().map_err(|_| ser::Error::CorruptedData)?;
+		compact_tx
+			.validate_read()
+			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(compact_tx)
 	}

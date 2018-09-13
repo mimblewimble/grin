@@ -62,7 +62,10 @@ impl Pool {
 		self.entries.iter().any(|x| x.tx.hash() == tx.hash())
 	}
 
-	pub fn retrieve_transactions_for_compact_transaction(&self, compact_tx: &CompactTransaction) -> Vec<Transaction> {
+	pub fn retrieve_transactions_for_compact_transaction(
+		&self,
+		compact_tx: &CompactTransaction,
+	) -> Vec<Transaction> {
 		let mut txs = vec![];
 
 		for x in &self.entries {

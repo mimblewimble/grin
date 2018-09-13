@@ -29,7 +29,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::transaction;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{BlockHeader, CompactBlock, Transaction, CompactTransaction};
+use core::core::{BlockHeader, CompactBlock, CompactTransaction, Transaction};
 use core::{core, global};
 use p2p;
 use pool;
@@ -83,8 +83,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		debug!(
 			LOGGER,
-			"Received compact_tx ({:?}), looking for matching tx(s) in txpool.",
-			compact_tx,
+			"Received compact_tx ({:?}), looking for matching tx(s) in txpool.", compact_tx,
 		);
 
 		// TODO - actually look in pool
@@ -97,8 +96,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	fn get_transaction(&self, compact_tx: CompactTransaction) -> Option<Transaction> {
 		debug!(
 			LOGGER,
-			"adapter: get_transaction: {:?}, looking for matching tx(s) in txpool.",
-			compact_tx,
+			"adapter: get_transaction: {:?}, looking for matching tx(s) in txpool.", compact_tx,
 		);
 
 		let txs = {
@@ -106,7 +104,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			tx_pool.retrieve_transactions_for_compact_transaction(&compact_tx)
 		};
 
-		debug!(LOGGER, "adapter: get_transaction: txs from tx pool - {}", txs.len());
+		debug!(
+			LOGGER,
+			"adapter: get_transaction: txs from tx pool - {}",
+			txs.len()
+		);
 
 		if txs.len() > 0 {
 			if let Ok(tx) = transaction::aggregate(txs, self.verifier_cache.clone()) {
@@ -657,8 +659,12 @@ impl NetToChainAdapter {
 		}
 	}
 
-	fn send_transaction_request_to_peer<F>(&self, compact_tx: &CompactTransaction, addr: &SocketAddr, f: F)
-	where
+	fn send_transaction_request_to_peer<F>(
+		&self,
+		compact_tx: &CompactTransaction,
+		addr: &SocketAddr,
+		f: F,
+	) where
 		F: Fn(&p2p::Peer, &CompactTransaction) -> Result<(), p2p::Error>,
 	{
 		match wo(&self.peers).get_connected_peer(addr) {

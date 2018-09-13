@@ -158,8 +158,12 @@ impl TransactionPool {
 	}
 
 	/// TODO - Merge this with retrieve_transactions() above.
-	pub fn retrieve_transactions_for_compact_transaction(&self, compact_tx: &CompactTransaction) -> Vec<Transaction> {
-		self.txpool.retrieve_transactions_for_compact_transaction(compact_tx)
+	pub fn retrieve_transactions_for_compact_transaction(
+		&self,
+		compact_tx: &CompactTransaction,
+	) -> Vec<Transaction> {
+		self.txpool
+			.retrieve_transactions_for_compact_transaction(compact_tx)
 	}
 
 	/// Whether the transaction is acceptable to the pool, given both how
