@@ -61,11 +61,7 @@ fn restore_wallet(base_dir: &str, wallet_dir: &str) -> Result<(), libwallet::Err
 
 	let wallet = common::create_wallet(&dest_dir, client.clone());
 
-	wallet_proxy.add_wallet(
-		wallet_dir,
-		client.get_send_instance(),
-		wallet.clone(),
-	);
+	wallet_proxy.add_wallet(wallet_dir, client.get_send_instance(), wallet.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -166,29 +162,17 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 	// proxy
 	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
 	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client.clone());
-	wallet_proxy.add_wallet(
-		"wallet1",
-		client.get_send_instance(),
-		wallet1.clone(),
-	);
+	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone());
 
 	// define recipient wallet, add to proxy
 	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
 	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client.clone());
-	wallet_proxy.add_wallet(
-		"wallet2",
-		client.get_send_instance(),
-		wallet2.clone(),
-	);
+	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone());
 
 	// Another wallet
 	let client = LocalWalletClient::new("wallet3", wallet_proxy.tx.clone());
 	let wallet3 = common::create_wallet(&format!("{}/wallet3", test_dir), client.clone());
-	wallet_proxy.add_wallet(
-		"wallet3",
-		client.get_send_instance(),
-		wallet3.clone(),
-	);
+	wallet_proxy.add_wallet("wallet3", client.get_send_instance(), wallet3.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {

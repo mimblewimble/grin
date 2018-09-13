@@ -312,9 +312,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				Ok(())
 			}
 			("info", Some(_)) => {
-				let (validated, wallet_info) = api
-					.retrieve_summary_info(true)
-					.unwrap_or_else(|e| {
+				let (validated, wallet_info) =
+					api.retrieve_summary_info(true).unwrap_or_else(|e| {
 						panic!(
 							"Error getting wallet info: {:?} Config: {:?}",
 							e, wallet_config
@@ -325,8 +324,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 			}
 			("outputs", Some(_)) => {
 				let (height, _) = api.node_height()?;
-				let (validated, outputs) =
-					api.retrieve_outputs(show_spent, true, None)?;
+				let (validated, outputs) = api.retrieve_outputs(show_spent, true, None)?;
 				let _res = display::outputs(height, validated, outputs).unwrap_or_else(|e| {
 					panic!(
 						"Error getting wallet outputs: {:?} Config: {:?}",

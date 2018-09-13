@@ -63,20 +63,12 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	// proxy
 	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
 	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client.clone());
-	wallet_proxy.add_wallet(
-		"wallet1",
-		client.get_send_instance(),
-		wallet1.clone(),
-	);
+	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone());
 
 	// define recipient wallet, add to proxy
 	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client.clone());
 	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	wallet_proxy.add_wallet(
-		"wallet2",
-		client.get_send_instance(),
-		wallet2.clone(),
-	);
+	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -93,8 +85,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Check wallet 1 contents are as expected
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) =
-			api.retrieve_summary_info(true)?;
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
 		debug!(
 			LOGGER,
 			"Wallet 1 Info Pre-Transaction, after {} blocks: {:?}",
@@ -173,8 +164,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Check wallet 1 contents are as expected
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) =
-			api.retrieve_summary_info(true)?;
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
 		debug!(
 			LOGGER,
 			"Wallet 1 Info Post Transaction, after {} blocks: {:?}",
@@ -216,8 +206,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// refresh wallets and retrieve info/tests for each wallet after maturity
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) =
-			api.retrieve_summary_info(true)?;
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
 		debug!(LOGGER, "Wallet 1 Info: {:?}", wallet1_info);
 		assert!(wallet1_refreshed);
 		assert_eq!(
@@ -232,8 +221,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (wallet2_refreshed, wallet2_info) =
-			api.retrieve_summary_info(true)?;
+		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
 		assert!(wallet2_refreshed);
 		assert_eq!(wallet2_info.amount_currently_spendable, amount);
 
@@ -264,8 +252,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
-		let (refreshed, _wallet1_info) =
-			sender_api.retrieve_summary_info(true)?;
+		let (refreshed, _wallet1_info) = sender_api.retrieve_summary_info(true)?;
 		assert!(refreshed);
 		let (_, txs) = sender_api.retrieve_txs(true, None)?;
 
@@ -289,8 +276,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// check wallet2 has stored transaction
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (wallet2_refreshed, wallet2_info) =
-			api.retrieve_summary_info(true)?;
+		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
 		assert!(wallet2_refreshed);
 		assert_eq!(wallet2_info.amount_currently_spendable, amount * 3);
 
@@ -322,20 +308,12 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	// proxy
 	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
 	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client.clone());
-	wallet_proxy.add_wallet(
-		"wallet1",
-		client.get_send_instance(),
-		wallet1.clone(),
-	);
+	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone());
 
 	// define recipient wallet, add to proxy
 	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
 	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client.clone());
-	wallet_proxy.add_wallet(
-		"wallet2",
-		client.get_send_instance(),
-		wallet2.clone(),
-	);
+	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -380,8 +358,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 		let mut locked_count = 0;
 		let mut unconfirmed_count = 0;
 		// get the tx entry, check outputs are as expected
-		let (_, outputs) =
-			api.retrieve_outputs(true, false, Some(tx.unwrap().id))?;
+		let (_, outputs) = api.retrieve_outputs(true, false, Some(tx.unwrap().id))?;
 		for (o, _) in outputs.clone() {
 			if o.status == OutputStatus::Locked {
 				locked_count = locked_count + 1;
@@ -405,8 +382,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
 		assert!(tx.is_some());
 		// get the tx entry, check outputs are as expected
-		let (_, outputs) =
-			api.retrieve_outputs(true, false, Some(tx.unwrap().id))?;
+		let (_, outputs) = api.retrieve_outputs(true, false, Some(tx.unwrap().id))?;
 		for (o, _) in outputs.clone() {
 			if o.status == OutputStatus::Unconfirmed {
 				unconfirmed_count = unconfirmed_count + 1;

@@ -135,7 +135,6 @@ where
 	fn parent_key_id(&mut self) -> Identifier {
 		self.parent_key_id.clone()
 	}
-	
 
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error> {
 		let key = to_key(OUTPUT_PREFIX, &mut id.to_bytes().to_vec());

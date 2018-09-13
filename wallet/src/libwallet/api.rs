@@ -415,9 +415,7 @@ where
 			w.client().get_chain_height()
 		};
 		match res {
-			Ok(height) => {
-				Ok((height, true))
-			}
+			Ok(height) => Ok((height, true)),
 			Err(_) => {
 				let outputs = self.retrieve_outputs(true, false, None)?;
 				let height = match outputs.1.iter().map(|(out, _)| out.height).max() {
@@ -470,10 +468,7 @@ where
 	}
 
 	/// Build a new (potential) coinbase transaction in the wallet
-	pub fn build_coinbase(
-		&mut self,
-		block_fees: &BlockFees,
-	) -> Result<CbData, Error> {
+	pub fn build_coinbase(&mut self, block_fees: &BlockFees) -> Result<CbData, Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 		let res = updater::build_coinbase(&mut **w, block_fees);
@@ -519,10 +514,7 @@ where
 	}
 
 	/// Receive a transaction from a sender
-	pub fn receive_tx(
-		&mut self,
-		slate: &mut Slate,
-	) -> Result<(), Error> {
+	pub fn receive_tx(&mut self, slate: &mut Slate) -> Result<(), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();

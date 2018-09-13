@@ -357,8 +357,7 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	let (out, kern, block_fees) =
-		receive_coinbase(wallet, block_fees).context(ErrorKind::Node)?;
+	let (out, kern, block_fees) = receive_coinbase(wallet, block_fees).context(ErrorKind::Node)?;
 
 	let out_bin = ser::ser_vec(&out).context(ErrorKind::Node)?;
 

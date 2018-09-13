@@ -484,10 +484,7 @@ where
 		req: Request<Body>,
 		mut api: APIForeign<T, C, K>,
 	) -> Box<Future<Item = CbData, Error = Error> + Send> {
-		Box::new(
-			parse_body(req)
-				.and_then(move |block_fees| api.build_coinbase(&block_fees)),
-		)
+		Box::new(parse_body(req).and_then(move |block_fees| api.build_coinbase(&block_fees)))
 	}
 
 	fn receive_tx(
@@ -495,15 +492,15 @@ where
 		req: Request<Body>,
 		mut api: APIForeign<T, C, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
-		Box::new(parse_body(req).and_then(move |mut slate| {
-			match api.receive_tx(&mut slate) {
+		Box::new(
+			parse_body(req).and_then(move |mut slate| match api.receive_tx(&mut slate) {
 				Ok(_) => ok(slate.clone()),
 				Err(e) => {
 					error!(LOGGER, "receive_tx: failed with error: {}", e);
 					err(e)
 				}
-			}
-		}))
+			}),
+		)
 	}
 
 	fn handle_request(&self, req: Request<Body>) -> WalletResponseFuture {

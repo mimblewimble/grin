@@ -134,8 +134,7 @@ where
 		tx: Sender<WalletProxyMessage>,
 		wallet: Arc<Mutex<Box<WalletInst<LocalWalletClient, K>>>>,
 	) {
-		self.wallets
-			.insert(addr.to_owned(), (tx, wallet));
+		self.wallets.insert(addr.to_owned(), (tx, wallet));
 	}
 
 	/// Run the incoming message queue and respond more or less
