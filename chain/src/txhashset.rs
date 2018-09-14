@@ -1236,11 +1236,7 @@ fn input_pos_to_rewind(
 				return None;
 			}
 		}
-		let bitmap = Bitmap::fast_or(
-			&block_input_bitmaps
-				.iter()
-				.collect::<Vec<&Bitmap>>(),
-		);
+		let bitmap = Bitmap::fast_or(&block_input_bitmaps.iter().collect::<Vec<&Bitmap>>());
 		block_input_bitmaps.clear();
 		block_input_bitmaps.push(bitmap.clone());
 		Some(bitmap)
