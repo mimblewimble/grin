@@ -253,10 +253,8 @@ fn listen_for_addrs(
 	rx: &mpsc::Receiver<SocketAddr>,
 ) {
 	if peers.peer_count() >= p2p.config.peer_max_count() {
-		let mut iter = rx.try_iter();
-		let _ = (0..50)
-			.filter(|&_| !iter.next().is_none())
-			.collect::<Vec<i32>>();
+		// clean the rx messages to avoid accumulating
+		for _ in rx.try_iter() {}
 		return;
 	}
 
