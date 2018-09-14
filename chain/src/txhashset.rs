@@ -1214,8 +1214,8 @@ fn input_pos_to_rewind(
 	head_header: &BlockHeader,
 	batch: &Batch,
 ) -> Result<Bitmap, Error> {
-	let mut bitmap = Bitmap::create();
 	let mut current = head_header.hash();
+	let mut height = head_header.height;
 
 	if head_header.height < block_header.height {
 		debug!(
@@ -1224,27 +1224,42 @@ fn input_pos_to_rewind(
 			head_header.height,
 			block_header.height
 		);
-		return Ok(bitmap);
+		return Ok(Bitmap::create());
 	}
 
-	//
-	// TODO - rework this loop to use Bitmap::fast_or() on a vec of bitmaps.
-	//
-	loop {
-		if current == block_header.hash() {
-			break;
+	// Batching up the block input bitmaps, and running fast_or() on every batch of 256 bitmaps.
+	// so to avoid maintaining a huge vec of bitmaps.
+	let bitmap_fast_or = |b_res, block_input_bitmaps: &mut Vec<Bitmap>| -> Option<Bitmap> {
+		if let Some(b) = b_res {
+			block_input_bitmaps.push(b);
+			if block_input_bitmaps.len() < 256 {
+				return None;
+			}
 		}
+		let bitmap = Bitmap::fast_or(&block_input_bitmaps.iter().collect::<Vec<&Bitmap>>());
+		block_input_bitmaps.clear();
+		block_input_bitmaps.push(bitmap.clone());
+		Some(bitmap)
+	};
 
+	let mut block_input_bitmaps: Vec<Bitmap> = vec![];
+	let bh = block_header.hash();
+
+	while current != bh {
 		// We cache recent block headers and block_input_bitmaps
 		// internally in our db layer (commit_index).
 		// I/O should be minimized or eliminated here for most
 		// rewind scenarios.
-		let current_header = commit_index.get_block_header(&current)?;
-		let input_bitmap_res = batch.get_block_input_bitmap(&current);
-		if let Ok(b) = input_bitmap_res {
-			bitmap.or_inplace(&b);
+		if let Ok(b_res) = batch.get_block_input_bitmap(&current) {
+			bitmap_fast_or(Some(b_res), &mut block_input_bitmaps);
 		}
-		current = current_header.previous;
+		if height == 0 {
+			break;
+		}
+		height -= 1;
+		current = commit_index.get_hash_by_height(height)?;
 	}
+
+	let bitmap = bitmap_fast_or(None, &mut block_input_bitmaps).unwrap();
 	Ok(bitmap)
 }
