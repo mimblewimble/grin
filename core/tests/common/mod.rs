@@ -33,7 +33,7 @@ pub fn tx2i1o() -> Transaction {
 	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
-	build::transaction_with_offset(
+	build::transaction(
 		vec![
 			input(10, key_id1),
 			input(11, key_id2),
@@ -50,7 +50,7 @@ pub fn tx1i1o() -> Transaction {
 	let key_id1 = keychain::ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 
-	build::transaction_with_offset(
+	build::transaction(
 		vec![input(5, key_id1), output(3, key_id2), with_fee(2)],
 		&keychain,
 	).unwrap()
@@ -65,7 +65,7 @@ pub fn tx1i2o() -> Transaction {
 	let key_id2 = keychain::ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 	let key_id3 = keychain::ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
-	build::transaction_with_offset(
+	build::transaction(
 		vec![
 			input(6, key_id1),
 			output(3, key_id2),
