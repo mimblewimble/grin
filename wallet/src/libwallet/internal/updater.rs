@@ -100,9 +100,7 @@ where
 	} else {
 		wallet
 			.tx_log_iter()
-			.filter(|t| {
-				t.parent_key_id == *parent_key_id
-			})
+			.filter(|t| t.parent_key_id == *parent_key_id)
 			.collect::<Vec<_>>()
 	};
 	txs.sort_by_key(|tx| tx.creation_ts);

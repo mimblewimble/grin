@@ -361,7 +361,7 @@ where
 			.borrow()
 			.as_ref()
 			.unwrap()
-			.put_ser(&tx_id_key, &(last_tx_log_id+1))?;
+			.put_ser(&tx_id_key, &(last_tx_log_id + 1))?;
 		Ok(last_tx_log_id)
 	}
 

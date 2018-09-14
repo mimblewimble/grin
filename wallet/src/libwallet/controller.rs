@@ -50,11 +50,11 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-		{
-			let mut w = wallet.lock().unwrap();
-			println!("Controller parent key id: {:?}", w.parent_key_id());
-		}
-  f(&mut APIOwner::new(wallet.clone()))?;
+	{
+		let mut w = wallet.lock().unwrap();
+		println!("Controller parent key id: {:?}", w.parent_key_id());
+	}
+	f(&mut APIOwner::new(wallet.clone()))?;
 	Ok(())
 }
 
