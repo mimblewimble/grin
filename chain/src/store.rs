@@ -24,8 +24,8 @@ use util::secp::pedersen::Commitment;
 
 use core::consensus::TargetError;
 use core::core::hash::{Hash, Hashed};
-use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
+use core::pow::Difficulty;
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, u64_to_key, Error};
 use types::Tip;

@@ -19,7 +19,7 @@ use std::sync::{Arc, RwLock};
 use conn;
 use core::core;
 use core::core::hash::{Hash, Hashed};
-use core::core::target::Difficulty;
+use core::pow::Difficulty;
 use handshake::Handshake;
 use msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest};
 use protocol::Protocol;
@@ -161,7 +161,8 @@ impl Peer {
 	/// Send the ban reason before banning
 	pub fn send_ban_reason(&self, ban_reason: ReasonForBan) {
 		let ban_reason_msg = BanReason { ban_reason };
-		match self.connection
+		match self
+			.connection
 			.as_ref()
 			.unwrap()
 			.send(ban_reason_msg, msg::Type::BanReason)

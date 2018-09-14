@@ -28,10 +28,10 @@ use std::sync::{Arc, RwLock};
 use chain::types::NoopAdapter;
 use chain::Chain;
 use core::core::hash::Hashed;
-use core::core::target::Difficulty;
 use core::core::verifier_cache::LruVerifierCache;
 use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
 use core::global::ChainTypes;
+use core::pow::Difficulty;
 use core::{consensus, global, pow};
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx::{self, build};
@@ -480,7 +480,7 @@ where
 	};
 	b.header.timestamp = prev.timestamp + Duration::seconds(60);
 	b.header.pow.total_difficulty = prev.total_difficulty() + Difficulty::from_num(diff);
-	b.header.pow.proof = core::core::Proof::random(proof_size);
+	b.header.pow.proof = pow::Proof::random(proof_size);
 	b
 }
 

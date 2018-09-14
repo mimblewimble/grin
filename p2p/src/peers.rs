@@ -22,7 +22,7 @@ use rand::{thread_rng, Rng};
 use chrono::prelude::Utc;
 use core::core;
 use core::core::hash::{Hash, Hashed};
-use core::core::target::Difficulty;
+use core::pow::Difficulty;
 use util::LOGGER;
 
 use peer::Peer;

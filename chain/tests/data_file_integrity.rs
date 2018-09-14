@@ -28,11 +28,10 @@ use std::sync::{Arc, RwLock};
 
 use chain::types::NoopAdapter;
 use chain::Chain;
-use core::core::target::Difficulty;
 use core::core::verifier_cache::LruVerifierCache;
 use core::core::{Block, BlockHeader, Transaction};
 use core::global::{self, ChainTypes};
-use core::pow;
+use core::pow::{self, Difficulty};
 use core::{consensus, genesis};
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
