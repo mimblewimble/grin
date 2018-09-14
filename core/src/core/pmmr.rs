@@ -501,10 +501,10 @@ where
 /// side of the range, and navigates toward lower siblings toward the right
 /// of the range.
 pub fn peaks(num: u64) -> Vec<u64> {
-	let mut peak_size = 1;
-	while peak_size < num {
-		peak_size = peak_size << 1 | 1;
+	if num == 0 {
+		return vec![];
 	}
+	let mut peak_size = u64::MAX >> num.leading_zeros();
 	let mut num_left = num;
 	let mut sum_prev_peaks = 0;
 	let mut peaks = vec![];
@@ -546,10 +546,10 @@ pub fn insertion_to_pmmr_index(mut sz: u64) -> u64 {
 ///   / \
 ///  0   1   3   4
 pub fn peak_sizes_height(size: u64) -> (Vec<u64>, u64) {
-	let mut peak_size = 1; // start at arbitrary 2-power minus 1
-	while peak_size < size {
-		peak_size = 2 * peak_size + 1;
+	if size == 0 {
+		return (vec![], 0);
 	}
+	let mut peak_size = u64::MAX >> size.leading_zeros();
 	let mut sizes = vec![];
 	let mut size_left = size;
 	while peak_size != 0 {
@@ -557,7 +557,7 @@ pub fn peak_sizes_height(size: u64) -> (Vec<u64>, u64) {
 			sizes.push(peak_size);
 			size_left -= peak_size;
 		}
-		peak_size /= 2;
+		peak_size >>= 1;
 	}
 	(sizes, size_left)
 }
