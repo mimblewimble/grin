@@ -181,6 +181,10 @@ impl Chain {
 
 		setup_head(genesis, store.clone(), &mut txhashset)?;
 
+		// Node may not have a kernel_pos index as this was introduced later.
+		// Build the index if missing.
+		build_missing_indices(store.clone(), &mut txhashset)?;
+
 		// Now reload the chain head (either existing head or genesis from above)
 		let head = store.head()?;
 
@@ -634,7 +638,7 @@ impl Chain {
 			Ok(())
 		})?;
 
-		// all good, prepare a new batch and update all the required records
+		// All good, prepare a new batch and update the indices.
 		debug!(
 			LOGGER,
 			"chain: txhashset_write: rewinding a 2nd time (writeable)"
@@ -642,7 +646,8 @@ impl Chain {
 		let mut batch = self.store.batch()?;
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			extension.rewind(&header)?;
-			extension.rebuild_index()?;
+			extension.rebuild_output_pos_index()?;
+			extension.rebuild_kernel_pos_index()?;
 			Ok(())
 		})?;
 
@@ -931,6 +936,26 @@ impl Chain {
 			.block_exists(&h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain block exists".to_owned()).into())
 	}
+}
+
+// If we have a kernel for the block at height 1, but we have
+// no corresponding entry in the kernel_pos index then build
+// the missing kernel_pos index.
+fn build_missing_indices(
+	store: Arc<store::ChainStore>,
+	txhashset: &mut txhashset::TxHashSet,
+) -> Result<(), Error> {
+	if let Ok(kernel) = txhashset.kernel_for_block_height(1) {
+		if let Err(_) = store.get_kernel_pos(&kernel.excess()) {
+			let mut batch = store.batch()?;
+			txhashset::extending(txhashset, &mut batch, |extension| {
+				extension.rebuild_kernel_pos_index()?;
+				Ok(())
+			})?;
+			batch.commit()?;
+		}
+	}
+	Ok(())
 }
 
 fn setup_head(
