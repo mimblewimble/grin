@@ -1227,6 +1227,8 @@ fn input_pos_to_rewind(
 		return Ok(Bitmap::create());
 	}
 
+	// Batching up the block input bitmaps, and running fast_or() on every batch of 256 bitmaps.
+	// so to avoid maintaining a huge vec of bitmaps.
 	let bitmap_fast_or = |b_res, block_input_bitmaps: &mut Vec<Bitmap>| -> Option<Bitmap> {
 		if let Some(b) = b_res {
 			block_input_bitmaps.push(b);
@@ -1237,7 +1239,6 @@ fn input_pos_to_rewind(
 		let bitmap = Bitmap::fast_or(
 			&block_input_bitmaps
 				.iter()
-				.map(|x| x)
 				.collect::<Vec<&Bitmap>>(),
 		);
 		block_input_bitmaps.clear();
