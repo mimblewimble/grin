@@ -361,8 +361,7 @@ where
 			.borrow()
 			.as_ref()
 			.unwrap()
-			.put_ser(&tx_id_key, &last_tx_log_id)?;
-		println!("Last ID: {}", last_tx_log_id);
+			.put_ser(&tx_id_key, &(last_tx_log_id+1))?;
 		Ok(last_tx_log_id)
 	}
 
@@ -406,7 +405,7 @@ where
 
 	fn save_tx_log_entry(&self, t: TxLogEntry, parent_id: &Identifier) -> Result<(), Error> {
 		let tx_log_key = to_key_u64(
-			TX_LOG_ID_PREFIX,
+			TX_LOG_ENTRY_PREFIX,
 			&mut parent_id.to_bytes().to_vec(),
 			t.id as u64,
 		);

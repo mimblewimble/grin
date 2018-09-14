@@ -101,7 +101,6 @@ where
 		wallet
 			.tx_log_iter()
 			.filter(|t| {
-				println!("t.parent_key_id: {:?}", t.parent_key_id);
 				t.parent_key_id == *parent_key_id
 			})
 			.collect::<Vec<_>>()

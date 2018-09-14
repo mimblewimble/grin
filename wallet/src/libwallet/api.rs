@@ -105,7 +105,6 @@ where
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
-		println!("w.parent_key_id: {:?}", parent_key_id);
 
 		let mut validated = false;
 		if refresh_from_node {

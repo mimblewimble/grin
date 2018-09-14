@@ -34,11 +34,9 @@ use std::time::Duration;
 
 use core::global;
 use core::global::ChainTypes;
-use keychain::{ExtKeychain, Identifier, Keychain};
+use keychain::{ExtKeychain, Keychain};
 use util::LOGGER;
-use wallet::libtx::slate::Slate;
 use wallet::libwallet;
-use wallet::libwallet::types::OutputStatus;
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -118,12 +116,14 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	{
 		let mut w = wallet1.lock().unwrap();
 		w.set_parent_key_id_by_name("account1")?;
+		assert_eq!(w.parent_key_id(), ExtKeychain::derive_key_id(2, 1, 0, 0, 0));
 	}
 	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 7);
 
 	{
 		let mut w = wallet1.lock().unwrap();
 		w.set_parent_key_id_by_name("account2")?;
+		assert_eq!(w.parent_key_id(), ExtKeychain::derive_key_id(2, 2, 0, 0, 0));
 	}
 	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 5);
 
@@ -139,7 +139,6 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		assert_eq!(txs.len(), 5);
 		Ok(())
 	})?;
-	panic!();
 	// now check second account
 	{
 		let mut w = wallet1.lock().unwrap();
@@ -234,7 +233,7 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 	// Default account on wallet 2 should be untouched
 	{
-		let mut w = wallet1.lock().unwrap();
+		let mut w = wallet2.lock().unwrap();
 		w.set_parent_key_id_by_name("default")?;
 	}
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
@@ -250,218 +249,6 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		assert_eq!(txs.len(), 0);
 		Ok(())
 	})?;
-
-	/*
-										// mine a few blocks
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 10);
-
-	// Check wallet 1 contents are as expected
-	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
-		debug!(
-			LOGGER,
-			"Wallet 1 Info Pre-Transaction, after {} blocks: {:?}",
-			wallet1_info.last_confirmed_height,
-			wallet1_info
-		);
-		assert!(wallet1_refreshed);
-		assert_eq!(
-			wallet1_info.amount_currently_spendable,
-			(wallet1_info.last_confirmed_height - cm) * reward
-		);
-		assert_eq!(wallet1_info.amount_immature, cm * reward);
-		Ok(())
-	})?;
-
-	// assert wallet contents
-	// and a single use api for a send command
-	let amount = 60_000_000_000;
-	let mut slate = Slate::blank(1);
-	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
-		// note this will increment the block count as part of the transaction "Posting"
-		slate = sender_api.issue_send_tx(
-			amount,    // amount
-			2,         // minimum confirmations
-			"wallet2", // dest
-			500,       // max outputs
-			1,         // num change outputs
-			true,      // select all outputs
-		)?;
-		Ok(())
-	})?;
-
-	// Check transaction log for wallet 1
-	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (_, wallet1_info) = api.retrieve_summary_info(true)?;
-		let (refreshed, txs) = api.retrieve_txs(true, None)?;
-		assert!(refreshed);
-		let fee = wallet::libtx::tx_fee(
-			wallet1_info.last_confirmed_height as usize - cm as usize,
-			2,
-			1,
-			None,
-		);
-		// we should have a transaction entry for this slate
-		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
-		assert!(tx.is_some());
-		let tx = tx.unwrap();
-		assert!(!tx.confirmed);
-		assert!(tx.confirmation_ts.is_none());
-		assert_eq!(tx.amount_debited - tx.amount_credited, fee + amount);
-		assert_eq!(Some(fee), tx.fee);
-		Ok(())
-	})?;
-
-	// Check transaction log for wallet 2
-	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (refreshed, txs) = api.retrieve_txs(true, None)?;
-		assert!(refreshed);
-		// we should have a transaction entry for this slate
-		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
-		assert!(tx.is_some());
-		let tx = tx.unwrap();
-		assert!(!tx.confirmed);
-		assert!(tx.confirmation_ts.is_none());
-		assert_eq!(amount, tx.amount_credited);
-		assert_eq!(0, tx.amount_debited);
-		assert_eq!(None, tx.fee);
-		Ok(())
-	})?;
-
-	// post transaction
-	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		api.post_tx(&slate, false)?;
-		Ok(())
-	})?;
-
-	// Check wallet 1 contents are as expected
-	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
-		debug!(
-			LOGGER,
-			"Wallet 1 Info Post Transaction, after {} blocks: {:?}",
-			wallet1_info.last_confirmed_height,
-			wallet1_info
-		);
-		let fee = wallet::libtx::tx_fee(
-			wallet1_info.last_confirmed_height as usize - 1 - cm as usize,
-			2,
-			1,
-			None,
-		);
-		assert!(wallet1_refreshed);
-		// wallet 1 received fees, so amount should be the same
-		assert_eq!(
-			wallet1_info.total,
-			amount * wallet1_info.last_confirmed_height - amount
-		);
-		assert_eq!(
-			wallet1_info.amount_currently_spendable,
-			(wallet1_info.last_confirmed_height - cm) * reward - amount - fee
-		);
-		assert_eq!(wallet1_info.amount_immature, cm * reward + fee);
-
-		// check tx log entry is confirmed
-		let (refreshed, txs) = api.retrieve_txs(true, None)?;
-		assert!(refreshed);
-		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
-		assert!(tx.is_some());
-		let tx = tx.unwrap();
-		assert!(tx.confirmed);
-		assert!(tx.confirmation_ts.is_some());
-
-		Ok(())
-	})?;
-
-	// mine a few more blocks
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
-
-	// refresh wallets and retrieve info/tests for each wallet after maturity
-	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
-		debug!(LOGGER, "Wallet 1 Info: {:?}", wallet1_info);
-		assert!(wallet1_refreshed);
-		assert_eq!(
-			wallet1_info.total,
-			amount * wallet1_info.last_confirmed_height - amount
-		);
-		assert_eq!(
-			wallet1_info.amount_currently_spendable,
-			(wallet1_info.last_confirmed_height - cm - 1) * reward
-		);
-		Ok(())
-	})?;
-
-	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
-		assert!(wallet2_refreshed);
-		assert_eq!(wallet2_info.amount_currently_spendable, amount);
-
-		// check tx log entry is confirmed
-		let (refreshed, txs) = api.retrieve_txs(true, None)?;
-		assert!(refreshed);
-		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
-		assert!(tx.is_some());
-		let tx = tx.unwrap();
-		assert!(tx.confirmed);
-		assert!(tx.confirmation_ts.is_some());
-		Ok(())
-	})?;
-
-	// Send another transaction, but don't post to chain immediately and use
-	// the stored transaction instead
-	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
-		// note this will increment the block count as part of the transaction "Posting"
-		slate = sender_api.issue_send_tx(
-			amount * 2, // amount
-			2,          // minimum confirmations
-			"wallet2",  // dest
-			500,        // max outputs
-			1,          // num change outputs
-			true,       // select all outputs
-		)?;
-		Ok(())
-	})?;
-
-	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
-		let (refreshed, _wallet1_info) = sender_api.retrieve_summary_info(true)?;
-		assert!(refreshed);
-		let (_, txs) = sender_api.retrieve_txs(true, None)?;
-
-		// find the transaction
-		let tx = txs
-			.iter()
-			.find(|t| t.tx_slate_id == Some(slate.id))
-			.unwrap();
-		sender_api.post_stored_tx(tx.id, false)?;
-		let (_, wallet1_info) = sender_api.retrieve_summary_info(true)?;
-		// should be mined now
-		assert_eq!(
-			wallet1_info.total,
-			amount * wallet1_info.last_confirmed_height - amount * 3
-		);
-		Ok(())
-	})?;
-
-	// mine a few more blocks
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
-
-	// check wallet2 has stored transaction
-	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
-		assert!(wallet2_refreshed);
-		assert_eq!(wallet2_info.amount_currently_spendable, amount * 3);
-
-		// check tx log entry is confirmed
-		let (refreshed, txs) = api.retrieve_txs(true, None)?;
-		assert!(refreshed);
-		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
-		assert!(tx.is_some());
-		let tx = tx.unwrap();
-		assert!(tx.confirmed);
-		assert!(tx.confirmation_ts.is_some());
-		Ok(())
-	})?;*/
 
 	// let logging finish
 	thread::sleep(Duration::from_millis(200));
