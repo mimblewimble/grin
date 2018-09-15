@@ -248,6 +248,7 @@ impl ProofOfWork {
 			self.write_pre_pow(ver, writer)?;
 		}
 
+		writer.write_u64(self.nonce)?;
 		self.proof.write(writer)?;
 		Ok(())
 	}
@@ -261,7 +262,6 @@ impl ProofOfWork {
 				[write_u64, self.scaling_difficulty]
 			);
 		}
-		writer.write_u64(self.nonce)?;
 		Ok(())
 	}
 
