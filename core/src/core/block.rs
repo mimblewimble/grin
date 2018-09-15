@@ -283,9 +283,7 @@ impl BlockHeader {
 	pub fn pre_pow_hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
 		self.write_pre_pow(&mut hasher).unwrap();
-		self.pow
-			.write_pre_pow(self.version, &mut hasher)
-			.unwrap();
+		self.pow.write_pre_pow(self.version, &mut hasher).unwrap();
 		hasher.write_u64(self.pow.nonce).unwrap();
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
