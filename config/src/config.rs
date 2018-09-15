@@ -14,6 +14,7 @@
 
 //! Configuration file management
 
+use dirs;
 use std::env;
 use std::fs::{self, File};
 use std::io::prelude::*;
@@ -43,7 +44,7 @@ const GRIN_WALLET_DIR: &'static str = "wallet_data";
 fn get_grin_path() -> Result<PathBuf, ConfigError> {
 	// Check if grin dir exists
 	let grin_path = {
-		match env::home_dir() {
+		match dirs::home_dir() {
 			Some(mut p) => {
 				p.push(GRIN_HOME);
 				p

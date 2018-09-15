@@ -12,9 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate chrono;
 extern crate croaring;
 extern crate rand;
 
+use chrono::prelude::Utc;
 use croaring::Bitmap;
 use rand::Rng;
 
@@ -96,4 +98,63 @@ fn test_a_big_bitmap() {
 	assert!(bitmap.run_optimize());
 	let serialized_buffer = bitmap.serialize();
 	assert_eq!(serialized_buffer.len(), 230);
+}
+
+#[ignore]
+#[test]
+fn bench_fast_or() {
+	let nano_to_millis = 1.0 / 1_000_000.0;
+
+	let bitmaps_number = 256;
+	let size_of_each_bitmap = 1_000;
+
+	let init_bitmaps = || -> Vec<Bitmap> {
+		let mut rng = rand::thread_rng();
+		let mut bitmaps = vec![];
+		for _ in 0..bitmaps_number {
+			let mut bitmap = Bitmap::create();
+			for _ in 0..size_of_each_bitmap {
+				let n = rng.gen_range(0, 1_000_000);
+				bitmap.add(n);
+			}
+			bitmaps.push(bitmap);
+		}
+		bitmaps
+	};
+
+	let mut bitmaps = init_bitmaps();
+	let mut bitmap = Bitmap::create();
+	let start = Utc::now().timestamp_nanos();
+	for _ in 0..bitmaps_number {
+		bitmap.or_inplace(&bitmaps.pop().unwrap());
+	}
+	let fin = Utc::now().timestamp_nanos();
+	let dur_ms = (fin - start) as f64 * nano_to_millis;
+	println!(
+		"  or_inplace(): {:9.3?}ms. bitmap cardinality: {}",
+		dur_ms,
+		bitmap.cardinality()
+	);
+
+	let bitmaps = init_bitmaps();
+	let start = Utc::now().timestamp_nanos();
+	let bitmap = Bitmap::fast_or(&bitmaps.iter().map(|x| x).collect::<Vec<&Bitmap>>());
+	let fin = Utc::now().timestamp_nanos();
+	let dur_ms = (fin - start) as f64 * nano_to_millis;
+	println!(
+		"     fast_or(): {:9.3?}ms. bitmap cardinality: {}",
+		dur_ms,
+		bitmap.cardinality()
+	);
+
+	let bitmaps = init_bitmaps();
+	let start = Utc::now().timestamp_nanos();
+	let bitmap = Bitmap::fast_or_heap(&bitmaps.iter().map(|x| x).collect::<Vec<&Bitmap>>());
+	let fin = Utc::now().timestamp_nanos();
+	let dur_ms = (fin - start) as f64 * nano_to_millis;
+	println!(
+		"fast_or_heap(): {:9.3?}ms. bitmap cardinality: {}",
+		dur_ms,
+		bitmap.cardinality()
+	);
 }

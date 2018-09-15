@@ -140,6 +140,13 @@ impl ChainStore {
 		}
 	}
 
+	pub fn get_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
+		option_to_not_found(
+			self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)),
+			&format!("Hash at height: {}", height),
+		)
+	}
+
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		option_to_not_found(
 			self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)),
