@@ -403,7 +403,10 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			return Err(ErrorKind::InvalidScaling.into());
 		}
 		if !(ctx.pow_verifier)(header, shift) {
-			error!(LOGGER, "pipe: validate_header bad cuckoo shift size {}", shift);
+			error!(
+				LOGGER,
+				"pipe: validate_header bad cuckoo shift size {}", shift
+			);
 			return Err(ErrorKind::InvalidPow.into());
 		}
 	}

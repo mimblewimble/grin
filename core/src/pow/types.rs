@@ -14,10 +14,9 @@
 
 /// Types for a Cuckoo proof of work and its encapsulation as a fully usable
 /// proof of work within a block header.
-
 use std::cmp::max;
-use std::{fmt, iter};
 use std::ops::{Add, Div, Mul, Sub};
+use std::{fmt, iter};
 
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
@@ -25,7 +24,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use consensus::SECOND_POW_SIZESHIFT;
 use core::hash::Hashed;
 use global;
-use ser::{self, Reader, Writer, Readable, Writeable};
+use ser::{self, Readable, Reader, Writeable, Writer};
 
 const HIGH_BIT: u64 = 1 << 63;
 
@@ -66,7 +65,7 @@ impl Difficulty {
 		let adjust_factor = (1 << (shift - global::ref_sizeshift()) as u64) * (shift as u64 - 1);
 		let difficulty = (max_target / max(target, adjust_factor)) * adjust_factor;
 
-		Difficulty{num: difficulty}
+		Difficulty { num: difficulty }
 	}
 
 	/// Same as `from_proof_adjusted` but instead of an adjustment based on
@@ -84,7 +83,7 @@ impl Difficulty {
 		} else {
 			difficulty * scaling
 		};
-		Difficulty{num: difficulty}
+		Difficulty { num: difficulty }
 	}
 
 	/// Converts the difficulty into a u64
@@ -235,7 +234,12 @@ impl ProofOfWork {
 		};
 		let nonce = reader.read_u64()?;
 		let proof = Proof::read(reader)?;
-		Ok(ProofOfWork { total_difficulty, scaling_difficulty, nonce, proof})
+		Ok(ProofOfWork {
+			total_difficulty,
+			scaling_difficulty,
+			nonce,
+			proof,
+		})
 	}
 
 	/// Write implementation, can't define as trait impl as we need a version
@@ -277,8 +281,6 @@ impl ProofOfWork {
 		self.proof.cuckoo_sizeshift
 	}
 }
-
-
 
 /// A Cuckoo Cycle proof of work, consisting of the shift to get the graph
 /// size (i.e. 31 for Cuckoo31 with a 2^31 or 1<<31 graph size) and the nonces
