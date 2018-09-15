@@ -568,7 +568,7 @@ fn block_has_more_work(header: &BlockHeader, tip: &Tip) -> bool {
 }
 
 /// Update the sync head so we can keep syncing from where we left off.
-fn update_sync_head(
+pub fn update_sync_head(
 	bh: &BlockHeader,
 	ctx: &mut BlockContext,
 	batch: &mut store::Batch,

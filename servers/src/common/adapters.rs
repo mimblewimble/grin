@@ -261,9 +261,25 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 
 		// headers will just set us backward if even the last is unknown
-		let last_h = bhs.last().unwrap().hash();
-		if let Ok(_) = w(&self.chain).get_block_header(&last_h) {
+		let bhs_last = bhs.last().unwrap().clone();
+		if let Ok(_) = w(&self.chain).get_block_header(&bhs_last.hash()) {
 			info!(LOGGER, "All known, ignoring");
+
+			// Check if we need update sync head.
+			//   In case of header head already updated by blocks broadcasting.
+			let tip = w(&self.chain).get_sync_head().unwrap();
+			if bhs_last.height > tip.height || w(&self.chain).get_block_header(&tip.hash()).is_err()
+			{
+				let res = w(&self.chain).update_sync_head(&bhs_last, self.chain_opts());
+				if let &Err(ref e) = &res {
+					debug!(
+						LOGGER,
+						"Block header {} update_sync_head fail: {:?}",
+						bhs_last.hash(),
+						e
+					);
+				}
+			}
 			return true;
 		}
 

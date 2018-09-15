@@ -140,18 +140,21 @@ pub fn run_sync(
 							&& si.highest_height.saturating_sub(head.height) > horizon;
 
 						// run the header sync every 10s
-						if si.header_sync_due(&header_head) {
+						if si.header_sync_due(&header_head, Duration::seconds(10)) {
 							header_sync(peers.clone(), chain.clone(), &mut history_locators);
 
 							let status = sync_state.status();
 							match status {
 								SyncStatus::TxHashsetDownload => (),
-								_ => {
+								SyncStatus::HeaderSync { .. }
+								| SyncStatus::NoSync
+								| SyncStatus::Initial => {
 									sync_state.update(SyncStatus::HeaderSync {
 										current_height: header_head.height,
 										highest_height: si.highest_height,
 									});
 								}
+								_ => (),
 							};
 						}
 
@@ -209,6 +212,16 @@ pub fn run_sync(
 						}
 					} else {
 						sync_state.update(SyncStatus::NoSync);
+						// still syncing the header but in longer interval than Sync state
+						if si.header_sync_due(&header_head, Duration::seconds(60)) {
+							header_sync(peers.clone(), chain.clone(), &mut history_locators);
+							debug!(
+								LOGGER,
+								"Independent HeaderSync: {{ current_height: {}, highest_height: {} }}",
+								header_head.height,
+								si.highest_height,
+							);
+						}
 					}
 
 					thread::sleep(time::Duration::from_millis(10));
@@ -659,7 +672,7 @@ impl SyncInfo {
 		}
 	}
 
-	fn header_sync_due(&mut self, header_head: &chain::Tip) -> bool {
+	fn header_sync_due(&mut self, header_head: &chain::Tip, max_timeout: Duration) -> bool {
 		let now = Utc::now();
 		let (timeout, latest_height, prev_height) = self.prev_header_sync;
 
@@ -671,7 +684,7 @@ impl SyncInfo {
 
 		if all_headers_received || stalling {
 			self.prev_header_sync = (
-				now + Duration::seconds(10),
+				now + max_timeout,
 				header_head.height,
 				header_head.height,
 			);
