@@ -683,11 +683,7 @@ impl SyncInfo {
 		let stalling = header_head.height == latest_height && now > timeout;
 
 		if all_headers_received || stalling {
-			self.prev_header_sync = (
-				now + max_timeout,
-				header_head.height,
-				header_head.height,
-			);
+			self.prev_header_sync = (now + max_timeout, header_head.height, header_head.height);
 			true
 		} else {
 			// resetting the timeout as long as we progress
