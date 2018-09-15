@@ -392,15 +392,18 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	if !ctx.opts.contains(Options::SKIP_POW) {
-		if global::min_sizeshift() > header.pow.cuckoo_sizeshift() {
+		let shift = header.pow.cuckoo_sizeshift();
+		// size shift can either be larger than the minimum on the primary PoW
+		// or equal to the seconday PoW size shift
+		if shift != consensus::SECOND_POW_SIZESHIFT && global::min_sizeshift() > shift {
 			return Err(ErrorKind::LowSizeshift.into());
 		}
-		if !(ctx.pow_verifier)(header, header.pow.cuckoo_sizeshift()) {
-			error!(
-				LOGGER,
-				"pipe: validate_header failed for cuckoo shift size {}",
-				header.pow.cuckoo_sizeshift()
-			);
+		// primary PoW must have a scaling factor of 1
+		if shift != consensus::SECOND_POW_SIZESHIFT && header.pow.scaling_difficulty != 1 {
+			return Err(ErrorKind::InvalidScaling.into());
+		}
+		if !(ctx.pow_verifier)(header, shift) {
+			error!(LOGGER, "pipe: validate_header bad cuckoo shift size {}", shift);
 			return Err(ErrorKind::InvalidPow.into());
 		}
 	}
@@ -461,7 +464,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		if target_difficulty != network_difficulty.clone() {
 			error!(
 				LOGGER,
-				"validate_header: BANNABLE OFFENCE: header target difficulty {} != {}",
+				"validate_header: header target difficulty {} != {}",
 				target_difficulty.to_num(),
 				network_difficulty.to_num()
 			);

@@ -57,6 +57,9 @@ pub const PROOFSIZE: usize = 42;
 /// Default Cuckoo Cycle size shift used for mining and validating.
 pub const DEFAULT_MIN_SIZESHIFT: u8 = 30;
 
+/// Secondary proof-of-work size shift, meant to be ASIC resistant.
+pub const SECOND_POW_SIZESHIFT: u8 = 29;
+
 /// Original reference sizeshift to compute difficulty factors for higher
 /// Cuckoo graph sizes, changing this would hard fork
 pub const REFERENCE_SIZESHIFT: u8 = 30;

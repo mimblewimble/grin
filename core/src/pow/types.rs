@@ -14,16 +14,18 @@
 
 /// Types for a Cuckoo proof of work and its encapsulation as a fully usable
 /// proof of work within a block header.
+
 use std::cmp::max;
-use std::ops::{Add, Div, Mul, Sub};
 use std::{fmt, iter};
+use std::ops::{Add, Div, Mul, Sub};
 
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
+use consensus::SECOND_POW_SIZESHIFT;
 use core::hash::Hashed;
 use global;
-use ser::{self, Readable, Reader, Writeable, Writer};
+use ser::{self, Reader, Writer, Readable, Writeable};
 
 const HIGH_BIT: u64 = 1 << 63;
 
@@ -54,24 +56,35 @@ impl Difficulty {
 	/// Computes the difficulty from a hash. Divides the maximum target by the
 	/// provided hash and applies the Cuckoo sizeshift adjustment factor (see
 	/// https://lists.launchpad.net/mimblewimble/msg00494.html).
-	pub fn from_pow(pow: &ProofOfWork) -> Difficulty {
+	pub fn from_proof_adjusted(proof: &Proof) -> Difficulty {
 		let max_target = <u64>::max_value();
-		let target = pow.proof.hash().to_u64();
-		let shift = pow.proof.cuckoo_sizeshift;
+		let target = proof.hash().to_u64();
+		let shift = proof.cuckoo_sizeshift;
 
 		// Adjust the difficulty based on a 2^(N-M)*(N-1) factor, with M being
 		// the minimum sizeshift and N the provided sizeshift
 		let adjust_factor = (1 << (shift - global::ref_sizeshift()) as u64) * (shift as u64 - 1);
 		let difficulty = (max_target / max(target, adjust_factor)) * adjust_factor;
 
+		Difficulty{num: difficulty}
+	}
+
+	/// Same as `from_proof_adjusted` but instead of an adjustment based on
+	/// cycle size, scales based on a provided factor. Used by dual PoW system
+	/// to scale one PoW against the other.
+	pub fn from_proof_scaled(proof: &Proof, scaling: u64) -> Difficulty {
+		let max_target = <u64>::max_value();
+		let target = proof.hash().to_u64();
+
+		let difficulty = max_target / target;
+
 		// Scaling between 2 proof of work algos
-		let scaling = pow.scaling_difficulty;
-		let num = if scaling & HIGH_BIT == 1 {
+		let difficulty = if scaling & HIGH_BIT == 1 {
 			difficulty / (scaling ^ HIGH_BIT)
 		} else {
 			difficulty * scaling
 		};
-		Difficulty { num }
+		Difficulty{num: difficulty}
 	}
 
 	/// Converts the difficulty into a u64
@@ -222,12 +235,7 @@ impl ProofOfWork {
 		};
 		let nonce = reader.read_u64()?;
 		let proof = Proof::read(reader)?;
-		Ok(ProofOfWork {
-			total_difficulty,
-			scaling_difficulty,
-			nonce,
-			proof,
-		})
+		Ok(ProofOfWork { total_difficulty, scaling_difficulty, nonce, proof})
 	}
 
 	/// Write implementation, can't define as trait impl as we need a version
@@ -255,7 +263,13 @@ impl ProofOfWork {
 
 	/// Maximum difficulty this proof of work can achieve
 	pub fn to_difficulty(&self) -> Difficulty {
-		Difficulty::from_pow(self)
+		// 2 proof of works, Cuckoo29 (for now) and Cuckoo30+, which are scaled
+		// differently (scaling not controlled for now)
+		if self.proof.cuckoo_sizeshift == SECOND_POW_SIZESHIFT {
+			Difficulty::from_proof_scaled(&self.proof, self.scaling_difficulty)
+		} else {
+			Difficulty::from_proof_adjusted(&self.proof)
+		}
 	}
 
 	/// The shift used for the cuckoo cycle size on this proof
@@ -263,6 +277,8 @@ impl ProofOfWork {
 		self.proof.cuckoo_sizeshift
 	}
 }
+
+
 
 /// A Cuckoo Cycle proof of work, consisting of the shift to get the graph
 /// size (i.e. 31 for Cuckoo31 with a 2^31 or 1<<31 graph size) and the nonces
