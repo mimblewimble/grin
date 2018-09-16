@@ -37,9 +37,9 @@ fn start_server(config: servers::ServerConfig) {
 	// Just kill process for now, otherwise the process
 	// hangs around until sigint because the API server
 	// currently has no shutdown facility
-	println!("Shutting down...");
+	warn!(LOGGER, "Shutting down...");
 	thread::sleep(Duration::from_millis(1000));
-	println!("Shutdown complete.");
+	warn!(LOGGER, "Shutdown complete.");
 	exit(0);
 }
 
@@ -47,33 +47,30 @@ fn start_server_tui(config: servers::ServerConfig) {
 	// Run the UI controller.. here for now for simplicity to access
 	// everything it might need
 	if config.run_tui.is_some() && config.run_tui.unwrap() {
-		println!("Starting GRIN in UI mode...");
+		warn!(LOGGER, "Starting GRIN in UI mode...");
 		servers::Server::start(config, |serv: Arc<servers::Server>| {
 			let running = Arc::new(AtomicBool::new(true));
-			let r = running.clone();
 			let _ = thread::Builder::new()
 				.name("ui".to_string())
 				.spawn(move || {
 					let mut controller = ui::Controller::new().unwrap_or_else(|e| {
 						panic!("Error loading UI controller: {}", e);
 					});
-					controller.run(serv.clone(), r);
+					controller.run(serv.clone(), running);
 				});
-			ctrlc::set_handler(move || {
-				running.store(false, Ordering::SeqCst);
-			}).expect("Error setting Ctrl-C handler");
 		}).unwrap();
 	} else {
+		warn!(LOGGER, "Starting GRIN w/o UI...");
 		servers::Server::start(config, |serv: Arc<servers::Server>| {
 			let running = Arc::new(AtomicBool::new(true));
 			let r = running.clone();
 			ctrlc::set_handler(move || {
 				r.store(false, Ordering::SeqCst);
-			}).expect("Error setting Ctrl-C handler");
+			}).expect("Error setting handler for both SIGINT (Ctrl+C) and SIGTERM (kill)");
 			while running.load(Ordering::SeqCst) {
 				thread::sleep(Duration::from_secs(1));
 			}
-			warn!(LOGGER, "Received SIGINT (Ctrl+C).");
+			warn!(LOGGER, "Received SIGINT (Ctrl+C) or SIGTERM (kill).");
 			serv.stop();
 		}).unwrap();
 	}
