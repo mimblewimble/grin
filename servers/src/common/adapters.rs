@@ -90,7 +90,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			tx_pool.retrieve_transactions(
 				compact_tx.tx_hash,
 				compact_tx.nonce,
-				compact_tx.new_kern_ids()
+				compact_tx.new_kern_ids(),
 			)
 		};
 
@@ -132,7 +132,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			tx_pool.retrieve_transactions(
 				compact_tx.tx_hash,
 				compact_tx.nonce,
-				compact_tx.req_kern_ids()
+				compact_tx.req_kern_ids(),
 			)
 		};
 
@@ -146,7 +146,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		if txs.len() > 0 {
 			if let Ok(tx) = transaction::aggregate(txs, self.verifier_cache.clone()) {
 				if tx.validate(self.verifier_cache.clone()).is_ok() {
-					debug!(LOGGER, "adapter: get_transaction: returning tx {:?}", tx.hash());
+					debug!(
+						LOGGER,
+						"adapter: get_transaction: returning tx {:?}",
+						tx.hash()
+					);
 					return Some(tx);
 				}
 			}

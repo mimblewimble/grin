@@ -30,8 +30,15 @@ pub struct CompactTransactionBody {
 }
 
 impl CompactTransactionBody {
-	fn init(new_kern_ids: Vec<ShortId>, req_kern_ids: Vec<ShortId>, verify_sorted: bool) -> Result<Self, Error> {
-		let body = CompactTransactionBody { new_kern_ids, req_kern_ids };
+	fn init(
+		new_kern_ids: Vec<ShortId>,
+		req_kern_ids: Vec<ShortId>,
+		verify_sorted: bool,
+	) -> Result<Self, Error> {
+		let body = CompactTransactionBody {
+			new_kern_ids,
+			req_kern_ids,
+		};
 
 		if verify_sorted {
 			// If we are verifying sort order then verify and
@@ -74,9 +81,8 @@ impl Readable for CompactTransactionBody {
 		let req_kern_ids = read_multi(reader, req_kern_id_len)?;
 
 		// Initialize transaction block body, verifying sort order.
-		let body =
-			CompactTransactionBody::init(new_kern_ids, req_kern_ids, true)
-				.map_err(|_| ser::Error::CorruptedData)?;
+		let body = CompactTransactionBody::init(new_kern_ids, req_kern_ids, true)
+			.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(body)
 	}
@@ -161,8 +167,8 @@ impl From<Transaction> for CompactTransaction {
 		}
 
 		// Initialize a compact transaction body and sort everything.
-		let body = CompactTransactionBody::init(kern_ids, vec![], false)
-			.expect("sorting, not verifying");
+		let body =
+			CompactTransactionBody::init(kern_ids, vec![], false).expect("sorting, not verifying");
 
 		CompactTransaction {
 			tx_hash,

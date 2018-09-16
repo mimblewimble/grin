@@ -66,7 +66,12 @@ impl Pool {
 	/// from the provided compact_block or compact_transaction.
 	/// Note: does not validate that we return the full set of required txs.
 	/// The caller will need to validate that themselves.
-	pub fn retrieve_transactions(&self, hash: Hash, nonce: u64, short_ids: &Vec<ShortId>) -> Vec<Transaction> {
+	pub fn retrieve_transactions(
+		&self,
+		hash: Hash,
+		nonce: u64,
+		short_ids: &Vec<ShortId>,
+	) -> Vec<Transaction> {
 		let mut txs = vec![];
 
 		for x in &self.entries {
