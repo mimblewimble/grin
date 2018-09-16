@@ -25,12 +25,13 @@ use ser::{self, read_multi, Readable, Reader, Writeable, Writer};
 
 #[derive(Debug, Clone)]
 pub struct CompactTransactionBody {
-	pub kern_ids: Vec<ShortId>,
+	pub new_kern_ids: Vec<ShortId>,
+	pub req_kern_ids: Vec<ShortId>,
 }
 
 impl CompactTransactionBody {
-	fn init(kern_ids: Vec<ShortId>, verify_sorted: bool) -> Result<Self, Error> {
-		let body = CompactTransactionBody { kern_ids };
+	fn init(new_kern_ids: Vec<ShortId>, req_kern_ids: Vec<ShortId>, verify_sorted: bool) -> Result<Self, Error> {
+		let body = CompactTransactionBody { new_kern_ids, req_kern_ids };
 
 		if verify_sorted {
 			// If we are verifying sort order then verify and
@@ -47,7 +48,8 @@ impl CompactTransactionBody {
 
 	/// Sort everything.
 	fn sort(&mut self) {
-		self.kern_ids.sort();
+		self.new_kern_ids.sort();
+		self.req_kern_ids.sort();
 	}
 
 	/// "Lightweight" validation.
@@ -58,19 +60,23 @@ impl CompactTransactionBody {
 
 	// Verify everything is sorted in lexicographical order.
 	fn verify_sorted(&self) -> Result<(), Error> {
-		self.kern_ids.verify_sort_order()?;
+		self.new_kern_ids.verify_sort_order()?;
+		self.req_kern_ids.verify_sort_order()?;
 		Ok(())
 	}
 }
 
 impl Readable for CompactTransactionBody {
 	fn read(reader: &mut Reader) -> Result<CompactTransactionBody, ser::Error> {
-		let kern_id_len = reader.read_u64()?;
-		let kern_ids = read_multi(reader, kern_id_len)?;
+		let (new_kern_id_len, req_kern_id_len) = ser_multiread!(reader, read_u64, read_u64);
+
+		let new_kern_ids = read_multi(reader, new_kern_id_len)?;
+		let req_kern_ids = read_multi(reader, req_kern_id_len)?;
 
 		// Initialize transaction block body, verifying sort order.
 		let body =
-			CompactTransactionBody::init(kern_ids, true).map_err(|_| ser::Error::CorruptedData)?;
+			CompactTransactionBody::init(new_kern_ids, req_kern_ids, true)
+				.map_err(|_| ser::Error::CorruptedData)?;
 
 		Ok(body)
 	}
@@ -78,8 +84,13 @@ impl Readable for CompactTransactionBody {
 
 impl Writeable for CompactTransactionBody {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		writer.write_u64(self.kern_ids.len() as u64)?;
-		self.kern_ids.write(writer)?;
+		ser_multiwrite!(
+			writer,
+			[write_u64, self.new_kern_ids.len() as u64],
+			[write_u64, self.req_kern_ids.len() as u64]
+		);
+		self.new_kern_ids.write(writer)?;
+		self.req_kern_ids.write(writer)?;
 		Ok(())
 	}
 }
@@ -98,18 +109,35 @@ pub struct CompactTransaction {
 	pub nonce: u64,
 	/// Container for kern_ids in the compact transaction.
 	body: CompactTransactionBody,
+
+	pub tx: Option<Transaction>,
 }
 
 impl CompactTransaction {
 	/// "Lightweight" validation.
 	fn validate_read(&self) -> Result<(), Error> {
 		self.body.validate_read()?;
+
+		if let Some(ref tx) = self.tx {
+			tx.validate_read();
+		}
+
 		Ok(())
 	}
 
 	/// Get kern_ids.
-	pub fn kern_ids(&self) -> &Vec<ShortId> {
-		&self.body.kern_ids
+	pub fn new_kern_ids(&self) -> &Vec<ShortId> {
+		&self.body.new_kern_ids
+	}
+
+	pub fn req_kern_ids(&self) -> &Vec<ShortId> {
+		&self.body.req_kern_ids
+	}
+
+	pub fn add_kern_ids_to_request(&mut self, kern_ids: &Vec<ShortId>) {
+		for x in kern_ids {
+			self.body.req_kern_ids.push(x.clone())
+		}
 	}
 
 	// TODO - is this wise?
@@ -133,12 +161,14 @@ impl From<Transaction> for CompactTransaction {
 		}
 
 		// Initialize a compact transaction body and sort everything.
-		let body = CompactTransactionBody::init(kern_ids, false).expect("sorting, not verifying");
+		let body = CompactTransactionBody::init(kern_ids, vec![], false)
+			.expect("sorting, not verifying");
 
 		CompactTransaction {
 			tx_hash,
 			nonce,
 			body,
+			tx: None,
 		}
 	}
 }
@@ -148,6 +178,10 @@ impl Writeable for CompactTransaction {
 		self.tx_hash.write(writer)?;
 		writer.write_u64(self.nonce)?;
 		self.body.write(writer)?;
+
+		if let Some(ref tx) = self.tx {
+			tx.write(writer)?;
+		}
 
 		Ok(())
 	}
@@ -159,10 +193,14 @@ impl Readable for CompactTransaction {
 		let nonce = reader.read_u64()?;
 		let body = CompactTransactionBody::read(reader)?;
 
+		// Read the optional embedded tx if present.
+		let tx = Transaction::read(reader).ok();
+
 		let compact_tx = CompactTransaction {
 			tx_hash,
 			nonce,
 			body,
+			tx,
 		};
 
 		// Now validate the compact transaction and treat any validation error as corrupted data.

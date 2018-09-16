@@ -20,10 +20,10 @@ use std::sync::{Arc, RwLock};
 
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
-use core::core::id::ShortIdentifiable;
+use core::core::id::{ShortId, ShortIdentifiable};
 use core::core::transaction;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{Block, CompactBlock, CompactTransaction, Transaction, TxKernel};
+use core::core::{Block, Transaction, TxKernel};
 use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 use util::LOGGER;
 
@@ -62,42 +62,22 @@ impl Pool {
 		self.entries.iter().any(|x| x.tx.hash() == tx.hash())
 	}
 
-	pub fn retrieve_transactions_for_compact_transaction(
-		&self,
-		compact_tx: &CompactTransaction,
-	) -> Vec<Transaction> {
-		let mut txs = vec![];
-
-		for x in &self.entries {
-			for kernel in x.tx.kernels() {
-				// rehash each kernel to calculate the block specific short_id
-				let short_id = kernel.short_id(&compact_tx.hash(), compact_tx.nonce);
-
-				// if any kernel matches then keep the tx for later
-				if compact_tx.kern_ids().contains(&short_id) {
-					txs.push(x.tx.clone());
-					break;
-				}
-			}
-		}
-		txs
-	}
-
 	/// Query the tx pool for all known txs based on kernel short_ids
-	/// from the provided compact_block.
+	/// from the provided compact_block or compact_transaction.
 	/// Note: does not validate that we return the full set of required txs.
 	/// The caller will need to validate that themselves.
-	pub fn retrieve_transactions(&self, cb: &CompactBlock) -> Vec<Transaction> {
+	pub fn retrieve_transactions(&self, hash: Hash, nonce: u64, short_ids: &Vec<ShortId>) -> Vec<Transaction> {
 		let mut txs = vec![];
 
 		for x in &self.entries {
-			for kernel in x.tx.kernels() {
-				// rehash each kernel to calculate the block specific short_id
-				let short_id = kernel.short_id(&cb.hash(), cb.nonce);
+			let tx = &x.tx;
+			for kernel in tx.kernels() {
+				// rehash each kernel to calculate the specific short_id
+				let short_id = kernel.short_id(&hash, nonce);
 
 				// if any kernel matches then keep the tx for later
-				if cb.kern_ids().contains(&short_id) {
-					txs.push(x.tx.clone());
+				if short_ids.contains(&short_id) {
+					txs.push(tx.clone());
 					break;
 				}
 			}

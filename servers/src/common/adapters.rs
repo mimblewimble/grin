@@ -69,7 +69,6 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		w(&self.chain).head().unwrap().height
 	}
 
-	// TODO compact_transaction_received()
 	// lookup exact match in txpool
 	// then lookup partial match (matched part and unmatched part)
 	// if exact match then nothing to do, already seen it
@@ -86,7 +85,31 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			"Received compact_tx ({:?}), looking for matching tx(s) in txpool.", compact_tx,
 		);
 
-		// TODO - actually look in pool
+		let txs = {
+			let tx_pool = self.tx_pool.read().unwrap();
+			tx_pool.retrieve_transactions(
+				compact_tx.tx_hash,
+				compact_tx.nonce,
+				compact_tx.new_kern_ids()
+			)
+		};
+
+		debug!(
+			LOGGER,
+			"adapter: compact_transaction_received: txs from tx pool - {}, {:?}",
+			txs.len(),
+			txs.iter().map(|x| x.hash()).collect::<Vec<_>>(),
+		);
+
+		// TODO - do we have *everything* in the CompactTransaction?
+		// No need to request it if we have seen it before...
+		// validate what we got from the pool
+		// then check the hash against the has from the CompactTransaction
+
+		// Tag the compact_tx with the kernel short_ids that we are missing.
+		let new_kern_ids = compact_tx.new_kern_ids().clone();
+		let mut compact_tx = compact_tx;
+		compact_tx.add_kern_ids_to_request(&new_kern_ids);
 
 		// We have not seen any tx matching these tx kernels so go request it
 		// from the peer that sent us the kernels.
@@ -94,6 +117,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn get_transaction(&self, compact_tx: CompactTransaction) -> Option<Transaction> {
+		// Ignore anything tx related if we are syncing.
+		if self.sync_state.is_syncing() {
+			return None;
+		}
+
 		debug!(
 			LOGGER,
 			"adapter: get_transaction: {:?}, looking for matching tx(s) in txpool.", compact_tx,
@@ -101,21 +129,28 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		let txs = {
 			let tx_pool = self.tx_pool.read().unwrap();
-			tx_pool.retrieve_transactions_for_compact_transaction(&compact_tx)
+			tx_pool.retrieve_transactions(
+				compact_tx.tx_hash,
+				compact_tx.nonce,
+				compact_tx.req_kern_ids()
+			)
 		};
 
 		debug!(
 			LOGGER,
-			"adapter: get_transaction: txs from tx pool - {}",
-			txs.len()
+			"adapter: get_transaction: txs from tx pool - {}, {:?}",
+			txs.len(),
+			txs.iter().map(|x| x.hash()).collect::<Vec<_>>(),
 		);
 
 		if txs.len() > 0 {
 			if let Ok(tx) = transaction::aggregate(txs, self.verifier_cache.clone()) {
-				return Some(tx);
+				if tx.validate(self.verifier_cache.clone()).is_ok() {
+					debug!(LOGGER, "adapter: get_transaction: returning tx {:?}", tx.hash());
+					return Some(tx);
+				}
 			}
 		}
-
 		None
 	}
 
@@ -198,7 +233,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 			let txs = {
 				let tx_pool = self.tx_pool.read().unwrap();
-				tx_pool.retrieve_transactions(&cb)
+				tx_pool.retrieve_transactions(cb.hash(), cb.nonce, cb.kern_ids())
 			};
 
 			debug!(LOGGER, "adapter: txs from tx pool - {}", txs.len(),);
