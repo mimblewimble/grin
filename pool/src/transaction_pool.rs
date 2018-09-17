@@ -153,13 +153,14 @@ impl TransactionPool {
 
 	/// Retrieve all transactions matching the provided hash and nonce based on the kernel set.
 	/// Note: we only look in the txpool for this (stempool is under embargo).
-	pub fn retrieve_transactions(
+	/// Returns the aggregate tx if we found anything in the pool.
+	pub fn retrieve_transaction(
 		&self,
 		hash: Hash,
 		nonce: u64,
 		short_ids: &Vec<ShortId>,
-	) -> Vec<Transaction> {
-		self.txpool.retrieve_transactions(hash, nonce, short_ids)
+	) -> Option<Transaction> {
+		self.txpool.retrieve_transaction(hash, nonce, short_ids)
 	}
 
 	/// Whether the transaction is acceptable to the pool, given both how

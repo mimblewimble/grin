@@ -237,33 +237,13 @@ impl Peer {
 		}
 	}
 
-	/// Sends the provided transaction to the remote peer. The request may be
-	/// dropped if the remote peer is known to already have the transaction.
-	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
-		if !self.tracking_adapter.has(tx.hash()) {
-			debug!(LOGGER, "Send tx {} to {}", tx.hash(), self.info.addr);
-			self.connection
-				.as_ref()
-				.unwrap()
-				.send(tx, msg::Type::Transaction)
-		} else {
-			debug!(
-				LOGGER,
-				"Not sending tx {} to {} (already seen)",
-				tx.hash(),
-				self.info.addr
-			);
-			Ok(())
-		}
-	}
-
 	pub fn send_compact_transaction(&self, compact_tx: &CompactTransaction) -> Result<(), Error> {
 		if !self.tracking_adapter.has(compact_tx.tx_hash) {
 			debug!(LOGGER, "Send {:?} to {}", compact_tx, self.info.addr,);
 			self.connection
 				.as_ref()
 				.unwrap()
-				.send(compact_tx, msg::Type::CompactTransaction)
+				.send(compact_tx, msg::Type::Transaction)
 		} else {
 			debug!(
 				LOGGER,
@@ -274,8 +254,8 @@ impl Peer {
 	}
 
 	/// Sends the provided stem transaction to the remote peer.
-	/// Note: tracking adapter is ignored for stem transactions (while under
-	/// embargo).
+	/// Note: tracking adapter is ignored for stem transactions
+	/// (while under embargo).
 	pub fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		debug!(LOGGER, "Send (stem) tx {} to {}", tx.hash(), self.info.addr);
 		self.connection
@@ -420,19 +400,16 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.total_height()
 	}
 
-	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
-		// Do not track the tx hash for stem txs.
-		// Otherwise we fail to handle the subsequent fluff or embargo expiration
-		// correctly.
-		if !stem {
-			self.push(tx.hash());
-		}
-		self.adapter.transaction_received(tx, stem)
+	fn stem_transaction_received(&self, tx: core::Transaction) {
+		self.adapter.stem_transaction_received(tx)
 	}
 
 	fn compact_transaction_received(&self, compact_tx: CompactTransaction, addr: SocketAddr) {
-		// Do not track this, we don't know if its a valid tx or not until we see the full tx.
-		self.adapter.compact_transaction_received(compact_tx, addr)
+		// Track the associated full tx if included in compact_tx.
+		if let Some(tx) = &compact_tx.tx {
+			self.push(tx.hash());
+		}
+		self.adapter.compact_transaction_received(compact_tx, addr);
 	}
 
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {

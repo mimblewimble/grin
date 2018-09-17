@@ -66,13 +66,15 @@ impl Pool {
 	/// from the provided compact_block or compact_transaction.
 	/// Note: does not validate that we return the full set of required txs.
 	/// The caller will need to validate that themselves.
-	pub fn retrieve_transactions(
+	/// Returns the aggregate tx if we found anything in the pool.
+	pub fn retrieve_transaction(
 		&self,
 		hash: Hash,
 		nonce: u64,
 		short_ids: &Vec<ShortId>,
-	) -> Vec<Transaction> {
+	) -> Option<Transaction> {
 		let mut txs = vec![];
+		let mut matched_short_ids = vec![];
 
 		for x in &self.entries {
 			let tx = &x.tx;
@@ -83,11 +85,17 @@ impl Pool {
 				// if any kernel matches then keep the tx for later
 				if short_ids.contains(&short_id) {
 					txs.push(tx.clone());
+					matched_short_ids.push(short_id.clone());
 					break;
 				}
 			}
 		}
-		txs
+
+		if txs.is_empty() {
+			None
+		} else {
+			transaction::aggregate(txs, self.verifier_cache.clone()).ok()
+		}
 	}
 
 	/// Take pool transactions, filtering and ordering them in a way that's

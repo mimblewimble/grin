@@ -140,6 +140,11 @@ pub struct CompactBlock {
 	pub nonce: u64,
 	/// Container for out_full, kern_full and kern_ids in the compact block.
 	body: CompactBlockBody,
+
+	// Optional aggregate tx to include with a compact_block.
+	// We can pass missing tx(s) to a peer via this if they let us know
+	// they can process the compact block with this additional data.
+	// pub tx: Option<Transaction>,
 }
 
 impl CompactBlock {
@@ -238,14 +243,13 @@ impl Readable for CompactBlock {
 }
 
 /// Hydrate a block from a compact block.
-/// Note: caller must validate the block themselves,
-/// we do not validate it here.
-pub fn hydrate_block(cb: CompactBlock, txs: Vec<Transaction>) -> Result<Block, Error> {
+/// Takes an optional tx (from txpool) to complete the missing parts of the block.
+/// Note: caller must validate the block, we do not validate it here.
+pub fn hydrate_block(cb: CompactBlock, tx: Option<Transaction>) -> Result<Block, Error> {
 	trace!(
 		LOGGER,
-		"compact_block: hydrate_block: {}, {} txs",
+		"compact_block: hydrate_block: {}",
 		cb.hash(),
-		txs.len(),
 	);
 
 	let header = cb.header.clone();
@@ -254,8 +258,8 @@ pub fn hydrate_block(cb: CompactBlock, txs: Vec<Transaction>) -> Result<Block, E
 	let mut all_outputs = HashSet::new();
 	let mut all_kernels = HashSet::new();
 
-	// collect all the inputs, outputs and kernels from the txs
-	for tx in txs {
+	// collect all the inputs, outputs and kernels from the tx
+	if let Some(tx) = tx {
 		let tb: TransactionBody = tx.into();
 		all_inputs.extend(tb.inputs);
 		all_outputs.extend(tb.outputs);

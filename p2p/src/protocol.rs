@@ -87,10 +87,10 @@ impl MessageHandler for Protocol {
 				Ok(None)
 			}
 
-			Type::CompactTransaction => {
+			Type::Transaction => {
 				debug!(
 					LOGGER,
-					"handle_payload: CompactTransaction: msg_len: {}", msg.header.msg_len
+					"handle_payload: Transaction: msg_len: {}", msg.header.msg_len
 				);
 				let compact_tx: CompactTransaction = msg.body()?;
 				adapter.compact_transaction_received(compact_tx, self.addr);
@@ -105,20 +105,10 @@ impl MessageHandler for Protocol {
 				let compact_tx: CompactTransaction = msg.body()?;
 
 				if let Some(compact_tx) = adapter.get_transaction(compact_tx) {
-					Ok(Some(msg.respond(Type::CompactTransaction, compact_tx)))
+					Ok(Some(msg.respond(Type::Transaction, compact_tx)))
 				} else {
 					Ok(None)
 				}
-			}
-
-			Type::Transaction => {
-				debug!(
-					LOGGER,
-					"handle_payload: Transaction: msg_len: {}", msg.header.msg_len
-				);
-				let tx: core::Transaction = msg.body()?;
-				adapter.transaction_received(tx, false);
-				Ok(None)
 			}
 
 			Type::StemTransaction => {
@@ -127,7 +117,7 @@ impl MessageHandler for Protocol {
 					"handle_payload: StemTransaction: msg_len: {}", msg.header.msg_len
 				);
 				let tx: core::Transaction = msg.body()?;
-				adapter.transaction_received(tx, true);
+				adapter.stem_transaction_received(tx);
 				Ok(None)
 			}
 

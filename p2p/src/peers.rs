@@ -383,16 +383,6 @@ impl Peers {
 	/// want to broadcast to a random subset of peers.
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the transaction.
-	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
-		let count = self.broadcast("transaction", |p| p.send_transaction(tx));
-		trace!(
-			LOGGER,
-			"broadcast_transaction: {}, to {} peers, done.",
-			tx.hash(),
-			count,
-		);
-	}
-
 	pub fn broadcast_compact_transaction(&self, compact_tx: &CompactTransaction) {
 		let count = self.broadcast("transaction", |p| p.send_compact_transaction(compact_tx));
 		trace!(
@@ -530,10 +520,12 @@ impl ChainAdapter for Peers {
 		self.adapter.total_height()
 	}
 
-	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
-		self.adapter.transaction_received(tx, stem)
+	// TODO - peer banning around bad stem transactions
+	fn stem_transaction_received(&self, tx: core::Transaction) {
+		self.adapter.stem_transaction_received(tx)
 	}
 
+	// TODO - peer banning around bad compact transactions?
 	fn compact_transaction_received(&self, compact_tx: CompactTransaction, addr: SocketAddr) {
 		self.adapter.compact_transaction_received(compact_tx, addr)
 	}

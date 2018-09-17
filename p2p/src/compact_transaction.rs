@@ -161,6 +161,18 @@ impl CompactTransaction {
 			..self
 		}
 	}
+
+	// When we send a compact_tx back to the original sender, requesting some full
+	// tx(s) to help us hydrate the compact_tx.
+	pub fn with_req_kern_ids(self, req_kern_ids: Vec<ShortId>) -> CompactTransaction {
+		CompactTransaction {
+			body: CompactTransactionBody {
+				req_kern_ids,
+				..self.body
+			},
+			..self
+		}
+	}
 }
 
 impl From<Transaction> for CompactTransaction {
@@ -210,7 +222,7 @@ impl Readable for CompactTransaction {
 		let nonce = reader.read_u64()?;
 		let body = CompactTransactionBody::read(reader)?;
 
-		// Read the optional embedded tx if present.
+		// Read the associated full tx (if present).
 		let tx = Transaction::read(reader).ok();
 
 		let compact_tx = CompactTransaction {
