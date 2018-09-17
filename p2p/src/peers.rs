@@ -20,6 +20,9 @@ use std::sync::{Arc, RwLock};
 use rand::{thread_rng, Rng};
 
 use chrono::prelude::Utc;
+
+use compact_block::CompactBlock;
+use compact_transaction::CompactTransaction;
 use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
@@ -130,8 +133,7 @@ impl Peers {
 			.filter(|x| match x.try_read() {
 				Ok(peer) => peer.info.direction == Direction::Outbound,
 				Err(_) => false,
-			})
-			.collect::<Vec<_>>();
+			}).collect::<Vec<_>>();
 		res
 	}
 
@@ -165,8 +167,7 @@ impl Peers {
 			.filter(|x| match x.try_read() {
 				Ok(peer) => peer.info.total_difficulty > total_difficulty,
 				Err(_) => false,
-			})
-			.collect::<Vec<_>>();
+			}).collect::<Vec<_>>();
 
 		thread_rng().shuffle(&mut max_peers);
 		max_peers
@@ -190,8 +191,7 @@ impl Peers {
 						&& peer.info.capabilities.contains(Capabilities::FULL_HIST)
 				}
 				Err(_) => false,
-			})
-			.collect::<Vec<_>>();
+			}).collect::<Vec<_>>();
 
 		thread_rng().shuffle(&mut max_peers);
 		max_peers
@@ -220,8 +220,7 @@ impl Peers {
 			.map(|x| match x.try_read() {
 				Ok(peer) => peer.info.total_difficulty.clone(),
 				Err(_) => Difficulty::zero(),
-			})
-			.max()
+			}).max()
 			.unwrap();
 
 		let mut max_peers = peers
@@ -229,8 +228,7 @@ impl Peers {
 			.filter(|x| match x.try_read() {
 				Ok(peer) => peer.info.total_difficulty == max_total_difficulty,
 				Err(_) => false,
-			})
-			.collect::<Vec<_>>();
+			}).collect::<Vec<_>>();
 
 		thread_rng().shuffle(&mut max_peers);
 		max_peers
@@ -325,7 +323,7 @@ impl Peers {
 	/// want to broadcast to a random subset of peers.
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the block.
-	pub fn broadcast_compact_block(&self, b: &core::CompactBlock) {
+	pub fn broadcast_compact_block(&self, b: &CompactBlock) {
 		let count = self.broadcast("compact block", |p| p.send_compact_block(b));
 		debug!(
 			LOGGER,
@@ -385,12 +383,12 @@ impl Peers {
 	/// want to broadcast to a random subset of peers.
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the transaction.
-	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
-		let count = self.broadcast("transaction", |p| p.send_transaction(tx));
+	pub fn broadcast_compact_transaction(&self, compact_tx: &CompactTransaction) {
+		let count = self.broadcast("transaction", |p| p.send_compact_transaction(compact_tx));
 		trace!(
 			LOGGER,
-			"broadcast_transaction: {}, to {} peers, done.",
-			tx.hash(),
+			"broadcast_compact_transaction: {:?}, to {} peers, done.",
+			compact_tx,
 			count,
 		);
 	}
@@ -489,8 +487,7 @@ impl Peers {
 				.map(|x| {
 					let p = x.read().unwrap();
 					p.info.addr.clone()
-				})
-				.collect::<Vec<_>>()
+				}).collect::<Vec<_>>()
 		};
 
 		// now remove them taking a short-lived write lock each time
@@ -523,8 +520,14 @@ impl ChainAdapter for Peers {
 		self.adapter.total_height()
 	}
 
-	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
-		self.adapter.transaction_received(tx, stem)
+	// TODO - peer banning around bad stem transactions
+	fn stem_transaction_received(&self, tx: core::Transaction) {
+		self.adapter.stem_transaction_received(tx)
+	}
+
+	// TODO - peer banning around bad compact transactions?
+	fn compact_transaction_received(&self, compact_tx: CompactTransaction, addr: SocketAddr) {
+		self.adapter.compact_transaction_received(compact_tx, addr)
 	}
 
 	fn block_received(&self, b: core::Block, peer_addr: SocketAddr) -> bool {
@@ -543,7 +546,7 @@ impl ChainAdapter for Peers {
 		}
 	}
 
-	fn compact_block_received(&self, cb: core::CompactBlock, peer_addr: SocketAddr) -> bool {
+	fn compact_block_received(&self, cb: CompactBlock, peer_addr: SocketAddr) -> bool {
 		let hash = cb.hash();
 		if !self.adapter.compact_block_received(cb, peer_addr) {
 			// if the peer sent us a block that's intrinsically bad
@@ -589,6 +592,10 @@ impl ChainAdapter for Peers {
 
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
+	}
+
+	fn get_transaction(&self, compact_tx: CompactTransaction) -> Option<CompactTransaction> {
+		self.adapter.get_transaction(compact_tx)
 	}
 
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {

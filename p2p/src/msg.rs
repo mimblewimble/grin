@@ -69,6 +69,7 @@ enum_from_primitive! {
 		TxHashSetRequest = 16,
 		TxHashSetArchive = 17,
 		BanReason = 18,
+		GetTransaction = 19,
 	}
 }
 
@@ -94,6 +95,7 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::TxHashSetRequest => 40,
 		Type::TxHashSetArchive => 64,
 		Type::BanReason => 64,
+		Type::GetTransaction => MAX_BLOCK_SIZE,
 	}
 }
 

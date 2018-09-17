@@ -27,11 +27,12 @@ use chain::{self, ChainAdapter, Options, Tip};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use core::core::transaction::Transaction;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{BlockHeader, CompactBlock};
+use core::core::{BlockHeader, Transaction};
 use core::{core, global};
 use p2p;
+use p2p::compact_block;
+use p2p::compact_transaction;
 use pool;
 use store;
 use util::{OneTime, LOGGER};
@@ -69,37 +70,117 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		w(&self.chain).head().unwrap().height
 	}
 
-	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
+	//
+	// If we have an associated full tx -
+	//   process the full tx first.
+	//
+	fn compact_transaction_received(
+		&self,
+		compact_tx: compact_transaction::CompactTransaction,
+		addr: SocketAddr,
+	) {
 		// nothing much we can do with a new transaction while syncing
 		if self.sync_state.is_syncing() {
 			return;
 		}
 
-		let source = pool::TxSource {
-			debug_name: "p2p".to_string(),
-			identifier: "?.?.?.?".to_string(),
-		};
+		if let Some(tx) = compact_tx.tx {
+			debug!(
+				LOGGER,
+				"Received compact_tx {}, with associated full tx {}, processing.",
+				compact_tx.tx_hash,
+				tx.hash(),
+			);
 
-		let tx_hash = tx.hash();
-		let block_hash = w(&self.chain).head_header().unwrap().hash();
+			// If the included full tx contains all kernels from the compact_tx
+			// then we just need to process the full tx.
+			// TODO - handle case where full tx is a subset of the (aggregated) compact_tx.
+			if compact_tx.tx_hash == tx.hash() {
+				self.process_transaction(tx, false);
+			}
+		} else {
+			debug!(LOGGER, "Received compact_tx {:?}", compact_tx,);
+
+			let tx = {
+				let tx_pool = self.tx_pool.read().unwrap();
+				tx_pool.retrieve_transaction(
+					compact_tx.tx_hash,
+					compact_tx.nonce,
+					compact_tx.new_kern_ids(),
+				)
+			};
+
+			if let Some(tx) = tx {
+				if compact_tx.tx_hash == tx.hash() {
+					debug!(
+						LOGGER,
+						"adapter: compact_transaction_received: tx {} already known.",
+						tx.hash(),
+					);
+					return;
+				}
+			}
+
+			// Tag the compact_tx with the kernel short_ids that we are missing.
+			let new_kern_ids = compact_tx.new_kern_ids().clone();
+			let req_compact_tx = compact_tx.with_req_kern_ids(new_kern_ids);
+
+			// We have not seen any tx matching these tx kernels so go request it
+			// from the peer that sent us the kernels.
+			self.request_transaction(&req_compact_tx, &addr);
+		}
+	}
+
+	fn get_transaction(
+		&self,
+		compact_tx: compact_transaction::CompactTransaction,
+	) -> Option<compact_transaction::CompactTransaction> {
+		// Ignore anything tx related if we are syncing.
+		if self.sync_state.is_syncing() {
+			return None;
+		}
 
 		debug!(
 			LOGGER,
-			"Received tx {}, inputs: {}, outputs: {}, kernels: {}, going to process.",
-			tx_hash,
-			tx.inputs().len(),
-			tx.outputs().len(),
-			tx.kernels().len(),
+			"adapter: get_transaction: {:?}, looking for matching tx(s) in txpool.", compact_tx,
 		);
 
-		let res = {
-			let mut tx_pool = self.tx_pool.write().unwrap();
-			tx_pool.add_to_pool(source, tx, stem, &block_hash)
+		let tx = {
+			let tx_pool = self.tx_pool.read().unwrap();
+			tx_pool.retrieve_transaction(
+				compact_tx.tx_hash,
+				compact_tx.nonce,
+				compact_tx.req_kern_ids(),
+			)
 		};
 
-		if let Err(e) = res {
-			debug!(LOGGER, "Transaction {} rejected: {:?}", tx_hash, e);
+		if let Some(tx) = tx {
+			if tx.validate(self.verifier_cache.clone()).is_ok() {
+				debug!(
+					LOGGER,
+					"adapter: get_transaction: returning tx {:?}",
+					tx.hash()
+				);
+
+				// Build the final compact_tx to send back.
+				// Include the full tx as part of the compact_tx.
+				// The compact_tx wrapper is redundant in the simple case
+				// but for aggregate txs it we have the flexibility of
+				// sending less than the whole tx back in the compact_tx
+				// (i.e. just the missing parts).
+				return Some(compact_tx.with_full_tx(tx));
+			}
 		}
+		None
+	}
+
+	fn stem_transaction_received(&self, tx: Transaction) {
+		// nothing much we can do with a new transaction while syncing
+		if self.sync_state.is_syncing() {
+			return;
+		}
+
+		self.process_transaction(tx, true);
 	}
 
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
@@ -116,7 +197,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		self.process_block(b, addr)
 	}
 
-	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
+	fn compact_block_received(&self, cb: compact_block::CompactBlock, addr: SocketAddr) -> bool {
 		let bhash = cb.hash();
 		debug!(
 			LOGGER,
@@ -131,8 +212,9 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		let cb_hash = cb.hash();
 		if cb.kern_ids().is_empty() {
-			// push the freshly hydrated block through the chain pipeline
-			match core::Block::hydrate_from(cb, vec![]) {
+			// If kern_ids is empty then this block should be empty and valid.
+			// Push the freshly hydrated empty block through the chain pipeline.
+			match compact_block::hydrate_block(cb, None) {
 				Ok(block) => self.process_block(block, addr),
 				Err(e) => {
 					debug!(LOGGER, "Invalid hydrated block {}: {}", cb_hash, e);
@@ -146,19 +228,17 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				return !e.is_bad_data();
 			}
 
-			let txs = {
+			let tx = {
 				let tx_pool = self.tx_pool.read().unwrap();
-				tx_pool.retrieve_transactions(&cb)
+				tx_pool.retrieve_transaction(cb.hash(), cb.nonce, cb.kern_ids())
 			};
-
-			debug!(LOGGER, "adapter: txs from tx pool - {}", txs.len(),);
 
 			// TODO - 3 scenarios here -
 			// 1) we hydrate a valid block (good to go)
 			// 2) we hydrate an invalid block (txs legit missing from our pool)
 			// 3) we hydrate an invalid block (peer sent us a "bad" compact block) - [TBD]
 
-			let block = match core::Block::hydrate_from(cb.clone(), txs) {
+			let block = match compact_block::hydrate_block(cb.clone(), tx) {
 				Ok(block) => block,
 				Err(e) => {
 					debug!(LOGGER, "Invalid hydrated block {}: {}", cb.hash(), e);
@@ -177,10 +257,12 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 						&prev.total_kernel_offset,
 						&prev.total_kernel_sum,
 						self.verifier_cache.clone(),
-					)
-					.is_ok()
+					).is_ok()
 				{
-					debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
+					debug!(
+						LOGGER,
+						"adapter: successfully hydrated block from tx pool, processing."
+					);
 					self.process_block(block, addr)
 				} else {
 					if self.sync_state.status() == SyncStatus::NoSync {
@@ -193,7 +275,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 					} else {
 						debug!(
 							LOGGER,
-							"adapter: block invalid after hydration, ignoring it, cause still syncing"
+							"adapter: block invalid after hydration, ignoring it, because still syncing"
 						);
 						true
 					}
@@ -442,6 +524,38 @@ impl NetToChainAdapter {
 		}
 	}
 
+	fn process_transaction(&self, tx: Transaction, stem: bool) {
+		let source = pool::TxSource {
+			debug_name: "p2p".to_string(),
+			identifier: "?.?.?.?".to_string(),
+		};
+
+		let tx_hash = tx.hash();
+
+		debug!(
+			LOGGER,
+			"adapter: process_transaction: {} (stem? {}), inputs: {}, outputs: {}, kernels: {}",
+			tx_hash,
+			stem,
+			tx.inputs().len(),
+			tx.outputs().len(),
+			tx.kernels().len(),
+		);
+
+		let res = {
+			let mut tx_pool = self.tx_pool.write().unwrap();
+			let block_hash = w(&self.chain).head_header().unwrap().hash();
+			tx_pool.add_to_pool(source, tx, stem, &block_hash)
+		};
+
+		if let Err(e) = res {
+			debug!(
+				LOGGER,
+				"Transaction {} (stem? {}) rejected: {:?}", tx_hash, stem, e
+			);
+		}
+	}
+
 	// pushing the new block through the chain pipeline
 	// remembering to reset the head if we have a bad block
 	fn process_block(&self, b: core::Block, addr: SocketAddr) -> bool {
@@ -450,10 +564,9 @@ impl NetToChainAdapter {
 			let head = chain.head().unwrap();
 			// we have a fast sync'd node and are sent a block older than our horizon,
 			// only sync can do something with that
-			if b.header.height
-				< head
-					.height
-					.saturating_sub(global::cut_through_horizon() as u64)
+			if b.header.height < head
+				.height
+				.saturating_sub(global::cut_through_horizon() as u64)
 			{
 				return true;
 			}
@@ -557,6 +670,16 @@ impl NetToChainAdapter {
 		}
 	}
 
+	fn request_transaction(
+		&self,
+		compact_tx: &compact_transaction::CompactTransaction,
+		addr: &SocketAddr,
+	) {
+		self.send_transaction_request_to_peer(compact_tx, addr, |peer, compact_tx| {
+			peer.send_transaction_request(compact_tx)
+		})
+	}
+
 	// After receiving a compact block if we cannot successfully hydrate
 	// it into a full block then fallback to requesting the full block
 	// from the same peer that gave us the compact block
@@ -584,7 +707,7 @@ impl NetToChainAdapter {
 	{
 		match w(&self.chain).block_exists(h) {
 			Ok(false) => {
-				match  wo(&self.peers).get_connected_peer(addr) {
+				match wo(&self.peers).get_connected_peer(addr) {
 					None => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, not connected", addr),
 					Some(peer) => {
 						match peer.read() {
@@ -600,6 +723,29 @@ impl NetToChainAdapter {
 			}
 			Ok(true) => debug!(LOGGER, "send_block_request_to_peer: block {} already known", h),
 			Err(e) => error!(LOGGER, "send_block_request_to_peer: failed to check block exists: {:?}", e)
+		}
+	}
+
+	fn send_transaction_request_to_peer<F>(
+		&self,
+		compact_tx: &compact_transaction::CompactTransaction,
+		addr: &SocketAddr,
+		f: F,
+	) where
+		F: Fn(&p2p::Peer, &compact_transaction::CompactTransaction) -> Result<(), p2p::Error>,
+	{
+		match wo(&self.peers).get_connected_peer(addr) {
+			None => debug!(LOGGER, "send_transaction_request_to_peer: can't send request to peer {:?}, not connected", addr),
+			Some(peer) => {
+				match peer.read() {
+					Err(e) => debug!(LOGGER, "send_transaction_request_to_peer: can't send request to peer {:?}, read fails: {:?}", addr, e),
+					Ok(p) => {
+						if let Err(e) =  f(&p, compact_tx) {
+							error!(LOGGER, "send_transaction_request_to_peer: failed: {:?}", e)
+						}
+					}
+				}
+			}
 		}
 	}
 
@@ -649,7 +795,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		if opts.contains(Options::MINE) {
 			// propagate compact block out if we mined the block
 			// but broadcast full block if we have no txs
-			let cb: CompactBlock = b.clone().into();
+			let cb: compact_block::CompactBlock = b.clone().into();
 			if cb.kern_ids().is_empty() {
 				// In the interest of exercising all code paths
 				// randomly decide how we send an empty block out.
@@ -705,14 +851,17 @@ pub struct PoolToNetAdapter {
 }
 
 impl pool::PoolAdapter for PoolToNetAdapter {
-	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
+	fn stem_tx_accepted(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
 		wo(&self.peers)
 			.broadcast_stem_transaction(tx)
 			.map_err(|_| pool::PoolError::DandelionError)?;
 		Ok(())
 	}
-	fn tx_accepted(&self, tx: &core::Transaction) {
-		wo(&self.peers).broadcast_transaction(tx);
+
+	fn tx_accepted(&self, tx: &Transaction) {
+		let compact_tx = tx.clone().into();
+		wo(&self.peers).broadcast_compact_transaction(&compact_tx);
+		// wo(&self.peers).broadcast_transaction(tx);
 	}
 }
 

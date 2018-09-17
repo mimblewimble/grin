@@ -18,6 +18,8 @@ use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::mpsc;
 
+use compact_block::CompactBlock;
+use compact_transaction::CompactTransaction;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
 use core::{core, ser};
@@ -263,8 +265,11 @@ pub trait ChainAdapter: Sync + Send {
 	/// Current total height
 	fn total_height(&self) -> u64;
 
-	/// A valid transaction has been received from one of our peers
-	fn transaction_received(&self, tx: core::Transaction, stem: bool);
+	/// A stem transaction has been received from one of our peers
+	fn stem_transaction_received(&self, tx: core::Transaction);
+
+	/// A compact transaction has been received from one of our peers.
+	fn compact_transaction_received(&self, compact_tx: CompactTransaction, addr: SocketAddr);
 
 	/// A block has been received from one of our peers. Returns true if the
 	/// block could be handled properly and is not deemed defective by the
@@ -272,7 +277,7 @@ pub trait ChainAdapter: Sync + Send {
 	/// may result in the peer being banned.
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool;
 
-	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool;
+	fn compact_block_received(&self, cb: CompactBlock, addr: SocketAddr) -> bool;
 
 	fn header_received(&self, bh: core::BlockHeader, addr: SocketAddr) -> bool;
 
@@ -288,6 +293,11 @@ pub trait ChainAdapter: Sync + Send {
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
+
+	/// Given a compact_tx with some requested kernel short_ids, return a
+	/// corresponding compact_transaction containing the necessary full transaction
+	/// to cover those kernels.
+	fn get_transaction(&self, compact_tx: CompactTransaction) -> Option<CompactTransaction>;
 
 	/// Provides a reading view into the current txhashset state as well as
 	/// the required indexes for a consumer to rewind to a consistant state

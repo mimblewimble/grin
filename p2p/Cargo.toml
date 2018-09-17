@@ -23,4 +23,6 @@ grin_store = { path = "../store" }
 grin_util = { path = "../util" }
 
 [dev-dependencies]
+grin_keychain = { path = "../keychain" }
 grin_pool = { path = "../pool" }
+grin_wallet = { path = "../wallet" }

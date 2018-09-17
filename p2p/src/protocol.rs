@@ -19,8 +19,10 @@ use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
 use std::time;
 
+use compact_block::CompactBlock;
+use compact_transaction::CompactTransaction;
 use conn::{Message, MessageHandler, Response};
-use core::core::{self, hash::Hash, CompactBlock};
+use core::core::{self, hash::Hash};
 use core::{global, ser};
 
 use msg::{
@@ -88,20 +90,34 @@ impl MessageHandler for Protocol {
 			Type::Transaction => {
 				debug!(
 					LOGGER,
-					"handle_payload: received tx: msg_len: {}", msg.header.msg_len
+					"handle_payload: Transaction: msg_len: {}", msg.header.msg_len
 				);
-				let tx: core::Transaction = msg.body()?;
-				adapter.transaction_received(tx, false);
+				let compact_tx: CompactTransaction = msg.body()?;
+				adapter.compact_transaction_received(compact_tx, self.addr);
 				Ok(None)
+			}
+
+			Type::GetTransaction => {
+				debug!(
+					LOGGER,
+					"handle_payload: GetTransaction: msg_len: {}", msg.header.msg_len
+				);
+				let compact_tx: CompactTransaction = msg.body()?;
+
+				if let Some(compact_tx) = adapter.get_transaction(compact_tx) {
+					Ok(Some(msg.respond(Type::Transaction, compact_tx)))
+				} else {
+					Ok(None)
+				}
 			}
 
 			Type::StemTransaction => {
 				debug!(
 					LOGGER,
-					"handle_payload: received stem tx: msg_len: {}", msg.header.msg_len
+					"handle_payload: StemTransaction: msg_len: {}", msg.header.msg_len
 				);
 				let tx: core::Transaction = msg.body()?;
-				adapter.transaction_received(tx, true);
+				adapter.stem_transaction_received(tx);
 				Ok(None)
 			}
 
@@ -119,7 +135,7 @@ impl MessageHandler for Protocol {
 			Type::Block => {
 				debug!(
 					LOGGER,
-					"handle_payload: received block: msg_len: {}", msg.header.msg_len
+					"handle_payload: Block: msg_len: {}", msg.header.msg_len
 				);
 				let b: core::Block = msg.body()?;
 
@@ -158,7 +174,7 @@ impl MessageHandler for Protocol {
 					LOGGER,
 					"handle_payload: received compact block: msg_len: {}", msg.header.msg_len
 				);
-				let b: core::CompactBlock = msg.body()?;
+				let b: CompactBlock = msg.body()?;
 
 				adapter.compact_block_received(b, self.addr);
 				Ok(None)

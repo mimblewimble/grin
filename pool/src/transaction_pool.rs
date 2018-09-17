@@ -22,8 +22,9 @@ use std::sync::{Arc, RwLock};
 use chrono::prelude::Utc;
 
 use core::core::hash::Hash;
+use core::core::id::ShortId;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{transaction, Block, CompactBlock, Transaction};
+use core::core::{transaction, Block, Transaction};
 use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
 
@@ -150,11 +151,16 @@ impl TransactionPool {
 		Ok(())
 	}
 
-	/// Retrieve all transactions matching the provided "compact block"
-	/// based on the kernel set.
+	/// Retrieve all transactions matching the provided hash and nonce based on the kernel set.
 	/// Note: we only look in the txpool for this (stempool is under embargo).
-	pub fn retrieve_transactions(&self, cb: &CompactBlock) -> Vec<Transaction> {
-		self.txpool.retrieve_transactions(cb)
+	/// Returns the aggregate tx if we found anything in the pool.
+	pub fn retrieve_transaction(
+		&self,
+		hash: Hash,
+		nonce: u64,
+		short_ids: &Vec<ShortId>,
+	) -> Option<Transaction> {
+		self.txpool.retrieve_transaction(hash, nonce, short_ids)
 	}
 
 	/// Whether the transaction is acceptable to the pool, given both how

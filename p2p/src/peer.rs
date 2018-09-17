@@ -16,6 +16,8 @@ use std::fs::File;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
+use compact_block::CompactBlock;
+use compact_transaction::CompactTransaction;
 use conn;
 use core::core;
 use core::core::hash::{Hash, Hashed};
@@ -194,7 +196,7 @@ impl Peer {
 		}
 	}
 
-	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<(), Error> {
+	pub fn send_compact_block(&self, b: &CompactBlock) -> Result<(), Error> {
 		if !self.tracking_adapter.has(b.hash()) {
 			trace!(
 				LOGGER,
@@ -235,29 +237,25 @@ impl Peer {
 		}
 	}
 
-	/// Sends the provided transaction to the remote peer. The request may be
-	/// dropped if the remote peer is known to already have the transaction.
-	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
-		if !self.tracking_adapter.has(tx.hash()) {
-			debug!(LOGGER, "Send tx {} to {}", tx.hash(), self.info.addr);
+	pub fn send_compact_transaction(&self, compact_tx: &CompactTransaction) -> Result<(), Error> {
+		if !self.tracking_adapter.has(compact_tx.tx_hash) {
+			debug!(LOGGER, "Send {:?} to {}", compact_tx, self.info.addr,);
 			self.connection
 				.as_ref()
 				.unwrap()
-				.send(tx, msg::Type::Transaction)
+				.send(compact_tx, msg::Type::Transaction)
 		} else {
 			debug!(
 				LOGGER,
-				"Not sending tx {} to {} (already seen)",
-				tx.hash(),
-				self.info.addr
+				"Not sending {:?} to {} (already seen)", compact_tx, self.info.addr,
 			);
 			Ok(())
 		}
 	}
 
 	/// Sends the provided stem transaction to the remote peer.
-	/// Note: tracking adapter is ignored for stem transactions (while under
-	/// embargo).
+	/// Note: tracking adapter is ignored for stem transactions
+	/// (while under embargo).
 	pub fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		debug!(LOGGER, "Send (stem) tx {} to {}", tx.hash(), self.info.addr);
 		self.connection
@@ -285,6 +283,17 @@ impl Peer {
 			.as_ref()
 			.unwrap()
 			.send(&h, msg::Type::GetBlock)
+	}
+
+	pub fn send_transaction_request(&self, compact_tx: &CompactTransaction) -> Result<(), Error> {
+		debug!(
+			LOGGER,
+			"Requesting full tx for {:?} from peer {}.", compact_tx, self.info.addr
+		);
+		self.connection
+			.as_ref()
+			.unwrap()
+			.send(compact_tx, msg::Type::GetTransaction)
 	}
 
 	/// Sends a request for a specific compact block by hash
@@ -391,14 +400,16 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.total_height()
 	}
 
-	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
-		// Do not track the tx hash for stem txs.
-		// Otherwise we fail to handle the subsequent fluff or embargo expiration
-		// correctly.
-		if !stem {
+	fn stem_transaction_received(&self, tx: core::Transaction) {
+		self.adapter.stem_transaction_received(tx)
+	}
+
+	fn compact_transaction_received(&self, compact_tx: CompactTransaction, addr: SocketAddr) {
+		// Track the associated full tx if included in compact_tx.
+		if let Some(tx) = &compact_tx.tx {
 			self.push(tx.hash());
 		}
-		self.adapter.transaction_received(tx, stem)
+		self.adapter.compact_transaction_received(compact_tx, addr);
 	}
 
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
@@ -406,7 +417,7 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.block_received(b, addr)
 	}
 
-	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
+	fn compact_block_received(&self, cb: CompactBlock, addr: SocketAddr) -> bool {
 		self.push(cb.hash());
 		self.adapter.compact_block_received(cb, addr)
 	}
@@ -426,6 +437,10 @@ impl ChainAdapter for TrackingAdapter {
 
 	fn get_block(&self, h: Hash) -> Option<core::Block> {
 		self.adapter.get_block(h)
+	}
+
+	fn get_transaction(&self, compact_tx: CompactTransaction) -> Option<CompactTransaction> {
+		self.adapter.get_transaction(compact_tx)
 	}
 
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead> {

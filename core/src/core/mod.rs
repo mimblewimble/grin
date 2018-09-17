@@ -16,7 +16,6 @@
 
 pub mod block;
 pub mod committed;
-pub mod compact_block;
 pub mod hash;
 pub mod id;
 pub mod merkle_proof;
@@ -34,7 +33,6 @@ use util::secp::pedersen::Commitment;
 
 pub use self::block::*;
 pub use self::committed::Committed;
-pub use self::compact_block::*;
 pub use self::id::ShortId;
 pub use self::transaction::*;
 use core::hash::Hashed;
