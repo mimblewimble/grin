@@ -77,6 +77,7 @@ fn aggsig_sender_receiver_interaction() {
 	};
 
 	let pub_nonce_sum;
+	let pub_key_sum;
 	// receiver receives partial tx
 	let (receiver_pub_excess, _receiver_pub_nonce, rx_sig_part) = {
 		let keychain = receiver_keychain.clone();
@@ -97,11 +98,20 @@ fn aggsig_sender_receiver_interaction() {
 			],
 		).unwrap();
 
+		pub_key_sum = PublicKey::from_combination(
+			keychain.secp(),
+			vec![
+				&s_cx.get_public_keys(keychain.secp()).0,
+				&rx_cx.get_public_keys(keychain.secp()).0,
+			],
+		).unwrap();
+
 		let sig_part = aggsig::calculate_partial_sig(
 			&keychain.secp(),
 			&rx_cx.sec_key,
 			&rx_cx.sec_nonce,
 			&pub_nonce_sum,
+			Some(&pub_key_sum),
 			0,
 			0,
 		).unwrap();
@@ -117,6 +127,7 @@ fn aggsig_sender_receiver_interaction() {
 			&rx_sig_part,
 			&pub_nonce_sum,
 			&receiver_pub_excess,
+			Some(&pub_key_sum),
 			0,
 			0,
 		);
@@ -131,6 +142,7 @@ fn aggsig_sender_receiver_interaction() {
 			&s_cx.sec_key,
 			&s_cx.sec_nonce,
 			&pub_nonce_sum,
+			Some(&pub_key_sum),
 			0,
 			0,
 		).unwrap();
@@ -146,6 +158,7 @@ fn aggsig_sender_receiver_interaction() {
 			&sender_sig_part,
 			&pub_nonce_sum,
 			&sender_pub_excess,
+			Some(&pub_key_sum),
 			0,
 			0,
 		);
@@ -161,6 +174,7 @@ fn aggsig_sender_receiver_interaction() {
 			&rx_cx.sec_key,
 			&rx_cx.sec_nonce,
 			&pub_nonce_sum,
+			Some(&pub_key_sum),
 			0,
 			0,
 		).unwrap();
@@ -190,7 +204,7 @@ fn aggsig_sender_receiver_interaction() {
 
 		// Receiver check the final signature verifies
 		let sig_verifies =
-			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, 0, 0);
+			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, Some(&final_pubkey), 0, 0);
 		assert!(!sig_verifies.is_err());
 	}
 
@@ -270,6 +284,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 
 	// receiver receives partial tx
 	let pub_nonce_sum;
+	let pub_key_sum;
 	let (receiver_pub_excess, _receiver_pub_nonce, sig_part) = {
 		let keychain = receiver_keychain.clone();
 		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
@@ -288,11 +303,20 @@ fn aggsig_sender_receiver_interaction_offset() {
 			],
 		).unwrap();
 
+		pub_key_sum = PublicKey::from_combination(
+			keychain.secp(),
+			vec![
+				&s_cx.get_public_keys(keychain.secp()).0,
+				&rx_cx.get_public_keys(keychain.secp()).0,
+			],
+		).unwrap();
+
 		let sig_part = aggsig::calculate_partial_sig(
 			&keychain.secp(),
 			&rx_cx.sec_key,
 			&rx_cx.sec_nonce,
 			&pub_nonce_sum,
+			Some(&pub_key_sum),
 			0,
 			0,
 		).unwrap();
@@ -308,6 +332,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&sig_part,
 			&pub_nonce_sum,
 			&receiver_pub_excess,
+			Some(&pub_key_sum),
 			0,
 			0,
 		);
@@ -322,6 +347,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&s_cx.sec_key,
 			&s_cx.sec_nonce,
 			&pub_nonce_sum,
+			Some(&pub_key_sum),
 			0,
 			0,
 		).unwrap();
@@ -337,6 +363,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&sender_sig_part,
 			&pub_nonce_sum,
 			&sender_pub_excess,
+			Some(&pub_key_sum),
 			0,
 			0,
 		);
@@ -351,6 +378,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&rx_cx.sec_key,
 			&rx_cx.sec_nonce,
 			&pub_nonce_sum,
+			Some(&pub_key_sum),
 			0,
 			0,
 		).unwrap();
@@ -380,7 +408,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 
 		// Receiver check the final signature verifies
 		let sig_verifies =
-			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, 0, 0);
+			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, Some(&final_pubkey), 0, 0);
 		assert!(!sig_verifies.is_err());
 	}
 

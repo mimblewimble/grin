@@ -162,6 +162,7 @@ impl Slate {
 			sec_key,
 			sec_nonce,
 			&self.pub_nonce_sum(keychain.secp())?,
+			Some(&self.pub_blind_sum(keychain.secp())?),
 			self.fee,
 			self.lock_height,
 		)?;
@@ -304,6 +305,7 @@ impl Slate {
 					p.part_sig.as_ref().unwrap(),
 					&self.pub_nonce_sum(secp)?,
 					&p.public_blind_excess,
+					Some(&self.pub_blind_sum(secp)?),
 					self.fee,
 					self.lock_height,
 				)?;
@@ -348,6 +350,7 @@ impl Slate {
 			&keychain.secp(),
 			&final_sig,
 			&final_pubkey,
+			Some(&final_pubkey),
 			self.fee,
 			self.lock_height,
 		)?;

@@ -236,7 +236,8 @@ where
 	// Generate kernel excess and excess_sig using the split key k1.
 	let skey = k1.secret_key(&keychain.secp())?;
 	kern.excess = ctx.keychain.secp().commit(0, skey)?;
-	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &k1).unwrap();
+	let pubkey = &kern.excess.to_pubkey(&keychain.secp())?;
+	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &k1, Some(&pubkey)).unwrap();
 
 	// Store the kernel offset (k2) on the tx.
 	// Commitments will sum correctly when accounting for the offset.
