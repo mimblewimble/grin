@@ -14,7 +14,7 @@
 
 /// Types for a Cuckoo proof of work and its encapsulation as a fully usable
 /// proof of work within a block header.
-use std::cmp::max;
+use std::cmp::min;
 use std::ops::{Add, Div, Mul, Sub};
 use std::{fmt, iter};
 
@@ -25,8 +25,6 @@ use consensus::SECOND_POW_SIZESHIFT;
 use core::hash::Hashed;
 use global;
 use ser::{self, Readable, Reader, Writeable, Writer};
-
-const HIGH_BIT: u64 = 1 << 63;
 
 /// The difficulty is defined as the maximum target divided by the block hash.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
@@ -49,7 +47,8 @@ impl Difficulty {
 
 	/// Convert a `u32` into a `Difficulty`
 	pub fn from_num(num: u64) -> Difficulty {
-		Difficulty { num: num }
+		// can't have difficulty lower than 1
+		Difficulty { num: min(num, 1) }
 	}
 
 	/// Computes the difficulty from a hash. Divides the maximum target by the
@@ -63,9 +62,9 @@ impl Difficulty {
 		// Adjust the difficulty based on a 2^(N-M)*(N-1) factor, with M being
 		// the minimum sizeshift and N the provided sizeshift
 		let adjust_factor = (1 << (shift - global::ref_sizeshift()) as u64) * (shift as u64 - 1);
-		let difficulty = (max_target / max(target, adjust_factor)) * adjust_factor;
+		let difficulty = (max_target / target) * adjust_factor;
 
-		Difficulty { num: difficulty }
+		Difficulty::from_num(difficulty)
 	}
 
 	/// Same as `from_proof_adjusted` but instead of an adjustment based on
@@ -75,15 +74,8 @@ impl Difficulty {
 		let max_target = <u64>::max_value();
 		let target = proof.hash().to_u64();
 
-		let difficulty = max_target / target;
-
 		// Scaling between 2 proof of work algos
-		let difficulty = if scaling & HIGH_BIT == 1 {
-			difficulty / (scaling ^ HIGH_BIT)
-		} else {
-			difficulty * scaling
-		};
-		Difficulty { num: difficulty }
+		Difficulty::from_num((max_target / scaling) / target)
 	}
 
 	/// Converts the difficulty into a u64
