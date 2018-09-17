@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate chrono;
 extern crate croaring;
 extern crate env_logger;
 extern crate grin_core as core;
 extern crate grin_store as store;
-extern crate chrono;
 
 use std::fs;
 
-use chrono::prelude::{Utc};
+use chrono::prelude::Utc;
 use croaring::Bitmap;
 
 use core::core::pmmr::{Backend, PMMR};
@@ -355,8 +355,7 @@ fn pmmr_rewind() {
 	// rewind and check the roots still match
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
-		pmmr.rewind(9, &Bitmap::of(&vec![11, 12, 16]))
-			.unwrap();
+		pmmr.rewind(9, &Bitmap::of(&vec![11, 12, 16])).unwrap();
 		assert_eq!(pmmr.unpruned_size(), 10);
 
 		// assert_eq!(pmmr.root(), root2);
@@ -400,8 +399,7 @@ fn pmmr_rewind() {
 
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, 10);
-		pmmr.rewind(5, &Bitmap::create())
-			.unwrap();
+		pmmr.rewind(5, &Bitmap::create()).unwrap();
 		assert_eq!(pmmr.root(), root1);
 	}
 	backend.sync().unwrap();
@@ -724,7 +722,12 @@ fn setup(tag: &str) -> (String, Vec<TestElem>) {
 		Err(e) => println!("env logger already initialized: {:?}", e),
 	};
 	let t = Utc::now();
-	let data_dir = format!("./target/tmp/{}.{}-{}", t.timestamp(), t.timestamp_subsec_nanos(), tag);
+	let data_dir = format!(
+		"./target/tmp/{}.{}-{}",
+		t.timestamp(),
+		t.timestamp_subsec_nanos(),
+		tag
+	);
 	fs::create_dir_all(data_dir.clone()).unwrap();
 
 	let mut elems = vec![];

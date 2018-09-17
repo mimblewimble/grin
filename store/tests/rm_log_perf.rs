@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate chrono;
 extern crate croaring;
 extern crate env_logger;
 extern crate grin_core as core;
 extern crate grin_store as store;
-extern crate chrono;
 
+use chrono::prelude::Utc;
 use std::fs;
 use std::time::{Duration, Instant};
-use chrono::prelude::{Utc};
 
 use store::rm_log::RemoveLog;
 
