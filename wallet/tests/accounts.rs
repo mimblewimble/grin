@@ -259,6 +259,6 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 fn accounts() {
 	let test_dir = "test_output/accounts";
 	if let Err(e) = accounts_test_impl(test_dir) {
-		panic!("Libwallet Error: {}", e);
+		panic!("Libwallet Error: {} - {}", e, e.backtrace().unwrap());
 	}
 }

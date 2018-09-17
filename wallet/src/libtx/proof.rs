@@ -56,7 +56,7 @@ where
 	let skey = k.derive_key(key_id)?;
 	let nonce = create_nonce(k, &commit)?;
 	Ok(k.secp()
-		.bullet_proof(amount, skey.secret_key, nonce, extra_data))
+		.bullet_proof(amount, skey.secret_key, nonce, extra_data, None))
 }
 
 /// Verify a proof

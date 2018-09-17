@@ -45,7 +45,9 @@ pub fn calculate_partial_sig(
 		&msg,
 		sec_key,
 		Some(sec_nonce),
+		None,
 		Some(nonce_sum),
+		None,
 		Some(nonce_sum),
 	)?;
 	Ok(sig)
@@ -80,7 +82,7 @@ where
 	K: Keychain,
 {
 	let skey = k.derive_key(key_id)?;
-	let sig = aggsig::sign_single(secp, &msg, &skey.secret_key, None, None, None)?;
+	let sig = aggsig::sign_single(secp, &msg, &skey.secret_key, None, None, None, None, None)?;
 	Ok(sig)
 }
 
@@ -128,7 +130,7 @@ pub fn verify_single(
 	pubkey: &PublicKey,
 	is_partial: bool,
 ) -> bool {
-	aggsig::verify_single(secp, sig, msg, pubnonce, pubkey, is_partial)
+	aggsig::verify_single(secp, sig, msg, pubnonce, pubkey, None, None, is_partial)
 }
 
 /// Adds signatures
@@ -149,6 +151,6 @@ pub fn sign_with_blinding(
 	blinding: &BlindingFactor,
 ) -> Result<Signature, Error> {
 	let skey = &blinding.secret_key(&secp)?;
-	let sig = aggsig::sign_single(secp, &msg, skey, None, None, None)?;
+	let sig = aggsig::sign_single(secp, &msg, skey, None, None, None, None, None)?;
 	Ok(sig)
 }
