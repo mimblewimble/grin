@@ -14,7 +14,7 @@
 
 /// Types for a Cuckoo proof of work and its encapsulation as a fully usable
 /// proof of work within a block header.
-use std::cmp::min;
+use std::cmp::max;
 use std::ops::{Add, Div, Mul, Sub};
 use std::{fmt, iter};
 
@@ -48,7 +48,7 @@ impl Difficulty {
 	/// Convert a `u32` into a `Difficulty`
 	pub fn from_num(num: u64) -> Difficulty {
 		// can't have difficulty lower than 1
-		Difficulty { num: min(num, 1) }
+		Difficulty { num: max(num, 1) }
 	}
 
 	/// Computes the difficulty from a hash. Divides the maximum target by the
