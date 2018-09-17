@@ -586,11 +586,9 @@ impl StratumServer {
 			for num in start..workers_l.len() {
 				if workers_l[num].error == true {
 					warn!(
-	                                        LOGGER,
-	                                        "(Server ID: {}) Dropping worker: {}",
-	                                        self.id,
-						workers_l[num].id;
-	                                );
+						LOGGER,
+						"(Server ID: {}) Dropping worker: {}", self.id, workers_l[num].id,
+					);
 					// Update worker stats
 					let mut stratum_stats = stratum_stats.write().unwrap();
 					let worker_stats_id = stratum_stats
