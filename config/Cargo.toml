@@ -9,7 +9,7 @@ publish = false
 serde = "1"
 serde_derive = "1"
 toml = "0.4"
-dirs = "1"
+dirs = "1.0.3"
 
 grin_servers = { path = "../servers" }
 grin_p2p = { path = "../p2p" }

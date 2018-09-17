@@ -13,7 +13,7 @@ libc = "0.2"
 failure = "0.1"
 failure_derive = "0.1"
 lmdb-zero = "0.4.4"
-memmap = { git = "https://github.com/danburkert/memmap-rs", tag = "0.6.2" }
+memmap = "0.6.2"
 serde = "1"
 serde_derive = "1"
 slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
