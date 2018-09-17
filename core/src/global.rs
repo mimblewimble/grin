@@ -145,8 +145,11 @@ pub fn coinbase_maturity(height: u64) -> u64 {
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
 		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
-		_ => if height < COINBASE_MATURITY_FORK_HEIGHT { OLD_COINBASE_MATURITY }
-                     else { COINBASE_MATURITY },
+		_ => if height < COINBASE_MATURITY_FORK_HEIGHT {
+			OLD_COINBASE_MATURITY
+		} else {
+			COINBASE_MATURITY
+		},
 	}
 }
 
