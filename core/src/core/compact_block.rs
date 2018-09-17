@@ -14,7 +14,7 @@
 
 //! Compact Blocks.
 
-use rand::{thread_rng, Rng};
+use rand::{RngCore, thread_rng};
 
 use consensus::VerifySortOrder;
 use core::block::{Block, BlockHeader, Error};

@@ -12,7 +12,7 @@ enum_primitive = "0.1"
 lmdb-zero = "0.4.4"
 net2 = "0.2"
 num = "0.1"
-rand = "0.3"
+rand = "0.5"
 serde = "1"
 serde_derive = "1"
 slog = { version = "~2.3", features = ["max_level_trace", "release_max_level_trace"] }

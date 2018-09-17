@@ -17,7 +17,7 @@ use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
 use rand::os::OsRng;
-use rand::Rng;
+use rand::RngCore;
 
 use core::core::hash::Hash;
 use core::core::target::Difficulty;

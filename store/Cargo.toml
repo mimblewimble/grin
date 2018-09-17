@@ -23,4 +23,4 @@ grin_util = { path = "../util" }
 
 [dev-dependencies]
 chrono = "0.4.4"
-rand = "0.3"
+rand = "0.5"

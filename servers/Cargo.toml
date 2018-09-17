@@ -12,7 +12,7 @@ http = "0.1"
 hyper-staticfile = "0.3"
 itertools = "0.7"
 lmdb-zero = "0.4.4"
-rand = "0.3"
+rand = "0.5"
 slog = { version = "~2.3", features = ["max_level_trace", "release_max_level_trace"] }
 serde = "1"
 serde_derive = "1"
