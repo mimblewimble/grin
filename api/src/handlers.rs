@@ -542,13 +542,13 @@ impl Handler for ChainValidationHandler {
 
 /// Chain compaction handler. Trigger a compaction of the chain state to regain
 /// storage space.
-/// GET /v1/chain/compact
+/// POST /v1/chain/compact
 pub struct ChainCompactHandler {
 	pub chain: Weak<chain::Chain>,
 }
 
 impl Handler for ChainCompactHandler {
-	fn get(&self, _req: Request<Body>) -> ResponseFuture {
+	fn post(&self, _req: Request<Body>) -> ResponseFuture {
 		match w(&self.chain).compact() {
 			Ok(_) => response(StatusCode::OK, ""),
 			Err(e) => response(
@@ -598,6 +598,18 @@ impl HeaderHandler {
 		}
 	}
 }
+
+impl Handler for HeaderHandler {
+	fn get(&self, req: Request<Body>) -> ResponseFuture {
+		let el = match req.uri().path().trim_right_matches("/").rsplit("/").next() {
+			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
+			Some(el) => el,
+		};
+		result_to_response(self.get_header(el.to_string()))
+	}
+}
+
+
 
 /// Gets block details given either a hash or an unspent commit
 /// GET /v1/blocks/<hash>
@@ -683,17 +695,8 @@ impl Handler for BlockHandler {
 	}
 }
 
-impl Handler for HeaderHandler {
-	fn get(&self, req: Request<Body>) -> ResponseFuture {
-		let el = match req.uri().path().trim_right_matches("/").rsplit("/").next() {
-			None => return response(StatusCode::BAD_REQUEST, "invalid url"),
-			Some(el) => el,
-		};
-		result_to_response(self.get_header(el.to_string()))
-	}
-}
-
-// Get basic information about the transaction pool.
+/// Get basic information about the transaction pool.
+/// GET /v1/pool
 struct PoolInfoHandler {
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 }
@@ -715,7 +718,8 @@ struct TxWrapper {
 	tx_hex: String,
 }
 
-// Push new transaction to our local transaction pool.
+/// Push new transaction to our local transaction pool.
+/// POST /v1/pool/push
 struct PoolPushHandler {
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 }
@@ -909,8 +913,8 @@ pub fn build_router(
 	let route_list = vec![
 		"get blocks".to_string(),
 		"get chain".to_string(),
-		"get chain/compact".to_string(),
-		"get chain/validate".to_string(),
+		"post chain/compact".to_string(),
+		"post chain/validate".to_string(),
 		"get chain/outputs".to_string(),
 		"get status".to_string(),
 		"get txhashset/roots".to_string(),
