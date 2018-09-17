@@ -483,8 +483,7 @@ fn validate_block(
 			&prev.total_kernel_offset,
 			&prev.total_kernel_sum,
 			verifier_cache,
-		)
-		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
+		).map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }
 

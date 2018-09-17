@@ -93,8 +93,9 @@ pub fn run_sync(
 						// * timeout
 						if wp.len() > MIN_PEERS
 							|| (wp.len() == 0
-								&& peers.enough_peers()
-								&& head.total_difficulty > Difficulty::zero()) || n > wait_secs
+								&& peers.enough_peers() && head.total_difficulty
+								> Difficulty::zero())
+							|| n > wait_secs
 						{
 							break;
 						}
@@ -343,8 +344,7 @@ fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, body_sync_info: &mut B
 			// only ask for blocks that we have not yet processed
 			// either successfully stored or in our orphan list
 			!chain.get_block(x).is_ok() && !chain.is_orphan(x)
-		})
-		.take(block_count)
+		}).take(block_count)
 		.collect::<Vec<_>>();
 
 	if hashes_to_get.len() > 0 {
@@ -524,11 +524,13 @@ fn get_locator(
 
 	// reset to header_head if sync_head is left behind
 	if header_head.height > tip.height {
-		debug!(LOGGER, "sync: get_locator reset to header_head. sync_head: {} at {}, header_head: {} at {}",
-			   tip.hash(),
-			   tip.height,
-			   header_head.hash(),
-			   header_head.height,
+		debug!(
+			LOGGER,
+			"sync: get_locator reset to header_head. sync_head: {} at {}, header_head: {} at {}",
+			tip.hash(),
+			tip.height,
+			header_head.hash(),
+			header_head.height,
 		);
 		tip = header_head;
 	}
@@ -686,7 +688,11 @@ impl SyncInfo {
 		let stalling = header_head.height == latest_height && now > timeout;
 
 		if all_headers_received || stalling {
-			self.prev_header_sync = (now + Duration::seconds(10), header_head.height, header_head.height);
+			self.prev_header_sync = (
+				now + Duration::seconds(10),
+				header_head.height,
+				header_head.height,
+			);
 			true
 		} else {
 			// resetting the timeout as long as we progress
@@ -761,9 +767,7 @@ mod test {
 		// headers
 		assert_eq!(
 			get_locator_heights(10000),
-			vec![
-				10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0,
-			]
+			vec![10000, 9998, 9994, 9986, 9970, 9938, 9874, 9746, 9490, 8978, 7954, 5906, 1810, 0,]
 		);
 	}
 }

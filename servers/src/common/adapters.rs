@@ -177,8 +177,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 						&prev.total_kernel_offset,
 						&prev.total_kernel_sum,
 						self.verifier_cache.clone(),
-					)
-					.is_ok()
+					).is_ok()
 				{
 					debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
 					self.process_block(block, addr)
@@ -450,10 +449,9 @@ impl NetToChainAdapter {
 			let head = chain.head().unwrap();
 			// we have a fast sync'd node and are sent a block older than our horizon,
 			// only sync can do something with that
-			if b.header.height
-				< head
-					.height
-					.saturating_sub(global::cut_through_horizon() as u64)
+			if b.header.height < head
+				.height
+				.saturating_sub(global::cut_through_horizon() as u64)
 			{
 				return true;
 			}
