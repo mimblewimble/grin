@@ -352,20 +352,6 @@ impl Chain {
 		res
 	}
 
-	/// Update sync head
-	/// This is only used for Independent HeaderSync
-	pub fn update_sync_head(&self, bh: &BlockHeader, opts: Options) -> Result<Option<Tip>, Error> {
-		let sync_head = self.get_sync_head()?;
-		let mut sync_ctx = self.ctx_from_head(sync_head, opts)?;
-		let mut batch = self.store.batch()?;
-		let res = pipe::update_sync_head(bh, &mut sync_ctx, &mut batch);
-
-		if res.is_ok() {
-			batch.commit()?;
-		}
-		res
-	}
-
 	fn ctx_from_head<'a>(&self, head: Tip, opts: Options) -> Result<pipe::BlockContext, Error> {
 		Ok(pipe::BlockContext {
 			opts: opts,

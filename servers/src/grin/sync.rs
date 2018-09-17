@@ -140,7 +140,7 @@ pub fn run_sync(
 							&& si.highest_height.saturating_sub(head.height) > horizon;
 
 						// run the header sync every 10s
-						if si.header_sync_due(&header_head, Duration::seconds(10)) {
+						if si.header_sync_due(&header_head) {
 							header_sync(peers.clone(), chain.clone(), &mut history_locators);
 
 							let status = sync_state.status();
@@ -212,16 +212,6 @@ pub fn run_sync(
 						}
 					} else {
 						sync_state.update(SyncStatus::NoSync);
-						// still syncing the header but in longer interval than Sync state
-						if si.header_sync_due(&header_head, Duration::seconds(60)) {
-							header_sync(peers.clone(), chain.clone(), &mut history_locators);
-							debug!(
-								LOGGER,
-								"Independent HeaderSync: {{ current_height: {}, highest_height: {} }}",
-								header_head.height,
-								si.highest_height,
-							);
-						}
 					}
 
 					thread::sleep(time::Duration::from_millis(10));
@@ -529,13 +519,26 @@ fn get_locator(
 ) -> Result<Vec<Hash>, Error> {
 	let mut this_height = 0;
 
-	let tip = chain.get_sync_head()?;
+	let mut tip = chain.get_sync_head()?;
+	let header_head = chain.get_header_head()?;
+
+	// reset to header_head if sync_head is left behind
+	if header_head.height > tip.height {
+		debug!(LOGGER, "sync: get_locator reset to header_head. sync_head: {} at {}, header_head: {} at {}",
+			   tip.hash(),
+			   tip.height,
+			   header_head.hash(),
+			   header_head.height,
+		);
+		tip = header_head;
+	}
+
 	let heights = get_locator_heights(tip.height);
 	let mut new_heights: Vec<u64> = vec![];
 
 	// for security, clear history_locators[] in any case of header chain rollback,
 	// the easiest way is to check whether the sync head and the header head are identical.
-	if history_locators.len() > 0 && tip.hash() != chain.get_header_head()?.hash() {
+	if history_locators.len() > 0 && tip.hash() != header_head.hash() {
 		history_locators.clear();
 	}
 
@@ -672,7 +675,7 @@ impl SyncInfo {
 		}
 	}
 
-	fn header_sync_due(&mut self, header_head: &chain::Tip, max_timeout: Duration) -> bool {
+	fn header_sync_due(&mut self, header_head: &chain::Tip) -> bool {
 		let now = Utc::now();
 		let (timeout, latest_height, prev_height) = self.prev_header_sync;
 
@@ -683,7 +686,7 @@ impl SyncInfo {
 		let stalling = header_head.height == latest_height && now > timeout;
 
 		if all_headers_received || stalling {
-			self.prev_header_sync = (now + max_timeout, header_head.height, header_head.height);
+			self.prev_header_sync = (now + Duration::seconds(10), header_head.height, header_head.height);
 			true
 		} else {
 			// resetting the timeout as long as we progress
