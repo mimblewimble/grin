@@ -24,7 +24,7 @@ use std::sync::atomic::AtomicBool;
 use std::{thread, time};
 
 use core::core::hash::Hash;
-use core::core::target::Difficulty;
+use core::pow::Difficulty;
 use p2p::Peer;
 
 fn open_port() -> u16 {
