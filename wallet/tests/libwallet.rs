@@ -203,8 +203,14 @@ fn aggsig_sender_receiver_interaction() {
 		let keychain = receiver_keychain.clone();
 
 		// Receiver check the final signature verifies
-		let sig_verifies =
-			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, Some(&final_pubkey), 0, 0);
+		let sig_verifies = aggsig::verify_sig_build_msg(
+			&keychain.secp(),
+			&final_sig,
+			&final_pubkey,
+			Some(&final_pubkey),
+			0,
+			0,
+		);
 		assert!(!sig_verifies.is_err());
 	}
 
@@ -407,8 +413,14 @@ fn aggsig_sender_receiver_interaction_offset() {
 		let keychain = receiver_keychain.clone();
 
 		// Receiver check the final signature verifies
-		let sig_verifies =
-			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, Some(&final_pubkey), 0, 0);
+		let sig_verifies = aggsig::verify_sig_build_msg(
+			&keychain.secp(),
+			&final_sig,
+			&final_pubkey,
+			Some(&final_pubkey),
+			0,
+			0,
+		);
 		assert!(!sig_verifies.is_err());
 	}
 

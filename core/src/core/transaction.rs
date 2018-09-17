@@ -202,7 +202,16 @@ impl TxKernel {
 		// Verify aggsig directly in libsecp
 		let pubkey = &self.excess.to_pubkey(&secp)?;
 		println!("VERIFY PUBKEY: {:?}", pubkey);
-		if !secp::aggsig::verify_single(&secp, &sig, &msg, None, &pubkey, Some(&pubkey), None, false) {
+		if !secp::aggsig::verify_single(
+			&secp,
+			&sig,
+			&msg,
+			None,
+			&pubkey,
+			Some(&pubkey),
+			None,
+			false,
+		) {
 			return Err(secp::Error::IncorrectSignature);
 		}
 		Ok(())
