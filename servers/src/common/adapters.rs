@@ -99,11 +99,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				self.process_transaction(tx, false);
 			}
 		} else {
-			debug!(
-				LOGGER,
-				"Received compact_tx {:?}",
-				compact_tx,
-			);
+			debug!(LOGGER, "Received compact_tx {:?}", compact_tx,);
 
 			let tx = {
 				let tx_pool = self.tx_pool.read().unwrap();
@@ -263,7 +259,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 						self.verifier_cache.clone(),
 					).is_ok()
 				{
-					debug!(LOGGER, "adapter: successfully hydrated block from tx pool, processing.");
+					debug!(
+						LOGGER,
+						"adapter: successfully hydrated block from tx pool, processing."
+					);
 					self.process_block(block, addr)
 				} else {
 					if self.sync_state.status() == SyncStatus::NoSync {
@@ -550,7 +549,10 @@ impl NetToChainAdapter {
 		};
 
 		if let Err(e) = res {
-			debug!(LOGGER, "Transaction {} (stem? {}) rejected: {:?}", tx_hash, stem, e);
+			debug!(
+				LOGGER,
+				"Transaction {} (stem? {}) rejected: {:?}", tx_hash, stem, e
+			);
 		}
 	}
 

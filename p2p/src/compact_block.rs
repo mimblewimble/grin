@@ -140,7 +140,6 @@ pub struct CompactBlock {
 	pub nonce: u64,
 	/// Container for out_full, kern_full and kern_ids in the compact block.
 	body: CompactBlockBody,
-
 	// Optional aggregate tx to include with a compact_block.
 	// We can pass missing tx(s) to a peer via this if they let us know
 	// they can process the compact block with this additional data.
@@ -246,11 +245,7 @@ impl Readable for CompactBlock {
 /// Takes an optional tx (from txpool) to complete the missing parts of the block.
 /// Note: caller must validate the block, we do not validate it here.
 pub fn hydrate_block(cb: CompactBlock, tx: Option<Transaction>) -> Result<Block, Error> {
-	trace!(
-		LOGGER,
-		"compact_block: hydrate_block: {}",
-		cb.hash(),
-	);
+	trace!(LOGGER, "compact_block: hydrate_block: {}", cb.hash(),);
 
 	let header = cb.header.clone();
 
