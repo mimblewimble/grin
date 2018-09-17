@@ -308,8 +308,7 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 						.map(|mut addr| {
 							addr.set_port(13414);
 							addr
-						})
-						.filter(|addr| !temp_addresses.contains(addr))
+						}).filter(|addr| !temp_addresses.contains(addr))
 						.collect()),
 				),
 				Err(e) => debug!(

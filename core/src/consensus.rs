@@ -49,7 +49,7 @@ pub const BLOCK_TIME_SEC: u64 = 60;
 
 /// Number of blocks before a coinbase matures and can be spent
 /// set to nominal number of block in one day (1440 with 1-minute blocks)
-pub const COINBASE_MATURITY: u64 = 24 * 60 * 60 / BLOCK_TIME_SEC; 
+pub const COINBASE_MATURITY: u64 = 24 * 60 * 60 / BLOCK_TIME_SEC;
 
 /// Cuckoo-cycle proof size (cycle length)
 pub const PROOFSIZE: usize = 42;

@@ -134,8 +134,7 @@ impl RemoveLog {
 						None
 					}
 				},
-			)
-			.collect()
+			).collect()
 	}
 }
 

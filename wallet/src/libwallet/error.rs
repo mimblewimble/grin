@@ -34,7 +34,11 @@ pub struct Error {
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorKind {
 	/// Not enough funds
-	#[fail(display = "Not enough funds. Required: {}, Available: {}", needed, available)]
+	#[fail(
+		display = "Not enough funds. Required: {}, Available: {}",
+		needed,
+		available
+	)]
 	NotEnoughFunds {
 		/// available funds
 		available: u64,
@@ -43,7 +47,11 @@ pub enum ErrorKind {
 	},
 
 	/// Fee dispute
-	#[fail(display = "Fee dispute: sender fee {}, recipient fee {}", sender_fee, recipient_fee)]
+	#[fail(
+		display = "Fee dispute: sender fee {}, recipient fee {}",
+		sender_fee,
+		recipient_fee
+	)]
 	FeeDispute {
 		/// sender fee
 		sender_fee: u64,

@@ -130,8 +130,7 @@ impl Peers {
 			.filter(|x| match x.try_read() {
 				Ok(peer) => peer.info.direction == Direction::Outbound,
 				Err(_) => false,
-			})
-			.collect::<Vec<_>>();
+			}).collect::<Vec<_>>();
 		res
 	}
 
@@ -165,8 +164,7 @@ impl Peers {
 			.filter(|x| match x.try_read() {
 				Ok(peer) => peer.info.total_difficulty > total_difficulty,
 				Err(_) => false,
-			})
-			.collect::<Vec<_>>();
+			}).collect::<Vec<_>>();
 
 		thread_rng().shuffle(&mut max_peers);
 		max_peers
@@ -190,8 +188,7 @@ impl Peers {
 						&& peer.info.capabilities.contains(Capabilities::FULL_HIST)
 				}
 				Err(_) => false,
-			})
-			.collect::<Vec<_>>();
+			}).collect::<Vec<_>>();
 
 		thread_rng().shuffle(&mut max_peers);
 		max_peers
@@ -220,8 +217,7 @@ impl Peers {
 			.map(|x| match x.try_read() {
 				Ok(peer) => peer.info.total_difficulty.clone(),
 				Err(_) => Difficulty::zero(),
-			})
-			.max()
+			}).max()
 			.unwrap();
 
 		let mut max_peers = peers
@@ -229,8 +225,7 @@ impl Peers {
 			.filter(|x| match x.try_read() {
 				Ok(peer) => peer.info.total_difficulty == max_total_difficulty,
 				Err(_) => false,
-			})
-			.collect::<Vec<_>>();
+			}).collect::<Vec<_>>();
 
 		thread_rng().shuffle(&mut max_peers);
 		max_peers
@@ -489,8 +484,7 @@ impl Peers {
 				.map(|x| {
 					let p = x.read().unwrap();
 					p.info.addr.clone()
-				})
-				.collect::<Vec<_>>()
+				}).collect::<Vec<_>>()
 		};
 
 		// now remove them taking a short-lived write lock each time

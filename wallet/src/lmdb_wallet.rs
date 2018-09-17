@@ -336,7 +336,11 @@ where
 
 	fn save_tx_log_entry(&self, t: TxLogEntry) -> Result<(), Error> {
 		let tx_log_key = u64_to_key(TX_LOG_ENTRY_PREFIX, t.id as u64);
-		self.db.borrow().as_ref().unwrap().put_ser(&tx_log_key, &t)?;
+		self.db
+			.borrow()
+			.as_ref()
+			.unwrap()
+			.put_ser(&tx_log_key, &t)?;
 		Ok(())
 	}
 

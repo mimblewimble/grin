@@ -151,12 +151,12 @@ fn get_diff_stats(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) -> Di
 
 	let mut i = 1;
 
-	let sum_blocks: Vec<Result<(u64, Difficulty), TargetError>> = global::difficulty_data_to_vector(
-		diff_iter,
-	).into_iter()
-		.skip(MEDIAN_TIME_WINDOW as usize)
-		.take(DIFFICULTY_ADJUST_WINDOW as usize)
-		.collect();
+	let sum_blocks: Vec<Result<(u64, Difficulty), TargetError>> =
+		global::difficulty_data_to_vector(diff_iter)
+			.into_iter()
+			.skip(MEDIAN_TIME_WINDOW as usize)
+			.take(DIFFICULTY_ADJUST_WINDOW as usize)
+			.collect();
 
 	let sum_entries: Vec<DiffBlock> = sum_blocks
 		.iter()
@@ -197,8 +197,7 @@ fn get_diff_stats(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) -> Di
 				time: time,
 				duration: dur,
 			}
-		})
-		.collect();
+		}).collect();
 
 	DiffStats {
 		height: tip_height as u64,

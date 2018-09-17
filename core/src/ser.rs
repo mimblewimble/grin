@@ -409,7 +409,7 @@ pub struct BinWriter<'a> {
 
 impl<'a> BinWriter<'a> {
 	pub fn new(write: &'a mut Write) -> BinWriter<'a> {
-		BinWriter{sink: write}
+		BinWriter { sink: write }
 	}
 }
 

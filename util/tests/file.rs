@@ -26,14 +26,14 @@ fn copy_dir() {
 	let root = Path::new("./target/tmp2");
 	fs::create_dir_all(root.join("./original/sub")).unwrap();
 	fs::create_dir_all(root.join("./original/sub2")).unwrap();
-	write_files("original".to_string(),&root).unwrap();
+	write_files("original".to_string(), &root).unwrap();
 	let original_path = Path::new("./target/tmp2/original");
 	let copy_path = Path::new("./target/tmp2/copy");
 	file::copy_dir_to(original_path, copy_path).unwrap();
 	let original_files = file::list_files("./target/tmp2/original".to_string());
 	let copied_files = file::list_files("./target/tmp2/copy".to_string());
 	for i in 1..5 {
-		assert_eq!(copied_files[i],original_files[i]);
+		assert_eq!(copied_files[i], original_files[i]);
 	}
 	fs::remove_dir_all(root).unwrap();
 }

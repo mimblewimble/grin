@@ -125,8 +125,7 @@ fn build_request<'a>(
 		.body(match body {
 			None => Body::empty(),
 			Some(json) => json.into(),
-		})
-		.map_err(|e| {
+		}).map_err(|e| {
 			ErrorKind::RequestError(format!("Bad request {} {}: {}", method, url, e)).into()
 		})
 }
@@ -181,8 +180,7 @@ fn send_request_async(req: Request<Body>) -> Box<Future<Item = String, Error = E
 							.map_err(|e| {
 								ErrorKind::RequestError(format!("Cannot read response body: {}", e))
 									.into()
-							})
-							.concat2()
+							}).concat2()
 							.and_then(|ch| ok(String::from_utf8_lossy(&ch.to_vec()).to_string())),
 					)
 				}

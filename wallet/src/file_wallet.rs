@@ -444,9 +444,9 @@ where
 		// write details file
 		let mut details_file =
 			File::create(details_file_path).context(ErrorKind::FileWallet(&"Could not create "))?;
-		let res_json = serde_json::to_string_pretty(&self.details).context(ErrorKind::FileWallet(
-			"Error serializing wallet details file",
-		))?;
+		let res_json = serde_json::to_string_pretty(&self.details).context(
+			ErrorKind::FileWallet("Error serializing wallet details file"),
+		)?;
 		details_file
 			.write_all(res_json.into_bytes().as_slice())
 			.context(ErrorKind::FileWallet(&"Error writing wallet details file"))
