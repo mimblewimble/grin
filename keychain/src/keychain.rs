@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use rand::distributions::Alphanumeric;
 /// Implementation of the Keychain trait based on an extended key derivation
 /// scheme.
 use rand::{thread_rng, Rng};
-use rand::distributions::Alphanumeric;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
