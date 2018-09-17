@@ -180,8 +180,7 @@ fn write_file(db_root: String) {
 				.join("txhashset")
 				.join("kernel")
 				.join("strange0"),
-		)
-		.unwrap();
+		).unwrap();
 	OpenOptions::new()
 		.create(true)
 		.write(true)
@@ -196,8 +195,7 @@ fn write_file(db_root: String) {
 				.join("txhashset")
 				.join("strange_dir")
 				.join("strange2"),
-		)
-		.unwrap();
+		).unwrap();
 	fs::create_dir(
 		Path::new(&db_root)
 			.join("txhashset")
@@ -213,8 +211,7 @@ fn write_file(db_root: String) {
 				.join("strange_dir")
 				.join("strange_subdir")
 				.join("strange3"),
-		)
-		.unwrap();
+		).unwrap();
 }
 
 fn txhashset_contains_expected_files(dirname: String, path_buf: PathBuf) -> bool {
