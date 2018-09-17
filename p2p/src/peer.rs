@@ -257,10 +257,7 @@ impl Peer {
 		}
 	}
 
-	pub fn send_compact_transaction(
-		&self,
-		compact_tx: &CompactTransaction,
-	) -> Result<(), Error> {
+	pub fn send_compact_transaction(&self, compact_tx: &CompactTransaction) -> Result<(), Error> {
 		if !self.tracking_adapter.has(compact_tx.tx_hash) {
 			debug!(LOGGER, "Send {:?} to {}", compact_tx, self.info.addr,);
 			self.connection
@@ -308,10 +305,7 @@ impl Peer {
 			.send(&h, msg::Type::GetBlock)
 	}
 
-	pub fn send_transaction_request(
-		&self,
-		compact_tx: &CompactTransaction,
-	) -> Result<(), Error> {
+	pub fn send_transaction_request(&self, compact_tx: &CompactTransaction) -> Result<(), Error> {
 		debug!(
 			LOGGER,
 			"Requesting full tx for {:?} from peer {}.", compact_tx, self.info.addr

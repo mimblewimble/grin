@@ -14,15 +14,15 @@
 
 //! Compact Blocks.
 
+use rand::{thread_rng, Rng};
 use std::collections::HashSet;
 use std::iter::FromIterator;
-use rand::{thread_rng, Rng};
 
 use core::consensus::VerifySortOrder;
 use core::core::block::{Block, BlockHeader, Error};
-use core::core::transaction::{Transaction, TransactionBody};
 use core::core::hash::Hashed;
 use core::core::id::ShortIdentifiable;
+use core::core::transaction::{Transaction, TransactionBody};
 use core::core::{KernelFeatures, Output, OutputFeatures, ShortId, TxKernel};
 use core::ser::{self, read_multi, Readable, Reader, Writeable, Writer};
 use util::LOGGER;
