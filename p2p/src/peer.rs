@@ -16,6 +16,8 @@ use std::fs::File;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
+use compact_block::CompactBlock;
+use compact_transaction::CompactTransaction;
 use conn;
 use core::core;
 use core::core::hash::{Hash, Hashed};
@@ -26,7 +28,6 @@ use protocol::Protocol;
 use types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerInfo, ReasonForBan, TxHashSetRead,
 };
-use util::secp::pedersen;
 use util::LOGGER;
 
 const MAX_TRACK_SIZE: usize = 30;
@@ -195,7 +196,7 @@ impl Peer {
 		}
 	}
 
-	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<(), Error> {
+	pub fn send_compact_block(&self, b: &CompactBlock) -> Result<(), Error> {
 		if !self.tracking_adapter.has(b.hash()) {
 			trace!(
 				LOGGER,
@@ -258,7 +259,7 @@ impl Peer {
 
 	pub fn send_compact_transaction(
 		&self,
-		compact_tx: &core::CompactTransaction,
+		compact_tx: &CompactTransaction,
 	) -> Result<(), Error> {
 		if !self.tracking_adapter.has(compact_tx.tx_hash) {
 			debug!(LOGGER, "Send {:?} to {}", compact_tx, self.info.addr,);
@@ -309,7 +310,7 @@ impl Peer {
 
 	pub fn send_transaction_request(
 		&self,
-		compact_tx: &core::CompactTransaction,
+		compact_tx: &CompactTransaction,
 	) -> Result<(), Error> {
 		debug!(
 			LOGGER,
@@ -435,7 +436,7 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.transaction_received(tx, stem)
 	}
 
-	fn compact_transaction_received(&self, compact_tx: core::CompactTransaction, addr: SocketAddr) {
+	fn compact_transaction_received(&self, compact_tx: CompactTransaction, addr: SocketAddr) {
 		// Do not track this, we don't know if its a valid tx or not until we see the full tx.
 		self.adapter.compact_transaction_received(compact_tx, addr)
 	}
@@ -445,7 +446,7 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.block_received(b, addr)
 	}
 
-	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
+	fn compact_block_received(&self, cb: CompactBlock, addr: SocketAddr) -> bool {
 		self.push(cb.hash());
 		self.adapter.compact_block_received(cb, addr)
 	}
@@ -467,7 +468,7 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.get_block(h)
 	}
 
-	fn get_transaction(&self, compact_tx: core::CompactTransaction) -> Option<core::Transaction> {
+	fn get_transaction(&self, compact_tx: CompactTransaction) -> Option<CompactTransaction> {
 		self.adapter.get_transaction(compact_tx)
 	}
 

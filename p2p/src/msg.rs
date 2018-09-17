@@ -26,7 +26,6 @@ use core::core::BlockHeader;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::{Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};
-use util::secp::pedersen::Commitment;
 use util::LOGGER;
 
 /// Current latest version of the protocol

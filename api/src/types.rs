@@ -596,7 +596,7 @@ impl CompactBlockPrintable {
 	/// Convert a compact block into a printable representation suitable for
 	/// api response
 	pub fn from_compact_block(
-		cb: &core::CompactBlock,
+		cb: &p2p::compact_block::CompactBlock,
 		chain: Arc<chain::Chain>,
 	) -> CompactBlockPrintable {
 		let block = chain.get_block(&cb.hash()).unwrap();

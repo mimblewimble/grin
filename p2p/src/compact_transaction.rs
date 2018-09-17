@@ -16,12 +16,11 @@
 
 use rand::{thread_rng, Rng};
 
-use consensus::VerifySortOrder;
-use core::block::{Block, BlockHeader, Error};
-use core::hash::{Hash, Hashed};
-use core::id::{ShortId, ShortIdentifiable};
-use core::{KernelFeatures, Output, OutputFeatures, Transaction, TxKernel};
-use ser::{self, read_multi, Readable, Reader, Writeable, Writer};
+use core::consensus::VerifySortOrder;
+use core::core::hash::{Hash, Hashed};
+use core::core::id::{ShortId, ShortIdentifiable};
+use core::core::transaction::{Error, Transaction};
+use core::ser::{self, read_multi, Readable, Reader, Writeable, Writer};
 
 #[derive(Debug, Clone)]
 pub struct CompactTransactionBody {
@@ -125,7 +124,7 @@ impl CompactTransaction {
 		self.body.validate_read()?;
 
 		if let Some(ref tx) = self.tx {
-			tx.validate_read();
+			tx.validate_read()?;
 		}
 
 		Ok(())
@@ -149,6 +148,18 @@ impl CompactTransaction {
 	// TODO - is this wise?
 	pub fn hash(&self) -> Hash {
 		self.tx_hash
+	}
+
+	pub fn with_full_tx(self, tx: Transaction) -> CompactTransaction {
+		// Swap the "required" kern_ids out for a full transaction.
+		CompactTransaction {
+			body: CompactTransactionBody {
+				req_kern_ids: vec![],
+				..self.body
+			},
+			tx: Some(tx),
+			..self
+		}
 	}
 }
 

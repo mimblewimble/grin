@@ -40,6 +40,8 @@ extern crate serde_derive;
 extern crate slog;
 extern crate chrono;
 
+pub mod compact_block;
+pub mod compact_transaction;
 mod conn;
 pub mod handshake;
 pub mod msg;

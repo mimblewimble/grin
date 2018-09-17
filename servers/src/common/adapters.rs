@@ -29,9 +29,11 @@ use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
 use core::core::transaction;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{BlockHeader, CompactBlock, CompactTransaction, Transaction};
+use core::core::{BlockHeader, Transaction};
 use core::{core, global};
 use p2p;
+use p2p::compact_block;
+use p2p::compact_transaction;
 use pool;
 use store;
 use util::{OneTime, LOGGER};
@@ -74,7 +76,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	// if exact match then nothing to do, already seen it
 	// if partial match, some kernels are not yet known -
 	// go request the transaction for the unknown kernel set
-	fn compact_transaction_received(&self, compact_tx: CompactTransaction, addr: SocketAddr) {
+	fn compact_transaction_received(&self, compact_tx: compact_transaction::CompactTransaction, addr: SocketAddr) {
 		// nothing much we can do with a new transaction while syncing
 		if self.sync_state.is_syncing() {
 			return;
@@ -116,7 +118,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		self.request_transaction(&compact_tx, &addr);
 	}
 
-	fn get_transaction(&self, compact_tx: CompactTransaction) -> Option<Transaction> {
+	fn get_transaction(
+		&self,
+		compact_tx: compact_transaction::CompactTransaction,
+	) -> Option<compact_transaction::CompactTransaction> {
 		// Ignore anything tx related if we are syncing.
 		if self.sync_state.is_syncing() {
 			return None;
@@ -151,7 +156,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 						"adapter: get_transaction: returning tx {:?}",
 						tx.hash()
 					);
-					return Some(tx);
+
+					// Build the final compact_tx to send back.
+					// Include the full tx as part of the compact_tx.
+					// The compact_tx wrapper is redundant in the simple case
+					// but for aggregate txs it we have the flexibility of
+					// sending less than the whole tx back in the compact_tx
+					// (i.e. just the missing parts).
+					return Some(compact_tx.with_full_tx(tx));
 				}
 			}
 		}
@@ -205,7 +217,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		self.process_block(b, addr)
 	}
 
-	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
+	fn compact_block_received(&self, cb: compact_block::CompactBlock, addr: SocketAddr) -> bool {
 		let bhash = cb.hash();
 		debug!(
 			LOGGER,
@@ -221,7 +233,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		let cb_hash = cb.hash();
 		if cb.kern_ids().is_empty() {
 			// push the freshly hydrated block through the chain pipeline
-			match core::Block::hydrate_from(cb, vec![]) {
+			match compact_block::hydrate_block(cb, vec![]) {
 				Ok(block) => self.process_block(block, addr),
 				Err(e) => {
 					debug!(LOGGER, "Invalid hydrated block {}: {}", cb_hash, e);
@@ -247,7 +259,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			// 2) we hydrate an invalid block (txs legit missing from our pool)
 			// 3) we hydrate an invalid block (peer sent us a "bad" compact block) - [TBD]
 
-			let block = match core::Block::hydrate_from(cb.clone(), txs) {
+			let block = match compact_block::hydrate_block(cb.clone(), txs) {
 				Ok(block) => block,
 				Err(e) => {
 					debug!(LOGGER, "Invalid hydrated block {}: {}", cb.hash(), e);
@@ -646,7 +658,11 @@ impl NetToChainAdapter {
 		}
 	}
 
-	fn request_transaction(&self, compact_tx: &CompactTransaction, addr: &SocketAddr) {
+	fn request_transaction(
+		&self,
+		compact_tx: &compact_transaction::CompactTransaction,
+		addr: &SocketAddr,
+	) {
 		self.send_transaction_request_to_peer(compact_tx, addr, |peer, compact_tx| {
 			peer.send_transaction_request(compact_tx)
 		})
@@ -700,11 +716,11 @@ impl NetToChainAdapter {
 
 	fn send_transaction_request_to_peer<F>(
 		&self,
-		compact_tx: &CompactTransaction,
+		compact_tx: &compact_transaction::CompactTransaction,
 		addr: &SocketAddr,
 		f: F,
 	) where
-		F: Fn(&p2p::Peer, &CompactTransaction) -> Result<(), p2p::Error>,
+		F: Fn(&p2p::Peer, &compact_transaction::CompactTransaction) -> Result<(), p2p::Error>,
 	{
 		match wo(&self.peers).get_connected_peer(addr) {
 			None => debug!(LOGGER, "send_transaction_request_to_peer: can't send request to peer {:?}, not connected", addr),
@@ -767,7 +783,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		if opts.contains(Options::MINE) {
 			// propagate compact block out if we mined the block
 			// but broadcast full block if we have no txs
-			let cb: CompactBlock = b.clone().into();
+			let cb: compact_block::CompactBlock = b.clone().into();
 			if cb.kern_ids().is_empty() {
 				// In the interest of exercising all code paths
 				// randomly decide how we send an empty block out.

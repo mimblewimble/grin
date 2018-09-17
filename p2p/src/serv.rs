@@ -21,6 +21,8 @@ use std::{io, thread};
 
 use lmdb;
 
+use compact_block::CompactBlock;
+use compact_transaction::CompactTransaction;
 use core::core;
 use core::core::hash::Hash;
 use core::core::target::Difficulty;
@@ -29,7 +31,6 @@ use peer::Peer;
 use peers::Peers;
 use store::PeerStore;
 use types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, TxHashSetRead};
-use util::secp::pedersen;
 use util::LOGGER;
 
 /// P2P server implementation, handling bootstrapping to find and connect to
@@ -258,11 +259,11 @@ impl ChainAdapter for DummyAdapter {
 	fn transaction_received(&self, _tx: core::Transaction, _stem: bool) {}
 	fn compact_transaction_received(
 		&self,
-		_compact_tx: core::CompactTransaction,
+		_compact_tx: CompactTransaction,
 		_addr: SocketAddr,
 	) {
 	}
-	fn compact_block_received(&self, _cb: core::CompactBlock, _addr: SocketAddr) -> bool {
+	fn compact_block_received(&self, _cb: CompactBlock, _addr: SocketAddr) -> bool {
 		true
 	}
 	fn header_received(&self, _bh: core::BlockHeader, _addr: SocketAddr) -> bool {
@@ -280,7 +281,7 @@ impl ChainAdapter for DummyAdapter {
 	fn get_block(&self, _h: Hash) -> Option<core::Block> {
 		None
 	}
-	fn get_transaction(&self, _compact_tx: core::CompactTransaction) -> Option<core::Transaction> {
+	fn get_transaction(&self, _compact_tx: CompactTransaction) -> Option<CompactTransaction> {
 		None
 	}
 	fn txhashset_read(&self, _h: Hash) -> Option<TxHashSetRead> {

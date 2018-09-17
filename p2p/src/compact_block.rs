@@ -14,14 +14,18 @@
 
 //! Compact Blocks.
 
+use std::collections::HashSet;
+use std::iter::FromIterator;
 use rand::{thread_rng, Rng};
 
-use consensus::VerifySortOrder;
-use core::block::{Block, BlockHeader, Error};
-use core::hash::Hashed;
-use core::id::ShortIdentifiable;
-use core::{KernelFeatures, Output, OutputFeatures, ShortId, TxKernel};
-use ser::{self, read_multi, Readable, Reader, Writeable, Writer};
+use core::consensus::VerifySortOrder;
+use core::core::block::{Block, BlockHeader, Error};
+use core::core::transaction::{Transaction, TransactionBody};
+use core::core::hash::Hashed;
+use core::core::id::ShortIdentifiable;
+use core::core::{KernelFeatures, Output, OutputFeatures, ShortId, TxKernel};
+use core::ser::{self, read_multi, Readable, Reader, Writeable, Writer};
+use util::LOGGER;
 
 /// Container for (full) outputs and kernels and kern_ids (short_ids) for a compact block.
 #[derive(Debug, Clone)]
@@ -231,4 +235,50 @@ impl Readable for CompactBlock {
 
 		Ok(cb)
 	}
+}
+
+/// Hydrate a block from a compact block.
+/// Note: caller must validate the block themselves,
+/// we do not validate it here.
+pub fn hydrate_block(cb: CompactBlock, txs: Vec<Transaction>) -> Result<Block, Error> {
+	trace!(
+		LOGGER,
+		"compact_block: hydrate_block: {}, {} txs",
+		cb.hash(),
+		txs.len(),
+	);
+
+	let header = cb.header.clone();
+
+	let mut all_inputs = HashSet::new();
+	let mut all_outputs = HashSet::new();
+	let mut all_kernels = HashSet::new();
+
+	// collect all the inputs, outputs and kernels from the txs
+	for tx in txs {
+		let tb: TransactionBody = tx.into();
+		all_inputs.extend(tb.inputs);
+		all_outputs.extend(tb.outputs);
+		all_kernels.extend(tb.kernels);
+	}
+
+	// include the coinbase output(s) and kernel(s) from the compact_block
+	{
+		let body: CompactBlockBody = cb.into();
+		all_outputs.extend(body.out_full);
+		all_kernels.extend(body.kern_full);
+	}
+
+	// convert the sets to vecs
+	let all_inputs = Vec::from_iter(all_inputs);
+	let all_outputs = Vec::from_iter(all_outputs);
+	let all_kernels = Vec::from_iter(all_kernels);
+
+	// Initialize a tx body and sort everything.
+	let body = TransactionBody::init(all_inputs, all_outputs, all_kernels, false)?;
+
+	// Finally return the full block.
+	// Note: we have not actually validated the block here,
+	// caller must validate the block.
+	Block::with_header_and_body(header, body).cut_through()
 }

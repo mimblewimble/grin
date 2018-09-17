@@ -16,15 +16,12 @@
 
 use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
-use std::collections::HashSet;
 use std::fmt;
-use std::iter::FromIterator;
 use std::mem;
 use std::sync::{Arc, RwLock};
 
 use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
-use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
 use core::target::Difficulty;
 use core::verifier_cache::{LruVerifierCache, VerifierCache};
@@ -35,7 +32,7 @@ use core::{
 use global;
 use keychain::{self, BlindingFactor};
 use ser::{self, Readable, Reader, Writeable, Writer};
-use util::{secp, secp_static, static_secp_instance, LOGGER};
+use util::{secp, secp_static, static_secp_instance};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, Eq, PartialEq, Fail)]
@@ -520,58 +517,17 @@ impl Block {
 		Ok(block)
 	}
 
-	/// Hydrate a block from a compact block.
-	/// Note: caller must validate the block themselves, we do not validate it
-	/// here.
-	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Result<Block, Error> {
-		trace!(
-			LOGGER,
-			"block: hydrate_from: {}, {} txs",
-			cb.hash(),
-			txs.len(),
-		);
-
-		let header = cb.header.clone();
-
-		let mut all_inputs = HashSet::new();
-		let mut all_outputs = HashSet::new();
-		let mut all_kernels = HashSet::new();
-
-		// collect all the inputs, outputs and kernels from the txs
-		for tx in txs {
-			let tb: TransactionBody = tx.into();
-			all_inputs.extend(tb.inputs);
-			all_outputs.extend(tb.outputs);
-			all_kernels.extend(tb.kernels);
-		}
-
-		// include the coinbase output(s) and kernel(s) from the compact_block
-		{
-			let body: CompactBlockBody = cb.into();
-			all_outputs.extend(body.out_full);
-			all_kernels.extend(body.kern_full);
-		}
-
-		// convert the sets to vecs
-		let all_inputs = Vec::from_iter(all_inputs);
-		let all_outputs = Vec::from_iter(all_outputs);
-		let all_kernels = Vec::from_iter(all_kernels);
-
-		// Initialize a tx body and sort everything.
-		let body = TransactionBody::init(all_inputs, all_outputs, all_kernels, false)?;
-
-		// Finally return the full block.
-		// Note: we have not actually validated the block here,
-		// caller must validate the block.
-		Block { header, body }.cut_through()
-	}
-
 	/// Build a new empty block from a specified header
 	pub fn with_header(header: BlockHeader) -> Block {
 		Block {
-			header: header,
+			header,
 			..Default::default()
 		}
+	}
+
+	/// Build a new block from the given header and body.
+	pub fn with_header_and_body(header: BlockHeader, body: TransactionBody) -> Block {
+		Block { header, body }
 	}
 
 	/// Builds a new block ready to mine from the header of the previous block,

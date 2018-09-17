@@ -20,10 +20,12 @@ use std::sync::{Arc, RwLock};
 use rand::{thread_rng, Rng};
 
 use chrono::prelude::Utc;
+
+use compact_block::CompactBlock;
+use compact_transaction::CompactTransaction;
 use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::core::target::Difficulty;
-use util::secp::pedersen;
 use util::LOGGER;
 
 use peer::Peer;
@@ -326,7 +328,7 @@ impl Peers {
 	/// want to broadcast to a random subset of peers.
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the block.
-	pub fn broadcast_compact_block(&self, b: &core::CompactBlock) {
+	pub fn broadcast_compact_block(&self, b: &CompactBlock) {
 		let count = self.broadcast("compact block", |p| p.send_compact_block(b));
 		debug!(
 			LOGGER,
@@ -396,7 +398,7 @@ impl Peers {
 		);
 	}
 
-	pub fn broadcast_compact_transaction(&self, compact_tx: &core::CompactTransaction) {
+	pub fn broadcast_compact_transaction(&self, compact_tx: &CompactTransaction) {
 		let count = self.broadcast("transaction", |p| p.send_compact_transaction(compact_tx));
 		trace!(
 			LOGGER,
@@ -538,7 +540,7 @@ impl ChainAdapter for Peers {
 		self.adapter.transaction_received(tx, stem)
 	}
 
-	fn compact_transaction_received(&self, compact_tx: core::CompactTransaction, addr: SocketAddr) {
+	fn compact_transaction_received(&self, compact_tx: CompactTransaction, addr: SocketAddr) {
 		self.adapter.compact_transaction_received(compact_tx, addr)
 	}
 
@@ -558,7 +560,7 @@ impl ChainAdapter for Peers {
 		}
 	}
 
-	fn compact_block_received(&self, cb: core::CompactBlock, peer_addr: SocketAddr) -> bool {
+	fn compact_block_received(&self, cb: CompactBlock, peer_addr: SocketAddr) -> bool {
 		let hash = cb.hash();
 		if !self.adapter.compact_block_received(cb, peer_addr) {
 			// if the peer sent us a block that's intrinsically bad
@@ -606,7 +608,7 @@ impl ChainAdapter for Peers {
 		self.adapter.get_block(h)
 	}
 
-	fn get_transaction(&self, compact_tx: core::CompactTransaction) -> Option<core::Transaction> {
+	fn get_transaction(&self, compact_tx: CompactTransaction) -> Option<CompactTransaction> {
 		self.adapter.get_transaction(compact_tx)
 	}
 

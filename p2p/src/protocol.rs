@@ -19,10 +19,11 @@ use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
 use std::time;
 
+use compact_block::CompactBlock;
+use compact_transaction::CompactTransaction;
 use conn::{Message, MessageHandler, Response};
-use core::core::{self, hash::Hash, CompactBlock};
+use core::core::{self, hash::Hash};
 use core::{global, ser};
-use util::secp::pedersen;
 
 use msg::{
 	read_exact, BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr,
@@ -91,7 +92,7 @@ impl MessageHandler for Protocol {
 					LOGGER,
 					"handle_payload: CompactTransaction: msg_len: {}", msg.header.msg_len
 				);
-				let compact_tx: core::CompactTransaction = msg.body()?;
+				let compact_tx: CompactTransaction = msg.body()?;
 				adapter.compact_transaction_received(compact_tx, self.addr);
 				Ok(None)
 			}
@@ -101,18 +102,13 @@ impl MessageHandler for Protocol {
 					LOGGER,
 					"handle_payload: GetTransaction: msg_len: {}", msg.header.msg_len
 				);
-				let compact_tx: core::CompactTransaction = msg.body()?;
+				let compact_tx: CompactTransaction = msg.body()?;
 
-				let tx = adapter.get_transaction(compact_tx);
-				if let Some(tx) = tx {
-					//
-					// TODO - respond with appropriately configured CompactTransaction here.
-					// clear out req_kern_ids
-					// embedded full Transaction containing everything the receiver needs.
-					//
-					return Ok(Some(msg.respond(Type::CompactTransaction, ctx)));
+				if let Some(compact_tx) = adapter.get_transaction(compact_tx) {
+					Ok(Some(msg.respond(Type::CompactTransaction, compact_tx)))
+				} else {
+					Ok(None)
 				}
-				Ok(None)
 			}
 
 			Type::Transaction => {
@@ -188,7 +184,7 @@ impl MessageHandler for Protocol {
 					LOGGER,
 					"handle_payload: received compact block: msg_len: {}", msg.header.msg_len
 				);
-				let b: core::CompactBlock = msg.body()?;
+				let b: CompactBlock = msg.body()?;
 
 				adapter.compact_block_received(b, self.addr);
 				Ok(None)
