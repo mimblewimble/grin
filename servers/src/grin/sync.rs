@@ -532,7 +532,7 @@ fn get_locator(
 			header_head.hash(),
 			header_head.height,
 		);
-		tip = header_head;
+		tip = header_head.clone();
 	}
 
 	let heights = get_locator_heights(tip.height);
