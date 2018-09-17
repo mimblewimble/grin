@@ -34,7 +34,7 @@ use core::{global, pow, ser};
 use keychain;
 use mining::mine_block;
 use pool;
-use util::{LOGGER, self};
+use util::{self, LOGGER};
 
 // ----------------------------------------
 // http://www.jsonrpc.org/specification
@@ -270,6 +270,9 @@ impl StratumServer {
 		{
 			let mut writer = ser::BinWriter::new(&mut header_buf);
 			bh.write_pre_pow(&mut writer).unwrap();
+			bh.pow
+				.write_pre_pow(bh.version, false, &mut writer)
+				.unwrap();
 		}
 		let pre_pow = util::to_hex(header_buf);
 		let job_template = JobTemplate {

@@ -12,7 +12,7 @@ lmdb-zero = "0.4.4"
 failure = "0.1"
 failure_derive = "0.1"
 croaring = "0.3"
-slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
+slog = { version = "~2.3", features = ["max_level_trace", "release_max_level_trace"] }
 serde = "1"
 serde_derive = "1"
 chrono = "0.4.4"

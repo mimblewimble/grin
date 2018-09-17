@@ -12,9 +12,9 @@ lazy_static = "1"
 rand = "0.3"
 serde = "1"
 serde_derive = "1"
-slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
-slog-term = "2.4"
-slog-async = "2.3"
+slog = { version = "~2.3", features = ["max_level_trace", "release_max_level_trace"] }
+slog-term = "~2.4"
+slog-async = "~2.3"
 walkdir = "2"
 zip = "0.4"
 

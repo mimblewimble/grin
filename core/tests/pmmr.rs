@@ -61,6 +61,22 @@ fn bench_peak_map() {
 }
 
 #[test]
+fn some_peak_size() {
+	assert_eq!(pmmr::peak_sizes_height(0), (vec![], 0));
+	assert_eq!(pmmr::peak_sizes_height(1), (vec![1], 0));
+	assert_eq!(pmmr::peak_sizes_height(2), (vec![1], 1));
+	assert_eq!(pmmr::peak_sizes_height(3), (vec![3], 0));
+	assert_eq!(pmmr::peak_sizes_height(4), (vec![3, 1], 0));
+	assert_eq!(pmmr::peak_sizes_height(5), (vec![3, 1], 1));
+	assert_eq!(pmmr::peak_sizes_height(6), (vec![3, 1], 2));
+	assert_eq!(pmmr::peak_sizes_height(7), (vec![7], 0));
+	assert_eq!(pmmr::peak_sizes_height(u64::MAX), (vec![u64::MAX], 0));
+
+	let size_of_peaks = (1..64).map(|i| u64::MAX >> i).collect::<Vec<u64>>();
+	assert_eq!(pmmr::peak_sizes_height(u64::MAX - 1), (size_of_peaks, 63));
+}
+
+#[test]
 #[allow(unused_variables)]
 fn first_100_mmr_heights() {
 	let first_100_str = "0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 0 0 1 0 0 1 2 0 0 1 0 0 1 2 3 4 \

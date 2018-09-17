@@ -145,13 +145,18 @@ impl ProofOfWork {
 		};
 		let nonce = reader.read_u64()?;
 		let proof = Proof::read(reader)?;
-		Ok(ProofOfWork { total_difficulty, scaling_difficulty, nonce, proof})
+		Ok(ProofOfWork {
+			total_difficulty,
+			scaling_difficulty,
+			nonce,
+			proof,
+		})
 	}
 
 	/// Write implementation, can't define as trait impl as we need a version
 	fn write<W: Writer>(&self, ver: u16, writer: &mut W) -> Result<(), ser::Error> {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			self.write_pre_pow(ver, writer)?;
+			self.write_pre_pow(ver, true, writer)?;
 		}
 
 		self.proof.write(writer)?;
@@ -159,7 +164,12 @@ impl ProofOfWork {
 	}
 
 	/// Write the pre-hash portion of the header
-	pub fn write_pre_pow<W: Writer>(&self, ver: u16, writer: &mut W) -> Result<(), ser::Error> {
+	pub fn write_pre_pow<W: Writer>(
+		&self,
+		ver: u16,
+		include_nonce: bool,
+		writer: &mut W,
+	) -> Result<(), ser::Error> {
 		if ver > 1 {
 			ser_multiwrite!(
 				writer,
@@ -167,7 +177,9 @@ impl ProofOfWork {
 				[write_u64, self.scaling_difficulty]
 			);
 		}
-		writer.write_u64(self.nonce)?;
+		if include_nonce {
+			writer.write_u64(self.nonce)?;
+		}
 		Ok(())
 	}
 
@@ -356,7 +368,9 @@ impl BlockHeader {
 	pub fn pre_pow_hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
 		self.write_pre_pow(&mut hasher).unwrap();
-		self.pow.write_pre_pow(self.version, &mut hasher).unwrap();
+		self.pow
+			.write_pre_pow(self.version, true, &mut hasher)
+			.unwrap();
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
