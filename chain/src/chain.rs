@@ -856,14 +856,6 @@ impl Chain {
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get header".to_owned()).into())
 	}
 
-	/// Gets hash of a block header by height
-	///   Only available if this height <= height of header head (tip of the header chain)
-	pub fn get_header_hash(&self, height: u64) -> Result<Hash, Error> {
-		self.store
-			.get_hash_by_height(height)
-			.map_err(|e| ErrorKind::StoreErr(e, "chain get hash by height".to_owned()).into())
-	}
-
 	/// Gets the block header at the provided height
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		self.store
