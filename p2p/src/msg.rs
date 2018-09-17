@@ -196,7 +196,7 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: time::Duration) -> i
 pub fn read_header(conn: &mut TcpStream, msg_type: Option<Type>) -> Result<MsgHeader, Error> {
 	let mut head = vec![0u8; HEADER_LEN as usize];
 	if Some(Type::Hand) == msg_type {
-		read_exact(conn, &mut head, time::Duration::from_millis(10), true)?;
+		read_exact(conn, &mut head, time::Duration::from_secs(1), true)?;
 	} else {
 		read_exact(conn, &mut head, time::Duration::from_secs(10), false)?;
 	}
