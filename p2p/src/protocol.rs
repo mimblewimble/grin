@@ -105,7 +105,12 @@ impl MessageHandler for Protocol {
 
 				let tx = adapter.get_transaction(compact_tx);
 				if let Some(tx) = tx {
-					return Ok(Some(msg.respond(Type::Transaction, tx)));
+					//
+					// TODO - respond with appropriately configured CompactTransaction here.
+					// clear out req_kern_ids
+					// embedded full Transaction containing everything the receiver needs.
+					//
+					return Ok(Some(msg.respond(Type::CompactTransaction, ctx)));
 				}
 				Ok(None)
 			}
