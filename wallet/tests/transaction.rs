@@ -91,7 +91,7 @@ fn basic_transaction_api(
 	// few values to keep things shorter
 	let reward = core::consensus::REWARD;
 	let cm = global::coinbase_maturity(0); // assume all testing precedes soft fork height
-	// mine a few blocks
+										// mine a few blocks
 	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 10);
 
 	// Check wallet 1 contents are as expected
@@ -344,7 +344,7 @@ fn tx_rollback(test_dir: &str, backend_type: common::BackendType) -> Result<(), 
 	// few values to keep things shorter
 	let reward = core::consensus::REWARD;
 	let cm = global::coinbase_maturity(0); // assume all testing precedes soft fork height
-	// mine a few blocks
+										// mine a few blocks
 	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 5);
 
 	let amount = 30_000_000_000;

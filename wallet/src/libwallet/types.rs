@@ -417,7 +417,8 @@ impl BlockIdentifier {
 
 	/// convert to hex string
 	pub fn from_hex(hex: &str) -> Result<BlockIdentifier, Error> {
-		let hash = Hash::from_hex(hex).context(ErrorKind::GenericError("Invalid hex".to_owned()))?;
+		let hash =
+			Hash::from_hex(hex).context(ErrorKind::GenericError("Invalid hex".to_owned()))?;
 		Ok(BlockIdentifier(hash))
 	}
 }
