@@ -16,7 +16,7 @@ lmdb-zero = "0.4.4"
 memmap = "0.6.2"
 serde = "1"
 serde_derive = "1"
-slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
+slog = { version = "~2.3", features = ["max_level_trace", "release_max_level_trace"] }
 
 grin_core = { path = "../core" }
 grin_util = { path = "../util" }
