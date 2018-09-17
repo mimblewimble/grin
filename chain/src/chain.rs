@@ -931,6 +931,13 @@ impl Chain {
 			.block_exists(&h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain block exists".to_owned()).into())
 	}
+
+	pub fn init_sync_head(&self, header_head: &Tip) -> Result<(), Error> {
+		let batch = self.store.batch()?;
+		batch.init_sync_head(header_head)?;
+		batch.commit()?;
+		Ok(())
+	}
 }
 
 fn setup_head(

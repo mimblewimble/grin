@@ -147,6 +147,10 @@ pub fn run_sync(
 							match status {
 								SyncStatus::TxHashsetDownload => (),
 								_ => {
+									// Reset sync_head to header_head
+									// on transition to HeaderSync.
+									chain.init_sync_head(&header_head).unwrap();
+
 									sync_state.update(SyncStatus::HeaderSync {
 										current_height: header_head.height,
 										highest_height: si.highest_height,
