@@ -257,8 +257,7 @@ fn test_the_transaction_pool() {
 					double_spend_tx.clone(),
 					false,
 					&header.hash()
-				)
-				.is_err()
+				).is_err()
 		);
 	}
 }
