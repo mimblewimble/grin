@@ -49,6 +49,14 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"api_secret".to_string(),
+		"
+#a secret token used by the API to authenticate the calls
+"
+			.to_string(),
+	);
+
+	retval.insert(
 		"db_root".to_string(),
 		"
 #the directory, relative to current, in which the grin blockchain
