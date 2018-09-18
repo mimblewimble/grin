@@ -303,23 +303,6 @@ impl Peers {
 		count
 	}
 
-	/// Broadcasts the provided block to PEER_PREFERRED_COUNT of our peers.
-	/// We may be connected to PEER_MAX_COUNT peers so we only
-	/// want to broadcast to a random subset of peers.
-	/// A peer implementation may drop the broadcast request
-	/// if it knows the remote peer already has the block.
-	pub fn broadcast_block(&self, b: &core::Block) {
-		let count = self.broadcast("block", |p| p.send_block(b));
-		debug!(
-			LOGGER,
-			"broadcast_block: {} @ {} [{}] was sent to {} peers.",
-			b.header.pow.total_difficulty,
-			b.header.height,
-			b.hash(),
-			count,
-		);
-	}
-
 	/// Broadcasts the provided compact block to PEER_PREFERRED_COUNT of our peers.
 	/// We may be connected to PEER_MAX_COUNT peers so we only
 	/// want to broadcast to a random subset of peers.
