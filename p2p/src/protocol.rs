@@ -108,9 +108,7 @@ impl MessageHandler for Protocol {
 				let h: Hash = msg.body()?;
 				debug!(
 					LOGGER,
-					"handle_payload: Getblock: {}, msg_len: {}",
-					h,
-					msg.header.msg_len,
+					"handle_payload: Getblock: {}, msg_len: {}", h, msg.header.msg_len,
 				);
 
 				let bo = adapter.get_block(h);
