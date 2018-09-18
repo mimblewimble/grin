@@ -22,8 +22,10 @@ use core::id::{ShortId, ShortIdentifiable};
 use core::transaction::{Error, Transaction};
 use ser::{self, read_multi, Readable, Reader, Writeable, Writer};
 
+/// A compact transaction body, wrapping a vec of kernel short_ids.
 #[derive(Debug, Clone)]
 pub struct CompactTransactionBody {
+	/// The vec of kernel short_ids that constitute the full transaction.
 	pub kern_ids: Vec<ShortId>,
 }
 
@@ -89,6 +91,9 @@ impl Into<CompactTransactionBody> for CompactTransaction {
 	}
 }
 
+/// A CompactTransaction is a vec of kernel short_ids with the
+/// associated tx hash and nonce to allow kernels to be rehashed
+/// and compared against these short_ids.
 #[derive(Debug, Clone)]
 pub struct CompactTransaction {
 	/// Hash of the latest block header (used as part of short_id generation).
@@ -111,7 +116,8 @@ impl CompactTransaction {
 		&self.body.kern_ids
 	}
 
-	// TODO - is this wise?
+	/// The hash of the compact transaction is the hash of the underlying transaction.
+	/// TODO - is this wise?
 	pub fn hash(&self) -> Hash {
 		self.tx_hash
 	}
