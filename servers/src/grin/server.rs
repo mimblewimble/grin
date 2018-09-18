@@ -260,12 +260,17 @@ impl Server {
 			"Starting public rest apis at: {}", &config.public_api_http_addr
 		);
 
-		api::start_rest_apis(
+		api::start_private_rest_apis(
 			config.private_api_http_addr.clone(),
-			config.public_api_http_addr.clone(),
 			Arc::downgrade(&shared_chain),
 			Arc::downgrade(&tx_pool),
 			Arc::downgrade(&p2p_server.peers),
+		);
+
+		api::start_public_rest_apis(
+			config.public_api_http_addr.clone(),
+			Arc::downgrade(&shared_chain),
+			Arc::downgrade(&tx_pool),
 		);
 
 		info!(LOGGER, "Starting dandelion monitor.");

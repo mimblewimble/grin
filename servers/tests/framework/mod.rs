@@ -61,8 +61,11 @@ pub struct LocalServerContainerConfig {
 	// Port the server (p2p) is running on
 	pub p2p_server_port: u16,
 
-	// Port the API server is running on
-	pub api_server_port: u16,
+	// Port the private API server is running on
+	pub private_api_server_port: u16,
+
+	// Port the public API server is running on
+	pub public_api_server_port: u16,
 
 	// Port the wallet server is running on
 	pub wallet_port: u16,
@@ -101,7 +104,8 @@ impl Default for LocalServerContainerConfig {
 		LocalServerContainerConfig {
 			name: String::from("test_host"),
 			base_addr: String::from("127.0.0.1"),
-			api_server_port: 13413,
+			private_api_server_port: 13412,
+			public_api_server_port: 13413,
 			p2p_server_port: 13414,
 			wallet_port: 13415,
 			seed_addr: String::from(""),
@@ -176,7 +180,14 @@ impl LocalServerContainer {
 	}
 
 	pub fn run_server(&mut self, duration_in_seconds: u64) -> servers::Server {
-		let api_addr = format!("{}:{}", self.config.base_addr, self.config.api_server_port);
+		let private_api_addr = format!(
+			"{}:{}",
+			self.config.base_addr, self.config.private_api_server_port
+		);
+		let public_api_addr = format!(
+			"{}:{}",
+			self.config.base_addr, self.config.public_api_server_port
+		);
 
 		let mut seeding_type = p2p::Seeding::None;
 		let mut seeds = Vec::new();
@@ -187,7 +198,8 @@ impl LocalServerContainer {
 		}
 
 		let s = servers::Server::new(servers::ServerConfig {
-			api_http_addr: api_addr,
+			private_api_http_addr: private_api_addr,
+			public_api_http_addr: public_api_addr,
 			db_root: format!("{}/.grin", self.working_dir),
 			p2p_config: p2p::P2PConfig {
 				port: self.config.p2p_server_port,
@@ -390,9 +402,13 @@ pub struct LocalServerContainerPoolConfig {
 	// Increment the number by 1 for each new server
 	pub base_p2p_port: u16,
 
-	// Base api port for all of the servers in this pool
+	// Base private api port for all of the servers in this pool
 	// Increment this number by 1 for each new server
-	pub base_api_port: u16,
+	pub base_private_api_port: u16,
+
+	// Base public api port for all of the servers in this pool
+	// Increment this number by 1 for each new server
+	pub base_public_api_port: u16,
 
 	// Base wallet port for this server
 	//
@@ -410,8 +426,9 @@ impl Default for LocalServerContainerPoolConfig {
 			base_name: String::from("test_pool"),
 			base_http_addr: String::from("127.0.0.1"),
 			base_p2p_port: 10000,
-			base_api_port: 11000,
-			base_wallet_port: 12000,
+			base_private_api_port: 11000,
+			base_public_api_port: 12000,
+			base_wallet_port: 13000,
 			run_length_in_seconds: 30,
 		}
 	}
@@ -430,7 +447,9 @@ pub struct LocalServerContainerPool {
 	// Keep track of what the last ports a server was opened on
 	next_p2p_port: u16,
 
-	next_api_port: u16,
+	next_private_api_port: u16,
+
+	next_public_api_port: u16,
 
 	next_wallet_port: u16,
 
@@ -441,7 +460,8 @@ pub struct LocalServerContainerPool {
 impl LocalServerContainerPool {
 	pub fn new(config: LocalServerContainerPoolConfig) -> LocalServerContainerPool {
 		(LocalServerContainerPool {
-			next_api_port: config.base_api_port,
+			next_private_api_port: config.base_private_api_port,
+			next_public_api_port: config.base_public_api_port,
 			next_p2p_port: config.base_p2p_port,
 			next_wallet_port: config.base_wallet_port,
 			config: config,
@@ -459,7 +479,9 @@ impl LocalServerContainerPool {
 	pub fn create_server(&mut self, server_config: &mut LocalServerContainerConfig) {
 		// If we're calling it this way, need to override these
 		server_config.p2p_server_port = self.next_p2p_port;
-		server_config.api_server_port = self.next_api_port;
+		server_config.private_api_server_port = self.next_private_api_port;
+		server_config.public_api_server_port = self.next_public_api_port;
+
 		server_config.wallet_port = self.next_wallet_port;
 
 		server_config.name = String::from(format!(
@@ -474,7 +496,8 @@ impl LocalServerContainerPool {
 		));
 
 		self.next_p2p_port += 1;
-		self.next_api_port += 1;
+		self.next_private_api_port += 1;
+		self.next_public_api_port += 1;
 		self.next_wallet_port += 1;
 
 		if server_config.is_seeding {
@@ -580,7 +603,8 @@ pub fn stop_all_servers(servers: Arc<Mutex<Vec<servers::Server>>>) {
 /// Create and return a ServerConfig
 pub fn config(n: u16, test_name_dir: &str, seed_n: u16) -> servers::ServerConfig {
 	servers::ServerConfig {
-		api_http_addr: format!("127.0.0.1:{}", 20000 + n),
+		private_api_http_addr: format!("127.0.0.1:{}", 20000 + n),
+		public_api_http_addr: format!("127.0.0.1:{}", 30000 + n),
 		db_root: format!("target/tmp/{}/grin-sync-{}", test_name_dir, n),
 		p2p_config: p2p::P2PConfig {
 			port: 10000 + n,

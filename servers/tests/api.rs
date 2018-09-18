@@ -62,7 +62,8 @@ fn simple_server_wallet() {
 	let mut server_config = LocalServerContainerConfig::default();
 	server_config.name = String::from("api_server_one");
 	server_config.p2p_server_port = 40000;
-	server_config.api_server_port = 40001;
+	server_config.private_api_server_port = 40001;
+	server_config.public_api_server_port = 40002;
 	server_config.start_miner = true;
 	server_config.start_wallet = false;
 	server_config.coinbase_wallet_address =
@@ -77,63 +78,65 @@ fn simple_server_wallet() {
 
 	// Starting tests
 	let base_addr = server_config.base_addr;
-	let api_server_port = server_config.api_server_port;
+	let private_api_server_port = server_config.private_api_server_port;
+	let public_api_server_port = server_config.public_api_server_port;
 
 	warn!(LOGGER, "Testing chain handler");
-	let tip = get_tip(&base_addr, api_server_port);
+	let tip = get_tip(&base_addr, private_api_server_port);
 	assert!(tip.is_ok());
 
 	warn!(LOGGER, "Testing status handler");
-	let status = get_status(&base_addr, api_server_port);
+	let status = get_status(&base_addr, private_api_server_port);
 	assert!(status.is_ok());
 
 	// Be sure that at least a block is mined by Travis
-	let mut current_tip = get_tip(&base_addr, api_server_port).unwrap();
+	let mut current_tip = get_tip(&base_addr, public_api_server_port).unwrap();
 	while current_tip.height == 0 {
 		thread::sleep(time::Duration::from_millis(1000));
-		current_tip = get_tip(&base_addr, api_server_port).unwrap();
+		current_tip = get_tip(&base_addr, public_api_server_port).unwrap();
 	}
 
 	warn!(LOGGER, "Testing block handler");
-	let last_block_by_height = get_block_by_height(&base_addr, api_server_port, current_tip.height);
+	let last_block_by_height =
+		get_block_by_height(&base_addr, public_api_server_port, current_tip.height);
 	assert!(last_block_by_height.is_ok());
 	let last_block_by_height_compact =
-		get_block_by_height_compact(&base_addr, api_server_port, current_tip.height);
+		get_block_by_height_compact(&base_addr, public_api_server_port, current_tip.height);
 	assert!(last_block_by_height_compact.is_ok());
 
 	let block_hash = current_tip.last_block_pushed;
-	let last_block_by_hash = get_block_by_hash(&base_addr, api_server_port, &block_hash);
+	let last_block_by_hash = get_block_by_hash(&base_addr, public_api_server_port, &block_hash);
 	assert!(last_block_by_hash.is_ok());
 	let last_block_by_hash_compact =
-		get_block_by_hash_compact(&base_addr, api_server_port, &block_hash);
+		get_block_by_hash_compact(&base_addr, public_api_server_port, &block_hash);
 	assert!(last_block_by_hash_compact.is_ok());
 
 	warn!(LOGGER, "Testing chain output handler");
 	let start_height = 0;
 	let end_height = current_tip.height;
 	let outputs_by_height =
-		get_outputs_by_height(&base_addr, api_server_port, start_height, end_height);
+		get_outputs_by_height(&base_addr, public_api_server_port, start_height, end_height);
 	assert!(outputs_by_height.is_ok());
 	let ids = get_ids_from_block_outputs(outputs_by_height.unwrap());
-	let outputs_by_ids1 = get_outputs_by_ids1(&base_addr, api_server_port, ids.clone());
+	let outputs_by_ids1 = get_outputs_by_ids1(&base_addr, public_api_server_port, ids.clone());
 	assert!(outputs_by_ids1.is_ok());
-	let outputs_by_ids2 = get_outputs_by_ids2(&base_addr, api_server_port, ids.clone());
+	let outputs_by_ids2 = get_outputs_by_ids2(&base_addr, public_api_server_port, ids.clone());
 	assert!(outputs_by_ids2.is_ok());
 
 	warn!(LOGGER, "Testing txhashset handler");
-	let roots = get_txhashset_roots(&base_addr, api_server_port);
+	let roots = get_txhashset_roots(&base_addr, public_api_server_port);
 	assert!(roots.is_ok());
-	let last_10_outputs = get_txhashset_lastoutputs(&base_addr, api_server_port, 0);
+	let last_10_outputs = get_txhashset_lastoutputs(&base_addr, public_api_server_port, 0);
 	assert!(last_10_outputs.is_ok());
-	let last_5_outputs = get_txhashset_lastoutputs(&base_addr, api_server_port, 5);
+	let last_5_outputs = get_txhashset_lastoutputs(&base_addr, public_api_server_port, 5);
 	assert!(last_5_outputs.is_ok());
-	let last_10_rangeproofs = get_txhashset_lastrangeproofs(&base_addr, api_server_port, 0);
+	let last_10_rangeproofs = get_txhashset_lastrangeproofs(&base_addr, public_api_server_port, 0);
 	assert!(last_10_rangeproofs.is_ok());
-	let last_5_rangeproofs = get_txhashset_lastrangeproofs(&base_addr, api_server_port, 5);
+	let last_5_rangeproofs = get_txhashset_lastrangeproofs(&base_addr, public_api_server_port, 5);
 	assert!(last_5_rangeproofs.is_ok());
-	let last_10_kernels = get_txhashset_lastkernels(&base_addr, api_server_port, 0);
+	let last_10_kernels = get_txhashset_lastkernels(&base_addr, public_api_server_port, 0);
 	assert!(last_10_kernels.is_ok());
-	let last_5_kernels = get_txhashset_lastkernels(&base_addr, api_server_port, 5);
+	let last_5_kernels = get_txhashset_lastkernels(&base_addr, public_api_server_port, 5);
 	assert!(last_5_kernels.is_ok());
 
 	//let some more mining happen, make sure nothing pukes
@@ -154,7 +157,8 @@ fn test_p2p() {
 	let mut server_config_one = LocalServerContainerConfig::default();
 	server_config_one.name = String::from("p2p_server_one");
 	server_config_one.p2p_server_port = 40002;
-	server_config_one.api_server_port = 40003;
+	server_config_one.private_api_server_port = 40003;
+	server_config_one.public_api_server_port = 40004;
 	server_config_one.start_miner = false;
 	server_config_one.start_wallet = false;
 	server_config_one.is_seeding = true;
@@ -166,8 +170,9 @@ fn test_p2p() {
 	// Spawn server and let it run for a bit
 	let mut server_config_two = LocalServerContainerConfig::default();
 	server_config_two.name = String::from("p2p_server_two");
-	server_config_two.p2p_server_port = 40004;
-	server_config_two.api_server_port = 40005;
+	server_config_two.p2p_server_port = 40005;
+	server_config_two.private_api_server_port = 40006;
+	server_config_two.public_api_server_port = 40006;
 	server_config_two.start_miner = false;
 	server_config_two.start_wallet = false;
 	server_config_two.is_seeding = false;
@@ -184,16 +189,16 @@ fn test_p2p() {
 	// Starting tests
 	warn!(LOGGER, "Starting P2P Tests");
 	let base_addr = server_config_one.base_addr;
-	let api_server_port = server_config_one.api_server_port;
+	let private_api_server_port = server_config_one.private_api_server_port;
 
 	// Check that peer all is also working
-	let mut peers_all = get_all_peers(&base_addr, api_server_port);
+	let mut peers_all = get_all_peers(&base_addr, private_api_server_port);
 	assert!(peers_all.is_ok());
 	let pall = peers_all.unwrap();
 	assert_eq!(pall.len(), 2);
 
 	// Check that when we get peer connected the peer is here
-	let peers_connected = get_connected_peers(&base_addr, api_server_port);
+	let peers_connected = get_connected_peers(&base_addr, private_api_server_port);
 	assert!(peers_connected.is_ok());
 	let pc = peers_connected.unwrap();
 	assert_eq!(pc.len(), 1);
@@ -203,36 +208,36 @@ fn test_p2p() {
 		"{}:{}",
 		server_config_two.base_addr, server_config_two.p2p_server_port
 	);
-	let peer = get_peer(&base_addr, api_server_port, &addr);
+	let peer = get_peer(&base_addr, private_api_server_port, &addr);
 	assert!(peer.is_ok());
 	assert_eq!(peer.unwrap().flags, p2p::State::Healthy);
 
 	// Ban the peer
-	let ban_result = ban_peer(&base_addr, api_server_port, &addr);
+	let ban_result = ban_peer(&base_addr, private_api_server_port, &addr);
 	assert!(ban_result.is_ok());
 	thread::sleep(time::Duration::from_millis(2000));
 
 	// Check its status is banned with get peer
-	let peer = get_peer(&base_addr, api_server_port, &addr);
+	let peer = get_peer(&base_addr, private_api_server_port, &addr);
 	assert!(peer.is_ok());
 	assert_eq!(peer.unwrap().flags, p2p::State::Banned);
 
 	// Check from peer all
-	peers_all = get_all_peers(&base_addr, api_server_port);
+	peers_all = get_all_peers(&base_addr, private_api_server_port);
 	assert!(peers_all.is_ok());
 	assert_eq!(peers_all.unwrap().len(), 2);
 
 	// Unban
-	let unban_result = unban_peer(&base_addr, api_server_port, &addr);
+	let unban_result = unban_peer(&base_addr, private_api_server_port, &addr);
 	assert!(unban_result.is_ok());
 
 	// Check from peer connected
-	let peers_connected = get_connected_peers(&base_addr, api_server_port);
+	let peers_connected = get_connected_peers(&base_addr, private_api_server_port);
 	assert!(peers_connected.is_ok());
 	assert_eq!(peers_connected.unwrap().len(), 0);
 
 	// Check its status is healthy with get peer
-	let peer = get_peer(&base_addr, api_server_port, &addr);
+	let peer = get_peer(&base_addr, private_api_server_port, &addr);
 	assert!(peer.is_ok());
 	assert_eq!(peer.unwrap().flags, p2p::State::Healthy);
 }
