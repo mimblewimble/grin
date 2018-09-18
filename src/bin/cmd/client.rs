@@ -89,7 +89,7 @@ pub fn ban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
 	let mut e = term::stdout().unwrap();
 	let url = format!(
 		"http://{}/v1/peers/{}/ban",
-		config.api_http_addr,
+		config.private_api_http_addr,
 		peer_addr.to_string()
 	);
 	match api::client::post_no_ret(url.as_str(), &params).map_err(|e| Error::API(e)) {
@@ -104,7 +104,7 @@ pub fn unban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
 	let mut e = term::stdout().unwrap();
 	let url = format!(
 		"http://{}/v1/peers/{}/unban",
-		config.api_http_addr,
+		config.private_api_http_addr,
 		peer_addr.to_string()
 	);
 	match api::client::post_no_ret(url.as_str(), &params).map_err(|e| Error::API(e)) {
@@ -116,7 +116,7 @@ pub fn unban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
 
 pub fn list_connected_peers(config: &ServerConfig) {
 	let mut e = term::stdout().unwrap();
-	let url = format!("http://{}/v1/peers/connected", config.api_http_addr);
+	let url = format!("http://{}/v1/peers/connected", config.private_api_http_addr);
 	match api::client::get::<Vec<p2p::PeerInfo>>(url.as_str()).map_err(|e| Error::API(e)) {
 		Ok(connected_peers) => {
 			let mut index = 0;
@@ -138,7 +138,7 @@ pub fn list_connected_peers(config: &ServerConfig) {
 }
 
 fn get_status_from_node(config: &ServerConfig) -> Result<api::Status, Error> {
-	let url = format!("http://{}/v1/status", config.api_http_addr);
+	let url = format!("http://{}/v1/status", config.private_api_http_addr);
 	api::client::get::<api::Status>(url.as_str()).map_err(|e| Error::API(e))
 }
 

@@ -609,8 +609,6 @@ impl Handler for HeaderHandler {
 	}
 }
 
-
-
 /// Gets block details given either a hash or an unspent commit
 /// GET /v1/blocks/<hash>
 /// GET /v1/blocks/<height>
@@ -857,7 +855,8 @@ thread_local!( static ROUTER: RefCell<Option<Router>> = RefCell::new(None) );
 /// used after a server shutdown (which should normally never happen,
 /// except during tests).
 pub fn start_rest_apis(
-	addr: String,
+	private_addr: String,
+	public_addr: String,
 	chain: Weak<chain::Chain>,
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
@@ -868,13 +867,36 @@ pub fn start_rest_apis(
 			let mut apis = ApiServer::new();
 
 			ROUTER.with(|router| {
-				*router.borrow_mut() =
-					Some(build_router(chain, tx_pool, peers).expect("unable to build API router"));
+				*router.borrow_mut() = Some(
+					build_private_router(chain.clone(), tx_pool.clone(), peers)
+						.expect("unable to build private API router"),
+				);
 
-				info!(LOGGER, "Starting HTTP API server at {}.", addr);
-				let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
+				info!(
+					LOGGER,
+					"Starting private HTTP API server at {}.", private_addr
+				);
+				let socket_addr: SocketAddr = private_addr
+					.parse()
+					.expect("unable to parse socket address");
 				apis.start(socket_addr, &handle).unwrap_or_else(|e| {
-					error!(LOGGER, "Failed to start API HTTP server: {}.", e);
+					error!(LOGGER, "Failed to start private API HTTP server: {}.", e);
+				});
+			});
+
+			ROUTER.with(|router| {
+				*router.borrow_mut() = Some(
+					build_public_router(chain, tx_pool).expect("unable to build public API router"),
+				);
+
+				info!(
+					LOGGER,
+					"Starting public HTTP API server at {}.", public_addr
+				);
+				let socket_addr: SocketAddr =
+					public_addr.parse().expect("unable to parse socket address");
+				apis.start(socket_addr, &handle).unwrap_or_else(|e| {
+					error!(LOGGER, "Failed to start public API HTTP server: {}.", e);
 				});
 			});
 		});
@@ -905,25 +927,16 @@ where
 	)
 }
 
-pub fn build_router(
+pub fn build_private_router(
 	chain: Weak<chain::Chain>,
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
 ) -> Result<Router, RouterError> {
 	let route_list = vec![
-		"get blocks".to_string(),
-		"get chain".to_string(),
 		"post chain/compact".to_string(),
 		"post chain/validate".to_string(),
-		"get chain/outputs".to_string(),
 		"get status".to_string(),
-		"get txhashset/roots".to_string(),
-		"get txhashset/lastoutputs?n=10".to_string(),
-		"get txhashset/lastrangeproofs".to_string(),
-		"get txhashset/lastkernels".to_string(),
-		"get txhashset/outputs?start_index=1&max=100".to_string(),
 		"get pool".to_string(),
-		"post pool/push".to_string(),
 		"post peers/a.b.c.d:p/ban".to_string(),
 		"post peers/a.b.c.d:p/unban".to_string(),
 		"get peers/all".to_string(),
@@ -932,19 +945,6 @@ pub fn build_router(
 	];
 	let index_handler = IndexHandler { list: route_list };
 
-	let output_handler = OutputHandler {
-		chain: chain.clone(),
-	};
-
-	let block_handler = BlockHandler {
-		chain: chain.clone(),
-	};
-	let header_handler = HeaderHandler {
-		chain: chain.clone(),
-	};
-	let chain_tip_handler = ChainHandler {
-		chain: chain.clone(),
-	};
 	let chain_compact_handler = ChainCompactHandler {
 		chain: chain.clone(),
 	};
@@ -954,9 +954,6 @@ pub fn build_router(
 	let status_handler = StatusHandler {
 		chain: chain.clone(),
 		peers: peers.clone(),
-	};
-	let txhashset_handler = TxHashSetHandler {
-		chain: chain.clone(),
 	};
 	let pool_info_handler = PoolInfoHandler {
 		tx_pool: tx_pool.clone(),
@@ -976,18 +973,61 @@ pub fn build_router(
 
 	let mut router = Router::new();
 	router.add_route("/v1/", Box::new(index_handler))?;
-	router.add_route("/v1/blocks/*", Box::new(block_handler))?;
-	router.add_route("/v1/headers/*", Box::new(header_handler))?;
-	router.add_route("/v1/chain", Box::new(chain_tip_handler))?;
-	router.add_route("/v1/chain/outputs/*", Box::new(output_handler))?;
 	router.add_route("/v1/chain/compact", Box::new(chain_compact_handler))?;
 	router.add_route("/v1/chain/validate", Box::new(chain_validation_handler))?;
-	router.add_route("/v1/txhashset/*", Box::new(txhashset_handler))?;
 	router.add_route("/v1/status", Box::new(status_handler))?;
 	router.add_route("/v1/pool", Box::new(pool_info_handler))?;
 	router.add_route("/v1/pool/push", Box::new(pool_push_handler))?;
 	router.add_route("/v1/peers/all", Box::new(peers_all_handler))?;
 	router.add_route("/v1/peers/connected", Box::new(peers_connected_handler))?;
 	router.add_route("/v1/peers/**", Box::new(peer_handler))?;
+	Ok(router)
+}
+
+pub fn build_public_router(
+	chain: Weak<chain::Chain>,
+	tx_pool: Weak<RwLock<pool::TransactionPool>>,
+) -> Result<Router, RouterError> {
+	let route_list = vec![
+		"get blocks".to_string(),
+		"get chain".to_string(),
+		"get chain/outputs".to_string(),
+		"get txhashset/roots".to_string(),
+		"get txhashset/lastoutputs?n=10".to_string(),
+		"get txhashset/lastrangeproofs".to_string(),
+		"get txhashset/lastkernels".to_string(),
+		"get txhashset/outputs?start_index=1&max=100".to_string(),
+		"post pool/push".to_string(),
+	];
+	let index_handler = IndexHandler { list: route_list };
+
+	let output_handler = OutputHandler {
+		chain: chain.clone(),
+	};
+
+	let block_handler = BlockHandler {
+		chain: chain.clone(),
+	};
+	let header_handler = HeaderHandler {
+		chain: chain.clone(),
+	};
+	let chain_tip_handler = ChainHandler {
+		chain: chain.clone(),
+	};
+	let txhashset_handler = TxHashSetHandler {
+		chain: chain.clone(),
+	};
+	let pool_push_handler = PoolPushHandler {
+		tx_pool: tx_pool.clone(),
+	};
+
+	let mut router = Router::new();
+	router.add_route("/v1/", Box::new(index_handler))?;
+	router.add_route("/v1/blocks/*", Box::new(block_handler))?;
+	router.add_route("/v1/headers/*", Box::new(header_handler))?;
+	router.add_route("/v1/chain", Box::new(chain_tip_handler))?;
+	router.add_route("/v1/chain/outputs/*", Box::new(output_handler))?;
+	router.add_route("/v1/txhashset/*", Box::new(txhashset_handler))?;
+	router.add_route("/v1/pool/push", Box::new(pool_push_handler))?;
 	Ok(router)
 }
