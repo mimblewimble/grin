@@ -122,7 +122,8 @@ impl Router {
 		let keys = generate_path(route);
 		let mut node_id = self.root();
 		for key in keys {
-			node_id = self.find(node_id, key)
+			node_id = self
+				.find(node_id, key)
 				.unwrap_or_else(|| self.add_empty_node(node_id, key));
 		}
 		match self.node(node_id).value() {
