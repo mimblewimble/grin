@@ -92,7 +92,7 @@ fundamental properties are achieved.
 Building upon the properties of ECC we described above, one can obscure the values
 in a transaction.
 
-If _v_ is the value of a transaction input or output and _H_ an elliptic curve, we can simply
+If _v_ is the value of a transaction input or output and _H_ a point on an elliptic curve _C_, we can simply
 embed `v*H` instead of _v_ in a transaction. This works because using the ECC
 operations, we can still validate that the sum of the outputs of a transaction equals the
 sum of inputs:
