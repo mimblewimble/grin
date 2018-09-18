@@ -43,16 +43,16 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"private_api_http_addr".to_string(),
 		"
- #the address on which the private API will listen
- "
+#the address on which the private API will listen
+"
 			.to_string(),
 	);
 
 	retval.insert(
 		"private_api_secret".to_string(),
 		"
- #a secret token used by the private API to authenticate the calls
- "
+#a secret token used by the private API to authenticate the calls
+"
 			.to_string(),
 	);
 

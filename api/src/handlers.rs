@@ -861,14 +861,16 @@ pub fn start_rest_apis(
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
 ) {
+	let private_api_chain = chain.clone();
+	let private_api_pool = tx_pool.clone();
 	let _ = thread::Builder::new()
-		.name("apis".to_string())
+		.name("private_apis".to_string())
 		.spawn(move || {
 			let mut apis = ApiServer::new();
 
 			ROUTER.with(|router| {
 				*router.borrow_mut() = Some(
-					build_private_router(chain.clone(), tx_pool.clone(), peers)
+					build_private_router(private_api_chain, private_api_pool, peers)
 						.expect("unable to build private API router"),
 				);
 
@@ -883,6 +885,12 @@ pub fn start_rest_apis(
 					error!(LOGGER, "Failed to start private API HTTP server: {}.", e);
 				});
 			});
+		});
+
+	let _ = thread::Builder::new()
+		.name("public_apis".to_string())
+		.spawn(move || {
+			let mut apis = ApiServer::new();
 
 			ROUTER.with(|router| {
 				*router.borrow_mut() = Some(
