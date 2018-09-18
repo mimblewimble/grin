@@ -100,7 +100,9 @@ where
 	} else {
 		wallet
 			.tx_log_iter()
-			.filter(|t| t.parent_key_id == *parent_key_id)
+			.filter(|t| {
+				t.parent_key_id == *parent_key_id
+				})
 			.collect::<Vec<_>>()
 	};
 	txs.sort_by_key(|tx| tx.creation_ts);
@@ -240,7 +242,7 @@ where
 						if !output.is_coinbase && output.status == OutputStatus::Unconfirmed {
 							let tx = batch
 								.tx_log_iter()
-								.find(|t| Some(t.id) == output.tx_log_entry);
+								.find(|t| Some(t.id) == output.tx_log_entry && t.parent_key_id == *parent_key_id);
 							if let Some(mut t) = tx {
 								t.update_confirmation_ts();
 								t.confirmed = true;

@@ -201,7 +201,6 @@ impl TxKernel {
 		let sig = &self.excess_sig;
 		// Verify aggsig directly in libsecp
 		let pubkey = &self.excess.to_pubkey(&secp)?;
-		println!("VERIFY PUBKEY: {:?}", pubkey);
 		if !secp::aggsig::verify_single(
 			&secp,
 			&sig,

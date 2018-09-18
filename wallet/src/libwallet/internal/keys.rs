@@ -94,3 +94,22 @@ where
 	batch.commit()?;
 	Ok(return_id)
 }
+
+/// Adds/sets a particular account path with a given label
+pub fn set_acct_path<T: ?Sized, C, K>(wallet: &mut T, label: &str, path: &Identifier) -> Result<(), Error>
+where
+	T: WalletBackend<C, K>,
+	C: WalletClient,
+	K: Keychain,
+{
+	let label = label.to_owned();
+	let save_path = AcctPathMapping {
+		label: label.to_owned(),
+		path: path.clone(),
+	};
+
+	let mut batch = wallet.batch()?;
+	batch.save_acct_path(save_path)?;
+	batch.commit()?;
+	Ok(())
+}

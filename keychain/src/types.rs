@@ -134,7 +134,7 @@ impl Identifier {
 	}
 
 	/// restore from a serialized path
-	pub fn from_serialized_path(len: u8, p: [u8; IDENTIFIER_SIZE - 1]) -> Identifier {
+	pub fn from_serialized_path(len: u8, p: &[u8]) -> Identifier {
 		let mut id = [0; IDENTIFIER_SIZE];
 		id[0] = len;
 		for i in 1..IDENTIFIER_SIZE {
@@ -143,6 +143,15 @@ impl Identifier {
 		Identifier(id)
 	}
 
+	/// Return the parent path
+	pub fn parent_path(&self) -> Identifier {
+		let mut p = ExtKeychainPath::from_identifier(&self);
+		if p.depth > 0 {
+			p.path[p.depth as usize - 1] = ChildNumber::from(0);
+			p.depth = p.depth - 1;
+		}
+		Identifier::from_path(&p)
+	}
 	pub fn from_bytes(bytes: &[u8]) -> Identifier {
 		let mut identifier = [0; IDENTIFIER_SIZE];
 		for i in 0..min(IDENTIFIER_SIZE, bytes.len()) {
@@ -454,5 +463,12 @@ mod test {
 
 		println!("id: {:?}", id);
 		println!("ret_path {:?}", ret_path);
+
+		let path = ExtKeychainPath::new(3, 0, 0, 10, 0);
+		let id = Identifier::from_path(&path);
+		let parent_id = id.parent_path();
+		let expected_path = ExtKeychainPath::new(2, 0, 0, 0, 0);
+		let expected_id = Identifier::from_path(&expected_path);
+		assert_eq!(expected_id, parent_id);
 	}
 }
