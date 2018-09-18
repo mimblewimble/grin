@@ -54,12 +54,12 @@ impl Server {
 		adapter: Arc<ChainAdapter>,
 		genesis: Hash,
 		stop: Arc<AtomicBool>,
-		archive_mode: bool,
+		_archive_mode: bool,
 		block_1_hash: Option<Hash>,
 	) -> Result<Server, Error> {
 		// In the case of an archive node, check that we do have the first block.
 		// In case of first sync we do not perform this check.
-		if archive_mode && adapter.total_height() > 0 {
+		if capab.contains(Capabilities::FULL_HIST) && adapter.total_height() > 0 {
 			// Check that we have block 1
 			match block_1_hash {
 				Some(hash) => match adapter.get_block(hash) {
