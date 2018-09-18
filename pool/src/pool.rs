@@ -63,7 +63,10 @@ impl Pool {
 	}
 
 	pub fn get_tx(&self, hash: Hash) -> Option<Transaction> {
-		self.entries.iter().find(|x| x.tx.hash() == hash).map(|x| x.tx.clone())
+		self.entries
+			.iter()
+			.find(|x| x.tx.hash() == hash)
+			.map(|x| x.tx.clone())
 	}
 
 	/// Query the tx pool for all known txs based on kernel short_ids
@@ -95,7 +98,11 @@ impl Pool {
 		// and the ids that successfully matched txs.
 		let matched_ids: HashSet<_> = rehashed.keys().collect();
 		let all_ids: HashSet<_> = kern_ids.iter().collect();
-		let missing_ids = all_ids.difference(&matched_ids).map(|x| *x).cloned().collect();
+		let missing_ids = all_ids
+			.difference(&matched_ids)
+			.map(|x| *x)
+			.cloned()
+			.collect();
 
 		(txs, missing_ids)
 	}
@@ -115,8 +122,7 @@ impl Pool {
 			.filter_map(|mut bucket| {
 				bucket.truncate(MAX_TX_CHAIN);
 				transaction::aggregate(bucket, self.verifier_cache.clone()).ok()
-			})
-			.collect();
+			}).collect();
 
 		// sort by fees over weight, multiplying by 1000 to keep some precision
 		// don't think we'll ever see a >max_u64/1000 fee transaction
