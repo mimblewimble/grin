@@ -39,12 +39,15 @@ extern crate tokio;
 extern crate tokio_core;
 
 pub mod client;
-mod handlers;
+mod common;
+mod private_handlers;
+mod public_handlers;
 mod rest;
 mod router;
 mod types;
 
-pub use handlers::start_rest_apis;
+pub use private_handlers::start_private_rest_apis;
+pub use public_handlers::start_public_rest_apis;
 pub use rest::*;
 pub use router::*;
 pub use types::*;

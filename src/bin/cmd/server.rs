@@ -99,9 +99,14 @@ pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: Globa
 			server_config.p2p_config.port = port.parse().unwrap();
 		}
 
-		if let Some(api_port) = a.value_of("api_port") {
+		if let Some(private_api_port) = a.value_of("private_api_port") {
+			let default_ip = "127.0.0.1";
+			server_config.private_api_http_addr = format!("{}:{}", default_ip, private_api_port);
+		}
+
+		if let Some(public_api_port) = a.value_of("public_api_port") {
 			let default_ip = "0.0.0.0";
-			server_config.api_http_addr = format!("{}:{}", default_ip, api_port);
+			server_config.public_api_http_addr = format!("{}:{}", default_ip, public_api_port);
 		}
 
 		if let Some(wallet_url) = a.value_of("wallet_url") {

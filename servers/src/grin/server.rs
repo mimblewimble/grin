@@ -255,19 +255,25 @@ impl Server {
 			.name("p2p-server".to_string())
 			.spawn(move || p2p_inner.listen());
 
-		info!(LOGGER, "Starting rest apis at: {}", &config.api_http_addr);
+		info!(
+			LOGGER,
+			"Starting public rest apis at: {}", &config.public_api_http_addr
+		);
 
-		api::start_rest_apis(
-			config.api_http_addr.clone(),
+		api::start_private_rest_apis(
+			config.private_api_http_addr.clone(),
 			Arc::downgrade(&shared_chain),
 			Arc::downgrade(&tx_pool),
 			Arc::downgrade(&p2p_server.peers),
 		);
 
-		info!(
-			LOGGER,
-			"Starting dandelion monitor: {}", &config.api_http_addr
+		api::start_public_rest_apis(
+			config.public_api_http_addr.clone(),
+			Arc::downgrade(&shared_chain),
+			Arc::downgrade(&tx_pool),
 		);
+
+		info!(LOGGER, "Starting dandelion monitor.");
 		dandelion_monitor::monitor_transactions(
 			config.dandelion_config.clone(),
 			tx_pool.clone(),
