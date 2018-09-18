@@ -14,6 +14,7 @@
 
 /// Implementation of the Keychain trait based on an extended key derivation
 /// scheme.
+use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -50,7 +51,7 @@ impl Keychain for ExtKeychain {
 
 	/// For testing - probably not a good idea to use outside of tests.
 	fn from_random_seed() -> Result<ExtKeychain, Error> {
-		let seed: String = thread_rng().gen_ascii_chars().take(16).collect();
+		let seed: String = thread_rng().sample_iter(&Alphanumeric).take(16).collect();
 		let seed = blake2::blake2b::blake2b(32, &[], seed.as_bytes());
 		ExtKeychain::from_seed(seed.as_bytes())
 	}

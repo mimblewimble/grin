@@ -9,7 +9,7 @@ publish = false
 backtrace = "0.3"
 byteorder = "1"
 lazy_static = "1"
-rand = "0.3"
+rand = "0.5"
 serde = "1"
 serde_derive = "1"
 slog = { version = "~2.3", features = ["max_level_trace", "release_max_level_trace"] }
@@ -20,6 +20,6 @@ zip = "0.4"
 
 [dependencies.secp256k1zkp]
 git = "https://github.com/mimblewimble/rust-secp256k1-zkp"
-tag = "grin_integration_23"
+tag = "grin_integration_23a"
 #path = "../../rust-secp256k1-zkp"
 features = ["bullet-proof-sizing"]
