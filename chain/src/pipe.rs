@@ -215,9 +215,15 @@ pub fn sync_block_header(
 	validate_header(&bh, sync_ctx)?;
 	add_block_header(bh, batch)?;
 
-	// now update the header_head (if new header with most work) and the sync_head
-	// (always)
+	// Update the header_head (but only if this header increases our total known work).
+	// i.e. Only if this header is now the head of the current "most work" chain.
 	update_header_head(bh, header_ctx, batch)?;
+
+	// Update our sync_head regardless of total work.
+	// We may be syncing a long fork that will *eventually* increase the work
+	// and become the "most work" chain.
+	// header_head and sync_head will diverge in this situation until we switch to
+	// a single "most work" chain.
 	update_sync_head(bh, sync_ctx, batch)
 }
 
@@ -483,8 +489,7 @@ fn validate_block(
 			&prev.total_kernel_offset,
 			&prev.total_kernel_sum,
 			verifier_cache,
-		)
-		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
+		).map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }
 
