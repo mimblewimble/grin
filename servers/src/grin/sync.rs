@@ -147,16 +147,13 @@ pub fn run_sync(
 							let status = sync_state.status();
 							match status {
 								SyncStatus::TxHashsetDownload => (),
-								SyncStatus::HeaderSync { .. }
-								| SyncStatus::NoSync
-								| SyncStatus::Initial => {
+								_ => {
 									sync_state.update(SyncStatus::HeaderSync {
 										current_height: header_head.height,
 										highest_height: si.highest_height,
 									});
 								}
-								_ => (),
-							};
+							}
 						}
 
 						if fast_sync_enabled {
@@ -528,11 +525,11 @@ fn get_locator(
 		history_locators.clear();
 	}
 
-	// reset to header_head if sync_head is left behind
+	// when sync_head is left behind, use header_head as the sync_head for get_locator
 	if header_head.height > tip.height {
 		debug!(
 			LOGGER,
-			"sync: get_locator reset to header_head. sync_head: {} at {}, header_head: {} at {}",
+			"sync: get_locator use header_head as sync_head. sync_head: {} at {}, header_head: {} at {}",
 			tip.hash(),
 			tip.height,
 			header_head.hash(),
