@@ -69,6 +69,8 @@ enum_from_primitive! {
 		TxHashSetRequest = 16,
 		TxHashSetArchive = 17,
 		BanReason = 18,
+		// GetTransaction = 19,
+		// CompactTransaction = 20,
 	}
 }
 
