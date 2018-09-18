@@ -25,8 +25,8 @@ use chain;
 use common::types::StratumServerConfig;
 use core::core::hash::{Hash, Hashed};
 use core::core::verifier_cache::VerifierCache;
-use core::core::{Block, BlockHeader, Proof};
-use core::pow::cuckoo;
+use core::core::{Block, BlockHeader};
+use core::pow::{cuckoo, Proof};
 use core::{consensus, global};
 use mining::mine_block;
 use pool;
@@ -72,13 +72,13 @@ impl Miner {
 
 	/// The inner part of mining loop for the internal miner
 	/// kept around mostly for automated testing purposes
-	pub fn inner_mining_loop(
+	fn inner_mining_loop(
 		&self,
 		b: &mut Block,
 		head: &BlockHeader,
 		attempt_time_per_block: u32,
 		latest_hash: &mut Hash,
-	) -> Option<Proof> {
+	) -> bool {
 		// look for a pow for at most 2 sec on the same block (to give a chance to new
 		// transactions) and as long as the head hasn't changed
 		let deadline = Utc::now().timestamp() + attempt_time_per_block as i64;
@@ -95,7 +95,6 @@ impl Miner {
 		);
 		let mut iter_count = 0;
 
-		let mut sol = None;
 		while head.hash() == *latest_hash && Utc::now().timestamp() < deadline {
 			if let Ok(proof) = cuckoo::Miner::new(
 				&b.header,
@@ -104,10 +103,10 @@ impl Miner {
 				global::min_sizeshift(),
 			).mine()
 			{
-				let proof_diff = proof.to_difficulty();
+				b.header.pow.proof = proof;
+				let proof_diff = b.header.pow.to_difficulty();
 				if proof_diff >= (b.header.total_difficulty() - head.total_difficulty()) {
-					sol = Some(proof);
-					break;
+					return true;
 				}
 			}
 
@@ -116,16 +115,13 @@ impl Miner {
 			iter_count += 1;
 		}
 
-		if sol == None {
-			debug!(
-				LOGGER,
-				"(Server ID: {}) No solution found after {} iterations, continuing...",
-				self.debug_output_id,
-				iter_count
-			)
-		}
-
-		sol
+		debug!(
+			LOGGER,
+			"(Server ID: {}) No solution found after {} iterations, continuing...",
+			self.debug_output_id,
+			iter_count
+		);
+		false
 	}
 
 	/// Starts the mining loop, building a new block on top of the existing
@@ -163,8 +159,7 @@ impl Miner {
 			);
 
 			// we found a solution, push our block through the chain processing pipeline
-			if let Some(proof) = sol {
-				b.header.pow.proof = proof;
+			if sol {
 				info!(
 					LOGGER,
 					"(Server ID: {}) Found valid proof of work, adding block {}.",

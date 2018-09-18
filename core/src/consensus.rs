@@ -21,8 +21,8 @@
 use std::cmp::max;
 use std::fmt;
 
-use core::target::Difficulty;
 use global;
+use pow::Difficulty;
 
 /// A grin is divisible to 10^9, following the SI prefixes
 pub const GRIN_BASE: u64 = 1_000_000_000;
@@ -49,13 +49,16 @@ pub const BLOCK_TIME_SEC: u64 = 60;
 
 /// Number of blocks before a coinbase matures and can be spent
 /// set to nominal number of block in one day (1440 with 1-minute blocks)
-pub const COINBASE_MATURITY: u64 = 24 * 60 * 60 / BLOCK_TIME_SEC; 
+pub const COINBASE_MATURITY: u64 = 24 * 60 * 60 / BLOCK_TIME_SEC;
 
 /// Cuckoo-cycle proof size (cycle length)
 pub const PROOFSIZE: usize = 42;
 
 /// Default Cuckoo Cycle size shift used for mining and validating.
 pub const DEFAULT_MIN_SIZESHIFT: u8 = 30;
+
+/// Secondary proof-of-work size shift, meant to be ASIC resistant.
+pub const SECOND_POW_SIZESHIFT: u8 = 29;
 
 /// Original reference sizeshift to compute difficulty factors for higher
 /// Cuckoo graph sizes, changing this would hard fork
@@ -250,4 +253,5 @@ pub trait VerifySortOrder<T> {
 	fn verify_sort_order(&self) -> Result<(), Error>;
 }
 
+/// Height for the v2 headers hard fork, with extended proof of work in header
 pub const HEADER_V2_HARD_FORK: u64 = 95_000;

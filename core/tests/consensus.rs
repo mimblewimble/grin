@@ -21,8 +21,8 @@ use core::consensus::{
 	next_difficulty, valid_header_version, TargetError, BLOCK_TIME_WINDOW, DAMP_FACTOR,
 	DIFFICULTY_ADJUST_WINDOW, MEDIAN_TIME_INDEX, MEDIAN_TIME_WINDOW, UPPER_TIME_BOUND,
 };
-use core::core::target::Difficulty;
 use core::global;
+use core::pow::Difficulty;
 use std::fmt::{self, Display};
 
 /// Last n blocks for difficulty calculation purposes
