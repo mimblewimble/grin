@@ -15,7 +15,6 @@
 //! Adapters connecting new block, new transaction, and accepted transaction
 //! events to consumers of those events.
 
-use rand::{self, Rng};
 use std::fs::File;
 use std::net::SocketAddr;
 use std::ops::Deref;
@@ -643,40 +642,16 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			);
 		}
 
-		// If we mined the block then we want to broadcast the block itself.
-		// If block is empty then broadcast the block.
-		// If block contains txs then broadcast the compact block.
+		// If we mined the block then we want to broadcast the compact block.
 		// If we received the block from another node then broadcast "header first"
 		// to minimize network traffic.
-
 		if opts.contains(Options::MINE) {
 			// propagate compact block out if we mined the block
-			// but broadcast full block if we have no txs
 			let cb: CompactBlock = b.clone().into();
-			if cb.kern_ids().is_empty() {
-				// In the interest of exercising all code paths
-				// randomly decide how we send an empty block out.
-				let mut rng = rand::thread_rng();
-				if rng.gen() {
-					wo(&self.peers).broadcast_block(&b);
-				} else {
-					wo(&self.peers).broadcast_compact_block(&cb);
-				}
-			} else {
-				wo(&self.peers).broadcast_compact_block(&cb);
-			}
+			wo(&self.peers).broadcast_compact_block(&cb);
 		} else {
 			// "header first" propagation if we are not the originator of this block
-			// again randomly chose between "header first" or "compact block" propagation
-			// to ensure we test a wide variety of code paths
-
-			let mut rng = rand::thread_rng();
-			if rng.gen() {
-				wo(&self.peers).broadcast_header(&b.header);
-			} else {
-				let cb = b.clone().into();
-				wo(&self.peers).broadcast_compact_block(&cb);
-			}
+			wo(&self.peers).broadcast_header(&b.header);
 		}
 	}
 }
