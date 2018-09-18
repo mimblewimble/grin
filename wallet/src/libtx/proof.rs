@@ -55,8 +55,9 @@ where
 	let commit = k.commit(amount, key_id)?;
 	let skey = k.derive_key(key_id)?;
 	let nonce = create_nonce(k, &commit)?;
+	let message = ProofMessage::from_bytes(&key_id.serialize_path());
 	Ok(k.secp()
-		.bullet_proof(amount, skey.secret_key, nonce, extra_data, None))
+		.bullet_proof(amount, skey.secret_key, nonce, extra_data, Some(message)))
 }
 
 /// Verify a proof

@@ -457,6 +457,7 @@ fn test_rewind_range_proof() {
 
 	assert_eq!(proof_info.success, true);
 	assert_eq!(proof_info.value, 5);
+	assert_eq!(proof_info.message.as_bytes(), key_id.serialize_path());
 
 	// cannot rewind with a different commit
 	let commit2 = keychain.commit(5, &key_id2).unwrap();
@@ -464,6 +465,7 @@ fn test_rewind_range_proof() {
 		proof::rewind(&keychain, commit2, Some(extra_data.to_vec().clone()), proof).unwrap();
 	assert_eq!(proof_info.success, false);
 	assert_eq!(proof_info.value, 0);
+	assert_eq!(proof_info.message, secp::pedersen::ProofMessage::empty());
 
 	// cannot rewind with a commitment to a different value
 	let commit3 = keychain.commit(4, &key_id).unwrap();
