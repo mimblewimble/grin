@@ -21,9 +21,10 @@ use std::sync::{Arc, RwLock};
 
 use chrono::prelude::Utc;
 
-use core::core::hash::Hash;
+use core::core::hash::{Hash, Hashed};
+use core::core::id::ShortId;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{transaction, Block, CompactBlock, Transaction};
+use core::core::{transaction, Block, Transaction};
 use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
 
@@ -103,7 +104,7 @@ impl TransactionPool {
 	) -> Result<(), PoolError> {
 		// Quick check to deal with common case of seeing the *same* tx
 		// broadcast from multiple peers simultaneously.
-		if !stem && self.txpool.contains_tx(&tx) {
+		if !stem && self.txpool.contains_tx(tx.hash()) {
 			return Err(PoolError::DuplicateTx);
 		}
 
@@ -153,8 +154,13 @@ impl TransactionPool {
 	/// Retrieve all transactions matching the provided "compact block"
 	/// based on the kernel set.
 	/// Note: we only look in the txpool for this (stempool is under embargo).
-	pub fn retrieve_transactions(&self, cb: &CompactBlock) -> Vec<Transaction> {
-		self.txpool.retrieve_transactions(cb)
+	pub fn retrieve_transactions(
+		&self,
+		hash: Hash,
+		nonce: u64,
+		kern_ids: &Vec<ShortId>,
+	) -> (Vec<Transaction>, Vec<ShortId>) {
+		self.txpool.retrieve_transactions(hash, nonce, kern_ids)
 	}
 
 	/// Whether the transaction is acceptable to the pool, given both how

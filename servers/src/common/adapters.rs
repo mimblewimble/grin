@@ -146,12 +146,17 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				return !e.is_bad_data();
 			}
 
-			let txs = {
+			let (txs, missing_short_ids) = {
 				let tx_pool = self.tx_pool.read().unwrap();
-				tx_pool.retrieve_transactions(&cb)
+				tx_pool.retrieve_transactions(cb.hash(), cb.nonce, cb.kern_ids())
 			};
 
-			debug!(LOGGER, "adapter: txs from tx pool - {}", txs.len(),);
+			debug!(
+				LOGGER,
+				"adapter: txs from tx pool - {}, (unknown kern_ids: {})",
+				txs.len(),
+				missing_short_ids.len(),
+			);
 
 			// TODO - 3 scenarios here -
 			// 1) we hydrate a valid block (good to go)
