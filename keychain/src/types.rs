@@ -127,18 +127,18 @@ impl Identifier {
 	/// output the path itself, for insertion into bulletproof
 	/// recovery processes can grind through possiblities to find the
 	/// correct length if required
-	pub fn serialize_path(&self) -> [u8; IDENTIFIER_SIZE-1] {
-		let mut retval = [0u8; IDENTIFIER_SIZE-1];
+	pub fn serialize_path(&self) -> [u8; IDENTIFIER_SIZE - 1] {
+		let mut retval = [0u8; IDENTIFIER_SIZE - 1];
 		retval.copy_from_slice(&self.0[1..IDENTIFIER_SIZE]);
 		retval
 	}
 
 	/// restore from a serialized path
-	pub fn from_serialized_path(len: u8, p: [u8; IDENTIFIER_SIZE-1]) -> Identifier {
+	pub fn from_serialized_path(len: u8, p: [u8; IDENTIFIER_SIZE - 1]) -> Identifier {
 		let mut id = [0; IDENTIFIER_SIZE];
 		id[0] = len;
 		for i in 1..IDENTIFIER_SIZE {
-			id[i] = p[i-1];
+			id[i] = p[i - 1];
 		}
 		Identifier(id)
 	}
@@ -382,7 +382,6 @@ impl ExtKeychainPath {
 			<u32>::from(self.path[self.depth as usize - 1])
 		}
 	}
-
 }
 
 pub trait Keychain: Sync + Send + Clone {
