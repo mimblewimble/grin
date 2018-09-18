@@ -14,14 +14,14 @@
 //! Functions to restore a wallet's outputs from just the master seed
 
 use core::global;
-use keychain::{Identifier, ExtKeychain, Keychain};
+use keychain::{ExtKeychain, Identifier, Keychain};
 use libtx::proof;
+use libwallet::internal::keys;
 use libwallet::types::*;
 use libwallet::Error;
-use libwallet::internal::keys;
+use std::collections::HashMap;
 use util::secp::{key::SecretKey, pedersen};
 use util::LOGGER;
-use std::collections::HashMap;
 
 /// Utility struct for return values from below
 struct OutputResult {
@@ -170,7 +170,7 @@ where
 				tx_log_entry = Some(log_id);
 				batch.save_tx_log_entry(t, &parent_key_id)?;
 			}
-			
+
 			let _ = batch.save(OutputData {
 				root_key_id: parent_key_id.clone(),
 				key_id: output.key_id,
@@ -193,7 +193,7 @@ where
 	// restore labels, account paths and child derivation indices
 	let label_base = "account";
 	let mut index = 1;
-	for (path, max_child_index) in found_parents.iter(){
+	for (path, max_child_index) in found_parents.iter() {
 		if *path == ExtKeychain::derive_key_id(2, 0, 0, 0, 0) {
 			//default path already exists
 			continue;
@@ -204,9 +204,7 @@ where
 		{
 			let mut batch = wallet.batch()?;
 			batch.save_child_index(path, max_child_index + 1)?;
-			
 		}
-		
 	}
 	Ok(())
 }

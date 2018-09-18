@@ -96,7 +96,11 @@ where
 }
 
 /// Adds/sets a particular account path with a given label
-pub fn set_acct_path<T: ?Sized, C, K>(wallet: &mut T, label: &str, path: &Identifier) -> Result<(), Error>
+pub fn set_acct_path<T: ?Sized, C, K>(
+	wallet: &mut T,
+	label: &str,
+	path: &Identifier,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,

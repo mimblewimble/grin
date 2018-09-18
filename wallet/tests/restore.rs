@@ -81,7 +81,11 @@ fn restore_wallet(base_dir: &str, wallet_dir: &str) -> Result<(), libwallet::Err
 	Ok(())
 }
 
-fn compare_wallet_restore(base_dir: &str, wallet_dir: &str, account_path: &Identifier) -> Result<(), libwallet::Error> {
+fn compare_wallet_restore(
+	base_dir: &str,
+	wallet_dir: &str,
+	account_path: &Identifier,
+) -> Result<(), libwallet::Error> {
 	let restore_name = format!("{}_restore", wallet_dir);
 	let source_dir = format!("{}/{}", base_dir, wallet_dir);
 	let dest_dir = format!("{}/{}", base_dir, restore_name);
@@ -149,13 +153,15 @@ fn compare_wallet_restore(base_dir: &str, wallet_dir: &str, account_path: &Ident
 	assert_eq!(src_info, dest_info);
 
 	// Net differences in TX logs should be the same
-	let src_sum: i64 = src_txs.clone()
+	let src_sum: i64 = src_txs
+		.clone()
 		.unwrap()
 		.iter()
 		.map(|t| t.amount_credited as i64 - t.amount_debited as i64)
 		.sum();
 
-	let dest_sum: i64 = dest_txs.clone()
+	let dest_sum: i64 = dest_txs
+		.clone()
 		.unwrap()
 		.iter()
 		.map(|t| t.amount_credited as i64 - t.amount_debited as i64)
@@ -164,7 +170,10 @@ fn compare_wallet_restore(base_dir: &str, wallet_dir: &str, account_path: &Ident
 	assert_eq!(src_sum, dest_sum);
 
 	// Number of created accounts should be the same
-	assert_eq!(src_accts.as_ref().unwrap().len(), dest_accts.as_ref().unwrap().len());
+	assert_eq!(
+		src_accts.as_ref().unwrap().len(),
+		dest_accts.as_ref().unwrap().len()
+	);
 
 	Ok(())
 }
@@ -316,13 +325,33 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 
 fn perform_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 	restore_wallet(test_dir, "wallet1")?;
-	compare_wallet_restore(test_dir, "wallet1", &ExtKeychain::derive_key_id(2, 0, 0, 0, 0))?;
+	compare_wallet_restore(
+		test_dir,
+		"wallet1",
+		&ExtKeychain::derive_key_id(2, 0, 0, 0, 0),
+	)?;
 	restore_wallet(test_dir, "wallet2")?;
-	compare_wallet_restore(test_dir, "wallet2", &ExtKeychain::derive_key_id(2, 0, 0, 0, 0))?;
-	compare_wallet_restore(test_dir, "wallet2", &ExtKeychain::derive_key_id(2, 1, 0, 0, 0))?;
-	compare_wallet_restore(test_dir, "wallet2", &ExtKeychain::derive_key_id(2, 2, 0, 0, 0))?;
+	compare_wallet_restore(
+		test_dir,
+		"wallet2",
+		&ExtKeychain::derive_key_id(2, 0, 0, 0, 0),
+	)?;
+	compare_wallet_restore(
+		test_dir,
+		"wallet2",
+		&ExtKeychain::derive_key_id(2, 1, 0, 0, 0),
+	)?;
+	compare_wallet_restore(
+		test_dir,
+		"wallet2",
+		&ExtKeychain::derive_key_id(2, 2, 0, 0, 0),
+	)?;
 	restore_wallet(test_dir, "wallet3")?;
-	compare_wallet_restore(test_dir, "wallet3", &ExtKeychain::derive_key_id(2, 0, 0, 0, 0))?;
+	compare_wallet_restore(
+		test_dir,
+		"wallet3",
+		&ExtKeychain::derive_key_id(2, 0, 0, 0, 0),
+	)?;
 	Ok(())
 }
 
