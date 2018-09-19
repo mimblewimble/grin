@@ -238,9 +238,9 @@ impl ProofOfWork {
 	pub fn write<W: Writer>(&self, ver: u16, writer: &mut W) -> Result<(), ser::Error> {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			self.write_pre_pow(ver, writer)?;
+			writer.write_u64(self.nonce)?;
 		}
 
-		writer.write_u64(self.nonce)?;
 		self.proof.write(writer)?;
 		Ok(())
 	}

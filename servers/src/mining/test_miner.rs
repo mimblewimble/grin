@@ -26,7 +26,7 @@ use common::types::StratumServerConfig;
 use core::core::hash::{Hash, Hashed};
 use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader};
-use core::pow::{cuckoo, Proof};
+use core::pow::cuckoo;
 use core::{consensus, global};
 use mining::mine_block;
 use pool;
