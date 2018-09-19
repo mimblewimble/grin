@@ -25,10 +25,10 @@ use lmdb;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
-use core::core::target::Difficulty;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
+use core::pow::Difficulty;
 use error::{Error, ErrorKind};
 use grin_store::Error::NotFoundErr;
 use pipe;

@@ -15,7 +15,7 @@
 //! Utility structs to handle the 3 hashtrees (output, range proof,
 //! kernel) more conveniently and transactionally.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -329,9 +329,6 @@ where
 		res = inner(&mut extension);
 
 		rollback = extension.rollback;
-		if res.is_ok() && !rollback {
-			extension.save_indexes()?;
-		}
 		sizes = extension.sizes();
 	}
 
@@ -378,7 +375,6 @@ pub struct Extension<'a> {
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 
 	commit_index: Arc<ChainStore>,
-	new_output_commits: HashMap<Commitment, u64>,
 	rollback: bool,
 
 	/// Batch in which the extension occurs, public so it can be used within
@@ -438,7 +434,6 @@ impl<'a> Extension<'a> {
 				trees.kernel_pmmr_h.last_pos,
 			),
 			commit_index,
-			new_output_commits: HashMap::new(),
 			rollback: false,
 			batch,
 		}
@@ -479,14 +474,22 @@ impl<'a> Extension<'a> {
 		let rewind_rm_pos = tx
 			.inputs()
 			.iter()
-			.filter_map(|x| self.get_output_pos(&x.commitment()).ok())
+			.filter_map(|x| self.batch.get_output_pos(&x.commitment()).ok())
 			.map(|x| x as u32)
 			.collect();
 
 		for ref output in tx.outputs() {
-			if let Err(e) = self.apply_output(output) {
-				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
-				return Err(e);
+			match self.apply_output(output) {
+				Ok(pos) => {
+					self.batch.save_output_pos(&output.commitment(), pos)?;
+					// We will rollback the batch later, but assert it works
+					// as we expect while we have it open.
+					assert_eq!(self.batch.get_output_pos(&output.commitment()), Ok(pos));
+				}
+				Err(e) => {
+					self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
+					return Err(e);
+				}
 			}
 		}
 
@@ -593,11 +596,10 @@ impl<'a> Extension<'a> {
 	/// applied in order of the provided Vec. If pruning is enabled, inputs also
 	/// prune MMR data.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
-		// A block is not valid if it has not been fully cut-through.
-		// So we can safely apply outputs first (we will not spend these in the same
-		// block).
 		for out in b.outputs() {
-			self.apply_output(out)?;
+			let pos = self.apply_output(out)?;
+			// Update the output_pos index for the new output.
+			self.batch.save_output_pos(&out.commitment(), pos)?;
 		}
 
 		for input in b.inputs() {
@@ -608,14 +610,6 @@ impl<'a> Extension<'a> {
 			self.apply_kernel(kernel)?;
 		}
 
-		Ok(())
-	}
-
-	// Store all new output pos in the index.
-	fn save_indexes(&self) -> Result<(), Error> {
-		for (commit, pos) in &self.new_output_commits {
-			self.batch.save_output_pos(commit, *pos)?;
-		}
 		Ok(())
 	}
 
@@ -657,7 +651,7 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn apply_output(&mut self, out: &Output) -> Result<(), Error> {
+	fn apply_output(&mut self, out: &Output) -> Result<(u64), Error> {
 		let commit = out.commitment();
 
 		if let Ok(pos) = self.batch.get_output_pos(&commit) {
@@ -667,19 +661,27 @@ impl<'a> Extension<'a> {
 				}
 			}
 		}
-		// push new outputs in their MMR and save them in the index
-		let pos = self
+		// push the new output to the MMR.
+		let output_pos = self
 			.output_pmmr
 			.push(OutputIdentifier::from_output(out))
 			.map_err(&ErrorKind::TxHashSetErr)?;
-		self.batch.save_output_pos(&out.commitment(), pos)?;
-		self.new_output_commits.insert(out.commitment(), pos);
 
-		// push range proofs in their MMR and file
-		self.rproof_pmmr
+		// push the rangeproof to the MMR.
+		let rproof_pos = self
+			.rproof_pmmr
 			.push(out.proof)
 			.map_err(&ErrorKind::TxHashSetErr)?;
-		Ok(())
+
+		// The output and rproof MMRs should be exactly the same size
+		// and we should have inserted to both in exactly the same pos.
+		assert_eq!(
+			self.output_pmmr.unpruned_size(),
+			self.rproof_pmmr.unpruned_size()
+		);
+		assert_eq!(output_pos, rproof_pos);
+
+		Ok(output_pos)
 	}
 
 	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
@@ -783,11 +785,6 @@ impl<'a> Extension<'a> {
 			kernel_pos,
 		);
 
-		// Remember to "rewind" our new_output_commits
-		// in case we are rewinding state that has not yet
-		// been sync'd to disk.
-		self.new_output_commits.retain(|_, &mut v| v <= output_pos);
-
 		self.output_pmmr
 			.rewind(output_pos, rewind_rm_pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
@@ -798,14 +795,6 @@ impl<'a> Extension<'a> {
 			.rewind(kernel_pos, &Bitmap::create())
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
-	}
-
-	fn get_output_pos(&self, commit: &Commitment) -> Result<u64, grin_store::Error> {
-		if let Some(pos) = self.new_output_commits.get(commit) {
-			Ok(*pos)
-		} else {
-			self.commit_index.get_output_pos(commit)
-		}
 	}
 
 	/// Current root hashes and sums (if applicable) for the Output, range proof
@@ -1138,8 +1127,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 					.file_name()
 					.and_then(|n| n.to_str().map(|s| String::from(s)))
 			})
-		})
-		.collect();
+		}).collect();
 
 	let dir_difference: Vec<String> = subdirectories_found
 		.difference(&subdirectories_expected)
@@ -1168,8 +1156,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 			} else {
 				String::from(s)
 			}
-		})
-		.collect();
+		}).collect();
 
 	let subdirectories = fs::read_dir(txhashset_path)?;
 	for subdirectory in subdirectories {
@@ -1182,8 +1169,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 						.file_name()
 						.and_then(|n| n.to_str().map(|s| String::from(s)))
 				})
-			})
-			.collect();
+			}).collect();
 		let difference: Vec<String> = pmmr_files_found
 			.difference(&pmmr_files_expected)
 			.cloned()

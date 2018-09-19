@@ -21,8 +21,8 @@ use std::cmp;
 use std::collections::HashSet;
 
 use core::BlockHeader;
-use core::Proof;
 use pow::siphash::siphash24;
+use pow::Proof;
 
 const MAXPATHLEN: usize = 8192;
 
@@ -318,7 +318,6 @@ fn u8_to_u64(p: &[u8], i: usize) -> u64 {
 mod test {
 	use super::*;
 	use blake2;
-	use core::Proof;
 
 	static V1: [u64; 42] = [
 		0x3bbd, 0x4e96, 0x1013b, 0x1172b, 0x1371b, 0x13e6a, 0x1aaa6, 0x1b575, 0x1e237, 0x1ee88,

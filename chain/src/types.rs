@@ -15,8 +15,8 @@
 //! Base types that the block chain pipeline requires.
 
 use core::core::hash::{Hash, Hashed};
-use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
+use core::pow::Difficulty;
 use core::ser;
 
 bitflags! {

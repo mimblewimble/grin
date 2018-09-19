@@ -18,8 +18,8 @@ use chrono::prelude::{TimeZone, Utc};
 
 use consensus;
 use core;
-use core::target::Difficulty;
 use global;
+use pow::{Difficulty, Proof, ProofOfWork};
 
 /// Genesis block definition for development networks. The proof of work size
 /// is small enough to mine it on the fly, so it does not contain its own
@@ -29,7 +29,7 @@ pub fn genesis_dev() -> core::Block {
 		height: 0,
 		previous: core::hash::Hash([0xff; 32]),
 		timestamp: Utc.ymd(1997, 8, 4).and_hms(0, 0, 0),
-		pow: core::ProofOfWork {
+		pow: ProofOfWork {
 			nonce: global::get_genesis_nonce(),
 			..Default::default()
 		},
@@ -43,11 +43,11 @@ pub fn genesis_testnet1() -> core::Block {
 	core::Block::with_header(core::BlockHeader {
 		height: 0,
 		timestamp: Utc.ymd(2017, 11, 16).and_hms(20, 0, 0),
-		pow: core::ProofOfWork {
+		pow: ProofOfWork {
 			total_difficulty: Difficulty::one(),
 			scaling_difficulty: 1,
 			nonce: 28205,
-			proof: core::Proof::new(vec![
+			proof: Proof::new(vec![
 				0x21e, 0x7a2, 0xeae, 0x144e, 0x1b1c, 0x1fbd, 0x203a, 0x214b, 0x293b, 0x2b74,
 				0x2bfa, 0x2c26, 0x32bb, 0x346a, 0x34c7, 0x37c5, 0x4164, 0x42cc, 0x4cc3, 0x55af,
 				0x5a70, 0x5b14, 0x5e1c, 0x5f76, 0x6061, 0x60f9, 0x61d7, 0x6318, 0x63a1, 0x63fb,
@@ -65,11 +65,11 @@ pub fn genesis_testnet2() -> core::Block {
 		height: 0,
 		previous: core::hash::Hash([0xff; 32]),
 		timestamp: Utc.ymd(2018, 3, 26).and_hms(16, 0, 0),
-		pow: core::ProofOfWork {
+		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
 			scaling_difficulty: 1,
 			nonce: 1060,
-			proof: core::Proof::new(vec![
+			proof: Proof::new(vec![
 				0x1940730, 0x333b9d0, 0x4739d6f, 0x4c6cfb1, 0x6e3d6c3, 0x74408a3, 0x7ba2bd2,
 				0x83e2024, 0x8ca22b5, 0x9d39ab8, 0xb6646dd, 0xc6698b6, 0xc6f78fe, 0xc99b662,
 				0xcf2ae8c, 0xcf41eed, 0xdd073e6, 0xded6af8, 0xf08d1a5, 0x1156a144, 0x11d1160a,
@@ -88,11 +88,11 @@ pub fn genesis_testnet3() -> core::Block {
 		height: 0,
 		previous: core::hash::Hash([0xff; 32]),
 		timestamp: Utc.ymd(2018, 7, 8).and_hms(18, 0, 0),
-		pow: core::ProofOfWork {
+		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
 			scaling_difficulty: 1,
 			nonce: 4956988373127691,
-			proof: core::Proof::new(vec![
+			proof: Proof::new(vec![
 				0xa420dc, 0xc8ffee, 0x10e433e, 0x1de9428, 0x2ed4cea, 0x52d907b, 0x5af0e3f,
 				0x6b8fcae, 0x8319b53, 0x845ca8c, 0x8d2a13e, 0x8d6e4cc, 0x9349e8d, 0xa7a33c5,
 				0xaeac3cb, 0xb193e23, 0xb502e19, 0xb5d9804, 0xc9ac184, 0xd4f4de3, 0xd7a23b8,
@@ -112,11 +112,11 @@ pub fn genesis_main() -> core::Block {
 		height: 0,
 		previous: core::hash::Hash([0xff; 32]),
 		timestamp: Utc.ymd(2018, 8, 14).and_hms(0, 0, 0),
-		pow: core::ProofOfWork {
+		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
 			scaling_difficulty: 1,
 			nonce: global::get_genesis_nonce(),
-			proof: core::Proof::zero(consensus::PROOFSIZE),
+			proof: Proof::zero(consensus::PROOFSIZE),
 		},
 		..Default::default()
 	})

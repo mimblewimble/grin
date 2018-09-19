@@ -25,10 +25,9 @@ use std::sync::Arc;
 
 use chain::Tip;
 use core::core::hash::Hashed;
-use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
 use core::global::{self, ChainTypes};
-use core::pow;
+use core::pow::{self, Difficulty};
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
 
