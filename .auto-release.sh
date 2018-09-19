@@ -1,6 +1,6 @@
 #!/bin/bash
 
-tagname=`git symbolic-ref -q --short HEAD || git describe --tags --exact-match`
+tagname=`git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD`
 
 if [[ $TRAVIS_OS_NAME == 'osx' ]]; then
 
