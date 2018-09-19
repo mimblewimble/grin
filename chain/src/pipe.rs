@@ -495,8 +495,7 @@ fn validate_block(
 			&prev.total_kernel_offset,
 			&prev.total_kernel_sum,
 			verifier_cache,
-		)
-		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
+		).map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }
 
@@ -523,7 +522,10 @@ fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Er
 	// Save the latest block_sums for the latest block to the batch.
 	ext.batch.save_block_sums(
 		&b.header.hash(),
-		&BlockSums{ utxo_sum, kernel_sum }
+		&BlockSums {
+			utxo_sum,
+			kernel_sum,
+		},
 	)?;
 
 	Ok(())

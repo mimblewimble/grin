@@ -19,7 +19,6 @@ use core::core::{Block, BlockHeader};
 use core::pow::Difficulty;
 use core::ser;
 
-
 bitflags! {
 /// Options for block validation
 	pub struct Options: u32 {

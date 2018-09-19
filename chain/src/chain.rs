@@ -644,11 +644,14 @@ impl Chain {
 
 			// Validate the extension, generating the utxo_sum and kernel_sum.
 			let (utxo_sum, kernel_sum) = extension.validate(&header, false, status)?;
-			
+
 			// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 			extension.batch.save_block_sums(
 				&header.hash(),
-				&BlockSums{ utxo_sum, kernel_sum }
+				&BlockSums {
+					utxo_sum,
+					kernel_sum,
+				},
 			)?;
 
 			extension.rebuild_index()?;
@@ -969,7 +972,8 @@ fn setup_head(
 					// now check we have the "block sums" for the block in question
 					// if we have no sums (migrating an existing node) we need to go
 					// back to the txhashset and sum the outputs and kernels
-					if header.height > 0 && extension.batch.get_block_sums(&header.hash()).is_err() {
+					if header.height > 0 && extension.batch.get_block_sums(&header.hash()).is_err()
+					{
 						debug!(
 							LOGGER,
 							"chain: init: building (missing) block sums for {} @ {}",
@@ -984,7 +988,10 @@ fn setup_head(
 						// Save the block_sums to the db for use later.
 						extension.batch.save_block_sums(
 							&header.hash(),
-							&BlockSums{ utxo_sum, kernel_sum },
+							&BlockSums {
+								utxo_sum,
+								kernel_sum,
+							},
 						)?;
 					}
 
