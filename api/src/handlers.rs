@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::net::SocketAddr;
@@ -23,7 +22,6 @@ use failure::ResultExt;
 use futures::future::{err, ok};
 use futures::{Future, Stream};
 use hyper::{Body, Request, Response, StatusCode};
-use rest::{Error, ErrorKind};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -609,8 +607,6 @@ impl Handler for HeaderHandler {
 	}
 }
 
-
-
 /// Gets block details given either a hash or an unspent commit
 /// GET /v1/blocks/<hash>
 /// GET /v1/blocks/<height>
@@ -846,8 +842,6 @@ fn just_response<T: Into<Body> + Debug>(status: StatusCode, text: T) -> Response
 	resp
 }
 
-thread_local!( static ROUTER: RefCell<Option<Router>> = RefCell::new(None) );
-
 /// Start all server HTTP handlers. Register all of them with Router
 /// and runs the corresponding HTTP server.
 ///
@@ -867,27 +861,14 @@ pub fn start_rest_apis(
 		.spawn(move || {
 			let mut apis = ApiServer::new();
 
-			ROUTER.with(|router| {
-				*router.borrow_mut() =
-					Some(build_router(chain, tx_pool, peers).expect("unable to build API router"));
+			let router = build_router(chain, tx_pool, peers).expect("unable to build API router");
 
-				info!(LOGGER, "Starting HTTP API server at {}.", addr);
-				let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-				apis.start(socket_addr, &handle).unwrap_or_else(|e| {
-					error!(LOGGER, "Failed to start API HTTP server: {}.", e);
-				});
+			info!(LOGGER, "Starting HTTP API server at {}.", addr);
+			let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
+			apis.start(socket_addr, router).unwrap_or_else(|e| {
+				error!(LOGGER, "Failed to start API HTTP server: {}.", e);
 			});
 		});
-}
-
-pub fn handle(req: Request<Body>) -> ResponseFuture {
-	ROUTER.with(|router| match *router.borrow() {
-		Some(ref h) => h.handle(req),
-		None => {
-			error!(LOGGER, "No HTTP API router configured");
-			response(StatusCode::INTERNAL_SERVER_ERROR, "No router configured")
-		}
-	})
 }
 
 fn parse_body<T>(req: Request<Body>) -> Box<Future<Item = T, Error = Error> + Send>
@@ -977,7 +958,11 @@ pub fn build_router(
 	};
 
 	let mut router = Router::new();
-	router.add_route("/v1/", Box::new(index_handler))?;
+	// example how we can use midlleware
+	router.add_route(
+		"/v1/",
+		Box::new(LoggingMiddleware::new(Box::new(index_handler))),
+	)?;
 	router.add_route("/v1/blocks/*", Box::new(block_handler))?;
 	router.add_route("/v1/headers/*", Box::new(header_handler))?;
 	router.add_route("/v1/chain", Box::new(chain_tip_handler))?;
