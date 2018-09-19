@@ -13,10 +13,10 @@
 // limitations under the License.
 
 //! Implementation of Cuckatoo Cycle designed by John Tromp.
-use std::ops::{Mul, BitOrAssign};
-use pow::num::{ToPrimitive, PrimInt};
+use pow::num::{PrimInt, ToPrimitive};
+use std::ops::{BitOrAssign, Mul};
 
-trait EdgeType: PrimInt + ToPrimitive + Mul + BitOrAssign{}
+trait EdgeType: PrimInt + ToPrimitive + Mul + BitOrAssign {}
 impl EdgeType for u32 {}
 impl EdgeType for u64 {}
 
@@ -93,14 +93,13 @@ where
 		//TODO: Incomplete
 		//self.adj_list[u.to_u64().unwrap() as usize] = ulink;
 		//self.adj_list[v.to_u64().unwrap() as usize] = vlink;
-
 	}
 }
 
 /// Cuckoo solver context
 struct CuckooContext<T>
 where
-	T: EdgeType
+	T: EdgeType,
 {
 	siphash_keys: [u64; 4],
 	easiness: T,
@@ -112,7 +111,13 @@ where
 	T: EdgeType,
 {
 	/// New Solver context
-	pub fn new(header:&[u8], nonce: u32, easiness:T, max_edges: T, max_sols: u32) -> CuckooContext<T> {
+	pub fn new(
+		header: &[u8],
+		nonce: u32,
+		easiness: T,
+		max_edges: T,
+		max_sols: u32,
+	) -> CuckooContext<T> {
 		CuckooContext {
 			siphash_keys: [0; 4],
 			easiness: easiness,
@@ -123,6 +128,6 @@ where
 
 #[test]
 fn cuckatoo() {
-	let ctx_u32 = CuckooContext::new(&[0u8;3], 0, 100u32, 10u32, 10);
-	let ctx_u64 = CuckooContext::new(&[0u8;3], 0, 100u64, 10u64, 10);
+	let ctx_u32 = CuckooContext::new(&[0u8; 3], 0, 100u32, 10u32, 10);
+	let ctx_u64 = CuckooContext::new(&[0u8; 3], 0, 100u64, 10u64, 10);
 }
