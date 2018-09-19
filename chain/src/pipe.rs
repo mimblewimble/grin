@@ -513,13 +513,22 @@ fn verify_coinbase_maturity(block: &Block, ext: &mut txhashset::Extension) -> Re
 /// based on block_sums of previous block, accounting for the inputs|outputs|kernels
 /// of the new block.
 fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+
+	// Retrieve the block_sums for the previous block.
 	let block_sums = ext.batch.get_block_sums(&b.header.previous)?;
+
+	// Overage is based purely on the new block.
+	// Previous block_sums have taken all previous overage into account.
 	let overage = b.header.overage();
+
+	// Offset on the other hand is the total kernel offset from the new block.
 	let offset = b.header.total_kernel_offset();
+
+	// Verify the kernel sums for the block_sums with the new block applied.
 	let (utxo_sum, kernel_sum) =
 		(block_sums, b as &Committed).verify_kernel_sums(overage, offset)?;
 
-	// Save the latest block_sums for the latest block to the batch.
+	// Save the new block_sums for the new block to the db via the batch.
 	ext.batch.save_block_sums(
 		&b.header.hash(),
 		&BlockSums {
