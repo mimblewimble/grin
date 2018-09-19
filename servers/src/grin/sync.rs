@@ -144,8 +144,7 @@ pub fn run_sync(
 							let status = sync_state.status();
 							let update_sync_state = match status {
 								SyncStatus::TxHashsetDownload => false,
-								SyncStatus::NoSync
-								| SyncStatus::Initial => {
+								SyncStatus::NoSync | SyncStatus::Initial => {
 									// Reset sync_head to header_head on transition to HeaderSync,
 									// but ONLY on initial transition to HeaderSync state.
 									let sync_head = chain.get_sync_head().unwrap();
@@ -161,9 +160,7 @@ pub fn run_sync(
 									history_locators.clear();
 									true
 								}
-								_ => {
-									true
-								}
+								_ => true,
 							};
 							if update_sync_state {
 								sync_state.update(SyncStatus::HeaderSync {
