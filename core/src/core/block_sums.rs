@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//! BlockSums per-block running totals for utxo_sum and kernel_sum.
+//! Allows fast "full" verification of kernel sums at a given block height.
+
 use core::committed::Committed;
 use ser::{self, Readable, Reader, Writeable, Writer};
 use util::secp::pedersen::Commitment;
