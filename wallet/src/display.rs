@@ -28,7 +28,10 @@ pub fn outputs(
 	validated: bool,
 	outputs: Vec<(OutputData, pedersen::Commitment)>,
 ) -> Result<(), Error> {
-	let title = format!("Wallet Outputs - Account '{}' - Block Height: {}", account, cur_height);
+	let title = format!(
+		"Wallet Outputs - Account '{}' - Block Height: {}",
+		account, cur_height
+	);
 	println!();
 	let mut t = term::stdout().unwrap();
 	t.fg(term::color::MAGENTA).unwrap();
@@ -94,7 +97,10 @@ pub fn txs(
 	txs: Vec<TxLogEntry>,
 	include_status: bool,
 ) -> Result<(), Error> {
-	let title = format!("Transaction Log - Account '{}' - Block Height: {}", account, cur_height);
+	let title = format!(
+		"Transaction Log - Account '{}' - Block Height: {}",
+		account, cur_height
+	);
 	println!();
 	let mut t = term::stdout().unwrap();
 	t.fg(term::color::MAGENTA).unwrap();
@@ -186,8 +192,7 @@ pub fn txs(
 pub fn info(account: &str, wallet_info: &WalletInfo, validated: bool) {
 	println!(
 		"\n____ Wallet Summary Info - Account '{}' as of height {} ____\n",
-		account,
-		wallet_info.last_confirmed_height
+		account, wallet_info.last_confirmed_height
 	);
 	let mut table = table!(
 		[bFG->"Total", FG->amount_to_hr_string(wallet_info.total, false)],
@@ -210,9 +215,7 @@ pub fn info(account: &str, wallet_info: &WalletInfo, validated: bool) {
 }
 /// Display list of wallet accounts in a pretty way
 pub fn accounts(acct_mappings: Vec<AcctPathMapping>, show_derivations: bool) {
-	println!(
-		"\n____ Wallet Accounts ____\n",
-	);
+	println!("\n____ Wallet Accounts ____\n",);
 	let mut table = table!();
 
 	table.set_titles(row![
