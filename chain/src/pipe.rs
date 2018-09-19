@@ -698,7 +698,13 @@ pub fn rewind_and_apply_fork(
 		let fb = store
 			.get_block(&h)
 			.map_err(|e| ErrorKind::StoreErr(e, format!("getting forked blocks")))?;
-		ext.apply_block(&fb)?;
+
+		// Re-verify coinbase maturity along this fork.
+		verify_coinbase_maturity(&fb, ext)?;
+		// Re-verify block_sums to set the block_sums up on this fork correctly.
+		verify_block_sums(&fb, ext)?;
+		// Re-apply the blocks.
+		apply_block_to_txhashset(&fb, ext)?;
 	}
 	Ok(())
 }

@@ -1029,6 +1029,13 @@ fn setup_head(
 			batch.setup_height(&genesis.header, &tip)?;
 			txhashset::extending(txhashset, &mut batch, |extension| {
 				extension.apply_block(&genesis)?;
+
+				// Save the block_sums to the db for use later.
+				extension.batch.save_block_sums(
+					&genesis.hash(),
+					&BlockSums::default(),
+				)?;
+
 				Ok(())
 			})?;
 
