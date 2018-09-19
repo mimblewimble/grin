@@ -24,7 +24,8 @@ use chain::OrphanBlockPool;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::verifier_cache::VerifierCache;
-use core::core::{Block, BlockHeader};
+use core::core::Committed;
+use core::core::{Block, BlockHeader, BlockSums};
 use core::global;
 use core::pow::Difficulty;
 use error::{Error, ErrorKind};
@@ -132,9 +133,8 @@ pub fn process_block(
 		check_prev_store(&b.header, ctx)?;
 	}
 
-	// Validate the block itself.
-	// Taking advantage of the verifier_cache for
-	// rangeproofs and kernel signatures.
+	// Validate the block itself, make sure it is internally consistent.
+	// Use the verifier_cache for verifying rangeproofs and kernel signatures.
 	validate_block(b, ctx, verifier_cache)?;
 
 	// Begin a new batch as we may begin modifying the db at this point.
@@ -161,6 +161,12 @@ pub fn process_block(
 		// rewound txhashset extension to reflect chain state prior
 		// to applying the new block.
 		verify_coinbase_maturity(b, &mut extension)?;
+
+		// Using block_sums (utxo_sum, kernel_sum) for the previous block from the db
+		// we can verify_kernel_sums across the full UTXO sum and full kernel sum
+		// accounting for inputs/outputs/kernels in this new block.
+		// We know there are no double-spends etc. if this verifies successfully.
+		verify_block_sums(b, &mut extension)?;
 
 		// Apply the block to the txhashset state.
 		// Validate the txhashset roots and sizes against the block header.
@@ -499,6 +505,27 @@ fn validate_block(
 /// Note: requires a txhashset extension.
 fn verify_coinbase_maturity(block: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
 	ext.verify_coinbase_maturity(&block.inputs(), block.header.height)?;
+	Ok(())
+}
+
+/// Some "real magick" verification logic.
+/// The (BlockSums, Block) tuple implements Committed...
+/// This allows us to verify kernel sums across the full utxo and kernel sets
+/// based on block_sums of previous block, accounting for the inputs|outputs|kernels
+/// of the new block.
+fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+	let block_sums = ext.batch.get_block_sums(&b.header.previous)?;
+	let overage = b.header.overage();
+	let offset = b.header.total_kernel_offset();
+	let (utxo_sum, kernel_sum) =
+		(block_sums, b as &Committed).verify_kernel_sums(overage, offset)?;
+
+	// Save the latest block_sums for the latest block to the batch.
+	ext.batch.save_block_sums(
+		&b.header.hash(),
+		&BlockSums{ utxo_sum, kernel_sum }
+	)?;
+
 	Ok(())
 }
 
