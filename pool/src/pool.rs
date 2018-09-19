@@ -122,7 +122,8 @@ impl Pool {
 			.filter_map(|mut bucket| {
 				bucket.truncate(MAX_TX_CHAIN);
 				transaction::aggregate(bucket, self.verifier_cache.clone()).ok()
-			}).collect();
+			})
+			.collect();
 
 		// sort by fees over weight, multiplying by 1000 to keep some precision
 		// don't think we'll ever see a >max_u64/1000 fee transaction

@@ -609,8 +609,6 @@ impl Handler for HeaderHandler {
 	}
 }
 
-
-
 /// Gets block details given either a hash or an unspent commit
 /// GET /v1/blocks/<hash>
 /// GET /v1/blocks/<height>
