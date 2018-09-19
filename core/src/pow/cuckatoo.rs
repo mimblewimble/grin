@@ -14,7 +14,4 @@
 
 //! Implementation of Cuckatoo Cycle designed by John Tromp.
 
-struct Graph {
-
-
-}
+struct Graph {}
