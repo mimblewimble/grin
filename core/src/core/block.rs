@@ -26,14 +26,14 @@ use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
-use core::target::Difficulty;
 use core::verifier_cache::{LruVerifierCache, VerifierCache};
 use core::{
-	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Proof, Transaction,
+	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Transaction,
 	TransactionBody, TxKernel,
 };
 use global;
 use keychain::{self, BlindingFactor};
+use pow::{Difficulty, Proof, ProofOfWork};
 use ser::{self, Readable, Reader, Writeable, Writer};
 use util::{secp, secp_static, static_secp_instance, LOGGER};
 
@@ -106,91 +106,6 @@ impl From<consensus::Error> for Error {
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		write!(f, "Block Error (display needs implementation")
-	}
-}
-
-/// Block header information pertaining to the proof of work
-#[derive(Clone, Debug, PartialEq)]
-pub struct ProofOfWork {
-	/// Total accumulated difficulty since genesis block
-	pub total_difficulty: Difficulty,
-	/// Difficulty scaling factor between the different proofs of work
-	pub scaling_difficulty: u64,
-	/// Nonce increment used to mine this block.
-	pub nonce: u64,
-	/// Proof of work data.
-	pub proof: Proof,
-}
-
-impl Default for ProofOfWork {
-	fn default() -> ProofOfWork {
-		let proof_size = global::proofsize();
-		ProofOfWork {
-			total_difficulty: Difficulty::one(),
-			scaling_difficulty: 1,
-			nonce: 0,
-			proof: Proof::zero(proof_size),
-		}
-	}
-}
-
-impl ProofOfWork {
-	/// Read implementation, can't define as trait impl as we need a version
-	fn read(ver: u16, reader: &mut Reader) -> Result<ProofOfWork, ser::Error> {
-		let (total_difficulty, scaling_difficulty) = if ver == 1 {
-			// read earlier in the header on older versions
-			(Difficulty::one(), 1)
-		} else {
-			(Difficulty::read(reader)?, reader.read_u64()?)
-		};
-		let nonce = reader.read_u64()?;
-		let proof = Proof::read(reader)?;
-		Ok(ProofOfWork {
-			total_difficulty,
-			scaling_difficulty,
-			nonce,
-			proof,
-		})
-	}
-
-	/// Write implementation, can't define as trait impl as we need a version
-	fn write<W: Writer>(&self, ver: u16, writer: &mut W) -> Result<(), ser::Error> {
-		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			self.write_pre_pow(ver, true, writer)?;
-		}
-
-		self.proof.write(writer)?;
-		Ok(())
-	}
-
-	/// Write the pre-hash portion of the header
-	pub fn write_pre_pow<W: Writer>(
-		&self,
-		ver: u16,
-		include_nonce: bool,
-		writer: &mut W,
-	) -> Result<(), ser::Error> {
-		if ver > 1 {
-			ser_multiwrite!(
-				writer,
-				[write_u64, self.total_difficulty.to_num()],
-				[write_u64, self.scaling_difficulty]
-			);
-		}
-		if include_nonce {
-			writer.write_u64(self.nonce)?;
-		}
-		Ok(())
-	}
-
-	/// Maximum difficulty this proof of work can achieve
-	pub fn to_difficulty(&self) -> Difficulty {
-		self.proof.to_difficulty()
-	}
-
-	/// The shift used for the cuckoo cycle size on this proof
-	pub fn cuckoo_sizeshift(&self) -> u8 {
-		self.proof.cuckoo_sizeshift
 	}
 }
 
@@ -368,9 +283,8 @@ impl BlockHeader {
 	pub fn pre_pow_hash(&self) -> Hash {
 		let mut hasher = HashWriter::default();
 		self.write_pre_pow(&mut hasher).unwrap();
-		self.pow
-			.write_pre_pow(self.version, true, &mut hasher)
-			.unwrap();
+		self.pow.write_pre_pow(self.version, &mut hasher).unwrap();
+		hasher.write_u64(self.pow.nonce).unwrap();
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)

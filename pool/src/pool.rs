@@ -20,10 +20,10 @@ use std::sync::{Arc, RwLock};
 
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
-use core::core::id::ShortIdentifiable;
+use core::core::id::{ShortId, ShortIdentifiable};
 use core::core::transaction;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{Block, CompactBlock, Transaction, TxKernel};
+use core::core::{Block, Transaction, TxKernel};
 use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 use util::LOGGER;
 
@@ -58,30 +58,53 @@ impl Pool {
 	}
 
 	/// Does the transaction pool contain an entry for the given transaction?
-	pub fn contains_tx(&self, tx: &Transaction) -> bool {
-		self.entries.iter().any(|x| x.tx.hash() == tx.hash())
+	pub fn contains_tx(&self, hash: Hash) -> bool {
+		self.entries.iter().any(|x| x.tx.hash() == hash)
+	}
+
+	pub fn get_tx(&self, hash: Hash) -> Option<Transaction> {
+		self.entries
+			.iter()
+			.find(|x| x.tx.hash() == hash)
+			.map(|x| x.tx.clone())
 	}
 
 	/// Query the tx pool for all known txs based on kernel short_ids
 	/// from the provided compact_block.
 	/// Note: does not validate that we return the full set of required txs.
 	/// The caller will need to validate that themselves.
-	pub fn retrieve_transactions(&self, cb: &CompactBlock) -> Vec<Transaction> {
-		let mut txs = vec![];
+	pub fn retrieve_transactions(
+		&self,
+		hash: Hash,
+		nonce: u64,
+		kern_ids: &Vec<ShortId>,
+	) -> (Vec<Transaction>, Vec<ShortId>) {
+		let mut rehashed = HashMap::new();
 
+		// Rehash all entries in the pool using short_ids based on provided hash and nonce.
 		for x in &self.entries {
-			for kernel in x.tx.kernels() {
+			for k in x.tx.kernels() {
 				// rehash each kernel to calculate the block specific short_id
-				let short_id = kernel.short_id(&cb.hash(), cb.nonce);
-
-				// if any kernel matches then keep the tx for later
-				if cb.kern_ids().contains(&short_id) {
-					txs.push(x.tx.clone());
-					break;
-				}
+				let short_id = k.short_id(&hash, nonce);
+				rehashed.insert(short_id, x.tx.hash());
 			}
 		}
-		txs
+
+		// Retrive the txs from the pool by the set of unique hashes.
+		let hashes: HashSet<_> = rehashed.values().collect();
+		let txs = hashes.into_iter().filter_map(|x| self.get_tx(*x)).collect();
+
+		// Calculate the missing ids based on the ids passed in
+		// and the ids that successfully matched txs.
+		let matched_ids: HashSet<_> = rehashed.keys().collect();
+		let all_ids: HashSet<_> = kern_ids.iter().collect();
+		let missing_ids = all_ids
+			.difference(&matched_ids)
+			.map(|x| *x)
+			.cloned()
+			.collect();
+
+		(txs, missing_ids)
 	}
 
 	/// Take pool transactions, filtering and ordering them in a way that's
@@ -99,8 +122,7 @@ impl Pool {
 			.filter_map(|mut bucket| {
 				bucket.truncate(MAX_TX_CHAIN);
 				transaction::aggregate(bucket, self.verifier_cache.clone()).ok()
-			})
-			.collect();
+			}).collect();
 
 		// sort by fees over weight, multiplying by 1000 to keep some precision
 		// don't think we'll ever see a >max_u64/1000 fee transaction

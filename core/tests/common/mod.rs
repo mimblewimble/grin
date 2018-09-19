@@ -20,8 +20,8 @@ extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
 use grin_core::core::block::{Block, BlockHeader};
-use grin_core::core::target::Difficulty;
 use grin_core::core::Transaction;
+use grin_core::pow::Difficulty;
 use keychain::{Identifier, Keychain};
 use wallet::libtx::build::{self, input, output, with_fee};
 use wallet::libtx::reward;

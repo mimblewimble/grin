@@ -743,11 +743,11 @@ impl PoolPushHandler {
 			parse_body(req)
 				.and_then(move |wrapper: TxWrapper| {
 					util::from_hex(wrapper.tx_hex)
-						.map_err(|_| ErrorKind::RequestError("Bad request".to_owned()).into())
+						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
 				})
 				.and_then(move |tx_bin| {
 					ser::deserialize(&mut &tx_bin[..])
-						.map_err(|_| ErrorKind::RequestError("Bad request".to_owned()).into())
+						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
 				})
 				.and_then(move |tx: Transaction| {
 					let source = pool::TxSource {
@@ -770,7 +770,7 @@ impl PoolPushHandler {
 						.add_to_pool(source, tx, !fluff, &header.hash())
 						.map_err(|e| {
 							error!(LOGGER, "update_pool: failed with error: {:?}", e);
-							ErrorKind::RequestError("Bad request".to_owned()).into()
+							ErrorKind::Internal(format!("Failed to update pool: {:?}", e)).into()
 						})
 				}),
 		)
@@ -897,10 +897,12 @@ where
 	Box::new(
 		req.into_body()
 			.concat2()
-			.map_err(|_e| ErrorKind::RequestError("Failed to read request".to_owned()).into())
+			.map_err(|e| ErrorKind::RequestError(format!("Failed to read request: {}", e)).into())
 			.and_then(|body| match serde_json::from_reader(&body.to_vec()[..]) {
 				Ok(obj) => ok(obj),
-				Err(_) => err(ErrorKind::RequestError("Invalid request body".to_owned()).into()),
+				Err(e) => {
+					err(ErrorKind::RequestError(format!("Invalid request body: {}", e)).into())
+				}
 			}),
 	)
 }

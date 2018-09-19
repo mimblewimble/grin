@@ -19,7 +19,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::sync::mpsc;
 
 use core::core::hash::Hash;
-use core::core::target::Difficulty;
+use core::pow::Difficulty;
 use core::{core, ser};
 use grin_store;
 

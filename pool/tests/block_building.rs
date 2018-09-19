@@ -32,8 +32,8 @@ use core::core::{Block, BlockHeader};
 use chain::txhashset;
 use chain::types::Tip;
 use core::core::hash::Hashed;
-use core::core::target::Difficulty;
 use core::core::verifier_cache::LruVerifierCache;
+use core::pow::Difficulty;
 
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;

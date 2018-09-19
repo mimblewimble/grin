@@ -158,8 +158,7 @@ where
 				// here we want to get from underlying hash file
 				// as the pos *may* have been "removed"
 				self.backend.get_from_file(pi)
-			})
-			.collect()
+			}).collect()
 	}
 
 	fn peak_path(&self, peak_pos: u64) -> Vec<Hash> {
