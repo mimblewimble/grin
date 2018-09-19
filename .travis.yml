@@ -1,5 +1,8 @@
 language: rust
 
+git:
+  depth: false
+
 os:
   - linux
   - osx
