@@ -47,6 +47,7 @@ script:
 before_deploy:
   - "echo 'make a tarball for the release binary...'"
   - ./.auto-release.sh
+  - ./.github_changelog_generator.sh
 
 deploy:
   provider: releases
