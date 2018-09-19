@@ -141,18 +141,37 @@ pub fn run_sync(
 
 						// run the header sync every 10s
 						if si.header_sync_due(&header_head) {
-							header_sync(peers.clone(), chain.clone(), &mut history_locators);
-
 							let status = sync_state.status();
-							match status {
-								SyncStatus::TxHashsetDownload => (),
+							let update_sync_state = match status {
+								SyncStatus::TxHashsetDownload => false,
+								SyncStatus::NoSync
+								| SyncStatus::Initial => {
+									// Reset sync_head to header_head on transition to HeaderSync,
+									// but ONLY on initial transition to HeaderSync state.
+									let sync_head = chain.get_sync_head().unwrap();
+									debug!(
+										LOGGER,
+										"sync: initial transition to HeaderSync. sync_head: {} at {}, reset to: {} at {}",
+										sync_head.hash(),
+										sync_head.height,
+										header_head.hash(),
+										header_head.height,
+									);
+									chain.init_sync_head(&header_head).unwrap();
+									history_locators.clear();
+									true
+								}
 								_ => {
-									sync_state.update(SyncStatus::HeaderSync {
-										current_height: header_head.height,
-										highest_height: si.highest_height,
-									});
+									true
 								}
 							};
+							if update_sync_state {
+								sync_state.update(SyncStatus::HeaderSync {
+									current_height: header_head.height,
+									highest_height: si.highest_height,
+								});
+							}
+							header_sync(peers.clone(), chain.clone(), &mut history_locators);
 						}
 
 						if fast_sync_enabled {
@@ -516,30 +535,15 @@ fn get_locator(
 ) -> Result<Vec<Hash>, Error> {
 	let mut this_height = 0;
 
-	let mut tip = chain.get_sync_head()?;
-	let header_head = chain.get_header_head()?;
+	let tip = chain.get_sync_head()?;
+	let heights = get_locator_heights(tip.height);
+	let mut new_heights: Vec<u64> = vec![];
 
 	// for security, clear history_locators[] in any case of header chain rollback,
 	// the easiest way is to check whether the sync head and the header head are identical.
-	if history_locators.len() > 0 && tip.hash() != header_head.hash() {
+	if history_locators.len() > 0 && tip.hash() != chain.get_header_head()?.hash() {
 		history_locators.clear();
 	}
-
-	// when sync_head is left behind, use header_head as the sync_head for get_locator
-	if header_head.height > tip.height {
-		debug!(
-			LOGGER,
-			"sync: get_locator use header_head as sync_head. sync_head: {} at {}, header_head: {} at {}",
-			tip.hash(),
-			tip.height,
-			header_head.hash(),
-			header_head.height,
-		);
-		tip = header_head.clone();
-	}
-
-	let heights = get_locator_heights(tip.height);
-	let mut new_heights: Vec<u64> = vec![];
 
 	debug!(LOGGER, "sync: locator heights : {:?}", heights);
 
