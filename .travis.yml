@@ -43,6 +43,9 @@ env:
 
 script:
   - cargo build --release
+
+before_deploy:
+  - "echo 'make a tarball for the release binary...'"
   - ./.auto-release.sh
 
 deploy:
