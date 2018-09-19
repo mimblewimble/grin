@@ -34,9 +34,9 @@ use common::{
 	test_transaction_spending_coinbase, ChainAdapter,
 };
 use core::core::hash::Hashed;
-use core::core::target::Difficulty;
 use core::core::verifier_cache::LruVerifierCache;
 use core::core::{transaction, Block, BlockHeader};
+use core::pow::Difficulty;
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
 

@@ -566,7 +566,7 @@ fn create_error_response(e: Error) -> Response<Body> {
 		.status(StatusCode::INTERNAL_SERVER_ERROR)
 		.header("access-control-allow-origin", "*")
 		.header("access-control-allow-headers", "Content-Type")
-		.body(format!("{}", e.kind()).into())
+		.body(format!("{}", e).into())
 		.unwrap()
 }
 
@@ -584,9 +584,6 @@ fn response<T: Into<Body>>(status: StatusCode, text: T) -> Response<Body> {
 		.header("access-control-allow-origin", "*")
 		.body(text.into())
 		.unwrap()
-	//let mut resp = Response::new(text.into());
-	//*resp.status_mut() = status;
-	//resp
 }
 
 fn parse_params(req: &Request<Body>) -> HashMap<String, Vec<String>> {
@@ -615,7 +612,9 @@ where
 			.map_err(|_| ErrorKind::GenericError("Failed to read request".to_owned()).into())
 			.and_then(|body| match serde_json::from_reader(&body.to_vec()[..]) {
 				Ok(obj) => ok(obj),
-				Err(_) => err(ErrorKind::GenericError("Invalid request body".to_owned()).into()),
+				Err(e) => {
+					err(ErrorKind::GenericError(format!("Invalid request body: {}", e)).into())
+				}
 			}),
 	)
 }

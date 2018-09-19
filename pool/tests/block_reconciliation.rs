@@ -36,8 +36,8 @@ use common::{
 	clean_output_dir, test_setup, test_source, test_transaction,
 	test_transaction_spending_coinbase, ChainAdapter,
 };
-use core::core::target::Difficulty;
 use core::core::verifier_cache::LruVerifierCache;
+use core::pow::Difficulty;
 use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
 

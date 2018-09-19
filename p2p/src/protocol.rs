@@ -27,7 +27,6 @@ use msg::{
 	read_exact, BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr,
 	TxHashSetArchive, TxHashSetRequest, Type,
 };
-use rand::{self, Rng};
 use types::{Error, NetAdapter};
 use util::LOGGER;
 
@@ -107,7 +106,10 @@ impl MessageHandler for Protocol {
 
 			Type::GetBlock => {
 				let h: Hash = msg.body()?;
-				trace!(LOGGER, "handle_payload: GetBlock {}", h);
+				debug!(
+					LOGGER,
+					"handle_payload: Getblock: {}, msg_len: {}", h, msg.header.msg_len,
+				);
 
 				let bo = adapter.get_block(h);
 				if let Some(b) = bo {
@@ -129,25 +131,9 @@ impl MessageHandler for Protocol {
 
 			Type::GetCompactBlock => {
 				let h: Hash = msg.body()?;
-
 				if let Some(b) = adapter.get_block(h) {
-					// if we have txs in the block send a compact block
-					// but if block is empty -
-					// to allow us to test all code paths, randomly choose to send
-					// either the block or the compact block
-					let mut rng = rand::thread_rng();
-
-					if b.kernels().len() == 1 && rng.gen() {
-						debug!(
-							LOGGER,
-							"handle_payload: GetCompactBlock: empty block, sending full block",
-						);
-
-						Ok(Some(msg.respond(Type::Block, b)))
-					} else {
-						let cb: CompactBlock = b.into();
-						Ok(Some(msg.respond(Type::CompactBlock, cb)))
-					}
+					let cb: CompactBlock = b.into();
+					Ok(Some(msg.respond(Type::CompactBlock, cb)))
 				} else {
 					Ok(None)
 				}

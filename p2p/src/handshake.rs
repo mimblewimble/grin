@@ -17,10 +17,10 @@ use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
 use rand::os::OsRng;
-use rand::Rng;
+use rand::RngCore;
 
 use core::core::hash::Hash;
-use core::core::target::Difficulty;
+use core::pow::Difficulty;
 use msg::{read_message, write_message, Hand, Shake, SockAddr, Type, PROTOCOL_VERSION, USER_AGENT};
 use peer::Peer;
 use types::{Capabilities, Direction, Error, P2PConfig, PeerInfo};

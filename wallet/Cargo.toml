@@ -13,11 +13,11 @@ failure_derive = "0.1"
 futures = "0.1"
 hyper = "0.12"
 prettytable-rs = "0.7"
-rand = "0.3"
+rand = "0.5"
 serde = "1"
 serde_derive = "1"
 serde_json = "1"
-slog = { version = "~2.2", features = ["max_level_trace", "release_max_level_trace"] }
+slog = { version = "~2.3", features = ["max_level_trace", "release_max_level_trace"] }
 term = "0.5"
 tokio = "0.1.7"
 tokio-core = "0.1"

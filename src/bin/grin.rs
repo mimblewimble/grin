@@ -39,6 +39,8 @@ extern crate grin_wallet;
 mod cmd;
 pub mod tui;
 
+use std::process::exit;
+
 use clap::{App, Arg, SubCommand};
 
 use config::config::{SERVER_CONFIG_FILE_NAME, WALLET_CONFIG_FILE_NAME};
@@ -355,7 +357,7 @@ fn main() {
 				if let ("init", Some(_)) = wallet_args.subcommand() {
 				} else {
 					println!("Wallet seed file doesn't exist. Run `grin wallet -p [password] init` first");
-					return;
+					exit(1);
 				}
 			}
 			let mut l = w.members.as_mut().unwrap().logging.clone().unwrap();

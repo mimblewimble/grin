@@ -23,7 +23,7 @@ use lmdb;
 
 use core::core;
 use core::core::hash::Hash;
-use core::core::target::Difficulty;
+use core::pow::Difficulty;
 use handshake::Handshake;
 use peer::Peer;
 use peers::Peers;
