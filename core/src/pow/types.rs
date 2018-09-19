@@ -60,7 +60,7 @@ impl Difficulty {
 		let shift = proof.cuckoo_sizeshift;
 		let adjust_factor = (1 << (shift - global::ref_sizeshift()) as u64) * (shift as u64 - 1);
 
-		Difficulty::from_num(Difficulty::raw_difficulty(proof) * adjust_factor)
+		Difficulty::from_num(proof.raw_difficulty() * adjust_factor)
 	}
 
 	/// Same as `from_proof_adjusted` but instead of an adjustment based on
@@ -68,11 +68,7 @@ impl Difficulty {
 	/// to scale one PoW against the other.
 	pub fn from_proof_scaled(proof: &Proof, scaling: u64) -> Difficulty {
 		// Scaling between 2 proof of work algos
-		Difficulty::from_num(Difficulty::raw_difficulty(proof) * scaling)
-	}
-
-	fn raw_difficulty(proof: &Proof) -> u64 {
-		<u64>::max_value() / proof.hash().to_u64()
+		Difficulty::from_num(proof.raw_difficulty() * scaling)
 	}
 
 	/// Converts the difficulty into a u64
@@ -343,6 +339,11 @@ impl Proof {
 	/// Returns the proof size
 	pub fn proof_size(&self) -> usize {
 		self.nonces.len()
+	}
+
+	/// Difficulty achieved by this proof
+	fn raw_difficulty(&self) -> u64 {
+		<u64>::max_value() / self.hash().to_u64()
 	}
 }
 
