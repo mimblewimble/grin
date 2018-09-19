@@ -598,7 +598,7 @@ impl<'a> Extension<'a> {
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
 		for out in b.outputs() {
 			let pos = self.apply_output(out)?;
- 			// Update the output_pos index for the new output.
+			// Update the output_pos index for the new output.
 			self.batch.save_output_pos(&out.commitment(), pos)?;
 		}
 
@@ -668,7 +668,8 @@ impl<'a> Extension<'a> {
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
 		// push the rangeproof to the MMR.
-		let rproof_pos = self.rproof_pmmr
+		let rproof_pos = self
+			.rproof_pmmr
 			.push(out.proof)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
@@ -1126,8 +1127,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 					.file_name()
 					.and_then(|n| n.to_str().map(|s| String::from(s)))
 			})
-		})
-		.collect();
+		}).collect();
 
 	let dir_difference: Vec<String> = subdirectories_found
 		.difference(&subdirectories_expected)
@@ -1156,8 +1156,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 			} else {
 				String::from(s)
 			}
-		})
-		.collect();
+		}).collect();
 
 	let subdirectories = fs::read_dir(txhashset_path)?;
 	for subdirectory in subdirectories {
@@ -1170,8 +1169,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 						.file_name()
 						.and_then(|n| n.to_str().map(|s| String::from(s)))
 				})
-			})
-			.collect();
+			}).collect();
 		let difference: Vec<String> = pmmr_files_found
 			.difference(&pmmr_files_expected)
 			.cloned()
