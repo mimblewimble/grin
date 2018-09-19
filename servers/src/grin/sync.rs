@@ -15,7 +15,7 @@
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use std::time;
 use std::{cmp, thread};
 
@@ -156,9 +156,9 @@ pub fn run_sync(
 						}
 
 						if fast_sync_enabled {
-							// check sync error
 							{
-								let mut sync_error_need_clear = false;
+								let mut sync_need_restart = false;
+								// check sync error
 								{
 									let clone = sync_state.sync_error();
 									if let Some(ref sync_error) = *clone.read().unwrap() {
@@ -167,12 +167,30 @@ pub fn run_sync(
 											"fast_sync: error = {:?}. restart fast sync",
 											sync_error
 										);
-										si.fast_sync_reset();
-										sync_error_need_clear = true;
+										sync_need_restart = true;
 									}
 									drop(clone);
 								}
-								if sync_error_need_clear {
+
+								// check peer connection status of this sync
+								if let Some(ref peer) = si.fast_sync_peer {
+									if let Ok(p) = peer.try_read() {
+										if !p.is_connected()
+											&& SyncStatus::TxHashsetDownload
+												== sync_state.status()
+										{
+											sync_need_restart = true;
+											info!(
+												LOGGER,
+												"fast_sync: peer connection lost: {:?}. restart",
+												p.info.addr,
+											);
+										}
+									}
+								}
+
+								if sync_need_restart {
+									si.fast_sync_reset();
 									sync_state.clear_sync_error();
 								}
 							}
@@ -182,10 +200,12 @@ pub fn run_sync(
 								let (go, download_timeout) = si.fast_sync_due();
 
 								if go {
-									if let Err(e) =
-										fast_sync(peers.clone(), chain.clone(), &header_head)
-									{
-										sync_state.set_sync_error(Error::P2P(e));
+									si.fast_sync_peer = None;
+									match fast_sync(peers.clone(), chain.clone(), &header_head) {
+										Ok(peer) => {
+											si.fast_sync_peer = Some(peer);
+										}
+										Err(e) => sync_state.set_sync_error(Error::P2P(e)),
 									}
 									sync_state.update(SyncStatus::TxHashsetDownload);
 								}
@@ -399,7 +419,7 @@ fn fast_sync(
 	peers: Arc<Peers>,
 	chain: Arc<chain::Chain>,
 	header_head: &chain::Tip,
-) -> Result<(), p2p::Error> {
+) -> Result<Arc<RwLock<Peer>>, p2p::Error> {
 	let horizon = global::cut_through_horizon() as u64;
 
 	if let Some(peer) = peers.most_work_peer() {
@@ -423,7 +443,7 @@ fn fast_sync(
 				error!(LOGGER, "fast_sync: send_txhashset_request err! {:?}", e);
 				return Err(e);
 			}
-			return Ok(());
+			return Ok(peer.clone());
 		}
 	}
 	Err(p2p::Error::PeerException)
@@ -645,6 +665,7 @@ struct SyncInfo {
 	prev_body_sync: (DateTime<Utc>, u64),
 	prev_header_sync: (DateTime<Utc>, u64, u64),
 	prev_fast_sync: Option<DateTime<Utc>>,
+	fast_sync_peer: Option<Arc<RwLock<Peer>>>,
 	highest_height: u64,
 }
 
@@ -655,6 +676,7 @@ impl SyncInfo {
 			prev_body_sync: (now.clone(), 0),
 			prev_header_sync: (now.clone(), 0, 0),
 			prev_fast_sync: None,
+			fast_sync_peer: None,
 			highest_height: 0,
 		}
 	}
@@ -726,6 +748,7 @@ impl SyncInfo {
 
 	fn fast_sync_reset(&mut self) {
 		self.prev_fast_sync = None;
+		self.fast_sync_peer = None;
 	}
 }
 
