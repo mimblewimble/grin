@@ -14,7 +14,7 @@ if [[ $TRAVIS_OS_NAME == 'osx' ]]; then
     echo "tarball generated\n"
 
     # Only generate changelog on Linux platform, to avoid duplication
-    exit 1
+    exit 0
 else
     # Do some custom requirements on Linux
     cd target/release ; rm -f *.tgz; tar zcf "grin-$tagname-$TRAVIS_JOB_ID-linux-amd64.tgz" grin
