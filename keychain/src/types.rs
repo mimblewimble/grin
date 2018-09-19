@@ -186,6 +186,15 @@ impl Identifier {
 	pub fn to_hex(&self) -> String {
 		util::to_hex(self.0.to_vec())
 	}
+
+	pub fn to_bip_32_string(&self) -> String {
+		let p = ExtKeychainPath::from_identifier(&self);
+		let mut retval = String::from("m");
+		for i in 0..p.depth {
+			retval.push_str(&format!("/{}", <u32>::from(p.path[i as usize])));
+		}
+		retval
+	}
 }
 
 impl AsRef<[u8]> for Identifier {

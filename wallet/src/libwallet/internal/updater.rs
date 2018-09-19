@@ -62,7 +62,7 @@ where
 	if let Some(id) = tx_id {
 		outputs = outputs
 			.into_iter()
-			.filter(|out| out.tx_log_entry == Some(id))
+			.filter(|out| out.tx_log_entry == Some(id) && out.root_key_id == *parent_key_id)
 			.collect::<Vec<_>>();
 	}
 
