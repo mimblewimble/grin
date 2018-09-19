@@ -1031,10 +1031,9 @@ fn setup_head(
 				extension.apply_block(&genesis)?;
 
 				// Save the block_sums to the db for use later.
-				extension.batch.save_block_sums(
-					&genesis.hash(),
-					&BlockSums::default(),
-				)?;
+				extension
+					.batch
+					.save_block_sums(&genesis.hash(), &BlockSums::default())?;
 
 				Ok(())
 			})?;
