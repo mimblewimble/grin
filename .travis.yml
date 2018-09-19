@@ -4,19 +4,15 @@ os:
   - linux
   - osx
 
+dist: trusty
+sudo: required
+
 cache:
   cargo: true
   timeout: 240
 
 before_cache:
   - rm -rf target/tmp
-
-matrix:
-  include:
-    - os: linux
-      dist: trusty
-      sudo: required
-    - os: osx
 
 rust:
   - stable
