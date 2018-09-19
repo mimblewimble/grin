@@ -32,13 +32,24 @@ Logging configuration for the wallet is read from `grin-wallet.toml`.
 
 ### Switches common to all wallet commands
 
+### Wallet Account
+
+The wallet supports multiple accounts. To set the active account for a wallet command, use the '-a' switch, e.g:
+
+```
+[host]$ grin wallet -a account_1 info
+```
+
+All output creation, transaction building, and querying is done against a particular account in the wallet.
+If the '-a' switch is not provided for a command, the account named 'default' is used.
+
 ##### Grin Node Address
 The wallet generally needs to talk to a running grin node in order to remain up-to-date and verify its contents. By default, the wallet
 tries to contact a node at `127.0.0.1:13413`. To change this, modify the value in the wallet's `grin_wallet.toml` file. Alternatively,
-you can provide the `-a` switch to the wallet command, e.g.:
+you can provide the `-r` (seRver) switch to the wallet command, e.g.:
 
 ```
-[host]$ grin wallet -a "http://192.168.0.2:1341" info
+[host]$ grin wallet -r "http://192.168.0.2:1341" info
 ```
 
 If commands that need to update from a grin node can't find one, they will generally inform you that the node couldn't be reached
@@ -78,6 +89,26 @@ This will create a `grin-wallet.toml` file in the current directory configured t
 as well as all needed data files. When running any `grin wallet` command, grin will check the current directory to see if 
 a `grin-wallet.toml` file exists. If not it will use the default in `~/.grin`
 
+### account
+
+To create a new account, use the 'grin wallet account' command with the argument '-c', e.g.:
+
+```
+[host]$ grin wallet account -c my_account
+```
+
+This will create a new account called 'my_account'. To use this account in subsequent commands, provide the '-a' flag to
+all wallet commands:
+
+```
+[host]$ grin wallet -a my_account info
+```
+
+To display a list of created accounts in the wallet, use the 'account' command with no flags:
+
+```
+[host]$ grin wallet -a my_account info
+```
 
 ### info
 
@@ -86,7 +117,7 @@ inflated if you have a lot of unconfirmed outputs in your wallet (especially one
 who then never it by posting to the chain). `Currently Spendable` is the most accurate field to look at here.
 
 ```
-____ Wallet Summary Info as of 49 ____
+____ Wallet Summary Info - Account 'default' as of 49 ____
 
  Total                            | 3000.000000000
  Awaiting Confirmation            | 60.000000000
@@ -174,7 +205,7 @@ Simply displays all the the outputs in your wallet: e.g:
 
 ```
 [host]$ grin wallet outputs
-Wallet Outputs - Block Height: 49                                                                                                               
+Wallet Outputs - Account 'default' - Block Height: 49                                                                                                               
 ------------------------------------------------------------------------------------------------------------------------------------------------
  Key Id                Child Key Index  Block Height  Locked Until  Status       Is Coinbase?  Num. of Confirmations  Value         Transaction 
 ================================================================================================================================================
@@ -207,7 +238,7 @@ transaction log, use the `txs`
 ```
 [host]$ grin wallet txs
                                                                                                                                                                                                                                                                                                                               
-Transaction Log - Block Height: 49                                                                                                                                                                                                                                                                                            
+Transaction Log - Account 'default' - Block Height: 49                                                                                                                                                                                                                                                                                            
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------                                                                                    
  Id  Type                 Shared Transaction Id                 Creation Time                      Confirmed?  Confirmation Time                  Num. Inputs  Num. Outputs  Amount Credited  Amount Debited  Fee          Net Difference                                                                                     
 ==========================================================================================================================================================================================================================================                                                                                    
@@ -229,7 +260,7 @@ To see the inputs/outputs associated with a particular transaction, use the `-i`
 
 ```
 [host]$ grin wallet txs -i 6
-Transaction Log - Block Height: 49
+Transaction Log - Account 'default' - Block Height: 49
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Id  Type         Shared Transaction Id                 Creation Time                      Confirmed?  Confirmation Time  Num. Inputs  Num. Outputs  Amount Credited  Amount Debited  Fee   Net Difference 
 ===========================================================================================================================================================================================================
@@ -260,7 +291,7 @@ Running against the data above:
 ```
 [host]$ grin wallet cancel -i 6
 [host]$ grin wallet txs -i 6
-Transaction Log - Block Height: 49
+Transaction Log - Account 'default' - Block Height: 49
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  Id  Type                     Shared Transaction Id                 Creation Time                      Confirmed?  Confirmation Time  Num. Inputs  Num. Outputs  Amount Credited  Amount Debited  Fee   Net Difference 
 =======================================================================================================================================================================================================================
