@@ -23,13 +23,10 @@ extern crate serde;
 #[macro_use]
 extern crate serde_derive;
 extern crate serde_json;
-#[macro_use]
-extern crate slog;
 extern crate crypto;
 extern crate uuid;
 
 mod base58;
-//pub mod extkey;
 pub mod extkey_bip32;
 mod types;
 
