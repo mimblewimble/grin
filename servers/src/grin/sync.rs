@@ -141,18 +141,34 @@ pub fn run_sync(
 
 						// run the header sync every 10s
 						if si.header_sync_due(&header_head) {
-							header_sync(peers.clone(), chain.clone(), &mut history_locators);
-
 							let status = sync_state.status();
-							match status {
-								SyncStatus::TxHashsetDownload => (),
-								_ => {
-									sync_state.update(SyncStatus::HeaderSync {
-										current_height: header_head.height,
-										highest_height: si.highest_height,
-									});
+							let update_sync_state = match status {
+								SyncStatus::TxHashsetDownload => false,
+								SyncStatus::NoSync | SyncStatus::Initial => {
+									// Reset sync_head to header_head on transition to HeaderSync,
+									// but ONLY on initial transition to HeaderSync state.
+									let sync_head = chain.get_sync_head().unwrap();
+									debug!(
+										LOGGER,
+										"sync: initial transition to HeaderSync. sync_head: {} at {}, reset to: {} at {}",
+										sync_head.hash(),
+										sync_head.height,
+										header_head.hash(),
+										header_head.height,
+									);
+									chain.init_sync_head(&header_head).unwrap();
+									history_locators.clear();
+									true
 								}
+								_ => true,
 							};
+							if update_sync_state {
+								sync_state.update(SyncStatus::HeaderSync {
+									current_height: header_head.height,
+									highest_height: si.highest_height,
+								});
+							}
+							header_sync(peers.clone(), chain.clone(), &mut history_locators);
 						}
 
 						if fast_sync_enabled {
