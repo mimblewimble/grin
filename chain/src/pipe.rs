@@ -516,6 +516,12 @@ fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Er
 	// Retrieve the block_sums for the previous block.
 	let block_sums = ext.batch.get_block_sums(&b.header.previous)?;
 
+	{
+		// Now that we have block_sums the total_kernel_sum on the block_header is redundant.
+		let prev = ext.batch.get_block_header(&b.header.previous)?;
+		assert_eq!(prev.total_kernel_sum, block_sums.kernel_sum);
+	}
+
 	// Overage is based purely on the new block.
 	// Previous block_sums have taken all previous overage into account.
 	let overage = b.header.overage();
