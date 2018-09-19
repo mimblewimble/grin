@@ -27,12 +27,14 @@ env:
   - RUST_FLAGS="-C debug-assertions"
   matrix:
   - TEST_DIR=core
-script: cd $TEST_DIR && cargo test --release
+script: cargo build --release
 deploy:
   provider: releases
   api_key:
-    secure: PBTFcoUmiQITkDdtFzrBlNR/5OgYHTCw+xVWGYu205xwTlj/ARBgw7DNt8dIdptLx+jOM2V5SbJqSFxs/CJ2ZcOHQZ6ubwpAJlRfuk3xDAi5JmuHYfcY+4SQ9l/0MgHnGfuml093xP7vTIYm2Vwwgdq8fd3jdWmvwgk9zgaGXB4UIXQA0yIs3EzxZpqiLg629Ouv7edMfyffwlG+rgQ1koe6sqeMCxIs0N3p97GCx19kNe0TV4dC7XAN74HreMdHmwxPKAK4xG/jtA1Snm0pMQ50Z0Kizt+0yrGOPMLnWwO9sS38iosBn3Vh1R8HKle2xBGflTtT/LG9lHdQZ5NF572q6681x6t7str4OjJ5bboy1PtNLFxG7RJCVIpp9gbouzdxIaJWRTxIdlk8UNQMrD8ieiNE6V1vZtbHGtJHRSJN1vO/XxsLlQDCyakLhG/nmSKXgiT9wIsu+zj/3oDe+LBt5QetEGYGBrCwUewjaQ7EP1rsT7alQrHTMad5DPjYftJuvfR+yBtz1qbzQwZVJpQC1KY1c476mXPQsaywuUrj56hH92p7P3vl6aMN2OPJZP+zENOVSURHc56KeTsDS55+KKzcRjCMA2L0LR1hP33+V5kavMHgCRrWIkxAkZ4eRqnermalzp8vlzL6EEoGm0VFLzv4mJmzrY1mC1LyCHo=
+    secure: Q0wrjfdRoieovGUe3JIcdU6iUM1kbAphVO0plvYt2aO4Y6z2TyJnfmheKBP09DhDcmVf/X6ZuRqSViaC5xuI01YF/9wwkXuXCcv2jMD8pUy4z08cVOykCe/rmlGp1oT2Ev0QCfo5klRJSFnQREUJiJpWW6/APRMSeh7uFbz9GmWF4bKObVKC+YkeGbN8rC4kPssPnZ1qt2Xbj1myDbgCH8D5yBtSlpI1hQ9iqh3Rrm2hYs6C5tKkoFxDfgGNQdgyJOfLLUCKfKHzdGL715JG+wyM/GNoH9cSug9REekIt6YCxdxanUheUA4ZJ0EZY4MSn7pL1uyJKPycWVnOqzXQM6qP4S1mNyvc6WPLe4fnSCZwGdsSZo1JT0JdomYK+bF7El+gSZoKrurBJnqixWCuU3eVu/qL31G91QSpOqi1jZTJgQwL0GKyvMpNfoEshXoGkYtEu9ByQX4TizIrIqxyKYud7URrFQAWpwDAY/bgSz5zVDkP9EEK3rEIuB/MRMeQi0zmqAEzmZ/Yus1wmHsjkc99Mlpp1ZS3VYbQO20LAsVo2kJF//TJ0aOvyaNkrERv7CL+oSlckqbjogbHlFoe3tGewvDJe0UGECT60YoeinxFGps2JmpyK6FqRXsPjLSl0gTdQp24/Sl5g1eFTpWsjEcaYXfsP6CYkdra3pHdLz4=
   file: target/release/grin
+  skip_cleanup: true
   on:
-    repo: mimblewimble/grin
+    repo: garyyu/grin
     tags: true
+
