@@ -15,7 +15,7 @@
 //! Controller for wallet.. instantiates and handles listeners (or single-run
 //! invocations) as needed.
 //! Still experimental
-use api::{ApiServer, Handler, ResponseFuture, Router};
+use api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
@@ -38,6 +38,7 @@ use libwallet::{Error, ErrorKind};
 use url::form_urlencoded;
 
 use util::secp::pedersen;
+use util::to_base64;
 use util::LOGGER;
 
 /// Instantiate wallet Owner API for a single-use (command line) call
@@ -68,7 +69,11 @@ where
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
-pub fn owner_listener<T: ?Sized, C, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
+pub fn owner_listener<T: ?Sized, C, K>(
+	wallet: Box<T>,
+	addr: &str,
+	owner_api_secret: &str,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
 	OwnerAPIHandler<T, C, K>: Handler,
@@ -78,10 +83,20 @@ where
 	let wallet_arc = Arc::new(Mutex::new(wallet));
 	let api_handler = OwnerAPIHandler::new(wallet_arc);
 
+	let api_basic_auth =
+		"Basic ".to_string() + &to_base64(&("grin:".to_string() + owner_api_secret));
+	let realm = "GrinOwnerAPI";
+
 	let mut router = Router::new();
 	router
-		.add_route("/v1/wallet/owner/**", Box::new(api_handler))
-		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
+		.add_route(
+			"/v1/wallet/owner/**",
+			Box::new(BasicAuthMiddleware::new(
+				Box::new(api_handler),
+				&api_basic_auth,
+				realm,
+			)),
+		).map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 
 	let mut apis = ApiServer::new();
 	info!(LOGGER, "Starting HTTP Owner API server at {}.", addr);

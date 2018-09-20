@@ -114,7 +114,7 @@ pub struct ServerConfig {
 	/// Network address for the Rest API HTTP server.
 	pub api_http_addr: String,
 
-	/// Secret for the private Rest API HTTP server.
+	/// Secret for basic auth on Rest API HTTP server.
 	pub api_secret: String,
 
 	/// Setup the server for tests, testnet or mainnet

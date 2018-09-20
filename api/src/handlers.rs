@@ -958,16 +958,18 @@ pub fn build_router(
 		peers: peers.clone(),
 	};
 
-	let mut router = Router::new();
-
 	let api_basic_auth =
 		"Basic ".to_string() + &util::to_base64(&("grin:".to_string() + api_secret));
+	let realm = "GrinAPI";
+
+	let mut router = Router::new();
 
 	router.add_route(
 		"/v1/",
 		Box::new(BasicAuthMiddleware::new(
 			Box::new(index_handler),
 			&api_basic_auth,
+			&realm,
 		)),
 	)?;
 	router.add_route(
@@ -975,6 +977,7 @@ pub fn build_router(
 		Box::new(BasicAuthMiddleware::new(
 			Box::new(block_handler),
 			&api_basic_auth,
+			&realm,
 		)),
 	)?;
 	router.add_route(
@@ -982,6 +985,7 @@ pub fn build_router(
 		Box::new(BasicAuthMiddleware::new(
 			Box::new(header_handler),
 			&api_basic_auth,
+			&realm,
 		)),
 	)?;
 	router.add_route(
@@ -989,6 +993,7 @@ pub fn build_router(
 		Box::new(BasicAuthMiddleware::new(
 			Box::new(chain_tip_handler),
 			&api_basic_auth,
+			&realm,
 		)),
 	)?;
 	router.add_route(
@@ -996,6 +1001,7 @@ pub fn build_router(
 		Box::new(BasicAuthMiddleware::new(
 			Box::new(output_handler),
 			&api_basic_auth,
+			&realm,
 		)),
 	)?;
 	router.add_route(
@@ -1003,6 +1009,7 @@ pub fn build_router(
 		Box::new(BasicAuthMiddleware::new(
 			Box::new(chain_compact_handler),
 			&api_basic_auth,
+			&realm,
 		)),
 	)?;
 	router.add_route(
@@ -1010,6 +1017,7 @@ pub fn build_router(
 		Box::new(BasicAuthMiddleware::new(
 			Box::new(chain_validation_handler),
 			&api_basic_auth,
+			&realm,
 		)),
 	)?;
 	router.add_route(
@@ -1017,6 +1025,7 @@ pub fn build_router(
 		Box::new(BasicAuthMiddleware::new(
 			Box::new(txhashset_handler),
 			&api_basic_auth,
+			&realm,
 		)),
 	)?;
 	router.add_route(
@@ -1024,6 +1033,7 @@ pub fn build_router(
 		Box::new(BasicAuthMiddleware::new(
 			Box::new(status_handler),
 			&api_basic_auth,
+			&realm,
 		)),
 	)?;
 	router.add_route(
@@ -1031,6 +1041,7 @@ pub fn build_router(
 		Box::new(BasicAuthMiddleware::new(
 			Box::new(pool_info_handler),
 			&api_basic_auth,
+			&realm,
 		)),
 	)?;
 	router.add_route(
@@ -1038,6 +1049,7 @@ pub fn build_router(
 		Box::new(BasicAuthMiddleware::new(
 			Box::new(pool_push_handler),
 			&api_basic_auth,
+			&realm,
 		)),
 	)?;
 	router.add_route(
@@ -1045,6 +1057,7 @@ pub fn build_router(
 		Box::new(BasicAuthMiddleware::new(
 			Box::new(peers_all_handler),
 			&api_basic_auth,
+			&realm,
 		)),
 	)?;
 	router.add_route(
@@ -1052,6 +1065,7 @@ pub fn build_router(
 		Box::new(BasicAuthMiddleware::new(
 			Box::new(peers_connected_handler),
 			&api_basic_auth,
+			&realm,
 		)),
 	)?;
 	router.add_route(
@@ -1059,6 +1073,7 @@ pub fn build_router(
 		Box::new(BasicAuthMiddleware::new(
 			Box::new(peer_handler),
 			&api_basic_auth,
+			&realm,
 		)),
 	)?;
 	Ok(router)

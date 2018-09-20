@@ -21,14 +21,17 @@ use router::{Handler, HandlerObj, ResponseFuture};
 pub struct BasicAuthMiddleware {
 	next: HandlerObj,
 	api_basic_auth: String,
+	basic_realm: String,
 }
 
 impl BasicAuthMiddleware {
-	pub fn new(next: HandlerObj, api_basic_auth_ref: &str) -> BasicAuthMiddleware {
+	pub fn new(next: HandlerObj, api_basic_auth_ref: &str, realm_ref: &str) -> BasicAuthMiddleware {
 		let api_basic_auth = api_basic_auth_ref.to_owned();
+		let basic_realm = "Basic realm=\"".to_owned() + realm_ref + "\"";
 		BasicAuthMiddleware {
 			next,
 			api_basic_auth,
+			basic_realm,
 		}
 	}
 }
@@ -44,17 +47,17 @@ impl Handler for BasicAuthMiddleware {
 			}
 		} else {
 			// Unauthorized 401
-			unauthorized_response()
+			unauthorized_response(&self.basic_realm)
 		}
 	}
 }
 
-fn unauthorized_response() -> ResponseFuture {
+fn unauthorized_response(basic_realm: &str) -> ResponseFuture {
 	let response = Response::builder()
 		.status(StatusCode::UNAUTHORIZED)
 		.header(
 			WWW_AUTHENTICATE,
-			HeaderValue::from_static("Basic realm=\"GrinAPI\""),
+			HeaderValue::from_str(basic_realm).unwrap(),
 		).body(Body::empty())
 		.unwrap();
 	Box::new(ok(response))

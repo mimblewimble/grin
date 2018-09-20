@@ -19,6 +19,7 @@ use std::path::Path;
 use std::path::MAIN_SEPARATOR;
 
 use blake2;
+use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 
 use core::global::ChainTypes;
@@ -39,6 +40,8 @@ pub struct WalletConfig {
 	pub api_listen_interface: String,
 	// The port this wallet will run on
 	pub api_listen_port: u16,
+	/// Secret for basic auth on the owner rest API
+	pub owner_api_secret: String,
 	// The api address of a running server node against which transaction inputs
 	// will be checked during send
 	pub check_node_api_http_addr: String,
@@ -52,6 +55,7 @@ impl Default for WalletConfig {
 			chain_type: Some(ChainTypes::Testnet3),
 			api_listen_interface: "127.0.0.1".to_string(),
 			api_listen_port: 13415,
+			owner_api_secret: thread_rng().sample_iter(&Alphanumeric).take(20).collect(),
 			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
 			data_file_dir: ".".to_string(),
 		}

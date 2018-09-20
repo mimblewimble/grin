@@ -143,7 +143,11 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					});
 			}
 			("owner_api", Some(_api_args)) => {
-				controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
+				controller::owner_listener(
+					wallet,
+					"127.0.0.1:13420",
+					&wallet_config.owner_api_secret,
+				).unwrap_or_else(|e| {
 					panic!(
 						"Error creating wallet api listener: {:?} Config: {:?}",
 						e, wallet_config
@@ -153,7 +157,11 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 			("web", Some(_api_args)) => {
 				// start owner listener and run static file server
 				start_webwallet_server();
-				controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
+				controller::owner_listener(
+					wallet,
+					"127.0.0.1:13420",
+					&wallet_config.owner_api_secret,
+				).unwrap_or_else(|e| {
 					panic!(
 						"Error creating wallet api listener: {:?} Config: {:?}",
 						e, wallet_config
