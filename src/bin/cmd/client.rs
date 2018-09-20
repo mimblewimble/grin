@@ -22,6 +22,7 @@ use config::GlobalConfig;
 use p2p;
 use servers::ServerConfig;
 use term;
+use util;
 
 pub fn client_command(client_args: &ArgMatches, global_config: GlobalConfig) {
 	// just get defaults from the global config
@@ -107,7 +108,16 @@ pub fn unban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
 		config.api_http_addr,
 		peer_addr.to_string()
 	);
-	match api::client::post_no_ret(url.as_str(), &params).map_err(|e| Error::API(e)) {
+	let res: Result<(), api::Error>;
+	if config.api_basic_auth.is_some() && config.api_basic_auth.unwrap() {
+		let api_basic_auth =
+			"Basic ".to_string() + &util::to_base64(&("grin:".to_string() + &config.api_secret));
+		res = api::client::post_basic_auth_no_ret(url.as_str(), &params, &api_basic_auth);
+	} else {
+		res = api::client::post_no_ret(url.as_str(), &params);
+	}
+
+	match res.map_err(|e| Error::API(e)) {
 		Ok(_) => writeln!(e, "Successfully unbanned peer {}", peer_addr).unwrap(),
 		Err(_) => writeln!(e, "Failed to unban peer {}", peer_addr).unwrap(),
 	};
@@ -117,7 +127,16 @@ pub fn unban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
 pub fn list_connected_peers(config: &ServerConfig) {
 	let mut e = term::stdout().unwrap();
 	let url = format!("http://{}/v1/peers/connected", config.api_http_addr);
-	match api::client::get::<Vec<p2p::PeerInfo>>(url.as_str()).map_err(|e| Error::API(e)) {
+	let peers_info: Result<Vec<p2p::PeerInfo>, api::Error>;
+	if config.api_basic_auth.is_some() && config.api_basic_auth.unwrap() {
+		let api_basic_auth =
+			"Basic ".to_string() + &util::to_base64(&("grin:".to_string() + &config.api_secret));
+		peers_info =
+			api::client::get_basic_auth::<Vec<p2p::PeerInfo>>(url.as_str(), &api_basic_auth);
+	} else {
+		peers_info = api::client::get::<Vec<p2p::PeerInfo>>(url.as_str());
+	}
+	match peers_info.map_err(|e| Error::API(e)) {
 		Ok(connected_peers) => {
 			let mut index = 0;
 			for connected_peer in connected_peers {
@@ -139,7 +158,14 @@ pub fn list_connected_peers(config: &ServerConfig) {
 
 fn get_status_from_node(config: &ServerConfig) -> Result<api::Status, Error> {
 	let url = format!("http://{}/v1/status", config.api_http_addr);
-	api::client::get::<api::Status>(url.as_str()).map_err(|e| Error::API(e))
+	if config.api_basic_auth.is_some() && config.api_basic_auth.unwrap() {
+		let api_basic_auth =
+			"Basic ".to_string() + &util::to_base64(&("grin:".to_string() + &config.api_secret));
+		api::client::get_basic_auth::<api::Status>(url.as_str(), &api_basic_auth)
+			.map_err(|e| Error::API(e))
+	} else {
+		api::client::get::<api::Status>(url.as_str()).map_err(|e| Error::API(e))
+	}
 }
 
 /// Error type wrapping underlying module errors.

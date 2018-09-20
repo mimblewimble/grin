@@ -39,9 +39,9 @@ where
 	handle_request(build_request(url, "GET", None)?)
 }
 
-/// Helper function to easily issue a HTTP GET request against a given URL that
-/// returns a JSON object. Handles request building, JSON deserialization and
-/// response code checking.
+/// Helper function to easily issue a HTTP GET request with basic auth against a
+/// given URL that returns a JSON object. Handles request building, JSON
+/// deserialization and response code checking.
 pub fn get_basic_auth<'a, T>(url: &'a str, basic_auth: &'a str) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de>,
@@ -100,6 +100,18 @@ where
 	IN: Serialize,
 {
 	let req = create_post_request(url, input)?;
+	send_request(req)?;
+	Ok(())
+}
+
+/// Helper function to easily issue a HTTP POST request with basic auth and with
+/// the provided JSON object as body on a given URL that returns nothing.
+/// Handles request building, JSON serialization, and response code checking.
+pub fn post_basic_auth_no_ret<IN>(url: &str, input: &IN, basic_auth: &str) -> Result<(), Error>
+where
+	IN: Serialize,
+{
+	let req = create_post_basic_auth_request(url, input, basic_auth)?;
 	send_request(req)?;
 	Ok(())
 }
@@ -172,6 +184,20 @@ where
 		"Could not serialize data to JSON".to_owned(),
 	))?;
 	build_request(url, "POST", Some(json))
+}
+
+fn create_post_basic_auth_request<IN>(
+	url: &str,
+	input: &IN,
+	basic_auth: &str,
+) -> Result<Request<Body>, Error>
+where
+	IN: Serialize,
+{
+	let json = serde_json::to_string(input).context(ErrorKind::Internal(
+		"Could not serialize data to JSON".to_owned(),
+	))?;
+	build_request_basic_auth(url, "POST", basic_auth, Some(json))
 }
 
 fn handle_request<T>(req: Request<Body>) -> Result<T, Error>
