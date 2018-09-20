@@ -25,6 +25,7 @@ use hyper::{Body, Request, Response, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
+use auth::BasicAuthMiddleware;
 use chain;
 use core::core::hash::{Hash, Hashed};
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
@@ -151,8 +152,7 @@ impl OutputHandler {
 			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
 			.map(|output| {
 				OutputPrintable::from_output(output, w(&self.chain), Some(&header), include_proof)
-			})
-			.collect();
+			}).collect();
 
 		Ok(BlockOutputs {
 			header: BlockHeaderInfo::from_header(&header),
@@ -740,12 +740,10 @@ impl PoolPushHandler {
 				.and_then(move |wrapper: TxWrapper| {
 					util::from_hex(wrapper.tx_hex)
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
-				})
-				.and_then(move |tx_bin| {
+				}).and_then(move |tx_bin| {
 					ser::deserialize(&mut &tx_bin[..])
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
-				})
-				.and_then(move |tx: Transaction| {
+				}).and_then(move |tx: Transaction| {
 					let source = pool::TxSource {
 						debug_name: "push-api".to_string(),
 						identifier: "?.?.?.?".to_string(),
@@ -855,13 +853,15 @@ pub fn start_rest_apis(
 	chain: Weak<chain::Chain>,
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
+	api_secret: String,
 ) {
 	let _ = thread::Builder::new()
 		.name("apis".to_string())
 		.spawn(move || {
 			let mut apis = ApiServer::new();
 
-			let router = build_router(chain, tx_pool, peers).expect("unable to build API router");
+			let router = build_router(chain, tx_pool, peers, &api_secret)
+				.expect("unable to build API router");
 
 			info!(LOGGER, "Starting HTTP API server at {}.", addr);
 			let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
@@ -892,6 +892,7 @@ pub fn build_router(
 	chain: Weak<chain::Chain>,
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
+	api_secret: &str,
 ) -> Result<Router, RouterError> {
 	let route_list = vec![
 		"get blocks".to_string(),
@@ -958,23 +959,107 @@ pub fn build_router(
 	};
 
 	let mut router = Router::new();
-	// example how we can use midlleware
+
+	let api_basic_auth =
+		"Basic ".to_string() + &util::to_base64(&("grin:".to_string() + api_secret));
+
 	router.add_route(
 		"/v1/",
-		Box::new(LoggingMiddleware::new(Box::new(index_handler))),
+		Box::new(BasicAuthMiddleware::new(
+			Box::new(index_handler),
+			&api_basic_auth,
+		)),
 	)?;
-	router.add_route("/v1/blocks/*", Box::new(block_handler))?;
-	router.add_route("/v1/headers/*", Box::new(header_handler))?;
-	router.add_route("/v1/chain", Box::new(chain_tip_handler))?;
-	router.add_route("/v1/chain/outputs/*", Box::new(output_handler))?;
-	router.add_route("/v1/chain/compact", Box::new(chain_compact_handler))?;
-	router.add_route("/v1/chain/validate", Box::new(chain_validation_handler))?;
-	router.add_route("/v1/txhashset/*", Box::new(txhashset_handler))?;
-	router.add_route("/v1/status", Box::new(status_handler))?;
-	router.add_route("/v1/pool", Box::new(pool_info_handler))?;
-	router.add_route("/v1/pool/push", Box::new(pool_push_handler))?;
-	router.add_route("/v1/peers/all", Box::new(peers_all_handler))?;
-	router.add_route("/v1/peers/connected", Box::new(peers_connected_handler))?;
-	router.add_route("/v1/peers/**", Box::new(peer_handler))?;
+	router.add_route(
+		"/v1/blocks/*",
+		Box::new(BasicAuthMiddleware::new(
+			Box::new(block_handler),
+			&api_basic_auth,
+		)),
+	)?;
+	router.add_route(
+		"/v1/headers/*",
+		Box::new(BasicAuthMiddleware::new(
+			Box::new(header_handler),
+			&api_basic_auth,
+		)),
+	)?;
+	router.add_route(
+		"/v1/chain",
+		Box::new(BasicAuthMiddleware::new(
+			Box::new(chain_tip_handler),
+			&api_basic_auth,
+		)),
+	)?;
+	router.add_route(
+		"/v1/chain/outputs/*",
+		Box::new(BasicAuthMiddleware::new(
+			Box::new(output_handler),
+			&api_basic_auth,
+		)),
+	)?;
+	router.add_route(
+		"/v1/chain/compact",
+		Box::new(BasicAuthMiddleware::new(
+			Box::new(chain_compact_handler),
+			&api_basic_auth,
+		)),
+	)?;
+	router.add_route(
+		"/v1/chain/validate",
+		Box::new(BasicAuthMiddleware::new(
+			Box::new(chain_validation_handler),
+			&api_basic_auth,
+		)),
+	)?;
+	router.add_route(
+		"/v1/txhashset/*",
+		Box::new(BasicAuthMiddleware::new(
+			Box::new(txhashset_handler),
+			&api_basic_auth,
+		)),
+	)?;
+	router.add_route(
+		"/v1/status",
+		Box::new(BasicAuthMiddleware::new(
+			Box::new(status_handler),
+			&api_basic_auth,
+		)),
+	)?;
+	router.add_route(
+		"/v1/pool",
+		Box::new(BasicAuthMiddleware::new(
+			Box::new(pool_info_handler),
+			&api_basic_auth,
+		)),
+	)?;
+	router.add_route(
+		"/v1/pool/push",
+		Box::new(BasicAuthMiddleware::new(
+			Box::new(pool_push_handler),
+			&api_basic_auth,
+		)),
+	)?;
+	router.add_route(
+		"/v1/peers/all",
+		Box::new(BasicAuthMiddleware::new(
+			Box::new(peers_all_handler),
+			&api_basic_auth,
+		)),
+	)?;
+	router.add_route(
+		"/v1/peers/connected",
+		Box::new(BasicAuthMiddleware::new(
+			Box::new(peers_connected_handler),
+			&api_basic_auth,
+		)),
+	)?;
+	router.add_route(
+		"/v1/peers/**",
+		Box::new(BasicAuthMiddleware::new(
+			Box::new(peer_handler),
+			&api_basic_auth,
+		)),
+	)?;
 	Ok(router)
 }

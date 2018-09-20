@@ -38,6 +38,7 @@ extern crate http;
 extern crate tokio;
 extern crate tokio_core;
 
+mod auth;
 pub mod client;
 mod handlers;
 mod rest;
