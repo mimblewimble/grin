@@ -732,17 +732,20 @@ impl PoolToChainAdapter {
 
 impl pool::BlockChain for PoolToChainAdapter {
 	fn chain_head(&self) -> Result<BlockHeader, pool::PoolError> {
-		wo(&self.chain).head_header()
+		wo(&self.chain)
+			.head_header()
 			.map_err(|_| pool::PoolError::Other(format!("failed to get head_header")))
 	}
 
 	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, pool::PoolError> {
-		wo(&self.chain).get_block_header(hash)
+		wo(&self.chain)
+			.get_block_header(hash)
 			.map_err(|_| pool::PoolError::Other(format!("failed to get block_header")))
 	}
 
 	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, pool::PoolError> {
-		wo(&self.chain).get_block_sums(hash)
+		wo(&self.chain)
+			.get_block_sums(hash)
 			.map_err(|_| pool::PoolError::Other(format!("failed to get block_sums")))
 	}
 

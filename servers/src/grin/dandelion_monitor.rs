@@ -93,10 +93,15 @@ fn process_stem_phase(
 	let header = tx_pool.blockchain.chain_head()?;
 
 	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
-	let stem_txs = tx_pool.stempool.get_transactions_in_state(PoolEntryState::ToStem);
-	let stem_txs = tx_pool.stempool
+	let stem_txs = tx_pool
+		.stempool
+		.get_transactions_in_state(PoolEntryState::ToStem);
+	let stem_txs = tx_pool
+		.stempool
 		.select_valid_transactions(stem_txs, txpool_tx, &header)?;
-	tx_pool.stempool.transition_to_state(&stem_txs, PoolEntryState::Stemmed);
+	tx_pool
+		.stempool
+		.transition_to_state(&stem_txs, PoolEntryState::Stemmed);
 
 	if stem_txs.len() > 0 {
 		debug!(
@@ -134,10 +139,15 @@ fn process_fluff_phase(
 	let header = tx_pool.blockchain.chain_head()?;
 
 	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
-	let stem_txs = tx_pool.stempool.get_transactions_in_state(PoolEntryState::ToFluff);
-	let stem_txs = tx_pool.stempool
+	let stem_txs = tx_pool
+		.stempool
+		.get_transactions_in_state(PoolEntryState::ToFluff);
+	let stem_txs = tx_pool
+		.stempool
 		.select_valid_transactions(stem_txs, txpool_tx, &header)?;
-	tx_pool.stempool.transition_to_state(&stem_txs, PoolEntryState::Fluffed);
+	tx_pool
+		.stempool
+		.transition_to_state(&stem_txs, PoolEntryState::Fluffed);
 
 	if stem_txs.len() > 0 {
 		debug!(

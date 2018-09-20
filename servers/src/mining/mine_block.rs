@@ -110,7 +110,11 @@ fn build_block(
 
 	// extract current transaction from the pool
 	// TODO - we have a lot of unwrap() going on in this fn...
-	let txs = tx_pool.read().unwrap().prepare_mineable_transactions().unwrap();
+	let txs = tx_pool
+		.read()
+		.unwrap()
+		.prepare_mineable_transactions()
+		.unwrap();
 
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();

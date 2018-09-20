@@ -175,8 +175,7 @@ impl Pool {
 	}
 
 	pub fn get_transactions_in_state(&self, state: PoolEntryState) -> Vec<Transaction> {
-		self
-			.entries
+		self.entries
 			.iter()
 			.filter(|x| x.state == state)
 			.map(|x| x.tx.clone())
@@ -244,7 +243,11 @@ impl Pool {
 		Ok(())
 	}
 
-	fn validate_raw_tx(&self, tx: &Transaction, header: &BlockHeader) -> Result<BlockSums, PoolError> {
+	fn validate_raw_tx(
+		&self,
+		tx: &Transaction,
+		header: &BlockHeader,
+	) -> Result<BlockSums, PoolError> {
 		let block_sums = self.blockchain.get_block_sums(&header.hash())?;
 		let new_sums = self.apply_tx_to_block_sums(&block_sums, tx, header)?;
 		Ok(new_sums)
@@ -285,7 +288,10 @@ impl Pool {
 		let (utxo_sum, kernel_sum) =
 			(block_sums.clone(), tx as &Committed).verify_kernel_sums(overage, offset)?;
 
-		Ok(BlockSums { utxo_sum, kernel_sum })
+		Ok(BlockSums {
+			utxo_sum,
+			kernel_sum,
+		})
 	}
 
 	pub fn reconcile(

@@ -14,22 +14,22 @@
 
 use rand::thread_rng;
 use std::cmp::min;
+use std::ops::Add;
 /// Keychain trait and its main supporting types. The Identifier is a
 /// semi-opaque structure (just bytes) to track keys within the Keychain.
 /// BlindingFactor is a useful wrapper around a private key to help with
 /// commitment generation.
 use std::{error, fmt};
-use std::ops::Add;
 
 use blake2::blake2b::blake2b;
 use serde::{de, ser};
 
 use util;
-use util::static_secp_instance;
 use util::secp::constants::SECRET_KEY_SIZE;
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::Commitment;
 use util::secp::{self, Message, Secp256k1, Signature};
+use util::static_secp_instance;
 
 // Size of an identifier in bytes
 pub const IDENTIFIER_SIZE: usize = 10;

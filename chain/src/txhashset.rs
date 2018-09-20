@@ -29,9 +29,7 @@ use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::pmmr::{self, PMMR};
-use core::core::{
-	Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel,
-};
+use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
 
