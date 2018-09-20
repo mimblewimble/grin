@@ -674,7 +674,9 @@ impl<'a> Extension<'a> {
 		// and we should have inserted to both in exactly the same pos.
 		{
 			if self.output_pmmr.unpruned_size() != self.rproof_pmmr.unpruned_size() {
-				return Err(ErrorKind::Other(format!("output vs rproof MMRs different sizes")).into());
+				return Err(
+					ErrorKind::Other(format!("output vs rproof MMRs different sizes")).into(),
+				);
 			}
 
 			if output_pos != rproof_pos {

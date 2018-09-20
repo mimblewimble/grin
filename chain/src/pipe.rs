@@ -520,7 +520,9 @@ fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Er
 		// Now that we have block_sums the total_kernel_sum on the block_header is redundant.
 		let prev = ext.batch.get_block_header(&b.header.previous)?;
 		if prev.total_kernel_sum != block_sums.kernel_sum {
-			return Err(ErrorKind::Other(format!("total_kernel_sum in header does not match")).into());
+			return Err(
+				ErrorKind::Other(format!("total_kernel_sum in header does not match")).into(),
+			);
 		}
 	}
 
