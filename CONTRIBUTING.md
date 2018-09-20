@@ -19,15 +19,15 @@ If any help is needed during your effort to contribute on this project, please d
 
 # Pull-Request Name Prefix
 
-Please consider putting one of the following prefix in the name of your pull-request:
+Please consider putting one of the following prefixes in the title of your pull-request:
 - **feat**:     A new feature
 - **fix**:      A bug fix
 - **docs**:     Documentation only changes
-- **style**:    White-space, formatting, missing semi-colons, etc
+- **style**:    Formatting, missing semi-colons, white-space, etc
 - **refactor**: A code change that neither fixes a bug nor adds a feature
 - **perf**:     A code change that improves performance
 - **test**:     Adding missing tests
-- **chore**:    Changes to the build process or auxiliary tools/libraries/documentation
+- **chore**:    Maintain. Changes to the build process or auxiliary tools/libraries/documentation
 
 For example: `fix: a panick on xxx when grin exiting`. Please don't worry if you can't find a suitable prefix, this's just optional, not mandatory.
 

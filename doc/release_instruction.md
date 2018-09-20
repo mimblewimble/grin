@@ -73,15 +73,15 @@ For more details, please run `github_changelog_generator --help`, or check its g
 
 ### Rules of Pull-Request
 
-And regarding to merged **pull-requests**, it will be put into group "all merged pull-requests". And it's strongly recommendded that each pull-request give a commit message with prefix:
+And regarding to merged **pull-requests**, it will be put into group "all merged pull-requests". And it's strongly recommended that each pull-request give a commit message with prefix:
 - **feat**:     A new feature
 - **fix**:      A bug fix
 - **docs**:     Documentation only changes
-- **style**:    White-space, formatting, missing semi-colons, etc
+- **style**:    Formatting, missing semi-colons, white-space, etc
 - **refactor**: A code change that neither fixes a bug nor adds a feature
 - **perf**:     A code change that improves performance
 - **test**:     Adding missing tests
-- **chore**:    Changes to the build process or auxiliary tools/libraries/documentation
+- **chore**:    Maintain. Changes to the build process or auxiliary tools/libraries/documentation
 
 These prefix are part of [Angular.js commit message conventions](https://docs.google.com/document/d/1QrDFcIiPjSLDn3EL15IJygNPiHORgU1_OOAqWjiDU5Y/edit?pref=2&pli=1#heading=h.uyo6cb12dt6w), and you can take a look at the practice in [Angular.js github project](https://github.com/angular/angular.js/commits/master).
 
