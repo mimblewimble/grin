@@ -22,6 +22,7 @@
 #![warn(missing_docs)]
 
 extern crate backtrace;
+extern crate base64;
 extern crate byteorder;
 extern crate rand;
 #[macro_use]
@@ -116,4 +117,9 @@ pub fn kernel_sig_msg(fee: u64, lock_height: u64) -> [u8; 32] {
 	BigEndian::write_u64(&mut bytes[16..24], fee);
 	BigEndian::write_u64(&mut bytes[24..], lock_height);
 	bytes
+}
+
+/// Encode an utf8 string to a base64 string
+pub fn to_base64(s: &str) -> String {
+	base64::encode(s)
 }

@@ -7,6 +7,7 @@ publish = false
 
 [dependencies]
 backtrace = "0.3"
+base64 = "0.9"
 byteorder = "1"
 lazy_static = "1"
 rand = "0.5"
