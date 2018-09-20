@@ -26,7 +26,7 @@ use lmdb;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{Block, BlockHeader, Output, OutputIdentifier, Transaction, TxKernel};
+use core::core::{Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
 use core::pow::Difficulty;
 use error::{Error, ErrorKind};
@@ -616,16 +616,15 @@ impl Chain {
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
 
-		// Validate against a read-only extension first.
-		// The kernel history validation requires a read-only extension
+		// Validate kernel history against a readonly extension first.
+		// Kernel history validation requires a readonly extension
 		// due to the internal rewind behavior.
 		debug!(
 			LOGGER,
-			"chain: txhashset_write: rewinding and validating (read-only)"
+			"chain: txhashset_write: rewinding and validating kernel history (readonly)"
 		);
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.rewind(&header)?;
-			extension.validate(&header, false, status)?;
 
 			// Now validate kernel sums at each historical header height
 			// so we know we can trust the kernel history.
@@ -642,6 +641,26 @@ impl Chain {
 		let mut batch = self.store.batch()?;
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			extension.rewind(&header)?;
+
+			// Validate the extension, generating the utxo_sum and kernel_sum.
+			let (utxo_sum, kernel_sum) = extension.validate(&header, false, status)?;
+
+			// Now that we have block_sums the total_kernel_sum on the block_header is redundant.
+			if header.total_kernel_sum != kernel_sum {
+				return Err(
+					ErrorKind::Other(format!("total_kernel_sum in header does not match")).into(),
+				);
+			}
+
+			// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
+			extension.batch.save_block_sums(
+				&header.hash(),
+				&BlockSums {
+					utxo_sum,
+					kernel_sum,
+				},
+			)?;
+
 			extension.rebuild_index()?;
 			Ok(())
 		})?;
@@ -739,6 +758,7 @@ impl Chain {
 					count += 1;
 					batch.delete_block(&b.hash())?;
 					batch.delete_block_input_bitmap(&b.hash())?;
+					batch.delete_block_sums(&b.hash())?;
 				}
 				Err(NotFoundErr(_)) => {
 					break;
@@ -963,6 +983,33 @@ fn setup_head(
 				let res = txhashset::extending(txhashset, &mut batch, |extension| {
 					extension.rewind(&header)?;
 					extension.validate_roots(&header)?;
+
+					// now check we have the "block sums" for the block in question
+					// if we have no sums (migrating an existing node) we need to go
+					// back to the txhashset and sum the outputs and kernels
+					if header.height > 0 && extension.batch.get_block_sums(&header.hash()).is_err()
+					{
+						debug!(
+							LOGGER,
+							"chain: init: building (missing) block sums for {} @ {}",
+							header.height,
+							header.hash()
+						);
+
+						// Do a full (and slow) validation of the txhashset extension
+						// to calculate the utxo_sum and kernel_sum at this block height.
+						let (utxo_sum, kernel_sum) = extension.validate_kernel_sums(&header)?;
+
+						// Save the block_sums to the db for use later.
+						extension.batch.save_block_sums(
+							&header.hash(),
+							&BlockSums {
+								utxo_sum,
+								kernel_sum,
+							},
+						)?;
+					}
+
 					debug!(
 						LOGGER,
 						"chain: init: rewinding and validating before we start... {} at {}",
@@ -992,6 +1039,12 @@ fn setup_head(
 			batch.setup_height(&genesis.header, &tip)?;
 			txhashset::extending(txhashset, &mut batch, |extension| {
 				extension.apply_block(&genesis)?;
+
+				// Save the block_sums to the db for use later.
+				extension
+					.batch
+					.save_block_sums(&genesis.hash(), &BlockSums::default())?;
+
 				Ok(())
 			})?;
 

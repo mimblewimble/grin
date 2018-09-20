@@ -482,9 +482,6 @@ impl<'a> Extension<'a> {
 			match self.apply_output(output) {
 				Ok(pos) => {
 					self.batch.save_output_pos(&output.commitment(), pos)?;
-					// We will rollback the batch later, but assert it works
-					// as we expect while we have it open.
-					assert_eq!(self.batch.get_output_pos(&output.commitment()), Ok(pos));
 				}
 				Err(e) => {
 					self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
@@ -675,11 +672,17 @@ impl<'a> Extension<'a> {
 
 		// The output and rproof MMRs should be exactly the same size
 		// and we should have inserted to both in exactly the same pos.
-		assert_eq!(
-			self.output_pmmr.unpruned_size(),
-			self.rproof_pmmr.unpruned_size()
-		);
-		assert_eq!(output_pos, rproof_pos);
+		{
+			if self.output_pmmr.unpruned_size() != self.rproof_pmmr.unpruned_size() {
+				return Err(
+					ErrorKind::Other(format!("output vs rproof MMRs different sizes")).into(),
+				);
+			}
+
+			if output_pos != rproof_pos {
+				return Err(ErrorKind::Other(format!("output vs rproof MMRs different pos")).into());
+			}
+		}
 
 		Ok(output_pos)
 	}
@@ -868,6 +871,19 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	/// Validate full kernel sums against the provided header (for overage and kernel_offset).
+	/// This is an expensive operation as we need to retrieve all the UTXOs and kernels
+	/// from the respective MMRs.
+	/// For a significantly faster way of validating full kernel sums see BlockSums.
+	pub fn validate_kernel_sums(
+		&self,
+		header: &BlockHeader,
+	) -> Result<((Commitment, Commitment)), Error> {
+		let (utxo_sum, kernel_sum) =
+			self.verify_kernel_sums(header.total_overage(), header.total_kernel_offset())?;
+		Ok((utxo_sum, kernel_sum))
+	}
+
 	/// Validate the txhashset state against the provided block header.
 	pub fn validate(
 		&mut self,
@@ -886,8 +902,7 @@ impl<'a> Extension<'a> {
 
 		// The real magicking happens here. Sum of kernel excesses should equal
 		// sum of unspent outputs minus total supply.
-		let (output_sum, kernel_sum) =
-			self.verify_kernel_sums(header.total_overage(), header.total_kernel_offset())?;
+		let (output_sum, kernel_sum) = self.validate_kernel_sums(header)?;
 
 		// This is an expensive verification step.
 		self.verify_kernel_signatures(status)?;
