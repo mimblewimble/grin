@@ -60,7 +60,7 @@ script:
   - if [[ "$TEST_DIR" != "none" ]]; then cd $TEST_DIR && cargo test --release; fi
 
 before_deploy:
-  - if [[ "$TEST_DIR" == "none" ]]; then ./.auto-release.sh                    fi
+  - if [[ "$TEST_DIR" == "none" ]]; then ./.auto-release.sh;                   fi
 
 deploy:
   provider: releases
