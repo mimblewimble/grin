@@ -137,8 +137,7 @@ impl Router {
 			.find(|&id| {
 				let node_key = self.node(*id).key;
 				node_key == key || node_key == *WILDCARD_HASH || node_key == *WILDCARD_STOP_HASH
-			})
-			.cloned()
+			}).cloned()
 	}
 
 	fn add_empty_node(&mut self, parent: NodeId, key: u64) -> NodeId {
