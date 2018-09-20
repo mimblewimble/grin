@@ -645,9 +645,9 @@ impl Chain {
 			// Validate the extension, generating the utxo_sum and kernel_sum.
 			let (utxo_sum, kernel_sum) = extension.validate(&header, false, status)?;
 
-			{
-				// Now that we have block_sums the total_kernel_sum on the block_header is redundant.
-				assert_eq!(header.total_kernel_sum, kernel_sum);
+			// Now that we have block_sums the total_kernel_sum on the block_header is redundant.
+			if header.total_kernel_sum != kernel_sum {
+				return Err(ErrorKind::Other(format!("total_kernel_sum in header does not match")).into());
 			}
 
 			// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
