@@ -44,7 +44,8 @@ pub fn compress(src_dir: &Path, dst_file: &File) -> ZipResult<()> {
 
 	for dent in it.filter_map(|e| e.ok()) {
 		let path = dent.path();
-		let name = path.strip_prefix(Path::new(src_dir))
+		let name = path
+			.strip_prefix(Path::new(src_dir))
 			.unwrap()
 			.to_str()
 			.unwrap();
