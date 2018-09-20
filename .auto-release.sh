@@ -65,3 +65,4 @@ jq -n \
 echo "Create release $version for repo: $repo_slug, branch: $branch"
 curl -H "Authorization: token $token" --data @CHANGELOG.md "https://api.github.com/repos/$repo_slug/releases"
 echo "auto changelog uploaded.\n"
+
