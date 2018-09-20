@@ -114,6 +114,9 @@ pub struct ServerConfig {
 	/// Network address for the Rest API HTTP server.
 	pub api_http_addr: String,
 
+	/// Whether to enable basic access authentication on API
+	pub api_basic_auth: Option<bool>,
+
 	/// Secret for basic auth on Rest API HTTP server.
 	pub api_secret: String,
 
@@ -192,6 +195,7 @@ impl Default for ServerConfig {
 		ServerConfig {
 			db_root: "grin_chain".to_string(),
 			api_http_addr: "127.0.0.1:13413".to_string(),
+			api_basic_auth: Some(true),
 			api_secret: thread_rng().sample_iter(&Alphanumeric).take(20).collect(),
 			p2p_config: p2p::P2PConfig::default(),
 			dandelion_config: pool::DandelionConfig::default(),

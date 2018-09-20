@@ -261,6 +261,7 @@ impl Server {
 			Arc::downgrade(&shared_chain),
 			Arc::downgrade(&tx_pool),
 			Arc::downgrade(&p2p_server.peers),
+			config.api_basic_auth.unwrap(),
 			config.api_secret.clone(),
 		);
 

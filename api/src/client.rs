@@ -16,7 +16,7 @@
 
 use failure::{Fail, ResultExt};
 use http::uri::{InvalidUri, Uri};
-use hyper::header::{ACCEPT, USER_AGENT};
+use hyper::header::{ACCEPT, AUTHORIZATION, USER_AGENT};
 use hyper::rt::{Future, Stream};
 use hyper::{Body, Client, Request};
 use serde::{Deserialize, Serialize};
@@ -37,6 +37,16 @@ where
 	for<'de> T: Deserialize<'de>,
 {
 	handle_request(build_request(url, "GET", None)?)
+}
+
+/// Helper function to easily issue a HTTP GET request against a given URL that
+/// returns a JSON object. Handles request building, JSON deserialization and
+/// response code checking.
+pub fn get_basic_auth<'a, T>(url: &'a str, basic_auth: &'a str) -> Result<T, Error>
+where
+	for<'de> T: Deserialize<'de>,
+{
+	handle_request(build_request_basic_auth(url, "GET", basic_auth, None)?)
 }
 
 /// Helper function to easily issue an async HTTP GET request against a given
@@ -120,6 +130,30 @@ fn build_request<'a>(
 	Request::builder()
 		.method(method)
 		.uri(uri)
+		.header(USER_AGENT, "grin-client")
+		.header(ACCEPT, "application/json")
+		.body(match body {
+			None => Body::empty(),
+			Some(json) => json.into(),
+		}).map_err(|e| {
+			ErrorKind::RequestError(format!("Bad request {} {}: {}", method, url, e)).into()
+		})
+}
+
+fn build_request_basic_auth<'a>(
+	url: &'a str,
+	method: &str,
+	basic_auth: &str,
+	body: Option<String>,
+) -> Result<Request<Body>, Error> {
+	let uri = url.parse::<Uri>().map_err::<Error, _>(|e: InvalidUri| {
+		e.context(ErrorKind::Argument(format!("Invalid url {}", url)))
+			.into()
+	})?;
+	Request::builder()
+		.method(method)
+		.uri(uri)
+		.header(AUTHORIZATION, basic_auth)
 		.header(USER_AGENT, "grin-client")
 		.header(ACCEPT, "application/json")
 		.body(match body {
