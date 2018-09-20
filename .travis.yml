@@ -42,14 +42,25 @@ env:
   - RUST_BACKTRACE="1"
   - RUST_FLAGS="-C debug-assertions"
   matrix:
+  - RUST_TEST_THREADS=1 TEST_DIR=servers
+  - TEST_DIR=store
+  - TEST_DIR=chain
+  - TEST_DIR=pool
+  - TEST_DIR=wallet
+  - TEST_DIR=p2p
+  - TEST_DIR=api
+  - TEST_DIR=keychain
   - TEST_DIR=core
+  - TEST_DIR=util
+  - TEST_DIR=config
+  - TEST_DIR=none
 
 script:
-  - cargo build --release
+  - if [[ "$TEST_DIR" == "none" ]]; then cargo build --release;                fi
+  - if [[ "$TEST_DIR" != "none" ]]; then cd $TEST_DIR && cargo test --release; fi
 
 before_deploy:
-  - "echo 'make a tarball for the release binary...'"
-  - ./.auto-release.sh
+  - if [[ "$TEST_DIR" == "none" ]]; then ./.auto-release.sh                    fi
 
 deploy:
   provider: releases
@@ -57,8 +68,11 @@ deploy:
     secure: Q0wrjfdRoieovGUe3JIcdU6iUM1kbAphVO0plvYt2aO4Y6z2TyJnfmheKBP09DhDcmVf/X6ZuRqSViaC5xuI01YF/9wwkXuXCcv2jMD8pUy4z08cVOykCe/rmlGp1oT2Ev0QCfo5klRJSFnQREUJiJpWW6/APRMSeh7uFbz9GmWF4bKObVKC+YkeGbN8rC4kPssPnZ1qt2Xbj1myDbgCH8D5yBtSlpI1hQ9iqh3Rrm2hYs6C5tKkoFxDfgGNQdgyJOfLLUCKfKHzdGL715JG+wyM/GNoH9cSug9REekIt6YCxdxanUheUA4ZJ0EZY4MSn7pL1uyJKPycWVnOqzXQM6qP4S1mNyvc6WPLe4fnSCZwGdsSZo1JT0JdomYK+bF7El+gSZoKrurBJnqixWCuU3eVu/qL31G91QSpOqi1jZTJgQwL0GKyvMpNfoEshXoGkYtEu9ByQX4TizIrIqxyKYud7URrFQAWpwDAY/bgSz5zVDkP9EEK3rEIuB/MRMeQi0zmqAEzmZ/Yus1wmHsjkc99Mlpp1ZS3VYbQO20LAsVo2kJF//TJ0aOvyaNkrERv7CL+oSlckqbjogbHlFoe3tGewvDJe0UGECT60YoeinxFGps2JmpyK6FqRXsPjLSl0gTdQp24/Sl5g1eFTpWsjEcaYXfsP6CYkdra3pHdLz4=
   file_glob: true
   file: target/release/grin*.tgz
+  file: target/release/*-md5sum.txt
   skip_cleanup: true
   on:
     repo: garyyu/grin
     tags: true
+    condition: $TEST_DIR = "none"
+
 

@@ -5,11 +5,15 @@ token="$GITHUB_TOKEN"
 
 tagname=`git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD`
 
+echo 'make a tarball for the release binary...\n'
+
 if [[ $TRAVIS_OS_NAME == 'osx' ]]; then
 
     # Do some custom requirements on OS X
     cd target/release ; rm -f *.tgz; tar zcf "grin-$tagname-$TRAVIS_JOB_ID-osx.tgz" grin
     /bin/ls -ls *.tgz  | awk '{print $6,$7,$8,$9,$10}'
+    md5 "grin-$tagname-$TRAVIS_JOB_ID-osx.tgz" > "grin-$tagname-$TRAVIS_JOB_ID-osx.tgz"-md5sum.txt
+    /bin/ls -ls *-md5sum.txt  | awk '{print $6,$7,$8,$9,$10}'
     cd - > /dev/null;
     echo "tarball generated\n"
 
@@ -19,6 +23,8 @@ else
     # Do some custom requirements on Linux
     cd target/release ; rm -f *.tgz; tar zcf "grin-$tagname-$TRAVIS_JOB_ID-linux-amd64.tgz" grin
     /bin/ls -ls *.tgz  | awk '{print $6,$7,$8,$9,$10}'
+    md5sum "grin-$tagname-$TRAVIS_JOB_ID-linux-amd64.tgz" > "grin-$tagname-$TRAVIS_JOB_ID-linux-amd64.tgz"-md5sum.txt
+    /bin/ls -ls *-md5sum.txt  | awk '{print $6,$7,$8,$9,$10}'
     cd - > /dev/null;
     echo "tarball generated\n"
 fi
