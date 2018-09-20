@@ -24,7 +24,7 @@ use util::secp::pedersen::Commitment;
 
 use core::consensus::TargetError;
 use core::core::hash::{Hash, Hashed};
-use core::core::{Block, BlockHeader};
+use core::core::{Block, BlockHeader, BlockSums};
 use core::pow::Difficulty;
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, u64_to_key, Error};
@@ -40,6 +40,7 @@ const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = 'B' as u8;
+const BLOCK_SUMS_PREFIX: u8 = 'M' as u8;
 
 /// All chain-related database operations
 pub struct ChainStore {
@@ -276,7 +277,7 @@ impl<'a> Batch<'a> {
 			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
 	}
 
-	pub fn get_block_header_db(&self, h: &Hash) -> Result<BlockHeader, Error> {
+	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
@@ -294,6 +295,23 @@ impl<'a> Batch<'a> {
 	pub fn delete_block_input_bitmap(&self, bh: &Hash) -> Result<(), Error> {
 		self.db
 			.delete(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
+	}
+
+	pub fn save_block_sums(&self, bh: &Hash, sums: &BlockSums) -> Result<(), Error> {
+		self.db
+			.put_ser(&to_key(BLOCK_SUMS_PREFIX, &mut bh.to_vec())[..], &sums)
+	}
+
+	pub fn get_block_sums(&self, bh: &Hash) -> Result<BlockSums, Error> {
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(BLOCK_SUMS_PREFIX, &mut bh.to_vec())),
+			&format!("Block sums for block: {}", bh),
+		)
+	}
+
+	pub fn delete_block_sums(&self, bh: &Hash) -> Result<(), Error> {
+		self.db.delete(&to_key(BLOCK_SUMS_PREFIX, &mut bh.to_vec()))
 	}
 
 	/// Maintain consistency of the "header_by_height" index by traversing back
