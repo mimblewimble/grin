@@ -20,10 +20,12 @@ The examples of **label of pre-release**:
 - 1.0.0-beta.2
 - 1.0.0-test.5
 
-In Grin, **build metadata** is used as the build number which comes from the Travis-CI job ID of building jobs, it's an unique ID for each building. Here is an example of the build metadata of Grin release version:
+In Grin, **build metadata** is used as the build number which comes from the Travis-CI job ID of building jobs, it's an unique ID for each building. **Note**: for the moment, this metadata is only used in the name of the released binary, and it's auto generated, no need to set it manually.
+
+Here is an example of the build metadata of Grin release version:
 - 0.3.1-430839304
 
-And an example of the whole encoded version string:
+And as the end of this section, here's an example of the whole encoded version string:
 - 0.3.1-pre.1-430839316
 
 ## Release Files (Binaries)
@@ -84,6 +86,15 @@ And regarding to merged **pull-requests**, it will be put into group "all merged
 These prefix are part of [Angular.js commit message conventions](https://docs.google.com/document/d/1QrDFcIiPjSLDn3EL15IJygNPiHORgU1_OOAqWjiDU5Y/edit?pref=2&pli=1#heading=h.uyo6cb12dt6w), and you can take a look at the practice in [Angular.js github project](https://github.com/angular/angular.js/commits/master).
 
 There's no need to fully follow Angular.js commit message conventions. We just need use these prefix in each pull-request's commit message, that's all. Perhaps a simple **pull-request template** can be set as default in Github.
+
+## Release Branches
+
+Each time when Grin release a new version, there's definitely a tag there with same version number. But it's not mandatory to have a **branch** with this version release.
+
+We define the following rules for the **release branch**:
+1. Only **MAJOR.MINOR** version could have a release branch, but also NOT mandatory.
+2. Only when a fix is needed for a **MAJOR.MINOR** version, we create a **release branch** on the name of **MAJOR.MINOR** from the tag of **MAJOR.MINOR.0**, and only one branch for all the fixes on this **MAJOR.MINOR** version.
+3. New version based on this **release branch** must have same **MAJOR.MINOR** version number, only **.PATCH** can be changed.
 
 ## Release Instruction
 
