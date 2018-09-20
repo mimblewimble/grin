@@ -30,7 +30,7 @@ use std::sync::{Arc, RwLock};
 use common::{test_setup, test_source, test_transaction};
 use core::core::hash::Hash;
 use core::core::verifier_cache::LruVerifierCache;
-use core::core::{BlockHeader, Transaction};
+use core::core::{BlockHeader, BlockSums, Transaction};
 use keychain::{ExtKeychain, Keychain};
 use pool::types::{BlockChain, PoolError};
 
@@ -48,12 +48,11 @@ impl BlockChain for CoinbaseMaturityErrorChainAdapter {
 		unimplemented!();
 	}
 
-	fn validate_raw_txs(
-		&self,
-		_txs: Vec<Transaction>,
-		_pre_tx: Option<Transaction>,
-		_block_hash: &Hash,
-	) -> Result<Vec<Transaction>, PoolError> {
+	fn get_block_header(&self, _hash: &Hash) -> Result<BlockHeader, PoolError> {
+		unimplemented!();
+	}
+
+	fn get_block_sums(&self, _hash: &Hash) -> Result<BlockSums, PoolError> {
 		unimplemented!();
 	}
 

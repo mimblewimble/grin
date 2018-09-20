@@ -31,10 +31,9 @@ use std::sync::{Arc, RwLock};
 
 use core::core::hash::Hash;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{BlockHeader, Transaction};
+use core::core::{BlockHeader, BlockSums, Transaction};
 
 use chain::store::ChainStore;
-use chain::txhashset;
 use chain::txhashset::TxHashSet;
 use pool::*;
 
@@ -74,24 +73,16 @@ impl BlockChain for ChainAdapter {
 			.map_err(|_| PoolError::Other(format!("failed to get chain head")))
 	}
 
-	fn validate_raw_txs(
-		&self,
-		txs: Vec<Transaction>,
-		pre_tx: Option<Transaction>,
-		block_hash: &Hash,
-	) -> Result<Vec<Transaction>, PoolError> {
-		let header = self
-			.store
-			.get_block_header(&block_hash)
-			.map_err(|_| PoolError::Other(format!("failed to get header")))?;
+	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, PoolError> {
+		self.store
+			.get_block_header(hash)
+			.map_err(|_| PoolError::Other(format!("failed to get block header")))
+	}
 
-		let mut txhashset = self.txhashset.write().unwrap();
-		let res = txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.rewind(&header)?;
-			let valid_txs = extension.validate_raw_txs(txs, pre_tx)?;
-			Ok(valid_txs)
-		}).map_err(|e| PoolError::Other(format!("Error: test chain adapter: {:?}", e)))?;
-		Ok(res)
+	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, PoolError> {
+		self.store
+			.get_block_sums(hash)
+			.map_err(|_| PoolError::Other(format!("failed to get block sums")))
 	}
 
 	// Mocking this check out for these tests.

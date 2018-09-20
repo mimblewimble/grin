@@ -404,7 +404,7 @@ impl TransactionBody {
 	}
 
 	/// Total fee for a TransactionBody is the sum of fees of all kernels.
-	pub fn fee(&self) -> u64 {
+	fn fee(&self) -> u64 {
 		self.kernels
 			.iter()
 			.fold(0, |acc, ref x| acc.saturating_add(x.fee))
@@ -748,7 +748,8 @@ impl Transaction {
 		self.body.fee()
 	}
 
-	fn overage(&self) -> i64 {
+	/// Total overage across all kernels.
+	pub fn overage(&self) -> i64 {
 		self.body.overage()
 	}
 

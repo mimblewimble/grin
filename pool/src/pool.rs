@@ -23,7 +23,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::id::{ShortId, ShortIdentifiable};
 use core::core::transaction;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{Block, Transaction, TxKernel};
+use core::core::{Block, BlockHeader, BlockSums, Committed, Transaction, TxKernel};
 use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 use util::LOGGER;
 
@@ -111,8 +111,8 @@ impl Pool {
 	/// appropriate to put in a mined block. Aggregates chains of dependent
 	/// transactions, orders by fee over weight and ensures to total weight
 	/// doesn't exceed block limits.
-	pub fn prepare_mineable_transactions(&self) -> Vec<Transaction> {
-		let header = self.blockchain.chain_head().unwrap();
+	pub fn prepare_mineable_transactions(&self) -> Result<Vec<Transaction>, PoolError> {
+		let header = self.blockchain.chain_head()?;
 
 		let tx_buckets = self.bucket_transactions();
 
@@ -135,11 +135,12 @@ impl Pool {
 			weight < MAX_MINEABLE_WEIGHT
 		});
 
-		// make sure those txs are all valid together, no Error is expected
-		// when passing None
-		self.blockchain
-			.validate_raw_txs(flat_txs, None, &header.hash())
-			.expect("should never happen")
+		// Iteratively apply the txs to the current chain state,
+		// rejecting any that do not result in a valid state.
+		// Return a vec of all the valid txs.
+		let mut block_sums = self.blockchain.get_block_sums(&header.hash())?;
+		let txs = self.validate_raw_txs(flat_txs, &header, &mut block_sums)?;
+		Ok(txs)
 	}
 
 	pub fn all_transactions(&self) -> Vec<Transaction> {
@@ -157,34 +158,38 @@ impl Pool {
 	}
 
 	pub fn select_valid_transactions(
-		&mut self,
-		from_state: PoolEntryState,
-		to_state: PoolEntryState,
+		&self,
+		txs: Vec<Transaction>,
 		extra_tx: Option<Transaction>,
-		block_hash: &Hash,
+		header: &BlockHeader,
 	) -> Result<Vec<Transaction>, PoolError> {
-		let entries = &mut self
-			.entries
-			.iter_mut()
-			.filter(|x| x.state == from_state)
-			.collect::<Vec<_>>();
+		let block_sums = if let Some(extra_tx) = extra_tx {
+			self.validate_raw_tx(&extra_tx, header)?
+		} else {
+			self.blockchain.get_block_sums(&header.hash())?
+		};
 
-		let candidate_txs: Vec<Transaction> = entries.iter().map(|x| x.tx.clone()).collect();
-		if candidate_txs.is_empty() {
-			return Ok(vec![]);
-		}
-		let valid_txs = self
-			.blockchain
-			.validate_raw_txs(candidate_txs, extra_tx, block_hash)?;
-
-		// Update state on all entries included in final vec of valid txs.
-		for x in &mut entries.iter_mut() {
-			if valid_txs.contains(&x.tx) {
-				x.state = to_state.clone();
-			}
-		}
+		let valid_txs = self.validate_raw_txs(txs, header, &block_sums)?;
 
 		Ok(valid_txs)
+	}
+
+	pub fn get_transactions_in_state(&self, state: PoolEntryState) -> Vec<Transaction> {
+		self
+			.entries
+			.iter()
+			.filter(|x| x.state == state)
+			.map(|x| x.tx.clone())
+			.collect::<Vec<_>>()
+	}
+
+	// Transition the specified pool entries to the new state.
+	pub fn transition_to_state(&mut self, txs: &Vec<Transaction>, state: PoolEntryState) {
+		for x in self.entries.iter_mut() {
+			if txs.contains(&x.tx) {
+				x.state = state.clone();
+			}
+		}
 	}
 
 	// Aggregate this new tx with all existing txs in the pool.
@@ -208,6 +213,8 @@ impl Pool {
 			block_hash,
 		);
 
+		let header = self.blockchain.get_block_header(&block_hash)?;
+
 		// Combine all the txs from the pool with any extra txs provided.
 		let mut txs = self.all_transactions();
 
@@ -228,10 +235,8 @@ impl Pool {
 			transaction::aggregate(txs, self.verifier_cache.clone())?
 		};
 
-		// Validate aggregated tx against a known chain state (via txhashset
-		// extension).
-		self.blockchain
-			.validate_raw_txs(vec![], Some(agg_tx), block_hash)?;
+		// Validate aggregated tx against a known chain state.
+		self.validate_raw_tx(&agg_tx, &header)?;
 
 		// If we get here successfully then we can safely add the entry to the pool.
 		self.entries.push(entry);
@@ -239,11 +244,57 @@ impl Pool {
 		Ok(())
 	}
 
+	fn validate_raw_tx(&self, tx: &Transaction, header: &BlockHeader) -> Result<BlockSums, PoolError> {
+		let block_sums = self.blockchain.get_block_sums(&header.hash())?;
+		let new_sums = self.apply_tx_to_block_sums(&block_sums, tx, header)?;
+		Ok(new_sums)
+	}
+
+	fn validate_raw_txs(
+		&self,
+		txs: Vec<Transaction>,
+		header: &BlockHeader,
+		block_sums: &BlockSums,
+	) -> Result<Vec<Transaction>, PoolError> {
+		let mut block_sums = block_sums.clone();
+		let mut valid_txs = vec![];
+
+		for tx in txs {
+			if let Ok(new_sums) = self.apply_tx_to_block_sums(&block_sums, &tx, &header) {
+				block_sums = new_sums;
+				valid_txs.push(tx);
+			}
+		}
+
+		Ok(valid_txs)
+	}
+
+	fn apply_tx_to_block_sums(
+		&self,
+		block_sums: &BlockSums,
+		tx: &Transaction,
+		header: &BlockHeader,
+	) -> Result<BlockSums, PoolError> {
+		// Overage is based on the new tx.
+		let overage = tx.overage();
+
+		// Offset is based on offset from header + offset from the new tx.
+		let offset = (header.total_kernel_offset() + tx.offset)?;
+
+		// Verify the kernel sums for the block_sums with the new block applied.
+		let (utxo_sum, kernel_sum) =
+			(block_sums.clone(), tx as &Committed).verify_kernel_sums(overage, offset)?;
+
+		Ok(BlockSums { utxo_sum, kernel_sum })
+	}
+
 	pub fn reconcile(
 		&mut self,
 		extra_tx: Option<Transaction>,
 		block_hash: &Hash,
 	) -> Result<(), PoolError> {
+		let header = self.blockchain.get_block_header(block_hash)?;
+
 		let candidate_txs = self.all_transactions();
 		let existing_len = candidate_txs.len();
 
@@ -253,9 +304,14 @@ impl Pool {
 
 		// Go through the candidate txs and keep everything that validates incrementally
 		// against a known chain state, accounting for the "extra tx" as necessary.
-		let valid_txs = self
-			.blockchain
-			.validate_raw_txs(candidate_txs, extra_tx, block_hash)?;
+		let block_sums = if let Some(extra_tx) = extra_tx {
+			self.validate_raw_tx(&extra_tx, &header)?
+		} else {
+			self.blockchain.get_block_sums(&header.hash())?
+		};
+
+		let valid_txs = self.validate_raw_txs(candidate_txs, &header, &block_sums)?;
+
 		self.entries.retain(|x| valid_txs.contains(&x.tx));
 
 		debug!(

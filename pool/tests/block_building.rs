@@ -129,7 +129,7 @@ fn test_transaction_pool_block_building() {
 
 	let txs = {
 		let read_pool = pool.read().unwrap();
-		read_pool.prepare_mineable_transactions()
+		read_pool.prepare_mineable_transactions().unwrap()
 	};
 	// children should have been aggregated into parents
 	assert_eq!(txs.len(), 3);

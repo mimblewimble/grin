@@ -450,28 +450,6 @@ impl Chain {
 		Ok(bh.height + 1)
 	}
 
-	/// Validate a vec of "raw" transactions against a known chain state
-	/// at the block with the specified block hash.
-	/// Specifying a "pre_tx" if we need to adjust the state, for example when
-	/// validating the txs in the stempool we adjust the state based on the
-	/// txpool.
-	pub fn validate_raw_txs(
-		&self,
-		txs: Vec<Transaction>,
-		pre_tx: Option<Transaction>,
-		block_hash: &Hash,
-	) -> Result<Vec<Transaction>, Error> {
-		// Get header so we can rewind chain state correctly.
-		let header = self.store.get_block_header(block_hash)?;
-
-		let mut txhashset = self.txhashset.write().unwrap();
-		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.rewind(&header)?;
-			let valid_txs = extension.validate_raw_txs(txs, pre_tx)?;
-			Ok(valid_txs)
-		})
-	}
-
 	/// Verify we are not attempting to spend a coinbase output
 	/// that has not yet sufficiently matured.
 	pub fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), Error> {
@@ -874,6 +852,13 @@ impl Chain {
 		self.store
 			.get_block_header(h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get header".to_owned()).into())
+	}
+
+	/// Get block_sums by header hash.
+	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
+		self.store
+			.get_block_sums(h)
+			.map_err(|e| ErrorKind::StoreErr(e, "chain get block_sums".to_owned()).into())
 	}
 
 	/// Gets the block header at the provided height

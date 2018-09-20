@@ -27,7 +27,7 @@ use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStat
 use core::core::hash::{Hash, Hashed};
 use core::core::transaction::Transaction;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{BlockHeader, CompactBlock};
+use core::core::{BlockHeader, BlockSums, CompactBlock};
 use core::pow::Difficulty;
 use core::{core, global};
 use p2p;
@@ -732,25 +732,18 @@ impl PoolToChainAdapter {
 
 impl pool::BlockChain for PoolToChainAdapter {
 	fn chain_head(&self) -> Result<BlockHeader, pool::PoolError> {
-		wo(&self.chain).head_header().map_err(|e| {
-			pool::PoolError::Other(format!(
-				"Chain adapter failed to retrieve chain head: {:?}",
-				e
-			))
-		})
+		wo(&self.chain).head_header()
+			.map_err(|_| pool::PoolError::Other(format!("failed to get head_header")))
 	}
 
-	fn validate_raw_txs(
-		&self,
-		txs: Vec<Transaction>,
-		pre_tx: Option<Transaction>,
-		block_hash: &Hash,
-	) -> Result<(Vec<Transaction>), pool::PoolError> {
-		wo(&self.chain)
-			.validate_raw_txs(txs, pre_tx, block_hash)
-			.map_err(|e| {
-				pool::PoolError::Other(format!("Chain adapter failed to validate_raw_txs: {:?}", e))
-			})
+	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, pool::PoolError> {
+		wo(&self.chain).get_block_header(hash)
+			.map_err(|_| pool::PoolError::Other(format!("failed to get block_header")))
+	}
+
+	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, pool::PoolError> {
+		wo(&self.chain).get_block_sums(hash)
+			.map_err(|_| pool::PoolError::Other(format!("failed to get block_sums")))
 	}
 
 	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
