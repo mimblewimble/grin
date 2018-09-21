@@ -1,5 +1,7 @@
 # Grin - Instruction of Release 
 
+**Note**: *[totally draft doc! to be reviewed and discussed]*
+
 ## Version Number Rule
 
 In Grin, we're using [Semantic Versioning 2.0.0](https://semver.org). For a short description of the rule:

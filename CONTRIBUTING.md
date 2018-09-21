@@ -19,6 +19,8 @@ If any help is needed during your effort to contribute on this project, please d
 
 # Pull-Request Name Prefix
 
+**Note**: *[draft part! to be reviewed and discussed]*
+
 Please consider putting one of the following prefixes in the title of your pull-request:
 - **feat**:     A new feature
 - **fix**:      A bug fix
@@ -75,7 +77,7 @@ rustfmt client.rs
 **Notes**:
 1. *Please add the rustfmt corrections as a separate commit at the end of your Pull Request to make the reviewers happy.*
 
-2. *most important: `rustfmt` is just a tool to make your code having pretty formatting, your changed code itself importance is definitely above the code format, since anyway the formatting can be done by running `rustfmt` later. So the point is, if not sure what should do on this, or the `rustfmt` is changing a lot of untouched code, please feel free to ignore it. We like to make you also happy to contribute on this open source project!*
+2. *If you're still not sure about what should do on the format, please feel free to ignore it. Since `rustfmt` is just a tool to make your code having pretty formatting, your changed code is definitely more important than the format. Hope you're happy to contribute on this open source project!*
 
 3. And anyway please don't use ~~`cargo +nightly fmt`~~ if at all possible.
 
