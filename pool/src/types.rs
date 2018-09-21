@@ -214,6 +214,8 @@ pub trait BlockChain: Sync + Send {
 	/// have matured sufficiently.
 	fn verify_tx_lock_height(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
 
+	fn validate_tx(&self, tx: &Transaction, header: &BlockHeader) -> Result<(), PoolError>;
+
 	fn chain_head(&self) -> Result<BlockHeader, PoolError>;
 
 	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, PoolError>;

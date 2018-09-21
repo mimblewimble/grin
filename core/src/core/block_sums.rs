@@ -59,7 +59,6 @@ impl Default for BlockSums {
 	}
 }
 
-/// WAT?
 /// It's a tuple but we can verify the "full" kernel sums on it.
 /// This means we can take a previous block_sums, apply a new block to it
 /// and verify the full kernel sums (full UTXO and kernel sets).

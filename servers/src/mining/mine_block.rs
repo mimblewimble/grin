@@ -132,7 +132,6 @@ fn build_block(
 		output,
 		kernel,
 		difficulty.clone(),
-		verifier_cache.clone(),
 	)?;
 
 	// making sure we're not spending time mining a useless block

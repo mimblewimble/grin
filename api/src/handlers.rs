@@ -763,7 +763,7 @@ impl PoolPushHandler {
 					let mut tx_pool = pool_arc.write().unwrap();
 					let header = tx_pool.blockchain.chain_head().unwrap();
 					tx_pool
-						.add_to_pool(source, tx, !fluff, &header.hash())
+						.add_to_pool(source, tx, !fluff, &header)
 						.map_err(|e| {
 							error!(LOGGER, "update_pool: failed with error: {:?}", e);
 							ErrorKind::Internal(format!("Failed to update pool: {:?}", e)).into()

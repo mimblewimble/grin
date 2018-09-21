@@ -431,6 +431,7 @@ impl Chain {
 		}
 	}
 
+	/// TODO - where do we call this from? And do we need a rewind first?
 	/// For the given commitment find the unspent output and return the
 	/// associated Return an error if the output does not exist or has been
 	/// spent. This querying is done in a way that is consistent with the
@@ -443,6 +444,15 @@ impl Chain {
 			Err(e) => Err(e),
 			Ok((h, _)) => Ok(h),
 		}
+	}
+
+	pub fn validate_tx(& self, tx: &Transaction, header: &BlockHeader) -> Result<(), Error> {
+		let mut txhashset = self.txhashset.write().unwrap();
+		txhashset::extending_readonly(&mut txhashset, |extension| {
+			extension.rewind(header)?;
+			extension.validate_utxo_fast(tx.inputs(), tx.outputs())?;
+			Ok(())
+		})
 	}
 
 	fn next_block_height(&self) -> Result<u64, Error> {

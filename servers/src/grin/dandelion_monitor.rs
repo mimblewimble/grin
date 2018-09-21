@@ -110,7 +110,8 @@ fn process_stem_phase(
 			stem_txs.len()
 		);
 
-		let agg_tx = transaction::aggregate(stem_txs, verifier_cache.clone())?;
+		let agg_tx = transaction::aggregate(stem_txs)?;
+		agg_tx.validate(verifier_cache.clone())?;
 
 		let res = tx_pool.adapter.stem_tx_accepted(&agg_tx);
 		if res.is_err() {
@@ -124,7 +125,7 @@ fn process_stem_phase(
 				identifier: "?.?.?.?".to_string(),
 			};
 
-			tx_pool.add_to_pool(src, agg_tx, false, &header.hash())?;
+			tx_pool.add_to_pool(src, agg_tx, false, &header)?;
 		}
 	}
 	Ok(())
@@ -156,14 +157,15 @@ fn process_fluff_phase(
 			stem_txs.len()
 		);
 
-		let agg_tx = transaction::aggregate(stem_txs, verifier_cache.clone())?;
+		let agg_tx = transaction::aggregate(stem_txs)?;
+		agg_tx.validate(verifier_cache.clone())?;
 
 		let src = TxSource {
 			debug_name: "fluff".to_string(),
 			identifier: "?.?.?.?".to_string(),
 		};
 
-		tx_pool.add_to_pool(src, agg_tx, false, &header.hash())?;
+		tx_pool.add_to_pool(src, agg_tx, false, &header)?;
 	}
 	Ok(())
 }
@@ -244,7 +246,7 @@ fn process_expired_entries(
 					debug_name: "embargo_expired".to_string(),
 					identifier: "?.?.?.?".to_string(),
 				};
-				match tx_pool.add_to_pool(src, entry.tx, false, &header.hash()) {
+				match tx_pool.add_to_pool(src, entry.tx, false, &header) {
 					Ok(_) => debug!(
 						LOGGER,
 						"dand_mon: embargo expired, fluffed tx successfully."

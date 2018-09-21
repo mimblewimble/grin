@@ -478,9 +478,25 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	/// Apply a new set of blocks on top the existing sum trees. Blocks are
-	/// applied in order of the provided Vec. If pruning is enabled, inputs also
-	/// prune MMR data.
+	// Inputs _must_ spend unspent outputs.
+	// Outputs _must not_ introduce duplicate commitments.
+	pub fn validate_utxo_fast(
+		&mut self,
+		inputs: &Vec<Input>,
+		outputs: &Vec<Output>,
+	) -> Result<(), Error> {
+		for out in outputs {
+			self.validate_utxo_output(out)?;
+		}
+
+		for input in inputs {
+			self.validate_utxo_input(input)?;
+		}
+
+		Ok(())
+	}
+
+	/// Apply a new block to the existing state.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
 		for out in b.outputs() {
 			let pos = self.apply_output(out)?;
@@ -497,6 +513,18 @@ impl<'a> Extension<'a> {
 		}
 
 		Ok(())
+	}
+
+	// TODO - Is this sufficient?
+	fn validate_utxo_input(&mut self, input: &Input) -> Result<(), Error> {
+		let commit = input.commitment();
+		let pos_res = self.batch.get_output_pos(&commit);
+		if let Ok(pos) = pos_res {
+			if let Some(_) = self.output_pmmr.get_data(pos) {
+				return Ok(());
+			}
+		}
+		Err(ErrorKind::AlreadySpent(commit).into())
 	}
 
 	fn apply_input(&mut self, input: &Input) -> Result<(), Error> {
@@ -533,6 +561,19 @@ impl<'a> Extension<'a> {
 			}
 		} else {
 			return Err(ErrorKind::AlreadySpent(commit).into());
+		}
+		Ok(())
+	}
+
+	/// TODO - Is this sufficient?
+	fn validate_utxo_output(&mut self, out: &Output) -> Result<(), Error> {
+		let commit = out.commitment();
+		if let Ok(pos) = self.batch.get_output_pos(&commit) {
+			if let Some(out_mmr) = self.output_pmmr.get_data(pos) {
+				if out_mmr.commitment() == commit {
+					return Err(ErrorKind::DuplicateCommitment(commit).into());
+				}
+			}
 		}
 		Ok(())
 	}

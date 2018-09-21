@@ -825,7 +825,6 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 /// Aggregate a vec of txs into a multi-kernel tx with cut_through.
 pub fn aggregate(
 	mut txs: Vec<Transaction>,
-	verifier: Arc<RwLock<VerifierCache>>,
 ) -> Result<Transaction, Error> {
 	// convenience short-circuiting
 	if txs.is_empty() {
@@ -868,12 +867,6 @@ pub fn aggregate(
 	//   * sum of all kernel offsets
 	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
 
-	// Now validate the aggregate tx to ensure we have not built something invalid.
-	// The resulting tx could be invalid for a variety of reasons -
-	//   * tx too large (too many inputs|outputs|kernels)
-	//   * cut-through may have invalidated the sums
-	tx.validate(verifier)?;
-
 	Ok(tx)
 }
 
@@ -892,7 +885,8 @@ pub fn deaggregate(
 	// transaction
 	let mut kernel_offsets = vec![];
 
-	let tx = aggregate(txs, verifier.clone())?;
+	let tx = aggregate(txs)?;
+	tx.validate(verifier.clone())?;
 
 	for mk_input in mk_tx.body.inputs {
 		if !tx.body.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
