@@ -65,7 +65,11 @@ pub trait Handler {
 		not_found()
 	}
 
-	fn call(&self, req: Request<Body>) -> ResponseFuture {
+	fn call(
+		&self,
+		req: Request<Body>,
+		mut _handlers: Box<Iterator<Item = HandlerObj>>,
+	) -> ResponseFuture {
 		match req.method() {
 			&Method::GET => self.get(req),
 			&Method::POST => self.post(req),
@@ -80,6 +84,7 @@ pub trait Handler {
 		}
 	}
 }
+
 #[derive(Fail, Debug)]
 pub enum RouterError {
 	#[fail(display = "Route already exists")]
@@ -100,14 +105,15 @@ struct NodeId(usize);
 
 const MAX_CHILDREN: usize = 16;
 
-pub type HandlerObj = Box<Handler + Send + Sync>;
+pub type HandlerObj = Arc<Handler + Send + Sync>;
 
 #[derive(Clone)]
-struct Node {
+pub struct Node {
 	key: u64,
-	value: Option<Arc<HandlerObj>>,
+	value: Option<HandlerObj>,
 	children: [NodeId; MAX_CHILDREN],
 	children_count: usize,
+	mws: Option<Vec<HandlerObj>>,
 }
 
 impl Router {
@@ -116,6 +122,10 @@ impl Router {
 		let mut nodes = vec![];
 		nodes.push(root);
 		Router { nodes }
+	}
+
+	pub fn add_middleware(&mut self, mw: HandlerObj) {
+		self.node_mut(NodeId(0)).add_middleware(mw);
 	}
 
 	fn root(&self) -> NodeId {
@@ -147,7 +157,11 @@ impl Router {
 		id
 	}
 
-	pub fn add_route(&mut self, route: &'static str, value: HandlerObj) -> Result<(), RouterError> {
+	pub fn add_route(
+		&mut self,
+		route: &'static str,
+		value: HandlerObj,
+	) -> Result<&mut Node, RouterError> {
 		let keys = generate_path(route);
 		let mut node_id = self.root();
 		for key in keys {
@@ -157,23 +171,34 @@ impl Router {
 		}
 		match self.node(node_id).value() {
 			None => {
-				self.node_mut(node_id).set_value(value);
-				Ok(())
+				let node = self.node_mut(node_id);
+				node.set_value(value);
+				Ok(node)
 			}
 			Some(_) => Err(RouterError::RouteAlreadyExists),
 		}
 	}
 
-	pub fn get(&self, path: &str) -> Result<Arc<HandlerObj>, RouterError> {
+	pub fn get(&self, path: &str) -> Result<impl Iterator<Item = HandlerObj>, RouterError> {
 		let keys = generate_path(path);
+		let mut handlers = vec![];
 		let mut node_id = self.root();
+		collect_node_middleware(&mut handlers, self.node(node_id));
 		for key in keys {
 			node_id = self.find(node_id, key).ok_or(RouterError::RouteNotFound)?;
-			if self.node(node_id).key == *WILDCARD_STOP_HASH {
+			let node = self.node(node_id);
+			collect_node_middleware(&mut handlers, self.node(node_id));
+			if node.key == *WILDCARD_STOP_HASH {
 				break;
 			}
 		}
-		self.node(node_id).value().ok_or(RouterError::NoValue)
+
+		if let Some(h) = self.node(node_id).value() {
+			handlers.push(h);
+			Ok(handlers.into_iter())
+		} else {
+			Err(RouterError::NoValue)
+		}
 	}
 }
 
@@ -186,7 +211,10 @@ impl Service for Router {
 	fn call(&mut self, req: Request<Self::ReqBody>) -> Self::Future {
 		match self.get(req.uri().path()) {
 			Err(_) => not_found(),
-			Ok(h) => h.call(req),
+			Ok(mut handlers) => match handlers.next() {
+				None => not_found(),
+				Some(h) => h.call(req, Box::new(handlers)),
+			},
 		}
 	}
 }
@@ -204,16 +232,27 @@ impl NewService for Router {
 }
 
 impl Node {
-	fn new(key: u64, value: Option<Arc<HandlerObj>>) -> Node {
+	fn new(key: u64, value: Option<HandlerObj>) -> Node {
 		Node {
 			key,
 			value,
 			children: [NodeId(0); MAX_CHILDREN],
 			children_count: 0,
+			mws: None,
 		}
 	}
 
-	fn value(&self) -> Option<Arc<HandlerObj>> {
+	pub fn add_middleware(&mut self, mw: HandlerObj) -> &mut Node {
+		if self.mws.is_none() {
+			self.mws = Some(vec![]);
+		}
+		if let Some(ref mut mws) = self.mws {
+			mws.push(mw.clone());
+		}
+		self
+	}
+
+	fn value(&self) -> Option<HandlerObj> {
 		match &self.value {
 			None => None,
 			Some(v) => Some(v.clone()),
@@ -221,7 +260,7 @@ impl Node {
 	}
 
 	fn set_value(&mut self, value: HandlerObj) {
-		self.value = Some(Arc::new(value));
+		self.value = Some(value);
 	}
 
 	fn add_child(&mut self, child_id: NodeId) {
@@ -253,6 +292,14 @@ fn generate_path(route: &str) -> Vec<u64> {
 		.collect()
 }
 
+fn collect_node_middleware(handlers: &mut Vec<HandlerObj>, node: &Node) {
+	if let Some(ref mws) = node.mws {
+		for mw in mws {
+			handlers.push(mw.clone());
+		}
+	}
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -276,30 +323,17 @@ mod tests {
 	#[test]
 	fn test_add_route() {
 		let mut routes = Router::new();
+		let h1 = Arc::new(HandlerImpl(1));
+		let h2 = Arc::new(HandlerImpl(2));
+		let h3 = Arc::new(HandlerImpl(3));
+		routes.add_route("/v1/users", h1.clone()).unwrap();
+		assert!(routes.add_route("/v1/users", h2.clone()).is_err());
+		routes.add_route("/v1/users/xxx", h3.clone()).unwrap();
+		routes.add_route("/v1/users/xxx/yyy", h3.clone()).unwrap();
+		routes.add_route("/v1/zzz/*", h3.clone()).unwrap();
+		assert!(routes.add_route("/v1/zzz/ccc", h2.clone()).is_err());
 		routes
-			.add_route("/v1/users", Box::new(HandlerImpl(1)))
-			.unwrap();
-		assert!(
-			routes
-				.add_route("/v1/users", Box::new(HandlerImpl(2)))
-				.is_err()
-		);
-		routes
-			.add_route("/v1/users/xxx", Box::new(HandlerImpl(3)))
-			.unwrap();
-		routes
-			.add_route("/v1/users/xxx/yyy", Box::new(HandlerImpl(3)))
-			.unwrap();
-		routes
-			.add_route("/v1/zzz/*", Box::new(HandlerImpl(3)))
-			.unwrap();
-		assert!(
-			routes
-				.add_route("/v1/zzz/ccc", Box::new(HandlerImpl(2)))
-				.is_err()
-		);
-		routes
-			.add_route("/v1/zzz/*/zzz", Box::new(HandlerImpl(6)))
+			.add_route("/v1/zzz/*/zzz", Arc::new(HandlerImpl(6)))
 			.unwrap();
 	}
 
@@ -307,25 +341,27 @@ mod tests {
 	fn test_get() {
 		let mut routes = Router::new();
 		routes
-			.add_route("/v1/users", Box::new(HandlerImpl(101)))
+			.add_route("/v1/users", Arc::new(HandlerImpl(101)))
 			.unwrap();
 		routes
-			.add_route("/v1/users/xxx", Box::new(HandlerImpl(103)))
+			.add_route("/v1/users/xxx", Arc::new(HandlerImpl(103)))
 			.unwrap();
 		routes
-			.add_route("/v1/users/xxx/yyy", Box::new(HandlerImpl(103)))
+			.add_route("/v1/users/xxx/yyy", Arc::new(HandlerImpl(103)))
 			.unwrap();
 		routes
-			.add_route("/v1/zzz/*", Box::new(HandlerImpl(103)))
+			.add_route("/v1/zzz/*", Arc::new(HandlerImpl(103)))
 			.unwrap();
 		routes
-			.add_route("/v1/zzz/*/zzz", Box::new(HandlerImpl(106)))
+			.add_route("/v1/zzz/*/zzz", Arc::new(HandlerImpl(106)))
 			.unwrap();
 
 		let call_handler = |url| {
 			let mut event_loop = Core::new().unwrap();
 			let task = routes
 				.get(url)
+				.unwrap()
+				.next()
 				.unwrap()
 				.get(Request::new(Body::default()))
 				.and_then(|resp| ok(resp.status().as_u16()));
