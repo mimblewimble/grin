@@ -415,13 +415,8 @@ impl Block {
 		difficulty: Difficulty,
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
-		let mut block = Block::with_reward(
-			prev,
-			txs,
-			reward_output.0,
-			reward_output.1,
-			difficulty,
-		)?;
+		let mut block =
+			Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
 
 		// Now set the pow on the header so block hashing works as expected.
 		{

@@ -27,8 +27,8 @@ pub mod common;
 
 use std::sync::{Arc, RwLock};
 
-use core::core::{Block, BlockHeader, Transaction};
 use core::core::verifier_cache::LruVerifierCache;
+use core::core::{Block, BlockHeader, Transaction};
 use core::pow::Difficulty;
 
 use keychain::{ExtKeychain, Keychain};

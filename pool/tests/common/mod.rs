@@ -85,10 +85,14 @@ impl ChainAdapter {
 		let offset = header.total_kernel_offset();
 
 		// Verify the kernel sums for the block_sums with the new block applied.
-		let (utxo_sum, kernel_sum) =
-			(prev_sums, block as &Committed).verify_kernel_sums(overage, offset).unwrap();
+		let (utxo_sum, kernel_sum) = (prev_sums, block as &Committed)
+			.verify_kernel_sums(overage, offset)
+			.unwrap();
 
-		let block_sums = BlockSums{utxo_sum, kernel_sum};
+		let block_sums = BlockSums {
+			utxo_sum,
+			kernel_sum,
+		};
 		batch.save_block_sums(&header.hash(), &block_sums).unwrap();
 
 		batch.commit().unwrap();

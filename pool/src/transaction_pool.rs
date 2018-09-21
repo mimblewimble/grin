@@ -71,7 +71,11 @@ impl TransactionPool {
 		Ok(())
 	}
 
-	fn add_to_txpool(&mut self, mut entry: PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
+	fn add_to_txpool(
+		&mut self,
+		mut entry: PoolEntry,
+		header: &BlockHeader,
+	) -> Result<(), PoolError> {
 		// First deaggregate the tx based on current txpool txs.
 		if entry.tx.kernels().len() > 1 {
 			let txs = self

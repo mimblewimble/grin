@@ -121,8 +121,7 @@ impl Pool {
 			.filter_map(|mut bucket| {
 				bucket.truncate(MAX_TX_CHAIN);
 				transaction::aggregate(bucket).ok()
-			})
-			.filter(|x| x.validate(self.verifier_cache.clone()).is_ok())
+			}).filter(|x| x.validate(self.verifier_cache.clone()).is_ok())
 			.collect();
 
 		// sort by fees over weight, multiplying by 1000 to keep some precision
@@ -259,7 +258,12 @@ impl Pool {
 		header: &BlockHeader,
 		block_sums: &BlockSums,
 	) -> Result<Vec<Transaction>, PoolError> {
-		println!("***** validate_raw_txs: {}, header: {}, {:?}", txs.len(), header.hash(), block_sums);
+		println!(
+			"***** validate_raw_txs: {}, header: {}, {:?}",
+			txs.len(),
+			header.hash(),
+			block_sums
+		);
 		let mut valid_txs = vec![];
 
 		println!("***** about to iteratively apply {} txs", txs.len());
@@ -270,7 +274,10 @@ impl Pool {
 			};
 			candidate_txs.extend(valid_txs.clone());
 			candidate_txs.push(tx.clone());
-			if self.apply_txs_to_block_sums(&block_sums, candidate_txs, header).is_ok() {
+			if self
+				.apply_txs_to_block_sums(&block_sums, candidate_txs, header)
+				.is_ok()
+			{
 				valid_txs.push(tx);
 			}
 		}
@@ -314,7 +321,6 @@ impl Pool {
 		extra_tx: Option<Transaction>,
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
-
 		let existing_entries = self.entries.clone();
 		self.entries.clear();
 
@@ -398,7 +404,10 @@ impl Pool {
 	// Also reject any txs where we see a conflicting tx,
 	// where an input is spent in a different tx.
 	fn remaining_transactions(&self, block: &Block) -> Vec<Transaction> {
-		println!("***** remaining_transactions: entries: {}", self.entries.len());
+		println!(
+			"***** remaining_transactions: entries: {}",
+			self.entries.len()
+		);
 		self.entries
 			.iter()
 			.filter(|x| !x.tx.kernels().iter().any(|y| block.kernels().contains(y)))

@@ -194,8 +194,7 @@ fn test_the_transaction_pool() {
 		let tx4 = test_transaction(&keychain, vec![800], vec![799]);
 		// tx1 and tx2 are already in the txpool (in aggregated form)
 		// tx4 is the "new" part of this aggregated tx that we care about
-		let agg_tx =
-			transaction::aggregate(vec![tx1.clone(), tx2.clone(), tx4]).unwrap();
+		let agg_tx = transaction::aggregate(vec![tx1.clone(), tx2.clone(), tx4]).unwrap();
 
 		agg_tx.validate(verifier_cache.clone()).unwrap();
 
@@ -226,12 +225,7 @@ fn test_the_transaction_pool() {
 		// check we cannot add a double spend to the txpool
 		assert!(
 			write_pool
-				.add_to_pool(
-					test_source(),
-					double_spend_tx.clone(),
-					false,
-					&header
-				)
+				.add_to_pool(test_source(), double_spend_tx.clone(), false, &header)
 				.is_err()
 		);
 	}

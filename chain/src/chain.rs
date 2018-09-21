@@ -446,7 +446,7 @@ impl Chain {
 		}
 	}
 
-	pub fn validate_tx(& self, tx: &Transaction, header: &BlockHeader) -> Result<(), Error> {
+	pub fn validate_tx(&self, tx: &Transaction, header: &BlockHeader) -> Result<(), Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.rewind(header)?;
