@@ -21,21 +21,13 @@ use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
 use croaring::Bitmap;
 use std::io::Cursor;
 
-use core::Proof;
+use pow::siphash::siphash24;
+use pow::Proof;
 use util;
 
 trait EdgeType: PrimInt + ToPrimitive + Mul + BitOrAssign {}
 impl EdgeType for u32 {}
 impl EdgeType for u64 {}
-
-/// An edge in the Cuckatoo/Cuckoo graph, reference to 2 endpoints
-struct Edge<T>
-where
-	T: EdgeType,
-{
-	u: T,
-	v: T,
-}
 
 /// An element of an adjencency list
 struct Link<T>
@@ -54,8 +46,6 @@ where
 	max_edges: T,
 	/// Maximum nodes
 	max_nodes: u64,
-	/// AKA halfedges, twice the number of edges
-	num_links: u64,
 	/// Adjacency links
 	links: Vec<Link<T>>,
 	/// Index into links array
@@ -66,6 +56,10 @@ where
 	max_sols: u32,
 	///
 	solutions: Vec<Proof>,
+	/// proof size
+	proof_size: usize,
+	/// define NIL type
+	nil: T,
 }
 
 impl<T> Graph<T>
@@ -73,38 +67,129 @@ where
 	T: EdgeType,
 {
 	/// Create a new graph with given parameters
-	pub fn new(max_edges: T, max_sols: u32) -> Graph<T> {
+	pub fn new(max_edges: T, max_sols: u32, proof_size: usize) -> Graph<T> {
 		let max_nodes = 2 * max_edges.to_u64().unwrap();
 		Graph {
 			max_edges: max_edges,
 			max_nodes: max_nodes,
-			num_links: 0,
 			links: Vec::with_capacity(max_nodes as usize),
-			adj_list: Vec::with_capacity(max_nodes as usize),
+			adj_list: vec![T::from(T::max_value()).unwrap(); max_nodes as usize],
 			visited: Bitmap::create(),
 			max_sols: max_sols,
 			solutions: vec![],
+			proof_size: proof_size,
+			nil: T::from(T::max_value()).unwrap(),
 		}
 	}
 
 	/// Add an edge to the graph
 	pub fn add_edge(&mut self, u: T, mut v: T) {
 		v |= self.max_edges;
-		self.num_links += 1;
-		let ulink = self.num_links;
-		// the two halfedges of an edge differ only in last bit
-		self.num_links += 1;
-		let vlink = self.num_links;
-		self.links[ulink as usize].next = self.adj_list[u.to_u64().unwrap() as usize];
-		self.links[vlink as usize].next = self.adj_list[v.to_u64().unwrap() as usize];
-		//TODO: Incomplete
-		//self.adj_list[u.to_u64().unwrap() as usize] = ulink;
-		//self.adj_list[v.to_u64().unwrap() as usize] = vlink;
+		assert!(u != self.nil && v != self.nil);
+		let ulink = self.links.len();
+		let vlink = self.links.len() + 1;
+		self.links.push(Link {
+			next: self.adj_list[u.to_u64().unwrap() as usize],
+			to: u,
+		});
+		self.links.push(Link {
+			next: self.adj_list[v.to_u64().unwrap() as usize],
+			to: v,
+		});
+		self.adj_list[u.to_u64().unwrap() as usize] = T::from(ulink).unwrap();
+		self.adj_list[v.to_u64().unwrap() as usize] = T::from(vlink).unwrap();
+	}
+
+	// remove lnk from u's adjacency list
+	fn remove_adj(&mut self, u: T, lnk: T) {
+		let mut lp = self.adj_list[u.to_u64().unwrap() as usize];
+		while lp != lnk {
+			assert!(lp != self.nil);
+			lp = self.links[lp.to_u64().unwrap() as usize].next;
+		}
+		lp = self.links[lnk.to_u64().unwrap() as usize].next;
+		self.links[lnk.to_u64().unwrap() as usize].to = self.nil;
+	}
+
+	fn remove_link(&mut self, lnk: T) {
+		let u = self.links[lnk.to_u64().unwrap() as usize].to;
+		if u == self.nil {
+			return;
+		}
+		self.remove_adj(u, lnk);
+		if self.adj_list[u.to_u64().unwrap() as usize] == self.nil {
+			let mut rl = self.adj_list[(u ^ T::one()).to_u64().unwrap() as usize];
+			while rl != self.nil {
+				self.links[rl.to_u64().unwrap() as usize].to = self.nil;
+				self.remove_link(rl ^ T::one());
+				rl = self.links[rl.to_u64().unwrap() as usize].next;
+			}
+			self.adj_list[(u ^ T::one()).to_u64().unwrap() as usize] = self.nil;
+		}
 	}
 
 	pub fn byte_count(&self) -> u64 {
 		self.max_nodes * (mem::size_of::<Link<T>>() as u64 + mem::size_of::<T>() as u64)
 			+ (self.max_edges.to_u64().unwrap() / 32) * mem::size_of::<u32>() as u64
+	}
+
+	fn test_bit(&mut self, u: u64) -> bool {
+		self.visited.contains(u as u32)
+	}
+
+	fn cycles_with_link(&mut self, len: u32, u: T, dest: T) {
+		if self.test_bit(u.to_u64().unwrap() >> 1) {
+			println!("Already visited");
+			return;
+		}
+		assert!(u != self.nil);
+		if (u ^ T::one()) == dest {
+			if len == self.proof_size as u32 {
+				if self.solutions.len() < self.max_sols as usize {
+					// create next solution
+					self.solutions.push(Proof::zero(self.proof_size));
+				}
+				return;
+			} else if len == self.proof_size as u32 {
+				return;
+			}
+		}
+		let mut au1 = self.adj_list[(u ^ T::one()).to_u64().unwrap() as usize];
+		if au1 != self.nil {
+			self.visited.add((u.to_u64().unwrap() >> 1) as u32);
+			while au1 != self.nil {
+				let i = self.solutions.len() - 1;
+				// TODO: ???
+				//self.solutions[i].nonces[len as usize] = au1.to_u64().unwrap() / 2;
+				let link_index = (au1 ^ T::one()).to_u64().unwrap() as usize;
+				let link = self.links[link_index].to;
+				/*if link == self.nil {
+					break;
+				}*/
+				self.cycles_with_link(len + 1, link, dest);
+				au1 = self.links[au1.to_u64().unwrap() as usize].next;
+			}
+			self.visited.remove((u.to_u64().unwrap() >> 1) as u32);
+		}
+	}
+
+	/// detect all cycles in the graph (up to proofsize)
+	pub fn cycles(&mut self) -> usize {
+		let mut n_links = self.links.len();
+		self.solutions.push(Proof::zero(self.proof_size));
+		while n_links > 0 {
+			let sol_index = self.solutions.len() - 1;
+			n_links -= 2;
+			let u = self.links[n_links].to;
+			let v = self.links[n_links + 1].to;
+			if u != self.nil && v != self.nil {
+				self.solutions[sol_index].nonces[0] = n_links as u64 / 2;
+				self.cycles_with_link(1, u, v);
+				self.remove_link(T::from(n_links).unwrap());
+				self.remove_link(T::from(n_links + 1).unwrap());
+			}
+		}
+		self.solutions.len() - 1
 	}
 }
 
@@ -116,7 +201,8 @@ where
 	siphash_keys: [u64; 4],
 	easiness: T,
 	graph: Graph<T>,
-	proof_size: u8,
+	proof_size: usize,
+	edge_mask: T,
 }
 
 impl<T> CuckooContext<T>
@@ -126,7 +212,7 @@ where
 	/// New Solver context
 	pub fn new(
 		edge_bits: u8,
-		proof_size: u8,
+		proof_size: usize,
 		easiness_pct: u32,
 		max_sols: u32,
 	) -> CuckooContext<T> {
@@ -136,8 +222,9 @@ where
 		CuckooContext {
 			siphash_keys: [0; 4],
 			easiness: T::from(easiness).unwrap(),
-			graph: Graph::new(T::from(num_edges).unwrap(), max_sols),
+			graph: Graph::new(T::from(num_edges).unwrap(), max_sols, proof_size),
 			proof_size: proof_size,
+			edge_mask: T::from(num_edges - 1).unwrap(),
 		}
 	}
 
@@ -177,8 +264,27 @@ where
 		self.create_keys(header);
 	}
 
+	/// Return siphash masked for type
+	pub fn sipnode(&self, edge: T, uorv: u64) -> T {
+		let hash_u64 = siphash24(self.siphash_keys, 2 * edge.to_u64().unwrap() + uorv);
+		let masked = hash_u64 & self.edge_mask.to_u64().unwrap();
+		T::from(masked).unwrap()
+	}
+
 	/// Simple implementation of algorithm
-	pub fn find_cycles_simple(&mut self) {}
+	pub fn find_cycles_simple(&mut self, disp_callback: Option<fn(&Self)>) -> usize {
+		for n in 0..self.easiness.to_u64().unwrap() {
+			let u = self.sipnode(T::from(n).unwrap(), 0);
+			let v = self.sipnode(T::from(n).unwrap(), 1);
+			self.graph
+				.add_edge(T::from(u).unwrap(), T::from(v).unwrap());
+			if let Some(d) = disp_callback {
+				d(&self);
+			}
+		}
+		let n_sols = self.graph.cycles();
+		n_sols
+	}
 }
 
 #[test]
@@ -216,4 +322,6 @@ fn cuckatoo() {
 		ctx_u32.sipkey_hex(2),
 		ctx_u32.sipkey_hex(3)
 	);
+	let num_sols = ctx_u32.find_cycles_simple(None);
+	println!("Num sols found: {}", num_sols);
 }
