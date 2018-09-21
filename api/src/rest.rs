@@ -19,14 +19,13 @@
 //! register them on a ApiServer.
 
 use hyper::rt::Future;
-use hyper::service::service_fn;
-use hyper::{Body, Request, Server};
-use router::ResponseFuture;
+use hyper::{rt, Body, Request, Server};
+use router::{Handler, HandlerObj, ResponseFuture, Router};
 use std::fmt::{self, Display};
 use std::net::SocketAddr;
-use tokio::runtime::current_thread::Runtime;
 
 use failure::{Backtrace, Context, Fail};
+use util::LOGGER;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
 #[derive(Debug)]
@@ -95,18 +94,16 @@ impl ApiServer {
 	}
 
 	/// Starts the ApiServer at the provided address.
-	pub fn start<F>(&mut self, addr: SocketAddr, f: &'static F) -> Result<(), String>
-	where
-		F: Fn(Request<Body>) -> ResponseFuture + Send + Sync + 'static,
-	{
+	pub fn start(&mut self, addr: SocketAddr, router: Router) -> Result<(), String> {
 		let server = Server::bind(&addr)
-			.serve(move || service_fn(f))
+			.serve(router)
 			.map_err(|e| eprintln!("server error: {}", e));
 
-		let mut rt = Runtime::new().unwrap();
-		if rt.block_on(server).is_err() {
-			return Err("tokio block_on error".to_owned());
-		}
+		//let mut rt = Runtime::new().unwrap();
+		//if rt.block_on(server).is_err() {
+		//	return Err("tokio block_on error".to_owned());
+		//}
+		rt::run(server);
 		Ok(())
 	}
 
@@ -117,5 +114,23 @@ impl ApiServer {
 		//	if let Some(rt) = self.rt.take() {
 		//		rt.shutdown_now().wait().unwrap();
 		//	}
+	}
+}
+
+// Simple example of middleware
+pub struct LoggingMiddleware {
+	next: HandlerObj,
+}
+
+impl LoggingMiddleware {
+	pub fn new(next: HandlerObj) -> LoggingMiddleware {
+		LoggingMiddleware { next }
+	}
+}
+
+impl Handler for LoggingMiddleware {
+	fn call(&self, req: Request<Body>) -> ResponseFuture {
+		debug!(LOGGER, "REST call: {} {}", req.method(), req.uri().path());
+		self.next.call(req)
 	}
 }

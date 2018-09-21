@@ -19,7 +19,7 @@ use std::sync::{Arc, RwLock};
 use conn;
 use core::core;
 use core::core::hash::{Hash, Hashed};
-use core::core::target::Difficulty;
+use core::pow::Difficulty;
 use handshake::Handshake;
 use msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest};
 use protocol::Protocol;

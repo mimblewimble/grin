@@ -21,8 +21,8 @@ use std::{thread, time};
 
 use core::consensus;
 use core::core::hash::Hash;
-use core::core::target::Difficulty;
 use core::core::BlockHeader;
+use core::pow::Difficulty;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::{Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};

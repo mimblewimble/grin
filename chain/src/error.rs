@@ -48,6 +48,9 @@ pub enum ErrorKind {
 	/// Block header sizeshift is lower than our min
 	#[fail(display = "Cuckoo Size too Low")]
 	LowSizeshift,
+	/// Scaling factor between primary and secondary PoW is invalid
+	#[fail(display = "Wrong scaling factor")]
+	InvalidScaling,
 	/// The proof of work is invalid
 	#[fail(display = "Invalid PoW")]
 	InvalidPow,

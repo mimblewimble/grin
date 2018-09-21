@@ -1,6 +1,7 @@
 use futures::future;
 use hyper;
 use hyper::rt::Future;
+use hyper::service::{NewService, Service};
 use hyper::{Body, Method, Request, Response, StatusCode};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -49,6 +50,21 @@ pub trait Handler {
 	fn connect(&self, _req: Request<Body>) -> ResponseFuture {
 		not_found()
 	}
+
+	fn call(&self, req: Request<Body>) -> ResponseFuture {
+		match req.method() {
+			&Method::GET => self.get(req),
+			&Method::POST => self.post(req),
+			&Method::PUT => self.put(req),
+			&Method::DELETE => self.delete(req),
+			&Method::PATCH => self.patch(req),
+			&Method::OPTIONS => self.options(req),
+			&Method::CONNECT => self.connect(req),
+			&Method::TRACE => self.trace(req),
+			&Method::HEAD => self.head(req),
+			_ => not_found(),
+		}
+	}
 }
 #[derive(Fail, Debug)]
 pub enum RouterError {
@@ -70,7 +86,7 @@ struct NodeId(usize);
 
 const MAX_CHILDREN: usize = 16;
 
-type HandlerObj = Box<Handler>;
+pub type HandlerObj = Box<Handler + Send + Sync>;
 
 #[derive(Clone)]
 struct Node {
@@ -122,7 +138,8 @@ impl Router {
 		let keys = generate_path(route);
 		let mut node_id = self.root();
 		for key in keys {
-			node_id = self.find(node_id, key)
+			node_id = self
+				.find(node_id, key)
 				.unwrap_or_else(|| self.add_empty_node(node_id, key));
 		}
 		match self.node(node_id).value() {
@@ -145,23 +162,31 @@ impl Router {
 		}
 		self.node(node_id).value().ok_or(RouterError::NoValue)
 	}
+}
 
-	pub fn handle(&self, req: Request<Body>) -> ResponseFuture {
+impl Service for Router {
+	type ReqBody = Body;
+	type ResBody = Body;
+	type Error = hyper::Error;
+	type Future = ResponseFuture;
+
+	fn call(&mut self, req: Request<Self::ReqBody>) -> Self::Future {
 		match self.get(req.uri().path()) {
 			Err(_) => not_found(),
-			Ok(h) => match req.method() {
-				&Method::GET => h.get(req),
-				&Method::POST => h.post(req),
-				&Method::PUT => h.put(req),
-				&Method::DELETE => h.delete(req),
-				&Method::PATCH => h.patch(req),
-				&Method::OPTIONS => h.options(req),
-				&Method::CONNECT => h.connect(req),
-				&Method::TRACE => h.trace(req),
-				&Method::HEAD => h.head(req),
-				_ => not_found(),
-			},
+			Ok(h) => h.call(req),
 		}
+	}
+}
+
+impl NewService for Router {
+	type ReqBody = Body;
+	type ResBody = Body;
+	type Error = hyper::Error;
+	type InitError = hyper::Error;
+	type Service = Router;
+	type Future = Box<Future<Item = Self::Service, Error = Self::InitError> + Send>;
+	fn new_service(&self) -> Self::Future {
+		Box::new(future::ok(self.clone()))
 	}
 }
 
@@ -303,5 +328,4 @@ mod tests {
 		assert_eq!(call_handler("/v1/zzz/2"), 103);
 		assert_eq!(call_handler("/v1/zzz/2/zzz"), 106);
 	}
-
 }
