@@ -296,8 +296,7 @@ mod test {
 					&BlindSum::new()
 						.add_blinding_factor(BlindingFactor::from_secret_key(skey1))
 						.add_blinding_factor(BlindingFactor::from_secret_key(skey2))
-				)
-				.unwrap(),
+				).unwrap(),
 			BlindingFactor::from_secret_key(skey3),
 		);
 	}
