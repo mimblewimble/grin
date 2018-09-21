@@ -156,15 +156,13 @@ impl ApiServer {
 								.map_err(|e| io::Error::new(io::ErrorKind::Other, e))
 						}),
 						router,
-					)
-					.then(|res| match res {
+					).then(|res| match res {
 						Ok(conn) => Ok(Some(conn)),
 						Err(e) => {
 							eprintln!("Error: {}", e);
 							Ok(None)
 						}
-					})
-					.for_each(|conn_opt| {
+					}).for_each(|conn_opt| {
 						if let Some(conn) = conn_opt {
 							rt::spawn(
 								conn.and_then(|c| c.map_err(|e| panic!("Hyper error {}", e)))
