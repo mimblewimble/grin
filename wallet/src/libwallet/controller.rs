@@ -16,18 +16,11 @@
 //! invocations) as needed.
 //! Still experimental
 use api::{ApiServer, Handler, ResponseFuture, Router};
-use std::collections::HashMap;
-use std::marker::PhantomData;
-use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
-
+use core::core::Transaction;
+use failure::ResultExt;
 use futures::future::{err, ok};
 use futures::{Future, Stream};
 use hyper::{Body, Request, Response, StatusCode};
-use serde::{Deserialize, Serialize};
-use serde_json;
-
-use core::core::Transaction;
 use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
@@ -35,8 +28,13 @@ use libwallet::types::{
 	CbData, OutputData, SendTXArgs, TxLogEntry, WalletBackend, WalletClient, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
+use serde::{Deserialize, Serialize};
+use serde_json;
+use std::collections::HashMap;
+use std::marker::PhantomData;
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
 use url::form_urlencoded;
-
 use util::secp::pedersen;
 use util::LOGGER;
 
@@ -86,8 +84,14 @@ where
 	let mut apis = ApiServer::new();
 	info!(LOGGER, "Starting HTTP Owner API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	apis.start(socket_addr, router);
-	Ok(())
+	let api_thread = apis
+		.start(socket_addr, router)
+		.context(ErrorKind::GenericError(
+			"API thread failed to start".to_string(),
+		))?;
+	api_thread
+		.join()
+		.map_err(|e| ErrorKind::GenericError(format!("API thread paniced :{:?}", e)).into())
 }
 
 /// Listener version, providing same API but listening for requests on a
@@ -108,8 +112,15 @@ where
 	let mut apis = ApiServer::new();
 	info!(LOGGER, "Starting HTTP Foreign API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	apis.start(socket_addr, router);
-	Ok(())
+	let api_thread = apis
+		.start(socket_addr, router)
+		.context(ErrorKind::GenericError(
+			"API thread failed to start".to_string(),
+		))?;
+
+	api_thread
+		.join()
+		.map_err(|e| ErrorKind::GenericError(format!("API thread paniced :{:?}", e)).into())
 }
 
 type WalletResponseFuture = Box<Future<Item = Response<Body>, Error = Error> + Send>;

@@ -805,7 +805,7 @@ pub fn start_rest_apis(
 
 	info!(LOGGER, "Starting HTTP API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	apis.start(socket_addr, router)
+	apis.start(socket_addr, router).is_ok()
 }
 
 pub fn build_router(
