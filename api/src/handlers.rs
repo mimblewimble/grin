@@ -879,22 +879,19 @@ pub fn build_router(
 
 	let mut router = Router::new();
 	// example how we can use midlleware
-	router.add_route(
-		"/v1/",
-		Box::new(LoggingMiddleware::new(Box::new(index_handler))),
-	)?;
-	router.add_route("/v1/blocks/*", Box::new(block_handler))?;
-	router.add_route("/v1/headers/*", Box::new(header_handler))?;
-	router.add_route("/v1/chain", Box::new(chain_tip_handler))?;
-	router.add_route("/v1/chain/outputs/*", Box::new(output_handler))?;
-	router.add_route("/v1/chain/compact", Box::new(chain_compact_handler))?;
-	router.add_route("/v1/chain/validate", Box::new(chain_validation_handler))?;
-	router.add_route("/v1/txhashset/*", Box::new(txhashset_handler))?;
-	router.add_route("/v1/status", Box::new(status_handler))?;
-	router.add_route("/v1/pool", Box::new(pool_info_handler))?;
-	router.add_route("/v1/pool/push", Box::new(pool_push_handler))?;
-	router.add_route("/v1/peers/all", Box::new(peers_all_handler))?;
-	router.add_route("/v1/peers/connected", Box::new(peers_connected_handler))?;
-	router.add_route("/v1/peers/**", Box::new(peer_handler))?;
+	router.add_route("/v1/", Arc::new(index_handler))?;
+	router.add_route("/v1/blocks/*", Arc::new(block_handler))?;
+	router.add_route("/v1/headers/*", Arc::new(header_handler))?;
+	router.add_route("/v1/chain", Arc::new(chain_tip_handler))?;
+	router.add_route("/v1/chain/outputs/*", Arc::new(output_handler))?;
+	router.add_route("/v1/chain/compact", Arc::new(chain_compact_handler))?;
+	router.add_route("/v1/chain/validate", Arc::new(chain_validation_handler))?;
+	router.add_route("/v1/txhashset/*", Arc::new(txhashset_handler))?;
+	router.add_route("/v1/status", Arc::new(status_handler))?;
+	router.add_route("/v1/pool", Arc::new(pool_info_handler))?;
+	router.add_route("/v1/pool/push", Arc::new(pool_push_handler))?;
+	router.add_route("/v1/peers/all", Arc::new(peers_all_handler))?;
+	router.add_route("/v1/peers/connected", Arc::new(peers_connected_handler))?;
+	router.add_route("/v1/peers/**", Arc::new(peer_handler))?;
 	Ok(router)
 }
