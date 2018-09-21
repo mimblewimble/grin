@@ -248,7 +248,7 @@ impl OutputData {
 	/// so we do not actually know how many confirmations this output had (and
 	/// never will).
 	pub fn num_confirmations(&self, current_height: u64) -> u64 {
-		if self.height >= current_height {
+		if self.height > current_height {
 			return 0;
 		}
 		if self.status == OutputStatus::Unconfirmed {
