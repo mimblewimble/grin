@@ -796,59 +796,29 @@ pub fn start_rest_apis(
 	chain: Weak<chain::Chain>,
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
-<<<<<<< HEAD
 	api_basic_auth: bool,
 	api_secret: String,
-) {
-	let _ = thread::Builder::new()
-		.name("apis".to_string())
-		.spawn(move || {
-			let mut apis = ApiServer::new();
-
-			let router = build_router(chain, tx_pool, peers, api_basic_auth, &api_secret)
-				.expect("unable to build API router");
-
-			info!(LOGGER, "Starting HTTP API server at {}.", addr);
-			let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-			apis.start(socket_addr, router).unwrap_or_else(|e| {
-				error!(LOGGER, "Failed to start API HTTP server: {}.", e);
-			});
-		});
-}
-
-fn parse_body<T>(req: Request<Body>) -> Box<Future<Item = T, Error = Error> + Send>
-where
-	for<'de> T: Deserialize<'de> + Send + 'static,
-{
-	Box::new(
-		req.into_body()
-			.concat2()
-			.map_err(|e| ErrorKind::RequestError(format!("Failed to read request: {}", e)).into())
-			.and_then(|body| match serde_json::from_reader(&body.to_vec()[..]) {
-				Ok(obj) => ok(obj),
-				Err(e) => {
-					err(ErrorKind::RequestError(format!("Invalid request body: {}", e)).into())
-				}
-			}),
-	)
-=======
 ) -> bool {
 	let mut apis = ApiServer::new();
-
-	let router = build_router(chain, tx_pool, peers).expect("unable to build API router");
+	let mut router = Router::new();
+	if api_basic_auth {
+		let api_basic_auth =
+			"Basic ".to_string() + &util::to_base64(&("grin:".to_string() + &api_secret));
+		let basic_realm = "Basic realm=GrinAPI".to_string();
+		let basic_auth_middleware = Arc::new(BasicAuthMiddleware::new(api_basic_auth, basic_realm));
+		router.add_middleware(basic_auth_middleware);
+	}
+	router = build_router(chain, tx_pool, peers).expect("unable to build API router");
 
 	info!(LOGGER, "Starting HTTP API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
 	apis.start(socket_addr, router)
->>>>>>> 3a3ba4d63641d7b7a26e0fb72e6393b05a28149c
 }
 
 pub fn build_router(
 	chain: Weak<chain::Chain>,
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
-	api_basic_auth: bool,
-	api_secret: &str,
 ) -> Result<Router, RouterError> {
 	let route_list = vec![
 		"get blocks".to_string(),

@@ -19,17 +19,13 @@ use router::{Handler, HandlerObj, ResponseFuture};
 
 // Basic Authentication Middleware
 pub struct BasicAuthMiddleware {
-	next: HandlerObj,
 	api_basic_auth: String,
 	basic_realm: String,
 }
 
 impl BasicAuthMiddleware {
-	pub fn new(next: HandlerObj, api_basic_auth_ref: &str, realm_ref: &str) -> BasicAuthMiddleware {
-		let api_basic_auth = api_basic_auth_ref.to_owned();
-		let basic_realm = "Basic realm=\"".to_owned() + realm_ref + "\"";
+	pub fn new(api_basic_auth: String, basic_realm: String) -> BasicAuthMiddleware {
 		BasicAuthMiddleware {
-			next,
 			api_basic_auth,
 			basic_realm,
 		}
@@ -37,10 +33,14 @@ impl BasicAuthMiddleware {
 }
 
 impl Handler for BasicAuthMiddleware {
-	fn call(&self, req: Request<Body>) -> ResponseFuture {
+	fn call(
+		&self,
+		req: Request<Body>,
+		mut handlers: Box<Iterator<Item = HandlerObj>>,
+	) -> ResponseFuture {
 		if req.headers().contains_key(AUTHORIZATION) {
 			if req.headers()[AUTHORIZATION] == self.api_basic_auth {
-				self.next.call(req)
+				handlers.next().unwrap().call(req, handlers)
 			} else {
 				// Forbidden 403
 				forbidden_response()
