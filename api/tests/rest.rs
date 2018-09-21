@@ -5,6 +5,8 @@ extern crate hyper;
 use api::*;
 use hyper::{Body, Request};
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
+use std::sync::Arc;
 use std::{thread, time};
 
 struct IndexHandler {
@@ -19,13 +21,41 @@ impl Handler for IndexHandler {
 	}
 }
 
+pub struct CounterMiddleware {
+	counter: AtomicUsize,
+}
+
+impl CounterMiddleware {
+	fn new() -> CounterMiddleware {
+		CounterMiddleware {
+			counter: ATOMIC_USIZE_INIT,
+		}
+	}
+
+	fn value(&self) -> usize {
+		self.counter.load(Ordering::SeqCst)
+	}
+}
+
+impl Handler for CounterMiddleware {
+	fn call(
+		&self,
+		req: Request<Body>,
+		mut handlers: Box<Iterator<Item = HandlerObj>>,
+	) -> ResponseFuture {
+		self.counter.fetch_add(1, Ordering::SeqCst);
+		handlers.next().unwrap().call(req, handlers)
+	}
+}
+
 fn build_router() -> Router {
 	let route_list = vec!["get blocks".to_string(), "get chain".to_string()];
 	let index_handler = IndexHandler { list: route_list };
 	let mut router = Router::new();
 	router
-		.add_route("/v1/*", Box::new(index_handler))
-		.expect("add_route failed");
+		.add_route("/v1/*", Arc::new(index_handler))
+		.expect("add_route failed")
+		.add_middleware(Arc::new(LoggingMiddleware {}));
 	router
 }
 
@@ -33,13 +63,17 @@ fn build_router() -> Router {
 fn test_start_api() {
 	util::init_test_logger();
 	let mut server = ApiServer::new();
-	let router = build_router();
+	let mut router = build_router();
+	let counter = Arc::new(CounterMiddleware::new());
+	// add middleware to the root
+	router.add_middleware(counter.clone());
 	let server_addr = "127.0.0.1:14434";
 	let addr: SocketAddr = server_addr.parse().expect("unable to parse server address");
 	assert!(server.start(addr, router));
 	let url = format!("http://{}/v1/", server_addr);
 	let index = api::client::get::<Vec<String>>(url.as_str()).unwrap();
 	assert_eq!(index.len(), 2);
+	assert_eq!(counter.value(), 1);
 	assert!(server.stop());
 	thread::sleep(time::Duration::from_millis(1_000));
 }

@@ -80,7 +80,7 @@ where
 
 	let mut router = Router::new();
 	router
-		.add_route("/v1/wallet/owner/**", Box::new(api_handler))
+		.add_route("/v1/wallet/owner/**", Arc::new(api_handler))
 		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 
 	let mut apis = ApiServer::new();
@@ -102,7 +102,7 @@ where
 
 	let mut router = Router::new();
 	router
-		.add_route("/v1/wallet/foreign/**", Box::new(api_handler))
+		.add_route("/v1/wallet/foreign/**", Arc::new(api_handler))
 		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 
 	let mut apis = ApiServer::new();

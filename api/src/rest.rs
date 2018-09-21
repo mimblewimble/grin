@@ -199,20 +199,15 @@ impl ApiServer {
 	}
 }
 
-// Simple example of middleware
-pub struct LoggingMiddleware {
-	next: HandlerObj,
-}
-
-impl LoggingMiddleware {
-	pub fn new(next: HandlerObj) -> LoggingMiddleware {
-		LoggingMiddleware { next }
-	}
-}
+pub struct LoggingMiddleware {}
 
 impl Handler for LoggingMiddleware {
-	fn call(&self, req: Request<Body>) -> ResponseFuture {
+	fn call(
+		&self,
+		req: Request<Body>,
+		mut handlers: Box<Iterator<Item = HandlerObj>>,
+	) -> ResponseFuture {
 		debug!(LOGGER, "REST call: {} {}", req.method(), req.uri().path());
-		self.next.call(req)
+		handlers.next().unwrap().call(req, handlers)
 	}
 }
