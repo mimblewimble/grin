@@ -16,7 +16,6 @@
 //! invocations) as needed.
 //! Still experimental
 use api::{ApiServer, Handler, ResponseFuture, Router};
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
@@ -67,8 +66,6 @@ where
 	Ok(())
 }
 
-thread_local!(static OWNER_ROUTER: RefCell<Option<Router>> = RefCell::new(None));
-
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
 pub fn owner_listener<T: ?Sized, C, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
@@ -81,37 +78,19 @@ where
 	let wallet_arc = Arc::new(Mutex::new(wallet));
 	let api_handler = OwnerAPIHandler::new(wallet_arc);
 
-	let mut orouter = Router::new();
-	orouter
+	let mut router = Router::new();
+	router
 		.add_route("/v1/wallet/owner/**", Box::new(api_handler))
 		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 
-	OWNER_ROUTER.with(move |router| {
-		*router.borrow_mut() = Some(orouter);
-		let mut apis = ApiServer::new();
-		info!(LOGGER, "Starting HTTP Owner API server at {}.", addr);
-		let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-		apis.start(socket_addr, &handle_owner).unwrap_or_else(|e| {
-			error!(LOGGER, "Failed to start API HTTP server: {}.", e);
-		})
+	let mut apis = ApiServer::new();
+	info!(LOGGER, "Starting HTTP Owner API server at {}.", addr);
+	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
+	apis.start(socket_addr, router).unwrap_or_else(|e| {
+		error!(LOGGER, "Failed to start API HTTP server: {}.", e);
 	});
 	Ok(())
 }
-
-fn handle_owner(req: Request<Body>) -> ResponseFuture {
-	OWNER_ROUTER.with(|router| match *router.borrow() {
-		Some(ref h) => h.handle(req),
-		None => {
-			error!(LOGGER, "No HTTP API router configured");
-			Box::new(ok(response(
-				StatusCode::INTERNAL_SERVER_ERROR,
-				"No router configured",
-			)))
-		}
-	})
-}
-
-thread_local!(static FOREIGN_ROUTER:  RefCell<Option<Router>> = RefCell::new(None));
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
@@ -128,31 +107,13 @@ where
 		.add_route("/v1/wallet/foreign/**", Box::new(api_handler))
 		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 
-	FOREIGN_ROUTER.with(move |frouter| {
-		*frouter.borrow_mut() = Some(router);
-		let mut apis = ApiServer::new();
-		info!(LOGGER, "Starting HTTP Foreign API server at {}.", addr);
-		let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-		apis.start(socket_addr, &handle_foreign)
-			.unwrap_or_else(|e| {
-				error!(LOGGER, "Failed to start API HTTP server: {}.", e);
-			});
+	let mut apis = ApiServer::new();
+	info!(LOGGER, "Starting HTTP Foreign API server at {}.", addr);
+	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
+	apis.start(socket_addr, router).unwrap_or_else(|e| {
+		error!(LOGGER, "Failed to start API HTTP server: {}.", e);
 	});
-
 	Ok(())
-}
-
-fn handle_foreign(req: Request<Body>) -> ResponseFuture {
-	FOREIGN_ROUTER.with(|router| match *router.borrow() {
-		Some(ref h) => h.handle(req),
-		None => {
-			error!(LOGGER, "No HTTP API router configured");
-			Box::new(ok(response(
-				StatusCode::INTERNAL_SERVER_ERROR,
-				"No router configured",
-			)))
-		}
-	})
 }
 
 type WalletResponseFuture = Box<Future<Item = Response<Body>, Error = Error> + Send>;

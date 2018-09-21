@@ -55,27 +55,20 @@ impl Difficulty {
 	/// provided hash and applies the Cuckoo sizeshift adjustment factor (see
 	/// https://lists.launchpad.net/mimblewimble/msg00494.html).
 	pub fn from_proof_adjusted(proof: &Proof) -> Difficulty {
-		let max_target = <u64>::max_value();
-		let target = proof.hash().to_u64();
-		let shift = proof.cuckoo_sizeshift;
-
 		// Adjust the difficulty based on a 2^(N-M)*(N-1) factor, with M being
 		// the minimum sizeshift and N the provided sizeshift
+		let shift = proof.cuckoo_sizeshift;
 		let adjust_factor = (1 << (shift - global::ref_sizeshift()) as u64) * (shift as u64 - 1);
-		let difficulty = (max_target / target) * adjust_factor;
 
-		Difficulty::from_num(difficulty)
+		Difficulty::from_num(proof.raw_difficulty() * adjust_factor)
 	}
 
 	/// Same as `from_proof_adjusted` but instead of an adjustment based on
 	/// cycle size, scales based on a provided factor. Used by dual PoW system
 	/// to scale one PoW against the other.
 	pub fn from_proof_scaled(proof: &Proof, scaling: u64) -> Difficulty {
-		let max_target = <u64>::max_value();
-		let target = proof.hash().to_u64();
-
 		// Scaling between 2 proof of work algos
-		Difficulty::from_num((max_target / scaling) / target)
+		Difficulty::from_num(proof.raw_difficulty() * scaling)
 	}
 
 	/// Converts the difficulty into a u64
@@ -346,6 +339,11 @@ impl Proof {
 	/// Returns the proof size
 	pub fn proof_size(&self) -> usize {
 		self.nonces.len()
+	}
+
+	/// Difficulty achieved by this proof
+	fn raw_difficulty(&self) -> u64 {
+		<u64>::max_value() / self.hash().to_u64()
 	}
 }
 

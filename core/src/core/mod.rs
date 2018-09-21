@@ -15,6 +15,7 @@
 //! Core types
 
 pub mod block;
+pub mod block_sums;
 pub mod committed;
 pub mod compact_block;
 pub mod compact_transaction;
@@ -30,6 +31,7 @@ use consensus::GRIN_BASE;
 use util::secp::pedersen::Commitment;
 
 pub use self::block::*;
+pub use self::block_sums::*;
 pub use self::committed::Committed;
 pub use self::compact_block::*;
 pub use self::compact_transaction::*;

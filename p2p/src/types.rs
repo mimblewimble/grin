@@ -128,7 +128,7 @@ impl Default for P2PConfig {
 		P2PConfig {
 			host: ipaddr,
 			port: 13414,
-			capabilities: Capabilities::FULL_NODE,
+			capabilities: Capabilities::FAST_SYNC_NODE,
 			seeding_type: Seeding::default(),
 			seeds: None,
 			peers_allow: None,
@@ -201,6 +201,9 @@ bitflags! {
 	const TXHASHSET_HIST = 0b00000010;
 	/// Can provide a list of healthy peers
 	const PEER_LIST = 0b00000100;
+
+	const FAST_SYNC_NODE = Capabilities::TXHASHSET_HIST.bits
+		| Capabilities::PEER_LIST.bits;
 
 	const FULL_NODE = Capabilities::FULL_HIST.bits
 		| Capabilities::TXHASHSET_HIST.bits
