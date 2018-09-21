@@ -80,15 +80,13 @@ where
 
 	let mut router = Router::new();
 	router
-		.add_route("/v1/wallet/owner/**", Box::new(api_handler))
+		.add_route("/v1/wallet/owner/**", Arc::new(api_handler))
 		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 
 	let mut apis = ApiServer::new();
 	info!(LOGGER, "Starting HTTP Owner API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	apis.start(socket_addr, router).unwrap_or_else(|e| {
-		error!(LOGGER, "Failed to start API HTTP server: {}.", e);
-	});
+	apis.start(socket_addr, router);
 	Ok(())
 }
 
@@ -104,15 +102,13 @@ where
 
 	let mut router = Router::new();
 	router
-		.add_route("/v1/wallet/foreign/**", Box::new(api_handler))
+		.add_route("/v1/wallet/foreign/**", Arc::new(api_handler))
 		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 
 	let mut apis = ApiServer::new();
 	info!(LOGGER, "Starting HTTP Foreign API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	apis.start(socket_addr, router).unwrap_or_else(|e| {
-		error!(LOGGER, "Failed to start API HTTP server: {}.", e);
-	});
+	apis.start(socket_addr, router);
 	Ok(())
 }
 

@@ -17,7 +17,10 @@ serde_json = "1"
 slog = { version = "~2.3", features = ["max_level_trace", "release_max_level_trace"] }
 tokio = "0.1.7"
 tokio-core = "0.1.17"
+tokio-tls = "0.2"
+native-tls = "0.2"
 http = "0.1.5"
+hyper-tls = "0.3"
 futures = "0.1.21"
 url = "1.7.0"
 
