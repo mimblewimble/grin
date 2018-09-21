@@ -86,9 +86,7 @@ where
 	let mut apis = ApiServer::new();
 	info!(LOGGER, "Starting HTTP Owner API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	apis.start(socket_addr, router).unwrap_or_else(|e| {
-		error!(LOGGER, "Failed to start API HTTP server: {}.", e);
-	});
+	apis.start(socket_addr, router);
 	Ok(())
 }
 
@@ -110,9 +108,7 @@ where
 	let mut apis = ApiServer::new();
 	info!(LOGGER, "Starting HTTP Foreign API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	apis.start(socket_addr, router).unwrap_or_else(|e| {
-		error!(LOGGER, "Failed to start API HTTP server: {}.", e);
-	});
+	apis.start(socket_addr, router);
 	Ok(())
 }
 

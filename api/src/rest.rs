@@ -18,13 +18,19 @@
 //! To use it, just have your service(s) implement the ApiEndpoint trait and
 //! register them on a ApiServer.
 
+use failure::{Backtrace, Context, Fail};
+use futures::sync::oneshot;
+use futures::Stream;
 use hyper::rt::Future;
+use hyper::server::conn::Http;
 use hyper::{rt, Body, Request, Server};
+use native_tls::{Identity, TlsAcceptor};
 use router::{Handler, HandlerObj, ResponseFuture, Router};
 use std::fmt::{self, Display};
 use std::net::SocketAddr;
-
-use failure::{Backtrace, Context, Fail};
+use std::{io, thread};
+use tokio::net::TcpListener;
+use tokio_tls;
 use util::LOGGER;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
@@ -83,37 +89,113 @@ impl From<Context<ErrorKind>> for Error {
 	}
 }
 
+/// TLS config
+pub struct TLSConfig {
+	pub pkcs_bytes: Vec<u8>,
+	pub pass: String,
+}
+
 /// HTTP server allowing the registration of ApiEndpoint implementations.
-pub struct ApiServer {}
+pub struct ApiServer {
+	shutdown_sender: Option<oneshot::Sender<()>>,
+}
 
 impl ApiServer {
 	/// Creates a new ApiServer that will serve ApiEndpoint implementations
 	/// under the root URL.
 	pub fn new() -> ApiServer {
-		ApiServer {}
+		ApiServer {
+			shutdown_sender: None,
+		}
 	}
 
 	/// Starts the ApiServer at the provided address.
-	pub fn start(&mut self, addr: SocketAddr, router: Router) -> Result<(), String> {
-		let server = Server::bind(&addr)
-			.serve(router)
-			.map_err(|e| eprintln!("server error: {}", e));
+	pub fn start(&mut self, addr: SocketAddr, router: Router) -> bool {
+		if self.shutdown_sender.is_some() {
+			error!(LOGGER, "Can't start HTTP API server, it's running already");
+			return false;
+		}
+		let (tx, _rx) = oneshot::channel::<()>();
+		let _ = thread::Builder::new()
+			.name("apis".to_string())
+			.spawn(move || {
+				let server = Server::bind(&addr)
+					.serve(router)
+					// TODO graceful shutdown is unstable, investigate 
+					//.with_graceful_shutdown(rx)
+					.map_err(|e| eprintln!("HTTP API server error: {}", e));
 
-		//let mut rt = Runtime::new().unwrap();
-		//if rt.block_on(server).is_err() {
-		//	return Err("tokio block_on error".to_owned());
-		//}
-		rt::run(server);
-		Ok(())
+				rt::run(server);
+			});
+
+		info!(LOGGER, "HTTP API server has been started");
+		self.shutdown_sender = Some(tx);
+		true
 	}
 
-	/// Stops the API server
-	pub fn stop(&mut self) {
-		// TODO implement proper stop, the following method doesn't
-		// work for current_thread runtime.
-		//	if let Some(rt) = self.rt.take() {
-		//		rt.shutdown_now().wait().unwrap();
-		//	}
+	/// Starts the TLS ApiServer at the provided address.
+	/// TODO support stop operation
+	pub fn start_tls(&mut self, addr: SocketAddr, router: Router, conf: TLSConfig) -> bool {
+		if self.shutdown_sender.is_some() {
+			error!(LOGGER, "Can't start HTTP API server, it's running already");
+			return false;
+		}
+		let _ = thread::Builder::new()
+			.name("apis".to_string())
+			.spawn(move || {
+				let cert = Identity::from_pkcs12(conf.pkcs_bytes.as_slice(), &conf.pass).unwrap();
+				let tls_cx = TlsAcceptor::builder(cert).build().unwrap();
+				let tls_cx = tokio_tls::TlsAcceptor::from(tls_cx);
+				let srv = TcpListener::bind(&addr).expect("Error binding local port");
+				// Use lower lever hyper API to be able to intercept client connection
+				let server = Http::new()
+					.serve_incoming(
+						srv.incoming().and_then(move |socket| {
+							tls_cx
+								.accept(socket)
+								.map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+						}),
+						router,
+					)
+					.then(|res| match res {
+						Ok(conn) => Ok(Some(conn)),
+						Err(e) => {
+							eprintln!("Error: {}", e);
+							Ok(None)
+						}
+					})
+					.for_each(|conn_opt| {
+						if let Some(conn) = conn_opt {
+							rt::spawn(
+								conn.and_then(|c| c.map_err(|e| panic!("Hyper error {}", e)))
+									.map_err(|e| eprintln!("Connection error {}", e)),
+							);
+						}
+						Ok(())
+					});
+
+				rt::run(server);
+			});
+
+		info!(LOGGER, "HTTPS API server has been started");
+		true
+	}
+
+	/// Stops the API server, it panics in case of error
+	pub fn stop(&mut self) -> bool {
+		if self.shutdown_sender.is_some() {
+			// TODO re-enable stop after investigation
+			//let tx = mem::replace(&mut self.shutdown_sender, None).unwrap();
+			//tx.send(()).expect("Failed to stop API server");
+			info!(LOGGER, "API server has been stoped");
+			true
+		} else {
+			error!(
+				LOGGER,
+				"Can't stop API server, it's not running or doesn't spport stop operation"
+			);
+			false
+		}
 	}
 }
 
