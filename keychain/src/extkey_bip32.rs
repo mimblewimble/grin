@@ -96,7 +96,7 @@ impl BIP32ReferenceHasher {
 	/// New empty hasher
 	pub fn new() -> BIP32ReferenceHasher {
 		BIP32ReferenceHasher {
-			hmac_sha512: HmacSha512::new(&GenericArray::from_slice(&[0; 64])),
+			hmac_sha512: HmacSha512::new(GenericArray::from_slice(&[0u8; 128])),
 		}
 	}
 }
