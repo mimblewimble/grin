@@ -144,12 +144,10 @@ impl TransactionPool {
 	/// provided block.
 	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
 		// First reconcile the txpool.
-		println!("*** reconcile_block txpool");
 		self.txpool.reconcile_block(block)?;
 		self.txpool.reconcile(None, &block.header)?;
 
 		// Then reconcile the stempool, accounting for the txpool txs.
-		println!("*** reconcile_block stempool");
 		let txpool_tx = self.txpool.aggregate_transaction()?;
 		self.stempool.reconcile_block(block)?;
 		self.stempool.reconcile(txpool_tx, &block.header)?;

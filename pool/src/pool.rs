@@ -245,8 +245,6 @@ impl Pool {
 		header: &BlockHeader,
 	) -> Result<BlockSums, PoolError> {
 		let block_sums = self.blockchain.get_block_sums(&header.hash())?;
-		println!("***** validate_raw_tx: {:?}", block_sums);
-
 		let new_sums = self.apply_txs_to_block_sums(&block_sums, vec![tx.clone()], header)?;
 		Ok(new_sums)
 	}
@@ -258,15 +256,8 @@ impl Pool {
 		header: &BlockHeader,
 		block_sums: &BlockSums,
 	) -> Result<Vec<Transaction>, PoolError> {
-		println!(
-			"***** validate_raw_txs: {}, header: {}, {:?}",
-			txs.len(),
-			header.hash(),
-			block_sums
-		);
 		let mut valid_txs = vec![];
 
-		println!("***** about to iteratively apply {} txs", txs.len());
 		for tx in txs {
 			let mut candidate_txs = vec![];
 			if let Some(extra_tx) = extra_tx.clone() {
@@ -291,8 +282,6 @@ impl Pool {
 		txs: Vec<Transaction>,
 		header: &BlockHeader,
 	) -> Result<BlockSums, PoolError> {
-		println!("***** apply_txs_to_block_sums: {}", txs.len());
-
 		// Build a single aggregate tx and validate it.
 		let tx = transaction::aggregate(txs)?;
 		tx.validate(self.verifier_cache.clone())?;
@@ -330,38 +319,10 @@ impl Pool {
 		}
 
 		for x in existing_entries {
-			let res = self.add_to_pool(x.clone(), extra_txs.clone(), header);
-			println!("*** {:?}", res);
+			let _ = self.add_to_pool(x.clone(), extra_txs.clone(), header);
 		}
 
 		Ok(())
-
-		// println!("***** reconcile: (is this correct???)");
-		// let candidate_txs = self.all_transactions();
-		// let existing_len = candidate_txs.len();
-		//
-		// if candidate_txs.is_empty() {
-		// 	return Ok(());
-		// }
-		//
-		// // Go through the candidate txs and keep everything that validates incrementally
-		// // against a known chain state, accounting for the "extra tx" as necessary.
-		// let block_sums = self.blockchain.get_block_sums(&header.hash())?;
-		// let valid_txs = self.validate_raw_txs(candidate_txs, extra_tx, header, &block_sums)?;
-		//
-		// println!("***** reconcile: valid_txs now: {}", valid_txs.len());
-		//
-		// self.entries.retain(|x| valid_txs.contains(&x.tx));
-		//
-		// debug!(
-		// 	LOGGER,
-		// 	"pool [{}]: reconcile: existing txs {}, retained txs {}",
-		// 	self.name,
-		// 	existing_len,
-		// 	self.entries.len(),
-		// );
-		//
-		// Ok(())
 	}
 
 	// Group dependent transactions in buckets (vectors), each bucket
@@ -404,10 +365,6 @@ impl Pool {
 	// Also reject any txs where we see a conflicting tx,
 	// where an input is spent in a different tx.
 	fn remaining_transactions(&self, block: &Block) -> Vec<Transaction> {
-		println!(
-			"***** remaining_transactions: entries: {}",
-			self.entries.len()
-		);
 		self.entries
 			.iter()
 			.filter(|x| !x.tx.kernels().iter().any(|y| block.kernels().contains(y)))
@@ -438,7 +395,6 @@ impl Pool {
 	/// inputs or kernels intersect with the block.
 	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
 		let candidate_txs = self.remaining_transactions(block);
-		println!("***** reconcile_block: {}", candidate_txs.len());
 		self.entries.retain(|x| candidate_txs.contains(&x.tx));
 		Ok(())
 	}
@@ -447,20 +403,3 @@ impl Pool {
 		self.entries.len()
 	}
 }
-
-// #[derive(Clone, Debug)]
-// pub struct TxSums {
-// 	pub block_sums: BlockSums,
-// 	pub offset: BlindingFactor,
-// 	pub overage: i64,
-// }
-//
-// impl Default for TxSums {
-// 	fn default() -> TxSums {
-// 		TxSums{
-// 			block_sums: BlockSums::default(),
-// 			offset: BlindingFactor::zero(),
-// 			overage: 0,
-// 		}
-// 	}
-// }
