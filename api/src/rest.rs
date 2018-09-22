@@ -110,13 +110,19 @@ impl ApiServer {
 	}
 
 	/// Starts the ApiServer at the provided address.
-	pub fn start(&mut self, addr: SocketAddr, router: Router) -> bool {
+	pub fn start(
+		&mut self,
+		addr: SocketAddr,
+		router: Router,
+	) -> Result<thread::JoinHandle<()>, Error> {
 		if self.shutdown_sender.is_some() {
-			error!(LOGGER, "Can't start HTTP API server, it's running already");
-			return false;
+			return Err(ErrorKind::Internal(
+				"Can't start HTTP API server, it's running already".to_string(),
+			))?;
 		}
 		let (tx, _rx) = oneshot::channel::<()>();
-		let _ = thread::Builder::new()
+		self.shutdown_sender = Some(tx);
+		thread::Builder::new()
 			.name("apis".to_string())
 			.spawn(move || {
 				let server = Server::bind(&addr)
@@ -126,21 +132,24 @@ impl ApiServer {
 					.map_err(|e| eprintln!("HTTP API server error: {}", e));
 
 				rt::run(server);
-			});
-
-		info!(LOGGER, "HTTP API server has been started");
-		self.shutdown_sender = Some(tx);
-		true
+			})
+			.map_err(|_| ErrorKind::Internal("failed to spawn API thread".to_string()).into())
 	}
 
 	/// Starts the TLS ApiServer at the provided address.
 	/// TODO support stop operation
-	pub fn start_tls(&mut self, addr: SocketAddr, router: Router, conf: TLSConfig) -> bool {
+	pub fn start_tls(
+		&mut self,
+		addr: SocketAddr,
+		router: Router,
+		conf: TLSConfig,
+	) -> Result<thread::JoinHandle<()>, Error> {
 		if self.shutdown_sender.is_some() {
-			error!(LOGGER, "Can't start HTTP API server, it's running already");
-			return false;
+			return Err(ErrorKind::Internal(
+				"Can't start HTTPS API server, it's running already".to_string(),
+			))?;
 		}
-		let _ = thread::Builder::new()
+		thread::Builder::new()
 			.name("apis".to_string())
 			.spawn(move || {
 				let cert = Identity::from_pkcs12(conf.pkcs_bytes.as_slice(), &conf.pass).unwrap();
@@ -175,10 +184,8 @@ impl ApiServer {
 					});
 
 				rt::run(server);
-			});
-
-		info!(LOGGER, "HTTPS API server has been started");
-		true
+			})
+			.map_err(|_| ErrorKind::Internal("failed to spawn API thread".to_string()).into())
 	}
 
 	/// Stops the API server, it panics in case of error
