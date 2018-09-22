@@ -173,12 +173,6 @@ impl ServerConfig {
 				self.p2p_config
 					.capabilities
 					.toggle(p2p::Capabilities::FULL_HIST);
-				warn!(
-					LOGGER,
-					"ServerConfig - capabilities conflict with archive_mode: {}, force to: {:?}",
-					archive,
-					self.p2p_config.capabilities,
-				); // note: slog not available before config loaded, only print here.
 			}
 		}
 
