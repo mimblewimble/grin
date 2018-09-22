@@ -100,16 +100,14 @@ troubleshooting, etc.
 
 ## Docker
 
-        # Build using all available cores
-        docker build -t grin .
+```
+docker build -t grin .
+```
 
-        # run in foreground
-        docker run -it -v grin:/usr/src/grin grin
-
-        # or in background
-        docker run -it -d -v grin:/usr/src/grin grin
-
-If you decide to use a persistent storage (e.g. ```-v grin:/usr/src/grin```) you will need grin-server.toml configuration file in it.
+You can bind-mount your grin cache to run inside the container.
+```
+docker run -it -d -v $HOME/.grin:/root/.grin grin
+```
 
 ### Cross-platform builds
 
