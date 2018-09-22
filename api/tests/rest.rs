@@ -69,7 +69,7 @@ fn test_start_api() {
 	router.add_middleware(counter.clone());
 	let server_addr = "127.0.0.1:14434";
 	let addr: SocketAddr = server_addr.parse().expect("unable to parse server address");
-	assert!(server.start(addr, router));
+	assert!(server.start(addr, router).is_ok());
 	let url = format!("http://{}/v1/", server_addr);
 	let index = api::client::get::<Vec<String>>(url.as_str()).unwrap();
 	assert_eq!(index.len(), 2);
@@ -94,7 +94,7 @@ fn test_start_api_tls() {
 	let router = build_router();
 	let server_addr = "127.0.0.1:14444";
 	let addr: SocketAddr = server_addr.parse().expect("unable to parse server address");
-	assert!(server.start_tls(addr, router, tls_conf));
+	assert!(server.start_tls(addr, router, tls_conf).is_ok());
 	let url = format!("https://{}/v1/", server_addr);
 	let index = api::client::get::<Vec<String>>(url.as_str()).unwrap();
 	assert_eq!(index.len(), 2);
