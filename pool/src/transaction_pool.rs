@@ -82,7 +82,9 @@ impl TransactionPool {
 				.txpool
 				.find_matching_transactions(entry.tx.kernels().clone());
 			if !txs.is_empty() {
-				entry.tx = transaction::deaggregate(entry.tx, txs, self.verifier_cache.clone())?;
+				let tx = transaction::deaggregate(entry.tx, txs)?;
+				tx.validate(self.verifier_cache.clone())?;
+				entry.tx = tx;
 				entry.src.debug_name = "deagg".to_string();
 			}
 		}

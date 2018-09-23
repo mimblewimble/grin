@@ -873,7 +873,6 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 pub fn deaggregate(
 	mk_tx: Transaction,
 	txs: Vec<Transaction>,
-	verifier: Arc<RwLock<VerifierCache>>,
 ) -> Result<Transaction, Error> {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
@@ -884,7 +883,6 @@ pub fn deaggregate(
 	let mut kernel_offsets = vec![];
 
 	let tx = aggregate(txs)?;
-	tx.validate(verifier.clone())?;
 
 	for mk_input in mk_tx.body.inputs {
 		if !tx.body.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
@@ -934,9 +932,6 @@ pub fn deaggregate(
 
 	// Build a new tx from the above data.
 	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
-
-	// Now validate the resulting tx to ensure we have not built something invalid.
-	tx.validate(verifier)?;
 	Ok(tx)
 }
 
