@@ -39,6 +39,7 @@ use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
 use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
 use types::{TxHashSetRoots, TxHashsetWriteStatus};
+use utxo_view::UTXOView;
 use util::{file, secp_static, zip, LOGGER};
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
@@ -297,6 +298,27 @@ where
 	res
 }
 
+pub fn utxo_view<'a, F, T>(trees: &'a mut TxHashSet, inner: F) -> Result<T, Error>
+where
+	F: FnOnce(&mut UTXOView) -> Result<T, Error>,
+{
+	let res: Result<T, Error>;
+	{
+		let store = trees.commit_index.clone();
+		trace!(LOGGER, "Starting new UTXOView.");
+
+		let output_pmmr = PMMR::at(
+			&mut trees.output_pmmr_h.backend,
+			trees.output_pmmr_h.last_pos,
+		);
+
+		let mut utxo_view = UTXOView::new(output_pmmr, store);
+		res = inner(&mut utxo_view);
+	}
+	trees.output_pmmr_h.backend.discard();
+	res
+}
+
 /// Starts a new unit of work to extend the chain with additional blocks,
 /// accepting a closure that will work within that unit of work. The closure
 /// has access to an Extension object that allows the addition of blocks to
@@ -376,7 +398,7 @@ pub struct Extension<'a> {
 	rollback: bool,
 
 	/// Batch in which the extension occurs, public so it can be used within
-	/// and `extending` closure. Just be careful using it that way as it will
+	/// an `extending` closure. Just be careful using it that way as it will
 	/// get rolled back with the extension (i.e on a losing fork).
 	pub batch: &'a Batch<'a>,
 }
@@ -437,6 +459,10 @@ impl<'a> Extension<'a> {
 		}
 	}
 
+	pub fn utxo_view(&mut self) -> UTXOView {
+		UTXOView::new(self.output_pmmr, self.commit_index)
+	}
+
 	/// Verify we are not attempting to spend any coinbase outputs
 	/// that have not sufficiently matured.
 	pub fn verify_coinbase_maturity(
@@ -478,24 +504,6 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	// Inputs _must_ spend unspent outputs.
-	// Outputs _must not_ introduce duplicate commitments.
-	pub fn validate_utxo_fast(
-		&mut self,
-		inputs: &Vec<Input>,
-		outputs: &Vec<Output>,
-	) -> Result<(), Error> {
-		for out in outputs {
-			self.validate_utxo_output(out)?;
-		}
-
-		for input in inputs {
-			self.validate_utxo_input(input)?;
-		}
-
-		Ok(())
-	}
-
 	/// Apply a new block to the existing state.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
 		for out in b.outputs() {
@@ -513,18 +521,6 @@ impl<'a> Extension<'a> {
 		}
 
 		Ok(())
-	}
-
-	// TODO - Is this sufficient?
-	fn validate_utxo_input(&mut self, input: &Input) -> Result<(), Error> {
-		let commit = input.commitment();
-		let pos_res = self.batch.get_output_pos(&commit);
-		if let Ok(pos) = pos_res {
-			if let Some(_) = self.output_pmmr.get_data(pos) {
-				return Ok(());
-			}
-		}
-		Err(ErrorKind::AlreadySpent(commit).into())
 	}
 
 	fn apply_input(&mut self, input: &Input) -> Result<(), Error> {
@@ -561,19 +557,6 @@ impl<'a> Extension<'a> {
 			}
 		} else {
 			return Err(ErrorKind::AlreadySpent(commit).into());
-		}
-		Ok(())
-	}
-
-	/// TODO - Is this sufficient?
-	fn validate_utxo_output(&mut self, out: &Output) -> Result<(), Error> {
-		let commit = out.commitment();
-		if let Ok(pos) = self.batch.get_output_pos(&commit) {
-			if let Some(out_mmr) = self.output_pmmr.get_data(pos) {
-				if out_mmr.commitment() == commit {
-					return Err(ErrorKind::DuplicateCommitment(commit).into());
-				}
-			}
 		}
 		Ok(())
 	}

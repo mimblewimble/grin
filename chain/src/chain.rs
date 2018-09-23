@@ -448,9 +448,9 @@ impl Chain {
 
 	pub fn validate_tx(&self, tx: &Transaction, header: &BlockHeader) -> Result<(), Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
-		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.rewind(header)?;
-			extension.validate_utxo_fast(tx.inputs(), tx.outputs())?;
+		txhashset::utxo_view(&mut txhashset, |utxo| {
+			utxo.rewind(header)?;
+			utxo.validate_utxo_fast(tx.inputs(), tx.outputs())?;
 			Ok(())
 		})
 	}
