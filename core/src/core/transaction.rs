@@ -870,10 +870,7 @@ pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
-pub fn deaggregate(
-	mk_tx: Transaction,
-	txs: Vec<Transaction>,
-) -> Result<Transaction, Error> {
+pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];

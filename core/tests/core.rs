@@ -238,15 +238,13 @@ fn multi_kernel_transaction_deaggregation_4() {
 	assert!(tx4.validate(vc.clone()).is_ok());
 	assert!(tx5.validate(vc.clone()).is_ok());
 
-	let tx12345 = aggregate(
-		vec![
-			tx1.clone(),
-			tx2.clone(),
-			tx3.clone(),
-			tx4.clone(),
-			tx5.clone(),
-		],
-	).unwrap();
+	let tx12345 = aggregate(vec![
+		tx1.clone(),
+		tx2.clone(),
+		tx3.clone(),
+		tx4.clone(),
+		tx5.clone(),
+	]).unwrap();
 	assert!(tx12345.validate(vc.clone()).is_ok());
 
 	let deaggregated_tx5 = deaggregate(
@@ -273,24 +271,19 @@ fn multi_kernel_transaction_deaggregation_5() {
 	assert!(tx4.validate(vc.clone()).is_ok());
 	assert!(tx5.validate(vc.clone()).is_ok());
 
-	let tx12345 = aggregate(
-		vec![
-			tx1.clone(),
-			tx2.clone(),
-			tx3.clone(),
-			tx4.clone(),
-			tx5.clone(),
-		],
-	).unwrap();
+	let tx12345 = aggregate(vec![
+		tx1.clone(),
+		tx2.clone(),
+		tx3.clone(),
+		tx4.clone(),
+		tx5.clone(),
+	]).unwrap();
 	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()]).unwrap();
 	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()]).unwrap();
 
 	assert!(tx12345.validate(vc.clone()).is_ok());
 
-	let deaggregated_tx5 = deaggregate(
-		tx12345.clone(),
-		vec![tx12.clone(), tx34.clone()],
-	).unwrap();
+	let deaggregated_tx5 = deaggregate(tx12345.clone(), vec![tx12.clone(), tx34.clone()]).unwrap();
 	assert!(deaggregated_tx5.validate(vc.clone()).is_ok());
 	assert_eq!(tx5, deaggregated_tx5);
 }
