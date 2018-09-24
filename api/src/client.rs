@@ -19,6 +19,7 @@ use http::uri::{InvalidUri, Uri};
 use hyper::header::{ACCEPT, USER_AGENT};
 use hyper::rt::{Future, Stream};
 use hyper::{Body, Client, Request};
+use hyper_tls;
 use serde::{Deserialize, Serialize};
 use serde_json;
 
@@ -165,7 +166,8 @@ where
 }
 
 fn send_request_async(req: Request<Body>) -> Box<Future<Item = String, Error = Error> + Send> {
-	let client = Client::new();
+	let https = hyper_tls::HttpsConnector::new(1).unwrap();
+	let client = Client::builder().build::<_, Body>(https);
 	Box::new(
 		client
 			.request(req)
