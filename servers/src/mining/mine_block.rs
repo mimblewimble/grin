@@ -16,7 +16,7 @@
 //! them into a block and returns it.
 
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
-use rand::{self, Rng};
+use rand::{thread_rng, Rng};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
@@ -135,8 +135,7 @@ fn build_block(
 		verifier_cache,
 	)?;
 
-	let mut rng = rand::OsRng::new().unwrap();
-	b.header.pow.nonce = rng.gen();
+	b.header.pow.nonce = thread_rng().gen();
 	b.header.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_sec, 0), Utc);;
 
 	let b_difficulty = (b.header.total_difficulty() - head.total_difficulty()).to_num();

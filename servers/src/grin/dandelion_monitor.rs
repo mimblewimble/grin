@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use chrono::prelude::Utc;
-use rand::{self, Rng};
+use rand::{thread_rng, Rng};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread;
@@ -176,7 +176,7 @@ fn process_fresh_entries(
 ) -> Result<(), PoolError> {
 	let mut tx_pool = tx_pool.write().unwrap();
 
-	let mut rng = rand::thread_rng();
+	let mut rng = thread_rng();
 
 	let fresh_entries = &mut tx_pool
 		.stempool
@@ -209,7 +209,7 @@ fn process_expired_entries(
 	tx_pool: Arc<RwLock<TransactionPool>>,
 ) -> Result<(), PoolError> {
 	let now = Utc::now().timestamp();
-	let embargo_sec = dandelion_config.embargo_secs.unwrap() + rand::thread_rng().gen_range(0, 31);
+	let embargo_sec = dandelion_config.embargo_secs.unwrap() + thread_rng().gen_range(0, 31);
 	let cutoff = now - embargo_sec as i64;
 
 	let mut expired_entries = vec![];

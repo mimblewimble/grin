@@ -14,7 +14,7 @@
 
 //! Compact Transactions.
 
-use rand::{thread_rng, RngCore};
+use rand::{thread_rng, Rng};
 
 use consensus::VerifySortOrder;
 use core::hash::{Hash, Hashed};
@@ -129,7 +129,7 @@ impl From<Transaction> for CompactTransaction {
 		let tx_hash = tx.hash();
 
 		// Generate a random nonce (short_ids specific to a particular peer connection).
-		let nonce = thread_rng().next_u64();
+		let nonce = thread_rng().gen();
 
 		let mut kern_ids = vec![];
 

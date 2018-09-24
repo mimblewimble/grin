@@ -145,13 +145,6 @@ macro_rules! impl_array_newtype {
                 }
             }
         }
-
-        impl ::rand::Rand for $thing {
-            #[inline]
-            fn rand<R: ::rand::Rng>(r: &mut R) -> $thing {
-                $thing(::rand::Rand::rand(r))
-            }
-        }
     }
 }
 
