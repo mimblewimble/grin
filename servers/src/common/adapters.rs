@@ -27,7 +27,7 @@ use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStat
 use core::core::hash::{Hash, Hashed};
 use core::core::transaction::Transaction;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{BlockHeader, CompactBlock};
+use core::core::{BlockHeader, BlockSums, CompactBlock};
 use core::pow::Difficulty;
 use core::{core, global};
 use p2p;
@@ -46,7 +46,7 @@ fn wo<T>(weak_one: &OneTime<Weak<T>>) -> Arc<T> {
 	w(weak_one.borrow().deref())
 }
 
-/// Implementation of the NetAdapter for the blockchain. Gets notified when new
+/// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
 pub struct NetToChainAdapter {
@@ -80,7 +80,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		};
 
 		let tx_hash = tx.hash();
-		let block_hash = w(&self.chain).head_header().unwrap().hash();
+		let header = w(&self.chain).head_header().unwrap();
 
 		debug!(
 			LOGGER,
@@ -93,7 +93,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		let res = {
 			let mut tx_pool = self.tx_pool.write().unwrap();
-			tx_pool.add_to_pool(source, tx, stem, &block_hash)
+			tx_pool.add_to_pool(source, tx, stem, &header)
 		};
 
 		if let Err(e) = res {
@@ -617,7 +617,7 @@ impl NetToChainAdapter {
 }
 
 /// Implementation of the ChainAdapter for the network. Gets notified when the
-/// blockchain accepted a new block, asking the pool to update its state and
+///  accepted a new block, asking the pool to update its state and
 /// the network to broadcast the block
 pub struct ChainToPoolAndNetAdapter {
 	sync_state: Arc<SyncState>,
@@ -708,7 +708,7 @@ impl PoolToNetAdapter {
 	}
 }
 
-/// Implements the view of the blockchain required by the TransactionPool to
+/// Implements the view of the  required by the TransactionPool to
 /// operate. Mostly needed to break any direct lifecycle or implementation
 /// dependency between the pool and the chain.
 #[derive(Clone)]
@@ -732,25 +732,27 @@ impl PoolToChainAdapter {
 
 impl pool::BlockChain for PoolToChainAdapter {
 	fn chain_head(&self) -> Result<BlockHeader, pool::PoolError> {
-		wo(&self.chain).head_header().map_err(|e| {
-			pool::PoolError::Other(format!(
-				"Chain adapter failed to retrieve chain head: {:?}",
-				e
-			))
-		})
+		wo(&self.chain)
+			.head_header()
+			.map_err(|_| pool::PoolError::Other(format!("failed to get head_header")))
 	}
 
-	fn validate_raw_txs(
-		&self,
-		txs: Vec<Transaction>,
-		pre_tx: Option<Transaction>,
-		block_hash: &Hash,
-	) -> Result<(Vec<Transaction>), pool::PoolError> {
+	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, pool::PoolError> {
 		wo(&self.chain)
-			.validate_raw_txs(txs, pre_tx, block_hash)
-			.map_err(|e| {
-				pool::PoolError::Other(format!("Chain adapter failed to validate_raw_txs: {:?}", e))
-			})
+			.get_block_header(hash)
+			.map_err(|_| pool::PoolError::Other(format!("failed to get block_header")))
+	}
+
+	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, pool::PoolError> {
+		wo(&self.chain)
+			.get_block_sums(hash)
+			.map_err(|_| pool::PoolError::Other(format!("failed to get block_sums")))
+	}
+
+	fn validate_tx(&self, tx: &Transaction, header: &BlockHeader) -> Result<(), pool::PoolError> {
+		wo(&self.chain)
+			.validate_tx(tx, header)
+			.map_err(|_| pool::PoolError::Other(format!("failed to validate tx")))
 	}
 
 	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), pool::PoolError> {

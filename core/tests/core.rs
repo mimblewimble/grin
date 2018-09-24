@@ -137,7 +137,7 @@ fn transaction_cut_through() {
 	let vc = verifier_cache();
 
 	// now build a "cut_through" tx from tx1 and tx2
-	let tx3 = aggregate(vec![tx1, tx2], vc.clone()).unwrap();
+	let tx3 = aggregate(vec![tx1, tx2]).unwrap();
 
 	assert!(tx3.validate(vc.clone()).is_ok());
 }
@@ -157,22 +157,19 @@ fn multi_kernel_transaction_deaggregation() {
 	assert!(tx3.validate(vc.clone()).is_ok());
 	assert!(tx4.validate(vc.clone()).is_ok());
 
-	let tx1234 = aggregate(
-		vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone()],
-		vc.clone(),
-	).unwrap();
-	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], vc.clone()).unwrap();
-	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()], vc.clone()).unwrap();
+	let tx1234 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone()]).unwrap();
+	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()]).unwrap();
+	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()]).unwrap();
 
 	assert!(tx1234.validate(vc.clone()).is_ok());
 	assert!(tx12.validate(vc.clone()).is_ok());
 	assert!(tx34.validate(vc.clone()).is_ok());
 
-	let deaggregated_tx34 = deaggregate(tx1234.clone(), vec![tx12.clone()], vc.clone()).unwrap();
+	let deaggregated_tx34 = deaggregate(tx1234.clone(), vec![tx12.clone()]).unwrap();
 	assert!(deaggregated_tx34.validate(vc.clone()).is_ok());
 	assert_eq!(tx34, deaggregated_tx34);
 
-	let deaggregated_tx12 = deaggregate(tx1234.clone(), vec![tx34.clone()], vc.clone()).unwrap();
+	let deaggregated_tx12 = deaggregate(tx1234.clone(), vec![tx34.clone()]).unwrap();
 
 	assert!(deaggregated_tx12.validate(vc.clone()).is_ok());
 	assert_eq!(tx12, deaggregated_tx12);
@@ -190,13 +187,13 @@ fn multi_kernel_transaction_deaggregation_2() {
 	assert!(tx2.validate(vc.clone()).is_ok());
 	assert!(tx3.validate(vc.clone()).is_ok());
 
-	let tx123 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone()], vc.clone()).unwrap();
-	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], vc.clone()).unwrap();
+	let tx123 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone()]).unwrap();
+	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()]).unwrap();
 
 	assert!(tx123.validate(vc.clone()).is_ok());
 	assert!(tx12.validate(vc.clone()).is_ok());
 
-	let deaggregated_tx3 = deaggregate(tx123.clone(), vec![tx12.clone()], vc.clone()).unwrap();
+	let deaggregated_tx3 = deaggregate(tx123.clone(), vec![tx12.clone()]).unwrap();
 	assert!(deaggregated_tx3.validate(vc.clone()).is_ok());
 	assert_eq!(tx3, deaggregated_tx3);
 }
@@ -213,14 +210,14 @@ fn multi_kernel_transaction_deaggregation_3() {
 	assert!(tx2.validate(vc.clone()).is_ok());
 	assert!(tx3.validate(vc.clone()).is_ok());
 
-	let tx123 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone()], vc.clone()).unwrap();
-	let tx13 = aggregate(vec![tx1.clone(), tx3.clone()], vc.clone()).unwrap();
-	let tx2 = aggregate(vec![tx2.clone()], vc.clone()).unwrap();
+	let tx123 = aggregate(vec![tx1.clone(), tx2.clone(), tx3.clone()]).unwrap();
+	let tx13 = aggregate(vec![tx1.clone(), tx3.clone()]).unwrap();
+	let tx2 = aggregate(vec![tx2.clone()]).unwrap();
 
 	assert!(tx123.validate(vc.clone()).is_ok());
 	assert!(tx2.validate(vc.clone()).is_ok());
 
-	let deaggregated_tx13 = deaggregate(tx123.clone(), vec![tx2.clone()], vc.clone()).unwrap();
+	let deaggregated_tx13 = deaggregate(tx123.clone(), vec![tx2.clone()]).unwrap();
 	assert!(deaggregated_tx13.validate(vc.clone()).is_ok());
 	assert_eq!(tx13, deaggregated_tx13);
 }
@@ -241,22 +238,18 @@ fn multi_kernel_transaction_deaggregation_4() {
 	assert!(tx4.validate(vc.clone()).is_ok());
 	assert!(tx5.validate(vc.clone()).is_ok());
 
-	let tx12345 = aggregate(
-		vec![
-			tx1.clone(),
-			tx2.clone(),
-			tx3.clone(),
-			tx4.clone(),
-			tx5.clone(),
-		],
-		vc.clone(),
-	).unwrap();
+	let tx12345 = aggregate(vec![
+		tx1.clone(),
+		tx2.clone(),
+		tx3.clone(),
+		tx4.clone(),
+		tx5.clone(),
+	]).unwrap();
 	assert!(tx12345.validate(vc.clone()).is_ok());
 
 	let deaggregated_tx5 = deaggregate(
 		tx12345.clone(),
 		vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone()],
-		vc.clone(),
 	).unwrap();
 	assert!(deaggregated_tx5.validate(vc.clone()).is_ok());
 	assert_eq!(tx5, deaggregated_tx5);
@@ -278,26 +271,19 @@ fn multi_kernel_transaction_deaggregation_5() {
 	assert!(tx4.validate(vc.clone()).is_ok());
 	assert!(tx5.validate(vc.clone()).is_ok());
 
-	let tx12345 = aggregate(
-		vec![
-			tx1.clone(),
-			tx2.clone(),
-			tx3.clone(),
-			tx4.clone(),
-			tx5.clone(),
-		],
-		vc.clone(),
-	).unwrap();
-	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()], vc.clone()).unwrap();
-	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()], vc.clone()).unwrap();
+	let tx12345 = aggregate(vec![
+		tx1.clone(),
+		tx2.clone(),
+		tx3.clone(),
+		tx4.clone(),
+		tx5.clone(),
+	]).unwrap();
+	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()]).unwrap();
+	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()]).unwrap();
 
 	assert!(tx12345.validate(vc.clone()).is_ok());
 
-	let deaggregated_tx5 = deaggregate(
-		tx12345.clone(),
-		vec![tx12.clone(), tx34.clone()],
-		vc.clone(),
-	).unwrap();
+	let deaggregated_tx5 = deaggregate(tx12345.clone(), vec![tx12.clone(), tx34.clone()]).unwrap();
 	assert!(deaggregated_tx5.validate(vc.clone()).is_ok());
 	assert_eq!(tx5, deaggregated_tx5);
 }
@@ -314,16 +300,16 @@ fn basic_transaction_deaggregation() {
 	assert!(tx2.validate(vc.clone()).is_ok());
 
 	// now build a "cut_through" tx from tx1 and tx2
-	let tx3 = aggregate(vec![tx1.clone(), tx2.clone()], vc.clone()).unwrap();
+	let tx3 = aggregate(vec![tx1.clone(), tx2.clone()]).unwrap();
 
 	assert!(tx3.validate(vc.clone()).is_ok());
 
-	let deaggregated_tx1 = deaggregate(tx3.clone(), vec![tx2.clone()], vc.clone()).unwrap();
+	let deaggregated_tx1 = deaggregate(tx3.clone(), vec![tx2.clone()]).unwrap();
 
 	assert!(deaggregated_tx1.validate(vc.clone()).is_ok());
 	assert_eq!(tx1, deaggregated_tx1);
 
-	let deaggregated_tx2 = deaggregate(tx3.clone(), vec![tx1.clone()], vc.clone()).unwrap();
+	let deaggregated_tx2 = deaggregate(tx3.clone(), vec![tx1.clone()]).unwrap();
 
 	assert!(deaggregated_tx2.validate(vc.clone()).is_ok());
 	assert_eq!(tx2, deaggregated_tx2);

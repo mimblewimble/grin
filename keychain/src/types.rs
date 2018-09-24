@@ -14,6 +14,7 @@
 
 use rand::thread_rng;
 use std::cmp::min;
+use std::ops::Add;
 /// Keychain trait and its main supporting types. The Identifier is a
 /// semi-opaque structure (just bytes) to track keys within the Keychain.
 /// BlindingFactor is a useful wrapper around a private key to help with
@@ -28,6 +29,7 @@ use util::secp::constants::SECRET_KEY_SIZE;
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::Commitment;
 use util::secp::{self, Message, Secp256k1, Signature};
+use util::static_secp_instance;
 
 // Size of an identifier in bytes
 pub const IDENTIFIER_SIZE: usize = 10;
@@ -174,6 +176,32 @@ impl fmt::Debug for BlindingFactor {
 impl AsRef<[u8]> for BlindingFactor {
 	fn as_ref(&self) -> &[u8] {
 		&self.0
+	}
+}
+
+impl Add for BlindingFactor {
+	type Output = Result<BlindingFactor, Error>;
+
+	// Convenient (and robust) way to add two blinding_factors together.
+	// Handles "zero" blinding_factors correctly.
+	//
+	// let bf = (bf1 + bf2)?;
+	//
+	fn add(self, other: BlindingFactor) -> Self::Output {
+		let secp = static_secp_instance();
+		let secp = secp.lock().unwrap();
+		let keys = vec![self, other]
+			.into_iter()
+			.filter(|x| *x != BlindingFactor::zero())
+			.filter_map(|x| x.secret_key(&secp).ok())
+			.collect::<Vec<_>>();
+
+		if keys.is_empty() {
+			Ok(BlindingFactor::zero())
+		} else {
+			let sum = secp.blind_sum(keys, vec![])?;
+			Ok(BlindingFactor::from_secret_key(sum))
+		}
 	}
 }
 

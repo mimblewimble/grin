@@ -93,12 +93,15 @@ fn process_stem_phase(
 	let header = tx_pool.blockchain.chain_head()?;
 
 	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
-	let stem_txs = tx_pool.stempool.select_valid_transactions(
-		PoolEntryState::ToStem,
-		PoolEntryState::Stemmed,
-		txpool_tx,
-		&header.hash(),
-	)?;
+	let stem_txs = tx_pool
+		.stempool
+		.get_transactions_in_state(PoolEntryState::ToStem);
+	let stem_txs = tx_pool
+		.stempool
+		.select_valid_transactions(stem_txs, txpool_tx, &header)?;
+	tx_pool
+		.stempool
+		.transition_to_state(&stem_txs, PoolEntryState::Stemmed);
 
 	if stem_txs.len() > 0 {
 		debug!(
@@ -107,7 +110,8 @@ fn process_stem_phase(
 			stem_txs.len()
 		);
 
-		let agg_tx = transaction::aggregate(stem_txs, verifier_cache.clone())?;
+		let agg_tx = transaction::aggregate(stem_txs)?;
+		agg_tx.validate(verifier_cache.clone())?;
 
 		let res = tx_pool.adapter.stem_tx_accepted(&agg_tx);
 		if res.is_err() {
@@ -121,7 +125,7 @@ fn process_stem_phase(
 				identifier: "?.?.?.?".to_string(),
 			};
 
-			tx_pool.add_to_pool(src, agg_tx, false, &header.hash())?;
+			tx_pool.add_to_pool(src, agg_tx, false, &header)?;
 		}
 	}
 	Ok(())
@@ -136,12 +140,15 @@ fn process_fluff_phase(
 	let header = tx_pool.blockchain.chain_head()?;
 
 	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
-	let stem_txs = tx_pool.stempool.select_valid_transactions(
-		PoolEntryState::ToFluff,
-		PoolEntryState::Fluffed,
-		txpool_tx,
-		&header.hash(),
-	)?;
+	let stem_txs = tx_pool
+		.stempool
+		.get_transactions_in_state(PoolEntryState::ToFluff);
+	let stem_txs = tx_pool
+		.stempool
+		.select_valid_transactions(stem_txs, txpool_tx, &header)?;
+	tx_pool
+		.stempool
+		.transition_to_state(&stem_txs, PoolEntryState::Fluffed);
 
 	if stem_txs.len() > 0 {
 		debug!(
@@ -150,14 +157,15 @@ fn process_fluff_phase(
 			stem_txs.len()
 		);
 
-		let agg_tx = transaction::aggregate(stem_txs, verifier_cache.clone())?;
+		let agg_tx = transaction::aggregate(stem_txs)?;
+		agg_tx.validate(verifier_cache.clone())?;
 
 		let src = TxSource {
 			debug_name: "fluff".to_string(),
 			identifier: "?.?.?.?".to_string(),
 		};
 
-		tx_pool.add_to_pool(src, agg_tx, false, &header.hash())?;
+		tx_pool.add_to_pool(src, agg_tx, false, &header)?;
 	}
 	Ok(())
 }
@@ -238,7 +246,7 @@ fn process_expired_entries(
 					debug_name: "embargo_expired".to_string(),
 					identifier: "?.?.?.?".to_string(),
 				};
-				match tx_pool.add_to_pool(src, entry.tx, false, &header.hash()) {
+				match tx_pool.add_to_pool(src, entry.tx, false, &header) {
 					Ok(_) => debug!(
 						LOGGER,
 						"dand_mon: embargo expired, fluffed tx successfully."
