@@ -13,7 +13,7 @@
 
 //! Implementation of Cuckatoo Cycle designed by John Tromp.
 use pow::num::{PrimInt, ToPrimitive};
-use std::mem;
+use std::{mem, fmt};
 use std::ops::{BitOrAssign, Mul};
 
 use blake2::blake2b::blake2b;
@@ -30,6 +30,7 @@ impl EdgeType for u32 {}
 impl EdgeType for u64 {}
 
 /// An element of an adjencency list
+#[derive(Debug, Clone, Eq, PartialEq)]
 struct Link<T>
 where
 	T: EdgeType,
@@ -37,6 +38,16 @@ where
 	next: T,
 	to: T,
 }
+
+impl <T> fmt::Display for Link<T> 
+where
+	T: EdgeType
+{
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		write!(f, "(next: {}, to: {})", self.next.to_u64().unwrap(), self.to.to_u64().unwrap())
+	}
+}
+
 
 struct Graph<T>
 where
@@ -55,7 +66,7 @@ where
 	/// Maximum solutions
 	max_sols: u32,
 	///
-	solutions: Vec<Proof>,
+	pub solutions: Vec<Proof>,
 	/// proof size
 	proof_size: usize,
 	/// define NIL type
@@ -103,11 +114,15 @@ where
 	// remove lnk from u's adjacency list
 	fn remove_adj(&mut self, u: T, lnk: T) {
 		let mut lp = self.adj_list[u.to_u64().unwrap() as usize];
+		let mut moved = false;
 		while lp != lnk {
 			assert!(lp != self.nil);
 			lp = self.links[lp.to_u64().unwrap() as usize].next;
+			moved = true;
 		}
-		lp = self.links[lnk.to_u64().unwrap() as usize].next;
+		if !moved {
+			self.adj_list[u.to_u64().unwrap() as usize] = self.links[lnk.to_u64().unwrap() as usize].next;
+		} 
 		self.links[lnk.to_u64().unwrap() as usize].to = self.nil;
 	}
 
@@ -138,38 +153,36 @@ where
 	}
 
 	fn cycles_with_link(&mut self, len: u32, u: T, dest: T) {
-		if self.test_bit(u.to_u64().unwrap() >> 1) {
-			println!("Already visited");
+		if self.test_bit((u >> 1).to_u64().unwrap()) {
 			return;
 		}
 		assert!(u != self.nil);
 		if (u ^ T::one()) == dest {
+			println!("{}-cycle found", len);
 			if len == self.proof_size as u32 {
 				if self.solutions.len() < self.max_sols as usize {
 					// create next solution
 					self.solutions.push(Proof::zero(self.proof_size));
 				}
 				return;
-			} else if len == self.proof_size as u32 {
+			} 
+		} else if len == self.proof_size as u32 {
 				return;
-			}
 		}
 		let mut au1 = self.adj_list[(u ^ T::one()).to_u64().unwrap() as usize];
 		if au1 != self.nil {
-			self.visited.add((u.to_u64().unwrap() >> 1) as u32);
+			self.visited.add((u >> 1).to_u64().unwrap() as u32);
 			while au1 != self.nil {
 				let i = self.solutions.len() - 1;
-				// TODO: ???
-				//self.solutions[i].nonces[len as usize] = au1.to_u64().unwrap() / 2;
+				self.solutions[i].nonces[len as usize] = au1.to_u64().unwrap() / 2;
 				let link_index = (au1 ^ T::one()).to_u64().unwrap() as usize;
 				let link = self.links[link_index].to;
-				/*if link == self.nil {
-					break;
-				}*/
-				self.cycles_with_link(len + 1, link, dest);
+				if link != self.nil {
+					self.cycles_with_link(len + 1, link, dest);
+				}
 				au1 = self.links[au1.to_u64().unwrap() as usize].next;
 			}
-			self.visited.remove((u.to_u64().unwrap() >> 1) as u32);
+			self.visited.remove((u >> 1).to_u64().unwrap() as u32);
 		}
 	}
 
@@ -200,7 +213,7 @@ where
 {
 	siphash_keys: [u64; 4],
 	easiness: T,
-	graph: Graph<T>,
+	pub graph: Graph<T>,
 	proof_size: usize,
 	edge_mask: T,
 }
@@ -234,17 +247,17 @@ where
 		let hb = h.as_bytes();
 		let mut rdr = Cursor::new(hb);
 		self.siphash_keys = [
-			rdr.read_u64::<BigEndian>().unwrap(),
-			rdr.read_u64::<BigEndian>().unwrap(),
-			rdr.read_u64::<BigEndian>().unwrap(),
-			rdr.read_u64::<BigEndian>().unwrap(),
+			rdr.read_u64::<LittleEndian>().unwrap(),
+			rdr.read_u64::<LittleEndian>().unwrap(),
+			rdr.read_u64::<LittleEndian>().unwrap(),
+			rdr.read_u64::<LittleEndian>().unwrap(),
 		];
 	}
 
 	/// Get a siphash key as a hex string (for display convenience)
 	pub fn sipkey_hex(&self, index: usize) -> String {
 		let mut rdr = vec![];
-		rdr.write_u64::<LittleEndian>(self.siphash_keys[index])
+		rdr.write_u64::<BigEndian>(self.siphash_keys[index])
 			.unwrap();
 		util::to_hex(rdr)
 	}
@@ -324,4 +337,8 @@ fn cuckatoo() {
 	);
 	let num_sols = ctx_u32.find_cycles_simple(None);
 	println!("Num sols found: {}", num_sols);
+	for i in 0..num_sols {
+		let sol = ctx_u32.graph.solutions[i].clone();
+		println!("{:?}", sol);
+	}
 }
