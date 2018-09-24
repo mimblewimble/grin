@@ -28,7 +28,8 @@ use util::secp::pedersen::{Commitment, RangeProof};
 use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
-use core::core::pmmr::{self, PMMRReadonly, PMMR};
+use core::core::pmmr::{self, PMMR};
+use core::core::readonly_pmmr::{ReadonlyPMMR};
 use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
@@ -301,7 +302,7 @@ where
 	let res: Result<T, Error>;
 	{
 		let output_pmmr =
-			PMMRReadonly::at(&trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos);
+			ReadonlyPMMR::at(&trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos);
 		let batch = trees.commit_index.batch()?;
 		let utxo_view = UTXOView::new(output_pmmr, &batch);
 		res = inner(&utxo_view);
@@ -441,8 +442,9 @@ impl<'a> Extension<'a> {
 		}
 	}
 
+	/// Build a view of the current UTXO set based on the output PMMR.
 	pub fn utxo_view(&'a self) -> UTXOView<'a> {
-		UTXOView::new(self.output_pmmr.pmmr_readonly(), self.batch)
+		UTXOView::new(self.output_pmmr.readonly_pmmr(), self.batch)
 	}
 
 	// TODO - move this into "utxo_view"

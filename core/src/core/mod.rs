@@ -23,6 +23,7 @@ pub mod hash;
 pub mod id;
 pub mod merkle_proof;
 pub mod pmmr;
+pub mod readonly_pmmr;
 pub mod transaction;
 pub mod verifier_cache;
 

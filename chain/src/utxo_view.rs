@@ -14,43 +14,31 @@
 
 //! Lightweight readonly view into output MMR for convenience.
 
-use std::collections::HashSet;
-use std::fs::{self, File};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::Instant;
-
-use util::secp::pedersen::{Commitment, RangeProof};
-
-use core::core::committed::Committed;
-use core::core::hash::{Hash, Hashed};
-use core::core::merkle_proof::MerkleProof;
-use core::core::pmmr::{self, PMMRReadonly, PMMR};
+use core::core::readonly_pmmr::ReadonlyPMMR;
 use core::core::{
-	Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel,
+	Block, Input, Output, OutputIdentifier, Transaction
 };
 
 use error::{Error, ErrorKind};
-use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
+use grin_store::pmmr::PMMRBackend;
 use store::Batch;
-use txhashset;
-use txhashset::{input_pos_to_rewind, TxHashSet};
 
 /// Readonly view of the UTXO set (based on output MMR).
 pub struct UTXOView<'a> {
-	pmmr: PMMRReadonly<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
+	pmmr: ReadonlyPMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 	batch: &'a Batch<'a>,
 }
 
 impl<'a> UTXOView<'a> {
+	/// Build a new UTXO view.
 	pub fn new(
-		pmmr: PMMRReadonly<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
+		pmmr: ReadonlyPMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 		batch: &'a Batch,
 	) -> UTXOView<'a> {
 		UTXOView { pmmr, batch }
 	}
 
-	/// Validate a block against the UTXO set.
+	/// Validate a block against the current UTXO set.
 	/// Every input must spend an output that currently exists in the UTXO set.
 	/// No duplicate outputs.
 	pub fn validate_block(&self, block: &Block) -> Result<(), Error> {
@@ -64,6 +52,9 @@ impl<'a> UTXOView<'a> {
 		Ok(())
 	}
 
+	/// Validate a transaction against the current UTXO set.
+	/// Every input must spend an output that currently exists in the UTXO set.
+	/// No duplicate outputs.
 	pub fn validate_tx(&self, tx: &Transaction) -> Result<(), Error> {
 		for output in tx.outputs() {
 			self.validate_output(output)?;
