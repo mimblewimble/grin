@@ -28,8 +28,7 @@ use util::secp::pedersen::{Commitment, RangeProof};
 use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
-use core::core::pmmr::{self, PMMR};
-use core::core::readonly_pmmr::ReadonlyPMMR;
+use core::core::pmmr::{self, PMMR, ReadonlyPMMR};
 use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
@@ -307,8 +306,8 @@ where
 		// Create a new batch here to pass into the utxo_view.
 		// Discard it (rollback) after we finish with the utxo_view.
 		let batch = trees.commit_index.batch()?;
-		let utxo_view = UTXOView::new(output_pmmr, &batch);
-		res = inner(&utxo_view);
+		let utxo = UTXOView::new(output_pmmr, &batch);
+		res = inner(&utxo);
 	}
 	res
 }

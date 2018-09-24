@@ -14,7 +14,7 @@
 
 //! Lightweight readonly view into output MMR for convenience.
 
-use core::core::readonly_pmmr::ReadonlyPMMR;
+use core::core::pmmr::ReadonlyPMMR;
 use core::core::{Block, Input, Output, OutputIdentifier, Transaction};
 
 use error::{Error, ErrorKind};
