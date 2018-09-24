@@ -27,14 +27,14 @@ use util::secp::pedersen::{Commitment, RangeProof};
 use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
-use core::core::pmmr::{self, PMMR, PMMRReadonly};
+use core::core::pmmr::{self, PMMRReadonly, PMMR};
 use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
 
 use error::{Error, ErrorKind};
 use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
 use store::Batch;
 use txhashset;
-use txhashset::{TxHashSet, input_pos_to_rewind};
+use txhashset::{input_pos_to_rewind, TxHashSet};
 
 /// Readonly view of the UTXO set (based on output MMR).
 pub struct UTXOView<'a> {
@@ -47,7 +47,7 @@ impl<'a> UTXOView<'a> {
 		pmmr: PMMRReadonly<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 		batch: &'a Batch,
 	) -> UTXOView<'a> {
-		UTXOView {pmmr, batch}
+		UTXOView { pmmr, batch }
 	}
 
 	/// Validate a vec of inputs against the UTXO set.

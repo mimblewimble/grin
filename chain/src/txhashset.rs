@@ -28,7 +28,7 @@ use util::secp::pedersen::{Commitment, RangeProof};
 use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
-use core::core::pmmr::{self, PMMR, PMMRReadonly};
+use core::core::pmmr::{self, PMMRReadonly, PMMR};
 use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
@@ -39,8 +39,8 @@ use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
 use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
 use types::{TxHashSetRoots, TxHashsetWriteStatus};
-use utxo_view::UTXOView;
 use util::{file, secp_static, zip, LOGGER};
+use utxo_view::UTXOView;
 
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
 const OUTPUT_SUBDIR: &'static str = "output";
@@ -233,11 +233,7 @@ impl TxHashSet {
 
 		let batch = self.commit_index.batch()?;
 
-		let rewind_rm_pos = input_pos_to_rewind(
-			&horizon_header,
-			&head_header,
-			&batch,
-		)?;
+		let rewind_rm_pos = input_pos_to_rewind(&horizon_header, &head_header, &batch)?;
 
 		{
 			let clean_output_index = |commit: &[u8]| {
@@ -304,10 +300,8 @@ where
 {
 	let res: Result<T, Error>;
 	{
-		let output_pmmr = PMMRReadonly::at(
-			&trees.output_pmmr_h.backend,
-			trees.output_pmmr_h.last_pos,
-		);
+		let output_pmmr =
+			PMMRReadonly::at(&trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos);
 		let batch = trees.commit_index.batch()?;
 		let utxo_view = UTXOView::new(output_pmmr, &batch);
 		res = inner(&utxo_view);
@@ -428,10 +422,7 @@ impl<'a> Committed for Extension<'a> {
 }
 
 impl<'a> Extension<'a> {
-	fn new(
-		trees: &'a mut TxHashSet,
-		batch: &'a Batch,
-	) -> Extension<'a> {
+	fn new(trees: &'a mut TxHashSet, batch: &'a Batch) -> Extension<'a> {
 		Extension {
 			output_pmmr: PMMR::at(
 				&mut trees.output_pmmr_h.backend,
@@ -665,11 +656,7 @@ impl<'a> Extension<'a> {
 		// undone during rewind).
 		// Rewound output pos will be removed from the MMR.
 		// Rewound input (spent) pos will be added back to the MMR.
-		let rewind_rm_pos = input_pos_to_rewind(
-			block_header,
-			&head_header,
-			&self.batch,
-		)?;
+		let rewind_rm_pos = input_pos_to_rewind(block_header, &head_header, &self.batch)?;
 
 		self.rewind_to_pos(
 			block_header.output_mmr_size,
