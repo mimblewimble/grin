@@ -303,6 +303,9 @@ where
 	{
 		let output_pmmr =
 			ReadonlyPMMR::at(&trees.output_pmmr_h.backend, trees.output_pmmr_h.last_pos);
+
+		// Create a new batch here to pass into the utxo_view.
+		// Discard it (rollback) after we finish with the utxo_view.
 		let batch = trees.commit_index.batch()?;
 		let utxo_view = UTXOView::new(output_pmmr, &batch);
 		res = inner(&utxo_view);

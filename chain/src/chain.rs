@@ -448,8 +448,8 @@ impl Chain {
 
 	/// Validate the tx against the current UTXO set.
 	pub fn validate_tx(&self, tx: &Transaction) -> Result<(), Error> {
-		let mut txhashset = self.txhashset.write().unwrap();
-		txhashset::utxo_view(&mut txhashset, |utxo| {
+		let txhashset = self.txhashset.read().unwrap();
+		txhashset::utxo_view(&txhashset, |utxo| {
 			utxo.validate_tx(tx)?;
 			Ok(())
 		})

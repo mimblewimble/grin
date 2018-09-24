@@ -725,7 +725,7 @@ pub fn rewind_and_apply_fork(
 	Ok(())
 }
 
-fn validate_utxo(block: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+fn validate_utxo(block: &Block, ext: &txhashset::Extension) -> Result<(), Error> {
 	let utxo_view = ext.utxo_view();
 	utxo_view.validate_block(block)?;
 	Ok(())
