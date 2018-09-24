@@ -18,7 +18,6 @@ use core::hash::Hash;
 use core::BlockHeader;
 use ser::PMMRable;
 
-
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
 /// The PMMR itself does not need the Backend to be accurate on the existence
 /// of an element (i.e. remove could be a no-op) but layers above can

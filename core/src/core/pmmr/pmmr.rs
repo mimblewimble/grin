@@ -19,11 +19,10 @@ use croaring::Bitmap;
 
 use core::hash::Hash;
 use core::merkle_proof::MerkleProof;
-use core::pmmr::{Backend,ReadonlyPMMR};
+use core::pmmr::{Backend, ReadonlyPMMR};
 use core::BlockHeader;
 use ser::{PMMRIndexHashable, PMMRable};
 use util::LOGGER;
-
 
 /// 64 bits all ones: 0b11111111...1
 const ALL_ONES: u64 = u64::MAX;
