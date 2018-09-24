@@ -20,8 +20,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Instant;
 
-use croaring::Bitmap;
-
 use util::secp::pedersen::{Commitment, RangeProof};
 
 use core::core::committed::Committed;
@@ -50,26 +48,20 @@ impl<'a> UTXOView<'a> {
 		UTXOView { pmmr, batch }
 	}
 
-	/// Validate a vec of inputs against the UTXO set.
+	/// Validate a Committed (inputs & outputs) against the UTXO set.
 	/// Every input must spend an output that currently exists in the UTXO set.
-	pub fn validate_inputs(&self, inputs: &Vec<Input>) -> Result<(), Error> {
-		for input in inputs {
-			self.validate_utxo_input(input)?;
+	pub fn validate(&self, committed: &Committed) -> Result<(), Error> {
+		for out in committed.outputs_committed() {
+			self.validate_output(out)?;
+		}
+
+		for input in committed.inputs_committed() {
+			self.validate_input(input)?;
 		}
 		Ok(())
 	}
 
-	/// Validate a vec of outputs against the UTXO set.
-	/// All outputs must be unique.
-	pub fn validate_outputs(&self, outputs: &Vec<Output>) -> Result<(), Error> {
-		for out in outputs {
-			self.validate_utxo_output(out)?;
-		}
-		Ok(())
-	}
-
-	fn validate_utxo_input(&self, input: &Input) -> Result<(), Error> {
-		let commit = input.commitment();
+	fn validate_input(&self, commit: Commitment) -> Result<(), Error> {
 		let pos_res = self.batch.get_output_pos(&commit);
 		if let Ok(pos) = pos_res {
 			if let Some(_) = self.pmmr.get_data(pos) {
@@ -79,8 +71,7 @@ impl<'a> UTXOView<'a> {
 		Err(ErrorKind::AlreadySpent(commit).into())
 	}
 
-	fn validate_utxo_output(&self, out: &Output) -> Result<(), Error> {
-		let commit = out.commitment();
+	fn validate_output(&self, commit: Commitment) -> Result<(), Error> {
 		if let Ok(pos) = self.batch.get_output_pos(&commit) {
 			if let Some(out_mmr) = self.pmmr.get_data(pos) {
 				if out_mmr.commitment() == commit {
