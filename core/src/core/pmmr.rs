@@ -43,8 +43,8 @@ use croaring::Bitmap;
 
 use core::hash::Hash;
 use core::merkle_proof::MerkleProof;
-use core::BlockHeader;
 use core::readonly_pmmr::ReadonlyPMMR;
+use core::BlockHeader;
 use ser::{PMMRIndexHashable, PMMRable};
 use util::LOGGER;
 

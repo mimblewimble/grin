@@ -15,9 +15,7 @@
 //! Lightweight readonly view into output MMR for convenience.
 
 use core::core::readonly_pmmr::ReadonlyPMMR;
-use core::core::{
-	Block, Input, Output, OutputIdentifier, Transaction
-};
+use core::core::{Block, Input, Output, OutputIdentifier, Transaction};
 
 use error::{Error, ErrorKind};
 use grin_store::pmmr::PMMRBackend;

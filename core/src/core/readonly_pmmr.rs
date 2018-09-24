@@ -16,7 +16,7 @@
 
 use std::marker;
 
-use core::pmmr::{Backend, is_leaf};
+use core::pmmr::{is_leaf, Backend};
 use ser::PMMRable;
 
 /// Readonly view of a PMMR.
