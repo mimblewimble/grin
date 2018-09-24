@@ -368,7 +368,7 @@ fn check_known_mmr(
 
 		// We want to return an error here (block already known)
 		// if we *successfully validate the MMR roots and sizes.
-		if extension.validate_roots(header).is_ok() && extension.validate_sizes(header).is_ok() {
+		if extension.validate_roots().is_ok() && extension.validate_sizes().is_ok() {
 			// TODO - determine if block is more than 50 blocks old
 			// and return specific OldBlock error.
 			// Or pull OldBlock (abusive peer) out into separate processing step.
@@ -563,8 +563,8 @@ fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Er
 /// Check both the txhashset roots and sizes are correct after applying the block.
 fn apply_block_to_txhashset(block: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
 	ext.apply_block(block)?;
-	ext.validate_roots(&block.header)?;
-	ext.validate_sizes(&block.header)?;
+	ext.validate_roots()?;
+	ext.validate_sizes()?;
 	Ok(())
 }
 

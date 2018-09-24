@@ -39,7 +39,9 @@
 mod backend;
 mod pmmr;
 mod readonly_pmmr;
+mod rewindable_pmmr;
 
 pub use self::backend::*;
 pub use self::pmmr::*;
 pub use self::readonly_pmmr::*;
+pub use self::rewindable_pmmr::*;
