@@ -449,7 +449,7 @@ impl Chain {
 	pub fn validate_tx(&self, tx: &Transaction) -> Result<(), Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset::utxo_view(&mut txhashset, |utxo| {
-			utxo.validate(tx)?;
+			utxo.validate_tx(tx)?;
 			Ok(())
 		})
 	}

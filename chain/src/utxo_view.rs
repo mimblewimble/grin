@@ -26,7 +26,7 @@ use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::pmmr::{self, PMMRReadonly, PMMR};
-use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
+use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
 
 use error::{Error, ErrorKind};
 use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
@@ -48,20 +48,33 @@ impl<'a> UTXOView<'a> {
 		UTXOView { pmmr, batch }
 	}
 
-	/// Validate a Committed (inputs & outputs) against the UTXO set.
+	/// Validate a block against the UTXO set.
 	/// Every input must spend an output that currently exists in the UTXO set.
-	pub fn validate(&self, committed: &Committed) -> Result<(), Error> {
-		for out in committed.outputs_committed() {
-			self.validate_output(out)?;
+	/// No duplicate outputs.
+	pub fn validate_block(&self, block: &Block) -> Result<(), Error> {
+		for output in block.outputs() {
+			self.validate_output(output)?;
 		}
 
-		for input in committed.inputs_committed() {
+		for input in block.inputs() {
 			self.validate_input(input)?;
 		}
 		Ok(())
 	}
 
-	fn validate_input(&self, commit: Commitment) -> Result<(), Error> {
+	pub fn validate_tx(&self, tx: &Transaction) -> Result<(), Error> {
+		for output in tx.outputs() {
+			self.validate_output(output)?;
+		}
+
+		for input in tx.inputs() {
+			self.validate_input(input)?;
+		}
+		Ok(())
+	}
+
+	fn validate_input(&self, input: &Input) -> Result<(), Error> {
+		let commit = input.commitment();
 		let pos_res = self.batch.get_output_pos(&commit);
 		if let Ok(pos) = pos_res {
 			if let Some(_) = self.pmmr.get_data(pos) {
@@ -71,7 +84,8 @@ impl<'a> UTXOView<'a> {
 		Err(ErrorKind::AlreadySpent(commit).into())
 	}
 
-	fn validate_output(&self, commit: Commitment) -> Result<(), Error> {
+	fn validate_output(&self, output: &Output) -> Result<(), Error> {
+		let commit = output.commitment();
 		if let Ok(pos) = self.batch.get_output_pos(&commit) {
 			if let Some(out_mmr) = self.pmmr.get_data(pos) {
 				if out_mmr.commitment() == commit {
