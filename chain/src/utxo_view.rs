@@ -26,7 +26,9 @@ use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::pmmr::{self, PMMRReadonly, PMMR};
-use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel};
+use core::core::{
+	Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel,
+};
 
 use error::{Error, ErrorKind};
 use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
