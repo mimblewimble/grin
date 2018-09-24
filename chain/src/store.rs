@@ -189,6 +189,14 @@ pub struct Batch<'a> {
 
 #[allow(missing_docs)]
 impl<'a> Batch<'a> {
+	pub fn head(&self) -> Result<Tip, Error> {
+		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), "HEAD")
+	}
+
+	pub fn head_header(&self) -> Result<BlockHeader, Error> {
+		self.get_block_header(&self.head()?.last_block_h)
+	}
+
 	pub fn save_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&vec![HEAD_PREFIX], t)?;
 		self.db.put_ser(&vec![HEADER_HEAD_PREFIX], t)
@@ -200,6 +208,13 @@ impl<'a> Batch<'a> {
 
 	pub fn save_header_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&vec![HEADER_HEAD_PREFIX], t)
+	}
+
+	pub fn get_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
+		option_to_not_found(
+			self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)),
+			&format!("Hash at height: {}", height),
+		)
 	}
 
 	pub fn save_sync_head(&self, t: &Tip) -> Result<(), Error> {
@@ -320,6 +335,13 @@ impl<'a> Batch<'a> {
 
 	pub fn delete_block_sums(&self, bh: &Hash) -> Result<(), Error> {
 		self.db.delete(&to_key(BLOCK_SUMS_PREFIX, &mut bh.to_vec()))
+	}
+
+	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
+		option_to_not_found(
+			self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)),
+			&format!("Header at height: {}", height),
+		).and_then(|hash| self.get_block_header(&hash))
 	}
 
 	/// Maintain consistency of the "header_by_height" index by traversing back

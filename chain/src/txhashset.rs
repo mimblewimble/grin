@@ -28,7 +28,7 @@ use util::secp::pedersen::{Commitment, RangeProof};
 use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
-use core::core::pmmr::{self, PMMR};
+use core::core::pmmr::{self, PMMR, PMMRReadonly};
 use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
@@ -234,7 +234,6 @@ impl TxHashSet {
 		let batch = self.commit_index.batch()?;
 
 		let rewind_rm_pos = input_pos_to_rewind(
-			self.commit_index.clone(),
 			&horizon_header,
 			&head_header,
 			&batch,
@@ -278,11 +277,10 @@ where
 	let res: Result<T, Error>;
 	{
 		let commit_index = trees.commit_index.clone();
-		let commit_index2 = trees.commit_index.clone();
 		let batch = commit_index.batch()?;
 
 		trace!(LOGGER, "Starting new txhashset (readonly) extension.");
-		let mut extension = Extension::new(trees, &batch, commit_index2);
+		let mut extension = Extension::new(trees, &batch);
 		extension.force_rollback();
 		res = inner(&mut extension);
 	}
@@ -298,24 +296,22 @@ where
 	res
 }
 
-pub fn utxo_view<'a, F, T>(trees: &'a mut TxHashSet, inner: F) -> Result<T, Error>
+/// Readonly view on the UTXO set.
+/// Based on the current txhashset output_pmmr.
+pub fn utxo_view<'a, F, T>(trees: &'a TxHashSet, inner: F) -> Result<T, Error>
 where
-	F: FnOnce(&mut UTXOView) -> Result<T, Error>,
+	F: FnOnce(&UTXOView) -> Result<T, Error>,
 {
 	let res: Result<T, Error>;
 	{
-		let store = trees.commit_index.clone();
-		trace!(LOGGER, "Starting new UTXOView.");
-
-		let output_pmmr = PMMR::at(
-			&mut trees.output_pmmr_h.backend,
+		let output_pmmr = PMMRReadonly::at(
+			&trees.output_pmmr_h.backend,
 			trees.output_pmmr_h.last_pos,
 		);
-
-		let mut utxo_view = UTXOView::new(output_pmmr, store);
-		res = inner(&mut utxo_view);
+		let batch = trees.commit_index.batch()?;
+		let utxo_view = UTXOView::new(output_pmmr, &batch);
+		res = inner(&utxo_view);
 	}
-	trees.output_pmmr_h.backend.discard();
 	res
 }
 
@@ -342,10 +338,8 @@ where
 	// index saving can be undone
 	let child_batch = batch.child()?;
 	{
-		let commit_index = trees.commit_index.clone();
-
 		trace!(LOGGER, "Starting new txhashset extension.");
-		let mut extension = Extension::new(trees, &child_batch, commit_index);
+		let mut extension = Extension::new(trees, &child_batch);
 		res = inner(&mut extension);
 
 		rollback = extension.rollback;
@@ -394,7 +388,7 @@ pub struct Extension<'a> {
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 
-	commit_index: Arc<ChainStore>,
+	/// Rollback flag.
 	rollback: bool,
 
 	/// Batch in which the extension occurs, public so it can be used within
@@ -434,11 +428,9 @@ impl<'a> Committed for Extension<'a> {
 }
 
 impl<'a> Extension<'a> {
-	// constructor
 	fn new(
 		trees: &'a mut TxHashSet,
 		batch: &'a Batch,
-		commit_index: Arc<ChainStore>,
 	) -> Extension<'a> {
 		Extension {
 			output_pmmr: PMMR::at(
@@ -453,16 +445,16 @@ impl<'a> Extension<'a> {
 				&mut trees.kernel_pmmr_h.backend,
 				trees.kernel_pmmr_h.last_pos,
 			),
-			commit_index,
 			rollback: false,
 			batch,
 		}
 	}
 
-	pub fn utxo_view(&mut self) -> UTXOView {
-		UTXOView::new(self.output_pmmr, self.commit_index)
+	pub fn utxo_view(&'a self) -> UTXOView<'a> {
+		UTXOView::new(self.output_pmmr.pmmr_readonly(), self.batch)
 	}
 
+	// TODO - move this into "utxo_view"
 	/// Verify we are not attempting to spend any coinbase outputs
 	/// that have not sufficiently matured.
 	pub fn verify_coinbase_maturity(
@@ -475,7 +467,7 @@ impl<'a> Extension<'a> {
 		let pos = inputs
 			.iter()
 			.filter(|x| x.features.contains(OutputFeatures::COINBASE_OUTPUT))
-			.filter_map(|x| self.commit_index.get_output_pos(&x.commitment()).ok())
+			.filter_map(|x| self.batch.get_output_pos(&x.commitment()).ok())
 			.max()
 			.unwrap_or(0);
 
@@ -491,7 +483,7 @@ impl<'a> Extension<'a> {
 			let cutoff_height = height
 				.checked_sub(global::coinbase_maturity(height))
 				.unwrap_or(0);
-			let cutoff_header = self.commit_index.get_header_by_height(cutoff_height)?;
+			let cutoff_header = self.batch.get_header_by_height(cutoff_height)?;
 			let cutoff_pos = cutoff_header.output_mmr_size;
 
 			// If any output pos exceed the cutoff_pos
@@ -609,6 +601,7 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	/// TODO - move this into "utxo_view"
 	/// Build a Merkle proof for the given output and the block by
 	/// rewinding the MMR to the last pos of the block.
 	/// Note: this relies on the MMR being stable even after pruning/compaction.
@@ -664,7 +657,7 @@ impl<'a> Extension<'a> {
 			block_header.hash(),
 		);
 
-		let head_header = self.commit_index.head_header()?;
+		let head_header = self.batch.head_header()?;
 
 		// We need to build bitmaps of added and removed output positions
 		// so we can correctly rewind all operations applied to the output MMR
@@ -673,7 +666,6 @@ impl<'a> Extension<'a> {
 		// Rewound output pos will be removed from the MMR.
 		// Rewound input (spent) pos will be added back to the MMR.
 		let rewind_rm_pos = input_pos_to_rewind(
-			self.commit_index.clone(),
 			block_header,
 			&head_header,
 			&self.batch,
@@ -979,7 +971,7 @@ impl<'a> Extension<'a> {
 
 		let mut current = header.clone();
 		loop {
-			current = self.commit_index.get_block_header(&current.previous)?;
+			current = self.batch.get_block_header(&current.previous)?;
 			if current.height == 0 {
 				break;
 			}
@@ -1122,8 +1114,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 /// of all inputs (spent outputs) we need to "undo" during a rewind.
 /// We do this by leveraging the "block_input_bitmap" cache and OR'ing
 /// the set of bitmaps together for the set of blocks being rewound.
-fn input_pos_to_rewind(
-	commit_index: Arc<ChainStore>,
+pub fn input_pos_to_rewind(
 	block_header: &BlockHeader,
 	head_header: &BlockHeader,
 	batch: &Batch,
@@ -1171,7 +1162,7 @@ fn input_pos_to_rewind(
 			break;
 		}
 		height -= 1;
-		current = commit_index.get_hash_by_height(height)?;
+		current = batch.get_hash_by_height(height)?;
 	}
 
 	let bitmap = bitmap_fast_or(None, &mut block_input_bitmaps).unwrap();

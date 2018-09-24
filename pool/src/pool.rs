@@ -289,7 +289,7 @@ impl Pool {
 		// Validate the tx against current chain state.
 		// Check all inputs are in the current UTXO set.
 		// Check all outputs are unique in current UTXO set.
-		self.blockchain.validate_tx(&tx, header)?;
+		self.blockchain.validate_tx(&tx)?;
 
 		let overage = tx.overage();
 		let offset = (header.total_kernel_offset() + tx.offset)?;

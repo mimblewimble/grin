@@ -27,120 +27,67 @@ use util::secp::pedersen::{Commitment, RangeProof};
 use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
-use core::core::pmmr::{self, PMMR};
+use core::core::pmmr::{self, PMMR, PMMRReadonly};
 use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
 
 use error::{Error, ErrorKind};
 use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
-use store::{Batch, ChainStore};
+use store::Batch;
 use txhashset;
-use txhashset::{TxHashSet, PMMRHandle, input_pos_to_rewind};
+use txhashset::{TxHashSet, input_pos_to_rewind};
 
+/// Readonly view of the UTXO set (based on output MMR).
 pub struct UTXOView<'a> {
-	output_pmmr: PMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
-	store: Arc<ChainStore>,
+	pmmr: PMMRReadonly<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
+	batch: &'a Batch<'a>,
 }
 
 impl<'a> UTXOView<'a> {
 	pub fn new(
-		output_pmmr: &'a mut PMMRHandle<OutputIdentifier>,
-		store: Arc<ChainStore>,
+		pmmr: PMMRReadonly<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
+		batch: &'a Batch,
 	) -> UTXOView<'a> {
-		UTXOView {output_pmmr, store}
+		UTXOView {pmmr, batch}
 	}
 
-	/// "Fast" validation of a set of inputs and outputs (from either a block or a transaction).
-	/// This is a lightweight/faster alternative to something like apply_block().
-	/// Inputs _must_ spend unspent outputs.
-	/// Outputs _must not_ introduce duplicate commitments.
-	pub fn validate_utxo_fast(
-		&mut self,
-		inputs: &Vec<Input>,
-		outputs: &Vec<Output>,
-	) -> Result<(), Error> {
-		for out in outputs {
-			self.validate_utxo_output(out)?;
-		}
-
+	/// Validate a vec of inputs against the UTXO set.
+	/// Every input must spend an output that currently exists in the UTXO set.
+	pub fn validate_inputs(&self, inputs: &Vec<Input>) -> Result<(), Error> {
 		for input in inputs {
 			self.validate_utxo_input(input)?;
 		}
-
 		Ok(())
 	}
 
-	// TODO - Is this sufficient?
-	fn validate_utxo_input(&mut self, input: &Input) -> Result<(), Error> {
+	/// Validate a vec of outputs against the UTXO set.
+	/// All outputs must be unique.
+	pub fn validate_outputs(&self, outputs: &Vec<Output>) -> Result<(), Error> {
+		for out in outputs {
+			self.validate_utxo_output(out)?;
+		}
+		Ok(())
+	}
+
+	fn validate_utxo_input(&self, input: &Input) -> Result<(), Error> {
 		let commit = input.commitment();
-		let pos_res = self.store.get_output_pos(&commit);
+		let pos_res = self.batch.get_output_pos(&commit);
 		if let Ok(pos) = pos_res {
-			if let Some(_) = self.output_pmmr.get_data(pos) {
+			if let Some(_) = self.pmmr.get_data(pos) {
 				return Ok(());
 			}
 		}
 		Err(ErrorKind::AlreadySpent(commit).into())
 	}
 
-	/// TODO - Is this sufficient?
-	fn validate_utxo_output(&mut self, out: &Output) -> Result<(), Error> {
+	fn validate_utxo_output(&self, out: &Output) -> Result<(), Error> {
 		let commit = out.commitment();
-		if let Ok(pos) = self.store.get_output_pos(&commit) {
-			if let Some(out_mmr) = self.output_pmmr.get_data(pos) {
+		if let Ok(pos) = self.batch.get_output_pos(&commit) {
+			if let Some(out_mmr) = self.pmmr.get_data(pos) {
 				if out_mmr.commitment() == commit {
 					return Err(ErrorKind::DuplicateCommitment(commit).into());
 				}
 			}
 		}
-		Ok(())
-	}
-
-	/// Rewinds the MMRs to the provided block, rewinding to the last output pos
-	/// and last kernel pos of that block.
-	pub fn rewind(&mut self, block_header: &BlockHeader) -> Result<(), Error> {
-		trace!(
-			LOGGER,
-			"Rewind to header {} @ {}",
-			block_header.height,
-			block_header.hash(),
-		);
-
-		let head_header = self.store.head_header()?;
-
-		// We need to build bitmaps of added and removed output positions
-		// so we can correctly rewind all operations applied to the output MMR
-		// after the position we are rewinding to (these operations will be
-		// undone during rewind).
-		// Rewound output pos will be removed from the MMR.
-		// Rewound input (spent) pos will be added back to the MMR.
-		let rewind_rm_pos = input_pos_to_rewind(
-			self.store.clone(),
-			block_header,
-			&head_header,
-			&self.batch,
-		)?;
-
-		self.rewind_to_pos(
-			block_header.output_mmr_size,
-			&rewind_rm_pos,
-		)
-	}
-
-	/// Rewinds the MMRs to the provided positions, given the output and
-	/// kernel we want to rewind to.
-	fn rewind_to_pos(
-		&mut self,
-		output_pos: u64,
-		rewind_rm_pos: &Bitmap,
-	) -> Result<(), Error> {
-		trace!(
-			LOGGER,
-			"Rewind utxo_view to output {}",
-			output_pos,
-		);
-
-		self.output_pmmr
-			.rewind(output_pos, rewind_rm_pos)
-			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
 }

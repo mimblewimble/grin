@@ -749,9 +749,9 @@ impl pool::BlockChain for PoolToChainAdapter {
 			.map_err(|_| pool::PoolError::Other(format!("failed to get block_sums")))
 	}
 
-	fn validate_tx(&self, tx: &Transaction, header: &BlockHeader) -> Result<(), pool::PoolError> {
+	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
 		wo(&self.chain)
-			.validate_tx(tx, header)
+			.validate_tx(tx)
 			.map_err(|_| pool::PoolError::Other(format!("failed to validate tx")))
 	}
 
