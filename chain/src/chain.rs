@@ -582,6 +582,41 @@ impl Chain {
 		))
 	}
 
+	// Special handling to make sure the whole kernel set matches each of its
+	// roots in each block header, without truncation. We go back header by
+	// header, rewind and check each root. This fixes a potential weakness in
+	// fast sync where a reorg past the horizon could allow a whole rewrite of
+	// the kernel set.
+	fn validate_kernel_history(
+		&self,
+		header: &BlockHeader,
+		txhashset: &txhashset::TxHashSet,
+	) -> Result<(), Error> {
+		debug!(
+			LOGGER,
+			"chain: validate_kernel_history: rewinding and validating kernel history (readonly)"
+		);
+
+		let mut count = 0;
+		let mut current = header.clone();
+		txhashset::rewindable_kernel_view(&txhashset, |view| {
+			while current.height > 0 {
+				view.rewind(&current)?;
+				view.validate_root()?;
+				current = view.batch().get_block_header(&current.previous)?;
+				count += 1;
+			}
+			Ok(())
+		})?;
+
+		debug!(
+			LOGGER,
+			"chain: validate_kernel_history: validated kernel root on {} headers", count,
+		);
+
+		Ok(())
+	}
+
 	/// Writes a reading view on a txhashset state that's been provided to us.
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
@@ -605,29 +640,8 @@ impl Chain {
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
 
-		// Validate kernel history against a readonly extension first.
-		// Kernel history validation requires a readonly extension
-		// due to the internal rewind behavior.
-		debug!(
-			LOGGER,
-			"chain: txhashset_write: rewinding and validating kernel history (readonly)"
-		);
-
-		// TODO - extract this into a fn
-		// Special handling to make sure the whole kernel set matches each of its
-		// roots in each block header, without truncation. We go back header by
-		// header, rewind and check each root. This fixes a potential weakness in
-		// fast sync where a reorg past the horizon could allow a whole rewrite of
-		// the kernel set.
-		let mut current = header.clone();
-		txhashset::rewindable_kernel_view(&txhashset, |view| {
-			while current.height > 0 {
-				view.rewind(&current)?;
-				view.validate_root()?;
-				current = view.batch().get_block_header(&current.previous)?;
-			}
-			Ok(())
-		})?;
+		// Validate the full kernel history (kernel MMR root for every block header).
+		self.validate_kernel_history(&header, &txhashset)?;
 
 		// all good, prepare a new batch and update all the required records
 		debug!(
