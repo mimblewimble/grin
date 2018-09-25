@@ -87,11 +87,11 @@ where
 		Graph {
 			max_edges: max_edges,
 			max_nodes: max_nodes,
-			links: Vec::with_capacity(max_nodes as usize),
-			adj_list: vec![T::from(T::max_value()).unwrap(); max_nodes as usize],
+			links: Vec::with_capacity(2 * max_nodes as usize),
+			adj_list: vec![T::from(T::max_value()).unwrap(); 2 * max_nodes as usize],
 			visited: Bitmap::create(),
 			max_sols: max_sols,
-			solutions: vec![],
+			solutions: vec![Proof::zero(proof_size); 1],
 			proof_size: proof_size,
 			nil: T::from(T::max_value()).unwrap(),
 		}
@@ -99,10 +99,19 @@ where
 
 	/// Add an edge to the graph
 	pub fn add_edge(&mut self, u: T, mut v: T) {
-		v |= self.max_edges;
-		assert!(u != self.nil && v != self.nil);
+		assert!(u < T::from(self.max_nodes).unwrap());
+		assert!(v < T::from(self.max_nodes).unwrap());
+		v = v + T::from(self.max_nodes).unwrap();
+		let adj_u = self.adj_list[(u ^ T::one()).to_u64().unwrap() as usize];
+		let adj_v = self.adj_list[(v ^ T::one()).to_u64().unwrap() as usize];
+		if adj_u != self.nil && adj_v != self.nil {
+			let sol_index = self.solutions.len() - 1;
+			self.solutions[sol_index].nonces[0] = self.links.len() as u64 / 2;
+			self.cycles_with_link(1, u, v);
+		}
 		let ulink = self.links.len();
 		let vlink = self.links.len() + 1;
+		assert!(T::from(vlink).unwrap() != self.nil);
 		self.links.push(Link {
 			next: self.adj_list[u.to_u64().unwrap() as usize],
 			to: u,
@@ -115,42 +124,9 @@ where
 		self.adj_list[v.to_u64().unwrap() as usize] = T::from(vlink).unwrap();
 	}
 
-	// remove lnk from u's adjacency list
-	fn remove_adj(&mut self, u: T, lnk: T) {
-		let mut lp = self.adj_list[u.to_u64().unwrap() as usize];
-		let mut moved = false;
-		while lp != lnk {
-			assert!(lp != self.nil);
-			lp = self.links[lp.to_u64().unwrap() as usize].next;
-			moved = true;
-		}
-		if !moved {
-			self.adj_list[u.to_u64().unwrap() as usize] =
-				self.links[lnk.to_u64().unwrap() as usize].next;
-		}
-		self.links[lnk.to_u64().unwrap() as usize].to = self.nil;
-	}
-
-	fn remove_link(&mut self, lnk: T) {
-		let u = self.links[lnk.to_u64().unwrap() as usize].to;
-		if u == self.nil {
-			return;
-		}
-		self.remove_adj(u, lnk);
-		if self.adj_list[u.to_u64().unwrap() as usize] == self.nil {
-			let mut rl = self.adj_list[(u ^ T::one()).to_u64().unwrap() as usize];
-			while rl != self.nil {
-				self.links[rl.to_u64().unwrap() as usize].to = self.nil;
-				self.remove_link(rl ^ T::one());
-				rl = self.links[rl.to_u64().unwrap() as usize].next;
-			}
-			self.adj_list[(u ^ T::one()).to_u64().unwrap() as usize] = self.nil;
-		}
-	}
-
 	pub fn byte_count(&self) -> u64 {
-		self.max_nodes * (mem::size_of::<Link<T>>() as u64 + mem::size_of::<T>() as u64)
-			+ (self.max_edges.to_u64().unwrap() / 32) * mem::size_of::<u32>() as u64
+		2 * self.max_edges.to_u64().unwrap() * mem::size_of::<Link<T>>() as u64
+			+ mem::size_of::<T>() as u64 * 2 * self.max_nodes
 	}
 
 	fn test_bit(&mut self, u: u64) -> bool {
@@ -161,7 +137,6 @@ where
 		if self.test_bit((u >> 1).to_u64().unwrap()) {
 			return;
 		}
-		assert!(u != self.nil);
 		if (u ^ T::one()) == dest {
 			println!("{}-cycle found", len);
 			if len == self.proof_size as u32 {
@@ -189,25 +164,6 @@ where
 			}
 			self.visited.remove((u >> 1).to_u64().unwrap() as u32);
 		}
-	}
-
-	/// detect all cycles in the graph (up to proofsize)
-	pub fn cycles(&mut self) -> usize {
-		let mut n_links = self.links.len();
-		self.solutions.push(Proof::zero(self.proof_size));
-		while n_links > 0 {
-			let sol_index = self.solutions.len() - 1;
-			n_links -= 2;
-			let u = self.links[n_links].to;
-			let v = self.links[n_links + 1].to;
-			if u != self.nil && v != self.nil {
-				self.solutions[sol_index].nonces[0] = n_links as u64 / 2;
-				self.cycles_with_link(1, u, v);
-				self.remove_link(T::from(n_links).unwrap());
-				self.remove_link(T::from(n_links + 1).unwrap());
-			}
-		}
-		self.solutions.len() - 1
 	}
 }
 
@@ -300,7 +256,7 @@ where
 				d(&self);
 			}
 		}
-		let n_sols = self.graph.cycles();
+		let n_sols = self.graph.solutions.len() - 1;
 		n_sols
 	}
 }
