@@ -620,7 +620,7 @@ impl Chain {
 		// fast sync where a reorg past the horizon could allow a whole rewrite of
 		// the kernel set.
 		let mut current = header.clone();
-		txhashset::rewindable_kernel_view(&mut txhashset, |view| {
+		txhashset::rewindable_kernel_view(&txhashset, |view| {
 			while current.height > 0 {
 				view.rewind(&current)?;
 				view.validate_root()?;
@@ -1040,7 +1040,7 @@ fn setup_head(
 			batch.save_block(&genesis)?;
 			let tip = Tip::from_block(&genesis.header);
 			batch.save_head(&tip)?;
-			batch.setup_height(&genesis.header, &tip)?;			
+			batch.setup_height(&genesis.header, &tip)?;
 
 			txhashset::extending(txhashset, &mut batch, |extension| {
 				extension.apply_block(&genesis)?;
