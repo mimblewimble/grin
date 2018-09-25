@@ -29,9 +29,7 @@ use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::pmmr::{self, PMMR};
-use core::core::{
-	Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, Transaction, TxKernel,
-};
+use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
 
@@ -439,115 +437,6 @@ impl<'a> Extension<'a> {
 		}
 	}
 
-	// Rewind the MMR backend to undo applying a raw tx to the txhashset extension.
-	// This is used during txpool validation to undo an invalid tx.
-	fn rewind_raw_tx(
-		&mut self,
-		output_pos: u64,
-		kernel_pos: u64,
-		rewind_rm_pos: &Bitmap,
-	) -> Result<(), Error> {
-		self.rewind_to_pos(output_pos, kernel_pos, rewind_rm_pos)?;
-		Ok(())
-	}
-
-	/// Apply a "raw" transaction to the txhashset.
-	/// We will never commit a txhashset extension that includes raw txs.
-	/// But we can use this when validating txs in the tx pool.
-	/// If we can add a tx to the tx pool and then successfully add the
-	/// aggregated tx from the tx pool to the current chain state (via a
-	/// txhashset extension) then we know the tx pool is valid (including the
-	/// new tx).
-	pub fn apply_raw_tx(&mut self, tx: &Transaction) -> Result<(), Error> {
-		// This should *never* be called on a writeable extension...
-		assert!(
-			self.rollback,
-			"applied raw_tx to writeable txhashset extension"
-		);
-
-		// Checkpoint the MMR positions before we apply the new tx,
-		// anything goes wrong we will rewind to these positions.
-		let output_pos = self.output_pmmr.unpruned_size();
-		let kernel_pos = self.kernel_pmmr.unpruned_size();
-
-		// Build bitmap of output pos spent (as inputs) by this tx for rewind.
-		let rewind_rm_pos = tx
-			.inputs()
-			.iter()
-			.filter_map(|x| self.batch.get_output_pos(&x.commitment()).ok())
-			.map(|x| x as u32)
-			.collect();
-
-		for ref output in tx.outputs() {
-			match self.apply_output(output) {
-				Ok(pos) => {
-					self.batch.save_output_pos(&output.commitment(), pos)?;
-				}
-				Err(e) => {
-					self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
-					return Err(e);
-				}
-			}
-		}
-
-		for ref input in tx.inputs() {
-			if let Err(e) = self.apply_input(input) {
-				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
-				return Err(e);
-			}
-		}
-
-		for ref kernel in tx.kernels() {
-			if let Err(e) = self.apply_kernel(kernel) {
-				self.rewind_raw_tx(output_pos, kernel_pos, &rewind_rm_pos)?;
-				return Err(e);
-			}
-		}
-
-		Ok(())
-	}
-
-	/// Validate a vector of "raw" transactions against the current chain state.
-	/// We support rewind on a "dirty" txhashset - so we can apply each tx in
-	/// turn, rewinding if any particular tx is not valid and continuing
-	/// through the vec of txs provided. This allows us to efficiently apply
-	/// all the txs, filtering out those that are not valid and returning the
-	/// final vec of txs that were successfully validated against the txhashset.
-	///
-	/// Note: We also pass in a "pre_tx". This tx is applied to and validated
-	/// before we start applying the vec of txs. We use this when validating
-	/// txs in the stempool as we need to account for txs in the txpool as
-	/// well (new_tx + stempool + txpool + txhashset). So we aggregate the
-	/// contents of the txpool into a single aggregated tx and pass it in here
-	/// as the "pre_tx" so we apply it to the txhashset before we start
-	/// validating the stempool txs.
-	/// This is optional and we pass in None when validating the txpool txs
-	/// themselves.
-	///
-	pub fn validate_raw_txs(
-		&mut self,
-		txs: Vec<Transaction>,
-		pre_tx: Option<Transaction>,
-	) -> Result<Vec<Transaction>, Error> {
-		let mut valid_txs = vec![];
-
-		// First apply the "pre_tx" to account for any state that need adding to
-		// the chain state before we can validate our vec of txs.
-		// This is the aggregate tx from the txpool if we are validating the stempool.
-		if let Some(tx) = pre_tx {
-			self.apply_raw_tx(&tx)?;
-		}
-
-		// Now validate each tx, rewinding any tx (and only that tx)
-		// if it fails to validate successfully.
-		for tx in txs {
-			if self.apply_raw_tx(&tx).is_ok() {
-				valid_txs.push(tx);
-			}
-		}
-		Ok(valid_txs)
-	}
-
 	/// Verify we are not attempting to spend any coinbase outputs
 	/// that have not sufficiently matured.
 	pub fn verify_coinbase_maturity(
@@ -589,9 +478,25 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	/// Apply a new set of blocks on top the existing sum trees. Blocks are
-	/// applied in order of the provided Vec. If pruning is enabled, inputs also
-	/// prune MMR data.
+	// Inputs _must_ spend unspent outputs.
+	// Outputs _must not_ introduce duplicate commitments.
+	pub fn validate_utxo_fast(
+		&mut self,
+		inputs: &Vec<Input>,
+		outputs: &Vec<Output>,
+	) -> Result<(), Error> {
+		for out in outputs {
+			self.validate_utxo_output(out)?;
+		}
+
+		for input in inputs {
+			self.validate_utxo_input(input)?;
+		}
+
+		Ok(())
+	}
+
+	/// Apply a new block to the existing state.
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
 		for out in b.outputs() {
 			let pos = self.apply_output(out)?;
@@ -608,6 +513,18 @@ impl<'a> Extension<'a> {
 		}
 
 		Ok(())
+	}
+
+	// TODO - Is this sufficient?
+	fn validate_utxo_input(&mut self, input: &Input) -> Result<(), Error> {
+		let commit = input.commitment();
+		let pos_res = self.batch.get_output_pos(&commit);
+		if let Ok(pos) = pos_res {
+			if let Some(_) = self.output_pmmr.get_data(pos) {
+				return Ok(());
+			}
+		}
+		Err(ErrorKind::AlreadySpent(commit).into())
 	}
 
 	fn apply_input(&mut self, input: &Input) -> Result<(), Error> {
@@ -644,6 +561,19 @@ impl<'a> Extension<'a> {
 			}
 		} else {
 			return Err(ErrorKind::AlreadySpent(commit).into());
+		}
+		Ok(())
+	}
+
+	/// TODO - Is this sufficient?
+	fn validate_utxo_output(&mut self, out: &Output) -> Result<(), Error> {
+		let commit = out.commitment();
+		if let Ok(pos) = self.batch.get_output_pos(&commit) {
+			if let Some(out_mmr) = self.output_pmmr.get_data(pos) {
+				if out_mmr.commitment() == commit {
+					return Err(ErrorKind::DuplicateCommitment(commit).into());
+				}
+			}
 		}
 		Ok(())
 	}

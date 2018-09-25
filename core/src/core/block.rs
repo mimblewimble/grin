@@ -26,7 +26,7 @@ use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
-use core::verifier_cache::{LruVerifierCache, VerifierCache};
+use core::verifier_cache::VerifierCache;
 use core::{
 	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Transaction,
 	TransactionBody, TxKernel,
@@ -415,15 +415,8 @@ impl Block {
 		difficulty: Difficulty,
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
-		let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-		let mut block = Block::with_reward(
-			prev,
-			txs,
-			reward_output.0,
-			reward_output.1,
-			difficulty,
-			verifier_cache,
-		)?;
+		let mut block =
+			Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
 
 		// Now set the pow on the header so block hashing works as expected.
 		{
@@ -497,12 +490,10 @@ impl Block {
 		reward_out: Output,
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
-		verifier: Arc<RwLock<VerifierCache>>,
 	) -> Result<Block, Error> {
 		// A block is just a big transaction, aggregate as such.
-		// Note that aggregation also runs transaction validation
-		// and duplicate commitment checks.
-		let mut agg_tx = transaction::aggregate(txs, verifier)?;
+		let mut agg_tx = transaction::aggregate(txs)?;
+
 		// Now add the reward output and reward kernel to the aggregate tx.
 		// At this point the tx is technically invalid,
 		// but the tx body is valid if we account for the reward (i.e. as a block).

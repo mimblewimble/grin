@@ -151,7 +151,7 @@ pub fn run_sync(
 		let header_head = chain.get_header_head().unwrap();
 
 		// run the header sync in every 10s at least
-		if si.header_sync_due(&header_head) {
+		if si.header_sync_due(sync_state.as_ref(), &header_head) {
 			do_header_sync(
 				sync_state.as_ref(),
 				header_head.clone(),
@@ -735,7 +735,7 @@ impl SyncInfo {
 		}
 	}
 
-	fn header_sync_due(&mut self, header_head: &chain::Tip) -> bool {
+	fn header_sync_due(&mut self, sync_state: &SyncState, header_head: &chain::Tip) -> bool {
 		let now = Utc::now();
 		let (timeout, latest_height, prev_height) = self.prev_header_sync;
 
@@ -745,7 +745,13 @@ impl SyncInfo {
 		// no headers processed and we're past timeout, need to ask for more
 		let stalling = header_head.height == latest_height && now > timeout;
 
-		if all_headers_received || stalling {
+		// always enable header sync on initial state transition from NoSync / Initial
+		let force_sync = match sync_state.status() {
+			SyncStatus::NoSync | SyncStatus::Initial => true,
+			_ => false,
+		};
+
+		if force_sync || all_headers_received || stalling {
 			self.prev_header_sync = (
 				now + Duration::seconds(10),
 				header_head.height,

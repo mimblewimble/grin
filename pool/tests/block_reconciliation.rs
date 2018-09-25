@@ -27,15 +27,9 @@ pub mod common;
 
 use std::sync::{Arc, RwLock};
 
-use core::core::hash::Hashed;
 use core::core::{Block, BlockHeader};
 
-use chain::txhashset;
-use chain::types::Tip;
-use common::{
-	clean_output_dir, test_setup, test_source, test_transaction,
-	test_transaction_spending_coinbase, ChainAdapter,
-};
+use common::*;
 use core::core::verifier_cache::LruVerifierCache;
 use core::pow::Difficulty;
 use keychain::{ExtKeychain, Keychain};
@@ -47,83 +41,40 @@ fn test_transaction_pool_block_reconciliation() {
 
 	let db_root = ".grin_block_reconciliation".to_string();
 	clean_output_dir(db_root.clone());
-	let chain = ChainAdapter::init(db_root.clone()).unwrap();
+	let chain = Arc::new(ChainAdapter::init(db_root.clone()).unwrap());
 
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
-	// Initialize the chain/txhashset with an initial block
-	// so we have a non-empty UTXO set.
+	// Initialize a new pool with our chain adapter.
+	let pool = RwLock::new(test_setup(chain.clone(), verifier_cache.clone()));
+
 	let header = {
 		let height = 1;
 		let key_id = keychain.derive_key_id(height as u32).unwrap();
 		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
-		let mut block =
-			Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
+		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
 
-		let mut batch = chain.store.batch().unwrap();
-		let mut txhashset = chain.txhashset.write().unwrap();
-		txhashset::extending(&mut txhashset, &mut batch, |extension| {
-			extension.apply_block(&block)?;
-
-			// Now set the roots and sizes as necessary on the block header.
-			let roots = extension.roots();
-			block.header.output_root = roots.output_root;
-			block.header.range_proof_root = roots.rproof_root;
-			block.header.kernel_root = roots.kernel_root;
-			let sizes = extension.sizes();
-			block.header.output_mmr_size = sizes.0;
-			block.header.kernel_mmr_size = sizes.2;
-
-			Ok(())
-		}).unwrap();
-
-		let tip = Tip::from_block(&block.header);
-		batch.save_block_header(&block.header).unwrap();
-		batch.save_head(&tip).unwrap();
-		batch.commit().unwrap();
+		chain.update_db_for_block(&block);
 
 		block.header
 	};
-
-	// Initialize a new pool with our chain adapter.
-	let pool = RwLock::new(test_setup(Arc::new(chain.clone()), verifier_cache.clone()));
 
 	// Now create tx to spend that first coinbase (now matured).
 	// Provides us with some useful outputs to test with.
 	let initial_tx = test_transaction_spending_coinbase(&keychain, &header, vec![10, 20, 30, 40]);
 
-	let header = {
+	let block = {
 		let key_id = keychain.derive_key_id(2).unwrap();
 		let fees = initial_tx.fee();
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
-		let mut block = Block::new(&header, vec![initial_tx], Difficulty::one(), reward).unwrap();
+		let block = Block::new(&header, vec![initial_tx], Difficulty::one(), reward).unwrap();
 
-		let mut batch = chain.store.batch().unwrap();
-		{
-			let mut txhashset = chain.txhashset.write().unwrap();
-			txhashset::extending(&mut txhashset, &mut batch, |extension| {
-				extension.apply_block(&block)?;
+		chain.update_db_for_block(&block);
 
-				// Now set the roots and sizes as necessary on the block header.
-				let roots = extension.roots();
-				block.header.output_root = roots.output_root;
-				block.header.range_proof_root = roots.rproof_root;
-				block.header.kernel_root = roots.kernel_root;
-				let sizes = extension.sizes();
-				block.header.output_mmr_size = sizes.0;
-				block.header.kernel_mmr_size = sizes.2;
-
-				Ok(())
-			}).unwrap();
-		}
-
-		let tip = Tip::from_block(&block.header);
-		batch.save_block_header(&block.header).unwrap();
-		batch.save_head(&tip).unwrap();
-		batch.commit().unwrap();
-
-		block.header
+		block
 	};
+
+	let header = block.header;
 
 	// Preparation: We will introduce three root pool transactions.
 	// 1. A transaction that should be invalidated because it is exactly
@@ -181,7 +132,7 @@ fn test_transaction_pool_block_reconciliation() {
 
 		for tx in &txs_to_add {
 			write_pool
-				.add_to_pool(test_source(), tx.clone(), false, &header.hash())
+				.add_to_pool(test_source(), tx.clone(), false, &header)
 				.unwrap();
 		}
 
@@ -198,6 +149,7 @@ fn test_transaction_pool_block_reconciliation() {
 	let block_tx_3 = test_transaction(&keychain, vec![8], vec![5, 1]);
 	// - Output conflict w/ 8
 	let block_tx_4 = test_transaction(&keychain, vec![40], vec![9, 31]);
+
 	let block_txs = vec![block_tx_1, block_tx_2, block_tx_3, block_tx_4];
 
 	// Now apply this block.
@@ -205,34 +157,9 @@ fn test_transaction_pool_block_reconciliation() {
 		let key_id = keychain.derive_key_id(3).unwrap();
 		let fees = block_txs.iter().map(|tx| tx.fee()).sum();
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
-		let mut block = Block::new(&header, block_txs, Difficulty::one(), reward).unwrap();
+		let block = Block::new(&header, block_txs, Difficulty::one(), reward).unwrap();
 
-		{
-			let mut batch = chain.store.batch().unwrap();
-			let mut txhashset = chain.txhashset.write().unwrap();
-			txhashset::extending(&mut txhashset, &mut batch, |extension| {
-				extension.apply_block(&block)?;
-
-				// Now set the roots and sizes as necessary on the block header.
-				let roots = extension.roots();
-				block.header.output_root = roots.output_root;
-				block.header.range_proof_root = roots.rproof_root;
-				block.header.kernel_root = roots.kernel_root;
-				let sizes = extension.sizes();
-				block.header.output_mmr_size = sizes.0;
-				block.header.kernel_mmr_size = sizes.2;
-
-				Ok(())
-			}).unwrap();
-			batch.commit().unwrap();
-		}
-
-		let tip = Tip::from_block(&block.header);
-		let batch = chain.store.batch().unwrap();
-		batch.save_block_header(&block.header).unwrap();
-		batch.save_head(&tip).unwrap();
-		batch.commit().unwrap();
-
+		chain.update_db_for_block(&block);
 		block
 	};
 
