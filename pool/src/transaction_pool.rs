@@ -24,7 +24,7 @@ use chrono::prelude::Utc;
 use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortId;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{transaction, Block, Transaction};
+use core::core::{transaction, Block, BlockHeader, Transaction};
 use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
 
@@ -61,33 +61,39 @@ impl TransactionPool {
 		}
 	}
 
-	fn add_to_stempool(&mut self, entry: PoolEntry, block_hash: &Hash) -> Result<(), PoolError> {
+	fn add_to_stempool(&mut self, entry: PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
 		// Add tx to stempool (passing in all txs from txpool to validate against).
 		self.stempool
-			.add_to_pool(entry.clone(), self.txpool.all_transactions(), block_hash)?;
+			.add_to_pool(entry.clone(), self.txpool.all_transactions(), header)?;
 
 		// Note: we do not notify the adapter here,
 		// we let the dandelion monitor handle this.
 		Ok(())
 	}
 
-	fn add_to_txpool(&mut self, mut entry: PoolEntry, block_hash: &Hash) -> Result<(), PoolError> {
+	fn add_to_txpool(
+		&mut self,
+		mut entry: PoolEntry,
+		header: &BlockHeader,
+	) -> Result<(), PoolError> {
 		// First deaggregate the tx based on current txpool txs.
 		if entry.tx.kernels().len() > 1 {
 			let txs = self
 				.txpool
 				.find_matching_transactions(entry.tx.kernels().clone());
 			if !txs.is_empty() {
-				entry.tx = transaction::deaggregate(entry.tx, txs, self.verifier_cache.clone())?;
+				let tx = transaction::deaggregate(entry.tx, txs)?;
+				tx.validate(self.verifier_cache.clone())?;
+				entry.tx = tx;
 				entry.src.debug_name = "deagg".to_string();
 			}
 		}
-		self.txpool.add_to_pool(entry.clone(), vec![], block_hash)?;
+		self.txpool.add_to_pool(entry.clone(), vec![], header)?;
 
 		// We now need to reconcile the stempool based on the new state of the txpool.
 		// Some stempool txs may no longer be valid and we need to evict them.
 		let txpool_tx = self.txpool.aggregate_transaction()?;
-		self.stempool.reconcile(txpool_tx, block_hash)?;
+		self.stempool.reconcile(txpool_tx, header)?;
 
 		self.adapter.tx_accepted(&entry.tx);
 		Ok(())
@@ -100,7 +106,7 @@ impl TransactionPool {
 		src: TxSource,
 		tx: Transaction,
 		stem: bool,
-		block_hash: &Hash,
+		header: &BlockHeader,
 	) -> Result<(), PoolError> {
 		// Quick check to deal with common case of seeing the *same* tx
 		// broadcast from multiple peers simultaneously.
@@ -129,9 +135,9 @@ impl TransactionPool {
 		};
 
 		if stem {
-			self.add_to_stempool(entry, block_hash)?;
+			self.add_to_stempool(entry, header)?;
 		} else {
-			self.add_to_txpool(entry, block_hash)?;
+			self.add_to_txpool(entry, header)?;
 		}
 		Ok(())
 	}
@@ -141,12 +147,12 @@ impl TransactionPool {
 	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
 		// First reconcile the txpool.
 		self.txpool.reconcile_block(block)?;
-		self.txpool.reconcile(None, &block.hash())?;
+		self.txpool.reconcile(None, &block.header)?;
 
 		// Then reconcile the stempool, accounting for the txpool txs.
 		let txpool_tx = self.txpool.aggregate_transaction()?;
 		self.stempool.reconcile_block(block)?;
-		self.stempool.reconcile(txpool_tx, &block.hash())?;
+		self.stempool.reconcile(txpool_tx, &block.header)?;
 
 		Ok(())
 	}
@@ -191,7 +197,7 @@ impl TransactionPool {
 
 	/// Returns a vector of transactions from the txpool so we can build a
 	/// block from them.
-	pub fn prepare_mineable_transactions(&self) -> Vec<Transaction> {
+	pub fn prepare_mineable_transactions(&self) -> Result<Vec<Transaction>, PoolError> {
 		self.txpool.prepare_mineable_transactions()
 	}
 }

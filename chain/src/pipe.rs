@@ -162,6 +162,9 @@ pub fn process_block(
 		// to applying the new block.
 		verify_coinbase_maturity(b, &mut extension)?;
 
+		// Validate the block against the UTXO set.
+		validate_utxo(b, &mut extension)?;
+
 		// Using block_sums (utxo_sum, kernel_sum) for the previous block from the db
 		// we can verify_kernel_sums across the full UTXO sum and full kernel sum
 		// accounting for inputs/outputs/kernels in this new block.
@@ -505,6 +508,7 @@ fn validate_block(
 	Ok(())
 }
 
+/// TODO - This can move into the utxo_view.
 /// Verify the block is not attempting to spend coinbase outputs
 /// before they have sufficiently matured.
 /// Note: requires a txhashset extension.
@@ -711,10 +715,18 @@ pub fn rewind_and_apply_fork(
 
 		// Re-verify coinbase maturity along this fork.
 		verify_coinbase_maturity(&fb, ext)?;
+		// Validate the block against the UTXO set.
+		validate_utxo(&fb, ext)?;
 		// Re-verify block_sums to set the block_sums up on this fork correctly.
 		verify_block_sums(&fb, ext)?;
 		// Re-apply the blocks.
 		apply_block_to_txhashset(&fb, ext)?;
 	}
+	Ok(())
+}
+
+fn validate_utxo(block: &Block, ext: &txhashset::Extension) -> Result<(), Error> {
+	let utxo = ext.utxo_view();
+	utxo.validate_block(block)?;
 	Ok(())
 }

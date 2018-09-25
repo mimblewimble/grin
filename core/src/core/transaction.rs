@@ -404,7 +404,7 @@ impl TransactionBody {
 	}
 
 	/// Total fee for a TransactionBody is the sum of fees of all kernels.
-	pub fn fee(&self) -> u64 {
+	fn fee(&self) -> u64 {
 		self.kernels
 			.iter()
 			.fold(0, |acc, ref x| acc.saturating_add(x.fee))
@@ -748,7 +748,8 @@ impl Transaction {
 		self.body.fee()
 	}
 
-	fn overage(&self) -> i64 {
+	/// Total overage across all kernels.
+	pub fn overage(&self) -> i64 {
 		self.body.overage()
 	}
 
@@ -822,10 +823,7 @@ pub fn cut_through(inputs: &mut Vec<Input>, outputs: &mut Vec<Output>) -> Result
 }
 
 /// Aggregate a vec of txs into a multi-kernel tx with cut_through.
-pub fn aggregate(
-	mut txs: Vec<Transaction>,
-	verifier: Arc<RwLock<VerifierCache>>,
-) -> Result<Transaction, Error> {
+pub fn aggregate(mut txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	// convenience short-circuiting
 	if txs.is_empty() {
 		return Ok(Transaction::empty());
@@ -867,22 +865,12 @@ pub fn aggregate(
 	//   * sum of all kernel offsets
 	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
 
-	// Now validate the aggregate tx to ensure we have not built something invalid.
-	// The resulting tx could be invalid for a variety of reasons -
-	//   * tx too large (too many inputs|outputs|kernels)
-	//   * cut-through may have invalidated the sums
-	tx.validate(verifier)?;
-
 	Ok(tx)
 }
 
 /// Attempt to deaggregate a multi-kernel transaction based on multiple
 /// transactions
-pub fn deaggregate(
-	mk_tx: Transaction,
-	txs: Vec<Transaction>,
-	verifier: Arc<RwLock<VerifierCache>>,
-) -> Result<Transaction, Error> {
+pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transaction, Error> {
 	let mut inputs: Vec<Input> = vec![];
 	let mut outputs: Vec<Output> = vec![];
 	let mut kernels: Vec<TxKernel> = vec![];
@@ -891,7 +879,7 @@ pub fn deaggregate(
 	// transaction
 	let mut kernel_offsets = vec![];
 
-	let tx = aggregate(txs, verifier.clone())?;
+	let tx = aggregate(txs)?;
 
 	for mk_input in mk_tx.body.inputs {
 		if !tx.body.inputs.contains(&mk_input) && !inputs.contains(&mk_input) {
@@ -941,9 +929,6 @@ pub fn deaggregate(
 
 	// Build a new tx from the above data.
 	let tx = Transaction::new(inputs, outputs, kernels).with_offset(total_kernel_offset);
-
-	// Now validate the resulting tx to ensure we have not built something invalid.
-	tx.validate(verifier)?;
 	Ok(tx)
 }
 
