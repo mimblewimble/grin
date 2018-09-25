@@ -799,7 +799,7 @@ pub fn start_rest_apis(
 	api_secret: Option<String>,
 ) -> bool {
 	let mut apis = ApiServer::new();
-	let mut router = Router::new();
+	let mut router = build_router(chain, tx_pool, peers).expect("unable to build API router");
 	if api_secret.is_some() {
 		let api_basic_auth =
 			"Basic ".to_string() + &util::to_base64(&("grin:".to_string() + &api_secret.unwrap()));
@@ -807,7 +807,6 @@ pub fn start_rest_apis(
 		let basic_auth_middleware = Arc::new(BasicAuthMiddleware::new(api_basic_auth, basic_realm));
 		router.add_middleware(basic_auth_middleware);
 	}
-	router = build_router(chain, tx_pool, peers).expect("unable to build API router");
 
 	info!(LOGGER, "Starting HTTP API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
