@@ -102,7 +102,7 @@ where
 		))?;
 	api_thread
 		.join()
-		.map_err(|e| ErrorKind::GenericError(format!("API thread paniced :{:?}", e)).into())
+		.map_err(|e| ErrorKind::GenericError(format!("API thread panicked :{:?}", e)).into())
 }
 
 /// Listener version, providing same API but listening for requests on a
