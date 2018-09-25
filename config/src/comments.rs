@@ -49,7 +49,8 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"api_secret".to_string(),
 		"
-#a secret token used by the API to authenticate the calls (comment the next line to disable basic auth)
+#a secret token used by the API to authenticate the calls
+#comment the secret to disable basic auth
 ".to_string(),
 	);
 
@@ -166,7 +167,7 @@ fn comments() -> HashMap<String, String> {
 		"host".to_string(),
 		"
 #The interface on which to listen. 
-#0.0.0.0 will listen on all interfaces, alowing others to interact
+#0.0.0.0 will listen on all interfaces, allowing others to interact
 #127.0.0.1 will listen on the local machine only
 ".to_string(),
 	);
@@ -315,7 +316,8 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"owner_api_secret".to_string(),
 		"
-#secret for basic auth on the Owner API (comment the next line to disable basic auth)
+#secret for basic auth on the Owner API
+#comment the secret to disable basic auth
 ".to_string(),
 	);
 	retval.insert(
