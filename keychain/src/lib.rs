@@ -25,7 +25,10 @@ extern crate serde_derive;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
-extern crate crypto;
+extern crate digest;
+extern crate hmac;
+extern crate ripemd160;
+extern crate sha2;
 extern crate uuid;
 
 mod base58;

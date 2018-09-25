@@ -28,21 +28,21 @@
 
 //! Base58 encoder and decoder
 
+use digest::Digest;
+use sha2::Sha256;
 use std::{error, fmt, mem, str};
 
 use byteorder::{ByteOrder, LittleEndian};
-use crypto::digest::Digest;
-use crypto::sha2::Sha256;
 
 /// Sha256dHash
 fn sha256d_hash(data: &[u8]) -> [u8; 32] {
 	let mut ret = [0; 32];
 	let mut sha2 = Sha256::new();
 	sha2.input(data);
-	sha2.result(&mut ret);
-	sha2.reset();
+	ret.copy_from_slice(sha2.result().as_slice());
+	sha2 = Sha256::new();
 	sha2.input(&ret);
-	sha2.result(&mut ret);
+	ret.copy_from_slice(sha2.result().as_slice());
 	ret
 }
 
