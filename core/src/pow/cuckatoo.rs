@@ -273,8 +273,8 @@ where
 	pub fn verify(&self, proof: &Proof) -> bool {
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * proof.proof_size()];
-		let mut xor0:u64 = (self.proof_size as u64 / 2) & 1;
-		let mut xor1:u64 = xor0;
+		let mut xor0: u64 = (self.proof_size as u64 / 2) & 1;
+		let mut xor1: u64 = xor0;
 
 		for n in 0..proof.proof_size() {
 			if nonces[n] > self.edge_mask.to_u64().unwrap() {
@@ -282,13 +282,19 @@ where
 				println!("TOO BIG");
 				return false;
 			}
-			if n > 0 && nonces[n] <= nonces[n-1] {
+			if n > 0 && nonces[n] <= nonces[n - 1] {
 				// POW TOO SMALL
 				println!("TOO SMALL");
 				return false;
 			}
-			uvs[2 * n] = self.sipnode(T::from(nonces[n]).unwrap(), 0).to_u64().unwrap();
-			uvs[2 * n + 1] = self.sipnode(T::from(nonces[n]).unwrap(), 1).to_u64().unwrap();
+			uvs[2 * n] = self
+				.sipnode(T::from(nonces[n]).unwrap(), 0)
+				.to_u64()
+				.unwrap();
+			uvs[2 * n + 1] = self
+				.sipnode(T::from(nonces[n]).unwrap(), 1)
+				.to_u64()
+				.unwrap();
 			xor0 ^= uvs[2 * n];
 			xor1 ^= uvs[2 * n + 1];
 		}
@@ -300,7 +306,8 @@ where
 		let mut n = 0;
 		let mut i = 0;
 		let mut j;
-		loop { // follow cycle
+		loop {
+			// follow cycle
 			j = i;
 			let mut k = j;
 			loop {
@@ -308,7 +315,8 @@ where
 				if k == i {
 					break;
 				}
-				if uvs[k] >> 1 == uvs[i] >> 1 { // find other edge endpoint matching one at i
+				if uvs[k] >> 1 == uvs[i] >> 1 {
+					// find other edge endpoint matching one at i
 					if j != i {
 						// POW_BRANCH
 						println!("POW_BRANCH"); // already found one before
