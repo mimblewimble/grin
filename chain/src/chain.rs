@@ -446,11 +446,11 @@ impl Chain {
 		}
 	}
 
-	pub fn validate_tx(&self, tx: &Transaction, header: &BlockHeader) -> Result<(), Error> {
-		let mut txhashset = self.txhashset.write().unwrap();
-		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.rewind(header)?;
-			extension.validate_utxo_fast(tx.inputs(), tx.outputs())?;
+	/// Validate the tx against the current UTXO set.
+	pub fn validate_tx(&self, tx: &Transaction) -> Result<(), Error> {
+		let txhashset = self.txhashset.read().unwrap();
+		txhashset::utxo_view(&txhashset, |utxo| {
+			utxo.validate_tx(tx)?;
 			Ok(())
 		})
 	}

@@ -128,7 +128,7 @@ impl BlockChain for ChainAdapter {
 			.map_err(|_| PoolError::Other(format!("failed to get block sums")))
 	}
 
-	fn validate_tx(&self, tx: &Transaction, _header: &BlockHeader) -> Result<(), pool::PoolError> {
+	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
 		let utxo = self.utxo.read().unwrap();
 
 		for x in tx.outputs() {
