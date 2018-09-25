@@ -14,7 +14,7 @@
 
 //! Compact Blocks.
 
-use rand::{thread_rng, RngCore};
+use rand::{thread_rng, Rng};
 
 use consensus::VerifySortOrder;
 use core::block::{Block, BlockHeader, Error};
@@ -164,7 +164,7 @@ impl CompactBlock {
 impl From<Block> for CompactBlock {
 	fn from(block: Block) -> Self {
 		let header = block.header.clone();
-		let nonce = thread_rng().next_u64();
+		let nonce = thread_rng().gen();
 
 		let out_full = block
 			.outputs()

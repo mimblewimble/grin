@@ -16,8 +16,7 @@ use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
-use rand::os::OsRng;
-use rand::RngCore;
+use rand::{thread_rng, Rng};
 
 use core::core::hash::Hash;
 use core::pow::Difficulty;
@@ -185,8 +184,7 @@ impl Handshake {
 
 	/// Generate a new random nonce and store it in our ring buffer
 	fn next_nonce(&self) -> u64 {
-		let mut rng = OsRng::new().unwrap();
-		let nonce = rng.next_u64();
+		let nonce = thread_rng().gen();
 
 		let mut nonces = self.nonces.write().unwrap();
 		nonces.push_back(nonce);

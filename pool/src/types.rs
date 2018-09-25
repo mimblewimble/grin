@@ -18,9 +18,11 @@
 use chrono::prelude::{DateTime, Utc};
 
 use core::consensus;
+use core::core::committed;
 use core::core::hash::Hash;
 use core::core::transaction::{self, Transaction};
-use core::core::BlockHeader;
+use core::core::{BlockHeader, BlockSums};
+use keychain;
 
 /// Dandelion relay timer
 const DANDELION_RELAY_SECS: u64 = 600;
@@ -161,6 +163,10 @@ pub struct TxSource {
 pub enum PoolError {
 	/// An invalid pool entry caused by underlying tx validation error
 	InvalidTx(transaction::Error),
+	/// Underlying keychain error.
+	Keychain(keychain::Error),
+	/// Underlying "committed" error.
+	Committed(committed::Error),
 	/// Attempt to add a transaction to the pool with lock_height
 	/// greater than height of current block
 	ImmatureTransaction,
@@ -186,17 +192,20 @@ impl From<transaction::Error> for PoolError {
 	}
 }
 
+impl From<keychain::Error> for PoolError {
+	fn from(e: keychain::Error) -> PoolError {
+		PoolError::Keychain(e)
+	}
+}
+
+impl From<committed::Error> for PoolError {
+	fn from(e: committed::Error) -> PoolError {
+		PoolError::Committed(e)
+	}
+}
+
 /// Interface that the pool requires from a blockchain implementation.
 pub trait BlockChain: Sync + Send {
-	/// Validate a vec of txs against known chain state at specific block
-	/// after applying the pre_tx to the chain state.
-	fn validate_raw_txs(
-		&self,
-		txs: Vec<transaction::Transaction>,
-		pre_tx: Option<transaction::Transaction>,
-		block_hash: &Hash,
-	) -> Result<Vec<transaction::Transaction>, PoolError>;
-
 	/// Verify any coinbase outputs being spent
 	/// have matured sufficiently.
 	fn verify_coinbase_maturity(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
@@ -205,7 +214,12 @@ pub trait BlockChain: Sync + Send {
 	/// have matured sufficiently.
 	fn verify_tx_lock_height(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
 
+	fn validate_tx(&self, tx: &Transaction, header: &BlockHeader) -> Result<(), PoolError>;
+
 	fn chain_head(&self) -> Result<BlockHeader, PoolError>;
+
+	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, PoolError>;
+	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, PoolError>;
 }
 
 /// Bridge between the transaction pool and the rest of the system. Handles

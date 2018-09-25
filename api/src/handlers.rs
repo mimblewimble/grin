@@ -13,17 +13,13 @@
 // limitations under the License.
 
 use std::collections::HashMap;
-use std::fmt::Debug;
 use std::net::SocketAddr;
 use std::sync::{Arc, RwLock, Weak};
-use std::thread;
 
 use failure::ResultExt;
-use futures::future::{err, ok};
-use futures::{Future, Stream};
-use hyper::{Body, Request, Response, StatusCode};
-use serde::{Deserialize, Serialize};
-use serde_json;
+use futures::future::ok;
+use futures::Future;
+use hyper::{Body, Request, StatusCode};
 
 use chain;
 use core::core::hash::{Hash, Hashed};
@@ -40,6 +36,7 @@ use url::form_urlencoded;
 use util;
 use util::secp::pedersen::Commitment;
 use util::LOGGER;
+use web::*;
 
 // All handlers use `Weak` references instead of `Arc` to avoid cycles that
 // can never be destroyed. These 2 functions are simple helpers to reduce the
@@ -151,8 +148,7 @@ impl OutputHandler {
 			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
 			.map(|output| {
 				OutputPrintable::from_output(output, w(&self.chain), Some(&header), include_proof)
-			})
-			.collect();
+			}).collect();
 
 		Ok(BlockOutputs {
 			header: BlockHeaderInfo::from_header(&header),
@@ -740,12 +736,10 @@ impl PoolPushHandler {
 				.and_then(move |wrapper: TxWrapper| {
 					util::from_hex(wrapper.tx_hex)
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
-				})
-				.and_then(move |tx_bin| {
+				}).and_then(move |tx_bin| {
 					ser::deserialize(&mut &tx_bin[..])
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
-				})
-				.and_then(move |tx: Transaction| {
+				}).and_then(move |tx: Transaction| {
 					let source = pool::TxSource {
 						debug_name: "push-api".to_string(),
 						identifier: "?.?.?.?".to_string(),
@@ -763,7 +757,7 @@ impl PoolPushHandler {
 					let mut tx_pool = pool_arc.write().unwrap();
 					let header = tx_pool.blockchain.chain_head().unwrap();
 					tx_pool
-						.add_to_pool(source, tx, !fluff, &header.hash())
+						.add_to_pool(source, tx, !fluff, &header)
 						.map_err(|e| {
 							error!(LOGGER, "update_pool: failed with error: {:?}", e);
 							ErrorKind::Internal(format!("Failed to update pool: {:?}", e)).into()
@@ -788,60 +782,6 @@ impl Handler for PoolPushHandler {
 	}
 }
 
-// Utility to serialize a struct into JSON and produce a sensible Response
-// out of it.
-fn json_response<T>(s: &T) -> ResponseFuture
-where
-	T: Serialize,
-{
-	match serde_json::to_string(s) {
-		Ok(json) => response(StatusCode::OK, json),
-		Err(_) => response(StatusCode::INTERNAL_SERVER_ERROR, ""),
-	}
-}
-
-fn result_to_response<T>(res: Result<T, Error>) -> ResponseFuture
-where
-	T: Serialize,
-{
-	match res {
-		Ok(s) => json_response_pretty(&s),
-		Err(e) => match e.kind() {
-			ErrorKind::Argument(msg) => response(StatusCode::BAD_REQUEST, msg.clone()),
-			ErrorKind::RequestError(msg) => response(StatusCode::BAD_REQUEST, msg.clone()),
-			ErrorKind::NotFound => response(StatusCode::NOT_FOUND, ""),
-			ErrorKind::Internal(msg) => response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
-			ErrorKind::ResponseError(msg) => {
-				response(StatusCode::INTERNAL_SERVER_ERROR, msg.clone())
-			}
-		},
-	}
-}
-
-// pretty-printed version of above
-fn json_response_pretty<T>(s: &T) -> ResponseFuture
-where
-	T: Serialize,
-{
-	match serde_json::to_string_pretty(s) {
-		Ok(json) => response(StatusCode::OK, json),
-		Err(e) => response(
-			StatusCode::INTERNAL_SERVER_ERROR,
-			format!("can't create json response: {}", e),
-		),
-	}
-}
-
-fn response<T: Into<Body> + Debug>(status: StatusCode, text: T) -> ResponseFuture {
-	Box::new(ok(just_response(status, text)))
-}
-
-fn just_response<T: Into<Body> + Debug>(status: StatusCode, text: T) -> Response<Body> {
-	let mut resp = Response::new(text.into());
-	*resp.status_mut() = status;
-	resp
-}
-
 /// Start all server HTTP handlers. Register all of them with Router
 /// and runs the corresponding HTTP server.
 ///
@@ -855,37 +795,14 @@ pub fn start_rest_apis(
 	chain: Weak<chain::Chain>,
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
-) {
-	let _ = thread::Builder::new()
-		.name("apis".to_string())
-		.spawn(move || {
-			let mut apis = ApiServer::new();
+) -> bool {
+	let mut apis = ApiServer::new();
 
-			let router = build_router(chain, tx_pool, peers).expect("unable to build API router");
+	let router = build_router(chain, tx_pool, peers).expect("unable to build API router");
 
-			info!(LOGGER, "Starting HTTP API server at {}.", addr);
-			let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-			apis.start(socket_addr, router).unwrap_or_else(|e| {
-				error!(LOGGER, "Failed to start API HTTP server: {}.", e);
-			});
-		});
-}
-
-fn parse_body<T>(req: Request<Body>) -> Box<Future<Item = T, Error = Error> + Send>
-where
-	for<'de> T: Deserialize<'de> + Send + 'static,
-{
-	Box::new(
-		req.into_body()
-			.concat2()
-			.map_err(|e| ErrorKind::RequestError(format!("Failed to read request: {}", e)).into())
-			.and_then(|body| match serde_json::from_reader(&body.to_vec()[..]) {
-				Ok(obj) => ok(obj),
-				Err(e) => {
-					err(ErrorKind::RequestError(format!("Invalid request body: {}", e)).into())
-				}
-			}),
-	)
+	info!(LOGGER, "Starting HTTP API server at {}.", addr);
+	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
+	apis.start(socket_addr, router).is_ok()
 }
 
 pub fn build_router(
@@ -959,22 +876,19 @@ pub fn build_router(
 
 	let mut router = Router::new();
 	// example how we can use midlleware
-	router.add_route(
-		"/v1/",
-		Box::new(LoggingMiddleware::new(Box::new(index_handler))),
-	)?;
-	router.add_route("/v1/blocks/*", Box::new(block_handler))?;
-	router.add_route("/v1/headers/*", Box::new(header_handler))?;
-	router.add_route("/v1/chain", Box::new(chain_tip_handler))?;
-	router.add_route("/v1/chain/outputs/*", Box::new(output_handler))?;
-	router.add_route("/v1/chain/compact", Box::new(chain_compact_handler))?;
-	router.add_route("/v1/chain/validate", Box::new(chain_validation_handler))?;
-	router.add_route("/v1/txhashset/*", Box::new(txhashset_handler))?;
-	router.add_route("/v1/status", Box::new(status_handler))?;
-	router.add_route("/v1/pool", Box::new(pool_info_handler))?;
-	router.add_route("/v1/pool/push", Box::new(pool_push_handler))?;
-	router.add_route("/v1/peers/all", Box::new(peers_all_handler))?;
-	router.add_route("/v1/peers/connected", Box::new(peers_connected_handler))?;
-	router.add_route("/v1/peers/**", Box::new(peer_handler))?;
+	router.add_route("/v1/", Arc::new(index_handler))?;
+	router.add_route("/v1/blocks/*", Arc::new(block_handler))?;
+	router.add_route("/v1/headers/*", Arc::new(header_handler))?;
+	router.add_route("/v1/chain", Arc::new(chain_tip_handler))?;
+	router.add_route("/v1/chain/outputs/*", Arc::new(output_handler))?;
+	router.add_route("/v1/chain/compact", Arc::new(chain_compact_handler))?;
+	router.add_route("/v1/chain/validate", Arc::new(chain_validation_handler))?;
+	router.add_route("/v1/txhashset/*", Arc::new(txhashset_handler))?;
+	router.add_route("/v1/status", Arc::new(status_handler))?;
+	router.add_route("/v1/pool", Arc::new(pool_info_handler))?;
+	router.add_route("/v1/pool/push", Arc::new(pool_push_handler))?;
+	router.add_route("/v1/peers/all", Arc::new(peers_all_handler))?;
+	router.add_route("/v1/peers/connected", Arc::new(peers_connected_handler))?;
+	router.add_route("/v1/peers/**", Arc::new(peer_handler))?;
 	Ok(router)
 }

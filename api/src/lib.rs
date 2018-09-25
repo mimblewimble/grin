@@ -24,6 +24,7 @@ extern crate failure;
 #[macro_use]
 extern crate failure_derive;
 extern crate hyper;
+extern crate hyper_tls;
 #[macro_use]
 extern crate lazy_static;
 extern crate regex;
@@ -35,16 +36,20 @@ extern crate serde_json;
 extern crate slog;
 extern crate futures;
 extern crate http;
+extern crate native_tls;
 extern crate tokio;
 extern crate tokio_core;
+extern crate tokio_tls;
 
 pub mod client;
 mod handlers;
 mod rest;
 mod router;
 mod types;
+mod web;
 
 pub use handlers::start_rest_apis;
 pub use rest::*;
 pub use router::*;
 pub use types::*;
+pub use web::*;

@@ -27,10 +27,10 @@ pub mod common;
 
 use std::sync::{Arc, RwLock};
 
-use common::{test_setup, test_source, test_transaction};
+use common::*;
 use core::core::hash::Hash;
 use core::core::verifier_cache::LruVerifierCache;
-use core::core::{BlockHeader, Transaction};
+use core::core::{BlockHeader, BlockSums, Transaction};
 use keychain::{ExtKeychain, Keychain};
 use pool::types::{BlockChain, PoolError};
 
@@ -48,12 +48,15 @@ impl BlockChain for CoinbaseMaturityErrorChainAdapter {
 		unimplemented!();
 	}
 
-	fn validate_raw_txs(
-		&self,
-		_txs: Vec<Transaction>,
-		_pre_tx: Option<Transaction>,
-		_block_hash: &Hash,
-	) -> Result<Vec<Transaction>, PoolError> {
+	fn get_block_header(&self, _hash: &Hash) -> Result<BlockHeader, PoolError> {
+		unimplemented!();
+	}
+
+	fn get_block_sums(&self, _hash: &Hash) -> Result<BlockSums, PoolError> {
+		unimplemented!();
+	}
+
+	fn validate_tx(&self, _tx: &Transaction, _header: &BlockHeader) -> Result<(), PoolError> {
 		unimplemented!();
 	}
 
@@ -82,7 +85,7 @@ fn test_coinbase_maturity() {
 	{
 		let mut write_pool = pool.write().unwrap();
 		let tx = test_transaction(&keychain, vec![50], vec![49]);
-		match write_pool.add_to_pool(test_source(), tx.clone(), true, &Hash::default()) {
+		match write_pool.add_to_pool(test_source(), tx.clone(), true, &BlockHeader::default()) {
 			Err(PoolError::ImmatureCoinbase) => {}
 			_ => panic!("Expected an immature coinbase error here."),
 		}

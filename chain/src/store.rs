@@ -90,6 +90,14 @@ impl ChainStore {
 		self.db.exists(&to_key(BLOCK_PREFIX, &mut h.to_vec()))
 	}
 
+	pub fn get_block_sums(&self, bh: &Hash) -> Result<BlockSums, Error> {
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(BLOCK_SUMS_PREFIX, &mut bh.to_vec())),
+			&format!("Block sums for block: {}", bh),
+		)
+	}
+
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		{
 			let mut header_cache = self.header_cache.write().unwrap();

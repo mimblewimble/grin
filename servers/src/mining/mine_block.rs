@@ -16,7 +16,7 @@
 //! them into a block and returns it.
 
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
-use rand::{self, Rng};
+use rand::{thread_rng, Rng};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
@@ -109,7 +109,12 @@ fn build_block(
 	let difficulty = consensus::next_difficulty(diff_iter).unwrap();
 
 	// extract current transaction from the pool
-	let txs = tx_pool.read().unwrap().prepare_mineable_transactions();
+	// TODO - we have a lot of unwrap() going on in this fn...
+	let txs = tx_pool
+		.read()
+		.unwrap()
+		.prepare_mineable_transactions()
+		.unwrap();
 
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
@@ -121,14 +126,7 @@ fn build_block(
 	};
 
 	let (output, kernel, block_fees) = get_coinbase(wallet_listener_url, block_fees)?;
-	let mut b = core::Block::with_reward(
-		&head,
-		txs,
-		output,
-		kernel,
-		difficulty.clone(),
-		verifier_cache.clone(),
-	)?;
+	let mut b = core::Block::with_reward(&head, txs, output, kernel, difficulty.clone())?;
 
 	// making sure we're not spending time mining a useless block
 	b.validate(
@@ -137,8 +135,7 @@ fn build_block(
 		verifier_cache,
 	)?;
 
-	let mut rng = rand::OsRng::new().unwrap();
-	b.header.pow.nonce = rng.gen();
+	b.header.pow.nonce = thread_rng().gen();
 	b.header.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_sec, 0), Utc);;
 
 	let b_difficulty = (b.header.total_difficulty() - head.total_difficulty()).to_num();

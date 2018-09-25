@@ -519,6 +519,10 @@ fn verify_coinbase_maturity(block: &Block, ext: &mut txhashset::Extension) -> Re
 /// based on block_sums of previous block, accounting for the inputs|outputs|kernels
 /// of the new block.
 fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+	// First check all our inputs exist in the current UTXO set.
+	// And that we are not introducing any duplicate outputs in the UTXO set.
+	ext.validate_utxo_fast(b.inputs(), b.outputs())?;
+
 	// Retrieve the block_sums for the previous block.
 	let block_sums = ext.batch.get_block_sums(&b.header.previous)?;
 

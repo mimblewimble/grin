@@ -1,26 +1,42 @@
 language: rust
+
+git:
+  depth: false
+
+os:
+  - linux
+  - osx
+
+dist: trusty
+sudo: required
+
 cache:
   cargo: true
   timeout: 240
+
 before_cache:
-- rm -rf target/tmp
-dist: trusty
-sudo: required
+  - rm -rf target/tmp
+
 rust:
-- stable
+  - stable
+
 addons:
   apt:
     sources:
-    - ubuntu-toolchain-r-test
+      - ubuntu-toolchain-r-test
     packages:
-    - g++-5
-    - cmake
-    - libcurl4-openssl-dev
-    - libelf-dev
-    - libdw-dev
-    - cmake
-    - gcc
-    - binutils-dev
+      - g++-5
+      - cmake
+      - libcurl4-openssl-dev
+      - libelf-dev
+      - libdw-dev
+      - cmake
+      - gcc
+      - binutils-dev
+
+before_install:
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update       ; fi
+
 env:
   global:
   - RUST_BACKTRACE="1"
@@ -37,12 +53,25 @@ env:
   - TEST_DIR=core
   - TEST_DIR=util
   - TEST_DIR=config
-script: cd $TEST_DIR && cargo test --release
+  - TEST_DIR=none
+
+script:
+  - if [[ "$TEST_DIR" == "none" ]]; then cargo build --release;                fi
+  - if [[ "$TEST_DIR" != "none" ]]; then cd $TEST_DIR && cargo test --release; fi
+
+before_deploy:
+  - if [[ "$TEST_DIR" == "none" ]]; then ./.auto-release.sh;                   fi
+
 deploy:
   provider: releases
   api_key:
     secure: PBTFcoUmiQITkDdtFzrBlNR/5OgYHTCw+xVWGYu205xwTlj/ARBgw7DNt8dIdptLx+jOM2V5SbJqSFxs/CJ2ZcOHQZ6ubwpAJlRfuk3xDAi5JmuHYfcY+4SQ9l/0MgHnGfuml093xP7vTIYm2Vwwgdq8fd3jdWmvwgk9zgaGXB4UIXQA0yIs3EzxZpqiLg629Ouv7edMfyffwlG+rgQ1koe6sqeMCxIs0N3p97GCx19kNe0TV4dC7XAN74HreMdHmwxPKAK4xG/jtA1Snm0pMQ50Z0Kizt+0yrGOPMLnWwO9sS38iosBn3Vh1R8HKle2xBGflTtT/LG9lHdQZ5NF572q6681x6t7str4OjJ5bboy1PtNLFxG7RJCVIpp9gbouzdxIaJWRTxIdlk8UNQMrD8ieiNE6V1vZtbHGtJHRSJN1vO/XxsLlQDCyakLhG/nmSKXgiT9wIsu+zj/3oDe+LBt5QetEGYGBrCwUewjaQ7EP1rsT7alQrHTMad5DPjYftJuvfR+yBtz1qbzQwZVJpQC1KY1c476mXPQsaywuUrj56hH92p7P3vl6aMN2OPJZP+zENOVSURHc56KeTsDS55+KKzcRjCMA2L0LR1hP33+V5kavMHgCRrWIkxAkZ4eRqnermalzp8vlzL6EEoGm0VFLzv4mJmzrY1mC1LyCHo=
-  file: target/release/grin
+  file_glob: true
+  file: target/release/grin-*.tgz*
+  skip_cleanup: true
   on:
     repo: mimblewimble/grin
     tags: true
+    condition: $TEST_DIR = "none"
+
+
