@@ -13,8 +13,8 @@
 
 //! Implementation of Cuckatoo Cycle designed by John Tromp.
 use pow::num::{PrimInt, ToPrimitive};
-use std::{mem, fmt};
 use std::ops::{BitOrAssign, Mul};
+use std::{fmt, mem};
 
 use blake2::blake2b::blake2b;
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
@@ -39,15 +39,19 @@ where
 	to: T,
 }
 
-impl <T> fmt::Display for Link<T> 
+impl<T> fmt::Display for Link<T>
 where
-	T: EdgeType
+	T: EdgeType,
 {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "(next: {}, to: {})", self.next.to_u64().unwrap(), self.to.to_u64().unwrap())
+		write!(
+			f,
+			"(next: {}, to: {})",
+			self.next.to_u64().unwrap(),
+			self.to.to_u64().unwrap()
+		)
 	}
 }
-
 
 struct Graph<T>
 where
@@ -121,8 +125,9 @@ where
 			moved = true;
 		}
 		if !moved {
-			self.adj_list[u.to_u64().unwrap() as usize] = self.links[lnk.to_u64().unwrap() as usize].next;
-		} 
+			self.adj_list[u.to_u64().unwrap() as usize] =
+				self.links[lnk.to_u64().unwrap() as usize].next;
+		}
 		self.links[lnk.to_u64().unwrap() as usize].to = self.nil;
 	}
 
@@ -165,9 +170,9 @@ where
 					self.solutions.push(Proof::zero(self.proof_size));
 				}
 				return;
-			} 
+			}
 		} else if len == self.proof_size as u32 {
-				return;
+			return;
 		}
 		let mut au1 = self.adj_list[(u ^ T::one()).to_u64().unwrap() as usize];
 		if au1 != self.nil {
