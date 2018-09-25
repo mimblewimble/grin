@@ -177,6 +177,7 @@ where
 	pub graph: Graph<T>,
 	proof_size: usize,
 	edge_mask: T,
+	num_edges: T,
 }
 
 impl<T> CuckooContext<T>
@@ -199,6 +200,7 @@ where
 			graph: Graph::new(T::from(num_edges).unwrap(), max_sols, proof_size),
 			proof_size: proof_size,
 			edge_mask: T::from(num_edges - 1).unwrap(),
+			num_edges: T::from(num_edges).unwrap(),
 		}
 	}
 
@@ -257,7 +259,82 @@ where
 			}
 		}
 		let n_sols = self.graph.solutions.len() - 1;
+		for s in &mut self.graph.solutions {
+			s.nonces.sort();
+		}
+		for s in &self.graph.solutions {
+			println!("Verification: {}", self.verify(&s));
+		}
 		n_sols
+	}
+
+	/// Verify that given edges are ascending and form a cycle in a header-generated
+	/// graph
+	pub fn verify(&self, proof: &Proof) -> bool {
+		let nonces = &proof.nonces;
+		let mut uvs = vec![0u64; 2 * proof.proof_size()];
+		let mut xor0:u64 = (self.proof_size as u64 / 2) & 1;
+		let mut xor1:u64 = xor0;
+
+		for n in 0..proof.proof_size() {
+			if nonces[n] > self.edge_mask.to_u64().unwrap() {
+				// POW TOO BIG
+				println!("TOO BIG");
+				return false;
+			}
+			if n > 0 && nonces[n] <= nonces[n-1] {
+				// POW TOO SMALL
+				println!("TOO SMALL");
+				return false;
+			}
+			uvs[2 * n] = self.sipnode(T::from(nonces[n]).unwrap(), 0).to_u64().unwrap();
+			uvs[2 * n + 1] = self.sipnode(T::from(nonces[n]).unwrap(), 1).to_u64().unwrap();
+			xor0 ^= uvs[2 * n];
+			xor1 ^= uvs[2 * n + 1];
+		}
+		if xor0 | xor1 != 0 {
+			// POW NON MATCHING
+			println!("NON MATCHING");
+			return false;
+		}
+		let mut n = 0;
+		let mut i = 0;
+		let mut j;
+		loop { // follow cycle
+			j = i;
+			let mut k = j;
+			loop {
+				k = (k + 2) % (2 * self.proof_size);
+				if k == i {
+					break;
+				}
+				if uvs[k] >> 1 == uvs[i] >> 1 { // find other edge endpoint matching one at i
+					if j != i {
+						// POW_BRANCH
+						println!("POW_BRANCH"); // already found one before
+						return false;
+					}
+					j = k;
+				}
+			}
+			if j == i || uvs[j] == uvs[i] {
+				// POW_DEAD_END
+				println!("POW_DEAD_END");
+				return false;
+			}
+			i = j ^ 1;
+			n += 1;
+			if i == 0 {
+				break;
+			}
+		}
+		if n == self.proof_size {
+			true
+		} else {
+			//POW_SHORT_CYCLE
+			println!("POW_SHORT_CYCLE");
+			false
+		}
 	}
 }
 
