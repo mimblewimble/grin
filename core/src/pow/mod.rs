@@ -36,8 +36,9 @@ extern crate serde;
 
 extern crate grin_util as util;
 
-mod cuckatoo;
+pub mod cuckatoo;
 pub mod cuckoo;
+mod error;
 mod siphash;
 mod types;
 
