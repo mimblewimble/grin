@@ -146,8 +146,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				controller::owner_listener(
 					wallet,
 					"127.0.0.1:13420",
-					wallet_config.owner_api_basic_auth.unwrap(),
-					&wallet_config.owner_api_secret,
+					wallet_config.owner_api_secret.clone(),
 				).unwrap_or_else(|e| {
 					panic!(
 						"Error creating wallet api listener: {:?} Config: {:?}",
@@ -161,8 +160,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				controller::owner_listener(
 					wallet,
 					"127.0.0.1:13420",
-					wallet_config.owner_api_basic_auth.unwrap(),
-					&wallet_config.owner_api_secret,
+					wallet_config.owner_api_secret.clone(),
 				).unwrap_or_else(|e| {
 					panic!(
 						"Error creating wallet api listener: {:?} Config: {:?}",

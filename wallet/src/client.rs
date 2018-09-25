@@ -86,7 +86,7 @@ impl WalletClient for HTTPWalletClient {
 		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
 		debug!(LOGGER, "Posting transaction slate to {}", url);
 
-		let res = api::client::post(url.as_str(), false, "", slate).context(
+		let res = api::client::post(url.as_str(), None, slate).context(
 			libwallet::ErrorKind::ClientCallback("Posting transaction slate"),
 		)?;
 		Ok(res)
@@ -101,7 +101,7 @@ impl WalletClient for HTTPWalletClient {
 		} else {
 			url = format!("{}/v1/pool/push", dest);
 		}
-		api::client::post_no_ret(url.as_str(), false, "", tx).context(
+		api::client::post_no_ret(url.as_str(), None, tx).context(
 			libwallet::ErrorKind::ClientCallback("Posting transaction to node"),
 		)?;
 		Ok(())
@@ -111,7 +111,7 @@ impl WalletClient for HTTPWalletClient {
 	fn get_chain_height(&self) -> Result<u64, libwallet::Error> {
 		let addr = self.node_url();
 		let url = format!("{}/v1/chain", addr);
-		let res = api::client::get::<api::Tip>(url.as_str(), false, "").context(
+		let res = api::client::get::<api::Tip>(url.as_str(), None).context(
 			libwallet::ErrorKind::ClientCallback("Getting chain height from node"),
 		)?;
 		Ok(res.height)
@@ -138,8 +138,7 @@ impl WalletClient for HTTPWalletClient {
 			let url = format!("{}/v1/chain/outputs/byids?{}", addr, query_chunk.join("&"),);
 			tasks.push(api::client::get_async::<Vec<api::Output>>(
 				url.as_str(),
-				false,
-				"",
+				None,
 			));
 		}
 
@@ -185,7 +184,7 @@ impl WalletClient for HTTPWalletClient {
 		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)> =
 			Vec::new();
 
-		match api::client::get::<api::OutputListing>(url.as_str(), false, "") {
+		match api::client::get::<api::OutputListing>(url.as_str(), None) {
 			Ok(o) => {
 				for out in o.outputs {
 					let is_coinbase = match out.output_type {
@@ -235,7 +234,7 @@ pub fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Err
 
 /// Makes a single request to the wallet API to create a new coinbase output.
 fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
-	let res = api::client::post(url, false, "", block_fees).context(ErrorKind::GenericError(
+	let res = api::client::post(url, None, block_fees).context(ErrorKind::GenericError(
 		"Posting create coinbase".to_string(),
 	))?;
 	Ok(res)

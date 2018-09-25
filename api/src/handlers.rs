@@ -796,14 +796,13 @@ pub fn start_rest_apis(
 	chain: Weak<chain::Chain>,
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
-	api_basic_auth: bool,
-	api_secret: String,
+	api_secret: Option<String>,
 ) -> bool {
 	let mut apis = ApiServer::new();
 	let mut router = Router::new();
-	if api_basic_auth {
+	if api_secret.is_some() {
 		let api_basic_auth =
-			"Basic ".to_string() + &util::to_base64(&("grin:".to_string() + &api_secret));
+			"Basic ".to_string() + &util::to_base64(&("grin:".to_string() + &api_secret.unwrap()));
 		let basic_realm = "Basic realm=GrinAPI".to_string();
 		let basic_auth_middleware = Arc::new(BasicAuthMiddleware::new(api_basic_auth, basic_realm));
 		router.add_middleware(basic_auth_middleware);

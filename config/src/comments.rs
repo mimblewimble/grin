@@ -47,16 +47,9 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
-		"api_basic_auth".to_string(),
-		"
-#whether to enable basic access authentication on API
-".to_string(),
-	);
-
-	retval.insert(
 		"api_secret".to_string(),
 		"
-#a secret token used by the API to authenticate the calls
+#a secret token used by the API to authenticate the calls (comment the next line to disable basic auth)
 ".to_string(),
 	);
 
@@ -320,16 +313,9 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
-		"owner_api_basic_auth".to_string(),
-		"
-#whether to enable basic access auth on Owner API
-".to_string(),
-	);
-
-	retval.insert(
 		"owner_api_secret".to_string(),
 		"
-#secret for basic auth on the Owner API
+#secret for basic auth on the Owner API (comment the next line to disable basic auth)
 ".to_string(),
 	);
 	retval.insert(

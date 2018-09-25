@@ -34,25 +34,21 @@ pub type ClientResponseFuture<T> = Box<Future<Item = T, Error = Error> + Send>;
 /// Helper function to easily issue a HTTP GET request against a given URL that
 /// returns a JSON object. Handles request building, JSON deserialization and
 /// response code checking.
-pub fn get<'a, T>(url: &'a str, api_basic_auth: bool, api_secret: &'a str) -> Result<T, Error>
+pub fn get<'a, T>(url: &'a str, api_secret: Option<String>) -> Result<T, Error>
 where
 	for<'de> T: Deserialize<'de>,
 {
-	handle_request(build_request(url, "GET", api_basic_auth, api_secret, None)?)
+	handle_request(build_request(url, "GET", api_secret, None)?)
 }
 
 /// Helper function to easily issue an async HTTP GET request against a given
 /// URL that returns a future. Handles request building, JSON deserialization
 /// and response code checking.
-pub fn get_async<'a, T>(
-	url: &'a str,
-	api_basic_auth: bool,
-	api_secret: &'a str,
-) -> ClientResponseFuture<T>
+pub fn get_async<'a, T>(url: &'a str, api_secret: Option<String>) -> ClientResponseFuture<T>
 where
 	for<'de> T: Deserialize<'de> + Send + 'static,
 {
-	match build_request(url, "GET", api_basic_auth, api_secret, None) {
+	match build_request(url, "GET", api_secret, None) {
 		Ok(req) => Box::new(handle_request_async(req)),
 		Err(e) => Box::new(err(e)),
 	}
@@ -62,17 +58,12 @@ where
 /// object as body on a given URL that returns a JSON object. Handles request
 /// building, JSON serialization and deserialization, and response code
 /// checking.
-pub fn post<IN, OUT>(
-	url: &str,
-	api_basic_auth: bool,
-	api_secret: &str,
-	input: &IN,
-) -> Result<OUT, Error>
+pub fn post<IN, OUT>(url: &str, api_secret: Option<String>, input: &IN) -> Result<OUT, Error>
 where
 	IN: Serialize,
 	for<'de> OUT: Deserialize<'de>,
 {
-	let req = create_post_request(url, api_basic_auth, api_secret, input)?;
+	let req = create_post_request(url, api_secret, input)?;
 	handle_request(req)
 }
 
@@ -83,15 +74,14 @@ where
 pub fn post_async<IN, OUT>(
 	url: &str,
 	input: &IN,
-	api_basic_auth: bool,
-	api_secret: &str,
+	api_secret: Option<String>,
 ) -> ClientResponseFuture<OUT>
 where
 	IN: Serialize,
 	OUT: Send + 'static,
 	for<'de> OUT: Deserialize<'de>,
 {
-	match create_post_request(url, api_basic_auth, api_secret, input) {
+	match create_post_request(url, api_secret, input) {
 		Ok(req) => Box::new(handle_request_async(req)),
 		Err(e) => Box::new(err(e)),
 	}
@@ -101,16 +91,11 @@ where
 /// object as body on a given URL that returns nothing. Handles request
 /// building, JSON serialization, and response code
 /// checking.
-pub fn post_no_ret<IN>(
-	url: &str,
-	api_basic_auth: bool,
-	api_secret: &str,
-	input: &IN,
-) -> Result<(), Error>
+pub fn post_no_ret<IN>(url: &str, api_secret: Option<String>, input: &IN) -> Result<(), Error>
 where
 	IN: Serialize,
 {
-	let req = create_post_request(url, api_basic_auth, api_secret, input)?;
+	let req = create_post_request(url, api_secret, input)?;
 	send_request(req)?;
 	Ok(())
 }
@@ -121,14 +106,13 @@ where
 /// checking.
 pub fn post_no_ret_async<IN>(
 	url: &str,
-	api_basic_auth: bool,
-	api_secret: &str,
+	api_secret: Option<String>,
 	input: &IN,
 ) -> ClientResponseFuture<()>
 where
 	IN: Serialize,
 {
-	match create_post_request(url, api_basic_auth, api_secret, input) {
+	match create_post_request(url, api_secret, input) {
 		Ok(req) => Box::new(send_request_async(req).and_then(|_| ok(()))),
 		Err(e) => Box::new(err(e)),
 	}
@@ -137,47 +121,36 @@ where
 fn build_request<'a>(
 	url: &'a str,
 	method: &str,
-	api_basic_auth: bool,
-	api_secret: &str,
+	api_secret: Option<String>,
 	body: Option<String>,
 ) -> Result<Request<Body>, Error> {
 	let uri = url.parse::<Uri>().map_err::<Error, _>(|e: InvalidUri| {
 		e.context(ErrorKind::Argument(format!("Invalid url {}", url)))
 			.into()
 	})?;
-	if api_basic_auth {
-		let basic_auth = "Basic ".to_string() + &to_base64(&("grin:".to_string() + &api_secret));
-		Request::builder()
-			.method(method)
-			.uri(uri)
-			.header(AUTHORIZATION, basic_auth)
-			.header(USER_AGENT, "grin-client")
-			.header(ACCEPT, "application/json")
-			.body(match body {
-				None => Body::empty(),
-				Some(json) => json.into(),
-			}).map_err(|e| {
-				ErrorKind::RequestError(format!("Bad request {} {}: {}", method, url, e)).into()
-			})
-	} else {
-		Request::builder()
-			.method(method)
-			.uri(uri)
-			.header(USER_AGENT, "grin-client")
-			.header(ACCEPT, "application/json")
-			.body(match body {
-				None => Body::empty(),
-				Some(json) => json.into(),
-			}).map_err(|e| {
-				ErrorKind::RequestError(format!("Bad request {} {}: {}", method, url, e)).into()
-			})
+	let mut builder = Request::builder();
+	if api_secret.is_some() {
+		let basic_auth =
+			"Basic ".to_string() + &to_base64(&("grin:".to_string() + &api_secret.unwrap()));
+		builder.header(AUTHORIZATION, basic_auth);
 	}
+
+	builder
+		.method(method)
+		.uri(uri)
+		.header(USER_AGENT, "grin-client")
+		.header(ACCEPT, "application/json")
+		.body(match body {
+			None => Body::empty(),
+			Some(json) => json.into(),
+		}).map_err(|e| {
+			ErrorKind::RequestError(format!("Bad request {} {}: {}", method, url, e)).into()
+		})
 }
 
 fn create_post_request<IN>(
 	url: &str,
-	api_basic_auth: bool,
-	api_secret: &str,
+	api_secret: Option<String>,
 	input: &IN,
 ) -> Result<Request<Body>, Error>
 where
@@ -186,7 +159,7 @@ where
 	let json = serde_json::to_string(input).context(ErrorKind::Internal(
 		"Could not serialize data to JSON".to_owned(),
 	))?;
-	build_request(url, "POST", api_basic_auth, api_secret, Some(json))
+	build_request(url, "POST", api_secret, Some(json))
 }
 
 fn handle_request<T>(req: Request<Body>) -> Result<T, Error>

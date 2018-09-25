@@ -92,12 +92,8 @@ pub fn ban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
 		config.api_http_addr,
 		peer_addr.to_string()
 	);
-	match api::client::post_no_ret(
-		url.as_str(),
-		config.api_basic_auth.unwrap_or(false),
-		&config.api_secret,
-		&params,
-	).map_err(|e| Error::API(e))
+	match api::client::post_no_ret(url.as_str(), config.api_secret.clone(), &params)
+		.map_err(|e| Error::API(e))
 	{
 		Ok(_) => writeln!(e, "Successfully banned peer {}", peer_addr.to_string()).unwrap(),
 		Err(_) => writeln!(e, "Failed to ban peer {}", peer_addr).unwrap(),
@@ -114,12 +110,7 @@ pub fn unban_peer(config: &ServerConfig, peer_addr: &SocketAddr) {
 		peer_addr.to_string()
 	);
 	let res: Result<(), api::Error>;
-	res = api::client::post_no_ret(
-		url.as_str(),
-		config.api_basic_auth.unwrap_or(false),
-		&config.api_secret,
-		&params,
-	);
+	res = api::client::post_no_ret(url.as_str(), config.api_secret.clone(), &params);
 
 	match res.map_err(|e| Error::API(e)) {
 		Ok(_) => writeln!(e, "Successfully unbanned peer {}", peer_addr).unwrap(),
@@ -132,11 +123,7 @@ pub fn list_connected_peers(config: &ServerConfig) {
 	let mut e = term::stdout().unwrap();
 	let url = format!("http://{}/v1/peers/connected", config.api_http_addr);
 	let peers_info: Result<Vec<p2p::PeerInfo>, api::Error>;
-	peers_info = api::client::get::<Vec<p2p::PeerInfo>>(
-		url.as_str(),
-		config.api_basic_auth.unwrap_or(false),
-		&config.api_secret,
-	);
+	peers_info = api::client::get::<Vec<p2p::PeerInfo>>(url.as_str(), config.api_secret.clone());
 
 	match peers_info.map_err(|e| Error::API(e)) {
 		Ok(connected_peers) => {
@@ -160,11 +147,8 @@ pub fn list_connected_peers(config: &ServerConfig) {
 
 fn get_status_from_node(config: &ServerConfig) -> Result<api::Status, Error> {
 	let url = format!("http://{}/v1/status", config.api_http_addr);
-	api::client::get::<api::Status>(
-		url.as_str(),
-		config.api_basic_auth.unwrap_or(false),
-		&config.api_secret,
-	).map_err(|e| Error::API(e))
+	api::client::get::<api::Status>(url.as_str(), config.api_secret.clone())
+		.map_err(|e| Error::API(e))
 }
 
 /// Error type wrapping underlying module errors.
