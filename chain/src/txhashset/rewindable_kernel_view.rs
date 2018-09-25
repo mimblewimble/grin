@@ -14,8 +14,6 @@
 
 //! Lightweight readonly view into kernel MMR for convenience.
 
-use croaring::Bitmap;
-
 use core::core::pmmr::RewindablePMMR;
 use core::core::{BlockHeader, TxKernel};
 
@@ -37,13 +35,23 @@ impl<'a> RewindableKernelView<'a> {
 		batch: &'a Batch,
 		header: BlockHeader,
 	) -> RewindableKernelView<'a> {
-		RewindableKernelView { pmmr, batch , header }
+		RewindableKernelView {
+			pmmr,
+			batch,
+			header,
+		}
 	}
 
+	/// Accessor for the batch used in this view.
+	/// We will discard this batch (rollback) at the end, so be aware of this.
+	/// Nothing will get written to the db/index via this view.
 	pub fn batch(&self) -> &'a Batch {
 		self.batch
 	}
 
+	/// Rewind this readonly view to a previous block.
+	/// We accomplish this in a readonly way because we can rewind the PMMR
+	/// via last_pos, without rewinding the underlying backend files.
 	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		self.pmmr
 			.rewind(header.kernel_mmr_size)

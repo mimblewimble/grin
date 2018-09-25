@@ -316,6 +316,11 @@ where
 	res
 }
 
+/// Rewindable (but still readonly) view on the kernel MMR.
+/// The underlying backend is readonly. But we permit the PMMR to be "rewound"
+/// via last_pos.
+/// We create a new db batch for this view and discard it (rollback)
+/// when we are done with the view.
 pub fn rewindable_kernel_view<'a, F, T>(trees: &'a TxHashSet, inner: F) -> Result<T, Error>
 where
 	F: FnOnce(&mut RewindableKernelView) -> Result<T, Error>,
