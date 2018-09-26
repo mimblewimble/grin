@@ -69,7 +69,7 @@ where
 pub fn owner_listener<T: ?Sized, C, K>(
 	wallet: Box<T>,
 	addr: &str,
-	owner_api_secret: Option<String>,
+	api_secret: Option<String>,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
@@ -81,9 +81,9 @@ where
 	let api_handler = OwnerAPIHandler::new(wallet_arc);
 
 	let mut router = Router::new();
-	if owner_api_secret.is_some() {
+	if api_secret.is_some() {
 		let api_basic_auth =
-			"Basic ".to_string() + &to_base64(&("grin:".to_string() + &owner_api_secret.unwrap()));
+			"Basic ".to_string() + &to_base64(&("grin:".to_string() + &api_secret.unwrap()));
 		let basic_realm = "Basic realm=GrinOwnerAPI".to_string();
 		let basic_auth_middleware = Arc::new(BasicAuthMiddleware::new(api_basic_auth, basic_realm));
 		router.add_middleware(basic_auth_middleware);

@@ -38,6 +38,7 @@ use mining::test_miner::Miner;
 use p2p;
 use pool;
 use store;
+use util::file::get_first_line;
 use util::LOGGER;
 
 /// Grin server holding internal structures.
@@ -255,13 +256,13 @@ impl Server {
 			.spawn(move || p2p_inner.listen());
 
 		info!(LOGGER, "Starting rest apis at: {}", &config.api_http_addr);
-
+		let api_secret = get_first_line(config.api_secret_path.clone());
 		api::start_rest_apis(
 			config.api_http_addr.clone(),
 			Arc::downgrade(&shared_chain),
 			Arc::downgrade(&tx_pool),
 			Arc::downgrade(&p2p_server.peers),
-			config.api_secret.clone(),
+			api_secret,
 		);
 
 		info!(

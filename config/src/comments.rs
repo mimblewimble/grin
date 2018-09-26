@@ -47,10 +47,10 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
-		"api_secret".to_string(),
+		"api_secret_path".to_string(),
 		"
-#a secret token used by the API to authenticate the calls
-#comment the secret to disable basic auth
+#path of the secret token used by the API to authenticate the calls
+#comment the it to disable basic auth
 ".to_string(),
 	);
 
@@ -314,10 +314,10 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
-		"owner_api_secret".to_string(),
+		"api_secret_path".to_string(),
 		"
-#secret for basic auth on the Owner API
-#comment the secret to disable basic auth
+#path of the secret token used by the API to authenticate the calls
+#comment it to disable basic auth
 ".to_string(),
 	);
 	retval.insert(

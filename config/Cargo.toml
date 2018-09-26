@@ -6,6 +6,7 @@ workspace = ".."
 publish = false
 
 [dependencies]
+rand = "0.5"
 serde = "1"
 serde_derive = "1"
 toml = "0.4"
