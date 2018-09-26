@@ -116,7 +116,7 @@ impl WalletClient for HTTPWalletClient {
 	fn get_chain_height(&self, api_secret: Option<String>) -> Result<u64, libwallet::Error> {
 		let addr = self.node_url();
 		let url = format!("{}/v1/chain", addr);
-		let res = api::client::get::<api::Tip>(url.as_str(), None).context(
+		let res = api::client::get::<api::Tip>(url.as_str(), api_secret).context(
 			libwallet::ErrorKind::ClientCallback("Getting chain height from node"),
 		)?;
 		Ok(res.height)

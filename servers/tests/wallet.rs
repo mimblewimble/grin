@@ -112,6 +112,7 @@ fn basic_wallet_transactions() {
 		"not_all",
 		"http://127.0.0.1:20002",
 		false,
+		None,
 	);
 
 	//Wait for a confirmation
@@ -136,6 +137,7 @@ fn basic_wallet_transactions() {
 			"not_all",
 			"http://127.0.0.1:20002",
 			false,
+			None,
 		);
 	}
 
@@ -155,6 +157,7 @@ fn basic_wallet_transactions() {
 		"all",
 		"http://127.0.0.1:10002",
 		false,
+		None,
 	);
 
 	thread::sleep(time::Duration::from_millis(5000));

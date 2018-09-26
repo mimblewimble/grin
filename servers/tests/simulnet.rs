@@ -487,8 +487,9 @@ fn replicate_tx_fluff_failure() {
 				500,                      // max outputs
 				1000,                     // num change outputs
 				true,                     // select all outputs
+				None,                     // no basic auth
 			).unwrap();
-		api.post_tx(&slate, false).unwrap();
+		api.post_tx(&slate, false, None).unwrap();
 		Ok(())
 	}).unwrap();
 
@@ -500,7 +501,7 @@ fn replicate_tx_fluff_failure() {
 
 	let wallet2 = Arc::new(Mutex::new(wallet2));
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let res = api.retrieve_summary_info(true).unwrap();
+		let res = api.retrieve_summary_info(true, None).unwrap();
 		assert_eq!(res.1.amount_currently_spendable, amount);
 		Ok(())
 	}).unwrap();

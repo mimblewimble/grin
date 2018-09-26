@@ -309,7 +309,7 @@ impl LocalServerContainer {
 		let mut wallet = FileWallet::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
-		let _ = wallet::libwallet::internal::updater::refresh_outputs(&mut wallet);
+		let _ = wallet::libwallet::internal::updater::refresh_outputs(&mut wallet, None);
 		wallet::libwallet::internal::updater::retrieve_info(&mut wallet).unwrap()
 	}
 
@@ -320,6 +320,7 @@ impl LocalServerContainer {
 		selection_strategy: &str,
 		dest: &str,
 		fluff: bool,
+		api_secret: Option<String>,
 	) {
 		let amount = core::core::amount_from_hr_string(amount)
 			.expect("Could not parse amount as a number with optional decimal point.");
@@ -348,6 +349,7 @@ impl LocalServerContainer {
 					max_outputs,
 					change_outputs,
 					selection_strategy == "all",
+					api_secret,
 				);
 				match result {
 					Ok(_) => println!(

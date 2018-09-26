@@ -261,7 +261,21 @@ where
 
 	fn handle_get_request(&self, req: &Request<Body>) -> Result<Response<Body>, Error> {
 		let api = APIOwner::new(self.wallet.clone());
-		let api_secret = Some("".to_string());
+		let mut api_secret = None;
+		if let Some(query_string) = req.uri().query() {
+			let params = form_urlencoded::parse(query_string.as_bytes())
+				.into_owned()
+				.fold(HashMap::new(), |mut hm, (k, v)| {
+					hm.entry(k).or_insert(vec![]).push(v);
+					hm
+				});
+			if let Some(secrets) = params.get("secret") {
+				if let Ok(secret) = str::parse(&secrets[0]) {
+					api_secret = Some(secret);
+				}
+			}
+		}
+
 		Ok(match req
 			.uri()
 			.path()
@@ -377,7 +391,20 @@ where
 
 	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
 		let api = APIOwner::new(self.wallet.clone());
-		let api_secret = Some("".to_string());
+		let mut api_secret = None;
+		if let Some(query_string) = req.uri().query() {
+			let params = form_urlencoded::parse(query_string.as_bytes())
+				.into_owned()
+				.fold(HashMap::new(), |mut hm, (k, v)| {
+					hm.entry(k).or_insert(vec![]).push(v);
+					hm
+				});
+			if let Some(secrets) = params.get("secret") {
+				if let Ok(secret) = str::parse(&secrets[0]) {
+					api_secret = Some(secret);
+				}
+			}
+		}
 		match req
 			.uri()
 			.path()
