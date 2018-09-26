@@ -273,11 +273,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		// try to add headers to our header chain
 		let res = w(&self.chain).sync_block_headers(&bhs, self.chain_opts());
 		if let &Err(ref e) = &res {
-			debug!(
-				LOGGER,
-				"Block headers refused by chain: {:?}",
-				e
-			);
+			debug!(LOGGER, "Block headers refused by chain: {:?}", e);
 
 			if e.is_bad_data() {
 				return false;

@@ -328,10 +328,7 @@ fn check_known_store(
 // Note: not just the header but the full block itself.
 // We cannot assume we can use the chain head for this
 // as we may be dealing with a fork (with less work currently).
-fn check_prev_store(
-	header: &BlockHeader,
-	batch: &mut store::Batch,
-) -> Result<(), Error> {
+fn check_prev_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
 	match batch.block_exists(&header.previous) {
 		Ok(true) => {
 			// We have the previous block in the store, so we can proceed.
@@ -607,7 +604,11 @@ fn add_block_header(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Er
 /// Directly updates the head if we've just appended a new block to it or handle
 /// the situation where we've just added enough work to have a fork with more
 /// work than the head.
-fn update_head(b: &Block, ctx: &BlockContext, batch: &mut store::Batch) -> Result<Option<Tip>, Error> {
+fn update_head(
+	b: &Block,
+	ctx: &BlockContext,
+	batch: &mut store::Batch,
+) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
 	// when extending the head), update it
 	if block_has_more_work(&b.header, &ctx.head) {
@@ -684,10 +685,7 @@ fn update_header_head(
 /// to find to fork root. Rewind the txhashset to the root and apply all the
 /// forked blocks prior to the one being processed to set the txhashset in
 /// the expected state.
-pub fn rewind_and_apply_fork(
-	b: &Block,
-	ext: &mut txhashset::Extension,
-) -> Result<(), Error> {
+pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
 	// extending a fork, first identify the block where forking occurred
 	// keeping the hashes of blocks along the fork
 	let mut current = b.header.previous;
@@ -725,7 +723,8 @@ pub fn rewind_and_apply_fork(
 
 	// Now re-apply all blocks on this fork.
 	for (_, h) in fork_hashes {
-		let fb = ext.batch
+		let fb = ext
+			.batch
 			.get_block(&h)
 			.map_err(|e| ErrorKind::StoreErr(e, format!("getting forked blocks")))?;
 

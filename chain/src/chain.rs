@@ -365,11 +365,7 @@ impl Chain {
 		Ok(res)
 	}
 
-	fn ctx_from_head(
-		&self,
-		head: Tip,
-		opts: Options,
-	) -> Result<pipe::BlockContext, Error> {
+	fn ctx_from_head(&self, head: Tip, opts: Options) -> Result<pipe::BlockContext, Error> {
 		Ok(pipe::BlockContext {
 			opts,
 			head,
