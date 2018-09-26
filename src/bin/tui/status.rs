@@ -37,35 +37,28 @@ impl TUIStatusListener for TUIStatusView {
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Current Status: "))
 						.child(TextView::new("Starting").with_id("basic_current_status")),
-				)
-				.child(
+				).child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Connected Peers: "))
 						.child(TextView::new("0").with_id("connected_peers")),
-				)
-				.child(
+				).child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Chain Height: "))
 						.child(TextView::new("  ").with_id("chain_height")),
-				)
-				.child(
+				).child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Total Difficulty: "))
 						.child(TextView::new("  ").with_id("basic_total_difficulty")),
-				)
-				.child(
+				).child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("------------------------")),
-				)
-				.child(
+				).child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("  ").with_id("basic_mining_config_status")),
-				)
-				.child(
+				).child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("  ").with_id("basic_mining_status")),
-				)
-				.child(
+				).child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("  ").with_id("basic_network_info")),
 				), //.child(logo_view)
