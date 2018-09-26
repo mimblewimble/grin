@@ -21,7 +21,7 @@ use croaring::Bitmap;
 use pow::common::EdgeType;
 use pow::common::{self, Link};
 use pow::error::{Error, ErrorKind};
-use pow::Proof;
+use pow::{PoWContext, Proof};
 use util;
 
 struct Graph<T>
@@ -174,12 +174,33 @@ where
 	edge_mask: T,
 }
 
+impl<T> PoWContext<T> for CuckatooContext<T>
+where
+	T: EdgeType,
+{
+	fn new(edge_bits: u8, proof_size: usize, easiness_pct: u32, max_sols: u32) -> Result<Box<Self>, Error> {
+		Ok(Box::new(CuckatooContext::<T>::new_impl(edge_bits, proof_size, easiness_pct, max_sols)?))
+	}
+
+	fn set_header_nonce(&mut self, header: Vec<u8>, nonce: Option<u32>) -> Result<(), Error> {
+		self.set_header_nonce_impl(header, nonce)
+	}
+
+	fn find_cycles(&mut self) -> Result<Vec<Proof>, Error> {
+		self.find_cycles_impl()
+	}
+
+	fn verify(&self, proof: &Proof) -> Result<(), Error> {
+		self.verify_impl(proof)
+	}
+}
+
 impl<T> CuckatooContext<T>
 where
 	T: EdgeType,
 {
 	/// New Solver context
-	pub fn new(
+	pub fn new_impl(
 		edge_bits: u8,
 		proof_size: usize,
 		easiness_pct: u32,
@@ -214,7 +235,7 @@ where
 	}
 
 	/// Set the header and optional nonce in the last part of the header
-	pub fn set_header_nonce(
+	pub fn set_header_nonce_impl(
 		&mut self,
 		mut header: Vec<u8>,
 		nonce: Option<u32>,
@@ -235,7 +256,7 @@ where
 	}
 
 	/// Simple implementation of algorithm
-	pub fn find_cycles(&mut self) -> Result<Vec<Proof>, Error> {
+	pub fn find_cycles_impl(&mut self) -> Result<Vec<Proof>, Error> {
 		for n in 0..self.easiness.to_u64().ok_or(ErrorKind::IntegerCast)? {
 			let u = self.sipnode(T::from(n).ok_or(ErrorKind::IntegerCast)?, 0)?;
 			let v = self.sipnode(T::from(n).ok_or(ErrorKind::IntegerCast)?, 1)?;
@@ -249,7 +270,7 @@ where
 			s.nonces.sort();
 		}
 		for s in &self.graph.solutions {
-			self.verify(&s)?;
+			self.verify_impl(&s)?;
 		}
 		if self.graph.solutions.len() == 0 {
 			Err(ErrorKind::NoSolution)?
@@ -260,7 +281,7 @@ where
 
 	/// Verify that given edges are ascending and form a cycle in a header-generated
 	/// graph
-	pub fn verify(&self, proof: &Proof) -> Result<(), Error> {
+	pub fn verify_impl(&self, proof: &Proof) -> Result<(), Error> {
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * proof.proof_size()];
 		let mut xor0: u64 = (self.proof_size as u64 / 2) & 1;
