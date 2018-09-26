@@ -498,7 +498,7 @@ impl Chain {
 		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.rewind(&header)?;
-			extension.validate(&header, skip_rproofs, &NoStatus)?;
+			extension.validate(skip_rproofs, &NoStatus)?;
 			Ok(())
 		})
 	}
@@ -534,7 +534,8 @@ impl Chain {
 		let mut txhashset = self.txhashset.write().unwrap();
 
 		let merkle_proof = txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.merkle_proof(output, block_header)
+			extension.rewind(&block_header)?;
+			extension.merkle_proof(output)
 		})?;
 
 		Ok(merkle_proof)
@@ -567,7 +568,7 @@ impl Chain {
 			let mut txhashset = self.txhashset.write().unwrap();
 			txhashset::extending_readonly(&mut txhashset, |extension| {
 				extension.rewind(&header)?;
-				extension.snapshot(&header)?;
+				extension.snapshot()?;
 				Ok(())
 			})?;
 		}
@@ -579,6 +580,41 @@ impl Chain {
 			header.kernel_mmr_size,
 			txhashset_reader,
 		))
+	}
+
+	// Special handling to make sure the whole kernel set matches each of its
+	// roots in each block header, without truncation. We go back header by
+	// header, rewind and check each root. This fixes a potential weakness in
+	// fast sync where a reorg past the horizon could allow a whole rewrite of
+	// the kernel set.
+	fn validate_kernel_history(
+		&self,
+		header: &BlockHeader,
+		txhashset: &txhashset::TxHashSet,
+	) -> Result<(), Error> {
+		debug!(
+			LOGGER,
+			"chain: validate_kernel_history: rewinding and validating kernel history (readonly)"
+		);
+
+		let mut count = 0;
+		let mut current = header.clone();
+		txhashset::rewindable_kernel_view(&txhashset, |view| {
+			while current.height > 0 {
+				view.rewind(&current)?;
+				view.validate_root()?;
+				current = view.batch().get_block_header(&current.previous)?;
+				count += 1;
+			}
+			Ok(())
+		})?;
+
+		debug!(
+			LOGGER,
+			"chain: validate_kernel_history: validated kernel root on {} headers", count,
+		);
+
+		Ok(())
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.
@@ -604,22 +640,8 @@ impl Chain {
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
 
-		// Validate kernel history against a readonly extension first.
-		// Kernel history validation requires a readonly extension
-		// due to the internal rewind behavior.
-		debug!(
-			LOGGER,
-			"chain: txhashset_write: rewinding and validating kernel history (readonly)"
-		);
-		txhashset::extending_readonly(&mut txhashset, |extension| {
-			extension.rewind(&header)?;
-
-			// Now validate kernel sums at each historical header height
-			// so we know we can trust the kernel history.
-			extension.validate_kernel_history(&header)?;
-
-			Ok(())
-		})?;
+		// Validate the full kernel history (kernel MMR root for every block header).
+		self.validate_kernel_history(&header, &txhashset)?;
 
 		// all good, prepare a new batch and update all the required records
 		debug!(
@@ -631,7 +653,7 @@ impl Chain {
 			extension.rewind(&header)?;
 
 			// Validate the extension, generating the utxo_sum and kernel_sum.
-			let (utxo_sum, kernel_sum) = extension.validate(&header, false, status)?;
+			let (utxo_sum, kernel_sum) = extension.validate(false, status)?;
 
 			// Now that we have block_sums the total_kernel_sum on the block_header is redundant.
 			if header.total_kernel_sum != kernel_sum {
@@ -977,7 +999,7 @@ fn setup_head(
 
 				let res = txhashset::extending(txhashset, &mut batch, |extension| {
 					extension.rewind(&header)?;
-					extension.validate_roots(&header)?;
+					extension.validate_roots()?;
 
 					// now check we have the "block sums" for the block in question
 					// if we have no sums (migrating an existing node) we need to go
@@ -993,7 +1015,7 @@ fn setup_head(
 
 						// Do a full (and slow) validation of the txhashset extension
 						// to calculate the utxo_sum and kernel_sum at this block height.
-						let (utxo_sum, kernel_sum) = extension.validate_kernel_sums(&header)?;
+						let (utxo_sum, kernel_sum) = extension.validate_kernel_sums()?;
 
 						// Save the block_sums to the db for use later.
 						extension.batch.save_block_sums(
@@ -1029,9 +1051,11 @@ fn setup_head(
 			}
 		}
 		Err(NotFoundErr(_)) => {
-			let tip = Tip::from_block(&genesis.header);
 			batch.save_block(&genesis)?;
+			let tip = Tip::from_block(&genesis.header);
+			batch.save_head(&tip)?;
 			batch.setup_height(&genesis.header, &tip)?;
+
 			txhashset::extending(txhashset, &mut batch, |extension| {
 				extension.apply_block(&genesis)?;
 
@@ -1043,8 +1067,6 @@ fn setup_head(
 				Ok(())
 			})?;
 
-			// saving a new tip based on genesis
-			batch.save_head(&tip)?;
 			head = tip;
 			info!(LOGGER, "chain: init: saved genesis: {:?}", genesis.hash());
 		}
