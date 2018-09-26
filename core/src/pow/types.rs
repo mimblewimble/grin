@@ -26,6 +26,8 @@ use core::hash::Hashed;
 use global;
 use ser::{self, Readable, Reader, Writeable, Writer};
 
+use pow::num::ToPrimitive;
+
 /// The difficulty is defined as the maximum target divided by the block hash.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Difficulty {

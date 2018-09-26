@@ -38,6 +38,18 @@ pub enum ErrorKind {
 	/// Unexpected Edge Error
 	#[fail(display = "Edge Addition Error")]
 	EdgeAddition,
+	/// Path Error
+	#[fail(display = "Path Error")]
+	Path,
+	/// Invalid cycle
+	#[fail(display = "Invalid Cycle length: {}", _0)]
+	InvalidCycle(usize),
+	/// No Cycle
+	#[fail(display = "No Cycle")]
+	NoCycle,
+	/// No Solution
+	#[fail(display = "No Solution")]
+	NoSolution,
 }
 
 impl Fail for Error {

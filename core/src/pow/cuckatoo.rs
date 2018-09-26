@@ -12,48 +12,17 @@
 // limitations under the License.
 
 //! Implementation of Cuckatoo Cycle designed by John Tromp.
-use pow::num::{PrimInt, ToPrimitive};
-use std::ops::{BitOrAssign, Mul};
-use std::{fmt, mem};
+use pow::num::ToPrimitive;
+use std::mem;
 
-use blake2::blake2b::blake2b;
-use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
+use byteorder::{BigEndian, LittleEndian, WriteBytesExt};
 use croaring::Bitmap;
-use std::io::Cursor;
 
 use pow::error::{Error, ErrorKind};
-use pow::siphash::siphash24;
+use pow::common::{self, Link};
 use pow::Proof;
+use pow::common::EdgeType;
 use util;
-
-/// Operations needed for edge type (going to be u32 or u64)
-pub trait EdgeType: PrimInt + ToPrimitive + Mul + BitOrAssign {}
-impl EdgeType for u32 {}
-impl EdgeType for u64 {}
-
-/// An element of an adjencency list
-#[derive(Debug, Clone, Eq, PartialEq)]
-struct Link<T>
-where
-	T: EdgeType,
-{
-	next: T,
-	to: T,
-}
-
-impl<T> fmt::Display for Link<T>
-where
-	T: EdgeType,
-{
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(
-			f,
-			"(next: {}, to: {})",
-			self.next.to_u64().unwrap_or(0),
-			self.to.to_u64().unwrap_or(0)
-		)
-	}
-}
 
 struct Graph<T>
 where
@@ -232,20 +201,6 @@ where
 		})
 	}
 
-	/// Extract siphash keys from header
-	pub fn create_keys(&mut self, header: Vec<u8>) -> Result<(), Error> {
-		let h = blake2b(32, &[], &header);
-		let hb = h.as_bytes();
-		let mut rdr = Cursor::new(hb);
-		self.siphash_keys = [
-			rdr.read_u64::<LittleEndian>()?,
-			rdr.read_u64::<LittleEndian>()?,
-			rdr.read_u64::<LittleEndian>()?,
-			rdr.read_u64::<LittleEndian>()?,
-		];
-		Ok(())
-	}
-
 	/// Get a siphash key as a hex string (for display convenience)
 	pub fn sipkey_hex(&self, index: usize) -> Result<String, Error> {
 		let mut rdr = vec![];
@@ -269,23 +224,18 @@ where
 		if let Some(n) = nonce {
 			header.write_u32::<LittleEndian>(n)?;
 		}
-		self.create_keys(header)?;
+		self.siphash_keys = common::set_header_nonce(header, nonce)?;
 		self.graph.reset()?;
 		Ok(())
 	}
 
 	/// Return siphash masked for type
-	pub fn sipnode(&self, edge: T, uorv: u64) -> Result<T, Error> {
-		let hash_u64 = siphash24(
-			self.siphash_keys,
-			2 * edge.to_u64().ok_or(ErrorKind::IntegerCast)? + uorv,
-		);
-		let masked = hash_u64 & self.edge_mask.to_u64().ok_or(ErrorKind::IntegerCast)?;
-		Ok(T::from(masked).ok_or(ErrorKind::IntegerCast)?)
+	fn sipnode(&self, edge: T, uorv: u64) -> Result<T, Error> {
+		common::sipnode::<T>(&self.siphash_keys, edge, &self.edge_mask, uorv, false)
 	}
 
 	/// Simple implementation of algorithm
-	pub fn find_cycles_simple(&mut self) -> Result<Vec<Proof>, Error> {
+	pub fn find_cycles(&mut self) -> Result<Vec<Proof>, Error> {
 		for n in 0..self.easiness.to_u64().ok_or(ErrorKind::IntegerCast)? {
 			let u = self.sipnode(T::from(n).ok_or(ErrorKind::IntegerCast)?, 0)?;
 			let v = self.sipnode(T::from(n).ok_or(ErrorKind::IntegerCast)?, 1)?;
@@ -301,7 +251,11 @@ where
 		for s in &self.graph.solutions {
 			self.verify(&s)?;
 		}
-		Ok(self.graph.solutions.clone())
+		if self.graph.solutions.len() == 0 {
+			Err(ErrorKind::NoSolution)?
+		} else {
+			Ok(self.graph.solutions.clone())
+		}
 	}
 
 	/// Verify that given edges are ascending and form a cycle in a header-generated
@@ -382,63 +336,6 @@ mod test {
 		if let Err(r) = ret {
 			panic!("basic_solve: Error: {}", r);
 		}
-		let ret = test_mine_32();
-		if let Err(r) = ret {
-			panic!("test_mine_32: Error: {}", r);
-		}
-		let sols_32 = ret.unwrap();
-		let ret = test_mine_64();
-		if let Err(r) = ret {
-			panic!("test_mine_64: Error: {}", r);
-		}
-		let sols_64 = ret.unwrap();
-		assert_eq!(sols_64, sols_32);
-	}
-
-	fn test_mine_32() -> Result<usize, Error> {
-		println!("Test mine 32");
-		let easiness_pct = 50;
-		let nonce = 0;
-		let range = 30;
-		let header = [0u8; 80].to_vec();
-		let proof_size = 42;
-		let edge_bits = 15;
-		let max_sols = 4;
-		let mut ctx_u32 =
-			CuckatooContext::<u32>::new(edge_bits, proof_size, easiness_pct, max_sols)?;
-		let mut num_sols = 0;
-		for r in 0..range {
-			ctx_u32.set_header_nonce(header.clone(), Some(nonce + r))?;
-			let sols = ctx_u32.find_cycles_simple()?;
-			for s in sols {
-				println!("Solution found: {:?}", s);
-				num_sols += 1;
-			}
-		}
-		Ok(num_sols)
-	}
-
-	fn test_mine_64() -> Result<usize, Error> {
-		println!("Test mine 64");
-		let easiness_pct = 50;
-		let nonce = 0;
-		let range = 30;
-		let header = [0u8; 80].to_vec();
-		let proof_size = 42;
-		let edge_bits = 15;
-		let max_sols = 4;
-		let mut ctx_u64 =
-			CuckatooContext::<u64>::new(edge_bits, proof_size, easiness_pct, max_sols)?;
-		let mut num_sols = 0;
-		for r in 0..range {
-			ctx_u64.set_header_nonce(header.clone(), Some(nonce + r))?;
-			let sols = ctx_u64.find_cycles_simple()?;
-			for s in sols {
-				println!("Solution found: {:?}", s);
-				num_sols += 1;
-			}
-		}
-		Ok(num_sols)
 	}
 
 	fn basic_solve() -> Result<(), Error> {
@@ -476,7 +373,7 @@ mod test {
 			ctx_u32.sipkey_hex(2)?,
 			ctx_u32.sipkey_hex(3)?
 		);
-		let sols = ctx_u32.find_cycles_simple()?;
+		let sols = ctx_u32.find_cycles()?;
 		// We know this nonce has 2 solutions
 		assert_eq!(sols.len(), 2);
 		for s in sols {
