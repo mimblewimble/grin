@@ -93,7 +93,12 @@ impl WalletClient for HTTPWalletClient {
 	}
 
 	/// Posts a transaction to a grin node
-	fn post_tx(&self, tx: &TxWrapper, fluff: bool) -> Result<(), libwallet::Error> {
+	fn post_tx(
+		&self,
+		tx: &TxWrapper,
+		fluff: bool,
+		api_secret: Option<String>,
+	) -> Result<(), libwallet::Error> {
 		let url;
 		let dest = self.node_url();
 		if fluff {
@@ -101,14 +106,14 @@ impl WalletClient for HTTPWalletClient {
 		} else {
 			url = format!("{}/v1/pool/push", dest);
 		}
-		api::client::post_no_ret(url.as_str(), None, tx).context(
+		api::client::post_no_ret(url.as_str(), api_secret, tx).context(
 			libwallet::ErrorKind::ClientCallback("Posting transaction to node"),
 		)?;
 		Ok(())
 	}
 
 	/// Return the chain tip from a given node
-	fn get_chain_height(&self) -> Result<u64, libwallet::Error> {
+	fn get_chain_height(&self, api_secret: Option<String>) -> Result<u64, libwallet::Error> {
 		let addr = self.node_url();
 		let url = format!("{}/v1/chain", addr);
 		let res = api::client::get::<api::Tip>(url.as_str(), None).context(
@@ -121,6 +126,7 @@ impl WalletClient for HTTPWalletClient {
 	fn get_outputs_from_node(
 		&self,
 		wallet_outputs: Vec<pedersen::Commitment>,
+		api_secret: Option<String>,
 	) -> Result<HashMap<pedersen::Commitment, (String, u64)>, libwallet::Error> {
 		let addr = self.node_url();
 		// build the necessary query params -
@@ -138,7 +144,7 @@ impl WalletClient for HTTPWalletClient {
 			let url = format!("{}/v1/chain/outputs/byids?{}", addr, query_chunk.join("&"),);
 			tasks.push(api::client::get_async::<Vec<api::Output>>(
 				url.as_str(),
-				None,
+				api_secret.clone(),
 			));
 		}
 
@@ -168,6 +174,7 @@ impl WalletClient for HTTPWalletClient {
 		&self,
 		start_height: u64,
 		max_outputs: u64,
+		api_secret: Option<String>,
 	) -> Result<
 		(
 			u64,
@@ -184,7 +191,7 @@ impl WalletClient for HTTPWalletClient {
 		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)> =
 			Vec::new();
 
-		match api::client::get::<api::OutputListing>(url.as_str(), None) {
+		match api::client::get::<api::OutputListing>(url.as_str(), api_secret) {
 			Ok(o) => {
 				for out in o.outputs {
 					let is_coinbase = match out.output_type {

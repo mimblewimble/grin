@@ -208,8 +208,8 @@ where
 		})
 	}
 
-	fn restore(&mut self) -> Result<(), Error> {
-		internal::restore::restore(self).context(ErrorKind::Restore)?;
+	fn restore(&mut self, api_secret: Option<String>) -> Result<(), Error> {
+		internal::restore::restore(self, api_secret).context(ErrorKind::Restore)?;
 		Ok(())
 	}
 }
@@ -336,7 +336,11 @@ where
 
 	fn save_tx_log_entry(&self, t: TxLogEntry) -> Result<(), Error> {
 		let tx_log_key = u64_to_key(TX_LOG_ENTRY_PREFIX, t.id as u64);
-		self.db.borrow().as_ref().unwrap().put_ser(&tx_log_key, &t)?;
+		self.db
+			.borrow()
+			.as_ref()
+			.unwrap()
+			.put_ser(&tx_log_key, &t)?;
 		Ok(())
 	}
 

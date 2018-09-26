@@ -100,7 +100,7 @@ where
 	fn details(&mut self, root_key_id: Identifier) -> Result<WalletDetails, Error>;
 
 	/// Attempt to restore the contents of a wallet from seed
-	fn restore(&mut self) -> Result<(), Error>;
+	fn restore(&mut self, api_secret: Option<String>) -> Result<(), Error>;
 }
 
 /// Batch trait to update the output data backend atomically. Trying to use a
@@ -166,16 +166,18 @@ pub trait WalletClient: Sync + Send + Clone {
 	fn send_tx_slate(&self, addr: &str, slate: &Slate) -> Result<Slate, Error>;
 
 	/// Posts a transaction to a grin node
-	fn post_tx(&self, tx: &TxWrapper, fluff: bool) -> Result<(), Error>;
+	fn post_tx(&self, tx: &TxWrapper, fluff: bool, api_secret: Option<String>)
+		-> Result<(), Error>;
 
 	/// retrieves the current tip from the specified grin node
-	fn get_chain_height(&self) -> Result<u64, Error>;
+	fn get_chain_height(&self, api_secret: Option<String>) -> Result<u64, Error>;
 
 	/// retrieve a list of outputs from the specified grin node
 	/// need "by_height" and "by_id" variants
 	fn get_outputs_from_node(
 		&self,
 		wallet_outputs: Vec<pedersen::Commitment>,
+		api_secret: Option<String>,
 	) -> Result<HashMap<pedersen::Commitment, (String, u64)>, Error>;
 
 	/// Get a list of outputs from the node by traversing the UTXO
@@ -187,6 +189,7 @@ pub trait WalletClient: Sync + Send + Clone {
 		&self,
 		start_height: u64,
 		max_outputs: u64,
+		api_secret: Option<String>,
 	) -> Result<
 		(
 			u64,
@@ -417,7 +420,8 @@ impl BlockIdentifier {
 
 	/// convert to hex string
 	pub fn from_hex(hex: &str) -> Result<BlockIdentifier, Error> {
-		let hash = Hash::from_hex(hex).context(ErrorKind::GenericError("Invalid hex".to_owned()))?;
+		let hash =
+			Hash::from_hex(hex).context(ErrorKind::GenericError("Invalid hex".to_owned()))?;
 		Ok(BlockIdentifier(hash))
 	}
 }
@@ -654,4 +658,6 @@ pub struct SendTXArgs {
 	pub selection_strategy_is_use_all: bool,
 	/// dandelion control
 	pub fluff: bool,
+	/// node api secret
+	pub api_secret: Option<String>,
 }

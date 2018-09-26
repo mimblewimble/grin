@@ -75,13 +75,14 @@ where
 		include_spent: bool,
 		refresh_from_node: bool,
 		tx_id: Option<u32>,
+		api_secret: Option<String>,
 	) -> Result<(bool, Vec<(OutputData, pedersen::Commitment)>), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 
 		let mut validated = false;
 		if refresh_from_node {
-			validated = self.update_outputs(&mut w);
+			validated = self.update_outputs(&mut w, api_secret);
 		}
 
 		let res = Ok((
@@ -99,13 +100,14 @@ where
 		&self,
 		refresh_from_node: bool,
 		tx_id: Option<u32>,
+		api_secret: Option<String>,
 	) -> Result<(bool, Vec<TxLogEntry>), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 
 		let mut validated = false;
 		if refresh_from_node {
-			validated = self.update_outputs(&mut w);
+			validated = self.update_outputs(&mut w, api_secret);
 		}
 
 		let res = Ok((validated, updater::retrieve_txs(&mut **w, tx_id)?));
@@ -118,13 +120,14 @@ where
 	pub fn retrieve_summary_info(
 		&mut self,
 		refresh_from_node: bool,
+		api_secret: Option<String>,
 	) -> Result<(bool, WalletInfo), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
 
 		let mut validated = false;
 		if refresh_from_node {
-			validated = self.update_outputs(&mut w);
+			validated = self.update_outputs(&mut w, api_secret);
 		}
 
 		let wallet_info = updater::retrieve_info(&mut **w)?;
@@ -143,6 +146,7 @@ where
 		max_outputs: usize,
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
+		api_secret: Option<String>,
 	) -> Result<Slate, Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
@@ -159,6 +163,7 @@ where
 			max_outputs,
 			num_change_outputs,
 			selection_strategy_is_use_all,
+			api_secret,
 		)?;
 
 		lock_fn_out = lock_fn;
@@ -194,6 +199,7 @@ where
 		max_outputs: usize,
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
+		api_secret: Option<String>,
 	) -> Result<Slate, Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
@@ -205,6 +211,7 @@ where
 			max_outputs,
 			num_change_outputs,
 			selection_strategy_is_use_all,
+			api_secret,
 		)?;
 		if write_to_disk {
 			let mut pub_tx = File::create(dest)?;
@@ -251,10 +258,10 @@ where
 	/// output if you're recipient), and unlock all locked outputs associated
 	/// with the transaction used when a transaction is created but never
 	/// posted
-	pub fn cancel_tx(&mut self, tx_id: u32) -> Result<(), Error> {
+	pub fn cancel_tx(&mut self, tx_id: u32, api_secret: Option<String>) -> Result<(), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
-		if !self.update_outputs(&mut w) {
+		if !self.update_outputs(&mut w, api_secret) {
 			return Err(ErrorKind::TransactionCancellationError(
 				"Can't contact running Grin node. Not Cancelling.",
 			))?;
@@ -270,24 +277,37 @@ where
 		amount: u64,
 		minimum_confirmations: u64,
 		max_outputs: usize,
+		api_secret: Option<String>,
 	) -> Result<(), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
-		let tx_burn = tx::issue_burn_tx(&mut **w, amount, minimum_confirmations, max_outputs)?;
+		let tx_burn = tx::issue_burn_tx(
+			&mut **w,
+			amount,
+			minimum_confirmations,
+			max_outputs,
+			api_secret.clone(),
+		)?;
 		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
-		w.client().post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
+		w.client()
+			.post_tx(&TxWrapper { tx_hex: tx_hex }, false, api_secret)?;
 		w.close()?;
 		Ok(())
 	}
 
 	/// Posts a transaction to the chain
-	pub fn post_tx(&self, slate: &Slate, fluff: bool) -> Result<(), Error> {
+	pub fn post_tx(
+		&self,
+		slate: &Slate,
+		fluff: bool,
+		api_secret: Option<String>,
+	) -> Result<(), Error> {
 		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
 		let client = {
 			let mut w = self.wallet.lock().unwrap();
 			w.client().clone()
 		};
-		let res = client.post_tx(&TxWrapper { tx_hex: tx_hex }, fluff);
+		let res = client.post_tx(&TxWrapper { tx_hex: tx_hex }, fluff, api_secret);
 		if let Err(e) = res {
 			error!(LOGGER, "api: post_tx: failed with error: {}", e);
 			Err(e)
@@ -340,7 +360,12 @@ where
 	}
 
 	/// (Re)Posts a transaction that's already been stored to the chain
-	pub fn post_stored_tx(&self, tx_id: u32, fluff: bool) -> Result<(), Error> {
+	pub fn post_stored_tx(
+		&self,
+		tx_id: u32,
+		fluff: bool,
+		api_secret: Option<String>,
+	) -> Result<(), Error> {
 		let client;
 		let (confirmed, tx_hex) = {
 			let mut w = self.wallet.lock().unwrap();
@@ -370,6 +395,7 @@ where
 				tx_hex: tx_hex.unwrap(),
 			},
 			fluff,
+			api_secret,
 		);
 		if let Err(e) = res {
 			error!(LOGGER, "api: repost_tx: failed with error: {}", e);
@@ -384,20 +410,20 @@ where
 	}
 
 	/// Attempt to restore contents of wallet
-	pub fn restore(&mut self) -> Result<(), Error> {
+	pub fn restore(&mut self, api_secret: Option<String>) -> Result<(), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
-		let res = w.restore();
+		let res = w.restore(api_secret);
 		w.close()?;
 		res
 	}
 
 	/// Retrieve current height from node
-	pub fn node_height(&mut self) -> Result<(u64, bool), Error> {
+	pub fn node_height(&mut self, api_secret: Option<String>) -> Result<(u64, bool), Error> {
 		let res = {
 			let mut w = self.wallet.lock().unwrap();
 			w.open_with_credentials()?;
-			w.client().get_chain_height()
+			w.client().get_chain_height(api_secret.clone())
 		};
 		match res {
 			Ok(height) => {
@@ -406,7 +432,7 @@ where
 				Ok((height, true))
 			}
 			Err(_) => {
-				let outputs = self.retrieve_outputs(true, false, None)?;
+				let outputs = self.retrieve_outputs(true, false, None, api_secret)?;
 				let height = match outputs.1.iter().map(|(out, _)| out.height).max() {
 					Some(height) => height,
 					None => 0,
@@ -419,8 +445,8 @@ where
 	}
 
 	/// Attempt to update outputs in wallet, return whether it was successful
-	fn update_outputs(&self, w: &mut W) -> bool {
-		match updater::refresh_outputs(&mut *w) {
+	fn update_outputs(&self, w: &mut W, api_secret: Option<String>) -> bool {
+		match updater::refresh_outputs(&mut *w, api_secret) {
 			Ok(_) => true,
 			Err(_) => false,
 		}

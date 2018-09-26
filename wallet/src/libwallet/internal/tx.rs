@@ -64,6 +64,7 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 	max_outputs: usize,
 	num_change_outputs: usize,
 	selection_strategy_is_use_all: bool,
+	api_secret: Option<String>,
 ) -> Result<
 	(
 		Slate,
@@ -78,9 +79,9 @@ where
 	K: Keychain,
 {
 	// Get lock height
-	let current_height = wallet.client().get_chain_height()?;
+	let current_height = wallet.client().get_chain_height(api_secret.clone())?;
 	// ensure outputs we're selecting are up to date
-	updater::refresh_outputs(wallet)?;
+	updater::refresh_outputs(wallet, api_secret)?;
 
 	let lock_height = current_height;
 
@@ -186,6 +187,7 @@ pub fn issue_burn_tx<T: ?Sized, C, K>(
 	amount: u64,
 	minimum_confirmations: u64,
 	max_outputs: usize,
+	api_secret: Option<String>,
 ) -> Result<Transaction, Error>
 where
 	T: WalletBackend<C, K>,
@@ -197,9 +199,9 @@ where
 	// &Identifier::zero());
 	let keychain = wallet.keychain().clone();
 
-	let current_height = wallet.client().get_chain_height()?;
+	let current_height = wallet.client().get_chain_height(api_secret.clone())?;
 
-	let _ = updater::refresh_outputs(wallet);
+	let _ = updater::refresh_outputs(wallet, api_secret);
 
 	// select some spendable coins from the wallet
 	let (_, coins) = selection::select_coins(

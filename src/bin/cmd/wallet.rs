@@ -126,11 +126,11 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 	let passphrase = wallet_args
 		.value_of("pass")
 		.expect("Failed to read passphrase.");
-
 	// Handle listener startup commands
 	{
 		let wallet = instantiate_wallet(wallet_config.clone(), passphrase);
 		let api_secret = get_first_line(wallet_config.api_secret_path.clone());
+
 		match wallet_args.subcommand() {
 			("listen", Some(listen_args)) => {
 				if let Some(port) = listen_args.value_of("port") {
@@ -175,6 +175,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 		wallet_config.clone(),
 		passphrase,
 	)));
+	let node_api_secret = Some("".to_string());
 	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {
 			("send", Some(send_args)) => {
@@ -213,6 +214,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 							max_outputs,
 							change_outputs,
 							selection_strategy == "all",
+							node_api_secret.clone(),
 						);
 						let slate = match result {
 							Ok(s) => {
@@ -240,7 +242,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 								panic!();
 							}
 						};
-						let result = api.post_tx(&slate, fluff);
+						let result = api.post_tx(&slate, fluff, node_api_secret);
 						match result {
 							Ok(_) => {
 								info!(LOGGER, "Tx sent",);
@@ -267,6 +269,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						max_outputs,
 						change_outputs,
 						selection_strategy == "all",
+						node_api_secret,
 					).expect("Send failed");
 					Ok(())
 				} else {
@@ -300,7 +303,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					.map_err(|_| grin_wallet::libwallet::ErrorKind::Format)?;
 				let _ = api.finalize_tx(&mut slate).expect("Finalize failed");
 
-				let result = api.post_tx(&slate, fluff);
+				let result = api.post_tx(&slate, fluff, node_api_secret);
 				match result {
 					Ok(_) => {
 						info!(LOGGER, "Tx sent");
@@ -324,15 +327,16 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					.parse()
 					.expect("Could not parse minimum_confirmations as a whole number.");
 				let max_outputs = 500;
-				api.issue_burn_tx(amount, minimum_confirmations, max_outputs)
+				api.issue_burn_tx(amount, minimum_confirmations, max_outputs, node_api_secret)
 					.unwrap_or_else(|e| {
 						panic!("Error burning tx: {:?} Config: {:?}", e, wallet_config)
 					});
 				Ok(())
 			}
 			("info", Some(_)) => {
-				let (validated, wallet_info) =
-					api.retrieve_summary_info(true).unwrap_or_else(|e| {
+				let (validated, wallet_info) = api
+					.retrieve_summary_info(true, node_api_secret.clone())
+					.unwrap_or_else(|e| {
 						panic!(
 							"Error getting wallet info: {:?} Config: {:?}",
 							e, wallet_config
@@ -342,8 +346,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				Ok(())
 			}
 			("outputs", Some(_)) => {
-				let (height, _) = api.node_height()?;
-				let (validated, outputs) = api.retrieve_outputs(show_spent, true, None)?;
+				let (height, _) = api.node_height(node_api_secret.clone())?;
+				let (validated, outputs) =
+					api.retrieve_outputs(show_spent, true, None, node_api_secret)?;
 				let _res = display::outputs(height, validated, outputs).unwrap_or_else(|e| {
 					panic!(
 						"Error getting wallet outputs: {:?} Config: {:?}",
@@ -360,8 +365,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						Err(_) => panic!("Unable to parse argument 'id' as a number"),
 					},
 				};
-				let (height, _) = api.node_height()?;
-				let (validated, txs) = api.retrieve_txs(true, tx_id)?;
+				let (height, _) = api.node_height(node_api_secret.clone())?;
+				let (validated, txs) = api.retrieve_txs(true, tx_id, node_api_secret.clone())?;
 				let include_status = !tx_id.is_some();
 				let _res =
 					display::txs(height, validated, txs, include_status).unwrap_or_else(|e| {
@@ -373,7 +378,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				// if given a particular transaction id, also get and display associated
 				// inputs/outputs
 				if tx_id.is_some() {
-					let (_, outputs) = api.retrieve_outputs(true, false, tx_id)?;
+					let (_, outputs) = api.retrieve_outputs(true, false, tx_id, node_api_secret)?;
 					let _res = display::outputs(height, validated, outputs).unwrap_or_else(|e| {
 						panic!(
 							"Error getting wallet outputs: {} Config: {:?}",
@@ -400,7 +405,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				let fluff = repost_args.is_present("fluff");
 				match dump_file {
 					None => {
-						let result = api.post_stored_tx(tx_id, fluff);
+						let result = api.post_stored_tx(tx_id, fluff, node_api_secret);
 						match result {
 							Ok(_) => {
 								info!(LOGGER, "Reposted transaction at {}", tx_id);
@@ -432,7 +437,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					.value_of("id")
 					.expect("'id' argument (-i) is required.");
 				let tx_id = tx_id.parse().expect("Could not parse id parameter.");
-				let result = api.cancel_tx(tx_id);
+				let result = api.cancel_tx(tx_id, node_api_secret);
 				match result {
 					Ok(_) => {
 						info!(LOGGER, "Transaction {} Cancelled", tx_id);
@@ -445,7 +450,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				}
 			}
 			("restore", Some(_)) => {
-				let result = api.restore();
+				let result = api.restore(node_api_secret);
 				match result {
 					Ok(_) => {
 						info!(LOGGER, "Wallet restore complete",);
