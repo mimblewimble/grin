@@ -175,7 +175,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 		wallet_config.clone(),
 		passphrase,
 	)));
-	let node_api_secret = Some("".to_string());
+	let node_api_secret = wallet_args.value_of("node_api_secret").map(str::to_string);;
 	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {
 			("send", Some(send_args)) => {
