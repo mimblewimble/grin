@@ -39,6 +39,8 @@ pub struct WalletConfig {
 	pub api_listen_interface: String,
 	// The port this wallet will run on
 	pub api_listen_port: u16,
+	/// Location of the secret for basic auth on the Owner API
+	pub api_secret_path: Option<String>,
 	// The api address of a running server node against which transaction inputs
 	// will be checked during send
 	pub check_node_api_http_addr: String,
@@ -52,6 +54,7 @@ impl Default for WalletConfig {
 			chain_type: Some(ChainTypes::Testnet3),
 			api_listen_interface: "127.0.0.1".to_string(),
 			api_listen_port: 13415,
+			api_secret_path: Some(".api_secret".to_string()),
 			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
 			data_file_dir: ".".to_string(),
 		}

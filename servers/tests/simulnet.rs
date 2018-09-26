@@ -127,7 +127,7 @@ fn simulate_seeding() {
 		"http://{}:{}/v1/peers/connected",
 		&server_config.base_addr, 30020
 	);
-	let peers_all = api::client::get::<Vec<p2p::PeerInfo>>(url.as_str());
+	let peers_all = api::client::get::<Vec<p2p::PeerInfo>>(url.as_str(), None);
 	assert!(peers_all.is_ok());
 	assert_eq!(peers_all.unwrap().len(), 4);
 
@@ -279,7 +279,11 @@ fn simulate_full_sync() {
 		thread::sleep(time::Duration::from_millis(1_000));
 		time_spent += 1;
 		if time_spent >= 60 {
-			println!("sync fail. s2.head().height: {}, s1_header.height: {}", s2.head().height, s1_header.height);
+			println!(
+				"sync fail. s2.head().height: {}, s1_header.height: {}",
+				s2.head().height,
+				s1_header.height
+			);
 			break;
 		}
 	}
@@ -475,8 +479,8 @@ fn replicate_tx_fluff_failure() {
 	let mut slate = Slate::blank(1);
 
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		slate =
-			api.issue_send_tx(
+		slate = api
+			.issue_send_tx(
 				amount,                   // amount
 				2,                        // minimum confirmations
 				"http://127.0.0.1:33001", // dest

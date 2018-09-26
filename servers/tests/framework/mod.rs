@@ -188,6 +188,7 @@ impl LocalServerContainer {
 
 		let s = servers::Server::new(servers::ServerConfig {
 			api_http_addr: api_addr,
+			api_secret_path: None,
 			db_root: format!("{}/.grin", self.working_dir),
 			p2p_config: p2p::P2PConfig {
 				port: self.config.p2p_server_port,
@@ -581,6 +582,7 @@ pub fn stop_all_servers(servers: Arc<Mutex<Vec<servers::Server>>>) {
 pub fn config(n: u16, test_name_dir: &str, seed_n: u16) -> servers::ServerConfig {
 	servers::ServerConfig {
 		api_http_addr: format!("127.0.0.1:{}", 20000 + n),
+		api_secret_path: None,
 		db_root: format!("target/tmp/{}/grin-sync-{}", test_name_dir, n),
 		p2p_config: p2p::P2PConfig {
 			port: 10000 + n,

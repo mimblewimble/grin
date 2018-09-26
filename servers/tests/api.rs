@@ -240,13 +240,13 @@ fn test_p2p() {
 // Tip handler function
 fn get_tip(base_addr: &String, api_server_port: u16) -> Result<api::Tip, Error> {
 	let url = format!("http://{}:{}/v1/chain", base_addr, api_server_port);
-	api::client::get::<api::Tip>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<api::Tip>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 // Status handler function
 fn get_status(base_addr: &String, api_server_port: u16) -> Result<api::Status, Error> {
 	let url = format!("http://{}:{}/v1/status", base_addr, api_server_port);
-	api::client::get::<api::Status>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<api::Status>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 // Block handler functions
@@ -259,7 +259,7 @@ fn get_block_by_height(
 		"http://{}:{}/v1/blocks/{}",
 		base_addr, api_server_port, height
 	);
-	api::client::get::<api::BlockPrintable>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<api::BlockPrintable>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 fn get_block_by_height_compact(
@@ -271,7 +271,7 @@ fn get_block_by_height_compact(
 		"http://{}:{}/v1/blocks/{}?compact",
 		base_addr, api_server_port, height
 	);
-	api::client::get::<api::CompactBlockPrintable>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<api::CompactBlockPrintable>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 fn get_block_by_hash(
@@ -283,7 +283,7 @@ fn get_block_by_hash(
 		"http://{}:{}/v1/blocks/{}",
 		base_addr, api_server_port, block_hash
 	);
-	api::client::get::<api::BlockPrintable>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<api::BlockPrintable>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 fn get_block_by_hash_compact(
@@ -295,7 +295,7 @@ fn get_block_by_hash_compact(
 		"http://{}:{}/v1/blocks/{}?compact",
 		base_addr, api_server_port, block_hash
 	);
-	api::client::get::<api::CompactBlockPrintable>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<api::CompactBlockPrintable>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 // Chain output handler functions
@@ -310,7 +310,7 @@ fn get_outputs_by_ids1(
 		api_server_port,
 		ids.join(",")
 	);
-	api::client::get::<Vec<api::Output>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::Output>>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 fn get_outputs_by_ids2(
@@ -327,7 +327,7 @@ fn get_outputs_by_ids2(
 		"http://{}:{}/v1/chain/outputs/byids?{}",
 		base_addr, api_server_port, ids_string
 	);
-	api::client::get::<Vec<api::Output>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::Output>>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 fn get_outputs_by_height(
@@ -340,7 +340,7 @@ fn get_outputs_by_height(
 		"http://{}:{}/v1/chain/outputs/byheight?start_height={}&end_height={}",
 		base_addr, api_server_port, start_height, end_height
 	);
-	api::client::get::<Vec<api::BlockOutputs>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::BlockOutputs>>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 // TxHashSet handler functions
@@ -349,7 +349,7 @@ fn get_txhashset_roots(base_addr: &String, api_server_port: u16) -> Result<api::
 		"http://{}:{}/v1/txhashset/roots",
 		base_addr, api_server_port
 	);
-	api::client::get::<api::TxHashSet>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<api::TxHashSet>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 fn get_txhashset_lastoutputs(
@@ -369,7 +369,7 @@ fn get_txhashset_lastoutputs(
 			base_addr, api_server_port, n
 		);
 	}
-	api::client::get::<Vec<api::TxHashSetNode>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::TxHashSetNode>>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 fn get_txhashset_lastrangeproofs(
@@ -389,7 +389,7 @@ fn get_txhashset_lastrangeproofs(
 			base_addr, api_server_port, n
 		);
 	}
-	api::client::get::<Vec<api::TxHashSetNode>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::TxHashSetNode>>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 fn get_txhashset_lastkernels(
@@ -409,7 +409,7 @@ fn get_txhashset_lastkernels(
 			base_addr, api_server_port, n
 		);
 	}
-	api::client::get::<Vec<api::TxHashSetNode>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<api::TxHashSetNode>>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 // Helper function to get a vec of commitment output ids from a vec of block
@@ -430,7 +430,7 @@ pub fn ban_peer(base_addr: &String, api_server_port: u16, peer_addr: &String) ->
 		"http://{}:{}/v1/peers/{}/ban",
 		base_addr, api_server_port, peer_addr
 	);
-	api::client::post_no_ret(url.as_str(), &"").map_err(|e| Error::API(e))
+	api::client::post_no_ret(url.as_str(), None, &"").map_err(|e| Error::API(e))
 }
 
 pub fn unban_peer(
@@ -442,7 +442,7 @@ pub fn unban_peer(
 		"http://{}:{}/v1/peers/{}/unban",
 		base_addr, api_server_port, peer_addr
 	);
-	api::client::post_no_ret(url.as_str(), &"").map_err(|e| Error::API(e))
+	api::client::post_no_ret(url.as_str(), None, &"").map_err(|e| Error::API(e))
 }
 
 pub fn get_peer(
@@ -454,7 +454,7 @@ pub fn get_peer(
 		"http://{}:{}/v1/peers/{}",
 		base_addr, api_server_port, peer_addr
 	);
-	api::client::get::<p2p::PeerData>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<p2p::PeerData>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 pub fn get_connected_peers(
@@ -465,7 +465,7 @@ pub fn get_connected_peers(
 		"http://{}:{}/v1/peers/connected",
 		base_addr, api_server_port
 	);
-	api::client::get::<Vec<p2p::PeerInfo>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<p2p::PeerInfo>>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 pub fn get_all_peers(
@@ -473,7 +473,7 @@ pub fn get_all_peers(
 	api_server_port: u16,
 ) -> Result<Vec<p2p::PeerData>, Error> {
 	let url = format!("http://{}:{}/v1/peers/all", base_addr, api_server_port);
-	api::client::get::<Vec<p2p::PeerData>>(url.as_str()).map_err(|e| Error::API(e))
+	api::client::get::<Vec<p2p::PeerData>>(url.as_str(), None).map_err(|e| Error::API(e))
 }
 
 /// Error type wrapping underlying module errors.

@@ -280,8 +280,8 @@ impl OutputPrintable {
 		let mut merkle_proof = None;
 		if output
 			.features
-			.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT) && !spent
-			&& block_header.is_some()
+			.contains(core::transaction::OutputFeatures::COINBASE_OUTPUT)
+			&& !spent && block_header.is_some()
 		{
 			merkle_proof = chain.get_merkle_proof(&out_id, &block_header.unwrap()).ok()
 		};
@@ -564,8 +564,7 @@ impl BlockPrintable {
 					Some(&block.header),
 					include_proof,
 				)
-			})
-			.collect();
+			}).collect();
 		let kernels = block
 			.kernels()
 			.iter()

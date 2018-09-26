@@ -15,9 +15,12 @@
 //! Configuration file management
 
 use dirs;
+use rand::distributions::{Alphanumeric, Distribution};
+use rand::thread_rng;
 use std::env;
 use std::fs::{self, File};
 use std::io::prelude::*;
+use std::io::BufReader;
 use std::io::Read;
 use std::path::PathBuf;
 use toml;
@@ -40,6 +43,7 @@ const WALLET_LOG_FILE_NAME: &'static str = "grin-wallet.log";
 const GRIN_HOME: &'static str = ".grin";
 const GRIN_CHAIN_DIR: &'static str = "chain_data";
 const GRIN_WALLET_DIR: &'static str = "wallet_data";
+const API_SECRET_FILE_NAME: &'static str = ".api_secret";
 
 fn get_grin_path() -> Result<PathBuf, ConfigError> {
 	// Check if grin dir exists
@@ -78,8 +82,45 @@ fn check_config_current_dir(path: &str) -> Option<PathBuf> {
 	None
 }
 
+/// Create file with api secret
+fn init_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
+	let mut api_secret_file = File::create(api_secret_path)?;
+	let api_secret: String = Alphanumeric
+		.sample_iter(&mut thread_rng())
+		.take(20)
+		.collect();
+	api_secret_file.write_all(api_secret.as_bytes())?;
+	Ok(())
+}
+
+/// // Check if file contains a secret and nothing else
+fn check_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
+	let api_secret_file = File::open(api_secret_path)?;
+	let buf_reader = BufReader::new(api_secret_file);
+	let mut lines_iter = buf_reader.lines();
+	let first_line = lines_iter.next();
+	if first_line.is_none() || first_line.unwrap().is_err() {
+		fs::remove_file(api_secret_path)?;
+		init_api_secret(api_secret_path)?;
+	}
+	Ok(())
+}
+
+/// Check that the api secret file exists and is valid
+pub fn check_api_secret_file() -> Result<(), ConfigError> {
+	let grin_path = get_grin_path()?;
+	let mut api_secret_path = grin_path.clone();
+	api_secret_path.push(API_SECRET_FILE_NAME);
+	if !api_secret_path.exists() {
+		init_api_secret(&api_secret_path)
+	} else {
+		check_api_secret(&api_secret_path)
+	}
+}
+
 /// Handles setup and detection of paths for node
 pub fn initial_setup_server() -> Result<GlobalConfig, ConfigError> {
+	check_api_secret_file()?;
 	// Use config file if current directory if it exists, .grin home otherwise
 	if let Some(p) = check_config_current_dir(SERVER_CONFIG_FILE_NAME) {
 		GlobalConfig::new(p.to_str().unwrap())
@@ -98,12 +139,14 @@ pub fn initial_setup_server() -> Result<GlobalConfig, ConfigError> {
 			default_config.update_paths(&grin_path);
 			default_config.write_to_file(config_path.to_str().unwrap())?;
 		}
+
 		GlobalConfig::new(config_path.to_str().unwrap())
 	}
 }
 
 /// Handles setup and detection of paths for wallet
 pub fn initial_setup_wallet() -> Result<GlobalWalletConfig, ConfigError> {
+	check_api_secret_file()?;
 	// Use config file if current directory if it exists, .grin home otherwise
 	if let Some(p) = check_config_current_dir(WALLET_CONFIG_FILE_NAME) {
 		GlobalWalletConfig::new(p.to_str().unwrap())
@@ -122,6 +165,7 @@ pub fn initial_setup_wallet() -> Result<GlobalWalletConfig, ConfigError> {
 			default_config.update_paths(&grin_path);
 			default_config.write_to_file(config_path.to_str().unwrap())?;
 		}
+
 		GlobalWalletConfig::new(config_path.to_str().unwrap())
 	}
 }
@@ -216,6 +260,10 @@ impl GlobalConfig {
 		let mut chain_path = grin_home.clone();
 		chain_path.push(GRIN_CHAIN_DIR);
 		self.members.as_mut().unwrap().server.db_root = chain_path.to_str().unwrap().to_owned();
+		let mut secret_path = grin_home.clone();
+		secret_path.push(API_SECRET_FILE_NAME);
+		self.members.as_mut().unwrap().server.api_secret_path =
+			Some(secret_path.to_str().unwrap().to_owned());
 		let mut log_path = grin_home.clone();
 		log_path.push(SERVER_LOG_FILE_NAME);
 		self.members
@@ -319,6 +367,10 @@ impl GlobalWalletConfig {
 		wallet_path.push(GRIN_WALLET_DIR);
 		self.members.as_mut().unwrap().wallet.data_file_dir =
 			wallet_path.to_str().unwrap().to_owned();
+		let mut secret_path = wallet_home.clone();
+		secret_path.push(API_SECRET_FILE_NAME);
+		self.members.as_mut().unwrap().wallet.api_secret_path =
+			Some(secret_path.to_str().unwrap().to_owned());
 		let mut log_path = wallet_home.clone();
 		log_path.push(WALLET_LOG_FILE_NAME);
 		self.members

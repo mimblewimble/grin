@@ -30,6 +30,7 @@ use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{HTTPWalletClient, LMDBBackend, WalletConfig, WalletInst, WalletSeed};
 use keychain;
 use servers::start_webwallet_server;
+use util::file::get_first_line;
 use util::LOGGER;
 
 pub fn _init_wallet_seed(wallet_config: WalletConfig) {
@@ -129,6 +130,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 	// Handle listener startup commands
 	{
 		let wallet = instantiate_wallet(wallet_config.clone(), passphrase);
+		let api_secret = get_first_line(wallet_config.api_secret_path.clone());
 		match wallet_args.subcommand() {
 			("listen", Some(listen_args)) => {
 				if let Some(port) = listen_args.value_of("port") {
@@ -143,22 +145,26 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					});
 			}
 			("owner_api", Some(_api_args)) => {
-				controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
-					panic!(
-						"Error creating wallet api listener: {:?} Config: {:?}",
-						e, wallet_config
-					)
-				});
+				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret).unwrap_or_else(
+					|e| {
+						panic!(
+							"Error creating wallet api listener: {:?} Config: {:?}",
+							e, wallet_config
+						)
+					},
+				);
 			}
 			("web", Some(_api_args)) => {
 				// start owner listener and run static file server
 				start_webwallet_server();
-				controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
-					panic!(
-						"Error creating wallet api listener: {:?} Config: {:?}",
-						e, wallet_config
-					)
-				});
+				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret).unwrap_or_else(
+					|e| {
+						panic!(
+							"Error creating wallet api listener: {:?} Config: {:?}",
+							e, wallet_config
+						)
+					},
+				);
 			}
 			_ => {}
 		};

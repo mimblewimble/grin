@@ -718,6 +718,7 @@ dependencies = [
  "grin_util 0.3.0",
  "grin_wallet 0.3.0",
  "pretty_assertions 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rand 0.5.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.79 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 1.0.79 (registry+https://github.com/rust-lang/crates.io-index)",
  "toml 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -862,6 +863,7 @@ name = "grin_util"
 version = "0.3.0"
 dependencies = [
  "backtrace 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
+ "base64 0.9.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "byteorder 1.2.6 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.5.5 (registry+https://github.com/rust-lang/crates.io-index)",

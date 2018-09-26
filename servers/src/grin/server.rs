@@ -38,6 +38,7 @@ use mining::test_miner::Miner;
 use p2p;
 use pool;
 use store;
+use util::file::get_first_line;
 use util::LOGGER;
 
 /// Grin server holding internal structures.
@@ -112,11 +113,10 @@ impl Server {
 		};
 
 		// If archive mode is enabled then the flags should contains the FULL_HIST flag
-		if archive_mode
-			&& !config
-				.p2p_config
-				.capabilities
-				.contains(p2p::Capabilities::FULL_HIST)
+		if archive_mode && !config
+			.p2p_config
+			.capabilities
+			.contains(p2p::Capabilities::FULL_HIST)
 		{
 			config
 				.p2p_config
@@ -256,12 +256,13 @@ impl Server {
 			.spawn(move || p2p_inner.listen());
 
 		info!(LOGGER, "Starting rest apis at: {}", &config.api_http_addr);
-
+		let api_secret = get_first_line(config.api_secret_path.clone());
 		api::start_rest_apis(
 			config.api_http_addr.clone(),
 			Arc::downgrade(&shared_chain),
 			Arc::downgrade(&tx_pool),
 			Arc::downgrade(&p2p_server.peers),
+			api_secret,
 		);
 
 		info!(
@@ -424,8 +425,7 @@ impl Server {
 						time: time,
 						duration: dur,
 					}
-				})
-				.collect();
+				}).collect();
 
 			let block_time_sum = diff_entries.iter().fold(0, |sum, t| sum + t.duration);
 			let block_diff_sum = diff_entries.iter().fold(0, |sum, d| sum + d.difficulty);
@@ -446,8 +446,7 @@ impl Server {
 			.map(|p| {
 				let p = p.read().unwrap();
 				PeerStats::from_peer(&p)
-			})
-			.collect();
+			}).collect();
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
 			head: self.head(),

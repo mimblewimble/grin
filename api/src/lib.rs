@@ -41,6 +41,7 @@ extern crate tokio;
 extern crate tokio_core;
 extern crate tokio_tls;
 
+pub mod auth;
 pub mod client;
 mod handlers;
 mod rest;
@@ -48,6 +49,7 @@ mod router;
 mod types;
 mod web;
 
+pub use auth::BasicAuthMiddleware;
 pub use handlers::start_rest_apis;
 pub use rest::*;
 pub use router::*;
