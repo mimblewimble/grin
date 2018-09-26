@@ -260,6 +260,10 @@ impl GlobalConfig {
 		let mut chain_path = grin_home.clone();
 		chain_path.push(GRIN_CHAIN_DIR);
 		self.members.as_mut().unwrap().server.db_root = chain_path.to_str().unwrap().to_owned();
+		let mut secret_path = grin_home.clone();
+		secret_path.push(API_SECRET_FILE_NAME);
+		self.members.as_mut().unwrap().server.api_secret_path =
+			Some(secret_path.to_str().unwrap().to_owned());
 		let mut log_path = grin_home.clone();
 		log_path.push(SERVER_LOG_FILE_NAME);
 		self.members
@@ -363,6 +367,10 @@ impl GlobalWalletConfig {
 		wallet_path.push(GRIN_WALLET_DIR);
 		self.members.as_mut().unwrap().wallet.data_file_dir =
 			wallet_path.to_str().unwrap().to_owned();
+		let mut secret_path = wallet_home.clone();
+		secret_path.push(API_SECRET_FILE_NAME);
+		self.members.as_mut().unwrap().wallet.api_secret_path =
+			Some(secret_path.to_str().unwrap().to_owned());
 		let mut log_path = wallet_home.clone();
 		log_path.push(WALLET_LOG_FILE_NAME);
 		self.members
