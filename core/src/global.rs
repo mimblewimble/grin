@@ -102,7 +102,6 @@ pub enum PoWContextTypes {
 	Cuckatoo,
 }
 
-
 lazy_static!{
 	/// The mining parameter mode
 	pub static ref CHAIN_TYPE: RwLock<ChainTypes> =
@@ -121,7 +120,12 @@ pub fn set_mining_mode(mode: ChainTypes) {
 
 /// Return either a cuckoo context or a cuckatoo context
 /// Single change point
-pub fn create_pow_context<T>(edge_bits: u8, proof_size: usize, easiness_pct: u32, max_sols: u32) -> Result<Box<impl PoWContext<T>>, pow::Error> 
+pub fn create_pow_context<T>(
+	edge_bits: u8,
+	proof_size: usize,
+	easiness_pct: u32,
+	max_sols: u32,
+) -> Result<Box<impl PoWContext<T>>, pow::Error>
 where
 	T: EdgeType,
 {

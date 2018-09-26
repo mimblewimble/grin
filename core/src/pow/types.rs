@@ -33,10 +33,15 @@ use pow::error::Error;
 /// Mostly used for verification, but also for test mining if necessary
 pub trait PoWContext<T>
 where
-	T: EdgeType
+	T: EdgeType,
 {
 	/// Create new instance of context with appropriate parameters
-	fn new(edge_bits: u8, proof_size: usize, easiness_pct: u32, max_sols: u32) -> Result<Box<Self>, Error>;
+	fn new(
+		edge_bits: u8,
+		proof_size: usize,
+		easiness_pct: u32,
+		max_sols: u32,
+	) -> Result<Box<Self>, Error>;
 	/// Sets the header along with an optional nonce at the end
 	fn set_header_nonce(&mut self, header: Vec<u8>, nonce: Option<u32>) -> Result<(), Error>;
 	/// find solutions using the stored parameters and header

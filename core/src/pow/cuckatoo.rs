@@ -178,8 +178,18 @@ impl<T> PoWContext<T> for CuckatooContext<T>
 where
 	T: EdgeType,
 {
-	fn new(edge_bits: u8, proof_size: usize, easiness_pct: u32, max_sols: u32) -> Result<Box<Self>, Error> {
-		Ok(Box::new(CuckatooContext::<T>::new_impl(edge_bits, proof_size, easiness_pct, max_sols)?))
+	fn new(
+		edge_bits: u8,
+		proof_size: usize,
+		easiness_pct: u32,
+		max_sols: u32,
+	) -> Result<Box<Self>, Error> {
+		Ok(Box::new(CuckatooContext::<T>::new_impl(
+			edge_bits,
+			proof_size,
+			easiness_pct,
+			max_sols,
+		)?))
 	}
 
 	fn set_header_nonce(&mut self, header: Vec<u8>, nonce: Option<u32>) -> Result<(), Error> {

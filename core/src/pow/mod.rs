@@ -49,18 +49,23 @@ use core::{Block, BlockHeader};
 use genesis;
 use global;
 
-pub use pow::cuckoo::CuckooContext;
-pub use pow::cuckatoo::CuckatooContext;
-pub use self::types::*;
 pub use self::common::EdgeType;
+pub use self::types::*;
+pub use pow::cuckatoo::CuckatooContext;
+pub use pow::cuckoo::CuckooContext;
 pub use pow::error::Error;
 
-const MAX_SOLS:u32 = 10;
+const MAX_SOLS: u32 = 10;
 
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u8) -> Result<(), Error> {
-	let mut ctx = global::create_pow_context::<u64>(cuckoo_sz, bh.pow.proof.nonces.len(), consensus::EASINESS, MAX_SOLS)?;
+	let mut ctx = global::create_pow_context::<u64>(
+		cuckoo_sz,
+		bh.pow.proof.nonces.len(),
+		consensus::EASINESS,
+		MAX_SOLS,
+	)?;
 	ctx.set_header_nonce(bh.pre_pow_hash().to_vec(), None)?;
 	ctx.verify(&bh.pow.proof)
 }
@@ -91,8 +96,7 @@ pub fn pow_size(
 	diff: Difficulty,
 	proof_size: usize,
 	sz: u8,
-) -> Result<(), Error>
-{
+) -> Result<(), Error> {
 	let start_nonce = bh.pow.nonce;
 
 	// set the nonce for faster solution finding in user testing
@@ -104,7 +108,8 @@ pub fn pow_size(
 	loop {
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
-		let mut ctx = global::create_pow_context::<u32>(sz, proof_size, consensus::EASINESS, MAX_SOLS)?;
+		let mut ctx =
+			global::create_pow_context::<u32>(sz, proof_size, consensus::EASINESS, MAX_SOLS)?;
 		ctx.set_header_nonce(bh.pre_pow_hash().to_vec(), None)?;
 		if let Ok(proofs) = ctx.find_cycles() {
 			bh.pow.proof = proofs[0].clone();

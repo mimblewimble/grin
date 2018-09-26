@@ -96,8 +96,14 @@ impl Miner {
 		let mut iter_count = 0;
 
 		while head.hash() == *latest_hash && Utc::now().timestamp() < deadline {
-			let mut ctx = global::create_pow_context::<u32>(global::min_sizeshift(), global::proofsize(), consensus::EASINESS, 10).unwrap();
-			ctx.set_header_nonce(b.header.pre_pow_hash().to_vec(), None).unwrap();
+			let mut ctx = global::create_pow_context::<u32>(
+				global::min_sizeshift(),
+				global::proofsize(),
+				consensus::EASINESS,
+				10,
+			).unwrap();
+			ctx.set_header_nonce(b.header.pre_pow_hash().to_vec(), None)
+				.unwrap();
 			if let Ok(proofs) = ctx.find_cycles() {
 				b.header.pow.proof = proofs[0].clone();
 				let proof_diff = b.header.pow.to_difficulty();

@@ -45,8 +45,18 @@ impl<T> PoWContext<T> for CuckooContext<T>
 where
 	T: EdgeType,
 {
-	fn new(edge_bits: u8, proof_size: usize, easiness_pct: u32, max_sols: u32) -> Result<Box<Self>, Error> {
-		Ok(Box::new(CuckooContext::<T>::new_impl(edge_bits, proof_size, easiness_pct, max_sols)?))
+	fn new(
+		edge_bits: u8,
+		proof_size: usize,
+		easiness_pct: u32,
+		max_sols: u32,
+	) -> Result<Box<Self>, Error> {
+		Ok(Box::new(CuckooContext::<T>::new_impl(
+			edge_bits,
+			proof_size,
+			easiness_pct,
+			max_sols,
+		)?))
 	}
 
 	fn set_header_nonce(&mut self, header: Vec<u8>, nonce: Option<u32>) -> Result<(), Error> {
@@ -94,7 +104,11 @@ where
 
 	/// Set the header and optional nonce in the last part of the header
 	/// and create siphash keys
-	pub fn set_header_nonce_impl(&mut self, header: Vec<u8>, nonce: Option<u32>) -> Result<(), Error> {
+	pub fn set_header_nonce_impl(
+		&mut self,
+		header: Vec<u8>,
+		nonce: Option<u32>,
+	) -> Result<(), Error> {
 		self.siphash_keys = common::set_header_nonce(header, nonce)?;
 		self.reset()?;
 		Ok(())
