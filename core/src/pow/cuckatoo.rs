@@ -18,10 +18,10 @@ use std::mem;
 use byteorder::{BigEndian, LittleEndian, WriteBytesExt};
 use croaring::Bitmap;
 
-use pow::error::{Error, ErrorKind};
-use pow::common::{self, Link};
-use pow::Proof;
 use pow::common::EdgeType;
+use pow::common::{self, Link};
+use pow::error::{Error, ErrorKind};
+use pow::Proof;
 use util;
 
 struct Graph<T>

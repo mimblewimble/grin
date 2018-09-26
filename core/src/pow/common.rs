@@ -1,4 +1,3 @@
-
 // Copyright 2018 The Grin Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +14,14 @@
 
 //! Common types and traits for cuckoo/cuckatoo family of solvers
 
-use std::{fmt, mem};
-use std::ops::{BitOrAssign, Mul};
-use std::hash::Hash;
-use pow::num::{PrimInt, ToPrimitive};
-use pow::error::{Error, ErrorKind};
-use pow::siphash::siphash24;
 use blake2::blake2b::blake2b;
+use pow::error::{Error, ErrorKind};
+use pow::num::{PrimInt, ToPrimitive};
+use pow::siphash::siphash24;
+use std::hash::Hash;
 use std::io::Cursor;
+use std::ops::{BitOrAssign, Mul};
+use std::{fmt, mem};
 
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
@@ -79,17 +78,17 @@ where
 	}
 }
 
-pub fn set_header_nonce(header: Vec<u8>, nonce: Option<u32>) -> Result<[u64;4], Error> {
-		let len = header.len();
-		let mut header = header.clone();
-		if let Some(n) = nonce {
-			header.truncate(len - mem::size_of::<u32>());
-			header.write_u32::<LittleEndian>(n)?;
-		}
-		create_siphash_keys(header)
+pub fn set_header_nonce(header: Vec<u8>, nonce: Option<u32>) -> Result<[u64; 4], Error> {
+	let len = header.len();
+	let mut header = header.clone();
+	if let Some(n) = nonce {
+		header.truncate(len - mem::size_of::<u32>());
+		header.write_u32::<LittleEndian>(n)?;
+	}
+	create_siphash_keys(header)
 }
 
-pub fn create_siphash_keys(header: Vec<u8>) -> Result<[u64;4], Error> {
+pub fn create_siphash_keys(header: Vec<u8>) -> Result<[u64; 4], Error> {
 	let h = blake2b(32, &[], &header);
 	let hb = h.as_bytes();
 	let mut rdr = Cursor::new(hb);
@@ -102,7 +101,13 @@ pub fn create_siphash_keys(header: Vec<u8>) -> Result<[u64;4], Error> {
 }
 
 /// Return siphash masked for type
-pub fn sipnode<T>(keys: &[u64;4], edge: T, edge_mask: &T, uorv: u64, shift: bool) -> Result<T, Error>
+pub fn sipnode<T>(
+	keys: &[u64; 4],
+	edge: T,
+	edge_mask: &T,
+	uorv: u64,
+	shift: bool,
+) -> Result<T, Error>
 where
 	T: EdgeType,
 {
@@ -117,4 +122,3 @@ where
 	}
 	Ok(T::from(masked).ok_or(ErrorKind::IntegerCast)?)
 }
-
