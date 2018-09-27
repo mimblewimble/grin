@@ -326,7 +326,12 @@ fn comments() -> HashMap<String, String> {
 #where the wallet should find a running node
 ".to_string(),
 	);
-
+	retval.insert(
+		"node_api_secret_path".to_string(),
+		"
+#location of the node api secret for basic auth on the Grin API
+".to_string(),
+	);
 	retval.insert(
 		"data_file_dir".to_string(),
 		"

@@ -52,6 +52,7 @@ pub fn seed_exists(wallet_config: WalletConfig) -> bool {
 pub fn instantiate_wallet(
 	wallet_config: WalletConfig,
 	passphrase: &str,
+	node_api_secret: Option<String>,
 ) -> Box<WalletInst<HTTPWalletClient, keychain::ExtKeychain>> {
 	if grin_wallet::needs_migrate(&wallet_config.data_file_dir) {
 		// Migrate wallet automatically
@@ -67,7 +68,7 @@ pub fn instantiate_wallet(
 		warn!(LOGGER, "If anything went wrong, you can try again by deleting the `db` directory and running a wallet command");
 		warn!(LOGGER, "If all is okay, you can move/backup/delete all files in the wallet directory EXCEPT FOR wallet.seed");
 	}
-	let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr);
+	let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
 	let db_wallet = LMDBBackend::new(wallet_config.clone(), "", client).unwrap_or_else(|e| {
 		panic!(
 			"Error creating DB wallet: {} Config: {:?}",
@@ -102,13 +103,15 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 	if wallet_args.is_present("show_spent") {
 		show_spent = true;
 	}
+	let node_api_secret = get_first_line(wallet_config.node_api_secret_path.clone());
 
 	// Derive the keychain based on seed from seed file and specified passphrase.
 	// Generate the initial wallet seed if we are running "wallet init".
 	if let ("init", Some(_)) = wallet_args.subcommand() {
 		WalletSeed::init_file(&wallet_config).expect("Failed to init wallet seed file.");
 		info!(LOGGER, "Wallet seed file created");
-		let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr);
+		let client =
+			HTTPWalletClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
 		let _: LMDBBackend<HTTPWalletClient, keychain::ExtKeychain> =
 			LMDBBackend::new(wallet_config.clone(), "", client).unwrap_or_else(|e| {
 				panic!(
@@ -126,11 +129,11 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 	let passphrase = wallet_args
 		.value_of("pass")
 		.expect("Failed to read passphrase.");
-
 	// Handle listener startup commands
 	{
-		let wallet = instantiate_wallet(wallet_config.clone(), passphrase);
+		let wallet = instantiate_wallet(wallet_config.clone(), passphrase, node_api_secret.clone());
 		let api_secret = get_first_line(wallet_config.api_secret_path.clone());
+
 		match wallet_args.subcommand() {
 			("listen", Some(listen_args)) => {
 				if let Some(port) = listen_args.value_of("port") {
@@ -174,6 +177,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 	let wallet = Arc::new(Mutex::new(instantiate_wallet(
 		wallet_config.clone(),
 		passphrase,
+		node_api_secret,
 	)));
 	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {

@@ -131,7 +131,7 @@ where
 
 	api_thread
 		.join()
-		.map_err(|e| ErrorKind::GenericError(format!("API thread paniced :{:?}", e)).into())
+		.map_err(|e| ErrorKind::GenericError(format!("API thread panicked :{:?}", e)).into())
 }
 
 type WalletResponseFuture = Box<Future<Item = Response<Body>, Error = Error> + Send>;
@@ -257,6 +257,7 @@ where
 
 	fn handle_get_request(&self, req: &Request<Body>) -> Result<Response<Body>, Error> {
 		let api = APIOwner::new(self.wallet.clone());
+
 		Ok(match req
 			.uri()
 			.path()
