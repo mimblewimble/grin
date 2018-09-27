@@ -96,7 +96,7 @@ where
 			easiness: to_edge!(easiness),
 			proof_size: proof_size,
 			edge_mask: to_edge!(num_edges / 2 - 1),
-			graph: vec![T::zero(); num_edges as usize + 1],
+			graph: vec![],
 			_max_sols: max_sols,
 		})
 	}
