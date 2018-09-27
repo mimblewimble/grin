@@ -263,7 +263,7 @@ impl LocalServerContainer {
 		let _ = fs::create_dir_all(self.wallet_config.clone().data_file_dir);
 		let r = wallet::WalletSeed::init_file(&self.wallet_config);
 
-		let client = HTTPWalletClient::new(&self.wallet_config.check_node_api_http_addr);
+		let client = HTTPWalletClient::new(&self.wallet_config.check_node_api_http_addr, None);
 
 		if let Err(e) = r {
 			//panic!("Error initializing wallet seed: {}", e);
@@ -305,11 +305,11 @@ impl LocalServerContainer {
 		let keychain: keychain::ExtKeychain = wallet_seed
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
-		let client = HTTPWalletClient::new(&config.check_node_api_http_addr);
+		let client = HTTPWalletClient::new(&config.check_node_api_http_addr, None);
 		let mut wallet = FileWallet::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
-		let _ = wallet::libwallet::internal::updater::refresh_outputs(&mut wallet, None);
+		let _ = wallet::libwallet::internal::updater::refresh_outputs(&mut wallet);
 		wallet::libwallet::internal::updater::retrieve_info(&mut wallet).unwrap()
 	}
 
@@ -320,7 +320,6 @@ impl LocalServerContainer {
 		selection_strategy: &str,
 		dest: &str,
 		fluff: bool,
-		api_secret: Option<String>,
 	) {
 		let amount = core::core::amount_from_hr_string(amount)
 			.expect("Could not parse amount as a number with optional decimal point.");
@@ -332,7 +331,7 @@ impl LocalServerContainer {
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 
-		let client = HTTPWalletClient::new(&config.check_node_api_http_addr);
+		let client = HTTPWalletClient::new(&config.check_node_api_http_addr, None);
 
 		let max_outputs = 500;
 		let change_outputs = 1;
@@ -349,7 +348,6 @@ impl LocalServerContainer {
 					max_outputs,
 					change_outputs,
 					selection_strategy == "all",
-					api_secret,
 				);
 				match result {
 					Ok(_) => println!(

@@ -317,8 +317,8 @@ where
 	}
 
 	/// Restore wallet contents
-	fn restore(&mut self, api_secret: Option<String>) -> Result<(), libwallet::Error> {
-		libwallet::internal::restore::restore(self, api_secret)
+	fn restore(&mut self) -> Result<(), libwallet::Error> {
+		libwallet::internal::restore::restore(self)
 	}
 }
 

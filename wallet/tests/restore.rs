@@ -76,8 +76,8 @@ fn restore_wallet(
 
 	// perform the restore and update wallet info
 	wallet::controller::owner_single_use(wallet.clone(), |api| {
-		let _ = api.restore(None)?;
-		let _ = api.retrieve_summary_info(true, None)?;
+		let _ = api.restore()?;
+		let _ = api.retrieve_summary_info(true)?;
 		Ok(())
 	})?;
 
@@ -126,14 +126,14 @@ fn compare_wallet_restore(
 
 	// Overall wallet info should be the same
 	wallet::controller::owner_single_use(wallet_source.clone(), |api| {
-		src_info = Some(api.retrieve_summary_info(true, None)?.1);
-		src_txs = Some(api.retrieve_txs(true, None, None)?.1);
+		src_info = Some(api.retrieve_summary_info(true)?.1);
+		src_txs = Some(api.retrieve_txs(true, None)?.1);
 		Ok(())
 	})?;
 
 	wallet::controller::owner_single_use(wallet_dest.clone(), |api| {
-		dest_info = Some(api.retrieve_summary_info(true, None)?.1);
-		dest_txs = Some(api.retrieve_txs(true, None, None)?.1);
+		dest_info = Some(api.retrieve_summary_info(true)?.1);
+		dest_txs = Some(api.retrieve_txs(true, None)?.1);
 		Ok(())
 	})?;
 
@@ -220,9 +220,8 @@ fn setup_restore(
 			500,       // max outputs
 			1,         // num change outputs
 			true,      // select all outputs
-			None,      // no basic auth
 		)?;
-		sender_api.post_tx(&slate, false, None)?;
+		sender_api.post_tx(&slate, false)?;
 		Ok(())
 	})?;
 
@@ -239,9 +238,8 @@ fn setup_restore(
 			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
-			None,       // no basic auth
 		)?;
-		sender_api.post_tx(&slate, false, None)?;
+		sender_api.post_tx(&slate, false)?;
 		Ok(())
 	})?;
 
@@ -258,9 +256,8 @@ fn setup_restore(
 			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
-			None,       // no basic auth
 		)?;
-		sender_api.post_tx(&slate, false, None)?;
+		sender_api.post_tx(&slate, false)?;
 		Ok(())
 	})?;
 
@@ -269,15 +266,15 @@ fn setup_restore(
 
 	// update everyone
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let _ = api.retrieve_summary_info(true, None)?;
+		let _ = api.retrieve_summary_info(true)?;
 		Ok(())
 	})?;
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let _ = api.retrieve_summary_info(true, None)?;
+		let _ = api.retrieve_summary_info(true)?;
 		Ok(())
 	})?;
 	wallet::controller::owner_single_use(wallet3.clone(), |api| {
-		let _ = api.retrieve_summary_info(true, None)?;
+		let _ = api.retrieve_summary_info(true)?;
 		Ok(())
 	})?;
 

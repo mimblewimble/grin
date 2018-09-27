@@ -314,6 +314,9 @@ impl WalletClient for LocalWalletClient {
 	fn node_url(&self) -> &str {
 		"node"
 	}
+	fn node_api_secret(&self) -> Option<String> {
+		None
+	}
 
 	/// Call the wallet API to create a coinbase output for the given
 	/// block_fees. Will retry based on default "retry forever with backoff"
@@ -351,12 +354,7 @@ impl WalletClient for LocalWalletClient {
 
 	/// Posts a transaction to a grin node
 	/// In this case it will create a new block with award rewarded to
-	fn post_tx(
-		&self,
-		tx: &TxWrapper,
-		_fluff: bool,
-		api_secret: Option<String>,
-	) -> Result<(), libwallet::Error> {
+	fn post_tx(&self, tx: &TxWrapper, _fluff: bool) -> Result<(), libwallet::Error> {
 		let m = WalletProxyMessage {
 			sender_id: self.id.clone(),
 			dest: self.node_url().to_owned(),
@@ -375,7 +373,7 @@ impl WalletClient for LocalWalletClient {
 	}
 
 	/// Return the chain tip from a given node
-	fn get_chain_height(&self, api_secret: Option<String>) -> Result<u64, libwallet::Error> {
+	fn get_chain_height(&self) -> Result<u64, libwallet::Error> {
 		let m = WalletProxyMessage {
 			sender_id: self.id.clone(),
 			dest: self.node_url().to_owned(),
@@ -406,7 +404,6 @@ impl WalletClient for LocalWalletClient {
 	fn get_outputs_from_node(
 		&self,
 		wallet_outputs: Vec<pedersen::Commitment>,
-		api_secret: Option<String>,
 	) -> Result<HashMap<pedersen::Commitment, (String, u64)>, libwallet::Error> {
 		let query_params: Vec<String> = wallet_outputs
 			.iter()
@@ -442,7 +439,6 @@ impl WalletClient for LocalWalletClient {
 		&self,
 		start_height: u64,
 		max_outputs: u64,
-		api_secret: Option<String>,
 	) -> Result<
 		(
 			u64,

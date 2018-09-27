@@ -146,7 +146,7 @@ where
 }
 
 /// Restore a wallet
-pub fn restore<T, C, K>(wallet: &mut T, api_secret: Option<String>) -> Result<(), Error>
+pub fn restore<T, C, K>(wallet: &mut T) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -172,7 +172,7 @@ where
 	loop {
 		let (highest_index, last_retrieved_index, outputs) = wallet
 			.client()
-			.get_outputs_by_pmmr_index(start_index, batch_size, api_secret.clone())?;
+			.get_outputs_by_pmmr_index(start_index, batch_size)?;
 		info!(
 			LOGGER,
 			"Retrieved {} outputs, up to index {}. (Highest index: {})",
@@ -199,7 +199,7 @@ where
 
 	// Now save what we have
 	let root_key_id = wallet.keychain().root_key_id();
-	let current_chain_height = wallet.client().get_chain_height(api_secret)?;
+	let current_chain_height = wallet.client().get_chain_height()?;
 	let mut batch = wallet.batch()?;
 	let mut max_child_index = 0;
 	for output in result_vec {

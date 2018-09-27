@@ -168,7 +168,6 @@ where
 		&self,
 		req: &Request<Body>,
 		api: APIOwner<T, C, K>,
-		api_secret: Option<String>,
 	) -> Result<(bool, Vec<(OutputData, pedersen::Commitment)>), Error> {
 		let mut update_from_node = false;
 		let mut id = None;
@@ -186,14 +185,13 @@ where
 				id = Some(i.parse().unwrap());
 			}
 		}
-		api.retrieve_outputs(show_spent, update_from_node, id, api_secret)
+		api.retrieve_outputs(show_spent, update_from_node, id)
 	}
 
 	fn retrieve_txs(
 		&self,
 		req: &Request<Body>,
 		api: APIOwner<T, C, K>,
-		api_secret: Option<String>,
 	) -> Result<(bool, Vec<TxLogEntry>), Error> {
 		let mut id = None;
 		let mut update_from_node = false;
@@ -208,7 +206,7 @@ where
 				id = Some(i.parse().unwrap());
 			}
 		}
-		api.retrieve_txs(update_from_node, id, api_secret)
+		api.retrieve_txs(update_from_node, id)
 	}
 
 	fn dump_stored_tx(
@@ -244,37 +242,21 @@ where
 		&self,
 		req: &Request<Body>,
 		mut api: APIOwner<T, C, K>,
-		api_secret: Option<String>,
 	) -> Result<(bool, WalletInfo), Error> {
 		let update_from_node = param_exists(req, "refresh");
-		api.retrieve_summary_info(update_from_node, api_secret)
+		api.retrieve_summary_info(update_from_node)
 	}
 
 	fn node_height(
 		&self,
 		_req: &Request<Body>,
 		mut api: APIOwner<T, C, K>,
-		api_secret: Option<String>,
 	) -> Result<(u64, bool), Error> {
-		api.node_height(api_secret)
+		api.node_height()
 	}
 
 	fn handle_get_request(&self, req: &Request<Body>) -> Result<Response<Body>, Error> {
 		let api = APIOwner::new(self.wallet.clone());
-		let mut api_secret = None;
-		if let Some(query_string) = req.uri().query() {
-			let params = form_urlencoded::parse(query_string.as_bytes())
-				.into_owned()
-				.fold(HashMap::new(), |mut hm, (k, v)| {
-					hm.entry(k).or_insert(vec![]).push(v);
-					hm
-				});
-			if let Some(secrets) = params.get("secret") {
-				if let Ok(secret) = str::parse(&secrets[0]) {
-					api_secret = Some(secret);
-				}
-			}
-		};
 
 		Ok(match req
 			.uri()
@@ -284,12 +266,10 @@ where
 			.next()
 			.unwrap()
 		{
-			"retrieve_outputs" => json_response(&self.retrieve_outputs(req, api, api_secret)?),
-			"retrieve_summary_info" => {
-				json_response(&self.retrieve_summary_info(req, api, api_secret)?)
-			}
-			"node_height" => json_response(&self.node_height(req, api, api_secret)?),
-			"retrieve_txs" => json_response(&self.retrieve_txs(req, api, api_secret)?),
+			"retrieve_outputs" => json_response(&self.retrieve_outputs(req, api)?),
+			"retrieve_summary_info" => json_response(&self.retrieve_summary_info(req, api)?),
+			"node_height" => json_response(&self.node_height(req, api)?),
+			"retrieve_txs" => json_response(&self.retrieve_txs(req, api)?),
 			"dump_stored_tx" => json_response(&self.dump_stored_tx(req, api)?),
 			_ => response(StatusCode::BAD_REQUEST, ""),
 		})
@@ -299,7 +279,6 @@ where
 		&self,
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
-		api_secret: Option<String>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(move |args: SendTXArgs| {
 			if args.method == "http" {
@@ -310,7 +289,6 @@ where
 					args.max_outputs,
 					args.num_change_outputs,
 					args.selection_strategy_is_use_all,
-					args.api_secret,
 				)
 			} else if args.method == "file" {
 				api.send_tx(
@@ -321,7 +299,6 @@ where
 					args.max_outputs,
 					args.num_change_outputs,
 					args.selection_strategy_is_use_all,
-					api_secret,
 				)
 			} else {
 				error!(LOGGER, "unsupported payment method: {}", args.method);
@@ -350,12 +327,11 @@ where
 		&self,
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
-		api_secret: Option<String>,
 	) -> Box<Future<Item = (), Error = Error> + Send> {
 		let params = parse_params(&req);
 		if let Some(id_string) = params.get("id") {
 			Box::new(match id_string[0].parse() {
-				Ok(id) => match api.cancel_tx(id, api_secret) {
+				Ok(id) => match api.cancel_tx(id) {
 					Ok(_) => ok(()),
 					Err(e) => {
 						error!(LOGGER, "finalize_tx: failed with error: {}", e);
@@ -380,10 +356,9 @@ where
 		&self,
 		_req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
-		api_secret: Option<String>,
 	) -> Box<Future<Item = (), Error = Error> + Send> {
 		// TODO: Args
-		Box::new(match api.issue_burn_tx(60, 10, 1000, api_secret) {
+		Box::new(match api.issue_burn_tx(60, 10, 1000) {
 			Ok(_) => ok(()),
 			Err(e) => err(e),
 		})
@@ -391,20 +366,6 @@ where
 
 	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
 		let api = APIOwner::new(self.wallet.clone());
-		let mut api_secret = None;
-		if let Some(query_string) = req.uri().query() {
-			let params = form_urlencoded::parse(query_string.as_bytes())
-				.into_owned()
-				.fold(HashMap::new(), |mut hm, (k, v)| {
-					hm.entry(k).or_insert(vec![]).push(v);
-					hm
-				});
-			if let Some(secrets) = params.get("secret") {
-				if let Ok(secret) = str::parse(&secrets[0]) {
-					api_secret = Some(secret);
-				}
-			}
-		}
 		match req
 			.uri()
 			.path()
@@ -414,7 +375,7 @@ where
 			.unwrap()
 		{
 			"issue_send_tx" => Box::new(
-				self.issue_send_tx(req, api, api_secret)
+				self.issue_send_tx(req, api)
 					.and_then(|slate| ok(json_response_pretty(&slate))),
 			),
 			"finalize_tx" => Box::new(
@@ -422,11 +383,11 @@ where
 					.and_then(|slate| ok(json_response_pretty(&slate))),
 			),
 			"cancel_tx" => Box::new(
-				self.cancel_tx(req, api, api_secret)
+				self.cancel_tx(req, api)
 					.and_then(|_| ok(response(StatusCode::OK, ""))),
 			),
 			"issue_burn_tx" => Box::new(
-				self.issue_burn_tx(req, api, api_secret)
+				self.issue_burn_tx(req, api)
 					.and_then(|_| ok(response(StatusCode::OK, ""))),
 			),
 			_ => Box::new(err(ErrorKind::GenericError(

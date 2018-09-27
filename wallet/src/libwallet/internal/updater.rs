@@ -103,17 +103,14 @@ where
 }
 /// Refreshes the outputs in a wallet with the latest information
 /// from a node
-pub fn refresh_outputs<T: ?Sized, C, K>(
-	wallet: &mut T,
-	api_secret: Option<String>,
-) -> Result<(), Error>
+pub fn refresh_outputs<T: ?Sized, C, K>(wallet: &mut T) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
 	K: Keychain,
 {
-	let height = wallet.client().get_chain_height(api_secret.clone())?;
-	refresh_output_state(wallet, height, api_secret)?;
+	let height = wallet.client().get_chain_height()?;
+	refresh_output_state(wallet, height)?;
 	Ok(())
 }
 
@@ -255,11 +252,7 @@ where
 
 /// Builds a single api query to retrieve the latest output data from the node.
 /// So we can refresh the local wallet outputs.
-fn refresh_output_state<T: ?Sized, C, K>(
-	wallet: &mut T,
-	height: u64,
-	api_secret: Option<String>,
-) -> Result<(), Error>
+fn refresh_output_state<T: ?Sized, C, K>(wallet: &mut T, height: u64) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -273,9 +266,7 @@ where
 
 	let wallet_output_keys = wallet_outputs.keys().map(|commit| commit.clone()).collect();
 
-	let api_outputs = wallet
-		.client()
-		.get_outputs_from_node(wallet_output_keys, api_secret)?;
+	let api_outputs = wallet.client().get_outputs_from_node(wallet_output_keys)?;
 	apply_api_outputs(wallet, &wallet_outputs, &api_outputs, height)?;
 	clean_old_unconfirmed(wallet, height)?;
 	Ok(())

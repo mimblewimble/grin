@@ -208,8 +208,8 @@ where
 		})
 	}
 
-	fn restore(&mut self, api_secret: Option<String>) -> Result<(), Error> {
-		internal::restore::restore(self, api_secret).context(ErrorKind::Restore)?;
+	fn restore(&mut self) -> Result<(), Error> {
+		internal::restore::restore(self).context(ErrorKind::Restore)?;
 		Ok(())
 	}
 }

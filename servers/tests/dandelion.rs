@@ -145,7 +145,6 @@ fn test_dandelion_timeout() {
 		"not_all",
 		"http://127.0.0.1:20002",
 		false,
-		None,
 	);
 
 	let coinbase_info =

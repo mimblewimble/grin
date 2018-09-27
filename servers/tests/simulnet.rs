@@ -423,7 +423,7 @@ fn replicate_tx_fluff_failure() {
 
 	// Create Wallet 1 (Mining Input) and start it listening
 	// Wallet 1 post to another node, just for fun
-	let client1 = HTTPWalletClient::new("http://127.0.0.1:23003");
+	let client1 = HTTPWalletClient::new("http://127.0.0.1:23003", None);
 	let wallet1 = create_wallet("target/tmp/tx_fluff/wallet1", client1.clone());
 	let wallet1_handle = thread::spawn(move || {
 		controller::foreign_listener(wallet1, "127.0.0.1:33000")
@@ -431,7 +431,7 @@ fn replicate_tx_fluff_failure() {
 	});
 
 	// Create Wallet 2 (Recipient) and launch
-	let client2 = HTTPWalletClient::new("http://127.0.0.1:23001");
+	let client2 = HTTPWalletClient::new("http://127.0.0.1:23001", None);
 	let wallet2 = create_wallet("target/tmp/tx_fluff/wallet2", client2.clone());
 	let wallet2_handle = thread::spawn(move || {
 		controller::foreign_listener(wallet2, "127.0.0.1:33001")
@@ -487,9 +487,8 @@ fn replicate_tx_fluff_failure() {
 				500,                      // max outputs
 				1000,                     // num change outputs
 				true,                     // select all outputs
-				None,                     // no basic auth
 			).unwrap();
-		api.post_tx(&slate, false, None).unwrap();
+		api.post_tx(&slate, false).unwrap();
 		Ok(())
 	}).unwrap();
 
@@ -501,7 +500,7 @@ fn replicate_tx_fluff_failure() {
 
 	let wallet2 = Arc::new(Mutex::new(wallet2));
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let res = api.retrieve_summary_info(true, None).unwrap();
+		let res = api.retrieve_summary_info(true).unwrap();
 		assert_eq!(res.1.amount_currently_spendable, amount);
 		Ok(())
 	}).unwrap();

@@ -175,11 +175,6 @@ fn main() {
 			.long("api_server_address")
 			.help("Api address of running node on which to check inputs and post transactions")
 			.takes_value(true))
-		.arg(Arg::with_name("node_api_secret")
-			.short("n")
-			.long("node_api_secret")
-			.help("Api secret of running node on which to check inputs and post transactions")
-			.takes_value(true))
 
 		.subcommand(SubCommand::with_name("listen")
 			.about("Runs the wallet in listening mode waiting for transactions.")

@@ -100,7 +100,7 @@ where
 	fn details(&mut self, root_key_id: Identifier) -> Result<WalletDetails, Error>;
 
 	/// Attempt to restore the contents of a wallet from seed
-	fn restore(&mut self, api_secret: Option<String>) -> Result<(), Error>;
+	fn restore(&mut self) -> Result<(), Error>;
 }
 
 /// Batch trait to update the output data backend atomically. Trying to use a
@@ -157,6 +157,8 @@ where
 pub trait WalletClient: Sync + Send + Clone {
 	/// Return the URL of the check node
 	fn node_url(&self) -> &str;
+	/// Return the node api secret
+	fn node_api_secret(&self) -> Option<String>;
 
 	/// Call the wallet API to create a coinbase transaction
 	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, Error>;
@@ -166,18 +168,16 @@ pub trait WalletClient: Sync + Send + Clone {
 	fn send_tx_slate(&self, addr: &str, slate: &Slate) -> Result<Slate, Error>;
 
 	/// Posts a transaction to a grin node
-	fn post_tx(&self, tx: &TxWrapper, fluff: bool, api_secret: Option<String>)
-		-> Result<(), Error>;
+	fn post_tx(&self, tx: &TxWrapper, fluff: bool) -> Result<(), Error>;
 
 	/// retrieves the current tip from the specified grin node
-	fn get_chain_height(&self, api_secret: Option<String>) -> Result<u64, Error>;
+	fn get_chain_height(&self) -> Result<u64, Error>;
 
 	/// retrieve a list of outputs from the specified grin node
 	/// need "by_height" and "by_id" variants
 	fn get_outputs_from_node(
 		&self,
 		wallet_outputs: Vec<pedersen::Commitment>,
-		api_secret: Option<String>,
 	) -> Result<HashMap<pedersen::Commitment, (String, u64)>, Error>;
 
 	/// Get a list of outputs from the node by traversing the UTXO
@@ -189,7 +189,6 @@ pub trait WalletClient: Sync + Send + Clone {
 		&self,
 		start_height: u64,
 		max_outputs: u64,
-		api_secret: Option<String>,
 	) -> Result<
 		(
 			u64,
@@ -658,6 +657,4 @@ pub struct SendTXArgs {
 	pub selection_strategy_is_use_all: bool,
 	/// dandelion control
 	pub fluff: bool,
-	/// node api secret
-	pub api_secret: Option<String>,
 }
