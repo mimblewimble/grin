@@ -93,10 +93,6 @@ pub fn process_block(
 	let txhashset = ctx.txhashset.clone();
 	let mut txhashset = txhashset.write().unwrap();
 
-	// TODO - Do we actually need this? We don't this for block_headers
-	// Update head now that we are in the lock.
-	// ctx.head = ctx.store.head()?;
-
 	// Fast in-memory checks to avoid re-processing a block we recently processed.
 	{
 		// Check if we have recently processed this block (via ctx chain head).
@@ -109,8 +105,8 @@ pub fn process_block(
 		check_known_orphans(&b.header, ctx)?;
 	}
 
-	// Check our header itself is actually valid before proceeding any further.
-	validate_header(&b.header, ctx, batch)?;
+	// Header specific processing.
+	handle_block_header(&b.header, ctx, batch)?;
 
 	// Check if are processing the "next" block relative to the current chain head.
 	if is_next_block(&b.header, ctx) {
@@ -223,12 +219,7 @@ pub fn sync_block_headers(
 	let mut tip = batch.get_header_head()?;
 
 	for header in headers {
-		validate_header(header, ctx, batch)?;
-		add_block_header(header, batch)?;
-
-		// Update header_head (but only if this header increases our total known work).
-		// i.e. Only if this header is now the head of the current "most work" chain.
-		update_header_head(header, ctx, batch)?;
+		handle_block_header(header, ctx, batch)?;
 
 		// Update sync_head regardless of total work.
 		// We may be syncing a long fork that will *eventually* increase the work
@@ -238,6 +229,20 @@ pub fn sync_block_headers(
 		tip = update_sync_head(header, ctx, batch)?;
 	}
 	Ok(tip)
+}
+
+fn handle_block_header(
+	header: &BlockHeader,
+	ctx: &mut BlockContext,
+	batch: &mut store::Batch,
+) -> Result<(), Error> {
+	validate_header(header, ctx, batch)?;
+	add_block_header(header, batch)?;
+
+	// Update header_head (but only if this header increases our total known work).
+	// i.e. Only if this header is now the head of the current "most work" chain.
+	update_header_head(header, ctx, batch)?;
+	Ok(())
 }
 
 /// Process block header as part of "header first" block propagation.
