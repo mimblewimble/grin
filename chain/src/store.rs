@@ -178,6 +178,10 @@ impl<'a> Batch<'a> {
 		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]), "HEADER_HEAD")
 	}
 
+	pub fn get_sync_head(&self) -> Result<Tip, Error> {
+		option_to_not_found(self.db.get_ser(&vec![SYNC_HEAD_PREFIX]), "SYNC_HEAD")
+	}
+
 	pub fn save_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&vec![HEAD_PREFIX], t)?;
 		self.db.put_ser(&vec![HEADER_HEAD_PREFIX], t)

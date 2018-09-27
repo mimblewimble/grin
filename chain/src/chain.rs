@@ -33,6 +33,7 @@ use error::{Error, ErrorKind};
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
+use store::Batch;
 use txhashset;
 use types::{ChainAdapter, NoStatus, Options, Tip, TxHashsetWriteStatus};
 use util::secp::pedersen::{Commitment, RangeProof};
@@ -234,9 +235,8 @@ impl Chain {
 		opts: Options,
 	) -> Result<(Option<Tip>, Option<Block>), Error> {
 		let mut batch = self.store.batch()?;
-		let head = batch.head()?;
 		let bhash = b.hash();
-		let mut ctx = self.ctx_from_head(head, opts)?;
+		let mut ctx = self.new_ctx(opts, &mut batch)?;
 
 		let res = pipe::process_block(&b, &mut ctx, &mut batch, self.verifier_cache.clone());
 
@@ -335,11 +335,8 @@ impl Chain {
 
 	/// Process a block header received during "header first" propagation.
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
-		let header_head = self.get_header_head()?;
-
-		let mut ctx = self.ctx_from_head(header_head, opts)?;
-
 		let mut batch = self.store.batch()?;
+		let mut ctx = self.new_ctx(opts, &mut batch)?;
 		pipe::process_block_header(bh, &mut ctx, &mut batch)?;
 		batch.commit()?;
 		Ok(())
@@ -352,23 +349,22 @@ impl Chain {
 		headers: &Vec<BlockHeader>,
 		opts: Options,
 	) -> Result<Tip, Error> {
-		let sync_head = self.get_sync_head()?;
-		let mut sync_ctx = self.ctx_from_head(sync_head, opts)?;
-
-		let header_head = self.get_header_head()?;
-		let mut header_ctx = self.ctx_from_head(header_head, opts)?;
-
 		let mut batch = self.store.batch()?;
-		let res = pipe::sync_block_headers(headers, &mut sync_ctx, &mut header_ctx, &mut batch)?;
+		let mut ctx = self.new_ctx(opts, &mut batch)?;
+		let res = pipe::sync_block_headers(headers, &mut ctx, &mut batch)?;
 		batch.commit()?;
-
 		Ok(res)
 	}
 
-	fn ctx_from_head(&self, head: Tip, opts: Options) -> Result<pipe::BlockContext, Error> {
+	fn new_ctx(&self, opts: Options, batch: &mut Batch) -> Result<pipe::BlockContext, Error> {
+		let head = batch.head()?;
+		let header_head = batch.get_header_head()?;
+		let sync_head = batch.get_sync_head()?;
 		Ok(pipe::BlockContext {
 			opts,
 			head,
+			header_head,
+			sync_head,
 			pow_verifier: self.pow_verifier,
 			block_hashes_cache: self.block_hashes_cache.clone(),
 			txhashset: self.txhashset.clone(),

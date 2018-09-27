@@ -44,6 +44,10 @@ pub struct BlockContext {
 	pub opts: Options,
 	/// The head
 	pub head: Tip,
+	/// The header head
+	pub header_head: Tip,
+	/// The sync head
+	pub sync_head: Tip,
 	/// The POW verification function
 	pub pow_verifier: fn(&BlockHeader, u8) -> bool,
 	/// MMR sum tree states
@@ -89,8 +93,9 @@ pub fn process_block(
 	let txhashset = ctx.txhashset.clone();
 	let mut txhashset = txhashset.write().unwrap();
 
+	// TODO - Do we actually need this? We don't this for block_headers
 	// Update head now that we are in the lock.
-	ctx.head = batch.head()?;
+	// ctx.head = ctx.store.head()?;
 
 	// Fast in-memory checks to avoid re-processing a block we recently processed.
 	{
@@ -202,8 +207,7 @@ pub fn process_block(
 /// This is only ever used during sync and uses a context based on sync_head.
 pub fn sync_block_headers(
 	headers: &Vec<BlockHeader>,
-	sync_ctx: &mut BlockContext,
-	header_ctx: &mut BlockContext,
+	ctx: &mut BlockContext,
 	batch: &mut store::Batch,
 ) -> Result<Tip, Error> {
 	if let Some(header) = headers.first() {
@@ -219,19 +223,19 @@ pub fn sync_block_headers(
 	let mut tip = batch.get_header_head()?;
 
 	for header in headers {
-		validate_header(header, sync_ctx, batch)?;
+		validate_header(header, ctx, batch)?;
 		add_block_header(header, batch)?;
 
 		// Update header_head (but only if this header increases our total known work).
 		// i.e. Only if this header is now the head of the current "most work" chain.
-		update_header_head(header, header_ctx, batch)?;
+		update_header_head(header, ctx, batch)?;
 
 		// Update sync_head regardless of total work.
 		// We may be syncing a long fork that will *eventually* increase the work
 		// and become the "most work" chain.
 		// header_head and sync_head will diverge in this situation until we switch to
 		// a single "most work" chain.
-		tip = update_sync_head(header, sync_ctx, batch)?;
+		tip = update_sync_head(header, ctx, batch)?;
 	}
 	Ok(tip)
 }
@@ -260,8 +264,8 @@ pub fn process_block_header(
 /// recently. Keeps duplicates from the network in check.
 /// ctx here is specific to the header_head (tip of the header chain)
 fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
-	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
-		return Err(ErrorKind::Unfit("already known".to_string()).into());
+	if bh == ctx.header_head.last_block_h || bh == ctx.header_head.prev_block_h {
+		return Err(ErrorKind::Unfit("header already known".to_string()).into());
 	}
 	Ok(())
 }
@@ -658,7 +662,7 @@ fn update_sync_head(
 	batch
 		.save_sync_head(&tip)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save sync head".to_owned()))?;
-	ctx.head = tip.clone();
+	ctx.sync_head = tip.clone();
 	debug!(LOGGER, "sync head {} @ {}", bh.hash(), bh.height);
 	Ok(tip)
 }
@@ -669,11 +673,11 @@ fn update_header_head(
 	batch: &mut store::Batch,
 ) -> Result<Option<Tip>, Error> {
 	let tip = Tip::from_block(bh);
-	if tip.total_difficulty > ctx.head.total_difficulty {
+	if tip.total_difficulty > ctx.header_head.total_difficulty {
 		batch
 			.save_header_head(&tip)
 			.map_err(|e| ErrorKind::StoreErr(e, "pipe save header head".to_owned()))?;
-		ctx.head = tip.clone();
+		ctx.header_head = tip.clone();
 		debug!(LOGGER, "header head {} @ {}", bh.hash(), bh.height);
 		Ok(Some(tip))
 	} else {
