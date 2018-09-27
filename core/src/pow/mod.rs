@@ -36,6 +36,7 @@ extern crate serde;
 
 extern crate grin_util as util;
 
+#[macro_use]
 mod common;
 pub mod cuckatoo;
 pub mod cuckoo;

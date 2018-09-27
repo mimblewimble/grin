@@ -122,3 +122,32 @@ where
 	}
 	Ok(T::from(masked).ok_or(ErrorKind::IntegerCast)?)
 }
+
+/// Macros to clean up integer unwrapping
+#[macro_export]
+macro_rules! to_u64 {
+	($n:expr) => {
+		$n.to_u64().ok_or(ErrorKind::IntegerCast)?
+	};
+}
+
+#[macro_export]
+macro_rules! to_u32 {
+	($n:expr) => {
+		$n.to_u64().ok_or(ErrorKind::IntegerCast)? as u32
+	};
+}
+
+#[macro_export]
+macro_rules! to_usize {
+	($n:expr) => {
+		$n.to_u64().ok_or(ErrorKind::IntegerCast)? as usize
+	};
+}
+
+#[macro_export]
+macro_rules! to_edge {
+	($n:expr) => {
+		T::from($n).ok_or(ErrorKind::IntegerCast)?
+	};
+}

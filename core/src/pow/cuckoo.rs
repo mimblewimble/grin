@@ -84,13 +84,13 @@ where
 		max_sols: u32,
 	) -> Result<CuckooContext<T>, Error> {
 		let num_edges = 1 << edge_bits;
-		let easiness = easiness_pct.to_u64().ok_or(ErrorKind::IntegerCast)? * num_edges / 100;
+		let easiness = to_u64!(easiness_pct) * num_edges / 100;
 		Ok(CuckooContext {
 			edge_bits: edge_bits,
 			siphash_keys: [0; 4],
-			easiness: T::from(easiness).ok_or(ErrorKind::IntegerCast)?,
+			easiness: to_edge!(easiness),
 			proof_size: proof_size,
-			edge_mask: T::from(num_edges / 2 - 1).ok_or(ErrorKind::IntegerCast)?,
+			edge_mask: to_edge!(num_edges / 2 - 1),
 			graph: vec![T::zero(); num_edges as usize + 1],
 			_max_sols: max_sols,
 		})
@@ -142,9 +142,9 @@ where
 				return Err(ErrorKind::Path)?;
 			}
 			us[nu as usize] = u;
-			u = self.graph[u.to_u64().ok_or(ErrorKind::IntegerCast)? as usize];
+			u = self.graph[to_usize!(u)];
 		}
-		Ok(T::from(nu).ok_or(ErrorKind::IntegerCast)?)
+		Ok(to_edge!(nu))
 	}
 
 	fn update_graph(
@@ -157,15 +157,15 @@ where
 		if nu < nv {
 			while nu != 0 {
 				nu -= 1;
-				self.graph[us[nu + 1].to_u64().ok_or(ErrorKind::IntegerCast)? as usize] = us[nu];
+				self.graph[to_usize!(us[nu + 1])] = us[nu];
 			}
-			self.graph[us[0].to_u64().ok_or(ErrorKind::IntegerCast)? as usize] = vs[0];
+			self.graph[to_usize!(us[0])] = vs[0];
 		} else {
 			while nv != 0 {
 				nv -= 1;
-				self.graph[vs[nv + 1].to_u64().ok_or(ErrorKind::IntegerCast)? as usize] = vs[nv];
+				self.graph[to_usize!(vs[nv + 1])] = vs[nv];
 			}
-			self.graph[vs[0].to_u64().ok_or(ErrorKind::IntegerCast)? as usize] = us[0];
+			self.graph[to_usize!(vs[0])] = us[0];
 		}
 		Ok(())
 	}
@@ -216,10 +216,10 @@ where
 		}
 		let mut n = 0;
 		let mut sol = vec![T::zero(); self.proof_size];
-		for nonce in 0..self.easiness.to_u64().ok_or(ErrorKind::IntegerCast)? as usize {
-			let edge = self.new_edge(T::from(nonce).ok_or(ErrorKind::IntegerCast)?)?;
+		for nonce in 0..to_usize!(self.easiness) {
+			let edge = self.new_edge(to_edge!(nonce))?;
 			if cycle.contains(&edge) {
-				sol[n] = T::from(nonce).ok_or(ErrorKind::IntegerCast)?;
+				sol[n] = to_edge!(nonce);
 				n += 1;
 				cycle.remove(&edge);
 			}
@@ -235,22 +235,16 @@ where
 	pub fn find_cycles_impl(&mut self) -> Result<Vec<Proof>, Error> {
 		let mut us = [T::zero(); MAXPATHLEN];
 		let mut vs = [T::zero(); MAXPATHLEN];
-		for nonce in 0..self.easiness.to_u64().ok_or(ErrorKind::IntegerCast)? as usize {
-			us[0] = self.new_node(T::from(nonce).ok_or(ErrorKind::IntegerCast)?, 0)?;
-			vs[0] = self.new_node(T::from(nonce).ok_or(ErrorKind::IntegerCast)?, 1)?;
-			let u = self.graph[us[0].to_u64().ok_or(ErrorKind::IntegerCast)? as usize];
-			let v = self.graph[vs[0].to_u64().ok_or(ErrorKind::IntegerCast)? as usize];
+		for nonce in 0..to_usize!(self.easiness) {
+			us[0] = self.new_node(to_edge!(nonce), 0)?;
+			vs[0] = self.new_node(to_edge!(nonce), 1)?;
+			let u = self.graph[to_usize!(us[0])];
+			let v = self.graph[to_usize!(vs[0])];
 			if us[0] == T::zero() {
 				continue; // ignore duplicate edges
 			}
-			let nu = self
-				.path(u, &mut us)?
-				.to_u64()
-				.ok_or(ErrorKind::IntegerCast)? as usize;
-			let nv = self
-				.path(v, &mut vs)?
-				.to_u64()
-				.ok_or(ErrorKind::IntegerCast)? as usize;
+			let nu = to_usize!(self.path(u, &mut us)?);
+			let nv = to_usize!(self.path(v, &mut vs)?);
 
 			let sol = self.find_sol(nu, &us, nv, &vs);
 			match sol {
@@ -273,7 +267,7 @@ where
 	/// nonces form a cycle in a Cuckoo graph. Each nonce generates an edge, we
 	/// build the nodes on both side of that edge and count the connections.
 	pub fn verify_impl(&self, proof: &Proof) -> Result<(), Error> {
-		let easiness = self.easiness.to_u64().ok_or(ErrorKind::IntegerCast)?;
+		let easiness = to_u64!(self.easiness);
 		let nonces = &proof.nonces;
 		let mut us = vec![T::zero(); proof.proof_size()];
 		let mut vs = vec![T::zero(); proof.proof_size()];
@@ -281,8 +275,8 @@ where
 			if nonces[n] >= easiness || (n != 0 && nonces[n] <= nonces[n - 1]) {
 				return Err(ErrorKind::Verification("edge wrong size".to_owned()))?;
 			}
-			us[n] = self.new_node(T::from(nonces[n]).ok_or(ErrorKind::IntegerCast)?, 0)?;
-			vs[n] = self.new_node(T::from(nonces[n]).ok_or(ErrorKind::IntegerCast)?, 1)?;
+			us[n] = self.new_node(to_edge!(nonces[n]), 0)?;
+			vs[n] = self.new_node(to_edge!(nonces[n]), 1)?;
 		}
 		let mut i = 0;
 		let mut count = proof.proof_size();

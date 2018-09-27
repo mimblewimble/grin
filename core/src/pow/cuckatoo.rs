@@ -18,8 +18,7 @@ use std::mem;
 use byteorder::{BigEndian, LittleEndian, WriteBytesExt};
 use croaring::Bitmap;
 
-use pow::common::EdgeType;
-use pow::common::{self, Link};
+use pow::common::{self, EdgeType, Link};
 use pow::error::{Error, ErrorKind};
 use pow::{PoWContext, Proof};
 use util;
@@ -54,7 +53,7 @@ where
 {
 	/// Create a new graph with given parameters
 	pub fn new(max_edges: T, max_sols: u32, proof_size: usize) -> Result<Graph<T>, Error> {
-		let max_nodes = 2 * max_edges.to_u64().ok_or(ErrorKind::IntegerCast)?;
+		let max_nodes = 2 * to_u64!(max_edges);
 		Ok(Graph {
 			max_edges: max_edges,
 			max_nodes: max_nodes,
@@ -64,37 +63,35 @@ where
 			max_sols: max_sols,
 			solutions: vec![],
 			proof_size: proof_size,
-			nil: T::from(T::max_value()).ok_or(ErrorKind::IntegerCast)?,
+			nil: T::max_value(),
 		})
 	}
 
 	pub fn reset(&mut self) -> Result<(), Error> {
 		//TODO: Can be optimised
 		self.links = Vec::with_capacity(2 * self.max_nodes as usize);
-		self.adj_list = vec![
-			T::from(T::max_value()).ok_or(ErrorKind::IntegerCast)?;
-			2 * self.max_nodes as usize
-		];
+		self.adj_list = vec![T::max_value(); 2 * self.max_nodes as usize];
 		self.solutions = vec![Proof::zero(self.proof_size); 1];
 		self.visited = Bitmap::create();
 		Ok(())
 	}
 
 	pub fn byte_count(&self) -> Result<u64, Error> {
-		Ok(2
-			* self.max_edges.to_u64().ok_or(ErrorKind::IntegerCast)?
-			* mem::size_of::<Link<T>>() as u64 + mem::size_of::<T>() as u64 * 2 * self.max_nodes)
+		Ok(
+			2 * to_u64!(self.max_edges) * mem::size_of::<Link<T>>() as u64
+				+ mem::size_of::<T>() as u64 * 2 * self.max_nodes,
+		)
 	}
 
 	/// Add an edge to the graph
 	pub fn add_edge(&mut self, u: T, mut v: T) -> Result<(), Error> {
-		let max_nodes_t = T::from(self.max_nodes).ok_or(ErrorKind::IntegerCast)?;
+		let max_nodes_t = to_edge!(self.max_nodes);
 		if u >= max_nodes_t || v >= max_nodes_t {
 			return Err(ErrorKind::EdgeAddition)?;
 		}
-		v = v + T::from(self.max_nodes).ok_or(ErrorKind::IntegerCast)?;
-		let adj_u = self.adj_list[(u ^ T::one()).to_u64().ok_or(ErrorKind::IntegerCast)? as usize];
-		let adj_v = self.adj_list[(v ^ T::one()).to_u64().ok_or(ErrorKind::IntegerCast)? as usize];
+		v = v + to_edge!(self.max_nodes);
+		let adj_u = self.adj_list[to_usize!(u ^ T::one())];
+		let adj_v = self.adj_list[to_usize!(v ^ T::one())];
 		if adj_u != self.nil && adj_v != self.nil {
 			let sol_index = self.solutions.len() - 1;
 			self.solutions[sol_index].nonces[0] = self.links.len() as u64 / 2;
@@ -102,21 +99,19 @@ where
 		}
 		let ulink = self.links.len();
 		let vlink = self.links.len() + 1;
-		if T::from(vlink).ok_or(ErrorKind::IntegerCast)? == self.nil {
+		if to_edge!(vlink) == self.nil {
 			return Err(ErrorKind::EdgeAddition)?;
 		}
 		self.links.push(Link {
-			next: self.adj_list[u.to_u64().ok_or(ErrorKind::IntegerCast)? as usize],
+			next: self.adj_list[to_usize!(u)],
 			to: u,
 		});
 		self.links.push(Link {
-			next: self.adj_list[v.to_u64().ok_or(ErrorKind::IntegerCast)? as usize],
+			next: self.adj_list[to_usize!(v)],
 			to: v,
 		});
-		self.adj_list[u.to_u64().ok_or(ErrorKind::IntegerCast)? as usize] =
-			T::from(ulink).ok_or(ErrorKind::IntegerCast)?;
-		self.adj_list[v.to_u64().ok_or(ErrorKind::IntegerCast)? as usize] =
-			T::from(vlink).ok_or(ErrorKind::IntegerCast)?;
+		self.adj_list[to_usize!(u)] = T::from(ulink).ok_or(ErrorKind::IntegerCast)?;
+		self.adj_list[to_usize!(v)] = T::from(vlink).ok_or(ErrorKind::IntegerCast)?;
 		Ok(())
 	}
 
@@ -125,7 +120,7 @@ where
 	}
 
 	fn cycles_with_link(&mut self, len: u32, u: T, dest: T) -> Result<(), Error> {
-		if self.test_bit((u >> 1).to_u64().ok_or(ErrorKind::IntegerCast)?) {
+		if self.test_bit(to_u64!(u >> 1)) {
 			return Ok(());
 		}
 		if (u ^ T::one()) == dest {
@@ -139,24 +134,20 @@ where
 		} else if len == self.proof_size as u32 {
 			return Ok(());
 		}
-		let mut au1 =
-			self.adj_list[(u ^ T::one()).to_u64().ok_or(ErrorKind::IntegerCast)? as usize];
+		let mut au1 = self.adj_list[to_usize!(u ^ T::one())];
 		if au1 != self.nil {
-			self.visited
-				.add((u >> 1).to_u64().ok_or(ErrorKind::IntegerCast)? as u32);
+			self.visited.add(to_u32!(u >> 1));
 			while au1 != self.nil {
 				let i = self.solutions.len() - 1;
-				self.solutions[i].nonces[len as usize] =
-					au1.to_u64().ok_or(ErrorKind::IntegerCast)? / 2;
-				let link_index = (au1 ^ T::one()).to_u64().ok_or(ErrorKind::IntegerCast)? as usize;
+				self.solutions[i].nonces[len as usize] = to_u64!(au1) / 2;
+				let link_index = to_usize!(au1 ^ T::one());
 				let link = self.links[link_index].to;
 				if link != self.nil {
 					self.cycles_with_link(len + 1, link, dest)?;
 				}
-				au1 = self.links[au1.to_u64().ok_or(ErrorKind::IntegerCast)? as usize].next;
+				au1 = self.links[to_usize!(au1)].next;
 			}
-			self.visited
-				.remove((u >> 1).to_u64().ok_or(ErrorKind::IntegerCast)? as u32);
+			self.visited.remove(to_u32!(u >> 1));
 		}
 		Ok(())
 	}
@@ -218,17 +209,13 @@ where
 	) -> Result<CuckatooContext<T>, Error> {
 		let num_edges = 1 << edge_bits;
 		let num_nodes = 2 * num_edges as u64;
-		let easiness = easiness_pct.to_u64().ok_or(ErrorKind::IntegerCast)? * num_nodes / 100;
+		let easiness = to_u64!(easiness_pct) * num_nodes / 100;
 		Ok(CuckatooContext {
 			siphash_keys: [0; 4],
-			easiness: T::from(easiness).ok_or(ErrorKind::IntegerCast)?,
-			graph: Graph::new(
-				T::from(num_edges).ok_or(ErrorKind::IntegerCast)?,
-				max_sols,
-				proof_size,
-			)?,
+			easiness: to_edge!(easiness),
+			graph: Graph::new(to_edge!(num_edges), max_sols, proof_size)?,
 			proof_size: proof_size,
-			edge_mask: T::from(num_edges - 1).ok_or(ErrorKind::IntegerCast)?,
+			edge_mask: to_edge!(num_edges - 1),
 		})
 	}
 
@@ -267,13 +254,10 @@ where
 
 	/// Simple implementation of algorithm
 	pub fn find_cycles_impl(&mut self) -> Result<Vec<Proof>, Error> {
-		for n in 0..self.easiness.to_u64().ok_or(ErrorKind::IntegerCast)? {
-			let u = self.sipnode(T::from(n).ok_or(ErrorKind::IntegerCast)?, 0)?;
-			let v = self.sipnode(T::from(n).ok_or(ErrorKind::IntegerCast)?, 1)?;
-			self.graph.add_edge(
-				T::from(u).ok_or(ErrorKind::IntegerCast)?,
-				T::from(v).ok_or(ErrorKind::IntegerCast)?,
-			)?;
+		for n in 0..to_u64!(self.easiness) {
+			let u = self.sipnode(to_edge!(n), 0)?;
+			let v = self.sipnode(to_edge!(n), 1)?;
+			self.graph.add_edge(to_edge!(u), to_edge!(v))?;
 		}
 		self.graph.solutions.pop();
 		for s in &mut self.graph.solutions {
@@ -298,20 +282,14 @@ where
 		let mut xor1: u64 = xor0;
 
 		for n in 0..proof.proof_size() {
-			if nonces[n] > self.edge_mask.to_u64().ok_or(ErrorKind::IntegerCast)? {
+			if nonces[n] > to_u64!(self.edge_mask) {
 				return Err(ErrorKind::Verification("edge too big".to_owned()))?;
 			}
 			if n > 0 && nonces[n] <= nonces[n - 1] {
 				return Err(ErrorKind::Verification("edges not ascending".to_owned()))?;
 			}
-			uvs[2 * n] = self
-				.sipnode(T::from(nonces[n]).ok_or(ErrorKind::IntegerCast)?, 0)?
-				.to_u64()
-				.ok_or(ErrorKind::IntegerCast)?;
-			uvs[2 * n + 1] = self
-				.sipnode(T::from(nonces[n]).ok_or(ErrorKind::IntegerCast)?, 1)?
-				.to_u64()
-				.ok_or(ErrorKind::IntegerCast)?;
+			uvs[2 * n] = to_u64!(self.sipnode(to_edge!(nonces[n]), 0)?);
+			uvs[2 * n + 1] = to_u64!(self.sipnode(to_edge!(nonces[n]), 1)?);
 			xor0 ^= uvs[2 * n];
 			xor1 ^= uvs[2 * n + 1];
 		}
