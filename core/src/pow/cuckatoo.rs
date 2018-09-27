@@ -183,7 +183,12 @@ where
 		)?))
 	}
 
-	fn set_header_nonce(&mut self, header: Vec<u8>, nonce: Option<u32>, solve:bool) -> Result<(), Error> {
+	fn set_header_nonce(
+		&mut self,
+		header: Vec<u8>,
+		nonce: Option<u32>,
+		solve: bool,
+	) -> Result<(), Error> {
 		self.set_header_nonce_impl(header, nonce, solve)
 	}
 
@@ -236,7 +241,7 @@ where
 		&mut self,
 		mut header: Vec<u8>,
 		nonce: Option<u32>,
-		solve: bool
+		solve: bool,
 	) -> Result<(), Error> {
 		let len = header.len();
 		header.truncate(len - mem::size_of::<u32>());
@@ -344,12 +349,12 @@ mod test {
 
 	// Cuckatoo 29 Solution for Header [0u8;80] - nonce 20
 	static V1_29: [u64; 42] = [
-	0x48a9e2,   0x9cf043,   0x155ca30,  0x18f4783,  0x248f86c,  0x2629a64,  0x5bad752,  0x72e3569,
-	0x93db760,  0x97d3b37,  0x9e05670,  0xa315d5a,  0xa3571a1,  0xa48db46,  0xa7796b6,  0xac43611,
-	0xb64912f,  0xbb6c71e,  0xbcc8be1,  0xc38a43a,  0xd4faa99,  0xe018a66,  0xe37e49c,  0xfa975fa,
-	0x11786035, 0x1243b60a, 0x12892da0, 0x141b5453, 0x1483c3a0, 0x1505525e, 0x1607352c, 0x16181fe3,
-	0x17e3a1da, 0x180b651e, 0x1899d678, 0x1931b0bb, 0x19606448, 0x1b041655, 0x1b2c20ad, 0x1bd7a83c,
-	0x1c05d5b0, 0x1c0b9caa,
+		0x48a9e2, 0x9cf043, 0x155ca30, 0x18f4783, 0x248f86c, 0x2629a64, 0x5bad752, 0x72e3569,
+		0x93db760, 0x97d3b37, 0x9e05670, 0xa315d5a, 0xa3571a1, 0xa48db46, 0xa7796b6, 0xac43611,
+		0xb64912f, 0xbb6c71e, 0xbcc8be1, 0xc38a43a, 0xd4faa99, 0xe018a66, 0xe37e49c, 0xfa975fa,
+		0x11786035, 0x1243b60a, 0x12892da0, 0x141b5453, 0x1483c3a0, 0x1505525e, 0x1607352c,
+		0x16181fe3, 0x17e3a1da, 0x180b651e, 0x1899d678, 0x1931b0bb, 0x19606448, 0x1b041655,
+		0x1b2c20ad, 0x1bd7a83c, 0x1c05d5b0, 0x1c0b9caa,
 	];
 
 	#[test]
@@ -408,9 +413,9 @@ mod test {
 		Ok(())
 	}
 
-	fn basic_solve<T>() -> Result<(), Error> 
+	fn basic_solve<T>() -> Result<(), Error>
 	where
-		T: EdgeType 
+		T: EdgeType,
 	{
 		let easiness_pct = 50;
 		let nonce = 1546569;
@@ -428,8 +433,7 @@ mod test {
 			nonce,
 			easiness_pct
 		);
-		let mut ctx_u32 =
-			CuckatooContext::<T>::new(edge_bits, proof_size, easiness_pct, max_sols)?;
+		let mut ctx_u32 = CuckatooContext::<T>::new(edge_bits, proof_size, easiness_pct, max_sols)?;
 		let mut bytes = ctx_u32.byte_count()?;
 		let mut unit = 0;
 		while bytes >= 10240 {

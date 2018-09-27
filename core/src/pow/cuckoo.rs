@@ -59,7 +59,12 @@ where
 		)?))
 	}
 
-	fn set_header_nonce(&mut self, header: Vec<u8>, nonce: Option<u32>, solve: bool) -> Result<(), Error> {
+	fn set_header_nonce(
+		&mut self,
+		header: Vec<u8>,
+		nonce: Option<u32>,
+		solve: bool,
+	) -> Result<(), Error> {
 		self.set_header_nonce_impl(header, nonce, solve)
 	}
 
