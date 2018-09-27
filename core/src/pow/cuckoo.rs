@@ -59,8 +59,8 @@ where
 		)?))
 	}
 
-	fn set_header_nonce(&mut self, header: Vec<u8>, nonce: Option<u32>) -> Result<(), Error> {
-		self.set_header_nonce_impl(header, nonce)
+	fn set_header_nonce(&mut self, header: Vec<u8>, nonce: Option<u32>, solve: bool) -> Result<(), Error> {
+		self.set_header_nonce_impl(header, nonce, solve)
 	}
 
 	fn find_cycles(&mut self) -> Result<Vec<Proof>, Error> {
@@ -108,9 +108,12 @@ where
 		&mut self,
 		header: Vec<u8>,
 		nonce: Option<u32>,
+		solve: bool,
 	) -> Result<(), Error> {
 		self.siphash_keys = common::set_header_nonce(header, nonce)?;
-		self.reset()?;
+		if solve {
+			self.reset()?;
+		}
 		Ok(())
 	}
 
@@ -398,21 +401,21 @@ mod test {
 		T: EdgeType,
 	{
 		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 75, 10)?;
-		cuckoo_ctx.set_header_nonce([49].to_vec(), None)?;
+		cuckoo_ctx.set_header_nonce([49].to_vec(), None, true)?;
 		let res = cuckoo_ctx.find_cycles()?;
 		let mut proof = Proof::new(V1.to_vec());
 		proof.cuckoo_sizeshift = 20;
 		assert_eq!(proof, res[0]);
 
 		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 70, 10)?;
-		cuckoo_ctx.set_header_nonce([50].to_vec(), None)?;
+		cuckoo_ctx.set_header_nonce([50].to_vec(), None, true)?;
 		let res = cuckoo_ctx.find_cycles()?;
 		let mut proof = Proof::new(V2.to_vec());
 		proof.cuckoo_sizeshift = 20;
 		assert_eq!(proof, res[0]);
 
 		//re-use context
-		cuckoo_ctx.set_header_nonce([51].to_vec(), None)?;
+		cuckoo_ctx.set_header_nonce([51].to_vec(), None, true)?;
 		let res = cuckoo_ctx.find_cycles()?;
 		let mut proof = Proof::new(V3.to_vec());
 		proof.cuckoo_sizeshift = 20;
@@ -425,12 +428,12 @@ mod test {
 		T: EdgeType,
 	{
 		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 75, 10)?;
-		cuckoo_ctx.set_header_nonce([49].to_vec(), None)?;
+		cuckoo_ctx.set_header_nonce([49].to_vec(), None, false)?;
 		assert!(cuckoo_ctx.verify(&Proof::new(V1.to_vec().clone())).is_ok());
 		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 70, 10)?;
-		cuckoo_ctx.set_header_nonce([50].to_vec(), None)?;
+		cuckoo_ctx.set_header_nonce([50].to_vec(), None, false)?;
 		assert!(cuckoo_ctx.verify(&Proof::new(V2.to_vec().clone())).is_ok());
-		cuckoo_ctx.set_header_nonce([51].to_vec(), None)?;
+		cuckoo_ctx.set_header_nonce([51].to_vec(), None, false)?;
 		assert!(cuckoo_ctx.verify(&Proof::new(V3.to_vec().clone())).is_ok());
 		Ok(())
 	}
@@ -441,17 +444,17 @@ mod test {
 	{
 		// edge checks
 		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 75, 10)?;
-		cuckoo_ctx.set_header_nonce([49].to_vec(), None)?;
+		cuckoo_ctx.set_header_nonce([49].to_vec(), None, false)?;
 		// edge checks
 		assert!(!cuckoo_ctx.verify(&Proof::new(vec![0; 42])).is_ok());
 		assert!(!cuckoo_ctx.verify(&Proof::new(vec![0xffff; 42])).is_ok());
 		// wrong data for proof
-		cuckoo_ctx.set_header_nonce([50].to_vec(), None)?;
+		cuckoo_ctx.set_header_nonce([50].to_vec(), None, false)?;
 		assert!(!cuckoo_ctx.verify(&Proof::new(V1.to_vec().clone())).is_ok());
 		let mut test_header = [0; 32];
 		test_header[0] = 24;
 		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 50, 10)?;
-		cuckoo_ctx.set_header_nonce(test_header.to_vec(), None)?;
+		cuckoo_ctx.set_header_nonce(test_header.to_vec(), None, false)?;
 		assert!(!cuckoo_ctx.verify(&Proof::new(V4.to_vec().clone())).is_ok());
 		Ok(())
 	}
@@ -463,7 +466,7 @@ mod test {
 		for n in 1..5 {
 			let h = [n; 32];
 			let mut cuckoo_ctx = CuckooContext::<T>::new(16, 42, 75, 10)?;
-			cuckoo_ctx.set_header_nonce(h.to_vec(), None)?;
+			cuckoo_ctx.set_header_nonce(h.to_vec(), None, false)?;
 			let res = cuckoo_ctx.find_cycles()?;
 			assert!(cuckoo_ctx.verify(&res[0]).is_ok())
 		}

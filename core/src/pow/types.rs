@@ -43,7 +43,8 @@ where
 		max_sols: u32,
 	) -> Result<Box<Self>, Error>;
 	/// Sets the header along with an optional nonce at the end
-	fn set_header_nonce(&mut self, header: Vec<u8>, nonce: Option<u32>) -> Result<(), Error>;
+	/// solve: whether to set up structures for a solve (true) or just validate (false)
+	fn set_header_nonce(&mut self, header: Vec<u8>, nonce: Option<u32>, solve: bool) -> Result<(), Error>;
 	/// find solutions using the stored parameters and header
 	fn find_cycles(&mut self) -> Result<Vec<Proof>, Error>;
 	/// Verify a solution with the stored parameters

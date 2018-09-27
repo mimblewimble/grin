@@ -102,7 +102,7 @@ impl Miner {
 				consensus::EASINESS,
 				10,
 			).unwrap();
-			ctx.set_header_nonce(b.header.pre_pow_hash().to_vec(), None)
+			ctx.set_header_nonce(b.header.pre_pow_hash().to_vec(), None, true)
 				.unwrap();
 			if let Ok(proofs) = ctx.find_cycles() {
 				b.header.pow.proof = proofs[0].clone();

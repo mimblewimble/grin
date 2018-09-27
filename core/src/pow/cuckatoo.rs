@@ -183,8 +183,8 @@ where
 		)?))
 	}
 
-	fn set_header_nonce(&mut self, header: Vec<u8>, nonce: Option<u32>) -> Result<(), Error> {
-		self.set_header_nonce_impl(header, nonce)
+	fn set_header_nonce(&mut self, header: Vec<u8>, nonce: Option<u32>, solve:bool) -> Result<(), Error> {
+		self.set_header_nonce_impl(header, nonce, solve)
 	}
 
 	fn find_cycles(&mut self) -> Result<Vec<Proof>, Error> {
@@ -236,6 +236,7 @@ where
 		&mut self,
 		mut header: Vec<u8>,
 		nonce: Option<u32>,
+		solve: bool
 	) -> Result<(), Error> {
 		let len = header.len();
 		header.truncate(len - mem::size_of::<u32>());
@@ -243,7 +244,9 @@ where
 			header.write_u32::<LittleEndian>(n)?;
 		}
 		self.siphash_keys = common::set_header_nonce(header, nonce)?;
-		self.graph.reset()?;
+		if solve {
+			self.graph.reset()?;
+		}
 		Ok(())
 	}
 
@@ -339,15 +342,76 @@ where
 mod test {
 	use super::*;
 
+	// Cuckatoo 29 Solution for Header [0u8;80] - nonce 20
+	static V1_29: [u64; 42] = [
+	0x48a9e2,   0x9cf043,   0x155ca30,  0x18f4783,  0x248f86c,  0x2629a64,  0x5bad752,  0x72e3569,
+	0x93db760,  0x97d3b37,  0x9e05670,  0xa315d5a,  0xa3571a1,  0xa48db46,  0xa7796b6,  0xac43611,
+	0xb64912f,  0xbb6c71e,  0xbcc8be1,  0xc38a43a,  0xd4faa99,  0xe018a66,  0xe37e49c,  0xfa975fa,
+	0x11786035, 0x1243b60a, 0x12892da0, 0x141b5453, 0x1483c3a0, 0x1505525e, 0x1607352c, 0x16181fe3,
+	0x17e3a1da, 0x180b651e, 0x1899d678, 0x1931b0bb, 0x19606448, 0x1b041655, 0x1b2c20ad, 0x1bd7a83c,
+	0x1c05d5b0, 0x1c0b9caa,
+	];
+
 	#[test]
 	fn cuckatoo() {
-		let ret = basic_solve();
+		let ret = basic_solve::<u32>();
 		if let Err(r) = ret {
-			panic!("basic_solve: Error: {}", r);
+			panic!("basic_solve u32: Error: {}", r);
+		}
+		let ret = basic_solve::<u64>();
+		if let Err(r) = ret {
+			panic!("basic_solve u64: Error: {}", r);
+		}
+		let ret = validate29_vectors::<u32>();
+		if let Err(r) = ret {
+			panic!("validate_29_vectors u32: Error: {}", r);
+		}
+		let ret = validate29_vectors::<u64>();
+		if let Err(r) = ret {
+			panic!("validate_29_vectors u64: Error: {}", r);
+		}
+		let ret = validate_fail::<u32>();
+		if let Err(r) = ret {
+			panic!("validate_fail u32: Error: {}", r);
+		}
+		let ret = validate_fail::<u64>();
+		if let Err(r) = ret {
+			panic!("validate_fail u64: Error: {}", r);
 		}
 	}
 
-	fn basic_solve() -> Result<(), Error> {
+	fn validate29_vectors<T>() -> Result<(), Error>
+	where
+		T: EdgeType,
+	{
+		let mut ctx = CuckatooContext::<T>::new(29, 42, 50, 10)?;
+		ctx.set_header_nonce([0u8; 80].to_vec(), Some(20), false)?;
+		assert!(ctx.verify(&Proof::new(V1_29.to_vec().clone())).is_ok());
+		Ok(())
+	}
+
+	fn validate_fail<T>() -> Result<(), Error>
+	where
+		T: EdgeType,
+	{
+		let mut ctx = CuckatooContext::<T>::new(29, 42, 50, 10)?;
+		let mut header = [0u8; 80];
+		header[0] = 1u8;
+		ctx.set_header_nonce(header.to_vec(), Some(20), false)?;
+		assert!(!ctx.verify(&Proof::new(V1_29.to_vec().clone())).is_ok());
+		header[0] = 0u8;
+		ctx.set_header_nonce(header.to_vec(), Some(20), false)?;
+		assert!(ctx.verify(&Proof::new(V1_29.to_vec().clone())).is_ok());
+		let mut bad_proof = V1_29.clone();
+		bad_proof[0] = 0x48a9e1;
+		assert!(!ctx.verify(&Proof::new(bad_proof.to_vec())).is_ok());
+		Ok(())
+	}
+
+	fn basic_solve<T>() -> Result<(), Error> 
+	where
+		T: EdgeType 
+	{
 		let easiness_pct = 50;
 		let nonce = 1546569;
 		let _range = 1;
@@ -365,7 +429,7 @@ mod test {
 			easiness_pct
 		);
 		let mut ctx_u32 =
-			CuckatooContext::<u32>::new(edge_bits, proof_size, easiness_pct, max_sols)?;
+			CuckatooContext::<T>::new(edge_bits, proof_size, easiness_pct, max_sols)?;
 		let mut bytes = ctx_u32.byte_count()?;
 		let mut unit = 0;
 		while bytes >= 10240 {
@@ -373,7 +437,7 @@ mod test {
 			unit += 1;
 		}
 		println!("Using {}{}B memory", bytes, [' ', 'K', 'M', 'G', 'T'][unit]);
-		ctx_u32.set_header_nonce(header, Some(nonce))?;
+		ctx_u32.set_header_nonce(header, Some(nonce), true)?;
 		println!(
 			"Nonce {} k0 k1 k2 k3 {} {} {} {}",
 			nonce,
