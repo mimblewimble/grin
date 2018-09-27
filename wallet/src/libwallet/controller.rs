@@ -274,7 +274,7 @@ where
 					api_secret = Some(secret);
 				}
 			}
-		}
+		};
 
 		Ok(match req
 			.uri()
