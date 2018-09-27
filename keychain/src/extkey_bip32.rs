@@ -41,13 +41,16 @@ use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::{self, ContextFlag, Secp256k1};
 
-use crypto::digest::Digest;
-use crypto::hmac::Hmac;
-use crypto::mac::Mac;
-use crypto::ripemd160::Ripemd160;
-use crypto::sha2::{Sha256, Sha512};
+use digest::generic_array::GenericArray;
+use digest::Digest;
+use hmac::{Hmac, Mac};
+use ripemd160::Ripemd160;
+use sha2::{Sha256, Sha512};
 
 use base58;
+
+// Create alias for HMAC-SHA256
+type HmacSha512 = Hmac<Sha512>;
 
 /// A chain code
 pub struct ChainCode([u8; 32]);
@@ -93,7 +96,7 @@ impl BIP32ReferenceHasher {
 	/// New empty hasher
 	pub fn new() -> BIP32ReferenceHasher {
 		BIP32ReferenceHasher {
-			hmac_sha512: Hmac::new(Sha512::new(), &[0u8]),
+			hmac_sha512: HmacSha512::new(GenericArray::from_slice(&[0u8; 128])),
 		}
 	}
 }
@@ -111,28 +114,28 @@ impl BIP32Hasher for BIP32ReferenceHasher {
 		b"Bitcoin seed".to_owned()
 	}
 	fn init_sha512(&mut self, seed: &[u8]) {
-		self.hmac_sha512 = Hmac::new(Sha512::new(), seed);
+		self.hmac_sha512 = HmacSha512::new_varkey(seed).expect("HMAC can take key of any size");;
 	}
 	fn append_sha512(&mut self, value: &[u8]) {
 		self.hmac_sha512.input(value);
 	}
 	fn result_sha512(&mut self) -> [u8; 64] {
 		let mut result = [0; 64];
-		self.hmac_sha512.raw_result(&mut result);
+		result.copy_from_slice(self.hmac_sha512.result().code().as_slice());
 		result
 	}
 	fn sha_256(&self, input: &[u8]) -> [u8; 32] {
 		let mut sha2_res = [0; 32];
 		let mut sha2 = Sha256::new();
 		sha2.input(input);
-		sha2.result(&mut sha2_res);
+		sha2_res.copy_from_slice(sha2.result().as_slice());
 		sha2_res
 	}
 	fn ripemd_160(&self, input: &[u8]) -> [u8; 20] {
 		let mut ripemd_res = [0; 20];
 		let mut ripemd = Ripemd160::new();
 		ripemd.input(input);
-		ripemd.result(&mut ripemd_res);
+		ripemd_res.copy_from_slice(ripemd.result().as_slice());
 		ripemd_res
 	}
 }
@@ -406,7 +409,8 @@ impl ExtendedPrivKey {
 		hasher.append_sha512(&be_n);
 		let result = hasher.result_sha512();
 		let mut sk = SecretKey::from_slice(secp, &result[..32]).map_err(Error::Ecdsa)?;
-		sk.add_assign(secp, &self.secret_key).map_err(Error::Ecdsa)?;
+		sk.add_assign(secp, &self.secret_key)
+			.map_err(Error::Ecdsa)?;
 
 		Ok(ExtendedPrivKey {
 			network: self.network,
@@ -642,7 +646,6 @@ impl FromStr for ExtendedPubKey {
 
 #[cfg(test)]
 mod tests {
-	extern crate crypto;
 
 	use std::str::FromStr;
 	use std::string::ToString;

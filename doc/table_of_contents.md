@@ -19,6 +19,7 @@
 
 ## Build and use
 - [build](build.md) - Explaining how to build and run the Grin binaries
+- [release](release_instruction.md) - Instructions of making a release
 - [usage](usage.md) - Explaining how to use grin in Testnet3
 - [wallet](wallet/usage.md) - Explains the wallet design and `grin wallet` sub-commands
 

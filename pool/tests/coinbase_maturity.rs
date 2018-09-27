@@ -56,7 +56,7 @@ impl BlockChain for CoinbaseMaturityErrorChainAdapter {
 		unimplemented!();
 	}
 
-	fn validate_tx(&self, _tx: &Transaction, _header: &BlockHeader) -> Result<(), PoolError> {
+	fn validate_tx(&self, _tx: &Transaction) -> Result<(), PoolError> {
 		unimplemented!();
 	}
 

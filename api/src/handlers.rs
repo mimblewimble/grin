@@ -21,6 +21,7 @@ use futures::future::ok;
 use futures::Future;
 use hyper::{Body, Request, StatusCode};
 
+use auth::BasicAuthMiddleware;
 use chain;
 use core::core::hash::{Hash, Hashed};
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
@@ -795,10 +796,17 @@ pub fn start_rest_apis(
 	chain: Weak<chain::Chain>,
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
+	api_secret: Option<String>,
 ) -> bool {
 	let mut apis = ApiServer::new();
-
-	let router = build_router(chain, tx_pool, peers).expect("unable to build API router");
+	let mut router = build_router(chain, tx_pool, peers).expect("unable to build API router");
+	if api_secret.is_some() {
+		let api_basic_auth =
+			"Basic ".to_string() + &util::to_base64(&("grin:".to_string() + &api_secret.unwrap()));
+		let basic_realm = "Basic realm=GrinAPI".to_string();
+		let basic_auth_middleware = Arc::new(BasicAuthMiddleware::new(api_basic_auth, basic_realm));
+		router.add_middleware(basic_auth_middleware);
+	}
 
 	info!(LOGGER, "Starting HTTP API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
@@ -875,7 +883,7 @@ pub fn build_router(
 	};
 
 	let mut router = Router::new();
-	// example how we can use midlleware
+
 	router.add_route("/v1/", Arc::new(index_handler))?;
 	router.add_route("/v1/blocks/*", Arc::new(block_handler))?;
 	router.add_route("/v1/headers/*", Arc::new(header_handler))?;

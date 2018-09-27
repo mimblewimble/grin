@@ -15,7 +15,7 @@
 //! Controller for wallet.. instantiates and handles listeners (or single-run
 //! invocations) as needed.
 //! Still experimental
-use api::{ApiServer, Handler, ResponseFuture, Router};
+use api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router};
 use core::core::Transaction;
 use failure::ResultExt;
 use futures::future::{err, ok};
@@ -36,7 +36,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use url::form_urlencoded;
 use util::secp::pedersen;
-use util::LOGGER;
+use util::{to_base64, LOGGER};
 
 /// Instantiate wallet Owner API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
@@ -66,7 +66,11 @@ where
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
-pub fn owner_listener<T: ?Sized, C, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
+pub fn owner_listener<T: ?Sized, C, K>(
+	wallet: Box<T>,
+	addr: &str,
+	api_secret: Option<String>,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
 	OwnerAPIHandler<T, C, K>: Handler,
@@ -77,6 +81,13 @@ where
 	let api_handler = OwnerAPIHandler::new(wallet_arc);
 
 	let mut router = Router::new();
+	if api_secret.is_some() {
+		let api_basic_auth =
+			"Basic ".to_string() + &to_base64(&("grin:".to_string() + &api_secret.unwrap()));
+		let basic_realm = "Basic realm=GrinOwnerAPI".to_string();
+		let basic_auth_middleware = Arc::new(BasicAuthMiddleware::new(api_basic_auth, basic_realm));
+		router.add_middleware(basic_auth_middleware);
+	}
 	router
 		.add_route("/v1/wallet/owner/**", Arc::new(api_handler))
 		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
@@ -91,7 +102,7 @@ where
 		))?;
 	api_thread
 		.join()
-		.map_err(|e| ErrorKind::GenericError(format!("API thread paniced :{:?}", e)).into())
+		.map_err(|e| ErrorKind::GenericError(format!("API thread panicked :{:?}", e)).into())
 }
 
 /// Listener version, providing same API but listening for requests on a

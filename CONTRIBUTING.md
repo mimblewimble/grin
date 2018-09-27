@@ -17,6 +17,22 @@ If any help is needed during your effort to contribute on this project, please d
 * Mailing list: join the [~MimbleWimble team](https://launchpad.net/~mimblewimble) and subscribe on Launchpad.
 * News: [Twitter](https://twitter.com/grinmw). Twitter bot that scrapes headlines, mailing list, and reddit posts related to MimbleWinble/Grin.
 
+# Pull-Request Title Prefix
+
+**Note**: *[draft part! to be reviewed and discussed]*
+
+Please consider putting one of the following prefixes in the title of your pull-request:
+- **feat**:     A new feature
+- **fix**:      A bug fix
+- **docs**:     Documentation only changes
+- **style**:    Formatting, missing semi-colons, white-space, etc
+- **refactor**: A code change that neither fixes a bug nor adds a feature
+- **perf**:     A code change that improves performance
+- **test**:     Adding missing tests
+- **chore**:    Maintain. Changes to the build process or auxiliary tools/libraries/documentation
+
+For example: `fix: a panick on xxx when grin exiting`. Please don't worry if you can't find a suitable prefix, this's just optional, not mandatory.
+
 # Grin Style Guide
 
 Grin uses `rustfmt` to maintain consistent formatting, and we're using the git commit hook as explained below.
