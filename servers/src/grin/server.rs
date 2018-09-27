@@ -397,6 +397,7 @@ impl Server {
 		// for release
 		let diff_stats = {
 			let diff_iter = self.chain.difficulty_iter();
+
 			let last_blocks: Vec<Result<(u64, Difficulty), consensus::TargetError>> =
 				global::difficulty_data_to_vector(diff_iter)
 					.into_iter()

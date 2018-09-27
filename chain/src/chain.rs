@@ -213,8 +213,7 @@ impl Chain {
 		b: Block,
 		opts: Options,
 	) -> Result<(Option<Tip>, Option<Block>), Error> {
-		let res = self.process_block_no_orphans(b, opts);
-		match res {
+		match self.process_block_no_orphans(b, opts) {
 			Ok((t, b)) => {
 				// We accepted a block, so see if we can accept any orphans
 				if let Some(ref b) = b {
@@ -234,11 +233,12 @@ impl Chain {
 		b: Block,
 		opts: Options,
 	) -> Result<(Option<Tip>, Option<Block>), Error> {
-		let head = self.store.head()?;
+		let mut batch = self.store.batch()?;
+		let head = batch.head()?;
 		let bhash = b.hash();
 		let mut ctx = self.ctx_from_head(head, opts)?;
 
-		let res = pipe::process_block(&b, &mut ctx, self.verifier_cache.clone());
+		let res = pipe::process_block(&b, &mut ctx, &mut batch, self.verifier_cache.clone());
 
 		let add_to_hash_cache = || {
 			// only add to hash cache below if block is definitively accepted
@@ -250,6 +250,8 @@ impl Chain {
 
 		match res {
 			Ok(Some(ref tip)) => {
+				batch.commit()?;
+
 				// block got accepted and extended the head, updating our head
 				let chain_head = self.head.clone();
 				{
@@ -264,6 +266,8 @@ impl Chain {
 				Ok((Some(tip.clone()), Some(b)))
 			}
 			Ok(None) => {
+				batch.commit()?;
+
 				add_to_hash_cache();
 
 				// block got accepted but we did not extend the head
@@ -332,31 +336,39 @@ impl Chain {
 	/// Process a block header received during "header first" propagation.
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
 		let header_head = self.get_header_head()?;
+
 		let mut ctx = self.ctx_from_head(header_head, opts)?;
-		let res = pipe::process_block_header(bh, &mut ctx);
-		res
+
+		let mut batch = self.store.batch()?;
+		pipe::process_block_header(bh, &mut ctx, &mut batch)?;
+		batch.commit()?;
+		Ok(())
 	}
 
 	/// Attempt to add a new header to the header chain.
 	/// This is only ever used during sync and uses sync_head.
-	pub fn sync_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<Option<Tip>, Error> {
+	pub fn sync_block_headers(
+		&self,
+		headers: &Vec<BlockHeader>,
+		opts: Options,
+	) -> Result<Tip, Error> {
 		let sync_head = self.get_sync_head()?;
-		let header_head = self.get_header_head()?;
 		let mut sync_ctx = self.ctx_from_head(sync_head, opts)?;
+
+		let header_head = self.get_header_head()?;
 		let mut header_ctx = self.ctx_from_head(header_head, opts)?;
+
 		let mut batch = self.store.batch()?;
-		let res = pipe::sync_block_header(bh, &mut sync_ctx, &mut header_ctx, &mut batch);
-		if res.is_ok() {
-			batch.commit()?;
-		}
-		res
+		let res = pipe::sync_block_headers(headers, &mut sync_ctx, &mut header_ctx, &mut batch)?;
+		batch.commit()?;
+
+		Ok(res)
 	}
 
-	fn ctx_from_head<'a>(&self, head: Tip, opts: Options) -> Result<pipe::BlockContext, Error> {
+	fn ctx_from_head(&self, head: Tip, opts: Options) -> Result<pipe::BlockContext, Error> {
 		Ok(pipe::BlockContext {
-			opts: opts,
-			store: self.store.clone(),
-			head: head,
+			opts,
+			head,
 			pow_verifier: self.pow_verifier,
 			block_hashes_cache: self.block_hashes_cache.clone(),
 			txhashset: self.txhashset.clone(),
@@ -507,11 +519,9 @@ impl Chain {
 	/// the current txhashset state.
 	pub fn set_txhashset_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
-		let store = self.store.clone();
-
 		let (roots, sizes) = txhashset::extending_readonly(&mut txhashset, |extension| {
 			if is_fork {
-				pipe::rewind_and_apply_fork(b, store, extension)?;
+				pipe::rewind_and_apply_fork(b, extension)?;
 			}
 			extension.apply_block(b)?;
 			Ok((extension.roots(), extension.sizes()))
@@ -934,7 +944,8 @@ impl Chain {
 	/// Checks the header_by_height index to verify the header is where we say
 	/// it is
 	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
-		self.store
+		let batch = self.store.batch()?;
+		batch
 			.is_on_current_chain(header)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain is_on_current_chain".to_owned()).into())
 	}
@@ -959,7 +970,8 @@ impl Chain {
 	/// difficulty calculation (timestamp and previous difficulties).
 	pub fn difficulty_iter(&self) -> store::DifficultyIter {
 		let head = self.head.lock().unwrap();
-		store::DifficultyIter::from(head.last_block_h, self.store.clone())
+		let batch = self.store.batch().unwrap();
+		store::DifficultyIter::from(head.last_block_h, batch)
 	}
 
 	/// Check whether we have a block without reading it
@@ -983,9 +995,10 @@ fn setup_head(
 	store: Arc<store::ChainStore>,
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
-	// check if we have a head in store, otherwise the genesis block is it
-	let head_res = store.head();
 	let mut batch = store.batch()?;
+
+	// check if we have a head in store, otherwise the genesis block is it
+	let head_res = batch.head();
 	let mut head: Tip;
 	match head_res {
 		Ok(h) => {
@@ -995,7 +1008,7 @@ fn setup_head(
 				// Note: We are rewinding and validating against a writeable extension.
 				// If validation is successful we will truncate the backend files
 				// to match the provided block header.
-				let header = store.get_block_header(&head.last_block_h)?;
+				let header = batch.get_block_header(&head.last_block_h)?;
 
 				let res = txhashset::extending(txhashset, &mut batch, |extension| {
 					extension.rewind(&header)?;
@@ -1042,7 +1055,7 @@ fn setup_head(
 					// We may have corrupted the MMR backend files last time we stopped the
 					// node. If this appears to be the case revert the head to the previous
 					// header and try again
-					let prev_header = store.get_block_header(&head.prev_block_h)?;
+					let prev_header = batch.get_block_header(&head.prev_block_h)?;
 					let _ = batch.delete_block(&header.hash());
 					let _ = batch.setup_height(&prev_header, &head)?;
 					head = Tip::from_block(&prev_header);
