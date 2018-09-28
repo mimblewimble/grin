@@ -103,21 +103,6 @@ impl TxHashSet {
 		commit_index: Arc<ChainStore>,
 		header: Option<&BlockHeader>,
 	) -> Result<TxHashSet, Error> {
-		let output_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, OUTPUT_SUBDIR]
-			.iter()
-			.collect();
-		fs::create_dir_all(output_file_path.clone())?;
-
-		let rproof_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, RANGE_PROOF_SUBDIR]
-			.iter()
-			.collect();
-		fs::create_dir_all(rproof_file_path.clone())?;
-
-		let kernel_file_path: PathBuf = [&root_dir, TXHASHSET_SUBDIR, KERNEL_SUBDIR]
-			.iter()
-			.collect();
-		fs::create_dir_all(kernel_file_path.clone())?;
-
 		Ok(TxHashSet {
 			output_pmmr_h: PMMRHandle::new(root_dir.clone(), OUTPUT_SUBDIR, true, header)?,
 			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR, true, header)?,
