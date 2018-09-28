@@ -28,7 +28,7 @@ use core::core::merkle_proof::MerkleProof;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernel};
 use core::global;
-use core::pow::Difficulty;
+use core::pow::{self, Difficulty};
 use error::{Error, ErrorKind};
 use grin_store::Error::NotFoundErr;
 use pipe;
@@ -153,7 +153,7 @@ pub struct Chain {
 	block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 	// POW verification function
-	pow_verifier: fn(&BlockHeader, u8) -> bool,
+	pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
 	archive_mode: bool,
 }
 
@@ -169,7 +169,7 @@ impl Chain {
 		db_env: Arc<lmdb::Environment>,
 		adapter: Arc<ChainAdapter>,
 		genesis: Block,
-		pow_verifier: fn(&BlockHeader, u8) -> bool,
+		pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
 		verifier_cache: Arc<RwLock<VerifierCache>>,
 		archive_mode: bool,
 	) -> Result<Chain, Error> {

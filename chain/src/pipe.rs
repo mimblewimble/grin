@@ -27,7 +27,7 @@ use core::core::verifier_cache::VerifierCache;
 use core::core::Committed;
 use core::core::{Block, BlockHeader, BlockSums};
 use core::global;
-use core::pow::Difficulty;
+use core::pow::{self, Difficulty};
 use error::{Error, ErrorKind};
 use grin_store;
 use store;
@@ -49,7 +49,7 @@ pub struct BlockContext {
 	/// The sync head
 	pub sync_head: Tip,
 	/// The POW verification function
-	pub pow_verifier: fn(&BlockHeader, u8) -> bool,
+	pub pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
 	/// MMR sum tree states
 	pub txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	/// Recently processed blocks to avoid double-processing
@@ -439,7 +439,7 @@ fn validate_header(
 		if shift != consensus::SECOND_POW_SIZESHIFT && header.pow.scaling_difficulty != 1 {
 			return Err(ErrorKind::InvalidScaling.into());
 		}
-		if !(ctx.pow_verifier)(header, shift) {
+		if !(ctx.pow_verifier)(header, shift).is_ok() {
 			error!(
 				LOGGER,
 				"pipe: validate_header bad cuckoo shift size {}", shift
@@ -527,7 +527,8 @@ fn validate_block(
 			&prev.total_kernel_offset,
 			&prev.total_kernel_sum,
 			verifier_cache,
-		).map_err(|e| ErrorKind::InvalidBlockProof(e))?;
+		)
+		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }
 
@@ -567,8 +568,7 @@ fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Er
 	let offset = b.header.total_kernel_offset();
 
 	// Verify the kernel sums for the block_sums with the new block applied.
-	let (utxo_sum, kernel_sum) =
-		(block_sums, b as &Committed).verify_kernel_sums(overage, offset)?;
+	let (utxo_sum, kernel_sum) = (block_sums, b as &Committed).verify_kernel_sums(overage, offset)?;
 
 	// Save the new block_sums for the new block to the db via the batch.
 	ext.batch.save_block_sums(

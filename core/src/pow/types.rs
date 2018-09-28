@@ -26,6 +26,36 @@ use core::hash::Hashed;
 use global;
 use ser::{self, Readable, Reader, Writeable, Writer};
 
+use pow::common::EdgeType;
+use pow::error::Error;
+
+/// Generic trait for a solver/verifier providing common interface into Cuckoo-family PoW
+/// Mostly used for verification, but also for test mining if necessary
+pub trait PoWContext<T>
+where
+	T: EdgeType,
+{
+	/// Create new instance of context with appropriate parameters
+	fn new(
+		edge_bits: u8,
+		proof_size: usize,
+		easiness_pct: u32,
+		max_sols: u32,
+	) -> Result<Box<Self>, Error>;
+	/// Sets the header along with an optional nonce at the end
+	/// solve: whether to set up structures for a solve (true) or just validate (false)
+	fn set_header_nonce(
+		&mut self,
+		header: Vec<u8>,
+		nonce: Option<u32>,
+		solve: bool,
+	) -> Result<(), Error>;
+	/// find solutions using the stored parameters and header
+	fn find_cycles(&mut self) -> Result<Vec<Proof>, Error>;
+	/// Verify a solution with the stored parameters
+	fn verify(&self, proof: &Proof) -> Result<(), Error>;
+}
+
 /// The difficulty is defined as the maximum target divided by the block hash.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Difficulty {

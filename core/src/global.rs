@@ -22,7 +22,7 @@ use consensus::{
 	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
 	REFERENCE_SIZESHIFT,
 };
-use pow::Difficulty;
+use pow::{self, CuckooContext, Difficulty, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
@@ -93,16 +93,48 @@ impl Default for ChainTypes {
 	}
 }
 
+/// PoW test mining and verifier context
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum PoWContextTypes {
+	/// Classic Cuckoo
+	Cuckoo,
+	/// Bleeding edge Cuckatoo
+	Cuckatoo,
+}
+
 lazy_static!{
 	/// The mining parameter mode
 	pub static ref CHAIN_TYPE: RwLock<ChainTypes> =
 			RwLock::new(ChainTypes::Mainnet);
+
+	/// PoW context type to instantiate
+	pub static ref POW_CONTEXT_TYPE: RwLock<PoWContextTypes> =
+			RwLock::new(PoWContextTypes::Cuckoo);
 }
 
 /// Set the mining mode
 pub fn set_mining_mode(mode: ChainTypes) {
 	let mut param_ref = CHAIN_TYPE.write().unwrap();
 	*param_ref = mode;
+}
+
+/// Return either a cuckoo context or a cuckatoo context
+/// Single change point
+pub fn create_pow_context<T>(
+	edge_bits: u8,
+	proof_size: usize,
+	easiness_pct: u32,
+	max_sols: u32,
+) -> Result<Box<impl PoWContext<T>>, pow::Error>
+where
+	T: EdgeType,
+{
+	// Perform whatever tests, configuration etc are needed to determine desired context + edge size
+	// + params
+	// Hardcode to regular cuckoo for now
+	CuckooContext::<T>::new(edge_bits, proof_size, easiness_pct, max_sols)
+	// Or switch to cuckatoo as follows:
+	// CuckatooContext::<T>::new(edge_bits, proof_size, easiness_pct, max_sols)
 }
 
 /// The minimum acceptable sizeshift
