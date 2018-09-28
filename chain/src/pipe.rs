@@ -216,7 +216,7 @@ pub fn sync_block_headers(
 		);
 	}
 
-	let mut tip = batch.get_header_head()?;
+	let mut sync_tip = batch.get_sync_head()?;
 
 	for header in headers {
 		handle_block_header(header, ctx, batch)?;
@@ -226,9 +226,10 @@ pub fn sync_block_headers(
 		// and become the "most work" chain.
 		// header_head and sync_head will diverge in this situation until we switch to
 		// a single "most work" chain.
-		tip = update_sync_head(header, ctx, batch)?;
+		sync_tip = update_sync_head(header, ctx, batch)?;
 	}
-	Ok(tip)
+
+	Ok(sync_tip)
 }
 
 fn handle_block_header(
