@@ -67,7 +67,7 @@ pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u8) -> Result<(), Error> {
 		consensus::EASINESS,
 		MAX_SOLS,
 	)?;
-	ctx.set_header_nonce(bh.pre_pow_hash().to_vec(), None, false)?;
+	ctx.set_header_nonce(bh.pre_pow(), None, false)?;
 	ctx.verify(&bh.pow.proof)
 }
 
@@ -111,7 +111,7 @@ pub fn pow_size(
 		// diff, we're all good
 		let mut ctx =
 			global::create_pow_context::<u32>(sz, proof_size, consensus::EASINESS, MAX_SOLS)?;
-		ctx.set_header_nonce(bh.pre_pow_hash().to_vec(), None, true)?;
+		ctx.set_header_nonce(bh.pre_pow(), None, true)?;
 		if let Ok(proofs) = ctx.find_cycles() {
 			bh.pow.proof = proofs[0].clone();
 			if bh.pow.to_difficulty() >= diff {

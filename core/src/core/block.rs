@@ -25,7 +25,7 @@ use std::sync::{Arc, RwLock};
 use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
-use core::hash::{Hash, HashWriter, Hashed, ZERO_HASH};
+use core::hash::{Hash, Hashed, ZERO_HASH};
 use core::verifier_cache::VerifierCache;
 use core::{
 	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Transaction,
@@ -278,16 +278,19 @@ impl BlockHeader {
 		Ok(())
 	}
 
-	/// Returns the pre-pow hash, as the post-pow hash
-	/// should just be the hash of the POW
-	pub fn pre_pow_hash(&self) -> Hash {
-		let mut hasher = HashWriter::default();
-		self.write_pre_pow(&mut hasher).unwrap();
-		self.pow.write_pre_pow(self.version, &mut hasher).unwrap();
-		hasher.write_u64(self.pow.nonce).unwrap();
-		let mut ret = [0; 32];
-		hasher.finalize(&mut ret);
-		Hash(ret)
+	/// Return the pre-pow, unhashed
+	/// Let the cuck(at)oo miner/verifier handle the hashing
+	/// for consistency with how this call is performed everywhere
+	/// else
+	pub fn pre_pow(&self) -> Vec<u8> {
+		let mut header_buf = vec![];
+		{
+			let mut writer = ser::BinWriter::new(&mut header_buf);
+			self.write_pre_pow(&mut writer).unwrap();
+			self.pow.write_pre_pow(self.version, &mut writer).unwrap();
+			writer.write_u64(self.pow.nonce).unwrap();
+		}
+		header_buf
 	}
 
 	/// Total difficulty accumulated by the proof of work on this header
