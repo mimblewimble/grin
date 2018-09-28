@@ -191,6 +191,11 @@ impl<'a> Batch<'a> {
 		self.store.get(key)
 	}
 
+	/// Whether the provided key exists
+	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
+		self.store.exists(key)
+	}
+
 	/// Produces an iterator of `Readable` types moving forward from the
 	/// provided key.
 	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<SerIterator<T>, Error> {

@@ -126,29 +126,6 @@ impl ChainStore {
 		}
 	}
 
-	// We are on the current chain if -
-	// * the header by height index matches the header, and
-	// * we are not ahead of the current head
-	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
-		let head = self.head()?;
-
-		// check we are not out ahead of the current head
-		if header.height > head.height {
-			return Err(Error::NotFoundErr(String::from(
-				"header.height > head.height",
-			)));
-		}
-
-		let header_at_height = self.get_header_by_height(header.height)?;
-		if header.hash() == header_at_height.hash() {
-			Ok(())
-		} else {
-			Err(Error::NotFoundErr(String::from(
-				"header.hash == header_at_height.hash",
-			)))
-		}
-	}
-
 	pub fn get_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
 		option_to_not_found(
 			self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)),
@@ -189,6 +166,22 @@ pub struct Batch<'a> {
 
 #[allow(missing_docs)]
 impl<'a> Batch<'a> {
+	pub fn head(&self) -> Result<Tip, Error> {
+		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), "HEAD")
+	}
+
+	pub fn head_header(&self) -> Result<BlockHeader, Error> {
+		self.get_block_header(&self.head()?.last_block_h)
+	}
+
+	pub fn get_header_head(&self) -> Result<Tip, Error> {
+		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]), "HEADER_HEAD")
+	}
+
+	pub fn get_sync_head(&self) -> Result<Tip, Error> {
+		option_to_not_found(self.db.get_ser(&vec![SYNC_HEAD_PREFIX]), "SYNC_HEAD")
+	}
+
 	pub fn save_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&vec![HEAD_PREFIX], t)?;
 		self.db.put_ser(&vec![HEADER_HEAD_PREFIX], t)
@@ -200,6 +193,13 @@ impl<'a> Batch<'a> {
 
 	pub fn save_header_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&vec![HEADER_HEAD_PREFIX], t)
+	}
+
+	pub fn get_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
+		option_to_not_found(
+			self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)),
+			&format!("Hash at height: {}", height),
+		)
 	}
 
 	pub fn save_sync_head(&self, t: &Tip) -> Result<(), Error> {
@@ -231,6 +231,10 @@ impl<'a> Batch<'a> {
 			self.db.get_ser(&to_key(BLOCK_PREFIX, &mut h.to_vec())),
 			&format!("Block with hash: {}", h),
 		)
+	}
+
+	pub fn block_exists(&self, h: &Hash) -> Result<bool, Error> {
+		self.db.exists(&to_key(BLOCK_PREFIX, &mut h.to_vec()))
 	}
 
 	/// Save the block and its header
@@ -322,6 +326,36 @@ impl<'a> Batch<'a> {
 		self.db.delete(&to_key(BLOCK_SUMS_PREFIX, &mut bh.to_vec()))
 	}
 
+	// We are on the current chain if -
+	// * the header by height index matches the header, and
+	// * we are not ahead of the current head
+	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
+		let head = self.head()?;
+
+		// check we are not out ahead of the current head
+		if header.height > head.height {
+			return Err(Error::NotFoundErr(String::from(
+				"header.height > head.height",
+			)));
+		}
+
+		let header_at_height = self.get_header_by_height(header.height)?;
+		if header.hash() == header_at_height.hash() {
+			Ok(())
+		} else {
+			Err(Error::NotFoundErr(String::from(
+				"header.hash == header_at_height.hash",
+			)))
+		}
+	}
+
+	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
+		option_to_not_found(
+			self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)),
+			&format!("Header at height: {}", height),
+		).and_then(|hash| self.get_block_header(&hash))
+	}
+
 	/// Maintain consistency of the "header_by_height" index by traversing back
 	/// through the current chain and updating "header_by_height" until we reach
 	/// a block_header that is consistent with its height (everything prior to
@@ -344,7 +378,7 @@ impl<'a> Batch<'a> {
 			let mut prev_header = self.store.get_block_header(&header.previous)?;
 			while prev_header.height > 0 {
 				if !force {
-					if let Ok(_) = self.store.is_on_current_chain(&prev_header) {
+					if let Ok(_) = self.is_on_current_chain(&prev_header) {
 						break;
 					}
 				}
@@ -434,9 +468,9 @@ impl<'a> Batch<'a> {
 /// information pertaining to block difficulty calculation (timestamp and
 /// previous difficulties). Mostly used by the consensus next difficulty
 /// calculation.
-pub struct DifficultyIter {
+pub struct DifficultyIter<'a> {
 	start: Hash,
-	store: Arc<ChainStore>,
+	batch: Batch<'a>,
 
 	// maintain state for both the "next" header in this iteration
 	// and its previous header in the chain ("next next" in the iteration)
@@ -446,27 +480,27 @@ pub struct DifficultyIter {
 	prev_header: Option<BlockHeader>,
 }
 
-impl DifficultyIter {
+impl<'a> DifficultyIter<'a> {
 	/// Build a new iterator using the provided chain store and starting from
 	/// the provided block hash.
-	pub fn from(start: Hash, store: Arc<ChainStore>) -> DifficultyIter {
+	pub fn from(start: Hash, batch: Batch) -> DifficultyIter {
 		DifficultyIter {
-			start: start,
-			store: store,
+			start,
+			batch,
 			header: None,
 			prev_header: None,
 		}
 	}
 }
 
-impl Iterator for DifficultyIter {
+impl<'a> Iterator for DifficultyIter<'a> {
 	type Item = Result<(u64, Difficulty), TargetError>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		// Get both header and previous_header if this is the initial iteration.
 		// Otherwise move prev_header to header and get the next prev_header.
 		self.header = if self.header.is_none() {
-			self.store.get_block_header(&self.start).ok()
+			self.batch.get_block_header(&self.start).ok()
 		} else {
 			self.prev_header.clone()
 		};
@@ -474,7 +508,7 @@ impl Iterator for DifficultyIter {
 		// If we have a header we can do this iteration.
 		// Otherwise we are done.
 		if let Some(header) = self.header.clone() {
-			self.prev_header = self.store.get_block_header(&header.previous).ok();
+			self.prev_header = self.batch.get_block_header(&header.previous).ok();
 
 			let prev_difficulty = self
 				.prev_header

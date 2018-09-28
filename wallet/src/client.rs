@@ -32,13 +32,15 @@ use util::{self, LOGGER};
 #[derive(Clone)]
 pub struct HTTPWalletClient {
 	node_url: String,
+	node_api_secret: Option<String>,
 }
 
 impl HTTPWalletClient {
 	/// Create a new client that will communicate with the given grin node
-	pub fn new(node_url: &str) -> HTTPWalletClient {
+	pub fn new(node_url: &str, node_api_secret: Option<String>) -> HTTPWalletClient {
 		HTTPWalletClient {
 			node_url: node_url.to_owned(),
+			node_api_secret: node_api_secret,
 		}
 	}
 }
@@ -46,6 +48,9 @@ impl HTTPWalletClient {
 impl WalletClient for HTTPWalletClient {
 	fn node_url(&self) -> &str {
 		&self.node_url
+	}
+	fn node_api_secret(&self) -> Option<String> {
+		self.node_api_secret.clone()
 	}
 
 	/// Call the wallet API to create a coinbase output for the given
@@ -86,7 +91,7 @@ impl WalletClient for HTTPWalletClient {
 		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
 		debug!(LOGGER, "Posting transaction slate to {}", url);
 
-		let res = api::client::post(url.as_str(), slate).context(
+		let res = api::client::post(url.as_str(), None, slate).context(
 			libwallet::ErrorKind::ClientCallback("Posting transaction slate"),
 		)?;
 		Ok(res)
@@ -101,9 +106,9 @@ impl WalletClient for HTTPWalletClient {
 		} else {
 			url = format!("{}/v1/pool/push", dest);
 		}
-		api::client::post_no_ret(url.as_str(), tx).context(libwallet::ErrorKind::ClientCallback(
-			"Posting transaction to node",
-		))?;
+		api::client::post_no_ret(url.as_str(), self.node_api_secret(), tx).context(
+			libwallet::ErrorKind::ClientCallback("Posting transaction to node"),
+		)?;
 		Ok(())
 	}
 
@@ -111,7 +116,7 @@ impl WalletClient for HTTPWalletClient {
 	fn get_chain_height(&self) -> Result<u64, libwallet::Error> {
 		let addr = self.node_url();
 		let url = format!("{}/v1/chain", addr);
-		let res = api::client::get::<api::Tip>(url.as_str()).context(
+		let res = api::client::get::<api::Tip>(url.as_str(), self.node_api_secret()).context(
 			libwallet::ErrorKind::ClientCallback("Getting chain height from node"),
 		)?;
 		Ok(res.height)
@@ -136,7 +141,10 @@ impl WalletClient for HTTPWalletClient {
 
 		for query_chunk in query_params.chunks(500) {
 			let url = format!("{}/v1/chain/outputs/byids?{}", addr, query_chunk.join("&"),);
-			tasks.push(api::client::get_async::<Vec<api::Output>>(url.as_str()));
+			tasks.push(api::client::get_async::<Vec<api::Output>>(
+				url.as_str(),
+				self.node_api_secret(),
+			));
 		}
 
 		let task = stream::futures_unordered(tasks).collect();
@@ -181,7 +189,7 @@ impl WalletClient for HTTPWalletClient {
 		let mut api_outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)> =
 			Vec::new();
 
-		match api::client::get::<api::OutputListing>(url.as_str()) {
+		match api::client::get::<api::OutputListing>(url.as_str(), self.node_api_secret()) {
 			Ok(o) => {
 				for out in o.outputs {
 					let is_coinbase = match out.output_type {
@@ -231,7 +239,7 @@ pub fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Err
 
 /// Makes a single request to the wallet API to create a new coinbase output.
 fn single_create_coinbase(url: &str, block_fees: &BlockFees) -> Result<CbData, Error> {
-	let res = api::client::post(url, block_fees).context(ErrorKind::GenericError(
+	let res = api::client::post(url, None, block_fees).context(ErrorKind::GenericError(
 		"Posting create coinbase".to_string(),
 	))?;
 	Ok(res)

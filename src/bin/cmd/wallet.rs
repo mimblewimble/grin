@@ -32,6 +32,7 @@ use grin_wallet::{
 };
 use keychain;
 use servers::start_webwallet_server;
+use util::file::get_first_line;
 use util::LOGGER;
 
 pub fn _init_wallet_seed(wallet_config: WalletConfig) {
@@ -54,8 +55,9 @@ pub fn instantiate_wallet(
 	wallet_config: WalletConfig,
 	passphrase: &str,
 	account: &str,
+	node_api_secret: Option<String>,
 ) -> Box<WalletInst<HTTPWalletClient, keychain::ExtKeychain>> {
-	let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr);
+	let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
 	let mut db_wallet =
 		LMDBBackend::new(wallet_config.clone(), passphrase, client).unwrap_or_else(|e| {
 			panic!(
@@ -97,13 +99,15 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 	if wallet_args.is_present("show_spent") {
 		show_spent = true;
 	}
+	let node_api_secret = get_first_line(wallet_config.node_api_secret_path.clone());
 
 	// Derive the keychain based on seed from seed file and specified passphrase.
 	// Generate the initial wallet seed if we are running "wallet init".
 	if let ("init", Some(_)) = wallet_args.subcommand() {
 		WalletSeed::init_file(&wallet_config).expect("Failed to init wallet seed file.");
 		info!(LOGGER, "Wallet seed file created");
-		let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr);
+		let client =
+			HTTPWalletClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
 		let _: LMDBBackend<HTTPWalletClient, keychain::ExtKeychain> =
 			LMDBBackend::new(wallet_config.clone(), "", client).unwrap_or_else(|e| {
 				panic!(
@@ -128,7 +132,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 
 	// Handle listener startup commands
 	{
-		let wallet = instantiate_wallet(wallet_config.clone(), passphrase, account);
+		let wallet = instantiate_wallet(wallet_config.clone(), passphrase, account, node_api_secret.clone());
+		let api_secret = get_first_line(wallet_config.api_secret_path.clone());
+
 		match wallet_args.subcommand() {
 			("listen", Some(listen_args)) => {
 				if let Some(port) = listen_args.value_of("port") {
@@ -143,22 +149,26 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					});
 			}
 			("owner_api", Some(_api_args)) => {
-				controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
-					panic!(
-						"Error creating wallet api listener: {:?} Config: {:?}",
-						e, wallet_config
-					)
-				});
+				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret).unwrap_or_else(
+					|e| {
+						panic!(
+							"Error creating wallet api listener: {:?} Config: {:?}",
+							e, wallet_config
+						)
+					},
+				);
 			}
 			("web", Some(_api_args)) => {
 				// start owner listener and run static file server
 				start_webwallet_server();
-				controller::owner_listener(wallet, "127.0.0.1:13420").unwrap_or_else(|e| {
-					panic!(
-						"Error creating wallet api listener: {:?} Config: {:?}",
-						e, wallet_config
-					)
-				});
+				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret).unwrap_or_else(
+					|e| {
+						panic!(
+							"Error creating wallet api listener: {:?} Config: {:?}",
+							e, wallet_config
+						)
+					},
+				);
 			}
 			_ => {}
 		};
@@ -169,6 +179,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 		wallet_config.clone(),
 		passphrase,
 		account,
+		node_api_secret,
 	)));
 	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {

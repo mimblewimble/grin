@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use std::fs;
-use std::io;
+use std::io::{self, BufRead};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
@@ -68,5 +68,20 @@ fn copy_to(src: &Path, src_type: &fs::FileType, dst: &Path) -> io::Result<u64> {
 			io::ErrorKind::Other,
 			format!("Could not copy: {}", src.display()),
 		));
+	}
+}
+
+/// Retrieve first line from file
+pub fn get_first_line(file_path: Option<String>) -> Option<String> {
+	match file_path {
+		Some(path) => match fs::File::open(path) {
+			Ok(file) => {
+				let buf_reader = io::BufReader::new(file);
+				let mut lines_iter = buf_reader.lines().map(|l| l.unwrap());;
+				lines_iter.next()
+			}
+			Err(_) => None,
+		},
+		None => None,
 	}
 }
