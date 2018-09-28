@@ -19,7 +19,7 @@ use std::marker;
 
 use core::hash::Hash;
 use core::pmmr::{bintree_postorder_height, is_leaf, peaks, Backend};
-use ser::{PMMRable, PMMRIndexHashable};
+use ser::{PMMRIndexHashable, PMMRable};
 
 /// Rewindable (but still readonly) view of a PMMR.
 pub struct RewindablePMMR<'a, T, B>
@@ -110,7 +110,8 @@ where
 				// here we want to get from underlying hash file
 				// as the pos *may* have been "removed"
 				self.backend.get_from_file(pi)
-			}).collect()
+			})
+			.collect()
 	}
 
 	/// Total size of the tree, including intermediary nodes and ignoring any

@@ -132,7 +132,12 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 
 	// Handle listener startup commands
 	{
-		let wallet = instantiate_wallet(wallet_config.clone(), passphrase, account, node_api_secret.clone());
+		let wallet = instantiate_wallet(
+			wallet_config.clone(),
+			passphrase,
+			account,
+			node_api_secret.clone(),
+		);
 		let api_secret = get_first_line(wallet_config.api_secret_path.clone());
 
 		match wallet_args.subcommand() {

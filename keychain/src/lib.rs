@@ -22,12 +22,12 @@ extern crate rand;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
-extern crate slog;
 extern crate digest;
 extern crate hmac;
 extern crate ripemd160;
+extern crate serde_json;
 extern crate sha2;
+extern crate slog;
 extern crate uuid;
 
 mod base58;

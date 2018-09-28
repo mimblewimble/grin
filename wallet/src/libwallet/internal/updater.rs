@@ -55,7 +55,8 @@ where
 			} else {
 				out.status != OutputStatus::Spent
 			}
-		}).collect::<Vec<_>>();
+		})
+		.collect::<Vec<_>>();
 
 	// only include outputs with a given tx_id if provided
 	if let Some(id) = tx_id {
@@ -72,7 +73,8 @@ where
 		.map(|out| {
 			let commit = wallet.get_commitment(&out.key_id).unwrap();
 			(out, commit)
-		}).collect();
+		})
+		.collect();
 	Ok(res)
 }
 
