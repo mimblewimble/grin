@@ -26,7 +26,7 @@ use common::types::StratumServerConfig;
 use core::core::hash::{Hash, Hashed};
 use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader};
-use core::pow::cuckoo;
+use core::pow::PoWContext;
 use core::{consensus, global};
 use mining::mine_block;
 use pool;
@@ -96,14 +96,16 @@ impl Miner {
 		let mut iter_count = 0;
 
 		while head.hash() == *latest_hash && Utc::now().timestamp() < deadline {
-			if let Ok(proof) = cuckoo::Miner::new(
-				&b.header,
-				consensus::EASINESS,
-				global::proofsize(),
+			let mut ctx = global::create_pow_context::<u32>(
 				global::min_sizeshift(),
-			).mine()
-			{
-				b.header.pow.proof = proof;
+				global::proofsize(),
+				consensus::EASINESS,
+				10,
+			).unwrap();
+			ctx.set_header_nonce(b.header.pre_pow(), None, true)
+				.unwrap();
+			if let Ok(proofs) = ctx.find_cycles() {
+				b.header.pow.proof = proofs[0].clone();
 				let proof_diff = b.header.pow.to_difficulty();
 				if proof_diff >= (b.header.total_difficulty() - head.total_difficulty()) {
 					return true;

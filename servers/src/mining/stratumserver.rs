@@ -529,7 +529,7 @@ impl StratumServer {
 			);
 		} else {
 			// Do some validation but dont submit
-			if !pow::verify_size(&b.header, global::min_sizeshift()) {
+			if !pow::verify_size(&b.header, global::min_sizeshift()).is_ok() {
 				// Return error status
 				error!(
 					LOGGER,

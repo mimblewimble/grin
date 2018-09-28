@@ -30,12 +30,17 @@
 
 extern crate blake2_rfc as blake2;
 extern crate chrono;
+extern crate num;
 extern crate rand;
 extern crate serde;
 
 extern crate grin_util as util;
 
+#[macro_use]
+mod common;
+pub mod cuckatoo;
 pub mod cuckoo;
+mod error;
 mod siphash;
 mod types;
 
@@ -44,15 +49,26 @@ use consensus;
 use core::{Block, BlockHeader};
 use genesis;
 use global;
-use pow::cuckoo::{Cuckoo, Error};
 
+pub use self::common::EdgeType;
 pub use self::types::*;
+pub use pow::cuckatoo::CuckatooContext;
+pub use pow::cuckoo::CuckooContext;
+pub use pow::error::Error;
+
+const MAX_SOLS: u32 = 10;
 
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
-pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u8) -> bool {
-	Cuckoo::from_hash(bh.pre_pow_hash().as_ref(), cuckoo_sz)
-		.verify(&bh.pow.proof, consensus::EASINESS as u64)
+pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u8) -> Result<(), Error> {
+	let mut ctx = global::create_pow_context::<u64>(
+		cuckoo_sz,
+		bh.pow.proof.nonces.len(),
+		consensus::EASINESS,
+		MAX_SOLS,
+	)?;
+	ctx.set_header_nonce(bh.pre_pow(), None, false)?;
+	ctx.verify(&bh.pow.proof)
 }
 
 /// Mines a genesis block using the internal miner
@@ -69,7 +85,7 @@ pub fn mine_genesis_block() -> Result<Block, Error> {
 	let sz = global::min_sizeshift();
 	let proof_size = global::proofsize();
 
-	pow_size(&mut gen.header, genesis_difficulty, proof_size, sz).unwrap();
+	pow_size(&mut gen.header, genesis_difficulty, proof_size, sz)?;
 	Ok(gen)
 }
 
@@ -93,8 +109,11 @@ pub fn pow_size(
 	loop {
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
-		if let Ok(proof) = cuckoo::Miner::new(bh, consensus::EASINESS, proof_size, sz).mine() {
-			bh.pow.proof = proof;
+		let mut ctx =
+			global::create_pow_context::<u32>(sz, proof_size, consensus::EASINESS, MAX_SOLS)?;
+		ctx.set_header_nonce(bh.pre_pow(), None, true)?;
+		if let Ok(proofs) = ctx.find_cycles() {
+			bh.pow.proof = proofs[0].clone();
 			if bh.pow.to_difficulty() >= diff {
 				return Ok(());
 			}
@@ -132,6 +151,6 @@ mod test {
 		).unwrap();
 		assert!(b.header.pow.nonce != 310);
 		assert!(b.header.pow.to_difficulty() >= Difficulty::one());
-		assert!(verify_size(&b.header, global::min_sizeshift()));
+		assert!(verify_size(&b.header, global::min_sizeshift()).is_ok());
 	}
 }

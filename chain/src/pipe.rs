@@ -27,7 +27,7 @@ use core::core::verifier_cache::VerifierCache;
 use core::core::Committed;
 use core::core::{Block, BlockHeader, BlockSums};
 use core::global;
-use core::pow::Difficulty;
+use core::pow::{self, Difficulty};
 use error::{Error, ErrorKind};
 use grin_store;
 use store;
@@ -49,7 +49,7 @@ pub struct BlockContext {
 	/// The sync head
 	pub sync_head: Tip,
 	/// The POW verification function
-	pub pow_verifier: fn(&BlockHeader, u8) -> bool,
+	pub pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
 	/// MMR sum tree states
 	pub txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	/// Recently processed blocks to avoid double-processing
@@ -439,7 +439,7 @@ fn validate_header(
 		if shift != consensus::SECOND_POW_SIZESHIFT && header.pow.scaling_difficulty != 1 {
 			return Err(ErrorKind::InvalidScaling.into());
 		}
-		if !(ctx.pow_verifier)(header, shift) {
+		if !(ctx.pow_verifier)(header, shift).is_ok() {
 			error!(
 				LOGGER,
 				"pipe: validate_header bad cuckoo shift size {}", shift
