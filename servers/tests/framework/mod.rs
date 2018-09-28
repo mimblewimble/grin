@@ -263,7 +263,7 @@ impl LocalServerContainer {
 		let _ = fs::create_dir_all(self.wallet_config.clone().data_file_dir);
 		let r = wallet::WalletSeed::init_file(&self.wallet_config);
 
-		let client = HTTPWalletClient::new(&self.wallet_config.check_node_api_http_addr);
+		let client = HTTPWalletClient::new(&self.wallet_config.check_node_api_http_addr, None);
 
 		if let Err(e) = r {
 			//panic!("Error initializing wallet seed: {}", e);
@@ -305,7 +305,7 @@ impl LocalServerContainer {
 		let keychain: keychain::ExtKeychain = wallet_seed
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
-		let client = HTTPWalletClient::new(&config.check_node_api_http_addr);
+		let client = HTTPWalletClient::new(&config.check_node_api_http_addr, None);
 		let mut wallet = FileWallet::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
@@ -331,7 +331,7 @@ impl LocalServerContainer {
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 
-		let client = HTTPWalletClient::new(&config.check_node_api_http_addr);
+		let client = HTTPWalletClient::new(&config.check_node_api_http_addr, None);
 
 		let max_outputs = 500;
 		let change_outputs = 1;

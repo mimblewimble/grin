@@ -371,6 +371,10 @@ impl GlobalWalletConfig {
 		secret_path.push(API_SECRET_FILE_NAME);
 		self.members.as_mut().unwrap().wallet.api_secret_path =
 			Some(secret_path.to_str().unwrap().to_owned());
+		let mut node_secret_path = wallet_home.clone();
+		node_secret_path.push(API_SECRET_FILE_NAME);
+		self.members.as_mut().unwrap().wallet.node_api_secret_path =
+			Some(node_secret_path.to_str().unwrap().to_owned());
 		let mut log_path = wallet_home.clone();
 		log_path.push(WALLET_LOG_FILE_NAME);
 		self.members

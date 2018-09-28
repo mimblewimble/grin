@@ -157,6 +157,8 @@ where
 pub trait WalletClient: Sync + Send + Clone {
 	/// Return the URL of the check node
 	fn node_url(&self) -> &str;
+	/// Return the node api secret
+	fn node_api_secret(&self) -> Option<String>;
 
 	/// Call the wallet API to create a coinbase transaction
 	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, Error>;
@@ -417,7 +419,8 @@ impl BlockIdentifier {
 
 	/// convert to hex string
 	pub fn from_hex(hex: &str) -> Result<BlockIdentifier, Error> {
-		let hash = Hash::from_hex(hex).context(ErrorKind::GenericError("Invalid hex".to_owned()))?;
+		let hash =
+			Hash::from_hex(hex).context(ErrorKind::GenericError("Invalid hex".to_owned()))?;
 		Ok(BlockIdentifier(hash))
 	}
 }
