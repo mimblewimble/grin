@@ -15,13 +15,14 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::fs::File;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 use lmdb;
+use lru_cache::LruCache;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
@@ -150,7 +151,7 @@ pub struct Chain {
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	// Recently processed blocks to avoid double-processing
-	block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
+	block_hashes_cache: Arc<RwLock<LruCache<Hash, bool>>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
@@ -202,7 +203,7 @@ impl Chain {
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			pow_verifier,
 			verifier_cache,
-			block_hashes_cache: Arc::new(RwLock::new(VecDeque::with_capacity(HASHES_CACHE_SIZE))),
+			block_hashes_cache: Arc::new(RwLock::new(LruCache::new(HASHES_CACHE_SIZE))),
 			archive_mode,
 		})
 	}
@@ -244,8 +245,7 @@ impl Chain {
 			// only add to hash cache below if block is definitively accepted
 			// or rejected
 			let mut cache = self.block_hashes_cache.write().unwrap();
-			cache.push_front(bhash);
-			cache.truncate(HASHES_CACHE_SIZE);
+			cache.insert(bhash, true);
 		};
 
 		match res {
