@@ -38,13 +38,10 @@ impl Handler for BasicAuthMiddleware {
 		req: Request<Body>,
 		mut handlers: Box<Iterator<Item = HandlerObj>>,
 	) -> ResponseFuture {
-		if req.headers().contains_key(AUTHORIZATION) {
-			if req.headers()[AUTHORIZATION] == self.api_basic_auth {
-				handlers.next().unwrap().call(req, handlers)
-			} else {
-				// Forbidden 403
-				forbidden_response()
-			}
+		if req.headers().contains_key(AUTHORIZATION)
+			&& req.headers()[AUTHORIZATION] == self.api_basic_auth
+		{
+			handlers.next().unwrap().call(req, handlers)
 		} else {
 			// Unauthorized 401
 			unauthorized_response(&self.basic_realm)
@@ -59,14 +56,6 @@ fn unauthorized_response(basic_realm: &str) -> ResponseFuture {
 			WWW_AUTHENTICATE,
 			HeaderValue::from_str(basic_realm).unwrap(),
 		).body(Body::empty())
-		.unwrap();
-	Box::new(ok(response))
-}
-
-fn forbidden_response() -> ResponseFuture {
-	let response = Response::builder()
-		.status(StatusCode::FORBIDDEN)
-		.body(Body::empty())
 		.unwrap();
 	Box::new(ok(response))
 }
