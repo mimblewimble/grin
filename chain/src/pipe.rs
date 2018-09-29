@@ -47,8 +47,6 @@ pub struct BlockContext {
 	pub head: Tip,
 	/// The header head
 	pub header_head: Tip,
-	/// The sync head
-	pub sync_head: Tip,
 	/// The POW verification function
 	pub pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
 	/// MMR sum tree states
@@ -206,7 +204,7 @@ pub fn sync_block_headers(
 	headers: &Vec<BlockHeader>,
 	ctx: &mut BlockContext,
 	batch: &mut store::Batch,
-) -> Result<Tip, Error> {
+) -> Result<(), Error> {
 	if let Some(header) = headers.first() {
 		debug!(
 			LOGGER,
@@ -217,8 +215,6 @@ pub fn sync_block_headers(
 		);
 	}
 
-	let mut sync_tip = batch.get_sync_head()?;
-
 	for header in headers {
 		handle_block_header(header, ctx, batch)?;
 
@@ -227,10 +223,9 @@ pub fn sync_block_headers(
 		// and become the "most work" chain.
 		// header_head and sync_head will diverge in this situation until we switch to
 		// a single "most work" chain.
-		sync_tip = update_sync_head(header, ctx, batch)?;
+		update_sync_head(header, batch)?;
 	}
-
-	Ok(sync_tip)
+	Ok(())
 }
 
 fn handle_block_header(
@@ -660,18 +655,13 @@ fn block_has_more_work(header: &BlockHeader, tip: &Tip) -> bool {
 }
 
 /// Update the sync head so we can keep syncing from where we left off.
-fn update_sync_head(
-	bh: &BlockHeader,
-	ctx: &mut BlockContext,
-	batch: &mut store::Batch,
-) -> Result<Tip, Error> {
+fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
 	let tip = Tip::from_block(bh);
 	batch
 		.save_sync_head(&tip)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save sync head".to_owned()))?;
-	ctx.sync_head = tip.clone();
 	debug!(LOGGER, "sync head {} @ {}", bh.hash(), bh.height);
-	Ok(tip)
+	Ok(())
 }
 
 fn update_header_head(
