@@ -348,23 +348,21 @@ impl Chain {
 		&self,
 		headers: &Vec<BlockHeader>,
 		opts: Options,
-	) -> Result<Tip, Error> {
+	) -> Result<(), Error> {
 		let mut batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, &mut batch)?;
-		let res = pipe::sync_block_headers(headers, &mut ctx, &mut batch)?;
+		pipe::sync_block_headers(headers, &mut ctx, &mut batch)?;
 		batch.commit()?;
-		Ok(res)
+		Ok(())
 	}
 
 	fn new_ctx(&self, opts: Options, batch: &mut Batch) -> Result<pipe::BlockContext, Error> {
 		let head = batch.head()?;
 		let header_head = batch.get_header_head()?;
-		let sync_head = batch.get_sync_head()?;
 		Ok(pipe::BlockContext {
 			opts,
 			head,
 			header_head,
-			sync_head,
 			pow_verifier: self.pow_verifier,
 			block_hashes_cache: self.block_hashes_cache.clone(),
 			txhashset: self.txhashset.clone(),
