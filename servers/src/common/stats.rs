@@ -102,7 +102,7 @@ pub struct StratumStats {
 }
 
 /// Stats on the last WINDOW blocks and the difficulty calculation
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct DiffStats {
 	/// latest height
 	pub height: u64,

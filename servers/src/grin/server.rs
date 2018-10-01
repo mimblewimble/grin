@@ -26,12 +26,11 @@ use chain;
 use common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
-use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
+use common::stats::{DiffStats, PeerStats, ServerStateInfo, ServerStats};
 use common::types::{Error, ServerConfig, StratumServerConfig, SyncState};
 use core::core::hash::Hashed;
 use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
-use core::pow::Difficulty;
-use core::{consensus, genesis, global, pow};
+use core::{genesis, global, pow};
 use grin::{dandelion_monitor, seed, sync};
 use mining::stratumserver;
 use mining::test_miner::Miner;
@@ -395,49 +394,50 @@ impl Server {
 		// could return it from next_difficulty, but would rather keep consensus
 		// code clean. This may be handy for testing but not really needed
 		// for release
-		let diff_stats = {
-			let diff_iter = self.chain.difficulty_iter();
-
-			let last_blocks: Vec<Result<(u64, Difficulty), consensus::TargetError>> =
-				global::difficulty_data_to_vector(diff_iter)
-					.into_iter()
-					.skip(consensus::MEDIAN_TIME_WINDOW as usize)
-					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
-					.collect();
-
-			let mut last_time = last_blocks[0].clone().unwrap().0;
-			let tip_height = self.chain.head().unwrap().height as i64;
-			let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
-
-			let mut i = 1;
-
-			let diff_entries: Vec<DiffBlock> = last_blocks
-				.iter()
-				.skip(1)
-				.map(|n| {
-					let (time, diff) = n.clone().unwrap();
-					let dur = time - last_time;
-					let height = earliest_block_height + i + 1;
-					i += 1;
-					last_time = time;
-					DiffBlock {
-						block_number: height,
-						difficulty: diff.to_num(),
-						time: time,
-						duration: dur,
-					}
-				}).collect();
-
-			let block_time_sum = diff_entries.iter().fold(0, |sum, t| sum + t.duration);
-			let block_diff_sum = diff_entries.iter().fold(0, |sum, d| sum + d.difficulty);
-			DiffStats {
-				height: tip_height as u64,
-				last_blocks: diff_entries,
-				average_block_time: block_time_sum / (consensus::DIFFICULTY_ADJUST_WINDOW - 1),
-				average_difficulty: block_diff_sum / (consensus::DIFFICULTY_ADJUST_WINDOW - 1),
-				window_size: consensus::DIFFICULTY_ADJUST_WINDOW,
-			}
-		};
+		let diff_stats = DiffStats::default();
+//		let diff_stats = {
+//			let diff_iter = self.chain.difficulty_iter();
+//
+//			let last_blocks: Vec<Result<(u64, Difficulty), consensus::TargetError>> =
+//				global::difficulty_data_to_vector(diff_iter)
+//					.into_iter()
+//					.skip(consensus::MEDIAN_TIME_WINDOW as usize)
+//					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
+//					.collect();
+//
+//			let mut last_time = last_blocks[0].clone().unwrap().0;
+//			let tip_height = self.chain.head().unwrap().height as i64;
+//			let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
+//
+//			let mut i = 1;
+//
+//			let diff_entries: Vec<DiffBlock> = last_blocks
+//				.iter()
+//				.skip(1)
+//				.map(|n| {
+//					let (time, diff) = n.clone().unwrap();
+//					let dur = time - last_time;
+//					let height = earliest_block_height + i + 1;
+//					i += 1;
+//					last_time = time;
+//					DiffBlock {
+//						block_number: height,
+//						difficulty: diff.to_num(),
+//						time: time,
+//						duration: dur,
+//					}
+//				}).collect();
+//
+//			let block_time_sum = diff_entries.iter().fold(0, |sum, t| sum + t.duration);
+//			let block_diff_sum = diff_entries.iter().fold(0, |sum, d| sum + d.difficulty);
+//			DiffStats {
+//				height: tip_height as u64,
+//				last_blocks: diff_entries,
+//				average_block_time: block_time_sum / (consensus::DIFFICULTY_ADJUST_WINDOW - 1),
+//				average_difficulty: block_diff_sum / (consensus::DIFFICULTY_ADJUST_WINDOW - 1),
+//				window_size: consensus::DIFFICULTY_ADJUST_WINDOW,
+//			}
+//		};
 
 		let peer_stats = self
 			.p2p
@@ -453,10 +453,10 @@ impl Server {
 			head: self.head(),
 			header_head: self.header_head(),
 			sync_status: self.sync_state.status(),
-			awaiting_peers: awaiting_peers,
-			stratum_stats: stratum_stats,
-			peer_stats: peer_stats,
-			diff_stats: diff_stats,
+			awaiting_peers,
+			stratum_stats,
+			peer_stats,
+			diff_stats,
 		})
 	}
 
