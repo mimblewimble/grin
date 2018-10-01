@@ -685,19 +685,24 @@ impl Chain {
 		);
 
 		status.on_save();
-		// replace the chain txhashset with the newly built one
+		// Replace the chain txhashset with the newly built one.
 		{
 			let mut txhashset_ref = self.txhashset.write().unwrap();
 			*txhashset_ref = txhashset;
 		}
-		// setup new head
-		{
+		// Setup new head.
+		let head = {
 			let mut head = self.head.lock().unwrap();
 			*head = Tip::from_block(&header);
+			head.clone()
+		};
+		// Save the new head to the db and rebuild the header by height index.
+		{
 			batch.save_body_head(&head)?;
 			batch.save_header_height(&header)?;
 			batch.build_by_height_index(&header, true)?;
 		}
+		// Commit all the changes to the db.
 		batch.commit()?;
 
 		debug!(
@@ -705,6 +710,7 @@ impl Chain {
 			"chain: txhashset_write: finished committing the batch (head etc.)"
 		);
 
+		// Check for any orphan blocks and process them based on the new chain state.
 		self.check_orphans(header.height + 1);
 
 		status.on_done();
