@@ -356,6 +356,31 @@ impl Chain {
 		Ok(())
 	}
 
+	/// Update sync head
+	/// This is only used for Independent HeaderSync
+	pub fn update_sync_head(&self, bh: &BlockHeader) -> Result<(), Error> {
+		let mut batch = self.store.batch()?;
+		let res = pipe::update_sync_head(bh, &mut batch);
+
+		if res.is_ok() {
+			batch.commit()?;
+		}
+		res
+	}
+
+	/// Update header head
+	/// This is only used for Independent HeaderSync
+	pub fn update_header_head(&self, bh: &BlockHeader, opts: Options) -> Result<Option<Tip>, Error> {
+		let mut batch = self.store.batch()?;
+		let mut sync_ctx = self.new_ctx(opts, &mut batch)?;
+		let res = pipe::update_header_head(bh, &mut sync_ctx, &mut batch);
+
+		if res.is_ok() {
+			batch.commit()?;
+		}
+		res
+	}
+
 	fn new_ctx(&self, opts: Options, batch: &mut Batch) -> Result<pipe::BlockContext, Error> {
 		let head = batch.head()?;
 		let header_head = batch.get_header_head()?;
