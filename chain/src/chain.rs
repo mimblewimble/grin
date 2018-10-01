@@ -975,10 +975,10 @@ impl Chain {
 			.map_err(|e| ErrorKind::StoreErr(e, "chain block exists".to_owned()).into())
 	}
 
-	/// reset sync_head to header_head
-	pub fn init_sync_head(&self, header_head: &Tip) -> Result<(), Error> {
+	/// Reset sync_head to the provided head.
+	pub fn reset_sync_head(&self, head: &Tip) -> Result<(), Error> {
 		let batch = self.store.batch()?;
-		batch.init_sync_head(header_head)?;
+		batch.save_sync_head(head)?;
 		batch.commit()?;
 		Ok(())
 	}
@@ -1074,14 +1074,13 @@ fn setup_head(
 				Ok(())
 			})?;
 
-			head = tip;
 			info!(LOGGER, "chain: init: saved genesis: {:?}", genesis.hash());
 		}
 		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()))?,
 	};
 
 	// Initialize header_head and sync_head as necessary for chain init.
-	batch.init_sync_head(&head)?;
+	batch.reset_head()?;
 	batch.commit()?;
 
 	Ok(())
