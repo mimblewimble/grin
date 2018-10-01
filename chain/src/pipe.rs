@@ -673,7 +673,7 @@ fn block_has_more_work(header: &BlockHeader, tip: &Tip) -> bool {
 }
 
 /// Update the sync head so we can keep syncing from where we left off.
-pub fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
+fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
 	let tip = Tip::from_block(bh);
 	batch
 		.save_sync_head(&tip)
@@ -683,7 +683,7 @@ pub fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<()
 }
 
 /// Update the header head so we can keep syncing from where we left off.
-pub fn update_header_head(
+fn update_header_head(
 	bh: &BlockHeader,
 	ctx: &mut BlockContext,
 	batch: &mut store::Batch,
