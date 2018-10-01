@@ -106,7 +106,7 @@ impl MessageHandler for Protocol {
 
 			Type::GetBlock => {
 				let h: Hash = msg.body()?;
-				debug!(
+				trace!(
 					LOGGER,
 					"handle_payload: Getblock: {}, msg_len: {}", h, msg.header.msg_len,
 				);
