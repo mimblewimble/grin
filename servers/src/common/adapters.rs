@@ -263,13 +263,6 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			return false;
 		}
 
-		// headers will just set us backward if even the last is unknown
-		let last_h = bhs.last().unwrap().hash();
-		if let Ok(_) = w(&self.chain).get_block_header(&last_h) {
-			info!(LOGGER, "All known, ignoring");
-			return true;
-		}
-
 		// try to add headers to our header chain
 		let res = w(&self.chain).sync_block_headers(&bhs, self.chain_opts());
 		if let &Err(ref e) = &res {
