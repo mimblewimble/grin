@@ -213,7 +213,7 @@ fn do_header_sync(
 				header_head.hash(),
 				header_head.height,
 			);
-			chain.init_sync_head(&header_head).unwrap();
+			chain.reset_sync_head(&header_head).unwrap();
 			history_locators.clear();
 			true
 		}

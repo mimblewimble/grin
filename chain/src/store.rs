@@ -206,21 +206,14 @@ impl<'a> Batch<'a> {
 		self.db.put_ser(&vec![SYNC_HEAD_PREFIX], t)
 	}
 
-	pub fn init_sync_head(&self, t: &Tip) -> Result<(), Error> {
-		let header_tip = match self.store.get_header_head() {
-			Ok(hh) => hh,
-			Err(store::Error::NotFoundErr(_)) => {
-				self.save_header_head(t)?;
-				t.clone()
-			}
-			Err(e) => return Err(e),
-		};
-		self.save_sync_head(&header_tip)
+	pub fn reset_sync_head(&self) -> Result<(), Error> {
+		let head = self.get_header_head()?;
+		self.save_sync_head(&head)
 	}
 
 	// Reset both header_head and sync_head to the current head of the body chain
 	pub fn reset_head(&self) -> Result<(), Error> {
-		let tip = self.store.head()?;
+		let tip = self.head()?;
 		self.save_header_head(&tip)?;
 		self.save_sync_head(&tip)
 	}
