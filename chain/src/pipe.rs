@@ -229,7 +229,7 @@ pub fn sync_block_headers(
 		false
 	};
 
-	if !all_known{
+	if !all_known {
 		for header in headers {
 			handle_block_header(header, ctx, batch)?;
 		}
