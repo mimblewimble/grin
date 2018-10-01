@@ -272,9 +272,11 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				return true;
 			}
 
-			info!(LOGGER, "All known, ignoring. Update header_head and sync_head to {} at {}",
-				  last_h,
-				  bhs_last.height,
+			info!(
+				LOGGER,
+				"All known, ignoring. Update header_head and sync_head to {} at {}",
+				last_h,
+				bhs_last.height,
 			);
 
 			// Update header_head and sync_head to the last header of this Headers package
@@ -282,18 +284,14 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			if let &Err(ref e) = &res {
 				error!(
 					LOGGER,
-					"Block header {} update_header_head fail: {:?}",
-					last_h,
-					e
+					"Block header {} update_header_head fail: {:?}", last_h, e
 				);
 			}
 			let res = w(&self.chain).update_sync_head(&bhs_last);
 			if let &Err(ref e) = &res {
 				error!(
 					LOGGER,
-					"Block header {} update_sync_head fail: {:?}",
-					last_h,
-					e
+					"Block header {} update_sync_head fail: {:?}", last_h, e
 				);
 			}
 			return true;

@@ -370,7 +370,11 @@ impl Chain {
 
 	/// Update header head
 	/// This is only used for Independent HeaderSync
-	pub fn update_header_head(&self, bh: &BlockHeader, opts: Options) -> Result<Option<Tip>, Error> {
+	pub fn update_header_head(
+		&self,
+		bh: &BlockHeader,
+		opts: Options,
+	) -> Result<Option<Tip>, Error> {
 		let mut batch = self.store.batch()?;
 		let mut sync_ctx = self.new_ctx(opts, &mut batch)?;
 		let res = pipe::update_header_head(bh, &mut sync_ctx, &mut batch);
