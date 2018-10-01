@@ -14,11 +14,12 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
-use std::collections::VecDeque;
 use std::sync::{Arc, RwLock};
 
 use chrono::prelude::Utc;
 use chrono::Duration;
+
+use lru_cache::LruCache;
 
 use chain::OrphanBlockPool;
 use core::consensus;
@@ -46,14 +47,12 @@ pub struct BlockContext {
 	pub head: Tip,
 	/// The header head
 	pub header_head: Tip,
-	/// The sync head
-	pub sync_head: Tip,
 	/// The POW verification function
 	pub pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
 	/// MMR sum tree states
 	pub txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	/// Recently processed blocks to avoid double-processing
-	pub block_hashes_cache: Arc<RwLock<VecDeque<Hash>>>,
+	pub block_hashes_cache: Arc<RwLock<LruCache<Hash, bool>>>,
 	/// Recent orphan blocks to avoid double-processing
 	pub orphans: Arc<OrphanBlockPool>,
 }
@@ -205,7 +204,7 @@ pub fn sync_block_headers(
 	headers: &Vec<BlockHeader>,
 	ctx: &mut BlockContext,
 	batch: &mut store::Batch,
-) -> Result<Tip, Error> {
+) -> Result<(), Error> {
 	if let Some(header) = headers.first() {
 		debug!(
 			LOGGER,
@@ -216,8 +215,6 @@ pub fn sync_block_headers(
 		);
 	}
 
-	let mut tip = batch.get_header_head()?;
-
 	for header in headers {
 		handle_block_header(header, ctx, batch)?;
 
@@ -226,9 +223,9 @@ pub fn sync_block_headers(
 		// and become the "most work" chain.
 		// header_head and sync_head will diverge in this situation until we switch to
 		// a single "most work" chain.
-		tip = update_sync_head(header, ctx, batch)?;
+		update_sync_head(header, batch)?;
 	}
-	Ok(tip)
+	Ok(())
 }
 
 fn handle_block_header(
@@ -290,8 +287,8 @@ fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), 
 /// Keeps duplicates from the network in check.
 /// Checks against the cache of recently processed block hashes.
 fn check_known_cache(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	let cache = ctx.block_hashes_cache.read().unwrap();
-	if cache.contains(&header.hash()) {
+	let mut cache = ctx.block_hashes_cache.write().unwrap();
+	if cache.contains_key(&header.hash()) {
 		return Err(ErrorKind::Unfit("already known in cache".to_string()).into());
 	}
 	Ok(())
@@ -527,8 +524,7 @@ fn validate_block(
 			&prev.total_kernel_offset,
 			&prev.total_kernel_sum,
 			verifier_cache,
-		)
-		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
+		).map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }
 
@@ -568,7 +564,8 @@ fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Er
 	let offset = b.header.total_kernel_offset();
 
 	// Verify the kernel sums for the block_sums with the new block applied.
-	let (utxo_sum, kernel_sum) = (block_sums, b as &Committed).verify_kernel_sums(overage, offset)?;
+	let (utxo_sum, kernel_sum) =
+		(block_sums, b as &Committed).verify_kernel_sums(overage, offset)?;
 
 	// Save the new block_sums for the new block to the db via the batch.
 	ext.batch.save_block_sums(
@@ -658,18 +655,13 @@ fn block_has_more_work(header: &BlockHeader, tip: &Tip) -> bool {
 }
 
 /// Update the sync head so we can keep syncing from where we left off.
-fn update_sync_head(
-	bh: &BlockHeader,
-	ctx: &mut BlockContext,
-	batch: &mut store::Batch,
-) -> Result<Tip, Error> {
+fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
 	let tip = Tip::from_block(bh);
 	batch
 		.save_sync_head(&tip)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save sync head".to_owned()))?;
-	ctx.sync_head = tip.clone();
 	debug!(LOGGER, "sync head {} @ {}", bh.hash(), bh.height);
-	Ok(tip)
+	Ok(())
 }
 
 fn update_header_head(
