@@ -259,10 +259,6 @@ fn handle_block_header(
 ) -> Result<(), Error> {
 	validate_header(header, ctx, batch)?;
 	add_block_header(header, batch)?;
-
-	// // Update header_head (but only if this header increases our total known work).
-	// // i.e. Only if this header is now the head of the current "most work" chain.
-	// update_header_head(header, ctx, batch)?;
 	Ok(())
 }
 
