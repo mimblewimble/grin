@@ -205,6 +205,27 @@ pub fn sync_block_headers(
 	ctx: &mut BlockContext,
 	batch: &mut store::Batch,
 ) -> Result<(), Error> {
+
+	let bhs_last = headers.last().unwrap().clone();
+	let last_h = bhs_last.hash();
+	if let Ok(_) = batch.get_block_header(&last_h) {
+		info!(
+			LOGGER,
+			"All known, ignoring. Update sync_head to {} at {}",
+			last_h,
+			bhs_last.height,
+		);
+
+		let res = update_sync_head(&bhs_last, batch);
+		if let &Err(ref e) = &res {
+			error!(
+				LOGGER,
+				"Block header {} update_sync_head fail: {:?}", last_h, e
+			);
+		}
+		return Ok(());
+	}
+
 	if let Some(header) = headers.first() {
 		debug!(
 			LOGGER,
