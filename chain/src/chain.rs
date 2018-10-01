@@ -963,8 +963,8 @@ impl Chain {
 	/// running backward. Specialized to return information pertaining to block
 	/// difficulty calculation (timestamp and previous difficulties).
 	pub fn difficulty_iter(&self) -> store::DifficultyIter {
-		let head = self.head.lock().unwrap();
 		let batch = self.store.batch().unwrap();
+		let head = self.head.lock().unwrap();
 		store::DifficultyIter::from(head.last_block_h, batch)
 	}
 
