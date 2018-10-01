@@ -18,7 +18,7 @@ use std::mem;
 use byteorder::{BigEndian, LittleEndian, WriteBytesExt};
 use croaring::Bitmap;
 
-use pow::common::{self, EdgeType, Link};
+use pow::common::{self, CuckooParams, EdgeType, Link};
 use pow::error::{Error, ErrorKind};
 use pow::{PoWContext, Proof};
 use util;
@@ -158,11 +158,8 @@ pub struct CuckatooContext<T>
 where
 	T: EdgeType,
 {
-	siphash_keys: [u64; 4],
-	easiness: T,
+	params: CuckooParams<T>,
 	graph: Graph<T>,
-	proof_size: usize,
-	edge_mask: T,
 }
 
 impl<T> PoWContext<T> for CuckatooContext<T>
@@ -193,7 +190,8 @@ where
 	}
 
 	fn find_cycles(&mut self) -> Result<Vec<Proof>, Error> {
-		self.find_cycles_impl()
+		let ease = to_u64!(self.params.easiness);
+		self.find_cycles_iter(0..ease)
 	}
 
 	fn verify(&self, proof: &Proof) -> Result<(), Error> {
@@ -212,22 +210,18 @@ where
 		easiness_pct: u32,
 		max_sols: u32,
 	) -> Result<CuckatooContext<T>, Error> {
-		let num_edges = 1 << edge_bits;
-		let num_nodes = 2 * num_edges as u64;
-		let easiness = to_u64!(easiness_pct) * num_nodes / 100;
+		let params = CuckooParams::new(edge_bits, proof_size, easiness_pct, true)?;
+		let num_edges = to_edge!(params.num_edges);
 		Ok(CuckatooContext {
-			siphash_keys: [0; 4],
-			easiness: to_edge!(easiness),
-			graph: Graph::new(to_edge!(num_edges), max_sols, proof_size)?,
-			proof_size: proof_size,
-			edge_mask: to_edge!(num_edges - 1),
+			params,
+			graph: Graph::new(num_edges, max_sols, proof_size)?,
 		})
 	}
 
 	/// Get a siphash key as a hex string (for display convenience)
 	pub fn sipkey_hex(&self, index: usize) -> Result<String, Error> {
 		let mut rdr = vec![];
-		rdr.write_u64::<BigEndian>(self.siphash_keys[index])?;
+		rdr.write_u64::<BigEndian>(self.params.siphash_keys[index])?;
 		Ok(util::to_hex(rdr))
 	}
 
@@ -239,16 +233,11 @@ where
 	/// Set the header and optional nonce in the last part of the header
 	pub fn set_header_nonce_impl(
 		&mut self,
-		mut header: Vec<u8>,
+		header: Vec<u8>,
 		nonce: Option<u32>,
 		solve: bool,
 	) -> Result<(), Error> {
-		let len = header.len();
-		header.truncate(len - mem::size_of::<u32>());
-		if let Some(n) = nonce {
-			header.write_u32::<LittleEndian>(n)?;
-		}
-		self.siphash_keys = common::set_header_nonce(header, nonce)?;
+		self.params.reset_header_nonce(header, nonce)?;
 		if solve {
 			self.graph.reset()?;
 		}
@@ -256,19 +245,26 @@ where
 	}
 
 	/// Return siphash masked for type
-	fn sipnode(&self, edge: T, uorv: u64) -> Result<T, Error> {
-		common::sipnode::<T>(&self.siphash_keys, edge, &self.edge_mask, uorv, false)
+	pub fn sipnode(&self, edge: T, uorv: u64) -> Result<T, Error> {
+		self.params.sipnode(edge, uorv, false)
 	}
 
 	/// Simple implementation of algorithm
-	pub fn find_cycles_impl(&mut self) -> Result<Vec<Proof>, Error> {
-		for n in 0..to_u64!(self.easiness) {
+
+	pub fn find_cycles_iter<'a, I>(&mut self, iter: I) -> Result<Vec<Proof>, Error>
+	where
+		I: Iterator<Item = u64>,
+	{
+		let mut val = vec![];
+		for n in iter {
+			val.push(n);
 			let u = self.sipnode(to_edge!(n), 0)?;
 			let v = self.sipnode(to_edge!(n), 1)?;
 			self.graph.add_edge(to_edge!(u), to_edge!(v))?;
 		}
 		self.graph.solutions.pop();
 		for s in &mut self.graph.solutions {
+			s.nonces = map_vec!(s.nonces, |n| val[*n as usize]);
 			s.nonces.sort();
 		}
 		for s in &self.graph.solutions {
@@ -286,11 +282,11 @@ where
 	pub fn verify_impl(&self, proof: &Proof) -> Result<(), Error> {
 		let nonces = &proof.nonces;
 		let mut uvs = vec![0u64; 2 * proof.proof_size()];
-		let mut xor0: u64 = (self.proof_size as u64 / 2) & 1;
+		let mut xor0: u64 = (self.params.proof_size as u64 / 2) & 1;
 		let mut xor1: u64 = xor0;
 
 		for n in 0..proof.proof_size() {
-			if nonces[n] > to_u64!(self.edge_mask) {
+			if nonces[n] > to_u64!(self.params.edge_mask) {
 				return Err(ErrorKind::Verification("edge too big".to_owned()))?;
 			}
 			if n > 0 && nonces[n] <= nonces[n - 1] {
@@ -314,7 +310,7 @@ where
 			j = i;
 			let mut k = j;
 			loop {
-				k = (k + 2) % (2 * self.proof_size);
+				k = (k + 2) % (2 * self.params.proof_size);
 				if k == i {
 					break;
 				}
@@ -335,7 +331,7 @@ where
 				break;
 			}
 		}
-		if n == self.proof_size {
+		if n == self.params.proof_size {
 			Ok(())
 		} else {
 			Err(ErrorKind::Verification("cycle too short".to_owned()))?

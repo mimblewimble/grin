@@ -41,6 +41,8 @@ mod common;
 pub mod cuckatoo;
 pub mod cuckoo;
 mod error;
+#[allow(dead_code)]
+pub mod lean;
 mod siphash;
 mod types;
 
@@ -61,12 +63,8 @@ const MAX_SOLS: u32 = 10;
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u8) -> Result<(), Error> {
-	let mut ctx = global::create_pow_context::<u64>(
-		cuckoo_sz,
-		bh.pow.proof.nonces.len(),
-		consensus::EASINESS,
-		MAX_SOLS,
-	)?;
+	let mut ctx =
+		global::create_pow_context::<u64>(cuckoo_sz, bh.pow.proof.nonces.len(), MAX_SOLS)?;
 	ctx.set_header_nonce(bh.pre_pow(), None, false)?;
 	ctx.verify(&bh.pow.proof)
 }
@@ -109,8 +107,7 @@ pub fn pow_size(
 	loop {
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
-		let mut ctx =
-			global::create_pow_context::<u32>(sz, proof_size, consensus::EASINESS, MAX_SOLS)?;
+		let mut ctx = global::create_pow_context::<u32>(sz, proof_size, MAX_SOLS)?;
 		ctx.set_header_nonce(bh.pre_pow(), None, true)?;
 		if let Ok(proofs) = ctx.find_cycles() {
 			bh.pow.proof = proofs[0].clone();
