@@ -15,7 +15,7 @@
 //! Controller for wallet.. instantiates and handles listeners (or single-run
 //! invocations) as needed.
 //! Still experimental
-use api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router};
+use api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router, TLSConfig};
 use core::core::Transaction;
 use failure::ResultExt;
 use futures::future::{err, ok};
@@ -70,6 +70,7 @@ pub fn owner_listener<T: ?Sized, C, K>(
 	wallet: Box<T>,
 	addr: &str,
 	api_secret: Option<String>,
+	tls_config: Option<TLSConfig>,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
@@ -95,11 +96,11 @@ where
 	let mut apis = ApiServer::new();
 	info!(LOGGER, "Starting HTTP Owner API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	let api_thread = apis
-		.start(socket_addr, router)
-		.context(ErrorKind::GenericError(
-			"API thread failed to start".to_string(),
-		))?;
+	let api_thread =
+		apis.start(socket_addr, router, tls_config)
+			.context(ErrorKind::GenericError(
+				"API thread failed to start".to_string(),
+			))?;
 	api_thread
 		.join()
 		.map_err(|e| ErrorKind::GenericError(format!("API thread panicked :{:?}", e)).into())
@@ -107,7 +108,11 @@ where
 
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
-pub fn foreign_listener<T: ?Sized, C, K>(wallet: Box<T>, addr: &str) -> Result<(), Error>
+pub fn foreign_listener<T: ?Sized, C, K>(
+	wallet: Box<T>,
+	addr: &str,
+	tls_config: Option<TLSConfig>,
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
 	C: WalletClient + 'static,
@@ -123,11 +128,11 @@ where
 	let mut apis = ApiServer::new();
 	info!(LOGGER, "Starting HTTP Foreign API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	let api_thread = apis
-		.start(socket_addr, router)
-		.context(ErrorKind::GenericError(
-			"API thread failed to start".to_string(),
-		))?;
+	let api_thread =
+		apis.start(socket_addr, router, tls_config)
+			.context(ErrorKind::GenericError(
+				"API thread failed to start".to_string(),
+			))?;
 
 	api_thread
 		.join()

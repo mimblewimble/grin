@@ -18,7 +18,7 @@
 //! To use it, just have your service(s) implement the ApiEndpoint trait and
 //! register them on a ApiServer.
 
-use failure::{Backtrace, Context, Fail};
+use failure::{Backtrace, Context, Fail, ResultExt};
 use futures::sync::oneshot;
 use futures::Stream;
 use hyper::rt::Future;
@@ -27,6 +27,8 @@ use hyper::{rt, Body, Request, Server};
 use native_tls::{Identity, TlsAcceptor};
 use router::{Handler, HandlerObj, ResponseFuture, Router};
 use std::fmt::{self, Display};
+use std::fs::File;
+use std::io::Read;
 use std::net::SocketAddr;
 use std::{io, thread};
 use tokio::net::TcpListener;
@@ -95,6 +97,22 @@ pub struct TLSConfig {
 	pub pass: String,
 }
 
+impl TLSConfig {
+	pub fn new(pass: String, file: String) -> Result<TLSConfig, Error> {
+		let mut f = File::open(&file).context(ErrorKind::Internal(format!(
+			"can't open TLS certifiacte file {}",
+			file
+		)))?;
+		let mut pkcs_bytes = Vec::new();
+		f.read_to_end(&mut pkcs_bytes)
+			.context(ErrorKind::Internal(format!(
+				"can't read TLS certifiacte file {}",
+				file
+			)))?;
+		Ok(TLSConfig { pkcs_bytes, pass })
+	}
+}
+
 /// HTTP server allowing the registration of ApiEndpoint implementations.
 pub struct ApiServer {
 	shutdown_sender: Option<oneshot::Sender<()>>,
@@ -109,8 +127,22 @@ impl ApiServer {
 		}
 	}
 
-	/// Starts the ApiServer at the provided address.
+	/// Starts ApiServer at the provided address.
+	/// TODO support stop operation
 	pub fn start(
+		&mut self,
+		addr: SocketAddr,
+		router: Router,
+		conf: Option<TLSConfig>,
+	) -> Result<thread::JoinHandle<()>, Error> {
+		match conf {
+			Some(conf) => self.start_tls(addr, router, conf),
+			None => self.start_no_tls(addr, router),
+		}
+	}
+
+	/// Starts the ApiServer at the provided address.
+	fn start_no_tls(
 		&mut self,
 		addr: SocketAddr,
 		router: Router,
@@ -137,7 +169,7 @@ impl ApiServer {
 
 	/// Starts the TLS ApiServer at the provided address.
 	/// TODO support stop operation
-	pub fn start_tls(
+	fn start_tls(
 		&mut self,
 		addr: SocketAddr,
 		router: Router,

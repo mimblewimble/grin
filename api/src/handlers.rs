@@ -797,6 +797,7 @@ pub fn start_rest_apis(
 	tx_pool: Weak<RwLock<pool::TransactionPool>>,
 	peers: Weak<p2p::Peers>,
 	api_secret: Option<String>,
+	tls_config: Option<TLSConfig>,
 ) -> bool {
 	let mut apis = ApiServer::new();
 	let mut router = build_router(chain, tx_pool, peers).expect("unable to build API router");
@@ -810,7 +811,7 @@ pub fn start_rest_apis(
 
 	info!(LOGGER, "Starting HTTP API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	apis.start(socket_addr, router).is_ok()
+	apis.start(socket_addr, router, tls_config).is_ok()
 }
 
 pub fn build_router(
