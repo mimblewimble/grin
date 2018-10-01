@@ -694,7 +694,7 @@ impl Chain {
 		let head = {
 			let mut head = self.head.lock().unwrap();
 			*head = Tip::from_block(&header);
-			head
+			head.clone()
 		};
 		// Save the new head to the db and rebuild the header by height index.
 		{
