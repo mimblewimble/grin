@@ -306,7 +306,7 @@ impl LocalServerContainer {
 		let keychain: keychain::ExtKeychain = wallet_seed
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
-		let client = HTTPWalletClient::new(&config.check_node_api_http_addr);
+		let client = HTTPWalletClient::new(&config.check_node_api_http_addr, None);
 		let mut wallet = LMDBBackend::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
