@@ -243,7 +243,8 @@ impl<'a> Batch<'a> {
 	/// Delete a full block. Does not delete any record associated with a block
 	/// header.
 	pub fn delete_block(&self, bh: &Hash) -> Result<(), Error> {
-		self.db.delete(&to_key(BLOCK_PREFIX, &mut bh.to_vec())[..])?;
+		self.db
+			.delete(&to_key(BLOCK_PREFIX, &mut bh.to_vec())[..])?;
 
 		// Best effort at deleting associated data for this block.
 		// Not an error if these fail.
