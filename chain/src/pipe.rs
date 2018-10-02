@@ -53,6 +53,8 @@ pub struct BlockContext {
 	pub txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	/// Recently processed blocks to avoid double-processing
 	pub block_hashes_cache: Arc<RwLock<LruCache<Hash, bool>>>,
+	/// The verifier cache (caching verifier for rangeproofs and kernel signatures)
+	pub verifier_cache: Arc<RwLock<VerifierCache>>,
 	/// Recent orphan blocks to avoid double-processing
 	pub orphans: Arc<OrphanBlockPool>,
 }
@@ -70,7 +72,6 @@ pub fn process_block(
 	b: &Block,
 	ctx: &mut BlockContext,
 	batch: &mut store::Batch,
-	verifier_cache: Arc<RwLock<VerifierCache>>,
 ) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
@@ -140,7 +141,7 @@ pub fn process_block(
 
 	// Validate the block itself, make sure it is internally consistent.
 	// Use the verifier_cache for verifying rangeproofs and kernel signatures.
-	validate_block(b, batch, verifier_cache)?;
+	validate_block(b, batch, ctx.verifier_cache.clone())?;
 
 	// Start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations

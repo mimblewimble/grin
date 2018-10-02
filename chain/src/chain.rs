@@ -215,7 +215,7 @@ impl Chain {
 		b: Block,
 		opts: Options,
 	) -> Result<(Option<Tip>, Option<Block>), Error> {
-		match self.process_block_no_orphans(b, opts) {
+		match self.process_block_single(b, opts) {
 			Ok((t, b)) => {
 				// We accepted a block, so see if we can accept any orphans
 				if let Some(ref b) = b {
@@ -230,7 +230,7 @@ impl Chain {
 	/// Attempt to add a new block to the chain. Returns the new chain tip if it
 	/// has been added to the longest chain, None if it's added to an (as of
 	/// now) orphan chain.
-	pub fn process_block_no_orphans(
+	fn process_block_single(
 		&self,
 		b: Block,
 		opts: Options,
@@ -239,7 +239,7 @@ impl Chain {
 		let bhash = b.hash();
 		let mut ctx = self.new_ctx(opts, &mut batch)?;
 
-		let res = pipe::process_block(&b, &mut ctx, &mut batch, self.verifier_cache.clone());
+		let res = pipe::process_block(&b, &mut ctx, &mut batch);
 
 		let add_to_hash_cache = || {
 			// only add to hash cache below if block is definitively accepted
@@ -365,6 +365,7 @@ impl Chain {
 			header_head,
 			pow_verifier: self.pow_verifier,
 			block_hashes_cache: self.block_hashes_cache.clone(),
+			verifier_cache: self.verifier_cache.clone(),
 			txhashset: self.txhashset.clone(),
 			orphans: self.orphans.clone(),
 		})
@@ -410,7 +411,7 @@ impl Chain {
 							String::new()
 						},
 					);
-					let res = self.process_block_no_orphans(orphan.block, orphan.opts);
+					let res = self.process_block_single(orphan.block, orphan.opts);
 					if let Ok((_, Some(b))) = res {
 						orphan_accepted = true;
 						height_accepted = b.header.height;
