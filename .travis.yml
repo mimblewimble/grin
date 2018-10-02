@@ -5,7 +5,7 @@ git:
 
 os:
   - linux
-  - osx
+#  - osx
 
 dist: trusty
 sudo: required
@@ -42,25 +42,28 @@ env:
   - RUST_BACKTRACE="1"
   - RUST_FLAGS="-C debug-assertions"
   matrix:
-  - RUST_TEST_THREADS=1 TEST_DIR=servers
-  - TEST_DIR=store
-  - TEST_DIR=chain
-  - TEST_DIR=pool
-  - TEST_DIR=wallet
-  - TEST_DIR=p2p
-  - TEST_DIR=api
-  - TEST_DIR=keychain
-  - TEST_DIR=core
-  - TEST_DIR=util
-  - TEST_DIR=config
-  - TEST_DIR=none
+  - TEST_SUITE=servers-store
+  - TEST_SUITE=chain-core
+  - TEST_SUITE=pool-p2p
+  - TEST_SUITE=keychain-wallet
+  - TEST_SUITE=config-api-util
+  - TEST_SUITE=none
 
 script:
-  - if [[ "$TEST_DIR" == "none" ]]; then cargo build --release;                fi
-  - if [[ "$TEST_DIR" != "none" ]]; then cd $TEST_DIR && cargo test --release; fi
+  - if [[ "TEST_SUITE" != "none" ]]; then
+        IFS='-' read -r -a array <<< "$TEST_SUITE"
+        for TEST_DIR in "${array[@]}"
+        do
+          echo "Start testing in folder $TEST_DIR..."
+          cd $TEST_DIR && cargo test --release;
+          cd - > /dev/null;
+          echo "Testing done for folder $TEST_DIR"
+        done
+    fi
 
 before_deploy:
-  - if [[ "$TEST_DIR" == "none" ]]; then ./.auto-release.sh;                   fi
+  - if [[ "TEST_SUITE" == "none" ]]; then cargo build --release;                fi
+  - if [[ "TEST_SUITE" == "none" ]]; then ./.auto-release.sh;                   fi
 
 deploy:
   provider: releases
