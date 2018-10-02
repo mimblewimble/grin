@@ -43,10 +43,10 @@ use failure::ResultExt;
 pub struct BlockContext {
 	/// The options
 	pub opts: Options,
-	/// The head
-	pub head: Tip,
-	/// The header head
-	pub header_head: Tip,
+	// /// The head
+	// pub head: Tip,
+	// /// The header head
+	// pub header_head: Tip,
 	/// The POW verification function
 	pub pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
 	/// MMR sum tree states
@@ -61,8 +61,8 @@ pub struct BlockContext {
 
 // Check if this block is the next block *immediately*
 // after our current chain head.
-fn is_next_block(header: &BlockHeader, ctx: &mut BlockContext) -> bool {
-	header.previous == ctx.head.last_block_h
+fn is_next_block(header: &BlockHeader, head: &Tip) -> bool {
+	header.previous == head.last_block_h
 }
 
 /// Runs the block processing pipeline, including validation and finding a
@@ -96,7 +96,7 @@ pub fn process_block(
 	// Fast in-memory checks to avoid re-processing a block we recently processed.
 	{
 		// Check if we have recently processed this block (via ctx chain head).
-		check_known_head(&b.header, ctx)?;
+		check_known_head(&b.header, batch)?;
 
 		// Check if we have recently processed this block (via block_hashes_cache).
 		check_known_cache(&b.header, ctx)?;
@@ -111,11 +111,12 @@ pub fn process_block(
 
 		// Update header_head (but only if this header increases our total known work).
 		// i.e. Only if this header is now the head of the current "most work" chain.
-		update_header_head(&b.header, ctx, batch)?;
+		update_header_head(&b.header, batch)?;
 	}
 
 	// Check if are processing the "next" block relative to the current chain head.
-	if is_next_block(&b.header, ctx) {
+	let head = batch.head()?;
+	if is_next_block(&b.header, &head) {
 		// If this is the "next" block then either -
 		//   * common case where we process blocks sequentially.
 		//   * special case where this is the first fast sync full block
@@ -124,14 +125,14 @@ pub fn process_block(
 		// Check we have *this* block in the store.
 		// Stop if we have processed this block previously (it is in the store).
 		// This is more expensive than the earlier check_known() as we hit the store.
-		check_known_store(&b.header, ctx, batch)?;
+		check_known_store(&b.header, batch)?;
 
 		// Check existing MMR (via rewind) to see if this block is known to us already.
 		// This should catch old blocks before we check to see if they appear to be
 		// orphaned due to compacting/pruning on a fast-sync node.
 		// This is more expensive than check_known_store() as we rewind the txhashset.
 		// But we only incur the cost of the rewind if this is an earlier block on the same chain.
-		check_known_mmr(&b.header, ctx, batch, &mut txhashset)?;
+		check_known_mmr(&b.header, batch, &mut txhashset)?;
 
 		// At this point it looks like this is a new block that we have not yet processed.
 		// Check we have the *previous* block in the store.
@@ -149,7 +150,13 @@ pub fn process_block(
 		// First we rewind the txhashset extension if necessary
 		// to put it into a consistent state for validating the block.
 		// We can skip this step if the previous header is the latest header we saw.
-		if is_next_block(&b.header, ctx) {
+
+		//
+		// TODO - Is this safe to do? Can we just go look in the db via the batch?
+		//
+		let head = extension.batch.head()?;
+
+		if is_next_block(&b.header, &head) {
 			// No need to rewind if we are processing the next block.
 		} else {
 			// Rewind the re-apply blocks on the forked chain to
@@ -180,7 +187,7 @@ pub fn process_block(
 
 		// If applying this block does not increase the work on the chain then
 		// we know we have not yet updated the chain to produce a new chain head.
-		if !block_has_more_work(&b.header, &ctx.head) {
+		if b.header.total_difficulty() <= head.total_difficulty {
 			extension.force_rollback();
 		}
 
@@ -244,7 +251,7 @@ pub fn sync_block_headers(
 	if let Some(header) = headers.last() {
 		// Update header_head (but only if this header increases our total known work).
 		// i.e. Only if this header is now the head of the current "most work" chain.
-		update_header_head(header, ctx, batch)?;
+		update_header_head(header, batch)?;
 
 		// Update sync_head regardless of total work.
 		update_sync_head(header, batch)?;
@@ -279,15 +286,16 @@ pub fn process_block_header(
 		bh.hash()
 	); // keep this
 
-	check_header_known(bh.hash(), ctx)?;
+	check_header_known(bh.hash(), batch)?;
 	validate_header(&bh, ctx, batch)
 }
 
 /// Quick in-memory check to fast-reject any block header we've already handled
 /// recently. Keeps duplicates from the network in check.
 /// ctx here is specific to the header_head (tip of the header chain)
-fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
-	if bh == ctx.header_head.last_block_h || bh == ctx.header_head.prev_block_h {
+fn check_header_known(bh: Hash, batch: &mut store::Batch) -> Result<(), Error> {
+	let header_head = batch.get_header_head()?;
+	if bh == header_head.last_block_h || bh == header_head.prev_block_h {
 		return Err(ErrorKind::Unfit("header already known".to_string()).into());
 	}
 	Ok(())
@@ -296,9 +304,10 @@ fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
 /// Quick in-memory check to fast-reject any block handled recently.
 /// Keeps duplicates from the network in check.
 /// Checks against the last_block_h and prev_block_h of the chain head.
-fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+fn check_known_head(header: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
 	let bh = header.hash();
-	if bh == ctx.head.last_block_h || bh == ctx.head.prev_block_h {
+	let head = batch.head()?;
+	if bh == head.last_block_h || bh == head.prev_block_h {
 		return Err(ErrorKind::Unfit("already known in head".to_string()).into());
 	}
 	Ok(())
@@ -325,14 +334,11 @@ fn check_known_orphans(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(
 }
 
 // Check if this block is in the store already.
-fn check_known_store(
-	header: &BlockHeader,
-	ctx: &mut BlockContext,
-	batch: &mut store::Batch,
-) -> Result<(), Error> {
+fn check_known_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
 	match batch.block_exists(&header.hash()) {
 		Ok(true) => {
-			if header.height < ctx.head.height.saturating_sub(50) {
+			let head = batch.head()?;
+			if header.height < head.height.saturating_sub(50) {
 				// TODO - we flag this as an "abusive peer" but only in the case
 				// where we have the full block in our store.
 				// So this is not a particularly exhaustive check.
@@ -379,13 +385,15 @@ fn check_prev_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<()
 // We can avoid a full rewind in this case.
 fn check_known_mmr(
 	header: &BlockHeader,
-	ctx: &mut BlockContext,
 	batch: &mut store::Batch,
 	write_txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
 	// No point checking the MMR if this block is not earlier in the chain.
-	if header.height > ctx.head.height {
-		return Ok(());
+	{
+		let head = batch.head()?;
+		if header.height > head.height {
+			return Ok(());
+		}
 	}
 
 	// Use "header by height" index to look at current most work chain.
@@ -636,18 +644,19 @@ fn update_head(
 	ctx: &BlockContext,
 	batch: &mut store::Batch,
 ) -> Result<Option<Tip>, Error> {
-	// if we made a fork with more work than the head (which should also be true
-	// when extending the head), update it
-	if block_has_more_work(&b.header, &ctx.head) {
+	// If we made a fork with more work than the head (which should also be true
+	// when extending the head), update it.
+	let current_head = batch.head()?;
+	if b.header.total_difficulty() > current_head.total_difficulty {
 		// update the block height index
+		let tip = Tip::from_block(&b.header);
 		batch
-			.setup_height(&b.header, &ctx.head)
+			.setup_height(&b.header, &tip)
 			.map_err(|e| ErrorKind::StoreErr(e, "pipe setup height".to_owned()))?;
 
 		// in sync mode, only update the "body chain", otherwise update both the
 		// "header chain" and "body chain", updating the header chain in sync resets
 		// all additional "future" headers we've received
-		let tip = Tip::from_block(&b.header);
 		if ctx.opts.contains(Options::SYNC) {
 			batch
 				.save_body_head(&tip)
@@ -669,12 +678,6 @@ fn update_head(
 	}
 }
 
-// Whether the provided block totals more work than the chain tip
-fn block_has_more_work(header: &BlockHeader, tip: &Tip) -> bool {
-	let block_tip = Tip::from_block(header);
-	block_tip.total_difficulty > tip.total_difficulty
-}
-
 /// Update the sync head so we can keep syncing from where we left off.
 fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
 	let tip = Tip::from_block(bh);
@@ -686,18 +689,18 @@ fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Er
 }
 
 /// Update the header head if this header has most work.
-fn update_header_head(
-	bh: &BlockHeader,
-	ctx: &mut BlockContext,
-	batch: &mut store::Batch,
-) -> Result<Option<Tip>, Error> {
-	let tip = Tip::from_block(bh);
-	if tip.total_difficulty > ctx.header_head.total_difficulty {
+fn update_header_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<Option<Tip>, Error> {
+	// Get current header_head from the db (via the batch)
+	// and compare the new header to this.
+	let header_head = batch.get_header_head()?;
+	if bh.total_difficulty() > header_head.total_difficulty {
+		let tip = Tip::from_block(&bh);
 		batch
 			.save_header_head(&tip)
 			.map_err(|e| ErrorKind::StoreErr(e, "pipe save header head".to_owned()))?;
-		ctx.header_head = tip.clone();
+
 		debug!(LOGGER, "header head {} @ {}", bh.hash(), bh.height);
+
 		Ok(Some(tip))
 	} else {
 		Ok(None)
