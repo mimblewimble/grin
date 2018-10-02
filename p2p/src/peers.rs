@@ -56,25 +56,29 @@ impl Peers {
 
 	/// Adds the peer to our internal peer mapping. Note that the peer is still
 	/// returned so the server can run it.
-	pub fn add_connected(&self, p: Peer) -> Result<Arc<RwLock<Peer>>, Error> {
-		debug!(LOGGER, "Saving newly connected peer {}.", p.info.addr);
-		let peer_data = PeerData {
-			addr: p.info.addr,
-			capabilities: p.info.capabilities,
-			user_agent: p.info.user_agent.clone(),
-			flags: State::Healthy,
-			last_banned: 0,
-			ban_reason: ReasonForBan::None,
-		};
+	pub fn add_connected(&self, peer: Arc<RwLock<Peer>>) -> Result<(), Error> {
+		let peer_data: PeerData;
+		let addr: SocketAddr;
+		{
+			let p = peer.read().unwrap();
+			peer_data = PeerData {
+				addr: p.info.addr,
+				capabilities: p.info.capabilities,
+				user_agent: p.info.user_agent.clone(),
+				flags: State::Healthy,
+				last_banned: 0,
+				ban_reason: ReasonForBan::None,
+			};
+			addr = p.info.addr.clone();
+		}
+		debug!(LOGGER, "Saving newly connected peer {}.", addr);
 		self.save_peer(&peer_data)?;
 
-		let addr = p.info.addr.clone();
-		let apeer = Arc::new(RwLock::new(p));
 		{
 			let mut peers = self.peers.write().unwrap();
-			peers.insert(addr, apeer.clone());
+			peers.insert(addr, peer.clone());
 		}
-		Ok(apeer)
+		Ok(())
 	}
 
 	// Update the dandelion relay
