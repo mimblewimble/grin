@@ -776,10 +776,8 @@ impl Chain {
 		loop {
 			match self.store.get_block(&current.hash()) {
 				Ok(b) => {
-					count += 1;
 					batch.delete_block(&b.hash())?;
-					batch.delete_block_input_bitmap(&b.hash())?;
-					batch.delete_block_sums(&b.hash())?;
+					count += 1;
 				}
 				Err(NotFoundErr(_)) => {
 					break;

@@ -79,6 +79,28 @@ fn test_various_store_indices() {
 
 	let block_header = chain_store.get_header_by_height(1).unwrap();
 	assert_eq!(block_header.hash(), block_hash);
+
+	// Test we can retrive the block from the db and that we can safely delete the
+	// block from the db even though the block_sums are missing.
+	{
+		// Block exists in the db.
+		assert!(chain_store.get_block(&block_hash).is_ok());
+
+		// Block sums do not exist (we never set them up).
+		assert!(chain_store.get_block_sums(&block_hash).is_err());
+
+		{
+			// Start a new batch and delete the block.
+			let batch = chain_store.batch().unwrap();
+			assert!(batch.delete_block(&block_hash).is_ok());
+
+			// Block is deleted within this batch.
+			assert!(batch.get_block(&block_hash).is_err());
+		}
+
+		// Check the batch did not commit any changes to the store .
+		assert!(chain_store.get_block(&block_hash).is_ok());
+	}
 }
 
 #[test]

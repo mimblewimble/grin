@@ -243,7 +243,17 @@ impl<'a> Batch<'a> {
 	/// Delete a full block. Does not delete any record associated with a block
 	/// header.
 	pub fn delete_block(&self, bh: &Hash) -> Result<(), Error> {
-		self.db.delete(&to_key(BLOCK_PREFIX, &mut bh.to_vec())[..])
+		self.db
+			.delete(&to_key(BLOCK_PREFIX, &mut bh.to_vec())[..])?;
+
+		// Best effort at deleting associated data for this block.
+		// Not an error if these fail.
+		{
+			let _ = self.delete_block_sums(bh);
+			let _ = self.delete_block_input_bitmap(bh);
+		}
+
+		Ok(())
 	}
 
 	pub fn save_block_header(&self, bh: &BlockHeader) -> Result<(), Error> {
@@ -297,7 +307,7 @@ impl<'a> Batch<'a> {
 		)
 	}
 
-	pub fn delete_block_input_bitmap(&self, bh: &Hash) -> Result<(), Error> {
+	fn delete_block_input_bitmap(&self, bh: &Hash) -> Result<(), Error> {
 		self.db
 			.delete(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
 	}
@@ -315,7 +325,7 @@ impl<'a> Batch<'a> {
 		)
 	}
 
-	pub fn delete_block_sums(&self, bh: &Hash) -> Result<(), Error> {
+	fn delete_block_sums(&self, bh: &Hash) -> Result<(), Error> {
 		self.db.delete(&to_key(BLOCK_SUMS_PREFIX, &mut bh.to_vec()))
 	}
 
