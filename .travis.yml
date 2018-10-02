@@ -52,9 +52,10 @@ env:
 script:
   - if [[ "TEST_SUITE" != "none" ]]; then
         IFS='-' read -r -a array <<< "$TEST_SUITE";
-        for TEST_DIR in "${array[@]}" do
+        for TEST_DIR in "${array[@]}"
+        do
           echo "Start testing in folder $TEST_DIR...";
-          cd $TEST_DIR && cargo test --release;
+          cd $TEST_DIR && rm -rf target/tmp && cargo test --release;
           cd - > /dev/null;
           echo "Testing done for folder $TEST_DIR";
         done;
