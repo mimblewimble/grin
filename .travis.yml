@@ -5,7 +5,7 @@ git:
 
 os:
   - linux
-  - osx
+#  - osx
 
 dist: trusty
 sudo: required
