@@ -333,10 +333,7 @@ fn check_known_orphans(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(
 }
 
 // Check if this block is in the store already.
-fn check_known_store(
-	header: &BlockHeader,
-	batch: &mut store::Batch,
-) -> Result<(), Error> {
+fn check_known_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
 	match batch.block_exists(&header.hash()) {
 		Ok(true) => {
 			let head = batch.head()?;
@@ -649,7 +646,7 @@ fn update_head(
 	// If we made a fork with more work than the head (which should also be true
 	// when extending the head), update it.
 	let current_head = batch.head()?;
-	if b.header.total_difficulty() >  current_head.total_difficulty {
+	if b.header.total_difficulty() > current_head.total_difficulty {
 		// update the block height index
 		let tip = Tip::from_block(&b.header);
 		batch
@@ -691,11 +688,7 @@ fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Er
 }
 
 /// Update the header head if this header has most work.
-fn update_header_head(
-	bh: &BlockHeader,
-	batch: &mut store::Batch,
-) -> Result<Option<Tip>, Error> {
-
+fn update_header_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<Option<Tip>, Error> {
 	// Get current header_head from the db (via the batch)
 	// and compare the new header to this.
 	let header_head = batch.get_header_head()?;
