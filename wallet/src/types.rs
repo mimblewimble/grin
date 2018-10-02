@@ -48,6 +48,10 @@ pub struct WalletConfig {
 	pub check_node_api_http_addr: String,
 	// The directory in which wallet files are stored
 	pub data_file_dir: String,
+	/// TLS ceritificate file
+	pub tls_certificate_file: Option<String>,
+	/// TLS ceritificate password
+	pub tls_certificate_pass: Option<String>,
 }
 
 impl Default for WalletConfig {
@@ -60,6 +64,8 @@ impl Default for WalletConfig {
 			node_api_secret_path: Some(".api_secret".to_string()),
 			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
 			data_file_dir: ".".to_string(),
+			tls_certificate_file: None,
+			tls_certificate_pass: None,
 		}
 	}
 }

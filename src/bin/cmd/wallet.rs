@@ -24,6 +24,7 @@ use std::time::Duration;
 
 use clap::ArgMatches;
 
+use api::TLSConfig;
 use config::GlobalWalletConfig;
 use core::{core, global};
 use grin_wallet::{self, controller, display, libwallet};
@@ -134,12 +135,24 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 		let wallet = instantiate_wallet(wallet_config.clone(), passphrase, node_api_secret.clone());
 		let api_secret = get_first_line(wallet_config.api_secret_path.clone());
 
+		let tls_conf = match wallet_config.tls_certificate_file.clone() {
+			None => None,
+			Some(file) => Some(
+				TLSConfig::new(
+					wallet_config
+						.tls_certificate_pass
+						.clone()
+						.expect("tls_certificate_pass must be set"),
+					file,
+				).expect("failed to configure TLS"),
+			),
+		};
 		match wallet_args.subcommand() {
 			("listen", Some(listen_args)) => {
 				if let Some(port) = listen_args.value_of("port") {
 					wallet_config.api_listen_port = port.parse().unwrap();
 				}
-				controller::foreign_listener(wallet, &wallet_config.api_listen_addr())
+				controller::foreign_listener(wallet, &wallet_config.api_listen_addr(), tls_conf)
 					.unwrap_or_else(|e| {
 						panic!(
 							"Error creating wallet listener: {:?} Config: {:?}",
@@ -148,26 +161,24 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					});
 			}
 			("owner_api", Some(_api_args)) => {
-				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret).unwrap_or_else(
-					|e| {
+				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret, tls_conf)
+					.unwrap_or_else(|e| {
 						panic!(
 							"Error creating wallet api listener: {:?} Config: {:?}",
 							e, wallet_config
 						)
-					},
-				);
+					});
 			}
 			("web", Some(_api_args)) => {
 				// start owner listener and run static file server
 				start_webwallet_server();
-				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret).unwrap_or_else(
-					|e| {
+				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret, tls_conf)
+					.unwrap_or_else(|e| {
 						panic!(
 							"Error creating wallet api listener: {:?} Config: {:?}",
 							e, wallet_config
 						)
-					},
-				);
+					});
 			}
 			_ => {}
 		};
@@ -209,7 +220,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				let fluff = send_args.is_present("fluff");
 				let max_outputs = 500;
 				if method == "http" {
-					if dest.starts_with("http://") {
+					if dest.starts_with("http://") || dest.starts_with("https://") {
 						let result = api.issue_send_tx(
 							amount,
 							minimum_confirmations,
@@ -258,7 +269,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					} else {
 						error!(
 							LOGGER,
-							"HTTP Destination should start with http://: {}", dest
+							"HTTP Destination should start with http://: or https://: {}", dest
 						);
 						panic!();
 					}

@@ -280,6 +280,7 @@ impl LocalServerContainer {
 		wallet::controller::foreign_listener(
 			Box::new(wallet),
 			&self.wallet_config.api_listen_addr(),
+			None,
 		).unwrap_or_else(|e| {
 			panic!(
 				"Error creating wallet listener: {:?} Config: {:?}",
