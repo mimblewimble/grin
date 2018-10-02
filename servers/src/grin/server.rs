@@ -264,6 +264,7 @@ impl Server {
 			Arc::downgrade(&tx_pool),
 			Arc::downgrade(&p2p_server.peers),
 			api_secret,
+			None,
 		);
 
 		info!(
