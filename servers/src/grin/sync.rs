@@ -199,7 +199,7 @@ fn do_header_sync(
 ) {
 	let status = sync_state.status();
 
-	let doit = match status {
+	let enable_header_sync = match status {
 		SyncStatus::BodySync { .. } | SyncStatus::HeaderSync { .. } => true,
 		SyncStatus::NoSync | SyncStatus::Initial => {
 			// Reset sync_head to header_head on transition to HeaderSync,
@@ -220,7 +220,7 @@ fn do_header_sync(
 		_ => false,
 	};
 
-	if doit {
+	if enable_header_sync {
 		sync_state.update(SyncStatus::HeaderSync {
 			current_height: header_head.height,
 			highest_height: si.highest_height,
