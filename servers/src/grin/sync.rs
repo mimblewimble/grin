@@ -199,8 +199,8 @@ fn do_header_sync(
 ) {
 	let status = sync_state.status();
 
-	let update_sync_state = match status {
-		SyncStatus::TxHashsetDownload => false,
+	let enable_header_sync = match status {
+		SyncStatus::BodySync { .. } | SyncStatus::HeaderSync { .. } => true,
 		SyncStatus::NoSync | SyncStatus::Initial => {
 			// Reset sync_head to header_head on transition to HeaderSync,
 			// but ONLY on initial transition to HeaderSync state.
@@ -217,17 +217,17 @@ fn do_header_sync(
 			history_locators.clear();
 			true
 		}
-		_ => true,
+		_ => false,
 	};
 
-	if update_sync_state {
+	if enable_header_sync {
 		sync_state.update(SyncStatus::HeaderSync {
 			current_height: header_head.height,
 			highest_height: si.highest_height,
 		});
-	}
 
-	header_sync(peers, chain, history_locators);
+		header_sync(peers, chain, history_locators);
+	}
 }
 
 fn do_fast_sync(
