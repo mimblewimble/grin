@@ -32,8 +32,8 @@ use serde_json::Value;
 use std::io::prelude::{BufRead, Write};
 use std::net::TcpStream;
 
-use std::{thread, time};
 use std::process;
+use std::{thread, time};
 
 use core::global::{self, ChainTypes};
 use util::LOGGER;
