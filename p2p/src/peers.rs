@@ -60,7 +60,7 @@ impl Peers {
 		let peer_data: PeerData;
 		let addr: SocketAddr;
 		{
-			let p = peer.write().unwrap();
+			let p = peer.read().unwrap();
 			peer_data = PeerData {
 				addr: p.info.addr,
 				capabilities: p.info.capabilities,
