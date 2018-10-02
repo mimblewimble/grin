@@ -34,7 +34,6 @@ use error::{Error, ErrorKind};
 use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
-use store::Batch;
 use txhashset;
 use types::{ChainAdapter, NoStatus, Options, Tip, TxHashsetWriteStatus};
 use util::secp::pedersen::{Commitment, RangeProof};
@@ -237,7 +236,7 @@ impl Chain {
 	) -> Result<(Option<Tip>, Option<Block>), Error> {
 		let mut batch = self.store.batch()?;
 		let bhash = b.hash();
-		let mut ctx = self.new_ctx(opts, &mut batch)?;
+		let mut ctx = self.new_ctx(opts)?;
 
 		let res = pipe::process_block(&b, &mut ctx, &mut batch, self.verifier_cache.clone());
 
@@ -336,7 +335,7 @@ impl Chain {
 	/// Process a block header received during "header first" propagation.
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
 		let mut batch = self.store.batch()?;
-		let mut ctx = self.new_ctx(opts, &mut batch)?;
+		let mut ctx = self.new_ctx(opts)?;
 		pipe::process_block_header(bh, &mut ctx, &mut batch)?;
 		batch.commit()?;
 		Ok(())
@@ -350,13 +349,13 @@ impl Chain {
 		opts: Options,
 	) -> Result<(), Error> {
 		let mut batch = self.store.batch()?;
-		let mut ctx = self.new_ctx(opts, &mut batch)?;
+		let mut ctx = self.new_ctx(opts)?;
 		pipe::sync_block_headers(headers, &mut ctx, &mut batch)?;
 		batch.commit()?;
 		Ok(())
 	}
 
-	fn new_ctx(&self, opts: Options, batch: &mut Batch) -> Result<pipe::BlockContext, Error> {
+	fn new_ctx(&self, opts: Options) -> Result<pipe::BlockContext, Error> {
 		Ok(pipe::BlockContext {
 			opts,
 			pow_verifier: self.pow_verifier,
