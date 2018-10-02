@@ -105,7 +105,13 @@ pub fn process_block(
 	}
 
 	// Header specific processing.
-	handle_block_header(&b.header, ctx, batch)?;
+	{
+		handle_block_header(&b.header, ctx, batch)?;
+
+		// Update header_head (but only if this header increases our total known work).
+		// i.e. Only if this header is now the head of the current "most work" chain.
+		update_header_head(&b.header, ctx, batch)?;
+	}
 
 	// Check if are processing the "next" block relative to the current chain head.
 	if is_next_block(&b.header, ctx) {
@@ -205,24 +211,6 @@ pub fn sync_block_headers(
 	ctx: &mut BlockContext,
 	batch: &mut store::Batch,
 ) -> Result<(), Error> {
-	let bhs_last = headers.last().unwrap().clone();
-	let last_h = bhs_last.hash();
-	if let Ok(_) = batch.get_block_header(&last_h) {
-		info!(
-			LOGGER,
-			"All known, ignoring. Update sync_head to {} at {}", last_h, bhs_last.height,
-		);
-
-		let res = update_sync_head(&bhs_last, batch);
-		if let &Err(ref e) = &res {
-			error!(
-				LOGGER,
-				"Block header {} update_sync_head fail: {:?}", last_h, e
-			);
-		}
-		return Ok(());
-	}
-
 	if let Some(header) = headers.first() {
 		debug!(
 			LOGGER,
@@ -231,18 +219,36 @@ pub fn sync_block_headers(
 			header.hash(),
 			header.height,
 		);
+	} else {
+		return Ok(());
 	}
 
-	for header in headers {
-		handle_block_header(header, ctx, batch)?;
+	let all_known = if let Some(last_header) = headers.last() {
+		batch.get_block_header(&last_header.hash()).is_ok()
+	} else {
+		false
+	};
+
+	if !all_known {
+		for header in headers {
+			handle_block_header(header, ctx, batch)?;
+		}
+	}
+
+	// Update header_head (if most work) and sync_head (regardless) in all cases,
+	// even if we already know all the headers.
+	// This avoids the case of us getting into an infinite loop with sync_head never
+	// progressing.
+	// We only need to do this once at the end of this batch of headers.
+	if let Some(header) = headers.last() {
+		// Update header_head (but only if this header increases our total known work).
+		// i.e. Only if this header is now the head of the current "most work" chain.
+		update_header_head(header, ctx, batch)?;
 
 		// Update sync_head regardless of total work.
-		// We may be syncing a long fork that will *eventually* increase the work
-		// and become the "most work" chain.
-		// header_head and sync_head will diverge in this situation until we switch to
-		// a single "most work" chain.
 		update_sync_head(header, batch)?;
 	}
+
 	Ok(())
 }
 
@@ -253,10 +259,6 @@ fn handle_block_header(
 ) -> Result<(), Error> {
 	validate_header(header, ctx, batch)?;
 	add_block_header(header, batch)?;
-
-	// Update header_head (but only if this header increases our total known work).
-	// i.e. Only if this header is now the head of the current "most work" chain.
-	update_header_head(header, ctx, batch)?;
 	Ok(())
 }
 
@@ -682,7 +684,7 @@ fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Er
 	Ok(())
 }
 
-/// Update the header head so we can keep syncing from where we left off.
+/// Update the header head if this header has most work.
 fn update_header_head(
 	bh: &BlockHeader,
 	ctx: &mut BlockContext,
