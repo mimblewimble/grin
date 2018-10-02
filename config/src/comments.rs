@@ -350,7 +350,8 @@ fn comments() -> HashMap<String, String> {
 #password of TLS certificate file (PKCS#12 format is supported)
 #tls_certificate_pass = \"\"
 
-".to_string(),
+"
+			.to_string(),
 	);
 
 	retval.insert(
