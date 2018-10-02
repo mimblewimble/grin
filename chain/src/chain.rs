@@ -357,12 +357,8 @@ impl Chain {
 	}
 
 	fn new_ctx(&self, opts: Options, batch: &mut Batch) -> Result<pipe::BlockContext, Error> {
-		let head = batch.head()?;
-		let header_head = batch.get_header_head()?;
 		Ok(pipe::BlockContext {
 			opts,
-			head,
-			header_head,
 			pow_verifier: self.pow_verifier,
 			block_hashes_cache: self.block_hashes_cache.clone(),
 			txhashset: self.txhashset.clone(),

@@ -43,10 +43,10 @@ use failure::ResultExt;
 pub struct BlockContext {
 	/// The options
 	pub opts: Options,
-	/// The head
-	pub head: Tip,
-	/// The header head
-	pub header_head: Tip,
+	// /// The head
+	// pub head: Tip,
+	// /// The header head
+	// pub header_head: Tip,
 	/// The POW verification function
 	pub pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
 	/// MMR sum tree states
