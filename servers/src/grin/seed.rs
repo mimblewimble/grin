@@ -18,6 +18,7 @@
 
 use chrono::prelude::Utc;
 use chrono::{Duration, MIN_DATE};
+use rand::{thread_rng, Rng};
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
@@ -101,7 +102,7 @@ fn monitor_peers(
 	let total_count = peers.all_peers().len();
 	let mut healthy_count = 0;
 	let mut banned_count = 0;
-	let mut defunct_count = 0;
+	let mut defuncts = vec![];
 	for x in peers.all_peers() {
 		match x.flags {
 			p2p::State::Banned => {
@@ -118,7 +119,7 @@ fn monitor_peers(
 				}
 			}
 			p2p::State::Healthy => healthy_count += 1,
-			p2p::State::Defunct => defunct_count += 1,
+			p2p::State::Defunct => defuncts.push(x),
 		}
 	}
 
@@ -133,7 +134,7 @@ fn monitor_peers(
 		total_count,
 		healthy_count,
 		banned_count,
-		defunct_count,
+		defuncts.len(),
 	);
 
 	// maintenance step first, clean up p2p server peers
@@ -174,6 +175,13 @@ fn monitor_peers(
 			}
 		}
 		None => debug!(LOGGER, "monitor_peers: no preferred peers"),
+	}
+
+	// take a random defunct peer and mark it healthy: over a long period any
+	// peer will see another as defunct eventually, gives us a chance to retry
+	if defuncts.len() > 0 {
+		thread_rng().shuffle(&mut defuncts);
+		let _ = peers.update_state(defuncts[0].addr, p2p::State::Healthy);
 	}
 
 	// find some peers from our db

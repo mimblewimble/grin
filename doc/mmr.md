@@ -145,5 +145,6 @@ Height
 0       1        7     10  11 15     18
 ```
 
-[1] Peter Todd, https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md
-[2] https://en.wikipedia.org/wiki/Merkle_tree
+[1] Peter Todd, [merkle-mountain-range](https://github.com/opentimestamps/opentimestamps-server/blob/master/doc/merkle-mountain-range.md)
+
+[2] [Wikipedia, Merkle Tree](https://en.wikipedia.org/wiki/Merkle_tree)

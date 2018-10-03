@@ -1,5 +1,5 @@
-Dandelion Simulation
-==================
+# Dandelion Simulation
+
 This document describes a network of node using the Dandelion protocol with transaction aggregation.
 
 In this scenario, we simulate a successful aggregation.
@@ -26,7 +26,7 @@ A waits until he runs out of patience.
 
 A runs out of patience, flips a coin and broadcasts the stem transaction to its Dandelion relay G.
 G receives the stem transaction, add it to its stempool and starts the embargo timer for this transaction.
- 
+
 ![t = 30](images/t30.png)
 
 ## T = 40
