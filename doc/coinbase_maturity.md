@@ -39,8 +39,8 @@ This is not necessarily recommended but Grin must handle this situation in a way
 Several things complicate this situation -
 
 1. It is possible for two blocks to have identical rewards, particularly for the case of empty blocks, but also possible for non-empty blocks with transaction fees.
-2. It is possible for a non-coinbase output to have the same value as a coinbase output.
-3. It is possible (but not recommended) for a miner to reuse private keys.
+1. It is possible for a non-coinbase output to have the same value as a coinbase output.
+1. It is possible (but not recommended) for a miner to reuse private keys.
 
 Grin does not allow duplicate commitments to exist in the Output set simultaneously.
 But the Output set is specific to the state of a particular chain fork. It *is* possible for duplicate *identical* commitments to exist simultaneously on different concurrent forks.

@@ -102,18 +102,18 @@ Alice wants to pay Bob in grins. She starts the transaction building process:
 
 1. Alice selects her inputs and builds her change output. The sum of all
    blinding factors (change output minus inputs) is `rs`.
-2. Alice picks a random nonce ks and sends her partial transaction, `ks*G` and
+1. Alice picks a random nonce ks and sends her partial transaction, `ks*G` and
    `rs*G` to Bob.
-3. Bob picks his own random nonce `kr` and the blinding factor for his output
+1. Bob picks his own random nonce `kr` and the blinding factor for his output
    `rr`. Using `rr`, Bob adds his output to the transaction.
-4. Bob computes the message `M = fee | lock_height`, the Schnorr challenge
+1. Bob computes the message `M = fee | lock_height`, the Schnorr challenge
    `e = SHA256(M | kr*G + ks*G | rr*G + rs*G)` and finally his side of the
    signature `sr = kr + e * rr`.
-5. Bob sends `sr`, `kr*G` and `rr*G` to Alice.
-6. Alice computes `e` just like Bob did and can check that
+1. Bob sends `sr`, `kr*G` and `rr*G` to Alice.
+1. Alice computes `e` just like Bob did and can check that
    `sr*G = kr*G + e*rr*G`.
-7. Alice sends her side of the signature `ss = ks + e * rs` to Bob.
-8. Bob validates `ss*G` just like Alice did for `sr*G` in step 5 and can
+1. Alice sends her side of the signature `ss = ks + e * rs` to Bob.
+1. Bob validates `ss*G` just like Alice did for `sr*G` in step 5 and can
    produce the final signature `s = (ss + sr, ks*G + kr*G)` as well as the final
    transaction kernel including `s` and the public key `rr*G + rs*G`.
 
@@ -140,12 +140,12 @@ to spend. Alice builds the transaction normally and adds the multiparty output
 such that:
 
 1. Bob picks a blinding factor `rb` and sends `rb*G` to Alice.
-2. Alice picks a blinding factor `ra` and builds the commitment
+1. Alice picks a blinding factor `ra` and builds the commitment
    `C = ra*G + rb*G + v*H`. She sends the commitment to Bob.
-3. Bob creates a range proof for `v` using `C` and `rb` and sends it to Alice.
-4. Alice generates her own range proof, aggregates it with Bob, finalizing
+1. Bob creates a range proof for `v` using `C` and `rb` and sends it to Alice.
+1. Alice generates her own range proof, aggregates it with Bob, finalizing
    the multiparty output `Oab`.
-5. The kernel is built following the same procedure as for Trustless
+1. The kernel is built following the same procedure as for Trustless
    Transactions.
 
 We observe that for that new output `Oab`, neither party know the whole
@@ -239,16 +239,16 @@ specified in section 2.1.
 
 1. Alice picks a random nonce `ks` and her blinding sum `rs` and sends `ks*G`
    and `rs*G` to Bob.
-2. Bob picks a random blinding factor `rr` and a random nonce `kr`. However
+1. Bob picks a random blinding factor `rr` and a random nonce `kr`. However
    this time, instead of simply sending `sr = kr + e * rr` with his `rr*G` and
    `kr*G`, Bob sends `sr' = kr + x + e * rr` as well as `x*G`.
-3. Alice can validate that `sr'*G = kr*G + x*G + rr*G`. She can also check
+1. Alice can validate that `sr'*G = kr*G + x*G + rr*G`. She can also check
    that Bob has money locked with `x*G` on the other chain.
-4. Alice sends back her `ss = ks + e * xs` as she normally would, now that she
+1. Alice sends back her `ss = ks + e * xs` as she normally would, now that she
    can also compute `e = SHA256(M | ks*G + kr*G)`.
-5. To complete the signature, Bob computes `sr = kr + e * rr` and the final
+1. To complete the signature, Bob computes `sr = kr + e * rr` and the final
    signature is `(sr + ss, kr*G + ks*G)`.
-6. As soon as Bob broadcasts the final transaction to get his new grins, Alice
+1. As soon as Bob broadcasts the final transaction to get his new grins, Alice
    can compute `sr' - sr` to get `x`.
 
 #### Notes on the Bitcoin setup

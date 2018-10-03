@@ -103,8 +103,8 @@ Each time when Grin release a new version, there's definitely a tag there with s
 We define the following rules for the **release branch**:
 
 1. Only **MAJOR.MINOR** version could have a release branch, but also NOT mandatory.
-2. Only when a fix is needed for a **MAJOR.MINOR** version, we create a **release branch** on the name of **MAJOR.MINOR** from the tag of **MAJOR.MINOR.0**, and only one branch for all the fixes on this **MAJOR.MINOR** version.
-3. New version based on this **release branch** must have same **MAJOR.MINOR** version number, only **.PATCH** can be changed.
+1. Only when a fix is needed for a **MAJOR.MINOR** version, we create a **release branch** on the name of **MAJOR.MINOR** from the tag of **MAJOR.MINOR.0**, and only one branch for all the fixes on this **MAJOR.MINOR** version.
+1. New version based on this **release branch** must have same **MAJOR.MINOR** version number, only **.PATCH** can be changed.
 
 ## Release Instruction
 
@@ -123,7 +123,7 @@ Remember to replace `0.3.1-pre1` as the real version, and warmly remind the [[Ve
 If you're NOT the owner of the github repo, but at least you have to be a committer which has the right to do a release, the following steps are needed to trigger a version release:
 
 1. Go to release page of the repo, click **Draft a new release**, remember to check the branch is what you're working on! set the **Tag version** to the release number (for    example: `0.3.1-pre1`), and set anything in **Release title** and **description**, then click **Publish release**. Don't worry the title and description parts because we need delete it in next step.
-2. Because github **release** will be auto-created by our `auto-release` building script, we MUST delete the **release** which we just created in previous step! (Unfortunately, there's no way to only create **tag** by web.)
+1. Because github **release** will be auto-created by our `auto-release` building script, we MUST delete the **release** which we just created in previous step! (Unfortunately, there's no way to only create **tag** by web.)
 
 Even normally Travis-CI need tens of minutes to complete building, I suggest you complete step 2 quickly, otherwise the `auto-release` script will fail on error "release already exist".
 

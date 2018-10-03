@@ -6,14 +6,14 @@ This document describes the current Stratum RPC protocol implemented in Grin.
 
 1. [Messages](#messages)
     1. [getjobtemplate](#getjobtemplate)
-    2. [job](#job)
-    3. [keepalive](#keepalive)
-    4. [login](#login)
-    5. [status](#status)
-    6. [submit](#submit)
-2. [Error Messages](#error-messages)
-3. [Miner Behavior](#miner-behavior)
-4. [Reference Implementation](#reference-implementation)
+    1. [job](#job)
+    1. [keepalive](#keepalive)
+    1. [login](#login)
+    1. [status](#status)
+    1. [submit](#submit)
+1. [Error Messages](#error-messages)
+1. [Miner Behavior](#miner-behavior)
+1. [Reference Implementation](#reference-implementation)
 
 ## Messages
 
