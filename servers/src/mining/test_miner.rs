@@ -27,7 +27,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader};
 use core::pow::PoWContext;
-use core::{consensus, global};
+use core::global;
 use mining::mine_block;
 use pool;
 use util::LOGGER;
@@ -99,7 +99,6 @@ impl Miner {
 			let mut ctx = global::create_pow_context::<u32>(
 				global::min_sizeshift(),
 				global::proofsize(),
-				consensus::EASINESS,
 				10,
 			).unwrap();
 			ctx.set_header_nonce(b.header.pre_pow(), None, true)
