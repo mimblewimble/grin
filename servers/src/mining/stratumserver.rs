@@ -502,7 +502,7 @@ impl StratumServer {
 			return Err(serde_json::to_value(e).unwrap());
 		}
 		// If the difficulty is high enough, submit it (which also validates it)
-		if share_difficulty >= self.current_difficulty {
+		if share_difficulty >= self.current_difficulty && !self.sync_state.is_syncing() {
 			// This is a full solution, submit it to the network
 			let res = self.chain.process_block(b.clone(), chain::Options::MINE);
 			if let Err(e) = res {
