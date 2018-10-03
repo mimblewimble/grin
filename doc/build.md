@@ -37,13 +37,7 @@ cargo build --release
 
 Grin can also be built in debug mode (without the `--release` flag, but using the `--debug` or the `--verbose` flag) but this will render fast sync prohibitively slow due to the large overhead of cryptographic operations.
 
-## Mining in Grin
-
-Please note that all mining functions for Grin have moved into a separate, standalone package called
-[grin_miner](https://github.com/mimblewimble/grin-miner). Once your Grin code node is up and running,
-you can start mining by building and running grin-miner against your running Grin node.
-
-### Build errors
+## Build errors
 
 See [Troubleshooting](https://github.com/mimblewimble/docs/wiki/Troubleshooting)
 
@@ -96,13 +90,7 @@ grin wallet help
 grin client help
 ```
 
-## Using grin
-
-The wiki page [How to use grin](https://github.com/mimblewimble/docs/wiki/How-to-use-grin)
-and linked pages have more information on what features we have,
-troubleshooting, etc.
-
-### Docker
+## Docker
 
 ```sh
 docker build -t grin .
@@ -114,9 +102,21 @@ You can bind-mount your grin cache to run inside the container.
 docker run -it -d -v $HOME/.grin:/root/.grin grin
 ```
 
-### Cross-platform builds
+## Cross-platform builds
 
 Rust (cargo) can build grin for many platforms, so in theory running `grin`
 as a validating node on your low powered device might be possible.
 To cross-compile `grin` on a x86 Linux platform and produce ARM binaries,
 say, for a Raspberry Pi.
+
+## Using grin
+
+The wiki page [How to use grin](https://github.com/mimblewimble/docs/wiki/How-to-use-grin)
+and linked pages have more information on what features we have,
+troubleshooting, etc.
+
+## Mining in Grin
+
+Please note that all mining functions for Grin have moved into a separate, standalone package called
+[grin_miner](https://github.com/mimblewimble/grin-miner). Once your Grin code node is up and running,
+you can start mining by building and running grin-miner against your running Grin node.
