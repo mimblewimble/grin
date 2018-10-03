@@ -57,8 +57,10 @@ script:
     echo "start testing on folder $DIR...";
     if [[ -n "$DIR" ]];  then cd $DIR && cargo test --release; cd - > /dev/null; fi;
   - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[1]};
-    echo "start testing on folder $DIR...";
-    if [[ -n "$DIR" ]];  then cd $DIR && cargo test --release; cd - > /dev/null; fi;
+    if [[ -n "$DIR" ]];  then
+      echo "start testing on folder $DIR...";
+      cd $DIR && cargo test --release; cd - > /dev/null;
+    fi;
   - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[2]};
     if [[ -n "$DIR" ]];  then
       echo "start testing on folder $DIR...";
@@ -66,8 +68,11 @@ script:
     fi;
 
 before_deploy:
-  - if [[ "TEST_SUITE" == "servers" ]]; then cargo build --release;        fi
-  - if [[ "TEST_SUITE" == "servers" ]]; then ./.auto-release.sh;           fi
+  - if [[ "TEST_SUITE" == "pool-p2p" ]]; then
+      cargo clean;
+      cargo build --release;
+      ./.auto-release.sh;
+    fi
 
 deploy:
   provider: releases
@@ -79,6 +84,6 @@ deploy:
   on:
     repo: mimblewimble/grin
     tags: true
-    condition: $TEST_SUITE = "servers"
+    condition: $TEST_SUITE = "pool-p2p"
 
 
