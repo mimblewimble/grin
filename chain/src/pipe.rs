@@ -659,9 +659,7 @@ fn update_head(
 
 		debug!(
 			LOGGER,
-			"pipe: head updated to {} at {}",
-			tip.last_block_h,
-			tip.height
+			"pipe: head updated to {} at {}", tip.last_block_h, tip.height
 		);
 
 		Ok(Some(tip))
@@ -698,7 +696,10 @@ fn update_header_head(
 			.save_header_head(&tip)
 			.map_err(|e| ErrorKind::StoreErr(e, "pipe save header head".to_owned()))?;
 
-		debug!(LOGGER, "pipe: header_head updated to {} at {}", tip.last_block_h, tip.height);
+		debug!(
+			LOGGER,
+			"pipe: header_head updated to {} at {}", tip.last_block_h, tip.height
+		);
 
 		Ok(Some(tip))
 	} else {

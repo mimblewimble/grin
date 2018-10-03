@@ -242,14 +242,20 @@ impl Chain {
 
 		*head = tip.clone();
 
-		debug!(LOGGER, "chain: head updated to {} at {}", tip.last_block_h, tip.height);
+		debug!(
+			LOGGER,
+			"chain: head updated to {} at {}", tip.last_block_h, tip.height
+		);
 	}
 
 	fn update_header_head(&self, tip: &Tip) {
 		let mut header_head = self.header_head.write().unwrap();
 		*header_head = tip.clone();
 
-		debug!(LOGGER, "chain: header_head updated to {} at {}", tip.last_block_h, tip.height);
+		debug!(
+			LOGGER,
+			"chain: header_head updated to {} at {}", tip.last_block_h, tip.height
+		);
 	}
 
 	/// Attempt to add a new block to the chain. Returns the new chain tip if it
@@ -387,9 +393,7 @@ impl Chain {
 				batch.commit()?;
 				Ok(())
 			}
-			Err(e) => {
-				Err(e)
-			}
+			Err(e) => Err(e),
 		}
 	}
 
