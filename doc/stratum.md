@@ -11,9 +11,9 @@ This document describes the current Stratum RPC protocol implemented in Grin.
     4. [login](#login)
     5. [status](#status)
     6. [submit](#submit)
-1. [Error Messages](#errormessages)
-1. [Miner Behavior](#minerbehavior)
-1. [Reference Implementation](#referenceimplementation)
+2. [Error Messages](#error-messages)
+3. [Miner Behavior](#miner-behavior)
+4. [Reference Implementation](#reference-implementation)
 
 ## Messages
 
