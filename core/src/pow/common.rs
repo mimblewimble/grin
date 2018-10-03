@@ -15,6 +15,8 @@
 //! Common types and traits for cuckoo/cuckatoo family of solvers
 
 use blake2::blake2b::blake2b;
+use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
+
 use pow::error::{Error, ErrorKind};
 use pow::num::{PrimInt, ToPrimitive};
 use pow::siphash::siphash24;
@@ -22,8 +24,6 @@ use std::hash::Hash;
 use std::io::Cursor;
 use std::ops::{BitOrAssign, Mul};
 use std::{fmt, mem};
-
-use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
 /// Operations needed for edge type (going to be u32 or u64)
 pub trait EdgeType: PrimInt + ToPrimitive + Mul + BitOrAssign + Hash {}
@@ -100,29 +100,6 @@ pub fn create_siphash_keys(header: Vec<u8>) -> Result<[u64; 4], Error> {
 	])
 }
 
-/// Return siphash masked for type
-pub fn sipnode<T>(
-	keys: &[u64; 4],
-	edge: T,
-	edge_mask: &T,
-	uorv: u64,
-	shift: bool,
-) -> Result<T, Error>
-where
-	T: EdgeType,
-{
-	let hash_u64 = siphash24(
-		keys,
-		2 * edge.to_u64().ok_or(ErrorKind::IntegerCast)? + uorv,
-	);
-	let mut masked = hash_u64 & edge_mask.to_u64().ok_or(ErrorKind::IntegerCast)?;
-	if shift {
-		masked = masked << 1;
-		masked |= uorv;
-	}
-	Ok(T::from(masked).ok_or(ErrorKind::IntegerCast)?)
-}
-
 /// Macros to clean up integer unwrapping
 #[macro_export]
 macro_rules! to_u64 {
@@ -150,4 +127,81 @@ macro_rules! to_edge {
 	($n:expr) => {
 		T::from($n).ok_or(ErrorKind::IntegerCast)?
 	};
+}
+
+/// Utility struct to calculate commonly used Cuckoo parameters calculated
+/// from header, nonce, sizeshift, etc.
+pub struct CuckooParams<T>
+where
+	T: EdgeType,
+{
+	pub edge_bits: u8,
+	pub proof_size: usize,
+	pub num_edges: u64,
+	pub siphash_keys: [u64; 4],
+	pub easiness: T,
+	pub edge_mask: T,
+}
+
+impl<T> CuckooParams<T>
+where
+	T: EdgeType,
+{
+	/// Instantiates new params and calculate easiness, edge mask, etc
+	pub fn new(
+		edge_bits: u8,
+		proof_size: usize,
+		easiness_pct: u32,
+		cuckatoo: bool,
+	) -> Result<CuckooParams<T>, Error> {
+		let num_edges = 1 << edge_bits;
+		let num_nodes = 2 * num_edges as u64;
+		let easiness = if cuckatoo {
+			to_u64!(easiness_pct) * num_nodes / 100
+		} else {
+			to_u64!(easiness_pct) * num_edges / 100
+		};
+		let edge_mask = if cuckatoo {
+			to_edge!(num_edges - 1)
+		} else {
+			to_edge!(num_edges / 2 - 1)
+		};
+		Ok(CuckooParams {
+			siphash_keys: [0; 4],
+			easiness: to_edge!(easiness),
+			proof_size,
+			edge_mask,
+			num_edges,
+			edge_bits,
+		})
+	}
+
+	/// Reset the main keys used for siphash from the header and nonce
+	pub fn reset_header_nonce(
+		&mut self,
+		mut header: Vec<u8>,
+		nonce: Option<u32>,
+	) -> Result<(), Error> {
+		if let Some(n) = nonce {
+			let len = header.len();
+			header.truncate(len - mem::size_of::<u32>());
+			header.write_u32::<LittleEndian>(n)?;
+		}
+		self.siphash_keys = set_header_nonce(header, nonce)?;
+		Ok(())
+	}
+
+	/// Return siphash masked for type
+	pub fn sipnode(&self, edge: T, uorv: u64, shift: bool) -> Result<T, Error> {
+		let hash_u64 = siphash24(
+			&self.siphash_keys,
+			2 * edge.to_u64().ok_or(ErrorKind::IntegerCast)? + uorv,
+		);
+		let mut masked = hash_u64 & self.edge_mask.to_u64().ok_or(ErrorKind::IntegerCast)?;
+		if shift {
+			masked = masked << 1;
+			masked |= uorv;
+		}
+		Ok(T::from(masked).ok_or(ErrorKind::IntegerCast)?)
+	}
 }

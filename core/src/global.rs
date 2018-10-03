@@ -19,7 +19,7 @@
 use consensus::TargetError;
 use consensus::{
 	BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_MIN_SIZESHIFT,
-	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
+	DIFFICULTY_ADJUST_WINDOW, EASINESS, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
 	REFERENCE_SIZESHIFT,
 };
 use pow::{self, CuckooContext, Difficulty, EdgeType, PoWContext};
@@ -123,7 +123,6 @@ pub fn set_mining_mode(mode: ChainTypes) {
 pub fn create_pow_context<T>(
 	edge_bits: u8,
 	proof_size: usize,
-	easiness_pct: u32,
 	max_sols: u32,
 ) -> Result<Box<impl PoWContext<T>>, pow::Error>
 where
@@ -132,7 +131,7 @@ where
 	// Perform whatever tests, configuration etc are needed to determine desired context + edge size
 	// + params
 	// Hardcode to regular cuckoo for now
-	CuckooContext::<T>::new(edge_bits, proof_size, easiness_pct, max_sols)
+	CuckooContext::<T>::new(edge_bits, proof_size, EASINESS, max_sols)
 	// Or switch to cuckatoo as follows:
 	// CuckatooContext::<T>::new(edge_bits, proof_size, easiness_pct, max_sols)
 }
