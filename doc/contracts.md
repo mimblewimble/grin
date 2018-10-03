@@ -178,35 +178,35 @@ This contract can be trivially used for unidirectional payment channels.
 
 Analogous to Bitcoin [CheckLockTimeVerify](https://en.bitcoin.it/wiki/Timelock#CheckLockTimeVerify).
 
-We currently have *unconditional* lock_heights on txs (tx is not valid and will not be accepted until lock_height has passed).
+We currently have _unconditional_ lock_heights on txs (tx is not valid and will not be accepted until lock_height has passed).
 
 Private keys can be summed together.
-Key^(_3) = Key^(_1) + Key^(_2)
+Key<sub>3</sub> = Key<sub>1</sub> + Key<sub>2</sub>
 
 Commitments can be summed together.
-C^(_13) = C^(_1) + C^(_2)
+C<sub>3</sub> = C<sub>1</sub> + C<sub>2</sub>
 
-Given *unconditional locktimes on txs* we can leverage these to give us *conditional locktimes on outputs* by "entangling" two outputs on two related txs together.
+Given _unconditional locktimes on txs_ we can leverage these to give us _conditional locktimes on outputs_ by "entangling" two outputs on two related txs together.
 
-We can construct two txs (Tx^(_1), Tx^(_1)) with two entangled outputs Out^(_1) and Out^(_1) such that -
+We can construct two txs (Tx<sub>1</sub>, Tx<sub>2</sub>) with two entangled outputs Out<sub>1</sub> and Out<sub>2</sub> such that -
 
-* Out^(_1) (commitment C^(_1)>) is from Tx^(_1) and built using Key^(_1)
-* Out^(_2) (commitment C^(_2)) is from Tx^(_2) and built using Key^(_2)
-* Tx^(_2) has an *unconditional* lock_height on it
+* Out<sub>1</sub> (commitment C<sub>1</sub>) is from Tx<sub>1</sub> and built using Key<sub>1</sub>
+* Out<sub>2</sub> (commitment C<sub>2</sub>) is from Tx<sub>2</sub> and built using Key<sub>2</sub>
+* Tx<sub>2</sub> has an _unconditional_ lock_height on it
 
 If we do this (and we can manage the keys as necessary) -
 
-* Out^(_1) + Out^(_2) can *only* be spent as a pair using Key^(_3)
-* They can *only* be spent after lock_height from Tx^(_2)
+* Out<sub>1</sub> + Out<sub>2</sub> can _only_ be spent as a pair using Key<sub>3</sub>
+* They can _only_ be spent after lock_height from Tx<sub>2</sub>
 
-Tx^(_1) (containing Out^(_1)) can be broadcast, accepted and confirmed on-chain immediately.
-Tx^(_2) cannot be broadcast and accepted until lock_height has passed.
+Tx<sub>1</sub> (containing Out<sub>1</sub>) can be broadcast, accepted and confirmed on-chain immediately.
+Tx<sub>2</sub> cannot be broadcast and accepted until lock_height has passed.
 
-So if Alice only knows K^(_3) and does not know Key^(_1) or Key^(_2), then Out^(_1) can only be spent by Alice after lock_height has passed.
-If Bob on the other hand knows Key^(_2) then Out^(_1) can be spent by Bob immediately.
+So if Alice only knows K<sub>3</sub> and does not know Key<sub>1</sub> or Key<sub>2</sub>, then Out<sub>1</sub> can only be spent by Alice after lock_height has passed.
+If Bob on the other hand knows Key<sub>2</sub> then Out<sub>1</sub> can be spent by Bob immediately.
 
-We have a _conditional_ timelock on Out^(_1) (confirmed, on-chain)
-where it can be spent either with Key^(_3) (after lock_height), _or_ Key^(_2) immediately.
+We have a _conditional_ timelock on Out<sub>1</sub> (confirmed, on-chain)
+where it can be spent either with Key<sub>3</sub> (after lock_height), _or_ Key<sub>2</sub> immediately.
 
 ### (Relative) Conditional Output Timelocks
 
@@ -214,8 +214,8 @@ Analogous to Bitcoin [CheckSequenceVerify](https://en.bitcoin.it/wiki/Timelock#C
 
 By combining "Conditional Timelock on Output" with "(Relative) Timelocked Transactions" we can encumber a confirmed output with a relative timelock (relative to a related tx kernel).
 
-Tx^(_1) (containing Out^(_1)) can be broadcast, accepted and confirmed on-chain immediately.
-Tx^(_2) cannot be broadcast and accepted until the *relative* lock_height has passed, relative to the referenced kernel from the earlier Tx^(_1).
+Tx<sub>1</sub> (containing Out<sub>1</sub>) can be broadcast, accepted and confirmed on-chain immediately.
+Tx<sub>2</sub> cannot be broadcast and accepted until the _relative_ lock_height has passed, relative to the referenced kernel from the earlier Tx<sub>1</sub>.
 
 ### Atomic Swap
 
