@@ -379,7 +379,7 @@ impl Server {
 
 	/// The head of the block header chain
 	pub fn header_head(&self) -> chain::Tip {
-		self.chain.get_header_head().unwrap()
+		self.chain.header_head().unwrap()
 	}
 
 	/// Returns a set of stats about this server. This and the ServerStats

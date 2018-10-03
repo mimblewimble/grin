@@ -676,7 +676,7 @@ impl Chain {
 		// Initial check based on relative heights of current head and header_head.
 		{
 			let head = self.head().unwrap();
-			let header_head = self.get_header_head().unwrap();
+			let header_head = self.header_head().unwrap();
 			if header_head.height - head.height < global::cut_through_horizon() as u64 {
 				return Err(ErrorKind::InvalidTxHashSet("not needed".to_owned()).into());
 			}
@@ -912,9 +912,14 @@ impl Chain {
 		Ok(())
 	}
 
-	/// Get the tip that's also the head of the chain
+	/// Tip (head) of the block chain.
 	pub fn head(&self) -> Result<Tip, Error> {
 		Ok(self.head.read().unwrap().clone())
+	}
+
+	/// Tip (head) of the header chain.
+	pub fn header_head(&self) -> Result<Tip, Error> {
+		Ok(self.header_head.read().unwrap().clone())
 	}
 
 	/// Block header for the chain head
@@ -998,13 +1003,6 @@ impl Chain {
 		self.store
 			.get_sync_head()
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get sync head".to_owned()).into())
-	}
-
-	/// Get the tip of the header chain.
-	pub fn get_header_head(&self) -> Result<Tip, Error> {
-		self.store
-			.get_header_head()
-			.map_err(|e| ErrorKind::StoreErr(e, "chain get header head".to_owned()).into())
 	}
 
 	/// Builds an iterator on blocks starting from the current chain head and
