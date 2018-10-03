@@ -1,8 +1,11 @@
 # grin code structure
+
 grin is built in [rust](https://www.rust-lang.org/), a memory safe, compiled language. Performance critical parts like the Cuckoo mining algorithm are built as plugins, making it easy to swap between algorithm implementations for various hardware. Grin comes with CPU and experimental GPU support.
 
 ## Files in project root
+
 List of files tracked in `git` and some files you'll create when you use grin.
+
 - [CODE_OF_CONDUCT](../CODE_OF_CONDUCT.md) - How to behave if you want to participate. Taken from rust. Slightly modified.
 - [CONTRIBUTING](../CONTRIBUTING.md) - How to help and become part of grin.
 - [Cargo.toml](../Cargo.toml) and Cargo.lock (locally created, _not_ in git) - defines how to the project code is to be compiled and built
@@ -11,6 +14,7 @@ List of files tracked in `git` and some files you'll create when you use grin.
 - [rustfmt.toml](../rustfmt.toml) - configuration file for rustfmt. Required before contributing _new_ code.
 
 ## Folder structure
+
 After checking out grin, building and using, these are the folders you'll have:
 
 - api
@@ -47,10 +51,11 @@ After checking out grin, building and using, these are the folders you'll have:
 - util
   Low-level rust utilities.
 - wallet
-	Simple command line wallet implementation. Will generate:
+  Simple command line wallet implementation. Will generate:
   - wallet_data - a database storing your "outputs", that once confirmed and matured, can be spent with the [`grin wallet send`](wallet.md) command. (locally created, _not_ in git)
   - wallet.seed - your secret wallet seed. (locally created, _not_ in git)
 
 ## grin dependencies
+
 - [secp256k1](https://github.com/mimblewimble/rust-secp256k1-zkp)
   Integration and rust bindings for libsecp256k1, and some changes waiting to be upstreamed. Imported in util/Cargo.toml.

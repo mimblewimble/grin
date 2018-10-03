@@ -1,5 +1,4 @@
-Introduction to MimbleWimble and Grin
-=====================================
+# Introduction to MimbleWimble and Grin
 
 *Read this in other languages: [English](intro.md), [简体中文](intro.zh-cn.md).*
 
@@ -15,7 +14,7 @@ cryptocurrency deployment.
 The main goal and characteristics of the Grin project are:
 
 * Privacy by default. This enables complete fungibility without precluding
-	the ability to selectively disclose information as needed.
+  the ability to selectively disclose information as needed.
 * Scales mostly with the number of users and minimally with the number of
   transactions (<100 byte `kernel), resulting in a large space saving compared
   to other blockchains.
@@ -25,7 +24,7 @@ The main goal and characteristics of the Grin project are:
 * Community driven, using an asic-resistant mining algorithm (Cuckoo Cycle)
   encouraging mining decentralization.
 
-# Tongue Tying for Everyone
+## Tongue Tying for Everyone
 
 This document is targeted at readers with a good
 understanding of blockchains and basic cryptography. With that in mind, we attempt
@@ -39,7 +38,7 @@ description of some relevant properties of Elliptic Curve Cryptography (ECC) to 
 foundation on which Grin is based and then describe all the key elements of a
 MimbleWimble blockchain's transactions and blocks.
 
-## Tiny Bits of Elliptic Curves
+### Tiny Bits of Elliptic Curves
 
 We start with a brief primer on Elliptic Curve Cryptography, reviewing just the
 properties necessary to understand how MimbleWimble works and without
@@ -70,7 +69,7 @@ two private keys (`k*H + j*H`). In the Bitcoin blockchain, Hierarchical
 Deterministic wallets heavily rely on this principle. MimbleWimble and the Grin
 implementation do as well.
 
-## Transacting with MimbleWimble
+### Transacting with MimbleWimble
 
 The structure of transactions demonstrates a crucial tenet of MimbleWimble:
 strong privacy and confidentiality guarantees.
@@ -78,16 +77,16 @@ strong privacy and confidentiality guarantees.
 The validation of MimbleWimble transactions relies on two basic properties:
 
 * **Verification of zero sums.** The sum of outputs minus inputs always equals zero,
-proving that the transaction did not create new funds, _without revealing the actual amounts_.
+  proving that the transaction did not create new funds, _without revealing the actual amounts_.
 * **Possession of private keys.** Like with most other cryptocurrencies, ownership of
-transaction outputs is guaranteed by the possession of ECC private keys. However,
-the proof that an entity owns those private keys is not achieved by directly signing
-the transaction.
+  transaction outputs is guaranteed by the possession of ECC private keys. However,
+  the proof that an entity owns those private keys is not achieved by directly signing
+  the transaction.
 
 The next sections on balance, ownership, change and proofs details how those two
 fundamental properties are achieved.
 
-### Balance
+#### Balance
 
 Building upon the properties of ECC we described above, one can obscure the values
 in a transaction.
@@ -148,7 +147,7 @@ As a final note, this idea is actually derived from Greg Maxwell's
 which is itself derived from an Adam Back proposal for homomorphic values applied
 to Bitcoin.
 
-### Ownership
+#### Ownership
 
 In the previous section we introduced a private key as a blinding factor to obscure the
 transaction's values. The second insight of MimbleWimble is that this private
@@ -187,7 +186,7 @@ steal the money back from Carol!
 To solve this, Carol uses a private key of her choosing.
 She picks 113 say, and what ends up on the blockchain is:
 
-	Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
+    Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
 
 Now the transaction no longer sums to zero and we have an _excess value_ on _G_
 (85), which is the result of the summation of all blinding factors. But because `85*G` is
@@ -207,15 +206,15 @@ which then validates that:
 This signature, attached to every transaction, together with some additional data (like mining
 fees), is called a _transaction kernel_ and is checked by all validators.
 
-### Some Finer Points
+#### Some Finer Points
 
 This section elaborates on the building of transactions by discussing how change is
 introduced and the requirement for range proofs so all values are proven to be
 non-negative. Neither of these are absolutely required to understand MimbleWimble and
 Grin, so if you're in a hurry, feel free to jump straight to
-[Putting It All Together](#transaction-conclusion).
+[Putting It All Together](#putting-it-all-together).
 
-#### Change
+##### Change
 
 Let's say you only want to send 2 coins to Carol from the 3 you received from
 Alice. To do this you would send the remaining 1 coin back to yourself as change.
@@ -230,8 +229,7 @@ And the signature is again built with the excess value, 97 in this example.
 
     (12*G + 1*H) + (113*G + 2*H) - (28*G + 3*H) = 97*G + 0*H
 
-
-#### Range Proofs
+##### Range Proofs
 
 In all the above calculations, we rely on the transaction values to always be positive. The
 introduction of negative amounts would be extremely problematic as one could
@@ -251,8 +249,7 @@ zero and does not overflow.
 
 It's also important to note that in order to create a valid range proof from the example above, both of the values 113 and 28 used in creating and signing for the excess value must be known. The reason for this, as well as a more detailed description of range proofs are further detailed in the [range proof paper](https://eprint.iacr.org/2017/1066.pdf).
 
-<a name="transaction-conclusion"></a>
-### Putting It All Together
+#### Putting It All Together
 
 A MimbleWimble transaction includes the following:
 
@@ -263,9 +260,9 @@ A MimbleWimble transaction includes the following:
   * A range proof that shows that v is non-negative.
 * An explicit transaction fee, in clear.
 * A signature, computed by taking the excess blinding value (the sum of all
-outputs plus the fee, minus the inputs) and using it as a private key.
+  outputs plus the fee, minus the inputs) and using it as a private key.
 
-## Blocks and Chain State
+### Blocks and Chain State
 
 We've explained above how MimbleWimble transactions can provide
 strong anonymity guarantees while maintaining the properties required for a valid
@@ -279,16 +276,17 @@ concept: _cut-through_. With this addition, a MimbleWimble chain gains:
   eliminated over time, without compromising security.
 * Further anonymity by mixing and removing transaction data.
 * And the ability for new nodes to sync up with the rest of the network very
-efficiently.
+  efficiently.
 
-### Transaction Aggregation
+#### Transaction Aggregation
 
 Recall that a transaction consists of the following -
+
 * a set of inputs that reference and spent a set of previous outputs
 * a set of new outputs (Pedersen commitments)
 * a transaction kernel, consisting of
-	* kernel excess (Pedersen commitment to zero)
-	* transaction signature (using kernel excess as public key)
+  * kernel excess (Pedersen commitment to zero)
+  * transaction signature (using kernel excess as public key)
 
 A tx is signed and the signature included in a _transaction kernel_. The signature is generated using the _kernel excess_ as a public key proving that the transaction sums to 0.
 
@@ -298,47 +296,47 @@ The public key in this example being `28*G`.
 
 We can say the following is true for any valid transaction (ignoring fees for simplicity) -
 
-	sum(outputs) - sum(inputs) = kernel_excess
+    sum(outputs) - sum(inputs) = kernel_excess
 
 The same holds true for blocks themselves once we realize a block is simply a set of aggregated inputs, outputs and transaction kernels. We can sum the tx outputs, subtract the sum of the tx inputs and compare the resulting Pedersen commitment to the sum of the kernel excesses -
 
-	sum(outputs) - sum(inputs) = sum(kernel_excess)
+    sum(outputs) - sum(inputs) = sum(kernel_excess)
 
 Simplifying slightly, (again ignoring transaction fees) we can say that MimbleWimble blocks can be treated exactly as MimbleWimble transactions.
 
-#### Kernel Offsets
+##### Kernel Offsets
 
 There is a subtle problem with MimbleWimble blocks and transactions as described above. It is possible (and in some cases trivial) to reconstruct the constituent transactions in a block. This is clearly bad for privacy. This is the "subset" problem - given a set of inputs, outputs and transaction kernels a subset of these will recombine to  reconstruct a valid transaction.
 
 For example, given the following two transactions -
 
-	(in1, in2) -> (out1), (kern1)
-	(in3) -> (out2), (kern2)
+    (in1, in2) -> (out1), (kern1)
+    (in3) -> (out2), (kern2)
 
 We can aggregate them into the following block (or aggregate transaction) -
 
-	(in1, in2, in3) -> (out1, out2), (kern1, kern2)
+    (in1, in2, in3) -> (out1, out2), (kern1, kern2)
 
 It is trivially easy to try all possible permutations to recover one of the transactions (where it sums successfully to zero) -
 
-	(in1, in2) -> (out1), (kern1)
+    (in1, in2) -> (out1), (kern1)
 
 We also know that everything remaining can be used to reconstruct the other valid transaction -
 
-	(in3) -> (out2), (kern2)
+    (in3) -> (out2), (kern2)
 
 To mitigate this we include a _kernel offset_ with every transaction kernel. This is a blinding factor (private key) that needs to be added back to the kernel excess to verify the commitments sum to zero -
 
-	sum(outputs) - sum(inputs) = kernel_excess + kernel_offset
+    sum(outputs) - sum(inputs) = kernel_excess + kernel_offset
 
 When we aggregate transactions in a block we store a _single_ aggregate offset in the block header. And now we have a single offset that cannot be decomposed into the individual transaction kernel offsets and the transactions can no longer be reconstructed -
 
-	sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset
+    sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset
 
 We "split" the key `k` into `k1+k2` during transaction construction. For a transaction kernel `(k1+k2)*G` we publish `k1*G` (the excess) and `k2` (the offset) and sign the transaction with `k1*G` as before.
 During block construction we can simply sum the `k2` offsets to generate a single aggregate `k2` offset to cover all transactions in the block. The `k2` offset for any individual transaction is unrecoverable.
 
-### Cut-through
+#### Cut-through
 
 Blocks let miners assemble multiple transactions into a single set that's added
 to the chain. In the following block representations, containing 3 transactions,
@@ -358,9 +356,9 @@ in a previous block is marked with a lower-case x.
 We notice the two following properties:
 
 * Within this block, some outputs are directly spent by included inputs (I3
-spends O2 and I4 spends O3).
+  spends O2 and I4 spends O3).
 * The structure of each transaction does not actually matter. As all transactions
-individually sum to zero, the sum of all transaction inputs and outputs must be zero.
+  individually sum to zero, the sum of all transaction inputs and outputs must be zero.
 
 Similarly to a transaction, all that needs to be checked in a block is that ownership
 has been proven (which comes from _transaction kernels_) and that the whole block did
@@ -392,14 +390,14 @@ guarantees:
 
 * Intermediate (cut-through) transactions will be represented only by their transaction kernels.
 * All outputs look the same: just very large numbers that are impossible to
-differentiate from one another. If one wanted to exclude some outputs, they'd have
-to exclude all.
+  differentiate from one another. If one wanted to exclude some outputs, they'd have
+  to exclude all.
 * All transaction structure has been removed, making it impossible to tell which output
-was matched with each input.
+  was matched with each input.
 
 And yet, it all still validates!
 
-### Cut-through All The Way
+#### Cut-through All The Way
 
 Going back to the previous example block, outputs x1 and x2, spent by I1 and
 I2, must have appeared previously in the blockchain. So after the addition of
@@ -418,17 +416,17 @@ height (its distance from the genesis block). And both the unspent outputs and t
 transaction kernels are extremely compact. This has 2 important consequences:
 
 * The state a given node in a MimbleWimble blockchain needs to maintain is very
-small (on the order of a few gigabytes for a bitcoin-sized blockchain, and
-potentially optimizable to a few hundreds of megabytes).
+  small (on the order of a few gigabytes for a bitcoin-sized blockchain, and
+  potentially optimizable to a few hundreds of megabytes).
 * When a new node joins a network building up a MimbleWimble chain, the amount of
-information that needs to be transferred is also very small.
+  information that needs to be transferred is also very small.
 
 In addition, the complete set of unspent outputs cannot be tampered with, even
 only by adding or removing an output. Doing so would cause the summation of all
 blinding factors in the transaction kernels to differ from the summation of blinding
 factors in the outputs.
 
-## Conclusion
+### Conclusion
 
 In this document we covered the basic principles that underlie a MimbleWimble
 blockchain. By using the addition properties of Elliptic Curve Cryptography, we're
