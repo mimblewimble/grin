@@ -1,5 +1,4 @@
-Blockchain Syncing
-==================
+# Blockchain Syncing
 
 We describe here the different methods used by a new node when joining the network
 to catch up with the latest chain state. We start with reminding the reader of the
@@ -87,13 +86,13 @@ with the network when it's actually is in a forged state. Multiple strategies ca
 be attempted:
 
 * Completely fake but valid horizon state (including header and proof of work).
-Assuming at least one honest peer, neither the UTXO set root hash nor the block
-hash will match other peers' horizon states.
+  Assuming at least one honest peer, neither the UTXO set root hash nor the block
+  hash will match other peers' horizon states.
 * Valid block header but faked UTXO set. The UTXO set root hash from the header
-will not match what the node calculates from the received UTXO set itself.
+  will not match what the node calculates from the received UTXO set itself.
 * Completely valid block with fake total difficulty, which could lead the node down
-a fake fork. The block hash changes if the total difficulty is changed, no honest
-peer will produce a valid head for that hash.
+  a fake fork. The block hash changes if the total difficulty is changed, no honest
+  peer will produce a valid head for that hash.
 
 #### A fork occurs that's older than the local UTXO history
 
@@ -125,11 +124,11 @@ headers.
 While this is a valid issue, several mitigation strategies exist:
 
 * Peers must still provide valid block headers at horizon `Z`. This includes the
-proof of work.
+  proof of work.
 * A group of block headers around the horizon could be asked to increase the cost
-of the attack.
+  of the attack.
 * Differing block headers providing a proof of work significantly lower could be
-rejected.
+  rejected.
 * The user or node operator may be asked to confirm a block hash.
 * In last resort, if none of the above strategies are effective, checkpoints could
-be used.
+  be used.

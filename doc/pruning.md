@@ -35,14 +35,14 @@ the set of UTXO commitments is strictly required for a node to function.
 There may be several contexts in which data can be pruned:
 
 * A fully validating node may get rid of some data it has already validated to
-free space.
+  free space.
 * A partially validating node (similar to SPV) may not be interested in either
-receiving or keeping all the data.
+  receiving or keeping all the data.
 * When a new node joins the network, it may temporarily behave as a partially
-validating node to make it available for use faster, even if it ultimately becomes
-a fully validating node.
+  validating node to make it available for use faster, even if it ultimately becomes
+  a fully validating node.
 
-# Validation of Fully Pruned State
+## Validation of Fully Pruned State
 
 Pruning needs to remove as much data as possible while keeping all the
 guarantees of a full MimbleWimble-style validation. This is necessary to keep
@@ -53,24 +53,24 @@ The full validation of the chain state requires that:
 
 * All kernel signatures verify against their public keys.
 * The sum of all UTXO commitments, minus the supply is a valid public key (can
-be used to sign the empty string).
+  be used to sign the empty string).
 * The sum of all kernel pubkeys equals the sum of all UTXO commitments, minus
-the supply.
+  the supply.
 * The root hashes of the UTXO PMMR, the range proofs PMMR and the kernels MMR
-match a block header with a valid Proof of Work chain.
+  match a block header with a valid Proof of Work chain.
 * All range proofs are valid.
 
 In addition, while not necessary to validate the full chain state, to be able
 to accept and validate new blocks additional data is required:
 
 * The output features and switch commitments, making the full output data
-necessary for all UTXOs.
+  necessary for all UTXOs.
 
 At minimum, this requires the following data:
 
 * The block headers chain.
 * All kernels, in order of inclusion in the chain. This also allows the
-reconstruction of the kernel MMR.
+  reconstruction of the kernel MMR.
 * All unspent outputs.
 * The UTXO MMR and the range proof MMR (to learn the hashes of pruned data).
 

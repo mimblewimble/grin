@@ -81,7 +81,6 @@ Design requirements:
 
 1. Support for serialization and efficient merging of pruned trees from partial archival nodes.
 
-
 ## Proposed Merkle Structure
 
 **The following design is proposed for all trees: a sum-MMR where every node
@@ -146,7 +145,6 @@ nodes are siblings, and so on.
 In the output set each node also commits to a sum of its unspent children, so
 a validator knows if it is missing data on unspent coins by checking whether or
 not this sum on a pruned node is zero.
-
 
 ## Algorithms
 

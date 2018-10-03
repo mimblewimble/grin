@@ -8,33 +8,33 @@ more widely.
 * What is Grin?
 * [Introduction to MimbleWimble](intro.md)
 * Cryptographic Primitives
-	* Pedersen Commitments
+  * Pedersen Commitments
   * Aggregate (Schnorr) Signatures
-	* Bulletproofs
+    * Bulletproofs
 * Block and Transaction Format
-	* Transaction
-		* Input, output
-		* Kernel
-	* Block
-		* Header
-		* Body
-		* Compact Block
+  * Transaction
+    * Input, output
+    * Kernel
+  * Block
+    * Header
+    * Body
+    * Compact Block
 * Chain State and Merkle Mountain Range
-	* Motivation
-	* [Merkle Mountain Range](mmr.md)
-	* [State and Storage](state.md)
-	* [Fast Sync](fast-sync.md)
-	* Merkle Proofs
+  * Motivation
+  * [Merkle Mountain Range](mmr.md)
+  * [State and Storage](state.md)
+  * [Fast Sync](fast-sync.md)
+  * Merkle Proofs
 * Proof of Work
-	* Cuckoo Cycle
-	* Difficulty Algorithm
+  * Cuckoo Cycle
+  * Difficulty Algorithm
 * Wire protocol
-	* Seeding and Sync
-	* Propagation
-	* Low-level Messages
+  * Seeding and Sync
+  * Propagation
+  * Low-level Messages
 * Dandelion & Aggregation
 * Building Transactions
 * Important Parameters
-	* Fees and Transaction Weight
-	* Reward and Block Weight
+  * Fees and Transaction Weight
+  * Reward and Block Weight
 * [Smart Contracts](contracts.md)
