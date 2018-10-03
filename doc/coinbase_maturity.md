@@ -43,17 +43,17 @@ Several things complicate this situation -
 3. It is possible (but not recommended) for a miner to reuse private keys.
 
 Grin does not allow duplicate commitments to exist in the Output set simultaneously.
-But the Output set is specific to the state of a particular chain fork. It _is_ possible for duplicate _identical_ commitments to exist simultaneously on different concurrent forks.
+But the Output set is specific to the state of a particular chain fork. It *is* possible for duplicate *identical* commitments to exist simultaneously on different concurrent forks.
 And these duplicate commitments may have different "lock heights" at which they mature and become spendable on the different forks.
 
-* Output O^(_1) from block B^(_1) spendable at height h^(_1) (on fork f^(_1))
-* Output O^(_1') from block B^(_2) spendable at height h^(_2) (on fork f^(_2))
+* Output O<sub>1</sub> from block B<sub>1</sub> spendable at height h<sub>1</sub> (on fork f<sub>1</sub>)
+* Output O<sub>1</sub>' from block B<sub>2</sub> spendable at height h<sub>2</sub> (on fork f<sub>2</sub>)
 
-The complication here is that input I^(_1) will spend either O^(_1) or O^(_1') depending on which fork the block containing I^(_1) exists on. And crucially I^(_1) may be valid at a particular block height on one fork but not the other.
+The complication here is that input I<sub>1</sub> will spend either O<sub>1</sub> or O<sub>1</sub>' depending on which fork the block containing I<sub>1</sub> exists on. And crucially I<sub>1</sub> may be valid at a particular block height on one fork but not the other.
 
-Said another way - a commitment may refer to multiple outputs, all of which may have different lock heights. And we _must_ ensure we correctly identify which output is actually being spent and that the coinbase maturity rules are correctly enforced based on the current chain state.
+Said another way - a commitment may refer to multiple outputs, all of which may have different lock heights. And we *must* ensure we correctly identify which output is actually being spent and that the coinbase maturity rules are correctly enforced based on the current chain state.
 
-A coinbase output, locked with the coinbase maturity rule at a specific lock height, _cannot_ be uniquely identified, and _cannot_ be safely spent by their commitment alone. To spend a coinbase output we need to know one additional piece of information -
+A coinbase output, locked with the coinbase maturity rule at a specific lock height, *cannot* be uniquely identified, and *cannot* be safely spent by their commitment alone. To spend a coinbase output we need to know one additional piece of information -
 
 * The block the coinbase output originated from
 
@@ -88,7 +88,7 @@ A pruned node may only store the following (refer to pruning doc) -
 
 Given this minimal set of data how do we know which block an output originated from?
 
-And given we now know multiple outputs (multiple forks, potentially different lock heights) can all have the _same_ commitment, what additional information do we need to provide in the input to uniquely identify the output being spent?
+And given we now know multiple outputs (multiple forks, potentially different lock heights) can all have the *same* commitment, what additional information do we need to provide in the input to uniquely identify the output being spent?
 
 And to take it a step further - can we do all this without relying on having access to full output data? Can we use just the output MMR?
 
@@ -98,7 +98,7 @@ We maintain an index mapping commitment to position in the output MMR.
 
 If no entry in the index exists or no entry in the output MMR exists for a given commitment then we now the output is not spendable (either it was spent previously or it never existed).
 
-If we find an entry in the output MMR then we know a spendable output exists in the Output set _but_ we do not know if this is the correct one. We do not if it is a coinbase output or not and we do not know the height of the block it originated from.
+If we find an entry in the output MMR then we know a spendable output exists in the Output set *but* we do not know if this is the correct one. We do not if it is a coinbase output or not and we do not know the height of the block it originated from.
 
 If the hash stored in the output MMR covers both the commitment and the output features and we require an input to provide both the commitment and the feature then we can do a further validation step -
 
