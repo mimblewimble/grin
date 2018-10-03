@@ -13,9 +13,12 @@ sudo: required
 cache:
   cargo: true
   timeout: 240
+  directories:
+    - $HOME/.cargo
+    - $TRAVIS_BUILD_DIR/target
 
 before_cache:
-  - rm -rf target/tmp
+  - rm -rf $TRAVIS_BUILD_DIR/target/tmp
 
 rust:
   - stable
@@ -25,14 +28,15 @@ addons:
     sources:
       - ubuntu-toolchain-r-test
     packages:
+      - libgit2-dev
+      - libncurses5-dev
+      - libncursesw5-dev
+      - zlib1g-dev
+      - libssl-dev
       - g++-5
       - cmake
-      - libcurl4-openssl-dev
-      - libelf-dev
-      - libdw-dev
-      - cmake
-      - gcc
-      - binutils-dev
+      - clang
+      - pkg-config
 
 before_install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update       ; fi
@@ -46,24 +50,17 @@ env:
   - TEST_SUITE=chain-core
   - TEST_SUITE=pool-p2p
   - TEST_SUITE=keychain-wallet
-  - TEST_SUITE=config-api-util
-  - TEST_SUITE=none
+  - TEST_SUITE=api-util-none
 
 script:
-  - if [[ "TEST_SUITE" != "none" ]]; then
-        IFS='-' read -r -a array <<< "$TEST_SUITE";
-        for TEST_DIR in "${array[@]}";
-        do
-          echo "Start testing in folder $TEST_DIR...";
-          cd $TEST_DIR && rm -rf target/tmp && cargo test --release;
-          cd - > /dev/null;
-          echo "Testing done for folder $TEST_DIR";
-        done;
-    fi
+  - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${array[0]};
+    if [[ -nz "$DIR" ]];  then cd $DIR && cargo test --release; cd - > /dev/null; fi;
+  - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${array[1]};
+    if [[ -nz "$DIR" ]];  then cd $DIR && cargo test --release; cd - > /dev/null; fi;
 
 before_deploy:
-  - if [[ "TEST_SUITE" == "none" ]]; then cargo build --release;                fi
-  - if [[ "TEST_SUITE" == "none" ]]; then ./.auto-release.sh;                   fi
+  - if [[ "TEST_SUITE" == "api-util-none" ]]; then cargo build --release;           fi
+  - if [[ "TEST_SUITE" == "api-util-none" ]]; then ./.auto-release.sh;              fi
 
 deploy:
   provider: releases
@@ -75,6 +72,6 @@ deploy:
   on:
     repo: mimblewimble/grin
     tags: true
-    condition: $TEST_DIR = "none"
+    condition: $TEST_DIR = "api-util-none"
 
 
