@@ -46,21 +46,28 @@ env:
   - RUST_BACKTRACE="1"
   - RUST_FLAGS="-C debug-assertions"
   matrix:
-  - TEST_SUITE=servers-store
+  - TEST_SUITE=servers
   - TEST_SUITE=chain-core
   - TEST_SUITE=pool-p2p
   - TEST_SUITE=keychain-wallet
-  - TEST_SUITE=api-util-none
+  - TEST_SUITE=api-util-store
 
 script:
   - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[0]};
+    echo "start testing on folder $DIR...";
     if [[ -n "$DIR" ]];  then cd $DIR && cargo test --release; cd - > /dev/null; fi;
   - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[1]};
+    echo "start testing on folder $DIR...";
     if [[ -n "$DIR" ]];  then cd $DIR && cargo test --release; cd - > /dev/null; fi;
+  - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[2]};
+    if [[ -n "$DIR" ]];  then
+      echo "start testing on folder $DIR...";
+      cd $DIR && cargo test --release; cd - > /dev/null;
+    fi;
 
 before_deploy:
-  - if [[ "TEST_SUITE" == "api-util-none" ]]; then cargo build --release;        fi
-  - if [[ "TEST_SUITE" == "api-util-none" ]]; then ./.auto-release.sh;           fi
+  - if [[ "TEST_SUITE" == "servers" ]]; then cargo build --release;        fi
+  - if [[ "TEST_SUITE" == "servers" ]]; then ./.auto-release.sh;           fi
 
 deploy:
   provider: releases
@@ -72,6 +79,6 @@ deploy:
   on:
     repo: mimblewimble/grin
     tags: true
-    condition: $TEST_DIR = "api-util-none"
+    condition: $TEST_SUITE = "servers"
 
 
