@@ -743,7 +743,7 @@ impl SyncInfo {
 		let all_headers_received =
 			header_head.height >= prev_height + (p2p::MAX_BLOCK_HEADERS as u64) - 4;
 		// no headers processed and we're past timeout, need to ask for more
-		let stalling = header_head.height == latest_height && now > timeout;
+		let stalling = header_head.height <= latest_height && now > timeout;
 
 		// always enable header sync on initial state transition from NoSync / Initial
 		let force_sync = match sync_state.status() {
