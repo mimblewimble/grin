@@ -9,8 +9,6 @@ To learn about what specific calls can be made read the [node API doc](node_api.
 
 ## Wallet APIs
 
-The wallet APIs is actually made of two endpoints: the foreign API and the wallet owner api.
-
 ### Foreign Wallet API
 
 The foreign API is an endpoint mainly designed to receiving grins through a network. This REST API can be started with the `grin wallet listen` command and by default is binded to  `localhost:13415`.
