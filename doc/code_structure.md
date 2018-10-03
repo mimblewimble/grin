@@ -17,40 +17,40 @@ List of files tracked in `git` and some files you'll create when you use grin.
 
 After checking out grin, building and using, these are the folders you'll have:
 
-- `api`
+- `api`\
  Code for ApiEndpoints accessible over REST.
-- `chain`
+- `chain`\
  The blockchain implementation. Accepts a block (see pipe.rs) and adds it to the chain, or reject it.
-- `config`
+- `config`\
  Code for handling configuration.
-- `core`
+- `core`\
  All core types: Hash, Block, Input, Output, and how to serialize them. Core mining algorithm, and more.
-- `doc`
+- `doc`\
  All documentation.
-- `servers`
+- `servers`\
  Many parts (adapters, lib, miner, seed, server, sync, types) that the `grin` server needs, including mining server.
-- `keychain`
+- `keychain`\
  Code for working safely with keys and doing blinding.
-- `p2p`
+- `p2p`\
  All peer to peer connection and protocol-related logic (handshake, block propagation, etc.).
-- `pool`
+- `pool`\
  Code for the transaction pool implementation.
-- `server`
+- `server`\
  A folder you're [supposed to create](build.md#running-a-node), before starting your server: cd to project root; mkdir server; cd server; grin server start (or run) and it will create a subfolder .grin
   - `.grin`
     - `chain` - a Rocksdb with the blockchain blocks and related information
     - `peers` - a Rocksdb with the list of Grin peers you're connected to
     - `txhashset` - contains folders kernel, rangeproof and output that each have a pmmr_dat.bin
-- `src`
+- `src`\
   Code for the `grin` binary.
-- `store`
+- `store`\
   Data store - a thin wrapper for Rocksdb, a key-value database forked from LevelDB.
-- `target`
+- `target`\
   Where the grin binary ends up, after the compile and build process finishes.
   In case of trouble, see [troubleshooting](https://github.com/mimblewimble/docs/wiki/Troubleshooting)
-- `util`
+- `util`\
   Low-level rust utilities.
-- `wallet`
+- `wallet`\
   Simple command line wallet implementation. Will generate:
   - `wallet_data` - a database storing your "outputs", that once confirmed and matured, can be spent with the [`grin wallet send`](wallet.md) command. (locally created, _not_ in git)
   - `wallet.seed` - your secret wallet seed. (locally created, _not_ in git)
