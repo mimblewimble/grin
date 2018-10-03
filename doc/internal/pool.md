@@ -1,5 +1,4 @@
-Transaction Pool
-==================
+# Transaction Pool
 
 This document describes some of the basic functionality and requirements of grin's transaction pool.
 
@@ -57,5 +56,3 @@ Next, the state of the transaction and where it would be located in the graph is
 ## Adversarial Conditions
 
 Under adversarial situations, the primary concerns to the transaction pool are denial-of-service attacks. The greatest concern should be maintaining the ability of the node to provide services to miners, by supplying ready made transactions to the mining service for inclusion in blocks. Resource consumption should be constrained as well. As we've seen on other chains, miners often have little incentive to include transactions if doing so impacts their ability to collect their primary reward.
-
-### 
