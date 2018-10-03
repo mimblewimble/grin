@@ -230,32 +230,36 @@ impl Chain {
 		}
 	}
 
-	fn update_head(&self, tip: &Tip, opts: &Options) {
+	// Update our head (and header_head) if total difficulty has increased.
+	fn update_head(&self, tip: &Tip) {
 		let mut head = self.head.write().unwrap();
 
-		// If we are not syncing then we want to update *both* head and header_head.
-		if !opts.contains(Options::SYNC) {
+		if tip.total_difficulty > head.total_difficulty {
 			// Update header_head while we have the lock on the head.
 			// Careful with the ordering of the locks here (always head first).
 			self.update_header_head(tip);
+
+			*head = tip.clone();
+
+			debug!(
+				LOGGER,
+				"chain: head updated to {} at {}", tip.last_block_h, tip.height
+			);
 		}
-
-		*head = tip.clone();
-
-		debug!(
-			LOGGER,
-			"chain: head updated to {} at {}", tip.last_block_h, tip.height
-		);
 	}
 
+	// Update our header_head if total difficulty has increased.
 	fn update_header_head(&self, tip: &Tip) {
 		let mut header_head = self.header_head.write().unwrap();
-		*header_head = tip.clone();
 
-		debug!(
-			LOGGER,
-			"chain: header_head updated to {} at {}", tip.last_block_h, tip.height
-		);
+		if tip.total_difficulty > header_head.total_difficulty {
+			*header_head = tip.clone();
+
+			debug!(
+				LOGGER,
+				"chain: header_head updated to {} at {}", tip.last_block_h, tip.height
+			);
+		}
 	}
 
 	/// Attempt to add a new block to the chain. Returns the new chain tip if it
@@ -282,7 +286,7 @@ impl Chain {
 		match res {
 			Ok(Some(ref tip)) => {
 				// Block accepted and head extended in the db, updating our head.
-				self.update_head(&tip, &opts);
+				self.update_head(&tip);
 
 				batch.commit()?;
 
@@ -737,7 +741,7 @@ impl Chain {
 
 		// Setup new head (SYNC opts, so head only, leave header_head unchanged).
 		let tip = Tip::from_block(&header);
-		self.update_head(&tip, &Options::SYNC);
+		self.update_head(&tip);
 
 		// Save the new head to the db and rebuild the header by height index.
 		{
