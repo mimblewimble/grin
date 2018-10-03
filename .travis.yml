@@ -53,9 +53,9 @@ env:
   - TEST_SUITE=api-util-none
 
 script:
-  - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${array[0]};
+  - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[0]};
     if [[ -nz "$DIR" ]];  then cd $DIR && cargo test --release; cd - > /dev/null; fi;
-  - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${array[1]};
+  - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[1]};
     if [[ -nz "$DIR" ]];  then cd $DIR && cargo test --release; cd - > /dev/null; fi;
 
 before_deploy:
