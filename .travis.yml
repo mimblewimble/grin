@@ -54,13 +54,13 @@ env:
 
 script:
   - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[0]};
-    if [[ -nz "$DIR" ]];  then cd $DIR && cargo test --release; cd - > /dev/null; fi;
+    if [[ -n "$DIR" ]];  then cd $DIR && cargo test --release; cd - > /dev/null; fi;
   - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[1]};
-    if [[ -nz "$DIR" ]];  then cd $DIR && cargo test --release; cd - > /dev/null; fi;
+    if [[ -n "$DIR" ]];  then cd $DIR && cargo test --release; cd - > /dev/null; fi;
 
 before_deploy:
-  - if [[ "TEST_SUITE" == "api-util-none" ]]; then cargo build --release;           fi
-  - if [[ "TEST_SUITE" == "api-util-none" ]]; then ./.auto-release.sh;              fi
+  - if [[ "TEST_SUITE" == "api-util-none" ]]; then cargo build --release;        fi
+  - if [[ "TEST_SUITE" == "api-util-none" ]]; then ./.auto-release.sh;           fi
 
 deploy:
   provider: releases
