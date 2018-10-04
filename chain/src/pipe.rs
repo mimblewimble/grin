@@ -43,10 +43,11 @@ use failure::ResultExt;
 pub struct BlockContext<'a> {
 	/// The options
 	pub opts: Options,
+	/// The pow verifier to use when processing a block.
 	pub pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
-
-	/// MMR sum tree states
+	/// The active txhashset (rewindable MMRs) to use for block processing.
 	pub txhashset: &'a mut txhashset::TxHashSet,
+	/// The active batch to use for block processing.
 	pub batch: store::Batch<'a>,
 
 	/// Recently processed blocks to avoid double-processing
@@ -55,13 +56,6 @@ pub struct BlockContext<'a> {
 	pub verifier_cache: Arc<RwLock<VerifierCache>>,
 	/// Recent orphan blocks to avoid double-processing
 	pub orphans: Arc<OrphanBlockPool>,
-}
-
-impl<'a> BlockContext<'a> {
-	pub fn commit(self) -> Result<(), Error> {
-		self.batch.commit()?;
-		Ok(())
-	}
 }
 
 // Check if this block is the next block *immediately*
@@ -254,25 +248,25 @@ fn handle_block_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(
 /// We validate the header but we do not store it or update header head based
 /// on this. We will update these once we get the block back after requesting
 /// it.
-pub fn process_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	debug!(
 		LOGGER,
-		"pipe: process_block_header at {} [{}]",
-		bh.height,
-		bh.hash()
+		"pipe: process_block_header: {} at {}",
+		header.hash(),
+		header.height,
 	); // keep this
 
-	check_header_known(bh.hash(), ctx)?;
-	validate_header(&bh, ctx)?;
+	check_header_known(header, ctx)?;
+	validate_header(header, ctx)?;
 	Ok(())
 }
 
 /// Quick in-memory check to fast-reject any block header we've already handled
 /// recently. Keeps duplicates from the network in check.
 /// ctx here is specific to the header_head (tip of the header chain)
-fn check_header_known(bh: Hash, ctx: &mut BlockContext) -> Result<(), Error> {
+fn check_header_known(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	let header_head = ctx.batch.header_head()?;
-	if bh == header_head.last_block_h || bh == header_head.prev_block_h {
+	if header.hash() == header_head.last_block_h || header.hash() == header_head.prev_block_h {
 		return Err(ErrorKind::Unfit("header already known".to_string()).into());
 	}
 	Ok(())

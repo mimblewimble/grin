@@ -219,8 +219,9 @@ impl Chain {
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
+		let batch = self.store.batch()?;
 		let mut txhashset = self.txhashset.write().unwrap();
-		let mut ctx = self.new_ctx(opts, &self.store, &mut txhashset)?;
+		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
 		let bhash = b.hash();
 
@@ -234,7 +235,7 @@ impl Chain {
 		match pipe::process_block(&b, &mut ctx) {
 			Ok(head) => {
 				// Commit the batch in the ctx to the db.
-				ctx.commit()?;
+				ctx.batch.commit()?;
 
 				add_to_hash_cache();
 
@@ -300,10 +301,11 @@ impl Chain {
 
 	/// Process a block header received during "header first" propagation.
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
+		let batch = self.store.batch()?;
 		let mut txhashset = self.txhashset.write().unwrap();
-		let mut ctx = self.new_ctx(opts, &self.store, &mut txhashset)?;
+		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 		pipe::process_block_header(bh, &mut ctx)?;
-		ctx.commit()?;
+		ctx.batch.commit()?;
 		Ok(())
 	}
 
@@ -315,11 +317,12 @@ impl Chain {
 		headers: &Vec<BlockHeader>,
 		opts: Options,
 	) -> Result<(), Error> {
+		let batch = self.store.batch()?;
 		let mut txhashset = self.txhashset.write().unwrap();
-		let mut ctx = self.new_ctx(opts, &self.store, &mut txhashset)?;
+		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
 		pipe::sync_block_headers(headers, &mut ctx)?;
-		ctx.commit()?;
+		ctx.batch.commit()?;
 
 		Ok(())
 	}
@@ -327,11 +330,9 @@ impl Chain {
 	fn new_ctx<'a>(
 		&self,
 		opts: Options,
-		store: &'a store::ChainStore,
+		batch: store::Batch<'a>,
 		txhashset: &'a mut txhashset::TxHashSet,
 	) -> Result<pipe::BlockContext<'a>, Error> {
-		let batch = store.batch()?;
-
 		Ok(pipe::BlockContext {
 			opts,
 			pow_verifier: self.pow_verifier,
@@ -541,7 +542,7 @@ impl Chain {
 		// so we can send these across as part of the zip file.
 		// The fast sync client does *not* have the necessary data
 		// to rewind after receiving the txhashset zip.
-		let header = self.store.get_block_header(&h)?;
+		let header = self.get_block_header(&h)?;
 		{
 			let mut txhashset = self.txhashset.write().unwrap();
 			txhashset::extending_readonly(&mut txhashset, |extension| {
@@ -616,7 +617,7 @@ impl Chain {
 			}
 		}
 
-		let header = self.store.get_block_header(&h)?;
+		let header = self.get_block_header(&h)?;
 		txhashset::zip_write(self.db_root.clone(), txhashset_data, &header)?;
 
 		let mut txhashset =
@@ -630,7 +631,9 @@ impl Chain {
 			LOGGER,
 			"chain: txhashset_write: rewinding a 2nd time (writeable)"
 		);
+
 		let mut batch = self.store.batch()?;
+
 		txhashset::extending(&mut txhashset, &mut batch, |extension| {
 			extension.rewind(&header)?;
 
@@ -663,11 +666,17 @@ impl Chain {
 		);
 
 		status.on_save();
+
 		// Replace the chain txhashset with the newly built one.
 		{
 			let mut txhashset_ref = self.txhashset.write().unwrap();
 			*txhashset_ref = txhashset;
 		}
+
+		debug!(
+			LOGGER,
+			"chain: txhashset_write: replaced our txhashset with the new one"
+		);
 
 		// Save the new head to the db and rebuild the header by height index.
 		{
@@ -715,11 +724,11 @@ impl Chain {
 		debug!(LOGGER, "Starting blockchain compaction.");
 		// Compact the txhashset via the extension.
 		{
-			let mut txhashes = self.txhashset.write().unwrap();
-			txhashes.compact()?;
+			let mut txhashset = self.txhashset.write().unwrap();
+			txhashset.compact()?;
 
 			// print out useful debug info after compaction
-			txhashset::extending_readonly(&mut txhashes, |extension| {
+			txhashset::extending_readonly(&mut txhashset, |extension| {
 				extension.dump_output_pmmr();
 				Ok(())
 			})?;
@@ -748,6 +757,7 @@ impl Chain {
 		let batch = self.store.batch()?;
 		let mut current = batch.get_header_by_height(head.height - horizon - 1)?;
 		loop {
+			// Go to the store directly so we can handle NotFoundErr robustly.
 			match self.store.get_block(&current.hash()) {
 				Ok(b) => {
 					batch.delete_block(&b.hash())?;
@@ -828,11 +838,6 @@ impl Chain {
 	/// Orphans pool size
 	pub fn orphans_len(&self) -> usize {
 		self.orphans.len()
-	}
-
-	/// Total difficulty at the head of the header chain
-	pub fn total_header_difficulty(&self) -> Result<Difficulty, Error> {
-		Ok(self.store.header_head()?.total_difficulty)
 	}
 
 	/// Reset header_head and sync_head to head of current body chain
