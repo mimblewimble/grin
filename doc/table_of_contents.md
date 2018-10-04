@@ -21,6 +21,7 @@
 
 ## Build and use
 
+- [api](api/api/md) - Explaining the different APIs in Grin and how to use them
 - [build](build.md) - Explaining how to build and run the Grin binaries
 - [release](release_instruction.md) - Instructions of making a release
 - [usage](usage.md) - Explaining how to use grin in Testnet3
