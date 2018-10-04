@@ -223,13 +223,11 @@ impl Chain {
 		let mut txhashset = self.txhashset.write().unwrap();
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
-		let bhash = b.hash();
-
 		let add_to_hash_cache = || {
 			// only add to hash cache below if block is definitively accepted
 			// or rejected
 			let mut cache = self.block_hashes_cache.write().unwrap();
-			cache.insert(bhash, true);
+			cache.insert(b.hash(), true);
 		};
 
 		match pipe::process_block(&b, &mut ctx) {
@@ -828,11 +826,6 @@ impl Chain {
 			});
 		}
 		Ok((outputs.0, max_index, output_vec))
-	}
-
-	/// Total difficulty at the head of the chain
-	pub fn total_difficulty(&self) -> Difficulty {
-		self.head().unwrap().total_difficulty
 	}
 
 	/// Orphans pool size

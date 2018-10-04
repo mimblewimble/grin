@@ -522,7 +522,7 @@ fn needs_syncing(
 	peers: Arc<Peers>,
 	chain: Arc<chain::Chain>,
 ) -> (bool, u64) {
-	let local_diff = chain.total_difficulty();
+	let local_diff = chain.head().unwrap().total_difficulty;
 	let peer = peers.most_work_peer();
 	let is_syncing = sync_state.is_syncing();
 	let mut most_work_height = 0;
