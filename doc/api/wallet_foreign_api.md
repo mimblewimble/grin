@@ -6,7 +6,7 @@
     1. [POST Build Coinbase](#post-build-coinbase)
     1. [POST Receive Tx](#post-receive-tx)
 
-## Foreign Endpoint
+## Wallet Foreign Endpoint
 
 ### POST Build Coinbase
 
