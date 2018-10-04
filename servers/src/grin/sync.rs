@@ -148,7 +148,7 @@ pub fn run_sync(
 
 		// if syncing is needed
 		let head = chain.head().unwrap();
-		let header_head = chain.get_header_head().unwrap();
+		let header_head = chain.header_head().unwrap();
 
 		// run the header sync in every 10s at least
 		if si.header_sync_due(sync_state.as_ref(), &header_head) {
@@ -365,7 +365,7 @@ impl BodySyncInfo {
 fn body_sync(peers: Arc<Peers>, chain: Arc<chain::Chain>, body_sync_info: &mut BodySyncInfo) {
 	let horizon = global::cut_through_horizon() as u64;
 	let body_head: chain::Tip = chain.head().unwrap();
-	let header_head: chain::Tip = chain.get_header_head().unwrap();
+	let header_head: chain::Tip = chain.header_head().unwrap();
 	let sync_head: chain::Tip = chain.get_sync_head().unwrap();
 
 	body_sync_info.reset();
@@ -455,7 +455,7 @@ fn header_sync(
 	chain: Arc<chain::Chain>,
 	history_locators: &mut Vec<(u64, Hash)>,
 ) {
-	if let Ok(header_head) = chain.get_header_head() {
+	if let Ok(header_head) = chain.header_head() {
 		let difficulty = header_head.total_difficulty;
 
 		if let Some(peer) = peers.most_work_peer() {
@@ -522,7 +522,7 @@ fn needs_syncing(
 	peers: Arc<Peers>,
 	chain: Arc<chain::Chain>,
 ) -> (bool, u64) {
-	let local_diff = chain.total_difficulty();
+	let local_diff = chain.head().unwrap().total_difficulty;
 	let peer = peers.most_work_peer();
 	let is_syncing = sync_state.is_syncing();
 	let mut most_work_height = 0;
@@ -596,7 +596,7 @@ fn get_locator(
 
 	// for security, clear history_locators[] in any case of header chain rollback,
 	// the easiest way is to check whether the sync head and the header head are identical.
-	if history_locators.len() > 0 && tip.hash() != chain.get_header_head()?.hash() {
+	if history_locators.len() > 0 && tip.hash() != chain.header_head()?.hash() {
 		history_locators.clear();
 	}
 

@@ -43,11 +43,25 @@ impl TUIStatusListener for TUIStatusView {
 						.child(TextView::new("0").with_id("connected_peers")),
 				).child(
 					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("------------------------")),
+				).child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("Header Chain Height: "))
+						.child(TextView::new("  ").with_id("basic_header_chain_height")),
+				).child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("Header Cumulative Difficulty: "))
+						.child(TextView::new("  ").with_id("basic_header_total_difficulty")),
+				).child(
+					LinearLayout::new(Orientation::Horizontal)
+						.child(TextView::new("------------------------")),
+				).child(
+					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Chain Height: "))
 						.child(TextView::new("  ").with_id("chain_height")),
 				).child(
 					LinearLayout::new(Orientation::Horizontal)
-						.child(TextView::new("Total Difficulty: "))
+						.child(TextView::new("Cumulative Difficulty: "))
 						.child(TextView::new("  ").with_id("basic_total_difficulty")),
 				).child(
 					LinearLayout::new(Orientation::Horizontal)
@@ -177,6 +191,12 @@ impl TUIStatusListener for TUIStatusView {
 		});
 		c.call_on_id("basic_total_difficulty", |t: &mut TextView| {
 			t.set_content(stats.head.total_difficulty.to_string());
+		});
+		c.call_on_id("basic_header_chain_height", |t: &mut TextView| {
+			t.set_content(stats.header_head.height.to_string());
+		});
+		c.call_on_id("basic_header_total_difficulty", |t: &mut TextView| {
+			t.set_content(stats.header_head.total_difficulty.to_string());
 		});
 		/*c.call_on_id("basic_mining_config_status", |t: &mut TextView| {
 			t.set_content(basic_mining_config_status);
