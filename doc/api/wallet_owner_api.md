@@ -4,7 +4,7 @@
 
 1. [Wallet Owner Endpoint](#wallet-owner-endpoint)
     1. [GET Retrieve Outputs](#get-retrieve-outputs)
-    1. [GET Retrieve Summary Info](#get-retrieve-summary_info)
+    1. [GET Retrieve Summary Info](#get-retrieve-summary-info)
     1. [GET Node Height](#get-node-height)
     1. [GET Retrieve Txs](#get-retrieve-txs)
     1. [GET Dump Stored Tx](#get-dump-stored-tx)
@@ -50,18 +50,18 @@ Attempt to update and retrieve outputs.
     |:---------------------|:---------|:---------------------------------------------------------------|
     |                      | bool     | Whether it was refreshed from node                             |
     | -                    | []object | Array                                                          |
-    |   -                  | []object | Array of Output Data                                           |
-    |     -                | object   | Output Data                                                    |
-    |       - root_key_id  | string   | Root key_id that the key for this output is derived from       |
-    |       - key_id       | string   | Derived key for this output                                    |
-    |       - n_child      | number   | How many derivations down from the root key                    |
-    |       - value        | number   | Value of the output, necessary to rebuild the commitment       |
-    |       - status       | string   | Current status of the output                                   |
-    |       - height       | number   | Height of the output                                           |
-    |       - lock_height  | number   | Height we are locked until                                     |
-    |       - is_coinbase  | bool     | Is this a coinbase output? Is it subject to coinbase locktime? |
-    |       - tx_log_entry | number   | Optional corresponding internal entry in tx entry log          |
-    |     -                | []number | Pedersen Commitment                                            |
+    | - -                  | []object | Array of Output Data                                           |
+    | - - -                | object   | Output Data                                                    |
+    | - - - - root_key_id  | string   | Root key_id that the key for this output is derived from       |
+    | - - - - key_id       | string   | Derived key for this output                                    |
+    | - - - - n_child      | number   | How many derivations down from the root key                    |
+    | - - - - value        | number   | Value of the output, necessary to rebuild the commitment       |
+    | - - - - status       | string   | Current status of the output                                   |
+    | - - - - height       | number   | Height of the output                                           |
+    | - - - - lock_height  | number   | Height we are locked until                                     |
+    | - - - - is_coinbase  | bool     | Is this a coinbase output? Is it subject to coinbase locktime? |
+    | - - - - tx_log_entry | number   | Optional corresponding internal entry in tx entry log          |
+    | - - -                | []number | Pedersen Commitment                                            |
 
 * **Error Response:**
 
@@ -112,12 +112,12 @@ Attempt to update and retrieve outputs.
     |:----------------------------------|:---------|:----------------------------------------|
     |                                   | bool     | Whether it was refreshed from node      |
     | -                                 | object   | Wallet information                      |
-    |   -  last_confirmed_height        | number   | Height from which info was taken        |
-    |   -  total                        | number   | Total amount in the wallet              |
-    |   -  amount_awaiting_confirmation | number   | Amount awaiting confirmation            |
-    |   -  amount_immature              | number   | Coinbases waiting for lock height       |
-    |   -  amount_currently_spendable   | number   | Amount currently spendable              |
-    |   -  amount_locked                | number   | Amount locked via previous transactions |
+    | - -  last_confirmed_height        | number   | Height from which info was taken        |
+    | - -  total                        | number   | Total amount in the wallet              |
+    | - -  amount_awaiting_confirmation | number   | Amount awaiting confirmation            |
+    | - -  amount_immature              | number   | Coinbases waiting for lock height       |
+    | - -  amount_currently_spendable   | number   | Amount currently spendable              |
+    | - -  amount_locked                | number   | Amount locked via previous transactions |
 
 * **Error Response:**
 
@@ -218,19 +218,19 @@ Return whether the outputs were validated against a node and an array of TxLogEn
     |:----------------------|:---------|:----------------------------------------------------------------------------|
     |                       | bool     | Whether it was refreshed from node                                          |
     | -                     | []object | Array of transactions                                                       |
-    |   -                   | object   | TxLogEntry                                                                  |
-    |     - id              | number   | Local id for this transaction (distinct from a slate transaction id)        |
-    |     - tx_slate_id     | string   | Slate transaction this entry is associated with, if any                     |
-    |     - tx_type         | string   | Transaction type                                                            |
-    |     - creation_ts     | string   | Time this tx entry was created                                              |
-    |     - confirmation_ts | string   | Time this tx was confirmed (by this wallet)                                 |
-    |     - confirmed       | bool     | Whether the inputs+outputs involved in this transaction have been confirmed |
-    |     - num_inputs      | number   | number of inputs involved in TX                                             |
-    |     - num_outputs     | number   | number of outputs involved in TX                                            |
-    |     - amount_credited | number   | Amount credited via this transaction                                        |
-    |     - amount_debited  | number   | Amount debited via this transaction                                         |
-    |     - fee             | number   |  Fee                                                                        |
-    |     - tx_hex          | string   | The transaction json itself, stored for reference or resending              |
+    | - -                   | object   | TxLogEntry                                                                  |
+    | - - - id              | number   | Local id for this transaction (distinct from a slate transaction id)        |
+    | - - - tx_slate_id     | string   | Slate transaction this entry is associated with, if any                     |
+    | - - - tx_type         | string   | Transaction type                                                            |
+    | - - - creation_ts     | string   | Time this tx entry was created                                              |
+    | - - - confirmation_ts | string   | Time this tx was confirmed (by this wallet)                                 |
+    | - - - confirmed       | bool     | Whether the inputs+outputs involved in this transaction have been confirmed |
+    | - - - num_inputs      | number   | number of inputs involved in TX                                             |
+    | - - - num_outputs     | number   | number of outputs involved in TX                                            |
+    | - - - amount_credited | number   | Amount credited via this transaction                                        |
+    | - - - amount_debited  | number   | Amount debited via this transaction                                         |
+    | - - - fee             | number   |  Fee                                                                        |
+    | - - - tx_hex          | string   | The transaction json itself, stored for reference or resending              |
 
   *Note on transaction type*: transaction type can be either `ConfirmedCoinbase`, `TxReceived`, `TxSent`, `TxReceivedCancelled` and `TxSentCancelled`.
 
@@ -282,22 +282,22 @@ Retrieves a given transaction.
     |                       | object   | The core transaction data (inputs, outputs, kernels and kernel offset)    |
     | - offset              | []number | The kernel "offset" k2, excess is k1G after splitting the key k = k1 + k2 |
     | - body                | object   | The transaction body - inputs/outputs/kernels                             |
-    |   - inputs            | []object | List of inputs spent by the transaction                                   |
-    |     - features        | object   | The features of the output being spent                                    |
-    |       - bits          | number   | Representation of the features in bits                                    |
-    |     - commit          | []number | The commit referencing the output being spent                             |
-    |   - outputs           | []object | List of outputs the transaction produces                                  |
-    |     - features        | object   | Options for an output's structure or use                                  |
-    |       - bits          | number   | Representation of the features in bits                                    |
-    |     - commit          | []number | The homomorphic commitment representing the output amount                 |
-    |     - proof           | []number | A proof that the commitment is in the right range                         |
-    |   - kernels           | []object | List of kernels that make up this transaction (usually a single kernel)   |
-    |     - features        | object   | Options for a kernel's structure or use                                   |
-    |       - bits          | number   | Representation of the features in bits                                    |
-    |     - fee             | number   | Fee originally included in the transaction this proof is for              |
-    |     - lock_height     | number   | The max lock_height of all inputs to this transaction                     |
-    |     - excess          | []number | Remainder of the sum of all transaction commitments                       |
-    |     - excess_sig      | []number | The signature proving the excess is a valid public key (signs the tx fee) |
+    | - - inputs            | []object | List of inputs spent by the transaction                                   |
+    | - - - features        | object   | The features of the output being spent                                    |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - commit          | []number | The commit referencing the output being spent                             |
+    | - - outputs           | []object | List of outputs the transaction produces                                  |
+    | - - - features        | object   | Options for an output's structure or use                                  |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - commit          | []number | The homomorphic commitment representing the output amount                 |
+    | - - - proof           | []number | A proof that the commitment is in the right range                         |
+    | - - kernels           | []object | List of kernels that make up this transaction (usually a single kernel)   |
+    | - - - features        | object   | Options for a kernel's structure or use                                   |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - fee             | number   | Fee originally included in the transaction this proof is for              |
+    | - - - lock_height     | number   | The max lock_height of all inputs to this transaction                     |
+    | - - - excess          | []number | Remainder of the sum of all transaction commitments                       |
+    | - - - excess_sig      | []number | The signature proving the excess is a valid public key (signs the tx fee) |
 
 * **Error Response:**
 
@@ -359,22 +359,22 @@ Send a transaction either directly by http or file (then display the slate)
     | tx                    | object   | The core transaction data (inputs, outputs, kernels and kernel offset)    |
     | - offset              | []number | The kernel "offset" k2, excess is k1G after splitting the key k = k1 + k2 |
     | - body                | object   | The transaction body - inputs/outputs/kernels                             |
-    |   - inputs            | []object | List of inputs spent by the transaction                                   |
-    |     - features        | object   | The features of the output being spent                                    |
-    |       - bits          | number   | Representation of the features in bits                                    |
-    |     - commit          | []number | The commit referencing the output being spent                             |
-    |   - outputs           | []object | List of outputs the transaction produces                                  |
-    |     - features        | object   | Options for an output's structure or use                                  |
-    |       - bits          | number   | Representation of the features in bits                                    |
-    |     - commit          | []number | The homomorphic commitment representing the output amount                 |
-    |     - proof           | []number | A proof that the commitment is in the right range                         |
-    |   - kernels           | []object | List of kernels that make up this transaction (usually a single kernel)   |
-    |     - features        | object   | Options for a kernel's structure or use                                   |
-    |       - bits          | number   | Representation of the features in bits                                    |
-    |     - fee             | number   | Fee originally included in the transaction this proof is for              |
-    |     - lock_height     | number   | The max lock_height of all inputs to this transaction                     |
-    |     - excess          | []number | Remainder of the sum of all transaction commitments                       |
-    |     - excess_sig      | []number | The signature proving the excess is a valid public key (signs the tx fee) |
+    | - - inputs            | []object | List of inputs spent by the transaction                                   |
+    | - - - features        | object   | The features of the output being spent                                    |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - commit          | []number | The commit referencing the output being spent                             |
+    | - - outputs           | []object | List of outputs the transaction produces                                  |
+    | - - - features        | object   | Options for an output's structure or use                                  |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - commit          | []number | The homomorphic commitment representing the output amount                 |
+    | - - - proof           | []number | A proof that the commitment is in the right range                         |
+    | - - kernels           | []object | List of kernels that make up this transaction (usually a single kernel)   |
+    | - - - features        | object   | Options for a kernel's structure or use                                   |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - fee             | number   | Fee originally included in the transaction this proof is for              |
+    | - - - lock_height     | number   | The max lock_height of all inputs to this transaction                     |
+    | - - - excess          | []number | Remainder of the sum of all transaction commitments                       |
+    | - - - excess_sig      | []number | The signature proving the excess is a valid public key (signs the tx fee) |
     | amount                | number   | Base amount (excluding fee)                                               |
     | fee                   | number   | Fee amount                                                                |
     | height                | number   | Block height for the transaction                                          |
@@ -437,22 +437,22 @@ Builds the complete transaction and sends it to a grin node for propagation.
     | tx                    | object   | The core transaction data (inputs, outputs, kernels and kernel offset)    |
     | - offset              | []number | The kernel "offset" k2, excess is k1G after splitting the key k = k1 + k2 |
     | - body                | object   | The transaction body - inputs/outputs/kernels                             |
-    |   - inputs            | []object | List of inputs spent by the transaction                                   |
-    |     - features        | object   | The features of the output being spent                                    |
-    |       - bits          | number   | Representation of the features in bits                                    |
-    |     - commit          | []number | The commit referencing the output being spent                             |
-    |   - outputs           | []object | List of outputs the transaction produces                                  |
-    |     - features        | object   | Options for an output's structure or use                                  |
-    |       - bits          | number   | Representation of the features in bits                                    |
-    |     - commit          | []number | The homomorphic commitment representing the output amount                 |
-    |     - proof           | []number | A proof that the commitment is in the right range                         |
-    |   - kernels           | []object | List of kernels that make up this transaction (usually a single kernel)   |
-    |     - features        | object   | Options for a kernel's structure or use                                   |
-    |       - bits          | number   | Representation of the features in bits                                    |
-    |     - fee             | number   | Fee originally included in the transaction this proof is for              |
-    |     - lock_height     | number   | The max lock_height of all inputs to this transaction                     |
-    |     - excess          | []number | Remainder of the sum of all transaction commitments                       |
-    |     - excess_sig      | []number | The signature proving the excess is a valid public key (signs the tx fee) |
+    | - - inputs            | []object | List of inputs spent by the transaction                                   |
+    | - - - features        | object   | The features of the output being spent                                    |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - commit          | []number | The commit referencing the output being spent                             |
+    | - - outputs           | []object | List of outputs the transaction produces                                  |
+    | - - - features        | object   | Options for an output's structure or use                                  |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - commit          | []number | The homomorphic commitment representing the output amount                 |
+    | - - - proof           | []number | A proof that the commitment is in the right range                         |
+    | - - kernels           | []object | List of kernels that make up this transaction (usually a single kernel)   |
+    | - - - features        | object   | Options for a kernel's structure or use                                   |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - fee             | number   | Fee originally included in the transaction this proof is for              |
+    | - - - lock_height     | number   | The max lock_height of all inputs to this transaction                     |
+    | - - - excess          | []number | Remainder of the sum of all transaction commitments                       |
+    | - - - excess_sig      | []number | The signature proving the excess is a valid public key (signs the tx fee) |
     | amount                | number   | Base amount (excluding fee)                                               |
     | fee                   | number   | Fee amount                                                                |
     | height                | number   | Block height for the transaction                                          |
@@ -475,22 +475,22 @@ Builds the complete transaction and sends it to a grin node for propagation.
     | tx                    | object   | The core transaction data (inputs, outputs, kernels and kernel offset)    |
     | - offset              | []number | The kernel "offset" k2, excess is k1G after splitting the key k = k1 + k2 |
     | - body                | object   | The transaction body - inputs/outputs/kernels                             |
-    |   - inputs            | []object | List of inputs spent by the transaction                                   |
-    |     - features        | object   | The features of the output being spent                                    |
-    |       - bits          | number   | Representation of the features in bits                                    |
-    |     - commit          | []number | The commit referencing the output being spent                             |
-    |   - outputs           | []object | List of outputs the transaction produces                                  |
-    |     - features        | object   | Options for an output's structure or use                                  |
-    |       - bits          | number   | Representation of the features in bits                                    |
-    |     - commit          | []number | The homomorphic commitment representing the output amount                 |
-    |     - proof           | []number | A proof that the commitment is in the right range                         |
-    |   - kernels           | []object | List of kernels that make up this transaction (usually a single kernel)   |
-    |     - features        | object   | Options for a kernel's structure or use                                   |
-    |       - bits          | number   | Representation of the features in bits                                    |
-    |     - fee             | number   | Fee originally included in the transaction this proof is for              |
-    |     - lock_height     | number   | The max lock_height of all inputs to this transaction                     |
-    |     - excess          | []number | Remainder of the sum of all transaction commitments                       |
-    |     - excess_sig      | []number | The signature proving the excess is a valid public key (signs the tx fee) |
+    | - - inputs            | []object | List of inputs spent by the transaction                                   |
+    | - - - features        | object   | The features of the output being spent                                    |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - commit          | []number | The commit referencing the output being spent                             |
+    | - - outputs           | []object | List of outputs the transaction produces                                  |
+    | - - - features        | object   | Options for an output's structure or use                                  |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - commit          | []number | The homomorphic commitment representing the output amount                 |
+    | - - - proof           | []number | A proof that the commitment is in the right range                         |
+    | - - kernels           | []object | List of kernels that make up this transaction (usually a single kernel)   |
+    | - - - features        | object   | Options for a kernel's structure or use                                   |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - fee             | number   | Fee originally included in the transaction this proof is for              |
+    | - - - lock_height     | number   | The max lock_height of all inputs to this transaction                     |
+    | - - - excess          | []number | Remainder of the sum of all transaction commitments                       |
+    | - - - excess_sig      | []number | The signature proving the excess is a valid public key (signs the tx fee) |
     | amount                | number   | Base amount (excluding fee)                                               |
     | fee                   | number   | Fee amount                                                                |
     | height                | number   | Block height for the transaction                                          |
