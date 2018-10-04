@@ -206,11 +206,7 @@ impl Chain {
 
 	/// Processes a single block, then checks for orphans, processing
 	/// those as well if they're found
-	pub fn process_block(
-		&self,
-		b: Block,
-		opts: Options,
-	) -> Result<Option<Tip>, Error> {
+	pub fn process_block(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
 		let height = b.header.height;
 		let res = self.process_block_single(b, opts);
 		if res.is_ok() {
@@ -246,7 +242,7 @@ impl Chain {
 				self.adapter.block_accepted(&b, opts);
 
 				Ok(head)
-			},
+			}
 			Err(e) => {
 				match e.kind() {
 					ErrorKind::Orphan => {

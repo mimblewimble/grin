@@ -73,10 +73,7 @@ fn is_next_block(header: &BlockHeader, head: &Tip) -> bool {
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain.
 /// Returns new head if chain head updated.
-pub fn process_block(
-	b: &Block,
-	ctx: &mut BlockContext,
-) -> Result<Option<Tip>, Error> {
+pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
@@ -247,10 +244,7 @@ pub fn sync_block_headers(
 	}
 }
 
-fn handle_block_header(
-	header: &BlockHeader,
-	ctx: &mut BlockContext,
-) -> Result<(), Error> {
+fn handle_block_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	validate_header(header, ctx)?;
 	add_block_header(header, ctx)?;
 	Ok(())
@@ -260,10 +254,7 @@ fn handle_block_header(
 /// We validate the header but we do not store it or update header head based
 /// on this. We will update these once we get the block back after requesting
 /// it.
-pub fn process_block_header(
-	bh: &BlockHeader,
-	ctx: &mut BlockContext,
-) -> Result<(), Error> {
+pub fn process_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	debug!(
 		LOGGER,
 		"pipe: process_block_header at {} [{}]",
@@ -320,10 +311,7 @@ fn check_known_orphans(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(
 }
 
 // Check if this block is in the store already.
-fn check_known_store(
-	header: &BlockHeader,
-	ctx: &mut BlockContext,
-) -> Result<(), Error> {
+fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	match ctx.batch.block_exists(&header.hash()) {
 		Ok(true) => {
 			let head = ctx.batch.head()?;
@@ -372,10 +360,7 @@ fn check_prev_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<()
 // First check the header matches via current height index.
 // Then peek directly into the MMRs at the appropriate pos.
 // We can avoid a full rewind in this case.
-fn check_known_mmr(
-	header: &BlockHeader,
-	ctx: &mut BlockContext,
-) -> Result<(), Error> {
+fn check_known_mmr(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	// No point checking the MMR if this block is not earlier in the chain.
 	let head = ctx.batch.head()?;
 	if header.height > head.height {
@@ -417,10 +402,7 @@ fn check_known_mmr(
 /// First level of block validation that only needs to act on the block header
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
-fn validate_header(
-	header: &BlockHeader,
-	ctx: &mut BlockContext,
-) -> Result<(), Error> {
+fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {
 		error!(
@@ -527,10 +509,7 @@ fn validate_header(
 	Ok(())
 }
 
-fn validate_block(
-	block: &Block,
-	ctx: &mut BlockContext,
-) -> Result<(), Error> {
+fn validate_block(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	let prev = ctx.batch.get_block_header(&block.header.previous)?;
 	block
 		.validate(
@@ -623,10 +602,7 @@ fn add_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Erro
 /// Directly updates the head if we've just appended a new block to it or handle
 /// the situation where we've just added enough work to have a fork with more
 /// work than the head.
-fn update_head(
-	b: &Block,
-	ctx: &BlockContext,
-) -> Result<Option<Tip>, Error> {
+fn update_head(b: &Block, ctx: &BlockContext) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
 	// when extending the head), update it
 	let head = ctx.batch.head()?;
@@ -669,10 +645,7 @@ fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Er
 }
 
 /// Update the header head if this header has most work.
-fn update_header_head(
-	bh: &BlockHeader,
-	ctx: &mut BlockContext,
-) -> Result<Option<Tip>, Error> {
+fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	let header_head = ctx.batch.header_head()?;
 	if has_more_work(&bh, &header_head) {
 		let tip = Tip::from_block(bh);
