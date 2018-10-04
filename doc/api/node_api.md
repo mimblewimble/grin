@@ -92,11 +92,12 @@ Optionally return results as "compact blocks" by passing `?compact` query.
     | - block_height        | number   | Block height at which the output is found                                   |
     | - merkle_proof        | string   | Merkle proof                                                                |
     | kernels               | []object | Transaction Kernels (a proof that a transaction sums to zero)               |
-    | - features            | string   | Rank of the user                                                            |
-    | - fee                 | number   | Hashrate of the user                                                        |
-    | - lock_height         | number   | Rank of the user                                                            |
-    | - excess              | string   | Hashrate of the user                                                        |
-    | - excess_sig          | string   | Rank of the user                                                            |
+    | - features            | object   | Options for a kernel's structure or use                                     |
+    |   - bits              | number   | Representation of the features in bits                                      |
+    | - fee                 | number   | Fee originally included in the transaction this proof is for                |
+    | - lock_height         | number   | The max lock_height of all inputs to this transaction                       |
+    | - excess              | []number | Remainder of the sum of all transaction commitments                         |
+    | - excess_sig          | []number | The signature proving the excess is a valid public key (signs the tx fee)   |
 
 * **Error Response:**
 
@@ -732,11 +733,12 @@ UTXO traversal. Retrieves last utxos since a start index until a max.
     | - block_height        | number   | Block height at which the output is found                                   |
     | - merkle_proof        | string   | Merkle proof                                                                |
     | kernels               | []object | Transaction Kernels (a proof that a transaction sums to zero)               |
-    | - features            | string   | Rank of the user                                                            |
-    | - fee                 | number   | Hashrate of the user                                                        |
-    | - lock_height         | number   | Rank of the user                                                            |
-    | - excess              | string   | Hashrate of the user                                                        |
-    | - excess_sig          | string   | Rank of the user                                                            |
+    | - features            | object   | Options for a kernel's structure or use                                     |
+    |   - bits              | number   | Representation of the features in bits                                      |
+    | - fee                 | number   | Fee originally included in the transaction this proof is for                |
+    | - lock_height         | number   | The max lock_height of all inputs to this transaction                       |
+    | - excess              | []number | Remainder of the sum of all transaction commitments                         |
+    | - excess_sig          | []number | The signature proving the excess is a valid public key (signs the tx fee)   |
 
 * **Error Response:**
 

@@ -5,7 +5,8 @@ This document contains the documentation for the 3 Grin REST APIs. These endpoin
 ## Node API
 
 This endpoint is used to query a node about various information on the blockchain, networks and peers. By default, this REST API will listen on `localhost:13413`. This API is started as the same time as the Grin node.
-To learn about what specific calls can be made read the [node API doc](node_api.md).
+This endpoint requires, by default, Basic Authentication. The username is `grin` and the password can be found in the `.api_secret` file.
+To learn about what specific calls can be made read the [node API doc](node_api.md).`
 
 ## Wallet APIs
 
@@ -17,4 +18,5 @@ To learn about what specific calls can be made read the [wallet foreign API doc]
 ### Wallet Owner API
 
 The wallet owner API is an endpoint to manage the user wallet: broadcast transaction, sign transaction, see the current balance... This REST API can be started with the `grin wallet owner_api` command and will listen on `localhost:13420`. This endpoint must **never** be exposed to the outside world.
+This endpoint requires, by default, Basic Authentication. The username is `grin` and the password can be found in the `.api_secret` file.
 To learn about what specific calls can be made read the [wallet owner API doc](wallet_owner_api.md).
