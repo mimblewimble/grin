@@ -88,7 +88,7 @@ impl BodySync {
 	fn body_sync(&mut self) {
 		let horizon = global::cut_through_horizon() as u64;
 		let body_head: chain::Tip = self.chain.head().unwrap();
-		let header_head: chain::Tip = self.chain.get_header_head().unwrap();
+		let header_head: chain::Tip = self.chain.header_head().unwrap();
 		let sync_head: chain::Tip = self.chain.get_sync_head().unwrap();
 
 		self.reset();

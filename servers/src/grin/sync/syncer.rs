@@ -132,7 +132,7 @@ fn sync_loop(
 
 		// if syncing is needed
 		let head = chain.head().unwrap();
-		let header_head = chain.get_header_head().unwrap();
+		let header_head = chain.header_head().unwrap();
 
 		// run each sync stage, each of them deciding whether they're needed
 		// except for body sync that only runs if state sync is off or done
@@ -150,7 +150,7 @@ fn needs_syncing(
 	peers: Arc<Peers>,
 	chain: Arc<chain::Chain>,
 ) -> (bool, u64) {
-	let local_diff = chain.total_difficulty();
+	let local_diff = chain.head().unwrap().total_difficulty;
 	let peer = peers.most_work_peer();
 	let is_syncing = sync_state.is_syncing();
 	let mut most_work_height = 0;

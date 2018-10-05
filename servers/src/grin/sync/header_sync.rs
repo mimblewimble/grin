@@ -120,7 +120,7 @@ impl HeaderSync {
 	}
 
 	fn header_sync(&mut self) {
-		if let Ok(header_head) = self.chain.get_header_head() {
+		if let Ok(header_head) = self.chain.header_head() {
 			let difficulty = header_head.total_difficulty;
 
 			if let Some(peer) = self.peers.most_work_peer() {
@@ -158,7 +158,7 @@ impl HeaderSync {
 
 		// for security, clear history_locators[] in any case of header chain rollback,
 		// the easiest way is to check whether the sync head and the header head are identical.
-		if self.history_locators.len() > 0 && tip.hash() != self.chain.get_header_head()?.hash() {
+		if self.history_locators.len() > 0 && tip.hash() != self.chain.header_head()?.hash() {
 			self.history_locators.clear();
 		}
 
