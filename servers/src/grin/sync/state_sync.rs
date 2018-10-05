@@ -126,7 +126,6 @@ impl StateSync {
 					Err(e) => self.sync_state.set_sync_error(Error::P2P(e)),
 				}
 				self.sync_state.update(SyncStatus::TxHashsetDownload);
-
 			}
 		}
 		true
