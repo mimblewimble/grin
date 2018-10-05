@@ -18,22 +18,22 @@ While not being exhaustive, the different ways we can imagine wallet software
 working with Grin are the following:
 
 1. A receive-only online wallet server. This should have some well-known network
-address that can be reached by a client. There should be a spending key kept
-offline.
-2. A fully offline interaction. The sender uses her wallet to dump a file that's
-sent to the receiver in any practical way. The receiver builds upon that file,
-sending it back to the sender. The sender finalizes the transaction and sends it
-to a Grin node.
-3. Fully online interaction through a non-trusted 3rd party. In this mode
-receiver and sender both connect to a web server that facilitates the
-interaction. Exchanges can be all be encrypted.
-4. Hardware wallet. Similar to offline but the hardware wallet interacts with
-a computer to produce required public keys and signatures.
-5. Web wallet. A 3rd party runs the required software behind the scenes and
-handles some of the key generation. This could be done in a custodial,
-non-custodial and multisig fashion.
-6. Fully programmatic. Similar to the online server, but both for receiving and
-sending, most likely by an automated bot of some sorts.
+   address that can be reached by a client. There should be a spending key kept
+   offline.
+1. A fully offline interaction. The sender uses her wallet to dump a file that's
+   sent to the receiver in any practical way. The receiver builds upon that file,
+   sending it back to the sender. The sender finalizes the transaction and sends it
+   to a Grin node.
+1. Fully online interaction through a non-trusted 3rd party. In this mode
+   receiver and sender both connect to a web server that facilitates the
+   interaction. Exchanges can be all be encrypted.
+1. Hardware wallet. Similar to offline but the hardware wallet interacts with
+   a computer to produce required public keys and signatures.
+1. Web wallet. A 3rd party runs the required software behind the scenes and
+   handles some of the key generation. This could be done in a custodial,
+   non-custodial and multisig fashion.
+1. Fully programmatic. Similar to the online server, but both for receiving and
+   sending, most likely by an automated bot of some sorts.
 
 As part of the Grin project, we will only consider the first 2 modes of
 interaction. We hope that other projects and businesses will tackle other modes
@@ -51,14 +51,14 @@ to build and manipulate commitments, related bulletproofs and aggregate
 signatures we can kill many birds with one stone:
 
 * Make the job of wallet implementers easier. The underlying cryptographic
-concepts can be quite complex.
+  concepts can be quite complex.
 * Make wallet implementations more secure. As we provide a higher level API,
-there is less risk in misusing lower-level constructs.
+  there is less risk in misusing lower-level constructs.
 * Provide some standardization in the way aggregations are done. There are
-sometimes multiple ways to build a commitment or aggregate signatures or proofs
-in a multiparty output.
+  sometimes multiple ways to build a commitment or aggregate signatures or proofs
+  in a multiparty output.
 * Provide more eyeballs and more security to the standard library. We need to
-have the wallet APIs thoroughly reviewed regardless.
+  have the wallet APIs thoroughly reviewed regardless.
 
 Receive-only Online Wallet
 --------------------------

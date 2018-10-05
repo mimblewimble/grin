@@ -1,3 +1,5 @@
+# Contract Ideas
+
 ## Atomic Swaps
 
 "On another chain, Igno sends coins to me that I can only redeem by revealing a hash preimage (which he knows, I don't). On the MW chain we do this exchange so that Igno can take my coins by revealing the preimage. When he takes his coins, he reveals it, enabling me to take my coins.

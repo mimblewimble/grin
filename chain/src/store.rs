@@ -67,11 +67,13 @@ impl ChainStore {
 		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), "HEAD")
 	}
 
+	/// Header of the block at the head of the block chain (not the same thing as header_head).
 	pub fn head_header(&self) -> Result<BlockHeader, Error> {
 		self.get_block_header(&self.head()?.last_block_h)
 	}
 
-	pub fn get_header_head(&self) -> Result<Tip, Error> {
+	/// Head of the header chain (not the same thing as head_header).
+	pub fn header_head(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]), "HEADER_HEAD")
 	}
 
@@ -170,11 +172,13 @@ impl<'a> Batch<'a> {
 		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), "HEAD")
 	}
 
+	/// Header of the block at the head of the block chain (not the same thing as header_head).
 	pub fn head_header(&self) -> Result<BlockHeader, Error> {
 		self.get_block_header(&self.head()?.last_block_h)
 	}
 
-	pub fn get_header_head(&self) -> Result<Tip, Error> {
+	/// Head of the header chain (not the same thing as head_header).
+	pub fn header_head(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(&vec![HEADER_HEAD_PREFIX]), "HEADER_HEAD")
 	}
 
@@ -207,7 +211,7 @@ impl<'a> Batch<'a> {
 	}
 
 	pub fn reset_sync_head(&self) -> Result<(), Error> {
-		let head = self.get_header_head()?;
+		let head = self.header_head()?;
 		self.save_sync_head(&head)
 	}
 
