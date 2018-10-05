@@ -301,7 +301,7 @@ impl Peers {
 							count += 1;
 						}
 					}
-				},
+				}
 				Err(_) => (),
 			}
 
