@@ -305,7 +305,7 @@ impl Peers {
 				Err(_) => (),
 			}
 
-			if count > num_peers {
+			if count >= num_peers {
 				break;
 			}
 		}
