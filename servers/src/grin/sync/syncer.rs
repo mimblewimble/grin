@@ -14,15 +14,15 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time;
 use std::thread;
+use std::time;
 
-use grin::sync::body_sync::BodySync;
-use grin::sync::header_sync::HeaderSync;
-use grin::sync::state_sync::StateSync;
 use chain;
 use common::types::{SyncState, SyncStatus};
 use core::pow::Difficulty;
+use grin::sync::body_sync::BodySync;
+use grin::sync::header_sync::HeaderSync;
+use grin::sync::state_sync::StateSync;
 use p2p::{self, Peers};
 use util::LOGGER;
 
@@ -34,7 +34,7 @@ pub fn run_sync(
 	skip_sync_wait: bool,
 	archive_mode: bool,
 	stop: Arc<AtomicBool>,
-	) {
+) {
 	let _ = thread::Builder::new()
 		.name("sync".to_string())
 		.spawn(move || {
@@ -46,7 +46,7 @@ pub fn run_sync(
 				skip_sync_wait,
 				archive_mode,
 				stop,
-				)
+			)
 		});
 }
 
@@ -100,7 +100,12 @@ fn sync_loop(
 	// Our 3 main sync stages
 	let mut header_sync = HeaderSync::new(sync_state.clone(), peers.clone(), chain.clone());
 	let mut body_sync = BodySync::new(sync_state.clone(), peers.clone(), chain.clone());
-	let mut state_sync = StateSync::new(sync_state.clone(), peers.clone(), chain.clone(), archive_mode);
+	let mut state_sync = StateSync::new(
+		sync_state.clone(),
+		peers.clone(),
+		chain.clone(),
+		archive_mode,
+	);
 
 	// Highest height seen on the network, generally useful for a fast test on
 	// whether some sync is needed
@@ -130,9 +135,11 @@ fn sync_loop(
 		let header_head = chain.get_header_head().unwrap();
 
 		// run each sync stage, each of them deciding whether they're needed
+		// except for body sync that only runs if state sync is off or done
 		header_sync.check_run(&header_head, highest_height);
-		state_sync.check_run(&header_head, &head, highest_height);
-		body_sync.check_run(&head, highest_height);
+		if !state_sync.check_run(&header_head, &head, highest_height) {
+			body_sync.check_run(&head, highest_height);
+		}
 	}
 }
 

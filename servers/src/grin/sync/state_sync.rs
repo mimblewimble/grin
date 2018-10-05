@@ -23,7 +23,6 @@ use core::global;
 use p2p::{self, Peer};
 use util::LOGGER;
 
-
 /// Fast sync has 3 "states":
 /// * syncing headers
 /// * once all headers are sync'd, requesting the txhashset state
@@ -41,7 +40,12 @@ pub struct StateSync {
 }
 
 impl StateSync {
-	pub fn new(sync_state: Arc<SyncState>, peers: Arc<p2p::Peers>, chain: Arc<chain::Chain>, archive_mode: bool) -> StateSync {
+	pub fn new(
+		sync_state: Arc<SyncState>,
+		peers: Arc<p2p::Peers>,
+		chain: Arc<chain::Chain>,
+		archive_mode: bool,
+	) -> StateSync {
 		StateSync {
 			sync_state,
 			peers,
@@ -52,7 +56,15 @@ impl StateSync {
 		}
 	}
 
-	pub fn check_run(&mut self, header_head: &chain::Tip, head: &chain::Tip, highest_height: u64) -> bool {
+	/// Check whether state sync should run and triggers a state download when
+	/// it's time (we have all headers). Returns true as long as state sync
+	/// needs monitoring, false when it's either done or turned off.
+	pub fn check_run(
+		&mut self,
+		header_head: &chain::Tip,
+		head: &chain::Tip,
+		highest_height: u64,
+	) -> bool {
 		let need_state_sync = !self.archive_mode
 			&& highest_height.saturating_sub(head.height) > global::cut_through_horizon() as u64;
 		if !need_state_sync {
@@ -68,7 +80,7 @@ impl StateSync {
 				error!(
 					LOGGER,
 					"fast_sync: error = {:?}. restart fast sync", sync_error
-					);
+				);
 				sync_need_restart = true;
 			}
 			drop(clone);
@@ -82,7 +94,7 @@ impl StateSync {
 					info!(
 						LOGGER,
 						"fast_sync: peer connection lost: {:?}. restart", p.info.addr,
-						);
+					);
 				}
 			}
 		}
@@ -100,8 +112,9 @@ impl StateSync {
 				error!(
 					LOGGER,
 					"fast_sync: TxHashsetDownload status timeout in 10 minutes!"
-					);
-				self.sync_state.set_sync_error(Error::P2P(p2p::Error::Timeout));
+				);
+				self.sync_state
+					.set_sync_error(Error::P2P(p2p::Error::Timeout));
 			}
 
 			if go {
@@ -114,10 +127,9 @@ impl StateSync {
 				}
 				self.sync_state.update(SyncStatus::TxHashsetDownload);
 
-				return true;
 			}
 		}
-		false
+		true
 	}
 
 	fn request_state(&self, header_head: &chain::Tip) -> Result<Arc<RwLock<Peer>>, p2p::Error> {
@@ -127,9 +139,15 @@ impl StateSync {
 			if let Ok(p) = peer.try_read() {
 				// ask for txhashset at 90% of horizon, this still leaves time for download
 				// and validation to happen and stay within horizon
-				let mut txhashset_head = self.chain.get_block_header(&header_head.prev_block_h).unwrap();
+				let mut txhashset_head = self
+					.chain
+					.get_block_header(&header_head.prev_block_h)
+					.unwrap();
 				for _ in 0..(horizon - horizon / 10) {
-					txhashset_head = self.chain.get_block_header(&txhashset_head.previous).unwrap();
+					txhashset_head = self
+						.chain
+						.get_block_header(&txhashset_head.previous)
+						.unwrap();
 				}
 				let bhash = txhashset_head.hash();
 				debug!(

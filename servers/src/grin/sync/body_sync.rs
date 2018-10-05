@@ -14,8 +14,8 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
-use std::sync::Arc;
 use std::cmp;
+use std::sync::Arc;
 
 use chain;
 use common::types::{SyncState, SyncStatus};
@@ -38,7 +38,11 @@ pub struct BodySync {
 }
 
 impl BodySync {
-	pub fn new(sync_state: Arc<SyncState>, peers: Arc<p2p::Peers>, chain: Arc<chain::Chain>) -> BodySync {
+	pub fn new(
+		sync_state: Arc<SyncState>,
+		peers: Arc<p2p::Peers>,
+		chain: Arc<chain::Chain>,
+	) -> BodySync {
 		BodySync {
 			sync_state,
 			peers,
@@ -186,7 +190,8 @@ impl BodySync {
 		match self.prev_body_received {
 			Some(prev_ts) => {
 				if tip.last_block_h == self.prev_tip.last_block_h
-					&& self.chain.orphans_len() + self.chain.orphans_evicted_len() == self.prev_orphans_len
+					&& self.chain.orphans_len() + self.chain.orphans_evicted_len()
+						== self.prev_orphans_len
 					&& Utc::now() - prev_ts > Duration::milliseconds(200)
 				{
 					let hashes_not_get = self
@@ -226,4 +231,3 @@ impl BodySync {
 		return false;
 	}
 }
-
