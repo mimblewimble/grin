@@ -137,15 +137,13 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 
 		let tls_conf = match wallet_config.tls_certificate_file.clone() {
 			None => None,
-			Some(file) => Some(
-				TLSConfig::new(
-					wallet_config
-						.tls_certificate_pass
-						.clone()
-						.expect("tls_certificate_pass must be set"),
-					file,
-				).expect("failed to configure TLS"),
-			),
+			Some(file) => Some(TLSConfig::new(
+				file,
+				wallet_config
+					.tls_certificate_key
+					.clone()
+					.expect("Private key for certificate is not set"),
+			)),
 		};
 		match wallet_args.subcommand() {
 			("listen", Some(listen_args)) => {
@@ -161,7 +159,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					});
 			}
 			("owner_api", Some(_api_args)) => {
-				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret, tls_conf)
+				// TLS is disabled because we bind to localhost
+				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret, None)
 					.unwrap_or_else(|e| {
 						panic!(
 							"Error creating wallet api listener: {:?} Config: {:?}",
