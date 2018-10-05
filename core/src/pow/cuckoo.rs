@@ -17,9 +17,8 @@
 //! simple miner is included, mostly for testing purposes. John Tromp's Tomato
 //! miner will be much faster in almost every environment.
 
-use pow::common::{self, CuckooParams, Edge, EdgeType};
+use pow::common::{CuckooParams, Edge, EdgeType};
 use pow::error::{Error, ErrorKind};
-use pow::num::ToPrimitive;
 use pow::{PoWContext, Proof};
 
 use std::cmp;

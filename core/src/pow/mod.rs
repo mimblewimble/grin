@@ -47,7 +47,6 @@ mod siphash;
 mod types;
 
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
-use consensus;
 use core::{Block, BlockHeader};
 use genesis;
 use global;

@@ -12,13 +12,12 @@
 // limitations under the License.
 
 //! Implementation of Cuckatoo Cycle designed by John Tromp.
-use pow::num::ToPrimitive;
 use std::mem;
 
-use byteorder::{BigEndian, LittleEndian, WriteBytesExt};
+use byteorder::{BigEndian, WriteBytesExt};
 use croaring::Bitmap;
 
-use pow::common::{self, CuckooParams, EdgeType, Link};
+use pow::common::{CuckooParams, EdgeType, Link};
 use pow::error::{Error, ErrorKind};
 use pow::{PoWContext, Proof};
 use util;
