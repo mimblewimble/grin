@@ -61,7 +61,7 @@ pub struct NetToChainAdapter {
 
 impl p2p::ChainAdapter for NetToChainAdapter {
 	fn total_difficulty(&self) -> Difficulty {
-		w(&self.chain).total_difficulty()
+		w(&self.chain).head().unwrap().total_difficulty
 	}
 
 	fn total_height(&self) -> u64 {
@@ -450,7 +450,7 @@ impl NetToChainAdapter {
 		let prev_hash = b.header.previous;
 		let bhash = b.hash();
 		match chain.process_block(b, self.chain_opts()) {
-			Ok((tip, _)) => {
+			Ok(tip) => {
 				self.validate_chain(bhash);
 				self.check_compact(tip);
 				true
@@ -523,13 +523,13 @@ impl NetToChainAdapter {
 		}
 	}
 
-	fn check_compact(&self, tip_res: Option<Tip>) {
+	fn check_compact(&self, tip: Option<Tip>) {
 		// no compaction during sync or if we're in historical mode
 		if self.archive_mode || self.sync_state.is_syncing() {
 			return;
 		}
 
-		if let Some(tip) = tip_res {
+		if let Some(tip) = tip {
 			// trigger compaction every 2000 blocks, uses a different thread to avoid
 			// blocking the caller thread (likely a peer)
 			if tip.height % 2000 == 0 {
