@@ -133,7 +133,7 @@ pub fn create_pow_context<T>(
 where
 	T: EdgeType,
 {
-		CuckatooContext::<T>::new(edge_bits, proof_size, EASINESS, max_sols)
+	CuckatooContext::<T>::new(edge_bits, proof_size, EASINESS, max_sols)
 }
 
 /// The minimum acceptable sizeshift
