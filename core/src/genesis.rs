@@ -105,6 +105,28 @@ pub fn genesis_testnet3() -> core::Block {
 	})
 }
 
+/// 4th testnet genesis block (cuckatoo29 AR, 30+ AF). Temporary values for now (Pow won't verify)
+pub fn genesis_testnet4() -> core::Block {
+	core::Block::with_header(core::BlockHeader {
+		height: 0,
+		previous: core::hash::Hash([0xff; 32]),
+		timestamp: Utc.ymd(2018, 8, 30).and_hms(18, 0, 0),
+		pow: ProofOfWork {
+			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
+			scaling_difficulty: 1,
+			nonce: 4956988373127691,
+			proof: Proof::new(vec![
+				0xa420dc, 0xc8ffee, 0x10e433e, 0x1de9428, 0x2ed4cea, 0x52d907b, 0x5af0e3f,
+				0x6b8fcae, 0x8319b53, 0x845ca8c, 0x8d2a13e, 0x8d6e4cc, 0x9349e8d, 0xa7a33c5,
+				0xaeac3cb, 0xb193e23, 0xb502e19, 0xb5d9804, 0xc9ac184, 0xd4f4de3, 0xd7a23b8,
+				0xf1d8660, 0xf443756, 0x10b833d2, 0x11418fc5, 0x11b8aeaf, 0x131836ec, 0x132ab818,
+				0x13a46a55, 0x13df89fe, 0x145d65b5, 0x166f9c3a, 0x166fe0ef, 0x178cb36f, 0x185baf68,
+				0x1bbfe563, 0x1bd637b4, 0x1cfc8382, 0x1d1ed012, 0x1e391ca5, 0x1e999b4c, 0x1f7c6d21,
+			]),
+		},
+		..Default::default()
+	})
+}
 /// Placeholder for mainnet genesis block, will definitely change before
 /// release so no use trying to pre-mine it.
 pub fn genesis_main() -> core::Block {

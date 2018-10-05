@@ -75,6 +75,7 @@ struct SubmitParams {
 	height: u64,
 	job_id: u64,
 	nonce: u64,
+	cuckoo_size: u32,
 	pow: Vec<u64>,
 }
 
@@ -480,6 +481,7 @@ impl StratumServer {
 		}
 		let mut b: Block = b.unwrap().clone();
 		// Reconstruct the block header with this nonce and pow added
+		b.header.pow.proof.cuckoo_sizeshift = params.cuckoo_size as u8;
 		b.header.pow.nonce = params.nonce;
 		b.header.pow.proof.nonces = params.pow;
 		// Get share difficulty
@@ -509,10 +511,11 @@ impl StratumServer {
 				// Return error status
 				error!(
 					LOGGER,
-					"(Server ID: {}) Failed to validate solution at height {}: {:?}",
+					"(Server ID: {}) Failed to validate solution at height {}: {}: {}",
 					self.id,
 					params.height,
-					e
+					e,
+					e.backtrace().unwrap(),
 				);
 				worker_stats.num_rejected += 1;
 				let e = RpcError {
@@ -529,7 +532,7 @@ impl StratumServer {
 			);
 		} else {
 			// Do some validation but dont submit
-			if !pow::verify_size(&b.header, global::min_sizeshift()).is_ok() {
+			if !pow::verify_size(&b.header, b.header.pow.proof.cuckoo_sizeshift).is_ok() {
 				// Return error status
 				error!(
 					LOGGER,

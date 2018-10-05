@@ -460,7 +460,7 @@ fn validate_header(
 		if !(ctx.pow_verifier)(header, shift).is_ok() {
 			error!(
 				LOGGER,
-				"pipe: validate_header bad cuckoo shift size {}", shift
+				"pipe: error validating header with cuckoo shift size {}", shift
 			);
 			return Err(ErrorKind::InvalidPow.into());
 		}

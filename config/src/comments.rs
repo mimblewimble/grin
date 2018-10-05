@@ -71,6 +71,8 @@ fn comments() -> HashMap<String, String> {
 #UserTesting - For regular user testing (cuckoo 16)
 #Testnet1 - Testnet1 genesis block (cuckoo 16)
 #Testnet2 - Testnet2 genesis block (cuckoo 30)
+#Testnet3 - Testnet3 genesis block (cuckoo 30)
+#Testnet4 - Testnet4 genesis block (cuckatoo 29+)
 ".to_string(),
 	);
 
