@@ -136,6 +136,11 @@ where
 	CuckatooContext::<T>::new(edge_bits, proof_size, EASINESS, max_sols)
 }
 
+/// Return the type of the pos
+pub fn pow_type() -> PoWContextTypes {
+	PoWContextTypes::Cuckatoo
+}
+
 /// The minimum acceptable sizeshift
 pub fn min_sizeshift() -> u8 {
 	let param_ref = CHAIN_TYPE.read().unwrap();

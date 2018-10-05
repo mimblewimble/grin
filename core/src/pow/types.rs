@@ -385,7 +385,10 @@ impl Readable for Proof {
 		}
 
 		let mut nonces = Vec::with_capacity(global::proofsize());
-		let nonce_bits = cuckoo_sizeshift as usize - 1;
+		let mut nonce_bits = cuckoo_sizeshift as usize;
+		if global::pow_type() == global::PoWContextTypes::Cuckoo {
+			nonce_bits -= 1;
+		}
 		let bytes_len = BitVec::bytes_len(nonce_bits * global::proofsize());
 		let bits = reader.read_fixed_bytes(bytes_len)?;
 		let bitvec = BitVec { bits };
@@ -411,7 +414,10 @@ impl Writeable for Proof {
 			writer.write_u8(self.cuckoo_sizeshift)?;
 		}
 
-		let nonce_bits = self.cuckoo_sizeshift as usize - 1;
+		let mut nonce_bits = self.cuckoo_sizeshift as usize;
+		if global::pow_type() == global::PoWContextTypes::Cuckoo {
+			nonce_bits -= 1;
+		}
 		let mut bitvec = BitVec::new(nonce_bits * global::proofsize());
 		for (n, nonce) in self.nonces.iter().enumerate() {
 			for bit in 0..nonce_bits {
