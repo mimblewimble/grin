@@ -13,15 +13,12 @@
 
 //! Lean miner for Cuckatoo Cycle
 
-use std::time::{Duration, Instant};
-
 use croaring::Bitmap;
 
 use pow::common::CuckooParams;
 use pow::cuckatoo::CuckatooContext;
-use pow::error::{Error, ErrorKind};
-use pow::siphash::siphash24;
-use pow::{PoWContext, Proof};
+use pow::error::Error;
+use pow::Proof;
 
 /// Lean miner implementation aiming to be as short and simple as possible.
 /// As a consequence, it's a little less than 10 times slower than John
