@@ -26,8 +26,8 @@ use common::types::StratumServerConfig;
 use core::core::hash::{Hash, Hashed};
 use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader};
+use core::global;
 use core::pow::PoWContext;
-use core::{consensus, global};
 use mining::mine_block;
 use pool;
 use util::LOGGER;
@@ -96,12 +96,9 @@ impl Miner {
 		let mut iter_count = 0;
 
 		while head.hash() == *latest_hash && Utc::now().timestamp() < deadline {
-			let mut ctx = global::create_pow_context::<u32>(
-				global::min_sizeshift(),
-				global::proofsize(),
-				consensus::EASINESS,
-				10,
-			).unwrap();
+			let mut ctx =
+				global::create_pow_context::<u32>(global::min_sizeshift(), global::proofsize(), 10)
+					.unwrap();
 			ctx.set_header_nonce(b.header.pre_pow(), None, true)
 				.unwrap();
 			if let Ok(proofs) = ctx.find_cycles() {

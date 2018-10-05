@@ -178,20 +178,20 @@ impl Server {
 				let addr = SocketAddr::new(self.config.host, self.config.port);
 				let total_diff = self.peers.total_difficulty();
 
-				let peer = Peer::connect(
+				let peer = Arc::new(RwLock::new(Peer::connect(
 					&mut stream,
 					self.capabilities,
 					total_diff,
 					addr,
 					&self.handshake,
 					self.peers.clone(),
-				)?;
-				let added = self.peers.add_connected(peer)?;
+				)?));
 				{
-					let mut peer = added.write().unwrap();
+					let mut peer = peer.write().unwrap();
 					peer.start(stream);
 				}
-				Ok(added)
+				self.peers.add_connected(peer.clone())?;
+				Ok(peer)
 			}
 			Err(e) => {
 				debug!(
@@ -211,16 +211,18 @@ impl Server {
 		let total_diff = self.peers.total_difficulty();
 
 		// accept the peer and add it to the server map
-		let peer = Peer::accept(
+		let peer = Arc::new(RwLock::new(Peer::accept(
 			&mut stream,
 			self.capabilities,
 			total_diff,
 			&self.handshake,
 			self.peers.clone(),
-		)?;
-		let added = self.peers.add_connected(peer)?;
-		let mut peer = added.write().unwrap();
-		peer.start(stream);
+		)?));
+		{
+			let mut peer = peer.write().unwrap();
+			peer.start(stream);
+		}
+		self.peers.add_connected(peer)?;
 		Ok(())
 	}
 

@@ -6,16 +6,16 @@ This document describes the current Stratum RPC protocol implemented in Grin.
 
 1. [Messages](#messages)
     1. [getjobtemplate](#getjobtemplate)
-    2. [job](#job)
-    3. [keepalive](#keepalive)
-    4. [login](#login)
-    5. [status](#status)
-    6. [submit](#submit)
-1. [Error Messages](#errormessages)
-1. [Miner Behavior](#minerbehavior)
-1. [Reference Implementation](#referenceimplementation)
+    1. [job](#job)
+    1. [keepalive](#keepalive)
+    1. [login](#login)
+    1. [status](#status)
+    1. [submit](#submit)
+1. [Error Messages](#error-messages)
+1. [Miner Behavior](#miner-behavior)
+1. [Reference Implementation](#reference-implementation)
 
-## Messages <a name="messages"></a>
+## Messages
 
 In this section, we detail each message and the potential response.
 
@@ -65,7 +65,7 @@ Example:
 }
 ```
 
-### ```getjobtemplate``` <a name="getjobtemplate"></a>
+### ```getjobtemplate```
 
 A message initiated by the miner.
 Miner can request a job with this message.
@@ -141,7 +141,7 @@ Example:
 }
 ```
 
-### ```job``` <a name="job"></a>
+### ```job```
 
 A message initiated by the Stratum server.
 Stratum server will send job automatically to connected miners.
@@ -178,7 +178,7 @@ Example:
 
 No response is required for this message.
 
-### ```keepalive``` <a name="keepalive"></a>
+### ```keepalive```
 
 A message initiated by the miner in order to keep the connection alive.
 
@@ -228,7 +228,7 @@ Example:
 
 ```
 
-### ```login``` <a name="login"></a>
+### ```login```
 
 ***
 
@@ -293,7 +293,7 @@ Example:
 
 Not yet implemented. Should return error -32500 "Login first".
 
-### ```status``` <a name="status"></a>
+### ```status```
 
 A message initiated by the miner.
 This message allows a miner to get the status of its current worker and the network.
@@ -351,7 +351,7 @@ Example:
 }
 ```
 
-### ```submit``` <a name="submit"></a>
+### ```submit```
 
 A message initiated by the miner.
 When a miner find a share, it will submit it to the node.
@@ -526,7 +526,7 @@ Example:
 }
 ```
 
-## Error Messages <a name="errormessages"></a>
+## Error Messages
 
 Grin Stratum protocol implementation contains the following error message:
 
@@ -540,7 +540,7 @@ Grin Stratum protocol implementation contains the following error message:
 | -32600      | Invalid Request                        |
 | -32601      | Method not found                       |
 
-## Miner behavior <a name="minerbehavior"></a>
+## Miner behavior
 
 Miners SHOULD, MAY or MUST respect the following rules:
 
@@ -552,6 +552,6 @@ Miners SHOULD, MAY or MUST respect the following rules:
 - Miners MAY send a login request (to identify which miner finds shares / solutions in the logs), the login request MUST have all 3 params.
 - Miners MUST return the supplied job_id with submit messages.
 
-## Reference Implementation <a name="referenceimplementation"></a>
+## Reference Implementation
 
 The current reference implementation is available at [mimblewimble/grin-miner](https://github.com/mimblewimble/grin-miner/blob/master/src/bin/client.rs).
