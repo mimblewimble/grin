@@ -217,11 +217,19 @@ impl Chain {
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
-		let batch = self.store.batch()?;
-		let mut txhashset = self.txhashset.write().unwrap();
-		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
+		let maybe_new_head: Result<Option<Tip>, Error>;
+		{
+			let batch = self.store.batch()?;
+			let mut txhashset = self.txhashset.write().unwrap();
+			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
-		// let hash = b.hash();
+			maybe_new_head = pipe::process_block(&b, &mut ctx);
+			if let Ok(_) = maybe_new_head {
+				ctx.batch.commit()?;
+			}
+			// release the lock and let the batch go before post-processing
+		}
+
 		let add_to_hash_cache = |hash: Hash| {
 			// only add to hash cache below if block is definitively accepted
 			// or rejected
@@ -229,11 +237,8 @@ impl Chain {
 			cache.insert(hash, true);
 		};
 
-		match pipe::process_block(&b, &mut ctx) {
+		match maybe_new_head {
 			Ok(head) => {
-				// Commit the batch in the ctx to the db.
-				ctx.batch.commit()?;
-
 				add_to_hash_cache(b.hash());
 
 				// notifying other parts of the system of the update
@@ -251,10 +256,6 @@ impl Chain {
 							added: Instant::now(),
 						};
 
-						// In the case of a fork - it is possible to have multiple blocks
-						// that are children of a given block.
-						// We do not handle this currently for orphans (future enhancement?).
-						// We just assume "last one wins" for now.
 						&self.orphans.add(orphan);
 
 						debug!(
