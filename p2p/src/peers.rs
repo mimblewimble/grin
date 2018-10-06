@@ -259,7 +259,7 @@ impl Peers {
 		if let Some(peer) = self.get_connected_peer(peer_addr) {
 			debug!(LOGGER, "Banning peer {}", peer_addr);
 			// setting peer status will get it removed at the next clean_peer
-			let peer = peer.write().unwrap();
+			let peer = peer.read().unwrap();
 			peer.send_ban_reason(ban_reason);
 			peer.set_banned();
 			peer.stop();
@@ -667,7 +667,7 @@ impl NetAdapter for Peers {
 
 	fn is_banned(&self, addr: SocketAddr) -> bool {
 		if let Some(peer) = self.get_connected_peer(&addr) {
-			let peer = peer.write().unwrap();
+			let peer = peer.read().unwrap();
 			peer.is_banned()
 		} else {
 			false
