@@ -402,7 +402,6 @@ impl Server {
 					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
 					.collect();
 
-
 			let mut last_time = last_blocks[0].clone().unwrap().0;
 			let tip_height = self.chain.head().unwrap().height as i64;
 			let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
