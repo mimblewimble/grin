@@ -42,6 +42,9 @@ use store;
 use util::file::get_first_line;
 use util::LOGGER;
 
+//#[cfg(feature = "deadlock_detection")]
+use util::deadlock;
+
 /// Grin server holding internal structures.
 pub struct Server {
 	/// server config
@@ -277,6 +280,30 @@ impl Server {
 		);
 
 		warn!(LOGGER, "Grin server started.");
+
+		// Create a background thread which checks for deadlocks every 180s
+		//		if cfg!(features = "deadlock_detection") {
+		warn!(LOGGER, "deadlock_detection feature enabled.");
+		thread::spawn(move || loop {
+			thread::sleep(time::Duration::from_secs(180));
+			let deadlocks = deadlock::check_deadlock();
+			if deadlocks.is_empty() {
+				continue;
+			}
+
+			warn!(LOGGER, "{} deadlocks detected", deadlocks.len());
+			for (i, threads) in deadlocks.iter().enumerate() {
+				warn!(LOGGER, "Deadlock #{}", i);
+				for t in threads {
+					warn!(LOGGER, "Thread Id {:#?}", t.thread_id());
+					warn!(LOGGER, "{:#?}", t.backtrace());
+				}
+			}
+		});
+		//		} else {
+		//			warn!(LOGGER, "deadlock_detection feature disabled.");
+		//		}
+
 		Ok(Server {
 			config,
 			p2p: p2p_server,
