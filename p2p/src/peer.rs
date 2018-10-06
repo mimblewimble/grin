@@ -179,10 +179,11 @@ impl Peer {
 
 	/// Sends the provided block to the remote peer. The request may be dropped
 	/// if the remote peer is known to already have the block.
-	pub fn send_block(&self, b: &core::Block) -> Result<(), Error> {
+	pub fn send_block(&self, b: &core::Block) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(b.hash()) {
 			trace!(LOGGER, "Send block {} to {}", b.hash(), self.info.addr);
-			self.connection.as_ref().unwrap().send(b, msg::Type::Block)
+			self.connection.as_ref().unwrap().send(b, msg::Type::Block)?;
+			Ok(true)
 		} else {
 			debug!(
 				LOGGER,
@@ -190,11 +191,11 @@ impl Peer {
 				b.hash(),
 				self.info.addr,
 			);
-			Ok(())
+			Ok(false)
 		}
 	}
 
-	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<(), Error> {
+	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(b.hash()) {
 			trace!(
 				LOGGER,
@@ -205,7 +206,8 @@ impl Peer {
 			self.connection
 				.as_ref()
 				.unwrap()
-				.send(b, msg::Type::CompactBlock)
+				.send(b, msg::Type::CompactBlock)?;
+			Ok(true)
 		} else {
 			debug!(
 				LOGGER,
@@ -213,37 +215,39 @@ impl Peer {
 				b.hash(),
 				self.info.addr,
 			);
-			Ok(())
+			Ok(false)
 		}
 	}
 
-	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<(), Error> {
+	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(bh.hash()) {
 			debug!(LOGGER, "Send header {} to {}", bh.hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
-				.send(bh, msg::Type::Header)
+				.send(bh, msg::Type::Header)?;
+			Ok(true)
 		} else {
-			trace!(
+			debug!(
 				LOGGER,
 				"Suppress header send {} to {} (already seen)",
 				bh.hash(),
 				self.info.addr,
 			);
-			Ok(())
+			Ok(false)
 		}
 	}
 
 	/// Sends the provided transaction to the remote peer. The request may be
 	/// dropped if the remote peer is known to already have the transaction.
-	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
+	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(tx.hash()) {
 			debug!(LOGGER, "Send tx {} to {}", tx.hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
-				.send(tx, msg::Type::Transaction)
+				.send(tx, msg::Type::Transaction)?;
+			Ok(true)
 		} else {
 			debug!(
 				LOGGER,
@@ -251,7 +255,7 @@ impl Peer {
 				tx.hash(),
 				self.info.addr
 			);
-			Ok(())
+			Ok(false)
 		}
 	}
 
