@@ -23,7 +23,7 @@ use core::core::hash::Hash;
 use core::pow::Difficulty;
 use msg::{read_message, write_message, Hand, Shake, SockAddr, Type, PROTOCOL_VERSION, USER_AGENT};
 use peer::Peer;
-use types::{Capabilities, Direction, Error, P2PConfig, PeerInfo, LiveInfo};
+use types::{Capabilities, Direction, Error, LiveInfo, P2PConfig, PeerInfo};
 use util::LOGGER;
 
 const NONCES_CAP: usize = 100;
