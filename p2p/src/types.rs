@@ -237,7 +237,7 @@ enum_from_primitive! {
 }
 
 #[derive(Clone, Debug)]
-pub struct PeerInfoStuff {
+pub struct LiveInfo {
 	pub total_difficulty: Difficulty,
 	pub height: u64,
 }
@@ -252,16 +252,16 @@ pub struct PeerInfo {
 	// pub total_difficulty: RwLock<Difficulty>,
 	// pub height: RwLock<u64>,
 	pub direction: Direction,
-	pub peer_info_stuff: Arc<RwLock<PeerInfoStuff>>,
+	pub live_info: Arc<RwLock<LiveInfo>>,
 }
 
 impl PeerInfo {
 	pub fn total_difficulty(&self) -> Difficulty {
-		self.peer_info_stuff.read().unwrap().total_difficulty
+		self.live_info.read().unwrap().total_difficulty
 	}
 
 	pub fn height(&self) -> u64 {
-		self.peer_info_stuff.read().unwrap().height
+		self.live_info.read().unwrap().height
 	}
 
 	pub fn last_seen(&self) -> DateTime<Utc> {
