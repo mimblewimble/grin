@@ -98,7 +98,7 @@ impl Handshake {
 			user_agent: shake.user_agent,
 			addr: peer_addr,
 			version: shake.version,
-			peer_info_stuff: Arc::new(RwLock::new(PeerInfoStuff{
+			peer_info_stuff: Arc::new(RwLock::new(PeerInfoStuff {
 				total_difficulty: shake.total_difficulty,
 				height: 0,
 			})),

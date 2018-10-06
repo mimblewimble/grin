@@ -95,8 +95,7 @@ impl Peers {
 					.insert(Utc::now().timestamp(), peer.clone());
 				debug!(
 					LOGGER,
-					"Successfully updated Dandelion relay to: {}",
-					peer.info.addr
+					"Successfully updated Dandelion relay to: {}", peer.info.addr
 				);
 			}
 			None => debug!(LOGGER, "Could not update dandelion relay"),
@@ -423,16 +422,10 @@ impl Peers {
 		// build a list of peers to be cleaned up
 		for peer in self.peers.read().unwrap().values() {
 			if peer.is_banned() {
-				debug!(
-					LOGGER,
-					"clean_peers {:?}, peer banned", peer.info.addr
-				);
+				debug!(LOGGER, "clean_peers {:?}, peer banned", peer.info.addr);
 				rm.push(peer.clone());
 			} else if !peer.is_connected() {
-				debug!(
-					LOGGER,
-					"clean_peers {:?}, not connected", peer.info.addr
-				);
+				debug!(LOGGER, "clean_peers {:?}, not connected", peer.info.addr);
 				rm.push(peer.clone());
 			}
 		}
