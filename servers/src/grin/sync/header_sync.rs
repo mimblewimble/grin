@@ -124,11 +124,8 @@ impl HeaderSync {
 			let difficulty = header_head.total_difficulty;
 
 			if let Some(peer) = self.peers.most_work_peer() {
-				if let Ok(p) = peer.try_read() {
-					let peer_difficulty = p.info.total_difficulty.clone();
-					if peer_difficulty > difficulty {
-						self.request_headers(&p);
-					}
+				if peer.info.total_difficulty() > difficulty {
+					self.request_headers(&peer);
 				}
 			}
 		}

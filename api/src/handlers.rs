@@ -405,13 +405,13 @@ pub struct PeersConnectedHandler {
 
 impl Handler for PeersConnectedHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
-		let mut peers = vec![];
-		for p in &w(&self.peers).connected_peers() {
-			let p = p.read().unwrap();
-			let peer_info = p.info.clone();
-			peers.push(peer_info);
-		}
-		json_response(&peers)
+		panic!("cannot serialize peer infos right now");
+		// let mut peers = vec![];
+		// for p in &w(&self.peers).connected_peers() {
+		// 	let peer_info = p.info.clone();
+		// 	peers.push(peer_info);
+		// }
+		// json_response(&peers)
 	}
 }
 

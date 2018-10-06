@@ -15,7 +15,7 @@
 use std::fs::File;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 use std::{io, thread};
 
@@ -127,7 +127,7 @@ impl Server {
 
 	/// Asks the server to connect to a new peer. Directly returns the peer if
 	/// we're already connected to the provided address.
-	pub fn connect(&self, addr: &SocketAddr) -> Result<Arc<RwLock<Peer>>, Error> {
+	pub fn connect(&self, addr: &SocketAddr) -> Result<Arc<Peer>, Error> {
 		if Peer::is_denied(&self.config, &addr) {
 			debug!(
 				LOGGER,
@@ -163,18 +163,16 @@ impl Server {
 				let addr = SocketAddr::new(self.config.host, self.config.port);
 				let total_diff = self.peers.total_difficulty();
 
-				let peer = Arc::new(RwLock::new(Peer::connect(
+				let mut peer = Peer::connect(
 					&mut stream,
 					self.capabilities,
 					total_diff,
 					addr,
 					&self.handshake,
 					self.peers.clone(),
-				)?));
-				{
-					let mut peer = peer.write().unwrap();
-					peer.start(stream);
-				}
+				)?;
+				peer.start(stream);
+				let peer = Arc::new(peer);
 				self.peers.add_connected(peer.clone())?;
 				Ok(peer)
 			}
@@ -196,18 +194,15 @@ impl Server {
 		let total_diff = self.peers.total_difficulty();
 
 		// accept the peer and add it to the server map
-		let peer = Arc::new(RwLock::new(Peer::accept(
+		let mut peer = Peer::accept(
 			&mut stream,
 			self.capabilities,
 			total_diff,
 			&self.handshake,
 			self.peers.clone(),
-		)?));
-		{
-			let mut peer = peer.write().unwrap();
-			peer.start(stream);
-		}
-		self.peers.add_connected(peer)?;
+		)?;
+		peer.start(stream);
+		self.peers.add_connected(Arc::new(peer))?;
 		Ok(())
 	}
 

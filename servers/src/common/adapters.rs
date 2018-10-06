@@ -575,13 +575,8 @@ impl NetToChainAdapter {
 				match  wo(&self.peers).get_connected_peer(addr) {
 					None => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, not connected", addr),
 					Some(peer) => {
-						match peer.read() {
-							Err(e) => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, read fails: {:?}", addr, e),
-							Ok(p) => {
-								if let Err(e) =  f(&p, h) {
-									error!(LOGGER, "send_block_request_to_peer: failed: {:?}", e)
-								}
-							}
+						if let Err(e) =  f(&peer, h) {
+							error!(LOGGER, "send_block_request_to_peer: failed: {:?}", e)
 						}
 					}
 				}

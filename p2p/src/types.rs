@@ -17,6 +17,7 @@ use std::fs::File;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::mpsc;
+use std::sync::{Arc, RwLock};
 
 use chrono::prelude::*;
 
@@ -235,17 +236,37 @@ enum_from_primitive! {
 	}
 }
 
+#[derive(Clone, Debug)]
+pub struct PeerInfoStuff {
+	pub total_difficulty: Difficulty,
+	pub height: u64,
+}
+
 /// General information about a connected peer that's useful to other modules.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct PeerInfo {
 	pub capabilities: Capabilities,
 	pub user_agent: String,
 	pub version: u32,
 	pub addr: SocketAddr,
-	pub total_difficulty: Difficulty,
-	pub height: u64,
+	// pub total_difficulty: RwLock<Difficulty>,
+	// pub height: RwLock<u64>,
 	pub direction: Direction,
-	pub last_seen: DateTime<Utc>,
+	pub peer_info_stuff: Arc<RwLock<PeerInfoStuff>>,
+}
+
+impl PeerInfo {
+	pub fn total_difficulty(&self) -> Difficulty {
+		self.peer_info_stuff.read().unwrap().total_difficulty
+	}
+
+	pub fn height(&self) -> u64 {
+		self.peer_info_stuff.read().unwrap().height
+	}
+
+	pub fn last_seen(&self) -> DateTime<Utc> {
+		self.peer_info_stuff.read().unwrap().last_seen
+	}
 }
 
 /// The full txhashset data along with indexes required for a consumer to

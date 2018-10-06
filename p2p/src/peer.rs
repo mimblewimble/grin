@@ -56,11 +56,11 @@ unsafe impl Send for Peer {}
 
 impl Peer {
 	// Only accept and connect can be externally used to build a peer
-	fn new(info: PeerInfo, na: Arc<NetAdapter>) -> Peer {
+	fn new(info: PeerInfo, adapter: Arc<NetAdapter>) -> Peer {
 		Peer {
-			info: info,
+			info,
 			state: Arc::new(RwLock::new(State::Connected)),
-			tracking_adapter: TrackingAdapter::new(na),
+			tracking_adapter: TrackingAdapter::new(adapter),
 			connection: None,
 		}
 	}
@@ -70,10 +70,10 @@ impl Peer {
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		hs: &Handshake,
-		na: Arc<NetAdapter>,
+		adapter: Arc<NetAdapter>,
 	) -> Result<Peer, Error> {
 		let info = hs.accept(capab, total_difficulty, conn)?;
-		Ok(Peer::new(info, na))
+		Ok(Peer::new(info, adapter))
 	}
 
 	pub fn connect(

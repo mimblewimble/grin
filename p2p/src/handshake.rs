@@ -23,7 +23,7 @@ use core::core::hash::Hash;
 use core::pow::Difficulty;
 use msg::{read_message, write_message, Hand, Shake, SockAddr, Type, PROTOCOL_VERSION, USER_AGENT};
 use peer::Peer;
-use types::{Capabilities, Direction, Error, P2PConfig, PeerInfo};
+use types::{Capabilities, Direction, Error, P2PConfig, PeerInfo, PeerInfoStuff};
 use util::LOGGER;
 
 const NONCES_CAP: usize = 100;
@@ -98,8 +98,10 @@ impl Handshake {
 			user_agent: shake.user_agent,
 			addr: peer_addr,
 			version: shake.version,
-			total_difficulty: shake.total_difficulty,
-			height: 0,
+			peer_info_stuff: Arc::new(RwLock::new(PeerInfoStuff{
+				total_difficulty: shake.total_difficulty,
+				height: 0,
+			})),
 			direction: Direction::Outbound,
 			last_seen: Utc::now(),
 		};
@@ -113,7 +115,7 @@ impl Handshake {
 		debug!(
 			LOGGER,
 			"Connected! Cumulative {} offered from {:?} {:?} {:?}",
-			peer_info.total_difficulty.to_num(),
+			shake.total_difficulty.to_num(),
 			peer_info.addr,
 			peer_info.user_agent,
 			peer_info.capabilities
@@ -155,8 +157,10 @@ impl Handshake {
 			user_agent: hand.user_agent,
 			addr: extract_ip(&hand.sender_addr.0, &conn),
 			version: hand.version,
-			total_difficulty: hand.total_difficulty,
-			height: 0,
+			peer_info_stuff: Arc::new(RwLock::new(PeerInfoStuff {
+				total_difficulty: hand.total_difficulty,
+				height: 0,
+			})),
 			direction: Direction::Inbound,
 			last_seen: Utc::now(),
 		};
