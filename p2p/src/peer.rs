@@ -326,11 +326,14 @@ impl Peer {
 	}
 
 	fn check_connection(&self) -> bool {
-		let mut state = self.state.write().unwrap();
+		let state = self.state.read().unwrap();
 		match self.connection.as_ref().unwrap().error_channel.try_recv() {
 			Ok(Error::Serialization(e)) => {
 				if State::Banned != *state {
-					*state = State::Disconnected;
+					{
+						let mut state = self.state.write().unwrap();
+						*state = State::Disconnected;
+					}
 					info!(
 						LOGGER,
 						"Client {} corrupted, will disconnect ({:?}).", self.info.addr, e
@@ -340,7 +343,10 @@ impl Peer {
 				false
 			}
 			Ok(e) => {
-				*state = State::Disconnected;
+				{
+					let mut state = self.state.write().unwrap();
+					*state = State::Disconnected;
+				}
 				debug!(LOGGER, "Client {} connection lost: {:?}", self.info.addr, e);
 				self.stop();
 				false
