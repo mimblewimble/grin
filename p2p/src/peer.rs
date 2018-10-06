@@ -182,7 +182,10 @@ impl Peer {
 	pub fn send_block(&self, b: &core::Block) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(b.hash()) {
 			trace!(LOGGER, "Send block {} to {}", b.hash(), self.info.addr);
-			self.connection.as_ref().unwrap().send(b, msg::Type::Block)?;
+			self.connection
+				.as_ref()
+				.unwrap()
+				.send(b, msg::Type::Block)?;
 			Ok(true)
 		} else {
 			debug!(
