@@ -612,10 +612,7 @@ impl NetAdapter for Peers {
 
 	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height: u64) {
 		if let Some(peer) = self.get_connected_peer(&addr) {
-			let mut live_info = peer.info.live_info.write().unwrap();
-			live_info.total_difficulty = diff;
-			live_info.height = height;
-			live_info.last_seen = Utc::now();
+			peer.info.update(height, diff);
 		}
 	}
 

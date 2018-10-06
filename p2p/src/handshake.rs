@@ -23,7 +23,7 @@ use core::core::hash::Hash;
 use core::pow::Difficulty;
 use msg::{read_message, write_message, Hand, Shake, SockAddr, Type, PROTOCOL_VERSION, USER_AGENT};
 use peer::Peer;
-use types::{Capabilities, Direction, Error, LiveInfo, P2PConfig, PeerInfo};
+use types::{Capabilities, Direction, Error, P2PConfig, PeerInfo, PeerLiveInfo};
 use util::LOGGER;
 
 const NONCES_CAP: usize = 100;
@@ -98,7 +98,7 @@ impl Handshake {
 			user_agent: shake.user_agent,
 			addr: peer_addr,
 			version: shake.version,
-			live_info: Arc::new(RwLock::new(LiveInfo {
+			live_info: Arc::new(RwLock::new(PeerLiveInfo {
 				total_difficulty: shake.total_difficulty,
 				height: 0,
 			})),
@@ -157,7 +157,7 @@ impl Handshake {
 			user_agent: hand.user_agent,
 			addr: extract_ip(&hand.sender_addr.0, &conn),
 			version: hand.version,
-			live_info: Arc::new(RwLock::new(LiveInfo {
+			live_info: Arc::new(RwLock::new(PeerLiveInfo {
 				total_difficulty: hand.total_difficulty,
 				height: 0,
 			})),

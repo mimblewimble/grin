@@ -122,29 +122,28 @@ pub fn unban_peer(config: &ServerConfig, peer_addr: &SocketAddr, api_secret: Opt
 pub fn list_connected_peers(config: &ServerConfig, api_secret: Option<String>) {
 	let mut e = term::stdout().unwrap();
 	let url = format!("http://{}/v1/peers/connected", config.api_http_addr);
-	let peers_info: Result<Vec<p2p::PeerInfo>, api::Error>;
+	// let peers_info: Result<Vec<p2p::PeerInfoDisplay>, api::Error>;
 
-	panic!("peer info not serializable");
+	let peers_info = api::client::get::<Vec<p2p::types::PeerInfoDisplay>>(url.as_str(), api_secret);
 
-	// peers_info = api::client::get::<Vec<p2p::PeerInfo>>(url.as_str(), api_secret);
-	//
-	// match peers_info.map_err(|e| Error::API(e)) {
-	// 	Ok(connected_peers) => {
-	// 		let mut index = 0;
-	// 		for connected_peer in connected_peers {
-	// 			writeln!(e, "Peer {}:", index).unwrap();
-	// 			writeln!(e, "Capabilities: {:?}", connected_peer.capabilities).unwrap();
-	// 			writeln!(e, "User agent: {}", connected_peer.user_agent).unwrap();
-	// 			writeln!(e, "Version: {}", connected_peer.version).unwrap();
-	// 			writeln!(e, "Peer address: {}", connected_peer.addr).unwrap();
-	// 			writeln!(e, "Total difficulty: {}", connected_peer.total_difficulty()).unwrap();
-	// 			writeln!(e, "Direction: {:?}", connected_peer.direction).unwrap();
-	// 			println!();
-	// 			index = index + 1;
-	// 		}
-	// 	}
-	// 	Err(_) => writeln!(e, "Failed to get connected peers").unwrap(),
-	// };
+	match peers_info.map_err(|e| Error::API(e)) {
+		Ok(connected_peers) => {
+			let mut index = 0;
+			for connected_peer in connected_peers {
+				writeln!(e, "Peer {}:", index).unwrap();
+				writeln!(e, "Capabilities: {:?}", connected_peer.capabilities).unwrap();
+				writeln!(e, "User agent: {}", connected_peer.user_agent).unwrap();
+				writeln!(e, "Version: {}", connected_peer.version).unwrap();
+				writeln!(e, "Peer address: {}", connected_peer.addr).unwrap();
+				writeln!(e, "Height: {}", connected_peer.height).unwrap();
+				writeln!(e, "Total difficulty: {}", connected_peer.total_difficulty).unwrap();
+				writeln!(e, "Direction: {:?}", connected_peer.direction).unwrap();
+				println!();
+				index = index + 1;
+			}
+		}
+		Err(_) => writeln!(e, "Failed to get connected peers").unwrap(),
+	};
 
 	e.reset().unwrap();
 }
