@@ -395,10 +395,8 @@ impl Server {
 		// code clean. This may be handy for testing but not really needed
 		// for release
 		let diff_stats = {
-			let diff_iter = self.chain.difficulty_iter();
-
 			let last_blocks: Vec<Result<(u64, Difficulty), consensus::TargetError>> =
-				global::difficulty_data_to_vector(diff_iter)
+				global::difficulty_data_to_vector(self.chain.difficulty_iter())
 					.into_iter()
 					.skip(consensus::MEDIAN_TIME_WINDOW as usize)
 					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
