@@ -14,7 +14,8 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use chain;
 use common::types::{Error, SyncState, SyncStatus};
@@ -76,7 +77,7 @@ impl StateSync {
 		// check sync error
 		{
 			let clone = self.sync_state.sync_error();
-			if let Some(ref sync_error) = *clone.read().unwrap() {
+			if let Some(ref sync_error) = *clone.read() {
 				error!(
 					LOGGER,
 					"fast_sync: error = {:?}. restart fast sync", sync_error
@@ -88,7 +89,7 @@ impl StateSync {
 
 		// check peer connection status of this sync
 		if let Some(ref peer) = self.fast_sync_peer {
-			if let Ok(p) = peer.try_read() {
+			if let Some(p) = peer.try_read() {
 				if !p.is_connected() && SyncStatus::TxHashsetDownload == self.sync_state.status() {
 					sync_need_restart = true;
 					info!(
@@ -135,7 +136,7 @@ impl StateSync {
 		let horizon = global::cut_through_horizon() as u64;
 
 		if let Some(peer) = self.peers.most_work_peer() {
-			if let Ok(p) = peer.try_read() {
+			if let Some(p) = peer.try_read() {
 				// ask for txhashset at 90% of horizon, this still leaves time for download
 				// and validation to happen and stay within horizon
 				let mut txhashset_head = self

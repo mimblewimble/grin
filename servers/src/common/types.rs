@@ -14,7 +14,8 @@
 
 //! Server types
 use std::convert::From;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use api;
 use chain;
@@ -292,12 +293,12 @@ impl SyncState {
 	/// Whether the current state matches any active syncing operation.
 	/// Note: This includes our "initial" state.
 	pub fn is_syncing(&self) -> bool {
-		*self.current.read().unwrap() != SyncStatus::NoSync
+		*self.current.read() != SyncStatus::NoSync
 	}
 
 	/// Current syncing status
 	pub fn status(&self) -> SyncStatus {
-		*self.current.read().unwrap()
+		*self.current.read()
 	}
 
 	/// Update the syncing status
@@ -306,7 +307,7 @@ impl SyncState {
 			return;
 		}
 
-		let mut status = self.current.write().unwrap();
+		let mut status = self.current.write();
 
 		debug!(
 			LOGGER,
@@ -318,7 +319,7 @@ impl SyncState {
 
 	/// Communicate sync error
 	pub fn set_sync_error(&self, error: Error) {
-		*self.sync_error.write().unwrap() = Some(error);
+		*self.sync_error.write() = Some(error);
 	}
 
 	/// Get sync error
@@ -328,7 +329,7 @@ impl SyncState {
 
 	/// Clear sync error
 	pub fn clear_sync_error(&self) {
-		*self.sync_error.write().unwrap() = None;
+		*self.sync_error.write() = None;
 	}
 }
 
@@ -338,7 +339,7 @@ impl chain::TxHashsetWriteStatus for SyncState {
 	}
 
 	fn on_validation(&self, vkernels: u64, vkernel_total: u64, vrproofs: u64, vrproof_total: u64) {
-		let mut status = self.current.write().unwrap();
+		let mut status = self.current.write();
 		match *status {
 			SyncStatus::TxHashsetValidation {
 				kernels,

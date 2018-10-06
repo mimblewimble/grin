@@ -25,7 +25,8 @@ extern crate rand;
 
 pub mod common;
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use common::*;
 use core::core::hash::Hash;
@@ -83,7 +84,7 @@ fn test_coinbase_maturity() {
 	let pool = RwLock::new(test_setup(chain, verifier_cache));
 
 	{
-		let mut write_pool = pool.write().unwrap();
+		let mut write_pool = pool.write();
 		let tx = test_transaction(&keychain, vec![50], vec![49]);
 		match write_pool.add_to_pool(test_source(), tx.clone(), true, &BlockHeader::default()) {
 			Err(PoolError::ImmatureCoinbase) => {}

@@ -19,7 +19,8 @@
 
 use chrono::prelude::Utc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use chain;
 use common::types::StratumServerConfig;

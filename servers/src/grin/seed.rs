@@ -149,7 +149,7 @@ fn monitor_peers(
 	// ask them for their list of peers
 	let mut connected_peers: Vec<SocketAddr> = vec![];
 	for p in peers.connected_peers() {
-		if let Ok(p) = p.try_read() {
+		if let Some(p) = p.try_read() {
 			debug!(
 				LOGGER,
 				"monitor_peers: {}:{} ask {} for more peers", config.host, config.port, p.info.addr,
@@ -276,7 +276,7 @@ fn listen_for_addrs(
 				for _ in 0..3 {
 					match p2p_c.connect(&addr) {
 						Ok(p) => {
-							if let Ok(p) = p.try_read() {
+							if let Some(p) = p.try_read() {
 								let _ = p.send_peer_request(capab);
 							}
 							let _ = peers_c.update_state(addr, p2p::State::Healthy);

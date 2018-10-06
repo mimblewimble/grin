@@ -17,8 +17,9 @@
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::collections::HashSet;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::{error, fmt};
+use util::RwLock;
 
 use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;
@@ -544,7 +545,7 @@ impl TransactionBody {
 
 		// Find all the outputs that have not had their rangeproofs verified.
 		let outputs = {
-			let mut verifier = verifier.write().unwrap();
+			let mut verifier = verifier.write();
 			verifier.filter_rangeproof_unverified(&self.outputs)
 		};
 
@@ -561,7 +562,7 @@ impl TransactionBody {
 
 		// Find all the kernels that have not yet been verified.
 		let kernels = {
-			let mut verifier = verifier.write().unwrap();
+			let mut verifier = verifier.write();
 			verifier.filter_kernel_sig_unverified(&self.kernels)
 		};
 
@@ -574,7 +575,7 @@ impl TransactionBody {
 
 		// Cache the successful verification results for the new outputs and kernels.
 		{
-			let mut verifier = verifier.write().unwrap();
+			let mut verifier = verifier.write();
 			verifier.add_rangeproof_verified(outputs);
 			verifier.add_kernel_sig_verified(kernels);
 		}

@@ -14,7 +14,8 @@
 
 //! Implements storage primitives required by the chain
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use croaring::Bitmap;
 use lmdb;
@@ -102,7 +103,7 @@ impl ChainStore {
 
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		{
-			let mut header_cache = self.header_cache.write().unwrap();
+			let mut header_cache = self.header_cache.write();
 
 			// cache hit - return the value from the cache
 			if let Some(header) = header_cache.get_mut(h) {
@@ -119,7 +120,7 @@ impl ChainStore {
 		// cache miss - so adding to the cache for next time
 		if let Ok(header) = header {
 			{
-				let mut header_cache = self.header_cache.write().unwrap();
+				let mut header_cache = self.header_cache.write();
 				header_cache.insert(*h, header.clone());
 			}
 			Ok(header)
@@ -415,7 +416,7 @@ impl<'a> Batch<'a> {
 		self.save_block_input_bitmap(&block.hash(), &bitmap)?;
 
 		// Finally cache it locally for use later.
-		let mut cache = self.store.block_input_bitmap_cache.write().unwrap();
+		let mut cache = self.store.block_input_bitmap_cache.write();
 		cache.insert(block.hash(), bitmap.serialize());
 
 		Ok(bitmap)
@@ -423,7 +424,7 @@ impl<'a> Batch<'a> {
 
 	pub fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
 		{
-			let mut cache = self.store.block_input_bitmap_cache.write().unwrap();
+			let mut cache = self.store.block_input_bitmap_cache.write();
 
 			// cache hit - return the value from the cache
 			if let Some(bytes) = cache.get_mut(bh) {

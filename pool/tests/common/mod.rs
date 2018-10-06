@@ -28,7 +28,8 @@ extern crate rand;
 
 use std::collections::HashSet;
 use std::fs;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::verifier_cache::VerifierCache;
@@ -98,7 +99,7 @@ impl ChainAdapter {
 		batch.commit().unwrap();
 
 		{
-			let mut utxo = self.utxo.write().unwrap();
+			let mut utxo = self.utxo.write();
 			for x in block.inputs() {
 				utxo.remove(&x.commitment());
 			}
@@ -129,7 +130,7 @@ impl BlockChain for ChainAdapter {
 	}
 
 	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		let utxo = self.utxo.read().unwrap();
+		let utxo = self.utxo.read();
 
 		for x in tx.outputs() {
 			if utxo.contains(&x.commitment()) {

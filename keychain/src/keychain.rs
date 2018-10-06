@@ -17,7 +17,8 @@
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use blake2;
 
@@ -166,7 +167,7 @@ impl ExtKeychain {
 		// then check the derivation cache to see if we have previously derived this key
 		// if so use the derivation from the cache to derive the key
 		{
-			let cache = self.key_derivation_cache.read().unwrap();
+			let cache = self.key_derivation_cache.read();
 			if let Some(derivation) = cache.get(key_id) {
 				trace!(
 					LOGGER,
@@ -183,7 +184,7 @@ impl ExtKeychain {
 		// TODO - remove hard limit (within reason)
 		// TODO - do we benefit here if we track our max known n_child?
 		{
-			let mut cache = self.key_derivation_cache.write().unwrap();
+			let mut cache = self.key_derivation_cache.write();
 			for i in 1..100_000 {
 				let child_key = self.extkey.derive(&self.secp, i)?;
 				// let child_key_id = extkey.identifier(&self.secp)?;

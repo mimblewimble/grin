@@ -21,9 +21,10 @@ use serde_json::Value;
 use std::error::Error;
 use std::io::{BufRead, ErrorKind, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 use std::{cmp, thread};
+use util::RwLock;
 
 use chain;
 use common::stats::{StratumStats, WorkerStats};
@@ -128,7 +129,7 @@ fn accept_workers(
 				worker_stats.is_connected = true;
 				worker_stats.id = worker_id.to_string();
 				worker_stats.pow_difficulty = 1; // XXX TODO
-				let mut stratum_stats = stratum_stats.write().unwrap();
+				let mut stratum_stats = stratum_stats.write();
 				stratum_stats.worker_stats.push(worker_stats);
 				worker_id = worker_id + 1;
 			}
@@ -305,7 +306,7 @@ impl StratumServer {
 						}
 					};
 
-					let mut stratum_stats = stratum_stats.write().unwrap();
+					let mut stratum_stats = stratum_stats.write();
 					let worker_stats_id = stratum_stats
 						.worker_stats
 						.iter()
@@ -590,7 +591,7 @@ impl StratumServer {
 						workers_l[num].id;
 	                                );
 					// Update worker stats
-					let mut stratum_stats = stratum_stats.write().unwrap();
+					let mut stratum_stats = stratum_stats.write();
 					let worker_stats_id = stratum_stats
 						.worker_stats
 						.iter()
@@ -604,7 +605,7 @@ impl StratumServer {
 				start = num + 1;
 			}
 			if start >= workers_l.len() {
-				let mut stratum_stats = stratum_stats.write().unwrap();
+				let mut stratum_stats = stratum_stats.write();
 				stratum_stats.num_workers = workers_l.len();
 				return stratum_stats.num_workers;
 			}
@@ -688,7 +689,7 @@ impl StratumServer {
 
 		// We have started
 		{
-			let mut stratum_stats = stratum_stats.write().unwrap();
+			let mut stratum_stats = stratum_stats.write();
 			stratum_stats.is_running = true;
 			stratum_stats.cuckoo_size = cuckoo_size as u16;
 		}
@@ -750,7 +751,7 @@ impl StratumServer {
 				deadline = Utc::now().timestamp() + attempt_time_per_block as i64;
 
 				{
-					let mut stratum_stats = stratum_stats.write().unwrap();
+					let mut stratum_stats = stratum_stats.write();
 					stratum_stats.block_height = new_block.header.height;
 					stratum_stats.network_difficulty = self.current_difficulty;
 				}

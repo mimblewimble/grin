@@ -16,7 +16,8 @@
 //! around during an interactive wallet exchange
 
 use rand::thread_rng;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 use uuid::Uuid;
 
 use core::core::committed::Committed;

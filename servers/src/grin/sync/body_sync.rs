@@ -159,7 +159,7 @@ impl BodySync {
 					self.peers.more_work_peer()
 				};
 				if let Some(peer) = peer {
-					if let Ok(peer) = peer.try_read() {
+					if let Some(peer) = peer.try_read() {
 						if let Err(e) = peer.send_block_request(*hash) {
 							debug!(LOGGER, "Skipped request to {}: {:?}", peer.info.addr, e);
 						} else {

@@ -14,7 +14,8 @@
 
 //! Transaction building functions
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use core::core::verifier_cache::LruVerifierCache;
 use core::core::Transaction;

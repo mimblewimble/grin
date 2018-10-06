@@ -27,7 +27,7 @@ use pow::{self, CuckooContext, Difficulty, EdgeType, PoWContext};
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
 /// e.g. CI, User testing, production values
-use std::sync::RwLock;
+use util::RwLock;
 
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
@@ -114,7 +114,7 @@ lazy_static!{
 
 /// Set the mining mode
 pub fn set_mining_mode(mode: ChainTypes) {
-	let mut param_ref = CHAIN_TYPE.write().unwrap();
+	let mut param_ref = CHAIN_TYPE.write();
 	*param_ref = mode;
 }
 
@@ -138,7 +138,7 @@ where
 
 /// The minimum acceptable sizeshift
 pub fn min_sizeshift() -> u8 {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_SIZESHIFT,
 		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
@@ -151,7 +151,7 @@ pub fn min_sizeshift() -> u8 {
 /// while the min_sizeshift can be changed on a soft fork, changing
 /// ref_sizeshift is a hard fork.
 pub fn ref_sizeshift() -> u8 {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_SIZESHIFT,
 		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
@@ -162,7 +162,7 @@ pub fn ref_sizeshift() -> u8 {
 
 /// The proofsize
 pub fn proofsize() -> usize {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
 		ChainTypes::UserTesting => USER_TESTING_PROOF_SIZE,
@@ -172,7 +172,7 @@ pub fn proofsize() -> usize {
 
 /// Coinbase maturity for coinbases to be spent at given height
 pub fn coinbase_maturity(height: u64) -> u64 {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
 		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
@@ -186,7 +186,7 @@ pub fn coinbase_maturity(height: u64) -> u64 {
 
 /// Initial mining difficulty
 pub fn initial_block_difficulty() -> u64 {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::UserTesting => TESTING_INITIAL_DIFFICULTY,
@@ -199,7 +199,7 @@ pub fn initial_block_difficulty() -> u64 {
 
 /// Horizon at which we can cut-through and do full local pruning
 pub fn cut_through_horizon() -> u32 {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => TESTING_CUT_THROUGH_HORIZON,
 		ChainTypes::UserTesting => TESTING_CUT_THROUGH_HORIZON,
@@ -209,19 +209,19 @@ pub fn cut_through_horizon() -> u32 {
 
 /// Are we in automated testing mode?
 pub fn is_automated_testing_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	ChainTypes::AutomatedTesting == *param_ref
 }
 
 /// Are we in user testing mode?
 pub fn is_user_testing_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	ChainTypes::UserTesting == *param_ref
 }
 
 /// Are we in production mode (a live public network)?
 pub fn is_production_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	ChainTypes::Testnet1 == *param_ref
 		|| ChainTypes::Testnet2 == *param_ref
 		|| ChainTypes::Testnet3 == *param_ref
@@ -233,7 +233,7 @@ pub fn is_production_mode() -> bool {
 /// as the genesis block POW solution turns out to be the same for every new
 /// block chain at the moment
 pub fn get_genesis_nonce() -> u64 {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		// won't make a difference
 		ChainTypes::AutomatedTesting => 0,
