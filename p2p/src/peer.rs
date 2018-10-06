@@ -14,7 +14,8 @@
 
 use std::fs::File;
 use std::net::{SocketAddr, TcpStream};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use chrono::prelude::{DateTime, Utc};
 use conn;
@@ -137,12 +138,12 @@ impl Peer {
 
 	/// Whether this peer has been banned.
 	pub fn is_banned(&self) -> bool {
-		State::Banned == *self.state.read().unwrap()
+		State::Banned == *self.state.read()
 	}
 
 	/// Whether this peer is stuck on sync.
 	pub fn is_stuck(&self) -> (bool, Difficulty) {
-		let peer_live_info = self.info.live_info.read().unwrap();
+		let peer_live_info = self.info.live_info.read();
 		let now = Utc::now().timestamp_millis();
 		// if last updated difficulty is 2 hours ago, we're sure this peer is a stuck node.
 		if now > peer_live_info.stuck_detector.timestamp_millis() + global::STUCK_PEER_KICK_TIME {
@@ -155,9 +156,8 @@ impl Peer {
 	/// Number of bytes sent to the peer
 	pub fn sent_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
-			if let Ok(sent_bytes) = tracker.sent_bytes.read() {
-				return Some(*sent_bytes);
-			}
+			let sent_bytes = tracker.sent_bytes.read();
+			return Some(*sent_bytes);
 		}
 		None
 	}
@@ -165,16 +165,15 @@ impl Peer {
 	/// Number of bytes received from the peer
 	pub fn received_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
-			if let Ok(received_bytes) = tracker.received_bytes.read() {
-				return Some(*received_bytes);
-			}
+			let received_bytes = tracker.received_bytes.read();
+			return Some(*received_bytes);
 		}
 		None
 	}
 
 	/// Set this peer status to banned
 	pub fn set_banned(&self) {
-		*self.state.write().unwrap() = State::Banned;
+		*self.state.write() = State::Banned;
 	}
 
 	/// Send a ping to the remote peer, providing our local difficulty and
@@ -369,7 +368,7 @@ impl Peer {
 		match self.connection.as_ref().unwrap().error_channel.try_recv() {
 			Ok(Error::Serialization(e)) => {
 				let need_stop = {
-					let mut state = self.state.write().unwrap();
+					let mut state = self.state.write();
 					if State::Banned != *state {
 						*state = State::Disconnected;
 						true
@@ -388,7 +387,7 @@ impl Peer {
 			}
 			Ok(e) => {
 				let need_stop = {
-					let mut state = self.state.write().unwrap();
+					let mut state = self.state.write();
 					if State::Disconnected != *state {
 						*state = State::Disconnected;
 						true
@@ -403,7 +402,7 @@ impl Peer {
 				false
 			}
 			Err(_) => {
-				let state = self.state.read().unwrap();
+				let state = self.state.read();
 				State::Connected == *state
 			}
 		}
@@ -427,14 +426,14 @@ impl TrackingAdapter {
 	}
 
 	fn has(&self, hash: Hash) -> bool {
-		let known = self.known.read().unwrap();
+		let known = self.known.read();
 		// may become too slow, an ordered set (by timestamp for eviction) may
 		// end up being a better choice
 		known.contains(&hash)
 	}
 
 	fn push(&self, hash: Hash) {
-		let mut known = self.known.write().unwrap();
+		let mut known = self.known.write();
 		if known.len() > MAX_TRACK_SIZE {
 			known.truncate(MAX_TRACK_SIZE);
 		}

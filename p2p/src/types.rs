@@ -17,7 +17,8 @@ use std::fs::File;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::mpsc;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use chrono::prelude::*;
 
@@ -258,23 +259,23 @@ pub struct PeerInfo {
 impl PeerInfo {
 	/// The current total_difficulty of the peer.
 	pub fn total_difficulty(&self) -> Difficulty {
-		self.live_info.read().unwrap().total_difficulty
+		self.live_info.read().total_difficulty
 	}
 
 	/// The current height of the peer.
 	pub fn height(&self) -> u64 {
-		self.live_info.read().unwrap().height
+		self.live_info.read().height
 	}
 
 	/// Time of last_seen for this peer (via ping/pong).
 	pub fn last_seen(&self) -> DateTime<Utc> {
-		self.live_info.read().unwrap().last_seen
+		self.live_info.read().last_seen
 	}
 
 	/// Update the total_difficulty, height and last_seen of the peer.
 	/// Takes a write lock on the live_info.
 	pub fn update(&self, height: u64, total_difficulty: Difficulty) {
-		let mut live_info = self.live_info.write().unwrap();
+		let mut live_info = self.live_info.write();
 		if total_difficulty != live_info.total_difficulty {
 			live_info.stuck_detector = Utc::now();
 		}

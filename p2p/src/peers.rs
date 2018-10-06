@@ -15,7 +15,8 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use rand::{thread_rng, Rng};
 
@@ -74,7 +75,7 @@ impl Peers {
 		self.save_peer(&peer_data)?;
 
 		{
-			let mut peers = self.peers.write().unwrap();
+			let mut peers = self.peers.write();
 			peers.insert(addr, peer.clone());
 		}
 		Ok(())
@@ -88,10 +89,9 @@ impl Peers {
 			Some(peer) => {
 				// Clear the map and add new relay
 				let dandelion_relay = &self.dandelion_relay;
-				dandelion_relay.write().unwrap().clear();
+				dandelion_relay.write().clear();
 				dandelion_relay
 					.write()
-					.unwrap()
 					.insert(Utc::now().timestamp(), peer.clone());
 				debug!(
 					LOGGER,
@@ -104,11 +104,11 @@ impl Peers {
 
 	// Get the dandelion relay
 	pub fn get_dandelion_relay(&self) -> HashMap<i64, Arc<Peer>> {
-		self.dandelion_relay.read().unwrap().clone()
+		self.dandelion_relay.read().clone()
 	}
 
 	pub fn is_known(&self, addr: &SocketAddr) -> bool {
-		self.peers.read().unwrap().contains_key(addr)
+		self.peers.read().contains_key(addr)
 	}
 
 	/// Get vec of peers we are currently connected to.
@@ -116,7 +116,6 @@ impl Peers {
 		let mut res = self
 			.peers
 			.read()
-			.unwrap()
 			.values()
 			.filter(|p| p.is_connected())
 			.cloned()
@@ -136,14 +135,13 @@ impl Peers {
 
 	/// Get a peer we're connected to by address.
 	pub fn get_connected_peer(&self, addr: &SocketAddr) -> Option<Arc<Peer>> {
-		self.peers.read().unwrap().get(addr).map(|p| p.clone())
+		self.peers.read().get(addr).map(|p| p.clone())
 	}
 
 	/// Number of peers we're currently connected to.
 	pub fn peer_count(&self) -> u32 {
 		self.peers
 			.read()
-			.unwrap()
 			.values()
 			.filter(|x| x.is_connected())
 			.count() as u32
@@ -370,7 +368,7 @@ impl Peers {
 	/// Ping all our connected peers. Always automatically expects a pong back
 	/// or disconnects. This acts as a liveness test.
 	pub fn check_all(&self, total_difficulty: Difficulty, height: u64) {
-		let peers_map = self.peers.read().unwrap();
+		let peers_map = self.peers.read();
 		for p in peers_map.values() {
 			if p.is_connected() {
 				let _ = p.send_ping(total_difficulty, height);
@@ -417,7 +415,7 @@ impl Peers {
 		let mut rm = vec![];
 
 		// build a list of peers to be cleaned up
-		for peer in self.peers.read().unwrap().values() {
+		for peer in self.peers.read().values() {
 			if peer.is_banned() {
 				debug!(LOGGER, "clean_peers {:?}, peer banned", peer.info.addr);
 				rm.push(peer.clone());
@@ -437,7 +435,7 @@ impl Peers {
 
 		// now clean up peer map based on the list to remove
 		{
-			let mut peers = self.peers.write().unwrap();
+			let mut peers = self.peers.write();
 			for p in rm {
 				peers.remove(&p.info.addr);
 			}
@@ -463,13 +461,13 @@ impl Peers {
 		// now remove them taking a short-lived write lock each time
 		// maybe better to take write lock once and remove them all?
 		for x in addrs.iter().take(excess_count) {
-			let mut peers = self.peers.write().unwrap();
+			let mut peers = self.peers.write();
 			peers.remove(x);
 		}
 	}
 
 	pub fn stop(&self) {
-		let mut peers = self.peers.write().unwrap();
+		let mut peers = self.peers.write();
 		for (_, peer) in peers.drain() {
 			peer.stop();
 		}

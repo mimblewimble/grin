@@ -17,7 +17,8 @@
 
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use rand::{thread_rng, Rng};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 use std::thread;
 use std::time::Duration;
 
@@ -112,7 +113,6 @@ fn build_block(
 	// TODO - we have a lot of unwrap() going on in this fn...
 	let txs = tx_pool
 		.read()
-		.unwrap()
 		.prepare_mineable_transactions()
 		.unwrap();
 

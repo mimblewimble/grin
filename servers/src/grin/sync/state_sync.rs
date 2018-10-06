@@ -76,7 +76,7 @@ impl StateSync {
 		// check sync error
 		{
 			let clone = self.sync_state.sync_error();
-			if let Some(ref sync_error) = *clone.read().unwrap() {
+			if let Some(ref sync_error) = *clone.read() {
 				error!(
 					LOGGER,
 					"fast_sync: error = {:?}. restart fast sync", sync_error

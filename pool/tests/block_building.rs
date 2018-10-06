@@ -25,7 +25,8 @@ extern crate rand;
 
 pub mod common;
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use core::core::verifier_cache::LruVerifierCache;
 use core::core::{Block, BlockHeader, Transaction};
@@ -80,7 +81,7 @@ fn test_transaction_pool_block_building() {
 	let child_tx_2 = test_transaction(&keychain, vec![38], vec![32]);
 
 	{
-		let mut write_pool = pool.write().unwrap();
+		let mut write_pool = pool.write();
 
 		// Add the three root txs to the pool.
 		write_pool
@@ -105,7 +106,7 @@ fn test_transaction_pool_block_building() {
 	}
 
 	let txs = {
-		let read_pool = pool.read().unwrap();
+		let read_pool = pool.read();
 		read_pool.prepare_mineable_transactions().unwrap()
 	};
 	// children should have been aggregated into parents
@@ -123,7 +124,7 @@ fn test_transaction_pool_block_building() {
 	// Now reconcile the transaction pool with the new block
 	// and check the resulting contents of the pool are what we expect.
 	{
-		let mut write_pool = pool.write().unwrap();
+		let mut write_pool = pool.write();
 		write_pool.reconcile_block(&block).unwrap();
 
 		assert_eq!(write_pool.total_size(), 0);

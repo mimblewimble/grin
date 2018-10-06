@@ -18,6 +18,7 @@ slog-term = "~2.4"
 slog-async = "~2.3"
 walkdir = "2"
 zip = "0.4"
+parking_lot = {version = "0.6"}
 
 [dependencies.secp256k1zkp]
 git = "https://github.com/mimblewimble/rust-secp256k1-zkp"

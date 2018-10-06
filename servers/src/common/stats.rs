@@ -16,7 +16,8 @@
 //! to collect information about server status
 
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 use std::time::SystemTime;
 
 use core::pow::Difficulty;

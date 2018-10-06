@@ -20,7 +20,8 @@ use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
 use std::mem;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
