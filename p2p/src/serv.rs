@@ -90,21 +90,6 @@ impl Server {
 	/// Starts a new TCP server and listen to incoming connections. This is a
 	/// blocking call until the TCP server stops.
 	pub fn listen(&self) -> Result<(), Error> {
-		// start peer monitoring thread
-		let peers_inner = self.peers.clone();
-		let stop = self.stop.clone();
-		let _ = thread::Builder::new()
-			.name("p2p-monitor".to_string())
-			.spawn(move || loop {
-				let total_diff = peers_inner.total_difficulty();
-				let total_height = peers_inner.total_height();
-				peers_inner.check_all(total_diff, total_height);
-				thread::sleep(Duration::from_secs(10));
-				if stop.load(Ordering::Relaxed) {
-					break;
-				}
-			});
-
 		// start TCP listener and handle incoming connections
 		let addr = SocketAddr::new(self.config.host, self.config.port);
 		let listener = TcpListener::bind(addr)?;
