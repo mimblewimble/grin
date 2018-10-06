@@ -268,22 +268,19 @@ impl Peers {
 		};
 	}
 
-	fn broadcast<F>(&self, obj_name: &str, num_peers: u32, f: F) -> u32
+	fn broadcast<F>(&self, obj_name: &str, num_peers: u32, inner: F) -> u32
 	where
 		F: Fn(&Peer) -> Result<(), Error>,
 	{
-		let peers = self.connected_peers();
 		let mut count = 0;
 
 		// Iterate over our connected peers.
 		// Try our best to send to at most num_peers peers.
-		for p in peers.iter() {
-			if p.is_connected() {
-				if let Err(e) = f(&p) {
-					debug!(LOGGER, "Error sending {} to peer: {:?}", obj_name, e);
-				} else {
-					count += 1;
-				}
+		for p in self.connected_peers().iter() {
+			if let Err(e) = inner(&p) {
+				debug!(LOGGER, "Error sending {} to peer: {:?}", obj_name, e);
+			} else {
+				count += 1;
 			}
 
 			if count >= num_peers {
