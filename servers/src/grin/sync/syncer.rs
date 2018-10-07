@@ -29,13 +29,12 @@ pub fn run_sync(
 	sync_state: Arc<SyncState>,
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
-	archive_mode: bool,
 	stop: Arc<AtomicBool>,
 ) {
 	let _ = thread::Builder::new()
 		.name("sync".to_string())
 		.spawn(move || {
-			let runner = SyncRunner::new(sync_state, peers, chain, archive_mode, stop);
+			let runner = SyncRunner::new(sync_state, peers, chain, stop);
 			runner.sync_loop();
 		});
 }
@@ -44,7 +43,6 @@ pub struct SyncRunner {
 	sync_state: Arc<SyncState>,
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
-	archive_mode: bool,
 	stop: Arc<AtomicBool>,
 }
 
@@ -53,14 +51,12 @@ impl SyncRunner {
 		sync_state: Arc<SyncState>,
 		peers: Arc<p2p::Peers>,
 		chain: Arc<chain::Chain>,
-		archive_mode: bool,
 		stop: Arc<AtomicBool>,
 	) -> SyncRunner {
 		SyncRunner {
 			sync_state,
 			peers,
 			chain,
-			archive_mode,
 			stop,
 		}
 	}
@@ -118,7 +114,6 @@ impl SyncRunner {
 			self.sync_state.clone(),
 			self.peers.clone(),
 			self.chain.clone(),
-			self.archive_mode,
 		);
 
 		// Highest height seen on the network, generally useful for a fast test on

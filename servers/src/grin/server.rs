@@ -236,7 +236,6 @@ impl Server {
 			sync_state.clone(),
 			p2p_server.peers.clone(),
 			shared_chain.clone(),
-			archive_mode,
 			stop.clone(),
 		);
 

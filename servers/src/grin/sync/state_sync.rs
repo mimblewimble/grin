@@ -32,7 +32,6 @@ pub struct StateSync {
 	sync_state: Arc<SyncState>,
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
-	archive_mode: bool,
 
 	prev_fast_sync: Option<DateTime<Utc>>,
 	fast_sync_peer: Option<Arc<Peer>>,
@@ -43,13 +42,11 @@ impl StateSync {
 		sync_state: Arc<SyncState>,
 		peers: Arc<p2p::Peers>,
 		chain: Arc<chain::Chain>,
-		archive_mode: bool,
 	) -> StateSync {
 		StateSync {
 			sync_state,
 			peers,
 			chain,
-			archive_mode,
 			prev_fast_sync: None,
 			fast_sync_peer: None,
 		}
@@ -64,8 +61,8 @@ impl StateSync {
 		head: &chain::Tip,
 		highest_height: u64,
 	) -> bool {
-		let need_state_sync = !self.archive_mode
-			&& highest_height.saturating_sub(head.height) > global::cut_through_horizon() as u64;
+		let need_state_sync =
+			highest_height.saturating_sub(head.height) > global::cut_through_horizon() as u64;
 		if !need_state_sync {
 			return false;
 		}
