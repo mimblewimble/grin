@@ -330,7 +330,7 @@ impl Peer {
 		match self.connection.as_ref().unwrap().error_channel.try_recv() {
 			Ok(Error::Serialization(e)) => {
 				let need_stop = {
-					let mut state = self.state.write().unwrap();
+					let mut state = self.state.write();
 					if State::Banned != *state {
 						*state = State::Disconnected;
 						true
@@ -349,7 +349,7 @@ impl Peer {
 			}
 			Ok(e) => {
 				let need_stop = {
-					let mut state = self.state.write().unwrap();
+					let mut state = self.state.write();
 					if State::Disconnected != *state {
 						*state = State::Disconnected;
 						true
@@ -364,7 +364,7 @@ impl Peer {
 				false
 			}
 			Err(_) => {
-				let state = self.state.read().unwrap();
+				let state = self.state.read();
 				State::Connected == *state
 			}
 		}
