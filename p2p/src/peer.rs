@@ -347,11 +347,16 @@ impl Peer {
 				false
 			}
 			Ok(e) => {
-				if State::Disconnected != *state {
-					{
-						let mut state = self.state.write().unwrap();
+				let need_stop = {
+					let mut state = self.state.write().unwrap();
+					if State::Disconnected != *state {
 						*state = State::Disconnected;
+						true
+					} else {
+						false
 					}
+				};
+				if need_stop {
 					debug!(LOGGER, "Client {} connection lost: {:?}", self.info.addr, e);
 					self.stop();
 				}
