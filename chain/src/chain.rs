@@ -462,7 +462,7 @@ impl Chain {
 	}
 
 	/// Validate the current chain state.
-	pub fn validate(&self, skip_rproofs: bool) -> Result<(), Error> {
+	pub fn validate(&self, fast_validation: bool) -> Result<(), Error> {
 		let header = self.store.head_header()?;
 
 		// Lets just treat an "empty" node that just got started up as valid.
@@ -477,7 +477,7 @@ impl Chain {
 		// ensure the view is consistent.
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.rewind(&header)?;
-			extension.validate(skip_rproofs, &NoStatus)?;
+			extension.validate(fast_validation, &NoStatus)?;
 			Ok(())
 		})
 	}
@@ -636,6 +636,7 @@ impl Chain {
 			extension.rewind(&header)?;
 
 			// Validate the extension, generating the utxo_sum and kernel_sum.
+			// Full validation, including rangeproofs and kernel signature verification.
 			let (utxo_sum, kernel_sum) = extension.validate(false, status)?;
 
 			// Now that we have block_sums the total_kernel_sum on the block_header is redundant.

@@ -524,7 +524,6 @@ pub struct ChainValidationHandler {
 
 impl Handler for ChainValidationHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
-		// TODO - read skip_rproofs from query params
 		match w(&self.chain).validate(true) {
 			Ok(_) => response(StatusCode::OK, ""),
 			Err(e) => response(
