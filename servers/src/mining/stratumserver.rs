@@ -21,9 +21,10 @@ use serde_json::Value;
 use std::error::Error;
 use std::io::{BufRead, ErrorKind, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use std::{cmp, thread};
+use util::Mutex;
 use util::RwLock;
 
 use chain;
@@ -122,7 +123,7 @@ fn accept_workers(
 					.set_nonblocking(true)
 					.expect("set_nonblocking call failed");
 				let mut worker = Worker::new(worker_id.to_string(), BufStream::new(stream));
-				workers.lock().unwrap().push(worker);
+				workers.lock().push(worker);
 				// stats for this worker (worker stat objects are added and updated but never
 				// removed)
 				let mut worker_stats = WorkerStats::default();
@@ -285,7 +286,7 @@ impl StratumServer {
 
 	// Handle an RPC request message from the worker(s)
 	fn handle_rpc_requests(&mut self, stratum_stats: &mut Arc<RwLock<StratumStats>>) {
-		let mut workers_l = self.workers.lock().unwrap();
+		let mut workers_l = self.workers.lock();
 		for num in 0..workers_l.len() {
 			match workers_l[num].read_message() {
 				Some(the_message) => {
@@ -580,7 +581,7 @@ impl StratumServer {
 	// Purge dead/sick workers - remove all workers marked in error state
 	fn clean_workers(&mut self, stratum_stats: &mut Arc<RwLock<StratumStats>>) -> usize {
 		let mut start = 0;
-		let mut workers_l = self.workers.lock().unwrap();
+		let mut workers_l = self.workers.lock();
 		loop {
 			for num in start..workers_l.len() {
 				if workers_l[num].error == true {
@@ -637,7 +638,7 @@ impl StratumServer {
 		// Push the new block to all connected clients
 		// NOTE: We do not give a unique nonce (should we?) so miners need
 		//       to choose one for themselves
-		let mut workers_l = self.workers.lock().unwrap();
+		let mut workers_l = self.workers.lock();
 		for num in 0..workers_l.len() {
 			workers_l[num].write_message(job_request_json.clone());
 		}

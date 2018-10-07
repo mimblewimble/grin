@@ -41,6 +41,7 @@ extern crate zip as zip_rs;
 // Re-export so only has to be included once
 extern crate parking_lot;
 pub use parking_lot::deadlock;
+pub use parking_lot::Mutex;
 pub use parking_lot::RwLock;
 
 // Re-export so only has to be included once

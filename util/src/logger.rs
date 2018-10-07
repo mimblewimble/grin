@@ -17,7 +17,7 @@ use slog_async;
 use slog_term;
 use std::fs::OpenOptions;
 use std::ops::Deref;
-use std::sync::Mutex;
+use Mutex;
 
 use backtrace::Backtrace;
 use std::{panic, thread};
@@ -46,12 +46,12 @@ lazy_static! {
 
 	/// And a static reference to the logger itself, accessible from all crates
 	pub static ref LOGGER: Logger = {
-		let was_init = WAS_INIT.lock().unwrap().clone();
-		let config = LOGGING_CONFIG.lock().unwrap();
+		let was_init = WAS_INIT.lock().clone();
+		let config = LOGGING_CONFIG.lock();
 		let slog_level_stdout = convert_log_level(&config.stdout_log_level);
 		let slog_level_file = convert_log_level(&config.file_log_level);
 		if config.tui_running.is_some() && config.tui_running.unwrap() {
-			let mut tui_running_ref = TUI_RUNNING.lock().unwrap();
+			let mut tui_running_ref = TUI_RUNNING.lock();
 			*tui_running_ref = true;
 		}
 
@@ -91,10 +91,10 @@ lazy_static! {
 /// Initialize the logger with the given configuration
 pub fn init_logger(config: Option<LoggingConfig>) {
 	if let Some(c) = config {
-		let mut config_ref = LOGGING_CONFIG.lock().unwrap();
+		let mut config_ref = LOGGING_CONFIG.lock();
 		*config_ref = c.clone();
 		// Logger configuration successfully injected into LOGGING_CONFIG...
-		let mut was_init_ref = WAS_INIT.lock().unwrap();
+		let mut was_init_ref = WAS_INIT.lock();
 		*was_init_ref = true;
 		// .. allow logging, having ensured that paths etc are immutable
 	}
@@ -103,14 +103,14 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 
 /// Initializes the logger for unit and integration tests
 pub fn init_test_logger() {
-	let mut was_init_ref = WAS_INIT.lock().unwrap();
+	let mut was_init_ref = WAS_INIT.lock();
 	if *was_init_ref.deref() {
 		return;
 	}
 	let mut logger = LoggingConfig::default();
 	logger.log_to_file = false;
 	logger.stdout_log_level = LogLevel::Debug;
-	let mut config_ref = LOGGING_CONFIG.lock().unwrap();
+	let mut config_ref = LOGGING_CONFIG.lock();
 	*config_ref = logger;
 	*was_init_ref = true;
 }
@@ -149,7 +149,7 @@ fn send_panic_to_log() {
 			),
 		}
 		//also print to stderr
-		let tui_running = TUI_RUNNING.lock().unwrap().clone();
+		let tui_running = TUI_RUNNING.lock().clone();
 		if !tui_running {
 			eprintln!(
 				"Thread '{}' panicked with message:\n\"{}\"\nSee grin.log for further details.",

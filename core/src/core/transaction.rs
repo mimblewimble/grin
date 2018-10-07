@@ -198,7 +198,7 @@ impl TxKernel {
 	pub fn verify(&self) -> Result<(), secp::Error> {
 		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
 		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
+		let secp = secp.lock();
 		let sig = &self.excess_sig;
 		// Verify aggsig directly in libsecp
 		let pubkey = &self.excess.to_pubkey(&secp)?;
@@ -903,7 +903,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	// now compute the total kernel offset
 	let total_kernel_offset = {
 		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
+		let secp = secp.lock();
 		let mut positive_key = vec![mk_tx.offset]
 			.into_iter()
 			.filter(|x| *x != BlindingFactor::zero())
@@ -1084,7 +1084,7 @@ impl Output {
 	/// Validates the range proof using the commitment
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
+		let secp = secp.lock();
 		match secp.verify_bullet_proof(self.commit, self.proof, None) {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
@@ -1097,7 +1097,7 @@ impl Output {
 		proofs: &Vec<RangeProof>,
 	) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
+		let secp = secp.lock();
 		match secp.verify_bullet_proof_multi(commits.clone(), proofs.clone(), None) {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
