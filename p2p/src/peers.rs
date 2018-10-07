@@ -654,8 +654,13 @@ impl NetAdapter for Peers {
 			);
 		}
 
-		if diff.to_num() > 0 {
-			if let Some(peer) = self.get_connected_peer(&addr) {
+		if let Some(peer) = self.get_connected_peer(&addr) {
+			let (prev_diff, prev_height) = {
+				let peer = peer.read();
+				(peer.info.total_difficulty, peer.info.height)
+			};
+
+			if diff != prev_diff || height != prev_height {
 				let mut peer = peer.write();
 				peer.info.total_difficulty = diff;
 				peer.info.height = height;
@@ -665,7 +670,7 @@ impl NetAdapter for Peers {
 
 	fn is_banned(&self, addr: SocketAddr) -> bool {
 		if let Some(peer) = self.get_connected_peer(&addr) {
-			let peer = peer.write();
+			let peer = peer.read();
 			peer.is_banned()
 		} else {
 			false
