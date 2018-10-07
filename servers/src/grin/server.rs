@@ -160,7 +160,7 @@ impl Server {
 		let db_env = Arc::new(store::new_env(config.db_root.clone()));
 		let shared_chain = Arc::new(chain::Chain::init(
 			config.db_root.clone(),
-			db_env.clone(),
+			db_env,
 			chain_adapter.clone(),
 			genesis.clone(),
 			pow::verify_size,
@@ -186,8 +186,9 @@ impl Server {
 			Err(_) => None,
 		};
 
+		let peer_db_env = Arc::new(store::new_named_env(config.db_root.clone(), "peer".into()));
 		let p2p_server = Arc::new(p2p::Server::new(
-			db_env,
+			peer_db_env,
 			config.p2p_config.capabilities,
 			config.p2p_config.clone(),
 			net_adapter.clone(),
