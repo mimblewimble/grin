@@ -15,7 +15,6 @@
 //! Implements storage primitives required by the chain
 
 use std::sync::Arc;
-use util::Mutex;
 use util::RwLock;
 
 use croaring::Bitmap;
@@ -47,7 +46,6 @@ const BLOCK_SUMS_PREFIX: u8 = 'M' as u8;
 /// All chain-related database operations
 pub struct ChainStore {
 	db: store::Store,
-	mutex: Mutex<u64>, // add for debug purpose. todo: please delete it
 	header_cache: Arc<RwLock<LruCache<Hash, BlockHeader>>>,
 	block_input_bitmap_cache: Arc<RwLock<LruCache<Hash, Vec<u8>>>>,
 }
@@ -58,7 +56,6 @@ impl ChainStore {
 		let db = store::Store::open(db_env, STORE_SUBPATH);
 		Ok(ChainStore {
 			db,
-			mutex: Mutex::new(0),
 			header_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
 			block_input_bitmap_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
 		})
@@ -156,11 +153,6 @@ impl ChainStore {
 
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch, Error> {
-		//+ add for debug purpose. todo: please delete it
-		let mut locked = self.mutex.lock();
-		*locked += 1;
-		//-
-
 		Ok(Batch {
 			store: self,
 			db: self.db.batch()?,
