@@ -54,10 +54,18 @@ pub fn option_to_not_found<T>(res: Result<Option<T>, Error>, field_name: &str) -
 	}
 }
 
-/// Create a new LMDB env under the provided directory to spawn various
-/// databases from.
+/// Create a new LMDB env under the provided directory.
+/// By default creates an environment named "lmdb".
+/// Be aware of transactional semantics in lmdb
+/// (transactions are per environment, not per database).
 pub fn new_env(path: String) -> lmdb::Environment {
-	let full_path = path + "/lmdb";
+	new_named_env(path, "lmdb".into())
+}
+
+/// TODO - We probably need more flexibility here, 500GB probably too big for peers...
+/// Create a new LMDB env under the provided directory with the provided name.
+pub fn new_named_env(path: String, name: String) -> lmdb::Environment {
+	let full_path = [path, name].join("/");
 	fs::create_dir_all(&full_path).unwrap();
 	unsafe {
 		let mut env_builder = lmdb::EnvBuilder::new().unwrap();
