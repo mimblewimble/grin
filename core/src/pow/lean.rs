@@ -90,6 +90,7 @@ mod test {
 	use super::*;
 	use pow::common;
 	use pow::cuckatoo::*;
+	use pow::types::PoWContext;
 
 	#[test]
 	fn lean_miner() {
