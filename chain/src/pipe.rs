@@ -109,13 +109,6 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		// This is more expensive than the earlier check_known() as we hit the store.
 		check_known_store(&b.header, ctx)?;
 
-		// Check existing MMR (via rewind) to see if this block is known to us already.
-		// This should catch old blocks before we check to see if they appear to be
-		// orphaned due to compacting/pruning on a fast-sync node.
-		// This is more expensive than check_known_store() as we rewind the txhashset.
-		// But we only incur the cost of the rewind if this is an earlier block on the same chain.
-		check_known_mmr(&b.header, ctx)?;
-
 		// At this point it looks like this is a new block that we have not yet processed.
 		// Check we have the *previous* block in the store.
 		// If we do not then treat this block as an orphan.
@@ -346,51 +339,6 @@ fn check_prev_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<()
 		}
 		Err(e) => Err(ErrorKind::StoreErr(e, "pipe get previous".to_owned()).into()),
 	}
-}
-
-// If we are processing an "old" block then
-// we can quickly check if it already exists
-// on our current longest chain (we have already processes it).
-// First check the header matches via current height index.
-// Then peek directly into the MMRs at the appropriate pos.
-// We can avoid a full rewind in this case.
-fn check_known_mmr(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	// No point checking the MMR if this block is not earlier in the chain.
-	let head = ctx.batch.head()?;
-	if header.height > head.height {
-		return Ok(());
-	}
-
-	// Use "header by height" index to look at current most work chain.
-	// Header is not "known if the header differs at the given height.
-	let local_header = ctx.batch.get_header_by_height(header.height)?;
-	if local_header.hash() != header.hash() {
-		return Ok(());
-	}
-
-	// Rewind the txhashset to the given block and validate
-	// roots and sizes against the header.
-	// If everything matches then this is a "known" block
-	// and we do not need to spend any more effort
-	txhashset::extending_readonly(&mut ctx.txhashset, |extension| {
-		extension.rewind(header)?;
-
-		// We want to return an error here (block already known)
-		// if we *successfully validate the MMR roots and sizes.
-		if extension.validate_roots().is_ok() && extension.validate_sizes().is_ok() {
-			// TODO - determine if block is more than 50 blocks old
-			// and return specific OldBlock error.
-			// Or pull OldBlock (abusive peer) out into separate processing step.
-
-			return Err(ErrorKind::Unfit("already known on most work chain".to_string()).into());
-		}
-
-		// If we get here then we have *not* seen this block before
-		// and we should continue processing the block.
-		Ok(())
-	})?;
-
-	Ok(())
 }
 
 /// First level of block validation that only needs to act on the block header
