@@ -15,6 +15,7 @@
 use futures::future::ok;
 use hyper::header::{HeaderValue, AUTHORIZATION, WWW_AUTHENTICATE};
 use hyper::{Body, Request, Response, StatusCode};
+use ring::constant_time::verify_slices_are_equal;
 use router::{Handler, HandlerObj, ResponseFuture};
 
 // Basic Authentication Middleware
@@ -38,8 +39,10 @@ impl Handler for BasicAuthMiddleware {
 		req: Request<Body>,
 		mut handlers: Box<Iterator<Item = HandlerObj>>,
 	) -> ResponseFuture {
-		if req.headers().contains_key(AUTHORIZATION)
-			&& req.headers()[AUTHORIZATION] == self.api_basic_auth
+		if req.headers().contains_key(AUTHORIZATION) && verify_slices_are_equal(
+			req.headers()[AUTHORIZATION].as_bytes(),
+			&self.api_basic_auth.as_bytes(),
+		).is_ok()
 		{
 			handlers.next().unwrap().call(req, handlers)
 		} else {
