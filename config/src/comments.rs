@@ -210,8 +210,9 @@ fn comments() -> HashMap<String, String> {
 
 	retval.insert(
 		"[server.p2p_config.capabilities]".to_string(),
-		"#7 = Bit flags for FULL_NODE, this structure needs to be changed
-#internally to make it more configurable
+		"# 7 = Bit flags for FULL_NODE
+# 6 = Bit flags for FAST_SYNC_NODE
+#This structure needs to be changed internally, to make it more configurable
 ".to_string(),
 	);
 
@@ -311,12 +312,10 @@ fn comments() -> HashMap<String, String> {
 		"
 #port for wallet listener
 
-#path of TLS certificate file (PKCS#12 format is supported)
-#self-signed certificates are not supported, use https://github.com/FiloSottile/mkcert
-#to test on localhost
+#path of TLS certificate file, self-signed certificates are not supported
 #tls_certificate_file = \"\"
-#password of TLS certificate file (PKCS#12 format is supported)
-#tls_certificate_pass = \"\"
+#private key for the TLS certificate
+#tls_certificate_key = \"\"
 
 ".to_string(),
 	);

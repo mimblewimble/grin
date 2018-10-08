@@ -18,6 +18,8 @@ use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::mpsc;
 
+use chrono::prelude::*;
+
 use core::core::hash::Hash;
 use core::pow::Difficulty;
 use core::{core, ser};
@@ -243,6 +245,7 @@ pub struct PeerInfo {
 	pub total_difficulty: Difficulty,
 	pub height: u64,
 	pub direction: Direction,
+	pub last_seen: DateTime<Utc>,
 }
 
 /// The full txhashset data along with indexes required for a consumer to

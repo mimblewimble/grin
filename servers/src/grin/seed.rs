@@ -25,6 +25,7 @@ use std::sync::{mpsc, Arc};
 use std::{cmp, io, str, thread, time};
 
 use p2p;
+use p2p::ChainAdapter;
 use pool::DandelionConfig;
 use util::LOGGER;
 
@@ -61,6 +62,7 @@ pub fn connect_and_monitor(
 			);
 
 			let mut prev = MIN_DATE.and_hms(0, 0, 0);
+			let mut prev_ping = Utc::now();
 			let mut start_attempt = 0;
 
 			while !stop.load(Ordering::Relaxed) {
@@ -83,6 +85,14 @@ pub fn connect_and_monitor(
 
 					prev = Utc::now();
 					start_attempt = cmp::min(6, start_attempt + 1);
+				}
+
+				// Ping connected peers on every 10s to monitor peers.
+				if Utc::now() - prev_ping > Duration::seconds(10) {
+					let total_diff = peers.total_difficulty();
+					let total_height = peers.total_height();
+					peers.check_all(total_diff, total_height);
+					prev_ping = Utc::now();
 				}
 
 				thread::sleep(time::Duration::from_secs(1));

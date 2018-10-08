@@ -86,17 +86,16 @@ fn test_start_api() {
 #[test]
 fn test_start_api_tls() {
 	util::init_test_logger();
-	let tls_conf = TLSConfig {
-		pkcs_bytes: include_bytes!("localhost+1.p12").to_vec(),
-		pass: "changeit".to_string(),
-	};
+	let tls_conf = TLSConfig::new(
+		"tests/fullchain.pem".to_string(),
+		"tests/privkey.pem".to_string(),
+	);
 	let mut server = ApiServer::new();
 	let router = build_router();
-	let server_addr = "127.0.0.1:14444";
+	let server_addr = "0.0.0.0:14444";
 	let addr: SocketAddr = server_addr.parse().expect("unable to parse server address");
 	assert!(server.start(addr, router, Some(tls_conf)).is_ok());
-	let url = format!("https://{}/v1/", server_addr);
-	let index = api::client::get::<Vec<String>>(url.as_str(), None).unwrap();
+	let index = api::client::get::<Vec<String>>("https://yourdomain.com:14444/v1/", None).unwrap();
 	assert_eq!(index.len(), 2);
 	assert!(!server.stop());
 }
