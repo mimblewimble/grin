@@ -13,9 +13,12 @@ sudo: required
 cache:
   cargo: true
   timeout: 240
+  directories:
+    - $HOME/.cargo
+    - $TRAVIS_BUILD_DIR/target
 
 before_cache:
-  - rm -rf target/tmp
+  - rm -rf $TRAVIS_BUILD_DIR/target/tmp
 
 rust:
   - stable
@@ -42,25 +45,33 @@ env:
   - RUST_BACKTRACE="1"
   - RUST_FLAGS="-C debug-assertions"
   matrix:
-  - RUST_TEST_THREADS=1 TEST_DIR=servers
-  - TEST_DIR=store
-  - TEST_DIR=chain
-  - TEST_DIR=pool
-  - TEST_DIR=wallet
-  - TEST_DIR=p2p
-  - TEST_DIR=api
-  - TEST_DIR=keychain
-  - TEST_DIR=core
-  - TEST_DIR=util
-  - TEST_DIR=config
-  - TEST_DIR=none
+  - TEST_SUITE=servers
+  - TEST_SUITE=chain-core
+  - TEST_SUITE=pool-p2p
+  - TEST_SUITE=keychain-wallet
+  - TEST_SUITE=api-util-store
 
 script:
-  - if [[ "$TEST_DIR" == "none" ]]; then cargo build --release;                fi
-  - if [[ "$TEST_DIR" != "none" ]]; then cd $TEST_DIR && cargo test --release; fi
+  - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[0]};
+    echo "start testing on folder $DIR...";
+    if [[ -n "$DIR" ]];  then cd $DIR && cargo test --release; cd - > /dev/null; fi;
+  - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[1]};
+    if [[ -n "$DIR" ]];  then
+      echo "start testing on folder $DIR...";
+      cd $DIR && cargo test --release; cd - > /dev/null;
+    fi;
+  - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[2]};
+    if [[ -n "$DIR" ]];  then
+      echo "start testing on folder $DIR...";
+      cd $DIR && cargo test --release; cd - > /dev/null;
+    fi;
 
 before_deploy:
-  - if [[ "$TEST_DIR" == "none" ]]; then ./.auto-release.sh;                   fi
+  - if [[ "TEST_SUITE" == "pool-p2p" ]]; then
+      cargo clean;
+      cargo build --release;
+      ./.auto-release.sh;
+    fi
 
 deploy:
   provider: releases
@@ -72,6 +83,6 @@ deploy:
   on:
     repo: mimblewimble/grin
     tags: true
-    condition: $TEST_DIR = "none"
+    condition: $TEST_SUITE = "pool-p2p"
 
 
