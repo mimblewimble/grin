@@ -19,7 +19,7 @@ use std::sync::{Arc, RwLock};
 
 use rand::{thread_rng, Rng};
 
-use chrono::prelude::Utc;
+use chrono::prelude::*;
 use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::pow::Difficulty;
@@ -644,29 +644,11 @@ impl NetAdapter for Peers {
 	}
 
 	fn peer_difficulty(&self, addr: SocketAddr, diff: Difficulty, height: u64) {
-		if diff != self.total_difficulty() || height != self.total_height() {
-			trace!(
-				LOGGER,
-				"ping/pong: {}: {} @ {} vs us: {} @ {}",
-				addr,
-				diff,
-				height,
-				self.total_difficulty(),
-				self.total_height()
-			);
-		}
-
 		if let Some(peer) = self.get_connected_peer(&addr) {
-			let (prev_diff, prev_height) = {
-				let peer = peer.read().unwrap();
-				(peer.info.total_difficulty, peer.info.height)
-			};
-
-			if diff != prev_diff || height != prev_height {
-				let mut peer = peer.write().unwrap();
-				peer.info.total_difficulty = diff;
-				peer.info.height = height;
-			}
+			let mut peer = peer.write().unwrap();
+			peer.info.total_difficulty = diff;
+			peer.info.height = height;
+			peer.info.last_seen = Utc::now();
 		}
 	}
 

@@ -16,6 +16,7 @@ use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
+use chrono::prelude::*;
 use rand::{thread_rng, Rng};
 
 use core::core::hash::Hash;
@@ -100,6 +101,7 @@ impl Handshake {
 			total_difficulty: shake.total_difficulty,
 			height: 0,
 			direction: Direction::Outbound,
+			last_seen: Utc::now(),
 		};
 
 		// If denied then we want to close the connection
@@ -156,6 +158,7 @@ impl Handshake {
 			total_difficulty: hand.total_difficulty,
 			height: 0,
 			direction: Direction::Inbound,
+			last_seen: Utc::now(),
 		};
 
 		// At this point we know the published ip and port of the peer
