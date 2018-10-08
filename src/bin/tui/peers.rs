@@ -56,14 +56,12 @@ impl TableViewItem<PeerColumn> for PeerStats {
 		match column {
 			PeerColumn::Address => self.addr.clone(),
 			PeerColumn::State => self.state.clone(),
-			PeerColumn::TotalDifficulty => {
-				format!(
-					"{} D @ {} H ({}s)",
-					self.total_difficulty,
-					self.height,
-					(Utc::now() - self.last_seen).num_seconds(),
-				).to_string()
-			}
+			PeerColumn::TotalDifficulty => format!(
+				"{} D @ {} H ({}s)",
+				self.total_difficulty,
+				self.height,
+				(Utc::now() - self.last_seen).num_seconds(),
+			).to_string(),
 			PeerColumn::Direction => self.direction.clone(),
 			PeerColumn::Version => self.version.to_string(),
 		}
