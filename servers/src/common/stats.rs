@@ -19,6 +19,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
+use chrono::prelude::*;
+
 use chain;
 use common::types::SyncStatus;
 use p2p;
@@ -144,6 +146,8 @@ pub struct PeerStats {
 	pub height: u64,
 	/// direction
 	pub direction: String,
+	/// Last time we saw a ping/pong from this peer.
+	pub last_seen: DateTime<Utc>,
 }
 
 impl StratumStats {
@@ -176,6 +180,7 @@ impl PeerStats {
 			total_difficulty: peer.info.total_difficulty.to_num(),
 			height: peer.info.height,
 			direction: direction.to_string(),
+			last_seen: peer.info.last_seen,
 		}
 	}
 }
