@@ -36,7 +36,6 @@ use util::{init_test_logger, LOGGER};
 
 #[test]
 fn simple_server_wallet() {
-	assert_eq!(1, 0);
 	init_test_logger();
 	info!(LOGGER, "starting simple_server_wallet");
 	let test_name_dir = "test_servers";
