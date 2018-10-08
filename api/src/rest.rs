@@ -22,17 +22,17 @@ use failure::{Backtrace, Context, Fail, ResultExt};
 use futures::sync::oneshot;
 use futures::Stream;
 use hyper::rt::Future;
-use hyper::server::conn::Http;
 use hyper::{rt, Body, Request, Server};
-use native_tls::{Identity, TlsAcceptor};
 use router::{Handler, HandlerObj, ResponseFuture, Router};
+use rustls;
+use rustls::internal::pemfile;
 use std::fmt::{self, Display};
 use std::fs::File;
-use std::io::Read;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::{io, thread};
-use tokio::net::TcpListener;
-use tokio_tls;
+use tokio_rustls::ServerConfigExt;
+use tokio_tcp;
 use util::LOGGER;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
@@ -93,23 +93,55 @@ impl From<Context<ErrorKind>> for Error {
 
 /// TLS config
 pub struct TLSConfig {
-	pub pkcs_bytes: Vec<u8>,
-	pub pass: String,
+	certificate: String,
+	private_key: String,
 }
 
 impl TLSConfig {
-	pub fn new(pass: String, file: String) -> Result<TLSConfig, Error> {
-		let mut f = File::open(&file).context(ErrorKind::Internal(format!(
-			"can't open TLS certifiacte file {}",
-			file
+	pub fn new(certificate: String, private_key: String) -> TLSConfig {
+		TLSConfig {
+			certificate,
+			private_key,
+		}
+	}
+
+	fn load_certs(&self) -> Result<Vec<rustls::Certificate>, Error> {
+		let certfile = File::open(&self.certificate).context(ErrorKind::Internal(format!(
+			"failed to open file {}",
+			self.certificate
 		)))?;
-		let mut pkcs_bytes = Vec::new();
-		f.read_to_end(&mut pkcs_bytes)
-			.context(ErrorKind::Internal(format!(
-				"can't read TLS certifiacte file {}",
-				file
-			)))?;
-		Ok(TLSConfig { pkcs_bytes, pass })
+		let mut reader = io::BufReader::new(certfile);
+
+		pemfile::certs(&mut reader)
+			.map_err(|_| ErrorKind::Internal("failed to load certificate".to_string()).into())
+	}
+
+	fn load_private_key(&self) -> Result<rustls::PrivateKey, Error> {
+		let keyfile = File::open(&self.private_key).context(ErrorKind::Internal(format!(
+			"failed to open file {}",
+			self.private_key
+		)))?;
+		let mut reader = io::BufReader::new(keyfile);
+
+		let keys = pemfile::pkcs8_private_keys(&mut reader)
+			.map_err(|_| ErrorKind::Internal("failed to load private key".to_string()))?;
+		if keys.len() != 1 {
+			return Err(ErrorKind::Internal(
+				"expected a single private key".to_string(),
+			))?;
+		}
+		Ok(keys[0].clone())
+	}
+
+	pub fn build_server_config(&self) -> Result<Arc<rustls::ServerConfig>, Error> {
+		let certs = self.load_certs()?;
+		let key = self.load_private_key()?;
+		let mut cfg = rustls::ServerConfig::new(rustls::NoClientAuth::new());
+		cfg.set_single_cert(certs, key)
+			.context(ErrorKind::Internal(
+				"set single certificate failed".to_string(),
+			))?;
+		Ok(Arc::new(cfg))
 	}
 }
 
@@ -180,37 +212,26 @@ impl ApiServer {
 				"Can't start HTTPS API server, it's running already".to_string(),
 			))?;
 		}
+
+		let tls_conf = conf.build_server_config()?;
+
 		thread::Builder::new()
 			.name("apis".to_string())
 			.spawn(move || {
-				let cert = Identity::from_pkcs12(conf.pkcs_bytes.as_slice(), &conf.pass).unwrap();
-				let tls_cx = TlsAcceptor::builder(cert).build().unwrap();
-				let tls_cx = tokio_tls::TlsAcceptor::from(tls_cx);
-				let srv = TcpListener::bind(&addr).expect("Error binding local port");
-				// Use lower lever hyper API to be able to intercept client connection
-				let server = Http::new()
-					.serve_incoming(
-						srv.incoming().and_then(move |socket| {
-							tls_cx
-								.accept(socket)
-								.map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-						}),
-						router,
-					).then(|res| match res {
-						Ok(conn) => Ok(Some(conn)),
+				let listener = tokio_tcp::TcpListener::bind(&addr).expect("failed to bind");
+				let tls = listener
+					.incoming()
+					.and_then(move |s| tls_conf.accept_async(s))
+					.then(|r| match r {
+						Ok(x) => Ok::<_, io::Error>(Some(x)),
 						Err(e) => {
-							eprintln!("Error: {}", e);
-							Ok(None)
+							eprintln!("accept_async failed");
+							Err(e)
 						}
-					}).for_each(|conn_opt| {
-						if let Some(conn) = conn_opt {
-							rt::spawn(
-								conn.and_then(|c| c.map_err(|e| panic!("Hyper error {}", e)))
-									.map_err(|e| eprintln!("Connection error {}", e)),
-							);
-						}
-						Ok(())
-					});
+					}).filter_map(|x| x);
+				let server = Server::builder(tls)
+					.serve(router)
+					.map_err(|e| eprintln!("HTTP API server error: {}", e));
 
 				rt::run(server);
 			}).map_err(|_| ErrorKind::Internal("failed to spawn API thread".to_string()).into())
