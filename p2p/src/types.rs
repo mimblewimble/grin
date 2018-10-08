@@ -240,6 +240,7 @@ enum_from_primitive! {
 pub struct PeerLiveInfo {
 	pub total_difficulty: Difficulty,
 	pub height: u64,
+	pub last_seen: DateTime<Utc>,
 }
 
 /// General information about a connected peer that's useful to other modules.

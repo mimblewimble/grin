@@ -101,9 +101,9 @@ impl Handshake {
 			live_info: Arc::new(RwLock::new(PeerLiveInfo {
 				total_difficulty: shake.total_difficulty,
 				height: 0,
+				last_seen: Utc::now(),
 			})),
 			direction: Direction::Outbound,
-			last_seen: Utc::now(),
 		};
 
 		// If denied then we want to close the connection
@@ -160,9 +160,9 @@ impl Handshake {
 			live_info: Arc::new(RwLock::new(PeerLiveInfo {
 				total_difficulty: hand.total_difficulty,
 				height: 0,
+				last_seen: Utc::now(),
 			})),
 			direction: Direction::Inbound,
-			last_seen: Utc::now(),
 		};
 
 		// At this point we know the published ip and port of the peer
