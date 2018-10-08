@@ -34,3 +34,6 @@ grin_wallet = { path = "../wallet" }
 [dev-dependencies]
 blake2-rfc = "0.2"
 grin_config = { path = "../config" }
+
+[features]
+deadlock_detection = []

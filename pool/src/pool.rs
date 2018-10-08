@@ -16,7 +16,8 @@
 //! Used for both the txpool and stempool layers in the pool.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use core::consensus;
 use core::core::hash::{Hash, Hashed};

@@ -15,9 +15,10 @@
 use std::fs::File;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 use std::{io, thread};
+use util::RwLock;
 
 use lmdb;
 
@@ -172,7 +173,7 @@ impl Server {
 					self.peers.clone(),
 				)?));
 				{
-					let mut peer = peer.write().unwrap();
+					let mut peer = peer.write();
 					peer.start(stream);
 				}
 				self.peers.add_connected(peer.clone())?;
@@ -204,7 +205,7 @@ impl Server {
 			self.peers.clone(),
 		)?));
 		{
-			let mut peer = peer.write().unwrap();
+			let mut peer = peer.write();
 			peer.start(stream);
 		}
 		self.peers.add_connected(peer)?;

@@ -20,7 +20,8 @@
 use std::fs::File;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use util::Mutex;
 
 use serde_json as json;
 
@@ -76,7 +77,7 @@ where
 		refresh_from_node: bool,
 		tx_id: Option<u32>,
 	) -> Result<(bool, Vec<(OutputData, pedersen::Commitment)>), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 
 		let mut validated = false;
@@ -100,7 +101,7 @@ where
 		refresh_from_node: bool,
 		tx_id: Option<u32>,
 	) -> Result<(bool, Vec<TxLogEntry>), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 
 		let mut validated = false;
@@ -119,7 +120,7 @@ where
 		&mut self,
 		refresh_from_node: bool,
 	) -> Result<(bool, WalletInfo), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 
 		let mut validated = false;
@@ -144,7 +145,7 @@ where
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
 	) -> Result<Slate, Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 
 		let client;
@@ -195,7 +196,7 @@ where
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
 	) -> Result<Slate, Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 
 		let (slate, context, lock_fn) = tx::create_send_tx(
@@ -231,7 +232,7 @@ where
 	/// Builds the complete transaction and sends it to a grin node for
 	/// propagation.
 	pub fn finalize_tx(&mut self, slate: &mut Slate) -> Result<(), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 
 		let context = w.get_private_context(slate.id.as_bytes())?;
@@ -252,7 +253,7 @@ where
 	/// with the transaction used when a transaction is created but never
 	/// posted
 	pub fn cancel_tx(&mut self, tx_id: u32) -> Result<(), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		if !self.update_outputs(&mut w) {
 			return Err(ErrorKind::TransactionCancellationError(
@@ -271,7 +272,7 @@ where
 		minimum_confirmations: u64,
 		max_outputs: usize,
 	) -> Result<(), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let tx_burn = tx::issue_burn_tx(&mut **w, amount, minimum_confirmations, max_outputs)?;
 		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
@@ -284,7 +285,7 @@ where
 	pub fn post_tx(&self, slate: &Slate, fluff: bool) -> Result<(), Error> {
 		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
 		let client = {
-			let mut w = self.wallet.lock().unwrap();
+			let mut w = self.wallet.lock();
 			w.client().clone()
 		};
 		let res = client.post_tx(&TxWrapper { tx_hex: tx_hex }, fluff);
@@ -310,7 +311,7 @@ where
 		dest: &str,
 	) -> Result<Transaction, Error> {
 		let (confirmed, tx_hex) = {
-			let mut w = self.wallet.lock().unwrap();
+			let mut w = self.wallet.lock();
 			w.open_with_credentials()?;
 			let res = tx::retrieve_tx_hex(&mut **w, tx_id)?;
 			w.close()?;
@@ -343,7 +344,7 @@ where
 	pub fn post_stored_tx(&self, tx_id: u32, fluff: bool) -> Result<(), Error> {
 		let client;
 		let (confirmed, tx_hex) = {
-			let mut w = self.wallet.lock().unwrap();
+			let mut w = self.wallet.lock();
 			w.open_with_credentials()?;
 			client = w.client().clone();
 			let res = tx::retrieve_tx_hex(&mut **w, tx_id)?;
@@ -385,7 +386,7 @@ where
 
 	/// Attempt to restore contents of wallet
 	pub fn restore(&mut self) -> Result<(), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let res = w.restore();
 		w.close()?;
@@ -395,13 +396,13 @@ where
 	/// Retrieve current height from node
 	pub fn node_height(&mut self) -> Result<(u64, bool), Error> {
 		let res = {
-			let mut w = self.wallet.lock().unwrap();
+			let mut w = self.wallet.lock();
 			w.open_with_credentials()?;
 			w.client().get_chain_height()
 		};
 		match res {
 			Ok(height) => {
-				let mut w = self.wallet.lock().unwrap();
+				let mut w = self.wallet.lock();
 				w.close()?;
 				Ok((height, true))
 			}
@@ -411,7 +412,7 @@ where
 					Some(height) => height,
 					None => 0,
 				};
-				let mut w = self.wallet.lock().unwrap();
+				let mut w = self.wallet.lock();
 				w.close()?;
 				Ok((height, false))
 			}
@@ -459,7 +460,7 @@ where
 
 	/// Build a new (potential) coinbase transaction in the wallet
 	pub fn build_coinbase(&mut self, block_fees: &BlockFees) -> Result<CbData, Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let res = updater::build_coinbase(&mut **w, block_fees);
 		w.close()?;
@@ -475,7 +476,7 @@ where
 		pub_tx_f.read_to_string(&mut content)?;
 		let mut slate: Slate = json::from_str(&content).map_err(|_| ErrorKind::Format)?;
 
-		let mut wallet = self.wallet.lock().unwrap();
+		let mut wallet = self.wallet.lock();
 		wallet.open_with_credentials()?;
 
 		// create an output using the amount in the slate
@@ -504,7 +505,7 @@ where
 
 	/// Receive a transaction from a sender
 	pub fn receive_tx(&mut self, slate: &mut Slate) -> Result<(), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let res = tx::receive_tx(&mut **w, slate);
 		w.close()?;

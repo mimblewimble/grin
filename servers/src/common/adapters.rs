@@ -18,9 +18,10 @@
 use std::fs::File;
 use std::net::SocketAddr;
 use std::ops::Deref;
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
+use util::RwLock;
 
 use chain::{self, ChainAdapter, Options, Tip};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
@@ -92,7 +93,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		);
 
 		let res = {
-			let mut tx_pool = self.tx_pool.write().unwrap();
+			let mut tx_pool = self.tx_pool.write();
 			tx_pool.add_to_pool(source, tx, stem, &header)
 		};
 
@@ -146,7 +147,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			}
 
 			let (txs, missing_short_ids) = {
-				let tx_pool = self.tx_pool.read().unwrap();
+				let tx_pool = self.tx_pool.read();
 				tx_pool.retrieve_transactions(cb.hash(), cb.nonce, cb.kern_ids())
 			};
 
@@ -575,13 +576,9 @@ impl NetToChainAdapter {
 				match  wo(&self.peers).get_connected_peer(addr) {
 					None => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, not connected", addr),
 					Some(peer) => {
-						match peer.read() {
-							Err(e) => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, read fails: {:?}", addr, e),
-							Ok(p) => {
-								if let Err(e) =  f(&p, h) {
-									error!(LOGGER, "send_block_request_to_peer: failed: {:?}", e)
-								}
-							}
+						let p = peer.read();
+						if let Err(e) =  f(&p, h) {
+							error!(LOGGER, "send_block_request_to_peer: failed: {:?}", e)
 						}
 					}
 				}
@@ -619,7 +616,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 
 		debug!(LOGGER, "adapter: block_accepted: {:?}", b.hash());
 
-		if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
+		if let Err(e) = self.tx_pool.write().reconcile_block(b) {
 			error!(
 				LOGGER,
 				"Pool could not update itself at block {}: {:?}",

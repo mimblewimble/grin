@@ -22,7 +22,8 @@ extern crate grin_wallet as wallet;
 extern crate serde_json;
 
 use chrono::Duration;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use util::Mutex;
 
 use chain::Chain;
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};

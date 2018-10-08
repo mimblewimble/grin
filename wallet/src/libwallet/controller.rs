@@ -33,9 +33,10 @@ use serde_json;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use url::form_urlencoded;
 use util::secp::pedersen;
+use util::Mutex;
 use util::{to_base64, LOGGER};
 
 /// Instantiate wallet Owner API for a single-use (command line) call

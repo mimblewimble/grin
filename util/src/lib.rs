@@ -38,6 +38,11 @@ extern crate serde;
 extern crate serde_derive;
 extern crate walkdir;
 extern crate zip as zip_rs;
+// Re-export so only has to be included once
+extern crate parking_lot;
+pub use parking_lot::deadlock;
+pub use parking_lot::Mutex;
+pub use parking_lot::RwLock;
 
 // Re-export so only has to be included once
 pub extern crate secp256k1zkp as secp_;

@@ -159,7 +159,7 @@ fn needs_syncing(
 	// difficulty than us
 	if is_syncing {
 		if let Some(peer) = peer {
-			if let Ok(peer) = peer.try_read() {
+			if let Some(peer) = peer.try_read() {
 				most_work_height = peer.info.height;
 
 				if peer.info.total_difficulty <= local_diff {
@@ -182,7 +182,7 @@ fn needs_syncing(
 		}
 	} else {
 		if let Some(peer) = peer {
-			if let Ok(peer) = peer.try_read() {
+			if let Some(peer) = peer.try_read() {
 				most_work_height = peer.info.height;
 
 				// sum the last 5 difficulties to give us the threshold

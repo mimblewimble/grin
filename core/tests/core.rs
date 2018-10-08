@@ -18,7 +18,8 @@ extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 pub mod common;
 
@@ -350,7 +351,7 @@ fn blind_tx() {
 	let Output { proof, .. } = btx.outputs()[0];
 
 	let secp = static_secp_instance();
-	let secp = secp.lock().unwrap();
+	let secp = secp.lock();
 	let info = secp.range_proof_info(proof);
 
 	assert!(info.min == 0);

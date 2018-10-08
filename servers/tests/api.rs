@@ -26,8 +26,9 @@ extern crate grin_wallet as wallet;
 
 mod framework;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::{thread, time};
+use util::Mutex;
 
 use core::global::{self, ChainTypes};
 
@@ -52,7 +53,7 @@ fn simple_server_wallet() {
 	));
 
 	let _ = thread::spawn(move || {
-		let mut w = coinbase_wallet.lock().unwrap();
+		let mut w = coinbase_wallet.lock();
 		w.run_wallet(0);
 	});
 

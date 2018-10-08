@@ -17,7 +17,8 @@
 //! resulting tx pool can be added to the current chain state to produce a
 //! valid chain state.
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use chrono::prelude::Utc;
 

@@ -17,6 +17,7 @@
 use std::fs;
 use std::marker;
 use std::sync::Arc;
+use util::Mutex;
 
 use lmdb_zero as lmdb;
 use lmdb_zero::traits::CreateCursor;
@@ -87,6 +88,7 @@ pub fn new_named_env(path: String, name: String) -> lmdb::Environment {
 pub struct Store {
 	env: Arc<lmdb::Environment>,
 	db: Arc<lmdb::Database<'static>>,
+	mutex: Mutex<u64>, // add for debug purpose. todo: please delete it
 }
 
 impl Store {
@@ -100,7 +102,11 @@ impl Store {
 				&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
 			).unwrap(),
 		);
-		Store { env, db }
+		Store {
+			env,
+			db,
+			mutex: Mutex::new(0),
+		}
 	}
 
 	/// Gets a value from the db, provided its key
@@ -161,6 +167,11 @@ impl Store {
 
 	/// Builds a new batch to be used with this store.
 	pub fn batch(&self) -> Result<Batch, Error> {
+		//+ add for debug purpose. todo: please delete it
+		let mut locked = self.mutex.lock();
+		*locked += 1;
+		//-
+
 		let txn = lmdb::WriteTransaction::new(self.env.clone())?;
 		Ok(Batch {
 			store: self,

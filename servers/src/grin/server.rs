@@ -18,8 +18,9 @@
 
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::{thread, time};
+use util::RwLock;
 
 use api;
 use chain;
@@ -40,6 +41,9 @@ use pool;
 use store;
 use util::file::get_first_line;
 use util::LOGGER;
+
+//#[cfg(feature = "deadlock_detection")]
+use util::deadlock;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -80,7 +84,7 @@ impl Server {
 			if let Some(s) = enable_stratum_server {
 				if s {
 					{
-						let mut stratum_stats = serv.state_info.stratum_stats.write().unwrap();
+						let mut stratum_stats = serv.state_info.stratum_stats.write();
 						stratum_stats.is_enabled = true;
 					}
 					serv.start_stratum_server(c.clone());
@@ -277,6 +281,30 @@ impl Server {
 		);
 
 		warn!(LOGGER, "Grin server started.");
+
+		// Create a background thread which checks for deadlocks every 180s
+		//		if cfg!(features = "deadlock_detection") {
+		warn!(LOGGER, "deadlock_detection feature enabled.");
+		thread::spawn(move || loop {
+			thread::sleep(time::Duration::from_secs(180));
+			let deadlocks = deadlock::check_deadlock();
+			if deadlocks.is_empty() {
+				continue;
+			}
+
+			warn!(LOGGER, "{} deadlocks detected", deadlocks.len());
+			for (i, threads) in deadlocks.iter().enumerate() {
+				warn!(LOGGER, "Deadlock #{}", i);
+				for t in threads {
+					warn!(LOGGER, "Thread Id {:#?}", t.thread_id());
+					warn!(LOGGER, "{:#?}", t.backtrace());
+				}
+			}
+		});
+		//		} else {
+		//			warn!(LOGGER, "deadlock_detection feature disabled.");
+		//		}
+
 		Ok(Server {
 			config,
 			p2p: p2p_server,
@@ -387,7 +415,7 @@ impl Server {
 	/// other
 	/// consumers
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
-		let stratum_stats = self.state_info.stratum_stats.read().unwrap().clone();
+		let stratum_stats = self.state_info.stratum_stats.read().clone();
 		let awaiting_peers = self.state_info.awaiting_peers.load(Ordering::Relaxed);
 
 		// Fill out stats on our current difficulty calculation
@@ -443,7 +471,7 @@ impl Server {
 			.connected_peers()
 			.into_iter()
 			.map(|p| {
-				let p = p.read().unwrap();
+				let p = p.read();
 				PeerStats::from_peer(&p)
 			}).collect();
 		Ok(ServerStats {
