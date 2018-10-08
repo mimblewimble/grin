@@ -15,12 +15,12 @@
 //! Adapters connecting new block, new transaction, and accepted transaction
 //! events to consumers of those events.
 
-use std::fs::File;
-use std::net::SocketAddr;
-use std::ops::Deref;
-use std::sync::{Arc, RwLock, Weak};
-use std::thread;
-use std::time::Instant;
+//use std::fs::File;
+//use std::net::SocketAddr;
+//use std::ops::Deref;
+//use std::sync::{Arc, RwLock, Weak};
+//use std::thread;
+//use std::time::Instant;
 
 use chain::{self, ChainAdapter, Options, Tip};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
