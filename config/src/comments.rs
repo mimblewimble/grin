@@ -210,8 +210,9 @@ fn comments() -> HashMap<String, String> {
 
 	retval.insert(
 		"[server.p2p_config.capabilities]".to_string(),
-		"#7 = Bit flags for FULL_NODE, this structure needs to be changed
-#internally to make it more configurable
+		"# 7 = Bit flags for FULL_NODE
+# 6 = Bit flags for FAST_SYNC_NODE
+#This structure needs to be changed internally, to make it more configurable
 ".to_string(),
 	);
 
