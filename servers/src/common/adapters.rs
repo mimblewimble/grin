@@ -35,17 +35,6 @@ use pool;
 use store;
 use util::{OneTime, LOGGER};
 
-// All adapters use `Weak` references instead of `Arc` to avoid cycles that
-// can never be destroyed. These 2 functions are simple helpers to reduce the
-// boilerplate of dealing with `Weak`.
-fn w<T>(weak: &Weak<T>) -> Arc<T> {
-	weak.upgrade().unwrap()
-}
-
-fn wo<T>(weak_one: &OneTime<Weak<T>>) -> Arc<T> {
-	w(weak_one.borrow().deref())
-}
-
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
@@ -140,7 +129,10 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			}
 		} else {
 			// check at least the header is valid before hydrating
-			if let Err(e) = w(&self.chain).process_block_header(&cb.header, self.chain_opts()) {
+			if let Err(e) = self
+				.chain
+				.process_block_header(&cb.header, self.chain_opts())
+			{
 				debug!(LOGGER, "Invalid compact block header {}: {}", cb_hash, e);
 				return !e.is_bad_data();
 			}
@@ -354,7 +346,9 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			return true;
 		}
 
-		if let Err(e) = w(&self.chain).txhashset_write(h, txhashset_data, self.sync_state.as_ref())
+		if let Err(e) = self
+			.chain
+			.txhashset_write(h, txhashset_data, self.sync_state.as_ref())
 		{
 			error!(LOGGER, "Failed to save txhashset archive: {}", e);
 			let is_good_data = !e.is_bad_data();
@@ -673,13 +667,14 @@ pub struct PoolToNetAdapter {
 
 impl pool::PoolAdapter for PoolToNetAdapter {
 	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
-		wo(&self.peers)
+		self.peers
+			.borrow()
 			.broadcast_stem_transaction(tx)
 			.map_err(|_| pool::PoolError::DandelionError)?;
 		Ok(())
 	}
 	fn tx_accepted(&self, tx: &core::Transaction) {
-		wo(&self.peers).broadcast_transaction(tx);
+		self.peers.borrow().broadcast_transaction(tx);
 	}
 }
 
@@ -721,37 +716,43 @@ impl PoolToChainAdapter {
 
 impl pool::BlockChain for PoolToChainAdapter {
 	fn chain_head(&self) -> Result<BlockHeader, pool::PoolError> {
-		wo(&self.chain)
+		self.chain
+			.borrow()
 			.head_header()
 			.map_err(|_| pool::PoolError::Other(format!("failed to get head_header")))
 	}
 
 	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, pool::PoolError> {
-		wo(&self.chain)
+		self.chain
+			.borrow()
 			.get_block_header(hash)
 			.map_err(|_| pool::PoolError::Other(format!("failed to get block_header")))
 	}
 
 	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, pool::PoolError> {
-		wo(&self.chain)
+		self.chain
+			.borrow()
 			.get_block_sums(hash)
 			.map_err(|_| pool::PoolError::Other(format!("failed to get block_sums")))
 	}
 
 	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		wo(&self.chain)
+		self.chain
+			.borrow()
 			.validate_tx(tx)
 			.map_err(|_| pool::PoolError::Other(format!("failed to validate tx")))
 	}
 
 	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		wo(&self.chain)
+		self.chain
+			.borrow()
 			.verify_coinbase_maturity(tx)
 			.map_err(|_| pool::PoolError::ImmatureCoinbase)
 	}
 
 	fn verify_tx_lock_height(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		wo(&self.chain)
+		self.chain
+			.borrow()
 			.verify_tx_lock_height(tx)
 			.map_err(|_| pool::PoolError::ImmatureTransaction)
 	}
