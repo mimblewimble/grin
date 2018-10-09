@@ -13,7 +13,7 @@ El objetivo principal y las características del proyecto Grin son:
 
 * Privacidad por defecto. Esto permite una funcionalidad completa sin excluir la posibilidad de revelar información de forma 
   selectiva cuando sea necesario.
-* Se escala principalmente con el número de usuarios y mínimamente con el número de transacciones (<100 bytes `kernel`), lo 
+* Se escala principalmente con el número de usuarios y mínimamente con el número de transacciones (`<100 bytes kernel`), lo 
   que resulta en un gran ahorro de espacio en comparación con otras cadenas de bloques.
 * Criptografía robusta y probada. MimbleWimble sólo se basa en la criptografía de curvas elípticas que ha sido probada y 
   comprobada durante décadas.
