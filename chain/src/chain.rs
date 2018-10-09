@@ -925,8 +925,7 @@ impl Chain {
 	/// Checks the header_by_height index to verify the header is where we say
 	/// it is
 	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
-		let batch = self.store.batch()?;
-		batch
+		self.store
 			.is_on_current_chain(header)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain is_on_current_chain".to_owned()).into())
 	}
