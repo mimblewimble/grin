@@ -58,9 +58,9 @@ pub mod macros;
 
 // other utils
 use byteorder::{BigEndian, ByteOrder};
-use std::cell::{Ref, RefCell};
 #[allow(unused_imports)]
 use std::ops::Deref;
+use std::sync::{Arc, RwLock};
 
 mod hex;
 pub use hex::*;
@@ -70,44 +70,42 @@ pub mod file;
 /// Compress and decompress zip bz2 archives
 pub mod zip;
 
-/// Encapsulation of a RefCell<Option<T>> for one-time initialization after
-/// construction. This implementation will purposefully fail hard if not used
-/// properly, for example if it's not initialized before being first used
+/// Encapsulation of a RwLock<Option<T>> for one-time initialization.
+/// This implementation will purposefully fail hard if not used
+/// properly, for example if not initialized before being first used
 /// (borrowed).
 #[derive(Clone)]
 pub struct OneTime<T> {
-	/// inner
-	inner: RefCell<Option<T>>,
+	/// The inner value.
+	inner: Arc<RwLock<Option<T>>>,
 }
 
-unsafe impl<T> Sync for OneTime<T> {}
-unsafe impl<T> Send for OneTime<T> {}
-
-impl<T> OneTime<T> {
+impl<T> OneTime<T>
+where
+	T: Clone,
+{
 	/// Builds a new uninitialized OneTime.
 	pub fn new() -> OneTime<T> {
 		OneTime {
-			inner: RefCell::new(None),
+			inner: Arc::new(RwLock::new(None)),
 		}
 	}
 
 	/// Initializes the OneTime, should only be called once after construction.
+	/// Will panic (via assert) if called more than once.
 	pub fn init(&self, value: T) {
-		let mut inner_mut = self.inner.borrow_mut();
-		*inner_mut = Some(value);
-	}
-
-	/// Whether the OneTime has been initialized
-	pub fn is_initialized(&self) -> bool {
-		match self.inner.try_borrow() {
-			Ok(inner) => inner.is_some(),
-			Err(_) => false,
-		}
+		let mut inner = self.inner.write().unwrap();
+		assert!(inner.is_none());
+		*inner = Some(value);
 	}
 
 	/// Borrows the OneTime, should only be called after initialization.
-	pub fn borrow(&self) -> Ref<T> {
-		Ref::map(self.inner.borrow(), |o| o.as_ref().unwrap())
+	/// Will panic (via expect) if called before initialization.
+	pub fn borrow(&self) -> T {
+		let inner = self.inner.read().unwrap();
+		inner
+			.clone()
+			.expect("Cannot borrow one_time before initialization.")
 	}
 }
 
