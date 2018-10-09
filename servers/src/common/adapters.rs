@@ -656,7 +656,10 @@ impl ChainToPoolAndNetAdapter {
 	}
 
 	fn peers(&self) -> Arc<p2p::Peers> {
-		self.peers.borrow().upgrade().expect("Failed to upgrade weak ref to our peers.")
+		self.peers
+			.borrow()
+			.upgrade()
+			.expect("Failed to upgrade weak ref to our peers.")
 	}
 }
 
