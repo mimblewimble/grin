@@ -219,8 +219,8 @@ impl Chain {
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
 		let maybe_new_head: Result<Option<Tip>, Error>;
 		{
-			let batch = self.store.batch()?;
 			let mut txhashset = self.txhashset.write().unwrap();
+			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
 			maybe_new_head = pipe::process_block(&b, &mut ctx);
@@ -297,8 +297,8 @@ impl Chain {
 
 	/// Process a block header received during "header first" propagation.
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
-		let batch = self.store.batch()?;
 		let mut txhashset = self.txhashset.write().unwrap();
+		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 		pipe::process_block_header(bh, &mut ctx)?;
 		ctx.batch.commit()?;
@@ -313,8 +313,8 @@ impl Chain {
 		headers: &Vec<BlockHeader>,
 		opts: Options,
 	) -> Result<(), Error> {
-		let batch = self.store.batch()?;
 		let mut txhashset = self.txhashset.write().unwrap();
+		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
 		pipe::sync_block_headers(headers, &mut ctx)?;
@@ -664,17 +664,6 @@ impl Chain {
 
 		status.on_save();
 
-		// Replace the chain txhashset with the newly built one.
-		{
-			let mut txhashset_ref = self.txhashset.write().unwrap();
-			*txhashset_ref = txhashset;
-		}
-
-		debug!(
-			LOGGER,
-			"chain: txhashset_write: replaced our txhashset with the new one"
-		);
-
 		// Save the new head to the db and rebuild the header by height index.
 		{
 			let tip = Tip::from_block(&header);
@@ -689,6 +678,17 @@ impl Chain {
 		debug!(
 			LOGGER,
 			"chain: txhashset_write: finished committing the batch (head etc.)"
+		);
+
+		// Replace the chain txhashset with the newly built one.
+		{
+			let mut txhashset_ref = self.txhashset.write().unwrap();
+			*txhashset_ref = txhashset;
+		}
+
+		debug!(
+			LOGGER,
+			"chain: txhashset_write: replaced our txhashset with the new one"
 		);
 
 		// Check for any orphan blocks and process them based on the new chain state.
@@ -923,8 +923,7 @@ impl Chain {
 	/// Checks the header_by_height index to verify the header is where we say
 	/// it is
 	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
-		let batch = self.store.batch()?;
-		batch
+		self.store
 			.is_on_current_chain(header)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain is_on_current_chain".to_owned()).into())
 	}
