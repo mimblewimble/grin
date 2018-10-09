@@ -58,9 +58,9 @@ pub mod macros;
 
 // other utils
 use byteorder::{BigEndian, ByteOrder};
-use std::sync::{Arc, RwLock};
 #[allow(unused_imports)]
 use std::ops::Deref;
+use std::sync::{Arc, RwLock};
 
 mod hex;
 pub use hex::*;
@@ -82,11 +82,13 @@ pub struct OneTime<T> {
 
 impl<T> OneTime<T>
 where
-	T: Clone
+	T: Clone,
 {
 	/// Builds a new uninitialized OneTime.
 	pub fn new() -> OneTime<T> {
-		OneTime { inner: Arc::new(RwLock::new(None)) }
+		OneTime {
+			inner: Arc::new(RwLock::new(None)),
+		}
 	}
 
 	/// Initializes the OneTime, should only be called once after construction.
@@ -101,7 +103,9 @@ where
 	/// Will panic (via expect) if called before initialization.
 	pub fn borrow(&self) -> T {
 		let inner = self.inner.read().unwrap();
-		inner.clone().expect("Cannot borrow one_time before initialization.")
+		inner
+			.clone()
+			.expect("Cannot borrow one_time before initialization.")
 	}
 }
 

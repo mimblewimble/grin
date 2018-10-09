@@ -34,7 +34,6 @@ use pool;
 use store;
 use util::{OneTime, LOGGER};
 
-
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
 /// implementations.
@@ -658,14 +657,14 @@ pub struct PoolToNetAdapter {
 
 impl pool::PoolAdapter for PoolToNetAdapter {
 	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
-		self.peers.borrow()
+		self.peers
+			.borrow()
 			.broadcast_stem_transaction(tx)
 			.map_err(|_| pool::PoolError::DandelionError)?;
 		Ok(())
 	}
 	fn tx_accepted(&self, tx: &core::Transaction) {
-		self.peers.borrow()
-			.broadcast_transaction(tx);
+		self.peers.borrow().broadcast_transaction(tx);
 	}
 }
 
@@ -707,37 +706,43 @@ impl PoolToChainAdapter {
 
 impl pool::BlockChain for PoolToChainAdapter {
 	fn chain_head(&self) -> Result<BlockHeader, pool::PoolError> {
-		self.chain.borrow()
+		self.chain
+			.borrow()
 			.head_header()
 			.map_err(|_| pool::PoolError::Other(format!("failed to get head_header")))
 	}
 
 	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, pool::PoolError> {
-		self.chain.borrow()
+		self.chain
+			.borrow()
 			.get_block_header(hash)
 			.map_err(|_| pool::PoolError::Other(format!("failed to get block_header")))
 	}
 
 	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, pool::PoolError> {
-		self.chain.borrow()
+		self.chain
+			.borrow()
 			.get_block_sums(hash)
 			.map_err(|_| pool::PoolError::Other(format!("failed to get block_sums")))
 	}
 
 	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		self.chain.borrow()
+		self.chain
+			.borrow()
 			.validate_tx(tx)
 			.map_err(|_| pool::PoolError::Other(format!("failed to validate tx")))
 	}
 
 	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		self.chain.borrow()
+		self.chain
+			.borrow()
 			.verify_coinbase_maturity(tx)
 			.map_err(|_| pool::PoolError::ImmatureCoinbase)
 	}
 
 	fn verify_tx_lock_height(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		self.chain.borrow()
+		self.chain
+			.borrow()
 			.verify_tx_lock_height(tx)
 			.map_err(|_| pool::PoolError::ImmatureTransaction)
 	}
