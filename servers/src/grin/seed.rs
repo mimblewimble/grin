@@ -25,6 +25,7 @@ use std::sync::{mpsc, Arc};
 use std::{cmp, io, str, thread, time};
 
 use p2p;
+use p2p::ChainAdapter;
 use pool::DandelionConfig;
 use util::LOGGER;
 
@@ -61,6 +62,7 @@ pub fn connect_and_monitor(
 			);
 
 			let mut prev = MIN_DATE.and_hms(0, 0, 0);
+			let mut prev_ping = Utc::now();
 			let mut start_attempt = 0;
 
 			while !stop.load(Ordering::Relaxed) {
@@ -83,6 +85,14 @@ pub fn connect_and_monitor(
 
 					prev = Utc::now();
 					start_attempt = cmp::min(6, start_attempt + 1);
+				}
+
+				// Ping connected peers on every 10s to monitor peers.
+				if Utc::now() - prev_ping > Duration::seconds(10) {
+					let total_diff = peers.total_difficulty();
+					let total_height = peers.total_height();
+					peers.check_all(total_diff, total_height);
+					prev_ping = Utc::now();
 				}
 
 				thread::sleep(time::Duration::from_secs(1));
@@ -149,16 +159,12 @@ fn monitor_peers(
 	// ask them for their list of peers
 	let mut connected_peers: Vec<SocketAddr> = vec![];
 	for p in peers.connected_peers() {
-		if let Ok(p) = p.try_read() {
-			debug!(
-				LOGGER,
-				"monitor_peers: {}:{} ask {} for more peers", config.host, config.port, p.info.addr,
-			);
-			let _ = p.send_peer_request(capabilities);
-			connected_peers.push(p.info.addr)
-		} else {
-			warn!(LOGGER, "monitor_peers: failed to get read lock on peer");
-		}
+		debug!(
+			LOGGER,
+			"monitor_peers: {}:{} ask {} for more peers", config.host, config.port, p.info.addr,
+		);
+		let _ = p.send_peer_request(capabilities);
+		connected_peers.push(p.info.addr)
 	}
 
 	// Attempt to connect to preferred peers if there is some
@@ -276,9 +282,7 @@ fn listen_for_addrs(
 				for _ in 0..3 {
 					match p2p_c.connect(&addr) {
 						Ok(p) => {
-							if let Ok(p) = p.try_read() {
-								let _ = p.send_peer_request(capab);
-							}
+							let _ = p.send_peer_request(capab);
 							let _ = peers_c.update_state(addr, p2p::State::Healthy);
 							break;
 						}
@@ -316,8 +320,7 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 						.map(|mut addr| {
 							addr.set_port(13414);
 							addr
-						})
-						.filter(|addr| !temp_addresses.contains(addr))
+						}).filter(|addr| !temp_addresses.contains(addr))
 						.collect()),
 				),
 				Err(e) => debug!(

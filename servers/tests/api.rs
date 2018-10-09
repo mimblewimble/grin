@@ -460,12 +460,13 @@ pub fn get_peer(
 pub fn get_connected_peers(
 	base_addr: &String,
 	api_server_port: u16,
-) -> Result<Vec<p2p::PeerInfo>, Error> {
+) -> Result<Vec<p2p::types::PeerInfoDisplay>, Error> {
 	let url = format!(
 		"http://{}:{}/v1/peers/connected",
 		base_addr, api_server_port
 	);
-	api::client::get::<Vec<p2p::PeerInfo>>(url.as_str(), None).map_err(|e| Error::API(e))
+	api::client::get::<Vec<p2p::types::PeerInfoDisplay>>(url.as_str(), None)
+		.map_err(|e| Error::API(e))
 }
 
 pub fn get_all_peers(

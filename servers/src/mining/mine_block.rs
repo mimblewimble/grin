@@ -104,9 +104,9 @@ fn build_block(
 		now_sec = head_sec + 1;
 	}
 
-	// get the difficulty our block should be at
-	let diff_iter = chain.difficulty_iter();
-	let difficulty = consensus::next_difficulty(diff_iter).unwrap();
+	// Determine the difficulty our block should be at.
+	// Note: do not keep the difficulty_iter in scope (it has an active batch).
+	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 
 	// extract current transaction from the pool
 	// TODO - we have a lot of unwrap() going on in this fn...

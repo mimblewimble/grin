@@ -19,11 +19,11 @@ use http::uri::{InvalidUri, Uri};
 use hyper::header::{ACCEPT, AUTHORIZATION, USER_AGENT};
 use hyper::rt::{Future, Stream};
 use hyper::{Body, Client, Request};
-use hyper_tls;
 use serde::{Deserialize, Serialize};
 use serde_json;
 
 use futures::future::{err, ok, Either};
+use hyper_rustls;
 use tokio::runtime::Runtime;
 
 use rest::{Error, ErrorKind};
@@ -186,7 +186,7 @@ where
 }
 
 fn send_request_async(req: Request<Body>) -> Box<Future<Item = String, Error = Error> + Send> {
-	let https = hyper_tls::HttpsConnector::new(1).unwrap();
+	let https = hyper_rustls::HttpsConnector::new(1);
 	let client = Client::builder().build::<_, Body>(https);
 	Box::new(
 		client

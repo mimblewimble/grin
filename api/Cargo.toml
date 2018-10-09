@@ -17,11 +17,12 @@ serde_json = "1"
 slog = { version = "~2.3", features = ["max_level_trace", "release_max_level_trace"] }
 tokio = "0.1.7"
 tokio-core = "0.1.17"
-tokio-tls = "0.2"
-native-tls = "0.2"
+tokio-tcp = "0.1" 
+tokio-rustls = "0.7"
 http = "0.1.5"
-hyper-tls = "0.3"
+hyper-rustls = "0.14"
 futures = "0.1.21"
+rustls = "0.13"
 url = "1.7.0"
 
 grin_core = { path = "../core" }

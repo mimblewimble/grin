@@ -54,23 +54,21 @@ env:
 script:
   - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[0]};
     echo "start testing on folder $DIR...";
-    if [[ -n "$DIR" ]];  then cd $DIR && cargo test --release; cd - > /dev/null; fi;
+    if [[ -n "$DIR" ]];  then cd $DIR && cargo test --release && cd - > /dev/null; fi;
   - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[1]};
     if [[ -n "$DIR" ]];  then
       echo "start testing on folder $DIR...";
-      cd $DIR && cargo test --release; cd - > /dev/null;
+      cd $DIR && cargo test --release && cd - > /dev/null;
     fi;
   - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[2]};
     if [[ -n "$DIR" ]];  then
       echo "start testing on folder $DIR...";
-      cd $DIR && cargo test --release; cd - > /dev/null;
+      cd $DIR && cargo test --release && cd - > /dev/null;
     fi;
 
 before_deploy:
   - if [[ "TEST_SUITE" == "pool-p2p" ]]; then
-      cargo clean;
-      cargo build --release;
-      ./.auto-release.sh;
+      cargo clean && cargo build --release && ./.auto-release.sh;
     fi
 
 deploy:

@@ -90,7 +90,6 @@ fn peer_handshake() {
 	thread::sleep(time::Duration::from_secs(1));
 
 	let server_peer = server.peers.get_connected_peer(&my_addr).unwrap();
-	let server_peer = server_peer.read().unwrap();
-	assert_eq!(server_peer.info.total_difficulty, Difficulty::one());
+	assert_eq!(server_peer.info.total_difficulty(), Difficulty::one());
 	assert!(server.peers.peer_count() > 0);
 }
