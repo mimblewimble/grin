@@ -796,9 +796,10 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Validate the txhashset state against the provided block header.
+	/// A "fast validation" will skip rangeproof verification and kernel signature verification.
 	pub fn validate(
 		&self,
-		skip_rproofs: bool,
+		fast_validation: bool,
 		status: &TxHashsetWriteStatus,
 	) -> Result<((Commitment, Commitment)), Error> {
 		self.validate_mmrs()?;
@@ -814,13 +815,13 @@ impl<'a> Extension<'a> {
 		// sum of unspent outputs minus total supply.
 		let (output_sum, kernel_sum) = self.validate_kernel_sums()?;
 
-		// This is an expensive verification step.
-		self.verify_kernel_signatures(status)?;
-
-		// Verify the rangeproof for each output in the sum above.
-		// This is an expensive verification step (skip for faster verification).
-		if !skip_rproofs {
+		// These are expensive verification step (skipped for "fast validation").
+		if !fast_validation {
+			// Verify the rangeproof associated with each unspent output.
 			self.verify_rangeproofs(status)?;
+
+			// Verify all the kernel signatures.
+			self.verify_kernel_signatures(status)?;
 		}
 
 		Ok((output_sum, kernel_sum))

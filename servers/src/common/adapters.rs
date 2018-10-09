@@ -571,23 +571,26 @@ impl NetToChainAdapter {
 		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
 	{
 		match w(&self.chain).block_exists(h) {
-			Ok(false) => {
-				match  wo(&self.peers).get_connected_peer(addr) {
-					None => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, not connected", addr),
-					Some(peer) => {
-						match peer.read() {
-							Err(e) => debug!(LOGGER, "send_block_request_to_peer: can't send request to peer {:?}, read fails: {:?}", addr, e),
-							Ok(p) => {
-								if let Err(e) =  f(&p, h) {
-									error!(LOGGER, "send_block_request_to_peer: failed: {:?}", e)
-								}
-							}
-						}
+			Ok(false) => match wo(&self.peers).get_connected_peer(addr) {
+				None => debug!(
+					LOGGER,
+					"send_block_request_to_peer: can't send request to peer {:?}, not connected",
+					addr
+				),
+				Some(peer) => {
+					if let Err(e) = f(&peer, h) {
+						error!(LOGGER, "send_block_request_to_peer: failed: {:?}", e)
 					}
 				}
-			}
-			Ok(true) => debug!(LOGGER, "send_block_request_to_peer: block {} already known", h),
-			Err(e) => error!(LOGGER, "send_block_request_to_peer: failed to check block exists: {:?}", e)
+			},
+			Ok(true) => debug!(
+				LOGGER,
+				"send_block_request_to_peer: block {} already known", h
+			),
+			Err(e) => error!(
+				LOGGER,
+				"send_block_request_to_peer: failed to check block exists: {:?}", e
+			),
 		}
 	}
 

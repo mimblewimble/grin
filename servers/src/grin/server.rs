@@ -160,7 +160,7 @@ impl Server {
 		let db_env = Arc::new(store::new_env(config.db_root.clone()));
 		let shared_chain = Arc::new(chain::Chain::init(
 			config.db_root.clone(),
-			db_env.clone(),
+			db_env,
 			chain_adapter.clone(),
 			genesis.clone(),
 			pow::verify_size,
@@ -186,8 +186,9 @@ impl Server {
 			Err(_) => None,
 		};
 
+		let peer_db_env = Arc::new(store::new_named_env(config.db_root.clone(), "peer".into()));
 		let p2p_server = Arc::new(p2p::Server::new(
-			db_env,
+			peer_db_env,
 			config.p2p_config.capabilities,
 			config.p2p_config.clone(),
 			net_adapter.clone(),
@@ -238,9 +239,7 @@ impl Server {
 			Some(b) => b,
 		};
 
-		let syncer = sync::Syncer::new();
-
-		syncer.run_sync(
+		sync::run_sync(
 			sync_state.clone(),
 			awaiting_peers.clone(),
 			p2p_server.peers.clone(),
@@ -397,10 +396,8 @@ impl Server {
 		// code clean. This may be handy for testing but not really needed
 		// for release
 		let diff_stats = {
-			let diff_iter = self.chain.difficulty_iter();
-
 			let last_blocks: Vec<Result<(u64, Difficulty), consensus::TargetError>> =
-				global::difficulty_data_to_vector(diff_iter)
+				global::difficulty_data_to_vector(self.chain.difficulty_iter())
 					.into_iter()
 					.skip(consensus::MEDIAN_TIME_WINDOW as usize)
 					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
@@ -445,10 +442,8 @@ impl Server {
 			.peers
 			.connected_peers()
 			.into_iter()
-			.map(|p| {
-				let p = p.read().unwrap();
-				PeerStats::from_peer(&p)
-			}).collect();
+			.map(|p| PeerStats::from_peer(&p))
+			.collect();
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
 			head: self.head(),
