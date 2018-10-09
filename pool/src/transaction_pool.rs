@@ -61,6 +61,10 @@ impl TransactionPool {
 		}
 	}
 
+	pub fn chain_head(&self) -> Result<BlockHeader, PoolError> {
+		self.blockchain.chain_head()
+	}
+
 	fn add_to_stempool(&mut self, entry: PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
 		// Add tx to stempool (passing in all txs from txpool to validate against).
 		self.stempool

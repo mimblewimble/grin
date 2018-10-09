@@ -258,9 +258,9 @@ impl Server {
 		let api_secret = get_first_line(config.api_secret_path.clone());
 		api::start_rest_apis(
 			config.api_http_addr.clone(),
-			Arc::downgrade(&shared_chain),
-			Arc::downgrade(&tx_pool),
-			Arc::downgrade(&p2p_server.peers),
+			shared_chain.clone(),
+			tx_pool.clone(),
+			p2p_server.peers.clone(),
 			api_secret,
 			None,
 		);

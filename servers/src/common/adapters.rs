@@ -17,7 +17,7 @@
 
 use std::fs::File;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 use std::time::Instant;
 
@@ -43,7 +43,7 @@ pub struct NetToChainAdapter {
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
-	peers: OneTime<Arc<p2p::Peers>>,
+	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 }
 
@@ -379,7 +379,14 @@ impl NetToChainAdapter {
 	/// Initialize a NetToChainAdaptor with reference to a Peers object.
 	/// Should only be called once.
 	pub fn init(&self, peers: Arc<p2p::Peers>) {
-		self.peers.init(peers);
+		self.peers.init(Arc::downgrade(&peers));
+	}
+
+	fn peers(&self) -> Arc<p2p::Peers> {
+		self.peers
+			.borrow()
+			.upgrade()
+			.expect("Failed to upgrade weak ref to our peers.")
 	}
 
 	// recursively go back through the locator vector and stop when we find
@@ -555,7 +562,7 @@ impl NetToChainAdapter {
 		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
 	{
 		match self.chain.block_exists(h) {
-			Ok(false) => match self.peers.borrow().get_connected_peer(addr) {
+			Ok(false) => match self.peers().get_connected_peer(addr) {
 				None => debug!(
 					LOGGER,
 					"send_block_request_to_peer: can't send request to peer {:?}, not connected",
@@ -595,7 +602,7 @@ impl NetToChainAdapter {
 pub struct ChainToPoolAndNetAdapter {
 	sync_state: Arc<SyncState>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
-	peers: OneTime<Arc<p2p::Peers>>,
+	peers: OneTime<Weak<p2p::Peers>>,
 }
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
@@ -621,10 +628,10 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		if opts.contains(Options::MINE) {
 			// propagate compact block out if we mined the block
 			let cb: CompactBlock = b.clone().into();
-			self.peers.borrow().broadcast_compact_block(&cb);
+			self.peers().broadcast_compact_block(&cb);
 		} else {
 			// "header first" propagation if we are not the originator of this block
-			self.peers.borrow().broadcast_header(&b.header);
+			self.peers().broadcast_header(&b.header);
 		}
 	}
 }
@@ -645,26 +652,29 @@ impl ChainToPoolAndNetAdapter {
 	/// Initialize a ChainToPoolAndNetAdapter instance with handle to a Peers
 	/// object. Should only be called once.
 	pub fn init(&self, peers: Arc<p2p::Peers>) {
-		self.peers.init(peers);
+		self.peers.init(Arc::downgrade(&peers));
+	}
+
+	fn peers(&self) -> Arc<p2p::Peers> {
+		self.peers.borrow().upgrade().expect("Failed to upgrade weak ref to our peers.")
 	}
 }
 
 /// Adapter between the transaction pool and the network, to relay
 /// transactions that have been accepted.
 pub struct PoolToNetAdapter {
-	peers: OneTime<Arc<p2p::Peers>>,
+	peers: OneTime<Weak<p2p::Peers>>,
 }
 
 impl pool::PoolAdapter for PoolToNetAdapter {
 	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
-		self.peers
-			.borrow()
+		self.peers()
 			.broadcast_stem_transaction(tx)
 			.map_err(|_| pool::PoolError::DandelionError)?;
 		Ok(())
 	}
 	fn tx_accepted(&self, tx: &core::Transaction) {
-		self.peers.borrow().broadcast_transaction(tx);
+		self.peers().broadcast_transaction(tx);
 	}
 }
 
@@ -678,7 +688,14 @@ impl PoolToNetAdapter {
 
 	/// Setup the p2p server on the adapter
 	pub fn init(&self, peers: Arc<p2p::Peers>) {
-		self.peers.init(peers);
+		self.peers.init(Arc::downgrade(&peers));
+	}
+
+	fn peers(&self) -> Arc<p2p::Peers> {
+		self.peers
+			.borrow()
+			.upgrade()
+			.expect("Failed to upgrade weak ref to our peers.")
 	}
 }
 
@@ -687,7 +704,7 @@ impl PoolToNetAdapter {
 /// dependency between the pool and the chain.
 #[derive(Clone)]
 pub struct PoolToChainAdapter {
-	chain: OneTime<Arc<chain::Chain>>,
+	chain: OneTime<Weak<chain::Chain>>,
 }
 
 impl PoolToChainAdapter {
@@ -700,49 +717,50 @@ impl PoolToChainAdapter {
 
 	/// Set the pool adapter's chain. Should only be called once.
 	pub fn set_chain(&self, chain_ref: Arc<chain::Chain>) {
-		self.chain.init(chain_ref);
+		self.chain.init(Arc::downgrade(&chain_ref));
+	}
+
+	fn chain(&self) -> Arc<chain::Chain> {
+		self.chain
+			.borrow()
+			.upgrade()
+			.expect("Failed to upgrade the weak ref to our chain.")
 	}
 }
 
 impl pool::BlockChain for PoolToChainAdapter {
 	fn chain_head(&self) -> Result<BlockHeader, pool::PoolError> {
-		self.chain
-			.borrow()
+		self.chain()
 			.head_header()
 			.map_err(|_| pool::PoolError::Other(format!("failed to get head_header")))
 	}
 
 	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, pool::PoolError> {
-		self.chain
-			.borrow()
+		self.chain()
 			.get_block_header(hash)
 			.map_err(|_| pool::PoolError::Other(format!("failed to get block_header")))
 	}
 
 	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, pool::PoolError> {
-		self.chain
-			.borrow()
+		self.chain()
 			.get_block_sums(hash)
 			.map_err(|_| pool::PoolError::Other(format!("failed to get block_sums")))
 	}
 
 	fn validate_tx(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		self.chain
-			.borrow()
+		self.chain()
 			.validate_tx(tx)
 			.map_err(|_| pool::PoolError::Other(format!("failed to validate tx")))
 	}
 
 	fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		self.chain
-			.borrow()
+		self.chain()
 			.verify_coinbase_maturity(tx)
 			.map_err(|_| pool::PoolError::ImmatureCoinbase)
 	}
 
 	fn verify_tx_lock_height(&self, tx: &Transaction) -> Result<(), pool::PoolError> {
-		self.chain
-			.borrow()
+		self.chain()
 			.verify_tx_lock_height(tx)
 			.map_err(|_| pool::PoolError::ImmatureTransaction)
 	}
