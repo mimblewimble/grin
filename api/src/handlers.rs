@@ -27,7 +27,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::ser;
 use p2p;
-use p2p::types::ReasonForBan;
+use p2p::types::{PeerInfoDisplay, ReasonForBan};
 use pool;
 use regex::Regex;
 use rest::*;
@@ -405,11 +405,10 @@ pub struct PeersConnectedHandler {
 
 impl Handler for PeersConnectedHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
-		let mut peers = vec![];
+		let mut peers: Vec<PeerInfoDisplay> = vec![];
 		for p in &w(&self.peers).connected_peers() {
-			let p = p.read().unwrap();
 			let peer_info = p.info.clone();
-			peers.push(peer_info);
+			peers.push(peer_info.into());
 		}
 		json_response(&peers)
 	}

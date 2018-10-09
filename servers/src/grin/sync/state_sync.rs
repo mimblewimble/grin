@@ -14,7 +14,7 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use chain;
 use common::types::{Error, SyncState, SyncStatus};
@@ -36,7 +36,7 @@ pub struct StateSync {
 	archive_mode: bool,
 
 	prev_fast_sync: Option<DateTime<Utc>>,
-	fast_sync_peer: Option<Arc<RwLock<Peer>>>,
+	fast_sync_peer: Option<Arc<Peer>>,
 }
 
 impl StateSync {
@@ -88,14 +88,12 @@ impl StateSync {
 
 		// check peer connection status of this sync
 		if let Some(ref peer) = self.fast_sync_peer {
-			if let Ok(p) = peer.try_read() {
-				if !p.is_connected() && SyncStatus::TxHashsetDownload == self.sync_state.status() {
-					sync_need_restart = true;
-					info!(
-						LOGGER,
-						"fast_sync: peer connection lost: {:?}. restart", p.info.addr,
-					);
-				}
+			if !peer.is_connected() && SyncStatus::TxHashsetDownload == self.sync_state.status() {
+				sync_need_restart = true;
+				info!(
+					LOGGER,
+					"fast_sync: peer connection lost: {:?}. restart", peer.info.addr,
+				);
 			}
 		}
 
@@ -131,38 +129,36 @@ impl StateSync {
 		true
 	}
 
-	fn request_state(&self, header_head: &chain::Tip) -> Result<Arc<RwLock<Peer>>, p2p::Error> {
+	fn request_state(&self, header_head: &chain::Tip) -> Result<Arc<Peer>, p2p::Error> {
 		let horizon = global::cut_through_horizon() as u64;
 
 		if let Some(peer) = self.peers.most_work_peer() {
-			if let Ok(p) = peer.try_read() {
-				// ask for txhashset at 90% of horizon, this still leaves time for download
-				// and validation to happen and stay within horizon
-				let mut txhashset_head = self
+			// ask for txhashset at 90% of horizon, this still leaves time for download
+			// and validation to happen and stay within horizon
+			let mut txhashset_head = self
+				.chain
+				.get_block_header(&header_head.prev_block_h)
+				.unwrap();
+			for _ in 0..(horizon - horizon / 10) {
+				txhashset_head = self
 					.chain
-					.get_block_header(&header_head.prev_block_h)
+					.get_block_header(&txhashset_head.previous)
 					.unwrap();
-				for _ in 0..(horizon - horizon / 10) {
-					txhashset_head = self
-						.chain
-						.get_block_header(&txhashset_head.previous)
-						.unwrap();
-				}
-				let bhash = txhashset_head.hash();
-				debug!(
-					LOGGER,
-					"fast_sync: before txhashset request, header head: {} / {}, txhashset_head: {} / {}",
-					header_head.height,
-					header_head.last_block_h,
-					txhashset_head.height,
-					bhash
-				);
-				if let Err(e) = p.send_txhashset_request(txhashset_head.height, bhash) {
-					error!(LOGGER, "fast_sync: send_txhashset_request err! {:?}", e);
-					return Err(e);
-				}
-				return Ok(peer.clone());
 			}
+			let bhash = txhashset_head.hash();
+			debug!(
+				LOGGER,
+				"fast_sync: before txhashset request, header head: {} / {}, txhashset_head: {} / {}",
+				header_head.height,
+				header_head.last_block_h,
+				txhashset_head.height,
+				bhash
+			);
+			if let Err(e) = peer.send_txhashset_request(txhashset_head.height, bhash) {
+				error!(LOGGER, "fast_sync: send_txhashset_request err! {:?}", e);
+				return Err(e);
+			}
+			return Ok(peer.clone());
 		}
 		Err(p2p::Error::PeerException)
 	}

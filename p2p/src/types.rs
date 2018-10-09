@@ -17,6 +17,7 @@ use std::fs::File;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::mpsc;
+use std::sync::{Arc, RwLock};
 
 use chrono::prelude::*;
 
@@ -235,17 +236,75 @@ enum_from_primitive! {
 	}
 }
 
+#[derive(Clone, Debug)]
+pub struct PeerLiveInfo {
+	pub total_difficulty: Difficulty,
+	pub height: u64,
+	pub last_seen: DateTime<Utc>,
+}
+
 /// General information about a connected peer that's useful to other modules.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct PeerInfo {
 	pub capabilities: Capabilities,
 	pub user_agent: String,
 	pub version: u32,
 	pub addr: SocketAddr,
+	pub direction: Direction,
+	pub live_info: Arc<RwLock<PeerLiveInfo>>,
+}
+
+impl PeerInfo {
+	/// The current total_difficulty of the peer.
+	pub fn total_difficulty(&self) -> Difficulty {
+		self.live_info.read().unwrap().total_difficulty
+	}
+
+	/// The current height of the peer.
+	pub fn height(&self) -> u64 {
+		self.live_info.read().unwrap().height
+	}
+
+	/// Time of last_seen for this peer (via ping/pong).
+	pub fn last_seen(&self) -> DateTime<Utc> {
+		self.live_info.read().unwrap().last_seen
+	}
+
+	/// Update the total_difficulty, height and last_seen of the peer.
+	/// Takes a write lock on the live_info.
+	pub fn update(&self, height: u64, total_difficulty: Difficulty) {
+		let mut live_info = self.live_info.write().unwrap();
+		live_info.height = height;
+		live_info.total_difficulty = total_difficulty;
+		live_info.last_seen = Utc::now()
+	}
+}
+
+/// Flatten out a PeerInfo and nested PeerLiveInfo (taking a read lock on it)
+/// so we can serialize/deserialize the data for the API and the TUI.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PeerInfoDisplay {
+	pub capabilities: Capabilities,
+	pub user_agent: String,
+	pub version: u32,
+	pub addr: SocketAddr,
+	pub direction: Direction,
 	pub total_difficulty: Difficulty,
 	pub height: u64,
-	pub direction: Direction,
-	pub last_seen: DateTime<Utc>,
+}
+
+impl From<PeerInfo> for PeerInfoDisplay {
+	fn from(info: PeerInfo) -> PeerInfoDisplay {
+		PeerInfoDisplay {
+			capabilities: info.capabilities.clone(),
+			user_agent: info.user_agent.clone(),
+			version: info.version.clone(),
+			addr: info.addr.clone(),
+			direction: info.direction.clone(),
+			total_difficulty: info.total_difficulty(),
+			height: info.height(),
+		}
+	}
 }
 
 /// The full txhashset data along with indexes required for a consumer to

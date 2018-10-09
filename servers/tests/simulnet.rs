@@ -127,7 +127,7 @@ fn simulate_seeding() {
 		"http://{}:{}/v1/peers/connected",
 		&server_config.base_addr, 30020
 	);
-	let peers_all = api::client::get::<Vec<p2p::PeerInfo>>(url.as_str(), None);
+	let peers_all = api::client::get::<Vec<p2p::types::PeerInfoDisplay>>(url.as_str(), None);
 	assert!(peers_all.is_ok());
 	assert_eq!(peers_all.unwrap().len(), 4);
 

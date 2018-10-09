@@ -177,10 +177,10 @@ impl PeerStats {
 			state: state.to_string(),
 			addr: addr,
 			version: peer.info.version,
-			total_difficulty: peer.info.total_difficulty.to_num(),
-			height: peer.info.height,
+			total_difficulty: peer.info.total_difficulty().to_num(),
+			height: peer.info.height(),
 			direction: direction.to_string(),
-			last_seen: peer.info.last_seen,
+			last_seen: peer.info.last_seen(),
 		}
 	}
 }

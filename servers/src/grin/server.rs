@@ -442,10 +442,8 @@ impl Server {
 			.peers
 			.connected_peers()
 			.into_iter()
-			.map(|p| {
-				let p = p.read().unwrap();
-				PeerStats::from_peer(&p)
-			}).collect();
+			.map(|p| PeerStats::from_peer(&p))
+			.collect();
 		Ok(ServerStats {
 			peer_count: self.peer_count(),
 			head: self.head(),

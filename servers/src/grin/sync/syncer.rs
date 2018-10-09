@@ -159,22 +159,19 @@ fn needs_syncing(
 	// difficulty than us
 	if is_syncing {
 		if let Some(peer) = peer {
-			if let Ok(peer) = peer.try_read() {
-				most_work_height = peer.info.height;
+			most_work_height = peer.info.height();
+			if peer.info.total_difficulty() <= local_diff {
+				let ch = chain.head().unwrap();
+				info!(
+					LOGGER,
+					"synchronized at {} @ {} [{}]",
+					local_diff.to_num(),
+					ch.height,
+					ch.last_block_h
+				);
 
-				if peer.info.total_difficulty <= local_diff {
-					let ch = chain.head().unwrap();
-					info!(
-						LOGGER,
-						"synchronized at {} @ {} [{}]",
-						local_diff.to_num(),
-						ch.height,
-						ch.last_block_h
-					);
-
-					let _ = chain.reset_head();
-					return (false, most_work_height);
-				}
+				let _ = chain.reset_head();
+				return (false, most_work_height);
 			}
 		} else {
 			warn!(LOGGER, "sync: no peers available, disabling sync");
@@ -182,26 +179,25 @@ fn needs_syncing(
 		}
 	} else {
 		if let Some(peer) = peer {
-			if let Ok(peer) = peer.try_read() {
-				most_work_height = peer.info.height;
+			most_work_height = peer.info.height();
 
-				// sum the last 5 difficulties to give us the threshold
-				let threshold = chain
-					.difficulty_iter()
-					.filter_map(|x| x.map(|(_, x)| x).ok())
-					.take(5)
-					.fold(Difficulty::zero(), |sum, val| sum + val);
+			// sum the last 5 difficulties to give us the threshold
+			let threshold = chain
+				.difficulty_iter()
+				.filter_map(|x| x.map(|(_, x)| x).ok())
+				.take(5)
+				.fold(Difficulty::zero(), |sum, val| sum + val);
 
-				if peer.info.total_difficulty > local_diff.clone() + threshold.clone() {
-					info!(
-						LOGGER,
-						"sync: total_difficulty {}, peer_difficulty {}, threshold {} (last 5 blocks), enabling sync",
-						local_diff,
-						peer.info.total_difficulty,
-						threshold,
-					);
-					return (true, most_work_height);
-				}
+			let peer_diff = peer.info.total_difficulty();
+			if peer_diff > local_diff.clone() + threshold.clone() {
+				info!(
+					LOGGER,
+					"sync: total_difficulty {}, peer_difficulty {}, threshold {} (last 5 blocks), enabling sync",
+					local_diff,
+					peer_diff,
+					threshold,
+				);
+				return (true, most_work_height);
 			}
 		}
 	}
