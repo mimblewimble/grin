@@ -168,14 +168,14 @@ impl Server {
 			archive_mode,
 		)?);
 
-		pool_adapter.set_chain(Arc::downgrade(&shared_chain));
+		pool_adapter.set_chain(shared_chain.clone());
 
 		let awaiting_peers = Arc::new(AtomicBool::new(false));
 
 		let net_adapter = Arc::new(NetToChainAdapter::new(
 			sync_state.clone(),
 			archive_mode,
-			Arc::downgrade(&shared_chain),
+			shared_chain.clone(),
 			tx_pool.clone(),
 			verifier_cache.clone(),
 			config.clone(),
@@ -197,9 +197,9 @@ impl Server {
 			archive_mode,
 			block_1_hash,
 		)?);
-		chain_adapter.init(Arc::downgrade(&p2p_server.peers));
-		pool_net_adapter.init(Arc::downgrade(&p2p_server.peers));
-		net_adapter.init(Arc::downgrade(&p2p_server.peers));
+		chain_adapter.init(p2p_server.peers.clone());
+		pool_net_adapter.init(p2p_server.peers.clone());
+		net_adapter.init(p2p_server.peers.clone());
 
 		if config.p2p_config.seeding_type.clone() != p2p::Seeding::Programmatic {
 			let seeder = match config.p2p_config.seeding_type.clone() {
@@ -258,9 +258,9 @@ impl Server {
 		let api_secret = get_first_line(config.api_secret_path.clone());
 		api::start_rest_apis(
 			config.api_http_addr.clone(),
-			Arc::downgrade(&shared_chain),
-			Arc::downgrade(&tx_pool),
-			Arc::downgrade(&p2p_server.peers),
+			shared_chain.clone(),
+			tx_pool.clone(),
+			p2p_server.peers.clone(),
 			api_secret,
 			None,
 		);
