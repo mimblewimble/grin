@@ -219,8 +219,8 @@ impl Chain {
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
 		let maybe_new_head: Result<Option<Tip>, Error>;
 		{
-			let batch = self.store.batch()?;
 			let mut txhashset = self.txhashset.write().unwrap();
+			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
 			maybe_new_head = pipe::process_block(&b, &mut ctx);
@@ -299,8 +299,8 @@ impl Chain {
 
 	/// Process a block header received during "header first" propagation.
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
-		let batch = self.store.batch()?;
 		let mut txhashset = self.txhashset.write().unwrap();
+		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 		pipe::process_block_header(bh, &mut ctx)?;
 		ctx.batch.commit()?;
@@ -315,8 +315,8 @@ impl Chain {
 		headers: &Vec<BlockHeader>,
 		opts: Options,
 	) -> Result<(), Error> {
-		let batch = self.store.batch()?;
 		let mut txhashset = self.txhashset.write().unwrap();
+		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
 		pipe::sync_block_headers(headers, &mut ctx)?;
