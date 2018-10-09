@@ -105,8 +105,7 @@ impl ChainStore {
 		}
 
 		let block_sums: Result<BlockSums, Error> = option_to_not_found(
-			self.db
-				.get_ser(&to_key(BLOCK_SUMS_PREFIX, &mut h.to_vec())),
+			self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, &mut h.to_vec())),
 			&format!("Block sums for block: {}", h),
 		);
 
@@ -410,8 +409,7 @@ impl<'a> Batch<'a> {
 		}
 
 		let block_sums: Result<BlockSums, Error> = option_to_not_found(
-			self.db
-				.get_ser(&to_key(BLOCK_SUMS_PREFIX, &mut h.to_vec())),
+			self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, &mut h.to_vec())),
 			&format!("Block sums for block: {}", h),
 		);
 
