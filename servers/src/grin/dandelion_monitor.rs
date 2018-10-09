@@ -53,8 +53,6 @@ pub fn monitor_transactions(
 				let patience_secs = dandelion_config.patience_secs.unwrap();
 				thread::sleep(Duration::from_secs(patience_secs));
 
-				let tx_pool = tx_pool.clone();
-
 				// Step 1: find all "ToStem" entries in stempool from last run.
 				// Aggregate them up to give a single (valid) aggregated tx and propagate it
 				// to the next Dandelion relay along the stem.
@@ -90,7 +88,7 @@ fn process_stem_phase(
 ) -> Result<(), PoolError> {
 	let mut tx_pool = tx_pool.write().unwrap();
 
-	let header = tx_pool.blockchain.chain_head()?;
+	let header = tx_pool.chain_head()?;
 
 	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
 	let stem_txs = tx_pool
@@ -137,7 +135,7 @@ fn process_fluff_phase(
 ) -> Result<(), PoolError> {
 	let mut tx_pool = tx_pool.write().unwrap();
 
-	let header = tx_pool.blockchain.chain_head()?;
+	let header = tx_pool.chain_head()?;
 
 	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
 	let stem_txs = tx_pool
@@ -239,7 +237,7 @@ fn process_expired_entries(
 
 		{
 			let mut tx_pool = tx_pool.write().unwrap();
-			let header = tx_pool.blockchain.chain_head()?;
+			let header = tx_pool.chain_head()?;
 
 			for entry in expired_entries {
 				let src = TxSource {

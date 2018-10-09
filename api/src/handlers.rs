@@ -791,9 +791,9 @@ impl Handler for PoolPushHandler {
 /// except during tests).
 pub fn start_rest_apis(
 	addr: String,
-	chain: Weak<chain::Chain>,
-	tx_pool: Weak<RwLock<pool::TransactionPool>>,
-	peers: Weak<p2p::Peers>,
+	chain: Arc<chain::Chain>,
+	tx_pool: Arc<RwLock<pool::TransactionPool>>,
+	peers: Arc<p2p::Peers>,
 	api_secret: Option<String>,
 	tls_config: Option<TLSConfig>,
 ) -> bool {
@@ -813,9 +813,9 @@ pub fn start_rest_apis(
 }
 
 pub fn build_router(
-	chain: Weak<chain::Chain>,
-	tx_pool: Weak<RwLock<pool::TransactionPool>>,
-	peers: Weak<p2p::Peers>,
+	chain: Arc<chain::Chain>,
+	tx_pool: Arc<RwLock<pool::TransactionPool>>,
+	peers: Arc<p2p::Peers>,
 ) -> Result<Router, RouterError> {
 	let route_list = vec![
 		"get blocks".to_string(),
@@ -840,45 +840,45 @@ pub fn build_router(
 	let index_handler = IndexHandler { list: route_list };
 
 	let output_handler = OutputHandler {
-		chain: chain.clone(),
+		chain: Arc::downgrade(&chain),
 	};
 
 	let block_handler = BlockHandler {
-		chain: chain.clone(),
+		chain: Arc::downgrade(&chain),
 	};
 	let header_handler = HeaderHandler {
-		chain: chain.clone(),
+		chain: Arc::downgrade(&chain),
 	};
 	let chain_tip_handler = ChainHandler {
-		chain: chain.clone(),
+		chain: Arc::downgrade(&chain),
 	};
 	let chain_compact_handler = ChainCompactHandler {
-		chain: chain.clone(),
+		chain: Arc::downgrade(&chain),
 	};
 	let chain_validation_handler = ChainValidationHandler {
-		chain: chain.clone(),
+		chain: Arc::downgrade(&chain),
 	};
 	let status_handler = StatusHandler {
-		chain: chain.clone(),
-		peers: peers.clone(),
+		chain: Arc::downgrade(&chain),
+		peers: Arc::downgrade(&peers),
 	};
 	let txhashset_handler = TxHashSetHandler {
-		chain: chain.clone(),
+		chain: Arc::downgrade(&chain),
 	};
 	let pool_info_handler = PoolInfoHandler {
-		tx_pool: tx_pool.clone(),
+		tx_pool: Arc::downgrade(&tx_pool),
 	};
 	let pool_push_handler = PoolPushHandler {
-		tx_pool: tx_pool.clone(),
+		tx_pool: Arc::downgrade(&tx_pool),
 	};
 	let peers_all_handler = PeersAllHandler {
-		peers: peers.clone(),
+		peers: Arc::downgrade(&peers),
 	};
 	let peers_connected_handler = PeersConnectedHandler {
-		peers: peers.clone(),
+		peers: Arc::downgrade(&peers),
 	};
 	let peer_handler = PeerHandler {
-		peers: peers.clone(),
+		peers: Arc::downgrade(&peers),
 	};
 
 	let mut router = Router::new();
