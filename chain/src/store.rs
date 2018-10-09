@@ -135,6 +135,29 @@ impl ChainStore {
 		)
 	}
 
+	// We are on the current chain if -
+	// * the header by height index matches the header, and
+	// * we are not ahead of the current head
+	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
+		let head = self.head()?;
+
+		// check we are not out ahead of the current head
+		if header.height > head.height {
+			return Err(Error::NotFoundErr(String::from(
+				"header.height > head.height",
+			)));
+		}
+
+		let header_at_height = self.get_header_by_height(header.height)?;
+		if header.hash() == header_at_height.hash() {
+			Ok(())
+		} else {
+			Err(Error::NotFoundErr(String::from(
+				"header.hash == header_at_height.hash",
+			)))
+		}
+	}
+
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		option_to_not_found(
 			self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)),
