@@ -124,9 +124,10 @@ fn sync_loop(
 			highest_height = most_work_height;
 		}
 
-		// quick short-circuit if no syncing is needed
+		// quick short-circuit (and a decent sleep) if no syncing is needed
 		if !syncing {
 			sync_state.update(SyncStatus::NoSync);
+			thread::sleep(time::Duration::from_secs(10));
 			continue;
 		}
 
