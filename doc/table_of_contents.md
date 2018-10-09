@@ -17,11 +17,11 @@
 - [merkle_proof graph](merkle_proof/merkle_proof.png) - Example merkle proof with pruning applied
 - [pruning](pruning.md) - Technical explanation of pruning
 - [stratum](stratum.md) - Technical explanation of Grin Stratum RPC protocol
-- [transaction UML](transaction/aggregating transaction without lock_height) - UML of an interactive transaction
+- [transaction UML](wallet/transaction/basic-transaction-wf.png) - UML of an interactive transaction (aggregating transaction without `lock_height`)
 
 ## Build and use
 
-- [api](api/api/md) - Explaining the different APIs in Grin and how to use them
+- [api](api/api.md) - Explaining the different APIs in Grin and how to use them
 - [build](build.md) - Explaining how to build and run the Grin binaries
 - [release](release_instruction.md) - Instructions of making a release
 - [usage](usage.md) - Explaining how to use grin in Testnet3
