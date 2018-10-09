@@ -480,8 +480,8 @@ fn replicate_tx_fluff_failure() {
 	let mut slate = Slate::blank(1);
 
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		slate =
-			api.issue_send_tx(
+		slate = api
+			.issue_send_tx(
 				amount,                   // amount
 				2,                        // minimum confirmations
 				"http://127.0.0.1:33001", // dest

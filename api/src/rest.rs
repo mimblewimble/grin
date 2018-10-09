@@ -196,8 +196,7 @@ impl ApiServer {
 					.map_err(|e| eprintln!("HTTP API server error: {}", e));
 
 				rt::run(server);
-			})
-			.map_err(|_| ErrorKind::Internal("failed to spawn API thread".to_string()).into())
+			}).map_err(|_| ErrorKind::Internal("failed to spawn API thread".to_string()).into())
 	}
 
 	/// Starts the TLS ApiServer at the provided address.
@@ -235,8 +234,7 @@ impl ApiServer {
 					.map_err(|e| eprintln!("HTTP API server error: {}", e));
 
 				rt::run(server);
-			})
-			.map_err(|_| ErrorKind::Internal("failed to spawn API thread".to_string()).into())
+			}).map_err(|_| ErrorKind::Internal("failed to spawn API thread".to_string()).into())
 	}
 
 	/// Stops the API server, it panics in case of error
