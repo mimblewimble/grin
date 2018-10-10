@@ -434,7 +434,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		// the _network_ difficulty of the previous block
 		// (during testnet1 we use _block_ difficulty here)
 		let child_batch = ctx.batch.child()?;
-		let diff_iter = store::DifficultyIter::from(header.previous, child_batch);
+		let diff_iter = store::DifficultyIter::from_batch(header.previous, child_batch);
 		let network_difficulty = consensus::next_difficulty(diff_iter)
 			.context(ErrorKind::Other("network difficulty".to_owned()))?;
 		if target_difficulty != network_difficulty.clone() {

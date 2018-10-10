@@ -575,7 +575,8 @@ impl<'a> Batch<'a> {
 /// calculation.
 pub struct DifficultyIter<'a> {
 	start: Hash,
-	batch: Batch<'a>,
+	store: Option<Arc<ChainStore>>,
+	batch: Option<Batch<'a>>,
 
 	// maintain state for both the "next" header in this iteration
 	// and its previous header in the chain ("next next" in the iteration)
@@ -588,10 +589,23 @@ pub struct DifficultyIter<'a> {
 impl<'a> DifficultyIter<'a> {
 	/// Build a new iterator using the provided chain store and starting from
 	/// the provided block hash.
-	pub fn from(start: Hash, batch: Batch) -> DifficultyIter {
+	pub fn from<'b>(start: Hash, store: Arc<ChainStore>) -> DifficultyIter<'b> {
 		DifficultyIter {
 			start,
-			batch,
+			store: Some(store),
+			batch: None,
+			header: None,
+			prev_header: None,
+		}
+	}
+
+	/// Build a new iterator using the provided chain store batch and starting from
+	/// the provided block hash.
+	pub fn from_batch(start: Hash, batch: Batch) -> DifficultyIter {
+		DifficultyIter {
+			start,
+			store: None,
+			batch: Some(batch),
 			header: None,
 			prev_header: None,
 		}
@@ -605,7 +619,15 @@ impl<'a> Iterator for DifficultyIter<'a> {
 		// Get both header and previous_header if this is the initial iteration.
 		// Otherwise move prev_header to header and get the next prev_header.
 		self.header = if self.header.is_none() {
-			self.batch.get_block_header(&self.start).ok()
+			if let Some(ref batch) = self.batch {
+				batch.get_block_header(&self.start).ok()
+			} else {
+				if let Some(ref store) = self.store {
+					store.get_block_header(&self.start).ok()
+				} else {
+					None
+				}
+			}
 		} else {
 			self.prev_header.clone()
 		};
@@ -613,7 +635,15 @@ impl<'a> Iterator for DifficultyIter<'a> {
 		// If we have a header we can do this iteration.
 		// Otherwise we are done.
 		if let Some(header) = self.header.clone() {
-			self.prev_header = self.batch.get_block_header(&header.previous).ok();
+			if let Some(ref batch) = self.batch {
+				self.prev_header = batch.get_block_header(&header.previous).ok();
+			} else {
+				if let Some(ref store) = self.store {
+					self.prev_header = store.get_block_header(&header.previous).ok();
+				} else {
+					self.prev_header = None;
+				}
+			}
 
 			let prev_difficulty = self
 				.prev_header

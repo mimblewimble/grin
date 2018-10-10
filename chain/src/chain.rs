@@ -943,8 +943,8 @@ impl Chain {
 	/// difficulty calculation (timestamp and previous difficulties).
 	pub fn difficulty_iter(&self) -> store::DifficultyIter {
 		let head = self.head().unwrap();
-		let batch = self.store.batch().unwrap();
-		store::DifficultyIter::from(head.last_block_h, batch)
+		let store = self.store.clone();
+		store::DifficultyIter::from(head.last_block_h, store)
 	}
 
 	/// Check whether we have a block without reading it
