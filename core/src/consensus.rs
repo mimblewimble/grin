@@ -51,6 +51,14 @@ pub const BLOCK_TIME_SEC: u64 = 60;
 /// set to nominal number of block in one day (1440 with 1-minute blocks)
 pub const COINBASE_MATURITY: u64 = 24 * 60 * 60 / BLOCK_TIME_SEC;
 
+/// Ratio the secondary proof of work should take over the primary, as a
+/// function of block height (time). Starts at 90% losing a percent
+/// approximately every week (10000 blocks). Represented as an integer
+/// between 0 and 100.
+pub fn secondary_pow_ratio(height: u64) -> u64 {
+	90u64.saturating_sub(height / 10000)
+}
+
 /// Cuckoo-cycle proof size (cycle length)
 pub const PROOFSIZE: usize = 42;
 
@@ -185,9 +193,9 @@ impl fmt::Display for TargetError {
 /// DIFFICULTY_ADJUST_WINDOW blocks. The corresponding timespan is calculated
 /// by using the difference between the median timestamps at the beginning
 /// and the end of the window.
-pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
+pub fn next_difficulty<T>(cursor: T) -> Result<(Difficulty, u64), TargetError>
 where
-	T: IntoIterator<Item = Result<(u64, Difficulty), TargetError>>,
+	T: IntoIterator<Item = Result<(u64, Difficulty, Option<u64>), TargetError>>,
 {
 	// Create vector of difficulty data running from earliest
 	// to latest, and pad with simulated pre-genesis data to allow earlier
@@ -195,27 +203,16 @@ where
 	// length will be DIFFICULTY_ADJUST_WINDOW+MEDIAN_TIME_WINDOW
 	let diff_data = global::difficulty_data_to_vector(cursor);
 
+	// First, get the ratio of secondary PoW vs primary
+	let sec_pow_scaling = secondary_pow_scaling(&diff_data);
+
 	// Obtain the median window for the earlier time period
-	// the first MEDIAN_TIME_WINDOW elements
-	let mut window_earliest: Vec<u64> = diff_data
-		.iter()
-		.take(MEDIAN_TIME_WINDOW as usize)
-		.map(|n| n.clone().unwrap().0)
-		.collect();
-	// pick median
-	window_earliest.sort();
-	let earliest_ts = window_earliest[MEDIAN_TIME_INDEX as usize];
+	// the first MEDIAN_TIME_WINDOW elements	
+	let earliest_ts = time_window_median(&diff_data, 0, MEDIAN_TIME_WINDOW as usize);
 
 	// Obtain the median window for the latest time period
 	// i.e. the last MEDIAN_TIME_WINDOW elements
-	let mut window_latest: Vec<u64> = diff_data
-		.iter()
-		.skip(DIFFICULTY_ADJUST_WINDOW as usize)
-		.map(|n| n.clone().unwrap().0)
-		.collect();
-	// pick median
-	window_latest.sort();
-	let latest_ts = window_latest[MEDIAN_TIME_INDEX as usize];
+	let latest_ts = time_window_median(&diff_data, DIFFICULTY_ADJUST_WINDOW as usize, MEDIAN_TIME_WINDOW as usize);
 
 	// median time delta
 	let ts_delta = latest_ts - earliest_ts;
@@ -244,7 +241,46 @@ where
 
 	let difficulty = diff_sum * BLOCK_TIME_SEC / adj_ts;
 
-	Ok(Difficulty::from_num(max(difficulty, 1)))
+	Ok((Difficulty::from_num(max(difficulty, 1)), sec_pow_scaling))
+}
+
+/// Factor by which the secondary proof of work difficulty will be adjusted
+fn secondary_pow_scaling(
+	diff_data: &Vec<Result<(u64, Difficulty, Option<u64>), TargetError>>,
+) -> u64 {
+
+	// median of past scaling factors, scaling is 1 if none found
+	let mut scalings  = diff_data.iter().filter_map(|n| n.clone().unwrap().2).collect::<Vec<_>>();
+	if scalings.len() == 0 {
+		return 1;
+	}
+	scalings.sort();
+	let scaling_median = scalings[scalings.len() / 2];
+
+	// what's the ideal ratio at the current height
+	let ratio = secondary_pow_ratio(diff_data.last().unwrap().clone().unwrap().0 + 1);
+
+	// adjust the past median based on ideal ratio vs actual ratio
+	scaling_median * ratio * diff_data.len() as u64 / scalings.len() as u64 / 100
+}
+
+/// Median timestamp within the time window starting at `from` with the
+/// provided `length`.
+fn time_window_median(
+	diff_data: &Vec<Result<(u64, Difficulty, Option<u64>), TargetError>>,
+	from: usize,
+	length: usize
+) -> u64 {
+
+	let mut window_latest: Vec<u64> = diff_data
+		.iter()
+		.skip(from)
+		.take(length)
+		.map(|n| n.clone().unwrap().0)
+		.collect();
+	// pick median
+	window_latest.sort();
+	window_latest[MEDIAN_TIME_INDEX as usize]
 }
 
 /// Consensus rule that collections of items are sorted lexicographically.

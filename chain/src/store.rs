@@ -524,7 +524,7 @@ impl<'a> DifficultyIter<'a> {
 }
 
 impl<'a> Iterator for DifficultyIter<'a> {
-	type Item = Result<(u64, Difficulty), TargetError>;
+	type Item = Result<(u64, Difficulty, Option<u64>), TargetError>;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		// Get both header and previous_header if this is the initial iteration.
@@ -545,8 +545,13 @@ impl<'a> Iterator for DifficultyIter<'a> {
 				.clone()
 				.map_or(Difficulty::zero(), |x| x.total_difficulty());
 			let difficulty = header.total_difficulty() - prev_difficulty;
+			let scaling = if header.pow.is_secondary() {
+				Some(header.pow.scaling_difficulty)
+			} else {
+				None
+			};
 
-			Some(Ok((header.timestamp.timestamp() as u64, difficulty)))
+			Some(Ok((header.timestamp.timestamp() as u64, difficulty, scaling)))
 		} else {
 			return None;
 		}

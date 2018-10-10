@@ -295,6 +295,22 @@ impl ProofOfWork {
 	pub fn cuckoo_sizeshift(&self) -> u8 {
 		self.proof.cuckoo_sizeshift
 	}
+
+	/// Whether this proof of work is for the primary algorithm (as opposed
+	/// to secondary). Only depends on the size shift at this time.
+	pub fn is_primary(&self) -> bool {
+		// 2 first conditions are redundant right now but not necessarily in
+		// the future
+		self.proof.cuckoo_sizeshift != SECOND_POW_SIZESHIFT
+			&& self.proof.cuckoo_sizeshift > global::min_sizeshift()
+			&& self.scaling_difficulty == 1
+	}
+
+	/// Whether this proof of work is for the secondary algorithm (as opposed
+	/// to primary). Only depends on the size shift at this time.
+	pub fn is_secondary(&self) -> bool {
+		self.proof.cuckoo_sizeshift == SECOND_POW_SIZESHIFT
+	}
 }
 
 /// A Cuckoo Cycle proof of work, consisting of the shift to get the graph

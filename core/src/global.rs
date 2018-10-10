@@ -16,7 +16,7 @@
 //! having to pass them all over the place, but aren't consensus values.
 //! should be used sparingly.
 
-use consensus::TargetError;
+use consensus::{TargetError, secondary_pow_ratio};
 use consensus::{
 	BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_MIN_SIZESHIFT,
 	DIFFICULTY_ADJUST_WINDOW, EASINESS, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
@@ -248,13 +248,13 @@ pub fn get_genesis_nonce() -> u64 {
 /// vector and pads if needed (which will) only be needed for the first few
 /// blocks after genesis
 
-pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<Result<(u64, Difficulty), TargetError>>
+pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<Result<(u64, Difficulty, Option<u64>), TargetError>>
 where
-	T: IntoIterator<Item = Result<(u64, Difficulty), TargetError>>,
+	T: IntoIterator<Item = Result<(u64, Difficulty, Option<u64>), TargetError>>,
 {
 	// Convert iterator to vector, so we can append to it if necessary
 	let needed_block_count = (MEDIAN_TIME_WINDOW + DIFFICULTY_ADJUST_WINDOW) as usize;
-	let mut last_n: Vec<Result<(u64, Difficulty), TargetError>> =
+	let mut last_n: Vec<Result<(u64, Difficulty, Option<u64>), TargetError>> =
 		cursor.into_iter().take(needed_block_count).collect();
 
 	// Sort blocks from earliest to latest (to keep conceptually easier)
@@ -289,9 +289,14 @@ where
 		let last_diff = live_intervals[live_intervals.len() - 1].1;
 		// fill in simulated blocks with values from the previous real block
 
-		for _ in 0..block_count_difference {
+		for n in 0..block_count_difference {
 			last_ts = last_ts.saturating_sub(live_intervals[live_intervals.len() - 1].0);
-			last_n.insert(0, Ok((last_ts, last_diff.clone())));
+			let pow_factor = if n % 10 < secondary_pow_ratio(n as u64) as usize / 10 {
+				Some(1)
+			} else {
+				None
+			};
+			last_n.insert(0, Ok((last_ts, last_diff.clone(), pow_factor)));
 			interval_index = match interval_index {
 				0 => live_intervals.len() - 1,
 				_ => interval_index - 1,

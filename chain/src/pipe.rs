@@ -364,16 +364,10 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	if !ctx.opts.contains(Options::SKIP_POW) {
+		if !header.pow.is_primary() && !header.pow.is_secondary() {
+			return Err(ErrorKind::InvalidSizeshift.into());
+		}
 		let shift = header.pow.cuckoo_sizeshift();
-		// size shift can either be larger than the minimum on the primary PoW
-		// or equal to the seconday PoW size shift
-		if shift != consensus::SECOND_POW_SIZESHIFT && global::min_sizeshift() > shift {
-			return Err(ErrorKind::LowSizeshift.into());
-		}
-		// primary PoW must have a scaling factor of 1
-		if shift != consensus::SECOND_POW_SIZESHIFT && header.pow.scaling_difficulty != 1 {
-			return Err(ErrorKind::InvalidScaling.into());
-		}
 		if !(ctx.pow_verifier)(header, shift).is_ok() {
 			error!(
 				LOGGER,
@@ -435,16 +429,22 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		// (during testnet1 we use _block_ difficulty here)
 		let child_batch = ctx.batch.child()?;
 		let diff_iter = store::DifficultyIter::from(header.previous, child_batch);
-		let network_difficulty = consensus::next_difficulty(diff_iter)
+		let (network_difficulty, network_scaling_difficulty) =
+			consensus::next_difficulty(diff_iter)
 			.context(ErrorKind::Other("network difficulty".to_owned()))?;
 		if target_difficulty != network_difficulty.clone() {
-			error!(
+			info!(
 				LOGGER,
 				"validate_header: header target difficulty {} != {}",
 				target_difficulty.to_num(),
 				network_difficulty.to_num()
 			);
 			return Err(ErrorKind::WrongTotalDifficulty.into());
+		}
+		// check the secondary PoW scaling factor if applicable
+		if header.pow.is_secondary() && header.pow.scaling_difficulty != network_scaling_difficulty {
+
+			return Err(ErrorKind::InvalidScaling.into());
 		}
 	}
 
