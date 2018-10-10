@@ -302,7 +302,7 @@ impl ProofOfWork {
 		// 2 first conditions are redundant right now but not necessarily in
 		// the future
 		self.proof.cuckoo_sizeshift != SECOND_POW_SIZESHIFT
-			&& self.proof.cuckoo_sizeshift > global::min_sizeshift()
+			&& self.proof.cuckoo_sizeshift >= global::min_sizeshift()
 			&& self.scaling_difficulty == 1
 	}
 

@@ -82,7 +82,7 @@ fn repeat(
 	diff: u64,
 	len: u64,
 	cur_time: Option<u64>,
-) -> Vec<Result<(u64, Difficulty), TargetError>> {
+) -> Vec<Result<(u64, Difficulty, Option<u64>), TargetError>> {
 	let cur_time = match cur_time {
 		Some(t) => t,
 		None => Utc::now().timestamp() as u64,
@@ -93,12 +93,12 @@ fn repeat(
 	let times = (0..(len as usize)).map(|n| n * interval as usize).rev();
 	let pairs = times.zip(diffs.iter());
 	pairs
-		.map(|(t, d)| Ok((cur_time + t as u64, d.clone())))
+		.map(|(t, d)| Ok((cur_time + t as u64, d.clone(), None)))
 		.collect::<Vec<_>>()
 }
 
 // Creates a new chain with a genesis at a simulated difficulty
-fn create_chain_sim(diff: u64) -> Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)> {
+fn create_chain_sim(diff: u64) -> Vec<((Result<(u64, Difficulty, Option<u64>), TargetError>), DiffStats)> {
 	println!(
 		"adding create: {}, {}",
 		Utc::now().timestamp(),
@@ -107,18 +107,19 @@ fn create_chain_sim(diff: u64) -> Vec<((Result<(u64, Difficulty), TargetError>),
 	let return_vec = vec![Ok((
 		Utc::now().timestamp() as u64,
 		Difficulty::from_num(diff),
+		None,
 	))];
 	let diff_stats = get_diff_stats(&return_vec);
 	vec![(
-		Ok((Utc::now().timestamp() as u64, Difficulty::from_num(diff))),
+		Ok((Utc::now().timestamp() as u64, Difficulty::from_num(diff), None)),
 		diff_stats,
 	)]
 }
 
-fn get_diff_stats(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) -> DiffStats {
+fn get_diff_stats(chain_sim: &Vec<Result<(u64, Difficulty, Option<u64>), TargetError>>) -> DiffStats {
 	// Fill out some difficulty stats for convenience
 	let diff_iter = chain_sim.clone();
-	let last_blocks: Vec<Result<(u64, Difficulty), TargetError>> =
+	let last_blocks: Vec<Result<(u64, Difficulty, Option<u64>), TargetError>> =
 		global::difficulty_data_to_vector(diff_iter.clone());
 
 	let mut last_time = last_blocks[0].clone().unwrap().0;
@@ -151,7 +152,7 @@ fn get_diff_stats(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) -> Di
 
 	let mut i = 1;
 
-	let sum_blocks: Vec<Result<(u64, Difficulty), TargetError>> = global::difficulty_data_to_vector(
+	let sum_blocks: Vec<Result<(u64, Difficulty, Option<u64>), TargetError>> = global::difficulty_data_to_vector(
 		diff_iter,
 	).into_iter()
 		.skip(MEDIAN_TIME_WINDOW as usize)
@@ -162,7 +163,7 @@ fn get_diff_stats(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) -> Di
 		.iter()
 		//.skip(1)
 		.map(|n| {
-			let (time, diff) = n.clone().unwrap();
+			let (time, diff, _fact) = n.clone().unwrap();
 			let dur = time - last_time;
 			let height = earliest_block_height + i + 1;
 			i += 1;
@@ -186,7 +187,7 @@ fn get_diff_stats(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) -> Di
 		.iter()
 		.skip(1)
 		.map(|n| {
-			let (time, diff) = n.clone().unwrap();
+			let (time, diff, _fact) = n.clone().unwrap();
 			let dur = time - last_time;
 			let height = earliest_block_height + i;
 			i += 1;
@@ -218,26 +219,26 @@ fn get_diff_stats(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) -> Di
 // from the difficulty adjustment at interval seconds from the previous block
 fn add_block(
 	interval: u64,
-	chain_sim: Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)>,
-) -> Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)> {
+	chain_sim: Vec<((Result<(u64, Difficulty, Option<u64>), TargetError>), DiffStats)>,
+) -> Vec<((Result<(u64, Difficulty, Option<u64>), TargetError>), DiffStats)> {
 	let mut ret_chain_sim = chain_sim.clone();
-	let mut return_chain: Vec<(Result<(u64, Difficulty), TargetError>)> =
+	let mut return_chain: Vec<(Result<(u64, Difficulty, Option<u64>), TargetError>)> =
 		chain_sim.clone().iter().map(|e| e.0.clone()).collect();
 	// get last interval
 	let diff = next_difficulty(return_chain.clone()).unwrap();
 	let last_elem = chain_sim.first().as_ref().unwrap().0.as_ref().unwrap();
 	let time = last_elem.0 + interval;
-	return_chain.insert(0, Ok((time, diff)));
+	return_chain.insert(0, Ok((time, diff.0, None)));
 	let diff_stats = get_diff_stats(&return_chain);
-	ret_chain_sim.insert(0, (Ok((time, diff)), diff_stats));
+	ret_chain_sim.insert(0, (Ok((time, diff.0, None)), diff_stats));
 	ret_chain_sim
 }
 
 // Adds many defined blocks
 fn add_blocks(
 	intervals: Vec<u64>,
-	chain_sim: Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)>,
-) -> Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)> {
+	chain_sim: Vec<((Result<(u64, Difficulty, Option<u64>), TargetError>), DiffStats)>,
+) -> Vec<((Result<(u64, Difficulty, Option<u64>), TargetError>), DiffStats)> {
 	let mut return_chain = chain_sim.clone();
 	for i in intervals {
 		return_chain = add_block(i, return_chain.clone());
@@ -248,9 +249,9 @@ fn add_blocks(
 // Adds another n 'blocks' to the iterator, with difficulty calculated
 fn add_block_repeated(
 	interval: u64,
-	chain_sim: Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)>,
+	chain_sim: Vec<((Result<(u64, Difficulty, Option<u64>), TargetError>), DiffStats)>,
 	iterations: usize,
-) -> Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)> {
+) -> Vec<((Result<(u64, Difficulty, Option<u64>), TargetError>), DiffStats)> {
 	let mut return_chain = chain_sim.clone();
 	for _ in 0..iterations {
 		return_chain = add_block(interval, return_chain.clone());
@@ -260,7 +261,7 @@ fn add_block_repeated(
 
 // Prints the contents of the iterator and its difficulties.. useful for
 // tweaking
-fn print_chain_sim(chain_sim: Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)>) {
+fn print_chain_sim(chain_sim: Vec<((Result<(u64, Difficulty, Option<u64>), TargetError>), DiffStats)>) {
 	let mut chain_sim = chain_sim.clone();
 	chain_sim.reverse();
 	let mut last_time = 0;
@@ -306,11 +307,11 @@ fn repeat_offs(
 	interval: u64,
 	diff: u64,
 	len: u64,
-) -> Vec<Result<(u64, Difficulty), TargetError>> {
+) -> Vec<Result<(u64, Difficulty, Option<u64>), TargetError>> {
 	map_vec!(repeat(interval, diff, len, Some(from)), |e| {
 		match e.clone() {
 			Err(e) => Err(e),
-			Ok((t, d)) => Ok((t, d)),
+			Ok((t, d, f)) => Ok((t, d, f)),
 		}
 	})
 }
@@ -416,25 +417,25 @@ fn next_target_adjustment() {
 	let cur_time = Utc::now().timestamp() as u64;
 
 	assert_eq!(
-		next_difficulty(vec![Ok((cur_time, Difficulty::one()))]).unwrap(),
+		next_difficulty(vec![Ok((cur_time, Difficulty::one(), None))]).unwrap().0,
 		Difficulty::one()
 	);
 
 	assert_eq!(
-		next_difficulty(repeat(60, 1, DIFFICULTY_ADJUST_WINDOW, None)).unwrap(),
+		next_difficulty(repeat(60, 1, DIFFICULTY_ADJUST_WINDOW, None)).unwrap().0,
 		Difficulty::one()
 	);
 
 	// Check we don't get stuck on difficulty 1
 	assert_ne!(
-		next_difficulty(repeat(1, 10, DIFFICULTY_ADJUST_WINDOW, None)).unwrap(),
+		next_difficulty(repeat(1, 10, DIFFICULTY_ADJUST_WINDOW, None)).unwrap().0,
 		Difficulty::one()
 	);
 
 	// just enough data, right interval, should stay constant
 	let just_enough = DIFFICULTY_ADJUST_WINDOW + MEDIAN_TIME_WINDOW;
 	assert_eq!(
-		next_difficulty(repeat(60, 1000, just_enough, None)).unwrap(),
+		next_difficulty(repeat(60, 1000, just_enough, None)).unwrap().0,
 		Difficulty::from_num(1000)
 	);
 
@@ -448,51 +449,51 @@ fn next_target_adjustment() {
 		DIFFICULTY_ADJUST_WINDOW / 2,
 	);
 	s2.append(&mut s1);
-	assert_eq!(next_difficulty(s2).unwrap(), Difficulty::from_num(1000));
+	assert_eq!(next_difficulty(s2).unwrap().0, Difficulty::from_num(1000));
 
 	// too slow, diff goes down
 	assert_eq!(
-		next_difficulty(repeat(90, 1000, just_enough, None)).unwrap(),
+		next_difficulty(repeat(90, 1000, just_enough, None)).unwrap().0,
 		Difficulty::from_num(857)
 	);
 	assert_eq!(
-		next_difficulty(repeat(120, 1000, just_enough, None)).unwrap(),
+		next_difficulty(repeat(120, 1000, just_enough, None)).unwrap().0,
 		Difficulty::from_num(750)
 	);
 
 	// too fast, diff goes up
 	assert_eq!(
-		next_difficulty(repeat(55, 1000, just_enough, None)).unwrap(),
+		next_difficulty(repeat(55, 1000, just_enough, None)).unwrap().0,
 		Difficulty::from_num(1028)
 	);
 	assert_eq!(
-		next_difficulty(repeat(45, 1000, just_enough, None)).unwrap(),
+		next_difficulty(repeat(45, 1000, just_enough, None)).unwrap().0,
 		Difficulty::from_num(1090)
 	);
 
 	// hitting lower time bound, should always get the same result below
 	assert_eq!(
-		next_difficulty(repeat(0, 1000, just_enough, None)).unwrap(),
+		next_difficulty(repeat(0, 1000, just_enough, None)).unwrap().0,
 		Difficulty::from_num(1500)
 	);
 	assert_eq!(
-		next_difficulty(repeat(0, 1000, just_enough, None)).unwrap(),
+		next_difficulty(repeat(0, 1000, just_enough, None)).unwrap().0,
 		Difficulty::from_num(1500)
 	);
 
 	// hitting higher time bound, should always get the same result above
 	assert_eq!(
-		next_difficulty(repeat(300, 1000, just_enough, None)).unwrap(),
+		next_difficulty(repeat(300, 1000, just_enough, None)).unwrap().0,
 		Difficulty::from_num(500)
 	);
 	assert_eq!(
-		next_difficulty(repeat(400, 1000, just_enough, None)).unwrap(),
+		next_difficulty(repeat(400, 1000, just_enough, None)).unwrap().0,
 		Difficulty::from_num(500)
 	);
 
 	// We should never drop below 1
 	assert_eq!(
-		next_difficulty(repeat(90, 0, just_enough, None)).unwrap(),
+		next_difficulty(repeat(90, 0, just_enough, None)).unwrap().0,
 		Difficulty::from_num(1)
 	);
 }

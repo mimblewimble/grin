@@ -67,7 +67,7 @@ fn mine_empty_chain() {
 		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
 		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 		let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
-		let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
+		let mut b = core::core::Block::new(&prev, vec![], difficulty.clone().0, reward).unwrap();
 		b.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 		chain.set_txhashset_roots(&mut b, false).unwrap();
@@ -78,7 +78,7 @@ fn mine_empty_chain() {
 			global::min_sizeshift()
 		};
 		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
-		pow::pow_size(&mut b.header, difficulty, global::proofsize(), sizeshift).unwrap();
+		pow::pow_size(&mut b.header, difficulty.0, global::proofsize(), sizeshift).unwrap();
 		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
 
 		let bhash = b.hash();
@@ -383,7 +383,7 @@ fn output_header_mappings() {
 		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 		let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
 		reward_outputs.push(reward.0.clone());
-		let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
+		let mut b = core::core::Block::new(&prev, vec![], difficulty.clone().0, reward).unwrap();
 		b.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 		chain.set_txhashset_roots(&mut b, false).unwrap();
@@ -394,7 +394,7 @@ fn output_header_mappings() {
 			global::min_sizeshift()
 		};
 		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
-		pow::pow_size(&mut b.header, difficulty, global::proofsize(), sizeshift).unwrap();
+		pow::pow_size(&mut b.header, difficulty.0, global::proofsize(), sizeshift).unwrap();
 		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
 
 		chain.process_block(b, chain::Options::MINE).unwrap();

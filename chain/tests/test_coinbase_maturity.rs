@@ -78,7 +78,7 @@ fn test_coinbase_maturity() {
 
 	pow::pow_size(
 		&mut block.header,
-		difficulty,
+		difficulty.0,
 		global::proofsize(),
 		global::min_sizeshift(),
 	).unwrap();
@@ -135,7 +135,7 @@ fn test_coinbase_maturity() {
 
 	pow::pow_size(
 		&mut block.header,
-		difficulty,
+		difficulty.0,
 		global::proofsize(),
 		global::min_sizeshift(),
 	).unwrap();
@@ -158,7 +158,7 @@ fn test_coinbase_maturity() {
 
 		pow::pow_size(
 			&mut block.header,
-			difficulty,
+			difficulty.0,
 			global::proofsize(),
 			global::min_sizeshift(),
 		).unwrap();
@@ -185,7 +185,7 @@ fn test_coinbase_maturity() {
 
 	pow::pow_size(
 		&mut block.header,
-		difficulty,
+		difficulty.0,
 		global::proofsize(),
 		global::min_sizeshift(),
 	).unwrap();
