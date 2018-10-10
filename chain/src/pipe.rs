@@ -430,7 +430,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		let child_batch = ctx.batch.child()?;
 		let diff_iter = store::DifficultyIter::from_batch(header.previous, child_batch);
 		let (network_difficulty, network_scaling_difficulty) =
-			consensus::next_difficulty(diff_iter)
+			consensus::next_difficulty(header.height, diff_iter)
 			.context(ErrorKind::Other("network difficulty".to_owned()))?;
 		if target_difficulty != network_difficulty.clone() {
 			info!(

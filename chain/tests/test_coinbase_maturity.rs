@@ -72,7 +72,7 @@ fn test_coinbase_maturity() {
 	let mut block = core::core::Block::new(&prev, vec![], Difficulty::one(), reward).unwrap();
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
-	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+	let difficulty = consensus::next_difficulty(1, chain.difficulty_iter()).unwrap();
 
 	chain.set_txhashset_roots(&mut block, false).unwrap();
 
@@ -119,7 +119,7 @@ fn test_coinbase_maturity() {
 	let mut block = core::core::Block::new(&prev, txs, Difficulty::one(), reward).unwrap();
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
-	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+	let difficulty = consensus::next_difficulty(1, chain.difficulty_iter()).unwrap();
 
 	chain.set_txhashset_roots(&mut block, false).unwrap();
 
@@ -152,7 +152,7 @@ fn test_coinbase_maturity() {
 		let mut block = core::core::Block::new(&prev, vec![], Difficulty::one(), reward).unwrap();
 		block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
-		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+		let difficulty = consensus::next_difficulty(1, chain.difficulty_iter()).unwrap();
 
 		chain.set_txhashset_roots(&mut block, false).unwrap();
 
@@ -179,7 +179,7 @@ fn test_coinbase_maturity() {
 
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
-	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+	let difficulty = consensus::next_difficulty(1, chain.difficulty_iter()).unwrap();
 
 	chain.set_txhashset_roots(&mut block, false).unwrap();
 

@@ -82,7 +82,7 @@ fn data_files() {
 
 		for n in 1..4 {
 			let prev = chain.head_header().unwrap();
-			let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+			let difficulty = consensus::next_difficulty(1, chain.difficulty_iter()).unwrap();
 			let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 			let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
 			let mut b = core::core::Block::new(&prev, vec![], difficulty.clone().0, reward).unwrap();

@@ -193,7 +193,7 @@ impl fmt::Display for TargetError {
 /// DIFFICULTY_ADJUST_WINDOW blocks. The corresponding timespan is calculated
 /// by using the difference between the median timestamps at the beginning
 /// and the end of the window.
-pub fn next_difficulty<T>(cursor: T) -> Result<(Difficulty, u64), TargetError>
+pub fn next_difficulty<T>(height: u64, cursor: T) -> Result<(Difficulty, u64), TargetError>
 where
 	T: IntoIterator<Item = Result<(u64, Difficulty, Option<u64>), TargetError>>,
 {
@@ -204,7 +204,7 @@ where
 	let diff_data = global::difficulty_data_to_vector(cursor);
 
 	// First, get the ratio of secondary PoW vs primary
-	let sec_pow_scaling = secondary_pow_scaling(&diff_data);
+	let sec_pow_scaling = secondary_pow_scaling(height, &diff_data);
 
 	// Obtain the median window for the earlier time period
 	// the first MEDIAN_TIME_WINDOW elements	
@@ -246,6 +246,7 @@ where
 
 /// Factor by which the secondary proof of work difficulty will be adjusted
 fn secondary_pow_scaling(
+	height: u64,
 	diff_data: &Vec<Result<(u64, Difficulty, Option<u64>), TargetError>>,
 ) -> u64 {
 
@@ -258,10 +259,16 @@ fn secondary_pow_scaling(
 	let scaling_median = scalings[scalings.len() / 2];
 
 	// what's the ideal ratio at the current height
-	let ratio = secondary_pow_ratio(diff_data.last().unwrap().clone().unwrap().0 + 1);
+	let ratio = secondary_pow_ratio(height);
+	println!("== {} {} {} {}", scaling_median, ratio, diff_data.len(), scalings.len());
 
 	// adjust the past median based on ideal ratio vs actual ratio
-	scaling_median * ratio * diff_data.len() as u64 / scalings.len() as u64 / 100
+	let scaling = scaling_median * scalings.len() as u64 * 100 / ratio / diff_data.len() as u64;
+	if scaling == 0 {
+		1
+	} else {
+		scaling
+	}
 }
 
 /// Median timestamp within the time window starting at `from` with the

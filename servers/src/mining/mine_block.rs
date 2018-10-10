@@ -106,7 +106,7 @@ fn build_block(
 
 	// Determine the difficulty our block should be at.
 	// Note: do not keep the difficulty_iter in scope (it has an active batch).
-	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+	let difficulty = consensus::next_difficulty(1, chain.difficulty_iter()).unwrap();
 
 	// extract current transaction from the pool
 	// TODO - we have a lot of unwrap() going on in this fn...
@@ -136,6 +136,7 @@ fn build_block(
 	)?;
 
 	b.header.pow.nonce = thread_rng().gen();
+	b.header.pow.scaling_difficulty = difficulty.1;
 	b.header.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_sec, 0), Utc);;
 
 	let b_difficulty = (b.header.total_difficulty() - head.total_difficulty()).to_num();
