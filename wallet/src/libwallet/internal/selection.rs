@@ -415,8 +415,7 @@ where
 		.filter(|out| {
 			out.root_key_id == *parent_key_id
 				&& out.eligible_to_spend(current_height, minimum_confirmations)
-		})
-		.collect::<Vec<OutputData>>();
+		}).collect::<Vec<OutputData>>();
 
 	let max_available = eligible.len();
 
@@ -479,8 +478,7 @@ fn select_from(amount: u64, select_all: bool, outputs: Vec<OutputData>) -> Optio
 						let res = selected_amount < amount;
 						selected_amount += out.value;
 						res
-					})
-					.cloned()
+					}).cloned()
 					.collect(),
 			);
 		}

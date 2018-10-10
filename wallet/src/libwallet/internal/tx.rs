@@ -228,13 +228,8 @@ where
 
 	let fee = tx_fee(coins.len(), 2, 1, None);
 	let num_change_outputs = 1;
-	let (mut parts, _) = selection::inputs_and_change(
-		&coins,
-		wallet,
-		amount,
-		fee,
-		num_change_outputs,
-	)?;
+	let (mut parts, _) =
+		selection::inputs_and_change(&coins, wallet, amount, fee, num_change_outputs)?;
 
 	//TODO: If we end up using this, create change output here
 
