@@ -44,7 +44,7 @@ note right of recipient
 	4: Calculate message **M** = **fee | lock_height **
 	5: Choose random nonce **kR** (private scalar)
 	6: Multiply **xR** and **kR** by generator G to create public curve points **xRG** and **kRG**
-	7: Compute Schnorr challenge **e** = SHA256(**kRG** + **kSG** | **xRG** + **kSG** | **M**)
+	7: Compute Schnorr challenge **e** = SHA256(**kRG** + **kSG** | **xRG** + **xSG** | **M**)
 	8: Compute Recipient Schnorr signature **sR** = **kR** + **e** * **xR**
 	9: Add **sR, xRG, kRG** to **Slate**
 	10: Create wallet output function **rF** that stores **receiver_output** in wallet with status "Unconfirmed"
@@ -61,7 +61,7 @@ end
 == Finalize Transaction ==
 note left of sender
 	1: Calculate message **M** = **fee | lock_height **
-	2: Compute Schnorr challenge **e** = SHA256(**kRG** + **kSG** | **xRG** + **kSG** | **M**)
+	2: Compute Schnorr challenge **e** = SHA256(**kRG** + **kSG** | **xRG** + **xSG** | **M**)
 	3: Verify **sR** by verifying **kRG** + **e** * **xRG** = **sRG**
 	4: Compute Sender Schnorr signature **sS** = **kS** + **e** * **xS**
 	5: Calculate final signature **s** = (**kSG**+**kRG**, **sS**+**sR**)
