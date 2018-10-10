@@ -397,12 +397,13 @@ impl Server {
 		// code clean. This may be handy for testing but not really needed
 		// for release
 		let diff_stats = {
-			let last_blocks: Vec<Result<(u64, Difficulty, Option<u64>), consensus::TargetError>> =
-				global::difficulty_data_to_vector(self.chain.difficulty_iter())
-					.into_iter()
-					.skip(consensus::MEDIAN_TIME_WINDOW as usize)
-					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
-					.collect();
+			let last_blocks: Vec<
+				Result<(u64, Difficulty, Option<u64>), consensus::TargetError>,
+			> = global::difficulty_data_to_vector(self.chain.difficulty_iter())
+				.into_iter()
+				.skip(consensus::MEDIAN_TIME_WINDOW as usize)
+				.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
+				.collect();
 
 			let mut last_time = last_blocks[0].clone().unwrap().0;
 			let tip_height = self.chain.head().unwrap().height as i64;
