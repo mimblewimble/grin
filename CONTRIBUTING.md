@@ -15,7 +15,9 @@ If any help is needed during your effort to contribute on this project, please d
 * [Forum](https://www.grin-forum.org/)
 * [Website](https://grin-tech.org)
 * Mailing list: join the [~MimbleWimble team](https://launchpad.net/~mimblewimble) and subscribe on Launchpad.
-* News: [Twitter](https://twitter.com/grinmw). Twitter bot that scrapes headlines, mailing list, and reddit posts related to MimbleWinble/Grin.
+* News: 
+  * Twitter for the Grin council: [@grincouncil](https://twitter.com/grincouncil)
+  * Twitter bot that scrapes headlines, mailing list, and reddit posts related to MimbleWinble/Grin: [@grinmw](https://twitter.com/grinmw)
 
 # Pull-Request Title Prefix
 
