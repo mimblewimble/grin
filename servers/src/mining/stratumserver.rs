@@ -30,7 +30,7 @@ use common::stats::{StratumStats, WorkerStats};
 use common::types::{StratumServerConfig, SyncState};
 use core::core::verifier_cache::VerifierCache;
 use core::core::Block;
-use core::{global, pow, ser};
+use core::{pow, ser};
 use keychain;
 use mining::mine_block;
 use pool;

@@ -116,7 +116,6 @@ where
 
 		// write the output representing our change
 		for (change_amount, id) in &change_amounts_derivations {
-			let change_id = keychain.derive_key(&id).unwrap();
 			t.num_outputs += 1;
 			t.amount_credited += change_amount;
 			batch.save(OutputData {
@@ -311,7 +310,7 @@ where
 
 	// build transaction skeleton with inputs and change
 	let (mut parts, change_amounts_derivations) =
-		inputs_and_change(&coins, wallet, amount, fee, change_outputs, parent_key_id)?;
+		inputs_and_change(&coins, wallet, amount, fee, change_outputs)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
@@ -327,7 +326,6 @@ pub fn inputs_and_change<T: ?Sized, C, K>(
 	amount: u64,
 	fee: u64,
 	num_change_outputs: usize,
-	parent_key_id: &Identifier,
 ) -> Result<(Vec<Box<build::Append<K>>>, Vec<(u64, Identifier)>), Error>
 where
 	T: WalletBackend<C, K>,
@@ -379,7 +377,6 @@ where
 				part_change
 			};
 
-			let keychain = wallet.keychain().clone();
 			let change_key = wallet.next_child().unwrap();
 
 			change_amounts_derivations.push((change_amount, change_key.clone()));
@@ -418,8 +415,7 @@ where
 		.filter(|out| {
 			out.root_key_id == *parent_key_id
 				&& out.eligible_to_spend(current_height, minimum_confirmations)
-		})
-		.collect::<Vec<OutputData>>();
+		}).collect::<Vec<OutputData>>();
 
 	let max_available = eligible.len();
 
@@ -482,8 +478,7 @@ fn select_from(amount: u64, select_all: bool, outputs: Vec<OutputData>) -> Optio
 						let res = selected_amount < amount;
 						selected_amount += out.value;
 						res
-					})
-					.cloned()
+					}).cloned()
 					.collect(),
 			);
 		}

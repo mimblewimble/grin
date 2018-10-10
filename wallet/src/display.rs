@@ -214,7 +214,7 @@ pub fn info(account: &str, wallet_info: &WalletInfo, validated: bool) {
 	}
 }
 /// Display list of wallet accounts in a pretty way
-pub fn accounts(acct_mappings: Vec<AcctPathMapping>, show_derivations: bool) {
+pub fn accounts(acct_mappings: Vec<AcctPathMapping>) {
 	println!("\n____ Wallet Accounts ____\n",);
 	let mut table = table!();
 
