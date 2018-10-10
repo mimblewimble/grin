@@ -84,7 +84,7 @@ impl Difficulty {
 	/// Computes the difficulty from a hash. Divides the maximum target by the
 	/// provided hash and applies the Cuckoo sizeshift adjustment factor (see
 	/// https://lists.launchpad.net/mimblewimble/msg00494.html).
-	pub fn from_proof_adjusted(proof: &Proof) -> Difficulty {
+	fn from_proof_adjusted(proof: &Proof) -> Difficulty {
 		// Adjust the difficulty based on a 2^(N-M)*(N-1) factor, with M being
 		// the minimum sizeshift and N the provided sizeshift
 		let shift = proof.cuckoo_sizeshift;
@@ -96,7 +96,7 @@ impl Difficulty {
 	/// Same as `from_proof_adjusted` but instead of an adjustment based on
 	/// cycle size, scales based on a provided factor. Used by dual PoW system
 	/// to scale one PoW against the other.
-	pub fn from_proof_scaled(proof: &Proof, scaling: u64) -> Difficulty {
+	fn from_proof_scaled(proof: &Proof, scaling: u64) -> Difficulty {
 		// Scaling between 2 proof of work algos
 		Difficulty::from_num(proof.raw_difficulty() * scaling)
 	}

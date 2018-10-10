@@ -397,7 +397,7 @@ impl Server {
 		// code clean. This may be handy for testing but not really needed
 		// for release
 		let diff_stats = {
-			let last_blocks: Vec<Result<(u64, Difficulty), consensus::TargetError>> =
+			let last_blocks: Vec<Result<(u64, Difficulty, Option<u64>), consensus::TargetError>> =
 				global::difficulty_data_to_vector(self.chain.difficulty_iter())
 					.into_iter()
 					.skip(consensus::MEDIAN_TIME_WINDOW as usize)
@@ -414,7 +414,7 @@ impl Server {
 				.iter()
 				.skip(1)
 				.map(|n| {
-					let (time, diff) = n.clone().unwrap();
+					let (time, diff, _fact) = n.clone().unwrap();
 					let dur = time - last_time;
 					let height = earliest_block_height + i + 1;
 					i += 1;

@@ -93,14 +93,14 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbDa
 	let mut b = core::core::Block::new(
 		&prev,
 		txs.into_iter().cloned().collect(),
-		difficulty.clone(),
+		difficulty.clone().0,
 		(output, kernel),
 	).unwrap();
 	b.header.timestamp = prev.timestamp + Duration::seconds(60);
 	chain.set_txhashset_roots(&mut b, false).unwrap();
 	pow::pow_size(
 		&mut b.header,
-		difficulty,
+		difficulty.0,
 		global::proofsize(),
 		global::min_sizeshift(),
 	).unwrap();
