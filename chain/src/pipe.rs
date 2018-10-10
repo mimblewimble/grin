@@ -431,7 +431,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		let diff_iter = store::DifficultyIter::from_batch(header.previous, child_batch);
 		let (network_difficulty, network_scaling_difficulty) =
 			consensus::next_difficulty(header.height, diff_iter)
-			.context(ErrorKind::Other("network difficulty".to_owned()))?;
+				.context(ErrorKind::Other("network difficulty".to_owned()))?;
 		if target_difficulty != network_difficulty.clone() {
 			info!(
 				LOGGER,
@@ -442,8 +442,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			return Err(ErrorKind::WrongTotalDifficulty.into());
 		}
 		// check the secondary PoW scaling factor if applicable
-		if header.pow.is_secondary() && header.pow.scaling_difficulty != network_scaling_difficulty {
-
+		if header.pow.is_secondary() && header.pow.scaling_difficulty != network_scaling_difficulty
+		{
 			return Err(ErrorKind::InvalidScaling.into());
 		}
 	}

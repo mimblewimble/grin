@@ -207,12 +207,16 @@ where
 	let sec_pow_scaling = secondary_pow_scaling(height, &diff_data);
 
 	// Obtain the median window for the earlier time period
-	// the first MEDIAN_TIME_WINDOW elements	
+	// the first MEDIAN_TIME_WINDOW elements
 	let earliest_ts = time_window_median(&diff_data, 0, MEDIAN_TIME_WINDOW as usize);
 
 	// Obtain the median window for the latest time period
 	// i.e. the last MEDIAN_TIME_WINDOW elements
-	let latest_ts = time_window_median(&diff_data, DIFFICULTY_ADJUST_WINDOW as usize, MEDIAN_TIME_WINDOW as usize);
+	let latest_ts = time_window_median(
+		&diff_data,
+		DIFFICULTY_ADJUST_WINDOW as usize,
+		MEDIAN_TIME_WINDOW as usize,
+	);
 
 	// median time delta
 	let ts_delta = latest_ts - earliest_ts;
@@ -249,9 +253,11 @@ fn secondary_pow_scaling(
 	height: u64,
 	diff_data: &Vec<Result<(u64, Difficulty, Option<u64>), TargetError>>,
 ) -> u64 {
-
 	// median of past scaling factors, scaling is 1 if none found
-	let mut scalings  = diff_data.iter().filter_map(|n| n.clone().unwrap().2).collect::<Vec<_>>();
+	let mut scalings = diff_data
+		.iter()
+		.filter_map(|n| n.clone().unwrap().2)
+		.collect::<Vec<_>>();
 	if scalings.len() == 0 {
 		return 1;
 	}
@@ -260,7 +266,13 @@ fn secondary_pow_scaling(
 
 	// what's the ideal ratio at the current height
 	let ratio = secondary_pow_ratio(height);
-	println!("== {} {} {} {}", scaling_median, ratio, diff_data.len(), scalings.len());
+	println!(
+		"== {} {} {} {}",
+		scaling_median,
+		ratio,
+		diff_data.len(),
+		scalings.len()
+	);
 
 	// adjust the past median based on ideal ratio vs actual ratio
 	let scaling = scaling_median * scalings.len() as u64 * 100 / ratio / diff_data.len() as u64;
@@ -276,9 +288,8 @@ fn secondary_pow_scaling(
 fn time_window_median(
 	diff_data: &Vec<Result<(u64, Difficulty, Option<u64>), TargetError>>,
 	from: usize,
-	length: usize
+	length: usize,
 ) -> u64 {
-
 	let mut window_latest: Vec<u64> = diff_data
 		.iter()
 		.skip(from)

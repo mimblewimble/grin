@@ -85,7 +85,8 @@ fn data_files() {
 			let difficulty = consensus::next_difficulty(1, chain.difficulty_iter()).unwrap();
 			let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 			let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
-			let mut b = core::core::Block::new(&prev, vec![], difficulty.clone().0, reward).unwrap();
+			let mut b =
+				core::core::Block::new(&prev, vec![], difficulty.clone().0, reward).unwrap();
 			b.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 			chain.set_txhashset_roots(&mut b, false).unwrap();
