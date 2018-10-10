@@ -153,6 +153,7 @@ pub struct Chain {
 	// POW verification function
 	pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
 	archive_mode: bool,
+	genesis: BlockHeader,
 }
 
 unsafe impl Sync for Chain {}
@@ -178,7 +179,7 @@ impl Chain {
 		// open the txhashset, creating a new one if necessary
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
-		setup_head(genesis, store.clone(), &mut txhashset)?;
+		setup_head(genesis.clone(), store.clone(), &mut txhashset)?;
 
 		let head = store.head()?;
 		debug!(
@@ -199,6 +200,7 @@ impl Chain {
 			verifier_cache,
 			block_hashes_cache: Arc::new(RwLock::new(LruCache::new(HASHES_CACHE_SIZE))),
 			archive_mode,
+			genesis: genesis.header.clone(),
 		})
 	}
 
@@ -246,54 +248,52 @@ impl Chain {
 
 				Ok(head)
 			}
-			Err(e) => {
-				match e.kind() {
-					ErrorKind::Orphan => {
-						let block_hash = b.hash();
-						let orphan = Orphan {
-							block: b,
-							opts: opts,
-							added: Instant::now(),
-						};
+			Err(e) => match e.kind() {
+				ErrorKind::Orphan => {
+					let block_hash = b.hash();
+					let orphan = Orphan {
+						block: b,
+						opts: opts,
+						added: Instant::now(),
+					};
 
-						&self.orphans.add(orphan);
+					&self.orphans.add(orphan);
 
-						debug!(
-							LOGGER,
-							"process_block: orphan: {:?}, # orphans {}{}",
-							block_hash,
-							self.orphans.len(),
-							if self.orphans.len_evicted() > 0 {
-								format!(", # evicted {}", self.orphans.len_evicted())
-							} else {
-								String::new()
-							},
-						);
-						Err(ErrorKind::Orphan.into())
-					}
-					ErrorKind::Unfit(ref msg) => {
-						debug!(
-							LOGGER,
-							"Block {} at {} is unfit at this time: {}",
-							b.hash(),
-							b.header.height,
-							msg
-						);
-						Err(ErrorKind::Unfit(msg.clone()).into())
-					}
-					_ => {
-						info!(
-							LOGGER,
-							"Rejected block {} at {}: {:?}",
-							b.hash(),
-							b.header.height,
-							e
-						);
-						add_to_hash_cache(b.hash());
-						Err(ErrorKind::Other(format!("{:?}", e).to_owned()).into())
-					}
+					debug!(
+						LOGGER,
+						"process_block: orphan: {:?}, # orphans {}{}",
+						block_hash,
+						self.orphans.len(),
+						if self.orphans.len_evicted() > 0 {
+							format!(", # evicted {}", self.orphans.len_evicted())
+						} else {
+							String::new()
+						},
+					);
+					Err(ErrorKind::Orphan.into())
 				}
-			}
+				ErrorKind::Unfit(ref msg) => {
+					debug!(
+						LOGGER,
+						"Block {} at {} is unfit at this time: {}",
+						b.hash(),
+						b.header.height,
+						msg
+					);
+					Err(ErrorKind::Unfit(msg.clone()).into())
+				}
+				_ => {
+					info!(
+						LOGGER,
+						"Rejected block {} at {}: {:?}",
+						b.hash(),
+						b.header.height,
+						e
+					);
+					add_to_hash_cache(b.hash());
+					Err(ErrorKind::Other(format!("{:?}", e).to_owned()).into())
+				}
+			},
 		}
 	}
 
@@ -494,11 +494,15 @@ impl Chain {
 			Ok((extension.roots(), extension.sizes()))
 		})?;
 
+		// Carefully destructure these correctly...
+		// TODO - Maybe sizes should be a struct to add some type safety here...
+		let (_, output_mmr_size, _, kernel_mmr_size) = sizes;
+
 		b.header.output_root = roots.output_root;
 		b.header.range_proof_root = roots.rproof_root;
 		b.header.kernel_root = roots.kernel_root;
-		b.header.output_mmr_size = sizes.0;
-		b.header.kernel_mmr_size = sizes.2;
+		b.header.output_mmr_size = output_mmr_size;
+		b.header.kernel_mmr_size = kernel_mmr_size;
 		Ok(())
 	}
 
@@ -594,6 +598,44 @@ impl Chain {
 		Ok(())
 	}
 
+	fn rebuild_header_mmr(
+		&self,
+		header: &BlockHeader,
+		txhashset: &mut txhashset::TxHashSet,
+	) -> Result<(), Error> {
+		let mut batch = self.store.batch()?;
+
+		let mut header_hashes = vec![];
+		let mut current = header.clone();
+		while current.height > 0 {
+			header_hashes.push(current.hash());
+			current = batch.get_block_header(&current.previous)?;
+		}
+		header_hashes.reverse();
+
+		debug!(
+			LOGGER,
+			"reapplying headers to header MMR {:?} ... {:?}",
+			header_hashes.first(),
+			header_hashes.last()
+		);
+
+		txhashset::header_extending(txhashset, &mut batch, |extension| {
+			// Rewind back to the genesis, leaving genesis in place in the header MMR.
+			extension.rewind(1)?;
+
+			for h in header_hashes {
+				let header = extension.batch.get_block_header(&h)?;
+				extension.apply_header(&header)?;
+			}
+			// extension.validate_header_root()?;
+			Ok(())
+		})?;
+
+		batch.commit()?;
+		Ok(())
+	}
+
 	/// Writes a reading view on a txhashset state that's been provided to us.
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
@@ -620,6 +662,10 @@ impl Chain {
 
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
+
+		// The txhashset.zip contains the output, rangeproof and kernel MMRs.
+		// We must rebuild the header MMR ourselves based on the headers in our db.
+		self.rebuild_header_mmr(&header, &mut txhashset)?;
 
 		// Validate the full kernel history (kernel MMR root for every block header).
 		self.validate_kernel_history(&header, &txhashset)?;
@@ -1044,14 +1090,16 @@ fn setup_head(
 
 			txhashset::extending(txhashset, &mut batch, |extension| {
 				extension.apply_block(&genesis)?;
-
-				// Save the block_sums to the db for use later.
-				extension
-					.batch
-					.save_block_sums(&genesis.hash(), &BlockSums::default())?;
-
+				warn!(
+					LOGGER,
+					"***** sizes here after applying genesis block: {:?}",
+					extension.sizes()
+				);
 				Ok(())
 			})?;
+
+			// Save the block_sums to the db for use later.
+			batch.save_block_sums(&genesis.hash(), &BlockSums::default())?;
 
 			info!(LOGGER, "chain: init: saved genesis: {:?}", genesis.hash());
 		}

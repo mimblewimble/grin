@@ -50,31 +50,6 @@ use byteorder::{BigEndian, WriteBytesExt};
 
 pub use lmdb::*;
 
-/// An iterator thad produces Readable instances back. Wraps the lower level
-/// DBIterator and deserializes the returned values.
-// pub struct SerIterator<T>
-// where
-// 	T: ser::Readable,
-// {
-// 	iter: DBIterator,
-// 	_marker: marker::PhantomData<T>,
-// }
-//
-// impl<T> Iterator for SerIterator<T>
-// where
-// 	T: ser::Readable,
-// {
-// 	type Item = T;
-//
-// 	fn next(&mut self) -> Option<T> {
-// 		let next = self.iter.next();
-// 		next.and_then(|r| {
-// 			let (_, v) = r;
-// 			ser::deserialize(&mut &v[..]).ok()
-// 		})
-// 	}
-// }
-
 /// Build a db key from a prefix and a byte vector identifier.
 pub fn to_key(prefix: u8, k: &mut Vec<u8>) -> Vec<u8> {
 	let mut res = Vec::with_capacity(k.len() + 2);

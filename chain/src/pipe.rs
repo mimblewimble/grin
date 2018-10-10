@@ -91,10 +91,18 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 
 		// Check if this block is already know due it being in the current set of orphan blocks.
 		check_known_orphans(&b.header, ctx)?;
+
+		// Check we have *this* block in the store.
+		// Stop if we have processed this block previously (it is in the store).
+		// This is more expensive than the earlier check_known() as we hit the store.
+		check_known_store(&b.header, ctx)?;
 	}
 
 	// Header specific processing.
-	handle_block_header(&b.header, ctx)?;
+	{
+		handle_block_header(&b.header, ctx)?;
+		update_header_head(&b.header, ctx)?;
+	}
 
 	// Check if are processing the "next" block relative to the current chain head.
 	let head = ctx.batch.head()?;
@@ -104,11 +112,6 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		//   * special case where this is the first fast sync full block
 		// Either way we can proceed (and we know the block is new and unprocessed).
 	} else {
-		// Check we have *this* block in the store.
-		// Stop if we have processed this block previously (it is in the store).
-		// This is more expensive than the earlier check_known() as we hit the store.
-		check_known_store(&b.header, ctx)?;
-
 		// At this point it looks like this is a new block that we have not yet processed.
 		// Check we have the *previous* block in the store.
 		// If we do not then treat this block as an orphan.
@@ -174,12 +177,8 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 	// Add the newly accepted block and header to our index.
 	add_block(b, ctx)?;
 
-	// Update the chain head (and header_head) if total work is increased.
-	let res = {
-		let _ = update_header_head(&b.header, ctx)?;
-		let res = update_head(b, ctx)?;
-		res
-	};
+	// Update the chain head if total work is increased.
+	let res = update_head(b, ctx)?;
 	Ok(res)
 }
 

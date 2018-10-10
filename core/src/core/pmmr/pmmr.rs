@@ -463,6 +463,9 @@ pub fn n_leaves(size: u64) -> u64 {
 
 /// Returns the pmmr index of the nth inserted element
 pub fn insertion_to_pmmr_index(mut sz: u64) -> u64 {
+	if sz == 0 {
+		return 0;
+	}
 	// 1 based pmmrs
 	sz -= 1;
 	2 * sz - sz.count_ones() as u64 + 1

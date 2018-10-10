@@ -18,7 +18,7 @@ use std::{fs, io, marker};
 use croaring::Bitmap;
 
 use core::core::hash::{Hash, Hashed};
-use core::core::pmmr::{self, family, Backend};
+use core::core::pmmr::{self, family, Backend, DBBackend};
 use core::core::BlockHeader;
 use core::ser::{self, PMMRable};
 use leaf_set::LeafSet;
@@ -451,6 +451,91 @@ where
 	}
 }
 
+pub struct DBPMMRBackend<T>
+where
+	T: PMMRable,
+{
+	data_dir: String,
+	hash_file: AppendOnlyFile,
+	_marker: marker::PhantomData<T>,
+}
+
+impl<T> DBBackend<T> for DBPMMRBackend<T>
+where
+	T: PMMRable,
+{
+	fn append(&mut self, position: u64, hashes: Vec<Hash>) -> Result<(), String> {
+		for h in hashes {
+			self.hash_file.append(&mut ser::ser_vec(&h).unwrap());
+		}
+		Ok(())
+	}
+
+	fn rewind(&mut self, position: u64) -> Result<(), String> {
+		let record_len = 32 as u64;
+		let file_pos = position * record_len;
+		self.hash_file.rewind(file_pos);
+		Ok(())
+	}
+
+	fn get_hash(&self, position: u64) -> Option<Hash> {
+		// Read PMMR
+		// The MMR starts at 1, our binary backend starts at 0
+		let pos = position - 1;
+
+		// Must be on disk, doing a read at the correct position
+		let hash_record_len = 32;
+		let file_offset = (pos as usize) * hash_record_len;
+		let data = self.hash_file.read(file_offset, hash_record_len);
+		match ser::deserialize(&mut &data[..]) {
+			Ok(h) => Some(h),
+			Err(e) => {
+				error!(
+					LOGGER,
+					"Corrupted storage, could not read an entry from hash store: {:?}", e
+				);
+				return None;
+			}
+		}
+	}
+}
+
+impl<T> DBPMMRBackend<T>
+where
+	T: PMMRable + ::std::fmt::Debug,
+{
+	/// Instantiates a new PMMR backend.
+	/// Use the provided dir to store its files.
+	pub fn new(data_dir: String) -> io::Result<DBPMMRBackend<T>> {
+		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
+		Ok(DBPMMRBackend {
+			data_dir,
+			hash_file,
+			_marker: marker::PhantomData,
+		})
+	}
+
+	pub fn unpruned_size(&self) -> io::Result<u64> {
+		let record_len = 32;
+		let sz = self.hash_file.size()?;
+		Ok(sz / record_len)
+	}
+
+	pub fn discard(&mut self) {
+		self.hash_file.discard();
+	}
+
+	pub fn sync(&mut self) -> io::Result<()> {
+		if let Err(e) = self.hash_file.flush() {
+			return Err(io::Error::new(
+				io::ErrorKind::Interrupted,
+				format!("Could not write to hash storage, disk full? {:?}", e),
+			));
+		}
+		Ok(())
+	}
+}
+
 /// Filter remove list to exclude roots.
 /// We want to keep roots around so we have hashes for Merkle proofs.
 fn removed_excl_roots(removed: Bitmap) -> Bitmap {
@@ -459,6 +544,5 @@ fn removed_excl_roots(removed: Bitmap) -> Bitmap {
 		.filter(|pos| {
 			let (parent_pos, _) = family(*pos as u64);
 			removed.contains(parent_pos as u32)
-		})
-		.collect()
+		}).collect()
 }
