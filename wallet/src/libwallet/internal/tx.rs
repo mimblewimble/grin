@@ -234,7 +234,6 @@ where
 		amount,
 		fee,
 		num_change_outputs,
-		parent_key_id,
 	)?;
 
 	//TODO: If we end up using this, create change output here

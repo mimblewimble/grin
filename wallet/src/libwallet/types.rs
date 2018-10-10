@@ -28,7 +28,7 @@ use uuid::Uuid;
 use core::core::hash::Hash;
 use core::ser;
 
-use keychain::{ExtKeychain, Identifier, Keychain};
+use keychain::{Identifier, Keychain};
 
 use libtx::aggsig;
 use libtx::slate::Slate;

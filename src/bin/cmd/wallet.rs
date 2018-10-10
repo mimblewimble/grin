@@ -205,7 +205,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						let acct_mappings = api.accounts()?;
 						// give logging thread a moment to catch up
 						thread::sleep(Duration::from_millis(200));
-						display::accounts(acct_mappings, false);
+						display::accounts(acct_mappings);
 						Ok(())
 					});
 					if res.is_err() {
