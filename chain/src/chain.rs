@@ -246,54 +246,52 @@ impl Chain {
 
 				Ok(head)
 			}
-			Err(e) => {
-				match e.kind() {
-					ErrorKind::Orphan => {
-						let block_hash = b.hash();
-						let orphan = Orphan {
-							block: b,
-							opts: opts,
-							added: Instant::now(),
-						};
+			Err(e) => match e.kind() {
+				ErrorKind::Orphan => {
+					let block_hash = b.hash();
+					let orphan = Orphan {
+						block: b,
+						opts: opts,
+						added: Instant::now(),
+					};
 
-						&self.orphans.add(orphan);
+					&self.orphans.add(orphan);
 
-						debug!(
-							LOGGER,
-							"process_block: orphan: {:?}, # orphans {}{}",
-							block_hash,
-							self.orphans.len(),
-							if self.orphans.len_evicted() > 0 {
-								format!(", # evicted {}", self.orphans.len_evicted())
-							} else {
-								String::new()
-							},
-						);
-						Err(ErrorKind::Orphan.into())
-					}
-					ErrorKind::Unfit(ref msg) => {
-						debug!(
-							LOGGER,
-							"Block {} at {} is unfit at this time: {}",
-							b.hash(),
-							b.header.height,
-							msg
-						);
-						Err(ErrorKind::Unfit(msg.clone()).into())
-					}
-					_ => {
-						info!(
-							LOGGER,
-							"Rejected block {} at {}: {:?}",
-							b.hash(),
-							b.header.height,
-							e
-						);
-						add_to_hash_cache(b.hash());
-						Err(ErrorKind::Other(format!("{:?}", e).to_owned()).into())
-					}
+					debug!(
+						LOGGER,
+						"process_block: orphan: {:?}, # orphans {}{}",
+						block_hash,
+						self.orphans.len(),
+						if self.orphans.len_evicted() > 0 {
+							format!(", # evicted {}", self.orphans.len_evicted())
+						} else {
+							String::new()
+						},
+					);
+					Err(ErrorKind::Orphan.into())
 				}
-			}
+				ErrorKind::Unfit(ref msg) => {
+					debug!(
+						LOGGER,
+						"Block {} at {} is unfit at this time: {}",
+						b.hash(),
+						b.header.height,
+						msg
+					);
+					Err(ErrorKind::Unfit(msg.clone()).into())
+				}
+				_ => {
+					info!(
+						LOGGER,
+						"Rejected block {} at {}: {:?}",
+						b.hash(),
+						b.header.height,
+						e
+					);
+					add_to_hash_cache(b.hash());
+					Err(ErrorKind::Other(format!("{:?}", e).to_owned()).into())
+				}
+			},
 		}
 	}
 
@@ -943,8 +941,8 @@ impl Chain {
 	/// difficulty calculation (timestamp and previous difficulties).
 	pub fn difficulty_iter(&self) -> store::DifficultyIter {
 		let head = self.head().unwrap();
-		let batch = self.store.batch().unwrap();
-		store::DifficultyIter::from(head.last_block_h, batch)
+		let store = self.store.clone();
+		store::DifficultyIter::from(head.last_block_h, store)
 	}
 
 	/// Check whether we have a block without reading it

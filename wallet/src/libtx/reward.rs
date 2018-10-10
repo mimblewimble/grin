@@ -51,6 +51,7 @@ where
 	let over_commit = secp.commit_value(reward(fees))?;
 	let out_commit = output.commitment();
 	let excess = secp.commit_sum(vec![out_commit], vec![over_commit])?;
+	let pubkey = excess.to_pubkey(&secp)?;
 
 	// NOTE: Remember we sign the fee *and* the lock_height.
 	// For a coinbase output the fee is 0 and the lock_height is
@@ -59,7 +60,7 @@ where
 	// This output will not be spendable earlier than lock_height (and we sign this
 	// here).
 	let msg = secp::Message::from_slice(&kernel_sig_msg(0, height))?;
-	let sig = aggsig::sign_from_key_id(&secp, keychain, &msg, &key_id)?;
+	let sig = aggsig::sign_from_key_id(&secp, keychain, &msg, &key_id, Some(&pubkey))?;
 
 	let proof = TxKernel {
 		features: KernelFeatures::COINBASE_KERNEL,

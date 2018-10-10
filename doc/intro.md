@@ -1,6 +1,6 @@
 # Introduction to MimbleWimble and Grin
 
-*Read this in other languages: [English](intro.md), [简体中文](intro.zh-cn.md).*
+*Read this in other languages: [English](intro.md), [简体中文](intro.zh-cn.md), [Español](intro_ES.md).*
 
 MimbleWimble is a blockchain format and protocol that provides
 extremely good scalability, privacy and fungibility by relying on strong

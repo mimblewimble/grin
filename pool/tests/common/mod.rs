@@ -38,7 +38,7 @@ use chain::store::ChainStore;
 use chain::types::Tip;
 use pool::*;
 
-use keychain::Keychain;
+use keychain::{ExtKeychain, Keychain};
 use wallet::libtx;
 
 use pool::types::*;
@@ -192,12 +192,12 @@ where
 
 	// single input spending a single coinbase (deterministic key_id aka height)
 	{
-		let key_id = keychain.derive_key_id(header.height as u32).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, header.height as u32, 0, 0, 0);
 		tx_elements.push(libtx::build::coinbase_input(coinbase_reward, key_id));
 	}
 
 	for output_value in output_values {
-		let key_id = keychain.derive_key_id(output_value as u32).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, output_value as u32, 0, 0, 0);
 		tx_elements.push(libtx::build::output(output_value, key_id));
 	}
 
@@ -223,12 +223,12 @@ where
 	let mut tx_elements = Vec::new();
 
 	for input_value in input_values {
-		let key_id = keychain.derive_key_id(input_value as u32).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, input_value as u32, 0, 0, 0);
 		tx_elements.push(libtx::build::input(input_value, key_id));
 	}
 
 	for output_value in output_values {
-		let key_id = keychain.derive_key_id(output_value as u32).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, output_value as u32, 0, 0, 0);
 		tx_elements.push(libtx::build::output(output_value, key_id));
 	}
 	tx_elements.push(libtx::build::with_fee(fees as u64));

@@ -27,11 +27,12 @@ use serde_json as json;
 use core::core::hash::Hashed;
 use core::core::Transaction;
 use core::ser;
-use keychain::Keychain;
+use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
-use libwallet::internal::{selection, tx, updater};
+use libwallet::internal::{keys, selection, tx, updater};
 use libwallet::types::{
-	BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend, WalletClient, WalletInfo,
+	AcctPathMapping, BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend,
+	WalletClient, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
 use util::secp::pedersen;
@@ -78,6 +79,7 @@ where
 	) -> Result<(bool, Vec<(OutputData, pedersen::Commitment)>), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
+		let parent_key_id = w.parent_key_id();
 
 		let mut validated = false;
 		if refresh_from_node {
@@ -86,7 +88,7 @@ where
 
 		let res = Ok((
 			validated,
-			updater::retrieve_outputs(&mut **w, include_spent, tx_id)?,
+			updater::retrieve_outputs(&mut **w, include_spent, tx_id, &parent_key_id)?,
 		));
 
 		w.close()?;
@@ -102,13 +104,17 @@ where
 	) -> Result<(bool, Vec<TxLogEntry>), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
+		let parent_key_id = w.parent_key_id();
 
 		let mut validated = false;
 		if refresh_from_node {
 			validated = self.update_outputs(&mut w);
 		}
 
-		let res = Ok((validated, updater::retrieve_txs(&mut **w, tx_id)?));
+		let res = Ok((
+			validated,
+			updater::retrieve_txs(&mut **w, tx_id, &parent_key_id)?,
+		));
 
 		w.close()?;
 		res
@@ -121,17 +127,30 @@ where
 	) -> Result<(bool, WalletInfo), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
+		let parent_key_id = w.parent_key_id();
 
 		let mut validated = false;
 		if refresh_from_node {
 			validated = self.update_outputs(&mut w);
 		}
 
-		let wallet_info = updater::retrieve_info(&mut **w)?;
+		let wallet_info = updater::retrieve_info(&mut **w, &parent_key_id)?;
 		let res = Ok((validated, wallet_info));
 
 		w.close()?;
 		res
+	}
+
+	/// Return list of existing account -> Path mappings
+	pub fn accounts(&mut self) -> Result<Vec<AcctPathMapping>, Error> {
+		let mut w = self.wallet.lock().unwrap();
+		keys::accounts(&mut **w)
+	}
+
+	/// Create a new account path
+	pub fn new_account_path(&mut self, label: &str) -> Result<Identifier, Error> {
+		let mut w = self.wallet.lock().unwrap();
+		keys::new_acct_path(&mut **w, label)
 	}
 
 	/// Issues a send transaction and sends to recipient
@@ -146,6 +165,7 @@ where
 	) -> Result<Slate, Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
+		let parent_key_id = w.parent_key_id();
 
 		let client;
 		let mut slate_out: Slate;
@@ -159,6 +179,7 @@ where
 			max_outputs,
 			num_change_outputs,
 			selection_strategy_is_use_all,
+			&parent_key_id,
 		)?;
 
 		lock_fn_out = lock_fn;
@@ -197,6 +218,7 @@ where
 	) -> Result<Slate, Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
+		let parent_key_id = w.parent_key_id();
 
 		let (slate, context, lock_fn) = tx::create_send_tx(
 			&mut **w,
@@ -205,6 +227,7 @@ where
 			max_outputs,
 			num_change_outputs,
 			selection_strategy_is_use_all,
+			&parent_key_id,
 		)?;
 		if write_to_disk {
 			let mut pub_tx = File::create(dest)?;
@@ -254,12 +277,13 @@ where
 	pub fn cancel_tx(&mut self, tx_id: u32) -> Result<(), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
+		let parent_key_id = w.parent_key_id();
 		if !self.update_outputs(&mut w) {
 			return Err(ErrorKind::TransactionCancellationError(
 				"Can't contact running Grin node. Not Cancelling.",
 			))?;
 		}
-		tx::cancel_tx(&mut **w, tx_id)?;
+		tx::cancel_tx(&mut **w, &parent_key_id, tx_id)?;
 		w.close()?;
 		Ok(())
 	}
@@ -273,7 +297,14 @@ where
 	) -> Result<(), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
-		let tx_burn = tx::issue_burn_tx(&mut **w, amount, minimum_confirmations, max_outputs)?;
+		let parent_key_id = w.parent_key_id();
+		let tx_burn = tx::issue_burn_tx(
+			&mut **w,
+			amount,
+			minimum_confirmations,
+			max_outputs,
+			&parent_key_id,
+		)?;
 		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
 		w.client().post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
 		w.close()?;
@@ -312,7 +343,8 @@ where
 		let (confirmed, tx_hex) = {
 			let mut w = self.wallet.lock().unwrap();
 			w.open_with_credentials()?;
-			let res = tx::retrieve_tx_hex(&mut **w, tx_id)?;
+			let parent_key_id = w.parent_key_id();
+			let res = tx::retrieve_tx_hex(&mut **w, &parent_key_id, tx_id)?;
 			w.close()?;
 			res
 		};
@@ -345,8 +377,9 @@ where
 		let (confirmed, tx_hex) = {
 			let mut w = self.wallet.lock().unwrap();
 			w.open_with_credentials()?;
+			let parent_key_id = w.parent_key_id();
 			client = w.client().clone();
-			let res = tx::retrieve_tx_hex(&mut **w, tx_id)?;
+			let res = tx::retrieve_tx_hex(&mut **w, &parent_key_id, tx_id)?;
 			w.close()?;
 			res
 		};
@@ -400,19 +433,13 @@ where
 			w.client().get_chain_height()
 		};
 		match res {
-			Ok(height) => {
-				let mut w = self.wallet.lock().unwrap();
-				w.close()?;
-				Ok((height, true))
-			}
+			Ok(height) => Ok((height, true)),
 			Err(_) => {
 				let outputs = self.retrieve_outputs(true, false, None)?;
 				let height = match outputs.1.iter().map(|(out, _)| out.height).max() {
 					Some(height) => height,
 					None => 0,
 				};
-				let mut w = self.wallet.lock().unwrap();
-				w.close()?;
 				Ok((height, false))
 			}
 		}
@@ -420,7 +447,8 @@ where
 
 	/// Attempt to update outputs in wallet, return whether it was successful
 	fn update_outputs(&self, w: &mut W) -> bool {
-		match updater::refresh_outputs(&mut *w) {
+		let parent_key_id = w.parent_key_id();
+		match updater::refresh_outputs(&mut *w, &parent_key_id) {
 			Ok(_) => true,
 			Err(_) => false,
 		}
@@ -477,10 +505,11 @@ where
 
 		let mut wallet = self.wallet.lock().unwrap();
 		wallet.open_with_credentials()?;
+		let parent_key_id = wallet.parent_key_id();
 
 		// create an output using the amount in the slate
 		let (_, mut context, receiver_create_fn) =
-			selection::build_recipient_output_with_slate(&mut **wallet, &mut slate)?;
+			selection::build_recipient_output_with_slate(&mut **wallet, &mut slate, parent_key_id)?;
 
 		// fill public keys
 		let _ = slate.fill_round_1(
@@ -506,7 +535,8 @@ where
 	pub fn receive_tx(&mut self, slate: &mut Slate) -> Result<(), Error> {
 		let mut w = self.wallet.lock().unwrap();
 		w.open_with_credentials()?;
-		let res = tx::receive_tx(&mut **w, slate);
+		let parent_key_id = w.parent_key_id();
+		let res = tx::receive_tx(&mut **w, slate, &parent_key_id);
 		w.close()?;
 
 		if let Err(e) = res {

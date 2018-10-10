@@ -240,15 +240,16 @@ impl HeaderSync {
 			let shrink_index = self
 				.history_locators
 				.iter()
-				.position(|&r| r.0 > shrink_height)
-				.unwrap();
-			if shrink_index > 100 {
-				// shrink but avoid trivial shrinking
-				let mut shrunk = self.history_locators[shrink_index..].to_vec();
-				shrunk_size = shrink_index;
-				self.history_locators.clear();
-				self.history_locators.push((0, locator[locator.len() - 1]));
-				self.history_locators.append(&mut shrunk);
+				.position(|&r| r.0 > shrink_height);
+			if let Some(shrink_index) = shrink_index {
+				if shrink_index > 100 {
+					// shrink but avoid trivial shrinking
+					let mut shrunk = self.history_locators[shrink_index..].to_vec();
+					shrunk_size = shrink_index;
+					self.history_locators.clear();
+					self.history_locators.push((0, locator[locator.len() - 1]));
+					self.history_locators.append(&mut shrunk);
+				}
 			}
 			debug!(
 				LOGGER,

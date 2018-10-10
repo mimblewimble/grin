@@ -371,7 +371,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		if !(ctx.pow_verifier)(header, shift).is_ok() {
 			error!(
 				LOGGER,
-				"pipe: validate_header bad cuckoo shift size {}", shift
+				"pipe: error validating header with cuckoo shift size {}", shift
 			);
 			return Err(ErrorKind::InvalidPow.into());
 		}
@@ -428,7 +428,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		// the _network_ difficulty of the previous block
 		// (during testnet1 we use _block_ difficulty here)
 		let child_batch = ctx.batch.child()?;
-		let diff_iter = store::DifficultyIter::from(header.previous, child_batch);
+		let diff_iter = store::DifficultyIter::from_batch(header.previous, child_batch);
 		let (network_difficulty, network_scaling_difficulty) =
 			consensus::next_difficulty(diff_iter)
 			.context(ErrorKind::Other("network difficulty".to_owned()))?;
