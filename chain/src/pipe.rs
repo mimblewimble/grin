@@ -100,7 +100,8 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 
 	// Header specific processing.
 	{
-		handle_block_header(&b.header, ctx)?;
+		validate_header(&b.header, ctx)?;
+		add_block_header(&b.header, ctx)?;
 		update_header_head(&b.header, ctx)?;
 	}
 
@@ -131,7 +132,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		if is_next_block(&b.header, &head) {
 			// No need to rewind if we are processing the next block.
 		} else {
-			// Rewind the re-apply blocks on the forked chain to
+			// Rewind and re-apply blocks on the forked chain to
 			// put the txhashset in the correct forked state
 			// (immediately prior to this new block).
 			rewind_and_apply_fork(b, extension)?;
@@ -208,8 +209,22 @@ pub fn sync_block_headers(
 
 	if !all_known {
 		for header in headers {
-			handle_block_header(header, ctx)?;
+			validate_header(header, ctx)?;
+			add_block_header(header, ctx)?;
 		}
+
+		let first_header = headers.first().unwrap();
+		let prev_header = ctx.batch.get_block_header(&first_header.previous)?;
+		txhashset::sync_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+			// Optimize this if "next" header
+			extension.rewind(&prev_header)?;
+
+			for header in headers {
+				extension.apply_header(header)?;
+			}
+
+			Ok(())
+		})?;
 	}
 
 	// Update header_head (if most work) and sync_head (regardless) in all cases,
@@ -228,12 +243,6 @@ pub fn sync_block_headers(
 	} else {
 		Ok(None)
 	}
-}
-
-fn handle_block_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	validate_header(header, ctx)?;
-	add_block_header(header, ctx)?;
-	Ok(())
 }
 
 /// Process block header as part of "header first" block propagation.

@@ -598,6 +598,44 @@ impl Chain {
 		Ok(())
 	}
 
+	// TODO - think about how to optimize this.
+	pub fn rebuild_sync_mmr(&self, header: &BlockHeader) -> Result<(), Error> {
+		let mut txhashset = self.txhashset.write().unwrap();
+		let mut batch = self.store.batch()?;
+
+		let mut header_hashes = vec![];
+		let mut current = header.clone();
+		while current.height > 0 {
+			header_hashes.push(current.hash());
+			current = batch.get_block_header(&current.previous)?;
+		}
+		header_hashes.push(self.genesis.hash());
+		header_hashes.reverse();
+
+		debug!(
+			LOGGER,
+			"Re-applying {} headers to sync MMR {:?} ... {:?} (clearing MMR first).",
+			header_hashes.len(),
+			header_hashes.first(),
+			header_hashes.last()
+		);
+
+		txhashset::sync_extending(&mut txhashset, &mut batch, |extension| {
+			extension.clear()?;
+
+			for h in header_hashes {
+				let header = extension.batch.get_block_header(&h)?;
+				// extension.validate_header_root()?;
+				extension.apply_header(&header)?;
+			}
+			Ok(())
+		})?;
+
+		batch.commit()?;
+		Ok(())
+	}
+
+	// TODO - think about how to optimize this.
 	fn rebuild_header_mmr(
 		&self,
 		header: &BlockHeader,
@@ -615,20 +653,19 @@ impl Chain {
 
 		debug!(
 			LOGGER,
-			"reapplying headers to header MMR {:?} ... {:?}",
+			"Re-applying {} headers to header MMR {:?} ... {:?}",
+			header_hashes.len(),
 			header_hashes.first(),
 			header_hashes.last()
 		);
 
 		txhashset::header_extending(txhashset, &mut batch, |extension| {
-			// Rewind back to the genesis, leaving genesis in place in the header MMR.
-			extension.rewind(1)?;
-
+			extension.rewind(&self.genesis)?;
 			for h in header_hashes {
 				let header = extension.batch.get_block_header(&h)?;
+				// extension.validate_header_root()?;
 				extension.apply_header(&header)?;
 			}
-			// extension.validate_header_root()?;
 			Ok(())
 		})?;
 
@@ -1088,6 +1125,7 @@ fn setup_head(
 			batch.save_head(&tip)?;
 			batch.setup_height(&genesis.header, &tip)?;
 
+			// Apply the genesis block to our MMRs.
 			txhashset::extending(txhashset, &mut batch, |extension| {
 				extension.apply_block(&genesis)?;
 				warn!(

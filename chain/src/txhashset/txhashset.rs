@@ -636,13 +636,26 @@ impl<'a> HeaderExtension<'a> {
 		Ok(())
 	}
 
-	pub fn rewind(&mut self, height: u64) -> Result<(), Error> {
-		debug!(LOGGER, "Rewind header extension to height {}", height,);
+	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
+		debug!(
+			LOGGER,
+			"Rewind header extension to {} at {}",
+			header.hash(),
+			header.height
+		);
 
-		let header_pos = pmmr::insertion_to_pmmr_index(height);
+		let header_pos = pmmr::insertion_to_pmmr_index(header.height + 1);
 		self.pmmr
 			.rewind(header_pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
+
+		Ok(())
+	}
+
+	pub fn clear(&mut self) -> Result<(), Error> {
+		debug!(LOGGER, "Clear header extension.");
+
+		self.pmmr.rewind(0).map_err(&ErrorKind::TxHashSetErr)?;
 
 		Ok(())
 	}
