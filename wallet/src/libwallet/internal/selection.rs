@@ -37,6 +37,7 @@ pub fn build_send_tx_slate<T: ?Sized, C, K>(
 	max_outputs: usize,
 	change_outputs: usize,
 	selection_strategy_is_use_all: bool,
+	parent_key_id: Identifier,
 ) -> Result<
 	(
 		Slate,
@@ -59,6 +60,7 @@ where
 		max_outputs,
 		change_outputs,
 		selection_strategy_is_use_all,
+		&parent_key_id,
 	)?;
 
 	// Create public slate
@@ -85,22 +87,19 @@ where
 	}
 
 	// Store change output(s)
-	for (_, derivation) in &change_amounts_derivations {
-		let change_id = keychain.derive_key_id(derivation.clone()).unwrap();
-		context.add_output(&change_id);
+	for (_, id) in &change_amounts_derivations {
+		context.add_output(&id);
 	}
 
 	let lock_inputs = context.get_inputs().clone();
 	let _lock_outputs = context.get_outputs().clone();
 
-	let root_key_id = keychain.root_key_id();
-
 	// Return a closure to acquire wallet lock and lock the coins being spent
 	// so we avoid accidental double spend attempt.
 	let update_sender_wallet_fn = move |wallet: &mut T, tx_hex: &str| {
 		let mut batch = wallet.batch()?;
-		let log_id = batch.next_tx_log_id(root_key_id.clone())?;
-		let mut t = TxLogEntry::new(TxLogEntryType::TxSent, log_id);
+		let log_id = batch.next_tx_log_id(&parent_key_id)?;
+		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxSent, log_id);
 		t.tx_slate_id = Some(slate_id);
 		t.fee = Some(fee);
 		t.tx_hex = Some(tx_hex.to_owned());
@@ -116,14 +115,14 @@ where
 		t.amount_debited = amount_debited;
 
 		// write the output representing our change
-		for (change_amount, change_derivation) in &change_amounts_derivations {
-			let change_id = keychain.derive_key_id(change_derivation.clone()).unwrap();
+		for (change_amount, id) in &change_amounts_derivations {
+			let change_id = keychain.derive_key(&id).unwrap();
 			t.num_outputs += 1;
 			t.amount_credited += change_amount;
 			batch.save(OutputData {
-				root_key_id: root_key_id.clone(),
-				key_id: change_id.clone(),
-				n_child: change_derivation.clone(),
+				root_key_id: parent_key_id.clone(),
+				key_id: id.clone(),
+				n_child: id.to_path().last_path_index(),
 				value: change_amount.clone(),
 				status: OutputStatus::Unconfirmed,
 				height: current_height,
@@ -132,7 +131,7 @@ where
 				tx_log_entry: Some(log_id),
 			})?;
 		}
-		batch.save_tx_log_entry(t)?;
+		batch.save_tx_log_entry(t, &parent_key_id)?;
 		batch.commit()?;
 		Ok(())
 	};
@@ -147,6 +146,7 @@ where
 pub fn build_recipient_output_with_slate<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
+	parent_key_id: Identifier,
 ) -> Result<
 	(
 		Identifier,
@@ -161,10 +161,9 @@ where
 	K: Keychain,
 {
 	// Create a potential output for this transaction
-	let (key_id, derivation) = keys::next_available_key(wallet).unwrap();
+	let key_id = keys::next_available_key(wallet).unwrap();
 
 	let keychain = wallet.keychain().clone();
-	let root_key_id = keychain.root_key_id();
 	let key_id_inner = key_id.clone();
 	let amount = slate.amount;
 	let height = slate.height;
@@ -187,15 +186,15 @@ where
 	// (up to the caller to decide when to do)
 	let wallet_add_fn = move |wallet: &mut T| {
 		let mut batch = wallet.batch()?;
-		let log_id = batch.next_tx_log_id(root_key_id.clone())?;
-		let mut t = TxLogEntry::new(TxLogEntryType::TxReceived, log_id);
+		let log_id = batch.next_tx_log_id(&parent_key_id)?;
+		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxReceived, log_id);
 		t.tx_slate_id = Some(slate_id);
 		t.amount_credited = amount;
 		t.num_outputs = 1;
 		batch.save(OutputData {
-			root_key_id: root_key_id,
-			key_id: key_id_inner,
-			n_child: derivation,
+			root_key_id: parent_key_id.clone(),
+			key_id: key_id_inner.clone(),
+			n_child: key_id_inner.to_path().last_path_index(),
 			value: amount,
 			status: OutputStatus::Unconfirmed,
 			height: height,
@@ -203,7 +202,7 @@ where
 			is_coinbase: false,
 			tx_log_entry: Some(log_id),
 		})?;
-		batch.save_tx_log_entry(t)?;
+		batch.save_tx_log_entry(t, &parent_key_id)?;
 		batch.commit()?;
 		Ok(())
 	};
@@ -222,13 +221,14 @@ pub fn select_send_tx<T: ?Sized, C, K>(
 	max_outputs: usize,
 	change_outputs: usize,
 	selection_strategy_is_use_all: bool,
+	parent_key_id: &Identifier,
 ) -> Result<
 	(
 		Vec<Box<build::Append<K>>>,
 		Vec<OutputData>,
-		Vec<(u64, u32)>, // change amounts and derivations
-		u64,             // amount
-		u64,             // fee
+		Vec<(u64, Identifier)>, // change amounts and derivations
+		u64,                    // amount
+		u64,                    // fee
 	),
 	Error,
 >
@@ -245,6 +245,7 @@ where
 		minimum_confirmations,
 		max_outputs,
 		selection_strategy_is_use_all,
+		parent_key_id,
 	);
 
 	// sender is responsible for setting the fee on the partial tx
@@ -300,6 +301,7 @@ where
 				minimum_confirmations,
 				max_outputs,
 				selection_strategy_is_use_all,
+				parent_key_id,
 			);
 			fee = tx_fee(coins.len(), num_outputs, 1, None);
 			total = coins.iter().map(|c| c.value).sum();
@@ -309,7 +311,7 @@ where
 
 	// build transaction skeleton with inputs and change
 	let (mut parts, change_amounts_derivations) =
-		inputs_and_change(&coins, wallet, amount, fee, change_outputs)?;
+		inputs_and_change(&coins, wallet, amount, fee, change_outputs, parent_key_id)?;
 
 	// This is more proof of concept than anything but here we set lock_height
 	// on tx being sent (based on current chain height via api).
@@ -325,7 +327,8 @@ pub fn inputs_and_change<T: ?Sized, C, K>(
 	amount: u64,
 	fee: u64,
 	num_change_outputs: usize,
-) -> Result<(Vec<Box<build::Append<K>>>, Vec<(u64, u32)>), Error>
+	parent_key_id: &Identifier,
+) -> Result<(Vec<Box<build::Append<K>>>, Vec<(u64, Identifier)>), Error>
 where
 	T: WalletBackend<C, K>,
 	C: WalletClient,
@@ -345,11 +348,10 @@ where
 
 	// build inputs using the appropriate derived key_ids
 	for coin in coins {
-		let key_id = wallet.keychain().derive_key_id(coin.n_child)?;
 		if coin.is_coinbase {
-			parts.push(build::coinbase_input(coin.value, key_id));
+			parts.push(build::coinbase_input(coin.value, coin.key_id.clone()));
 		} else {
-			parts.push(build::input(coin.value, key_id));
+			parts.push(build::input(coin.value, coin.key_id.clone()));
 		}
 	}
 
@@ -378,11 +380,9 @@ where
 			};
 
 			let keychain = wallet.keychain().clone();
-			let root_key_id = keychain.root_key_id();
-			let change_derivation = wallet.next_child(root_key_id.clone()).unwrap();
-			let change_key = keychain.derive_key_id(change_derivation).unwrap();
+			let change_key = wallet.next_child().unwrap();
 
-			change_amounts_derivations.push((change_amount, change_derivation));
+			change_amounts_derivations.push((change_amount, change_key.clone()));
 			parts.push(build::output(change_amount, change_key));
 		}
 	}
@@ -404,6 +404,7 @@ pub fn select_coins<T: ?Sized, C, K>(
 	minimum_confirmations: u64,
 	max_outputs: usize,
 	select_all: bool,
+	parent_key_id: &Identifier,
 ) -> (usize, Vec<OutputData>)
 //    max_outputs_available, Outputs
 where
@@ -412,11 +413,10 @@ where
 	K: Keychain,
 {
 	// first find all eligible outputs based on number of confirmations
-	let root_key_id = wallet.keychain().root_key_id();
 	let mut eligible = wallet
 		.iter()
 		.filter(|out| {
-			out.root_key_id == root_key_id
+			out.root_key_id == *parent_key_id
 				&& out.eligible_to_spend(current_height, minimum_confirmations)
 		})
 		.collect::<Vec<OutputData>>();

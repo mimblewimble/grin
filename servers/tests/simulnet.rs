@@ -32,13 +32,13 @@ use core::global::{self, ChainTypes};
 
 use wallet::controller;
 use wallet::libtx::slate::Slate;
-use wallet::libwallet::types::{WalletBackend, WalletClient, WalletInst};
+use wallet::libwallet::types::{WalletBackend, WalletInst};
 use wallet::lmdb_wallet::LMDBBackend;
 use wallet::HTTPWalletClient;
 use wallet::WalletConfig;
 
 use framework::{
-	config, stop_all_servers, stratum_config, LocalServerContainerConfig, LocalServerContainerPool,
+	config, stop_all_servers, LocalServerContainerConfig, LocalServerContainerPool,
 	LocalServerContainerPoolConfig,
 };
 
@@ -326,7 +326,7 @@ fn simulate_fast_sync() {
 	let s2 = servers::Server::new(conf).unwrap();
 
 	while s2.header_head().height < 1 {
-		s2.ping_peers();
+		let _ = s2.ping_peers();
 		thread::sleep(time::Duration::from_millis(1_000));
 	}
 	s1.stop_test_miner();
@@ -351,7 +351,8 @@ fn simulate_fast_sync() {
 	thread::sleep(time::Duration::from_millis(1_000));
 }
 
-// #[test]
+#[ignore]
+#[test]
 fn simulate_fast_sync_double() {
 	util::init_test_logger();
 
@@ -455,7 +456,7 @@ fn replicate_tx_fluff_failure() {
 	s2_config.dandelion_config.embargo_secs = Some(10);
 	s2_config.dandelion_config.patience_secs = Some(1);
 	s2_config.dandelion_config.relay_secs = Some(1);
-	let s2 = servers::Server::new(s2_config.clone()).unwrap();
+	let _s2 = servers::Server::new(s2_config.clone()).unwrap();
 
 	let dl_nodes = 5;
 

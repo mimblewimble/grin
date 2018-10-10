@@ -28,7 +28,7 @@ use core::core::hash::Hashed;
 use core::core::{Block, BlockHeader};
 use core::global::{self, ChainTypes};
 use core::pow::{self, Difficulty};
-use keychain::{ExtKeychain, Keychain};
+use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 use wallet::libtx;
 
 fn clean_output_dir(dir_name: &str) {
@@ -45,7 +45,7 @@ fn test_various_store_indices() {
 	clean_output_dir(chain_dir);
 
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 	let db_env = Arc::new(store::new_env(chain_dir.to_string()));
 
 	let chain_store = chain::store::ChainStore::new(db_env).unwrap();

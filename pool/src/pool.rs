@@ -118,10 +118,8 @@ impl Pool {
 		// flatten buckets using aggregate (with cut-through)
 		let mut flat_txs: Vec<Transaction> = tx_buckets
 			.into_iter()
-			.filter_map(|mut bucket| {
-				bucket.truncate(MAX_TX_CHAIN);
-				transaction::aggregate(bucket).ok()
-			}).filter(|x| x.validate(self.verifier_cache.clone()).is_ok())
+			.filter_map(|bucket| transaction::aggregate(bucket).ok())
+			.filter(|x| x.validate(self.verifier_cache.clone()).is_ok())
 			.collect();
 
 		// sort by fees over weight, multiplying by 1000 to keep some precision

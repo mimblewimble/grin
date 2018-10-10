@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use core::core::{self, amount_to_hr_string};
-use libwallet::types::{OutputData, TxLogEntry, WalletInfo};
+use libwallet::types::{AcctPathMapping, OutputData, TxLogEntry, WalletInfo};
 use libwallet::Error;
 use prettytable;
 use std::io::prelude::Write;
@@ -23,11 +23,15 @@ use util::secp::pedersen;
 
 /// Display outputs in a pretty way
 pub fn outputs(
+	account: &str,
 	cur_height: u64,
 	validated: bool,
 	outputs: Vec<(OutputData, pedersen::Commitment)>,
 ) -> Result<(), Error> {
-	let title = format!("Wallet Outputs - Block Height: {}", cur_height);
+	let title = format!(
+		"Wallet Outputs - Account '{}' - Block Height: {}",
+		account, cur_height
+	);
 	println!();
 	let mut t = term::stdout().unwrap();
 	t.fg(term::color::MAGENTA).unwrap();
@@ -87,12 +91,16 @@ pub fn outputs(
 
 /// Display transaction log in a pretty way
 pub fn txs(
+	account: &str,
 	cur_height: u64,
 	validated: bool,
 	txs: Vec<TxLogEntry>,
 	include_status: bool,
 ) -> Result<(), Error> {
-	let title = format!("Transaction Log - Block Height: {}", cur_height);
+	let title = format!(
+		"Transaction Log - Account '{}' - Block Height: {}",
+		account, cur_height
+	);
 	println!();
 	let mut t = term::stdout().unwrap();
 	t.fg(term::color::MAGENTA).unwrap();
@@ -181,10 +189,10 @@ pub fn txs(
 	Ok(())
 }
 /// Display summary info in a pretty way
-pub fn info(wallet_info: &WalletInfo, validated: bool) {
+pub fn info(account: &str, wallet_info: &WalletInfo, validated: bool) {
 	println!(
-		"\n____ Wallet Summary Info as of {} ____\n",
-		wallet_info.last_confirmed_height
+		"\n____ Wallet Summary Info - Account '{}' as of height {} ____\n",
+		account, wallet_info.last_confirmed_height
 	);
 	let mut table = table!(
 		[bFG->"Total", FG->amount_to_hr_string(wallet_info.total, false)],
@@ -204,4 +212,23 @@ pub fn info(wallet_info: &WalletInfo, validated: bool) {
 			 (is your `grin server` offline or broken?)"
 		);
 	}
+}
+/// Display list of wallet accounts in a pretty way
+pub fn accounts(acct_mappings: Vec<AcctPathMapping>, show_derivations: bool) {
+	println!("\n____ Wallet Accounts ____\n",);
+	let mut table = table!();
+
+	table.set_titles(row![
+		mMG->"Name",
+		bMG->"Parent BIP-32 Derivation Path",
+	]);
+	for m in acct_mappings {
+		table.add_row(row![
+			bFC->m.label,
+			bGC->m.path.to_bip_32_string(),
+		]);
+	}
+	table.set_format(*prettytable::format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
+	table.printstd();
+	println!();
 }

@@ -52,7 +52,7 @@ fn too_large_block() {
 
 	let mut pks = vec![];
 	for n in 0..(max_out + 1) {
-		pks.push(keychain.derive_key_id(n as u32).unwrap());
+		pks.push(ExtKeychain::derive_key_id(1, n as u32, 0, 0, 0));
 	}
 
 	let mut parts = vec![];
@@ -66,7 +66,7 @@ fn too_large_block() {
 	println!("Build tx: {}", now.elapsed().as_secs());
 
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx], &keychain, &prev, &key_id);
 	assert!(
 		b.validate(&BlindingFactor::zero(), &zero_commit, verifier_cache())
@@ -90,9 +90,9 @@ fn very_empty_block() {
 // builds a block with a tx spending another and check that cut_through occurred
 fn block_with_cut_through() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let key_id1 = keychain.derive_key_id(1).unwrap();
-	let key_id2 = keychain.derive_key_id(2).unwrap();
-	let key_id3 = keychain.derive_key_id(3).unwrap();
+	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
+	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let zero_commit = secp_static::commit_to_zero_value();
 
@@ -106,7 +106,7 @@ fn block_with_cut_through() {
 
 	let mut btx3 = txspend1i1o(5, &keychain, key_id2.clone(), key_id3);
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(
 		vec![&mut btx1, &mut btx2, &mut btx3],
 		&keychain,
@@ -129,7 +129,7 @@ fn empty_block_with_coinbase_is_valid() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let zero_commit = secp_static::commit_to_zero_value();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 
 	assert_eq!(b.inputs().len(), 0);
@@ -168,7 +168,7 @@ fn remove_coinbase_output_flag() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let zero_commit = secp_static::commit_to_zero_value();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let mut b = new_block(vec![], &keychain, &prev, &key_id);
 
 	assert!(
@@ -198,7 +198,7 @@ fn remove_coinbase_kernel_flag() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let zero_commit = secp_static::commit_to_zero_value();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let mut b = new_block(vec![], &keychain, &prev, &key_id);
 
 	assert!(
@@ -225,7 +225,7 @@ fn remove_coinbase_kernel_flag() {
 fn serialize_deserialize_block_header() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let header1 = b.header;
 
@@ -242,7 +242,7 @@ fn serialize_deserialize_block() {
 	let tx1 = tx1i2o();
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 
 	let mut vec = Vec::new();
@@ -260,7 +260,7 @@ fn serialize_deserialize_block() {
 fn empty_block_serialized_size() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
@@ -273,7 +273,7 @@ fn block_single_tx_serialized_size() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let tx1 = tx1i2o();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
@@ -285,7 +285,7 @@ fn block_single_tx_serialized_size() {
 fn empty_compact_block_serialized_size() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
@@ -299,7 +299,7 @@ fn compact_block_single_tx_serialized_size() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let tx1 = tx1i2o();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
@@ -319,7 +319,7 @@ fn block_10_tx_serialized_size() {
 		txs.push(tx);
 	}
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(txs.iter().collect(), &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
@@ -337,7 +337,7 @@ fn compact_block_10_tx_serialized_size() {
 		txs.push(tx);
 	}
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(txs.iter().collect(), &keychain, &prev, &key_id);
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
@@ -351,7 +351,7 @@ fn compact_block_hash_with_nonce() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let tx = tx1i2o();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx], &keychain, &prev, &key_id);
 	let cb1: CompactBlock = b.clone().into();
 	let cb2: CompactBlock = b.clone().into();
@@ -381,7 +381,7 @@ fn convert_block_to_compact_block() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let tx1 = tx1i2o();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 	let cb: CompactBlock = b.clone().into();
 
@@ -403,7 +403,7 @@ fn convert_block_to_compact_block() {
 fn hydrate_empty_compact_block() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let cb: CompactBlock = b.clone().into();
 	let hb = Block::hydrate_from(cb, vec![]).unwrap();
@@ -417,7 +417,7 @@ fn serialize_deserialize_compact_block() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let tx1 = tx1i2o();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 
 	let mut cb1: CompactBlock = b.into();
@@ -442,7 +442,7 @@ fn empty_block_v2_switch() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let mut prev = BlockHeader::default();
 	prev.height = consensus::HEADER_V2_HARD_FORK - 1;
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");

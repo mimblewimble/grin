@@ -77,7 +77,7 @@ pub fn get_first_line(file_path: Option<String>) -> Option<String> {
 		Some(path) => match fs::File::open(path) {
 			Ok(file) => {
 				let buf_reader = io::BufReader::new(file);
-				let mut lines_iter = buf_reader.lines().map(|l| l.unwrap());;
+				let mut lines_iter = buf_reader.lines().map(|l| l.unwrap());
 				lines_iter.next()
 			}
 			Err(_) => None,

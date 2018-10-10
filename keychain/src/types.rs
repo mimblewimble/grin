@@ -14,6 +14,7 @@
 
 use rand::thread_rng;
 use std::cmp::min;
+use std::io::Cursor;
 use std::ops::Add;
 /// Keychain trait and its main supporting types. The Identifier is a
 /// semi-opaque structure (just bytes) to track keys within the Keychain.
@@ -22,7 +23,8 @@ use std::ops::Add;
 use std::{error, fmt};
 
 use blake2::blake2b::blake2b;
-use serde::{de, ser};
+use extkey_bip32::{self, ChildNumber, ExtendedPrivKey};
+use serde::{de, ser}; //TODO: Convert errors to use ErrorKind
 
 use util;
 use util::secp::constants::SECRET_KEY_SIZE;
@@ -31,13 +33,15 @@ use util::secp::pedersen::Commitment;
 use util::secp::{self, Message, Secp256k1, Signature};
 use util::static_secp_instance;
 
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+
 // Size of an identifier in bytes
-pub const IDENTIFIER_SIZE: usize = 10;
+pub const IDENTIFIER_SIZE: usize = 17;
 
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub enum Error {
 	Secp(secp::Error),
-	KeyDerivation(String),
+	KeyDerivation(extkey_bip32::Error),
 	Transaction(String),
 	RangeProof(String),
 }
@@ -45,6 +49,12 @@ pub enum Error {
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
 		Error::Secp(e)
+	}
+}
+
+impl From<extkey_bip32::Error> for Error {
+	fn from(e: extkey_bip32::Error) -> Error {
+		Error::KeyDerivation(e)
 	}
 }
 
@@ -108,6 +118,42 @@ impl Identifier {
 		Identifier::from_bytes(&[0; IDENTIFIER_SIZE])
 	}
 
+	pub fn from_path(path: &ExtKeychainPath) -> Identifier {
+		path.to_identifier()
+	}
+
+	pub fn to_path(&self) -> ExtKeychainPath {
+		ExtKeychainPath::from_identifier(&self)
+	}
+
+	/// output the path itself, for insertion into bulletproof
+	/// recovery processes can grind through possiblities to find the
+	/// correct length if required
+	pub fn serialize_path(&self) -> [u8; IDENTIFIER_SIZE - 1] {
+		let mut retval = [0u8; IDENTIFIER_SIZE - 1];
+		retval.copy_from_slice(&self.0[1..IDENTIFIER_SIZE]);
+		retval
+	}
+
+	/// restore from a serialized path
+	pub fn from_serialized_path(len: u8, p: &[u8]) -> Identifier {
+		let mut id = [0; IDENTIFIER_SIZE];
+		id[0] = len;
+		for i in 1..IDENTIFIER_SIZE {
+			id[i] = p[i - 1];
+		}
+		Identifier(id)
+	}
+
+	/// Return the parent path
+	pub fn parent_path(&self) -> Identifier {
+		let mut p = ExtKeychainPath::from_identifier(&self);
+		if p.depth > 0 {
+			p.path[p.depth as usize - 1] = ChildNumber::from(0);
+			p.depth = p.depth - 1;
+		}
+		Identifier::from_path(&p)
+	}
 	pub fn from_bytes(bytes: &[u8]) -> Identifier {
 		let mut identifier = [0; IDENTIFIER_SIZE];
 		for i in 0..min(IDENTIFIER_SIZE, bytes.len()) {
@@ -141,6 +187,15 @@ impl Identifier {
 
 	pub fn to_hex(&self) -> String {
 		util::to_hex(self.0.to_vec())
+	}
+
+	pub fn to_bip_32_string(&self) -> String {
+		let p = ExtKeychainPath::from_identifier(&self);
+		let mut retval = String::from("m");
+		for i in 0..p.depth {
+			retval.push_str(&format!("/{}", <u32>::from(p.path[i as usize])));
+		}
+		retval
 	}
 }
 
@@ -272,8 +327,8 @@ pub struct SplitBlindingFactor {
 /// factor as well as the "sign" with which they should be combined.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BlindSum {
-	pub positive_key_ids: Vec<Identifier>,
-	pub negative_key_ids: Vec<Identifier>,
+	pub positive_key_ids: Vec<ExtKeychainPath>,
+	pub negative_key_ids: Vec<ExtKeychainPath>,
 	pub positive_blinding_factors: Vec<BlindingFactor>,
 	pub negative_blinding_factors: Vec<BlindingFactor>,
 }
@@ -289,13 +344,13 @@ impl BlindSum {
 		}
 	}
 
-	pub fn add_key_id(mut self, key_id: Identifier) -> BlindSum {
-		self.positive_key_ids.push(key_id);
+	pub fn add_key_id(mut self, path: ExtKeychainPath) -> BlindSum {
+		self.positive_key_ids.push(path);
 		self
 	}
 
-	pub fn sub_key_id(mut self, key_id: Identifier) -> BlindSum {
-		self.negative_key_ids.push(key_id);
+	pub fn sub_key_id(mut self, path: ExtKeychainPath) -> BlindSum {
+		self.negative_key_ids.push(path);
 		self
 	}
 
@@ -312,16 +367,78 @@ impl BlindSum {
 	}
 }
 
+/// Encapsulates a max 4-level deep BIP32 path, which is the
+/// most we can currently fit into a rangeproof message
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Deserialize)]
+pub struct ExtKeychainPath {
+	pub depth: u8,
+	pub path: [extkey_bip32::ChildNumber; 4],
+}
+
+impl ExtKeychainPath {
+	/// Return a new chain path with given derivation and depth
+	pub fn new(depth: u8, d0: u32, d1: u32, d2: u32, d3: u32) -> ExtKeychainPath {
+		ExtKeychainPath {
+			depth: depth,
+			path: [
+				ChildNumber::from(d0),
+				ChildNumber::from(d1),
+				ChildNumber::from(d2),
+				ChildNumber::from(d3),
+			],
+		}
+	}
+
+	/// from an Indentifier [manual deserialization]
+	pub fn from_identifier(id: &Identifier) -> ExtKeychainPath {
+		let mut rdr = Cursor::new(id.0.to_vec());
+		ExtKeychainPath {
+			depth: rdr.read_u8().unwrap(),
+			path: [
+				ChildNumber::from(rdr.read_u32::<BigEndian>().unwrap()),
+				ChildNumber::from(rdr.read_u32::<BigEndian>().unwrap()),
+				ChildNumber::from(rdr.read_u32::<BigEndian>().unwrap()),
+				ChildNumber::from(rdr.read_u32::<BigEndian>().unwrap()),
+			],
+		}
+	}
+
+	/// to an Identifier [manual serialization]
+	pub fn to_identifier(&self) -> Identifier {
+		let mut wtr = vec![];
+		wtr.write_u8(self.depth).unwrap();
+		wtr.write_u32::<BigEndian>(<u32>::from(self.path[0]))
+			.unwrap();
+		wtr.write_u32::<BigEndian>(<u32>::from(self.path[1]))
+			.unwrap();
+		wtr.write_u32::<BigEndian>(<u32>::from(self.path[2]))
+			.unwrap();
+		wtr.write_u32::<BigEndian>(<u32>::from(self.path[3]))
+			.unwrap();
+		let mut retval = [0u8; IDENTIFIER_SIZE];
+		retval.copy_from_slice(&wtr[0..IDENTIFIER_SIZE]);
+		Identifier(retval)
+	}
+
+	/// Last part of the path (for last n_child)
+	pub fn last_path_index(&self) -> u32 {
+		if self.depth == 0 {
+			0
+		} else {
+			<u32>::from(self.path[self.depth as usize - 1])
+		}
+	}
+}
+
 pub trait Keychain: Sync + Send + Clone {
 	fn from_seed(seed: &[u8]) -> Result<Self, Error>;
 	fn from_random_seed() -> Result<Self, Error>;
-	fn root_key_id(&self) -> Identifier;
-	fn derive_key_id(&self, derivation: u32) -> Result<Identifier, Error>;
-	fn derived_key(&self, key_id: &Identifier) -> Result<SecretKey, Error>;
-	fn commit(&self, amount: u64, key_id: &Identifier) -> Result<Commitment, Error>;
-	fn commit_with_key_index(&self, amount: u64, derivation: u32) -> Result<Commitment, Error>;
+	fn root_key_id() -> Identifier;
+	fn derive_key_id(depth: u8, d1: u32, d2: u32, d3: u32, d4: u32) -> Identifier;
+	fn derive_key(&self, id: &Identifier) -> Result<ExtendedPrivKey, Error>;
+	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error>;
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
-	fn sign(&self, msg: &Message, key_id: &Identifier) -> Result<Signature, Error>;
+	fn sign(&self, msg: &Message, id: &Identifier) -> Result<Signature, Error>;
 	fn sign_with_blinding(&self, &Message, &BlindingFactor) -> Result<Signature, Error>;
 	fn secp(&self) -> &Secp256k1;
 }
@@ -330,7 +447,7 @@ pub trait Keychain: Sync + Send + Clone {
 mod test {
 	use rand::thread_rng;
 
-	use types::BlindingFactor;
+	use types::{BlindingFactor, ExtKeychainPath, Identifier};
 	use util::secp::key::{SecretKey, ZERO_KEY};
 	use util::secp::Secp256k1;
 
@@ -360,5 +477,35 @@ mod test {
 		let _ = skey_out.add_assign(&secp, &skey_zero).unwrap();
 
 		assert_eq!(skey_in, skey_out);
+	}
+
+	// Check path identifiers
+	#[test]
+	fn path_identifier() {
+		let path = ExtKeychainPath::new(4, 1, 2, 3, 4);
+		let id = Identifier::from_path(&path);
+		let ret_path = id.to_path();
+		assert_eq!(path, ret_path);
+
+		let path = ExtKeychainPath::new(
+			1,
+			<u32>::max_value(),
+			<u32>::max_value(),
+			3,
+			<u32>::max_value(),
+		);
+		let id = Identifier::from_path(&path);
+		let ret_path = id.to_path();
+		assert_eq!(path, ret_path);
+
+		println!("id: {:?}", id);
+		println!("ret_path {:?}", ret_path);
+
+		let path = ExtKeychainPath::new(3, 0, 0, 10, 0);
+		let id = Identifier::from_path(&path);
+		let parent_id = id.parent_path();
+		let expected_path = ExtKeychainPath::new(2, 0, 0, 0, 0);
+		let expected_id = Identifier::from_path(&expected_path);
+		assert_eq!(expected_id, parent_id);
 	}
 }

@@ -19,8 +19,8 @@ use std::path::PathBuf;
 /// Wallet commands processing
 use std::process::exit;
 use std::sync::{Arc, Mutex};
-use std::thread;
 use std::time::Duration;
+use std::{process, thread};
 
 use clap::ArgMatches;
 
@@ -28,7 +28,9 @@ use api::TLSConfig;
 use config::GlobalWalletConfig;
 use core::{core, global};
 use grin_wallet::{self, controller, display, libwallet};
-use grin_wallet::{HTTPWalletClient, LMDBBackend, WalletConfig, WalletInst, WalletSeed};
+use grin_wallet::{
+	HTTPWalletClient, LMDBBackend, WalletBackend, WalletConfig, WalletInst, WalletSeed,
+};
 use keychain;
 use servers::start_webwallet_server;
 use util::file::get_first_line;
@@ -53,29 +55,23 @@ pub fn seed_exists(wallet_config: WalletConfig) -> bool {
 pub fn instantiate_wallet(
 	wallet_config: WalletConfig,
 	passphrase: &str,
+	account: &str,
 	node_api_secret: Option<String>,
 ) -> Box<WalletInst<HTTPWalletClient, keychain::ExtKeychain>> {
-	if grin_wallet::needs_migrate(&wallet_config.data_file_dir) {
-		// Migrate wallet automatically
-		warn!(LOGGER, "Migrating legacy File-Based wallet to LMDB Format");
-		if let Err(e) = grin_wallet::migrate(&wallet_config.data_file_dir, passphrase) {
-			error!(LOGGER, "Error while trying to migrate wallet: {:?}", e);
-			error!(LOGGER, "Please ensure your file wallet files exist and are not corrupted, and that your password is correct");
-			panic!();
-		} else {
-			warn!(LOGGER, "Migration successful. Using LMDB Wallet backend");
-		}
-		warn!(LOGGER, "Please check the results of the migration process using `grin wallet info` and `grin wallet outputs`");
-		warn!(LOGGER, "If anything went wrong, you can try again by deleting the `db` directory and running a wallet command");
-		warn!(LOGGER, "If all is okay, you can move/backup/delete all files in the wallet directory EXCEPT FOR wallet.seed");
-	}
 	let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-	let db_wallet = LMDBBackend::new(wallet_config.clone(), "", client).unwrap_or_else(|e| {
-		panic!(
-			"Error creating DB wallet: {} Config: {:?}",
-			e, wallet_config
-		);
-	});
+	let mut db_wallet =
+		LMDBBackend::new(wallet_config.clone(), passphrase, client).unwrap_or_else(|e| {
+			panic!(
+				"Error creating DB wallet: {} Config: {:?}",
+				e, wallet_config
+			);
+		});
+	db_wallet
+		.set_parent_key_id_by_name(account)
+		.unwrap_or_else(|e| {
+			println!("Error starting wallet: {}", e);
+			process::exit(0);
+		});
 	info!(LOGGER, "Using LMDB Backend for wallet");
 	Box::new(db_wallet)
 }
@@ -130,9 +126,19 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 	let passphrase = wallet_args
 		.value_of("pass")
 		.expect("Failed to read passphrase.");
+
+	let account = wallet_args
+		.value_of("account")
+		.expect("Failed to read account.");
+
 	// Handle listener startup commands
 	{
-		let wallet = instantiate_wallet(wallet_config.clone(), passphrase, node_api_secret.clone());
+		let wallet = instantiate_wallet(
+			wallet_config.clone(),
+			passphrase,
+			account,
+			node_api_secret.clone(),
+		);
 		let api_secret = get_first_line(wallet_config.api_secret_path.clone());
 
 		let tls_conf = match wallet_config.tls_certificate_file.clone() {
@@ -187,10 +193,40 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 	let wallet = Arc::new(Mutex::new(instantiate_wallet(
 		wallet_config.clone(),
 		passphrase,
+		account,
 		node_api_secret,
 	)));
 	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {
+			("account", Some(acct_args)) => {
+				let create = acct_args.value_of("create");
+				if create.is_none() {
+					let res = controller::owner_single_use(wallet, |api| {
+						let acct_mappings = api.accounts()?;
+						// give logging thread a moment to catch up
+						thread::sleep(Duration::from_millis(200));
+						display::accounts(acct_mappings, false);
+						Ok(())
+					});
+					if res.is_err() {
+						panic!("Error listing accounts: {}", res.unwrap_err());
+					}
+				} else {
+					let label = create.unwrap();
+					let res = controller::owner_single_use(wallet, |api| {
+						api.new_account_path(label)?;
+						thread::sleep(Duration::from_millis(200));
+						println!("Account: '{}' Created!", label);
+						Ok(())
+					});
+					if res.is_err() {
+						thread::sleep(Duration::from_millis(200));
+						println!("Error creating account '{}': {}", label, res.unwrap_err());
+						exit(1);
+					}
+				}
+				Ok(())
+			}
 			("send", Some(send_args)) => {
 				let amount = send_args
 					.value_of("amount")
@@ -352,18 +388,19 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 							e, wallet_config
 						)
 					});
-				display::info(&wallet_info, validated);
+				display::info(account, &wallet_info, validated);
 				Ok(())
 			}
 			("outputs", Some(_)) => {
 				let (height, _) = api.node_height()?;
 				let (validated, outputs) = api.retrieve_outputs(show_spent, true, None)?;
-				let _res = display::outputs(height, validated, outputs).unwrap_or_else(|e| {
-					panic!(
-						"Error getting wallet outputs: {:?} Config: {:?}",
-						e, wallet_config
-					)
-				});
+				let _res =
+					display::outputs(account, height, validated, outputs).unwrap_or_else(|e| {
+						panic!(
+							"Error getting wallet outputs: {:?} Config: {:?}",
+							e, wallet_config
+						)
+					});
 				Ok(())
 			}
 			("txs", Some(txs_args)) => {
@@ -377,8 +414,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				let (height, _) = api.node_height()?;
 				let (validated, txs) = api.retrieve_txs(true, tx_id)?;
 				let include_status = !tx_id.is_some();
-				let _res =
-					display::txs(height, validated, txs, include_status).unwrap_or_else(|e| {
+				let _res = display::txs(account, height, validated, txs, include_status)
+					.unwrap_or_else(|e| {
 						panic!(
 							"Error getting wallet outputs: {} Config: {:?}",
 							e, wallet_config
@@ -388,12 +425,13 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				// inputs/outputs
 				if tx_id.is_some() {
 					let (_, outputs) = api.retrieve_outputs(true, false, tx_id)?;
-					let _res = display::outputs(height, validated, outputs).unwrap_or_else(|e| {
-						panic!(
-							"Error getting wallet outputs: {} Config: {:?}",
-							e, wallet_config
-						)
-					});
+					let _res = display::outputs(account, height, validated, outputs)
+						.unwrap_or_else(|e| {
+							panic!(
+								"Error getting wallet outputs: {} Config: {:?}",
+								e, wallet_config
+							)
+						});
 				};
 				Ok(())
 			}

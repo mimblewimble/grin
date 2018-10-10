@@ -33,6 +33,7 @@ pub fn calculate_partial_sig(
 	sec_key: &SecretKey,
 	sec_nonce: &SecretKey,
 	nonce_sum: &PublicKey,
+	pubkey_sum: Option<&PublicKey>,
 	fee: u64,
 	lock_height: u64,
 ) -> Result<Signature, Error> {
@@ -45,7 +46,9 @@ pub fn calculate_partial_sig(
 		&msg,
 		sec_key,
 		Some(sec_nonce),
+		None,
 		Some(nonce_sum),
+		pubkey_sum,
 		Some(nonce_sum),
 	)?;
 	Ok(sig)
@@ -57,11 +60,20 @@ pub fn verify_partial_sig(
 	sig: &Signature,
 	pub_nonce_sum: &PublicKey,
 	pubkey: &PublicKey,
+	pubkey_sum: Option<&PublicKey>,
 	fee: u64,
 	lock_height: u64,
 ) -> Result<(), Error> {
 	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
-	if !verify_single(secp, sig, &msg, Some(&pub_nonce_sum), pubkey, true) {
+	if !verify_single(
+		secp,
+		sig,
+		&msg,
+		Some(&pub_nonce_sum),
+		pubkey,
+		pubkey_sum,
+		true,
+	) {
 		Err(ErrorKind::Signature(
 			"Signature validation error".to_string(),
 		))?
@@ -75,12 +87,22 @@ pub fn sign_from_key_id<K>(
 	k: &K,
 	msg: &Message,
 	key_id: &Identifier,
+	blind_sum: Option<&PublicKey>,
 ) -> Result<Signature, Error>
 where
 	K: Keychain,
 {
-	let skey = k.derived_key(key_id)?;
-	let sig = aggsig::sign_single(secp, &msg, &skey, None, None, None)?;
+	let skey = k.derive_key(key_id)?;
+	let sig = aggsig::sign_single(
+		secp,
+		&msg,
+		&skey.secret_key,
+		None,
+		None,
+		None,
+		blind_sum,
+		None,
+	)?;
 	Ok(sig)
 }
 
@@ -91,10 +113,8 @@ pub fn verify_single_from_commit(
 	msg: &Message,
 	commit: &Commitment,
 ) -> Result<(), Error> {
-	// Extract the pubkey, unfortunately we need this hack for now, (we just hope
-	// one is valid)
 	let pubkey = commit.to_pubkey(secp)?;
-	if !verify_single(secp, sig, &msg, None, &pubkey, false) {
+	if !verify_single(secp, sig, &msg, None, &pubkey, Some(&pubkey), false) {
 		Err(ErrorKind::Signature(
 			"Signature validation error".to_string(),
 		))?
@@ -107,11 +127,12 @@ pub fn verify_sig_build_msg(
 	secp: &Secp256k1,
 	sig: &Signature,
 	pubkey: &PublicKey,
+	pubkey_sum: Option<&PublicKey>,
 	fee: u64,
 	lock_height: u64,
 ) -> Result<(), Error> {
 	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
-	if !verify_single(secp, sig, &msg, None, pubkey, true) {
+	if !verify_single(secp, sig, &msg, None, pubkey, pubkey_sum, true) {
 		Err(ErrorKind::Signature(
 			"Signature validation error".to_string(),
 		))?
@@ -126,9 +147,12 @@ pub fn verify_single(
 	msg: &Message,
 	pubnonce: Option<&PublicKey>,
 	pubkey: &PublicKey,
+	pubkey_sum: Option<&PublicKey>,
 	is_partial: bool,
 ) -> bool {
-	aggsig::verify_single(secp, sig, msg, pubnonce, pubkey, is_partial)
+	aggsig::verify_single(
+		secp, sig, msg, pubnonce, pubkey, pubkey_sum, None, is_partial,
+	)
 }
 
 /// Adds signatures
@@ -147,8 +171,10 @@ pub fn sign_with_blinding(
 	secp: &Secp256k1,
 	msg: &Message,
 	blinding: &BlindingFactor,
+	pubkey_sum: Option<&PublicKey>,
 ) -> Result<Signature, Error> {
 	let skey = &blinding.secret_key(&secp)?;
-	let sig = aggsig::sign_single(secp, &msg, skey, None, None, None)?;
+	//let pubkey_sum = PublicKey::from_secret_key(&secp, &skey)?;
+	let sig = aggsig::sign_single(secp, &msg, skey, None, None, None, pubkey_sum, None)?;
 	Ok(sig)
 }
