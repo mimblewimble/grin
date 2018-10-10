@@ -35,7 +35,7 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{ChainAdapter, NoStatus, Options, Tip, TxHashsetWriteStatus};
+use types::{ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::LOGGER;
 
@@ -530,7 +530,7 @@ impl Chain {
 	}
 
 	/// Returns current txhashset roots
-	pub fn get_txhashset_roots(&self) -> (Hash, Hash, Hash) {
+	pub fn get_txhashset_roots(&self) -> TxHashSetRoots {
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset.roots()
 	}
