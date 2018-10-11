@@ -123,6 +123,19 @@ impl StateSync {
 					}
 					Err(e) => self.sync_state.set_sync_error(Error::P2P(e)),
 				}
+
+				// to avoid the confusing log,
+				// update the final HeaderSync state mainly for 'current_height'
+				{
+					let status = self.sync_state.status();
+					if let SyncStatus::HeaderSync { .. } = status {
+						self.sync_state.update(SyncStatus::HeaderSync {
+							current_height: header_head.height,
+							highest_height,
+						});
+					}
+				}
+
 				self.sync_state.update(SyncStatus::TxHashsetDownload);
 			}
 		}
