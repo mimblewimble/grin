@@ -186,7 +186,7 @@ impl MessageHandler for Protocol {
 					let headers: Headers = headers_streaming_body(
 						conn,
 						msg.header.msg_len,
-						8,
+						32,
 						&mut total_read,
 						&mut reserved,
 						header_size,
