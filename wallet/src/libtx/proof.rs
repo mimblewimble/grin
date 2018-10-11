@@ -25,9 +25,9 @@ fn create_nonce<K>(k: &K, commit: &Commitment) -> Result<SecretKey, Error>
 where
 	K: Keychain,
 {
-	// hash(commit|masterkey) as nonce
-	let root_key = k.root_key_id();
-	let res = blake2::blake2b::blake2b(32, &commit.0, &root_key.to_bytes()[..]);
+	// hash(commit|wallet root secret key (m)) as nonce
+	let root_key = k.derive_key(&K::root_key_id())?.secret_key;
+	let res = blake2::blake2b::blake2b(32, &commit.0, &root_key.0[..]);
 	let res = res.as_bytes();
 	let mut ret_val = [0; 32];
 	for i in 0..res.len() {
@@ -53,9 +53,11 @@ where
 	K: Keychain,
 {
 	let commit = k.commit(amount, key_id)?;
-	let skey = k.derived_key(key_id)?;
+	let skey = k.derive_key(key_id)?;
 	let nonce = create_nonce(k, &commit)?;
-	Ok(k.secp().bullet_proof(amount, skey, nonce, extra_data))
+	let message = ProofMessage::from_bytes(&key_id.serialize_path());
+	Ok(k.secp()
+		.bullet_proof(amount, skey.secret_key, nonce, extra_data, Some(message)))
 }
 
 /// Verify a proof

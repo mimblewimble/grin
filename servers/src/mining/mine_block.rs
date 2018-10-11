@@ -184,7 +184,7 @@ fn build_block(
 fn burn_reward(block_fees: BlockFees) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
 	warn!(LOGGER, "Burning block fees: {:?}", block_fees);
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let (out, kernel) =
 		wallet::libtx::reward::output(&keychain, &key_id, block_fees.fees, block_fees.height)
 			.unwrap();

@@ -19,8 +19,8 @@ use std::{fs, path};
 use failure::ResultExt;
 use uuid::Uuid;
 
-use keychain::{Identifier, Keychain};
-use store::{self, option_to_not_found, to_key, u64_to_key};
+use keychain::{ChildNumber, ExtKeychain, Identifier, Keychain};
+use store::{self, option_to_not_found, to_key, to_key_u64};
 
 use libwallet::types::*;
 use libwallet::{internal, Error, ErrorKind};
@@ -36,6 +36,7 @@ const CONFIRMED_HEIGHT_PREFIX: u8 = 'c' as u8;
 const PRIVATE_TX_CONTEXT_PREFIX: u8 = 'p' as u8;
 const TX_LOG_ENTRY_PREFIX: u8 = 't' as u8;
 const TX_LOG_ID_PREFIX: u8 = 'i' as u8;
+const ACCOUNT_PATH_MAPPING_PREFIX: u8 = 'a' as u8;
 
 impl From<store::Error> for Error {
 	fn from(error: store::Error) -> Error {
@@ -56,7 +57,9 @@ pub struct LMDBBackend<C, K> {
 	/// passphrase: TODO better ways of dealing with this other than storing
 	passphrase: String,
 	/// Keychain
-	keychain: Option<K>,
+	pub keychain: Option<K>,
+	/// Parent path to use by default for output operations
+	parent_key_id: Identifier,
 	/// client
 	client: C,
 }
@@ -67,14 +70,40 @@ impl<C, K> LMDBBackend<C, K> {
 		fs::create_dir_all(&db_path).expect("Couldn't create wallet backend directory!");
 
 		let lmdb_env = Arc::new(store::new_env(db_path.to_str().unwrap().to_string()));
-		let db = store::Store::open(lmdb_env, DB_DIR);
-		Ok(LMDBBackend {
-			db,
+		let store = store::Store::open(lmdb_env, DB_DIR);
+
+		// Make sure default wallet derivation path always exists
+		let default_account = AcctPathMapping {
+			label: "default".to_owned(),
+			path: LMDBBackend::<C, K>::default_path(),
+		};
+		let acct_key = to_key(
+			ACCOUNT_PATH_MAPPING_PREFIX,
+			&mut default_account.label.as_bytes().to_vec(),
+		);
+
+		{
+			let batch = store.batch()?;
+			batch.put_ser(&acct_key, &default_account)?;
+			batch.commit()?;
+		}
+
+		let res = LMDBBackend {
+			db: store,
 			config: config.clone(),
 			passphrase: String::from(passphrase),
 			keychain: None,
+			parent_key_id: LMDBBackend::<C, K>::default_path(),
 			client: client,
-		})
+		};
+		Ok(res)
+	}
+
+	fn default_path() -> Identifier {
+		// return the default parent wallet path, corresponding to the default account
+		// in the BIP32 spec. Parent is account 0 at level 2, child output identifiers
+		// are all at level 3
+		ExtKeychain::derive_key_id(2, 0, 0, 0, 0)
 	}
 
 	/// Just test to see if database files exist in the current directory. If
@@ -115,6 +144,27 @@ where
 	/// Return the client being used
 	fn client(&mut self) -> &mut C {
 		&mut self.client
+	}
+
+	/// Set parent path by account name
+	fn set_parent_key_id_by_name(&mut self, label: &str) -> Result<(), Error> {
+		let label = label.to_owned();
+		let res = self.acct_path_iter().find(|l| l.label == label);
+		if let Some(a) = res {
+			self.set_parent_key_id(a.path);
+			Ok(())
+		} else {
+			return Err(ErrorKind::UnknownAccountLabel(label.clone()).into());
+		}
+	}
+
+	/// set parent path
+	fn set_parent_key_id(&mut self, id: Identifier) {
+		self.parent_key_id = id;
+	}
+
+	fn parent_key_id(&mut self) -> Identifier {
+		self.parent_key_id.clone()
 	}
 
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error> {
@@ -170,6 +220,15 @@ where
 		).map_err(|e| e.into())
 	}
 
+	fn acct_path_iter<'a>(&'a self) -> Box<Iterator<Item = AcctPathMapping> + 'a> {
+		Box::new(self.db.iter(&[ACCOUNT_PATH_MAPPING_PREFIX]).unwrap())
+	}
+
+	fn get_acct_path(&self, label: String) -> Result<Option<AcctPathMapping>, Error> {
+		let acct_key = to_key(ACCOUNT_PATH_MAPPING_PREFIX, &mut label.as_bytes().to_vec());
+		self.db.get_ser(&acct_key).map_err(|e| e.into())
+	}
+
 	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch<K> + 'a>, Error> {
 		Ok(Box::new(Batch {
 			_store: self,
@@ -178,34 +237,37 @@ where
 		}))
 	}
 
-	fn next_child<'a>(&mut self, root_key_id: Identifier) -> Result<u32, Error> {
-		let mut details = self.details(root_key_id.clone())?;
+	fn next_child<'a>(&mut self) -> Result<Identifier, Error> {
+		let parent_key_id = self.parent_key_id.clone();
+		let mut deriv_idx = {
+			let batch = self.db.batch()?;
+			let deriv_key = to_key(DERIV_PREFIX, &mut self.parent_key_id.to_bytes().to_vec());
+			match batch.get_ser(&deriv_key)? {
+				Some(idx) => idx,
+				None => 0,
+			}
+		};
+		let mut return_path = self.parent_key_id.to_path();
+		return_path.depth = return_path.depth + 1;
+		return_path.path[return_path.depth as usize - 1] = ChildNumber::from(deriv_idx);
+		deriv_idx = deriv_idx + 1;
 		let mut batch = self.batch()?;
-		details.last_child_index = details.last_child_index + 1;
-		batch.save_details(root_key_id, details.clone())?;
+		batch.save_child_index(&parent_key_id, deriv_idx)?;
 		batch.commit()?;
-		Ok(details.last_child_index + 1)
+		Ok(Identifier::from_path(&return_path))
 	}
 
-	fn details(&mut self, root_key_id: Identifier) -> Result<WalletDetails, Error> {
+	fn last_confirmed_height<'a>(&mut self) -> Result<u64, Error> {
 		let batch = self.db.batch()?;
-		let deriv_key = to_key(DERIV_PREFIX, &mut root_key_id.to_bytes().to_vec());
-		let deriv_idx = match batch.get_ser(&deriv_key)? {
-			Some(idx) => idx,
-			None => 0,
-		};
 		let height_key = to_key(
 			CONFIRMED_HEIGHT_PREFIX,
-			&mut root_key_id.to_bytes().to_vec(),
+			&mut self.parent_key_id.to_bytes().to_vec(),
 		);
 		let last_confirmed_height = match batch.get_ser(&height_key)? {
 			Some(h) => h,
 			None => 0,
 		};
-		Ok(WalletDetails {
-			last_child_index: deriv_idx,
-			last_confirmed_height: last_confirmed_height,
-		})
+		Ok(last_confirmed_height)
 	}
 
 	fn restore(&mut self) -> Result<(), Error> {
@@ -289,18 +351,17 @@ where
 		Ok(())
 	}
 
-	fn next_tx_log_id(&mut self, root_key_id: Identifier) -> Result<u32, Error> {
-		let tx_id_key = to_key(TX_LOG_ID_PREFIX, &mut root_key_id.to_bytes().to_vec());
-		let mut last_tx_log_id = match self.db.borrow().as_ref().unwrap().get_ser(&tx_id_key)? {
+	fn next_tx_log_id(&mut self, parent_key_id: &Identifier) -> Result<u32, Error> {
+		let tx_id_key = to_key(TX_LOG_ID_PREFIX, &mut parent_key_id.to_bytes().to_vec());
+		let last_tx_log_id = match self.db.borrow().as_ref().unwrap().get_ser(&tx_id_key)? {
 			Some(t) => t,
 			None => 0,
 		};
-		last_tx_log_id = last_tx_log_id + 1;
 		self.db
 			.borrow()
 			.as_ref()
 			.unwrap()
-			.put_ser(&tx_id_key, &last_tx_log_id)?;
+			.put_ser(&tx_id_key, &(last_tx_log_id + 1))?;
 		Ok(last_tx_log_id)
 	}
 
@@ -315,33 +376,65 @@ where
 		)
 	}
 
-	fn save_details(&mut self, root_key_id: Identifier, d: WalletDetails) -> Result<(), Error> {
-		let deriv_key = to_key(DERIV_PREFIX, &mut root_key_id.to_bytes().to_vec());
+	fn save_last_confirmed_height(
+		&mut self,
+		parent_key_id: &Identifier,
+		height: u64,
+	) -> Result<(), Error> {
 		let height_key = to_key(
 			CONFIRMED_HEIGHT_PREFIX,
-			&mut root_key_id.to_bytes().to_vec(),
+			&mut parent_key_id.to_bytes().to_vec(),
 		);
 		self.db
 			.borrow()
 			.as_ref()
 			.unwrap()
-			.put_ser(&deriv_key, &d.last_child_index)?;
-		self.db
-			.borrow()
-			.as_ref()
-			.unwrap()
-			.put_ser(&height_key, &d.last_confirmed_height)?;
+			.put_ser(&height_key, &height)?;
 		Ok(())
 	}
 
-	fn save_tx_log_entry(&self, t: TxLogEntry) -> Result<(), Error> {
-		let tx_log_key = u64_to_key(TX_LOG_ENTRY_PREFIX, t.id as u64);
+	fn save_child_index(&mut self, parent_id: &Identifier, child_n: u32) -> Result<(), Error> {
+		let deriv_key = to_key(DERIV_PREFIX, &mut parent_id.to_bytes().to_vec());
 		self.db
 			.borrow()
 			.as_ref()
 			.unwrap()
-			.put_ser(&tx_log_key, &t)?;
+			.put_ser(&deriv_key, &child_n)?;
 		Ok(())
+	}
+
+	fn save_tx_log_entry(&self, t: TxLogEntry, parent_id: &Identifier) -> Result<(), Error> {
+		let tx_log_key = to_key_u64(
+			TX_LOG_ENTRY_PREFIX,
+			&mut parent_id.to_bytes().to_vec(),
+			t.id as u64,
+		);
+		self.db.borrow().as_ref().unwrap().put_ser(&tx_log_key, &t)?;
+		Ok(())
+	}
+
+	fn save_acct_path(&mut self, mapping: AcctPathMapping) -> Result<(), Error> {
+		let acct_key = to_key(
+			ACCOUNT_PATH_MAPPING_PREFIX,
+			&mut mapping.label.as_bytes().to_vec(),
+		);
+		self.db
+			.borrow()
+			.as_ref()
+			.unwrap()
+			.put_ser(&acct_key, &mapping)?;
+		Ok(())
+	}
+
+	fn acct_path_iter(&self) -> Box<Iterator<Item = AcctPathMapping>> {
+		Box::new(
+			self.db
+				.borrow()
+				.as_ref()
+				.unwrap()
+				.iter(&[ACCOUNT_PATH_MAPPING_PREFIX])
+				.unwrap(),
+		)
 	}
 
 	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error> {

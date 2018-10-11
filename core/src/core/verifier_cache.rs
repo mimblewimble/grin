@@ -69,7 +69,8 @@ impl VerifierCache for LruVerifierCache {
 					.kernel_sig_verification_cache
 					.get_mut(&x.hash())
 					.unwrap_or(&mut false)
-			}).cloned()
+			})
+			.cloned()
 			.collect::<Vec<_>>();
 		debug!(
 			LOGGER,
@@ -88,7 +89,8 @@ impl VerifierCache for LruVerifierCache {
 					.rangeproof_verification_cache
 					.get_mut(&x.proof.hash())
 					.unwrap_or(&mut false)
-			}).cloned()
+			})
+			.cloned()
 			.collect::<Vec<_>>();
 		debug!(
 			LOGGER,

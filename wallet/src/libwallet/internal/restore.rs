@@ -14,10 +14,12 @@
 //! Functions to restore a wallet's outputs from just the master seed
 
 use core::global;
-use keychain::{Identifier, Keychain};
+use keychain::{ExtKeychain, Identifier, Keychain};
 use libtx::proof;
+use libwallet::internal::keys;
 use libwallet::types::*;
 use libwallet::Error;
+use std::collections::HashMap;
 use util::secp::{key::SecretKey, pedersen};
 use util::LOGGER;
 
@@ -26,9 +28,9 @@ struct OutputResult {
 	///
 	pub commit: pedersen::Commitment,
 	///
-	pub key_id: Option<Identifier>,
+	pub key_id: Identifier,
 	///
-	pub n_child: Option<u32>,
+	pub n_child: u32,
 	///
 	pub value: u64,
 	///
@@ -79,10 +81,14 @@ where
 			*height
 		};
 
+		// TODO: Output paths are always going to be length 3 for now, but easy enough to grind
+		// through to find the right path if required later
+		let key_id = Identifier::from_serialized_path(3u8, &info.message.as_bytes());
+
 		wallet_outputs.push(OutputResult {
 			commit: *commit,
-			key_id: None,
-			n_child: None,
+			key_id: key_id.clone(),
+			n_child: key_id.to_path().last_path_index(),
 			value: info.value,
 			height: *height,
 			lock_height: lock_height,
@@ -93,58 +99,6 @@ where
 	Ok(wallet_outputs)
 }
 
-/// Attempts to populate a list of outputs with their
-/// correct child indices based on the root key
-fn populate_child_indices<T, C, K>(
-	wallet: &mut T,
-	outputs: &mut Vec<OutputResult>,
-	max_derivations: u32,
-) -> Result<(), Error>
-where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
-	K: Keychain,
-{
-	info!(
-		LOGGER,
-		"Attempting to populate child indices and key identifiers for {} identified outputs",
-		outputs.len()
-	);
-
-	// keep track of child keys we've already found, and avoid some EC ops
-	let mut found_child_indices: Vec<u32> = vec![];
-	for output in outputs.iter_mut() {
-		let mut found = false;
-		for i in 1..max_derivations {
-			// seems to be a bug allowing multiple child keys at the moment
-			/*if found_child_indices.contains(&i){
-				continue;
-			}*/
-			let key_id = wallet.keychain().derive_key_id(i as u32)?;
-			let b = wallet.keychain().derived_key(&key_id)?;
-			if output.blinding != b {
-				continue;
-			}
-			found = true;
-			found_child_indices.push(i);
-			info!(
-				LOGGER,
-				"Key index {} found for output {:?}", i, output.commit
-			);
-			output.key_id = Some(key_id);
-			output.n_child = Some(i);
-			break;
-		}
-		if !found {
-			warn!(
-				LOGGER,
-				"Unable to find child key index for: {:?}", output.commit,
-			);
-		}
-	}
-	Ok(())
-}
-
 /// Restore a wallet
 pub fn restore<T, C, K>(wallet: &mut T) -> Result<(), Error>
 where
@@ -152,8 +106,6 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	let max_derivations = 1_000_000;
-
 	// Don't proceed if wallet_data has anything in it
 	let is_empty = wallet.iter().next().is_none();
 	if !is_empty {
@@ -195,29 +147,34 @@ where
 		result_vec.len(),
 	);
 
-	populate_child_indices(wallet, &mut result_vec, max_derivations)?;
-
+	let mut found_parents: HashMap<Identifier, u32> = HashMap::new();
 	// Now save what we have
-	let root_key_id = wallet.keychain().root_key_id();
-	let current_chain_height = wallet.client().get_chain_height()?;
-	let mut batch = wallet.batch()?;
-	let mut max_child_index = 0;
-	for output in result_vec {
-		if output.key_id.is_some() && output.n_child.is_some() {
+	{
+		let mut batch = wallet.batch()?;
+
+		for output in result_vec {
+			let parent_key_id = output.key_id.parent_path();
+			if !found_parents.contains_key(&parent_key_id) {
+				found_parents.insert(parent_key_id.clone(), 0);
+			}
+
+			let log_id = batch.next_tx_log_id(&parent_key_id)?;
 			let mut tx_log_entry = None;
+			// wallet update will create tx log entries when it finds confirmed coinbase
+			// transactions
 			if !output.is_coinbase {
-				let log_id = batch.next_tx_log_id(root_key_id.clone())?;
-				// also keep tx log updated so everything still tallies
-				let mut t = TxLogEntry::new(TxLogEntryType::TxReceived, log_id);
+				let mut t =
+					TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxReceived, log_id);
 				t.amount_credited = output.value;
 				t.num_outputs = 1;
 				tx_log_entry = Some(log_id);
-				let _ = batch.save_tx_log_entry(t);
+				batch.save_tx_log_entry(t, &parent_key_id)?;
 			}
+
 			let _ = batch.save(OutputData {
-				root_key_id: root_key_id.clone(),
-				key_id: output.key_id.unwrap(),
-				n_child: output.n_child.unwrap(),
+				root_key_id: parent_key_id.clone(),
+				key_id: output.key_id,
+				n_child: output.n_child,
 				value: output.value,
 				status: OutputStatus::Unconfirmed,
 				height: output.height,
@@ -226,28 +183,28 @@ where
 				tx_log_entry: tx_log_entry,
 			});
 
-			max_child_index = if max_child_index >= output.n_child.unwrap() {
-				max_child_index
-			} else {
-				output.n_child.unwrap()
+			let max_child_index = found_parents.get(&parent_key_id).unwrap().clone();
+			if output.n_child >= max_child_index {
+				found_parents.insert(parent_key_id.clone(), output.n_child);
 			};
-		} else {
-			warn!(
-				LOGGER,
-				"Commit {:?} identified but unable to recover key. Output has not been restored.",
-				output.commit
-			);
+		}
+		batch.commit()?;
+	}
+	// restore labels, account paths and child derivation indices
+	let label_base = "account";
+	let mut index = 1;
+	for (path, max_child_index) in found_parents.iter() {
+		if *path == ExtKeychain::derive_key_id(2, 0, 0, 0, 0) {
+			//default path already exists
+			continue;
+		}
+		let label = format!("{}_{}", label_base, index);
+		keys::set_acct_path(wallet, &label, path)?;
+		index = index + 1;
+		{
+			let mut batch = wallet.batch()?;
+			batch.save_child_index(path, max_child_index + 1)?;
 		}
 	}
-
-	if max_child_index > 0 {
-		let details = WalletDetails {
-			last_child_index: max_child_index + 1,
-			last_confirmed_height: current_chain_height,
-		};
-		batch.save_details(root_key_id.clone(), details)?;
-	}
-
-	batch.commit()?;
 	Ok(())
 }

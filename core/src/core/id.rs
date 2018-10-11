@@ -170,9 +170,9 @@ mod test {
 
 		let foo = Foo(0);
 
-		let expected_hash =
-			Hash::from_hex("81e47a19e6b29b0a65b9591762ce5143ed30d0261e5d24a3201752506b20f15c")
-				.unwrap();
+		let expected_hash = Hash::from_hex(
+			"81e47a19e6b29b0a65b9591762ce5143ed30d0261e5d24a3201752506b20f15c",
+		).unwrap();
 		assert_eq!(foo.hash(), expected_hash);
 
 		let other_hash = Hash::default();
@@ -182,9 +182,9 @@ mod test {
 		);
 
 		let foo = Foo(5);
-		let expected_hash =
-			Hash::from_hex("3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673")
-				.unwrap();
+		let expected_hash = Hash::from_hex(
+			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
+		).unwrap();
 		assert_eq!(foo.hash(), expected_hash);
 
 		let other_hash = Hash::default();
@@ -194,14 +194,14 @@ mod test {
 		);
 
 		let foo = Foo(5);
-		let expected_hash =
-			Hash::from_hex("3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673")
-				.unwrap();
+		let expected_hash = Hash::from_hex(
+			"3a42e66e46dd7633b57d1f921780a1ac715e6b93c19ee52ab714178eb3a9f673",
+		).unwrap();
 		assert_eq!(foo.hash(), expected_hash);
 
-		let other_hash =
-			Hash::from_hex("81e47a19e6b29b0a65b9591762ce5143ed30d0261e5d24a3201752506b20f15c")
-				.unwrap();
+		let other_hash = Hash::from_hex(
+			"81e47a19e6b29b0a65b9591762ce5143ed30d0261e5d24a3201752506b20f15c",
+		).unwrap();
 		assert_eq!(
 			foo.short_id(&other_hash, foo.0),
 			ShortId::from_hex("3e9cde72a687").unwrap()

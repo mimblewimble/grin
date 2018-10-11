@@ -22,7 +22,7 @@ use consensus::{
 	DIFFICULTY_ADJUST_WINDOW, EASINESS, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
 	REFERENCE_SIZESHIFT,
 };
-use pow::{self, CuckooContext, Difficulty, EdgeType, PoWContext};
+use pow::{self, CuckatooContext, Difficulty, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
@@ -39,7 +39,7 @@ pub const AUTOMATED_TESTING_MIN_SIZESHIFT: u8 = 10;
 pub const AUTOMATED_TESTING_PROOF_SIZE: usize = 4;
 
 /// User testing sizeshift
-pub const USER_TESTING_MIN_SIZESHIFT: u8 = 16;
+pub const USER_TESTING_MIN_SIZESHIFT: u8 = 19;
 
 /// User testing proof size
 pub const USER_TESTING_PROOF_SIZE: usize = 42;
@@ -69,6 +69,9 @@ pub const TESTNET2_INITIAL_DIFFICULTY: u64 = 1000;
 /// a 30x Cuckoo adjustment factor
 pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
 
+/// Testnet 4 initial block difficulty
+pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1;
+
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -83,13 +86,15 @@ pub enum ChainTypes {
 	Testnet2,
 	/// Third test network
 	Testnet3,
+	/// Fourth test network
+	Testnet4,
 	/// Main production network
 	Mainnet,
 }
 
 impl Default for ChainTypes {
 	fn default() -> ChainTypes {
-		ChainTypes::Testnet3
+		ChainTypes::Testnet4
 	}
 }
 
@@ -128,12 +133,12 @@ pub fn create_pow_context<T>(
 where
 	T: EdgeType,
 {
-	// Perform whatever tests, configuration etc are needed to determine desired context + edge size
-	// + params
-	// Hardcode to regular cuckoo for now
-	CuckooContext::<T>::new(edge_bits, proof_size, EASINESS, max_sols)
-	// Or switch to cuckatoo as follows:
-	// CuckatooContext::<T>::new(edge_bits, proof_size, easiness_pct, max_sols)
+	CuckatooContext::<T>::new(edge_bits, proof_size, EASINESS, max_sols)
+}
+
+/// Return the type of the pos
+pub fn pow_type() -> PoWContextTypes {
+	PoWContextTypes::Cuckatoo
 }
 
 /// The minimum acceptable sizeshift
@@ -193,6 +198,7 @@ pub fn initial_block_difficulty() -> u64 {
 		ChainTypes::Testnet1 => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet2 => TESTNET2_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet3 => TESTNET3_INITIAL_DIFFICULTY,
+		ChainTypes::Testnet4 => TESTNET4_INITIAL_DIFFICULTY,
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
 	}
 }
@@ -225,6 +231,7 @@ pub fn is_production_mode() -> bool {
 	ChainTypes::Testnet1 == *param_ref
 		|| ChainTypes::Testnet2 == *param_ref
 		|| ChainTypes::Testnet3 == *param_ref
+		|| ChainTypes::Testnet4 == *param_ref
 		|| ChainTypes::Mainnet == *param_ref
 }
 
