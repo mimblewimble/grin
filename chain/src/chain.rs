@@ -1058,8 +1058,8 @@ fn setup_head(
 		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()))?,
 	};
 
-	// Initialize header_head and sync_head as necessary for chain init.
-	batch.reset_head()?;
+	// Reset sync_head to be consistent with current header_head.
+	batch.reset_sync_head()?;
 	batch.commit()?;
 
 	Ok(())
