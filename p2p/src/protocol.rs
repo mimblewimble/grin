@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::cmp;
 use std::env;
 use std::fs::File;
 use std::io::{self, BufWriter};
@@ -19,6 +20,7 @@ use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
 use std::time;
 
+use chrono::prelude::Utc;
 use conn::{Message, MessageHandler, Response};
 use core::core::{self, hash::Hash, CompactBlock};
 use core::{global, ser};
@@ -255,11 +257,27 @@ impl MessageHandler for Protocol {
 					);
 					return Err(Error::BadMessage);
 				}
+
+				let download_start_time = Utc::now();
+				self.adapter
+					.txhashset_download_update(download_start_time, 0, sm_arch.bytes);
+
 				let mut tmp = env::temp_dir();
 				tmp.push("txhashset.zip");
 				let mut save_txhashset_to_file = |file| -> Result<(), Error> {
 					let mut tmp_zip = BufWriter::new(File::create(file)?);
-					msg.copy_attachment(sm_arch.bytes as usize, &mut tmp_zip)?;
+					let total_size = sm_arch.bytes as usize;
+					let mut downloaded_size: usize = 0;
+					let mut request_size = 48_000;
+					while request_size > 0 {
+						downloaded_size += msg.copy_attachment(request_size, &mut tmp_zip)?;
+						request_size = cmp::min(48_000, total_size - downloaded_size);
+						self.adapter.txhashset_download_update(
+							download_start_time,
+							downloaded_size as u64,
+							total_size as u64,
+						);
+					}
 					tmp_zip.into_inner().unwrap().sync_all()?;
 					Ok(())
 				};

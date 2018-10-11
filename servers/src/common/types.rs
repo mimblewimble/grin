@@ -18,6 +18,7 @@ use std::sync::{Arc, RwLock};
 
 use api;
 use chain;
+use chrono::prelude::{DateTime, Utc};
 use core::global::ChainTypes;
 use core::{core, pow};
 use p2p;
@@ -255,7 +256,11 @@ pub enum SyncStatus {
 		highest_height: u64,
 	},
 	/// Downloading the various txhashsets
-	TxHashsetDownload,
+	TxHashsetDownload {
+		start_time: DateTime<Utc>,
+		downloaded_size: u64,
+		total_size: u64,
+	},
 	/// Setting up before validation
 	TxHashsetSetup,
 	/// Validating the full state
@@ -314,6 +319,17 @@ impl SyncState {
 		);
 
 		*status = new_status;
+	}
+
+	/// Update txhashset downloading progress
+	pub fn update_txhashset_download(&self, new_status: SyncStatus) -> bool {
+		if let SyncStatus::TxHashsetDownload { .. } = new_status {
+			let mut status = self.current.write().unwrap();
+			*status = new_status;
+			true
+		} else {
+			false
+		}
 	}
 
 	/// Communicate sync error
