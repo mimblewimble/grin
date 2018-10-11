@@ -165,7 +165,6 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				if block
 					.validate(
 						&prev.total_kernel_offset,
-						&prev.total_kernel_sum,
 						self.verifier_cache.clone(),
 					).is_ok()
 				{

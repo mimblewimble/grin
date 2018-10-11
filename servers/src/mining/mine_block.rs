@@ -131,7 +131,6 @@ fn build_block(
 	// making sure we're not spending time mining a useless block
 	b.validate(
 		&head.total_kernel_offset,
-		&head.total_kernel_sum,
 		verifier_cache,
 	)?;
 
