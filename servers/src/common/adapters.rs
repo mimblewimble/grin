@@ -23,6 +23,7 @@ use std::time::Instant;
 
 use chain::{self, ChainAdapter, Options, Tip};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
+use constants;
 use core::core::hash::{Hash, Hashed};
 use core::core::transaction::Transaction;
 use core::core::verifier_cache::VerifierCache;
@@ -527,9 +528,9 @@ impl NetToChainAdapter {
 		}
 
 		if let Some(tip) = tip {
-			// trigger compaction every 2000 blocks, uses a different thread to avoid
+			// trigger compaction every COMPACTION_BLOCKS blocks, uses a different thread to avoid
 			// blocking the caller thread (likely a peer)
-			if tip.height % 2000 == 0 {
+			if tip.height % constants::COMPACTION_BLOCKS == 0 {
 				let chain = self.chain().clone();
 				let _ = thread::Builder::new()
 					.name("compactor".to_string())
