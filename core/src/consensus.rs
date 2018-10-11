@@ -266,13 +266,6 @@ fn secondary_pow_scaling(
 
 	// what's the ideal ratio at the current height
 	let ratio = secondary_pow_ratio(height);
-	println!(
-		"== {} {} {} {}",
-		scaling_median,
-		ratio,
-		diff_data.len(),
-		scalings.len()
-	);
 
 	// adjust the past median based on ideal ratio vs actual ratio
 	let scaling = scaling_median * scalings.len() as u64 * 100 / ratio / diff_data.len() as u64;
