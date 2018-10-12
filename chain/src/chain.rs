@@ -598,7 +598,10 @@ impl Chain {
 		Ok(())
 	}
 
-	// TODO - think about how to optimize this.
+	/// Rebuild the sync MMR based on current header_head.
+	/// We rebuild the sync MMR when first entering sync mode so ensure we
+	/// have an MMR we can safely rewind based on the headers received from a peer.
+	/// TODO - think about how to optimize this.
 	pub fn rebuild_sync_mmr(&self, head: &Tip) -> Result<(), Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		let mut batch = self.store.batch()?;
@@ -610,7 +613,11 @@ impl Chain {
 		Ok(())
 	}
 
-	// TODO - think about how to optimize this.
+	/// Rebuild the header MMR based on current header_head.
+	/// We rebuild the header MMR after receiving a txhashset from a peer.
+	/// The txhashset contains output, rangeproof and kernel MMRs but we construct
+	/// the header MMR locally based on headers from our db.
+	/// TODO - think about how to optimize this.
 	fn rebuild_header_mmr(
 		&self,
 		head: &Tip,

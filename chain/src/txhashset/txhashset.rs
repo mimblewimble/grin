@@ -474,6 +474,10 @@ where
 	}
 }
 
+/// Start a new sync MMR unit of work. This MMR tracks the sync_head.
+/// This is used during header sync to validate batches of headers as they arrive
+/// without needing to repeatedly rewind the header MMR that continues to track
+/// the header_head as they diverge during sync.
 pub fn sync_extending<'a, F, T>(
 	trees: &'a mut TxHashSet,
 	batch: &'a mut Batch,
@@ -538,6 +542,9 @@ where
 	}
 }
 
+/// Start a new header MMR unit of work. This MMR tracks the header_head.
+/// This MMR can be extended individually beyond the other (output, rangeproof and kernel) MMRs
+/// to allow headers to be validated before we receive the full block data.
 pub fn header_extending<'a, F, T>(
 	trees: &'a mut TxHashSet,
 	batch: &'a mut Batch,
@@ -604,7 +611,11 @@ where
 	}
 }
 
+/// A header extension to allow the header MMR to extend beyond the other MMRs individually.
+/// This is to allow headers to be validated against the MMR before we have the full block data.
 pub struct HeaderExtension<'a> {
+	header: BlockHeader,
+
 	pmmr: DBPMMR<'a, BlockHeader, DBPMMRBackend<BlockHeader>>,
 
 	/// Rollback flag.
@@ -623,19 +634,26 @@ impl<'a> HeaderExtension<'a> {
 		header: BlockHeader,
 	) -> HeaderExtension<'a> {
 		HeaderExtension {
+			header,
 			pmmr,
 			rollback: false,
 			batch,
 		}
 	}
 
+	/// Apply a new header to the header MMR extension.
+	/// This may be either the header MMR or the sync MMR depending on the
+	/// extension.
 	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		self.pmmr
 			.push(header.clone())
 			.map_err(&ErrorKind::TxHashSetErr)?;
+		self.header = header.clone();
 		Ok(())
 	}
 
+	/// Rewind the header extension to the specified header.
+	/// Note the close relationship between header height and insertion index.
 	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		debug!(
 			LOGGER,
@@ -649,21 +667,28 @@ impl<'a> HeaderExtension<'a> {
 			.rewind(header_pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
+		// Update our header to reflect the one we rewound to.
+		self.header = header.clone();
+
 		Ok(())
 	}
 
+	/// Truncate the header MMR (rewind all the way back to pos 0).
+	/// Used when rebuilding the header MMR by reapplying all headers
+	/// including the genesis block header.
 	pub fn truncate(&mut self) -> Result<(), Error> {
 		debug!(LOGGER, "Truncating header extension.");
 		self.pmmr.rewind(0).map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
 
+	/// The size of the header MMR.
 	pub fn size(&self) -> u64 {
 		self.pmmr.unpruned_size()
 	}
 
-	// TODO - think about how to optimize this.
-	// Requires *all* header hashes to be iterated over in ascending order.
+	/// TODO - think about how to optimize this.
+	/// Requires *all* header hashes to be iterated over in ascending order.
 	pub fn rebuild(&mut self, head: &Tip, genesis: &BlockHeader) -> Result<(), Error> {
 		debug!(
 			LOGGER,
@@ -1084,12 +1109,17 @@ impl<'a> Extension<'a> {
 		}
 	}
 
-	pub fn validate_header_root(&self, header: &BlockHeader) -> Result<(), Error> {
+	/// Validate the provided header by comparing its "prev_root" to the 
+	/// root of the current header MMR.
+	///
+	/// TODO - Implement this once we commit to prev_root in block headers.
+	///
+	pub fn validate_header_root(&self, _header: &BlockHeader) -> Result<(), Error> {
 		if self.header.height == 0 {
 			return Ok(());
 		}
 
-		let roots = self.roots();
+		let _roots = self.roots();
 
 		// TODO - validate once we commit to header MMR root in the header
 		// (not just previous hash)
