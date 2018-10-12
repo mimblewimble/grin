@@ -664,11 +664,7 @@ impl<'a> HeaderExtension<'a> {
 
 	// TODO - think about how to optimize this.
 	// Requires *all* header hashes to be iterated over in ascending order.
-	pub fn rebuild(
-		&mut self,
-		head: &Tip,
-		genesis: &BlockHeader,
-	) -> Result<(), Error> {
+	pub fn rebuild(&mut self, head: &Tip, genesis: &BlockHeader) -> Result<(), Error> {
 		debug!(
 			LOGGER,
 			"About to rebuild header extension from {:?} to {:?}.",
