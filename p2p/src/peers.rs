@@ -569,6 +569,16 @@ impl ChainAdapter for Peers {
 			true
 		}
 	}
+
+	fn txhashset_download_update(
+		&self,
+		start_time: DateTime<Utc>,
+		downloaded_size: u64,
+		total_size: u64,
+	) -> bool {
+		self.adapter
+			.txhashset_download_update(start_time, downloaded_size, total_size)
+	}
 }
 
 impl NetAdapter for Peers {
