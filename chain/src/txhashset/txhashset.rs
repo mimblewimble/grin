@@ -39,7 +39,7 @@ use grin_store::pmmr::{DBPMMRBackend, PMMRBackend, PMMR_FILES};
 use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
 use txhashset::{RewindableKernelView, UTXOView};
-use types::{TxHashSetRoots, TxHashsetWriteStatus};
+use types::{Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use util::{file, secp_static, zip, LOGGER};
 
 const HEADERHASHSET_SUBDIR: &'static str = "header";
@@ -652,16 +652,57 @@ impl<'a> HeaderExtension<'a> {
 		Ok(())
 	}
 
-	pub fn clear(&mut self) -> Result<(), Error> {
-		debug!(LOGGER, "Clear header extension.");
-
+	pub fn truncate(&mut self) -> Result<(), Error> {
+		debug!(LOGGER, "Truncating header extension.");
 		self.pmmr.rewind(0).map_err(&ErrorKind::TxHashSetErr)?;
-
 		Ok(())
 	}
 
 	pub fn size(&self) -> u64 {
 		self.pmmr.unpruned_size()
+	}
+
+	// TODO - think about how to optimize this.
+	// Requires *all* header hashes to be iterated over in ascending order.
+	pub fn rebuild(
+		&mut self,
+		head: &Tip,
+		genesis: &BlockHeader,
+	) -> Result<(), Error> {
+		debug!(
+			LOGGER,
+			"About to rebuild header extension from {:?} to {:?}.",
+			genesis.hash(),
+			head.last_block_h,
+		);
+
+		let mut header_hashes = vec![];
+		let mut current = self.batch.get_block_header(&head.last_block_h)?;
+		while current.height > 0 {
+			header_hashes.push(current.hash());
+			current = self.batch.get_block_header(&current.previous)?;
+		}
+		// Include the genesis header as we will re-apply it after truncating the extension.
+		header_hashes.push(genesis.hash());
+		header_hashes.reverse();
+
+		// Trucate the extension (back to pos 0).
+		self.truncate()?;
+
+		debug!(
+			LOGGER,
+			"Re-applying {} headers to extension, from {:?} to {:?}.",
+			header_hashes.len(),
+			header_hashes.first().unwrap(),
+			header_hashes.last().unwrap(),
+		);
+
+		for h in header_hashes {
+			let header = self.batch.get_block_header(&h)?;
+			// self.validate_header_root()?;
+			self.apply_header(&header)?;
+		}
+		Ok(())
 	}
 }
 

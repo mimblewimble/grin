@@ -599,38 +599,13 @@ impl Chain {
 	}
 
 	// TODO - think about how to optimize this.
-	pub fn rebuild_sync_mmr(&self, header: &BlockHeader) -> Result<(), Error> {
+	pub fn rebuild_sync_mmr(&self, head: &Tip) -> Result<(), Error> {
 		let mut txhashset = self.txhashset.write().unwrap();
 		let mut batch = self.store.batch()?;
-
-		let mut header_hashes = vec![];
-		let mut current = header.clone();
-		while current.height > 0 {
-			header_hashes.push(current.hash());
-			current = batch.get_block_header(&current.previous)?;
-		}
-		header_hashes.push(self.genesis.hash());
-		header_hashes.reverse();
-
-		debug!(
-			LOGGER,
-			"Re-applying {} headers to sync MMR {:?} ... {:?} (clearing MMR first).",
-			header_hashes.len(),
-			header_hashes.first(),
-			header_hashes.last()
-		);
-
 		txhashset::sync_extending(&mut txhashset, &mut batch, |extension| {
-			extension.clear()?;
-
-			for h in header_hashes {
-				let header = extension.batch.get_block_header(&h)?;
-				// extension.validate_header_root()?;
-				extension.apply_header(&header)?;
-			}
+			extension.rebuild(head, &self.genesis)?;
 			Ok(())
 		})?;
-
 		batch.commit()?;
 		Ok(())
 	}
@@ -638,37 +613,14 @@ impl Chain {
 	// TODO - think about how to optimize this.
 	fn rebuild_header_mmr(
 		&self,
-		header: &BlockHeader,
+		head: &Tip,
 		txhashset: &mut txhashset::TxHashSet,
 	) -> Result<(), Error> {
 		let mut batch = self.store.batch()?;
-
-		let mut header_hashes = vec![];
-		let mut current = header.clone();
-		while current.height > 0 {
-			header_hashes.push(current.hash());
-			current = batch.get_block_header(&current.previous)?;
-		}
-		header_hashes.reverse();
-
-		debug!(
-			LOGGER,
-			"Re-applying {} headers to header MMR {:?} ... {:?}",
-			header_hashes.len(),
-			header_hashes.first(),
-			header_hashes.last()
-		);
-
 		txhashset::header_extending(txhashset, &mut batch, |extension| {
-			extension.rewind(&self.genesis)?;
-			for h in header_hashes {
-				let header = extension.batch.get_block_header(&h)?;
-				// extension.validate_header_root()?;
-				extension.apply_header(&header)?;
-			}
+			extension.rebuild(head, &self.genesis)?;
 			Ok(())
 		})?;
-
 		batch.commit()?;
 		Ok(())
 	}
@@ -702,7 +654,7 @@ impl Chain {
 
 		// The txhashset.zip contains the output, rangeproof and kernel MMRs.
 		// We must rebuild the header MMR ourselves based on the headers in our db.
-		self.rebuild_header_mmr(&header, &mut txhashset)?;
+		self.rebuild_header_mmr(&Tip::from_block(&header), &mut txhashset)?;
 
 		// Validate the full kernel history (kernel MMR root for every block header).
 		self.validate_kernel_history(&header, &txhashset)?;
@@ -1066,6 +1018,15 @@ fn setup_head(
 				// to match the provided block header.
 				let header = batch.get_block_header(&head.last_block_h)?;
 
+				// If we have no header MMR then rebuild as necessary.
+				// Supports old nodes with no header MMR.
+				txhashset::header_extending(txhashset, &mut batch, |extension| {
+					if extension.size() == 0 {
+						extension.rebuild(&head, &genesis.header)?;
+					}
+					Ok(())
+				})?;
+
 				let res = txhashset::extending(txhashset, &mut batch, |extension| {
 					extension.rewind(&header)?;
 					extension.validate_roots()?;
@@ -1125,14 +1086,9 @@ fn setup_head(
 			batch.save_head(&tip)?;
 			batch.setup_height(&genesis.header, &tip)?;
 
-			// Apply the genesis block to our MMRs.
+			// Apply the genesis block to our empty MMRs.
 			txhashset::extending(txhashset, &mut batch, |extension| {
 				extension.apply_block(&genesis)?;
-				warn!(
-					LOGGER,
-					"***** sizes here after applying genesis block: {:?}",
-					extension.sizes()
-				);
 				Ok(())
 			})?;
 
