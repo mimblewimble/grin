@@ -36,8 +36,6 @@ use txhashset;
 use types::{Options, Tip};
 use util::LOGGER;
 
-use failure::ResultExt;
-
 /// Contextual information required to process a new block and either reject or
 /// accept it.
 pub struct BlockContext<'a> {
@@ -429,21 +427,18 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		// (during testnet1 we use _block_ difficulty here)
 		let child_batch = ctx.batch.child()?;
 		let diff_iter = store::DifficultyIter::from_batch(header.previous, child_batch);
-		let (network_difficulty, network_scaling_difficulty) =
-			consensus::next_difficulty(header.height, diff_iter)
-				.context(ErrorKind::Other("network difficulty".to_owned()))?;
-		if target_difficulty != network_difficulty.clone() {
+		let next_header_info = consensus::next_difficulty(header.height, diff_iter);
+		if target_difficulty != next_header_info.difficulty {
 			info!(
 				LOGGER,
 				"validate_header: header target difficulty {} != {}",
 				target_difficulty.to_num(),
-				network_difficulty.to_num()
+				next_header_info.difficulty.to_num()
 			);
 			return Err(ErrorKind::WrongTotalDifficulty.into());
 		}
 		// check the secondary PoW scaling factor if applicable
-		if header.pow.is_secondary() && header.pow.scaling_difficulty != network_scaling_difficulty
-		{
+		if header.pow.scaling_difficulty != next_header_info.secondary_scaling {
 			return Err(ErrorKind::InvalidScaling.into());
 		}
 	}

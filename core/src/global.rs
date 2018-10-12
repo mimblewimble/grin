@@ -16,13 +16,14 @@
 //! having to pass them all over the place, but aren't consensus values.
 //! should be used sparingly.
 
-use consensus::{TargetError, secondary_pow_ratio};
+use consensus::HeaderInfo;
 use consensus::{
 	BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_MIN_SIZESHIFT,
 	DIFFICULTY_ADJUST_WINDOW, EASINESS, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
 	REFERENCE_SIZESHIFT,
 };
-use pow::{self, CuckatooContext, Difficulty, EdgeType, PoWContext};
+use pow::{self, CuckatooContext, EdgeType, PoWContext};
+
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
@@ -255,13 +256,13 @@ pub fn get_genesis_nonce() -> u64 {
 /// vector and pads if needed (which will) only be needed for the first few
 /// blocks after genesis
 
-pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<Result<(u64, Difficulty, Option<u64>), TargetError>>
+pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<HeaderInfo>
 where
-	T: IntoIterator<Item = Result<(u64, Difficulty, Option<u64>), TargetError>>,
+	T: IntoIterator<Item = HeaderInfo>,
 {
 	// Convert iterator to vector, so we can append to it if necessary
 	let needed_block_count = (MEDIAN_TIME_WINDOW + DIFFICULTY_ADJUST_WINDOW) as usize;
-	let mut last_n: Vec<Result<(u64, Difficulty, Option<u64>), TargetError>> =
+	let mut last_n: Vec<HeaderInfo> =
 		cursor.into_iter().take(needed_block_count).collect();
 
 	// Sort blocks from earliest to latest (to keep conceptually easier)
@@ -272,16 +273,16 @@ where
 	let block_count_difference = needed_block_count - last_n.len();
 	if block_count_difference > 0 {
 		// Collect any real data we have
-		let mut live_intervals: Vec<(u64, Difficulty)> = last_n
+		let mut live_intervals: Vec<HeaderInfo> = last_n
 			.iter()
-			.map(|b| (b.clone().unwrap().0, b.clone().unwrap().1))
+			.map(|b| HeaderInfo::from_ts_diff(b.timestamp, b.difficulty))
 			.collect();
 		for i in (1..live_intervals.len()).rev() {
 			// prevents issues with very fast automated test chains
-			if live_intervals[i - 1].0 > live_intervals[i].0 {
-				live_intervals[i].0 = 0;
+			if live_intervals[i - 1].timestamp > live_intervals[i].timestamp {
+				live_intervals[i].timestamp = 0;
 			} else {
-				live_intervals[i].0 = live_intervals[i].0 - live_intervals[i - 1].0;
+				live_intervals[i].timestamp = live_intervals[i].timestamp - live_intervals[i - 1].timestamp;
 			}
 		}
 		// Remove genesis "interval"
@@ -289,21 +290,16 @@ where
 			live_intervals.remove(0);
 		} else {
 			//if it's just genesis, adjust the interval
-			live_intervals[0].0 = BLOCK_TIME_SEC;
+			live_intervals[0].timestamp = BLOCK_TIME_SEC;
 		}
 		let mut interval_index = live_intervals.len() - 1;
-		let mut last_ts = last_n.first().as_ref().unwrap().as_ref().unwrap().0;
-		let last_diff = live_intervals[live_intervals.len() - 1].1;
+		let mut last_ts = last_n.first().unwrap().timestamp;
+		let last_diff = live_intervals[live_intervals.len() - 1].difficulty;
 		// fill in simulated blocks with values from the previous real block
 
-		for n in 0..block_count_difference {
-			last_ts = last_ts.saturating_sub(live_intervals[live_intervals.len() - 1].0);
-			let pow_factor = if n % 10 < secondary_pow_ratio(n as u64) as usize / 10 {
-				Some(1)
-			} else {
-				None
-			};
-			last_n.insert(0, Ok((last_ts, last_diff.clone(), pow_factor)));
+		for _ in 0..block_count_difference {
+			last_ts = last_ts.saturating_sub(live_intervals[live_intervals.len() - 1].timestamp);
+			last_n.insert(0, HeaderInfo::from_ts_diff(last_ts, last_diff.clone()));
 			interval_index = match interval_index {
 				0 => live_intervals.len() - 1,
 				_ => interval_index - 1,
