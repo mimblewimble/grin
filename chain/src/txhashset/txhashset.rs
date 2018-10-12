@@ -1109,7 +1109,7 @@ impl<'a> Extension<'a> {
 		}
 	}
 
-	/// Validate the provided header by comparing its "prev_root" to the 
+	/// Validate the provided header by comparing its "prev_root" to the
 	/// root of the current header MMR.
 	///
 	/// TODO - Implement this once we commit to prev_root in block headers.
