@@ -262,8 +262,7 @@ where
 {
 	// Convert iterator to vector, so we can append to it if necessary
 	let needed_block_count = (MEDIAN_TIME_WINDOW + DIFFICULTY_ADJUST_WINDOW) as usize;
-	let mut last_n: Vec<HeaderInfo> =
-		cursor.into_iter().take(needed_block_count).collect();
+	let mut last_n: Vec<HeaderInfo> = cursor.into_iter().take(needed_block_count).collect();
 
 	// Sort blocks from earliest to latest (to keep conceptually easier)
 	last_n.reverse();
@@ -282,7 +281,8 @@ where
 			if live_intervals[i - 1].timestamp > live_intervals[i].timestamp {
 				live_intervals[i].timestamp = 0;
 			} else {
-				live_intervals[i].timestamp = live_intervals[i].timestamp - live_intervals[i - 1].timestamp;
+				live_intervals[i].timestamp =
+					live_intervals[i].timestamp - live_intervals[i - 1].timestamp;
 			}
 		}
 		// Remove genesis "interval"

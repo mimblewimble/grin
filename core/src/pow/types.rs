@@ -265,7 +265,7 @@ impl ProofOfWork {
 	}
 
 	/// Write the pre-hash portion of the header
-	pub fn write_pre_pow<W: Writer>(&self, ver: u16, writer: &mut W) -> Result<(), ser::Error> {
+	pub fn write_pre_pow<W: Writer>(&self, _ver: u16, writer: &mut W) -> Result<(), ser::Error> {
 		ser_multiwrite!(
 			writer,
 			[write_u64, self.total_difficulty.to_num()],

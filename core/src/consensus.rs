@@ -175,7 +175,7 @@ impl fmt::Display for Error {
 /// Minimal header information required for the Difficulty calculation to
 /// take place
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct HeaderInfo {	
+pub struct HeaderInfo {
 	/// Timestamp of the header, 1 when not used (returned info)
 	pub timestamp: u64,
 	/// Network difficulty or next difficulty to use
@@ -188,20 +188,40 @@ pub struct HeaderInfo {
 
 impl HeaderInfo {
 	/// Default constructor
-	pub fn new(timestamp: u64, difficulty: Difficulty, secondary_scaling: u32, is_secondary: bool) -> HeaderInfo {
-		HeaderInfo {timestamp, difficulty, secondary_scaling, is_secondary}
+	pub fn new(
+		timestamp: u64,
+		difficulty: Difficulty,
+		secondary_scaling: u32,
+		is_secondary: bool,
+	) -> HeaderInfo {
+		HeaderInfo {
+			timestamp,
+			difficulty,
+			secondary_scaling,
+			is_secondary,
+		}
 	}
 
 	/// Constructor from a timestamp and difficulty, setting a default secondary
 	/// PoW factor
 	pub fn from_ts_diff(timestamp: u64, difficulty: Difficulty) -> HeaderInfo {
-		HeaderInfo {timestamp, difficulty, secondary_scaling: 1, is_secondary: false}
+		HeaderInfo {
+			timestamp,
+			difficulty,
+			secondary_scaling: 1,
+			is_secondary: false,
+		}
 	}
 
 	/// Constructor from a difficulty and secondary factor, setting a default
 	/// timestamp
 	pub fn from_diff_scaling(difficulty: Difficulty, secondary_scaling: u32) -> HeaderInfo {
-		HeaderInfo {timestamp: 1, difficulty, secondary_scaling, is_secondary: false}
+		HeaderInfo {
+			timestamp: 1,
+			difficulty,
+			secondary_scaling,
+			is_secondary: false,
+		}
 	}
 }
 
@@ -274,11 +294,7 @@ where
 }
 
 /// Factor by which the secondary proof of work difficulty will be adjusted
-fn secondary_pow_scaling(
-	height: u64,
-	diff_data: &Vec<HeaderInfo>,
-) -> u32 {
-
+fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 	// median of past scaling factors, scaling is 1 if none found
 	let mut scalings = diff_data
 		.iter()
@@ -289,10 +305,7 @@ fn secondary_pow_scaling(
 	}
 	scalings.sort();
 	let scaling_median = scalings[scalings.len() / 2] as u64;
-	let secondary_count = diff_data
-		.iter()
-		.filter(|n| n.is_secondary)
-		.count() as u64;
+	let secondary_count = diff_data.iter().filter(|n| n.is_secondary).count() as u64;
 
 	// what's the ideal ratio at the current height
 	let ratio = secondary_pow_ratio(height);
@@ -308,11 +321,7 @@ fn secondary_pow_scaling(
 
 /// Median timestamp within the time window starting at `from` with the
 /// provided `length`.
-fn time_window_median(
-	diff_data: &Vec<HeaderInfo>,
-	from: usize,
-	length: usize,
-) -> u64 {
+fn time_window_median(diff_data: &Vec<HeaderInfo>, from: usize, length: usize) -> u64 {
 	let mut window_latest: Vec<u64> = diff_data
 		.iter()
 		.skip(from)

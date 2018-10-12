@@ -652,7 +652,12 @@ impl<'a> Iterator for DifficultyIter<'a> {
 			let difficulty = header.total_difficulty() - prev_difficulty;
 			let scaling = header.pow.scaling_difficulty;
 
-			Some(HeaderInfo::new(header.timestamp.timestamp() as u64, difficulty, scaling, header.pow.is_secondary()))
+			Some(HeaderInfo::new(
+				header.timestamp.timestamp() as u64,
+				difficulty,
+				scaling,
+				header.pow.is_secondary(),
+			))
 		} else {
 			return None;
 		}

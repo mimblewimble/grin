@@ -132,7 +132,7 @@ fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
 		.clone()
 		.iter()
 		.take(MEDIAN_TIME_WINDOW as usize)
-		.map(|n| n.clone().difficulty.to_num())
+		.map(|n| n.clone().timestamp)
 		.collect();
 	// pick median
 	window_earliest.sort();
@@ -144,7 +144,7 @@ fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
 		.clone()
 		.iter()
 		.skip(DIFFICULTY_ADJUST_WINDOW as usize)
-		.map(|n| n.clone().difficulty.to_num())
+		.map(|n| n.clone().timestamp)
 		.collect();
 	// pick median
 	window_latest.sort();
@@ -427,7 +427,7 @@ fn next_target_adjustment() {
 	hi.secondary_scaling = 100;
 	assert_eq!(
 		next_difficulty(1, repeat(60, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 109),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 93),
 	);
 
 	// Check we don't get stuck on difficulty 1
@@ -513,7 +513,8 @@ fn hard_forks() {
 	assert!(valid_header_version(10, 1));
 	assert!(!valid_header_version(10, 2));
 	assert!(valid_header_version(249_999, 1));
-	assert!(valid_header_version(250_000, 2));
+	// v2 not active yet
+	assert!(!valid_header_version(250_000, 2));
 	assert!(!valid_header_version(250_000, 1));
 	assert!(!valid_header_version(500_000, 1));
 	assert!(!valid_header_version(250_001, 2));
