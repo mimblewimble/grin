@@ -49,7 +49,6 @@ extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
 pub mod common;
-mod constants;
 mod grin;
 mod mining;
 mod webwallet;

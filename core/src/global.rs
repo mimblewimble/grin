@@ -72,6 +72,10 @@ pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
 /// Testnet 4 initial block difficulty
 pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1;
 
+/// Trigger compaction check every 1440 blocks (i.e. one day) for FAST_SYNC_NODE.
+/// All blocks lower than (BodyHead.height - CUT_THROUGH_HORIZON) will be removed.
+pub const COMPACTION_CHECK: u64 = 1440;
+
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
