@@ -16,6 +16,7 @@ use std::fs::File;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
+use chrono::prelude::{DateTime, Utc};
 use conn;
 use core::core;
 use core::core::hash::{Hash, Hashed};
@@ -465,6 +466,16 @@ impl ChainAdapter for TrackingAdapter {
 
 	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: SocketAddr) -> bool {
 		self.adapter.txhashset_write(h, txhashset_data, peer_addr)
+	}
+
+	fn txhashset_download_update(
+		&self,
+		start_time: DateTime<Utc>,
+		downloaded_size: u64,
+		total_size: u64,
+	) -> bool {
+		self.adapter
+			.txhashset_download_update(start_time, downloaded_size, total_size)
 	}
 }
 

@@ -88,12 +88,14 @@ impl StateSync {
 
 		// check peer connection status of this sync
 		if let Some(ref peer) = self.fast_sync_peer {
-			if !peer.is_connected() && SyncStatus::TxHashsetDownload == self.sync_state.status() {
-				sync_need_restart = true;
-				info!(
-					LOGGER,
-					"fast_sync: peer connection lost: {:?}. restart", peer.info.addr,
-				);
+			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
+				if !peer.is_connected() {
+					sync_need_restart = true;
+					info!(
+						LOGGER,
+						"fast_sync: peer connection lost: {:?}. restart", peer.info.addr,
+					);
+				}
 			}
 		}
 
@@ -106,13 +108,15 @@ impl StateSync {
 		if header_head.height == highest_height {
 			let (go, download_timeout) = self.fast_sync_due();
 
-			if download_timeout && SyncStatus::TxHashsetDownload == self.sync_state.status() {
-				error!(
-					LOGGER,
-					"fast_sync: TxHashsetDownload status timeout in 10 minutes!"
-				);
-				self.sync_state
-					.set_sync_error(Error::P2P(p2p::Error::Timeout));
+			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
+				if download_timeout {
+					error!(
+						LOGGER,
+						"fast_sync: TxHashsetDownload status timeout in 10 minutes!"
+					);
+					self.sync_state
+						.set_sync_error(Error::P2P(p2p::Error::Timeout));
+				}
 			}
 
 			if go {
@@ -136,7 +140,11 @@ impl StateSync {
 					}
 				}
 
-				self.sync_state.update(SyncStatus::TxHashsetDownload);
+				self.sync_state.update(SyncStatus::TxHashsetDownload {
+					start_time: Utc::now(),
+					downloaded_size: 0,
+					total_size: 0,
+				});
 			}
 		}
 		true
