@@ -34,7 +34,7 @@ use grin_core::core::Committed;
 use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
 use grin_core::{global, ser};
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
-use util::{secp, secp_static};
+use util::secp;
 use wallet::libtx::build::{self, input, output, with_fee};
 
 fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
@@ -47,8 +47,6 @@ fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
 fn too_large_block() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let max_out = MAX_BLOCK_WEIGHT / BLOCK_OUTPUT_WEIGHT;
-
-	let zero_commit = secp_static::commit_to_zero_value();
 
 	let mut pks = vec![];
 	for n in 0..(max_out + 1) {
@@ -69,7 +67,7 @@ fn too_large_block() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx], &keychain, &prev, &key_id);
 	assert!(
-		b.validate(&BlindingFactor::zero(), &zero_commit, verifier_cache())
+		b.validate(&BlindingFactor::zero(), verifier_cache())
 			.is_err()
 	);
 }
@@ -94,8 +92,6 @@ fn block_with_cut_through() {
 	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
-	let zero_commit = secp_static::commit_to_zero_value();
-
 	let mut btx1 = tx2i1o();
 	let mut btx2 = build::transaction(
 		vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
@@ -117,7 +113,7 @@ fn block_with_cut_through() {
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
 	println!("3");
-	b.validate(&BlindingFactor::zero(), &zero_commit, verifier_cache())
+	b.validate(&BlindingFactor::zero(), verifier_cache())
 		.unwrap();
 	assert_eq!(b.inputs().len(), 3);
 	assert_eq!(b.outputs().len(), 3);
@@ -127,7 +123,6 @@ fn block_with_cut_through() {
 #[test]
 fn empty_block_with_coinbase_is_valid() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let zero_commit = secp_static::commit_to_zero_value();
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![], &keychain, &prev, &key_id);
@@ -155,7 +150,7 @@ fn empty_block_with_coinbase_is_valid() {
 	// the block should be valid here (single coinbase output with corresponding
 	// txn kernel)
 	assert!(
-		b.validate(&BlindingFactor::zero(), &zero_commit, verifier_cache())
+		b.validate(&BlindingFactor::zero(), verifier_cache())
 			.is_ok()
 	);
 }
@@ -166,7 +161,6 @@ fn empty_block_with_coinbase_is_valid() {
 // additionally verifying the merkle_inputs_outputs also fails
 fn remove_coinbase_output_flag() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let zero_commit = secp_static::commit_to_zero_value();
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let mut b = new_block(vec![], &keychain, &prev, &key_id);
@@ -186,7 +180,7 @@ fn remove_coinbase_output_flag() {
 			.is_ok()
 	);
 	assert_eq!(
-		b.validate(&BlindingFactor::zero(), &zero_commit, verifier_cache()),
+		b.validate(&BlindingFactor::zero(), verifier_cache()),
 		Err(Error::CoinbaseSumMismatch)
 	);
 }
@@ -196,7 +190,6 @@ fn remove_coinbase_output_flag() {
 // invalidates the block and specifically it causes verify_coinbase to fail
 fn remove_coinbase_kernel_flag() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let zero_commit = secp_static::commit_to_zero_value();
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let mut b = new_block(vec![], &keychain, &prev, &key_id);
@@ -216,7 +209,7 @@ fn remove_coinbase_kernel_flag() {
 	);
 
 	assert_eq!(
-		b.validate(&BlindingFactor::zero(), &zero_commit, verifier_cache()),
+		b.validate(&BlindingFactor::zero(), verifier_cache()),
 		Err(Error::Secp(secp::Error::IncorrectCommitSum))
 	);
 }
@@ -264,7 +257,7 @@ fn empty_block_serialized_size() {
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 1_257;
+	let target_len = 1_224;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -277,7 +270,7 @@ fn block_single_tx_serialized_size() {
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 2_839;
+	let target_len = 2_806;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -290,7 +283,7 @@ fn empty_compact_block_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_265;
+	let target_len = 1_232;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -304,7 +297,7 @@ fn compact_block_single_tx_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_271;
+	let target_len = 1_238;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -323,7 +316,7 @@ fn block_10_tx_serialized_size() {
 	let b = new_block(txs.iter().collect(), &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 17_077;
+	let target_len = 17_044;
 	assert_eq!(vec.len(), target_len,);
 }
 
@@ -342,7 +335,7 @@ fn compact_block_10_tx_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_325;
+	let target_len = 1_292;
 	assert_eq!(vec.len(), target_len,);
 }
 
@@ -446,7 +439,7 @@ fn empty_block_v2_switch() {
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 1_265;
+	let target_len = 1_232;
 	assert_eq!(b.header.version, 2);
 	assert_eq!(vec.len(), target_len);
 
@@ -455,7 +448,7 @@ fn empty_block_v2_switch() {
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 1_257;
+	let target_len = 1_224;
 	assert_eq!(b.header.version, 1);
 	assert_eq!(vec.len(), target_len);
 }

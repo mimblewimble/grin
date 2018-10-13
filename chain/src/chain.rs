@@ -637,13 +637,6 @@ impl Chain {
 			// Full validation, including rangeproofs and kernel signature verification.
 			let (utxo_sum, kernel_sum) = extension.validate(false, status)?;
 
-			// Now that we have block_sums the total_kernel_sum on the block_header is redundant.
-			if header.total_kernel_sum != kernel_sum {
-				return Err(
-					ErrorKind::Other(format!("total_kernel_sum in header does not match")).into(),
-				);
-			}
-
 			// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 			extension.batch.save_block_sums(
 				&header.hash(),
@@ -1056,8 +1049,8 @@ fn setup_head(
 		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()))?,
 	};
 
-	// Initialize header_head and sync_head as necessary for chain init.
-	batch.reset_head()?;
+	// Reset sync_head to be consistent with current header_head.
+	batch.reset_sync_head()?;
 	batch.commit()?;
 
 	Ok(())

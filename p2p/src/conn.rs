@@ -77,7 +77,7 @@ impl<'a> Message<'a> {
 		read_body(&self.header, self.conn)
 	}
 
-	pub fn copy_attachment(&mut self, len: usize, writer: &mut Write) -> Result<(), Error> {
+	pub fn copy_attachment(&mut self, len: usize, writer: &mut Write) -> Result<usize, Error> {
 		let mut written = 0;
 		while written < len {
 			let read_len = cmp::min(8000, len - written);
@@ -91,7 +91,7 @@ impl<'a> Message<'a> {
 			writer.write_all(&mut buf)?;
 			written += read_len;
 		}
-		Ok(())
+		Ok(written)
 	}
 
 	/// Respond to the message with the provided message type and body

@@ -22,6 +22,7 @@ use std::thread;
 use std::time::Instant;
 
 use chain::{self, ChainAdapter, Options};
+use chrono::prelude::{DateTime, Utc};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
 use core::core::hash::{Hash, Hashed};
 use core::core::transaction::Transaction;
@@ -164,11 +165,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 			if let Ok(prev) = self.chain().get_block_header(&cb.header.previous) {
 				if block
-					.validate(
-						&prev.total_kernel_offset,
-						&prev.total_kernel_sum,
-						self.verifier_cache.clone(),
-					).is_ok()
+					.validate(&prev.total_kernel_offset, self.verifier_cache.clone())
+					.is_ok()
 				{
 					debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
 					self.process_block(block, addr)
@@ -328,7 +326,29 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn txhashset_receive_ready(&self) -> bool {
-		self.sync_state.status() == SyncStatus::TxHashsetDownload
+		match self.sync_state.status() {
+			SyncStatus::TxHashsetDownload { .. } => true,
+			_ => false,
+		}
+	}
+
+	fn txhashset_download_update(
+		&self,
+		start_time: DateTime<Utc>,
+		downloaded_size: u64,
+		total_size: u64,
+	) -> bool {
+		match self.sync_state.status() {
+			SyncStatus::TxHashsetDownload { .. } => {
+				self.sync_state
+					.update_txhashset_download(SyncStatus::TxHashsetDownload {
+						start_time,
+						downloaded_size,
+						total_size,
+					})
+			}
+			_ => false,
+		}
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.
@@ -337,7 +357,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	/// rewound to the provided indexes.
 	fn txhashset_write(&self, h: Hash, txhashset_data: File, _peer_addr: SocketAddr) -> bool {
 		// check status again after download, in case 2 txhashsets made it somehow
-		if self.sync_state.status() != SyncStatus::TxHashsetDownload {
+		if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
+		} else {
 			return true;
 		}
 
