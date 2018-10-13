@@ -21,7 +21,7 @@ use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 use std::time::Instant;
 
-use chain::{self, ChainAdapter, Options, Tip};
+use chain::{self, ChainAdapter, Options};
 use chrono::prelude::{DateTime, Utc};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
 use core::core::hash::{Hash, Hashed};
@@ -32,6 +32,7 @@ use core::pow::Difficulty;
 use core::{core, global};
 use p2p;
 use pool;
+use rand::prelude::*;
 use store;
 use util::{OneTime, LOGGER};
 
@@ -470,9 +471,9 @@ impl NetToChainAdapter {
 		let prev_hash = b.header.previous;
 		let bhash = b.hash();
 		match self.chain().process_block(b, self.chain_opts()) {
-			Ok(tip) => {
+			Ok(_) => {
 				self.validate_chain(bhash);
-				self.check_compact(tip);
+				self.check_compact();
 				true
 			}
 			Err(ref e) if e.is_bad_data() => {
@@ -541,25 +542,24 @@ impl NetToChainAdapter {
 		}
 	}
 
-	fn check_compact(&self, tip: Option<Tip>) {
+	fn check_compact(&self) {
 		// no compaction during sync or if we're in historical mode
 		if self.archive_mode || self.sync_state.is_syncing() {
 			return;
 		}
 
-		if let Some(tip) = tip {
-			// trigger compaction every 2000 blocks, uses a different thread to avoid
-			// blocking the caller thread (likely a peer)
-			if tip.height % 2000 == 0 {
-				let chain = self.chain().clone();
-				let _ = thread::Builder::new()
-					.name("compactor".to_string())
-					.spawn(move || {
-						if let Err(e) = chain.compact() {
-							error!(LOGGER, "Could not compact chain: {:?}", e);
-						}
-					});
-			}
+		// Roll the dice to trigger compaction at 1/COMPACTION_CHECK chance per block,
+		// uses a different thread to avoid blocking the caller thread (likely a peer)
+		let mut rng = thread_rng();
+		if 0 == rng.gen_range(0, global::COMPACTION_CHECK) {
+			let chain = self.chain().clone();
+			let _ = thread::Builder::new()
+				.name("compactor".to_string())
+				.spawn(move || {
+					if let Err(e) = chain.compact() {
+						error!(LOGGER, "Could not compact chain: {:?}", e);
+					}
+				});
 		}
 	}
 

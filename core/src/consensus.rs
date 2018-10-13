@@ -72,9 +72,9 @@ pub const EASINESS: u32 = 50;
 /// happening. Needs to be long enough to not overlap with a long reorg.
 /// Rational
 /// behind the value is the longest bitcoin fork was about 30 blocks, so 5h. We
-/// add an order of magnitude to be safe and round to 48h of blocks to make it
+/// add an order of magnitude to be safe and round to 7x24h of blocks to make it
 /// easier to reason about.
-pub const CUT_THROUGH_HORIZON: u32 = 48 * 3600 / (BLOCK_TIME_SEC as u32);
+pub const CUT_THROUGH_HORIZON: u32 = 7 * 24 * 3600 / (BLOCK_TIME_SEC as u32);
 
 /// Weight of an input when counted against the max block weight capacity
 pub const BLOCK_INPUT_WEIGHT: usize = 1;
