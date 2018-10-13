@@ -77,12 +77,7 @@ impl Display for DiffBlock {
 
 // Builds an iterator for next difficulty calculation with the provided
 // constant time interval, difficulty and total length.
-fn repeat(
-	interval: u64,
-	diff: HeaderInfo,
-	len: u64,
-	cur_time: Option<u64>,
-) -> Vec<HeaderInfo> {
+fn repeat(interval: u64, diff: HeaderInfo, len: u64, cur_time: Option<u64>) -> Vec<HeaderInfo> {
 	let cur_time = match cur_time {
 		Some(t) => t,
 		None => Utc::now().timestamp() as u64,
@@ -93,8 +88,14 @@ fn repeat(
 	let times = (0..(len as usize)).map(|n| n * interval as usize).rev();
 	let pairs = times.zip(diffs.iter());
 	pairs
-		.map(|(t, d)| HeaderInfo::new(cur_time + t as u64, d.clone(), diff.secondary_scaling, diff.is_secondary))
-		.collect::<Vec<_>>()
+		.map(|(t, d)| {
+			HeaderInfo::new(
+				cur_time + t as u64,
+				d.clone(),
+				diff.secondary_scaling,
+				diff.is_secondary,
+			)
+		}).collect::<Vec<_>>()
 }
 
 // Creates a new chain with a genesis at a simulated difficulty
@@ -104,11 +105,10 @@ fn create_chain_sim(diff: u64) -> Vec<(HeaderInfo, DiffStats)> {
 		Utc::now().timestamp(),
 		Difficulty::from_num(diff)
 	);
-	let return_vec = vec![
-		HeaderInfo::from_ts_diff(
-			Utc::now().timestamp() as u64,
-			Difficulty::from_num(diff),
-		)];
+	let return_vec = vec![HeaderInfo::from_ts_diff(
+		Utc::now().timestamp() as u64,
+		Difficulty::from_num(diff),
+	)];
 	let diff_stats = get_diff_stats(&return_vec);
 	vec![(
 		HeaderInfo::from_ts_diff(Utc::now().timestamp() as u64, Difficulty::from_num(diff)),
@@ -119,8 +119,7 @@ fn create_chain_sim(diff: u64) -> Vec<(HeaderInfo, DiffStats)> {
 fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
 	// Fill out some difficulty stats for convenience
 	let diff_iter = chain_sim.clone();
-	let last_blocks: Vec<HeaderInfo> =
-		global::difficulty_data_to_vector(diff_iter.iter().cloned());
+	let last_blocks: Vec<HeaderInfo> = global::difficulty_data_to_vector(diff_iter.iter().cloned());
 
 	let mut last_time = last_blocks[0].timestamp;
 	let tip_height = chain_sim.len();
@@ -152,9 +151,8 @@ fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
 
 	let mut i = 1;
 
-	let sum_blocks: Vec<HeaderInfo> = global::difficulty_data_to_vector(
-		diff_iter.iter().cloned(),
-	).into_iter()
+	let sum_blocks: Vec<HeaderInfo> = global::difficulty_data_to_vector(diff_iter.iter().cloned())
+		.into_iter()
 		.skip(MEDIAN_TIME_WINDOW as usize)
 		.take(DIFFICULTY_ADJUST_WINDOW as usize)
 		.collect();
@@ -196,8 +194,7 @@ fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
 				time: n.timestamp,
 				duration: dur,
 			}
-		})
-		.collect();
+		}).collect();
 
 	DiffStats {
 		height: tip_height as u64,
@@ -220,15 +217,17 @@ fn add_block(
 	chain_sim: Vec<(HeaderInfo, DiffStats)>,
 ) -> Vec<(HeaderInfo, DiffStats)> {
 	let mut ret_chain_sim = chain_sim.clone();
-	let mut return_chain: Vec<HeaderInfo> =
-		chain_sim.clone().iter().map(|e| e.0.clone()).collect();
+	let mut return_chain: Vec<HeaderInfo> = chain_sim.clone().iter().map(|e| e.0.clone()).collect();
 	// get last interval
 	let diff = next_difficulty(1, return_chain.clone());
 	let last_elem = chain_sim.first().unwrap().clone().0;
 	let time = last_elem.timestamp + interval;
 	return_chain.insert(0, HeaderInfo::from_ts_diff(time, diff.difficulty));
 	let diff_stats = get_diff_stats(&return_chain);
-	ret_chain_sim.insert(0, (HeaderInfo::from_ts_diff(time, diff.difficulty), diff_stats));
+	ret_chain_sim.insert(
+		0,
+		(HeaderInfo::from_ts_diff(time, diff.difficulty), diff_stats),
+	);
 	ret_chain_sim
 }
 
@@ -301,7 +300,12 @@ fn print_chain_sim(chain_sim: Vec<(HeaderInfo, DiffStats)>) {
 }
 
 fn repeat_offs(from: u64, interval: u64, diff: u64, len: u64) -> Vec<HeaderInfo> {
-	repeat(interval, HeaderInfo::from_ts_diff(1, Difficulty::from_num(diff)), len, Some(from))
+	repeat(
+		interval,
+		HeaderInfo::from_ts_diff(1, Difficulty::from_num(diff)),
+		len,
+		Some(from),
+	)
 }
 
 /// Checks different next_target adjustments and difficulty boundaries
@@ -456,7 +460,10 @@ fn next_target_adjustment() {
 		DIFFICULTY_ADJUST_WINDOW / 2,
 	);
 	s2.append(&mut s1);
-	assert_eq!(next_difficulty(1, s2).difficulty, Difficulty::from_num(1000));
+	assert_eq!(
+		next_difficulty(1, s2).difficulty,
+		Difficulty::from_num(1000)
+	);
 
 	// too slow, diff goes down
 	hi.difficulty = Difficulty::from_num(1000);
