@@ -637,13 +637,6 @@ impl Chain {
 			// Full validation, including rangeproofs and kernel signature verification.
 			let (utxo_sum, kernel_sum) = extension.validate(false, status)?;
 
-			// Now that we have block_sums the total_kernel_sum on the block_header is redundant.
-			if header.total_kernel_sum != kernel_sum {
-				return Err(
-					ErrorKind::Other(format!("total_kernel_sum in header does not match")).into(),
-				);
-			}
-
 			// Save the block_sums (utxo_sum, kernel_sum) to the db for use later.
 			extension.batch.save_block_sums(
 				&header.hash(),

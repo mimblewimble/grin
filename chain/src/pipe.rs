@@ -454,11 +454,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 fn validate_block(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	let prev = ctx.batch.get_block_header(&block.header.previous)?;
 	block
-		.validate(
-			&prev.total_kernel_offset,
-			&prev.total_kernel_sum,
-			ctx.verifier_cache.clone(),
-		).map_err(|e| ErrorKind::InvalidBlockProof(e))?;
+		.validate(&prev.total_kernel_offset, ctx.verifier_cache.clone())
+		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }
 
@@ -479,16 +476,6 @@ fn verify_coinbase_maturity(block: &Block, ext: &mut txhashset::Extension) -> Re
 fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
 	// Retrieve the block_sums for the previous block.
 	let block_sums = ext.batch.get_block_sums(&b.header.previous)?;
-
-	{
-		// Now that we have block_sums the total_kernel_sum on the block_header is redundant.
-		let prev = ext.batch.get_block_header(&b.header.previous)?;
-		if prev.total_kernel_sum != block_sums.kernel_sum {
-			return Err(
-				ErrorKind::Other(format!("total_kernel_sum in header does not match")).into(),
-			);
-		}
-	}
 
 	// Overage is based purely on the new block.
 	// Previous block_sums have taken all previous overage into account.
