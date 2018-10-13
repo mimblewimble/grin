@@ -21,7 +21,8 @@ use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 use std::time::Instant;
 
-use chain::{self, ChainAdapter, Options, Tip};
+use chain::{self, ChainAdapter, Options};
+use chrono::prelude::{DateTime, Utc};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
 use core::core::hash::{Hash, Hashed};
 use core::core::transaction::Transaction;
@@ -31,6 +32,7 @@ use core::pow::Difficulty;
 use core::{core, global};
 use p2p;
 use pool;
+use rand::prelude::*;
 use store;
 use util::{OneTime, LOGGER};
 
@@ -163,11 +165,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 			if let Ok(prev) = self.chain().get_block_header(&cb.header.previous) {
 				if block
-					.validate(
-						&prev.total_kernel_offset,
-						&prev.total_kernel_sum,
-						self.verifier_cache.clone(),
-					).is_ok()
+					.validate(&prev.total_kernel_offset, self.verifier_cache.clone())
+					.is_ok()
 				{
 					debug!(LOGGER, "adapter: successfully hydrated block from tx pool!");
 					self.process_block(block, addr)
@@ -327,7 +326,29 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn txhashset_receive_ready(&self) -> bool {
-		self.sync_state.status() == SyncStatus::TxHashsetDownload
+		match self.sync_state.status() {
+			SyncStatus::TxHashsetDownload { .. } => true,
+			_ => false,
+		}
+	}
+
+	fn txhashset_download_update(
+		&self,
+		start_time: DateTime<Utc>,
+		downloaded_size: u64,
+		total_size: u64,
+	) -> bool {
+		match self.sync_state.status() {
+			SyncStatus::TxHashsetDownload { .. } => {
+				self.sync_state
+					.update_txhashset_download(SyncStatus::TxHashsetDownload {
+						start_time,
+						downloaded_size,
+						total_size,
+					})
+			}
+			_ => false,
+		}
 	}
 
 	/// Writes a reading view on a txhashset state that's been provided to us.
@@ -336,7 +357,8 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	/// rewound to the provided indexes.
 	fn txhashset_write(&self, h: Hash, txhashset_data: File, _peer_addr: SocketAddr) -> bool {
 		// check status again after download, in case 2 txhashsets made it somehow
-		if self.sync_state.status() != SyncStatus::TxHashsetDownload {
+		if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
+		} else {
 			return true;
 		}
 
@@ -449,9 +471,9 @@ impl NetToChainAdapter {
 		let prev_hash = b.header.previous;
 		let bhash = b.hash();
 		match self.chain().process_block(b, self.chain_opts()) {
-			Ok(tip) => {
+			Ok(_) => {
 				self.validate_chain(bhash);
-				self.check_compact(tip);
+				self.check_compact();
 				true
 			}
 			Err(ref e) if e.is_bad_data() => {
@@ -520,25 +542,24 @@ impl NetToChainAdapter {
 		}
 	}
 
-	fn check_compact(&self, tip: Option<Tip>) {
+	fn check_compact(&self) {
 		// no compaction during sync or if we're in historical mode
 		if self.archive_mode || self.sync_state.is_syncing() {
 			return;
 		}
 
-		if let Some(tip) = tip {
-			// trigger compaction every 2000 blocks, uses a different thread to avoid
-			// blocking the caller thread (likely a peer)
-			if tip.height % 2000 == 0 {
-				let chain = self.chain().clone();
-				let _ = thread::Builder::new()
-					.name("compactor".to_string())
-					.spawn(move || {
-						if let Err(e) = chain.compact() {
-							error!(LOGGER, "Could not compact chain: {:?}", e);
-						}
-					});
-			}
+		// Roll the dice to trigger compaction at 1/COMPACTION_CHECK chance per block,
+		// uses a different thread to avoid blocking the caller thread (likely a peer)
+		let mut rng = thread_rng();
+		if 0 == rng.gen_range(0, global::COMPACTION_CHECK) {
+			let chain = self.chain().clone();
+			let _ = thread::Builder::new()
+				.name("compactor".to_string())
+				.spawn(move || {
+					if let Err(e) = chain.compact() {
+						error!(LOGGER, "Could not compact chain: {:?}", e);
+					}
+				});
 		}
 	}
 
