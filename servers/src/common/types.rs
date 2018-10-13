@@ -166,11 +166,10 @@ impl ServerConfig {
 		// check [server.p2p_config.capabilities] with 'archive_mode' in [server]
 		if let Some(archive) = self.archive_mode {
 			// note: slog not available before config loaded, only print here.
-			if archive
-				!= self
-					.p2p_config
-					.capabilities
-					.contains(p2p::Capabilities::FULL_HIST)
+			if archive != self
+				.p2p_config
+				.capabilities
+				.contains(p2p::Capabilities::FULL_HIST)
 			{
 				// if conflict, 'archive_mode' win
 				self.p2p_config
