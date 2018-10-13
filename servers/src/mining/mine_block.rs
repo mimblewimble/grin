@@ -129,11 +129,7 @@ fn build_block(
 	let mut b = core::Block::with_reward(&head, txs, output, kernel, difficulty.clone())?;
 
 	// making sure we're not spending time mining a useless block
-	b.validate(
-		&head.total_kernel_offset,
-		&head.total_kernel_sum,
-		verifier_cache,
-	)?;
+	b.validate(&head.total_kernel_offset, verifier_cache)?;
 
 	b.header.pow.nonce = thread_rng().gen();
 	b.header.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_sec, 0), Utc);;
