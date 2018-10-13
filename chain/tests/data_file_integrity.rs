@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate chrono;
 extern crate env_logger;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
@@ -20,19 +21,19 @@ extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
-extern crate time;
 
+use chrono::Duration;
 use std::fs;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
+use chain::types::NoopAdapter;
 use chain::Chain;
-use chain::types::{NoopAdapter, Tip};
-use core::core::target::Difficulty;
+use core::core::verifier_cache::LruVerifierCache;
 use core::core::{Block, BlockHeader, Transaction};
 use core::global::{self, ChainTypes};
-use core::pow;
+use core::pow::{self, Difficulty};
 use core::{consensus, genesis};
-use keychain::{ExtKeychain, Keychain};
+use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 use wallet::libtx;
 
 fn clean_output_dir(dir_name: &str) {
@@ -44,6 +45,7 @@ fn setup(dir_name: &str) -> Chain {
 	clean_output_dir(dir_name);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis_block = pow::mine_genesis_block().unwrap();
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
@@ -51,10 +53,13 @@ fn setup(dir_name: &str) -> Chain {
 		Arc::new(NoopAdapter {}),
 		genesis_block,
 		pow::verify_size,
+		verifier_cache,
+		false,
 	).unwrap()
 }
 
 fn reload_chain(dir_name: &str) -> Chain {
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(
 		dir_name.to_string(),
@@ -62,6 +67,8 @@ fn reload_chain(dir_name: &str) -> Chain {
 		Arc::new(NoopAdapter {}),
 		genesis::genesis_dev(),
 		pow::verify_size,
+		verifier_cache,
+		false,
 	).unwrap()
 }
 
@@ -76,10 +83,10 @@ fn data_files() {
 		for n in 1..4 {
 			let prev = chain.head_header().unwrap();
 			let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
-			let pk = keychain.derive_key_id(n as u32).unwrap();
+			let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 			let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
 			let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
-			b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
+			b.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 			chain.set_txhashset_roots(&mut b, false).unwrap();
 
@@ -94,8 +101,6 @@ fn data_files() {
 			chain
 				.process_block(b.clone(), chain::Options::MINE)
 				.unwrap();
-
-			let head = Tip::from_block(&b.header);
 
 			chain.validate(false).unwrap();
 		}
@@ -149,7 +154,7 @@ fn _prepare_block_nosum(
 	diff: u64,
 	txs: Vec<&Transaction>,
 ) -> Block {
-	let key_id = kc.derive_key_id(diff as u32).unwrap();
+	let key_id = ExtKeychainPath::new(1, diff as u32, 0, 0, 0).to_identifier();
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward = libtx::reward::output(kc, &key_id, fees, prev.height).unwrap();
@@ -162,7 +167,7 @@ fn _prepare_block_nosum(
 		Err(e) => panic!("{:?}", e),
 		Ok(b) => b,
 	};
-	b.header.timestamp = prev.timestamp + time::Duration::seconds(60);
-	b.header.total_difficulty = Difficulty::from_num(diff);
+	b.header.timestamp = prev.timestamp + Duration::seconds(60);
+	b.header.pow.total_difficulty = Difficulty::from_num(diff);
 	b
 }

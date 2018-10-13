@@ -15,11 +15,14 @@
 //! The primary module containing the implementations of the transaction pool
 //! and its top-level members.
 
-use std::{error, fmt};
-use time::Timespec;
+use chrono::prelude::{DateTime, Utc};
 
 use core::consensus;
+use core::core::committed;
+use core::core::hash::Hash;
 use core::core::transaction::{self, Transaction};
+use core::core::{BlockHeader, BlockSums};
+use keychain;
 
 /// Dandelion relay timer
 const DANDELION_RELAY_SECS: u64 = 600;
@@ -35,7 +38,7 @@ const DANDELION_STEM_PROBABILITY: usize = 90;
 
 /// Configuration for "Dandelion".
 /// Note: shared between p2p and pool.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DandelionConfig {
 	/// Choose new Dandelion relay peer every n secs.
 	#[serde = "default_dandelion_relay_secs"]
@@ -81,7 +84,7 @@ fn default_dandelion_stem_probability() -> Option<usize> {
 }
 
 /// Transaction pool configuration
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct PoolConfig {
 	/// Base fee for a transaction to be accepted by the pool. The transaction
 	/// weight is computed from its number of inputs, outputs and kernels and
@@ -119,7 +122,7 @@ pub struct PoolEntry {
 	/// Info on where this tx originated from.
 	pub src: TxSource,
 	/// Timestamp of when this tx was originally added to the pool.
-	pub tx_at: Timespec,
+	pub tx_at: DateTime<Utc>,
 	/// The transaction itself.
 	pub tx: Transaction,
 }
@@ -160,6 +163,10 @@ pub struct TxSource {
 pub enum PoolError {
 	/// An invalid pool entry caused by underlying tx validation error
 	InvalidTx(transaction::Error),
+	/// Underlying keychain error.
+	Keychain(keychain::Error),
+	/// Underlying "committed" error.
+	Committed(committed::Error),
 	/// Attempt to add a transaction to the pool with lock_height
 	/// greater than height of current block
 	ImmatureTransaction,
@@ -173,6 +180,8 @@ pub enum PoolError {
 	LowFeeTransaction(u64),
 	/// Attempt to add a duplicate output to the pool.
 	DuplicateCommitment,
+	/// Attempt to add a duplicate tx to the pool.
+	DuplicateTx,
 	/// Other kinds of error (not yet pulled out into meaningful errors).
 	Other(String),
 }
@@ -183,32 +192,20 @@ impl From<transaction::Error> for PoolError {
 	}
 }
 
-impl error::Error for PoolError {
-	fn description(&self) -> &str {
-		match *self {
-			_ => "some kind of pool error",
-		}
+impl From<keychain::Error> for PoolError {
+	fn from(e: keychain::Error) -> PoolError {
+		PoolError::Keychain(e)
 	}
 }
 
-impl fmt::Display for PoolError {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		match *self {
-			_ => write!(f, "some kind of pool error"),
-		}
+impl From<committed::Error> for PoolError {
+	fn from(e: committed::Error) -> PoolError {
+		PoolError::Committed(e)
 	}
 }
 
 /// Interface that the pool requires from a blockchain implementation.
-pub trait BlockChain {
-	/// Validate a vec of txs against the current chain state after applying the
-	/// pre_tx to the chain state.
-	fn validate_raw_txs(
-		&self,
-		txs: Vec<transaction::Transaction>,
-		pre_tx: Option<transaction::Transaction>,
-	) -> Result<Vec<transaction::Transaction>, PoolError>;
-
+pub trait BlockChain: Sync + Send {
 	/// Verify any coinbase outputs being spent
 	/// have matured sufficiently.
 	fn verify_coinbase_maturity(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
@@ -216,6 +213,13 @@ pub trait BlockChain {
 	/// Verify any coinbase outputs being spent
 	/// have matured sufficiently.
 	fn verify_tx_lock_height(&self, tx: &transaction::Transaction) -> Result<(), PoolError>;
+
+	fn validate_tx(&self, tx: &Transaction) -> Result<(), PoolError>;
+
+	fn chain_head(&self) -> Result<BlockHeader, PoolError>;
+
+	fn get_block_header(&self, hash: &Hash) -> Result<BlockHeader, PoolError>;
+	fn get_block_sums(&self, hash: &Hash) -> Result<BlockSums, PoolError>;
 }
 
 /// Bridge between the transaction pool and the rest of the system. Handles

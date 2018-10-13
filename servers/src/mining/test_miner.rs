@@ -17,28 +17,26 @@
 //! header with its proof-of-work.  Any valid mined blocks are submitted to the
 //! network.
 
+use chrono::prelude::Utc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
-use time;
 
 use chain;
-use common::adapters::PoolToChainAdapter;
 use common::types::StratumServerConfig;
 use core::core::hash::{Hash, Hashed};
-use core::core::{Block, BlockHeader, Proof};
-use core::pow::cuckoo;
-use core::{consensus, global};
+use core::core::verifier_cache::VerifierCache;
+use core::core::{Block, BlockHeader};
+use core::global;
+use core::pow::PoWContext;
 use mining::mine_block;
 use pool;
 use util::LOGGER;
 
-// Max number of transactions this miner will assemble in a block
-const MAX_TX: u32 = 5000;
-
 pub struct Miner {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
-	tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+	tx_pool: Arc<RwLock<pool::TransactionPool>>,
+	verifier_cache: Arc<RwLock<VerifierCache>>,
 	stop: Arc<AtomicBool>,
 
 	// Just to hold the port we're on, so this miner can be identified
@@ -51,16 +49,18 @@ impl Miner {
 	/// storage.
 	pub fn new(
 		config: StratumServerConfig,
-		chain_ref: Arc<chain::Chain>,
-		tx_pool: Arc<RwLock<pool::TransactionPool<PoolToChainAdapter>>>,
+		chain: Arc<chain::Chain>,
+		tx_pool: Arc<RwLock<pool::TransactionPool>>,
+		verifier_cache: Arc<RwLock<VerifierCache>>,
 		stop: Arc<AtomicBool>,
 	) -> Miner {
 		Miner {
-			config: config,
-			chain: chain_ref,
-			tx_pool: tx_pool,
+			config,
+			chain,
+			tx_pool,
+			verifier_cache,
 			debug_output_id: String::from("none"),
-			stop: stop,
+			stop,
 		}
 	}
 
@@ -72,16 +72,16 @@ impl Miner {
 
 	/// The inner part of mining loop for the internal miner
 	/// kept around mostly for automated testing purposes
-	pub fn inner_mining_loop(
+	fn inner_mining_loop(
 		&self,
 		b: &mut Block,
 		head: &BlockHeader,
 		attempt_time_per_block: u32,
 		latest_hash: &mut Hash,
-	) -> Option<Proof> {
+	) -> bool {
 		// look for a pow for at most 2 sec on the same block (to give a chance to new
 		// transactions) and as long as the head hasn't changed
-		let deadline = time::get_time().sec + attempt_time_per_block as i64;
+		let deadline = Utc::now().timestamp() + attempt_time_per_block as i64;
 
 		debug!(
 			LOGGER,
@@ -89,44 +89,38 @@ impl Miner {
 			self.debug_output_id,
 			global::min_sizeshift(),
 			attempt_time_per_block,
-			b.header.total_difficulty,
+			b.header.total_difficulty(),
 			b.header.height,
 			latest_hash
 		);
 		let mut iter_count = 0;
 
-		let mut sol = None;
-		while head.hash() == *latest_hash && time::get_time().sec < deadline {
-			if let Ok(proof) = cuckoo::Miner::new(
-				&b.header,
-				consensus::EASINESS,
-				global::proofsize(),
-				global::min_sizeshift(),
-			).mine()
-			{
-				let proof_diff = proof.to_difficulty();
-				if proof_diff >= (b.header.total_difficulty.clone() - head.total_difficulty.clone())
-				{
-					sol = Some(proof);
-					break;
+		while head.hash() == *latest_hash && Utc::now().timestamp() < deadline {
+			let mut ctx =
+				global::create_pow_context::<u32>(global::min_sizeshift(), global::proofsize(), 10)
+					.unwrap();
+			ctx.set_header_nonce(b.header.pre_pow(), None, true)
+				.unwrap();
+			if let Ok(proofs) = ctx.find_cycles() {
+				b.header.pow.proof = proofs[0].clone();
+				let proof_diff = b.header.pow.to_difficulty();
+				if proof_diff >= (b.header.total_difficulty() - head.total_difficulty()) {
+					return true;
 				}
 			}
 
-			b.header.nonce += 1;
+			b.header.pow.nonce += 1;
 			*latest_hash = self.chain.head().unwrap().last_block_h;
 			iter_count += 1;
 		}
 
-		if sol == None {
-			debug!(
-				LOGGER,
-				"(Server ID: {}) No solution found after {} iterations, continuing...",
-				self.debug_output_id,
-				iter_count
-			)
-		}
-
-		sol
+		debug!(
+			LOGGER,
+			"(Server ID: {}) No solution found after {} iterations, continuing...",
+			self.debug_output_id,
+			iter_count
+		);
+		false
 	}
 
 	/// Starts the mining loop, building a new block on top of the existing
@@ -151,8 +145,8 @@ impl Miner {
 			let (mut b, block_fees) = mine_block::get_block(
 				&self.chain,
 				&self.tx_pool,
+				self.verifier_cache.clone(),
 				key_id.clone(),
-				MAX_TX.clone(),
 				wallet_listener_url.clone(),
 			);
 
@@ -164,8 +158,7 @@ impl Miner {
 			);
 
 			// we found a solution, push our block through the chain processing pipeline
-			if let Some(proof) = sol {
-				b.header.pow = proof;
+			if sol {
 				info!(
 					LOGGER,
 					"(Server ID: {}) Found valid proof of work, adding block {}.",

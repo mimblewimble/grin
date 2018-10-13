@@ -14,14 +14,16 @@
 //! core consensus.rs tests (separated to de-clutter consensus.rs)
 #[macro_use]
 extern crate grin_core as core;
-extern crate time;
+extern crate chrono;
 
-use core::consensus::{next_difficulty, valid_header_version, TargetError,
-                      DIFFICULTY_ADJUST_WINDOW, MEDIAN_TIME_WINDOW,
-                      UPPER_TIME_BOUND, BLOCK_TIME_WINDOW, DAMP_FACTOR, MEDIAN_TIME_INDEX};
-use core::core::target::Difficulty;
-use std::fmt::{self, Display};
+use chrono::prelude::Utc;
+use core::consensus::{
+	next_difficulty, valid_header_version, TargetError, BLOCK_TIME_WINDOW, DAMP_FACTOR,
+	DIFFICULTY_ADJUST_WINDOW, MEDIAN_TIME_INDEX, MEDIAN_TIME_WINDOW, UPPER_TIME_BOUND,
+};
 use core::global;
+use core::pow::Difficulty;
+use std::fmt::{self, Display};
 
 /// Last n blocks for difficulty calculation purposes
 /// (copied from stats in server crate)
@@ -57,11 +59,10 @@ pub struct DiffStats {
 	pub block_diff_sum: u64,
 	/// latest ts
 	pub latest_ts: u64,
-	/// earlist ts
+	/// earliest ts
 	pub earliest_ts: u64,
 	/// ts delta
 	pub ts_delta: u64,
-	
 }
 
 impl Display for DiffBlock {
@@ -84,7 +85,7 @@ fn repeat(
 ) -> Vec<Result<(u64, Difficulty), TargetError>> {
 	let cur_time = match cur_time {
 		Some(t) => t,
-		None => time::get_time().sec as u64,
+		None => Utc::now().timestamp() as u64,
 	};
 	// watch overflow here, length shouldn't be ridiculous anyhow
 	assert!(len < std::usize::MAX as u64);
@@ -97,20 +98,21 @@ fn repeat(
 }
 
 // Creates a new chain with a genesis at a simulated difficulty
-fn create_chain_sim(diff: u64)
-	-> Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)> {
+fn create_chain_sim(diff: u64) -> Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)> {
 	println!(
 		"adding create: {}, {}",
-		time::get_time().sec,
+		Utc::now().timestamp(),
 		Difficulty::from_num(diff)
 	);
-	let return_vec = vec![
-		Ok((time::get_time().sec as u64, Difficulty::from_num(diff))),
-	];
+	let return_vec = vec![Ok((
+		Utc::now().timestamp() as u64,
+		Difficulty::from_num(diff),
+	))];
 	let diff_stats = get_diff_stats(&return_vec);
-	vec![
-		(Ok((time::get_time().sec as u64, Difficulty::from_num(diff))), diff_stats),
-	]
+	vec![(
+		Ok((Utc::now().timestamp() as u64, Difficulty::from_num(diff))),
+		diff_stats,
+	)]
 }
 
 fn get_diff_stats(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) -> DiffStats {
@@ -125,7 +127,8 @@ fn get_diff_stats(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) -> Di
 
 	// Obtain the median window for the earlier time period
 	// the first MEDIAN_TIME_WINDOW elements
-	let mut window_earliest: Vec<u64> = last_blocks.clone()
+	let mut window_earliest: Vec<u64> = last_blocks
+		.clone()
 		.iter()
 		.take(MEDIAN_TIME_WINDOW as usize)
 		.map(|n| n.clone().unwrap().0)
@@ -136,7 +139,8 @@ fn get_diff_stats(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) -> Di
 
 	// Obtain the median window for the latest time period
 	// i.e. the last  MEDIAN_TIME_WINDOW elements
-	let mut window_latest: Vec<u64> = last_blocks.clone()
+	let mut window_latest: Vec<u64> = last_blocks
+		.clone()
 		.iter()
 		.skip(DIFFICULTY_ADJUST_WINDOW as usize)
 		.map(|n| n.clone().unwrap().0)
@@ -146,13 +150,13 @@ fn get_diff_stats(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) -> Di
 	let latest_ts = window_latest[MEDIAN_TIME_INDEX as usize];
 
 	let mut i = 1;
-	
-	let sum_blocks: Vec<Result<(u64, Difficulty), TargetError>> =
-		global::difficulty_data_to_vector(diff_iter)
-			.into_iter()
-			.skip(MEDIAN_TIME_WINDOW as usize)
-			.take(DIFFICULTY_ADJUST_WINDOW as usize)
-			.collect();
+
+	let sum_blocks: Vec<Result<(u64, Difficulty), TargetError>> = global::difficulty_data_to_vector(
+		diff_iter,
+	).into_iter()
+		.skip(MEDIAN_TIME_WINDOW as usize)
+		.take(DIFFICULTY_ADJUST_WINDOW as usize)
+		.collect();
 
 	let sum_entries: Vec<DiffBlock> = sum_blocks
 		.iter()
@@ -206,7 +210,7 @@ fn get_diff_stats(chain_sim: &Vec<Result<(u64, Difficulty), TargetError>>) -> Di
 		block_diff_sum: block_diff_sum,
 		latest_ts: latest_ts,
 		earliest_ts: earliest_ts,
-		ts_delta: latest_ts-earliest_ts,
+		ts_delta: latest_ts - earliest_ts,
 	}
 }
 
@@ -217,9 +221,8 @@ fn add_block(
 	chain_sim: Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)>,
 ) -> Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)> {
 	let mut ret_chain_sim = chain_sim.clone();
-	let mut return_chain: Vec<(Result<(u64, Difficulty), TargetError>)> = chain_sim.clone().iter()
-		.map(|e| e.0.clone())
-		.collect();
+	let mut return_chain: Vec<(Result<(u64, Difficulty), TargetError>)> =
+		chain_sim.clone().iter().map(|e| e.0.clone()).collect();
 	// get last interval
 	let diff = next_difficulty(return_chain.clone()).unwrap();
 	let last_elem = chain_sim.first().as_ref().unwrap().0.as_ref().unwrap();
@@ -257,9 +260,7 @@ fn add_block_repeated(
 
 // Prints the contents of the iterator and its difficulties.. useful for
 // tweaking
-fn print_chain_sim(
-	chain_sim: Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)>
-){
+fn print_chain_sim(chain_sim: Vec<((Result<(u64, Difficulty), TargetError>), DiffStats)>) {
 	let mut chain_sim = chain_sim.clone();
 	chain_sim.reverse();
 	let mut last_time = 0;
@@ -306,13 +307,12 @@ fn repeat_offs(
 	diff: u64,
 	len: u64,
 ) -> Vec<Result<(u64, Difficulty), TargetError>> {
-	map_vec!(
-		repeat(interval, diff, len, Some(from)),
-		|e| match e.clone() {
+	map_vec!(repeat(interval, diff, len, Some(from)), |e| {
+		match e.clone() {
 			Err(e) => Err(e),
 			Ok((t, d)) => Ok((t, d)),
 		}
-	)
+	})
 }
 
 /// Checks different next_target adjustments and difficulty boundaries
@@ -413,7 +413,7 @@ fn adjustment_scenarios() {
 #[test]
 fn next_target_adjustment() {
 	global::set_mining_mode(global::ChainTypes::AutomatedTesting);
-	let cur_time = time::get_time().sec as u64;
+	let cur_time = Utc::now().timestamp() as u64;
 
 	assert_eq!(
 		next_difficulty(vec![Ok((cur_time, Difficulty::one()))]).unwrap(),
@@ -498,12 +498,14 @@ fn next_target_adjustment() {
 }
 
 #[test]
-fn hard_fork_1() {
+fn hard_forks() {
 	assert!(valid_header_version(0, 1));
 	assert!(valid_header_version(10, 1));
 	assert!(!valid_header_version(10, 2));
-	assert!(valid_header_version(250_000, 1));
-	assert!(!valid_header_version(250_001, 1));
+	assert!(valid_header_version(100_000, 2));
+	assert!(valid_header_version(249_999, 2));
+	assert!(valid_header_version(250_000, 3));
+	assert!(!valid_header_version(250_000, 1));
 	assert!(!valid_header_version(500_000, 1));
 	assert!(!valid_header_version(250_001, 2));
 }

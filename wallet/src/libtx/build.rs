@@ -55,7 +55,7 @@ where
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			let commit = build.keychain.commit(value, &key_id).unwrap();
 			let input = Input::new(features, commit);
-			(tx.with_input(input), kern, sum.sub_key_id(key_id.clone()))
+			(tx.with_input(input), kern, sum.sub_key_id(key_id.to_path()))
 		},
 	)
 }
@@ -93,10 +93,9 @@ where
 {
 	Box::new(
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
-			debug!(LOGGER, "Building an output: {}, {}", value, key_id,);
-
 			let commit = build.keychain.commit(value, &key_id).unwrap();
-			trace!(LOGGER, "Builder - Pedersen Commit is: {:?}", commit,);
+
+			debug!(LOGGER, "Building output: {}, {:?}", value, commit);
 
 			let rproof = proof::create(build.keychain, value, &key_id, commit, None).unwrap();
 
@@ -107,7 +106,7 @@ where
 					proof: rproof,
 				}),
 				kern,
-				sum.add_key_id(key_id.clone()),
+				sum.add_key_id(key_id.to_path()),
 			)
 		},
 	)
@@ -170,8 +169,8 @@ pub fn initial_tx<K>(mut tx: Transaction) -> Box<Append<K>>
 where
 	K: Keychain,
 {
-	assert_eq!(tx.kernels.len(), 1);
-	let kern = tx.kernels.remove(0);
+	assert_eq!(tx.kernels().len(), 1);
+	let kern = tx.kernels_mut().remove(0);
 	Box::new(
 		move |_build, (_, _, sum)| -> (Transaction, TxKernel, BlindSum) {
 			(tx.clone(), kern.clone(), sum)
@@ -197,45 +196,22 @@ where
 	K: Keychain,
 {
 	let mut ctx = Context { keychain };
-	let (mut tx, kern, sum) = elems.iter().fold(
+	let (tx, kern, sum) = elems.iter().fold(
 		(Transaction::empty(), TxKernel::empty(), BlindSum::new()),
 		|acc, elem| elem(&mut ctx, acc),
 	);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 
 	// we only support building a tx with a single kernel via build::transaction()
-	assert!(tx.kernels.is_empty());
-	tx.kernels.push(kern);
+	assert!(tx.kernels().is_empty());
+
+	let tx = tx.with_kernel(kern);
 
 	Ok((tx, blind_sum))
 }
 
 /// Builds a complete transaction.
 pub fn transaction<K>(
-	elems: Vec<Box<Append<K>>>,
-	keychain: &K,
-) -> Result<Transaction, keychain::Error>
-where
-	K: Keychain,
-{
-	let (mut tx, blind_sum) = partial_transaction(elems, keychain)?;
-	assert_eq!(tx.kernels.len(), 1);
-
-	let mut kern = tx.kernels.remove(0);
-	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
-
-	let skey = blind_sum.secret_key(&keychain.secp())?;
-	kern.excess = keychain.secp().commit(0, skey)?;
-	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &blind_sum).unwrap();
-
-	tx.kernels.push(kern);
-
-	Ok(tx)
-}
-
-/// Builds a complete transaction, splitting the key and
-/// setting the excess, excess_sig and tx offset as necessary.
-pub fn transaction_with_offset<K>(
 	elems: Vec<Box<Append<K>>>,
 	keychain: &K,
 ) -> Result<Transaction, keychain::Error>
@@ -249,23 +225,29 @@ where
 	);
 	let blind_sum = ctx.keychain.blind_sum(&sum)?;
 
+	// Split the key so we can generate an offset for the tx.
 	let split = blind_sum.split(&keychain.secp())?;
 	let k1 = split.blind_1;
 	let k2 = split.blind_2;
 
+	// Construct the message to be signed.
 	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
 
-	// generate kernel excess and excess_sig using the split key k1
+	// Generate kernel excess and excess_sig using the split key k1.
 	let skey = k1.secret_key(&keychain.secp())?;
 	kern.excess = ctx.keychain.secp().commit(0, skey)?;
-	kern.excess_sig = aggsig::sign_with_blinding(&keychain.secp(), &msg, &k1).unwrap();
+	let pubkey = &kern.excess.to_pubkey(&keychain.secp())?;
+	kern.excess_sig =
+		aggsig::sign_with_blinding(&keychain.secp(), &msg, &k1, Some(&pubkey)).unwrap();
 
-	// store the kernel offset (k2) on the tx itself
-	// commitments will sum correctly when including the offset
+	// Store the kernel offset (k2) on the tx.
+	// Commitments will sum correctly when accounting for the offset.
 	tx.offset = k2.clone();
 
-	assert!(tx.kernels.is_empty());
-	tx.kernels.push(kern);
+	// Set the kernel on the tx (assert this is now a single-kernel tx).
+	assert!(tx.kernels().is_empty());
+	let tx = tx.with_kernel(kern);
+	assert_eq!(tx.kernels().len(), 1);
 
 	Ok(tx)
 }
@@ -273,15 +255,24 @@ where
 // Just a simple test, most exhaustive tests in the core mod.rs.
 #[cfg(test)]
 mod test {
+	use std::sync::{Arc, RwLock};
+
 	use super::*;
-	use keychain::ExtKeychain;
+	use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
+	use keychain::{ExtKeychain, ExtKeychainPath};
+
+	fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
+		Arc::new(RwLock::new(LruVerifierCache::new()))
+	}
 
 	#[test]
 	fn blind_simple_tx() {
 		let keychain = ExtKeychain::from_random_seed().unwrap();
-		let key_id1 = keychain.derive_key_id(1).unwrap();
-		let key_id2 = keychain.derive_key_id(2).unwrap();
-		let key_id3 = keychain.derive_key_id(3).unwrap();
+		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
+		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
+		let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
+
+		let vc = verifier_cache();
 
 		let tx = transaction(
 			vec![
@@ -293,17 +284,19 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		tx.validate().unwrap();
+		tx.validate(vc.clone()).unwrap();
 	}
 
 	#[test]
 	fn blind_simple_tx_with_offset() {
 		let keychain = ExtKeychain::from_random_seed().unwrap();
-		let key_id1 = keychain.derive_key_id(1).unwrap();
-		let key_id2 = keychain.derive_key_id(2).unwrap();
-		let key_id3 = keychain.derive_key_id(3).unwrap();
+		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
+		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
+		let key_id3 = ExtKeychainPath::new(1, 3, 0, 0, 0).to_identifier();
 
-		let tx = transaction_with_offset(
+		let vc = verifier_cache();
+
+		let tx = transaction(
 			vec![
 				input(10, key_id1),
 				input(12, key_id2),
@@ -313,20 +306,22 @@ mod test {
 			&keychain,
 		).unwrap();
 
-		tx.validate().unwrap();
+		tx.validate(vc.clone()).unwrap();
 	}
 
 	#[test]
 	fn blind_simpler_tx() {
 		let keychain = ExtKeychain::from_random_seed().unwrap();
-		let key_id1 = keychain.derive_key_id(1).unwrap();
-		let key_id2 = keychain.derive_key_id(2).unwrap();
+		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
+		let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
+
+		let vc = verifier_cache();
 
 		let tx = transaction(
 			vec![input(6, key_id1), output(2, key_id2), with_fee(4)],
 			&keychain,
 		).unwrap();
 
-		tx.validate().unwrap();
+		tx.validate(vc.clone()).unwrap();
 	}
 }

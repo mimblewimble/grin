@@ -15,8 +15,8 @@
 //! Base types that the block chain pipeline requires.
 
 use core::core::hash::{Hash, Hashed};
-use core::core::target::Difficulty;
 use core::core::{Block, BlockHeader};
+use core::pow::Difficulty;
 use core::ser;
 
 bitflags! {
@@ -78,7 +78,7 @@ impl Tip {
 			height: bh.height,
 			last_block_h: bh.hash(),
 			prev_block_h: bh.previous,
-			total_difficulty: bh.total_difficulty.clone(),
+			total_difficulty: bh.total_difficulty(),
 		}
 	}
 }

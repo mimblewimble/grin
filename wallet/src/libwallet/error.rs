@@ -13,12 +13,16 @@
 // limitations under the License.
 
 //! Error types for libwallet
+
+use std::fmt::{self, Display};
+use std::io;
+
+use failure::{Backtrace, Context, Fail};
+
+use core;
+use core::core::transaction;
 use keychain;
 use libtx;
-use std::fmt::{self, Display};
-
-use core::core::transaction;
-use failure::{Backtrace, Context, Fail};
 
 /// Error definition
 #[derive(Debug, Fail)]
@@ -72,6 +76,10 @@ pub enum ErrorKind {
 	#[fail(display = "Transaction error")]
 	Transaction(transaction::Error),
 
+	/// API Error
+	#[fail(display = "Client Callback Error: {}", _0)]
+	ClientCallback(&'static str),
+
 	/// Secp Error
 	#[fail(display = "Secp error")]
 	Secp,
@@ -91,6 +99,10 @@ pub enum ErrorKind {
 	/// An error in the format of the JSON structures exchanged by the wallet
 	#[fail(display = "JSON format error")]
 	Format,
+
+	/// Other serialization errors
+	#[fail(display = "Ser/Deserialization error")]
+	Deser(core::ser::Error),
 
 	/// IO Error
 	#[fail(display = "I/O error")]
@@ -128,9 +140,45 @@ pub enum ErrorKind {
 	#[fail(display = "Wallet seed doesn't exist error")]
 	WalletSeedDoesntExist,
 
+	/// Transaction doesn't exist
+	#[fail(display = "Transaction {} doesn't exist", _0)]
+	TransactionDoesntExist(u32),
+
+	/// Transaction already rolled back
+	#[fail(display = "Transaction {} cannot be cancelled", _0)]
+	TransactionNotCancellable(u32),
+
+	/// Cancellation error
+	#[fail(display = "Cancellation Error: {}", _0)]
+	TransactionCancellationError(&'static str),
+
+	/// Cancellation error
+	#[fail(display = "Tx dump Error: {}", _0)]
+	TransactionDumpError(&'static str),
+
+	/// Attempt to repost a transaction that's already confirmed
+	#[fail(display = "Transaction already confirmed error")]
+	TransactionAlreadyConfirmed,
+
+	/// Attempt to repost a transaction that's not completed and stored
+	#[fail(display = "Transaction building not completed: {}", _0)]
+	TransactionBuildingNotCompleted(u32),
+
+	/// Invalid BIP-32 Depth
+	#[fail(display = "Invalid BIP32 Depth (must be 1 or greater)")]
+	InvalidBIP32Depth,
+
+	/// Attempt to add an account that exists
+	#[fail(display = "Account Label '{}' already exists", _0)]
+	AccountLabelAlreadyExists(String),
+
+	/// Reference unknown account label
+	#[fail(display = "Unknown Account Label '{}'", _0)]
+	UnknownAccountLabel(String),
+
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
-	GenericError(&'static str),
+	GenericError(String),
 }
 
 impl Display for Error {
@@ -168,6 +216,14 @@ impl From<Context<ErrorKind>> for Error {
 	}
 }
 
+impl From<io::Error> for Error {
+	fn from(_error: io::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::IO),
+		}
+	}
+}
+
 impl From<keychain::Error> for Error {
 	fn from(error: keychain::Error) -> Error {
 		Error {
@@ -188,6 +244,14 @@ impl From<transaction::Error> for Error {
 	fn from(error: transaction::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::Transaction(error)),
+		}
+	}
+}
+
+impl From<core::ser::Error> for Error {
+	fn from(error: core::ser::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::Deser(error)),
 		}
 	}
 }

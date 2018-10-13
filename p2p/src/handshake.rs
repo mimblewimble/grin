@@ -16,14 +16,14 @@ use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
-use rand::Rng;
-use rand::os::OsRng;
+use chrono::prelude::*;
+use rand::{thread_rng, Rng};
 
 use core::core::hash::Hash;
-use core::core::target::Difficulty;
+use core::pow::Difficulty;
 use msg::{read_message, write_message, Hand, Shake, SockAddr, Type, PROTOCOL_VERSION, USER_AGENT};
 use peer::Peer;
-use types::{Capabilities, Direction, Error, P2PConfig, PeerInfo};
+use types::{Capabilities, Direction, Error, P2PConfig, PeerInfo, PeerLiveInfo};
 use util::LOGGER;
 
 const NONCES_CAP: usize = 100;
@@ -98,8 +98,11 @@ impl Handshake {
 			user_agent: shake.user_agent,
 			addr: peer_addr,
 			version: shake.version,
-			total_difficulty: shake.total_difficulty,
-			height: 0,
+			live_info: Arc::new(RwLock::new(PeerLiveInfo {
+				total_difficulty: shake.total_difficulty,
+				height: 0,
+				last_seen: Utc::now(),
+			})),
 			direction: Direction::Outbound,
 		};
 
@@ -112,7 +115,7 @@ impl Handshake {
 		debug!(
 			LOGGER,
 			"Connected! Cumulative {} offered from {:?} {:?} {:?}",
-			peer_info.total_difficulty.to_num(),
+			shake.total_difficulty.to_num(),
 			peer_info.addr,
 			peer_info.user_agent,
 			peer_info.capabilities
@@ -154,8 +157,11 @@ impl Handshake {
 			user_agent: hand.user_agent,
 			addr: extract_ip(&hand.sender_addr.0, &conn),
 			version: hand.version,
-			total_difficulty: hand.total_difficulty,
-			height: 0,
+			live_info: Arc::new(RwLock::new(PeerLiveInfo {
+				total_difficulty: hand.total_difficulty,
+				height: 0,
+				last_seen: Utc::now(),
+			})),
 			direction: Direction::Inbound,
 		};
 
@@ -185,8 +191,7 @@ impl Handshake {
 
 	/// Generate a new random nonce and store it in our ring buffer
 	fn next_nonce(&self) -> u64 {
-		let mut rng = OsRng::new().unwrap();
-		let nonce = rng.next_u64();
+		let nonce = thread_rng().gen();
 
 		let mut nonces = self.nonces.write().unwrap();
 		nonces.push_back(nonce);

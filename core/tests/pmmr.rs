@@ -15,9 +15,13 @@
 //! PMMR tests
 #[macro_use]
 extern crate grin_core as core;
+extern crate chrono;
 extern crate croaring;
 
 mod vec_backend;
+
+use chrono::prelude::Utc;
+use std::u64;
 
 use core::core::hash::Hash;
 use core::core::pmmr::{self, PMMR};
@@ -25,23 +29,51 @@ use core::ser::PMMRIndexHashable;
 use vec_backend::{TestElem, VecBackend};
 
 #[test]
-fn some_all_ones() {
-	for n in vec![1, 7, 255] {
-		assert!(pmmr::all_ones(n), "{} should be all ones", n);
-	}
-	for n in vec![0, 6, 9, 128] {
-		assert!(!pmmr::all_ones(n), "{} should not be all ones", n);
+fn some_peak_map() {
+	assert_eq!(pmmr::peak_map_height(0), (0b0, 0));
+	assert_eq!(pmmr::peak_map_height(1), (0b1, 0));
+	assert_eq!(pmmr::peak_map_height(2), (0b1, 1));
+	assert_eq!(pmmr::peak_map_height(3), (0b10, 0));
+	assert_eq!(pmmr::peak_map_height(4), (0b11, 0));
+	assert_eq!(pmmr::peak_map_height(5), (0b11, 1));
+	assert_eq!(pmmr::peak_map_height(6), (0b11, 2));
+	assert_eq!(pmmr::peak_map_height(7), (0b100, 0));
+	assert_eq!(pmmr::peak_map_height(u64::MAX), ((u64::MAX >> 1) + 1, 0));
+	assert_eq!(pmmr::peak_map_height(u64::MAX - 1), (u64::MAX >> 1, 63));
+}
+
+#[ignore]
+#[test]
+fn bench_peak_map() {
+	let nano_to_millis = 1.0 / 1_000_000.0;
+
+	let increments = vec![1000_000u64, 10_000_000u64, 100_000_000u64];
+
+	for v in increments {
+		let start = Utc::now().timestamp_nanos();
+		for i in 0..v {
+			let _ = pmmr::peak_map_height(i);
+		}
+		let fin = Utc::now().timestamp_nanos();
+		let dur_ms = (fin - start) as f64 * nano_to_millis;
+		println!("{:9?} peak_map_height() in {:9.3?}ms", v, dur_ms);
 	}
 }
 
 #[test]
-fn some_most_signif() {
-	assert_eq!(pmmr::most_significant_pos(0), 0);
-	assert_eq!(pmmr::most_significant_pos(1), 1);
-	assert_eq!(pmmr::most_significant_pos(6), 3);
-	assert_eq!(pmmr::most_significant_pos(7), 3);
-	assert_eq!(pmmr::most_significant_pos(8), 4);
-	assert_eq!(pmmr::most_significant_pos(128), 8);
+fn some_peak_size() {
+	assert_eq!(pmmr::peak_sizes_height(0), (vec![], 0));
+	assert_eq!(pmmr::peak_sizes_height(1), (vec![1], 0));
+	assert_eq!(pmmr::peak_sizes_height(2), (vec![1], 1));
+	assert_eq!(pmmr::peak_sizes_height(3), (vec![3], 0));
+	assert_eq!(pmmr::peak_sizes_height(4), (vec![3, 1], 0));
+	assert_eq!(pmmr::peak_sizes_height(5), (vec![3, 1], 1));
+	assert_eq!(pmmr::peak_sizes_height(6), (vec![3, 1], 2));
+	assert_eq!(pmmr::peak_sizes_height(7), (vec![7], 0));
+	assert_eq!(pmmr::peak_sizes_height(u64::MAX), (vec![u64::MAX], 0));
+
+	let size_of_peaks = (1..64).map(|i| u64::MAX >> i).collect::<Vec<u64>>();
+	assert_eq!(pmmr::peak_sizes_height(u64::MAX - 1), (size_of_peaks, 63));
 }
 
 #[test]
@@ -62,6 +94,32 @@ fn first_100_mmr_heights() {
 		);
 		count += 1;
 	}
+}
+
+// The pos of the rightmost leaf for the provided MMR size (last leaf in subtree).
+#[test]
+fn test_bintree_rightmost() {
+	assert_eq!(pmmr::bintree_rightmost(0), 0);
+	assert_eq!(pmmr::bintree_rightmost(1), 1);
+	assert_eq!(pmmr::bintree_rightmost(2), 2);
+	assert_eq!(pmmr::bintree_rightmost(3), 2);
+	assert_eq!(pmmr::bintree_rightmost(4), 4);
+	assert_eq!(pmmr::bintree_rightmost(5), 5);
+	assert_eq!(pmmr::bintree_rightmost(6), 5);
+	assert_eq!(pmmr::bintree_rightmost(7), 5);
+}
+
+// The pos of the leftmost leaf for the provided MMR size (first leaf in subtree).
+#[test]
+fn test_bintree_leftmost() {
+	assert_eq!(pmmr::bintree_leftmost(0), 0);
+	assert_eq!(pmmr::bintree_leftmost(1), 1);
+	assert_eq!(pmmr::bintree_leftmost(2), 2);
+	assert_eq!(pmmr::bintree_leftmost(3), 1);
+	assert_eq!(pmmr::bintree_leftmost(4), 4);
+	assert_eq!(pmmr::bintree_leftmost(5), 5);
+	assert_eq!(pmmr::bintree_leftmost(6), 4);
+	assert_eq!(pmmr::bintree_leftmost(7), 1);
 }
 
 #[test]
@@ -427,7 +485,7 @@ fn pmmr_prune() {
 	assert_eq!(ba.elems.len(), 16);
 	assert_eq!(ba.remove_list.len(), 4);
 
-	// TODO - no longeer true (leaves only now) - pruning all leaves under level >1
+	// TODO - no longer true (leaves only now) - pruning all leaves under level >1
 	// removes all subtree
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
@@ -447,46 +505,6 @@ fn pmmr_prune() {
 	}
 	assert_eq!(ba.elems.len(), 16);
 	assert_eq!(ba.remove_list.len(), 9);
-}
-
-#[test]
-fn check_all_ones() {
-	for i in 0..1000000 {
-		assert_eq!(old_all_ones(i), pmmr::all_ones(i));
-	}
-}
-
-// Check if the binary representation of a number is all ones.
-fn old_all_ones(num: u64) -> bool {
-	if num == 0 {
-		return false;
-	}
-	let mut bit = 1;
-	while num >= bit {
-		if num & bit == 0 {
-			return false;
-		}
-		bit = bit << 1;
-	}
-	true
-}
-
-#[test]
-fn check_most_significant_pos() {
-	for i in 0u64..1000000 {
-		assert_eq!(old_most_significant_pos(i), pmmr::most_significant_pos(i));
-	}
-}
-
-// Get the position of the most significant bit in a number.
-fn old_most_significant_pos(num: u64) -> u64 {
-	let mut pos = 0;
-	let mut bit = 1;
-	while num >= bit {
-		bit = bit << 1;
-		pos += 1;
-	}
-	pos
 }
 
 #[test]

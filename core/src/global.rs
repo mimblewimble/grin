@@ -19,10 +19,10 @@
 use consensus::TargetError;
 use consensus::{
 	BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_MIN_SIZESHIFT,
-	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
+	DIFFICULTY_ADJUST_WINDOW, EASINESS, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
 	REFERENCE_SIZESHIFT,
 };
-use core::target::Difficulty;
+use pow::{self, CuckatooContext, Difficulty, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
@@ -39,7 +39,7 @@ pub const AUTOMATED_TESTING_MIN_SIZESHIFT: u8 = 10;
 pub const AUTOMATED_TESTING_PROOF_SIZE: usize = 4;
 
 /// User testing sizeshift
-pub const USER_TESTING_MIN_SIZESHIFT: u8 = 16;
+pub const USER_TESTING_MIN_SIZESHIFT: u8 = 19;
 
 /// User testing proof size
 pub const USER_TESTING_PROOF_SIZE: usize = 42;
@@ -49,6 +49,12 @@ pub const AUTOMATED_TESTING_COINBASE_MATURITY: u64 = 3;
 
 /// User testing coinbase maturity
 pub const USER_TESTING_COINBASE_MATURITY: u64 = 3;
+
+/// Old coinbase maturity
+/// TODO: obsolete for mainnet together with maturity code below
+pub const OLD_COINBASE_MATURITY: u64 = 1_000;
+/// soft-fork around Sep 17 2018 on testnet3
+pub const COINBASE_MATURITY_FORK_HEIGHT: u64 = 100_000;
 
 /// Testing cut through horizon in blocks
 pub const TESTING_CUT_THROUGH_HORIZON: u32 = 20;
@@ -62,6 +68,9 @@ pub const TESTNET2_INITIAL_DIFFICULTY: u64 = 1000;
 /// Testnet 3 initial block difficulty, moderately high, taking into account
 /// a 30x Cuckoo adjustment factor
 pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
+
+/// Testnet 4 initial block difficulty
+pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1;
 
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
@@ -77,26 +86,59 @@ pub enum ChainTypes {
 	Testnet2,
 	/// Third test network
 	Testnet3,
+	/// Fourth test network
+	Testnet4,
 	/// Main production network
 	Mainnet,
 }
 
 impl Default for ChainTypes {
 	fn default() -> ChainTypes {
-		ChainTypes::UserTesting
+		ChainTypes::Testnet4
 	}
+}
+
+/// PoW test mining and verifier context
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum PoWContextTypes {
+	/// Classic Cuckoo
+	Cuckoo,
+	/// Bleeding edge Cuckatoo
+	Cuckatoo,
 }
 
 lazy_static!{
 	/// The mining parameter mode
 	pub static ref CHAIN_TYPE: RwLock<ChainTypes> =
 			RwLock::new(ChainTypes::Mainnet);
+
+	/// PoW context type to instantiate
+	pub static ref POW_CONTEXT_TYPE: RwLock<PoWContextTypes> =
+			RwLock::new(PoWContextTypes::Cuckoo);
 }
 
 /// Set the mining mode
 pub fn set_mining_mode(mode: ChainTypes) {
 	let mut param_ref = CHAIN_TYPE.write().unwrap();
 	*param_ref = mode;
+}
+
+/// Return either a cuckoo context or a cuckatoo context
+/// Single change point
+pub fn create_pow_context<T>(
+	edge_bits: u8,
+	proof_size: usize,
+	max_sols: u32,
+) -> Result<Box<impl PoWContext<T>>, pow::Error>
+where
+	T: EdgeType,
+{
+	CuckatooContext::<T>::new(edge_bits, proof_size, EASINESS, max_sols)
+}
+
+/// Return the type of the pos
+pub fn pow_type() -> PoWContextTypes {
+	PoWContextTypes::Cuckatoo
 }
 
 /// The minimum acceptable sizeshift
@@ -133,13 +175,17 @@ pub fn proofsize() -> usize {
 	}
 }
 
-/// Coinbase maturity
-pub fn coinbase_maturity() -> u64 {
+/// Coinbase maturity for coinbases to be spent at given height
+pub fn coinbase_maturity(height: u64) -> u64 {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
 		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
-		_ => COINBASE_MATURITY,
+		_ => if height < COINBASE_MATURITY_FORK_HEIGHT {
+			OLD_COINBASE_MATURITY
+		} else {
+			COINBASE_MATURITY
+		},
 	}
 }
 
@@ -152,6 +198,7 @@ pub fn initial_block_difficulty() -> u64 {
 		ChainTypes::Testnet1 => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet2 => TESTNET2_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet3 => TESTNET3_INITIAL_DIFFICULTY,
+		ChainTypes::Testnet4 => TESTNET4_INITIAL_DIFFICULTY,
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
 	}
 }
@@ -184,6 +231,7 @@ pub fn is_production_mode() -> bool {
 	ChainTypes::Testnet1 == *param_ref
 		|| ChainTypes::Testnet2 == *param_ref
 		|| ChainTypes::Testnet3 == *param_ref
+		|| ChainTypes::Testnet4 == *param_ref
 		|| ChainTypes::Mainnet == *param_ref
 }
 
@@ -203,7 +251,7 @@ pub fn get_genesis_nonce() -> u64 {
 	}
 }
 
-/// Converts an iterator of block difficulty data to more a more mangeable
+/// Converts an iterator of block difficulty data to more a more manageable
 /// vector and pads if needed (which will) only be needed for the first few
 /// blocks after genesis
 
@@ -245,11 +293,11 @@ where
 		}
 		let mut interval_index = live_intervals.len() - 1;
 		let mut last_ts = last_n.first().as_ref().unwrap().as_ref().unwrap().0;
-		let last_diff = live_intervals[live_intervals.len()-1].1;
+		let last_diff = live_intervals[live_intervals.len() - 1].1;
 		// fill in simulated blocks with values from the previous real block
 
 		for _ in 0..block_count_difference {
-			last_ts = last_ts.saturating_sub(live_intervals[live_intervals.len()-1].0);
+			last_ts = last_ts.saturating_sub(live_intervals[live_intervals.len() - 1].0);
 			last_n.insert(0, Ok((last_ts, last_diff.clone())));
 			interval_index = match interval_index {
 				0 => live_intervals.len() - 1,

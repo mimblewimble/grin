@@ -8,3 +8,4 @@ Cargo.lock
 grin.log
 wallet.seed
 test_output
+wallet_data

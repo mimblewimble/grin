@@ -14,25 +14,33 @@
 
 //! Transaction building functions
 
+use std::sync::{Arc, RwLock};
+
+use core::core::verifier_cache::LruVerifierCache;
 use core::core::Transaction;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
-use libwallet::internal::{selection, sigcontext, updater};
-use libwallet::types::{WalletBackend, WalletClient};
+use libwallet::internal::{selection, updater};
+use libwallet::types::{Context, TxLogEntryType, WalletBackend, WalletClient};
 use libwallet::{Error, ErrorKind};
 use util::LOGGER;
 
 /// Receive a transaction, modifying the slate accordingly (which can then be
 /// sent back to sender for posting)
-pub fn receive_tx<T: ?Sized, K>(wallet: &mut T, slate: &mut Slate) -> Result<(), Error>
+pub fn receive_tx<T: ?Sized, C, K>(
+	wallet: &mut T,
+	slate: &mut Slate,
+	parent_key_id: &Identifier,
+) -> Result<(), Error>
 where
-	T: WalletBackend<K>,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	// create an output using the amount in the slate
 	let (_, mut context, receiver_create_fn) =
-		selection::build_recipient_output_with_slate(wallet, slate)?;
+		selection::build_recipient_output_with_slate(wallet, slate, parent_key_id.clone())?;
 
 	// fill public keys
 	let _ = slate.fill_round_1(
@@ -53,28 +61,31 @@ where
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
-pub fn create_send_tx<T: ?Sized, K>(
+pub fn create_send_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
 	max_outputs: usize,
+	num_change_outputs: usize,
 	selection_strategy_is_use_all: bool,
+	parent_key_id: &Identifier,
 ) -> Result<
 	(
 		Slate,
-		sigcontext::Context,
-		impl FnOnce(&mut T) -> Result<(), Error>,
+		Context,
+		impl FnOnce(&mut T, &str) -> Result<(), Error>,
 	),
 	Error,
 >
 where
-	T: WalletBackend<K> + WalletClient,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	// Get lock height
-	let current_height = wallet.get_chain_height()?;
+	let current_height = wallet.client().get_chain_height()?;
 	// ensure outputs we're selecting are up to date
-	updater::refresh_outputs(wallet)?;
+	updater::refresh_outputs(wallet, parent_key_id)?;
 
 	let lock_height = current_height;
 
@@ -93,7 +104,9 @@ where
 		minimum_confirmations,
 		lock_height,
 		max_outputs,
+		num_change_outputs,
 		selection_strategy_is_use_all,
+		parent_key_id.clone(),
 	)?;
 
 	// Generate a kernel offset and subtract from our context's secret key. Store
@@ -110,13 +123,14 @@ where
 }
 
 /// Complete a transaction as the sender
-pub fn complete_tx<T: ?Sized, K>(
+pub fn complete_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
-	context: &sigcontext::Context,
+	context: &Context,
 ) -> Result<(), Error>
 where
-	T: WalletBackend<K>,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 0)?;
@@ -128,15 +142,66 @@ where
 	Ok(())
 }
 
+/// Rollback outputs associated with a transaction in the wallet
+pub fn cancel_tx<T: ?Sized, C, K>(
+	wallet: &mut T,
+	parent_key_id: &Identifier,
+	tx_id: u32,
+) -> Result<(), Error>
+where
+	T: WalletBackend<C, K>,
+	C: WalletClient,
+	K: Keychain,
+{
+	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), &parent_key_id)?;
+	if tx_vec.len() != 1 {
+		return Err(ErrorKind::TransactionDoesntExist(tx_id))?;
+	}
+	let tx = tx_vec[0].clone();
+	if tx.tx_type != TxLogEntryType::TxSent && tx.tx_type != TxLogEntryType::TxReceived {
+		return Err(ErrorKind::TransactionNotCancellable(tx_id))?;
+	}
+	if tx.confirmed == true {
+		return Err(ErrorKind::TransactionNotCancellable(tx_id))?;
+	}
+	// get outputs associated with tx
+	let res = updater::retrieve_outputs(wallet, false, Some(tx_id), &parent_key_id)?;
+	let outputs = res.iter().map(|(out, _)| out).cloned().collect();
+	updater::cancel_tx_and_outputs(wallet, tx, outputs, parent_key_id)?;
+	Ok(())
+}
+
+/// Retrieve the associated stored finalised hex Transaction for a given transaction Id
+/// as well as whether it's been confirmed
+pub fn retrieve_tx_hex<T: ?Sized, C, K>(
+	wallet: &mut T,
+	parent_key_id: &Identifier,
+	tx_id: u32,
+) -> Result<(bool, Option<String>), Error>
+where
+	T: WalletBackend<C, K>,
+	C: WalletClient,
+	K: Keychain,
+{
+	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), parent_key_id)?;
+	if tx_vec.len() != 1 {
+		return Err(ErrorKind::TransactionDoesntExist(tx_id))?;
+	}
+	let tx = tx_vec[0].clone();
+	Ok((tx.confirmed, tx.tx_hex))
+}
+
 /// Issue a burn tx
-pub fn issue_burn_tx<T: ?Sized, K>(
+pub fn issue_burn_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
 	max_outputs: usize,
+	parent_key_id: &Identifier,
 ) -> Result<Transaction, Error>
 where
-	T: WalletBackend<K> + WalletClient,
+	T: WalletBackend<C, K>,
+	C: WalletClient,
 	K: Keychain,
 {
 	// TODO
@@ -144,26 +209,27 @@ where
 	// &Identifier::zero());
 	let keychain = wallet.keychain().clone();
 
-	let current_height = wallet.get_chain_height()?;
+	let current_height = wallet.client().get_chain_height()?;
 
-	let _ = updater::refresh_outputs(wallet);
-
-	let key_id = keychain.root_key_id();
+	let _ = updater::refresh_outputs(wallet, parent_key_id);
 
 	// select some spendable coins from the wallet
-	let coins = wallet.select_coins(
-		key_id.clone(),
+	let (_, coins) = selection::select_coins(
+		wallet,
 		amount,
 		current_height,
 		minimum_confirmations,
 		max_outputs,
 		false,
+		parent_key_id,
 	);
 
 	debug!(LOGGER, "selected some coins - {}", coins.len());
 
-	let fee = tx_fee(coins.len(), 2, None);
-	let (mut parts, _, _) = selection::inputs_and_change(&coins, wallet, amount, fee)?;
+	let fee = tx_fee(coins.len(), 2, 1, None);
+	let num_change_outputs = 1;
+	let (mut parts, _) =
+		selection::inputs_and_change(&coins, wallet, amount, fee, num_change_outputs)?;
 
 	//TODO: If we end up using this, create change output here
 
@@ -172,13 +238,14 @@ where
 
 	// finalize the burn transaction and send
 	let tx_burn = build::transaction(parts, &keychain)?;
-	tx_burn.validate()?;
+	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
+	tx_burn.validate(verifier_cache)?;
 	Ok(tx_burn)
 }
 
 #[cfg(test)]
 mod test {
-	use keychain::{ExtKeychain, Keychain};
+	use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 	use libtx::build;
 
 	#[test]
@@ -186,12 +253,12 @@ mod test {
 	// based on the public key and amount begin spent
 	fn output_commitment_equals_input_commitment_on_spend() {
 		let keychain = ExtKeychain::from_random_seed().unwrap();
-		let key_id1 = keychain.derive_key_id(1).unwrap();
+		let key_id1 = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 
 		let tx1 = build::transaction(vec![build::output(105, key_id1.clone())], &keychain).unwrap();
 		let tx2 = build::transaction(vec![build::input(105, key_id1.clone())], &keychain).unwrap();
 
-		assert_eq!(tx1.outputs[0].features, tx2.inputs[0].features);
-		assert_eq!(tx1.outputs[0].commitment(), tx2.inputs[0].commitment());
+		assert_eq!(tx1.outputs()[0].features, tx2.inputs()[0].features);
+		assert_eq!(tx1.outputs()[0].commitment(), tx2.inputs()[0].commitment());
 	}
 }

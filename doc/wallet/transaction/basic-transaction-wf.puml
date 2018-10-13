@@ -1,0 +1,97 @@
+@startuml grin-transaction
+
+title 
+**Current Grin Tranaction Workflow** 
+Accurate as of Oct 10, 2018 - Master branch only
+end title
+
+actor "Sender" as sender
+actor "Recipient" as recipient
+entity "Grin Node" as grin_node
+
+== Round 1 ==
+
+note left of sender
+	1: Create Transaction **UUID** (for reference and maintaining correct state)
+	2: Set **lock_height** for transaction kernel (current chain height)
+	3: Select **inputs** using desired selection strategy
+	4: Calculate sum **inputs** blinding factors **xI**
+	5: Create **change_output**
+	6: Select blinding factor **xC** for **change_output**
+	7: Create lock function **sF** that locks **inputs** and stores **change_output** in wallet
+	   and identifying wallet transaction log entry **TS** linking **inputs + outputs**
+	   (Not executed at this point)
+end note
+note left of sender
+	8: Calculate **tx_weight**: MAX(-1 * **num_inputs** + 4 * (**num_change_outputs** + 1), 1)
+		(+1 covers a single output on the receiver's side)
+	9: Calculate **fee**:  **tx_weight** * 1_000_000 nG
+	10: Calculate total blinding excess sum for all inputs and outputs **xS1** = **xC** - **xI** (private scalar)
+	11: Select a random nonce **kS** (private scalar)
+	12: Subtract random kernel offset **oS** from **xS1**. Calculate **xS** = **xS1** - **oS**
+	13: Multiply **xS** and **kS** by generator G to create public curve points **xSG** and **kSG**
+	14: Add values to **Slate** for passing to other participants: **UUID, inputs, change_outputs,**
+	    **fee, amount, lock_height, kSG, xSG, oS**
+end note
+sender -> recipient: **Slate**
+== Round 2 ==
+note right of recipient
+	1: Check fee against number of **inputs**, **change_outputs** +1 * **receiver_output**)
+	2: Create **receiver_output**
+	3: Choose random blinding factor for **receiver_output** **xR** (private scalar)
+end note
+note right of recipient
+	4: Calculate message **M** = **fee | lock_height **
+	5: Choose random nonce **kR** (private scalar)
+	6: Multiply **xR** and **kR** by generator G to create public curve points **xRG** and **kRG**
+	7: Compute Schnorr challenge **e** = SHA256(**kRG** + **kSG** | **xRG** + **xSG** | **M**)
+	8: Compute Recipient Schnorr signature **sR** = **kR** + **e** * **xR**
+	9: Add **sR, xRG, kRG** to **Slate**
+	10: Create wallet output function **rF** that stores **receiver_output** in wallet with status "Unconfirmed"
+	    and identifying transaction log entry **TR** linking **receiver_output** with transaction.
+end note
+alt All Okay
+recipient --> sender: Okay - **Slate**
+recipient -> recipient: execute wallet output function **rF**
+else Any Failure
+recipient ->x]: Abort
+recipient --> sender: Error
+[x<- sender: Abort
+end
+== Finalize Transaction ==
+note left of sender
+	1: Calculate message **M** = **fee | lock_height **
+	2: Compute Schnorr challenge **e** = SHA256(**kRG** + **kSG** | **xRG** + **xSG** | **M**)
+	3: Verify **sR** by verifying **kRG** + **e** * **xRG** = **sRG**
+	4: Compute Sender Schnorr signature **sS** = **kS** + **e** * **xS**
+	5: Calculate final signature **s** = (**kSG**+**kRG**, **sS**+**sR**)
+	6: Calculate public key for **s**: **xG** = **xRG** + **xSG**
+	7: Verify **s** against excess values in final transaction using **xG**
+	8: Create Transaction Kernel Containing:
+		 Excess signature **s**
+		 Public excess **xG**
+		 **fee**
+		 **lock_height**
+end note
+sender -> sender: Create final transaction **tx** from **Slate**
+sender -> grin_node: Post **tx** to mempool
+grin_node --> recipient: "Ok"
+alt All Okay
+recipient --> sender: "Ok" - **UUID**
+sender -> sender: Execute wallet lock function **sF**
+...Await confirmation...
+recipient -> grin_node: Confirm **receiver_output**
+recipient -> recipient: Change status of **receiver_output** to "Confirmed"
+sender -> grin_node: Confirm **change_output**
+sender -> sender: Change status of **inputs** to "Spent"
+sender -> sender: Change status of **change_output** to "Confirmed"
+else Any Error
+recipient -> recipient: Manually remove **receiver_output** from wallet using transaction log entry **TR**
+recipient ->x]: Abort
+recipient --> sender: Error
+sender -> sender: Unlock **inputs** and delete **change_output** identified in transaction log entry **TS**
+[x<- sender: Abort
+end
+
+
+@enduml

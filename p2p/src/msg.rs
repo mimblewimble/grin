@@ -19,10 +19,10 @@ use std::io::{self, Read, Write};
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
 use std::{thread, time};
 
-use core::consensus::{MAX_MSG_LEN, MAX_TX_INPUTS, MAX_TX_KERNELS, MAX_TX_OUTPUTS};
-use core::core::BlockHeader;
+use core::consensus;
 use core::core::hash::Hash;
-use core::core::target::Difficulty;
+use core::core::BlockHeader;
+use core::pow::Difficulty;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::{Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};
@@ -39,6 +39,10 @@ const MAGIC: [u8; 2] = [0x1e, 0xc5];
 
 /// Size in bytes of a message header
 pub const HEADER_LEN: u64 = 11;
+
+/// Max theoretical size of a block filled with outputs.
+const MAX_BLOCK_SIZE: u64 =
+	(consensus::MAX_BLOCK_WEIGHT / consensus::BLOCK_OUTPUT_WEIGHT * 708) as u64;
 
 /// Types of messages.
 /// Note: Values here are *important* so we should only add new values at the
@@ -65,6 +69,8 @@ enum_from_primitive! {
 		TxHashSetRequest = 16,
 		TxHashSetArchive = 17,
 		BanReason = 18,
+		// GetTransaction = 19,
+		// CompactTransaction = 20,
 	}
 }
 
@@ -82,11 +88,11 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::Header => 365,
 		Type::Headers => 2 + 365 * MAX_BLOCK_HEADERS as u64,
 		Type::GetBlock => 32,
-		Type::Block => MAX_MSG_LEN,
+		Type::Block => MAX_BLOCK_SIZE,
 		Type::GetCompactBlock => 32,
-		Type::CompactBlock => MAX_MSG_LEN / 10,
-		Type::StemTransaction => 1000 * MAX_TX_INPUTS + 710 * MAX_TX_OUTPUTS + 114 * MAX_TX_KERNELS,
-		Type::Transaction => 1000 * MAX_TX_INPUTS + 710 * MAX_TX_OUTPUTS + 114 * MAX_TX_KERNELS,
+		Type::CompactBlock => MAX_BLOCK_SIZE / 10,
+		Type::StemTransaction => MAX_BLOCK_SIZE,
+		Type::Transaction => MAX_BLOCK_SIZE,
 		Type::TxHashSetRequest => 40,
 		Type::TxHashSetArchive => 64,
 		Type::BanReason => 64,
@@ -108,16 +114,21 @@ fn max_msg_size(msg_type: Type) -> u64 {
 pub fn read_exact(
 	conn: &mut TcpStream,
 	mut buf: &mut [u8],
-	timeout: u32,
+	timeout: time::Duration,
 	block_on_empty: bool,
 ) -> io::Result<()> {
-	let sleep_time = time::Duration::from_millis(1);
-	let mut count = 0;
+	let sleep_time = time::Duration::from_micros(10);
+	let mut count = time::Duration::new(0, 0);
 
 	let mut read = 0;
 	loop {
 		match conn.read(buf) {
-			Ok(0) => break,
+			Ok(0) => {
+				return Err(io::Error::new(
+					io::ErrorKind::ConnectionAborted,
+					"read_exact",
+				));
+			}
 			Ok(n) => {
 				let tmp = buf;
 				buf = &mut tmp[n..];
@@ -133,7 +144,7 @@ pub fn read_exact(
 		}
 		if !buf.is_empty() {
 			thread::sleep(sleep_time);
-			count += 1;
+			count += sleep_time;
 		} else {
 			break;
 		}
@@ -148,9 +159,9 @@ pub fn read_exact(
 }
 
 /// Same as `read_exact` but for writing.
-pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<()> {
-	let sleep_time = time::Duration::from_millis(1);
-	let mut count = 0;
+pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: time::Duration) -> io::Result<()> {
+	let sleep_time = time::Duration::from_micros(10);
+	let mut count = time::Duration::new(0, 0);
 
 	while !buf.is_empty() {
 		match conn.write(buf) {
@@ -167,7 +178,7 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<(
 		}
 		if !buf.is_empty() {
 			thread::sleep(sleep_time);
-			count += 1;
+			count += sleep_time;
 		} else {
 			break;
 		}
@@ -184,9 +195,13 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: u32) -> io::Result<(
 /// Read a header from the provided connection without blocking if the
 /// underlying stream is async. Typically headers will be polled for, so
 /// we do not want to block.
-pub fn read_header(conn: &mut TcpStream) -> Result<MsgHeader, Error> {
+pub fn read_header(conn: &mut TcpStream, msg_type: Option<Type>) -> Result<MsgHeader, Error> {
 	let mut head = vec![0u8; HEADER_LEN as usize];
-	read_exact(conn, &mut head, 10000, false)?;
+	if Some(Type::Hand) == msg_type {
+		read_exact(conn, &mut head, time::Duration::from_millis(10), true)?;
+	} else {
+		read_exact(conn, &mut head, time::Duration::from_secs(10), false)?;
+	}
 	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
 	let max_len = max_msg_size(header.msg_type);
 	// TODO 4x the limits for now to leave ourselves space to change things
@@ -207,7 +222,7 @@ where
 	T: Readable,
 {
 	let mut body = vec![0u8; h.msg_len as usize];
-	read_exact(conn, &mut body, 20000, true)?;
+	read_exact(conn, &mut body, time::Duration::from_secs(20), true)?;
 	ser::deserialize(&mut &body[..]).map_err(From::from)
 }
 
@@ -216,7 +231,7 @@ pub fn read_message<T>(conn: &mut TcpStream, msg_type: Type) -> Result<T, Error>
 where
 	T: Readable,
 {
-	let header = read_header(conn)?;
+	let header = read_header(conn, Some(msg_type))?;
 	if header.msg_type != msg_type {
 		return Err(Error::BadMessage);
 	}
@@ -600,9 +615,13 @@ impl Readable for Headers {
 		if (len as u32) > MAX_BLOCK_HEADERS + 1 {
 			return Err(ser::Error::TooLargeReadErr);
 		}
-		let mut headers = Vec::with_capacity(len as usize);
-		for _ in 0..len {
-			headers.push(BlockHeader::read(reader)?);
+		let mut headers: Vec<BlockHeader> = Vec::with_capacity(len as usize);
+		for n in 0..len as usize {
+			let header = BlockHeader::read(reader)?;
+			if n > 0 && header.height != headers[n - 1].height + 1 {
+				return Err(ser::Error::CorruptedData);
+			}
+			headers.push(header);
 		}
 		Ok(Headers { headers: headers })
 	}
@@ -626,15 +645,8 @@ impl Writeable for Ping {
 
 impl Readable for Ping {
 	fn read(reader: &mut Reader) -> Result<Ping, ser::Error> {
-		// TODO - once everyone is sending total_difficulty we can clean this up
-		let total_difficulty = match Difficulty::read(reader) {
-			Ok(diff) => diff,
-			Err(_) => Difficulty::zero(),
-		};
-		let height = match reader.read_u64() {
-			Ok(h) => h,
-			Err(_) => 0,
-		};
+		let total_difficulty = Difficulty::read(reader)?;
+		let height = reader.read_u64()?;
 		Ok(Ping {
 			total_difficulty,
 			height,
@@ -660,15 +672,8 @@ impl Writeable for Pong {
 
 impl Readable for Pong {
 	fn read(reader: &mut Reader) -> Result<Pong, ser::Error> {
-		// TODO - once everyone is sending total_difficulty we can clean this up
-		let total_difficulty = match Difficulty::read(reader) {
-			Ok(diff) => diff,
-			Err(_) => Difficulty::zero(),
-		};
-		let height = match reader.read_u64() {
-			Ok(h) => h,
-			Err(_) => 0,
-		};
+		let total_difficulty = Difficulty::read(reader)?;
+		let height = reader.read_u64()?;
 		Ok(Pong {
 			total_difficulty,
 			height,
@@ -743,11 +748,7 @@ pub struct TxHashSetArchive {
 impl Writeable for TxHashSetArchive {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.hash.write(writer)?;
-		ser_multiwrite!(
-			writer,
-			[write_u64, self.height],
-			[write_u64, self.bytes]
-		);
+		ser_multiwrite!(writer, [write_u64, self.height], [write_u64, self.bytes]);
 		Ok(())
 	}
 }

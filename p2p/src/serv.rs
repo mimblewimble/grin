@@ -15,15 +15,16 @@
 use std::fs::File;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 use std::{io, thread};
 
 use lmdb;
 
+use chrono::prelude::{DateTime, Utc};
 use core::core;
 use core::core::hash::Hash;
-use core::core::target::Difficulty;
+use core::pow::Difficulty;
 use handshake::Handshake;
 use peer::Peer;
 use peers::Peers;
@@ -54,12 +55,12 @@ impl Server {
 		adapter: Arc<ChainAdapter>,
 		genesis: Hash,
 		stop: Arc<AtomicBool>,
-		archive_mode: bool,
+		_archive_mode: bool,
 		block_1_hash: Option<Hash>,
 	) -> Result<Server, Error> {
 		// In the case of an archive node, check that we do have the first block.
 		// In case of first sync we do not perform this check.
-		if archive_mode && adapter.total_height() > 0 {
+		if capab.contains(Capabilities::FULL_HIST) && adapter.total_height() > 0 {
 			// Check that we have block 1
 			match block_1_hash {
 				Some(hash) => match adapter.get_block(hash) {
@@ -90,21 +91,6 @@ impl Server {
 	/// Starts a new TCP server and listen to incoming connections. This is a
 	/// blocking call until the TCP server stops.
 	pub fn listen(&self) -> Result<(), Error> {
-		// start peer monitoring thread
-		let peers_inner = self.peers.clone();
-		let stop = self.stop.clone();
-		let _ = thread::Builder::new()
-			.name("p2p-monitor".to_string())
-			.spawn(move || loop {
-				let total_diff = peers_inner.total_difficulty();
-				let total_height = peers_inner.total_height();
-				peers_inner.check_all(total_diff, total_height);
-				thread::sleep(Duration::from_secs(10));
-				if stop.load(Ordering::Relaxed) {
-					break;
-				}
-			});
-
 		// start TCP listener and handle incoming connections
 		let addr = SocketAddr::new(self.config.host, self.config.port);
 		let listener = TcpListener::bind(addr)?;
@@ -142,10 +128,22 @@ impl Server {
 
 	/// Asks the server to connect to a new peer. Directly returns the peer if
 	/// we're already connected to the provided address.
-	pub fn connect(&self, addr: &SocketAddr) -> Result<Arc<RwLock<Peer>>, Error> {
+	pub fn connect(&self, addr: &SocketAddr) -> Result<Arc<Peer>, Error> {
 		if Peer::is_denied(&self.config, &addr) {
-			debug!(LOGGER, "Peer {} denied, not connecting.", addr);
+			debug!(
+				LOGGER,
+				"connect_peer: peer {} denied, not connecting.", addr
+			);
 			return Err(Error::ConnectionClose);
+		}
+
+		// check ip and port to see if we are trying to connect to ourselves
+		// todo: this can't detect all cases of PeerWithSelf, for example config.host is '0.0.0.0'
+		//
+		if self.config.port == addr.port()
+			&& (addr.ip().is_loopback() || addr.ip() == self.config.host)
+		{
+			return Err(Error::PeerWithSelf);
 		}
 
 		if let Some(p) = self.peers.get_connected_peer(addr) {
@@ -154,13 +152,19 @@ impl Server {
 			return Ok(p);
 		}
 
-		trace!(LOGGER, "connect_peer: connecting to {}", addr);
+		trace!(
+			LOGGER,
+			"connect_peer: on {}:{}. connecting to {}",
+			self.config.host,
+			self.config.port,
+			addr
+		);
 		match TcpStream::connect_timeout(addr, Duration::from_secs(10)) {
 			Ok(mut stream) => {
 				let addr = SocketAddr::new(self.config.host, self.config.port);
 				let total_diff = self.peers.total_difficulty();
 
-				let peer = Peer::connect(
+				let mut peer = Peer::connect(
 					&mut stream,
 					self.capabilities,
 					total_diff,
@@ -168,15 +172,20 @@ impl Server {
 					&self.handshake,
 					self.peers.clone(),
 				)?;
-				let added = self.peers.add_connected(peer);
-				{
-					let mut peer = added.write().unwrap();
-					peer.start(stream);
-				}
-				Ok(added)
+				peer.start(stream);
+				let peer = Arc::new(peer);
+				self.peers.add_connected(peer.clone())?;
+				Ok(peer)
 			}
 			Err(e) => {
-				debug!(LOGGER, "Could not connect to {}: {:?}", addr, e);
+				debug!(
+					LOGGER,
+					"connect_peer: on {}:{}. Could not connect to {}: {:?}",
+					self.config.host,
+					self.config.port,
+					addr,
+					e
+				);
 				Err(Error::Connection(e))
 			}
 		}
@@ -186,16 +195,15 @@ impl Server {
 		let total_diff = self.peers.total_difficulty();
 
 		// accept the peer and add it to the server map
-		let peer = Peer::accept(
+		let mut peer = Peer::accept(
 			&mut stream,
 			self.capabilities,
 			total_diff,
 			&self.handshake,
 			self.peers.clone(),
 		)?;
-		let added = self.peers.add_connected(peer);
-		let mut peer = added.write().unwrap();
 		peer.start(stream);
+		self.peers.add_connected(Arc::new(peer))?;
 		Ok(())
 	}
 
@@ -239,7 +247,9 @@ impl ChainAdapter for DummyAdapter {
 	fn block_received(&self, _: core::Block, _: SocketAddr) -> bool {
 		true
 	}
-	fn headers_received(&self, _: Vec<core::BlockHeader>, _: SocketAddr) {}
+	fn headers_received(&self, _: Vec<core::BlockHeader>, _: SocketAddr) -> bool {
+		true
+	}
 	fn locate_headers(&self, _: Vec<Hash>) -> Vec<core::BlockHeader> {
 		vec![]
 	}
@@ -250,11 +260,19 @@ impl ChainAdapter for DummyAdapter {
 		unimplemented!()
 	}
 
-	fn txhashset_write(
+	fn txhashset_receive_ready(&self) -> bool {
+		false
+	}
+
+	fn txhashset_write(&self, _h: Hash, _txhashset_data: File, _peer_addr: SocketAddr) -> bool {
+		false
+	}
+
+	fn txhashset_download_update(
 		&self,
-		_h: Hash,
-		_txhashset_data: File,
-		_peer_addr: SocketAddr,
+		_start_time: DateTime<Utc>,
+		_downloaded_size: u64,
+		_total_size: u64,
 	) -> bool {
 		false
 	}

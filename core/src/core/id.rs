@@ -70,7 +70,7 @@ impl<H: Hashed> ShortIdentifiable for H {
 }
 
 /// Short id for identifying inputs/outputs/kernels
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Hash)]
 pub struct ShortId([u8; 6]);
 
 /// We want to sort short_ids in a canonical and consistent manner so we can

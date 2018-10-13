@@ -30,6 +30,7 @@ extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 #[macro_use]
 extern crate lazy_static;
+extern crate lru_cache;
 extern crate num_bigint as bigint;
 extern crate rand;
 extern crate serde;
@@ -38,8 +39,8 @@ extern crate serde_derive;
 extern crate siphasher;
 #[macro_use]
 extern crate slog;
+extern crate chrono;
 extern crate failure;
-extern crate time;
 #[macro_use]
 extern crate failure_derive;
 

@@ -18,6 +18,8 @@ use std::cmp::Ordering;
 
 use servers::{PeerStats, ServerStats};
 
+use chrono::prelude::*;
+
 use cursive::direction::Orientation;
 use cursive::traits::{Boxable, Identifiable};
 use cursive::view::View;
@@ -54,9 +56,12 @@ impl TableViewItem<PeerColumn> for PeerStats {
 		match column {
 			PeerColumn::Address => self.addr.clone(),
 			PeerColumn::State => self.state.clone(),
-			PeerColumn::TotalDifficulty => {
-				format!("{} D @ {} H", self.total_difficulty, self.height).to_string()
-			}
+			PeerColumn::TotalDifficulty => format!(
+				"{} D @ {} H ({}s)",
+				self.total_difficulty,
+				self.height,
+				(Utc::now() - self.last_seen).num_seconds(),
+			).to_string(),
 			PeerColumn::Direction => self.direction.clone(),
 			PeerColumn::Version => self.version.to_string(),
 		}
@@ -80,28 +85,24 @@ pub struct TUIPeerView;
 
 impl TUIStatusListener for TUIPeerView {
 	fn create() -> Box<View> {
-		let table_view =
-			TableView::<PeerStats, PeerColumn>::new()
-				.column(PeerColumn::Address, "Address", |c| c.width_percent(20))
-				.column(PeerColumn::State, "State", |c| c.width_percent(20))
-				.column(PeerColumn::Direction, "Direction", |c| c.width_percent(20))
-				.column(PeerColumn::TotalDifficulty, "Total Difficulty", |c| {
-					c.width_percent(20)
-				})
-				.column(PeerColumn::Version, "Version", |c| c.width_percent(20));
+		let table_view = TableView::<PeerStats, PeerColumn>::new()
+			.column(PeerColumn::Address, "Address", |c| c.width_percent(20))
+			.column(PeerColumn::State, "State", |c| c.width_percent(20))
+			.column(PeerColumn::Direction, "Direction", |c| c.width_percent(20))
+			.column(PeerColumn::TotalDifficulty, "Total Difficulty", |c| {
+				c.width_percent(20)
+			}).column(PeerColumn::Version, "Version", |c| c.width_percent(20));
 		let peer_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Total Peers: "))
 						.child(TextView::new("  ").with_id("peers_total")),
-				)
-				.child(
+				).child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Longest Chain: "))
 						.child(TextView::new("  ").with_id("longest_work_peer")),
-				)
-				.child(TextView::new("   "))
+				).child(TextView::new("   "))
 				.child(
 					Dialog::around(table_view.with_id(TABLE_PEER_STATUS).min_size((50, 20)))
 						.title("Connected Peers"),

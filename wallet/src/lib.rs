@@ -25,19 +25,17 @@ extern crate serde_derive;
 extern crate serde_json;
 #[macro_use]
 extern crate slog;
+extern crate chrono;
 extern crate term;
-extern crate urlencoded;
+extern crate url;
 extern crate uuid;
 
-extern crate bodyparser;
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;
 extern crate futures;
 extern crate hyper;
-extern crate iron;
-#[macro_use]
-extern crate router;
+extern crate tokio;
 extern crate tokio_core;
 extern crate tokio_retry;
 
@@ -50,16 +48,16 @@ extern crate grin_util as util;
 mod client;
 pub mod display;
 mod error;
-pub mod file_wallet;
 pub mod libtx;
 pub mod libwallet;
 pub mod lmdb_wallet;
 mod types;
 
-pub use client::create_coinbase;
+pub use client::{create_coinbase, HTTPWalletClient};
 pub use error::{Error, ErrorKind};
-pub use file_wallet::FileWallet;
 pub use libwallet::controller;
-pub use libwallet::types::{BlockFees, CbData, WalletInfo, WalletInst};
+pub use libwallet::types::{
+	BlockFees, CbData, WalletBackend, WalletClient, WalletInfo, WalletInst,
+};
 pub use lmdb_wallet::{wallet_db_exists, LMDBBackend};
-pub use types::{WalletConfig, WalletSeed};
+pub use types::{WalletConfig, WalletSeed, SEED_FILE};

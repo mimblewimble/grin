@@ -14,6 +14,7 @@
 
 //! Storage implementation for peer data.
 
+use chrono::Utc;
 use num::FromPrimitive;
 use rand::{thread_rng, Rng};
 use std::net::SocketAddr;
@@ -137,7 +138,8 @@ impl PeerStore {
 	}
 
 	pub fn find_peers(&self, state: State, cap: Capabilities, count: usize) -> Vec<PeerData> {
-		let mut peers = self.db
+		let mut peers = self
+			.db
 			.iter::<PeerData>(&to_key(PEER_PREFIX, &mut "".to_string().into_bytes()))
 			.unwrap()
 			.filter(|p| p.flags == state && p.capabilities.contains(cap))
@@ -154,19 +156,21 @@ impl PeerStore {
 	}
 
 	/// Convenience method to load a peer data, update its status and save it
-	/// back.
+	/// back. If new state is Banned its last banned time will be updated too.
 	pub fn update_state(&self, peer_addr: SocketAddr, new_state: State) -> Result<(), Error> {
-		let mut peer = self.get_peer(peer_addr)?;
-		peer.flags = new_state;
-		self.save_peer(&peer)
-	}
+		let batch = self.db.batch()?;
 
-	/// Convenience method to load a peer data, update its last banned time and
-	/// save it back.
-	pub fn update_last_banned(&self, peer_addr: SocketAddr, last_banned: i64) -> Result<(), Error> {
-		let mut peer = self.get_peer(peer_addr)?;
-		peer.last_banned = last_banned;
-		self.save_peer(&peer)
+		let mut peer = option_to_not_found(
+			batch.get_ser::<PeerData>(&peer_key(peer_addr)[..]),
+			&format!("Peer at address: {}", peer_addr),
+		)?;
+		peer.flags = new_state;
+		if new_state == State::Banned {
+			peer.last_banned = Utc::now().timestamp();
+		}
+
+		batch.put_ser(&peer_key(peer.addr)[..], &peer)?;
+		batch.commit()
 	}
 }
 

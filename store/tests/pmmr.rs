@@ -16,10 +16,11 @@ extern crate croaring;
 extern crate env_logger;
 extern crate grin_core as core;
 extern crate grin_store as store;
-extern crate time;
+extern crate chrono;
 
 use std::fs;
 
+use chrono::prelude::{Utc};
 use croaring::Bitmap;
 
 use core::core::pmmr::{Backend, PMMR};
@@ -722,8 +723,8 @@ fn setup(tag: &str) -> (String, Vec<TestElem>) {
 		Ok(_) => println!("Initializing env logger"),
 		Err(e) => println!("env logger already initialized: {:?}", e),
 	};
-	let t = time::get_time();
-	let data_dir = format!("./target/tmp/{}.{}-{}", t.sec, t.nsec, tag);
+	let t = Utc::now();
+	let data_dir = format!("./target/tmp/{}.{}-{}", t.timestamp(), t.timestamp_subsec_nanos(), tag);
 	fs::create_dir_all(data_dir.clone()).unwrap();
 
 	let mut elems = vec![];

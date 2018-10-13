@@ -1,6 +1,6 @@
 [package]
 name = "grin_core-fuzz"
-version = "0.0.1"
+version = "0.0.3"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 publish = false
 
@@ -10,7 +10,9 @@ cargo-fuzz = true
 [dependencies]
 grin_core = { path = ".."}
 grin_keychain = { path = "../../keychain"}
-libfuzzer-sys = { git = "https://github.com/rust-fuzz/libfuzzer-sys.git" }
+grin_wallet = { path = "../../wallet"}
+[dependencies.libfuzzer-sys]
+git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
 
 # Prevent this from interfering with workspaces
 [workspace]

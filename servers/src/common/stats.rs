@@ -19,6 +19,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
+use chrono::prelude::*;
+
 use chain;
 use common::types::SyncStatus;
 use p2p;
@@ -138,12 +140,21 @@ pub struct PeerStats {
 	pub addr: String,
 	/// version running
 	pub version: u32,
-	/// difficulty repored by peer
+	/// difficulty reported by peer
 	pub total_difficulty: u64,
 	/// height reported by peer on ping
 	pub height: u64,
 	/// direction
 	pub direction: String,
+	/// Last time we saw a ping/pong from this peer.
+	pub last_seen: DateTime<Utc>,
+}
+
+impl StratumStats {
+	/// Calculate network hashrate
+	pub fn network_hashrate(&self) -> f64 {
+		42.0 * (self.network_difficulty as f64 / (self.cuckoo_size - 1) as f64) / 60.0
+	}
 }
 
 impl PeerStats {
@@ -166,9 +177,10 @@ impl PeerStats {
 			state: state.to_string(),
 			addr: addr,
 			version: peer.info.version,
-			total_difficulty: peer.info.total_difficulty.to_num(),
-			height: peer.info.height,
+			total_difficulty: peer.info.total_difficulty().to_num(),
+			height: peer.info.height(),
 			direction: direction.to_string(),
+			last_seen: peer.info.last_seen(),
 		}
 	}
 }
@@ -194,8 +206,8 @@ impl Default for StratumStats {
 			is_running: false,
 			num_workers: 0,
 			block_height: 0,
-			network_difficulty: 0,
-			cuckoo_size: 0,
+			network_difficulty: 1000,
+			cuckoo_size: 30,
 			worker_stats: Vec::new(),
 		}
 	}

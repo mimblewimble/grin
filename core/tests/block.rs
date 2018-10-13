@@ -12,25 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+extern crate chrono;
 extern crate grin_core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
+use std::sync::{Arc, RwLock};
+use std::time::Instant;
+
 pub mod common;
 
+use chrono::Duration;
 use common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
-use grin_core::consensus::{BLOCK_OUTPUT_WEIGHT, MAX_BLOCK_WEIGHT};
-use grin_core::core::Committed;
+use grin_core::consensus::{self, BLOCK_OUTPUT_WEIGHT, MAX_BLOCK_WEIGHT};
 use grin_core::core::block::Error;
 use grin_core::core::hash::Hashed;
-use grin_core::core::id::{ShortId, ShortIdentifiable};
+use grin_core::core::id::ShortIdentifiable;
+use grin_core::core::verifier_cache::{LruVerifierCache, VerifierCache};
+use grin_core::core::Committed;
 use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
 use grin_core::{global, ser};
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
-use std::time::Instant;
-use util::{secp, secp_static};
+use util::secp;
 use wallet::libtx::build::{self, input, output, with_fee};
+
+fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
+	Arc::new(RwLock::new(LruVerifierCache::new()))
+}
 
 // Too slow for now #[test]
 // TODO: make this fast enough or add similar but faster test?
@@ -39,11 +48,9 @@ fn too_large_block() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let max_out = MAX_BLOCK_WEIGHT / BLOCK_OUTPUT_WEIGHT;
 
-	let zero_commit = secp_static::commit_to_zero_value();
-
 	let mut pks = vec![];
 	for n in 0..(max_out + 1) {
-		pks.push(keychain.derive_key_id(n as u32).unwrap());
+		pks.push(ExtKeychain::derive_key_id(1, n as u32, 0, 0, 0));
 	}
 
 	let mut parts = vec![];
@@ -57,21 +64,19 @@ fn too_large_block() {
 	println!("Build tx: {}", now.elapsed().as_secs());
 
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx], &keychain, &prev, &key_id);
-	assert!(b.validate(&BlindingFactor::zero(), &zero_commit).is_err());
+	assert!(
+		b.validate(&BlindingFactor::zero(), verifier_cache())
+			.is_err()
+	);
 }
 
 #[test]
 // block with no inputs/outputs/kernels
 // no fees, no reward, no coinbase
 fn very_empty_block() {
-	let b = Block {
-		header: BlockHeader::default(),
-		inputs: vec![],
-		outputs: vec![],
-		kernels: vec![],
-	};
+	let b = Block::with_header(BlockHeader::default());
 
 	assert_eq!(
 		b.verify_coinbase(),
@@ -83,11 +88,9 @@ fn very_empty_block() {
 // builds a block with a tx spending another and check that cut_through occurred
 fn block_with_cut_through() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let key_id1 = keychain.derive_key_id(1).unwrap();
-	let key_id2 = keychain.derive_key_id(2).unwrap();
-	let key_id3 = keychain.derive_key_id(3).unwrap();
-
-	let zero_commit = secp_static::commit_to_zero_value();
+	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
+	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let mut btx1 = tx2i1o();
 	let mut btx2 = build::transaction(
@@ -99,7 +102,7 @@ fn block_with_cut_through() {
 
 	let mut btx3 = txspend1i1o(5, &keychain, key_id2.clone(), key_id3);
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(
 		vec![&mut btx1, &mut btx2, &mut btx3],
 		&keychain,
@@ -110,32 +113,34 @@ fn block_with_cut_through() {
 	// block should have been automatically compacted (including reward
 	// output) and should still be valid
 	println!("3");
-	b.validate(&BlindingFactor::zero(), &zero_commit).unwrap();
-	assert_eq!(b.inputs.len(), 3);
-	assert_eq!(b.outputs.len(), 3);
+	b.validate(&BlindingFactor::zero(), verifier_cache())
+		.unwrap();
+	assert_eq!(b.inputs().len(), 3);
+	assert_eq!(b.outputs().len(), 3);
 	println!("4");
 }
 
 #[test]
 fn empty_block_with_coinbase_is_valid() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let zero_commit = secp_static::commit_to_zero_value();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 
-	assert_eq!(b.inputs.len(), 0);
-	assert_eq!(b.outputs.len(), 1);
-	assert_eq!(b.kernels.len(), 1);
+	assert_eq!(b.inputs().len(), 0);
+	assert_eq!(b.outputs().len(), 1);
+	assert_eq!(b.kernels().len(), 1);
 
-	let coinbase_outputs = b.outputs
+	let coinbase_outputs = b
+		.outputs()
 		.iter()
 		.filter(|out| out.features.contains(OutputFeatures::COINBASE_OUTPUT))
 		.map(|o| o.clone())
 		.collect::<Vec<_>>();
 	assert_eq!(coinbase_outputs.len(), 1);
 
-	let coinbase_kernels = b.kernels
+	let coinbase_kernels = b
+		.kernels()
 		.iter()
 		.filter(|out| out.features.contains(KernelFeatures::COINBASE_KERNEL))
 		.map(|o| o.clone())
@@ -144,7 +149,10 @@ fn empty_block_with_coinbase_is_valid() {
 
 	// the block should be valid here (single coinbase output with corresponding
 	// txn kernel)
-	assert!(b.validate(&BlindingFactor::zero(), &zero_commit).is_ok());
+	assert!(
+		b.validate(&BlindingFactor::zero(), verifier_cache())
+			.is_ok()
+	);
 }
 
 #[test]
@@ -153,17 +161,16 @@ fn empty_block_with_coinbase_is_valid() {
 // additionally verifying the merkle_inputs_outputs also fails
 fn remove_coinbase_output_flag() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let zero_commit = secp_static::commit_to_zero_value();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let mut b = new_block(vec![], &keychain, &prev, &key_id);
 
 	assert!(
-		b.outputs[0]
+		b.outputs()[0]
 			.features
 			.contains(OutputFeatures::COINBASE_OUTPUT)
 	);
-	b.outputs[0]
+	b.outputs_mut()[0]
 		.features
 		.remove(OutputFeatures::COINBASE_OUTPUT);
 
@@ -173,7 +180,7 @@ fn remove_coinbase_output_flag() {
 			.is_ok()
 	);
 	assert_eq!(
-		b.validate(&BlindingFactor::zero(), &zero_commit),
+		b.validate(&BlindingFactor::zero(), verifier_cache()),
 		Err(Error::CoinbaseSumMismatch)
 	);
 }
@@ -183,17 +190,16 @@ fn remove_coinbase_output_flag() {
 // invalidates the block and specifically it causes verify_coinbase to fail
 fn remove_coinbase_kernel_flag() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let zero_commit = secp_static::commit_to_zero_value();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let mut b = new_block(vec![], &keychain, &prev, &key_id);
 
 	assert!(
-		b.kernels[0]
+		b.kernels()[0]
 			.features
 			.contains(KernelFeatures::COINBASE_KERNEL)
 	);
-	b.kernels[0]
+	b.kernels_mut()[0]
 		.features
 		.remove(KernelFeatures::COINBASE_KERNEL);
 
@@ -203,37 +209,55 @@ fn remove_coinbase_kernel_flag() {
 	);
 
 	assert_eq!(
-		b.validate(&BlindingFactor::zero(), &zero_commit),
+		b.validate(&BlindingFactor::zero(), verifier_cache()),
 		Err(Error::Secp(secp::Error::IncorrectCommitSum))
 	);
 }
 
 #[test]
-fn serialize_deserialize_block() {
+fn serialize_deserialize_block_header() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![], &keychain, &prev, &key_id);
+	let header1 = b.header;
+
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, &header1).expect("serialization failed");
+	let header2: BlockHeader = ser::deserialize(&mut &vec[..]).unwrap();
+
+	assert_eq!(header1.hash(), header2.hash());
+	assert_eq!(header1, header2);
+}
+
+#[test]
+fn serialize_deserialize_block() {
+	let tx1 = tx1i2o();
+	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let prev = BlockHeader::default();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
 	let b2: Block = ser::deserialize(&mut &vec[..]).unwrap();
 
+	assert_eq!(b.hash(), b2.hash());
 	assert_eq!(b.header, b2.header);
-	assert_eq!(b.inputs, b2.inputs);
-	assert_eq!(b.outputs, b2.outputs);
-	assert_eq!(b.kernels, b2.kernels);
+	assert_eq!(b.inputs(), b2.inputs());
+	assert_eq!(b.outputs(), b2.outputs());
+	assert_eq!(b.kernels(), b2.kernels());
 }
 
 #[test]
 fn empty_block_serialized_size() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 1_252;
+	let target_len = 1_224;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -242,11 +266,11 @@ fn block_single_tx_serialized_size() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let tx1 = tx1i2o();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 2_834;
+	let target_len = 2_806;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -254,11 +278,12 @@ fn block_single_tx_serialized_size() {
 fn empty_compact_block_serialized_size() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![], &keychain, &prev, &key_id);
+	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-	let target_len = 1_260;
+	ser::serialize(&mut vec, &cb).expect("serialization failed");
+	let target_len = 1_232;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -267,11 +292,12 @@ fn compact_block_single_tx_serialized_size() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let tx1 = tx1i2o();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
+	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-	let target_len = 1_266;
+	ser::serialize(&mut vec, &cb).expect("serialization failed");
+	let target_len = 1_238;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -286,11 +312,11 @@ fn block_10_tx_serialized_size() {
 		txs.push(tx);
 	}
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(txs.iter().collect(), &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 17_072;
+	let target_len = 17_044;
 	assert_eq!(vec.len(), target_len,);
 }
 
@@ -304,11 +330,12 @@ fn compact_block_10_tx_serialized_size() {
 		txs.push(tx);
 	}
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(txs.iter().collect(), &keychain, &prev, &key_id);
+	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &b.as_compact_block()).expect("serialization failed");
-	let target_len = 1_320;
+	ser::serialize(&mut vec, &cb).expect("serialization failed");
+	let target_len = 1_292;
 	assert_eq!(vec.len(), target_len,);
 }
 
@@ -317,10 +344,10 @@ fn compact_block_hash_with_nonce() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let tx = tx1i2o();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx], &keychain, &prev, &key_id);
-	let cb1 = b.as_compact_block();
-	let cb2 = b.as_compact_block();
+	let cb1: CompactBlock = b.clone().into();
+	let cb2: CompactBlock = b.clone().into();
 
 	// random nonce will not affect the hash of the compact block itself
 	// hash is based on header POW only
@@ -328,17 +355,17 @@ fn compact_block_hash_with_nonce() {
 	assert_eq!(b.hash(), cb1.hash());
 	assert_eq!(cb1.hash(), cb2.hash());
 
-	assert!(cb1.kern_ids[0] != cb2.kern_ids[0]);
+	assert!(cb1.kern_ids()[0] != cb2.kern_ids()[0]);
 
 	// check we can identify the specified kernel from the short_id
 	// correctly in both of the compact_blocks
 	assert_eq!(
-		cb1.kern_ids[0],
-		tx.kernels[0].short_id(&cb1.hash(), cb1.nonce)
+		cb1.kern_ids()[0],
+		tx.kernels()[0].short_id(&cb1.hash(), cb1.nonce)
 	);
 	assert_eq!(
-		cb2.kern_ids[0],
-		tx.kernels[0].short_id(&cb2.hash(), cb2.nonce)
+		cb2.kern_ids()[0],
+		tx.kernels()[0].short_id(&cb2.hash(), cb2.nonce)
 	);
 }
 
@@ -347,17 +374,17 @@ fn convert_block_to_compact_block() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let tx1 = tx1i2o();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
-	let cb = b.as_compact_block();
+	let cb: CompactBlock = b.clone().into();
 
-	assert_eq!(cb.out_full.len(), 1);
-	assert_eq!(cb.kern_full.len(), 1);
-	assert_eq!(cb.kern_ids.len(), 1);
+	assert_eq!(cb.out_full().len(), 1);
+	assert_eq!(cb.kern_full().len(), 1);
+	assert_eq!(cb.kern_ids().len(), 1);
 
 	assert_eq!(
-		cb.kern_ids[0],
-		b.kernels
+		cb.kern_ids()[0],
+		b.kernels()
 			.iter()
 			.find(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
 			.unwrap()
@@ -369,29 +396,59 @@ fn convert_block_to_compact_block() {
 fn hydrate_empty_compact_block() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let prev = BlockHeader::default();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![], &keychain, &prev, &key_id);
-	let cb = b.as_compact_block();
-	let hb = Block::hydrate_from(cb, vec![]);
+	let cb: CompactBlock = b.clone().into();
+	let hb = Block::hydrate_from(cb, vec![]).unwrap();
 	assert_eq!(hb.header, b.header);
-	assert_eq!(hb.outputs, b.outputs);
-	assert_eq!(hb.kernels, b.kernels);
+	assert_eq!(hb.outputs(), b.outputs());
+	assert_eq!(hb.kernels(), b.kernels());
 }
 
 #[test]
 fn serialize_deserialize_compact_block() {
-	let b = CompactBlock {
-		header: BlockHeader::default(),
-		nonce: 0,
-		out_full: vec![],
-		kern_full: vec![],
-		kern_ids: vec![ShortId::zero()],
-	};
+	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let tx1 = tx1i2o();
+	let prev = BlockHeader::default();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
+
+	let mut cb1: CompactBlock = b.into();
 
 	let mut vec = Vec::new();
-	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let b2: CompactBlock = ser::deserialize(&mut &vec[..]).unwrap();
+	ser::serialize(&mut vec, &cb1).expect("serialization failed");
 
-	assert_eq!(b.header, b2.header);
-	assert_eq!(b.kern_ids, b2.kern_ids);
+	// After header serialization, timestamp will lose 'nanos' info, that's the designed behavior.
+	// To suppress 'nanos' difference caused assertion fail, we force b.header also lose 'nanos'.
+	let origin_ts = cb1.header.timestamp;
+	cb1.header.timestamp =
+		origin_ts - Duration::nanoseconds(origin_ts.timestamp_subsec_nanos() as i64);
+
+	let cb2: CompactBlock = ser::deserialize(&mut &vec[..]).unwrap();
+
+	assert_eq!(cb1.header, cb2.header);
+	assert_eq!(cb1.kern_ids(), cb2.kern_ids());
+}
+
+#[test]
+fn empty_block_v2_switch() {
+	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let mut prev = BlockHeader::default();
+	prev.height = consensus::HEADER_V2_HARD_FORK - 1;
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let b = new_block(vec![], &keychain, &prev, &key_id);
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, &b).expect("serialization failed");
+	let target_len = 1_232;
+	assert_eq!(b.header.version, 2);
+	assert_eq!(vec.len(), target_len);
+
+	// another try right before v2
+	prev.height = consensus::HEADER_V2_HARD_FORK - 2;
+	let b = new_block(vec![], &keychain, &prev, &key_id);
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, &b).expect("serialization failed");
+	let target_len = 1_224;
+	assert_eq!(b.header.version, 1);
+	assert_eq!(vec.len(), target_len);
 }

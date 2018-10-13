@@ -16,24 +16,32 @@ use std::fs::File;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::{Arc, RwLock};
 
+use chrono::prelude::{DateTime, Utc};
 use conn;
 use core::core;
 use core::core::hash::{Hash, Hashed};
-use core::core::target::Difficulty;
+use core::pow::Difficulty;
 use handshake::Handshake;
 use msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest};
 use protocol::Protocol;
-use types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerInfo, ReasonForBan,
-            TxHashSetRead};
+use types::{
+	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerInfo, ReasonForBan, TxHashSetRead,
+};
 use util::LOGGER;
 
 const MAX_TRACK_SIZE: usize = 30;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Remind: don't mix up this 'State' with that 'State' in p2p/src/store.rs,
+///   which has different 3 states: {Healthy, Banned, Defunct}.
+///   For example: 'Disconnected' state here could still be 'Healthy' and could reconnect in next loop.
 enum State {
 	Connected,
 	Disconnected,
 	Banned,
+	// Banned from Peers side, by ban_peer().
+	//   This could happen when error in block (or compact block) received, header(s) received,
+	//   or txhashset received.
 }
 
 pub struct Peer {
@@ -49,11 +57,11 @@ unsafe impl Send for Peer {}
 
 impl Peer {
 	// Only accept and connect can be externally used to build a peer
-	fn new(info: PeerInfo, na: Arc<NetAdapter>) -> Peer {
+	fn new(info: PeerInfo, adapter: Arc<NetAdapter>) -> Peer {
 		Peer {
-			info: info,
+			info,
 			state: Arc::new(RwLock::new(State::Connected)),
-			tracking_adapter: TrackingAdapter::new(na),
+			tracking_adapter: TrackingAdapter::new(adapter),
 			connection: None,
 		}
 	}
@@ -63,10 +71,10 @@ impl Peer {
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		hs: &Handshake,
-		na: Arc<NetAdapter>,
+		adapter: Arc<NetAdapter>,
 	) -> Result<Peer, Error> {
 		let info = hs.accept(capab, total_difficulty, conn)?;
-		Ok(Peer::new(info, na))
+		Ok(Peer::new(info, adapter))
 	}
 
 	pub fn connect(
@@ -124,24 +132,17 @@ impl Peer {
 
 	/// Whether this peer is still connected.
 	pub fn is_connected(&self) -> bool {
-		if !self.check_connection() {
-			return false;
-		}
-		let state = self.state.read().unwrap();
-		*state == State::Connected
+		self.check_connection()
 	}
 
 	/// Whether this peer has been banned.
 	pub fn is_banned(&self) -> bool {
-		let _ = self.check_connection();
-		let state = self.state.read().unwrap();
-		*state == State::Banned
+		State::Banned == *self.state.read().unwrap()
 	}
 
 	/// Set this peer status to banned
 	pub fn set_banned(&self) {
-		let mut state = self.state.write().unwrap();
-		*state = State::Banned;
+		*self.state.write().unwrap() = State::Banned;
 	}
 
 	/// Send a ping to the remote peer, providing our local difficulty and
@@ -160,7 +161,8 @@ impl Peer {
 	/// Send the ban reason before banning
 	pub fn send_ban_reason(&self, ban_reason: ReasonForBan) {
 		let ban_reason_msg = BanReason { ban_reason };
-		match self.connection
+		match self
+			.connection
 			.as_ref()
 			.unwrap()
 			.send(ban_reason_msg, msg::Type::BanReason)
@@ -178,10 +180,14 @@ impl Peer {
 
 	/// Sends the provided block to the remote peer. The request may be dropped
 	/// if the remote peer is known to already have the block.
-	pub fn send_block(&self, b: &core::Block) -> Result<(), Error> {
+	pub fn send_block(&self, b: &core::Block) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(b.hash()) {
 			trace!(LOGGER, "Send block {} to {}", b.hash(), self.info.addr);
-			self.connection.as_ref().unwrap().send(b, msg::Type::Block)
+			self.connection
+				.as_ref()
+				.unwrap()
+				.send(b, msg::Type::Block)?;
+			Ok(true)
 		} else {
 			debug!(
 				LOGGER,
@@ -189,11 +195,11 @@ impl Peer {
 				b.hash(),
 				self.info.addr,
 			);
-			Ok(())
+			Ok(false)
 		}
 	}
 
-	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<(), Error> {
+	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(b.hash()) {
 			trace!(
 				LOGGER,
@@ -204,7 +210,8 @@ impl Peer {
 			self.connection
 				.as_ref()
 				.unwrap()
-				.send(b, msg::Type::CompactBlock)
+				.send(b, msg::Type::CompactBlock)?;
+			Ok(true)
 		} else {
 			debug!(
 				LOGGER,
@@ -212,37 +219,39 @@ impl Peer {
 				b.hash(),
 				self.info.addr,
 			);
-			Ok(())
+			Ok(false)
 		}
 	}
 
-	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<(), Error> {
+	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(bh.hash()) {
 			debug!(LOGGER, "Send header {} to {}", bh.hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
-				.send(bh, msg::Type::Header)
+				.send(bh, msg::Type::Header)?;
+			Ok(true)
 		} else {
-			trace!(
+			debug!(
 				LOGGER,
 				"Suppress header send {} to {} (already seen)",
 				bh.hash(),
 				self.info.addr,
 			);
-			Ok(())
+			Ok(false)
 		}
 	}
 
 	/// Sends the provided transaction to the remote peer. The request may be
 	/// dropped if the remote peer is known to already have the transaction.
-	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
+	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(tx.hash()) {
 			debug!(LOGGER, "Send tx {} to {}", tx.hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
-				.send(tx, msg::Type::Transaction)
+				.send(tx, msg::Type::Transaction)?;
+			Ok(true)
 		} else {
 			debug!(
 				LOGGER,
@@ -250,7 +259,7 @@ impl Peer {
 				tx.hash(),
 				self.info.addr
 			);
-			Ok(())
+			Ok(false)
 		}
 	}
 
@@ -327,21 +336,44 @@ impl Peer {
 	fn check_connection(&self) -> bool {
 		match self.connection.as_ref().unwrap().error_channel.try_recv() {
 			Ok(Error::Serialization(e)) => {
-				let mut state = self.state.write().unwrap();
-				*state = State::Banned;
-				info!(
-					LOGGER,
-					"Client {} corrupted, ban ({:?}).", self.info.addr, e
-				);
+				let need_stop = {
+					let mut state = self.state.write().unwrap();
+					if State::Banned != *state {
+						*state = State::Disconnected;
+						true
+					} else {
+						false
+					}
+				};
+				if need_stop {
+					debug!(
+						LOGGER,
+						"Client {} corrupted, will disconnect ({:?}).", self.info.addr, e
+					);
+					self.stop();
+				}
 				false
 			}
 			Ok(e) => {
-				let mut state = self.state.write().unwrap();
-				*state = State::Disconnected;
-				debug!(LOGGER, "Client {} connection lost: {:?}", self.info.addr, e);
+				let need_stop = {
+					let mut state = self.state.write().unwrap();
+					if State::Disconnected != *state {
+						*state = State::Disconnected;
+						true
+					} else {
+						false
+					}
+				};
+				if need_stop {
+					debug!(LOGGER, "Client {} connection lost: {:?}", self.info.addr, e);
+					self.stop();
+				}
 				false
 			}
-			Err(_) => true,
+			Err(_) => {
+				let state = self.state.read().unwrap();
+				State::Connected == *state
+			}
 		}
 	}
 }
@@ -412,7 +444,7 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.header_received(bh, addr)
 	}
 
-	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr) {
+	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr) -> bool {
 		self.adapter.headers_received(bh, addr)
 	}
 
@@ -428,17 +460,22 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.txhashset_read(h)
 	}
 
-	fn txhashset_write(
+	fn txhashset_receive_ready(&self) -> bool {
+		self.adapter.txhashset_receive_ready()
+	}
+
+	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: SocketAddr) -> bool {
+		self.adapter.txhashset_write(h, txhashset_data, peer_addr)
+	}
+
+	fn txhashset_download_update(
 		&self,
-		h: Hash,
-		txhashset_data: File,
-		peer_addr: SocketAddr,
+		start_time: DateTime<Utc>,
+		downloaded_size: u64,
+		total_size: u64,
 	) -> bool {
-		self.adapter.txhashset_write(
-			h,
-			txhashset_data,
-			peer_addr,
-		)
+		self.adapter
+			.txhashset_download_update(start_time, downloaded_size, total_size)
 	}
 }
 

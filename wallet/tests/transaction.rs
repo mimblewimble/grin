@@ -21,189 +21,452 @@ extern crate grin_wallet as wallet;
 extern crate rand;
 #[macro_use]
 extern crate slog;
+extern crate chrono;
 extern crate serde;
-extern crate time;
 extern crate uuid;
 
 mod common;
+use common::testclient::{LocalWalletClient, WalletProxy};
 
 use std::fs;
-use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 
-use chain::Chain;
-use chain::types::NoopAdapter;
+use core::global;
 use core::global::ChainTypes;
-use core::{global, pow};
+use keychain::ExtKeychain;
 use util::LOGGER;
-use wallet::libwallet::internal::selection;
+use wallet::libtx::slate::Slate;
+use wallet::libwallet;
+use wallet::libwallet::types::OutputStatus;
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
 }
 
-fn setup(test_dir: &str, chain_dir: &str) -> Chain {
+fn setup(test_dir: &str) {
 	util::init_test_logger();
 	clean_output_dir(test_dir);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let genesis_block = pow::mine_genesis_block().unwrap();
-	let dir_name = format!("{}/{}", test_dir, chain_dir);
-	let db_env = Arc::new(store::new_env(dir_name.to_string()));
-	chain::Chain::init(
-		dir_name.to_string(),
-		db_env,
-		Arc::new(NoopAdapter {}),
-		genesis_block,
-		pow::verify_size,
-	).unwrap()
 }
 
-/// Build and test new version of sending API
+/// Exercises the Transaction API fully with a test WalletClient operating
+/// directly on a chain instance
+/// Callable with any type of wallet
+fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
+	setup(test_dir);
+	// Create a new proxy to simulate server and wallet responses
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
+	let chain = wallet_proxy.chain.clone();
+
+	// Create a new wallet test client, and set its queues to communicate with the
+	// proxy
+	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
+	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client.clone());
+	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone());
+
+	// define recipient wallet, add to proxy
+	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client.clone());
+	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
+	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone());
+
+	// Set the wallet proxy listener running
+	thread::spawn(move || {
+		if let Err(e) = wallet_proxy.run() {
+			error!(LOGGER, "Wallet Proxy error: {}", e);
+		}
+	});
+
+	// few values to keep things shorter
+	let reward = core::consensus::REWARD;
+	let cm = global::coinbase_maturity(0); // assume all testing precedes soft fork height
+										// mine a few blocks
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 10);
+
+	// Check wallet 1 contents are as expected
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		debug!(
+			LOGGER,
+			"Wallet 1 Info Pre-Transaction, after {} blocks: {:?}",
+			wallet1_info.last_confirmed_height,
+			wallet1_info
+		);
+		assert!(wallet1_refreshed);
+		assert_eq!(
+			wallet1_info.amount_currently_spendable,
+			(wallet1_info.last_confirmed_height - cm) * reward
+		);
+		assert_eq!(wallet1_info.amount_immature, cm * reward);
+		Ok(())
+	})?;
+
+	// assert wallet contents
+	// and a single use api for a send command
+	let amount = 60_000_000_000;
+	let mut slate = Slate::blank(1);
+	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
+		// note this will increment the block count as part of the transaction "Posting"
+		slate = sender_api.issue_send_tx(
+			amount,    // amount
+			2,         // minimum confirmations
+			"wallet2", // dest
+			500,       // max outputs
+			1,         // num change outputs
+			true,      // select all outputs
+		)?;
+		Ok(())
+	})?;
+
+	// Check transaction log for wallet 1
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		let (_, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (refreshed, txs) = api.retrieve_txs(true, None)?;
+		assert!(refreshed);
+		let fee = wallet::libtx::tx_fee(
+			wallet1_info.last_confirmed_height as usize - cm as usize,
+			2,
+			1,
+			None,
+		);
+		// we should have a transaction entry for this slate
+		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
+		assert!(tx.is_some());
+		let tx = tx.unwrap();
+		assert!(!tx.confirmed);
+		assert!(tx.confirmation_ts.is_none());
+		assert_eq!(tx.amount_debited - tx.amount_credited, fee + amount);
+		assert_eq!(Some(fee), tx.fee);
+		Ok(())
+	})?;
+
+	// Check transaction log for wallet 2
+	wallet::controller::owner_single_use(wallet2.clone(), |api| {
+		let (refreshed, txs) = api.retrieve_txs(true, None)?;
+		assert!(refreshed);
+		// we should have a transaction entry for this slate
+		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
+		assert!(tx.is_some());
+		let tx = tx.unwrap();
+		assert!(!tx.confirmed);
+		assert!(tx.confirmation_ts.is_none());
+		assert_eq!(amount, tx.amount_credited);
+		assert_eq!(0, tx.amount_debited);
+		assert_eq!(None, tx.fee);
+		Ok(())
+	})?;
+
+	// post transaction
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		api.post_tx(&slate, false)?;
+		Ok(())
+	})?;
+
+	// Check wallet 1 contents are as expected
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		debug!(
+			LOGGER,
+			"Wallet 1 Info Post Transaction, after {} blocks: {:?}",
+			wallet1_info.last_confirmed_height,
+			wallet1_info
+		);
+		let fee = wallet::libtx::tx_fee(
+			wallet1_info.last_confirmed_height as usize - 1 - cm as usize,
+			2,
+			1,
+			None,
+		);
+		assert!(wallet1_refreshed);
+		// wallet 1 received fees, so amount should be the same
+		assert_eq!(
+			wallet1_info.total,
+			amount * wallet1_info.last_confirmed_height - amount
+		);
+		assert_eq!(
+			wallet1_info.amount_currently_spendable,
+			(wallet1_info.last_confirmed_height - cm) * reward - amount - fee
+		);
+		assert_eq!(wallet1_info.amount_immature, cm * reward + fee);
+
+		// check tx log entry is confirmed
+		let (refreshed, txs) = api.retrieve_txs(true, None)?;
+		assert!(refreshed);
+		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
+		assert!(tx.is_some());
+		let tx = tx.unwrap();
+		assert!(tx.confirmed);
+		assert!(tx.confirmation_ts.is_some());
+
+		Ok(())
+	})?;
+
+	// mine a few more blocks
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
+
+	// refresh wallets and retrieve info/tests for each wallet after maturity
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		debug!(LOGGER, "Wallet 1 Info: {:?}", wallet1_info);
+		assert!(wallet1_refreshed);
+		assert_eq!(
+			wallet1_info.total,
+			amount * wallet1_info.last_confirmed_height - amount
+		);
+		assert_eq!(
+			wallet1_info.amount_currently_spendable,
+			(wallet1_info.last_confirmed_height - cm - 1) * reward
+		);
+		Ok(())
+	})?;
+
+	wallet::controller::owner_single_use(wallet2.clone(), |api| {
+		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		assert!(wallet2_refreshed);
+		assert_eq!(wallet2_info.amount_currently_spendable, amount);
+
+		// check tx log entry is confirmed
+		let (refreshed, txs) = api.retrieve_txs(true, None)?;
+		assert!(refreshed);
+		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
+		assert!(tx.is_some());
+		let tx = tx.unwrap();
+		assert!(tx.confirmed);
+		assert!(tx.confirmation_ts.is_some());
+		Ok(())
+	})?;
+
+	// Send another transaction, but don't post to chain immediately and use
+	// the stored transaction instead
+	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
+		// note this will increment the block count as part of the transaction "Posting"
+		slate = sender_api.issue_send_tx(
+			amount * 2, // amount
+			2,          // minimum confirmations
+			"wallet2",  // dest
+			500,        // max outputs
+			1,          // num change outputs
+			true,       // select all outputs
+		)?;
+		Ok(())
+	})?;
+
+	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
+		let (refreshed, _wallet1_info) = sender_api.retrieve_summary_info(true)?;
+		assert!(refreshed);
+		let (_, txs) = sender_api.retrieve_txs(true, None)?;
+
+		// find the transaction
+		let tx = txs
+			.iter()
+			.find(|t| t.tx_slate_id == Some(slate.id))
+			.unwrap();
+		sender_api.post_stored_tx(tx.id, false)?;
+		let (_, wallet1_info) = sender_api.retrieve_summary_info(true)?;
+		// should be mined now
+		assert_eq!(
+			wallet1_info.total,
+			amount * wallet1_info.last_confirmed_height - amount * 3
+		);
+		Ok(())
+	})?;
+
+	// mine a few more blocks
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
+
+	// check wallet2 has stored transaction
+	wallet::controller::owner_single_use(wallet2.clone(), |api| {
+		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		assert!(wallet2_refreshed);
+		assert_eq!(wallet2_info.amount_currently_spendable, amount * 3);
+
+		// check tx log entry is confirmed
+		let (refreshed, txs) = api.retrieve_txs(true, None)?;
+		assert!(refreshed);
+		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
+		assert!(tx.is_some());
+		let tx = tx.unwrap();
+		assert!(tx.confirmed);
+		assert!(tx.confirmation_ts.is_some());
+		Ok(())
+	})?;
+
+	// let logging finish
+	thread::sleep(Duration::from_millis(200));
+	Ok(())
+}
+
+/// Test rolling back transactions and outputs when a transaction is never
+/// posted to a chain
+fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
+	setup(test_dir);
+	// Create a new proxy to simulate server and wallet responses
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
+	let chain = wallet_proxy.chain.clone();
+
+	// Create a new wallet test client, and set its queues to communicate with the
+	// proxy
+	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
+	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client.clone());
+	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone());
+
+	// define recipient wallet, add to proxy
+	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
+	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client.clone());
+	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone());
+
+	// Set the wallet proxy listener running
+	thread::spawn(move || {
+		if let Err(e) = wallet_proxy.run() {
+			error!(LOGGER, "Wallet Proxy error: {}", e);
+		}
+	});
+
+	// few values to keep things shorter
+	let reward = core::consensus::REWARD;
+	let cm = global::coinbase_maturity(0); // assume all testing precedes soft fork height
+										// mine a few blocks
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 5);
+
+	let amount = 30_000_000_000;
+	let mut slate = Slate::blank(1);
+	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
+		// note this will increment the block count as part of the transaction "Posting"
+		slate = sender_api.issue_send_tx(
+			amount,    // amount
+			2,         // minimum confirmations
+			"wallet2", // dest
+			500,       // max outputs
+			1,         // num change outputs
+			true,      // select all outputs
+		)?;
+		Ok(())
+	})?;
+
+	// Check transaction log for wallet 1
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		let (refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		println!(
+			"last confirmed height: {}",
+			wallet1_info.last_confirmed_height
+		);
+		assert!(refreshed);
+		let (_, txs) = api.retrieve_txs(true, None)?;
+		// we should have a transaction entry for this slate
+		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
+		assert!(tx.is_some());
+		let mut locked_count = 0;
+		let mut unconfirmed_count = 0;
+		// get the tx entry, check outputs are as expected
+		let (_, outputs) = api.retrieve_outputs(true, false, Some(tx.unwrap().id))?;
+		for (o, _) in outputs.clone() {
+			if o.status == OutputStatus::Locked {
+				locked_count = locked_count + 1;
+			}
+			if o.status == OutputStatus::Unconfirmed {
+				unconfirmed_count = unconfirmed_count + 1;
+			}
+		}
+		assert_eq!(outputs.len(), 3);
+		assert_eq!(locked_count, 2);
+		assert_eq!(unconfirmed_count, 1);
+
+		Ok(())
+	})?;
+
+	// Check transaction log for wallet 2
+	wallet::controller::owner_single_use(wallet2.clone(), |api| {
+		let (refreshed, txs) = api.retrieve_txs(true, None)?;
+		assert!(refreshed);
+		let mut unconfirmed_count = 0;
+		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
+		assert!(tx.is_some());
+		// get the tx entry, check outputs are as expected
+		let (_, outputs) = api.retrieve_outputs(true, false, Some(tx.unwrap().id))?;
+		for (o, _) in outputs.clone() {
+			if o.status == OutputStatus::Unconfirmed {
+				unconfirmed_count = unconfirmed_count + 1;
+			}
+		}
+		assert_eq!(outputs.len(), 1);
+		assert_eq!(unconfirmed_count, 1);
+		let (refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		assert!(refreshed);
+		assert_eq!(wallet2_info.amount_currently_spendable, 0,);
+		assert_eq!(wallet2_info.total, amount);
+		Ok(())
+	})?;
+
+	// wallet 1 is bold and doesn't ever post the transaction mine a few more blocks
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 5);
+
+	// Wallet 1 decides to roll back instead
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		// can't roll back coinbase
+		let res = api.cancel_tx(1);
+		assert!(res.is_err());
+		let (_, txs) = api.retrieve_txs(true, None)?;
+		let tx = txs
+			.iter()
+			.find(|t| t.tx_slate_id == Some(slate.id))
+			.unwrap();
+		api.cancel_tx(tx.id)?;
+		let (refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		assert!(refreshed);
+		println!(
+			"last confirmed height: {}",
+			wallet1_info.last_confirmed_height
+		);
+		// check all eligible inputs should be now be spendable
+		println!("cm: {}", cm);
+		assert_eq!(
+			wallet1_info.amount_currently_spendable,
+			(wallet1_info.last_confirmed_height - cm) * reward
+		);
+		// can't roll back again
+		let res = api.cancel_tx(tx.id);
+		assert!(res.is_err());
+
+		Ok(())
+	})?;
+
+	// Wallet 2 rolls back
+	wallet::controller::owner_single_use(wallet2.clone(), |api| {
+		let (_, txs) = api.retrieve_txs(true, None)?;
+		let tx = txs
+			.iter()
+			.find(|t| t.tx_slate_id == Some(slate.id))
+			.unwrap();
+		api.cancel_tx(tx.id)?;
+		let (refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		assert!(refreshed);
+		// check all eligible inputs should be now be spendable
+		assert_eq!(wallet2_info.amount_currently_spendable, 0,);
+		assert_eq!(wallet2_info.total, 0,);
+		// can't roll back again
+		let res = api.cancel_tx(tx.id);
+		assert!(res.is_err());
+
+		Ok(())
+	})?;
+
+	// let logging finish
+	thread::sleep(Duration::from_millis(200));
+	Ok(())
+}
+
 #[test]
-fn build_transaction() {
-	let chain = setup("test_output", "build_transaction_2/.grin");
-	let mut wallet1 = common::create_wallet("test_output/build_transaction_2/wallet1");
-	let mut wallet2 = common::create_wallet("test_output/build_transaction_2/wallet2");
-	common::award_blocks_to_wallet(&chain, &mut wallet1, 10);
-	// Wallet 1 has 600 Grins, wallet 2 has 0. Create a transaction that sends
-	// 300 Grins from wallet 1 to wallet 2, using libtx
-
-	// Get lock height
-	let chain_tip = chain.head().unwrap();
-	let amount = 300_000_000_000;
-	let min_confirmations = 3;
-
-	// ensure outputs we're selecting are up to date
-	let res = common::refresh_output_state_local(&mut wallet1, &chain);
-
-	if let Err(e) = res {
-		panic!("Unable to refresh sender wallet outputs: {}", e);
+fn db_wallet_basic_transaction_api() {
+	let test_dir = "test_output/basic_transaction_api";
+	if let Err(e) = basic_transaction_api(test_dir) {
+		println!("Libwallet Error: {}", e);
 	}
+}
 
-	// TRANSACTION WORKFLOW STARTS HERE
-	// Sender selects outputs into a new slate and save our corresponding IDs in
-	// a transaction context. The secret key in our transaction context will be
-	// randomly selected. This returns the public slate, and a closure that locks
-	// our inputs and outputs once we're convinced the transaction exchange went
-	// according to plan
-	// This function is just a big helper to do all of that, in theory
-	// this process can be split up in any way
-	let (mut slate, mut sender_context, sender_lock_fn) = selection::build_send_tx_slate(
-		&mut wallet1,
-		2,
-		amount,
-		chain_tip.height,
-		min_confirmations,
-		chain_tip.height,
-		1000,
-		true,
-	).unwrap();
-
-	// Generate a kernel offset and subtract from our context's secret key. Store
-	// the offset in the slate's transaction kernel, and adds our public key
-	// information to the slate
-	let _ = slate
-		.fill_round_1(
-			wallet1.keychain.as_ref().unwrap(),
-			&mut sender_context.sec_key,
-			&sender_context.sec_nonce,
-			0,
-		)
-		.unwrap();
-
-	debug!(LOGGER, "Transaction Slate after step 1: sender initiation");
-	debug!(LOGGER, "-----------------------------------------");
-	debug!(LOGGER, "{:?}", slate);
-
-	// Now, just like the sender did, recipient is going to select a target output,
-	// add it to the transaction, and keep track of the corresponding wallet
-	// Identifier Again, this is a helper to do that, which returns a closure that
-	// creates the output when we're satisfied the process was successful
-	let (_, mut recp_context, receiver_create_fn) =
-		selection::build_recipient_output_with_slate(&mut wallet2, &mut slate).unwrap();
-
-	let _ = slate
-		.fill_round_1(
-			wallet2.keychain.as_ref().unwrap(),
-			&mut recp_context.sec_key,
-			&recp_context.sec_nonce,
-			1,
-		)
-		.unwrap();
-
-	// recipient can proceed to round 2 now
-	let _ = receiver_create_fn(&mut wallet2);
-
-	let _ = slate
-		.fill_round_2(
-			wallet1.keychain.as_ref().unwrap(),
-			&recp_context.sec_key,
-			&recp_context.sec_nonce,
-			1,
-		)
-		.unwrap();
-
-	debug!(
-		LOGGER,
-		"Transaction Slate after step 2: receiver initiation"
-	);
-	debug!(LOGGER, "-----------------------------------------");
-	debug!(LOGGER, "{:?}", slate);
-
-	// SENDER Part 3: Sender confirmation
-	let _ = slate
-		.fill_round_2(
-			wallet1.keychain.as_ref().unwrap(),
-			&sender_context.sec_key,
-			&sender_context.sec_nonce,
-			0,
-		)
-		.unwrap();
-
-	debug!(LOGGER, "PartialTx after step 3: sender confirmation");
-	debug!(LOGGER, "--------------------------------------------");
-	debug!(LOGGER, "{:?}", slate);
-
-	// Final transaction can be built by anyone at this stage
-	let res = slate.finalize(wallet1.keychain.as_ref().unwrap());
-
-	if let Err(e) = res {
-		panic!("Error creating final tx: {:?}", e);
+#[test]
+fn db_wallet_tx_rollback() {
+	let test_dir = "test_output/tx_rollback";
+	if let Err(e) = tx_rollback(test_dir) {
+		println!("Libwallet Error: {}", e);
 	}
-
-	debug!(LOGGER, "Final transaction is:");
-	debug!(LOGGER, "--------------------------------------------");
-	debug!(LOGGER, "{:?}", slate.tx);
-
-	// All okay, lock sender's outputs
-	let _ = sender_lock_fn(&mut wallet1);
-
-	// Insert this transaction into a new block, then mine till confirmation
-	common::award_block_to_wallet(&chain, vec![&slate.tx], &mut wallet1);
-	common::award_blocks_to_wallet(&chain, &mut wallet1, 5);
-
-	// Refresh wallets
-	let res = common::refresh_output_state_local(&mut wallet2, &chain);
-	if let Err(e) = res {
-		panic!("Error refreshing output state for wallet: {:?}", e);
-	}
-
-	// check recipient wallet
-	let chain_tip = chain.head().unwrap();
-	let balances = common::get_wallet_balances(&mut wallet2, chain_tip.height).unwrap();
-
-	assert_eq!(balances.3, 300_000_000_000);
-
-	// check sender wallet
-	let res = common::refresh_output_state_local(&mut wallet1, &chain);
-	if let Err(e) = res {
-		panic!("Error refreshing output state for wallet: {:?}", e);
-	}
-	let balances = common::get_wallet_balances(&mut wallet1, chain_tip.height).unwrap();
-	println!("tip height: {:?}", chain_tip.height);
-	println!("Sender balances: {:?}", balances);
-	// num blocks * grins per block, and wallet1 mined the fee
-	assert_eq!(
-		balances.3,
-		(chain_tip.height - min_confirmations) * 60_000_000_000 - amount
-	);
 }

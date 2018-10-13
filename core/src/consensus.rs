@@ -21,8 +21,8 @@
 use std::cmp::max;
 use std::fmt;
 
-use core::target::Difficulty;
 use global;
+use pow::Difficulty;
 
 /// A grin is divisible to 10^9, following the SI prefixes
 pub const GRIN_BASE: u64 = 1_000_000_000;
@@ -41,20 +41,24 @@ pub fn reward(fee: u64) -> u64 {
 	REWARD + fee
 }
 
-/// Number of blocks before a coinbase matures and can be spent
-pub const COINBASE_MATURITY: u64 = 1_000;
-
 /// Block interval, in seconds, the network will tune its next_target for. Note
 /// that we may reduce this value in the future as we get more data on mining
 /// with Cuckoo Cycle, networks improve and block propagation is optimized
 /// (adjusting the reward accordingly).
 pub const BLOCK_TIME_SEC: u64 = 60;
 
+/// Number of blocks before a coinbase matures and can be spent
+/// set to nominal number of block in one day (1440 with 1-minute blocks)
+pub const COINBASE_MATURITY: u64 = 24 * 60 * 60 / BLOCK_TIME_SEC;
+
 /// Cuckoo-cycle proof size (cycle length)
 pub const PROOFSIZE: usize = 42;
 
 /// Default Cuckoo Cycle size shift used for mining and validating.
 pub const DEFAULT_MIN_SIZESHIFT: u8 = 30;
+
+/// Secondary proof-of-work size shift, meant to be ASIC resistant.
+pub const SECOND_POW_SIZESHIFT: u8 = 29;
 
 /// Original reference sizeshift to compute difficulty factors for higher
 /// Cuckoo graph sizes, changing this would hard fork
@@ -72,10 +76,6 @@ pub const EASINESS: u32 = 50;
 /// easier to reason about.
 pub const CUT_THROUGH_HORIZON: u32 = 48 * 3600 / (BLOCK_TIME_SEC as u32);
 
-/// The maximum size we're willing to accept for any message. Enforced by the
-/// peer-to-peer networking layer only for DoS protection.
-pub const MAX_MSG_LEN: u64 = 20_000_000;
-
 /// Weight of an input when counted against the max block weight capacity
 pub const BLOCK_INPUT_WEIGHT: usize = 1;
 
@@ -85,28 +85,20 @@ pub const BLOCK_OUTPUT_WEIGHT: usize = 10;
 /// Weight of a kernel when counted against the max block weight capacity
 pub const BLOCK_KERNEL_WEIGHT: usize = 2;
 
-/// Total maximum block weight
-pub const MAX_BLOCK_WEIGHT: usize = 80_000;
-
-/// Maximum inputs for a block (issue#261)
-/// Hundreds of inputs + 1 output might be slow to validate (issue#258)
-pub const MAX_BLOCK_INPUTS: usize = 300_000; // soft fork down when too_high
-
-/// Maximum inputs for a transaction
-pub const MAX_TX_INPUTS: u64 = 2048;
-
-/// Maximum outputs for a transaction
-pub const MAX_TX_OUTPUTS: u64 = 500; // wallet uses 500 as max
-
-/// Maximum kernels for a transaction
-pub const MAX_TX_KERNELS: u64 = 2048;
-
-/// Whether a block exceeds the maximum acceptable weight
-pub fn exceeds_weight(input_len: usize, output_len: usize, kernel_len: usize) -> bool {
-	input_len * BLOCK_INPUT_WEIGHT
-		+ output_len * BLOCK_OUTPUT_WEIGHT
-		+ kernel_len * BLOCK_KERNEL_WEIGHT > MAX_BLOCK_WEIGHT || input_len > MAX_BLOCK_INPUTS
-}
+/// Total maximum block weight. At current sizes, this means a maximum
+/// theoretical size of:
+/// * `(674 + 33 + 1) * 4_000 = 2_832_000` for a block with only outputs
+/// * `(1 + 8 + 8 + 33 + 64) * 20_000 = 2_280_000` for a block with only kernels
+/// * `(1 + 33) * 40_000 = 1_360_000` for a block with only inputs
+///
+/// Given that a block needs to have at least one kernel for the coinbase,
+/// and one kernel for the transaction, practical maximum size is 2_831_440,
+/// (ignoring the edge case of a miner producing a block with all coinbase
+/// outputs and a single kernel).
+///
+/// A more "standard" block, filled with transactions of 2 inputs, 2 outputs
+/// and one kernel, should be around 2_663_333 bytes.
+pub const MAX_BLOCK_WEIGHT: usize = 40_000;
 
 /// Fork every 250,000 blocks for first 2 years, simple number and just a
 /// little less than 6 months.
@@ -116,16 +108,16 @@ pub const HARD_FORK_INTERVAL: u64 = 250_000;
 /// 6 months interval scheduled hard forks for the first 2 years.
 pub fn valid_header_version(height: u64, version: u16) -> bool {
 	// uncomment below as we go from hard fork to hard fork
-	if height <= HARD_FORK_INTERVAL && version == 1 {
-		true
-	/* } else if height <= 2 * HARD_FORK_INTERVAL && version == 2 {
-		true */
-	/* } else if height <= 3 * HARD_FORK_INTERVAL && version == 3 {
-		true */
-	/* } else if height <= 4 * HARD_FORK_INTERVAL && version == 4 {
-		true */
-	/* } else if height > 4 * HARD_FORK_INTERVAL && version > 4 {
-		true */
+	if height < HEADER_V2_HARD_FORK {
+		version == 1
+	} else if height < HARD_FORK_INTERVAL {
+		version == 2
+	} else if height < 2 * HARD_FORK_INTERVAL {
+		version == 3
+	/* } else if height < 3 * HARD_FORK_INTERVAL {
+		version == 4 */
+	/* } else if height >= 4 * HARD_FORK_INTERVAL {
+		version > 4 */
 	} else {
 		false
 	}
@@ -260,3 +252,6 @@ pub trait VerifySortOrder<T> {
 	/// Verify a collection of items is sorted as required.
 	fn verify_sort_order(&self) -> Result<(), Error>;
 }
+
+/// Height for the v2 headers hard fork, with extended proof of work in header
+pub const HEADER_V2_HARD_FORK: u64 = 95_000;

@@ -213,6 +213,10 @@ impl TUIStatusListener for TUIMiningView {
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
+					.child(TextView::new("  ").with_id("stratum_network_hashrate")),
+			)
+			.child(
+				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_cuckoo_size_status")),
 			);
 
@@ -304,6 +308,11 @@ impl TUIStatusListener for TUIMiningView {
 			},
 		);
 		let stratum_stats = stats.stratum_stats.clone();
+		let stratum_network_hashrate = format!(
+			"Network Hashrate: {:.*}",
+			2,
+			stratum_stats.network_hashrate()
+		);
 		let worker_stats = stratum_stats.worker_stats;
 		let stratum_enabled = format!("Mining server enabled: {}", stratum_stats.is_enabled);
 		let stratum_is_running = format!("Mining server running: {}", stratum_stats.is_running);
@@ -327,6 +336,9 @@ impl TUIStatusListener for TUIMiningView {
 		});
 		c.call_on_id("stratum_network_difficulty_status", |t: &mut TextView| {
 			t.set_content(stratum_network_difficulty);
+		});
+		c.call_on_id("stratum_network_hashrate", |t: &mut TextView| {
+			t.set_content(stratum_network_hashrate);
 		});
 		c.call_on_id("stratum_cuckoo_size_status", |t: &mut TextView| {
 			t.set_content(stratum_cuckoo_size);

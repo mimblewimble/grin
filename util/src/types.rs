@@ -15,7 +15,7 @@
 //! Logging configuration types
 
 /// Log level types, as slog's don't implement serialize
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum LogLevel {
 	/// Critical
 	Critical,
@@ -32,7 +32,7 @@ pub enum LogLevel {
 }
 
 /// Logging config
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct LoggingConfig {
 	/// whether to log to stdout
 	pub log_to_stdout: bool,
@@ -54,11 +54,11 @@ impl Default for LoggingConfig {
 	fn default() -> LoggingConfig {
 		LoggingConfig {
 			log_to_stdout: true,
-			stdout_log_level: LogLevel::Debug,
-			log_to_file: false,
-			file_log_level: LogLevel::Trace,
+			stdout_log_level: LogLevel::Warning,
+			log_to_file: true,
+			file_log_level: LogLevel::Debug,
 			log_file_path: String::from("grin.log"),
-			log_file_append: false,
+			log_file_append: true,
 			tui_running: None,
 		}
 	}

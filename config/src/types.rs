@@ -18,7 +18,7 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use servers::{ServerConfig, StratumServerConfig};
+use servers::ServerConfig;
 use util::LoggingConfig;
 use wallet::WalletConfig;
 
@@ -75,14 +75,10 @@ impl From<io::Error> for ConfigError {
 /// as they tend to be quite nested in the code
 /// Most structs optional, as they may or may not
 /// be needed depending on what's being run
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct GlobalConfig {
 	/// Keep track of the file we've read
 	pub config_file_path: Option<PathBuf>,
-	/// keep track of whether we're using
-	/// a config file or just the defaults
-	/// for each member
-	pub using_config_file: bool,
 	/// Global member config
 	pub members: Option<ConfigMembers>,
 }
@@ -91,19 +87,30 @@ pub struct GlobalConfig {
 /// level GlobalConfigContainer options might want to keep
 /// internal state that we don't necessarily
 /// want serialised or deserialised
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct ConfigMembers {
 	/// Server config
 	#[serde(default)]
 	pub server: ServerConfig,
-	/// Mining config
-	pub mining_server: Option<StratumServerConfig>,
 	/// Logging config
 	pub logging: Option<LoggingConfig>,
+}
 
-	/// Wallet config. May eventually need to be moved to its own thing. Or not.
-	/// Depends on whether we end up starting the wallet in its own process but
-	/// with the same lifecycle as the server.
+/// Wallet should be split into a separate configuration file
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct GlobalWalletConfig {
+	/// Keep track of the file we've read
+	pub config_file_path: Option<PathBuf>,
+	/// Wallet members
+	pub members: Option<GlobalWalletConfigMembers>,
+}
+
+/// Wallet internal members
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct GlobalWalletConfigMembers {
+	/// Wallet configuration
 	#[serde(default)]
 	pub wallet: WalletConfig,
+	/// Logging config
+	pub logging: Option<LoggingConfig>,
 }

@@ -24,17 +24,18 @@ extern crate grin_wallet as wallet;
 extern crate blake2_rfc as blake2;
 
 use std::default::Default;
+use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::{fs, thread, time};
 
-use wallet::{FileWallet, WalletConfig};
+use framework::keychain::Keychain;
+use wallet::{HTTPWalletClient, LMDBBackend, WalletConfig};
 
 /// Just removes all results from previous runs
 pub fn clean_all_output(test_name_dir: &str) {
 	let target_dir = format!("target/tmp/{}", test_name_dir);
-	let result = fs::remove_dir_all(target_dir);
-	if let Err(e) = result {
-		println!("{}", e);
+	if let Err(e) = fs::remove_dir_all(target_dir) {
+		println!("can't remove output from previous test :{}, may be ok", e);
 	}
 }
 
@@ -70,7 +71,7 @@ pub struct LocalServerContainerConfig {
 	// Whether we're going to mine
 	pub start_miner: bool,
 
-	// time in millis by which to artifically slow down the mining loop
+	// time in millis by which to artificially slow down the mining loop
 	// in this container
 	pub miner_slowdown_in_millis: u64,
 
@@ -153,10 +154,10 @@ pub struct LocalServerContainer {
 impl LocalServerContainer {
 	/// Create a new local server container with defaults, with the given name
 	/// all related files will be created in the directory
-	/// target/tmp/test_servers/{name}
+	/// target/tmp/{name}
 
 	pub fn new(config: LocalServerContainerConfig) -> Result<LocalServerContainer, Error> {
-		let working_dir = format!("target/tmp/test_servers/{}", config.name);
+		let working_dir = format!("target/tmp/{}", config.name);
 		let mut wallet_config = WalletConfig::default();
 
 		wallet_config.api_listen_port = config.wallet_port;
@@ -175,26 +176,27 @@ impl LocalServerContainer {
 		})
 	}
 
-	pub fn run_server(&mut self, duration_in_seconds: u64) -> servers::ServerStats {
+	pub fn run_server(&mut self, duration_in_seconds: u64) -> servers::Server {
 		let api_addr = format!("{}:{}", self.config.base_addr, self.config.api_server_port);
 
-		let mut seeding_type = servers::Seeding::None;
+		let mut seeding_type = p2p::Seeding::None;
 		let mut seeds = Vec::new();
 
 		if self.config.seed_addr.len() > 0 {
-			seeding_type = servers::Seeding::List;
+			seeding_type = p2p::Seeding::List;
 			seeds = vec![self.config.seed_addr.to_string()];
 		}
 
 		let s = servers::Server::new(servers::ServerConfig {
 			api_http_addr: api_addr,
+			api_secret_path: None,
 			db_root: format!("{}/.grin", self.working_dir),
 			p2p_config: p2p::P2PConfig {
 				port: self.config.p2p_server_port,
+				seeds: Some(seeds),
+				seeding_type: seeding_type,
 				..p2p::P2PConfig::default()
 			},
-			seeds: Some(seeds),
-			seeding_type: seeding_type,
 			chain_type: core::global::ChainTypes::AutomatedTesting,
 			skip_sync_wait: Some(true),
 			stratum_mining_config: None,
@@ -225,14 +227,14 @@ impl LocalServerContainer {
 
 		for p in &mut self.peer_list {
 			println!("{} connecting to peer: {}", self.config.p2p_server_port, p);
-			s.connect_peer(p.parse().unwrap()).unwrap();
+			let _ = s.connect_peer(p.parse().unwrap());
 		}
 
 		if self.wallet_is_running {
 			self.stop_wallet();
 		}
 
-		s.get_server_stats().unwrap()
+		s
 	}
 
 	/// Starts a wallet daemon to receive and returns the
@@ -262,25 +264,30 @@ impl LocalServerContainer {
 		let _ = fs::create_dir_all(self.wallet_config.clone().data_file_dir);
 		let r = wallet::WalletSeed::init_file(&self.wallet_config);
 
+		let client = HTTPWalletClient::new(&self.wallet_config.check_node_api_http_addr, None);
+
 		if let Err(e) = r {
-			//panic!("Error initting wallet seed: {}", e);
+			//panic!("Error initializing wallet seed: {}", e);
 		}
 
-		let wallet: FileWallet<keychain::ExtKeychain> =
-			FileWallet::new(self.wallet_config.clone(), "").unwrap_or_else(|e| {
+		let wallet: LMDBBackend<HTTPWalletClient, keychain::ExtKeychain> =
+			LMDBBackend::new(self.wallet_config.clone(), "", client).unwrap_or_else(|e| {
 				panic!(
 					"Error creating wallet: {:?} Config: {:?}",
 					e, self.wallet_config
 				)
 			});
 
-		wallet::controller::foreign_listener(Box::new(wallet), &self.wallet_config.api_listen_addr())
-			.unwrap_or_else(|e| {
-				panic!(
-					"Error creating wallet listener: {:?} Config: {:?}",
-					e, self.wallet_config
-				)
-			});
+		wallet::controller::foreign_listener(
+			Box::new(wallet),
+			&self.wallet_config.api_listen_addr(),
+			None,
+		).unwrap_or_else(|e| {
+			panic!(
+				"Error creating wallet listener: {:?} Config: {:?}",
+				e, self.wallet_config
+			)
+		});
 
 		self.wallet_is_running = true;
 	}
@@ -300,11 +307,13 @@ impl LocalServerContainer {
 		let keychain: keychain::ExtKeychain = wallet_seed
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
-		let mut wallet = FileWallet::new(config.clone(), "")
+		let client = HTTPWalletClient::new(&config.check_node_api_http_addr, None);
+		let mut wallet = LMDBBackend::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
-		let _ = wallet::libwallet::internal::updater::refresh_outputs(&mut wallet);
-		wallet::libwallet::internal::updater::retrieve_info(&mut wallet).unwrap()
+		let parent_id = keychain::ExtKeychain::derive_key_id(2, 0, 0, 0, 0);
+		let _ = wallet::libwallet::internal::updater::refresh_outputs(&mut wallet, &parent_id);
+		wallet::libwallet::internal::updater::retrieve_info(&mut wallet, &parent_id).unwrap()
 	}
 
 	pub fn send_amount_to(
@@ -324,25 +333,29 @@ impl LocalServerContainer {
 		let keychain: keychain::ExtKeychain = wallet_seed
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
-		let max_outputs = 500;
 
-		let mut wallet = FileWallet::new(config.clone(), "")
+		let client = HTTPWalletClient::new(&config.check_node_api_http_addr, None);
+
+		let max_outputs = 500;
+		let change_outputs = 1;
+
+		let mut wallet = LMDBBackend::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		let _ =
-			wallet::controller::owner_single_use(Box::new(wallet), |api| {
+			wallet::controller::owner_single_use(Arc::new(Mutex::new(Box::new(wallet))), |api| {
 				let result = api.issue_send_tx(
 					amount,
 					minimum_confirmations,
 					dest,
 					max_outputs,
+					change_outputs,
 					selection_strategy == "all",
-					fluff,
 				);
 				match result {
 					Ok(_) => println!(
 						"Tx sent: {} grin to {} (strategy '{}')",
-						core::core::amount_to_hr_string(amount),
+						core::core::amount_to_hr_string(amount, false),
 						dest,
 						selection_strategy,
 					),
@@ -501,7 +514,7 @@ impl LocalServerContainerPool {
 	/// once they've all been run
 	///
 
-	pub fn run_all_servers(self) -> Vec<servers::ServerStats> {
+	pub fn run_all_servers(self) -> Arc<Mutex<Vec<servers::Server>>> {
 		let run_length = self.config.run_length_in_seconds;
 		let mut handles = vec![];
 
@@ -537,9 +550,9 @@ impl LocalServerContainerPool {
 				}
 			}
 		}
+
 		// return a much simplified version of the results
-		let return_vec = return_containers.lock().unwrap();
-		return_vec.clone()
+		return_containers.clone()
 	}
 
 	pub fn connect_all_peers(&mut self) {
@@ -561,17 +574,25 @@ impl LocalServerContainerPool {
 	}
 }
 
+pub fn stop_all_servers(servers: Arc<Mutex<Vec<servers::Server>>>) {
+	let locked_servs = servers.lock().unwrap();
+	for s in locked_servs.deref() {
+		s.stop();
+	}
+}
+
 /// Create and return a ServerConfig
 pub fn config(n: u16, test_name_dir: &str, seed_n: u16) -> servers::ServerConfig {
 	servers::ServerConfig {
 		api_http_addr: format!("127.0.0.1:{}", 20000 + n),
+		api_secret_path: None,
 		db_root: format!("target/tmp/{}/grin-sync-{}", test_name_dir, n),
 		p2p_config: p2p::P2PConfig {
 			port: 10000 + n,
+			seeding_type: p2p::Seeding::List,
+			seeds: Some(vec![format!("127.0.0.1:{}", 10000 + seed_n)]),
 			..p2p::P2PConfig::default()
 		},
-		seeding_type: servers::Seeding::List,
-		seeds: Some(vec![format!("127.0.0.1:{}", 10000 + seed_n)]),
 		chain_type: core::global::ChainTypes::AutomatedTesting,
 		archive_mode: Some(true),
 		skip_sync_wait: Some(true),

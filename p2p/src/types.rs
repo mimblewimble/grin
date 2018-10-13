@@ -17,9 +17,12 @@ use std::fs::File;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::mpsc;
+use std::sync::{Arc, RwLock};
+
+use chrono::prelude::*;
 
 use core::core::hash::Hash;
-use core::core::target::Difficulty;
+use core::pow::Difficulty;
 use core::{core, ser};
 use grin_store;
 
@@ -66,6 +69,7 @@ pub enum Error {
 		peer: Hash,
 	},
 	Send(String),
+	PeerException,
 }
 
 impl From<ser::Error> for Error {
@@ -90,14 +94,28 @@ impl<T> From<mpsc::TrySendError<T>> for Error {
 }
 
 /// Configuration for the peer-to-peer server.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct P2PConfig {
 	pub host: IpAddr,
 	pub port: u16,
 
+	/// Method used to get the list of seed nodes for initial bootstrap.
+	#[serde(default)]
+	pub seeding_type: Seeding,
+
+	/// The list of seed nodes, if using Seeding as a seed type
+	pub seeds: Option<Vec<String>>,
+
+	/// Capabilities expose by this node, also conditions which other peers this
+	/// node will have an affinity toward when connection.
+	pub capabilities: Capabilities,
+
 	pub peers_allow: Option<Vec<String>>,
 
 	pub peers_deny: Option<Vec<String>>,
+
+	/// The list of preferred peers that we will try to connect to
+	pub peers_preferred: Option<Vec<String>>,
 
 	pub ban_window: Option<i64>,
 
@@ -113,17 +131,21 @@ impl Default for P2PConfig {
 		P2PConfig {
 			host: ipaddr,
 			port: 13414,
+			capabilities: Capabilities::FAST_SYNC_NODE,
+			seeding_type: Seeding::default(),
+			seeds: None,
 			peers_allow: None,
 			peers_deny: None,
-			ban_window: Some(BAN_WINDOW),
-			peer_max_count: Some(PEER_MAX_COUNT),
-			peer_min_preferred_count: Some(PEER_MIN_PREFERRED_COUNT),
+			peers_preferred: None,
+			ban_window: None,
+			peer_max_count: None,
+			peer_min_preferred_count: None,
 		}
 	}
 }
 
 /// Note certain fields are options just so they don't have to be
-/// included in grin.toml, but we don't want them to ever return none
+/// included in grin-server.toml, but we don't want them to ever return none
 impl P2PConfig {
 	/// return ban window
 	pub fn ban_window(&self) -> i64 {
@@ -150,6 +172,25 @@ impl P2PConfig {
 	}
 }
 
+/// Type of seeding the server will use to find other peers on the network.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum Seeding {
+	/// No seeding, mostly for tests that programmatically connect
+	None,
+	/// A list of seed addresses provided to the server
+	List,
+	/// Automatically get a list of seeds from multiple DNS
+	DNSSeed,
+	/// Mostly for tests, where connections are initiated programmatically
+	Programmatic,
+}
+
+impl Default for Seeding {
+	fn default() -> Seeding {
+		Seeding::DNSSeed
+	}
+}
+
 bitflags! {
   /// Options for what type of interaction a peer supports
   #[derive(Serialize, Deserialize)]
@@ -163,6 +204,9 @@ bitflags! {
 	const TXHASHSET_HIST = 0b00000010;
 	/// Can provide a list of healthy peers
 	const PEER_LIST = 0b00000100;
+
+	const FAST_SYNC_NODE = Capabilities::TXHASHSET_HIST.bits
+		| Capabilities::PEER_LIST.bits;
 
 	const FULL_NODE = Capabilities::FULL_HIST.bits
 		| Capabilities::TXHASHSET_HIST.bits
@@ -192,20 +236,79 @@ enum_from_primitive! {
 	}
 }
 
+#[derive(Clone, Debug)]
+pub struct PeerLiveInfo {
+	pub total_difficulty: Difficulty,
+	pub height: u64,
+	pub last_seen: DateTime<Utc>,
+}
+
 /// General information about a connected peer that's useful to other modules.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct PeerInfo {
 	pub capabilities: Capabilities,
 	pub user_agent: String,
 	pub version: u32,
 	pub addr: SocketAddr,
+	pub direction: Direction,
+	pub live_info: Arc<RwLock<PeerLiveInfo>>,
+}
+
+impl PeerInfo {
+	/// The current total_difficulty of the peer.
+	pub fn total_difficulty(&self) -> Difficulty {
+		self.live_info.read().unwrap().total_difficulty
+	}
+
+	/// The current height of the peer.
+	pub fn height(&self) -> u64 {
+		self.live_info.read().unwrap().height
+	}
+
+	/// Time of last_seen for this peer (via ping/pong).
+	pub fn last_seen(&self) -> DateTime<Utc> {
+		self.live_info.read().unwrap().last_seen
+	}
+
+	/// Update the total_difficulty, height and last_seen of the peer.
+	/// Takes a write lock on the live_info.
+	pub fn update(&self, height: u64, total_difficulty: Difficulty) {
+		let mut live_info = self.live_info.write().unwrap();
+		live_info.height = height;
+		live_info.total_difficulty = total_difficulty;
+		live_info.last_seen = Utc::now()
+	}
+}
+
+/// Flatten out a PeerInfo and nested PeerLiveInfo (taking a read lock on it)
+/// so we can serialize/deserialize the data for the API and the TUI.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PeerInfoDisplay {
+	pub capabilities: Capabilities,
+	pub user_agent: String,
+	pub version: u32,
+	pub addr: SocketAddr,
+	pub direction: Direction,
 	pub total_difficulty: Difficulty,
 	pub height: u64,
-	pub direction: Direction,
+}
+
+impl From<PeerInfo> for PeerInfoDisplay {
+	fn from(info: PeerInfo) -> PeerInfoDisplay {
+		PeerInfoDisplay {
+			capabilities: info.capabilities.clone(),
+			user_agent: info.user_agent.clone(),
+			version: info.version.clone(),
+			addr: info.addr.clone(),
+			direction: info.direction.clone(),
+			total_difficulty: info.total_difficulty(),
+			height: info.height(),
+		}
+	}
 }
 
 /// The full txhashset data along with indexes required for a consumer to
-/// rewind to a consistant requested state.
+/// rewind to a consistent requested state.
 pub struct TxHashSetRead {
 	/// Output tree index the receiver should rewind to
 	pub output_index: u64,
@@ -241,7 +344,7 @@ pub trait ChainAdapter: Sync + Send {
 	/// A set of block header has been received, typically in response to a
 	/// block
 	/// header request.
-	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr);
+	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr) -> bool;
 
 	/// Finds a list of block headers based on the provided locator. Tries to
 	/// identify the common chain and gets the headers that follow it
@@ -256,16 +359,25 @@ pub trait ChainAdapter: Sync + Send {
 	/// at the provided block hash.
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead>;
 
+	/// Whether the node is ready to accept a new txhashset. If this isn't the
+	/// case, the archive is provided without being requested and likely an
+	/// attack attempt. This should be checked *before* downloading the whole
+	/// state data.
+	fn txhashset_receive_ready(&self) -> bool;
+
+	/// Update txhashset downloading progress
+	fn txhashset_download_update(
+		&self,
+		start_time: DateTime<Utc>,
+		downloaded_size: u64,
+		total_size: u64,
+	) -> bool;
+
 	/// Writes a reading view on a txhashset state that's been provided to us.
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
-	fn txhashset_write(
-		&self,
-		h: Hash,
-		txhashset_data: File,
-		peer_addr: SocketAddr,
-	) -> bool;
+	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: SocketAddr) -> bool;
 }
 
 /// Additional methods required by the protocol that don't need to be

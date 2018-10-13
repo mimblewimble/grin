@@ -19,12 +19,12 @@ extern crate grin_store as store;
 extern crate grin_util as util;
 
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::{thread, time};
 
 use core::core::hash::Hash;
-use core::core::target::Difficulty;
+use core::pow::Difficulty;
 use p2p::Peer;
 
 fn open_port() -> u16 {
@@ -90,7 +90,6 @@ fn peer_handshake() {
 	thread::sleep(time::Duration::from_secs(1));
 
 	let server_peer = server.peers.get_connected_peer(&my_addr).unwrap();
-	let server_peer = server_peer.read().unwrap();
-	assert_eq!(server_peer.info.total_difficulty, Difficulty::one());
+	assert_eq!(server_peer.info.total_difficulty(), Difficulty::one());
 	assert!(server.peers.peer_count() > 0);
 }

@@ -24,7 +24,7 @@ use keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
 use util::secp::key::{PublicKey, SecretKey};
 use util::{kernel_sig_msg, secp};
 use wallet::libtx::{aggsig, proof};
-use wallet::libwallet::internal::sigcontext;
+use wallet::libwallet::types::Context;
 
 use rand::thread_rng;
 
@@ -36,19 +36,17 @@ fn aggsig_sender_receiver_interaction() {
 	// Calculate the kernel excess here for convenience.
 	// Normally this would happen during transaction building.
 	let kernel_excess = {
-		let skey1 = sender_keychain
-			.derived_key(&sender_keychain.derive_key_id(1).unwrap())
-			.unwrap();
-
-		let skey2 = receiver_keychain
-			.derived_key(&receiver_keychain.derive_key_id(1).unwrap())
-			.unwrap();
+		let id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+		let skey1 = sender_keychain.derive_key(&id1).unwrap().secret_key;
+		let skey2 = receiver_keychain.derive_key(&id1).unwrap().secret_key;
 
 		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let blinding_factor = keychain
-			.blind_sum(&BlindSum::new()
-				.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
-				.add_blinding_factor(BlindingFactor::from_secret_key(skey2)))
+			.blind_sum(
+				&BlindSum::new()
+					.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
+					.add_blinding_factor(BlindingFactor::from_secret_key(skey2)),
+			)
 			.unwrap();
 
 		keychain
@@ -62,10 +60,8 @@ fn aggsig_sender_receiver_interaction() {
 	// sender starts the tx interaction
 	let (sender_pub_excess, _sender_pub_nonce) = {
 		let keychain = sender_keychain.clone();
-
-		let skey = keychain
-			.derived_key(&keychain.derive_key_id(1).unwrap())
-			.unwrap();
+		let id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+		let skey = keychain.derive_key(&id1).unwrap().secret_key;
 
 		// dealing with an input here so we need to negate the blinding_factor
 		// rather than use it as is
@@ -76,20 +72,21 @@ fn aggsig_sender_receiver_interaction() {
 
 		let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
 
-		s_cx = sigcontext::Context::new(&keychain.secp(), blind);
+		s_cx = Context::new(&keychain.secp(), blind);
 		s_cx.get_public_keys(&keychain.secp())
 	};
 
 	let pub_nonce_sum;
+	let pub_key_sum;
 	// receiver receives partial tx
 	let (receiver_pub_excess, _receiver_pub_nonce, rx_sig_part) = {
 		let keychain = receiver_keychain.clone();
-		let key_id = keychain.derive_key_id(1).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 		// let blind = blind_sum.secret_key(&keychain.secp())?;
-		let blind = keychain.derived_key(&key_id).unwrap();
+		let blind = keychain.derive_key(&key_id).unwrap().secret_key;
 
-		rx_cx = sigcontext::Context::new(&keychain.secp(), blind);
+		rx_cx = Context::new(&keychain.secp(), blind);
 		let (pub_excess, pub_nonce) = rx_cx.get_public_keys(&keychain.secp());
 		rx_cx.add_output(&key_id);
 
@@ -101,11 +98,20 @@ fn aggsig_sender_receiver_interaction() {
 			],
 		).unwrap();
 
+		pub_key_sum = PublicKey::from_combination(
+			keychain.secp(),
+			vec![
+				&s_cx.get_public_keys(keychain.secp()).0,
+				&rx_cx.get_public_keys(keychain.secp()).0,
+			],
+		).unwrap();
+
 		let sig_part = aggsig::calculate_partial_sig(
 			&keychain.secp(),
 			&rx_cx.sec_key,
 			&rx_cx.sec_nonce,
 			&pub_nonce_sum,
+			Some(&pub_key_sum),
 			0,
 			0,
 		).unwrap();
@@ -121,6 +127,7 @@ fn aggsig_sender_receiver_interaction() {
 			&rx_sig_part,
 			&pub_nonce_sum,
 			&receiver_pub_excess,
+			Some(&pub_key_sum),
 			0,
 			0,
 		);
@@ -135,6 +142,7 @@ fn aggsig_sender_receiver_interaction() {
 			&s_cx.sec_key,
 			&s_cx.sec_nonce,
 			&pub_nonce_sum,
+			Some(&pub_key_sum),
 			0,
 			0,
 		).unwrap();
@@ -150,6 +158,7 @@ fn aggsig_sender_receiver_interaction() {
 			&sender_sig_part,
 			&pub_nonce_sum,
 			&sender_pub_excess,
+			Some(&pub_key_sum),
 			0,
 			0,
 		);
@@ -165,6 +174,7 @@ fn aggsig_sender_receiver_interaction() {
 			&rx_cx.sec_key,
 			&rx_cx.sec_nonce,
 			&pub_nonce_sum,
+			Some(&pub_key_sum),
 			0,
 			0,
 		).unwrap();
@@ -193,8 +203,14 @@ fn aggsig_sender_receiver_interaction() {
 		let keychain = receiver_keychain.clone();
 
 		// Receiver check the final signature verifies
-		let sig_verifies =
-			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, 0, 0);
+		let sig_verifies = aggsig::verify_sig_build_msg(
+			&keychain.secp(),
+			&final_sig,
+			&final_pubkey,
+			Some(&final_pubkey),
+			0,
+			0,
+		);
 		assert!(!sig_verifies.is_err());
 	}
 
@@ -224,22 +240,20 @@ fn aggsig_sender_receiver_interaction_offset() {
 	// Calculate the kernel excess here for convenience.
 	// Normally this would happen during transaction building.
 	let kernel_excess = {
-		let skey1 = sender_keychain
-			.derived_key(&sender_keychain.derive_key_id(1).unwrap())
-			.unwrap();
-
-		let skey2 = receiver_keychain
-			.derived_key(&receiver_keychain.derive_key_id(1).unwrap())
-			.unwrap();
+		let id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+		let skey1 = sender_keychain.derive_key(&id1).unwrap().secret_key;
+		let skey2 = receiver_keychain.derive_key(&id1).unwrap().secret_key;
 
 		let keychain = ExtKeychain::from_random_seed().unwrap();
 		let blinding_factor = keychain
-			.blind_sum(&BlindSum::new()
+			.blind_sum(
+				&BlindSum::new()
 				.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
 				.add_blinding_factor(BlindingFactor::from_secret_key(skey2))
 				// subtract the kernel offset here like as would when
 				// verifying a kernel signature
-				.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)))
+				.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)),
+			)
 			.unwrap();
 
 		keychain
@@ -253,36 +267,37 @@ fn aggsig_sender_receiver_interaction_offset() {
 	// sender starts the tx interaction
 	let (sender_pub_excess, _sender_pub_nonce) = {
 		let keychain = sender_keychain.clone();
-
-		let skey = keychain
-			.derived_key(&keychain.derive_key_id(1).unwrap())
-			.unwrap();
+		let id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+		let skey = keychain.derive_key(&id1).unwrap().secret_key;
 
 		// dealing with an input here so we need to negate the blinding_factor
 		// rather than use it as is
 		let blinding_factor = keychain
-			.blind_sum(&BlindSum::new()
+			.blind_sum(
+				&BlindSum::new()
 				.sub_blinding_factor(BlindingFactor::from_secret_key(skey))
 				// subtract the kernel offset to create an aggsig context
 				// with our "split" key
-				.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)))
+				.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)),
+			)
 			.unwrap();
 
 		let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
 
-		s_cx = sigcontext::Context::new(&keychain.secp(), blind);
+		s_cx = Context::new(&keychain.secp(), blind);
 		s_cx.get_public_keys(&keychain.secp())
 	};
 
 	// receiver receives partial tx
 	let pub_nonce_sum;
+	let pub_key_sum;
 	let (receiver_pub_excess, _receiver_pub_nonce, sig_part) = {
 		let keychain = receiver_keychain.clone();
-		let key_id = keychain.derive_key_id(1).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
-		let blind = keychain.derived_key(&key_id).unwrap();
+		let blind = keychain.derive_key(&key_id).unwrap().secret_key;
 
-		rx_cx = sigcontext::Context::new(&keychain.secp(), blind);
+		rx_cx = Context::new(&keychain.secp(), blind);
 		let (pub_excess, pub_nonce) = rx_cx.get_public_keys(&keychain.secp());
 		rx_cx.add_output(&key_id);
 
@@ -294,11 +309,20 @@ fn aggsig_sender_receiver_interaction_offset() {
 			],
 		).unwrap();
 
+		pub_key_sum = PublicKey::from_combination(
+			keychain.secp(),
+			vec![
+				&s_cx.get_public_keys(keychain.secp()).0,
+				&rx_cx.get_public_keys(keychain.secp()).0,
+			],
+		).unwrap();
+
 		let sig_part = aggsig::calculate_partial_sig(
 			&keychain.secp(),
 			&rx_cx.sec_key,
 			&rx_cx.sec_nonce,
 			&pub_nonce_sum,
+			Some(&pub_key_sum),
 			0,
 			0,
 		).unwrap();
@@ -314,6 +338,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&sig_part,
 			&pub_nonce_sum,
 			&receiver_pub_excess,
+			Some(&pub_key_sum),
 			0,
 			0,
 		);
@@ -328,6 +353,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&s_cx.sec_key,
 			&s_cx.sec_nonce,
 			&pub_nonce_sum,
+			Some(&pub_key_sum),
 			0,
 			0,
 		).unwrap();
@@ -343,6 +369,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&sender_sig_part,
 			&pub_nonce_sum,
 			&sender_pub_excess,
+			Some(&pub_key_sum),
 			0,
 			0,
 		);
@@ -357,6 +384,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&rx_cx.sec_key,
 			&rx_cx.sec_nonce,
 			&pub_nonce_sum,
+			Some(&pub_key_sum),
 			0,
 			0,
 		).unwrap();
@@ -385,8 +413,14 @@ fn aggsig_sender_receiver_interaction_offset() {
 		let keychain = receiver_keychain.clone();
 
 		// Receiver check the final signature verifies
-		let sig_verifies =
-			aggsig::verify_sig_build_msg(&keychain.secp(), &final_sig, &final_pubkey, 0, 0);
+		let sig_verifies = aggsig::verify_sig_build_msg(
+			&keychain.secp(),
+			&final_sig,
+			&final_pubkey,
+			Some(&final_pubkey),
+			0,
+			0,
+		);
 		assert!(!sig_verifies.is_err());
 	}
 
@@ -406,8 +440,8 @@ fn aggsig_sender_receiver_interaction_offset() {
 #[test]
 fn test_rewind_range_proof() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let key_id = keychain.derive_key_id(1).unwrap();
-	let key_id2 = keychain.derive_key_id(2).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 	let commit = keychain.commit(5, &key_id).unwrap();
 	let extra_data = [99u8; 64];
 
@@ -423,6 +457,7 @@ fn test_rewind_range_proof() {
 
 	assert_eq!(proof_info.success, true);
 	assert_eq!(proof_info.value, 5);
+	assert_eq!(proof_info.message.as_bytes(), key_id.serialize_path());
 
 	// cannot rewind with a different commit
 	let commit2 = keychain.commit(5, &key_id2).unwrap();
@@ -430,6 +465,7 @@ fn test_rewind_range_proof() {
 		proof::rewind(&keychain, commit2, Some(extra_data.to_vec().clone()), proof).unwrap();
 	assert_eq!(proof_info.success, false);
 	assert_eq!(proof_info.value, 0);
+	assert_eq!(proof_info.message, secp::pedersen::ProofMessage::empty());
 
 	// cannot rewind with a commitment to a different value
 	let commit3 = keychain.commit(4, &key_id).unwrap();

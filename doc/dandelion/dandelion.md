@@ -1,5 +1,6 @@
-Dandelion in Grin: Privacy-Preserving Transaction Aggregation and Propagation
-==================
+# Dandelion in Grin: Privacy-Preserving Transaction Aggregation and Propagation
+
+
 This document describes the implementation of Dandelion in Grin and its modification to handle transactions aggregation in the P2P protocol.
 ## Introduction
 
@@ -16,7 +17,8 @@ We first define the original Dandelion propagation then the Grin adaptation  of 
 Dandelion transaction propagation proceeds in two phases: first the “stem” phase, and then “fluff” phase. During the stem phase, each node relays the transaction to a *single* peer. After a random number of hops along the stem, the transaction enters the fluff phase, which behaves just like ordinary flooding/diffusion. Even when an attacker can identify the location of the fluff phase, it is much more difficult to identify the source of the stem.
 
 Illustration:
-<pre>
+
+```
                                                    ┌-> F ...
                                            ┌-> D --┤
                                            |       └-> G ...
@@ -24,7 +26,7 @@ Illustration:
                                            |       ┌-> H ...
                                            └-> E --┤
                                                    └-> I ...
-</pre>
+```
 
 ### Specifications
 
@@ -42,9 +44,10 @@ The Dandelion protocol is based on three mechanisms:
 Dandelion stem mode transactions are indicated by a new type of relay message type.
 
 Stem transaction relay message type:
-<pre>
+
+```rust
 Type::StemTransaction;
-</pre>
+```
 
 After receiving a stem transaction, the node flips a biased coin to determine whether to propagate it in “stem mode”, or to switch to “fluff mode.” The bias is controlled by a parameter exposed to the configuration file, initially 90% chance of staying in stem mode (meaning the expected stem length would be 10 hops).
 
@@ -55,9 +58,9 @@ Nodes that receives stem transactions are called stem relays. This relay is chos
 The main implementation challenges are: (1) identifying a satisfactory tradeoff between Dandelion’s privacy guarantees and its latency/overhead, and (2) ensuring that privacy cannot be degraded through abuse of existing mechanisms. In particular, the implementation should prevent an attacker from identifying stem nodes without interfering too much with the various existing mechanisms for efficient and DoS-resistant propagation.
 
 * The privacy afforded by Dandelion depends on 3 parameters: the stem probability, the number of outbound peers that can serve as dandelion relay, and the time between re-randomizations of the stem relay. These parameters define a tradeoff between privacy and broadcast latency/processing overhead. Lowering the stem probability harms privacy but helps reduce latency by shortening the mean stem length; based on theory, simulations, and experiments, we have chosen a default of 90%. Reducing the time between each node’s re-randomization of its stem relay reduces the chance of an adversary learning the stem relay for each node, at the expense of increased overhead.
-* When receiving a Dandelion stem transaction, we avoid placing that transaction in <code>tracking_adapter</code>. This way, transactions can also travel back “up” the stem in the fluff phase.
+* When receiving a Dandelion stem transaction, we avoid placing that transaction in `tracking_adapter`. This way, transactions can also travel back “up” the stem in the fluff phase.
 * Like ordinary transactions, Dandelion stem transactions are only relayed after being successfully accepted to mempool. This ensures that nodes will never be punished for relaying Dandelion stem transactions.
-* If a stem orphan transaction is received, it is added to the <code>orphan</code> pool, and also marked as stem-mode. If the transaction is later accepted to mempool, then it is relayed as a stem transaction or regular transaction (either stem mode or fluff mode, depending on a coin flip).
+* If a stem orphan transaction is received, it is added to the `orphan` pool, and also marked as stem-mode. If the transaction is later accepted to mempool, then it is relayed as a stem transaction or regular transaction (either stem mode or fluff mode, depending on a coin flip).
 * If a node receives a child transaction that depends on one or more currently-embargoed Dandelion transactions, then the transaction is also relayed in stem mode, and the embargo timer is set to the maximum of the embargo times of its parents. This helps ensure that parent transactions enter fluff mode before child transactions. Later on, this two transaction will be aggregated in one unique transaction removing the need for the timer.
 * Transaction propagation latency should be minimally affected by opting-in to this privacy feature; in particular, a transaction should never be prevented from propagating at all because of Dandelion. The random timer guarantees that the embargo mechanism is temporary, and every transaction is relayed according to the ordinary diffusion mechanism after some maximum (random) delay on the order of 30-60 seconds.
 
@@ -77,7 +80,7 @@ A simulation of this scenario is available [here](simulation.md).
 
 ## References
 
-- [1] (Sigmetrics 2017) Dandelion: Redesigning the Bitcoin Network for Anonymity https://arxiv.org/abs/1701.04439
-- [2] Dandelion BIP https://github.com/dandelion-org/bips/blob/master/bip-dandelion.mediawiki
-- [3] (Sigmetrics 2018) Dandelion++: Lightweight Cryptocurrency Networking with Formal Anonymity Guarantees https://arxiv.org/abs/1805.11060
-- [4] Dandelion Grin Pull Request #1067: https://github.com/mimblewimble/grin/pull/1067
+* [1] (Sigmetrics 2017) [Dandelion: Redesigning the Bitcoin Network for Anonymity](https://arxiv.org/abs/1701.04439)
+* [2] [Dandelion BIP](https://github.com/dandelion-org/bips/blob/master/bip-dandelion.mediawiki)
+* [3] (Sigmetrics 2018) [Dandelion++: Lightweight Cryptocurrency Networking with Formal Anonymity Guarantees](https://arxiv.org/abs/1805.11060)
+* [4] [Dandelion Grin Pull Request #1067](https://github.com/mimblewimble/grin/pull/1067)

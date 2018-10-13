@@ -21,6 +21,7 @@ use std::path::MAIN_SEPARATOR;
 use blake2;
 use rand::{thread_rng, Rng};
 
+use core::global::ChainTypes;
 use error::{Error, ErrorKind};
 use failure::ResultExt;
 use keychain::Keychain;
@@ -29,32 +30,42 @@ use util::LOGGER;
 
 pub const SEED_FILE: &'static str = "wallet.seed";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct WalletConfig {
-	// Right now the decision to run or not a wallet is based on the command.
-	// This may change in the near-future.
-	// pub enable_wallet: bool,
-
+	// Chain parameters (default to Testnet3 if none at the moment)
+	pub chain_type: Option<ChainTypes>,
 	// The api interface/ip_address that this api server (i.e. this wallet) will run
 	// by default this is 127.0.0.1 (and will not accept connections from external clients)
 	pub api_listen_interface: String,
 	// The port this wallet will run on
 	pub api_listen_port: u16,
+	/// Location of the secret for basic auth on the Owner API
+	pub api_secret_path: Option<String>,
+	/// Location of the node api secret for basic auth on the Grin API
+	pub node_api_secret_path: Option<String>,
 	// The api address of a running server node against which transaction inputs
 	// will be checked during send
 	pub check_node_api_http_addr: String,
 	// The directory in which wallet files are stored
 	pub data_file_dir: String,
+	/// TLS ceritificate file
+	pub tls_certificate_file: Option<String>,
+	/// TLS ceritificate private key file
+	pub tls_certificate_key: Option<String>,
 }
 
 impl Default for WalletConfig {
 	fn default() -> WalletConfig {
 		WalletConfig {
-			// enable_wallet: false,
+			chain_type: Some(ChainTypes::Testnet3),
 			api_listen_interface: "127.0.0.1".to_string(),
 			api_listen_port: 13415,
+			api_secret_path: Some(".api_secret".to_string()),
+			node_api_secret_path: Some(".api_secret".to_string()),
 			check_node_api_http_addr: "http://127.0.0.1:13413".to_string(),
 			data_file_dir: ".".to_string(),
+			tls_certificate_file: None,
+			tls_certificate_key: None,
 		}
 	}
 }
@@ -77,9 +88,9 @@ impl WalletSeed {
 		WalletSeed(seed)
 	}
 
-	fn from_hex(hex: &str) -> Result<WalletSeed, Error> {
-		let bytes =
-			util::from_hex(hex.to_string()).context(ErrorKind::GenericError("Invalid hex"))?;
+	pub fn from_hex(hex: &str) -> Result<WalletSeed, Error> {
+		let bytes = util::from_hex(hex.to_string())
+			.context(ErrorKind::GenericError("Invalid hex".to_owned()))?;
 		Ok(WalletSeed::from_bytes(&bytes))
 	}
 

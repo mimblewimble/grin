@@ -28,7 +28,7 @@ use wallet::libtx::proof;
 #[test]
 fn test_output_ser_deser() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let commit = keychain.commit(5, &key_id).unwrap();
 	let proof = proof::create(&keychain, 5, &key_id, commit, None).unwrap();
 

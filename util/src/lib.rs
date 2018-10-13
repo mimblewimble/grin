@@ -22,6 +22,7 @@
 #![warn(missing_docs)]
 
 extern crate backtrace;
+extern crate base64;
 extern crate byteorder;
 extern crate rand;
 #[macro_use]
@@ -53,56 +54,58 @@ pub use secp_static::static_secp_instance;
 pub mod types;
 pub use types::{LogLevel, LoggingConfig};
 
+pub mod macros;
+
 // other utils
 use byteorder::{BigEndian, ByteOrder};
-use std::cell::{Ref, RefCell};
 #[allow(unused_imports)]
 use std::ops::Deref;
+use std::sync::{Arc, RwLock};
 
 mod hex;
 pub use hex::*;
 
+/// File util
+pub mod file;
 /// Compress and decompress zip bz2 archives
 pub mod zip;
 
-/// Encapsulation of a RefCell<Option<T>> for one-time initialization after
-/// construction. This implementation will purposefully fail hard if not used
-/// properly, for example if it's not initialized before being first used
+/// Encapsulation of a RwLock<Option<T>> for one-time initialization.
+/// This implementation will purposefully fail hard if not used
+/// properly, for example if not initialized before being first used
 /// (borrowed).
 #[derive(Clone)]
 pub struct OneTime<T> {
-	/// inner
-	inner: RefCell<Option<T>>,
+	/// The inner value.
+	inner: Arc<RwLock<Option<T>>>,
 }
 
-unsafe impl<T> Sync for OneTime<T> {}
-unsafe impl<T> Send for OneTime<T> {}
-
-impl<T> OneTime<T> {
+impl<T> OneTime<T>
+where
+	T: Clone,
+{
 	/// Builds a new uninitialized OneTime.
 	pub fn new() -> OneTime<T> {
 		OneTime {
-			inner: RefCell::new(None),
+			inner: Arc::new(RwLock::new(None)),
 		}
 	}
 
 	/// Initializes the OneTime, should only be called once after construction.
+	/// Will panic (via assert) if called more than once.
 	pub fn init(&self, value: T) {
-		let mut inner_mut = self.inner.borrow_mut();
-		*inner_mut = Some(value);
-	}
-
-	/// Whether the OneTime has been initialized
-	pub fn is_initialized(&self) -> bool {
-		match self.inner.try_borrow() {
-			Ok(inner) => inner.is_some(),
-			Err(_) => false,
-		}
+		let mut inner = self.inner.write().unwrap();
+		assert!(inner.is_none());
+		*inner = Some(value);
 	}
 
 	/// Borrows the OneTime, should only be called after initialization.
-	pub fn borrow(&self) -> Ref<T> {
-		Ref::map(self.inner.borrow(), |o| o.as_ref().unwrap())
+	/// Will panic (via expect) if called before initialization.
+	pub fn borrow(&self) -> T {
+		let inner = self.inner.read().unwrap();
+		inner
+			.clone()
+			.expect("Cannot borrow one_time before initialization.")
 	}
 }
 
@@ -112,4 +115,9 @@ pub fn kernel_sig_msg(fee: u64, lock_height: u64) -> [u8; 32] {
 	BigEndian::write_u64(&mut bytes[16..24], fee);
 	BigEndian::write_u64(&mut bytes[24..], lock_height);
 	bytes
+}
+
+/// Encode an utf8 string to a base64 string
+pub fn to_base64(s: &str) -> String {
+	base64::encode(s)
 }

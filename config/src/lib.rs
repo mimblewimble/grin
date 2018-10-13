@@ -20,7 +20,8 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-extern crate serde;
+extern crate dirs;
+extern crate rand;
 #[macro_use]
 extern crate serde_derive;
 extern crate toml;
@@ -30,7 +31,9 @@ extern crate grin_servers as servers;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
+mod comments;
 pub mod config;
 pub mod types;
 
-pub use types::{ConfigError, ConfigMembers, GlobalConfig};
+pub use config::{check_api_secret_file, initial_setup_server, initial_setup_wallet};
+pub use types::{ConfigError, ConfigMembers, GlobalConfig, GlobalWalletConfig};

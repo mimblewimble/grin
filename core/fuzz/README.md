@@ -1,6 +1,7 @@
 # Fuzz testing
 
 ## Installation
+You have to use Rust nightly at the moment.
 Cargo-fuzz (https://github.com/rust-fuzz/cargo-fuzz) has been used. 
 To install it:
 
@@ -24,6 +25,7 @@ Fuzz test is basically infinite test, run it for some period of time then
 stop if no failures are found.
 To run the tests make sure youre in folder `core` otherwise you may get 
 some misleading errors, then run one of the following tests:
+
 ```
 cargo fuzz run tx_read
 
@@ -32,4 +34,9 @@ cargo fuzz run block_read
 cargo fuzz run compact_block_read
 
 ```
-Check `fuzz/Cargo.toml` for the full list of targets.
+
+Run
+```
+cargo fuzz list
+```
+or check `fuzz/Cargo.toml` for the full list of targets.

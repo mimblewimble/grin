@@ -48,9 +48,15 @@ pub enum ErrorKind {
 	/// Block header sizeshift is lower than our min
 	#[fail(display = "Cuckoo Size too Low")]
 	LowSizeshift,
+	/// Scaling factor between primary and secondary PoW is invalid
+	#[fail(display = "Wrong scaling factor")]
+	InvalidScaling,
 	/// The proof of work is invalid
 	#[fail(display = "Invalid PoW")]
 	InvalidPow,
+	/// Peer abusively sending us an old block we already have
+	#[fail(display = "Old Block")]
+	OldBlock,
 	/// The block doesn't sum correctly or a tx signature is invalid
 	#[fail(display = "Invalid Block Proof")]
 	InvalidBlockProof(block::Error),
@@ -76,7 +82,7 @@ pub enum ErrorKind {
 	#[fail(display = "Already Spent: {:?}", _0)]
 	AlreadySpent(Commitment),
 	/// An output with that commitment already exists (should be unique)
-	#[fail(display = "Dupliate Commitment: {:?}", _0)]
+	#[fail(display = "Duplicate Commitment: {:?}", _0)]
 	DuplicateCommitment(Commitment),
 	/// Attempt to spend a coinbase output before it sufficiently matures.
 	#[fail(display = "Attempt to spend immature coinbase")]

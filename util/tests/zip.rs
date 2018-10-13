@@ -25,7 +25,7 @@ fn zip_unzip() {
 	let zip_name = "./target/tmp/zipped.zip";
 
 	fs::create_dir_all(root.join("./to_zip/sub")).unwrap();
-	write_files(&root).unwrap();
+	write_files("to_zip".to_string(), &root).unwrap();
 
 	let zip_file = File::create(zip_name).unwrap();
 	zip::compress(&root.join("./to_zip"), &zip_file).unwrap();
@@ -48,12 +48,12 @@ fn zip_unzip() {
 	assert!(lorem.metadata().unwrap().len() == 55);
 }
 
-fn write_files(root: &Path) -> io::Result<()> {
-	let mut file = File::create(root.join("to_zip/foo.txt"))?;
+fn write_files(dir_name: String, root: &Path) -> io::Result<()> {
+	let mut file = File::create(root.join(dir_name.clone() + "/foo.txt"))?;
 	file.write_all(b"Hello, world!")?;
-	let mut file = File::create(root.join("to_zip/bar.txt"))?;
+	let mut file = File::create(root.join(dir_name.clone() + "/bar.txt"))?;
 	file.write_all(b"Goodbye, world!")?;
-	let mut file = File::create(root.join("to_zip/sub/lorem"))?;
+	let mut file = File::create(root.join(dir_name.clone() + "/sub/lorem"))?;
 	file.write_all(b"Lorem ipsum dolor sit amet, consectetur adipiscing elit")?;
 	Ok(())
 }
