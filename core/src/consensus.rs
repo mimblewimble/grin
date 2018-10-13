@@ -51,6 +51,14 @@ pub const BLOCK_TIME_SEC: u64 = 60;
 /// set to nominal number of block in one day (1440 with 1-minute blocks)
 pub const COINBASE_MATURITY: u64 = 24 * 60 * 60 / BLOCK_TIME_SEC;
 
+/// Ratio the secondary proof of work should take over the primary, as a
+/// function of block height (time). Starts at 90% losing a percent
+/// approximately every week (10000 blocks). Represented as an integer
+/// between 0 and 100.
+pub fn secondary_pow_ratio(height: u64) -> u64 {
+	90u64.saturating_sub(height / 10000)
+}
+
 /// Cuckoo-cycle proof size (cycle length)
 pub const PROOFSIZE: usize = 42;
 
@@ -108,15 +116,15 @@ pub const HARD_FORK_INTERVAL: u64 = 250_000;
 /// 6 months interval scheduled hard forks for the first 2 years.
 pub fn valid_header_version(height: u64, version: u16) -> bool {
 	// uncomment below as we go from hard fork to hard fork
-	if height < HEADER_V2_HARD_FORK {
+	if height < HARD_FORK_INTERVAL {
 		version == 1
-	} else if height < HARD_FORK_INTERVAL {
+	/* } else if height < 2 * HARD_FORK_INTERVAL {
 		version == 2
-	} else if height < 2 * HARD_FORK_INTERVAL {
+	} else if height < 3 * HARD_FORK_INTERVAL {
 		version == 3
-	/* } else if height < 3 * HARD_FORK_INTERVAL {
-		version == 4 */
-	/* } else if height >= 4 * HARD_FORK_INTERVAL {
+	} else if height < 4 * HARD_FORK_INTERVAL {
+		version == 4 
+	} else if height >= 5 * HARD_FORK_INTERVAL {
 		version > 4 */
 	} else {
 		false
@@ -164,20 +172,62 @@ impl fmt::Display for Error {
 	}
 }
 
-/// Error when computing the next difficulty adjustment.
-#[derive(Debug, Clone, Fail)]
-pub struct TargetError(pub String);
+/// Minimal header information required for the Difficulty calculation to
+/// take place
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HeaderInfo {
+	/// Timestamp of the header, 1 when not used (returned info)
+	pub timestamp: u64,
+	/// Network difficulty or next difficulty to use
+	pub difficulty: Difficulty,
+	/// Network secondary PoW factor or factor to use
+	pub secondary_scaling: u32,
+	/// Whether the header is a secondary proof of work
+	pub is_secondary: bool,
+}
 
-impl fmt::Display for TargetError {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "Error computing new difficulty: {}", self.0)
+impl HeaderInfo {
+	/// Default constructor
+	pub fn new(
+		timestamp: u64,
+		difficulty: Difficulty,
+		secondary_scaling: u32,
+		is_secondary: bool,
+	) -> HeaderInfo {
+		HeaderInfo {
+			timestamp,
+			difficulty,
+			secondary_scaling,
+			is_secondary,
+		}
+	}
+
+	/// Constructor from a timestamp and difficulty, setting a default secondary
+	/// PoW factor
+	pub fn from_ts_diff(timestamp: u64, difficulty: Difficulty) -> HeaderInfo {
+		HeaderInfo {
+			timestamp,
+			difficulty,
+			secondary_scaling: 1,
+			is_secondary: false,
+		}
+	}
+
+	/// Constructor from a difficulty and secondary factor, setting a default
+	/// timestamp
+	pub fn from_diff_scaling(difficulty: Difficulty, secondary_scaling: u32) -> HeaderInfo {
+		HeaderInfo {
+			timestamp: 1,
+			difficulty,
+			secondary_scaling,
+			is_secondary: false,
+		}
 	}
 }
 
 /// Computes the proof-of-work difficulty that the next block should comply
-/// with. Takes an iterator over past blocks, from latest (highest height) to
-/// oldest (lowest height). The iterator produces pairs of timestamp and
-/// difficulty for each block.
+/// with. Takes an iterator over past block headers information, from latest
+/// (highest height) to oldest (lowest height).
 ///
 /// The difficulty calculation is based on both Digishield and GravityWave
 /// family of difficulty computation, coming to something very close to Zcash.
@@ -185,9 +235,12 @@ impl fmt::Display for TargetError {
 /// DIFFICULTY_ADJUST_WINDOW blocks. The corresponding timespan is calculated
 /// by using the difference between the median timestamps at the beginning
 /// and the end of the window.
-pub fn next_difficulty<T>(cursor: T) -> Result<Difficulty, TargetError>
+///
+/// The secondary proof-of-work factor is calculated along the same lines, as
+/// an adjustment on the deviation against the ideal value.
+pub fn next_difficulty<T>(height: u64, cursor: T) -> HeaderInfo
 where
-	T: IntoIterator<Item = Result<(u64, Difficulty), TargetError>>,
+	T: IntoIterator<Item = HeaderInfo>,
 {
 	// Create vector of difficulty data running from earliest
 	// to latest, and pad with simulated pre-genesis data to allow earlier
@@ -195,27 +248,20 @@ where
 	// length will be DIFFICULTY_ADJUST_WINDOW+MEDIAN_TIME_WINDOW
 	let diff_data = global::difficulty_data_to_vector(cursor);
 
+	// First, get the ratio of secondary PoW vs primary
+	let sec_pow_scaling = secondary_pow_scaling(height, &diff_data);
+
 	// Obtain the median window for the earlier time period
 	// the first MEDIAN_TIME_WINDOW elements
-	let mut window_earliest: Vec<u64> = diff_data
-		.iter()
-		.take(MEDIAN_TIME_WINDOW as usize)
-		.map(|n| n.clone().unwrap().0)
-		.collect();
-	// pick median
-	window_earliest.sort();
-	let earliest_ts = window_earliest[MEDIAN_TIME_INDEX as usize];
+	let earliest_ts = time_window_median(&diff_data, 0, MEDIAN_TIME_WINDOW as usize);
 
 	// Obtain the median window for the latest time period
 	// i.e. the last MEDIAN_TIME_WINDOW elements
-	let mut window_latest: Vec<u64> = diff_data
-		.iter()
-		.skip(DIFFICULTY_ADJUST_WINDOW as usize)
-		.map(|n| n.clone().unwrap().0)
-		.collect();
-	// pick median
-	window_latest.sort();
-	let latest_ts = window_latest[MEDIAN_TIME_INDEX as usize];
+	let latest_ts = time_window_median(
+		&diff_data,
+		DIFFICULTY_ADJUST_WINDOW as usize,
+		MEDIAN_TIME_WINDOW as usize,
+	);
 
 	// median time delta
 	let ts_delta = latest_ts - earliest_ts;
@@ -224,7 +270,7 @@ where
 	let diff_sum = diff_data
 		.iter()
 		.skip(MEDIAN_TIME_WINDOW as usize)
-		.fold(0, |sum, d| sum + d.clone().unwrap().1.to_num());
+		.fold(0, |sum, d| sum + d.difficulty.to_num());
 
 	// Apply dampening except when difficulty is near 1
 	let ts_damp = if diff_sum < DAMP_FACTOR * DIFFICULTY_ADJUST_WINDOW {
@@ -242,9 +288,49 @@ where
 		ts_damp
 	};
 
-	let difficulty = diff_sum * BLOCK_TIME_SEC / adj_ts;
+	let difficulty = max(diff_sum * BLOCK_TIME_SEC / adj_ts, 1);
 
-	Ok(Difficulty::from_num(max(difficulty, 1)))
+	HeaderInfo::from_diff_scaling(Difficulty::from_num(difficulty), sec_pow_scaling)
+}
+
+/// Factor by which the secondary proof of work difficulty will be adjusted
+fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
+	// median of past scaling factors, scaling is 1 if none found
+	let mut scalings = diff_data
+		.iter()
+		.map(|n| n.secondary_scaling)
+		.collect::<Vec<_>>();
+	if scalings.len() == 0 {
+		return 1;
+	}
+	scalings.sort();
+	let scaling_median = scalings[scalings.len() / 2] as u64;
+	let secondary_count = diff_data.iter().filter(|n| n.is_secondary).count() as u64;
+
+	// what's the ideal ratio at the current height
+	let ratio = secondary_pow_ratio(height);
+
+	// adjust the past median based on ideal ratio vs actual ratio
+	let scaling = scaling_median * secondary_count * 100 / ratio / diff_data.len() as u64;
+	if scaling == 0 {
+		1
+	} else {
+		scaling as u32
+	}
+}
+
+/// Median timestamp within the time window starting at `from` with the
+/// provided `length`.
+fn time_window_median(diff_data: &Vec<HeaderInfo>, from: usize, length: usize) -> u64 {
+	let mut window_latest: Vec<u64> = diff_data
+		.iter()
+		.skip(from)
+		.take(length)
+		.map(|n| n.timestamp)
+		.collect();
+	// pick median
+	window_latest.sort();
+	window_latest[MEDIAN_TIME_INDEX as usize]
 }
 
 /// Consensus rule that collections of items are sorted lexicographically.
@@ -252,6 +338,3 @@ pub trait VerifySortOrder<T> {
 	/// Verify a collection of items is sorted as required.
 	fn verify_sort_order(&self) -> Result<(), Error>;
 }
-
-/// Height for the v2 headers hard fork, with extended proof of work in header
-pub const HEADER_V2_HARD_FORK: u64 = 95_000;

@@ -72,13 +72,13 @@ fn test_coinbase_maturity() {
 	let mut block = core::core::Block::new(&prev, vec![], Difficulty::one(), reward).unwrap();
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
-	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
 
 	chain.set_txhashset_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
 		&mut block.header,
-		difficulty,
+		next_header_info.difficulty,
 		global::proofsize(),
 		global::min_sizeshift(),
 	).unwrap();
@@ -119,7 +119,7 @@ fn test_coinbase_maturity() {
 	let mut block = core::core::Block::new(&prev, txs, Difficulty::one(), reward).unwrap();
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
-	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
 
 	chain.set_txhashset_roots(&mut block, false).unwrap();
 
@@ -135,7 +135,7 @@ fn test_coinbase_maturity() {
 
 	pow::pow_size(
 		&mut block.header,
-		difficulty,
+		next_header_info.difficulty,
 		global::proofsize(),
 		global::min_sizeshift(),
 	).unwrap();
@@ -152,13 +152,13 @@ fn test_coinbase_maturity() {
 		let mut block = core::core::Block::new(&prev, vec![], Difficulty::one(), reward).unwrap();
 		block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
-		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
 
 		chain.set_txhashset_roots(&mut block, false).unwrap();
 
 		pow::pow_size(
 			&mut block.header,
-			difficulty,
+			next_header_info.difficulty,
 			global::proofsize(),
 			global::min_sizeshift(),
 		).unwrap();
@@ -179,13 +179,13 @@ fn test_coinbase_maturity() {
 
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 
-	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
 
 	chain.set_txhashset_roots(&mut block, false).unwrap();
 
 	pow::pow_size(
 		&mut block.header,
-		difficulty,
+		next_header_info.difficulty,
 		global::proofsize(),
 		global::min_sizeshift(),
 	).unwrap();

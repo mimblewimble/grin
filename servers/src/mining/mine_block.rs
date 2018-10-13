@@ -106,7 +106,7 @@ fn build_block(
 
 	// Determine the difficulty our block should be at.
 	// Note: do not keep the difficulty_iter in scope (it has an active batch).
-	let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+	let difficulty = consensus::next_difficulty(1, chain.difficulty_iter());
 
 	// extract current transaction from the pool
 	// TODO - we have a lot of unwrap() going on in this fn...
@@ -126,13 +126,14 @@ fn build_block(
 	};
 
 	let (output, kernel, block_fees) = get_coinbase(wallet_listener_url, block_fees)?;
-	let mut b = core::Block::with_reward(&head, txs, output, kernel, difficulty.clone())?;
+	let mut b = core::Block::with_reward(&head, txs, output, kernel, difficulty.difficulty)?;
 
 	// making sure we're not spending time mining a useless block
 	b.validate(&head.total_kernel_offset, verifier_cache)?;
 
 	b.header.pow.nonce = thread_rng().gen();
-	b.header.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_sec, 0), Utc);;
+	b.header.pow.scaling_difficulty = difficulty.secondary_scaling;
+	b.header.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_sec, 0), Utc);
 
 	let b_difficulty = (b.header.total_difficulty() - head.total_difficulty()).to_num();
 	debug!(

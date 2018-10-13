@@ -30,7 +30,6 @@ use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStat
 use common::types::{Error, ServerConfig, StratumServerConfig, SyncState};
 use core::core::hash::Hashed;
 use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
-use core::pow::Difficulty;
 use core::{consensus, genesis, global, pow};
 use grin::{dandelion_monitor, seed, sync};
 use mining::stratumserver;
@@ -397,14 +396,14 @@ impl Server {
 		// code clean. This may be handy for testing but not really needed
 		// for release
 		let diff_stats = {
-			let last_blocks: Vec<Result<(u64, Difficulty), consensus::TargetError>> =
+			let last_blocks: Vec<consensus::HeaderInfo> =
 				global::difficulty_data_to_vector(self.chain.difficulty_iter())
 					.into_iter()
 					.skip(consensus::MEDIAN_TIME_WINDOW as usize)
 					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
 					.collect();
 
-			let mut last_time = last_blocks[0].clone().unwrap().0;
+			let mut last_time = last_blocks[0].timestamp;
 			let tip_height = self.chain.head().unwrap().height as i64;
 			let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
 
@@ -414,15 +413,14 @@ impl Server {
 				.iter()
 				.skip(1)
 				.map(|n| {
-					let (time, diff) = n.clone().unwrap();
-					let dur = time - last_time;
+					let dur = n.timestamp - last_time;
 					let height = earliest_block_height + i + 1;
 					i += 1;
-					last_time = time;
+					last_time = n.timestamp;
 					DiffBlock {
 						block_number: height,
-						difficulty: diff.to_num(),
-						time: time,
+						difficulty: n.difficulty.to_num(),
+						time: n.timestamp,
 						duration: dur,
 					}
 				}).collect();

@@ -84,7 +84,7 @@ impl Difficulty {
 	/// Computes the difficulty from a hash. Divides the maximum target by the
 	/// provided hash and applies the Cuckoo sizeshift adjustment factor (see
 	/// https://lists.launchpad.net/mimblewimble/msg00494.html).
-	pub fn from_proof_adjusted(proof: &Proof) -> Difficulty {
+	fn from_proof_adjusted(proof: &Proof) -> Difficulty {
 		// Adjust the difficulty based on a 2^(N-M)*(N-1) factor, with M being
 		// the minimum sizeshift and N the provided sizeshift
 		let shift = proof.cuckoo_sizeshift;
@@ -96,9 +96,9 @@ impl Difficulty {
 	/// Same as `from_proof_adjusted` but instead of an adjustment based on
 	/// cycle size, scales based on a provided factor. Used by dual PoW system
 	/// to scale one PoW against the other.
-	pub fn from_proof_scaled(proof: &Proof, scaling: u64) -> Difficulty {
+	fn from_proof_scaled(proof: &Proof, scaling: u32) -> Difficulty {
 		// Scaling between 2 proof of work algos
-		Difficulty::from_num(proof.raw_difficulty() * scaling)
+		Difficulty::from_num(proof.raw_difficulty() * scaling as u64)
 	}
 
 	/// Converts the difficulty into a u64
@@ -219,7 +219,7 @@ pub struct ProofOfWork {
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
 	/// Difficulty scaling factor between the different proofs of work
-	pub scaling_difficulty: u64,
+	pub scaling_difficulty: u32,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Proof of work data.
@@ -240,13 +240,9 @@ impl Default for ProofOfWork {
 
 impl ProofOfWork {
 	/// Read implementation, can't define as trait impl as we need a version
-	pub fn read(ver: u16, reader: &mut Reader) -> Result<ProofOfWork, ser::Error> {
-		let (total_difficulty, scaling_difficulty) = if ver == 1 {
-			// read earlier in the header on older versions
-			(Difficulty::one(), 1)
-		} else {
-			(Difficulty::read(reader)?, reader.read_u64()?)
-		};
+	pub fn read(_ver: u16, reader: &mut Reader) -> Result<ProofOfWork, ser::Error> {
+		let total_difficulty = Difficulty::read(reader)?;
+		let scaling_difficulty = reader.read_u32()?;
 		let nonce = reader.read_u64()?;
 		let proof = Proof::read(reader)?;
 		Ok(ProofOfWork {
@@ -269,14 +265,12 @@ impl ProofOfWork {
 	}
 
 	/// Write the pre-hash portion of the header
-	pub fn write_pre_pow<W: Writer>(&self, ver: u16, writer: &mut W) -> Result<(), ser::Error> {
-		if ver > 1 {
-			ser_multiwrite!(
-				writer,
-				[write_u64, self.total_difficulty.to_num()],
-				[write_u64, self.scaling_difficulty]
-			);
-		}
+	pub fn write_pre_pow<W: Writer>(&self, _ver: u16, writer: &mut W) -> Result<(), ser::Error> {
+		ser_multiwrite!(
+			writer,
+			[write_u64, self.total_difficulty.to_num()],
+			[write_u32, self.scaling_difficulty]
+		);
 		Ok(())
 	}
 
@@ -294,6 +288,21 @@ impl ProofOfWork {
 	/// The shift used for the cuckoo cycle size on this proof
 	pub fn cuckoo_sizeshift(&self) -> u8 {
 		self.proof.cuckoo_sizeshift
+	}
+
+	/// Whether this proof of work is for the primary algorithm (as opposed
+	/// to secondary). Only depends on the size shift at this time.
+	pub fn is_primary(&self) -> bool {
+		// 2 conditions are redundant right now but not necessarily in
+		// the future
+		self.proof.cuckoo_sizeshift != SECOND_POW_SIZESHIFT
+			&& self.proof.cuckoo_sizeshift >= global::min_sizeshift()
+	}
+
+	/// Whether this proof of work is for the secondary algorithm (as opposed
+	/// to primary). Only depends on the size shift at this time.
+	pub fn is_secondary(&self) -> bool {
+		self.proof.cuckoo_sizeshift == SECOND_POW_SIZESHIFT
 	}
 }
 

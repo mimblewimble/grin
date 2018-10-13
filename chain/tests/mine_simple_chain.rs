@@ -64,10 +64,12 @@ fn mine_empty_chain() {
 
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
-		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
 		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 		let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
-		let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
+		let mut b =
+			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
+				.unwrap();
 		b.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 		chain.set_txhashset_roots(&mut b, false).unwrap();
@@ -78,7 +80,12 @@ fn mine_empty_chain() {
 			global::min_sizeshift()
 		};
 		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
-		pow::pow_size(&mut b.header, difficulty, global::proofsize(), sizeshift).unwrap();
+		pow::pow_size(
+			&mut b.header,
+			next_header_info.difficulty,
+			global::proofsize(),
+			sizeshift,
+		).unwrap();
 		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
 
 		let bhash = b.hash();
@@ -379,11 +386,13 @@ fn output_header_mappings() {
 
 	for n in 1..15 {
 		let prev = chain.head_header().unwrap();
-		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
+		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
 		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 		let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
 		reward_outputs.push(reward.0.clone());
-		let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
+		let mut b =
+			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
+				.unwrap();
 		b.header.timestamp = prev.timestamp + Duration::seconds(60);
 
 		chain.set_txhashset_roots(&mut b, false).unwrap();
@@ -394,7 +403,12 @@ fn output_header_mappings() {
 			global::min_sizeshift()
 		};
 		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
-		pow::pow_size(&mut b.header, difficulty, global::proofsize(), sizeshift).unwrap();
+		pow::pow_size(
+			&mut b.header,
+			next_header_info.difficulty,
+			global::proofsize(),
+			sizeshift,
+		).unwrap();
 		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
 
 		chain.process_block(b, chain::Options::MINE).unwrap();
@@ -506,18 +520,17 @@ fn actual_diff_iter_output() {
 	let iter = chain.difficulty_iter();
 	let mut last_time = 0;
 	let mut first = true;
-	for i in iter.into_iter() {
-		let elem = i.unwrap();
+	for elem in iter.into_iter() {
 		if first {
-			last_time = elem.0;
+			last_time = elem.timestamp;
 			first = false;
 		}
 		println!(
 			"next_difficulty time: {}, diff: {}, duration: {} ",
-			elem.0,
-			elem.1.to_num(),
-			last_time - elem.0
+			elem.timestamp,
+			elem.difficulty.to_num(),
+			last_time - elem.timestamp
 		);
-		last_time = elem.0;
+		last_time = elem.timestamp;
 	}
 }

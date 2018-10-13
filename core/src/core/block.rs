@@ -139,7 +139,7 @@ pub struct BlockHeader {
 }
 
 /// Serialized size of fixed part of a BlockHeader, i.e. without pow
-fn fixed_size_of_serialized_header(version: u16) -> usize {
+fn fixed_size_of_serialized_header(_version: u16) -> usize {
 	let mut size: usize = 0;
 	size += mem::size_of::<u16>(); // version
 	size += mem::size_of::<u64>(); // height
@@ -152,9 +152,7 @@ fn fixed_size_of_serialized_header(version: u16) -> usize {
 	size += mem::size_of::<u64>(); // output_mmr_size
 	size += mem::size_of::<u64>(); // kernel_mmr_size
 	size += mem::size_of::<Difficulty>(); // total_difficulty
-	if version >= 2 {
-		size += mem::size_of::<u64>(); // scaling_difficulty
-	}
+	size += mem::size_of::<u32>(); // scaling_difficulty
 	size += mem::size_of::<u64>(); // nonce
 	size
 }
@@ -208,19 +206,12 @@ impl Readable for BlockHeader {
 		let (version, height) = ser_multiread!(reader, read_u16, read_u64);
 		let previous = Hash::read(reader)?;
 		let timestamp = reader.read_i64()?;
-		let mut total_difficulty = None;
-		if version == 1 {
-			total_difficulty = Some(Difficulty::read(reader)?);
-		}
 		let output_root = Hash::read(reader)?;
 		let range_proof_root = Hash::read(reader)?;
 		let kernel_root = Hash::read(reader)?;
 		let total_kernel_offset = BlindingFactor::read(reader)?;
 		let (output_mmr_size, kernel_mmr_size) = ser_multiread!(reader, read_u64, read_u64);
-		let mut pow = ProofOfWork::read(version, reader)?;
-		if version == 1 {
-			pow.total_difficulty = total_difficulty.unwrap();
-		}
+		let pow = ProofOfWork::read(version, reader)?;
 
 		if timestamp > MAX_DATE.and_hms(0, 0, 0).timestamp()
 			|| timestamp < MIN_DATE.and_hms(0, 0, 0).timestamp()
@@ -254,10 +245,6 @@ impl BlockHeader {
 			[write_fixed_bytes, &self.previous],
 			[write_i64, self.timestamp.timestamp()]
 		);
-		if self.version == 1 {
-			// written as part of the ProofOfWork in later versions
-			writer.write_u64(self.pow.total_difficulty.to_num())?;
-		}
 		ser_multiwrite!(
 			writer,
 			[write_fixed_bytes, &self.output_root],
@@ -501,18 +488,11 @@ impl Block {
 		let now = Utc::now().timestamp();
 		let timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now, 0), Utc);
 
-		let version = if prev.height + 1 < consensus::HEADER_V2_HARD_FORK {
-			1
-		} else {
-			2
-		};
-
 		// Now build the block with all the above information.
 		// Note: We have not validated the block here.
 		// Caller must validate the block as necessary.
 		Block {
 			header: BlockHeader {
-				version,
 				height: prev.height + 1,
 				timestamp,
 				previous: prev.hash(),

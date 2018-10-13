@@ -180,9 +180,9 @@ where
 			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper"),
 		)?;
 
-		let tx_bin = util::from_hex(wrapper.tx_hex).context(libwallet::ErrorKind::ClientCallback(
-			"Error parsing TxWrapper: tx_bin",
-		))?;
+		let tx_bin = util::from_hex(wrapper.tx_hex).context(
+			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper: tx_bin"),
+		)?;
 
 		let tx: Transaction = ser::deserialize(&mut &tx_bin[..]).context(
 			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper: tx"),

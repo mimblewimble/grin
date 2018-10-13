@@ -459,8 +459,7 @@ fn simple_block() {
 		&key_id,
 	);
 
-	b.validate(&BlindingFactor::zero(), vc.clone())
-		.unwrap();
+	b.validate(&BlindingFactor::zero(), vc.clone()).unwrap();
 }
 
 #[test]
@@ -488,8 +487,7 @@ fn test_block_with_timelocked_tx() {
 	let previous_header = BlockHeader::default();
 
 	let b = new_block(vec![&tx1], &keychain, &previous_header, &key_id3.clone());
-	b.validate(&BlindingFactor::zero(), vc.clone())
-		.unwrap();
+	b.validate(&BlindingFactor::zero(), vc.clone()).unwrap();
 
 	// now try adding a timelocked tx where lock height is greater than current
 	// block height

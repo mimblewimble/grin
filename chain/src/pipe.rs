@@ -36,8 +36,6 @@ use txhashset;
 use types::{Options, Tip};
 use util::LOGGER;
 
-use failure::ResultExt;
-
 /// Contextual information required to process a new block and either reject or
 /// accept it.
 pub struct BlockContext<'a> {
@@ -364,16 +362,10 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	if !ctx.opts.contains(Options::SKIP_POW) {
+		if !header.pow.is_primary() && !header.pow.is_secondary() {
+			return Err(ErrorKind::InvalidSizeshift.into());
+		}
 		let shift = header.pow.cuckoo_sizeshift();
-		// size shift can either be larger than the minimum on the primary PoW
-		// or equal to the seconday PoW size shift
-		if shift != consensus::SECOND_POW_SIZESHIFT && global::min_sizeshift() > shift {
-			return Err(ErrorKind::LowSizeshift.into());
-		}
-		// primary PoW must have a scaling factor of 1
-		if shift != consensus::SECOND_POW_SIZESHIFT && header.pow.scaling_difficulty != 1 {
-			return Err(ErrorKind::InvalidScaling.into());
-		}
 		if !(ctx.pow_verifier)(header, shift).is_ok() {
 			error!(
 				LOGGER,
@@ -435,16 +427,19 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		// (during testnet1 we use _block_ difficulty here)
 		let child_batch = ctx.batch.child()?;
 		let diff_iter = store::DifficultyIter::from_batch(header.previous, child_batch);
-		let network_difficulty = consensus::next_difficulty(diff_iter)
-			.context(ErrorKind::Other("network difficulty".to_owned()))?;
-		if target_difficulty != network_difficulty.clone() {
-			error!(
+		let next_header_info = consensus::next_difficulty(header.height, diff_iter);
+		if target_difficulty != next_header_info.difficulty {
+			info!(
 				LOGGER,
 				"validate_header: header target difficulty {} != {}",
 				target_difficulty.to_num(),
-				network_difficulty.to_num()
+				next_header_info.difficulty.to_num()
 			);
 			return Err(ErrorKind::WrongTotalDifficulty.into());
+		}
+		// check the secondary PoW scaling factor if applicable
+		if header.pow.scaling_difficulty != next_header_info.secondary_scaling {
+			return Err(ErrorKind::InvalidScaling.into());
 		}
 	}
 
@@ -454,10 +449,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 fn validate_block(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	let prev = ctx.batch.get_block_header(&block.header.previous)?;
 	block
-		.validate(
-			&prev.total_kernel_offset,
-			ctx.verifier_cache.clone(),
-		).map_err(|e| ErrorKind::InvalidBlockProof(e))?;
+		.validate(&prev.total_kernel_offset, ctx.verifier_cache.clone())
+		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }
 

@@ -268,7 +268,7 @@ impl MessageHandler for Protocol {
 					let mut tmp_zip = BufWriter::new(File::create(file)?);
 					let total_size = sm_arch.bytes as usize;
 					let mut downloaded_size: usize = 0;
-					let mut request_size = 48_000;
+					let mut request_size = cmp::min(48_000, sm_arch.bytes) as usize;
 					while request_size > 0 {
 						downloaded_size += msg.copy_attachment(request_size, &mut tmp_zip)?;
 						request_size = cmp::min(48_000, total_size - downloaded_size);
@@ -337,23 +337,23 @@ fn headers_header_size(conn: &mut TcpStream, msg_len: u64) -> Result<u64, Error>
 
 	// support size of Cuckoo: from Cuckoo 30 to Cuckoo 36, with version 2
 	// having slightly larger headers
-	let minimum_size = core::serialized_size_of_header(1, global::min_sizeshift());
-	let maximum_size = core::serialized_size_of_header(2, global::min_sizeshift() + 6);
-	if average_header_size < minimum_size as u64 || average_header_size > maximum_size as u64 {
+	let min_size = core::serialized_size_of_header(1, global::min_sizeshift());
+	let max_size = min_size + 6;
+	if average_header_size < min_size as u64 || average_header_size > max_size as u64 {
 		debug!(
 			LOGGER,
 			"headers_header_size - size of Vec: {}, average_header_size: {}, min: {}, max: {}",
 			total_headers,
 			average_header_size,
-			minimum_size,
-			maximum_size,
+			min_size,
+			max_size,
 		);
 		return Err(Error::Connection(io::Error::new(
 			io::ErrorKind::InvalidData,
 			"headers_header_size",
 		)));
 	}
-	return Ok(maximum_size as u64);
+	return Ok(max_size as u64);
 }
 
 /// Read the Headers streaming body from the underlying connection
