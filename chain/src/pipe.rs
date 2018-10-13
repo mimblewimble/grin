@@ -454,8 +454,10 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 fn validate_block(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	let prev = ctx.batch.get_block_header(&block.header.previous)?;
 	block
-		.validate(&prev.total_kernel_offset, ctx.verifier_cache.clone())
-		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
+		.validate(
+			&prev.total_kernel_offset,
+			ctx.verifier_cache.clone(),
+		).map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }
 

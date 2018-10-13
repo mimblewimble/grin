@@ -30,7 +30,7 @@ use grin_core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use grin_core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction};
 use grin_core::ser;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
-use util::{secp_static, static_secp_instance};
+use util::static_secp_instance;
 use wallet::libtx::build::{
 	self, initial_tx, input, output, with_excess, with_fee, with_lock_height,
 };
@@ -411,15 +411,13 @@ fn reward_empty_block() {
 	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
-	let zero_commit = secp_static::commit_to_zero_value();
-
 	let previous_header = BlockHeader::default();
 
 	let b = new_block(vec![], &keychain, &previous_header, &key_id);
 
 	b.cut_through()
 		.unwrap()
-		.validate(&BlindingFactor::zero(), &zero_commit, verifier_cache())
+		.validate(&BlindingFactor::zero(), verifier_cache())
 		.unwrap();
 }
 
@@ -430,8 +428,6 @@ fn reward_with_tx_block() {
 
 	let vc = verifier_cache();
 
-	let zero_commit = secp_static::commit_to_zero_value();
-
 	let mut tx1 = tx2i1o();
 	tx1.validate(vc.clone()).unwrap();
 
@@ -441,7 +437,7 @@ fn reward_with_tx_block() {
 	block
 		.cut_through()
 		.unwrap()
-		.validate(&BlindingFactor::zero(), &zero_commit, vc.clone())
+		.validate(&BlindingFactor::zero(), vc.clone())
 		.unwrap();
 }
 
@@ -451,8 +447,6 @@ fn simple_block() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 	let vc = verifier_cache();
-
-	let zero_commit = secp_static::commit_to_zero_value();
 
 	let mut tx1 = tx2i1o();
 	let mut tx2 = tx1i1o();
@@ -465,7 +459,7 @@ fn simple_block() {
 		&key_id,
 	);
 
-	b.validate(&BlindingFactor::zero(), &zero_commit, vc.clone())
+	b.validate(&BlindingFactor::zero(), vc.clone())
 		.unwrap();
 }
 
@@ -478,8 +472,6 @@ fn test_block_with_timelocked_tx() {
 	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let vc = verifier_cache();
-
-	let zero_commit = secp_static::commit_to_zero_value();
 
 	// first check we can add a timelocked tx where lock height matches current
 	// block height and that the resulting block is valid
@@ -496,7 +488,7 @@ fn test_block_with_timelocked_tx() {
 	let previous_header = BlockHeader::default();
 
 	let b = new_block(vec![&tx1], &keychain, &previous_header, &key_id3.clone());
-	b.validate(&BlindingFactor::zero(), &zero_commit, vc.clone())
+	b.validate(&BlindingFactor::zero(), vc.clone())
 		.unwrap();
 
 	// now try adding a timelocked tx where lock height is greater than current
@@ -514,7 +506,7 @@ fn test_block_with_timelocked_tx() {
 	let previous_header = BlockHeader::default();
 	let b = new_block(vec![&tx1], &keychain, &previous_header, &key_id3.clone());
 
-	match b.validate(&BlindingFactor::zero(), &zero_commit, vc.clone()) {
+	match b.validate(&BlindingFactor::zero(), vc.clone()) {
 		Err(KernelLockHeight(height)) => {
 			assert_eq!(height, 2);
 		}
