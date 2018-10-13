@@ -21,6 +21,7 @@ use std::{io, thread};
 
 use lmdb;
 
+use chrono::prelude::{DateTime, Utc};
 use core::core;
 use core::core::hash::Hash;
 use core::pow::Difficulty;
@@ -264,6 +265,15 @@ impl ChainAdapter for DummyAdapter {
 	}
 
 	fn txhashset_write(&self, _h: Hash, _txhashset_data: File, _peer_addr: SocketAddr) -> bool {
+		false
+	}
+
+	fn txhashset_download_update(
+		&self,
+		_start_time: DateTime<Utc>,
+		_downloaded_size: u64,
+		_total_size: u64,
+	) -> bool {
 		false
 	}
 }

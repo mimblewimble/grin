@@ -365,6 +365,14 @@ pub trait ChainAdapter: Sync + Send {
 	/// state data.
 	fn txhashset_receive_ready(&self) -> bool;
 
+	/// Update txhashset downloading progress
+	fn txhashset_download_update(
+		&self,
+		start_time: DateTime<Utc>,
+		downloaded_size: u64,
+		total_size: u64,
+	) -> bool;
+
 	/// Writes a reading view on a txhashset state that's been provided to us.
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
