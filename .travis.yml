@@ -67,7 +67,7 @@ script:
     fi;
 
 before_deploy:
-  - if [[ "TEST_SUITE" == "pool-p2p" ]]; then
+  - if [[ "$TEST_SUITE" == "pool-p2p" ]]; then
       cargo clean && cargo build --release && ./.auto-release.sh;
     fi
 
