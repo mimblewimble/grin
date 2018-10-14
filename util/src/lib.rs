@@ -40,8 +40,7 @@ extern crate walkdir;
 extern crate zip as zip_rs;
 
 // Re-export so only has to be included once
-pub extern crate secp256k1zkp as secp_;
-pub use secp_ as secp;
+pub extern crate secp256k1zkp as secp;
 
 // Logging related
 pub mod logger;
