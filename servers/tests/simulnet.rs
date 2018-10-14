@@ -26,20 +26,20 @@ extern crate slog;
 mod framework;
 
 use std::default::Default;
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 use std::{thread, time};
 
 use core::core::hash::Hashed;
 use core::global::{self, ChainTypes};
 
+use util::LOGGER;
 use wallet::controller;
 use wallet::libtx::slate::Slate;
 use wallet::libwallet::types::{WalletBackend, WalletInst};
 use wallet::lmdb_wallet::LMDBBackend;
 use wallet::HTTPWalletClient;
 use wallet::WalletConfig;
-use util::LOGGER;
 
 use framework::{
 	config, stop_all_servers, LocalServerContainerConfig, LocalServerContainerPool,
@@ -114,7 +114,10 @@ fn simulate_seeding() {
 
 	// point next servers at first seed
 	server_config.is_seeding = false;
-	server_config.seed_addr = format!("{}:{}", server_config.base_addr, server_config.p2p_server_port);
+	server_config.seed_addr = format!(
+		"{}:{}",
+		server_config.base_addr, server_config.p2p_server_port
+	);
 
 	for _ in 0..4 {
 		pool.create_server(&mut server_config);
@@ -173,7 +176,10 @@ fn simulate_parallel_mining() {
 
 	// point next servers at first seed
 	server_config.is_seeding = false;
-	server_config.seed_addr = format!("{}:{}", server_config.base_addr, server_config.p2p_server_port);
+	server_config.seed_addr = format!(
+		"{}:{}",
+		server_config.base_addr, server_config.p2p_server_port
+	);
 
 	// And create 4 more, then let them run for a while
 	for i in 1..4 {
@@ -236,10 +242,7 @@ fn simulate_block_propagation() {
 		thread::sleep(time::Duration::from_millis(1_000));
 		time_spent += 1;
 		if time_spent >= 30 {
-			info!(
-				LOGGER,
-				"simulate_block_propagation - fail on timeout",
-			);
+			info!(LOGGER, "simulate_block_propagation - fail on timeout",);
 			break;
 		}
 
@@ -280,7 +283,12 @@ fn simulate_full_sync() {
 
 	// Get the current header from s1.
 	let s1_header = s1.chain.head_header().unwrap();
-	info!(LOGGER, "simulate_full_sync - s1 header head: {} at {}", s1_header.hash(), s1_header.height);
+	info!(
+		LOGGER,
+		"simulate_full_sync - s1 header head: {} at {}",
+		s1_header.hash(),
+		s1_header.height
+	);
 
 	// Wait for s2 to sync up to and including the header from s1.
 	let mut time_spent = 0;

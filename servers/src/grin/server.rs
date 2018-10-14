@@ -335,10 +335,7 @@ impl Server {
 	/// internal miner, and should only be used for automated testing. Burns
 	/// reward if wallet_listener_url is 'None'
 	pub fn start_test_miner(&self, wallet_listener_url: Option<String>, stop: Arc<AtomicBool>) {
-		info!(
-			LOGGER,
-			"start_test_miner - start",
-		);
+		info!(LOGGER, "start_test_miner - start",);
 		let sync_state = self.sync_state.clone();
 		let config_wallet_url = match wallet_listener_url.clone() {
 			Some(u) => u,
@@ -469,9 +466,6 @@ impl Server {
 	/// Stops the test miner without stopping the p2p layer
 	pub fn stop_test_miner(&self, stop: Arc<AtomicBool>) {
 		stop.store(true, Ordering::Relaxed);
-		info!(
-			LOGGER,
-			"stop_test_miner - stop",
-		);
+		info!(LOGGER, "stop_test_miner - stop",);
 	}
 }

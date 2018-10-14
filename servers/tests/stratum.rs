@@ -33,9 +33,9 @@ use std::io::prelude::{BufRead, Write};
 use std::net::TcpStream;
 
 use std::process;
-use std::{thread, time};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+use std::{thread, time};
 
 use core::global::{self, ChainTypes};
 use util::LOGGER;
