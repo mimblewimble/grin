@@ -16,7 +16,7 @@
 //! initialization overhead
 
 use rand::thread_rng;
-use secp_ as secp;
+use secp;
 use std::sync::{Arc, Mutex};
 
 lazy_static! {
