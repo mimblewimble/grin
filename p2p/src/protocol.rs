@@ -268,7 +268,7 @@ impl MessageHandler for Protocol {
 					let mut tmp_zip = BufWriter::new(File::create(file)?);
 					let total_size = sm_arch.bytes as usize;
 					let mut downloaded_size: usize = 0;
-					let mut request_size = cmp::min(48_000, sm_arch.bytes) as usize;
+					let mut request_size = cmp::min(48_000, total_size);
 					while request_size > 0 {
 						downloaded_size += msg.copy_attachment(request_size, &mut tmp_zip)?;
 						request_size = cmp::min(48_000, total_size - downloaded_size);

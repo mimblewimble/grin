@@ -135,7 +135,7 @@ impl Miner {
 		// nothing has changed. We only want to create a new key_id for each new block.
 		let mut key_id = None;
 
-		loop {
+		while !self.stop.load(Ordering::Relaxed) {
 			trace!(LOGGER, "in miner loop. key_id: {:?}", key_id);
 
 			// get the latest chain state and build a block on top of it
@@ -183,10 +183,11 @@ impl Miner {
 				);
 				key_id = block_fees.key_id();
 			}
-
-			if self.stop.load(Ordering::Relaxed) {
-				break;
-			}
 		}
+
+		info!(
+			LOGGER,
+			"(Server ID: {}) test miner exit.", self.debug_output_id
+		);
 	}
 }
