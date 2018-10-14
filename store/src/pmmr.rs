@@ -451,19 +451,12 @@ where
 	}
 }
 
-pub struct DBPMMRBackend<T>
-where
-	T: PMMRable,
-{
+pub struct DBPMMRBackend {
 	data_dir: String,
 	hash_file: AppendOnlyFile,
-	_marker: marker::PhantomData<T>,
 }
 
-impl<T> DBBackend<T> for DBPMMRBackend<T>
-where
-	T: PMMRable,
-{
+impl DBBackend for DBPMMRBackend {
 	fn append(&mut self, position: u64, hashes: Vec<Hash>) -> Result<(), String> {
 		for h in hashes {
 			self.hash_file.append(&mut ser::ser_vec(&h).unwrap());
@@ -472,8 +465,7 @@ where
 	}
 
 	fn rewind(&mut self, position: u64) -> Result<(), String> {
-		let record_len = 32 as u64;
-		let file_pos = position * record_len;
+		let file_pos = position * Hash::SIZE as u64;
 		self.hash_file.rewind(file_pos);
 		Ok(())
 	}
@@ -484,9 +476,8 @@ where
 		let pos = position - 1;
 
 		// Must be on disk, doing a read at the correct position
-		let hash_record_len = 32;
-		let file_offset = (pos as usize) * hash_record_len;
-		let data = self.hash_file.read(file_offset, hash_record_len);
+		let file_offset = (pos as usize) * Hash::SIZE;
+		let data = self.hash_file.read(file_offset, Hash::SIZE);
 		match ser::deserialize(&mut &data[..]) {
 			Ok(h) => Some(h),
 			Err(e) => {
@@ -500,25 +491,20 @@ where
 	}
 }
 
-impl<T> DBPMMRBackend<T>
-where
-	T: PMMRable + ::std::fmt::Debug,
-{
+impl DBPMMRBackend {
 	/// Instantiates a new PMMR backend.
 	/// Use the provided dir to store its files.
-	pub fn new(data_dir: String) -> io::Result<DBPMMRBackend<T>> {
+	pub fn new(data_dir: String) -> io::Result<DBPMMRBackend> {
 		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		Ok(DBPMMRBackend {
 			data_dir,
 			hash_file,
-			_marker: marker::PhantomData,
 		})
 	}
 
 	pub fn unpruned_size(&self) -> io::Result<u64> {
-		let record_len = 32;
 		let sz = self.hash_file.size()?;
-		Ok(sz / record_len)
+		Ok(sz / Hash::SIZE as u64)
 	}
 
 	pub fn discard(&mut self) {

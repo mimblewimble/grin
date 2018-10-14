@@ -24,7 +24,7 @@ use ser::{PMMRIndexHashable, PMMRable};
 pub struct DBPMMR<'a, T, B>
 where
 	T: PMMRable,
-	B: 'a + DBBackend<T>,
+	B: 'a + DBBackend,
 {
 	/// The last position in the PMMR
 	last_pos: u64,
@@ -37,7 +37,7 @@ where
 impl<'a, T, B> DBPMMR<'a, T, B>
 where
 	T: PMMRable + ::std::fmt::Debug,
-	B: 'a + DBBackend<T>,
+	B: 'a + DBBackend,
 {
 	/// Build a new db backed MMR.
 	pub fn new(backend: &'a mut B) -> DBPMMR<T, B> {
