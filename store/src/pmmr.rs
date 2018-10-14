@@ -18,7 +18,7 @@ use std::{fs, io, marker};
 use croaring::Bitmap;
 
 use core::core::hash::{Hash, Hashed};
-use core::core::pmmr::{self, family, Backend, DBBackend};
+use core::core::pmmr::{self, family, Backend, HashOnlyBackend};
 use core::core::BlockHeader;
 use core::ser::{self, PMMRable};
 use leaf_set::LeafSet;
@@ -451,12 +451,12 @@ where
 	}
 }
 
-pub struct DBPMMRBackend {
+pub struct HashOnlyMMRBackend {
 	data_dir: String,
 	hash_file: HashFile,
 }
 
-impl DBBackend for DBPMMRBackend {
+impl HashOnlyBackend for HashOnlyMMRBackend {
 	fn append(&mut self, position: u64, hashes: Vec<Hash>) -> Result<(), String> {
 		for ref h in hashes {
 			self.hash_file.append(h);
@@ -474,12 +474,12 @@ impl DBBackend for DBPMMRBackend {
 	}
 }
 
-impl DBPMMRBackend {
+impl HashOnlyMMRBackend {
 	/// Instantiates a new PMMR backend.
 	/// Use the provided dir to store its files.
-	pub fn new(data_dir: String) -> io::Result<DBPMMRBackend> {
+	pub fn new(data_dir: String) -> io::Result<HashOnlyMMRBackend> {
 		let hash_file = HashFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
-		Ok(DBPMMRBackend {
+		Ok(HashOnlyMMRBackend {
 			data_dir,
 			hash_file,
 		})

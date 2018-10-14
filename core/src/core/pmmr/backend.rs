@@ -18,7 +18,7 @@ use core::hash::Hash;
 use core::BlockHeader;
 use ser::PMMRable;
 
-pub trait DBBackend {
+pub trait HashOnlyBackend {
 	fn append(&mut self, position: u64, data: Vec<Hash>) -> Result<(), String>;
 
 	fn rewind(&mut self, position: u64) -> Result<(), String>;

@@ -35,7 +35,7 @@ use core::ser::{PMMRIndexHashable, PMMRable};
 
 use error::{Error, ErrorKind};
 use grin_store;
-use grin_store::pmmr::{DBPMMRBackend, PMMRBackend, PMMR_FILES};
+use grin_store::pmmr::{HashOnlyMMRBackend, PMMRBackend, PMMR_FILES};
 use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
 use txhashset::{RewindableKernelView, UTXOView};
@@ -54,18 +54,18 @@ const KERNEL_SUBDIR: &'static str = "kernel";
 
 const TXHASHSET_ZIP: &'static str = "txhashset_snapshot.zip";
 
-struct DBPMMRHandle {
-	backend: DBPMMRBackend,
+struct HashOnlyMMRHandle {
+	backend: HashOnlyMMRBackend,
 	last_pos: u64,
 }
 
-impl DBPMMRHandle {
-	fn new(root_dir: &str, sub_dir: &str, file_name: &str) -> Result<DBPMMRHandle, Error> {
+impl HashOnlyMMRHandle {
+	fn new(root_dir: &str, sub_dir: &str, file_name: &str) -> Result<HashOnlyMMRHandle, Error> {
 		let path = Path::new(root_dir).join(sub_dir).join(file_name);
 		fs::create_dir_all(path.clone())?;
-		let backend = DBPMMRBackend::new(path.to_str().unwrap().to_string())?;
+		let backend = HashOnlyMMRBackend::new(path.to_str().unwrap().to_string())?;
 		let last_pos = backend.unpruned_size()?;
-		Ok(DBPMMRHandle { backend, last_pos })
+		Ok(HashOnlyMMRHandle { backend, last_pos })
 	}
 }
 
@@ -112,7 +112,7 @@ pub struct TxHashSet {
 	/// readonly_extension.
 	/// It can also be rewound and applied separately via a header_extension.
 	/// Note: the header MMR is backed by the database maintains just the hash file.
-	header_pmmr_h: DBPMMRHandle,
+	header_pmmr_h: HashOnlyMMRHandle,
 
 	/// Header MMR to support exploratory sync_head.
 	/// The header_head and sync_head chains can diverge so we need to maintain
@@ -121,7 +121,7 @@ pub struct TxHashSet {
 	/// Note: this is rewound and applied separately to the other MMRs
 	/// via a "sync_extension".
 	/// Note: the sync MMR is backed by the database and maintains just the hash file.
-	sync_pmmr_h: DBPMMRHandle,
+	sync_pmmr_h: HashOnlyMMRHandle,
 
 	output_pmmr_h: PMMRHandle<OutputIdentifier>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
@@ -139,8 +139,8 @@ impl TxHashSet {
 		header: Option<&BlockHeader>,
 	) -> Result<TxHashSet, Error> {
 		Ok(TxHashSet {
-			header_pmmr_h: DBPMMRHandle::new(&root_dir, HEADERHASHSET_SUBDIR, HEADER_HEAD_SUBDIR)?,
-			sync_pmmr_h: DBPMMRHandle::new(&root_dir, HEADERHASHSET_SUBDIR, SYNC_HEAD_SUBDIR)?,
+			header_pmmr_h: HashOnlyMMRHandle::new(&root_dir, HEADERHASHSET_SUBDIR, HEADER_HEAD_SUBDIR)?,
+			sync_pmmr_h: HashOnlyMMRHandle::new(&root_dir, HEADERHASHSET_SUBDIR, SYNC_HEAD_SUBDIR)?,
 			output_pmmr_h: PMMRHandle::new(
 				&root_dir,
 				TXHASHSET_SUBDIR,
@@ -610,7 +610,7 @@ where
 pub struct HeaderExtension<'a> {
 	header: BlockHeader,
 
-	pmmr: DBPMMR<'a, BlockHeader, DBPMMRBackend>,
+	pmmr: DBPMMR<'a, BlockHeader, HashOnlyMMRBackend>,
 
 	/// Rollback flag.
 	rollback: bool,
@@ -623,7 +623,7 @@ pub struct HeaderExtension<'a> {
 
 impl<'a> HeaderExtension<'a> {
 	fn new(
-		pmmr: DBPMMR<'a, BlockHeader, DBPMMRBackend>,
+		pmmr: DBPMMR<'a, BlockHeader, HashOnlyMMRBackend>,
 		batch: &'a Batch,
 		header: BlockHeader,
 	) -> HeaderExtension<'a> {
@@ -727,7 +727,7 @@ impl<'a> HeaderExtension<'a> {
 pub struct Extension<'a> {
 	header: BlockHeader,
 
-	header_pmmr: DBPMMR<'a, BlockHeader, DBPMMRBackend>,
+	header_pmmr: DBPMMR<'a, BlockHeader, HashOnlyMMRBackend>,
 	output_pmmr: PMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,

@@ -17,14 +17,14 @@
 use std::marker;
 
 use core::hash::Hash;
-use core::pmmr::{bintree_postorder_height, is_leaf, peak_map_height, peaks, DBBackend};
+use core::pmmr::{bintree_postorder_height, is_leaf, peak_map_height, peaks, HashOnlyBackend};
 use ser::{PMMRIndexHashable, PMMRable};
 
 /// Database backed MMR.
 pub struct DBPMMR<'a, T, B>
 where
 	T: PMMRable,
-	B: 'a + DBBackend,
+	B: 'a + HashOnlyBackend,
 {
 	/// The last position in the PMMR
 	last_pos: u64,
@@ -37,7 +37,7 @@ where
 impl<'a, T, B> DBPMMR<'a, T, B>
 where
 	T: PMMRable + ::std::fmt::Debug,
-	B: 'a + DBBackend,
+	B: 'a + HashOnlyBackend,
 {
 	/// Build a new db backed MMR.
 	pub fn new(backend: &'a mut B) -> DBPMMR<T, B> {
