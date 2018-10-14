@@ -23,7 +23,7 @@ use core::core::BlockHeader;
 use core::ser::{self, PMMRable};
 use leaf_set::LeafSet;
 use prune_list::PruneList;
-use types::{prune_noop, AppendOnlyFile};
+use types::{prune_noop, AppendOnlyFile, HashFile};
 use util::LOGGER;
 
 const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
@@ -453,41 +453,24 @@ where
 
 pub struct DBPMMRBackend {
 	data_dir: String,
-	hash_file: AppendOnlyFile,
+	hash_file: HashFile,
 }
 
 impl DBBackend for DBPMMRBackend {
 	fn append(&mut self, position: u64, hashes: Vec<Hash>) -> Result<(), String> {
-		for h in hashes {
-			self.hash_file.append(&mut ser::ser_vec(&h).unwrap());
+		for ref h in hashes {
+			self.hash_file.append(h);
 		}
 		Ok(())
 	}
 
 	fn rewind(&mut self, position: u64) -> Result<(), String> {
-		let file_pos = position * Hash::SIZE as u64;
-		self.hash_file.rewind(file_pos);
+		self.hash_file.rewind(position);
 		Ok(())
 	}
 
 	fn get_hash(&self, position: u64) -> Option<Hash> {
-		// Read PMMR
-		// The MMR starts at 1, our binary backend starts at 0
-		let pos = position - 1;
-
-		// Must be on disk, doing a read at the correct position
-		let file_offset = (pos as usize) * Hash::SIZE;
-		let data = self.hash_file.read(file_offset, Hash::SIZE);
-		match ser::deserialize(&mut &data[..]) {
-			Ok(h) => Some(h),
-			Err(e) => {
-				error!(
-					LOGGER,
-					"Corrupted storage, could not read an entry from hash store: {:?}", e
-				);
-				return None;
-			}
-		}
+		self.hash_file.read(position)
 	}
 }
 
@@ -495,7 +478,7 @@ impl DBPMMRBackend {
 	/// Instantiates a new PMMR backend.
 	/// Use the provided dir to store its files.
 	pub fn new(data_dir: String) -> io::Result<DBPMMRBackend> {
-		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
+		let hash_file = HashFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		Ok(DBPMMRBackend {
 			data_dir,
 			hash_file,
