@@ -43,13 +43,11 @@ where
 	fn new(
 		edge_bits: u8,
 		proof_size: usize,
-		easiness_pct: u32,
 		max_sols: u32,
 	) -> Result<Box<Self>, Error> {
 		Ok(Box::new(CuckooContext::<T>::new_impl(
 			edge_bits,
 			proof_size,
-			easiness_pct,
 			max_sols,
 		)?))
 	}
@@ -80,20 +78,20 @@ where
 	pub fn new_impl(
 		edge_bits: u8,
 		proof_size: usize,
-		easiness_pct: u32,
 		max_sols: u32,
 	) -> Result<CuckooContext<T>, Error> {
-		let params = CuckooParams::new(edge_bits, proof_size, easiness_pct, false)?;
-		let num_edges = params.num_edges as usize;
+		let params = CuckooParams::new(edge_bits, proof_size)?;
+		let num_nodes = 2 * params.num_edges as usize;
 		Ok(CuckooContext {
 			params: params,
-			graph: vec![T::zero(); num_edges + 1],
+			graph: vec![T::zero(); num_nodes],
 			_max_sols: max_sols,
 		})
 	}
 
 	fn reset(&mut self) -> Result<(), Error> {
-		self.graph = vec![T::zero(); self.params.num_edges as usize + 1];
+		let num_nodes = 2 * self.params.num_edges as usize;
+		self.graph = vec![T::zero(); num_nodes];
 		Ok(())
 	}
 
@@ -214,7 +212,7 @@ where
 		}
 		let mut n = 0;
 		let mut sol = vec![T::zero(); self.params.proof_size];
-		for nonce in 0..to_usize!(self.params.easiness) {
+		for nonce in 0..self.params.num_edges {
 			let edge = self.new_edge(to_edge!(nonce))?;
 			if cycle.contains(&edge) {
 				sol[n] = to_edge!(nonce);
@@ -233,7 +231,7 @@ where
 	pub fn find_cycles_impl(&mut self) -> Result<Vec<Proof>, Error> {
 		let mut us = [T::zero(); MAXPATHLEN];
 		let mut vs = [T::zero(); MAXPATHLEN];
-		for nonce in 0..to_usize!(self.params.easiness) {
+		for nonce in 0..self.params.num_edges {
 			us[0] = self.new_node(to_edge!(nonce), 0)?;
 			vs[0] = self.new_node(to_edge!(nonce), 1)?;
 			let u = self.graph[to_usize!(us[0])];
@@ -261,16 +259,16 @@ where
 		Err(ErrorKind::NoSolution)?
 	}
 
-	/// Assuming increasing nonces all smaller than easiness, verifies the
+	/// Assuming increasing nonces all smaller than #edges, verifies the
 	/// nonces form a cycle in a Cuckoo graph. Each nonce generates an edge, we
 	/// build the nodes on both side of that edge and count the connections.
 	pub fn verify_impl(&self, proof: &Proof) -> Result<(), Error> {
-		let easiness = to_u64!(self.params.easiness);
+		let num_nonces = self.params.num_edges;
 		let nonces = &proof.nonces;
 		let mut us = vec![T::zero(); proof.proof_size()];
 		let mut vs = vec![T::zero(); proof.proof_size()];
 		for n in 0..proof.proof_size() {
-			if nonces[n] >= easiness || (n != 0 && nonces[n] <= nonces[n - 1]) {
+			if nonces[n] >= num_nonces || (n != 0 && nonces[n] <= nonces[n - 1]) {
 				return Err(ErrorKind::Verification("edge wrong size".to_owned()))?;
 			}
 			us[n] = self.new_node(to_edge!(nonces[n]), 0)?;
@@ -322,25 +320,25 @@ mod test {
 	use super::*;
 
 	static V1: [u64; 42] = [
-		0x3bbd, 0x4e96, 0x1013b, 0x1172b, 0x1371b, 0x13e6a, 0x1aaa6, 0x1b575, 0x1e237, 0x1ee88,
-		0x22f94, 0x24223, 0x25b4f, 0x2e9f3, 0x33b49, 0x34063, 0x3454a, 0x3c081, 0x3d08e, 0x3d863,
-		0x4285a, 0x42f22, 0x43122, 0x4b853, 0x4cd0c, 0x4f280, 0x557d5, 0x562cf, 0x58e59, 0x59a62,
-		0x5b568, 0x644b9, 0x657e9, 0x66337, 0x6821c, 0x7866f, 0x7e14b, 0x7ec7c, 0x7eed7, 0x80643,
-		0x8628c, 0x8949e,
+		0x8702, 0x12003, 0x2043f, 0x24cf8, 0x27631, 0x2beda, 0x325e5, 0x345b4, 0x36f5c, 0x3b3bc,
+		0x4cef6, 0x4dfdf, 0x5036b, 0x5d528, 0x7d76b, 0x80958, 0x81649, 0x8a064, 0x935fe, 0x93c28,
+		0x93fc9, 0x9aec5, 0x9c5c8, 0xa00a7, 0xa7256, 0xaa35e, 0xb9e04, 0xc8835, 0xcda49, 0xd72ea,
+		0xd7f80, 0xdaa3a, 0xdafce, 0xe03fe, 0xe55a2, 0xe6e60, 0xebb9d, 0xf5248, 0xf6a4b, 0xf6d32,
+		0xf7c61, 0xfd9e9
 	];
 	static V2: [u64; 42] = [
-		0x5e3a, 0x8a8b, 0x103d8, 0x1374b, 0x14780, 0x16110, 0x1b571, 0x1c351, 0x1c826, 0x28228,
-		0x2909f, 0x29516, 0x2c1c4, 0x334eb, 0x34cdd, 0x38a2c, 0x3ad23, 0x45ac5, 0x46afe, 0x50f43,
-		0x51ed6, 0x52ddd, 0x54a82, 0x5a46b, 0x5dbdb, 0x60f6f, 0x60fcd, 0x61c78, 0x63899, 0x64dab,
-		0x6affc, 0x6b569, 0x72639, 0x73987, 0x78806, 0x7b98e, 0x7c7d7, 0x7ddd4, 0x7fa88, 0x8277c,
-		0x832d9, 0x8ba6f,
+		0xab0, 0x403c, 0x509c, 0x127c0, 0x1a0b3, 0x1ffe4, 0x26180, 0x2a20a, 0x35559, 0x36dd3,
+		0x3cb20, 0x4992f, 0x55b20, 0x5b507, 0x66e58, 0x6784d, 0x6fda8, 0x7363d, 0x76dd6, 0x7f13b,
+		0x84672, 0x85724, 0x991cf, 0x9a6fe, 0x9b0c5, 0xa5019, 0xa7207, 0xaf32f, 0xc29f3, 0xc39d3,
+		0xc78ed, 0xc9e75, 0xcd0db, 0xcd81e, 0xd02e0, 0xd05c4, 0xd8f99, 0xd9359, 0xdff3b, 0xea623,
+		0xf9100, 0xfc966
 	];
 	static V3: [u64; 42] = [
-		0x308b, 0x9004, 0x91fc, 0x983e, 0x9d67, 0xa293, 0xb4cb, 0xb6c8, 0xccc8, 0xdddc, 0xf04d,
-		0x1372f, 0x16ec9, 0x17b61, 0x17d03, 0x1e3bc, 0x1fb0f, 0x29e6e, 0x2a2ca, 0x2a719, 0x3a078,
-		0x3b7cc, 0x3c71d, 0x40daa, 0x43e17, 0x46adc, 0x4b359, 0x4c3aa, 0x4ce92, 0x4d06e, 0x51140,
-		0x565ac, 0x56b1f, 0x58a8b, 0x5e410, 0x5e607, 0x5ebb5, 0x5f8ae, 0x7aeac, 0x7b902, 0x7d6af,
-		0x7f400,
+		0x14ca, 0x1e80, 0x587c, 0xa2d4, 0x14f6b, 0x1b100, 0x1b74c, 0x2477d, 0x29ba4, 0x33f25,
+		0x4c55f, 0x4d280, 0x50ffa, 0x53900, 0x5cf62, 0x63f66, 0x65623, 0x6fb19, 0x7a19e, 0x82eef,
+		0x83d2d, 0x88015, 0x8e6c5, 0x91086, 0x97429, 0x9aa27, 0xa01b7, 0xa304b, 0xafa06, 0xb1cb3,
+		0xbb9fc, 0xbf345, 0xc0761, 0xc0e78, 0xc5b99, 0xc9f09, 0xcc62c, 0xceb6e, 0xd98ad, 0xeecb3,
+		0xef966, 0xfef9b
 	];
 	// cuckoo28 at 50% edges of letter 'u'
 	static V4: [u64; 42] = [
@@ -395,22 +393,23 @@ mod test {
 	where
 		T: EdgeType,
 	{
-		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 75, 10)?;
-		cuckoo_ctx.set_header_nonce([49].to_vec(), None, true)?;
+		let header = [0; 4].to_vec();
+		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 10)?;
+		cuckoo_ctx.set_header_nonce(header.clone(), Some(39), true)?;
 		let res = cuckoo_ctx.find_cycles()?;
 		let mut proof = Proof::new(V1.to_vec());
 		proof.cuckoo_sizeshift = 20;
 		assert_eq!(proof, res[0]);
 
-		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 70, 10)?;
-		cuckoo_ctx.set_header_nonce([50].to_vec(), None, true)?;
+		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 10)?;
+		cuckoo_ctx.set_header_nonce(header.clone(), Some(56), true)?;
 		let res = cuckoo_ctx.find_cycles()?;
 		let mut proof = Proof::new(V2.to_vec());
 		proof.cuckoo_sizeshift = 20;
 		assert_eq!(proof, res[0]);
 
 		//re-use context
-		cuckoo_ctx.set_header_nonce([51].to_vec(), None, true)?;
+		cuckoo_ctx.set_header_nonce(header, Some(66), true)?;
 		let res = cuckoo_ctx.find_cycles()?;
 		let mut proof = Proof::new(V3.to_vec());
 		proof.cuckoo_sizeshift = 20;
@@ -422,13 +421,14 @@ mod test {
 	where
 		T: EdgeType,
 	{
-		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 75, 10)?;
-		cuckoo_ctx.set_header_nonce([49].to_vec(), None, false)?;
+		let header = [0; 4].to_vec();
+		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 10)?;
+		cuckoo_ctx.set_header_nonce(header.clone(), Some(39), false)?;
 		assert!(cuckoo_ctx.verify(&Proof::new(V1.to_vec().clone())).is_ok());
-		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 70, 10)?;
-		cuckoo_ctx.set_header_nonce([50].to_vec(), None, false)?;
+		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 10)?;
+		cuckoo_ctx.set_header_nonce(header.clone(), Some(56), false)?;
 		assert!(cuckoo_ctx.verify(&Proof::new(V2.to_vec().clone())).is_ok());
-		cuckoo_ctx.set_header_nonce([51].to_vec(), None, false)?;
+		cuckoo_ctx.set_header_nonce(header.clone(), Some(66), false)?;
 		assert!(cuckoo_ctx.verify(&Proof::new(V3.to_vec().clone())).is_ok());
 		Ok(())
 	}
@@ -438,7 +438,7 @@ mod test {
 		T: EdgeType,
 	{
 		// edge checks
-		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 75, 10)?;
+		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 10)?;
 		cuckoo_ctx.set_header_nonce([49].to_vec(), None, false)?;
 		// edge checks
 		assert!(!cuckoo_ctx.verify(&Proof::new(vec![0; 42])).is_ok());
@@ -448,7 +448,7 @@ mod test {
 		assert!(!cuckoo_ctx.verify(&Proof::new(V1.to_vec().clone())).is_ok());
 		let mut test_header = [0; 32];
 		test_header[0] = 24;
-		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 50, 10)?;
+		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 10)?;
 		cuckoo_ctx.set_header_nonce(test_header.to_vec(), None, false)?;
 		assert!(!cuckoo_ctx.verify(&Proof::new(V4.to_vec().clone())).is_ok());
 		Ok(())
@@ -458,10 +458,10 @@ mod test {
 	where
 		T: EdgeType,
 	{
-		for n in 1..5 {
-			let h = [n; 32];
-			let mut cuckoo_ctx = CuckooContext::<T>::new(16, 42, 75, 10)?;
-			cuckoo_ctx.set_header_nonce(h.to_vec(), None, false)?;
+		let h = [0 as u8; 32];
+		for n in [45 as u32, 49,131,143,151].iter() {
+			let mut cuckoo_ctx = CuckooContext::<T>::new(16, 42, 10)?;
+			cuckoo_ctx.set_header_nonce(h.to_vec(), Some(*n), false)?;
 			let res = cuckoo_ctx.find_cycles()?;
 			assert!(cuckoo_ctx.verify(&res[0]).is_ok())
 		}
