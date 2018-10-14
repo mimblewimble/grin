@@ -59,7 +59,7 @@ pub struct Server {
 	/// To be passed around to collect stats and info
 	state_info: ServerStateInfo,
 	/// Stop flag
-	stop: Arc<AtomicBool>,
+	pub stop: Arc<AtomicBool>,
 }
 
 impl Server {
@@ -90,7 +90,7 @@ impl Server {
 
 		if let Some(s) = enable_test_miner {
 			if s {
-				serv.start_test_miner(test_miner_wallet_url);
+				serv.start_test_miner(test_miner_wallet_url, serv.stop.clone());
 			}
 		}
 
@@ -334,7 +334,8 @@ impl Server {
 	/// Start mining for blocks internally on a separate thread. Relies on
 	/// internal miner, and should only be used for automated testing. Burns
 	/// reward if wallet_listener_url is 'None'
-	pub fn start_test_miner(&self, wallet_listener_url: Option<String>) {
+	pub fn start_test_miner(&self, wallet_listener_url: Option<String>, stop: Arc<AtomicBool>) {
+		info!(LOGGER, "start_test_miner - start",);
 		let sync_state = self.sync_state.clone();
 		let config_wallet_url = match wallet_listener_url.clone() {
 			Some(u) => u,
@@ -355,7 +356,7 @@ impl Server {
 			self.chain.clone(),
 			self.tx_pool.clone(),
 			self.verifier_cache.clone(),
-			self.stop.clone(),
+			stop,
 		);
 		miner.set_debug_output_id(format!("Port {}", self.config.p2p_config.port));
 		let _ = thread::Builder::new()
@@ -463,7 +464,8 @@ impl Server {
 	}
 
 	/// Stops the test miner without stopping the p2p layer
-	pub fn stop_test_miner(&self) {
-		self.stop.store(true, Ordering::Relaxed);
+	pub fn stop_test_miner(&self, stop: Arc<AtomicBool>) {
+		stop.store(true, Ordering::Relaxed);
+		info!(LOGGER, "stop_test_miner - stop",);
 	}
 }

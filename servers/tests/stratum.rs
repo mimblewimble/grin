@@ -33,6 +33,8 @@ use std::io::prelude::{BufRead, Write};
 use std::net::TcpStream;
 
 use std::process;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 use std::{thread, time};
 
 use core::global::{self, ChainTypes};
@@ -149,12 +151,13 @@ fn basic_stratum_server() {
 	info!(LOGGER, "stratum server and worker stats verification ok");
 
 	// Start mining blocks
-	s.start_test_miner(None);
+	let stop = Arc::new(AtomicBool::new(false));
+	s.start_test_miner(None, stop.clone());
 	info!(LOGGER, "test miner started");
 
 	// This test is supposed to complete in 3 seconds,
 	// so let's set a timeout on 10s to avoid infinite waiting happened in Travis-CI.
-	let handler = thread::spawn(|| {
+	let _handler = thread::spawn(|| {
 		thread::sleep(time::Duration::from_secs(10));
 		error!(LOGGER, "basic_stratum_server test fail on timeout!");
 		thread::sleep(time::Duration::from_millis(100));
@@ -164,9 +167,12 @@ fn basic_stratum_server() {
 	// Simulate a worker lost connection
 	workers.remove(1);
 
+	// Wait for a few mined blocks
+	thread::sleep(time::Duration::from_secs(3));
+	s.stop_test_miner(stop);
+
 	// Verify blocks are being broadcast to workers
 	let expected = String::from("job");
-	thread::sleep(time::Duration::from_secs(3)); // Wait for a few mined blocks
 	let mut jobtemplate = String::new();
 	let _st = workers[2].read_line(&mut jobtemplate);
 	let job_template: Value = serde_json::from_str(&jobtemplate).unwrap();

@@ -20,25 +20,29 @@ extern crate grin_p2p as p2p;
 extern crate grin_servers as servers;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
+#[macro_use]
+extern crate slog;
 
 mod framework;
 
 use std::default::Default;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use std::{thread, time};
 
 use core::core::hash::Hashed;
 use core::global::{self, ChainTypes};
 
+use util::LOGGER;
 use wallet::controller;
 use wallet::libtx::slate::Slate;
-use wallet::libwallet::types::{WalletBackend, WalletClient, WalletInst};
+use wallet::libwallet::types::{WalletBackend, WalletInst};
 use wallet::lmdb_wallet::LMDBBackend;
 use wallet::HTTPWalletClient;
 use wallet::WalletConfig;
 
 use framework::{
-	config, stop_all_servers, stratum_config, LocalServerContainerConfig, LocalServerContainerPool,
+	config, stop_all_servers, LocalServerContainerConfig, LocalServerContainerPool,
 	LocalServerContainerPoolConfig,
 };
 
@@ -86,7 +90,7 @@ fn simulate_seeding() {
 
 	// Create a server pool
 	let mut pool_config = LocalServerContainerPoolConfig::default();
-	pool_config.base_name = String::from(test_name_dir);
+	pool_config.base_name = test_name_dir.to_string();
 	pool_config.run_length_in_seconds = 30;
 
 	// have to use different ports because of tests being run in parallel
@@ -110,10 +114,10 @@ fn simulate_seeding() {
 
 	// point next servers at first seed
 	server_config.is_seeding = false;
-	server_config.seed_addr = String::from(format!(
+	server_config.seed_addr = format!(
 		"{}:{}",
 		server_config.base_addr, server_config.p2p_server_port
-	));
+	);
 
 	for _ in 0..4 {
 		pool.create_server(&mut server_config);
@@ -138,15 +142,13 @@ fn simulate_seeding() {
 }
 
 /// Create 1 server, start it mining, then connect 4 other peers mining and
-/// using the first
-/// as a seed. Meant to test the evolution of mining difficulty with miners
-/// running at
-/// different rates
-// Just going to comment this out as an automatically run test for the time
-// being,
-// As it's more for actively testing and hurts CI a lot
-//#[test]
-#[allow(dead_code)]
+/// using the first as a seed. Meant to test the evolution of mining difficulty with miners
+/// running at different rates.
+///
+/// TODO: Just going to comment this out as an automatically run test for the time
+/// being, As it's more for actively testing and hurts CI a lot
+#[ignore]
+#[test]
 fn simulate_parallel_mining() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
@@ -155,7 +157,7 @@ fn simulate_parallel_mining() {
 
 	// Create a server pool
 	let mut pool_config = LocalServerContainerPoolConfig::default();
-	pool_config.base_name = String::from(test_name_dir);
+	pool_config.base_name = test_name_dir.to_string();
 	pool_config.run_length_in_seconds = 60;
 	// have to use different ports because of tests being run in parallel
 	pool_config.base_api_port = 30040;
@@ -174,10 +176,10 @@ fn simulate_parallel_mining() {
 
 	// point next servers at first seed
 	server_config.is_seeding = false;
-	server_config.seed_addr = String::from(format!(
+	server_config.seed_addr = format!(
 		"{}:{}",
 		server_config.base_addr, server_config.p2p_server_port
-	));
+	);
 
 	// And create 4 more, then let them run for a while
 	for i in 1..4 {
@@ -219,7 +221,8 @@ fn simulate_block_propagation() {
 	}
 
 	// start mining
-	servers[0].start_test_miner(None);
+	let stop = Arc::new(AtomicBool::new(false));
+	servers[0].start_test_miner(None, stop.clone());
 
 	// monitor for a change of head on a different server and check whether
 	// chain height has changed
@@ -238,8 +241,14 @@ fn simulate_block_propagation() {
 		}
 		thread::sleep(time::Duration::from_millis(1_000));
 		time_spent += 1;
-		if time_spent >= 60 {
+		if time_spent >= 30 {
+			info!(LOGGER, "simulate_block_propagation - fail on timeout",);
 			break;
+		}
+
+		// stop mining after 8s
+		if time_spent == 8 {
+			servers[0].stop_test_miner(stop.clone());
 		}
 	}
 	for n in 0..5 {
@@ -265,21 +274,30 @@ fn simulate_full_sync() {
 
 	let s1 = servers::Server::new(framework::config(1000, "grin-sync", 1000)).unwrap();
 	// mine a few blocks on server 1
-	s1.start_test_miner(None);
+	let stop = Arc::new(AtomicBool::new(false));
+	s1.start_test_miner(None, stop.clone());
 	thread::sleep(time::Duration::from_secs(8));
+	s1.stop_test_miner(stop);
 
 	let s2 = servers::Server::new(framework::config(1001, "grin-sync", 1000)).unwrap();
 
 	// Get the current header from s1.
 	let s1_header = s1.chain.head_header().unwrap();
+	info!(
+		LOGGER,
+		"simulate_full_sync - s1 header head: {} at {}",
+		s1_header.hash(),
+		s1_header.height
+	);
 
 	// Wait for s2 to sync up to and including the header from s1.
 	let mut time_spent = 0;
 	while s2.head().height < s1_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		time_spent += 1;
-		if time_spent >= 60 {
-			println!(
+		if time_spent >= 30 {
+			info!(
+				LOGGER,
 				"sync fail. s2.head().height: {}, s1_header.height: {}",
 				s2.head().height,
 				s1_header.height
@@ -314,29 +332,36 @@ fn simulate_fast_sync() {
 
 	// start s1 and mine enough blocks to get beyond the fast sync horizon
 	let s1 = servers::Server::new(framework::config(2000, "grin-fast", 2000)).unwrap();
-	s1.start_test_miner(None);
+	let stop = Arc::new(AtomicBool::new(false));
+	s1.start_test_miner(None, stop.clone());
 
 	while s1.head().height < 20 {
 		thread::sleep(time::Duration::from_millis(1_000));
 	}
+	s1.stop_test_miner(stop);
 
 	let mut conf = config(2001, "grin-fast", 2000);
 	conf.archive_mode = Some(false);
 
 	let s2 = servers::Server::new(conf).unwrap();
 
-	while s2.header_head().height < 1 {
-		s2.ping_peers();
-		thread::sleep(time::Duration::from_millis(1_000));
-	}
-	s1.stop_test_miner();
-
 	// Get the current header from s1.
 	let s1_header = s1.chain.head_header().unwrap();
 
 	// Wait for s2 to sync up to and including the header from s1.
+	let mut total_wait = 0;
 	while s2.head().height < s1_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
+		total_wait += 1;
+		if total_wait >= 30 {
+			error!(
+				LOGGER,
+				"simulate_fast_sync test fail on timeout! s2 height: {}, s1 height: {}",
+				s2.head().height,
+				s1_header.height,
+			);
+			break;
+		}
 	}
 
 	// Confirm both s1 and s2 see a consistent header at that height.
@@ -351,7 +376,8 @@ fn simulate_fast_sync() {
 	thread::sleep(time::Duration::from_millis(1_000));
 }
 
-// #[test]
+#[ignore]
+#[test]
 fn simulate_fast_sync_double() {
 	util::init_test_logger();
 
@@ -363,7 +389,7 @@ fn simulate_fast_sync_double() {
 
 	let s1 = servers::Server::new(framework::config(3000, "grin-double-fast1", 3000)).unwrap();
 	// mine a few blocks on server 1
-	s1.start_test_miner(None);
+	s1.start_test_miner(None, s1.stop.clone());
 	thread::sleep(time::Duration::from_secs(8));
 
 	{
@@ -446,7 +472,7 @@ fn replicate_tx_fluff_failure() {
 	s1_config.dandelion_config.relay_secs = Some(1);
 	let s1 = servers::Server::new(s1_config.clone()).unwrap();
 	// Mine off of server 1
-	s1.start_test_miner(s1_config.test_miner_wallet_url);
+	s1.start_test_miner(s1_config.test_miner_wallet_url, s1.stop.clone());
 	thread::sleep(time::Duration::from_secs(5));
 
 	// Server 2 (another node)
@@ -455,7 +481,7 @@ fn replicate_tx_fluff_failure() {
 	s2_config.dandelion_config.embargo_secs = Some(10);
 	s2_config.dandelion_config.patience_secs = Some(1);
 	s2_config.dandelion_config.relay_secs = Some(1);
-	let s2 = servers::Server::new(s2_config.clone()).unwrap();
+	let _s2 = servers::Server::new(s2_config.clone()).unwrap();
 
 	let dl_nodes = 5;
 

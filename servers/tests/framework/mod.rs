@@ -221,7 +221,7 @@ impl LocalServerContainer {
 				"starting test Miner on port {}",
 				self.config.p2p_server_port
 			);
-			s.start_test_miner(wallet_url);
+			s.start_test_miner(wallet_url, s.stop.clone());
 		}
 
 		for p in &mut self.peer_list {
@@ -265,7 +265,7 @@ impl LocalServerContainer {
 
 		let client = HTTPWalletClient::new(&self.wallet_config.check_node_api_http_addr, None);
 
-		if let Err(e) = r {
+		if let Err(_e) = r {
 			//panic!("Error initializing wallet seed: {}", e);
 		}
 
@@ -320,7 +320,7 @@ impl LocalServerContainer {
 		minimum_confirmations: u64,
 		selection_strategy: &str,
 		dest: &str,
-		fluff: bool,
+		_fluff: bool,
 	) {
 		let amount = core::core::amount_from_hr_string(amount)
 			.expect("Could not parse amount as a number with optional decimal point.");
