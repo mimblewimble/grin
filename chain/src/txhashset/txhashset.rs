@@ -54,19 +54,13 @@ const KERNEL_SUBDIR: &'static str = "kernel";
 
 const TXHASHSET_ZIP: &'static str = "txhashset_snapshot.zip";
 
-struct DBPMMRHandle<T>
-where
-	T: PMMRable,
-{
-	backend: DBPMMRBackend<T>,
+struct DBPMMRHandle {
+	backend: DBPMMRBackend,
 	last_pos: u64,
 }
 
-impl<T> DBPMMRHandle<T>
-where
-	T: PMMRable + ::std::fmt::Debug,
-{
-	fn new(root_dir: &str, sub_dir: &str, file_name: &str) -> Result<DBPMMRHandle<T>, Error> {
+impl DBPMMRHandle {
+	fn new(root_dir: &str, sub_dir: &str, file_name: &str) -> Result<DBPMMRHandle, Error> {
 		let path = Path::new(root_dir).join(sub_dir).join(file_name);
 		fs::create_dir_all(path.clone())?;
 		let backend = DBPMMRBackend::new(path.to_str().unwrap().to_string())?;
@@ -118,7 +112,7 @@ pub struct TxHashSet {
 	/// readonly_extension.
 	/// It can also be rewound and applied separately via a header_extension.
 	/// Note: the header MMR is backed by the database maintains just the hash file.
-	header_pmmr_h: DBPMMRHandle<BlockHeader>,
+	header_pmmr_h: DBPMMRHandle,
 
 	/// Header MMR to support exploratory sync_head.
 	/// The header_head and sync_head chains can diverge so we need to maintain
@@ -127,7 +121,7 @@ pub struct TxHashSet {
 	/// Note: this is rewound and applied separately to the other MMRs
 	/// via a "sync_extension".
 	/// Note: the sync MMR is backed by the database and maintains just the hash file.
-	sync_pmmr_h: DBPMMRHandle<BlockHeader>,
+	sync_pmmr_h: DBPMMRHandle,
 
 	output_pmmr_h: PMMRHandle<OutputIdentifier>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
@@ -616,7 +610,7 @@ where
 pub struct HeaderExtension<'a> {
 	header: BlockHeader,
 
-	pmmr: DBPMMR<'a, BlockHeader, DBPMMRBackend<BlockHeader>>,
+	pmmr: DBPMMR<'a, BlockHeader, DBPMMRBackend>,
 
 	/// Rollback flag.
 	rollback: bool,
@@ -629,7 +623,7 @@ pub struct HeaderExtension<'a> {
 
 impl<'a> HeaderExtension<'a> {
 	fn new(
-		pmmr: DBPMMR<'a, BlockHeader, DBPMMRBackend<BlockHeader>>,
+		pmmr: DBPMMR<'a, BlockHeader, DBPMMRBackend>,
 		batch: &'a Batch,
 		header: BlockHeader,
 	) -> HeaderExtension<'a> {
@@ -733,7 +727,7 @@ impl<'a> HeaderExtension<'a> {
 pub struct Extension<'a> {
 	header: BlockHeader,
 
-	header_pmmr: DBPMMR<'a, BlockHeader, DBPMMRBackend<BlockHeader>>,
+	header_pmmr: DBPMMR<'a, BlockHeader, DBPMMRBackend>,
 	output_pmmr: PMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
