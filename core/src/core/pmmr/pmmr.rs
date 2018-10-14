@@ -173,7 +173,7 @@ where
 		let elmt_pos = self.last_pos + 1;
 		let mut current_hash = elmt.hash_with_index(elmt_pos - 1);
 
-		let mut to_append = vec![(current_hash, Some(elmt))];
+		let mut to_append = vec![current_hash];
 		let mut pos = elmt_pos;
 
 		let (peak_map, height) = peak_map_height(pos - 1);
@@ -191,11 +191,11 @@ where
 			peak *= 2;
 			pos += 1;
 			current_hash = (left_hash, current_hash).hash_with_index(pos - 1);
-			to_append.push((current_hash, None));
+			to_append.push(current_hash);
 		}
 
 		// append all the new nodes and update the MMR index
-		self.backend.append(elmt_pos, to_append)?;
+		self.backend.append(elmt_pos, &elmt, to_append)?;
 		self.last_pos = pos;
 		Ok(elmt_pos)
 	}

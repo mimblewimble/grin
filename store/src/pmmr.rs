@@ -69,17 +69,14 @@ where
 {
 	/// Append the provided Hashes to the backend storage.
 	#[allow(unused_variables)]
-	fn append(&mut self, position: u64, data: Vec<(Hash, Option<T>)>) -> Result<(), String> {
-		for d in data {
-			self.hash_file.append(&mut ser::ser_vec(&d.0).unwrap());
-			if let Some(elem) = d.1 {
-				self.data_file.append(&mut ser::ser_vec(&elem).unwrap());
-
-				if self.prunable {
-					// Add the new position to our leaf_set.
-					self.leaf_set.add(position);
-				}
-			}
+	fn append(&mut self, position: u64, data: &T, hashes: Vec<Hash>) -> Result<(), String> {
+		if self.prunable {
+			// Add the new position to our leaf_set.
+			self.leaf_set.add(position);
+		}
+		self.data_file.append(&mut ser::ser_vec(data).unwrap());
+		for ref h in hashes {
+			self.hash_file.append(&mut ser::ser_vec(h).unwrap());
 		}
 		Ok(())
 	}
