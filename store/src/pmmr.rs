@@ -484,9 +484,7 @@ impl HashOnlyMMRBackend {
 	/// Use the provided dir to store its files.
 	pub fn new(data_dir: String) -> io::Result<HashOnlyMMRBackend> {
 		let hash_file = HashFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
-		Ok(HashOnlyMMRBackend {
-			hash_file,
-		})
+		Ok(HashOnlyMMRBackend { hash_file })
 	}
 
 	/// The unpruned size of this MMR backend.
