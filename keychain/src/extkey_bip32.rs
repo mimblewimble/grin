@@ -103,12 +103,12 @@ impl BIP32GrinHasher {
 
 impl BIP32Hasher for BIP32GrinHasher {
 	fn network_priv() -> [u8; 4] {
-		// xprv
-		[0x04, 0x88, 0xAD, 0xE4]
+		// gprv
+		[0x03, 0x3C, 0x04, 0xA4]
 	}
 	fn network_pub() -> [u8; 4] {
-		// xpub
-		[0x04, 0x88, 0xB2, 0x1E]
+		// gpub
+		[0x03, 0x3C, 0x08, 0xDF]
 	}
 	fn master_seed() -> [u8; 12] {
 		b"IamVoldemort".to_owned()
