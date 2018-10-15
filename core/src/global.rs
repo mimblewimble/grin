@@ -19,7 +19,7 @@
 use consensus::HeaderInfo;
 use consensus::{
 	BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_MIN_SIZESHIFT,
-	DIFFICULTY_ADJUST_WINDOW, EASINESS, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
+	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
 	REFERENCE_SIZESHIFT,
 };
 use pow::{self, CuckatooContext, EdgeType, PoWContext};
@@ -139,7 +139,7 @@ pub fn create_pow_context<T>(
 where
 	T: EdgeType,
 {
-	CuckatooContext::<T>::new(edge_bits, proof_size, EASINESS, max_sols)
+	CuckatooContext::<T>::new(edge_bits, proof_size, max_sols)
 }
 
 /// Return the type of the pos

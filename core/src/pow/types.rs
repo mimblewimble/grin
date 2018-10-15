@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Types for a Cuckoo proof of work and its encapsulation as a fully usable
+/// Types for a Cuck(at)oo proof of work and its encapsulation as a fully usable
 /// proof of work within a block header.
 use std::cmp::max;
 use std::ops::{Add, Div, Mul, Sub};
@@ -39,7 +39,6 @@ where
 	fn new(
 		edge_bits: u8,
 		proof_size: usize,
-		easiness_pct: u32,
 		max_sols: u32,
 	) -> Result<Box<Self>, Error>;
 	/// Sets the header along with an optional nonce at the end
