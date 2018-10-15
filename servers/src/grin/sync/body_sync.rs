@@ -35,6 +35,7 @@ pub struct BodySync {
 	prev_body_received: Option<DateTime<Utc>>,
 	prev_tip: chain::Tip,
 	prev_orphans_len: usize,
+	stuck_detector: (Hash, u64),
 }
 
 impl BodySync {
@@ -53,6 +54,7 @@ impl BodySync {
 			prev_body_received: None,
 			prev_tip: chain::Tip::new(ZERO_HASH),
 			prev_orphans_len: 0,
+			stuck_detector: (ZERO_HASH, 0),
 		}
 	}
 
@@ -142,6 +144,17 @@ impl BodySync {
 			.collect::<Vec<_>>();
 
 		if hashes_to_get.len() > 0 {
+			// Stuck detection:
+			// In case stuck detected, exit sync thread to avoid useless infinite loop.
+			if hashes_to_get.len() == 1 && hashes_to_get[0].clone() == self.stuck_detector.0 {
+				self.stuck_detector.1 += 1;
+				if self.stuck_detector.1 >= 100 {
+					panic!("sync: body sync stuck detected! sync thread exited!");
+				}
+			} else {
+				self.stuck_detector = (hashes_to_get[0].clone(), 0);
+			}
+
 			debug!(
 				LOGGER,
 				"block_sync: {}/{} requesting blocks {:?} from {} peers",

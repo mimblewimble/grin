@@ -18,7 +18,7 @@ use std::sync::Arc;
 
 use chain;
 use common::types::{Error, SyncState, SyncStatus};
-use core::core::hash::{Hash, Hashed};
+use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use p2p::{self, Peer};
 use util::LOGGER;
 
@@ -29,6 +29,7 @@ pub struct HeaderSync {
 
 	history_locators: Vec<(u64, Hash)>,
 	prev_header_sync: (DateTime<Utc>, u64, u64),
+	stuck_detector: (Hash, u64),
 }
 
 impl HeaderSync {
@@ -43,6 +44,7 @@ impl HeaderSync {
 			chain,
 			history_locators: vec![],
 			prev_header_sync: (Utc::now(), 0, 0),
+			stuck_detector: (ZERO_HASH, 0),
 		}
 	}
 
@@ -134,6 +136,17 @@ impl HeaderSync {
 	/// Request some block headers from a peer to advance us.
 	fn request_headers(&mut self, peer: &Peer) {
 		if let Ok(locator) = self.get_locator() {
+			// Stuck detection:
+			// In case stuck detected, exit sync thread to avoid useless infinite loop.
+			if locator[0] == self.stuck_detector.0 {
+				self.stuck_detector.1 += 1;
+				if self.stuck_detector.1 >= 100 {
+					panic!("sync: header sync stuck detected! sync thread exited!");
+				}
+			} else {
+				self.stuck_detector = (locator[0], 0);
+			}
+
 			debug!(
 				LOGGER,
 				"sync: request_headers: asking {} for headers, {:?}", peer.info.addr, locator,
