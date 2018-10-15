@@ -17,10 +17,7 @@ extern crate grin_core as core;
 extern crate chrono;
 
 use chrono::prelude::Utc;
-use core::consensus::{
-	next_difficulty, valid_header_version, HeaderInfo, BLOCK_TIME_WINDOW, DAMP_FACTOR,
-	DIFFICULTY_ADJUST_WINDOW, MEDIAN_TIME_INDEX, MEDIAN_TIME_WINDOW, UPPER_TIME_BOUND,
-};
+use core::consensus::*;
 use core::global;
 use core::pow::Difficulty;
 use std::fmt::{self, Display};
@@ -511,6 +508,71 @@ fn next_target_adjustment() {
 	assert_eq!(
 		next_difficulty(1, repeat(90, hi.clone(), just_enough, None)).difficulty,
 		Difficulty::from_num(1)
+	);
+}
+
+#[test]
+fn secondary_pow_scale() {
+	let window = DIFFICULTY_ADJUST_WINDOW + MEDIAN_TIME_WINDOW;
+	let mut hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 100);
+
+	// all primary, factor should be multiplied by 4 (max adjustment) so it
+	// becomes easier to find a high difficulty block
+	assert_eq!(
+		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect()),
+		400
+	);
+	// all secondary on 90%, factor should lose 10%
+	hi.is_secondary = true;
+	assert_eq!(
+		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect()),
+		90
+	);
+	// all secondary on 1%, should be divided by 4 (max adjustment)
+	assert_eq!(
+		secondary_pow_scaling(890_000, &(0..window).map(|_| hi.clone()).collect()),
+		25
+	);
+	// same as above, testing lowest bound
+	let mut low_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 3);
+	low_hi.is_secondary = true;
+	assert_eq!(
+		secondary_pow_scaling(890_000, &(0..window).map(|_| low_hi.clone()).collect()),
+		1
+	);
+	// just about the right ratio, also playing with median
+	let primary_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 50);
+	assert_eq!(
+		secondary_pow_scaling(
+			1,
+			&(0..(window / 10))
+				.map(|_| primary_hi.clone())
+				.chain((0..(window * 9 / 10)).map(|_| hi.clone()))
+				.collect()
+		),
+		100
+	);
+	// 95% secondary, should come down
+	assert_eq!(
+		secondary_pow_scaling(
+			1,
+			&(0..(window / 20))
+				.map(|_| primary_hi.clone())
+				.chain((0..(window * 95 / 100)).map(|_| hi.clone()))
+				.collect()
+		),
+		94
+	);
+	// 40% secondary, should come up
+	assert_eq!(
+		secondary_pow_scaling(
+			1,
+			&(0..(window * 6 / 10))
+				.map(|_| primary_hi.clone())
+				.chain((0..(window * 4 / 10)).map(|_| hi.clone()))
+				.collect()
+		),
+		112
 	);
 }
 

@@ -18,7 +18,7 @@
 //! enough, consensus-relevant constants and short functions should be kept
 //! here.
 
-use std::cmp::max;
+use std::cmp::{max, min};
 use std::fmt;
 
 use global;
@@ -293,8 +293,10 @@ where
 	HeaderInfo::from_diff_scaling(Difficulty::from_num(difficulty), sec_pow_scaling)
 }
 
+pub const MAX_SECONDARY_SCALING: u64 = (::std::u32::MAX / 70) as u64;
+
 /// Factor by which the secondary proof of work difficulty will be adjusted
-fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
+pub fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 	// median of past scaling factors, scaling is 1 if none found
 	let mut scalings = diff_data
 		.iter()
@@ -305,18 +307,30 @@ fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 	}
 	scalings.sort();
 	let scaling_median = scalings[scalings.len() / 2] as u64;
-	let secondary_count = diff_data.iter().filter(|n| n.is_secondary).count() as u64;
+	let secondary_count = max(diff_data.iter().filter(|n| n.is_secondary).count(), 1) as u64;
 
 	// what's the ideal ratio at the current height
 	let ratio = secondary_pow_ratio(height);
 
+	println!(
+		"-- {} {} {} {}",
+		scaling_median,
+		secondary_count,
+		diff_data.len(),
+		ratio
+	);
 	// adjust the past median based on ideal ratio vs actual ratio
-	let scaling = scaling_median * secondary_count * 100 / ratio / diff_data.len() as u64;
-	if scaling == 0 {
-		1
+	let scaling = scaling_median * diff_data.len() as u64 * ratio / 100 / secondary_count as u64;
+
+	// various bounds
+	let bounded_scaling = if scaling < scaling_median / 4 || scaling == 0 {
+		max(scaling_median / 4, 1)
+	} else if scaling > MAX_SECONDARY_SCALING || scaling > scaling_median * 4 {
+		min(MAX_SECONDARY_SCALING, scaling_median * 4)
 	} else {
-		scaling as u32
-	}
+		scaling
+	};
+	bounded_scaling as u32
 }
 
 /// Median timestamp within the time window starting at `from` with the
