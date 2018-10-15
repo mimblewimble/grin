@@ -35,5 +35,5 @@ mod comments;
 pub mod config;
 pub mod types;
 
-pub use config::{check_api_secret_file, initial_setup_server, initial_setup_wallet};
+pub use config::{initial_setup_server, initial_setup_wallet};
 pub use types::{ConfigError, ConfigMembers, GlobalConfig, GlobalWalletConfig};
