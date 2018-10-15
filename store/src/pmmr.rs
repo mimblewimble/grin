@@ -67,26 +67,17 @@ impl<T> Backend<T> for PMMRBackend<T>
 where
 	T: PMMRable + ::std::fmt::Debug,
 {
-	/// Append the provided Hashes to the backend storage.
+	/// Append the provided data and hashes to the backend storage.
+	/// Add the new leaf pos to our leaf_set if this is a prunable MMR.
 	#[allow(unused_variables)]
 	fn append(&mut self, data: T, hashes: Vec<Hash>) -> Result<(), String> {
 		if self.prunable {
-			// Add the new position to our leaf_set.
-			// TODO - how to get position here???
-			// TODO - can we determine it from result of append below?
-
-			// What to do here?
-			// We need to work back from unsynced file size to pos
-			// accounting for prune offset
-
 			let record_len = Hash::SIZE as u64;
 			let shift = self.prune_list.get_total_shift();
 			let position = (self.hash_file.size_unsync() / record_len) + shift + 1;
 			self.leaf_set.add(position);
 		}
-
 		self.data_file.append(&mut ser::ser_vec(&data).unwrap());
-
 		for ref h in hashes {
 			self.hash_file.append(&mut ser::ser_vec(h).unwrap());
 		}
