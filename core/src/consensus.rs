@@ -312,13 +312,6 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 	// what's the ideal ratio at the current height
 	let ratio = secondary_pow_ratio(height);
 
-	println!(
-		"-- {} {} {} {}",
-		scaling_median,
-		secondary_count,
-		diff_data.len(),
-		ratio
-	);
 	// adjust the past median based on ideal ratio vs actual ratio
 	let scaling = scaling_median * diff_data.len() as u64 * ratio / 100 / secondary_count as u64;
 
