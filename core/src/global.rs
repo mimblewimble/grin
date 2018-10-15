@@ -18,12 +18,11 @@
 
 use consensus::HeaderInfo;
 use consensus::{
-	BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_MIN_SIZESHIFT,
+	BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_MIN_EDGE_BITS,
 	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
-	REFERENCE_SIZESHIFT,
+	BASE_EDGE_BITS,
 };
 use pow::{self, CuckatooContext, EdgeType, PoWContext};
-
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
@@ -33,14 +32,14 @@ use std::sync::RwLock;
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
 
-/// Automated testing sizeshift
-pub const AUTOMATED_TESTING_MIN_SIZESHIFT: u8 = 10;
+/// Automated testing edge_bits
+pub const AUTOMATED_TESTING_MIN_EDGE_BITS: u8 = 9;
 
 /// Automated testing proof size
 pub const AUTOMATED_TESTING_PROOF_SIZE: usize = 4;
 
-/// User testing sizeshift
-pub const USER_TESTING_MIN_SIZESHIFT: u8 = 19;
+/// User testing edge_bits
+pub const USER_TESTING_MIN_EDGE_BITS: u8 = 15;
 
 /// User testing proof size
 pub const USER_TESTING_PROOF_SIZE: usize = 42;
@@ -147,27 +146,27 @@ pub fn pow_type() -> PoWContextTypes {
 	PoWContextTypes::Cuckatoo
 }
 
-/// The minimum acceptable sizeshift
-pub fn min_sizeshift() -> u8 {
+/// The minimum acceptable edge_bits
+pub fn min_edge_bits() -> u8 {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
-		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_SIZESHIFT,
-		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
-		ChainTypes::Testnet1 => USER_TESTING_MIN_SIZESHIFT,
-		_ => DEFAULT_MIN_SIZESHIFT,
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
+		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
+		ChainTypes::Testnet1 => USER_TESTING_MIN_EDGE_BITS,
+		_ => DEFAULT_MIN_EDGE_BITS,
 	}
 }
 
-/// Reference sizeshift used to compute factor on higher Cuckoo graph sizes,
-/// while the min_sizeshift can be changed on a soft fork, changing
-/// ref_sizeshift is a hard fork.
-pub fn ref_sizeshift() -> u8 {
+/// Reference edge_bits used to compute factor on higher Cuck(at)oo graph sizes,
+/// while the min_edge_bits can be changed on a soft fork, changing
+/// base_edge_bits is a hard fork.
+pub fn base_edge_bits() -> u8 {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
-		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_SIZESHIFT,
-		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
-		ChainTypes::Testnet1 => USER_TESTING_MIN_SIZESHIFT,
-		_ => REFERENCE_SIZESHIFT,
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
+		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
+		ChainTypes::Testnet1 => USER_TESTING_MIN_EDGE_BITS,
+		_ => BASE_EDGE_BITS,
 	}
 }
 
@@ -250,9 +249,9 @@ pub fn get_genesis_nonce() -> u64 {
 	match *param_ref {
 		// won't make a difference
 		ChainTypes::AutomatedTesting => 0,
-		// Magic nonce for current genesis block at cuckoo16
+		// Magic nonce for current genesis block at cuckatoo15
 		ChainTypes::UserTesting => 27944,
-		// Magic nonce for genesis block for testnet2 (cuckoo30)
+		// Magic nonce for genesis block for testnet2 (cuckatoo29)
 		_ => panic!("Pre-set"),
 	}
 }

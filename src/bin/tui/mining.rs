@@ -217,7 +217,7 @@ impl TUIStatusListener for TUIMiningView {
 			)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
-					.child(TextView::new("  ").with_id("stratum_cuckoo_size_status")),
+					.child(TextView::new("  ").with_id("stratum_edge_bits_status")),
 			);
 
 		let mining_device_view = LinearLayout::new(Orientation::Vertical)
@@ -320,7 +320,7 @@ impl TUIStatusListener for TUIMiningView {
 		let stratum_block_height = format!("Solving Block Height: {}", stratum_stats.block_height);
 		let stratum_network_difficulty =
 			format!("Network Difficulty: {}", stratum_stats.network_difficulty);
-		let stratum_cuckoo_size = format!("Cuckoo Size: {}", stratum_stats.cuckoo_size);
+		let stratum_edge_bits = format!("Cuckoo Size: {}", stratum_stats.edge_bits);
 
 		c.call_on_id("stratum_config_status", |t: &mut TextView| {
 			t.set_content(stratum_enabled);
@@ -340,8 +340,8 @@ impl TUIStatusListener for TUIMiningView {
 		c.call_on_id("stratum_network_hashrate", |t: &mut TextView| {
 			t.set_content(stratum_network_hashrate);
 		});
-		c.call_on_id("stratum_cuckoo_size_status", |t: &mut TextView| {
-			t.set_content(stratum_cuckoo_size);
+		c.call_on_id("stratum_edge_bits_status", |t: &mut TextView| {
+			t.set_content(stratum_edge_bits);
 		});
 		let _ = c.call_on_id(
 			TABLE_MINING_STATUS,

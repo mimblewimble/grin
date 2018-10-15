@@ -246,7 +246,7 @@ where
 			match sol {
 				Ok(s) => {
 					let mut proof = Proof::new(map_vec!(s.to_vec(), |&n| n.to_u64().unwrap_or(0)));
-					proof.cuckoo_sizeshift = self.params.edge_bits;
+					proof.edge_bits = self.params.edge_bits;
 					return Ok(vec![proof]);
 				}
 				Err(e) => match e.kind() {
@@ -398,21 +398,21 @@ mod test {
 		cuckoo_ctx.set_header_nonce(header.clone(), Some(39), true)?;
 		let res = cuckoo_ctx.find_cycles()?;
 		let mut proof = Proof::new(V1.to_vec());
-		proof.cuckoo_sizeshift = 20;
+		proof.edge_bits = 20;
 		assert_eq!(proof, res[0]);
 
 		let mut cuckoo_ctx = CuckooContext::<T>::new(20, 42, 10)?;
 		cuckoo_ctx.set_header_nonce(header.clone(), Some(56), true)?;
 		let res = cuckoo_ctx.find_cycles()?;
 		let mut proof = Proof::new(V2.to_vec());
-		proof.cuckoo_sizeshift = 20;
+		proof.edge_bits = 20;
 		assert_eq!(proof, res[0]);
 
 		//re-use context
 		cuckoo_ctx.set_header_nonce(header, Some(66), true)?;
 		let res = cuckoo_ctx.find_cycles()?;
 		let mut proof = Proof::new(V3.to_vec());
-		proof.cuckoo_sizeshift = 20;
+		proof.edge_bits = 20;
 		assert_eq!(proof, res[0]);
 		Ok(())
 	}

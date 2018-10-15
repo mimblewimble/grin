@@ -62,19 +62,20 @@ pub fn secondary_pow_ratio(height: u64) -> u64 {
 /// Cuckoo-cycle proof size (cycle length)
 pub const PROOFSIZE: usize = 42;
 
-/// Default Cuckoo Cycle size shift used for mining and validating.
-pub const DEFAULT_MIN_SIZESHIFT: u8 = 30;
+/// Default Cuckoo Cycle edge_bits, used for mining and validating.
+pub const DEFAULT_MIN_EDGE_BITS: u8 = 30;
 
-/// Secondary proof-of-work size shift, meant to be ASIC resistant.
-pub const SECOND_POW_SIZESHIFT: u8 = 29;
+/// Secondary proof-of-work edge_bits, meant to be ASIC resistant.
+pub const SECOND_POW_EDGE_BITS: u8 = 29;
 
-/// Original reference sizeshift to compute difficulty factors for higher
+/// Original reference edge_bits to compute difficulty factors for higher
 /// Cuckoo graph sizes, changing this would hard fork
-pub const REFERENCE_SIZESHIFT: u8 = 30;
+pub const BASE_EDGE_BITS: u8 = 24;
 
-/// Default Cuckoo Cycle easiness, high enough to have good likeliness to find
-/// a solution.
-pub const EASINESS: u32 = 50;
+/// maximum scaling factor for secondary pow, enforced in diff retargetting
+/// increasing scaling factor increases frequency of secondary blocks
+/// ONLY IN TESTNET4 LIMITED TO ABOUT 8 TIMES THE NATURAL SCALE
+pub const MAX_SECOND_POW_SCALE: u64 = 8 << 11;
 
 /// Default number of blocks in the past when cross-block cut-through will start
 /// happening. Needs to be long enough to not overlap with a long reorg.

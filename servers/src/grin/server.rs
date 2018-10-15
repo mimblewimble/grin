@@ -313,7 +313,7 @@ impl Server {
 
 	/// Start a minimal "stratum" mining service on a separate thread
 	pub fn start_stratum_server(&self, config: StratumServerConfig) {
-		let cuckoo_size = global::min_sizeshift();
+		let edge_bits = global::min_edge_bits();
 		let proof_size = global::proofsize();
 		let sync_state = self.sync_state.clone();
 
@@ -327,7 +327,7 @@ impl Server {
 		let _ = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
-				stratum_server.run_loop(stratum_stats, cuckoo_size as u32, proof_size, sync_state);
+				stratum_server.run_loop(stratum_stats, edge_bits as u32, proof_size, sync_state);
 			});
 	}
 
