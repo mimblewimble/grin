@@ -69,12 +69,24 @@ where
 {
 	/// Append the provided Hashes to the backend storage.
 	#[allow(unused_variables)]
-	fn append(&mut self, position: u64, data: &T, hashes: Vec<Hash>) -> Result<(), String> {
+	fn append(&mut self, data: T, hashes: Vec<Hash>) -> Result<(), String> {
 		if self.prunable {
 			// Add the new position to our leaf_set.
+			// TODO - how to get position here???
+			// TODO - can we determine it from result of append below?
+
+			// What to do here?
+			// We need to work back from unsynced file size to pos
+			// accounting for prune offset
+
+			let record_len = Hash::SIZE as u64;
+			let shift = self.prune_list.get_total_shift();
+			let position = (self.hash_file.size_unsync() / record_len) + shift + 1;
 			self.leaf_set.add(position);
 		}
-		self.data_file.append(&mut ser::ser_vec(data).unwrap());
+
+		self.data_file.append(&mut ser::ser_vec(&data).unwrap());
+
 		for ref h in hashes {
 			self.hash_file.append(&mut ser::ser_vec(h).unwrap());
 		}
@@ -93,7 +105,7 @@ where
 		let pos = position - 1;
 
 		// Must be on disk, doing a read at the correct position
-		let hash_record_len = 32;
+		let hash_record_len = Hash::SIZE;
 		let file_offset = ((pos - shift) as usize) * hash_record_len;
 		let data = self.hash_file.read(file_offset, hash_record_len);
 		match ser::deserialize(&mut &data[..]) {
@@ -162,7 +174,7 @@ where
 
 		// Rewind the hash file accounting for pruned/compacted pos
 		let shift = self.prune_list.get_shift(position);
-		let record_len = 32 as u64;
+		let record_len = Hash::SIZE as u64;
 		let file_pos = (position - shift) * record_len;
 		self.hash_file.rewind(file_pos);
 
@@ -262,7 +274,7 @@ where
 	pub fn unpruned_size(&self) -> io::Result<u64> {
 		let total_shift = self.prune_list.get_total_shift();
 
-		let record_len = 32;
+		let record_len = Hash::SIZE as u64;
 		let sz = self.hash_file.size()?;
 		Ok(sz / record_len + total_shift)
 	}
@@ -277,7 +289,7 @@ where
 	/// Size of the underlying hashed data. Extremely dependent on pruning
 	/// and compaction.
 	pub fn hash_size(&self) -> io::Result<u64> {
-		self.hash_file.size().map(|sz| sz / 32)
+		self.hash_file.size().map(|sz| sz / Hash::SIZE as u64)
 	}
 
 	/// Syncs all files to disk. A call to sync is required to ensure all the
@@ -347,7 +359,7 @@ where
 
 		// 1. Save compact copy of the hash file, skipping removed data.
 		{
-			let record_len = 32;
+			let record_len = Hash::SIZE as u64;
 
 			let off_to_rm = map_vec!(pos_to_rm, |pos| {
 				let shift = self.prune_list.get_shift(pos.into());
@@ -454,7 +466,7 @@ pub struct HashOnlyMMRBackend {
 }
 
 impl HashOnlyBackend for HashOnlyMMRBackend {
-	fn append(&mut self, position: u64, hashes: Vec<Hash>) -> Result<(), String> {
+	fn append(&mut self, hashes: Vec<Hash>) -> Result<(), String> {
 		for ref h in hashes {
 			self.hash_file.append(h);
 		}

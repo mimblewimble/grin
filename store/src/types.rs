@@ -302,6 +302,10 @@ impl AppendOnlyFile {
 		fs::metadata(&self.path).map(|md| md.len())
 	}
 
+	pub fn size_unsync(&self) -> u64 {
+		(self.buffer_start + self.buffer.len()) as u64
+	}
+
 	/// Path of the underlying file
 	pub fn path(&self) -> String {
 		self.path.clone()
