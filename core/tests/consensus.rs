@@ -408,17 +408,17 @@ fn next_target_adjustment() {
 	let diff_one = Difficulty::one();
 	assert_eq!(
 		next_difficulty(1, vec![HeaderInfo::from_ts_diff(cur_time, diff_one)]),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 4),
 	);
 	assert_eq!(
 		next_difficulty(1, vec![HeaderInfo::new(cur_time, diff_one, 10, true)]),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 4),
 	);
 
 	let mut hi = HeaderInfo::from_diff_scaling(diff_one, 1);
 	assert_eq!(
 		next_difficulty(1, repeat(60, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 4),
 	);
 	hi.is_secondary = true;
 	assert_eq!(
@@ -428,7 +428,7 @@ fn next_target_adjustment() {
 	hi.secondary_scaling = 100;
 	assert_eq!(
 		next_difficulty(1, repeat(60, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 93),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 106),
 	);
 
 	// Check we don't get stuck on difficulty 1
