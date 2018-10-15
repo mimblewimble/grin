@@ -44,16 +44,18 @@ impl HashFile {
 		Ok(HashFile { file })
 	}
 
-	/// TODO - Error handling, get rid of unwrap()
+	/// Append a hash to this hash file.
+	/// Will not be written to disk until flush() is subsequently called.
+	/// Alternatively discard() may be called to discard any pending changes.
 	pub fn append(&mut self, hash: &Hash) -> io::Result<()> {
-		self.file.append(&mut ser::ser_vec(hash).unwrap());
+		let mut bytes = ser::ser_vec(hash).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+		self.file.append(&mut bytes);
 		Ok(())
 	}
 
 	/// Read a hash from the hash file by position.
 	pub fn read(&self, position: u64) -> Option<Hash> {
-		// Read PMMR
-		// The MMR starts at 1, our binary backend starts at 0
+		// The MMR starts at 1, our binary backend starts at 0.
 		let pos = position - 1;
 
 		// Must be on disk, doing a read at the correct position
