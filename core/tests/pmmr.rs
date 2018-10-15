@@ -438,7 +438,7 @@ fn pmmr_prune() {
 	}
 
 	// First check the initial numbers of elements.
-	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 0);
 
 	// pruning a leaf with no parent should do nothing
@@ -447,7 +447,7 @@ fn pmmr_prune() {
 		pmmr.prune(16).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 1);
 
 	// pruning leaves with no shared parent just removes 1 element
@@ -456,7 +456,7 @@ fn pmmr_prune() {
 		pmmr.prune(2).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 2);
 
 	{
@@ -464,7 +464,7 @@ fn pmmr_prune() {
 		pmmr.prune(4).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 3);
 
 	// pruning a non-leaf node has no effect
@@ -473,7 +473,7 @@ fn pmmr_prune() {
 		pmmr.prune(3).unwrap_err();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 3);
 
 	// TODO - no longer true (leaves only now) - pruning sibling removes subtree
@@ -482,7 +482,7 @@ fn pmmr_prune() {
 		pmmr.prune(5).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 4);
 
 	// TODO - no longer true (leaves only now) - pruning all leaves under level >1
@@ -492,7 +492,7 @@ fn pmmr_prune() {
 		pmmr.prune(1).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 5);
 
 	// pruning everything should only leave us with a single peak
@@ -503,7 +503,7 @@ fn pmmr_prune() {
 		}
 		assert_eq!(orig_root, pmmr.root());
 	}
-	assert_eq!(ba.elems.len(), 16);
+	assert_eq!(ba.hashes.len(), 16);
 	assert_eq!(ba.remove_list.len(), 9);
 }
 

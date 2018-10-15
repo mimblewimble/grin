@@ -67,7 +67,13 @@ impl HeaderSync {
 					header_head.hash(),
 					header_head.height,
 				);
+
+				// Reset sync_head to the same as current header_head.
 				self.chain.reset_sync_head(&header_head).unwrap();
+
+				// Rebuild the sync MMR to match our updates sync_head.
+				self.chain.rebuild_sync_mmr(&header_head).unwrap();
+
 				self.history_locators.clear();
 				true
 			}

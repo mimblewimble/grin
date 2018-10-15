@@ -84,8 +84,7 @@ where
 				// here we want to get from underlying hash file
 				// as the pos *may* have been "removed"
 				self.backend.get_from_file(pi)
-			})
-			.collect()
+			}).collect()
 	}
 
 	fn peak_path(&self, peak_pos: u64) -> Vec<Hash> {
@@ -174,7 +173,7 @@ where
 		let elmt_pos = self.last_pos + 1;
 		let mut current_hash = elmt.hash_with_index(elmt_pos - 1);
 
-		let mut to_append = vec![(current_hash, Some(elmt))];
+		let mut to_append = vec![current_hash];
 		let mut pos = elmt_pos;
 
 		let (peak_map, height) = peak_map_height(pos - 1);
@@ -192,11 +191,11 @@ where
 			peak *= 2;
 			pos += 1;
 			current_hash = (left_hash, current_hash).hash_with_index(pos - 1);
-			to_append.push((current_hash, None));
+			to_append.push(current_hash);
 		}
 
 		// append all the new nodes and update the MMR index
-		self.backend.append(elmt_pos, to_append)?;
+		self.backend.append(elmt, to_append)?;
 		self.last_pos = pos;
 		Ok(elmt_pos)
 	}
@@ -464,6 +463,9 @@ pub fn n_leaves(size: u64) -> u64 {
 
 /// Returns the pmmr index of the nth inserted element
 pub fn insertion_to_pmmr_index(mut sz: u64) -> u64 {
+	if sz == 0 {
+		return 0;
+	}
 	// 1 based pmmrs
 	sz -= 1;
 	2 * sz - sz.count_ones() as u64 + 1
