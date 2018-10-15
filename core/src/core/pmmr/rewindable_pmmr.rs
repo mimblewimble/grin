@@ -19,7 +19,7 @@ use std::marker;
 
 use core::hash::Hash;
 use core::pmmr::{bintree_postorder_height, is_leaf, peaks, Backend};
-use ser::{PMMRable, PMMRIndexHashable};
+use ser::{PMMRIndexHashable, PMMRable};
 
 /// Rewindable (but still readonly) view of a PMMR.
 pub struct RewindablePMMR<'a, T, B>

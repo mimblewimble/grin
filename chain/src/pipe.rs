@@ -91,10 +91,19 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 
 		// Check if this block is already know due it being in the current set of orphan blocks.
 		check_known_orphans(&b.header, ctx)?;
+
+		// Check we have *this* block in the store.
+		// Stop if we have processed this block previously (it is in the store).
+		// This is more expensive than the earlier check_known() as we hit the store.
+		check_known_store(&b.header, ctx)?;
 	}
 
 	// Header specific processing.
-	handle_block_header(&b.header, ctx)?;
+	{
+		validate_header(&b.header, ctx)?;
+		add_block_header(&b.header, ctx)?;
+		update_header_head(&b.header, ctx)?;
+	}
 
 	// Check if are processing the "next" block relative to the current chain head.
 	let head = ctx.batch.head()?;
@@ -104,11 +113,6 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		//   * special case where this is the first fast sync full block
 		// Either way we can proceed (and we know the block is new and unprocessed).
 	} else {
-		// Check we have *this* block in the store.
-		// Stop if we have processed this block previously (it is in the store).
-		// This is more expensive than the earlier check_known() as we hit the store.
-		check_known_store(&b.header, ctx)?;
-
 		// At this point it looks like this is a new block that we have not yet processed.
 		// Check we have the *previous* block in the store.
 		// If we do not then treat this block as an orphan.
@@ -128,7 +132,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		if is_next_block(&b.header, &head) {
 			// No need to rewind if we are processing the next block.
 		} else {
-			// Rewind the re-apply blocks on the forked chain to
+			// Rewind and re-apply blocks on the forked chain to
 			// put the txhashset in the correct forked state
 			// (immediately prior to this new block).
 			rewind_and_apply_fork(b, extension)?;
@@ -174,12 +178,8 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 	// Add the newly accepted block and header to our index.
 	add_block(b, ctx)?;
 
-	// Update the chain head (and header_head) if total work is increased.
-	let res = {
-		let _ = update_header_head(&b.header, ctx)?;
-		let res = update_head(b, ctx)?;
-		res
-	};
+	// Update the chain head if total work is increased.
+	let res = update_head(b, ctx)?;
 	Ok(res)
 }
 
@@ -209,8 +209,22 @@ pub fn sync_block_headers(
 
 	if !all_known {
 		for header in headers {
-			handle_block_header(header, ctx)?;
+			validate_header(header, ctx)?;
+			add_block_header(header, ctx)?;
 		}
+
+		let first_header = headers.first().unwrap();
+		let prev_header = ctx.batch.get_block_header(&first_header.previous)?;
+		txhashset::sync_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+			// Optimize this if "next" header
+			extension.rewind(&prev_header)?;
+
+			for header in headers {
+				extension.apply_header(header)?;
+			}
+
+			Ok(())
+		})?;
 	}
 
 	// Update header_head (if most work) and sync_head (regardless) in all cases,
@@ -229,12 +243,6 @@ pub fn sync_block_headers(
 	} else {
 		Ok(None)
 	}
-}
-
-fn handle_block_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	validate_header(header, ctx)?;
-	add_block_header(header, ctx)?;
-	Ok(())
 }
 
 /// Process block header as part of "header first" block propagation.

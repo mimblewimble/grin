@@ -17,7 +17,7 @@ extern crate croaring;
 use croaring::Bitmap;
 
 use core::core::hash::Hash;
-use core::core::pmmr::Backend;
+use core::core::pmmr::{self, Backend};
 use core::core::BlockHeader;
 use core::ser;
 use core::ser::{PMMRable, Readable, Reader, Writeable, Writer};
@@ -59,7 +59,8 @@ where
 	T: PMMRable,
 {
 	/// Backend elements
-	pub elems: Vec<Option<(Hash, Option<T>)>>,
+	pub data: Vec<T>,
+	pub hashes: Vec<Hash>,
 	/// Positions of removed elements
 	pub remove_list: Vec<u64>,
 }
@@ -68,8 +69,9 @@ impl<T> Backend<T> for VecBackend<T>
 where
 	T: PMMRable,
 {
-	fn append(&mut self, _position: u64, data: Vec<(Hash, Option<T>)>) -> Result<(), String> {
-		self.elems.append(&mut map_vec!(data, |d| Some(d.clone())));
+	fn append(&mut self, data: T, hashes: Vec<Hash>) -> Result<(), String> {
+		self.data.push(data);
+		self.hashes.append(&mut hashes.clone());
 		Ok(())
 	}
 
@@ -77,11 +79,7 @@ where
 		if self.remove_list.contains(&position) {
 			None
 		} else {
-			if let Some(ref elem) = self.elems[(position - 1) as usize] {
-				Some(elem.0)
-			} else {
-				None
-			}
+			self.get_from_file(position)
 		}
 	}
 
@@ -89,28 +87,19 @@ where
 		if self.remove_list.contains(&position) {
 			None
 		} else {
-			if let Some(ref elem) = self.elems[(position - 1) as usize] {
-				elem.1.clone()
-			} else {
-				None
-			}
+			self.get_data_from_file(position)
 		}
 	}
 
 	fn get_from_file(&self, position: u64) -> Option<Hash> {
-		if let Some(ref x) = self.elems[(position - 1) as usize] {
-			Some(x.0)
-		} else {
-			None
-		}
+		let hash = &self.hashes[(position - 1) as usize];
+		Some(hash.clone())
 	}
 
 	fn get_data_from_file(&self, position: u64) -> Option<T> {
-		if let Some(ref x) = self.elems[(position - 1) as usize] {
-			x.1.clone()
-		} else {
-			None
-		}
+		let idx = pmmr::n_leaves(position);
+		let data = &self.data[(idx - 1) as usize];
+		Some(data.clone())
 	}
 
 	fn remove(&mut self, position: u64) -> Result<(), String> {
@@ -119,7 +108,9 @@ where
 	}
 
 	fn rewind(&mut self, position: u64, _rewind_rm_pos: &Bitmap) -> Result<(), String> {
-		self.elems = self.elems[0..(position as usize) + 1].to_vec();
+		let idx = pmmr::n_leaves(position);
+		self.data = self.data[0..(idx as usize) + 1].to_vec();
+		self.hashes = self.hashes[0..(position as usize) + 1].to_vec();
 		Ok(())
 	}
 
@@ -141,20 +132,9 @@ where
 	/// Instantiates a new VecBackend<T>
 	pub fn new() -> VecBackend<T> {
 		VecBackend {
-			elems: vec![],
+			data: vec![],
+			hashes: vec![],
 			remove_list: vec![],
 		}
 	}
-
-	// /// Current number of elements in the underlying Vec.
-	// pub fn used_size(&self) -> usize {
-	// 	let mut usz = self.elems.len();
-	// 	for (idx, _) in self.elems.iter().enumerate() {
-	// 		let idx = idx as u64;
-	// 		if self.remove_list.contains(&idx) {
-	// 			usz -= 1;
-	// 		}
-	// 	}
-	// 	usz
-	// }
 }

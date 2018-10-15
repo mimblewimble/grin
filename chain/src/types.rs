@@ -34,9 +34,11 @@ bitflags! {
 }
 
 /// A helper to hold the roots of the txhashset in order to keep them
-/// readable
+/// readable.
 #[derive(Debug)]
 pub struct TxHashSetRoots {
+	/// Header root
+	pub header_root: Hash,
 	/// Output root
 	pub output_root: Hash,
 	/// Range Proof root

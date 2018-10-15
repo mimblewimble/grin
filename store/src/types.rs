@@ -25,10 +25,75 @@ use libc::{ftruncate as ftruncate64, off_t as off64_t};
 #[cfg(any(target_os = "linux"))]
 use libc::{ftruncate64, off64_t};
 
+use core::core::hash::Hash;
 use core::ser;
+use util::LOGGER;
 
 /// A no-op function for doing nothing with some pruned data.
 pub fn prune_noop(_pruned_data: &[u8]) {}
+
+/// Hash file (MMR) wrapper around an append only file.
+pub struct HashFile {
+	file: AppendOnlyFile,
+}
+
+impl HashFile {
+	/// Open (or create) a hash file at the provided path on disk.
+	pub fn open(path: String) -> io::Result<HashFile> {
+		let file = AppendOnlyFile::open(path)?;
+		Ok(HashFile { file })
+	}
+
+	/// Append a hash to this hash file.
+	/// Will not be written to disk until flush() is subsequently called.
+	/// Alternatively discard() may be called to discard any pending changes.
+	pub fn append(&mut self, hash: &Hash) -> io::Result<()> {
+		let mut bytes = ser::ser_vec(hash).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+		self.file.append(&mut bytes);
+		Ok(())
+	}
+
+	/// Read a hash from the hash file by position.
+	pub fn read(&self, position: u64) -> Option<Hash> {
+		// The MMR starts at 1, our binary backend starts at 0.
+		let pos = position - 1;
+
+		// Must be on disk, doing a read at the correct position
+		let file_offset = (pos as usize) * Hash::SIZE;
+		let data = self.file.read(file_offset, Hash::SIZE);
+		match ser::deserialize(&mut &data[..]) {
+			Ok(h) => Some(h),
+			Err(e) => {
+				error!(
+					LOGGER,
+					"Corrupted storage, could not read an entry from hash file: {:?}", e
+				);
+				return None;
+			}
+		}
+	}
+
+	/// Rewind the backend file to the specified position.
+	pub fn rewind(&mut self, position: u64) -> io::Result<()> {
+		self.file.rewind(position * Hash::SIZE as u64);
+		Ok(())
+	}
+
+	/// Flush unsynced changes to the hash file to disk.
+	pub fn flush(&mut self) -> io::Result<()> {
+		self.file.flush()
+	}
+
+	/// Discard any unsynced changes to the hash file.
+	pub fn discard(&mut self) {
+		self.file.discard()
+	}
+
+	/// Size of the hash file in bytes.
+	pub fn size(&self) -> io::Result<u64> {
+		self.file.size()
+	}
+}
 
 /// Wrapper for a file that can be read at any position (random read) but for
 /// which writes are append only. Reads are backed by a memory map (mmap(2)),
@@ -244,6 +309,11 @@ impl AppendOnlyFile {
 	/// Current size of the file in bytes.
 	pub fn size(&self) -> io::Result<u64> {
 		fs::metadata(&self.path).map(|md| md.len())
+	}
+
+	/// Current size of the (unsynced) file in bytes.
+	pub fn size_unsync(&self) -> u64 {
+		(self.buffer_start + self.buffer.len()) as u64
 	}
 
 	/// Path of the underlying file

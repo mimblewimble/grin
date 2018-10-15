@@ -34,7 +34,7 @@ use core::{
 use global;
 use keychain::{self, BlindingFactor};
 use pow::{Difficulty, Proof, ProofOfWork};
-use ser::{self, Readable, Reader, Writeable, Writer};
+use ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use util::{secp, secp_static, static_secp_instance, LOGGER};
 
 /// Errors thrown by Block validation
@@ -193,6 +193,14 @@ impl Default for BlockHeader {
 			kernel_mmr_size: 0,
 			pow: ProofOfWork::default(),
 		}
+	}
+}
+
+/// Block header hashes are maintained in the header MMR
+/// but we store the data itself in the db.
+impl PMMRable for BlockHeader {
+	fn len() -> usize {
+		0
 	}
 }
 
