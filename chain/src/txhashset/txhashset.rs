@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Utility structs to handle the 3 hashtrees (output, range proof,
-//! kernel) more conveniently and transactionally.
+//! Utility structs to handle the 3 MMRs (output, rangeproof,
+//! kernel) along the overall header MMR conveniently and transactionally.
 
 use std::collections::HashSet;
 use std::fs::{self, File};
@@ -28,25 +28,46 @@ use util::secp::pedersen::{Commitment, RangeProof};
 use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
-use core::core::pmmr::{self, ReadonlyPMMR, RewindablePMMR, PMMR};
+use core::core::pmmr::{self, ReadonlyPMMR, RewindablePMMR, DBPMMR, PMMR};
 use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
 
 use error::{Error, ErrorKind};
 use grin_store;
-use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
+use grin_store::pmmr::{HashOnlyMMRBackend, PMMRBackend, PMMR_FILES};
 use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
 use txhashset::{RewindableKernelView, UTXOView};
-use types::{TxHashSetRoots, TxHashsetWriteStatus};
+use types::{Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use util::{file, secp_static, zip, LOGGER};
 
+const HEADERHASHSET_SUBDIR: &'static str = "header";
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
+
+const HEADER_HEAD_SUBDIR: &'static str = "header_head";
+const SYNC_HEAD_SUBDIR: &'static str = "sync_head";
+
 const OUTPUT_SUBDIR: &'static str = "output";
 const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
 const KERNEL_SUBDIR: &'static str = "kernel";
+
 const TXHASHSET_ZIP: &'static str = "txhashset_snapshot.zip";
+
+struct HashOnlyMMRHandle {
+	backend: HashOnlyMMRBackend,
+	last_pos: u64,
+}
+
+impl HashOnlyMMRHandle {
+	fn new(root_dir: &str, sub_dir: &str, file_name: &str) -> Result<HashOnlyMMRHandle, Error> {
+		let path = Path::new(root_dir).join(sub_dir).join(file_name);
+		fs::create_dir_all(path.clone())?;
+		let backend = HashOnlyMMRBackend::new(path.to_str().unwrap().to_string())?;
+		let last_pos = backend.unpruned_size()?;
+		Ok(HashOnlyMMRHandle { backend, last_pos })
+	}
+}
 
 struct PMMRHandle<T>
 where
@@ -61,19 +82,17 @@ where
 	T: PMMRable + ::std::fmt::Debug,
 {
 	fn new(
-		root_dir: String,
+		root_dir: &str,
+		sub_dir: &str,
 		file_name: &str,
 		prunable: bool,
 		header: Option<&BlockHeader>,
 	) -> Result<PMMRHandle<T>, Error> {
-		let path = Path::new(&root_dir).join(TXHASHSET_SUBDIR).join(file_name);
+		let path = Path::new(root_dir).join(sub_dir).join(file_name);
 		fs::create_dir_all(path.clone())?;
-		let be = PMMRBackend::new(path.to_str().unwrap().to_string(), prunable, header)?;
-		let sz = be.unpruned_size()?;
-		Ok(PMMRHandle {
-			backend: be,
-			last_pos: sz,
-		})
+		let backend = PMMRBackend::new(path.to_str().unwrap().to_string(), prunable, header)?;
+		let last_pos = backend.unpruned_size()?;
+		Ok(PMMRHandle { backend, last_pos })
 	}
 }
 
@@ -86,8 +105,24 @@ where
 /// guaranteed to indicate whether an output is spent or not. The index
 /// may have commitments that have already been spent, even with
 /// pruning enabled.
-
 pub struct TxHashSet {
+	/// Header MMR to support the header_head chain.
+	/// This is rewound and applied transactionally with the
+	/// output, rangeproof and kernel MMRs during an extension or a
+	/// readonly_extension.
+	/// It can also be rewound and applied separately via a header_extension.
+	/// Note: the header MMR is backed by the database maintains just the hash file.
+	header_pmmr_h: HashOnlyMMRHandle,
+
+	/// Header MMR to support exploratory sync_head.
+	/// The header_head and sync_head chains can diverge so we need to maintain
+	/// multiple header MMRs during the sync process.
+	///
+	/// Note: this is rewound and applied separately to the other MMRs
+	/// via a "sync_extension".
+	/// Note: the sync MMR is backed by the database and maintains just the hash file.
+	sync_pmmr_h: HashOnlyMMRHandle,
+
 	output_pmmr_h: PMMRHandle<OutputIdentifier>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
 	kernel_pmmr_h: PMMRHandle<TxKernel>,
@@ -104,9 +139,33 @@ impl TxHashSet {
 		header: Option<&BlockHeader>,
 	) -> Result<TxHashSet, Error> {
 		Ok(TxHashSet {
-			output_pmmr_h: PMMRHandle::new(root_dir.clone(), OUTPUT_SUBDIR, true, header)?,
-			rproof_pmmr_h: PMMRHandle::new(root_dir.clone(), RANGE_PROOF_SUBDIR, true, header)?,
-			kernel_pmmr_h: PMMRHandle::new(root_dir.clone(), KERNEL_SUBDIR, false, None)?,
+			header_pmmr_h: HashOnlyMMRHandle::new(
+				&root_dir,
+				HEADERHASHSET_SUBDIR,
+				HEADER_HEAD_SUBDIR,
+			)?,
+			sync_pmmr_h: HashOnlyMMRHandle::new(&root_dir, HEADERHASHSET_SUBDIR, SYNC_HEAD_SUBDIR)?,
+			output_pmmr_h: PMMRHandle::new(
+				&root_dir,
+				TXHASHSET_SUBDIR,
+				OUTPUT_SUBDIR,
+				true,
+				header,
+			)?,
+			rproof_pmmr_h: PMMRHandle::new(
+				&root_dir,
+				TXHASHSET_SUBDIR,
+				RANGE_PROOF_SUBDIR,
+				true,
+				header,
+			)?,
+			kernel_pmmr_h: PMMRHandle::new(
+				&root_dir,
+				TXHASHSET_SUBDIR,
+				KERNEL_SUBDIR,
+				false,
+				None,
+			)?,
 			commit_index,
 		})
 	}
@@ -186,16 +245,23 @@ impl TxHashSet {
 		rproof_pmmr.elements_from_insertion_index(start_index, max_count)
 	}
 
-	/// Get sum tree roots
-	/// TODO: Return data instead of hashes
-	pub fn roots(&mut self) -> (Hash, Hash, Hash) {
+	/// Get MMR roots.
+	pub fn roots(&mut self) -> TxHashSetRoots {
+		let header_pmmr: DBPMMR<BlockHeader, _> =
+			DBPMMR::at(&mut self.header_pmmr_h.backend, self.header_pmmr_h.last_pos);
 		let output_pmmr: PMMR<OutputIdentifier, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		let rproof_pmmr: PMMR<RangeProof, _> =
 			PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
 		let kernel_pmmr: PMMR<TxKernel, _> =
 			PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
-		(output_pmmr.root(), rproof_pmmr.root(), kernel_pmmr.root())
+
+		TxHashSetRoots {
+			header_root: header_pmmr.root(),
+			output_root: output_pmmr.root(),
+			rproof_root: rproof_pmmr.root(),
+			kernel_root: kernel_pmmr.root(),
+		}
 	}
 
 	/// build a new merkle proof for the given position
@@ -255,23 +321,28 @@ pub fn extending_readonly<'a, F, T>(trees: &'a mut TxHashSet, inner: F) -> Resul
 where
 	F: FnOnce(&mut Extension) -> Result<T, Error>,
 {
-	let res: Result<T, Error>;
-	{
-		let commit_index = trees.commit_index.clone();
-		let batch = commit_index.batch()?;
+	let commit_index = trees.commit_index.clone();
+	let batch = commit_index.batch()?;
 
-		// We want to use the current head of the most work chain unless
-		// we explicitly rewind the extension.
-		let header = batch.head_header()?;
+	// We want to use the current head of the most work chain unless
+	// we explicitly rewind the extension.
+	let header = batch.head_header()?;
 
-		trace!(LOGGER, "Starting new txhashset (readonly) extension.");
+	trace!(LOGGER, "Starting new txhashset (readonly) extension.");
+
+	let res = {
 		let mut extension = Extension::new(trees, &batch, header);
 		extension.force_rollback();
-		res = inner(&mut extension);
-	}
+
+		// TODO - header_mmr may be out ahead via the header_head
+		// TODO - do we need to handle this via an explicit rewind on the header_mmr?
+
+		inner(&mut extension)
+	};
 
 	trace!(LOGGER, "Rollbacking txhashset (readonly) extension.");
 
+	trees.header_pmmr_h.backend.discard();
 	trees.output_pmmr_h.backend.discard();
 	trees.rproof_pmmr_h.backend.discard();
 	trees.kernel_pmmr_h.backend.discard();
@@ -340,7 +411,7 @@ pub fn extending<'a, F, T>(
 where
 	F: FnOnce(&mut Extension) -> Result<T, Error>,
 {
-	let sizes: (u64, u64, u64);
+	let sizes: (u64, u64, u64, u64);
 	let res: Result<T, Error>;
 	let rollback: bool;
 
@@ -353,6 +424,9 @@ where
 	let child_batch = batch.child()?;
 	{
 		trace!(LOGGER, "Starting new txhashset extension.");
+
+		// TODO - header_mmr may be out ahead via the header_head
+		// TODO - do we need to handle this via an explicit rewind on the header_mmr?
 		let mut extension = Extension::new(trees, &child_batch, header);
 		res = inner(&mut extension);
 
@@ -366,6 +440,7 @@ where
 				LOGGER,
 				"Error returned, discarding txhashset extension: {}", e
 			);
+			trees.header_pmmr_h.backend.discard();
 			trees.output_pmmr_h.backend.discard();
 			trees.rproof_pmmr_h.backend.discard();
 			trees.kernel_pmmr_h.backend.discard();
@@ -374,23 +449,279 @@ where
 		Ok(r) => {
 			if rollback {
 				trace!(LOGGER, "Rollbacking txhashset extension. sizes {:?}", sizes);
+				trees.header_pmmr_h.backend.discard();
 				trees.output_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
 			} else {
 				trace!(LOGGER, "Committing txhashset extension. sizes {:?}", sizes);
 				child_batch.commit()?;
+				trees.header_pmmr_h.backend.sync()?;
 				trees.output_pmmr_h.backend.sync()?;
 				trees.rproof_pmmr_h.backend.sync()?;
 				trees.kernel_pmmr_h.backend.sync()?;
-				trees.output_pmmr_h.last_pos = sizes.0;
-				trees.rproof_pmmr_h.last_pos = sizes.1;
-				trees.kernel_pmmr_h.last_pos = sizes.2;
+				trees.header_pmmr_h.last_pos = sizes.0;
+				trees.output_pmmr_h.last_pos = sizes.1;
+				trees.rproof_pmmr_h.last_pos = sizes.2;
+				trees.kernel_pmmr_h.last_pos = sizes.3;
 			}
 
 			trace!(LOGGER, "TxHashSet extension done.");
 			Ok(r)
 		}
+	}
+}
+
+/// Start a new sync MMR unit of work. This MMR tracks the sync_head.
+/// This is used during header sync to validate batches of headers as they arrive
+/// without needing to repeatedly rewind the header MMR that continues to track
+/// the header_head as they diverge during sync.
+pub fn sync_extending<'a, F, T>(
+	trees: &'a mut TxHashSet,
+	batch: &'a mut Batch,
+	inner: F,
+) -> Result<T, Error>
+where
+	F: FnOnce(&mut HeaderExtension) -> Result<T, Error>,
+{
+	let size: u64;
+	let res: Result<T, Error>;
+	let rollback: bool;
+
+	// We want to use the current sync_head unless
+	// we explicitly rewind the extension.
+	let head = batch.get_sync_head()?;
+	let header = batch.get_block_header(&head.last_block_h)?;
+
+	// create a child transaction so if the state is rolled back by itself, all
+	// index saving can be undone
+	let child_batch = batch.child()?;
+	{
+		trace!(LOGGER, "Starting new txhashset sync_head extension.");
+		let pmmr = DBPMMR::at(&mut trees.sync_pmmr_h.backend, trees.sync_pmmr_h.last_pos);
+		let mut extension = HeaderExtension::new(pmmr, &child_batch, header);
+
+		res = inner(&mut extension);
+
+		rollback = extension.rollback;
+		size = extension.size();
+	}
+
+	match res {
+		Err(e) => {
+			debug!(
+				LOGGER,
+				"Error returned, discarding txhashset sync_head extension: {}", e
+			);
+			trees.sync_pmmr_h.backend.discard();
+			Err(e)
+		}
+		Ok(r) => {
+			if rollback {
+				trace!(
+					LOGGER,
+					"Rollbacking txhashset sync_head extension. size {:?}",
+					size
+				);
+				trees.sync_pmmr_h.backend.discard();
+			} else {
+				trace!(
+					LOGGER,
+					"Committing txhashset sync_head extension. size {:?}",
+					size
+				);
+				child_batch.commit()?;
+				trees.sync_pmmr_h.backend.sync()?;
+				trees.sync_pmmr_h.last_pos = size;
+			}
+			trace!(LOGGER, "TxHashSet sync_head extension done.");
+			Ok(r)
+		}
+	}
+}
+
+/// Start a new header MMR unit of work. This MMR tracks the header_head.
+/// This MMR can be extended individually beyond the other (output, rangeproof and kernel) MMRs
+/// to allow headers to be validated before we receive the full block data.
+pub fn header_extending<'a, F, T>(
+	trees: &'a mut TxHashSet,
+	batch: &'a mut Batch,
+	inner: F,
+) -> Result<T, Error>
+where
+	F: FnOnce(&mut HeaderExtension) -> Result<T, Error>,
+{
+	let size: u64;
+	let res: Result<T, Error>;
+	let rollback: bool;
+
+	// We want to use the current head of the header chain unless
+	// we explicitly rewind the extension.
+	let head = batch.header_head()?;
+	let header = batch.get_block_header(&head.last_block_h)?;
+
+	// create a child transaction so if the state is rolled back by itself, all
+	// index saving can be undone
+	let child_batch = batch.child()?;
+	{
+		trace!(LOGGER, "Starting new txhashset header extension.");
+		let pmmr = DBPMMR::at(
+			&mut trees.header_pmmr_h.backend,
+			trees.header_pmmr_h.last_pos,
+		);
+		let mut extension = HeaderExtension::new(pmmr, &child_batch, header);
+		res = inner(&mut extension);
+
+		rollback = extension.rollback;
+		size = extension.size();
+	}
+
+	match res {
+		Err(e) => {
+			debug!(
+				LOGGER,
+				"Error returned, discarding txhashset header extension: {}", e
+			);
+			trees.header_pmmr_h.backend.discard();
+			Err(e)
+		}
+		Ok(r) => {
+			if rollback {
+				trace!(
+					LOGGER,
+					"Rollbacking txhashset header extension. size {:?}",
+					size
+				);
+				trees.header_pmmr_h.backend.discard();
+			} else {
+				trace!(
+					LOGGER,
+					"Committing txhashset header extension. size {:?}",
+					size
+				);
+				child_batch.commit()?;
+				trees.header_pmmr_h.backend.sync()?;
+				trees.header_pmmr_h.last_pos = size;
+			}
+			trace!(LOGGER, "TxHashSet header extension done.");
+			Ok(r)
+		}
+	}
+}
+
+/// A header extension to allow the header MMR to extend beyond the other MMRs individually.
+/// This is to allow headers to be validated against the MMR before we have the full block data.
+pub struct HeaderExtension<'a> {
+	header: BlockHeader,
+
+	pmmr: DBPMMR<'a, BlockHeader, HashOnlyMMRBackend>,
+
+	/// Rollback flag.
+	rollback: bool,
+
+	/// Batch in which the extension occurs, public so it can be used within
+	/// an `extending` closure. Just be careful using it that way as it will
+	/// get rolled back with the extension (i.e on a losing fork).
+	pub batch: &'a Batch<'a>,
+}
+
+impl<'a> HeaderExtension<'a> {
+	fn new(
+		pmmr: DBPMMR<'a, BlockHeader, HashOnlyMMRBackend>,
+		batch: &'a Batch,
+		header: BlockHeader,
+	) -> HeaderExtension<'a> {
+		HeaderExtension {
+			header,
+			pmmr,
+			rollback: false,
+			batch,
+		}
+	}
+
+	/// Apply a new header to the header MMR extension.
+	/// This may be either the header MMR or the sync MMR depending on the
+	/// extension.
+	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
+		self.pmmr
+			.push(header.clone())
+			.map_err(&ErrorKind::TxHashSetErr)?;
+		self.header = header.clone();
+		Ok(())
+	}
+
+	/// Rewind the header extension to the specified header.
+	/// Note the close relationship between header height and insertion index.
+	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
+		debug!(
+			LOGGER,
+			"Rewind header extension to {} at {}",
+			header.hash(),
+			header.height
+		);
+
+		let header_pos = pmmr::insertion_to_pmmr_index(header.height + 1);
+		self.pmmr
+			.rewind(header_pos)
+			.map_err(&ErrorKind::TxHashSetErr)?;
+
+		// Update our header to reflect the one we rewound to.
+		self.header = header.clone();
+
+		Ok(())
+	}
+
+	/// Truncate the header MMR (rewind all the way back to pos 0).
+	/// Used when rebuilding the header MMR by reapplying all headers
+	/// including the genesis block header.
+	pub fn truncate(&mut self) -> Result<(), Error> {
+		debug!(LOGGER, "Truncating header extension.");
+		self.pmmr.rewind(0).map_err(&ErrorKind::TxHashSetErr)?;
+		Ok(())
+	}
+
+	/// The size of the header MMR.
+	pub fn size(&self) -> u64 {
+		self.pmmr.unpruned_size()
+	}
+
+	/// TODO - think about how to optimize this.
+	/// Requires *all* header hashes to be iterated over in ascending order.
+	pub fn rebuild(&mut self, head: &Tip, genesis: &BlockHeader) -> Result<(), Error> {
+		debug!(
+			LOGGER,
+			"About to rebuild header extension from {:?} to {:?}.",
+			genesis.hash(),
+			head.last_block_h,
+		);
+
+		let mut header_hashes = vec![];
+		let mut current = self.batch.get_block_header(&head.last_block_h)?;
+		while current.height > 0 {
+			header_hashes.push(current.hash());
+			current = self.batch.get_block_header(&current.previous)?;
+		}
+		// Include the genesis header as we will re-apply it after truncating the extension.
+		header_hashes.push(genesis.hash());
+		header_hashes.reverse();
+
+		// Trucate the extension (back to pos 0).
+		self.truncate()?;
+
+		debug!(
+			LOGGER,
+			"Re-applying {} headers to extension, from {:?} to {:?}.",
+			header_hashes.len(),
+			header_hashes.first().unwrap(),
+			header_hashes.last().unwrap(),
+		);
+
+		for h in header_hashes {
+			let header = self.batch.get_block_header(&h)?;
+			// self.validate_header_root()?;
+			self.apply_header(&header)?;
+		}
+		Ok(())
 	}
 }
 
@@ -400,6 +731,7 @@ where
 pub struct Extension<'a> {
 	header: BlockHeader,
 
+	header_pmmr: DBPMMR<'a, BlockHeader, HashOnlyMMRBackend>,
 	output_pmmr: PMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
@@ -447,6 +779,10 @@ impl<'a> Extension<'a> {
 	fn new(trees: &'a mut TxHashSet, batch: &'a Batch, header: BlockHeader) -> Extension<'a> {
 		Extension {
 			header,
+			header_pmmr: DBPMMR::at(
+				&mut trees.header_pmmr_h.backend,
+				trees.header_pmmr_h.last_pos,
+			),
 			output_pmmr: PMMR::at(
 				&mut trees.output_pmmr_h.backend,
 				trees.output_pmmr_h.last_pos,
@@ -508,7 +844,16 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Apply a new block to the existing state.
+	///
+	/// Applies the following -
+	///   * header
+	///   * outputs
+	///   * inputs
+	///   * kernels
+	///
 	pub fn apply_block(&mut self, b: &Block) -> Result<(), Error> {
+		self.apply_header(&b.header)?;
+
 		for out in b.outputs() {
 			let pos = self.apply_output(out)?;
 			// Update the output_pos index for the new output.
@@ -606,12 +951,18 @@ impl<'a> Extension<'a> {
 		Ok(output_pos)
 	}
 
+	/// Push kernel onto MMR (hash and data files).
 	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
-		// push kernels in their MMR and file
 		self.kernel_pmmr
 			.push(kernel.clone())
 			.map_err(&ErrorKind::TxHashSetErr)?;
+		Ok(())
+	}
 
+	fn apply_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
+		self.header_pmmr
+			.push(header.clone())
+			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
 
@@ -653,12 +1004,12 @@ impl<'a> Extension<'a> {
 
 	/// Rewinds the MMRs to the provided block, rewinding to the last output pos
 	/// and last kernel pos of that block.
-	pub fn rewind(&mut self, block_header: &BlockHeader) -> Result<(), Error> {
-		trace!(
+	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
+		debug!(
 			LOGGER,
-			"Rewind to header {} @ {}",
-			block_header.height,
-			block_header.hash(),
+			"Rewind to header {} at {}",
+			header.hash(),
+			header.height,
 		);
 
 		// We need to build bitmaps of added and removed output positions
@@ -667,16 +1018,19 @@ impl<'a> Extension<'a> {
 		// undone during rewind).
 		// Rewound output pos will be removed from the MMR.
 		// Rewound input (spent) pos will be added back to the MMR.
-		let rewind_rm_pos = input_pos_to_rewind(block_header, &self.header, &self.batch)?;
+		let rewind_rm_pos = input_pos_to_rewind(header, &self.header, &self.batch)?;
+
+		let header_pos = pmmr::insertion_to_pmmr_index(header.height + 1);
 
 		self.rewind_to_pos(
-			block_header.output_mmr_size,
-			block_header.kernel_mmr_size,
+			header_pos,
+			header.output_mmr_size,
+			header.kernel_mmr_size,
 			&rewind_rm_pos,
 		)?;
 
 		// Update our header to reflect the one we rewound to.
-		self.header = block_header.clone();
+		self.header = header.clone();
 
 		Ok(())
 	}
@@ -685,17 +1039,22 @@ impl<'a> Extension<'a> {
 	/// kernel we want to rewind to.
 	fn rewind_to_pos(
 		&mut self,
+		header_pos: u64,
 		output_pos: u64,
 		kernel_pos: u64,
 		rewind_rm_pos: &Bitmap,
 	) -> Result<(), Error> {
-		trace!(
+		debug!(
 			LOGGER,
-			"Rewind txhashset to output {}, kernel {}",
+			"txhashset: rewind_to_pos: header {}, output {}, kernel {}",
+			header_pos,
 			output_pos,
 			kernel_pos,
 		);
 
+		self.header_pmmr
+			.rewind(header_pos)
+			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.output_pmmr
 			.rewind(output_pos, rewind_rm_pos)
 			.map_err(&ErrorKind::TxHashSetErr)?;
@@ -712,13 +1071,23 @@ impl<'a> Extension<'a> {
 	/// and kernel sum trees.
 	pub fn roots(&self) -> TxHashSetRoots {
 		TxHashSetRoots {
+			header_root: self.header_pmmr.root(),
 			output_root: self.output_pmmr.root(),
 			rproof_root: self.rproof_pmmr.root(),
 			kernel_root: self.kernel_pmmr.root(),
 		}
 	}
 
-	/// Validate the various MMR roots against the block header.
+	/// Validate the following MMR roots against the latest header applied -
+	///   * output
+	///   * rangeproof
+	///   * kernel
+	///
+	/// Note we do not validate the header MMR roots here as we need to validate
+	/// a header against the state of the MMR *prior* to applying it as
+	/// each header commits to the root of the MMR of all previous headers,
+	/// not including the header itself.
+	///
 	pub fn validate_roots(&self) -> Result<(), Error> {
 		// If we are validating the genesis block then we have no outputs or
 		// kernels. So we are done here.
@@ -727,6 +1096,7 @@ impl<'a> Extension<'a> {
 		}
 
 		let roots = self.roots();
+
 		if roots.output_root != self.header.output_root
 			|| roots.rproof_root != self.header.range_proof_root
 			|| roots.kernel_root != self.header.kernel_root
@@ -737,7 +1107,26 @@ impl<'a> Extension<'a> {
 		}
 	}
 
-	/// Validate the output and kernel MMR sizes against the block header.
+	/// Validate the provided header by comparing its "prev_root" to the
+	/// root of the current header MMR.
+	///
+	/// TODO - Implement this once we commit to prev_root in block headers.
+	///
+	pub fn validate_header_root(&self, _header: &BlockHeader) -> Result<(), Error> {
+		if self.header.height == 0 {
+			return Ok(());
+		}
+
+		let _roots = self.roots();
+
+		// TODO - validate once we commit to header MMR root in the header
+		// (not just previous hash)
+		// if roots.header_root != header.prev_root
+
+		Ok(())
+	}
+
+	/// Validate the header, output and kernel MMR sizes against the block header.
 	pub fn validate_sizes(&self) -> Result<(), Error> {
 		// If we are validating the genesis block then we have no outputs or
 		// kernels. So we are done here.
@@ -745,10 +1134,14 @@ impl<'a> Extension<'a> {
 			return Ok(());
 		}
 
-		let (output_mmr_size, rproof_mmr_size, kernel_mmr_size) = self.sizes();
-		if output_mmr_size != self.header.output_mmr_size
-			|| kernel_mmr_size != self.header.kernel_mmr_size
-		{
+		let (header_mmr_size, output_mmr_size, rproof_mmr_size, kernel_mmr_size) = self.sizes();
+		let expected_header_mmr_size = pmmr::insertion_to_pmmr_index(self.header.height + 2) - 1;
+
+		if header_mmr_size != expected_header_mmr_size {
+			Err(ErrorKind::InvalidMMRSize.into())
+		} else if output_mmr_size != self.header.output_mmr_size {
+			Err(ErrorKind::InvalidMMRSize.into())
+		} else if kernel_mmr_size != self.header.kernel_mmr_size {
 			Err(ErrorKind::InvalidMMRSize.into())
 		} else if output_mmr_size != rproof_mmr_size {
 			Err(ErrorKind::InvalidMMRSize.into())
@@ -761,6 +1154,9 @@ impl<'a> Extension<'a> {
 		let now = Instant::now();
 
 		// validate all hashes and sums within the trees
+		if let Err(e) = self.header_pmmr.validate() {
+			return Err(ErrorKind::InvalidTxHashSet(e).into());
+		}
 		if let Err(e) = self.output_pmmr.validate() {
 			return Err(ErrorKind::InvalidTxHashSet(e).into());
 		}
@@ -773,7 +1169,8 @@ impl<'a> Extension<'a> {
 
 		debug!(
 			LOGGER,
-			"txhashset: validated the output {}, rproof {}, kernel {} mmrs, took {}s",
+			"txhashset: validated the header {}, output {}, rproof {}, kernel {} mmrs, took {}s",
+			self.header_pmmr.unpruned_size(),
 			self.output_pmmr.unpruned_size(),
 			self.rproof_pmmr.unpruned_size(),
 			self.kernel_pmmr.unpruned_size(),
@@ -871,8 +1268,9 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Sizes of each of the sum trees
-	pub fn sizes(&self) -> (u64, u64, u64) {
+	pub fn sizes(&self) -> (u64, u64, u64, u64) {
 		(
+			self.header_pmmr.unpruned_size(),
 			self.output_pmmr.unpruned_size(),
 			self.rproof_pmmr.unpruned_size(),
 			self.kernel_pmmr.unpruned_size(),

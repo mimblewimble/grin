@@ -35,7 +35,7 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{ChainAdapter, NoStatus, Options, Tip, TxHashsetWriteStatus};
+use types::{ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::LOGGER;
 
@@ -153,6 +153,7 @@ pub struct Chain {
 	// POW verification function
 	pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
 	archive_mode: bool,
+	genesis: BlockHeader,
 }
 
 unsafe impl Sync for Chain {}
@@ -178,7 +179,7 @@ impl Chain {
 		// open the txhashset, creating a new one if necessary
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
-		setup_head(genesis, store.clone(), &mut txhashset)?;
+		setup_head(genesis.clone(), store.clone(), &mut txhashset)?;
 
 		let head = store.head()?;
 		debug!(
@@ -199,6 +200,7 @@ impl Chain {
 			verifier_cache,
 			block_hashes_cache: Arc::new(RwLock::new(LruCache::new(HASHES_CACHE_SIZE))),
 			archive_mode,
+			genesis: genesis.header.clone(),
 		})
 	}
 
@@ -492,11 +494,15 @@ impl Chain {
 			Ok((extension.roots(), extension.sizes()))
 		})?;
 
+		// Carefully destructure these correctly...
+		// TODO - Maybe sizes should be a struct to add some type safety here...
+		let (_, output_mmr_size, _, kernel_mmr_size) = sizes;
+
 		b.header.output_root = roots.output_root;
 		b.header.range_proof_root = roots.rproof_root;
 		b.header.kernel_root = roots.kernel_root;
-		b.header.output_mmr_size = sizes.0;
-		b.header.kernel_mmr_size = sizes.2;
+		b.header.output_mmr_size = output_mmr_size;
+		b.header.kernel_mmr_size = kernel_mmr_size;
 		Ok(())
 	}
 
@@ -524,7 +530,7 @@ impl Chain {
 	}
 
 	/// Returns current txhashset roots
-	pub fn get_txhashset_roots(&self) -> (Hash, Hash, Hash) {
+	pub fn get_txhashset_roots(&self) -> TxHashSetRoots {
 		let mut txhashset = self.txhashset.write().unwrap();
 		txhashset.roots()
 	}
@@ -592,6 +598,40 @@ impl Chain {
 		Ok(())
 	}
 
+	/// Rebuild the sync MMR based on current header_head.
+	/// We rebuild the sync MMR when first entering sync mode so ensure we
+	/// have an MMR we can safely rewind based on the headers received from a peer.
+	/// TODO - think about how to optimize this.
+	pub fn rebuild_sync_mmr(&self, head: &Tip) -> Result<(), Error> {
+		let mut txhashset = self.txhashset.write().unwrap();
+		let mut batch = self.store.batch()?;
+		txhashset::sync_extending(&mut txhashset, &mut batch, |extension| {
+			extension.rebuild(head, &self.genesis)?;
+			Ok(())
+		})?;
+		batch.commit()?;
+		Ok(())
+	}
+
+	/// Rebuild the header MMR based on current header_head.
+	/// We rebuild the header MMR after receiving a txhashset from a peer.
+	/// The txhashset contains output, rangeproof and kernel MMRs but we construct
+	/// the header MMR locally based on headers from our db.
+	/// TODO - think about how to optimize this.
+	fn rebuild_header_mmr(
+		&self,
+		head: &Tip,
+		txhashset: &mut txhashset::TxHashSet,
+	) -> Result<(), Error> {
+		let mut batch = self.store.batch()?;
+		txhashset::header_extending(txhashset, &mut batch, |extension| {
+			extension.rebuild(head, &self.genesis)?;
+			Ok(())
+		})?;
+		batch.commit()?;
+		Ok(())
+	}
+
 	/// Writes a reading view on a txhashset state that's been provided to us.
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
@@ -618,6 +658,10 @@ impl Chain {
 
 		let mut txhashset =
 			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
+
+		// The txhashset.zip contains the output, rangeproof and kernel MMRs.
+		// We must rebuild the header MMR ourselves based on the headers in our db.
+		self.rebuild_header_mmr(&Tip::from_block(&header), &mut txhashset)?;
 
 		// Validate the full kernel history (kernel MMR root for every block header).
 		self.validate_kernel_history(&header, &txhashset)?;
@@ -974,6 +1018,15 @@ fn setup_head(
 				// to match the provided block header.
 				let header = batch.get_block_header(&head.last_block_h)?;
 
+				// If we have no header MMR then rebuild as necessary.
+				// Supports old nodes with no header MMR.
+				txhashset::header_extending(txhashset, &mut batch, |extension| {
+					if extension.size() == 0 {
+						extension.rebuild(&head, &genesis.header)?;
+					}
+					Ok(())
+				})?;
+
 				let res = txhashset::extending(txhashset, &mut batch, |extension| {
 					extension.rewind(&header)?;
 					extension.validate_roots()?;
@@ -1033,16 +1086,14 @@ fn setup_head(
 			batch.save_head(&tip)?;
 			batch.setup_height(&genesis.header, &tip)?;
 
+			// Apply the genesis block to our empty MMRs.
 			txhashset::extending(txhashset, &mut batch, |extension| {
 				extension.apply_block(&genesis)?;
-
-				// Save the block_sums to the db for use later.
-				extension
-					.batch
-					.save_block_sums(&genesis.hash(), &BlockSums::default())?;
-
 				Ok(())
 			})?;
+
+			// Save the block_sums to the db for use later.
+			batch.save_block_sums(&genesis.hash(), &BlockSums::default())?;
 
 			info!(LOGGER, "chain: init: saved genesis: {:?}", genesis.hash());
 		}

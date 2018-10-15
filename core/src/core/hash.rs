@@ -53,11 +53,13 @@ impl fmt::Display for Hash {
 }
 
 impl Hash {
+	pub const SIZE: usize = 32;
+
 	/// Builds a Hash from a byte vector. If the vector is too short, it will be
 	/// completed by zeroes. If it's too long, it will be truncated.
 	pub fn from_vec(v: &[u8]) -> Hash {
-		let mut h = [0; 32];
-		let copy_size = min(v.len(), 32);
+		let mut h = [0; Hash::SIZE];
+		let copy_size = min(v.len(), Hash::SIZE);
 		h[..copy_size].copy_from_slice(&v[..copy_size]);
 		Hash(h)
 	}
