@@ -451,21 +451,26 @@ where
 	}
 }
 
+/// Simple MMR Backend for hashes only (data maintained in the db).
 pub struct HashOnlyMMRBackend {
-	data_dir: String,
+	/// The hash file underlying this MMR backend.
 	hash_file: HashFile,
 }
 
 impl HashOnlyBackend for HashOnlyMMRBackend {
 	fn append(&mut self, hashes: Vec<Hash>) -> Result<(), String> {
 		for ref h in hashes {
-			self.hash_file.append(h);
+			self.hash_file
+				.append(h)
+				.map_err(|e| format!("Failed to append to backend, {:?}", e))?;
 		}
 		Ok(())
 	}
 
 	fn rewind(&mut self, position: u64) -> Result<(), String> {
-		self.hash_file.rewind(position);
+		self.hash_file
+			.rewind(position)
+			.map_err(|e| format!("Failed to rewind backend, {:?}", e))?;
 		Ok(())
 	}
 
@@ -480,20 +485,22 @@ impl HashOnlyMMRBackend {
 	pub fn new(data_dir: String) -> io::Result<HashOnlyMMRBackend> {
 		let hash_file = HashFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		Ok(HashOnlyMMRBackend {
-			data_dir,
 			hash_file,
 		})
 	}
 
+	/// The unpruned size of this MMR backend.
 	pub fn unpruned_size(&self) -> io::Result<u64> {
 		let sz = self.hash_file.size()?;
 		Ok(sz / Hash::SIZE as u64)
 	}
 
+	/// Discard any pending changes to this MMR backend.
 	pub fn discard(&mut self) {
 		self.hash_file.discard();
 	}
 
+	/// Sync pending changes to the backend file on disk.
 	pub fn sync(&mut self) -> io::Result<()> {
 		if let Err(e) = self.hash_file.flush() {
 			return Err(io::Error::new(
