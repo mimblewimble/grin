@@ -424,6 +424,11 @@ impl Peers {
 			} else if !peer.is_connected() {
 				debug!(LOGGER, "clean_peers {:?}, not connected", peer.info.addr);
 				rm.push(peer.clone());
+			} else if peer.is_stuck() {
+				debug!(LOGGER, "clean_peers {:?}, stuck peer", peer.info.addr);
+				peer.stop();
+				let _ = self.update_state(peer.info.addr, State::Defunct);
+				rm.push(peer.clone());
 			}
 		}
 

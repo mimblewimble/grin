@@ -140,6 +140,18 @@ impl Peer {
 		State::Banned == *self.state.read().unwrap()
 	}
 
+	/// Whether this peer is stuck on sync.
+	pub fn is_stuck(&self) -> bool {
+		let peer_live_info = self.info.live_info.read().unwrap();
+		let now = Utc::now().timestamp_millis();
+		// if last updated difficulty is 30 minutes ago, we're sure this peer is a stuck node.
+		if now > peer_live_info.stuck_detector.timestamp_millis() + 30 * 60 * 1000 {
+			true
+		} else {
+			false
+		}
+	}
+
 	/// Set this peer status to banned
 	pub fn set_banned(&self) {
 		*self.state.write().unwrap() = State::Banned;
