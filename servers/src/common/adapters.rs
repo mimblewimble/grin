@@ -21,7 +21,7 @@ use std::sync::{Arc, RwLock, Weak};
 use std::thread;
 use std::time::Instant;
 
-use chain::{self, ChainAdapter, Options, Tip};
+use chain::{self, ChainAdapter, Options};
 use chrono::prelude::{DateTime, Utc};
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
 use core::core::hash::{Hash, Hashed};

@@ -128,12 +128,12 @@ pub fn create_pow_context<T>(
 where
 	T: EdgeType,
 {
-	// Perform whatever tests, configuration etc are needed to determine desired context + edge size
-	// + params
-	// Hardcode to regular cuckoo for now
-	CuckooContext::<T>::new(edge_bits, proof_size, max_sols)
-	// Or switch to cuckatoo as follows:
-	// CuckatooContext::<T>::new(edge_bits, proof_size, easiness_pct, max_sols)
+	CuckatooContext::<T>::new(edge_bits, proof_size, max_sols)
+}
+
+/// Return the type of the pos
+pub fn pow_type() -> PoWContextTypes {
+	PoWContextTypes::Cuckatoo
 }
 
 /// The minimum acceptable sizeshift
