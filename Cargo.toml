@@ -1,6 +1,6 @@
 [package]
 name = "grin"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 exclude = ["**/*.grin", "**/*.grin2"]
 publish = false
