@@ -103,7 +103,7 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbDa
 		&mut b.header,
 		next_header_info.difficulty,
 		global::proofsize(),
-		global::min_sizeshift(),
+		global::min_edge_bits(),
 	).unwrap();
 	chain.process_block(b, chain::Options::MINE).unwrap();
 	chain.validate(false).unwrap();

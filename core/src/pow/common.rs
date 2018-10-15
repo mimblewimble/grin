@@ -130,7 +130,7 @@ macro_rules! to_edge {
 }
 
 /// Utility struct to calculate commonly used Cuckoo parameters calculated
-/// from header, nonce, sizeshift, etc.
+/// from header, nonce, edge_bits, etc.
 pub struct CuckooParams<T>
 where
 	T: EdgeType,

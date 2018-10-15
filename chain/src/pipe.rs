@@ -371,13 +371,13 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 	if !ctx.opts.contains(Options::SKIP_POW) {
 		if !header.pow.is_primary() && !header.pow.is_secondary() {
-			return Err(ErrorKind::InvalidSizeshift.into());
+			return Err(ErrorKind::LowEdgebits.into());
 		}
-		let shift = header.pow.cuckoo_sizeshift();
-		if !(ctx.pow_verifier)(header, shift).is_ok() {
+		let edge_bits = header.pow.edge_bits();
+		if !(ctx.pow_verifier)(header, edge_bits).is_ok() {
 			error!(
 				LOGGER,
-				"pipe: error validating header with cuckoo shift size {}", shift
+				"pipe: error validating header with cuckoo edge_bits {}", edge_bits
 			);
 			return Err(ErrorKind::InvalidPow.into());
 		}

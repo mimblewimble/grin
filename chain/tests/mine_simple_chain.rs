@@ -75,19 +75,19 @@ fn mine_empty_chain() {
 
 		chain.set_txhashset_roots(&mut b, false).unwrap();
 
-		let sizeshift = if n == 2 {
-			global::min_sizeshift() + 1
+		let edge_bits = if n == 2 {
+			global::min_edge_bits() + 1
 		} else {
-			global::min_sizeshift()
+			global::min_edge_bits()
 		};
-		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
+		b.header.pow.proof.edge_bits = edge_bits;
 		pow::pow_size(
 			&mut b.header,
 			next_header_info.difficulty,
 			global::proofsize(),
-			sizeshift,
+			edge_bits,
 		).unwrap();
-		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
+		b.header.pow.proof.edge_bits = edge_bits;
 
 		let bhash = b.hash();
 		chain.process_block(b, chain::Options::MINE).unwrap();
@@ -399,19 +399,19 @@ fn output_header_mappings() {
 
 		chain.set_txhashset_roots(&mut b, false).unwrap();
 
-		let sizeshift = if n == 2 {
-			global::min_sizeshift() + 1
+		let edge_bits = if n == 2 {
+			global::min_edge_bits() + 1
 		} else {
-			global::min_sizeshift()
+			global::min_edge_bits()
 		};
-		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
+		b.header.pow.proof.edge_bits = edge_bits;
 		pow::pow_size(
 			&mut b.header,
 			next_header_info.difficulty,
 			global::proofsize(),
-			sizeshift,
+			edge_bits,
 		).unwrap();
-		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
+		b.header.pow.proof.edge_bits = edge_bits;
 
 		chain.process_block(b, chain::Options::MINE).unwrap();
 

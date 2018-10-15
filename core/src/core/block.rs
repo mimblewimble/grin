@@ -158,11 +158,11 @@ fn fixed_size_of_serialized_header(_version: u16) -> usize {
 }
 
 /// Serialized size of a BlockHeader
-pub fn serialized_size_of_header(version: u16, cuckoo_sizeshift: u8) -> usize {
+pub fn serialized_size_of_header(version: u16, edge_bits: u8) -> usize {
 	let mut size = fixed_size_of_serialized_header(version);
 
-	size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
-	let nonce_bits = cuckoo_sizeshift as usize - 1;
+	size += mem::size_of::<u8>(); // pow.edge_bits
+	let nonce_bits = edge_bits as usize;
 	let bitvec_len = global::proofsize() * nonce_bits;
 	size += bitvec_len / 8; // pow.nonces
 	if bitvec_len % 8 != 0 {
@@ -306,8 +306,8 @@ impl BlockHeader {
 	pub fn serialized_size(&self) -> usize {
 		let mut size = fixed_size_of_serialized_header(self.version);
 
-		size += mem::size_of::<u8>(); // pow.cuckoo_sizeshift
-		let nonce_bits = self.pow.cuckoo_sizeshift() as usize - 1;
+		size += mem::size_of::<u8>(); // pow.edge_bits
+		let nonce_bits = self.pow.edge_bits() as usize;
 		let bitvec_len = global::proofsize() * nonce_bits;
 		size += bitvec_len / 8; // pow.nonces
 		if bitvec_len % 8 != 0 {

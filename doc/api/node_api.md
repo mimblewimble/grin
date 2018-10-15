@@ -78,7 +78,7 @@ Optionally return results as "compact blocks" by passing `?compact` query.
     | - range_proof_root    | string   | Merklish root of all range proofs in the TxHashSet                          |
     | - kernel_root         | string   | Merklish root of all transaction kernels in the TxHashSet                   |
     | - nonce               | number   | Nonce increment used to mine this block                                     |
-    | - cuckoo_size         | number   | Size of the cuckoo graph                                                    |
+    | - edge_bits           | number   | Size of the cuckoo graph (2_log of number of edges)                         |
     | - cuckoo_solution     | []number | The Cuckoo solution for this block                                          |
     | - total_difficulty    | number   | Total accumulated difficulty since genesis block                            |
     | - total_kernel_offset | string   | Total kernel offset since genesis block                                     |
@@ -163,7 +163,7 @@ Returns data about a block headers given either a hash or height or an output co
     | - range_proof_root    | string   | Merklish root of all range proofs in the TxHashSet                          |
     | - kernel_root         | string   | Merklish root of all transaction kernels in the TxHashSet                   |
     | - nonce               | number   | Nonce increment used to mine this block                                     |
-    | - cuckoo_size         | number   | Size of the cuckoo graph                                                    |
+    | - edge_bits           | number   | Size of the cuckoo graph (2_log of number of edges)                         |
     | - cuckoo_solution     | []number | The Cuckoo solution for this block                                          |
     | - total_difficulty    | number   | Total accumulated difficulty since genesis block                            |
     | - total_kernel_offset | string   | Total kernel offset since genesis block                                     |

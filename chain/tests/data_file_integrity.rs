@@ -97,7 +97,7 @@ fn data_files() {
 				&mut b.header,
 				next_header_info.difficulty,
 				global::proofsize(),
-				global::min_sizeshift(),
+				global::min_edge_bits(),
 			).unwrap();
 
 			let _bhash = b.hash();

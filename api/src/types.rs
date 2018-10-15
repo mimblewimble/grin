@@ -502,7 +502,7 @@ pub struct BlockHeaderPrintable {
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Size of the cuckoo graph
-	pub cuckoo_size: u8,
+	pub edge_bits: u8,
 	pub cuckoo_solution: Vec<u64>,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: u64,
@@ -522,7 +522,7 @@ impl BlockHeaderPrintable {
 			range_proof_root: util::to_hex(h.range_proof_root.to_vec()),
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),
 			nonce: h.pow.nonce,
-			cuckoo_size: h.pow.cuckoo_sizeshift(),
+			edge_bits: h.pow.edge_bits(),
 			cuckoo_solution: h.pow.proof.nonces.clone(),
 			total_difficulty: h.pow.total_difficulty.to_num(),
 			total_kernel_offset: h.total_kernel_offset.to_hex(),
