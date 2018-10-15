@@ -98,7 +98,7 @@ where
 
 	fn get_data_from_file(&self, position: u64) -> Option<T> {
 		let idx = pmmr::n_leaves(position);
-		let data = &self.data[(idx-1) as usize];
+		let data = &self.data[(idx - 1) as usize];
 		Some(data.clone())
 	}
 
