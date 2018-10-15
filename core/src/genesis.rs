@@ -106,11 +106,12 @@ pub fn genesis_testnet3() -> core::Block {
 }
 
 /// 4th testnet genesis block (cuckatoo29 AR, 30+ AF). Temporary values for now (Pow won't verify)
+/// NB: Currently set to intenal pre-testnet values
 pub fn genesis_testnet4() -> core::Block {
 	core::Block::with_header(core::BlockHeader {
 		height: 0,
 		previous: core::hash::Hash([0xff; 32]),
-		timestamp: Utc.ymd(2018, 8, 30).and_hms(18, 0, 0),
+		timestamp: Utc.ymd(2018, 10, 15).and_hms(12, 0, 0),
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
 			scaling_difficulty: 1,
