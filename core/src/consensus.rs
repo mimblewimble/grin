@@ -132,12 +132,6 @@ pub fn valid_header_version(height: u64, version: u16) -> bool {
 	}
 }
 
-/// Time window in blocks to calculate block time median
-pub const MEDIAN_TIME_WINDOW: u64 = 11;
-
-/// Index at half the desired median
-pub const MEDIAN_TIME_INDEX: u64 = MEDIAN_TIME_WINDOW / 2;
-
 /// Number of blocks used to calculate difficulty adjustments
 pub const DIFFICULTY_ADJUST_WINDOW: u64 = 60;
 
@@ -246,32 +240,20 @@ where
 	// Create vector of difficulty data running from earliest
 	// to latest, and pad with simulated pre-genesis data to allow earlier
 	// adjustment if there isn't enough window data
-	// length will be DIFFICULTY_ADJUST_WINDOW+MEDIAN_TIME_WINDOW
+	// length will be DIFFICULTY_ADJUST_WINDOW
 	let diff_data = global::difficulty_data_to_vector(cursor);
 
 	// First, get the ratio of secondary PoW vs primary
 	let sec_pow_scaling = secondary_pow_scaling(height, &diff_data);
 
-	// Obtain the median window for the earlier time period
-	// the first MEDIAN_TIME_WINDOW elements
-	let earliest_ts = time_window_median(&diff_data, 0, MEDIAN_TIME_WINDOW as usize);
+	let earliest_ts = diff_data[0].timestamp;
+	let latest_ts = diff_data[diff_data.len()-1].timestamp;
 
-	// Obtain the median window for the latest time period
-	// i.e. the last MEDIAN_TIME_WINDOW elements
-	let latest_ts = time_window_median(
-		&diff_data,
-		DIFFICULTY_ADJUST_WINDOW as usize,
-		MEDIAN_TIME_WINDOW as usize,
-	);
-
-	// median time delta
+	// time delta within the window
 	let ts_delta = latest_ts - earliest_ts;
 
 	// Get the difficulty sum of the last DIFFICULTY_ADJUST_WINDOW elements
-	let diff_sum = diff_data
-		.iter()
-		.skip(MEDIAN_TIME_WINDOW as usize)
-		.fold(0, |sum, d| sum + d.difficulty.to_num());
+	let diff_sum: u64 = diff_data.iter().map(|dd| dd.difficulty.to_num()).sum();
 
 	// Apply dampening except when difficulty is near 1
 	let ts_damp = if diff_sum < DAMP_FACTOR * DIFFICULTY_ADJUST_WINDOW {
@@ -323,20 +305,6 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 		scaling
 	};
 	bounded_scaling as u32
-}
-
-/// Median timestamp within the time window starting at `from` with the
-/// provided `length`.
-fn time_window_median(diff_data: &Vec<HeaderInfo>, from: usize, length: usize) -> u64 {
-	let mut window_latest: Vec<u64> = diff_data
-		.iter()
-		.skip(from)
-		.take(length)
-		.map(|n| n.timestamp)
-		.collect();
-	// pick median
-	window_latest.sort();
-	window_latest[MEDIAN_TIME_INDEX as usize]
 }
 
 /// Consensus rule that collections of items are sorted lexicographically.
