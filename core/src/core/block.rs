@@ -118,6 +118,8 @@ pub struct BlockHeader {
 	pub height: u64,
 	/// Hash of the block previous to this in the chain.
 	pub previous: Hash,
+	/// Root hash of the header MMR at the previous header.
+	pub prev_root: Hash,
 	/// Timestamp at which the block was built.
 	pub timestamp: DateTime<Utc>,
 	/// Merklish root of all the commitments in the TxHashSet
@@ -143,8 +145,9 @@ fn fixed_size_of_serialized_header(_version: u16) -> usize {
 	let mut size: usize = 0;
 	size += mem::size_of::<u16>(); // version
 	size += mem::size_of::<u64>(); // height
+	size += mem::size_of::<i64>(); // timestamp
 	size += mem::size_of::<Hash>(); // previous
-	size += mem::size_of::<u64>(); // timestamp
+	size += mem::size_of::<Hash>(); // prev_root
 	size += mem::size_of::<Hash>(); // output_root
 	size += mem::size_of::<Hash>(); // range_proof_root
 	size += mem::size_of::<Hash>(); // kernel_root
@@ -176,8 +179,9 @@ impl Default for BlockHeader {
 		BlockHeader {
 			version: 1,
 			height: 0,
-			previous: ZERO_HASH,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
+			previous: ZERO_HASH,
+			prev_root: ZERO_HASH,
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
 			kernel_root: ZERO_HASH,
@@ -211,9 +215,9 @@ impl Writeable for BlockHeader {
 /// Deserialization of a block header
 impl Readable for BlockHeader {
 	fn read(reader: &mut Reader) -> Result<BlockHeader, ser::Error> {
-		let (version, height) = ser_multiread!(reader, read_u16, read_u64);
+		let (version, height, timestamp) = ser_multiread!(reader, read_u16, read_u64, read_i64);
 		let previous = Hash::read(reader)?;
-		let timestamp = reader.read_i64()?;
+		let prev_root = Hash::read(reader)?;
 		let output_root = Hash::read(reader)?;
 		let range_proof_root = Hash::read(reader)?;
 		let kernel_root = Hash::read(reader)?;
@@ -230,8 +234,9 @@ impl Readable for BlockHeader {
 		Ok(BlockHeader {
 			version,
 			height,
-			previous,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc),
+			previous,
+			prev_root,
 			output_root,
 			range_proof_root,
 			kernel_root,
@@ -250,11 +255,9 @@ impl BlockHeader {
 			writer,
 			[write_u16, self.version],
 			[write_u64, self.height],
+			[write_i64, self.timestamp.timestamp()],
 			[write_fixed_bytes, &self.previous],
-			[write_i64, self.timestamp.timestamp()]
-		);
-		ser_multiwrite!(
-			writer,
+			[write_fixed_bytes, &self.prev_root],
 			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
 			[write_fixed_bytes, &self.kernel_root],

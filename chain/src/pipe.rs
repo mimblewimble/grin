@@ -218,6 +218,7 @@ pub fn sync_block_headers(
 			extension.rewind(&prev_header)?;
 
 			for header in headers {
+				extension.validate_root(header)?;
 				extension.apply_header(header)?;
 			}
 
@@ -500,6 +501,7 @@ fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Er
 /// Fully validate the block by applying it to the txhashset extension.
 /// Check both the txhashset roots and sizes are correct after applying the block.
 fn apply_block_to_txhashset(block: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+	ext.validate_header_root(&block.header)?;
 	ext.apply_block(block)?;
 	ext.validate_roots()?;
 	ext.validate_sizes()?;

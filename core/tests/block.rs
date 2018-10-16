@@ -257,7 +257,7 @@ fn empty_block_serialized_size() {
 	let b = new_block(vec![], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 1_223;
+	let target_len = 1_284;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -270,7 +270,7 @@ fn block_single_tx_serialized_size() {
 	let b = new_block(vec![&tx1], &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 2_805;
+	let target_len = 2_866;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -283,7 +283,7 @@ fn empty_compact_block_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_231;
+	let target_len = 1_292;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -297,7 +297,7 @@ fn compact_block_single_tx_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_237;
+	let target_len = 1_298;
 	assert_eq!(vec.len(), target_len);
 }
 
@@ -316,7 +316,7 @@ fn block_10_tx_serialized_size() {
 	let b = new_block(txs.iter().collect(), &keychain, &prev, &key_id);
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &b).expect("serialization failed");
-	let target_len = 17_043;
+	let target_len = 17_104;
 	assert_eq!(vec.len(), target_len,);
 }
 
@@ -335,7 +335,7 @@ fn compact_block_10_tx_serialized_size() {
 	let cb: CompactBlock = b.into();
 	let mut vec = Vec::new();
 	ser::serialize(&mut vec, &cb).expect("serialization failed");
-	let target_len = 1_291;
+	let target_len = 1_352;
 	assert_eq!(vec.len(), target_len,);
 }
 
@@ -428,4 +428,27 @@ fn serialize_deserialize_compact_block() {
 
 	assert_eq!(cb1.header, cb2.header);
 	assert_eq!(cb1.kern_ids(), cb2.kern_ids());
+}
+
+#[test]
+fn empty_block_v2_switch() {
+	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let mut prev = BlockHeader::default();
+	prev.height = consensus::HEADER_V2_HARD_FORK - 1;
+	let key_id = keychain.derive_key_id(1).unwrap();
+	let b = new_block(vec![], &keychain, &prev, &key_id);
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, &b).expect("serialization failed");
+	let target_len = 1_292;
+	assert_eq!(b.header.version, 2);
+	assert_eq!(vec.len(), target_len);
+
+	// another try right before v2
+	prev.height = consensus::HEADER_V2_HARD_FORK - 2;
+	let b = new_block(vec![], &keychain, &prev, &key_id);
+	let mut vec = Vec::new();
+	ser::serialize(&mut vec, &b).expect("serialization failed");
+	let target_len = 1_284;
+	assert_eq!(b.header.version, 1);
+	assert_eq!(vec.len(), target_len);
 }
