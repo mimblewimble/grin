@@ -126,9 +126,14 @@ impl BodySync {
 		// if we have 5 peers to sync from then ask for 50 blocks total (peer_count *
 		// 10) max will be 80 if all 8 peers are advertising more work
 		// also if the chain is already saturated with orphans, throttle
-		let peer_count = self.peers.more_work_peers().len();
+		let peers = if oldest_height < header_head.height.saturating_sub(horizon) {
+			self.peers.more_work_archival_peers()
+		} else {
+			self.peers.more_work_peers()
+		};
+
 		let block_count = cmp::min(
-			cmp::min(100, peer_count * 10),
+			cmp::min(100, peers.len() * 10),
 			chain::MAX_ORPHAN_SIZE.saturating_sub(self.chain.orphans_len()) + 1,
 		);
 
@@ -148,17 +153,13 @@ impl BodySync {
 				body_head.height,
 				header_head.height,
 				hashes_to_get,
-				peer_count,
+				peers.len(),
 			);
 
+			let mut peers_iter = peers.iter().cycle();
+
 			for hash in hashes_to_get.clone() {
-				// only archival  peers can be expected to have blocks older than horizon
-				let peer = if oldest_height < header_head.height.saturating_sub(horizon) {
-					self.peers.more_work_archival_peer()
-				} else {
-					self.peers.more_work_peer()
-				};
-				if let Some(peer) = peer {
+				if let Some(peer) = peers_iter.next() {
 					if let Err(e) = peer.send_block_request(*hash) {
 						debug!(LOGGER, "Skipped request to {}: {:?}", peer.info.addr, e);
 					} else {

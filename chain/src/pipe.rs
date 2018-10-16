@@ -28,7 +28,7 @@ use core::core::verifier_cache::VerifierCache;
 use core::core::Committed;
 use core::core::{Block, BlockHeader, BlockSums};
 use core::global;
-use core::pow::{self, Difficulty};
+use core::pow;
 use error::{Error, ErrorKind};
 use grin_store;
 use store;
@@ -421,12 +421,6 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		let target_difficulty = header.total_difficulty() - prev.total_difficulty();
 
 		if header.pow.to_difficulty() < target_difficulty {
-			return Err(ErrorKind::DifficultyTooLow.into());
-		}
-
-		// explicit check to ensure we are not below the minimum difficulty
-		// we will also check difficulty based on next_difficulty later on
-		if target_difficulty < Difficulty::one() {
 			return Err(ErrorKind::DifficultyTooLow.into());
 		}
 
