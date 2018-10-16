@@ -821,14 +821,14 @@ impl<'a> Extension<'a> {
 		if pos > 0 {
 			// If we have not yet reached 1,000 / 1,440 blocks then
 			// we can fail immediately as coinbase cannot be mature.
-			if height < global::coinbase_maturity(height) {
+			if height < global::coinbase_maturity() {
 				return Err(ErrorKind::ImmatureCoinbase.into());
 			}
 
 			// Find the "cutoff" pos in the output MMR based on the
 			// header from 1,000 blocks ago.
 			let cutoff_height = height
-				.checked_sub(global::coinbase_maturity(height))
+				.checked_sub(global::coinbase_maturity())
 				.unwrap_or(0);
 			let cutoff_header = self.batch.get_header_by_height(cutoff_height)?;
 			let cutoff_pos = cutoff_header.output_mmr_size;

@@ -20,7 +20,7 @@ use consensus::HeaderInfo;
 use consensus::{
 	BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
 	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
-	SECOND_POW_EDGE_BITS,
+	SECOND_POW_EDGE_BITS, DAY_HEIGHT
 };
 use pow::{self, CuckatooContext, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
@@ -50,12 +50,6 @@ pub const AUTOMATED_TESTING_COINBASE_MATURITY: u64 = 3;
 /// User testing coinbase maturity
 pub const USER_TESTING_COINBASE_MATURITY: u64 = 3;
 
-/// Old coinbase maturity
-/// TODO: obsolete for mainnet together with maturity code below
-pub const OLD_COINBASE_MATURITY: u64 = 1_000;
-/// soft-fork around Sep 17 2018 on testnet3
-pub const COINBASE_MATURITY_FORK_HEIGHT: u64 = 100_000;
-
 /// Testing cut through horizon in blocks
 pub const TESTING_CUT_THROUGH_HORIZON: u32 = 20;
 
@@ -70,12 +64,13 @@ pub const TESTNET2_INITIAL_DIFFICULTY: u64 = 1000;
 pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
 
 /// Testnet 4 initial block difficulty
-pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1;
+/// 1_000 times natural scale factor for cuckatoo29
+pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1_000 * (2<<(29-24)) * 29;
 
-/// Trigger compaction check on average every 1440 blocks (i.e. one day) for FAST_SYNC_NODE,
+/// Trigger compaction check on average every day for FAST_SYNC_NODE,
 /// roll the dice on every block to decide,
 /// all blocks lower than (BodyHead.height - CUT_THROUGH_HORIZON) will be removed.
-pub const COMPACTION_CHECK: u64 = 1440;
+pub const COMPACTION_CHECK: u64 = DAY_HEIGHT;
 
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
@@ -180,17 +175,13 @@ pub fn proofsize() -> usize {
 	}
 }
 
-/// Coinbase maturity for coinbases to be spent at given height
-pub fn coinbase_maturity(height: u64) -> u64 {
+/// Coinbase maturity for coinbases to be spent
+pub fn coinbase_maturity() -> u64 {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
 		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
-		_ => if height < COINBASE_MATURITY_FORK_HEIGHT {
-			OLD_COINBASE_MATURITY
-		} else {
-			COINBASE_MATURITY
-		},
+		_ => COINBASE_MATURITY,
 	}
 }
 

@@ -581,12 +581,12 @@ fn hard_forks() {
 	assert!(valid_header_version(0, 1));
 	assert!(valid_header_version(10, 1));
 	assert!(!valid_header_version(10, 2));
-	assert!(valid_header_version(249_999, 1));
+	assert!(valid_header_version(YEAR_HEIGHT/2-1,  1));
 	// v2 not active yet
-	assert!(!valid_header_version(250_000, 2));
-	assert!(!valid_header_version(250_000, 1));
-	assert!(!valid_header_version(500_000, 1));
-	assert!(!valid_header_version(250_001, 2));
+	assert!(!valid_header_version(YEAR_HEIGHT/2,   2));
+	assert!(!valid_header_version(YEAR_HEIGHT/2,   1));
+	assert!(!valid_header_version(YEAR_HEIGHT,     1));
+	assert!(!valid_header_version(YEAR_HEIGHT/2+1, 2));
 }
 
 // #[test]

@@ -33,30 +33,34 @@ pub const MICRO_GRIN: u64 = MILLI_GRIN / 1_000;
 /// Nanogrin, smallest unit, takes a billion to make a grin
 pub const NANO_GRIN: u64 = 1;
 
-/// The block subsidy amount, one grin per second on average
-pub const REWARD: u64 = 60 * GRIN_BASE;
-
-/// Actual block reward for a given total fee amount
-pub fn reward(fee: u64) -> u64 {
-	REWARD + fee
-}
-
 /// Block interval, in seconds, the network will tune its next_target for. Note
 /// that we may reduce this value in the future as we get more data on mining
 /// with Cuckoo Cycle, networks improve and block propagation is optimized
 /// (adjusting the reward accordingly).
 pub const BLOCK_TIME_SEC: u64 = 60;
 
+/// The block subsidy amount, one grin per second on average
+pub const REWARD: u64 = BLOCK_TIME_SEC * GRIN_BASE;
+
+/// Actual block reward for a given total fee amount
+pub fn reward(fee: u64) -> u64 {
+	REWARD + fee
+}
+
+/// Nominal height for standard time intervals
+pub const HOUR_HEIGHT: u64 = 3600 / BLOCK_TIME_SEC;
+pub const  DAY_HEIGHT: u64 = 24 * HOUR_HEIGHT;
+pub const WEEK_HEIGHT: u64 =  7 *  DAY_HEIGHT;
+pub const YEAR_HEIGHT: u64 = 52 * WEEK_HEIGHT;
+
 /// Number of blocks before a coinbase matures and can be spent
-/// set to nominal number of block in one day (1440 with 1-minute blocks)
-pub const COINBASE_MATURITY: u64 = 24 * 60 * 60 / BLOCK_TIME_SEC;
+pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
 
 /// Ratio the secondary proof of work should take over the primary, as a
 /// function of block height (time). Starts at 90% losing a percent
-/// approximately every week (10000 blocks). Represented as an integer
-/// between 0 and 100.
+/// approximately every week. Represented as an integer between 0 and 100.
 pub fn secondary_pow_ratio(height: u64) -> u64 {
-	90u64.saturating_sub(height / 10000)
+	90u64.saturating_sub(height / WEEK_HEIGHT)
 }
 
 /// Cuckoo-cycle proof size (cycle length)
@@ -83,7 +87,7 @@ pub const MAX_SECONDARY_SCALING: u64 = 8 << 11;
 /// behind the value is the longest bitcoin fork was about 30 blocks, so 5h. We
 /// add an order of magnitude to be safe and round to 7x24h of blocks to make it
 /// easier to reason about.
-pub const CUT_THROUGH_HORIZON: u32 = 7 * 24 * 3600 / (BLOCK_TIME_SEC as u32);
+pub const CUT_THROUGH_HORIZON: u32 = WEEK_HEIGHT as u32;
 
 /// Weight of an input when counted against the max block weight capacity
 pub const BLOCK_INPUT_WEIGHT: usize = 1;
@@ -106,12 +110,11 @@ pub const BLOCK_KERNEL_WEIGHT: usize = 2;
 /// outputs and a single kernel).
 ///
 /// A more "standard" block, filled with transactions of 2 inputs, 2 outputs
-/// and one kernel, should be around 2_663_333 bytes.
+/// and one kernel, should be around 2.66 MB
 pub const MAX_BLOCK_WEIGHT: usize = 40_000;
 
-/// Fork every 250,000 blocks for first 2 years, simple number and just a
-/// little less than 6 months.
-pub const HARD_FORK_INTERVAL: u64 = 250_000;
+/// Fork every 6 months.
+pub const HARD_FORK_INTERVAL: u64 = YEAR_HEIGHT / 2;
 
 /// Check whether the block version is valid at a given height, implements
 /// 6 months interval scheduled hard forks for the first 2 years.
@@ -139,7 +142,7 @@ pub const MEDIAN_TIME_WINDOW: u64 = 11;
 pub const MEDIAN_TIME_INDEX: u64 = MEDIAN_TIME_WINDOW / 2;
 
 /// Number of blocks used to calculate difficulty adjustments
-pub const DIFFICULTY_ADJUST_WINDOW: u64 = 60;
+pub const DIFFICULTY_ADJUST_WINDOW: u64 = HOUR_HEIGHT;
 
 /// Average time span of the difficulty adjustment window
 pub const BLOCK_TIME_WINDOW: u64 = DIFFICULTY_ADJUST_WINDOW * BLOCK_TIME_SEC;
@@ -153,12 +156,20 @@ pub const LOWER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW / 2;
 /// Dampening factor to use for difficulty adjustment
 pub const DAMP_FACTOR: u64 = 3;
 
+/// Compute difficulty scaling factor as number of siphash bits defining the graph
+/// Must be made dependent on height to phase out smaller size over the years
+/// This can wait until end of 2019 at latest
+pub fn scale(edge_bits: u8) -> u64 {
+	(2 << (edge_bits - global::base_edge_bits()) as u64) * (edge_bits as u64)
+}
+
 /// The initial difficulty at launch. This should be over-estimated
 /// and difficulty should come down at launch rather than up
 /// Currently grossly over-estimated at 10% of current
-/// ethereum GPUs (assuming 1GPU can solve a block at diff 1
-/// in one block interval)
-pub const INITIAL_DIFFICULTY: u64 = 1_000_000;
+/// ethereum GPUs (assuming 1GPU can solve a block at diff 1 in one block interval)
+/// Pick MUCH more modest value for TESTNET4; CHANGE FOR MAINNET
+pub const INITIAL_DIFFICULTY: u64 = 1_000 * (2<<(29-24)) * 29; // scale(SECOND_POW_EDGE_BITS);
+/// pub const INITIAL_DIFFICULTY: u64 = 1_000_000 * Difficulty::scale(SECOND_POW_EDGE_BITS);
 
 /// Consensus errors
 #[derive(Clone, Debug, Eq, PartialEq, Fail)]

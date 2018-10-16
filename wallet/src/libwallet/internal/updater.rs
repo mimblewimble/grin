@@ -398,7 +398,7 @@ where
 	K: Keychain,
 {
 	let height = block_fees.height;
-	let lock_height = height + global::coinbase_maturity(height); // ignores on/off spendability around soft fork height
+	let lock_height = height + global::coinbase_maturity();
 	let key_id = block_fees.key_id();
 	let parent_key_id = wallet.parent_key_id();
 

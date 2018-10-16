@@ -99,7 +99,7 @@ fn test_coinbase_maturity() {
 
 	let amount = consensus::REWARD;
 
-	let lock_height = 1 + global::coinbase_maturity(1);
+	let lock_height = 1 + global::coinbase_maturity();
 	assert_eq!(lock_height, 4);
 
 	// here we build a tx that attempts to spend the earlier coinbase output
