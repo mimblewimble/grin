@@ -72,10 +72,10 @@ pub const SECOND_POW_EDGE_BITS: u8 = 29;
 /// Cuckoo graph sizes, changing this would hard fork
 pub const BASE_EDGE_BITS: u8 = 24;
 
-/// maximum scaling factor for secondary pow, enforced in diff retargetting
+/// Maximum scaling factor for secondary pow, enforced in diff retargetting
 /// increasing scaling factor increases frequency of secondary blocks
 /// ONLY IN TESTNET4 LIMITED TO ABOUT 8 TIMES THE NATURAL SCALE
-pub const MAX_SECOND_POW_SCALE: u64 = 8 << 11;
+pub const MAX_SECONDARY_SCALING: u64 = 8 << 11;
 
 /// Default number of blocks in the past when cross-block cut-through will start
 /// happening. Needs to be long enough to not overlap with a long reorg.
@@ -294,8 +294,6 @@ where
 	HeaderInfo::from_diff_scaling(Difficulty::from_num(difficulty), sec_pow_scaling)
 }
 
-pub const MAX_SECONDARY_SCALING: u64 = (::std::u32::MAX / 70) as u64;
-
 /// Factor by which the secondary proof of work difficulty will be adjusted
 pub fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 	// median of past scaling factors, scaling is 1 if none found
@@ -317,10 +315,10 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 	let scaling = scaling_median * diff_data.len() as u64 * ratio / 100 / secondary_count as u64;
 
 	// various bounds
-	let bounded_scaling = if scaling < scaling_median / 4 || scaling == 0 {
-		max(scaling_median / 4, 1)
-	} else if scaling > MAX_SECONDARY_SCALING || scaling > scaling_median * 4 {
-		min(MAX_SECONDARY_SCALING, scaling_median * 4)
+	let bounded_scaling = if scaling < scaling_median / 2 || scaling == 0 {
+		max(scaling_median / 2, 1)
+	} else if scaling > MAX_SECONDARY_SCALING || scaling > scaling_median * 2 {
+		min(MAX_SECONDARY_SCALING, scaling_median * 2)
 	} else {
 		scaling
 	};
