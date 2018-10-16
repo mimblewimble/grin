@@ -239,8 +239,8 @@ where
 {
 	// Create vector of difficulty data running from earliest
 	// to latest, and pad with simulated pre-genesis data to allow earlier
-	// adjustment if there isn't enough window data
-	// length will be DIFFICULTY_ADJUST_WINDOW
+	// adjustment if there isn't enough window data length will be
+	// DIFFICULTY_ADJUST_WINDOW + 1 (for initial block time bound)
 	let diff_data = global::difficulty_data_to_vector(cursor);
 
 	// First, get the ratio of secondary PoW vs primary
@@ -253,13 +253,13 @@ where
 	let ts_delta = latest_ts - earliest_ts;
 
 	// Get the difficulty sum of the last DIFFICULTY_ADJUST_WINDOW elements
-	let diff_sum: u64 = diff_data.iter().map(|dd| dd.difficulty.to_num()).sum();
+	let diff_sum: u64 = diff_data.iter().skip(1).map(|dd| dd.difficulty.to_num()).sum();
 
 	// Apply dampening except when difficulty is near 1
 	let	ts_damp = if diff_sum < DAMP_FACTOR * DIFFICULTY_ADJUST_WINDOW {
 		ts_delta
 	} else {
-		(1 * ts_delta + (DAMP_FACTOR - 1) * BLOCK_TIME_WINDOW) / DAMP_FACTOR
+		(ts_delta + (DAMP_FACTOR - 1) * BLOCK_TIME_WINDOW) / DAMP_FACTOR
 	};
 
 	// Apply time bounds
@@ -290,11 +290,8 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 	// calculate and dampen ideal secondary count so it can be compared with the
 	// actual, both are multiplied by a factor of 100 to increase resolution
 	let ratio = secondary_pow_ratio(height);
-	let damp = DAMP_FACTOR as i64;
-	let magnified_secondary_count = (secondary_count * 100) as i64;
 	let ideal_secondary_count = diff_data.len() as u64 * ratio;
-	let secondary_diff = ideal_secondary_count as i64 - magnified_secondary_count;
-	let dampened_secondary_count = magnified_secondary_count + ((damp-1) * secondary_diff / damp);
+	let dampened_secondary_count = (secondary_count * 100 + (DAMP_FACTOR - 1) * ideal_secondary_count) / DAMP_FACTOR;
 
 	// adjust the past median based on ideal ratio vs actual ratio
 	let scaling = scaling_median * ideal_secondary_count / dampened_secondary_count as u64;

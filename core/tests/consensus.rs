@@ -385,17 +385,17 @@ fn next_target_adjustment() {
 	let diff_one = Difficulty::one();
 	assert_eq!(
 		next_difficulty(1, vec![HeaderInfo::from_ts_diff(cur_time, diff_one)]),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 2),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
 	);
 	assert_eq!(
 		next_difficulty(1, vec![HeaderInfo::new(cur_time, diff_one, 10, true)]),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 2),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
 	);
 
 	let mut hi = HeaderInfo::from_diff_scaling(diff_one, 1);
 	assert_eq!(
 		next_difficulty(1, repeat(60, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 2),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
 	);
 	hi.is_secondary = true;
 	assert_eq!(
@@ -405,7 +405,7 @@ fn next_target_adjustment() {
 	hi.secondary_scaling = 100;
 	assert_eq!(
 		next_difficulty(1, repeat(60, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 90),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 96),
 	);
 
 	// Check we don't get stuck on difficulty 1
@@ -416,11 +416,11 @@ fn next_target_adjustment() {
 	);
 
 	// just enough data, right interval, should stay constant
-	let just_enough = DIFFICULTY_ADJUST_WINDOW;
+	let just_enough = DIFFICULTY_ADJUST_WINDOW + 1;
 	hi.difficulty = Difficulty::from_num(1000);
 	assert_eq!(
 		next_difficulty(1, repeat(60, hi.clone(), just_enough, None)).difficulty,
-		Difficulty::from_num(1005)
+		Difficulty::from_num(1000)
 	);
 
 	// checking averaging works
@@ -436,28 +436,28 @@ fn next_target_adjustment() {
 	s2.append(&mut s1);
 	assert_eq!(
 		next_difficulty(1, s2).difficulty,
-		Difficulty::from_num(1005)
+		Difficulty::from_num(1000)
 	);
 
 	// too slow, diff goes down
 	hi.difficulty = Difficulty::from_num(1000);
 	assert_eq!(
 		next_difficulty(1, repeat(90, hi.clone(), just_enough, None)).difficulty,
-		Difficulty::from_num(863)
+		Difficulty::from_num(857)
 	);
 	assert_eq!(
 		next_difficulty(1, repeat(120, hi.clone(), just_enough, None)).difficulty,
-		Difficulty::from_num(756)
+		Difficulty::from_num(750)
 	);
 
 	// too fast, diff goes up
 	assert_eq!(
 		next_difficulty(1, repeat(55, hi.clone(), just_enough, None)).difficulty,
-		Difficulty::from_num(1034)
+		Difficulty::from_num(1028)
 	);
 	assert_eq!(
 		next_difficulty(1, repeat(45, hi.clone(), just_enough, None)).difficulty,
-		Difficulty::from_num(1095)
+		Difficulty::from_num(1090)
 	);
 
 	// hitting lower time bound, should always get the same result below
