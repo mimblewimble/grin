@@ -503,9 +503,12 @@ pub struct BlockHeaderPrintable {
 	pub nonce: u64,
 	/// Size of the cuckoo graph
 	pub edge_bits: u8,
+	/// Nonces of the cuckoo solution
 	pub cuckoo_solution: Vec<u64>,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: u64,
+	/// Difficulty scaling factor between the different proofs of work
+	pub scaling_difficulty: u32,
 	/// Total kernel offset since genesis block
 	pub total_kernel_offset: String,
 }
@@ -525,6 +528,7 @@ impl BlockHeaderPrintable {
 			edge_bits: h.pow.edge_bits(),
 			cuckoo_solution: h.pow.proof.nonces.clone(),
 			total_difficulty: h.pow.total_difficulty.to_num(),
+			scaling_difficulty: h.pow.scaling_difficulty,
 			total_kernel_offset: h.total_kernel_offset.to_hex(),
 		}
 	}
