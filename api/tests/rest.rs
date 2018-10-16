@@ -111,5 +111,6 @@ fn request_with_retry(url: &str) -> Result<Vec<String>, api::Error> {
 			return res;
 		}
 		tries += 1;
+		thread::sleep(time::Duration::from_millis(500));
 	}
 }
