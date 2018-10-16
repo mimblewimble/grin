@@ -111,11 +111,11 @@ pub fn genesis_testnet4() -> core::Block {
 	core::Block::with_header(core::BlockHeader {
 		height: 0,
 		previous: core::hash::Hash([0xff; 32]),
-		timestamp: Utc.ymd(2018, 10, 15).and_hms(12, 0, 0),
+		timestamp: Utc.ymd(2018, 10, 16).and_hms(9, 0, 0),
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
 			scaling_difficulty: 1,
-			nonce: 4956988373127691,
+			nonce: 4956988373127692,
 			proof: Proof::new(vec![
 				0xa420dc, 0xc8ffee, 0x10e433e, 0x1de9428, 0x2ed4cea, 0x52d907b, 0x5af0e3f,
 				0x6b8fcae, 0x8319b53, 0x845ca8c, 0x8d2a13e, 0x8d6e4cc, 0x9349e8d, 0xa7a33c5,
