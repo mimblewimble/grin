@@ -84,8 +84,10 @@ pub fn set_header_nonce(header: Vec<u8>, nonce: Option<u32>) -> Result<[u64; 4],
 		let mut header = header.clone();
 		header.truncate(len - mem::size_of::<u32>());
 		header.write_u32::<LittleEndian>(n)?;
+		create_siphash_keys(header)
+	} else {
+		create_siphash_keys(header)
 	}
-	create_siphash_keys(header)
 }
 
 pub fn create_siphash_keys(header: Vec<u8>) -> Result<[u64; 4], Error> {
@@ -165,15 +167,9 @@ where
 	/// Reset the main keys used for siphash from the header and nonce
 	pub fn reset_header_nonce(
 		&mut self,
-		mut header: Vec<u8>,
+		header: Vec<u8>,
 		nonce: Option<u32>,
 	) -> Result<(), Error> {
-		// THIS IF LOOKS REDUNDANT SINCE set_header_nonce DOES SAME THING
-		if let Some(n) = nonce {
-			let len = header.len();
-			header.truncate(len - mem::size_of::<u32>());
-			header.write_u32::<LittleEndian>(n)?;
-		}
 		self.siphash_keys = set_header_nonce(header, nonce)?;
 		Ok(())
 	}

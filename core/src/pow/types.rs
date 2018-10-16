@@ -14,14 +14,14 @@
 
 /// Types for a Cuck(at)oo proof of work and its encapsulation as a fully usable
 /// proof of work within a block header.
-use std::cmp::max;
+use std::cmp::{min,max};
 use std::ops::{Add, Div, Mul, Sub};
 use std::{fmt, iter};
 
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use consensus::SECOND_POW_EDGE_BITS;
+use consensus::{self, SECOND_POW_EDGE_BITS};
 use core::hash::Hashed;
 use global;
 use ser::{self, Readable, Reader, Writeable, Writer};
@@ -89,11 +89,8 @@ impl Difficulty {
 	/// provided hash and applies the Cuck(at)oo size adjustment factor (see
 	/// https://lists.launchpad.net/mimblewimble/msg00494.html).
 	fn from_proof_adjusted(proof: &Proof) -> Difficulty {
-		// Adjust the difficulty based on a 2^(N-M)*(N-1) factor, with M being
-		// the minimum edge_bits and N the provided edge_bits
-		let edge_bits = proof.edge_bits;
-
-		Difficulty::from_num(proof.raw_difficulty() * Difficulty::scale(edge_bits))
+		// scale with natural scaling factor
+		Difficulty::from_num(proof.scaled_difficulty(consensus::scale(proof.edge_bits)))
 	}
 
 	/// Same as `from_proof_adjusted` but instead of an adjustment based on
@@ -101,7 +98,7 @@ impl Difficulty {
 	/// to scale one PoW against the other.
 	fn from_proof_scaled(proof: &Proof, scaling: u32) -> Difficulty {
 		// Scaling between 2 proof of work algos
-		Difficulty::from_num(proof.raw_difficulty() * scaling as u64)
+		Difficulty::from_num(proof.scaled_difficulty(scaling as u64))
 	}
 
 	/// Converts the difficulty into a u64
@@ -383,9 +380,10 @@ impl Proof {
 		self.nonces.len()
 	}
 
-	/// Difficulty achieved by this proof
-	fn raw_difficulty(&self) -> u64 {
-		<u64>::max_value() / self.hash().to_u64()
+	/// Difficulty achieved by this proof with given scaling factor
+	fn scaled_difficulty(&self, scale: u64) -> u64 {
+		let diff = ((scale as u128) << 64) / (self.hash().to_u64() as u128);
+		min(diff, <u64>::max_value() as u128) as u64
 	}
 }
 
