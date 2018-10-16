@@ -69,6 +69,10 @@ pub const TESTNET2_INITIAL_DIFFICULTY: u64 = 1000;
 /// a 30x Cuckoo adjustment factor
 pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
 
+/// If a peer's last updated difficulty is 2 hours ago and its difficulty's lower than ours,
+/// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
+pub const STUCK_PEER_KICK_TIME: i64 = 2 * 3600 * 1000;
+
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
