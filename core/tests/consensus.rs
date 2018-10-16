@@ -408,17 +408,17 @@ fn next_target_adjustment() {
 	let diff_one = Difficulty::one();
 	assert_eq!(
 		next_difficulty(1, vec![HeaderInfo::from_ts_diff(cur_time, diff_one)]),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 4),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 2),
 	);
 	assert_eq!(
 		next_difficulty(1, vec![HeaderInfo::new(cur_time, diff_one, 10, true)]),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 4),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 2),
 	);
 
 	let mut hi = HeaderInfo::from_diff_scaling(diff_one, 1);
 	assert_eq!(
 		next_difficulty(1, repeat(60, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 4),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 2),
 	);
 	hi.is_secondary = true;
 	assert_eq!(
@@ -520,7 +520,7 @@ fn secondary_pow_scale() {
 	// becomes easier to find a high difficulty block
 	assert_eq!(
 		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect()),
-		400
+		200
 	);
 	// all secondary on 90%, factor should lose 10%
 	hi.is_secondary = true;
@@ -531,7 +531,7 @@ fn secondary_pow_scale() {
 	// all secondary on 1%, should be divided by 4 (max adjustment)
 	assert_eq!(
 		secondary_pow_scaling(890_000, &(0..window).map(|_| hi.clone()).collect()),
-		25
+		50
 	);
 	// same as above, testing lowest bound
 	let mut low_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 3);
@@ -572,7 +572,7 @@ fn secondary_pow_scale() {
 				.chain((0..(window * 4 / 10)).map(|_| hi.clone()))
 				.collect()
 		),
-		112
+		100
 	);
 }
 
