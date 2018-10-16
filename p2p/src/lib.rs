@@ -50,6 +50,7 @@ mod serv;
 mod store;
 pub mod types;
 
+pub use conn::SEND_CHANNEL_CAP;
 pub use peer::Peer;
 pub use peers::Peers;
 pub use serv::{DummyAdapter, Server};
