@@ -493,19 +493,19 @@ fn secondary_pow_scale() {
 	let window = DIFFICULTY_ADJUST_WINDOW;
 	let mut hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 100);
 
-	// all primary, factor should be multiplied by 4 (max adjustment) so it
-	// becomes easier to find a high difficulty block
+	// all primary, factor should increase so it becomes easier to find a high
+	// difficulty block
 	assert_eq!(
 		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect()),
-		200
+		148
 	);
-	// all secondary on 90%, factor should lose 10%
+	// all secondary on 90%, factor should go down a bit
 	hi.is_secondary = true;
 	assert_eq!(
 		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect()),
-		90
+		96
 	);
-	// all secondary on 1%, should be divided by 4 (max adjustment)
+	// all secondary on 1%, factor should go down to bound (divide by 2)
 	assert_eq!(
 		secondary_pow_scaling(890_000, &(0..window).map(|_| hi.clone()).collect()),
 		50
@@ -529,7 +529,7 @@ fn secondary_pow_scale() {
 		),
 		100
 	);
-	// 95% secondary, should come down
+	// 95% secondary, should come down based on 100 median
 	assert_eq!(
 		secondary_pow_scaling(
 			1,
@@ -538,9 +538,9 @@ fn secondary_pow_scale() {
 				.chain((0..(window * 95 / 100)).map(|_| hi.clone()))
 				.collect()
 		),
-		94
+		98
 	);
-	// 40% secondary, should come up
+	// 40% secondary, should come up based on 50 median
 	assert_eq!(
 		secondary_pow_scaling(
 			1,
@@ -549,7 +549,7 @@ fn secondary_pow_scale() {
 				.chain((0..(window * 4 / 10)).map(|_| hi.clone()))
 				.collect()
 		),
-		100
+		61
 	);
 }
 

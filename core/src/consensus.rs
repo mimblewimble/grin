@@ -256,7 +256,7 @@ where
 	let diff_sum: u64 = diff_data.iter().map(|dd| dd.difficulty.to_num()).sum();
 
 	// Apply dampening except when difficulty is near 1
-	let ts_damp = if diff_sum < DAMP_FACTOR * DIFFICULTY_ADJUST_WINDOW {
+	let	ts_damp = if diff_sum < DAMP_FACTOR * DIFFICULTY_ADJUST_WINDOW {
 		ts_delta
 	} else {
 		(1 * ts_delta + (DAMP_FACTOR - 1) * BLOCK_TIME_WINDOW) / DAMP_FACTOR
@@ -279,10 +279,7 @@ where
 /// Factor by which the secondary proof of work difficulty will be adjusted
 pub fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 	// median of past scaling factors, scaling is 1 if none found
-	let mut scalings = diff_data
-		.iter()
-		.map(|n| n.secondary_scaling)
-		.collect::<Vec<_>>();
+	let mut scalings = diff_data.iter().map(|n| n.secondary_scaling).collect::<Vec<_>>();
 	if scalings.len() == 0 {
 		return 1;
 	}
@@ -290,11 +287,17 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 	let scaling_median = scalings[scalings.len() / 2] as u64;
 	let secondary_count = max(diff_data.iter().filter(|n| n.is_secondary).count(), 1) as u64;
 
-	// what's the ideal ratio at the current height
+	// calculate and dampen ideal secondary count so it can be compared with the
+	// actual, both are multiplied by a factor of 100 to increase resolution
 	let ratio = secondary_pow_ratio(height);
+	let damp = DAMP_FACTOR as i64;
+	let magnified_secondary_count = (secondary_count * 100) as i64;
+	let ideal_secondary_count = diff_data.len() as u64 * ratio;
+	let secondary_diff = ideal_secondary_count as i64 - magnified_secondary_count;
+	let dampened_secondary_count = magnified_secondary_count + ((damp-1) * secondary_diff / damp);
 
 	// adjust the past median based on ideal ratio vs actual ratio
-	let scaling = scaling_median * diff_data.len() as u64 * ratio / 100 / secondary_count as u64;
+	let scaling = scaling_median * ideal_secondary_count / dampened_secondary_count as u64;
 
 	// various bounds
 	let bounded_scaling = if scaling < scaling_median / 2 || scaling == 0 {
