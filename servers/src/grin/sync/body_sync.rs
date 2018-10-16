@@ -133,7 +133,7 @@ impl BodySync {
 		};
 
 		let block_count = cmp::min(
-			cmp::min(100, peers.len() * 10),
+			cmp::min(100, peers.len() * p2p::SEND_CHANNEL_CAP),
 			chain::MAX_ORPHAN_SIZE.saturating_sub(self.chain.orphans_len()) + 1,
 		);
 
