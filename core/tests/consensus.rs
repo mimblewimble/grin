@@ -122,35 +122,13 @@ fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
 	let tip_height = chain_sim.len();
 	let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
 
-	// Obtain the median window for the earlier time period
-	// the first MEDIAN_TIME_WINDOW elements
-	let mut window_earliest: Vec<u64> = last_blocks
-		.clone()
-		.iter()
-		.take(MEDIAN_TIME_WINDOW as usize)
-		.map(|n| n.clone().timestamp)
-		.collect();
-	// pick median
-	window_earliest.sort();
-	let earliest_ts = window_earliest[MEDIAN_TIME_INDEX as usize];
-
-	// Obtain the median window for the latest time period
-	// i.e. the last  MEDIAN_TIME_WINDOW elements
-	let mut window_latest: Vec<u64> = last_blocks
-		.clone()
-		.iter()
-		.skip(DIFFICULTY_ADJUST_WINDOW as usize)
-		.map(|n| n.clone().timestamp)
-		.collect();
-	// pick median
-	window_latest.sort();
-	let latest_ts = window_latest[MEDIAN_TIME_INDEX as usize];
+	let earliest_ts = last_blocks[0].timestamp;
+	let latest_ts = last_blocks[last_blocks.len()-1].timestamp;
 
 	let mut i = 1;
 
 	let sum_blocks: Vec<HeaderInfo> = global::difficulty_data_to_vector(diff_iter.iter().cloned())
 		.into_iter()
-		.skip(MEDIAN_TIME_WINDOW as usize)
 		.take(DIFFICULTY_ADJUST_WINDOW as usize)
 		.collect();
 
@@ -263,7 +241,6 @@ fn print_chain_sim(chain_sim: Vec<(HeaderInfo, DiffStats)>) {
 	println!("Constants");
 	println!("DIFFICULTY_ADJUST_WINDOW: {}", DIFFICULTY_ADJUST_WINDOW);
 	println!("BLOCK_TIME_WINDOW: {}", BLOCK_TIME_WINDOW);
-	println!("MEDIAN_TIME_WINDOW: {}", MEDIAN_TIME_WINDOW);
 	println!("UPPER_TIME_BOUND: {}", UPPER_TIME_BOUND);
 	println!("DAMP_FACTOR: {}", DAMP_FACTOR);
 	chain_sim.iter().enumerate().for_each(|(i, b)| {
@@ -338,7 +315,7 @@ fn adjustment_scenarios() {
 	println!("*********************************************************");
 	print_chain_sim(chain_sim);
 	println!("*********************************************************");
-	let just_enough = (DIFFICULTY_ADJUST_WINDOW + MEDIAN_TIME_WINDOW) as usize;
+	let just_enough = (DIFFICULTY_ADJUST_WINDOW) as usize;
 
 	// Steady difficulty for a good while, then a sudden drop
 	let chain_sim = create_chain_sim(global::initial_block_difficulty());
@@ -408,17 +385,17 @@ fn next_target_adjustment() {
 	let diff_one = Difficulty::one();
 	assert_eq!(
 		next_difficulty(1, vec![HeaderInfo::from_ts_diff(cur_time, diff_one)]),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 2),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
 	);
 	assert_eq!(
 		next_difficulty(1, vec![HeaderInfo::new(cur_time, diff_one, 10, true)]),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 2),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
 	);
 
 	let mut hi = HeaderInfo::from_diff_scaling(diff_one, 1);
 	assert_eq!(
 		next_difficulty(1, repeat(60, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 2),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
 	);
 	hi.is_secondary = true;
 	assert_eq!(
@@ -428,7 +405,7 @@ fn next_target_adjustment() {
 	hi.secondary_scaling = 100;
 	assert_eq!(
 		next_difficulty(1, repeat(60, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 106),
+		HeaderInfo::from_diff_scaling(Difficulty::one(), 96),
 	);
 
 	// Check we don't get stuck on difficulty 1
@@ -439,7 +416,7 @@ fn next_target_adjustment() {
 	);
 
 	// just enough data, right interval, should stay constant
-	let just_enough = DIFFICULTY_ADJUST_WINDOW + MEDIAN_TIME_WINDOW;
+	let just_enough = DIFFICULTY_ADJUST_WINDOW + 1;
 	hi.difficulty = Difficulty::from_num(1000);
 	assert_eq!(
 		next_difficulty(1, repeat(60, hi.clone(), just_enough, None)).difficulty,
@@ -448,7 +425,7 @@ fn next_target_adjustment() {
 
 	// checking averaging works
 	hi.difficulty = Difficulty::from_num(500);
-	let sec = DIFFICULTY_ADJUST_WINDOW / 2 + MEDIAN_TIME_WINDOW;
+	let sec = DIFFICULTY_ADJUST_WINDOW / 2;
 	let mut s1 = repeat(60, hi.clone(), sec, Some(cur_time));
 	let mut s2 = repeat_offs(
 		cur_time + (sec * 60) as u64,
@@ -513,22 +490,22 @@ fn next_target_adjustment() {
 
 #[test]
 fn secondary_pow_scale() {
-	let window = DIFFICULTY_ADJUST_WINDOW + MEDIAN_TIME_WINDOW;
+	let window = DIFFICULTY_ADJUST_WINDOW;
 	let mut hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 100);
 
-	// all primary, factor should be multiplied by 4 (max adjustment) so it
-	// becomes easier to find a high difficulty block
+	// all primary, factor should increase so it becomes easier to find a high
+	// difficulty block
 	assert_eq!(
 		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect()),
-		200
+		148
 	);
-	// all secondary on 90%, factor should lose 10%
+	// all secondary on 90%, factor should go down a bit
 	hi.is_secondary = true;
 	assert_eq!(
 		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect()),
-		90
+		96
 	);
-	// all secondary on 1%, should be divided by 4 (max adjustment)
+	// all secondary on 1%, factor should go down to bound (divide by 2)
 	assert_eq!(
 		secondary_pow_scaling(890_000, &(0..window).map(|_| hi.clone()).collect()),
 		50
@@ -552,7 +529,7 @@ fn secondary_pow_scale() {
 		),
 		100
 	);
-	// 95% secondary, should come down
+	// 95% secondary, should come down based on 100 median
 	assert_eq!(
 		secondary_pow_scaling(
 			1,
@@ -561,9 +538,9 @@ fn secondary_pow_scale() {
 				.chain((0..(window * 95 / 100)).map(|_| hi.clone()))
 				.collect()
 		),
-		94
+		98
 	);
-	// 40% secondary, should come up
+	// 40% secondary, should come up based on 50 median
 	assert_eq!(
 		secondary_pow_scaling(
 			1,
@@ -572,7 +549,7 @@ fn secondary_pow_scale() {
 				.chain((0..(window * 4 / 10)).map(|_| hi.clone()))
 				.collect()
 		),
-		100
+		61
 	);
 }
 

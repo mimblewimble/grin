@@ -19,8 +19,8 @@
 use consensus::HeaderInfo;
 use consensus::{
 	BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
-	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
-	SECOND_POW_EDGE_BITS, DAY_HEIGHT
+	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, DAY_HEIGHT,
+  SECOND_POW_EDGE_BITS,
 };
 use pow::{self, CuckatooContext, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
@@ -256,7 +256,7 @@ where
 	T: IntoIterator<Item = HeaderInfo>,
 {
 	// Convert iterator to vector, so we can append to it if necessary
-	let needed_block_count = (MEDIAN_TIME_WINDOW + DIFFICULTY_ADJUST_WINDOW) as usize;
+	let needed_block_count = DIFFICULTY_ADJUST_WINDOW as usize + 1;
 	let mut last_n: Vec<HeaderInfo> = cursor.into_iter().take(needed_block_count).collect();
 
 	// Sort blocks from earliest to latest (to keep conceptually easier)
