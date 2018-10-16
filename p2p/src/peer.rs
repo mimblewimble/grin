@@ -18,7 +18,7 @@ use std::sync::{Arc, RwLock};
 
 use chrono::prelude::{DateTime, Utc};
 use conn;
-use core::core;
+use core::{core, global};
 use core::core::hash::{Hash, Hashed};
 use core::pow::Difficulty;
 use handshake::Handshake;
@@ -141,14 +141,14 @@ impl Peer {
 	}
 
 	/// Whether this peer is stuck on sync.
-	pub fn is_stuck(&self) -> bool {
+	pub fn is_stuck(&self) -> (bool, Difficulty) {
 		let peer_live_info = self.info.live_info.read().unwrap();
 		let now = Utc::now().timestamp_millis();
-		// if last updated difficulty is 30 minutes ago, we're sure this peer is a stuck node.
-		if now > peer_live_info.stuck_detector.timestamp_millis() + 30 * 60 * 1000 {
-			true
+		// if last updated difficulty is 2 hours ago, we're sure this peer is a stuck node.
+		if now > peer_live_info.stuck_detector.timestamp_millis() + global::STUCK_PEER_KICK_TIME {
+			(true, peer_live_info.total_difficulty)
 		} else {
-			false
+			(false, peer_live_info.total_difficulty)
 		}
 	}
 
