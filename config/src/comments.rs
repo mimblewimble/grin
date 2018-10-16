@@ -184,7 +184,13 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"seeding_type".to_string(),
 		"
-#If the seeding type is List, the list of peers to connect to can
+#how to seed this server, can be None, List or DNSSeed
+".to_string(),
+	);
+
+	retval.insert(
+		"[server.p2p_config.capabilities]".to_string(),
+		"#If the seeding type is List, the list of peers to connect to can
 #be specified as follows:
 #seeds = [\"192.168.0.1:13414\",\"192.168.0.2:13414\"]
 
@@ -206,13 +212,7 @@ fn comments() -> HashMap<String, String> {
 #until we get to at least this number
 #peer_min_preferred_count = 8
 
-#how to seed this server, can be None, List or DNSSeed
-".to_string(),
-	);
-
-	retval.insert(
-		"[server.p2p_config.capabilities]".to_string(),
-		"# 7 = Bit flags for FULL_NODE
+# 7 = Bit flags for FULL_NODE
 # 6 = Bit flags for FAST_SYNC_NODE
 #This structure needs to be changed internally, to make it more configurable
 ".to_string(),
