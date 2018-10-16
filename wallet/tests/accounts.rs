@@ -75,7 +75,7 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// few values to keep things shorter
 	let reward = core::consensus::REWARD;
-	let cm = global::coinbase_maturity(0); // assume all testing precedes soft fork height
+	let cm = global::coinbase_maturity(); // assume all testing precedes soft fork height
 
 	// test default accounts exist
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
