@@ -18,9 +18,9 @@ use std::sync::{Arc, RwLock};
 
 use chrono::prelude::{DateTime, Utc};
 use conn;
-use core::{core, global};
 use core::core::hash::{Hash, Hashed};
 use core::pow::Difficulty;
+use core::{core, global};
 use handshake::Handshake;
 use msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest};
 use protocol::Protocol;
