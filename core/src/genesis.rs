@@ -114,7 +114,7 @@ pub fn genesis_testnet4() -> core::Block {
 		timestamp: Utc.ymd(2018, 10, 17).and_hms(13, 0, 0),
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
-			scaling_difficulty: 1,
+			scaling_difficulty: consensus::scale(consensus::SECOND_POW_EDGE_BITS as u8) as u32,
 			nonce: 4956988373127692,
 			proof: Proof::new(vec![
 				0xa420dc, 0xc8ffee, 0x10e433e, 0x1de9428, 0x2ed4cea, 0x52d907b, 0x5af0e3f,
