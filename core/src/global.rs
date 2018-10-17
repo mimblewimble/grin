@@ -18,8 +18,9 @@
 
 use consensus::HeaderInfo;
 use consensus::{
-	BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT,
-	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, SECOND_POW_EDGE_BITS,
+	graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
+	DAY_HEIGHT, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, MIN_DIFFICULTY, PROOFSIZE,
+	SECOND_POW_EDGE_BITS,
 };
 use pow::{self, CuckatooContext, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
@@ -51,6 +52,9 @@ pub const USER_TESTING_COINBASE_MATURITY: u64 = 3;
 
 /// Testing cut through horizon in blocks
 pub const TESTING_CUT_THROUGH_HORIZON: u32 = 20;
+
+/// Testing initial graph weight
+pub const TESTING_INITIAL_GRAPH_WEIGHT: u32 = 1;
 
 /// Testing initial block difficulty
 pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
@@ -197,6 +201,19 @@ pub fn initial_block_difficulty() -> u64 {
 		ChainTypes::Testnet3 => TESTNET3_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet4 => TESTNET4_INITIAL_DIFFICULTY,
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
+	}
+}
+/// Initial mining secondary scale
+pub fn initial_graph_weight() -> u32 {
+	let param_ref = CHAIN_TYPE.read().unwrap();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => TESTING_INITIAL_GRAPH_WEIGHT,
+		ChainTypes::UserTesting => TESTING_INITIAL_GRAPH_WEIGHT,
+		ChainTypes::Testnet1 => TESTING_INITIAL_GRAPH_WEIGHT,
+		ChainTypes::Testnet2 => TESTING_INITIAL_GRAPH_WEIGHT,
+		ChainTypes::Testnet3 => TESTING_INITIAL_GRAPH_WEIGHT,
+		ChainTypes::Testnet4 => graph_weight(SECOND_POW_EDGE_BITS) as u32,
+		ChainTypes::Mainnet => graph_weight(SECOND_POW_EDGE_BITS) as u32,
 	}
 }
 

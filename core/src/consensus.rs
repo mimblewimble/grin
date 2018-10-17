@@ -49,8 +49,8 @@ pub fn reward(fee: u64) -> u64 {
 
 /// Nominal height for standard time intervals
 pub const HOUR_HEIGHT: u64 = 3600 / BLOCK_TIME_SEC;
-pub const  DAY_HEIGHT: u64 = 24 * HOUR_HEIGHT;
-pub const WEEK_HEIGHT: u64 =  7 *  DAY_HEIGHT;
+pub const DAY_HEIGHT: u64 = 24 * HOUR_HEIGHT;
+pub const WEEK_HEIGHT: u64 = 7 * DAY_HEIGHT;
 pub const YEAR_HEIGHT: u64 = 52 * WEEK_HEIGHT;
 
 /// Number of blocks before a coinbase matures and can be spent
@@ -156,7 +156,8 @@ pub fn graph_weight(edge_bits: u8) -> u64 {
 }
 
 /// minimum possible difficulty equal to graph_weight(SECOND_POW_EDGE_BITS)
-pub const MIN_DIFFICULTY: u64 = ((2 as u64) << (SECOND_POW_EDGE_BITS - BASE_EDGE_BITS)) * (SECOND_POW_EDGE_BITS as u64);
+pub const MIN_DIFFICULTY: u64 =
+	((2 as u64) << (SECOND_POW_EDGE_BITS - BASE_EDGE_BITS)) * (SECOND_POW_EDGE_BITS as u64);
 
 /// The initial difficulty at launch. This should be over-estimated
 /// and difficulty should come down at launch rather than up
@@ -216,7 +217,7 @@ impl HeaderInfo {
 		HeaderInfo {
 			timestamp,
 			difficulty,
-			secondary_scaling: 1,
+			secondary_scaling: global::initial_graph_weight(),
 			is_secondary: false,
 		}
 	}
@@ -233,9 +234,12 @@ impl HeaderInfo {
 	}
 }
 
+/// TODO: Doc
 pub fn damp(actual: u64, goal: u64, damp_factor: u64) -> u64 {
-	(1 * actual + (damp_factor-1) * goal) / damp_factor
+	(1 * actual + (damp_factor - 1) * goal) / damp_factor
 }
+
+/// TODO: Doc
 pub fn clamp(actual: u64, goal: u64, clamp_factor: u64) -> u64 {
 	max(goal / clamp_factor, min(actual, goal * clamp_factor))
 }
@@ -267,13 +271,22 @@ where
 	let sec_pow_scaling = secondary_pow_scaling(height, &diff_data);
 
 	// Get the timestamp delta across the window
-	let ts_delta: u64 = diff_data[DIFFICULTY_ADJUST_WINDOW as usize].timestamp - diff_data[0].timestamp;
+	let ts_delta: u64 =
+		diff_data[DIFFICULTY_ADJUST_WINDOW as usize].timestamp - diff_data[0].timestamp;
 
 	// Get the difficulty sum of the last DIFFICULTY_ADJUST_WINDOW elements
-	let diff_sum: u64 = diff_data.iter().skip(1).map(|dd| dd.difficulty.to_num()).sum();
+	let diff_sum: u64 = diff_data
+		.iter()
+		.skip(1)
+		.map(|dd| dd.difficulty.to_num())
+		.sum();
 
-        // adjust time delta toward goal subject to dampening and clamping
-	let adj_ts = clamp(damp(ts_delta, BLOCK_TIME_WINDOW, DAMP_FACTOR), BLOCK_TIME_WINDOW, CLAMP_FACTOR);
+	// adjust time delta toward goal subject to dampening and clamping
+	let adj_ts = clamp(
+		damp(ts_delta, BLOCK_TIME_WINDOW, DAMP_FACTOR),
+		BLOCK_TIME_WINDOW,
+		CLAMP_FACTOR,
+	);
 	let difficulty = max(1, diff_sum * BLOCK_TIME_SEC / adj_ts);
 
 	HeaderInfo::from_diff_scaling(Difficulty::from_num(difficulty), sec_pow_scaling)
@@ -285,14 +298,22 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 	let snd_count = 100 * diff_data.iter().filter(|n| n.is_secondary).count() as u64;
 
 	// Get the scaling factor sum of the last DIFFICULTY_ADJUST_WINDOW elements
-	let scale_sum: u64 = diff_data.iter().skip(1).map(|dd| dd.secondary_scaling as u64).sum();
+	let scale_sum: u64 = diff_data
+		.iter()
+		.skip(1)
+		.map(|dd| dd.secondary_scaling as u64)
+		.sum();
 
 	// compute ideal 2nd_pow_fraction in pct and across window
 	let target_pct = secondary_pow_ratio(height);
 	let target_count = DIFFICULTY_ADJUST_WINDOW * target_pct;
 
-        // adjust count toward goal subject to dampening and clamping
-	let adj_count = clamp(damp(snd_count, target_count, DAMP_FACTOR), target_count, CLAMP_FACTOR);
+	// adjust count toward goal subject to dampening and clamping
+	let adj_count = clamp(
+		damp(snd_count, target_count, DAMP_FACTOR),
+		target_count,
+		CLAMP_FACTOR,
+	);
 	let scale = scale_sum * target_pct / adj_count;
 
 	max(1, min(scale, MAX_SECONDARY_SCALING)) as u32
