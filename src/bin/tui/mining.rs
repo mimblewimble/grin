@@ -100,7 +100,9 @@ impl TableViewItem<StratumWorkerColumn> for WorkerStats {
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum DiffColumn {
 	BlockNumber,
+	PoWType,
 	Difficulty,
+	SecondaryScaling,
 	Time,
 	Duration,
 }
@@ -109,7 +111,9 @@ impl DiffColumn {
 	fn _as_str(&self) -> &str {
 		match *self {
 			DiffColumn::BlockNumber => "Block Number",
+			DiffColumn::PoWType => "Type",
 			DiffColumn::Difficulty => "Network Difficulty",
+			DiffColumn::SecondaryScaling => "Sec. Scaling",
 			DiffColumn::Time => "Block Time",
 			DiffColumn::Duration => "Duration",
 		}
@@ -120,10 +124,16 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 	fn to_column(&self, column: DiffColumn) -> String {
 		let naive_datetime = NaiveDateTime::from_timestamp(self.time as i64, 0);
 		let datetime: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
+		let pow_type = match self.is_secondary {
+			true => String::from("Secondary"),
+			false => String::from("Primary"),
+		};
 
 		match column {
 			DiffColumn::BlockNumber => self.block_number.to_string(),
+			DiffColumn::PoWType => pow_type,
 			DiffColumn::Difficulty => self.difficulty.to_string(),
+			DiffColumn::SecondaryScaling => self.secondary_scaling.to_string(),
 			DiffColumn::Time => format!("{}", datetime).to_string(),
 			DiffColumn::Duration => format!("{}s", self.duration).to_string(),
 		}
@@ -135,7 +145,9 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 	{
 		match column {
 			DiffColumn::BlockNumber => Ordering::Equal,
+			DiffColumn::PoWType => Ordering::Equal,
 			DiffColumn::Difficulty => Ordering::Equal,
+			DiffColumn::SecondaryScaling => Ordering::Equal,
 			DiffColumn::Time => Ordering::Equal,
 			DiffColumn::Duration => Ordering::Equal,
 		}
@@ -252,10 +264,16 @@ impl TUIStatusListener for TUIMiningView {
 
 		let diff_table_view = TableView::<DiffBlock, DiffColumn>::new()
 			.column(DiffColumn::BlockNumber, "Block Number", |c| {
-				c.width_percent(25)
+				c.width_percent(15)
+			})
+			.column(DiffColumn::PoWType, "Type", |c| {
+				c.width_percent(10)
 			})
 			.column(DiffColumn::Difficulty, "Network Difficulty", |c| {
-				c.width_percent(25)
+				c.width_percent(15)
+			})
+			.column(DiffColumn::SecondaryScaling, "Sec. Scaling", |c| {
+				c.width_percent(10)
 			})
 			.column(DiffColumn::Time, "Block Time", |c| c.width_percent(25))
 			.column(DiffColumn::Duration, "Duration", |c| c.width_percent(25));

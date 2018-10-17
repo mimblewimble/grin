@@ -422,6 +422,8 @@ impl Server {
 						difficulty: n.difficulty.to_num(),
 						time: n.timestamp,
 						duration: dur,
+						secondary_scaling: n.secondary_scaling,
+						is_secondary: n.is_secondary,
 					}
 				}).collect();
 

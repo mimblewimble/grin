@@ -131,6 +131,10 @@ pub struct DiffBlock {
 	pub time: u64,
 	/// Duration since previous block (epoch seconds)
 	pub duration: u64,
+	/// secondary scaling
+	pub secondary_scaling: u32,
+	/// is secondary
+	pub is_secondary: bool,
 }
 
 /// Struct to return relevant information about peers
