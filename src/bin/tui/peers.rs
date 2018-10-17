@@ -122,8 +122,9 @@ impl TUIStatusListener for TUIPeerView {
 		let table_view = TableView::<PeerStats, PeerColumn>::new()
 			.column(PeerColumn::Address, "Address", |c| c.width_percent(16))
 			.column(PeerColumn::State, "State", |c| c.width_percent(16))
-			.column(PeerColumn::UsedBandwidth, "Used bandwidth", |c| c.width_percent(16))
-			.column(PeerColumn::Direction, "Direction", |c| c.width_percent(16))
+			.column(PeerColumn::UsedBandwidth, "Used bandwidth", |c| {
+				c.width_percent(16)
+			}).column(PeerColumn::Direction, "Direction", |c| c.width_percent(16))
 			.column(PeerColumn::TotalDifficulty, "Total Difficulty", |c| {
 				c.width_percent(16)
 			}).column(PeerColumn::Version, "Version", |c| c.width_percent(16));
