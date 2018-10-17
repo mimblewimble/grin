@@ -159,7 +159,8 @@ pub struct PeerStats {
 impl StratumStats {
 	/// Calculate network hashrate
 	pub fn network_hashrate(&self) -> f64 {
-		42.0 * (self.network_difficulty as f64 / Difficulty::scale(self.edge_bits as u8) as f64) / 60.0
+		42.0 * (self.network_difficulty as f64 / Difficulty::scale(self.edge_bits as u8) as f64)
+			/ 60.0
 	}
 }
 
