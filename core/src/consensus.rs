@@ -49,8 +49,8 @@ pub fn reward(fee: u64) -> u64 {
 
 /// Nominal height for standard time intervals
 pub const HOUR_HEIGHT: u64 = 3600 / BLOCK_TIME_SEC;
-pub const  DAY_HEIGHT: u64 = 24 * HOUR_HEIGHT;
-pub const WEEK_HEIGHT: u64 =  7 *  DAY_HEIGHT;
+pub const DAY_HEIGHT: u64 = 24 * HOUR_HEIGHT;
+pub const WEEK_HEIGHT: u64 = 7 * DAY_HEIGHT;
 pub const YEAR_HEIGHT: u64 = 52 * WEEK_HEIGHT;
 
 /// Number of blocks before a coinbase matures and can be spent
@@ -162,7 +162,7 @@ pub fn scale(edge_bits: u8) -> u64 {
 /// Currently grossly over-estimated at 10% of current
 /// ethereum GPUs (assuming 1GPU can solve a block at diff 1 in one block interval)
 /// Pick MUCH more modest value for TESTNET4; CHANGE FOR MAINNET
-pub const INITIAL_DIFFICULTY: u64 = 1_000 * (2<<(29-24)) * 29; // scale(SECOND_POW_EDGE_BITS);
+pub const INITIAL_DIFFICULTY: u64 = 1_000 * (2 << (29 - 24)) * 29; // scale(SECOND_POW_EDGE_BITS);
 /// pub const INITIAL_DIFFICULTY: u64 = 1_000_000 * Difficulty::scale(SECOND_POW_EDGE_BITS);
 
 /// Consensus errors
@@ -258,16 +258,20 @@ where
 	let sec_pow_scaling = secondary_pow_scaling(height, &diff_data);
 
 	let earliest_ts = diff_data[0].timestamp;
-	let latest_ts = diff_data[diff_data.len()-1].timestamp;
+	let latest_ts = diff_data[diff_data.len() - 1].timestamp;
 
 	// time delta within the window
 	let ts_delta = latest_ts - earliest_ts;
 
 	// Get the difficulty sum of the last DIFFICULTY_ADJUST_WINDOW elements
-	let diff_sum: u64 = diff_data.iter().skip(1).map(|dd| dd.difficulty.to_num()).sum();
+	let diff_sum: u64 = diff_data
+		.iter()
+		.skip(1)
+		.map(|dd| dd.difficulty.to_num())
+		.sum();
 
 	// Apply dampening except when difficulty is near 1
-	let	ts_damp = if diff_sum < DAMP_FACTOR * DIFFICULTY_ADJUST_WINDOW {
+	let ts_damp = if diff_sum < DAMP_FACTOR * DIFFICULTY_ADJUST_WINDOW {
 		ts_delta
 	} else {
 		(ts_delta + (DAMP_FACTOR - 1) * BLOCK_TIME_WINDOW) / DAMP_FACTOR
@@ -290,7 +294,10 @@ where
 /// Factor by which the secondary proof of work difficulty will be adjusted
 pub fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 	// median of past scaling factors, scaling is 1 if none found
-	let mut scalings = diff_data.iter().map(|n| n.secondary_scaling).collect::<Vec<_>>();
+	let mut scalings = diff_data
+		.iter()
+		.map(|n| n.secondary_scaling)
+		.collect::<Vec<_>>();
 	if scalings.len() == 0 {
 		return 1;
 	}
@@ -302,7 +309,8 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 	// actual, both are multiplied by a factor of 100 to increase resolution
 	let ratio = secondary_pow_ratio(height);
 	let ideal_secondary_count = diff_data.len() as u64 * ratio;
-	let dampened_secondary_count = (secondary_count * 100 + (DAMP_FACTOR - 1) * ideal_secondary_count) / DAMP_FACTOR;
+	let dampened_secondary_count =
+		(secondary_count * 100 + (DAMP_FACTOR - 1) * ideal_secondary_count) / DAMP_FACTOR;
 
 	// adjust the past median based on ideal ratio vs actual ratio
 	let scaling = scaling_median * ideal_secondary_count / dampened_secondary_count as u64;
