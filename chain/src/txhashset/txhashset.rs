@@ -701,27 +701,50 @@ impl<'a> HeaderExtension<'a> {
 			header_hashes.push(current.hash());
 			current = self.batch.get_block_header(&current.previous)?;
 		}
-		// Include the genesis header as we will re-apply it after truncating the extension.
-		header_hashes.push(genesis.hash());
 		header_hashes.reverse();
 
 		// Trucate the extension (back to pos 0).
 		self.truncate()?;
 
-		debug!(
-			LOGGER,
-			"Re-applying {} headers to extension, from {:?} to {:?}.",
-			header_hashes.len(),
-			header_hashes.first().unwrap(),
-			header_hashes.last().unwrap(),
-		);
+		// Re-apply the genesis header after truncation.
+		self.apply_header(&genesis)?;
 
-		for h in header_hashes {
-			let header = self.batch.get_block_header(&h)?;
-			// self.validate_header_root()?;
-			self.apply_header(&header)?;
+		if header_hashes.len() > 0 {
+			debug!(
+				LOGGER,
+				"Re-applying {} headers to extension, from {:?} to {:?}.",
+				header_hashes.len(),
+				header_hashes.first().unwrap(),
+				header_hashes.last().unwrap(),
+			);
+
+			for h in header_hashes {
+				let header = self.batch.get_block_header(&h)?;
+				self.validate_root(&header)?;
+				self.apply_header(&header)?;
+			}
 		}
 		Ok(())
+	}
+
+	/// The root of the header MMR for convenience.
+	pub fn root(&self) -> Hash {
+		self.pmmr.root()
+	}
+
+	/// Validate the prev_root of the header against the root of the current header MMR.
+	pub fn validate_root(&self, header: &BlockHeader) -> Result<(), Error> {
+		// If we are validating the genesis block then we have no prev_root.
+		// So we are done here.
+		if header.height == 1 {
+			return Ok(());
+		}
+
+		if self.root() != header.prev_root {
+			Err(ErrorKind::InvalidRoot.into())
+		} else {
+			Ok(())
+		}
 	}
 }
 
@@ -1078,14 +1101,19 @@ impl<'a> Extension<'a> {
 		}
 	}
 
+	/// Get the root of the current header MMR.
+	pub fn header_root(&self) -> Hash {
+		self.header_pmmr.root()
+	}
+
 	/// Validate the following MMR roots against the latest header applied -
 	///   * output
 	///   * rangeproof
 	///   * kernel
 	///
-	/// Note we do not validate the header MMR roots here as we need to validate
-	/// a header against the state of the MMR *prior* to applying it as
-	/// each header commits to the root of the MMR of all previous headers,
+	/// Note we do not validate the header MMR root here as we need to validate
+	/// a header against the state of the MMR *prior* to applying it.
+	/// Each header commits to the root of the MMR of all previous headers,
 	/// not including the header itself.
 	///
 	pub fn validate_roots(&self) -> Result<(), Error> {
@@ -1107,23 +1135,19 @@ impl<'a> Extension<'a> {
 		}
 	}
 
-	/// Validate the provided header by comparing its "prev_root" to the
+	/// Validate the provided header by comparing its prev_root to the
 	/// root of the current header MMR.
-	///
-	/// TODO - Implement this once we commit to prev_root in block headers.
-	///
-	pub fn validate_header_root(&self, _header: &BlockHeader) -> Result<(), Error> {
-		if self.header.height == 0 {
+	pub fn validate_header_root(&self, header: &BlockHeader) -> Result<(), Error> {
+		if header.height == 1 {
 			return Ok(());
 		}
 
-		let _roots = self.roots();
-
-		// TODO - validate once we commit to header MMR root in the header
-		// (not just previous hash)
-		// if roots.header_root != header.prev_root
-
-		Ok(())
+		let roots = self.roots();
+		if roots.header_root != header.prev_root {
+			Err(ErrorKind::InvalidRoot.into())
+		} else {
+			Ok(())
+		}
 	}
 
 	/// Validate the header, output and kernel MMR sizes against the block header.

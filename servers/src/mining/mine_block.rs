@@ -95,9 +95,9 @@ fn build_block(
 	key_id: Option<Identifier>,
 	wallet_listener_url: Option<String>,
 ) -> Result<(core::Block, BlockFees), Error> {
-	// prepare the block header timestamp
 	let head = chain.head_header()?;
 
+	// prepare the block header timestamp
 	let mut now_sec = Utc::now().timestamp();
 	let head_sec = head.timestamp.timestamp();
 	if now_sec <= head_sec {
