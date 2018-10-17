@@ -47,10 +47,13 @@ pub fn reward(fee: u64) -> u64 {
 	REWARD + fee
 }
 
-/// Nominal height for standard time intervals
+/// Nominal height for standard time intervals, hour is 60 blocks
 pub const HOUR_HEIGHT: u64 = 3600 / BLOCK_TIME_SEC;
+/// A day is 1440 blocks
 pub const DAY_HEIGHT: u64 = 24 * HOUR_HEIGHT;
+/// A week is 10_080 blocks
 pub const WEEK_HEIGHT: u64 = 7 * DAY_HEIGHT;
+/// A year is 524_160 blocks
 pub const YEAR_HEIGHT: u64 = 52 * WEEK_HEIGHT;
 
 /// Number of blocks before a coinbase matures and can be spent
