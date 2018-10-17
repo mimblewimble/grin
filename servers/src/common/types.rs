@@ -20,7 +20,7 @@ use api;
 use chain;
 use chrono::prelude::{DateTime, Utc};
 use core::global::ChainTypes;
-use core::{core, pow};
+use core::{consensus, core, pow};
 use p2p;
 use pool;
 use store;
@@ -235,7 +235,7 @@ impl Default for StratumServerConfig {
 			wallet_listener_url: "http://127.0.0.1:13415".to_string(),
 			burn_reward: false,
 			attempt_time_per_block: 15,
-			minimum_share_difficulty: 1,
+			minimum_share_difficulty: consensus::MIN_DIFFICULTY,
 			enable_stratum_server: Some(false),
 			stratum_server_addr: Some("127.0.0.1:13416".to_string()),
 		}
