@@ -40,9 +40,9 @@ Optionally return results as "compact blocks" by passing `?compact` query.
 
 * **URL**
 
-  /v1/blocks/hash
-  /v1/blocks/height
-  /v1/blocks/commit
+  * /v1/blocks/hash
+  * /v1/blocks/height
+  * /v1/blocks/commit
 
 * **Method:**
 
@@ -73,6 +73,7 @@ Optionally return results as "compact blocks" by passing `?compact` query.
     | - version             | number   | Version of the block                                                        |
     | - height              | number   | Height of this block since the genesis block (height 0)                     |
     | - previous            | string   | Hash of the block previous to this in the chain                             |
+    | - prev_root           | string   | Root hash of the header MMR at the previous header                          |
     | - timestamp           | string   | RFC3339 timestamp at which the block was built                              |
     | - output_root         | string   | Merklish root of all the commitments in the TxHashSet                       |
     | - range_proof_root    | string   | Merklish root of all range proofs in the TxHashSet                          |
@@ -126,9 +127,9 @@ Returns data about a block headers given either a hash or height or an output co
 
 * **URL**
 
-  /v1/headers/hash
-  /v1/headers/height
-  /v1/headers/commit
+  * /v1/headers/hash
+  * /v1/headers/height
+  * /v1/headers/commit
 
 * **Method:**
 
@@ -159,6 +160,7 @@ Returns data about a block headers given either a hash or height or an output co
     | - version             | number   | Version of the block                                                        |
     | - height              | number   | Height of this block since the genesis block (height 0)                     |
     | - previous            | string   | Hash of the block previous to this in the chain                             |
+    | - prev_root           | string   | Root hash of the header MMR at the previous header                          |
     | - timestamp           | string   | RFC3339 timestamp at which the block was built                              |
     | - output_root         | string   | Merklish root of all the commitments in the TxHashSet                       |
     | - range_proof_root    | string   | Merklish root of all range proofs in the TxHashSet                          |
@@ -327,9 +329,9 @@ Retrieves details about specifics outputs. Supports retrieval of multiple output
 
 * **URL**
 
-  /v1/chain/outputs/byids?id=x
-  /v1/chain/outputs/byids?id=x,y,z
-  /v1/chain/outputs/byids?id=x&id=y&id=z
+  * /v1/chain/outputs/byids?id=x
+  * /v1/chain/outputs/byids?id=x,y,z
+  * /v1/chain/outputs/byids?id=x&id=y&id=z
 
 * **Method:**
 
@@ -550,8 +552,8 @@ Retrieves the last n outputs inserted into the tree.
 
 * **URL**
 
-/v1/txhashset/lastoutputs (gets last 10)
-/v1/txhashset/lastoutputs?n=x
+  * /v1/txhashset/lastoutputs (gets last 10)
+  * /v1/txhashset/lastoutputs?n=x
 
 * **Method:**
 
@@ -600,8 +602,8 @@ Retrieves the last n rangeproofs inserted in to the tree.
 
 * **URL**
 
-/v1/txhashset/lastrangeproofs (gets last 10)
-/v1/txhashset/lastrangeproofs?n=x
+  * /v1/txhashset/lastrangeproofs (gets last 10)
+  * /v1/txhashset/lastrangeproofs?n=x
 
 * **Method:**
 
@@ -650,8 +652,8 @@ Retrieves the last n kernels inserted in to the tree.
 
 * **URL**
 
-/v1/txhashset/lastkernels (gets last 10)
-/v1/txhashset/lastkernels?n=x
+  * /v1/txhashset/lastkernels (gets last 10)
+  * /v1/txhashset/lastkernels?n=x
 
 * **Method:**
 
