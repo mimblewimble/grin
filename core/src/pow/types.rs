@@ -21,7 +21,7 @@ use std::{fmt, iter};
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use consensus::{self, SECOND_POW_EDGE_BITS};
+use consensus::{graph_weight, SECOND_POW_EDGE_BITS};
 use core::hash::Hashed;
 use global;
 use ser::{self, Readable, Reader, Writeable, Writer};
@@ -90,7 +90,7 @@ impl Difficulty {
 	/// https://lists.launchpad.net/mimblewimble/msg00494.html).
 	fn from_proof_adjusted(proof: &Proof) -> Difficulty {
 		// scale with natural scaling factor
-		Difficulty::from_num(proof.scaled_difficulty(consensus::scale(proof.edge_bits)))
+		Difficulty::from_num(proof.scaled_difficulty(graph_weight(proof.edge_bits)))
 	}
 
 	/// Same as `from_proof_adjusted` but instead of an adjustment based on
