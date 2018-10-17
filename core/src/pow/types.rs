@@ -14,7 +14,7 @@
 
 /// Types for a Cuck(at)oo proof of work and its encapsulation as a fully usable
 /// proof of work within a block header.
-use std::cmp::{min,max};
+use std::cmp::{max, min};
 use std::ops::{Add, Div, Mul, Sub};
 use std::{fmt, iter};
 
@@ -36,11 +36,7 @@ where
 	T: EdgeType,
 {
 	/// Create new instance of context with appropriate parameters
-	fn new(
-		edge_bits: u8,
-		proof_size: usize,
-		max_sols: u32,
-	) -> Result<Box<Self>, Error>;
+	fn new(edge_bits: u8, proof_size: usize, max_sols: u32) -> Result<Box<Self>, Error>;
 	/// Sets the header along with an optional nonce at the end
 	/// solve: whether to set up structures for a solve (true) or just validate (false)
 	fn set_header_nonce(
@@ -78,11 +74,6 @@ impl Difficulty {
 	pub fn from_num(num: u64) -> Difficulty {
 		// can't have difficulty lower than 1
 		Difficulty { num: max(num, 1) }
-	}
-
-	/// Compute difficulty scaling factor for graph defined by 2 * 2^edge_bits * edge_bits bits
-	pub fn scale(edge_bits: u8) -> u64 {
-		(2 << (edge_bits - global::base_edge_bits()) as u64) * (edge_bits as u64)
 	}
 
 	/// Computes the difficulty from a hash. Divides the maximum target by the
@@ -408,10 +399,7 @@ impl Readable for Proof {
 			}
 			nonces.push(nonce);
 		}
-		Ok(Proof {
-			edge_bits,
-			nonces,
-		})
+		Ok(Proof { edge_bits, nonces })
 	}
 }
 
