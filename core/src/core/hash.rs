@@ -53,6 +53,7 @@ impl fmt::Display for Hash {
 }
 
 impl Hash {
+	/// Size of a hash in bytes.
 	pub const SIZE: usize = 32;
 
 	/// Builds a Hash from a byte vector. If the vector is too short, it will be
