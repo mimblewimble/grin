@@ -152,6 +152,28 @@ impl Peer {
 		}
 	}
 
+	/// Number of bytes sent to the peer
+	pub fn sent_bytes(&self) -> Option<u64> {
+		if let Some(ref tracker) = self.connection {
+			if let Ok(sent_bytes) = tracker.sent_bytes.read() {
+				return Some(*sent_bytes);
+			}
+		}
+
+		None
+	}
+
+	/// Number of bytes received from the peer
+	pub fn received_bytes(&self) -> Option<u64> {
+		if let Some(ref tracker) = self.connection {
+			if let Ok(received_bytes) = tracker.received_bytes.read() {
+				return Some(*received_bytes);
+			}
+		}
+
+		None
+	}
+
 	/// Set this peer status to banned
 	pub fn set_banned(&self) {
 		*self.state.write().unwrap() = State::Banned;

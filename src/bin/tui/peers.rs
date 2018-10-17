@@ -19,6 +19,7 @@ use std::cmp::Ordering;
 use servers::{PeerStats, ServerStats};
 
 use chrono::prelude::*;
+use tui::humansize::{file_size_opts::CONVENTIONAL, FileSize};
 
 use cursive::direction::Orientation;
 use cursive::traits::{Boxable, Identifiable};
@@ -34,6 +35,7 @@ use tui::types::TUIStatusListener;
 enum PeerColumn {
 	Address,
 	State,
+	UsedBandwidth,
 	TotalDifficulty,
 	Direction,
 	Version,
@@ -44,6 +46,7 @@ impl PeerColumn {
 		match *self {
 			PeerColumn::Address => "Address",
 			PeerColumn::State => "State",
+			PeerColumn::UsedBandwidth => "Used bandwidth",
 			PeerColumn::Version => "Version",
 			PeerColumn::TotalDifficulty => "Total Difficulty",
 			PeerColumn::Direction => "Direction",
@@ -53,9 +56,27 @@ impl PeerColumn {
 
 impl TableViewItem<PeerColumn> for PeerStats {
 	fn to_column(&self, column: PeerColumn) -> String {
+		// Converts optional size to human readable size
+		fn size_to_string(size: Option<u64>) -> String {
+			if let Some(n) = size {
+				let size = n.file_size(CONVENTIONAL);
+				match size {
+					Ok(size) => size,
+					Err(_) => "-".to_string(),
+				}
+			} else {
+				"-".to_string()
+			}
+		}
+
 		match column {
 			PeerColumn::Address => self.addr.clone(),
 			PeerColumn::State => self.state.clone(),
+			PeerColumn::UsedBandwidth => format!(
+				"S: {}, R: {}",
+				size_to_string(self.sent_bytes),
+				size_to_string(self.received_bytes),
+			).to_string(),
 			PeerColumn::TotalDifficulty => format!(
 				"{} D @ {} H ({}s)",
 				self.total_difficulty,
@@ -71,9 +92,23 @@ impl TableViewItem<PeerColumn> for PeerStats {
 	where
 		Self: Sized,
 	{
+		// Compares used bandwidth of two peers
+		fn cmp_used_bandwidth(curr: &PeerStats, other: &PeerStats) -> Ordering {
+			let curr_recv_bytes = curr.received_bytes.unwrap_or(0);
+			let curr_sent_bytes = curr.sent_bytes.unwrap_or(0);
+			let other_recv_bytes = other.received_bytes.unwrap_or(0);
+			let other_sent_bytes = other.sent_bytes.unwrap_or(0);
+
+			let curr_sum = curr_recv_bytes + curr_sent_bytes;
+			let other_sum = other_recv_bytes + other_sent_bytes;
+
+			curr_sum.cmp(&other_sum)
+		};
+
 		match column {
 			PeerColumn::Address => self.addr.cmp(&other.addr),
 			PeerColumn::State => self.state.cmp(&other.state),
+			PeerColumn::UsedBandwidth => cmp_used_bandwidth(&self, &other),
 			PeerColumn::TotalDifficulty => self.total_difficulty.cmp(&other.total_difficulty),
 			PeerColumn::Direction => self.direction.cmp(&other.direction),
 			PeerColumn::Version => self.version.cmp(&other.version),
@@ -86,12 +121,14 @@ pub struct TUIPeerView;
 impl TUIStatusListener for TUIPeerView {
 	fn create() -> Box<View> {
 		let table_view = TableView::<PeerStats, PeerColumn>::new()
-			.column(PeerColumn::Address, "Address", |c| c.width_percent(20))
-			.column(PeerColumn::State, "State", |c| c.width_percent(20))
-			.column(PeerColumn::Direction, "Direction", |c| c.width_percent(20))
+			.column(PeerColumn::Address, "Address", |c| c.width_percent(16))
+			.column(PeerColumn::State, "State", |c| c.width_percent(16))
+			.column(PeerColumn::UsedBandwidth, "Used bandwidth", |c| {
+				c.width_percent(16)
+			}).column(PeerColumn::Direction, "Direction", |c| c.width_percent(16))
 			.column(PeerColumn::TotalDifficulty, "Total Difficulty", |c| {
-				c.width_percent(20)
-			}).column(PeerColumn::Version, "Version", |c| c.width_percent(20));
+				c.width_percent(16)
+			}).column(PeerColumn::Version, "Version", |c| c.width_percent(16));
 		let peer_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
 				.child(
