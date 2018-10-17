@@ -24,7 +24,7 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::mem::size_of;
 use std::net::TcpStream;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc, RwLock};
 use std::{cmp, thread, time};
 
 use core::ser;
@@ -147,9 +147,9 @@ pub const SEND_CHANNEL_CAP: usize = 10;
 // TODO count sent and received
 pub struct Tracker {
 	/// Bytes we've sent.
-	pub sent_bytes: Arc<Mutex<u64>>,
+	pub sent_bytes: Arc<RwLock<u64>>,
 	/// Bytes we've received.
-	pub received_bytes: Arc<Mutex<u64>>,
+	pub received_bytes: Arc<RwLock<u64>>,
 	/// Channel to allow sending data through the connection
 	pub send_channel: mpsc::SyncSender<Vec<u8>>,
 	/// Channel to close the connection
@@ -168,7 +168,7 @@ impl Tracker {
 		self.send_channel.try_send(buf)?;
 
 		// Increase sent bytes counter
-		if let Ok(mut sent_bytes) = self.sent_bytes.lock() {
+		if let Ok(mut sent_bytes) = self.sent_bytes.write() {
 			*sent_bytes += buf_len as u64;
 		}
 
@@ -188,7 +188,7 @@ where
 	let (error_tx, error_rx) = mpsc::channel();
 
 	// Counter of number of bytes received
-	let received_bytes = Arc::new(Mutex::new(0));
+	let received_bytes = Arc::new(RwLock::new(0));
 
 	stream
 		.set_nonblocking(true)
@@ -203,7 +203,7 @@ where
 	);
 
 	Tracker {
-		sent_bytes: Arc::new(Mutex::new(0)),
+		sent_bytes: Arc::new(RwLock::new(0)),
 		received_bytes: received_bytes.clone(),
 		send_channel: send_tx,
 		close_channel: close_tx,
@@ -217,7 +217,7 @@ fn poll<H>(
 	send_rx: mpsc::Receiver<Vec<u8>>,
 	error_tx: mpsc::Sender<Error>,
 	close_rx: mpsc::Receiver<()>,
-	received_bytes: Arc<Mutex<u64>>,
+	received_bytes: Arc<RwLock<u64>>,
 ) where
 	H: MessageHandler,
 {
@@ -241,7 +241,7 @@ fn poll<H>(
 					);
 
 					// Increase received bytes counter
-					if let Ok(mut received_bytes) = received_bytes.lock() {
+					if let Ok(mut received_bytes) = received_bytes.write() {
 						let header_size = size_of::<MsgHeader>() as u64;
 						*received_bytes += header_size + msg.header.msg_len;
 					}
