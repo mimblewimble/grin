@@ -241,7 +241,7 @@ fn print_chain_sim(chain_sim: Vec<(HeaderInfo, DiffStats)>) {
 	println!("Constants");
 	println!("DIFFICULTY_ADJUST_WINDOW: {}", DIFFICULTY_ADJUST_WINDOW);
 	println!("BLOCK_TIME_WINDOW: {}", BLOCK_TIME_WINDOW);
-	println!("UPPER_TIME_BOUND: {}", UPPER_TIME_BOUND);
+	println!("CLAMP_FACTOR: {}", CLAMP_FACTOR);
 	println!("DAMP_FACTOR: {}", DAMP_FACTOR);
 	chain_sim.iter().enumerate().for_each(|(i, b)| {
 		let block = b.0.clone();
@@ -497,18 +497,18 @@ fn secondary_pow_scale() {
 	// difficulty block
 	assert_eq!(
 		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect()),
-		148
+		147
 	);
 	// all secondary on 90%, factor should go down a bit
 	hi.is_secondary = true;
 	assert_eq!(
 		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect()),
-		96
+		94
 	);
 	// all secondary on 1%, factor should go down to bound (divide by 2)
 	assert_eq!(
 		secondary_pow_scaling(890_000, &(0..window).map(|_| hi.clone()).collect()),
-		50
+		49
 	);
 	// same as above, testing lowest bound
 	let mut low_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 3);
@@ -517,7 +517,7 @@ fn secondary_pow_scale() {
 		secondary_pow_scaling(890_000, &(0..window).map(|_| low_hi.clone()).collect()),
 		1
 	);
-	// just about the right ratio, also playing with median
+	// just about the right ratio, also no longer playing with median
 	let primary_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 50);
 	assert_eq!(
 		secondary_pow_scaling(
@@ -527,7 +527,7 @@ fn secondary_pow_scale() {
 				.chain((0..(window * 9 / 10)).map(|_| hi.clone()))
 				.collect()
 		),
-		100
+		94
 	);
 	// 95% secondary, should come down based on 100 median
 	assert_eq!(
@@ -538,7 +538,7 @@ fn secondary_pow_scale() {
 				.chain((0..(window * 95 / 100)).map(|_| hi.clone()))
 				.collect()
 		),
-		98
+		94
 	);
 	// 40% secondary, should come up based on 50 median
 	assert_eq!(
@@ -549,7 +549,7 @@ fn secondary_pow_scale() {
 				.chain((0..(window * 4 / 10)).map(|_| hi.clone()))
 				.collect()
 		),
-		61
+		84
 	);
 }
 

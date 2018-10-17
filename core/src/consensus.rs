@@ -141,29 +141,31 @@ pub const DIFFICULTY_ADJUST_WINDOW: u64 = HOUR_HEIGHT;
 /// Average time span of the difficulty adjustment window
 pub const BLOCK_TIME_WINDOW: u64 = DIFFICULTY_ADJUST_WINDOW * BLOCK_TIME_SEC;
 
-/// Maximum size time window used for difficulty adjustments
-pub const UPPER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW * 2;
-
-/// Minimum size time window used for difficulty adjustments
-pub const LOWER_TIME_BOUND: u64 = BLOCK_TIME_WINDOW / 2;
+/// Clamp factor to use for difficulty adjustment
+/// Limit value to within this factor of goal
+pub const CLAMP_FACTOR: u64 = 2;
 
 /// Dampening factor to use for difficulty adjustment
 pub const DAMP_FACTOR: u64 = 3;
 
-/// Compute difficulty scaling factor as number of siphash bits defining the graph
+/// Compute weight of a graph as number of siphash bits defining the graph
 /// Must be made dependent on height to phase out smaller size over the years
 /// This can wait until end of 2019 at latest
-pub fn scale(edge_bits: u8) -> u64 {
+pub fn graph_weight(edge_bits: u8) -> u64 {
 	(2 << (edge_bits - global::base_edge_bits()) as u64) * (edge_bits as u64)
 }
+
+/// minimum possible difficulty equal to graph_weight(SECOND_POW_EDGE_BITS)
+pub const MIN_DIFFICULTY: u64 = ((2 as u64) << (SECOND_POW_EDGE_BITS - BASE_EDGE_BITS)) * (SECOND_POW_EDGE_BITS as u64);
 
 /// The initial difficulty at launch. This should be over-estimated
 /// and difficulty should come down at launch rather than up
 /// Currently grossly over-estimated at 10% of current
 /// ethereum GPUs (assuming 1GPU can solve a block at diff 1 in one block interval)
-/// Pick MUCH more modest value for TESTNET4; CHANGE FOR MAINNET
-pub const INITIAL_DIFFICULTY: u64 = 1_000 * (2<<(29-24)) * 29; // scale(SECOND_POW_EDGE_BITS);
-/// pub const INITIAL_DIFFICULTY: u64 = 1_000_000 * Difficulty::scale(SECOND_POW_EDGE_BITS);
+/// FOR MAINNET, use
+/// pub const INITIAL_DIFFICULTY: u64 = 1_000_000 * MIN_DIFFICULTY;
+/// Pick MUCH more modest value for TESTNET4:
+pub const INITIAL_DIFFICULTY: u64 = 1_000 * MIN_DIFFICULTY;
 
 /// Consensus errors
 #[derive(Clone, Debug, Eq, PartialEq, Fail)]
@@ -231,6 +233,13 @@ impl HeaderInfo {
 	}
 }
 
+pub fn damp(actual: u64, goal: u64, damp_factor: u64) -> u64 {
+	(1 * actual + (damp_factor-1) * goal) / damp_factor
+}
+pub fn clamp(actual: u64, goal: u64, clamp_factor: u64) -> u64 {
+	max(goal / clamp_factor, min(actual, goal * clamp_factor))
+}
+
 /// Computes the proof-of-work difficulty that the next block should comply
 /// with. Takes an iterator over past block headers information, from latest
 /// (highest height) to oldest (lowest height).
@@ -257,65 +266,36 @@ where
 	// First, get the ratio of secondary PoW vs primary
 	let sec_pow_scaling = secondary_pow_scaling(height, &diff_data);
 
-	let earliest_ts = diff_data[0].timestamp;
-	let latest_ts = diff_data[diff_data.len()-1].timestamp;
-
-	// time delta within the window
-	let ts_delta = latest_ts - earliest_ts;
+	// Get the timestamp delta across the window
+	let ts_delta: u64 = diff_data[DIFFICULTY_ADJUST_WINDOW as usize].timestamp - diff_data[0].timestamp;
 
 	// Get the difficulty sum of the last DIFFICULTY_ADJUST_WINDOW elements
 	let diff_sum: u64 = diff_data.iter().skip(1).map(|dd| dd.difficulty.to_num()).sum();
 
-	// Apply dampening except when difficulty is near 1
-	let	ts_damp = if diff_sum < DAMP_FACTOR * DIFFICULTY_ADJUST_WINDOW {
-		ts_delta
-	} else {
-		(ts_delta + (DAMP_FACTOR - 1) * BLOCK_TIME_WINDOW) / DAMP_FACTOR
-	};
-
-	// Apply time bounds
-	let adj_ts = if ts_damp < LOWER_TIME_BOUND {
-		LOWER_TIME_BOUND
-	} else if ts_damp > UPPER_TIME_BOUND {
-		UPPER_TIME_BOUND
-	} else {
-		ts_damp
-	};
-
-	let difficulty = max(diff_sum * BLOCK_TIME_SEC / adj_ts, 1);
+        // adjust time delta toward goal subject to dampening and clamping
+	let adj_ts = clamp(damp(ts_delta, BLOCK_TIME_WINDOW, DAMP_FACTOR), BLOCK_TIME_WINDOW, CLAMP_FACTOR);
+	let difficulty = max(1, diff_sum * BLOCK_TIME_SEC / adj_ts);
 
 	HeaderInfo::from_diff_scaling(Difficulty::from_num(difficulty), sec_pow_scaling)
 }
 
 /// Factor by which the secondary proof of work difficulty will be adjusted
 pub fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
-	// median of past scaling factors, scaling is 1 if none found
-	let mut scalings = diff_data.iter().map(|n| n.secondary_scaling).collect::<Vec<_>>();
-	if scalings.len() == 0 {
-		return 1;
-	}
-	scalings.sort();
-	let scaling_median = scalings[scalings.len() / 2] as u64;
-	let secondary_count = max(diff_data.iter().filter(|n| n.is_secondary).count(), 1) as u64;
+	// Get the secondary count across the window, in pct (100 * 60 * 2nd_pow_fraction)
+	let snd_count = 100 * diff_data.iter().filter(|n| n.is_secondary).count() as u64;
 
-	// calculate and dampen ideal secondary count so it can be compared with the
-	// actual, both are multiplied by a factor of 100 to increase resolution
-	let ratio = secondary_pow_ratio(height);
-	let ideal_secondary_count = diff_data.len() as u64 * ratio;
-	let dampened_secondary_count = (secondary_count * 100 + (DAMP_FACTOR - 1) * ideal_secondary_count) / DAMP_FACTOR;
+	// Get the scaling factor sum of the last DIFFICULTY_ADJUST_WINDOW elements
+	let scale_sum: u64 = diff_data.iter().skip(1).map(|dd| dd.secondary_scaling as u64).sum();
 
-	// adjust the past median based on ideal ratio vs actual ratio
-	let scaling = scaling_median * ideal_secondary_count / dampened_secondary_count as u64;
+	// compute ideal 2nd_pow_fraction in pct and across window
+	let target_pct = secondary_pow_ratio(height);
+	let target_count = DIFFICULTY_ADJUST_WINDOW * target_pct;
 
-	// various bounds
-	let bounded_scaling = if scaling < scaling_median / 2 || scaling == 0 {
-		max(scaling_median / 2, 1)
-	} else if scaling > MAX_SECONDARY_SCALING || scaling > scaling_median * 2 {
-		min(MAX_SECONDARY_SCALING, scaling_median * 2)
-	} else {
-		scaling
-	};
-	bounded_scaling as u32
+        // adjust count toward goal subject to dampening and clamping
+	let adj_count = clamp(damp(snd_count, target_count, DAMP_FACTOR), target_count, CLAMP_FACTOR);
+	let scale = scale_sum * target_pct / adj_count;
+
+	max(1, min(scale, MAX_SECONDARY_SCALING)) as u32
 }
 
 /// Consensus rule that collections of items are sorted lexicographically.
