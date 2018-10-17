@@ -111,7 +111,7 @@ pub fn genesis_testnet4() -> core::Block {
 	core::Block::with_header(core::BlockHeader {
 		height: 0,
 		previous: core::hash::Hash([0xff; 32]),
-		timestamp: Utc.ymd(2018, 10, 16).and_hms(9, 0, 0),
+		timestamp: Utc.ymd(2018, 10, 17).and_hms(13, 0, 0),
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
 			scaling_difficulty: 1,
