@@ -655,6 +655,7 @@ dependencies = [
  "grin_servers 0.3.0",
  "grin_util 0.3.0",
  "grin_wallet 0.3.0",
+ "humansize 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "reqwest 0.9.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.79 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 1.0.28 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -958,6 +959,11 @@ dependencies = [
 [[package]]
 name = "httparse"
 version = "1.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "humansize"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -2767,6 +2773,7 @@ dependencies = [
 "checksum hmac 0.6.3 (registry+https://github.com/rust-lang/crates.io-index)" = "733e1b3ac906631ca01ebb577e9bb0f5e37a454032b9036b5eaea4013ed6f99a"
 "checksum http 0.1.13 (registry+https://github.com/rust-lang/crates.io-index)" = "24f58e8c2d8e886055c3ead7b28793e1455270b5fb39650984c224bc538ba581"
 "checksum httparse 1.3.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7b6288d7db100340ca12873fd4d08ad1b8f206a9457798dfb17c018a33fee540"
+"checksum humansize 1.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b6cab2627acfc432780848602f3f558f7e9dd427352224b0d9324025796d2a5e"
 "checksum humantime 1.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "0484fda3e7007f2a4a0d9c3a703ca38c71c54c55602ce4660c419fd32e188c9e"
 "checksum hyper 0.12.10 (registry+https://github.com/rust-lang/crates.io-index)" = "529d00e4c998cced1a15ffd53bbe203917b39ed6071281c16184ab0014ca6ff3"
 "checksum hyper-rustls 0.14.0 (registry+https://github.com/rust-lang/crates.io-index)" = "68f2aa6b1681795bf4da8063f718cd23145aa0c9a5143d9787b345aa60d38ee4"

@@ -148,6 +148,10 @@ pub struct PeerStats {
 	pub direction: String,
 	/// Last time we saw a ping/pong from this peer.
 	pub last_seen: DateTime<Utc>,
+	/// Number of bytes we've sent to the peer.
+	pub sent_bytes: Option<u64>,
+	/// Number of bytes we've received from the peer.
+	pub received_bytes: Option<u64>,
 }
 
 impl StratumStats {
@@ -181,6 +185,8 @@ impl PeerStats {
 			height: peer.info.height(),
 			direction: direction.to_string(),
 			last_seen: peer.info.last_seen(),
+			sent_bytes: peer.sent_bytes(),
+			received_bytes: peer.received_bytes(),
 		}
 	}
 }

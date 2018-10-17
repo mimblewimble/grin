@@ -14,6 +14,7 @@
 
 //! Grin TUI
 extern crate chrono;
+extern crate humansize;
 
 mod constants;
 mod menu;
