@@ -18,11 +18,15 @@ use core::hash::Hash;
 use core::BlockHeader;
 use ser::PMMRable;
 
+/// Simple "hash only" backend (used for header MMR, headers stored in the db).
 pub trait HashOnlyBackend {
+	/// Append a vec of hashes to the backend.
 	fn append(&mut self, data: Vec<Hash>) -> Result<(), String>;
 
+	/// Rewind the backend to the specified position.
 	fn rewind(&mut self, position: u64) -> Result<(), String>;
 
+	/// Get the hash at the specified position.
 	fn get_hash(&self, position: u64) -> Option<Hash>;
 }
 
