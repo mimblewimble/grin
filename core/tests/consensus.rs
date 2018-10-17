@@ -12,7 +12,6 @@
 // limitations under the License.
 
 //! core consensus.rs tests (separated to de-clutter consensus.rs)
-#[macro_use]
 extern crate grin_core as core;
 extern crate chrono;
 

@@ -20,6 +20,7 @@ use consensus::HeaderInfo;
 use consensus::{
 	BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT,
 	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, SECOND_POW_EDGE_BITS,
+	scale,
 };
 use pow::{self, CuckatooContext, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
@@ -54,6 +55,9 @@ pub const TESTING_CUT_THROUGH_HORIZON: u32 = 20;
 
 /// Testing initial block difficulty
 pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
+
+/// Testing initial secondary scale
+pub const TESTING_INITIAL_SEC_SCALE: u32 = 1;
 
 /// Testnet 2 initial block difficulty, high to see how it goes
 pub const TESTNET2_INITIAL_DIFFICULTY: u64 = 1000;
@@ -200,6 +204,19 @@ pub fn initial_block_difficulty() -> u64 {
 	}
 }
 
+/// Initial mining difficulty
+pub fn initial_sec_scale() -> u32 {
+	let param_ref = CHAIN_TYPE.read().unwrap();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => TESTING_INITIAL_SEC_SCALE,
+		ChainTypes::UserTesting => TESTING_INITIAL_SEC_SCALE,
+		ChainTypes::Testnet1 => TESTING_INITIAL_SEC_SCALE,
+		ChainTypes::Testnet2 => TESTING_INITIAL_SEC_SCALE,
+		ChainTypes::Testnet3 => TESTING_INITIAL_SEC_SCALE,
+		ChainTypes::Testnet4 => scale(SECOND_POW_EDGE_BITS) as u32,
+		ChainTypes::Mainnet => scale(SECOND_POW_EDGE_BITS) as u32,
+	}
+}
 /// Horizon at which we can cut-through and do full local pruning
 pub fn cut_through_horizon() -> u32 {
 	let param_ref = CHAIN_TYPE.read().unwrap();

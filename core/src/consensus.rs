@@ -214,7 +214,7 @@ impl HeaderInfo {
 		HeaderInfo {
 			timestamp,
 			difficulty,
-			secondary_scaling: scale(SECOND_POW_EDGE_BITS) as u32,
+			secondary_scaling: global::initial_sec_scale(),
 			is_secondary: false,
 		}
 	}
