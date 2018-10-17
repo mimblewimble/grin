@@ -99,9 +99,10 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			let other_recv_bytes = other.received_bytes.unwrap_or(0);
 			let other_sent_bytes = other.sent_bytes.unwrap_or(0);
 
-			curr_recv_bytes
-				.cmp(&other_recv_bytes)
-				.then(curr_sent_bytes.cmp(&other_sent_bytes))
+			let curr_sum = curr_recv_bytes + curr_sent_bytes;
+			let other_sum = other_recv_bytes + other_sent_bytes;
+
+			curr_sum.cmp(&other_sum)
 		};
 
 		match column {
