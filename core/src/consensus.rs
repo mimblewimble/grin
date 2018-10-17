@@ -216,7 +216,7 @@ impl HeaderInfo {
 		HeaderInfo {
 			timestamp,
 			difficulty,
-			secondary_scaling: 1,
+			secondary_scaling: global::initial_graph_weight(),
 			is_secondary: false,
 		}
 	}
@@ -233,9 +233,12 @@ impl HeaderInfo {
 	}
 }
 
+/// TODO: Doc
 pub fn damp(actual: u64, goal: u64, damp_factor: u64) -> u64 {
 	(1 * actual + (damp_factor-1) * goal) / damp_factor
 }
+
+/// TODO: Doc
 pub fn clamp(actual: u64, goal: u64, clamp_factor: u64) -> u64 {
 	max(goal / clamp_factor, min(actual, goal * clamp_factor))
 }
