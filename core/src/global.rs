@@ -66,7 +66,7 @@ pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
 /// 1_000 times natural scale factor for cuckatoo29
 // TODO: Enable this on real testnet
 // pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1_000 * (2<<(29-24)) * 29;
-pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1;
+pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1 * (2 << (29 - 24)) * 29;
 
 /// Trigger compaction check on average every day for FAST_SYNC_NODE,
 /// roll the dice on every block to decide,
