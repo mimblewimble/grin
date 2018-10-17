@@ -18,9 +18,8 @@
 
 use consensus::HeaderInfo;
 use consensus::{
-	BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
-	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, DAY_HEIGHT,
-  SECOND_POW_EDGE_BITS,
+	BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DAY_HEIGHT,
+	DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, SECOND_POW_EDGE_BITS,
 };
 use pow::{self, CuckatooContext, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
@@ -65,7 +64,9 @@ pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
 
 /// Testnet 4 initial block difficulty
 /// 1_000 times natural scale factor for cuckatoo29
-pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1_000 * (2<<(29-24)) * 29;
+// TODO: Enable this on real testnet
+// pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1_000 * (2<<(29-24)) * 29;
+pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1;
 
 /// Trigger compaction check on average every day for FAST_SYNC_NODE,
 /// roll the dice on every block to decide,

@@ -100,7 +100,9 @@ impl TableViewItem<StratumWorkerColumn> for WorkerStats {
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum DiffColumn {
 	BlockNumber,
+	PoWType,
 	Difficulty,
+	SecondaryScaling,
 	Time,
 	Duration,
 }
@@ -109,7 +111,9 @@ impl DiffColumn {
 	fn _as_str(&self) -> &str {
 		match *self {
 			DiffColumn::BlockNumber => "Block Number",
+			DiffColumn::PoWType => "Type",
 			DiffColumn::Difficulty => "Network Difficulty",
+			DiffColumn::SecondaryScaling => "Sec. Scaling",
 			DiffColumn::Time => "Block Time",
 			DiffColumn::Duration => "Duration",
 		}
@@ -120,10 +124,16 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 	fn to_column(&self, column: DiffColumn) -> String {
 		let naive_datetime = NaiveDateTime::from_timestamp(self.time as i64, 0);
 		let datetime: DateTime<Utc> = DateTime::from_utc(naive_datetime, Utc);
+		let pow_type = match self.is_secondary {
+			true => String::from("Secondary"),
+			false => String::from("Primary"),
+		};
 
 		match column {
 			DiffColumn::BlockNumber => self.block_number.to_string(),
+			DiffColumn::PoWType => pow_type,
 			DiffColumn::Difficulty => self.difficulty.to_string(),
+			DiffColumn::SecondaryScaling => self.secondary_scaling.to_string(),
 			DiffColumn::Time => format!("{}", datetime).to_string(),
 			DiffColumn::Duration => format!("{}s", self.duration).to_string(),
 		}
@@ -135,7 +145,9 @@ impl TableViewItem<DiffColumn> for DiffBlock {
 	{
 		match column {
 			DiffColumn::BlockNumber => Ordering::Equal,
+			DiffColumn::PoWType => Ordering::Equal,
 			DiffColumn::Difficulty => Ordering::Equal,
+			DiffColumn::SecondaryScaling => Ordering::Equal,
 			DiffColumn::Time => Ordering::Equal,
 			DiffColumn::Duration => Ordering::Equal,
 		}
@@ -170,23 +182,17 @@ impl TUIStatusListener for TUIMiningView {
 		let table_view = TableView::<WorkerStats, StratumWorkerColumn>::new()
 			.column(StratumWorkerColumn::Id, "Worker ID", |c| {
 				c.width_percent(10)
-			})
-			.column(StratumWorkerColumn::IsConnected, "Connected", |c| {
+			}).column(StratumWorkerColumn::IsConnected, "Connected", |c| {
 				c.width_percent(10)
-			})
-			.column(StratumWorkerColumn::LastSeen, "Last Seen", |c| {
+			}).column(StratumWorkerColumn::LastSeen, "Last Seen", |c| {
 				c.width_percent(20)
-			})
-			.column(StratumWorkerColumn::PowDifficulty, "Pow Difficulty", |c| {
+			}).column(StratumWorkerColumn::PowDifficulty, "Pow Difficulty", |c| {
 				c.width_percent(10)
-			})
-			.column(StratumWorkerColumn::NumAccepted, "Num Accepted", |c| {
+			}).column(StratumWorkerColumn::NumAccepted, "Num Accepted", |c| {
 				c.width_percent(10)
-			})
-			.column(StratumWorkerColumn::NumRejected, "Num Rejected", |c| {
+			}).column(StratumWorkerColumn::NumRejected, "Num Rejected", |c| {
 				c.width_percent(10)
-			})
-			.column(StratumWorkerColumn::NumStale, "Num Stale", |c| {
+			}).column(StratumWorkerColumn::NumStale, "Num Stale", |c| {
 				c.width_percent(10)
 			});
 
@@ -194,28 +200,22 @@ impl TUIStatusListener for TUIMiningView {
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_config_status")),
-			)
-			.child(
+			).child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_is_running_status")),
-			)
-			.child(
+			).child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_num_workers_status")),
-			)
-			.child(
+			).child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_block_height_status")),
-			)
-			.child(
+			).child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_network_difficulty_status")),
-			)
-			.child(
+			).child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_network_hashrate")),
-			)
-			.child(
+			).child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("  ").with_id("stratum_edge_bits_status")),
 			);
@@ -225,26 +225,22 @@ impl TUIStatusListener for TUIMiningView {
 			.child(BoxView::with_full_screen(
 				Dialog::around(table_view.with_id(TABLE_MINING_STATUS).min_size((50, 20)))
 					.title("Mining Workers"),
-			))
-			.with_id("mining_device_view");
+			)).with_id("mining_device_view");
 
 		let diff_status_view = LinearLayout::new(Orientation::Vertical)
 			.child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Tip Height: "))
 					.child(TextView::new("").with_id("diff_cur_height")),
-			)
-			.child(
+			).child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Difficulty Adjustment Window: "))
 					.child(TextView::new("").with_id("diff_adjust_window")),
-			)
-			.child(
+			).child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Average Block Time: "))
 					.child(TextView::new("").with_id("diff_avg_block_time")),
-			)
-			.child(
+			).child(
 				LinearLayout::new(Orientation::Horizontal)
 					.child(TextView::new("Average Difficulty: "))
 					.child(TextView::new("").with_id("diff_avg_difficulty")),
@@ -252,12 +248,13 @@ impl TUIStatusListener for TUIMiningView {
 
 		let diff_table_view = TableView::<DiffBlock, DiffColumn>::new()
 			.column(DiffColumn::BlockNumber, "Block Number", |c| {
-				c.width_percent(25)
-			})
+				c.width_percent(15)
+			}).column(DiffColumn::PoWType, "Type", |c| c.width_percent(10))
 			.column(DiffColumn::Difficulty, "Network Difficulty", |c| {
-				c.width_percent(25)
-			})
-			.column(DiffColumn::Time, "Block Time", |c| c.width_percent(25))
+				c.width_percent(15)
+			}).column(DiffColumn::SecondaryScaling, "Sec. Scaling", |c| {
+				c.width_percent(10)
+			}).column(DiffColumn::Time, "Block Time", |c| c.width_percent(25))
 			.column(DiffColumn::Duration, "Duration", |c| c.width_percent(25));
 
 		let mining_difficulty_view = LinearLayout::new(Orientation::Vertical)
@@ -268,8 +265,7 @@ impl TUIStatusListener for TUIMiningView {
 						.with_id(TABLE_MINING_DIFF_STATUS)
 						.min_size((50, 20)),
 				).title("Mining Difficulty Data"),
-			))
-			.with_id("mining_difficulty_view");
+			)).with_id("mining_difficulty_view");
 
 		let view_stack = StackView::new()
 			.layer(mining_difficulty_view)
