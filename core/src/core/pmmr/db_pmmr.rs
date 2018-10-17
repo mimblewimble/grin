@@ -58,14 +58,17 @@ where
 		}
 	}
 
+	/// Get the unpruned size of the MMR.
 	pub fn unpruned_size(&self) -> u64 {
 		self.last_pos
 	}
 
+	/// Is the MMR empty?
 	pub fn is_empty(&self) -> bool {
 		self.last_pos == 0
 	}
 
+	/// Rewind the MMR to the specified position.
 	pub fn rewind(&mut self, position: u64) -> Result<(), String> {
 		// Identify which actual position we should rewind to as the provided
 		// position is a leaf. We traverse the MMR to include any parent(s) that
@@ -126,6 +129,7 @@ where
 		Ok(elmt_pos)
 	}
 
+	/// Return the vec of peak hashes for this MMR.
 	pub fn peaks(&self) -> Vec<Hash> {
 		let peaks_pos = peaks(self.last_pos);
 		peaks_pos
@@ -134,6 +138,7 @@ where
 			.collect()
 	}
 
+	/// Return the overall root hash for this MMR.
 	pub fn root(&self) -> Hash {
 		let mut res = None;
 		for peak in self.peaks().iter().rev() {
@@ -145,6 +150,9 @@ where
 		res.expect("no root, invalid tree")
 	}
 
+	/// Validate all the hashes in the MMR.
+	/// For every parent node we check hashes of the children produce the parent hash
+	/// by hashing them together.
 	pub fn validate(&self) -> Result<(), String> {
 		// iterate on all parent nodes
 		for n in 1..(self.last_pos + 1) {
