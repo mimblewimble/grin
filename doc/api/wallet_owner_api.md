@@ -21,9 +21,8 @@ Attempt to update and retrieve outputs.
 
 * **URL**
 
-  /v1/wallet/owner/retrieve_outputs
-  or
-  /v1/wallet/owner/retrieve_outputs?refresh&show_spent&tx_id=x&tx_id=y
+  * /v1/wallet/owner/retrieve_outputs
+  * /v1/wallet/owner/retrieve_outputs?refresh&show_spent&tx_id=x&tx_id=y
 
 * **Method:**
 
@@ -86,8 +85,8 @@ Attempt to update and retrieve outputs.
 
 * **URL**
 
-  /v1/wallet/owner/retrieve_summary_info
-  /v1/wallet/owner/retrieve_summary_info?refresh
+  * /v1/wallet/owner/retrieve_summary_info
+  * /v1/wallet/owner/retrieve_summary_info?refresh
 
 * **Method:**
 
@@ -190,9 +189,8 @@ Return whether the outputs were validated against a node and an array of TxLogEn
 
 * **URL**
 
-  /v1/wallet/owner/retrieve_txs
-  or
-  /v1/wallet/owner/retrieve_txs?refresh?id=x
+  */v1/wallet/owner/retrieve_txs
+  */v1/wallet/owner/retrieve_txs?refresh?id=x
 
 * **Method:**
 

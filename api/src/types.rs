@@ -491,6 +491,8 @@ pub struct BlockHeaderPrintable {
 	pub height: u64,
 	/// Hash of the block previous to this in the chain.
 	pub previous: String,
+	/// Root hash of the header MMR at the previous header.
+	pub prev_root: String,
 	/// rfc3339 timestamp at which the block was built.
 	pub timestamp: String,
 	/// Merklish root of all the commitments in the TxHashSet
@@ -520,6 +522,7 @@ impl BlockHeaderPrintable {
 			version: h.version,
 			height: h.height,
 			previous: util::to_hex(h.previous.to_vec()),
+			prev_root: util::to_hex(h.prev_root.to_vec()),
 			timestamp: h.timestamp.to_rfc3339(),
 			output_root: util::to_hex(h.output_root.to_vec()),
 			range_proof_root: util::to_hex(h.range_proof_root.to_vec()),
