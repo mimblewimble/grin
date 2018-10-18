@@ -48,11 +48,13 @@ It will ask you some questions, as result you should see something like:
 ### Change permissions
 Now you have the certificate files but only root user can read it. We run grin as `ubuntu` user. There are different scenarios how to fix it, the simplest one is to create a group which will have access to `/etc/letsencrypt` directory and add our user to this group.
 
-* `$ sudo groupadd tls-cert`
-* `$ sudo usermod -a -G tls-cert ubuntu`
-* `$ chgrp -R tls-cert /etc/letsencrypt`
-* `$ chmod -R g=rX /etc/letsencrypt`
-* `$ sudo chmod 2755 /etc/letsencrypt`
+```
+$ sudo groupadd tls-cert`
+$ sudo usermod -a -G tls-cert ubuntu`
+$ chgrp -R tls-cert /etc/letsencrypt`
+$ chmod -R g=rX /etc/letsencrypt`
+$ sudo chmod 2755 /etc/letsencrypt`
+```
 
 The last step is needed for renewal, it makes sure that all new files will have the same group ownership.
 
