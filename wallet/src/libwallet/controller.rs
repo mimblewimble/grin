@@ -339,20 +339,20 @@ where
 				Ok(id) => match api.cancel_tx(id) {
 					Ok(_) => ok(()),
 					Err(e) => {
-						error!(LOGGER, "finalize_tx: failed with error: {}", e);
+						error!(LOGGER, "cancel_tx: failed with error: {}", e);
 						err(e)
 					}
 				},
 				Err(e) => {
-					error!(LOGGER, "finalize_tx: could not parse id: {}", e);
+					error!(LOGGER, "cancel_tx: could not parse id: {}", e);
 					err(ErrorKind::TransactionCancellationError(
-						"finalize_tx: cannot cancel transaction. Could not parse id in request.",
+						"cancel_tx: cannot cancel transaction. Could not parse id in request.",
 					).into())
 				}
 			})
 		} else {
 			Box::new(err(ErrorKind::TransactionCancellationError(
-				"finalize_tx: Cannot cancel transaction. Missing id param in request.",
+				"cancel_tx: Cannot cancel transaction. Missing id param in request.",
 			).into()))
 		}
 	}

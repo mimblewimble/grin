@@ -35,7 +35,5 @@ pub fn static_secp_instance() -> Arc<Mutex<secp::Secp256k1>> {
 
 /// Convenient way to generate a commitment to zero.
 pub fn commit_to_zero_value() -> secp::pedersen::Commitment {
-	let secp = static_secp_instance();
-	let secp = secp.lock().unwrap();
-	secp.commit_value(0).unwrap()
+	secp::pedersen::Commitment::from_vec(vec![0])
 }

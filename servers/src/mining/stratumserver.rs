@@ -30,7 +30,7 @@ use common::stats::{StratumStats, WorkerStats};
 use common::types::{StratumServerConfig, SyncState};
 use core::core::verifier_cache::VerifierCache;
 use core::core::Block;
-use core::{global, pow, ser};
+use core::{pow, ser};
 use keychain;
 use mining::mine_block;
 use pool;
@@ -75,6 +75,7 @@ struct SubmitParams {
 	height: u64,
 	job_id: u64,
 	nonce: u64,
+	edge_bits: u32,
 	pow: Vec<u64>,
 }
 
@@ -480,6 +481,7 @@ impl StratumServer {
 		}
 		let mut b: Block = b.unwrap().clone();
 		// Reconstruct the block header with this nonce and pow added
+		b.header.pow.proof.edge_bits = params.edge_bits as u8;
 		b.header.pow.nonce = params.nonce;
 		b.header.pow.proof.nonces = params.pow;
 		// Get share difficulty
@@ -509,10 +511,11 @@ impl StratumServer {
 				// Return error status
 				error!(
 					LOGGER,
-					"(Server ID: {}) Failed to validate solution at height {}: {:?}",
+					"(Server ID: {}) Failed to validate solution at height {}: {}: {}",
 					self.id,
 					params.height,
-					e
+					e,
+					e.backtrace().unwrap(),
 				);
 				worker_stats.num_rejected += 1;
 				let e = RpcError {
@@ -529,7 +532,7 @@ impl StratumServer {
 			);
 		} else {
 			// Do some validation but dont submit
-			if !pow::verify_size(&b.header, global::min_sizeshift()).is_ok() {
+			if !pow::verify_size(&b.header, b.header.pow.proof.edge_bits).is_ok() {
 				// Return error status
 				error!(
 					LOGGER,
@@ -650,15 +653,15 @@ impl StratumServer {
 	pub fn run_loop(
 		&mut self,
 		stratum_stats: Arc<RwLock<StratumStats>>,
-		cuckoo_size: u32,
+		edge_bits: u32,
 		proof_size: usize,
 		sync_state: Arc<SyncState>,
 	) {
 		info!(
 			LOGGER,
-			"(Server ID: {}) Starting stratum server with cuckoo_size = {}, proof_size = {}",
+			"(Server ID: {}) Starting stratum server with edge_bits = {}, proof_size = {}",
 			self.id,
-			cuckoo_size,
+			edge_bits,
 			proof_size
 		);
 
@@ -690,7 +693,7 @@ impl StratumServer {
 		{
 			let mut stratum_stats = stratum_stats.write().unwrap();
 			stratum_stats.is_running = true;
-			stratum_stats.cuckoo_size = cuckoo_size as u16;
+			stratum_stats.edge_bits = edge_bits as u16;
 		}
 
 		warn!(

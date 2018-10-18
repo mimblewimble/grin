@@ -22,7 +22,7 @@ use lru_cache::LruCache;
 
 use util::secp::pedersen::Commitment;
 
-use core::consensus::TargetError;
+use core::consensus::HeaderInfo;
 use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader, BlockSums};
 use core::pow::Difficulty;
@@ -613,7 +613,7 @@ impl<'a> DifficultyIter<'a> {
 }
 
 impl<'a> Iterator for DifficultyIter<'a> {
-	type Item = Result<(u64, Difficulty), TargetError>;
+	type Item = HeaderInfo;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		// Get both header and previous_header if this is the initial iteration.
@@ -650,8 +650,14 @@ impl<'a> Iterator for DifficultyIter<'a> {
 				.clone()
 				.map_or(Difficulty::zero(), |x| x.total_difficulty());
 			let difficulty = header.total_difficulty() - prev_difficulty;
+			let scaling = header.pow.scaling_difficulty;
 
-			Some(Ok((header.timestamp.timestamp() as u64, difficulty)))
+			Some(HeaderInfo::new(
+				header.timestamp.timestamp() as u64,
+				difficulty,
+				scaling,
+				header.pow.is_secondary(),
+			))
 		} else {
 			return None;
 		}

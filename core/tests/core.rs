@@ -30,7 +30,7 @@ use grin_core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use grin_core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction};
 use grin_core::ser;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
-use util::{secp_static, static_secp_instance};
+use util::static_secp_instance;
 use wallet::libtx::build::{
 	self, initial_tx, input, output, with_excess, with_fee, with_lock_height,
 };
@@ -77,7 +77,7 @@ fn tx_double_ser_deser() {
 #[should_panic(expected = "InvalidSecretKey")]
 fn test_zero_commit_fails() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let key_id1 = keychain.derive_key_id(1).unwrap();
+	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 	// blinding should fail as signing with a zero r*G shouldn't work
 	build::transaction(
@@ -97,9 +97,9 @@ fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
 #[test]
 fn build_tx_kernel() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let key_id1 = keychain.derive_key_id(1).unwrap();
-	let key_id2 = keychain.derive_key_id(2).unwrap();
-	let key_id3 = keychain.derive_key_id(3).unwrap();
+	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
+	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	// first build a valid tx with corresponding blinding factor
 	let tx = build::transaction(
@@ -318,9 +318,9 @@ fn basic_transaction_deaggregation() {
 #[test]
 fn hash_output() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let key_id1 = keychain.derive_key_id(1).unwrap();
-	let key_id2 = keychain.derive_key_id(2).unwrap();
-	let key_id3 = keychain.derive_key_id(3).unwrap();
+	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
+	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let tx = build::transaction(
 		vec![
@@ -372,10 +372,10 @@ fn tx_hash_diff() {
 #[test]
 fn tx_build_exchange() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
-	let key_id1 = keychain.derive_key_id(1).unwrap();
-	let key_id2 = keychain.derive_key_id(2).unwrap();
-	let key_id3 = keychain.derive_key_id(3).unwrap();
-	let key_id4 = keychain.derive_key_id(4).unwrap();
+	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
+	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
+	let key_id4 = ExtKeychain::derive_key_id(1, 4, 0, 0, 0);
 
 	let (tx_alice, blind_sum) = {
 		// Alice gets 2 of her pre-existing outputs to send 5 coins to Bob, they
@@ -409,9 +409,7 @@ fn tx_build_exchange() {
 #[test]
 fn reward_empty_block() {
 	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
-	let key_id = keychain.derive_key_id(1).unwrap();
-
-	let zero_commit = secp_static::commit_to_zero_value();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 	let previous_header = BlockHeader::default();
 
@@ -419,18 +417,16 @@ fn reward_empty_block() {
 
 	b.cut_through()
 		.unwrap()
-		.validate(&BlindingFactor::zero(), &zero_commit, verifier_cache())
+		.validate(&BlindingFactor::zero(), verifier_cache())
 		.unwrap();
 }
 
 #[test]
 fn reward_with_tx_block() {
 	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 	let vc = verifier_cache();
-
-	let zero_commit = secp_static::commit_to_zero_value();
 
 	let mut tx1 = tx2i1o();
 	tx1.validate(vc.clone()).unwrap();
@@ -441,18 +437,16 @@ fn reward_with_tx_block() {
 	block
 		.cut_through()
 		.unwrap()
-		.validate(&BlindingFactor::zero(), &zero_commit, vc.clone())
+		.validate(&BlindingFactor::zero(), vc.clone())
 		.unwrap();
 }
 
 #[test]
 fn simple_block() {
 	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
-	let key_id = keychain.derive_key_id(1).unwrap();
+	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 
 	let vc = verifier_cache();
-
-	let zero_commit = secp_static::commit_to_zero_value();
 
 	let mut tx1 = tx2i1o();
 	let mut tx2 = tx1i1o();
@@ -465,21 +459,18 @@ fn simple_block() {
 		&key_id,
 	);
 
-	b.validate(&BlindingFactor::zero(), &zero_commit, vc.clone())
-		.unwrap();
+	b.validate(&BlindingFactor::zero(), vc.clone()).unwrap();
 }
 
 #[test]
 fn test_block_with_timelocked_tx() {
 	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
 
-	let key_id1 = keychain.derive_key_id(1).unwrap();
-	let key_id2 = keychain.derive_key_id(2).unwrap();
-	let key_id3 = keychain.derive_key_id(3).unwrap();
+	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
+	let key_id2 = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
+	let key_id3 = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 
 	let vc = verifier_cache();
-
-	let zero_commit = secp_static::commit_to_zero_value();
 
 	// first check we can add a timelocked tx where lock height matches current
 	// block height and that the resulting block is valid
@@ -496,8 +487,7 @@ fn test_block_with_timelocked_tx() {
 	let previous_header = BlockHeader::default();
 
 	let b = new_block(vec![&tx1], &keychain, &previous_header, &key_id3.clone());
-	b.validate(&BlindingFactor::zero(), &zero_commit, vc.clone())
-		.unwrap();
+	b.validate(&BlindingFactor::zero(), vc.clone()).unwrap();
 
 	// now try adding a timelocked tx where lock height is greater than current
 	// block height
@@ -514,7 +504,7 @@ fn test_block_with_timelocked_tx() {
 	let previous_header = BlockHeader::default();
 	let b = new_block(vec![&tx1], &keychain, &previous_header, &key_id3.clone());
 
-	match b.validate(&BlindingFactor::zero(), &zero_commit, vc.clone()) {
+	match b.validate(&BlindingFactor::zero(), vc.clone()) {
 		Err(KernelLockHeight(height)) => {
 			assert_eq!(height, 2);
 		}

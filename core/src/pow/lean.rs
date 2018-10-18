@@ -31,13 +31,13 @@ pub struct Lean {
 
 impl Lean {
 	/// Instantiates a new lean miner based on some Cuckatoo parameters
-	pub fn new(edge_bits: u8, easiness_pct: u32) -> Lean {
+	pub fn new(edge_bits: u8) -> Lean {
 		// note that proof size doesn't matter to a lean miner
-		let params = CuckooParams::new(edge_bits, 42, easiness_pct, true).unwrap();
+		let params = CuckooParams::new(edge_bits, 42).unwrap();
 
 		// edge bitmap, before trimming all of them are on
-		let mut edges = Bitmap::create_with_capacity(params.easiness);
-		edges.flip_inplace(0..params.easiness.into());
+		let mut edges = Bitmap::create_with_capacity(params.num_edges as u32);
+		edges.flip_inplace(0..params.num_edges.into());
 
 		Lean { params, edges }
 	}
@@ -51,7 +51,7 @@ impl Lean {
 	/// and works well for Cuckatoo size above 18.
 	pub fn trim(&mut self) {
 		// trimming successively
-		while self.edges.cardinality() > (7 * (self.params.easiness >> 8) / 8) as u64 {
+		while self.edges.cardinality() > (7 * (self.params.num_edges >> 8) / 8) as u64 {
 			self.count_and_kill();
 		}
 	}
@@ -88,8 +88,6 @@ impl Lean {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use pow::common;
-	use pow::cuckatoo::*;
 	use pow::types::PoWContext;
 
 	#[test]
@@ -98,11 +96,11 @@ mod test {
 		let header = [0u8; 84].to_vec(); // with nonce
 		let edge_bits = 19;
 
-		let mut lean = Lean::new(edge_bits, 50);
+		let mut lean = Lean::new(edge_bits);
 		lean.set_header_nonce(header.clone(), nonce);
 		lean.trim();
 
-		let mut ctx_u32 = CuckatooContext::<u32>::new_impl(edge_bits, 42, 50, 10).unwrap();
+		let mut ctx_u32 = CuckatooContext::<u32>::new_impl(edge_bits, 42, 10).unwrap();
 		ctx_u32.set_header_nonce(header, Some(nonce), true).unwrap();
 		lean.find_cycles(ctx_u32).unwrap();
 	}

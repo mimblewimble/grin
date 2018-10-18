@@ -28,15 +28,13 @@ use core::core::verifier_cache::VerifierCache;
 use core::core::Committed;
 use core::core::{Block, BlockHeader, BlockSums};
 use core::global;
-use core::pow::{self, Difficulty};
+use core::pow;
 use error::{Error, ErrorKind};
 use grin_store;
 use store;
 use txhashset;
 use types::{Options, Tip};
 use util::LOGGER;
-
-use failure::ResultExt;
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.
@@ -220,6 +218,7 @@ pub fn sync_block_headers(
 			extension.rewind(&prev_header)?;
 
 			for header in headers {
+				extension.validate_root(header)?;
 				extension.apply_header(header)?;
 			}
 
@@ -372,20 +371,14 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	if !ctx.opts.contains(Options::SKIP_POW) {
-		let shift = header.pow.cuckoo_sizeshift();
-		// size shift can either be larger than the minimum on the primary PoW
-		// or equal to the seconday PoW size shift
-		if shift != consensus::SECOND_POW_SIZESHIFT && global::min_sizeshift() > shift {
-			return Err(ErrorKind::LowSizeshift.into());
+		if !header.pow.is_primary() && !header.pow.is_secondary() {
+			return Err(ErrorKind::LowEdgebits.into());
 		}
-		// primary PoW must have a scaling factor of 1
-		if shift != consensus::SECOND_POW_SIZESHIFT && header.pow.scaling_difficulty != 1 {
-			return Err(ErrorKind::InvalidScaling.into());
-		}
-		if !(ctx.pow_verifier)(header, shift).is_ok() {
+		let edge_bits = header.pow.edge_bits();
+		if !(ctx.pow_verifier)(header, edge_bits).is_ok() {
 			error!(
 				LOGGER,
-				"pipe: validate_header bad cuckoo shift size {}", shift
+				"pipe: error validating header with cuckoo edge_bits {}", edge_bits
 			);
 			return Err(ErrorKind::InvalidPow.into());
 		}
@@ -432,27 +425,24 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			return Err(ErrorKind::DifficultyTooLow.into());
 		}
 
-		// explicit check to ensure we are not below the minimum difficulty
-		// we will also check difficulty based on next_difficulty later on
-		if target_difficulty < Difficulty::one() {
-			return Err(ErrorKind::DifficultyTooLow.into());
-		}
-
 		// explicit check to ensure total_difficulty has increased by exactly
 		// the _network_ difficulty of the previous block
 		// (during testnet1 we use _block_ difficulty here)
 		let child_batch = ctx.batch.child()?;
 		let diff_iter = store::DifficultyIter::from_batch(header.previous, child_batch);
-		let network_difficulty = consensus::next_difficulty(diff_iter)
-			.context(ErrorKind::Other("network difficulty".to_owned()))?;
-		if target_difficulty != network_difficulty.clone() {
-			error!(
+		let next_header_info = consensus::next_difficulty(header.height, diff_iter);
+		if target_difficulty != next_header_info.difficulty {
+			info!(
 				LOGGER,
 				"validate_header: header target difficulty {} != {}",
 				target_difficulty.to_num(),
-				network_difficulty.to_num()
+				next_header_info.difficulty.to_num()
 			);
 			return Err(ErrorKind::WrongTotalDifficulty.into());
+		}
+		// check the secondary PoW scaling factor if applicable
+		if header.pow.scaling_difficulty != next_header_info.secondary_scaling {
+			return Err(ErrorKind::InvalidScaling.into());
 		}
 	}
 
@@ -462,11 +452,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 fn validate_block(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	let prev = ctx.batch.get_block_header(&block.header.previous)?;
 	block
-		.validate(
-			&prev.total_kernel_offset,
-			&prev.total_kernel_sum,
-			ctx.verifier_cache.clone(),
-		).map_err(|e| ErrorKind::InvalidBlockProof(e))?;
+		.validate(&prev.total_kernel_offset, ctx.verifier_cache.clone())
+		.map_err(|e| ErrorKind::InvalidBlockProof(e))?;
 	Ok(())
 }
 
@@ -487,16 +474,6 @@ fn verify_coinbase_maturity(block: &Block, ext: &mut txhashset::Extension) -> Re
 fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
 	// Retrieve the block_sums for the previous block.
 	let block_sums = ext.batch.get_block_sums(&b.header.previous)?;
-
-	{
-		// Now that we have block_sums the total_kernel_sum on the block_header is redundant.
-		let prev = ext.batch.get_block_header(&b.header.previous)?;
-		if prev.total_kernel_sum != block_sums.kernel_sum {
-			return Err(
-				ErrorKind::Other(format!("total_kernel_sum in header does not match")).into(),
-			);
-		}
-	}
 
 	// Overage is based purely on the new block.
 	// Previous block_sums have taken all previous overage into account.
@@ -524,6 +501,7 @@ fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Er
 /// Fully validate the block by applying it to the txhashset extension.
 /// Check both the txhashset roots and sizes are correct after applying the block.
 fn apply_block_to_txhashset(block: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+	ext.validate_header_root(&block.header)?;
 	ext.apply_block(block)?;
 	ext.validate_roots()?;
 	ext.validate_sizes()?;

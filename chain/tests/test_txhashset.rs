@@ -26,7 +26,10 @@ use std::sync::Arc;
 
 use chain::store::ChainStore;
 use chain::txhashset;
-use core::core::BlockHeader;
+use chain::types::Tip;
+use core::core::{Block, BlockHeader};
+use core::pow::Difficulty;
+use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 use util::file;
 
 fn clean_output_dir(dir_name: &str) {

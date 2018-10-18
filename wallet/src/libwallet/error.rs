@@ -34,7 +34,11 @@ pub struct Error {
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
 pub enum ErrorKind {
 	/// Not enough funds
-	#[fail(display = "Not enough funds. Required: {}, Available: {}", needed, available)]
+	#[fail(
+		display = "Not enough funds. Required: {}, Available: {}",
+		needed,
+		available
+	)]
 	NotEnoughFunds {
 		/// available funds
 		available: u64,
@@ -43,7 +47,11 @@ pub enum ErrorKind {
 	},
 
 	/// Fee dispute
-	#[fail(display = "Fee dispute: sender fee {}, recipient fee {}", sender_fee, recipient_fee)]
+	#[fail(
+		display = "Fee dispute: sender fee {}, recipient fee {}",
+		sender_fee,
+		recipient_fee
+	)]
 	FeeDispute {
 		/// sender fee
 		sender_fee: u64,
@@ -163,6 +171,18 @@ pub enum ErrorKind {
 	/// Attempt to repost a transaction that's not completed and stored
 	#[fail(display = "Transaction building not completed: {}", _0)]
 	TransactionBuildingNotCompleted(u32),
+
+	/// Invalid BIP-32 Depth
+	#[fail(display = "Invalid BIP32 Depth (must be 1 or greater)")]
+	InvalidBIP32Depth,
+
+	/// Attempt to add an account that exists
+	#[fail(display = "Account Label '{}' already exists", _0)]
+	AccountLabelAlreadyExists(String),
+
+	/// Reference unknown account label
+	#[fail(display = "Unknown Account Label '{}'", _0)]
+	UnknownAccountLabel(String),
 
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]

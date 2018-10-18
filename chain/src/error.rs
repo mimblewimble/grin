@@ -45,9 +45,9 @@ pub enum ErrorKind {
 	/// Addition of difficulties on all previous block is wrong
 	#[fail(display = "Addition of difficulties on all previous blocks is wrong")]
 	WrongTotalDifficulty,
-	/// Block header sizeshift is lower than our min
-	#[fail(display = "Cuckoo Size too Low")]
-	LowSizeshift,
+	/// Block header edge_bits is lower than our min
+	#[fail(display = "Cuckoo Size too small")]
+	LowEdgebits,
 	/// Scaling factor between primary and secondary PoW is invalid
 	#[fail(display = "Wrong scaling factor")]
 	InvalidScaling,

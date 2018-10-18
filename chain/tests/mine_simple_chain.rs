@@ -33,7 +33,7 @@ use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transacti
 use core::global::ChainTypes;
 use core::pow::Difficulty;
 use core::{consensus, global, pow};
-use keychain::{ExtKeychain, Keychain};
+use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 use wallet::libtx::{self, build};
 
 fn clean_output_dir(dir_name: &str) {
@@ -64,22 +64,30 @@ fn mine_empty_chain() {
 
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
-		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
-		let pk = keychain.derive_key_id(n as u32).unwrap();
+		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
+		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 		let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
-		let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
+		let mut b =
+			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
+				.unwrap();
 		b.header.timestamp = prev.timestamp + Duration::seconds(60);
+		b.header.pow.scaling_difficulty = next_header_info.secondary_scaling;
 
 		chain.set_txhashset_roots(&mut b, false).unwrap();
 
-		let sizeshift = if n == 2 {
-			global::min_sizeshift() + 1
+		let edge_bits = if n == 2 {
+			global::min_edge_bits() + 1
 		} else {
-			global::min_sizeshift()
+			global::min_edge_bits()
 		};
-		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
-		pow::pow_size(&mut b.header, difficulty, global::proofsize(), sizeshift).unwrap();
-		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
+		b.header.pow.proof.edge_bits = edge_bits;
+		pow::pow_size(
+			&mut b.header,
+			next_header_info.difficulty,
+			global::proofsize(),
+			edge_bits,
+		).unwrap();
+		b.header.pow.proof.edge_bits = edge_bits;
 
 		let bhash = b.hash();
 		chain.process_block(b, chain::Options::MINE).unwrap();
@@ -262,11 +270,14 @@ fn spend_in_fork_and_compact() {
 
 	// Check the height of the "fork block".
 	assert_eq!(fork_head.height, 4);
+	let key_id2 = ExtKeychainPath::new(1, 2, 0, 0, 0).to_identifier();
+	let key_id30 = ExtKeychainPath::new(1, 30, 0, 0, 0).to_identifier();
+	let key_id31 = ExtKeychainPath::new(1, 31, 0, 0, 0).to_identifier();
 
 	let tx1 = build::transaction(
 		vec![
-			build::coinbase_input(consensus::REWARD, kc.derive_key_id(2).unwrap()),
-			build::output(consensus::REWARD - 20000, kc.derive_key_id(30).unwrap()),
+			build::coinbase_input(consensus::REWARD, key_id2.clone()),
+			build::output(consensus::REWARD - 20000, key_id30.clone()),
 			build::with_fee(20000),
 		],
 		&kc,
@@ -281,8 +292,8 @@ fn spend_in_fork_and_compact() {
 
 	let tx2 = build::transaction(
 		vec![
-			build::input(consensus::REWARD - 20000, kc.derive_key_id(30).unwrap()),
-			build::output(consensus::REWARD - 40000, kc.derive_key_id(31).unwrap()),
+			build::input(consensus::REWARD - 20000, key_id30.clone()),
+			build::output(consensus::REWARD - 40000, key_id31.clone()),
 			build::with_fee(20000),
 		],
 		&kc,
@@ -376,23 +387,31 @@ fn output_header_mappings() {
 
 	for n in 1..15 {
 		let prev = chain.head_header().unwrap();
-		let difficulty = consensus::next_difficulty(chain.difficulty_iter()).unwrap();
-		let pk = keychain.derive_key_id(n as u32).unwrap();
+		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
+		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
 		let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
 		reward_outputs.push(reward.0.clone());
-		let mut b = core::core::Block::new(&prev, vec![], difficulty.clone(), reward).unwrap();
+		let mut b =
+			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
+				.unwrap();
 		b.header.timestamp = prev.timestamp + Duration::seconds(60);
+		b.header.pow.scaling_difficulty = next_header_info.secondary_scaling;
 
 		chain.set_txhashset_roots(&mut b, false).unwrap();
 
-		let sizeshift = if n == 2 {
-			global::min_sizeshift() + 1
+		let edge_bits = if n == 2 {
+			global::min_edge_bits() + 1
 		} else {
-			global::min_sizeshift()
+			global::min_edge_bits()
 		};
-		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
-		pow::pow_size(&mut b.header, difficulty, global::proofsize(), sizeshift).unwrap();
-		b.header.pow.proof.cuckoo_sizeshift = sizeshift;
+		b.header.pow.proof.edge_bits = edge_bits;
+		pow::pow_size(
+			&mut b.header,
+			next_header_info.difficulty,
+			global::proofsize(),
+			edge_bits,
+		).unwrap();
+		b.header.pow.proof.edge_bits = edge_bits;
 
 		chain.process_block(b, chain::Options::MINE).unwrap();
 
@@ -465,7 +484,7 @@ where
 	K: Keychain,
 {
 	let proof_size = global::proofsize();
-	let key_id = kc.derive_key_id(diff as u32).unwrap();
+	let key_id = ExtKeychainPath::new(1, diff as u32, 0, 0, 0).to_identifier();
 
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
 	let reward = libtx::reward::output(kc, &key_id, fees, prev.height).unwrap();
@@ -503,18 +522,17 @@ fn actual_diff_iter_output() {
 	let iter = chain.difficulty_iter();
 	let mut last_time = 0;
 	let mut first = true;
-	for i in iter.into_iter() {
-		let elem = i.unwrap();
+	for elem in iter.into_iter() {
 		if first {
-			last_time = elem.0;
+			last_time = elem.timestamp;
 			first = false;
 		}
 		println!(
 			"next_difficulty time: {}, diff: {}, duration: {} ",
-			elem.0,
-			elem.1.to_num(),
-			last_time - elem.0
+			elem.timestamp,
+			elem.difficulty.to_num(),
+			last_time - elem.timestamp
 		);
-		last_time = elem.0;
+		last_time = elem.timestamp;
 	}
 }
