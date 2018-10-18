@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use core::core::{self, amount_to_hr_string};
-use libwallet::types::{AcctPathMapping, OutputData, TxLogEntry, WalletInfo};
+use libwallet::types::{AcctPathMapping, OutputData, OutputStatus, TxLogEntry, WalletInfo};
 use libwallet::Error;
 use prettytable;
 use std::io::prelude::Write;
@@ -55,8 +55,14 @@ pub fn outputs(
 		let commit = format!("{}", util::to_hex(commit.as_ref().to_vec()));
 		let height = format!("{}", out.height);
 		let lock_height = format!("{}", out.lock_height);
-		let status = format!("{:?}", out.status);
 		let is_coinbase = format!("{}", out.is_coinbase);
+
+		// Mark unconfirmed coinbase outputs as "Mining" instead of "Unconfirmed"
+		let status = match out.status {
+			OutputStatus::Unconfirmed if out.is_coinbase => "Mining".to_string(),
+			_ => format!("{}", out.status),
+		};
+
 		let num_confirmations = format!("{}", out.num_confirmations(cur_height));
 		let value = format!("{}", core::amount_to_hr_string(out.value, false));
 		let tx = match out.tx_log_entry {
