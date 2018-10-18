@@ -174,6 +174,18 @@ impl Peer {
 		None
 	}
 
+	/// Checks whether this peer wasn't seen for too long or not.
+	pub fn is_dead(&self) -> bool {
+		if let Ok(info) = self.info.live_info.read() {
+			let now = Utc::now().timestamp_millis();
+			let allowed_diff = info.last_seen.timestamp_millis() + global::DEAD_PEER_KICK_TIME;
+
+			return now > allowed_diff
+		}
+
+		false
+	}
+
 	/// Set this peer status to banned
 	pub fn set_banned(&self) {
 		*self.state.write().unwrap() = State::Banned;

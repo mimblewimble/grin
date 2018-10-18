@@ -424,6 +424,10 @@ impl Peers {
 			} else if !peer.is_connected() {
 				debug!(LOGGER, "clean_peers {:?}, not connected", peer.info.addr);
 				rm.push(peer.clone());
+			} else if peer.is_dead() {
+				debug!(LOGGER, "clean_peers {:?}, seems to be dead due to last seen timeout",
+					   peer.info.addr);
+				rm.push(peer.clone());
 			} else {
 				let (stuck, diff) = peer.is_stuck();
 				if stuck && diff < self.adapter.total_difficulty() {

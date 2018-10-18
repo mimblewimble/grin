@@ -73,6 +73,12 @@ pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
 pub const STUCK_PEER_KICK_TIME: i64 = 2 * 3600 * 1000;
 
+/// If a peer's last seen time is 2 days ago we will kick out such kind of 'dead' peers.
+const DEAD_PEER_KICK_TIME_DAYS: i64 = 2;
+
+/// Constant that expresses dead peer timeout in milliseconds to be used in checks.
+pub const DEAD_PEER_KICK_TIME: i64 = DEAD_PEER_KICK_TIME_DAYS * 24 * 3600 * 1000;
+
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
