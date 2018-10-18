@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use core::core::{self, amount_to_hr_string};
-use libwallet::types::{AcctPathMapping, OutputData, TxLogEntry, WalletInfo, OutputStatus};
+use libwallet::types::{AcctPathMapping, OutputData, OutputStatus, TxLogEntry, WalletInfo};
 use libwallet::Error;
 use prettytable;
 use std::io::prelude::Write;
@@ -60,7 +60,7 @@ pub fn outputs(
 		// Mark unconfirmed coinbase outputs as "Mining" instead of "Unconfirmed"
 		let status = match out.status {
 			OutputStatus::Unconfirmed if out.is_coinbase => "Mining".to_string(),
-			_ => format!("{}", out.status)
+			_ => format!("{}", out.status),
 		};
 
 		let num_confirmations = format!("{}", out.num_confirmations(cur_height));
