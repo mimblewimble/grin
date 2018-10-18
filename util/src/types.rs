@@ -46,6 +46,8 @@ pub struct LoggingConfig {
 	pub log_file_path: String,
 	/// Whether to append to log or replace
 	pub log_file_append: bool,
+	/// Size of the log in bytes to rotate over (optional)
+	pub log_rotate_over_size: Option<usize>,
 	/// Whether the tui is running (optional)
 	pub tui_running: Option<bool>,
 }
@@ -59,6 +61,7 @@ impl Default for LoggingConfig {
 			file_log_level: LogLevel::Debug,
 			log_file_path: String::from("grin.log"),
 			log_file_append: true,
+			log_rotate_over_size: None,
 			tui_running: None,
 		}
 	}

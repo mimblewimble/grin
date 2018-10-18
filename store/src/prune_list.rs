@@ -29,8 +29,6 @@ use croaring::Bitmap;
 
 use core::core::pmmr::{bintree_postorder_height, family, path};
 
-use util::LOGGER;
-
 /// Maintains a list of previously pruned nodes in PMMR, compacting the list as
 /// parents get pruned and allowing checking whether a leaf is pruned. Given
 /// a node's position, computes how much it should get shifted given the
@@ -91,7 +89,7 @@ impl PruneList {
 		prune_list.init_caches();
 
 		if !prune_list.bitmap.is_empty() {
-			debug!(LOGGER, "prune_list: bitmap {} pos ({} bytes), pruned_cache {} pos ({} bytes), shift_cache {}, leaf_shift_cache {}",
+			debug!("prune_list: bitmap {} pos ({} bytes), pruned_cache {} pos ({} bytes), shift_cache {}, leaf_shift_cache {}",
 				prune_list.bitmap.cardinality(),
 				prune_list.bitmap.get_serialized_size_in_bytes(),
 				prune_list.pruned_cache.cardinality(),

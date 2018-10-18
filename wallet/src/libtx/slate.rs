@@ -27,9 +27,9 @@ use keychain::{BlindSum, BlindingFactor, Keychain};
 use libtx::error::{Error, ErrorKind};
 use libtx::{aggsig, build, tx_fee};
 
+use util::secp;
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::Signature;
-use util::{secp, LOGGER};
 
 /// Public data for each participant in the slate
 
@@ -289,7 +289,7 @@ impl Slate {
 				amount_to_hr_string(fee, false),
 				amount_to_hr_string(self.amount + self.fee, false)
 			);
-			info!(LOGGER, "{}", reason);
+			info!("{}", reason);
 			return Err(ErrorKind::Fee(reason.to_string()))?;
 		}
 
@@ -395,7 +395,7 @@ impl Slate {
 		final_tx.kernels_mut()[0].excess_sig = final_sig.clone();
 
 		// confirm the kernel verifies successfully before proceeding
-		debug!(LOGGER, "Validating final transaction");
+		debug!("Validating final transaction");
 		final_tx.kernels()[0].verify()?;
 
 		// confirm the overall transaction is valid (including the updated kernel)

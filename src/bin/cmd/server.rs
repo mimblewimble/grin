@@ -29,7 +29,6 @@ use core::global;
 use p2p::Seeding;
 use servers;
 use tui::ui;
-use util::LOGGER;
 
 /// wrap below to allow UI to clean up on stop
 fn start_server(config: servers::ServerConfig) {
@@ -37,9 +36,9 @@ fn start_server(config: servers::ServerConfig) {
 	// Just kill process for now, otherwise the process
 	// hangs around until sigint because the API server
 	// currently has no shutdown facility
-	warn!(LOGGER, "Shutting down...");
+	warn!("Shutting down...");
 	thread::sleep(Duration::from_millis(1000));
-	warn!(LOGGER, "Shutdown complete.");
+	warn!("Shutdown complete.");
 	exit(0);
 }
 
@@ -47,7 +46,7 @@ fn start_server_tui(config: servers::ServerConfig) {
 	// Run the UI controller.. here for now for simplicity to access
 	// everything it might need
 	if config.run_tui.is_some() && config.run_tui.unwrap() {
-		warn!(LOGGER, "Starting GRIN in UI mode...");
+		warn!("Starting GRIN in UI mode...");
 		servers::Server::start(config, |serv: Arc<servers::Server>| {
 			let running = Arc::new(AtomicBool::new(true));
 			let _ = thread::Builder::new()
@@ -60,7 +59,7 @@ fn start_server_tui(config: servers::ServerConfig) {
 				});
 		}).unwrap();
 	} else {
-		warn!(LOGGER, "Starting GRIN w/o UI...");
+		warn!("Starting GRIN w/o UI...");
 		servers::Server::start(config, |serv: Arc<servers::Server>| {
 			let running = Arc::new(AtomicBool::new(true));
 			let r = running.clone();
@@ -70,7 +69,7 @@ fn start_server_tui(config: servers::ServerConfig) {
 			while running.load(Ordering::SeqCst) {
 				thread::sleep(Duration::from_secs(1));
 			}
-			warn!(LOGGER, "Received SIGINT (Ctrl+C) or SIGTERM (kill).");
+			warn!("Received SIGINT (Ctrl+C) or SIGTERM (kill).");
 			serv.stop();
 		}).unwrap();
 	}
@@ -170,8 +169,8 @@ pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: Globa
 						}
 					});
 				match daemonize.start() {
-					Ok(_) => info!(LOGGER, "Grin server successfully started."),
-					Err(e) => error!(LOGGER, "Error starting: {}", e),
+					Ok(_) => info!("Grin server successfully started."),
+					Err(e) => error!("Error starting: {}", e),
 				}
 			}
 			("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),

@@ -30,7 +30,7 @@ extern crate serde;
 #[macro_use] // Needed for Serialize/Deserialize. The compiler complaining here is a bug.
 extern crate serde_derive;
 #[macro_use]
-extern crate slog;
+extern crate log;
 extern crate chrono;
 
 mod pool;

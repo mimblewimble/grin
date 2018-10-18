@@ -26,7 +26,6 @@ use error::{Error, ErrorKind};
 use failure::ResultExt;
 use keychain::Keychain;
 use util;
-use util::LOGGER;
 
 pub const SEED_FILE: &'static str = "wallet.seed";
 
@@ -118,7 +117,7 @@ impl WalletSeed {
 			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
 		);
 
-		debug!(LOGGER, "Generating wallet seed file at: {}", seed_file_path);
+		debug!("Generating wallet seed file at: {}", seed_file_path);
 
 		if Path::new(seed_file_path).exists() {
 			Err(ErrorKind::WalletSeedExists)?
@@ -140,7 +139,7 @@ impl WalletSeed {
 			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
 		);
 
-		debug!(LOGGER, "Using wallet seed file at: {}", seed_file_path,);
+		debug!("Using wallet seed file at: {}", seed_file_path,);
 
 		if Path::new(seed_file_path).exists() {
 			let mut file = File::open(seed_file_path).context(ErrorKind::IO)?;
@@ -150,7 +149,6 @@ impl WalletSeed {
 			Ok(wallet_seed)
 		} else {
 			error!(
-				LOGGER,
 				"wallet seed file {} could not be opened (grin wallet init). \
 				 Run \"grin wallet init\" to initialize a new wallet.",
 				seed_file_path

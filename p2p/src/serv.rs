@@ -30,7 +30,6 @@ use peer::Peer;
 use peers::Peers;
 use store::PeerStore;
 use types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, TxHashSetRead};
-use util::LOGGER;
 
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.
@@ -64,17 +63,14 @@ impl Server {
 			// Check that we have block 1
 			match block_1_hash {
 				Some(hash) => match adapter.get_block(hash) {
-					Some(_) => debug!(LOGGER, "Full block 1 found, archive capabilities confirmed"),
+					Some(_) => debug!("Full block 1 found, archive capabilities confirmed"),
 					None => {
-						debug!(
-							LOGGER,
-							"Full block 1 not found, archive capabilities disabled"
-						);
+						debug!("Full block 1 not found, archive capabilities disabled");
 						capab.remove(Capabilities::FULL_HIST);
 					}
 				},
 				None => {
-					debug!(LOGGER, "Block 1 not found, archive capabilities disabled");
+					debug!("Block 1 not found, archive capabilities disabled");
 					capab.remove(Capabilities::FULL_HIST);
 				}
 			}
@@ -102,12 +98,7 @@ impl Server {
 				Ok((stream, peer_addr)) => {
 					if !self.check_banned(&stream) {
 						if let Err(e) = self.handle_new_peer(stream) {
-							warn!(
-								LOGGER,
-								"Error accepting peer {}: {:?}",
-								peer_addr.to_string(),
-								e
-							);
+							warn!("Error accepting peer {}: {:?}", peer_addr.to_string(), e);
 						}
 					}
 				}
@@ -115,7 +106,7 @@ impl Server {
 					// nothing to do, will retry in next iteration
 				}
 				Err(e) => {
-					warn!(LOGGER, "Couldn't establish new client connection: {:?}", e);
+					warn!("Couldn't establish new client connection: {:?}", e);
 				}
 			}
 			if self.stop.load(Ordering::Relaxed) {
@@ -130,10 +121,7 @@ impl Server {
 	/// we're already connected to the provided address.
 	pub fn connect(&self, addr: &SocketAddr) -> Result<Arc<Peer>, Error> {
 		if Peer::is_denied(&self.config, &addr) {
-			debug!(
-				LOGGER,
-				"connect_peer: peer {} denied, not connecting.", addr
-			);
+			debug!("connect_peer: peer {} denied, not connecting.", addr);
 			return Err(Error::ConnectionClose);
 		}
 
@@ -148,12 +136,11 @@ impl Server {
 
 		if let Some(p) = self.peers.get_connected_peer(addr) {
 			// if we're already connected to the addr, just return the peer
-			trace!(LOGGER, "connect_peer: already connected {}", addr);
+			trace!("connect_peer: already connected {}", addr);
 			return Ok(p);
 		}
 
 		trace!(
-			LOGGER,
 			"connect_peer: on {}:{}. connecting to {}",
 			self.config.host,
 			self.config.port,
@@ -179,12 +166,8 @@ impl Server {
 			}
 			Err(e) => {
 				debug!(
-					LOGGER,
 					"connect_peer: on {}:{}. Could not connect to {}: {:?}",
-					self.config.host,
-					self.config.port,
-					addr,
-					e
+					self.config.host, self.config.port, addr, e
 				);
 				Err(Error::Connection(e))
 			}
@@ -211,9 +194,9 @@ impl Server {
 		// peer has been banned, go away!
 		if let Ok(peer_addr) = stream.peer_addr() {
 			if self.peers.is_banned(peer_addr) {
-				debug!(LOGGER, "Peer {} banned, refusing connection.", peer_addr);
+				debug!("Peer {} banned, refusing connection.", peer_addr);
 				if let Err(e) = stream.shutdown(Shutdown::Both) {
-					debug!(LOGGER, "Error shutting down conn: {:?}", e);
+					debug!("Error shutting down conn: {:?}", e);
 				}
 				return true;
 			}

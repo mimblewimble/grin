@@ -22,7 +22,6 @@ use common::types::{SyncState, SyncStatus};
 use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::global;
 use p2p;
-use util::LOGGER;
 
 pub struct BodySync {
 	chain: Arc<chain::Chain>,
@@ -94,7 +93,6 @@ impl BodySync {
 		self.reset();
 
 		debug!(
-			LOGGER,
 			"body_sync: body_head - {}, {}, header_head - {}, {}, sync_head - {}, {}",
 			body_head.last_block_h,
 			body_head.height,
@@ -148,7 +146,6 @@ impl BodySync {
 
 		if hashes_to_get.len() > 0 {
 			debug!(
-				LOGGER,
 				"block_sync: {}/{} requesting blocks {:?} from {} peers",
 				body_head.height,
 				header_head.height,
@@ -161,7 +158,7 @@ impl BodySync {
 			for hash in hashes_to_get.clone() {
 				if let Some(peer) = peers_iter.next() {
 					if let Err(e) = peer.send_block_request(*hash) {
-						debug!(LOGGER, "Skipped request to {}: {:?}", peer.info.addr, e);
+						debug!("Skipped request to {}: {:?}", peer.info.addr, e);
 					} else {
 						self.body_sync_hashes.push(hash.clone());
 					}
@@ -199,7 +196,6 @@ impl BodySync {
 						.filter(|x| !self.chain.get_block(*x).is_ok() && !self.chain.is_orphan(*x))
 						.collect::<Vec<_>>();
 					debug!(
-						LOGGER,
 						"body_sync: {}/{} blocks received, and no more in 200ms",
 						self.body_sync_hashes.len() - hashes_not_get.len(),
 						self.body_sync_hashes.len(),
@@ -210,7 +206,6 @@ impl BodySync {
 			None => {
 				if Utc::now() - self.sync_start_ts > Duration::seconds(5) {
 					debug!(
-						LOGGER,
 						"body_sync: 0/{} blocks received in 5s",
 						self.body_sync_hashes.len(),
 					);

@@ -22,7 +22,6 @@ use core::merkle_proof::MerkleProof;
 use core::pmmr::{Backend, ReadonlyPMMR};
 use core::BlockHeader;
 use ser::{PMMRIndexHashable, PMMRable};
-use util::LOGGER;
 
 /// 64 bits all ones: 0b11111111...1
 const ALL_ONES: u64 = u64::MAX;
@@ -137,7 +136,7 @@ where
 
 	/// Build a Merkle proof for the element at the given position.
 	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
-		debug!(LOGGER, "merkle_proof  {}, last_pos {}", pos, self.last_pos);
+		debug!("merkle_proof  {}, last_pos {}", pos, self.last_pos);
 
 		// check this pos is actually a leaf in the MMR
 		if !is_leaf(pos) {
@@ -384,14 +383,14 @@ where
 					None => hashes.push_str(&format!("{:>8} ", "??")),
 				}
 			}
-			trace!(LOGGER, "{}", idx);
-			trace!(LOGGER, "{}", hashes);
+			trace!("{}", idx);
+			trace!("{}", hashes);
 		}
 	}
 
 	/// Prints PMMR statistics to the logs, used for debugging.
 	pub fn dump_stats(&self) {
-		debug!(LOGGER, "pmmr: unpruned - {}", self.unpruned_size());
+		debug!("pmmr: unpruned - {}", self.unpruned_size());
 		self.backend.dump_stats();
 	}
 
@@ -418,8 +417,8 @@ where
 					None => hashes.push_str(&format!("{:>8} ", " .")),
 				}
 			}
-			debug!(LOGGER, "{}", idx);
-			debug!(LOGGER, "{}", hashes);
+			debug!("{}", idx);
+			debug!("{}", hashes);
 		}
 	}
 }

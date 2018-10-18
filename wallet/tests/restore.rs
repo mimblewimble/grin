@@ -20,7 +20,7 @@ extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
 #[macro_use]
-extern crate slog;
+extern crate log;
 extern crate chrono;
 extern crate serde;
 extern crate uuid;
@@ -35,7 +35,6 @@ use std::time::Duration;
 use core::global;
 use core::global::ChainTypes;
 use keychain::{ExtKeychain, Identifier, Keychain};
-use util::LOGGER;
 use wallet::libtx::slate::Slate;
 use wallet::libwallet;
 use wallet::libwallet::types::AcctPathMapping;
@@ -67,7 +66,7 @@ fn restore_wallet(base_dir: &str, wallet_dir: &str) -> Result<(), libwallet::Err
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
 		if let Err(e) = wallet_proxy.run() {
-			error!(LOGGER, "Wallet Proxy error: {}", e);
+			error!("Wallet Proxy error: {}", e);
 		}
 	});
 
@@ -121,7 +120,7 @@ fn compare_wallet_restore(
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
 		if let Err(e) = wallet_proxy.run() {
-			error!(LOGGER, "Wallet Proxy error: {}", e);
+			error!("Wallet Proxy error: {}", e);
 		}
 	});
 
@@ -218,7 +217,7 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
 		if let Err(e) = wallet_proxy.run() {
-			error!(LOGGER, "Wallet Proxy error: {}", e);
+			error!("Wallet Proxy error: {}", e);
 		}
 	});
 

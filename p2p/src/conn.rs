@@ -31,7 +31,6 @@ use util::RwLock;
 use core::ser;
 use msg::{read_body, read_exact, read_header, write_all, write_to_buf, MsgHeader, Type};
 use types::Error;
-use util::LOGGER;
 
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.
@@ -234,7 +233,6 @@ fn poll<H>(
 				if let Some(h) = try_break!(error_tx, read_header(conn, None)) {
 					let msg = Message::from_header(h, conn);
 					trace!(
-						LOGGER,
 						"Received message header, type {:?}, len {}.",
 						msg.header.msg_type,
 						msg.header.msg_len
@@ -276,7 +274,6 @@ fn poll<H>(
 				// check the close channel
 				if let Ok(_) = close_rx.try_recv() {
 					debug!(
-						LOGGER,
 						"Connection close with {} initiated by us",
 						conn.peer_addr()
 							.map(|a| a.to_string())

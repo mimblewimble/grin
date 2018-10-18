@@ -25,7 +25,6 @@ use core::pow::Difficulty;
 use msg::{read_message, write_message, Hand, Shake, SockAddr, Type, PROTOCOL_VERSION, USER_AGENT};
 use peer::Peer;
 use types::{Capabilities, Direction, Error, P2PConfig, PeerInfo, PeerLiveInfo};
-use util::LOGGER;
 
 const NONCES_CAP: usize = 100;
 
@@ -115,7 +114,6 @@ impl Handshake {
 		}
 
 		debug!(
-			LOGGER,
 			"Connected! Cumulative {} offered from {:?} {:?} {:?}",
 			shake.total_difficulty.to_num(),
 			peer_info.addr,
@@ -186,7 +184,7 @@ impl Handshake {
 		};
 
 		write_message(conn, shake, Type::Shake)?;
-		trace!(LOGGER, "Success handshake with {}.", peer_info.addr);
+		trace!("Success handshake with {}.", peer_info.addr);
 
 		// when more than one protocol version is supported, choosing should go here
 		Ok(peer_info)

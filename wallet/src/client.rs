@@ -26,8 +26,8 @@ use api;
 use error::{Error, ErrorKind};
 use libtx::slate::Slate;
 use libwallet;
+use util;
 use util::secp::pedersen;
-use util::{self, LOGGER};
 
 #[derive(Clone)]
 pub struct HTTPWalletClient {
@@ -65,11 +65,11 @@ impl WalletClient for HTTPWalletClient {
 		match single_create_coinbase(&url, &block_fees) {
 			Err(e) => {
 				error!(
-					LOGGER,
-					"Failed to get coinbase from {}. Run grin wallet listen?", url
+					"Failed to get coinbase from {}. Run grin wallet listen?",
+					url
 				);
-				error!(LOGGER, "Underlying Error: {}", e.cause().unwrap());
-				error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
+				error!("Underlying Error: {}", e.cause().unwrap());
+				error!("Backtrace: {}", e.backtrace().unwrap());
 				Err(libwallet::ErrorKind::ClientCallback(
 					"Failed to get coinbase",
 				))?
@@ -85,11 +85,11 @@ impl WalletClient for HTTPWalletClient {
 				"dest formatted as {} but send -d expected stdout or http://IP:port",
 				dest
 			);
-			error!(LOGGER, "{}", err_str,);
+			error!("{}", err_str,);
 			Err(libwallet::ErrorKind::Uri)?
 		}
 		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
-		debug!(LOGGER, "Posting transaction slate to {}", url);
+		debug!("Posting transaction slate to {}", url);
 
 		let res = api::client::post(url.as_str(), None, slate).context(
 			libwallet::ErrorKind::ClientCallback("Posting transaction slate"),
@@ -153,7 +153,7 @@ impl WalletClient for HTTPWalletClient {
 		let results = match rt.block_on(task) {
 			Ok(outputs) => outputs,
 			Err(e) => {
-				error!(LOGGER, "Outputs by id failed: {}", e);
+				error!("Outputs by id failed: {}", e);
 				return Err(libwallet::ErrorKind::ClientCallback("Error from server"))?;
 			}
 		};
@@ -209,8 +209,8 @@ impl WalletClient for HTTPWalletClient {
 			Err(e) => {
 				// if we got anything other than 200 back from server, bye
 				error!(
-					LOGGER,
-					"get_outputs_by_pmmr_index: unable to contact API {}. Error: {}", addr, e
+					"get_outputs_by_pmmr_index: unable to contact API {}. Error: {}",
+					addr, e
 				);
 				Err(libwallet::ErrorKind::ClientCallback(
 					"unable to contact api",
@@ -226,11 +226,11 @@ pub fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Err
 	match single_create_coinbase(&url, &block_fees) {
 		Err(e) => {
 			error!(
-				LOGGER,
-				"Failed to get coinbase from {}. Run grin wallet listen?", url
+				"Failed to get coinbase from {}. Run grin wallet listen?",
+				url
 			);
-			error!(LOGGER, "Underlying Error: {}", e.cause().unwrap());
-			error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
+			error!("Underlying Error: {}", e.cause().unwrap());
+			error!("Backtrace: {}", e.backtrace().unwrap());
 			Err(e)?
 		}
 		Ok(res) => Ok(res),

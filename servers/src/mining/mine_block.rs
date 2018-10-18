@@ -28,7 +28,7 @@ use core::core::verifier_cache::VerifierCache;
 use core::{consensus, core, ser};
 use keychain::{ExtKeychain, Identifier, Keychain};
 use pool;
-use util::{self, LOGGER};
+use util;
 use wallet::{self, BlockFees};
 
 // Ensure a block suitable for mining is built and returned
@@ -55,24 +55,22 @@ pub fn get_block(
 			self::Error::Chain(c) => match c.kind() {
 				chain::ErrorKind::DuplicateCommitment(_) => {
 					debug!(
-						LOGGER,
 						"Duplicate commit for potential coinbase detected. Trying next derivation."
 					);
 				}
 				_ => {
-					error!(LOGGER, "Chain Error: {}", c);
+					error!("Chain Error: {}", c);
 				}
 			},
 			self::Error::Wallet(_) => {
 				error!(
-					LOGGER,
 					"Error building new block: Can't connect to wallet listener at {:?}; will retry",
 					wallet_listener_url.as_ref().unwrap()
 				);
 				thread::sleep(Duration::from_secs(wallet_retry_interval));
 			}
 			ae => {
-				warn!(LOGGER, "Error building new block: {:?}. Retrying.", ae);
+				warn!("Error building new block: {:?}. Retrying.", ae);
 			}
 		}
 		thread::sleep(Duration::from_millis(100));
@@ -134,7 +132,6 @@ fn build_block(
 
 	let b_difficulty = (b.header.total_difficulty() - head.total_difficulty()).to_num();
 	debug!(
-		LOGGER,
 		"Built new block with {} inputs and {} outputs, network difficulty: {}, cumulative difficulty {}",
 		b.inputs().len(),
 		b.outputs().len(),
@@ -159,10 +156,7 @@ fn build_block(
 
 				//Some other issue, possibly duplicate kernel
 				_ => {
-					error!(
-						LOGGER,
-						"Error setting txhashset root to build a block: {:?}", e
-					);
+					error!("Error setting txhashset root to build a block: {:?}", e);
 					Err(Error::Chain(
 						chain::ErrorKind::Other(format!("{:?}", e)).into(),
 					))
@@ -176,7 +170,7 @@ fn build_block(
 /// Probably only want to do this when testing.
 ///
 fn burn_reward(block_fees: BlockFees) -> Result<(core::Output, core::TxKernel, BlockFees), Error> {
-	warn!(LOGGER, "Burning block fees: {:?}", block_fees);
+	warn!("Burning block fees: {:?}", block_fees);
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let (out, kernel) =
@@ -209,7 +203,7 @@ fn get_coinbase(
 				..block_fees
 			};
 
-			debug!(LOGGER, "get_coinbase: {:?}", block_fees);
+			debug!("get_coinbase: {:?}", block_fees);
 			return Ok((output, kernel, block_fees));
 		}
 	}

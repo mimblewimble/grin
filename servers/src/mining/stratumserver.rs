@@ -35,7 +35,7 @@ use core::{pow, ser};
 use keychain;
 use mining::mine_block;
 use pool;
-use util::{self, LOGGER};
+use util;
 
 // ----------------------------------------
 // http://www.jsonrpc.org/specification
@@ -114,7 +114,6 @@ fn accept_workers(
 		match stream {
 			Ok(stream) => {
 				warn!(
-					LOGGER,
 					"(Server ID: {}) New connection: {}",
 					id,
 					stream.peer_addr().unwrap()
@@ -135,10 +134,7 @@ fn accept_workers(
 				worker_id = worker_id + 1;
 			}
 			Err(e) => {
-				warn!(
-					LOGGER,
-					"(Server ID: {}) Error accepting connection: {:?}", id, e
-				);
+				warn!("(Server ID: {}) Error accepting connection: {:?}", id, e);
 			}
 		}
 	}
@@ -185,8 +181,8 @@ impl Worker {
 			}
 			Err(e) => {
 				warn!(
-					LOGGER,
-					"(Server ID: {}) Error in connection with stratum client: {}", self.id, e
+					"(Server ID: {}) Error in connection with stratum client: {}",
+					self.id, e
 				);
 				self.error = true;
 				return None;
@@ -206,16 +202,16 @@ impl Worker {
 				Ok(_) => {}
 				Err(e) => {
 					warn!(
-						LOGGER,
-						"(Server ID: {}) Error in connection with stratum client: {}", self.id, e
+						"(Server ID: {}) Error in connection with stratum client: {}",
+						self.id, e
 					);
 					self.error = true;
 				}
 			},
 			Err(e) => {
 				warn!(
-					LOGGER,
-					"(Server ID: {}) Error in connection with stratum client: {}", self.id, e
+					"(Server ID: {}) Error in connection with stratum client: {}",
+					self.id, e
 				);
 				self.error = true;
 				return;
@@ -296,7 +292,6 @@ impl StratumServer {
 						Err(e) => {
 							// not a valid JSON RpcRequest - disconnect the worker
 							warn!(
-								LOGGER,
 								"(Server ID: {}) Failed to parse JSONRpc: {} - {:?}",
 								self.id,
 								e.description(),
@@ -409,11 +404,8 @@ impl StratumServer {
 		let job_template = self.build_block_template();
 		let response = serde_json::to_value(&job_template).unwrap();
 		debug!(
-			LOGGER,
 			"(Server ID: {}) sending block {} with id {} to single worker",
-			self.id,
-			job_template.height,
-			job_template.job_id,
+			self.id, job_template.height, job_template.job_id,
 		);
 		return Ok(response);
 	}
@@ -452,8 +444,8 @@ impl StratumServer {
 		if params.height != self.current_block_versions.last().unwrap().header.height {
 			// Return error status
 			error!(
-				LOGGER,
-				"(Server ID: {}) Share at height {} submitted too late", self.id, params.height,
+				"(Server ID: {}) Share at height {} submitted too late",
+				self.id, params.height,
 			);
 			worker_stats.num_stale += 1;
 			let e = RpcError {
@@ -467,11 +459,8 @@ impl StratumServer {
 		if b.is_none() {
 			// Return error status
 			error!(
-				LOGGER,
 				"(Server ID: {}) Failed to validate solution at height {}: invalid job_id {}",
-				self.id,
-				params.height,
-				params.job_id,
+				self.id, params.height, params.job_id,
 			);
 			worker_stats.num_rejected += 1;
 			let e = RpcError {
@@ -491,11 +480,8 @@ impl StratumServer {
 		if share_difficulty < self.minimum_share_difficulty {
 			// Return error status
 			error!(
-				LOGGER,
 				"(Server ID: {}) Share rejected due to low difficulty: {}/{}",
-				self.id,
-				share_difficulty,
-				self.minimum_share_difficulty,
+				self.id, share_difficulty, self.minimum_share_difficulty,
 			);
 			worker_stats.num_rejected += 1;
 			let e = RpcError {
@@ -511,7 +497,6 @@ impl StratumServer {
 			if let Err(e) = res {
 				// Return error status
 				error!(
-					LOGGER,
 					"(Server ID: {}) Failed to validate solution at height {}: {}: {}",
 					self.id,
 					params.height,
@@ -528,15 +513,14 @@ impl StratumServer {
 			share_is_block = true;
 			// Log message to make it obvious we found a block
 			warn!(
-				LOGGER,
-				"(Server ID: {}) Solution Found for block {} - Yay!!!", self.id, params.height
+				"(Server ID: {}) Solution Found for block {} - Yay!!!",
+				self.id, params.height
 			);
 		} else {
 			// Do some validation but dont submit
 			if !pow::verify_size(&b.header, b.header.pow.proof.edge_bits).is_ok() {
 				// Return error status
 				error!(
-					LOGGER,
 					"(Server ID: {}) Failed to validate share at height {} with nonce {} using job_id {}",
 					self.id,
 					params.height,
@@ -557,7 +541,6 @@ impl StratumServer {
 			Some(login) => login.clone(),
 		};
 		info!(
-			LOGGER,
 			"(Server ID: {}) Got share for block: hash {}, height {}, nonce {}, difficulty {}/{}, submitted by {}",
 			self.id,
 			b.hash(),
@@ -588,11 +571,9 @@ impl StratumServer {
 			for num in start..workers_l.len() {
 				if workers_l[num].error == true {
 					warn!(
-	                                        LOGGER,
-	                                        "(Server ID: {}) Dropping worker: {}",
-	                                        self.id,
-						workers_l[num].id;
-	                                );
+						"(Server ID: {}) Dropping worker: {}",
+						self.id, workers_l[num].id
+					);
 					// Update worker stats
 					let mut stratum_stats = stratum_stats.write();
 					let worker_stats_id = stratum_stats
@@ -631,11 +612,8 @@ impl StratumServer {
 		};
 		let job_request_json = serde_json::to_string(&job_request).unwrap();
 		debug!(
-			LOGGER,
 			"(Server ID: {}) sending block {} with id {} to stratum clients",
-			self.id,
-			job_template.height,
-			job_template.job_id,
+			self.id, job_template.height, job_template.job_id,
 		);
 		// Push the new block to all connected clients
 		// NOTE: We do not give a unique nonce (should we?) so miners need
@@ -659,11 +637,8 @@ impl StratumServer {
 		sync_state: Arc<SyncState>,
 	) {
 		info!(
-			LOGGER,
 			"(Server ID: {}) Starting stratum server with edge_bits = {}, proof_size = {}",
-			self.id,
-			edge_bits,
-			proof_size
+			self.id, edge_bits, proof_size
 		);
 
 		self.sync_state = sync_state;
@@ -698,7 +673,6 @@ impl StratumServer {
 		}
 
 		warn!(
-			LOGGER,
 			"Stratum server started on {}",
 			self.config.stratum_server_addr.clone().unwrap()
 		);

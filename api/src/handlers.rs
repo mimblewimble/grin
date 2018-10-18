@@ -37,7 +37,6 @@ use types::*;
 use url::form_urlencoded;
 use util;
 use util::secp::pedersen::Commitment;
-use util::LOGGER;
 use web::*;
 
 // All handlers use `Weak` references instead of `Arc` to avoid cycles that
@@ -206,12 +205,8 @@ impl OutputHandler {
 		}
 
 		debug!(
-			LOGGER,
 			"outputs_block_batch: {}-{}, {:?}, {:?}",
-			start_height,
-			end_height,
-			commitments,
-			include_rp,
+			start_height, end_height, commitments, include_rp,
 		);
 
 		let mut return_vec = vec![];
@@ -745,7 +740,6 @@ impl PoolPushHandler {
 						identifier: "?.?.?.?".to_string(),
 					};
 					info!(
-						LOGGER,
 						"Pushing transaction {} to pool (inputs: {}, outputs: {}, kernels: {})",
 						tx.hash(),
 						tx.inputs().len(),
@@ -759,7 +753,7 @@ impl PoolPushHandler {
 					tx_pool
 						.add_to_pool(source, tx, !fluff, &header)
 						.map_err(|e| {
-							error!(LOGGER, "update_pool: failed with error: {:?}", e);
+							error!("update_pool: failed with error: {:?}", e);
 							ErrorKind::Internal(format!("Failed to update pool: {:?}", e)).into()
 						})
 				}),
@@ -808,7 +802,7 @@ pub fn start_rest_apis(
 		router.add_middleware(basic_auth_middleware);
 	}
 
-	info!(LOGGER, "Starting HTTP API server at {}.", addr);
+	info!("Starting HTTP API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
 	apis.start(socket_addr, router, tls_config).is_ok()
 }

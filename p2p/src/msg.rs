@@ -26,7 +26,6 @@ use core::pow::Difficulty;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::{Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};
-use util::LOGGER;
 
 /// Current latest version of the protocol
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -207,8 +206,8 @@ pub fn read_header(conn: &mut TcpStream, msg_type: Option<Type>) -> Result<MsgHe
 	// TODO 4x the limits for now to leave ourselves space to change things
 	if header.msg_len > max_len * 4 {
 		error!(
-			LOGGER,
-			"Too large read {}, had {}, wanted {}.", header.msg_type as u8, max_len, header.msg_len
+			"Too large read {}, had {}, wanted {}.",
+			header.msg_type as u8, max_len, header.msg_len
 		);
 		return Err(Error::Serialization(ser::Error::TooLargeReadErr));
 	}

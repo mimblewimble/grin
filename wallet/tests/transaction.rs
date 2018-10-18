@@ -20,7 +20,7 @@ extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
 #[macro_use]
-extern crate slog;
+extern crate log;
 extern crate chrono;
 extern crate serde;
 extern crate uuid;
@@ -35,7 +35,6 @@ use std::time::Duration;
 use core::global;
 use core::global::ChainTypes;
 use keychain::ExtKeychain;
-use util::LOGGER;
 use wallet::libtx::slate::Slate;
 use wallet::libwallet;
 use wallet::libwallet::types::OutputStatus;
@@ -73,7 +72,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
 		if let Err(e) = wallet_proxy.run() {
-			error!(LOGGER, "Wallet Proxy error: {}", e);
+			error!("Wallet Proxy error: {}", e);
 		}
 	});
 
@@ -87,10 +86,8 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
 		debug!(
-			LOGGER,
 			"Wallet 1 Info Pre-Transaction, after {} blocks: {:?}",
-			wallet1_info.last_confirmed_height,
-			wallet1_info
+			wallet1_info.last_confirmed_height, wallet1_info
 		);
 		assert!(wallet1_refreshed);
 		assert_eq!(
@@ -166,10 +163,8 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
 		debug!(
-			LOGGER,
 			"Wallet 1 Info Post Transaction, after {} blocks: {:?}",
-			wallet1_info.last_confirmed_height,
-			wallet1_info
+			wallet1_info.last_confirmed_height, wallet1_info
 		);
 		let fee = wallet::libtx::tx_fee(
 			wallet1_info.last_confirmed_height as usize - 1 - cm as usize,
@@ -207,7 +202,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	// refresh wallets and retrieve info/tests for each wallet after maturity
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
-		debug!(LOGGER, "Wallet 1 Info: {:?}", wallet1_info);
+		debug!("Wallet 1 Info: {:?}", wallet1_info);
 		assert!(wallet1_refreshed);
 		assert_eq!(
 			wallet1_info.total,
@@ -318,7 +313,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
 		if let Err(e) = wallet_proxy.run() {
-			error!(LOGGER, "Wallet Proxy error: {}", e);
+			error!("Wallet Proxy error: {}", e);
 		}
 	});
 

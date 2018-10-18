@@ -40,7 +40,7 @@ use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
 use txhashset::{RewindableKernelView, UTXOView};
 use types::{Tip, TxHashSetRoots, TxHashsetWriteStatus};
-use util::{file, secp_static, zip, LOGGER};
+use util::{file, secp_static, zip};
 
 const HEADERHASHSET_SUBDIR: &'static str = "header";
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
@@ -328,7 +328,7 @@ where
 	// we explicitly rewind the extension.
 	let header = batch.head_header()?;
 
-	trace!(LOGGER, "Starting new txhashset (readonly) extension.");
+	trace!("Starting new txhashset (readonly) extension.");
 
 	let res = {
 		let mut extension = Extension::new(trees, &batch, header);
@@ -340,14 +340,14 @@ where
 		inner(&mut extension)
 	};
 
-	trace!(LOGGER, "Rollbacking txhashset (readonly) extension.");
+	trace!("Rollbacking txhashset (readonly) extension.");
 
 	trees.header_pmmr_h.backend.discard();
 	trees.output_pmmr_h.backend.discard();
 	trees.rproof_pmmr_h.backend.discard();
 	trees.kernel_pmmr_h.backend.discard();
 
-	trace!(LOGGER, "TxHashSet (readonly) extension done.");
+	trace!("TxHashSet (readonly) extension done.");
 
 	res
 }
@@ -423,7 +423,7 @@ where
 	// index saving can be undone
 	let child_batch = batch.child()?;
 	{
-		trace!(LOGGER, "Starting new txhashset extension.");
+		trace!("Starting new txhashset extension.");
 
 		// TODO - header_mmr may be out ahead via the header_head
 		// TODO - do we need to handle this via an explicit rewind on the header_mmr?
@@ -436,10 +436,7 @@ where
 
 	match res {
 		Err(e) => {
-			debug!(
-				LOGGER,
-				"Error returned, discarding txhashset extension: {}", e
-			);
+			debug!("Error returned, discarding txhashset extension: {}", e);
 			trees.header_pmmr_h.backend.discard();
 			trees.output_pmmr_h.backend.discard();
 			trees.rproof_pmmr_h.backend.discard();
@@ -448,13 +445,13 @@ where
 		}
 		Ok(r) => {
 			if rollback {
-				trace!(LOGGER, "Rollbacking txhashset extension. sizes {:?}", sizes);
+				trace!("Rollbacking txhashset extension. sizes {:?}", sizes);
 				trees.header_pmmr_h.backend.discard();
 				trees.output_pmmr_h.backend.discard();
 				trees.rproof_pmmr_h.backend.discard();
 				trees.kernel_pmmr_h.backend.discard();
 			} else {
-				trace!(LOGGER, "Committing txhashset extension. sizes {:?}", sizes);
+				trace!("Committing txhashset extension. sizes {:?}", sizes);
 				child_batch.commit()?;
 				trees.header_pmmr_h.backend.sync()?;
 				trees.output_pmmr_h.backend.sync()?;
@@ -466,7 +463,7 @@ where
 				trees.kernel_pmmr_h.last_pos = sizes.3;
 			}
 
-			trace!(LOGGER, "TxHashSet extension done.");
+			trace!("TxHashSet extension done.");
 			Ok(r)
 		}
 	}
@@ -497,7 +494,7 @@ where
 	// index saving can be undone
 	let child_batch = batch.child()?;
 	{
-		trace!(LOGGER, "Starting new txhashset sync_head extension.");
+		trace!("Starting new txhashset sync_head extension.");
 		let pmmr = DBPMMR::at(&mut trees.sync_pmmr_h.backend, trees.sync_pmmr_h.last_pos);
 		let mut extension = HeaderExtension::new(pmmr, &child_batch, header);
 
@@ -510,31 +507,23 @@ where
 	match res {
 		Err(e) => {
 			debug!(
-				LOGGER,
-				"Error returned, discarding txhashset sync_head extension: {}", e
+				"Error returned, discarding txhashset sync_head extension: {}",
+				e
 			);
 			trees.sync_pmmr_h.backend.discard();
 			Err(e)
 		}
 		Ok(r) => {
 			if rollback {
-				trace!(
-					LOGGER,
-					"Rollbacking txhashset sync_head extension. size {:?}",
-					size
-				);
+				trace!("Rollbacking txhashset sync_head extension. size {:?}", size);
 				trees.sync_pmmr_h.backend.discard();
 			} else {
-				trace!(
-					LOGGER,
-					"Committing txhashset sync_head extension. size {:?}",
-					size
-				);
+				trace!("Committing txhashset sync_head extension. size {:?}", size);
 				child_batch.commit()?;
 				trees.sync_pmmr_h.backend.sync()?;
 				trees.sync_pmmr_h.last_pos = size;
 			}
-			trace!(LOGGER, "TxHashSet sync_head extension done.");
+			trace!("TxHashSet sync_head extension done.");
 			Ok(r)
 		}
 	}
@@ -564,7 +553,7 @@ where
 	// index saving can be undone
 	let child_batch = batch.child()?;
 	{
-		trace!(LOGGER, "Starting new txhashset header extension.");
+		trace!("Starting new txhashset header extension.");
 		let pmmr = DBPMMR::at(
 			&mut trees.header_pmmr_h.backend,
 			trees.header_pmmr_h.last_pos,
@@ -579,31 +568,23 @@ where
 	match res {
 		Err(e) => {
 			debug!(
-				LOGGER,
-				"Error returned, discarding txhashset header extension: {}", e
+				"Error returned, discarding txhashset header extension: {}",
+				e
 			);
 			trees.header_pmmr_h.backend.discard();
 			Err(e)
 		}
 		Ok(r) => {
 			if rollback {
-				trace!(
-					LOGGER,
-					"Rollbacking txhashset header extension. size {:?}",
-					size
-				);
+				trace!("Rollbacking txhashset header extension. size {:?}", size);
 				trees.header_pmmr_h.backend.discard();
 			} else {
-				trace!(
-					LOGGER,
-					"Committing txhashset header extension. size {:?}",
-					size
-				);
+				trace!("Committing txhashset header extension. size {:?}", size);
 				child_batch.commit()?;
 				trees.header_pmmr_h.backend.sync()?;
 				trees.header_pmmr_h.last_pos = size;
 			}
-			trace!(LOGGER, "TxHashSet header extension done.");
+			trace!("TxHashSet header extension done.");
 			Ok(r)
 		}
 	}
@@ -654,7 +635,6 @@ impl<'a> HeaderExtension<'a> {
 	/// Note the close relationship between header height and insertion index.
 	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		debug!(
-			LOGGER,
 			"Rewind header extension to {} at {}",
 			header.hash(),
 			header.height
@@ -675,7 +655,7 @@ impl<'a> HeaderExtension<'a> {
 	/// Used when rebuilding the header MMR by reapplying all headers
 	/// including the genesis block header.
 	pub fn truncate(&mut self) -> Result<(), Error> {
-		debug!(LOGGER, "Truncating header extension.");
+		debug!("Truncating header extension.");
 		self.pmmr.rewind(0).map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
@@ -689,7 +669,6 @@ impl<'a> HeaderExtension<'a> {
 	/// Requires *all* header hashes to be iterated over in ascending order.
 	pub fn rebuild(&mut self, head: &Tip, genesis: &BlockHeader) -> Result<(), Error> {
 		debug!(
-			LOGGER,
 			"About to rebuild header extension from {:?} to {:?}.",
 			genesis.hash(),
 			head.last_block_h,
@@ -712,7 +691,6 @@ impl<'a> HeaderExtension<'a> {
 
 		if header_hashes.len() > 0 {
 			debug!(
-				LOGGER,
 				"Re-applying {} headers to extension, from {:?} to {:?}.",
 				header_hashes.len(),
 				header_hashes.first().unwrap(),
@@ -995,10 +973,7 @@ impl<'a> Extension<'a> {
 	/// We need the hash of each sibling pos from the pos up to the peak
 	/// including the sibling leaf node which may have been removed.
 	pub fn merkle_proof(&self, output: &OutputIdentifier) -> Result<MerkleProof, Error> {
-		debug!(
-			LOGGER,
-			"txhashset: merkle_proof: output: {:?}", output.commit,
-		);
+		debug!("txhashset: merkle_proof: output: {:?}", output.commit,);
 		// then calculate the Merkle Proof based on the known pos
 		let pos = self.batch.get_output_pos(&output.commit)?;
 		let merkle_proof = self
@@ -1027,12 +1002,7 @@ impl<'a> Extension<'a> {
 	/// Rewinds the MMRs to the provided block, rewinding to the last output pos
 	/// and last kernel pos of that block.
 	pub fn rewind(&mut self, header: &BlockHeader) -> Result<(), Error> {
-		debug!(
-			LOGGER,
-			"Rewind to header {} at {}",
-			header.hash(),
-			header.height,
-		);
+		debug!("Rewind to header {} at {}", header.hash(), header.height,);
 
 		// We need to build bitmaps of added and removed output positions
 		// so we can correctly rewind all operations applied to the output MMR
@@ -1067,11 +1037,8 @@ impl<'a> Extension<'a> {
 		rewind_rm_pos: &Bitmap,
 	) -> Result<(), Error> {
 		debug!(
-			LOGGER,
 			"txhashset: rewind_to_pos: header {}, output {}, kernel {}",
-			header_pos,
-			output_pos,
-			kernel_pos,
+			header_pos, output_pos, kernel_pos,
 		);
 
 		self.header_pmmr
@@ -1191,7 +1158,6 @@ impl<'a> Extension<'a> {
 		}
 
 		debug!(
-			LOGGER,
 			"txhashset: validated the header {}, output {}, rproof {}, kernel {} mmrs, took {}s",
 			self.header_pmmr.unpruned_size(),
 			self.output_pmmr.unpruned_size(),
@@ -1270,22 +1236,22 @@ impl<'a> Extension<'a> {
 	/// Dumps the output MMR.
 	/// We use this after compacting for visual confirmation that it worked.
 	pub fn dump_output_pmmr(&self) {
-		debug!(LOGGER, "-- outputs --");
+		debug!("-- outputs --");
 		self.output_pmmr.dump_from_file(false);
-		debug!(LOGGER, "--");
+		debug!("--");
 		self.output_pmmr.dump_stats();
-		debug!(LOGGER, "-- end of outputs --");
+		debug!("-- end of outputs --");
 	}
 
 	/// Dumps the state of the 3 sum trees to stdout for debugging. Short
 	/// version only prints the Output tree.
 	pub fn dump(&self, short: bool) {
-		debug!(LOGGER, "-- outputs --");
+		debug!("-- outputs --");
 		self.output_pmmr.dump(short);
 		if !short {
-			debug!(LOGGER, "-- range proofs --");
+			debug!("-- range proofs --");
 			self.rproof_pmmr.dump(short);
-			debug!(LOGGER, "-- kernels --");
+			debug!("-- kernels --");
 			self.kernel_pmmr.dump(short);
 		}
 	}
@@ -1318,7 +1284,6 @@ impl<'a> Extension<'a> {
 		}
 
 		debug!(
-			LOGGER,
 			"txhashset: verified {} kernel signatures, pmmr size {}, took {}s",
 			kern_count,
 			self.kernel_pmmr.unpruned_size(),
@@ -1353,8 +1318,8 @@ impl<'a> Extension<'a> {
 						commits.clear();
 						proofs.clear();
 						debug!(
-							LOGGER,
-							"txhashset: verify_rangeproofs: verified {} rangeproofs", proof_count,
+							"txhashset: verify_rangeproofs: verified {} rangeproofs",
+							proof_count,
 						);
 					}
 				}
@@ -1370,13 +1335,12 @@ impl<'a> Extension<'a> {
 			commits.clear();
 			proofs.clear();
 			debug!(
-				LOGGER,
-				"txhashset: verify_rangeproofs: verified {} rangeproofs", proof_count,
+				"txhashset: verify_rangeproofs: verified {} rangeproofs",
+				proof_count,
 			);
 		}
 
 		debug!(
-			LOGGER,
 			"txhashset: verified {} rangeproofs, pmmr size {}, took {}s",
 			proof_count,
 			self.rproof_pmmr.unpruned_size(),
@@ -1452,10 +1416,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 
 	// Removing unexpected directories if needed
 	if !dir_difference.is_empty() {
-		debug!(
-			LOGGER,
-			"Unexpected folder(s) found in txhashset folder, removing."
-		);
+		debug!("Unexpected folder(s) found in txhashset folder, removing.");
 		for diff in dir_difference {
 			let diff_path = txhashset_path.join(diff);
 			file::delete(diff_path)?;
@@ -1492,7 +1453,6 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 			.collect();
 		if !difference.is_empty() {
 			debug!(
-				LOGGER,
 				"Unexpected file(s) found in txhashset subfolder {:?}, removing.",
 				&subdirectory_path
 			);
@@ -1520,10 +1480,8 @@ pub fn input_pos_to_rewind(
 
 	if head_header.height < block_header.height {
 		debug!(
-			LOGGER,
 			"input_pos_to_rewind: {} < {}, nothing to rewind",
-			head_header.height,
-			block_header.height
+			head_header.height, block_header.height
 		);
 		return Ok(Bitmap::create());
 	}

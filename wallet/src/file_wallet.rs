@@ -27,8 +27,7 @@ use uuid::Uuid;
 use failure::ResultExt;
 
 use keychain::{self, Identifier, Keychain};
-use util::secp::pedersen;
-use util::LOGGER;
+use util::secp::pedersen
 
 use error::{Error, ErrorKind};
 
@@ -168,11 +167,10 @@ where
 		// delete the lock file
 		if let Err(e) = fs::remove_dir(&self.lock_file_path) {
 			error!(
-				LOGGER,
 				"Could not remove wallet lock file. Maybe insufficient rights? {:?} ", e
 			);
 		}
-		info!(LOGGER, "... released wallet lock");
+		info!("... released wallet lock");
 	}
 }
 
@@ -224,7 +222,7 @@ where
 
 	/// Close wallet and remove any stored credentials (TBD)
 	fn close(&mut self) -> Result<(), libwallet::Error> {
-		debug!(LOGGER, "Closing wallet keychain");
+		debug!("Closing wallet keychain");
 		self.keychain = None;
 		Ok(())
 	}
@@ -352,14 +350,14 @@ where
 	fn lock(&self) -> Result<(), libwallet::Error> {
 		// create directory if it doesn't exist
 		fs::create_dir_all(self.config.data_file_dir.clone()).unwrap_or_else(|why| {
-			info!(LOGGER, "! {:?}", why.kind());
+			info!("! {:?}", why.kind());
 		});
 
-		info!(LOGGER, "Acquiring wallet lock ...");
+		info!("Acquiring wallet lock ...");
 
 		let lock_file_path = self.lock_file_path.clone();
 		let action = || {
-			trace!(LOGGER, "making lock file for wallet lock");
+			trace!("making lock file for wallet lock");
 			fs::create_dir(&lock_file_path)
 		};
 
@@ -377,7 +375,6 @@ where
 			Ok(_) => Ok(()),
 			Err(e) => {
 				error!(
-					LOGGER,
 					"Failed to acquire wallet lock file (multiple retries)",
 				);
 				Err(e.into())
@@ -390,7 +387,7 @@ where
 	fn read_or_create_paths(&mut self) -> Result<(), Error> {
 		if !Path::new(&self.config.data_file_dir.clone()).exists() {
 			fs::create_dir_all(&self.config.data_file_dir.clone()).unwrap_or_else(|why| {
-				info!(LOGGER, "! {:?}", why.kind());
+				info!("! {:?}", why.kind());
 			});
 		}
 		if Path::new(&self.data_file_path.clone()).exists() {

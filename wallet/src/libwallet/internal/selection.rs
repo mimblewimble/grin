@@ -20,8 +20,6 @@ use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
 use libwallet::types::*;
 
-use util::LOGGER;
-
 /// Initialize a transaction on the sender side, returns a corresponding
 /// libwallet transaction slate with the appropriate inputs selected,
 /// and saves the private wallet identifiers of our selected outputs
@@ -356,14 +354,11 @@ where
 	let mut change_amounts_derivations = vec![];
 
 	if change == 0 {
-		debug!(
-			LOGGER,
-			"No change (sending exactly amount + fee), no change outputs to build"
-		);
+		debug!("No change (sending exactly amount + fee), no change outputs to build");
 	} else {
 		debug!(
-			LOGGER,
-			"Building change outputs: total change: {} ({} outputs)", change, num_change_outputs
+			"Building change outputs: total change: {} ({} outputs)",
+			change, num_change_outputs
 		);
 
 		let part_change = change / num_change_outputs as u64;
@@ -442,7 +437,6 @@ where
 		// coins = the amount.
 		if let Some(outputs) = select_from(amount, false, eligible.clone()) {
 			debug!(
-				LOGGER,
 				"Extending maximum number of outputs. {} outputs selected.",
 				outputs.len()
 			);

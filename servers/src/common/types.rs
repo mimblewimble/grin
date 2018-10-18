@@ -25,7 +25,6 @@ use core::{core, pow};
 use p2p;
 use pool;
 use store;
-use util::LOGGER;
 use wallet;
 
 /// Error type wrapping underlying module errors.
@@ -314,10 +313,7 @@ impl SyncState {
 
 		let mut status = self.current.write();
 
-		debug!(
-			LOGGER,
-			"sync_state: sync_status: {:?} -> {:?}", *status, new_status,
-		);
+		debug!("sync_state: sync_status: {:?} -> {:?}", *status, new_status,);
 
 		*status = new_status;
 	}

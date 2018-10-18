@@ -24,7 +24,6 @@ use chrono::prelude::*;
 use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::pow::Difficulty;
-use util::LOGGER;
 
 use peer::Peer;
 use store::{PeerData, PeerStore, State};
@@ -71,7 +70,7 @@ impl Peers {
 			};
 			addr = peer.info.addr.clone();
 		}
-		debug!(LOGGER, "Saving newly connected peer {}.", addr);
+		debug!("Saving newly connected peer {}.", addr);
 		self.save_peer(&peer_data)?;
 
 		{
@@ -94,11 +93,11 @@ impl Peers {
 					.write()
 					.insert(Utc::now().timestamp(), peer.clone());
 				debug!(
-					LOGGER,
-					"Successfully updated Dandelion relay to: {}", peer.info.addr
+					"Successfully updated Dandelion relay to: {}",
+					peer.info.addr
 				);
 			}
-			None => debug!(LOGGER, "Could not update dandelion relay"),
+			None => debug!("Could not update dandelion relay"),
 		};
 	}
 
@@ -238,11 +237,11 @@ impl Peers {
 	/// Ban a peer, disconnecting it if we're currently connected
 	pub fn ban_peer(&self, peer_addr: &SocketAddr, ban_reason: ReasonForBan) {
 		if let Err(e) = self.update_state(*peer_addr, State::Banned) {
-			error!(LOGGER, "Couldn't ban {}: {:?}", peer_addr, e);
+			error!("Couldn't ban {}: {:?}", peer_addr, e);
 		}
 
 		if let Some(peer) = self.get_connected_peer(peer_addr) {
-			debug!(LOGGER, "Banning peer {}", peer_addr);
+			debug!("Banning peer {}", peer_addr);
 			// setting peer status will get it removed at the next clean_peer
 			peer.send_ban_reason(ban_reason);
 			peer.set_banned();
@@ -256,13 +255,13 @@ impl Peers {
 			Ok(_) => {
 				if self.is_banned(*peer_addr) {
 					if let Err(e) = self.update_state(*peer_addr, State::Healthy) {
-						error!(LOGGER, "Couldn't unban {}: {:?}", peer_addr, e);
+						error!("Couldn't unban {}: {:?}", peer_addr, e);
 					}
 				} else {
-					error!(LOGGER, "Couldn't unban {}: peer is not banned", peer_addr);
+					error!("Couldn't unban {}: peer is not banned", peer_addr);
 				}
 			}
-			Err(e) => error!(LOGGER, "Couldn't unban {}: {:?}", peer_addr, e),
+			Err(e) => error!("Couldn't unban {}: {:?}", peer_addr, e),
 		};
 	}
 
@@ -278,7 +277,7 @@ impl Peers {
 			match inner(&p) {
 				Ok(true) => count += 1,
 				Ok(false) => (),
-				Err(e) => debug!(LOGGER, "Error sending {} to peer: {:?}", obj_name, e),
+				Err(e) => debug!("Error sending {} to peer: {:?}", obj_name, e),
 			}
 
 			if count >= num_peers {
@@ -297,7 +296,6 @@ impl Peers {
 		let num_peers = self.config.peer_max_count();
 		let count = self.broadcast("compact block", num_peers, |p| p.send_compact_block(b));
 		debug!(
-			LOGGER,
 			"broadcast_compact_block: {}, {} at {}, to {} peers, done.",
 			b.hash(),
 			b.header.pow.total_difficulty,
@@ -315,7 +313,6 @@ impl Peers {
 		let num_peers = self.config.peer_min_preferred_count();
 		let count = self.broadcast("header", num_peers, |p| p.send_header(bh));
 		debug!(
-			LOGGER,
 			"broadcast_header: {}, {} at {}, to {} peers, done.",
 			bh.hash(),
 			bh.pow.total_difficulty,
@@ -328,7 +325,7 @@ impl Peers {
 	pub fn broadcast_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		let dandelion_relay = self.get_dandelion_relay();
 		if dandelion_relay.is_empty() {
-			debug!(LOGGER, "No dandelion relay, updating.");
+			debug!("No dandelion relay, updating.");
 			self.update_dandelion_relay();
 		}
 		// If still return an error, let the caller handle this as they see fit.
@@ -339,10 +336,7 @@ impl Peers {
 		for relay in dandelion_relay.values() {
 			if relay.is_connected() {
 				if let Err(e) = relay.send_stem_transaction(tx) {
-					debug!(
-						LOGGER,
-						"Error sending stem transaction to peer relay: {:?}", e
-					);
+					debug!("Error sending stem transaction to peer relay: {:?}", e);
 				}
 			}
 		}
@@ -358,7 +352,6 @@ impl Peers {
 		let num_peers = self.config.peer_min_preferred_count();
 		let count = self.broadcast("transaction", num_peers, |p| p.send_transaction(tx));
 		trace!(
-			LOGGER,
 			"broadcast_transaction: {}, to {} peers, done.",
 			tx.hash(),
 			count,
@@ -417,15 +410,15 @@ impl Peers {
 		// build a list of peers to be cleaned up
 		for peer in self.peers.read().values() {
 			if peer.is_banned() {
-				debug!(LOGGER, "clean_peers {:?}, peer banned", peer.info.addr);
+				debug!("clean_peers {:?}, peer banned", peer.info.addr);
 				rm.push(peer.clone());
 			} else if !peer.is_connected() {
-				debug!(LOGGER, "clean_peers {:?}, not connected", peer.info.addr);
+				debug!("clean_peers {:?}, not connected", peer.info.addr);
 				rm.push(peer.clone());
 			} else {
 				let (stuck, diff) = peer.is_stuck();
 				if stuck && diff < self.adapter.total_difficulty() {
-					debug!(LOGGER, "clean_peers {:?}, stuck peer", peer.info.addr);
+					debug!("clean_peers {:?}, stuck peer", peer.info.addr);
 					peer.stop();
 					let _ = self.update_state(peer.info.addr, State::Defunct);
 					rm.push(peer.clone());
@@ -497,8 +490,8 @@ impl ChainAdapter for Peers {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			debug!(
-				LOGGER,
-				"Received a bad block {} from  {}, the peer will be banned", hash, peer_addr
+				"Received a bad block {} from  {}, the peer will be banned",
+				hash, peer_addr
 			);
 			self.ban_peer(&peer_addr, ReasonForBan::BadBlock);
 			false
@@ -513,10 +506,8 @@ impl ChainAdapter for Peers {
 			// if the peer sent us a block that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
 			debug!(
-				LOGGER,
 				"Received a bad compact block {} from  {}, the peer will be banned",
-				hash,
-				&peer_addr
+				hash, &peer_addr
 			);
 			self.ban_peer(&peer_addr, ReasonForBan::BadCompactBlock);
 			false
@@ -566,8 +557,8 @@ impl ChainAdapter for Peers {
 	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: SocketAddr) -> bool {
 		if !self.adapter.txhashset_write(h, txhashset_data, peer_addr) {
 			debug!(
-				LOGGER,
-				"Received a bad txhashset data from {}, the peer will be banned", &peer_addr
+				"Received a bad txhashset data from {}, the peer will be banned",
+				&peer_addr
 			);
 			self.ban_peer(&peer_addr, ReasonForBan::BadTxHashSet);
 			false
@@ -592,17 +583,13 @@ impl NetAdapter for Peers {
 	/// addresses.
 	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr> {
 		let peers = self.find_peers(State::Healthy, capab, MAX_PEER_ADDRS as usize);
-		trace!(
-			LOGGER,
-			"find_peer_addrs: {} healthy peers picked",
-			peers.len()
-		);
+		trace!("find_peer_addrs: {} healthy peers picked", peers.len());
 		map_vec!(peers, |p| p.addr)
 	}
 
 	/// A list of peers has been received from one of our peers.
 	fn peer_addrs_received(&self, peer_addrs: Vec<SocketAddr>) {
-		trace!(LOGGER, "Received {} peer addrs, saving.", peer_addrs.len());
+		trace!("Received {} peer addrs, saving.", peer_addrs.len());
 		for pa in peer_addrs {
 			if let Ok(e) = self.exists_peer(pa) {
 				if e {
@@ -618,7 +605,7 @@ impl NetAdapter for Peers {
 				ban_reason: ReasonForBan::None,
 			};
 			if let Err(e) = self.save_peer(&peer) {
-				error!(LOGGER, "Could not save received peer address: {:?}", e);
+				error!("Could not save received peer address: {:?}", e);
 			}
 		}
 	}

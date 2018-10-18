@@ -26,7 +26,6 @@ use core::core::transaction;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader, BlockSums, Committed, Transaction, TxKernel};
 use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
-use util::LOGGER;
 
 // max weight leaving minimum space for a coinbase
 const MAX_MINEABLE_WEIGHT: usize =
@@ -192,7 +191,6 @@ impl Pool {
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
 		debug!(
-			LOGGER,
 			"pool [{}]: add_to_pool: {}, {:?}, inputs: {}, outputs: {}, kernels: {} (at block {})",
 			self.name,
 			entry.tx.hash(),

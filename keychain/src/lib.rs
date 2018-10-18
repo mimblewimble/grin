@@ -24,10 +24,10 @@ extern crate serde;
 extern crate serde_derive;
 extern crate digest;
 extern crate hmac;
+extern crate log;
 extern crate ripemd160;
 extern crate serde_json;
 extern crate sha2;
-extern crate slog;
 extern crate uuid;
 
 mod base58;
