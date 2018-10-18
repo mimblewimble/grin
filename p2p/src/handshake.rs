@@ -102,6 +102,7 @@ impl Handshake {
 				total_difficulty: shake.total_difficulty,
 				height: 0,
 				last_seen: Utc::now(),
+				stuck_detector: Utc::now(),
 			})),
 			direction: Direction::Outbound,
 		};
@@ -161,6 +162,7 @@ impl Handshake {
 				total_difficulty: hand.total_difficulty,
 				height: 0,
 				last_seen: Utc::now(),
+				stuck_detector: Utc::now(),
 			})),
 			direction: Direction::Inbound,
 		};

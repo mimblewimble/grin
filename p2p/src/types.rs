@@ -241,6 +241,7 @@ pub struct PeerLiveInfo {
 	pub total_difficulty: Difficulty,
 	pub height: u64,
 	pub last_seen: DateTime<Utc>,
+	pub stuck_detector: DateTime<Utc>,
 }
 
 /// General information about a connected peer that's useful to other modules.
@@ -274,6 +275,9 @@ impl PeerInfo {
 	/// Takes a write lock on the live_info.
 	pub fn update(&self, height: u64, total_difficulty: Difficulty) {
 		let mut live_info = self.live_info.write().unwrap();
+		if total_difficulty != live_info.total_difficulty {
+			live_info.stuck_detector = Utc::now();
+		}
 		live_info.height = height;
 		live_info.total_difficulty = total_difficulty;
 		live_info.last_seen = Utc::now()
