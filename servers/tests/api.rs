@@ -38,13 +38,13 @@ use util::{init_test_logger, LOGGER};
 fn simple_server_wallet() {
 	init_test_logger();
 	info!(LOGGER, "starting simple_server_wallet");
-	let test_name_dir = "test_servers";
 	core::global::set_mining_mode(core::global::ChainTypes::AutomatedTesting);
-	framework::clean_all_output(test_name_dir);
 
 	// Run a separate coinbase wallet for coinbase transactions
+	let coinbase_dir = "coinbase_wallet_api";
+	framework::clean_all_output(coinbase_dir);
 	let mut coinbase_config = LocalServerContainerConfig::default();
-	coinbase_config.name = String::from("coinbase_wallet_api");
+	coinbase_config.name = String::from(coinbase_dir);
 	coinbase_config.wallet_validating_node_url = String::from("http://127.0.0.1:40001");
 	coinbase_config.wallet_port = 50002;
 	let coinbase_wallet = Arc::new(Mutex::new(
@@ -59,8 +59,10 @@ fn simple_server_wallet() {
 	// Wait for the wallet to start
 	thread::sleep(time::Duration::from_millis(1000));
 
+	let api_server_one_dir = "api_server_one";
+	framework::clean_all_output(api_server_one_dir);
 	let mut server_config = LocalServerContainerConfig::default();
-	server_config.name = String::from("api_server_one");
+	server_config.name = String::from(api_server_one_dir);
 	server_config.p2p_server_port = 40000;
 	server_config.api_server_port = 40001;
 	server_config.start_miner = true;
@@ -148,11 +150,12 @@ fn test_p2p() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "test_servers";
-	framework::clean_all_output(test_name_dir);
 
 	// Spawn server and let it run for a bit
+	let server_one_dir = "p2p_server_one";
+	framework::clean_all_output(server_one_dir);
 	let mut server_config_one = LocalServerContainerConfig::default();
-	server_config_one.name = String::from("p2p_server_one");
+	server_config_one.name = String::from(server_one_dir);
 	server_config_one.p2p_server_port = 40002;
 	server_config_one.api_server_port = 40003;
 	server_config_one.start_miner = false;
@@ -164,8 +167,10 @@ fn test_p2p() {
 	thread::sleep(time::Duration::from_millis(1000));
 
 	// Spawn server and let it run for a bit
+	let server_two_dir = "p2p_server_two";
+	framework::clean_all_output(server_two_dir);
 	let mut server_config_two = LocalServerContainerConfig::default();
-	server_config_two.name = String::from("p2p_server_two");
+	server_config_two.name = String::from(server_two_dir);
 	server_config_two.p2p_server_port = 40004;
 	server_config_two.api_server_port = 40005;
 	server_config_two.start_miner = false;
