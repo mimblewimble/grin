@@ -14,7 +14,7 @@
 
 /// Types for a Cuck(at)oo proof of work and its encapsulation as a fully usable
 /// proof of work within a block header.
-use std::cmp::{min,max};
+use std::cmp::{max, min};
 use std::ops::{Add, Div, Mul, Sub};
 use std::{fmt, iter};
 
@@ -36,11 +36,7 @@ where
 	T: EdgeType,
 {
 	/// Create new instance of context with appropriate parameters
-	fn new(
-		edge_bits: u8,
-		proof_size: usize,
-		max_sols: u32,
-	) -> Result<Box<Self>, Error>;
+	fn new(edge_bits: u8, proof_size: usize, max_sols: u32) -> Result<Box<Self>, Error>;
 	/// Sets the header along with an optional nonce at the end
 	/// solve: whether to set up structures for a solve (true) or just validate (false)
 	fn set_header_nonce(
@@ -408,10 +404,7 @@ impl Readable for Proof {
 			}
 			nonces.push(nonce);
 		}
-		Ok(Proof {
-			edge_bits,
-			nonces,
-		})
+		Ok(Proof { edge_bits, nonces })
 	}
 }
 

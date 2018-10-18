@@ -46,8 +46,7 @@ fn aggsig_sender_receiver_interaction() {
 				&BlindSum::new()
 					.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
 					.add_blinding_factor(BlindingFactor::from_secret_key(skey2)),
-			)
-			.unwrap();
+			).unwrap();
 
 		keychain
 			.secp()
@@ -253,8 +252,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 				// subtract the kernel offset here like as would when
 				// verifying a kernel signature
 				.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)),
-			)
-			.unwrap();
+			).unwrap();
 
 		keychain
 			.secp()
@@ -279,8 +277,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 				// subtract the kernel offset to create an aggsig context
 				// with our "split" key
 				.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)),
-			)
-			.unwrap();
+			).unwrap();
 
 		let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
 

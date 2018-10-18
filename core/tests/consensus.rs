@@ -123,7 +123,7 @@ fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
 	let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
 
 	let earliest_ts = last_blocks[0].timestamp;
-	let latest_ts = last_blocks[last_blocks.len()-1].timestamp;
+	let latest_ts = last_blocks[last_blocks.len() - 1].timestamp;
 
 	let mut i = 1;
 
@@ -558,12 +558,12 @@ fn hard_forks() {
 	assert!(valid_header_version(0, 1));
 	assert!(valid_header_version(10, 1));
 	assert!(!valid_header_version(10, 2));
-	assert!(valid_header_version(YEAR_HEIGHT/2-1,  1));
+	assert!(valid_header_version(YEAR_HEIGHT / 2 - 1, 1));
 	// v2 not active yet
-	assert!(!valid_header_version(YEAR_HEIGHT/2,   2));
-	assert!(!valid_header_version(YEAR_HEIGHT/2,   1));
-	assert!(!valid_header_version(YEAR_HEIGHT,     1));
-	assert!(!valid_header_version(YEAR_HEIGHT/2+1, 2));
+	assert!(!valid_header_version(YEAR_HEIGHT / 2, 2));
+	assert!(!valid_header_version(YEAR_HEIGHT / 2, 1));
+	assert!(!valid_header_version(YEAR_HEIGHT, 1));
+	assert!(!valid_header_version(YEAR_HEIGHT / 2 + 1, 2));
 }
 
 // #[test]

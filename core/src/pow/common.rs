@@ -149,10 +149,7 @@ where
 	T: EdgeType,
 {
 	/// Instantiates new params and calculate edge mask, etc
-	pub fn new(
-		edge_bits: u8,
-		proof_size: usize,
-	) -> Result<CuckooParams<T>, Error> {
+	pub fn new(edge_bits: u8, proof_size: usize) -> Result<CuckooParams<T>, Error> {
 		let num_edges = (1 as u64) << edge_bits;
 		let edge_mask = to_edge!(num_edges - 1);
 		Ok(CuckooParams {
@@ -165,11 +162,7 @@ where
 	}
 
 	/// Reset the main keys used for siphash from the header and nonce
-	pub fn reset_header_nonce(
-		&mut self,
-		header: Vec<u8>,
-		nonce: Option<u32>,
-	) -> Result<(), Error> {
+	pub fn reset_header_nonce(&mut self, header: Vec<u8>, nonce: Option<u32>) -> Result<(), Error> {
 		self.siphash_keys = set_header_nonce(header, nonce)?;
 		Ok(())
 	}

@@ -31,7 +31,7 @@ use util::LOGGER;
 
 // DNS Seeds with contact email associated
 const DNS_SEEDS: &'static [&'static str] = &[
-	"t4.seed.grin-tech.org",    // igno.peverell@protonmail.com
+	"t4.seed.grin-tech.org", // igno.peverell@protonmail.com
 ];
 
 pub fn connect_and_monitor(

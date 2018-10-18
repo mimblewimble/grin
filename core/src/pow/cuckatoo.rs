@@ -165,15 +165,9 @@ impl<T> PoWContext<T> for CuckatooContext<T>
 where
 	T: EdgeType,
 {
-	fn new(
-		edge_bits: u8,
-		proof_size: usize,
-		max_sols: u32,
-	) -> Result<Box<Self>, Error> {
+	fn new(edge_bits: u8, proof_size: usize, max_sols: u32) -> Result<Box<Self>, Error> {
 		Ok(Box::new(CuckatooContext::<T>::new_impl(
-			edge_bits,
-			proof_size,
-			max_sols,
+			edge_bits, proof_size, max_sols,
 		)?))
 	}
 

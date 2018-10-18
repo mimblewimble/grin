@@ -409,7 +409,11 @@ where
 			&mut parent_id.to_bytes().to_vec(),
 			t.id as u64,
 		);
-		self.db.borrow().as_ref().unwrap().put_ser(&tx_log_key, &t)?;
+		self.db
+			.borrow()
+			.as_ref()
+			.unwrap()
+			.put_ser(&tx_log_key, &t)?;
 		Ok(())
 	}
 

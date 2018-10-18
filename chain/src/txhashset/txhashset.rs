@@ -851,9 +851,7 @@ impl<'a> Extension<'a> {
 
 			// Find the "cutoff" pos in the output MMR based on the
 			// header from 1,000 blocks ago.
-			let cutoff_height = height
-				.checked_sub(global::coinbase_maturity())
-				.unwrap_or(0);
+			let cutoff_height = height.checked_sub(global::coinbase_maturity()).unwrap_or(0);
 			let cutoff_header = self.batch.get_header_by_height(cutoff_height)?;
 			let cutoff_pos = cutoff_header.output_mmr_size;
 

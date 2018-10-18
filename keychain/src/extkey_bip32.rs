@@ -409,7 +409,8 @@ impl ExtendedPrivKey {
 		hasher.append_sha512(&be_n);
 		let result = hasher.result_sha512();
 		let mut sk = SecretKey::from_slice(secp, &result[..32]).map_err(Error::Ecdsa)?;
-		sk.add_assign(secp, &self.secret_key).map_err(Error::Ecdsa)?;
+		sk.add_assign(secp, &self.secret_key)
+			.map_err(Error::Ecdsa)?;
 
 		Ok(ExtendedPrivKey {
 			network: self.network,

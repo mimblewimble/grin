@@ -63,13 +63,11 @@ pub fn create() -> Box<View> {
 			let mut s: ViewRef<SelectView<&str>> = c.find_id(MAIN_MENU).unwrap();
 			s.select_down(1)(c);
 			Some(EventResult::Consumed(None));
-		})
-		.on_pre_event('k', move |c| {
+		}).on_pre_event('k', move |c| {
 			let mut s: ViewRef<SelectView<&str>> = c.find_id(MAIN_MENU).unwrap();
 			s.select_up(1)(c);
 			Some(EventResult::Consumed(None));
-		})
-		.on_pre_event(Key::Tab, move |c| {
+		}).on_pre_event(Key::Tab, move |c| {
 			let mut s: ViewRef<SelectView<&str>> = c.find_id(MAIN_MENU).unwrap();
 			if s.selected_id().unwrap() == s.len() - 1 {
 				s.set_selection(0)(c);
