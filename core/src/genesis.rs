@@ -44,7 +44,7 @@ pub fn genesis_testnet1() -> core::Block {
 		height: 0,
 		timestamp: Utc.ymd(2017, 11, 16).and_hms(20, 0, 0),
 		pow: ProofOfWork {
-			total_difficulty: Difficulty::one(),
+			total_difficulty: Difficulty::min(),
 			scaling_difficulty: 1,
 			nonce: 28205,
 			proof: Proof::new(vec![

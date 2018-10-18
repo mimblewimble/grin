@@ -50,7 +50,7 @@ fn block() -> Block {
 
 	let reward = reward::output(&keychain, &key_id, 0, header.height).unwrap();
 
-	Block::new(&header, txs, Difficulty::one(), reward).unwrap()
+	Block::new(&header, txs, Difficulty::min(), reward).unwrap()
 }
 
 fn compact_block() -> CompactBlock {

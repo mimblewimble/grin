@@ -92,7 +92,7 @@ where
 	Block::new(
 		&previous_header,
 		txs.into_iter().cloned().collect(),
-		Difficulty::one(),
+		Difficulty::min(),
 		reward_output,
 	).unwrap()
 }

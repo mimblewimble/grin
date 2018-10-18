@@ -54,7 +54,7 @@ fn test_transaction_pool_block_building() {
 		let key_id = ExtKeychain::derive_key_id(1, height as u32, 0, 0, 0);
 		let fee = txs.iter().map(|x| x.fee()).sum();
 		let reward = libtx::reward::output(&keychain, &key_id, fee, height).unwrap();
-		let block = Block::new(&prev_header, txs, Difficulty::one(), reward).unwrap();
+		let block = Block::new(&prev_header, txs, Difficulty::min(), reward).unwrap();
 
 		chain.update_db_for_block(&block);
 		block.header
@@ -115,7 +115,7 @@ fn test_transaction_pool_block_building() {
 		let key_id = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 		let fees = txs.iter().map(|tx| tx.fee()).sum();
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
-		Block::new(&header, txs, Difficulty::one(), reward)
+		Block::new(&header, txs, Difficulty::min(), reward)
 	}.unwrap();
 
 	chain.update_db_for_block(&block);

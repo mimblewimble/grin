@@ -232,7 +232,7 @@ pub struct DummyAdapter {}
 
 impl ChainAdapter for DummyAdapter {
 	fn total_difficulty(&self) -> Difficulty {
-		Difficulty::one()
+		Difficulty::min()
 	}
 	fn total_height(&self) -> u64 {
 		0

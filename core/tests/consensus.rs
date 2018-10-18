@@ -381,7 +381,6 @@ fn adjustment_scenarios() {
 fn next_target_adjustment() {
 	global::set_mining_mode(global::ChainTypes::AutomatedTesting);
 	let cur_time = Utc::now().timestamp() as u64;
-	let diff_one = Difficulty::one();
 	let diff_min = Difficulty::min();
 
 	// Check we don't get stuck on difficulty <= MIN_DIFFICULTY (at 4x faster blocks at least)

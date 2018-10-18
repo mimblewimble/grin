@@ -290,8 +290,8 @@ where
 		BLOCK_TIME_WINDOW,
 		CLAMP_FACTOR,
 	);
-	// minimum of 3 avoids getting stuck due to dampening
-	let difficulty = max(3, diff_sum * BLOCK_TIME_SEC / adj_ts);
+	// minimum difficulty avoids getting stuck due to dampening
+	let difficulty = max(MIN_DIFFICULTY, diff_sum * BLOCK_TIME_SEC / adj_ts);
 
 	HeaderInfo::from_diff_scaling(Difficulty::from_num(difficulty), sec_pow_scaling)
 }
@@ -320,8 +320,8 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 	);
 	let scale = scale_sum * target_pct / adj_count;
 
-	// minimum of 3 avoids getting stuck due to dampening
-	max(3, min(scale, MAX_SECONDARY_SCALING)) as u32
+	// minimum difficulty avoids getting stuck due to dampening
+	max(MIN_DIFFICULTY, min(scale, MAX_SECONDARY_SCALING)) as u32
 }
 
 /// Consensus rule that collections of items are sorted lexicographically.

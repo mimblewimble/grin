@@ -70,7 +70,7 @@ impl Tip {
 			height: 0,
 			last_block_h: gbh,
 			prev_block_h: gbh,
-			total_difficulty: Difficulty::one(),
+			total_difficulty: Difficulty::min(),
 		}
 	}
 

@@ -236,7 +236,7 @@ impl Default for ProofOfWork {
 	fn default() -> ProofOfWork {
 		let proof_size = global::proofsize();
 		ProofOfWork {
-			total_difficulty: Difficulty::one(),
+			total_difficulty: Difficulty::min(),
 			scaling_difficulty: 1,
 			nonce: 0,
 			proof: Proof::zero(proof_size),
