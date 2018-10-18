@@ -88,30 +88,30 @@ pub trait BIP32Hasher {
 }
 
 /// Implementation of the above that uses the standard BIP32 Hash algorithms
-pub struct BIP32ReferenceHasher {
+pub struct BIP32GrinHasher {
 	hmac_sha512: Hmac<Sha512>,
 }
 
-impl BIP32ReferenceHasher {
+impl BIP32GrinHasher {
 	/// New empty hasher
-	pub fn new() -> BIP32ReferenceHasher {
-		BIP32ReferenceHasher {
+	pub fn new() -> BIP32GrinHasher {
+		BIP32GrinHasher {
 			hmac_sha512: HmacSha512::new(GenericArray::from_slice(&[0u8; 128])),
 		}
 	}
 }
 
-impl BIP32Hasher for BIP32ReferenceHasher {
+impl BIP32Hasher for BIP32GrinHasher {
 	fn network_priv() -> [u8; 4] {
-		// bitcoin network (xprv) (for test vectors)
-		[0x04, 0x88, 0xAD, 0xE4]
+		// gprv
+		[0x03, 0x3C, 0x04, 0xA4]
 	}
 	fn network_pub() -> [u8; 4] {
-		// bitcoin network (xpub) (for test vectors)
-		[0x04, 0x88, 0xB2, 0x1E]
+		// gpub
+		[0x03, 0x3C, 0x08, 0xDF]
 	}
 	fn master_seed() -> [u8; 12] {
-		b"Bitcoin seed".to_owned()
+		b"IamVoldemort".to_owned()
 	}
 	fn init_sha512(&mut self, seed: &[u8]) {
 		self.hmac_sha512 = HmacSha512::new_varkey(seed).expect("HMAC can take key of any size");;
@@ -175,7 +175,7 @@ pub struct ExtendedPubKey {
 }
 
 /// A child number for a derived key
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum ChildNumber {
 	/// Non-hardened key
 	Normal {
@@ -409,8 +409,7 @@ impl ExtendedPrivKey {
 		hasher.append_sha512(&be_n);
 		let result = hasher.result_sha512();
 		let mut sk = SecretKey::from_slice(secp, &result[..32]).map_err(Error::Ecdsa)?;
-		sk.add_assign(secp, &self.secret_key)
-			.map_err(Error::Ecdsa)?;
+		sk.add_assign(secp, &self.secret_key).map_err(Error::Ecdsa)?;
 
 		Ok(ExtendedPrivKey {
 			network: self.network,
@@ -653,11 +652,66 @@ mod tests {
 	use util::from_hex;
 	use util::secp::Secp256k1;
 
-	use super::ChildNumber::{Hardened, Normal};
-	use super::Error;
-	use super::{ChildNumber, ExtendedPrivKey, ExtendedPubKey};
+	use super::*;
 
-	use super::BIP32ReferenceHasher;
+	use digest::generic_array::GenericArray;
+	use digest::Digest;
+	use hmac::{Hmac, Mac};
+	use ripemd160::Ripemd160;
+	use sha2::{Sha256, Sha512};
+
+	/// Implementation of the above that uses the standard BIP32 Hash algorithms
+	pub struct BIP32ReferenceHasher {
+		hmac_sha512: Hmac<Sha512>,
+	}
+
+	impl BIP32ReferenceHasher {
+		/// New empty hasher
+		pub fn new() -> BIP32ReferenceHasher {
+			BIP32ReferenceHasher {
+				hmac_sha512: HmacSha512::new(GenericArray::from_slice(&[0u8; 128])),
+			}
+		}
+	}
+
+	impl BIP32Hasher for BIP32ReferenceHasher {
+		fn network_priv() -> [u8; 4] {
+			// bitcoin network (xprv) (for test vectors)
+			[0x04, 0x88, 0xAD, 0xE4]
+		}
+		fn network_pub() -> [u8; 4] {
+			// bitcoin network (xpub) (for test vectors)
+			[0x04, 0x88, 0xB2, 0x1E]
+		}
+		fn master_seed() -> [u8; 12] {
+			b"Bitcoin seed".to_owned()
+		}
+		fn init_sha512(&mut self, seed: &[u8]) {
+			self.hmac_sha512 = HmacSha512::new_varkey(seed).expect("HMAC can take key of any size");;
+		}
+		fn append_sha512(&mut self, value: &[u8]) {
+			self.hmac_sha512.input(value);
+		}
+		fn result_sha512(&mut self) -> [u8; 64] {
+			let mut result = [0; 64];
+			result.copy_from_slice(self.hmac_sha512.result().code().as_slice());
+			result
+		}
+		fn sha_256(&self, input: &[u8]) -> [u8; 32] {
+			let mut sha2_res = [0; 32];
+			let mut sha2 = Sha256::new();
+			sha2.input(input);
+			sha2_res.copy_from_slice(sha2.result().as_slice());
+			sha2_res
+		}
+		fn ripemd_160(&self, input: &[u8]) -> [u8; 20] {
+			let mut ripemd_res = [0; 20];
+			let mut ripemd = Ripemd160::new();
+			ripemd.input(input);
+			ripemd_res.copy_from_slice(ripemd.result().as_slice());
+			ripemd_res
+		}
+	}
 
 	fn test_path(
 		secp: &Secp256k1,
@@ -694,12 +748,12 @@ mod tests {
 		for &num in path.iter() {
 			sk = sk.ckd_priv(secp, &mut h, num).unwrap();
 			match num {
-				Normal { .. } => {
+				ChildNumber::Normal { .. } => {
 					let pk2 = pk.ckd_pub(secp, &mut h, num).unwrap();
 					pk = ExtendedPubKey::from_private::<BIP32ReferenceHasher>(secp, &sk);
 					assert_eq!(pk, pk2);
 				}
-				Hardened { .. } => {
+				ChildNumber::Hardened { .. } => {
 					assert_eq!(
 						pk.ckd_pub(secp, &mut h, num),
 						Err(Error::CannotDeriveFromHardenedKey)

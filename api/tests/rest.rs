@@ -71,9 +71,9 @@ fn test_start_api() {
 	let addr: SocketAddr = server_addr.parse().expect("unable to parse server address");
 	assert!(server.start(addr, router, None).is_ok());
 	let url = format!("http://{}/v1/", server_addr);
-	let index = api::client::get::<Vec<String>>(url.as_str(), None).unwrap();
-	//	assert_eq!(index.len(), 2);
-	//	assert_eq!(counter.value(), 1);
+	let index = request_with_retry(url.as_str()).unwrap();
+	assert_eq!(index.len(), 2);
+	assert_eq!(counter.value(), 1);
 	assert!(server.stop());
 	thread::sleep(time::Duration::from_millis(1_000));
 }
@@ -95,7 +95,22 @@ fn test_start_api_tls() {
 	let server_addr = "0.0.0.0:14444";
 	let addr: SocketAddr = server_addr.parse().expect("unable to parse server address");
 	assert!(server.start(addr, router, Some(tls_conf)).is_ok());
-	let index = api::client::get::<Vec<String>>("https://yourdomain.com:14444/v1/", None).unwrap();
+	let index = request_with_retry("https://yourdomain.com:14444/v1/").unwrap();
 	assert_eq!(index.len(), 2);
 	assert!(!server.stop());
+}
+
+fn request_with_retry(url: &str) -> Result<Vec<String>, api::Error> {
+	let mut tries = 0;
+	loop {
+		let res = api::client::get::<Vec<String>>(url, None);
+		if res.is_ok() {
+			return res;
+		}
+		if tries > 5 {
+			return res;
+		}
+		tries += 1;
+		thread::sleep(time::Duration::from_millis(500));
+	}
 }

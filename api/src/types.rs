@@ -491,6 +491,8 @@ pub struct BlockHeaderPrintable {
 	pub height: u64,
 	/// Hash of the block previous to this in the chain.
 	pub previous: String,
+	/// Root hash of the header MMR at the previous header.
+	pub prev_root: String,
 	/// rfc3339 timestamp at which the block was built.
 	pub timestamp: String,
 	/// Merklish root of all the commitments in the TxHashSet
@@ -502,10 +504,13 @@ pub struct BlockHeaderPrintable {
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Size of the cuckoo graph
-	pub cuckoo_size: u8,
+	pub edge_bits: u8,
+	/// Nonces of the cuckoo solution
 	pub cuckoo_solution: Vec<u64>,
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: u64,
+	/// Difficulty scaling factor between the different proofs of work
+	pub scaling_difficulty: u32,
 	/// Total kernel offset since genesis block
 	pub total_kernel_offset: String,
 }
@@ -517,14 +522,16 @@ impl BlockHeaderPrintable {
 			version: h.version,
 			height: h.height,
 			previous: util::to_hex(h.previous.to_vec()),
+			prev_root: util::to_hex(h.prev_root.to_vec()),
 			timestamp: h.timestamp.to_rfc3339(),
 			output_root: util::to_hex(h.output_root.to_vec()),
 			range_proof_root: util::to_hex(h.range_proof_root.to_vec()),
 			kernel_root: util::to_hex(h.kernel_root.to_vec()),
 			nonce: h.pow.nonce,
-			cuckoo_size: h.pow.cuckoo_sizeshift(),
+			edge_bits: h.pow.edge_bits(),
 			cuckoo_solution: h.pow.proof.nonces.clone(),
 			total_difficulty: h.pow.total_difficulty.to_num(),
+			scaling_difficulty: h.pow.scaling_difficulty,
 			total_kernel_offset: h.total_kernel_offset.to_hex(),
 		}
 	}

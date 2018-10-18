@@ -30,7 +30,6 @@ use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStat
 use common::types::{Error, ServerConfig, StratumServerConfig, SyncState};
 use core::core::hash::Hashed;
 use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
-use core::pow::Difficulty;
 use core::{consensus, genesis, global, pow};
 use grin::{dandelion_monitor, seed, sync};
 use mining::stratumserver;
@@ -150,6 +149,7 @@ impl Server {
 			global::ChainTypes::Testnet1 => genesis::genesis_testnet1(),
 			global::ChainTypes::Testnet2 => genesis::genesis_testnet2(),
 			global::ChainTypes::Testnet3 => genesis::genesis_testnet3(),
+			global::ChainTypes::Testnet4 => genesis::genesis_testnet4(),
 			global::ChainTypes::AutomatedTesting => genesis::genesis_dev(),
 			global::ChainTypes::UserTesting => genesis::genesis_dev(),
 			global::ChainTypes::Mainnet => genesis::genesis_testnet2(), //TODO: Fix, obviously
@@ -313,7 +313,7 @@ impl Server {
 
 	/// Start a minimal "stratum" mining service on a separate thread
 	pub fn start_stratum_server(&self, config: StratumServerConfig) {
-		let cuckoo_size = global::min_sizeshift();
+		let edge_bits = global::min_edge_bits();
 		let proof_size = global::proofsize();
 		let sync_state = self.sync_state.clone();
 
@@ -327,7 +327,7 @@ impl Server {
 		let _ = thread::Builder::new()
 			.name("stratum_server".to_string())
 			.spawn(move || {
-				stratum_server.run_loop(stratum_stats, cuckoo_size as u32, proof_size, sync_state);
+				stratum_server.run_loop(stratum_stats, edge_bits as u32, proof_size, sync_state);
 			});
 	}
 
@@ -397,14 +397,13 @@ impl Server {
 		// code clean. This may be handy for testing but not really needed
 		// for release
 		let diff_stats = {
-			let last_blocks: Vec<Result<(u64, Difficulty), consensus::TargetError>> =
+			let last_blocks: Vec<consensus::HeaderInfo> =
 				global::difficulty_data_to_vector(self.chain.difficulty_iter())
 					.into_iter()
-					.skip(consensus::MEDIAN_TIME_WINDOW as usize)
 					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
 					.collect();
 
-			let mut last_time = last_blocks[0].clone().unwrap().0;
+			let mut last_time = last_blocks[0].timestamp;
 			let tip_height = self.chain.head().unwrap().height as i64;
 			let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
 
@@ -414,16 +413,17 @@ impl Server {
 				.iter()
 				.skip(1)
 				.map(|n| {
-					let (time, diff) = n.clone().unwrap();
-					let dur = time - last_time;
+					let dur = n.timestamp - last_time;
 					let height = earliest_block_height + i + 1;
 					i += 1;
-					last_time = time;
+					last_time = n.timestamp;
 					DiffBlock {
 						block_number: height,
-						difficulty: diff.to_num(),
-						time: time,
+						difficulty: n.difficulty.to_num(),
+						time: n.timestamp,
 						duration: dur,
+						secondary_scaling: n.secondary_scaling,
+						is_secondary: n.is_secondary,
 					}
 				}).collect();
 

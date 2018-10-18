@@ -50,7 +50,7 @@ fn test_transaction_pool_block_reconciliation() {
 
 	let header = {
 		let height = 1;
-		let key_id = keychain.derive_key_id(height as u32).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, height as u32, 0, 0, 0);
 		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
 		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
 
@@ -64,7 +64,7 @@ fn test_transaction_pool_block_reconciliation() {
 	let initial_tx = test_transaction_spending_coinbase(&keychain, &header, vec![10, 20, 30, 40]);
 
 	let block = {
-		let key_id = keychain.derive_key_id(2).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 		let fees = initial_tx.fee();
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
 		let block = Block::new(&header, vec![initial_tx], Difficulty::one(), reward).unwrap();
@@ -154,7 +154,7 @@ fn test_transaction_pool_block_reconciliation() {
 
 	// Now apply this block.
 	let block = {
-		let key_id = keychain.derive_key_id(3).unwrap();
+		let key_id = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 		let fees = block_txs.iter().map(|tx| tx.fee()).sum();
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
 		let block = Block::new(&header, block_txs, Difficulty::one(), reward).unwrap();

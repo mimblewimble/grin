@@ -142,6 +142,9 @@ impl<'a> Response<'a> {
 	}
 }
 
+pub const SEND_CHANNEL_CAP: usize = 10;
+
+// TODO count sent and received
 pub struct Tracker {
 	/// Bytes we've sent.
 	pub sent_bytes: Arc<RwLock<u64>>,
@@ -180,7 +183,7 @@ pub fn listen<H>(stream: TcpStream, handler: H) -> Tracker
 where
 	H: MessageHandler,
 {
-	let (send_tx, send_rx) = mpsc::sync_channel(10);
+	let (send_tx, send_rx) = mpsc::sync_channel(SEND_CHANNEL_CAP);
 	let (close_tx, close_rx) = mpsc::channel();
 	let (error_tx, error_rx) = mpsc::channel();
 

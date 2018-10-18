@@ -159,7 +159,6 @@ impl Peer {
 				return Some(*sent_bytes);
 			}
 		}
-
 		None
 	}
 
@@ -170,7 +169,6 @@ impl Peer {
 				return Some(*received_bytes);
 			}
 		}
-
 		None
 	}
 

@@ -19,6 +19,8 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, RwLock};
 use std::time::SystemTime;
 
+use core::pow::Difficulty;
+
 use chrono::prelude::*;
 
 use chain;
@@ -98,7 +100,7 @@ pub struct StratumStats {
 	/// current network difficulty we're working on
 	pub network_difficulty: u64,
 	/// cuckoo size used for mining
-	pub cuckoo_size: u16,
+	pub edge_bits: u16,
 	/// Individual worker status
 	pub worker_stats: Vec<WorkerStats>,
 }
@@ -129,6 +131,10 @@ pub struct DiffBlock {
 	pub time: u64,
 	/// Duration since previous block (epoch seconds)
 	pub duration: u64,
+	/// secondary scaling
+	pub secondary_scaling: u32,
+	/// is secondary
+	pub is_secondary: bool,
 }
 
 /// Struct to return relevant information about peers
@@ -157,7 +163,8 @@ pub struct PeerStats {
 impl StratumStats {
 	/// Calculate network hashrate
 	pub fn network_hashrate(&self) -> f64 {
-		42.0 * (self.network_difficulty as f64 / (self.cuckoo_size - 1) as f64) / 60.0
+		42.0 * (self.network_difficulty as f64 / Difficulty::scale(self.edge_bits as u8) as f64)
+			/ 60.0
 	}
 }
 
@@ -213,7 +220,7 @@ impl Default for StratumStats {
 			num_workers: 0,
 			block_height: 0,
 			network_difficulty: 1000,
-			cuckoo_size: 30,
+			edge_bits: 29,
 			worker_stats: Vec::new(),
 		}
 	}

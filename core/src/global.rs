@@ -16,13 +16,13 @@
 //! having to pass them all over the place, but aren't consensus values.
 //! should be used sparingly.
 
-use consensus::TargetError;
+use consensus::HeaderInfo;
 use consensus::{
-	BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON, DEFAULT_MIN_SIZESHIFT,
-	DIFFICULTY_ADJUST_WINDOW, EASINESS, INITIAL_DIFFICULTY, MEDIAN_TIME_WINDOW, PROOFSIZE,
-	REFERENCE_SIZESHIFT,
+	graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
+	DAY_HEIGHT, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE,
+	SECOND_POW_EDGE_BITS,
 };
-use pow::{self, CuckooContext, Difficulty, EdgeType, PoWContext};
+use pow::{self, CuckatooContext, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
@@ -32,14 +32,14 @@ use std::sync::RwLock;
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
 
-/// Automated testing sizeshift
-pub const AUTOMATED_TESTING_MIN_SIZESHIFT: u8 = 10;
+/// Automated testing edge_bits
+pub const AUTOMATED_TESTING_MIN_EDGE_BITS: u8 = 9;
 
 /// Automated testing proof size
 pub const AUTOMATED_TESTING_PROOF_SIZE: usize = 4;
 
-/// User testing sizeshift
-pub const USER_TESTING_MIN_SIZESHIFT: u8 = 16;
+/// User testing edge_bits
+pub const USER_TESTING_MIN_EDGE_BITS: u8 = 15;
 
 /// User testing proof size
 pub const USER_TESTING_PROOF_SIZE: usize = 42;
@@ -50,14 +50,11 @@ pub const AUTOMATED_TESTING_COINBASE_MATURITY: u64 = 3;
 /// User testing coinbase maturity
 pub const USER_TESTING_COINBASE_MATURITY: u64 = 3;
 
-/// Old coinbase maturity
-/// TODO: obsolete for mainnet together with maturity code below
-pub const OLD_COINBASE_MATURITY: u64 = 1_000;
-/// soft-fork around Sep 17 2018 on testnet3
-pub const COINBASE_MATURITY_FORK_HEIGHT: u64 = 100_000;
-
 /// Testing cut through horizon in blocks
 pub const TESTING_CUT_THROUGH_HORIZON: u32 = 20;
+
+/// Testing initial graph weight
+pub const TESTING_INITIAL_GRAPH_WEIGHT: u32 = 1;
 
 /// Testing initial block difficulty
 pub const TESTING_INITIAL_DIFFICULTY: u64 = 1;
@@ -73,6 +70,15 @@ pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
 pub const STUCK_PEER_KICK_TIME: i64 = 2 * 3600 * 1000;
 
+/// Testnet 4 initial block difficulty
+/// 1_000 times natural scale factor for cuckatoo29
+pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1_000 * (2<<(29-24)) * 29;
+
+/// Trigger compaction check on average every day for FAST_SYNC_NODE,
+/// roll the dice on every block to decide,
+/// all blocks lower than (BodyHead.height - CUT_THROUGH_HORIZON) will be removed.
+pub const COMPACTION_CHECK: u64 = DAY_HEIGHT;
+
 /// Types of chain a server can run with, dictates the genesis block and
 /// and mining parameters used.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -87,13 +93,15 @@ pub enum ChainTypes {
 	Testnet2,
 	/// Third test network
 	Testnet3,
+	/// Fourth test network
+	Testnet4,
 	/// Main production network
 	Mainnet,
 }
 
 impl Default for ChainTypes {
 	fn default() -> ChainTypes {
-		ChainTypes::Testnet3
+		ChainTypes::Testnet4
 	}
 }
 
@@ -132,35 +140,35 @@ pub fn create_pow_context<T>(
 where
 	T: EdgeType,
 {
-	// Perform whatever tests, configuration etc are needed to determine desired context + edge size
-	// + params
-	// Hardcode to regular cuckoo for now
-	CuckooContext::<T>::new(edge_bits, proof_size, EASINESS, max_sols)
-	// Or switch to cuckatoo as follows:
-	// CuckatooContext::<T>::new(edge_bits, proof_size, easiness_pct, max_sols)
+	CuckatooContext::<T>::new(edge_bits, proof_size, max_sols)
 }
 
-/// The minimum acceptable sizeshift
-pub fn min_sizeshift() -> u8 {
+/// Return the type of the pos
+pub fn pow_type() -> PoWContextTypes {
+	PoWContextTypes::Cuckatoo
+}
+
+/// The minimum acceptable edge_bits
+pub fn min_edge_bits() -> u8 {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
-		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_SIZESHIFT,
-		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
-		ChainTypes::Testnet1 => USER_TESTING_MIN_SIZESHIFT,
-		_ => DEFAULT_MIN_SIZESHIFT,
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
+		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
+		ChainTypes::Testnet1 => USER_TESTING_MIN_EDGE_BITS,
+		_ => SECOND_POW_EDGE_BITS,
 	}
 }
 
-/// Reference sizeshift used to compute factor on higher Cuckoo graph sizes,
-/// while the min_sizeshift can be changed on a soft fork, changing
-/// ref_sizeshift is a hard fork.
-pub fn ref_sizeshift() -> u8 {
+/// Reference edge_bits used to compute factor on higher Cuck(at)oo graph sizes,
+/// while the min_edge_bits can be changed on a soft fork, changing
+/// base_edge_bits is a hard fork.
+pub fn base_edge_bits() -> u8 {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
-		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_SIZESHIFT,
-		ChainTypes::UserTesting => USER_TESTING_MIN_SIZESHIFT,
-		ChainTypes::Testnet1 => USER_TESTING_MIN_SIZESHIFT,
-		_ => REFERENCE_SIZESHIFT,
+		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
+		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
+		ChainTypes::Testnet1 => USER_TESTING_MIN_EDGE_BITS,
+		_ => BASE_EDGE_BITS,
 	}
 }
 
@@ -174,17 +182,13 @@ pub fn proofsize() -> usize {
 	}
 }
 
-/// Coinbase maturity for coinbases to be spent at given height
-pub fn coinbase_maturity(height: u64) -> u64 {
+/// Coinbase maturity for coinbases to be spent
+pub fn coinbase_maturity() -> u64 {
 	let param_ref = CHAIN_TYPE.read().unwrap();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
 		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
-		_ => if height < COINBASE_MATURITY_FORK_HEIGHT {
-			OLD_COINBASE_MATURITY
-		} else {
-			COINBASE_MATURITY
-		},
+		_ => COINBASE_MATURITY,
 	}
 }
 
@@ -197,7 +201,21 @@ pub fn initial_block_difficulty() -> u64 {
 		ChainTypes::Testnet1 => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet2 => TESTNET2_INITIAL_DIFFICULTY,
 		ChainTypes::Testnet3 => TESTNET3_INITIAL_DIFFICULTY,
+		ChainTypes::Testnet4 => TESTNET4_INITIAL_DIFFICULTY,
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
+	}
+}
+/// Initial mining secondary scale
+pub fn initial_graph_weight() -> u32 {
+	let param_ref = CHAIN_TYPE.read().unwrap();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => TESTING_INITIAL_GRAPH_WEIGHT,
+		ChainTypes::UserTesting => TESTING_INITIAL_GRAPH_WEIGHT,
+		ChainTypes::Testnet1 => TESTING_INITIAL_GRAPH_WEIGHT,
+		ChainTypes::Testnet2 => TESTING_INITIAL_GRAPH_WEIGHT,
+		ChainTypes::Testnet3 => TESTING_INITIAL_GRAPH_WEIGHT,
+		ChainTypes::Testnet4 => graph_weight(SECOND_POW_EDGE_BITS) as u32,
+		ChainTypes::Mainnet => graph_weight(SECOND_POW_EDGE_BITS) as u32,
 	}
 }
 
@@ -229,6 +247,7 @@ pub fn is_production_mode() -> bool {
 	ChainTypes::Testnet1 == *param_ref
 		|| ChainTypes::Testnet2 == *param_ref
 		|| ChainTypes::Testnet3 == *param_ref
+		|| ChainTypes::Testnet4 == *param_ref
 		|| ChainTypes::Mainnet == *param_ref
 }
 
@@ -241,9 +260,9 @@ pub fn get_genesis_nonce() -> u64 {
 	match *param_ref {
 		// won't make a difference
 		ChainTypes::AutomatedTesting => 0,
-		// Magic nonce for current genesis block at cuckoo16
+		// Magic nonce for current genesis block at cuckatoo15
 		ChainTypes::UserTesting => 27944,
-		// Magic nonce for genesis block for testnet2 (cuckoo30)
+		// Magic nonce for genesis block for testnet2 (cuckatoo29)
 		_ => panic!("Pre-set"),
 	}
 }
@@ -252,14 +271,13 @@ pub fn get_genesis_nonce() -> u64 {
 /// vector and pads if needed (which will) only be needed for the first few
 /// blocks after genesis
 
-pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<Result<(u64, Difficulty), TargetError>>
+pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<HeaderInfo>
 where
-	T: IntoIterator<Item = Result<(u64, Difficulty), TargetError>>,
+	T: IntoIterator<Item = HeaderInfo>,
 {
 	// Convert iterator to vector, so we can append to it if necessary
-	let needed_block_count = (MEDIAN_TIME_WINDOW + DIFFICULTY_ADJUST_WINDOW) as usize;
-	let mut last_n: Vec<Result<(u64, Difficulty), TargetError>> =
-		cursor.into_iter().take(needed_block_count).collect();
+	let needed_block_count = DIFFICULTY_ADJUST_WINDOW as usize + 1;
+	let mut last_n: Vec<HeaderInfo> = cursor.into_iter().take(needed_block_count).collect();
 
 	// Sort blocks from earliest to latest (to keep conceptually easier)
 	last_n.reverse();
@@ -269,16 +287,17 @@ where
 	let block_count_difference = needed_block_count - last_n.len();
 	if block_count_difference > 0 {
 		// Collect any real data we have
-		let mut live_intervals: Vec<(u64, Difficulty)> = last_n
+		let mut live_intervals: Vec<HeaderInfo> = last_n
 			.iter()
-			.map(|b| (b.clone().unwrap().0, b.clone().unwrap().1))
+			.map(|b| HeaderInfo::from_ts_diff(b.timestamp, b.difficulty))
 			.collect();
 		for i in (1..live_intervals.len()).rev() {
 			// prevents issues with very fast automated test chains
-			if live_intervals[i - 1].0 > live_intervals[i].0 {
-				live_intervals[i].0 = 0;
+			if live_intervals[i - 1].timestamp > live_intervals[i].timestamp {
+				live_intervals[i].timestamp = 0;
 			} else {
-				live_intervals[i].0 = live_intervals[i].0 - live_intervals[i - 1].0;
+				live_intervals[i].timestamp =
+					live_intervals[i].timestamp - live_intervals[i - 1].timestamp;
 			}
 		}
 		// Remove genesis "interval"
@@ -286,16 +305,16 @@ where
 			live_intervals.remove(0);
 		} else {
 			//if it's just genesis, adjust the interval
-			live_intervals[0].0 = BLOCK_TIME_SEC;
+			live_intervals[0].timestamp = BLOCK_TIME_SEC;
 		}
 		let mut interval_index = live_intervals.len() - 1;
-		let mut last_ts = last_n.first().as_ref().unwrap().as_ref().unwrap().0;
-		let last_diff = live_intervals[live_intervals.len() - 1].1;
+		let mut last_ts = last_n.first().unwrap().timestamp;
+		let last_diff = live_intervals[live_intervals.len() - 1].difficulty;
 		// fill in simulated blocks with values from the previous real block
 
 		for _ in 0..block_count_difference {
-			last_ts = last_ts.saturating_sub(live_intervals[live_intervals.len() - 1].0);
-			last_n.insert(0, Ok((last_ts, last_diff.clone())));
+			last_ts = last_ts.saturating_sub(live_intervals[live_intervals.len() - 1].timestamp);
+			last_n.insert(0, HeaderInfo::from_ts_diff(last_ts, last_diff.clone()));
 			interval_index = match interval_index {
 				0 => live_intervals.len() - 1,
 				_ => interval_index - 1,

@@ -12,16 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// Types for a Cuckoo proof of work and its encapsulation as a fully usable
+/// Types for a Cuck(at)oo proof of work and its encapsulation as a fully usable
 /// proof of work within a block header.
-use std::cmp::max;
+use std::cmp::{min,max};
 use std::ops::{Add, Div, Mul, Sub};
 use std::{fmt, iter};
 
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use consensus::SECOND_POW_SIZESHIFT;
+use consensus::{graph_weight, SECOND_POW_EDGE_BITS};
 use core::hash::Hashed;
 use global;
 use ser::{self, Readable, Reader, Writeable, Writer};
@@ -39,7 +39,6 @@ where
 	fn new(
 		edge_bits: u8,
 		proof_size: usize,
-		easiness_pct: u32,
 		max_sols: u32,
 	) -> Result<Box<Self>, Error>;
 	/// Sets the header along with an optional nonce at the end
@@ -81,24 +80,25 @@ impl Difficulty {
 		Difficulty { num: max(num, 1) }
 	}
 
-	/// Computes the difficulty from a hash. Divides the maximum target by the
-	/// provided hash and applies the Cuckoo sizeshift adjustment factor (see
-	/// https://lists.launchpad.net/mimblewimble/msg00494.html).
-	pub fn from_proof_adjusted(proof: &Proof) -> Difficulty {
-		// Adjust the difficulty based on a 2^(N-M)*(N-1) factor, with M being
-		// the minimum sizeshift and N the provided sizeshift
-		let shift = proof.cuckoo_sizeshift;
-		let adjust_factor = (1 << (shift - global::ref_sizeshift()) as u64) * (shift as u64 - 1);
+	/// Compute difficulty scaling factor for graph defined by 2 * 2^edge_bits * edge_bits bits
+	pub fn scale(edge_bits: u8) -> u64 {
+		(2 << (edge_bits - global::base_edge_bits()) as u64) * (edge_bits as u64)
+	}
 
-		Difficulty::from_num(proof.raw_difficulty() * adjust_factor)
+	/// Computes the difficulty from a hash. Divides the maximum target by the
+	/// provided hash and applies the Cuck(at)oo size adjustment factor (see
+	/// https://lists.launchpad.net/mimblewimble/msg00494.html).
+	fn from_proof_adjusted(proof: &Proof) -> Difficulty {
+		// scale with natural scaling factor
+		Difficulty::from_num(proof.scaled_difficulty(graph_weight(proof.edge_bits)))
 	}
 
 	/// Same as `from_proof_adjusted` but instead of an adjustment based on
 	/// cycle size, scales based on a provided factor. Used by dual PoW system
 	/// to scale one PoW against the other.
-	pub fn from_proof_scaled(proof: &Proof, scaling: u64) -> Difficulty {
+	fn from_proof_scaled(proof: &Proof, scaling: u32) -> Difficulty {
 		// Scaling between 2 proof of work algos
-		Difficulty::from_num(proof.raw_difficulty() * scaling)
+		Difficulty::from_num(proof.scaled_difficulty(scaling as u64))
 	}
 
 	/// Converts the difficulty into a u64
@@ -219,7 +219,7 @@ pub struct ProofOfWork {
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
 	/// Difficulty scaling factor between the different proofs of work
-	pub scaling_difficulty: u64,
+	pub scaling_difficulty: u32,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Proof of work data.
@@ -240,13 +240,9 @@ impl Default for ProofOfWork {
 
 impl ProofOfWork {
 	/// Read implementation, can't define as trait impl as we need a version
-	pub fn read(ver: u16, reader: &mut Reader) -> Result<ProofOfWork, ser::Error> {
-		let (total_difficulty, scaling_difficulty) = if ver == 1 {
-			// read earlier in the header on older versions
-			(Difficulty::one(), 1)
-		} else {
-			(Difficulty::read(reader)?, reader.read_u64()?)
-		};
+	pub fn read(_ver: u16, reader: &mut Reader) -> Result<ProofOfWork, ser::Error> {
+		let total_difficulty = Difficulty::read(reader)?;
+		let scaling_difficulty = reader.read_u32()?;
 		let nonce = reader.read_u64()?;
 		let proof = Proof::read(reader)?;
 		Ok(ProofOfWork {
@@ -269,14 +265,12 @@ impl ProofOfWork {
 	}
 
 	/// Write the pre-hash portion of the header
-	pub fn write_pre_pow<W: Writer>(&self, ver: u16, writer: &mut W) -> Result<(), ser::Error> {
-		if ver > 1 {
-			ser_multiwrite!(
-				writer,
-				[write_u64, self.total_difficulty.to_num()],
-				[write_u64, self.scaling_difficulty]
-			);
-		}
+	pub fn write_pre_pow<W: Writer>(&self, _ver: u16, writer: &mut W) -> Result<(), ser::Error> {
+		ser_multiwrite!(
+			writer,
+			[write_u64, self.total_difficulty.to_num()],
+			[write_u32, self.scaling_difficulty]
+		);
 		Ok(())
 	}
 
@@ -284,23 +278,38 @@ impl ProofOfWork {
 	pub fn to_difficulty(&self) -> Difficulty {
 		// 2 proof of works, Cuckoo29 (for now) and Cuckoo30+, which are scaled
 		// differently (scaling not controlled for now)
-		if self.proof.cuckoo_sizeshift == SECOND_POW_SIZESHIFT {
+		if self.proof.edge_bits == SECOND_POW_EDGE_BITS {
 			Difficulty::from_proof_scaled(&self.proof, self.scaling_difficulty)
 		} else {
 			Difficulty::from_proof_adjusted(&self.proof)
 		}
 	}
 
-	/// The shift used for the cuckoo cycle size on this proof
-	pub fn cuckoo_sizeshift(&self) -> u8 {
-		self.proof.cuckoo_sizeshift
+	/// The edge_bits used for the cuckoo cycle size on this proof
+	pub fn edge_bits(&self) -> u8 {
+		self.proof.edge_bits
+	}
+
+	/// Whether this proof of work is for the primary algorithm (as opposed
+	/// to secondary). Only depends on the edge_bits at this time.
+	pub fn is_primary(&self) -> bool {
+		// 2 conditions are redundant right now but not necessarily in
+		// the future
+		self.proof.edge_bits != SECOND_POW_EDGE_BITS
+			&& self.proof.edge_bits >= global::min_edge_bits()
+	}
+
+	/// Whether this proof of work is for the secondary algorithm (as opposed
+	/// to primary). Only depends on the edge_bits at this time.
+	pub fn is_secondary(&self) -> bool {
+		self.proof.edge_bits == SECOND_POW_EDGE_BITS
 	}
 }
 
-/// A Cuckoo Cycle proof of work, consisting of the shift to get the graph
-/// size (i.e. 31 for Cuckoo31 with a 2^31 or 1<<31 graph size) and the nonces
-/// of the graph solution. While being expressed as u64 for simplicity, each
-/// nonce is strictly less than half the cycle size (i.e. <2^30 for Cuckoo 31).
+/// A Cuck(at)oo Cycle proof of work, consisting of the edge_bits to get the graph
+/// size (i.e. the 2-log of the number of edges) and the nonces
+/// of the graph solution. While being expressed as u64 for simplicity,
+/// nonces a.k.a. edge indices range from 0 to (1 << edge_bits) - 1
 ///
 /// The hash of the `Proof` is the hash of its packed nonces when serializing
 /// them at their exact bit size. The resulting bit sequence is padded to be
@@ -309,14 +318,14 @@ impl ProofOfWork {
 #[derive(Clone, PartialOrd, PartialEq)]
 pub struct Proof {
 	/// Power of 2 used for the size of the cuckoo graph
-	pub cuckoo_sizeshift: u8,
+	pub edge_bits: u8,
 	/// The nonces
 	pub nonces: Vec<u64>,
 }
 
 impl fmt::Debug for Proof {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "Cuckoo{}(", self.cuckoo_sizeshift)?;
+		write!(f, "Cuckoo{}(", self.edge_bits)?;
 		for (i, val) in self.nonces[..].iter().enumerate() {
 			write!(f, "{:x}", val)?;
 			if i < self.nonces.len() - 1 {
@@ -330,11 +339,11 @@ impl fmt::Debug for Proof {
 impl Eq for Proof {}
 
 impl Proof {
-	/// Builds a proof with provided nonces at default sizeshift
+	/// Builds a proof with provided nonces at default edge_bits
 	pub fn new(mut in_nonces: Vec<u64>) -> Proof {
 		in_nonces.sort();
 		Proof {
-			cuckoo_sizeshift: global::min_sizeshift(),
+			edge_bits: global::min_edge_bits(),
 			nonces: in_nonces,
 		}
 	}
@@ -342,7 +351,7 @@ impl Proof {
 	/// Builds a proof with all bytes zeroed out
 	pub fn zero(proof_size: usize) -> Proof {
 		Proof {
-			cuckoo_sizeshift: global::min_sizeshift(),
+			edge_bits: global::min_edge_bits(),
 			nonces: vec![0; proof_size],
 		}
 	}
@@ -351,17 +360,17 @@ impl Proof {
 	/// needed so that tests that ignore POW
 	/// don't fail due to duplicate hashes
 	pub fn random(proof_size: usize) -> Proof {
-		let sizeshift = global::min_sizeshift();
-		let nonce_mask = (1 << (sizeshift - 1)) - 1;
+		let edge_bits = global::min_edge_bits();
+		let nonce_mask = (1 << edge_bits) - 1;
 		let mut rng = thread_rng();
-		// force the random num to be within sizeshift bits
+		// force the random num to be within edge_bits bits
 		let mut v: Vec<u64> = iter::repeat(())
 			.map(|()| (rng.gen::<u32>() & nonce_mask) as u64)
 			.take(proof_size)
 			.collect();
 		v.sort();
 		Proof {
-			cuckoo_sizeshift: global::min_sizeshift(),
+			edge_bits: global::min_edge_bits(),
 			nonces: v,
 		}
 	}
@@ -371,21 +380,22 @@ impl Proof {
 		self.nonces.len()
 	}
 
-	/// Difficulty achieved by this proof
-	fn raw_difficulty(&self) -> u64 {
-		<u64>::max_value() / self.hash().to_u64()
+	/// Difficulty achieved by this proof with given scaling factor
+	fn scaled_difficulty(&self, scale: u64) -> u64 {
+		let diff = ((scale as u128) << 64) / (self.hash().to_u64() as u128);
+		min(diff, <u64>::max_value() as u128) as u64
 	}
 }
 
 impl Readable for Proof {
 	fn read(reader: &mut Reader) -> Result<Proof, ser::Error> {
-		let cuckoo_sizeshift = reader.read_u8()?;
-		if cuckoo_sizeshift == 0 || cuckoo_sizeshift > 64 {
+		let edge_bits = reader.read_u8()?;
+		if edge_bits == 0 || edge_bits > 64 {
 			return Err(ser::Error::CorruptedData);
 		}
 
 		let mut nonces = Vec::with_capacity(global::proofsize());
-		let nonce_bits = cuckoo_sizeshift as usize - 1;
+		let nonce_bits = edge_bits as usize;
 		let bytes_len = BitVec::bytes_len(nonce_bits * global::proofsize());
 		let bits = reader.read_fixed_bytes(bytes_len)?;
 		let bitvec = BitVec { bits };
@@ -399,7 +409,7 @@ impl Readable for Proof {
 			nonces.push(nonce);
 		}
 		Ok(Proof {
-			cuckoo_sizeshift,
+			edge_bits,
 			nonces,
 		})
 	}
@@ -408,10 +418,9 @@ impl Readable for Proof {
 impl Writeable for Proof {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
-			writer.write_u8(self.cuckoo_sizeshift)?;
+			writer.write_u8(self.edge_bits)?;
 		}
-
-		let nonce_bits = self.cuckoo_sizeshift as usize - 1;
+		let nonce_bits = self.edge_bits as usize;
 		let mut bitvec = BitVec::new(nonce_bits * global::proofsize());
 		for (n, nonce) in self.nonces.iter().enumerate() {
 			for bit in 0..nonce_bits {

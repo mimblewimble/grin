@@ -79,13 +79,15 @@ where
 }
 
 pub fn set_header_nonce(header: Vec<u8>, nonce: Option<u32>) -> Result<[u64; 4], Error> {
-	let len = header.len();
-	let mut header = header.clone();
 	if let Some(n) = nonce {
+		let len = header.len();
+		let mut header = header.clone();
 		header.truncate(len - mem::size_of::<u32>());
 		header.write_u32::<LittleEndian>(n)?;
+		create_siphash_keys(header)
+	} else {
+		create_siphash_keys(header)
 	}
-	create_siphash_keys(header)
 }
 
 pub fn create_siphash_keys(header: Vec<u8>) -> Result<[u64; 4], Error> {
@@ -130,7 +132,7 @@ macro_rules! to_edge {
 }
 
 /// Utility struct to calculate commonly used Cuckoo parameters calculated
-/// from header, nonce, sizeshift, etc.
+/// from header, nonce, edge_bits, etc.
 pub struct CuckooParams<T>
 where
 	T: EdgeType,
@@ -139,7 +141,6 @@ where
 	pub proof_size: usize,
 	pub num_edges: u64,
 	pub siphash_keys: [u64; 4],
-	pub easiness: T,
 	pub edge_mask: T,
 }
 
@@ -147,46 +148,28 @@ impl<T> CuckooParams<T>
 where
 	T: EdgeType,
 {
-	/// Instantiates new params and calculate easiness, edge mask, etc
+	/// Instantiates new params and calculate edge mask, etc
 	pub fn new(
 		edge_bits: u8,
 		proof_size: usize,
-		easiness_pct: u32,
-		cuckatoo: bool,
 	) -> Result<CuckooParams<T>, Error> {
-		let num_edges = 1 << edge_bits;
-		let num_nodes = 2 * num_edges as u64;
-		let easiness = if cuckatoo {
-			to_u64!(easiness_pct) * num_nodes / 100
-		} else {
-			to_u64!(easiness_pct) * num_edges / 100
-		};
-		let edge_mask = if cuckatoo {
-			to_edge!(num_edges - 1)
-		} else {
-			to_edge!(num_edges / 2 - 1)
-		};
+		let num_edges = (1 as u64) << edge_bits;
+		let edge_mask = to_edge!(num_edges - 1);
 		Ok(CuckooParams {
-			siphash_keys: [0; 4],
-			easiness: to_edge!(easiness),
-			proof_size,
-			edge_mask,
-			num_edges,
 			edge_bits,
+			proof_size,
+			num_edges,
+			siphash_keys: [0; 4],
+			edge_mask,
 		})
 	}
 
 	/// Reset the main keys used for siphash from the header and nonce
 	pub fn reset_header_nonce(
 		&mut self,
-		mut header: Vec<u8>,
+		header: Vec<u8>,
 		nonce: Option<u32>,
 	) -> Result<(), Error> {
-		if let Some(n) = nonce {
-			let len = header.len();
-			header.truncate(len - mem::size_of::<u32>());
-			header.write_u32::<LittleEndian>(n)?;
-		}
 		self.siphash_keys = set_header_nonce(header, nonce)?;
 		Ok(())
 	}

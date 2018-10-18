@@ -59,6 +59,15 @@ pub fn to_key(prefix: u8, k: &mut Vec<u8>) -> Vec<u8> {
 	res
 }
 
+/// Build a db key from a prefix and a byte vector identifier and numeric identifier
+pub fn to_key_u64(prefix: u8, k: &mut Vec<u8>, val: u64) -> Vec<u8> {
+	let mut res = vec![];
+	res.push(prefix);
+	res.push(SEP);
+	res.append(k);
+	res.write_u64::<BigEndian>(val).unwrap();
+	res
+}
 /// Build a db key from a prefix and a numeric identifier.
 pub fn u64_to_key<'a>(prefix: u8, val: u64) -> Vec<u8> {
 	let mut u64_vec = vec![];

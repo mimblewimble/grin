@@ -201,7 +201,7 @@ impl TUIStatusListener for TUIStatusView {
 						),
 						format!(
 							"Cuckoo {} - Network Difficulty {}",
-							stats.mining_stats.cuckoo_size,
+							stats.mining_stats.edge_bits,
 							stats.mining_stats.network_difficulty.to_string()
 						),
 					)

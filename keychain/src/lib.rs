@@ -22,20 +22,21 @@ extern crate rand;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
-#[macro_use]
-extern crate slog;
 extern crate digest;
 extern crate hmac;
 extern crate ripemd160;
+extern crate serde_json;
 extern crate sha2;
+extern crate slog;
 extern crate uuid;
 
 mod base58;
-pub mod extkey;
 pub mod extkey_bip32;
 mod types;
 
 pub mod keychain;
+pub use extkey_bip32::ChildNumber;
 pub use keychain::ExtKeychain;
-pub use types::{BlindSum, BlindingFactor, Error, Identifier, Keychain, IDENTIFIER_SIZE};
+pub use types::{
+	BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain, IDENTIFIER_SIZE,
+};

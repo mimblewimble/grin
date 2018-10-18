@@ -185,7 +185,7 @@ fn needs_syncing(
 			// sum the last 5 difficulties to give us the threshold
 			let threshold = chain
 				.difficulty_iter()
-				.filter_map(|x| x.map(|(_, x)| x).ok())
+				.map(|x| x.difficulty)
 				.take(5)
 				.fold(Difficulty::zero(), |sum, val| sum + val);
 

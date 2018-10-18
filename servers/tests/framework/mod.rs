@@ -28,7 +28,8 @@ use std::ops::Deref;
 use std::sync::{Arc, Mutex};
 use std::{fs, thread, time};
 
-use wallet::{FileWallet, HTTPWalletClient, WalletConfig};
+use framework::keychain::Keychain;
+use wallet::{HTTPWalletClient, LMDBBackend, WalletConfig};
 
 /// Just removes all results from previous runs
 pub fn clean_all_output(test_name_dir: &str) {
@@ -269,8 +270,8 @@ impl LocalServerContainer {
 			//panic!("Error initializing wallet seed: {}", e);
 		}
 
-		let wallet: FileWallet<HTTPWalletClient, keychain::ExtKeychain> =
-			FileWallet::new(self.wallet_config.clone(), "", client).unwrap_or_else(|e| {
+		let wallet: LMDBBackend<HTTPWalletClient, keychain::ExtKeychain> =
+			LMDBBackend::new(self.wallet_config.clone(), "", client).unwrap_or_else(|e| {
 				panic!(
 					"Error creating wallet: {:?} Config: {:?}",
 					e, self.wallet_config
@@ -307,11 +308,12 @@ impl LocalServerContainer {
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let client = HTTPWalletClient::new(&config.check_node_api_http_addr, None);
-		let mut wallet = FileWallet::new(config.clone(), "", client)
+		let mut wallet = LMDBBackend::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
-		let _ = wallet::libwallet::internal::updater::refresh_outputs(&mut wallet);
-		wallet::libwallet::internal::updater::retrieve_info(&mut wallet).unwrap()
+		let parent_id = keychain::ExtKeychain::derive_key_id(2, 0, 0, 0, 0);
+		let _ = wallet::libwallet::internal::updater::refresh_outputs(&mut wallet, &parent_id);
+		wallet::libwallet::internal::updater::retrieve_info(&mut wallet, &parent_id).unwrap()
 	}
 
 	pub fn send_amount_to(
@@ -337,7 +339,7 @@ impl LocalServerContainer {
 		let max_outputs = 500;
 		let change_outputs = 1;
 
-		let mut wallet = FileWallet::new(config.clone(), "", client)
+		let mut wallet = LMDBBackend::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		let _ =
