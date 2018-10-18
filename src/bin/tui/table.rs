@@ -42,8 +42,13 @@
 //! A basic table view implementation for [cursive](https://crates.io/crates/cursive).
 
 #![deny(
-	missing_docs, missing_copy_implementations, trivial_casts, trivial_numeric_casts, unsafe_code,
-	unused_import_braces, unused_qualifications
+	missing_docs,
+	missing_copy_implementations,
+	trivial_casts,
+	trivial_numeric_casts,
+	unsafe_code,
+	unused_import_braces,
+	unused_qualifications
 )]
 
 // Crate Dependencies ---------------------------------------------------------
