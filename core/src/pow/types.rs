@@ -70,6 +70,11 @@ impl Difficulty {
 		Difficulty { num: 1 }
 	}
 
+	/// Difficulty unit, which is the graph weight of minimal graph
+	pub fn unit() -> Difficulty {
+		Difficulty { num: global::initial_graph_weight() }
+	}
+
 	/// Convert a `u32` into a `Difficulty`
 	pub fn from_num(num: u64) -> Difficulty {
 		// can't have difficulty lower than 1

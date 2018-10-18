@@ -383,36 +383,37 @@ fn next_target_adjustment() {
 	let cur_time = Utc::now().timestamp() as u64;
 
 	let diff_one = Difficulty::one();
+	let diff_unit = Difficulty::unit();
 	assert_eq!(
 		next_difficulty(1, vec![HeaderInfo::from_ts_diff(cur_time, diff_one)]),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
+		HeaderInfo::from_diff_scaling(diff_one, diff_unit),
 	);
 	assert_eq!(
 		next_difficulty(1, vec![HeaderInfo::new(cur_time, diff_one, 10, true)]),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
+		HeaderInfo::from_diff_scaling(diff_one, 1),
 	);
 
 	let mut hi = HeaderInfo::from_diff_scaling(diff_one, 1);
 	assert_eq!(
 		next_difficulty(1, repeat(60, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
+		HeaderInfo::from_diff_scaling(diff_one, 1),
 	);
 	hi.is_secondary = true;
 	assert_eq!(
 		next_difficulty(1, repeat(60, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
+		HeaderInfo::from_diff_scaling(diff_one, 1),
 	);
 	hi.secondary_scaling = 100;
 	assert_eq!(
 		next_difficulty(1, repeat(60, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 96),
+		HeaderInfo::from_diff_scaling(diff_one, 96),
 	);
 
 	// Check we don't get stuck on difficulty 1
 	let mut hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 1);
 	assert_ne!(
 		next_difficulty(1, repeat(1, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)).difficulty,
-		Difficulty::one()
+		diff_one
 	);
 
 	// just enough data, right interval, should stay constant

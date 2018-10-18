@@ -158,18 +158,15 @@ pub fn graph_weight(edge_bits: u8) -> u64 {
 	(2 << (edge_bits - global::base_edge_bits()) as u64) * (edge_bits as u64)
 }
 
-/// minimum possible difficulty equal to graph_weight(SECOND_POW_EDGE_BITS)
-pub const MIN_DIFFICULTY: u64 =
+/// unit difficulty, equal to graph_weight(SECOND_POW_EDGE_BITS)
+pub const UNIT_DIFFICULTY: u64 =
 	((2 as u64) << (SECOND_POW_EDGE_BITS - BASE_EDGE_BITS)) * (SECOND_POW_EDGE_BITS as u64);
 
 /// The initial difficulty at launch. This should be over-estimated
 /// and difficulty should come down at launch rather than up
 /// Currently grossly over-estimated at 10% of current
 /// ethereum GPUs (assuming 1GPU can solve a block at diff 1 in one block interval)
-/// FOR MAINNET, use
-/// pub const INITIAL_DIFFICULTY: u64 = 1_000_000 * MIN_DIFFICULTY;
-/// Pick MUCH more modest value for TESTNET4:
-pub const INITIAL_DIFFICULTY: u64 = 1_000 * MIN_DIFFICULTY;
+pub const INITIAL_DIFFICULTY: u64 = 1_000_000 * UNIT_DIFFICULTY;
 
 /// Consensus errors
 #[derive(Clone, Debug, Eq, PartialEq, Fail)]
