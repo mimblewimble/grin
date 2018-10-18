@@ -180,7 +180,7 @@ impl Peer {
 			let now = Utc::now().timestamp_millis();
 			let allowed_diff = info.last_seen.timestamp_millis() + global::DEAD_PEER_KICK_TIME;
 
-			return now > allowed_diff
+			return now > allowed_diff;
 		}
 
 		false
