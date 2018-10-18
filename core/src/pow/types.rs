@@ -21,7 +21,7 @@ use std::{fmt, iter};
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use consensus::{graph_weight, SECOND_POW_EDGE_BITS};
+use consensus::{graph_weight, SECOND_POW_EDGE_BITS, MIN_DIFFICULTY};
 use core::hash::Hashed;
 use global;
 use ser::{self, Readable, Reader, Writeable, Writer};
@@ -70,9 +70,14 @@ impl Difficulty {
 		Difficulty { num: 1 }
 	}
 
+	/// Difficulty of MIN_DIFFICULTY
+	pub fn min() -> Difficulty {
+		Difficulty { num: MIN_DIFFICULTY }
+	}
+
 	/// Difficulty unit, which is the graph weight of minimal graph
 	pub fn unit() -> Difficulty {
-		Difficulty { num: global::initial_graph_weight() }
+		Difficulty { num: global::initial_graph_weight() as u64 }
 	}
 
 	/// Convert a `u32` into a `Difficulty`

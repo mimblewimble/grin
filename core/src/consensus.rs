@@ -158,6 +158,9 @@ pub fn graph_weight(edge_bits: u8) -> u64 {
 	(2 << (edge_bits - global::base_edge_bits()) as u64) * (edge_bits as u64)
 }
 
+/// minimum difficulty to avoid getting stuck when trying to increase subject to dampening
+pub const MIN_DIFFICULTY: u64 = DAMP_FACTOR;
+
 /// unit difficulty, equal to graph_weight(SECOND_POW_EDGE_BITS)
 pub const UNIT_DIFFICULTY: u64 =
 	((2 as u64) << (SECOND_POW_EDGE_BITS - BASE_EDGE_BITS)) * (SECOND_POW_EDGE_BITS as u64);
@@ -218,7 +221,7 @@ impl HeaderInfo {
 			timestamp,
 			difficulty,
 			secondary_scaling: global::initial_graph_weight(),
-			is_secondary: false,
+			is_secondary: true,
 		}
 	}
 
@@ -229,17 +232,17 @@ impl HeaderInfo {
 			timestamp: 1,
 			difficulty,
 			secondary_scaling,
-			is_secondary: false,
+			is_secondary: true,
 		}
 	}
 }
 
-/// TODO: Doc
+/// Move value linearly toward a goal
 pub fn damp(actual: u64, goal: u64, damp_factor: u64) -> u64 {
 	(1 * actual + (damp_factor - 1) * goal) / damp_factor
 }
 
-/// TODO: Doc
+/// limit value to be within some factor from a goal
 pub fn clamp(actual: u64, goal: u64, clamp_factor: u64) -> u64 {
 	max(goal / clamp_factor, min(actual, goal * clamp_factor))
 }
@@ -287,7 +290,8 @@ where
 		BLOCK_TIME_WINDOW,
 		CLAMP_FACTOR,
 	);
-	let difficulty = max(1, diff_sum * BLOCK_TIME_SEC / adj_ts);
+	// minimum of 3 avoids getting stuck due to dampening
+	let difficulty = max(3, diff_sum * BLOCK_TIME_SEC / adj_ts);
 
 	HeaderInfo::from_diff_scaling(Difficulty::from_num(difficulty), sec_pow_scaling)
 }
@@ -316,7 +320,8 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &Vec<HeaderInfo>) -> u32 {
 	);
 	let scale = scale_sum * target_pct / adj_count;
 
-	max(1, min(scale, MAX_SECONDARY_SCALING)) as u32
+	// minimum of 3 avoids getting stuck due to dampening
+	max(3, min(scale, MAX_SECONDARY_SCALING)) as u32
 }
 
 /// Consensus rule that collections of items are sorted lexicographically.
