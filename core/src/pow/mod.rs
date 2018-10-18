@@ -141,12 +141,12 @@ mod test {
 		b.header.pow.nonce = 485;
 		pow_size(
 			&mut b.header,
-			Difficulty::one(),
+			Difficulty::min(),
 			global::proofsize(),
 			global::min_edge_bits(),
 		).unwrap();
 		assert!(b.header.pow.nonce != 310);
-		assert!(b.header.pow.to_difficulty() >= Difficulty::one());
+		assert!(b.header.pow.to_difficulty() >= Difficulty::min());
 		assert!(verify_size(&b.header, global::min_edge_bits()).is_ok());
 	}
 }
