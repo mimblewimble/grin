@@ -26,7 +26,7 @@ You can get it for free from [Let's Encrypt](https://letsencrypt.org/). To simpl
 Go to [Certbot home page](https://certbot.eff.org/), choose I'm using `None of the above` and your OS (eg `Ubuntu 18.04` which will be used as an example). You will be redirected to a page with instructions like [steps for Ubuntu](https://certbot.eff.org/lets-encrypt/ubuntubionic-other). Follow instructions from `Install` section. As result you should have `certbot` installed.
 
 ### Obtain certificate
-If you have experince with `certboot` feel free to use any type of the challenge, this guide covers the simplest case of HTTP challenge. For that you need to have a web server listening on port `80`, which requires running it as root in the simplest case. So there is no value to implement certbot authenticator in Grin even it runs web server. We will use a server provided by certbot. **Make sure you have port 80 open**
+If you have experince with `certboot` feel free to use any type of challenge. This guide covers the simplest case of HTTP challenge. For this you need to have a web server listening on port `80`, which requires running it as root in the simplest case. We will use the server provided by certbot. **Make sure you have port 80 open**
 
 ```
 	sudo certbot certonly --standalone -d grin1.example.com
