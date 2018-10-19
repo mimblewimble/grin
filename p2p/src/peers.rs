@@ -492,6 +492,10 @@ impl Peers {
 		// Delete peers from the current list of peers
 		let mut peers = self.peers.write().unwrap();
 		for peer in peers_to_remove {
+			if let Some(peer) = peers.get(&peer.addr) {
+				peer.stop();
+			}
+
 			peers.remove(&peer.addr);
 
 			debug!(LOGGER, "remove_expired peer {:?} removed", &peer.addr)
