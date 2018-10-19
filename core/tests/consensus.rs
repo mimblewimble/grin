@@ -400,6 +400,12 @@ fn next_target_adjustment() {
 		Difficulty::from_num(10000)
 	);
 
+	// check pre difficulty_data_to_vector effect on retargetting
+	assert_eq!(
+		next_difficulty(1, vec![HeaderInfo::from_ts_diff(42, hi.difficulty)]).difficulty,
+		Difficulty::from_num(14913)
+	);
+
 	// checking averaging works
 	hi.difficulty = Difficulty::from_num(500);
 	let sec = DIFFICULTY_ADJUST_WINDOW / 2;

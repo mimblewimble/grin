@@ -45,7 +45,7 @@ pub fn genesis_testnet1() -> core::Block {
 		timestamp: Utc.ymd(2017, 11, 16).and_hms(20, 0, 0),
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::min(),
-			scaling_difficulty: 1,
+			secondary_scaling: 1,
 			nonce: 28205,
 			proof: Proof::new(vec![
 				0x21e, 0x7a2, 0xeae, 0x144e, 0x1b1c, 0x1fbd, 0x203a, 0x214b, 0x293b, 0x2b74,
@@ -67,7 +67,7 @@ pub fn genesis_testnet2() -> core::Block {
 		timestamp: Utc.ymd(2018, 3, 26).and_hms(16, 0, 0),
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
-			scaling_difficulty: 1,
+			secondary_scaling: 1,
 			nonce: 1060,
 			proof: Proof::new(vec![
 				0x1940730, 0x333b9d0, 0x4739d6f, 0x4c6cfb1, 0x6e3d6c3, 0x74408a3, 0x7ba2bd2,
@@ -90,7 +90,7 @@ pub fn genesis_testnet3() -> core::Block {
 		timestamp: Utc.ymd(2018, 7, 8).and_hms(18, 0, 0),
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
-			scaling_difficulty: 1,
+			secondary_scaling: 1,
 			nonce: 4956988373127691,
 			proof: Proof::new(vec![
 				0xa420dc, 0xc8ffee, 0x10e433e, 0x1de9428, 0x2ed4cea, 0x52d907b, 0x5af0e3f,
@@ -114,7 +114,7 @@ pub fn genesis_testnet4() -> core::Block {
 		timestamp: Utc.ymd(2018, 10, 17).and_hms(20, 0, 0),
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
-			scaling_difficulty: global::initial_graph_weight(),
+			secondary_scaling: global::initial_graph_weight(),
 			nonce: 8612241555342799290,
 			proof: Proof::new(vec![
 				0x46f3b4, 0x1135f8c, 0x1a1596f, 0x1e10f71, 0x41c03ea, 0x63fe8e7, 0x65af34f,
@@ -137,7 +137,7 @@ pub fn genesis_main() -> core::Block {
 		timestamp: Utc.ymd(2018, 8, 14).and_hms(0, 0, 0),
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
-			scaling_difficulty: 1,
+			secondary_scaling: 1,
 			nonce: global::get_genesis_nonce(),
 			proof: Proof::zero(consensus::PROOFSIZE),
 		},

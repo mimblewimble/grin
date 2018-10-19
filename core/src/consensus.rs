@@ -221,7 +221,7 @@ impl HeaderInfo {
 			timestamp,
 			difficulty,
 			secondary_scaling: global::initial_graph_weight(),
-			is_secondary: true,
+			is_secondary: false,
 		}
 	}
 
@@ -232,7 +232,7 @@ impl HeaderInfo {
 			timestamp: 1,
 			difficulty,
 			secondary_scaling,
-			is_secondary: true,
+			is_secondary: false,
 		}
 	}
 }

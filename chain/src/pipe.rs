@@ -441,7 +441,13 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			return Err(ErrorKind::WrongTotalDifficulty.into());
 		}
 		// check the secondary PoW scaling factor if applicable
-		if header.pow.scaling_difficulty != next_header_info.secondary_scaling {
+		if header.pow.secondary_scaling != next_header_info.secondary_scaling {
+			info!(
+				LOGGER,
+				"validate_header: header secondary scaling {} != {}",
+				header.pow.secondary_scaling,
+				next_header_info.secondary_scaling
+			);
 			return Err(ErrorKind::InvalidScaling.into());
 		}
 	}

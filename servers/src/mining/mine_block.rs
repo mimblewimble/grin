@@ -132,7 +132,7 @@ fn build_block(
 	b.validate(&head.total_kernel_offset, verifier_cache)?;
 
 	b.header.pow.nonce = thread_rng().gen();
-	b.header.pow.scaling_difficulty = difficulty.secondary_scaling;
+	b.header.pow.secondary_scaling = difficulty.secondary_scaling;
 	b.header.timestamp = DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(now_sec, 0), Utc);
 
 	let b_difficulty = (b.header.total_difficulty() - head.total_difficulty()).to_num();

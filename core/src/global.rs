@@ -279,47 +279,26 @@ where
 	let needed_block_count = DIFFICULTY_ADJUST_WINDOW as usize + 1;
 	let mut last_n: Vec<HeaderInfo> = cursor.into_iter().take(needed_block_count).collect();
 
-	// Sort blocks from earliest to latest (to keep conceptually easier)
-	last_n.reverse();
 	// Only needed just after blockchain launch... basically ensures there's
 	// always enough data by simulating perfectly timed pre-genesis
 	// blocks at the genesis difficulty as needed.
-	let block_count_difference = needed_block_count - last_n.len();
-	if block_count_difference > 0 {
-		// Collect any real data we have
-		let mut live_intervals: Vec<HeaderInfo> = last_n
-			.iter()
-			.map(|b| HeaderInfo::from_ts_diff(b.timestamp, b.difficulty))
-			.collect();
-		for i in (1..live_intervals.len()).rev() {
-			// prevents issues with very fast automated test chains
-			if live_intervals[i - 1].timestamp > live_intervals[i].timestamp {
-				live_intervals[i].timestamp = 0;
-			} else {
-				live_intervals[i].timestamp =
-					live_intervals[i].timestamp - live_intervals[i - 1].timestamp;
-			}
-		}
-		// Remove genesis "interval"
-		if live_intervals.len() > 1 {
-			live_intervals.remove(0);
+	let n = last_n.len();
+	if needed_block_count > n {
+		let last_ts_delta = if n > 1 {
+			last_n[0].timestamp - last_n[1].timestamp
 		} else {
-			//if it's just genesis, adjust the interval
-			live_intervals[0].timestamp = BLOCK_TIME_SEC;
-		}
-		let mut interval_index = live_intervals.len() - 1;
-		let mut last_ts = last_n.first().unwrap().timestamp;
-		let last_diff = live_intervals[live_intervals.len() - 1].difficulty;
-		// fill in simulated blocks with values from the previous real block
+			BLOCK_TIME_SEC
+		};
+		let last_diff = last_n[0].difficulty;
 
-		for _ in 0..block_count_difference {
-			last_ts = last_ts.saturating_sub(live_intervals[live_intervals.len() - 1].timestamp);
-			last_n.insert(0, HeaderInfo::from_ts_diff(last_ts, last_diff.clone()));
-			interval_index = match interval_index {
-				0 => live_intervals.len() - 1,
-				_ => interval_index - 1,
-			};
+		// fill in simulated blocks with values from the previous real block
+		let mut last_ts = last_n.last().unwrap().timestamp;
+		for _ in n..needed_block_count {
+			last_ts = last_ts.saturating_sub(last_ts_delta);
+			last_n.push(HeaderInfo::from_ts_diff(last_ts, last_diff.clone()));
 		}
 	}
+	last_n.reverse();
+	assert_eq!(last_n.len(), needed_block_count);
 	last_n
 }

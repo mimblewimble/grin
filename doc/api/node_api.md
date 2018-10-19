@@ -82,7 +82,7 @@ Optionally return results as "compact blocks" by passing `?compact` query.
     | - edge_bits           | number   | Size of the cuckoo graph (2_log of number of edges)                         |
     | - cuckoo_solution     | []number | The Cuckoo solution for this block                                          |
     | - total_difficulty    | number   | Total accumulated difficulty since genesis block                            |
-    | - scaling_difficulty  | number   | Difficulty scaling factor between the different proofs of work              |
+    | - secondary_scaling   | number   | Variable difficulty scaling factor for secondary proof of work              |
     | - total_kernel_offset | string   | Total kernel offset since genesis block                                     |
     | inputs                | []string | Input transactions                                                          |
     | outputs               | []object | Outputs transactions                                                        |
