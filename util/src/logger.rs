@@ -29,10 +29,10 @@ use log4rs::append::rolling_file::{
 	policy::compound::trigger::size::SizeTrigger, policy::compound::CompoundPolicy,
 	RollingFileAppender,
 };
-use log4rs::filter::threshold::ThresholdFilter;
 use log4rs::append::Append;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
+use log4rs::filter::threshold::ThresholdFilter;
 
 fn convert_log_level(in_level: &LogLevel) -> LevelFilter {
 	match *in_level {
@@ -80,7 +80,11 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 
 		if c.log_to_stdout {
 			let filter = Box::new(ThresholdFilter::new(level_stdout));
-			appenders.push(Appender::builder().filter(filter).build("stdout", Box::new(stdout)));
+			appenders.push(
+				Appender::builder()
+					.filter(filter)
+					.build("stdout", Box::new(stdout)),
+			);
 		}
 
 		if c.log_to_file {
@@ -119,13 +123,18 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 
 		let config = Config::builder()
 			.appenders(appenders)
-			.build(root.appender("stdout").appender("file").build(level_minimum))
-			.unwrap();
+			.build(
+				root.appender("stdout")
+					.appender("file")
+					.build(level_minimum),
+			).unwrap();
 
 		let _ = log4rs::init_config(config).unwrap();
 
-		warn!("log4rs is initialized, file level: {:?}, stdout level: {:?}, min. level: {:?}",
-			  level_file, level_stdout, level_minimum);
+		warn!(
+			"log4rs is initialized, file level: {:?}, stdout level: {:?}, min. level: {:?}",
+			level_file, level_stdout, level_minimum
+		);
 
 		// Logger configuration successfully injected into LOGGING_CONFIG...
 		let mut was_init_ref = WAS_INIT.lock();
