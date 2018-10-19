@@ -22,8 +22,8 @@ use rand::{thread_rng, Rng};
 
 use chrono::prelude::*;
 use core::core;
-use core::global;
 use core::core::hash::{Hash, Hashed};
+use core::global;
 use core::pow::Difficulty;
 
 use peer::Peer;
@@ -490,8 +490,7 @@ impl Peers {
 		});
 
 		// Delete peers from the current list of peers
-		let mut peers = self.peers.write()
-			.unwrap();
+		let mut peers = self.peers.write().unwrap();
 		for peer in peers_to_remove {
 			peers.remove(&peer.addr);
 
@@ -632,7 +631,7 @@ impl NetAdapter for Peers {
 				flags: State::Healthy,
 				last_banned: 0,
 				ban_reason: ReasonForBan::None,
-				last_connected: Utc::now().timestamp()
+				last_connected: Utc::now().timestamp(),
 			};
 			if let Err(e) = self.save_peer(&peer) {
 				error!("Could not save received peer address: {:?}", e);

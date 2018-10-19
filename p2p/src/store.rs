@@ -95,7 +95,7 @@ impl Readable for PeerData {
 				flags: flags,
 				last_banned: last_banned,
 				ban_reason: ban_reason,
-				last_connected
+				last_connected,
 			}),
 			None => Err(ser::Error::CorruptedData),
 		}
@@ -179,7 +179,9 @@ impl PeerStore {
 
 	/// Deletes peers from the storage that are satisfies some condition `predicate`
 	pub fn delete_peers<F>(&self, mut predicate: F) -> Result<(), Error>
-	where F: FnMut(&PeerData) -> bool {
+	where
+		F: FnMut(&PeerData) -> bool,
+	{
 		let mut to_remove = vec![];
 
 		for x in self.all_peers() {
