@@ -472,7 +472,10 @@ pub struct BlockHeaderInfo {
 }
 
 impl BlockHeaderInfo {
-	pub fn from_headers(header: &core::BlockHeader, previous: &core::BlockHeader) -> BlockHeaderInfo {
+	pub fn from_headers(
+		header: &core::BlockHeader,
+		previous: &core::BlockHeader,
+	) -> BlockHeaderInfo {
 		BlockHeaderInfo {
 			hash: util::to_hex(header.hash().to_vec()),
 			height: header.height,
@@ -516,7 +519,10 @@ pub struct BlockHeaderPrintable {
 }
 
 impl BlockHeaderPrintable {
-	pub fn from_headers(header: &core::BlockHeader, previous: &core::BlockHeader) -> BlockHeaderPrintable {
+	pub fn from_headers(
+		header: &core::BlockHeader,
+		previous: &core::BlockHeader,
+	) -> BlockHeaderPrintable {
 		BlockHeaderPrintable {
 			hash: util::to_hex(header.hash().to_vec()),
 			version: header.version,

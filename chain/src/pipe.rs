@@ -383,12 +383,10 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		Ok(prev) => prev,
 		Err(grin_store::Error::NotFoundErr(_)) => return Err(ErrorKind::Orphan.into()),
 		Err(e) => {
-			return Err(
-				ErrorKind::StoreErr(
-					e,
-					format!("Failed to find previous header to {}", header.hash()),
-				).into(),
-			)
+			return Err(ErrorKind::StoreErr(
+				e,
+				format!("Failed to find previous header to {}", header.hash()),
+			).into())
 		}
 	};
 

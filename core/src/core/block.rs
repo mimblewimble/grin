@@ -120,7 +120,6 @@ pub struct BlockHeader {
 
 	// /// Hash of the block previous to this in the chain.
 	// pub previous: Hash,
-
 	/// Root hash of the header MMR at the previous header.
 	pub prev_root: Hash,
 	/// Timestamp at which the block was built.
