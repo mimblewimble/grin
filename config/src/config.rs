@@ -107,7 +107,7 @@ fn check_api_secret(api_secret_path: &PathBuf) -> Result<(), ConfigError> {
 }
 
 /// Check that the api secret file exists and is valid
-pub fn check_api_secret_file() -> Result<(), ConfigError> {
+fn check_api_secret_file() -> Result<(), ConfigError> {
 	let grin_path = get_grin_path()?;
 	let mut api_secret_path = grin_path.clone();
 	api_secret_path.push(API_SECRET_FILE_NAME);
