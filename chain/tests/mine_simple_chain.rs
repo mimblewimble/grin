@@ -60,7 +60,7 @@ fn setup(dir_name: &str, genesis: Block) -> Chain {
 #[test]
 fn mine_empty_chain() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let chain = setup(".grin", pow::mine_genesis_block());
+	let chain = setup(".grin", pow::mine_genesis_block().unwrap());
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 
 	for n in 1..4 {
@@ -120,7 +120,7 @@ fn mine_empty_chain() {
 #[test]
 fn mine_forks() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let chain = setup(".grin2", pow::mine_genesis_block());
+	let chain = setup(".grin2", pow::mine_genesis_block().unwrap());
 	let kc = ExtKeychain::from_random_seed().unwrap();
 
 	// add a first block to not fork genesis
@@ -164,7 +164,7 @@ fn mine_forks() {
 fn mine_losing_fork() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let kc = ExtKeychain::from_random_seed().unwrap();
-	let chain = setup(".grin3", pow::mine_genesis_block());
+	let chain = setup(".grin3", pow::mine_genesis_block().unwrap());
 
 	// add a first block we'll be forking from
 	let prev = chain.head_header().unwrap();
@@ -199,7 +199,7 @@ fn longer_fork() {
 	// to make it easier to compute the txhashset roots in the test, we
 	// prepare 2 chains, the 2nd will be have the forked blocks we can
 	// then send back on the 1st
-	let genesis = pow::mine_genesis_block();
+	let genesis = pow::mine_genesis_block().unwrap();
 	let chain = setup(".grin4", genesis.clone());
 	let chain_fork = setup(".grin5", genesis);
 
@@ -246,7 +246,7 @@ fn longer_fork() {
 fn spend_in_fork_and_compact() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	util::init_test_logger();
-	let chain = setup(".grin6", pow::mine_genesis_block());
+	let chain = setup(".grin6", pow::mine_genesis_block().unwrap());
 	let prev = chain.head_header().unwrap();
 	let kc = ExtKeychain::from_random_seed().unwrap();
 
@@ -379,7 +379,7 @@ fn spend_in_fork_and_compact() {
 #[test]
 fn output_header_mappings() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let chain = setup(".grin_header_for_output", pow::mine_genesis_block());
+	let chain = setup(".grin_header_for_output", pow::mine_genesis_block().unwrap());
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let mut reward_outputs = vec![];
 
@@ -505,7 +505,7 @@ where
 #[ignore]
 fn actual_diff_iter_output() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let genesis_block = pow::mine_genesis_block();
+	let genesis_block = pow::mine_genesis_block().unwrap();
 	let db_env = Arc::new(store::new_env(".grin".to_string()));
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	let chain = chain::Chain::init(

@@ -18,6 +18,7 @@ extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_store as store;
+extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
 
@@ -46,7 +47,7 @@ fn test_coinbase_maturity() {
 	clean_output_dir(".grin");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
-	let genesis_block = pow::mine_genesis_block();
+	let genesis_block = pow::mine_genesis_block().unwrap();
 
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 
