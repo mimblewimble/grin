@@ -46,7 +46,7 @@ fn test_coinbase_maturity() {
 	clean_output_dir(".grin");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
-	let genesis_block = pow::mine_genesis_block().unwrap();
+	let genesis_block = pow::mine_genesis_block();
 
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 

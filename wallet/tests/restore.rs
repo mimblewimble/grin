@@ -109,12 +109,12 @@ fn compare_wallet_restore(
 	);
 
 	{
-		let mut w = wallet_source.lock().unwrap();
+		let mut w = wallet_source.lock();
 		w.set_parent_key_id(account_path.clone());
 	}
 
 	{
-		let mut w = wallet_dest.lock().unwrap();
+		let mut w = wallet_dest.lock();
 		w.set_parent_key_id(account_path.clone());
 	}
 
@@ -206,7 +206,7 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Default wallet 2 to listen on that account
 	{
-		let mut w = wallet2.lock().unwrap();
+		let mut w = wallet2.lock();
 		w.set_parent_key_id_by_name("account1")?;
 	}
 
@@ -281,7 +281,7 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Another listener account on wallet 2
 	{
-		let mut w = wallet2.lock().unwrap();
+		let mut w = wallet2.lock();
 		w.set_parent_key_id_by_name("account2")?;
 	}
 

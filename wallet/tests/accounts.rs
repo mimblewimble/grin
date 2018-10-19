@@ -108,20 +108,20 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Default wallet 2 to listen on that account
 	{
-		let mut w = wallet2.lock().unwrap();
+		let mut w = wallet2.lock();
 		w.set_parent_key_id_by_name("listener_account")?;
 	}
 
 	// Mine into two different accounts in the same wallet
 	{
-		let mut w = wallet1.lock().unwrap();
+		let mut w = wallet1.lock();
 		w.set_parent_key_id_by_name("account1")?;
 		assert_eq!(w.parent_key_id(), ExtKeychain::derive_key_id(2, 1, 0, 0, 0));
 	}
 	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 7);
 
 	{
-		let mut w = wallet1.lock().unwrap();
+		let mut w = wallet1.lock();
 		w.set_parent_key_id_by_name("account2")?;
 		assert_eq!(w.parent_key_id(), ExtKeychain::derive_key_id(2, 2, 0, 0, 0));
 	}
@@ -141,7 +141,7 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 	// now check second account
 	{
-		let mut w = wallet1.lock().unwrap();
+		let mut w = wallet1.lock();
 		w.set_parent_key_id_by_name("account1")?;
 	}
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
@@ -161,7 +161,7 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// should be nothing in default account
 	{
-		let mut w = wallet1.lock().unwrap();
+		let mut w = wallet1.lock();
 		w.set_parent_key_id_by_name("default")?;
 	}
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
@@ -180,7 +180,7 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Send a tx to another wallet
 	{
-		let mut w = wallet1.lock().unwrap();
+		let mut w = wallet1.lock();
 		w.set_parent_key_id_by_name("account1")?;
 	}
 
@@ -208,7 +208,7 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// other account should be untouched
 	{
-		let mut w = wallet1.lock().unwrap();
+		let mut w = wallet1.lock();
 		w.set_parent_key_id_by_name("account2")?;
 	}
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
@@ -233,7 +233,7 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 	// Default account on wallet 2 should be untouched
 	{
-		let mut w = wallet2.lock().unwrap();
+		let mut w = wallet2.lock();
 		w.set_parent_key_id_by_name("default")?;
 	}
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {

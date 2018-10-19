@@ -351,7 +351,7 @@ fn blind_tx() {
 	let Output { proof, .. } = btx.outputs()[0];
 
 	let secp = static_secp_instance();
-	let secp = secp.lock().unwrap();
+	let secp = secp.lock();
 	let info = secp.range_proof_info(proof);
 
 	assert!(info.min == 0);

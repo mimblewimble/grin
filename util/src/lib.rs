@@ -41,6 +41,7 @@ extern crate zip as zip_rs;
 // Re-export so only has to be included once
 extern crate parking_lot;
 pub use parking_lot::RwLock;
+pub use parking_lot::Mutex;
 
 // Re-export so only has to be included once
 pub extern crate secp256k1zkp as secp;

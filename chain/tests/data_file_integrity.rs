@@ -45,7 +45,7 @@ fn setup(dir_name: &str) -> Chain {
 	util::init_test_logger();
 	clean_output_dir(dir_name);
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let genesis_block = pow::mine_genesis_block().unwrap();
+	let genesis_block = pow::mine_genesis_block();
 	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
 	let db_env = Arc::new(store::new_env(dir_name.to_string()));
 	chain::Chain::init(

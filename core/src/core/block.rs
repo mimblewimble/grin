@@ -649,7 +649,7 @@ impl Block {
 
 		{
 			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
+			let secp = secp.lock();
 			let over_commit = secp.commit_value(reward(self.total_fees()))?;
 
 			let out_adjust_sum = secp.commit_sum(

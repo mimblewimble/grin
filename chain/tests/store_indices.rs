@@ -50,7 +50,7 @@ fn test_various_store_indices() {
 
 	let chain_store = chain::store::ChainStore::new(db_env).unwrap();
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let genesis = pow::mine_genesis_block().unwrap();
+	let genesis = pow::mine_genesis_block();
 	let reward = libtx::reward::output(&keychain, &key_id, 0, 1).unwrap();
 
 	let block = Block::new(&genesis.header, vec![], Difficulty::one(), reward).unwrap();
