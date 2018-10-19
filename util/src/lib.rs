@@ -27,7 +27,7 @@ extern crate byteorder;
 extern crate rand;
 #[macro_use]
 extern crate log;
-extern crate flexi_logger;
+extern crate log4rs;
 #[macro_use]
 extern crate lazy_static;
 
