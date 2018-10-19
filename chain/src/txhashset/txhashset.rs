@@ -676,7 +676,7 @@ impl<'a> HeaderExtension<'a> {
 		let mut current = self.batch.get_block_header(&head.last_block_h)?;
 		while current.height > 0 {
 			header_hashes.push(current.hash());
-			current = self.batch.get_block_header(&current.previous)?;
+			current = self.batch.get_previous_header(&current)?;
 		}
 
 		header_hashes.reverse();

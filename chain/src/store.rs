@@ -122,6 +122,14 @@ impl ChainStore {
 		}
 	}
 
+	pub fn get_header_by_prev_root(&self, h: &Hash) -> Result<BlockHeader, Error> {
+		unimplemented!("[wip]")
+	}
+
+	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
+		self.get_header_by_prev_root(&header.prev_root)
+	}
+
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		{
 			let mut header_cache = self.header_cache.write();
@@ -349,6 +357,14 @@ impl<'a> Batch<'a> {
 			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
 	}
 
+	pub fn get_header_by_prev_root(&self, h: &Hash) -> Result<BlockHeader, Error> {
+		unimplemented!("[wip]")
+	}
+
+	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
+		self.get_header_by_prev_root(&header.prev_root)
+	}
+
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		{
 			let mut header_cache = self.header_cache.write();
@@ -479,7 +495,7 @@ impl<'a> Batch<'a> {
 		self.save_header_height(&header)?;
 
 		if header.height > 0 {
-			let mut prev_header = self.get_block_header(&header.previous)?;
+			let mut prev_header = self.get_previous_header(&header)?;
 			while prev_header.height > 0 {
 				if !force {
 					if let Ok(_) = self.is_on_current_chain(&prev_header) {
@@ -488,7 +504,7 @@ impl<'a> Batch<'a> {
 				}
 				self.save_header_height(&prev_header)?;
 
-				prev_header = self.get_block_header(&prev_header.previous)?;
+				prev_header = self.get_previous_header(&prev_header)?;
 			}
 		}
 		Ok(())
@@ -637,10 +653,10 @@ impl<'a> Iterator for DifficultyIter<'a> {
 		// Otherwise we are done.
 		if let Some(header) = self.header.clone() {
 			if let Some(ref batch) = self.batch {
-				self.prev_header = batch.get_block_header(&header.previous).ok();
+				self.prev_header = batch.get_previous_header(&header).ok();
 			} else {
 				if let Some(ref store) = self.store {
-					self.prev_header = store.get_block_header(&header.previous).ok();
+					self.prev_header = store.get_previous_header(&header).ok();
 				} else {
 					self.prev_header = None;
 				}

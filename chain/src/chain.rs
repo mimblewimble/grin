@@ -590,7 +590,7 @@ impl Chain {
 			while current.height > 0 {
 				view.rewind(&current)?;
 				view.validate_root()?;
-				current = view.batch().get_block_header(&current.previous)?;
+				current = view.batch().get_previous_header(&current)?;
 				count += 1;
 			}
 			Ok(())
@@ -667,7 +667,8 @@ impl Chain {
 
 		// The txhashset.zip contains the output, rangeproof and kernel MMRs.
 		// We must rebuild the header MMR ourselves based on the headers in our db.
-		self.rebuild_header_mmr(&Tip::from_block(&header), &mut txhashset)?;
+		let prev = self.get_previous_header(&header)?;
+		self.rebuild_header_mmr(&Tip::from_headers(&header, &prev), &mut txhashset)?;
 
 		// Validate the full kernel history (kernel MMR root for every block header).
 		self.validate_kernel_history(&header, &txhashset)?;
@@ -703,7 +704,8 @@ impl Chain {
 
 		// Save the new head to the db and rebuild the header by height index.
 		{
-			let tip = Tip::from_block(&header);
+			let prev = batch.get_previous_header(&header)?;
+			let tip = Tip::from_headers(&header, &prev);
 			batch.save_body_head(&tip)?;
 			batch.save_header_height(&header)?;
 			batch.build_by_height_index(&header, true)?;
@@ -791,7 +793,7 @@ impl Chain {
 			if current.height <= 1 {
 				break;
 			}
-			match batch.get_block_header(&current.previous) {
+			match batch.get_previous_header(&current) {
 				Ok(h) => current = h,
 				Err(NotFoundErr(_)) => break,
 				Err(e) => return Err(From::from(e)),
@@ -907,6 +909,12 @@ impl Chain {
 		self.store
 			.get_block_header(h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get header".to_owned()).into())
+	}
+
+	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
+		self.store
+			.get_previous_header(header)
+			.map_err(|e| ErrorKind::StoreErr(e, "chain get previous header".to_owned()).into())
 	}
 
 	/// Get block_sums by header hash.
@@ -1068,16 +1076,17 @@ fn setup_head(
 					// node. If this appears to be the case revert the head to the previous
 					// header and try again
 					let prev_header = batch.get_block_header(&head.prev_block_h)?;
+					let prev_prev_header = batch.get_previous_header(&prev_header)?;
 					let _ = batch.delete_block(&header.hash());
 					let _ = batch.setup_height(&prev_header, &head)?;
-					head = Tip::from_block(&prev_header);
+					head = Tip::from_headers(&prev_header, &prev_prev_header);
 					batch.save_head(&head)?;
 				}
 			}
 		}
 		Err(NotFoundErr(_)) => {
 			batch.save_block(&genesis)?;
-			let tip = Tip::from_block(&genesis.header);
+			let tip = Tip::from_genesis(&genesis.header);
 			batch.save_head(&tip)?;
 			batch.setup_height(&genesis.header, &tip)?;
 

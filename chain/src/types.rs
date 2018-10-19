@@ -14,7 +14,7 @@
 
 //! Base types that the block chain pipeline requires.
 
-use core::core::hash::{Hash, Hashed};
+use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::{Block, BlockHeader};
 use core::pow::Difficulty;
 use core::ser;
@@ -57,30 +57,40 @@ pub struct Tip {
 	pub height: u64,
 	/// Last block pushed to the fork
 	pub last_block_h: Hash,
-	/// Block previous to last
+	/// Previous block
 	pub prev_block_h: Hash,
 	/// Total difficulty accumulated on that fork
 	pub total_difficulty: Difficulty,
 }
 
 impl Tip {
-	/// Creates a new tip at height zero and the provided genesis hash.
-	pub fn new(gbh: Hash) -> Tip {
+	/// Creates a new tip at height 1 and the provided genesis hash.
+	pub fn from_genesis(genesis: &BlockHeader) -> Tip {
 		Tip {
 			height: 0,
-			last_block_h: gbh,
-			prev_block_h: gbh,
+			last_block_h: genesis.hash(),
+			prev_block_h: ZERO_HASH,
 			total_difficulty: Difficulty::min(),
 		}
 	}
 
-	/// Append a new block to this tip, returning a new updated tip.
-	pub fn from_block(bh: &BlockHeader) -> Tip {
+	pub fn from_headers(header: &BlockHeader, previous: &BlockHeader) -> Tip {
 		Tip {
-			height: bh.height,
-			last_block_h: bh.hash(),
-			prev_block_h: bh.previous,
-			total_difficulty: bh.total_difficulty(),
+			height: header.height,
+			last_block_h: header.hash(),
+			prev_block_h: previous.hash(),
+			total_difficulty: header.total_difficulty(),
+		}
+	}
+
+	/// TODO - check height etc and return error if not valid?
+	/// Append a new block to this tip, returning a new updated tip.
+	pub fn append_header(&self, header: &BlockHeader) -> Tip {
+		Tip {
+			height: header.height,
+			last_block_h: header.hash(),
+			prev_block_h: self.last_block_h,
+			total_difficulty: header.total_difficulty(),
 		}
 	}
 }

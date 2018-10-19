@@ -67,8 +67,9 @@ fn test_various_store_indices() {
 	{
 		let batch = chain_store.batch().unwrap();
 		batch.save_block(&block).unwrap();
+		let prev = batch.get_previous_header(&block.header).unwrap();
 		batch
-			.setup_height(&block.header, &Tip::from_block(&block.header))
+			.setup_height(&block.header, &Tip::from_headers(&block.header, &prev))
 			.unwrap();
 
 		batch.commit().unwrap();

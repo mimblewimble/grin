@@ -143,6 +143,9 @@ impl OutputHandler {
 		let block = w(&self.chain)
 			.get_block(&header.hash())
 			.map_err(|_| ErrorKind::NotFound)?;
+		let previous = w(&self.chain)
+			.get_previous_header(&header)
+			.map_err(|_| ErrorKind::NotFound)?;
 		let outputs = block
 			.outputs()
 			.iter()
@@ -152,7 +155,7 @@ impl OutputHandler {
 			}).collect();
 
 		Ok(BlockOutputs {
-			header: BlockHeaderInfo::from_header(&header),
+			header: BlockHeaderInfo::from_headers(&header, &previous),
 			outputs: outputs,
 		})
 	}
