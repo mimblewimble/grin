@@ -390,10 +390,6 @@ Send a transaction either directly by http or file (then display the slate)
 * **Sample Call:**
 
   ```javascript
-    var coinbase_data = {
-      fees: 0,
-      height: 123456
-    }
     $.ajax({
       url: "/v1/wallet/owner/issue_send_tx",
       dataType: "json",
@@ -506,10 +502,6 @@ Builds the complete transaction and sends it to a grin node for propagation.
 * **Sample Call:**
 
   ```javascript
-    var coinbase_data = {
-      fees: 0,
-      height: 123456
-    }
     $.ajax({
       url: "/v1/wallet/owner/finalize_tx",
       dataType: "json",
@@ -555,10 +547,6 @@ Roll back a transaction and all associated outputs with a given transaction id T
 * **Sample Call:**
 
   ```javascript
-    var coinbase_data = {
-      fees: 0,
-      height: 123456
-    }
     $.ajax({
       url: "/v1/wallet/owner/cancel_tx?id=3",
       dataType: "json",
@@ -566,6 +554,83 @@ Roll back a transaction and all associated outputs with a given transaction id T
       success : function(r) {
         console.log(r);
       }
+    });
+  ```
+
+### POST Post Tx
+
+Push new transaction to the connected node transaction pool. Add `?fluff` at the end of the URL to bypass Dandelion relay.
+
+* **URL**
+
+  /v1/wallet/owner/post_tx
+
+* **Method:**
+
+  `POST`
+  
+* **URL Params**
+
+  None
+
+* **Data Params**
+
+  **Required:** A transaction slate in JSON.
+
+    | Field                 | Type     | Description                                                               |
+    |:----------------------|:---------|:--------------------------------------------------------------------------|
+    | num_participants      | number   | The number of participants intended to take part in this transaction      |
+    | id                    | number   | Unique transaction ID, selected by sender                                 |
+    | tx                    | object   | The core transaction data (inputs, outputs, kernels and kernel offset)    |
+    | - offset              | []number | The kernel "offset" k2, excess is k1G after splitting the key k = k1 + k2 |
+    | - body                | object   | The transaction body - inputs/outputs/kernels                             |
+    | - - inputs            | []object | List of inputs spent by the transaction                                   |
+    | - - - features        | object   | The features of the output being spent                                    |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - commit          | []number | The commit referencing the output being spent                             |
+    | - - outputs           | []object | List of outputs the transaction produces                                  |
+    | - - - features        | object   | Options for an output's structure or use                                  |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - commit          | []number | The homomorphic commitment representing the output amount                 |
+    | - - - proof           | []number | A proof that the commitment is in the right range                         |
+    | - - kernels           | []object | List of kernels that make up this transaction (usually a single kernel)   |
+    | - - - features        | object   | Options for a kernel's structure or use                                   |
+    | - - - - bits          | number   | Representation of the features in bits                                    |
+    | - - - fee             | number   | Fee originally included in the transaction this proof is for              |
+    | - - - lock_height     | number   | The max lock_height of all inputs to this transaction                     |
+    | - - - excess          | []number | Remainder of the sum of all transaction commitments                       |
+    | - - - excess_sig      | []number | The signature proving the excess is a valid public key (signs the tx fee) |
+    | amount                | number   | Base amount (excluding fee)                                               |
+    | fee                   | number   | Fee amount                                                                |
+    | height                | number   | Block height for the transaction                                          |
+    | lock_height           | number   | Lock height                                                               |
+    | participant_data      | object   | Participant data                                                          |
+    | - id                  | number   | Id of participant in the transaction. (For now, 0=sender, 1=rec)          |
+    | - public_blind_excess | []number | Public key corresponding to private blinding factor                       |
+    | - public_nonce        | []number | Public key corresponding to private nonce                                 |
+    | - part_sig            | []number | Public partial signature                                                  |
+
+* **Success Response:**
+
+  * **Code:** 200
+
+* **Error Response:**
+
+  * **Code:** 400
+
+* **Sample Call:**
+
+  ```javascript
+    $.ajax({
+      url: "/v1/wallet/owner/post_tx",
+      dataType: "json",
+      type : "POST",
+      success : function(r) {
+        console.log(r);
+      },
+      data: {
+        file: tx.json
+      },
     });
   ```
 
@@ -600,10 +665,6 @@ Issue a burn TX.
 * **Sample Call:**
 
   ```javascript
-    var coinbase_data = {
-      fees: 0,
-      height: 123456
-    }
     $.ajax({
       url: "/v1/wallet/owner/issue_burn_tx",
       dataType: "json",
