@@ -28,8 +28,8 @@ mod framework;
 
 use framework::{LocalServerContainer, LocalServerContainerConfig};
 use std::sync::Arc;
-use util::Mutex;
 use std::{thread, time};
+use util::Mutex;
 
 use util::LOGGER;
 

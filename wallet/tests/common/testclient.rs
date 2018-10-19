@@ -23,7 +23,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use util::{RwLock, Mutex};
+use util::{Mutex, RwLock};
 
 use common::api;
 use common::serde_json;

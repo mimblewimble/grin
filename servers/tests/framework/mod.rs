@@ -26,8 +26,8 @@ extern crate blake2_rfc as blake2;
 use std::default::Default;
 use std::ops::Deref;
 use std::sync::Arc;
-use util::Mutex;
 use std::{fs, thread, time};
+use util::Mutex;
 
 use framework::keychain::Keychain;
 use wallet::{HTTPWalletClient, LMDBBackend, WalletConfig};
