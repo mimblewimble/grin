@@ -22,17 +22,16 @@ use types::{LogLevel, LoggingConfig};
 
 use log::LevelFilter;
 use log4rs;
-use log4rs::append::Append;
 use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
 use log4rs::append::rolling_file::{
-	RollingFileAppender,
-	policy::compound::CompoundPolicy,
 	policy::compound::roll::fixed_window::FixedWindowRoller,
-	policy::compound::trigger::size::SizeTrigger,
+	policy::compound::trigger::size::SizeTrigger, policy::compound::CompoundPolicy,
+	RollingFileAppender,
 };
-use log4rs::encode::pattern::PatternEncoder;
+use log4rs::append::Append;
 use log4rs::config::{Appender, Config, Logger, Root};
+use log4rs::encode::pattern::PatternEncoder;
 
 fn convert_log_level(in_level: &LogLevel) -> LevelFilter {
 	match *in_level {
@@ -77,15 +76,19 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 
 				let policy = CompoundPolicy::new(Box::new(trigger), Box::new(roller));
 
-				Box::new(RollingFileAppender::builder()
-					.encoder(Box::new(PatternEncoder::new("{d} {M} {l} - {m}{n}")))
-					.build(c.log_file_path, Box::new(policy))
-					.unwrap())
+				Box::new(
+					RollingFileAppender::builder()
+						.encoder(Box::new(PatternEncoder::new("{d} {M} {l} - {m}{n}")))
+						.build(c.log_file_path, Box::new(policy))
+						.unwrap(),
+				)
 			} else {
-				Box::new(FileAppender::builder()
-					.encoder(Box::new(PatternEncoder::new("{d} {M} {l} - {m}{n}")))
-					.build(c.log_file_path)
-					.unwrap())
+				Box::new(
+					FileAppender::builder()
+						.encoder(Box::new(PatternEncoder::new("{d} {M} {l} - {m}{n}")))
+						.build(c.log_file_path)
+						.unwrap(),
+				)
 			}
 		};
 
@@ -94,12 +97,13 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 
 		if c.log_to_stdout {
 			config = config
-				.appender(Appender::builder()
-					.build("stdout", Box::new(stdout)))
-				.logger(Logger::builder()
-					.additive(true)
-					.appender("stdout")
-					.build("stdout", level_stdout));
+				.appender(Appender::builder().build("stdout", Box::new(stdout)))
+				.logger(
+					Logger::builder()
+						.additive(true)
+						.appender("stdout")
+						.build("stdout", level_stdout),
+				);
 
 			root = root.appender("stdout");
 		}
@@ -107,15 +111,15 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 		if c.log_to_file {
 			config = config
 				.appender(Appender::builder().build("file", file))
-				.logger(Logger::builder()
-					.additive(true)
-					.appender("file")
-					.build("file", level_file));
+				.logger(
+					Logger::builder()
+						.additive(true)
+						.appender("file")
+						.build("file", level_file),
+				);
 		}
 
-		let config = config
-			.build(root.build(level_stdout))
-			.unwrap();
+		let config = config.build(root.build(level_stdout)).unwrap();
 
 		let _ = log4rs::init_config(config).unwrap();
 
