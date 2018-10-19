@@ -119,7 +119,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 				);
 		}
 
-		let config = config.build(root.build(level_stdout)).unwrap();
+		let config = config.build(root.build(LevelFilter::Off)).unwrap();
 
 		let _ = log4rs::init_config(config).unwrap();
 
