@@ -22,6 +22,7 @@ use rand::{thread_rng, Rng};
 
 use chrono::prelude::*;
 use core::core;
+use core::global;
 use core::core::hash::{Hash, Hashed};
 use core::pow::Difficulty;
 
@@ -67,6 +68,7 @@ impl Peers {
 				flags: State::Healthy,
 				last_banned: 0,
 				ban_reason: ReasonForBan::None,
+				last_connected: Utc::now().timestamp(),
 			};
 			addr = peer.info.addr.clone();
 		}
@@ -469,6 +471,33 @@ impl Peers {
 	pub fn enough_peers(&self) -> bool {
 		self.connected_peers().len() >= self.config.peer_min_preferred_count() as usize
 	}
+
+	/// Removes those peers that are seemed to be expired
+	pub fn remove_expired(&self) {
+		let now = Utc::now().timestamp_millis();
+
+		let mut peers_to_remove = vec![];
+
+		// Delete peers from storage
+		let _ = self.store.delete_peers(|peer| {
+			if peer.last_connected + global::PEER_EXPIRATION_REMOVE_TIME > now {
+				peers_to_remove.push(peer.clone());
+
+				true
+			} else {
+				false
+			}
+		});
+
+		// Delete peers from the current list of peers
+		let mut peers = self.peers.write()
+			.unwrap();
+		for peer in peers_to_remove {
+			peers.remove(&peer.addr);
+
+			debug!(LOGGER, "remove_expired peer {:?} removed", &peer.addr)
+		}
+	}
 }
 
 impl ChainAdapter for Peers {
@@ -603,6 +632,7 @@ impl NetAdapter for Peers {
 				flags: State::Healthy,
 				last_banned: 0,
 				ban_reason: ReasonForBan::None,
+				last_connected: Utc::now().timestamp()
 			};
 			if let Err(e) = self.save_peer(&peer) {
 				error!("Could not save received peer address: {:?}", e);

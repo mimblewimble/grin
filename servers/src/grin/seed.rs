@@ -110,6 +110,10 @@ fn monitor_peers(
 	let mut healthy_count = 0;
 	let mut banned_count = 0;
 	let mut defuncts = vec![];
+
+	// Remove peers that are seemed to be expired
+	peers.remove_expired();
+
 	for x in peers.all_peers() {
 		match x.flags {
 			p2p::State::Banned => {
