@@ -21,9 +21,9 @@ use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
-use util::RwLock;
 use std::thread;
 use std::time::Duration;
+use util::RwLock;
 
 use common::api;
 use common::serde_json;

@@ -18,9 +18,9 @@
 use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
-use util::RwLock;
 use std::thread;
 use std::time::Instant;
+use util::RwLock;
 
 use chain::{self, ChainAdapter, Options};
 use chrono::prelude::{DateTime, Utc};

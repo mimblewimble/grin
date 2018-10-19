@@ -16,9 +16,9 @@ use chrono::prelude::Utc;
 use rand::{thread_rng, Rng};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use util::RwLock;
 use std::thread;
 use std::time::Duration;
+use util::RwLock;
 
 use core::core::hash::Hashed;
 use core::core::transaction;

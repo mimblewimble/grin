@@ -19,8 +19,8 @@
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use util::RwLock;
 use std::{thread, time};
+use util::RwLock;
 
 use api;
 use chain;

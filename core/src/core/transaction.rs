@@ -18,8 +18,8 @@ use std::cmp::max;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::sync::Arc;
-use util::RwLock;
 use std::{error, fmt};
+use util::RwLock;
 
 use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;

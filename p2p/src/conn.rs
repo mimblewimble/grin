@@ -25,8 +25,8 @@ use std::io::{self, Read, Write};
 use std::mem::size_of;
 use std::net::TcpStream;
 use std::sync::{mpsc, Arc};
-use util::RwLock;
 use std::{cmp, thread, time};
+use util::RwLock;
 
 use core::ser;
 use msg::{read_body, read_exact, read_header, write_all, write_to_buf, MsgHeader, Type};

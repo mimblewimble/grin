@@ -17,8 +17,8 @@
 
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use util::RwLock;
 use std::time::SystemTime;
+use util::RwLock;
 
 use core::pow::Difficulty;
 

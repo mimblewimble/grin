@@ -22,9 +22,9 @@ use std::error::Error;
 use std::io::{BufRead, ErrorKind, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
-use util::RwLock;
 use std::time::{Duration, SystemTime};
 use std::{cmp, thread};
+use util::RwLock;
 
 use chain;
 use common::stats::{StratumStats, WorkerStats};
