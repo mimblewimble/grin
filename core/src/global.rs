@@ -299,6 +299,5 @@ where
 		}
 	}
 	last_n.reverse();
-	assert_eq!(last_n.len(), needed_block_count);
 	last_n
 }
