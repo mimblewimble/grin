@@ -379,7 +379,10 @@ fn spend_in_fork_and_compact() {
 #[test]
 fn output_header_mappings() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let chain = setup(".grin_header_for_output", pow::mine_genesis_block().unwrap());
+	let chain = setup(
+		".grin_header_for_output",
+		pow::mine_genesis_block().unwrap(),
+	);
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let mut reward_outputs = vec![];
 
