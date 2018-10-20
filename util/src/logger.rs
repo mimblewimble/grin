@@ -20,7 +20,7 @@ use std::{panic, thread};
 
 use types::{LogLevel, LoggingConfig};
 
-use log::{Record, LevelFilter};
+use log::{LevelFilter, Record};
 use log4rs;
 use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
@@ -64,7 +64,7 @@ impl Filter for GrinFilter {
 	fn filter(&self, record: &Record) -> Response {
 		if let Some(module_path) = record.module_path() {
 			if module_path.starts_with("grin") {
-				return Response::Neutral
+				return Response::Neutral;
 			}
 		}
 
@@ -138,15 +138,19 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 				}
 			};
 
-			appenders.push(Appender::builder().filter(filter).filter(Box::new(GrinFilter)).build("file", file));
+			appenders.push(
+				Appender::builder()
+					.filter(filter)
+					.filter(Box::new(GrinFilter))
+					.build("file", file),
+			);
 			root = root.appender("file");
 		}
 
 		let config = Config::builder()
 			.appenders(appenders)
-			.build(
-				root.build(level_minimum),
-			).unwrap();
+			.build(root.build(level_minimum))
+			.unwrap();
 
 		let _ = log4rs::init_config(config).unwrap();
 
