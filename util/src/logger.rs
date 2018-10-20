@@ -20,7 +20,7 @@ use std::{panic, thread};
 
 use types::{LogLevel, LoggingConfig};
 
-use log::LevelFilter;
+use log::{Record, LevelFilter};
 use log4rs;
 use log4rs::append::console::ConsoleAppender;
 use log4rs::append::file::FileAppender;
@@ -32,7 +32,7 @@ use log4rs::append::rolling_file::{
 use log4rs::append::Append;
 use log4rs::config::{Appender, Config, Root};
 use log4rs::encode::pattern::PatternEncoder;
-use log4rs::filter::threshold::ThresholdFilter;
+use log4rs::filter::{threshold::ThresholdFilter, Filter, Response};
 
 fn convert_log_level(in_level: &LogLevel) -> LevelFilter {
 	match *in_level {
@@ -53,6 +53,23 @@ lazy_static! {
 	static ref TUI_RUNNING: Mutex<bool> = Mutex::new(false);
 	/// Static Logging configuration, should only be set once, before first logging call
 	static ref LOGGING_CONFIG: Mutex<LoggingConfig> = Mutex::new(LoggingConfig::default());
+}
+
+/// This filter is rejecting messages that doesn't start with "grin"
+/// in order to save log space for only Grin-related records
+#[derive(Debug)]
+struct GrinFilter;
+
+impl Filter for GrinFilter {
+	fn filter(&self, record: &Record) -> Response {
+		if let Some(module_path) = record.module_path() {
+			if module_path.starts_with("grin") {
+				return Response::Neutral
+			}
+		}
+
+		Response::Reject
+	}
 }
 
 /// Initialize the logger with the given configuration
@@ -83,8 +100,11 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 			appenders.push(
 				Appender::builder()
 					.filter(filter)
+					.filter(Box::new(GrinFilter))
 					.build("stdout", Box::new(stdout)),
 			);
+
+			root = root.appender("stdout");
 		}
 
 		if c.log_to_file {
@@ -118,20 +138,19 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 				}
 			};
 
-			appenders.push(Appender::builder().filter(filter).build("file", file));
+			appenders.push(Appender::builder().filter(filter).filter(Box::new(GrinFilter)).build("file", file));
+			root = root.appender("file");
 		}
 
 		let config = Config::builder()
 			.appenders(appenders)
 			.build(
-				root.appender("stdout")
-					.appender("file")
-					.build(level_minimum),
+				root.build(level_minimum),
 			).unwrap();
 
 		let _ = log4rs::init_config(config).unwrap();
 
-		warn!(
+		info!(
 			"log4rs is initialized, file level: {:?}, stdout level: {:?}, min. level: {:?}",
 			level_file, level_stdout, level_minimum
 		);
