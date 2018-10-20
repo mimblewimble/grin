@@ -114,7 +114,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 			let file: Box<Append> = {
 				if let Some(size) = c.log_max_size {
 					let roller = FixedWindowRoller::builder()
-						.build("grin_{}.gz", 32)
+						.build(&format!("{}.{{}}.gz", c.log_file_path), 32)
 						.unwrap();
 					let trigger = SizeTrigger::new(size);
 
