@@ -14,7 +14,8 @@
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{Arc, Weak};
+use util::RwLock;
 
 use failure::ResultExt;
 use futures::future::ok;
@@ -695,7 +696,7 @@ struct PoolInfoHandler {
 impl Handler for PoolInfoHandler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
 		let pool_arc = w(&self.tx_pool);
-		let pool = pool_arc.read().unwrap();
+		let pool = pool_arc.read();
 
 		json_response(&PoolInfo {
 			pool_size: pool.total_size(),
@@ -753,7 +754,7 @@ impl PoolPushHandler {
 					);
 
 					//  Push to tx pool.
-					let mut tx_pool = pool_arc.write().unwrap();
+					let mut tx_pool = pool_arc.write();
 					let header = tx_pool.blockchain.chain_head().unwrap();
 					tx_pool
 						.add_to_pool(source, tx, !fluff, &header)

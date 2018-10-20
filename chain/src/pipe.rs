@@ -14,7 +14,8 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use chrono::prelude::Utc;
 use chrono::Duration;
@@ -288,7 +289,7 @@ fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), 
 /// Keeps duplicates from the network in check.
 /// Checks against the cache of recently processed block hashes.
 fn check_known_cache(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	let mut cache = ctx.block_hashes_cache.write().unwrap();
+	let mut cache = ctx.block_hashes_cache.write();
 	if cache.contains_key(&header.hash()) {
 		return Err(ErrorKind::Unfit("already known in cache".to_string()).into());
 	}

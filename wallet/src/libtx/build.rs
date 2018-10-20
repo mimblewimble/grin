@@ -255,7 +255,8 @@ where
 // Just a simple test, most exhaustive tests in the core mod.rs.
 #[cfg(test)]
 mod test {
-	use std::sync::{Arc, RwLock};
+	use std::sync::Arc;
+	use util::RwLock;
 
 	use super::*;
 	use core::core::verifier_cache::{LruVerifierCache, VerifierCache};

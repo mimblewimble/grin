@@ -17,8 +17,9 @@
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::collections::HashSet;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::{error, fmt};
+use util::RwLock;
 
 use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;
@@ -197,7 +198,7 @@ impl TxKernel {
 	pub fn verify(&self) -> Result<(), secp::Error> {
 		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
 		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
+		let secp = secp.lock();
 		let sig = &self.excess_sig;
 		// Verify aggsig directly in libsecp
 		let pubkey = &self.excess.to_pubkey(&secp)?;
@@ -553,7 +554,7 @@ impl TransactionBody {
 
 		// Find all the outputs that have not had their rangeproofs verified.
 		let outputs = {
-			let mut verifier = verifier.write().unwrap();
+			let mut verifier = verifier.write();
 			verifier.filter_rangeproof_unverified(&self.outputs)
 		};
 
@@ -570,7 +571,7 @@ impl TransactionBody {
 
 		// Find all the kernels that have not yet been verified.
 		let kernels = {
-			let mut verifier = verifier.write().unwrap();
+			let mut verifier = verifier.write();
 			verifier.filter_kernel_sig_unverified(&self.kernels)
 		};
 
@@ -583,7 +584,7 @@ impl TransactionBody {
 
 		// Cache the successful verification results for the new outputs and kernels.
 		{
-			let mut verifier = verifier.write().unwrap();
+			let mut verifier = verifier.write();
 			verifier.add_rangeproof_verified(outputs);
 			verifier.add_kernel_sig_verified(kernels);
 		}
@@ -911,7 +912,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	// now compute the total kernel offset
 	let total_kernel_offset = {
 		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
+		let secp = secp.lock();
 		let mut positive_key = vec![mk_tx.offset]
 			.into_iter()
 			.filter(|x| *x != BlindingFactor::zero())
@@ -1092,7 +1093,7 @@ impl Output {
 	/// Validates the range proof using the commitment
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
+		let secp = secp.lock();
 		match secp.verify_bullet_proof(self.commit, self.proof, None) {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
@@ -1105,7 +1106,7 @@ impl Output {
 		proofs: &Vec<RangeProof>,
 	) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
+		let secp = secp.lock();
 		match secp.verify_bullet_proof_multi(commits.clone(), proofs.clone(), None) {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),

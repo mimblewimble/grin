@@ -21,9 +21,10 @@ use serde_json::Value;
 use std::error::Error;
 use std::io::{BufRead, ErrorKind, Write};
 use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use std::{cmp, thread};
+use util::{Mutex, RwLock};
 
 use chain;
 use common::stats::{StratumStats, WorkerStats};
@@ -122,14 +123,14 @@ fn accept_workers(
 					.set_nonblocking(true)
 					.expect("set_nonblocking call failed");
 				let mut worker = Worker::new(worker_id.to_string(), BufStream::new(stream));
-				workers.lock().unwrap().push(worker);
+				workers.lock().push(worker);
 				// stats for this worker (worker stat objects are added and updated but never
 				// removed)
 				let mut worker_stats = WorkerStats::default();
 				worker_stats.is_connected = true;
 				worker_stats.id = worker_id.to_string();
 				worker_stats.pow_difficulty = 1; // XXX TODO
-				let mut stratum_stats = stratum_stats.write().unwrap();
+				let mut stratum_stats = stratum_stats.write();
 				stratum_stats.worker_stats.push(worker_stats);
 				worker_id = worker_id + 1;
 			}
@@ -285,7 +286,7 @@ impl StratumServer {
 
 	// Handle an RPC request message from the worker(s)
 	fn handle_rpc_requests(&mut self, stratum_stats: &mut Arc<RwLock<StratumStats>>) {
-		let mut workers_l = self.workers.lock().unwrap();
+		let mut workers_l = self.workers.lock();
 		for num in 0..workers_l.len() {
 			match workers_l[num].read_message() {
 				Some(the_message) => {
@@ -306,7 +307,7 @@ impl StratumServer {
 						}
 					};
 
-					let mut stratum_stats = stratum_stats.write().unwrap();
+					let mut stratum_stats = stratum_stats.write();
 					let worker_stats_id = stratum_stats
 						.worker_stats
 						.iter()
@@ -582,7 +583,7 @@ impl StratumServer {
 	// Purge dead/sick workers - remove all workers marked in error state
 	fn clean_workers(&mut self, stratum_stats: &mut Arc<RwLock<StratumStats>>) -> usize {
 		let mut start = 0;
-		let mut workers_l = self.workers.lock().unwrap();
+		let mut workers_l = self.workers.lock();
 		loop {
 			for num in start..workers_l.len() {
 				if workers_l[num].error == true {
@@ -593,7 +594,7 @@ impl StratumServer {
 						workers_l[num].id;
 	                                );
 					// Update worker stats
-					let mut stratum_stats = stratum_stats.write().unwrap();
+					let mut stratum_stats = stratum_stats.write();
 					let worker_stats_id = stratum_stats
 						.worker_stats
 						.iter()
@@ -607,7 +608,7 @@ impl StratumServer {
 				start = num + 1;
 			}
 			if start >= workers_l.len() {
-				let mut stratum_stats = stratum_stats.write().unwrap();
+				let mut stratum_stats = stratum_stats.write();
 				stratum_stats.num_workers = workers_l.len();
 				return stratum_stats.num_workers;
 			}
@@ -639,7 +640,7 @@ impl StratumServer {
 		// Push the new block to all connected clients
 		// NOTE: We do not give a unique nonce (should we?) so miners need
 		//       to choose one for themselves
-		let mut workers_l = self.workers.lock().unwrap();
+		let mut workers_l = self.workers.lock();
 		for num in 0..workers_l.len() {
 			workers_l[num].write_message(job_request_json.clone());
 		}
@@ -691,7 +692,7 @@ impl StratumServer {
 
 		// We have started
 		{
-			let mut stratum_stats = stratum_stats.write().unwrap();
+			let mut stratum_stats = stratum_stats.write();
 			stratum_stats.is_running = true;
 			stratum_stats.edge_bits = edge_bits as u16;
 		}
@@ -753,7 +754,7 @@ impl StratumServer {
 				deadline = Utc::now().timestamp() + attempt_time_per_block as i64;
 
 				{
-					let mut stratum_stats = stratum_stats.write().unwrap();
+					let mut stratum_stats = stratum_stats.write();
 					stratum_stats.block_height = new_block.header.height;
 					stratum_stats.network_difficulty = self.current_difficulty;
 				}

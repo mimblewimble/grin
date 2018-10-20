@@ -18,8 +18,9 @@
 
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::{thread, time};
+use util::RwLock;
 
 use api;
 use chain;
@@ -79,7 +80,7 @@ impl Server {
 			if let Some(s) = enable_stratum_server {
 				if s {
 					{
-						let mut stratum_stats = serv.state_info.stratum_stats.write().unwrap();
+						let mut stratum_stats = serv.state_info.stratum_stats.write();
 						stratum_stats.is_enabled = true;
 					}
 					serv.start_stratum_server(c.clone());
@@ -388,7 +389,7 @@ impl Server {
 	/// other
 	/// consumers
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
-		let stratum_stats = self.state_info.stratum_stats.read().unwrap().clone();
+		let stratum_stats = self.state_info.stratum_stats.read().clone();
 		let awaiting_peers = self.state_info.awaiting_peers.load(Ordering::Relaxed);
 
 		// Fill out stats on our current difficulty calculation

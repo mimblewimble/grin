@@ -24,7 +24,8 @@ extern crate rand;
 
 use chrono::Duration;
 use std::fs;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use chain::types::NoopAdapter;
 use chain::Chain;

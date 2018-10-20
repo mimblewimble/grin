@@ -24,8 +24,9 @@ use std::fs::File;
 use std::io::{self, Read, Write};
 use std::mem::size_of;
 use std::net::TcpStream;
-use std::sync::{mpsc, Arc, RwLock};
+use std::sync::{mpsc, Arc};
 use std::{cmp, thread, time};
+use util::RwLock;
 
 use core::ser;
 use msg::{read_body, read_exact, read_header, write_all, write_to_buf, MsgHeader, Type};
@@ -168,9 +169,8 @@ impl Tracker {
 		self.send_channel.try_send(buf)?;
 
 		// Increase sent bytes counter
-		if let Ok(mut sent_bytes) = self.sent_bytes.write() {
-			*sent_bytes += buf_len as u64;
-		}
+		let mut sent_bytes = self.sent_bytes.write();
+		*sent_bytes += buf_len as u64;
 
 		Ok(())
 	}
@@ -241,7 +241,8 @@ fn poll<H>(
 					);
 
 					// Increase received bytes counter
-					if let Ok(mut received_bytes) = received_bytes.write() {
+					{
+						let mut received_bytes = received_bytes.write();
 						let header_size = size_of::<MsgHeader>() as u64;
 						*received_bytes += header_size + msg.header.msg_len;
 					}

@@ -18,7 +18,8 @@ extern crate grin_keychain as keychain;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 pub mod common;
 
@@ -48,20 +49,20 @@ fn test_verifier_cache_rangeproofs() {
 
 	// Check our output is not verified according to the cache.
 	{
-		let mut cache = cache.write().unwrap();
+		let mut cache = cache.write();
 		let unverified = cache.filter_rangeproof_unverified(&vec![out]);
 		assert_eq!(unverified, vec![out]);
 	}
 
 	// Add our output to the cache.
 	{
-		let mut cache = cache.write().unwrap();
+		let mut cache = cache.write();
 		cache.add_rangeproof_verified(vec![out]);
 	}
 
 	// Check it shows as verified according to the cache.
 	{
-		let mut cache = cache.write().unwrap();
+		let mut cache = cache.write();
 		let unverified = cache.filter_rangeproof_unverified(&vec![out]);
 		assert_eq!(unverified, vec![]);
 	}

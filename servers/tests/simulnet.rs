@@ -27,8 +27,9 @@ mod framework;
 
 use std::default::Default;
 use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::{thread, time};
+use util::Mutex;
 
 use core::core::hash::Hashed;
 use core::global::{self, ChainTypes};

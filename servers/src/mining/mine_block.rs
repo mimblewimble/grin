@@ -17,9 +17,10 @@
 
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use rand::{thread_rng, Rng};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use util::RwLock;
 
 use chain;
 use common::types::Error;
@@ -110,11 +111,7 @@ fn build_block(
 
 	// extract current transaction from the pool
 	// TODO - we have a lot of unwrap() going on in this fn...
-	let txs = tx_pool
-		.read()
-		.unwrap()
-		.prepare_mineable_transactions()
-		.unwrap();
+	let txs = tx_pool.read().prepare_mineable_transactions().unwrap();
 
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();

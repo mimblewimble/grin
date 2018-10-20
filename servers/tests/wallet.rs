@@ -27,8 +27,9 @@ extern crate grin_wallet as wallet;
 mod framework;
 
 use framework::{LocalServerContainer, LocalServerContainerConfig};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::{thread, time};
+use util::Mutex;
 
 use util::LOGGER;
 
@@ -55,11 +56,11 @@ fn basic_wallet_transactions() {
 	let coinbase_wallet = Arc::new(Mutex::new(
 		LocalServerContainer::new(coinbase_config).unwrap(),
 	));
-	let coinbase_wallet_config = { coinbase_wallet.lock().unwrap().wallet_config.clone() };
+	let coinbase_wallet_config = { coinbase_wallet.lock().wallet_config.clone() };
 
 	let coinbase_seed = LocalServerContainer::get_wallet_seed(&coinbase_wallet_config);
 	let _ = thread::spawn(move || {
-		let mut w = coinbase_wallet.lock().unwrap();
+		let mut w = coinbase_wallet.lock();
 		w.run_wallet(0);
 	});
 
@@ -69,11 +70,11 @@ fn basic_wallet_transactions() {
 	recp_config.wallet_port = 20002;
 	let target_wallet = Arc::new(Mutex::new(LocalServerContainer::new(recp_config).unwrap()));
 	let target_wallet_cloned = target_wallet.clone();
-	let recp_wallet_config = { target_wallet.lock().unwrap().wallet_config.clone() };
+	let recp_wallet_config = { target_wallet.lock().wallet_config.clone() };
 	let recp_seed = LocalServerContainer::get_wallet_seed(&recp_wallet_config);
 	//Start up a second wallet, to receive
 	let _ = thread::spawn(move || {
-		let mut w = target_wallet_cloned.lock().unwrap();
+		let mut w = target_wallet_cloned.lock();
 		w.run_wallet(0);
 	});
 

@@ -20,7 +20,8 @@ use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
 use std::mem;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
@@ -648,7 +649,7 @@ impl Block {
 
 		{
 			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
+			let secp = secp.lock();
 			let over_commit = secp.commit_value(reward(self.total_fees()))?;
 
 			let out_adjust_sum = secp.commit_sum(

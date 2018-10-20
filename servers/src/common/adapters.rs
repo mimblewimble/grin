@@ -17,9 +17,10 @@
 
 use std::fs::File;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
+use util::RwLock;
 
 use chain::{self, ChainAdapter, Options};
 use chrono::prelude::{DateTime, Utc};
@@ -82,7 +83,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		);
 
 		let res = {
-			let mut tx_pool = self.tx_pool.write().unwrap();
+			let mut tx_pool = self.tx_pool.write();
 			tx_pool.add_to_pool(source, tx, stem, &header)
 		};
 
@@ -139,7 +140,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			}
 
 			let (txs, missing_short_ids) = {
-				let tx_pool = self.tx_pool.read().unwrap();
+				let tx_pool = self.tx_pool.read();
 				tx_pool.retrieve_transactions(cb.hash(), cb.nonce, cb.kern_ids())
 			};
 
@@ -640,7 +641,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 
 		debug!(LOGGER, "adapter: block_accepted: {:?}", b.hash());
 
-		if let Err(e) = self.tx_pool.write().unwrap().reconcile_block(b) {
+		if let Err(e) = self.tx_pool.write().reconcile_block(b) {
 			error!(
 				LOGGER,
 				"Pool could not update itself at block {}: {:?}",

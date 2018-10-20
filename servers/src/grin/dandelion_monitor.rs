@@ -15,9 +15,10 @@
 use chrono::prelude::Utc;
 use rand::{thread_rng, Rng};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use util::RwLock;
 
 use core::core::hash::Hashed;
 use core::core::transaction;
@@ -86,7 +87,7 @@ fn process_stem_phase(
 	tx_pool: Arc<RwLock<TransactionPool>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 ) -> Result<(), PoolError> {
-	let mut tx_pool = tx_pool.write().unwrap();
+	let mut tx_pool = tx_pool.write();
 
 	let header = tx_pool.chain_head()?;
 
@@ -133,7 +134,7 @@ fn process_fluff_phase(
 	tx_pool: Arc<RwLock<TransactionPool>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 ) -> Result<(), PoolError> {
-	let mut tx_pool = tx_pool.write().unwrap();
+	let mut tx_pool = tx_pool.write();
 
 	let header = tx_pool.chain_head()?;
 
@@ -172,7 +173,7 @@ fn process_fresh_entries(
 	dandelion_config: DandelionConfig,
 	tx_pool: Arc<RwLock<TransactionPool>>,
 ) -> Result<(), PoolError> {
-	let mut tx_pool = tx_pool.write().unwrap();
+	let mut tx_pool = tx_pool.write();
 
 	let mut rng = thread_rng();
 
@@ -212,7 +213,7 @@ fn process_expired_entries(
 
 	let mut expired_entries = vec![];
 	{
-		let tx_pool = tx_pool.read().unwrap();
+		let tx_pool = tx_pool.read();
 		for entry in tx_pool
 			.stempool
 			.entries
@@ -236,7 +237,7 @@ fn process_expired_entries(
 		);
 
 		{
-			let mut tx_pool = tx_pool.write().unwrap();
+			let mut tx_pool = tx_pool.write();
 			let header = tx_pool.chain_head()?;
 
 			for entry in expired_entries {

@@ -18,12 +18,14 @@ extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_store as store;
+extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
 
 use chrono::Duration;
 use std::fs;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use chain::types::NoopAdapter;
 use chain::ErrorKind;

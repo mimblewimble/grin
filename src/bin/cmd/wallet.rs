@@ -18,9 +18,10 @@ use std::io::Read;
 use std::path::PathBuf;
 /// Wallet commands processing
 use std::process::exit;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use std::{process, thread};
+use util::Mutex;
 
 use clap::ArgMatches;
 

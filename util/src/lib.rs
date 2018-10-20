@@ -38,6 +38,10 @@ extern crate serde;
 extern crate serde_derive;
 extern crate walkdir;
 extern crate zip as zip_rs;
+// Re-export so only has to be included once
+extern crate parking_lot;
+pub use parking_lot::Mutex;
+pub use parking_lot::RwLock;
 
 // Re-export so only has to be included once
 pub extern crate secp256k1zkp as secp;
@@ -59,7 +63,7 @@ pub mod macros;
 use byteorder::{BigEndian, ByteOrder};
 #[allow(unused_imports)]
 use std::ops::Deref;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 mod hex;
 pub use hex::*;
@@ -93,7 +97,7 @@ where
 	/// Initializes the OneTime, should only be called once after construction.
 	/// Will panic (via assert) if called more than once.
 	pub fn init(&self, value: T) {
-		let mut inner = self.inner.write().unwrap();
+		let mut inner = self.inner.write();
 		assert!(inner.is_none());
 		*inner = Some(value);
 	}
@@ -101,7 +105,7 @@ where
 	/// Borrows the OneTime, should only be called after initialization.
 	/// Will panic (via expect) if called before initialization.
 	pub fn borrow(&self) -> T {
-		let inner = self.inner.read().unwrap();
+		let inner = self.inner.read();
 		inner
 			.clone()
 			.expect("Cannot borrow one_time before initialization.")

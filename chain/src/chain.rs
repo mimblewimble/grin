@@ -18,8 +18,9 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
+use util::RwLock;
 
 use lmdb;
 use lru_cache::LruCache;
@@ -75,7 +76,7 @@ impl OrphanBlockPool {
 	}
 
 	fn len(&self) -> usize {
-		let orphans = self.orphans.read().unwrap();
+		let orphans = self.orphans.read();
 		orphans.len()
 	}
 
@@ -84,8 +85,8 @@ impl OrphanBlockPool {
 	}
 
 	fn add(&self, orphan: Orphan) {
-		let mut orphans = self.orphans.write().unwrap();
-		let mut height_idx = self.height_idx.write().unwrap();
+		let mut orphans = self.orphans.write();
+		let mut height_idx = self.height_idx.write();
 		{
 			let height_hashes = height_idx
 				.entry(orphan.block.header.height)
@@ -125,15 +126,15 @@ impl OrphanBlockPool {
 	/// Get an orphan from the pool indexed by the hash of its parent, removing
 	/// it at the same time, preventing clone
 	fn remove_by_height(&self, height: &u64) -> Option<Vec<Orphan>> {
-		let mut orphans = self.orphans.write().unwrap();
-		let mut height_idx = self.height_idx.write().unwrap();
+		let mut orphans = self.orphans.write();
+		let mut height_idx = self.height_idx.write();
 		height_idx
 			.remove(height)
 			.map(|hs| hs.iter().filter_map(|h| orphans.remove(h)).collect())
 	}
 
 	pub fn contains(&self, hash: &Hash) -> bool {
-		let orphans = self.orphans.read().unwrap();
+		let orphans = self.orphans.read();
 		orphans.contains_key(hash)
 	}
 }
@@ -221,7 +222,7 @@ impl Chain {
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
 		let maybe_new_head: Result<Option<Tip>, Error>;
 		{
-			let mut txhashset = self.txhashset.write().unwrap();
+			let mut txhashset = self.txhashset.write();
 			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
@@ -235,7 +236,7 @@ impl Chain {
 		let add_to_hash_cache = |hash: Hash| {
 			// only add to hash cache below if block is definitively accepted
 			// or rejected
-			let mut cache = self.block_hashes_cache.write().unwrap();
+			let mut cache = self.block_hashes_cache.write();
 			cache.insert(hash, true);
 		};
 
@@ -299,7 +300,7 @@ impl Chain {
 
 	/// Process a block header received during "header first" propagation.
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 		pipe::process_block_header(bh, &mut ctx)?;
@@ -315,7 +316,7 @@ impl Chain {
 		headers: &Vec<BlockHeader>,
 		opts: Options,
 	) -> Result<(), Error> {
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
@@ -417,7 +418,7 @@ impl Chain {
 	/// current chain state, specifically the current winning (valid, most
 	/// work) fork.
 	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Hash, Error> {
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 		let res = txhashset.is_unspent(output_ref);
 		match res {
 			Err(e) => Err(e),
@@ -427,7 +428,7 @@ impl Chain {
 
 	/// Validate the tx against the current UTXO set.
 	pub fn validate_tx(&self, tx: &Transaction) -> Result<(), Error> {
-		let txhashset = self.txhashset.read().unwrap();
+		let txhashset = self.txhashset.read();
 		txhashset::utxo_view(&txhashset, |utxo| {
 			utxo.validate_tx(tx)?;
 			Ok(())
@@ -443,7 +444,7 @@ impl Chain {
 	/// that has not yet sufficiently matured.
 	pub fn verify_coinbase_maturity(&self, tx: &Transaction) -> Result<(), Error> {
 		let height = self.next_block_height()?;
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 		txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.verify_coinbase_maturity(&tx.inputs(), height)?;
 			Ok(())
@@ -470,7 +471,7 @@ impl Chain {
 			return Ok(());
 		}
 
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 
 		// Now create an extension from the txhashset and validate against the
 		// latest block header. Rewind the extension to the specified header to
@@ -485,7 +486,7 @@ impl Chain {
 	/// Sets the txhashset roots on a brand new block by applying the block on
 	/// the current txhashset state.
 	pub fn set_txhashset_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 		let (prev_root, roots, sizes) =
 			txhashset::extending_readonly(&mut txhashset, |extension| {
 				if is_fork {
@@ -526,7 +527,7 @@ impl Chain {
 		output: &OutputIdentifier,
 		block_header: &BlockHeader,
 	) -> Result<MerkleProof, Error> {
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 
 		let merkle_proof = txhashset::extending_readonly(&mut txhashset, |extension| {
 			extension.rewind(&block_header)?;
@@ -539,13 +540,13 @@ impl Chain {
 	/// Return a merkle proof valid for the current output pmmr state at the
 	/// given pos
 	pub fn get_merkle_proof_for_pos(&self, commit: Commitment) -> Result<MerkleProof, String> {
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 		txhashset.merkle_proof(commit)
 	}
 
 	/// Returns current txhashset roots
 	pub fn get_txhashset_roots(&self) -> TxHashSetRoots {
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 		txhashset.roots()
 	}
 
@@ -560,7 +561,7 @@ impl Chain {
 		// to rewind after receiving the txhashset zip.
 		let header = self.get_block_header(&h)?;
 		{
-			let mut txhashset = self.txhashset.write().unwrap();
+			let mut txhashset = self.txhashset.write();
 			txhashset::extending_readonly(&mut txhashset, |extension| {
 				extension.rewind(&header)?;
 				extension.snapshot()?;
@@ -617,7 +618,7 @@ impl Chain {
 	/// have an MMR we can safely rewind based on the headers received from a peer.
 	/// TODO - think about how to optimize this.
 	pub fn rebuild_sync_mmr(&self, head: &Tip) -> Result<(), Error> {
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 		let mut batch = self.store.batch()?;
 		txhashset::sync_extending(&mut txhashset, &mut batch, |extension| {
 			extension.rebuild(head, &self.genesis)?;
@@ -733,7 +734,7 @@ impl Chain {
 
 		// Replace the chain txhashset with the newly built one.
 		{
-			let mut txhashset_ref = self.txhashset.write().unwrap();
+			let mut txhashset_ref = self.txhashset.write();
 			*txhashset_ref = txhashset;
 		}
 
@@ -772,7 +773,7 @@ impl Chain {
 		debug!(LOGGER, "Starting blockchain compaction.");
 		// Compact the txhashset via the extension.
 		{
-			let mut txhashset = self.txhashset.write().unwrap();
+			let mut txhashset = self.txhashset.write();
 			txhashset.compact()?;
 
 			// print out useful debug info after compaction
@@ -836,19 +837,19 @@ impl Chain {
 
 	/// returns the last n nodes inserted into the output sum tree
 	pub fn get_last_n_output(&self, distance: u64) -> Vec<(Hash, OutputIdentifier)> {
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 		txhashset.last_n_output(distance)
 	}
 
 	/// as above, for rangeproofs
 	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<(Hash, RangeProof)> {
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 		txhashset.last_n_rangeproof(distance)
 	}
 
 	/// as above, for kernels
 	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<(Hash, TxKernel)> {
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 		txhashset.last_n_kernel(distance)
 	}
 
@@ -858,7 +859,7 @@ impl Chain {
 		start_index: u64,
 		max: u64,
 	) -> Result<(u64, u64, Vec<Output>), Error> {
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 		let max_index = txhashset.highest_output_insertion_index();
 		let outputs = txhashset.outputs_by_insertion_index(start_index, max);
 		let rangeproofs = txhashset.rangeproofs_by_insertion_index(start_index, max);
@@ -945,7 +946,7 @@ impl Chain {
 		&self,
 		output_ref: &OutputIdentifier,
 	) -> Result<BlockHeader, Error> {
-		let mut txhashset = self.txhashset.write().unwrap();
+		let mut txhashset = self.txhashset.write();
 		let (_, pos) = txhashset.is_unspent(output_ref)?;
 		let mut min = 1;
 		let mut max = {
