@@ -14,11 +14,9 @@
 
 //! Logging configuration types
 
-/// Log level types, as slog's don't implement serialize
+/// Log level types
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum LogLevel {
-	/// Critical
-	Critical,
 	/// Error
 	Error,
 	/// Warning

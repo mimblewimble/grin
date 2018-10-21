@@ -37,7 +37,6 @@ use log4rs::filter::{threshold::ThresholdFilter, Filter, Response};
 fn convert_log_level(in_level: &LogLevel) -> LevelFilter {
 	match *in_level {
 		LogLevel::Info => LevelFilter::Info,
-		LogLevel::Critical => LevelFilter::Error,
 		LogLevel::Warning => LevelFilter::Warn,
 		LogLevel::Debug => LevelFilter::Debug,
 		LogLevel::Trace => LevelFilter::Trace,
