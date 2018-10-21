@@ -36,8 +36,8 @@ use libwallet::types::{
 	WalletClient, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
+use util;
 use util::secp::pedersen;
-use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to
 /// the wallet/keychain that they're acting upon
@@ -188,7 +188,6 @@ where
 			Ok(s) => s,
 			Err(e) => {
 				error!(
-				LOGGER,
 				"Communication with receiver failed on SenderInitiation send. Aborting transaction {:?}",
 				e,
 			);
@@ -321,11 +320,10 @@ where
 		};
 		let res = client.post_tx(&TxWrapper { tx_hex: tx_hex }, fluff);
 		if let Err(e) = res {
-			error!(LOGGER, "api: post_tx: failed with error: {}", e);
+			error!("api: post_tx: failed with error: {}", e);
 			Err(e)
 		} else {
 			debug!(
-				LOGGER,
 				"api: post_tx: successfully posted tx: {}, fluff? {}",
 				slate.tx.hash(),
 				fluff
@@ -351,14 +349,14 @@ where
 		};
 		if confirmed {
 			warn!(
-				LOGGER,
-				"api: dump_stored_tx: transaction at {} is already confirmed.", tx_id
+				"api: dump_stored_tx: transaction at {} is already confirmed.",
+				tx_id
 			);
 		}
 		if tx_hex.is_none() {
 			error!(
-				LOGGER,
-				"api: dump_stored_tx: completed transaction at {} does not exist.", tx_id
+				"api: dump_stored_tx: completed transaction at {} does not exist.",
+				tx_id
 			);
 			return Err(ErrorKind::TransactionBuildingNotCompleted(tx_id))?;
 		}
@@ -386,15 +384,15 @@ where
 		};
 		if confirmed {
 			error!(
-				LOGGER,
-				"api: repost_tx: transaction at {} is confirmed. NOT resending.", tx_id
+				"api: repost_tx: transaction at {} is confirmed. NOT resending.",
+				tx_id
 			);
 			return Err(ErrorKind::TransactionAlreadyConfirmed)?;
 		}
 		if tx_hex.is_none() {
 			error!(
-				LOGGER,
-				"api: repost_tx: completed transaction at {} does not exist.", tx_id
+				"api: repost_tx: completed transaction at {} does not exist.",
+				tx_id
 			);
 			return Err(ErrorKind::TransactionBuildingNotCompleted(tx_id))?;
 		}
@@ -406,12 +404,12 @@ where
 			fluff,
 		);
 		if let Err(e) = res {
-			error!(LOGGER, "api: repost_tx: failed with error: {}", e);
+			error!("api: repost_tx: failed with error: {}", e);
 			Err(e)
 		} else {
 			debug!(
-				LOGGER,
-				"api: repost_tx: successfully posted tx at: {}, fluff? {}", tx_id, fluff
+				"api: repost_tx: successfully posted tx at: {}, fluff? {}",
+				tx_id, fluff
 			);
 			Ok(())
 		}
@@ -541,11 +539,10 @@ where
 		w.close()?;
 
 		if let Err(e) = res {
-			error!(LOGGER, "api: receive_tx: failed with error: {}", e);
+			error!("api: receive_tx: failed with error: {}", e);
 			Err(e)
 		} else {
 			debug!(
-				LOGGER,
 				"api: receive_tx: successfully received tx: {}",
 				slate.tx.hash()
 			);

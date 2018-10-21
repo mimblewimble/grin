@@ -39,7 +39,6 @@ use p2p;
 use pool;
 use store;
 use util::file::get_first_line;
-use util::LOGGER;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -156,7 +155,7 @@ impl Server {
 			global::ChainTypes::Mainnet => genesis::genesis_testnet2(), //TODO: Fix, obviously
 		};
 
-		info!(LOGGER, "Starting server, genesis block: {}", genesis.hash());
+		info!("Starting server, genesis block: {}", genesis.hash());
 
 		let db_env = Arc::new(store::new_env(config.db_root.clone()));
 		let shared_chain = Arc::new(chain::Chain::init(
@@ -205,10 +204,7 @@ impl Server {
 		if config.p2p_config.seeding_type.clone() != p2p::Seeding::Programmatic {
 			let seeder = match config.p2p_config.seeding_type.clone() {
 				p2p::Seeding::None => {
-					warn!(
-						LOGGER,
-						"No seed configured, will stay solo until connected to"
-					);
+					warn!("No seed configured, will stay solo until connected to");
 					seed::predefined_seeds(vec![])
 				}
 				p2p::Seeding::List => {
@@ -255,7 +251,7 @@ impl Server {
 			.name("p2p-server".to_string())
 			.spawn(move || p2p_inner.listen());
 
-		info!(LOGGER, "Starting rest apis at: {}", &config.api_http_addr);
+		info!("Starting rest apis at: {}", &config.api_http_addr);
 		let api_secret = get_first_line(config.api_secret_path.clone());
 		api::start_rest_apis(
 			config.api_http_addr.clone(),
@@ -266,10 +262,7 @@ impl Server {
 			None,
 		);
 
-		info!(
-			LOGGER,
-			"Starting dandelion monitor: {}", &config.api_http_addr
-		);
+		info!("Starting dandelion monitor: {}", &config.api_http_addr);
 		dandelion_monitor::monitor_transactions(
 			config.dandelion_config.clone(),
 			tx_pool.clone(),
@@ -277,7 +270,7 @@ impl Server {
 			stop.clone(),
 		);
 
-		warn!(LOGGER, "Grin server started.");
+		warn!("Grin server started.");
 		Ok(Server {
 			config,
 			p2p: p2p_server,
@@ -336,7 +329,7 @@ impl Server {
 	/// internal miner, and should only be used for automated testing. Burns
 	/// reward if wallet_listener_url is 'None'
 	pub fn start_test_miner(&self, wallet_listener_url: Option<String>, stop: Arc<AtomicBool>) {
-		info!(LOGGER, "start_test_miner - start",);
+		info!("start_test_miner - start",);
 		let sync_state = self.sync_state.clone();
 		let config_wallet_url = match wallet_listener_url.clone() {
 			Some(u) => u,
@@ -467,6 +460,6 @@ impl Server {
 	/// Stops the test miner without stopping the p2p layer
 	pub fn stop_test_miner(&self, stop: Arc<AtomicBool>) {
 		stop.store(true, Ordering::Relaxed);
-		info!(LOGGER, "stop_test_miner - stop",);
+		info!("stop_test_miner - stop",);
 	}
 }

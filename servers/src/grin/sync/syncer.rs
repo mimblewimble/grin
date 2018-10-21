@@ -24,7 +24,6 @@ use grin::sync::body_sync::BodySync;
 use grin::sync::header_sync::HeaderSync;
 use grin::sync::state_sync::StateSync;
 use p2p::{self, Peers};
-use util::LOGGER;
 
 pub fn run_sync(
 	sync_state: Arc<SyncState>,
@@ -164,7 +163,6 @@ fn needs_syncing(
 			if peer.info.total_difficulty() <= local_diff {
 				let ch = chain.head().unwrap();
 				info!(
-					LOGGER,
 					"synchronized at {} @ {} [{}]",
 					local_diff.to_num(),
 					ch.height,
@@ -175,7 +173,7 @@ fn needs_syncing(
 				return (false, most_work_height);
 			}
 		} else {
-			warn!(LOGGER, "sync: no peers available, disabling sync");
+			warn!("sync: no peers available, disabling sync");
 			return (false, 0);
 		}
 	} else {
@@ -192,7 +190,6 @@ fn needs_syncing(
 			let peer_diff = peer.info.total_difficulty();
 			if peer_diff > local_diff.clone() + threshold.clone() {
 				info!(
-					LOGGER,
 					"sync: total_difficulty {}, peer_difficulty {}, threshold {} (last 5 blocks), enabling sync",
 					local_diff,
 					peer_diff,

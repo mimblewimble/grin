@@ -28,7 +28,7 @@ extern crate lmdb_zero;
 extern crate memmap;
 extern crate serde;
 #[macro_use]
-extern crate slog;
+extern crate log;
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;

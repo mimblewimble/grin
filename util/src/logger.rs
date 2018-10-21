@@ -12,10 +12,6 @@
 // limitations under the License.
 
 //! Logging wrapper to be used throughout all crates in the workspace
-use slog::{Discard, Drain, Duplicate, Level, LevelFilter, Logger};
-use slog_async;
-use slog_term;
-use std::fs::OpenOptions;
 use std::ops::Deref;
 use Mutex;
 
@@ -24,14 +20,27 @@ use std::{panic, thread};
 
 use types::{LogLevel, LoggingConfig};
 
-fn convert_log_level(in_level: &LogLevel) -> Level {
+use log::{LevelFilter, Record};
+use log4rs;
+use log4rs::append::console::ConsoleAppender;
+use log4rs::append::file::FileAppender;
+use log4rs::append::rolling_file::{
+	policy::compound::roll::fixed_window::FixedWindowRoller,
+	policy::compound::trigger::size::SizeTrigger, policy::compound::CompoundPolicy,
+	RollingFileAppender,
+};
+use log4rs::append::Append;
+use log4rs::config::{Appender, Config, Root};
+use log4rs::encode::pattern::PatternEncoder;
+use log4rs::filter::{threshold::ThresholdFilter, Filter, Response};
+
+fn convert_log_level(in_level: &LogLevel) -> LevelFilter {
 	match *in_level {
-		LogLevel::Info => Level::Info,
-		LogLevel::Critical => Level::Critical,
-		LogLevel::Warning => Level::Warning,
-		LogLevel::Debug => Level::Debug,
-		LogLevel::Trace => Level::Trace,
-		LogLevel::Error => Level::Error,
+		LogLevel::Info => LevelFilter::Info,
+		LogLevel::Warning => LevelFilter::Warn,
+		LogLevel::Debug => LevelFilter::Debug,
+		LogLevel::Trace => LevelFilter::Trace,
+		LogLevel::Error => LevelFilter::Error,
 	}
 }
 
@@ -43,60 +52,115 @@ lazy_static! {
 	static ref TUI_RUNNING: Mutex<bool> = Mutex::new(false);
 	/// Static Logging configuration, should only be set once, before first logging call
 	static ref LOGGING_CONFIG: Mutex<LoggingConfig> = Mutex::new(LoggingConfig::default());
+}
 
-	/// And a static reference to the logger itself, accessible from all crates
-	pub static ref LOGGER: Logger = {
-		let was_init = WAS_INIT.lock().clone();
-		let config = LOGGING_CONFIG.lock();
-		let slog_level_stdout = convert_log_level(&config.stdout_log_level);
-		let slog_level_file = convert_log_level(&config.file_log_level);
-		if config.tui_running.is_some() && config.tui_running.unwrap() {
-			let mut tui_running_ref = TUI_RUNNING.lock();
-			*tui_running_ref = true;
+/// This filter is rejecting messages that doesn't start with "grin"
+/// in order to save log space for only Grin-related records
+#[derive(Debug)]
+struct GrinFilter;
+
+impl Filter for GrinFilter {
+	fn filter(&self, record: &Record) -> Response {
+		if let Some(module_path) = record.module_path() {
+			if module_path.starts_with("grin") {
+				return Response::Neutral;
+			}
 		}
 
-		//Terminal output drain
-		let terminal_decorator = slog_term::TermDecorator::new().build();
-		let terminal_drain = slog_term::FullFormat::new(terminal_decorator).build().fuse();
-		let terminal_drain = LevelFilter::new(terminal_drain, slog_level_stdout).fuse();
-		let mut terminal_drain = slog_async::Async::new(terminal_drain).build().fuse();
-		if !config.log_to_stdout || !was_init {
-			terminal_drain = slog_async::Async::new(Discard{}).build().fuse();
-		}
-
-		if config.log_to_file && was_init {
-			//File drain
-			let file = OpenOptions::new()
-				.create(true)
-				.write(true)
-				.append(config.log_file_append)
-				.truncate(false)
-				.open(&config.log_file_path)
-				.unwrap();
-
-			let file_decorator = slog_term::PlainDecorator::new(file);
-			let file_drain = slog_term::FullFormat::new(file_decorator).build().fuse();
-			let file_drain = LevelFilter::new(file_drain, slog_level_file).fuse();
-			let file_drain_final = slog_async::Async::new(file_drain).build().fuse();
-
-			let composite_drain = Duplicate::new(terminal_drain, file_drain_final).fuse();
-
-			Logger::root(composite_drain, o!())
-		} else {
-			Logger::root(terminal_drain, o!())
-		}
-	};
+		Response::Reject
+	}
 }
 
 /// Initialize the logger with the given configuration
 pub fn init_logger(config: Option<LoggingConfig>) {
 	if let Some(c) = config {
-		let mut config_ref = LOGGING_CONFIG.lock();
-		*config_ref = c.clone();
+		let level_stdout = convert_log_level(&c.stdout_log_level);
+		let level_file = convert_log_level(&c.file_log_level);
+		let level_minimum;
+
+		// Determine minimum logging level for Root logger
+		if level_stdout > level_file {
+			level_minimum = level_stdout;
+		} else {
+			level_minimum = level_file;
+		}
+
+		// Start logger
+		let stdout = ConsoleAppender::builder()
+			.encoder(Box::new(PatternEncoder::default()))
+			.build();
+
+		let mut root = Root::builder();
+
+		let mut appenders = vec![];
+
+		if c.log_to_stdout {
+			let filter = Box::new(ThresholdFilter::new(level_stdout));
+			appenders.push(
+				Appender::builder()
+					.filter(filter)
+					.filter(Box::new(GrinFilter))
+					.build("stdout", Box::new(stdout)),
+			);
+
+			root = root.appender("stdout");
+		}
+
+		if c.log_to_file {
+			// If maximum log size is specified, use rolling file appender
+			// or use basic one otherwise
+			let filter = Box::new(ThresholdFilter::new(level_file));
+			let file: Box<Append> = {
+				if let Some(size) = c.log_max_size {
+					let roller = FixedWindowRoller::builder()
+						.build(&format!("{}.{{}}.gz", c.log_file_path), 32)
+						.unwrap();
+					let trigger = SizeTrigger::new(size);
+
+					let policy = CompoundPolicy::new(Box::new(trigger), Box::new(roller));
+
+					Box::new(
+						RollingFileAppender::builder()
+							.append(c.log_file_append)
+							.encoder(Box::new(PatternEncoder::new("{d} {l} {M} - {m}{n}")))
+							.build(c.log_file_path, Box::new(policy))
+							.unwrap(),
+					)
+				} else {
+					Box::new(
+						FileAppender::builder()
+							.append(c.log_file_append)
+							.encoder(Box::new(PatternEncoder::new("{d} {l} {M} - {m}{n}")))
+							.build(c.log_file_path)
+							.unwrap(),
+					)
+				}
+			};
+
+			appenders.push(
+				Appender::builder()
+					.filter(filter)
+					.filter(Box::new(GrinFilter))
+					.build("file", file),
+			);
+			root = root.appender("file");
+		}
+
+		let config = Config::builder()
+			.appenders(appenders)
+			.build(root.build(level_minimum))
+			.unwrap();
+
+		let _ = log4rs::init_config(config).unwrap();
+
+		info!(
+			"log4rs is initialized, file level: {:?}, stdout level: {:?}, min. level: {:?}",
+			level_file, level_stdout, level_minimum
+		);
+
 		// Logger configuration successfully injected into LOGGING_CONFIG...
 		let mut was_init_ref = WAS_INIT.lock();
 		*was_init_ref = true;
-		// .. allow logging, having ensured that paths etc are immutable
 	}
 	send_panic_to_log();
 }
@@ -134,7 +198,6 @@ fn send_panic_to_log() {
 		match info.location() {
 			Some(location) => {
 				error!(
-					LOGGER,
 					"\nthread '{}' panicked at '{}': {}:{}{:?}\n\n",
 					thread,
 					msg,
@@ -143,10 +206,7 @@ fn send_panic_to_log() {
 					backtrace
 				);
 			}
-			None => error!(
-				LOGGER,
-				"thread '{}' panicked at '{}'{:?}", thread, msg, backtrace
-			),
+			None => error!("thread '{}' panicked at '{}'{:?}", thread, msg, backtrace),
 		}
 		//also print to stderr
 		let tui_running = TUI_RUNNING.lock().clone();

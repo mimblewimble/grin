@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #[macro_use]
-extern crate slog;
+extern crate log;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
@@ -30,8 +30,6 @@ use framework::{LocalServerContainer, LocalServerContainerConfig};
 use std::sync::Arc;
 use std::{thread, time};
 use util::Mutex;
-
-use util::LOGGER;
 
 /// Start 1 node mining, 1 non mining node and two wallets.
 /// Then send a transaction from one wallet to another and propagate it a stem
@@ -136,7 +134,7 @@ fn test_dandelion_timeout() {
 			LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
 	}
 
-	warn!(LOGGER, "Sending 50 Grins to recipient wallet");
+	warn!("Sending 50 Grins to recipient wallet");
 
 	// Sending stem transaction
 	LocalServerContainer::send_amount_to(

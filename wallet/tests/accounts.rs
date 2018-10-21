@@ -20,7 +20,7 @@ extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
 #[macro_use]
-extern crate slog;
+extern crate log;
 extern crate chrono;
 extern crate serde;
 extern crate uuid;
@@ -35,7 +35,6 @@ use std::time::Duration;
 use core::global;
 use core::global::ChainTypes;
 use keychain::{ExtKeychain, Keychain};
-use util::LOGGER;
 use wallet::libwallet;
 
 fn clean_output_dir(test_dir: &str) {
@@ -69,7 +68,7 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
 		if let Err(e) = wallet_proxy.run() {
-			error!(LOGGER, "Wallet Proxy error: {}", e);
+			error!("Wallet Proxy error: {}", e);
 		}
 	});
 

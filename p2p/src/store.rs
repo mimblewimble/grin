@@ -26,7 +26,6 @@ use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store::{self, option_to_not_found, to_key, Error};
 use msg::SockAddr;
 use types::{Capabilities, ReasonForBan};
-use util::LOGGER;
 
 const STORE_SUBPATH: &'static str = "peers";
 
@@ -111,7 +110,7 @@ impl PeerStore {
 	}
 
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
-		debug!(LOGGER, "save_peer: {:?} marked {:?}", p.addr, p.flags);
+		debug!("save_peer: {:?} marked {:?}", p.addr, p.flags);
 
 		let batch = self.db.batch()?;
 		batch.put_ser(&peer_key(p.addr)[..], p)?;

@@ -21,7 +21,6 @@ use common::types::{Error, SyncState, SyncStatus};
 use core::core::hash::Hashed;
 use core::global;
 use p2p::{self, Peer};
-use util::LOGGER;
 
 /// Fast sync has 3 "states":
 /// * syncing headers
@@ -77,10 +76,7 @@ impl StateSync {
 		{
 			let clone = self.sync_state.sync_error();
 			if let Some(ref sync_error) = *clone.read() {
-				error!(
-					LOGGER,
-					"fast_sync: error = {:?}. restart fast sync", sync_error
-				);
+				error!("fast_sync: error = {:?}. restart fast sync", sync_error);
 				sync_need_restart = true;
 			}
 			drop(clone);
@@ -92,8 +88,8 @@ impl StateSync {
 				if !peer.is_connected() {
 					sync_need_restart = true;
 					info!(
-						LOGGER,
-						"fast_sync: peer connection lost: {:?}. restart", peer.info.addr,
+						"fast_sync: peer connection lost: {:?}. restart",
+						peer.info.addr,
 					);
 				}
 			}
@@ -110,10 +106,7 @@ impl StateSync {
 
 			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
 				if download_timeout {
-					error!(
-						LOGGER,
-						"fast_sync: TxHashsetDownload status timeout in 10 minutes!"
-					);
+					error!("fast_sync: TxHashsetDownload status timeout in 10 minutes!");
 					self.sync_state
 						.set_sync_error(Error::P2P(p2p::Error::Timeout));
 				}
@@ -168,7 +161,6 @@ impl StateSync {
 			}
 			let bhash = txhashset_head.hash();
 			debug!(
-				LOGGER,
 				"fast_sync: before txhashset request, header head: {} / {}, txhashset_head: {} / {}",
 				header_head.height,
 				header_head.last_block_h,
@@ -176,7 +168,7 @@ impl StateSync {
 				bhash
 			);
 			if let Err(e) = peer.send_txhashset_request(txhashset_head.height, bhash) {
-				error!(LOGGER, "fast_sync: send_txhashset_request err! {:?}", e);
+				error!("fast_sync: send_txhashset_request err! {:?}", e);
 				return Err(e);
 			}
 			return Ok(peer.clone());

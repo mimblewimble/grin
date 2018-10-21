@@ -21,7 +21,7 @@ extern crate grin_servers as servers;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 #[macro_use]
-extern crate slog;
+extern crate log;
 
 mod framework;
 
@@ -34,7 +34,6 @@ use util::Mutex;
 use core::core::hash::Hashed;
 use core::global::{self, ChainTypes};
 
-use util::LOGGER;
 use wallet::controller;
 use wallet::libtx::slate::Slate;
 use wallet::libwallet::types::{WalletBackend, WalletInst};
@@ -243,7 +242,7 @@ fn simulate_block_propagation() {
 		thread::sleep(time::Duration::from_millis(1_000));
 		time_spent += 1;
 		if time_spent >= 30 {
-			info!(LOGGER, "simulate_block_propagation - fail on timeout",);
+			info!("simulate_block_propagation - fail on timeout",);
 			break;
 		}
 
@@ -285,7 +284,6 @@ fn simulate_full_sync() {
 	// Get the current header from s1.
 	let s1_header = s1.chain.head_header().unwrap();
 	info!(
-		LOGGER,
 		"simulate_full_sync - s1 header head: {} at {}",
 		s1_header.hash(),
 		s1_header.height
@@ -298,7 +296,6 @@ fn simulate_full_sync() {
 		time_spent += 1;
 		if time_spent >= 30 {
 			info!(
-				LOGGER,
 				"sync fail. s2.head().height: {}, s1_header.height: {}",
 				s2.head().height,
 				s1_header.height
@@ -356,7 +353,6 @@ fn simulate_fast_sync() {
 		total_wait += 1;
 		if total_wait >= 30 {
 			error!(
-				LOGGER,
 				"simulate_fast_sync test fail on timeout! s2 height: {}, s1 height: {}",
 				s2.head().height,
 				s1_header.height,

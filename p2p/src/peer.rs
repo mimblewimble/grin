@@ -28,7 +28,6 @@ use protocol::Protocol;
 use types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerInfo, ReasonForBan, TxHashSetRead,
 };
-use util::LOGGER;
 
 const MAX_TRACK_SIZE: usize = 30;
 
@@ -104,8 +103,8 @@ impl Peer {
 		if let Some(ref denied) = config.peers_deny {
 			if denied.contains(&peer) {
 				debug!(
-					LOGGER,
-					"checking peer allowed/denied: {:?} explicitly denied", peer_addr
+					"checking peer allowed/denied: {:?} explicitly denied",
+					peer_addr
 				);
 				return true;
 			}
@@ -113,14 +112,14 @@ impl Peer {
 		if let Some(ref allowed) = config.peers_allow {
 			if allowed.contains(&peer) {
 				debug!(
-					LOGGER,
-					"checking peer allowed/denied: {:?} explicitly allowed", peer_addr
+					"checking peer allowed/denied: {:?} explicitly allowed",
+					peer_addr
 				);
 				return false;
 			} else {
 				debug!(
-					LOGGER,
-					"checking peer allowed/denied: {:?} not explicitly allowed, denying", peer_addr
+					"checking peer allowed/denied: {:?} not explicitly allowed, denying",
+					peer_addr
 				);
 				return true;
 			}
@@ -198,13 +197,10 @@ impl Peer {
 			.unwrap()
 			.send(ban_reason_msg, msg::Type::BanReason)
 		{
-			Ok(_) => debug!(
-				LOGGER,
-				"Sent ban reason {:?} to {}", ban_reason, self.info.addr
-			),
+			Ok(_) => debug!("Sent ban reason {:?} to {}", ban_reason, self.info.addr),
 			Err(e) => error!(
-				LOGGER,
-				"Could not send ban reason {:?} to {}: {:?}", ban_reason, self.info.addr, e
+				"Could not send ban reason {:?} to {}: {:?}",
+				ban_reason, self.info.addr, e
 			),
 		};
 	}
@@ -213,7 +209,7 @@ impl Peer {
 	/// if the remote peer is known to already have the block.
 	pub fn send_block(&self, b: &core::Block) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(b.hash()) {
-			trace!(LOGGER, "Send block {} to {}", b.hash(), self.info.addr);
+			trace!("Send block {} to {}", b.hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
@@ -221,7 +217,6 @@ impl Peer {
 			Ok(true)
 		} else {
 			debug!(
-				LOGGER,
 				"Suppress block send {} to {} (already seen)",
 				b.hash(),
 				self.info.addr,
@@ -232,12 +227,7 @@ impl Peer {
 
 	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(b.hash()) {
-			trace!(
-				LOGGER,
-				"Send compact block {} to {}",
-				b.hash(),
-				self.info.addr
-			);
+			trace!("Send compact block {} to {}", b.hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
@@ -245,7 +235,6 @@ impl Peer {
 			Ok(true)
 		} else {
 			debug!(
-				LOGGER,
 				"Suppress compact block send {} to {} (already seen)",
 				b.hash(),
 				self.info.addr,
@@ -256,7 +245,7 @@ impl Peer {
 
 	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(bh.hash()) {
-			debug!(LOGGER, "Send header {} to {}", bh.hash(), self.info.addr);
+			debug!("Send header {} to {}", bh.hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
@@ -264,7 +253,6 @@ impl Peer {
 			Ok(true)
 		} else {
 			debug!(
-				LOGGER,
 				"Suppress header send {} to {} (already seen)",
 				bh.hash(),
 				self.info.addr,
@@ -277,7 +265,7 @@ impl Peer {
 	/// dropped if the remote peer is known to already have the transaction.
 	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(tx.hash()) {
-			debug!(LOGGER, "Send tx {} to {}", tx.hash(), self.info.addr);
+			debug!("Send tx {} to {}", tx.hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
@@ -285,7 +273,6 @@ impl Peer {
 			Ok(true)
 		} else {
 			debug!(
-				LOGGER,
 				"Not sending tx {} to {} (already seen)",
 				tx.hash(),
 				self.info.addr
@@ -298,7 +285,7 @@ impl Peer {
 	/// Note: tracking adapter is ignored for stem transactions (while under
 	/// embargo).
 	pub fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
-		debug!(LOGGER, "Send (stem) tx {} to {}", tx.hash(), self.info.addr);
+		debug!("Send (stem) tx {} to {}", tx.hash(), self.info.addr);
 		self.connection
 			.as_ref()
 			.unwrap()
@@ -316,10 +303,7 @@ impl Peer {
 
 	/// Sends a request for a specific block by hash
 	pub fn send_block_request(&self, h: Hash) -> Result<(), Error> {
-		debug!(
-			LOGGER,
-			"Requesting block {} from peer {}.", h, self.info.addr
-		);
+		debug!("Requesting block {} from peer {}.", h, self.info.addr);
 		self.connection
 			.as_ref()
 			.unwrap()
@@ -328,10 +312,7 @@ impl Peer {
 
 	/// Sends a request for a specific compact block by hash
 	pub fn send_compact_block_request(&self, h: Hash) -> Result<(), Error> {
-		debug!(
-			LOGGER,
-			"Requesting compact block {} from {}", h, self.info.addr
-		);
+		debug!("Requesting compact block {} from {}", h, self.info.addr);
 		self.connection
 			.as_ref()
 			.unwrap()
@@ -339,7 +320,7 @@ impl Peer {
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
-		debug!(LOGGER, "Asking {} for more peers.", self.info.addr);
+		debug!("Asking {} for more peers.", self.info.addr);
 		self.connection.as_ref().unwrap().send(
 			&GetPeerAddrs {
 				capabilities: capab,
@@ -350,8 +331,8 @@ impl Peer {
 
 	pub fn send_txhashset_request(&self, height: u64, hash: Hash) -> Result<(), Error> {
 		debug!(
-			LOGGER,
-			"Asking {} for txhashset archive at {} {}.", self.info.addr, height, hash
+			"Asking {} for txhashset archive at {} {}.",
+			self.info.addr, height, hash
 		);
 		self.connection.as_ref().unwrap().send(
 			&TxHashSetRequest { hash, height },
@@ -378,8 +359,8 @@ impl Peer {
 				};
 				if need_stop {
 					debug!(
-						LOGGER,
-						"Client {} corrupted, will disconnect ({:?}).", self.info.addr, e
+						"Client {} corrupted, will disconnect ({:?}).",
+						self.info.addr, e
 					);
 					self.stop();
 				}
@@ -396,7 +377,7 @@ impl Peer {
 					}
 				};
 				if need_stop {
-					debug!(LOGGER, "Client {} connection lost: {:?}", self.info.addr, e);
+					debug!("Client {} connection lost: {:?}", self.info.addr, e);
 					self.stop();
 				}
 				false

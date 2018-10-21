@@ -36,7 +36,7 @@ use global;
 use keychain::{self, BlindingFactor};
 use pow::{Difficulty, Proof, ProofOfWork};
 use ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
-use util::{secp, static_secp_instance, LOGGER};
+use util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, Eq, PartialEq, Fail)]
@@ -425,12 +425,7 @@ impl Block {
 	/// Note: caller must validate the block themselves, we do not validate it
 	/// here.
 	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Result<Block, Error> {
-		trace!(
-			LOGGER,
-			"block: hydrate_from: {}, {} txs",
-			cb.hash(),
-			txs.len(),
-		);
+		trace!("block: hydrate_from: {}, {} txs", cb.hash(), txs.len(),);
 
 		let header = cb.header.clone();
 

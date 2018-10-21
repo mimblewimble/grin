@@ -37,7 +37,6 @@ use servers::Server;
 use tui::constants::ROOT_STACK;
 use tui::types::{TUIStatusListener, UIMessage};
 use tui::{menu, mining, peers, status, version};
-use util::LOGGER;
 
 use built_info;
 
@@ -172,7 +171,7 @@ impl Controller {
 		let mut next_stat_update = Utc::now().timestamp() + stat_update_interval;
 		while self.ui.step() {
 			if !running.load(Ordering::SeqCst) {
-				warn!(LOGGER, "Received SIGINT (Ctrl+C).");
+				warn!("Received SIGINT (Ctrl+C).");
 				server.stop();
 				self.ui.stop();
 			}

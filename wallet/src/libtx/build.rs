@@ -30,7 +30,6 @@ use util::{kernel_sig_msg, secp};
 use core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use keychain::{self, BlindSum, BlindingFactor, Identifier, Keychain};
 use libtx::{aggsig, proof};
-use util::LOGGER;
 
 /// Context information available to transaction combinators.
 pub struct Context<'a, K: 'a>
@@ -67,8 +66,8 @@ where
 	K: Keychain,
 {
 	debug!(
-		LOGGER,
-		"Building input (spending regular output): {}, {}", value, key_id
+		"Building input (spending regular output): {}, {}",
+		value, key_id
 	);
 	build_input(value, OutputFeatures::DEFAULT_OUTPUT, key_id)
 }
@@ -78,10 +77,7 @@ pub fn coinbase_input<K>(value: u64, key_id: Identifier) -> Box<Append<K>>
 where
 	K: Keychain,
 {
-	debug!(
-		LOGGER,
-		"Building input (spending coinbase): {}, {}", value, key_id
-	);
+	debug!("Building input (spending coinbase): {}, {}", value, key_id);
 	build_input(value, OutputFeatures::COINBASE_OUTPUT, key_id)
 }
 
@@ -95,7 +91,7 @@ where
 		move |build, (tx, kern, sum)| -> (Transaction, TxKernel, BlindSum) {
 			let commit = build.keychain.commit(value, &key_id).unwrap();
 
-			debug!(LOGGER, "Building output: {}, {:?}", value, commit);
+			debug!("Building output: {}, {:?}", value, commit);
 
 			let rproof = proof::create(build.keychain, value, &key_id, commit, None).unwrap();
 

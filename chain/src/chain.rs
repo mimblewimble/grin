@@ -38,7 +38,6 @@ use store;
 use txhashset;
 use types::{ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use util::secp::pedersen::{Commitment, RangeProof};
-use util::LOGGER;
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -184,7 +183,6 @@ impl Chain {
 
 		let head = store.head()?;
 		debug!(
-			LOGGER,
 			"Chain init: {} @ {} [{}]",
 			head.total_difficulty.to_num(),
 			head.height,
@@ -261,7 +259,6 @@ impl Chain {
 					&self.orphans.add(orphan);
 
 					debug!(
-						LOGGER,
 						"process_block: orphan: {:?}, # orphans {}{}",
 						block_hash,
 						self.orphans.len(),
@@ -275,7 +272,6 @@ impl Chain {
 				}
 				ErrorKind::Unfit(ref msg) => {
 					debug!(
-						LOGGER,
 						"Block {} at {} is unfit at this time: {}",
 						b.hash(),
 						b.header.height,
@@ -285,7 +281,6 @@ impl Chain {
 				}
 				_ => {
 					info!(
-						LOGGER,
 						"Rejected block {} at {}: {:?}",
 						b.hash(),
 						b.header.height,
@@ -360,7 +355,6 @@ impl Chain {
 		// Is there an orphan in our orphans that we can now process?
 		loop {
 			trace!(
-				LOGGER,
 				"check_orphans: at {}, # orphans {}",
 				height,
 				self.orphans.len(),
@@ -373,7 +367,6 @@ impl Chain {
 				let orphans_len = orphans.len();
 				for (i, orphan) in orphans.into_iter().enumerate() {
 					debug!(
-						LOGGER,
 						"check_orphans: get block {} at {}{}",
 						orphan.block.hash(),
 						height,
@@ -402,7 +395,6 @@ impl Chain {
 
 		if initial_height != height {
 			debug!(
-				LOGGER,
 				"check_orphans: {} blocks accepted since height {}, remaining # orphans {}",
 				height - initial_height,
 				initial_height,
@@ -589,7 +581,6 @@ impl Chain {
 		txhashset: &txhashset::TxHashSet,
 	) -> Result<(), Error> {
 		debug!(
-			LOGGER,
 			"chain: validate_kernel_history: rewinding and validating kernel history (readonly)"
 		);
 
@@ -606,8 +597,8 @@ impl Chain {
 		})?;
 
 		debug!(
-			LOGGER,
-			"chain: validate_kernel_history: validated kernel root on {} headers", count,
+			"chain: validate_kernel_history: validated kernel root on {} headers",
+			count,
 		);
 
 		Ok(())
@@ -682,10 +673,7 @@ impl Chain {
 		self.validate_kernel_history(&header, &txhashset)?;
 
 		// all good, prepare a new batch and update all the required records
-		debug!(
-			LOGGER,
-			"chain: txhashset_write: rewinding a 2nd time (writeable)"
-		);
+		debug!("chain: txhashset_write: rewinding a 2nd time (writeable)");
 
 		let mut batch = self.store.batch()?;
 
@@ -709,10 +697,7 @@ impl Chain {
 			Ok(())
 		})?;
 
-		debug!(
-			LOGGER,
-			"chain: txhashset_write: finished validating and rebuilding"
-		);
+		debug!("chain: txhashset_write: finished validating and rebuilding");
 
 		status.on_save();
 
@@ -727,10 +712,7 @@ impl Chain {
 		// Commit all the changes to the db.
 		batch.commit()?;
 
-		debug!(
-			LOGGER,
-			"chain: txhashset_write: finished committing the batch (head etc.)"
-		);
+		debug!("chain: txhashset_write: finished committing the batch (head etc.)");
 
 		// Replace the chain txhashset with the newly built one.
 		{
@@ -738,10 +720,7 @@ impl Chain {
 			*txhashset_ref = txhashset;
 		}
 
-		debug!(
-			LOGGER,
-			"chain: txhashset_write: replaced our txhashset with the new one"
-		);
+		debug!("chain: txhashset_write: replaced our txhashset with the new one");
 
 		// Check for any orphan blocks and process them based on the new chain state.
 		self.check_orphans(header.height + 1);
@@ -763,14 +742,11 @@ impl Chain {
 	/// therefore be called judiciously.
 	pub fn compact(&self) -> Result<(), Error> {
 		if self.archive_mode {
-			debug!(
-				LOGGER,
-				"Blockchain compaction disabled, node running in archive mode."
-			);
+			debug!("Blockchain compaction disabled, node running in archive mode.");
 			return Ok(());
 		}
 
-		debug!(LOGGER, "Starting blockchain compaction.");
+		debug!("Starting blockchain compaction.");
 		// Compact the txhashset via the extension.
 		{
 			let mut txhashset = self.txhashset.write();
@@ -785,7 +761,7 @@ impl Chain {
 
 		// Now check we can still successfully validate the chain state after
 		// compacting, shouldn't be necessary once all of this is well-oiled
-		debug!(LOGGER, "Validating state after compaction.");
+		debug!("Validating state after compaction.");
 		self.validate(true)?;
 
 		// we need to be careful here in testing as 20 blocks is not that long
@@ -798,7 +774,6 @@ impl Chain {
 		}
 
 		debug!(
-			LOGGER,
 			"Compaction remove blocks older than {}.",
 			head.height - horizon
 		);
@@ -831,7 +806,7 @@ impl Chain {
 			}
 		}
 		batch.commit()?;
-		debug!(LOGGER, "Compaction removed {} blocks, done.", count);
+		debug!("Compaction removed {} blocks, done.", count);
 		Ok(())
 	}
 
@@ -1052,7 +1027,6 @@ fn setup_head(
 					if header.height > 0 && extension.batch.get_block_sums(&header.hash()).is_err()
 					{
 						debug!(
-							LOGGER,
 							"chain: init: building (missing) block sums for {} @ {}",
 							header.height,
 							header.hash()
@@ -1073,7 +1047,6 @@ fn setup_head(
 					}
 
 					debug!(
-						LOGGER,
 						"chain: init: rewinding and validating before we start... {} at {}",
 						header.hash(),
 						header.height,
@@ -1110,7 +1083,7 @@ fn setup_head(
 			// Save the block_sums to the db for use later.
 			batch.save_block_sums(&genesis.hash(), &BlockSums::default())?;
 
-			info!(LOGGER, "chain: init: saved genesis: {:?}", genesis.hash());
+			info!("chain: init: saved genesis: {:?}", genesis.hash());
 		}
 		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()))?,
 	};

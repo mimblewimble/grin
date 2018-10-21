@@ -26,10 +26,8 @@ extern crate base64;
 extern crate byteorder;
 extern crate rand;
 #[macro_use]
-extern crate slog;
-extern crate slog_async;
-extern crate slog_term;
-
+extern crate log;
+extern crate log4rs;
 #[macro_use]
 extern crate lazy_static;
 
@@ -48,7 +46,7 @@ pub extern crate secp256k1zkp as secp;
 
 // Logging related
 pub mod logger;
-pub use logger::{init_logger, init_test_logger, LOGGER};
+pub use logger::{init_logger, init_test_logger};
 
 // Static secp instance
 pub mod secp_static;

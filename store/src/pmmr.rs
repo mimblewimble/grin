@@ -24,7 +24,6 @@ use core::ser::{self, PMMRable};
 use leaf_set::LeafSet;
 use prune_list::PruneList;
 use types::{prune_noop, AppendOnlyFile, HashFile};
-use util::LOGGER;
 
 const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
@@ -103,8 +102,8 @@ where
 			Ok(h) => Some(h),
 			Err(e) => {
 				error!(
-					LOGGER,
-					"Corrupted storage, could not read an entry from hash store: {:?}", e
+					"Corrupted storage, could not read an entry from hash store: {:?}",
+					e
 				);
 				return None;
 			}
@@ -126,8 +125,8 @@ where
 			Ok(h) => Some(h),
 			Err(e) => {
 				error!(
-					LOGGER,
-					"Corrupted storage, could not read an entry from data store: {:?}", e
+					"Corrupted storage, could not read an entry from data store: {:?}",
+					e
 				);
 				return None;
 			}
@@ -200,7 +199,6 @@ where
 
 	fn dump_stats(&self) {
 		debug!(
-			LOGGER,
 			"pmmr backend: unpruned: {}, hashes: {}, data: {}, leaf_set: {}, prune_list: {}",
 			self.unpruned_size().unwrap_or(0),
 			self.hash_size().unwrap_or(0),

@@ -28,8 +28,8 @@ use util::{Mutex, RwLock};
 use common::api;
 use common::serde_json;
 use store;
+use util;
 use util::secp::pedersen::Commitment;
-use util::{self, LOGGER};
 
 use common::failure::ResultExt;
 
@@ -146,7 +146,7 @@ where
 			thread::sleep(Duration::from_millis(10));
 			// read queue
 			let m = self.rx.recv().unwrap();
-			trace!(LOGGER, "Wallet Client Proxy Received: {:?}", m);
+			trace!("Wallet Client Proxy Received: {:?}", m);
 			let resp = match m.method.as_ref() {
 				"get_chain_height" => self.get_chain_height(m)?,
 				"get_outputs_from_node" => self.get_outputs_from_node(m)?,
@@ -345,7 +345,7 @@ impl WalletClient for LocalWalletClient {
 		}
 		let r = self.rx.lock();
 		let m = r.recv().unwrap();
-		trace!(LOGGER, "Received send_tx_slate response: {:?}", m.clone());
+		trace!("Received send_tx_slate response: {:?}", m.clone());
 		Ok(
 			serde_json::from_str(&m.body).context(libwallet::ErrorKind::ClientCallback(
 				"Parsing send_tx_slate response",
@@ -369,7 +369,7 @@ impl WalletClient for LocalWalletClient {
 		}
 		let r = self.rx.lock();
 		let m = r.recv().unwrap();
-		trace!(LOGGER, "Received post_tx response: {:?}", m.clone());
+		trace!("Received post_tx response: {:?}", m.clone());
 		Ok(())
 	}
 
@@ -389,11 +389,7 @@ impl WalletClient for LocalWalletClient {
 		}
 		let r = self.rx.lock();
 		let m = r.recv().unwrap();
-		trace!(
-			LOGGER,
-			"Received get_chain_height response: {:?}",
-			m.clone()
-		);
+		trace!("Received get_chain_height response: {:?}", m.clone());
 		Ok(m.body
 			.parse::<u64>()
 			.context(libwallet::ErrorKind::ClientCallback(

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #[macro_use]
-extern crate slog;
+extern crate log;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
@@ -30,8 +30,6 @@ use framework::{LocalServerContainer, LocalServerContainerConfig};
 use std::sync::Arc;
 use std::{thread, time};
 use util::Mutex;
-
-use util::LOGGER;
 
 /// Start 1 node mining and two wallets, then send a few
 /// transactions from one to the other
@@ -105,7 +103,7 @@ fn basic_wallet_transactions() {
 		coinbase_info =
 			LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
 	}
-	warn!(LOGGER, "Sending 50 Grins to recipient wallet");
+	warn!("Sending 50 Grins to recipient wallet");
 	LocalServerContainer::send_amount_to(
 		&coinbase_wallet_config,
 		"50.00",
@@ -125,10 +123,7 @@ fn basic_wallet_transactions() {
 	println!("Recipient wallet info: {:?}", recipient_info);
 	assert!(recipient_info.amount_currently_spendable == 50000000000);
 
-	warn!(
-		LOGGER,
-		"Sending many small transactions to recipient wallet"
-	);
+	warn!("Sending many small transactions to recipient wallet");
 	for _i in 0..10 {
 		LocalServerContainer::send_amount_to(
 			&coinbase_wallet_config,

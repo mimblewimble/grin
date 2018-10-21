@@ -367,7 +367,7 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"stdout_log_level".to_string(),
 		"
-#log level for stdout: Critical, Error, Warning, Info, Debug, Trace
+#log level for stdout: Error, Warning, Info, Debug, Trace
 ".to_string(),
 	);
 
@@ -381,7 +381,7 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"file_log_level".to_string(),
 		"
-#log level for file: Critical, Error, Warning, Info, Debug, Trace
+#log level for file: Error, Warning, Info, Debug, Trace
 ".to_string(),
 	);
 
@@ -396,6 +396,14 @@ fn comments() -> HashMap<String, String> {
 		"log_file_append".to_string(),
 		"
 #whether to append to the log file (true), or replace it on every run (false)
+".to_string(),
+	);
+
+	retval.insert(
+		"log_max_size".to_string(),
+		"
+#maximum log file size in bytes before performing log rotation
+#comment it to disable log rotation
 ".to_string(),
 	);
 
