@@ -170,10 +170,6 @@ Receives a transaction, modifying the slate accordingly (which can then be sent 
 * **Sample Call:**
 
   ```javascript
-    var coinbase_data = {
-      fees: 0,
-      height: 123456
-    }
     $.ajax({
       url: "/v1/wallet/foreign/build_coinbase",
       dataType: "json",

@@ -358,6 +358,32 @@ where
 		}
 	}
 
+	fn post_tx(
+		&self,
+		req: Request<Body>,
+		api: APIOwner<T, C, K>,
+	) -> Box<Future<Item = (), Error = Error> + Send> {
+		let params = match req.uri().query() {
+			Some(query_string) => form_urlencoded::parse(query_string.as_bytes())
+				.into_owned()
+				.fold(HashMap::new(), |mut hm, (k, v)| {
+					hm.entry(k).or_insert(vec![]).push(v);
+					hm
+				}),
+			None => HashMap::new(),
+		};
+		let fluff = params.get("fluff").is_some();
+		Box::new(
+			parse_body(req).and_then(move |slate| match api.post_tx(&slate, fluff) {
+				Ok(_) => ok(()),
+				Err(e) => {
+					error!(LOGGER, "post_tx: failed with error: {}", e);
+					err(e)
+				}
+			}),
+		)
+	}
+
 	fn issue_burn_tx(
 		&self,
 		_req: Request<Body>,
@@ -390,6 +416,10 @@ where
 			),
 			"cancel_tx" => Box::new(
 				self.cancel_tx(req, api)
+					.and_then(|_| ok(response(StatusCode::OK, ""))),
+			),
+			"post_tx" => Box::new(
+				self.post_tx(req, api)
 					.and_then(|_| ok(response(StatusCode::OK, ""))),
 			),
 			"issue_burn_tx" => Box::new(
