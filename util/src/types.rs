@@ -61,7 +61,7 @@ impl Default for LoggingConfig {
 			file_log_level: LogLevel::Debug,
 			log_file_path: String::from("grin.log"),
 			log_file_append: true,
-			log_max_size: Some(1024 * 1024 * 2), // 2 megabytes default
+			log_max_size: Some(1024 * 1024 * 16), // 16 megabytes default
 			tui_running: None,
 		}
 	}
