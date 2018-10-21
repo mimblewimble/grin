@@ -36,8 +36,8 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use url::form_urlencoded;
 use util::secp::pedersen;
-use util::Mutex;
 use util::to_base64;
+use util::Mutex;
 
 /// Instantiate wallet Owner API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
@@ -377,7 +377,7 @@ where
 			parse_body(req).and_then(move |slate| match api.post_tx(&slate, fluff) {
 				Ok(_) => ok(()),
 				Err(e) => {
-					error!(LOGGER, "post_tx: failed with error: {}", e);
+					error!("post_tx: failed with error: {}", e);
 					err(e)
 				}
 			}),
