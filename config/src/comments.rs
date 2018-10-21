@@ -399,6 +399,14 @@ fn comments() -> HashMap<String, String> {
 ".to_string(),
 	);
 
+	retval.insert(
+		"log_max_size".to_string(),
+		"
+#maximum log file size in bytes before performing log rotation
+#comment it to disable log rotation
+".to_string(),
+	);
+
 	retval
 }
 
