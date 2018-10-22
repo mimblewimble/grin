@@ -482,9 +482,16 @@ impl Peers {
 		let _ = self.store.delete_peers(|peer| {
 			let diff = now - Utc.timestamp(peer.last_connected, 0);
 
-			if 	peer.flags == State::Defunct && diff > Duration::seconds(global::PEER_EXPIRATION_REMOVE_TIME) {
-				warn!("removing peer {:?}: last connected {} days {} hours {} minutes ago.", peer.addr,
-					  diff.num_days(), diff.num_hours(), diff.num_minutes());
+			if peer.flags == State::Defunct
+				&& diff > Duration::seconds(global::PEER_EXPIRATION_REMOVE_TIME)
+			{
+				warn!(
+					"removing peer {:?}: last connected {} days {} hours {} minutes ago.",
+					peer.addr,
+					diff.num_days(),
+					diff.num_hours(),
+					diff.num_minutes()
+				);
 
 				peers_to_remove.push(peer.clone());
 
