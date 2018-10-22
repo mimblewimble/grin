@@ -163,20 +163,20 @@ pub struct ServerConfig {
 impl ServerConfig {
 	/// Configuration items validation check
 	pub fn validation_check(&mut self) {
+		// TODO - we do not expose archive_mode as separate capability now, clean this up.
 		// check [server.p2p_config.capabilities] with 'archive_mode' in [server]
-		if let Some(archive) = self.archive_mode {
-			// note: slog not available before config loaded, only print here.
-			if archive != self
-				.p2p_config
-				.capabilities
-				.contains(p2p::Capabilities::FULL_HIST)
-			{
-				// if conflict, 'archive_mode' win
-				self.p2p_config
-					.capabilities
-					.toggle(p2p::Capabilities::FULL_HIST);
-			}
-		}
+		// if let Some(archive) = self.archive_mode {
+		// 	if archive != self
+		// 		.p2p_config
+		// 		.capabilities
+		// 		.contains(p2p::Capabilities::FULL_HIST)
+		// 	{
+		// 		// if conflict, 'archive_mode' win
+		// 		self.p2p_config
+		// 			.capabilities
+		// 			.toggle(p2p::Capabilities::FULL_HIST);
+		// 	}
+		// }
 
 		// todo: other checks if needed
 	}

@@ -79,9 +79,11 @@ pub const PEER_EXPIRATION_REMOVE_TIME: i64 = PEER_EXPIRATION_DAYS * 24 * 3600;
 /// 1_000 times natural scale factor for cuckatoo29
 pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1_000 * (2 << (29 - 24)) * 29;
 
-/// Trigger compaction check on average every day for FAST_SYNC_NODE,
-/// roll the dice on every block to decide,
-/// all blocks lower than (BodyHead.height - CUT_THROUGH_HORIZON) will be removed.
+/// Trigger compaction check on average every day for all nodes.
+/// Randomized per node - roll the dice on every block to decide.
+/// Will compact the txhashset to remove pruned data.
+/// Will also remove old blocks and associated data from the database.
+/// For a node configured as "archival_mode = true" only the txhashset will be compacted.
 pub const COMPACTION_CHECK: u64 = DAY_HEIGHT;
 
 /// Types of chain a server can run with, dictates the genesis block and

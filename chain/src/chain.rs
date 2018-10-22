@@ -729,30 +729,11 @@ impl Chain {
 		Ok(())
 	}
 
-	/// Triggers chain compaction, cleaning up some unnecessary historical
-	/// information. We introduce a chain depth called horizon, which is
-	/// typically in the range of a couple days. Before that horizon, this
-	/// method will:
-	///
-	/// * compact the MMRs data files and flushing the corresponding remove logs
-	/// * delete old records from the k/v store (older blocks, indexes, etc.)
-	///
-	/// This operation can be resource intensive and takes some time to execute.
-	/// Meanwhile, the chain will not be able to accept new blocks. It should
-	/// therefore be called judiciously.
-	pub fn compact(&self) -> Result<(), Error> {
-		if self.archive_mode {
-			debug!("Blockchain compaction disabled, node running in archive mode.");
-			return Ok(());
-		}
-
+	fn compact_txhashset(&self) -> Result<(), Error> {
 		debug!("Starting blockchain compaction.");
-		// Compact the txhashset via the extension.
 		{
 			let mut txhashset = self.txhashset.write();
 			txhashset.compact()?;
-
-			// print out useful debug info after compaction
 			txhashset::extending_readonly(&mut txhashset, |extension| {
 				extension.dump_output_pmmr();
 				Ok(())
@@ -763,20 +744,33 @@ impl Chain {
 		// compacting, shouldn't be necessary once all of this is well-oiled
 		debug!("Validating state after compaction.");
 		self.validate(true)?;
+		Ok(())
+	}
 
-		// we need to be careful here in testing as 20 blocks is not that long
-		// in wall clock time
+	/// Cleanup old blocks from the db.
+	/// Determine the cutoff height from the horizon and the current block height.
+	/// *Only* runs if we are not in archive mode.
+	fn compact_blocks_db(&self) -> Result<(), Error> {
+		if !self.archive_mode {
+			return Ok(())
+		}
+
 		let horizon = global::cut_through_horizon() as u64;
 		let head = self.head()?;
 
-		if head.height <= horizon {
+		let cutoff = head.height.saturating_sub(horizon);
+
+		debug!(
+			"chain: compact_blocks_db: head height: {}, horizon: {}, cutoff: {}",
+			head.height,
+			horizon,
+			cutoff,
+		);
+
+		if cutoff == 0 {
 			return Ok(());
 		}
 
-		debug!(
-			"Compaction remove blocks older than {}.",
-			head.height - horizon
-		);
 		let mut count = 0;
 		let batch = self.store.batch()?;
 		let mut current = batch.get_header_by_height(head.height - horizon - 1)?;
@@ -806,7 +800,22 @@ impl Chain {
 			}
 		}
 		batch.commit()?;
-		debug!("Compaction removed {} blocks, done.", count);
+		debug!("chain: compact_blocks_db: removed {} blocks.", count);
+		Ok(())
+	}
+
+	/// Triggers chain compaction.
+	///
+	/// * compacts the txhashset based on current prune_list
+	/// * removes historical blocks and associated data from the db (unless archive mode)
+	///
+	pub fn compact(&self) -> Result<(), Error> {
+		self.compact_txhashset()?;
+
+		if !self.archive_mode {
+			self.compact_blocks_db()?;
+		}
+
 		Ok(())
 	}
 

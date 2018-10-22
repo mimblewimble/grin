@@ -238,7 +238,7 @@ fn connect_to_seeds_and_preferred_peers(
 	peers_preferred_list: Option<Vec<SocketAddr>>,
 ) {
 	// check if we have some peers in db
-	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::FULL_HIST, 100);
+	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::FULL_NODE, 100);
 
 	// if so, get their addresses, otherwise use our seeds
 	let mut peer_addrs = if peers.len() > 3 {

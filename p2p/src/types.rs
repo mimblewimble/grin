@@ -132,7 +132,7 @@ impl Default for P2PConfig {
 		P2PConfig {
 			host: ipaddr,
 			port: 13414,
-			capabilities: Capabilities::FAST_SYNC_NODE,
+			capabilities: Capabilities::FULL_NODE,
 			seeding_type: Seeding::default(),
 			seeds: None,
 			peers_allow: None,
@@ -193,26 +193,27 @@ impl Default for Seeding {
 }
 
 bitflags! {
-  /// Options for what type of interaction a peer supports
-  #[derive(Serialize, Deserialize)]
-  pub struct Capabilities: u32 {
-	/// We don't know (yet) what the peer can do.
-	const UNKNOWN = 0b00000000;
-	/// Full archival node, has the whole history without any pruning.
-	const FULL_HIST = 0b00000001;
-	/// Can provide block headers and the TxHashSet for some recent-enough
-	/// height.
-	const TXHASHSET_HIST = 0b00000010;
-	/// Can provide a list of healthy peers
-	const PEER_LIST = 0b00000100;
+	/// Options for what type of interaction a peer supports
+	#[derive(Serialize, Deserialize)]
+	pub struct Capabilities: u32 {
+		/// We don't know (yet) what the peer can do.
+		const UNKNOWN = 0b00000000;
+		/// Can provide full history of headers back to genesis
+		/// (for at least one arbitrary fork).
+		const HEADER_HIST = 0b00000001;
+		/// Can provide block headers and the TxHashSet for some recent-enough
+		/// height.
+		const TXHASHSET_HIST = 0b00000010;
+		/// Can provide a list of healthy peers
+		const PEER_LIST = 0b00000100;
 
-	const FAST_SYNC_NODE = Capabilities::TXHASHSET_HIST.bits
-		| Capabilities::PEER_LIST.bits;
-
-	const FULL_NODE = Capabilities::FULL_HIST.bits
-		| Capabilities::TXHASHSET_HIST.bits
-		| Capabilities::PEER_LIST.bits;
-  }
+		/// All nodes right now are "full nodes".
+		/// Some nodes internally may maintain longer block histories (archival_mode)
+		/// but we do not advertise this to other nodes.
+		const FULL_NODE = Capabilities::HEADER_HIST.bits
+			| Capabilities::TXHASHSET_HIST.bits
+			| Capabilities::PEER_LIST.bits;
+	}
 }
 
 /// Types of connection

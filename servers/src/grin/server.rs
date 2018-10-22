@@ -111,17 +111,20 @@ impl Server {
 			Some(b) => b,
 		};
 
+		// TODO - we no longer advertise "archival_mode" as separate capability
+		// TODO - we also seem to be doing this in a couple of different places
+		// TODO - clean this up
 		// If archive mode is enabled then the flags should contains the FULL_HIST flag
-		if archive_mode && !config
-			.p2p_config
-			.capabilities
-			.contains(p2p::Capabilities::FULL_HIST)
-		{
-			config
-				.p2p_config
-				.capabilities
-				.insert(p2p::Capabilities::FULL_HIST);
-		}
+		// if archive_mode && !config
+		// 	.p2p_config
+		// 	.capabilities
+		// 	.contains(p2p::Capabilities::FULL_HIST)
+		// {
+		// 	config
+		// 		.p2p_config
+		// 		.capabilities
+		// 		.insert(p2p::Capabilities::FULL_HIST);
+		// }
 
 		let stop = Arc::new(AtomicBool::new(false));
 

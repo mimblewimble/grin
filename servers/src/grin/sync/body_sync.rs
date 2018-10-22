@@ -121,16 +121,16 @@ impl BodySync {
 		}
 		hashes.reverse();
 
-		// TODO - clean this up
 		if oldest_height < header_head.height.saturating_sub(horizon) {
-			debug!("cannot sync full blocks earlier than horizon");
+			debug!("body_sync: cannot sync full blocks earlier than horizon.");
 			return;
-		};
+		}
+
+		let peers = self.peers.more_work_peers();
 
 		// if we have 5 peers to sync from then ask for 50 blocks total (peer_count *
 		// 10) max will be 80 if all 8 peers are advertising more work
 		// also if the chain is already saturated with orphans, throttle
-		let peers = self.peers.more_work_peers();
 		let block_count = cmp::min(
 			cmp::min(100, peers.len() * p2p::SEND_CHANNEL_CAP),
 			chain::MAX_ORPHAN_SIZE.saturating_sub(self.chain.orphans_len()) + 1,
