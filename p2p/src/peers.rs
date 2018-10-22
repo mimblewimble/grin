@@ -21,6 +21,7 @@ use util::RwLock;
 use rand::{thread_rng, Rng};
 
 use chrono::prelude::*;
+use chrono::Duration;
 use core::core;
 use core::core::hash::{Hash, Hashed};
 use core::global;
@@ -474,13 +475,17 @@ impl Peers {
 
 	/// Removes those peers that are seemed to be expired
 	pub fn remove_expired(&self) {
-		let now = Utc::now().timestamp_millis();
-
+		let now = Utc::now();
 		let mut peers_to_remove = vec![];
 
-		// Delete peers from storage
+		// Delete defunct peers from storage
 		let _ = self.store.delete_peers(|peer| {
-			if peer.last_connected + global::PEER_EXPIRATION_REMOVE_TIME > now {
+			let diff = now - Utc.timestamp(peer.last_connected, 0);
+
+			if 	peer.flags == State::Defunct && diff > Duration::seconds(global::PEER_EXPIRATION_REMOVE_TIME) {
+				warn!("removing peer {:?}: last connected {} days {} hours {} minutes ago.", peer.addr,
+					  diff.num_days(), diff.num_hours(), diff.num_minutes());
+
 				peers_to_remove.push(peer.clone());
 
 				true
@@ -488,18 +493,6 @@ impl Peers {
 				false
 			}
 		});
-
-		// Delete peers from the current list of peers
-		let mut peers = self.peers.write().unwrap();
-		for peer in peers_to_remove {
-			if let Some(peer) = peers.get(&peer.addr) {
-				peer.stop();
-			}
-
-			peers.remove(&peer.addr);
-
-			debug!(LOGGER, "remove_expired peer {:?} removed", &peer.addr)
-		}
 	}
 }
 

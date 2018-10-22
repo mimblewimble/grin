@@ -69,11 +69,11 @@ pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
 pub const STUCK_PEER_KICK_TIME: i64 = 2 * 3600 * 1000;
 
-/// If a peer's last seen time is 2 weeks ago we will kick out such kind of 'dead' peers.
+/// If a peer's last seen time is 2 weeks ago we will forget such kind of defunct peers.
 const PEER_EXPIRATION_DAYS: i64 = 7 * 2;
 
-/// Constant that expresses dead peer timeout in milliseconds to be used in checks.
-pub const PEER_EXPIRATION_REMOVE_TIME: i64 = PEER_EXPIRATION_DAYS * 24 * 3600 * 1000;
+/// Constant that expresses defunct peer timeout in seconds to be used in checks.
+pub const PEER_EXPIRATION_REMOVE_TIME: i64 = PEER_EXPIRATION_DAYS * 24 * 3600;
 
 /// Testnet 4 initial block difficulty
 /// 1_000 times natural scale factor for cuckatoo29

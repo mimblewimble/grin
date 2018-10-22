@@ -66,6 +66,9 @@ pub fn connect_and_monitor(
 				// make several attempts to get peers as quick as possible
 				// with exponential backoff
 				if Utc::now() - prev > Duration::seconds(cmp::min(20, 1 << start_attempt)) {
+					// Remove peers that are seemed to be expired
+					peers.remove_expired();
+
 					// try to connect to any address sent to the channel
 					listen_for_addrs(peers.clone(), p2p_server.clone(), capabilities, &rx);
 
@@ -110,9 +113,6 @@ fn monitor_peers(
 	let mut healthy_count = 0;
 	let mut banned_count = 0;
 	let mut defuncts = vec![];
-
-	// Remove peers that are seemed to be expired
-	peers.remove_expired();
 
 	for x in peers.all_peers() {
 		match x.flags {
