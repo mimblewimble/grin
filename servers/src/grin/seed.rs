@@ -59,16 +59,21 @@ pub fn connect_and_monitor(
 			);
 
 			let mut prev = MIN_DATE.and_hms(0, 0, 0);
+			let mut prev_expire_check = MIN_DATE.and_hms(0, 0, 0);
 			let mut prev_ping = Utc::now();
 			let mut start_attempt = 0;
 
 			while !stop.load(Ordering::Relaxed) {
+				// Check for and remove expired peers from the storage
+				if Utc::now() - prev_expire_check > Duration::hours(1) {
+					peers.remove_expired();
+
+					prev_expire_check = Utc::now();
+				}
+
 				// make several attempts to get peers as quick as possible
 				// with exponential backoff
 				if Utc::now() - prev > Duration::seconds(cmp::min(20, 1 << start_attempt)) {
-					// Remove peers that are seemed to be expired
-					peers.remove_expired();
-
 					// try to connect to any address sent to the channel
 					listen_for_addrs(peers.clone(), p2p_server.clone(), capabilities, &rx);
 
