@@ -400,7 +400,6 @@ impl Server {
 			let mut last_time = last_blocks[0].timestamp;
 			let tip_height = self.chain.head().unwrap().height as i64;
 			let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
-
 			let mut i = 1;
 
 			let diff_entries: Vec<DiffBlock> = last_blocks
@@ -408,7 +407,7 @@ impl Server {
 				.skip(1)
 				.map(|n| {
 					let dur = n.timestamp - last_time;
-					let height = earliest_block_height + i + 1;
+					let height = earliest_block_height + i;
 					i += 1;
 					last_time = n.timestamp;
 					DiffBlock {

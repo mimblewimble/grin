@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use util::RwLock;
 
-use core::pow::Difficulty;
+use core::consensus::graph_weight;
 
 use chrono::prelude::*;
 
@@ -164,8 +164,7 @@ pub struct PeerStats {
 impl StratumStats {
 	/// Calculate network hashrate
 	pub fn network_hashrate(&self) -> f64 {
-		42.0 * (self.network_difficulty as f64 / Difficulty::scale(self.edge_bits as u8) as f64)
-			/ 60.0
+		42.0 * (self.network_difficulty as f64 / graph_weight(self.edge_bits as u8) as f64) / 60.0
 	}
 }
 
