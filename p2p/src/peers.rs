@@ -476,29 +476,25 @@ impl Peers {
 	/// Removes those peers that are seemed to be expired
 	pub fn remove_expired(&self) {
 		let now = Utc::now();
-		let mut peers_to_remove = vec![];
 
 		// Delete defunct peers from storage
 		let _ = self.store.delete_peers(|peer| {
 			let diff = now - Utc.timestamp(peer.last_connected, 0);
 
-			if peer.flags == State::Defunct
-				&& diff > Duration::seconds(global::PEER_EXPIRATION_REMOVE_TIME)
-			{
-				warn!(
+			let should_remove = peer.flags == State::Defunct
+				&& diff > Duration::seconds(global::PEER_EXPIRATION_REMOVE_TIME);
+
+			if should_remove {
+				debug!(
 					"removing peer {:?}: last connected {} days {} hours {} minutes ago.",
 					peer.addr,
 					diff.num_days(),
 					diff.num_hours(),
 					diff.num_minutes()
 				);
-
-				peers_to_remove.push(peer.clone());
-
-				true
-			} else {
-				false
 			}
+
+			should_remove
 		});
 	}
 }
