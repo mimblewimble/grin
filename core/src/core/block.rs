@@ -286,7 +286,7 @@ impl BlockHeader {
 
 	/// Total difficulty accumulated by the proof of work on this header
 	pub fn total_difficulty(&self) -> Difficulty {
-		self.pow.total_difficulty.clone()
+		self.pow.total_difficulty
 	}
 
 	/// The "overage" to use when verifying the kernel sums.
@@ -362,10 +362,7 @@ impl Readable for Block {
 		body.validate_read(true)
 			.map_err(|_| ser::Error::CorruptedData)?;
 
-		Ok(Block {
-			header: header,
-			body: body,
-		})
+		Ok(Block { header, body })
 	}
 }
 
@@ -465,7 +462,7 @@ impl Block {
 	/// Build a new empty block from a specified header
 	pub fn with_header(header: BlockHeader) -> Block {
 		Block {
-			header: header,
+			header,
 			..Default::default()
 		}
 	}
@@ -607,15 +604,14 @@ impl Block {
 
 		// take the kernel offset for this block (block offset minus previous) and
 		// verify.body.outputs and kernel sums
-		let block_kernel_offset = if self.header.total_kernel_offset() == prev_kernel_offset.clone()
-		{
+		let block_kernel_offset = if self.header.total_kernel_offset() == *prev_kernel_offset {
 			// special case when the sum hasn't changed (typically an empty block),
 			// zero isn't a valid private key but it's a valid blinding factor
 			BlindingFactor::zero()
 		} else {
 			committed::sum_kernel_offsets(
 				vec![self.header.total_kernel_offset()],
-				vec![prev_kernel_offset.clone()],
+				vec![*prev_kernel_offset],
 			)?
 		};
 		let (_utxo_sum, kernel_sum) =

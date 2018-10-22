@@ -86,7 +86,7 @@ impl MerkleProof {
 	pub fn from_hex(hex: &str) -> Result<MerkleProof, String> {
 		let bytes = util::from_hex(hex.to_string()).unwrap();
 		let res = ser::deserialize(&mut &bytes[..])
-			.map_err(|_| format!("failed to deserialize a Merkle Proof"))?;
+			.map_err(|_| "failed to deserialize a Merkle Proof".to_string())?;
 		Ok(res)
 	}
 
@@ -102,7 +102,7 @@ impl MerkleProof {
 		// calculate the peaks once as these are based on overall MMR size
 		// (and will not change)
 		let peaks_pos = pmmr::peaks(self.mmr_size);
-		proof.verify_consume(root, element, node_pos, peaks_pos)
+		proof.verify_consume(root, element, node_pos, &peaks_pos)
 	}
 
 	/// Consumes the Merkle proof while verifying it.
@@ -113,7 +113,7 @@ impl MerkleProof {
 		root: Hash,
 		element: &PMMRIndexHashable,
 		node_pos: u64,
-		peaks_pos: Vec<u64>,
+		peaks_pos: &[u64],
 	) -> Result<(), MerkleProofError> {
 		let node_hash = if node_pos > self.mmr_size {
 			element.hash_with_index(self.mmr_size)
@@ -123,7 +123,7 @@ impl MerkleProof {
 
 		// handle special case of only a single entry in the MMR
 		// (no siblings to hash together)
-		if self.path.len() == 0 {
+		if self.path.is_empty() {
 			if root == node_hash {
 				return Ok(());
 			} else {

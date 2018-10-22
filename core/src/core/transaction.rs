@@ -177,7 +177,7 @@ impl Readable for TxKernel {
 		let features =
 			KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(TxKernel {
-			features: features,
+			features,
 			fee: reader.read_u64()?,
 			lock_height: reader.read_u64()?,
 			excess: Commitment::read(reader)?,
@@ -230,13 +230,13 @@ impl TxKernel {
 
 	/// Builds a new tx kernel with the provided fee.
 	pub fn with_fee(self, fee: u64) -> TxKernel {
-		TxKernel { fee: fee, ..self }
+		TxKernel { fee, ..self }
 	}
 
 	/// Builds a new tx kernel with the provided lock_height.
 	pub fn with_lock_height(self, lock_height: u64) -> TxKernel {
 		TxKernel {
-			lock_height: lock_height,
+			lock_height,
 			..self
 		}
 	}
@@ -356,9 +356,9 @@ impl TransactionBody {
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
 		let body = TransactionBody {
-			inputs: inputs,
-			outputs: outputs,
-			kernels: kernels,
+			inputs,
+			outputs,
+			kernels,
 		};
 
 		if verify_sorted {
@@ -436,7 +436,7 @@ impl TransactionBody {
 
 	/// Calculate transaction weight from transaction details
 	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> u32 {
-		let mut body_weight = -1 * (input_len as i32) + (4 * output_len as i32) + kernel_len as i32;
+		let mut body_weight = -(input_len as i32) + (4 * output_len as i32) + kernel_len as i32;
 		if body_weight < 1 {
 			body_weight = 1;
 		}
@@ -559,7 +559,7 @@ impl TransactionBody {
 		};
 
 		// Now batch verify all those unverified rangeproofs
-		if outputs.len() > 0 {
+		if !outputs.is_empty() {
 			let mut commits = vec![];
 			let mut proofs = vec![];
 			for x in &outputs {
@@ -687,10 +687,7 @@ impl Transaction {
 	/// Creates a new transaction using this transaction as a template
 	/// and with the specified offset.
 	pub fn with_offset(self, offset: BlindingFactor) -> Transaction {
-		Transaction {
-			offset: offset,
-			..self
-		}
+		Transaction { offset, ..self }
 	}
 
 	/// Builds a new transaction with the provided inputs added. Existing
@@ -1072,7 +1069,7 @@ impl Readable for Output {
 			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 
 		Ok(Output {
-			features: features,
+			features,
 			commit: Commitment::read(reader)?,
 			proof: RangeProof::read(reader)?,
 		})
@@ -1131,8 +1128,8 @@ impl OutputIdentifier {
 	/// Build a new output_identifier.
 	pub fn new(features: OutputFeatures, commit: &Commitment) -> OutputIdentifier {
 		OutputIdentifier {
-			features: features,
-			commit: commit.clone(),
+			features,
+			commit: *commit,
 		}
 	}
 
@@ -1152,9 +1149,9 @@ impl OutputIdentifier {
 	/// Converts this identifier to a full output, provided a RangeProof
 	pub fn into_output(self, proof: RangeProof) -> Output {
 		Output {
+			proof,
 			features: self.features,
 			commit: self.commit,
-			proof: proof,
 		}
 	}
 
@@ -1196,8 +1193,8 @@ impl Readable for OutputIdentifier {
 		let features =
 			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(OutputIdentifier {
+			features,
 			commit: Commitment::read(reader)?,
-			features: features,
 		})
 	}
 }

@@ -43,8 +43,8 @@ where
 	/// Build a new readonly PMMR.
 	pub fn new(backend: &'a B) -> RewindablePMMR<T, B> {
 		RewindablePMMR {
+			backend,
 			last_pos: 0,
-			backend: backend,
 			_marker: marker::PhantomData,
 		}
 	}
@@ -53,8 +53,8 @@ where
 	/// last_pos with the provided backend.
 	pub fn at(backend: &'a B, last_pos: u64) -> RewindablePMMR<T, B> {
 		RewindablePMMR {
-			last_pos: last_pos,
-			backend: backend,
+			backend,
+			last_pos,
 			_marker: marker::PhantomData,
 		}
 	}

@@ -496,25 +496,31 @@ fn secondary_pow_scale() {
 	// all primary, factor should increase so it becomes easier to find a high
 	// difficulty block
 	assert_eq!(
-		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect()),
+		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
 		147
 	);
 	// all secondary on 90%, factor should go down a bit
 	hi.is_secondary = true;
 	assert_eq!(
-		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect()),
+		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
 		94
 	);
 	// all secondary on 1%, factor should go down to bound (divide by 2)
 	assert_eq!(
-		secondary_pow_scaling(890_000, &(0..window).map(|_| hi.clone()).collect()),
+		secondary_pow_scaling(
+			890_000,
+			&(0..window).map(|_| hi.clone()).collect::<Vec<_>>()
+		),
 		49
 	);
 	// same as above, testing lowest bound
 	let mut low_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 3);
 	low_hi.is_secondary = true;
 	assert_eq!(
-		secondary_pow_scaling(890_000, &(0..window).map(|_| low_hi.clone()).collect()),
+		secondary_pow_scaling(
+			890_000,
+			&(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()
+		),
 		1
 	);
 	// just about the right ratio, also no longer playing with median
@@ -525,7 +531,7 @@ fn secondary_pow_scale() {
 			&(0..(window / 10))
 				.map(|_| primary_hi.clone())
 				.chain((0..(window * 9 / 10)).map(|_| hi.clone()))
-				.collect()
+				.collect::<Vec<_>>()
 		),
 		94
 	);
@@ -536,7 +542,7 @@ fn secondary_pow_scale() {
 			&(0..(window / 20))
 				.map(|_| primary_hi.clone())
 				.chain((0..(window * 95 / 100)).map(|_| hi.clone()))
-				.collect()
+				.collect::<Vec<_>>()
 		),
 		94
 	);
@@ -547,7 +553,7 @@ fn secondary_pow_scale() {
 			&(0..(window * 6 / 10))
 				.map(|_| primary_hi.clone())
 				.chain((0..(window * 4 / 10)).map(|_| hi.clone()))
-				.collect()
+				.collect::<Vec<_>>()
 		),
 		84
 	);

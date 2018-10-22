@@ -42,8 +42,8 @@ where
 	/// Build a new db backed MMR.
 	pub fn new(backend: &'a mut B) -> DBPMMR<T, B> {
 		DBPMMR {
+			backend,
 			last_pos: 0,
-			backend: backend,
 			_marker: marker::PhantomData,
 		}
 	}
@@ -52,8 +52,8 @@ where
 	/// last_pos with the provided db backend.
 	pub fn at(backend: &'a mut B, last_pos: u64) -> DBPMMR<T, B> {
 		DBPMMR {
-			last_pos: last_pos,
-			backend: backend,
+			backend,
+			last_pos,
 			_marker: marker::PhantomData,
 		}
 	}
@@ -98,7 +98,7 @@ where
 
 	/// Push a new element into the MMR. Computes new related peaks at
 	/// the same time if applicable.
-	pub fn push(&mut self, elmt: T) -> Result<u64, String> {
+	pub fn push(&mut self, elmt: &T) -> Result<u64, String> {
 		let elmt_pos = self.last_pos + 1;
 		let mut current_hash = elmt.hash_with_index(elmt_pos - 1);
 

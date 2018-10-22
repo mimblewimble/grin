@@ -53,8 +53,8 @@ impl Default for BlockSums {
 	fn default() -> BlockSums {
 		let zero_commit = secp_static::commit_to_zero_value();
 		BlockSums {
-			utxo_sum: zero_commit.clone(),
-			kernel_sum: zero_commit.clone(),
+			utxo_sum: zero_commit,
+			kernel_sum: zero_commit,
 		}
 	}
 }

@@ -77,7 +77,7 @@ pub fn mine_genesis_block() -> Result<Block, Error> {
 	}
 
 	// total_difficulty on the genesis header *is* the difficulty of that block
-	let genesis_difficulty = gen.header.pow.total_difficulty.clone();
+	let genesis_difficulty = gen.header.pow.total_difficulty;
 
 	let sz = global::min_edge_bits();
 	let proof_size = global::proofsize();

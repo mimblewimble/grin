@@ -53,8 +53,8 @@ where
 	/// Build a new prunable Merkle Mountain Range using the provided backend.
 	pub fn new(backend: &'a mut B) -> PMMR<T, B> {
 		PMMR {
+			backend,
 			last_pos: 0,
-			backend: backend,
 			_marker: marker::PhantomData,
 		}
 	}
@@ -63,8 +63,8 @@ where
 	/// last_pos with the provided backend.
 	pub fn at(backend: &'a mut B, last_pos: u64) -> PMMR<T, B> {
 		PMMR {
-			last_pos: last_pos,
-			backend: backend,
+			backend,
+			last_pos,
 			_marker: marker::PhantomData,
 		}
 	}
@@ -90,7 +90,7 @@ where
 		let rhs = self.bag_the_rhs(peak_pos);
 		let mut res = peaks(self.last_pos)
 			.into_iter()
-			.filter(|x| x < &peak_pos)
+			.filter(|x| *x < peak_pos)
 			.filter_map(|x| self.backend.get_from_file(x))
 			.collect::<Vec<_>>();
 		res.reverse();
@@ -107,7 +107,7 @@ where
 	pub fn bag_the_rhs(&self, peak_pos: u64) -> Option<Hash> {
 		let rhs = peaks(self.last_pos)
 			.into_iter()
-			.filter(|x| x > &peak_pos)
+			.filter(|x| *x > peak_pos)
 			.filter_map(|x| self.backend.get_from_file(x))
 			.collect::<Vec<_>>();
 
@@ -145,7 +145,7 @@ where
 
 		// check we actually have a hash in the MMR at this pos
 		self.get_hash(pos)
-			.ok_or(format!("no element at pos {}", pos))?;
+			.ok_or_else(|| format!("no element at pos {}", pos))?;
 
 		let mmr_size = self.unpruned_size();
 
@@ -510,7 +510,7 @@ pub fn peak_map_height(mut pos: u64) -> (u64, u64) {
 	let mut peak_size = ALL_ONES >> pos.leading_zeros();
 	let mut bitmap = 0;
 	while peak_size != 0 {
-		bitmap = bitmap << 1;
+		bitmap <<= 1;
 		if pos >= peak_size {
 			pos -= peak_size;
 			bitmap |= 1;

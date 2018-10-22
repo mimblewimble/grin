@@ -27,10 +27,10 @@ use core::{Output, TxKernel};
 pub trait VerifierCache: Sync + Send {
 	/// Takes a vec of tx kernels and returns those kernels
 	/// that have not yet been verified.
-	fn filter_kernel_sig_unverified(&mut self, kernels: &Vec<TxKernel>) -> Vec<TxKernel>;
+	fn filter_kernel_sig_unverified(&mut self, kernels: &[TxKernel]) -> Vec<TxKernel>;
 	/// Takes a vec of tx outputs and returns those outputs
 	/// that have not yet had their rangeproofs verified.
-	fn filter_rangeproof_unverified(&mut self, outputs: &Vec<Output>) -> Vec<Output>;
+	fn filter_rangeproof_unverified(&mut self, outputs: &[Output]) -> Vec<Output>;
 	/// Adds a vec of tx kernels to the cache (used in conjunction with the the filter above).
 	fn add_kernel_sig_verified(&mut self, kernels: Vec<TxKernel>);
 	/// Adds a vec of outputs to the cache (used in conjunction with the the filter above).
@@ -45,9 +45,6 @@ pub struct LruVerifierCache {
 	rangeproof_verification_cache: LruCache<Hash, bool>,
 }
 
-unsafe impl Sync for LruVerifierCache {}
-unsafe impl Send for LruVerifierCache {}
-
 impl LruVerifierCache {
 	/// TODO how big should these caches be?
 	/// They need to be *at least* large enough to cover a maxed out block.
@@ -60,7 +57,7 @@ impl LruVerifierCache {
 }
 
 impl VerifierCache for LruVerifierCache {
-	fn filter_kernel_sig_unverified(&mut self, kernels: &Vec<TxKernel>) -> Vec<TxKernel> {
+	fn filter_kernel_sig_unverified(&mut self, kernels: &[TxKernel]) -> Vec<TxKernel> {
 		let res = kernels
 			.into_iter()
 			.filter(|x| {
@@ -78,7 +75,7 @@ impl VerifierCache for LruVerifierCache {
 		res
 	}
 
-	fn filter_rangeproof_unverified(&mut self, outputs: &Vec<Output>) -> Vec<Output> {
+	fn filter_rangeproof_unverified(&mut self, outputs: &[Output]) -> Vec<Output> {
 		let res = outputs
 			.into_iter()
 			.filter(|x| {
