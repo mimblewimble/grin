@@ -86,7 +86,7 @@ impl Readable for PeerData {
 		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
 		let last_banned = lb;
 		let ban_reason = ReasonForBan::from_i32(br).ok_or(ser::Error::CorruptedData)?;
-		let last_connected = lc;
+
 		match State::from_u8(fl) {
 			Some(flags) => Ok(PeerData {
 				addr: addr.0,
@@ -95,7 +95,7 @@ impl Readable for PeerData {
 				flags: flags,
 				last_banned: last_banned,
 				ban_reason: ban_reason,
-				last_connected,
+				last_connected: lc,
 			}),
 			None => Err(ser::Error::CorruptedData),
 		}
