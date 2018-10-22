@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Mining plugin manager, using the cuckoo-miner crate to provide
-//! a mining worker implementation
-//!
+//! Seeds a server with initial peers on first start and keep monitoring
+//! peer counts to connect to more if neeed. Seedin strategy is
+//! configurable with either no peers, a user-defined list or a preset
+//! list of DNS records (the default).
 
 use chrono::prelude::Utc;
 use chrono::{Duration, MIN_DATE};
