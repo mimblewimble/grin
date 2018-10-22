@@ -54,8 +54,6 @@ impl Server {
 		adapter: Arc<ChainAdapter>,
 		genesis: Hash,
 		stop: Arc<AtomicBool>,
-		_archive_mode: bool,
-		_block_1_hash: Option<Hash>,
 	) -> Result<Server, Error> {
 		Ok(Server {
 			config: config.clone(),
