@@ -59,10 +59,18 @@ pub fn connect_and_monitor(
 			);
 
 			let mut prev = MIN_DATE.and_hms(0, 0, 0);
+			let mut prev_expire_check = MIN_DATE.and_hms(0, 0, 0);
 			let mut prev_ping = Utc::now();
 			let mut start_attempt = 0;
 
 			while !stop.load(Ordering::Relaxed) {
+				// Check for and remove expired peers from the storage
+				if Utc::now() - prev_expire_check > Duration::hours(1) {
+					peers.remove_expired();
+
+					prev_expire_check = Utc::now();
+				}
+
 				// make several attempts to get peers as quick as possible
 				// with exponential backoff
 				if Utc::now() - prev > Duration::seconds(cmp::min(20, 1 << start_attempt)) {
@@ -110,6 +118,7 @@ fn monitor_peers(
 	let mut healthy_count = 0;
 	let mut banned_count = 0;
 	let mut defuncts = vec![];
+
 	for x in peers.all_peers() {
 		match x.flags {
 			p2p::State::Banned => {
