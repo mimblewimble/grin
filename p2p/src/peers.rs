@@ -473,7 +473,7 @@ impl Peers {
 		self.connected_peers().len() >= self.config.peer_min_preferred_count() as usize
 	}
 
-	/// Removes those peers that are seemed to be expired
+	/// Removes those peers that seem to have expired
 	pub fn remove_expired(&self) {
 		let now = Utc::now();
 

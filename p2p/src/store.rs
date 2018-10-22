@@ -177,7 +177,7 @@ impl PeerStore {
 		batch.commit()
 	}
 
-	/// Deletes peers from the storage that are satisfies some condition `predicate`
+	/// Deletes peers from the storage that satisfy some condition `predicate`
 	pub fn delete_peers<F>(&self, predicate: F) -> Result<(), Error>
 	where
 		F: Fn(&PeerData) -> bool,
