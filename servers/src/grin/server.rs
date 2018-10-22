@@ -408,7 +408,7 @@ impl Server {
 				.skip(1)
 				.map(|n| {
 					let dur = n.timestamp - last_time;
-					let height = earliest_block_height + i + 1;
+					let height = earliest_block_height + i;
 					i += 1;
 					last_time = n.timestamp;
 					DiffBlock {
