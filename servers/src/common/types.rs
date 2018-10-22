@@ -250,6 +250,9 @@ pub enum SyncStatus {
 	Initial,
 	/// Not syncing
 	NoSync,
+	/// Not enough peers to do anything yet, boolean indicates whether
+	/// we should wait at all or ignore and start ASAP
+	AwaitingPeers(bool),
 	/// Downloading block headers
 	HeaderSync {
 		current_height: u64,
