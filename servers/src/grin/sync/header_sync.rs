@@ -54,7 +54,7 @@ impl HeaderSync {
 
 		let enable_header_sync = match status {
 			SyncStatus::BodySync { .. } | SyncStatus::HeaderSync { .. } => true,
-			SyncStatus::NoSync | SyncStatus::Initial => {
+			SyncStatus::NoSync | SyncStatus::Initial | SyncStatus::AwaitingPeers(_) => {
 				// Reset sync_head to header_head on transition to HeaderSync,
 				// but ONLY on initial transition to HeaderSync state.
 				let sync_head = self.chain.get_sync_head().unwrap();
@@ -102,7 +102,7 @@ impl HeaderSync {
 
 		// always enable header sync on initial state transition from NoSync / Initial
 		let force_sync = match self.sync_state.status() {
-			SyncStatus::NoSync | SyncStatus::Initial => true,
+			SyncStatus::NoSync | SyncStatus::Initial | SyncStatus::AwaitingPeers(_) => true,
 			_ => false,
 		};
 
