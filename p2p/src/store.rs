@@ -178,9 +178,9 @@ impl PeerStore {
 	}
 
 	/// Deletes peers from the storage that are satisfies some condition `predicate`
-	pub fn delete_peers<F>(&self, mut predicate: F) -> Result<(), Error>
+	pub fn delete_peers<F>(&self, predicate: F) -> Result<(), Error>
 	where
-		F: FnMut(&PeerData) -> bool,
+		F: Fn(&PeerData) -> bool,
 	{
 		let mut to_remove = vec![];
 
