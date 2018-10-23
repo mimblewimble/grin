@@ -324,8 +324,7 @@ impl<'a> Batch<'a> {
 		let hash = header.hash();
 
 		// TODO - cache the header by root.
-		{
-		}
+		{}
 
 		// Cache the header.
 		{
@@ -334,8 +333,10 @@ impl<'a> Batch<'a> {
 		}
 
 		// Store the header hash indexed by header root.
-		self.db
-			.put_ser(&to_key(HEADER_ROOT_PREFIX, &mut header_root.to_vec())[..], &hash)?;
+		self.db.put_ser(
+			&to_key(HEADER_ROOT_PREFIX, &mut header_root.to_vec())[..],
+			&hash,
+		)?;
 
 		// Store the header itself indexed by hash.
 		self.db

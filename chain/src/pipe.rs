@@ -546,7 +546,11 @@ fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 }
 
 /// Officially adds the block header to our header chain.
-fn add_block_header(bh: &BlockHeader, header_root: &Hash, batch: &mut store::Batch) -> Result<(), Error> {
+fn add_block_header(
+	bh: &BlockHeader,
+	header_root: &Hash,
+	batch: &mut store::Batch,
+) -> Result<(), Error> {
 	batch
 		.save_block_header(bh, &header_root)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header".to_owned()).into())
