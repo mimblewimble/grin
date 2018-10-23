@@ -74,6 +74,10 @@ impl Filter for GrinFilter {
 /// Initialize the logger with the given configuration
 pub fn init_logger(config: Option<LoggingConfig>) {
 	if let Some(c) = config {
+		// Save current logging configuration
+		let mut config_ref = LOGGING_CONFIG.lock();
+		*config_ref = c.clone();
+
 		let level_stdout = convert_log_level(&c.stdout_log_level);
 		let level_file = convert_log_level(&c.file_log_level);
 		let level_minimum;
@@ -158,10 +162,11 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 			level_file, level_stdout, level_minimum
 		);
 
-		// Logger configuration successfully injected into LOGGING_CONFIG...
+		// Mark logger as initialized
 		let mut was_init_ref = WAS_INIT.lock();
 		*was_init_ref = true;
 	}
+
 	send_panic_to_log();
 }
 
@@ -211,9 +216,11 @@ fn send_panic_to_log() {
 		//also print to stderr
 		let tui_running = TUI_RUNNING.lock().clone();
 		if !tui_running {
+			let config = LOGGING_CONFIG.lock();
+
 			eprintln!(
-				"Thread '{}' panicked with message:\n\"{}\"\nSee grin.log for further details.",
-				thread, msg
+				"Thread '{}' panicked with message:\n\"{}\"\nSee {} for further details.",
+				thread, msg, config.log_file_path
 			);
 		}
 	}));
