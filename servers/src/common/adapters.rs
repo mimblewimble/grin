@@ -433,14 +433,11 @@ impl NetToChainAdapter {
 	// pushing the new block through the chain pipeline
 	// remembering to reset the head if we have a bad block
 	fn process_block(&self, b: core::Block, addr: SocketAddr) -> bool {
-		if !self.archive_mode {
+		// We cannot process blocks earlier than the horizon so check for this here.
+		{
 			let head = self.chain().head().unwrap();
-			// we have a fast sync'd node and are sent a block older than our horizon,
-			// only sync can do something with that
-			if b.header.height < head
-				.height
-				.saturating_sub(global::cut_through_horizon() as u64)
-			{
+			let horizon = head.height.saturating_sub(global::cut_through_horizon() as u64);
+			if b.header.height < horizon {
 				return true;
 			}
 		}

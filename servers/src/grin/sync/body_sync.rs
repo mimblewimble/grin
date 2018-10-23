@@ -86,9 +86,9 @@ impl BodySync {
 
 	fn body_sync(&mut self) {
 		let horizon = global::cut_through_horizon() as u64;
-		let body_head: chain::Tip = self.chain.head().unwrap();
-		let header_head: chain::Tip = self.chain.header_head().unwrap();
-		let sync_head: chain::Tip = self.chain.get_sync_head().unwrap();
+		let body_head = self.chain.head().unwrap();
+		let header_head = self.chain.header_head().unwrap();
+		let sync_head = self.chain.get_sync_head().unwrap();
 
 		self.reset();
 
@@ -121,15 +121,16 @@ impl BodySync {
 		}
 		hashes.reverse();
 
+		if oldest_height < header_head.height.saturating_sub(horizon) {
+			debug!("body_sync: cannot sync full blocks earlier than horizon.");
+			return;
+		}
+
+		let peers = self.peers.more_work_peers();
+
 		// if we have 5 peers to sync from then ask for 50 blocks total (peer_count *
 		// 10) max will be 80 if all 8 peers are advertising more work
 		// also if the chain is already saturated with orphans, throttle
-		let peers = if oldest_height < header_head.height.saturating_sub(horizon) {
-			self.peers.more_work_archival_peers()
-		} else {
-			self.peers.more_work_peers()
-		};
-
 		let block_count = cmp::min(
 			cmp::min(100, peers.len() * p2p::SEND_CHANNEL_CAP),
 			chain::MAX_ORPHAN_SIZE.saturating_sub(self.chain.orphans_len()) + 1,

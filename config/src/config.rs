@@ -233,8 +233,7 @@ impl GlobalConfig {
 		file.read_to_string(&mut contents)?;
 		let decoded: Result<ConfigMembers, toml::de::Error> = toml::from_str(&contents);
 		match decoded {
-			Ok(mut gc) => {
-				gc.server.validation_check();
+			Ok(gc) => {
 				self.members = Some(gc);
 				return Ok(self);
 			}

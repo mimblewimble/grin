@@ -29,7 +29,6 @@ use common::adapters::{
 };
 use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
 use common::types::{Error, ServerConfig, StratumServerConfig, SyncState, SyncStatus};
-use core::core::hash::Hashed;
 use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use core::{consensus, genesis, global, pow};
 use grin::{dandelion_monitor, seed, sync};
@@ -111,18 +110,6 @@ impl Server {
 			Some(b) => b,
 		};
 
-		// If archive mode is enabled then the flags should contains the FULL_HIST flag
-		if archive_mode && !config
-			.p2p_config
-			.capabilities
-			.contains(p2p::Capabilities::FULL_HIST)
-		{
-			config
-				.p2p_config
-				.capabilities
-				.insert(p2p::Capabilities::FULL_HIST);
-		}
-
 		let stop = Arc::new(AtomicBool::new(false));
 
 		// Shared cache for verification results.
@@ -179,11 +166,6 @@ impl Server {
 			config.clone(),
 		));
 
-		let block_1_hash = match shared_chain.get_header_by_height(1) {
-			Ok(header) => Some(header.hash()),
-			Err(_) => None,
-		};
-
 		let peer_db_env = Arc::new(store::new_named_env(config.db_root.clone(), "peer".into()));
 		let p2p_server = Arc::new(p2p::Server::new(
 			peer_db_env,
@@ -192,8 +174,6 @@ impl Server {
 			net_adapter.clone(),
 			genesis.hash(),
 			stop.clone(),
-			archive_mode,
-			block_1_hash,
 		)?);
 		chain_adapter.init(p2p_server.peers.clone());
 		pool_net_adapter.init(p2p_server.peers.clone());
@@ -236,7 +216,6 @@ impl Server {
 			sync_state.clone(),
 			p2p_server.peers.clone(),
 			shared_chain.clone(),
-			archive_mode,
 			stop.clone(),
 		);
 

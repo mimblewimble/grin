@@ -160,28 +160,6 @@ pub struct ServerConfig {
 	pub stratum_mining_config: Option<StratumServerConfig>,
 }
 
-impl ServerConfig {
-	/// Configuration items validation check
-	pub fn validation_check(&mut self) {
-		// check [server.p2p_config.capabilities] with 'archive_mode' in [server]
-		if let Some(archive) = self.archive_mode {
-			// note: slog not available before config loaded, only print here.
-			if archive != self
-				.p2p_config
-				.capabilities
-				.contains(p2p::Capabilities::FULL_HIST)
-			{
-				// if conflict, 'archive_mode' win
-				self.p2p_config
-					.capabilities
-					.toggle(p2p::Capabilities::FULL_HIST);
-			}
-		}
-
-		// todo: other checks if needed
-	}
-}
-
 impl Default for ServerConfig {
 	fn default() -> ServerConfig {
 		ServerConfig {

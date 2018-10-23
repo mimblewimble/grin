@@ -168,7 +168,7 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"host".to_string(),
 		"
-#The interface on which to listen. 
+#The interface on which to listen.
 #0.0.0.0 will listen on all interfaces, allowing others to interact
 #127.0.0.1 will listen on the local machine only
 ".to_string(),
@@ -213,7 +213,6 @@ fn comments() -> HashMap<String, String> {
 #peer_min_preferred_count = 8
 
 # 7 = Bit flags for FULL_NODE
-# 6 = Bit flags for FAST_SYNC_NODE
 #This structure needs to be changed internally, to make it more configurable
 ".to_string(),
 	);

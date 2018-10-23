@@ -168,35 +168,9 @@ impl Peers {
 		max_peers
 	}
 
-	// Return vec of connected peers that currently advertise more work
-	// (total_difficulty) than we do and are also full archival nodes.
-	pub fn more_work_archival_peers(&self) -> Vec<Arc<Peer>> {
-		let peers = self.connected_peers();
-		if peers.len() == 0 {
-			return vec![];
-		}
-
-		let total_difficulty = self.total_difficulty();
-
-		let mut max_peers = peers
-			.into_iter()
-			.filter(|x| {
-				x.info.total_difficulty() > total_difficulty
-					&& x.info.capabilities.contains(Capabilities::FULL_HIST)
-			}).collect::<Vec<_>>();
-
-		thread_rng().shuffle(&mut max_peers);
-		max_peers
-	}
-
 	/// Returns single random peer with more work than us.
 	pub fn more_work_peer(&self) -> Option<Arc<Peer>> {
 		self.more_work_peers().pop()
-	}
-
-	/// Returns single random archival peer with more work than us.
-	pub fn more_work_archival_peer(&self) -> Option<Arc<Peer>> {
-		self.more_work_archival_peers().pop()
 	}
 
 	/// Return vec of connected peers that currently have the most worked
