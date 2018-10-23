@@ -751,7 +751,7 @@ impl Chain {
 	/// Determine the cutoff height from the horizon and the current block height.
 	/// *Only* runs if we are not in archive mode.
 	fn compact_blocks_db(&self) -> Result<(), Error> {
-		if !self.archive_mode {
+		if self.archive_mode {
 			return Ok(())
 		}
 
