@@ -80,22 +80,29 @@ impl Writeable for PeerData {
 impl Readable for PeerData {
 	fn read(reader: &mut Reader) -> Result<PeerData, ser::Error> {
 		let addr = SockAddr::read(reader)?;
-		let (capab, ua, fl, lb, br, lc) =
-			ser_multiread!(reader, read_u32, read_vec, read_u8, read_i64, read_i32, read_i64);
+		let (capab, ua, fl, lb, br) =
+			ser_multiread!(reader, read_u32, read_vec, read_u8, read_i64, read_i32);
+		let lc = reader.read_i64();
+		// this only works because each PeerData is read in its own vector and this
+		// is the last data element
+		let last_connected = if let Err(_) = lc {
+			Utc::now().timestamp()
+		} else {
+			lc.unwrap()
+		};
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
-		let last_banned = lb;
 		let ban_reason = ReasonForBan::from_i32(br).ok_or(ser::Error::CorruptedData)?;
 
 		match State::from_u8(fl) {
 			Some(flags) => Ok(PeerData {
 				addr: addr.0,
-				capabilities: capabilities,
-				user_agent: user_agent,
+				capabilities,
+				user_agent,
 				flags: flags,
-				last_banned: last_banned,
-				ban_reason: ban_reason,
-				last_connected: lc,
+				last_banned: lb,
+				ban_reason,
+				last_connected,
 			}),
 			None => Err(ser::Error::CorruptedData),
 		}
