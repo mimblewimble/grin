@@ -28,7 +28,7 @@ use common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
 use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
-use common::types::{Error, ServerConfig, StratumServerConfig, SyncState};
+use common::types::{Error, ServerConfig, StratumServerConfig, SyncState, SyncStatus};
 use core::core::hash::Hashed;
 use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use core::{consensus, genesis, global, pow};
@@ -170,8 +170,6 @@ impl Server {
 
 		pool_adapter.set_chain(shared_chain.clone());
 
-		let awaiting_peers = Arc::new(AtomicBool::new(false));
-
 		let net_adapter = Arc::new(NetToChainAdapter::new(
 			sync_state.clone(),
 			archive_mode,
@@ -231,17 +229,13 @@ impl Server {
 
 		// Defaults to None (optional) in config file.
 		// This translates to false here so we do not skip by default.
-		let skip_sync_wait = match config.skip_sync_wait {
-			None => false,
-			Some(b) => b,
-		};
+		let skip_sync_wait = config.skip_sync_wait.unwrap_or(false);
+		sync_state.update(SyncStatus::AwaitingPeers(!skip_sync_wait));
 
 		sync::run_sync(
 			sync_state.clone(),
-			awaiting_peers.clone(),
 			p2p_server.peers.clone(),
 			shared_chain.clone(),
-			skip_sync_wait,
 			archive_mode,
 			stop.clone(),
 		);
@@ -279,7 +273,6 @@ impl Server {
 			verifier_cache,
 			sync_state,
 			state_info: ServerStateInfo {
-				awaiting_peers: awaiting_peers,
 				..Default::default()
 			},
 			stop,
@@ -383,7 +376,6 @@ impl Server {
 	/// consumers
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
 		let stratum_stats = self.state_info.stratum_stats.read().clone();
-		let awaiting_peers = self.state_info.awaiting_peers.load(Ordering::Relaxed);
 
 		// Fill out stats on our current difficulty calculation
 		// TODO: check the overhead of calculating this again isn't too much
@@ -443,7 +435,6 @@ impl Server {
 			head: self.head(),
 			header_head: self.header_head(),
 			sync_status: self.sync_state.status(),
-			awaiting_peers: awaiting_peers,
 			stratum_stats: stratum_stats,
 			peer_stats: peer_stats,
 			diff_stats: diff_stats,
