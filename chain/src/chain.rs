@@ -751,8 +751,8 @@ impl Chain {
 	/// Determine the cutoff height from the horizon and the current block height.
 	/// *Only* runs if we are not in archive mode.
 	fn compact_blocks_db(&self) -> Result<(), Error> {
-		if !self.archive_mode {
-			return Ok(())
+		if self.archive_mode {
+			return Ok(());
 		}
 
 		let horizon = global::cut_through_horizon() as u64;
@@ -762,9 +762,7 @@ impl Chain {
 
 		debug!(
 			"chain: compact_blocks_db: head height: {}, horizon: {}, cutoff: {}",
-			head.height,
-			horizon,
-			cutoff,
+			head.height, horizon, cutoff,
 		);
 
 		if cutoff == 0 {
