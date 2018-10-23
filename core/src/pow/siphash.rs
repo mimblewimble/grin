@@ -62,7 +62,7 @@ pub fn siphash24(v: &[u64; 4], nonce: u64) -> u64 {
 	round!();
 	round!();
 
-	return v0 ^ v1 ^ v2 ^ v3;
+	v0 ^ v1 ^ v2 ^ v3
 }
 
 #[cfg(test)]

@@ -77,7 +77,7 @@ where
 		let params = CuckooParams::new(edge_bits, proof_size)?;
 		let num_nodes = 2 * params.num_edges as usize;
 		Ok(CuckooContext {
-			params: params,
+			params,
 			graph: vec![T::zero(); num_nodes],
 			_max_sols: max_sols,
 		})
@@ -190,7 +190,7 @@ where
 		cycle.insert(Edge { u: us[0], v: vs[0] });
 		while nu != 0 {
 			// u's in even position; v's in odd
-			nu = nu - 1;
+			nu -= 1;
 			cycle.insert(Edge {
 				u: us[((nu + 1) & !1) as usize],
 				v: us[(nu | 1) as usize],
@@ -214,11 +214,11 @@ where
 				cycle.remove(&edge);
 			}
 		}
-		return if n == self.params.proof_size {
+		if n == self.params.proof_size {
 			Ok(sol)
 		} else {
 			Err(ErrorKind::NoCycle)?
-		};
+		}
 	}
 
 	/// Searches for a solution (simple implementation)

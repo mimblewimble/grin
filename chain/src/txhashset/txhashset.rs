@@ -624,9 +624,7 @@ impl<'a> HeaderExtension<'a> {
 	/// This may be either the header MMR or the sync MMR depending on the
 	/// extension.
 	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
-		self.pmmr
-			.push(header.clone())
-			.map_err(&ErrorKind::TxHashSetErr)?;
+		self.pmmr.push(&header).map_err(&ErrorKind::TxHashSetErr)?;
 		self.header = header.clone();
 		Ok(())
 	}
@@ -961,7 +959,7 @@ impl<'a> Extension<'a> {
 
 	fn apply_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		self.header_pmmr
-			.push(header.clone())
+			.push(&header)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}

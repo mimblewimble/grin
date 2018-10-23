@@ -303,8 +303,7 @@ where
 			if live_intervals[i - 1].timestamp > live_intervals[i].timestamp {
 				live_intervals[i].timestamp = 0;
 			} else {
-				live_intervals[i].timestamp =
-					live_intervals[i].timestamp - live_intervals[i - 1].timestamp;
+				live_intervals[i].timestamp -= live_intervals[i - 1].timestamp;
 			}
 		}
 		// Remove genesis "interval"
@@ -321,7 +320,7 @@ where
 
 		for _ in 0..block_count_difference {
 			last_ts = last_ts.saturating_sub(live_intervals[live_intervals.len() - 1].timestamp);
-			last_n.insert(0, HeaderInfo::from_ts_diff(last_ts, last_diff.clone()));
+			last_n.insert(0, HeaderInfo::from_ts_diff(last_ts, last_diff));
 			interval_index = match interval_index {
 				0 => live_intervals.len() - 1,
 				_ => interval_index - 1,
