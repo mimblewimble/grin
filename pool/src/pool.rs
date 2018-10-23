@@ -74,34 +74,35 @@ impl Pool {
 		&self,
 		hash: Hash,
 		nonce: u64,
-		kern_ids: &Vec<ShortId>,
+		kern_ids: &[ShortId],
 	) -> (Vec<Transaction>, Vec<ShortId>) {
-		let mut rehashed = HashMap::new();
+		let mut txs = vec![];
+		let mut found_ids = vec![];
 
 		// Rehash all entries in the pool using short_ids based on provided hash and nonce.
-		for x in &self.entries {
+		'outer: for x in &self.entries {
 			for k in x.tx.kernels() {
 				// rehash each kernel to calculate the block specific short_id
 				let short_id = k.short_id(&hash, nonce);
-				rehashed.insert(short_id, x.tx.hash());
+				//rehashed.insert(short_id, x.tx.hash());
+				if kern_ids.contains(&short_id) {
+					txs.push(x.tx.clone());
+					found_ids.push(short_id);
+				}
+				if found_ids.len() == kern_ids.len() {
+					break 'outer;
+				}
 			}
 		}
-
-		// Retrive the txs from the pool by the set of unique hashes.
-		let hashes: HashSet<_> = rehashed.values().collect();
-		let txs = hashes.into_iter().filter_map(|x| self.get_tx(*x)).collect();
-
-		// Calculate the missing ids based on the ids passed in
-		// and the ids that successfully matched txs.
-		let matched_ids: HashSet<_> = rehashed.keys().collect();
-		let all_ids: HashSet<_> = kern_ids.iter().collect();
-		let missing_ids = all_ids
-			.difference(&matched_ids)
-			.map(|x| *x)
-			.cloned()
-			.collect();
-
-		(txs, missing_ids)
+		txs.dedup();
+		(
+			txs,
+			kern_ids
+				.into_iter()
+				.filter(|id| !found_ids.contains(id))
+				.map(|id| id.clone())
+				.collect(),
+		)
 	}
 
 	/// Take pool transactions, filtering and ordering them in a way that's
@@ -365,7 +366,7 @@ impl Pool {
 			.collect()
 	}
 
-	pub fn find_matching_transactions(&self, kernels: Vec<TxKernel>) -> Vec<Transaction> {
+	pub fn find_matching_transactions(&self, kernels: &[TxKernel]) -> Vec<Transaction> {
 		// While the inputs outputs can be cut-through the kernel will stay intact
 		// In order to deaggregate tx we look for tx with the same kernel
 		let mut found_txs = vec![];
@@ -375,7 +376,7 @@ impl Pool {
 
 		// Check each transaction in the pool
 		for entry in &self.entries {
-			let entry_kernel_set = entry.tx.kernels().iter().cloned().collect::<HashSet<_>>();
+			let entry_kernel_set = entry.tx.kernels().iter().collect::<HashSet<_>>();
 			if entry_kernel_set.is_subset(&kernel_set) {
 				found_txs.push(entry.tx.clone());
 			}
