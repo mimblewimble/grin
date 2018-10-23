@@ -89,17 +89,37 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		check_known_store(&b.header, ctx)?;
 	}
 
+	let prev_header = ctx.batch.get_previous_header(&b.header)?;
+
 	// Header specific processing.
 	{
 		validate_header(&b.header, ctx)?;
-		add_block_header(&b.header, ctx)?;
+
+		// TODO - we need a header extension here to build the new header root
+		panic!("still wip");
+		txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+			// Optimize this if "next" header
+			extension.rewind(&prev_header)?;
+
+			for header in headers {
+				// Check the current root is correct.
+				extension.validate_root(header)?;
+
+				// Apply the new header and store header in the db.
+				let header_root = extension.apply_header(header)?;
+				add_block_header(header, &header_root, &mut extension.batch)?;
+			}
+
+			Ok(())
+		})?;
+
+		add_block_header(&b.header, &header_root, ctx)?;
 		update_header_head(&b.header, ctx)?;
 	}
 
 	// Check if are processing the "next" block relative to the current chain head.
-	let prev = ctx.batch.get_previous_header(&b.header)?;
 	let head = ctx.batch.head()?;
-	if prev.hash() == head.last_block_h {
+	if prev_header.hash() == head.last_block_h {
 		// If this is the "next" block then either -
 		//   * common case where we process blocks sequentially.
 		//   * special case where this is the first fast sync full block
@@ -201,7 +221,6 @@ pub fn sync_block_headers(
 	if !all_known {
 		for header in headers {
 			validate_header(header, ctx)?;
-			add_block_header(header, ctx)?;
 		}
 
 		let first_header = headers.first().unwrap();
@@ -211,8 +230,12 @@ pub fn sync_block_headers(
 			extension.rewind(&prev_header)?;
 
 			for header in headers {
+				// Check the current root is correct.
 				extension.validate_root(header)?;
-				extension.apply_header(header)?;
+
+				// Apply the new header and store header in the db.
+				let header_root = extension.apply_header(header)?;
+				add_block_header(header, &header_root, &mut extension.batch)?;
 			}
 
 			Ok(())
@@ -523,9 +546,9 @@ fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 }
 
 /// Officially adds the block header to our header chain.
-fn add_block_header(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	ctx.batch
-		.save_block_header(bh)
+fn add_block_header(bh: &BlockHeader, header_root: &Hash, batch: &mut store::Batch) -> Result<(), Error> {
+	batch
+		.save_block_header(bh, &header_root)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header".to_owned()).into())
 }
 

@@ -623,10 +623,12 @@ impl<'a> HeaderExtension<'a> {
 	/// Apply a new header to the header MMR extension.
 	/// This may be either the header MMR or the sync MMR depending on the
 	/// extension.
-	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
-		self.pmmr.push(&header).map_err(&ErrorKind::TxHashSetErr)?;
-		self.header = header.clone();
-		Ok(())
+	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<Hash, Error> {
+		self.pmmr
+			.push(header.clone())
+			.map_err(&ErrorKind::TxHashSetErr)?;
+		self.header = header;
+		Ok(self.root())
 	}
 
 	/// Rewind the header extension to the specified header.

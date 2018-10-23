@@ -39,6 +39,7 @@ const HEAD_PREFIX: u8 = 'H' as u8;
 const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
+const HEADER_ROOT_PREFIX: u8 = 'r' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = 'B' as u8;
 const BLOCK_SUMS_PREFIX: u8 = 'M' as u8;
@@ -122,12 +123,16 @@ impl ChainStore {
 		}
 	}
 
-	pub fn get_header_by_prev_root(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		unimplemented!("[wip]")
+	pub fn get_header_by_root(&self, h: &Hash) -> Result<BlockHeader, Error> {
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(HEADER_ROOT_PREFIX, &mut h.to_vec())),
+			&format!("BLOCK HEADER ROOT: {}", h),
+		)
 	}
 
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
-		self.get_header_by_prev_root(&header.prev_root)
+		self.get_header_by_root(&header.prev_root)
 	}
 
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
@@ -292,8 +297,8 @@ impl<'a> Batch<'a> {
 	}
 
 	/// Save the block and its header, caching the header.
-	pub fn save_block(&self, b: &Block) -> Result<(), Error> {
-		self.save_block_header(&b.header)?;
+	pub fn save_block(&self, b: &Block, header_root: &Hash) -> Result<(), Error> {
+		self.save_block_header(&b.header, header_root)?;
 		self.db
 			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?;
 		Ok(())
@@ -315,14 +320,24 @@ impl<'a> Batch<'a> {
 		Ok(())
 	}
 
-	pub fn save_block_header(&self, header: &BlockHeader) -> Result<(), Error> {
+	pub fn save_block_header(&self, header: &BlockHeader, header_root: &Hash) -> Result<(), Error> {
 		let hash = header.hash();
 
+		// TODO - cache the header by root.
+		{
+		}
+
+		// Cache the header.
 		{
 			let mut header_cache = self.header_cache.write();
 			header_cache.insert(hash, header.clone());
 		}
 
+		// Store the header hash indexed by header root.
+		self.db
+			.put_ser(&to_key(HEADER_ROOT_PREFIX, &mut header_root.to_vec())[..], &hash)?;
+
+		// Store the header itself indexed by hash.
 		self.db
 			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut hash.to_vec())[..], header)?;
 		Ok(())
@@ -357,12 +372,16 @@ impl<'a> Batch<'a> {
 			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
 	}
 
-	pub fn get_header_by_prev_root(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		unimplemented!("[wip]")
+	pub fn get_header_by_root(&self, h: &Hash) -> Result<BlockHeader, Error> {
+		option_to_not_found(
+			self.db
+				.get_ser(&to_key(HEADER_ROOT_PREFIX, &mut h.to_vec())),
+			&format!("BLOCK HEADER ROOT: {}", h),
+		)
 	}
 
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
-		self.get_header_by_prev_root(&header.prev_root)
+		self.get_header_by_root(&header.prev_root)
 	}
 
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
