@@ -87,4 +87,7 @@ rustfmt client.rs
 
 Even one word correction are welcome! Our objective is to encourage you to get interested in Grin and contribute in any way possible. Thanks for any help!
 
-
+Name:  Sreelakshmi T D 
+Place:  Kerala,India
+Github:  Sreelakshmi T D
+LinkedIn:  Sreelakshmi T D
