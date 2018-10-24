@@ -141,7 +141,7 @@ fn process_fluff_phase(
 		.get_transactions_in_state(PoolEntryState::ToFluff);
 
 	if stem_txs.is_empty() {
-		return Ok(())
+		return Ok(());
 	}
 
 	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;

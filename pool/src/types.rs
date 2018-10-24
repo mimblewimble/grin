@@ -18,9 +18,9 @@
 use chrono::prelude::{DateTime, Utc};
 
 use core::consensus;
+use core::core::block;
 use core::core::committed;
 use core::core::hash::Hash;
-use core::core::block;
 use core::core::transaction::{self, Transaction};
 use core::core::{BlockHeader, BlockSums};
 use keychain;

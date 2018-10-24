@@ -423,11 +423,7 @@ impl Block {
 		&self,
 		prev_kernel_offset: BlindingFactor,
 	) -> Result<Option<Transaction>, Error> {
-		let inputs = self
-			.inputs()
-			.iter()
-			.cloned()
-			.collect();
+		let inputs = self.inputs().iter().cloned().collect();
 		let outputs = self
 			.outputs()
 			.iter()
@@ -622,7 +618,10 @@ impl Block {
 		Ok(())
 	}
 
-	fn block_kernel_offset(&self, prev_kernel_offset: BlindingFactor) -> Result<BlindingFactor, Error> {
+	fn block_kernel_offset(
+		&self,
+		prev_kernel_offset: BlindingFactor,
+	) -> Result<BlindingFactor, Error> {
 		let offset = if self.header.total_kernel_offset() == prev_kernel_offset {
 			// special case when the sum hasn't changed (typically an empty block),
 			// zero isn't a valid private key but it's a valid blinding factor

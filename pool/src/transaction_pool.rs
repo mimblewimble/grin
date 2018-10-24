@@ -30,7 +30,7 @@ use core::core::{transaction, Block, BlockHeader, Transaction};
 use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
 
-const REORG_CACHE_SIZE: usize = 1_00;
+const REORG_CACHE_SIZE: usize = 100;
 
 /// Transaction pool implementation.
 pub struct TransactionPool {
@@ -82,10 +82,7 @@ impl TransactionPool {
 		Ok(())
 	}
 
-	fn add_to_reorg_cache(
-		&mut self,
-		entry: PoolEntry,
-	) -> Result<(), PoolError> {
+	fn add_to_reorg_cache(&mut self, entry: PoolEntry) -> Result<(), PoolError> {
 		let mut cache = self.reorg_cache.write();
 		cache.push_back(entry);
 		if cache.len() > REORG_CACHE_SIZE {
