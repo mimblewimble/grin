@@ -25,7 +25,7 @@ use util::RwLock;
 use lmdb;
 use lru_cache::LruCache;
 
-use core::core::hash::{Hash, Hashed};
+use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::merkle_proof::MerkleProof;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernel};
@@ -1085,7 +1085,10 @@ fn setup_head(
 			}
 		}
 		Err(NotFoundErr(_)) => {
+			let header_root = ZERO_HASH;
+			batch.save_block_header(&genesis.header, &header_root)?;
 			batch.save_block(&genesis)?;
+
 			let tip = Tip::from_genesis(&genesis.header);
 			batch.save_head(&tip)?;
 			batch.setup_height(&genesis.header, &tip)?;

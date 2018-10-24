@@ -153,7 +153,7 @@ impl StateSync {
 			for _ in 0..(horizon - horizon / 10) {
 				txhashset_head = self
 					.chain
-					.get_block_header(&txhashset_head.previous)
+					.get_previous_header(&txhashset_head)
 					.unwrap();
 			}
 			let bhash = txhashset_head.hash();

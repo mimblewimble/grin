@@ -95,25 +95,20 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 	{
 		validate_header(&b.header, ctx)?;
 
-		// TODO - we need a header extension here to build the new header root
-		panic!("still wip");
 		txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
 			// Optimize this if "next" header
-			extension.rewind(&prev_header)?;
+			rewind_and_apply_header_fork(&b.header, extension)?;
 
-			for header in headers {
-				// Check the current root is correct.
-				extension.validate_root(header)?;
+			// Check the current root is correct.
+			extension.validate_root(&b.header)?;
 
-				// Apply the new header and store header in the db.
-				let header_root = extension.apply_header(header)?;
-				add_block_header(header, &header_root, &mut extension.batch)?;
-			}
+			// Apply the new header and store header in the db.
+			let header_root = extension.apply_header(&b.header)?;
+			add_block_header(&b.header, &header_root, extension)?;
 
 			Ok(())
 		})?;
 
-		add_block_header(&b.header, &header_root, ctx)?;
 		update_header_head(&b.header, ctx)?;
 	}
 
@@ -171,6 +166,9 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		// Block is invalid if there are any discrepencies.
 		apply_block_to_txhashset(b, &mut extension)?;
 
+		// Add the new accepted block to our index.
+		add_block(b, extension)?;
+
 		// If applying this block does not increase the work on the chain then
 		// we know we have not yet updated the chain to produce a new chain head.
 		let head = extension.batch.head()?;
@@ -186,9 +184,6 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		b.hash(),
 		b.header.height,
 	);
-
-	// Add the newly accepted block and header to our index.
-	add_block(b, ctx)?;
 
 	// Update the chain head if total work is increased.
 	let res = update_head(b, ctx)?;
@@ -235,7 +230,7 @@ pub fn sync_block_headers(
 
 				// Apply the new header and store header in the db.
 				let header_root = extension.apply_header(header)?;
-				add_block_header(header, &header_root, &mut extension.batch)?;
+				add_block_header(header, &header_root, extension)?;
 			}
 
 			Ok(())
@@ -534,14 +529,13 @@ fn apply_block_to_txhashset(block: &Block, ext: &mut txhashset::Extension) -> Re
 }
 
 /// Officially adds the block to our chain.
-fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
-	// Save the block itself to the db (via the batch).
-	ctx.batch
-		.save_block(b)
+/// Header must be added separately (assume this has been done previously).
+fn add_block(
+	b: &Block,
+	ext: &txhashset::Extension,
+) -> Result<(), Error> {
+	ext.batch.save_block(b)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save block".to_owned()))?;
-
-	// Build the block_input_bitmap, save to the db (via the batch) and cache locally.
-	ctx.batch.build_and_cache_block_input_bitmap(&b)?;
 	Ok(())
 }
 
@@ -549,11 +543,11 @@ fn add_block(b: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 fn add_block_header(
 	bh: &BlockHeader,
 	header_root: &Hash,
-	batch: &mut store::Batch,
+	ext: &txhashset::HeaderExtension,
 ) -> Result<(), Error> {
-	batch
-		.save_block_header(bh, &header_root)
-		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header".to_owned()).into())
+	ext.batch.save_block_header(bh, header_root)
+		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header".to_owned()))?;
+	Ok(())
 }
 
 /// Directly updates the head if we've just appended a new block to it or handle
@@ -622,6 +616,44 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 	} else {
 		Ok(None)
 	}
+}
+
+pub fn rewind_and_apply_header_fork(
+	header: &BlockHeader,
+	ext: &mut txhashset::HeaderExtension,
+) -> Result<(), Error> {
+	let mut fork_hashes = vec![];
+	let mut current = ext.batch.get_previous_header(header)?;
+
+	while ext.batch.is_on_current_chain(&current).is_ok() {
+		fork_hashes.insert(0, (current.height, current.hash()));
+		current = ext.batch.get_previous_header(&current)?;
+	}
+
+	let forked_header = current;
+
+	trace!(
+		"rewind_and_apply_header_fork @ {} [{}], was @ {} [{}]",
+		forked_header.height,
+		forked_header.hash(),
+		header.height,
+		header.hash()
+	);
+
+	// Rewind the txhashset state back to the block where we forked from the most work chain.
+	ext.rewind(&forked_header)?;
+
+	trace!("rewind_and_apply_header_fork: headers on fork: {:?}", fork_hashes);
+
+	// Now re-apply all blocks on this fork.
+	for (_, h) in fork_hashes {
+		let header = ext
+			.batch
+			.get_block_header(&h)
+			.map_err(|e| ErrorKind::StoreErr(e, format!("getting forked headers")))?;
+		ext.apply_header(&header)?;
+	}
+	Ok(())
 }
 
 /// Utility function to handle forks. From the forked block, jump backward

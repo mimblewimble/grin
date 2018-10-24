@@ -583,8 +583,9 @@ impl BlockPrintable {
 			.iter()
 			.map(|kernel| TxKernelPrintable::from_txkernel(kernel))
 			.collect();
+		let previous = chain.get_previous_header(&block.header).unwrap();
 		BlockPrintable {
-			header: BlockHeaderPrintable::from_header(&block.header),
+			header: BlockHeaderPrintable::from_headers(&block.header, &previous),
 			inputs: inputs,
 			outputs: outputs,
 			kernels: kernels,
@@ -622,8 +623,9 @@ impl CompactBlockPrintable {
 			.iter()
 			.map(|x| TxKernelPrintable::from_txkernel(x))
 			.collect();
+		let previous = chain.get_previous_header(&cb.header).unwrap();
 		CompactBlockPrintable {
-			header: BlockHeaderPrintable::from_header(&cb.header),
+			header: BlockHeaderPrintable::from_headers(&cb.header, &previous),
 			out_full,
 			kern_full,
 			kern_ids: cb.kern_ids().iter().map(|x| x.to_hex()).collect(),

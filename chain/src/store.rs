@@ -296,11 +296,15 @@ impl<'a> Batch<'a> {
 		self.db.exists(&to_key(BLOCK_PREFIX, &mut h.to_vec()))
 	}
 
-	/// Save the block and its header, caching the header.
-	pub fn save_block(&self, b: &Block, header_root: &Hash) -> Result<(), Error> {
-		self.save_block_header(&b.header, header_root)?;
-		self.db
-			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?;
+	/// Save the block and the associated input bitmap.
+	/// Note: the block header is not saved to the db here, assumes this has already been done.
+	pub fn save_block(&self, b: &Block) -> Result<(), Error> {
+		// Build the "input bitmap" for this new block and cache it locally.
+		self.build_and_cache_block_input_bitmap(&b)?;
+
+		// Save the block itself to the db.
+		self.db.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?;
+
 		Ok(())
 	}
 
@@ -540,7 +544,7 @@ impl<'a> Batch<'a> {
 		Ok(bitmap)
 	}
 
-	pub fn build_and_cache_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
+	fn build_and_cache_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
 		// Build the bitmap.
 		let bitmap = self.build_block_input_bitmap(block)?;
 
