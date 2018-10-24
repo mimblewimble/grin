@@ -87,4 +87,6 @@ rustfmt client.rs
 
 Even one word correction are welcome! Our objective is to encourage you to get interested in Grin and contribute in any way possible. Thanks for any help!
 
-
+Name: "Kannnan"  
+   Place: "kerala"  
+   Github: [kannanvg10](https://github.com/kannanvg10)  
