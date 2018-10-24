@@ -303,7 +303,8 @@ impl<'a> Batch<'a> {
 		self.build_and_cache_block_input_bitmap(&b)?;
 
 		// Save the block itself to the db.
-		self.db.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?;
+		self.db
+			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?;
 
 		Ok(())
 	}

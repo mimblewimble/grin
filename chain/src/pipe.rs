@@ -530,11 +530,9 @@ fn apply_block_to_txhashset(block: &Block, ext: &mut txhashset::Extension) -> Re
 
 /// Officially adds the block to our chain.
 /// Header must be added separately (assume this has been done previously).
-fn add_block(
-	b: &Block,
-	ext: &txhashset::Extension,
-) -> Result<(), Error> {
-	ext.batch.save_block(b)
+fn add_block(b: &Block, ext: &txhashset::Extension) -> Result<(), Error> {
+	ext.batch
+		.save_block(b)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save block".to_owned()))?;
 	Ok(())
 }
@@ -545,7 +543,8 @@ fn add_block_header(
 	header_root: &Hash,
 	ext: &txhashset::HeaderExtension,
 ) -> Result<(), Error> {
-	ext.batch.save_block_header(bh, header_root)
+	ext.batch
+		.save_block_header(bh, header_root)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header".to_owned()))?;
 	Ok(())
 }
@@ -643,7 +642,10 @@ pub fn rewind_and_apply_header_fork(
 	// Rewind the txhashset state back to the block where we forked from the most work chain.
 	ext.rewind(&forked_header)?;
 
-	trace!("rewind_and_apply_header_fork: headers on fork: {:?}", fork_hashes);
+	trace!(
+		"rewind_and_apply_header_fork: headers on fork: {:?}",
+		fork_hashes
+	);
 
 	// Now re-apply all blocks on this fork.
 	for (_, h) in fork_hashes {
