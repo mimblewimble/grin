@@ -418,6 +418,35 @@ impl Block {
 		Ok(block)
 	}
 
+	/// Extract tx data from this block as a single aggregate tx.
+	pub fn aggregate_transaction(
+		&self,
+		prev_kernel_offset: BlindingFactor,
+	) -> Result<Option<Transaction>, Error> {
+		let inputs = self.inputs().iter().cloned().collect();
+		let outputs = self
+			.outputs()
+			.iter()
+			.filter(|x| !x.features.contains(OutputFeatures::COINBASE_OUTPUT))
+			.cloned()
+			.collect();
+		let kernels = self
+			.kernels()
+			.iter()
+			.filter(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
+			.cloned()
+			.collect::<Vec<_>>();
+
+		let tx = if kernels.is_empty() {
+			None
+		} else {
+			let tx = Transaction::new(inputs, outputs, kernels)
+				.with_offset(self.block_kernel_offset(prev_kernel_offset)?);
+			Some(tx)
+		};
+		Ok(tx)
+	}
+
 	/// Hydrate a block from a compact block.
 	/// Note: caller must validate the block themselves, we do not validate it
 	/// here.
@@ -589,6 +618,23 @@ impl Block {
 		Ok(())
 	}
 
+	fn block_kernel_offset(
+		&self,
+		prev_kernel_offset: BlindingFactor,
+	) -> Result<BlindingFactor, Error> {
+		let offset = if self.header.total_kernel_offset() == prev_kernel_offset {
+			// special case when the sum hasn't changed (typically an empty block),
+			// zero isn't a valid private key but it's a valid blinding factor
+			BlindingFactor::zero()
+		} else {
+			committed::sum_kernel_offsets(
+				vec![self.header.total_kernel_offset()],
+				vec![prev_kernel_offset],
+			)?
+		};
+		Ok(offset)
+	}
+
 	/// Validates all the elements in a block that can be checked without
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
@@ -596,7 +642,7 @@ impl Block {
 		&self,
 		prev_kernel_offset: &BlindingFactor,
 		verifier: Arc<RwLock<VerifierCache>>,
-	) -> Result<(Commitment), Error> {
+	) -> Result<Commitment, Error> {
 		self.body.validate(true, verifier)?;
 
 		self.verify_kernel_lock_heights()?;
@@ -604,18 +650,10 @@ impl Block {
 
 		// take the kernel offset for this block (block offset minus previous) and
 		// verify.body.outputs and kernel sums
-		let block_kernel_offset = if self.header.total_kernel_offset() == *prev_kernel_offset {
-			// special case when the sum hasn't changed (typically an empty block),
-			// zero isn't a valid private key but it's a valid blinding factor
-			BlindingFactor::zero()
-		} else {
-			committed::sum_kernel_offsets(
-				vec![self.header.total_kernel_offset()],
-				vec![*prev_kernel_offset],
-			)?
-		};
-		let (_utxo_sum, kernel_sum) =
-			self.verify_kernel_sums(self.header.overage(), block_kernel_offset)?;
+		let (_utxo_sum, kernel_sum) = self.verify_kernel_sums(
+			self.header.overage(),
+			self.block_kernel_offset(*prev_kernel_offset)?,
+		)?;
 
 		Ok(kernel_sum)
 	}

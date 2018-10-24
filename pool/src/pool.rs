@@ -188,17 +188,6 @@ impl Pool {
 		extra_txs: Vec<Transaction>,
 		header: &BlockHeader,
 	) -> Result<(), PoolError> {
-		debug!(
-			"pool [{}]: add_to_pool: {}, {:?}, inputs: {}, outputs: {}, kernels: {} (at block {})",
-			self.name,
-			entry.tx.hash(),
-			entry.src,
-			entry.tx.inputs().len(),
-			entry.tx.outputs().len(),
-			entry.tx.kernels().len(),
-			header.hash(),
-		);
-
 		// Combine all the txs from the pool with any extra txs provided.
 		let mut txs = self.all_transactions();
 
@@ -226,7 +215,19 @@ impl Pool {
 		self.validate_raw_tx(&agg_tx, header)?;
 
 		// If we get here successfully then we can safely add the entry to the pool.
-		self.entries.push(entry);
+		self.entries.push(entry.clone());
+
+		debug!(
+			"add_to_pool [{}]: {} ({}), in/out/kern: {}/{}/{}, pool: {} (at block {})",
+			self.name,
+			entry.tx.hash(),
+			entry.src.debug_name,
+			entry.tx.inputs().len(),
+			entry.tx.outputs().len(),
+			entry.tx.kernels().len(),
+			self.size(),
+			header.hash(),
+		);
 
 		Ok(())
 	}

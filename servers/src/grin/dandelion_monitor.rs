@@ -90,10 +90,16 @@ fn process_stem_phase(
 
 	let header = tx_pool.chain_head()?;
 
-	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
 	let stem_txs = tx_pool
 		.stempool
 		.get_transactions_in_state(PoolEntryState::ToStem);
+
+	if stem_txs.is_empty() {
+		return Ok(());
+	}
+
+	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
+
 	let stem_txs = tx_pool
 		.stempool
 		.select_valid_transactions(stem_txs, txpool_tx, &header)?;
@@ -130,10 +136,16 @@ fn process_fluff_phase(
 
 	let header = tx_pool.chain_head()?;
 
-	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
 	let stem_txs = tx_pool
 		.stempool
 		.get_transactions_in_state(PoolEntryState::ToFluff);
+
+	if stem_txs.is_empty() {
+		return Ok(());
+	}
+
+	let txpool_tx = tx_pool.txpool.aggregate_transaction()?;
+
 	let stem_txs = tx_pool
 		.stempool
 		.select_valid_transactions(stem_txs, txpool_tx, &header)?;

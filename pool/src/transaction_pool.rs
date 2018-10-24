@@ -17,6 +17,7 @@
 //! resulting tx pool can be added to the current chain state to produce a
 //! valid chain state.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 use util::RwLock;
 
@@ -29,6 +30,9 @@ use core::core::{transaction, Block, BlockHeader, Transaction};
 use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
 
+// Cache this many txs to handle a potential fork and re-org.
+const REORG_CACHE_SIZE: usize = 100;
+
 /// Transaction pool implementation.
 pub struct TransactionPool {
 	/// Pool Config
@@ -37,6 +41,8 @@ pub struct TransactionPool {
 	pub txpool: Pool,
 	/// Our Dandelion "stempool".
 	pub stempool: Pool,
+	/// Cache of previous txs in case of a re-org.
+	pub reorg_cache: Arc<RwLock<VecDeque<PoolEntry>>>,
 	/// The blockchain
 	pub blockchain: Arc<BlockChain>,
 	pub verifier_cache: Arc<RwLock<VerifierCache>>,
@@ -56,6 +62,7 @@ impl TransactionPool {
 			config,
 			txpool: Pool::new(chain.clone(), verifier_cache.clone(), format!("txpool")),
 			stempool: Pool::new(chain.clone(), verifier_cache.clone(), format!("stempool")),
+			reorg_cache: Arc::new(RwLock::new(VecDeque::new())),
 			blockchain: chain,
 			verifier_cache,
 			adapter,
@@ -73,6 +80,16 @@ impl TransactionPool {
 
 		// Note: we do not notify the adapter here,
 		// we let the dandelion monitor handle this.
+		Ok(())
+	}
+
+	fn add_to_reorg_cache(&mut self, entry: PoolEntry) -> Result<(), PoolError> {
+		let mut cache = self.reorg_cache.write();
+		cache.push_back(entry);
+		if cache.len() > REORG_CACHE_SIZE {
+			cache.pop_front();
+		}
+		debug!("added tx to reorg_cache: size now {}", cache.len());
 		Ok(())
 	}
 
@@ -97,8 +114,10 @@ impl TransactionPool {
 
 		// We now need to reconcile the stempool based on the new state of the txpool.
 		// Some stempool txs may no longer be valid and we need to evict them.
-		let txpool_tx = self.txpool.aggregate_transaction()?;
-		self.stempool.reconcile(txpool_tx, header)?;
+		{
+			let txpool_tx = self.txpool.aggregate_transaction()?;
+			self.stempool.reconcile(txpool_tx, header)?;
+		}
 
 		self.adapter.tx_accepted(&entry.tx);
 		Ok(())
@@ -140,10 +159,22 @@ impl TransactionPool {
 		};
 
 		if stem {
+			// TODO - what happens to txs in the stempool in a re-org scenario?
 			self.add_to_stempool(entry, header)?;
 		} else {
-			self.add_to_txpool(entry, header)?;
+			self.add_to_txpool(entry.clone(), header)?;
+			self.add_to_reorg_cache(entry)?;
 		}
+		Ok(())
+	}
+
+	fn reconcile_reorg_cache(&mut self, header: &BlockHeader) -> Result<(), PoolError> {
+		let entries = self.reorg_cache.read().iter().cloned().collect::<Vec<_>>();
+		debug!("reconcile_reorg_cache: size: {} ...", entries.len());
+		for entry in entries {
+			let _ = &self.add_to_txpool(entry.clone(), header);
+		}
+		debug!("reconcile_reorg_cache: ... done.");
 		Ok(())
 	}
 
@@ -154,10 +185,16 @@ impl TransactionPool {
 		self.txpool.reconcile_block(block)?;
 		self.txpool.reconcile(None, &block.header)?;
 
-		// Then reconcile the stempool, accounting for the txpool txs.
-		let txpool_tx = self.txpool.aggregate_transaction()?;
+		// Take our "reorg_cache" and see if this block means
+		// we need to (re)add old txs due to a fork and re-org.
+		self.reconcile_reorg_cache(&block.header)?;
+
+		// Now reconcile our stempool, accounting for the updated txpool txs.
 		self.stempool.reconcile_block(block)?;
-		self.stempool.reconcile(txpool_tx, &block.header)?;
+		{
+			let txpool_tx = self.txpool.aggregate_transaction()?;
+			self.stempool.reconcile(txpool_tx, &block.header)?;
+		}
 
 		Ok(())
 	}

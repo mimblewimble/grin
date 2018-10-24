@@ -67,7 +67,7 @@ impl VerifierCache for LruVerifierCache {
 					.unwrap_or(&mut false)
 			}).cloned()
 			.collect::<Vec<_>>();
-		debug!(
+		trace!(
 			"lru_verifier_cache: kernel sigs: {}, not cached (must verify): {}",
 			kernels.len(),
 			res.len()
@@ -85,7 +85,7 @@ impl VerifierCache for LruVerifierCache {
 					.unwrap_or(&mut false)
 			}).cloned()
 			.collect::<Vec<_>>();
-		debug!(
+		trace!(
 			"lru_verifier_cache: rangeproofs: {}, not cached (must verify): {}",
 			outputs.len(),
 			res.len()
