@@ -133,8 +133,7 @@ impl Pool {
 		// Iteratively apply the txs to the current chain state,
 		// rejecting any that do not result in a valid state.
 		// Return a vec of all the valid txs.
-		let block_sums = self.blockchain.get_block_sums(&header.hash())?;
-		let txs = self.validate_raw_txs(flat_txs, None, &header, &block_sums)?;
+		let txs = self.validate_raw_txs(flat_txs, None, &header)?;
 		Ok(txs)
 	}
 
@@ -159,8 +158,7 @@ impl Pool {
 		extra_tx: Option<Transaction>,
 		header: &BlockHeader,
 	) -> Result<Vec<Transaction>, PoolError> {
-		let block_sums = self.blockchain.get_block_sums(&header.hash())?;
-		let valid_txs = self.validate_raw_txs(txs, extra_tx, header, &block_sums)?;
+		let valid_txs = self.validate_raw_txs(txs, extra_tx, header)?;
 		Ok(valid_txs)
 	}
 
@@ -238,8 +236,14 @@ impl Pool {
 		tx: &Transaction,
 		header: &BlockHeader,
 	) -> Result<BlockSums, PoolError> {
-		let block_sums = self.blockchain.get_block_sums(&header.hash())?;
-		let new_sums = self.apply_txs_to_block_sums(&block_sums, vec![tx.clone()], header)?;
+		tx.validate(self.verifier_cache.clone())?;
+
+		// Validate the tx against current chain state.
+		// Check all inputs are in the current UTXO set.
+		// Check all outputs are unique in current UTXO set.
+		self.blockchain.validate_tx(tx)?;
+
+		let new_sums = self.apply_tx_to_block_sums(tx, header)?;
 		Ok(new_sums)
 	}
 
@@ -248,7 +252,6 @@ impl Pool {
 		txs: Vec<Transaction>,
 		extra_tx: Option<Transaction>,
 		header: &BlockHeader,
-		block_sums: &BlockSums,
 	) -> Result<Vec<Transaction>, PoolError> {
 		let mut valid_txs = vec![];
 
@@ -259,10 +262,12 @@ impl Pool {
 			};
 			candidate_txs.extend(valid_txs.clone());
 			candidate_txs.push(tx.clone());
-			if self
-				.apply_txs_to_block_sums(&block_sums, candidate_txs, header)
-				.is_ok()
-			{
+
+			// Build a single aggregate tx from candidate txs.
+			let agg_tx = transaction::aggregate(candidate_txs)?;
+
+			// We know the tx is valid if the entire aggregate tx is valid.
+			if self.validate_raw_tx(&agg_tx, header).is_ok() {
 				valid_txs.push(tx);
 			}
 		}
@@ -270,28 +275,20 @@ impl Pool {
 		Ok(valid_txs)
 	}
 
-	fn apply_txs_to_block_sums(
+	fn apply_tx_to_block_sums(
 		&self,
-		block_sums: &BlockSums,
-		txs: Vec<Transaction>,
+		tx: &Transaction,
 		header: &BlockHeader,
 	) -> Result<BlockSums, PoolError> {
-		// Build a single aggregate tx and validate it.
-		let tx = transaction::aggregate(txs)?;
-		tx.validate(self.verifier_cache.clone())?;
-
-		// Validate the tx against current chain state.
-		// Check all inputs are in the current UTXO set.
-		// Check all outputs are unique in current UTXO set.
-		self.blockchain.validate_tx(&tx)?;
-
 		let overage = tx.overage();
 		let offset = (header.total_kernel_offset() + tx.offset)?;
+
+		let block_sums = self.blockchain.get_block_sums(&header.hash())?;
 
 		// Verify the kernel sums for the block_sums with the new tx applied,
 		// accounting for overage and offset.
 		let (utxo_sum, kernel_sum) =
-			(block_sums.clone(), &tx as &Committed).verify_kernel_sums(overage, offset)?;
+			(block_sums, tx as &Committed).verify_kernel_sums(overage, offset)?;
 
 		Ok(BlockSums {
 			utxo_sum,
