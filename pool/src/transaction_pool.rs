@@ -30,6 +30,7 @@ use core::core::{transaction, Block, BlockHeader, Transaction};
 use pool::Pool;
 use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
 
+// Cache this many txs to handle a potential fork and re-org.
 const REORG_CACHE_SIZE: usize = 100;
 
 /// Transaction pool implementation.
@@ -184,9 +185,11 @@ impl TransactionPool {
 		self.txpool.reconcile_block(block)?;
 		self.txpool.reconcile(None, &block.header)?;
 
+		// Take our "reorg_cache" and see if this block means
+		// we need to (re)add old txs due to a fork and re-org.
 		self.reconcile_reorg_cache(&block.header)?;
 
-		// Then reconcile the stempool, accounting for the txpool txs.
+		// Now reconcile our stempool, accounting for the updated txpool txs.
 		self.stempool.reconcile_block(block)?;
 		{
 			let txpool_tx = self.txpool.aggregate_transaction()?;
