@@ -686,6 +686,4 @@ pub struct SendTXArgs {
 	pub num_change_outputs: usize,
 	/// whether to use all outputs (combine)
 	pub selection_strategy_is_use_all: bool,
-	/// dandelion control
-	pub fluff: bool,
 }
