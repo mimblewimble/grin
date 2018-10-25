@@ -144,7 +144,6 @@ impl<'a> Response<'a> {
 
 pub const SEND_CHANNEL_CAP: usize = 10;
 
-// TODO count sent and received
 pub struct Tracker {
 	/// Bytes we've sent.
 	pub sent_bytes: Arc<RwLock<u64>>,
