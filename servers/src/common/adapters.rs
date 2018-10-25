@@ -468,7 +468,9 @@ impl NetToChainAdapter {
 					chain::ErrorKind::Orphan => {
 						if let Ok(previous) = previous {
 							// make sure we did not miss the parent block
-							if !self.chain().is_orphan(&previous.hash()) && !self.sync_state.is_syncing() {
+							if !self.chain().is_orphan(&previous.hash())
+								&& !self.sync_state.is_syncing()
+							{
 								debug!("adapter: process_block: received an orphan block, checking the parent: {:}", previous.hash());
 								self.request_block_by_hash(previous.hash(), &addr)
 							}
