@@ -108,8 +108,7 @@ fn build_block(
 	let difficulty = consensus::next_difficulty(head.height + 1, chain.difficulty_iter());
 
 	// extract current transaction from the pool
-	// TODO - we have a lot of unwrap() going on in this fn...
-	let txs = tx_pool.read().prepare_mineable_transactions().unwrap();
+	let txs = tx_pool.read().prepare_mineable_transactions()?;
 
 	// build the coinbase and the block itself
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
