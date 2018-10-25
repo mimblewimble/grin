@@ -74,6 +74,12 @@ impl Filter for GrinFilter {
 /// Initialize the logger with the given configuration
 pub fn init_logger(config: Option<LoggingConfig>) {
 	if let Some(c) = config {
+		let tui_running = c.tui_running.unwrap_or(false);
+		if tui_running {
+			let mut tui_running_ref = TUI_RUNNING.lock();
+			*tui_running_ref = true;
+		}
+
 		// Save current logging configuration
 		let mut config_ref = LOGGING_CONFIG.lock();
 		*config_ref = c.clone();
@@ -98,7 +104,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 
 		let mut appenders = vec![];
 
-		if c.log_to_stdout {
+		if c.log_to_stdout && !tui_running {
 			let filter = Box::new(ThresholdFilter::new(level_stdout));
 			appenders.push(
 				Appender::builder()
