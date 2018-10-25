@@ -44,6 +44,8 @@ pub enum Error {
 	Wallet(wallet::Error),
 	/// Error originating from the cuckoo miner
 	Cuckoo(pow::Error),
+	/// Error originating from the transaction pool.
+	Pool(pool::PoolError),
 }
 
 impl From<core::block::Error> for Error {
@@ -84,6 +86,12 @@ impl From<api::Error> for Error {
 impl From<wallet::Error> for Error {
 	fn from(e: wallet::Error) -> Error {
 		Error::Wallet(e)
+	}
+}
+
+impl From<pool::PoolError> for Error {
+	fn from(e: pool::PoolError) -> Error {
+		Error::Pool(e)
 	}
 }
 
