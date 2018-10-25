@@ -52,30 +52,27 @@ pub mod built_info {
 	include!(concat!(env!("OUT_DIR"), "/built.rs"));
 }
 
-pub fn info_strings() -> (String, String, String) {
+pub fn info_strings() -> (String, String) {
 	(
 		format!(
 			"This is Grin version {}{}, built for {} by {}.",
 			built_info::PKG_VERSION,
 			built_info::GIT_VERSION.map_or_else(|| "".to_owned(), |v| format!(" (git {})", v)),
 			built_info::TARGET,
-			built_info::RUSTC_VERSION
+			built_info::RUSTC_VERSION,
 		).to_string(),
 		format!(
-			"Built with profile \"{}\", features \"{}\" on {}.",
+			"Built with profile \"{}\", features \"{}\".",
 			built_info::PROFILE,
 			built_info::FEATURES_STR,
-			built_info::BUILT_TIME_UTC
 		).to_string(),
-		format!("Dependencies:\n {}", built_info::DEPENDENCIES_STR).to_string(),
 	)
 }
 
 fn log_build_info() {
-	let (basic_info, detailed_info, deps) = info_strings();
+	let (basic_info, detailed_info) = info_strings();
 	info!("{}", basic_info);
 	debug!("{}", detailed_info);
-	trace!("{}", deps);
 }
 
 fn main() {
