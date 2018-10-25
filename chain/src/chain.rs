@@ -1085,19 +1085,23 @@ fn setup_head(
 			}
 		}
 		Err(NotFoundErr(_)) => {
-			let header_root = ZERO_HASH;
-			batch.save_block_header(&genesis.header, &header_root)?;
+			// Save the genesis header with a "zero" header_root.
+			// We will update this later once we have the correct header_root.
+			batch.save_block_header(&genesis.header, &ZERO_HASH)?;
 			batch.save_block(&genesis)?;
 
 			let tip = Tip::from_genesis(&genesis.header);
 			batch.save_head(&tip)?;
 			batch.setup_height(&genesis.header, &tip)?;
 
-			// Apply the genesis block to our empty MMRs.
-			txhashset::extending(txhashset, &mut batch, |extension| {
-				extension.apply_block(&genesis)?;
-				Ok(())
+			// Apply the genesis header to our header MMR so we can
+			// setup the header_by_root index correctly.
+			let header_root = txhashset::header_extending(txhashset, &mut batch, |extension| {
+				extension.truncate()?;
+				let root = extension.apply_header(&genesis.header)?;
+				Ok(root)
 			})?;
+			batch.save_block_header(&genesis.header, &header_root)?;
 
 			// Save the block_sums to the db for use later.
 			batch.save_block_sums(&genesis.hash(), &BlockSums::default())?;

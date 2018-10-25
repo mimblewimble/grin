@@ -123,7 +123,7 @@ impl ChainStore {
 		}
 	}
 
-	pub fn get_header_by_root(&self, h: &Hash) -> Result<BlockHeader, Error> {
+	fn get_header_hash_by_root(&self, h: &Hash) -> Result<Hash, Error> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(HEADER_ROOT_PREFIX, &mut h.to_vec())),
@@ -132,7 +132,13 @@ impl ChainStore {
 	}
 
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
-		self.get_header_by_root(&header.prev_root)
+		if header.height == 0 {
+			return Err(Error::NotFoundErr(String::from(
+				"genesis has no previous",
+			)));
+		}
+		let hash = self.get_header_hash_by_root(&header.prev_root)?;
+		self.get_block_header(&hash)
 	}
 
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
@@ -326,6 +332,7 @@ impl<'a> Batch<'a> {
 	}
 
 	pub fn save_block_header(&self, header: &BlockHeader, header_root: &Hash) -> Result<(), Error> {
+		error!("***** saving block header - {:?}, {}", header, header_root);
 		let hash = header.hash();
 
 		// TODO - cache the header by root.
@@ -338,6 +345,7 @@ impl<'a> Batch<'a> {
 		}
 
 		// Store the header hash indexed by header root.
+		error!("*** saving header_root index: root: {}, hash: {}", header_root, hash);
 		self.db.put_ser(
 			&to_key(HEADER_ROOT_PREFIX, &mut header_root.to_vec())[..],
 			&hash,
@@ -378,7 +386,7 @@ impl<'a> Batch<'a> {
 			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
 	}
 
-	pub fn get_header_by_root(&self, h: &Hash) -> Result<BlockHeader, Error> {
+	fn get_header_hash_by_root(&self, h: &Hash) -> Result<Hash, Error> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(HEADER_ROOT_PREFIX, &mut h.to_vec())),
@@ -387,7 +395,13 @@ impl<'a> Batch<'a> {
 	}
 
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
-		self.get_header_by_root(&header.prev_root)
+		if header.height == 0 {
+			return Err(Error::NotFoundErr(String::from(
+				"genesis has no previous",
+			)));
+		}
+		let hash = self.get_header_hash_by_root(&header.prev_root)?;
+		self.get_block_header(&hash)
 	}
 
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {

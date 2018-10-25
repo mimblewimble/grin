@@ -59,6 +59,8 @@ pub struct BlockContext<'a> {
 /// Process a block header as part of processing a full block.
 /// We want to make sure the header is valid before we process the full block.
 fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	debug!("*** process_header_for_block: {:?}", header);
+
 	validate_header(header, ctx)?;
 
 	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
@@ -87,7 +89,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 	// spend resources reading the full block when its header is invalid
 
 	debug!(
-		"pipe: process_block {} at {} with {} inputs, {} outputs, {} kernels",
+		"pipe: process_block {} at {}, in/out/kern: {}/{}/{}",
 		b.hash(),
 		b.header.height,
 		b.inputs().len(),
@@ -137,12 +139,11 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 	// Start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
 	txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |mut extension| {
-		// First we rewind the txhashset extension if necessary
-		// to put it into a consistent state for validating the block.
-		// We can skip this step if the previous header is the latest header we saw.
 		let prev = extension.batch.get_previous_header(&b.header)?;
 		if prev.hash() == head.last_block_h {
-			// No need to rewind if we are processing the next block.
+			// Not a fork so we just need to rewind to put header MMR
+			// in the correct state for the full block.
+			extension.rewind(&prev)?;
 		} else {
 			// Rewind and re-apply blocks on the forked chain to
 			// put the txhashset in the correct forked state
@@ -218,17 +219,16 @@ pub fn sync_block_headers(
 	};
 
 	if !all_known {
-		for header in headers {
-			validate_header(header, ctx)?;
-		}
-
 		let first_header = headers.first().unwrap();
 		let prev_header = ctx.batch.get_previous_header(&first_header)?;
 		txhashset::sync_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
-			// Optimize this if "next" header
+			// TODO - Optimize this if "next" header
+			// TODO - Check this assumption - are we reliably on the same chain/fork?
 			extension.rewind(&prev_header)?;
 
 			for header in headers {
+				validate_header(header, extension.ctx)?;
+
 				// Check the current root is correct.
 				extension.validate_root(header)?;
 
@@ -347,7 +347,6 @@ fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(),
 // We cannot assume we can use the chain head for this
 // as we may be dealing with a fork (with less work currently).
 fn check_prev_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
-	// TODO - this is now 2 db calls (indirect previous link)
 	let prev = batch.get_previous_header(&header)?;
 	match batch.block_exists(&prev.hash()) {
 		Ok(true) => {
@@ -368,6 +367,8 @@ fn check_prev_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<()
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
 fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	error!("*** validate_header: {:?}", header);
+
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {
 		error!(
@@ -401,6 +402,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	// first I/O cost, better as late as possible
+	debug!("*** about to look for prev header using prev_root: {}", header.prev_root);
 	let prev = match ctx.batch.get_previous_header(&header) {
 		Ok(prev) => prev,
 		Err(grin_store::Error::NotFoundErr(_)) => return Err(ErrorKind::Orphan.into()),
@@ -626,9 +628,11 @@ pub fn rewind_and_apply_header_fork(
 	header: &BlockHeader,
 	ext: &mut txhashset::HeaderExtension,
 ) -> Result<(), Error> {
+	debug!("*** rewind_and_apply_header_fork: entered");
+
 	let mut fork_hashes = vec![];
 	let mut current = ext.batch.get_previous_header(header)?;
-	while ext.batch.is_on_current_chain(&current).is_ok() {
+	while current.height > 0 && ext.batch.is_on_current_chain(&current).is_ok() {
 		fork_hashes.push(current.hash());
 		current = ext.batch.get_previous_header(&current)?;
 	}
@@ -657,11 +661,9 @@ pub fn rewind_and_apply_header_fork(
 pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
 	// extending a fork, first identify the block where forking occurred
 	// keeping the hashes of blocks along the fork
-
 	let mut fork_hashes = vec![];
 	let mut current = ext.batch.get_previous_header(&b.header)?;
-
-	while ext.batch.is_on_current_chain(&current).is_ok() {
+	while current.height > 0 && ext.batch.is_on_current_chain(&current).is_ok() {
 		fork_hashes.push(current.hash());
 		current = ext.batch.get_previous_header(&current)?;
 	}
