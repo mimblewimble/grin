@@ -133,9 +133,7 @@ impl ChainStore {
 
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
 		if header.height == 0 {
-			return Err(Error::NotFoundErr(String::from(
-				"genesis has no previous",
-			)));
+			return Err(Error::NotFoundErr(String::from("genesis has no previous")));
 		}
 		let hash = self.get_header_hash_by_root(&header.prev_root)?;
 		self.get_block_header(&hash)
@@ -345,7 +343,10 @@ impl<'a> Batch<'a> {
 		}
 
 		// Store the header hash indexed by header root.
-		error!("*** saving header_root index: root: {}, hash: {}", header_root, hash);
+		error!(
+			"*** saving header_root index: root: {}, hash: {}",
+			header_root, hash
+		);
 		self.db.put_ser(
 			&to_key(HEADER_ROOT_PREFIX, &mut header_root.to_vec())[..],
 			&hash,
@@ -396,9 +397,7 @@ impl<'a> Batch<'a> {
 
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
 		if header.height == 0 {
-			return Err(Error::NotFoundErr(String::from(
-				"genesis has no previous",
-			)));
+			return Err(Error::NotFoundErr(String::from("genesis has no previous")));
 		}
 		let hash = self.get_header_hash_by_root(&header.prev_root)?;
 		self.get_block_header(&hash)

@@ -402,7 +402,10 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	// first I/O cost, better as late as possible
-	debug!("*** about to look for prev header using prev_root: {}", header.prev_root);
+	debug!(
+		"*** about to look for prev header using prev_root: {}",
+		header.prev_root
+	);
 	let prev = match ctx.batch.get_previous_header(&header) {
 		Ok(prev) => prev,
 		Err(grin_store::Error::NotFoundErr(_)) => return Err(ErrorKind::Orphan.into()),
