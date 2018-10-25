@@ -625,9 +625,9 @@ impl<'a> HeaderExtension<'a> {
 	/// extension.
 	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<Hash, Error> {
 		self.pmmr
-			.push(header.clone())
+			.push(header)
 			.map_err(&ErrorKind::TxHashSetErr)?;
-		self.header = header;
+		self.header = header.clone();
 		Ok(self.root())
 	}
 

@@ -56,6 +56,29 @@ pub struct BlockContext<'a> {
 	pub orphans: Arc<OrphanBlockPool>,
 }
 
+/// Process a block header as part of processing a full block.
+/// We want to make sure the header is valid before we process the full block.
+fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	validate_header(header, ctx)?;
+
+	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+		// Optimize this if "next" header
+		rewind_and_apply_header_fork(header, extension)?;
+
+		// Check the current root is correct.
+		extension.validate_root(header)?;
+
+		// Apply the new header and store header in the db.
+		let root = extension.apply_header(header)?;
+		add_block_header(header, &root, extension)?;
+
+		Ok(())
+	})?;
+
+	update_header_head(header, ctx)?;
+	Ok(())
+}
+
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain.
 /// Returns new head if chain head updated.
@@ -89,30 +112,11 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		check_known_store(&b.header, ctx)?;
 	}
 
-	let prev_header = ctx.batch.get_previous_header(&b.header)?;
-
 	// Header specific processing.
-	{
-		validate_header(&b.header, ctx)?;
-
-		txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
-			// Optimize this if "next" header
-			rewind_and_apply_header_fork(&b.header, extension)?;
-
-			// Check the current root is correct.
-			extension.validate_root(&b.header)?;
-
-			// Apply the new header and store header in the db.
-			let header_root = extension.apply_header(&b.header)?;
-			add_block_header(&b.header, &header_root, extension)?;
-
-			Ok(())
-		})?;
-
-		update_header_head(&b.header, ctx)?;
-	}
+	process_header_for_block(&b.header, ctx)?;
 
 	// Check if are processing the "next" block relative to the current chain head.
+	let prev_header = ctx.batch.get_previous_header(&b.header)?;
 	let head = ctx.batch.head()?;
 	if prev_header.hash() == head.last_block_h {
 		// If this is the "next" block then either -
@@ -617,38 +621,26 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 	}
 }
 
+/// Rewind the header chain and reapply headers on a fork.
 pub fn rewind_and_apply_header_fork(
 	header: &BlockHeader,
 	ext: &mut txhashset::HeaderExtension,
 ) -> Result<(), Error> {
 	let mut fork_hashes = vec![];
 	let mut current = ext.batch.get_previous_header(header)?;
-
 	while ext.batch.is_on_current_chain(&current).is_ok() {
-		fork_hashes.insert(0, (current.height, current.hash()));
+		fork_hashes.push(current.hash());
 		current = ext.batch.get_previous_header(&current)?;
 	}
+	fork_hashes.reverse();
 
 	let forked_header = current;
-
-	trace!(
-		"rewind_and_apply_header_fork @ {} [{}], was @ {} [{}]",
-		forked_header.height,
-		forked_header.hash(),
-		header.height,
-		header.hash()
-	);
 
 	// Rewind the txhashset state back to the block where we forked from the most work chain.
 	ext.rewind(&forked_header)?;
 
-	trace!(
-		"rewind_and_apply_header_fork: headers on fork: {:?}",
-		fork_hashes
-	);
-
-	// Now re-apply all blocks on this fork.
-	for (_, h) in fork_hashes {
+	// Re-apply all headers on this fork.
+	for h in fork_hashes {
 		let header = ext
 			.batch
 			.get_block_header(&h)
@@ -670,27 +662,18 @@ pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension) -> Resul
 	let mut current = ext.batch.get_previous_header(&b.header)?;
 
 	while ext.batch.is_on_current_chain(&current).is_ok() {
-		fork_hashes.insert(0, (current.height, current.hash()));
+		fork_hashes.push(current.hash());
 		current = ext.batch.get_previous_header(&current)?;
 	}
+	fork_hashes.reverse();
 
 	let forked_header = current;
-
-	trace!(
-		"rewind_and_apply_fork @ {} [{}], was @ {} [{}]",
-		forked_header.height,
-		forked_header.hash(),
-		b.header.height,
-		b.header.hash()
-	);
 
 	// Rewind the txhashset state back to the block where we forked from the most work chain.
 	ext.rewind(&forked_header)?;
 
-	trace!("rewind_and_apply_fork: blocks on fork: {:?}", fork_hashes,);
-
 	// Now re-apply all blocks on this fork.
-	for (_, h) in fork_hashes {
+	for h in fork_hashes {
 		let fb = ext
 			.batch
 			.get_block(&h)

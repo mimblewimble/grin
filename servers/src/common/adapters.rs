@@ -442,6 +442,8 @@ impl NetToChainAdapter {
 		}
 
 		let bhash = b.hash();
+		let previous = self.chain().get_previous_header(&b.header);
+
 		match self.chain().process_block(b, self.chain_opts()) {
 			Ok(_) => {
 				self.validate_chain(bhash);
@@ -464,12 +466,12 @@ impl NetToChainAdapter {
 			Err(e) => {
 				match e.kind() {
 					chain::ErrorKind::Orphan => {
-						let previous = self.chain().get_previous_header(&b.header);
-
-						// make sure we did not miss the parent block
-						if !self.chain().is_orphan(&prev_hash) && !self.sync_state.is_syncing() {
-							debug!("adapter: process_block: received an orphan block, checking the parent: {:}", prev_hash);
-							self.request_block_by_hash(prev_hash, &addr)
+						if let Ok(previous) = previous {
+							// make sure we did not miss the parent block
+							if !self.chain().is_orphan(&previous.hash()) && !self.sync_state.is_syncing() {
+								debug!("adapter: process_block: received an orphan block, checking the parent: {:}", previous.hash());
+								self.request_block_by_hash(previous.hash(), &addr)
+							}
 						}
 						true
 					}

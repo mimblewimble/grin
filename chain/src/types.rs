@@ -95,6 +95,17 @@ impl Tip {
 	}
 }
 
+impl Default for Tip {
+	fn default() -> Self {
+		Tip {
+			height: 0,
+			last_block_h: ZERO_HASH,
+			prev_block_h: ZERO_HASH,
+			total_difficulty: Difficulty::one(),
+		}
+	}
+}
+
 /// Serialization of a tip, required to save to datastore.
 impl ser::Writeable for Tip {
 	fn write<W: ser::Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
