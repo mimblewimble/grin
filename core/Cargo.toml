@@ -2,6 +2,10 @@
 name = "grin_core"
 version = "0.4.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+description = "Chain implementation for grin, a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+license = "Apache-2.0"
+repository = "https://github.com/mimblewimble/grin"
+keywords = [ "crypto", "grin", "mimblewimble" ]
 workspace = ".."
 publish = false
 

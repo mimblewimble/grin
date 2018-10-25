@@ -2,6 +2,10 @@
 name = "grin_config"
 version = "0.4.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+description = "Configuration for grin, a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+license = "Apache-2.0"
+repository = "https://github.com/mimblewimble/grin"
+keywords = [ "crypto", "grin", "mimblewimble" ]
 workspace = ".."
 publish = false
 
@@ -12,10 +16,10 @@ serde_derive = "1"
 toml = "0.4"
 dirs = "1.0.3"
 
-grin_servers = { path = "../servers" }
-grin_p2p = { path = "../p2p" }
-grin_util = { path = "../util" }
-grin_wallet = { path = "../wallet"}
+grin_servers = { path = "../servers", version = "0.4.0" }
+grin_p2p = { path = "../p2p", version = "0.4.0" }
+grin_util = { path = "../util", version = "0.4.0" }
+grin_wallet = { path = "../wallet", version = "0.4.0" }
 
 [dev-dependencies]
 pretty_assertions = "0.5.1"

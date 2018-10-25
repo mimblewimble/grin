@@ -2,6 +2,10 @@
 name = "grin_wallet"
 version = "0.4.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+license = "Apache-2.0"
+repository = "https://github.com/mimblewimble/grin"
+keywords = [ "crypto", "grin", "mimblewimble" ]
 workspace = '..'
 publish = false
 
@@ -26,12 +30,12 @@ uuid = { version = "0.6", features = ["serde", "v4"] }
 url = "1.7.0"
 chrono = { version = "0.4.4", features = ["serde"] }
 
-grin_api = { path = "../api" }
-grin_core = { path = "../core" }
-grin_keychain = { path = "../keychain" }
-grin_store = { path = "../store" }
-grin_util = { path = "../util" }
+grin_api = { path = "../api", version = "0.4.0" }
+grin_core = { path = "../core", version = "0.4.0" }
+grin_keychain = { path = "../keychain", version = "0.4.0" }
+grin_store = { path = "../store", version = "0.4.0" }
+grin_util = { path = "../util", version = "0.4.0" }
 
 [dev-dependencies]
-grin_chain = { path = "../chain" }
-grin_store = { path = "../store" }
+grin_chain = { path = "../chain", version = "0.4.0" }
+grin_store = { path = "../store", version = "0.4.0" }

@@ -2,6 +2,10 @@
 name = "grin_servers"
 version = "0.4.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+license = "Apache-2.0"
+repository = "https://github.com/mimblewimble/grin"
+keywords = [ "crypto", "grin", "mimblewimble" ]
 workspace = ".."
 publish = false
 
@@ -21,16 +25,16 @@ chrono = "0.4.4"
 bufstream = "~0.1"
 jsonrpc-core = "~8.0"
 
-grin_api = { path = "../api" }
-grin_chain = { path = "../chain" }
-grin_core = { path = "../core" }
-grin_keychain = { path = "../keychain" }
-grin_p2p = { path = "../p2p" }
-grin_pool = { path = "../pool" }
-grin_store = { path = "../store" }
-grin_util = { path = "../util" }
-grin_wallet = { path = "../wallet" }
+grin_api = { path = "../api", version = "0.4.0" }
+grin_chain = { path = "../chain", version = "0.4.0" }
+grin_core = { path = "../core", version = "0.4.0" }
+grin_keychain = { path = "../keychain", version = "0.4.0" }
+grin_p2p = { path = "../p2p", version = "0.4.0" }
+grin_pool = { path = "../pool", version = "0.4.0" }
+grin_store = { path = "../store", version = "0.4.0" }
+grin_util = { path = "../util", version = "0.4.0" }
+grin_wallet = { path = "../wallet", version = "0.4.0" }
 
 [dev-dependencies]
 blake2-rfc = "0.2"
-grin_config = { path = "../config" }
+grin_config = { path = "../config", version = "0.4.0" }
