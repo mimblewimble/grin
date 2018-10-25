@@ -178,7 +178,7 @@ impl AppendOnlyFile {
 		}
 
 		self.buffer_start += self.buffer.len();
-		self.file.write(&self.buffer[..])?;
+		self.file.write_all(&self.buffer[..])?;
 		self.file.sync_all()?;
 
 		self.buffer = vec![];
