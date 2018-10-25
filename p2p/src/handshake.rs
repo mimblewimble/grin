@@ -14,7 +14,8 @@
 
 use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpStream};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use chrono::prelude::*;
 use rand::{thread_rng, Rng};
@@ -24,7 +25,6 @@ use core::pow::Difficulty;
 use msg::{read_message, write_message, Hand, Shake, SockAddr, Type, PROTOCOL_VERSION, USER_AGENT};
 use peer::Peer;
 use types::{Capabilities, Direction, Error, P2PConfig, PeerInfo, PeerLiveInfo};
-use util::LOGGER;
 
 const NONCES_CAP: usize = 100;
 
@@ -114,7 +114,6 @@ impl Handshake {
 		}
 
 		debug!(
-			LOGGER,
 			"Connected! Cumulative {} offered from {:?} {:?} {:?}",
 			shake.total_difficulty.to_num(),
 			peer_info.addr,
@@ -146,7 +145,7 @@ impl Handshake {
 			});
 		} else {
 			// check the nonce to see if we are trying to connect to ourselves
-			let nonces = self.nonces.read().unwrap();
+			let nonces = self.nonces.read();
 			if nonces.contains(&hand.nonce) {
 				return Err(Error::PeerWithSelf);
 			}
@@ -185,7 +184,7 @@ impl Handshake {
 		};
 
 		write_message(conn, shake, Type::Shake)?;
-		trace!(LOGGER, "Success handshake with {}.", peer_info.addr);
+		trace!("Success handshake with {}.", peer_info.addr);
 
 		// when more than one protocol version is supported, choosing should go here
 		Ok(peer_info)
@@ -195,7 +194,7 @@ impl Handshake {
 	fn next_nonce(&self) -> u64 {
 		let nonce = thread_rng().gen();
 
-		let mut nonces = self.nonces.write().unwrap();
+		let mut nonces = self.nonces.write();
 		nonces.push_back(nonce);
 		if nonces.len() >= NONCES_CAP {
 			nonces.pop_front();

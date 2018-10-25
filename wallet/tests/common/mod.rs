@@ -22,7 +22,8 @@ extern crate grin_wallet as wallet;
 extern crate serde_json;
 
 use chrono::Duration;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use util::Mutex;
 
 use chain::Chain;
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
@@ -38,13 +39,13 @@ use util::secp::pedersen;
 pub mod testclient;
 
 /// types of backends tests should iterate through
-#[derive(Clone)]
-pub enum BackendType {
-	/// File
-	FileBackend,
-	/// LMDB
-	LMDBBackend,
-}
+//#[derive(Clone)]
+//pub enum BackendType {
+//	/// File
+//	FileBackend,
+//	/// LMDB
+//	LMDBBackend,
+//}
 
 /// Get an output from the chain locally and present it back as an API output
 fn get_output_local(chain: &chain::Chain, commit: &pedersen::Commitment) -> Option<api::Output> {

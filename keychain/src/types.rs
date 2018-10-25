@@ -244,7 +244,7 @@ impl Add for BlindingFactor {
 	//
 	fn add(self, other: BlindingFactor) -> Self::Output {
 		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
+		let secp = secp.lock();
 		let keys = vec![self, other]
 			.into_iter()
 			.filter(|x| *x != BlindingFactor::zero())

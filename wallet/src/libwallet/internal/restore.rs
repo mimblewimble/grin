@@ -21,7 +21,6 @@ use libwallet::types::*;
 use libwallet::Error;
 use std::collections::HashMap;
 use util::secp::{key::SecretKey, pedersen};
-use util::LOGGER;
 
 /// Utility struct for return values from below
 struct OutputResult {
@@ -55,7 +54,6 @@ where
 	let mut wallet_outputs: Vec<OutputResult> = Vec::new();
 
 	info!(
-		LOGGER,
 		"Scanning {} outputs in the current Grin utxo set",
 		outputs.len(),
 	);
@@ -70,10 +68,7 @@ where
 			continue;
 		}
 
-		info!(
-			LOGGER,
-			"Output found: {:?}, amount: {:?}", commit, info.value
-		);
+		info!("Output found: {:?}, amount: {:?}", commit, info.value);
 
 		let lock_height = if *is_coinbase {
 			*height + global::coinbase_maturity()
@@ -109,14 +104,11 @@ where
 	// Don't proceed if wallet_data has anything in it
 	let is_empty = wallet.iter().next().is_none();
 	if !is_empty {
-		error!(
-			LOGGER,
-			"Not restoring. Please back up and remove existing db directory first."
-		);
+		error!("Not restoring. Please back up and remove existing db directory first.");
 		return Ok(());
 	}
 
-	info!(LOGGER, "Starting restore.");
+	info!("Starting restore.");
 
 	let batch_size = 1000;
 	let mut start_index = 1;
@@ -126,7 +118,6 @@ where
 			.client()
 			.get_outputs_by_pmmr_index(start_index, batch_size)?;
 		info!(
-			LOGGER,
 			"Retrieved {} outputs, up to index {}. (Highest index: {})",
 			outputs.len(),
 			highest_index,
@@ -142,7 +133,6 @@ where
 	}
 
 	info!(
-		LOGGER,
 		"Identified {} wallet_outputs as belonging to this wallet",
 		result_vec.len(),
 	);

@@ -168,7 +168,7 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"host".to_string(),
 		"
-#The interface on which to listen. 
+#The interface on which to listen.
 #0.0.0.0 will listen on all interfaces, allowing others to interact
 #127.0.0.1 will listen on the local machine only
 ".to_string(),
@@ -213,7 +213,6 @@ fn comments() -> HashMap<String, String> {
 #peer_min_preferred_count = 8
 
 # 7 = Bit flags for FULL_NODE
-# 6 = Bit flags for FAST_SYNC_NODE
 #This structure needs to be changed internally, to make it more configurable
 ".to_string(),
 	);
@@ -367,7 +366,7 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"stdout_log_level".to_string(),
 		"
-#log level for stdout: Critical, Error, Warning, Info, Debug, Trace
+#log level for stdout: Error, Warning, Info, Debug, Trace
 ".to_string(),
 	);
 
@@ -381,7 +380,7 @@ fn comments() -> HashMap<String, String> {
 	retval.insert(
 		"file_log_level".to_string(),
 		"
-#log level for file: Critical, Error, Warning, Info, Debug, Trace
+#log level for file: Error, Warning, Info, Debug, Trace
 ".to_string(),
 	);
 
@@ -396,6 +395,14 @@ fn comments() -> HashMap<String, String> {
 		"log_file_append".to_string(),
 		"
 #whether to append to the log file (true), or replace it on every run (false)
+".to_string(),
+	);
+
+	retval.insert(
+		"log_max_size".to_string(),
+		"
+#maximum log file size in bytes before performing log rotation
+#comment it to disable log rotation
 ".to_string(),
 	);
 

@@ -20,7 +20,6 @@ use chain;
 use common::types::{Error, SyncState, SyncStatus};
 use core::core::hash::{Hash, Hashed};
 use p2p::{self, Peer};
-use util::LOGGER;
 
 pub struct HeaderSync {
 	sync_state: Arc<SyncState>,
@@ -55,12 +54,11 @@ impl HeaderSync {
 
 		let enable_header_sync = match status {
 			SyncStatus::BodySync { .. } | SyncStatus::HeaderSync { .. } => true,
-			SyncStatus::NoSync | SyncStatus::Initial => {
+			SyncStatus::NoSync | SyncStatus::Initial | SyncStatus::AwaitingPeers(_) => {
 				// Reset sync_head to header_head on transition to HeaderSync,
 				// but ONLY on initial transition to HeaderSync state.
 				let sync_head = self.chain.get_sync_head().unwrap();
 				debug!(
-					LOGGER,
 					"sync: initial transition to HeaderSync. sync_head: {} at {}, reset to: {} at {}",
 					sync_head.hash(),
 					sync_head.height,
@@ -104,7 +102,7 @@ impl HeaderSync {
 
 		// always enable header sync on initial state transition from NoSync / Initial
 		let force_sync = match self.sync_state.status() {
-			SyncStatus::NoSync | SyncStatus::Initial => true,
+			SyncStatus::NoSync | SyncStatus::Initial | SyncStatus::AwaitingPeers(_) => true,
 			_ => false,
 		};
 
@@ -141,8 +139,8 @@ impl HeaderSync {
 	fn request_headers(&mut self, peer: &Peer) {
 		if let Ok(locator) = self.get_locator() {
 			debug!(
-				LOGGER,
-				"sync: request_headers: asking {} for headers, {:?}", peer.info.addr, locator,
+				"sync: request_headers: asking {} for headers, {:?}",
+				peer.info.addr, locator,
 			);
 
 			let _ = peer.send_header_request(locator);
@@ -165,7 +163,7 @@ impl HeaderSync {
 			self.history_locators.clear();
 		}
 
-		debug!(LOGGER, "sync: locator heights : {:?}", heights);
+		debug!("sync: locator heights : {:?}", heights);
 
 		let mut locator: Vec<Hash> = vec![];
 		let mut current = self.chain.get_block_header(&tip.last_block_h);
@@ -237,7 +235,7 @@ impl HeaderSync {
 			}
 		}
 
-		debug!(LOGGER, "sync: locator heights': {:?}", new_heights);
+		debug!("sync: locator heights': {:?}", new_heights);
 
 		// shrink history_locators properly
 		if heights.len() > 1 {
@@ -258,14 +256,13 @@ impl HeaderSync {
 				}
 			}
 			debug!(
-				LOGGER,
 				"sync: history locators: len={}, shrunk={}",
 				self.history_locators.len(),
 				shrunk_size
 			);
 		}
 
-		debug!(LOGGER, "sync: locator: {:?}", locator);
+		debug!("sync: locator: {:?}", locator);
 
 		Ok(locator)
 	}

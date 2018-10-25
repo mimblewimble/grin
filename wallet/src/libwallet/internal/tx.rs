@@ -14,7 +14,8 @@
 
 //! Transaction building functions
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use core::core::verifier_cache::LruVerifierCache;
 use core::core::Transaction;
@@ -24,7 +25,6 @@ use libtx::{build, tx_fee};
 use libwallet::internal::{selection, updater};
 use libwallet::types::{Context, TxLogEntryType, WalletBackend, WalletClient};
 use libwallet::{Error, ErrorKind};
-use util::LOGGER;
 
 /// Receive a transaction, modifying the slate accordingly (which can then be
 /// sent back to sender for posting)
@@ -224,7 +224,7 @@ where
 		parent_key_id,
 	);
 
-	debug!(LOGGER, "selected some coins - {}", coins.len());
+	debug!("selected some coins - {}", coins.len());
 
 	let fee = tx_fee(coins.len(), 2, 1, None);
 	let num_change_outputs = 1;

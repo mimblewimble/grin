@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Mining plugin manager, using the cuckoo-miner crate to provide
-//! a mining worker implementation
-//!
+//! Seeds a server with initial peers on first start and keep monitoring
+//! peer counts to connect to more if neeed. Seedin strategy is
+//! configurable with either no peers, a user-defined list or a preset
+//! list of DNS records (the default).
 
 use chrono::prelude::Utc;
 use chrono::{Duration, MIN_DATE};
@@ -27,7 +28,6 @@ use std::{cmp, io, str, thread, time};
 use p2p;
 use p2p::ChainAdapter;
 use pool::DandelionConfig;
-use util::LOGGER;
 
 // DNS Seeds with contact email associated
 const DNS_SEEDS: &'static [&'static str] = &[
@@ -60,10 +60,18 @@ pub fn connect_and_monitor(
 			);
 
 			let mut prev = MIN_DATE.and_hms(0, 0, 0);
+			let mut prev_expire_check = MIN_DATE.and_hms(0, 0, 0);
 			let mut prev_ping = Utc::now();
 			let mut start_attempt = 0;
 
 			while !stop.load(Ordering::Relaxed) {
+				// Check for and remove expired peers from the storage
+				if Utc::now() - prev_expire_check > Duration::hours(1) {
+					peers.remove_expired();
+
+					prev_expire_check = Utc::now();
+				}
+
 				// make several attempts to get peers as quick as possible
 				// with exponential backoff
 				if Utc::now() - prev > Duration::seconds(cmp::min(20, 1 << start_attempt)) {
@@ -111,6 +119,7 @@ fn monitor_peers(
 	let mut healthy_count = 0;
 	let mut banned_count = 0;
 	let mut defuncts = vec![];
+
 	for x in peers.all_peers() {
 		match x.flags {
 			p2p::State::Banned => {
@@ -119,8 +128,8 @@ fn monitor_peers(
 				if interval >= config.ban_window() {
 					peers.unban_peer(&x.addr);
 					debug!(
-						LOGGER,
-						"monitor_peers: unbanned {} after {} seconds", x.addr, interval
+						"monitor_peers: unbanned {} after {} seconds",
+						x.addr, interval
 					);
 				} else {
 					banned_count += 1;
@@ -132,7 +141,6 @@ fn monitor_peers(
 	}
 
 	debug!(
-		LOGGER,
 		"monitor_peers: on {}:{}, {} connected ({} most_work). \
 		 all {} = {} healthy + {} banned + {} defunct",
 		config.host,
@@ -158,8 +166,8 @@ fn monitor_peers(
 	let mut connected_peers: Vec<SocketAddr> = vec![];
 	for p in peers.connected_peers() {
 		debug!(
-			LOGGER,
-			"monitor_peers: {}:{} ask {} for more peers", config.host, config.port, p.info.addr,
+			"monitor_peers: {}:{} ask {} for more peers",
+			config.host, config.port, p.info.addr,
 		);
 		let _ = p.send_peer_request(capabilities);
 		connected_peers.push(p.info.addr)
@@ -178,7 +186,7 @@ fn monitor_peers(
 				}
 			}
 		}
-		None => debug!(LOGGER, "monitor_peers: no preferred peers"),
+		None => debug!("monitor_peers: no preferred peers"),
 	}
 
 	// take a random defunct peer and mark it healthy: over a long period any
@@ -197,8 +205,8 @@ fn monitor_peers(
 	);
 	for p in new_peers.iter().filter(|p| !peers.is_known(&p.addr)) {
 		debug!(
-			LOGGER,
-			"monitor_peers: on {}:{}, queue to soon try {}", config.host, config.port, p.addr,
+			"monitor_peers: on {}:{}, queue to soon try {}",
+			config.host, config.port, p.addr,
 		);
 		tx.send(p.addr).unwrap();
 	}
@@ -208,13 +216,13 @@ fn update_dandelion_relay(peers: Arc<p2p::Peers>, dandelion_config: DandelionCon
 	// Dandelion Relay Updater
 	let dandelion_relay = peers.get_dandelion_relay();
 	if dandelion_relay.is_empty() {
-		debug!(LOGGER, "monitor_peers: no dandelion relay updating");
+		debug!("monitor_peers: no dandelion relay updating");
 		peers.update_dandelion_relay();
 	} else {
 		for last_added in dandelion_relay.keys() {
 			let dandelion_interval = Utc::now().timestamp() - last_added;
 			if dandelion_interval >= dandelion_config.relay_secs.unwrap() as i64 {
-				debug!(LOGGER, "monitor_peers: updating expired dandelion relay");
+				debug!("monitor_peers: updating expired dandelion relay");
 				peers.update_dandelion_relay();
 			}
 		}
@@ -230,7 +238,7 @@ fn connect_to_seeds_and_preferred_peers(
 	peers_preferred_list: Option<Vec<SocketAddr>>,
 ) {
 	// check if we have some peers in db
-	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::FULL_HIST, 100);
+	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::FULL_NODE, 100);
 
 	// if so, get their addresses, otherwise use our seeds
 	let mut peer_addrs = if peers.len() > 3 {
@@ -242,11 +250,11 @@ fn connect_to_seeds_and_preferred_peers(
 	// If we have preferred peers add them to the connection
 	match peers_preferred_list {
 		Some(mut peers_preferred) => peer_addrs.append(&mut peers_preferred),
-		None => debug!(LOGGER, "No preferred peers"),
+		None => debug!("No preferred peers"),
 	};
 
 	if peer_addrs.len() == 0 {
-		warn!(LOGGER, "No seeds were retrieved.");
+		warn!("No seeds were retrieved.");
 	}
 
 	// connect to this first set of addresses
@@ -311,7 +319,7 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 		let mut addresses: Vec<SocketAddr> = vec![];
 		for dns_seed in DNS_SEEDS {
 			let temp_addresses = addresses.clone();
-			debug!(LOGGER, "Retrieving seed nodes from dns {}", dns_seed);
+			debug!("Retrieving seed nodes from dns {}", dns_seed);
 			match (dns_seed.to_owned(), 0).to_socket_addrs() {
 				Ok(addrs) => addresses.append(
 					&mut (addrs
@@ -321,13 +329,10 @@ pub fn dns_seeds() -> Box<Fn() -> Vec<SocketAddr> + Send> {
 						}).filter(|addr| !temp_addresses.contains(addr))
 						.collect()),
 				),
-				Err(e) => debug!(
-					LOGGER,
-					"Failed to resolve seed {:?} got error {:?}", dns_seed, e
-				),
+				Err(e) => debug!("Failed to resolve seed {:?} got error {:?}", dns_seed, e),
 			}
 		}
-		debug!(LOGGER, "Retrieved seed addresses: {:?}", addresses);
+		debug!("Retrieved seed addresses: {:?}", addresses);
 		addresses
 	})
 }

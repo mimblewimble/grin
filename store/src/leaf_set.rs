@@ -25,7 +25,6 @@ use core::core::hash::Hashed;
 use core::core::pmmr;
 use core::core::BlockHeader;
 use prune_list::PruneList;
-use util::LOGGER;
 
 /// Compact (roaring) bitmap representing the set of positions of
 /// leaves that are currently unpruned in the MMR.
@@ -64,7 +63,7 @@ impl LeafSet {
 		let cp_file_path = Path::new(&cp_path);
 
 		if !cp_file_path.exists() {
-			debug!(LOGGER, "leaf_set: rewound leaf file not found: {}", cp_path);
+			debug!("leaf_set: rewound leaf file not found: {}", cp_path);
 			return Ok(());
 		}
 
@@ -73,10 +72,7 @@ impl LeafSet {
 		bitmap_file.read_to_end(&mut buffer)?;
 		let bitmap = Bitmap::deserialize(&buffer);
 
-		debug!(
-			LOGGER,
-			"leaf_set: copying rewound file {} to {}", cp_path, path
-		);
+		debug!("leaf_set: copying rewound file {} to {}", cp_path, path);
 
 		let mut leaf_set = LeafSet {
 			path: path.clone(),

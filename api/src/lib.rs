@@ -33,7 +33,7 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_json;
 #[macro_use]
-extern crate slog;
+extern crate log;
 extern crate futures;
 extern crate http;
 extern crate hyper_rustls;

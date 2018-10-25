@@ -21,7 +21,7 @@ use core::core::KernelFeatures;
 use core::core::{Output, OutputFeatures, TxKernel};
 use libtx::error::Error;
 use libtx::{aggsig, proof};
-use util::{kernel_sig_msg, secp, static_secp_instance, LOGGER};
+use util::{kernel_sig_msg, secp, static_secp_instance};
 
 /// output a reward output
 pub fn output<K>(
@@ -36,7 +36,7 @@ where
 	let value = reward(fees);
 	let commit = keychain.commit(value, key_id)?;
 
-	trace!(LOGGER, "Block reward - Pedersen Commit is: {:?}", commit,);
+	trace!("Block reward - Pedersen Commit is: {:?}", commit,);
 
 	let rproof = proof::create(keychain, value, key_id, commit, None)?;
 
@@ -47,7 +47,7 @@ where
 	};
 
 	let secp = static_secp_instance();
-	let secp = secp.lock().unwrap();
+	let secp = secp.lock();
 	let over_commit = secp.commit_value(reward(fees))?;
 	let out_commit = output.commitment();
 	let excess = secp.commit_sum(vec![out_commit], vec![over_commit])?;

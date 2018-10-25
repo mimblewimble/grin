@@ -20,7 +20,8 @@ use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
 use std::mem;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use consensus::{self, reward, REWARD};
 use core::committed::{self, Committed};
@@ -35,7 +36,7 @@ use global;
 use keychain::{self, BlindingFactor};
 use pow::{Difficulty, Proof, ProofOfWork};
 use ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
-use util::{secp, static_secp_instance, LOGGER};
+use util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, Eq, PartialEq, Fail)]
@@ -285,7 +286,7 @@ impl BlockHeader {
 
 	/// Total difficulty accumulated by the proof of work on this header
 	pub fn total_difficulty(&self) -> Difficulty {
-		self.pow.total_difficulty.clone()
+		self.pow.total_difficulty
 	}
 
 	/// The "overage" to use when verifying the kernel sums.
@@ -361,10 +362,7 @@ impl Readable for Block {
 		body.validate_read(true)
 			.map_err(|_| ser::Error::CorruptedData)?;
 
-		Ok(Block {
-			header: header,
-			body: body,
-		})
+		Ok(Block { header, body })
 	}
 }
 
@@ -420,16 +418,40 @@ impl Block {
 		Ok(block)
 	}
 
+	/// Extract tx data from this block as a single aggregate tx.
+	pub fn aggregate_transaction(
+		&self,
+		prev_kernel_offset: BlindingFactor,
+	) -> Result<Option<Transaction>, Error> {
+		let inputs = self.inputs().iter().cloned().collect();
+		let outputs = self
+			.outputs()
+			.iter()
+			.filter(|x| !x.features.contains(OutputFeatures::COINBASE_OUTPUT))
+			.cloned()
+			.collect();
+		let kernels = self
+			.kernels()
+			.iter()
+			.filter(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
+			.cloned()
+			.collect::<Vec<_>>();
+
+		let tx = if kernels.is_empty() {
+			None
+		} else {
+			let tx = Transaction::new(inputs, outputs, kernels)
+				.with_offset(self.block_kernel_offset(prev_kernel_offset)?);
+			Some(tx)
+		};
+		Ok(tx)
+	}
+
 	/// Hydrate a block from a compact block.
 	/// Note: caller must validate the block themselves, we do not validate it
 	/// here.
 	pub fn hydrate_from(cb: CompactBlock, txs: Vec<Transaction>) -> Result<Block, Error> {
-		trace!(
-			LOGGER,
-			"block: hydrate_from: {}, {} txs",
-			cb.hash(),
-			txs.len(),
-		);
+		trace!("block: hydrate_from: {}, {} txs", cb.hash(), txs.len(),);
 
 		let header = cb.header.clone();
 
@@ -469,7 +491,7 @@ impl Block {
 	/// Build a new empty block from a specified header
 	pub fn with_header(header: BlockHeader) -> Block {
 		Block {
-			header: header,
+			header,
 			..Default::default()
 		}
 	}
@@ -596,6 +618,23 @@ impl Block {
 		Ok(())
 	}
 
+	fn block_kernel_offset(
+		&self,
+		prev_kernel_offset: BlindingFactor,
+	) -> Result<BlindingFactor, Error> {
+		let offset = if self.header.total_kernel_offset() == prev_kernel_offset {
+			// special case when the sum hasn't changed (typically an empty block),
+			// zero isn't a valid private key but it's a valid blinding factor
+			BlindingFactor::zero()
+		} else {
+			committed::sum_kernel_offsets(
+				vec![self.header.total_kernel_offset()],
+				vec![prev_kernel_offset],
+			)?
+		};
+		Ok(offset)
+	}
+
 	/// Validates all the elements in a block that can be checked without
 	/// additional data. Includes commitment sums and kernels, Merkle
 	/// trees, reward, etc.
@@ -603,7 +642,7 @@ impl Block {
 		&self,
 		prev_kernel_offset: &BlindingFactor,
 		verifier: Arc<RwLock<VerifierCache>>,
-	) -> Result<(Commitment), Error> {
+	) -> Result<Commitment, Error> {
 		self.body.validate(true, verifier)?;
 
 		self.verify_kernel_lock_heights()?;
@@ -611,19 +650,10 @@ impl Block {
 
 		// take the kernel offset for this block (block offset minus previous) and
 		// verify.body.outputs and kernel sums
-		let block_kernel_offset = if self.header.total_kernel_offset() == prev_kernel_offset.clone()
-		{
-			// special case when the sum hasn't changed (typically an empty block),
-			// zero isn't a valid private key but it's a valid blinding factor
-			BlindingFactor::zero()
-		} else {
-			committed::sum_kernel_offsets(
-				vec![self.header.total_kernel_offset()],
-				vec![prev_kernel_offset.clone()],
-			)?
-		};
-		let (_utxo_sum, kernel_sum) =
-			self.verify_kernel_sums(self.header.overage(), block_kernel_offset)?;
+		let (_utxo_sum, kernel_sum) = self.verify_kernel_sums(
+			self.header.overage(),
+			self.block_kernel_offset(*prev_kernel_offset)?,
+		)?;
 
 		Ok(kernel_sum)
 	}
@@ -648,7 +678,7 @@ impl Block {
 
 		{
 			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
+			let secp = secp.lock();
 			let over_commit = secp.commit_value(reward(self.total_fees()))?;
 
 			let out_adjust_sum = secp.commit_sum(

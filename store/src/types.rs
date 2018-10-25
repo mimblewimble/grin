@@ -27,7 +27,6 @@ use libc::{ftruncate64, off64_t};
 
 use core::core::hash::Hash;
 use core::ser;
-use util::LOGGER;
 
 /// A no-op function for doing nothing with some pruned data.
 pub fn prune_noop(_pruned_data: &[u8]) {}
@@ -65,8 +64,8 @@ impl HashFile {
 			Ok(h) => Some(h),
 			Err(e) => {
 				error!(
-					LOGGER,
-					"Corrupted storage, could not read an entry from hash file: {:?}", e
+					"Corrupted storage, could not read an entry from hash file: {:?}",
+					e
 				);
 				return None;
 			}
@@ -179,7 +178,7 @@ impl AppendOnlyFile {
 		}
 
 		self.buffer_start += self.buffer.len();
-		self.file.write(&self.buffer[..])?;
+		self.file.write_all(&self.buffer[..])?;
 		self.file.sync_all()?;
 
 		self.buffer = vec![];

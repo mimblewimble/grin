@@ -25,7 +25,8 @@ extern crate rand;
 
 pub mod common;
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use core::core::{Block, BlockHeader};
 
@@ -127,7 +128,7 @@ fn test_transaction_pool_block_reconciliation() {
 	// First we add the above transactions to the pool.
 	// All should be accepted.
 	{
-		let mut write_pool = pool.write().unwrap();
+		let mut write_pool = pool.write();
 		assert_eq!(write_pool.total_size(), 0);
 
 		for tx in &txs_to_add {
@@ -165,13 +166,13 @@ fn test_transaction_pool_block_reconciliation() {
 
 	// Check the pool still contains everything we expect at this point.
 	{
-		let write_pool = pool.write().unwrap();
+		let write_pool = pool.write();
 		assert_eq!(write_pool.total_size(), txs_to_add.len());
 	}
 
 	// And reconcile the pool with this latest block.
 	{
-		let mut write_pool = pool.write().unwrap();
+		let mut write_pool = pool.write();
 		write_pool.reconcile_block(&block).unwrap();
 
 		assert_eq!(write_pool.total_size(), 4);

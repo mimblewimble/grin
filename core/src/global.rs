@@ -27,7 +27,7 @@ use pow::{self, CuckatooContext, EdgeType, PoWContext};
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
 /// e.g. CI, User testing, production values
-use std::sync::RwLock;
+use util::RwLock;
 
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
@@ -70,13 +70,21 @@ pub const TESTNET3_INITIAL_DIFFICULTY: u64 = 30000;
 /// we're sure this peer is a stuck node, and we will kick out such kind of stuck peers.
 pub const STUCK_PEER_KICK_TIME: i64 = 2 * 3600 * 1000;
 
+/// If a peer's last seen time is 2 weeks ago we will forget such kind of defunct peers.
+const PEER_EXPIRATION_DAYS: i64 = 7 * 2;
+
+/// Constant that expresses defunct peer timeout in seconds to be used in checks.
+pub const PEER_EXPIRATION_REMOVE_TIME: i64 = PEER_EXPIRATION_DAYS * 24 * 3600;
+
 /// Testnet 4 initial block difficulty
 /// 1_000 times natural scale factor for cuckatoo29
 pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1_000 * UNIT_DIFFICULTY;
 
-/// Trigger compaction check on average every day for FAST_SYNC_NODE,
-/// roll the dice on every block to decide,
-/// all blocks lower than (BodyHead.height - CUT_THROUGH_HORIZON) will be removed.
+/// Trigger compaction check on average every day for all nodes.
+/// Randomized per node - roll the dice on every block to decide.
+/// Will compact the txhashset to remove pruned data.
+/// Will also remove old blocks and associated data from the database.
+/// For a node configured as "archival_mode = true" only the txhashset will be compacted.
 pub const COMPACTION_CHECK: u64 = DAY_HEIGHT;
 
 /// Types of chain a server can run with, dictates the genesis block and
@@ -126,7 +134,7 @@ lazy_static!{
 
 /// Set the mining mode
 pub fn set_mining_mode(mode: ChainTypes) {
-	let mut param_ref = CHAIN_TYPE.write().unwrap();
+	let mut param_ref = CHAIN_TYPE.write();
 	*param_ref = mode;
 }
 
@@ -150,7 +158,7 @@ pub fn pow_type() -> PoWContextTypes {
 
 /// The minimum acceptable edge_bits
 pub fn min_edge_bits() -> u8 {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
@@ -163,7 +171,7 @@ pub fn min_edge_bits() -> u8 {
 /// while the min_edge_bits can be changed on a soft fork, changing
 /// base_edge_bits is a hard fork.
 pub fn base_edge_bits() -> u8 {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
@@ -174,7 +182,7 @@ pub fn base_edge_bits() -> u8 {
 
 /// The proofsize
 pub fn proofsize() -> usize {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_PROOF_SIZE,
 		ChainTypes::UserTesting => USER_TESTING_PROOF_SIZE,
@@ -184,7 +192,7 @@ pub fn proofsize() -> usize {
 
 /// Coinbase maturity for coinbases to be spent
 pub fn coinbase_maturity() -> u64 {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_COINBASE_MATURITY,
 		ChainTypes::UserTesting => USER_TESTING_COINBASE_MATURITY,
@@ -194,7 +202,7 @@ pub fn coinbase_maturity() -> u64 {
 
 /// Initial mining difficulty
 pub fn initial_block_difficulty() -> u64 {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => TESTING_INITIAL_DIFFICULTY,
 		ChainTypes::UserTesting => TESTING_INITIAL_DIFFICULTY,
@@ -207,7 +215,7 @@ pub fn initial_block_difficulty() -> u64 {
 }
 /// Initial mining secondary scale
 pub fn initial_graph_weight() -> u32 {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => TESTING_INITIAL_GRAPH_WEIGHT,
 		ChainTypes::UserTesting => TESTING_INITIAL_GRAPH_WEIGHT,
@@ -221,7 +229,7 @@ pub fn initial_graph_weight() -> u32 {
 
 /// Horizon at which we can cut-through and do full local pruning
 pub fn cut_through_horizon() -> u32 {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => TESTING_CUT_THROUGH_HORIZON,
 		ChainTypes::UserTesting => TESTING_CUT_THROUGH_HORIZON,
@@ -231,19 +239,19 @@ pub fn cut_through_horizon() -> u32 {
 
 /// Are we in automated testing mode?
 pub fn is_automated_testing_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	ChainTypes::AutomatedTesting == *param_ref
 }
 
 /// Are we in user testing mode?
 pub fn is_user_testing_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	ChainTypes::UserTesting == *param_ref
 }
 
 /// Are we in production mode (a live public network)?
 pub fn is_production_mode() -> bool {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	ChainTypes::Testnet1 == *param_ref
 		|| ChainTypes::Testnet2 == *param_ref
 		|| ChainTypes::Testnet3 == *param_ref
@@ -256,7 +264,7 @@ pub fn is_production_mode() -> bool {
 /// as the genesis block POW solution turns out to be the same for every new
 /// block chain at the moment
 pub fn get_genesis_nonce() -> u64 {
-	let param_ref = CHAIN_TYPE.read().unwrap();
+	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		// won't make a difference
 		ChainTypes::AutomatedTesting => 0,

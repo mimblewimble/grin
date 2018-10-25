@@ -18,9 +18,10 @@ use std::io::Read;
 use std::path::PathBuf;
 /// Wallet commands processing
 use std::process::exit;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use std::{process, thread};
+use util::Mutex;
 
 use clap::ArgMatches;
 
@@ -34,7 +35,6 @@ use grin_wallet::{
 use keychain;
 use servers::start_webwallet_server;
 use util::file::get_first_line;
-use util::LOGGER;
 
 pub fn _init_wallet_seed(wallet_config: WalletConfig) {
 	if let Err(_) = WalletSeed::from_file(&wallet_config) {
@@ -72,7 +72,7 @@ pub fn instantiate_wallet(
 			println!("Error starting wallet: {}", e);
 			process::exit(0);
 		});
-	info!(LOGGER, "Using LMDB Backend for wallet");
+	info!("Using LMDB Backend for wallet");
 	Box::new(db_wallet)
 }
 
@@ -106,7 +106,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 	// Generate the initial wallet seed if we are running "wallet init".
 	if let ("init", Some(_)) = wallet_args.subcommand() {
 		WalletSeed::init_file(&wallet_config).expect("Failed to init wallet seed file.");
-		info!(LOGGER, "Wallet seed file created");
+		info!("Wallet seed file created");
 		let client =
 			HTTPWalletClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
 		let _: LMDBBackend<HTTPWalletClient, keychain::ExtKeychain> =
@@ -116,7 +116,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					e, wallet_config
 				);
 			});
-		info!(LOGGER, "Wallet database backend created");
+		info!("Wallet database backend created");
 		// give logging thread a moment to catch up
 		thread::sleep(Duration::from_millis(200));
 		// we are done here with creating the wallet, so just return
@@ -267,7 +267,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						let slate = match result {
 							Ok(s) => {
 								info!(
-									LOGGER,
 									"Tx created: {} grin to {} (strategy '{}')",
 									core::amount_to_hr_string(amount, false),
 									dest,
@@ -276,7 +275,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 								s
 							}
 							Err(e) => {
-								error!(LOGGER, "Tx not created: {:?}", e);
+								error!("Tx not created: {:?}", e);
 								match e.kind() {
 									// user errors, don't backtrace
 									libwallet::ErrorKind::NotEnoughFunds { .. } => {}
@@ -284,7 +283,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 									libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
 									_ => {
 										// otherwise give full dump
-										error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
+										error!("Backtrace: {}", e.backtrace().unwrap());
 									}
 								};
 								panic!();
@@ -293,18 +292,18 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						let result = api.post_tx(&slate, fluff);
 						match result {
 							Ok(_) => {
-								info!(LOGGER, "Tx sent",);
+								info!("Tx sent",);
 								Ok(())
 							}
 							Err(e) => {
-								error!(LOGGER, "Tx not sent: {:?}", e);
+								error!("Tx not sent: {:?}", e);
 								Err(e)
 							}
 						}
 					} else {
 						error!(
-							LOGGER,
-							"HTTP Destination should start with http://: or https://: {}", dest
+							"HTTP Destination should start with http://: or https://: {}",
+							dest
 						);
 						panic!();
 					}
@@ -320,7 +319,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					).expect("Send failed");
 					Ok(())
 				} else {
-					error!(LOGGER, "unsupported payment method: {}", method);
+					error!("unsupported payment method: {}", method);
 					panic!();
 				}
 			}
@@ -353,11 +352,11 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				let result = api.post_tx(&slate, fluff);
 				match result {
 					Ok(_) => {
-						info!(LOGGER, "Tx sent");
+						info!("Tx sent");
 						Ok(())
 					}
 					Err(e) => {
-						error!(LOGGER, "Tx not sent: {:?}", e);
+						error!("Tx not sent: {:?}", e);
 						Err(e)
 					}
 				}
@@ -438,7 +437,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 			("repost", Some(repost_args)) => {
 				let tx_id: u32 = match repost_args.value_of("id") {
 					None => {
-						error!(LOGGER, "Transaction of a completed but unconfirmed transaction required (specify with --id=[id])");
+						error!("Transaction of a completed but unconfirmed transaction required (specify with --id=[id])");
 						panic!();
 					}
 					Some(tx) => match tx.parse() {
@@ -455,11 +454,11 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						let result = api.post_stored_tx(tx_id, fluff);
 						match result {
 							Ok(_) => {
-								info!(LOGGER, "Reposted transaction at {}", tx_id);
+								info!("Reposted transaction at {}", tx_id);
 								Ok(())
 							}
 							Err(e) => {
-								error!(LOGGER, "Transaction reposting failed: {}", e);
+								error!("Transaction reposting failed: {}", e);
 								Err(e)
 							}
 						}
@@ -468,11 +467,11 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						let result = api.dump_stored_tx(tx_id, true, f);
 						match result {
 							Ok(_) => {
-								warn!(LOGGER, "Dumped transaction data for tx {} to {}", tx_id, f);
+								warn!("Dumped transaction data for tx {} to {}", tx_id, f);
 								Ok(())
 							}
 							Err(e) => {
-								error!(LOGGER, "Transaction reposting failed: {}", e);
+								error!("Transaction reposting failed: {}", e);
 								Err(e)
 							}
 						}
@@ -487,11 +486,11 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				let result = api.cancel_tx(tx_id);
 				match result {
 					Ok(_) => {
-						info!(LOGGER, "Transaction {} Cancelled", tx_id);
+						info!("Transaction {} Cancelled", tx_id);
 						Ok(())
 					}
 					Err(e) => {
-						error!(LOGGER, "TX Cancellation failed: {}", e);
+						error!("TX Cancellation failed: {}", e);
 						Err(e)
 					}
 				}
@@ -500,12 +499,12 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				let result = api.restore();
 				match result {
 					Ok(_) => {
-						info!(LOGGER, "Wallet restore complete",);
+						info!("Wallet restore complete",);
 						Ok(())
 					}
 					Err(e) => {
-						error!(LOGGER, "Wallet restore failed: {:?}", e);
-						error!(LOGGER, "Backtrace: {}", e.backtrace().unwrap());
+						error!("Wallet restore failed: {:?}", e);
+						error!("Backtrace: {}", e.backtrace().unwrap());
 						Err(e)
 					}
 				}

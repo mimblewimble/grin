@@ -10,7 +10,7 @@ blake2-rfc = "0.2"
 rand = "0.5"
 serde = "1"
 serde_derive = "1"
-slog = { version = "~2.3", features = ["max_level_trace", "release_max_level_trace"] }
+log = "0.4"
 chrono = "0.4.4"
 
 grin_core = { path = "../core" }

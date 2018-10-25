@@ -26,7 +26,6 @@ use core::ser::{self, Readable, Reader, Writeable, Writer};
 use grin_store::{self, option_to_not_found, to_key, Error};
 use msg::SockAddr;
 use types::{Capabilities, ReasonForBan};
-use util::LOGGER;
 
 const STORE_SUBPATH: &'static str = "peers";
 
@@ -58,6 +57,8 @@ pub struct PeerData {
 	pub last_banned: i64,
 	/// The reason for the ban
 	pub ban_reason: ReasonForBan,
+	/// Time when we last connected to this peer.
+	pub last_connected: i64,
 }
 
 impl Writeable for PeerData {
@@ -69,7 +70,8 @@ impl Writeable for PeerData {
 			[write_bytes, &self.user_agent],
 			[write_u8, self.flags as u8],
 			[write_i64, self.last_banned],
-			[write_i32, self.ban_reason as i32]
+			[write_i32, self.ban_reason as i32],
+			[write_i64, self.last_connected]
 		);
 		Ok(())
 	}
@@ -80,18 +82,27 @@ impl Readable for PeerData {
 		let addr = SockAddr::read(reader)?;
 		let (capab, ua, fl, lb, br) =
 			ser_multiread!(reader, read_u32, read_vec, read_u8, read_i64, read_i32);
+		let lc = reader.read_i64();
+		// this only works because each PeerData is read in its own vector and this
+		// is the last data element
+		let last_connected = if let Err(_) = lc {
+			Utc::now().timestamp()
+		} else {
+			lc.unwrap()
+		};
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
-		let last_banned = lb;
 		let ban_reason = ReasonForBan::from_i32(br).ok_or(ser::Error::CorruptedData)?;
+
 		match State::from_u8(fl) {
 			Some(flags) => Ok(PeerData {
 				addr: addr.0,
-				capabilities: capabilities,
-				user_agent: user_agent,
+				capabilities,
+				user_agent,
 				flags: flags,
-				last_banned: last_banned,
-				ban_reason: ban_reason,
+				last_banned: lb,
+				ban_reason,
+				last_connected,
 			}),
 			None => Err(ser::Error::CorruptedData),
 		}
@@ -111,7 +122,7 @@ impl PeerStore {
 	}
 
 	pub fn save_peer(&self, p: &PeerData) -> Result<(), Error> {
-		debug!(LOGGER, "save_peer: {:?} marked {:?}", p.addr, p.flags);
+		debug!("save_peer: {:?} marked {:?}", p.addr, p.flags);
 
 		let batch = self.db.batch()?;
 		batch.put_ser(&peer_key(p.addr)[..], p)?;
@@ -171,6 +182,33 @@ impl PeerStore {
 
 		batch.put_ser(&peer_key(peer.addr)[..], &peer)?;
 		batch.commit()
+	}
+
+	/// Deletes peers from the storage that satisfy some condition `predicate`
+	pub fn delete_peers<F>(&self, predicate: F) -> Result<(), Error>
+	where
+		F: Fn(&PeerData) -> bool,
+	{
+		let mut to_remove = vec![];
+
+		for x in self.all_peers() {
+			if predicate(&x) {
+				to_remove.push(x)
+			}
+		}
+
+		// Delete peers in single batch
+		if !to_remove.is_empty() {
+			let batch = self.db.batch()?;
+
+			for peer in to_remove {
+				batch.delete(&peer_key(peer.addr)[..])?;
+			}
+
+			batch.commit()?;
+		}
+
+		Ok(())
 	}
 }
 

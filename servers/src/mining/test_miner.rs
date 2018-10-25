@@ -19,7 +19,8 @@
 
 use chrono::prelude::Utc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use chain;
 use common::types::StratumServerConfig;
@@ -30,7 +31,6 @@ use core::global;
 use core::pow::PoWContext;
 use mining::mine_block;
 use pool;
-use util::LOGGER;
 
 pub struct Miner {
 	config: StratumServerConfig,
@@ -84,7 +84,6 @@ impl Miner {
 		let deadline = Utc::now().timestamp() + attempt_time_per_block as i64;
 
 		debug!(
-			LOGGER,
 			"(Server ID: {}) Mining Cuckoo{} for max {}s on {} @ {} [{}].",
 			self.debug_output_id,
 			global::min_edge_bits(),
@@ -115,10 +114,8 @@ impl Miner {
 		}
 
 		debug!(
-			LOGGER,
 			"(Server ID: {}) No solution found after {} iterations, continuing...",
-			self.debug_output_id,
-			iter_count
+			self.debug_output_id, iter_count
 		);
 		false
 	}
@@ -127,8 +124,8 @@ impl Miner {
 	/// chain anytime required and looking for PoW solution.
 	pub fn run_loop(&self, wallet_listener_url: Option<String>) {
 		info!(
-			LOGGER,
-			"(Server ID: {}) Starting test miner loop.", self.debug_output_id
+			"(Server ID: {}) Starting test miner loop.",
+			self.debug_output_id
 		);
 
 		// iteration, we keep the returned derivation to provide it back when
@@ -136,7 +133,7 @@ impl Miner {
 		let mut key_id = None;
 
 		while !self.stop.load(Ordering::Relaxed) {
-			trace!(LOGGER, "in miner loop. key_id: {:?}", key_id);
+			trace!("in miner loop. key_id: {:?}", key_id);
 
 			// get the latest chain state and build a block on top of it
 			let head = self.chain.head_header().unwrap();
@@ -160,7 +157,6 @@ impl Miner {
 			// we found a solution, push our block through the chain processing pipeline
 			if sol {
 				info!(
-					LOGGER,
 					"(Server ID: {}) Found valid proof of work, adding block {}.",
 					self.debug_output_id,
 					b.hash()
@@ -168,26 +164,21 @@ impl Miner {
 				let res = self.chain.process_block(b, chain::Options::MINE);
 				if let Err(e) = res {
 					error!(
-						LOGGER,
 						"(Server ID: {}) Error validating mined block: {:?}",
-						self.debug_output_id,
-						e
+						self.debug_output_id, e
 					);
 				}
-				trace!(LOGGER, "resetting key_id in miner to None");
+				trace!("resetting key_id in miner to None");
 				key_id = None;
 			} else {
 				debug!(
-					LOGGER,
-					"setting pubkey in miner to pubkey from block_fees - {:?}", block_fees
+					"setting pubkey in miner to pubkey from block_fees - {:?}",
+					block_fees
 				);
 				key_id = block_fees.key_id();
 			}
 		}
 
-		info!(
-			LOGGER,
-			"(Server ID: {}) test miner exit.", self.debug_output_id
-		);
+		info!("(Server ID: {}) test miner exit.", self.debug_output_id);
 	}
 }

@@ -20,7 +20,8 @@
 use std::fs::File;
 use std::io::{Read, Write};
 use std::marker::PhantomData;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use util::Mutex;
 
 use serde_json as json;
 
@@ -35,8 +36,8 @@ use libwallet::types::{
 	WalletClient, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
+use util;
 use util::secp::pedersen;
-use util::{self, LOGGER};
 
 /// Wrapper around internal API functions, containing a reference to
 /// the wallet/keychain that they're acting upon
@@ -77,7 +78,7 @@ where
 		refresh_from_node: bool,
 		tx_id: Option<u32>,
 	) -> Result<(bool, Vec<(OutputData, pedersen::Commitment)>), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
 
@@ -102,7 +103,7 @@ where
 		refresh_from_node: bool,
 		tx_id: Option<u32>,
 	) -> Result<(bool, Vec<TxLogEntry>), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
 
@@ -125,7 +126,7 @@ where
 		&mut self,
 		refresh_from_node: bool,
 	) -> Result<(bool, WalletInfo), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
 
@@ -143,13 +144,13 @@ where
 
 	/// Return list of existing account -> Path mappings
 	pub fn accounts(&mut self) -> Result<Vec<AcctPathMapping>, Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		keys::accounts(&mut **w)
 	}
 
 	/// Create a new account path
 	pub fn new_account_path(&mut self, label: &str) -> Result<Identifier, Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		keys::new_acct_path(&mut **w, label)
 	}
 
@@ -163,7 +164,7 @@ where
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
 	) -> Result<Slate, Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
 
@@ -187,7 +188,6 @@ where
 			Ok(s) => s,
 			Err(e) => {
 				error!(
-				LOGGER,
 				"Communication with receiver failed on SenderInitiation send. Aborting transaction {:?}",
 				e,
 			);
@@ -216,7 +216,7 @@ where
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
 	) -> Result<Slate, Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
 
@@ -254,7 +254,7 @@ where
 	/// Builds the complete transaction and sends it to a grin node for
 	/// propagation.
 	pub fn finalize_tx(&mut self, slate: &mut Slate) -> Result<(), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 
 		let context = w.get_private_context(slate.id.as_bytes())?;
@@ -275,7 +275,7 @@ where
 	/// with the transaction used when a transaction is created but never
 	/// posted
 	pub fn cancel_tx(&mut self, tx_id: u32) -> Result<(), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
 		if !self.update_outputs(&mut w) {
@@ -295,7 +295,7 @@ where
 		minimum_confirmations: u64,
 		max_outputs: usize,
 	) -> Result<(), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
 		let tx_burn = tx::issue_burn_tx(
@@ -315,16 +315,15 @@ where
 	pub fn post_tx(&self, slate: &Slate, fluff: bool) -> Result<(), Error> {
 		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
 		let client = {
-			let mut w = self.wallet.lock().unwrap();
+			let mut w = self.wallet.lock();
 			w.client().clone()
 		};
 		let res = client.post_tx(&TxWrapper { tx_hex: tx_hex }, fluff);
 		if let Err(e) = res {
-			error!(LOGGER, "api: post_tx: failed with error: {}", e);
+			error!("api: post_tx: failed with error: {}", e);
 			Err(e)
 		} else {
 			debug!(
-				LOGGER,
 				"api: post_tx: successfully posted tx: {}, fluff? {}",
 				slate.tx.hash(),
 				fluff
@@ -341,7 +340,7 @@ where
 		dest: &str,
 	) -> Result<Transaction, Error> {
 		let (confirmed, tx_hex) = {
-			let mut w = self.wallet.lock().unwrap();
+			let mut w = self.wallet.lock();
 			w.open_with_credentials()?;
 			let parent_key_id = w.parent_key_id();
 			let res = tx::retrieve_tx_hex(&mut **w, &parent_key_id, tx_id)?;
@@ -350,14 +349,14 @@ where
 		};
 		if confirmed {
 			warn!(
-				LOGGER,
-				"api: dump_stored_tx: transaction at {} is already confirmed.", tx_id
+				"api: dump_stored_tx: transaction at {} is already confirmed.",
+				tx_id
 			);
 		}
 		if tx_hex.is_none() {
 			error!(
-				LOGGER,
-				"api: dump_stored_tx: completed transaction at {} does not exist.", tx_id
+				"api: dump_stored_tx: completed transaction at {} does not exist.",
+				tx_id
 			);
 			return Err(ErrorKind::TransactionBuildingNotCompleted(tx_id))?;
 		}
@@ -375,7 +374,7 @@ where
 	pub fn post_stored_tx(&self, tx_id: u32, fluff: bool) -> Result<(), Error> {
 		let client;
 		let (confirmed, tx_hex) = {
-			let mut w = self.wallet.lock().unwrap();
+			let mut w = self.wallet.lock();
 			w.open_with_credentials()?;
 			let parent_key_id = w.parent_key_id();
 			client = w.client().clone();
@@ -385,15 +384,15 @@ where
 		};
 		if confirmed {
 			error!(
-				LOGGER,
-				"api: repost_tx: transaction at {} is confirmed. NOT resending.", tx_id
+				"api: repost_tx: transaction at {} is confirmed. NOT resending.",
+				tx_id
 			);
 			return Err(ErrorKind::TransactionAlreadyConfirmed)?;
 		}
 		if tx_hex.is_none() {
 			error!(
-				LOGGER,
-				"api: repost_tx: completed transaction at {} does not exist.", tx_id
+				"api: repost_tx: completed transaction at {} does not exist.",
+				tx_id
 			);
 			return Err(ErrorKind::TransactionBuildingNotCompleted(tx_id))?;
 		}
@@ -405,12 +404,12 @@ where
 			fluff,
 		);
 		if let Err(e) = res {
-			error!(LOGGER, "api: repost_tx: failed with error: {}", e);
+			error!("api: repost_tx: failed with error: {}", e);
 			Err(e)
 		} else {
 			debug!(
-				LOGGER,
-				"api: repost_tx: successfully posted tx at: {}, fluff? {}", tx_id, fluff
+				"api: repost_tx: successfully posted tx at: {}, fluff? {}",
+				tx_id, fluff
 			);
 			Ok(())
 		}
@@ -418,7 +417,7 @@ where
 
 	/// Attempt to restore contents of wallet
 	pub fn restore(&mut self) -> Result<(), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let res = w.restore();
 		w.close()?;
@@ -428,7 +427,7 @@ where
 	/// Retrieve current height from node
 	pub fn node_height(&mut self) -> Result<(u64, bool), Error> {
 		let res = {
-			let mut w = self.wallet.lock().unwrap();
+			let mut w = self.wallet.lock();
 			w.open_with_credentials()?;
 			w.client().get_chain_height()
 		};
@@ -487,7 +486,7 @@ where
 
 	/// Build a new (potential) coinbase transaction in the wallet
 	pub fn build_coinbase(&mut self, block_fees: &BlockFees) -> Result<CbData, Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let res = updater::build_coinbase(&mut **w, block_fees);
 		w.close()?;
@@ -503,7 +502,7 @@ where
 		pub_tx_f.read_to_string(&mut content)?;
 		let mut slate: Slate = json::from_str(&content).map_err(|_| ErrorKind::Format)?;
 
-		let mut wallet = self.wallet.lock().unwrap();
+		let mut wallet = self.wallet.lock();
 		wallet.open_with_credentials()?;
 		let parent_key_id = wallet.parent_key_id();
 
@@ -533,18 +532,17 @@ where
 
 	/// Receive a transaction from a sender
 	pub fn receive_tx(&mut self, slate: &mut Slate) -> Result<(), Error> {
-		let mut w = self.wallet.lock().unwrap();
+		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
 		let res = tx::receive_tx(&mut **w, slate, &parent_key_id);
 		w.close()?;
 
 		if let Err(e) = res {
-			error!(LOGGER, "api: receive_tx: failed with error: {}", e);
+			error!("api: receive_tx: failed with error: {}", e);
 			Err(e)
 		} else {
 			debug!(
-				LOGGER,
 				"api: receive_tx: successfully received tx: {}",
 				slate.tx.hash()
 			);

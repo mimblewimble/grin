@@ -13,11 +13,11 @@ lazy_static = "1"
 rand = "0.5"
 serde = "1"
 serde_derive = "1"
-slog = { version = "~2.3", features = ["max_level_trace", "release_max_level_trace"] }
-slog-term = "~2.4"
-slog-async = "~2.3"
+log4rs = { version = "0.8.1", features = ["rolling_file_appender", "compound_policy", "size_trigger", "fixed_window_roller"] }
+log = "0.4"
 walkdir = "2"
 zip = "0.4"
+parking_lot = {version = "0.6"}
 
 [dependencies.secp256k1zkp]
 git = "https://github.com/mimblewimble/rust-secp256k1-zkp"

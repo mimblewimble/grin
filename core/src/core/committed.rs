@@ -66,7 +66,7 @@ pub trait Committed {
 		// commit to zero built from the offset
 		let kernel_sum_plus_offset = {
 			let secp = static_secp_instance();
-			let secp = secp.lock().unwrap();
+			let secp = secp.lock();
 			let mut commits = vec![kernel_sum];
 			if *offset != BlindingFactor::zero() {
 				let key = offset.secret_key(&secp)?;
@@ -90,7 +90,7 @@ pub trait Committed {
 		if overage != 0 {
 			let over_commit = {
 				let secp = static_secp_instance();
-				let secp = secp.lock().unwrap();
+				let secp = secp.lock();
 				let overage_abs = overage.checked_abs().ok_or_else(|| Error::InvalidValue)? as u64;
 				secp.commit_value(overage_abs).unwrap()
 			};
@@ -144,7 +144,7 @@ pub fn sum_commits(
 	positive.retain(|x| *x != zero_commit);
 	negative.retain(|x| *x != zero_commit);
 	let secp = static_secp_instance();
-	let secp = secp.lock().unwrap();
+	let secp = secp.lock();
 	Ok(secp.commit_sum(positive, negative)?)
 }
 
@@ -156,7 +156,7 @@ pub fn sum_kernel_offsets(
 	negative: Vec<BlindingFactor>,
 ) -> Result<BlindingFactor, Error> {
 	let secp = static_secp_instance();
-	let secp = secp.lock().unwrap();
+	let secp = secp.lock();
 	let positive = to_secrets(positive, &secp);
 	let negative = to_secrets(negative, &secp);
 

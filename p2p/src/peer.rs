@@ -14,7 +14,8 @@
 
 use std::fs::File;
 use std::net::{SocketAddr, TcpStream};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use chrono::prelude::{DateTime, Utc};
 use conn;
@@ -27,7 +28,6 @@ use protocol::Protocol;
 use types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerInfo, ReasonForBan, TxHashSetRead,
 };
-use util::LOGGER;
 
 const MAX_TRACK_SIZE: usize = 30;
 
@@ -103,8 +103,8 @@ impl Peer {
 		if let Some(ref denied) = config.peers_deny {
 			if denied.contains(&peer) {
 				debug!(
-					LOGGER,
-					"checking peer allowed/denied: {:?} explicitly denied", peer_addr
+					"checking peer allowed/denied: {:?} explicitly denied",
+					peer_addr
 				);
 				return true;
 			}
@@ -112,14 +112,14 @@ impl Peer {
 		if let Some(ref allowed) = config.peers_allow {
 			if allowed.contains(&peer) {
 				debug!(
-					LOGGER,
-					"checking peer allowed/denied: {:?} explicitly allowed", peer_addr
+					"checking peer allowed/denied: {:?} explicitly allowed",
+					peer_addr
 				);
 				return false;
 			} else {
 				debug!(
-					LOGGER,
-					"checking peer allowed/denied: {:?} not explicitly allowed, denying", peer_addr
+					"checking peer allowed/denied: {:?} not explicitly allowed, denying",
+					peer_addr
 				);
 				return true;
 			}
@@ -137,12 +137,12 @@ impl Peer {
 
 	/// Whether this peer has been banned.
 	pub fn is_banned(&self) -> bool {
-		State::Banned == *self.state.read().unwrap()
+		State::Banned == *self.state.read()
 	}
 
 	/// Whether this peer is stuck on sync.
 	pub fn is_stuck(&self) -> (bool, Difficulty) {
-		let peer_live_info = self.info.live_info.read().unwrap();
+		let peer_live_info = self.info.live_info.read();
 		let now = Utc::now().timestamp_millis();
 		// if last updated difficulty is 2 hours ago, we're sure this peer is a stuck node.
 		if now > peer_live_info.stuck_detector.timestamp_millis() + global::STUCK_PEER_KICK_TIME {
@@ -155,9 +155,8 @@ impl Peer {
 	/// Number of bytes sent to the peer
 	pub fn sent_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
-			if let Ok(sent_bytes) = tracker.sent_bytes.read() {
-				return Some(*sent_bytes);
-			}
+			let sent_bytes = tracker.sent_bytes.read();
+			return Some(*sent_bytes);
 		}
 		None
 	}
@@ -165,16 +164,15 @@ impl Peer {
 	/// Number of bytes received from the peer
 	pub fn received_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
-			if let Ok(received_bytes) = tracker.received_bytes.read() {
-				return Some(*received_bytes);
-			}
+			let received_bytes = tracker.received_bytes.read();
+			return Some(*received_bytes);
 		}
 		None
 	}
 
 	/// Set this peer status to banned
 	pub fn set_banned(&self) {
-		*self.state.write().unwrap() = State::Banned;
+		*self.state.write() = State::Banned;
 	}
 
 	/// Send a ping to the remote peer, providing our local difficulty and
@@ -199,13 +197,10 @@ impl Peer {
 			.unwrap()
 			.send(ban_reason_msg, msg::Type::BanReason)
 		{
-			Ok(_) => debug!(
-				LOGGER,
-				"Sent ban reason {:?} to {}", ban_reason, self.info.addr
-			),
+			Ok(_) => debug!("Sent ban reason {:?} to {}", ban_reason, self.info.addr),
 			Err(e) => error!(
-				LOGGER,
-				"Could not send ban reason {:?} to {}: {:?}", ban_reason, self.info.addr, e
+				"Could not send ban reason {:?} to {}: {:?}",
+				ban_reason, self.info.addr, e
 			),
 		};
 	}
@@ -214,7 +209,7 @@ impl Peer {
 	/// if the remote peer is known to already have the block.
 	pub fn send_block(&self, b: &core::Block) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(b.hash()) {
-			trace!(LOGGER, "Send block {} to {}", b.hash(), self.info.addr);
+			trace!("Send block {} to {}", b.hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
@@ -222,7 +217,6 @@ impl Peer {
 			Ok(true)
 		} else {
 			debug!(
-				LOGGER,
 				"Suppress block send {} to {} (already seen)",
 				b.hash(),
 				self.info.addr,
@@ -233,12 +227,7 @@ impl Peer {
 
 	pub fn send_compact_block(&self, b: &core::CompactBlock) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(b.hash()) {
-			trace!(
-				LOGGER,
-				"Send compact block {} to {}",
-				b.hash(),
-				self.info.addr
-			);
+			trace!("Send compact block {} to {}", b.hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
@@ -246,7 +235,6 @@ impl Peer {
 			Ok(true)
 		} else {
 			debug!(
-				LOGGER,
 				"Suppress compact block send {} to {} (already seen)",
 				b.hash(),
 				self.info.addr,
@@ -257,7 +245,7 @@ impl Peer {
 
 	pub fn send_header(&self, bh: &core::BlockHeader) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(bh.hash()) {
-			debug!(LOGGER, "Send header {} to {}", bh.hash(), self.info.addr);
+			debug!("Send header {} to {}", bh.hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
@@ -265,7 +253,6 @@ impl Peer {
 			Ok(true)
 		} else {
 			debug!(
-				LOGGER,
 				"Suppress header send {} to {} (already seen)",
 				bh.hash(),
 				self.info.addr,
@@ -278,7 +265,7 @@ impl Peer {
 	/// dropped if the remote peer is known to already have the transaction.
 	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<bool, Error> {
 		if !self.tracking_adapter.has(tx.hash()) {
-			debug!(LOGGER, "Send tx {} to {}", tx.hash(), self.info.addr);
+			debug!("Send tx {} to {}", tx.hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
@@ -286,7 +273,6 @@ impl Peer {
 			Ok(true)
 		} else {
 			debug!(
-				LOGGER,
 				"Not sending tx {} to {} (already seen)",
 				tx.hash(),
 				self.info.addr
@@ -299,7 +285,7 @@ impl Peer {
 	/// Note: tracking adapter is ignored for stem transactions (while under
 	/// embargo).
 	pub fn send_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
-		debug!(LOGGER, "Send (stem) tx {} to {}", tx.hash(), self.info.addr);
+		debug!("Send (stem) tx {} to {}", tx.hash(), self.info.addr);
 		self.connection
 			.as_ref()
 			.unwrap()
@@ -317,10 +303,7 @@ impl Peer {
 
 	/// Sends a request for a specific block by hash
 	pub fn send_block_request(&self, h: Hash) -> Result<(), Error> {
-		debug!(
-			LOGGER,
-			"Requesting block {} from peer {}.", h, self.info.addr
-		);
+		debug!("Requesting block {} from peer {}.", h, self.info.addr);
 		self.connection
 			.as_ref()
 			.unwrap()
@@ -329,10 +312,7 @@ impl Peer {
 
 	/// Sends a request for a specific compact block by hash
 	pub fn send_compact_block_request(&self, h: Hash) -> Result<(), Error> {
-		debug!(
-			LOGGER,
-			"Requesting compact block {} from {}", h, self.info.addr
-		);
+		debug!("Requesting compact block {} from {}", h, self.info.addr);
 		self.connection
 			.as_ref()
 			.unwrap()
@@ -340,7 +320,7 @@ impl Peer {
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
-		debug!(LOGGER, "Asking {} for more peers.", self.info.addr);
+		debug!("Asking {} for more peers.", self.info.addr);
 		self.connection.as_ref().unwrap().send(
 			&GetPeerAddrs {
 				capabilities: capab,
@@ -351,8 +331,8 @@ impl Peer {
 
 	pub fn send_txhashset_request(&self, height: u64, hash: Hash) -> Result<(), Error> {
 		debug!(
-			LOGGER,
-			"Asking {} for txhashset archive at {} {}.", self.info.addr, height, hash
+			"Asking {} for txhashset archive at {} {}.",
+			self.info.addr, height, hash
 		);
 		self.connection.as_ref().unwrap().send(
 			&TxHashSetRequest { hash, height },
@@ -369,7 +349,7 @@ impl Peer {
 		match self.connection.as_ref().unwrap().error_channel.try_recv() {
 			Ok(Error::Serialization(e)) => {
 				let need_stop = {
-					let mut state = self.state.write().unwrap();
+					let mut state = self.state.write();
 					if State::Banned != *state {
 						*state = State::Disconnected;
 						true
@@ -379,8 +359,8 @@ impl Peer {
 				};
 				if need_stop {
 					debug!(
-						LOGGER,
-						"Client {} corrupted, will disconnect ({:?}).", self.info.addr, e
+						"Client {} corrupted, will disconnect ({:?}).",
+						self.info.addr, e
 					);
 					self.stop();
 				}
@@ -388,7 +368,7 @@ impl Peer {
 			}
 			Ok(e) => {
 				let need_stop = {
-					let mut state = self.state.write().unwrap();
+					let mut state = self.state.write();
 					if State::Disconnected != *state {
 						*state = State::Disconnected;
 						true
@@ -397,13 +377,13 @@ impl Peer {
 					}
 				};
 				if need_stop {
-					debug!(LOGGER, "Client {} connection lost: {:?}", self.info.addr, e);
+					debug!("Client {} connection lost: {:?}", self.info.addr, e);
 					self.stop();
 				}
 				false
 			}
 			Err(_) => {
-				let state = self.state.read().unwrap();
+				let state = self.state.read();
 				State::Connected == *state
 			}
 		}
@@ -427,14 +407,14 @@ impl TrackingAdapter {
 	}
 
 	fn has(&self, hash: Hash) -> bool {
-		let known = self.known.read().unwrap();
+		let known = self.known.read();
 		// may become too slow, an ordered set (by timestamp for eviction) may
 		// end up being a better choice
 		known.contains(&hash)
 	}
 
 	fn push(&self, hash: Hash) {
-		let mut known = self.known.write().unwrap();
+		let mut known = self.known.write();
 		if known.len() > MAX_TRACK_SIZE {
 			known.truncate(MAX_TRACK_SIZE);
 		}

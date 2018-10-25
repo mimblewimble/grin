@@ -33,7 +33,6 @@ use std::sync::Arc;
 use std::{io, thread};
 use tokio_rustls::ServerConfigExt;
 use tokio_tcp;
-use util::LOGGER;
 
 /// Errors that can be returned by an ApiEndpoint implementation.
 #[derive(Debug)]
@@ -243,13 +242,10 @@ impl ApiServer {
 			// TODO re-enable stop after investigation
 			//let tx = mem::replace(&mut self.shutdown_sender, None).unwrap();
 			//tx.send(()).expect("Failed to stop API server");
-			info!(LOGGER, "API server has been stoped");
+			info!("API server has been stoped");
 			true
 		} else {
-			error!(
-				LOGGER,
-				"Can't stop API server, it's not running or doesn't spport stop operation"
-			);
+			error!("Can't stop API server, it's not running or doesn't spport stop operation");
 			false
 		}
 	}
@@ -263,7 +259,7 @@ impl Handler for LoggingMiddleware {
 		req: Request<Body>,
 		mut handlers: Box<Iterator<Item = HandlerObj>>,
 	) -> ResponseFuture {
-		debug!(LOGGER, "REST call: {} {}", req.method(), req.uri().path());
+		debug!("REST call: {} {}", req.method(), req.uri().path());
 		handlers.next().unwrap().call(req, handlers)
 	}
 }

@@ -17,7 +17,8 @@
 
 use rand::thread_rng;
 use secp;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use Mutex;
 
 lazy_static! {
 	/// Static reference to secp instance
@@ -28,7 +29,7 @@ lazy_static! {
 /// Returns the static instance, but calls randomize on it as well
 /// (Recommended to avoid side channel attacks
 pub fn static_secp_instance() -> Arc<Mutex<secp::Secp256k1>> {
-	let mut secp_inst = SECP256K1.lock().unwrap();
+	let mut secp_inst = SECP256K1.lock();
 	secp_inst.randomize(&mut thread_rng());
 	SECP256K1.clone()
 }

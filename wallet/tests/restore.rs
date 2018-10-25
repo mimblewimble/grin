@@ -20,7 +20,7 @@ extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 extern crate rand;
 #[macro_use]
-extern crate slog;
+extern crate log;
 extern crate chrono;
 extern crate serde;
 extern crate uuid;
@@ -35,7 +35,6 @@ use std::time::Duration;
 use core::global;
 use core::global::ChainTypes;
 use keychain::{ExtKeychain, Identifier, Keychain};
-use util::LOGGER;
 use wallet::libtx::slate::Slate;
 use wallet::libwallet;
 use wallet::libwallet::types::AcctPathMapping;
@@ -67,7 +66,7 @@ fn restore_wallet(base_dir: &str, wallet_dir: &str) -> Result<(), libwallet::Err
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
 		if let Err(e) = wallet_proxy.run() {
-			error!(LOGGER, "Wallet Proxy error: {}", e);
+			error!("Wallet Proxy error: {}", e);
 		}
 	});
 
@@ -109,19 +108,19 @@ fn compare_wallet_restore(
 	);
 
 	{
-		let mut w = wallet_source.lock().unwrap();
+		let mut w = wallet_source.lock();
 		w.set_parent_key_id(account_path.clone());
 	}
 
 	{
-		let mut w = wallet_dest.lock().unwrap();
+		let mut w = wallet_dest.lock();
 		w.set_parent_key_id(account_path.clone());
 	}
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
 		if let Err(e) = wallet_proxy.run() {
-			error!(LOGGER, "Wallet Proxy error: {}", e);
+			error!("Wallet Proxy error: {}", e);
 		}
 	});
 
@@ -206,7 +205,7 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Default wallet 2 to listen on that account
 	{
-		let mut w = wallet2.lock().unwrap();
+		let mut w = wallet2.lock();
 		w.set_parent_key_id_by_name("account1")?;
 	}
 
@@ -218,7 +217,7 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
 		if let Err(e) = wallet_proxy.run() {
-			error!(LOGGER, "Wallet Proxy error: {}", e);
+			error!("Wallet Proxy error: {}", e);
 		}
 	});
 
@@ -281,7 +280,7 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Another listener account on wallet 2
 	{
-		let mut w = wallet2.lock().unwrap();
+		let mut w = wallet2.lock();
 		w.set_parent_key_id_by_name("account2")?;
 	}
 

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #[macro_use]
-extern crate slog;
+extern crate log;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
@@ -26,18 +26,20 @@ extern crate grin_wallet as wallet;
 
 mod framework;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::{thread, time};
+use util::Mutex;
 
 use core::global::{self, ChainTypes};
 
 use framework::{LocalServerContainer, LocalServerContainerConfig};
-use util::{init_test_logger, LOGGER};
+use util::init_test_logger;
 
 #[test]
 fn simple_server_wallet() {
 	init_test_logger();
-	info!(LOGGER, "starting simple_server_wallet");
+	info!("starting simple_server_wallet");
+	let test_name_dir = "test_servers";
 	core::global::set_mining_mode(core::global::ChainTypes::AutomatedTesting);
 
 	// Run a separate coinbase wallet for coinbase transactions
@@ -52,7 +54,7 @@ fn simple_server_wallet() {
 	));
 
 	let _ = thread::spawn(move || {
-		let mut w = coinbase_wallet.lock().unwrap();
+		let mut w = coinbase_wallet.lock();
 		w.run_wallet(0);
 	});
 
@@ -81,11 +83,11 @@ fn simple_server_wallet() {
 	let base_addr = server_config.base_addr;
 	let api_server_port = server_config.api_server_port;
 
-	warn!(LOGGER, "Testing chain handler");
+	warn!("Testing chain handler");
 	let tip = get_tip(&base_addr, api_server_port);
 	assert!(tip.is_ok());
 
-	warn!(LOGGER, "Testing status handler");
+	warn!("Testing status handler");
 	let status = get_status(&base_addr, api_server_port);
 	assert!(status.is_ok());
 
@@ -96,7 +98,7 @@ fn simple_server_wallet() {
 		current_tip = get_tip(&base_addr, api_server_port).unwrap();
 	}
 
-	warn!(LOGGER, "Testing block handler");
+	warn!("Testing block handler");
 	let last_block_by_height = get_block_by_height(&base_addr, api_server_port, current_tip.height);
 	assert!(last_block_by_height.is_ok());
 	let last_block_by_height_compact =
@@ -110,7 +112,7 @@ fn simple_server_wallet() {
 		get_block_by_hash_compact(&base_addr, api_server_port, &block_hash);
 	assert!(last_block_by_hash_compact.is_ok());
 
-	warn!(LOGGER, "Testing chain output handler");
+	warn!("Testing chain output handler");
 	let start_height = 0;
 	let end_height = current_tip.height;
 	let outputs_by_height =
@@ -122,7 +124,7 @@ fn simple_server_wallet() {
 	let outputs_by_ids2 = get_outputs_by_ids2(&base_addr, api_server_port, ids.clone());
 	assert!(outputs_by_ids2.is_ok());
 
-	warn!(LOGGER, "Testing txhashset handler");
+	warn!("Testing txhashset handler");
 	let roots = get_txhashset_roots(&base_addr, api_server_port);
 	assert!(roots.is_ok());
 	let last_10_outputs = get_txhashset_lastoutputs(&base_addr, api_server_port, 0);
@@ -146,7 +148,7 @@ fn simple_server_wallet() {
 #[test]
 fn test_p2p() {
 	init_test_logger();
-	info!(LOGGER, "starting test_p2p");
+	info!("starting test_p2p");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
 	let test_name_dir = "test_servers";
@@ -187,7 +189,7 @@ fn test_p2p() {
 	thread::sleep(time::Duration::from_millis(2000));
 
 	// Starting tests
-	warn!(LOGGER, "Starting P2P Tests");
+	warn!("Starting P2P Tests");
 	let base_addr = server_config_one.base_addr;
 	let api_server_port = server_config_one.api_server_port;
 

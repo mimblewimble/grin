@@ -18,8 +18,9 @@
 
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::{thread, time};
+use util::RwLock;
 
 use api;
 use chain;
@@ -27,8 +28,7 @@ use common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
 use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
-use common::types::{Error, ServerConfig, StratumServerConfig, SyncState};
-use core::core::hash::Hashed;
+use common::types::{Error, ServerConfig, StratumServerConfig, SyncState, SyncStatus};
 use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use core::{consensus, genesis, global, pow};
 use grin::{dandelion_monitor, seed, sync};
@@ -38,7 +38,6 @@ use p2p;
 use pool;
 use store;
 use util::file::get_first_line;
-use util::LOGGER;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -79,7 +78,7 @@ impl Server {
 			if let Some(s) = enable_stratum_server {
 				if s {
 					{
-						let mut stratum_stats = serv.state_info.stratum_stats.write().unwrap();
+						let mut stratum_stats = serv.state_info.stratum_stats.write();
 						stratum_stats.is_enabled = true;
 					}
 					serv.start_stratum_server(c.clone());
@@ -110,18 +109,6 @@ impl Server {
 			None => false,
 			Some(b) => b,
 		};
-
-		// If archive mode is enabled then the flags should contains the FULL_HIST flag
-		if archive_mode && !config
-			.p2p_config
-			.capabilities
-			.contains(p2p::Capabilities::FULL_HIST)
-		{
-			config
-				.p2p_config
-				.capabilities
-				.insert(p2p::Capabilities::FULL_HIST);
-		}
 
 		let stop = Arc::new(AtomicBool::new(false));
 
@@ -155,7 +142,7 @@ impl Server {
 			global::ChainTypes::Mainnet => genesis::genesis_testnet2(), //TODO: Fix, obviously
 		};
 
-		info!(LOGGER, "Starting server, genesis block: {}", genesis.hash());
+		info!("Starting server, genesis block: {}", genesis.hash());
 
 		let db_env = Arc::new(store::new_env(config.db_root.clone()));
 		let shared_chain = Arc::new(chain::Chain::init(
@@ -170,8 +157,6 @@ impl Server {
 
 		pool_adapter.set_chain(shared_chain.clone());
 
-		let awaiting_peers = Arc::new(AtomicBool::new(false));
-
 		let net_adapter = Arc::new(NetToChainAdapter::new(
 			sync_state.clone(),
 			archive_mode,
@@ -181,11 +166,6 @@ impl Server {
 			config.clone(),
 		));
 
-		let block_1_hash = match shared_chain.get_header_by_height(1) {
-			Ok(header) => Some(header.hash()),
-			Err(_) => None,
-		};
-
 		let peer_db_env = Arc::new(store::new_named_env(config.db_root.clone(), "peer".into()));
 		let p2p_server = Arc::new(p2p::Server::new(
 			peer_db_env,
@@ -194,8 +174,6 @@ impl Server {
 			net_adapter.clone(),
 			genesis.hash(),
 			stop.clone(),
-			archive_mode,
-			block_1_hash,
 		)?);
 		chain_adapter.init(p2p_server.peers.clone());
 		pool_net_adapter.init(p2p_server.peers.clone());
@@ -204,10 +182,7 @@ impl Server {
 		if config.p2p_config.seeding_type.clone() != p2p::Seeding::Programmatic {
 			let seeder = match config.p2p_config.seeding_type.clone() {
 				p2p::Seeding::None => {
-					warn!(
-						LOGGER,
-						"No seed configured, will stay solo until connected to"
-					);
+					warn!("No seed configured, will stay solo until connected to");
 					seed::predefined_seeds(vec![])
 				}
 				p2p::Seeding::List => {
@@ -234,18 +209,13 @@ impl Server {
 
 		// Defaults to None (optional) in config file.
 		// This translates to false here so we do not skip by default.
-		let skip_sync_wait = match config.skip_sync_wait {
-			None => false,
-			Some(b) => b,
-		};
+		let skip_sync_wait = config.skip_sync_wait.unwrap_or(false);
+		sync_state.update(SyncStatus::AwaitingPeers(!skip_sync_wait));
 
 		sync::run_sync(
 			sync_state.clone(),
-			awaiting_peers.clone(),
 			p2p_server.peers.clone(),
 			shared_chain.clone(),
-			skip_sync_wait,
-			archive_mode,
 			stop.clone(),
 		);
 
@@ -254,7 +224,7 @@ impl Server {
 			.name("p2p-server".to_string())
 			.spawn(move || p2p_inner.listen());
 
-		info!(LOGGER, "Starting rest apis at: {}", &config.api_http_addr);
+		info!("Starting rest apis at: {}", &config.api_http_addr);
 		let api_secret = get_first_line(config.api_secret_path.clone());
 		api::start_rest_apis(
 			config.api_http_addr.clone(),
@@ -265,10 +235,7 @@ impl Server {
 			None,
 		);
 
-		info!(
-			LOGGER,
-			"Starting dandelion monitor: {}", &config.api_http_addr
-		);
+		info!("Starting dandelion monitor: {}", &config.api_http_addr);
 		dandelion_monitor::monitor_transactions(
 			config.dandelion_config.clone(),
 			tx_pool.clone(),
@@ -276,7 +243,7 @@ impl Server {
 			stop.clone(),
 		);
 
-		warn!(LOGGER, "Grin server started.");
+		warn!("Grin server started.");
 		Ok(Server {
 			config,
 			p2p: p2p_server,
@@ -285,7 +252,6 @@ impl Server {
 			verifier_cache,
 			sync_state,
 			state_info: ServerStateInfo {
-				awaiting_peers: awaiting_peers,
 				..Default::default()
 			},
 			stop,
@@ -335,7 +301,7 @@ impl Server {
 	/// internal miner, and should only be used for automated testing. Burns
 	/// reward if wallet_listener_url is 'None'
 	pub fn start_test_miner(&self, wallet_listener_url: Option<String>, stop: Arc<AtomicBool>) {
-		info!(LOGGER, "start_test_miner - start",);
+		info!("start_test_miner - start",);
 		let sync_state = self.sync_state.clone();
 		let config_wallet_url = match wallet_listener_url.clone() {
 			Some(u) => u,
@@ -388,8 +354,7 @@ impl Server {
 	/// other
 	/// consumers
 	pub fn get_server_stats(&self) -> Result<ServerStats, Error> {
-		let stratum_stats = self.state_info.stratum_stats.read().unwrap().clone();
-		let awaiting_peers = self.state_info.awaiting_peers.load(Ordering::Relaxed);
+		let stratum_stats = self.state_info.stratum_stats.read().clone();
 
 		// Fill out stats on our current difficulty calculation
 		// TODO: check the overhead of calculating this again isn't too much
@@ -406,7 +371,6 @@ impl Server {
 			let mut last_time = last_blocks[0].timestamp;
 			let tip_height = self.chain.head().unwrap().height as i64;
 			let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
-
 			let mut i = 1;
 
 			let diff_entries: Vec<DiffBlock> = last_blocks
@@ -414,7 +378,7 @@ impl Server {
 				.skip(1)
 				.map(|n| {
 					let dur = n.timestamp - last_time;
-					let height = earliest_block_height + i + 1;
+					let height = earliest_block_height + i;
 					i += 1;
 					last_time = n.timestamp;
 					DiffBlock {
@@ -450,7 +414,6 @@ impl Server {
 			head: self.head(),
 			header_head: self.header_head(),
 			sync_status: self.sync_state.status(),
-			awaiting_peers: awaiting_peers,
 			stratum_stats: stratum_stats,
 			peer_stats: peer_stats,
 			diff_stats: diff_stats,
@@ -466,6 +429,6 @@ impl Server {
 	/// Stops the test miner without stopping the p2p layer
 	pub fn stop_test_miner(&self, stop: Arc<AtomicBool>) {
 		stop.store(true, Ordering::Relaxed);
-		info!(LOGGER, "stop_test_miner - stop",);
+		info!("stop_test_miner - stop",);
 	}
 }

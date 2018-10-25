@@ -15,11 +15,11 @@
 //! Server stat collection types, to be used by tests, logging or GUI/TUI
 //! to collect information about server status
 
-use std::sync::atomic::AtomicBool;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::SystemTime;
+use util::RwLock;
 
-use core::pow::Difficulty;
+use core::consensus::graph_weight;
 
 use chrono::prelude::*;
 
@@ -31,8 +31,6 @@ use p2p;
 /// and populated when required
 #[derive(Clone)]
 pub struct ServerStateInfo {
-	/// whether we're in a state of waiting for peers at startup
-	pub awaiting_peers: Arc<AtomicBool>,
 	/// Stratum stats
 	pub stratum_stats: Arc<RwLock<StratumStats>>,
 }
@@ -40,7 +38,6 @@ pub struct ServerStateInfo {
 impl Default for ServerStateInfo {
 	fn default() -> ServerStateInfo {
 		ServerStateInfo {
-			awaiting_peers: Arc::new(AtomicBool::new(false)),
 			stratum_stats: Arc::new(RwLock::new(StratumStats::default())),
 		}
 	}
@@ -57,8 +54,6 @@ pub struct ServerStats {
 	pub header_head: chain::Tip,
 	/// Whether we're currently syncing
 	pub sync_status: SyncStatus,
-	/// Whether we're awaiting peers
-	pub awaiting_peers: bool,
 	/// Handle to current stratum server stats
 	pub stratum_stats: StratumStats,
 	/// Peer stats
@@ -163,8 +158,7 @@ pub struct PeerStats {
 impl StratumStats {
 	/// Calculate network hashrate
 	pub fn network_hashrate(&self) -> f64 {
-		42.0 * (self.network_difficulty as f64 / Difficulty::scale(self.edge_bits as u8) as f64)
-			/ 60.0
+		42.0 * (self.network_difficulty as f64 / graph_weight(self.edge_bits as u8) as f64) / 60.0
 	}
 }
 

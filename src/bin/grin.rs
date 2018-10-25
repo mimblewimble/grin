@@ -24,7 +24,7 @@ extern crate daemonize;
 extern crate serde;
 extern crate serde_json;
 #[macro_use]
-extern crate slog;
+extern crate log;
 extern crate term;
 
 extern crate grin_api as api;
@@ -45,7 +45,7 @@ use clap::{App, Arg, SubCommand};
 
 use config::config::{SERVER_CONFIG_FILE_NAME, WALLET_CONFIG_FILE_NAME};
 use core::global;
-use util::{init_logger, LOGGER};
+use util::init_logger;
 
 // include build information
 pub mod built_info {
@@ -73,9 +73,9 @@ pub fn info_strings() -> (String, String, String) {
 
 fn log_build_info() {
 	let (basic_info, detailed_info, deps) = info_strings();
-	info!(LOGGER, "{}", basic_info);
-	debug!(LOGGER, "{}", detailed_info);
-	trace!(LOGGER, "{}", deps);
+	info!("{}", basic_info);
+	debug!("{}", detailed_info);
+	trace!("{}", deps);
 }
 
 fn main() {
@@ -378,7 +378,6 @@ fn main() {
 			l.tui_running = Some(false);
 			init_logger(Some(l));
 			warn!(
-				LOGGER,
 				"Using wallet configuration file at {}",
 				w.config_file_path.as_ref().unwrap().to_str().unwrap()
 			);
@@ -399,12 +398,11 @@ fn main() {
 			global::set_mining_mode(s.members.as_mut().unwrap().server.clone().chain_type);
 			if let Some(file_path) = &s.config_file_path {
 				info!(
-					LOGGER,
 					"Using configuration file at {}",
 					file_path.to_str().unwrap()
 				);
 			} else {
-				info!(LOGGER, "Node configuration file not found, using default");
+				info!("Node configuration file not found, using default");
 			}
 			node_config = Some(s);
 		}

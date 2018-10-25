@@ -80,11 +80,6 @@ impl Difficulty {
 		Difficulty { num: max(num, 1) }
 	}
 
-	/// Compute difficulty scaling factor for graph defined by 2 * 2^edge_bits * edge_bits bits
-	pub fn scale(edge_bits: u8) -> u64 {
-		(2 << (edge_bits - global::base_edge_bits()) as u64) * (edge_bits as u64)
-	}
-
 	/// Computes the difficulty from a hash. Divides the maximum target by the
 	/// provided hash and applies the Cuck(at)oo size adjustment factor (see
 	/// https://lists.launchpad.net/mimblewimble/msg00494.html).

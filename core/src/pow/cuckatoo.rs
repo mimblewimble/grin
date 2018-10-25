@@ -54,14 +54,14 @@ where
 	pub fn new(max_edges: T, max_sols: u32, proof_size: usize) -> Result<Graph<T>, Error> {
 		let max_nodes = 2 * to_u64!(max_edges);
 		Ok(Graph {
-			max_edges: max_edges,
-			max_nodes: max_nodes,
+			max_edges,
+			max_nodes,
+			max_sols,
+			proof_size,
 			links: vec![],
 			adj_list: vec![],
 			visited: Bitmap::create(),
-			max_sols: max_sols,
 			solutions: vec![],
-			proof_size: proof_size,
 			nil: T::max_value(),
 		})
 	}
@@ -241,7 +241,7 @@ where
 
 	/// Simple implementation of algorithm
 
-	pub fn find_cycles_iter<'a, I>(&mut self, iter: I) -> Result<Vec<Proof>, Error>
+	pub fn find_cycles_iter<I>(&mut self, iter: I) -> Result<Vec<Proof>, Error>
 	where
 		I: Iterator<Item = u64>,
 	{
@@ -260,7 +260,7 @@ where
 		for s in &self.graph.solutions {
 			self.verify_impl(&s)?;
 		}
-		if self.graph.solutions.len() == 0 {
+		if self.graph.solutions.is_empty() {
 			Err(ErrorKind::NoSolution)?
 		} else {
 			Ok(self.graph.solutions.clone())

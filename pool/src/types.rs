@@ -18,6 +18,7 @@
 use chrono::prelude::{DateTime, Utc};
 
 use core::consensus;
+use core::core::block;
 use core::core::committed;
 use core::core::hash::Hash;
 use core::core::transaction::{self, Transaction};
@@ -128,7 +129,7 @@ pub struct PoolEntry {
 }
 
 /// The possible states a pool entry can be in.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PoolEntryState {
 	/// A new entry, not yet processed.
 	Fresh,
@@ -163,6 +164,8 @@ pub struct TxSource {
 pub enum PoolError {
 	/// An invalid pool entry caused by underlying tx validation error
 	InvalidTx(transaction::Error),
+	/// An invalid pool entry caused by underlying block validation error
+	InvalidBlock(block::Error),
 	/// Underlying keychain error.
 	Keychain(keychain::Error),
 	/// Underlying "committed" error.
@@ -189,6 +192,12 @@ pub enum PoolError {
 impl From<transaction::Error> for PoolError {
 	fn from(e: transaction::Error) -> PoolError {
 		PoolError::InvalidTx(e)
+	}
+}
+
+impl From<block::Error> for PoolError {
+	fn from(e: block::Error) -> PoolError {
+		PoolError::InvalidBlock(e)
 	}
 }
 

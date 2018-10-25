@@ -22,7 +22,6 @@ use common::types::{SyncState, SyncStatus};
 use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::global;
 use p2p;
-use util::LOGGER;
 
 pub struct BodySync {
 	chain: Arc<chain::Chain>,
@@ -87,14 +86,13 @@ impl BodySync {
 
 	fn body_sync(&mut self) {
 		let horizon = global::cut_through_horizon() as u64;
-		let body_head: chain::Tip = self.chain.head().unwrap();
-		let header_head: chain::Tip = self.chain.header_head().unwrap();
-		let sync_head: chain::Tip = self.chain.get_sync_head().unwrap();
+		let body_head = self.chain.head().unwrap();
+		let header_head = self.chain.header_head().unwrap();
+		let sync_head = self.chain.get_sync_head().unwrap();
 
 		self.reset();
 
 		debug!(
-			LOGGER,
 			"body_sync: body_head - {}, {}, header_head - {}, {}, sync_head - {}, {}",
 			body_head.last_block_h,
 			body_head.height,
@@ -123,15 +121,16 @@ impl BodySync {
 		}
 		hashes.reverse();
 
+		if oldest_height < header_head.height.saturating_sub(horizon) {
+			debug!("body_sync: cannot sync full blocks earlier than horizon.");
+			return;
+		}
+
+		let peers = self.peers.more_work_peers();
+
 		// if we have 5 peers to sync from then ask for 50 blocks total (peer_count *
 		// 10) max will be 80 if all 8 peers are advertising more work
 		// also if the chain is already saturated with orphans, throttle
-		let peers = if oldest_height < header_head.height.saturating_sub(horizon) {
-			self.peers.more_work_archival_peers()
-		} else {
-			self.peers.more_work_peers()
-		};
-
 		let block_count = cmp::min(
 			cmp::min(100, peers.len() * p2p::SEND_CHANNEL_CAP),
 			chain::MAX_ORPHAN_SIZE.saturating_sub(self.chain.orphans_len()) + 1,
@@ -148,7 +147,6 @@ impl BodySync {
 
 		if hashes_to_get.len() > 0 {
 			debug!(
-				LOGGER,
 				"block_sync: {}/{} requesting blocks {:?} from {} peers",
 				body_head.height,
 				header_head.height,
@@ -161,7 +159,7 @@ impl BodySync {
 			for hash in hashes_to_get.clone() {
 				if let Some(peer) = peers_iter.next() {
 					if let Err(e) = peer.send_block_request(*hash) {
-						debug!(LOGGER, "Skipped request to {}: {:?}", peer.info.addr, e);
+						debug!("Skipped request to {}: {:?}", peer.info.addr, e);
 					} else {
 						self.body_sync_hashes.push(hash.clone());
 					}
@@ -199,7 +197,6 @@ impl BodySync {
 						.filter(|x| !self.chain.get_block(*x).is_ok() && !self.chain.is_orphan(*x))
 						.collect::<Vec<_>>();
 					debug!(
-						LOGGER,
 						"body_sync: {}/{} blocks received, and no more in 200ms",
 						self.body_sync_hashes.len() - hashes_not_get.len(),
 						self.body_sync_hashes.len(),
@@ -210,7 +207,6 @@ impl BodySync {
 			None => {
 				if Utc::now() - self.sync_start_ts > Duration::seconds(5) {
 					debug!(
-						LOGGER,
 						"body_sync: 0/{} blocks received in 5s",
 						self.body_sync_hashes.len(),
 					);

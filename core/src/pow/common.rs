@@ -78,19 +78,19 @@ where
 	}
 }
 
-pub fn set_header_nonce(header: Vec<u8>, nonce: Option<u32>) -> Result<[u64; 4], Error> {
+pub fn set_header_nonce(header: &[u8], nonce: Option<u32>) -> Result<[u64; 4], Error> {
 	if let Some(n) = nonce {
 		let len = header.len();
-		let mut header = header.clone();
+		let mut header = header.to_owned();
 		header.truncate(len - mem::size_of::<u32>());
 		header.write_u32::<LittleEndian>(n)?;
-		create_siphash_keys(header)
+		create_siphash_keys(&header)
 	} else {
-		create_siphash_keys(header)
+		create_siphash_keys(&header)
 	}
 }
 
-pub fn create_siphash_keys(header: Vec<u8>) -> Result<[u64; 4], Error> {
+pub fn create_siphash_keys(header: &[u8]) -> Result<[u64; 4], Error> {
 	let h = blake2b(32, &[], &header);
 	let hb = h.as_bytes();
 	let mut rdr = Cursor::new(hb);
@@ -163,7 +163,7 @@ where
 
 	/// Reset the main keys used for siphash from the header and nonce
 	pub fn reset_header_nonce(&mut self, header: Vec<u8>, nonce: Option<u32>) -> Result<(), Error> {
-		self.siphash_keys = set_header_nonce(header, nonce)?;
+		self.siphash_keys = set_header_nonce(&header, nonce)?;
 		Ok(())
 	}
 
@@ -175,7 +175,7 @@ where
 		);
 		let mut masked = hash_u64 & self.edge_mask.to_u64().ok_or(ErrorKind::IntegerCast)?;
 		if shift {
-			masked = masked << 1;
+			masked <<= 1;
 			masked |= uorv;
 		}
 		Ok(T::from(masked).ok_or(ErrorKind::IntegerCast)?)

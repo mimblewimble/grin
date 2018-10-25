@@ -17,8 +17,9 @@
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::collections::HashSet;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::{error, fmt};
+use util::RwLock;
 
 use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;
@@ -176,7 +177,7 @@ impl Readable for TxKernel {
 		let features =
 			KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(TxKernel {
-			features: features,
+			features,
 			fee: reader.read_u64()?,
 			lock_height: reader.read_u64()?,
 			excess: Commitment::read(reader)?,
@@ -197,7 +198,7 @@ impl TxKernel {
 	pub fn verify(&self) -> Result<(), secp::Error> {
 		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
 		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
+		let secp = secp.lock();
 		let sig = &self.excess_sig;
 		// Verify aggsig directly in libsecp
 		let pubkey = &self.excess.to_pubkey(&secp)?;
@@ -229,13 +230,13 @@ impl TxKernel {
 
 	/// Builds a new tx kernel with the provided fee.
 	pub fn with_fee(self, fee: u64) -> TxKernel {
-		TxKernel { fee: fee, ..self }
+		TxKernel { fee, ..self }
 	}
 
 	/// Builds a new tx kernel with the provided lock_height.
 	pub fn with_lock_height(self, lock_height: u64) -> TxKernel {
 		TxKernel {
-			lock_height: lock_height,
+			lock_height,
 			..self
 		}
 	}
@@ -355,9 +356,9 @@ impl TransactionBody {
 		verify_sorted: bool,
 	) -> Result<TransactionBody, Error> {
 		let body = TransactionBody {
-			inputs: inputs,
-			outputs: outputs,
-			kernels: kernels,
+			inputs,
+			outputs,
+			kernels,
 		};
 
 		if verify_sorted {
@@ -435,7 +436,7 @@ impl TransactionBody {
 
 	/// Calculate transaction weight from transaction details
 	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> u32 {
-		let mut body_weight = -1 * (input_len as i32) + (4 * output_len as i32) + kernel_len as i32;
+		let mut body_weight = -(input_len as i32) + (4 * output_len as i32) + kernel_len as i32;
 		if body_weight < 1 {
 			body_weight = 1;
 		}
@@ -553,12 +554,12 @@ impl TransactionBody {
 
 		// Find all the outputs that have not had their rangeproofs verified.
 		let outputs = {
-			let mut verifier = verifier.write().unwrap();
+			let mut verifier = verifier.write();
 			verifier.filter_rangeproof_unverified(&self.outputs)
 		};
 
 		// Now batch verify all those unverified rangeproofs
-		if outputs.len() > 0 {
+		if !outputs.is_empty() {
 			let mut commits = vec![];
 			let mut proofs = vec![];
 			for x in &outputs {
@@ -570,7 +571,7 @@ impl TransactionBody {
 
 		// Find all the kernels that have not yet been verified.
 		let kernels = {
-			let mut verifier = verifier.write().unwrap();
+			let mut verifier = verifier.write();
 			verifier.filter_kernel_sig_unverified(&self.kernels)
 		};
 
@@ -583,7 +584,7 @@ impl TransactionBody {
 
 		// Cache the successful verification results for the new outputs and kernels.
 		{
-			let mut verifier = verifier.write().unwrap();
+			let mut verifier = verifier.write();
 			verifier.add_rangeproof_verified(outputs);
 			verifier.add_kernel_sig_verified(kernels);
 		}
@@ -686,10 +687,7 @@ impl Transaction {
 	/// Creates a new transaction using this transaction as a template
 	/// and with the specified offset.
 	pub fn with_offset(self, offset: BlindingFactor) -> Transaction {
-		Transaction {
-			offset: offset,
-			..self
-		}
+		Transaction { offset, ..self }
 	}
 
 	/// Builds a new transaction with the provided inputs added. Existing
@@ -911,7 +909,7 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	// now compute the total kernel offset
 	let total_kernel_offset = {
 		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
+		let secp = secp.lock();
 		let mut positive_key = vec![mk_tx.offset]
 			.into_iter()
 			.filter(|x| *x != BlindingFactor::zero())
@@ -1071,7 +1069,7 @@ impl Readable for Output {
 			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 
 		Ok(Output {
-			features: features,
+			features,
 			commit: Commitment::read(reader)?,
 			proof: RangeProof::read(reader)?,
 		})
@@ -1092,7 +1090,7 @@ impl Output {
 	/// Validates the range proof using the commitment
 	pub fn verify_proof(&self) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
+		let secp = secp.lock();
 		match secp.verify_bullet_proof(self.commit, self.proof, None) {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
@@ -1105,7 +1103,7 @@ impl Output {
 		proofs: &Vec<RangeProof>,
 	) -> Result<(), secp::Error> {
 		let secp = static_secp_instance();
-		let secp = secp.lock().unwrap();
+		let secp = secp.lock();
 		match secp.verify_bullet_proof_multi(commits.clone(), proofs.clone(), None) {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
@@ -1130,8 +1128,8 @@ impl OutputIdentifier {
 	/// Build a new output_identifier.
 	pub fn new(features: OutputFeatures, commit: &Commitment) -> OutputIdentifier {
 		OutputIdentifier {
-			features: features,
-			commit: commit.clone(),
+			features,
+			commit: *commit,
 		}
 	}
 
@@ -1151,9 +1149,9 @@ impl OutputIdentifier {
 	/// Converts this identifier to a full output, provided a RangeProof
 	pub fn into_output(self, proof: RangeProof) -> Output {
 		Output {
+			proof,
 			features: self.features,
 			commit: self.commit,
-			proof: proof,
 		}
 	}
 
@@ -1195,8 +1193,8 @@ impl Readable for OutputIdentifier {
 		let features =
 			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(OutputIdentifier {
+			features,
 			commit: Commitment::read(reader)?,
-			features: features,
 		})
 	}
 }

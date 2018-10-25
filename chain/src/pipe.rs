@@ -14,7 +14,8 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use chrono::prelude::Utc;
 use chrono::Duration;
@@ -34,7 +35,6 @@ use grin_store;
 use store;
 use txhashset;
 use types::{Options, Tip};
-use util::LOGGER;
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.
@@ -70,7 +70,6 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 	// spend resources reading the full block when its header is invalid
 
 	debug!(
-		LOGGER,
 		"pipe: process_block {} at {} with {} inputs, {} outputs, {} kernels",
 		b.hash(),
 		b.header.height,
@@ -167,7 +166,6 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 	})?;
 
 	trace!(
-		LOGGER,
 		"pipe: process_block: {} at {} is valid, save and append.",
 		b.hash(),
 		b.header.height,
@@ -189,7 +187,6 @@ pub fn sync_block_headers(
 ) -> Result<Option<Tip>, Error> {
 	if let Some(header) = headers.first() {
 		debug!(
-			LOGGER,
 			"pipe: sync_block_headers: {} headers from {} at {}",
 			headers.len(),
 			header.hash(),
@@ -250,7 +247,6 @@ pub fn sync_block_headers(
 /// it.
 pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	debug!(
-		LOGGER,
 		"pipe: process_block_header: {} at {}",
 		header.hash(),
 		header.height,
@@ -288,7 +284,7 @@ fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), 
 /// Keeps duplicates from the network in check.
 /// Checks against the cache of recently processed block hashes.
 fn check_known_cache(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	let mut cache = ctx.block_hashes_cache.write().unwrap();
+	let mut cache = ctx.block_hashes_cache.write();
 	if cache.contains_key(&header.hash()) {
 		return Err(ErrorKind::Unfit("already known in cache".to_string()).into());
 	}
@@ -355,8 +351,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {
 		error!(
-			LOGGER,
-			"Invalid block header version received ({}), maybe update Grin?", header.version
+			"Invalid block header version received ({}), maybe update Grin?",
+			header.version
 		);
 		return Err(ErrorKind::InvalidBlockVersion(header.version).into());
 	}
@@ -377,8 +373,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		let edge_bits = header.pow.edge_bits();
 		if !(ctx.pow_verifier)(header, edge_bits).is_ok() {
 			error!(
-				LOGGER,
-				"pipe: error validating header with cuckoo edge_bits {}", edge_bits
+				"pipe: error validating header with cuckoo edge_bits {}",
+				edge_bits
 			);
 			return Err(ErrorKind::InvalidPow.into());
 		}
@@ -433,7 +429,6 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		let next_header_info = consensus::next_difficulty(header.height, diff_iter);
 		if target_difficulty != next_header_info.difficulty {
 			info!(
-				LOGGER,
 				"validate_header: header target difficulty {} != {}",
 				target_difficulty.to_num(),
 				next_header_info.difficulty.to_num()
@@ -553,8 +548,8 @@ fn update_head(b: &Block, ctx: &BlockContext) -> Result<Option<Tip>, Error> {
 			.map_err(|e| ErrorKind::StoreErr(e, "pipe save body".to_owned()))?;
 
 		debug!(
-			LOGGER,
-			"pipe: head updated to {} at {}", tip.last_block_h, tip.height
+			"pipe: head updated to {} at {}",
+			tip.last_block_h, tip.height
 		);
 
 		Ok(Some(tip))
@@ -574,7 +569,7 @@ fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Er
 	batch
 		.save_sync_head(&tip)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save sync head".to_owned()))?;
-	debug!(LOGGER, "sync head {} @ {}", bh.hash(), bh.height);
+	debug!("sync head {} @ {}", bh.hash(), bh.height);
 	Ok(())
 }
 
@@ -588,8 +583,8 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 			.map_err(|e| ErrorKind::StoreErr(e, "pipe save header head".to_owned()))?;
 
 		debug!(
-			LOGGER,
-			"pipe: header_head updated to {} at {}", tip.last_block_h, tip.height
+			"pipe: header_head updated to {} at {}",
+			tip.last_block_h, tip.height
 		);
 
 		Ok(Some(tip))
@@ -621,7 +616,6 @@ pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension) -> Resul
 	let forked_header = ext.batch.get_block_header(&current)?;
 
 	trace!(
-		LOGGER,
 		"rewind_and_apply_fork @ {} [{}], was @ {} [{}]",
 		forked_header.height,
 		forked_header.hash(),
@@ -632,11 +626,7 @@ pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension) -> Resul
 	// Rewind the txhashset state back to the block where we forked from the most work chain.
 	ext.rewind(&forked_header)?;
 
-	trace!(
-		LOGGER,
-		"rewind_and_apply_fork: blocks on fork: {:?}",
-		fork_hashes,
-	);
+	trace!("rewind_and_apply_fork: blocks on fork: {:?}", fork_hashes,);
 
 	// Now re-apply all blocks on this fork.
 	for (_, h) in fork_hashes {

@@ -20,15 +20,16 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use util::{Mutex, RwLock};
 
 use common::api;
 use common::serde_json;
 use store;
+use util;
 use util::secp::pedersen::Commitment;
-use util::{self, LOGGER};
 
 use common::failure::ResultExt;
 
@@ -145,7 +146,7 @@ where
 			thread::sleep(Duration::from_millis(10));
 			// read queue
 			let m = self.rx.recv().unwrap();
-			trace!(LOGGER, "Wallet Client Proxy Received: {:?}", m);
+			trace!("Wallet Client Proxy Received: {:?}", m);
 			let resp = match m.method.as_ref() {
 				"get_chain_height" => self.get_chain_height(m)?,
 				"get_outputs_from_node" => self.get_outputs_from_node(m)?,
@@ -306,7 +307,7 @@ impl LocalWalletClient {
 
 	/// get an instance of the send queue for other senders
 	pub fn get_send_instance(&self) -> Sender<WalletProxyMessage> {
-		self.tx.lock().unwrap().clone()
+		self.tx.lock().clone()
 	}
 }
 
@@ -338,13 +339,13 @@ impl WalletClient for LocalWalletClient {
 			body: serde_json::to_string(slate).unwrap(),
 		};
 		{
-			let p = self.proxy_tx.lock().unwrap();
+			let p = self.proxy_tx.lock();
 			p.send(m)
 				.context(libwallet::ErrorKind::ClientCallback("Send TX Slate"))?;
 		}
-		let r = self.rx.lock().unwrap();
+		let r = self.rx.lock();
 		let m = r.recv().unwrap();
-		trace!(LOGGER, "Received send_tx_slate response: {:?}", m.clone());
+		trace!("Received send_tx_slate response: {:?}", m.clone());
 		Ok(
 			serde_json::from_str(&m.body).context(libwallet::ErrorKind::ClientCallback(
 				"Parsing send_tx_slate response",
@@ -362,13 +363,13 @@ impl WalletClient for LocalWalletClient {
 			body: serde_json::to_string(tx).unwrap(),
 		};
 		{
-			let p = self.proxy_tx.lock().unwrap();
+			let p = self.proxy_tx.lock();
 			p.send(m)
 				.context(libwallet::ErrorKind::ClientCallback("post_tx send"))?;
 		}
-		let r = self.rx.lock().unwrap();
+		let r = self.rx.lock();
 		let m = r.recv().unwrap();
-		trace!(LOGGER, "Received post_tx response: {:?}", m.clone());
+		trace!("Received post_tx response: {:?}", m.clone());
 		Ok(())
 	}
 
@@ -381,18 +382,14 @@ impl WalletClient for LocalWalletClient {
 			body: "".to_owned(),
 		};
 		{
-			let p = self.proxy_tx.lock().unwrap();
+			let p = self.proxy_tx.lock();
 			p.send(m).context(libwallet::ErrorKind::ClientCallback(
 				"Get chain height send",
 			))?;
 		}
-		let r = self.rx.lock().unwrap();
+		let r = self.rx.lock();
 		let m = r.recv().unwrap();
-		trace!(
-			LOGGER,
-			"Received get_chain_height response: {:?}",
-			m.clone()
-		);
+		trace!("Received get_chain_height response: {:?}", m.clone());
 		Ok(m.body
 			.parse::<u64>()
 			.context(libwallet::ErrorKind::ClientCallback(
@@ -417,12 +414,12 @@ impl WalletClient for LocalWalletClient {
 			body: query_str,
 		};
 		{
-			let p = self.proxy_tx.lock().unwrap();
+			let p = self.proxy_tx.lock();
 			p.send(m).context(libwallet::ErrorKind::ClientCallback(
 				"Get outputs from node send",
 			))?;
 		}
-		let r = self.rx.lock().unwrap();
+		let r = self.rx.lock();
 		let m = r.recv().unwrap();
 		let outputs: Vec<api::Output> = serde_json::from_str(&m.body).unwrap();
 		let mut api_outputs: HashMap<pedersen::Commitment, (String, u64)> = HashMap::new();
@@ -456,13 +453,13 @@ impl WalletClient for LocalWalletClient {
 			body: query_str,
 		};
 		{
-			let p = self.proxy_tx.lock().unwrap();
+			let p = self.proxy_tx.lock();
 			p.send(m).context(libwallet::ErrorKind::ClientCallback(
 				"Get outputs from node by PMMR index send",
 			))?;
 		}
 
-		let r = self.rx.lock().unwrap();
+		let r = self.rx.lock();
 		let m = r.recv().unwrap();
 		let o: api::OutputListing = serde_json::from_str(&m.body).unwrap();
 

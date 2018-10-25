@@ -30,8 +30,8 @@ use libwallet::types::{
 	BlockFees, CbData, OutputData, OutputStatus, TxLogEntry, TxLogEntryType, WalletBackend,
 	WalletClient, WalletInfo,
 };
+use util;
 use util::secp::pedersen;
-use util::{self, LOGGER};
 
 /// Retrieve all of the outputs (doesn't attempt to update from node)
 pub fn retrieve_outputs<T: ?Sized, C, K>(
@@ -201,14 +201,10 @@ where
 		// these changes as the chain is syncing, incorrect or forking
 		if height < last_confirmed_height {
 			warn!(
-				LOGGER,
 				"Not updating outputs as the height of the node's chain \
 				 is less than the last reported wallet update height."
 			);
-			warn!(
-				LOGGER,
-				"Please wait for sync on node to complete or fork to resolve and try again."
-			);
+			warn!("Please wait for sync on node to complete or fork to resolve and try again.");
 			return Ok(());
 		}
 		let mut batch = wallet.batch()?;
@@ -274,7 +270,7 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	debug!(LOGGER, "Refreshing wallet outputs");
+	debug!("Refreshing wallet outputs");
 
 	// build a local map of wallet outputs keyed by commit
 	// and a list of outputs we want to query the node for
@@ -423,7 +419,6 @@ where
 	}
 
 	debug!(
-		LOGGER,
 		"receive_coinbase: built candidate output - {:?}, {}",
 		key_id.clone(),
 		key_id,
@@ -432,7 +427,7 @@ where
 	let mut block_fees = block_fees.clone();
 	block_fees.key_id = Some(key_id.clone());
 
-	debug!(LOGGER, "receive_coinbase: {:?}", block_fees);
+	debug!("receive_coinbase: {:?}", block_fees);
 
 	let (out, kern) = reward::output(
 		wallet.keychain(),

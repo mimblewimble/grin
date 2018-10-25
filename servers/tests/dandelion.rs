@@ -13,7 +13,7 @@
 // limitations under the License.
 
 #[macro_use]
-extern crate slog;
+extern crate log;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
@@ -27,10 +27,9 @@ extern crate grin_wallet as wallet;
 mod framework;
 
 use framework::{LocalServerContainer, LocalServerContainerConfig};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::{thread, time};
-
-use util::LOGGER;
+use util::Mutex;
 
 /// Start 1 node mining, 1 non mining node and two wallets.
 /// Then send a transaction from one wallet to another and propagate it a stem
@@ -56,12 +55,12 @@ fn test_dandelion_timeout() {
 	let coinbase_wallet = Arc::new(Mutex::new(
 		LocalServerContainer::new(coinbase_config).unwrap(),
 	));
-	let coinbase_wallet_config = { coinbase_wallet.lock().unwrap().wallet_config.clone() };
+	let coinbase_wallet_config = { coinbase_wallet.lock().wallet_config.clone() };
 
 	let coinbase_seed = LocalServerContainer::get_wallet_seed(&coinbase_wallet_config);
 
 	let _ = thread::spawn(move || {
-		let mut w = coinbase_wallet.lock().unwrap();
+		let mut w = coinbase_wallet.lock();
 		w.run_wallet(0);
 	});
 
@@ -71,12 +70,12 @@ fn test_dandelion_timeout() {
 	recp_config.wallet_port = 20002;
 	let target_wallet = Arc::new(Mutex::new(LocalServerContainer::new(recp_config).unwrap()));
 	let target_wallet_cloned = target_wallet.clone();
-	let recp_wallet_config = { target_wallet.lock().unwrap().wallet_config.clone() };
+	let recp_wallet_config = { target_wallet.lock().wallet_config.clone() };
 
 	let recp_seed = LocalServerContainer::get_wallet_seed(&recp_wallet_config);
 	//Start up a second wallet, to receive
 	let _ = thread::spawn(move || {
-		let mut w = target_wallet_cloned.lock().unwrap();
+		let mut w = target_wallet_cloned.lock();
 		w.run_wallet(0);
 	});
 
@@ -135,7 +134,7 @@ fn test_dandelion_timeout() {
 			LocalServerContainer::get_wallet_info(&coinbase_wallet_config, &coinbase_seed);
 	}
 
-	warn!(LOGGER, "Sending 50 Grins to recipient wallet");
+	warn!("Sending 50 Grins to recipient wallet");
 
 	// Sending stem transaction
 	LocalServerContainer::send_amount_to(

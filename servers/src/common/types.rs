@@ -14,7 +14,8 @@
 
 //! Server types
 use std::convert::From;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use api;
 use chain;
@@ -24,7 +25,6 @@ use core::{core, pow};
 use p2p;
 use pool;
 use store;
-use util::LOGGER;
 use wallet;
 
 /// Error type wrapping underlying module errors.
@@ -44,6 +44,8 @@ pub enum Error {
 	Wallet(wallet::Error),
 	/// Error originating from the cuckoo miner
 	Cuckoo(pow::Error),
+	/// Error originating from the transaction pool.
+	Pool(pool::PoolError),
 }
 
 impl From<core::block::Error> for Error {
@@ -84,6 +86,12 @@ impl From<api::Error> for Error {
 impl From<wallet::Error> for Error {
 	fn from(e: wallet::Error) -> Error {
 		Error::Wallet(e)
+	}
+}
+
+impl From<pool::PoolError> for Error {
+	fn from(e: pool::PoolError) -> Error {
+		Error::Pool(e)
 	}
 }
 
@@ -160,28 +168,6 @@ pub struct ServerConfig {
 	pub stratum_mining_config: Option<StratumServerConfig>,
 }
 
-impl ServerConfig {
-	/// Configuration items validation check
-	pub fn validation_check(&mut self) {
-		// check [server.p2p_config.capabilities] with 'archive_mode' in [server]
-		if let Some(archive) = self.archive_mode {
-			// note: slog not available before config loaded, only print here.
-			if archive != self
-				.p2p_config
-				.capabilities
-				.contains(p2p::Capabilities::FULL_HIST)
-			{
-				// if conflict, 'archive_mode' win
-				self.p2p_config
-					.capabilities
-					.toggle(p2p::Capabilities::FULL_HIST);
-			}
-		}
-
-		// todo: other checks if needed
-	}
-}
-
 impl Default for ServerConfig {
 	fn default() -> ServerConfig {
 		ServerConfig {
@@ -250,6 +236,9 @@ pub enum SyncStatus {
 	Initial,
 	/// Not syncing
 	NoSync,
+	/// Not enough peers to do anything yet, boolean indicates whether
+	/// we should wait at all or ignore and start ASAP
+	AwaitingPeers(bool),
 	/// Downloading block headers
 	HeaderSync {
 		current_height: u64,
@@ -297,12 +286,12 @@ impl SyncState {
 	/// Whether the current state matches any active syncing operation.
 	/// Note: This includes our "initial" state.
 	pub fn is_syncing(&self) -> bool {
-		*self.current.read().unwrap() != SyncStatus::NoSync
+		*self.current.read() != SyncStatus::NoSync
 	}
 
 	/// Current syncing status
 	pub fn status(&self) -> SyncStatus {
-		*self.current.read().unwrap()
+		*self.current.read()
 	}
 
 	/// Update the syncing status
@@ -311,12 +300,9 @@ impl SyncState {
 			return;
 		}
 
-		let mut status = self.current.write().unwrap();
+		let mut status = self.current.write();
 
-		debug!(
-			LOGGER,
-			"sync_state: sync_status: {:?} -> {:?}", *status, new_status,
-		);
+		debug!("sync_state: sync_status: {:?} -> {:?}", *status, new_status,);
 
 		*status = new_status;
 	}
@@ -324,7 +310,7 @@ impl SyncState {
 	/// Update txhashset downloading progress
 	pub fn update_txhashset_download(&self, new_status: SyncStatus) -> bool {
 		if let SyncStatus::TxHashsetDownload { .. } = new_status {
-			let mut status = self.current.write().unwrap();
+			let mut status = self.current.write();
 			*status = new_status;
 			true
 		} else {
@@ -334,7 +320,7 @@ impl SyncState {
 
 	/// Communicate sync error
 	pub fn set_sync_error(&self, error: Error) {
-		*self.sync_error.write().unwrap() = Some(error);
+		*self.sync_error.write() = Some(error);
 	}
 
 	/// Get sync error
@@ -344,7 +330,7 @@ impl SyncState {
 
 	/// Clear sync error
 	pub fn clear_sync_error(&self) {
-		*self.sync_error.write().unwrap() = None;
+		*self.sync_error.write() = None;
 	}
 }
 
@@ -354,7 +340,7 @@ impl chain::TxHashsetWriteStatus for SyncState {
 	}
 
 	fn on_validation(&self, vkernels: u64, vkernel_total: u64, vrproofs: u64, vrproof_total: u64) {
-		let mut status = self.current.write().unwrap();
+		let mut status = self.current.write();
 		match *status {
 			SyncStatus::TxHashsetValidation {
 				kernels,

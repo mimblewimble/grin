@@ -14,7 +14,8 @@
 
 //! Implements storage primitives required by the chain
 
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use util::RwLock;
 
 use croaring::Bitmap;
 use lmdb;
@@ -96,7 +97,7 @@ impl ChainStore {
 
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
 		{
-			let mut block_sums_cache = self.block_sums_cache.write().unwrap();
+			let mut block_sums_cache = self.block_sums_cache.write();
 
 			// cache hit - return the value from the cache
 			if let Some(block_sums) = block_sums_cache.get_mut(h) {
@@ -112,7 +113,7 @@ impl ChainStore {
 		// cache miss - so adding to the cache for next time
 		if let Ok(block_sums) = block_sums {
 			{
-				let mut block_sums_cache = self.block_sums_cache.write().unwrap();
+				let mut block_sums_cache = self.block_sums_cache.write();
 				block_sums_cache.insert(*h, block_sums.clone());
 			}
 			Ok(block_sums)
@@ -123,7 +124,7 @@ impl ChainStore {
 
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		{
-			let mut header_cache = self.header_cache.write().unwrap();
+			let mut header_cache = self.header_cache.write();
 
 			// cache hit - return the value from the cache
 			if let Some(header) = header_cache.get_mut(h) {
@@ -140,7 +141,7 @@ impl ChainStore {
 		// cache miss - so adding to the cache for next time
 		if let Ok(header) = header {
 			{
-				let mut header_cache = self.header_cache.write().unwrap();
+				let mut header_cache = self.header_cache.write();
 				header_cache.insert(*h, header.clone());
 			}
 			Ok(header)
@@ -310,7 +311,7 @@ impl<'a> Batch<'a> {
 		let hash = header.hash();
 
 		{
-			let mut header_cache = self.header_cache.write().unwrap();
+			let mut header_cache = self.header_cache.write();
 			header_cache.insert(hash, header.clone());
 		}
 
@@ -350,7 +351,7 @@ impl<'a> Batch<'a> {
 
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		{
-			let mut header_cache = self.header_cache.write().unwrap();
+			let mut header_cache = self.header_cache.write();
 
 			// cache hit - return the value from the cache
 			if let Some(header) = header_cache.get_mut(h) {
@@ -367,7 +368,7 @@ impl<'a> Batch<'a> {
 		// cache miss - so adding to the cache for next time
 		if let Ok(header) = header {
 			{
-				let mut header_cache = self.header_cache.write().unwrap();
+				let mut header_cache = self.header_cache.write();
 				header_cache.insert(*h, header.clone());
 			}
 			Ok(header)
@@ -390,7 +391,7 @@ impl<'a> Batch<'a> {
 
 	pub fn save_block_sums(&self, h: &Hash, sums: &BlockSums) -> Result<(), Error> {
 		{
-			let mut block_sums_cache = self.block_sums_cache.write().unwrap();
+			let mut block_sums_cache = self.block_sums_cache.write();
 			block_sums_cache.insert(*h, sums.clone());
 		}
 
@@ -400,7 +401,7 @@ impl<'a> Batch<'a> {
 
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
 		{
-			let mut block_sums_cache = self.block_sums_cache.write().unwrap();
+			let mut block_sums_cache = self.block_sums_cache.write();
 
 			// cache hit - return the value from the cache
 			if let Some(block_sums) = block_sums_cache.get_mut(h) {
@@ -416,7 +417,7 @@ impl<'a> Batch<'a> {
 		// cache miss - so adding to the cache for next time
 		if let Ok(block_sums) = block_sums {
 			{
-				let mut block_sums_cache = self.block_sums_cache.write().unwrap();
+				let mut block_sums_cache = self.block_sums_cache.write();
 				block_sums_cache.insert(*h, block_sums.clone());
 			}
 			Ok(block_sums)
@@ -511,7 +512,7 @@ impl<'a> Batch<'a> {
 		self.save_block_input_bitmap(&block.hash(), &bitmap)?;
 
 		// Finally cache it locally for use later.
-		let mut cache = self.block_input_bitmap_cache.write().unwrap();
+		let mut cache = self.block_input_bitmap_cache.write();
 		cache.insert(block.hash(), bitmap.serialize());
 
 		Ok(bitmap)
@@ -519,7 +520,7 @@ impl<'a> Batch<'a> {
 
 	pub fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
 		{
-			let mut cache = self.block_input_bitmap_cache.write().unwrap();
+			let mut cache = self.block_input_bitmap_cache.write();
 
 			// cache hit - return the value from the cache
 			if let Some(bytes) = cache.get_mut(bh) {

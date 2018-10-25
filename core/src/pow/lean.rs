@@ -37,7 +37,7 @@ impl Lean {
 
 		// edge bitmap, before trimming all of them are on
 		let mut edges = Bitmap::create_with_capacity(params.num_edges as u32);
-		edges.flip_inplace(0..params.num_edges.into());
+		edges.flip_inplace(0..params.num_edges);
 
 		Lean { params, edges }
 	}

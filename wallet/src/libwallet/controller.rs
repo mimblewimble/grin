@@ -33,10 +33,11 @@ use serde_json;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use url::form_urlencoded;
 use util::secp::pedersen;
-use util::{to_base64, LOGGER};
+use util::to_base64;
+use util::Mutex;
 
 /// Instantiate wallet Owner API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
@@ -94,7 +95,7 @@ where
 		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 
 	let mut apis = ApiServer::new();
-	info!(LOGGER, "Starting HTTP Owner API server at {}.", addr);
+	info!("Starting HTTP Owner API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
 	let api_thread =
 		apis.start(socket_addr, router, tls_config)
@@ -126,7 +127,7 @@ where
 		.map_err(|_| ErrorKind::GenericError("Router failed to add route".to_string()))?;
 
 	let mut apis = ApiServer::new();
-	info!(LOGGER, "Starting HTTP Foreign API server at {}.", addr);
+	info!("Starting HTTP Foreign API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
 	let api_thread =
 		apis.start(socket_addr, router, tls_config)
@@ -225,12 +226,12 @@ where
 				Ok(id) => match api.dump_stored_tx(id, false, "") {
 					Ok(tx) => Ok(tx),
 					Err(e) => {
-						error!(LOGGER, "dump_stored_tx: failed with error: {}", e);
+						error!("dump_stored_tx: failed with error: {}", e);
 						Err(e)
 					}
 				},
 				Err(e) => {
-					error!(LOGGER, "dump_stored_tx: could not parse id: {}", e);
+					error!("dump_stored_tx: could not parse id: {}", e);
 					Err(ErrorKind::TransactionDumpError(
 						"dump_stored_tx: cannot dump transaction. Could not parse id in request.",
 					).into())
@@ -306,7 +307,7 @@ where
 					args.selection_strategy_is_use_all,
 				)
 			} else {
-				error!(LOGGER, "unsupported payment method: {}", args.method);
+				error!("unsupported payment method: {}", args.method);
 				return Err(ErrorKind::ClientCallback("unsupported payment method"))?;
 			}
 		}))
@@ -321,7 +322,7 @@ where
 			parse_body(req).and_then(move |mut slate| match api.finalize_tx(&mut slate) {
 				Ok(_) => ok(slate.clone()),
 				Err(e) => {
-					error!(LOGGER, "finalize_tx: failed with error: {}", e);
+					error!("finalize_tx: failed with error: {}", e);
 					err(e)
 				}
 			}),
@@ -339,12 +340,12 @@ where
 				Ok(id) => match api.cancel_tx(id) {
 					Ok(_) => ok(()),
 					Err(e) => {
-						error!(LOGGER, "cancel_tx: failed with error: {}", e);
+						error!("cancel_tx: failed with error: {}", e);
 						err(e)
 					}
 				},
 				Err(e) => {
-					error!(LOGGER, "cancel_tx: could not parse id: {}", e);
+					error!("cancel_tx: could not parse id: {}", e);
 					err(ErrorKind::TransactionCancellationError(
 						"cancel_tx: cannot cancel transaction. Could not parse id in request.",
 					).into())
@@ -355,6 +356,32 @@ where
 				"cancel_tx: Cannot cancel transaction. Missing id param in request.",
 			).into()))
 		}
+	}
+
+	fn post_tx(
+		&self,
+		req: Request<Body>,
+		api: APIOwner<T, C, K>,
+	) -> Box<Future<Item = (), Error = Error> + Send> {
+		let params = match req.uri().query() {
+			Some(query_string) => form_urlencoded::parse(query_string.as_bytes())
+				.into_owned()
+				.fold(HashMap::new(), |mut hm, (k, v)| {
+					hm.entry(k).or_insert(vec![]).push(v);
+					hm
+				}),
+			None => HashMap::new(),
+		};
+		let fluff = params.get("fluff").is_some();
+		Box::new(
+			parse_body(req).and_then(move |slate| match api.post_tx(&slate, fluff) {
+				Ok(_) => ok(()),
+				Err(e) => {
+					error!("post_tx: failed with error: {}", e);
+					err(e)
+				}
+			}),
+		)
 	}
 
 	fn issue_burn_tx(
@@ -391,6 +418,10 @@ where
 				self.cancel_tx(req, api)
 					.and_then(|_| ok(response(StatusCode::OK, ""))),
 			),
+			"post_tx" => Box::new(
+				self.post_tx(req, api)
+					.and_then(|_| ok(response(StatusCode::OK, ""))),
+			),
 			"issue_burn_tx" => Box::new(
 				self.issue_burn_tx(req, api)
 					.and_then(|_| ok(response(StatusCode::OK, ""))),
@@ -412,7 +443,7 @@ where
 		match self.handle_get_request(&req) {
 			Ok(r) => Box::new(ok(r)),
 			Err(e) => {
-				error!(LOGGER, "Request Error: {:?}", e);
+				error!("Request Error: {:?}", e);
 				Box::new(ok(create_error_response(e)))
 			}
 		}
@@ -423,7 +454,7 @@ where
 			self.handle_post_request(req)
 				.and_then(|r| ok(r))
 				.or_else(|e| {
-					error!(LOGGER, "Request Error: {:?}", e);
+					error!("Request Error: {:?}", e);
 					ok(create_error_response(e))
 				}),
 		)
@@ -480,7 +511,7 @@ where
 			parse_body(req).and_then(move |mut slate| match api.receive_tx(&mut slate) {
 				Ok(_) => ok(slate.clone()),
 				Err(e) => {
-					error!(LOGGER, "receive_tx: failed with error: {}", e);
+					error!("receive_tx: failed with error: {}", e);
 					err(e)
 				}
 			}),
@@ -517,7 +548,7 @@ where
 {
 	fn post(&self, req: Request<Body>) -> ResponseFuture {
 		Box::new(self.handle_request(req).and_then(|r| ok(r)).or_else(|e| {
-			error!(LOGGER, "Request Error: {:?}", e);
+			error!("Request Error: {:?}", e);
 			ok(create_error_response(e))
 		}))
 	}

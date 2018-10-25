@@ -22,7 +22,6 @@ use core::merkle_proof::MerkleProof;
 use core::pmmr::{Backend, ReadonlyPMMR};
 use core::BlockHeader;
 use ser::{PMMRIndexHashable, PMMRable};
-use util::LOGGER;
 
 /// 64 bits all ones: 0b11111111...1
 const ALL_ONES: u64 = u64::MAX;
@@ -54,8 +53,8 @@ where
 	/// Build a new prunable Merkle Mountain Range using the provided backend.
 	pub fn new(backend: &'a mut B) -> PMMR<T, B> {
 		PMMR {
+			backend,
 			last_pos: 0,
-			backend: backend,
 			_marker: marker::PhantomData,
 		}
 	}
@@ -64,8 +63,8 @@ where
 	/// last_pos with the provided backend.
 	pub fn at(backend: &'a mut B, last_pos: u64) -> PMMR<T, B> {
 		PMMR {
-			last_pos: last_pos,
-			backend: backend,
+			backend,
+			last_pos,
 			_marker: marker::PhantomData,
 		}
 	}
@@ -91,7 +90,7 @@ where
 		let rhs = self.bag_the_rhs(peak_pos);
 		let mut res = peaks(self.last_pos)
 			.into_iter()
-			.filter(|x| x < &peak_pos)
+			.filter(|x| *x < peak_pos)
 			.filter_map(|x| self.backend.get_from_file(x))
 			.collect::<Vec<_>>();
 		res.reverse();
@@ -108,7 +107,7 @@ where
 	pub fn bag_the_rhs(&self, peak_pos: u64) -> Option<Hash> {
 		let rhs = peaks(self.last_pos)
 			.into_iter()
-			.filter(|x| x > &peak_pos)
+			.filter(|x| *x > peak_pos)
 			.filter_map(|x| self.backend.get_from_file(x))
 			.collect::<Vec<_>>();
 
@@ -137,7 +136,7 @@ where
 
 	/// Build a Merkle proof for the element at the given position.
 	pub fn merkle_proof(&self, pos: u64) -> Result<MerkleProof, String> {
-		debug!(LOGGER, "merkle_proof  {}, last_pos {}", pos, self.last_pos);
+		debug!("merkle_proof  {}, last_pos {}", pos, self.last_pos);
 
 		// check this pos is actually a leaf in the MMR
 		if !is_leaf(pos) {
@@ -146,7 +145,7 @@ where
 
 		// check we actually have a hash in the MMR at this pos
 		self.get_hash(pos)
-			.ok_or(format!("no element at pos {}", pos))?;
+			.ok_or_else(|| format!("no element at pos {}", pos))?;
 
 		let mmr_size = self.unpruned_size();
 
@@ -384,14 +383,14 @@ where
 					None => hashes.push_str(&format!("{:>8} ", "??")),
 				}
 			}
-			trace!(LOGGER, "{}", idx);
-			trace!(LOGGER, "{}", hashes);
+			trace!("{}", idx);
+			trace!("{}", hashes);
 		}
 	}
 
 	/// Prints PMMR statistics to the logs, used for debugging.
 	pub fn dump_stats(&self) {
-		debug!(LOGGER, "pmmr: unpruned - {}", self.unpruned_size());
+		debug!("pmmr: unpruned - {}", self.unpruned_size());
 		self.backend.dump_stats();
 	}
 
@@ -418,8 +417,8 @@ where
 					None => hashes.push_str(&format!("{:>8} ", " .")),
 				}
 			}
-			debug!(LOGGER, "{}", idx);
-			debug!(LOGGER, "{}", hashes);
+			debug!("{}", idx);
+			debug!("{}", hashes);
 		}
 	}
 }
@@ -511,7 +510,7 @@ pub fn peak_map_height(mut pos: u64) -> (u64, u64) {
 	let mut peak_size = ALL_ONES >> pos.leading_zeros();
 	let mut bitmap = 0;
 	while peak_size != 0 {
-		bitmap = bitmap << 1;
+		bitmap <<= 1;
 		if pos >= peak_size {
 			pos -= peak_size;
 			bitmap |= 1;

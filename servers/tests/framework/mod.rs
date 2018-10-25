@@ -25,8 +25,9 @@ extern crate blake2_rfc as blake2;
 
 use std::default::Default;
 use std::ops::Deref;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::{fs, thread, time};
+use util::Mutex;
 
 use framework::keychain::Keychain;
 use wallet::{HTTPWalletClient, LMDBBackend, WalletConfig};
@@ -532,7 +533,7 @@ impl LocalServerContainerPool {
 					thread::sleep(time::Duration::from_millis(2000));
 				}
 				let server_ref = s.run_server(run_length);
-				return_container_ref.lock().unwrap().push(server_ref);
+				return_container_ref.lock().push(server_ref);
 			});
 			// Not a big fan of sleeping hack here, but there appears to be a
 			// concurrency issue when creating files in rocksdb that causes
@@ -575,7 +576,7 @@ impl LocalServerContainerPool {
 }
 
 pub fn stop_all_servers(servers: Arc<Mutex<Vec<servers::Server>>>) {
-	let locked_servs = servers.lock().unwrap();
+	let locked_servs = servers.lock();
 	for s in locked_servs.deref() {
 		s.stop();
 	}
