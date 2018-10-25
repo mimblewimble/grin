@@ -84,7 +84,6 @@ impl Pool {
 			for k in x.tx.kernels() {
 				// rehash each kernel to calculate the block specific short_id
 				let short_id = k.short_id(&hash, nonce);
-				//rehashed.insert(short_id, x.tx.hash());
 				if kern_ids.contains(&short_id) {
 					txs.push(x.tx.clone());
 					found_ids.push(short_id);
