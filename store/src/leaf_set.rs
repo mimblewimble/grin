@@ -15,7 +15,7 @@
 //! Compact (roaring) bitmap representing the set of leaf positions
 //! that exist and are not currently pruned in the MMR.
 
-use std::fs::{File, remove_file, rename};
+use std::fs::{remove_file, rename, File};
 use std::io::{self, BufWriter, Read, Write};
 use std::path::Path;
 
