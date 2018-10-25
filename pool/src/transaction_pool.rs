@@ -60,8 +60,12 @@ impl TransactionPool {
 	) -> TransactionPool {
 		TransactionPool {
 			config,
-			txpool: Pool::new(chain.clone(), verifier_cache.clone(), format!("txpool")),
-			stempool: Pool::new(chain.clone(), verifier_cache.clone(), format!("stempool")),
+			txpool: Pool::new(chain.clone(), verifier_cache.clone(), "txpool".to_string()),
+			stempool: Pool::new(
+				chain.clone(),
+				verifier_cache.clone(),
+				"stempool".to_string(),
+			),
 			reorg_cache: Arc::new(RwLock::new(VecDeque::new())),
 			blockchain: chain,
 			verifier_cache,
@@ -76,7 +80,7 @@ impl TransactionPool {
 	fn add_to_stempool(&mut self, entry: PoolEntry, header: &BlockHeader) -> Result<(), PoolError> {
 		// Add tx to stempool (passing in all txs from txpool to validate against).
 		self.stempool
-			.add_to_pool(entry.clone(), self.txpool.all_transactions(), header)?;
+			.add_to_pool(entry, self.txpool.all_transactions(), header)?;
 
 		// Note: we do not notify the adapter here,
 		// we let the dandelion monitor handle this.
@@ -100,9 +104,7 @@ impl TransactionPool {
 	) -> Result<(), PoolError> {
 		// First deaggregate the tx based on current txpool txs.
 		if entry.tx.kernels().len() > 1 {
-			let txs = self
-				.txpool
-				.find_matching_transactions(entry.tx.kernels().clone());
+			let txs = self.txpool.find_matching_transactions(entry.tx.kernels());
 			if !txs.is_empty() {
 				let tx = transaction::deaggregate(entry.tx, txs)?;
 				tx.validate(self.verifier_cache.clone())?;
@@ -143,7 +145,7 @@ impl TransactionPool {
 
 		// Make sure the transaction is valid before anything else.
 		tx.validate(self.verifier_cache.clone())
-			.map_err(|e| PoolError::InvalidTx(e))?;
+			.map_err(PoolError::InvalidTx)?;
 
 		// Check the tx lock_time is valid based on current chain state.
 		self.blockchain.verify_tx_lock_height(&tx)?;
@@ -155,7 +157,7 @@ impl TransactionPool {
 			state: PoolEntryState::Fresh,
 			src,
 			tx_at: Utc::now(),
-			tx: tx.clone(),
+			tx,
 		};
 
 		if stem {
@@ -182,7 +184,7 @@ impl TransactionPool {
 	/// provided block.
 	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
 		// First reconcile the txpool.
-		self.txpool.reconcile_block(block)?;
+		self.txpool.reconcile_block(block);
 		self.txpool.reconcile(None, &block.header)?;
 
 		// Take our "reorg_cache" and see if this block means
@@ -190,7 +192,7 @@ impl TransactionPool {
 		self.reconcile_reorg_cache(&block.header)?;
 
 		// Now reconcile our stempool, accounting for the updated txpool txs.
-		self.stempool.reconcile_block(block)?;
+		self.stempool.reconcile_block(block);
 		{
 			let txpool_tx = self.txpool.aggregate_transaction()?;
 			self.stempool.reconcile(txpool_tx, &block.header)?;
@@ -206,7 +208,7 @@ impl TransactionPool {
 		&self,
 		hash: Hash,
 		nonce: u64,
-		kern_ids: &Vec<ShortId>,
+		kern_ids: &[ShortId],
 	) -> (Vec<Transaction>, Vec<ShortId>) {
 		self.txpool.retrieve_transactions(hash, nonce, kern_ids)
 	}

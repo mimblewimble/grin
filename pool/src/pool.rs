@@ -48,8 +48,8 @@ impl Pool {
 	) -> Pool {
 		Pool {
 			entries: vec![],
-			blockchain: chain.clone(),
-			verifier_cache: verifier_cache.clone(),
+			blockchain: chain,
+			verifier_cache,
 			name,
 		}
 	}
@@ -100,7 +100,7 @@ impl Pool {
 			kern_ids
 				.into_iter()
 				.filter(|id| !found_ids.contains(id))
-				.map(|id| id.clone())
+				.cloned()
 				.collect(),
 		)
 	}
@@ -172,10 +172,10 @@ impl Pool {
 	}
 
 	// Transition the specified pool entries to the new state.
-	pub fn transition_to_state(&mut self, txs: &Vec<Transaction>, state: PoolEntryState) {
-		for x in self.entries.iter_mut() {
+	pub fn transition_to_state(&mut self, txs: &[Transaction], state: PoolEntryState) {
+		for x in &mut self.entries {
 			if txs.contains(&x.tx) {
-				x.state = state.clone();
+				x.state = state;
 			}
 		}
 	}
@@ -215,9 +215,6 @@ impl Pool {
 		// Validate aggregated tx against a known chain state.
 		self.validate_raw_tx(&agg_tx, header)?;
 
-		// If we get here successfully then we can safely add the entry to the pool.
-		self.entries.push(entry.clone());
-
 		debug!(
 			"add_to_pool [{}]: {} ({}), in/out/kern: {}/{}/{}, pool: {} (at block {})",
 			self.name,
@@ -229,6 +226,8 @@ impl Pool {
 			self.size(),
 			header.hash(),
 		);
+		// If we get here successfully then we can safely add the entry to the pool.
+		self.entries.push(entry);
 
 		Ok(())
 	}
@@ -312,7 +311,7 @@ impl Pool {
 		}
 
 		for x in existing_entries {
-			let _ = self.add_to_pool(x.clone(), extra_txs.clone(), header);
+			let _ = self.add_to_pool(x, extra_txs.clone(), header);
 		}
 
 		Ok(())
@@ -353,19 +352,6 @@ impl Pool {
 		tx_buckets
 	}
 
-	// Filter txs in the pool based on the latest block.
-	// Reject any txs where we see a matching tx kernel in the block.
-	// Also reject any txs where we see a conflicting tx,
-	// where an input is spent in a different tx.
-	fn remaining_transactions(&self, block: &Block) -> Vec<Transaction> {
-		self.entries
-			.iter()
-			.filter(|x| !x.tx.kernels().iter().any(|y| block.kernels().contains(y)))
-			.filter(|x| !x.tx.inputs().iter().any(|y| block.inputs().contains(y)))
-			.map(|x| x.tx.clone())
-			.collect()
-	}
-
 	pub fn find_matching_transactions(&self, kernels: &[TxKernel]) -> Vec<Transaction> {
 		// While the inputs outputs can be cut-through the kernel will stay intact
 		// In order to deaggregate tx we look for tx with the same kernel
@@ -386,10 +372,15 @@ impl Pool {
 
 	/// Quick reconciliation step - we can evict any txs in the pool where
 	/// inputs or kernels intersect with the block.
-	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
-		let candidate_txs = self.remaining_transactions(block);
-		self.entries.retain(|x| candidate_txs.contains(&x.tx));
-		Ok(())
+	pub fn reconcile_block(&mut self, block: &Block) {
+		// Filter txs in the pool based on the latest block.
+		// Reject any txs where we see a matching tx kernel in the block.
+		// Also reject any txs where we see a conflicting tx,
+		// where an input is spent in a different tx.
+		self.entries.retain(|x| {
+			!x.tx.kernels().iter().any(|y| block.kernels().contains(y))
+				&& !x.tx.inputs().iter().any(|y| block.inputs().contains(y))
+		});
 	}
 
 	pub fn size(&self) -> usize {
