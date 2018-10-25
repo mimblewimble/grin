@@ -129,7 +129,7 @@ pub struct PoolEntry {
 }
 
 /// The possible states a pool entry can be in.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum PoolEntryState {
 	/// A new entry, not yet processed.
 	Fresh,
