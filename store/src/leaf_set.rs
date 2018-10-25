@@ -15,7 +15,7 @@
 //! Compact (roaring) bitmap representing the set of leaf positions
 //! that exist and are not currently pruned in the MMR.
 
-use std::fs::File;
+use std::fs::{File, remove_file, rename};
 use std::io::{self, BufWriter, Read, Write};
 use std::path::Path;
 
@@ -168,13 +168,26 @@ impl LeafSet {
 		// First run the optimization step on the bitmap.
 		self.bitmap.run_optimize();
 
-		// TODO - consider writing this to disk in a tmp file and then renaming?
-
 		// Write the updated bitmap file to disk.
 		{
-			let mut file = BufWriter::new(File::create(self.path.clone())?);
+			// Write temporary file
+			let temp_name = format!("{}.tmp", &self.path);
+			let temp_path = Path::new(&temp_name);
+			if temp_path.exists() {
+				remove_file(&temp_path)?;
+			}
+
+			let mut file = BufWriter::new(File::create(&temp_path)?);
 			file.write_all(&self.bitmap.serialize())?;
 			file.flush()?;
+
+			// Move temporary file into original
+			let original = Path::new(&self.path);
+			if original.exists() {
+				remove_file(&original)?;
+			}
+
+			rename(&temp_path, &original)?;
 		}
 
 		// Make sure our backup in memory is up to date.
