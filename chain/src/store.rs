@@ -48,6 +48,7 @@ const BLOCK_SUMS_PREFIX: u8 = 'M' as u8;
 pub struct ChainStore {
 	db: store::Store,
 	header_cache: Arc<RwLock<LruCache<Hash, BlockHeader>>>,
+	header_root_cache: Arc<RwLock<LruCache<Hash, Hash>>>,
 	block_input_bitmap_cache: Arc<RwLock<LruCache<Hash, Vec<u8>>>>,
 	block_sums_cache: Arc<RwLock<LruCache<Hash, BlockSums>>>,
 }
@@ -59,6 +60,7 @@ impl ChainStore {
 		Ok(ChainStore {
 			db,
 			header_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
+			header_root_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
 			block_input_bitmap_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
 			block_sums_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
 		})
@@ -124,11 +126,31 @@ impl ChainStore {
 	}
 
 	fn get_header_hash_by_root(&self, h: &Hash) -> Result<Hash, Error> {
-		option_to_not_found(
+		{
+			let mut cache = self.header_root_cache.write();
+
+			// cache hit - return the value from the cache
+			if let Some(hash) = cache.get_mut(h) {
+				return Ok(*hash);
+			}
+		}
+
+		let hash: Result<Hash, Error> = option_to_not_found(
 			self.db
 				.get_ser(&to_key(HEADER_ROOT_PREFIX, &mut h.to_vec())),
 			&format!("BLOCK HEADER ROOT: {}", h),
-		)
+		);
+
+		// cache miss - so adding to the cache for next time
+		if let Ok(hash) = hash {
+			{
+				let mut cache = self.header_root_cache.write();
+				cache.insert(*h, hash);
+			}
+			Ok(hash)
+		} else {
+			hash
+		}
 	}
 
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
@@ -141,10 +163,10 @@ impl ChainStore {
 
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		{
-			let mut header_cache = self.header_cache.write();
+			let mut cache = self.header_cache.write();
 
 			// cache hit - return the value from the cache
-			if let Some(header) = header_cache.get_mut(h) {
+			if let Some(header) = cache.get_mut(h) {
 				return Ok(header.clone());
 			}
 		}
@@ -158,8 +180,8 @@ impl ChainStore {
 		// cache miss - so adding to the cache for next time
 		if let Ok(header) = header {
 			{
-				let mut header_cache = self.header_cache.write();
-				header_cache.insert(*h, header.clone());
+				let mut cache = self.header_cache.write();
+				cache.insert(*h, header.clone());
 			}
 			Ok(header)
 		} else {
@@ -217,6 +239,7 @@ impl ChainStore {
 		Ok(Batch {
 			db: self.db.batch()?,
 			header_cache: self.header_cache.clone(),
+			header_root_cache: self.header_root_cache.clone(),
 			block_input_bitmap_cache: self.block_input_bitmap_cache.clone(),
 			block_sums_cache: self.block_sums_cache.clone(),
 		})
@@ -228,6 +251,7 @@ impl ChainStore {
 pub struct Batch<'a> {
 	db: store::Batch<'a>,
 	header_cache: Arc<RwLock<LruCache<Hash, BlockHeader>>>,
+	header_root_cache: Arc<RwLock<LruCache<Hash, Hash>>>,
 	block_sums_cache: Arc<RwLock<LruCache<Hash, BlockSums>>>,
 	block_input_bitmap_cache: Arc<RwLock<LruCache<Hash, Vec<u8>>>>,
 }
@@ -384,11 +408,31 @@ impl<'a> Batch<'a> {
 	}
 
 	fn get_header_hash_by_root(&self, h: &Hash) -> Result<Hash, Error> {
-		option_to_not_found(
+		{
+			let mut cache = self.header_root_cache.write();
+
+			// cache hit - return the value from the cache
+			if let Some(hash) = cache.get_mut(h) {
+				return Ok(*hash);
+			}
+		}
+
+		let hash: Result<Hash, Error> = option_to_not_found(
 			self.db
 				.get_ser(&to_key(HEADER_ROOT_PREFIX, &mut h.to_vec())),
 			&format!("BLOCK HEADER ROOT: {}", h),
-		)
+		);
+
+		// cache miss - so adding to the cache for next time
+		if let Ok(hash) = hash {
+			{
+				let mut cache = self.header_root_cache.write();
+				cache.insert(*h, hash);
+			}
+			Ok(hash)
+		} else {
+			hash
+		}
 	}
 
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
@@ -401,10 +445,10 @@ impl<'a> Batch<'a> {
 
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		{
-			let mut header_cache = self.header_cache.write();
+			let mut cache = self.header_cache.write();
 
 			// cache hit - return the value from the cache
-			if let Some(header) = header_cache.get_mut(h) {
+			if let Some(header) = cache.get_mut(h) {
 				return Ok(header.clone());
 			}
 		}
@@ -418,8 +462,8 @@ impl<'a> Batch<'a> {
 		// cache miss - so adding to the cache for next time
 		if let Ok(header) = header {
 			{
-				let mut header_cache = self.header_cache.write();
-				header_cache.insert(*h, header.clone());
+				let mut cache = self.header_cache.write();
+				cache.insert(*h, header.clone());
 			}
 			Ok(header)
 		} else {
@@ -614,6 +658,7 @@ impl<'a> Batch<'a> {
 		Ok(Batch {
 			db: self.db.child()?,
 			header_cache: self.header_cache.clone(),
+			header_root_cache: self.header_root_cache.clone(),
 			block_sums_cache: self.block_sums_cache.clone(),
 			block_input_bitmap_cache: self.block_input_bitmap_cache.clone(),
 		})
