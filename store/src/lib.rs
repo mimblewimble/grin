@@ -79,9 +79,14 @@ pub fn u64_to_key<'a>(prefix: u8, val: u64) -> Vec<u8> {
 
 /// Creates temporary file with name created by adding `temp_suffix` to `path`.
 /// Applies writer function to it and renames temporary file into original specified by `path`.
-pub fn save_via_temp_file<F>(path: &str, temp_suffix: &str, mut writer: F)
-	-> Result<(), std::io::Error>
-where F: FnMut(Box<std::io::Write>) -> Result<(), std::io::Error> {
+pub fn save_via_temp_file<F>(
+	path: &str,
+	temp_suffix: &str,
+	mut writer: F,
+) -> Result<(), std::io::Error>
+where
+	F: FnMut(Box<std::io::Write>) -> Result<(), std::io::Error>,
+{
 	assert_ne!(*temp_suffix, *"");
 
 	use std::fs::{remove_file, rename, File};
@@ -90,7 +95,7 @@ where F: FnMut(Box<std::io::Write>) -> Result<(), std::io::Error> {
 
 	// Write temporary file
 	let temp_name = format!("{}{}", &path, temp_suffix);
-	let temp_path= Path::new(&temp_name);
+	let temp_path = Path::new(&temp_name);
 	if temp_path.exists() {
 		remove_file(&temp_path)?;
 	}

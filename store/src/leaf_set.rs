@@ -23,7 +23,7 @@ use core::core::hash::Hashed;
 use core::core::pmmr;
 use core::core::BlockHeader;
 use prune_list::PruneList;
-use ::save_via_temp_file;
+use save_via_temp_file;
 
 /// Compact (roaring) bitmap representing the set of positions of
 /// leaves that are currently unpruned in the MMR.
