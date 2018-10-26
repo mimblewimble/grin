@@ -15,8 +15,6 @@
 //! Compact (roaring) bitmap representing the set of leaf positions
 //! that exist and are not currently pruned in the MMR.
 
-use std::fs::{remove_file, rename, File};
-use std::io::{self, BufWriter, Read, Write};
 use std::path::Path;
 
 use croaring::Bitmap;
@@ -25,6 +23,7 @@ use core::core::hash::Hashed;
 use core::core::pmmr;
 use core::core::BlockHeader;
 use prune_list::PruneList;
+use ::save_via_temp_file;
 
 /// Compact (roaring) bitmap representing the set of positions of
 /// leaves that are currently unpruned in the MMR.
@@ -169,26 +168,11 @@ impl LeafSet {
 		self.bitmap.run_optimize();
 
 		// Write the updated bitmap file to disk.
-		{
-			// Write temporary file
-			let temp_name = format!("{}.tmp", &self.path);
-			let temp_path = Path::new(&temp_name);
-			if temp_path.exists() {
-				remove_file(&temp_path)?;
-			}
-
-			let mut file = BufWriter::new(File::create(&temp_path)?);
-			file.write_all(&self.bitmap.serialize())?;
-			file.flush()?;
-
-			// Move temporary file into original
-			let original = Path::new(&self.path);
-			if original.exists() {
-				remove_file(&original)?;
-			}
-
-			rename(&temp_path, &original)?;
-		}
+		save_via_temp_file(&self.path, ".tmp", |w| {
+			let mut w = BufWriter::new(w);
+			w.write_all(&self.bitmap.serialize())?;
+			w.flush()
+		})?;
 
 		// Make sure our backup in memory is up to date.
 		self.bitmap_bak = self.bitmap.clone();
