@@ -15,8 +15,6 @@
 //! Compact (roaring) bitmap representing the set of leaf positions
 //! that exist and are not currently pruned in the MMR.
 
-use std::fs::File;
-use std::io::{self, BufWriter, Read, Write};
 use std::path::Path;
 
 use croaring::Bitmap;
@@ -25,6 +23,10 @@ use core::core::hash::Hashed;
 use core::core::pmmr;
 use core::core::BlockHeader;
 use prune_list::PruneList;
+use save_via_temp_file;
+
+use std::fs::File;
+use std::io::{self, BufWriter, Read, Write};
 
 /// Compact (roaring) bitmap representing the set of positions of
 /// leaves that are currently unpruned in the MMR.
@@ -168,14 +170,12 @@ impl LeafSet {
 		// First run the optimization step on the bitmap.
 		self.bitmap.run_optimize();
 
-		// TODO - consider writing this to disk in a tmp file and then renaming?
-
 		// Write the updated bitmap file to disk.
-		{
-			let mut file = BufWriter::new(File::create(self.path.clone())?);
-			file.write_all(&self.bitmap.serialize())?;
-			file.flush()?;
-		}
+		save_via_temp_file(&self.path, ".tmp", |w| {
+			let mut w = BufWriter::new(w);
+			w.write_all(&self.bitmap.serialize())?;
+			w.flush()
+		})?;
 
 		// Make sure our backup in memory is up to date.
 		self.bitmap_bak = self.bitmap.clone();

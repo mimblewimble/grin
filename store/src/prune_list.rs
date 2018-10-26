@@ -28,6 +28,7 @@ use std::path::Path;
 use croaring::Bitmap;
 
 use core::core::pmmr::{bintree_postorder_height, family, path};
+use save_via_temp_file;
 
 /// Maintains a list of previously pruned nodes in PMMR, compacting the list as
 /// parents get pruned and allowing checking whether a leaf is pruned. Given
@@ -115,13 +116,13 @@ impl PruneList {
 		// Run the optimization step on the bitmap.
 		self.bitmap.run_optimize();
 
-		// TODO - consider writing this to disk in a tmp file and then renaming?
-
 		// Write the updated bitmap file to disk.
 		if let Some(ref path) = self.path {
-			let mut file = BufWriter::new(File::create(path)?);
-			file.write_all(&self.bitmap.serialize())?;
-			file.flush()?;
+			save_via_temp_file(&path, ".tmp", |w| {
+				let mut w = BufWriter::new(w);
+				w.write_all(&self.bitmap.serialize())?;
+				w.flush()
+			})?;
 		}
 
 		// Rebuild our "shift caches" here as we are flushing changes to disk
