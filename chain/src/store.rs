@@ -330,12 +330,6 @@ impl<'a> Batch<'a> {
 	}
 
 	pub fn save_block_header(&self, header: &BlockHeader, header_root: &Hash) -> Result<(), Error> {
-		error!(
-			"***** saving block header: prev_root: {}, hash: {}, root: {}",
-			header.prev_root,
-			header.hash(),
-			header_root
-		);
 		let hash = header.hash();
 
 		// TODO - cache the header by root.
@@ -356,10 +350,6 @@ impl<'a> Batch<'a> {
 		// Store the header itself indexed by hash.
 		self.db
 			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut hash.to_vec())[..], header)?;
-
-		error!("*** about to check our indices for {}", header_root);
-		let foo = self.get_header_hash_by_root(&header_root)?;
-		let baz = self.get_block_header(&foo)?;
 
 		Ok(())
 	}
@@ -393,8 +383,7 @@ impl<'a> Batch<'a> {
 			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
 	}
 
-	pub fn get_header_hash_by_root(&self, h: &Hash) -> Result<Hash, Error> {
-		error!("*** get_header_hash_by_root: {}", h);
+	fn get_header_hash_by_root(&self, h: &Hash) -> Result<Hash, Error> {
 		option_to_not_found(
 			self.db
 				.get_ser(&to_key(HEADER_ROOT_PREFIX, &mut h.to_vec())),
