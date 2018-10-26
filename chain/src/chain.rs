@@ -248,16 +248,19 @@ impl Chain {
 			let mut txhashset = self.txhashset.write();
 			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
-			let header_root = txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
-				let root = extension.root();
-				error!("*** checking index, root of header MMR: {}", root);
-				Ok(root)
-			})?;
-			error!("*** got a root {}, now looking for header hash for it", header_root);
+			let header_root =
+				txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+					let root = extension.root();
+					error!("*** checking index, root of header MMR: {}", root);
+					Ok(root)
+				})?;
+			error!(
+				"*** got a root {}, now looking for header hash for it",
+				header_root
+			);
 			let h = ctx.batch.get_header_hash_by_root(&header_root)?;
 			error!("*** checking index, h: {}", h);
 		}
-
 
 		let add_to_hash_cache = |hash: Hash| {
 			// only add to hash cache below if block is definitively accepted

@@ -59,7 +59,11 @@ pub struct BlockContext<'a> {
 /// Process a block header as part of processing a full block.
 /// We want to make sure the header is valid before we process the full block.
 fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	debug!("*** process_header_for_block: prev_root: {}, hash: {}", header.prev_root, header.hash());
+	debug!(
+		"*** process_header_for_block: prev_root: {}, hash: {}",
+		header.prev_root,
+		header.hash()
+	);
 
 	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
 		// Optimize this if "next" header
@@ -373,7 +377,11 @@ fn check_prev_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<()
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
 fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	error!("*** validate_header: prev_root: {}, hash: {}", header.prev_root, header.hash());
+	error!(
+		"*** validate_header: prev_root: {}, hash: {}",
+		header.prev_root,
+		header.hash()
+	);
 
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {

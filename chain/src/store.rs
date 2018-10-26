@@ -330,7 +330,12 @@ impl<'a> Batch<'a> {
 	}
 
 	pub fn save_block_header(&self, header: &BlockHeader, header_root: &Hash) -> Result<(), Error> {
-		error!("***** saving block header: prev_root: {}, hash: {}, root: {}", header.prev_root, header.hash(), header_root);
+		error!(
+			"***** saving block header: prev_root: {}, hash: {}, root: {}",
+			header.prev_root,
+			header.hash(),
+			header_root
+		);
 		let hash = header.hash();
 
 		// TODO - cache the header by root.
