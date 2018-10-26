@@ -185,9 +185,9 @@ impl TUIStatusListener for TUIMiningView {
 			}).column(StratumWorkerColumn::IsConnected, "Connected", |c| {
 				c.width_percent(10)
 			}).column(StratumWorkerColumn::LastSeen, "Last Seen", |c| {
-				c.width_percent(20)
+				c.width_percent(16)
 			}).column(StratumWorkerColumn::PowDifficulty, "Pow Difficulty", |c| {
-				c.width_percent(10)
+				c.width_percent(14)
 			}).column(StratumWorkerColumn::NumAccepted, "Num Accepted", |c| {
 				c.width_percent(10)
 			}).column(StratumWorkerColumn::NumRejected, "Num Rejected", |c| {
