@@ -438,7 +438,6 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		// check the secondary PoW scaling factor if applicable
 		if header.pow.secondary_scaling != next_header_info.secondary_scaling {
 			info!(
-				LOGGER,
 				"validate_header: header secondary scaling {} != {}",
 				header.pow.secondary_scaling,
 				next_header_info.secondary_scaling
