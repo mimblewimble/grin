@@ -821,9 +821,10 @@ pub fn build_router(
 		"get status".to_string(),
 		"get txhashset/roots".to_string(),
 		"get txhashset/lastoutputs?n=10".to_string(),
-		"get txhashset/lastrangeproofs".to_string(),
-		"get txhashset/lastkernels".to_string(),
+		"get txhashset/lastrangeproofs?n=1".to_string(),
+		"get txhashset/lastkernels?n=1".to_string(),
 		"get txhashset/outputs?start_index=1&max=100".to_string(),
+		"get txhashset/merkleproof?n=output_id".to_string(),
 		"get pool".to_string(),
 		"post pool/push".to_string(),
 		"post peers/a.b.c.d:p/ban".to_string(),
@@ -831,6 +832,7 @@ pub fn build_router(
 		"get peers/all".to_string(),
 		"get peers/connected".to_string(),
 		"get peers/a.b.c.d".to_string(),
+		"get headers".to_string(),
 	];
 	let index_handler = IndexHandler { list: route_list };
 
