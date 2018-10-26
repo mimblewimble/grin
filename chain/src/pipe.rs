@@ -59,9 +59,7 @@ pub struct BlockContext<'a> {
 /// Process a block header as part of processing a full block.
 /// We want to make sure the header is valid before we process the full block.
 fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	debug!("*** process_header_for_block: {:?}", header);
-
-	validate_header(header, ctx)?;
+	debug!("*** process_header_for_block: prev_root: {}, hash: {}", header.prev_root, header.hash());
 
 	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
 		// Optimize this if "next" header
@@ -77,7 +75,9 @@ fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext) -> Res
 		Ok(())
 	})?;
 
+	validate_header(header, ctx)?;
 	update_header_head(header, ctx)?;
+
 	Ok(())
 }
 
@@ -143,6 +143,8 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		if prev.hash() == head.last_block_h {
 			// Not a fork so we just need to rewind to put header MMR
 			// in the correct state for the full block.
+			// The header processing above put the header MMR (and only the header MMR)
+			// ahead by a single header.
 			extension.rewind(&prev)?;
 		} else {
 			// Rewind and re-apply blocks on the forked chain to
@@ -227,8 +229,6 @@ pub fn sync_block_headers(
 			extension.rewind(&prev_header)?;
 
 			for header in headers {
-				validate_header(header, extension.ctx)?;
-
 				// Check the current root is correct.
 				extension.validate_root(header)?;
 
@@ -239,6 +239,12 @@ pub fn sync_block_headers(
 
 			Ok(())
 		})?;
+
+		// Validate all our headers now that we have added each "previous"
+		// header to the db in this batch above.
+		for header in headers {
+			validate_header(header, ctx)?;
+		}
 	}
 
 	// Update header_head (if most work) and sync_head (regardless) in all cases,
@@ -367,7 +373,7 @@ fn check_prev_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<()
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
 fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	error!("*** validate_header: {:?}", header);
+	error!("*** validate_header: prev_root: {}, hash: {}", header.prev_root, header.hash());
 
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {

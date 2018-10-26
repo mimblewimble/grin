@@ -544,9 +544,10 @@ where
 	let res: Result<T, Error>;
 	let rollback: bool;
 
-	// We want to use the current head of the header chain unless
+	// We want to use the current head of the most work chain unless
 	// we explicitly rewind the extension.
-	let head = batch.header_head()?;
+	// Note: this is *not* necessarily the head of the head chain (explain why).
+	let head = batch.head()?;
 	let header = batch.get_block_header(&head.last_block_h)?;
 
 	// create a child transaction so if the state is rolled back by itself, all
@@ -618,6 +619,11 @@ impl<'a> HeaderExtension<'a> {
 			rollback: false,
 			batch,
 		}
+	}
+
+	/// Force the rollback of this extension, no matter the result.
+	pub fn force_rollback(&mut self) {
+		self.rollback = true;
 	}
 
 	/// Apply a new header to the header MMR extension.

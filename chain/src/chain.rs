@@ -181,13 +181,25 @@ impl Chain {
 
 		setup_head(genesis.clone(), store.clone(), &mut txhashset)?;
 
-		let head = store.head()?;
-		debug!(
-			"Chain init: {} @ {} [{}]",
-			head.total_difficulty.to_num(),
-			head.height,
-			head.last_block_h,
-		);
+		{
+			let head = store.head()?;
+			debug!(
+				"Chain init: head: {} @ {} [{}]",
+				head.total_difficulty.to_num(),
+				head.height,
+				head.last_block_h,
+			);
+		}
+
+		{
+			let header_head = store.header_head()?;
+			debug!(
+				"Chain init: header_head: {} @ {} [{}]",
+				header_head.total_difficulty.to_num(),
+				header_head.height,
+				header_head.last_block_h,
+			);
+		}
 
 		Ok(Chain {
 			db_root: db_root,
@@ -230,6 +242,22 @@ impl Chain {
 			}
 			// release the lock and let the batch go before post-processing
 		}
+
+		// Now check indices after committing the batch.
+		{
+			let mut txhashset = self.txhashset.write();
+			let batch = self.store.batch()?;
+			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
+			let header_root = txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+				let root = extension.root();
+				error!("*** checking index, root of header MMR: {}", root);
+				Ok(root)
+			})?;
+			error!("*** got a root {}, now looking for header hash for it", header_root);
+			let h = ctx.batch.get_header_hash_by_root(&header_root)?;
+			error!("*** checking index, h: {}", h);
+		}
+
 
 		let add_to_hash_cache = |hash: Hash| {
 			// only add to hash cache below if block is definitively accepted
