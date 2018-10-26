@@ -1,4 +1,4 @@
-# Введение в Мимблвимбл и Grin
+# Введение в МимблВимбл и Grin
 
 *На других языках: [English](intro.md), [简体中文](intro.zh-cn.md), [Español](intro_ES.md).*
 
@@ -8,19 +8,19 @@
 Этот протокол призван исправить недостаток, присущий почти всем текущим
 реализациям блокчейна.
 
-Grin это проект с открытым исходым кодом, реалищующий блокчейн МимблВимбл
-и закрывает пробелы, требуемые для окончательного внедрения блокчейна и криптовалют.
+Grin это проект с открытым исходным кодом, реализующий блокчейн МимблВимбл,
+призванный решить проблемы, препятствующие внедрению блокчейна и криптовалют.
 
 Основными целями и характеристиками Grin являются:
 
 * Приватность по-умолчанию. Возможность использовать криптовалюту
 анонимно, так и выборочно раскрывать часть данных.
-* Масштабируется в основном пропорционально количеству пользователей
-и минимально с количчеством транзакций, что приводит к значительной
-экономии дискового пространства по сравнению с другими блокчейнами.
+* Масштабироваться в основном с количеством пользователей
+и минимально с количеством транзакций. Это приводит к значительной
+экономии дискового пространства, по сравнению с другими блокчейнами.
 * Сильная и доказанная криптография. МимблВимбл опирается на проверенные
-временем Эллиптические Кривые, используемые и тестируемые десятилетиями
-* Простой дизайн системы упрощает аудит и дальнейшую поддержку
+временем Эллиптические Кривые, используемые и тестируемые десятилетиями.
+* Простой дизайн системы упрощает аудит и дальнейшую поддержку.
 * Ведётся сообществом, использует ASIC-устойчивый алгоритм майнинга
 (Cuckoo Cycle), приветствуя децентрализацию майнеров.
 
@@ -28,36 +28,35 @@ Grin это проект с открытым исходым кодом, реал
 
 Этот документ ориентирован на читателей с хорошим пониманием
 блокчейнов и основ криптографии. Имея это в виду, мы попытаемся
-объяснить техническую основу МимблВимбла и как он применён в Grin.
-Мы надеемся этот документ будет понятен большинству технически-
-ориентированныэх читателей, ведь наша цель это заинтересовать вас
-использовать Grin и принимать участие в проекте всеми возможными способами.
+объяснить техническую основу МимблВимбла и его применение в Grin.
+Мы надеемся, что этот документ будет понятен большинству технически-
+ориентированных читателей, ведь наша цель это всеми силами заинтересовать вас
+использовать Grin и принимать участие в проекте.
 
-Чтобы достигнуть этой цели, мы опишем основные идеи, требуемые для хорошего
-понимания принципов работы Grin как реализации МимблВимбла. Мы начнем с
-кратого описания некоторых из основных свойст Криптографии на Эллиптических
+Для достижения этой цели, мы опишем основные идеи, требуемые для хорошего
+понимания принципов работы Grin, как реализации МимблВимбла. Мы начнем с
+краткого описания некоторых основных свойств Криптографии на Эллиптических
 Кривых, чтобы заложить фундамент, на котором основан Grin, и затем расскажем
 о ключевых частях транзакций и блоков МимблВимбла.
 
 ### Немного Эллиптических Кривых
 
-Мы начнём с кратого примера Криптографии на Эллиптических Кривых,
-рассмотрев свойства, необходимые для понимания работы МимблВимбла и без
+Мы начнём с краткого примера Криптографии на Эллиптических Кривых,
+рассмотрев свойства, необходимые для понимания работы МимблВимбла без
 излишнего погружения в тонкости данного вида криптографии.
 
-Эллиптическая Кривая, для целей криптографии, это просто большое множество точек,
-которые мы назовём _C_. Эти точки можно складывать, вычитать или умножать на целые числа
-(так же называемые скалярами).
+Эллиптическая Кривая это просто большое множество точек, которые мы назовём _C_. 
+Эти точки можно складывать, вычитать или умножать на целые числа (так же называемые скалярами).
 Пусть _k_ является целым числом, тогда, используя скалярное умножение, мы можем вычислить
 `k*H`, что так же является точкой на кривой _C_. Пусть дано другое целое число _j_,
 тогда мы также можем вычислить `(k+j)*H`, что равняется `k*H + j*H`.
-Сложение и скалярное умноэение на Эллиптической Кривой удовлетворяет свойствам коммутативности и
+Сложение и скалярное умножение на Эллиптической Кривой удовлетворяет свойствам коммутативности и
 ассоциативности сложения и умножения:
 
     (k+j)*H = k*H + j*H
 
 В Эллиптической Криптографии, если мы выберем большое значение _k_ как публичный ключ,
-тогда произведение `k*H` станет соответствующим публичным ключём.
+тогда произведение `k*H` станет соответствующим публичным ключом.
 Даже если кто-то знает значение публичного ключа `k*H`, вычисление _k_ близко к невозможному
 (другими словами, не смотря на тривиальность умножения, деление точек Эллиптической Кривой является
 крайне сложным). 
@@ -77,9 +76,9 @@ Grin это проект с открытым исходым кодом, реал
 
 * **Проверка нулевых сумм.** Сумма выходов минус сумма входов всегда равняется нулю,
   это доказывает, что транзакция не создаёт новых монет, при этом _без раскрытия реальных сумм переводов_.
-* **Владение приватным ключём.** Как и у большинства других криптовалют, владение
+* **Владение приватным ключом.** Как и у большинства других криптовалют, владение
   выходами транзакции гарантируется владением приватного ключа. Однако доказательство того,
-  что некто владет приватным ключём, достигается иначе, нежели простой подписью транзакции.
+  что некто владеет приватным ключом, достигается иначе, нежели простой подписью транзакции.
 
 Далее будет рассказано, как вычисляется баланс кошелька, 
 проверяется владение, образуется "сдача" и будет показано, как перечисленные выше свойства
@@ -102,7 +101,7 @@ Grin это проект с открытым исходым кодом, реал
 количества передаваемых в транзакциях монет.
 
 Однако, количество пригодных для использования количеств монет конечно и злоумышленник может 
-попытаться угадать передаваемое количетсво монет путём перебора. Кроме того, знание _v1_ 
+попытаться угадать передаваемое количество монет путём перебора. Кроме того, знание _v1_ 
 (например из предыдущей транзакции) и конечного значения `v1*H`, раскрывает значения
 всех выходов всех транзакций, которые используют _v1_. Из-за этого мы введём вторую
 Эллиптическую Кривую _G_ (на самом деле _G_ это просто ещё один генератор группы, образованной той же самой кривой _H_)
@@ -155,7 +154,7 @@ Grin это проект с открытым исходым кодом, реал
 то, что этот же самый ключ может использоваться для доказательства владения монетами.
 
 Алиса отправляет вам 3 монеты и, чтобы засекретить количество, вы выбрали 28 как ваш
-фактор сокрытия (заметим, что на практике фактор сокрытия, будучи приватным ключём, 
+фактор сокрытия (заметим, что на практике фактор сокрытия, будучи приватным ключом, 
 является очень большим числом). Тогда где-то в блокчейне должен быть следующий выход (UTXO),
 доступный для траты только вами:
 
@@ -164,14 +163,14 @@ Grin это проект с открытым исходым кодом, реал
 Сумма _X_ является видимой для всех, а значение 3 известно только вам и Алисе. Ну а число 28 известно только вам.
 
 Чтобы передать эти 3 монеты снова, протокол требует, чтобы число 28 было каким-то образом раскрыто.
-Чтобы показать принцип работы, допустим, что вы хотите передать те же 3 моенты Кэрол.
+Чтобы показать принцип работы, допустим, что вы хотите передать те же 3 монеты Кэрол.
 Тогда вам нужно создать простую транзакцию, такую, что:
 
     Xi => Y
 
 Где _Xi_ это выход, который тратит ваш вход _X_, а Y это выход для Кэрол. Не существует способа создать
-такую транзакыию без знания вашего приватного ключа 28. Разумеется, если Кэрол решит принять монеты из этой
-транзации, ей нужно будет узнать как значение вашего приватного ключа, так и значение, которое этой
+такую транзакцию без знания вашего приватного ключа 28. Разумеется, если Кэрол решит принять монеты из этой
+транзакции, ей нужно будет узнать как значение вашего приватного ключа, так и значение, которое этой
 транзакцией переводится. Таким образом:
 
     Y - Xi = (28*G + 3*H) - (28*G + 3*H) = 0*G + 0*H
@@ -188,11 +187,11 @@ Grin это проект с открытым исходым кодом, реал
 
 Эта сумма (транзакция) больше не сводится к нулю и мы имеем _избыточное_ значение на _G_ (85), 
 которое является результатом сложения всех факторов сокрытия. Но из-за того, что
-произведение `85*G` будет являться корректным публичным ключем на ЭК _G_ с приватным ключем 85,
-для любого x и y, только если `y = 0`, сумма `x*G + y*H` будет являться публичным ключём на _G_.
+произведение `85*G` будет являться корректным публичным ключом на ЭК _G_ с приватным ключом 85,
+для любого x и y, только если `y = 0`, сумма `x*G + y*H` будет являться публичным ключом на _G_.
 
 Всё что нужно, это проверить, что (`Y - Xi`) - валидный публичный ключ на кривой _G_ и
-участники транзакции совместно обладают приватным ключём (85 в случае транзакции с Кэрол).
+участники транзакции совместно обладают приватным ключом (85 в случае транзакции с Кэрол).
 Простейший способ достичь этого, это если потребовать создавать некую подпись избыточного значения (85),
 которая будет удостоверять, что:
 
@@ -231,114 +230,123 @@ Grin это проект с открытым исходым кодом, реал
 монет в транзакциях всегда являются положительным числом. Если допустить использовать отрицательные
 значения передаваемых монет, это вызовет много проблем и позволит создавать новые монеты в каждой транзакции.
 
-Например, некто может создать транзакцию со входом 2 и выходами 5 и -3 монет и
+Например, можно создать транзакцию со входом в 2 монеты и выходами 5 и -3 монет и
 всё равно получить хорошо сбалансированную транзакцию, согласно формулам выше.
-Трудно будет обрнаружить такие случаи, поскольку даже если _x_ отрицательно, 
-соответствующая точка `x*H` на кривой является неотличимой от других.
+Такие случаи будет трудно обнаруживать, поскольку даже если _x_ отрицательно, 
+соответствующая точка `x*H` на ЭК является неотличимой от любых других.
 
-To solve this problem, MimbleWimble leverages another cryptographic concept (also
-coming from Confidential Transactions) called
-range proofs: a proof that a number falls within a given range, without revealing
-the number. We won't elaborate on the range proof, but you just need to know
-that for any `r.G + v.H` we can build a proof that will show that _v_ is greater than
-zero and does not overflow.
+Для решения этой проблемы МимблВимбл применяет другой криптографическую идею,
+называемую range proof: доказательство того, что число находится в заданном интервале, не раскрывая
+самого числа. Не вдаваясь в детали, скажем, что достаточно знать, что для любой суммы
+`r.G + v.H` мы можем создать такое доказательство, которое покажет, что _v_ больше нуля и не
+переполняется.
 
-It's also important to note that in order to create a valid range proof from the example above, both of the values 113 and 28 used in creating and signing for the excess value must be known. The reason for this, as well as a more detailed description of range proofs are further detailed in the [range proof paper](https://eprint.iacr.org/2017/1066.pdf).
+Так же важно то, что для создания корректного доказательства для примера выше, оба значения 113 и 28, использующиеся для
+создания и подписывания избыточного значения должны быть известны. Причину этого, совместно с более детальным описанием
+range proof-ов можно найти в [публикации о range proof-ах](https://eprint.iacr.org/2017/1066.pdf).
 
-#### Putting It All Together
+#### Всё Вместе
 
-A MimbleWimble transaction includes the following:
+Транзакция МимблВимбла включает следующее:
+* Набор входов, которые указывают и тратят набор выходов других транзакций.
+* Набор новых выходов, который включает:
+  * Количество монет и фактор сокрытия (который является просто новым приватным ключом), умноженный на
+  эллиптическую кривую, что даёт в сумме `r.G + v.H`.
+  * Доказательство того, что v не является отрицательным (range proof).
+* Комиссия транзакции в открытом виде.
+* Подпись, вычисленная путём использования избыточного значения (суммы всех выходов и комиссии за вычетом суммы входов)
+и использования этого значения в качестве приватного ключа.
 
-* A set of inputs, that reference and spend a set of previous outputs.
-* A set of new outputs that include:
-  * A value and a blinding factor (which is just a new private key) multiplied on
-  a curve and summed to be `r.G + v.H`.
-  * A range proof that shows that v is non-negative.
-* An explicit transaction fee, in clear.
-* A signature, computed by taking the excess blinding value (the sum of all
-  outputs plus the fee, minus the inputs) and using it as a private key.
+### Блоки и Состояние Цепочки
 
-### Blocks and Chain State
+Выше мы рассказали о том, как транзакции МимблВимбла предоставляют сильные гарантии анонимности,
+при этом сохраняя свойства, требуемые для поддержания корректного блокчейна, т.е. запрет на создание новых монет
+транзакциями и доказательство владения монетами, реализованное за счёт приватных ключей.
 
-We've explained above how MimbleWimble transactions can provide
-strong anonymity guarantees while maintaining the properties required for a valid
-blockchain, i.e., a transaction does not create money and proof of ownership
-is established through private keys.
+Формат блоков МимблВимбла привносит дополнительную идею, называемую _прорезанием_,
+благодаря которой блокчейн МимблВимбла получает:
 
-The MimbleWimble block format builds on this by introducing one additional
-concept: _cut-through_. With this addition, a MimbleWimble chain gains:
+* Исключительную масштабируемость, т.к. б*о*льшая часть данных о транзакциях может быть
+уничтожена со временем без ущерба безопасности
+* Ещё большую анонимность за счёт смешивания и удаления данных о транзакциях
+* Возможность для новых участников сети очень быстро синхронизироваться с остальными
 
-* Extremely good scalability, as the great majority of transaction data can be
-  eliminated over time, without compromising security.
-* Further anonymity by mixing and removing transaction data.
-* And the ability for new nodes to sync up with the rest of the network very
-  efficiently.
+#### Аггрегирование Транзакций
 
-#### Transaction Aggregation
+Напомним, что транзакция состоит из:
 
-Recall that a transaction consists of the following -
+* Набора входов, которые тратят набор предыдущих выходов.
+* Набора новых выходов (Обязательств Педерсена).
+* Ядра транзакции, состоящего из:
+  * Избыточного значения (Обязательство Педерсена для нуля).
+  * Подпись транзакции, использующая избыточное значение как ключ.
 
-* a set of inputs that reference and spent a set of previous outputs
-* a set of new outputs (Pedersen commitments)
-* a transaction kernel, consisting of
-  * kernel excess (Pedersen commitment to zero)
-  * transaction signature (using kernel excess as public key)
-
-A tx is signed and the signature included in a _transaction kernel_. The signature is generated using the _kernel excess_ as a public key proving that the transaction sums to 0.
+Транзакция подписывается и подпись включается в _ядро транзакции_. Подпись генерируется с использованием _избытка ядра_
+в качестве публичного ключа, доказывая, что транзакция сводится к нулю.
 
     (42*G + 1*H) + (99*G + 2*H) - (113*G + 3*H) = 28*G + 0*H
 
-The public key in this example being `28*G`.
+Публичный ключ в этом примере это `28*G`.
 
-We can say the following is true for any valid transaction (ignoring fees for simplicity) -
+Для любой корректной транзакции мы можем сказать, что (игнорируя комиссию для простоты):
 
-    sum(outputs) - sum(inputs) = kernel_excess
+    сумма(выходы) - сумма(входы) = избыток_ядра
 
-The same holds true for blocks themselves once we realize a block is simply a set of aggregated inputs, outputs and transaction kernels. We can sum the tx outputs, subtract the sum of the tx inputs and compare the resulting Pedersen commitment to the sum of the kernel excesses -
+То же самое истинно для самих блоков, если считать блоки простым набором агрегированных входов, выходов и ядер транзакций.
+Мы можем просуммировать выходы транзакций, вычесть сумму входов транзакций и сравнить результирующее значение с суммой
+избытков ядер:
 
-    sum(outputs) - sum(inputs) = sum(kernel_excess)
 
-Simplifying slightly, (again ignoring transaction fees) we can say that MimbleWimble blocks can be treated exactly as MimbleWimble transactions.
+    сумма(выходы) - сумма(входы) = sum(избытки_ядер)
 
-##### Kernel Offsets
+Простыми словами, с блоками МимблВимбла можно работать точно так же, как и с транзакциями МимблВимбла. 
 
-There is a subtle problem with MimbleWimble blocks and transactions as described above. It is possible (and in some cases trivial) to reconstruct the constituent transactions in a block. This is clearly bad for privacy. This is the "subset" problem - given a set of inputs, outputs and transaction kernels a subset of these will recombine to  reconstruct a valid transaction.
+##### Смещения Ядер
 
-For example, given the following two transactions -
+Но есть небольшая проблема с блоками МимблВимбла и транзакциями, описанными выше.
+Является возможным (в некоторых случаях довольно просто) воссоздать накопленные транзакции из блока.
+Становится очевидным, что это очень плохо сказывается на приватности. Такая проблема является случаем проблемы "подмножества":
+если дано множество входов, выходов и ядер, подмножество их можно собрать в корректную транзакцию.
 
-    (in1, in2) -> (out1), (kern1)
-    (in3) -> (out2), (kern2)
+Например, даны две транзакции:
 
-We can aggregate them into the following block (or aggregate transaction) -
+    (вход1, вход2) -> (out1), (ядро1)
+    (вход3) -> (выход2), (ядро2)
 
-    (in1, in2, in3) -> (out1, out2), (kern1, kern2)
+Мы можем агрегировать их в одну единую транзакцию:
 
-It is trivially easy to try all possible permutations to recover one of the transactions (where it sums successfully to zero) -
+    (вход1, вход2, вход3) -> (выход1, выход2), (ядро1, ядро2)
 
-    (in1, in2) -> (out1), (kern1)
+Довольно просто попробовать все возможные перестановки для восстановления одной из транзакций (чтобы сумма была нулём):
 
-We also know that everything remaining can be used to reconstruct the other valid transaction -
+    (вход1, вход2) -> (выход1), (ядро1)
 
-    (in3) -> (out2), (kern2)
+Теперь мы знаем, что всё остальное можно использовать для восстановления другой корректной транзакции:
 
-To mitigate this we include a _kernel offset_ with every transaction kernel. This is a blinding factor (private key) that needs to be added back to the kernel excess to verify the commitments sum to zero -
+    (вход3) -> (выход2), (ядро2)
 
-    sum(outputs) - sum(inputs) = kernel_excess + kernel_offset
+Для предотвращения этого мы включим _смещение ядра_ в каждое ядро транзакции. Это фактор сокрытия (приватный ключ), который
+нужно добавлять к избытку ядра:
 
-When we aggregate transactions in a block we store a _single_ aggregate offset in the block header. And now we have a single offset that cannot be decomposed into the individual transaction kernel offsets and the transactions can no longer be reconstructed -
+    sum(выходы) - sum(входы) = избыток_ядра + смещение_ядра
 
-    sum(outputs) - sum(inputs) = sum(kernel_excess) + kernel_offset
+Когда мы накапливаем (аггрегируем) транзакции в блок, мы храним _одно_ накопленное значение смещения в заголовке блока.
+Теперь у нас есть единичное смещение, которое невозможно будет разбить по отдельным смещениям ядер и транзакции больше
+нельзя будет восстановить:
 
-We "split" the key `k` into `k1+k2` during transaction construction. For a transaction kernel `(k1+k2)*G` we publish `k1*G` (the excess) and `k2` (the offset) and sign the transaction with `k1*G` as before.
-During block construction we can simply sum the `k2` offsets to generate a single aggregate `k2` offset to cover all transactions in the block. The `k2` offset for any individual transaction is unrecoverable.
+    sum(выходы) - sum(входы) = sum(избыток_ядра) + смещение_ядра
 
-#### Cut-through
+Мы "разделим" ключ `k` в сумму `k1+k2` в ходе создания транзакции. Для ядра транзакции `(k1+k2)*G` 
+мы оставляем открытыми `k1*G` (избыток) и `k2` (смещение) и подписываем транзакцию используя `k1*G` как раньше.
+В ходе сборки бока мы можем просто просуммировать смещения ядер для создания одного агрегированого смещения,
+покрывающего все транзакции в блоке. Смещения каждой отдельно взятой транзакции теперь невозможно восстановить.
 
-Blocks let miners assemble multiple transactions into a single set that's added
-to the chain. In the following block representations, containing 3 transactions,
-we only show inputs and
-outputs of transactions. Inputs reference outputs they spend. An output included
-in a previous block is marked with a lower-case x.
+#### Прорезание
+
+Блоки позволяют майнерам собирать множество транзакций в единый набор, который
+попадает в цепочку. В диаграммах ниже, представляющих блоки, содержится 3 транзакции
+и мы будем показывать только их входы и выходы. Входы указывают на выходы, которые они
+тратят. Выход, включаемый в предыдущий блок, помечается буквой `x`.
 
     I1(x1) --- O1
             |- O2
@@ -349,83 +357,76 @@ in a previous block is marked with a lower-case x.
     I4(O3) --- O4
             |- O5
 
-We notice the two following properties:
+Можно обнаружить следующие два свойства:
 
-* Within this block, some outputs are directly spent by included inputs (I3
-  spends O2 and I4 spends O3).
-* The structure of each transaction does not actually matter. As all transactions
-  individually sum to zero, the sum of all transaction inputs and outputs must be zero.
+* Внутри этого блока некоторые выходы напрямую тратятся некоторыми из входов 
+(I3 тратит O2 и I4 тратит O3).
+* Структура каждой транзакции не имеет особого значения. Так как все транзакции 
+суммируются в ноль, сумма всех входов и выходов должна быть нулевой.
 
-Similarly to a transaction, all that needs to be checked in a block is that ownership
-has been proven (which comes from _transaction kernels_) and that the whole block did
-not add any money supply (other than what's allowed by the coinbase).
-Therefore, matching inputs and outputs can be eliminated, as their contribution to the overall
-sum cancels out. Which leads to the following, much more compact block:
+Схожим с транзакциями образом, все, что нужно проверить в блоке, так это то, что
+владение было доказано (информация об этом содержится в _ядрах транзакций_) и то, что
+целый блок не создаёт новых денег (кроме того количества, что разрешено алгоритмом эмиссии).
+Таким образом, находя входы и выходы, которые могут быть убраны из-за того, что их общий вклад в сумму
+взаимоисключается, мы можем получить гораздо более компактный блок:
 
     I1(x1) | O1
     I2(x2) | O4
            | O5
 
-Note that all transaction structure has been eliminated and the order of inputs and
-outputs does not matter anymore. However, the sum of all outputs in this block,
-minus the inputs, is still guaranteed to be zero.
+Заметим, что структура транзакций была потеряна и порядок вдохов и выходов больше не имеет значения. Однако, по-прежнему
+гарантируется, что сумма всех входов за вычетом суммы всех выходов в блоке равна нулю.
 
-A block is simply built from:
+Блок строится из:
 
-* A block header.
-* The list of inputs remaining after cut-through.
-* The list of outputs remaining after cut-through.
-* A single kernel offset to cover the full block.
-* The transaction kernels containing, for each transaction:
-  * The public key `r*G` obtained from the summation of all the commitments.
-  * The signatures generated using the excess value.
-  * The mining fee.
+* Заголовка блока.
+* Списка входов, оставшихся после *прорезания*.
+* Списка выходов, оставшихся после *прорезания*.
+* Одно *смещение ядра*, защищающее блок целиком.
+* Ядра транзакций, содержащие для каждой транзакции:
+  * Публичный ключ `r*G`, полученный из суммирования всех *обязательств*.
+  * Подпись, сгенерированная из *избыточного значения*.
+  * Комиссия.
+  
+Организованный таким образом блоки МимблВимбла могут предложить исключительные гарантии приватности:
 
-When structured this way, a MimbleWimble block offers extremely good privacy
-guarantees:
+* Промежуточные транзакции (прорезанные) представляются только их *ядрами*.
+* Все выходы выглядят одинаково: просто очень большие числа, которые невозможно отличить друг от друга. Если кто-то
+захочет убрать или цензурировать один из выходов, ему придётся убрать их все.
+* Структура транзакций уничтожается, скрывая информацию о том, какой выход передаёт монеты какому входу.
 
-* Intermediate (cut-through) transactions will be represented only by their transaction kernels.
-* All outputs look the same: just very large numbers that are impossible to
-  differentiate from one another. If one wanted to exclude some outputs, they'd have
-  to exclude all.
-* All transaction structure has been removed, making it impossible to tell which output
-  was matched with each input.
+И, несмотря на всё это, данная схема всё ещё корректно валидируется!
 
-And yet, it all still validates!
+#### Прорезание До Конца
 
-#### Cut-through All The Way
+Возвращаясь к блоку из примера выше, выходы x1 и x2, потраченные входами I1 и I2,
+должны ранее уже находиться в блокчейне. Таким образом, после добавления этого блока,
+и входы и выходы могут быть убраны из всей цепочки, так как они более не имеют вклада в общую сумму.  
 
-Going back to the previous example block, outputs x1 and x2, spent by I1 and
-I2, must have appeared previously in the blockchain. So after the addition of
-this block, those outputs as well as I1 and I2 can also be removed from the
-overall chain, as they do not contribute to the overall sum.
+Обобщая, мы можем заключить, что состояние цепочки (за вычетом заголовков) в любое время может быть
+сведено к следующей информации:
 
-Generalizing, we conclude that the chain state (excluding headers) at any point
-in time can be summarized by just these pieces of information:
+1. Общее количество монет, созданное майнингом цепочки.
+2. Полный набор непотраченых выходов транзакций.
+3. Ядра каждой из транзакций.
 
-1. The total amount of coins created by mining in the chain.
-2. The complete set of unspent outputs.
-3. The transactions kernels for each transaction.
+Информацию для первого пункта мы можем получить просто из высоты (расстояние от генезиса) блока.
+А, в свою очередь, непотраченые выходы и ядра транзакций довольно компактны.
 
-The first piece of information can be deduced just using the block
-height (its distance from the genesis block). And both the unspent outputs and the
-transaction kernels are extremely compact. This has 2 important consequences:
+Это приводит нас к двум важным следствиям:
 
-* The state a given node in a MimbleWimble blockchain needs to maintain is very
-  small (on the order of a few gigabytes for a bitcoin-sized blockchain, and
-  potentially optimizable to a few hundreds of megabytes).
-* When a new node joins a network building up a MimbleWimble chain, the amount of
-  information that needs to be transferred is also very small.
+* Набор данных, который должен хранить конкретный узел МимблВимбла, очень мал: порядка нескольких гигабайт для
+масштабов блокчейна Биткойна и потенциально оптимизируемый до нескольких сотен мегабайт.
+* Можно передавать очень мало информации для синхронизации новых участников сети.
 
-In addition, the complete set of unspent outputs cannot be tampered with, even
-only by adding or removing an output. Doing so would cause the summation of all
-blinding factors in the transaction kernels to differ from the summation of blinding
-factors in the outputs.
+В дополнение скажем, что подделать набор непотраченых выходов невозможно, поскольку 
+любое, даже самое маленькое изменение, вызовет расхождение между суммой факторов сокрытия из
+ядер транзакций и суммой факторов сокрытия из выходов транзакций.
 
-### Conclusion
+### Заключение
 
-In this document we covered the basic principles that underlie a MimbleWimble
-blockchain. By using the addition properties of Elliptic Curve Cryptography, we're
-able to build transactions that are completely opaque but can still be properly
-validated. And by generalizing those properties to blocks, we can eliminate a large
-amount of blockchain data, allowing for great scaling and fast sync of new peers.
+В этом документе мы осветили основные принципы, лежащие в основе блокчейна МимблВимбла.
+Используя свойства операции сложения над Эллиптическими Кривыми мы способны создавать транзакции, которые являются
+абсолютно непрозрачными, но и в то же время могут быть проверены на корректность. Обобщая те же самые свойства с
+транзакций на блоки, мы можем значительно уменьшить объем хранимых данных, тем самым открывая дорогу для
+масштабируемости и быстрого подключения новых участников к сети.
