@@ -25,10 +25,10 @@ use leaf_set::LeafSet;
 use prune_list::PruneList;
 use types::{prune_noop, AppendOnlyFile, HashFile};
 
-const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
-const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
-const PMMR_LEAF_FILE: &'static str = "pmmr_leaf.bin";
-const PMMR_PRUN_FILE: &'static str = "pmmr_prun.bin";
+const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
+const PMMR_DATA_FILE: &str = "pmmr_data.bin";
+const PMMR_LEAF_FILE: &str = "pmmr_leaf.bin";
+const PMMR_PRUN_FILE: &str = "pmmr_prun.bin";
 
 /// The list of PMMR_Files for internal purposes
 pub const PMMR_FILES: [&str; 4] = [
@@ -105,7 +105,7 @@ where
 					"Corrupted storage, could not read an entry from hash store: {:?}",
 					e
 				);
-				return None;
+				None
 			}
 		}
 	}
@@ -128,7 +128,7 @@ where
 					"Corrupted storage, could not read an entry from data store: {:?}",
 					e
 				);
-				return None;
+				None
 			}
 		}
 	}

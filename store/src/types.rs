@@ -67,7 +67,7 @@ impl HashFile {
 					"Corrupted storage, could not read an entry from hash file: {:?}",
 					e
 				);
-				return None;
+				None
 			}
 		}
 	}

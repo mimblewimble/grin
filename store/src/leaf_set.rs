@@ -45,19 +45,24 @@ impl LeafSet {
 	pub fn open(path: String) -> io::Result<LeafSet> {
 		let file_path = Path::new(&path);
 		let bitmap = if file_path.exists() {
-			let mut bitmap_file = File::open(path.clone())?;
-			let mut buffer = vec![];
-			bitmap_file.read_to_end(&mut buffer)?;
-			Bitmap::deserialize(&buffer)
+			read_bitmap(file_path)?
 		} else {
 			Bitmap::create()
 		};
 
 		Ok(LeafSet {
 			path: path.clone(),
-			bitmap: bitmap.clone(),
 			bitmap_bak: bitmap.clone(),
+			bitmap,
 		})
+	}
+
+	fn read_bitmap(file_path: Path) -> io::Result<Bitmap> {
+		let mut bitmap_file = File::open(file_path)?;
+		let f_md = bitmap_file.metadata()?;
+		let mut buffer = Vec::with_capacity(f_md.len() as usize);
+		bitmap_file.read_to_end(&mut buffer)?;
+		Ok(Bitmap::deserialize(&buffer))
 	}
 
 	/// Copies a snapshot of the utxo file into the primary utxo file.
@@ -69,17 +74,18 @@ impl LeafSet {
 			return Ok(());
 		}
 
-		let mut bitmap_file = File::open(cp_path.clone())?;
-		let mut buffer = vec![];
+		let mut bitmap_file = File::open(cp_file_path)?;
+		let f_md = bitmap_file.metadata()?;
+		let mut buffer = Vec::with_capacity(f_md.len() as usize);
 		bitmap_file.read_to_end(&mut buffer)?;
 		let bitmap = Bitmap::deserialize(&buffer);
 
 		debug!("leaf_set: copying rewound file {} to {}", cp_path, path);
 
 		let mut leaf_set = LeafSet {
-			path: path.clone(),
-			bitmap: bitmap.clone(),
+			path,
 			bitmap_bak: bitmap.clone(),
+			bitmap,
 		};
 
 		leaf_set.flush()?;
