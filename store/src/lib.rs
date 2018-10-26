@@ -90,7 +90,6 @@ where
 	assert_ne!(*temp_suffix, *"");
 
 	use std::fs::{remove_file, rename, File};
-	use std::io::{self, BufWriter, Read, Write};
 	use std::path::Path;
 
 	// Write temporary file

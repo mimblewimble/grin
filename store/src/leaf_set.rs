@@ -25,6 +25,9 @@ use core::core::BlockHeader;
 use prune_list::PruneList;
 use save_via_temp_file;
 
+use std::fs::File;
+use std::io::{self, BufWriter, Read, Write};
+
 /// Compact (roaring) bitmap representing the set of positions of
 /// leaves that are currently unpruned in the MMR.
 pub struct LeafSet {

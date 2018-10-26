@@ -21,7 +21,7 @@
 //! must be shifted the appropriate amount when reading from the hash and data
 //! files.
 
-use std::fs::{remove_file, rename, File};
+use std::fs::File;
 use std::io::{self, BufWriter, Read, Write};
 use std::path::Path;
 
