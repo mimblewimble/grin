@@ -1,244 +1,240 @@
-# Introduction to MimbleWimble and Grin
+# Введение в Мимблвимбл и Grin
 
-*Read this in other languages: [English](intro.md), [简体中文](intro.zh-cn.md), [Español](intro_ES.md).*
+*На других языках: [English](intro.md), [简体中文](intro.zh-cn.md), [Español](intro_ES.md).*
 
-MimbleWimble is a blockchain format and protocol that provides
-extremely good scalability, privacy and fungibility by relying on strong
-cryptographic primitives. It addresses gaps existing in almost all current
-blockchain implementations.
+МимблВимбл это формат и протокол блокчейна, предоставляющий
+исключительную масштабируемость, приватность и обезличенность криптовалюты,
+опираясь на сильные криптографические примитивы.
+Этот протокол призван исправить недостаток, присущий почти всем текущим
+реализациям блокчейна.
 
-Grin is an open source software project that implements a MimbleWimble
-blockchain and fills the gaps required for a full blockchain and
-cryptocurrency deployment.
+Grin это проект с открытым исходым кодом, реалищующий блокчейн МимблВимбл
+и закрывает пробелы, требуемые для окончательного внедрения блокчейна и криптовалют.
 
-The main goal and characteristics of the Grin project are:
+Основными целями и характеристиками Grin являются:
 
-* Privacy by default. This enables complete fungibility without precluding
-  the ability to selectively disclose information as needed.
-* Scales mostly with the number of users and minimally with the number of
-  transactions (<100 byte `kernel), resulting in a large space saving compared
-  to other blockchains.
-* Strong and proven cryptography. MimbleWimble only relies on Elliptic Curve
-  Cryptography which has been tried and tested for decades.
-* Design simplicity that makes it easy to audit and maintain over time.
-* Community driven, using an asic-resistant mining algorithm (Cuckoo Cycle)
-  encouraging mining decentralization.
+* Приватность по-умолчанию. Возможность использовать криптовалюту
+анонимно, так и выборочно раскрывать часть данных.
+* Масштабируется в основном пропорционально количеству пользователей
+и минимально с количчеством транзакций, что приводит к значительной
+экономии дискового пространства по сравнению с другими блокчейнами.
+* Сильная и доказанная криптография. МимблВимбл опирается на проверенные
+временем Эллиптические Кривые, используемые и тестируемые десятилетиями
+* Простой дизайн системы упрощает аудит и дальнейшую поддержку
+* Ведётся сообществом, использует ASIC-устойчивый алгоритм майнинга
+(Cuckoo Cycle), приветствуя децентрализацию майнеров.
 
-## Tongue Tying for Everyone
+### Завязывание Языка для Чайников
 
-This document is targeted at readers with a good
-understanding of blockchains and basic cryptography. With that in mind, we attempt
-to explain the technical buildup of MimbleWimble and how it's applied in Grin. We hope
-this document is understandable to most technically-minded readers. Our objective is
-to encourage you to get interested in Grin and contribute in any way possible.
+Этот документ ориентирован на читателей с хорошим пониманием
+блокчейнов и основ криптографии. Имея это в виду, мы попытаемся
+объяснить техническую основу МимблВимбла и как он применён в Grin.
+Мы надеемся этот документ будет понятен большинству технически-
+ориентированныэх читателей, ведь наша цель это заинтересовать вас
+использовать Grin и принимать участие в проекте всеми возможными способами.
 
-To achieve this objective, we will introduce the main concepts required for a good
-understanding of Grin as a MimbleWimble implementation. We will start with a brief
-description of some relevant properties of Elliptic Curve Cryptography (ECC) to lay the
-foundation on which Grin is based and then describe all the key elements of a
-MimbleWimble blockchain's transactions and blocks.
+Чтобы достигнуть этой цели, мы опишем основные идеи, требуемые для хорошего
+понимания принципов работы Grin как реализации МимблВимбла. Мы начнем с
+кратого описания некоторых из основных свойст Криптографии на Эллиптических
+Кривых, чтобы заложить фундамент, на котором основан Grin, и затем расскажем
+о ключевых частях транзакций и блоков МимблВимбла.
 
-### Tiny Bits of Elliptic Curves
+### Немного Эллиптических Кривых
 
-We start with a brief primer on Elliptic Curve Cryptography, reviewing just the
-properties necessary to understand how MimbleWimble works and without
-delving too much into the intricacies of ECC. For readers who would want to
-dive deeper into those assumptions, there are other opportunities to
-[learn more](http://andrea.corbellini.name/2015/05/17/elliptic-curve-cryptography-a-gentle-introduction/).
+Мы начнём с кратого примера Криптографии на Эллиптических Кривых,
+рассмотрев свойства, необходимые для понимания работы МимблВимбла и без
+излишнего погружения в тонкости данного вида криптографии.
 
-An Elliptic Curve for the purpose of cryptography is simply a large set of points that
-we will call _C_. These points can be added, subtracted, or multiplied by integers (also called scalars).
-Given an integer _k_ and
-using the scalar multiplication operation we can compute `k*H`, which is also a point on
-curve _C_. Given another integer _j_ we can also calculate `(k+j)*H`, which equals
-`k*H + j*H`. The addition and scalar multiplication operations on an elliptic curve
-maintain the commutative and associative properties of addition and multiplication:
+Эллиптическая Кривая, для целей криптографии, это просто большое множество точек,
+которые мы назовём _C_. Эти точки можно складывать, вычитать или умножать на целые числа
+(так же называемые скалярами).
+Пусть _k_ является целым числом, тогда, используя скалярное умножение, мы можем вычислить
+`k*H`, что так же является точкой на кривой _C_. Пусть дано другое целое число _j_,
+тогда мы также можем вычислить `(k+j)*H`, что равняется `k*H + j*H`.
+Сложение и скалярное умноэение на Эллиптической Кривой удовлетворяет свойствам коммутативности и
+ассоциативности сложения и умножения:
 
     (k+j)*H = k*H + j*H
 
-In ECC, if we pick a very large number _k_ as a private key, `k*H` is
-considered the corresponding public key. Even if one knows the
-value of the public key `k*H`, deducing _k_ is close to impossible (or said
-differently, while multiplication is trivial, "division" by curve points is
-extremely difficult).
+В Эллиптической Криптографии, если мы выберем большое значение _k_ как публичный ключ,
+тогда произведение `k*H` станет соответствующим публичным ключём.
+Даже если кто-то знает значение публичного ключа `k*H`, вычисление _k_ близко к невозможному
+(другими словами, не смотря на тривиальность умножения, деление точек Эллиптической Кривой является
+крайне сложным). 
 
-The previous formula `(k+j)*H = k*H + j*H`, with _k_ and _j_ both private
-keys, demonstrates that a public key obtained from the addition of two private
-keys (`(k+j)*H`) is identical to the addition of the public keys for each of those
-two private keys (`k*H + j*H`). In the Bitcoin blockchain, Hierarchical
-Deterministic wallets heavily rely on this principle. MimbleWimble and the Grin
-implementation do as well.
+Предыдущая формула `(k+j)*H = k*H + j*H`, где _k_ и _j_ хранятся в тайне, 
+показывает, что публичный ключ может быть получен путём сложения двух приватных ключей
+и является идентичным сложению двух соответствующих публичных ключей. Например, в Биткоин
+работа Детерминистических Иерархичных (HD wallets) кошельков всецело
+основана на этом принципе. МимблВимбл и Grin тоже используют это свойство.
 
-### Transacting with MimbleWimble
+### Создание Транзакций в МимблВимбл
 
-The structure of transactions demonstrates a crucial tenet of MimbleWimble:
-strong privacy and confidentiality guarantees.
+Структура транзакций указывает на ключевые принципы МимблВимбла: нерушимую
+гарантию приватности и конфиденциальности.
 
-The validation of MimbleWimble transactions relies on two basic properties:
+Проверка транзакций МимблВимбла опирается на два основных свойства:
 
-* **Verification of zero sums.** The sum of outputs minus inputs always equals zero,
-  proving that the transaction did not create new funds, _without revealing the actual amounts_.
-* **Possession of private keys.** Like with most other cryptocurrencies, ownership of
-  transaction outputs is guaranteed by the possession of ECC private keys. However,
-  the proof that an entity owns those private keys is not achieved by directly signing
-  the transaction.
+* **Проверка нулевых сумм.** Сумма выходов минус сумма входов всегда равняется нулю,
+  это доказывает, что транзакция не создаёт новых монет, при этом _без раскрытия реальных сумм переводов_.
+* **Владение приватным ключём.** Как и у большинства других криптовалют, владение
+  выходами транзакции гарантируется владением приватного ключа. Однако доказательство того,
+  что некто владет приватным ключём, достигается иначе, нежели простой подписью транзакции.
 
-The next sections on balance, ownership, change and proofs details how those two
-fundamental properties are achieved.
+Далее будет рассказано, как вычисляется баланс кошелька, 
+проверяется владение, образуется "сдача" и будет показано, как перечисленные выше свойства
+достигаются.
 
-#### Balance
+#### Баланс
 
-Building upon the properties of ECC we described above, one can obscure the values
-in a transaction.
+Основываясь на свойствах Эллиптических Кривых (ЭК), некто может сокрыть 
+количество отправляемых монет в транзакции.
 
-If _v_ is the value of a transaction input or output and _H_ an elliptic curve, we can simply
-embed `v*H` instead of _v_ in a transaction. This works because using the ECC
-operations, we can still validate that the sum of the outputs of a transaction equals the
-sum of inputs:
+Пусть _v_ это значение входа или выхода транзакции и _H_ это Эллиптическая Кривая, тогда
+мы можем просто подставить значение `v*H` вместо _v_ в транзакцию. Это работает благодаря тому,
+что используя операции на Эллиптической Кривой, мы сможем удостовериться, что сумма
+выходов транзакции равняется сумме её входов:
 
     v1 + v2 = v3  =>  v1*H + v2*H = v3*H
 
-Verifying this property on every transaction allows the protocol to verify that a
-transaction doesn't create money out of thin air, without knowing what the actual
-values are. However, there are a finite number of usable values and one could try every single
-one of them to guess the value of your transaction. In addition, knowing v1 (from
-a previous transaction for example) and the resulting `v1*H` reveals all outputs with
-value v1 across the blockchain. For these reasons, we introduce a second elliptic curve
-_G_ (practically _G_ is just another generator point on the same curve group as _H_) and
-a private key _r_ used as a *blinding factor*.
+Проверка этого свойства для каждой транзакции позволяет протоколу удостовериться,
+что транзакция не создаёт новые монеты из воздуха, при этом не раскрывая
+количества передаваемых в транзакциях монет.
 
-An input or output value in a transaction can then be expressed as:
+Однако, количество пригодных для использования количеств монет конечно и злоумышленник может 
+попытаться угадать передаваемое количетсво монет путём перебора. Кроме того, знание _v1_ 
+(например из предыдущей транзакции) и конечного значения `v1*H`, раскрывает значения
+всех выходов всех транзакций, которые используют _v1_. Из-за этого мы введём вторую
+Эллиптическую Кривую _G_ (на самом деле _G_ это просто ещё один генератор группы, образованной той же самой кривой _H_)
+и некий приватный ключ _r_ используемый как *фактор сокрытия*.
+
+Таким образом, значения входов и выходов транзакции могут быть выражены как:
 
     r*G + v*H
 
-Where:
+Где:
 
-* _r_ is a private key used as a blinding factor, _G_ is an elliptic curve and
-  their product `r*G` is the public key for _r_ on _G_.
-* _v_ is the value of an input or output and _H_ is another elliptic curve.
+* _r_ приватный ключ, используемый как фактор сокрытия, _G_ это Эллиптическая Кривая и
+  произведение `r*G` это публичный ключ для _r_ на кривой _G_.
+* _v_ это значение входа или выхода транзакции, а _H_ это другая ЭК.
 
-Neither _v_ nor _r_ can be deduced, leveraging the fundamental properties of Elliptic
-Curve Cryptography. `r*G + v*H` is called a _Pedersen Commitment_.
+Опираясь на ключевые свойства ЭК, ни _v_ ни _r_ не могут быть вычислены. Произведение
+`r*G + v*H` называется _Обязательство Педерсена_.
 
-As a an example, let's assume we want to build a transaction with two inputs and one
-output. We have (ignoring fees):
+В качестве примера, предположим, что мы хотим создать транзакцию с двумя входами и одним выходом,
+тогда (без учёта комиссий):
 
-* vi1 and vi2 as input values.
-* vo3 as output value.
+* vi1 и vi2 это входы.
+* vo3 это выход.
 
-Such that:
+Такие, что:
 
     vi1 + vi2 = vo3
 
-Generating a private key as a blinding factor for each input value and replacing each value
-with their respective Pedersen Commitments in the previous equation, we obtain:
+Создав приватные ключи как факторы сокрытия для каждого из значений и заменив их на
+соответствующие Обязательства Педерсена в предыдущем уравнении, мы получим другое уравнение:
 
     (ri1*G + vi1*H) + (ri2*G + vi2*H) = (ro3*G + vo3*H)
 
-Which as a consequence requires that:
+Которое, как следствие, требует, чтобы:
 
     ri1 + ri2 = ro3
 
-This is the first pillar of MimbleWimble: the arithmetic required to validate a
-transaction can be done without knowing any of the values.
+Это первый из столпов МимблВимбла: вычисления, требуемые для валидации транзакции,
+могут быть совершены без раскрытия количеств монет, передаваемых этими транзакциями.
 
-As a final note, this idea is actually derived from Greg Maxwell's
-[Confidential Transactions](https://www.elementsproject.org/elements/confidential-transactions/),
-which is itself derived from an Adam Back proposal for homomorphic values applied
-to Bitcoin.
+Примечательно, что эта идея была выведена из 
+[Конфиденциальных Транзакций](https://www.elementsproject.org/elements/confidential-transactions/) Грега Максвелла,
+которые, в свою очередь, сами основаны на предложении Адама Бэка для гомоморфных значений, применимых к
+Биткоину.
 
-#### Ownership
+#### Владение
 
-In the previous section we introduced a private key as a blinding factor to obscure the
-transaction's values. The second insight of MimbleWimble is that this private
-key can be leveraged to prove ownership of the value.
+Выше мы ввели приватный ключ в качестве фактора сокрытия, чтобы засекретить информацию о 
+количестве передаваемых транзакцией монет. Вторая идея, которую предоставляет МимблВимбл, это 
+то, что этот же самый ключ может использоваться для доказательства владения монетами.
 
-Alice sends you 3 coins and to obscure that amount, you chose 28 as your
-blinding factor (note that in practice, the blinding factor being a private key, it's an
-extremely large number). Somewhere on the blockchain, the following output appears and
-should only be spendable by you:
+Алиса отправляет вам 3 монеты и, чтобы засекретить количество, вы выбрали 28 как ваш
+фактор сокрытия (заметим, что на практике фактор сокрытия, будучи приватным ключём, 
+является очень большим числом). Тогда где-то в блокчейне должен быть следующий выход (UTXO),
+доступный для траты только вами:
 
     X = 28*G + 3*H
 
-_X_, the result of the addition, is visible by everyone. The value 3 is only known to you and Alice,
-and 28 is only known to you.
+Сумма _X_ является видимой для всех, а значение 3 известно только вам и Алисе. Ну а число 28 известно только вам.
 
-To transfer those 3 coins again, the protocol requires 28 to be known somehow.
-To demonstrate how this works, let's say you want to transfer those 3 same coins to Carol.
-You need to build a simple transaction such that:
+Чтобы передать эти 3 монеты снова, протокол требует, чтобы число 28 было каким-то образом раскрыто.
+Чтобы показать принцип работы, допустим, что вы хотите передать те же 3 моенты Кэрол.
+Тогда вам нужно создать простую транзакцию, такую, что:
 
     Xi => Y
 
-Where _Xi_ is an input that spends your _X_ output and Y is Carol's output. There is no way to build
-such a transaction and balance it without knowing your private key of 28. Indeed, if Carol
-is to balance this transaction, she needs to know both the value sent and your private key
-so that:
+Где _Xi_ это выход, который тратит ваш вход _X_, а Y это выход для Кэрол. Не существует способа создать
+такую транзакыию без знания вашего приватного ключа 28. Разумеется, если Кэрол решит принять монеты из этой
+транзации, ей нужно будет узнать как значение вашего приватного ключа, так и значение, которое этой
+транзакцией переводится. Таким образом:
 
     Y - Xi = (28*G + 3*H) - (28*G + 3*H) = 0*G + 0*H
 
-By checking that everything has been zeroed out, we can again make sure that
-no new money has been created.
+Проверяя, что всё свелось к нулю, мы в очередной раз убедимся, что новых монет создано не было.
 
-Wait! Stop! Now you know the private key in Carol's output (which, in this case, must
-be the same as yours to balance out) and so you could
-steal the money back from Carol!
+Но постойте-ка! Теперь вы знаете значение приватного ключа из выхода Кэрол (которое, в этом случае, должно быть
+такое же, как и у вас, чтобы свести сумму в ноль) и тогда вы можете украсть деньги у Кэрол назад!
 
-To solve this, Carol uses a private key of her choosing.
-She picks 113 say, and what ends up on the blockchain is:
+Для решения этой проблемы, Кэрол использует приватный ключ, который выбрала сама.
+Например, она выбрала 133, тогда в блокчейн будет записано:
 
     Y - Xi = (113*G + 3*H) - (28*G + 3*H) = 85*G + 0*H
 
-Now the transaction no longer sums to zero and we have an _excess value_ on _G_
-(85), which is the result of the summation of all blinding factors. But because `85*G` is
-a valid public key on the elliptic curve _G_, with private key 85,
-for any x and y, only if `y = 0` is `x*G + y*H` a valid public key on _G_.
+Эта сумма (транзакция) больше не сводится к нулю и мы имеем _избыточное_ значение на _G_ (85), 
+которое является результатом сложения всех факторов сокрытия. Но из-за того, что
+произведение `85*G` будет являться корректным публичным ключем на ЭК _G_ с приватным ключем 85,
+для любого x и y, только если `y = 0`, сумма `x*G + y*H` будет являться публичным ключём на _G_.
 
-So all the protocol needs to verify is that (`Y - Xi`) is a valid public key on _G_ and that
-the transacting parties collectively know the private key (85 in our transaction with Carol). The
-simplest way to do so is to require a signature built with the excess value (85),
-which then validates that:
+Всё что нужно, это проверить, что (`Y - Xi`) - валидный публичный ключ на кривой _G_ и
+участники транзакции совместно обладают приватным ключём (85 в случае транзакции с Кэрол).
+Простейший способ достичь этого, это если потребовать создавать некую подпись избыточного значения (85),
+которая будет удостоверять, что:
 
-* The transacting parties collectively know the private key, and
-* The sum of the transaction outputs, minus the inputs, sum to a zero value
-  (because only a valid public key, matching the private key, will check against
-  the signature).
+* Участники транзакции совместно знают приватный ключ, и
+* Сумма выходов транзакции минус сумма входов, равняется нулю
+  (потому что только валидный публичный ключ будет удовлетворять этой подписи)
+  
+Эта подпись, прикрепляемая к каждой транзакции, совместно с некоей дополнительной информацией 
+(например комиссиями майнеров) называется _ядром транзакции_ и должна проверяться всеми валидаторами.
 
-This signature, attached to every transaction, together with some additional data (like mining
-fees), is called a _transaction kernel_ and is checked by all validators.
+#### Некоторые Уточнения
 
-#### Some Finer Points
+Этот раздел уточняет процесс создания транзакций, обсудив то, как образуется 
+"сдача" и требования для доказательств неотрицательности значений. Ничего из этого не 
+требуется для понимания МимблВимбла и Grin, так что если вы спешите, можете спокойной переходить
+к разделу [Всё Вместе](#всё-вместе).
 
-This section elaborates on the building of transactions by discussing how change is
-introduced and the requirement for range proofs so all values are proven to be
-non-negative. Neither of these are absolutely required to understand MimbleWimble and
-Grin, so if you're in a hurry, feel free to jump straight to
-[Putting It All Together](#putting-it-all-together).
+##### Сдача
 
-##### Change
+Допустим вы хотите отправить 2 монеты Кэрол из трёх монет, которые вы получили от 
+Алисы. Чтобы это сделать, вы отправите остаток из 1 монеты назад к себе в качестве сдачи.
+Для этого создайте другой приватный ключ (например 12) в качестве фактора сокрытия, чтобы защитить ваш
+выход сдачи. Кэрол использует свой приватный ключ как и ранее.
 
-Let's say you only want to send 2 coins to Carol from the 3 you received from
-Alice. To do this you would send the remaining 1 coin back to yourself as change.
-You generate another private key (say 12) as a blinding factor to
-protect your change output. Carol uses her own private key as before.
+    Выход для сдачи:     12*G + 1*H
+    Выход для Кэрол:    113*G + 2*H
 
-    Change output:     12*G + 1*H
-    Carol's output:    113*G + 2*H
-
-What ends up on the blockchain is something very similar to before.
-And the signature is again built with the excess value, 97 in this example.
+Тогда в блокчейн попадёт кое-что уже нам знакомое, а подпись опять-таки построена 
+на избыточном значении, 97 в этом примере.
 
     (12*G + 1*H) + (113*G + 2*H) - (28*G + 3*H) = 97*G + 0*H
 
-##### Range Proofs
+##### Доказательства Интервала
 
-In all the above calculations, we rely on the transaction values to always be positive. The
-introduction of negative amounts would be extremely problematic as one could
-create new funds in every transaction.
+Во всех вычислениях, проделанных выше, мы опираемся на тот факт, что количества передаваемых
+монет в транзакциях всегда являются положительным числом. Если допустить использовать отрицательные
+значения передаваемых монет, это вызовет много проблем и позволит создавать новые монеты в каждой транзакции.
 
-For example, one could create a transaction with an input of 2 and outputs of 5
-and -3 and still obtain a well-balanced transaction, following the definition in
-the previous sections. This can't be easily detected because even if _x_ is
-negative, the corresponding point `x.H` on the curve looks like any other.
+Например, некто может создать транзакцию со входом 2 и выходами 5 и -3 монет и
+всё равно получить хорошо сбалансированную транзакцию, согласно формулам выше.
+Трудно будет обрнаружить такие случаи, поскольку даже если _x_ отрицательно, 
+соответствующая точка `x*H` на кривой является неотличимой от других.
 
 To solve this problem, MimbleWimble leverages another cryptographic concept (also
 coming from Confidential Transactions) called
