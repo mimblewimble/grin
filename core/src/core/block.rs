@@ -117,9 +117,8 @@ pub struct BlockHeader {
 	pub version: u16,
 	/// Height of this block since the genesis block (height 0)
 	pub height: u64,
-
-	// /// Hash of the block previous to this in the chain.
-	// pub previous: Hash,
+	/// Hash of the block previous to this in the chain (deprecated).
+	pub deprecated_previous: Hash,
 	/// Root hash of the header MMR at the previous header.
 	pub prev_root: Hash,
 	/// Timestamp at which the block was built.
@@ -178,7 +177,7 @@ impl Default for BlockHeader {
 			version: 1,
 			height: 0,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
-			// previous: ZERO_HASH,
+			deprecated_previous: ZERO_HASH,
 			prev_root: ZERO_HASH,
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
@@ -214,7 +213,7 @@ impl Writeable for BlockHeader {
 impl Readable for BlockHeader {
 	fn read(reader: &mut Reader) -> Result<BlockHeader, ser::Error> {
 		let (version, height, timestamp) = ser_multiread!(reader, read_u16, read_u64, read_i64);
-		// let previous = Hash::read(reader)?;
+		let deprecated_previous = Hash::read(reader)?;
 		let prev_root = Hash::read(reader)?;
 		let output_root = Hash::read(reader)?;
 		let range_proof_root = Hash::read(reader)?;
@@ -233,7 +232,7 @@ impl Readable for BlockHeader {
 			version,
 			height,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc),
-			// previous,
+			deprecated_previous,
 			prev_root,
 			output_root,
 			range_proof_root,
@@ -254,7 +253,7 @@ impl BlockHeader {
 			[write_u16, self.version],
 			[write_u64, self.height],
 			[write_i64, self.timestamp.timestamp()],
-			// [write_fixed_bytes, &self.previous],
+			[write_fixed_bytes, &self.deprecated_previous],
 			[write_fixed_bytes, &self.prev_root],
 			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
