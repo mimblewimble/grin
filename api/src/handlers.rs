@@ -241,15 +241,19 @@ impl Handler for OutputHandler {
 //
 // Last inserted nodes::
 // GET /v1/txhashset/lastoutputs (gets last 10)
-// GET /v1/txhashset/lastoutputs?n=5
-// GET /v1/txhashset/lastrangeproofs
-// GET /v1/txhashset/lastkernels
+// GET /v1/txhashset/lastoutputs?n=5 (get last 5)
+//
+// GET /v1/txhashset/lastrangeproofs (gets last 10)
+// GET /v1/txhashset/lastrangeproofs?n=5 (get last 5)
+//
+// GET /v1/txhashset/lastkernels (gets last 10)
+// GET /v1/txhashset/lastkernels?n=5 (get last 5)
 
 // UTXO traversal::
 // GET /v1/txhashset/outputs?start_index=1&max=100
 //
 // Build a merkle proof for a given pos
-// GET /v1/txhashset/merkleproof?id=1
+// GET /v1/txhashset/merkleproof?id=1 (get merkle proof of output commitment 1)
 
 struct TxHashSetHandler {
 	chain: Weak<chain::Chain>,
