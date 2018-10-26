@@ -2,6 +2,10 @@
 name = "grin_api"
 version = "0.4.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+description = "APIs for grin, a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+license = "Apache-2.0"
+repository = "https://github.com/mimblewimble/grin"
+keywords = [ "crypto", "grin", "mimblewimble" ]
 workspace = ".."
 publish = false
 
@@ -26,9 +30,9 @@ futures = "0.1.21"
 rustls = "0.13"
 url = "1.7.0"
 
-grin_core = { path = "../core" }
-grin_chain = { path = "../chain" }
-grin_p2p = { path = "../p2p" }
-grin_pool = { path = "../pool" }
-grin_store = { path = "../store" }
-grin_util = { path = "../util" }
+grin_core = { path = "../core", version = "0.4.0" }
+grin_chain = { path = "../chain", version = "0.4.0" }
+grin_p2p = { path = "../p2p", version = "0.4.0" }
+grin_pool = { path = "../pool", version = "0.4.0" }
+grin_store = { path = "../store", version = "0.4.0" }
+grin_util = { path = "../util", version = "0.4.0" }

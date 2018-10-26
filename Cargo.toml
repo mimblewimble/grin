@@ -2,9 +2,12 @@
 name = "grin"
 version = "0.4.0"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
+license = "Apache-2.0"
+repository = "https://github.com/mimblewimble/grin"
+keywords = [ "crypto", "grin", "mimblewimble" ]
+readme = "README.md"
 exclude = ["**/*.grin", "**/*.grin2"]
-publish = false
-autobins = false
 build = "src/build/build.rs"
 
 [workspace]
@@ -27,18 +30,14 @@ serde_json = "1"
 log = "0.4"
 term = "0.5"
 
-grin_api = { path = "./api" }
-grin_config = { path = "./config" }
-grin_core = { path = "./core" }
-grin_keychain = { path = "./keychain" }
-grin_p2p = { path = "./p2p"}
-grin_servers = { path = "./servers" }
-grin_util = { path = "./util"}
-grin_wallet = { path = "./wallet" }
-
-# TODO - once "patch" is available we should be able to clean up the workspace dependencies
-# [patch.crate-io]
-# secp256k1zkp = { git = "https://github.com/mimblewimble/rust-secp256k1-zkp" }
+grin_api = { path = "./api", version = "0.4.0" }
+grin_config = { path = "./config", version = "0.4.0" }
+grin_core = { path = "./core", version = "0.4.0" }
+grin_keychain = { path = "./keychain", version = "0.4.0" }
+grin_p2p = { path = "./p2p", version = "0.4.0" }
+grin_servers = { path = "./servers", version = "0.4.0" }
+grin_util = { path = "./util", version = "0.4.0" }
+grin_wallet = { path = "./wallet", version = "0.4.0" }
 
 [build-dependencies]
 built = "0.3"
