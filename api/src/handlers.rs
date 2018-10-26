@@ -249,7 +249,7 @@ impl Handler for OutputHandler {
 // GET /v1/txhashset/outputs?start_index=1&max=100
 //
 // Build a merkle proof for a given pos
-// GET /v1/txhashset/merkleproof?n=1
+// GET /v1/txhashset/merkleproof?id=1
 
 struct TxHashSetHandler {
 	chain: Weak<chain::Chain>,
@@ -820,11 +820,11 @@ pub fn build_router(
 		"get chain/outputs".to_string(),
 		"get status".to_string(),
 		"get txhashset/roots".to_string(),
-		"get txhashset/merkleproof?n=output_id".to_string(),
 		"get txhashset/lastoutputs?n=<count>".to_string(),
 		"get txhashset/lastrangeproofs?n=<count>".to_string(),
 		"get txhashset/lastkernels?n=<count>".to_string(),
 		"get txhashset/outputs?start_index=<index>&max=<count>".to_string(),
+		"get txhashset/merkleproof?id=<output_commitment>".to_string(),
 		"get pool".to_string(),
 		"post pool/push".to_string(),
 		"post peers/<ip>:<port>/ban".to_string(),
