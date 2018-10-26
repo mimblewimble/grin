@@ -501,7 +501,7 @@ fn secondary_pow_scale() {
 	let mut low_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_DIFFICULTY as u32);
 	low_hi.is_secondary = true;
 	assert_eq!(
-		secondary_pow_scaling(890_000, &(0..window).map(|_| low_hi.clone()).collect()::<Vec<_>>),
+		secondary_pow_scaling(890_000, &(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()),
 		MIN_DIFFICULTY as u32
 	);
 	// just about the right ratio, also no longer playing with median
