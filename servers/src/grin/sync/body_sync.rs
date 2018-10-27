@@ -167,7 +167,8 @@ impl BodySync {
 		if blocks_received > self.prev_blocks_received {
 			// some received, update for next check
 			self.prev_receive_ts = Utc::now();
-			self.blocks_requested.saturating_sub(blocks_received - self.prev_blocks_received);
+			self.blocks_requested
+				.saturating_sub(blocks_received - self.prev_blocks_received);
 			self.prev_blocks_received = blocks_received;
 		}
 
@@ -182,7 +183,8 @@ impl BodySync {
 
 	// Total numbers received on this chain, including the head and orphans
 	fn blocks_received(&self) -> u64 {
-		self.chain.head().unwrap().height + self.chain.orphans_len() as u64 + self.chain.orphans_evicted_len() as u64
+		self.chain.head().unwrap().height
+			+ self.chain.orphans_len() as u64
+			+ self.chain.orphans_evicted_len() as u64
 	}
-
 }
