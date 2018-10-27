@@ -835,7 +835,7 @@ pub fn build_router(
 		"post peers/<ip>:<port>/unban".to_string(),
 		"get peers/all".to_string(),
 		"get peers/connected".to_string(),
-		"get peers/<ip>".to_string(),
+		"get peers/<ip>:<port>".to_string(),
 		"get headers".to_string(),
 	];
 	let index_handler = IndexHandler { list: route_list };
