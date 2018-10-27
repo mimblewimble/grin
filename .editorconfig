@@ -1,6 +1,6 @@
 # top-most .editorconfig file
 root = true
-
+#root cannot be false
 # use hard tabs for rust source files
 [*.rs]
 indent_style = tab
