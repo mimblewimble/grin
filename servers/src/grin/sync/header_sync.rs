@@ -244,7 +244,12 @@ mod test {
 	#[test]
 	fn test_close_enough() {
 		let zh = hash::ZERO_HASH;
-		let locator = vec![(1000, zh.clone()), (500, zh.clone()), (250, zh.clone()), (125, zh.clone())];
+		let locator = vec![
+			(1000, zh.clone()),
+			(500, zh.clone()),
+			(250, zh.clone()),
+			(125, zh.clone()),
+		];
 		assert_eq!(close_enough(&locator, 1100), None);
 		assert_eq!(close_enough(&locator, 900), Some((1000, zh)));
 		assert_eq!(close_enough(&locator, 270), Some((250, zh)));
