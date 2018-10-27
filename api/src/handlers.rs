@@ -241,15 +241,19 @@ impl Handler for OutputHandler {
 //
 // Last inserted nodes::
 // GET /v1/txhashset/lastoutputs (gets last 10)
-// GET /v1/txhashset/lastoutputs?n=5
-// GET /v1/txhashset/lastrangeproofs
-// GET /v1/txhashset/lastkernels
+// GET /v1/txhashset/lastoutputs?n=5 (get last 5)
+//
+// GET /v1/txhashset/lastrangeproofs (gets last 10)
+// GET /v1/txhashset/lastrangeproofs?n=5 (get last 5)
+//
+// GET /v1/txhashset/lastkernels (gets last 10)
+// GET /v1/txhashset/lastkernels?n=5 (get last 5)
 
 // UTXO traversal::
 // GET /v1/txhashset/outputs?start_index=1&max=100
 //
 // Build a merkle proof for a given pos
-// GET /v1/txhashset/merkleproof?n=1
+// GET /v1/txhashset/merkleproof?id=1 (get merkle proof of output commitment 1)
 
 struct TxHashSetHandler {
 	chain: Weak<chain::Chain>,
@@ -820,17 +824,19 @@ pub fn build_router(
 		"get chain/outputs".to_string(),
 		"get status".to_string(),
 		"get txhashset/roots".to_string(),
-		"get txhashset/lastoutputs?n=10".to_string(),
-		"get txhashset/lastrangeproofs".to_string(),
-		"get txhashset/lastkernels".to_string(),
-		"get txhashset/outputs?start_index=1&max=100".to_string(),
+		"get txhashset/lastoutputs?n=<count>".to_string(),
+		"get txhashset/lastrangeproofs?n=<count>".to_string(),
+		"get txhashset/lastkernels?n=<count>".to_string(),
+		"get txhashset/outputs?start_index=<index>&max=<count>".to_string(),
+		"get txhashset/merkleproof?id=<output_commitment>".to_string(),
 		"get pool".to_string(),
 		"post pool/push".to_string(),
-		"post peers/a.b.c.d:p/ban".to_string(),
-		"post peers/a.b.c.d:p/unban".to_string(),
+		"post peers/<ip>:<port>/ban".to_string(),
+		"post peers/<ip>:<port>/unban".to_string(),
 		"get peers/all".to_string(),
 		"get peers/connected".to_string(),
-		"get peers/a.b.c.d".to_string(),
+		"get peers/<ip>:<port>".to_string(),
+		"get headers".to_string(),
 	];
 	let index_handler = IndexHandler { list: route_list };
 
