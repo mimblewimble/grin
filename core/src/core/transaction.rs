@@ -292,11 +292,9 @@ impl Readable for TransactionBody {
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
 		// quick block weight check before proceeding
-		let tx_block_weight = TransactionBody::weight(
-			input_len as usize,
-			output_len as usize,
-			kernel_len as usize,
-		) as usize;
+		let tx_block_weight =
+			TransactionBody::weight(input_len as usize, output_len as usize, kernel_len as usize)
+				as usize;
 
 		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
 			return Err(ser::Error::TooLargeReadErr);
@@ -457,7 +455,11 @@ impl TransactionBody {
 
 	/// Lock height of a body is the max lock height of the kernels.
 	pub fn lock_height(&self) -> u64 {
-		self.kernels.iter().map(|x| x.lock_height).max().unwrap_or(0)
+		self.kernels
+			.iter()
+			.map(|x| x.lock_height)
+			.max()
+			.unwrap_or(0)
 	}
 
 	// Verify the body is not too big in terms of number of inputs|outputs|kernels.
