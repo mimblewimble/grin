@@ -651,7 +651,7 @@ impl<'a> Iterator for DifficultyIter<'a> {
 				.clone()
 				.map_or(Difficulty::zero(), |x| x.total_difficulty());
 			let difficulty = header.total_difficulty() - prev_difficulty;
-			let scaling = header.pow.scaling_difficulty;
+			let scaling = header.pow.secondary_scaling;
 
 			Some(HeaderInfo::new(
 				header.timestamp.timestamp() as u64,

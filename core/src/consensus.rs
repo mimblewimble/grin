@@ -158,18 +158,18 @@ pub fn graph_weight(edge_bits: u8) -> u64 {
 	(2 << (edge_bits - global::base_edge_bits()) as u64) * (edge_bits as u64)
 }
 
-/// minimum possible difficulty equal to graph_weight(SECOND_POW_EDGE_BITS)
-pub const MIN_DIFFICULTY: u64 =
+/// minimum difficulty to avoid getting stuck when trying to increase subject to dampening
+pub const MIN_DIFFICULTY: u64 = DAMP_FACTOR;
+
+/// unit difficulty, equal to graph_weight(SECOND_POW_EDGE_BITS)
+pub const UNIT_DIFFICULTY: u64 =
 	((2 as u64) << (SECOND_POW_EDGE_BITS - BASE_EDGE_BITS)) * (SECOND_POW_EDGE_BITS as u64);
 
 /// The initial difficulty at launch. This should be over-estimated
 /// and difficulty should come down at launch rather than up
 /// Currently grossly over-estimated at 10% of current
 /// ethereum GPUs (assuming 1GPU can solve a block at diff 1 in one block interval)
-/// FOR MAINNET, use
-/// pub const INITIAL_DIFFICULTY: u64 = 1_000_000 * MIN_DIFFICULTY;
-/// Pick MUCH more modest value for TESTNET4:
-pub const INITIAL_DIFFICULTY: u64 = 1_000 * MIN_DIFFICULTY;
+pub const INITIAL_DIFFICULTY: u64 = 1_000_000 * UNIT_DIFFICULTY;
 
 /// Consensus errors
 #[derive(Clone, Debug, Eq, PartialEq, Fail)]
@@ -237,12 +237,12 @@ impl HeaderInfo {
 	}
 }
 
-/// TODO: Doc
+/// Move value linearly toward a goal
 pub fn damp(actual: u64, goal: u64, damp_factor: u64) -> u64 {
 	(1 * actual + (damp_factor - 1) * goal) / damp_factor
 }
 
-/// TODO: Doc
+/// limit value to be within some factor from a goal
 pub fn clamp(actual: u64, goal: u64, clamp_factor: u64) -> u64 {
 	max(goal / clamp_factor, min(actual, goal * clamp_factor))
 }
@@ -290,7 +290,8 @@ where
 		BLOCK_TIME_WINDOW,
 		CLAMP_FACTOR,
 	);
-	let difficulty = max(1, diff_sum * BLOCK_TIME_SEC / adj_ts);
+	// minimum difficulty avoids getting stuck due to dampening
+	let difficulty = max(MIN_DIFFICULTY, diff_sum * BLOCK_TIME_SEC / adj_ts);
 
 	HeaderInfo::from_diff_scaling(Difficulty::from_num(difficulty), sec_pow_scaling)
 }
@@ -319,7 +320,8 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
 	);
 	let scale = scale_sum * target_pct / adj_count;
 
-	max(1, min(scale, MAX_SECONDARY_SCALING)) as u32
+	// minimum difficulty avoids getting stuck due to dampening
+	max(MIN_DIFFICULTY, min(scale, MAX_SECONDARY_SCALING)) as u32
 }
 
 /// Consensus rule that collections of items are sorted lexicographically.

@@ -156,7 +156,7 @@ fn fixed_size_of_serialized_header(_version: u16) -> usize {
 	size += mem::size_of::<u64>(); // output_mmr_size
 	size += mem::size_of::<u64>(); // kernel_mmr_size
 	size += mem::size_of::<Difficulty>(); // total_difficulty
-	size += mem::size_of::<u32>(); // scaling_difficulty
+	size += mem::size_of::<u32>(); // secondary_scaling
 	size += mem::size_of::<u64>(); // nonce
 	size
 }

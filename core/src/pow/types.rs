@@ -21,7 +21,7 @@ use std::{fmt, iter};
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use consensus::{graph_weight, SECOND_POW_EDGE_BITS};
+use consensus::{graph_weight, SECOND_POW_EDGE_BITS, MIN_DIFFICULTY};
 use core::hash::Hashed;
 use global;
 use ser::{self, Readable, Reader, Writeable, Writer};
@@ -64,10 +64,14 @@ impl Difficulty {
 		Difficulty { num: 0 }
 	}
 
-	/// Difficulty of one, which is the minimum difficulty
-	/// (when the hash equals the max target)
-	pub fn one() -> Difficulty {
-		Difficulty { num: 1 }
+	/// Difficulty of MIN_DIFFICULTY
+	pub fn min() -> Difficulty {
+		Difficulty { num: MIN_DIFFICULTY }
+	}
+
+	/// Difficulty unit, which is the graph weight of minimal graph
+	pub fn unit() -> Difficulty {
+		Difficulty { num: global::initial_graph_weight() as u64 }
 	}
 
 	/// Convert a `u32` into a `Difficulty`
@@ -209,8 +213,8 @@ impl<'de> de::Visitor<'de> for DiffVisitor {
 pub struct ProofOfWork {
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
-	/// Difficulty scaling factor between the different proofs of work
-	pub scaling_difficulty: u32,
+	/// Variable difficulty scaling factor fo secondary proof of work
+	pub secondary_scaling: u32,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Proof of work data.
@@ -221,8 +225,8 @@ impl Default for ProofOfWork {
 	fn default() -> ProofOfWork {
 		let proof_size = global::proofsize();
 		ProofOfWork {
-			total_difficulty: Difficulty::one(),
-			scaling_difficulty: 1,
+			total_difficulty: Difficulty::min(),
+			secondary_scaling: 1,
 			nonce: 0,
 			proof: Proof::zero(proof_size),
 		}
@@ -233,12 +237,12 @@ impl ProofOfWork {
 	/// Read implementation, can't define as trait impl as we need a version
 	pub fn read(_ver: u16, reader: &mut Reader) -> Result<ProofOfWork, ser::Error> {
 		let total_difficulty = Difficulty::read(reader)?;
-		let scaling_difficulty = reader.read_u32()?;
+		let secondary_scaling = reader.read_u32()?;
 		let nonce = reader.read_u64()?;
 		let proof = Proof::read(reader)?;
 		Ok(ProofOfWork {
 			total_difficulty,
-			scaling_difficulty,
+			secondary_scaling,
 			nonce,
 			proof,
 		})
@@ -260,7 +264,7 @@ impl ProofOfWork {
 		ser_multiwrite!(
 			writer,
 			[write_u64, self.total_difficulty.to_num()],
-			[write_u32, self.scaling_difficulty]
+			[write_u32, self.secondary_scaling]
 		);
 		Ok(())
 	}
@@ -270,7 +274,7 @@ impl ProofOfWork {
 		// 2 proof of works, Cuckoo29 (for now) and Cuckoo30+, which are scaled
 		// differently (scaling not controlled for now)
 		if self.proof.edge_bits == SECOND_POW_EDGE_BITS {
-			Difficulty::from_proof_scaled(&self.proof, self.scaling_difficulty)
+			Difficulty::from_proof_scaled(&self.proof, self.secondary_scaling)
 		} else {
 			Difficulty::from_proof_adjusted(&self.proof)
 		}

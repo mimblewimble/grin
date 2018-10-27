@@ -381,55 +381,38 @@ fn adjustment_scenarios() {
 fn next_target_adjustment() {
 	global::set_mining_mode(global::ChainTypes::AutomatedTesting);
 	let cur_time = Utc::now().timestamp() as u64;
+	let diff_min = Difficulty::min();
 
-	let diff_one = Difficulty::one();
-	assert_eq!(
-		next_difficulty(1, vec![HeaderInfo::from_ts_diff(cur_time, diff_one)]),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
-	);
-	assert_eq!(
-		next_difficulty(1, vec![HeaderInfo::new(cur_time, diff_one, 10, true)]),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
-	);
+	// Check we don't get stuck on difficulty <= MIN_DIFFICULTY (at 4x faster blocks at least)
+	let mut hi = HeaderInfo::from_diff_scaling(diff_min, MIN_DIFFICULTY as u32);
+	hi.is_secondary = false;
+	let hinext = next_difficulty(1, repeat(15, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None));
+	assert_ne!(hinext.difficulty, diff_min);
 
-	let mut hi = HeaderInfo::from_diff_scaling(diff_one, 1);
-	assert_eq!(
-		next_difficulty(1, repeat(60, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
-	);
-	hi.is_secondary = true;
-	assert_eq!(
-		next_difficulty(1, repeat(60, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 1),
-	);
-	hi.secondary_scaling = 100;
-	assert_eq!(
-		next_difficulty(1, repeat(60, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)),
-		HeaderInfo::from_diff_scaling(Difficulty::one(), 96),
-	);
-
-	// Check we don't get stuck on difficulty 1
-	let mut hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 1);
-	assert_ne!(
-		next_difficulty(1, repeat(1, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None)).difficulty,
-		Difficulty::one()
-	);
+	// Check we don't get stuck on scale MIN_DIFFICULTY, when primary frequency is too high
+	assert_ne!(hinext.secondary_scaling, MIN_DIFFICULTY as u32);
 
 	// just enough data, right interval, should stay constant
 	let just_enough = DIFFICULTY_ADJUST_WINDOW + 1;
-	hi.difficulty = Difficulty::from_num(1000);
+	hi.difficulty = Difficulty::from_num(10000);
 	assert_eq!(
-		next_difficulty(1, repeat(60, hi.clone(), just_enough, None)).difficulty,
-		Difficulty::from_num(1000)
+		next_difficulty(1, repeat(BLOCK_TIME_SEC, hi.clone(), just_enough, None)).difficulty,
+		Difficulty::from_num(10000)
+	);
+
+	// check pre difficulty_data_to_vector effect on retargetting
+	assert_eq!(
+		next_difficulty(1, vec![HeaderInfo::from_ts_diff(42, hi.difficulty)]).difficulty,
+		Difficulty::from_num(14913)
 	);
 
 	// checking averaging works
 	hi.difficulty = Difficulty::from_num(500);
 	let sec = DIFFICULTY_ADJUST_WINDOW / 2;
-	let mut s1 = repeat(60, hi.clone(), sec, Some(cur_time));
+	let mut s1 = repeat(BLOCK_TIME_SEC, hi.clone(), sec, Some(cur_time));
 	let mut s2 = repeat_offs(
-		cur_time + (sec * 60) as u64,
-		60,
+		cur_time + (sec * BLOCK_TIME_SEC) as u64,
+		BLOCK_TIME_SEC,
 		1500,
 		DIFFICULTY_ADJUST_WINDOW / 2,
 	);
@@ -459,12 +442,12 @@ fn next_target_adjustment() {
 		next_difficulty(1, repeat(45, hi.clone(), just_enough, None)).difficulty,
 		Difficulty::from_num(1090)
 	);
+	assert_eq!(
+		next_difficulty(1, repeat(30, hi.clone(), just_enough, None)).difficulty,
+		Difficulty::from_num(1200)
+	);
 
 	// hitting lower time bound, should always get the same result below
-	assert_eq!(
-		next_difficulty(1, repeat(0, hi.clone(), just_enough, None)).difficulty,
-		Difficulty::from_num(1500)
-	);
 	assert_eq!(
 		next_difficulty(1, repeat(0, hi.clone(), just_enough, None)).difficulty,
 		Difficulty::from_num(1500)
@@ -480,11 +463,11 @@ fn next_target_adjustment() {
 		Difficulty::from_num(500)
 	);
 
-	// We should never drop below 1
+	// We should never drop below minimum
 	hi.difficulty = Difficulty::zero();
 	assert_eq!(
 		next_difficulty(1, repeat(90, hi.clone(), just_enough, None)).difficulty,
-		Difficulty::from_num(1)
+		Difficulty::min()
 	);
 }
 
@@ -495,6 +478,7 @@ fn secondary_pow_scale() {
 
 	// all primary, factor should increase so it becomes easier to find a high
 	// difficulty block
+	hi.is_secondary = false;
 	assert_eq!(
 		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
 		147
@@ -514,17 +498,15 @@ fn secondary_pow_scale() {
 		49
 	);
 	// same as above, testing lowest bound
-	let mut low_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 3);
+	let mut low_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_DIFFICULTY as u32);
 	low_hi.is_secondary = true;
 	assert_eq!(
-		secondary_pow_scaling(
-			890_000,
-			&(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()
-		),
-		1
+		secondary_pow_scaling(890_000, &(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()),
+		MIN_DIFFICULTY as u32
 	);
 	// just about the right ratio, also no longer playing with median
-	let primary_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 50);
+	let mut primary_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 50);
+	primary_hi.is_secondary = false;
 	assert_eq!(
 		secondary_pow_scaling(
 			1,
@@ -535,7 +517,7 @@ fn secondary_pow_scale() {
 		),
 		94
 	);
-	// 95% secondary, should come down based on 100 median
+	// 95% secondary, should come down based on 97.5 average
 	assert_eq!(
 		secondary_pow_scaling(
 			1,
@@ -546,7 +528,7 @@ fn secondary_pow_scale() {
 		),
 		94
 	);
-	// 40% secondary, should come up based on 50 median
+	// 40% secondary, should come up based on 70 average
 	assert_eq!(
 		secondary_pow_scaling(
 			1,

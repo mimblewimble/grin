@@ -53,7 +53,7 @@ fn test_various_store_indices() {
 	let genesis = pow::mine_genesis_block().unwrap();
 	let reward = libtx::reward::output(&keychain, &key_id, 0, 1).unwrap();
 
-	let block = Block::new(&genesis.header, vec![], Difficulty::one(), reward).unwrap();
+	let block = Block::new(&genesis.header, vec![], Difficulty::min(), reward).unwrap();
 	let block_hash = block.hash();
 
 	{

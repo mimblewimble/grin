@@ -53,7 +53,7 @@ fn test_transaction_pool_block_reconciliation() {
 		let height = 1;
 		let key_id = ExtKeychain::derive_key_id(1, height as u32, 0, 0, 0);
 		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
-		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::one(), reward).unwrap();
+		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::min(), reward).unwrap();
 
 		chain.update_db_for_block(&block);
 
@@ -68,7 +68,7 @@ fn test_transaction_pool_block_reconciliation() {
 		let key_id = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 		let fees = initial_tx.fee();
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
-		let block = Block::new(&header, vec![initial_tx], Difficulty::one(), reward).unwrap();
+		let block = Block::new(&header, vec![initial_tx], Difficulty::min(), reward).unwrap();
 
 		chain.update_db_for_block(&block);
 
@@ -158,7 +158,7 @@ fn test_transaction_pool_block_reconciliation() {
 		let key_id = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 		let fees = block_txs.iter().map(|tx| tx.fee()).sum();
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
-		let block = Block::new(&header, block_txs, Difficulty::one(), reward).unwrap();
+		let block = Block::new(&header, block_txs, Difficulty::min(), reward).unwrap();
 
 		chain.update_db_for_block(&block);
 		block

@@ -73,7 +73,7 @@ fn peer_handshake() {
 	let mut peer = Peer::connect(
 		&mut socket,
 		p2p::Capabilities::UNKNOWN,
-		Difficulty::one(),
+		Difficulty::min(),
 		my_addr,
 		&p2p::handshake::Handshake::new(Hash::from_vec(&vec![]), p2p_config.clone()),
 		net_adapter,
@@ -84,10 +84,10 @@ fn peer_handshake() {
 	peer.start(socket);
 	thread::sleep(time::Duration::from_secs(1));
 
-	peer.send_ping(Difficulty::one(), 0).unwrap();
+	peer.send_ping(Difficulty::min(), 0).unwrap();
 	thread::sleep(time::Duration::from_secs(1));
 
 	let server_peer = server.peers.get_connected_peer(&my_addr).unwrap();
-	assert_eq!(server_peer.info.total_difficulty(), Difficulty::one());
+	assert_eq!(server_peer.info.total_difficulty(), Difficulty::min());
 	assert!(server.peers.peer_count() > 0);
 }
