@@ -1,4 +1,4 @@
-# Grin's Security Process
+# Grin's Security Processes
 
 Grin has a [code of conduct](CODE_OF_CONDUCT.md) and the handling of vulnerability disclosure is no exception. We are committed to conduct our security process in a professional and civil manner. Public shaming, under-reporting or misrepresentation of vulnerabilities will not be tolerated.
 
