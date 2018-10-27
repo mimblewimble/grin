@@ -156,55 +156,51 @@ impl SyncRunner {
 	/// just receiving blocks through gossip.
 	fn needs_syncing(&self) -> (bool, u64) {
 		let local_diff = self.chain.head().unwrap().total_difficulty;
+		let mut is_syncing = self.sync_state.is_syncing();
 		let peer = self.peers.most_work_peer();
-		let is_syncing = self.sync_state.is_syncing();
-		let mut most_work_height = 0;
+
+		let peer_info = if let Some(p) = peer {
+			p.info.clone()
+		} else {
+			warn!("sync: no peers available, disabling sync");
+			return (false, 0);
+		};
 
 		// if we're already syncing, we're caught up if no peer has a higher
 		// difficulty than us
 		if is_syncing {
-			if let Some(peer) = peer {
-				most_work_height = peer.info.height();
-				if peer.info.total_difficulty() <= local_diff {
-					let ch = self.chain.head().unwrap();
-					info!(
-						"synchronized at {} @ {} [{}]",
-						local_diff.to_num(),
-						ch.height,
-						ch.last_block_h
-					);
+			if peer_info.total_difficulty() <= local_diff {
+				let ch = self.chain.head().unwrap();
+				info!(
+					"synchronized at {} @ {} [{}]",
+					local_diff.to_num(),
+					ch.height,
+					ch.last_block_h
+				);
 
-					let _ = self.chain.reset_head();
-					return (false, most_work_height);
-				}
-			} else {
-				warn!("sync: no peers available, disabling sync");
-				return (false, 0);
+				let _ = self.chain.reset_head();
+				is_syncing = false;
 			}
 		} else {
-			if let Some(peer) = peer {
-				most_work_height = peer.info.height();
+			// sum the last 5 difficulties to give us the threshold
+			let threshold = self
+				.chain
+				.difficulty_iter()
+				.map(|x| x.difficulty)
+				.take(5)
+				.fold(Difficulty::zero(), |sum, val| sum + val);
 
-				// sum the last 5 difficulties to give us the threshold
-				let threshold = self
-					.chain
-					.difficulty_iter()
-					.map(|x| x.difficulty)
-					.take(5)
-					.fold(Difficulty::zero(), |sum, val| sum + val);
-
-				let peer_diff = peer.info.total_difficulty();
-				if peer_diff > local_diff.clone() + threshold.clone() {
-					info!(
-						"sync: total_difficulty {}, peer_difficulty {}, threshold {} (last 5 blocks), enabling sync",
-						local_diff,
-						peer_diff,
-						threshold,
-						);
-					return (true, most_work_height);
-				}
+			let peer_diff = peer_info.total_difficulty();
+			if peer_diff > local_diff.clone() + threshold.clone() {
+				info!(
+					"sync: total_difficulty {}, peer_difficulty {}, threshold {} (last 5 blocks), enabling sync",
+					local_diff,
+					peer_diff,
+					threshold,
+				);
+				is_syncing = true;
 			}
 		}
-		(is_syncing, most_work_height)
+		(is_syncing, peer_info.height())
 	}
 }
