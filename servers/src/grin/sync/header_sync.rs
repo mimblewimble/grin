@@ -190,7 +190,7 @@ impl HeaderSync {
 				.zip(locator.clone().into_iter())
 				.collect();
 			tmp.reverse();
-			if self.history_locators.len() > 0 && tmp[0].0 == 0 {
+			if self.history_locators.len() > 0 && tmp.len() > 0 && tmp[0].0 == 0 {
 				tmp = tmp[1..].to_vec();
 			}
 			self.history_locators.append(&mut tmp);
