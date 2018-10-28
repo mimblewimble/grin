@@ -322,6 +322,20 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"owner_api_listen_interface".to_string(),
+		"
+#host IP for owner_api listener
+".to_string(),
+	);
+
+	retval.insert(
+		"owner_api_listen_port".to_string(),
+		"
+#port for owner_api listener
+".to_string(),
+	);
+
+	retval.insert(
 		"api_secret_path".to_string(),
 		"
 #path of the secret token used by the API to authenticate the calls

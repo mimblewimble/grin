@@ -165,25 +165,32 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					});
 			}
 			("owner_api", Some(_api_args)) => {
-				// TLS is disabled because we bind to localhost
-				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret, None)
-					.unwrap_or_else(|e| {
-						panic!(
-							"Error creating wallet api listener: {:?} Config: {:?}",
-							e, wallet_config
-						)
-					});
+				controller::owner_listener(
+					wallet,
+					&wallet_config.owner_api_listen_addr(),
+					api_secret,
+					tls_conf,
+				).unwrap_or_else(|e| {
+					panic!(
+						"Error creating wallet owner api listener: {:?} Config: {:?}",
+						e, wallet_config
+					)
+				});
 			}
 			("web", Some(_api_args)) => {
 				// start owner listener and run static file server
 				start_webwallet_server();
-				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret, tls_conf)
-					.unwrap_or_else(|e| {
-						panic!(
-							"Error creating wallet api listener: {:?} Config: {:?}",
-							e, wallet_config
-						)
-					});
+				controller::owner_listener(
+					wallet,
+					&wallet_config.owner_api_listen_addr(),
+					api_secret,
+					tls_conf,
+				).unwrap_or_else(|e| {
+					panic!(
+						"Error creating wallet owner api listener: {:?} Config: {:?}",
+						e, wallet_config
+					)
+				});
 			}
 			_ => {}
 		};
