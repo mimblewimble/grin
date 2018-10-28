@@ -170,7 +170,7 @@ impl HeaderSync {
 				let last_loc = locator.last().unwrap().clone();
 				let mut header_cursor = self.chain.get_block_header(&last_loc.1);
 				while let Ok(header) = header_cursor {
-					if header.height == h {
+					if header.height == h && header.height != last_loc.0 {
 						locator.push((header.height, header.hash()));
 						break;
 					}
@@ -185,8 +185,16 @@ impl HeaderSync {
 
 // Whether we have a value close enough to the provided height in the locator
 fn close_enough(locator: &Vec<(u64, Hash)>, height: u64) -> Option<(u64, Hash)> {
-	if locator.len() > 0 && locator.last().unwrap().0 >= height {
+	if locator.len() == 0 {
+		return None;
+	}
+	// bounds, lower that last is last
+	if locator.last().unwrap().0 >= height {
 		return locator.last().map(|l| l.clone());
+	}
+	// higher than first is first if within max headers
+	if locator[0].0 < height && height - (p2p::MAX_BLOCK_HEADERS as u64) < locator[0].0 {
+		return Some(locator[0]);
 	}
 	for hh in locator.windows(2) {
 		if height <= hh[0].0 && height > hh[1].0 {
@@ -244,13 +252,9 @@ mod test {
 	#[test]
 	fn test_close_enough() {
 		let zh = hash::ZERO_HASH;
-		let locator = vec![
-			(1000, zh.clone()),
-			(500, zh.clone()),
-			(250, zh.clone()),
-			(125, zh.clone()),
-		];
-		assert_eq!(close_enough(&locator, 1100), None);
+		let locator = vec![(1000, zh.clone()), (500, zh.clone()), (250, zh.clone()), (125, zh.clone())];
+		assert_eq!(close_enough(&locator, 2000), None);
+		assert_eq!(close_enough(&locator, 1050), Some((1000, zh)));
 		assert_eq!(close_enough(&locator, 900), Some((1000, zh)));
 		assert_eq!(close_enough(&locator, 270), Some((250, zh)));
 		assert_eq!(close_enough(&locator, 20), Some((125, zh)));
