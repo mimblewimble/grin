@@ -546,7 +546,6 @@ where
 
 	// We want to use the current head of the most work chain unless
 	// we explicitly rewind the extension.
-	// Note: this is *not* necessarily the head of the head chain (explain why).
 	let head = batch.head()?;
 	let header = batch.get_block_header(&head.last_block_h)?;
 

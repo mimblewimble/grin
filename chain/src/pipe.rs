@@ -145,57 +145,52 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 	// Use the verifier_cache for verifying rangeproofs and kernel signatures.
 	validate_block(b, ctx)?;
 
-	{
-		// Create a child batch that we can safely commit or discard in the extension.
-		let mut batch = ctx.batch.child()?;
+	// Start a chain extension unit of work dependent on the success of the
+	// internal validation and saving operations
+	txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |mut extension| {
+		let prev = extension.batch.get_previous_header(&b.header)?;
+		if prev.hash() == head.last_block_h {
+			// Not a fork so we just need to rewind to put header MMR
+			// in the correct state for the full block.
+			// The header processing above put the header MMR (and only the header MMR)
+			// ahead by a single header.
+			extension.rewind(&prev)?;
+		} else {
+			// Rewind and re-apply blocks on the forked chain to
+			// put the txhashset in the correct forked state
+			// (immediately prior to this new block).
+			rewind_and_apply_fork(b, extension)?;
+		}
 
-		// Start a chain extension unit of work dependent on the success of the
-		// internal validation and saving operations
-		txhashset::extending(&mut ctx.txhashset, &mut batch, |mut extension| {
-			let prev = extension.batch.get_previous_header(&b.header)?;
-			if prev.hash() == head.last_block_h {
-				// Not a fork so we just need to rewind to put header MMR
-				// in the correct state for the full block.
-				// The header processing above put the header MMR (and only the header MMR)
-				// ahead by a single header.
-				extension.rewind(&prev)?;
-			} else {
-				// Rewind and re-apply blocks on the forked chain to
-				// put the txhashset in the correct forked state
-				// (immediately prior to this new block).
-				rewind_and_apply_fork(b, extension)?;
-			}
+		// Check any coinbase being spent have matured sufficiently.
+		// This needs to be done within the context of a potentially
+		// rewound txhashset extension to reflect chain state prior
+		// to applying the new block.
+		verify_coinbase_maturity(b, &mut extension)?;
 
-			// Check any coinbase being spent have matured sufficiently.
-			// This needs to be done within the context of a potentially
-			// rewound txhashset extension to reflect chain state prior
-			// to applying the new block.
-			verify_coinbase_maturity(b, &mut extension)?;
+		// Validate the block against the UTXO set.
+		validate_utxo(b, &mut extension)?;
 
-			// Validate the block against the UTXO set.
-			validate_utxo(b, &mut extension)?;
+		// Using block_sums (utxo_sum, kernel_sum) for the previous block from the db
+		// we can verify_kernel_sums across the full UTXO sum and full kernel sum
+		// accounting for inputs/outputs/kernels in this new block.
+		// We know there are no double-spends etc. if this verifies successfully.
+		verify_block_sums(b, &mut extension)?;
 
-			// Using block_sums (utxo_sum, kernel_sum) for the previous block from the db
-			// we can verify_kernel_sums across the full UTXO sum and full kernel sum
-			// accounting for inputs/outputs/kernels in this new block.
-			// We know there are no double-spends etc. if this verifies successfully.
-			verify_block_sums(b, &mut extension)?;
+		// Apply the block to the txhashset state.
+		// Validate the txhashset roots and sizes against the block header.
+		// Block is invalid if there are any discrepencies.
+		apply_block_to_txhashset(b, &mut extension)?;
 
-			// Apply the block to the txhashset state.
-			// Validate the txhashset roots and sizes against the block header.
-			// Block is invalid if there are any discrepencies.
-			apply_block_to_txhashset(b, &mut extension)?;
+		// If applying this block does not increase the work on the chain then
+		// we know we have not yet updated the chain to produce a new chain head.
+		let head = extension.batch.head()?;
+		if !has_more_work(&b.header, &head) {
+			extension.force_rollback();
+		}
 
-			// If applying this block does not increase the work on the chain then
-			// we know we have not yet updated the chain to produce a new chain head.
-			let head = extension.batch.head()?;
-			if !has_more_work(&b.header, &head) {
-				extension.force_rollback();
-			}
-
-			Ok(())
-		})?;
-	}
+		Ok(())
+	})?;
 
 	// Add the validated block to the db.
 	// We do this even if we have not increased the total cumulative work

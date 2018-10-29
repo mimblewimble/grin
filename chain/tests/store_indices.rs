@@ -24,7 +24,7 @@ use std::fs;
 use std::sync::Arc;
 
 use chain::{txhashset, Error, Tip};
-use core::core::hash::Hashed;
+use core::core::hash::{Hashed, ZERO_HASH};
 use core::core::{Block, BlockHeader};
 use core::global::{self, ChainTypes};
 use core::pow::{self, Difficulty};
@@ -41,14 +41,21 @@ fn setup_chain(
 	chain_store: Arc<chain::store::ChainStore>,
 ) -> Result<(), Error> {
 	let mut batch = chain_store.batch()?;
+
+	batch.save_block_header(&genesis.header, &ZERO_HASH)?;
+	batch.save_block(&genesis)?;
+
+	let head = Tip::from_genesis(&genesis.header);
+	batch.save_head(&head)?;
+	batch.setup_height(&genesis.header, &head)?;
+
 	let header_root = txhashset::header_extending(txhashset, &mut batch, |extension| {
 		extension.truncate().unwrap();
 		let root = extension.apply_header(&genesis.header)?;
 		Ok(root)
 	})?;
+
 	batch.save_block_header(&genesis.header, &header_root)?;
-	batch.save_block(genesis)?;
-	batch.setup_height(&genesis.header, &Tip::from_genesis(&genesis.header))?;
 	batch.commit()?;
 	Ok(())
 }

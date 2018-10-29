@@ -987,12 +987,16 @@ impl Chain {
 		&self,
 		output_ref: &OutputIdentifier,
 	) -> Result<BlockHeader, Error> {
-		let mut txhashset = self.txhashset.write();
-		let (_, pos) = txhashset.is_unspent(output_ref)?;
+		let pos = {
+			let mut txhashset = self.txhashset.write();
+			let (_, pos) = txhashset.is_unspent(output_ref)?;
+			pos
+		};
+
 		let mut min = 1;
 		let mut max = {
-			let h = self.head()?;
-			h.height
+			let head = self.head()?;
+			head.height
 		};
 
 		loop {
