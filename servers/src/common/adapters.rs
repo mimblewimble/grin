@@ -436,7 +436,9 @@ impl NetToChainAdapter {
 		// We cannot process blocks earlier than the horizon so check for this here.
 		{
 			let head = self.chain().head().unwrap();
-			let horizon = head.height.saturating_sub(global::cut_through_horizon() as u64);
+			let horizon = head
+				.height
+				.saturating_sub(global::cut_through_horizon() as u64);
 			if b.header.height < horizon {
 				return true;
 			}
