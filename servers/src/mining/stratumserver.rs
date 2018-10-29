@@ -445,7 +445,7 @@ impl StratumServer {
 			// Return error status
 			error!(
 				"(Server ID: {}) Share at height {} with {} edge_bits submitted too late",
-				self.id, params.height, params.edge_bits
+				self.id, params.height, params.edge_bits,
 			);
 			worker_stats.num_stale += 1;
 			let e = RpcError {
