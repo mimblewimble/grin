@@ -151,7 +151,6 @@ impl HeaderSync {
 	fn get_locator(&mut self) -> Result<Vec<Hash>, Error> {
 		let tip = self.chain.get_sync_head()?;
 		let heights = get_locator_heights(tip.height);
-		debug!("sync: locator heights : {:?}", heights);
 
 		// for security, clear history_locator[] in any case of header chain rollback,
 		// the easiest way is to check whether the sync head and the header head are identical.
@@ -179,6 +178,7 @@ impl HeaderSync {
 			}
 		}
 		self.history_locator = locator.clone();
+		debug!("sync: locator : {:?}", locator.clone());
 		Ok(locator.iter().map(|l| l.1).collect())
 	}
 }
@@ -192,8 +192,8 @@ fn close_enough(locator: &Vec<(u64, Hash)>, height: u64) -> Option<(u64, Hash)> 
 	if locator.last().unwrap().0 >= height {
 		return locator.last().map(|l| l.clone());
 	}
-	// higher than first is first if within max headers
-	if locator[0].0 < height && height - (p2p::MAX_BLOCK_HEADERS as u64) < locator[0].0 {
+	// higher than first is first if within an acceptable gap
+	if locator[0].0 < height && height - 127 < locator[0].0 {
 		return Some(locator[0]);
 	}
 	for hh in locator.windows(2) {

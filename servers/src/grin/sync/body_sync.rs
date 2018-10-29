@@ -30,7 +30,7 @@ pub struct BodySync {
 
 	blocks_requested: u64,
 
-	prev_receive_ts: DateTime<Utc>,
+	receive_timeout: DateTime<Utc>,
 	prev_blocks_received: u64,
 }
 
@@ -45,7 +45,7 @@ impl BodySync {
 			peers,
 			chain,
 			blocks_requested: 0,
-			prev_receive_ts: Utc::now(),
+			receive_timeout: Utc::now(),
 			prev_blocks_received: 0,
 		}
 	}
@@ -133,8 +133,11 @@ impl BodySync {
 				peers.len(),
 			);
 
-			let mut peers_iter = peers.iter().cycle();
+			// reinitialize download tracking state
+			self.blocks_requested = 0;
+			self.receive_timeout = Utc::now() + Duration::seconds(6);
 
+			let mut peers_iter = peers.iter().cycle();
 			for hash in hashes_to_get.clone() {
 				if let Some(peer) = peers_iter.next() {
 					if let Err(e) = peer.send_block_request(*hash) {
@@ -153,11 +156,11 @@ impl BodySync {
 
 		// some blocks have been requested
 		if self.blocks_requested > 0 {
-			// but none received in last 200ms, ask again
-			let timeout = Utc::now() - self.prev_receive_ts > Duration::milliseconds(200);
+			// but none received since timeout, ask again
+			let timeout = Utc::now() > self.receive_timeout;
 			if timeout && blocks_received <= self.prev_blocks_received {
 				debug!(
-					"body_sync: expecting {} more blocks, and none received in 200ms",
+					"body_sync: expecting {} more blocks and none received for a while",
 					self.blocks_requested,
 				);
 				return true;
@@ -166,13 +169,14 @@ impl BodySync {
 
 		if blocks_received > self.prev_blocks_received {
 			// some received, update for next check
-			self.prev_receive_ts = Utc::now();
-			self.blocks_requested
+			self.receive_timeout = Utc::now() + Duration::seconds(1);
+			self.blocks_requested = self.blocks_requested
 				.saturating_sub(blocks_received - self.prev_blocks_received);
 			self.prev_blocks_received = blocks_received;
 		}
 
-		if self.blocks_requested == 0 {
+		// off by one to account for broadcast adding a couple orphans
+		if self.blocks_requested < 2 {
 			// no pending block requests, ask more
 			debug!("body_sync: no pending block request, asking more");
 			return true;
