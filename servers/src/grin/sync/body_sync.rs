@@ -170,7 +170,8 @@ impl BodySync {
 		if blocks_received > self.prev_blocks_received {
 			// some received, update for next check
 			self.receive_timeout = Utc::now() + Duration::seconds(1);
-			self.blocks_requested = self.blocks_requested
+			self.blocks_requested = self
+				.blocks_requested
 				.saturating_sub(blocks_received - self.prev_blocks_received);
 			self.prev_blocks_received = blocks_received;
 		}
