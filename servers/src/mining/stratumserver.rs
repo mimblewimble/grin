@@ -444,8 +444,8 @@ impl StratumServer {
 		if params.height != self.current_block_versions.last().unwrap().header.height {
 			// Return error status
 			error!(
-				"(Server ID: {}) Share at height {} submitted too late",
-				self.id, params.height,
+				"(Server ID: {}) Share at height {} with {} edge_bits submitted too late",
+				self.id, params.height, params.edge_bits,
 			);
 			worker_stats.num_stale += 1;
 			let e = RpcError {
@@ -459,8 +459,8 @@ impl StratumServer {
 		if b.is_none() {
 			// Return error status
 			error!(
-				"(Server ID: {}) Failed to validate solution at height {}: invalid job_id {}",
-				self.id, params.height, params.job_id,
+				"(Server ID: {}) Failed to validate solution at height {} with {} edge_bits: invalid job_id {}",
+				self.id, params.height, params.edge_bits, params.job_id,
 			);
 			worker_stats.num_rejected += 1;
 			let e = RpcError {
@@ -480,8 +480,8 @@ impl StratumServer {
 		if share_difficulty < self.minimum_share_difficulty {
 			// Return error status
 			error!(
-				"(Server ID: {}) Share rejected due to low difficulty: {}/{}",
-				self.id, share_difficulty, self.minimum_share_difficulty,
+				"(Server ID: {}) Share at height {} with {} edge_bits rejected due to low difficulty: {}/{}",
+				self.id, params.height, params.edge_bits, share_difficulty, self.minimum_share_difficulty,
 			);
 			worker_stats.num_rejected += 1;
 			let e = RpcError {
@@ -497,9 +497,10 @@ impl StratumServer {
 			if let Err(e) = res {
 				// Return error status
 				error!(
-					"(Server ID: {}) Failed to validate solution at height {}: {}: {}",
+					"(Server ID: {}) Failed to validate solution at height {} with {} edge_bits: {}: {}",
 					self.id,
 					params.height,
+					params.edge_bits,
 					e,
 					e.backtrace().unwrap(),
 				);
@@ -521,9 +522,10 @@ impl StratumServer {
 			if !pow::verify_size(&b.header, b.header.pow.proof.edge_bits).is_ok() {
 				// Return error status
 				error!(
-					"(Server ID: {}) Failed to validate share at height {} with nonce {} using job_id {}",
+					"(Server ID: {}) Failed to validate share at height {} with {} edge_bits with nonce {} using job_id {}",
 					self.id,
 					params.height,
+					params.edge_bits,
 					b.header.pow.nonce,
 					params.job_id,
 				);
@@ -541,10 +543,11 @@ impl StratumServer {
 			Some(login) => login.clone(),
 		};
 		info!(
-			"(Server ID: {}) Got share for block: hash {}, height {}, nonce {}, difficulty {}/{}, submitted by {}",
+			"(Server ID: {}) Got share for block: hash {}, height {}, edge_bits {}, nonce {}, difficulty {}/{}, submitted by {}",
 			self.id,
 			b.hash(),
 			b.header.height,
+			b.header.pow.proof.edge_bits,
 			b.header.pow.nonce,
 			share_difficulty,
 			self.current_difficulty,
@@ -763,3 +766,4 @@ where
 			serde_json::to_value(e).unwrap()
 		})
 }
+
