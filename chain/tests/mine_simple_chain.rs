@@ -447,12 +447,7 @@ where
 	b
 }
 
-fn prepare_fork_block<K>(
-	kc: &K,
-	prev: &BlockHeader,
-	chain: &Chain,
-	diff: u64,
-) -> Block
+fn prepare_fork_block<K>(kc: &K, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block
 where
 	K: Keychain,
 {

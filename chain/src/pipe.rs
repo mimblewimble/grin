@@ -65,22 +65,23 @@ fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext) -> Res
 		return Err(ErrorKind::Orphan.into());
 	}
 
-	let header_root = txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
-		// TODO - make this an explicit readonly extension.
-		// TODO - as updates here really mess with the extension later on in the presence of forks...
-		extension.force_rollback();
+	let header_root =
+		txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+			// TODO - make this an explicit readonly extension.
+			// TODO - as updates here really mess with the extension later on in the presence of forks...
+			extension.force_rollback();
 
-		// Optimize this if "next" header
-		rewind_and_apply_header_fork(header, extension)?;
+			// Optimize this if "next" header
+			rewind_and_apply_header_fork(header, extension)?;
 
-		// Check the current root is correct.
-		extension.validate_root(header)?;
+			// Check the current root is correct.
+			extension.validate_root(header)?;
 
-		// Apply the new header and store header in the db,
-		// passing in the new root to set the header_by_root index correctly.
-		let root = extension.apply_header(header)?;
-		Ok(root)
-	})?;
+			// Apply the new header and store header in the db,
+			// passing in the new root to set the header_by_root index correctly.
+			let root = extension.apply_header(header)?;
+			Ok(root)
+		})?;
 
 	validate_header(header, ctx)?;
 	add_block_header(header, &header_root, &ctx.batch)?;
@@ -417,9 +418,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	// first I/O cost, better as late as possible
 	let prev = match ctx.batch.get_previous_header(&header) {
 		Ok(prev) => prev,
-		Err(grin_store::Error::NotFoundErr(_)) => {
-			return Err(ErrorKind::Orphan.into())
-		},
+		Err(grin_store::Error::NotFoundErr(_)) => return Err(ErrorKind::Orphan.into()),
 		Err(e) => {
 			return Err(ErrorKind::StoreErr(
 				e,
@@ -680,7 +679,6 @@ pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension) -> Resul
 		current = ext.batch.get_previous_header(&current)?;
 	}
 	fork_hashes.reverse();
-
 
 	let forked_header = current;
 

@@ -77,11 +77,7 @@ fn test_various_store_indices() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis = pow::mine_genesis_block().unwrap();
 
-	setup_chain(
-		&mut txhashset,
-		&genesis,
-		chain_store.clone(),
-	).unwrap();
+	setup_chain(&mut txhashset, &genesis, chain_store.clone()).unwrap();
 
 	let reward = libtx::reward::output(&keychain, &key_id, 0, 1).unwrap();
 	let block = Block::new(&genesis.header, vec![], Difficulty::min(), reward).unwrap();
@@ -92,7 +88,9 @@ fn test_various_store_indices() {
 		let header_root = txhashset::header_extending(&mut txhashset, &mut batch, |extension| {
 			extension.apply_header(&block.header)
 		}).unwrap();
-		batch.save_block_header(&block.header, &header_root).unwrap();
+		batch
+			.save_block_header(&block.header, &header_root)
+			.unwrap();
 		batch.save_block(&block).unwrap();
 		let prev = batch.get_previous_header(&block.header).unwrap();
 		batch
@@ -151,11 +149,7 @@ fn test_store_header_height() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis = pow::mine_genesis_block().unwrap();
 
-	setup_chain(
-		&mut txhashset,
-		&genesis,
-		chain_store.clone(),
-	).unwrap();
+	setup_chain(&mut txhashset, &genesis, chain_store.clone()).unwrap();
 
 	let mut block_header = BlockHeader::default();
 	block_header.height = 1;
@@ -165,7 +159,9 @@ fn test_store_header_height() {
 		let header_root = txhashset::header_extending(&mut txhashset, &mut batch, |extension| {
 			extension.apply_header(&block_header)
 		}).unwrap();
-		batch.save_block_header(&block_header, &header_root).unwrap();
+		batch
+			.save_block_header(&block_header, &header_root)
+			.unwrap();
 		batch.save_header_height(&block_header).unwrap();
 		batch.commit().unwrap();
 	}

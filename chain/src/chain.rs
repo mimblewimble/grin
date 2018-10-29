@@ -487,7 +487,11 @@ impl Chain {
 		})
 	}
 
-	pub fn set_txhashset_roots_forked(&self, b: &mut Block, prev: &BlockHeader) -> Result<(), Error> {
+	pub fn set_txhashset_roots_forked(
+		&self,
+		b: &mut Block,
+		prev: &BlockHeader,
+	) -> Result<(), Error> {
 		let prev_block = self.get_block(&prev.hash())?;
 		let mut txhashset = self.txhashset.write();
 		let (prev_root, roots, sizes) =
