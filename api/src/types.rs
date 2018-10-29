@@ -537,7 +537,7 @@ impl BlockHeaderPrintable {
 			edge_bits: header.pow.edge_bits(),
 			cuckoo_solution: header.pow.proof.nonces.clone(),
 			total_difficulty: header.pow.total_difficulty.to_num(),
-			scaling_difficulty: header.pow.scaling_difficulty,
+			secondary_scaling: header.pow.secondary_scaling,
 			total_kernel_offset: header.total_kernel_offset.to_hex(),
 		}
 	}
