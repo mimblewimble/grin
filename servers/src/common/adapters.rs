@@ -515,8 +515,8 @@ impl NetToChainAdapter {
 	}
 
 	fn check_compact(&self) {
-		// no compaction during sync or if we're in historical mode
-		if self.archive_mode || self.sync_state.is_syncing() {
+		// Skip compaction if we are syncing.
+		if self.sync_state.is_syncing() {
 			return;
 		}
 
