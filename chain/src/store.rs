@@ -356,13 +356,16 @@ impl<'a> Batch<'a> {
 	pub fn save_block_header(&self, header: &BlockHeader, header_root: &Hash) -> Result<(), Error> {
 		let hash = header.hash();
 
-		// TODO - cache the header by root.
-		{}
-
 		// Cache the header.
 		{
 			let mut header_cache = self.header_cache.write();
 			header_cache.insert(hash, header.clone());
+		}
+
+		// Cache the header by root.
+		{
+			let mut header_root_cache = self.header_root_cache.write();
+			header_root_cache.insert(header_root.clone(), hash);
 		}
 
 		// Store the header hash indexed by header root.

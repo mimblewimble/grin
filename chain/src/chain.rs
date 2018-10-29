@@ -487,16 +487,51 @@ impl Chain {
 		})
 	}
 
-	/// Sets the txhashset roots on a brand new block by applying the block on
-	/// the current txhashset state.
-	pub fn set_txhashset_roots(&self, b: &mut Block, is_fork: bool) -> Result<(), Error> {
+	pub fn set_txhashset_roots_forked(&self, b: &mut Block, prev: &BlockHeader) -> Result<(), Error> {
+		let prev_block = self.get_block(&prev.hash())?;
 		let mut txhashset = self.txhashset.write();
 		let (prev_root, roots, sizes) =
 			txhashset::extending_readonly(&mut txhashset, |extension| {
-				if is_fork {
-					pipe::rewind_and_apply_fork(b, extension)?;
-				}
+				// Put the txhashset in the correct state as of the previous block.
+				// We cannot use the new block to do this because we have no
+				// explicit previous linkage (and prev_root not yet setup).
+				pipe::rewind_and_apply_fork(&prev_block, extension)?;
+				extension.apply_block(&prev_block)?;
 
+				// Retrieve the header root before we apply the new block
+				let prev_root = extension.header_root();
+
+				// Apply the latest block to the chain state via the extension.
+				extension.apply_block(b)?;
+
+				Ok((prev_root, extension.roots(), extension.sizes()))
+			})?;
+
+		// Set the prev_root on the header.
+		b.header.prev_root = prev_root;
+
+		// Set the output, rangeproof and kernel MMR roots.
+		b.header.output_root = roots.output_root;
+		b.header.range_proof_root = roots.rproof_root;
+		b.header.kernel_root = roots.kernel_root;
+
+		// Set the output and kernel MMR sizes.
+		{
+			// Carefully destructure these correctly...
+			let (_, output_mmr_size, _, kernel_mmr_size) = sizes;
+			b.header.output_mmr_size = output_mmr_size;
+			b.header.kernel_mmr_size = kernel_mmr_size;
+		}
+
+		Ok(())
+	}
+
+	/// Sets the txhashset roots on a brand new block by applying the block on
+	/// the current txhashset state.
+	pub fn set_txhashset_roots(&self, b: &mut Block) -> Result<(), Error> {
+		let mut txhashset = self.txhashset.write();
+		let (prev_root, roots, sizes) =
+			txhashset::extending_readonly(&mut txhashset, |extension| {
 				// Retrieve the header root before we apply the new block
 				let prev_root = extension.header_root();
 

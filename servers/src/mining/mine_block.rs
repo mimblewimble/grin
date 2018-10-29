@@ -139,7 +139,7 @@ fn build_block(
 	);
 
 	// Now set txhashset roots and sizes on the header of the block being built.
-	let roots_result = chain.set_txhashset_roots(&mut b, false);
+	let roots_result = chain.set_txhashset_roots(&mut b);
 
 	match roots_result {
 		Ok(_) => Ok((b, block_fees)),

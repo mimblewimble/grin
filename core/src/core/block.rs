@@ -494,7 +494,7 @@ impl Block {
 			header: BlockHeader {
 				height: prev.height + 1,
 				timestamp,
-				// previous: prev.hash(),
+				deprecated_previous: prev.hash(),
 				total_kernel_offset,
 				pow: ProofOfWork {
 					total_difficulty: difficulty + prev.pow.total_difficulty,
