@@ -86,5 +86,6 @@ rustfmt client.rs
 ## Thanks for any contribution
 
 Even one word correction are welcome! Our objective is to encourage you to get interested in Grin and contribute in any way possible. Thanks for any help!
+hello
 
 
