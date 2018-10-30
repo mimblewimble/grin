@@ -177,8 +177,10 @@ impl HeaderSync {
 				}
 			}
 		}
-		self.history_locator = locator.clone();
+		locator.dedup_by(|a, b| a.0 == b.0);
 		debug!("sync: locator : {:?}", locator.clone());
+		self.history_locator = locator.clone();
+
 		Ok(locator.iter().map(|l| l.1).collect())
 	}
 }
@@ -193,7 +195,7 @@ fn close_enough(locator: &Vec<(u64, Hash)>, height: u64) -> Option<(u64, Hash)> 
 		return locator.last().map(|l| l.clone());
 	}
 	// higher than first is first if within an acceptable gap
-	if locator[0].0 < height && height - 127 < locator[0].0 {
+	if locator[0].0 < height && height.saturating_sub(127) < locator[0].0 {
 		return Some(locator[0]);
 	}
 	for hh in locator.windows(2) {
@@ -252,6 +254,24 @@ mod test {
 	#[test]
 	fn test_close_enough() {
 		let zh = hash::ZERO_HASH;
+
+		// empty check
+		assert_eq!(close_enough(&vec![], 0), None);
+
+		// just 1 locator in history
+		let heights: Vec<u64> = vec![64, 62, 58, 50, 34, 2, 0];
+		let history_locator: Vec<(u64, Hash)> = vec![
+			(0, zh.clone()),
+		];
+		let mut locator: Vec<(u64, Hash)> = vec![];
+		for h in heights {
+			if let Some(l) = close_enough(&history_locator, h) {
+				locator.push(l);
+			}
+		}
+		assert_eq!(locator, vec![(0, zh.clone())]);
+
+		// simple dummy example
 		let locator = vec![
 			(1000, zh.clone()),
 			(500, zh.clone()),
@@ -265,5 +285,67 @@ mod test {
 		assert_eq!(close_enough(&locator, 20), Some((125, zh)));
 		assert_eq!(close_enough(&locator, 125), Some((125, zh)));
 		assert_eq!(close_enough(&locator, 500), Some((500, zh)));
+
+		// more realistic test with 11 history
+		let heights: Vec<u64> = vec![
+			2554, 2552, 2548, 2540, 2524, 2492, 2428, 2300, 2044, 1532, 508, 0
+		];
+		let history_locator: Vec<(u64, Hash)> = vec![
+			(2043, zh.clone()),
+			(2041, zh.clone()),
+			(2037, zh.clone()),
+			(2029, zh.clone()),
+			(2013, zh.clone()),
+			(1981, zh.clone()),
+			(1917, zh.clone()),
+			(1789, zh.clone()),
+			(1532, zh.clone()),
+			(1021, zh.clone()),
+			(0, zh.clone()),
+		];
+		let mut locator: Vec<(u64, Hash)> = vec![];
+		for h in heights {
+			if let Some(l) = close_enough(&history_locator, h) {
+				locator.push(l);
+			}
+		}
+		locator.dedup_by(|a, b| a.0 == b.0);
+		assert_eq!(locator, vec![
+			(2043, zh.clone()),
+			(1532, zh.clone()),
+			(0, zh.clone()),
+		]);
+
+		// more realistic test with 12 history
+		let heights: Vec<u64> = vec![
+			4598, 4596, 4592, 4584, 4568, 4536, 4472, 4344, 4088, 3576, 2552, 504, 0
+		];
+		let history_locator: Vec<(u64, Hash)> = vec![
+			(4087, zh.clone()),
+			(4085, zh.clone()),
+			(4081, zh.clone()),
+			(4073, zh.clone()),
+			(4057, zh.clone()),
+			(4025, zh.clone()),
+			(3961, zh.clone()),
+			(3833, zh.clone()),
+			(3576, zh.clone()),
+			(3065, zh.clone()),
+			(1532, zh.clone()),
+			(0, zh.clone()),
+		];
+		let mut locator: Vec<(u64, Hash)> = vec![];
+		for h in heights {
+			if let Some(l) = close_enough(&history_locator, h) {
+				locator.push(l);
+			}
+		}
+		locator.dedup_by(|a, b| a.0 == b.0);
+		assert_eq!(locator, vec![
+			(4087, zh.clone()),
+			(3576, zh.clone()),
+			(3065, zh.clone()),
+			(0, zh.clone()),
+		]);
 	}
 }
