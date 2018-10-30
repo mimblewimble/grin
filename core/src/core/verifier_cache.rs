@@ -59,7 +59,7 @@ impl LruVerifierCache {
 impl VerifierCache for LruVerifierCache {
 	fn filter_kernel_sig_unverified(&mut self, kernels: &[TxKernel]) -> Vec<TxKernel> {
 		let res = kernels
-			.into_iter()
+			.iter()
 			.filter(|x| {
 				!*self
 					.kernel_sig_verification_cache
@@ -77,7 +77,7 @@ impl VerifierCache for LruVerifierCache {
 
 	fn filter_rangeproof_unverified(&mut self, outputs: &[Output]) -> Vec<Output> {
 		let res = outputs
-			.into_iter()
+			.iter()
 			.filter(|x| {
 				!*self
 					.rangeproof_verification_cache

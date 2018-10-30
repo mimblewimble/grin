@@ -148,8 +148,6 @@ pub struct TxKernel {
 
 hashable_ord!(TxKernel);
 
-/// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash
-/// implementations?
 impl ::std::hash::Hash for TxKernel {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
@@ -293,9 +291,14 @@ impl Readable for TransactionBody {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
-		// TODO at this point we know how many input, outputs and kernels
-		// we are about to read. We may want to call a variant of
-		// verify_weight() here as a quick early check.
+		// quick block weight check before proceeding
+		let tx_block_weight =
+			TransactionBody::weight(input_len as usize, output_len as usize, kernel_len as usize)
+				as usize;
+
+		if tx_block_weight > consensus::MAX_BLOCK_WEIGHT {
+			return Err(ser::Error::TooLargeReadErr);
+		}
 
 		let inputs = read_multi(reader, input_len)?;
 		let outputs = read_multi(reader, output_len)?;
@@ -434,16 +437,16 @@ impl TransactionBody {
 		TransactionBody::weight_as_block(self.inputs.len(), self.outputs.len(), self.kernels.len())
 	}
 
-	/// Calculate transaction weight from transaction details
+	/// Calculate transaction weight from transaction details. This is non
+	/// consensus critical and compared to block weight, incentivizes spending
+	/// more outputs (to lower the fee).
 	pub fn weight(input_len: usize, output_len: usize, kernel_len: usize) -> u32 {
-		let mut body_weight = -(input_len as i32) + (4 * output_len as i32) + kernel_len as i32;
-		if body_weight < 1 {
-			body_weight = 1;
-		}
-		body_weight as u32
+		let body_weight = -(input_len as i32) + (4 * output_len as i32) + kernel_len as i32;
+		max(body_weight, 1) as u32
 	}
 
-	/// Calculate transaction weight using block weighing from transaction details
+	/// Calculate transaction weight using block weighing from transaction
+	/// details. Consensus critical and uses consensus weight values.
 	pub fn weight_as_block(input_len: usize, output_len: usize, kernel_len: usize) -> u32 {
 		(input_len * consensus::BLOCK_INPUT_WEIGHT
 			+ output_len * consensus::BLOCK_OUTPUT_WEIGHT
@@ -454,7 +457,9 @@ impl TransactionBody {
 	pub fn lock_height(&self) -> u64 {
 		self.kernels
 			.iter()
-			.fold(0, |acc, ref x| max(acc, x.lock_height))
+			.map(|x| x.lock_height)
+			.max()
+			.unwrap_or(0)
 	}
 
 	// Verify the body is not too big in terms of number of inputs|outputs|kernels.
@@ -484,12 +489,12 @@ impl TransactionBody {
 
 	// Verify that no input is spending an output from the same block.
 	fn verify_cut_through(&self) -> Result<(), Error> {
+		let mut out_set = HashSet::new();
+		for out in &self.outputs {
+			out_set.insert(out.commitment());
+		}
 		for inp in &self.inputs {
-			if self
-				.outputs
-				.iter()
-				.any(|out| out.commitment() == inp.commitment())
-			{
+			if out_set.contains(&inp.commitment()) {
 				return Err(Error::CutThrough);
 			}
 		}
@@ -548,9 +553,7 @@ impl TransactionBody {
 		with_reward: bool,
 		verifier: Arc<RwLock<VerifierCache>>,
 	) -> Result<(), Error> {
-		self.verify_weight(with_reward)?;
-		self.verify_sorted()?;
-		self.verify_cut_through()?;
+		self.validate_read(with_reward)?;
 
 		// Find all the outputs that have not had their rangeproofs verified.
 		let outputs = {
@@ -953,8 +956,6 @@ pub struct Input {
 
 hashable_ord!(Input);
 
-/// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash
-/// implementations?
 impl ::std::hash::Hash for Input {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
@@ -1036,8 +1037,6 @@ pub struct Output {
 
 hashable_ord!(Output);
 
-/// TODO - no clean way to bridge core::hash::Hash and std::hash::Hash
-/// implementations?
 impl ::std::hash::Hash for Output {
 	fn hash<H: ::std::hash::Hasher>(&self, state: &mut H) {
 		let mut vec = Vec::new();
@@ -1053,7 +1052,7 @@ impl Writeable for Output {
 		writer.write_u8(self.features.bits())?;
 		self.commit.write(writer)?;
 		// The hash of an output doesn't include the range proof, which
-		// is commit to separately
+		// is committed to separately
 		if writer.serialization_mode() != ser::SerializationMode::Hash {
 			writer.write_bytes(&self.proof)?
 		}

@@ -577,7 +577,10 @@ impl Block {
 
 	/// Sum of all fees (inputs less outputs) in the block
 	pub fn total_fees(&self) -> u64 {
-		self.body.kernels.iter().map(|p| p.fee).sum()
+		self.body
+			.kernels
+			.iter()
+			.fold(0, |acc, ref x| acc.saturating_add(x.fee))
 	}
 
 	/// Matches any output with a potential spending input, eliminating them
