@@ -42,7 +42,6 @@ use util::OneTime;
 /// implementations.
 pub struct NetToChainAdapter {
 	sync_state: Arc<SyncState>,
-	archive_mode: bool,
 	chain: Weak<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
@@ -358,7 +357,6 @@ impl NetToChainAdapter {
 	/// Construct a new NetToChainAdapter instance
 	pub fn new(
 		sync_state: Arc<SyncState>,
-		archive_mode: bool,
 		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
 		verifier_cache: Arc<RwLock<VerifierCache>>,
@@ -366,7 +364,6 @@ impl NetToChainAdapter {
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
 			sync_state,
-			archive_mode,
 			chain: Arc::downgrade(&chain),
 			tx_pool,
 			verifier_cache,
