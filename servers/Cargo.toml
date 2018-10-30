@@ -11,7 +11,7 @@ publish = false
 
 [dependencies]
 hyper = "0.12"
-futures = "0.1"
+futures = "0.1"   
 http = "0.1"
 hyper-staticfile = "0.3"
 itertools = "0.7"
