@@ -15,7 +15,7 @@
 use serde_json as json;
 use std::fs::File;
 use std::io::Read;
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 /// Wallet commands processing
 use std::process::exit;
 use std::sync::Arc;
@@ -329,7 +329,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					.value_of("input")
 					.expect("Transaction file required");
 				if !Path::new(tx_file).is_file() {
-					error!("File {} not found.", {tx_file});
+					error!("File {} not found.", { tx_file });
 					exit(1);
 				}
 				let res = controller::foreign_single_use(wallet, |api| {
@@ -352,7 +352,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					.value_of("input")
 					.expect("Receiver's transaction file required");
 				if !Path::new(tx_file).is_file() {
-					error!("File {} not found.", {tx_file});
+					error!("File {} not found.", { tx_file });
 					exit(1);
 				}
 				let mut pub_tx_f = File::open(tx_file)?;
