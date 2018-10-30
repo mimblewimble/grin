@@ -159,7 +159,6 @@ impl Server {
 
 		let net_adapter = Arc::new(NetToChainAdapter::new(
 			sync_state.clone(),
-			archive_mode,
 			shared_chain.clone(),
 			tx_pool.clone(),
 			verifier_cache.clone(),
