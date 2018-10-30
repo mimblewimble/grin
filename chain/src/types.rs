@@ -67,7 +67,7 @@ impl Tip {
 	/// Creates a new tip at height 1 and the provided genesis hash.
 	pub fn from_genesis(genesis: &BlockHeader) -> Tip {
 		Tip {
-			height: 0,
+			height: genesis.height,
 			last_block_h: genesis.hash(),
 			prev_block_h: ZERO_HASH,
 			total_difficulty: Difficulty::min(),

@@ -201,6 +201,16 @@ impl Chain {
 			);
 		}
 
+		{
+			let sync_head = store.get_sync_head()?;
+			debug!(
+				"Chain init: sync_head: {} @ {} [{}]",
+				sync_head.total_difficulty.to_num(),
+				sync_head.height,
+				sync_head.last_block_h,
+			);
+		}
+
 		Ok(Chain {
 			db_root: db_root,
 			store: store,
