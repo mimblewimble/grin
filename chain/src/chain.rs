@@ -1095,8 +1095,18 @@ fn setup_head(
 		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()))?,
 	};
 
-	// Reset sync_head to be consistent with current header_head.
-	batch.reset_sync_head()?;
+	// Check we have the header corresponding to the header_head.
+	// If not then something is corrupted and we should reset our header_head.
+	// Either way we want to reset sync_head to match header_head.
+	let header_head = batch.header_head()?;
+	if batch.get_block_header(&header_head.last_block_h).is_ok() {
+		// Reset sync_head to be consistent with current header_head.
+		batch.reset_sync_head()?;
+	} else {
+		// Reset both header_head and sync_head to be consistent with current head.
+		batch.reset_head()?;
+	}
+
 	batch.commit()?;
 
 	Ok(())
