@@ -766,7 +766,7 @@ Build a merkle proof for a given output id and return a dummy output with merkle
 
 * **URL**
 
-  /v1/txhashset/merkleproof?n=x
+  /v1/txhashset/merkleproof?id=x
 
 * **Method:**
 
@@ -775,7 +775,7 @@ Build a merkle proof for a given output id and return a dummy output with merkle
 * **URL Params**
 
   **Required:**
-  `n=[string]`
+  `id=[string]`
 
 * **Data Params**
 
@@ -805,7 +805,7 @@ Build a merkle proof for a given output id and return a dummy output with merkle
 
   ```javascript
     $.ajax({
-      url: "/v1/txhashset/merkleproof?n=0803516094a30830ed9fedff1c63251b51703ddffbb73f944d9e33e8fa5d17444f",
+      url: "/v1/txhashset/merkleproof?id=0803516094a30830ed9fedff1c63251b51703ddffbb73f944d9e33e8fa5d17444f",
       dataType: "json",
       type : "GET",
       success : function(r) {
