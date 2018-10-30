@@ -122,13 +122,13 @@ pub fn txs(
 		bMG->"Creation Time",
 		bMG->"Confirmed?",
 		bMG->"Confirmation Time",
-		bMG->"Num. Inputs",
-		bMG->"Num. Outputs",
-		bMG->"Amount Credited",
-		bMG->"Amount Debited",
+		bMG->"Num. \nInputs",
+		bMG->"Num. \nOutputs",
+		bMG->"Amount \nCredited",
+		bMG->"Amount \nDebited",
 		bMG->"Fee",
-		bMG->"Net Difference",
-		bMG->"Tx Data",
+		bMG->"Net \nDifference",
+		bMG->"Tx \nData",
 	]);
 
 	for t in txs {
