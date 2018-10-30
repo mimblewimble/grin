@@ -15,7 +15,7 @@
 use serde_json as json;
 use std::fs::File;
 use std::io::Read;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 /// Wallet commands processing
 use std::process::exit;
 use std::sync::Arc;
@@ -325,15 +325,24 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 			}
 			("receive", Some(send_args)) => {
 				let mut receive_result: Result<(), grin_wallet::libwallet::Error> = Ok(());
+				let tx_file = send_args
+					.value_of("input")
+					.expect("Transaction file required");
+				if !Path::new(tx_file).is_file() {
+					error!("File {} not found.", { tx_file });
+					exit(1);
+				}
 				let res = controller::foreign_single_use(wallet, |api| {
-					let tx_file = send_args
-						.value_of("input")
-						.expect("Transaction file required");
 					receive_result = api.file_receive_tx(tx_file);
 					Ok(())
 				});
 				if res.is_err() {
 					exit(1);
+				} else {
+					info!(
+						"Response file {}.response generated, sending it back to the transaction originator.",
+						tx_file,
+					);
 				}
 				receive_result
 			}
@@ -342,6 +351,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				let tx_file = send_args
 					.value_of("input")
 					.expect("Receiver's transaction file required");
+				if !Path::new(tx_file).is_file() {
+					error!("File {} not found.", { tx_file });
+					exit(1);
+				}
 				let mut pub_tx_f = File::open(tx_file)?;
 				let mut content = String::new();
 				pub_tx_f.read_to_string(&mut content)?;
@@ -352,7 +365,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				let result = api.post_tx(&slate, fluff);
 				match result {
 					Ok(_) => {
-						info!("Tx sent");
+						info!("Transaction sent successfully, check the wallet again for confirmation.");
 						Ok(())
 					}
 					Err(e) => {
@@ -516,6 +529,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 	thread::sleep(Duration::from_millis(100));
 
 	if res.is_err() {
+		error!("Wallet command failed: {:?}", res);
 		exit(1);
 	}
 }

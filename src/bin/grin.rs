@@ -374,7 +374,7 @@ fn main() {
 			let mut l = w.members.as_mut().unwrap().logging.clone().unwrap();
 			l.tui_running = Some(false);
 			init_logger(Some(l));
-			warn!(
+			info!(
 				"Using wallet configuration file at {}",
 				w.config_file_path.as_ref().unwrap().to_str().unwrap()
 			);
