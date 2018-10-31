@@ -147,10 +147,10 @@ fn fixed_size_of_serialized_header(_version: u16) -> usize {
 	size += mem::size_of::<u16>(); // version
 	size += mem::size_of::<u64>(); // height
 	size += mem::size_of::<i64>(); // timestamp
-	// previous, prev_root, output_root, range_proof_root, kernel_root 
-	size += 5 * mem::size_of::<Hash>(); 
+								// previous, prev_root, output_root, range_proof_root, kernel_root
+	size += 5 * mem::size_of::<Hash>();
 	size += mem::size_of::<BlindingFactor>(); // total_kernel_offset
-	// output_mmr_size, kernel_mmr_size
+										   // output_mmr_size, kernel_mmr_size
 	size += 2 * mem::size_of::<u64>();
 	size += mem::size_of::<Difficulty>(); // total_difficulty
 	size += mem::size_of::<u32>(); // secondary_scaling
@@ -476,7 +476,9 @@ impl Block {
 		// A block is just a big transaction, aggregate and add the reward output
 		// and reward kernel. At this point the tx is technically invalid but the
 		// tx body is valid if we account for the reward (i.e. as a block).
-		let agg_tx = transaction::aggregate(txs)?.with_output(reward_out).with_kernel(reward_kern);
+		let agg_tx = transaction::aggregate(txs)?
+			.with_output(reward_out)
+			.with_kernel(reward_kern);
 
 		// Now add the kernel offset of the previous block for a total
 		let total_kernel_offset =
@@ -642,10 +644,8 @@ impl Block {
 			let secp = secp.lock();
 			let over_commit = secp.commit_value(reward(self.total_fees()))?;
 
-			let out_adjust_sum = secp.commit_sum(
-				map_vec!(cb_outs, |x| x.commitment()),
-				vec![over_commit],
-			)?;
+			let out_adjust_sum =
+				secp.commit_sum(map_vec!(cb_outs, |x| x.commitment()), vec![over_commit])?;
 
 			let kerns_sum = secp.commit_sum(cb_kerns.iter().map(|x| x.excess).collect(), vec![])?;
 
