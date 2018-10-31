@@ -86,6 +86,16 @@ impl BodySync {
 
 		if header_head.total_difficulty > body_head.total_difficulty {
 			let mut current = self.chain.get_block_header(&header_head.last_block_h);
+
+			//+ remove me after #1880 root cause found
+			if current.is_err() {
+				error!(
+					"body_sync: header_head not found in chain db: {} at {}",
+					header_head.last_block_h, header_head.height,
+				);
+			}
+			//-
+
 			while let Ok(header) = current {
 				// break out of the while loop when we find a header common
 				// between the header chain and the current body chain
@@ -98,10 +108,22 @@ impl BodySync {
 				current = self.chain.get_block_header(&header.previous);
 			}
 		}
+		//+ remove me after #1880 root cause found
+		else {
+			debug!(
+				"body_sync: header_head.total_difficulty: {}, body_head.total_difficulty: {}",
+				header_head.total_difficulty, body_head.total_difficulty,
+			);
+		}
+		//-
+
 		hashes.reverse();
 
 		if oldest_height < header_head.height.saturating_sub(horizon) {
-			debug!("body_sync: cannot sync full blocks earlier than horizon.");
+			debug!(
+				"body_sync: cannot sync full blocks earlier than horizon. oldest_height: {}",
+				oldest_height,
+			);
 			return;
 		}
 
