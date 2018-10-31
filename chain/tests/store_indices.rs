@@ -35,10 +35,7 @@ fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
 }
 
-fn setup_chain(
-	genesis: &Block,
-	chain_store: Arc<chain::store::ChainStore>,
-) -> Result<(), Error> {
+fn setup_chain(genesis: &Block, chain_store: Arc<chain::store::ChainStore>) -> Result<(), Error> {
 	let batch = chain_store.batch()?;
 	batch.save_block_header(&genesis.header)?;
 	batch.save_block(&genesis)?;
@@ -76,9 +73,7 @@ fn test_various_store_indices() {
 
 	{
 		let batch = chain_store.batch().unwrap();
-		batch
-			.save_block_header(&block.header)
-			.unwrap();
+		batch.save_block_header(&block.header).unwrap();
 		batch.save_block(&block).unwrap();
 		batch
 			.setup_height(&block.header, &Tip::from_header(&block.header))
@@ -137,9 +132,7 @@ fn test_store_header_height() {
 
 	{
 		let batch = chain_store.batch().unwrap();
-		batch
-			.save_block_header(&block_header)
-			.unwrap();
+		batch.save_block_header(&block_header).unwrap();
 		batch.save_header_height(&block_header).unwrap();
 		batch.commit().unwrap();
 	}

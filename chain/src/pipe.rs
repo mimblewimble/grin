@@ -466,8 +466,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		if header.pow.secondary_scaling != next_header_info.secondary_scaling {
 			info!(
 				"validate_header: header secondary scaling {} != {}",
-				header.pow.secondary_scaling,
-				next_header_info.secondary_scaling
+				header.pow.secondary_scaling, next_header_info.secondary_scaling
 			);
 			return Err(ErrorKind::InvalidScaling.into());
 		}
@@ -547,10 +546,7 @@ fn add_block(b: &Block, batch: &store::Batch) -> Result<(), Error> {
 }
 
 /// Officially adds the block header to our header chain.
-fn add_block_header(
-	bh: &BlockHeader,
-	batch: &store::Batch,
-) -> Result<(), Error> {
+fn add_block_header(bh: &BlockHeader, batch: &store::Batch) -> Result<(), Error> {
 	batch
 		.save_block_header(bh)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header".to_owned()))?;
