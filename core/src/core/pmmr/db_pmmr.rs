@@ -71,7 +71,6 @@ where
 
 	/// Rewind the MMR to the specified position.
 	pub fn rewind(&mut self, position: u64) -> Result<(), String> {
-		println!("hash pmmr: rewind: {}", position);
 		// Identify which actual position we should rewind to as the provided
 		// position is a leaf. We traverse the MMR to include any parent(s) that
 		// need to be included for the MMR to be valid.
@@ -81,7 +80,6 @@ where
 		}
 		self.backend.rewind(pos)?;
 		self.last_pos = pos;
-		println!("hash pmmr: rewind: last_pos now: {}", self.last_pos);
 		Ok(())
 	}
 
@@ -102,7 +100,6 @@ where
 	/// Push a new element into the MMR. Computes new related peaks at
 	/// the same time if applicable.
 	pub fn push(&mut self, elmt: &T) -> Result<u64, String> {
-		println!("*** push size: {}, {:?}", self.unpruned_size(), elmt);
 		let elmt_pos = self.last_pos + 1;
 		let mut current_hash = elmt.hash_with_index(elmt_pos - 1);
 
