@@ -147,9 +147,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 	txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |mut extension| {
 		let prev = extension.batch.get_previous_header(&b.header)?;
 		if prev.hash() == head.last_block_h {
-			// Not a fork so we just need to rewind to put header MMR
-			// in the correct state for the full block.
-			extension.rewind(&prev)?;
+			// Not a fork so we do not need to rewind or reapply any blocks.
 		} else {
 			// Rewind and re-apply blocks on the forked chain to
 			// put the txhashset in the correct forked state
