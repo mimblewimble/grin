@@ -713,7 +713,7 @@ impl<'a> HeaderExtension<'a> {
 	pub fn validate_root(&self, header: &BlockHeader) -> Result<(), Error> {
 		// If we are validating the genesis block then we have no prev_root.
 		// So we are done here.
-		if header.height == 1 {
+		if header.height == 0 {
 			return Ok(());
 		}
 
@@ -1102,7 +1102,7 @@ impl<'a> Extension<'a> {
 	/// Validate the provided header by comparing its prev_root to the
 	/// root of the current header MMR.
 	pub fn validate_header_root(&self, header: &BlockHeader) -> Result<(), Error> {
-		if header.height == 1 {
+		if header.height == 0 {
 			return Ok(());
 		}
 

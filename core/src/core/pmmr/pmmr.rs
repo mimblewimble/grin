@@ -17,7 +17,7 @@ use std::u64;
 
 use croaring::Bitmap;
 
-use core::hash::Hash;
+use core::hash::{Hash, ZERO_HASH};
 use core::merkle_proof::MerkleProof;
 use core::pmmr::{Backend, ReadonlyPMMR};
 use core::BlockHeader;
@@ -124,6 +124,9 @@ where
 	/// Computes the root of the MMR. Find all the peaks in the current
 	/// tree and "bags" them to get a single peak.
 	pub fn root(&self) -> Hash {
+		if self.is_empty() {
+			return ZERO_HASH;
+		}
 		let mut res = None;
 		for peak in self.peaks().iter().rev() {
 			res = match res {
@@ -348,6 +351,11 @@ where
 			}
 		}
 		Ok(())
+	}
+
+	/// Check if this PMMR is (unpruned_size == 0).
+	pub fn is_empty(&self) -> bool {
+		self.unpruned_size() == 0
 	}
 
 	/// Total size of the tree, including intermediary nodes and ignoring any
