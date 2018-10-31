@@ -215,10 +215,9 @@ impl TransactionPool {
 
 	/// Whether the transaction is acceptable to the pool, given both how
 	/// full the pool is and the transaction weight.
-	fn is_acceptable(&self, tx: &Transaction) -> Result<(), PoolError> {
+	fn is_acceptable(&mut self, tx: &Transaction) -> Result<(), PoolError> {
 		if self.total_size() > self.config.max_pool_size {
-			// TODO evict old/large transactions instead
-			return Err(PoolError::OverCapacity);
+			self.txpool.evict_from_pool(self.config.max_pool_size);
 		}
 
 		// for a basic transaction (1 input, 2 outputs) -

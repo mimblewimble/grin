@@ -152,6 +152,35 @@ impl Pool {
 		Ok(Some(tx))
 	}
 
+	/// evict last 10% of the transaction from the pool (based on fees over weight)
+	pub fn evict_from_pool(&mut self, max_pool_size: usize) {
+		let tx_buckets = self.bucket_transactions();
+
+		let mut flat_txs: Vec<Transaction> = vec![];
+		for tx_bucket in tx_buckets {
+			for tx in tx_bucket {
+				flat_txs.push(tx);
+			}
+		}
+
+		// sort by fees over weight, multiplying by 1000 to keep some precision
+		// don't think we'll ever see a >max_u64/1000 fee transaction
+		flat_txs.sort_unstable_by_key(|tx| tx.fee() * 1000 / tx.tx_weight() as u64);
+
+		// Get last 10%
+		let number_to_evict = ((max_pool_size as f32) * 0.1) as usize;
+
+		// evict the bottom 10%
+		let evicted_tx: Vec<_> = flat_txs.drain(number_to_evict..).collect();
+
+		self.entries = self
+			.entries
+			.iter()
+			.filter(|x| evicted_tx.contains(&x.tx))
+			.map(|x| x.clone())
+			.collect::<Vec<_>>();
+	}
+
 	pub fn select_valid_transactions(
 		&self,
 		txs: Vec<Transaction>,
