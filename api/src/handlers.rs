@@ -143,9 +143,6 @@ impl OutputHandler {
 		let block = w(&self.chain)
 			.get_block(&header.hash())
 			.map_err(|_| ErrorKind::NotFound)?;
-		let previous = w(&self.chain)
-			.get_previous_header(&header)
-			.map_err(|_| ErrorKind::NotFound)?;
 		let outputs = block
 			.outputs()
 			.iter()
@@ -155,7 +152,7 @@ impl OutputHandler {
 			}).collect();
 
 		Ok(BlockOutputs {
-			header: BlockHeaderInfo::from_headers(&header, &previous),
+			header: BlockHeaderInfo::from_header(&header),
 			outputs: outputs,
 		})
 	}
@@ -590,10 +587,7 @@ impl HeaderHandler {
 
 	/// Convert a header into a "printable" version for json serialization.
 	fn convert_header(&self, header: &BlockHeader) -> Result<BlockHeaderPrintable, Error> {
-		let previous = w(&self.chain)
-			.get_previous_header(header)
-			.context(ErrorKind::NotFound)?;
-		return Ok(BlockHeaderPrintable::from_headers(header, &previous));
+		return Ok(BlockHeaderPrintable::from_header(header));
 	}
 
 	fn get_header_for_output(&self, commit_id: String) -> Result<BlockHeaderPrintable, Error> {

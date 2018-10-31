@@ -64,32 +64,13 @@ pub struct Tip {
 }
 
 impl Tip {
-	/// Creates a new tip at height 1 and the provided genesis hash.
-	pub fn from_genesis(genesis: &BlockHeader) -> Tip {
-		Tip {
-			height: genesis.height,
-			last_block_h: genesis.hash(),
-			prev_block_h: ZERO_HASH,
-			total_difficulty: Difficulty::min(),
-		}
-	}
-
-	pub fn from_headers(header: &BlockHeader, previous: &BlockHeader) -> Tip {
+	/// TODO - why do we have Tip when we could just use a block header?
+	/// Creates a new tip based on header.
+	pub fn from_header(header: &BlockHeader) -> Tip {
 		Tip {
 			height: header.height,
 			last_block_h: header.hash(),
-			prev_block_h: previous.hash(),
-			total_difficulty: header.total_difficulty(),
-		}
-	}
-
-	/// TODO - check height etc and return error if not valid?
-	/// Append a new block to this tip, returning a new updated tip.
-	pub fn append_header(&self, header: &BlockHeader) -> Tip {
-		Tip {
-			height: header.height,
-			last_block_h: header.hash(),
-			prev_block_h: self.last_block_h,
+			prev_block_h: header.prev_hash,
 			total_difficulty: header.total_difficulty(),
 		}
 	}

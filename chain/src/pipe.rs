@@ -65,26 +65,23 @@ fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext) -> Res
 		return Err(ErrorKind::Orphan.into());
 	}
 
-	let header_root =
-		txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
-			// TODO - make this an explicit readonly extension.
-			// TODO - as updates here really mess with the extension later on in the presence of forks...
-			extension.force_rollback();
+	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+		extension.force_rollback();
 
-			// Optimize this if "next" header
-			rewind_and_apply_header_fork(header, extension)?;
+		// Optimize this if "next" header
+		rewind_and_apply_header_fork(header, extension)?;
 
-			// Check the current root is correct.
-			extension.validate_root(header)?;
+		// Check the current root is correct.
+		extension.validate_root(header)?;
 
-			// Apply the new header and store header in the db,
-			// passing in the new root to set the header_by_root index correctly.
-			let root = extension.apply_header(header)?;
-			Ok(root)
-		})?;
+		// Apply the new header to our header extension.
+		extension.apply_header(header)?;
+
+		Ok(())
+	})?;
 
 	validate_header(header, ctx)?;
-	add_block_header(header, &header_root, &ctx.batch)?;
+	add_block_header(header, &ctx.batch)?;
 	update_header_head(header, ctx)?;
 
 	Ok(())
@@ -152,8 +149,6 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		if prev.hash() == head.last_block_h {
 			// Not a fork so we just need to rewind to put header MMR
 			// in the correct state for the full block.
-			// The header processing above put the header MMR (and only the header MMR)
-			// ahead by a single header.
 			extension.rewind(&prev)?;
 		} else {
 			// Rewind and re-apply blocks on the forked chain to
@@ -229,17 +224,17 @@ pub fn sync_block_headers(
 		let first_header = headers.first().unwrap();
 		let prev_header = ctx.batch.get_previous_header(&first_header)?;
 		txhashset::sync_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
-			// TODO - Optimize this if "next" header
-			// TODO - Check this assumption - are we reliably on the same chain/fork?
 			extension.rewind(&prev_header)?;
 
 			for header in headers {
 				// Check the current root is correct.
 				extension.validate_root(header)?;
 
-				// Apply the new header and store header in the db.
-				let header_root = extension.apply_header(header)?;
-				add_block_header(header, &header_root, &extension.batch)?;
+				// Apply the header to the header MMR.
+				extension.apply_header(header)?;
+
+				// Save the header to the db.
+				add_block_header(header, &extension.batch)?;
 			}
 
 			Ok(())
@@ -554,11 +549,10 @@ fn add_block(b: &Block, batch: &store::Batch) -> Result<(), Error> {
 /// Officially adds the block header to our header chain.
 fn add_block_header(
 	bh: &BlockHeader,
-	header_root: &Hash,
 	batch: &store::Batch,
 ) -> Result<(), Error> {
 	batch
-		.save_block_header(bh, header_root)
+		.save_block_header(bh)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header".to_owned()))?;
 	Ok(())
 }
@@ -576,8 +570,7 @@ fn update_head(b: &Block, ctx: &BlockContext) -> Result<Option<Tip>, Error> {
 			.setup_height(&b.header, &head)
 			.map_err(|e| ErrorKind::StoreErr(e, "pipe setup height".to_owned()))?;
 
-		let prev = ctx.batch.get_previous_header(&b.header)?;
-		let tip = Tip::from_headers(&b.header, &prev);
+		let tip = Tip::from_header(&b.header);
 
 		ctx.batch
 			.save_body_head(&tip)
@@ -601,8 +594,7 @@ fn has_more_work(header: &BlockHeader, head: &Tip) -> bool {
 
 /// Update the sync head so we can keep syncing from where we left off.
 fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
-	let prev = batch.get_previous_header(bh)?;
-	let tip = Tip::from_headers(bh, &prev);
+	let tip = Tip::from_header(bh);
 	batch
 		.save_sync_head(&tip)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save sync head".to_owned()))?;
@@ -614,8 +606,7 @@ fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Er
 fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
 	let header_head = ctx.batch.header_head()?;
 	if has_more_work(&bh, &header_head) {
-		let prev = ctx.batch.get_previous_header(bh)?;
-		let tip = Tip::from_headers(bh, &prev);
+		let tip = Tip::from_header(bh);
 		ctx.batch
 			.save_header_head(&tip)
 			.map_err(|e| ErrorKind::StoreErr(e, "pipe save header head".to_owned()))?;

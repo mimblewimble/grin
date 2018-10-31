@@ -472,14 +472,13 @@ pub struct BlockHeaderInfo {
 }
 
 impl BlockHeaderInfo {
-	pub fn from_headers(
+	pub fn from_header(
 		header: &core::BlockHeader,
-		previous: &core::BlockHeader,
 	) -> BlockHeaderInfo {
 		BlockHeaderInfo {
 			hash: util::to_hex(header.hash().to_vec()),
 			height: header.height,
-			previous: util::to_hex(previous.hash().to_vec()),
+			previous: util::to_hex(header.prev_hash.to_vec()),
 		}
 	}
 }
@@ -519,15 +518,12 @@ pub struct BlockHeaderPrintable {
 }
 
 impl BlockHeaderPrintable {
-	pub fn from_headers(
-		header: &core::BlockHeader,
-		previous: &core::BlockHeader,
-	) -> BlockHeaderPrintable {
+	pub fn from_header(header: &core::BlockHeader) -> BlockHeaderPrintable {
 		BlockHeaderPrintable {
 			hash: util::to_hex(header.hash().to_vec()),
 			version: header.version,
 			height: header.height,
-			previous: util::to_hex(previous.hash().to_vec()),
+			previous: util::to_hex(header.prev_hash.to_vec()),
 			prev_root: util::to_hex(header.prev_root.to_vec()),
 			timestamp: header.timestamp.to_rfc3339(),
 			output_root: util::to_hex(header.output_root.to_vec()),
@@ -583,9 +579,8 @@ impl BlockPrintable {
 			.iter()
 			.map(|kernel| TxKernelPrintable::from_txkernel(kernel))
 			.collect();
-		let previous = chain.get_previous_header(&block.header).unwrap();
 		BlockPrintable {
-			header: BlockHeaderPrintable::from_headers(&block.header, &previous),
+			header: BlockHeaderPrintable::from_header(&block.header),
 			inputs: inputs,
 			outputs: outputs,
 			kernels: kernels,
@@ -623,9 +618,8 @@ impl CompactBlockPrintable {
 			.iter()
 			.map(|x| TxKernelPrintable::from_txkernel(x))
 			.collect();
-		let previous = chain.get_previous_header(&cb.header).unwrap();
 		CompactBlockPrintable {
-			header: BlockHeaderPrintable::from_headers(&cb.header, &previous),
+			header: BlockHeaderPrintable::from_header(&cb.header),
 			out_full,
 			kern_full,
 			kern_ids: cb.kern_ids().iter().map(|x| x.to_hex()).collect(),

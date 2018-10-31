@@ -39,7 +39,6 @@ const HEAD_PREFIX: u8 = 'H' as u8;
 const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
-const HEADER_ROOT_PREFIX: u8 = 'r' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = 'B' as u8;
 const BLOCK_SUMS_PREFIX: u8 = 'M' as u8;
@@ -48,7 +47,6 @@ const BLOCK_SUMS_PREFIX: u8 = 'M' as u8;
 pub struct ChainStore {
 	db: store::Store,
 	header_cache: Arc<RwLock<LruCache<Hash, BlockHeader>>>,
-	header_root_cache: Arc<RwLock<LruCache<Hash, Hash>>>,
 	block_input_bitmap_cache: Arc<RwLock<LruCache<Hash, Vec<u8>>>>,
 	block_sums_cache: Arc<RwLock<LruCache<Hash, BlockSums>>>,
 }
@@ -60,7 +58,6 @@ impl ChainStore {
 		Ok(ChainStore {
 			db,
 			header_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
-			header_root_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
 			block_input_bitmap_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
 			block_sums_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
 		})
@@ -125,40 +122,8 @@ impl ChainStore {
 		}
 	}
 
-	fn get_header_hash_by_root(&self, h: &Hash) -> Result<Hash, Error> {
-		{
-			let mut cache = self.header_root_cache.write();
-
-			// cache hit - return the value from the cache
-			if let Some(hash) = cache.get_mut(h) {
-				return Ok(*hash);
-			}
-		}
-
-		let hash: Result<Hash, Error> = option_to_not_found(
-			self.db
-				.get_ser(&to_key(HEADER_ROOT_PREFIX, &mut h.to_vec())),
-			&format!("BLOCK HEADER ROOT: {}", h),
-		);
-
-		// cache miss - so adding to the cache for next time
-		if let Ok(hash) = hash {
-			{
-				let mut cache = self.header_root_cache.write();
-				cache.insert(*h, hash);
-			}
-			Ok(hash)
-		} else {
-			hash
-		}
-	}
-
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
-		if header.height == 0 {
-			return Err(Error::NotFoundErr(String::from("genesis has no previous")));
-		}
-		let hash = self.get_header_hash_by_root(&header.prev_root)?;
-		self.get_block_header(&hash)
+		self.get_block_header(&header.prev_hash)
 	}
 
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
@@ -239,7 +204,6 @@ impl ChainStore {
 		Ok(Batch {
 			db: self.db.batch()?,
 			header_cache: self.header_cache.clone(),
-			header_root_cache: self.header_root_cache.clone(),
 			block_input_bitmap_cache: self.block_input_bitmap_cache.clone(),
 			block_sums_cache: self.block_sums_cache.clone(),
 		})
@@ -251,7 +215,6 @@ impl ChainStore {
 pub struct Batch<'a> {
 	db: store::Batch<'a>,
 	header_cache: Arc<RwLock<LruCache<Hash, BlockHeader>>>,
-	header_root_cache: Arc<RwLock<LruCache<Hash, Hash>>>,
 	block_sums_cache: Arc<RwLock<LruCache<Hash, BlockSums>>>,
 	block_input_bitmap_cache: Arc<RwLock<LruCache<Hash, Vec<u8>>>>,
 }
@@ -353,7 +316,7 @@ impl<'a> Batch<'a> {
 		Ok(())
 	}
 
-	pub fn save_block_header(&self, header: &BlockHeader, header_root: &Hash) -> Result<(), Error> {
+	pub fn save_block_header(&self, header: &BlockHeader) -> Result<(), Error> {
 		let hash = header.hash();
 
 		// Cache the header.
@@ -361,18 +324,6 @@ impl<'a> Batch<'a> {
 			let mut header_cache = self.header_cache.write();
 			header_cache.insert(hash, header.clone());
 		}
-
-		// Cache the header by root.
-		{
-			let mut header_root_cache = self.header_root_cache.write();
-			header_root_cache.insert(header_root.clone(), hash);
-		}
-
-		// Store the header hash indexed by header root.
-		self.db.put_ser(
-			&to_key(HEADER_ROOT_PREFIX, &mut header_root.to_vec())[..],
-			&hash,
-		)?;
 
 		// Store the header itself indexed by hash.
 		self.db
@@ -410,40 +361,8 @@ impl<'a> Batch<'a> {
 			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
 	}
 
-	fn get_header_hash_by_root(&self, h: &Hash) -> Result<Hash, Error> {
-		{
-			let mut cache = self.header_root_cache.write();
-
-			// cache hit - return the value from the cache
-			if let Some(hash) = cache.get_mut(h) {
-				return Ok(*hash);
-			}
-		}
-
-		let hash: Result<Hash, Error> = option_to_not_found(
-			self.db
-				.get_ser(&to_key(HEADER_ROOT_PREFIX, &mut h.to_vec())),
-			&format!("BLOCK HEADER ROOT: {}", h),
-		);
-
-		// cache miss - so adding to the cache for next time
-		if let Ok(hash) = hash {
-			{
-				let mut cache = self.header_root_cache.write();
-				cache.insert(*h, hash);
-			}
-			Ok(hash)
-		} else {
-			hash
-		}
-	}
-
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
-		if header.height == 0 {
-			return Err(Error::NotFoundErr(String::from("genesis has no previous")));
-		}
-		let hash = self.get_header_hash_by_root(&header.prev_root)?;
-		self.get_block_header(&hash)
+		self.get_block_header(&header.prev_hash)
 	}
 
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
@@ -661,7 +580,6 @@ impl<'a> Batch<'a> {
 		Ok(Batch {
 			db: self.db.child()?,
 			header_cache: self.header_cache.clone(),
-			header_root_cache: self.header_root_cache.clone(),
 			block_sums_cache: self.block_sums_cache.clone(),
 			block_input_bitmap_cache: self.block_input_bitmap_cache.clone(),
 		})

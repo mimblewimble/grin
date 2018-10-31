@@ -101,7 +101,6 @@ fn data_files() {
 				global::min_edge_bits(),
 			).unwrap();
 
-			let _bhash = b.hash();
 			chain
 				.process_block(b.clone(), chain::Options::MINE)
 				.unwrap();

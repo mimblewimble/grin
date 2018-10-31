@@ -25,7 +25,7 @@ use util::RwLock;
 use lmdb;
 use lru_cache::LruCache;
 
-use core::core::hash::{Hash, Hashed, ZERO_HASH};
+use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernel};
@@ -497,6 +497,9 @@ impl Chain {
 		})
 	}
 
+	/// *** Only used in tests. ***
+	/// Convenience for setting roots on a block header when
+	/// creating a chain fork during tests.
 	pub fn set_txhashset_roots_forked(
 		&self,
 		b: &mut Block,
@@ -728,8 +731,7 @@ impl Chain {
 
 		// The txhashset.zip contains the output, rangeproof and kernel MMRs.
 		// We must rebuild the header MMR ourselves based on the headers in our db.
-		let prev = self.get_previous_header(&header)?;
-		self.rebuild_header_mmr(&Tip::from_headers(&header, &prev), &mut txhashset)?;
+		self.rebuild_header_mmr(&Tip::from_header(&header), &mut txhashset)?;
 
 		// Validate the full kernel history (kernel MMR root for every block header).
 		self.validate_kernel_history(&header, &txhashset)?;
@@ -765,8 +767,7 @@ impl Chain {
 
 		// Save the new head to the db and rebuild the header by height index.
 		{
-			let prev = batch.get_previous_header(&header)?;
-			let tip = Tip::from_headers(&header, &prev);
+			let tip = Tip::from_header(&header);
 			batch.save_body_head(&tip)?;
 			batch.save_header_height(&header)?;
 			batch.build_by_height_index(&header, true)?;
@@ -972,6 +973,7 @@ impl Chain {
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get header".to_owned()).into())
 	}
 
+	/// Get previous block header.
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
 		self.store
 			.get_previous_header(header)
@@ -1141,10 +1143,9 @@ fn setup_head(
 					// node. If this appears to be the case revert the head to the previous
 					// header and try again
 					let prev_header = batch.get_block_header(&head.prev_block_h)?;
-					let prev_prev_header = batch.get_previous_header(&prev_header)?;
 					let _ = batch.delete_block(&header.hash());
 					let _ = batch.setup_height(&prev_header, &head)?;
-					head = Tip::from_headers(&prev_header, &prev_prev_header);
+					head = Tip::from_header(&prev_header);
 					batch.save_head(&head)?;
 				}
 			}
@@ -1152,21 +1153,20 @@ fn setup_head(
 		Err(NotFoundErr(_)) => {
 			// Save the genesis header with a "zero" header_root.
 			// We will update this later once we have the correct header_root.
-			batch.save_block_header(&genesis.header, &ZERO_HASH)?;
+			batch.save_block_header(&genesis.header)?;
 			batch.save_block(&genesis)?;
 
-			let tip = Tip::from_genesis(&genesis.header);
+			let tip = Tip::from_header(&genesis.header);
 			batch.save_head(&tip)?;
 			batch.setup_height(&genesis.header, &tip)?;
 
-			// Apply the genesis header to our header MMR so we can
-			// setup the header_by_root index correctly.
-			let header_root = txhashset::header_extending(txhashset, &mut batch, |extension| {
-				extension.truncate()?;
-				let root = extension.apply_header(&genesis.header)?;
-				Ok(root)
+			// Initialize our header MM with the genesis header.
+			txhashset::header_extending(txhashset, &mut batch, |extension| {
+				extension.apply_header(&genesis.header)?;
+				Ok(())
 			})?;
-			batch.save_block_header(&genesis.header, &header_root)?;
+
+			batch.save_block_header(&genesis.header)?;
 
 			// Save the block_sums to the db for use later.
 			batch.save_block_sums(&genesis.hash(), &BlockSums::default())?;

@@ -23,8 +23,8 @@ extern crate rand;
 use std::fs;
 use std::sync::Arc;
 
-use chain::{txhashset, Error, Tip};
-use core::core::hash::{Hashed, ZERO_HASH};
+use chain::{Error, Tip};
+use core::core::hash::Hashed;
 use core::core::{Block, BlockHeader};
 use core::global::{self, ChainTypes};
 use core::pow::{self, Difficulty};
@@ -36,26 +36,16 @@ fn clean_output_dir(dir_name: &str) {
 }
 
 fn setup_chain(
-	txhashset: &mut txhashset::TxHashSet,
 	genesis: &Block,
 	chain_store: Arc<chain::store::ChainStore>,
 ) -> Result<(), Error> {
-	let mut batch = chain_store.batch()?;
-
-	batch.save_block_header(&genesis.header, &ZERO_HASH)?;
+	let batch = chain_store.batch()?;
+	batch.save_block_header(&genesis.header)?;
 	batch.save_block(&genesis)?;
-
-	let head = Tip::from_genesis(&genesis.header);
+	let head = Tip::from_header(&genesis.header);
 	batch.save_head(&head)?;
 	batch.setup_height(&genesis.header, &head)?;
-
-	let header_root = txhashset::header_extending(txhashset, &mut batch, |extension| {
-		extension.truncate().unwrap();
-		let root = extension.apply_header(&genesis.header)?;
-		Ok(root)
-	})?;
-
-	batch.save_block_header(&genesis.header, &header_root)?;
+	batch.save_block_header(&genesis.header)?;
 	batch.commit()?;
 	Ok(())
 }
@@ -75,33 +65,23 @@ fn test_various_store_indices() {
 
 	let chain_store = Arc::new(chain::store::ChainStore::new(db_env).unwrap());
 
-	let mut txhashset = txhashset::TxHashSet::open(
-		format!("{}{}", chain_dir, "txhashset"),
-		chain_store.clone(),
-		None,
-	).unwrap();
-
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis = pow::mine_genesis_block().unwrap();
 
-	setup_chain(&mut txhashset, &genesis, chain_store.clone()).unwrap();
+	setup_chain(&genesis, chain_store.clone()).unwrap();
 
 	let reward = libtx::reward::output(&keychain, &key_id, 0, 1).unwrap();
 	let block = Block::new(&genesis.header, vec![], Difficulty::min(), reward).unwrap();
 	let block_hash = block.hash();
 
 	{
-		let mut batch = chain_store.batch().unwrap();
-		let header_root = txhashset::header_extending(&mut txhashset, &mut batch, |extension| {
-			extension.apply_header(&block.header)
-		}).unwrap();
+		let batch = chain_store.batch().unwrap();
 		batch
-			.save_block_header(&block.header, &header_root)
+			.save_block_header(&block.header)
 			.unwrap();
 		batch.save_block(&block).unwrap();
-		let prev = batch.get_previous_header(&block.header).unwrap();
 		batch
-			.setup_height(&block.header, &Tip::from_headers(&block.header, &prev))
+			.setup_height(&block.header, &Tip::from_header(&block.header))
 			.unwrap();
 		batch.commit().unwrap();
 	}
@@ -147,27 +127,18 @@ fn test_store_header_height() {
 	let db_env = Arc::new(store::new_env(chain_dir.to_string()));
 	let chain_store = Arc::new(chain::store::ChainStore::new(db_env).unwrap());
 
-	let mut txhashset = txhashset::TxHashSet::open(
-		format!("{}{}", chain_dir, "txhashset"),
-		chain_store.clone(),
-		None,
-	).unwrap();
-
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis = pow::mine_genesis_block().unwrap();
 
-	setup_chain(&mut txhashset, &genesis, chain_store.clone()).unwrap();
+	setup_chain(&genesis, chain_store.clone()).unwrap();
 
 	let mut block_header = BlockHeader::default();
 	block_header.height = 1;
 
 	{
-		let mut batch = chain_store.batch().unwrap();
-		let header_root = txhashset::header_extending(&mut txhashset, &mut batch, |extension| {
-			extension.apply_header(&block_header)
-		}).unwrap();
+		let batch = chain_store.batch().unwrap();
 		batch
-			.save_block_header(&block_header, &header_root)
+			.save_block_header(&block_header)
 			.unwrap();
 		batch.save_header_height(&block_header).unwrap();
 		batch.commit().unwrap();

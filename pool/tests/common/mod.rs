@@ -66,15 +66,7 @@ impl ChainAdapter {
 
 	pub fn update_db_for_block(&self, block: &Block) {
 		let header = &block.header;
-
-		let prev = self.store.get_previous_header(&header);
-
-		let tip = if let Ok(prev) = prev {
-			Tip::from_headers(header, &prev)
-		} else {
-			Tip::from_genesis(header)
-		};
-
+		let tip = Tip::from_header(header);
 		let batch = self.store.batch().unwrap();
 
 		// For testing we are using the hash as the root (no MMR for a real root).
