@@ -147,14 +147,11 @@ fn fixed_size_of_serialized_header(_version: u16) -> usize {
 	size += mem::size_of::<u16>(); // version
 	size += mem::size_of::<u64>(); // height
 	size += mem::size_of::<i64>(); // timestamp
-	size += mem::size_of::<Hash>(); // previous
-	size += mem::size_of::<Hash>(); // prev_root
-	size += mem::size_of::<Hash>(); // output_root
-	size += mem::size_of::<Hash>(); // range_proof_root
-	size += mem::size_of::<Hash>(); // kernel_root
+								// previous, prev_root, output_root, range_proof_root, kernel_root
+	size += 5 * mem::size_of::<Hash>();
 	size += mem::size_of::<BlindingFactor>(); // total_kernel_offset
-	size += mem::size_of::<u64>(); // output_mmr_size
-	size += mem::size_of::<u64>(); // kernel_mmr_size
+										   // output_mmr_size, kernel_mmr_size
+	size += 2 * mem::size_of::<u64>();
 	size += mem::size_of::<Difficulty>(); // total_difficulty
 	size += mem::size_of::<u32>(); // secondary_scaling
 	size += mem::size_of::<u64>(); // nonce
@@ -166,8 +163,7 @@ pub fn serialized_size_of_header(version: u16, edge_bits: u8) -> usize {
 	let mut size = fixed_size_of_serialized_header(version);
 
 	size += mem::size_of::<u8>(); // pow.edge_bits
-	let nonce_bits = edge_bits as usize;
-	let bitvec_len = global::proofsize() * nonce_bits;
+	let bitvec_len = global::proofsize() * edge_bits as usize;
 	size += bitvec_len / 8; // pow.nonces
 	if bitvec_len % 8 != 0 {
 		size += 1;
@@ -418,35 +414,6 @@ impl Block {
 		Ok(block)
 	}
 
-	/// Extract tx data from this block as a single aggregate tx.
-	pub fn aggregate_transaction(
-		&self,
-		prev_kernel_offset: BlindingFactor,
-	) -> Result<Option<Transaction>, Error> {
-		let inputs = self.inputs().iter().cloned().collect();
-		let outputs = self
-			.outputs()
-			.iter()
-			.filter(|x| !x.features.contains(OutputFeatures::COINBASE_OUTPUT))
-			.cloned()
-			.collect();
-		let kernels = self
-			.kernels()
-			.iter()
-			.filter(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
-			.cloned()
-			.collect::<Vec<_>>();
-
-		let tx = if kernels.is_empty() {
-			None
-		} else {
-			let tx = Transaction::new(inputs, outputs, kernels)
-				.with_offset(self.block_kernel_offset(prev_kernel_offset)?);
-			Some(tx)
-		};
-		Ok(tx)
-	}
-
 	/// Hydrate a block from a compact block.
 	/// Note: caller must validate the block themselves, we do not validate it
 	/// here.
@@ -506,13 +473,12 @@ impl Block {
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
 	) -> Result<Block, Error> {
-		// A block is just a big transaction, aggregate as such.
-		let mut agg_tx = transaction::aggregate(txs)?;
-
-		// Now add the reward output and reward kernel to the aggregate tx.
-		// At this point the tx is technically invalid,
-		// but the tx body is valid if we account for the reward (i.e. as a block).
-		agg_tx = agg_tx.with_output(reward_out).with_kernel(reward_kern);
+		// A block is just a big transaction, aggregate and add the reward output
+		// and reward kernel. At this point the tx is technically invalid but the
+		// tx body is valid if we account for the reward (i.e. as a block).
+		let agg_tx = transaction::aggregate(txs)?
+			.with_output(reward_out)
+			.with_kernel(reward_kern);
 
 		// Now add the kernel offset of the previous block for a total
 		let total_kernel_offset =
@@ -587,12 +553,6 @@ impl Block {
 	/// from the block. Provides a simple way to cut-through the block. The
 	/// elimination is stable with respect to the order of inputs and outputs.
 	/// Method consumes the block.
-	///
-	/// NOTE: exclude coinbase from cut-through process
-	/// if a block contains a new coinbase output and
-	/// is a transaction spending a previous coinbase
-	/// we do not want to cut-through (all coinbase must be preserved)
-	///
 	pub fn cut_through(self) -> Result<Block, Error> {
 		let mut inputs = self.inputs().clone();
 		let mut outputs = self.outputs().clone();
@@ -684,10 +644,8 @@ impl Block {
 			let secp = secp.lock();
 			let over_commit = secp.commit_value(reward(self.total_fees()))?;
 
-			let out_adjust_sum = secp.commit_sum(
-				cb_outs.iter().map(|x| x.commitment()).collect(),
-				vec![over_commit],
-			)?;
+			let out_adjust_sum =
+				secp.commit_sum(map_vec!(cb_outs, |x| x.commitment()), vec![over_commit])?;
 
 			let kerns_sum = secp.commit_sum(cb_kerns.iter().map(|x| x.excess).collect(), vec![])?;
 
