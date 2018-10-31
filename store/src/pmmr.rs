@@ -77,7 +77,7 @@ where
 			self.leaf_set.add(position);
 		}
 		self.data_file.append(&mut ser::ser_vec(&data).unwrap());
-		for ref h in hashes {
+		for h in &hashes {
 			self.hash_file.append(&mut ser::ser_vec(h).unwrap());
 		}
 		Ok(())
@@ -229,11 +229,11 @@ where
 		// place so we use it.
 		if let Some(header) = header {
 			let leaf_snapshot_path = format!("{}/{}.{}", data_dir, PMMR_LEAF_FILE, header.hash());
-			LeafSet::copy_snapshot(leaf_set_path.clone(), leaf_snapshot_path.clone())?;
+			LeafSet::copy_snapshot(&leaf_set_path, &leaf_snapshot_path)?;
 		}
 
-		let leaf_set = LeafSet::open(leaf_set_path.clone())?;
-		let prune_list = PruneList::open(format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
+		let leaf_set = LeafSet::open(&leaf_set_path)?;
+		let prune_list = PruneList::open(&format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
 
 		Ok(PMMRBackend {
 			data_dir,
@@ -357,7 +357,7 @@ where
 
 			self.hash_file.save_prune(
 				tmp_prune_file_hash.clone(),
-				off_to_rm,
+				&off_to_rm,
 				record_len,
 				&prune_noop,
 			)?;
@@ -381,7 +381,7 @@ where
 
 			self.data_file.save_prune(
 				tmp_prune_file_data.clone(),
-				off_to_rm,
+				&off_to_rm,
 				record_len,
 				prune_cb,
 			)?;
@@ -445,7 +445,7 @@ where
 				}
 			}
 		}
-		(leaf_pos_to_rm, removed_excl_roots(expanded))
+		(leaf_pos_to_rm, removed_excl_roots(&expanded))
 	}
 }
 
@@ -457,7 +457,7 @@ pub struct HashOnlyMMRBackend {
 
 impl HashOnlyBackend for HashOnlyMMRBackend {
 	fn append(&mut self, hashes: Vec<Hash>) -> Result<(), String> {
-		for ref h in hashes {
+		for h in &hashes {
 			self.hash_file
 				.append(h)
 				.map_err(|e| format!("Failed to append to backend, {:?}", e))?;
@@ -480,7 +480,7 @@ impl HashOnlyBackend for HashOnlyMMRBackend {
 impl HashOnlyMMRBackend {
 	/// Instantiates a new PMMR backend.
 	/// Use the provided dir to store its files.
-	pub fn new(data_dir: String) -> io::Result<HashOnlyMMRBackend> {
+	pub fn new(data_dir: &str) -> io::Result<HashOnlyMMRBackend> {
 		let hash_file = HashFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		Ok(HashOnlyMMRBackend { hash_file })
 	}
@@ -510,7 +510,7 @@ impl HashOnlyMMRBackend {
 
 /// Filter remove list to exclude roots.
 /// We want to keep roots around so we have hashes for Merkle proofs.
-fn removed_excl_roots(removed: Bitmap) -> Bitmap {
+fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 	removed
 		.iter()
 		.filter(|pos| {

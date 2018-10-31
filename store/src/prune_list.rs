@@ -51,9 +51,6 @@ pub struct PruneList {
 	leaf_shift_cache: Vec<u64>,
 }
 
-unsafe impl Send for PruneList {}
-unsafe impl Sync for PruneList {}
-
 impl PruneList {
 	/// Instantiate a new empty prune list
 	pub fn new() -> PruneList {
@@ -67,10 +64,10 @@ impl PruneList {
 	}
 
 	/// Open an existing prune_list or create a new one.
-	pub fn open(path: String) -> io::Result<PruneList> {
+	pub fn open(path: &str) -> io::Result<PruneList> {
 		let file_path = Path::new(&path);
 		let bitmap = if file_path.exists() {
-			let mut bitmap_file = File::open(path.clone())?;
+			let mut bitmap_file = File::open(&path)?;
 			let mut buffer = vec![];
 			bitmap_file.read_to_end(&mut buffer)?;
 			Bitmap::deserialize(&buffer)
@@ -79,7 +76,7 @@ impl PruneList {
 		};
 
 		let mut prune_list = PruneList {
-			path: Some(path.clone()),
+			path: Some(path.to_string()),
 			bitmap,
 			pruned_cache: Bitmap::create(),
 			shift_cache: vec![],

@@ -36,37 +36,26 @@ pub struct LeafSet {
 	bitmap_bak: Bitmap,
 }
 
-unsafe impl Send for LeafSet {}
-unsafe impl Sync for LeafSet {}
-
 impl LeafSet {
 	/// Open the remove log file.
 	/// The content of the file will be read in memory for fast checking.
-	pub fn open(path: String) -> io::Result<LeafSet> {
+	pub fn open(path: &str) -> io::Result<LeafSet> {
 		let file_path = Path::new(&path);
 		let bitmap = if file_path.exists() {
-			read_bitmap(file_path)?
+			read_bitmap!(file_path)
 		} else {
 			Bitmap::create()
 		};
 
 		Ok(LeafSet {
-			path: path.clone(),
+			path: path.to_string(),
 			bitmap_bak: bitmap.clone(),
 			bitmap,
 		})
 	}
 
-	fn read_bitmap(file_path: Path) -> io::Result<Bitmap> {
-		let mut bitmap_file = File::open(file_path)?;
-		let f_md = bitmap_file.metadata()?;
-		let mut buffer = Vec::with_capacity(f_md.len() as usize);
-		bitmap_file.read_to_end(&mut buffer)?;
-		Ok(Bitmap::deserialize(&buffer))
-	}
-
 	/// Copies a snapshot of the utxo file into the primary utxo file.
-	pub fn copy_snapshot(path: String, cp_path: String) -> io::Result<()> {
+	pub fn copy_snapshot(path: &str, cp_path: &str) -> io::Result<()> {
 		let cp_file_path = Path::new(&cp_path);
 
 		if !cp_file_path.exists() {
@@ -74,16 +63,11 @@ impl LeafSet {
 			return Ok(());
 		}
 
-		let mut bitmap_file = File::open(cp_file_path)?;
-		let f_md = bitmap_file.metadata()?;
-		let mut buffer = Vec::with_capacity(f_md.len() as usize);
-		bitmap_file.read_to_end(&mut buffer)?;
-		let bitmap = Bitmap::deserialize(&buffer);
-
+		let bitmap = read_bitmap!(cp_file_path);
 		debug!("leaf_set: copying rewound file {} to {}", cp_path, path);
 
 		let mut leaf_set = LeafSet {
-			path,
+			path: path.to_string(),
 			bitmap_bak: bitmap.clone(),
 			bitmap,
 		};

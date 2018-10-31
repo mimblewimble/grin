@@ -148,11 +148,11 @@ impl Store {
 	/// Produces an iterator of `Readable` types moving forward from the
 	/// provided key.
 	pub fn iter<T: ser::Readable>(&self, from: &[u8]) -> Result<SerIterator<T>, Error> {
-		let txn = Arc::new(lmdb::ReadTransaction::new(self.env.clone())?);
-		let cursor = Arc::new(txn.cursor(self.db.clone()).unwrap());
+		let tx = Arc::new(lmdb::ReadTransaction::new(self.env.clone())?);
+		let cursor = Arc::new(tx.cursor(self.db.clone()).unwrap());
 		Ok(SerIterator {
-			tx: txn,
-			cursor: cursor,
+			tx,
+			cursor,
 			seek: false,
 			prefix: from.to_vec(),
 			_marker: marker::PhantomData,
