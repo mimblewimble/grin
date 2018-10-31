@@ -41,7 +41,6 @@ pub mod leaf_set;
 mod lmdb;
 pub mod pmmr;
 pub mod prune_list;
-pub mod rm_log;
 pub mod types;
 
 const SEP: u8 = ':' as u8;

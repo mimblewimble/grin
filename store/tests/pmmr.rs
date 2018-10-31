@@ -276,7 +276,7 @@ fn pmmr_reload() {
 
 		// pos 4 is removed (via prune list)
 		assert_eq!(backend.get_hash(4), None);
-		// pos 5 is removed (via rm_log)
+		// pos 5 is removed (via leaf_set)
 		assert_eq!(backend.get_hash(5), None);
 
 		// now check contents of the hash file
@@ -628,7 +628,7 @@ fn pmmr_compact_horizon() {
 
 		// check we can read a hash by pos correctly from recreated backend
 		// get_hash() and get_from_file() should return the same value
-		// and we only store leaves in the rm_log so pos 7 still has a hash in there
+		// and we only store leaves in the leaf_set so pos 7 still has a hash in there
 		assert_eq!(backend.get_hash(7), Some(pos_7_hash));
 		assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
