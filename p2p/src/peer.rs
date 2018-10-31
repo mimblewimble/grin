@@ -52,9 +52,6 @@ pub struct Peer {
 	connection: Option<conn::Tracker>,
 }
 
-unsafe impl Sync for Peer {}
-unsafe impl Send for Peer {}
-
 impl Peer {
 	// Only accept and connect can be externally used to build a peer
 	fn new(info: PeerInfo, adapter: Arc<NetAdapter>) -> Peer {

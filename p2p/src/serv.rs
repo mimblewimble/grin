@@ -41,9 +41,6 @@ pub struct Server {
 	stop: Arc<AtomicBool>,
 }
 
-unsafe impl Sync for Server {}
-unsafe impl Send for Server {}
-
 // TODO TLS
 impl Server {
 	/// Creates a new idle p2p server with no peers

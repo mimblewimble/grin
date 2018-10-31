@@ -51,9 +51,6 @@ pub struct PruneList {
 	leaf_shift_cache: Vec<u64>,
 }
 
-unsafe impl Send for PruneList {}
-unsafe impl Sync for PruneList {}
-
 impl PruneList {
 	/// Instantiate a new empty prune list
 	pub fn new() -> PruneList {
