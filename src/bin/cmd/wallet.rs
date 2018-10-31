@@ -124,19 +124,15 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 		return;
 	}
 
-	let passphrase = wallet_args
-		.value_of("pass")
-		.unwrap_or_else(|| {
-			error!("Failed to read passphrase.");
-			exit(1);
-		});
+	let passphrase = wallet_args.value_of("pass").unwrap_or_else(|| {
+		error!("Failed to read passphrase.");
+		exit(1);
+	});
 
-	let account = wallet_args
-		.value_of("account")
-		.unwrap_or_else(|| {
-			error!("Failed to read account.");
-			exit(1);
-		});
+	let account = wallet_args.value_of("account").unwrap_or_else(|| {
+		error!("Failed to read account.");
+		exit(1);
+	});
 
 	// Handle listener startup commands
 	{
