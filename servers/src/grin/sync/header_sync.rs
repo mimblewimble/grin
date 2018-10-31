@@ -173,7 +173,7 @@ impl HeaderSync {
 						locator.push((header.height, header.hash()));
 						break;
 					}
-					header_cursor = self.chain.get_block_header(&header.previous);
+					header_cursor = self.chain.get_previous_header(&header);
 				}
 			}
 		}
