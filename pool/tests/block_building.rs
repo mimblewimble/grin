@@ -67,12 +67,6 @@ fn test_transaction_pool_block_building() {
 
 	let block = add_block(BlockHeader::default(), vec![], &mut chain);
 	let header = block.header;
-	println!(
-		"***** block added: {}, {}, prev_root: {}",
-		header.hash(),
-		header.height,
-		header.prev_root
-	);
 
 	// Now create tx to spend that first coinbase (now matured).
 	// Provides us with some useful outputs to test with.
@@ -81,12 +75,6 @@ fn test_transaction_pool_block_building() {
 	// Mine that initial tx so we can spend it with multiple txs
 	let block = add_block(header, vec![initial_tx], &mut chain);
 	let header = block.header;
-	println!(
-		"***** block added: {}, {}, prev_root: {}",
-		header.hash(),
-		header.height,
-		header.prev_root
-	);
 
 	// Initialize a new pool with our chain adapter.
 	let pool = RwLock::new(test_setup(Arc::new(chain.clone()), verifier_cache));
@@ -132,12 +120,6 @@ fn test_transaction_pool_block_building() {
 
 	let block = add_block(header, txs, &mut chain);
 	let header = block.header.clone();
-	println!(
-		"***** block added: {}, {}, prev_root: {}",
-		header.hash(),
-		header.height,
-		header.prev_root
-	);
 
 	// Now reconcile the transaction pool with the new block
 	// and check the resulting contents of the pool are what we expect.
