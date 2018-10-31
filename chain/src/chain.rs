@@ -644,9 +644,7 @@ impl Chain {
 		header: &BlockHeader,
 		txhashset: &txhashset::TxHashSet,
 	) -> Result<(), Error> {
-		debug!(
-			"validate_kernel_history: rewinding and validating kernel history (readonly)"
-		);
+		debug!("validate_kernel_history: rewinding and validating kernel history (readonly)");
 
 		let mut count = 0;
 		let mut current = header.clone();
