@@ -69,11 +69,7 @@ impl ChainAdapter {
 		let tip = Tip::from_header(header);
 		let batch = self.store.batch().unwrap();
 
-		// For testing we are using the hash as the root (no MMR for a real root).
-		{
-			let header_root = tip.last_block_h;
-			batch.save_block_header(header, &header_root).unwrap();
-		}
+		batch.save_block_header(header).unwrap();
 		batch.save_head(&tip).unwrap();
 
 		// Retrieve previous block_sums from the db.

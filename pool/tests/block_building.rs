@@ -119,7 +119,6 @@ fn test_transaction_pool_block_building() {
 	assert_eq!(txs.len(), 3);
 
 	let block = add_block(header, txs, &mut chain);
-	let header = block.header.clone();
 
 	// Now reconcile the transaction pool with the new block
 	// and check the resulting contents of the pool are what we expect.
