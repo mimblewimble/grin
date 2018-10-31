@@ -184,7 +184,7 @@ impl Chain {
 		{
 			let head = store.head()?;
 			debug!(
-				"Chain init: head: {} @ {} [{}]",
+				"init: head: {} @ {} [{}]",
 				head.total_difficulty.to_num(),
 				head.height,
 				head.last_block_h,
@@ -194,7 +194,7 @@ impl Chain {
 		{
 			let header_head = store.header_head()?;
 			debug!(
-				"Chain init: header_head: {} @ {} [{}]",
+				"init: header_head: {} @ {} [{}]",
 				header_head.total_difficulty.to_num(),
 				header_head.height,
 				header_head.last_block_h,
@@ -204,7 +204,7 @@ impl Chain {
 		{
 			let sync_head = store.get_sync_head()?;
 			debug!(
-				"Chain init: sync_head: {} @ {} [{}]",
+				"init: sync_head: {} @ {} [{}]",
 				sync_head.total_difficulty.to_num(),
 				sync_head.height,
 				sync_head.last_block_h,
@@ -645,7 +645,7 @@ impl Chain {
 		txhashset: &txhashset::TxHashSet,
 	) -> Result<(), Error> {
 		debug!(
-			"chain: validate_kernel_history: rewinding and validating kernel history (readonly)"
+			"validate_kernel_history: rewinding and validating kernel history (readonly)"
 		);
 
 		let mut count = 0;
@@ -661,7 +661,7 @@ impl Chain {
 		})?;
 
 		debug!(
-			"chain: validate_kernel_history: validated kernel root on {} headers",
+			"validate_kernel_history: validated kernel root on {} headers",
 			count,
 		);
 
@@ -737,7 +737,7 @@ impl Chain {
 		self.validate_kernel_history(&header, &txhashset)?;
 
 		// all good, prepare a new batch and update all the required records
-		debug!("chain: txhashset_write: rewinding a 2nd time (writeable)");
+		debug!("txhashset_write: rewinding a 2nd time (writeable)");
 
 		let mut batch = self.store.batch()?;
 
@@ -761,7 +761,7 @@ impl Chain {
 			Ok(())
 		})?;
 
-		debug!("chain: txhashset_write: finished validating and rebuilding");
+		debug!("txhashset_write: finished validating and rebuilding");
 
 		status.on_save();
 
@@ -776,7 +776,7 @@ impl Chain {
 		// Commit all the changes to the db.
 		batch.commit()?;
 
-		debug!("chain: txhashset_write: finished committing the batch (head etc.)");
+		debug!("txhashset_write: finished committing the batch (head etc.)");
 
 		// Replace the chain txhashset with the newly built one.
 		{
@@ -784,7 +784,7 @@ impl Chain {
 			*txhashset_ref = txhashset;
 		}
 
-		debug!("chain: txhashset_write: replaced our txhashset with the new one");
+		debug!("txhashset_write: replaced our txhashset with the new one");
 
 		// Check for any orphan blocks and process them based on the new chain state.
 		self.check_orphans(header.height + 1);
@@ -825,7 +825,7 @@ impl Chain {
 		let cutoff = head.height.saturating_sub(horizon);
 
 		debug!(
-			"chain: compact_blocks_db: head height: {}, horizon: {}, cutoff: {}",
+			"compact_blocks_db: head height: {}, horizon: {}, cutoff: {}",
 			head.height, horizon, cutoff,
 		);
 
@@ -862,7 +862,7 @@ impl Chain {
 			}
 		}
 		batch.commit()?;
-		debug!("chain: compact_blocks_db: removed {} blocks.", count);
+		debug!("compact_blocks_db: removed {} blocks.", count);
 		Ok(())
 	}
 
@@ -1109,7 +1109,7 @@ fn setup_head(
 					if header.height > 0 && extension.batch.get_block_sums(&header.hash()).is_err()
 					{
 						debug!(
-							"chain: init: building (missing) block sums for {} @ {}",
+							"init: building (missing) block sums for {} @ {}",
 							header.height,
 							header.hash()
 						);
@@ -1129,7 +1129,7 @@ fn setup_head(
 					}
 
 					debug!(
-						"chain: init: rewinding and validating before we start... {} at {}",
+						"init: rewinding and validating before we start... {} at {}",
 						header.hash(),
 						header.height,
 					);
@@ -1171,7 +1171,7 @@ fn setup_head(
 			// Save the block_sums to the db for use later.
 			batch.save_block_sums(&genesis.hash(), &BlockSums::default())?;
 
-			info!("chain: init: saved genesis: {:?}", genesis.hash());
+			info!("init: saved genesis: {:?}", genesis.hash());
 		}
 		Err(e) => return Err(ErrorKind::StoreErr(e, "chain init load head".to_owned()))?,
 	};
