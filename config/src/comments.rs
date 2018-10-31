@@ -241,6 +241,13 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"max_stempool_size".to_string(),
+		"
+#maximum number of transactions allowed in the stempool
+".to_string(),
+	);
+
+	retval.insert(
 		"[server.stratum_mining_config]".to_string(),
 		"
 ################################################
