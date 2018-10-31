@@ -223,7 +223,7 @@ impl TransactionPool {
 
 		// Check that the stempool can accept this transaction
 		if stem {
-			if self.total_stempool_size() > self.config.max_stempool_size {
+			if self.stempool.size() > self.config.max_stempool_size {
 				// TODO evict old/large transactions instead
 				return Err(PoolError::OverCapacity);
 			}
@@ -245,11 +245,6 @@ impl TransactionPool {
 	/// Note: we only consider the txpool here as stempool is under embargo.
 	pub fn total_size(&self) -> usize {
 		self.txpool.size()
-	}
-
-	/// Get the total size of the stempool.
-	fn total_stempool_size(&self) -> usize {
-		self.stempool.size()
 	}
 
 	/// Returns a vector of transactions from the txpool so we can build a
