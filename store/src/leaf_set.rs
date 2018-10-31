@@ -23,10 +23,10 @@ use core::core::hash::Hashed;
 use core::core::pmmr;
 use core::core::BlockHeader;
 use prune_list::PruneList;
-use save_via_temp_file;
+use {read_bitmap, save_via_temp_file};
 
 use std::fs::File;
-use std::io::{self, BufWriter, Read, Write};
+use std::io::{self, BufWriter, Write};
 
 /// Compact (roaring) bitmap representing the set of positions of
 /// leaves that are currently unpruned in the MMR.
@@ -42,7 +42,7 @@ impl LeafSet {
 	pub fn open(path: &str) -> io::Result<LeafSet> {
 		let file_path = Path::new(&path);
 		let bitmap = if file_path.exists() {
-			read_bitmap!(file_path)
+			read_bitmap(file_path)?
 		} else {
 			Bitmap::create()
 		};
@@ -63,7 +63,7 @@ impl LeafSet {
 			return Ok(());
 		}
 
-		let bitmap = read_bitmap!(cp_file_path);
+		let bitmap = read_bitmap(cp_file_path)?;
 		debug!("leaf_set: copying rewound file {} to {}", cp_path, path);
 
 		let mut leaf_set = LeafSet {

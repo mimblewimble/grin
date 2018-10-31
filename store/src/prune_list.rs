@@ -21,14 +21,13 @@
 //! must be shifted the appropriate amount when reading from the hash and data
 //! files.
 
-use std::fs::File;
-use std::io::{self, BufWriter, Read, Write};
+use std::io::{self, BufWriter, Write};
 use std::path::Path;
 
 use croaring::Bitmap;
 
 use core::core::pmmr::{bintree_postorder_height, family, path};
-use save_via_temp_file;
+use {read_bitmap, save_via_temp_file};
 
 /// Maintains a list of previously pruned nodes in PMMR, compacting the list as
 /// parents get pruned and allowing checking whether a leaf is pruned. Given
@@ -67,10 +66,7 @@ impl PruneList {
 	pub fn open(path: &str) -> io::Result<PruneList> {
 		let file_path = Path::new(&path);
 		let bitmap = if file_path.exists() {
-			let mut bitmap_file = File::open(&path)?;
-			let mut buffer = vec![];
-			bitmap_file.read_to_end(&mut buffer)?;
-			Bitmap::deserialize(&buffer)
+			read_bitmap(&file_path)?
 		} else {
 			Bitmap::create()
 		};

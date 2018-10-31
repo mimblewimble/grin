@@ -36,12 +36,11 @@ extern crate failure_derive;
 extern crate grin_core as core;
 extern crate grin_util as util;
 
-#[macro_use]
-pub mod types;
 pub mod leaf_set;
 mod lmdb;
 pub mod pmmr;
 pub mod prune_list;
+pub mod types;
 
 const SEP: u8 = b':';
 
@@ -110,4 +109,17 @@ where
 	rename(&temp_path, &original)?;
 
 	Ok(())
+}
+
+use croaring::Bitmap;
+use std::io::{self, Read};
+use std::path::Path;
+/// Read Bitmap from a file
+pub fn read_bitmap<P: AsRef<Path>>(file_path: P) -> io::Result<Bitmap> {
+	use std::fs::File;
+	let mut bitmap_file = File::open(file_path)?;
+	let f_md = bitmap_file.metadata()?;
+	let mut buffer = Vec::with_capacity(f_md.len() as usize);
+	bitmap_file.read_to_end(&mut buffer)?;
+	Ok(Bitmap::deserialize(&buffer))
 }

@@ -220,8 +220,8 @@ where
 		prunable: bool,
 		header: Option<&BlockHeader>,
 	) -> io::Result<PMMRBackend<T>> {
-		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
-		let data_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
+		let hash_file = AppendOnlyFile::open(&format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
+		let data_file = AppendOnlyFile::open(&format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
 
 		let leaf_set_path = format!("{}/{}", data_dir, PMMR_LEAF_FILE);
 
@@ -400,14 +400,14 @@ where
 			tmp_prune_file_hash.clone(),
 			format!("{}/{}", self.data_dir, PMMR_HASH_FILE),
 		)?;
-		self.hash_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_HASH_FILE))?;
+		self.hash_file = AppendOnlyFile::open(&format!("{}/{}", self.data_dir, PMMR_HASH_FILE))?;
 
 		// 5. Rename the compact copy of the data file and reopen it.
 		fs::rename(
 			tmp_prune_file_data.clone(),
 			format!("{}/{}", self.data_dir, PMMR_DATA_FILE),
 		)?;
-		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
+		self.data_file = AppendOnlyFile::open(&format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
 
 		// 6. Write the leaf_set to disk.
 		// Optimize the bitmap storage in the process.
@@ -481,7 +481,7 @@ impl HashOnlyMMRBackend {
 	/// Instantiates a new PMMR backend.
 	/// Use the provided dir to store its files.
 	pub fn new(data_dir: &str) -> io::Result<HashOnlyMMRBackend> {
-		let hash_file = HashFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
+		let hash_file = HashFile::open(&format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		Ok(HashOnlyMMRBackend { hash_file })
 	}
 

@@ -28,16 +28,6 @@ use libc::{ftruncate64, off64_t};
 use core::core::hash::Hash;
 use core::ser;
 
-macro_rules! read_bitmap {
-	($file_path:expr) => {{
-		let mut bitmap_file = File::open($file_path)?;
-		let f_md = bitmap_file.metadata()?;
-		let mut buffer = Vec::with_capacity(f_md.len() as usize);
-		bitmap_file.read_to_end(&mut buffer)?;
-		Bitmap::deserialize(&buffer)
-		}};
-}
-
 /// A no-op function for doing nothing with some pruned data.
 pub fn prune_noop(_pruned_data: &[u8]) {}
 
@@ -48,7 +38,7 @@ pub struct HashFile {
 
 impl HashFile {
 	/// Open (or create) a hash file at the provided path on disk.
-	pub fn open(path: String) -> io::Result<HashFile> {
+	pub fn open(path: &str) -> io::Result<HashFile> {
 		let file = AppendOnlyFile::open(path)?;
 		Ok(HashFile { file })
 	}
@@ -123,15 +113,15 @@ pub struct AppendOnlyFile {
 
 impl AppendOnlyFile {
 	/// Open a file (existing or not) as append-only, backed by a mmap.
-	pub fn open(path: String) -> io::Result<AppendOnlyFile> {
+	pub fn open(path: &str) -> io::Result<AppendOnlyFile> {
 		let file = OpenOptions::new()
 			.read(true)
 			.append(true)
 			.create(true)
-			.open(path.clone())?;
+			.open(&path)?;
 		let mut aof = AppendOnlyFile {
-			path,
 			file,
+			path: path.to_string(),
 			mmap: None,
 			buffer_start: 0,
 			buffer: vec![],
