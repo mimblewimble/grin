@@ -41,9 +41,6 @@ pub struct Handshake {
 	config: P2PConfig,
 }
 
-unsafe impl Sync for Handshake {}
-unsafe impl Send for Handshake {}
-
 impl Handshake {
 	/// Creates a new handshake handler
 	pub fn new(genesis: Hash, config: P2PConfig) -> Handshake {

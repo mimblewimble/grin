@@ -36,9 +36,6 @@ pub struct LeafSet {
 	bitmap_bak: Bitmap,
 }
 
-unsafe impl Send for LeafSet {}
-unsafe impl Sync for LeafSet {}
-
 impl LeafSet {
 	/// Open the remove log file.
 	/// The content of the file will be read in memory for fast checking.
