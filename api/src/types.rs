@@ -472,11 +472,11 @@ pub struct BlockHeaderInfo {
 }
 
 impl BlockHeaderInfo {
-	pub fn from_header(h: &core::BlockHeader) -> BlockHeaderInfo {
+	pub fn from_header(header: &core::BlockHeader) -> BlockHeaderInfo {
 		BlockHeaderInfo {
-			hash: util::to_hex(h.hash().to_vec()),
-			height: h.height,
-			previous: util::to_hex(h.previous.to_vec()),
+			hash: util::to_hex(header.hash().to_vec()),
+			height: header.height,
+			previous: util::to_hex(header.prev_hash.to_vec()),
 		}
 	}
 }
@@ -516,23 +516,23 @@ pub struct BlockHeaderPrintable {
 }
 
 impl BlockHeaderPrintable {
-	pub fn from_header(h: &core::BlockHeader) -> BlockHeaderPrintable {
+	pub fn from_header(header: &core::BlockHeader) -> BlockHeaderPrintable {
 		BlockHeaderPrintable {
-			hash: util::to_hex(h.hash().to_vec()),
-			version: h.version,
-			height: h.height,
-			previous: util::to_hex(h.previous.to_vec()),
-			prev_root: util::to_hex(h.prev_root.to_vec()),
-			timestamp: h.timestamp.to_rfc3339(),
-			output_root: util::to_hex(h.output_root.to_vec()),
-			range_proof_root: util::to_hex(h.range_proof_root.to_vec()),
-			kernel_root: util::to_hex(h.kernel_root.to_vec()),
-			nonce: h.pow.nonce,
-			edge_bits: h.pow.edge_bits(),
-			cuckoo_solution: h.pow.proof.nonces.clone(),
-			total_difficulty: h.pow.total_difficulty.to_num(),
-			secondary_scaling: h.pow.secondary_scaling,
-			total_kernel_offset: h.total_kernel_offset.to_hex(),
+			hash: util::to_hex(header.hash().to_vec()),
+			version: header.version,
+			height: header.height,
+			previous: util::to_hex(header.prev_hash.to_vec()),
+			prev_root: util::to_hex(header.prev_root.to_vec()),
+			timestamp: header.timestamp.to_rfc3339(),
+			output_root: util::to_hex(header.output_root.to_vec()),
+			range_proof_root: util::to_hex(header.range_proof_root.to_vec()),
+			kernel_root: util::to_hex(header.kernel_root.to_vec()),
+			nonce: header.pow.nonce,
+			edge_bits: header.pow.edge_bits(),
+			cuckoo_solution: header.pow.proof.nonces.clone(),
+			total_difficulty: header.pow.total_difficulty.to_num(),
+			secondary_scaling: header.pow.secondary_scaling,
+			total_kernel_offset: header.total_kernel_offset.to_hex(),
 		}
 	}
 }

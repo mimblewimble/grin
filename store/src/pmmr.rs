@@ -25,10 +25,10 @@ use leaf_set::LeafSet;
 use prune_list::PruneList;
 use types::{prune_noop, AppendOnlyFile, HashFile};
 
-const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
-const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
-const PMMR_LEAF_FILE: &'static str = "pmmr_leaf.bin";
-const PMMR_PRUN_FILE: &'static str = "pmmr_prun.bin";
+const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
+const PMMR_DATA_FILE: &str = "pmmr_data.bin";
+const PMMR_LEAF_FILE: &str = "pmmr_leaf.bin";
+const PMMR_PRUN_FILE: &str = "pmmr_prun.bin";
 
 /// The list of PMMR_Files for internal purposes
 pub const PMMR_FILES: [&str; 4] = [
@@ -77,7 +77,7 @@ where
 			self.leaf_set.add(position);
 		}
 		self.data_file.append(&mut ser::ser_vec(&data).unwrap());
-		for ref h in hashes {
+		for h in &hashes {
 			self.hash_file.append(&mut ser::ser_vec(h).unwrap());
 		}
 		Ok(())
@@ -105,7 +105,7 @@ where
 					"Corrupted storage, could not read an entry from hash store: {:?}",
 					e
 				);
-				return None;
+				None
 			}
 		}
 	}
@@ -128,7 +128,7 @@ where
 					"Corrupted storage, could not read an entry from data store: {:?}",
 					e
 				);
-				return None;
+				None
 			}
 		}
 	}
@@ -220,8 +220,8 @@ where
 		prunable: bool,
 		header: Option<&BlockHeader>,
 	) -> io::Result<PMMRBackend<T>> {
-		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
-		let data_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
+		let hash_file = AppendOnlyFile::open(&format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
+		let data_file = AppendOnlyFile::open(&format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
 
 		let leaf_set_path = format!("{}/{}", data_dir, PMMR_LEAF_FILE);
 
@@ -229,11 +229,11 @@ where
 		// place so we use it.
 		if let Some(header) = header {
 			let leaf_snapshot_path = format!("{}/{}.{}", data_dir, PMMR_LEAF_FILE, header.hash());
-			LeafSet::copy_snapshot(leaf_set_path.clone(), leaf_snapshot_path.clone())?;
+			LeafSet::copy_snapshot(&leaf_set_path, &leaf_snapshot_path)?;
 		}
 
-		let leaf_set = LeafSet::open(leaf_set_path.clone())?;
-		let prune_list = PruneList::open(format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
+		let leaf_set = LeafSet::open(&leaf_set_path)?;
+		let prune_list = PruneList::open(&format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
 
 		Ok(PMMRBackend {
 			data_dir,
@@ -357,7 +357,7 @@ where
 
 			self.hash_file.save_prune(
 				tmp_prune_file_hash.clone(),
-				off_to_rm,
+				&off_to_rm,
 				record_len,
 				&prune_noop,
 			)?;
@@ -381,7 +381,7 @@ where
 
 			self.data_file.save_prune(
 				tmp_prune_file_data.clone(),
-				off_to_rm,
+				&off_to_rm,
 				record_len,
 				prune_cb,
 			)?;
@@ -400,14 +400,14 @@ where
 			tmp_prune_file_hash.clone(),
 			format!("{}/{}", self.data_dir, PMMR_HASH_FILE),
 		)?;
-		self.hash_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_HASH_FILE))?;
+		self.hash_file = AppendOnlyFile::open(&format!("{}/{}", self.data_dir, PMMR_HASH_FILE))?;
 
 		// 5. Rename the compact copy of the data file and reopen it.
 		fs::rename(
 			tmp_prune_file_data.clone(),
 			format!("{}/{}", self.data_dir, PMMR_DATA_FILE),
 		)?;
-		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
+		self.data_file = AppendOnlyFile::open(&format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
 
 		// 6. Write the leaf_set to disk.
 		// Optimize the bitmap storage in the process.
@@ -445,7 +445,7 @@ where
 				}
 			}
 		}
-		(leaf_pos_to_rm, removed_excl_roots(expanded))
+		(leaf_pos_to_rm, removed_excl_roots(&expanded))
 	}
 }
 
@@ -457,7 +457,7 @@ pub struct HashOnlyMMRBackend {
 
 impl HashOnlyBackend for HashOnlyMMRBackend {
 	fn append(&mut self, hashes: Vec<Hash>) -> Result<(), String> {
-		for ref h in hashes {
+		for h in &hashes {
 			self.hash_file
 				.append(h)
 				.map_err(|e| format!("Failed to append to backend, {:?}", e))?;
@@ -480,8 +480,8 @@ impl HashOnlyBackend for HashOnlyMMRBackend {
 impl HashOnlyMMRBackend {
 	/// Instantiates a new PMMR backend.
 	/// Use the provided dir to store its files.
-	pub fn new(data_dir: String) -> io::Result<HashOnlyMMRBackend> {
-		let hash_file = HashFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
+	pub fn new(data_dir: &str) -> io::Result<HashOnlyMMRBackend> {
+		let hash_file = HashFile::open(&format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		Ok(HashOnlyMMRBackend { hash_file })
 	}
 
@@ -510,7 +510,7 @@ impl HashOnlyMMRBackend {
 
 /// Filter remove list to exclude roots.
 /// We want to keep roots around so we have hashes for Merkle proofs.
-fn removed_excl_roots(removed: Bitmap) -> Bitmap {
+fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 	removed
 		.iter()
 		.filter(|pos| {

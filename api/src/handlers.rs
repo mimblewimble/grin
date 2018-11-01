@@ -25,7 +25,7 @@ use hyper::{Body, Request, StatusCode};
 use auth::BasicAuthMiddleware;
 use chain;
 use core::core::hash::{Hash, Hashed};
-use core::core::{OutputFeatures, OutputIdentifier, Transaction};
+use core::core::{BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
 use core::ser;
 use p2p;
 use p2p::types::{PeerInfoDisplay, ReasonForBan};
@@ -569,7 +569,9 @@ impl HeaderHandler {
 		}
 		if let Ok(height) = input.parse() {
 			match w(&self.chain).get_header_by_height(height) {
-				Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
+				Ok(header) => {
+					return self.convert_header(&header);
+				}
 				Err(_) => return Err(ErrorKind::NotFound)?,
 			}
 		}
@@ -580,13 +582,18 @@ impl HeaderHandler {
 		let header = w(&self.chain)
 			.get_block_header(&h)
 			.context(ErrorKind::NotFound)?;
-		Ok(BlockHeaderPrintable::from_header(&header))
+		self.convert_header(&header)
+	}
+
+	/// Convert a header into a "printable" version for json serialization.
+	fn convert_header(&self, header: &BlockHeader) -> Result<BlockHeaderPrintable, Error> {
+		return Ok(BlockHeaderPrintable::from_header(header));
 	}
 
 	fn get_header_for_output(&self, commit_id: String) -> Result<BlockHeaderPrintable, Error> {
 		let oid = get_output(&self.chain, &commit_id)?.1;
 		match w(&self.chain).get_header_for_output(&oid) {
-			Ok(header) => return Ok(BlockHeaderPrintable::from_header(&header)),
+			Ok(header) => return self.convert_header(&header),
 			Err(_) => return Err(ErrorKind::NotFound)?,
 		}
 	}

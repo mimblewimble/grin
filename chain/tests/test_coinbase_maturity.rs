@@ -76,7 +76,7 @@ fn test_coinbase_maturity() {
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 	block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 
-	chain.set_txhashset_roots(&mut block, false).unwrap();
+	chain.set_txhashset_roots(&mut block).unwrap();
 
 	pow::pow_size(
 		&mut block.header,
@@ -123,7 +123,7 @@ fn test_coinbase_maturity() {
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 	block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 
-	chain.set_txhashset_roots(&mut block, false).unwrap();
+	chain.set_txhashset_roots(&mut block).unwrap();
 
 	// Confirm the tx attempting to spend the coinbase output
 	// is not valid at the current block height given the current chain state.
@@ -156,7 +156,7 @@ fn test_coinbase_maturity() {
 		block.header.timestamp = prev.timestamp + Duration::seconds(60);
 		block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 
-		chain.set_txhashset_roots(&mut block, false).unwrap();
+		chain.set_txhashset_roots(&mut block).unwrap();
 
 		pow::pow_size(
 			&mut block.header,
@@ -183,7 +183,7 @@ fn test_coinbase_maturity() {
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
 	block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 
-	chain.set_txhashset_roots(&mut block, false).unwrap();
+	chain.set_txhashset_roots(&mut block).unwrap();
 
 	pow::pow_size(
 		&mut block.header,

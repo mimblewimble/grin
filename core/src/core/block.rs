@@ -118,7 +118,7 @@ pub struct BlockHeader {
 	/// Height of this block since the genesis block (height 0)
 	pub height: u64,
 	/// Hash of the block previous to this in the chain.
-	pub previous: Hash,
+	pub prev_hash: Hash,
 	/// Root hash of the header MMR at the previous header.
 	pub prev_root: Hash,
 	/// Timestamp at which the block was built.
@@ -147,10 +147,10 @@ fn fixed_size_of_serialized_header(_version: u16) -> usize {
 	size += mem::size_of::<u16>(); // version
 	size += mem::size_of::<u64>(); // height
 	size += mem::size_of::<i64>(); // timestamp
-								// previous, prev_root, output_root, range_proof_root, kernel_root
+	// prev_hash, prev_root, output_root, range_proof_root, kernel_root
 	size += 5 * mem::size_of::<Hash>();
 	size += mem::size_of::<BlindingFactor>(); // total_kernel_offset
-										   // output_mmr_size, kernel_mmr_size
+	// output_mmr_size, kernel_mmr_size
 	size += 2 * mem::size_of::<u64>();
 	size += mem::size_of::<Difficulty>(); // total_difficulty
 	size += mem::size_of::<u32>(); // secondary_scaling
@@ -177,7 +177,7 @@ impl Default for BlockHeader {
 			version: 1,
 			height: 0,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
-			previous: ZERO_HASH,
+			prev_hash: ZERO_HASH,
 			prev_root: ZERO_HASH,
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
@@ -213,7 +213,7 @@ impl Writeable for BlockHeader {
 impl Readable for BlockHeader {
 	fn read(reader: &mut Reader) -> Result<BlockHeader, ser::Error> {
 		let (version, height, timestamp) = ser_multiread!(reader, read_u16, read_u64, read_i64);
-		let previous = Hash::read(reader)?;
+		let prev_hash = Hash::read(reader)?;
 		let prev_root = Hash::read(reader)?;
 		let output_root = Hash::read(reader)?;
 		let range_proof_root = Hash::read(reader)?;
@@ -232,7 +232,7 @@ impl Readable for BlockHeader {
 			version,
 			height,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc),
-			previous,
+			prev_hash,
 			prev_root,
 			output_root,
 			range_proof_root,
@@ -253,7 +253,7 @@ impl BlockHeader {
 			[write_u16, self.version],
 			[write_u64, self.height],
 			[write_i64, self.timestamp.timestamp()],
-			[write_fixed_bytes, &self.previous],
+			[write_fixed_bytes, &self.prev_hash],
 			[write_fixed_bytes, &self.prev_root],
 			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
@@ -494,7 +494,7 @@ impl Block {
 			header: BlockHeader {
 				height: prev.height + 1,
 				timestamp,
-				previous: prev.hash(),
+				prev_hash: prev.hash(),
 				total_kernel_offset,
 				pow: ProofOfWork {
 					total_difficulty: difficulty + prev.pow.total_difficulty,

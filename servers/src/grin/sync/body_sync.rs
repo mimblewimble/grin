@@ -105,7 +105,7 @@ impl BodySync {
 
 				hashes.push(header.hash());
 				oldest_height = header.height;
-				current = self.chain.get_block_header(&header.previous);
+				current = self.chain.get_previous_header(&header);
 			}
 		}
 		//+ remove me after #1880 root cause found

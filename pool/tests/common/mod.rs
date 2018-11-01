@@ -66,13 +66,14 @@ impl ChainAdapter {
 
 	pub fn update_db_for_block(&self, block: &Block) {
 		let header = &block.header;
+		let tip = Tip::from_header(header);
 		let batch = self.store.batch().unwrap();
-		let tip = Tip::from_block(&header);
-		batch.save_block_header(&header).unwrap();
+
+		batch.save_block_header(header).unwrap();
 		batch.save_head(&tip).unwrap();
 
 		// Retrieve previous block_sums from the db.
-		let prev_sums = if let Ok(prev_sums) = batch.get_block_sums(&header.previous) {
+		let prev_sums = if let Ok(prev_sums) = batch.get_block_sums(&tip.prev_block_h) {
 			prev_sums
 		} else {
 			BlockSums::default()

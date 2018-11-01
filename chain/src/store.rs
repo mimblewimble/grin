@@ -122,12 +122,16 @@ impl ChainStore {
 		}
 	}
 
+	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
+		self.get_block_header(&header.prev_hash)
+	}
+
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		{
-			let mut header_cache = self.header_cache.write();
+			let mut cache = self.header_cache.write();
 
 			// cache hit - return the value from the cache
-			if let Some(header) = header_cache.get_mut(h) {
+			if let Some(header) = cache.get_mut(h) {
 				return Ok(header.clone());
 			}
 		}
@@ -141,8 +145,8 @@ impl ChainStore {
 		// cache miss - so adding to the cache for next time
 		if let Ok(header) = header {
 			{
-				let mut header_cache = self.header_cache.write();
-				header_cache.insert(*h, header.clone());
+				let mut cache = self.header_cache.write();
+				cache.insert(*h, header.clone());
 			}
 			Ok(header)
 		} else {
@@ -283,11 +287,16 @@ impl<'a> Batch<'a> {
 		self.db.exists(&to_key(BLOCK_PREFIX, &mut h.to_vec()))
 	}
 
-	/// Save the block and its header, caching the header.
+	/// Save the block and the associated input bitmap.
+	/// Note: the block header is not saved to the db here, assumes this has already been done.
 	pub fn save_block(&self, b: &Block) -> Result<(), Error> {
-		self.save_block_header(&b.header)?;
+		// Build the "input bitmap" for this new block and cache it locally.
+		self.build_and_cache_block_input_bitmap(&b)?;
+
+		// Save the block itself to the db.
 		self.db
 			.put_ser(&to_key(BLOCK_PREFIX, &mut b.hash().to_vec())[..], b)?;
+
 		Ok(())
 	}
 
@@ -310,13 +319,16 @@ impl<'a> Batch<'a> {
 	pub fn save_block_header(&self, header: &BlockHeader) -> Result<(), Error> {
 		let hash = header.hash();
 
+		// Cache the header.
 		{
 			let mut header_cache = self.header_cache.write();
 			header_cache.insert(hash, header.clone());
 		}
 
+		// Store the header itself indexed by hash.
 		self.db
 			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut hash.to_vec())[..], header)?;
+
 		Ok(())
 	}
 
@@ -349,12 +361,16 @@ impl<'a> Batch<'a> {
 			.delete(&to_key(COMMIT_POS_PREFIX, &mut commit.to_vec()))
 	}
 
+	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
+		self.get_block_header(&header.prev_hash)
+	}
+
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
 		{
-			let mut header_cache = self.header_cache.write();
+			let mut cache = self.header_cache.write();
 
 			// cache hit - return the value from the cache
-			if let Some(header) = header_cache.get_mut(h) {
+			if let Some(header) = cache.get_mut(h) {
 				return Ok(header.clone());
 			}
 		}
@@ -368,8 +384,8 @@ impl<'a> Batch<'a> {
 		// cache miss - so adding to the cache for next time
 		if let Ok(header) = header {
 			{
-				let mut header_cache = self.header_cache.write();
-				header_cache.insert(*h, header.clone());
+				let mut cache = self.header_cache.write();
+				cache.insert(*h, header.clone());
 			}
 			Ok(header)
 		} else {
@@ -479,7 +495,7 @@ impl<'a> Batch<'a> {
 		self.save_header_height(&header)?;
 
 		if header.height > 0 {
-			let mut prev_header = self.get_block_header(&header.previous)?;
+			let mut prev_header = self.get_previous_header(&header)?;
 			while prev_header.height > 0 {
 				if !force {
 					if let Ok(_) = self.is_on_current_chain(&prev_header) {
@@ -488,7 +504,7 @@ impl<'a> Batch<'a> {
 				}
 				self.save_header_height(&prev_header)?;
 
-				prev_header = self.get_block_header(&prev_header.previous)?;
+				prev_header = self.get_previous_header(&prev_header)?;
 			}
 		}
 		Ok(())
@@ -504,7 +520,7 @@ impl<'a> Batch<'a> {
 		Ok(bitmap)
 	}
 
-	pub fn build_and_cache_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
+	fn build_and_cache_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
 		// Build the bitmap.
 		let bitmap = self.build_block_input_bitmap(block)?;
 
@@ -637,10 +653,10 @@ impl<'a> Iterator for DifficultyIter<'a> {
 		// Otherwise we are done.
 		if let Some(header) = self.header.clone() {
 			if let Some(ref batch) = self.batch {
-				self.prev_header = batch.get_block_header(&header.previous).ok();
+				self.prev_header = batch.get_previous_header(&header).ok();
 			} else {
 				if let Some(ref store) = self.store {
-					self.prev_header = store.get_block_header(&header.previous).ok();
+					self.prev_header = store.get_previous_header(&header).ok();
 				} else {
 					self.prev_header = None;
 				}
