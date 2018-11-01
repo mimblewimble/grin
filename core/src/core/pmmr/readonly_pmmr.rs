@@ -35,7 +35,7 @@ where
 
 impl<'a, T, B> ReadonlyPMMR<'a, T, B>
 where
-	T: PMMRable + ::std::fmt::Debug,
+	T: PMMRable,
 	B: 'a + Backend<T>,
 {
 	/// Build a new readonly PMMR.

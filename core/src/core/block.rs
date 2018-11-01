@@ -35,7 +35,7 @@ use core::{
 use global;
 use keychain::{self, BlindingFactor};
 use pow::{Difficulty, Proof, ProofOfWork};
-use ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
+use ser::{self, HashOnlyPMMRable, Readable, Reader, Writeable, Writer};
 use util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
@@ -190,13 +190,7 @@ impl Default for BlockHeader {
 	}
 }
 
-/// Block header hashes are maintained in the header MMR
-/// but we store the data itself in the db.
-impl PMMRable for BlockHeader {
-	fn len() -> usize {
-		0
-	}
-}
+impl HashOnlyPMMRable for BlockHeader {}
 
 /// Serialization of a block header
 impl Writeable for BlockHeader {

@@ -26,7 +26,7 @@ use core::hash::Hashed;
 use core::verifier_cache::VerifierCache;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
-use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};
+use ser::{self, read_multi, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
 use util;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::secp::{self, Message, Signature};
@@ -240,12 +240,13 @@ impl TxKernel {
 	}
 }
 
-impl PMMRable for TxKernel {
-	fn len() -> usize {
-		17 + // features plus fee and lock_height
-			secp::constants::PEDERSEN_COMMITMENT_SIZE + secp::constants::AGG_SIGNATURE_SIZE
-	}
+impl FixedLength for TxKernel {
+	const LEN: usize = 17 // features plus fee and lock_height
+		+ secp::constants::PEDERSEN_COMMITMENT_SIZE
+		+ secp::constants::AGG_SIGNATURE_SIZE;
 }
+
+impl PMMRable for TxKernel {}
 
 /// TransactionBody is a common abstraction for transaction and block
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1172,12 +1173,11 @@ impl OutputIdentifier {
 	}
 }
 
-/// Ensure this is implemented to centralize hashing with indexes
-impl PMMRable for OutputIdentifier {
-	fn len() -> usize {
-		1 + secp::constants::PEDERSEN_COMMITMENT_SIZE
-	}
+impl FixedLength for OutputIdentifier {
+	const LEN: usize = 1 + secp::constants::PEDERSEN_COMMITMENT_SIZE;
 }
+
+impl PMMRable for OutputIdentifier {}
 
 impl Writeable for OutputIdentifier {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {

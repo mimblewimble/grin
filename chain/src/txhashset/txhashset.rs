@@ -69,18 +69,12 @@ impl HashOnlyMMRHandle {
 	}
 }
 
-struct PMMRHandle<T>
-where
-	T: PMMRable,
-{
+struct PMMRHandle<T: PMMRable> {
 	backend: PMMRBackend<T>,
 	last_pos: u64,
 }
 
-impl<T> PMMRHandle<T>
-where
-	T: PMMRable + ::std::fmt::Debug,
-{
+impl<T: PMMRable> PMMRHandle<T> {
 	fn new(
 		root_dir: &str,
 		sub_dir: &str,
