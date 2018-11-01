@@ -70,14 +70,14 @@ pub fn outputs(
 			Some(t) => t.to_string(),
 		};
 		table.add_row(row![
-			bFC->commit,
+			bFD->commit,
 			bFB->height,
 			bFB->lock_height,
 			bFR->status,
-			bFY->is_coinbase,
+			bFD->is_coinbase,
 			bFB->num_confirmations,
 			bFG->value,
-			bFC->tx,
+			bFD->tx,
 		]);
 	}
 
@@ -164,21 +164,39 @@ pub fn txs(
 			Some(_) => format!("Exists"),
 			None => "None".to_owned(),
 		};
-		table.add_row(row![
-			bFC->id,
-			bFC->entry_type,
-			bFC->slate_id,
-			bFB->creation_ts,
-			bFC->confirmed,
-			bFB->confirmation_ts,
-			bFC->num_inputs,
-			bFC->num_outputs,
-			bFG->amount_credited_str,
-			bFR->amount_debited_str,
-			bFR->fee,
-			bFY->net_diff,
-			bFb->tx_data,
-		]);
+		if t.confirmed {
+			table.add_row(row![
+				bFD->id,
+				bFC->entry_type,
+				bFD->slate_id,
+				bFB->creation_ts,
+				bFg->confirmed,
+				bFB->confirmation_ts,
+				bFD->num_inputs,
+				bFD->num_outputs,
+				bFG->amount_credited_str,
+				bFD->amount_debited_str,
+				bFD->fee,
+				bFG->net_diff,
+				bFB->tx_data,
+			]);
+		} else {
+			table.add_row(row![
+				bFD->id,
+				bFC->entry_type,
+				bFD->slate_id,
+				bFB->creation_ts,
+				bFR->confirmed,
+				bFB->confirmation_ts,
+				bFD->num_inputs,
+				bFD->num_outputs,
+				bFG->amount_credited_str,
+				bFD->amount_debited_str,
+				bFD->fee,
+				bFG->net_diff,
+				bFB->tx_data,
+			]);
+		}
 	}
 
 	table.set_format(*prettytable::format::consts::FORMAT_NO_COLSEP);
@@ -202,10 +220,10 @@ pub fn info(account: &str, wallet_info: &WalletInfo, validated: bool) {
 	);
 	let mut table = table!(
 		[bFG->"Total", FG->amount_to_hr_string(wallet_info.total, false)],
-		[bFY->"Awaiting Confirmation", FY->amount_to_hr_string(wallet_info.amount_awaiting_confirmation, false)],
-		[bFY->"Immature Coinbase", FY->amount_to_hr_string(wallet_info.amount_immature, false)],
+		[bFB->"Awaiting Confirmation", FB->amount_to_hr_string(wallet_info.amount_awaiting_confirmation, false)],
+		[bFB->"Immature Coinbase", FB->amount_to_hr_string(wallet_info.amount_immature, false)],
 		[bFG->"Currently Spendable", FG->amount_to_hr_string(wallet_info.amount_currently_spendable, false)],
-		[Fw->"---------", Fw->"---------"],
+		[Fw->"--------------------------------", Fw->"-------------"],
 		[Fr->"(Locked by previous transaction)", Fr->amount_to_hr_string(wallet_info.amount_locked, false)]
 	);
 	table.set_format(*prettytable::format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
