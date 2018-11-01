@@ -32,7 +32,6 @@ extern crate log;
 extern crate failure;
 #[macro_use]
 extern crate failure_derive;
-
 #[macro_use]
 extern crate grin_core as core;
 extern crate grin_util as util;
@@ -43,7 +42,7 @@ pub mod pmmr;
 pub mod prune_list;
 pub mod types;
 
-const SEP: u8 = ':' as u8;
+const SEP: u8 = b':';
 
 use byteorder::{BigEndian, WriteBytesExt};
 
@@ -68,7 +67,7 @@ pub fn to_key_u64(prefix: u8, k: &mut Vec<u8>, val: u64) -> Vec<u8> {
 	res
 }
 /// Build a db key from a prefix and a numeric identifier.
-pub fn u64_to_key<'a>(prefix: u8, val: u64) -> Vec<u8> {
+pub fn u64_to_key(prefix: u8, val: u64) -> Vec<u8> {
 	let mut u64_vec = vec![];
 	u64_vec.write_u64::<BigEndian>(val).unwrap();
 	u64_vec.insert(0, SEP);
@@ -110,4 +109,17 @@ where
 	rename(&temp_path, &original)?;
 
 	Ok(())
+}
+
+use croaring::Bitmap;
+use std::io::{self, Read};
+use std::path::Path;
+/// Read Bitmap from a file
+pub fn read_bitmap<P: AsRef<Path>>(file_path: P) -> io::Result<Bitmap> {
+	use std::fs::File;
+	let mut bitmap_file = File::open(file_path)?;
+	let f_md = bitmap_file.metadata()?;
+	let mut buffer = Vec::with_capacity(f_md.len() as usize);
+	bitmap_file.read_to_end(&mut buffer)?;
+	Ok(Bitmap::deserialize(&buffer))
 }
