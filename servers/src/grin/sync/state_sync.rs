@@ -144,13 +144,13 @@ impl StateSync {
 		let horizon = global::cut_through_horizon() as u64;
 
 		if let Some(peer) = self.peers.most_work_peer() {
-			// ask for txhashset at 90% of horizon, this still leaves time for download
+			// ask for txhashset at 30% of horizon, this still leaves time for download
 			// and validation to happen and stay within horizon
 			let mut txhashset_head = self
 				.chain
 				.get_block_header(&header_head.prev_block_h)
 				.unwrap();
-			for _ in 0..(horizon - horizon / 10) {
+			for _ in 0..(horizon / 10 * 3) {
 				txhashset_head = self
 					.chain
 					.get_block_header(&txhashset_head.previous)
