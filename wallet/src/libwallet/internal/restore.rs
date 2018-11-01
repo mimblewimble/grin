@@ -68,8 +68,6 @@ where
 			continue;
 		}
 
-		info!("Output found: {:?}, amount: {:?}", commit, info.value);
-
 		let lock_height = if *is_coinbase {
 			*height + global::coinbase_maturity()
 		} else {
@@ -79,6 +77,11 @@ where
 		// TODO: Output paths are always going to be length 3 for now, but easy enough to grind
 		// through to find the right path if required later
 		let key_id = Identifier::from_serialized_path(3u8, &info.message.as_bytes());
+
+		info!(
+			"Output found: {:?}, amount: {:?}, parent_key_id: {:?}",
+			commit, info.value, key_id
+		);
 
 		wallet_outputs.push(OutputResult {
 			commit: *commit,
@@ -149,28 +152,28 @@ where
 			}
 
 			let log_id = batch.next_tx_log_id(&parent_key_id)?;
-			let mut tx_log_entry = None;
-			// wallet update will create tx log entries when it finds confirmed coinbase
-			// transactions
-			if !output.is_coinbase {
-				let mut t =
-					TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxReceived, log_id);
-				t.amount_credited = output.value;
-				t.num_outputs = 1;
-				tx_log_entry = Some(log_id);
-				batch.save_tx_log_entry(t, &parent_key_id)?;
-			}
+			let entry_type = match output.is_coinbase {
+				true => TxLogEntryType::ConfirmedCoinbase,
+				false => TxLogEntryType::TxReceived,
+			};
+
+			let mut t = TxLogEntry::new(parent_key_id.clone(), entry_type, log_id);
+			t.confirmed = true;
+			t.amount_credited = output.value;
+			t.num_outputs = 1;
+			t.update_confirmation_ts();
+			batch.save_tx_log_entry(t, &parent_key_id)?;
 
 			let _ = batch.save(OutputData {
 				root_key_id: parent_key_id.clone(),
 				key_id: output.key_id,
 				n_child: output.n_child,
 				value: output.value,
-				status: OutputStatus::Unconfirmed,
+				status: OutputStatus::Unspent,
 				height: output.height,
 				lock_height: output.lock_height,
 				is_coinbase: output.is_coinbase,
-				tx_log_entry: tx_log_entry,
+				tx_log_entry: Some(log_id),
 			});
 
 			let max_child_index = found_parents.get(&parent_key_id).unwrap().clone();
