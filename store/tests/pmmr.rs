@@ -24,7 +24,9 @@ use chrono::prelude::Utc;
 use croaring::Bitmap;
 
 use core::core::pmmr::{Backend, PMMR};
-use core::ser::{Error, FixedLength, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
+use core::ser::{
+	Error, FixedLength, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer,
+};
 use store::types::prune_noop;
 
 #[test]
