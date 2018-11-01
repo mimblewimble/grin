@@ -147,10 +147,10 @@ fn fixed_size_of_serialized_header(_version: u16) -> usize {
 	size += mem::size_of::<u16>(); // version
 	size += mem::size_of::<u64>(); // height
 	size += mem::size_of::<i64>(); // timestamp
-	// prev_hash, prev_root, output_root, range_proof_root, kernel_root
+								// prev_hash, prev_root, output_root, range_proof_root, kernel_root
 	size += 5 * mem::size_of::<Hash>();
 	size += mem::size_of::<BlindingFactor>(); // total_kernel_offset
-	// output_mmr_size, kernel_mmr_size
+										   // output_mmr_size, kernel_mmr_size
 	size += 2 * mem::size_of::<u64>();
 	size += mem::size_of::<Difficulty>(); // total_difficulty
 	size += mem::size_of::<u32>(); // secondary_scaling

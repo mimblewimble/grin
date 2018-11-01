@@ -26,7 +26,7 @@ use std::{fmt, ops};
 use blake2::blake2b::Blake2b;
 
 use consensus;
-use ser::{self, FixedLength, AsFixedBytes, Error, Readable, Reader, Writeable, Writer};
+use ser::{self, AsFixedBytes, Error, FixedLength, Readable, Reader, Writeable, Writer};
 use util;
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.

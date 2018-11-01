@@ -18,7 +18,7 @@ use std::marker;
 
 use core::hash::{Hash, ZERO_HASH};
 use core::pmmr::{bintree_postorder_height, is_leaf, peak_map_height, peaks, HashOnlyBackend};
-use ser::{PMMRIndexHashable, HashOnlyPMMRable};
+use ser::{HashOnlyPMMRable, PMMRIndexHashable};
 
 /// Database backed MMR.
 pub struct DBPMMR<'a, T, B>
