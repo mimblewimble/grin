@@ -24,7 +24,9 @@ use chrono::prelude::Utc;
 use croaring::Bitmap;
 
 use core::core::pmmr::{Backend, PMMR};
-use core::ser::{Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
+use core::ser::{
+	Error, FixedLength, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer,
+};
 use store::types::prune_noop;
 
 #[test]
@@ -752,11 +754,11 @@ fn load(pos: u64, elems: &[TestElem], backend: &mut store::pmmr::PMMRBackend<Tes
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 struct TestElem(u32);
 
-impl PMMRable for TestElem {
-	fn len() -> usize {
-		4
-	}
+impl FixedLength for TestElem {
+	const LEN: usize = 4;
 }
+
+impl PMMRable for TestElem {}
 
 impl Writeable for TestElem {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {

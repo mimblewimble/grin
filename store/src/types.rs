@@ -26,7 +26,7 @@ use libc::{ftruncate as ftruncate64, off_t as off64_t};
 use libc::{ftruncate64, off64_t};
 
 use core::core::hash::Hash;
-use core::ser;
+use core::ser::{self, FixedLength};
 
 /// A no-op function for doing nothing with some pruned data.
 pub fn prune_noop(_pruned_data: &[u8]) {}
@@ -58,8 +58,8 @@ impl HashFile {
 		let pos = position - 1;
 
 		// Must be on disk, doing a read at the correct position
-		let file_offset = (pos as usize) * Hash::SIZE;
-		let data = self.file.read(file_offset, Hash::SIZE);
+		let file_offset = (pos as usize) * Hash::LEN;
+		let data = self.file.read(file_offset, Hash::LEN);
 		match ser::deserialize(&mut &data[..]) {
 			Ok(h) => Some(h),
 			Err(e) => {
@@ -74,7 +74,7 @@ impl HashFile {
 
 	/// Rewind the backend file to the specified position.
 	pub fn rewind(&mut self, position: u64) -> io::Result<()> {
-		self.file.rewind(position * Hash::SIZE as u64);
+		self.file.rewind(position * Hash::LEN as u64);
 		Ok(())
 	}
 
