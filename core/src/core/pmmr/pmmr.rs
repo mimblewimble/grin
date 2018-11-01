@@ -353,9 +353,9 @@ where
 		Ok(())
 	}
 
-	/// Check if this PMMR is (unpruned_size == 0).
+	/// Is the MMR empty?
 	pub fn is_empty(&self) -> bool {
-		self.unpruned_size() == 0
+		self.last_pos == 0
 	}
 
 	/// Total size of the tree, including intermediary nodes and ignoring any

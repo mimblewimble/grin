@@ -14,7 +14,7 @@
 
 //! Base types that the block chain pipeline requires.
 
-use core::core::hash::{Hash, Hashed};
+use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::{Block, BlockHeader};
 use core::pow::Difficulty;
 use core::ser;
@@ -57,30 +57,32 @@ pub struct Tip {
 	pub height: u64,
 	/// Last block pushed to the fork
 	pub last_block_h: Hash,
-	/// Block previous to last
+	/// Previous block
 	pub prev_block_h: Hash,
 	/// Total difficulty accumulated on that fork
 	pub total_difficulty: Difficulty,
 }
 
 impl Tip {
-	/// Creates a new tip at height zero and the provided genesis hash.
-	pub fn new(gbh: Hash) -> Tip {
+	/// TODO - why do we have Tip when we could just use a block header?
+	/// Creates a new tip based on header.
+	pub fn from_header(header: &BlockHeader) -> Tip {
 		Tip {
-			height: 0,
-			last_block_h: gbh,
-			prev_block_h: gbh,
-			total_difficulty: Difficulty::min(),
+			height: header.height,
+			last_block_h: header.hash(),
+			prev_block_h: header.prev_hash,
+			total_difficulty: header.total_difficulty(),
 		}
 	}
+}
 
-	/// Append a new block to this tip, returning a new updated tip.
-	pub fn from_block(bh: &BlockHeader) -> Tip {
+impl Default for Tip {
+	fn default() -> Self {
 		Tip {
-			height: bh.height,
-			last_block_h: bh.hash(),
-			prev_block_h: bh.previous,
-			total_difficulty: bh.total_difficulty(),
+			height: 0,
+			last_block_h: ZERO_HASH,
+			prev_block_h: ZERO_HASH,
+			total_difficulty: Difficulty::min(),
 		}
 	}
 }

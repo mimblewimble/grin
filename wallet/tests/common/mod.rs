@@ -99,7 +99,7 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbDa
 	).unwrap();
 	b.header.timestamp = prev.timestamp + Duration::seconds(60);
 	b.header.pow.secondary_scaling = next_header_info.secondary_scaling;
-	chain.set_txhashset_roots(&mut b, false).unwrap();
+	chain.set_txhashset_roots(&mut b).unwrap();
 	pow::pow_size(
 		&mut b.header,
 		next_header_info.difficulty,

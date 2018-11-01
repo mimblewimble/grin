@@ -23,7 +23,7 @@ extern crate rand;
 use std::fs;
 use std::sync::Arc;
 
-use chain::Tip;
+use chain::{Error, Tip};
 use core::core::hash::Hashed;
 use core::core::{Block, BlockHeader};
 use core::global::{self, ChainTypes};
@@ -33,6 +33,18 @@ use wallet::libtx;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
+}
+
+fn setup_chain(genesis: &Block, chain_store: Arc<chain::store::ChainStore>) -> Result<(), Error> {
+	let batch = chain_store.batch()?;
+	batch.save_block_header(&genesis.header)?;
+	batch.save_block(&genesis)?;
+	let head = Tip::from_header(&genesis.header);
+	batch.save_head(&head)?;
+	batch.setup_height(&genesis.header, &head)?;
+	batch.save_block_header(&genesis.header)?;
+	batch.commit()?;
+	Ok(())
 }
 
 #[test]
@@ -48,29 +60,24 @@ fn test_various_store_indices() {
 	let key_id = ExtKeychainPath::new(1, 1, 0, 0, 0).to_identifier();
 	let db_env = Arc::new(store::new_env(chain_dir.to_string()));
 
-	let chain_store = chain::store::ChainStore::new(db_env).unwrap();
+	let chain_store = Arc::new(chain::store::ChainStore::new(db_env).unwrap());
+
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 	let genesis = pow::mine_genesis_block().unwrap();
-	let reward = libtx::reward::output(&keychain, &key_id, 0, 1).unwrap();
 
+	setup_chain(&genesis, chain_store.clone()).unwrap();
+
+	let reward = libtx::reward::output(&keychain, &key_id, 0, 1).unwrap();
 	let block = Block::new(&genesis.header, vec![], Difficulty::min(), reward).unwrap();
 	let block_hash = block.hash();
 
 	{
 		let batch = chain_store.batch().unwrap();
-		batch.save_block(&genesis).unwrap();
-		batch
-			.setup_height(&genesis.header, &Tip::new(genesis.hash()))
-			.unwrap();
-		batch.commit().unwrap();
-	}
-	{
-		let batch = chain_store.batch().unwrap();
+		batch.save_block_header(&block.header).unwrap();
 		batch.save_block(&block).unwrap();
 		batch
-			.setup_height(&block.header, &Tip::from_block(&block.header))
+			.setup_height(&block.header, &Tip::from_header(&block.header))
 			.unwrap();
-
 		batch.commit().unwrap();
 	}
 
@@ -113,7 +120,12 @@ fn test_store_header_height() {
 	clean_output_dir(chain_dir);
 
 	let db_env = Arc::new(store::new_env(chain_dir.to_string()));
-	let chain_store = chain::store::ChainStore::new(db_env).unwrap();
+	let chain_store = Arc::new(chain::store::ChainStore::new(db_env).unwrap());
+
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+	let genesis = pow::mine_genesis_block().unwrap();
+
+	setup_chain(&genesis, chain_store.clone()).unwrap();
 
 	let mut block_header = BlockHeader::default();
 	block_header.height = 1;

@@ -27,7 +27,7 @@ use pow::{Difficulty, Proof, ProofOfWork};
 pub fn genesis_dev() -> core::Block {
 	core::Block::with_header(core::BlockHeader {
 		height: 0,
-		previous: core::hash::Hash([0xff; 32]),
+		// previous: core::hash::Hash([0xff; 32]),
 		timestamp: Utc.ymd(1997, 8, 4).and_hms(0, 0, 0),
 		pow: ProofOfWork {
 			nonce: global::get_genesis_nonce(),
@@ -63,7 +63,7 @@ pub fn genesis_testnet1() -> core::Block {
 pub fn genesis_testnet2() -> core::Block {
 	core::Block::with_header(core::BlockHeader {
 		height: 0,
-		previous: core::hash::Hash([0xff; 32]),
+		// previous: core::hash::Hash([0xff; 32]),
 		timestamp: Utc.ymd(2018, 3, 26).and_hms(16, 0, 0),
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
@@ -86,7 +86,7 @@ pub fn genesis_testnet2() -> core::Block {
 pub fn genesis_testnet3() -> core::Block {
 	core::Block::with_header(core::BlockHeader {
 		height: 0,
-		previous: core::hash::Hash([0xff; 32]),
+		// previous: core::hash::Hash([0xff; 32]),
 		timestamp: Utc.ymd(2018, 7, 8).and_hms(18, 0, 0),
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
@@ -110,7 +110,7 @@ pub fn genesis_testnet3() -> core::Block {
 pub fn genesis_testnet4() -> core::Block {
 	core::Block::with_header(core::BlockHeader {
 		height: 0,
-		previous: core::hash::Hash([0xff; 32]),
+		// previous: core::hash::Hash([0xff; 32]),
 		timestamp: Utc.ymd(2018, 10, 17).and_hms(20, 0, 0),
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
@@ -133,7 +133,7 @@ pub fn genesis_testnet4() -> core::Block {
 pub fn genesis_main() -> core::Block {
 	core::Block::with_header(core::BlockHeader {
 		height: 0,
-		previous: core::hash::Hash([0xff; 32]),
+		// previous: core::hash::Hash([0xff; 32]),
 		timestamp: Utc.ymd(2018, 8, 14).and_hms(0, 0, 0),
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),

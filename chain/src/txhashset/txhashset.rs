@@ -544,9 +544,9 @@ where
 	let res: Result<T, Error>;
 	let rollback: bool;
 
-	// We want to use the current head of the header chain unless
+	// We want to use the current head of the most work chain unless
 	// we explicitly rewind the extension.
-	let head = batch.header_head()?;
+	let head = batch.head()?;
 	let header = batch.get_block_header(&head.last_block_h)?;
 
 	// create a child transaction so if the state is rolled back by itself, all
@@ -620,13 +620,18 @@ impl<'a> HeaderExtension<'a> {
 		}
 	}
 
+	/// Force the rollback of this extension, no matter the result.
+	pub fn force_rollback(&mut self) {
+		self.rollback = true;
+	}
+
 	/// Apply a new header to the header MMR extension.
 	/// This may be either the header MMR or the sync MMR depending on the
 	/// extension.
-	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
-		self.pmmr.push(&header).map_err(&ErrorKind::TxHashSetErr)?;
+	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<Hash, Error> {
+		self.pmmr.push(header).map_err(&ErrorKind::TxHashSetErr)?;
 		self.header = header.clone();
-		Ok(())
+		Ok(self.root())
 	}
 
 	/// Rewind the header extension to the specified header.
@@ -676,7 +681,7 @@ impl<'a> HeaderExtension<'a> {
 		let mut current = self.batch.get_block_header(&head.last_block_h)?;
 		while current.height > 0 {
 			header_hashes.push(current.hash());
-			current = self.batch.get_block_header(&current.previous)?;
+			current = self.batch.get_previous_header(&current)?;
 		}
 
 		header_hashes.reverse();
