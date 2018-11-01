@@ -78,7 +78,10 @@ where
 		// through to find the right path if required later
 		let key_id = Identifier::from_serialized_path(3u8, &info.message.as_bytes());
 
-		info!("Output found: {:?}, amount: {:?}, parent_key_id: {:?}", commit, info.value, key_id);
+		info!(
+			"Output found: {:?}, amount: {:?}, parent_key_id: {:?}",
+			commit, info.value, key_id
+		);
 
 		wallet_outputs.push(OutputResult {
 			commit: *commit,
@@ -154,8 +157,7 @@ where
 				false => TxLogEntryType::TxReceived,
 			};
 
-			let mut t =
-				TxLogEntry::new(parent_key_id.clone(), entry_type, log_id);
+			let mut t = TxLogEntry::new(parent_key_id.clone(), entry_type, log_id);
 			t.confirmed = true;
 			t.amount_credited = output.value;
 			t.num_outputs = 1;
