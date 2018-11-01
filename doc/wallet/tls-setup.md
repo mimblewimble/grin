@@ -17,7 +17,13 @@ tls_certificate_file = "/path/to/my/cerificate/fullchain.pem"
 tls_certificate_key =  "/path/to/my/cerificate/privkey.pem"
 ```
 
-Make sure your user has read access to the files (see below for how to do it). Restart wallet. When you (or someone else) send grins to this wallet the destination (`-d` option) must start with `https://`, not with `http://`.
+If you have Stratum server enabled (you run a miner) make sure that wallet listener URL starts with `https` in node config (by default `~/.grin/grin-server.toml`):
+
+```
+wallet_listener_url = "https://grin1.example.com:13415"
+```
+
+Make sure your user has read access to the files (see below for how to do it). Restart wallet. If you changed your node configuration restart `grin` too. When you (or someone else) send grins to this wallet the destination (`-d` option) must start with `https://`, not with `http://`.
 
 ## I don't have a TLS certificate
 You can get it for free from [Let's Encrypt](https://letsencrypt.org/). To simplify the process we need `certbot`.
