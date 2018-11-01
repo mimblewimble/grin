@@ -224,8 +224,8 @@ impl ApiServer {
 					.then(|r| match r {
 						Ok(x) => Ok::<_, io::Error>(Some(x)),
 						Err(e) => {
-							eprintln!("accept_async failed");
-							Err(e)
+							error!("accept_async failed: {}", e);
+							Ok(None)
 						}
 					}).filter_map(|x| x);
 				let server = Server::builder(tls)
