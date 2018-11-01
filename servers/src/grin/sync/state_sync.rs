@@ -62,7 +62,7 @@ impl StateSync {
 		highest_height: u64,
 	) -> bool {
 		let need_state_sync =
-			highest_height.saturating_sub(head.height) > global::cut_through_horizon() as u64;
+			highest_height.saturating_sub(head.height) > global::state_sync_threshold() as u64;
 		if !need_state_sync {
 			return false;
 		}
@@ -141,7 +141,7 @@ impl StateSync {
 	}
 
 	fn request_state(&self, header_head: &chain::Tip) -> Result<Arc<Peer>, p2p::Error> {
-		let horizon = global::cut_through_horizon() as u64;
+		let threshold = global::state_sync_threshold() as u64;
 
 		if let Some(peer) = self.peers.most_work_peer() {
 			// ask for txhashset at 90% of horizon, this still leaves time for download
@@ -150,7 +150,7 @@ impl StateSync {
 				.chain
 				.get_block_header(&header_head.prev_block_h)
 				.unwrap();
-			for _ in 0..(horizon - horizon / 10) {
+			for _ in 0..(threshold - threshold / 10) {
 				txhashset_head = self.chain.get_previous_header(&txhashset_head).unwrap();
 			}
 			let bhash = txhashset_head.hash();

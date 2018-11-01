@@ -20,7 +20,7 @@ use consensus::HeaderInfo;
 use consensus::{
 	graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
 	DAY_HEIGHT, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, SECOND_POW_EDGE_BITS,
-	UNIT_DIFFICULTY
+	STATE_SYNC_THRESHOLD, UNIT_DIFFICULTY,
 };
 use pow::{self, CuckatooContext, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
@@ -234,6 +234,16 @@ pub fn cut_through_horizon() -> u32 {
 		ChainTypes::AutomatedTesting => TESTING_CUT_THROUGH_HORIZON,
 		ChainTypes::UserTesting => TESTING_CUT_THROUGH_HORIZON,
 		_ => CUT_THROUGH_HORIZON,
+	}
+}
+
+/// Threshold at which we can request a txhashset (and full blocks from)
+pub fn state_sync_threshold() -> u32 {
+	let param_ref = CHAIN_TYPE.read();
+	match *param_ref {
+		ChainTypes::AutomatedTesting => TESTING_CUT_THROUGH_HORIZON,
+		ChainTypes::UserTesting => TESTING_CUT_THROUGH_HORIZON,
+		_ => STATE_SYNC_THRESHOLD,
 	}
 }
 

@@ -716,7 +716,7 @@ impl Chain {
 		{
 			let head = self.head().unwrap();
 			let header_head = self.header_head().unwrap();
-			if header_head.height - head.height < global::cut_through_horizon() as u64 {
+			if header_head.height - head.height < global::state_sync_threshold() as u64 {
 				return Err(ErrorKind::InvalidTxHashSet("not needed".to_owned()).into());
 			}
 		}
