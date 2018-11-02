@@ -263,7 +263,7 @@ pub fn info(
 			[bFY->"Awaiting Confirmation", FY->amount_to_hr_string(wallet_info.amount_awaiting_confirmation, false)],
 			[bFY->"Immature Coinbase", FY->amount_to_hr_string(wallet_info.amount_immature, false)],
 			[bFG->"Currently Spendable", FG->amount_to_hr_string(wallet_info.amount_currently_spendable, false)],
-			[Fw->"---------", Fw->"---------"],
+			[Fw->"--------------------------------", Fw->"-------------"],
 			[Fr->"(Locked by previous transaction)", Fr->amount_to_hr_string(wallet_info.amount_locked, false)]
 		)
 	} else {
