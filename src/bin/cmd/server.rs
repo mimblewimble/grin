@@ -79,7 +79,7 @@ fn start_server_tui(config: servers::ServerConfig) {
 /// stopping the Grin blockchain server. Processes all the command line
 /// arguments to build a proper configuration and runs Grin with that
 /// configuration.
-pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalConfig) {
+pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalConfig) -> i32 {
 	global::set_mining_mode(
 		global_config
 			.members
@@ -185,4 +185,5 @@ pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: Globa
 	} else {
 		start_server(server_config);
 	}
+	0
 }
