@@ -14,6 +14,7 @@
 
 //! Lightweight readonly view into output MMR for convenience.
 
+use core::core::hash::Hash;
 use core::core::pmmr::ReadonlyPMMR;
 use core::core::{Block, Input, Output, OutputIdentifier, Transaction};
 
@@ -28,12 +29,25 @@ pub struct UTXOView<'a> {
 }
 
 impl<'a> UTXOView<'a> {
-	/// Build a new UTXO view.
+	/// Build a new readonly UTXO view.
 	pub fn new(
 		pmmr: ReadonlyPMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 		batch: &'a Batch,
 	) -> UTXOView<'a> {
 		UTXOView { pmmr, batch }
+	}
+
+	/// The size of the MMR (this is *not* the size of the UTXO set).
+	pub fn size(&self) -> u64 {
+		self.pmmr.unpruned_size()
+	}
+
+	pub fn root(&self) -> Hash {
+		self.pmmr.root()
+	}
+
+	pub fn get(&self, pos: u64) -> Option<OutputIdentifier> {
+		self.pmmr.get_data(pos)
 	}
 
 	/// Validate a block against the current UTXO set.

@@ -36,6 +36,7 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
+use txhashset::utxo_set;
 use types::{ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use util::secp::pedersen::{Commitment, RangeProof};
 
@@ -147,6 +148,7 @@ pub struct Chain {
 	adapter: Arc<ChainAdapter>,
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
+	utxo_set: Arc<RwLock<utxo_set::UTXOSet>>,
 	// Recently processed blocks to avoid double-processing
 	block_hashes_cache: Arc<RwLock<LruCache<Hash, bool>>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
@@ -178,6 +180,8 @@ impl Chain {
 
 		// open the txhashset, creating a new one if necessary
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
+
+		let utxo_set = utxo_set::UTXOSet::open(db_root.clone())?;
 
 		setup_head(genesis.clone(), store.clone(), &mut txhashset)?;
 
@@ -217,6 +221,7 @@ impl Chain {
 			adapter: adapter,
 			orphans: Arc::new(OrphanBlockPool::new()),
 			txhashset: Arc::new(RwLock::new(txhashset)),
+			utxo_set: Arc::new(RwLock::new(utxo_set)),
 			pow_verifier,
 			verifier_cache,
 			block_hashes_cache: Arc::new(RwLock::new(LruCache::new(HASHES_CACHE_SIZE))),
@@ -791,6 +796,31 @@ impl Chain {
 		Ok(())
 	}
 
+	fn rebuild_utxo_set(&self) -> Result<(), Error> {
+		debug!("Rebuilding UTXO set (experimental).");
+
+		let mut txhashset = self.txhashset.write();
+		txhashset::extending_readonly(&mut txhashset, |extension| {
+			// TODO - rewind the extension to a known height here.
+
+			// Take a readonly view on the output MMR.
+			let utxo_view = extension.utxo_view();
+
+			// Here we are recreating the UTXOSet via an extension,
+			// based on data from the outer txhashset extension.
+			let mut utxo_set = self.utxo_set.write();
+			utxo_set::extending(&mut utxo_set, |utxo_extension| {
+				utxo_extension.rebuild(&utxo_view)?;
+				warn!("********** UTXO root: {} (output root: {})", utxo_extension.root(), utxo_view.root());
+				Ok(())
+			})?;
+
+			Ok(())
+		})?;
+
+		Ok(())
+	}
+
 	fn compact_txhashset(&self) -> Result<(), Error> {
 		debug!("Starting blockchain compaction.");
 		{
@@ -871,6 +901,8 @@ impl Chain {
 	///
 	pub fn compact(&self) -> Result<(), Error> {
 		self.compact_txhashset()?;
+
+		self.rebuild_utxo_set()?;
 
 		if !self.archive_mode {
 			self.compact_blocks_db()?;

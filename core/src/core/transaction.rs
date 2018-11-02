@@ -26,7 +26,7 @@ use core::hash::Hashed;
 use core::verifier_cache::VerifierCache;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
-use ser::{self, read_multi, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
+use ser::{self, read_multi, FixedLength, HashOnlyPMMRable, PMMRable, Readable, Reader, Writeable, Writer};
 use util;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::secp::{self, Message, Signature};
@@ -1108,6 +1108,24 @@ impl Output {
 			Ok(_) => Ok(()),
 			Err(e) => Err(e),
 		}
+	}
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum UTXOEntry {
+	Spent,
+	Unspent(OutputIdentifier),
+}
+
+impl HashOnlyPMMRable for UTXOEntry {}
+
+impl Writeable for UTXOEntry {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		match self {
+			UTXOEntry::Spent => writer.write_fixed_bytes(&[0; 32])?,
+			UTXOEntry::Unspent(out) => out.write(writer)?,
+		}
+		Ok(())
 	}
 }
 

@@ -16,8 +16,9 @@
 
 use std::marker;
 
-use core::pmmr::{is_leaf, Backend};
-use ser::PMMRable;
+use core::hash::{Hash, ZERO_HASH};
+use core::pmmr::{peaks, is_leaf, Backend};
+use ser::{PMMRable, PMMRIndexHashable};
 
 /// Readonly view of a PMMR.
 pub struct ReadonlyPMMR<'a, T, B>
@@ -47,6 +48,11 @@ where
 		}
 	}
 
+	/// Is the MMR empty?
+	pub fn is_empty(&self) -> bool {
+		self.last_pos == 0
+	}
+
 	/// Build a new readonly PMMR pre-initialized to
 	/// last_pos with the provided backend.
 	pub fn at(backend: &'a B, last_pos: u64) -> ReadonlyPMMR<T, B> {
@@ -55,6 +61,38 @@ where
 			last_pos,
 			_marker: marker::PhantomData,
 		}
+	}
+
+	/// Total size of the tree, including intermediary nodes and ignoring any
+	/// pruning.
+	pub fn unpruned_size(&self) -> u64 {
+		self.last_pos
+	}
+
+	/// Returns a vec of the peaks of this MMR.
+	pub fn peaks(&self) -> Vec<Hash> {
+		let peaks_pos = peaks(self.last_pos);
+		peaks_pos
+			.into_iter()
+			.filter_map(|pi| {
+				// here we want to get from underlying hash file
+				// as the pos *may* have been "removed"
+				self.backend.get_from_file(pi)
+			}).collect()
+	}
+
+	pub fn root(&self) -> Hash {
+		if self.is_empty() {
+			return ZERO_HASH;
+		}
+		let mut res = None;
+		for peak in self.peaks().iter().rev() {
+			res = match res {
+				None => Some(*peak),
+				Some(rhash) => Some((*peak, rhash).hash_with_index(self.unpruned_size())),
+			}
+		}
+		res.expect("no root, invalid tree")
 	}
 
 	/// Get the data element at provided position in the MMR.

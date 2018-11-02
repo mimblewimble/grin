@@ -29,7 +29,7 @@ use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::pmmr::{self, ReadonlyPMMR, RewindablePMMR, DBPMMR, PMMR};
-use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
+use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel, UTXOEntry};
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
 
@@ -39,9 +39,12 @@ use grin_store::pmmr::{HashOnlyMMRBackend, PMMRBackend, PMMR_FILES};
 use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
 use txhashset::{RewindableKernelView, UTXOView};
+use txhashset::utxo_set::UTXOSet;
 use types::{Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use util::{file, secp_static, zip};
 
+// TODO - simplify all these, we do not need diur and subdir, just a single path...
+// TODO "txhashset/output" etc.
 const HEADERHASHSET_SUBDIR: &'static str = "header";
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
 
@@ -138,7 +141,11 @@ impl TxHashSet {
 				HEADERHASHSET_SUBDIR,
 				HEADER_HEAD_SUBDIR,
 			)?,
-			sync_pmmr_h: HashOnlyMMRHandle::new(&root_dir, HEADERHASHSET_SUBDIR, SYNC_HEAD_SUBDIR)?,
+			sync_pmmr_h: HashOnlyMMRHandle::new(
+				&root_dir,
+				HEADERHASHSET_SUBDIR,
+				SYNC_HEAD_SUBDIR,
+			)?,
 			output_pmmr_h: PMMRHandle::new(
 				&root_dir,
 				TXHASHSET_SUBDIR,
@@ -804,7 +811,6 @@ impl<'a> Extension<'a> {
 		UTXOView::new(self.output_pmmr.readonly_pmmr(), self.batch)
 	}
 
-	// TODO - move this into "utxo_view"
 	/// Verify we are not attempting to spend any coinbase outputs
 	/// that have not sufficiently matured.
 	pub fn verify_coinbase_maturity(&self, inputs: &Vec<Input>, height: u64) -> Result<(), Error> {
@@ -963,7 +969,6 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	/// TODO - move this into "utxo_view"
 	/// Build a Merkle proof for the given output and the block
 	/// this extension is currently referencing.
 	/// Note: this relies on the MMR being stable even after pruning/compaction.
