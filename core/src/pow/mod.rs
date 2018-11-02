@@ -57,6 +57,9 @@ pub use pow::cuckatoo::CuckatooContext;
 pub use pow::cuckoo::CuckooContext;
 pub use pow::error::Error;
 
+/// Size of a block of hashes computed serially to use as Cuckoo edges. 
+pub const HASH_BLOCK_SIZE: u16 = 64;
+
 const MAX_SOLS: u32 = 10;
 
 /// Validates the proof of work of a given header, and that the proof of work
