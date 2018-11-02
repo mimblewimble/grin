@@ -54,6 +54,8 @@ lazy_static! {
 	static ref LOGGING_CONFIG: Mutex<LoggingConfig> = Mutex::new(LoggingConfig::default());
 }
 
+const LOGGING_PATTERN: &str = "{d(%Y%m%d %H:%M:%S%.3f)} {h({l})} {M} - {m}{n}";
+
 /// This filter is rejecting messages that doesn't start with "grin"
 /// in order to save log space for only Grin-related records
 #[derive(Debug)]
@@ -97,7 +99,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 
 		// Start logger
 		let stdout = ConsoleAppender::builder()
-			.encoder(Box::new(PatternEncoder::default()))
+			.encoder(Box::new(PatternEncoder::new(&LOGGING_PATTERN)))
 			.build();
 
 		let mut root = Root::builder();
@@ -132,7 +134,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 					Box::new(
 						RollingFileAppender::builder()
 							.append(c.log_file_append)
-							.encoder(Box::new(PatternEncoder::new("{d} {l} {M} - {m}{n}")))
+							.encoder(Box::new(PatternEncoder::new(&LOGGING_PATTERN)))
 							.build(c.log_file_path, Box::new(policy))
 							.unwrap(),
 					)
@@ -140,7 +142,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 					Box::new(
 						FileAppender::builder()
 							.append(c.log_file_append)
-							.encoder(Box::new(PatternEncoder::new("{d} {l} {M} - {m}{n}")))
+							.encoder(Box::new(PatternEncoder::new(&LOGGING_PATTERN)))
 							.build(c.log_file_path)
 							.unwrap(),
 					)
