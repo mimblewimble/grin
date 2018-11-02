@@ -434,13 +434,24 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						e, wallet_config
 					))
 				})?;
-				display::info(account, &wallet_info, validated);
+				display::info(
+					account,
+					&wallet_info,
+					validated,
+					wallet_config.dark_background_color_scheme.unwrap(),
+				);
 				Ok(())
 			}
 			("outputs", Some(_)) => {
 				let (height, _) = api.node_height()?;
 				let (validated, outputs) = api.retrieve_outputs(show_spent, true, None)?;
-				display::outputs(account, height, validated, outputs).map_err(|e| {
+				display::outputs(
+					account,
+					height,
+					validated,
+					outputs,
+					wallet_config.dark_background_color_scheme.unwrap(),
+				).map_err(|e| {
 					ErrorKind::GenericError(format!(
 						"Error getting wallet outputs: {:?} Config: {:?}",
 						e, wallet_config
@@ -462,7 +473,14 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				let (height, _) = api.node_height()?;
 				let (validated, txs) = api.retrieve_txs(true, tx_id)?;
 				let include_status = !tx_id.is_some();
-				display::txs(account, height, validated, txs, include_status).map_err(|e| {
+				display::txs(
+					account,
+					height,
+					validated,
+					txs,
+					include_status,
+					wallet_config.dark_background_color_scheme.unwrap(),
+				).map_err(|e| {
 					ErrorKind::GenericError(format!(
 						"Error getting wallet outputs: {} Config: {:?}",
 						e, wallet_config
@@ -472,7 +490,13 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				// inputs/outputs
 				if tx_id.is_some() {
 					let (_, outputs) = api.retrieve_outputs(true, false, tx_id)?;
-					display::outputs(account, height, validated, outputs).map_err(|e| {
+					display::outputs(
+						account,
+						height,
+						validated,
+						outputs,
+						wallet_config.dark_background_color_scheme.unwrap(),
+					).map_err(|e| {
 						ErrorKind::GenericError(format!(
 							"Error getting wallet outputs: {} Config: {:?}",
 							e, wallet_config
