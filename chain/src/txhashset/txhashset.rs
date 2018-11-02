@@ -29,7 +29,9 @@ use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::pmmr::{self, ReadonlyPMMR, RewindablePMMR, DBPMMR, PMMR};
-use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel, UTXOEntry};
+use core::core::{
+	Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel, UTXOEntry,
+};
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
 
@@ -38,8 +40,8 @@ use grin_store;
 use grin_store::pmmr::{HashOnlyMMRBackend, PMMRBackend, PMMR_FILES};
 use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
-use txhashset::{RewindableKernelView, UTXOView};
 use txhashset::utxo_set::UTXOSet;
+use txhashset::{RewindableKernelView, UTXOView};
 use types::{Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use util::{file, secp_static, zip};
 
@@ -141,11 +143,7 @@ impl TxHashSet {
 				HEADERHASHSET_SUBDIR,
 				HEADER_HEAD_SUBDIR,
 			)?,
-			sync_pmmr_h: HashOnlyMMRHandle::new(
-				&root_dir,
-				HEADERHASHSET_SUBDIR,
-				SYNC_HEAD_SUBDIR,
-			)?,
+			sync_pmmr_h: HashOnlyMMRHandle::new(&root_dir, HEADERHASHSET_SUBDIR, SYNC_HEAD_SUBDIR)?,
 			output_pmmr_h: PMMRHandle::new(
 				&root_dir,
 				TXHASHSET_SUBDIR,

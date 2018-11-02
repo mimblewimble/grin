@@ -811,7 +811,11 @@ impl Chain {
 			let mut utxo_set = self.utxo_set.write();
 			utxo_set::extending(&mut utxo_set, |utxo_extension| {
 				utxo_extension.rebuild(&utxo_view)?;
-				warn!("********** UTXO root: {} (output root: {})", utxo_extension.root(), utxo_view.root());
+				warn!(
+					"********** UTXO root: {} (output root: {})",
+					utxo_extension.root(),
+					utxo_view.root()
+				);
 				Ok(())
 			})?;
 

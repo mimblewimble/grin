@@ -18,7 +18,7 @@ use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 
 use core::core::hash::Hash;
-use core::core::pmmr::{self, DBPMMR, ReadonlyPMMR};
+use core::core::pmmr::{self, ReadonlyPMMR, DBPMMR};
 use core::core::{Block, Input, Output, OutputIdentifier, Transaction, UTXOEntry};
 use error::{Error, ErrorKind};
 use grin_store::pmmr::{HashOnlyMMRBackend, PMMRBackend};
@@ -48,15 +48,9 @@ pub struct UTXOSet {
 }
 
 impl UTXOSet {
-	pub fn open(
-		root_dir: String,
-	) -> Result<UTXOSet, Error> {
+	pub fn open(root_dir: String) -> Result<UTXOSet, Error> {
 		Ok(UTXOSet {
-			pmmr_h: HashOnlyMMRHandle::new(
-				&root_dir,
-				UTXOSET_SUBDIR,
-				UTXOSET_UTXO_SUBDIR,
-			)?,
+			pmmr_h: HashOnlyMMRHandle::new(&root_dir, UTXOSET_SUBDIR, UTXOSET_UTXO_SUBDIR)?,
 		})
 	}
 }
@@ -82,10 +76,7 @@ pub struct Extension<'a> {
 impl<'a> Extension<'a> {
 	fn new(utxo: &'a mut UTXOSet) -> Extension<'a> {
 		Extension {
-			pmmr: DBPMMR::at(
-				&mut utxo.pmmr_h.backend,
-				utxo.pmmr_h.last_pos,
-			)
+			pmmr: DBPMMR::at(&mut utxo.pmmr_h.backend, utxo.pmmr_h.last_pos),
 		}
 	}
 
@@ -100,10 +91,7 @@ impl<'a> Extension<'a> {
 	}
 
 	fn apply_entry(&mut self, entry: &UTXOEntry) -> Result<(u64), Error> {
-		let pos = self
-			.pmmr
-			.push(entry)
-			.map_err(&ErrorKind::TxHashSetErr)?;
+		let pos = self.pmmr.push(entry).map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(pos)
 	}
 

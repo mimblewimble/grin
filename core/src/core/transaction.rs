@@ -26,7 +26,9 @@ use core::hash::Hashed;
 use core::verifier_cache::VerifierCache;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
-use ser::{self, read_multi, FixedLength, HashOnlyPMMRable, PMMRable, Readable, Reader, Writeable, Writer};
+use ser::{
+	self, read_multi, FixedLength, HashOnlyPMMRable, PMMRable, Readable, Reader, Writeable, Writer,
+};
 use util;
 use util::secp::pedersen::{Commitment, RangeProof};
 use util::secp::{self, Message, Signature};
