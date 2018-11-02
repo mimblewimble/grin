@@ -14,6 +14,7 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
+use std::cmp;
 use std::sync::Arc;
 
 use chain;
@@ -59,10 +60,16 @@ impl StateSync {
 		&mut self,
 		header_head: &chain::Tip,
 		head: &chain::Tip,
+		tail: &chain::Tip,
 		highest_height: u64,
 	) -> bool {
-		let need_state_sync =
-			highest_height.saturating_sub(head.height) > global::state_sync_threshold() as u64;
+		let need_state_sync = highest_height.saturating_sub(head.height) > cmp::min(
+			global::cut_through_horizon() as u64,
+			cmp::max(
+				head.height.saturating_sub(tail.height),
+				global::state_sync_threshold() as u64,
+			),
+		);
 		if !need_state_sync {
 			return false;
 		}
@@ -144,8 +151,8 @@ impl StateSync {
 		let threshold = global::state_sync_threshold() as u64;
 
 		if let Some(peer) = self.peers.most_work_peer() {
-			// ask for txhashset at 90% of horizon, this still leaves time for download
-			// and validation to happen and stay within horizon
+			// ask for txhashset at 90% of state_sync_threshold, this still leaves time for download
+			// and validation to happen and stay within state_sync_threshold
 			let mut txhashset_head = self
 				.chain
 				.get_block_header(&header_head.prev_block_h)

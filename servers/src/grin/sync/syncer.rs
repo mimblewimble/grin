@@ -141,12 +141,13 @@ impl SyncRunner {
 
 			// if syncing is needed
 			let head = self.chain.head().unwrap();
+			let tail = self.chain.tail().unwrap_or_else(|_| head.clone());
 			let header_head = self.chain.header_head().unwrap();
 
 			// run each sync stage, each of them deciding whether they're needed
 			// except for body sync that only runs if state sync is off or done
 			header_sync.check_run(&header_head, highest_height);
-			if !state_sync.check_run(&header_head, &head, highest_height) {
+			if !state_sync.check_run(&header_head, &head, &tail, highest_height) {
 				body_sync.check_run(&head, highest_height);
 			}
 		}

@@ -859,6 +859,8 @@ impl Chain {
 				Err(e) => return Err(From::from(e)),
 			}
 		}
+		let tail = batch.get_header_by_height(head.height - horizon)?;
+		batch.save_body_tail(&Tip::from_header(&tail))?;
 		batch.commit()?;
 		debug!("compact_blocks_db: removed {} blocks.", count);
 		Ok(())
@@ -941,6 +943,13 @@ impl Chain {
 		self.store
 			.head()
 			.map_err(|e| ErrorKind::StoreErr(e, "chain head".to_owned()).into())
+	}
+
+	/// Tail of the block chain in this node after compact (cross-block cut-through)
+	pub fn tail(&self) -> Result<Tip, Error> {
+		self.store
+			.tail()
+			.map_err(|e| ErrorKind::StoreErr(e, "chain tail".to_owned()).into())
 	}
 
 	/// Tip (head) of the header chain.
