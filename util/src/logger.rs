@@ -54,7 +54,7 @@ lazy_static! {
 	static ref LOGGING_CONFIG: Mutex<LoggingConfig> = Mutex::new(LoggingConfig::default());
 }
 
-const LOGGING_PATTERN: &str = "{d(%m-%d %H:%M:%S%.3f)} {h({l})} {M} - {m}{n}";
+const LOGGING_PATTERN: &str = "{d(%Y%m%d %H:%M:%S%.3f)} {h({l})} {M} - {m}{n}";
 
 /// This filter is rejecting messages that doesn't start with "grin"
 /// in order to save log space for only Grin-related records
