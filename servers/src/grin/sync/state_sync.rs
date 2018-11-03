@@ -14,7 +14,6 @@
 
 use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
-use std::cmp;
 use std::sync::Arc;
 
 use chain;
@@ -63,13 +62,39 @@ impl StateSync {
 		tail: &chain::Tip,
 		highest_height: u64,
 	) -> bool {
-		let need_state_sync = highest_height.saturating_sub(head.height) > cmp::min(
-			global::cut_through_horizon() as u64,
-			cmp::max(
-				head.height.saturating_sub(tail.height),
-				global::state_sync_threshold() as u64,
-			),
-		);
+		if header_head.height != highest_height {
+			return true;
+		}
+
+		// if gap > horizon, need state sync
+		// because nobody has the old full blocks before horizon
+		let mut need_state_sync =
+			highest_height.saturating_sub(head.height) > global::cut_through_horizon() as u64;
+
+		// turn off state sync when previous sync just completed
+		if !need_state_sync && head.height > 0 && tail.last_block_h == head.last_block_h {
+			return false;
+		}
+
+		// or if tail is not on the current header chain, need state sync
+		// because the fork point is beyond the local database so we can't rewind and request blocks
+		if !need_state_sync && header_head.height > tail.height {
+			let mut header_cursor = self.chain.get_block_header(&header_head.prev_block_h);
+			while let Ok(header) = header_cursor {
+				if tail.height + 1 == header.height {
+					if tail.last_block_h != header.prev_hash {
+						need_state_sync = true;
+						debug!(
+							"fast_sync: tail {} at {} is not on the local chain. state sync needed",
+							tail.last_block_h, tail.height,
+						);
+					}
+					break;
+				}
+				header_cursor = self.chain.get_previous_header(&header);
+			}
+		}
+
 		if !need_state_sync {
 			return false;
 		}
@@ -151,13 +176,12 @@ impl StateSync {
 		let threshold = global::state_sync_threshold() as u64;
 
 		if let Some(peer) = self.peers.most_work_peer() {
-			// ask for txhashset at 90% of state_sync_threshold, this still leaves time for download
-			// and validation to happen and stay within state_sync_threshold
+			// ask for txhashset at state_sync_threshold
 			let mut txhashset_head = self
 				.chain
 				.get_block_header(&header_head.prev_block_h)
 				.unwrap();
-			for _ in 0..(threshold - threshold / 10) {
+			for _ in 0..threshold {
 				txhashset_head = self.chain.get_previous_header(&txhashset_head).unwrap();
 			}
 			let bhash = txhashset_head.hash();

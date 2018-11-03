@@ -712,12 +712,29 @@ impl Chain {
 	) -> Result<(), Error> {
 		status.on_setup();
 
-		// Initial check based on relative heights of current head and header_head.
+		// Initial check based on body tail and current header chain.
+		// if tail is on the current header chain, the txhashset is not needed
 		{
 			let head = self.head().unwrap();
+			let tail = self.tail().unwrap_or_else(|_| head.clone());
 			let header_head = self.header_head().unwrap();
-			if header_head.height - head.height < global::state_sync_threshold() as u64 {
-				return Err(ErrorKind::InvalidTxHashSet("not needed".to_owned()).into());
+			if header_head.height - head.height < global::cut_through_horizon() as u64
+				&& tail.last_block_h != head.last_block_h
+				&& header_head.height > tail.height
+			{
+				let mut header_cursor = self.get_block_header(&header_head.prev_block_h);
+				while let Ok(header) = header_cursor {
+					if tail.height + 1 == header.height {
+						if tail.last_block_h == header.prev_hash {
+							warn!("txhashset_write: body tail {} at {} is on the local chain. txhashset not needed",
+								   tail.last_block_h, tail.height,
+							);
+							return Err(ErrorKind::InvalidTxHashSet("not needed".to_owned()).into());
+						}
+						break;
+					}
+					header_cursor = self.get_previous_header(&header);
+				}
 			}
 		}
 
@@ -769,6 +786,9 @@ impl Chain {
 			batch.save_body_head(&tip)?;
 			batch.save_header_height(&header)?;
 			batch.build_by_height_index(&header, true)?;
+
+			// Reset the body tail to the body head after a txhashset write
+			batch.save_body_tail(&tip)?;
 		}
 
 		// Commit all the changes to the db.
