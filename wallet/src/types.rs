@@ -68,7 +68,7 @@ impl Default for WalletConfig {
 			data_file_dir: ".".to_string(),
 			tls_certificate_file: None,
 			tls_certificate_key: None,
-			dark_background_color_scheme: Some(false),
+			dark_background_color_scheme: Some(true),
 		}
 	}
 }
