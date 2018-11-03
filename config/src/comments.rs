@@ -346,6 +346,12 @@ fn comments() -> HashMap<String, String> {
 #where to find wallet files (seed, data, etc)
 ".to_string(),
 	);
+	retval.insert(
+		"dark_background_color_scheme".to_string(),
+		"
+#Whether to use the black background color scheme for command line
+".to_string(),
+	);
 
 	retval.insert(
 		"[logging]".to_string(),
