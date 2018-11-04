@@ -56,7 +56,7 @@ pub fn instantiate_wallet(
 	passphrase: &str,
 	account: &str,
 	node_api_secret: Option<String>,
-) -> Box<WalletInst<HTTPWalletClient, keychain::ExtKeychain>> {
+) -> Arc<Mutex<WalletInst<HTTPWalletClient, keychain::ExtKeychain>>> {
 	let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
 	let mut db_wallet =
 		LMDBBackend::new(wallet_config.clone(), passphrase, client).unwrap_or_else(|e| {
@@ -71,7 +71,7 @@ pub fn instantiate_wallet(
 			panic!("Error starting wallet: {}", e);
 		});
 	info!("Using LMDB Backend for wallet");
-	Box::new(db_wallet)
+	Arc::new(Mutex::new(db_wallet))
 }
 
 pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i32 {
@@ -137,14 +137,15 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		Some(p) => p,
 	};
 
+	let wallet = instantiate_wallet(
+		wallet_config.clone(),
+		passphrase,
+		account,
+		node_api_secret.clone(),
+	);
+
 	// Handle listener startup commands
 	{
-		let wallet = instantiate_wallet(
-			wallet_config.clone(),
-			passphrase,
-			account,
-			node_api_secret.clone(),
-		);
 		let api_secret = get_first_line(wallet_config.api_secret_path.clone());
 
 		let tls_conf = match wallet_config.tls_certificate_file.clone() {
@@ -164,17 +165,20 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				if let Some(port) = listen_args.value_of("port") {
 					wallet_config.api_listen_port = port.parse().unwrap();
 				}
-				controller::foreign_listener(wallet, &wallet_config.api_listen_addr(), tls_conf)
-					.unwrap_or_else(|e| {
-						panic!(
-							"Error creating wallet listener: {:?} Config: {:?}",
-							e, wallet_config
-						);
-					});
+				controller::foreign_listener(
+					wallet.clone(),
+					&wallet_config.api_listen_addr(),
+					tls_conf,
+				).unwrap_or_else(|e| {
+					panic!(
+						"Error creating wallet listener: {:?} Config: {:?}",
+						e, wallet_config
+					);
+				});
 			}
 			("owner_api", Some(_api_args)) => {
 				// TLS is disabled because we bind to localhost
-				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret, None)
+				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, None)
 					.unwrap_or_else(|e| {
 						panic!(
 							"Error creating wallet api listener: {:?} Config: {:?}",
@@ -185,7 +189,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			("web", Some(_api_args)) => {
 				// start owner listener and run static file server
 				start_webwallet_server();
-				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret, tls_conf)
+				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, tls_conf)
 					.unwrap_or_else(|e| {
 						panic!(
 							"Error creating wallet api listener: {:?} Config: {:?}",
@@ -197,13 +201,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		};
 	}
 
-	// Handle single-use (command line) owner commands
-	let wallet = Arc::new(Mutex::new(instantiate_wallet(
-		wallet_config.clone(),
-		passphrase,
-		account,
-		node_api_secret,
-	)));
 	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {
 			("account", Some(acct_args)) => {

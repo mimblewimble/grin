@@ -49,7 +49,7 @@ where
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
 	/// perhaps)
-	pub wallet: Arc<Mutex<Box<W>>>,
+	pub wallet: Arc<Mutex<W>>,
 	phantom: PhantomData<K>,
 	phantom_c: PhantomData<C>,
 }
@@ -61,7 +61,7 @@ where
 	K: Keychain,
 {
 	/// Create new API instance
-	pub fn new(wallet_in: Arc<Mutex<Box<W>>>) -> Self {
+	pub fn new(wallet_in: Arc<Mutex<W>>) -> Self {
 		APIOwner {
 			wallet: wallet_in,
 			phantom: PhantomData,
@@ -89,7 +89,7 @@ where
 
 		let res = Ok((
 			validated,
-			updater::retrieve_outputs(&mut **w, include_spent, tx_id, &parent_key_id)?,
+			updater::retrieve_outputs(&mut *w, include_spent, tx_id, &parent_key_id)?,
 		));
 
 		w.close()?;
@@ -114,7 +114,7 @@ where
 
 		let res = Ok((
 			validated,
-			updater::retrieve_txs(&mut **w, tx_id, &parent_key_id)?,
+			updater::retrieve_txs(&mut *w, tx_id, &parent_key_id)?,
 		));
 
 		w.close()?;
@@ -135,7 +135,7 @@ where
 			validated = self.update_outputs(&mut w);
 		}
 
-		let wallet_info = updater::retrieve_info(&mut **w, &parent_key_id)?;
+		let wallet_info = updater::retrieve_info(&mut *w, &parent_key_id)?;
 		let res = Ok((validated, wallet_info));
 
 		w.close()?;
@@ -145,13 +145,13 @@ where
 	/// Return list of existing account -> Path mappings
 	pub fn accounts(&mut self) -> Result<Vec<AcctPathMapping>, Error> {
 		let mut w = self.wallet.lock();
-		keys::accounts(&mut **w)
+		keys::accounts(&mut *w)
 	}
 
 	/// Create a new account path
 	pub fn new_account_path(&mut self, label: &str) -> Result<Identifier, Error> {
 		let mut w = self.wallet.lock();
-		keys::new_acct_path(&mut **w, label)
+		keys::new_acct_path(&mut *w, label)
 	}
 
 	/// Issues a send transaction and sends to recipient
@@ -174,7 +174,7 @@ where
 
 		client = w.client().clone();
 		let (slate, context, lock_fn) = tx::create_send_tx(
-			&mut **w,
+			&mut *w,
 			amount,
 			minimum_confirmations,
 			max_outputs,
@@ -196,11 +196,11 @@ where
 			}
 		};
 
-		tx::complete_tx(&mut **w, &mut slate_out, &context)?;
+		tx::complete_tx(&mut *w, &mut slate_out, &context)?;
 		let tx_hex = util::to_hex(ser::ser_vec(&slate_out.tx).unwrap());
 
 		// lock our inputs
-		lock_fn_out(&mut **w, &tx_hex)?;
+		lock_fn_out(&mut *w, &tx_hex)?;
 		w.close()?;
 		Ok(slate_out)
 	}
@@ -225,7 +225,7 @@ where
 		let parent_key_id = w.parent_key_id();
 
 		let (mut slate, context, lock_fn) = tx::create_send_tx(
-			&mut **w,
+			&mut *w,
 			amount,
 			minimum_confirmations,
 			max_outputs,
@@ -237,13 +237,13 @@ where
 
 		w.set_parent_key_id_by_name(dest_acct_name)?;
 		let parent_key_id = w.parent_key_id();
-		tx::receive_tx(&mut **w, &mut slate, &parent_key_id, true)?;
+		tx::receive_tx(&mut *w, &mut slate, &parent_key_id, true)?;
 
-		tx::complete_tx(&mut **w, &mut slate, &context)?;
+		tx::complete_tx(&mut *w, &mut slate, &context)?;
 		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
 
 		// lock our inputs
-		lock_fn(&mut **w, &tx_hex)?;
+		lock_fn(&mut *w, &tx_hex)?;
 		w.set_parent_key_id(orig_parent_key_id);
 		w.close()?;
 		Ok(slate)
@@ -266,7 +266,7 @@ where
 		let parent_key_id = w.parent_key_id();
 
 		let (slate, context, lock_fn) = tx::create_send_tx(
-			&mut **w,
+			&mut *w,
 			amount,
 			minimum_confirmations,
 			max_outputs,
@@ -290,7 +290,7 @@ where
 		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
 
 		// lock our inputs
-		lock_fn(&mut **w, &tx_hex)?;
+		lock_fn(&mut *w, &tx_hex)?;
 		w.close()?;
 		Ok(slate)
 	}
@@ -304,7 +304,7 @@ where
 		w.open_with_credentials()?;
 
 		let context = w.get_private_context(slate.id.as_bytes())?;
-		tx::complete_tx(&mut **w, slate, &context)?;
+		tx::complete_tx(&mut *w, slate, &context)?;
 		{
 			let mut batch = w.batch()?;
 			batch.delete_private_context(slate.id.as_bytes())?;
@@ -329,7 +329,7 @@ where
 				"Can't contact running Grin node. Not Cancelling.",
 			))?;
 		}
-		tx::cancel_tx(&mut **w, &parent_key_id, tx_id)?;
+		tx::cancel_tx(&mut *w, &parent_key_id, tx_id)?;
 		w.close()?;
 		Ok(())
 	}
@@ -345,7 +345,7 @@ where
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
 		let tx_burn = tx::issue_burn_tx(
-			&mut **w,
+			&mut *w,
 			amount,
 			minimum_confirmations,
 			max_outputs,
@@ -389,7 +389,7 @@ where
 			let mut w = self.wallet.lock();
 			w.open_with_credentials()?;
 			let parent_key_id = w.parent_key_id();
-			let res = tx::retrieve_tx_hex(&mut **w, &parent_key_id, tx_id)?;
+			let res = tx::retrieve_tx_hex(&mut *w, &parent_key_id, tx_id)?;
 			w.close()?;
 			res
 		};
@@ -424,7 +424,7 @@ where
 			w.open_with_credentials()?;
 			let parent_key_id = w.parent_key_id();
 			client = w.client().clone();
-			let res = tx::retrieve_tx_hex(&mut **w, &parent_key_id, tx_id)?;
+			let res = tx::retrieve_tx_hex(&mut *w, &parent_key_id, tx_id)?;
 			w.close()?;
 			res
 		};
@@ -510,7 +510,7 @@ where
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
 	/// perhaps)
-	pub wallet: Arc<Mutex<Box<W>>>,
+	pub wallet: Arc<Mutex<W>>,
 	phantom: PhantomData<K>,
 	phantom_c: PhantomData<C>,
 }
@@ -522,7 +522,7 @@ where
 	K: Keychain,
 {
 	/// Create new API instance
-	pub fn new(wallet_in: Arc<Mutex<Box<W>>>) -> Box<Self> {
+	pub fn new(wallet_in: Arc<Mutex<W>>) -> Box<Self> {
 		Box::new(APIForeign {
 			wallet: wallet_in,
 			phantom: PhantomData,
@@ -534,7 +534,7 @@ where
 	pub fn build_coinbase(&mut self, block_fees: &BlockFees) -> Result<CbData, Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
-		let res = updater::build_coinbase(&mut **w, block_fees);
+		let res = updater::build_coinbase(&mut *w, block_fees);
 		w.close()?;
 		res
 	}
@@ -554,7 +554,7 @@ where
 
 		// create an output using the amount in the slate
 		let (_, mut context, receiver_create_fn) = selection::build_recipient_output_with_slate(
-			&mut **wallet,
+			&mut *wallet,
 			&mut slate,
 			parent_key_id,
 			false,
@@ -585,7 +585,7 @@ where
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
-		let res = tx::receive_tx(&mut **w, slate, &parent_key_id, false);
+		let res = tx::receive_tx(&mut *w, slate, &parent_key_id, false);
 		w.close()?;
 
 		if let Err(e) = res {

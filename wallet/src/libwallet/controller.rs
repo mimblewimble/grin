@@ -41,7 +41,7 @@ use util::Mutex;
 
 /// Instantiate wallet Owner API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
-pub fn owner_single_use<F, T: ?Sized, C, K>(wallet: Arc<Mutex<Box<T>>>, f: F) -> Result<(), Error>
+pub fn owner_single_use<F, T: ?Sized, C, K>(wallet: Arc<Mutex<T>>, f: F) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	F: FnOnce(&mut APIOwner<T, C, K>) -> Result<(), Error>,
@@ -54,7 +54,7 @@ where
 
 /// Instantiate wallet Foreign API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
-pub fn foreign_single_use<F, T: ?Sized, C, K>(wallet: Arc<Mutex<Box<T>>>, f: F) -> Result<(), Error>
+pub fn foreign_single_use<F, T: ?Sized, C, K>(wallet: Arc<Mutex<T>>, f: F) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
 	F: FnOnce(&mut APIForeign<T, C, K>) -> Result<(), Error>,
@@ -68,7 +68,7 @@ where
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
 pub fn owner_listener<T: ?Sized, C, K>(
-	wallet: Box<T>,
+	wallet: Arc<Mutex<T>>,
 	addr: &str,
 	api_secret: Option<String>,
 	tls_config: Option<TLSConfig>,
@@ -79,8 +79,7 @@ where
 	C: WalletClient + 'static,
 	K: Keychain + 'static,
 {
-	let wallet_arc = Arc::new(Mutex::new(wallet));
-	let api_handler = OwnerAPIHandler::new(wallet_arc);
+	let api_handler = OwnerAPIHandler::new(wallet);
 
 	let mut router = Router::new();
 	if api_secret.is_some() {
@@ -110,7 +109,7 @@ where
 /// Listener version, providing same API but listening for requests on a
 /// port and wrapping the calls
 pub fn foreign_listener<T: ?Sized, C, K>(
-	wallet: Box<T>,
+	wallet: Arc<Mutex<T>>,
 	addr: &str,
 	tls_config: Option<TLSConfig>,
 ) -> Result<(), Error>
@@ -119,7 +118,7 @@ where
 	C: WalletClient + 'static,
 	K: Keychain + 'static,
 {
-	let api_handler = ForeignAPIHandler::new(Arc::new(Mutex::new(wallet)));
+	let api_handler = ForeignAPIHandler::new(wallet);
 
 	let mut router = Router::new();
 	router
@@ -150,7 +149,7 @@ where
 	K: Keychain + 'static,
 {
 	/// Wallet instance
-	pub wallet: Arc<Mutex<Box<T>>>,
+	pub wallet: Arc<Mutex<T>>,
 	phantom: PhantomData<K>,
 	phantom_c: PhantomData<C>,
 }
@@ -162,7 +161,7 @@ where
 	K: Keychain + 'static,
 {
 	/// Create a new owner API handler for GET methods
-	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> OwnerAPIHandler<T, C, K> {
+	pub fn new(wallet: Arc<Mutex<T>>) -> OwnerAPIHandler<T, C, K> {
 		OwnerAPIHandler {
 			wallet,
 			phantom: PhantomData,
@@ -474,7 +473,7 @@ where
 	K: Keychain + 'static,
 {
 	/// Wallet instance
-	pub wallet: Arc<Mutex<Box<T>>>,
+	pub wallet: Arc<Mutex<T>>,
 	phantom: PhantomData<K>,
 	phantom_c: PhantomData<C>,
 }
@@ -486,7 +485,7 @@ where
 	K: Keychain + 'static,
 {
 	/// create a new api handler
-	pub fn new(wallet: Arc<Mutex<Box<T>>>) -> ForeignAPIHandler<T, C, K> {
+	pub fn new(wallet: Arc<Mutex<T>>) -> ForeignAPIHandler<T, C, K> {
 		ForeignAPIHandler {
 			wallet,
 			phantom: PhantomData,
