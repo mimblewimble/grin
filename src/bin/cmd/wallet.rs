@@ -435,7 +435,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					account,
 					&wallet_info,
 					validated,
-					wallet_config.dark_background_color_scheme.unwrap(),
+					wallet_config.dark_background_color_scheme.unwrap_or(true),
 				);
 				Ok(())
 			}
@@ -447,7 +447,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					height,
 					validated,
 					outputs,
-					wallet_config.dark_background_color_scheme.unwrap(),
+					wallet_config.dark_background_color_scheme.unwrap_or(true),
 				).map_err(|e| {
 					ErrorKind::GenericError(format!(
 						"Error getting wallet outputs: {:?} Config: {:?}",
@@ -477,7 +477,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					validated,
 					txs,
 					include_status,
-					wallet_config.dark_background_color_scheme.unwrap(),
+					wallet_config.dark_background_color_scheme.unwrap_or(true),
 				).map_err(|e| {
 					ErrorKind::GenericError(format!(
 						"Error getting wallet outputs: {} Config: {:?}",
@@ -493,7 +493,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						height,
 						validated,
 						outputs,
-						wallet_config.dark_background_color_scheme.unwrap(),
+						wallet_config.dark_background_color_scheme.unwrap_or(true),
 					).map_err(|e| {
 						ErrorKind::GenericError(format!(
 							"Error getting wallet outputs: {} Config: {:?}",
