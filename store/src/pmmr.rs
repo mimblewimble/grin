@@ -313,11 +313,8 @@ impl<T: PMMRable> PMMRBackend<T> {
 				pos as u64 - 1 - shift
 			});
 
-			self.hash_file.save_prune(
-				tmp_prune_file_hash.clone(),
-				&off_to_rm,
-				&prune_noop,
-			)?;
+			self.hash_file
+				.save_prune(tmp_prune_file_hash.clone(), &off_to_rm, &prune_noop)?;
 		}
 
 		// 2. Save compact copy of the data file, skipping removed leaves.

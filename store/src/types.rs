@@ -97,17 +97,16 @@ impl HashFile {
 		self.file.size_unsync() / Hash::LEN as u64
 	}
 
-	pub fn save_prune<T>(
-		&self,
-		target: String,
-		prune_offs: &[u64],
-		prune_cb: T,
-	) -> io::Result<()>
+	pub fn save_prune<T>(&self, target: String, prune_offs: &[u64], prune_cb: T) -> io::Result<()>
 	where
 		T: Fn(&[u8]),
 	{
-		let prune_offs = prune_offs.iter().map(|x| x * Hash::LEN as u64).collect::<Vec<_>>();
-		self.file.save_prune(target, prune_offs.as_slice(), Hash::LEN as u64, prune_cb)
+		let prune_offs = prune_offs
+			.iter()
+			.map(|x| x * Hash::LEN as u64)
+			.collect::<Vec<_>>();
+		self.file
+			.save_prune(target, prune_offs.as_slice(), Hash::LEN as u64, prune_cb)
 	}
 }
 
