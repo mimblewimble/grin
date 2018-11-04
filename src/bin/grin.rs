@@ -76,6 +76,11 @@ fn log_build_info() {
 }
 
 fn main() {
+	let exit_code = real_main();
+	std::process::exit(exit_code);
+}
+
+fn real_main() -> i32 {
 	let args = App::new("Grin")
 		.version(crate_version!())
 		.author("The Grin Team")
@@ -343,7 +348,7 @@ fn main() {
 			// If it's just a server config command, do it and exit
 			if let ("config", Some(_)) = server_args.subcommand() {
 				cmd::config_command_server(SERVER_CONFIG_FILE_NAME);
-				return;
+				return 0;
 			}
 		}
 		("wallet", Some(wallet_args)) => {
@@ -410,24 +415,18 @@ fn main() {
 	match args.subcommand() {
 		// server commands and options
 		("server", Some(server_args)) => {
-			cmd::server_command(Some(server_args), node_config.unwrap());
+			cmd::server_command(Some(server_args), node_config.unwrap())
 		}
 
 		// client commands and options
-		("client", Some(client_args)) => {
-			cmd::client_command(client_args, node_config.unwrap());
-		}
+		("client", Some(client_args)) => cmd::client_command(client_args, node_config.unwrap()),
 
 		// client commands and options
-		("wallet", Some(wallet_args)) => {
-			cmd::wallet_command(wallet_args, wallet_config.unwrap());
-		}
+		("wallet", Some(wallet_args)) => cmd::wallet_command(wallet_args, wallet_config.unwrap()),
 
 		// If nothing is specified, try to just use the config file instead
 		// this could possibly become the way to configure most things
 		// with most command line options being phased out
-		_ => {
-			cmd::server_command(None, node_config.unwrap());
-		}
+		_ => cmd::server_command(None, node_config.unwrap()),
 	}
 }
