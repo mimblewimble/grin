@@ -201,6 +201,11 @@ impl TransactionPool {
 		Ok(())
 	}
 
+	/// Retrieve individual transaction for the given kernel hash.
+	pub fn retrieve_tx_by_kernel_hash(&self, hash: Hash) -> Option<Transaction> {
+		self.txpool.retrieve_tx_by_kernel_hash(hash)
+	}
+
 	/// Retrieve all transactions matching the provided "compact block"
 	/// based on the kernel set.
 	/// Note: we only look in the txpool for this (stempool is under embargo).

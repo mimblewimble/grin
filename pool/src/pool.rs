@@ -66,6 +66,18 @@ impl Pool {
 			.map(|x| x.tx.clone())
 	}
 
+	/// Query the tx pool for an individual tx matching the given kernel hash.
+	pub fn retrieve_tx_by_kernel_hash(&self, hash: Hash) -> Option<Transaction> {
+		for x in &self.entries {
+			for k in x.tx.kernels() {
+				if k.hash() == hash {
+					return Some(x.tx.clone());
+				}
+			}
+		}
+		None
+	}
+
 	/// Query the tx pool for all known txs based on kernel short_ids
 	/// from the provided compact_block.
 	/// Note: does not validate that we return the full set of required txs.

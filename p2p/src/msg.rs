@@ -27,6 +27,7 @@ use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::{Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};
 
+
 /// Current latest version of the protocol
 pub const PROTOCOL_VERSION: u32 = 1;
 
@@ -68,8 +69,8 @@ enum_from_primitive! {
 		TxHashSetRequest = 16,
 		TxHashSetArchive = 17,
 		BanReason = 18,
-		// GetTransaction = 19,
-		// CompactTransaction = 20,
+		GetTransaction = 19,
+		TransactionKernel = 20,
 	}
 }
 
@@ -95,6 +96,8 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::TxHashSetRequest => 40,
 		Type::TxHashSetArchive => 64,
 		Type::BanReason => 64,
+		Type::GetTransaction => 32,
+		Type::TransactionKernel => 32,
 	}
 }
 
@@ -445,7 +448,7 @@ impl Readable for GetPeerAddrs {
 		let capab = reader.read_u32()?;
 		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
 		Ok(GetPeerAddrs {
-			capabilities: capabilities,
+			capabilities,
 		})
 	}
 }
