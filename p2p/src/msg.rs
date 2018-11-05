@@ -551,7 +551,7 @@ impl Readable for SockAddr {
 				port,
 			))))
 		} else {
-			let ip = try_map_vec!([0..8], |_| reader.read_u16());
+			let ip = try_iter_map_vec!(0..8, |_| reader.read_u16());
 			let port = reader.read_u16()?;
 			Ok(SockAddr(SocketAddr::V6(SocketAddrV6::new(
 				Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]),
