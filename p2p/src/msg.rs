@@ -27,7 +27,6 @@ use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::{Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};
 
-
 /// Current latest version of the protocol
 pub const PROTOCOL_VERSION: u32 = 1;
 
@@ -447,9 +446,7 @@ impl Readable for GetPeerAddrs {
 	fn read(reader: &mut Reader) -> Result<GetPeerAddrs, ser::Error> {
 		let capab = reader.read_u32()?;
 		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
-		Ok(GetPeerAddrs {
-			capabilities,
-		})
+		Ok(GetPeerAddrs { capabilities })
 	}
 }
 

@@ -327,9 +327,7 @@ impl Peers {
 	/// if it knows the remote peer already has the transaction.
 	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
 		let num_peers = self.config.peer_max_count();
-		let count = self.broadcast("transaction", num_peers, |p| {
-			p.send_transaction(tx)
-		});
+		let count = self.broadcast("transaction", num_peers, |p| p.send_transaction(tx));
 		debug!(
 			"broadcast_transaction: {} to {} peers, done.",
 			tx.hash(),

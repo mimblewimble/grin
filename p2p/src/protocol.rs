@@ -87,8 +87,7 @@ impl MessageHandler for Protocol {
 				let h: Hash = msg.body()?;
 				debug!(
 					"handle_payload: received tx kernel: {}, msg_len: {}",
-					h,
-					msg.header.msg_len
+					h, msg.header.msg_len
 				);
 				adapter.tx_kernel_received(h, self.addr);
 				Ok(None)
@@ -98,8 +97,7 @@ impl MessageHandler for Protocol {
 				let h: Hash = msg.body()?;
 				debug!(
 					"handle_payload: GetTransaction: {}, msg_len: {}",
-					h,
-					msg.header.msg_len,
+					h, msg.header.msg_len,
 				);
 				let tx = adapter.get_transaction(h);
 				if let Some(tx) = tx {

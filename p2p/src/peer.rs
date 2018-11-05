@@ -269,8 +269,7 @@ impl Peer {
 		} else {
 			debug!(
 				"Not sending tx kernel hash {} to {} (already seen)",
-				h,
-				self.info.addr
+				h, self.info.addr
 			);
 			Ok(false)
 		}
@@ -283,7 +282,11 @@ impl Peer {
 	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<bool, Error> {
 		let kernel = &tx.kernels()[0];
 
-		if self.info.capabilities.contains(Capabilities::TX_KERNEL_HASH) {
+		if self
+			.info
+			.capabilities
+			.contains(Capabilities::TX_KERNEL_HASH)
+		{
 			return self.send_tx_kernel_hash(kernel.hash());
 		}
 
@@ -325,7 +328,10 @@ impl Peer {
 	}
 
 	pub fn send_tx_request(&self, h: Hash) -> Result<(), Error> {
-		debug!("Requesting tx (kernel hash) {} from peer {}.", h, self.info.addr);
+		debug!(
+			"Requesting tx (kernel hash) {} from peer {}.",
+			h, self.info.addr
+		);
 		self.connection
 			.as_ref()
 			.unwrap()

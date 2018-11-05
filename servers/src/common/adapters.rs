@@ -59,10 +59,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
-		self
-			.tx_pool
-			.read()
-			.retrieve_tx_by_kernel_hash(kernel_hash)
+		self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash)
 	}
 
 	fn tx_kernel_received(&self, kernel_hash: Hash, addr: SocketAddr) {
@@ -71,10 +68,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			return;
 		}
 
-		let tx = self
-			.tx_pool
-			.read()
-			.retrieve_tx_by_kernel_hash(kernel_hash);
+		let tx = self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash);
 
 		if tx.is_none() {
 			self.request_transaction(kernel_hash, &addr);
@@ -159,8 +153,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			}
 
 			let (txs, missing_short_ids) = {
-				self
-					.tx_pool
+				self.tx_pool
 					.read()
 					.retrieve_transactions(cb.hash(), cb.nonce, cb.kern_ids())
 			};
