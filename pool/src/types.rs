@@ -96,6 +96,10 @@ pub struct PoolConfig {
 	/// Maximum capacity of the pool in number of transactions
 	#[serde = "default_max_pool_size"]
 	pub max_pool_size: usize,
+
+	/// Maximum capacity of the pool in number of transactions
+	#[serde = "default_max_stempool_size"]
+	pub max_stempool_size: usize,
 }
 
 impl Default for PoolConfig {
@@ -103,6 +107,7 @@ impl Default for PoolConfig {
 		PoolConfig {
 			accept_fee_base: default_accept_fee_base(),
 			max_pool_size: default_max_pool_size(),
+			max_stempool_size: default_max_stempool_size(),
 		}
 	}
 }
@@ -111,6 +116,9 @@ fn default_accept_fee_base() -> u64 {
 	consensus::MILLI_GRIN
 }
 fn default_max_pool_size() -> usize {
+	50_000
+}
+fn default_max_stempool_size() -> usize {
 	50_000
 }
 
