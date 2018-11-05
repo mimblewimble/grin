@@ -1349,9 +1349,13 @@ impl<'a> Extension<'a> {
 
 /// Packages the txhashset data files into a zip and returns a Read to the
 /// resulting file
-pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
-	let now = SystemTime::now();
-	let ts = now.duration_since(UNIX_EPOCH).unwrap().subsec_micros();
+pub fn zip_read(root_dir: String, header: &BlockHeader, rand: Option<u32>) -> Result<File, Error> {
+	let ts = if let None = rand {
+		let now = SystemTime::now();
+		now.duration_since(UNIX_EPOCH).unwrap().subsec_micros()
+	} else {
+		rand.unwrap()
+	};
 	let txhashset_zip = format!("{}_{}.zip", TXHASHSET_ZIP, ts);
 
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
