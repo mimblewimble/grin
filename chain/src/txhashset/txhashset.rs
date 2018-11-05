@@ -19,7 +19,7 @@ use std::collections::HashSet;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use croaring::Bitmap;
 
@@ -52,7 +52,7 @@ const OUTPUT_SUBDIR: &'static str = "output";
 const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
 const KERNEL_SUBDIR: &'static str = "kernel";
 
-const TXHASHSET_ZIP: &'static str = "txhashset_snapshot.zip";
+const TXHASHSET_ZIP: &'static str = "txhashset_snapshot";
 
 struct HashOnlyMMRHandle {
 	backend: HashOnlyMMRBackend,
@@ -1349,13 +1349,22 @@ impl<'a> Extension<'a> {
 
 /// Packages the txhashset data files into a zip and returns a Read to the
 /// resulting file
-pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
+pub fn zip_read(root_dir: String, header: &BlockHeader, rand: Option<u32>) -> Result<File, Error> {
+	let ts = if let None = rand {
+		let now = SystemTime::now();
+		now.duration_since(UNIX_EPOCH).unwrap().subsec_micros()
+	} else {
+		rand.unwrap()
+	};
+	let txhashset_zip = format!("{}_{}.zip", TXHASHSET_ZIP, ts);
+
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
-	let zip_path = Path::new(&root_dir).join(TXHASHSET_ZIP);
+	let zip_path = Path::new(&root_dir).join(txhashset_zip);
 	// create the zip archive
 	{
 		// Temp txhashset directory
-		let temp_txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR.to_string() + "_zip");
+		let temp_txhashset_path =
+			Path::new(&root_dir).join(format!("{}_zip_{}", TXHASHSET_SUBDIR, ts));
 		// Remove temp dir if it exist
 		if temp_txhashset_path.exists() {
 			fs::remove_dir_all(&temp_txhashset_path)?;
@@ -1455,7 +1464,11 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 			);
 			for diff in difference {
 				let diff_path = subdirectory_path.join(diff);
-				file::delete(diff_path)?;
+				file::delete(diff_path.clone())?;
+				debug!(
+					"check_and_remove_files: unexpected file '{:?}' removed",
+					diff_path
+				);
 			}
 		}
 	}
