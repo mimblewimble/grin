@@ -187,8 +187,47 @@ pub fn init_test_logger() {
 	let mut logger = LoggingConfig::default();
 	logger.log_to_file = false;
 	logger.stdout_log_level = LogLevel::Debug;
+
+	// Save current logging configuration
 	let mut config_ref = LOGGING_CONFIG.lock();
 	*config_ref = logger;
+
+	let level_stdout = convert_log_level(&config_ref.stdout_log_level);
+	let level_minimum = level_stdout; // minimum logging level for Root logger
+
+	// Start logger
+	let stdout = ConsoleAppender::builder()
+		.encoder(Box::new(PatternEncoder::default()))
+		.build();
+
+	let mut root = Root::builder();
+
+	let mut appenders = vec![];
+
+	{
+		let filter = Box::new(ThresholdFilter::new(level_stdout));
+		appenders.push(
+			Appender::builder()
+				.filter(filter)
+				.filter(Box::new(GrinFilter))
+				.build("stdout", Box::new(stdout)),
+		);
+
+		root = root.appender("stdout");
+	}
+
+	let config = Config::builder()
+		.appenders(appenders)
+		.build(root.build(level_minimum))
+		.unwrap();
+
+	let _ = log4rs::init_config(config).unwrap();
+
+	info!(
+		"log4rs is initialized, stdout level: {:?}, min. level: {:?}",
+		level_stdout, level_minimum
+	);
+
 	*was_init_ref = true;
 }
 
