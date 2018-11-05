@@ -93,10 +93,12 @@ impl HashFile {
 		self.file.size() / Hash::LEN as u64
 	}
 
+	/// Size of the unsync'd hash file, in hashes (not bytes).
 	pub fn size_unsync(&self) -> u64 {
 		self.file.size_unsync() / Hash::LEN as u64
 	}
 
+	/// Rewrite the hash file out to disk, pruning removed hashes.
 	pub fn save_prune<T>(&self, target: String, prune_offs: &[u64], prune_cb: T) -> io::Result<()>
 	where
 		T: Fn(&[u8]),

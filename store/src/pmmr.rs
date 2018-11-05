@@ -20,7 +20,7 @@ use croaring::Bitmap;
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::{self, family, Backend, HashOnlyBackend};
 use core::core::BlockHeader;
-use core::ser::{self, FixedLength, PMMRable};
+use core::ser::{self, PMMRable};
 use leaf_set::LeafSet;
 use prune_list::PruneList;
 use types::{prune_noop, AppendOnlyFile, HashFile};
@@ -71,7 +71,8 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		}
 		self.data_file.append(&mut ser::ser_vec(&data).unwrap());
 		for h in &hashes {
-			self.hash_file.append(h);
+			self.hash_file.append(h)
+				.map_err(|e| format!("Failed to append hash to file. {}", e))?;
 		}
 		Ok(())
 	}
@@ -137,7 +138,8 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 
 		// Rewind the hash file accounting for pruned/compacted pos
 		let shift = self.prune_list.get_shift(position);
-		self.hash_file.rewind(position - shift);
+		self.hash_file.rewind(position - shift)
+			.map_err(|e| format!("Failed to rewind hash file. {}", e))?;
 
 		// Rewind the data file accounting for pruned/compacted pos
 		let leaf_shift = self.prune_list.get_leaf_shift(position);
@@ -319,8 +321,6 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 		// 2. Save compact copy of the data file, skipping removed leaves.
 		{
-			let record_len = T::LEN as u64;
-
 			let leaf_pos_to_rm = pos_to_rm
 				.iter()
 				.filter(|&x| pmmr::is_leaf(x.into()))
@@ -330,13 +330,13 @@ impl<T: PMMRable> PMMRBackend<T> {
 			let off_to_rm = map_vec!(leaf_pos_to_rm, |&pos| {
 				let flat_pos = pmmr::n_leaves(pos);
 				let shift = self.prune_list.get_leaf_shift(pos);
-				(flat_pos - 1 - shift) * record_len
+				(flat_pos - 1 - shift) * T::LEN as u64
 			});
 
 			self.data_file.save_prune(
 				tmp_prune_file_data.clone(),
 				&off_to_rm,
-				record_len,
+				T::LEN as u64,
 				prune_cb,
 			)?;
 		}
