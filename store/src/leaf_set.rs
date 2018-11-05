@@ -16,6 +16,7 @@
 //! that exist and are not currently pruned in the MMR.
 
 use std::path::Path;
+use std::sync::Arc;
 
 use croaring::Bitmap;
 
@@ -27,6 +28,7 @@ use {read_bitmap, save_via_temp_file};
 
 use std::fs::File;
 use std::io::{self, BufWriter, Write};
+use util::RwLock;
 
 /// Compact (roaring) bitmap representing the set of positions of
 /// leaves that are currently unpruned in the MMR.
@@ -79,10 +81,10 @@ impl LeafSet {
 	/// Calculate the set of unpruned leaves
 	/// up to and including the cutoff_pos.
 	/// Only applicable for the output MMR.
-	fn unpruned_pre_cutoff(&self, cutoff_pos: u64, prune_list: &PruneList) -> Bitmap {
+	fn unpruned_pre_cutoff(&self, cutoff_pos: u64, prune_list: &Arc<RwLock<PruneList>>) -> Bitmap {
 		(1..=cutoff_pos)
 			.filter(|&x| pmmr::is_leaf(x))
-			.filter(|&x| !prune_list.is_pruned(x))
+			.filter(|&x| !prune_list.read().is_pruned(x))
 			.map(|x| x as u32)
 			.collect()
 	}
@@ -94,7 +96,7 @@ impl LeafSet {
 		&self,
 		cutoff_pos: u64,
 		rewind_rm_pos: &Bitmap,
-		prune_list: &PruneList,
+		prune_list: &Arc<RwLock<PruneList>>,
 	) -> Bitmap {
 		let mut bitmap = self.bitmap.clone();
 

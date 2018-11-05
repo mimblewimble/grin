@@ -156,9 +156,6 @@ pub struct Chain {
 	genesis: BlockHeader,
 }
 
-unsafe impl Sync for Chain {}
-unsafe impl Send for Chain {}
-
 impl Chain {
 	/// Initializes the blockchain and returns a new Chain instance. Does a
 	/// check on the current chain head to make sure it exists and creates one

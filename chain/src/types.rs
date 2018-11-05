@@ -115,7 +115,7 @@ impl ser::Readable for Tip {
 /// Bridge between the chain pipeline and the rest of the system. Handles
 /// downstream processing of valid blocks by the rest of the system, most
 /// importantly the broadcasting of blocks to our peers.
-pub trait ChainAdapter {
+pub trait ChainAdapter: Send + Sync {
 	/// The blockchain pipeline has accepted this block as valid and added
 	/// it to our chain.
 	fn block_accepted(&self, b: &Block, opts: Options);
