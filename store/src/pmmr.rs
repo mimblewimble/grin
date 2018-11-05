@@ -13,8 +13,8 @@
 
 //! Implementation of the persistent Backend for the prunable MMR tree.
 
-use std::{fs, io, marker};
 use std::sync::Arc;
+use std::{fs, io, marker};
 
 use croaring::Bitmap;
 
@@ -212,7 +212,10 @@ impl<T: PMMRable> PMMRBackend<T> {
 		}
 
 		let leaf_set = Arc::new(RwLock::new(LeafSet::open(&leaf_set_path)?));
-		let prune_list = Arc::new(RwLock::new(PruneList::open(&format!("{}/{}", data_dir, PMMR_PRUN_FILE))?));
+		let prune_list = Arc::new(RwLock::new(PruneList::open(&format!(
+			"{}/{}",
+			data_dir, PMMR_PRUN_FILE
+		))?));
 
 		Ok(PMMRBackend {
 			data_dir,
