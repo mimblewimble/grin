@@ -71,7 +71,8 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		}
 		self.data_file.append(&mut ser::ser_vec(&data).unwrap());
 		for h in &hashes {
-			self.hash_file.append(h)
+			self.hash_file
+				.append(h)
 				.map_err(|e| format!("Failed to append hash to file. {}", e))?;
 		}
 		Ok(())
@@ -138,7 +139,8 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 
 		// Rewind the hash file accounting for pruned/compacted pos
 		let shift = self.prune_list.get_shift(position);
-		self.hash_file.rewind(position - shift)
+		self.hash_file
+			.rewind(position - shift)
 			.map_err(|e| format!("Failed to rewind hash file. {}", e))?;
 
 		// Rewind the data file accounting for pruned/compacted pos
