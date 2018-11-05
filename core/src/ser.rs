@@ -23,6 +23,7 @@ use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use consensus;
 use core::hash::{Hash, Hashed};
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
+use std::fmt::Debug;
 use std::io::{self, Read, Write};
 use std::{cmp, error, fmt, mem};
 use util::secp::constants::{
@@ -371,11 +372,11 @@ impl Readable for RangeProof {
 	}
 }
 
-impl PMMRable for RangeProof {
-	fn len() -> usize {
-		MAX_PROOF_SIZE + 8
-	}
+impl FixedLength for RangeProof {
+	const LEN: usize = MAX_PROOF_SIZE + 8;
 }
+
+impl PMMRable for RangeProof {}
 
 impl Readable for Signature {
 	fn read(reader: &mut Reader) -> Result<Signature, Error> {
@@ -535,11 +536,17 @@ impl Writeable for [u8; 4] {
 	}
 }
 
-/// Trait for types that can serialize and report their size
-pub trait PMMRable: Readable + Writeable + Clone {
-	/// Length in bytes
-	fn len() -> usize;
+/// Trait for types that serialize to a known fixed length.
+pub trait FixedLength {
+	/// The length in bytes
+	const LEN: usize;
 }
+
+/// Trait for types that can be added to a "hash only" PMMR (block headers for example).
+pub trait HashOnlyPMMRable: Writeable + Clone + Debug {}
+
+/// Trait for types that can be added to a PMMR.
+pub trait PMMRable: FixedLength + Readable + Writeable + Clone + Debug {}
 
 /// Generic trait to ensure PMMR elements can be hashed with an index
 pub trait PMMRIndexHashable {
@@ -547,16 +554,9 @@ pub trait PMMRIndexHashable {
 	fn hash_with_index(&self, index: u64) -> Hash;
 }
 
-impl<T: PMMRable> PMMRIndexHashable for T {
+impl<T: Writeable> PMMRIndexHashable for T {
 	fn hash_with_index(&self, index: u64) -> Hash {
 		(index, self).hash()
-	}
-}
-
-// Convenient way to hash two existing hashes together with an index.
-impl PMMRIndexHashable for (Hash, Hash) {
-	fn hash_with_index(&self, index: u64) -> Hash {
-		(index, &self.0, &self.1).hash()
 	}
 }
 

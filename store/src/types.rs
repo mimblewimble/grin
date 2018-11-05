@@ -26,7 +26,7 @@ use libc::{ftruncate as ftruncate64, off_t as off64_t};
 use libc::{ftruncate64, off64_t};
 
 use core::core::hash::Hash;
-use core::ser;
+use core::ser::{self, FixedLength};
 
 /// A no-op function for doing nothing with some pruned data.
 pub fn prune_noop(_pruned_data: &[u8]) {}
@@ -58,8 +58,8 @@ impl HashFile {
 		let pos = position - 1;
 
 		// Must be on disk, doing a read at the correct position
-		let file_offset = (pos as usize) * Hash::SIZE;
-		let data = self.file.read(file_offset, Hash::SIZE);
+		let file_offset = (pos as usize) * Hash::LEN;
+		let data = self.file.read(file_offset, Hash::LEN);
 		match ser::deserialize(&mut &data[..]) {
 			Ok(h) => Some(h),
 			Err(e) => {
@@ -74,7 +74,7 @@ impl HashFile {
 
 	/// Rewind the backend file to the specified position.
 	pub fn rewind(&mut self, position: u64) -> io::Result<()> {
-		self.file.rewind(position * Hash::SIZE as u64);
+		self.file.rewind(position * Hash::LEN as u64);
 		Ok(())
 	}
 
@@ -88,9 +88,27 @@ impl HashFile {
 		self.file.discard()
 	}
 
-	/// Size of the hash file in bytes.
-	pub fn size(&self) -> io::Result<u64> {
-		self.file.size()
+	/// Size of the hash file in number of hashes (not bytes).
+	pub fn size(&self) -> u64 {
+		self.file.size() / Hash::LEN as u64
+	}
+
+	/// Size of the unsync'd hash file, in hashes (not bytes).
+	pub fn size_unsync(&self) -> u64 {
+		self.file.size_unsync() / Hash::LEN as u64
+	}
+
+	/// Rewrite the hash file out to disk, pruning removed hashes.
+	pub fn save_prune<T>(&self, target: String, prune_offs: &[u64], prune_cb: T) -> io::Result<()>
+	where
+		T: Fn(&[u8]),
+	{
+		let prune_offs = prune_offs
+			.iter()
+			.map(|x| x * Hash::LEN as u64)
+			.collect::<Vec<_>>();
+		self.file
+			.save_prune(target, prune_offs.as_slice(), Hash::LEN as u64, prune_cb)
 	}
 }
 
@@ -127,12 +145,11 @@ impl AppendOnlyFile {
 			buffer: vec![],
 			buffer_start_bak: 0,
 		};
-		// if we have a non-empty file then mmap it.
-		if let Ok(sz) = aof.size() {
-			if sz > 0 {
-				aof.buffer_start = sz as usize;
-				aof.mmap = Some(unsafe { memmap::Mmap::map(&aof.file)? });
-			}
+		// If we have a non-empty file then mmap it.
+		let sz = aof.size();
+		if sz > 0 {
+			aof.buffer_start = sz as usize;
+			aof.mmap = Some(unsafe { memmap::Mmap::map(&aof.file)? });
 		}
 		Ok(aof)
 	}
@@ -306,8 +323,8 @@ impl AppendOnlyFile {
 	}
 
 	/// Current size of the file in bytes.
-	pub fn size(&self) -> io::Result<u64> {
-		fs::metadata(&self.path).map(|md| md.len())
+	pub fn size(&self) -> u64 {
+		fs::metadata(&self.path).map(|md| md.len()).unwrap_or(0)
 	}
 
 	/// Current size of the (unsynced) file in bytes.

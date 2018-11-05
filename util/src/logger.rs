@@ -54,6 +54,8 @@ lazy_static! {
 	static ref LOGGING_CONFIG: Mutex<LoggingConfig> = Mutex::new(LoggingConfig::default());
 }
 
+const LOGGING_PATTERN: &str = "{d(%Y%m%d %H:%M:%S%.3f)} {h({l})} {M} - {m}{n}";
+
 /// This filter is rejecting messages that doesn't start with "grin"
 /// in order to save log space for only Grin-related records
 #[derive(Debug)]
@@ -97,7 +99,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 
 		// Start logger
 		let stdout = ConsoleAppender::builder()
-			.encoder(Box::new(PatternEncoder::default()))
+			.encoder(Box::new(PatternEncoder::new(&LOGGING_PATTERN)))
 			.build();
 
 		let mut root = Root::builder();
@@ -132,7 +134,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 					Box::new(
 						RollingFileAppender::builder()
 							.append(c.log_file_append)
-							.encoder(Box::new(PatternEncoder::new("{d} {l} {M} - {m}{n}")))
+							.encoder(Box::new(PatternEncoder::new(&LOGGING_PATTERN)))
 							.build(c.log_file_path, Box::new(policy))
 							.unwrap(),
 					)
@@ -140,7 +142,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 					Box::new(
 						FileAppender::builder()
 							.append(c.log_file_append)
-							.encoder(Box::new(PatternEncoder::new("{d} {l} {M} - {m}{n}")))
+							.encoder(Box::new(PatternEncoder::new(&LOGGING_PATTERN)))
 							.build(c.log_file_path)
 							.unwrap(),
 					)
@@ -185,8 +187,47 @@ pub fn init_test_logger() {
 	let mut logger = LoggingConfig::default();
 	logger.log_to_file = false;
 	logger.stdout_log_level = LogLevel::Debug;
+
+	// Save current logging configuration
 	let mut config_ref = LOGGING_CONFIG.lock();
 	*config_ref = logger;
+
+	let level_stdout = convert_log_level(&config_ref.stdout_log_level);
+	let level_minimum = level_stdout; // minimum logging level for Root logger
+
+	// Start logger
+	let stdout = ConsoleAppender::builder()
+		.encoder(Box::new(PatternEncoder::default()))
+		.build();
+
+	let mut root = Root::builder();
+
+	let mut appenders = vec![];
+
+	{
+		let filter = Box::new(ThresholdFilter::new(level_stdout));
+		appenders.push(
+			Appender::builder()
+				.filter(filter)
+				.filter(Box::new(GrinFilter))
+				.build("stdout", Box::new(stdout)),
+		);
+
+		root = root.appender("stdout");
+	}
+
+	let config = Config::builder()
+		.appenders(appenders)
+		.build(root.build(level_minimum))
+		.unwrap();
+
+	let _ = log4rs::init_config(config).unwrap();
+
+	info!(
+		"log4rs is initialized, stdout level: {:?}, min. level: {:?}",
+		level_stdout, level_minimum
+	);
+
 	*was_init_ref = true;
 }
 

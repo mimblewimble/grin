@@ -241,6 +241,13 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"max_stempool_size".to_string(),
+		"
+#maximum number of transactions allowed in the stempool
+".to_string(),
+	);
+
+	retval.insert(
 		"[server.stratum_mining_config]".to_string(),
 		"
 ################################################
@@ -344,6 +351,12 @@ fn comments() -> HashMap<String, String> {
 		"data_file_dir".to_string(),
 		"
 #where to find wallet files (seed, data, etc)
+".to_string(),
+	);
+	retval.insert(
+		"dark_background_color_scheme".to_string(),
+		"
+#Whether to use the black background color scheme for command line
 ".to_string(),
 	);
 

@@ -20,16 +20,16 @@ use core::core::hash::Hash;
 use core::core::pmmr::{self, Backend};
 use core::core::BlockHeader;
 use core::ser;
-use core::ser::{PMMRable, Readable, Reader, Writeable, Writer};
+use core::ser::{FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TestElem(pub [u32; 4]);
 
-impl PMMRable for TestElem {
-	fn len() -> usize {
-		16
-	}
+impl FixedLength for TestElem {
+	const LEN: usize = 16;
 }
+
+impl PMMRable for TestElem {}
 
 impl Writeable for TestElem {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
@@ -54,10 +54,7 @@ impl Readable for TestElem {
 /// Simple MMR backend implementation based on a Vector. Pruning does not
 /// compact the Vec itself.
 #[derive(Clone, Debug)]
-pub struct VecBackend<T>
-where
-	T: PMMRable,
-{
+pub struct VecBackend<T: PMMRable> {
 	/// Backend elements
 	pub data: Vec<T>,
 	pub hashes: Vec<Hash>,
@@ -65,10 +62,7 @@ where
 	pub remove_list: Vec<u64>,
 }
 
-impl<T> Backend<T> for VecBackend<T>
-where
-	T: PMMRable,
-{
+impl<T: PMMRable> Backend<T> for VecBackend<T> {
 	fn append(&mut self, data: T, hashes: Vec<Hash>) -> Result<(), String> {
 		self.data.push(data);
 		self.hashes.append(&mut hashes.clone());
@@ -125,10 +119,7 @@ where
 	fn dump_stats(&self) {}
 }
 
-impl<T> VecBackend<T>
-where
-	T: PMMRable,
-{
+impl<T: PMMRable> VecBackend<T> {
 	/// Instantiates a new VecBackend<T>
 	pub fn new() -> VecBackend<T> {
 		VecBackend {

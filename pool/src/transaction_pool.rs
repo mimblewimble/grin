@@ -141,7 +141,7 @@ impl TransactionPool {
 		}
 
 		// Do we have the capacity to accept this transaction?
-		self.is_acceptable(&tx)?;
+		self.is_acceptable(&tx, stem)?;
 
 		// Make sure the transaction is valid before anything else.
 		tx.validate(self.verifier_cache.clone())
@@ -215,10 +215,18 @@ impl TransactionPool {
 
 	/// Whether the transaction is acceptable to the pool, given both how
 	/// full the pool is and the transaction weight.
-	fn is_acceptable(&self, tx: &Transaction) -> Result<(), PoolError> {
+	fn is_acceptable(&self, tx: &Transaction, stem: bool) -> Result<(), PoolError> {
 		if self.total_size() > self.config.max_pool_size {
 			// TODO evict old/large transactions instead
 			return Err(PoolError::OverCapacity);
+		}
+
+		// Check that the stempool can accept this transaction
+		if stem {
+			if self.stempool.size() > self.config.max_stempool_size {
+				// TODO evict old/large transactions instead
+				return Err(PoolError::OverCapacity);
+			}
 		}
 
 		// for a basic transaction (1 input, 2 outputs) -

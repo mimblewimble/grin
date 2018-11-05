@@ -168,6 +168,7 @@ pub fn test_setup(
 		PoolConfig {
 			accept_fee_base: 0,
 			max_pool_size: 50,
+			max_stempool_size: 50,
 		},
 		chain.clone(),
 		verifier_cache.clone(),

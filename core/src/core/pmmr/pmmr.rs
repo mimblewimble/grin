@@ -47,7 +47,7 @@ where
 
 impl<'a, T, B> PMMR<'a, T, B>
 where
-	T: PMMRable + ::std::fmt::Debug,
+	T: PMMRable,
 	B: 'a + Backend<T>,
 {
 	/// Build a new prunable Merkle Mountain Range using the provided backend.

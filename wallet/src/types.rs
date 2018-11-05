@@ -51,6 +51,9 @@ pub struct WalletConfig {
 	pub tls_certificate_file: Option<String>,
 	/// TLS ceritificate private key file
 	pub tls_certificate_key: Option<String>,
+	/// Whether to use the black background color scheme for command line
+	/// if enabled, wallet command output color will be suitable for black background terminal
+	pub dark_background_color_scheme: Option<bool>,
 }
 
 impl Default for WalletConfig {
@@ -65,6 +68,7 @@ impl Default for WalletConfig {
 			data_file_dir: ".".to_string(),
 			tls_certificate_file: None,
 			tls_certificate_key: None,
+			dark_background_color_scheme: Some(true),
 		}
 	}
 }
