@@ -59,7 +59,7 @@ pub struct BlockContext<'a> {
 /// Process a block header as part of processing a full block.
 /// We want to make sure the header is valid before we process the full block.
 fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	let head = ctx.batch.header_head()?;
+	let head = ctx.batch.head()?;
 
 	// If we do not have the previous header then treat the block for this header
 	// as an orphan.
