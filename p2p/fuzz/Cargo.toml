@@ -1,0 +1,63 @@
+
+[package]
+name = "grin_p2p-fuzz"
+version = "0.0.1"
+authors = ["Automatically generated"]
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies.grin_p2p]
+path = ".."
+[dependencies.grin_core]
+path = "../../core"
+[dependencies.libfuzzer-sys]
+git = "https://github.com/rust-fuzz/libfuzzer-sys.git"
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "read_msg_header"
+path = "fuzz_targets/read_msg_header.rs"
+[[bin]]
+name = "read_hand"
+path = "fuzz_targets/read_hand.rs"
+[[bin]]
+name = "read_shake"
+path = "fuzz_targets/read_shake.rs"
+[[bin]]
+name = "read_get_peer_addrs"
+path = "fuzz_targets/read_get_peer_addrs.rs"
+[[bin]]
+name = "read_peer_addrs"
+path = "fuzz_targets/read_peer_addrs.rs"
+[[bin]]
+name = "read_peer_error"
+path = "fuzz_targets/read_peer_error.rs"
+[[bin]]
+name = "read_sock_addr"
+path = "fuzz_targets/read_sock_addr.rs"
+[[bin]]
+name = "read_locator"
+path = "fuzz_targets/read_locator.rs"
+[[bin]]
+name = "read_headers"
+path = "fuzz_targets/read_headers.rs"
+[[bin]]
+name = "read_ping"
+path = "fuzz_targets/read_ping.rs"
+[[bin]]
+name = "read_pong"
+path = "fuzz_targets/read_pong.rs"
+[[bin]]
+name = "read_ban_reason"
+path = "fuzz_targets/read_ban_reason.rs"
+[[bin]]
+name = "read_tx_hashset_request"
+path = "fuzz_targets/read_tx_hashset_request.rs"
+[[bin]]
+name = "read_tx_hashset_archive"
+path = "fuzz_targets/read_tx_hashset_archive.rs"
