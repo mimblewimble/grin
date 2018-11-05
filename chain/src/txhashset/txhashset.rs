@@ -1462,7 +1462,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 				let diff_path = subdirectory_path.join(diff);
 				file::delete(diff_path)?;
 				debug!(
-					"check_and_remove_files: unexpected file '{}' removed",
+					"check_and_remove_files: unexpected file '{:?}' removed",
 					diff_path
 				);
 			}
