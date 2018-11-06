@@ -150,19 +150,19 @@ impl Peer {
 	}
 
 	/// Number of bytes sent to the peer
-	pub fn sent_bytes(&self) -> Option<u64> {
+	pub fn last_min_sent_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
 			let sent_bytes = tracker.sent_bytes.read();
-			return Some(*sent_bytes);
+			return Some(sent_bytes.bytes_per_min());
 		}
 		None
 	}
 
 	/// Number of bytes received from the peer
-	pub fn received_bytes(&self) -> Option<u64> {
+	pub fn last_min_received_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
 			let received_bytes = tracker.received_bytes.read();
-			return Some(*received_bytes);
+			return Some(received_bytes.bytes_per_min());
 		}
 		None
 	}
