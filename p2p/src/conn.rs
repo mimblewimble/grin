@@ -252,7 +252,8 @@ fn poll<H>(
 				let maybe_data = retry_send.or_else(|_| send_rx.try_recv());
 				retry_send = Err(());
 				if let Ok(data) = maybe_data {
-					let written = try_break!(error_tx, conn.write_all(&data[..]).map_err(&From::from));
+					let written =
+						try_break!(error_tx, conn.write_all(&data[..]).map_err(&From::from));
 					if written.is_none() {
 						retry_send = Ok(data);
 					}

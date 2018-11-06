@@ -13,7 +13,6 @@
 // limitations under the License.
 
 /// Utility to track the rate of data transfers
-
 use std::time::{Duration, SystemTime};
 
 /// A rate counter tracks the number of transfers, the amount of data
@@ -64,6 +63,8 @@ impl RateCounter {
 // turns out getting the millisecs since epoch in Rust isn't as easy as it
 // could be
 fn millis_since_epoch() -> u64 {
-	let since_epoch = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap_or(Duration::new(0, 0));
+	let since_epoch = SystemTime::now()
+		.duration_since(SystemTime::UNIX_EPOCH)
+		.unwrap_or(Duration::new(0, 0));
 	since_epoch.as_secs() * 1000 + since_epoch.subsec_millis() as u64
 }
