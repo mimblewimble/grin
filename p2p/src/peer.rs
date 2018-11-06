@@ -14,7 +14,7 @@
 
 use std::fs::File;
 use std::net::{SocketAddr, TcpStream};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use util::RwLock;
 
 use chrono::prelude::{DateTime, Utc};
@@ -49,7 +49,7 @@ pub struct Peer {
 	state: Arc<RwLock<State>>,
 	// set of all hashes known to this peer (so no need to send)
 	tracking_adapter: TrackingAdapter,
-	connection: Option<conn::Tracker>,
+	connection: Option<Mutex<conn::Tracker>>,
 }
 
 impl Peer {
@@ -92,7 +92,7 @@ impl Peer {
 		let addr = self.info.addr;
 		let adapter = Arc::new(self.tracking_adapter.clone());
 		let handler = Protocol::new(adapter, addr);
-		self.connection = Some(conn::listen(conn, handler));
+		self.connection = Some(Mutex::new(conn::listen(conn, handler)));
 	}
 
 	pub fn is_denied(config: &P2PConfig, peer_addr: &SocketAddr) -> bool {
@@ -152,7 +152,8 @@ impl Peer {
 	/// Number of bytes sent to the peer
 	pub fn sent_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
-			let sent_bytes = tracker.sent_bytes.read();
+			let conn = tracker.lock().unwrap();
+			let sent_bytes = conn.sent_bytes.read();
 			return Some(*sent_bytes);
 		}
 		None
@@ -161,7 +162,8 @@ impl Peer {
 	/// Number of bytes received from the peer
 	pub fn received_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
-			let received_bytes = tracker.received_bytes.read();
+			let conn = tracker.lock().unwrap();
+			let received_bytes = conn.received_bytes.read();
 			return Some(*received_bytes);
 		}
 		None
@@ -182,6 +184,8 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
+			.unwrap()
 			.send(ping_msg, msg::Type::Ping)
 	}
 
@@ -191,6 +195,8 @@ impl Peer {
 		match self
 			.connection
 			.as_ref()
+			.unwrap()
+			.lock()
 			.unwrap()
 			.send(ban_reason_msg, msg::Type::BanReason)
 		{
@@ -210,6 +216,8 @@ impl Peer {
 			self.connection
 				.as_ref()
 				.unwrap()
+				.lock()
+				.unwrap()
 				.send(b, msg::Type::Block)?;
 			Ok(true)
 		} else {
@@ -228,6 +236,8 @@ impl Peer {
 			self.connection
 				.as_ref()
 				.unwrap()
+				.lock()
+				.unwrap()
 				.send(b, msg::Type::CompactBlock)?;
 			Ok(true)
 		} else {
@@ -245,6 +255,8 @@ impl Peer {
 			debug!("Send header {} to {}", bh.hash(), self.info.addr);
 			self.connection
 				.as_ref()
+				.unwrap()
+				.lock()
 				.unwrap()
 				.send(bh, msg::Type::Header)?;
 			Ok(true)
@@ -266,6 +278,8 @@ impl Peer {
 			self.connection
 				.as_ref()
 				.unwrap()
+				.lock()
+				.unwrap()
 				.send(tx, msg::Type::Transaction)?;
 			Ok(true)
 		} else {
@@ -286,6 +300,8 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
+			.unwrap()
 			.send(tx, msg::Type::StemTransaction)?;
 		Ok(())
 	}
@@ -294,6 +310,8 @@ impl Peer {
 	pub fn send_header_request(&self, locator: Vec<Hash>) -> Result<(), Error> {
 		self.connection
 			.as_ref()
+			.unwrap()
+			.lock()
 			.unwrap()
 			.send(&Locator { hashes: locator }, msg::Type::GetHeaders)
 	}
@@ -304,6 +322,8 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
+			.unwrap()
 			.send(&h, msg::Type::GetBlock)
 	}
 
@@ -313,12 +333,14 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
+			.unwrap()
 			.send(&h, msg::Type::GetCompactBlock)
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
 		debug!("Asking {} for more peers.", self.info.addr);
-		self.connection.as_ref().unwrap().send(
+		self.connection.as_ref().unwrap().lock().unwrap().send(
 			&GetPeerAddrs {
 				capabilities: capab,
 			},
@@ -331,7 +353,7 @@ impl Peer {
 			"Asking {} for txhashset archive at {} {}.",
 			self.info.addr, height, hash
 		);
-		self.connection.as_ref().unwrap().send(
+		self.connection.as_ref().unwrap().lock().unwrap().send(
 			&TxHashSetRequest { hash, height },
 			msg::Type::TxHashSetRequest,
 		)
@@ -339,11 +361,26 @@ impl Peer {
 
 	/// Stops the peer, closing its connection
 	pub fn stop(&self) {
-		let _ = self.connection.as_ref().unwrap().close_channel.send(());
+		let _ = self
+			.connection
+			.as_ref()
+			.unwrap()
+			.lock()
+			.unwrap()
+			.close_channel
+			.send(());
 	}
 
 	fn check_connection(&self) -> bool {
-		match self.connection.as_ref().unwrap().error_channel.try_recv() {
+		match self
+			.connection
+			.as_ref()
+			.unwrap()
+			.lock()
+			.unwrap()
+			.error_channel
+			.try_recv()
+		{
 			Ok(Error::Serialization(e)) => {
 				let need_stop = {
 					let mut state = self.state.write();
