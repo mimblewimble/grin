@@ -110,11 +110,11 @@ fn self_send_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		assert_eq!(wallet1_info.total, bh * reward);
 		// send to send
 		let slate = api.issue_self_tx(
-			reward * 2,    // amount
-			2,         // minimum confirmations
-			500,       // max outputs
-			1,         // num change outputs
-			true,      // select all outputs
+			reward * 2, // amount
+			2,          // minimum confirmations
+			500,        // max outputs
+			1,          // num change outputs
+			true,       // select all outputs
 			"mining",
 			"listener",
 		)?;
@@ -147,7 +147,6 @@ fn self_send_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		assert_eq!(wallet1_info.total, 2 * reward);
 		Ok(())
 	})?;
-
 
 	// let logging finish
 	thread::sleep(Duration::from_millis(200));

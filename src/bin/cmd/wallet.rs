@@ -272,12 +272,15 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						""
 					} else {
 						send_args.value_of("dest").ok_or_else(|| {
-							ErrorKind::GenericError("Destination wallet address required".to_string())
+							ErrorKind::GenericError(
+								"Destination wallet address required".to_string(),
+							)
 						})?
 					}
 				};
 				if dest.contains("0.0.0.0") || dest.contains("127.0.0.1") {
-					let msg = "Sending network transactions to self discouraged. Use '-m=self' instead";
+					let msg =
+						"Sending network transactions to self discouraged. Use '-m=self' instead";
 					error!("{}", msg);
 					return Err(ErrorKind::GenericError(msg.to_string()).into());
 				}
@@ -395,7 +398,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 							Err(e)
 						}
 					}
-					
 				} else if method == "file" {
 					api.send_tx(
 						true,

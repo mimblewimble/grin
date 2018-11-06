@@ -553,8 +553,12 @@ where
 		let parent_key_id = wallet.parent_key_id();
 
 		// create an output using the amount in the slate
-		let (_, mut context, receiver_create_fn) =
-			selection::build_recipient_output_with_slate(&mut **wallet, &mut slate, parent_key_id, false)?;
+		let (_, mut context, receiver_create_fn) = selection::build_recipient_output_with_slate(
+			&mut **wallet,
+			&mut slate,
+			parent_key_id,
+			false,
+		)?;
 
 		// fill public keys
 		let _ = slate.fill_round_1(
