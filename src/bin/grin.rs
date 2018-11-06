@@ -235,7 +235,7 @@ fn real_main() -> i32 {
 				.help("Method for sending this transaction.")
 				.short("m")
 				.long("method")
-				.possible_values(&["http", "file"])
+				.possible_values(&["http", "file", "self"])
 				.default_value("http")
 				.takes_value(true))
 			.arg(Arg::with_name("dest")

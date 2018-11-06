@@ -267,9 +267,20 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				let method = send_args.value_of("method").ok_or_else(|| {
 					ErrorKind::GenericError("Payment method required".to_string())
 				})?;
-				let dest = send_args.value_of("dest").ok_or_else(|| {
-					ErrorKind::GenericError("Destination wallet address required".to_string())
-				})?;
+				let dest = {
+					if method == "self" {
+						""
+					} else {
+						send_args.value_of("dest").ok_or_else(|| {
+							ErrorKind::GenericError("Destination wallet address required".to_string())
+						})?
+					}
+				};
+				if dest.contains("0.0.0.0") || dest.contains("127.0.0.1") {
+					let msg = "Sending network transactions to self discouraged. Use '-m=self' instead";
+					error!("{}", msg);
+					return Err(ErrorKind::GenericError(msg.to_string()).into());
+				}
 				let change_outputs = send_args
 					.value_of("change_outputs")
 					.ok_or_else(|| ErrorKind::GenericError("Change outputs required".to_string()))
@@ -335,6 +346,56 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 							dest
 						)).into());
 					}
+				} else if method == "self" {
+					let src_acct = "default";
+					let dest_acct = "default";
+					let result = api.issue_self_tx(
+						amount,
+						minimum_confirmations,
+						max_outputs,
+						change_outputs,
+						selection_strategy == "all",
+						src_acct,
+						dest_acct,
+					);
+					let slate = match result {
+						Ok(s) => {
+							info!(
+								"Tx created: {} grin to self, source acct: {} dest_acct: {} (strategy '{}')",
+								core::amount_to_hr_string(amount, false),
+								src_acct,
+								dest_acct,
+								selection_strategy,
+							);
+							s
+						}
+						Err(e) => {
+							error!("Tx not created: {}", e);
+							match e.kind() {
+								// user errors, don't backtrace
+								libwallet::ErrorKind::NotEnoughFunds { .. } => {}
+								libwallet::ErrorKind::FeeDispute { .. } => {}
+								libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
+								_ => {
+									// otherwise give full dump
+									error!("Backtrace: {}", e.backtrace().unwrap());
+								}
+							};
+							return Err(e);
+						}
+					};
+					let result = api.post_tx(&slate, fluff);
+					match result {
+						Ok(_) => {
+							info!("Tx sent",);
+							Ok(())
+						}
+						Err(e) => {
+							error!("Tx not sent: {}", e);
+							Err(e)
+						}
+					}
+					
 				} else if method == "file" {
 					api.send_tx(
 						true,
