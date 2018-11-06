@@ -397,7 +397,6 @@ fn simulate_fast_sync() {
 /// 	check server A can sync without txhashset download.
 /// 	check server B can sync but need txhashset download.
 ///
-#[ignore]
 #[test]
 fn simulate_long_fork() {
 	util::init_test_logger();
@@ -409,10 +408,30 @@ fn simulate_long_fork() {
 	let test_name_dir = "grin-long-fork";
 	framework::clean_all_output(test_name_dir);
 
+	long_fork_test_preparation();
+	thread::sleep(time::Duration::from_millis(5 * 1_000));
+
+	long_fork_test_case_1();
+	thread::sleep(time::Duration::from_millis(5 * 1_000));
+
+	long_fork_test_case_2();
+	thread::sleep(time::Duration::from_millis(5 * 1_000));
+
 	// ------------------------------- //
-	// ------     preparation   ------ //
+	// ------    test case 3    ------ //
 	// ------------------------------- //
 
+	// TODO:
+	// Mine cut_through_horizon-1 blocks on s4
+	// Connect s4 to all other servers (s0,s1,s2,s3)
+	// Check server s0 can sync without txhashset download.
+	// Check server s1 can sync but need txhashset download.
+
+	// wait servers fully stop before start next automated test
+	thread::sleep(time::Duration::from_millis(1_000));
+}
+
+fn long_fork_test_preparation() {
 	println!("preparation: mine 80 blocks");
 
 	let mut s: Vec<servers::Server> = vec![];
@@ -422,6 +441,7 @@ fn simulate_long_fork() {
 	conf.archive_mode = Some(false);
 	conf.api_secret_path = None;
 	let s0 = servers::Server::new(conf).unwrap();
+	thread::sleep(time::Duration::from_millis(1_000));
 	s.push(s0);
 	let stop = Arc::new(AtomicBool::new(false));
 	s[0].start_test_miner(None, stop.clone());
@@ -450,6 +470,7 @@ fn simulate_long_fork() {
 		let si = servers::Server::new(conf).unwrap();
 		s.push(si);
 	}
+	thread::sleep(time::Duration::from_millis(1_000));
 
 	// Wait for s[1..4] to sync up to and including the header from s0.
 	let mut total_wait = 0;
@@ -495,303 +516,162 @@ fn simulate_long_fork() {
 		}
 	}
 
-	// Disconnect s2,s3,s4 from others
-	for i in 2..5 {
-		for j in 0..5 {
-			ban_peer(
-				&"127.0.0.1".to_owned(),
-				22100 + i,
-				&format!("127.0.0.1:{}", s[j].p2p.config.port),
-			);
-		}
-	}
+	// Clean up
 	for i in 0..5 {
-		for j in 2..5 {
-			ban_peer(
-				&"127.0.0.1".to_owned(),
-				22100 + i,
-				&format!("127.0.0.1:{}", s[j].p2p.config.port),
-			);
-		}
+		s[i].stop();
 	}
+}
 
-	// ------------------------------- //
-	// ------    test case 1    ------ //
-	// ------------------------------- //
+fn long_fork_test_mining(blocks: u64, node: u16) {
+	// Start server s[n]
+	println!("s{} starting...", node);
+	let mut conf = config(2100 + node, "grin-long-fork", 2100);
+	conf.archive_mode = Some(false);
+	conf.api_secret_path = None;
+	let sn = servers::Server::new(conf).unwrap();
+	thread::sleep(time::Duration::from_millis(1_000));
+	println!("s{} started.", node);
 
-	println!("test case 1 start");
+	// Get the current header from node.
+	let sn_header = sn.chain.head().unwrap();
 
 	// Mine state_sync_threshold-7 blocks on s0
 	let stop = Arc::new(AtomicBool::new(false));
-	s[0].start_test_miner(None, stop.clone());
+	sn.start_test_miner(None, stop.clone());
 
-	while s[0].head().height < s0_header.height + global::state_sync_threshold() as u64 - 7 {
+	while sn.head().height < sn_header.height + blocks {
 		thread::sleep(time::Duration::from_millis(1));
 	}
-	s[0].stop_test_miner(stop);
+	sn.stop_test_miner(stop);
 	thread::sleep(time::Duration::from_millis(1_000));
 	println!(
-		"test case 1: state_sync_threshold-7 blocks mined on s0. s2.height: {}, s0.height: {}",
-		s[2].head().height,
-		s[0].head().height,
+		"{} blocks mined on s{}. s{}.height: {}",
+		blocks,
+		node,
+		node,
+		sn.head().height,
 	);
 
-	// Get the current header from s0.
-	let s0_header = s[0].chain.head().unwrap();
+	let _ = sn.chain.compact();
 
-	// Check server s1 get all blocks
-	let mut total_wait = 0;
-	while s[1].head().height < s0_header.height {
-		thread::sleep(time::Duration::from_millis(1_000));
-		total_wait += 1;
-		if total_wait >= 60 {
-			println!(
-				"simulate_long_fork (t1) test fail on timeout! s1 height: {}, s0 height: {}",
-				s[1].head().height,
-				s0_header.height,
-			);
-			exit(1);
-		}
-	}
+	sn.stop();
+}
+
+fn long_fork_test_case_1() {
+	println!("test case 1 start");
+
+	// Mine state_sync_threshold-7 blocks on s0
+	long_fork_test_mining(global::state_sync_threshold() as u64 - 7, 0);
 
 	// Mine state_sync_threshold-1 blocks on s2 (long fork), a fork with more work than s0 chain
-	let s2_header = s[2].chain.head().unwrap();
-	let stop = Arc::new(AtomicBool::new(false));
-	s[2].start_test_miner(None, stop.clone());
+	long_fork_test_mining(global::state_sync_threshold() as u64 - 1, 2);
 
-	while s[2].head().height < s2_header.height + global::state_sync_threshold() as u64 - 1 {
-		thread::sleep(time::Duration::from_millis(1));
-	}
-	s[2].stop_test_miner(stop);
+	println!("test case 1: s0 starting...");
+	let mut conf = config(2100, "grin-long-fork", 2100);
+	conf.archive_mode = Some(false);
+	conf.api_secret_path = None;
+	let s0 = servers::Server::new(conf).unwrap();
 	thread::sleep(time::Duration::from_millis(1_000));
-	let s2_header = s[2].chain.head().unwrap();
+	let s0_header = s0.chain.head().unwrap();
+	let s0_tail = s0.chain.tail().unwrap();
 	println!(
-		"test case 1: state_sync_threshold-1 blocks mined on s2. s2.height: {}, s1.height: {}",
-		s2_header.height,
-		s[1].head().height,
+		"test case 1: s0 started. s0.head().height: {}",
+		s0_header.height
 	);
 
-	for i in 0..5 {
-		s[i].chain.compact();
-	}
+	println!("test case 1: s2 starting...");
+	let mut conf = config(2100 + 2, "grin-long-fork", 2100);
+	conf.archive_mode = Some(false);
+	conf.api_secret_path = None;
+	let s2 = servers::Server::new(conf).unwrap();
+	thread::sleep(time::Duration::from_millis(1_000));
+	let s2_header = s2.chain.head().unwrap();
+	println!(
+		"test case 1: s2 started. s2.head().height: {}",
+		s2_header.height
+	);
 
-	let s1_tail = s[1].chain.tail().unwrap();
-
-	// Connect s2 to server s0 and s1
-	for j in 0..2 {
-		unban_peer(
-			&"127.0.0.1".to_owned(),
-			22100 + 2,
-			&format!("127.0.0.1:{}", s[j].p2p.config.port),
-		);
-	}
-	for i in 0..2 {
-		unban_peer(
-			&"127.0.0.1".to_owned(),
-			22100 + i,
-			&format!("127.0.0.1:{}", 12102),
-		);
-	}
-
-	// Check server s1 can sync without txhashset download.
-	while s[1].head().height < s2_header.height {
+	// Check server s0 can sync to s2 without txhashset download.
+	let mut total_wait = 0;
+	while s0.head().height < s2_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		total_wait += 1;
 		if total_wait >= 60 {
 			println!(
 				"simulate_long_fork (t1) test fail on timeout! s1 height: {}, s2 height: {}",
-				s[1].head().height,
+				s0.head().height,
 				s2_header.height,
 			);
 			exit(1);
 		}
 	}
-	let s1_tail_new = s[1].chain.tail().unwrap();
-	assert_eq!(s1_tail_new.height, s1_tail.height);
+	let s0_tail_new = s0.chain.tail().unwrap();
+	assert_eq!(s0_tail_new.height, s0_tail.height);
 	println!(
-		"s[1].head().height: {}, s2_header.height: {}",
-		s[1].head().height,
+		"s0.head().height: {}, s2_header.height: {}",
+		s0.head().height,
 		s2_header.height,
 	);
-	assert_eq!(s[1].head().last_block_h, s2_header.last_block_h);
+	assert_eq!(s0.head().last_block_h, s2_header.last_block_h);
 
-	// ------------------------------- //
-	// ------    test case 2    ------ //
-	// ------------------------------- //
+	s0.stop();
+	s2.stop();
+}
 
-	println!(
-		"test case 2 start. s[0].head().height: {}, s[2].head().height: {}",
-		s[0].head().height,
-		s[2].head().height,
-	);
+fn long_fork_test_case_2() {
+	println!("test case 2 start");
 
-	while s[0].head().height < s2_header.height {
-		thread::sleep(time::Duration::from_millis(1_000));
-		total_wait += 1;
-		if total_wait >= 60 {
-			println!(
-				"simulate_long_fork (t2) test fail on timeout! s0 height: {}, s2 height: {}",
-				s[0].head().height,
-				s2_header.height,
-			);
-			exit(1);
-		}
-	}
-	let s0_header = s[0].chain.head().unwrap();
-
-	// Disconnect s3 from server s0, s1 and s2
-	for j in 0..3 {
-		ban_peer(
-			&"127.0.0.1".to_owned(),
-			22100 + 3,
-			&format!("127.0.0.1:{}", s[j].p2p.config.port),
-		);
-	}
-	for i in 0..3 {
-		ban_peer(
-			&"127.0.0.1".to_owned(),
-			22100 + i,
-			&format!("127.0.0.1:{}", 12103),
-		);
-	}
-
-	// Mine 30 blocks on s0, check server s1 and s2 get all blocks.
-	let stop = Arc::new(AtomicBool::new(false));
-	s[0].start_test_miner(None, stop.clone());
-
-	while s[0].head().height < s0_header.height + 30 {
-		thread::sleep(time::Duration::from_millis(1));
-	}
-	s[0].stop_test_miner(stop);
-	thread::sleep(time::Duration::from_millis(1_000));
-	println!(
-		"test case 2: 30 blocks mined on s0. s3.height: {}, s0.height: {}",
-		s[3].head().height,
-		s[0].head().height,
-	);
+	// Mine 30 blocks on s0
+	long_fork_test_mining(30, 0);
 
 	// Mine cut_through_horizon-1 blocks on s3 (longer fork)
-	let stop = Arc::new(AtomicBool::new(false));
-	let s3_header = s[3].chain.head().unwrap();
-	s[3].start_test_miner(None, stop.clone());
+	long_fork_test_mining(global::cut_through_horizon() as u64 - 1, 3);
 
-	while s[3].head().height < s3_header.height + global::cut_through_horizon() as u64 - 1 {
-		thread::sleep(time::Duration::from_millis(1));
-	}
-	s[3].stop_test_miner(stop);
+	println!("test case 2: s0 starting...");
+	let mut conf = config(2100, "grin-long-fork", 2100);
+	conf.archive_mode = Some(false);
+	conf.api_secret_path = None;
+	let s0 = servers::Server::new(conf).unwrap();
 	thread::sleep(time::Duration::from_millis(1_000));
-	let s3_header = s[3].chain.head().unwrap();
+	let s0_header = s0.chain.head().unwrap();
+	let s0_tail = s0.chain.tail().unwrap();
 	println!(
-		"test case 2: cut_through_horizon-1 blocks mined on s3. s3.height: {}, s1.height: {}",
-		s3_header.height,
-		s[1].head().height,
+		"test case 2: s0 started. s0.head().height: {}",
+		s0_header.height
 	);
 
-	for i in 0..5 {
-		s[i].chain.compact();
-	}
-	let s1_tail = s[1].chain.tail().unwrap();
+	println!("test case 2: s3 starting...");
+	let mut conf = config(2100 + 3, "grin-long-fork", 2100);
+	conf.archive_mode = Some(false);
+	conf.api_secret_path = None;
+	let s3 = servers::Server::new(conf).unwrap();
+	thread::sleep(time::Duration::from_millis(1_000));
+	let s3_header = s3.chain.head().unwrap();
+	println!(
+		"test case 2: s3 started. s3.head().height: {}",
+		s3_header.height
+	);
 
-	// Connect s3 to servers s0, s1 and s2
-	for j in 0..3 {
-		unban_peer(
-			&"127.0.0.1".to_owned(),
-			22100 + 3,
-			&format!("127.0.0.1:{}", s[j].p2p.config.port),
-		);
-	}
-	for i in 0..3 {
-		unban_peer(
-			&"127.0.0.1".to_owned(),
-			22100 + i,
-			&format!("127.0.0.1:{}", 12103),
-		);
-	}
-
-	// Check server s1 can sync without txhashset download.
-	while s[1].head().height < s3_header.height {
+	// Check server s0 can sync to s3 without txhashset download.
+	let mut total_wait = 0;
+	while s0.head().height < s3_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		total_wait += 1;
 		if total_wait >= 120 {
 			println!(
-				"simulate_long_fork (t2) test fail on timeout! s1 height: {}, s3 height: {}",
-				s[1].head().height,
+				"simulate_long_fork (t2) test fail on timeout! s0 height: {}, s3 height: {}",
+				s0.head().height,
 				s3_header.height,
 			);
 			exit(1);
 		}
 	}
-	let s1_tail_new = s[1].chain.tail().unwrap();
-	assert_eq!(s1_tail_new.height, s1_tail.height);
-	assert_eq!(s[1].head().hash(), s3_header.hash());
+	let s0_tail_new = s0.chain.tail().unwrap();
+	assert_eq!(s0_tail_new.height, s0_tail.height);
+	assert_eq!(s0.head().hash(), s3_header.hash());
 
-	// ------------------------------- //
-	// ------    test case 3    ------ //
-	// ------------------------------- //
-
-	println!(
-		"test case 3 start. s[0].head().height: {}",
-		s[0].head().height
-	);
-
-	// TODO:
-	// Mine cut_through_horizon-1 blocks on s4
-	// Connect s4 to all other servers (s0,s1,s2,s3)
-	// Check server s0 can sync without txhashset download.
-	// Check server s1 can sync but need txhashset download.
-
-	// ------------------------------- //
-	// ------      clean up     ------ //
-	// ------------------------------- //
-	for i in 0..5 {
-		s[i].stop();
-	}
-
-	// wait servers fully stop before start next automated test
-	thread::sleep(time::Duration::from_millis(1_000));
-}
-
-#[ignore]
-#[test]
-fn simulate_fast_sync_double() {
-	util::init_test_logger();
-
-	// we actually set the chain_type in the ServerConfig below
-	global::set_mining_mode(ChainTypes::AutomatedTesting);
-
-	framework::clean_all_output("grin-double-fast1");
-	framework::clean_all_output("grin-double-fast2");
-
-	let s1 = servers::Server::new(framework::config(3000, "grin-double-fast1", 3000)).unwrap();
-	// mine a few blocks on server 1
-	s1.start_test_miner(None, s1.stop.clone());
-	thread::sleep(time::Duration::from_secs(8));
-
-	{
-		let mut conf = config(3001, "grin-double-fast2", 3000);
-		conf.archive_mode = Some(false);
-		let s2 = servers::Server::new(conf).unwrap();
-		while s2.head().height != s2.header_head().height || s2.head().height < 20 {
-			thread::sleep(time::Duration::from_millis(1000));
-		}
-		s2.stop();
-	}
-	// locks files don't seem to be cleaned properly until process exit
-	std::fs::remove_file("target/tmp/grin-double-fast2/grin-sync-1001/chain/LOCK").unwrap();
-	std::fs::remove_file("target/tmp/grin-double-fast2/grin-sync-1001/peers/LOCK").unwrap();
-	thread::sleep(time::Duration::from_secs(20));
-
-	let mut conf = config(3001, "grin-double-fast2", 3000);
-	conf.archive_mode = Some(false);
-	let s2 = servers::Server::new(conf).unwrap();
-	while s2.head().height != s2.header_head().height || s2.head().height < 50 {
-		thread::sleep(time::Duration::from_millis(1000));
-	}
-	s1.stop();
-	s2.stop();
-
-	// wait servers fully stop before start next automated test
-	thread::sleep(time::Duration::from_millis(1_000));
+	s0.stop();
+	s3.stop();
 }
 
 pub fn create_wallet(
