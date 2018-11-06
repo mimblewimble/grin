@@ -156,9 +156,6 @@ pub struct Chain {
 	genesis: BlockHeader,
 }
 
-unsafe impl Sync for Chain {}
-unsafe impl Send for Chain {}
-
 impl Chain {
 	/// Initializes the blockchain and returns a new Chain instance. Does a
 	/// check on the current chain head to make sure it exists and creates one
@@ -910,7 +907,8 @@ impl Chain {
 		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
 			return Err(ErrorKind::TxHashSetErr(String::from(
 				"Output and rangeproof sets don't match",
-			)).into());
+			))
+			.into());
 		}
 		let mut output_vec: Vec<Output> = vec![];
 		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
