@@ -30,6 +30,7 @@ use types::{
 };
 
 const MAX_TRACK_SIZE: usize = 30;
+const MAX_PEER_MSG_PER_MIN = 300;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Remind: don't mix up this 'State' with that 'State' in p2p/src/store.rs,
@@ -146,6 +147,17 @@ impl Peer {
 			(true, peer_live_info.total_difficulty)
 		} else {
 			(false, peer_live_info.total_difficulty)
+		}
+	}
+
+	/// Whether the peer is considered abusive, mostly for spammy nodes
+	pub fn is_abusive(&self) -> bool {
+		if let Some(ref conn) = self.connection {
+			let rec = conn.received_bytes.read();
+			let sent = conn.sent_bytes.read();
+			rec.count_per_min() > MAX_PEER_MSG_PER_MIN || sent.count_per_min() > MAX_PEER_MSG_PER_MIN
+		} else {
+			false
 		}
 	}
 
