@@ -14,8 +14,8 @@
 
 use std::fs::File;
 use std::net::{SocketAddr, TcpStream};
-use std::sync::{Arc, Mutex};
-use util::RwLock;
+use std::sync::Arc;
+use util::{Mutex, RwLock};
 
 use chrono::prelude::{DateTime, Utc};
 use conn;
@@ -152,7 +152,7 @@ impl Peer {
 	/// Number of bytes sent to the peer
 	pub fn sent_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
-			let conn = tracker.lock().unwrap();
+			let conn = tracker.lock();
 			let sent_bytes = conn.sent_bytes.read();
 			return Some(*sent_bytes);
 		}
@@ -162,7 +162,7 @@ impl Peer {
 	/// Number of bytes received from the peer
 	pub fn received_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
-			let conn = tracker.lock().unwrap();
+			let conn = tracker.lock();
 			let received_bytes = conn.received_bytes.read();
 			return Some(*received_bytes);
 		}
@@ -185,7 +185,6 @@ impl Peer {
 			.as_ref()
 			.unwrap()
 			.lock()
-			.unwrap()
 			.send(ping_msg, msg::Type::Ping)
 	}
 
@@ -197,7 +196,6 @@ impl Peer {
 			.as_ref()
 			.unwrap()
 			.lock()
-			.unwrap()
 			.send(ban_reason_msg, msg::Type::BanReason)
 		{
 			Ok(_) => debug!("Sent ban reason {:?} to {}", ban_reason, self.info.addr),
@@ -217,7 +215,6 @@ impl Peer {
 				.as_ref()
 				.unwrap()
 				.lock()
-				.unwrap()
 				.send(b, msg::Type::Block)?;
 			Ok(true)
 		} else {
@@ -237,7 +234,6 @@ impl Peer {
 				.as_ref()
 				.unwrap()
 				.lock()
-				.unwrap()
 				.send(b, msg::Type::CompactBlock)?;
 			Ok(true)
 		} else {
@@ -257,7 +253,6 @@ impl Peer {
 				.as_ref()
 				.unwrap()
 				.lock()
-				.unwrap()
 				.send(bh, msg::Type::Header)?;
 			Ok(true)
 		} else {
@@ -279,7 +274,6 @@ impl Peer {
 				.as_ref()
 				.unwrap()
 				.lock()
-				.unwrap()
 				.send(tx, msg::Type::Transaction)?;
 			Ok(true)
 		} else {
@@ -301,7 +295,6 @@ impl Peer {
 			.as_ref()
 			.unwrap()
 			.lock()
-			.unwrap()
 			.send(tx, msg::Type::StemTransaction)?;
 		Ok(())
 	}
@@ -312,7 +305,6 @@ impl Peer {
 			.as_ref()
 			.unwrap()
 			.lock()
-			.unwrap()
 			.send(&Locator { hashes: locator }, msg::Type::GetHeaders)
 	}
 
@@ -323,7 +315,6 @@ impl Peer {
 			.as_ref()
 			.unwrap()
 			.lock()
-			.unwrap()
 			.send(&h, msg::Type::GetBlock)
 	}
 
@@ -334,13 +325,12 @@ impl Peer {
 			.as_ref()
 			.unwrap()
 			.lock()
-			.unwrap()
 			.send(&h, msg::Type::GetCompactBlock)
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
 		debug!("Asking {} for more peers.", self.info.addr);
-		self.connection.as_ref().unwrap().lock().unwrap().send(
+		self.connection.as_ref().unwrap().lock().send(
 			&GetPeerAddrs {
 				capabilities: capab,
 			},
@@ -353,7 +343,7 @@ impl Peer {
 			"Asking {} for txhashset archive at {} {}.",
 			self.info.addr, height, hash
 		);
-		self.connection.as_ref().unwrap().lock().unwrap().send(
+		self.connection.as_ref().unwrap().lock().send(
 			&TxHashSetRequest { hash, height },
 			msg::Type::TxHashSetRequest,
 		)
@@ -366,7 +356,6 @@ impl Peer {
 			.as_ref()
 			.unwrap()
 			.lock()
-			.unwrap()
 			.close_channel
 			.send(());
 	}
@@ -377,7 +366,6 @@ impl Peer {
 			.as_ref()
 			.unwrap()
 			.lock()
-			.unwrap()
 			.error_channel
 			.try_recv()
 		{
