@@ -155,7 +155,8 @@ impl Peer {
 		if let Some(ref conn) = self.connection {
 			let rec = conn.received_bytes.read();
 			let sent = conn.sent_bytes.read();
-			rec.count_per_min() > MAX_PEER_MSG_PER_MIN || sent.count_per_min() > MAX_PEER_MSG_PER_MIN
+			rec.count_per_min() > MAX_PEER_MSG_PER_MIN
+				|| sent.count_per_min() > MAX_PEER_MSG_PER_MIN
 		} else {
 			false
 		}
