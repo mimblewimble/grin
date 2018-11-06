@@ -16,7 +16,6 @@
 //! that exist and are not currently pruned in the MMR.
 
 use std::path::Path;
-use std::sync::Mutex;
 
 use croaring::Bitmap;
 

@@ -13,7 +13,6 @@
 
 //! Implementation of the persistent Backend for the prunable MMR tree.
 
-use std::sync::Mutex;
 use std::{fs, io, marker};
 
 use croaring::Bitmap;
@@ -25,6 +24,7 @@ use core::ser::{self, PMMRable};
 use leaf_set::LeafSet;
 use prune_list::PruneList;
 use types::{prune_noop, AppendOnlyFile, HashFile};
+use util::RwLock;
 
 const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &str = "pmmr_data.bin";
@@ -55,7 +55,7 @@ pub struct PMMRBackend<T: PMMRable> {
 	prunable: bool,
 	hash_file: HashFile,
 	data_file: AppendOnlyFile,
-	data: Mutex<FragileData>,
+	data: RwLock<FragileData>,
 	_marker: marker::PhantomData<T>,
 }
 
@@ -63,6 +63,14 @@ struct FragileData {
 	leaf_set: LeafSet,
 	prune_list: PruneList,
 }
+// FragileData contains multiple Bitmaps inside. "CRoaring library has no built-in thread support. Thus
+// whenever you modify a bitmap in one thread, it is unsafe to query it in others. It is safe however
+// to query bitmaps (without modifying them) from several distinct threads, as long as you do not use
+// the copy-on-write attribute." So it's sase to use it under RwLock. The only place when we use
+// FragileData is PMMRBackend, guarded by RwLock. To miminimize amount of unsafe code Sync and Send
+// are implemented for FragileData
+unsafe impl Sync for FragileData {}
+unsafe impl Send for FragileData {}
 
 impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Append the provided data and hashes to the backend storage.
@@ -70,7 +78,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	#[allow(unused_variables)]
 	fn append(&mut self, data: T, hashes: Vec<Hash>) -> Result<(), String> {
 		if self.prunable {
-			let mut data = self.data.lock().unwrap();
+			let mut data = self.data.write();
 			let shift = data.prune_list.get_total_shift();
 			let position = self.hash_file.size_unsync() + shift + 1;
 			data.leaf_set.add(position);
@@ -88,7 +96,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		if self.is_compacted(position) {
 			return None;
 		}
-		let shift = self.data.lock().unwrap().prune_list.get_shift(position);
+		let shift = self.data.read().prune_list.get_shift(position);
 		self.hash_file.read(position - shift)
 	}
 
@@ -96,12 +104,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		if self.is_compacted(position) {
 			return None;
 		}
-		let shift = self
-			.data
-			.lock()
-			.unwrap()
-			.prune_list
-			.get_leaf_shift(position);
+		let shift = self.data.read().prune_list.get_leaf_shift(position);
 		let pos = pmmr::n_leaves(position) - 1;
 
 		// Must be on disk, doing a read at the correct position
@@ -123,8 +126,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Return None if pos is a leaf and it has been removed (or pruned or
 	/// compacted).
 	fn get_hash(&self, pos: u64) -> Option<(Hash)> {
-		if self.prunable && pmmr::is_leaf(pos) && !self.data.lock().unwrap().leaf_set.includes(pos)
-		{
+		if self.prunable && pmmr::is_leaf(pos) && !self.data.read().leaf_set.includes(pos) {
 			return None;
 		}
 		self.get_from_file(pos)
@@ -136,7 +138,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		if !pmmr::is_leaf(pos) {
 			return None;
 		}
-		if self.prunable && !self.data.lock().unwrap().leaf_set.includes(pos) {
+		if self.prunable && !self.data.read().leaf_set.includes(pos) {
 			return None;
 		}
 		self.get_data_from_file(pos)
@@ -145,7 +147,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Rewind the PMMR backend to the given position.
 	fn rewind(&mut self, position: u64, rewind_rm_pos: &Bitmap) -> Result<(), String> {
 		// First rewind the leaf_set with the necessary added and removed positions.
-		let mut data = self.data.lock().unwrap();
+		let mut data = self.data.write();
 		if self.prunable {
 			data.leaf_set.rewind(position, rewind_rm_pos);
 		}
@@ -168,7 +170,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Remove by insertion position.
 	fn remove(&mut self, pos: u64) -> Result<(), String> {
 		assert!(self.prunable, "Remove on non-prunable MMR");
-		self.data.lock().unwrap().leaf_set.remove(pos);
+		self.data.write().leaf_set.remove(pos);
 		Ok(())
 	}
 
@@ -179,8 +181,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 
 	fn snapshot(&self, header: &BlockHeader) -> Result<(), String> {
 		self.data
-			.lock()
-			.unwrap()
+			.write()
 			.leaf_set
 			.snapshot(header)
 			.map_err(|_| format!("Failed to save copy of leaf_set for {}", header.hash()))?;
@@ -188,7 +189,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	}
 
 	fn dump_stats(&self) {
-		let data = self.data.lock().unwrap();
+		let data = self.data.read();
 		debug!(
 			"pmmr backend: unpruned: {}, hashes: {}, data: {}, leaf_set: {}, prune_list: {}",
 			self.unpruned_size(),
@@ -222,7 +223,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 
 		let leaf_set = LeafSet::open(&leaf_set_path)?;
 		let prune_list = PruneList::open(&format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
-		let data = Mutex::new(FragileData {
+		let data = RwLock::new(FragileData {
 			leaf_set,
 			prune_list,
 		});
@@ -238,21 +239,21 @@ impl<T: PMMRable> PMMRBackend<T> {
 	}
 
 	fn is_pruned(&self, pos: u64) -> bool {
-		self.data.lock().unwrap().prune_list.is_pruned(pos)
+		self.data.read().prune_list.is_pruned(pos)
 	}
 
 	fn is_pruned_root(&self, pos: u64) -> bool {
-		self.data.lock().unwrap().prune_list.is_pruned_root(pos)
+		self.data.read().prune_list.is_pruned_root(pos)
 	}
 
 	fn is_compacted(&self, pos: u64) -> bool {
-		self.data.lock().unwrap().prune_list.is_pruned(pos) && !self.is_pruned_root(pos)
+		self.data.read().prune_list.is_pruned(pos) && !self.is_pruned_root(pos)
 	}
 
 	/// Number of elements in the PMMR stored by this backend. Only produces the
 	/// fully sync'd size.
 	pub fn unpruned_size(&self) -> u64 {
-		let total_shift = self.data.lock().unwrap().prune_list.get_total_shift();
+		let total_shift = self.data.read().prune_list.get_total_shift();
 		let sz = self.hash_file.size();
 		sz + total_shift
 	}
@@ -282,7 +283,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		}
 
 		// Flush the leaf_set to disk.
-		self.data.lock().unwrap().leaf_set.flush()?;
+		self.data.write().leaf_set.flush()?;
 
 		Ok(())
 	}
@@ -290,7 +291,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 	/// Discard the current, non synced state of the backend.
 	pub fn discard(&mut self) {
 		self.hash_file.discard();
-		self.data.lock().unwrap().leaf_set.discard();
+		self.data.write().leaf_set.discard();
 		self.data_file.discard();
 	}
 
@@ -321,7 +322,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		P: Fn(&[u8]),
 	{
 		assert!(self.prunable, "Trying to compact a non-prunable PMMR");
-		let mut data = self.data.lock().unwrap();
+		let mut data = self.data.write();
 
 		// Paths for tmp hash and data files.
 		let tmp_prune_file_hash = format!("{}/{}.hashprune", self.data_dir, PMMR_HASH_FILE);
@@ -397,7 +398,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		let mut expanded = Bitmap::create();
 
 		let leaf_pos_to_rm = {
-			let data = self.data.lock().unwrap();
+			let data = self.data.write();
 			data.leaf_set
 				.removed_pre_cutoff(cutoff_pos, rewind_rm_pos, &data.prune_list)
 		};
