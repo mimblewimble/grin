@@ -132,7 +132,9 @@ impl Default for P2PConfig {
 		P2PConfig {
 			host: ipaddr,
 			port: 13414,
-			capabilities: Capabilities::FULL_NODE,
+			capabilities: Capabilities::HEADER_HIST
+				| Capabilities::TXHASHSET_HIST
+				| Capabilities::PEER_LIST,
 			seeding_type: Seeding::default(),
 			seeds: None,
 			peers_allow: None,
