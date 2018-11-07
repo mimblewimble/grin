@@ -15,7 +15,7 @@
 use std::fs::File;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
-use util::RwLock;
+use util::{Mutex, RwLock};
 
 use chrono::prelude::{DateTime, Utc};
 use conn;
@@ -50,7 +50,7 @@ pub struct Peer {
 	state: Arc<RwLock<State>>,
 	// set of all hashes known to this peer (so no need to send)
 	tracking_adapter: TrackingAdapter,
-	connection: Option<conn::Tracker>,
+	connection: Option<Mutex<conn::Tracker>>,
 }
 
 impl Peer {
@@ -93,7 +93,7 @@ impl Peer {
 		let addr = self.info.addr;
 		let adapter = Arc::new(self.tracking_adapter.clone());
 		let handler = Protocol::new(adapter, addr);
-		self.connection = Some(conn::listen(conn, handler));
+		self.connection = Some(Mutex::new(conn::listen(conn, handler)));
 	}
 
 	pub fn is_denied(config: &P2PConfig, peer_addr: &SocketAddr) -> bool {
@@ -153,6 +153,7 @@ impl Peer {
 	/// Whether the peer is considered abusive, mostly for spammy nodes
 	pub fn is_abusive(&self) -> bool {
 		if let Some(ref conn) = self.connection {
+			let conn = conn.lock();
 			let rec = conn.received_bytes.read();
 			let sent = conn.sent_bytes.read();
 			rec.count_per_min() > MAX_PEER_MSG_PER_MIN
@@ -165,7 +166,8 @@ impl Peer {
 	/// Number of bytes sent to the peer
 	pub fn last_min_sent_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
-			let sent_bytes = tracker.sent_bytes.read();
+			let conn = tracker.lock();
+			let sent_bytes = conn.sent_bytes.read();
 			return Some(sent_bytes.bytes_per_min());
 		}
 		None
@@ -174,7 +176,8 @@ impl Peer {
 	/// Number of bytes received from the peer
 	pub fn last_min_received_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
-			let received_bytes = tracker.received_bytes.read();
+			let conn = tracker.lock();
+			let received_bytes = conn.received_bytes.read();
 			return Some(received_bytes.bytes_per_min());
 		}
 		None
@@ -195,6 +198,7 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
 			.send(ping_msg, msg::Type::Ping)
 	}
 
@@ -205,6 +209,7 @@ impl Peer {
 			.connection
 			.as_ref()
 			.unwrap()
+			.lock()
 			.send(ban_reason_msg, msg::Type::BanReason)
 		{
 			Ok(_) => debug!("Sent ban reason {:?} to {}", ban_reason, self.info.addr),
@@ -223,6 +228,7 @@ impl Peer {
 			self.connection
 				.as_ref()
 				.unwrap()
+				.lock()
 				.send(b, msg::Type::Block)?;
 			Ok(true)
 		} else {
@@ -241,6 +247,7 @@ impl Peer {
 			self.connection
 				.as_ref()
 				.unwrap()
+				.lock()
 				.send(b, msg::Type::CompactBlock)?;
 			Ok(true)
 		} else {
@@ -259,6 +266,7 @@ impl Peer {
 			self.connection
 				.as_ref()
 				.unwrap()
+				.lock()
 				.send(bh, msg::Type::Header)?;
 			Ok(true)
 		} else {
@@ -279,6 +287,7 @@ impl Peer {
 			self.connection
 				.as_ref()
 				.unwrap()
+				.lock()
 				.send(tx, msg::Type::Transaction)?;
 			Ok(true)
 		} else {
@@ -299,6 +308,7 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
 			.send(tx, msg::Type::StemTransaction)?;
 		Ok(())
 	}
@@ -308,6 +318,7 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
 			.send(&Locator { hashes: locator }, msg::Type::GetHeaders)
 	}
 
@@ -317,6 +328,7 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
 			.send(&h, msg::Type::GetBlock)
 	}
 
@@ -326,12 +338,13 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
 			.send(&h, msg::Type::GetCompactBlock)
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
 		debug!("Asking {} for more peers.", self.info.addr);
-		self.connection.as_ref().unwrap().send(
+		self.connection.as_ref().unwrap().lock().send(
 			&GetPeerAddrs {
 				capabilities: capab,
 			},
@@ -344,7 +357,7 @@ impl Peer {
 			"Asking {} for txhashset archive at {} {}.",
 			self.info.addr, height, hash
 		);
-		self.connection.as_ref().unwrap().send(
+		self.connection.as_ref().unwrap().lock().send(
 			&TxHashSetRequest { hash, height },
 			msg::Type::TxHashSetRequest,
 		)
@@ -352,11 +365,12 @@ impl Peer {
 
 	/// Stops the peer, closing its connection
 	pub fn stop(&self) {
-		let _ = self.connection.as_ref().unwrap().close_channel.send(());
+		stop_with_connection(&self.connection.as_ref().unwrap().lock());
 	}
 
 	fn check_connection(&self) -> bool {
-		match self.connection.as_ref().unwrap().error_channel.try_recv() {
+		let connection = self.connection.as_ref().unwrap().lock();
+		match connection.error_channel.try_recv() {
 			Ok(Error::Serialization(e)) => {
 				let need_stop = {
 					let mut state = self.state.write();
@@ -372,7 +386,7 @@ impl Peer {
 						"Client {} corrupted, will disconnect ({:?}).",
 						self.info.addr, e
 					);
-					self.stop();
+					stop_with_connection(&connection);
 				}
 				false
 			}
@@ -388,7 +402,7 @@ impl Peer {
 				};
 				if need_stop {
 					debug!("Client {} connection lost: {:?}", self.info.addr, e);
-					self.stop();
+					stop_with_connection(&connection);
 				}
 				false
 			}
@@ -398,6 +412,10 @@ impl Peer {
 			}
 		}
 	}
+}
+
+fn stop_with_connection(connection: &conn::Tracker) {
+	let _ = connection.close_channel.send(());
 }
 
 /// Adapter implementation that forwards everything to an underlying adapter

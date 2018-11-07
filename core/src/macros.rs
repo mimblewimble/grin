@@ -29,7 +29,15 @@ macro_rules! map_vec {
 #[macro_export]
 macro_rules! try_map_vec {
 	($thing:expr, $mapfn:expr) => {
-		$thing.iter().map($mapfn).collect::<Result<Vec<_>, _>>()?;
+		try_iter_map_vec!($thing.iter(), $mapfn);
+	};
+}
+
+/// Same as try_map_vec when thing is an iterator
+#[macro_export]
+macro_rules! try_iter_map_vec {
+	($thing:expr, $mapfn:expr) => {
+		$thing.map($mapfn).collect::<Result<Vec<_>, _>>()?;
 	};
 }
 

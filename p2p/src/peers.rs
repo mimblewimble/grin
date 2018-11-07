@@ -42,9 +42,6 @@ pub struct Peers {
 	config: P2PConfig,
 }
 
-unsafe impl Send for Peers {}
-unsafe impl Sync for Peers {}
-
 impl Peers {
 	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>, config: P2PConfig) -> Peers {
 		Peers {
