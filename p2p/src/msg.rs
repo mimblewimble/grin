@@ -362,7 +362,7 @@ impl Writeable for Hand {
 impl Readable for Hand {
 	fn read(reader: &mut Reader) -> Result<Hand, ser::Error> {
 		let (version, capab, nonce) = ser_multiread!(reader, read_u32, read_u32, read_u64);
-		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
+		let capabilities = Capabilities::from_bits_truncate(capab);
 		let total_diff = Difficulty::read(reader)?;
 		let sender_addr = SockAddr::read(reader)?;
 		let receiver_addr = SockAddr::read(reader)?;
@@ -415,7 +415,7 @@ impl Writeable for Shake {
 impl Readable for Shake {
 	fn read(reader: &mut Reader) -> Result<Shake, ser::Error> {
 		let (version, capab) = ser_multiread!(reader, read_u32, read_u32);
-		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
+		let capabilities = Capabilities::from_bits_truncate(capab);
 		let total_diff = Difficulty::read(reader)?;
 		let ua = reader.read_vec()?;
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
@@ -445,7 +445,7 @@ impl Writeable for GetPeerAddrs {
 impl Readable for GetPeerAddrs {
 	fn read(reader: &mut Reader) -> Result<GetPeerAddrs, ser::Error> {
 		let capab = reader.read_u32()?;
-		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
+		let capabilities = Capabilities::from_bits_truncate(capab);
 		Ok(GetPeerAddrs { capabilities })
 	}
 }
