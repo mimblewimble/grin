@@ -22,7 +22,6 @@ use std::time::{Duration, SystemTime};
 /// rates are worst-case estimates.
 pub struct RateCounter {
 	last_min_bytes: Vec<u64>,
-	last_min_count: u64,
 	last_min_times: Vec<u64>,
 }
 
@@ -31,7 +30,6 @@ impl RateCounter {
 	pub fn new() -> RateCounter {
 		RateCounter {
 			last_min_bytes: vec![],
-			last_min_count: 0,
 			last_min_times: vec![],
 		}
 	}
@@ -41,11 +39,9 @@ impl RateCounter {
 		let now_millis = millis_since_epoch();
 		self.last_min_times.push(now_millis);
 		self.last_min_bytes.push(bytes);
-		self.last_min_count += 1;
 		while self.last_min_times.len() > 0 && self.last_min_times[0] > now_millis + 60000 {
-			self.last_min_times.pop();
-			self.last_min_bytes.pop();
-			self.last_min_count -= 1;
+			self.last_min_times.remove(0);
+			self.last_min_bytes.remove(0);
 		}
 	}
 
@@ -56,7 +52,7 @@ impl RateCounter {
 
 	/// Count of increases in the last minute
 	pub fn count_per_min(&self) -> u64 {
-		self.last_min_count
+		self.last_min_bytes.len() as u64
 	}
 }
 

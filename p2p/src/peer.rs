@@ -30,7 +30,7 @@ use types::{
 };
 
 const MAX_TRACK_SIZE: usize = 30;
-const MAX_PEER_MSG_PER_MIN: u64 = 300;
+const MAX_PEER_MSG_PER_MIN: u64 = 500;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Remind: don't mix up this 'State' with that 'State' in p2p/src/store.rs,
@@ -179,6 +179,16 @@ impl Peer {
 			let conn = tracker.lock();
 			let received_bytes = conn.received_bytes.read();
 			return Some(received_bytes.bytes_per_min());
+		}
+		None
+	}
+
+	pub fn last_min_message_counts(&self) -> Option<(u64, u64)> {
+		if let Some(ref tracker) = self.connection {
+			let conn = tracker.lock();
+			let received_bytes = conn.received_bytes.read();
+			let sent_bytes = conn.sent_bytes.read();
+			return Some((sent_bytes.count_per_min(), received_bytes.count_per_min()));
 		}
 		None
 	}

@@ -390,7 +390,11 @@ impl Peers {
 				debug!("clean_peers {:?}, not connected", peer.info.addr);
 				rm.push(peer.info.addr.clone());
 			} else if peer.is_abusive() {
-				debug!("clean_peers {:?}, abusive", peer.info.addr);
+				let counts = peer.last_min_message_counts().unwrap();
+				debug!(
+					"clean_peers {:?}, abusive ({} sent, {} recv)",
+					peer.info.addr, counts.0, counts.1,
+				);
 				let _ = self.update_state(peer.info.addr, State::Banned);
 				rm.push(peer.info.addr.clone());
 			} else {
