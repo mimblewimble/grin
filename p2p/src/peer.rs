@@ -279,11 +279,40 @@ impl Peer {
 		}
 	}
 
+	pub fn send_tx_kernel_hash(&self, h: Hash) -> Result<bool, Error> {
+		if !self.tracking_adapter.has(h) {
+			debug!("Send tx kernel hash {} to {}", h, self.info.addr);
+			self.connection
+				.as_ref()
+				.unwrap()
+				.send(h, msg::Type::TransactionKernel)?;
+			Ok(true)
+		} else {
+			debug!(
+				"Not sending tx kernel hash {} to {} (already seen)",
+				h, self.info.addr
+			);
+			Ok(false)
+		}
+	}
+
 	/// Sends the provided transaction to the remote peer. The request may be
 	/// dropped if the remote peer is known to already have the transaction.
+	/// We support broadcast of lightweight tx kernel hash
+	/// so track known txs by kernel hash.
 	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<bool, Error> {
-		if !self.tracking_adapter.has(tx.hash()) {
-			debug!("Send tx {} to {}", tx.hash(), self.info.addr);
+		let kernel = &tx.kernels()[0];
+
+		if self
+			.info
+			.capabilities
+			.contains(Capabilities::TX_KERNEL_HASH)
+		{
+			return self.send_tx_kernel_hash(kernel.hash());
+		}
+
+		if !self.tracking_adapter.has(kernel.hash()) {
+			debug!("Send full tx {} to {}", tx.hash(), self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
@@ -320,6 +349,17 @@ impl Peer {
 			.unwrap()
 			.lock()
 			.send(&Locator { hashes: locator }, msg::Type::GetHeaders)
+	}
+
+	pub fn send_tx_request(&self, h: Hash) -> Result<(), Error> {
+		debug!(
+			"Requesting tx (kernel hash) {} from peer {}.",
+			h, self.info.addr
+		);
+		self.connection
+			.as_ref()
+			.unwrap()
+			.send(&h, msg::Type::GetTransaction)
 	}
 
 	/// Sends a request for a specific block by hash
@@ -459,12 +499,22 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.total_height()
 	}
 
+	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
+		self.adapter.get_transaction(kernel_hash)
+	}
+
+	fn tx_kernel_received(&self, kernel_hash: Hash, addr: SocketAddr) {
+		self.push(kernel_hash);
+		self.adapter.tx_kernel_received(kernel_hash, addr)
+	}
+
 	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
 		// Do not track the tx hash for stem txs.
 		// Otherwise we fail to handle the subsequent fluff or embargo expiration
 		// correctly.
 		if !stem {
-			self.push(tx.hash());
+			let kernel = &tx.kernels()[0];
+			self.push(kernel.hash());
 		}
 		self.adapter.transaction_received(tx, stem)
 	}

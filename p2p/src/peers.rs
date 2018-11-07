@@ -295,8 +295,8 @@ impl Peers {
 		);
 	}
 
-	/// Broadcasts the provided stem transaction to our peer relay.
-	pub fn broadcast_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
+	/// Relays the provided stem transaction to our single stem peer.
+	pub fn relay_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		let dandelion_relay = self.get_dandelion_relay();
 		if dandelion_relay.is_empty() {
 			debug!("No dandelion relay, updating.");
@@ -323,10 +323,10 @@ impl Peers {
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the transaction.
 	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
-		let num_peers = self.config.peer_min_preferred_count();
+		let num_peers = self.config.peer_max_count();
 		let count = self.broadcast("transaction", num_peers, |p| p.send_transaction(tx));
-		trace!(
-			"broadcast_transaction: {}, to {} peers, done.",
+		debug!(
+			"broadcast_transaction: {} to {} peers, done.",
 			tx.hash(),
 			count,
 		);
@@ -470,6 +470,14 @@ impl ChainAdapter for Peers {
 
 	fn total_height(&self) -> u64 {
 		self.adapter.total_height()
+	}
+
+	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
+		self.adapter.get_transaction(kernel_hash)
+	}
+
+	fn tx_kernel_received(&self, kernel_hash: Hash, addr: SocketAddr) {
+		self.adapter.tx_kernel_received(kernel_hash, addr)
 	}
 
 	fn transaction_received(&self, tx: core::Transaction, stem: bool) {

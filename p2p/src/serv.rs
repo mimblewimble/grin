@@ -197,6 +197,10 @@ impl ChainAdapter for DummyAdapter {
 	fn total_height(&self) -> u64 {
 		0
 	}
+	fn get_transaction(&self, _h: Hash) -> Option<core::Transaction> {
+		None
+	}
+	fn tx_kernel_received(&self, _h: Hash, _addr: SocketAddr) {}
 	fn transaction_received(&self, _: core::Transaction, _stem: bool) {}
 	fn compact_block_received(&self, _cb: core::CompactBlock, _addr: SocketAddr) -> bool {
 		true

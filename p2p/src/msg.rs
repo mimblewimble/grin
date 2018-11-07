@@ -68,8 +68,8 @@ enum_from_primitive! {
 		TxHashSetRequest = 16,
 		TxHashSetArchive = 17,
 		BanReason = 18,
-		// GetTransaction = 19,
-		// CompactTransaction = 20,
+		GetTransaction = 19,
+		TransactionKernel = 20,
 	}
 }
 
@@ -95,6 +95,8 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::TxHashSetRequest => 40,
 		Type::TxHashSetArchive => 64,
 		Type::BanReason => 64,
+		Type::GetTransaction => 32,
+		Type::TransactionKernel => 32,
 	}
 }
 
@@ -444,9 +446,7 @@ impl Readable for GetPeerAddrs {
 	fn read(reader: &mut Reader) -> Result<GetPeerAddrs, ser::Error> {
 		let capab = reader.read_u32()?;
 		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
-		Ok(GetPeerAddrs {
-			capabilities: capabilities,
-		})
+		Ok(GetPeerAddrs { capabilities })
 	}
 }
 
