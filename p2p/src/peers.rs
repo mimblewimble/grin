@@ -385,51 +385,44 @@ impl Peers {
 		for peer in self.peers.read().values() {
 			if peer.is_banned() {
 				debug!("clean_peers {:?}, peer banned", peer.info.addr);
-				rm.push(peer.clone());
+				rm.push(peer.info.addr.clone());
 			} else if !peer.is_connected() {
 				debug!("clean_peers {:?}, not connected", peer.info.addr);
-				rm.push(peer.clone());
+				rm.push(peer.info.addr.clone());
+			} else if peer.is_abusive() {
+				debug!("clean_peers {:?}, abusive", peer.info.addr);
+				let _ = self.update_state(peer.info.addr, State::Banned);
+				rm.push(peer.info.addr.clone());
 			} else {
 				let (stuck, diff) = peer.is_stuck();
 				if stuck && diff < self.adapter.total_difficulty() {
 					debug!("clean_peers {:?}, stuck peer", peer.info.addr);
-					peer.stop();
 					let _ = self.update_state(peer.info.addr, State::Defunct);
-					rm.push(peer.clone());
+					rm.push(peer.info.addr.clone());
 				}
 			}
+		}
+
+		// ensure we do not still have too many connected peers
+		let excess_count = (self.peer_count() as usize - rm.len()).saturating_sub(max_count);
+		if excess_count > 0 {
+			// map peers to addrs in a block to bound how long we keep the read lock for
+			let mut addrs = self
+				.connected_peers()
+				.iter()
+				.take(excess_count)
+				.map(|x| x.info.addr.clone())
+				.collect::<Vec<_>>();
+			rm.append(&mut addrs);
 		}
 
 		// now clean up peer map based on the list to remove
 		{
 			let mut peers = self.peers.write();
 			for p in rm {
-				peers.remove(&p.info.addr);
+				let _ = peers.get(&p).map(|p| p.stop());
+				peers.remove(&p);
 			}
-		}
-
-		// ensure we do not have too many connected peers
-		let excess_count = {
-			let peer_count = self.peer_count() as usize;
-			if peer_count > max_count {
-				peer_count - max_count
-			} else {
-				0
-			}
-		};
-
-		// map peers to addrs in a block to bound how long we keep the read lock for
-		let addrs = self
-			.connected_peers()
-			.iter()
-			.map(|x| x.info.addr.clone())
-			.collect::<Vec<_>>();
-
-		// now remove them taking a short-lived write lock each time
-		// maybe better to take write lock once and remove them all?
-		for x in addrs.iter().take(excess_count) {
-			let mut peers = self.peers.write();
-			peers.remove(x);
 		}
 	}
 

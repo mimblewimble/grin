@@ -30,6 +30,7 @@ use types::{
 };
 
 const MAX_TRACK_SIZE: usize = 30;
+const MAX_PEER_MSG_PER_MIN: u64 = 300;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Remind: don't mix up this 'State' with that 'State' in p2p/src/store.rs,
@@ -149,22 +150,35 @@ impl Peer {
 		}
 	}
 
+	/// Whether the peer is considered abusive, mostly for spammy nodes
+	pub fn is_abusive(&self) -> bool {
+		if let Some(ref conn) = self.connection {
+			let conn = conn.lock();
+			let rec = conn.received_bytes.read();
+			let sent = conn.sent_bytes.read();
+			rec.count_per_min() > MAX_PEER_MSG_PER_MIN
+				|| sent.count_per_min() > MAX_PEER_MSG_PER_MIN
+		} else {
+			false
+		}
+	}
+
 	/// Number of bytes sent to the peer
-	pub fn sent_bytes(&self) -> Option<u64> {
+	pub fn last_min_sent_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
 			let conn = tracker.lock();
 			let sent_bytes = conn.sent_bytes.read();
-			return Some(*sent_bytes);
+			return Some(sent_bytes.bytes_per_min());
 		}
 		None
 	}
 
 	/// Number of bytes received from the peer
-	pub fn received_bytes(&self) -> Option<u64> {
+	pub fn last_min_received_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
 			let conn = tracker.lock();
 			let received_bytes = conn.received_bytes.read();
-			return Some(*received_bytes);
+			return Some(received_bytes.bytes_per_min());
 		}
 		None
 	}
