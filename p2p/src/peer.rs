@@ -285,6 +285,7 @@ impl Peer {
 			self.connection
 				.as_ref()
 				.unwrap()
+				.lock()
 				.send(h, msg::Type::TransactionKernel)?;
 			Ok(true)
 		} else {
@@ -359,6 +360,7 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
 			.send(&h, msg::Type::GetTransaction)
 	}
 
