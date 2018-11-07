@@ -189,6 +189,8 @@ or, to send between accounts, use the -a flag to specify the source account:
 [host]$ grin wallet -a "my_source_account" send -m self -d "my_dest_account" 60
 ```
 
+When sending to self, the transaction will be created and posted to the chain in the same operation.
+
 Other flags here are:
 
 * `-m` 'Method', which can be 'http', 'file' or 'self' (described above). If 'http' is specified (default), the transaction will be sent to the IP address which follows the `-d` flag. If 'file' is specified, Grin wallet will generate a partial transaction file under the file name specified in the `-d` flag. This file needs to be signed by the recipient using the `grin wallet receive -i filename` command and finalized by the sender using the `grin wallet finalize -i filename.response` command. To create a partial transaction file, use:
