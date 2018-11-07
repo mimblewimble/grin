@@ -269,7 +269,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				})?;
 				let dest = {
 					if method == "self" {
-						""
+						match send_args.value_of("dest") {
+							Some(d) => d,
+							None => "default",
+						}
 					} else {
 						send_args.value_of("dest").ok_or_else(|| {
 							ErrorKind::GenericError(
@@ -280,7 +283,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				};
 				if dest.contains("0.0.0.0") || dest.contains("127.0.0.1") {
 					let msg =
-						"Sending network transactions to self discouraged. Use '-m=self' instead";
+						"Sending network transactions to self is discouraged. Use '-m \"self\" [-d \"accountname\"]' instead";
 					error!("{}", msg);
 					return Err(ErrorKind::GenericError(msg.to_string()).into());
 				}
@@ -350,24 +353,22 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						)).into());
 					}
 				} else if method == "self" {
-					let src_acct = "default";
-					let dest_acct = "default";
 					let result = api.issue_self_tx(
 						amount,
 						minimum_confirmations,
 						max_outputs,
 						change_outputs,
 						selection_strategy == "all",
-						src_acct,
-						dest_acct,
+						account,
+						dest,
 					);
 					let slate = match result {
 						Ok(s) => {
 							info!(
 								"Tx created: {} grin to self, source acct: {} dest_acct: {} (strategy '{}')",
 								core::amount_to_hr_string(amount, false),
-								src_acct,
-								dest_acct,
+								account,
+								dest,
 								selection_strategy,
 							);
 							s
