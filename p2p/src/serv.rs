@@ -87,6 +87,7 @@ impl Server {
 				}
 			}
 			if self.stop.load(Ordering::Relaxed) {
+				info!("p2p-server has been stop");
 				break;
 			}
 			thread::sleep(sleep_time);

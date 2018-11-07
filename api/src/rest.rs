@@ -29,7 +29,7 @@ use rustls::internal::pemfile;
 use std::fmt::{self, Display};
 use std::fs::File;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 use std::{io, thread};
 use tokio_rustls::ServerConfigExt;
 use tokio_tcp;
@@ -146,10 +146,14 @@ impl TLSConfig {
 
 /// HTTP server allowing the registration of ApiEndpoint implementations.
 pub struct ApiServer {
-	shutdown_sender: Option<oneshot::Sender<()>>,
+	shutdown_sender: Option<mpsc::Sender<()>>,
 }
 
+unsafe impl Send for ApiServer {}
+unsafe impl Sync for ApiServer {}
+
 impl ApiServer {
+
 	/// Creates a new ApiServer that will serve ApiEndpoint implementations
 	/// under the root URL.
 	pub fn new() -> ApiServer {
@@ -159,7 +163,6 @@ impl ApiServer {
 	}
 
 	/// Starts ApiServer at the provided address.
-	/// TODO support stop operation
 	pub fn start(
 		&mut self,
 		addr: SocketAddr,
@@ -183,15 +186,23 @@ impl ApiServer {
 				"Can't start HTTP API server, it's running already".to_string(),
 			))?;
 		}
-		let (tx, _rx) = oneshot::channel::<()>();
-		self.shutdown_sender = Some(tx);
+		let (tx, rx) = oneshot::channel::<()>();
+		let (tx2, rx2) = mpsc::channel();
+		self.shutdown_sender = Some(tx2);
+
+		// TODO: refactoring is needed here.
+		// Remove this additional thread which is only for shutdown
+		thread::spawn(move || {
+			let _ = rx2.recv();
+			let _ = tx.send(());
+		});
+
 		thread::Builder::new()
 			.name("apis".to_string())
 			.spawn(move || {
 				let server = Server::bind(&addr)
 					.serve(router)
-					// TODO graceful shutdown is unstable, investigate 
-					//.with_graceful_shutdown(rx)
+					.with_graceful_shutdown(rx)
 					.map_err(|e| eprintln!("HTTP API server error: {}", e));
 
 				rt::run(server);
@@ -199,7 +210,6 @@ impl ApiServer {
 	}
 
 	/// Starts the TLS ApiServer at the provided address.
-	/// TODO support stop operation
 	fn start_tls(
 		&mut self,
 		addr: SocketAddr,
@@ -213,6 +223,17 @@ impl ApiServer {
 		}
 
 		let tls_conf = conf.build_server_config()?;
+
+		let (tx, rx) = oneshot::channel::<()>();
+		let (tx2, rx2) = mpsc::channel();
+		self.shutdown_sender = Some(tx2);
+
+		// TODO: refactoring is needed here.
+		// Remove this additional thread which is only for shutdown
+		thread::spawn(move || {
+			let _ = rx2.recv();
+			let _ = tx.send(());
+		});
 
 		thread::Builder::new()
 			.name("apis".to_string())
@@ -230,6 +251,7 @@ impl ApiServer {
 					}).filter_map(|x| x);
 				let server = Server::builder(tls)
 					.serve(router)
+					.with_graceful_shutdown(rx)
 					.map_err(|e| eprintln!("HTTP API server error: {}", e));
 
 				rt::run(server);
@@ -237,15 +259,13 @@ impl ApiServer {
 	}
 
 	/// Stops the API server, it panics in case of error
-	pub fn stop(&mut self) -> bool {
-		if self.shutdown_sender.is_some() {
-			// TODO re-enable stop after investigation
-			//let tx = mem::replace(&mut self.shutdown_sender, None).unwrap();
-			//tx.send(()).expect("Failed to stop API server");
-			info!("API server has been stoped");
+	pub fn stop(&self) -> bool {
+		if let Some(ref tx) = self.shutdown_sender {
+			tx.send(()).expect("Failed to stop API server");
+			info!("API server has been stop");
 			true
 		} else {
-			error!("Can't stop API server, it's not running or doesn't spport stop operation");
+			error!("Can't stop API server, it's not running or doesn't support stop operation");
 			false
 		}
 	}

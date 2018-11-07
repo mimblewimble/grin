@@ -73,7 +73,7 @@ pub fn start_rest_apis(
 	peers: Arc<p2p::Peers>,
 	api_secret: Option<String>,
 	tls_config: Option<TLSConfig>,
-) -> bool {
+) -> Option<ApiServer> {
 	let mut apis = ApiServer::new();
 	let mut router = build_router(chain, tx_pool, peers).expect("unable to build API router");
 	if api_secret.is_some() {
@@ -86,7 +86,11 @@ pub fn start_rest_apis(
 
 	info!("Starting HTTP API server at {}.", addr);
 	let socket_addr: SocketAddr = addr.parse().expect("unable to parse socket address");
-	apis.start(socket_addr, router, tls_config).is_ok()
+	if apis.start(socket_addr, router, tls_config).is_ok() {
+		Some(apis)
+	} else {
+		None
+	}
 }
 
 pub fn build_router(

@@ -45,6 +45,8 @@ pub struct Server {
 	pub config: ServerConfig,
 	/// handle to our network server
 	pub p2p: Arc<p2p::Server>,
+	/// API Server
+	pub api_server: Arc<Option<api::ApiServer>>,
 	/// data store access
 	pub chain: Arc<chain::Chain>,
 	/// in-memory transaction pool
@@ -225,7 +227,7 @@ impl Server {
 
 		info!("Starting rest apis at: {}", &config.api_http_addr);
 		let api_secret = get_first_line(config.api_secret_path.clone());
-		api::start_rest_apis(
+		let api_server = api::start_rest_apis(
 			config.api_http_addr.clone(),
 			shared_chain.clone(),
 			tx_pool.clone(),
@@ -246,6 +248,7 @@ impl Server {
 		Ok(Server {
 			config,
 			p2p: p2p_server,
+			api_server: Arc::new(api_server),
 			chain: shared_chain,
 			tx_pool,
 			verifier_cache,
@@ -413,9 +416,9 @@ impl Server {
 			head: self.head(),
 			header_head: self.header_head(),
 			sync_status: self.sync_state.status(),
-			stratum_stats: stratum_stats,
-			peer_stats: peer_stats,
-			diff_stats: diff_stats,
+			stratum_stats,
+			peer_stats,
+			diff_stats,
 		})
 	}
 
@@ -423,6 +426,9 @@ impl Server {
 	pub fn stop(&self) {
 		self.p2p.stop();
 		self.stop.store(true, Ordering::Relaxed);
+		if let Some(ref apis) = *self.api_server {
+			apis.stop();
+		}
 	}
 
 	/// Stops the test miner without stopping the p2p layer
