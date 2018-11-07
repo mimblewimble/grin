@@ -216,8 +216,11 @@ bitflags! {
 		/// but we do not advertise this to other nodes.
 		const FULL_NODE = Capabilities::HEADER_HIST.bits
 			| Capabilities::TXHASHSET_HIST.bits
-			| Capabilities::PEER_LIST.bits
-			| Capabilities::TX_KERNEL_HASH.bits;
+			| Capabilities::PEER_LIST.bits;
+
+		// TODO - we cannot include TX_KERNEL_HASH in FULL_NODE right now
+		// as legacy nodes do not recognise these Capabilities safely.
+		// | Capabilities::TX_KERNEL_HASH.bits;
 	}
 }
 
