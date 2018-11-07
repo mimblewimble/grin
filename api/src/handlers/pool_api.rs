@@ -79,12 +79,10 @@ impl PoolPushHandler {
 				.and_then(move |wrapper: TxWrapper| {
 					util::from_hex(wrapper.tx_hex)
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
-				})
-				.and_then(move |tx_bin| {
+				}).and_then(move |tx_bin| {
 					ser::deserialize(&mut &tx_bin[..])
 						.map_err(|e| ErrorKind::RequestError(format!("Bad request: {}", e)).into())
-				})
-				.and_then(move |tx: Transaction| {
+				}).and_then(move |tx: Transaction| {
 					let source = pool::TxSource {
 						debug_name: "push-api".to_string(),
 						identifier: "?.?.?.?".to_string(),

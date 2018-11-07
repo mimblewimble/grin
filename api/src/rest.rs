@@ -153,7 +153,6 @@ unsafe impl Send for ApiServer {}
 unsafe impl Sync for ApiServer {}
 
 impl ApiServer {
-
 	/// Creates a new ApiServer that will serve ApiEndpoint implementations
 	/// under the root URL.
 	pub fn new() -> ApiServer {
