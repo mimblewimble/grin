@@ -42,3 +42,14 @@ fn test_reason_for_ban_enum() {
 fn test_type_enum() {
 	assert_eq!(p2p::msg::Type::from_i32(0), Some(p2p::msg::Type::Error));
 }
+
+#[test]
+fn test_capabilities() {
+	assert_eq!(p2p::types::Capabilities::from_bits_truncate(0b00000000 as u32), p2p::types::Capabilities::UNKNOWN);
+	assert_eq!(p2p::types::Capabilities::from_bits_truncate(0b10000000 as u32), p2p::types::Capabilities::UNKNOWN);
+	
+	assert_eq!(p2p::types::Capabilities::from_bits_truncate(0b1111 as u32), p2p::types::Capabilities::FULL_NODE);
+	assert_eq!(p2p::types::Capabilities::from_bits_truncate(0b00001111 as u32), p2p::types::Capabilities::FULL_NODE);
+	assert_eq!(p2p::types::Capabilities::from_bits_truncate(0b11111111 as u32), p2p::types::Capabilities::FULL_NODE);
+	assert_eq!(p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32), p2p::types::Capabilities::FULL_NODE);
+}
