@@ -351,24 +351,12 @@ impl Peer {
 
 	/// Stops the peer, closing its connection
 	pub fn stop(&self) {
-		let _ = self
-			.connection
-			.as_ref()
-			.unwrap()
-			.lock()
-			.close_channel
-			.send(());
+		stop_with_connection(&self.connection.as_ref().unwrap().lock());
 	}
 
 	fn check_connection(&self) -> bool {
-		match self
-			.connection
-			.as_ref()
-			.unwrap()
-			.lock()
-			.error_channel
-			.try_recv()
-		{
+		let connection = self.connection.as_ref().unwrap().lock();
+		match connection.error_channel.try_recv() {
 			Ok(Error::Serialization(e)) => {
 				let need_stop = {
 					let mut state = self.state.write();
@@ -384,7 +372,7 @@ impl Peer {
 						"Client {} corrupted, will disconnect ({:?}).",
 						self.info.addr, e
 					);
-					self.stop();
+					stop_with_connection(&connection);
 				}
 				false
 			}
@@ -400,7 +388,7 @@ impl Peer {
 				};
 				if need_stop {
 					debug!("Client {} connection lost: {:?}", self.info.addr, e);
-					self.stop();
+					stop_with_connection(&connection);
 				}
 				false
 			}
@@ -410,6 +398,10 @@ impl Peer {
 			}
 		}
 	}
+}
+
+fn stop_with_connection(connection: &conn::Tracker) {
+	let _ = connection.close_channel.send(());
 }
 
 /// Adapter implementation that forwards everything to an underlying adapter
