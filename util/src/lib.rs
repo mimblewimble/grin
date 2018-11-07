@@ -71,6 +71,9 @@ pub mod file;
 /// Compress and decompress zip bz2 archives
 pub mod zip;
 
+mod rate_counter;
+pub use rate_counter::RateCounter;
+
 /// Encapsulation of a RwLock<Option<T>> for one-time initialization.
 /// This implementation will purposefully fail hard if not used
 /// properly, for example if not initialized before being first used

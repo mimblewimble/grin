@@ -83,6 +83,30 @@ impl MessageHandler for Protocol {
 				Ok(None)
 			}
 
+			Type::TransactionKernel => {
+				let h: Hash = msg.body()?;
+				debug!(
+					"handle_payload: received tx kernel: {}, msg_len: {}",
+					h, msg.header.msg_len
+				);
+				adapter.tx_kernel_received(h, self.addr);
+				Ok(None)
+			}
+
+			Type::GetTransaction => {
+				let h: Hash = msg.body()?;
+				debug!(
+					"handle_payload: GetTransaction: {}, msg_len: {}",
+					h, msg.header.msg_len,
+				);
+				let tx = adapter.get_transaction(h);
+				if let Some(tx) = tx {
+					Ok(Some(msg.respond(Type::Transaction, tx)))
+				} else {
+					Ok(None)
+				}
+			}
+
 			Type::Transaction => {
 				debug!(
 					"handle_payload: received tx: msg_len: {}",
@@ -106,7 +130,7 @@ impl MessageHandler for Protocol {
 			Type::GetBlock => {
 				let h: Hash = msg.body()?;
 				trace!(
-					"handle_payload: Getblock: {}, msg_len: {}",
+					"handle_payload: GetBlock: {}, msg_len: {}",
 					h,
 					msg.header.msg_len,
 				);

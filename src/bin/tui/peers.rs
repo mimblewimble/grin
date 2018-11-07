@@ -57,16 +57,8 @@ impl PeerColumn {
 impl TableViewItem<PeerColumn> for PeerStats {
 	fn to_column(&self, column: PeerColumn) -> String {
 		// Converts optional size to human readable size
-		fn size_to_string(size: Option<u64>) -> String {
-			if let Some(n) = size {
-				let size = n.file_size(CONVENTIONAL);
-				match size {
-					Ok(size) => size,
-					Err(_) => "-".to_string(),
-				}
-			} else {
-				"-".to_string()
-			}
+		fn size_to_string(size: u64) -> String {
+			size.file_size(CONVENTIONAL).unwrap_or("-".to_string())
 		}
 
 		match column {
@@ -74,8 +66,8 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			PeerColumn::State => self.state.clone(),
 			PeerColumn::UsedBandwidth => format!(
 				"S: {}, R: {}",
-				size_to_string(self.sent_bytes),
-				size_to_string(self.received_bytes),
+				size_to_string(self.sent_bytes_per_sec),
+				size_to_string(self.received_bytes_per_sec),
 			).to_string(),
 			PeerColumn::TotalDifficulty => format!(
 				"{} D @ {} H ({}s)",
@@ -94,10 +86,10 @@ impl TableViewItem<PeerColumn> for PeerStats {
 	{
 		// Compares used bandwidth of two peers
 		fn cmp_used_bandwidth(curr: &PeerStats, other: &PeerStats) -> Ordering {
-			let curr_recv_bytes = curr.received_bytes.unwrap_or(0);
-			let curr_sent_bytes = curr.sent_bytes.unwrap_or(0);
-			let other_recv_bytes = other.received_bytes.unwrap_or(0);
-			let other_sent_bytes = other.sent_bytes.unwrap_or(0);
+			let curr_recv_bytes = curr.received_bytes_per_sec;
+			let curr_sent_bytes = curr.sent_bytes_per_sec;
+			let other_recv_bytes = other.received_bytes_per_sec;
+			let other_sent_bytes = other.sent_bytes_per_sec;
 
 			let curr_sum = curr_recv_bytes + curr_sent_bytes;
 			let other_sum = other_recv_bytes + other_sent_bytes;

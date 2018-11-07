@@ -206,13 +206,16 @@ bitflags! {
 		const TXHASHSET_HIST = 0b00000010;
 		/// Can provide a list of healthy peers
 		const PEER_LIST = 0b00000100;
+		/// Can broadcast and request txs by kernel hash.
+		const TX_KERNEL_HASH = 0b00001000;
 
 		/// All nodes right now are "full nodes".
 		/// Some nodes internally may maintain longer block histories (archival_mode)
 		/// but we do not advertise this to other nodes.
 		const FULL_NODE = Capabilities::HEADER_HIST.bits
 			| Capabilities::TXHASHSET_HIST.bits
-			| Capabilities::PEER_LIST.bits;
+			| Capabilities::PEER_LIST.bits
+			| Capabilities::TX_KERNEL_HASH.bits;
 	}
 }
 
@@ -336,6 +339,10 @@ pub trait ChainAdapter: Sync + Send {
 
 	/// A valid transaction has been received from one of our peers
 	fn transaction_received(&self, tx: core::Transaction, stem: bool);
+
+	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction>;
+
+	fn tx_kernel_received(&self, kernel_hash: Hash, addr: SocketAddr);
 
 	/// A block has been received from one of our peers. Returns true if the
 	/// block could be handled properly and is not deemed defective by the

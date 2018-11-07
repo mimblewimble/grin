@@ -58,6 +58,23 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		self.chain().head().unwrap().height
 	}
 
+	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
+		self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash)
+	}
+
+	fn tx_kernel_received(&self, kernel_hash: Hash, addr: SocketAddr) {
+		// nothing much we can do with a new transaction while syncing
+		if self.sync_state.is_syncing() {
+			return;
+		}
+
+		let tx = self.tx_pool.read().retrieve_tx_by_kernel_hash(kernel_hash);
+
+		if tx.is_none() {
+			self.request_transaction(kernel_hash, &addr);
+		}
+	}
+
 	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
 		// nothing much we can do with a new transaction while syncing
 		if self.sync_state.is_syncing() {
@@ -136,8 +153,9 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			}
 
 			let (txs, missing_short_ids) = {
-				let tx_pool = self.tx_pool.read();
-				tx_pool.retrieve_transactions(cb.hash(), cb.nonce, cb.kern_ids())
+				self.tx_pool
+					.read()
+					.retrieve_transactions(cb.hash(), cb.nonce, cb.kern_ids())
 			};
 
 			debug!(
@@ -539,6 +557,10 @@ impl NetToChainAdapter {
 		}
 	}
 
+	fn request_transaction(&self, h: Hash, addr: &SocketAddr) {
+		self.send_tx_request_to_peer(h, addr, |peer, h| peer.send_tx_request(h))
+	}
+
 	// After receiving a compact block if we cannot successfully hydrate
 	// it into a full block then fallback to requesting the full block
 	// from the same peer that gave us the compact block
@@ -558,6 +580,23 @@ impl NetToChainAdapter {
 		self.send_block_request_to_peer(bh.hash(), addr, |peer, h| {
 			peer.send_compact_block_request(h)
 		})
+	}
+
+	fn send_tx_request_to_peer<F>(&self, h: Hash, addr: &SocketAddr, f: F)
+	where
+		F: Fn(&p2p::Peer, Hash) -> Result<(), p2p::Error>,
+	{
+		match self.peers().get_connected_peer(addr) {
+			None => debug!(
+				"send_tx_request_to_peer: can't send request to peer {:?}, not connected",
+				addr
+			),
+			Some(peer) => {
+				if let Err(e) = f(&peer, h) {
+					error!("send_tx_request_to_peer: failed: {:?}", e)
+				}
+			}
+		}
 	}
 
 	fn send_block_request_to_peer<F>(&self, h: Hash, addr: &SocketAddr, f: F)
@@ -670,10 +709,11 @@ pub struct PoolToNetAdapter {
 impl pool::PoolAdapter for PoolToNetAdapter {
 	fn stem_tx_accepted(&self, tx: &core::Transaction) -> Result<(), pool::PoolError> {
 		self.peers()
-			.broadcast_stem_transaction(tx)
+			.relay_stem_transaction(tx)
 			.map_err(|_| pool::PoolError::DandelionError)?;
 		Ok(())
 	}
+
 	fn tx_accepted(&self, tx: &core::Transaction) {
 		self.peers().broadcast_transaction(tx);
 	}

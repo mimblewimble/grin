@@ -59,6 +59,8 @@ pub struct BlockContext<'a> {
 /// Process a block header as part of processing a full block.
 /// We want to make sure the header is valid before we process the full block.
 fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+	let head = ctx.batch.head()?;
+
 	// If we do not have the previous header then treat the block for this header
 	// as an orphan.
 	if ctx.batch.get_previous_header(header).is_err() {
@@ -68,8 +70,15 @@ fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext) -> Res
 	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
 		extension.force_rollback();
 
-		// Optimize this if "next" header
-		rewind_and_apply_header_fork(header, extension)?;
+		let prev = extension.batch.get_previous_header(header)?;
+		if prev.hash() == head.last_block_h {
+			// Not a fork so we do not need to rewind or reapply any headers.
+		} else {
+			// Rewind and re-apply headers on the forked chain to
+			// put the header extension in the correct forked state
+			// (immediately prior to this new header).
+			rewind_and_apply_header_fork(header, extension)?;
+		}
 
 		// Check the current root is correct.
 		extension.validate_root(header)?;

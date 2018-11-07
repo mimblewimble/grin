@@ -212,7 +212,7 @@ fn comments() -> HashMap<String, String> {
 #until we get to at least this number
 #peer_min_preferred_count = 8
 
-# 7 = Bit flags for FULL_NODE
+# 15 = Bit flags for FULL_NODE
 #This structure needs to be changed internally, to make it more configurable
 ".to_string(),
 	);
