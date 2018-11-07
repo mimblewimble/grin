@@ -281,12 +281,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						})?
 					}
 				};
-				if dest.contains("0.0.0.0") || dest.contains("127.0.0.1") {
-					let msg =
-						"Sending network transactions to self is discouraged. Use '-m self [-d \"accountname\"]' instead";
-					error!("{}", msg);
-					return Err(ErrorKind::GenericError(msg.to_string()).into());
-				}
 				let change_outputs = send_args
 					.value_of("change_outputs")
 					.ok_or_else(|| ErrorKind::GenericError("Change outputs required".to_string()))
