@@ -17,10 +17,10 @@
 //! Implementation of BIP39 Mnemonic code for generating deterministic keys, as defined
 //! at https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki
 
-use crypto::digest::Digest;
-use crypto::hmac::Hmac;
-use crypto::pbkdf2::pbkdf2;
-use crypto::sha2::{Sha256, Sha512};
+use digest::Digest;
+use hmac::Hmac;
+use pbkdf2::pbkdf2;
+use sha2::{Sha256, Sha512};
 use std::fmt;
 
 lazy_static! {
@@ -95,9 +95,9 @@ pub fn to_entropy(mnemonic: &str) -> Result<Vec<u8>, Error> {
 	}
 
 	let mut hash = [0; 32];
-	let mut sha2 = Sha256::new();
-	sha2.input(&entropy.clone());
-	sha2.result(&mut hash);
+	let mut sha2sum = Sha256::default();
+	sha2sum.input(&entropy.clone());
+    hash.copy_from_slice(sha2sum.result().as_slice());
 
 	let actual = (hash[0] >> 8 - checksum_bits) & mask;
 
@@ -118,8 +118,8 @@ where
 	let salt = ("mnemonic".to_owned() + Option::from(passphrase).unwrap_or("")).into_bytes();
 	let data = mnemonic.as_bytes();
 	let mut seed = [0; 64];
-	let mut mac = Hmac::new(Sha512::new(), &data);
-	pbkdf2(&mut mac, &salt[..], 2048, &mut seed);
+
+	pbkdf2::<Hmac<Sha512>>(data, &salt[..], 2048, &mut seed);
 
 	Ok(seed)
 }
