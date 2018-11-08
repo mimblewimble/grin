@@ -39,7 +39,7 @@ impl RateCounter {
 		let now_millis = millis_since_epoch();
 		self.last_min_times.push(now_millis);
 		self.last_min_bytes.push(bytes);
-		while self.last_min_times.len() > 0 && self.last_min_times[0] > now_millis + 60000 {
+		while self.last_min_times.len() > 0 && self.last_min_times[0] + 60000 < now_millis {
 			self.last_min_times.remove(0);
 			self.last_min_bytes.remove(0);
 		}
