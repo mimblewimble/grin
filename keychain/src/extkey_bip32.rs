@@ -376,7 +376,7 @@ impl ExtendedPrivKey {
 			Ok(s) => s,
 			Err(e) => return Err(Error::MnemonicError(e)),
 		};
-		let mut hasher = BIP32ReferenceHasher::new();
+		let mut hasher = BIP32GrinHasher::new();
 		let key = try!(ExtendedPrivKey::new_master(secp, &mut hasher, &seed));
 		Ok(key)
 	}
