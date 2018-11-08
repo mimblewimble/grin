@@ -267,9 +267,20 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				let method = send_args.value_of("method").ok_or_else(|| {
 					ErrorKind::GenericError("Payment method required".to_string())
 				})?;
-				let dest = send_args.value_of("dest").ok_or_else(|| {
-					ErrorKind::GenericError("Destination wallet address required".to_string())
-				})?;
+				let dest = {
+					if method == "self" {
+						match send_args.value_of("dest") {
+							Some(d) => d,
+							None => "default",
+						}
+					} else {
+						send_args.value_of("dest").ok_or_else(|| {
+							ErrorKind::GenericError(
+								"Destination wallet address required".to_string(),
+							)
+						})?
+					}
+				};
 				let change_outputs = send_args
 					.value_of("change_outputs")
 					.ok_or_else(|| ErrorKind::GenericError("Change outputs required".to_string()))
@@ -334,6 +345,53 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 							"HTTP Destination should start with http://: or https://: {}",
 							dest
 						)).into());
+					}
+				} else if method == "self" {
+					let result = api.issue_self_tx(
+						amount,
+						minimum_confirmations,
+						max_outputs,
+						change_outputs,
+						selection_strategy == "all",
+						account,
+						dest,
+					);
+					let slate = match result {
+						Ok(s) => {
+							info!(
+								"Tx created: {} grin to self, source acct: {} dest_acct: {} (strategy '{}')",
+								core::amount_to_hr_string(amount, false),
+								account,
+								dest,
+								selection_strategy,
+							);
+							s
+						}
+						Err(e) => {
+							error!("Tx not created: {}", e);
+							match e.kind() {
+								// user errors, don't backtrace
+								libwallet::ErrorKind::NotEnoughFunds { .. } => {}
+								libwallet::ErrorKind::FeeDispute { .. } => {}
+								libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
+								_ => {
+									// otherwise give full dump
+									error!("Backtrace: {}", e.backtrace().unwrap());
+								}
+							};
+							return Err(e);
+						}
+					};
+					let result = api.post_tx(&slate, fluff);
+					match result {
+						Ok(_) => {
+							info!("Tx sent",);
+							Ok(())
+						}
+						Err(e) => {
+							error!("Tx not sent: {}", e);
+							Err(e)
+						}
 					}
 				} else if method == "file" {
 					api.send_tx(

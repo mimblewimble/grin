@@ -32,6 +32,7 @@ pub fn receive_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
 	parent_key_id: &Identifier,
+	is_self: bool,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
@@ -39,8 +40,12 @@ where
 	K: Keychain,
 {
 	// create an output using the amount in the slate
-	let (_, mut context, receiver_create_fn) =
-		selection::build_recipient_output_with_slate(wallet, slate, parent_key_id.clone())?;
+	let (_, mut context, receiver_create_fn) = selection::build_recipient_output_with_slate(
+		wallet,
+		slate,
+		parent_key_id.clone(),
+		is_self,
+	)?;
 
 	// fill public keys
 	let _ = slate.fill_round_1(
@@ -69,6 +74,7 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 	num_change_outputs: usize,
 	selection_strategy_is_use_all: bool,
 	parent_key_id: &Identifier,
+	is_self: bool,
 ) -> Result<
 	(
 		Slate,
@@ -107,6 +113,7 @@ where
 		num_change_outputs,
 		selection_strategy_is_use_all,
 		parent_key_id.clone(),
+		is_self,
 	)?;
 
 	// Generate a kernel offset and subtract from our context's secret key. Store

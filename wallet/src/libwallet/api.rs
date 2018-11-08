@@ -181,6 +181,7 @@ where
 			num_change_outputs,
 			selection_strategy_is_use_all,
 			&parent_key_id,
+			false,
 		)?;
 
 		lock_fn_out = lock_fn;
@@ -202,6 +203,50 @@ where
 		lock_fn_out(&mut **w, &tx_hex)?;
 		w.close()?;
 		Ok(slate_out)
+	}
+
+	/// Issues a send transaction to the same wallet, without needing communication
+	/// good for consolidating outputs, or can be extended to split outputs to multiple
+	/// accounts
+	pub fn issue_self_tx(
+		&mut self,
+		amount: u64,
+		minimum_confirmations: u64,
+		max_outputs: usize,
+		num_change_outputs: usize,
+		selection_strategy_is_use_all: bool,
+		src_acct_name: &str,
+		dest_acct_name: &str,
+	) -> Result<Slate, Error> {
+		let mut w = self.wallet.lock();
+		w.open_with_credentials()?;
+		let orig_parent_key_id = w.parent_key_id();
+		w.set_parent_key_id_by_name(src_acct_name)?;
+		let parent_key_id = w.parent_key_id();
+
+		let (mut slate, context, lock_fn) = tx::create_send_tx(
+			&mut **w,
+			amount,
+			minimum_confirmations,
+			max_outputs,
+			num_change_outputs,
+			selection_strategy_is_use_all,
+			&parent_key_id,
+			true,
+		)?;
+
+		w.set_parent_key_id_by_name(dest_acct_name)?;
+		let parent_key_id = w.parent_key_id();
+		tx::receive_tx(&mut **w, &mut slate, &parent_key_id, true)?;
+
+		tx::complete_tx(&mut **w, &mut slate, &context)?;
+		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
+
+		// lock our inputs
+		lock_fn(&mut **w, &tx_hex)?;
+		w.set_parent_key_id(orig_parent_key_id);
+		w.close()?;
+		Ok(slate)
 	}
 
 	/// Write a transaction to send to file so a user can transmit it to the
@@ -228,6 +273,7 @@ where
 			num_change_outputs,
 			selection_strategy_is_use_all,
 			&parent_key_id,
+			false,
 		)?;
 		if write_to_disk {
 			let mut pub_tx = File::create(dest)?;
@@ -507,8 +553,12 @@ where
 		let parent_key_id = wallet.parent_key_id();
 
 		// create an output using the amount in the slate
-		let (_, mut context, receiver_create_fn) =
-			selection::build_recipient_output_with_slate(&mut **wallet, &mut slate, parent_key_id)?;
+		let (_, mut context, receiver_create_fn) = selection::build_recipient_output_with_slate(
+			&mut **wallet,
+			&mut slate,
+			parent_key_id,
+			false,
+		)?;
 
 		// fill public keys
 		let _ = slate.fill_round_1(
@@ -535,7 +585,7 @@ where
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
-		let res = tx::receive_tx(&mut **w, slate, &parent_key_id);
+		let res = tx::receive_tx(&mut **w, slate, &parent_key_id, false);
 		w.close()?;
 
 		if let Err(e) = res {

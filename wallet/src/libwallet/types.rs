@@ -546,6 +546,10 @@ pub enum TxLogEntryType {
 	TxReceived,
 	/// Inputs locked + change outputs when a transaction is created
 	TxSent,
+	/// As above, but self-transaction
+	TxReceivedSelf,
+	/// As Above
+	TxSentSelf,
 	/// Received transaction that was rolled back by user
 	TxReceivedCancelled,
 	/// Sent transaction that was rolled back by user
@@ -558,6 +562,8 @@ impl fmt::Display for TxLogEntryType {
 			TxLogEntryType::ConfirmedCoinbase => write!(f, "Confirmed \nCoinbase"),
 			TxLogEntryType::TxReceived => write!(f, "Received Tx"),
 			TxLogEntryType::TxSent => write!(f, "Sent Tx"),
+			TxLogEntryType::TxReceivedSelf => write!(f, "Received Tx (Self)"),
+			TxLogEntryType::TxSentSelf => write!(f, "Sent Tx (Self)"),
 			TxLogEntryType::TxReceivedCancelled => write!(f, "Received Tx\n- Cancelled"),
 			TxLogEntryType::TxSentCancelled => write!(f, "Send Tx\n- Cancelled"),
 		}

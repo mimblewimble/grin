@@ -177,9 +177,23 @@ It's important to understand exactly what happens during a send command, so at a
 
 Outputs in your wallet will appear as unconfirmed or locked until the transaction hits the chain and is mined and validated.
 
+You can also create a transaction entirely within your own wallet by specifying the method 'self'. Using the 'self' method, you can send yourself money in a single command (for testing purposes,) or distribute funds between accounts within your wallet without having to run a listener or manipulate files. For instance, to send funds from your wallet's 'default' account to an account called 'account1', use:
+
+```sh
+[host]$ grin wallet send -m self -d "account1" 60
+```
+
+or, to send between accounts, use the -a flag to specify the source account:
+
+```sh
+[host]$ grin wallet -a "my_source_account" send -m self -d "my_dest_account" 60
+```
+
+When sending to self, the transaction will be created and posted to the chain in the same operation.
+
 Other flags here are:
 
-* `-m` 'Method', which can be 'http' or 'file'. In the first case, the transaction will be sent to the IP address which follows the `-d` flag. In the second case, Grin wallet will generate a partial transaction file under the file name specified in the `-d` flag. This file needs to be signed by the recipient using the `grin wallet receive -i filename` command and finalize by the sender using the `grin wallet finalize -i filename.response` command. To create a partial transaction file, use:
+* `-m` 'Method', which can be 'http', 'file' or 'self' (described above). If 'http' is specified (default), the transaction will be sent to the IP address which follows the `-d` flag. If 'file' is specified, Grin wallet will generate a partial transaction file under the file name specified in the `-d` flag. This file needs to be signed by the recipient using the `grin wallet receive -i filename` command and finalized by the sender using the `grin wallet finalize -i filename.response` command. To create a partial transaction file, use:
 
  ```sh
 [host]$ grin wallet send -d "transaction" -m file 60.00
