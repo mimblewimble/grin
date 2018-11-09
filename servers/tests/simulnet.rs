@@ -376,7 +376,7 @@ fn simulate_fast_sync() {
 }
 
 /// Preparation:
-/// 	Creates 5 disconnected servers: A, B, C, D, and E, mine 80 blocks on A,
+/// 	Creates 6 disconnected servers: A, B, C, D, E and F, mine 80 blocks on A,
 /// 	Compact server A.
 /// 	Connect all servers, check all get state_sync_threshold full blocks using fast sync.
 /// 	Disconnect all servers from each other.
@@ -399,8 +399,12 @@ fn simulate_fast_sync() {
 /// 	check server B can sync to E but need txhashset download.
 ///
 /// Test case 4: nodes which had a success state sync can have a new state sync if needed.
-/// 	Mine cut_through_horizon+1 blocks on E, connect E to servers B
-///     check server B can sync to E with txhashset download.
+/// 	Mine cut_through_horizon+20 blocks on F (longer fork than E), connect F to servers B
+///     check server B can sync to F with txhashset download.
+///
+/// Test case 5: normal sync (not a fork) should not trigger a txhashset download
+/// 	Mine cut_through_horizon+1 blocks on F, connect F to servers B
+///     check server B can sync to F without txhashset download.
 ///
 #[test]
 fn simulate_long_fork() {
@@ -429,6 +433,9 @@ fn simulate_long_fork() {
 	thread::sleep(time::Duration::from_millis(1_000));
 
 	long_fork_test_case_4(&s);
+	thread::sleep(time::Duration::from_millis(1_000));
+
+	long_fork_test_case_5(&s);
 
 	// Clean up
 	for si in &s {
@@ -440,7 +447,7 @@ fn simulate_long_fork() {
 }
 
 fn long_fork_test_preparation() -> Vec<servers::Server> {
-	println!("preparation: mine 80 blocks");
+	println!("preparation: mine 80 blocks, create 6 servers and sync all of them");
 
 	let mut s: Vec<servers::Server> = vec![];
 
@@ -471,7 +478,7 @@ fn long_fork_test_preparation() -> Vec<servers::Server> {
 		s0_tail.height
 	);
 
-	for i in 1..5 {
+	for i in 1..6 {
 		let mut conf = config(2100 + i, "grin-long-fork", 2100);
 		conf.archive_mode = Some(false);
 		conf.api_secret_path = None;
@@ -480,7 +487,7 @@ fn long_fork_test_preparation() -> Vec<servers::Server> {
 	}
 	thread::sleep(time::Duration::from_millis(1_000));
 
-	// Wait for s[1..4] to sync up to and including the header from s0.
+	// Wait for s[1..5] to sync up to and including the header from s0.
 	let mut total_wait = 0;
 	let mut min_height = 0;
 	while min_height < s0_header.height {
@@ -495,7 +502,7 @@ fn long_fork_test_preparation() -> Vec<servers::Server> {
 			exit(1);
 		}
 		min_height = s0_header.height;
-		for i in 1..5 {
+		for i in 1..6 {
 			min_height = cmp::min(s[i].head().height, min_height);
 		}
 	}
@@ -503,6 +510,10 @@ fn long_fork_test_preparation() -> Vec<servers::Server> {
 	// Confirm both s0 and s1 see a consistent header at that height.
 	let s1_header = s[1].chain.head().unwrap();
 	assert_eq!(s0_header, s1_header);
+	println!(
+		"preparation done. all 5 servers head.height: {}",
+		s0_header.height
+	);
 
 	// Wait for peers fully connection
 	let mut total_wait = 0;
@@ -541,11 +552,12 @@ fn long_fork_test_mining(blocks: u64, n: u16, s: &servers::Server) {
 	s.stop_test_miner(stop);
 	thread::sleep(time::Duration::from_millis(1_000));
 	println!(
-		"{} blocks mined on s{}. s{}.height: {}",
-		blocks,
+		"{} blocks mined on s{}. s{}.height: {} (old height: {})",
+		s.head().height - sn_header.height,
 		n,
 		n,
 		s.head().height,
+		sn_header.height,
 	);
 
 	let _ = s.chain.compact();
@@ -558,7 +570,7 @@ fn long_fork_test_mining(blocks: u64, n: u16, s: &servers::Server) {
 }
 
 fn long_fork_test_case_1(s: &Vec<servers::Server>) {
-	println!("test case 1 start");
+	println!("\ntest case 1 start");
 
 	// Mine state_sync_threshold-7 blocks on s0
 	long_fork_test_mining(global::state_sync_threshold() as u64 - 7, 0, &s[0]);
@@ -605,7 +617,7 @@ fn long_fork_test_case_1(s: &Vec<servers::Server>) {
 }
 
 fn long_fork_test_case_2(s: &Vec<servers::Server>) {
-	println!("test case 2 start");
+	println!("\ntest case 2 start");
 
 	// Mine 20 blocks on s0
 	long_fork_test_mining(20, 0, &s[0]);
@@ -654,7 +666,7 @@ fn long_fork_test_case_2(s: &Vec<servers::Server>) {
 }
 
 fn long_fork_test_case_3(s: &Vec<servers::Server>) {
-	println!("test case 3 start");
+	println!("\ntest case 3 start");
 
 	// Mine cut_through_horizon+1 blocks on s4
 	long_fork_test_mining(global::cut_through_horizon() as u64 + 10, 4, &s[4]);
@@ -720,32 +732,34 @@ fn long_fork_test_case_3(s: &Vec<servers::Server>) {
 }
 
 fn long_fork_test_case_4(s: &Vec<servers::Server>) {
-	println!("test case 4 start");
+	println!("\ntest case 4 start");
 
-	// Mine cut_through_horizon+1 blocks on s4
-	long_fork_test_mining(global::cut_through_horizon() as u64 + 1, 4, &s[4]);
+	let _ = s[1].chain.compact();
 
-	let s4_header = s[4].chain.head().unwrap();
+	// Mine cut_through_horizon+20 blocks on s5 (longer fork than s4)
+	long_fork_test_mining(global::cut_through_horizon() as u64 + 20, 5, &s[5]);
+
+	let s5_header = s[5].chain.head().unwrap();
 	let s1_header = s[1].chain.head().unwrap();
 	let s1_tail = s[1].chain.tail().unwrap();
 	println!(
-		"test case 4: s1 start syncing with s4. s1.head().height: {}, s1.tail().height: {}, s4.head().height: {}",
+		"test case 4: s1 start syncing with s5. s1.head().height: {}, s1.tail().height: {}, s5.head().height: {}",
 		s1_header.height, s1_tail.height,
-		s4_header.height,
+		s5_header.height,
 	);
 	s[1].resume();
-	s[4].resume();
+	s[5].resume();
 
-	// Check server s1 can sync to s4 with a new txhashset download.
+	// Check server s1 can sync to s5 with a new txhashset download.
 	let mut total_wait = 0;
-	while s[1].head().height < s4_header.height {
+	while s[1].head().height < s5_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		total_wait += 1;
 		if total_wait >= 120 {
 			println!(
-				"test case 4: test fail on timeout! s1 height: {}, s4 height: {}",
+				"test case 4: test fail on timeout! s1 height: {}, s5 height: {}",
 				s[1].head().height,
-				s4_header.height,
+				s5_header.height,
 			);
 			exit(1);
 		}
@@ -756,12 +770,59 @@ fn long_fork_test_case_4(s: &Vec<servers::Server>) {
 		s1_tail_new.height, s1_tail.height
 	);
 	assert_ne!(s1_tail_new.height, s1_tail.height);
-	assert_eq!(s[1].head().hash(), s4_header.hash());
+	assert_eq!(s[1].head().hash(), s5_header.hash());
 
 	s[1].pause();
-	s[4].pause();
+	s[5].pause();
 
 	println!("test case 4 passed")
+}
+
+fn long_fork_test_case_5(s: &Vec<servers::Server>) {
+	println!("\ntest case 5 start");
+
+	let _ = s[1].chain.compact();
+
+	// Mine cut_through_horizon+1 blocks on s5
+	long_fork_test_mining(global::cut_through_horizon() as u64 + 1, 5, &s[5]);
+
+	let s5_header = s[5].chain.head().unwrap();
+	let s1_header = s[1].chain.head().unwrap();
+	let s1_tail = s[1].chain.tail().unwrap();
+	println!(
+		"test case 5: s1 start syncing with s5. s1.head().height: {}, s1.tail().height: {}, s5.head().height: {}",
+		s1_header.height, s1_tail.height,
+		s5_header.height,
+	);
+	s[1].resume();
+	s[5].resume();
+
+	// Check server s1 can sync to s5 without a txhashset download (normal body sync)
+	let mut total_wait = 0;
+	while s[1].head().height < s5_header.height {
+		thread::sleep(time::Duration::from_millis(1_000));
+		total_wait += 1;
+		if total_wait >= 120 {
+			println!(
+				"test case 5: test fail on timeout! s1 height: {}, s5 height: {}",
+				s[1].head().height,
+				s5_header.height,
+			);
+			exit(1);
+		}
+	}
+	let s1_tail_new = s[1].chain.tail().unwrap();
+	println!(
+		"test case 5: s[1].tail().height: {}, old height: {}",
+		s1_tail_new.height, s1_tail.height
+	);
+	assert_eq!(s1_tail_new.height, s1_tail.height);
+	assert_eq!(s[1].head().hash(), s5_header.hash());
+
+	s[1].pause();
+	s[5].pause();
+
+	println!("test case 5 passed")
 }
 
 pub fn create_wallet(
