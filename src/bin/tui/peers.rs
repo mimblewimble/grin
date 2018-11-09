@@ -39,6 +39,7 @@ enum PeerColumn {
 	TotalDifficulty,
 	Direction,
 	Version,
+	UserAgent,
 }
 
 impl PeerColumn {
@@ -50,6 +51,7 @@ impl PeerColumn {
 			PeerColumn::Version => "Version",
 			PeerColumn::TotalDifficulty => "Total Difficulty",
 			PeerColumn::Direction => "Direction",
+			PeerColumn::UserAgent => "User Agent",
 		}
 	}
 }
@@ -77,6 +79,7 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			).to_string(),
 			PeerColumn::Direction => self.direction.clone(),
 			PeerColumn::Version => self.version.to_string(),
+			PeerColumn::UserAgent => self.user_agent.clone(),
 		}
 	}
 
@@ -104,6 +107,7 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			PeerColumn::TotalDifficulty => self.total_difficulty.cmp(&other.total_difficulty),
 			PeerColumn::Direction => self.direction.cmp(&other.direction),
 			PeerColumn::Version => self.version.cmp(&other.version),
+			PeerColumn::UserAgent => self.user_agent.cmp(&other.user_agent),
 		}
 	}
 }
@@ -116,11 +120,12 @@ impl TUIStatusListener for TUIPeerView {
 			.column(PeerColumn::Address, "Address", |c| c.width_percent(16))
 			.column(PeerColumn::State, "State", |c| c.width_percent(8))
 			.column(PeerColumn::UsedBandwidth, "Used bandwidth", |c| {
-				c.width_percent(24)
+				c.width_percent(16)
 			}).column(PeerColumn::Direction, "Direction", |c| c.width_percent(8))
 			.column(PeerColumn::TotalDifficulty, "Total Difficulty", |c| {
 				c.width_percent(24)
-			}).column(PeerColumn::Version, "Version", |c| c.width_percent(16));
+			}).column(PeerColumn::Version, "Version", |c| c.width_percent(8))
+			.column(PeerColumn::UserAgent, "User Agent", |c| c.width_percent(16));
 		let peer_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
 				.child(
