@@ -58,6 +58,8 @@ pub struct Server {
 	state_info: ServerStateInfo,
 	/// Stop flag
 	pub stop: Arc<AtomicBool>,
+	/// Pause flag
+	pub pause: Arc<AtomicBool>,
 }
 
 impl Server {
@@ -111,6 +113,7 @@ impl Server {
 		};
 
 		let stop = Arc::new(AtomicBool::new(false));
+		let pause = Arc::new(AtomicBool::new(false));
 
 		// Shared cache for verification results.
 		// We cache rangeproof verification and kernel signature verification.
@@ -173,6 +176,7 @@ impl Server {
 			net_adapter.clone(),
 			genesis.hash(),
 			stop.clone(),
+			pause.clone(),
 		)?);
 		chain_adapter.init(p2p_server.peers.clone());
 		pool_net_adapter.init(p2p_server.peers.clone());
@@ -203,6 +207,7 @@ impl Server {
 				seeder,
 				peers_preferred,
 				stop.clone(),
+				pause.clone(),
 			);
 		}
 
@@ -254,6 +259,7 @@ impl Server {
 				..Default::default()
 			},
 			stop,
+			pause,
 		})
 	}
 
@@ -423,6 +429,18 @@ impl Server {
 	pub fn stop(&self) {
 		self.p2p.stop();
 		self.stop.store(true, Ordering::Relaxed);
+	}
+
+	/// Pause the p2p server.
+	pub fn pause(&self) {
+		self.pause.store(true, Ordering::Relaxed);
+		thread::sleep(time::Duration::from_secs(1));
+		self.p2p.pause();
+	}
+
+	/// Resume the p2p server.
+	pub fn resume(&self) {
+		self.pause.store(false, Ordering::Relaxed);
 	}
 
 	/// Stops the test miner without stopping the p2p layer

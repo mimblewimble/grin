@@ -379,23 +379,23 @@ fn simulate_fast_sync() {
 /// 	Creates 5 disconnected servers: A, B, C, D, and E, mine 80 blocks on A,
 /// 	Compact server A.
 /// 	Connect all servers, check all get state_sync_threshold full blocks using fast sync.
-/// 	Disconnect C, D and E from all others.
+/// 	Disconnect all servers from each other.
 ///
 /// Test case 1: nodes that just synced is able to handle forks of up to state_sync_threshold
-/// 	Mine state_sync_threshold-7 blocks on A, check server B get all blocks.
-/// 	Mine state_sync_threshold-1 blocks on C (long fork), connect C to server A and B,
-/// 	check server B can sync without txhashset download.
+/// 	Mine state_sync_threshold-7 blocks on A
+/// 	Mine state_sync_threshold-1 blocks on C (long fork), connect C to server A
+/// 	check server A can sync to C without txhashset download.
 ///
 /// Test case 2: nodes with history in between state_sync_threshold and cut_through_horizon will
 /// be able to handle forks larger than state_sync_threshold but not as large as cut_through_horizon.
-/// 	Mine 30 blocks on A, check server B and C get all blocks.
-/// 	Mine cut_through_horizon-1 blocks on D (longer fork), connect D to servers A, B and C,
-/// 	check server B can sync without txhashset download.
+/// 	Mine 30 blocks on A
+/// 	Mine cut_through_horizon-1 blocks on D (longer fork), connect D to servers A
+/// 	check server A can sync without txhashset download.
 ///
 /// Test case 3: nodes that have enough history is able to handle forks of up to cut_through_horizon
-/// 	Mine cut_through_horizon-1 blocks on E, connect E to all other servers (A,B,C,D)
-/// 	check server A can sync without txhashset download.
-/// 	check server B can sync but need txhashset download.
+/// 	Mine cut_through_horizon-1 + 10 blocks on E, connect E to servers A and B
+/// 	check server A can sync to E without txhashset download.
+/// 	check server B can sync to E but need txhashset download.
 ///
 #[test]
 fn simulate_long_fork() {
@@ -408,30 +408,30 @@ fn simulate_long_fork() {
 	let test_name_dir = "grin-long-fork";
 	framework::clean_all_output(test_name_dir);
 
-	long_fork_test_preparation();
-	thread::sleep(time::Duration::from_millis(5 * 1_000));
+	let s = long_fork_test_preparation();
+	for si in &s {
+		si.pause();
+	}
+	thread::sleep(time::Duration::from_millis(1_000));
 
-	long_fork_test_case_1();
-	thread::sleep(time::Duration::from_millis(5 * 1_000));
+	long_fork_test_case_1(&s);
+	thread::sleep(time::Duration::from_millis(1_000));
 
-	long_fork_test_case_2();
-	thread::sleep(time::Duration::from_millis(5 * 1_000));
+	long_fork_test_case_2(&s);
+	thread::sleep(time::Duration::from_millis(1_000));
 
-	// ------------------------------- //
-	// ------    test case 3    ------ //
-	// ------------------------------- //
+	long_fork_test_case_3(&s);
 
-	// TODO:
-	// Mine cut_through_horizon-1 blocks on s4
-	// Connect s4 to all other servers (s0,s1,s2,s3)
-	// Check server s0 can sync without txhashset download.
-	// Check server s1 can sync but need txhashset download.
+	// Clean up
+	for si in &s {
+		si.stop();
+	}
 
 	// wait servers fully stop before start next automated test
 	thread::sleep(time::Duration::from_millis(1_000));
 }
 
-fn long_fork_test_preparation() {
+fn long_fork_test_preparation() -> Vec<servers::Server> {
 	println!("preparation: mine 80 blocks");
 
 	let mut s: Vec<servers::Server> = vec![];
@@ -516,162 +516,183 @@ fn long_fork_test_preparation() {
 		}
 	}
 
-	// Clean up
-	for i in 0..5 {
-		s[i].stop();
-	}
+	return s;
 }
 
-fn long_fork_test_mining(blocks: u64, node: u16) {
-	// Start server s[n]
-	println!("s{} starting...", node);
-	let mut conf = config(2100 + node, "grin-long-fork", 2100);
-	conf.archive_mode = Some(false);
-	conf.api_secret_path = None;
-	let sn = servers::Server::new(conf).unwrap();
-	thread::sleep(time::Duration::from_millis(1_000));
-	println!("s{} started.", node);
-
+fn long_fork_test_mining(blocks: u64, n: u16, s: &servers::Server) {
 	// Get the current header from node.
-	let sn_header = sn.chain.head().unwrap();
+	let sn_header = s.chain.head().unwrap();
 
-	// Mine state_sync_threshold-7 blocks on s0
+	// Mining
 	let stop = Arc::new(AtomicBool::new(false));
-	sn.start_test_miner(None, stop.clone());
+	s.start_test_miner(None, stop.clone());
 
-	while sn.head().height < sn_header.height + blocks {
+	while s.head().height < sn_header.height + blocks {
 		thread::sleep(time::Duration::from_millis(1));
 	}
-	sn.stop_test_miner(stop);
+	s.stop_test_miner(stop);
 	thread::sleep(time::Duration::from_millis(1_000));
 	println!(
 		"{} blocks mined on s{}. s{}.height: {}",
 		blocks,
-		node,
-		node,
-		sn.head().height,
+		n,
+		n,
+		s.head().height,
 	);
 
-	let _ = sn.chain.compact();
-
-	sn.stop();
+	let _ = s.chain.compact();
 }
 
-fn long_fork_test_case_1() {
+fn long_fork_test_case_1(s: &Vec<servers::Server>) {
 	println!("test case 1 start");
 
 	// Mine state_sync_threshold-7 blocks on s0
-	long_fork_test_mining(global::state_sync_threshold() as u64 - 7, 0);
+	long_fork_test_mining(global::state_sync_threshold() as u64 - 7, 0, &s[0]);
 
 	// Mine state_sync_threshold-1 blocks on s2 (long fork), a fork with more work than s0 chain
-	long_fork_test_mining(global::state_sync_threshold() as u64 - 1, 2);
+	long_fork_test_mining(global::state_sync_threshold() as u64 - 1, 2, &s[2]);
 
-	println!("test case 1: s0 starting...");
-	let mut conf = config(2100, "grin-long-fork", 2100);
-	conf.archive_mode = Some(false);
-	conf.api_secret_path = None;
-	let s0 = servers::Server::new(conf).unwrap();
-	thread::sleep(time::Duration::from_millis(1_000));
-	let s0_header = s0.chain.head().unwrap();
-	let s0_tail = s0.chain.tail().unwrap();
+	let s2_header = s[2].chain.head().unwrap();
+	let s0_header = s[0].chain.head().unwrap();
+	let s0_tail = s[0].chain.tail().unwrap();
 	println!(
-		"test case 1: s0 started. s0.head().height: {}",
-		s0_header.height
+		"test case 1: s0 start syncing with s2... s0.head().height: {}, s2.head().height: {}",
+		s0_header.height, s2_header.height,
 	);
-
-	println!("test case 1: s2 starting...");
-	let mut conf = config(2100 + 2, "grin-long-fork", 2100);
-	conf.archive_mode = Some(false);
-	conf.api_secret_path = None;
-	let s2 = servers::Server::new(conf).unwrap();
-	thread::sleep(time::Duration::from_millis(1_000));
-	let s2_header = s2.chain.head().unwrap();
-	println!(
-		"test case 1: s2 started. s2.head().height: {}",
-		s2_header.height
-	);
+	s[0].resume();
+	s[2].resume();
 
 	// Check server s0 can sync to s2 without txhashset download.
 	let mut total_wait = 0;
-	while s0.head().height < s2_header.height {
+	while s[0].head().height < s2_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		total_wait += 1;
-		if total_wait >= 60 {
+		if total_wait >= 120 {
 			println!(
-				"simulate_long_fork (t1) test fail on timeout! s1 height: {}, s2 height: {}",
-				s0.head().height,
+				"simulate_long_fork (t1) test fail on timeout! s0 height: {}, s2 height: {}",
+				s[0].head().height,
 				s2_header.height,
 			);
 			exit(1);
 		}
 	}
-	let s0_tail_new = s0.chain.tail().unwrap();
+	let s0_tail_new = s[0].chain.tail().unwrap();
 	assert_eq!(s0_tail_new.height, s0_tail.height);
 	println!(
 		"s0.head().height: {}, s2_header.height: {}",
-		s0.head().height,
+		s[0].head().height,
 		s2_header.height,
 	);
-	assert_eq!(s0.head().last_block_h, s2_header.last_block_h);
+	assert_eq!(s[0].head().last_block_h, s2_header.last_block_h);
 
-	s0.stop();
-	s2.stop();
+	s[0].pause();
+	s[2].pause();
 }
 
-fn long_fork_test_case_2() {
+fn long_fork_test_case_2(s: &Vec<servers::Server>) {
 	println!("test case 2 start");
 
 	// Mine 30 blocks on s0
-	long_fork_test_mining(30, 0);
+	long_fork_test_mining(30, 0, &s[0]);
 
 	// Mine cut_through_horizon-1 blocks on s3 (longer fork)
-	long_fork_test_mining(global::cut_through_horizon() as u64 - 1, 3);
-
-	println!("test case 2: s0 starting...");
-	let mut conf = config(2100, "grin-long-fork", 2100);
-	conf.archive_mode = Some(false);
-	conf.api_secret_path = None;
-	let s0 = servers::Server::new(conf).unwrap();
-	thread::sleep(time::Duration::from_millis(1_000));
-	let s0_header = s0.chain.head().unwrap();
-	let s0_tail = s0.chain.tail().unwrap();
+	long_fork_test_mining(global::cut_through_horizon() as u64 - 1, 3, &s[3]);
+	let s3_header = s[3].chain.head().unwrap();
+	let s0_header = s[0].chain.head().unwrap();
+	let s0_tail = s[0].chain.tail().unwrap();
 	println!(
-		"test case 2: s0 started. s0.head().height: {}",
-		s0_header.height
+		"test case 2: s0 start syncing with s3. s0.head().height: {}, s3.head().height: {}",
+		s0_header.height, s3_header.height,
 	);
-
-	println!("test case 2: s3 starting...");
-	let mut conf = config(2100 + 3, "grin-long-fork", 2100);
-	conf.archive_mode = Some(false);
-	conf.api_secret_path = None;
-	let s3 = servers::Server::new(conf).unwrap();
-	thread::sleep(time::Duration::from_millis(1_000));
-	let s3_header = s3.chain.head().unwrap();
-	println!(
-		"test case 2: s3 started. s3.head().height: {}",
-		s3_header.height
-	);
+	s[0].resume();
+	s[3].resume();
 
 	// Check server s0 can sync to s3 without txhashset download.
 	let mut total_wait = 0;
-	while s0.head().height < s3_header.height {
+	while s[0].head().height < s3_header.height {
 		thread::sleep(time::Duration::from_millis(1_000));
 		total_wait += 1;
 		if total_wait >= 120 {
 			println!(
 				"simulate_long_fork (t2) test fail on timeout! s0 height: {}, s3 height: {}",
-				s0.head().height,
+				s[0].head().height,
 				s3_header.height,
 			);
 			exit(1);
 		}
 	}
-	let s0_tail_new = s0.chain.tail().unwrap();
+	let s0_tail_new = s[0].chain.tail().unwrap();
 	assert_eq!(s0_tail_new.height, s0_tail.height);
-	assert_eq!(s0.head().hash(), s3_header.hash());
+	assert_eq!(s[0].head().hash(), s3_header.hash());
 
-	s0.stop();
-	s3.stop();
+	s[0].pause();
+	s[3].pause();
+}
+
+fn long_fork_test_case_3(s: &Vec<servers::Server>) {
+	println!("test case 3 start");
+
+	// Mine cut_through_horizon-1 + 10 blocks on s4
+	long_fork_test_mining(global::cut_through_horizon() as u64 - 1 + 10, 4, &s[4]);
+
+	let s4_header = s[4].chain.head().unwrap();
+	let s0_header = s[0].chain.head().unwrap();
+	let s0_tail = s[0].chain.tail().unwrap();
+	let s1_header = s[1].chain.head().unwrap();
+	let s1_tail = s[1].chain.tail().unwrap();
+	println!(
+		"test case 3: s0/1 start syncing with s4. s0.head().height: {}, s1.head().height: {}, s4.head().height: {}",
+		s0_header.height,
+		s1_header.height,
+		s4_header.height,
+	);
+	s[0].resume();
+	s[1].resume();
+	s[4].resume();
+
+	// Check server s0 can sync to s4 without txhashset download.
+	let mut total_wait = 0;
+	while s[0].head().height < s4_header.height {
+		thread::sleep(time::Duration::from_millis(1_000));
+		total_wait += 1;
+		if total_wait >= 120 {
+			println!(
+				"simulate_long_fork (t3) test fail on timeout! s0 height: {}, s4 height: {}",
+				s[0].head().height,
+				s4_header.height,
+			);
+			exit(1);
+		}
+	}
+	let s0_tail_new = s[0].chain.tail().unwrap();
+	assert_eq!(s0_tail_new.height, s0_tail.height);
+	assert_eq!(s[0].head().hash(), s4_header.hash());
+
+	// Check server s1 can sync to s4 but with txhashset download.
+	let mut total_wait = 0;
+	while s[1].head().height < s4_header.height {
+		thread::sleep(time::Duration::from_millis(1_000));
+		total_wait += 1;
+		if total_wait >= 120 {
+			println!(
+				"simulate_long_fork (t3) test fail on timeout! s1 height: {}, s4 height: {}",
+				s[1].head().height,
+				s4_header.height,
+			);
+			exit(1);
+		}
+	}
+	let s1_tail_new = s[1].chain.tail().unwrap();
+	println!(
+		"s[1].tail().height: {}, old height: {}",
+		s1_tail_new.height, s1_tail.height
+	);
+	assert_ne!(s1_tail_new.height, s1_tail.height);
+	assert_eq!(s[1].head().hash(), s4_header.hash());
+
+	s[0].pause();
+	s[1].pause();
+	s[3].pause();
 }
 
 pub fn create_wallet(
@@ -785,24 +806,6 @@ fn replicate_tx_fluff_failure() {
 		assert_eq!(res.1.amount_currently_spendable, amount);
 		Ok(())
 	}).unwrap();
-}
-
-fn ban_peer(base_addr: &String, api_server_port: u16, peer_addr: &String) {
-	let url = format!(
-		"http://{}:{}/v1/peers/{}/ban",
-		base_addr, api_server_port, peer_addr
-	);
-	println!("ban_peer: url={}", url);
-	let _ = api::client::post_no_ret(url.as_str(), None, &"");
-}
-
-fn unban_peer(base_addr: &String, api_server_port: u16, peer_addr: &String) {
-	let url = format!(
-		"http://{}:{}/v1/peers/{}/unban",
-		base_addr, api_server_port, peer_addr
-	);
-	println!("unban_peer: url={}", url);
-	let _ = api::client::post_no_ret(url.as_str(), None, &"");
 }
 
 fn get_connected_peers(
