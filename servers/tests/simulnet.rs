@@ -411,6 +411,7 @@ fn simulate_fast_sync() {
 ///     check server B can sync to F with txhashset download.
 ///
 ///
+#[ignore]
 #[test]
 fn simulate_long_fork() {
 	util::init_test_logger();
