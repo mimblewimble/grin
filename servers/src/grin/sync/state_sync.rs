@@ -62,7 +62,7 @@ impl StateSync {
 		tail: &chain::Tip,
 		highest_height: u64,
 	) -> bool {
-		debug!("state_sync: head.height: {}, tail.height: {}. header_head.height: {}, highest_height: {}",
+		trace!("state_sync: head.height: {}, tail.height: {}. header_head.height: {}, highest_height: {}",
 			   head.height, tail.height, header_head.height, highest_height,
 		);
 

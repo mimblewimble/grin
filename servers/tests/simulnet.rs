@@ -403,8 +403,13 @@ fn simulate_fast_sync() {
 ///     check server B can sync to F with txhashset download.
 ///
 /// Test case 5: normal sync (not a fork) should not trigger a txhashset download
-/// 	Mine cut_through_horizon+1 blocks on F, connect F to servers B
+/// 	Mine cut_through_horizon-10 blocks on F, connect F to servers B
 ///     check server B can sync to F without txhashset download.
+///
+/// Test case 6: far behind sync (not a fork) should trigger a txhashset download
+/// 	Mine cut_through_horizon+1 blocks on F, connect F to servers B
+///     check server B can sync to F with txhashset download.
+///
 ///
 #[test]
 fn simulate_long_fork() {
@@ -783,8 +788,8 @@ fn long_fork_test_case_5(s: &Vec<servers::Server>) {
 
 	let _ = s[1].chain.compact();
 
-	// Mine cut_through_horizon+1 blocks on s5
-	long_fork_test_mining(global::cut_through_horizon() as u64 + 1, 5, &s[5]);
+	// Mine cut_through_horizon-10 blocks on s5
+	long_fork_test_mining(global::cut_through_horizon() as u64 - 10, 5, &s[5]);
 
 	let s5_header = s[5].chain.head().unwrap();
 	let s1_header = s[1].chain.head().unwrap();
@@ -823,6 +828,53 @@ fn long_fork_test_case_5(s: &Vec<servers::Server>) {
 	s[5].pause();
 
 	println!("test case 5 passed")
+}
+
+fn long_fork_test_case_6(s: &Vec<servers::Server>) {
+	println!("\ntest case 6 start");
+
+	let _ = s[1].chain.compact();
+
+	// Mine cut_through_horizon+1 blocks on s5
+	long_fork_test_mining(global::cut_through_horizon() as u64 + 1, 5, &s[5]);
+
+	let s5_header = s[5].chain.head().unwrap();
+	let s1_header = s[1].chain.head().unwrap();
+	let s1_tail = s[1].chain.tail().unwrap();
+	println!(
+		"test case 6: s1 start syncing with s5. s1.head().height: {}, s1.tail().height: {}, s5.head().height: {}",
+		s1_header.height, s1_tail.height,
+		s5_header.height,
+	);
+	s[1].resume();
+	s[5].resume();
+
+	// Check server s1 can sync to s5 without a txhashset download (normal body sync)
+	let mut total_wait = 0;
+	while s[1].head().height < s5_header.height {
+		thread::sleep(time::Duration::from_millis(1_000));
+		total_wait += 1;
+		if total_wait >= 120 {
+			println!(
+				"test case 6: test fail on timeout! s1 height: {}, s5 height: {}",
+				s[1].head().height,
+				s5_header.height,
+			);
+			exit(1);
+		}
+	}
+	let s1_tail_new = s[1].chain.tail().unwrap();
+	println!(
+		"test case 6: s[1].tail().height: {}, old height: {}",
+		s1_tail_new.height, s1_tail.height
+	);
+	assert_eq!(s1_tail_new.height, s1_tail.height);
+	assert_eq!(s[1].head().hash(), s5_header.hash());
+
+	s[1].pause();
+	s[5].pause();
+
+	println!("test case 6 passed")
 }
 
 pub fn create_wallet(
