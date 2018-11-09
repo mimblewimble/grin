@@ -700,6 +700,48 @@ impl Chain {
 		Ok(())
 	}
 
+	/// Check chain status whether a txhashset downloading is needed
+	fn check_txhashset_needed(&self) -> bool {
+		let horizon = global::cut_through_horizon() as u64;
+		let body_head = self.head().unwrap();
+		let header_head = self.header_head().unwrap();
+
+		if body_head.total_difficulty >= header_head.total_difficulty {
+			return false;
+		}
+
+		let mut oldest_height = 0;
+
+		let mut current = self.get_block_header(&header_head.last_block_h);
+		if current.is_err() {
+			error!(
+				"check_txhashset_needed: header_head not found in chain db: {} at {}",
+				header_head.last_block_h, header_head.height,
+			);
+		}
+
+		while let Ok(header) = current {
+			// break out of the while loop when we find a header common
+			// between the header chain and the current body chain
+			if let Ok(_) = self.is_on_current_chain(&header) {
+				break;
+			}
+
+			oldest_height = header.height;
+			current = self.get_previous_header(&header);
+		}
+
+		if oldest_height < header_head.height.saturating_sub(horizon) {
+			return if oldest_height > 0 {
+				true
+			} else {
+				error!("check_txhashset_needed: something is wrong! oldest_height is 0");
+				false
+			};
+		}
+		return false;
+	}
+
 	/// Writes a reading view on a txhashset state that's been provided to us.
 	/// If we're willing to accept that new state, the data stream will be
 	/// read as a zip file, unzipped and the resulting state files should be
@@ -712,30 +754,10 @@ impl Chain {
 	) -> Result<(), Error> {
 		status.on_setup();
 
-		// Initial check based on body tail and current header chain.
-		// if tail is on the current header chain, the txhashset is not needed
-		{
-			let head = self.head().unwrap();
-			let tail = self.tail().unwrap_or_else(|_| head.clone());
-			let header_head = self.header_head().unwrap();
-			if header_head.height - head.height < global::cut_through_horizon() as u64
-				&& tail.last_block_h != head.last_block_h
-				&& header_head.height > tail.height
-			{
-				let mut header_cursor = self.get_block_header(&header_head.prev_block_h);
-				while let Ok(header) = header_cursor {
-					if tail.height + 1 == header.height {
-						if tail.last_block_h == header.prev_hash {
-							warn!("txhashset_write: body tail {} at {} is on the local chain. txhashset not needed",
-								   tail.last_block_h, tail.height,
-							);
-							return Err(ErrorKind::InvalidTxHashSet("not needed".to_owned()).into());
-						}
-						break;
-					}
-					header_cursor = self.get_previous_header(&header);
-				}
-			}
+		// Initial check whether this txhashset is needed or not
+		if !self.check_txhashset_needed() {
+			warn!("txhashset_write: txhashset received but it's not needed! ignored.");
+			return Err(ErrorKind::InvalidTxHashSet("not needed".to_owned()).into());
 		}
 
 		let header = self.get_block_header(&h)?;
@@ -839,12 +861,13 @@ impl Chain {
 
 		let horizon = global::cut_through_horizon() as u64;
 		let head = self.head()?;
+		let tail = self.tail()?;
 
 		let cutoff = head.height.saturating_sub(horizon);
 
 		debug!(
-			"compact_blocks_db: head height: {}, horizon: {}, cutoff: {}",
-			head.height, horizon, cutoff,
+			"compact_blocks_db: head height: {}, tail height: {}, horizon: {}, cutoff: {}",
+			head.height, tail.height, horizon, cutoff,
 		);
 
 		if cutoff == 0 {
@@ -882,7 +905,10 @@ impl Chain {
 		let tail = batch.get_header_by_height(head.height - horizon)?;
 		batch.save_body_tail(&Tip::from_header(&tail))?;
 		batch.commit()?;
-		debug!("compact_blocks_db: removed {} blocks.", count);
+		debug!(
+			"compact_blocks_db: removed {} blocks. tail height: {}",
+			count, tail.height
+		);
 		Ok(())
 	}
 

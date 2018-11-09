@@ -50,22 +50,25 @@ impl BodySync {
 		}
 	}
 
-	/// Check whether a body sync is needed and run it if so
+	/// Check whether a body sync is needed and run it if so.
+	/// Return true if txhashset download is needed (when requested block is under the horizon).
 	pub fn check_run(&mut self, head: &chain::Tip, highest_height: u64) -> bool {
-		// if fast_sync disabled or not needed, run the body_sync every 5s
+		// run the body_sync every 5s
 		if self.body_sync_due() {
-			self.body_sync();
+			if self.body_sync() {
+				return true;
+			}
 
 			self.sync_state.update(SyncStatus::BodySync {
 				current_height: head.height,
 				highest_height: highest_height,
 			});
-			return true;
 		}
 		false
 	}
 
-	fn body_sync(&mut self) {
+	/// Return true if txhashset download is needed (when requested block is under the horizon).
+	fn body_sync(&mut self) -> bool {
 		let horizon = global::cut_through_horizon() as u64;
 		let body_head = self.chain.head().unwrap();
 		let header_head = self.chain.header_head().unwrap();
@@ -107,24 +110,27 @@ impl BodySync {
 				oldest_height = header.height;
 				current = self.chain.get_previous_header(&header);
 			}
-		}
-		//+ remove me after #1880 root cause found
-		else {
+		} else {
 			debug!(
-				"body_sync: header_head.total_difficulty: {}, body_head.total_difficulty: {}",
+				"body_sync: skipped. header_head.total_difficulty: {} <= body_head.total_difficulty: {}",
 				header_head.total_difficulty, body_head.total_difficulty,
 			);
+			return false;
 		}
-		//-
 
 		hashes.reverse();
 
 		if oldest_height < header_head.height.saturating_sub(horizon) {
-			debug!(
-				"body_sync: cannot sync full blocks earlier than horizon. oldest_height: {}",
-				oldest_height,
-			);
-			return;
+			return if oldest_height > 0 {
+				debug!(
+					"body_sync: cannot sync full blocks from height {}, earlier than horizon. will request txhashset",
+					oldest_height,
+				);
+				true
+			} else {
+				error!("body_sync: something is wrong! oldest_height is 0");
+				false
+			};
 		}
 
 		let peers = self.peers.more_work_peers();
@@ -170,6 +176,7 @@ impl BodySync {
 				}
 			}
 		}
+		return false;
 	}
 
 	// Should we run block body sync and ask for more full blocks?

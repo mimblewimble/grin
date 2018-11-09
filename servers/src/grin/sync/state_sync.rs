@@ -33,8 +33,8 @@ pub struct StateSync {
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
 
-	prev_fast_sync: Option<DateTime<Utc>>,
-	fast_sync_peer: Option<Arc<Peer>>,
+	prev_state_sync: Option<DateTime<Utc>>,
+	state_sync_peer: Option<Arc<Peer>>,
 }
 
 impl StateSync {
@@ -47,8 +47,8 @@ impl StateSync {
 			sync_state,
 			peers,
 			chain,
-			prev_fast_sync: None,
-			fast_sync_peer: None,
+			prev_state_sync: None,
+			state_sync_peer: None,
 		}
 	}
 
@@ -62,42 +62,9 @@ impl StateSync {
 		tail: &chain::Tip,
 		highest_height: u64,
 	) -> bool {
-		if header_head.height != highest_height {
-			return true;
-		}
-
-		// if gap > horizon, need state sync
-		// because nobody has the old full blocks before horizon
-		let mut need_state_sync =
-			highest_height.saturating_sub(head.height) > global::cut_through_horizon() as u64;
-
-		// turn off state sync when previous sync just completed
-		if !need_state_sync && head.height > 0 && tail.last_block_h == head.last_block_h {
-			return false;
-		}
-
-		// or if tail is not on the current header chain, need state sync
-		// because the fork point is beyond the local database so we can't rewind and request blocks
-		if !need_state_sync && header_head.height > tail.height {
-			let mut header_cursor = self.chain.get_block_header(&header_head.prev_block_h);
-			while let Ok(header) = header_cursor {
-				if tail.height + 1 == header.height {
-					if tail.last_block_h != header.prev_hash {
-						need_state_sync = true;
-						debug!(
-							"fast_sync: tail {} at {} is not on the local chain. state sync needed",
-							tail.last_block_h, tail.height,
-						);
-					}
-					break;
-				}
-				header_cursor = self.chain.get_previous_header(&header);
-			}
-		}
-
-		if !need_state_sync {
-			return false;
-		}
+		debug!("state_sync: head.height: {}, tail.height: {}. header_head.height: {}, highest_height: {}",
+			   head.height, tail.height, header_head.height, highest_height,
+		);
 
 		let mut sync_need_restart = false;
 
@@ -105,47 +72,63 @@ impl StateSync {
 		{
 			let clone = self.sync_state.sync_error();
 			if let Some(ref sync_error) = *clone.read() {
-				error!("fast_sync: error = {:?}. restart fast sync", sync_error);
+				error!("state_sync: error = {:?}. restart fast sync", sync_error);
 				sync_need_restart = true;
 			}
 			drop(clone);
 		}
 
 		// check peer connection status of this sync
-		if let Some(ref peer) = self.fast_sync_peer {
+		if let Some(ref peer) = self.state_sync_peer {
 			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
 				if !peer.is_connected() {
 					sync_need_restart = true;
 					info!(
-						"fast_sync: peer connection lost: {:?}. restart",
+						"state_sync: peer connection lost: {:?}. restart",
 						peer.info.addr,
 					);
 				}
 			}
 		}
 
-		if sync_need_restart {
-			self.fast_sync_reset();
+		// if txhashset downloaded and validated successfully, we switch to BodySync state,
+		// and we need call state_sync_reset() to make it ready for next possible state sync.
+		let done = if let SyncStatus::TxHashsetDone = self.sync_state.status() {
+			self.sync_state.update(SyncStatus::BodySync {
+				current_height: 0,
+				highest_height: 0,
+			});
+			true
+		} else {
+			false
+		};
+
+		if sync_need_restart || done {
+			self.state_sync_reset();
 			self.sync_state.clear_sync_error();
+		}
+
+		if done {
+			return false;
 		}
 
 		// run fast sync if applicable, normally only run one-time, except restart in error
 		if header_head.height == highest_height {
-			let (go, download_timeout) = self.fast_sync_due();
+			let (go, download_timeout) = self.state_sync_due();
 
 			if let SyncStatus::TxHashsetDownload { .. } = self.sync_state.status() {
 				if download_timeout {
-					error!("fast_sync: TxHashsetDownload status timeout in 10 minutes!");
+					error!("state_sync: TxHashsetDownload status timeout in 10 minutes!");
 					self.sync_state
 						.set_sync_error(Error::P2P(p2p::Error::Timeout));
 				}
 			}
 
 			if go {
-				self.fast_sync_peer = None;
+				self.state_sync_peer = None;
 				match self.request_state(&header_head) {
 					Ok(peer) => {
-						self.fast_sync_peer = Some(peer);
+						self.state_sync_peer = Some(peer);
 					}
 					Err(e) => self.sync_state.set_sync_error(Error::P2P(e)),
 				}
@@ -186,14 +169,14 @@ impl StateSync {
 			}
 			let bhash = txhashset_head.hash();
 			debug!(
-				"fast_sync: before txhashset request, header head: {} / {}, txhashset_head: {} / {}",
+				"state_sync: before txhashset request, header head: {} / {}, txhashset_head: {} / {}",
 				header_head.height,
 				header_head.last_block_h,
 				txhashset_head.height,
 				bhash
 			);
 			if let Err(e) = peer.send_txhashset_request(txhashset_head.height, bhash) {
-				error!("fast_sync: send_txhashset_request err! {:?}", e);
+				error!("state_sync: send_txhashset_request err! {:?}", e);
 				return Err(e);
 			}
 			return Ok(peer.clone());
@@ -202,13 +185,13 @@ impl StateSync {
 	}
 
 	// For now this is a one-time thing (it can be slow) at initial startup.
-	fn fast_sync_due(&mut self) -> (bool, bool) {
+	fn state_sync_due(&mut self) -> (bool, bool) {
 		let now = Utc::now();
 		let mut download_timeout = false;
 
-		match self.prev_fast_sync {
+		match self.prev_state_sync {
 			None => {
-				self.prev_fast_sync = Some(now);
+				self.prev_state_sync = Some(now);
 				(true, download_timeout)
 			}
 			Some(prev) => {
@@ -220,8 +203,8 @@ impl StateSync {
 		}
 	}
 
-	fn fast_sync_reset(&mut self) {
-		self.prev_fast_sync = None;
-		self.fast_sync_peer = None;
+	fn state_sync_reset(&mut self) {
+		self.prev_state_sync = None;
+		self.state_sync_peer = None;
 	}
 }
