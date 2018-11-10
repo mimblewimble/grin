@@ -17,10 +17,10 @@
 
 use rand::thread_rng;
 use std::sync::Arc;
-use util::RwLock;
 use uuid::Uuid;
 
 use core::core::committed::Committed;
+use core::core::transaction::kernel_sig_msg;
 use core::core::verifier_cache::LruVerifierCache;
 use core::core::{amount_to_hr_string, Transaction};
 use keychain::{BlindSum, BlindingFactor, Keychain};
@@ -30,6 +30,7 @@ use libtx::{aggsig, build, tx_fee};
 use util::secp;
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::Signature;
+use util::RwLock;
 
 /// Public data for each participant in the slate
 
@@ -144,6 +145,13 @@ impl Slate {
 		Ok(())
 	}
 
+	// This is the msg that we will sign as part of the tx kernel.
+	// Currently includes the fee and the lock_height.
+	fn msg_to_sign(&self) -> Result<secp::Message, Error> {
+		let msg = kernel_sig_msg(self.fee, self.lock_height)?;
+		Ok(msg)
+	}
+
 	/// Completes caller's part of round 2, completing signatures
 	pub fn fill_round_2<K>(
 		&mut self,
@@ -164,8 +172,7 @@ impl Slate {
 			sec_nonce,
 			&self.pub_nonce_sum(keychain.secp())?,
 			Some(&self.pub_blind_sum(keychain.secp())?),
-			self.fee,
-			self.lock_height,
+			&self.msg_to_sign()?,
 		)?;
 		self.participant_data[participant_id].part_sig = Some(sig_part);
 		Ok(())
@@ -307,8 +314,7 @@ impl Slate {
 					&self.pub_nonce_sum(secp)?,
 					&p.public_blind_excess,
 					Some(&self.pub_blind_sum(secp)?),
-					self.fee,
-					self.lock_height,
+					&self.msg_to_sign()?,
 				)?;
 			}
 		}
@@ -352,8 +358,7 @@ impl Slate {
 			&final_sig,
 			&final_pubkey,
 			Some(&final_pubkey),
-			self.fee,
-			self.lock_height,
+			&self.msg_to_sign()?,
 		)?;
 
 		Ok(final_sig)

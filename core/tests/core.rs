@@ -75,7 +75,7 @@ fn tx_double_ser_deser() {
 }
 
 #[test]
-#[should_panic(expected = "InvalidSecretKey")]
+#[should_panic(expected = "Keychain Error")]
 fn test_zero_commit_fails() {
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id1 = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
