@@ -174,7 +174,9 @@ fn monitor_peers(
 	for p in peers.connected_peers() {
 		trace!(
 			"monitor_peers: {}:{} ask {} for more peers",
-			config.host, config.port, p.info.addr,
+			config.host,
+			config.port,
+			p.info.addr,
 		);
 		let _ = p.send_peer_request(capabilities);
 		connected_peers.push(p.info.addr)
@@ -213,7 +215,9 @@ fn monitor_peers(
 	for p in new_peers.iter().filter(|p| !peers.is_known(&p.addr)) {
 		trace!(
 			"monitor_peers: on {}:{}, queue to soon try {}",
-			config.host, config.port, p.addr,
+			config.host,
+			config.port,
+			p.addr,
 		);
 		tx.send(p.addr).unwrap();
 	}
