@@ -25,7 +25,7 @@ use util::RwLock;
 use lmdb;
 use lru_cache::LruCache;
 
-use core::core::hash::{Hash, Hashed};
+use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::merkle_proof::MerkleProof;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernel};
@@ -701,22 +701,39 @@ impl Chain {
 	}
 
 	/// Check chain status whether a txhashset downloading is needed
-	fn check_txhashset_needed(&self) -> bool {
+	pub fn check_txhashset_needed(&self, caller: String, hashes: &mut Option<Vec<Hash>>) -> bool {
 		let horizon = global::cut_through_horizon() as u64;
 		let body_head = self.head().unwrap();
 		let header_head = self.header_head().unwrap();
+		let sync_head = self.get_sync_head().unwrap();
+
+		debug!(
+			"{}: body_head - {}, {}, header_head - {}, {}, sync_head - {}, {}",
+			caller,
+			body_head.last_block_h,
+			body_head.height,
+			header_head.last_block_h,
+			header_head.height,
+			sync_head.last_block_h,
+			sync_head.height,
+		);
 
 		if body_head.total_difficulty >= header_head.total_difficulty {
+			debug!(
+				"{}: no need. header_head.total_difficulty: {} <= body_head.total_difficulty: {}",
+				caller, header_head.total_difficulty, body_head.total_difficulty,
+			);
 			return false;
 		}
 
 		let mut oldest_height = 0;
+		let mut oldest_hash = ZERO_HASH;
 
 		let mut current = self.get_block_header(&header_head.last_block_h);
 		if current.is_err() {
 			error!(
-				"check_txhashset_needed: header_head not found in chain db: {} at {}",
-				header_head.last_block_h, header_head.height,
+				"{}: header_head not found in chain db: {} at {}",
+				caller, header_head.last_block_h, header_head.height,
 			);
 		}
 
@@ -728,15 +745,23 @@ impl Chain {
 			}
 
 			oldest_height = header.height;
+			oldest_hash = header.hash();
+			if let Some(hs) = hashes {
+				hs.push(oldest_hash);
+			}
 			current = self.get_previous_header(&header);
 		}
 
 		if oldest_height < header_head.height.saturating_sub(horizon) {
-			return if oldest_height > 0 {
-				true
+			if oldest_height > 0 {
+				debug!(
+					"{}: oldest block which is not on local chain: {} at {}",
+					caller, oldest_hash, oldest_height,
+				);
+				return true;
 			} else {
-				error!("check_txhashset_needed: something is wrong! oldest_height is 0");
-				false
+				error!("{}: something is wrong! oldest_height is 0", caller);
+				return false;
 			};
 		}
 		return false;
@@ -755,7 +780,8 @@ impl Chain {
 		status.on_setup();
 
 		// Initial check whether this txhashset is needed or not
-		if !self.check_txhashset_needed() {
+		let mut hashes: Option<Vec<Hash>> = None;
+		if !self.check_txhashset_needed("txhashset_write".to_owned(), &mut hashes) {
 			warn!("txhashset_write: txhashset received but it's not needed! ignored.");
 			return Err(ErrorKind::InvalidTxHashSet("not needed".to_owned()).into());
 		}
