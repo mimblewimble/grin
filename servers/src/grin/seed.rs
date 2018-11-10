@@ -41,6 +41,7 @@ pub fn connect_and_monitor(
 	seed_list: Box<Fn() -> Vec<SocketAddr> + Send>,
 	preferred_peers: Option<Vec<SocketAddr>>,
 	stop: Arc<AtomicBool>,
+	pause: Arc<AtomicBool>,
 ) {
 	let _ = thread::Builder::new()
 		.name("seed".to_string())
@@ -65,6 +66,12 @@ pub fn connect_and_monitor(
 			let mut start_attempt = 0;
 
 			while !stop.load(Ordering::Relaxed) {
+				// Pause egress peer connection request. Only for tests.
+				if pause.load(Ordering::Relaxed) {
+					thread::sleep(time::Duration::from_secs(1));
+					continue;
+				}
+
 				// Check for and remove expired peers from the storage
 				if Utc::now() - prev_expire_check > Duration::hours(1) {
 					peers.remove_expired();

@@ -36,6 +36,7 @@ const STORE_SUBPATH: &'static str = "chain";
 const BLOCK_HEADER_PREFIX: u8 = 'h' as u8;
 const BLOCK_PREFIX: u8 = 'b' as u8;
 const HEAD_PREFIX: u8 = 'H' as u8;
+const TAIL_PREFIX: u8 = 'T' as u8;
 const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const SYNC_HEAD_PREFIX: u8 = 's' as u8;
 const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
@@ -68,6 +69,10 @@ impl ChainStore {
 impl ChainStore {
 	pub fn head(&self) -> Result<Tip, Error> {
 		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), "HEAD")
+	}
+
+	pub fn tail(&self) -> Result<Tip, Error> {
+		option_to_not_found(self.db.get_ser(&vec![TAIL_PREFIX]), "TAIL")
 	}
 
 	/// Header of the block at the head of the block chain (not the same thing as header_head).
@@ -225,6 +230,10 @@ impl<'a> Batch<'a> {
 		option_to_not_found(self.db.get_ser(&vec![HEAD_PREFIX]), "HEAD")
 	}
 
+	pub fn tail(&self) -> Result<Tip, Error> {
+		option_to_not_found(self.db.get_ser(&vec![TAIL_PREFIX]), "TAIL")
+	}
+
 	/// Header of the block at the head of the block chain (not the same thing as header_head).
 	pub fn head_header(&self) -> Result<BlockHeader, Error> {
 		self.get_block_header(&self.head()?.last_block_h)
@@ -246,6 +255,10 @@ impl<'a> Batch<'a> {
 
 	pub fn save_body_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&vec![HEAD_PREFIX], t)
+	}
+
+	pub fn save_body_tail(&self, t: &Tip) -> Result<(), Error> {
+		self.db.put_ser(&vec![TAIL_PREFIX], t)
 	}
 
 	pub fn save_header_head(&self, t: &Tip) -> Result<(), Error> {

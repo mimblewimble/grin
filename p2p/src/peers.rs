@@ -225,6 +225,7 @@ impl Peers {
 
 	/// Unban a peer, checks if it exists and banned then unban
 	pub fn unban_peer(&self, peer_addr: &SocketAddr) {
+		debug!("unban_peer: peer {}", peer_addr);
 		match self.get_peer(*peer_addr) {
 			Ok(_) => {
 				if self.is_banned(*peer_addr) {

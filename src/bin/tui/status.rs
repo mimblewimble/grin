@@ -125,7 +125,7 @@ impl TUIStatusListener for TUIStatusView {
 						let fin = Utc::now().timestamp_nanos();
 						let dur_ms = (fin - start) as f64 * NANO_TO_MILLIS;
 
-						format!("Downloading {}(MB) chain state for fast sync: {}% at {:.1?}(kB/s), step 2/4",
+						format!("Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s), step 2/4",
 						total_size / 1_000_000,
 						percent,
 						if dur_ms > 1.0f64 { downloaded_size as f64 / dur_ms as f64 } else { 0f64 },
@@ -135,7 +135,7 @@ impl TUIStatusListener for TUIStatusView {
 						let fin = Utc::now().timestamp_millis();
 						let dur_secs = (fin - start) / 1000;
 
-						format!("Downloading chain state for fast sync. Waiting remote peer to start: {}s, step 2/4",
+						format!("Downloading chain state for state sync. Waiting remote peer to start: {}s, step 2/4",
 										dur_secs,
 										)
 					}
@@ -164,7 +164,10 @@ impl TUIStatusListener for TUIStatusView {
 					format!("Validating chain state: {}%, step 3/4", percent)
 				}
 				SyncStatus::TxHashsetSave => {
-					"Finalizing chain state for fast sync, step 3/4".to_string()
+					"Finalizing chain state for state sync, step 3/4".to_string()
+				}
+				SyncStatus::TxHashsetDone => {
+					"Finalized chain state for state sync, step 3/4".to_string()
 				}
 				SyncStatus::BodySync {
 					current_height,

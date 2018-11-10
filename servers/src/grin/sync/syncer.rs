@@ -141,13 +141,34 @@ impl SyncRunner {
 
 			// if syncing is needed
 			let head = self.chain.head().unwrap();
+			let tail = self.chain.tail().unwrap_or_else(|_| head.clone());
 			let header_head = self.chain.header_head().unwrap();
 
 			// run each sync stage, each of them deciding whether they're needed
-			// except for body sync that only runs if state sync is off or done
+			// except for state sync that only runs if body sync return true (means txhashset is needed)
 			header_sync.check_run(&header_head, highest_height);
-			if !state_sync.check_run(&header_head, &head, highest_height) {
-				body_sync.check_run(&head, highest_height);
+
+			let mut check_state_sync = false;
+			match self.sync_state.status() {
+				SyncStatus::TxHashsetDownload { .. }
+				| SyncStatus::TxHashsetSetup
+				| SyncStatus::TxHashsetValidation { .. }
+				| SyncStatus::TxHashsetSave
+				| SyncStatus::TxHashsetDone => check_state_sync = true,
+				_ => {
+					// skip body sync if header chain is not synced.
+					if header_head.height < highest_height {
+						continue;
+					}
+
+					if body_sync.check_run(&head, highest_height) {
+						check_state_sync = true;
+					}
+				}
+			}
+
+			if check_state_sync {
+				state_sync.check_run(&header_head, &head, &tail, highest_height);
 			}
 		}
 	}

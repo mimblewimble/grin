@@ -39,6 +39,7 @@ pub struct Server {
 	handshake: Arc<Handshake>,
 	pub peers: Arc<Peers>,
 	stop: Arc<AtomicBool>,
+	pause: Arc<AtomicBool>,
 }
 
 // TODO TLS
@@ -51,13 +52,15 @@ impl Server {
 		adapter: Arc<ChainAdapter>,
 		genesis: Hash,
 		stop: Arc<AtomicBool>,
+		pause: Arc<AtomicBool>,
 	) -> Result<Server, Error> {
 		Ok(Server {
 			config: config.clone(),
 			capabilities: capab,
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
 			peers: Arc::new(Peers::new(PeerStore::new(db_env)?, adapter, config)),
-			stop: stop,
+			stop,
+			pause,
 		})
 	}
 
@@ -71,6 +74,12 @@ impl Server {
 
 		let sleep_time = Duration::from_millis(1);
 		loop {
+			// Pause peer ingress connection request. Only for tests.
+			if self.pause.load(Ordering::Relaxed) {
+				thread::sleep(Duration::from_secs(1));
+				continue;
+			}
+
 			match listener.accept() {
 				Ok((stream, peer_addr)) => {
 					if !self.check_banned(&stream) {
@@ -183,6 +192,14 @@ impl Server {
 
 	pub fn stop(&self) {
 		self.stop.store(true, Ordering::Relaxed);
+		self.peers.stop();
+	}
+
+	/// Pause means: stop all the current peers connection, only for tests.
+	/// Note:
+	/// 1. must pause the 'seed' thread also, to avoid the new egress peer connection
+	/// 2. must pause the 'p2p-server' thread also, to avoid the new ingress peer connection.
+	pub fn pause(&self) {
 		self.peers.stop();
 	}
 }

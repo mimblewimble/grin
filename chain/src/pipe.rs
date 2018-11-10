@@ -199,6 +199,10 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 	// so we can maintain multiple (in progress) forks.
 	add_block(b, &ctx.batch)?;
 
+	if ctx.batch.tail().is_err() {
+		update_body_tail(&b.header, &ctx.batch)?;
+	}
+
 	// Update the chain head if total work is increased.
 	let res = update_head(b, ctx)?;
 	Ok(res)
@@ -549,6 +553,16 @@ fn add_block(b: &Block, batch: &store::Batch) -> Result<(), Error> {
 	batch
 		.save_block(b)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save block".to_owned()))?;
+	Ok(())
+}
+
+/// Update the block chain tail so we can know the exact tail of full blocks in this node
+fn update_body_tail(bh: &BlockHeader, batch: &store::Batch) -> Result<(), Error> {
+	let tip = Tip::from_header(bh);
+	batch
+		.save_body_tail(&tip)
+		.map_err(|e| ErrorKind::StoreErr(e, "pipe save body tail".to_owned()))?;
+	debug!("body tail {} @ {}", bh.hash(), bh.height);
 	Ok(())
 }
 

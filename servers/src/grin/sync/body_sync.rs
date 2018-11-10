@@ -19,8 +19,7 @@ use std::sync::Arc;
 
 use chain;
 use common::types::{SyncState, SyncStatus};
-use core::core::hash::Hashed;
-use core::global;
+use core::core::hash::Hash;
 use p2p;
 
 pub struct BodySync {
@@ -50,82 +49,38 @@ impl BodySync {
 		}
 	}
 
-	/// Check whether a body sync is needed and run it if so
+	/// Check whether a body sync is needed and run it if so.
+	/// Return true if txhashset download is needed (when requested block is under the horizon).
 	pub fn check_run(&mut self, head: &chain::Tip, highest_height: u64) -> bool {
-		// if fast_sync disabled or not needed, run the body_sync every 5s
+		// run the body_sync every 5s
 		if self.body_sync_due() {
-			self.body_sync();
+			if self.body_sync() {
+				return true;
+			}
 
 			self.sync_state.update(SyncStatus::BodySync {
 				current_height: head.height,
 				highest_height: highest_height,
 			});
-			return true;
 		}
 		false
 	}
 
-	fn body_sync(&mut self) {
-		let horizon = global::cut_through_horizon() as u64;
-		let body_head = self.chain.head().unwrap();
-		let header_head = self.chain.header_head().unwrap();
-		let sync_head = self.chain.get_sync_head().unwrap();
-
-		debug!(
-			"body_sync: body_head - {}, {}, header_head - {}, {}, sync_head - {}, {}",
-			body_head.last_block_h,
-			body_head.height,
-			header_head.last_block_h,
-			header_head.height,
-			sync_head.last_block_h,
-			sync_head.height,
-		);
-
-		let mut hashes = vec![];
-		let mut oldest_height = 0;
-
-		if header_head.total_difficulty > body_head.total_difficulty {
-			let mut current = self.chain.get_block_header(&header_head.last_block_h);
-
-			//+ remove me after #1880 root cause found
-			if current.is_err() {
-				error!(
-					"body_sync: header_head not found in chain db: {} at {}",
-					header_head.last_block_h, header_head.height,
-				);
-			}
-			//-
-
-			while let Ok(header) = current {
-				// break out of the while loop when we find a header common
-				// between the header chain and the current body chain
-				if let Ok(_) = self.chain.is_on_current_chain(&header) {
-					break;
-				}
-
-				hashes.push(header.hash());
-				oldest_height = header.height;
-				current = self.chain.get_previous_header(&header);
-			}
-		}
-		//+ remove me after #1880 root cause found
-		else {
+	/// Return true if txhashset download is needed (when requested block is under the horizon).
+	fn body_sync(&mut self) -> bool {
+		let mut hashes: Option<Vec<Hash>> = Some(vec![]);
+		if self
+			.chain
+			.check_txhashset_needed("body_sync".to_owned(), &mut hashes)
+		{
 			debug!(
-				"body_sync: header_head.total_difficulty: {}, body_head.total_difficulty: {}",
-				header_head.total_difficulty, body_head.total_difficulty,
+				"body_sync: cannot sync full blocks earlier than horizon. will request txhashset",
 			);
+			return true;
 		}
-		//-
 
+		let mut hashes = hashes.unwrap();
 		hashes.reverse();
-
-		if oldest_height < header_head.height.saturating_sub(horizon) {
-			debug!(
-				"body_sync: cannot sync full blocks earlier than horizon. oldest_height: {}",
-				oldest_height,
-			);
-			return;
-		}
 
 		let peers = self.peers.more_work_peers();
 
@@ -147,6 +102,9 @@ impl BodySync {
 			.collect::<Vec<_>>();
 
 		if hashes_to_get.len() > 0 {
+			let body_head = self.chain.head().unwrap();
+			let header_head = self.chain.header_head().unwrap();
+
 			debug!(
 				"block_sync: {}/{} requesting blocks {:?} from {} peers",
 				body_head.height,
@@ -170,6 +128,7 @@ impl BodySync {
 				}
 			}
 		}
+		return false;
 	}
 
 	// Should we run block body sync and ask for more full blocks?
