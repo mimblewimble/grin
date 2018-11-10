@@ -22,8 +22,8 @@ extern crate uuid;
 
 use core::core::transaction::kernel_sig_msg;
 use keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
-use util::secp::key::{PublicKey, SecretKey};
 use util::secp;
+use util::secp::key::{PublicKey, SecretKey};
 use wallet::libtx::{aggsig, proof};
 use wallet::libwallet::types::Context;
 
@@ -246,11 +246,11 @@ fn aggsig_sender_receiver_interaction_offset() {
 		let blinding_factor = keychain
 			.blind_sum(
 				&BlindSum::new()
-				.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
-				.add_blinding_factor(BlindingFactor::from_secret_key(skey2))
-				// subtract the kernel offset here like as would when
-				// verifying a kernel signature
-				.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)),
+					.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
+					.add_blinding_factor(BlindingFactor::from_secret_key(skey2))
+					// subtract the kernel offset here like as would when
+					// verifying a kernel signature
+					.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)),
 			).unwrap();
 
 		keychain
@@ -272,10 +272,10 @@ fn aggsig_sender_receiver_interaction_offset() {
 		let blinding_factor = keychain
 			.blind_sum(
 				&BlindSum::new()
-				.sub_blinding_factor(BlindingFactor::from_secret_key(skey))
-				// subtract the kernel offset to create an aggsig context
-				// with our "split" key
-				.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)),
+					.sub_blinding_factor(BlindingFactor::from_secret_key(skey))
+					// subtract the kernel offset to create an aggsig context
+					// with our "split" key
+					.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)),
 			).unwrap();
 
 		let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();

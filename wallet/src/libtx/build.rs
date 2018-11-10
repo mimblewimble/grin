@@ -206,10 +206,7 @@ where
 }
 
 /// Builds a complete transaction.
-pub fn transaction<K>(
-	elems: Vec<Box<Append<K>>>,
-	keychain: &K,
-) -> Result<Transaction, Error>
+pub fn transaction<K>(elems: Vec<Box<Append<K>>>, keychain: &K) -> Result<Transaction, Error>
 where
 	K: Keychain,
 {
