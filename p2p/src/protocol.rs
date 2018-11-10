@@ -44,7 +44,11 @@ impl Protocol {
 }
 
 impl MessageHandler for Protocol {
-	fn consume<'a>(&self, mut msg: Message<'a>, received_bytes: Arc<RwLock<RateCounter>>) -> Result<Option<Response<'a>>, Error> {
+	fn consume<'a>(
+		&self,
+		mut msg: Message<'a>,
+		received_bytes: Arc<RwLock<RateCounter>>,
+	) -> Result<Option<Response<'a>>, Error> {
 		let adapter = &self.adapter;
 
 		// If we received a msg from a banned peer then log and drop it.

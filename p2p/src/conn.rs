@@ -35,7 +35,11 @@ use util::{RateCounter, RwLock};
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.
 pub trait MessageHandler: Send + 'static {
-	fn consume<'a>(&self, msg: Message<'a>, received_bytes: Arc<RwLock<RateCounter>>) -> Result<Option<Response<'a>>, Error>;
+	fn consume<'a>(
+		&self,
+		msg: Message<'a>,
+		received_bytes: Arc<RwLock<RateCounter>>,
+	) -> Result<Option<Response<'a>>, Error>;
 }
 
 // Macro to simplify the boilerplate around async I/O error handling,
@@ -139,7 +143,7 @@ impl<'a> Response<'a> {
 						// Increase sent bytes counter
 						let mut sent_bytes = sent_bytes.write();
 						sent_bytes.inc(n as u64);
-					},
+					}
 					Err(e) => return Err(From::from(e)),
 				}
 			}
