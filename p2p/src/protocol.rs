@@ -24,6 +24,7 @@ use chrono::prelude::Utc;
 use conn::{Message, MessageHandler, Response};
 use core::core::{self, hash::Hash, CompactBlock};
 use core::{global, ser};
+use util::{RateCounter, RwLock};
 
 use msg::{
 	read_exact, BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr,
@@ -43,7 +44,11 @@ impl Protocol {
 }
 
 impl MessageHandler for Protocol {
-	fn consume<'a>(&self, mut msg: Message<'a>) -> Result<Option<Response<'a>>, Error> {
+	fn consume<'a>(
+		&self,
+		mut msg: Message<'a>,
+		received_bytes: Arc<RwLock<RateCounter>>,
+	) -> Result<Option<Response<'a>>, Error> {
 		let adapter = &self.adapter;
 
 		// If we received a msg from a banned peer then log and drop it.
@@ -286,13 +291,20 @@ impl MessageHandler for Protocol {
 					let mut downloaded_size: usize = 0;
 					let mut request_size = cmp::min(48_000, total_size);
 					while request_size > 0 {
-						downloaded_size += msg.copy_attachment(request_size, &mut tmp_zip)?;
+						let size = msg.copy_attachment(request_size, &mut tmp_zip)?;
+						downloaded_size += size;
 						request_size = cmp::min(48_000, total_size - downloaded_size);
 						self.adapter.txhashset_download_update(
 							download_start_time,
 							downloaded_size as u64,
 							total_size as u64,
 						);
+
+						// Increase received bytes counter
+						{
+							let mut received_bytes = received_bytes.write();
+							received_bytes.inc(size as u64);
+						}
 					}
 					tmp_zip.into_inner().unwrap().sync_all()?;
 					Ok(())

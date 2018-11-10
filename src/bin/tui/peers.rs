@@ -124,8 +124,8 @@ impl TUIStatusListener for TUIPeerView {
 			}).column(PeerColumn::Direction, "Direction", |c| c.width_percent(8))
 			.column(PeerColumn::TotalDifficulty, "Total Difficulty", |c| {
 				c.width_percent(24)
-			}).column(PeerColumn::Version, "Version", |c| c.width_percent(8))
-			.column(PeerColumn::UserAgent, "User Agent", |c| c.width_percent(16));
+			}).column(PeerColumn::Version, "Ver", |c| c.width_percent(6))
+			.column(PeerColumn::UserAgent, "User Agent", |c| c.width_percent(18));
 		let peer_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
 				.child(
