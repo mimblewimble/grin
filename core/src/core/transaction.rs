@@ -1088,26 +1088,22 @@ impl Output {
 	}
 
 	/// Validates the range proof using the commitment
-	pub fn verify_proof(&self) -> Result<(), secp::Error> {
+	pub fn verify_proof(&self) -> Result<(), Error> {
 		let secp = static_secp_instance();
-		let secp = secp.lock();
-		match secp.verify_bullet_proof(self.commit, self.proof, None) {
-			Ok(_) => Ok(()),
-			Err(e) => Err(e),
-		}
+		secp.lock()
+			.verify_bullet_proof(self.commit, self.proof, None)?;
+		Ok(())
 	}
 
 	/// Batch validates the range proofs using the commitments
 	pub fn batch_verify_proofs(
 		commits: &Vec<Commitment>,
 		proofs: &Vec<RangeProof>,
-	) -> Result<(), secp::Error> {
+	) -> Result<(), Error> {
 		let secp = static_secp_instance();
-		let secp = secp.lock();
-		match secp.verify_bullet_proof_multi(commits.clone(), proofs.clone(), None) {
-			Ok(_) => Ok(()),
-			Err(e) => Err(e),
-		}
+		secp.lock()
+			.verify_bullet_proof_multi(commits.clone(), proofs.clone(), None)?;
+		Ok(())
 	}
 }
 
