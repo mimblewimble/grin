@@ -148,11 +148,6 @@ impl SyncRunner {
 			// except for state sync that only runs if body sync return true (means txhashset is needed)
 			header_sync.check_run(&header_head, highest_height);
 
-			// skip body sync and state sync if header chain is not synced.
-			if header_head.height != highest_height {
-				continue;
-			}
-
 			let mut check_state_sync = false;
 			match self.sync_state.status() {
 				SyncStatus::TxHashsetDownload { .. }
@@ -161,6 +156,11 @@ impl SyncRunner {
 				| SyncStatus::TxHashsetSave
 				| SyncStatus::TxHashsetDone => check_state_sync = true,
 				_ => {
+					// skip body sync if header chain is not synced.
+					if header_head.height < highest_height {
+						continue;
+					}
+
 					if body_sync.check_run(&head, highest_height) {
 						check_state_sync = true;
 					}
