@@ -172,9 +172,11 @@ fn monitor_peers(
 	// ask them for their list of peers
 	let mut connected_peers: Vec<SocketAddr> = vec![];
 	for p in peers.connected_peers() {
-		debug!(
+		trace!(
 			"monitor_peers: {}:{} ask {} for more peers",
-			config.host, config.port, p.info.addr,
+			config.host,
+			config.port,
+			p.info.addr,
 		);
 		let _ = p.send_peer_request(capabilities);
 		connected_peers.push(p.info.addr)
@@ -211,9 +213,11 @@ fn monitor_peers(
 		config.peer_max_count() as usize,
 	);
 	for p in new_peers.iter().filter(|p| !peers.is_known(&p.addr)) {
-		debug!(
+		trace!(
 			"monitor_peers: on {}:{}, queue to soon try {}",
-			config.host, config.port, p.addr,
+			config.host,
+			config.port,
+			p.addr,
 		);
 		tx.send(p.addr).unwrap();
 	}
@@ -257,7 +261,7 @@ fn connect_to_seeds_and_preferred_peers(
 	// If we have preferred peers add them to the connection
 	match peers_preferred_list {
 		Some(mut peers_preferred) => peer_addrs.append(&mut peers_preferred),
-		None => debug!("No preferred peers"),
+		None => trace!("No preferred peers"),
 	};
 
 	if peer_addrs.len() == 0 {

@@ -151,9 +151,12 @@ impl Server {
 				Ok(peer)
 			}
 			Err(e) => {
-				debug!(
+				trace!(
 					"connect_peer: on {}:{}. Could not connect to {}: {:?}",
-					self.config.host, self.config.port, addr, e
+					self.config.host,
+					self.config.port,
+					addr,
+					e
 				);
 				Err(Error::Connection(e))
 			}
