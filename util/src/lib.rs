@@ -58,7 +58,6 @@ pub use types::{LogLevel, LoggingConfig};
 pub mod macros;
 
 // other utils
-use byteorder::{BigEndian, ByteOrder};
 #[allow(unused_imports)]
 use std::ops::Deref;
 use std::sync::Arc;
@@ -111,14 +110,6 @@ where
 			.clone()
 			.expect("Cannot borrow one_time before initialization.")
 	}
-}
-
-/// Construct msg bytes from tx fee and lock_height
-pub fn kernel_sig_msg(fee: u64, lock_height: u64) -> [u8; 32] {
-	let mut bytes = [0; 32];
-	BigEndian::write_u64(&mut bytes[16..24], fee);
-	BigEndian::write_u64(&mut bytes[24..], lock_height);
-	bytes
 }
 
 /// Encode an utf8 string to a base64 string
