@@ -28,7 +28,9 @@ use lru_cache::LruCache;
 use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::merkle_proof::MerkleProof;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernelEntry};
+use core::core::{
+	Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernelEntry,
+};
 use core::global;
 use core::pow;
 use error::{Error, ErrorKind};

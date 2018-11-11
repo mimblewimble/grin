@@ -254,7 +254,7 @@ impl TxKernel {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TxKernelEntry {
 	/// The underlying tx kernel.
-	pub kernel: TxKernel
+	pub kernel: TxKernel,
 }
 
 impl Writeable for TxKernelEntry {
@@ -282,9 +282,7 @@ impl Readable for TxKernelEntry {
 			excess: Commitment::read(reader)?,
 			excess_sig: secp::Signature::read(reader)?,
 		};
-		Ok(TxKernelEntry {
-			kernel
-		})
+		Ok(TxKernelEntry { kernel })
 	}
 }
 
@@ -302,9 +300,7 @@ impl TxKernelEntry {
 
 impl From<TxKernel> for TxKernelEntry {
 	fn from(kernel: TxKernel) -> Self {
-		TxKernelEntry{
-			kernel
-		}
+		TxKernelEntry { kernel }
 	}
 }
 
