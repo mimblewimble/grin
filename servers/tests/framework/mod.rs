@@ -280,7 +280,7 @@ impl LocalServerContainer {
 			});
 
 		wallet::controller::foreign_listener(
-			Box::new(wallet),
+			Arc::new(Mutex::new(wallet)),
 			&self.wallet_config.api_listen_addr(),
 			None,
 		).unwrap_or_else(|e| {
@@ -343,29 +343,28 @@ impl LocalServerContainer {
 		let mut wallet = LMDBBackend::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
-		let _ =
-			wallet::controller::owner_single_use(Arc::new(Mutex::new(Box::new(wallet))), |api| {
-				let result = api.issue_send_tx(
-					amount,
-					minimum_confirmations,
+		let _ = wallet::controller::owner_single_use(Arc::new(Mutex::new(wallet)), |api| {
+			let result = api.issue_send_tx(
+				amount,
+				minimum_confirmations,
+				dest,
+				max_outputs,
+				change_outputs,
+				selection_strategy == "all",
+			);
+			match result {
+				Ok(_) => println!(
+					"Tx sent: {} grin to {} (strategy '{}')",
+					core::core::amount_to_hr_string(amount, false),
 					dest,
-					max_outputs,
-					change_outputs,
-					selection_strategy == "all",
-				);
-				match result {
-					Ok(_) => println!(
-						"Tx sent: {} grin to {} (strategy '{}')",
-						core::core::amount_to_hr_string(amount, false),
-						dest,
-						selection_strategy,
-					),
-					Err(e) => {
-						println!("Tx not sent to {}: {:?}", dest, e);
-					}
-				};
-				Ok(())
-			}).unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
+					selection_strategy,
+				),
+				Err(e) => {
+					println!("Tx not sent to {}: {:?}", dest, e);
+				}
+			};
+			Ok(())
+		}).unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 	}
 
 	/// Stops the running wallet server

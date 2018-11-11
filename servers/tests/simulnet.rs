@@ -881,7 +881,7 @@ fn long_fork_test_case_6(s: &Vec<servers::Server>) {
 pub fn create_wallet(
 	dir: &str,
 	client: HTTPWalletClient,
-) -> Box<WalletInst<HTTPWalletClient, keychain::ExtKeychain>> {
+) -> Arc<Mutex<WalletInst<HTTPWalletClient, keychain::ExtKeychain>>> {
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
 	let _ = wallet::WalletSeed::init_file(&wallet_config);
@@ -895,7 +895,7 @@ pub fn create_wallet(
 			e, wallet_config
 		)
 	});
-	Box::new(wallet)
+	Arc::new(Mutex::new(wallet))
 }
 
 /// Intended to replicate https://github.com/mimblewimble/grin/issues/1325
@@ -958,12 +958,11 @@ fn replicate_tx_fluff_failure() {
 
 	// get another instance of wallet1 (to update contents and perform a send)
 	let wallet1 = create_wallet("target/tmp/tx_fluff/wallet1", client1.clone());
-	let wallet1 = Arc::new(Mutex::new(wallet1));
 
 	let amount = 30_000_000_000;
 	let mut slate = Slate::blank(1);
 
-	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+	wallet::controller::owner_single_use(wallet1, |api| {
 		slate = api
 			.issue_send_tx(
 				amount,                   // amount
@@ -983,8 +982,7 @@ fn replicate_tx_fluff_failure() {
 	// get another instance of wallet (to check contents)
 	let wallet2 = create_wallet("target/tmp/tx_fluff/wallet2", client2.clone());
 
-	let wallet2 = Arc::new(Mutex::new(wallet2));
-	wallet::controller::owner_single_use(wallet2.clone(), |api| {
+	wallet::controller::owner_single_use(wallet2, |api| {
 		let res = api.retrieve_summary_info(true).unwrap();
 		assert_eq!(res.1.amount_currently_spendable, amount);
 		Ok(())
