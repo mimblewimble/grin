@@ -250,13 +250,67 @@ impl TxKernel {
 	}
 }
 
-impl FixedLength for TxKernel {
+/// Wrapper around a tx kernel used when maintaining them in the MMR.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TxKernelEntry {
+	/// The underlying tx kernel.
+	pub kernel: TxKernel,
+}
+
+impl Writeable for TxKernelEntry {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		ser_multiwrite!(
+			writer,
+			[write_u8, self.kernel.features.bits()],
+			[write_u64, self.kernel.fee],
+			[write_u64, self.kernel.lock_height],
+			[write_fixed_bytes, &self.kernel.excess]
+		);
+		self.kernel.excess_sig.write(writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for TxKernelEntry {
+	fn read(reader: &mut Reader) -> Result<TxKernelEntry, ser::Error> {
+		let features =
+			KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
+		let kernel = TxKernel {
+			features: features,
+			fee: reader.read_u64()?,
+			lock_height: reader.read_u64()?,
+			excess: Commitment::read(reader)?,
+			excess_sig: secp::Signature::read(reader)?,
+		};
+		Ok(TxKernelEntry { kernel })
+	}
+}
+
+impl TxKernelEntry {
+	/// The excess on the underlying tx kernel.
+	pub fn excess(&self) -> Commitment {
+		self.kernel.excess
+	}
+
+	/// Verify the underlying tx kernel.
+	pub fn verify(&self) -> Result<(), Error> {
+		self.kernel.verify()
+	}
+}
+
+impl From<TxKernel> for TxKernelEntry {
+	fn from(kernel: TxKernel) -> Self {
+		TxKernelEntry { kernel }
+	}
+}
+
+impl FixedLength for TxKernelEntry {
 	const LEN: usize = 17 // features plus fee and lock_height
 		+ secp::constants::PEDERSEN_COMMITMENT_SIZE
 		+ secp::constants::AGG_SIGNATURE_SIZE;
 }
 
-impl PMMRable for TxKernel {}
+impl PMMRable for TxKernelEntry {}
 
 /// TransactionBody is a common abstraction for transaction and block
 #[derive(Serialize, Deserialize, Debug, Clone)]

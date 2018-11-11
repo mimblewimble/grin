@@ -28,7 +28,9 @@ use lru_cache::LruCache;
 use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::merkle_proof::MerkleProof;
 use core::core::verifier_cache::VerifierCache;
-use core::core::{Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernel};
+use core::core::{
+	Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernelEntry,
+};
 use core::global;
 use core::pow;
 use error::{Error, ErrorKind};
@@ -966,7 +968,7 @@ impl Chain {
 	}
 
 	/// as above, for kernels
-	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<(Hash, TxKernel)> {
+	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<(Hash, TxKernelEntry)> {
 		let mut txhashset = self.txhashset.write();
 		txhashset.last_n_kernel(distance)
 	}

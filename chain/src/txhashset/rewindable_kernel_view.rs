@@ -15,7 +15,7 @@
 //! Lightweight readonly view into kernel MMR for convenience.
 
 use core::core::pmmr::RewindablePMMR;
-use core::core::{BlockHeader, TxKernel};
+use core::core::{BlockHeader, TxKernelEntry};
 
 use error::{Error, ErrorKind};
 use grin_store::pmmr::PMMRBackend;
@@ -23,7 +23,7 @@ use store::Batch;
 
 /// Rewindable (but readonly) view of the kernel set (based on kernel MMR).
 pub struct RewindableKernelView<'a> {
-	pmmr: RewindablePMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
+	pmmr: RewindablePMMR<'a, TxKernelEntry, PMMRBackend<TxKernelEntry>>,
 	batch: &'a Batch<'a>,
 	header: BlockHeader,
 }
@@ -31,7 +31,7 @@ pub struct RewindableKernelView<'a> {
 impl<'a> RewindableKernelView<'a> {
 	/// Build a new readonly kernel view.
 	pub fn new(
-		pmmr: RewindablePMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
+		pmmr: RewindablePMMR<'a, TxKernelEntry, PMMRBackend<TxKernelEntry>>,
 		batch: &'a Batch,
 		header: BlockHeader,
 	) -> RewindableKernelView<'a> {
