@@ -18,7 +18,6 @@ pub mod block;
 pub mod block_sums;
 pub mod committed;
 pub mod compact_block;
-pub mod compact_transaction;
 pub mod hash;
 pub mod id;
 pub mod merkle_proof;
@@ -34,7 +33,6 @@ pub use self::block::*;
 pub use self::block_sums::*;
 pub use self::committed::Committed;
 pub use self::compact_block::*;
-pub use self::compact_transaction::*;
 pub use self::id::ShortId;
 pub use self::transaction::*;
 
