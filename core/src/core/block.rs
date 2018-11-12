@@ -140,8 +140,7 @@ pub struct BlockHeader {
 	pub pow: ProofOfWork,
 }
 
-const FIXED_HEADER_SIZE: usize =
-	2 // version
+const FIXED_HEADER_SIZE: usize = 2 // version
 		+ 8 // height
 		+ 8 // timestamp
 		+ 5 * Hash::LEN // prev_hash, prev_root, output_root, range_proof_root, kernel_root

@@ -20,10 +20,10 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use pow::error::{Error, ErrorKind};
 use pow::num::{PrimInt, ToPrimitive};
 use pow::siphash::siphash24;
+use std::fmt;
 use std::hash::Hash;
 use std::io::Cursor;
 use std::ops::{BitOrAssign, Mul};
-use std::fmt;
 
 /// Operations needed for edge type (going to be u32 or u64)
 pub trait EdgeType: PrimInt + ToPrimitive + Mul + BitOrAssign + Hash {}
