@@ -25,13 +25,17 @@ extern crate serde_derive;
 extern crate digest;
 extern crate hmac;
 extern crate log;
+extern crate pbkdf2;
 extern crate ripemd160;
 extern crate serde_json;
 extern crate sha2;
 extern crate uuid;
+#[macro_use]
+extern crate lazy_static;
 
 mod base58;
 pub mod extkey_bip32;
+pub mod mnemonic;
 mod types;
 
 pub mod keychain;
