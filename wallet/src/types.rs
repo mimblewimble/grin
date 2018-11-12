@@ -149,7 +149,7 @@ impl WalletSeed {
 			let mut file = File::open(seed_file_path).context(ErrorKind::IO)?;
 			let mut buffer = String::new();
 			file.read_to_string(&mut buffer).context(ErrorKind::IO)?;
-			let wallet_seed = WalletSeed::from_hex(&buffer)?;
+			let wallet_seed = WalletSeed::from_hex(&buffer.trim())?;
 			Ok(wallet_seed)
 		} else {
 			error!(
