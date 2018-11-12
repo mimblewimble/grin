@@ -524,7 +524,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					},
 				};
 				let (height, _) = api.node_height()?;
-				let (validated, txs) = api.retrieve_txs(true, tx_id)?;
+				let (validated, txs) = api.retrieve_txs(true, tx_id, None)?;
 				let include_status = !tx_id.is_some();
 				display::txs(
 					account,

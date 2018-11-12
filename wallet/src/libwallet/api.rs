@@ -22,6 +22,7 @@ use std::io::{Read, Write};
 use std::marker::PhantomData;
 use std::sync::Arc;
 use util::Mutex;
+use uuid::Uuid;
 
 use serde_json as json;
 
@@ -102,6 +103,7 @@ where
 		&self,
 		refresh_from_node: bool,
 		tx_id: Option<u32>,
+		tx_slate_id: Option<Uuid>,
 	) -> Result<(bool, Vec<TxLogEntry>), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
@@ -114,7 +116,7 @@ where
 
 		let res = Ok((
 			validated,
-			updater::retrieve_txs(&mut *w, tx_id, &parent_key_id)?,
+			updater::retrieve_txs(&mut *w, tx_id, tx_slate_id, &parent_key_id)?,
 		));
 
 		w.close()?;

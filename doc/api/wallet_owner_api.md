@@ -189,8 +189,9 @@ Return whether the outputs were validated against a node and an array of TxLogEn
 
 * **URL**
 
-  */v1/wallet/owner/retrieve_txs
-  */v1/wallet/owner/retrieve_txs?refresh?id=x
+  * /v1/wallet/owner/retrieve_txs
+  * /v1/wallet/owner/retrieve_txs?refresh&id=x
+  * /v1/wallet/owner/retrieve_txs?tx_id=x
 
 * **Method:**
 
@@ -200,8 +201,9 @@ Return whether the outputs were validated against a node and an array of TxLogEn
 
   **Optional:**
 
-  `refresh` to refresh from node
-  `tx_id=[number]` to retrieve only the specified output
+  * `refresh` to refresh from node
+  * `id=[number]` to retrieve only the specified output by id
+  * `tx_id=[string]` to retrieve only the specified output by tx id
 
 * **Data Params**
 

@@ -160,7 +160,7 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), &parent_key_id)?;
+	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), None, &parent_key_id)?;
 	if tx_vec.len() != 1 {
 		return Err(ErrorKind::TransactionDoesntExist(tx_id))?;
 	}
@@ -190,7 +190,7 @@ where
 	C: WalletClient,
 	K: Keychain,
 {
-	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), parent_key_id)?;
+	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), None, parent_key_id)?;
 	if tx_vec.len() != 1 {
 		return Err(ErrorKind::TransactionDoesntExist(tx_id))?;
 	}

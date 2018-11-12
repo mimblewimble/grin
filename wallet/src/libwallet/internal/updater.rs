@@ -17,6 +17,7 @@
 
 use failure::ResultExt;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 use core::consensus::reward;
 use core::core::{Output, TxKernel};
@@ -80,6 +81,7 @@ where
 pub fn retrieve_txs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	tx_id: Option<u32>,
+	tx_slate_id: Option<Uuid>,
 	parent_key_id: &Identifier,
 ) -> Result<Vec<TxLogEntry>, Error>
 where
@@ -90,6 +92,13 @@ where
 	// just read the wallet here, no need for a write lock
 	let mut txs = if let Some(id) = tx_id {
 		let tx = wallet.tx_log_iter().find(|t| t.id == id);
+		if let Some(t) = tx {
+			vec![t]
+		} else {
+			vec![]
+		}
+	} else if tx_slate_id.is_some() {
+		let tx = wallet.tx_log_iter().find(|t| t.tx_slate_id == tx_slate_id);
 		if let Some(t) = tx {
 			vec![t]
 		} else {

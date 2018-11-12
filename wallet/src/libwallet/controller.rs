@@ -198,7 +198,8 @@ where
 		req: &Request<Body>,
 		api: APIOwner<T, C, K>,
 	) -> Result<(bool, Vec<TxLogEntry>), Error> {
-		let mut id = None;
+		let mut tx_id = None;
+		let mut tx_slate_id = None;
 		let mut update_from_node = false;
 
 		let params = parse_params(req);
@@ -208,10 +209,15 @@ where
 		}
 		if let Some(ids) = params.get("id") {
 			for i in ids {
-				id = Some(i.parse().unwrap());
+				tx_id = Some(i.parse().unwrap());
 			}
 		}
-		api.retrieve_txs(update_from_node, id)
+		if let Some(tx_slate_ids) = params.get("tx_id") {
+			for i in tx_slate_ids {
+				tx_slate_id = Some(i.parse().unwrap());
+			}
+		}
+		api.retrieve_txs(update_from_node, tx_id, tx_slate_id)
 	}
 
 	fn dump_stored_tx(

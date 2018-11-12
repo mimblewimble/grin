@@ -136,14 +136,14 @@ fn compare_wallet_restore(
 	// Overall wallet info should be the same
 	wallet::controller::owner_single_use(wallet_source.clone(), |api| {
 		src_info = Some(api.retrieve_summary_info(true)?.1);
-		src_txs = Some(api.retrieve_txs(true, None)?.1);
+		src_txs = Some(api.retrieve_txs(true, None, None)?.1);
 		src_accts = Some(api.accounts()?);
 		Ok(())
 	})?;
 
 	wallet::controller::owner_single_use(wallet_dest.clone(), |api| {
 		dest_info = Some(api.retrieve_summary_info(true)?.1);
-		dest_txs = Some(api.retrieve_txs(true, None)?.1);
+		dest_txs = Some(api.retrieve_txs(true, None, None)?.1);
 		dest_accts = Some(api.accounts()?);
 		Ok(())
 	})?;
