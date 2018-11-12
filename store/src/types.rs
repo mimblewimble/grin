@@ -250,17 +250,6 @@ impl AppendOnlyFile {
 		}
 	}
 
-	// /// Truncates the underlying file to the provided offset
-	// pub fn truncate(&self, offs: usize) -> io::Result<()> {
-	// 	let fd = self.file.as_raw_fd();
-	// 	let res = unsafe { ftruncate64(fd, offs as off64_t) };
-	// 	if res == -1 {
-	// 		Err(io::Error::last_os_error())
-	// 	} else {
-	// 		Ok(())
-	// 	}
-	// }
-
 	/// Saves a copy of the current file content, skipping data at the provided
 	/// prune indices. The prune Vec must be ordered.
 	pub fn save_prune<T>(
