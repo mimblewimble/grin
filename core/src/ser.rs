@@ -25,7 +25,7 @@ use core::hash::{Hash, Hashed};
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use std::fmt::Debug;
 use std::io::{self, Read, Write};
-use std::{cmp, error, fmt, mem};
+use std::{cmp, error, fmt};
 use util::secp::constants::{
 	AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE, SECRET_KEY_SIZE,
 };
@@ -208,10 +208,13 @@ pub fn read_multi<T>(reader: &mut Reader, count: u64) -> Result<Vec<T>, Error>
 where
 	T: Readable + Hashed + Writeable,
 {
-	let elem_size = mem::size_of::<T>();
-	if count.checked_mul(elem_size as u64).is_none() {
+	// Very rudimentary check to ensure we do not overflow anything
+	// attempting to read huge amounts of data.
+	// Probably better than checking if count * size overflows a u64 though.
+	if count > 1_000_000 {
 		return Err(Error::TooLargeReadErr);
 	}
+
 	let result: Vec<T> = try!((0..count).map(|_| T::read(reader)).collect());
 	Ok(result)
 }
@@ -336,9 +339,13 @@ impl Writeable for BlindingFactor {
 
 impl Readable for BlindingFactor {
 	fn read(reader: &mut Reader) -> Result<BlindingFactor, Error> {
-		let bytes = reader.read_fixed_bytes(SECRET_KEY_SIZE)?;
+		let bytes = reader.read_fixed_bytes(BlindingFactor::LEN)?;
 		Ok(BlindingFactor::from_slice(&bytes))
 	}
+}
+
+impl FixedLength for BlindingFactor {
+	const LEN: usize = SECRET_KEY_SIZE;
 }
 
 impl Writeable for Identifier {

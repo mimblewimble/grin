@@ -24,7 +24,7 @@ use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use consensus::{graph_weight, SECOND_POW_EDGE_BITS, MIN_DIFFICULTY};
 use core::hash::Hashed;
 use global;
-use ser::{self, Readable, Reader, Writeable, Writer};
+use ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
 
 use pow::common::EdgeType;
 use pow::error::Error;
@@ -155,6 +155,10 @@ impl Readable for Difficulty {
 		let data = reader.read_u64()?;
 		Ok(Difficulty { num: data })
 	}
+}
+
+impl FixedLength for Difficulty {
+	const LEN: usize = 8;
 }
 
 impl Serialize for Difficulty {

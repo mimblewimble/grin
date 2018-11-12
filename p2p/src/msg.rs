@@ -23,7 +23,7 @@ use core::consensus;
 use core::core::hash::Hash;
 use core::core::BlockHeader;
 use core::pow::Difficulty;
-use core::ser::{self, Readable, Reader, Writeable, Writer};
+use core::ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
 
 use types::{Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};
 
@@ -35,9 +35,6 @@ pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION
 
 /// Magic number expected in the header of every message
 const MAGIC: [u8; 2] = [0x54, 0x34];
-
-/// Size in bytes of a message header
-pub const HEADER_LEN: u64 = 11;
 
 /// Max theoretical size of a block filled with outputs.
 const MAX_BLOCK_SIZE: u64 =
@@ -197,7 +194,7 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: time::Duration) -> i
 /// underlying stream is async. Typically headers will be polled for, so
 /// we do not want to block.
 pub fn read_header(conn: &mut TcpStream, msg_type: Option<Type>) -> Result<MsgHeader, Error> {
-	let mut head = vec![0u8; HEADER_LEN as usize];
+	let mut head = vec![0u8; MsgHeader::LEN];
 	if Some(Type::Hand) == msg_type {
 		read_exact(conn, &mut head, time::Duration::from_millis(10), true)?;
 	} else {
@@ -284,11 +281,10 @@ impl MsgHeader {
 			msg_len: len,
 		}
 	}
+}
 
-	/// Serialized length of the header in bytes
-	pub fn serialized_len(&self) -> u64 {
-		HEADER_LEN
-	}
+impl FixedLength for MsgHeader {
+	const LEN: usize = 1 + 1 + 1 + 8;
 }
 
 impl Writeable for MsgHeader {
