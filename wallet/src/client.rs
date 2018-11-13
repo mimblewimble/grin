@@ -176,7 +176,19 @@ impl WalletToNodeClient for HTTPWalletToNodeClient {
 	}
 }
 
-impl WalletToWalletClient for HTTPWalletToNodeClient {
+#[derive(Clone)]
+pub struct HTTPWalletToWalletClient {
+}
+
+impl HTTPWalletToWalletClient {
+	/// Create a new client that will communicate other wallets
+	pub fn new() -> HTTPWalletToWalletClient {
+		HTTPWalletToWalletClient {
+		}
+	}
+}
+
+impl WalletToWalletClient for HTTPWalletToWalletClient {
 	/// Call the wallet API to create a coinbase output for the given
 	/// block_fees. Will retry based on default "retry forever with backoff"
 	/// behavior.

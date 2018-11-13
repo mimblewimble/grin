@@ -13,7 +13,6 @@
 // limitations under the License.
 
 //! PMMR tests
-#[macro_use]
 extern crate grin_core as core;
 extern crate chrono;
 extern crate croaring;

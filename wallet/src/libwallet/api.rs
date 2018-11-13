@@ -69,6 +69,7 @@ where
 			wallet: wallet_in,
 			phantom: PhantomData,
 			phantom_c: PhantomData,
+			phantom_l: PhantomData,
 		}
 	}
 
@@ -175,7 +176,7 @@ where
 		let mut slate_out: Slate;
 		let lock_fn_out;
 
-		client = w.client().clone();
+		client = w.w2w_client().clone();
 		let (slate, context, lock_fn) = tx::create_send_tx(
 			&mut *w,
 			amount,
@@ -355,7 +356,7 @@ where
 			&parent_key_id,
 		)?;
 		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
-		w.client().post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
+		w.w2n_client().post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
 		w.close()?;
 		Ok(())
 	}
@@ -365,7 +366,7 @@ where
 		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
 		let client = {
 			let mut w = self.wallet.lock();
-			w.client().clone()
+			w.w2n_client().clone()
 		};
 		let res = client.post_tx(&TxWrapper { tx_hex: tx_hex }, fluff);
 		if let Err(e) = res {
@@ -426,7 +427,7 @@ where
 			let mut w = self.wallet.lock();
 			w.open_with_credentials()?;
 			let parent_key_id = w.parent_key_id();
-			client = w.client().clone();
+			client = w.w2n_client().clone();
 			let res = tx::retrieve_tx_hex(&mut *w, &parent_key_id, tx_id)?;
 			w.close()?;
 			res
@@ -478,7 +479,7 @@ where
 		let res = {
 			let mut w = self.wallet.lock();
 			w.open_with_credentials()?;
-			w.client().get_chain_height()
+			w.w2n_client().get_chain_height()
 		};
 		match res {
 			Ok(height) => Ok((height, true)),
@@ -533,6 +534,7 @@ where
 			wallet: wallet_in,
 			phantom: PhantomData,
 			phantom_c: PhantomData,
+			phantom_l: PhantomData,
 		})
 	}
 

@@ -29,7 +29,7 @@ use core::{core, global};
 use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
-	HTTPWalletToNodeClient, LMDBBackend, WalletBackend, WalletConfig, WalletInst, WalletSeed,
+	HTTPWalletToNodeClient, HTTPWalletToWalletClient, LMDBBackend, WalletBackend, WalletConfig, WalletInst, WalletSeed,
 };
 use keychain;
 use servers::start_webwallet_server;
@@ -56,11 +56,13 @@ pub fn instantiate_wallet(
 	passphrase: &str,
 	account: &str,
 	node_api_secret: Option<String>,
-) -> Arc<Mutex<WalletInst<HTTPWalletToNodeClient, keychain::ExtKeychain>>> {
-	let client =
+) -> Arc<Mutex<WalletInst<HTTPWalletToNodeClient, HTTPWalletToWalletClient, keychain::ExtKeychain>>> {
+	let client_n =
 		HTTPWalletToNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
+	let client_w =
+		HTTPWalletToWalletClient::new();
 	let mut db_wallet =
-		LMDBBackend::new(wallet_config.clone(), passphrase, client).unwrap_or_else(|e| {
+		LMDBBackend::new(wallet_config.clone(), passphrase, client_n, client_w).unwrap_or_else(|e| {
 			panic!(
 				"Error creating DB wallet: {} Config: {:?}",
 				e, wallet_config
@@ -106,10 +108,12 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 	if let ("init", Some(_)) = wallet_args.subcommand() {
 		WalletSeed::init_file(&wallet_config).expect("Failed to init wallet seed file.");
 		info!("Wallet seed file created");
-		let client =
+		let client_n =
 			HTTPWalletToNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-		let _: LMDBBackend<HTTPWalletToNodeClient, keychain::ExtKeychain> =
-			LMDBBackend::new(wallet_config.clone(), "", client).unwrap_or_else(|e| {
+		let client_w =
+			HTTPWalletToWalletClient::new();
+		let _: LMDBBackend<HTTPWalletToNodeClient, HTTPWalletToWalletClient, keychain::ExtKeychain> =
+			LMDBBackend::new(wallet_config.clone(), "", client_n, client_w).unwrap_or_else(|e| {
 				panic!(
 					"Error creating DB for wallet: {} Config: {:?}",
 					e, wallet_config

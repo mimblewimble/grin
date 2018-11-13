@@ -63,9 +63,10 @@ pub struct WalletProxyMessage {
 
 /// communicates with a chain instance or other wallet
 /// listener APIs via message queues
-pub struct WalletProxy<C, K>
+pub struct WalletProxy<C, L, K>
 where
 	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// directory to create the chain in
@@ -77,7 +78,7 @@ where
 		String,
 		(
 			Sender<WalletProxyMessage>,
-			Arc<Mutex<WalletInst<LocalWalletToNodeClient, K>>>,
+			Arc<Mutex<WalletInst<LocalWalletClient, LocalWalletClient, K>>>,
 		),
 	>,
 	/// simulate json send to another client
@@ -91,11 +92,14 @@ where
 	phantom_c: PhantomData<C>,
 	/// Phantom
 	phantom_k: PhantomData<K>,
+	/// Phantom
+	phantom_l: PhantomData<L>,
 }
 
-impl<C, K> WalletProxy<C, K>
+impl<C, L, K> WalletProxy<C, L, K>
 where
 	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Create a new client that will communicate with the given grin node
@@ -124,6 +128,7 @@ where
 			running: Arc::new(AtomicBool::new(false)),
 			phantom_c: PhantomData,
 			phantom_k: PhantomData,
+			phantom_l: PhantomData,
 		};
 		retval
 	}
@@ -133,7 +138,7 @@ where
 		&mut self,
 		addr: &str,
 		tx: Sender<WalletProxyMessage>,
-		wallet: Arc<Mutex<WalletInst<LocalWalletToNodeClient, K>>>,
+		wallet: Arc<Mutex<WalletInst<LocalWalletClient, LocalWalletClient, K>>>,
 	) {
 		self.wallets.insert(addr.to_owned(), (tx, wallet));
 	}
@@ -282,7 +287,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct LocalWalletToNodeClient {
+pub struct LocalWalletClient {
 	/// wallet identifier for the proxy queue
 	pub id: String,
 	/// proxy's tx queue (receive messages from other wallets or node
@@ -293,11 +298,11 @@ pub struct LocalWalletToNodeClient {
 	pub tx: Arc<Mutex<Sender<WalletProxyMessage>>>,
 }
 
-impl LocalWalletToNodeClient {
+impl LocalWalletClient {
 	/// new
 	pub fn new(id: &str, proxy_rx: Sender<WalletProxyMessage>) -> Self {
 		let (tx, rx) = channel();
-		LocalWalletToNodeClient {
+		LocalWalletClient {
 			id: id.to_owned(),
 			proxy_tx: Arc::new(Mutex::new(proxy_rx)),
 			rx: Arc::new(Mutex::new(rx)),
@@ -311,7 +316,7 @@ impl LocalWalletToNodeClient {
 	}
 }
 
-impl WalletToWalletClient for LocalWalletToNodeClient {
+impl WalletToWalletClient for LocalWalletClient {
 	/// Call the wallet API to create a coinbase output for the given
 	/// block_fees. Will retry based on default "retry forever with backoff"
 	/// behavior.
@@ -347,7 +352,7 @@ impl WalletToWalletClient for LocalWalletToNodeClient {
 	}
 }
 
-impl WalletToNodeClient for LocalWalletToNodeClient {
+impl WalletToNodeClient for LocalWalletClient {
 	fn node_url(&self) -> &str {
 		"node"
 	}

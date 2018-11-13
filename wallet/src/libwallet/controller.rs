@@ -158,6 +158,7 @@ where
 	pub wallet: Arc<Mutex<T>>,
 	phantom: PhantomData<K>,
 	phantom_c: PhantomData<C>,
+	phantom_l: PhantomData<L>,
 }
 
 impl<T: ?Sized, C, L, K> OwnerAPIHandler<T, C, L, K>
@@ -204,7 +205,7 @@ where
 	fn retrieve_txs(
 		&self,
 		req: &Request<Body>,
-		api: APIOwner<T, C, K>,
+		api: APIOwner<T, C, L, K>,
 	) -> Result<(bool, Vec<TxLogEntry>), Error> {
 		let mut id = None;
 		let mut update_from_node = false;
@@ -225,7 +226,7 @@ where
 	fn dump_stored_tx(
 		&self,
 		req: &Request<Body>,
-		api: APIOwner<T, C, K>,
+		api: APIOwner<T, C, L, K>,
 	) -> Result<Transaction, Error> {
 		let params = parse_params(req);
 		if let Some(id_string) = params.get("id") {
@@ -254,7 +255,7 @@ where
 	fn retrieve_summary_info(
 		&self,
 		req: &Request<Body>,
-		mut api: APIOwner<T, C, K>,
+		mut api: APIOwner<T, C, L, K>,
 	) -> Result<(bool, WalletInfo), Error> {
 		let update_from_node = param_exists(req, "refresh");
 		api.retrieve_summary_info(update_from_node)
@@ -263,7 +264,7 @@ where
 	fn node_height(
 		&self,
 		_req: &Request<Body>,
-		mut api: APIOwner<T, C, K>,
+		mut api: APIOwner<T, C, L, K>,
 	) -> Result<(u64, bool), Error> {
 		api.node_height()
 	}
@@ -291,7 +292,7 @@ where
 	fn issue_send_tx(
 		&self,
 		req: Request<Body>,
-		mut api: APIOwner<T, C, K>,
+		mut api: APIOwner<T, C, L, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(move |args: SendTXArgs| {
 			if args.method == "http" {
@@ -323,7 +324,7 @@ where
 	fn finalize_tx(
 		&self,
 		req: Request<Body>,
-		mut api: APIOwner<T, C, K>,
+		mut api: APIOwner<T, C, L, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
 		Box::new(
 			parse_body(req).and_then(move |mut slate| match api.finalize_tx(&mut slate) {
@@ -339,7 +340,7 @@ where
 	fn cancel_tx(
 		&self,
 		req: Request<Body>,
-		mut api: APIOwner<T, C, K>,
+		mut api: APIOwner<T, C, L, K>,
 	) -> Box<Future<Item = (), Error = Error> + Send> {
 		let params = parse_params(&req);
 		if let Some(id_string) = params.get("id") {
@@ -368,7 +369,7 @@ where
 	fn post_tx(
 		&self,
 		req: Request<Body>,
-		api: APIOwner<T, C, K>,
+		api: APIOwner<T, C, L, K>,
 	) -> Box<Future<Item = (), Error = Error> + Send> {
 		let params = match req.uri().query() {
 			Some(query_string) => form_urlencoded::parse(query_string.as_bytes())
@@ -394,7 +395,7 @@ where
 	fn issue_burn_tx(
 		&self,
 		_req: Request<Body>,
-		mut api: APIOwner<T, C, K>,
+		mut api: APIOwner<T, C, L, K>,
 	) -> Box<Future<Item = (), Error = Error> + Send> {
 		// TODO: Args
 		Box::new(match api.issue_burn_tx(60, 10, 1000) {

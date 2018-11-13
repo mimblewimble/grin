@@ -72,8 +72,11 @@ where
 	/// Return the keychain being used
 	fn keychain(&mut self) -> &mut K;
 
-	/// Return the client being used
-	fn client(&mut self) -> &mut C;
+	/// Return the client being used to communicate with the node
+	fn w2n_client(&mut self) -> &mut C;
+
+	/// Return the client being used to communicate with other wallets
+	fn w2w_client(&mut self) -> &mut L;
 
 	/// Set parent key id by stored account name
 	fn set_parent_key_id_by_name(&mut self, label: &str) -> Result<(), Error>;
