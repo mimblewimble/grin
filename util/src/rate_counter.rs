@@ -57,9 +57,10 @@ impl RateCounter {
 		self.last_min_bytes.iter().sum()
 	}
 
-	/// Count of increases in the last minute
+	/// Count of increases in the last minute.
+	/// Count last_min_times so we can exclude "quiet" byte increments.
 	pub fn count_per_min(&self) -> u64 {
-		self.last_min_bytes.len() as u64
+		self.last_min_times.len() as u64
 	}
 }
 
