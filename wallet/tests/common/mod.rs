@@ -29,7 +29,7 @@ use chain::Chain;
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::{consensus, global, pow, ser};
 use wallet::libwallet;
-use wallet::libwallet::types::{BlockFees, CbData, WalletClient, WalletInst};
+use wallet::libwallet::types::{BlockFees, CbData, WalletToNodeClient, WalletInst};
 use wallet::lmdb_wallet::LMDBBackend;
 use wallet::{WalletBackend, WalletConfig};
 
@@ -119,7 +119,7 @@ pub fn award_block_to_wallet<C, K>(
 	wallet: Arc<Mutex<WalletInst<C, K>>>,
 ) -> Result<(), libwallet::Error>
 where
-	C: WalletClient,
+	C: WalletToNodeClient,
 	K: keychain::Keychain,
 {
 	// build block fees
@@ -146,7 +146,7 @@ pub fn award_blocks_to_wallet<C, K>(
 	number: usize,
 ) -> Result<(), libwallet::Error>
 where
-	C: WalletClient,
+	C: WalletToNodeClient,
 	K: keychain::Keychain,
 {
 	for _ in 0..number {
@@ -158,7 +158,7 @@ where
 /// dispatch a db wallet
 pub fn create_wallet<C, K>(dir: &str, client: C) -> Arc<Mutex<WalletInst<C, K>>>
 where
-	C: WalletClient + 'static,
+	C: WalletToNodeClient + 'static,
 	K: keychain::Keychain + 'static,
 {
 	let mut wallet_config = WalletConfig::default();

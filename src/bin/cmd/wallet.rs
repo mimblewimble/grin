@@ -29,7 +29,7 @@ use core::{core, global};
 use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
-	HTTPWalletClient, LMDBBackend, WalletBackend, WalletConfig, WalletInst, WalletSeed,
+	HTTPWalletToNodeClient, LMDBBackend, WalletBackend, WalletConfig, WalletInst, WalletSeed,
 };
 use keychain;
 use servers::start_webwallet_server;
@@ -56,8 +56,8 @@ pub fn instantiate_wallet(
 	passphrase: &str,
 	account: &str,
 	node_api_secret: Option<String>,
-) -> Arc<Mutex<WalletInst<HTTPWalletClient, keychain::ExtKeychain>>> {
-	let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
+) -> Arc<Mutex<WalletInst<HTTPWalletToNodeClient, keychain::ExtKeychain>>> {
+	let client = HTTPWalletToNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
 	let mut db_wallet =
 		LMDBBackend::new(wallet_config.clone(), passphrase, client).unwrap_or_else(|e| {
 			panic!(
@@ -106,8 +106,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		WalletSeed::init_file(&wallet_config).expect("Failed to init wallet seed file.");
 		info!("Wallet seed file created");
 		let client =
-			HTTPWalletClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-		let _: LMDBBackend<HTTPWalletClient, keychain::ExtKeychain> =
+			HTTPWalletToNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
+		let _: LMDBBackend<HTTPWalletToNodeClient, keychain::ExtKeychain> =
 			LMDBBackend::new(wallet_config.clone(), "", client).unwrap_or_else(|e| {
 				panic!(
 					"Error creating DB for wallet: {} Config: {:?}",

@@ -65,7 +65,7 @@ pub struct WalletProxyMessage {
 /// listener APIs via message queues
 pub struct WalletProxy<C, K>
 where
-	C: WalletClient,
+	C: WalletToNodeClient,
 	K: Keychain,
 {
 	/// directory to create the chain in
@@ -77,7 +77,7 @@ where
 		String,
 		(
 			Sender<WalletProxyMessage>,
-			Arc<Mutex<WalletInst<LocalWalletClient, K>>>,
+			Arc<Mutex<WalletInst<LocalWalletToNodeClient, K>>>,
 		),
 	>,
 	/// simulate json send to another client
@@ -95,7 +95,7 @@ where
 
 impl<C, K> WalletProxy<C, K>
 where
-	C: WalletClient,
+	C: WalletToNodeClient,
 	K: Keychain,
 {
 	/// Create a new client that will communicate with the given grin node
@@ -133,7 +133,7 @@ where
 		&mut self,
 		addr: &str,
 		tx: Sender<WalletProxyMessage>,
-		wallet: Arc<Mutex<WalletInst<LocalWalletClient, K>>>,
+		wallet: Arc<Mutex<WalletInst<LocalWalletToNodeClient, K>>>,
 	) {
 		self.wallets.insert(addr.to_owned(), (tx, wallet));
 	}
@@ -282,7 +282,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct LocalWalletClient {
+pub struct LocalWalletToNodeClient {
 	/// wallet identifier for the proxy queue
 	pub id: String,
 	/// proxy's tx queue (receive messages from other wallets or node
@@ -293,11 +293,11 @@ pub struct LocalWalletClient {
 	pub tx: Arc<Mutex<Sender<WalletProxyMessage>>>,
 }
 
-impl LocalWalletClient {
+impl LocalWalletToNodeClient {
 	/// new
 	pub fn new(id: &str, proxy_rx: Sender<WalletProxyMessage>) -> Self {
 		let (tx, rx) = channel();
-		LocalWalletClient {
+		LocalWalletToNodeClient {
 			id: id.to_owned(),
 			proxy_tx: Arc::new(Mutex::new(proxy_rx)),
 			rx: Arc::new(Mutex::new(rx)),
@@ -311,14 +311,7 @@ impl LocalWalletClient {
 	}
 }
 
-impl WalletClient for LocalWalletClient {
-	fn node_url(&self) -> &str {
-		"node"
-	}
-	fn node_api_secret(&self) -> Option<String> {
-		None
-	}
-
+impl WalletToWalletClient for LocalWalletToNodeClient {
 	/// Call the wallet API to create a coinbase output for the given
 	/// block_fees. Will retry based on default "retry forever with backoff"
 	/// behavior.
@@ -351,6 +344,15 @@ impl WalletClient for LocalWalletClient {
 				"Parsing send_tx_slate response",
 			))?,
 		)
+	}
+}
+
+impl WalletToNodeClient for LocalWalletToNodeClient {
+	fn node_url(&self) -> &str {
+		"node"
+	}
+	fn node_api_secret(&self) -> Option<String> {
+		None
 	}
 
 	/// Posts a transaction to a grin node

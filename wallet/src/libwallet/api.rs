@@ -33,7 +33,7 @@ use libtx::slate::Slate;
 use libwallet::internal::{keys, selection, tx, updater};
 use libwallet::types::{
 	AcctPathMapping, BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend,
-	WalletClient, WalletInfo,
+	WalletToNodeClient, WalletToWalletClient, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
 use util;
@@ -41,10 +41,11 @@ use util::secp::pedersen;
 
 /// Wrapper around internal API functions, containing a reference to
 /// the wallet/keychain that they're acting upon
-pub struct APIOwner<W: ?Sized, C, K>
+pub struct APIOwner<W: ?Sized, C, L, K>
 where
-	W: WalletBackend<C, K>,
-	C: WalletClient,
+	W: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
@@ -52,12 +53,14 @@ where
 	pub wallet: Arc<Mutex<W>>,
 	phantom: PhantomData<K>,
 	phantom_c: PhantomData<C>,
+	phantom_l: PhantomData<L>,
 }
 
-impl<W: ?Sized, C, K> APIOwner<W, C, K>
+impl<W: ?Sized, C, L, K> APIOwner<W, C, L, K>
 where
-	W: WalletBackend<C, K>,
-	C: WalletClient,
+	W: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Create new API instance
@@ -502,10 +505,11 @@ where
 
 /// Wrapper around external API functions, intended to communicate
 /// with other parties
-pub struct APIForeign<W: ?Sized, C, K>
+pub struct APIForeign<W: ?Sized, C, L, K>
 where
-	W: WalletBackend<C, K>,
-	C: WalletClient,
+	W: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
@@ -513,12 +517,14 @@ where
 	pub wallet: Arc<Mutex<W>>,
 	phantom: PhantomData<K>,
 	phantom_c: PhantomData<C>,
+	phantom_l: PhantomData<L>,
 }
 
-impl<'a, W: ?Sized, C, K> APIForeign<W, C, K>
+impl<'a, W: ?Sized, C, L, K> APIForeign<W, C, L, K>
 where
-	W: WalletBackend<C, K>,
-	C: WalletClient,
+	W: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Create new API instance

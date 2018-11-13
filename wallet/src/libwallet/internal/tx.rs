@@ -23,7 +23,7 @@ use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
 use libwallet::internal::{selection, updater};
-use libwallet::types::{Context, TxLogEntryType, WalletBackend, WalletClient};
+use libwallet::types::{Context, TxLogEntryType, WalletBackend, WalletToNodeClient};
 use libwallet::{Error, ErrorKind};
 
 /// Receive a transaction, modifying the slate accordingly (which can then be
@@ -36,7 +36,7 @@ pub fn receive_tx<T: ?Sized, C, K>(
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletClient,
+	C: WalletToNodeClient,
 	K: Keychain,
 {
 	// create an output using the amount in the slate
@@ -85,7 +85,7 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 >
 where
 	T: WalletBackend<C, K>,
-	C: WalletClient,
+	C: WalletToNodeClient,
 	K: Keychain,
 {
 	// Get lock height
@@ -137,7 +137,7 @@ pub fn complete_tx<T: ?Sized, C, K>(
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletClient,
+	C: WalletToNodeClient,
 	K: Keychain,
 {
 	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 0)?;
@@ -157,7 +157,7 @@ pub fn cancel_tx<T: ?Sized, C, K>(
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletClient,
+	C: WalletToNodeClient,
 	K: Keychain,
 {
 	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), &parent_key_id)?;
@@ -187,7 +187,7 @@ pub fn retrieve_tx_hex<T: ?Sized, C, K>(
 ) -> Result<(bool, Option<String>), Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletClient,
+	C: WalletToNodeClient,
 	K: Keychain,
 {
 	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), parent_key_id)?;
@@ -208,7 +208,7 @@ pub fn issue_burn_tx<T: ?Sized, C, K>(
 ) -> Result<Transaction, Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletClient,
+	C: WalletToNodeClient,
 	K: Keychain,
 {
 	// TODO

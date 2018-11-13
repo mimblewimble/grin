@@ -30,7 +30,7 @@ use std::{fs, thread, time};
 use util::Mutex;
 
 use framework::keychain::Keychain;
-use wallet::{HTTPWalletClient, LMDBBackend, WalletConfig};
+use wallet::{HTTPWalletToNodeClient, LMDBBackend, WalletConfig};
 
 /// Just removes all results from previous runs
 pub fn clean_all_output(test_name_dir: &str) {
@@ -265,13 +265,13 @@ impl LocalServerContainer {
 		let _ = fs::create_dir_all(self.wallet_config.clone().data_file_dir);
 		let r = wallet::WalletSeed::init_file(&self.wallet_config);
 
-		let client = HTTPWalletClient::new(&self.wallet_config.check_node_api_http_addr, None);
+		let client = HTTPWalletToNodeClient::new(&self.wallet_config.check_node_api_http_addr, None);
 
 		if let Err(_e) = r {
 			//panic!("Error initializing wallet seed: {}", e);
 		}
 
-		let wallet: LMDBBackend<HTTPWalletClient, keychain::ExtKeychain> =
+		let wallet: LMDBBackend<HTTPWalletToNodeClient, keychain::ExtKeychain> =
 			LMDBBackend::new(self.wallet_config.clone(), "", client).unwrap_or_else(|e| {
 				panic!(
 					"Error creating wallet: {:?} Config: {:?}",
@@ -308,7 +308,7 @@ impl LocalServerContainer {
 		let keychain: keychain::ExtKeychain = wallet_seed
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
-		let client = HTTPWalletClient::new(&config.check_node_api_http_addr, None);
+		let client = HTTPWalletToNodeClient::new(&config.check_node_api_http_addr, None);
 		let mut wallet = LMDBBackend::new(config.clone(), "", client)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
@@ -335,7 +335,7 @@ impl LocalServerContainer {
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 
-		let client = HTTPWalletClient::new(&config.check_node_api_http_addr, None);
+		let client = HTTPWalletToNodeClient::new(&config.check_node_api_http_addr, None);
 
 		let max_outputs = 500;
 		let change_outputs = 1;

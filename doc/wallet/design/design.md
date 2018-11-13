@@ -24,7 +24,7 @@ the code is organized into the following components (from highest-level to lowes
 * **libTx** - Library that provides lower-level transaction building, rangeproof and signing functions, highly-reusable by wallet implementors.
 * **Wallet Traits** - A set of generic traits defined within libWallet and the `keychain` crate . A wallet implementation such as Grin's current
   default only needs to implement these traits in order to provide a wallet:
-  * **WalletClient** - Defines communication between the wallet, a running grin node and/or other wallets
+  * **WalletToNodeClient** - Defines communication between the wallet, a running grin node and/or other wallets
   * **WalletBackend** - Defines the storage implementation of the wallet
   * **KeyChain** - Defines key derivation operations
   
@@ -66,22 +66,22 @@ pub fn retrieve_outputs<T: ?Sized, C, K>(
 ) -> Result<Vec<OutputData>, Error>
 where
 !·T: WalletBackend<C, K>,
-!·C: WalletClient,
+!·C: WalletToNodeClient,
 !·K: Keychain,
 {  
 ```
 
 With `T` in this instance being a class that implements  the `WalletBackend` trait, which is further parameterized with implementations of
-`WalletClient` and `Keychain`.
+`WalletToNodeClient` and `Keychain`.
 
 There is currently only a single implementation of the Keychain trait within the Grin code, in the `keychain` crate exported as `ExtKeyChain`.
 The `Keychain` trait makes several assumptions about the underlying implementation, particularly that it will adhere to a
 [BIP-38 style](https://github.com/bitcoin/bips/blob/master/bip-0038.mediawiki) 'master key -> child key' model.
 
-There are two implementations of `WalletClient` within the code, the main version being the `HTTPWalletClient` found within `wallet/src/client.rs` and
-the seconds a test client that communicates with an in-process instance of a chain. The WalletClient isolates all network calls, so upgrading wallet
+There are two implementations of `WalletToNodeClient` within the code, the main version being the `HTTPWalletToNodeClient` found within `wallet/src/client.rs` and
+the seconds a test client that communicates with an in-process instance of a chain. The WalletToNodeClient isolates all network calls, so upgrading wallet
 communication from the current simple http interaction to a more secure protocol (or allowing for many options) should be a simple
-matter of dropping in different `WalletClient` implementations.
+matter of dropping in different `WalletToNodeClient` implementations.
 
 There are also two implementations of `WalletBackend` within the code at the base of the `wallet` crate. `LMDBBackend` found within
 `wallet/src/lmdb_wallet.rs` is the main implementation, and is now used by all grin wallet commands. The earlier `FileWallet` still exists
