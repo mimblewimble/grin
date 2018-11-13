@@ -57,7 +57,8 @@ pub fn instantiate_wallet(
 	account: &str,
 	node_api_secret: Option<String>,
 ) -> Arc<Mutex<WalletInst<HTTPWalletToNodeClient, keychain::ExtKeychain>>> {
-	let client = HTTPWalletToNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
+	let client =
+		HTTPWalletToNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
 	let mut db_wallet =
 		LMDBBackend::new(wallet_config.clone(), passphrase, client).unwrap_or_else(|e| {
 			panic!(

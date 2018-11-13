@@ -29,7 +29,7 @@ use chain::Chain;
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::{consensus, global, pow, ser};
 use wallet::libwallet;
-use wallet::libwallet::types::{BlockFees, CbData, WalletToNodeClient, WalletInst};
+use wallet::libwallet::types::{BlockFees, CbData, WalletInst, WalletToNodeClient};
 use wallet::lmdb_wallet::LMDBBackend;
 use wallet::{WalletBackend, WalletConfig};
 

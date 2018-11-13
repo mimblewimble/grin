@@ -28,7 +28,7 @@ use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
 use libwallet::types::{
 	BlockFees, CbData, OutputData, OutputStatus, TxLogEntry, TxLogEntryType, WalletBackend,
-	WalletToNodeClient, WalletInfo,
+	WalletInfo, WalletToNodeClient,
 };
 use util;
 use util::secp::pedersen;

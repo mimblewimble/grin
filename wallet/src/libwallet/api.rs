@@ -33,7 +33,7 @@ use libtx::slate::Slate;
 use libwallet::internal::{keys, selection, tx, updater};
 use libwallet::types::{
 	AcctPathMapping, BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend,
-	WalletToNodeClient, WalletToWalletClient, WalletInfo,
+	WalletInfo, WalletToNodeClient, WalletToWalletClient,
 };
 use libwallet::{Error, ErrorKind};
 use util;

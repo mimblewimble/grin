@@ -57,7 +57,7 @@ pub use client::{create_coinbase, HTTPWalletToNodeClient};
 pub use error::{Error, ErrorKind};
 pub use libwallet::controller;
 pub use libwallet::types::{
-	BlockFees, CbData, WalletBackend, WalletToNodeClient, WalletInfo, WalletInst,
+	BlockFees, CbData, WalletBackend, WalletInfo, WalletInst, WalletToNodeClient,
 };
 pub use lmdb_wallet::{wallet_db_exists, LMDBBackend};
 pub use types::{WalletConfig, WalletSeed, SEED_FILE};

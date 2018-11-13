@@ -25,7 +25,8 @@ use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
 use libwallet::types::{
-	CbData, OutputData, SendTXArgs, TxLogEntry, WalletBackend, WalletToNodeClient, WalletToWalletClient, WalletInfo,
+	CbData, OutputData, SendTXArgs, TxLogEntry, WalletBackend, WalletInfo, WalletToNodeClient,
+	WalletToWalletClient,
 };
 use libwallet::{Error, ErrorKind};
 use serde::{Deserialize, Serialize};
