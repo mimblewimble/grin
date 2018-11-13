@@ -89,7 +89,6 @@ pub fn connect_and_monitor(
 					monitor_peers(
 						peers.clone(),
 						p2p_server.config.clone(),
-						capabilities,
 						tx.clone(),
 						preferred_peers.clone(),
 					);
@@ -116,7 +115,6 @@ pub fn connect_and_monitor(
 fn monitor_peers(
 	peers: Arc<p2p::Peers>,
 	config: p2p::P2PConfig,
-	capabilities: p2p::Capabilities,
 	tx: mpsc::Sender<SocketAddr>,
 	preferred_peers_list: Option<Vec<SocketAddr>>,
 ) {
@@ -178,7 +176,7 @@ fn monitor_peers(
 			config.port,
 			p.info.addr,
 		);
-		let _ = p.send_peer_request(capabilities);
+		let _ = p.send_peer_request(p2p::Capabilities::PEER_LIST);
 		connected_peers.push(p.info.addr)
 	}
 
@@ -212,6 +210,7 @@ fn monitor_peers(
 		p2p::Capabilities::UNKNOWN,
 		config.peer_max_count() as usize,
 	);
+
 	for p in new_peers.iter().filter(|p| !peers.is_known(&p.addr)) {
 		trace!(
 			"monitor_peers: on {}:{}, queue to soon try {}",
@@ -249,7 +248,8 @@ fn connect_to_seeds_and_preferred_peers(
 	peers_preferred_list: Option<Vec<SocketAddr>>,
 ) {
 	// check if we have some peers in db
-	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::FULL_NODE, 100);
+	// look for peers that are able to give us other peers (via PEER_LIST capability)
+	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::PEER_LIST, 100);
 
 	// if so, get their addresses, otherwise use our seeds
 	let mut peer_addrs = if peers.len() > 3 {
