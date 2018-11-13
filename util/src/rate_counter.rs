@@ -77,7 +77,9 @@ impl RateCounter {
 
 	fn truncate(&mut self) {
 		let now_millis = millis_since_epoch();
-		while self.last_min_entries.len() > 0 && self.last_min_entries[0].timestamp + 60000 < now_millis {
+		while self.last_min_entries.len() > 0
+			&& self.last_min_entries[0].timestamp + 60000 < now_millis
+		{
 			self.last_min_entries.remove(0);
 		}
 	}
@@ -91,7 +93,10 @@ impl RateCounter {
 	/// Count of increases in the last minute.
 	/// Excludes "quiet" byte increments.
 	pub fn count_per_min(&self) -> u64 {
-		self.last_min_entries.iter().filter(|x| !x.is_quiet()).count() as u64
+		self.last_min_entries
+			.iter()
+			.filter(|x| !x.is_quiet())
+			.count() as u64
 	}
 }
 
