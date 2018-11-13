@@ -42,13 +42,14 @@ struct OutputResult {
 	pub blinding: SecretKey,
 }
 
-fn identify_utxo_outputs<T, C, K>(
+fn identify_utxo_outputs<T, C, L, K>(
 	wallet: &mut T,
 	outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)>,
 ) -> Result<Vec<OutputResult>, Error>
 where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
+	T: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	let mut wallet_outputs: Vec<OutputResult> = Vec::new();
@@ -98,10 +99,11 @@ where
 }
 
 /// Restore a wallet
-pub fn restore<T, C, K>(wallet: &mut T) -> Result<(), Error>
+pub fn restore<T, C, L, K>(wallet: &mut T) -> Result<(), Error>
 where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
+	T: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	// Don't proceed if wallet_data has anything in it
@@ -118,7 +120,7 @@ where
 	let mut result_vec: Vec<OutputResult> = vec![];
 	loop {
 		let (highest_index, last_retrieved_index, outputs) = wallet
-			.client()
+			.w2n_client()
 			.get_outputs_by_pmmr_index(start_index, batch_size)?;
 		info!(
 			"Retrieved {} outputs, up to index {}. (Highest index: {})",

@@ -63,9 +63,10 @@ pub struct WalletProxyMessage {
 
 /// communicates with a chain instance or other wallet
 /// listener APIs via message queues
-pub struct WalletProxy<C, K>
+pub struct WalletProxy<C, L, K>
 where
-	C: WalletClient,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// directory to create the chain in
@@ -77,7 +78,7 @@ where
 		String,
 		(
 			Sender<WalletProxyMessage>,
-			Arc<Mutex<WalletInst<LocalWalletClient, K>>>,
+			Arc<Mutex<WalletInst<LocalWalletClient, LocalWalletClient, K>>>,
 		),
 	>,
 	/// simulate json send to another client
@@ -91,11 +92,14 @@ where
 	phantom_c: PhantomData<C>,
 	/// Phantom
 	phantom_k: PhantomData<K>,
+	/// Phantom
+	phantom_l: PhantomData<L>,
 }
 
-impl<C, K> WalletProxy<C, K>
+impl<C, L, K> WalletProxy<C, L, K>
 where
-	C: WalletClient,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Create a new client that will communicate with the given grin node
@@ -124,6 +128,7 @@ where
 			running: Arc::new(AtomicBool::new(false)),
 			phantom_c: PhantomData,
 			phantom_k: PhantomData,
+			phantom_l: PhantomData,
 		};
 		retval
 	}
@@ -133,7 +138,7 @@ where
 		&mut self,
 		addr: &str,
 		tx: Sender<WalletProxyMessage>,
-		wallet: Arc<Mutex<WalletInst<LocalWalletClient, K>>>,
+		wallet: Arc<Mutex<WalletInst<LocalWalletClient, LocalWalletClient, K>>>,
 	) {
 		self.wallets.insert(addr.to_owned(), (tx, wallet));
 	}
@@ -311,14 +316,7 @@ impl LocalWalletClient {
 	}
 }
 
-impl WalletClient for LocalWalletClient {
-	fn node_url(&self) -> &str {
-		"node"
-	}
-	fn node_api_secret(&self) -> Option<String> {
-		None
-	}
-
+impl WalletToWalletClient for LocalWalletClient {
 	/// Call the wallet API to create a coinbase output for the given
 	/// block_fees. Will retry based on default "retry forever with backoff"
 	/// behavior.
@@ -351,6 +349,15 @@ impl WalletClient for LocalWalletClient {
 				"Parsing send_tx_slate response",
 			))?,
 		)
+	}
+}
+
+impl WalletToNodeClient for LocalWalletClient {
+	fn node_url(&self) -> &str {
+		"node"
+	}
+	fn node_api_secret(&self) -> Option<String> {
+		None
 	}
 
 	/// Posts a transaction to a grin node

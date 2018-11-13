@@ -40,8 +40,8 @@ use wallet::controller;
 use wallet::libtx::slate::Slate;
 use wallet::libwallet::types::{WalletBackend, WalletInst};
 use wallet::lmdb_wallet::LMDBBackend;
-use wallet::HTTPWalletClient;
 use wallet::WalletConfig;
+use wallet::{HTTPWalletToNodeClient, HTTPWalletToWalletClient};
 
 use framework::{
 	config, stop_all_servers, LocalServerContainerConfig, LocalServerContainerPool,
@@ -880,15 +880,19 @@ fn long_fork_test_case_6(s: &Vec<servers::Server>) {
 
 pub fn create_wallet(
 	dir: &str,
-	client: HTTPWalletClient,
-) -> Arc<Mutex<WalletInst<HTTPWalletClient, keychain::ExtKeychain>>> {
+	client_n: HTTPWalletToNodeClient,
+	client_w: HTTPWalletToWalletClient,
+) -> Arc<Mutex<WalletInst<HTTPWalletToNodeClient, HTTPWalletToWalletClient, keychain::ExtKeychain>>>
+{
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
 	let _ = wallet::WalletSeed::init_file(&wallet_config);
-	let mut wallet: LMDBBackend<HTTPWalletClient, keychain::ExtKeychain> =
-		LMDBBackend::new(wallet_config.clone(), "", client).unwrap_or_else(|e| {
-			panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config)
-		});
+	let mut wallet: LMDBBackend<
+		HTTPWalletToNodeClient,
+		HTTPWalletToWalletClient,
+		keychain::ExtKeychain,
+	> = LMDBBackend::new(wallet_config.clone(), "", client_n, client_w)
+		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
 	wallet.open_with_credentials().unwrap_or_else(|e| {
 		panic!(
 			"Error initializing wallet: {:?} Config: {:?}",
@@ -908,16 +912,26 @@ fn replicate_tx_fluff_failure() {
 
 	// Create Wallet 1 (Mining Input) and start it listening
 	// Wallet 1 post to another node, just for fun
-	let client1 = HTTPWalletClient::new("http://127.0.0.1:23003", None);
-	let wallet1 = create_wallet("target/tmp/tx_fluff/wallet1", client1.clone());
+	let client1 = HTTPWalletToNodeClient::new("http://127.0.0.1:23003", None);
+	let client1_w = HTTPWalletToWalletClient::new();
+	let wallet1 = create_wallet(
+		"target/tmp/tx_fluff/wallet1",
+		client1.clone(),
+		client1_w.clone(),
+	);
 	let wallet1_handle = thread::spawn(move || {
 		controller::foreign_listener(wallet1, "127.0.0.1:33000", None)
 			.unwrap_or_else(|e| panic!("Error creating wallet1 listener: {:?}", e,));
 	});
 
 	// Create Wallet 2 (Recipient) and launch
-	let client2 = HTTPWalletClient::new("http://127.0.0.1:23001", None);
-	let wallet2 = create_wallet("target/tmp/tx_fluff/wallet2", client2.clone());
+	let client2 = HTTPWalletToNodeClient::new("http://127.0.0.1:23001", None);
+	let client2_w = HTTPWalletToWalletClient::new();
+	let wallet2 = create_wallet(
+		"target/tmp/tx_fluff/wallet2",
+		client2.clone(),
+		client2_w.clone(),
+	);
 	let wallet2_handle = thread::spawn(move || {
 		controller::foreign_listener(wallet2, "127.0.0.1:33001", None)
 			.unwrap_or_else(|e| panic!("Error creating wallet2 listener: {:?}", e,));
@@ -957,7 +971,11 @@ fn replicate_tx_fluff_failure() {
 	thread::sleep(time::Duration::from_secs(10));
 
 	// get another instance of wallet1 (to update contents and perform a send)
-	let wallet1 = create_wallet("target/tmp/tx_fluff/wallet1", client1.clone());
+	let wallet1 = create_wallet(
+		"target/tmp/tx_fluff/wallet1",
+		client1.clone(),
+		client1_w.clone(),
+	);
 
 	let amount = 30_000_000_000;
 	let mut slate = Slate::blank(1);
@@ -980,7 +998,11 @@ fn replicate_tx_fluff_failure() {
 	thread::sleep(time::Duration::from_secs(200));
 
 	// get another instance of wallet (to check contents)
-	let wallet2 = create_wallet("target/tmp/tx_fluff/wallet2", client2.clone());
+	let wallet2 = create_wallet(
+		"target/tmp/tx_fluff/wallet2",
+		client2.clone(),
+		client2_w.clone(),
+	);
 
 	wallet::controller::owner_single_use(wallet2, |api| {
 		let res = api.retrieve_summary_info(true).unwrap();

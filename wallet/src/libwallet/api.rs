@@ -33,7 +33,7 @@ use libtx::slate::Slate;
 use libwallet::internal::{keys, selection, tx, updater};
 use libwallet::types::{
 	AcctPathMapping, BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend,
-	WalletClient, WalletInfo,
+	WalletInfo, WalletToNodeClient, WalletToWalletClient,
 };
 use libwallet::{Error, ErrorKind};
 use util;
@@ -41,10 +41,11 @@ use util::secp::pedersen;
 
 /// Wrapper around internal API functions, containing a reference to
 /// the wallet/keychain that they're acting upon
-pub struct APIOwner<W: ?Sized, C, K>
+pub struct APIOwner<W: ?Sized, C, L, K>
 where
-	W: WalletBackend<C, K>,
-	C: WalletClient,
+	W: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
@@ -52,12 +53,14 @@ where
 	pub wallet: Arc<Mutex<W>>,
 	phantom: PhantomData<K>,
 	phantom_c: PhantomData<C>,
+	phantom_l: PhantomData<L>,
 }
 
-impl<W: ?Sized, C, K> APIOwner<W, C, K>
+impl<W: ?Sized, C, L, K> APIOwner<W, C, L, K>
 where
-	W: WalletBackend<C, K>,
-	C: WalletClient,
+	W: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Create new API instance
@@ -66,6 +69,7 @@ where
 			wallet: wallet_in,
 			phantom: PhantomData,
 			phantom_c: PhantomData,
+			phantom_l: PhantomData,
 		}
 	}
 
@@ -172,7 +176,7 @@ where
 		let mut slate_out: Slate;
 		let lock_fn_out;
 
-		client = w.client().clone();
+		client = w.w2w_client().clone();
 		let (slate, context, lock_fn) = tx::create_send_tx(
 			&mut *w,
 			amount,
@@ -352,7 +356,8 @@ where
 			&parent_key_id,
 		)?;
 		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
-		w.client().post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
+		w.w2n_client()
+			.post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
 		w.close()?;
 		Ok(())
 	}
@@ -362,7 +367,7 @@ where
 		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
 		let client = {
 			let mut w = self.wallet.lock();
-			w.client().clone()
+			w.w2n_client().clone()
 		};
 		let res = client.post_tx(&TxWrapper { tx_hex: tx_hex }, fluff);
 		if let Err(e) = res {
@@ -423,7 +428,7 @@ where
 			let mut w = self.wallet.lock();
 			w.open_with_credentials()?;
 			let parent_key_id = w.parent_key_id();
-			client = w.client().clone();
+			client = w.w2n_client().clone();
 			let res = tx::retrieve_tx_hex(&mut *w, &parent_key_id, tx_id)?;
 			w.close()?;
 			res
@@ -475,7 +480,7 @@ where
 		let res = {
 			let mut w = self.wallet.lock();
 			w.open_with_credentials()?;
-			w.client().get_chain_height()
+			w.w2n_client().get_chain_height()
 		};
 		match res {
 			Ok(height) => Ok((height, true)),
@@ -502,10 +507,11 @@ where
 
 /// Wrapper around external API functions, intended to communicate
 /// with other parties
-pub struct APIForeign<W: ?Sized, C, K>
+pub struct APIForeign<W: ?Sized, C, L, K>
 where
-	W: WalletBackend<C, K>,
-	C: WalletClient,
+	W: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
@@ -513,12 +519,14 @@ where
 	pub wallet: Arc<Mutex<W>>,
 	phantom: PhantomData<K>,
 	phantom_c: PhantomData<C>,
+	phantom_l: PhantomData<L>,
 }
 
-impl<'a, W: ?Sized, C, K> APIForeign<W, C, K>
+impl<'a, W: ?Sized, C, L, K> APIForeign<W, C, L, K>
 where
-	W: WalletBackend<C, K>,
-	C: WalletClient,
+	W: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Create new API instance
@@ -527,6 +535,7 @@ where
 			wallet: wallet_in,
 			phantom: PhantomData,
 			phantom_c: PhantomData,
+			phantom_l: PhantomData,
 		})
 	}
 
