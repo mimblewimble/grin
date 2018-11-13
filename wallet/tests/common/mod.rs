@@ -29,7 +29,9 @@ use chain::Chain;
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::{consensus, global, pow, ser};
 use wallet::libwallet;
-use wallet::libwallet::types::{BlockFees, CbData, WalletInst, WalletToNodeClient, WalletToWalletClient};
+use wallet::libwallet::types::{
+	BlockFees, CbData, WalletInst, WalletToNodeClient, WalletToWalletClient,
+};
 use wallet::lmdb_wallet::LMDBBackend;
 use wallet::{WalletBackend, WalletConfig};
 
@@ -158,7 +160,11 @@ where
 }
 
 /// dispatch a db wallet
-pub fn create_wallet<C, L, K>(dir: &str, n_client: C, w_client: L) -> Arc<Mutex<WalletInst<C, L, K>>>
+pub fn create_wallet<C, L, K>(
+	dir: &str,
+	n_client: C,
+	w_client: L,
+) -> Arc<Mutex<WalletInst<C, L, K>>>
 where
 	C: WalletToNodeClient + 'static,
 	L: WalletToWalletClient + 'static,

@@ -28,7 +28,7 @@ use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
 use libwallet::types::{
 	BlockFees, CbData, OutputData, OutputStatus, TxLogEntry, TxLogEntryType, WalletBackend,
-	WalletInfo, WalletToNodeClient, WalletToWalletClient
+	WalletInfo, WalletToNodeClient, WalletToWalletClient,
 };
 use util;
 use util::secp::pedersen;
@@ -285,7 +285,9 @@ where
 
 	let wallet_output_keys = wallet_outputs.keys().map(|commit| commit.clone()).collect();
 
-	let api_outputs = wallet.w2n_client().get_outputs_from_node(wallet_output_keys)?;
+	let api_outputs = wallet
+		.w2n_client()
+		.get_outputs_from_node(wallet_output_keys)?;
 	apply_api_outputs(wallet, &wallet_outputs, &api_outputs, height, parent_key_id)?;
 	clean_old_unconfirmed(wallet, height)?;
 	Ok(())

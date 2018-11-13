@@ -356,7 +356,8 @@ where
 			&parent_key_id,
 		)?;
 		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
-		w.w2n_client().post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
+		w.w2n_client()
+			.post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
 		w.close()?;
 		Ok(())
 	}

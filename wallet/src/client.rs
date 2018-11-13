@@ -177,14 +177,12 @@ impl WalletToNodeClient for HTTPWalletToNodeClient {
 }
 
 #[derive(Clone)]
-pub struct HTTPWalletToWalletClient {
-}
+pub struct HTTPWalletToWalletClient {}
 
 impl HTTPWalletToWalletClient {
 	/// Create a new client that will communicate other wallets
 	pub fn new() -> HTTPWalletToWalletClient {
-		HTTPWalletToWalletClient {
-		}
+		HTTPWalletToWalletClient {}
 	}
 }
 

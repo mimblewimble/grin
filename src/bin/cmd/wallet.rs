@@ -29,7 +29,8 @@ use core::{core, global};
 use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
-	HTTPWalletToNodeClient, HTTPWalletToWalletClient, LMDBBackend, WalletBackend, WalletConfig, WalletInst, WalletSeed,
+	HTTPWalletToNodeClient, HTTPWalletToWalletClient, LMDBBackend, WalletBackend, WalletConfig,
+	WalletInst, WalletSeed,
 };
 use keychain;
 use servers::start_webwallet_server;
@@ -56,13 +57,13 @@ pub fn instantiate_wallet(
 	passphrase: &str,
 	account: &str,
 	node_api_secret: Option<String>,
-) -> Arc<Mutex<WalletInst<HTTPWalletToNodeClient, HTTPWalletToWalletClient, keychain::ExtKeychain>>> {
+) -> Arc<Mutex<WalletInst<HTTPWalletToNodeClient, HTTPWalletToWalletClient, keychain::ExtKeychain>>>
+{
 	let client_n =
 		HTTPWalletToNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-	let client_w =
-		HTTPWalletToWalletClient::new();
-	let mut db_wallet =
-		LMDBBackend::new(wallet_config.clone(), passphrase, client_n, client_w).unwrap_or_else(|e| {
+	let client_w = HTTPWalletToWalletClient::new();
+	let mut db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, client_n, client_w)
+		.unwrap_or_else(|e| {
 			panic!(
 				"Error creating DB wallet: {} Config: {:?}",
 				e, wallet_config
@@ -110,15 +111,17 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		info!("Wallet seed file created");
 		let client_n =
 			HTTPWalletToNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-		let client_w =
-			HTTPWalletToWalletClient::new();
-		let _: LMDBBackend<HTTPWalletToNodeClient, HTTPWalletToWalletClient, keychain::ExtKeychain> =
-			LMDBBackend::new(wallet_config.clone(), "", client_n, client_w).unwrap_or_else(|e| {
-				panic!(
-					"Error creating DB for wallet: {} Config: {:?}",
-					e, wallet_config
-				);
-			});
+		let client_w = HTTPWalletToWalletClient::new();
+		let _: LMDBBackend<
+			HTTPWalletToNodeClient,
+			HTTPWalletToWalletClient,
+			keychain::ExtKeychain,
+		> = LMDBBackend::new(wallet_config.clone(), "", client_n, client_w).unwrap_or_else(|e| {
+			panic!(
+				"Error creating DB for wallet: {} Config: {:?}",
+				e, wallet_config
+			);
+		});
 		info!("Wallet database backend created");
 		// give logging thread a moment to catch up
 		thread::sleep(Duration::from_millis(200));

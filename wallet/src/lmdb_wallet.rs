@@ -67,7 +67,12 @@ pub struct LMDBBackend<C, L, K> {
 }
 
 impl<C, L, K> LMDBBackend<C, L, K> {
-	pub fn new(config: WalletConfig, passphrase: &str, n_client: C, w_client: L) -> Result<Self, Error> {
+	pub fn new(
+		config: WalletConfig,
+		passphrase: &str,
+		n_client: C,
+		w_client: L,
+	) -> Result<Self, Error> {
 		let db_path = path::Path::new(&config.data_file_dir).join(DB_DIR);
 		fs::create_dir_all(&db_path).expect("Couldn't create wallet backend directory!");
 
