@@ -395,7 +395,7 @@ impl Peer {
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
-		trace!("Asking {} for more peers.", self.info.addr);
+		trace!("Asking {} for more peers {:?}", self.info.addr, capab);
 		self.connection.as_ref().unwrap().lock().send(
 			&GetPeerAddrs {
 				capabilities: capab,
