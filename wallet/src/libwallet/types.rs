@@ -262,7 +262,7 @@ impl ser::Writeable for OutputData {
 
 impl ser::Readable for OutputData {
 	fn read(reader: &mut ser::Reader) -> Result<OutputData, ser::Error> {
-		let data = reader.read_vec()?;
+		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
 	}
 }
@@ -431,7 +431,7 @@ impl ser::Writeable for Context {
 
 impl ser::Readable for Context {
 	fn read(reader: &mut ser::Reader) -> Result<Context, ser::Error> {
-		let data = reader.read_vec()?;
+		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
 	}
 }
@@ -615,7 +615,7 @@ impl ser::Writeable for TxLogEntry {
 
 impl ser::Readable for TxLogEntry {
 	fn read(reader: &mut ser::Reader) -> Result<TxLogEntry, ser::Error> {
-		let data = reader.read_vec()?;
+		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
 	}
 }
@@ -663,7 +663,7 @@ impl ser::Writeable for AcctPathMapping {
 
 impl ser::Readable for AcctPathMapping {
 	fn read(reader: &mut ser::Reader) -> Result<AcctPathMapping, ser::Error> {
-		let data = reader.read_vec()?;
+		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
 	}
 }

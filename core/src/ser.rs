@@ -184,10 +184,8 @@ pub trait Reader {
 	fn read_i32(&mut self) -> Result<i32, Error>;
 	/// Read a i64 from the underlying Read
 	fn read_i64(&mut self) -> Result<i64, Error>;
-	/// first before the data bytes.
-	fn read_vec(&mut self) -> Result<Vec<u8>, Error>;
-	/// first before the data bytes limited to max bytes.
-	fn read_limited_vec(&mut self, max: usize) -> Result<Vec<u8>, Error>;
+	/// Read a u64 len prefix followed by that number of exact bytes.
+	fn read_bytes_len_prefix(&mut self) -> Result<Vec<u8>, Error>;
 	/// Read a fixed number of bytes from the underlying reader.
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error>;
 	/// Consumes a byte from the reader, producing an error if it doesn't have
@@ -281,16 +279,11 @@ impl<'a> Reader for BinReader<'a> {
 		self.source.read_i64::<BigEndian>().map_err(map_io_err)
 	}
 	/// Read a variable size vector from the underlying Read. Expects a usize
-	fn read_vec(&mut self) -> Result<Vec<u8>, Error> {
+	fn read_bytes_len_prefix(&mut self) -> Result<Vec<u8>, Error> {
 		let len = self.read_u64()?;
 		self.read_fixed_bytes(len as usize)
 	}
-	/// Read limited variable size vector from the underlying Read. Expects a
-	/// usize
-	fn read_limited_vec(&mut self, max: usize) -> Result<Vec<u8>, Error> {
-		let len = cmp::min(max, self.read_u64()? as usize);
-		self.read_fixed_bytes(len as usize)
-	}
+	/// Read a fixed number of bytes.
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error> {
 		// not reading more than 100k in a single read
 		if length > 100000 {
@@ -369,27 +362,30 @@ impl Writeable for RangeProof {
 
 impl Readable for RangeProof {
 	fn read(reader: &mut Reader) -> Result<RangeProof, Error> {
-		let p = reader.read_limited_vec(MAX_PROOF_SIZE)?;
-		let mut a = [0; MAX_PROOF_SIZE];
-		a[..p.len()].clone_from_slice(&p[..]);
+		let len = reader.read_u64()?;
+		let max_len = cmp::min(len as usize, MAX_PROOF_SIZE);
+		let p = reader.read_fixed_bytes(max_len)?;
+		let mut proof = [0; MAX_PROOF_SIZE];
+		proof[..p.len()].clone_from_slice(&p[..]);
 		Ok(RangeProof {
-			proof: a,
-			plen: p.len(),
+			plen: proof.len(),
+			proof,
 		})
 	}
 }
 
 impl FixedLength for RangeProof {
-	const LEN: usize = MAX_PROOF_SIZE + 8;
+	const LEN: usize = 8 // length prefix
+		+ MAX_PROOF_SIZE;
 }
 
 impl PMMRable for RangeProof {}
 
 impl Readable for Signature {
 	fn read(reader: &mut Reader) -> Result<Signature, Error> {
-		let a = reader.read_fixed_bytes(AGG_SIGNATURE_SIZE)?;
-		let mut c = [0; AGG_SIGNATURE_SIZE];
-		c[..AGG_SIGNATURE_SIZE].clone_from_slice(&a[..AGG_SIGNATURE_SIZE]);
+		let a = reader.read_fixed_bytes(Signature::LEN)?;
+		let mut c = [0; Signature::LEN];
+		c[..Signature::LEN].clone_from_slice(&a[..Signature::LEN]);
 		Ok(Signature::from_raw_data(&c).unwrap())
 	}
 }
@@ -398,6 +394,10 @@ impl Writeable for Signature {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_fixed_bytes(self)
 	}
+}
+
+impl FixedLength for Signature {
+	const LEN: usize = AGG_SIGNATURE_SIZE;
 }
 
 /// Utility wrapper for an underlying byte Writer. Defines higher level methods

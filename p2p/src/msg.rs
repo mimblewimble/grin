@@ -362,7 +362,7 @@ impl Readable for Hand {
 		let total_diff = Difficulty::read(reader)?;
 		let sender_addr = SockAddr::read(reader)?;
 		let receiver_addr = SockAddr::read(reader)?;
-		let ua = reader.read_vec()?;
+		let ua = reader.read_bytes_len_prefix()?;
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let genesis = Hash::read(reader)?;
 		Ok(Hand {
@@ -413,7 +413,7 @@ impl Readable for Shake {
 		let (version, capab) = ser_multiread!(reader, read_u32, read_u32);
 		let capabilities = Capabilities::from_bits_truncate(capab);
 		let total_diff = Difficulty::read(reader)?;
-		let ua = reader.read_vec()?;
+		let ua = reader.read_bytes_len_prefix()?;
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let genesis = Hash::read(reader)?;
 		Ok(Shake {
@@ -498,7 +498,8 @@ impl Writeable for PeerError {
 
 impl Readable for PeerError {
 	fn read(reader: &mut Reader) -> Result<PeerError, ser::Error> {
-		let (code, msg) = ser_multiread!(reader, read_u32, read_vec);
+		let code = reader.read_u32()?;
+		let msg = reader.read_bytes_len_prefix()?;
 		let message = String::from_utf8(msg).map_err(|_| ser::Error::CorruptedData)?;
 		Ok(PeerError {
 			code: code,
