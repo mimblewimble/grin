@@ -22,12 +22,12 @@
 
 use std::fs::File;
 use std::io::{self, Read, Write};
-use std::mem::size_of;
 use std::net::TcpStream;
 use std::sync::{mpsc, Arc};
 use std::{cmp, thread, time};
 
 use core::ser;
+use core::ser::FixedLength;
 use msg::{read_body, read_exact, read_header, write_all, write_to_buf, MsgHeader, Type};
 use types::Error;
 use util::{RateCounter, RwLock};
@@ -259,7 +259,7 @@ fn poll<H>(
 					let received = received_bytes.clone();
 					{
 						let mut received_bytes = received_bytes.write();
-						received_bytes.inc(size_of::<MsgHeader>() as u64 + msg.header.msg_len);
+						received_bytes.inc(MsgHeader::LEN as u64 + msg.header.msg_len);
 					}
 
 					if let Some(Some(resp)) = try_break!(error_tx, handler.consume(msg, received)) {
