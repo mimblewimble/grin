@@ -127,7 +127,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Check transaction log for wallet 1
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (_, wallet1_info) = api.retrieve_summary_info(true)?;
-		let (refreshed, txs) = api.retrieve_txs(true, None)?;
+		let (refreshed, txs) = api.retrieve_txs(true, None, None)?;
 		assert!(refreshed);
 		let fee = wallet::libtx::tx_fee(
 			wallet1_info.last_confirmed_height as usize - cm as usize,
@@ -148,7 +148,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Check transaction log for wallet 2
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (refreshed, txs) = api.retrieve_txs(true, None)?;
+		let (refreshed, txs) = api.retrieve_txs(true, None, None)?;
 		assert!(refreshed);
 		// we should have a transaction entry for this slate
 		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
@@ -194,7 +194,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 		assert_eq!(wallet1_info.amount_immature, cm * reward + fee);
 
 		// check tx log entry is confirmed
-		let (refreshed, txs) = api.retrieve_txs(true, None)?;
+		let (refreshed, txs) = api.retrieve_txs(true, None, None)?;
 		assert!(refreshed);
 		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
 		assert!(tx.is_some());
@@ -230,7 +230,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 		assert_eq!(wallet2_info.amount_currently_spendable, amount);
 
 		// check tx log entry is confirmed
-		let (refreshed, txs) = api.retrieve_txs(true, None)?;
+		let (refreshed, txs) = api.retrieve_txs(true, None, None)?;
 		assert!(refreshed);
 		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
 		assert!(tx.is_some());
@@ -258,7 +258,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
 		let (refreshed, _wallet1_info) = sender_api.retrieve_summary_info(true)?;
 		assert!(refreshed);
-		let (_, txs) = sender_api.retrieve_txs(true, None)?;
+		let (_, txs) = sender_api.retrieve_txs(true, None, None)?;
 
 		// find the transaction
 		let tx = txs
@@ -285,7 +285,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 		assert_eq!(wallet2_info.amount_currently_spendable, amount * 3);
 
 		// check tx log entry is confirmed
-		let (refreshed, txs) = api.retrieve_txs(true, None)?;
+		let (refreshed, txs) = api.retrieve_txs(true, None, None)?;
 		assert!(refreshed);
 		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
 		assert!(tx.is_some());
@@ -364,7 +364,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 			wallet1_info.last_confirmed_height
 		);
 		assert!(refreshed);
-		let (_, txs) = api.retrieve_txs(true, None)?;
+		let (_, txs) = api.retrieve_txs(true, None, None)?;
 		// we should have a transaction entry for this slate
 		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
 		assert!(tx.is_some());
@@ -389,7 +389,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Check transaction log for wallet 2
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (refreshed, txs) = api.retrieve_txs(true, None)?;
+		let (refreshed, txs) = api.retrieve_txs(true, None, None)?;
 		assert!(refreshed);
 		let mut unconfirmed_count = 0;
 		let tx = txs.iter().find(|t| t.tx_slate_id == Some(slate.id));
@@ -416,14 +416,14 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Wallet 1 decides to roll back instead
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		// can't roll back coinbase
-		let res = api.cancel_tx(1);
+		let res = api.cancel_tx(Some(1), None);
 		assert!(res.is_err());
-		let (_, txs) = api.retrieve_txs(true, None)?;
+		let (_, txs) = api.retrieve_txs(true, None, None)?;
 		let tx = txs
 			.iter()
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
-		api.cancel_tx(tx.id)?;
+		api.cancel_tx(Some(tx.id), None)?;
 		let (refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
 		assert!(refreshed);
 		println!(
@@ -437,7 +437,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 			(wallet1_info.last_confirmed_height - cm) * reward
 		);
 		// can't roll back again
-		let res = api.cancel_tx(tx.id);
+		let res = api.cancel_tx(Some(tx.id), None);
 		assert!(res.is_err());
 
 		Ok(())
@@ -445,19 +445,19 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Wallet 2 rolls back
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (_, txs) = api.retrieve_txs(true, None)?;
+		let (_, txs) = api.retrieve_txs(true, None, None)?;
 		let tx = txs
 			.iter()
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
-		api.cancel_tx(tx.id)?;
+		api.cancel_tx(Some(tx.id), None)?;
 		let (refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
 		assert!(refreshed);
 		// check all eligible inputs should be now be spendable
 		assert_eq!(wallet2_info.amount_currently_spendable, 0,);
 		assert_eq!(wallet2_info.total, 0,);
 		// can't roll back again
-		let res = api.cancel_tx(tx.id);
+		let res = api.cancel_tx(Some(tx.id), None);
 		assert!(res.is_err());
 
 		Ok(())

@@ -16,6 +16,7 @@
 
 use std::sync::Arc;
 use util::RwLock;
+use uuid::Uuid;
 
 use core::core::verifier_cache::LruVerifierCache;
 use core::core::Transaction;
@@ -158,7 +159,8 @@ where
 pub fn cancel_tx<T: ?Sized, C, L, K>(
 	wallet: &mut T,
 	parent_key_id: &Identifier,
-	tx_id: u32,
+	tx_id: Option<u32>,
+	tx_slate_id: Option<Uuid>,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, L, K>,
@@ -166,19 +168,25 @@ where
 	L: WalletToWalletClient,
 	K: Keychain,
 {
-	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), &parent_key_id)?;
+	let mut tx_id_string = String::new();
+	if let Some(tx_id) = tx_id {
+		tx_id_string = tx_id.to_string();
+	} else if let Some(tx_slate_id) = tx_slate_id {
+		tx_id_string = tx_slate_id.to_string();
+	}
+	let tx_vec = updater::retrieve_txs(wallet, tx_id, tx_slate_id, &parent_key_id)?;
 	if tx_vec.len() != 1 {
-		return Err(ErrorKind::TransactionDoesntExist(tx_id))?;
+		return Err(ErrorKind::TransactionDoesntExist(tx_id_string))?;
 	}
 	let tx = tx_vec[0].clone();
 	if tx.tx_type != TxLogEntryType::TxSent && tx.tx_type != TxLogEntryType::TxReceived {
-		return Err(ErrorKind::TransactionNotCancellable(tx_id))?;
+		return Err(ErrorKind::TransactionNotCancellable(tx_id_string))?;
 	}
 	if tx.confirmed == true {
-		return Err(ErrorKind::TransactionNotCancellable(tx_id))?;
+		return Err(ErrorKind::TransactionNotCancellable(tx_id_string))?;
 	}
 	// get outputs associated with tx
-	let res = updater::retrieve_outputs(wallet, false, Some(tx_id), &parent_key_id)?;
+	let res = updater::retrieve_outputs(wallet, false, Some(tx.id), &parent_key_id)?;
 	let outputs = res.iter().map(|(out, _)| out).cloned().collect();
 	updater::cancel_tx_and_outputs(wallet, tx, outputs, parent_key_id)?;
 	Ok(())
@@ -197,9 +205,9 @@ where
 	L: WalletToWalletClient,
 	K: Keychain,
 {
-	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), parent_key_id)?;
+	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), None, parent_key_id)?;
 	if tx_vec.len() != 1 {
-		return Err(ErrorKind::TransactionDoesntExist(tx_id))?;
+		return Err(ErrorKind::TransactionDoesntExist(tx_id.to_string()))?;
 	}
 	let tx = tx_vec[0].clone();
 	Ok((tx.confirmed, tx.tx_hex))

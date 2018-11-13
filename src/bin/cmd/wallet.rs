@@ -532,7 +532,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					},
 				};
 				let (height, _) = api.node_height()?;
-				let (validated, txs) = api.retrieve_txs(true, tx_id)?;
+				let (validated, txs) = api.retrieve_txs(true, tx_id, None)?;
 				let include_status = !tx_id.is_some();
 				display::txs(
 					account,
@@ -611,22 +611,49 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				}
 			}
 			("cancel", Some(tx_args)) => {
-				let tx_id = tx_args
-					.value_of("id")
-					.ok_or_else(|| {
-						ErrorKind::GenericError("'id' argument (-i) is required.".to_string())
-					}).and_then(|v| {
-						v.parse().map_err(|e| {
-							ErrorKind::GenericError(format!(
+				let mut tx_id_string = "";
+				let tx_id = match tx_args.value_of("id") {
+					None => None,
+					Some(tx) => match tx.parse() {
+						Ok(t) => {
+							tx_id_string = tx;
+							Some(t)
+						}
+						Err(e) => {
+							return Err(ErrorKind::GenericError(format!(
 								"Could not parse id parameter. e={:?}",
-								e
-							))
-						})
-					})?;
-				let result = api.cancel_tx(tx_id);
+								e,
+							)).into());
+						}
+					},
+				};
+				let tx_slate_id = match tx_args.value_of("txid") {
+					None => None,
+					Some(tx) => match tx.parse() {
+						Ok(t) => {
+							tx_id_string = tx;
+							Some(t)
+						}
+						Err(e) => {
+							return Err(ErrorKind::GenericError(format!(
+								"Could not parse txid parameter. e={:?}",
+								e,
+							)).into());
+						}
+					},
+				};
+				if (tx_id.is_none() && tx_slate_id.is_none())
+					|| (tx_id.is_some() && tx_slate_id.is_some())
+				{
+					return Err(ErrorKind::GenericError(format!(
+						"'id' (-i) or 'txid' (-t) argument is required."
+					)).into());
+				}
+
+				let result = api.cancel_tx(tx_id, tx_slate_id);
 				match result {
 					Ok(_) => {
-						info!("Transaction {} Cancelled", tx_id);
+						info!("Transaction {} Cancelled", tx_id_string);
 						Ok(())
 					}
 					Err(e) => {

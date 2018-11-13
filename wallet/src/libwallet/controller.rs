@@ -207,7 +207,8 @@ where
 		req: &Request<Body>,
 		api: APIOwner<T, C, L, K>,
 	) -> Result<(bool, Vec<TxLogEntry>), Error> {
-		let mut id = None;
+		let mut tx_id = None;
+		let mut tx_slate_id = None;
 		let mut update_from_node = false;
 
 		let params = parse_params(req);
@@ -217,10 +218,15 @@ where
 		}
 		if let Some(ids) = params.get("id") {
 			for i in ids {
-				id = Some(i.parse().unwrap());
+				tx_id = Some(i.parse().unwrap());
 			}
 		}
-		api.retrieve_txs(update_from_node, id)
+		if let Some(tx_slate_ids) = params.get("tx_id") {
+			for i in tx_slate_ids {
+				tx_slate_id = Some(i.parse().unwrap());
+			}
+		}
+		api.retrieve_txs(update_from_node, tx_id, tx_slate_id)
 	}
 
 	fn dump_stored_tx(
@@ -345,7 +351,7 @@ where
 		let params = parse_params(&req);
 		if let Some(id_string) = params.get("id") {
 			Box::new(match id_string[0].parse() {
-				Ok(id) => match api.cancel_tx(id) {
+				Ok(id) => match api.cancel_tx(Some(id), None) {
 					Ok(_) => ok(()),
 					Err(e) => {
 						error!("cancel_tx: failed with error: {}", e);
@@ -359,9 +365,25 @@ where
 					).into())
 				}
 			})
+		} else if let Some(tx_id_string) = params.get("tx_id") {
+			Box::new(match tx_id_string[0].parse() {
+				Ok(tx_id) => match api.cancel_tx(None, Some(tx_id)) {
+					Ok(_) => ok(()),
+					Err(e) => {
+						error!("cancel_tx: failed with error: {}", e);
+						err(e)
+					}
+				},
+				Err(e) => {
+					error!("cancel_tx: could not parse tx_id: {}", e);
+					err(ErrorKind::TransactionCancellationError(
+						"cancel_tx: cannot cancel transaction. Could not parse tx_id in request.",
+					).into())
+				}
+			})
 		} else {
 			Box::new(err(ErrorKind::TransactionCancellationError(
-				"cancel_tx: Cannot cancel transaction. Missing id param in request.",
+				"cancel_tx: Cannot cancel transaction. Missing id or tx_id param in request.",
 			).into()))
 		}
 	}
