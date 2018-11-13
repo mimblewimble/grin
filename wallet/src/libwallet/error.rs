@@ -150,11 +150,11 @@ pub enum ErrorKind {
 
 	/// Transaction doesn't exist
 	#[fail(display = "Transaction {} doesn't exist", _0)]
-	TransactionDoesntExist(u32),
+	TransactionDoesntExist(String),
 
 	/// Transaction already rolled back
 	#[fail(display = "Transaction {} cannot be cancelled", _0)]
-	TransactionNotCancellable(u32),
+	TransactionNotCancellable(String),
 
 	/// Cancellation error
 	#[fail(display = "Cancellation Error: {}", _0)]

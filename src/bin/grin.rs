@@ -321,6 +321,11 @@ fn real_main() -> i32 {
 				.help("The ID of the transaction to cancel")
 				.short("i")
 				.long("id")
+				.takes_value(true))
+			.arg(Arg::with_name("txid")
+				.help("The TxID of the transaction to cancel")
+				.short("t")
+				.long("txid")
 				.takes_value(true)))
 
 		.subcommand(SubCommand::with_name("info")

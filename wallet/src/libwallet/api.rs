@@ -322,7 +322,11 @@ where
 	/// output if you're recipient), and unlock all locked outputs associated
 	/// with the transaction used when a transaction is created but never
 	/// posted
-	pub fn cancel_tx(&mut self, tx_id: u32) -> Result<(), Error> {
+	pub fn cancel_tx(
+		&mut self,
+		tx_id: Option<u32>,
+		tx_slate_id: Option<Uuid>,
+	) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = w.parent_key_id();
@@ -331,7 +335,7 @@ where
 				"Can't contact running Grin node. Not Cancelling.",
 			))?;
 		}
-		tx::cancel_tx(&mut *w, &parent_key_id, tx_id)?;
+		tx::cancel_tx(&mut *w, &parent_key_id, tx_id, tx_slate_id)?;
 		w.close()?;
 		Ok(())
 	}
