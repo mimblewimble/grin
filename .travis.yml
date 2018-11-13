@@ -44,17 +44,17 @@ env:
   matrix:
     include:
       - os: linux
-        TEST_SUITE=servers
+        env: TEST_SUITE=servers
       - os: linux
-        TEST_SUITE=chain-core
+        env: TEST_SUITE=chain-core
       - os: linux
-        TEST_SUITE=pool-p2p
+        env: TEST_SUITE=pool-p2p
       - os: linux
-        TEST_SUITE=keychain-wallet
+        env: TEST_SUITE=keychain-wallet
       - os: linux
-        TEST_SUITE=api-util-store
+        env: TEST_SUITE=api-util-store
       - os: osx
-        TEST_SUITE=release
+        env: TEST_SUITE=release
 
 script:
   - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[0]};
