@@ -300,10 +300,11 @@ impl MessageHandler for Protocol {
 							total_size as u64,
 						);
 
-						// Increase received bytes counter
+						// Increase received bytes quietly (without affecting the counters).
+						// Otherwise we risk banning a peer as "abusive".
 						{
 							let mut received_bytes = received_bytes.write();
-							received_bytes.inc(size as u64);
+							received_bytes.inc_quiet(size as u64);
 						}
 					}
 					tmp_zip.into_inner().unwrap().sync_all()?;

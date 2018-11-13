@@ -45,6 +45,13 @@ impl RateCounter {
 		}
 	}
 
+	/// Increments number of bytes without updating the count and/or rate.
+	/// Specifically - used during txhashset.zip download to track bytes downloaded
+	/// without treating a peer as abusive (too high a rate of download).
+	pub fn inc_quiet(&mut self, bytes: u64) {
+		self.last_min_bytes.push(bytes);
+	}
+
 	/// Number of bytes counted in the last minute
 	pub fn bytes_per_min(&self) -> u64 {
 		self.last_min_bytes.iter().sum()
