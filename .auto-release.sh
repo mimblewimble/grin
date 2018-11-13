@@ -1,6 +1,6 @@
 #!/bin/bash
 
-repo_slug="mimblewimble/grin"
+repo_slug="garyyu/grin"
 token="$GITHUB_TOKEN"
 
 tagname=`git describe --tags --exact-match 2>/dev/null || git symbolic-ref -q --short HEAD`
