@@ -523,7 +523,8 @@ Roll back a transaction and all associated outputs with a given transaction id T
 
 * **URL**
 
-  /v1/wallet/owner/cancel_tx?id=x
+  * /v1/wallet/owner/cancel_tx?id=x
+  * /v1/wallet/owner/cancel_tx?tx_id=x
 
 * **Method:**
 
@@ -532,7 +533,8 @@ Roll back a transaction and all associated outputs with a given transaction id T
 * **URL Params**
 
   **Required:**
-  `id=[number]`
+  * `id=[number]` the transaction id
+  * `tx_id=[string]`the transaction slate id
 
 * **Data Params**
 
