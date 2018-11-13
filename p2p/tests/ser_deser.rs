@@ -55,24 +55,29 @@ fn test_capabilities() {
 	);
 
 	assert_eq!(
-		p2p::types::Capabilities::from_bits_truncate(0b0111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b1111 as u32),
 		p2p::types::Capabilities::FULL_NODE
 	);
 	assert_eq!(
-		p2p::types::Capabilities::from_bits_truncate(0b00000111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b00001111 as u32),
 		p2p::types::Capabilities::FULL_NODE
 	);
 	assert_eq!(
-		p2p::types::Capabilities::from_bits_truncate(0b11110111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b11111111 as u32),
 		p2p::types::Capabilities::FULL_NODE
 	);
 	assert_eq!(
-		p2p::types::Capabilities::from_bits_truncate(0b00100111 as u32),
+		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32),
 		p2p::types::Capabilities::FULL_NODE
 	);
 
-	assert_eq!(
-		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32),
-		p2p::types::Capabilities::FULL_NODE | p2p::types::Capabilities::TX_KERNEL_HASH
+	assert!(
+		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32)
+			.contains(p2p::types::Capabilities::FULL_NODE)
+	);
+
+	assert!(
+		p2p::types::Capabilities::from_bits_truncate(0b00101111 as u32)
+			.contains(p2p::types::Capabilities::TX_KERNEL_HASH)
 	);
 }
