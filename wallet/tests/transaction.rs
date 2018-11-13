@@ -398,14 +398,14 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Wallet 1 decides to roll back instead
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		// can't roll back coinbase
-		let res = api.cancel_tx(1);
+		let res = api.cancel_tx(Some(1), None);
 		assert!(res.is_err());
 		let (_, txs) = api.retrieve_txs(true, None, None)?;
 		let tx = txs
 			.iter()
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
-		api.cancel_tx(tx.id)?;
+		api.cancel_tx(Some(tx.id), None)?;
 		let (refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
 		assert!(refreshed);
 		println!(
@@ -419,7 +419,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 			(wallet1_info.last_confirmed_height - cm) * reward
 		);
 		// can't roll back again
-		let res = api.cancel_tx(tx.id);
+		let res = api.cancel_tx(Some(tx.id), None);
 		assert!(res.is_err());
 
 		Ok(())
@@ -432,14 +432,14 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 			.iter()
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
-		api.cancel_tx(tx.id)?;
+		api.cancel_tx(Some(tx.id), None)?;
 		let (refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
 		assert!(refreshed);
 		// check all eligible inputs should be now be spendable
 		assert_eq!(wallet2_info.amount_currently_spendable, 0,);
 		assert_eq!(wallet2_info.total, 0,);
 		// can't roll back again
-		let res = api.cancel_tx(tx.id);
+		let res = api.cancel_tx(Some(tx.id), None);
 		assert!(res.is_err());
 
 		Ok(())
