@@ -42,14 +42,19 @@ env:
   - RUST_BACKTRACE="1"
   - RUST_FLAGS="-C debug-assertions"
   matrix:
-  - os: linux
-    TEST_SUITE=servers
-    TEST_SUITE=chain-core
-    TEST_SUITE=pool-p2p
-    TEST_SUITE=keychain-wallet
-    TEST_SUITE=api-util-store
-  - os: osx
-    TEST_SUITE=release
+    include:
+      - os: linux
+        TEST_SUITE=servers
+      - os: linux
+        TEST_SUITE=chain-core
+      - os: linux
+        TEST_SUITE=pool-p2p
+      - os: linux
+        TEST_SUITE=keychain-wallet
+      - os: linux
+        TEST_SUITE=api-util-store
+      - os: osx
+        TEST_SUITE=release
 
 script:
   - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[0]};
