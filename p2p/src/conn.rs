@@ -142,7 +142,7 @@ impl<'a> Response<'a> {
 						write_all(&mut self.conn, &buf[..n], time::Duration::from_secs(10))?;
 						// Increase sent bytes counter
 						let mut sent_bytes = sent_bytes.write();
-						sent_bytes.inc(n as u64);
+						sent_bytes.inc_quiet(n as u64);
 					}
 					Err(e) => return Err(From::from(e)),
 				}
