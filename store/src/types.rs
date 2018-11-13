@@ -17,13 +17,7 @@ use memmap;
 use std::cmp;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
-use std::os::unix::io::AsRawFd;
 use std::path::Path;
-
-#[cfg(not(any(target_os = "linux", target_os = "android")))]
-use libc::{ftruncate as ftruncate64, off_t as off64_t};
-#[cfg(any(target_os = "linux"))]
-use libc::{ftruncate64, off64_t};
 
 use core::core::hash::Hash;
 use core::ser::{self, FixedLength};
@@ -189,8 +183,8 @@ impl AppendOnlyFile {
 	/// written data accessible.
 	pub fn flush(&mut self) -> io::Result<()> {
 		if self.buffer_start_bak > 0 {
-			// flushing a rewound state, we need to truncate before applying
-			self.truncate(self.buffer_start)?;
+			// Flushing a rewound state, we need to truncate via set_len() before applying.
+			self.file.set_len(self.buffer_start as u64)?;
 			self.buffer_start_bak = 0;
 		}
 
@@ -253,17 +247,6 @@ impl AppendOnlyFile {
 			vec![]
 		} else {
 			self.buffer[offset..(offset + length)].to_vec()
-		}
-	}
-
-	/// Truncates the underlying file to the provided offset
-	pub fn truncate(&self, offs: usize) -> io::Result<()> {
-		let fd = self.file.as_raw_fd();
-		let res = unsafe { ftruncate64(fd, offs as off64_t) };
-		if res == -1 {
-			Err(io::Error::last_os_error())
-		} else {
-			Ok(())
 		}
 	}
 
