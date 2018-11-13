@@ -3,6 +3,10 @@ language: rust
 git:
   depth: false
 
+os:
+  - linux
+  - osx
+
 dist: trusty
 sudo: required
 
