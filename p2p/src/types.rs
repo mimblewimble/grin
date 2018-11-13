@@ -132,9 +132,7 @@ impl Default for P2PConfig {
 		P2PConfig {
 			host: ipaddr,
 			port: 13414,
-			capabilities: Capabilities::HEADER_HIST
-				| Capabilities::TXHASHSET_HIST
-				| Capabilities::PEER_LIST,
+			capabilities: Capabilities::FULL_NODE,
 			seeding_type: Seeding::default(),
 			seeds: None,
 			peers_allow: None,
@@ -214,13 +212,11 @@ bitflags! {
 		/// All nodes right now are "full nodes".
 		/// Some nodes internally may maintain longer block histories (archival_mode)
 		/// but we do not advertise this to other nodes.
+		/// All nodes by default will accept lightweight "kernel first" tx broadcast.
 		const FULL_NODE = Capabilities::HEADER_HIST.bits
 			| Capabilities::TXHASHSET_HIST.bits
-			| Capabilities::PEER_LIST.bits;
-
-		// TODO - we cannot include TX_KERNEL_HASH in FULL_NODE right now
-		// as legacy nodes do not recognise these Capabilities safely.
-		// | Capabilities::TX_KERNEL_HASH.bits;
+			| Capabilities::PEER_LIST.bits
+			| Capabilities::TX_KERNEL_HASH.bits;
 	}
 }
 
