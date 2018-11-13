@@ -140,9 +140,10 @@ impl<'a> Response<'a> {
 					Ok(0) => break,
 					Ok(n) => {
 						write_all(&mut self.conn, &buf[..n], time::Duration::from_secs(10))?;
-						// Increase sent bytes counter
+						// Increase sent bytes "quietly" without incrementing the counter.
+						// (In a loop here for the single attachment).
 						let mut sent_bytes = sent_bytes.write();
-						sent_bytes.inc(n as u64);
+						sent_bytes.inc_quiet(n as u64);
 					}
 					Err(e) => return Err(From::from(e)),
 				}
