@@ -20,11 +20,12 @@ What's working so far?
 * pkg-config
 * libssl-dev
 * linux-headers (reported needed on Alpine linux)
+* llvm
 
 For Debian-based distributions (Debian, Ubuntu, Mint, etc), all in one line (except Rust):
 
 ```sh
-apt install build-essential cmake git libgit2-dev clang libncurses5-dev libncursesw5-dev zlib1g-dev pkg-config libssl-dev
+apt install build-essential cmake git libgit2-dev clang libncurses5-dev libncursesw5-dev zlib1g-dev pkg-config libssl-dev llvm
 ```
 
 ## Build steps
