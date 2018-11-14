@@ -92,8 +92,8 @@ impl From<Context<ErrorKind>> for Error {
 
 /// TLS config
 pub struct TLSConfig {
-	certificate: String,
-	private_key: String,
+	pub certificate: String,
+	pub private_key: String,
 }
 
 impl TLSConfig {

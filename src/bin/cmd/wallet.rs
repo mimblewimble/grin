@@ -14,6 +14,7 @@
 
 use clap::ArgMatches;
 use serde_json as json;
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -30,7 +31,7 @@ use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
 	HTTPWalletToNodeClient, HTTPWalletToWalletClient, LMDBBackend, WalletBackend, WalletConfig,
-	WalletInst, WalletSeed,
+	WalletInst, WalletSeed, start_listener,
 };
 use keychain;
 use servers::start_webwallet_server;
@@ -173,10 +174,15 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				if let Some(port) = listen_args.value_of("port") {
 					wallet_config.api_listen_port = port.parse().unwrap();
 				}
-				controller::foreign_listener(
+				let mut params = HashMap::new();
+				params.insert("api_listen_addr".to_owned(), wallet_config.api_listen_addr());
+				if let Some(t) =  tls_conf {
+					params.insert("certificate".to_owned(), t.certificate);
+					params.insert("private_key".to_owned(), t.private_key);
+				}
+				start_listener(
+					params,
 					wallet.clone(),
-					&wallet_config.api_listen_addr(),
-					tls_conf,
 				).unwrap_or_else(|e| {
 					panic!(
 						"Error creating wallet listener: {:?} Config: {:?}",

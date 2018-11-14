@@ -14,9 +14,12 @@
 
 /// HTTP Wallet 'plugin' implementation
 use failure::ResultExt;
+use std::sync::Arc;
+use std::collections::HashMap;
+use util::Mutex;
 
 use api;
-use error::{Error, ErrorKind};
+use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet;
 use libwallet::types::*;
@@ -51,3 +54,26 @@ impl WalletToWalletClient for HTTPWalletToWalletClient {
 		Ok(res)
 	}
 }
+
+pub fn start_listener<T: ?Sized, C, L, K>(
+	params: HashMap<String, String>,
+	wallet: Arc<Mutex<T>>,
+) -> Result<(), libwallet::Error>
+where
+	T: WalletBackend<C, L, K> + Send + Sync + 'static,
+	C: WalletToNodeClient + 'static,
+	L: WalletToWalletClient + 'static,
+	K: Keychain + 'static,
+{
+	let listen_addr = params.get("api_listen_addr").unwrap();
+	let tls_conf = match params.get("certificate") {
+		Some(s) => {
+			Some(api::TLSConfig::new(s.to_owned(), params.get("private_key").unwrap().to_owned()))
+		},
+		None => None,
+	};
+	libwallet::controller::foreign_listener(wallet.clone(), &listen_addr, tls_conf)?;
+	Ok(())
+}
+
+
