@@ -248,6 +248,13 @@ fn comments() -> HashMap<String, String> {
 	);
 
 	retval.insert(
+		"mineable_max_weight".to_string(),
+		"
+#maximum total weight of transactions that can get selected to build a block
+".to_string(),
+	);
+
+	retval.insert(
 		"[server.stratum_mining_config]".to_string(),
 		"
 ################################################

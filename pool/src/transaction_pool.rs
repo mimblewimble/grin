@@ -255,6 +255,6 @@ impl TransactionPool {
 	/// Returns a vector of transactions from the txpool so we can build a
 	/// block from them.
 	pub fn prepare_mineable_transactions(&self) -> Result<Vec<Transaction>, PoolError> {
-		self.txpool.prepare_mineable_transactions()
+		self.txpool.prepare_mineable_transactions(self.config.mineable_max_weight)
 	}
 }
