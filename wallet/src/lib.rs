@@ -51,9 +51,11 @@ mod error;
 pub mod libtx;
 pub mod libwallet;
 pub mod lmdb_wallet;
+mod clients;
 mod types;
 
-pub use client::{create_coinbase, HTTPWalletToNodeClient, HTTPWalletToWalletClient};
+pub use clients::{HTTPWalletToWalletClient};
+pub use client::{create_coinbase, HTTPWalletToNodeClient};
 pub use error::{Error, ErrorKind};
 pub use libwallet::controller;
 pub use libwallet::types::{

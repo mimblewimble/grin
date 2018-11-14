@@ -24,7 +24,6 @@ use tokio::runtime::Runtime;
 
 use api;
 use error::{Error, ErrorKind};
-use libtx::slate::Slate;
 use libwallet;
 use util;
 use util::secp::pedersen;
@@ -173,37 +172,6 @@ impl WalletToNodeClient for HTTPWalletToNodeClient {
 				))?
 			}
 		}
-	}
-}
-
-#[derive(Clone)]
-pub struct HTTPWalletToWalletClient {}
-
-impl HTTPWalletToWalletClient {
-	/// Create a new client that will communicate other wallets
-	pub fn new() -> HTTPWalletToWalletClient {
-		HTTPWalletToWalletClient {}
-	}
-}
-
-impl WalletToWalletClient for HTTPWalletToWalletClient {
-	/// Send the slate to a listening wallet instance
-	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
-		if &dest[..4] != "http" {
-			let err_str = format!(
-				"dest formatted as {} but send -d expected stdout or http://IP:port",
-				dest
-			);
-			error!("{}", err_str,);
-			Err(libwallet::ErrorKind::Uri)?
-		}
-		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
-		debug!("Posting transaction slate to {}", url);
-
-		let res = api::client::post(url.as_str(), None, slate).context(
-			libwallet::ErrorKind::ClientCallback("Posting transaction slate"),
-		)?;
-		Ok(res)
 	}
 }
 

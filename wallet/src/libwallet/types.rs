@@ -700,21 +700,3 @@ pub struct SendTXArgs {
 	/// whether to use all outputs (combine)
 	pub selection_strategy_is_use_all: bool,
 }
-
-/// Common interface to encapsulate all requirements for
-/// wallet to wallet communication
-pub trait WalletCommPluginThingy {
-	fn receive_tx_async();
-	fn receive_tx_sync();
-	fn send_tx_async();
-	fn send_tx_sync();
-}
-
-/*
-	
-
-
-
-
- 
- */
