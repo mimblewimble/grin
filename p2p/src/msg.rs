@@ -70,6 +70,7 @@ enum_from_primitive! {
 		BanReason = 18,
 		GetTransaction = 19,
 		TransactionKernel = 20,
+		GetKernels = 21
 	}
 }
 
@@ -97,6 +98,7 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::BanReason => 64,
 		Type::GetTransaction => 32,
 		Type::TransactionKernel => 32,
+		Type::GetKernels => 40,
 	}
 }
 
@@ -758,6 +760,64 @@ impl Readable for TxHashSetArchive {
 		let (height, bytes) = ser_multiread!(reader, read_u64, read_u64);
 
 		Ok(TxHashSetArchive {
+			hash,
+			height,
+			bytes,
+		})
+	}
+}
+
+/// Request to get the kernels up to the given block.
+/// This is required to sync a new node.
+pub struct GetKernels {
+	/// Hash of the block for which the kernels should be provided.
+	pub hash: Hash,
+	/// Height of the corresponding block.
+	pub height: u64,
+}
+
+impl Writeable for GetKernels {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.hash.write(writer)?;
+		writer.write_u64(self.height)?;
+		Ok(())
+	}
+}
+
+impl Readable for GetKernels {
+	fn read(reader: &mut Reader) -> Result<KernelMMRRequest, ser::Error> {
+		Ok(GetKernels {
+			hash: Hash::read(reader)?,
+			height: reader.read_u64()?,
+		})
+	}
+}
+
+/// Response to a kernel MMR request.
+/// Must include a binary stream of the kernels after the message body.
+pub struct Kernels {
+	/// Hash of the block for which the kernels are provided.
+	pub hash: Hash,
+	/// Height of the corresponding block.
+	pub height: u64,
+	/// Size in bytes of the kernels.
+	pub bytes: u64,
+}
+
+impl Writeable for Kernels {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.hash.write(writer)?;
+		ser_multiwrite!(writer, [write_u64, self.height], [write_u64, self.bytes]);
+		Ok(())
+	}
+}
+
+impl Readable for Kernels {
+	fn read(reader: &mut Reader) -> Result<Kernels, ser::Error> {
+		let hash = Hash::read(reader)?;
+		let (height, bytes) = ser_multiread!(reader, read_u64, read_u64);
+
+		Ok(Kernels {
 			hash,
 			height,
 			bytes,

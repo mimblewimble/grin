@@ -210,6 +210,9 @@ bitflags! {
 		const PEER_LIST = 0b00000100;
 		/// Can broadcast and request txs by kernel hash.
 		const TX_KERNEL_HASH = 0b00001000;
+		/// Can provide block headers and the TxHashSet for some recent-enough
+		/// height.
+		const ENHANCED_TXHASHSET_HIST = 0b00010000;
 
 		/// All nodes right now are "full nodes".
 		/// Some nodes internally may maintain longer block histories (archival_mode)
@@ -373,7 +376,7 @@ pub trait ChainAdapter: Sync + Send {
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
 
 	/// Provides a reading view into the current txhashset state as well as
-	/// the required indexes for a consumer to rewind to a consistant state
+	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead>;
 
