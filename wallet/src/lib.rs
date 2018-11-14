@@ -46,16 +46,16 @@ extern crate grin_store as store;
 extern crate grin_util as util;
 
 mod client;
+mod clients;
 pub mod display;
 mod error;
 pub mod libtx;
 pub mod libwallet;
 pub mod lmdb_wallet;
-mod clients;
 mod types;
 
-pub use clients::{HTTPWalletToWalletClient};
 pub use client::{create_coinbase, HTTPWalletToNodeClient};
+pub use clients::HTTPWalletToWalletClient;
 pub use error::{Error, ErrorKind};
 pub use libwallet::controller;
 pub use libwallet::types::{

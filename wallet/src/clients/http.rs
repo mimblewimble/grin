@@ -17,9 +17,9 @@ use failure::ResultExt;
 
 use api;
 use error::{Error, ErrorKind};
+use libtx::slate::Slate;
 use libwallet;
 use libwallet::types::*;
-use libtx::slate::Slate;
 
 #[derive(Clone)]
 pub struct HTTPWalletToWalletClient {}
