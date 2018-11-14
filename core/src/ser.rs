@@ -23,9 +23,9 @@ use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use consensus;
 use core::hash::{Hash, Hashed};
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
-use std::marker;
 use std::fmt::Debug;
 use std::io::{self, Read, Write};
+use std::marker;
 use std::{cmp, error, fmt};
 use util::secp::constants::{
 	AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE, SECRET_KEY_SIZE,
@@ -225,9 +225,9 @@ impl<'a, T> IteratingReader<'a, T> {
 	}
 }
 
-
 impl<'a, T> Iterator for IteratingReader<'a, T>
-	where T: Readable
+where
+	T: Readable,
 {
 	type Item = T;
 
@@ -254,7 +254,7 @@ where
 
 	let res: Vec<T> = IteratingReader::new(reader, count).collect();
 	if res.len() as u64 != count {
-		return Err(Error::CountError)
+		return Err(Error::CountError);
 	}
 	Ok(res)
 }
