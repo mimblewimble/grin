@@ -190,7 +190,7 @@ impl ApiServer {
 			.spawn(move || {
 				let server = Server::bind(&addr)
 					.serve(router)
-					// TODO graceful shutdown is unstable, investigate 
+					// TODO graceful shutdown is unstable, investigate
 					//.with_graceful_shutdown(rx)
 					.map_err(|e| eprintln!("HTTP API server error: {}", e));
 

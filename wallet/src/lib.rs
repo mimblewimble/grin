@@ -55,7 +55,7 @@ pub mod lmdb_wallet;
 mod types;
 
 pub use client::{create_coinbase, HTTPWalletToNodeClient};
-pub use clients::{HTTPWalletToWalletClient, start_listener};
+pub use clients::{start_listener, HTTPWalletToWalletClient};
 pub use error::{Error, ErrorKind};
 pub use libwallet::controller;
 pub use libwallet::types::{

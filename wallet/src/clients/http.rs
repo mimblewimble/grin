@@ -14,8 +14,8 @@
 
 /// HTTP Wallet 'plugin' implementation
 use failure::ResultExt;
-use std::sync::Arc;
 use std::collections::HashMap;
+use std::sync::Arc;
 use util::Mutex;
 
 use api;
@@ -67,13 +67,12 @@ where
 {
 	let listen_addr = params.get("api_listen_addr").unwrap();
 	let tls_conf = match params.get("certificate") {
-		Some(s) => {
-			Some(api::TLSConfig::new(s.to_owned(), params.get("private_key").unwrap().to_owned()))
-		},
+		Some(s) => Some(api::TLSConfig::new(
+			s.to_owned(),
+			params.get("private_key").unwrap().to_owned(),
+		)),
 		None => None,
 	};
 	libwallet::controller::foreign_listener(wallet.clone(), &listen_addr, tls_conf)?;
 	Ok(())
 }
-
-

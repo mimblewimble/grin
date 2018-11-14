@@ -14,4 +14,4 @@
 
 mod http;
 
-pub use self::http::{HTTPWalletToWalletClient, start_listener};
+pub use self::http::{start_listener, HTTPWalletToWalletClient};
