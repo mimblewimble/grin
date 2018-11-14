@@ -24,7 +24,9 @@ use chrono::prelude::Utc;
 use croaring::Bitmap;
 
 use core::core::pmmr::{Backend, PMMR};
-use core::ser::{Error, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer};
+use core::ser::{
+	Error, FixedLength, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer,
+};
 use store::types::prune_noop;
 
 #[test]
@@ -246,7 +248,7 @@ fn pmmr_reload() {
 			.unwrap();
 		backend.sync().unwrap();
 
-		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
+		assert_eq!(backend.unpruned_size(), mmr_size);
 
 		// prune some more to get rm log data
 		{
@@ -254,14 +256,14 @@ fn pmmr_reload() {
 			pmmr.prune(5).unwrap();
 		}
 		backend.sync().unwrap();
-		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
+		assert_eq!(backend.unpruned_size(), mmr_size);
 	}
 
 	// create a new backend referencing the data files
 	// and check everything still works as expected
 	{
 		let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), true, None).unwrap();
-		assert_eq!(backend.unpruned_size().unwrap(), mmr_size);
+		assert_eq!(backend.unpruned_size(), mmr_size);
 		{
 			let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			assert_eq!(root, pmmr.root());
@@ -276,7 +278,7 @@ fn pmmr_reload() {
 
 		// pos 4 is removed (via prune list)
 		assert_eq!(backend.get_hash(4), None);
-		// pos 5 is removed (via rm_log)
+		// pos 5 is removed (via leaf_set)
 		assert_eq!(backend.get_hash(5), None);
 
 		// now check contents of the hash file
@@ -395,7 +397,7 @@ fn pmmr_rewind() {
 	assert_eq!(backend.get_data(9), Some(elems[5]));
 	assert_eq!(backend.get_hash(9), Some(elems[5].hash_with_index(8)));
 
-	assert_eq!(backend.data_size().unwrap(), 2);
+	assert_eq!(backend.data_size(), 2);
 
 	{
 		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, 10);
@@ -417,7 +419,7 @@ fn pmmr_rewind() {
 
 	// check we have no data in the backend after
 	// pruning, compacting and rewinding
-	assert_eq!(backend.data_size().unwrap(), 0);
+	assert_eq!(backend.data_size(), 0);
 
 	teardown(data_dir);
 }
@@ -508,8 +510,8 @@ fn pmmr_compact_horizon() {
 
 	// 0010012001001230
 	// 9 leaves
-	assert_eq!(backend.data_size().unwrap(), 19);
-	assert_eq!(backend.hash_size().unwrap(), 35);
+	assert_eq!(backend.data_size(), 19);
+	assert_eq!(backend.hash_size(), 35);
 
 	let pos_1_hash = backend.get_hash(1).unwrap();
 	let pos_2_hash = backend.get_hash(2).unwrap();
@@ -587,8 +589,8 @@ fn pmmr_compact_horizon() {
 		let backend =
 			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), true, None).unwrap();
 
-		assert_eq!(backend.data_size().unwrap(), 19);
-		assert_eq!(backend.hash_size().unwrap(), 35);
+		assert_eq!(backend.data_size(), 19);
+		assert_eq!(backend.hash_size(), 35);
 
 		// check we can read a hash by pos correctly from recreated backend
 		assert_eq!(backend.get_hash(7), Some(pos_7_hash));
@@ -623,12 +625,12 @@ fn pmmr_compact_horizon() {
 
 		// 0010012001001230
 
-		assert_eq!(backend.data_size().unwrap(), 13);
-		assert_eq!(backend.hash_size().unwrap(), 27);
+		assert_eq!(backend.data_size(), 13);
+		assert_eq!(backend.hash_size(), 27);
 
 		// check we can read a hash by pos correctly from recreated backend
 		// get_hash() and get_from_file() should return the same value
-		// and we only store leaves in the rm_log so pos 7 still has a hash in there
+		// and we only store leaves in the leaf_set so pos 7 still has a hash in there
 		assert_eq!(backend.get_hash(7), Some(pos_7_hash));
 		assert_eq!(backend.get_from_file(7), Some(pos_7_hash));
 
@@ -752,11 +754,11 @@ fn load(pos: u64, elems: &[TestElem], backend: &mut store::pmmr::PMMRBackend<Tes
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 struct TestElem(u32);
 
-impl PMMRable for TestElem {
-	fn len() -> usize {
-		4
-	}
+impl FixedLength for TestElem {
+	const LEN: usize = 4;
 }
+
+impl PMMRable for TestElem {}
 
 impl Writeable for TestElem {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {

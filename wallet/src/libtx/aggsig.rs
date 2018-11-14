@@ -13,9 +13,9 @@
 // limitations under the License.
 //! Aggsig helper functions used in transaction creation.. should be only
 //! interface into the underlying secp library
+
 use keychain::{BlindingFactor, Identifier, Keychain};
 use libtx::error::{Error, ErrorKind};
-use util::kernel_sig_msg;
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::Commitment;
 use util::secp::{self, aggsig, Message, Secp256k1, Signature};
@@ -34,12 +34,8 @@ pub fn calculate_partial_sig(
 	sec_nonce: &SecretKey,
 	nonce_sum: &PublicKey,
 	pubkey_sum: Option<&PublicKey>,
-	fee: u64,
-	lock_height: u64,
+	msg: &secp::Message,
 ) -> Result<Signature, Error> {
-	// Add public nonces kR*G + kS*G
-	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
-
 	//Now calculate signature using message M=fee, nonce in e=nonce_sum
 	let sig = aggsig::sign_single(
 		secp,
@@ -61,10 +57,8 @@ pub fn verify_partial_sig(
 	pub_nonce_sum: &PublicKey,
 	pubkey: &PublicKey,
 	pubkey_sum: Option<&PublicKey>,
-	fee: u64,
-	lock_height: u64,
+	msg: &secp::Message,
 ) -> Result<(), Error> {
-	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
 	if !verify_single(
 		secp,
 		sig,
@@ -114,7 +108,7 @@ pub fn verify_single_from_commit(
 	commit: &Commitment,
 ) -> Result<(), Error> {
 	let pubkey = commit.to_pubkey(secp)?;
-	if !verify_single(secp, sig, &msg, None, &pubkey, Some(&pubkey), false) {
+	if !verify_single(secp, sig, msg, None, &pubkey, Some(&pubkey), false) {
 		Err(ErrorKind::Signature(
 			"Signature validation error".to_string(),
 		))?
@@ -128,11 +122,9 @@ pub fn verify_sig_build_msg(
 	sig: &Signature,
 	pubkey: &PublicKey,
 	pubkey_sum: Option<&PublicKey>,
-	fee: u64,
-	lock_height: u64,
+	msg: &secp::Message,
 ) -> Result<(), Error> {
-	let msg = secp::Message::from_slice(&kernel_sig_msg(fee, lock_height))?;
-	if !verify_single(secp, sig, &msg, None, pubkey, pubkey_sum, true) {
+	if !verify_single(secp, sig, msg, None, pubkey, pubkey_sum, true) {
 		Err(ErrorKind::Signature(
 			"Signature validation error".to_string(),
 		))?

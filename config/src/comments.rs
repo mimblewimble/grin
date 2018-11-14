@@ -212,7 +212,7 @@ fn comments() -> HashMap<String, String> {
 #until we get to at least this number
 #peer_min_preferred_count = 8
 
-# 7 = Bit flags for FULL_NODE
+# 15 = Bit flags for FULL_NODE
 #This structure needs to be changed internally, to make it more configurable
 ".to_string(),
 	);
@@ -237,6 +237,13 @@ fn comments() -> HashMap<String, String> {
 		"max_pool_size".to_string(),
 		"
 #maximum number of transactions allowed in the pool
+".to_string(),
+	);
+
+	retval.insert(
+		"max_stempool_size".to_string(),
+		"
+#maximum number of transactions allowed in the stempool
 ".to_string(),
 	);
 
@@ -344,6 +351,12 @@ fn comments() -> HashMap<String, String> {
 		"data_file_dir".to_string(),
 		"
 #where to find wallet files (seed, data, etc)
+".to_string(),
+	);
+	retval.insert(
+		"dark_background_color_scheme".to_string(),
+		"
+#Whether to use the black background color scheme for command line
 ".to_string(),
 	);
 

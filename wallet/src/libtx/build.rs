@@ -25,10 +25,9 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use util::{kernel_sig_msg, secp};
-
 use core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
-use keychain::{self, BlindSum, BlindingFactor, Identifier, Keychain};
+use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
+use libtx::Error;
 use libtx::{aggsig, proof};
 
 /// Context information available to transaction combinators.
@@ -187,7 +186,7 @@ where
 pub fn partial_transaction<K>(
 	elems: Vec<Box<Append<K>>>,
 	keychain: &K,
-) -> Result<(Transaction, BlindingFactor), keychain::Error>
+) -> Result<(Transaction, BlindingFactor), Error>
 where
 	K: Keychain,
 {
@@ -207,10 +206,7 @@ where
 }
 
 /// Builds a complete transaction.
-pub fn transaction<K>(
-	elems: Vec<Box<Append<K>>>,
-	keychain: &K,
-) -> Result<Transaction, keychain::Error>
+pub fn transaction<K>(elems: Vec<Box<Append<K>>>, keychain: &K) -> Result<Transaction, Error>
 where
 	K: Keychain,
 {
@@ -227,7 +223,7 @@ where
 	let k2 = split.blind_2;
 
 	// Construct the message to be signed.
-	let msg = secp::Message::from_slice(&kernel_sig_msg(kern.fee, kern.lock_height))?;
+	let msg = kern.msg_to_sign()?;
 
 	// Generate kernel excess and excess_sig using the split key k1.
 	let skey = k1.secret_key(&keychain.secp())?;

@@ -21,10 +21,10 @@ use std::{fmt, iter};
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use consensus::{graph_weight, SECOND_POW_EDGE_BITS, MIN_DIFFICULTY};
+use consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
 use core::hash::Hashed;
 use global;
-use ser::{self, Readable, Reader, Writeable, Writer};
+use ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
 
 use pow::common::EdgeType;
 use pow::error::Error;
@@ -66,12 +66,16 @@ impl Difficulty {
 
 	/// Difficulty of MIN_DIFFICULTY
 	pub fn min() -> Difficulty {
-		Difficulty { num: MIN_DIFFICULTY }
+		Difficulty {
+			num: MIN_DIFFICULTY,
+		}
 	}
 
 	/// Difficulty unit, which is the graph weight of minimal graph
 	pub fn unit() -> Difficulty {
-		Difficulty { num: global::initial_graph_weight() as u64 }
+		Difficulty {
+			num: global::initial_graph_weight() as u64,
+		}
 	}
 
 	/// Convert a `u32` into a `Difficulty`
@@ -155,6 +159,10 @@ impl Readable for Difficulty {
 		let data = reader.read_u64()?;
 		Ok(Difficulty { num: data })
 	}
+}
+
+impl FixedLength for Difficulty {
+	const LEN: usize = 8;
 }
 
 impl Serialize for Difficulty {

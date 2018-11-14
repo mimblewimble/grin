@@ -157,9 +157,10 @@ impl Miner {
 			// we found a solution, push our block through the chain processing pipeline
 			if sol {
 				info!(
-					"(Server ID: {}) Found valid proof of work, adding block {}.",
+					"(Server ID: {}) Found valid proof of work, adding block {} (prev_root {}).",
 					self.debug_output_id,
-					b.hash()
+					b.hash(),
+					b.header.prev_root,
 				);
 				let res = self.chain.process_block(b, chain::Options::MINE);
 				if let Err(e) = res {

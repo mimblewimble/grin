@@ -34,10 +34,7 @@ pub trait HashOnlyBackend {
 /// The PMMR itself does not need the Backend to be accurate on the existence
 /// of an element (i.e. remove could be a no-op) but layers above can
 /// depend on an accurate Backend to check existence.
-pub trait Backend<T>
-where
-	T: PMMRable,
-{
+pub trait Backend<T: PMMRable> {
 	/// Append the provided Hashes to the backend storage, and optionally an
 	/// associated data element to flatfile storage (for leaf nodes only). The
 	/// position of the first element of the Vec in the MMR is provided to

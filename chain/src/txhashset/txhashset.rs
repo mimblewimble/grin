@@ -19,7 +19,7 @@ use std::collections::HashSet;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use croaring::Bitmap;
 
@@ -29,7 +29,9 @@ use core::core::committed::Committed;
 use core::core::hash::{Hash, Hashed};
 use core::core::merkle_proof::MerkleProof;
 use core::core::pmmr::{self, ReadonlyPMMR, RewindablePMMR, DBPMMR, PMMR};
-use core::core::{Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel};
+use core::core::{
+	Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel, TxKernelEntry,
+};
 use core::global;
 use core::ser::{PMMRIndexHashable, PMMRable};
 
@@ -52,7 +54,7 @@ const OUTPUT_SUBDIR: &'static str = "output";
 const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
 const KERNEL_SUBDIR: &'static str = "kernel";
 
-const TXHASHSET_ZIP: &'static str = "txhashset_snapshot.zip";
+const TXHASHSET_ZIP: &'static str = "txhashset_snapshot";
 
 struct HashOnlyMMRHandle {
 	backend: HashOnlyMMRBackend,
@@ -63,24 +65,18 @@ impl HashOnlyMMRHandle {
 	fn new(root_dir: &str, sub_dir: &str, file_name: &str) -> Result<HashOnlyMMRHandle, Error> {
 		let path = Path::new(root_dir).join(sub_dir).join(file_name);
 		fs::create_dir_all(path.clone())?;
-		let backend = HashOnlyMMRBackend::new(path.to_str().unwrap().to_string())?;
-		let last_pos = backend.unpruned_size()?;
+		let backend = HashOnlyMMRBackend::new(path.to_str().unwrap())?;
+		let last_pos = backend.unpruned_size();
 		Ok(HashOnlyMMRHandle { backend, last_pos })
 	}
 }
 
-struct PMMRHandle<T>
-where
-	T: PMMRable,
-{
+struct PMMRHandle<T: PMMRable> {
 	backend: PMMRBackend<T>,
 	last_pos: u64,
 }
 
-impl<T> PMMRHandle<T>
-where
-	T: PMMRable + ::std::fmt::Debug,
-{
+impl<T: PMMRable> PMMRHandle<T> {
 	fn new(
 		root_dir: &str,
 		sub_dir: &str,
@@ -91,7 +87,7 @@ where
 		let path = Path::new(root_dir).join(sub_dir).join(file_name);
 		fs::create_dir_all(path.clone())?;
 		let backend = PMMRBackend::new(path.to_str().unwrap().to_string(), prunable, header)?;
-		let last_pos = backend.unpruned_size()?;
+		let last_pos = backend.unpruned_size();
 		Ok(PMMRHandle { backend, last_pos })
 	}
 }
@@ -125,7 +121,7 @@ pub struct TxHashSet {
 
 	output_pmmr_h: PMMRHandle<OutputIdentifier>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
-	kernel_pmmr_h: PMMRHandle<TxKernel>,
+	kernel_pmmr_h: PMMRHandle<TxKernelEntry>,
 
 	// chain store used as index of commitments to MMR positions
 	commit_index: Arc<ChainStore>,
@@ -211,8 +207,8 @@ impl TxHashSet {
 	}
 
 	/// as above, for kernels
-	pub fn last_n_kernel(&mut self, distance: u64) -> Vec<(Hash, TxKernel)> {
-		let kernel_pmmr: PMMR<TxKernel, _> =
+	pub fn last_n_kernel(&mut self, distance: u64) -> Vec<(Hash, TxKernelEntry)> {
+		let kernel_pmmr: PMMR<TxKernelEntry, _> =
 			PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 		kernel_pmmr.get_last_n_insertions(distance)
 	}
@@ -253,7 +249,7 @@ impl TxHashSet {
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		let rproof_pmmr: PMMR<RangeProof, _> =
 			PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
-		let kernel_pmmr: PMMR<TxKernel, _> =
+		let kernel_pmmr: PMMR<TxKernelEntry, _> =
 			PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 
 		TxHashSetRoots {
@@ -544,9 +540,9 @@ where
 	let res: Result<T, Error>;
 	let rollback: bool;
 
-	// We want to use the current head of the header chain unless
+	// We want to use the current head of the most work chain unless
 	// we explicitly rewind the extension.
-	let head = batch.header_head()?;
+	let head = batch.head()?;
 	let header = batch.get_block_header(&head.last_block_h)?;
 
 	// create a child transaction so if the state is rolled back by itself, all
@@ -620,13 +616,18 @@ impl<'a> HeaderExtension<'a> {
 		}
 	}
 
+	/// Force the rollback of this extension, no matter the result.
+	pub fn force_rollback(&mut self) {
+		self.rollback = true;
+	}
+
 	/// Apply a new header to the header MMR extension.
 	/// This may be either the header MMR or the sync MMR depending on the
 	/// extension.
-	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
-		self.pmmr.push(&header).map_err(&ErrorKind::TxHashSetErr)?;
+	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<Hash, Error> {
+		self.pmmr.push(header).map_err(&ErrorKind::TxHashSetErr)?;
 		self.header = header.clone();
-		Ok(())
+		Ok(self.root())
 	}
 
 	/// Rewind the header extension to the specified header.
@@ -676,7 +677,7 @@ impl<'a> HeaderExtension<'a> {
 		let mut current = self.batch.get_block_header(&head.last_block_h)?;
 		while current.height > 0 {
 			header_hashes.push(current.hash());
-			current = self.batch.get_block_header(&current.previous)?;
+			current = self.batch.get_previous_header(&current)?;
 		}
 
 		header_hashes.reverse();
@@ -713,7 +714,7 @@ impl<'a> HeaderExtension<'a> {
 	pub fn validate_root(&self, header: &BlockHeader) -> Result<(), Error> {
 		// If we are validating the genesis block then we have no prev_root.
 		// So we are done here.
-		if header.height == 1 {
+		if header.height == 0 {
 			return Ok(());
 		}
 
@@ -734,7 +735,7 @@ pub struct Extension<'a> {
 	header_pmmr: DBPMMR<'a, BlockHeader, HashOnlyMMRBackend>,
 	output_pmmr: PMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
-	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
+	kernel_pmmr: PMMR<'a, TxKernelEntry, PMMRBackend<TxKernelEntry>>,
 
 	/// Rollback flag.
 	rollback: bool,
@@ -767,7 +768,7 @@ impl<'a> Committed for Extension<'a> {
 		for n in 1..self.kernel_pmmr.unpruned_size() + 1 {
 			if pmmr::is_leaf(n) {
 				if let Some(kernel) = self.kernel_pmmr.get_data(n) {
-					commitments.push(kernel.excess);
+					commitments.push(kernel.excess());
 				}
 			}
 		}
@@ -952,14 +953,14 @@ impl<'a> Extension<'a> {
 	/// Push kernel onto MMR (hash and data files).
 	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
 		self.kernel_pmmr
-			.push(kernel.clone())
+			.push(TxKernelEntry::from(kernel.clone()))
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
 
 	fn apply_header(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		self.header_pmmr
-			.push(&header)
+			.push(header)
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
@@ -1102,7 +1103,7 @@ impl<'a> Extension<'a> {
 	/// Validate the provided header by comparing its prev_root to the
 	/// root of the current header MMR.
 	pub fn validate_header_root(&self, header: &BlockHeader) -> Result<(), Error> {
-		if header.height == 1 {
+		if header.height == 0 {
 			return Ok(());
 		}
 
@@ -1350,13 +1351,22 @@ impl<'a> Extension<'a> {
 
 /// Packages the txhashset data files into a zip and returns a Read to the
 /// resulting file
-pub fn zip_read(root_dir: String, header: &BlockHeader) -> Result<File, Error> {
+pub fn zip_read(root_dir: String, header: &BlockHeader, rand: Option<u32>) -> Result<File, Error> {
+	let ts = if let None = rand {
+		let now = SystemTime::now();
+		now.duration_since(UNIX_EPOCH).unwrap().subsec_micros()
+	} else {
+		rand.unwrap()
+	};
+	let txhashset_zip = format!("{}_{}.zip", TXHASHSET_ZIP, ts);
+
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
-	let zip_path = Path::new(&root_dir).join(TXHASHSET_ZIP);
+	let zip_path = Path::new(&root_dir).join(txhashset_zip);
 	// create the zip archive
 	{
 		// Temp txhashset directory
-		let temp_txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR.to_string() + "_zip");
+		let temp_txhashset_path =
+			Path::new(&root_dir).join(format!("{}_zip_{}", TXHASHSET_SUBDIR, ts));
 		// Remove temp dir if it exist
 		if temp_txhashset_path.exists() {
 			fs::remove_dir_all(&temp_txhashset_path)?;
@@ -1456,7 +1466,11 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 			);
 			for diff in difference {
 				let diff_path = subdirectory_path.join(diff);
-				file::delete(diff_path)?;
+				file::delete(diff_path.clone())?;
+				debug!(
+					"check_and_remove_files: unexpected file '{:?}' removed",
+					diff_path
+				);
 			}
 		}
 	}

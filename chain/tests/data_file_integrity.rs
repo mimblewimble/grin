@@ -92,7 +92,7 @@ fn data_files() {
 			b.header.timestamp = prev.timestamp + Duration::seconds(60);
 			b.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 
-			chain.set_txhashset_roots(&mut b, false).unwrap();
+			chain.set_txhashset_roots(&mut b).unwrap();
 
 			pow::pow_size(
 				&mut b.header,
@@ -101,7 +101,6 @@ fn data_files() {
 				global::min_edge_bits(),
 			).unwrap();
 
-			let _bhash = b.hash();
 			chain
 				.process_block(b.clone(), chain::Options::MINE)
 				.unwrap();
@@ -118,7 +117,7 @@ fn data_files() {
 
 fn _prepare_block(kc: &ExtKeychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_txhashset_roots(&mut b, false).unwrap();
+	chain.set_txhashset_roots(&mut b).unwrap();
 	b
 }
 
@@ -130,13 +129,13 @@ fn _prepare_block_tx(
 	txs: Vec<&Transaction>,
 ) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_txhashset_roots(&mut b, false).unwrap();
+	chain.set_txhashset_roots(&mut b).unwrap();
 	b
 }
 
 fn _prepare_fork_block(kc: &ExtKeychain, prev: &BlockHeader, chain: &Chain, diff: u64) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, vec![]);
-	chain.set_txhashset_roots(&mut b, true).unwrap();
+	chain.set_txhashset_roots_forked(&mut b, prev).unwrap();
 	b
 }
 
@@ -148,7 +147,7 @@ fn _prepare_fork_block_tx(
 	txs: Vec<&Transaction>,
 ) -> Block {
 	let mut b = _prepare_block_nosum(kc, prev, diff, txs);
-	chain.set_txhashset_roots(&mut b, true).unwrap();
+	chain.set_txhashset_roots_forked(&mut b, prev).unwrap();
 	b
 }
 

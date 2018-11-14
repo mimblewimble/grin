@@ -31,6 +31,7 @@ use util::RwLock;
 use core::core::{Block, BlockHeader};
 
 use common::*;
+use core::core::hash::Hashed;
 use core::core::verifier_cache::LruVerifierCache;
 use core::pow::Difficulty;
 use keychain::{ExtKeychain, Keychain};
@@ -53,7 +54,11 @@ fn test_transaction_pool_block_reconciliation() {
 		let height = 1;
 		let key_id = ExtKeychain::derive_key_id(1, height as u32, 0, 0, 0);
 		let reward = libtx::reward::output(&keychain, &key_id, 0, height).unwrap();
-		let block = Block::new(&BlockHeader::default(), vec![], Difficulty::min(), reward).unwrap();
+		let genesis = BlockHeader::default();
+		let mut block = Block::new(&genesis, vec![], Difficulty::min(), reward).unwrap();
+
+		// Set the prev_root to the prev hash for testing purposes (no MMR to obtain a root from).
+		block.header.prev_root = genesis.hash();
 
 		chain.update_db_for_block(&block);
 
@@ -68,7 +73,10 @@ fn test_transaction_pool_block_reconciliation() {
 		let key_id = ExtKeychain::derive_key_id(1, 2, 0, 0, 0);
 		let fees = initial_tx.fee();
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
-		let block = Block::new(&header, vec![initial_tx], Difficulty::min(), reward).unwrap();
+		let mut block = Block::new(&header, vec![initial_tx], Difficulty::min(), reward).unwrap();
+
+		// Set the prev_root to the prev hash for testing purposes (no MMR to obtain a root from).
+		block.header.prev_root = header.hash();
 
 		chain.update_db_for_block(&block);
 
@@ -158,7 +166,10 @@ fn test_transaction_pool_block_reconciliation() {
 		let key_id = ExtKeychain::derive_key_id(1, 3, 0, 0, 0);
 		let fees = block_txs.iter().map(|tx| tx.fee()).sum();
 		let reward = libtx::reward::output(&keychain, &key_id, fees, 0).unwrap();
-		let block = Block::new(&header, block_txs, Difficulty::min(), reward).unwrap();
+		let mut block = Block::new(&header, block_txs, Difficulty::min(), reward).unwrap();
+
+		// Set the prev_root to the prev hash for testing purposes (no MMR to obtain a root from).
+		block.header.prev_root = header.hash();
 
 		chain.update_db_for_block(&block);
 		block

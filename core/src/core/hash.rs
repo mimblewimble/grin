@@ -26,7 +26,7 @@ use std::{fmt, ops};
 use blake2::blake2b::Blake2b;
 
 use consensus;
-use ser::{self, AsFixedBytes, Error, Readable, Reader, Writeable, Writer};
+use ser::{self, AsFixedBytes, Error, FixedLength, Readable, Reader, Writeable, Writer};
 use util;
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
@@ -52,15 +52,17 @@ impl fmt::Display for Hash {
 	}
 }
 
-impl Hash {
+impl FixedLength for Hash {
 	/// Size of a hash in bytes.
-	pub const SIZE: usize = 32;
+	const LEN: usize = 32;
+}
 
+impl Hash {
 	/// Builds a Hash from a byte vector. If the vector is too short, it will be
 	/// completed by zeroes. If it's too long, it will be truncated.
 	pub fn from_vec(v: &[u8]) -> Hash {
-		let mut h = [0; Hash::SIZE];
-		let copy_size = min(v.len(), Hash::SIZE);
+		let mut h = [0; Hash::LEN];
+		let copy_size = min(v.len(), Hash::LEN);
 		h[..copy_size].copy_from_slice(&v[..copy_size]);
 		Hash(h)
 	}

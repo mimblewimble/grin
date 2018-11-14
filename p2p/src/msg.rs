@@ -23,7 +23,7 @@ use core::consensus;
 use core::core::hash::Hash;
 use core::core::BlockHeader;
 use core::pow::Difficulty;
-use core::ser::{self, Readable, Reader, Writeable, Writer};
+use core::ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
 
 use types::{Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};
 
@@ -35,9 +35,6 @@ pub const USER_AGENT: &'static str = concat!("MW/Grin ", env!("CARGO_PKG_VERSION
 
 /// Magic number expected in the header of every message
 const MAGIC: [u8; 2] = [0x54, 0x34];
-
-/// Size in bytes of a message header
-pub const HEADER_LEN: u64 = 11;
 
 /// Max theoretical size of a block filled with outputs.
 const MAX_BLOCK_SIZE: u64 =
@@ -68,8 +65,8 @@ enum_from_primitive! {
 		TxHashSetRequest = 16,
 		TxHashSetArchive = 17,
 		BanReason = 18,
-		// GetTransaction = 19,
-		// CompactTransaction = 20,
+		GetTransaction = 19,
+		TransactionKernel = 20,
 	}
 }
 
@@ -95,6 +92,8 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::TxHashSetRequest => 40,
 		Type::TxHashSetArchive => 64,
 		Type::BanReason => 64,
+		Type::GetTransaction => 32,
+		Type::TransactionKernel => 32,
 	}
 }
 
@@ -195,7 +194,7 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: time::Duration) -> i
 /// underlying stream is async. Typically headers will be polled for, so
 /// we do not want to block.
 pub fn read_header(conn: &mut TcpStream, msg_type: Option<Type>) -> Result<MsgHeader, Error> {
-	let mut head = vec![0u8; HEADER_LEN as usize];
+	let mut head = vec![0u8; MsgHeader::LEN];
 	if Some(Type::Hand) == msg_type {
 		read_exact(conn, &mut head, time::Duration::from_millis(10), true)?;
 	} else {
@@ -282,11 +281,10 @@ impl MsgHeader {
 			msg_len: len,
 		}
 	}
+}
 
-	/// Serialized length of the header in bytes
-	pub fn serialized_len(&self) -> u64 {
-		HEADER_LEN
-	}
+impl FixedLength for MsgHeader {
+	const LEN: usize = 1 + 1 + 1 + 8;
 }
 
 impl Writeable for MsgHeader {
@@ -360,11 +358,11 @@ impl Writeable for Hand {
 impl Readable for Hand {
 	fn read(reader: &mut Reader) -> Result<Hand, ser::Error> {
 		let (version, capab, nonce) = ser_multiread!(reader, read_u32, read_u32, read_u64);
-		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
+		let capabilities = Capabilities::from_bits_truncate(capab);
 		let total_diff = Difficulty::read(reader)?;
 		let sender_addr = SockAddr::read(reader)?;
 		let receiver_addr = SockAddr::read(reader)?;
-		let ua = reader.read_vec()?;
+		let ua = reader.read_bytes_len_prefix()?;
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let genesis = Hash::read(reader)?;
 		Ok(Hand {
@@ -413,9 +411,9 @@ impl Writeable for Shake {
 impl Readable for Shake {
 	fn read(reader: &mut Reader) -> Result<Shake, ser::Error> {
 		let (version, capab) = ser_multiread!(reader, read_u32, read_u32);
-		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
+		let capabilities = Capabilities::from_bits_truncate(capab);
 		let total_diff = Difficulty::read(reader)?;
-		let ua = reader.read_vec()?;
+		let ua = reader.read_bytes_len_prefix()?;
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
 		let genesis = Hash::read(reader)?;
 		Ok(Shake {
@@ -443,10 +441,8 @@ impl Writeable for GetPeerAddrs {
 impl Readable for GetPeerAddrs {
 	fn read(reader: &mut Reader) -> Result<GetPeerAddrs, ser::Error> {
 		let capab = reader.read_u32()?;
-		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
-		Ok(GetPeerAddrs {
-			capabilities: capabilities,
-		})
+		let capabilities = Capabilities::from_bits_truncate(capab);
+		Ok(GetPeerAddrs { capabilities })
 	}
 }
 
@@ -502,7 +498,8 @@ impl Writeable for PeerError {
 
 impl Readable for PeerError {
 	fn read(reader: &mut Reader) -> Result<PeerError, ser::Error> {
-		let (code, msg) = ser_multiread!(reader, read_u32, read_vec);
+		let code = reader.read_u32()?;
+		let msg = reader.read_bytes_len_prefix()?;
 		let message = String::from_utf8(msg).map_err(|_| ser::Error::CorruptedData)?;
 		Ok(PeerError {
 			code: code,
@@ -551,7 +548,7 @@ impl Readable for SockAddr {
 				port,
 			))))
 		} else {
-			let ip = try_map_vec!([0..8], |_| reader.read_u16());
+			let ip = try_iter_map_vec!(0..8, |_| reader.read_u16());
 			let port = reader.read_u16()?;
 			Ok(SockAddr(SocketAddr::V6(SocketAddrV6::new(
 				Ipv6Addr::new(ip[0], ip[1], ip[2], ip[3], ip[4], ip[5], ip[6], ip[7]),

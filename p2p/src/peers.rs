@@ -42,9 +42,6 @@ pub struct Peers {
 	config: P2PConfig,
 }
 
-unsafe impl Send for Peers {}
-unsafe impl Sync for Peers {}
-
 impl Peers {
 	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>, config: P2PConfig) -> Peers {
 		Peers {
@@ -228,6 +225,7 @@ impl Peers {
 
 	/// Unban a peer, checks if it exists and banned then unban
 	pub fn unban_peer(&self, peer_addr: &SocketAddr) {
+		debug!("unban_peer: peer {}", peer_addr);
 		match self.get_peer(*peer_addr) {
 			Ok(_) => {
 				if self.is_banned(*peer_addr) {
@@ -298,8 +296,8 @@ impl Peers {
 		);
 	}
 
-	/// Broadcasts the provided stem transaction to our peer relay.
-	pub fn broadcast_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
+	/// Relays the provided stem transaction to our single stem peer.
+	pub fn relay_stem_transaction(&self, tx: &core::Transaction) -> Result<(), Error> {
 		let dandelion_relay = self.get_dandelion_relay();
 		if dandelion_relay.is_empty() {
 			debug!("No dandelion relay, updating.");
@@ -326,10 +324,10 @@ impl Peers {
 	/// A peer implementation may drop the broadcast request
 	/// if it knows the remote peer already has the transaction.
 	pub fn broadcast_transaction(&self, tx: &core::Transaction) {
-		let num_peers = self.config.peer_min_preferred_count();
+		let num_peers = self.config.peer_max_count();
 		let count = self.broadcast("transaction", num_peers, |p| p.send_transaction(tx));
-		trace!(
-			"broadcast_transaction: {}, to {} peers, done.",
+		debug!(
+			"broadcast_transaction: {} to {} peers, done.",
 			tx.hash(),
 			count,
 		);
@@ -388,51 +386,48 @@ impl Peers {
 		for peer in self.peers.read().values() {
 			if peer.is_banned() {
 				debug!("clean_peers {:?}, peer banned", peer.info.addr);
-				rm.push(peer.clone());
+				rm.push(peer.info.addr.clone());
 			} else if !peer.is_connected() {
 				debug!("clean_peers {:?}, not connected", peer.info.addr);
-				rm.push(peer.clone());
+				rm.push(peer.info.addr.clone());
+			} else if peer.is_abusive() {
+				let counts = peer.last_min_message_counts().unwrap();
+				debug!(
+					"clean_peers {:?}, abusive ({} sent, {} recv)",
+					peer.info.addr, counts.0, counts.1,
+				);
+				let _ = self.update_state(peer.info.addr, State::Banned);
+				rm.push(peer.info.addr.clone());
 			} else {
 				let (stuck, diff) = peer.is_stuck();
 				if stuck && diff < self.adapter.total_difficulty() {
 					debug!("clean_peers {:?}, stuck peer", peer.info.addr);
-					peer.stop();
 					let _ = self.update_state(peer.info.addr, State::Defunct);
-					rm.push(peer.clone());
+					rm.push(peer.info.addr.clone());
 				}
 			}
+		}
+
+		// ensure we do not still have too many connected peers
+		let excess_count = (self.peer_count() as usize - rm.len()).saturating_sub(max_count);
+		if excess_count > 0 {
+			// map peers to addrs in a block to bound how long we keep the read lock for
+			let mut addrs = self
+				.connected_peers()
+				.iter()
+				.take(excess_count)
+				.map(|x| x.info.addr.clone())
+				.collect::<Vec<_>>();
+			rm.append(&mut addrs);
 		}
 
 		// now clean up peer map based on the list to remove
 		{
 			let mut peers = self.peers.write();
 			for p in rm {
-				peers.remove(&p.info.addr);
+				let _ = peers.get(&p).map(|p| p.stop());
+				peers.remove(&p);
 			}
-		}
-
-		// ensure we do not have too many connected peers
-		let excess_count = {
-			let peer_count = self.peer_count() as usize;
-			if peer_count > max_count {
-				peer_count - max_count
-			} else {
-				0
-			}
-		};
-
-		// map peers to addrs in a block to bound how long we keep the read lock for
-		let addrs = self
-			.connected_peers()
-			.iter()
-			.map(|x| x.info.addr.clone())
-			.collect::<Vec<_>>();
-
-		// now remove them taking a short-lived write lock each time
-		// maybe better to take write lock once and remove them all?
-		for x in addrs.iter().take(excess_count) {
-			let mut peers = self.peers.write();
-			peers.remove(x);
 		}
 	}
 
@@ -480,6 +475,14 @@ impl ChainAdapter for Peers {
 
 	fn total_height(&self) -> u64 {
 		self.adapter.total_height()
+	}
+
+	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
+		self.adapter.get_transaction(kernel_hash)
+	}
+
+	fn tx_kernel_received(&self, kernel_hash: Hash, addr: SocketAddr) {
+		self.adapter.tx_kernel_received(kernel_hash, addr)
 	}
 
 	fn transaction_received(&self, tx: core::Transaction, stem: bool) {

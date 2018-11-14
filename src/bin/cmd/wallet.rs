@@ -12,25 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use clap::ArgMatches;
 use serde_json as json;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 /// Wallet commands processing
-use std::process::exit;
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
-use std::{process, thread};
 use util::Mutex;
-
-use clap::ArgMatches;
 
 use api::TLSConfig;
 use config::GlobalWalletConfig;
 use core::{core, global};
+use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
-	HTTPWalletClient, LMDBBackend, WalletBackend, WalletConfig, WalletInst, WalletSeed,
+	HTTPWalletToNodeClient, HTTPWalletToWalletClient, LMDBBackend, WalletBackend, WalletConfig,
+	WalletInst, WalletSeed,
 };
 use keychain;
 use servers::start_webwallet_server;
@@ -57,10 +57,13 @@ pub fn instantiate_wallet(
 	passphrase: &str,
 	account: &str,
 	node_api_secret: Option<String>,
-) -> Box<WalletInst<HTTPWalletClient, keychain::ExtKeychain>> {
-	let client = HTTPWalletClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-	let mut db_wallet =
-		LMDBBackend::new(wallet_config.clone(), passphrase, client).unwrap_or_else(|e| {
+) -> Arc<Mutex<WalletInst<HTTPWalletToNodeClient, HTTPWalletToWalletClient, keychain::ExtKeychain>>>
+{
+	let client_n =
+		HTTPWalletToNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
+	let client_w = HTTPWalletToWalletClient::new();
+	let mut db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, client_n, client_w)
+		.unwrap_or_else(|e| {
 			panic!(
 				"Error creating DB wallet: {} Config: {:?}",
 				e, wallet_config
@@ -69,14 +72,13 @@ pub fn instantiate_wallet(
 	db_wallet
 		.set_parent_key_id_by_name(account)
 		.unwrap_or_else(|e| {
-			println!("Error starting wallet: {}", e);
-			process::exit(0);
+			panic!("Error starting wallet: {}", e);
 		});
 	info!("Using LMDB Backend for wallet");
-	Box::new(db_wallet)
+	Arc::new(Mutex::new(db_wallet))
 }
 
-pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
+pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i32 {
 	// just get defaults from the global config
 	let mut wallet_config = config.members.unwrap().wallet;
 
@@ -107,38 +109,51 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 	if let ("init", Some(_)) = wallet_args.subcommand() {
 		WalletSeed::init_file(&wallet_config).expect("Failed to init wallet seed file.");
 		info!("Wallet seed file created");
-		let client =
-			HTTPWalletClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-		let _: LMDBBackend<HTTPWalletClient, keychain::ExtKeychain> =
-			LMDBBackend::new(wallet_config.clone(), "", client).unwrap_or_else(|e| {
-				panic!(
-					"Error creating DB for wallet: {} Config: {:?}",
-					e, wallet_config
-				);
-			});
+		let client_n =
+			HTTPWalletToNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
+		let client_w = HTTPWalletToWalletClient::new();
+		let _: LMDBBackend<
+			HTTPWalletToNodeClient,
+			HTTPWalletToWalletClient,
+			keychain::ExtKeychain,
+		> = LMDBBackend::new(wallet_config.clone(), "", client_n, client_w).unwrap_or_else(|e| {
+			panic!(
+				"Error creating DB for wallet: {} Config: {:?}",
+				e, wallet_config
+			);
+		});
 		info!("Wallet database backend created");
 		// give logging thread a moment to catch up
 		thread::sleep(Duration::from_millis(200));
 		// we are done here with creating the wallet, so just return
-		return;
+		return 0;
 	}
 
-	let passphrase = wallet_args
-		.value_of("pass")
-		.expect("Failed to read passphrase.");
+	let passphrase = match wallet_args.value_of("pass") {
+		None => {
+			error!("Failed to read passphrase.");
+			return 1;
+		}
+		Some(p) => p,
+	};
 
-	let account = wallet_args
-		.value_of("account")
-		.expect("Failed to read account.");
+	let account = match wallet_args.value_of("account") {
+		None => {
+			error!("Failed to read account.");
+			return 1;
+		}
+		Some(p) => p,
+	};
+
+	let wallet = instantiate_wallet(
+		wallet_config.clone(),
+		passphrase,
+		account,
+		node_api_secret.clone(),
+	);
 
 	// Handle listener startup commands
 	{
-		let wallet = instantiate_wallet(
-			wallet_config.clone(),
-			passphrase,
-			account,
-			node_api_secret.clone(),
-		);
 		let api_secret = get_first_line(wallet_config.api_secret_path.clone());
 
 		let tls_conf = match wallet_config.tls_certificate_file.clone() {
@@ -148,7 +163,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				wallet_config
 					.tls_certificate_key
 					.clone()
-					.expect("Private key for certificate is not set"),
+					.unwrap_or_else(|| {
+						panic!("Private key for certificate is not set");
+					}),
 			)),
 		};
 		match wallet_args.subcommand() {
@@ -156,46 +173,42 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				if let Some(port) = listen_args.value_of("port") {
 					wallet_config.api_listen_port = port.parse().unwrap();
 				}
-				controller::foreign_listener(wallet, &wallet_config.api_listen_addr(), tls_conf)
-					.unwrap_or_else(|e| {
-						panic!(
-							"Error creating wallet listener: {:?} Config: {:?}",
-							e, wallet_config
-						)
-					});
+				controller::foreign_listener(
+					wallet.clone(),
+					&wallet_config.api_listen_addr(),
+					tls_conf,
+				).unwrap_or_else(|e| {
+					panic!(
+						"Error creating wallet listener: {:?} Config: {:?}",
+						e, wallet_config
+					);
+				});
 			}
 			("owner_api", Some(_api_args)) => {
 				// TLS is disabled because we bind to localhost
-				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret, None)
+				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, None)
 					.unwrap_or_else(|e| {
 						panic!(
 							"Error creating wallet api listener: {:?} Config: {:?}",
 							e, wallet_config
-						)
+						);
 					});
 			}
 			("web", Some(_api_args)) => {
 				// start owner listener and run static file server
 				start_webwallet_server();
-				controller::owner_listener(wallet, "127.0.0.1:13420", api_secret, tls_conf)
+				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, tls_conf)
 					.unwrap_or_else(|e| {
 						panic!(
 							"Error creating wallet api listener: {:?} Config: {:?}",
 							e, wallet_config
-						)
+						);
 					});
 			}
 			_ => {}
 		};
 	}
 
-	// Handle single-use (command line) owner commands
-	let wallet = Arc::new(Mutex::new(instantiate_wallet(
-		wallet_config.clone(),
-		passphrase,
-		account,
-		node_api_secret,
-	)));
 	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {
 			("account", Some(acct_args)) => {
@@ -208,8 +221,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						display::accounts(acct_mappings);
 						Ok(())
 					});
-					if res.is_err() {
-						panic!("Error listing accounts: {}", res.unwrap_err());
+					if let Err(e) = res {
+						error!("Error listing accounts: {}", e);
+						return Err(e);
 					}
 				} else {
 					let label = create.unwrap();
@@ -219,39 +233,70 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						println!("Account: '{}' Created!", label);
 						Ok(())
 					});
-					if res.is_err() {
+					if let Err(e) = res {
 						thread::sleep(Duration::from_millis(200));
-						println!("Error creating account '{}': {}", label, res.unwrap_err());
-						exit(1);
+						error!("Error creating account '{}': {}", label, e);
+						return Err(e);
 					}
 				}
 				Ok(())
 			}
 			("send", Some(send_args)) => {
-				let amount = send_args
-					.value_of("amount")
-					.expect("Amount to send required");
-				let amount = core::amount_from_hr_string(amount)
-					.expect("Could not parse amount as a number with optional decimal point.");
+				let amount = send_args.value_of("amount").ok_or_else(|| {
+					ErrorKind::GenericError("Amount to send required".to_string())
+				})?;
+				let amount = core::amount_from_hr_string(amount).map_err(|e| {
+					ErrorKind::GenericError(format!(
+						"Could not parse amount as a number with optional decimal point. e={:?}",
+						e
+					))
+				})?;
 				let minimum_confirmations: u64 = send_args
 					.value_of("minimum_confirmations")
-					.unwrap()
-					.parse()
-					.expect("Could not parse minimum_confirmations as a whole number.");
-				let selection_strategy = send_args
-					.value_of("selection_strategy")
-					.expect("Selection strategy required");
-				let method = send_args
-					.value_of("method")
-					.expect("Payment method required");
-				let dest = send_args
-					.value_of("dest")
-					.expect("Destination wallet address required");
+					.ok_or_else(|| {
+						ErrorKind::GenericError(
+							"Minimum confirmations to send required".to_string(),
+						)
+					}).and_then(|v| {
+						v.parse().map_err(|e| {
+							ErrorKind::GenericError(format!(
+								"Could not parse minimum_confirmations as a whole number. e={:?}",
+								e
+							))
+						})
+					})?;
+				let selection_strategy =
+					send_args.value_of("selection_strategy").ok_or_else(|| {
+						ErrorKind::GenericError("Selection strategy required".to_string())
+					})?;
+				let method = send_args.value_of("method").ok_or_else(|| {
+					ErrorKind::GenericError("Payment method required".to_string())
+				})?;
+				let dest = {
+					if method == "self" {
+						match send_args.value_of("dest") {
+							Some(d) => d,
+							None => "default",
+						}
+					} else {
+						send_args.value_of("dest").ok_or_else(|| {
+							ErrorKind::GenericError(
+								"Destination wallet address required".to_string(),
+							)
+						})?
+					}
+				};
 				let change_outputs = send_args
 					.value_of("change_outputs")
-					.unwrap()
-					.parse()
-					.expect("Failed to parse number of change outputs.");
+					.ok_or_else(|| ErrorKind::GenericError("Change outputs required".to_string()))
+					.and_then(|v| {
+						v.parse().map_err(|e| {
+							ErrorKind::GenericError(format!(
+								"Failed to parse number of change outputs. e={:?}",
+								e
+							))
+						})
+					})?;
 				let fluff = send_args.is_present("fluff");
 				let max_outputs = 500;
 				if method == "http" {
@@ -275,7 +320,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 								s
 							}
 							Err(e) => {
-								error!("Tx not created: {:?}", e);
+								error!("Tx not created: {}", e);
 								match e.kind() {
 									// user errors, don't backtrace
 									libwallet::ErrorKind::NotEnoughFunds { .. } => {}
@@ -286,7 +331,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 										error!("Backtrace: {}", e.backtrace().unwrap());
 									}
 								};
-								panic!();
+								return Err(e);
 							}
 						};
 						let result = api.post_tx(&slate, fluff);
@@ -296,16 +341,62 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 								Ok(())
 							}
 							Err(e) => {
-								error!("Tx not sent: {:?}", e);
+								error!("Tx not sent: {}", e);
 								Err(e)
 							}
 						}
 					} else {
-						error!(
+						return Err(ErrorKind::GenericError(format!(
 							"HTTP Destination should start with http://: or https://: {}",
 							dest
-						);
-						panic!();
+						)).into());
+					}
+				} else if method == "self" {
+					let result = api.issue_self_tx(
+						amount,
+						minimum_confirmations,
+						max_outputs,
+						change_outputs,
+						selection_strategy == "all",
+						account,
+						dest,
+					);
+					let slate = match result {
+						Ok(s) => {
+							info!(
+								"Tx created: {} grin to self, source acct: {} dest_acct: {} (strategy '{}')",
+								core::amount_to_hr_string(amount, false),
+								account,
+								dest,
+								selection_strategy,
+							);
+							s
+						}
+						Err(e) => {
+							error!("Tx not created: {}", e);
+							match e.kind() {
+								// user errors, don't backtrace
+								libwallet::ErrorKind::NotEnoughFunds { .. } => {}
+								libwallet::ErrorKind::FeeDispute { .. } => {}
+								libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
+								_ => {
+									// otherwise give full dump
+									error!("Backtrace: {}", e.backtrace().unwrap());
+								}
+							};
+							return Err(e);
+						}
+					};
+					let result = api.post_tx(&slate, fluff);
+					match result {
+						Ok(_) => {
+							info!("Tx sent",);
+							Ok(())
+						}
+						Err(e) => {
+							error!("Tx not sent: {}", e);
+							Err(e)
+						}
 					}
 				} else if method == "file" {
 					api.send_tx(
@@ -316,28 +407,31 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						max_outputs,
 						change_outputs,
 						selection_strategy == "all",
-					).expect("Send failed");
+					).map_err(|e| ErrorKind::GenericError(format!("Send failed. e={:?}", e)))?;
 					Ok(())
 				} else {
-					error!("unsupported payment method: {}", method);
-					panic!();
+					return Err(ErrorKind::GenericError(format!(
+						"unsupported payment method: {}",
+						method
+					)).into());
 				}
 			}
 			("receive", Some(send_args)) => {
 				let mut receive_result: Result<(), grin_wallet::libwallet::Error> = Ok(());
-				let tx_file = send_args
-					.value_of("input")
-					.expect("Transaction file required");
+				let tx_file = send_args.value_of("input").ok_or_else(|| {
+					ErrorKind::GenericError("Transaction file required".to_string())
+				})?;
 				if !Path::new(tx_file).is_file() {
-					error!("File {} not found.", { tx_file });
-					exit(1);
+					return Err(
+						ErrorKind::GenericError(format!("File {} not found.", tx_file)).into(),
+					);
 				}
 				let res = controller::foreign_single_use(wallet, |api| {
 					receive_result = api.file_receive_tx(tx_file);
 					Ok(())
 				});
 				if res.is_err() {
-					exit(1);
+					return res;
 				} else {
 					info!(
 						"Response file {}.response generated, sending it back to the transaction originator.",
@@ -348,12 +442,13 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 			}
 			("finalize", Some(send_args)) => {
 				let fluff = send_args.is_present("fluff");
-				let tx_file = send_args
-					.value_of("input")
-					.expect("Receiver's transaction file required");
+				let tx_file = send_args.value_of("input").ok_or_else(|| {
+					ErrorKind::GenericError("Receiver's transaction file required".to_string())
+				})?;
 				if !Path::new(tx_file).is_file() {
-					error!("File {} not found.", { tx_file });
-					exit(1);
+					return Err(
+						ErrorKind::GenericError(format!("File {} not found.", tx_file)).into(),
+					);
 				}
 				let mut pub_tx_f = File::open(tx_file)?;
 				let mut content = String::new();
@@ -369,7 +464,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						Ok(())
 					}
 					Err(e) => {
-						error!("Tx not sent: {:?}", e);
+						error!("Tx not sent: {}", e);
 						Err(e)
 					}
 				}
@@ -393,26 +488,35 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				Ok(())
 			}
 			("info", Some(_)) => {
-				let (validated, wallet_info) =
-					api.retrieve_summary_info(true).unwrap_or_else(|e| {
-						panic!(
-							"Error getting wallet info: {:?} Config: {:?}",
-							e, wallet_config
-						)
-					});
-				display::info(account, &wallet_info, validated);
+				let (validated, wallet_info) = api.retrieve_summary_info(true).map_err(|e| {
+					ErrorKind::GenericError(format!(
+						"Error getting wallet info: {:?} Config: {:?}",
+						e, wallet_config
+					))
+				})?;
+				display::info(
+					account,
+					&wallet_info,
+					validated,
+					wallet_config.dark_background_color_scheme.unwrap_or(true),
+				);
 				Ok(())
 			}
 			("outputs", Some(_)) => {
 				let (height, _) = api.node_height()?;
 				let (validated, outputs) = api.retrieve_outputs(show_spent, true, None)?;
-				let _res =
-					display::outputs(account, height, validated, outputs).unwrap_or_else(|e| {
-						panic!(
-							"Error getting wallet outputs: {:?} Config: {:?}",
-							e, wallet_config
-						)
-					});
+				display::outputs(
+					account,
+					height,
+					validated,
+					outputs,
+					wallet_config.dark_background_color_scheme.unwrap_or(true),
+				).map_err(|e| {
+					ErrorKind::GenericError(format!(
+						"Error getting wallet outputs: {:?} Config: {:?}",
+						e, wallet_config
+					))
+				})?;
 				Ok(())
 			}
 			("txs", Some(txs_args)) => {
@@ -420,46 +524,61 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 					None => None,
 					Some(tx) => match tx.parse() {
 						Ok(t) => Some(t),
-						Err(_) => panic!("Unable to parse argument 'id' as a number"),
+						Err(_) => {
+							return Err(ErrorKind::GenericError(
+								"Unable to parse argument 'id' as a number".to_string(),
+							).into());
+						}
 					},
 				};
 				let (height, _) = api.node_height()?;
-				let (validated, txs) = api.retrieve_txs(true, tx_id)?;
+				let (validated, txs) = api.retrieve_txs(true, tx_id, None)?;
 				let include_status = !tx_id.is_some();
-				let _res = display::txs(account, height, validated, txs, include_status)
-					.unwrap_or_else(|e| {
-						panic!(
-							"Error getting wallet outputs: {} Config: {:?}",
-							e, wallet_config
-						)
-					});
+				display::txs(
+					account,
+					height,
+					validated,
+					txs,
+					include_status,
+					wallet_config.dark_background_color_scheme.unwrap_or(true),
+				).map_err(|e| {
+					ErrorKind::GenericError(format!(
+						"Error getting wallet outputs: {} Config: {:?}",
+						e, wallet_config
+					))
+				})?;
 				// if given a particular transaction id, also get and display associated
 				// inputs/outputs
 				if tx_id.is_some() {
 					let (_, outputs) = api.retrieve_outputs(true, false, tx_id)?;
-					let _res = display::outputs(account, height, validated, outputs)
-						.unwrap_or_else(|e| {
-							panic!(
-								"Error getting wallet outputs: {} Config: {:?}",
-								e, wallet_config
-							)
-						});
+					display::outputs(
+						account,
+						height,
+						validated,
+						outputs,
+						wallet_config.dark_background_color_scheme.unwrap_or(true),
+					).map_err(|e| {
+						ErrorKind::GenericError(format!(
+							"Error getting wallet outputs: {} Config: {:?}",
+							e, wallet_config
+						))
+					})?;
 				};
 				Ok(())
 			}
 			("repost", Some(repost_args)) => {
-				let tx_id: u32 = match repost_args.value_of("id") {
-					None => {
-						error!("Transaction of a completed but unconfirmed transaction required (specify with --id=[id])");
-						panic!();
-					}
-					Some(tx) => match tx.parse() {
-						Ok(t) => t,
-						Err(_) => {
-							panic!("Unable to parse argument 'id' as a number");
-						}
-					},
-				};
+				let tx_id = repost_args
+					.value_of("id")
+					.ok_or_else(|| {
+						ErrorKind::GenericError("Transaction of a completed but unconfirmed transaction required (specify with --id=[id])".to_string())
+					}).and_then(|v|{
+					v.parse().map_err(|e| {
+						ErrorKind::GenericError(format!(
+							"Unable to parse argument 'id' as a number. e={:?}",
+							e
+						))
+					})})?;
+
 				let dump_file = repost_args.value_of("dumpfile");
 				let fluff = repost_args.is_present("fluff");
 				match dump_file {
@@ -492,14 +611,49 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 				}
 			}
 			("cancel", Some(tx_args)) => {
-				let tx_id = tx_args
-					.value_of("id")
-					.expect("'id' argument (-i) is required.");
-				let tx_id = tx_id.parse().expect("Could not parse id parameter.");
-				let result = api.cancel_tx(tx_id);
+				let mut tx_id_string = "";
+				let tx_id = match tx_args.value_of("id") {
+					None => None,
+					Some(tx) => match tx.parse() {
+						Ok(t) => {
+							tx_id_string = tx;
+							Some(t)
+						}
+						Err(e) => {
+							return Err(ErrorKind::GenericError(format!(
+								"Could not parse id parameter. e={:?}",
+								e,
+							)).into());
+						}
+					},
+				};
+				let tx_slate_id = match tx_args.value_of("txid") {
+					None => None,
+					Some(tx) => match tx.parse() {
+						Ok(t) => {
+							tx_id_string = tx;
+							Some(t)
+						}
+						Err(e) => {
+							return Err(ErrorKind::GenericError(format!(
+								"Could not parse txid parameter. e={:?}",
+								e,
+							)).into());
+						}
+					},
+				};
+				if (tx_id.is_none() && tx_slate_id.is_none())
+					|| (tx_id.is_some() && tx_slate_id.is_some())
+				{
+					return Err(ErrorKind::GenericError(format!(
+						"'id' (-i) or 'txid' (-t) argument is required."
+					)).into());
+				}
+
+				let result = api.cancel_tx(tx_id, tx_slate_id);
 				match result {
 					Ok(_) => {
-						info!("Transaction {} Cancelled", tx_id);
+						info!("Transaction {} Cancelled", tx_id_string);
 						Ok(())
 					}
 					Err(e) => {
@@ -516,20 +670,26 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) {
 						Ok(())
 					}
 					Err(e) => {
-						error!("Wallet restore failed: {:?}", e);
+						error!("Wallet restore failed: {}", e);
 						error!("Backtrace: {}", e.backtrace().unwrap());
 						Err(e)
 					}
 				}
 			}
-			_ => panic!("Unknown wallet command, use 'grin help wallet' for details"),
+			_ => {
+				return Err(ErrorKind::GenericError(
+					"Unknown wallet command, use 'grin help wallet' for details".to_string(),
+				).into());
+			}
 		}
 	});
 	// we need to give log output a chance to catch up before exiting
 	thread::sleep(Duration::from_millis(100));
 
-	if res.is_err() {
-		error!("Wallet command failed: {:?}", res);
-		exit(1);
+	if let Err(e) = res {
+		println!("Wallet command failed: {}", e);
+		1
+	} else {
+		0
 	}
 }

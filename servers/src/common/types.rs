@@ -261,6 +261,8 @@ pub enum SyncStatus {
 	},
 	/// Finalizing the new state
 	TxHashsetSave,
+	/// State sync finalized
+	TxHashsetDone,
 	/// Downloading blocks
 	BodySync {
 		current_height: u64,
@@ -383,9 +385,6 @@ impl chain::TxHashsetWriteStatus for SyncState {
 	}
 
 	fn on_done(&self) {
-		self.update(SyncStatus::BodySync {
-			current_height: 0,
-			highest_height: 0,
-		});
+		self.update(SyncStatus::TxHashsetDone);
 	}
 }

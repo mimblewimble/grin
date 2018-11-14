@@ -24,6 +24,7 @@ use chrono::prelude::Utc;
 use conn::{Message, MessageHandler, Response};
 use core::core::{self, hash::Hash, CompactBlock};
 use core::{global, ser};
+use util::{RateCounter, RwLock};
 
 use msg::{
 	read_exact, BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr,
@@ -43,7 +44,11 @@ impl Protocol {
 }
 
 impl MessageHandler for Protocol {
-	fn consume<'a>(&self, mut msg: Message<'a>) -> Result<Option<Response<'a>>, Error> {
+	fn consume<'a>(
+		&self,
+		mut msg: Message<'a>,
+		received_bytes: Arc<RwLock<RateCounter>>,
+	) -> Result<Option<Response<'a>>, Error> {
 		let adapter = &self.adapter;
 
 		// If we received a msg from a banned peer then log and drop it.
@@ -83,6 +88,30 @@ impl MessageHandler for Protocol {
 				Ok(None)
 			}
 
+			Type::TransactionKernel => {
+				let h: Hash = msg.body()?;
+				debug!(
+					"handle_payload: received tx kernel: {}, msg_len: {}",
+					h, msg.header.msg_len
+				);
+				adapter.tx_kernel_received(h, self.addr);
+				Ok(None)
+			}
+
+			Type::GetTransaction => {
+				let h: Hash = msg.body()?;
+				debug!(
+					"handle_payload: GetTransaction: {}, msg_len: {}",
+					h, msg.header.msg_len,
+				);
+				let tx = adapter.get_transaction(h);
+				if let Some(tx) = tx {
+					Ok(Some(msg.respond(Type::Transaction, tx)))
+				} else {
+					Ok(None)
+				}
+			}
+
 			Type::Transaction => {
 				debug!(
 					"handle_payload: received tx: msg_len: {}",
@@ -106,7 +135,7 @@ impl MessageHandler for Protocol {
 			Type::GetBlock => {
 				let h: Hash = msg.body()?;
 				trace!(
-					"handle_payload: Getblock: {}, msg_len: {}",
+					"handle_payload: GetBlock: {}, msg_len: {}",
 					h,
 					msg.header.msg_len,
 				);
@@ -262,13 +291,21 @@ impl MessageHandler for Protocol {
 					let mut downloaded_size: usize = 0;
 					let mut request_size = cmp::min(48_000, total_size);
 					while request_size > 0 {
-						downloaded_size += msg.copy_attachment(request_size, &mut tmp_zip)?;
+						let size = msg.copy_attachment(request_size, &mut tmp_zip)?;
+						downloaded_size += size;
 						request_size = cmp::min(48_000, total_size - downloaded_size);
 						self.adapter.txhashset_download_update(
 							download_start_time,
 							downloaded_size as u64,
 							total_size as u64,
 						);
+
+						// Increase received bytes quietly (without affecting the counters).
+						// Otherwise we risk banning a peer as "abusive".
+						{
+							let mut received_bytes = received_bytes.write();
+							received_bytes.inc_quiet(size as u64);
+						}
 					}
 					tmp_zip.into_inner().unwrap().sync_all()?;
 					Ok(())

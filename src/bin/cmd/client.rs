@@ -24,7 +24,7 @@ use servers::ServerConfig;
 use term;
 use util::file::get_first_line;
 
-pub fn client_command(client_args: &ArgMatches, global_config: GlobalConfig) {
+pub fn client_command(client_args: &ArgMatches, global_config: GlobalConfig) -> i32 {
 	// just get defaults from the global config
 	let server_config = global_config.members.unwrap().server;
 	let api_secret = get_first_line(server_config.api_secret_path.clone());
@@ -56,6 +56,7 @@ pub fn client_command(client_args: &ArgMatches, global_config: GlobalConfig) {
 		}
 		_ => panic!("Unknown client command, use 'grin help client' for details"),
 	}
+	0
 }
 
 pub fn show_status(config: &ServerConfig, api_secret: Option<String>) {

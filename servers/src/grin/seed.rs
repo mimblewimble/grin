@@ -41,6 +41,7 @@ pub fn connect_and_monitor(
 	seed_list: Box<Fn() -> Vec<SocketAddr> + Send>,
 	preferred_peers: Option<Vec<SocketAddr>>,
 	stop: Arc<AtomicBool>,
+	pause: Arc<AtomicBool>,
 ) {
 	let _ = thread::Builder::new()
 		.name("seed".to_string())
@@ -65,6 +66,12 @@ pub fn connect_and_monitor(
 			let mut start_attempt = 0;
 
 			while !stop.load(Ordering::Relaxed) {
+				// Pause egress peer connection request. Only for tests.
+				if pause.load(Ordering::Relaxed) {
+					thread::sleep(time::Duration::from_secs(1));
+					continue;
+				}
+
 				// Check for and remove expired peers from the storage
 				if Utc::now() - prev_expire_check > Duration::hours(1) {
 					peers.remove_expired();
@@ -82,7 +89,6 @@ pub fn connect_and_monitor(
 					monitor_peers(
 						peers.clone(),
 						p2p_server.config.clone(),
-						capabilities,
 						tx.clone(),
 						preferred_peers.clone(),
 					);
@@ -109,7 +115,6 @@ pub fn connect_and_monitor(
 fn monitor_peers(
 	peers: Arc<p2p::Peers>,
 	config: p2p::P2PConfig,
-	capabilities: p2p::Capabilities,
 	tx: mpsc::Sender<SocketAddr>,
 	preferred_peers_list: Option<Vec<SocketAddr>>,
 ) {
@@ -165,11 +170,13 @@ fn monitor_peers(
 	// ask them for their list of peers
 	let mut connected_peers: Vec<SocketAddr> = vec![];
 	for p in peers.connected_peers() {
-		debug!(
+		trace!(
 			"monitor_peers: {}:{} ask {} for more peers",
-			config.host, config.port, p.info.addr,
+			config.host,
+			config.port,
+			p.info.addr,
 		);
-		let _ = p.send_peer_request(capabilities);
+		let _ = p.send_peer_request(p2p::Capabilities::PEER_LIST);
 		connected_peers.push(p.info.addr)
 	}
 
@@ -203,10 +210,13 @@ fn monitor_peers(
 		p2p::Capabilities::UNKNOWN,
 		config.peer_max_count() as usize,
 	);
+
 	for p in new_peers.iter().filter(|p| !peers.is_known(&p.addr)) {
-		debug!(
+		trace!(
 			"monitor_peers: on {}:{}, queue to soon try {}",
-			config.host, config.port, p.addr,
+			config.host,
+			config.port,
+			p.addr,
 		);
 		tx.send(p.addr).unwrap();
 	}
@@ -238,7 +248,8 @@ fn connect_to_seeds_and_preferred_peers(
 	peers_preferred_list: Option<Vec<SocketAddr>>,
 ) {
 	// check if we have some peers in db
-	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::FULL_NODE, 100);
+	// look for peers that are able to give us other peers (via PEER_LIST capability)
+	let peers = peers.find_peers(p2p::State::Healthy, p2p::Capabilities::PEER_LIST, 100);
 
 	// if so, get their addresses, otherwise use our seeds
 	let mut peer_addrs = if peers.len() > 3 {
@@ -250,7 +261,7 @@ fn connect_to_seeds_and_preferred_peers(
 	// If we have preferred peers add them to the connection
 	match peers_preferred_list {
 		Some(mut peers_preferred) => peer_addrs.append(&mut peers_preferred),
-		None => debug!("No preferred peers"),
+		None => trace!("No preferred peers"),
 	};
 
 	if peer_addrs.len() == 0 {

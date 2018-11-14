@@ -39,6 +39,7 @@ enum PeerColumn {
 	TotalDifficulty,
 	Direction,
 	Version,
+	UserAgent,
 }
 
 impl PeerColumn {
@@ -50,6 +51,7 @@ impl PeerColumn {
 			PeerColumn::Version => "Version",
 			PeerColumn::TotalDifficulty => "Total Difficulty",
 			PeerColumn::Direction => "Direction",
+			PeerColumn::UserAgent => "User Agent",
 		}
 	}
 }
@@ -57,16 +59,8 @@ impl PeerColumn {
 impl TableViewItem<PeerColumn> for PeerStats {
 	fn to_column(&self, column: PeerColumn) -> String {
 		// Converts optional size to human readable size
-		fn size_to_string(size: Option<u64>) -> String {
-			if let Some(n) = size {
-				let size = n.file_size(CONVENTIONAL);
-				match size {
-					Ok(size) => size,
-					Err(_) => "-".to_string(),
-				}
-			} else {
-				"-".to_string()
-			}
+		fn size_to_string(size: u64) -> String {
+			size.file_size(CONVENTIONAL).unwrap_or("-".to_string())
 		}
 
 		match column {
@@ -74,8 +68,8 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			PeerColumn::State => self.state.clone(),
 			PeerColumn::UsedBandwidth => format!(
 				"S: {}, R: {}",
-				size_to_string(self.sent_bytes),
-				size_to_string(self.received_bytes),
+				size_to_string(self.sent_bytes_per_sec),
+				size_to_string(self.received_bytes_per_sec),
 			).to_string(),
 			PeerColumn::TotalDifficulty => format!(
 				"{} D @ {} H ({}s)",
@@ -85,6 +79,7 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			).to_string(),
 			PeerColumn::Direction => self.direction.clone(),
 			PeerColumn::Version => self.version.to_string(),
+			PeerColumn::UserAgent => self.user_agent.clone(),
 		}
 	}
 
@@ -94,10 +89,10 @@ impl TableViewItem<PeerColumn> for PeerStats {
 	{
 		// Compares used bandwidth of two peers
 		fn cmp_used_bandwidth(curr: &PeerStats, other: &PeerStats) -> Ordering {
-			let curr_recv_bytes = curr.received_bytes.unwrap_or(0);
-			let curr_sent_bytes = curr.sent_bytes.unwrap_or(0);
-			let other_recv_bytes = other.received_bytes.unwrap_or(0);
-			let other_sent_bytes = other.sent_bytes.unwrap_or(0);
+			let curr_recv_bytes = curr.received_bytes_per_sec;
+			let curr_sent_bytes = curr.sent_bytes_per_sec;
+			let other_recv_bytes = other.received_bytes_per_sec;
+			let other_sent_bytes = other.sent_bytes_per_sec;
 
 			let curr_sum = curr_recv_bytes + curr_sent_bytes;
 			let other_sum = other_recv_bytes + other_sent_bytes;
@@ -112,6 +107,7 @@ impl TableViewItem<PeerColumn> for PeerStats {
 			PeerColumn::TotalDifficulty => self.total_difficulty.cmp(&other.total_difficulty),
 			PeerColumn::Direction => self.direction.cmp(&other.direction),
 			PeerColumn::Version => self.version.cmp(&other.version),
+			PeerColumn::UserAgent => self.user_agent.cmp(&other.user_agent),
 		}
 	}
 }
@@ -124,11 +120,12 @@ impl TUIStatusListener for TUIPeerView {
 			.column(PeerColumn::Address, "Address", |c| c.width_percent(16))
 			.column(PeerColumn::State, "State", |c| c.width_percent(8))
 			.column(PeerColumn::UsedBandwidth, "Used bandwidth", |c| {
-				c.width_percent(24)
+				c.width_percent(16)
 			}).column(PeerColumn::Direction, "Direction", |c| c.width_percent(8))
 			.column(PeerColumn::TotalDifficulty, "Total Difficulty", |c| {
 				c.width_percent(24)
-			}).column(PeerColumn::Version, "Version", |c| c.width_percent(16));
+			}).column(PeerColumn::Version, "Ver", |c| c.width_percent(6))
+			.column(PeerColumn::UserAgent, "User Agent", |c| c.width_percent(18));
 		let peer_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
 				.child(

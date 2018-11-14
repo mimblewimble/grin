@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Client functions, implementations of the WalletClient trait
+//! Client functions, implementations of the WalletToNodeClient trait
 //! specific to the FileWallet
 
 use failure::ResultExt;
@@ -30,71 +30,27 @@ use util;
 use util::secp::pedersen;
 
 #[derive(Clone)]
-pub struct HTTPWalletClient {
+pub struct HTTPWalletToNodeClient {
 	node_url: String,
 	node_api_secret: Option<String>,
 }
 
-impl HTTPWalletClient {
+impl HTTPWalletToNodeClient {
 	/// Create a new client that will communicate with the given grin node
-	pub fn new(node_url: &str, node_api_secret: Option<String>) -> HTTPWalletClient {
-		HTTPWalletClient {
+	pub fn new(node_url: &str, node_api_secret: Option<String>) -> HTTPWalletToNodeClient {
+		HTTPWalletToNodeClient {
 			node_url: node_url.to_owned(),
 			node_api_secret: node_api_secret,
 		}
 	}
 }
 
-impl WalletClient for HTTPWalletClient {
+impl WalletToNodeClient for HTTPWalletToNodeClient {
 	fn node_url(&self) -> &str {
 		&self.node_url
 	}
 	fn node_api_secret(&self) -> Option<String> {
 		self.node_api_secret.clone()
-	}
-
-	/// Call the wallet API to create a coinbase output for the given
-	/// block_fees. Will retry based on default "retry forever with backoff"
-	/// behavior.
-	fn create_coinbase(
-		&self,
-		dest: &str,
-		block_fees: &BlockFees,
-	) -> Result<CbData, libwallet::Error> {
-		let url = format!("{}/v1/wallet/foreign/build_coinbase", dest);
-		match single_create_coinbase(&url, &block_fees) {
-			Err(e) => {
-				error!(
-					"Failed to get coinbase from {}. Run grin wallet listen?",
-					url
-				);
-				error!("Underlying Error: {}", e.cause().unwrap());
-				error!("Backtrace: {}", e.backtrace().unwrap());
-				Err(libwallet::ErrorKind::ClientCallback(
-					"Failed to get coinbase",
-				))?
-			}
-			Ok(res) => Ok(res),
-		}
-	}
-
-	/// Send the slate to a listening wallet instance
-	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
-		if &dest[..4] != "http" {
-			let err_str = format!(
-				"dest formatted as {} but send -d expected stdout or http://IP:port",
-				dest
-			);
-			error!("{}", err_str,);
-			Err(libwallet::ErrorKind::Uri)?
-		}
-		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
-		debug!("Posting transaction slate to {}", url);
-
-		let res = api::client::post(url.as_str(), None, slate).context(
-			libwallet::ErrorKind::ClientCallback("Posting transaction slate"),
-		)?;
-		Ok(res)
 	}
 
 	/// Posts a transaction to a grin node
@@ -219,6 +175,63 @@ impl WalletClient for HTTPWalletClient {
 		}
 	}
 }
+
+#[derive(Clone)]
+pub struct HTTPWalletToWalletClient {}
+
+impl HTTPWalletToWalletClient {
+	/// Create a new client that will communicate other wallets
+	pub fn new() -> HTTPWalletToWalletClient {
+		HTTPWalletToWalletClient {}
+	}
+}
+
+impl WalletToWalletClient for HTTPWalletToWalletClient {
+	/// Call the wallet API to create a coinbase output for the given
+	/// block_fees. Will retry based on default "retry forever with backoff"
+	/// behavior.
+	fn create_coinbase(
+		&self,
+		dest: &str,
+		block_fees: &BlockFees,
+	) -> Result<CbData, libwallet::Error> {
+		let url = format!("{}/v1/wallet/foreign/build_coinbase", dest);
+		match single_create_coinbase(&url, &block_fees) {
+			Err(e) => {
+				error!(
+					"Failed to get coinbase from {}. Run grin wallet listen?",
+					url
+				);
+				error!("Underlying Error: {}", e.cause().unwrap());
+				error!("Backtrace: {}", e.backtrace().unwrap());
+				Err(libwallet::ErrorKind::ClientCallback(
+					"Failed to get coinbase",
+				))?
+			}
+			Ok(res) => Ok(res),
+		}
+	}
+
+	/// Send the slate to a listening wallet instance
+	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+		if &dest[..4] != "http" {
+			let err_str = format!(
+				"dest formatted as {} but send -d expected stdout or http://IP:port",
+				dest
+			);
+			error!("{}", err_str,);
+			Err(libwallet::ErrorKind::Uri)?
+		}
+		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
+		debug!("Posting transaction slate to {}", url);
+
+		let res = api::client::post(url.as_str(), None, slate).context(
+			libwallet::ErrorKind::ClientCallback("Posting transaction slate"),
+		)?;
+		Ok(res)
+	}
+}
+
 /// Call the wallet API to create a coinbase output for the given block_fees.
 /// Will retry based on default "retry forever with backoff" behavior.
 pub fn create_coinbase(dest: &str, block_fees: &BlockFees) -> Result<CbData, Error> {

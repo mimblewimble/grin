@@ -92,6 +92,14 @@ pub const MAX_SECONDARY_SCALING: u64 = 8 << 11;
 /// easier to reason about.
 pub const CUT_THROUGH_HORIZON: u32 = WEEK_HEIGHT as u32;
 
+/// Default number of blocks in the past to determine the height where we request
+/// a txhashset (and full blocks from). Needs to be long enough to not overlap with
+/// a long reorg.
+/// Rational behind the value is the longest bitcoin fork was about 30 blocks, so 5h.
+/// We add an order of magnitude to be safe and round to 2x24h of blocks to make it
+/// easier to reason about.
+pub const STATE_SYNC_THRESHOLD: u32 = 2 * DAY_HEIGHT as u32;
+
 /// Weight of an input when counted against the max block weight capacity
 pub const BLOCK_INPUT_WEIGHT: usize = 1;
 

@@ -51,7 +51,9 @@ impl HeaderSync {
 		}
 
 		let enable_header_sync = match self.sync_state.status() {
-			SyncStatus::BodySync { .. } | SyncStatus::HeaderSync { .. } => true,
+			SyncStatus::BodySync { .. }
+			| SyncStatus::HeaderSync { .. }
+			| SyncStatus::TxHashsetDone => true,
 			SyncStatus::NoSync | SyncStatus::Initial | SyncStatus::AwaitingPeers(_) => {
 				// Reset sync_head to header_head on transition to HeaderSync,
 				// but ONLY on initial transition to HeaderSync state.
@@ -67,7 +69,7 @@ impl HeaderSync {
 				// Reset sync_head to the same as current header_head.
 				self.chain.reset_sync_head(&header_head).unwrap();
 
-				// Rebuild the sync MMR to match our updates sync_head.
+				// Rebuild the sync MMR to match our updated sync_head.
 				self.chain.rebuild_sync_mmr(&header_head).unwrap();
 
 				self.history_locator.clear();
@@ -173,7 +175,7 @@ impl HeaderSync {
 						locator.push((header.height, header.hash()));
 						break;
 					}
-					header_cursor = self.chain.get_block_header(&header.previous);
+					header_cursor = self.chain.get_previous_header(&header);
 				}
 			}
 		}
@@ -260,9 +262,7 @@ mod test {
 
 		// just 1 locator in history
 		let heights: Vec<u64> = vec![64, 62, 58, 50, 34, 2, 0];
-		let history_locator: Vec<(u64, Hash)> = vec![
-			(0, zh.clone()),
-		];
+		let history_locator: Vec<(u64, Hash)> = vec![(0, zh.clone())];
 		let mut locator: Vec<(u64, Hash)> = vec![];
 		for h in heights {
 			if let Some(l) = close_enough(&history_locator, h) {
@@ -288,7 +288,7 @@ mod test {
 
 		// more realistic test with 11 history
 		let heights: Vec<u64> = vec![
-			2554, 2552, 2548, 2540, 2524, 2492, 2428, 2300, 2044, 1532, 508, 0
+			2554, 2552, 2548, 2540, 2524, 2492, 2428, 2300, 2044, 1532, 508, 0,
 		];
 		let history_locator: Vec<(u64, Hash)> = vec![
 			(2043, zh.clone()),
@@ -310,15 +310,14 @@ mod test {
 			}
 		}
 		locator.dedup_by(|a, b| a.0 == b.0);
-		assert_eq!(locator, vec![
-			(2043, zh.clone()),
-			(1532, zh.clone()),
-			(0, zh.clone()),
-		]);
+		assert_eq!(
+			locator,
+			vec![(2043, zh.clone()), (1532, zh.clone()), (0, zh.clone()),]
+		);
 
 		// more realistic test with 12 history
 		let heights: Vec<u64> = vec![
-			4598, 4596, 4592, 4584, 4568, 4536, 4472, 4344, 4088, 3576, 2552, 504, 0
+			4598, 4596, 4592, 4584, 4568, 4536, 4472, 4344, 4088, 3576, 2552, 504, 0,
 		];
 		let history_locator: Vec<(u64, Hash)> = vec![
 			(4087, zh.clone()),
@@ -341,11 +340,14 @@ mod test {
 			}
 		}
 		locator.dedup_by(|a, b| a.0 == b.0);
-		assert_eq!(locator, vec![
-			(4087, zh.clone()),
-			(3576, zh.clone()),
-			(3065, zh.clone()),
-			(0, zh.clone()),
-		]);
+		assert_eq!(
+			locator,
+			vec![
+				(4087, zh.clone()),
+				(3576, zh.clone()),
+				(3065, zh.clone()),
+				(0, zh.clone()),
+			]
+		);
 	}
 }

@@ -38,6 +38,7 @@ use std::str::FromStr;
 use std::{error, fmt};
 
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
+use mnemonic;
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::{self, ContextFlag, Secp256k1};
 
@@ -297,6 +298,8 @@ pub enum Error {
 	InvalidChildNumber(ChildNumber),
 	/// Error creating a master seed --- for application use
 	RngError(String),
+	/// Error converting mnemonic to seed
+	MnemonicError(mnemonic::Error),
 }
 
 impl fmt::Display for Error {
@@ -308,6 +311,7 @@ impl fmt::Display for Error {
 			Error::Ecdsa(ref e) => fmt::Display::fmt(e, f),
 			Error::InvalidChildNumber(ref n) => write!(f, "child number {} is invalid", n),
 			Error::RngError(ref s) => write!(f, "rng error {}", s),
+			Error::MnemonicError(ref e) => fmt::Display::fmt(e, f),
 		}
 	}
 }
@@ -327,6 +331,7 @@ impl error::Error for Error {
 			Error::Ecdsa(ref e) => error::Error::description(e),
 			Error::InvalidChildNumber(_) => "child number is invalid",
 			Error::RngError(_) => "rng error",
+			Error::MnemonicError(_) => "mnemonic error",
 		}
 	}
 }
@@ -359,6 +364,21 @@ impl ExtendedPrivKey {
 			secret_key: SecretKey::from_slice(secp, &result[..32]).map_err(Error::Ecdsa)?,
 			chain_code: ChainCode::from(&result[32..]),
 		})
+	}
+
+	/// Construct a new master key from a mnemonic and a passphrase
+	pub fn from_mnemonic(
+		secp: &Secp256k1,
+		mnemonic: &str,
+		passphrase: &str,
+	) -> Result<ExtendedPrivKey, Error> {
+		let seed = match mnemonic::to_seed(mnemonic, passphrase) {
+			Ok(s) => s,
+			Err(e) => return Err(Error::MnemonicError(e)),
+		};
+		let mut hasher = BIP32GrinHasher::new();
+		let key = try!(ExtendedPrivKey::new_master(secp, &mut hasher, &seed));
+		Ok(key)
 	}
 
 	/// Attempts to derive an extended private key from a path.
@@ -409,8 +429,7 @@ impl ExtendedPrivKey {
 		hasher.append_sha512(&be_n);
 		let result = hasher.result_sha512();
 		let mut sk = SecretKey::from_slice(secp, &result[..32]).map_err(Error::Ecdsa)?;
-		sk.add_assign(secp, &self.secret_key)
-			.map_err(Error::Ecdsa)?;
+		sk.add_assign(secp, &self.secret_key).map_err(Error::Ecdsa)?;
 
 		Ok(ExtendedPrivKey {
 			network: self.network,

@@ -23,8 +23,9 @@ use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use consensus;
 use core::hash::{Hash, Hashed};
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
+use std::fmt::Debug;
 use std::io::{self, Read, Write};
-use std::{cmp, error, fmt, mem};
+use std::{cmp, error, fmt};
 use util::secp::constants::{
 	AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE, SECRET_KEY_SIZE,
 };
@@ -183,10 +184,8 @@ pub trait Reader {
 	fn read_i32(&mut self) -> Result<i32, Error>;
 	/// Read a i64 from the underlying Read
 	fn read_i64(&mut self) -> Result<i64, Error>;
-	/// first before the data bytes.
-	fn read_vec(&mut self) -> Result<Vec<u8>, Error>;
-	/// first before the data bytes limited to max bytes.
-	fn read_limited_vec(&mut self, max: usize) -> Result<Vec<u8>, Error>;
+	/// Read a u64 len prefix followed by that number of exact bytes.
+	fn read_bytes_len_prefix(&mut self) -> Result<Vec<u8>, Error>;
 	/// Read a fixed number of bytes from the underlying reader.
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error>;
 	/// Consumes a byte from the reader, producing an error if it doesn't have
@@ -207,10 +206,13 @@ pub fn read_multi<T>(reader: &mut Reader, count: u64) -> Result<Vec<T>, Error>
 where
 	T: Readable + Hashed + Writeable,
 {
-	let elem_size = mem::size_of::<T>();
-	if count.checked_mul(elem_size as u64).is_none() {
+	// Very rudimentary check to ensure we do not overflow anything
+	// attempting to read huge amounts of data.
+	// Probably better than checking if count * size overflows a u64 though.
+	if count > 1_000_000 {
 		return Err(Error::TooLargeReadErr);
 	}
+
 	let result: Vec<T> = try!((0..count).map(|_| T::read(reader)).collect());
 	Ok(result)
 }
@@ -277,16 +279,11 @@ impl<'a> Reader for BinReader<'a> {
 		self.source.read_i64::<BigEndian>().map_err(map_io_err)
 	}
 	/// Read a variable size vector from the underlying Read. Expects a usize
-	fn read_vec(&mut self) -> Result<Vec<u8>, Error> {
+	fn read_bytes_len_prefix(&mut self) -> Result<Vec<u8>, Error> {
 		let len = self.read_u64()?;
 		self.read_fixed_bytes(len as usize)
 	}
-	/// Read limited variable size vector from the underlying Read. Expects a
-	/// usize
-	fn read_limited_vec(&mut self, max: usize) -> Result<Vec<u8>, Error> {
-		let len = cmp::min(max, self.read_u64()? as usize);
-		self.read_fixed_bytes(len as usize)
-	}
+	/// Read a fixed number of bytes.
 	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error> {
 		// not reading more than 100k in a single read
 		if length > 100000 {
@@ -335,9 +332,13 @@ impl Writeable for BlindingFactor {
 
 impl Readable for BlindingFactor {
 	fn read(reader: &mut Reader) -> Result<BlindingFactor, Error> {
-		let bytes = reader.read_fixed_bytes(SECRET_KEY_SIZE)?;
+		let bytes = reader.read_fixed_bytes(BlindingFactor::LEN)?;
 		Ok(BlindingFactor::from_slice(&bytes))
 	}
+}
+
+impl FixedLength for BlindingFactor {
+	const LEN: usize = SECRET_KEY_SIZE;
 }
 
 impl Writeable for Identifier {
@@ -361,27 +362,30 @@ impl Writeable for RangeProof {
 
 impl Readable for RangeProof {
 	fn read(reader: &mut Reader) -> Result<RangeProof, Error> {
-		let p = reader.read_limited_vec(MAX_PROOF_SIZE)?;
-		let mut a = [0; MAX_PROOF_SIZE];
-		a[..p.len()].clone_from_slice(&p[..]);
+		let len = reader.read_u64()?;
+		let max_len = cmp::min(len as usize, MAX_PROOF_SIZE);
+		let p = reader.read_fixed_bytes(max_len)?;
+		let mut proof = [0; MAX_PROOF_SIZE];
+		proof[..p.len()].clone_from_slice(&p[..]);
 		Ok(RangeProof {
-			proof: a,
-			plen: p.len(),
+			plen: proof.len(),
+			proof,
 		})
 	}
 }
 
-impl PMMRable for RangeProof {
-	fn len() -> usize {
-		MAX_PROOF_SIZE + 8
-	}
+impl FixedLength for RangeProof {
+	const LEN: usize = 8 // length prefix
+		+ MAX_PROOF_SIZE;
 }
+
+impl PMMRable for RangeProof {}
 
 impl Readable for Signature {
 	fn read(reader: &mut Reader) -> Result<Signature, Error> {
-		let a = reader.read_fixed_bytes(AGG_SIGNATURE_SIZE)?;
-		let mut c = [0; AGG_SIGNATURE_SIZE];
-		c[..AGG_SIGNATURE_SIZE].clone_from_slice(&a[..AGG_SIGNATURE_SIZE]);
+		let a = reader.read_fixed_bytes(Signature::LEN)?;
+		let mut c = [0; Signature::LEN];
+		c[..Signature::LEN].clone_from_slice(&a[..Signature::LEN]);
 		Ok(Signature::from_raw_data(&c).unwrap())
 	}
 }
@@ -390,6 +394,10 @@ impl Writeable for Signature {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_fixed_bytes(self)
 	}
+}
+
+impl FixedLength for Signature {
+	const LEN: usize = AGG_SIGNATURE_SIZE;
 }
 
 /// Utility wrapper for an underlying byte Writer. Defines higher level methods
@@ -535,11 +543,17 @@ impl Writeable for [u8; 4] {
 	}
 }
 
-/// Trait for types that can serialize and report their size
-pub trait PMMRable: Readable + Writeable + Clone {
-	/// Length in bytes
-	fn len() -> usize;
+/// Trait for types that serialize to a known fixed length.
+pub trait FixedLength {
+	/// The length in bytes
+	const LEN: usize;
 }
+
+/// Trait for types that can be added to a "hash only" PMMR (block headers for example).
+pub trait HashOnlyPMMRable: Writeable + Clone + Debug {}
+
+/// Trait for types that can be added to a PMMR.
+pub trait PMMRable: FixedLength + Readable + Writeable + Clone + Debug {}
 
 /// Generic trait to ensure PMMR elements can be hashed with an index
 pub trait PMMRIndexHashable {
@@ -547,16 +561,9 @@ pub trait PMMRIndexHashable {
 	fn hash_with_index(&self, index: u64) -> Hash;
 }
 
-impl<T: PMMRable> PMMRIndexHashable for T {
+impl<T: Writeable> PMMRIndexHashable for T {
 	fn hash_with_index(&self, index: u64) -> Hash {
 		(index, self).hash()
-	}
-}
-
-// Convenient way to hash two existing hashes together with an index.
-impl PMMRIndexHashable for (Hash, Hash) {
-	fn hash_with_index(&self, index: u64) -> Hash {
-		(index, &self.0, &self.1).hash()
 	}
 }
 

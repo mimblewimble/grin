@@ -21,16 +21,18 @@ use std::sync::Arc;
 use std::{error, fmt};
 use util::RwLock;
 
+use byteorder::{BigEndian, ByteOrder};
+
 use consensus::{self, VerifySortOrder};
 use core::hash::Hashed;
 use core::verifier_cache::VerifierCache;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
-use ser::{self, read_multi, PMMRable, Readable, Reader, Writeable, Writer};
+use ser::{self, read_multi, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
 use util;
+use util::secp;
 use util::secp::pedersen::{Commitment, RangeProof};
-use util::secp::{self, Message, Signature};
-use util::{kernel_sig_msg, static_secp_instance};
+use util::static_secp_instance;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -81,6 +83,8 @@ pub enum Error {
 	/// Validation error relating to kernel features.
 	/// It is invalid for a transaction to contain a coinbase kernel, for example.
 	InvalidKernelFeatures,
+	/// Signature verification error.
+	IncorrectSignature,
 }
 
 impl error::Error for Error {
@@ -143,7 +147,7 @@ pub struct TxKernel {
 	pub excess: Commitment,
 	/// The signature proving the excess is a valid public key, which signs
 	/// the transaction fee.
-	pub excess_sig: Signature,
+	pub excess_sig: secp::Signature,
 }
 
 hashable_ord!(TxKernel);
@@ -179,7 +183,7 @@ impl Readable for TxKernel {
 			fee: reader.read_u64()?,
 			lock_height: reader.read_u64()?,
 			excess: Commitment::read(reader)?,
-			excess_sig: Signature::read(reader)?,
+			excess_sig: secp::Signature::read(reader)?,
 		})
 	}
 }
@@ -190,11 +194,17 @@ impl TxKernel {
 		self.excess
 	}
 
+	/// The msg signed as part of the tx kernel.
+	/// Consists of the fee and the lock_height.
+	pub fn msg_to_sign(&self) -> Result<secp::Message, Error> {
+		let msg = kernel_sig_msg(self.fee, self.lock_height)?;
+		Ok(msg)
+	}
+
 	/// Verify the transaction proof validity. Entails handling the commitment
 	/// as a public key and checking the signature verifies with the fee as
 	/// message.
-	pub fn verify(&self) -> Result<(), secp::Error> {
-		let msg = Message::from_slice(&kernel_sig_msg(self.fee, self.lock_height))?;
+	pub fn verify(&self) -> Result<(), Error> {
 		let secp = static_secp_instance();
 		let secp = secp.lock();
 		let sig = &self.excess_sig;
@@ -203,14 +213,14 @@ impl TxKernel {
 		if !secp::aggsig::verify_single(
 			&secp,
 			&sig,
-			&msg,
+			&self.msg_to_sign()?,
 			None,
 			&pubkey,
 			Some(&pubkey),
 			None,
 			false,
 		) {
-			return Err(secp::Error::IncorrectSignature);
+			return Err(Error::IncorrectSignature);
 		}
 		Ok(())
 	}
@@ -222,7 +232,7 @@ impl TxKernel {
 			fee: 0,
 			lock_height: 0,
 			excess: Commitment::from_vec(vec![0; 33]),
-			excess_sig: Signature::from_raw_data(&[0; 64]).unwrap(),
+			excess_sig: secp::Signature::from_raw_data(&[0; 64]).unwrap(),
 		}
 	}
 
@@ -240,12 +250,67 @@ impl TxKernel {
 	}
 }
 
-impl PMMRable for TxKernel {
-	fn len() -> usize {
-		17 + // features plus fee and lock_height
-			secp::constants::PEDERSEN_COMMITMENT_SIZE + secp::constants::AGG_SIGNATURE_SIZE
+/// Wrapper around a tx kernel used when maintaining them in the MMR.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct TxKernelEntry {
+	/// The underlying tx kernel.
+	pub kernel: TxKernel,
+}
+
+impl Writeable for TxKernelEntry {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		ser_multiwrite!(
+			writer,
+			[write_u8, self.kernel.features.bits()],
+			[write_u64, self.kernel.fee],
+			[write_u64, self.kernel.lock_height],
+			[write_fixed_bytes, &self.kernel.excess]
+		);
+		self.kernel.excess_sig.write(writer)?;
+		Ok(())
 	}
 }
+
+impl Readable for TxKernelEntry {
+	fn read(reader: &mut Reader) -> Result<TxKernelEntry, ser::Error> {
+		let features =
+			KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
+		let kernel = TxKernel {
+			features: features,
+			fee: reader.read_u64()?,
+			lock_height: reader.read_u64()?,
+			excess: Commitment::read(reader)?,
+			excess_sig: secp::Signature::read(reader)?,
+		};
+		Ok(TxKernelEntry { kernel })
+	}
+}
+
+impl TxKernelEntry {
+	/// The excess on the underlying tx kernel.
+	pub fn excess(&self) -> Commitment {
+		self.kernel.excess
+	}
+
+	/// Verify the underlying tx kernel.
+	pub fn verify(&self) -> Result<(), Error> {
+		self.kernel.verify()
+	}
+}
+
+impl From<TxKernel> for TxKernelEntry {
+	fn from(kernel: TxKernel) -> Self {
+		TxKernelEntry { kernel }
+	}
+}
+
+impl FixedLength for TxKernelEntry {
+	const LEN: usize = 17 // features plus fee and lock_height
+		+ secp::constants::PEDERSEN_COMMITMENT_SIZE
+		+ secp::constants::AGG_SIGNATURE_SIZE;
+}
+
+impl PMMRable for TxKernelEntry {}
 
 /// TransactionBody is a common abstraction for transaction and block
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1087,26 +1152,22 @@ impl Output {
 	}
 
 	/// Validates the range proof using the commitment
-	pub fn verify_proof(&self) -> Result<(), secp::Error> {
+	pub fn verify_proof(&self) -> Result<(), Error> {
 		let secp = static_secp_instance();
-		let secp = secp.lock();
-		match secp.verify_bullet_proof(self.commit, self.proof, None) {
-			Ok(_) => Ok(()),
-			Err(e) => Err(e),
-		}
+		secp.lock()
+			.verify_bullet_proof(self.commit, self.proof, None)?;
+		Ok(())
 	}
 
 	/// Batch validates the range proofs using the commitments
 	pub fn batch_verify_proofs(
 		commits: &Vec<Commitment>,
 		proofs: &Vec<RangeProof>,
-	) -> Result<(), secp::Error> {
+	) -> Result<(), Error> {
 		let secp = static_secp_instance();
-		let secp = secp.lock();
-		match secp.verify_bullet_proof_multi(commits.clone(), proofs.clone(), None) {
-			Ok(_) => Ok(()),
-			Err(e) => Err(e),
-		}
+		secp.lock()
+			.verify_bullet_proof_multi(commits.clone(), proofs.clone(), None)?;
+		Ok(())
 	}
 }
 
@@ -1172,12 +1233,11 @@ impl OutputIdentifier {
 	}
 }
 
-/// Ensure this is implemented to centralize hashing with indexes
-impl PMMRable for OutputIdentifier {
-	fn len() -> usize {
-		1 + secp::constants::PEDERSEN_COMMITMENT_SIZE
-	}
+impl FixedLength for OutputIdentifier {
+	const LEN: usize = 1 + secp::constants::PEDERSEN_COMMITMENT_SIZE;
 }
+
+impl PMMRable for OutputIdentifier {}
 
 impl Writeable for OutputIdentifier {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
@@ -1196,6 +1256,15 @@ impl Readable for OutputIdentifier {
 			commit: Commitment::read(reader)?,
 		})
 	}
+}
+
+/// Construct msg from tx fee and lock_height.
+pub fn kernel_sig_msg(fee: u64, lock_height: u64) -> Result<secp::Message, Error> {
+	let mut bytes = [0; 32];
+	BigEndian::write_u64(&mut bytes[16..24], fee);
+	BigEndian::write_u64(&mut bytes[24..], lock_height);
+	let msg = secp::Message::from_slice(&bytes)?;
+	Ok(msg)
 }
 
 #[cfg(test)]

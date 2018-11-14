@@ -15,7 +15,7 @@
 use std::fs::File;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
-use util::RwLock;
+use util::{Mutex, RwLock};
 
 use chrono::prelude::{DateTime, Utc};
 use conn;
@@ -30,6 +30,7 @@ use types::{
 };
 
 const MAX_TRACK_SIZE: usize = 30;
+const MAX_PEER_MSG_PER_MIN: u64 = 500;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Remind: don't mix up this 'State' with that 'State' in p2p/src/store.rs,
@@ -49,11 +50,8 @@ pub struct Peer {
 	state: Arc<RwLock<State>>,
 	// set of all hashes known to this peer (so no need to send)
 	tracking_adapter: TrackingAdapter,
-	connection: Option<conn::Tracker>,
+	connection: Option<Mutex<conn::Tracker>>,
 }
-
-unsafe impl Sync for Peer {}
-unsafe impl Send for Peer {}
 
 impl Peer {
 	// Only accept and connect can be externally used to build a peer
@@ -95,7 +93,7 @@ impl Peer {
 		let addr = self.info.addr;
 		let adapter = Arc::new(self.tracking_adapter.clone());
 		let handler = Protocol::new(adapter, addr);
-		self.connection = Some(conn::listen(conn, handler));
+		self.connection = Some(Mutex::new(conn::listen(conn, handler)));
 	}
 
 	pub fn is_denied(config: &P2PConfig, peer_addr: &SocketAddr) -> bool {
@@ -152,20 +150,45 @@ impl Peer {
 		}
 	}
 
+	/// Whether the peer is considered abusive, mostly for spammy nodes
+	pub fn is_abusive(&self) -> bool {
+		if let Some(ref conn) = self.connection {
+			let conn = conn.lock();
+			let rec = conn.received_bytes.read();
+			let sent = conn.sent_bytes.read();
+			rec.count_per_min() > MAX_PEER_MSG_PER_MIN
+				|| sent.count_per_min() > MAX_PEER_MSG_PER_MIN
+		} else {
+			false
+		}
+	}
+
 	/// Number of bytes sent to the peer
-	pub fn sent_bytes(&self) -> Option<u64> {
+	pub fn last_min_sent_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
-			let sent_bytes = tracker.sent_bytes.read();
-			return Some(*sent_bytes);
+			let conn = tracker.lock();
+			let sent_bytes = conn.sent_bytes.read();
+			return Some(sent_bytes.bytes_per_min());
 		}
 		None
 	}
 
 	/// Number of bytes received from the peer
-	pub fn received_bytes(&self) -> Option<u64> {
+	pub fn last_min_received_bytes(&self) -> Option<u64> {
 		if let Some(ref tracker) = self.connection {
-			let received_bytes = tracker.received_bytes.read();
-			return Some(*received_bytes);
+			let conn = tracker.lock();
+			let received_bytes = conn.received_bytes.read();
+			return Some(received_bytes.bytes_per_min());
+		}
+		None
+	}
+
+	pub fn last_min_message_counts(&self) -> Option<(u64, u64)> {
+		if let Some(ref tracker) = self.connection {
+			let conn = tracker.lock();
+			let received_bytes = conn.received_bytes.read();
+			let sent_bytes = conn.sent_bytes.read();
+			return Some((sent_bytes.count_per_min(), received_bytes.count_per_min()));
 		}
 		None
 	}
@@ -185,6 +208,7 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
 			.send(ping_msg, msg::Type::Ping)
 	}
 
@@ -195,6 +219,7 @@ impl Peer {
 			.connection
 			.as_ref()
 			.unwrap()
+			.lock()
 			.send(ban_reason_msg, msg::Type::BanReason)
 		{
 			Ok(_) => debug!("Sent ban reason {:?} to {}", ban_reason, self.info.addr),
@@ -213,6 +238,7 @@ impl Peer {
 			self.connection
 				.as_ref()
 				.unwrap()
+				.lock()
 				.send(b, msg::Type::Block)?;
 			Ok(true)
 		} else {
@@ -231,6 +257,7 @@ impl Peer {
 			self.connection
 				.as_ref()
 				.unwrap()
+				.lock()
 				.send(b, msg::Type::CompactBlock)?;
 			Ok(true)
 		} else {
@@ -249,6 +276,7 @@ impl Peer {
 			self.connection
 				.as_ref()
 				.unwrap()
+				.lock()
 				.send(bh, msg::Type::Header)?;
 			Ok(true)
 		} else {
@@ -261,14 +289,45 @@ impl Peer {
 		}
 	}
 
-	/// Sends the provided transaction to the remote peer. The request may be
-	/// dropped if the remote peer is known to already have the transaction.
-	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<bool, Error> {
-		if !self.tracking_adapter.has(tx.hash()) {
-			debug!("Send tx {} to {}", tx.hash(), self.info.addr);
+	pub fn send_tx_kernel_hash(&self, h: Hash) -> Result<bool, Error> {
+		if !self.tracking_adapter.has(h) {
+			debug!("Send tx kernel hash {} to {}", h, self.info.addr);
 			self.connection
 				.as_ref()
 				.unwrap()
+				.lock()
+				.send(h, msg::Type::TransactionKernel)?;
+			Ok(true)
+		} else {
+			debug!(
+				"Not sending tx kernel hash {} to {} (already seen)",
+				h, self.info.addr
+			);
+			Ok(false)
+		}
+	}
+
+	/// Sends the provided transaction to the remote peer. The request may be
+	/// dropped if the remote peer is known to already have the transaction.
+	/// We support broadcast of lightweight tx kernel hash
+	/// so track known txs by kernel hash.
+	pub fn send_transaction(&self, tx: &core::Transaction) -> Result<bool, Error> {
+		let kernel = &tx.kernels()[0];
+
+		if self
+			.info
+			.capabilities
+			.contains(Capabilities::TX_KERNEL_HASH)
+		{
+			return self.send_tx_kernel_hash(kernel.hash());
+		}
+
+		if !self.tracking_adapter.has(kernel.hash()) {
+			debug!("Send full tx {} to {}", tx.hash(), self.info.addr);
+			self.connection
+				.as_ref()
+				.unwrap()
+				.lock()
 				.send(tx, msg::Type::Transaction)?;
 			Ok(true)
 		} else {
@@ -289,6 +348,7 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
 			.send(tx, msg::Type::StemTransaction)?;
 		Ok(())
 	}
@@ -298,7 +358,20 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
 			.send(&Locator { hashes: locator }, msg::Type::GetHeaders)
+	}
+
+	pub fn send_tx_request(&self, h: Hash) -> Result<(), Error> {
+		debug!(
+			"Requesting tx (kernel hash) {} from peer {}.",
+			h, self.info.addr
+		);
+		self.connection
+			.as_ref()
+			.unwrap()
+			.lock()
+			.send(&h, msg::Type::GetTransaction)
 	}
 
 	/// Sends a request for a specific block by hash
@@ -307,6 +380,7 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
 			.send(&h, msg::Type::GetBlock)
 	}
 
@@ -316,12 +390,13 @@ impl Peer {
 		self.connection
 			.as_ref()
 			.unwrap()
+			.lock()
 			.send(&h, msg::Type::GetCompactBlock)
 	}
 
 	pub fn send_peer_request(&self, capab: Capabilities) -> Result<(), Error> {
-		debug!("Asking {} for more peers.", self.info.addr);
-		self.connection.as_ref().unwrap().send(
+		trace!("Asking {} for more peers {:?}", self.info.addr, capab);
+		self.connection.as_ref().unwrap().lock().send(
 			&GetPeerAddrs {
 				capabilities: capab,
 			},
@@ -334,7 +409,7 @@ impl Peer {
 			"Asking {} for txhashset archive at {} {}.",
 			self.info.addr, height, hash
 		);
-		self.connection.as_ref().unwrap().send(
+		self.connection.as_ref().unwrap().lock().send(
 			&TxHashSetRequest { hash, height },
 			msg::Type::TxHashSetRequest,
 		)
@@ -342,11 +417,12 @@ impl Peer {
 
 	/// Stops the peer, closing its connection
 	pub fn stop(&self) {
-		let _ = self.connection.as_ref().unwrap().close_channel.send(());
+		stop_with_connection(&self.connection.as_ref().unwrap().lock());
 	}
 
 	fn check_connection(&self) -> bool {
-		match self.connection.as_ref().unwrap().error_channel.try_recv() {
+		let connection = self.connection.as_ref().unwrap().lock();
+		match connection.error_channel.try_recv() {
 			Ok(Error::Serialization(e)) => {
 				let need_stop = {
 					let mut state = self.state.write();
@@ -362,7 +438,7 @@ impl Peer {
 						"Client {} corrupted, will disconnect ({:?}).",
 						self.info.addr, e
 					);
-					self.stop();
+					stop_with_connection(&connection);
 				}
 				false
 			}
@@ -378,7 +454,7 @@ impl Peer {
 				};
 				if need_stop {
 					debug!("Client {} connection lost: {:?}", self.info.addr, e);
-					self.stop();
+					stop_with_connection(&connection);
 				}
 				false
 			}
@@ -388,6 +464,10 @@ impl Peer {
 			}
 		}
 	}
+}
+
+fn stop_with_connection(connection: &conn::Tracker) {
+	let _ = connection.close_channel.send(());
 }
 
 /// Adapter implementation that forwards everything to an underlying adapter
@@ -431,12 +511,22 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.total_height()
 	}
 
+	fn get_transaction(&self, kernel_hash: Hash) -> Option<core::Transaction> {
+		self.adapter.get_transaction(kernel_hash)
+	}
+
+	fn tx_kernel_received(&self, kernel_hash: Hash, addr: SocketAddr) {
+		self.push(kernel_hash);
+		self.adapter.tx_kernel_received(kernel_hash, addr)
+	}
+
 	fn transaction_received(&self, tx: core::Transaction, stem: bool) {
 		// Do not track the tx hash for stem txs.
 		// Otherwise we fail to handle the subsequent fluff or embargo expiration
 		// correctly.
 		if !stem {
-			self.push(tx.hash());
+			let kernel = &tx.kernels()[0];
+			self.push(kernel.hash());
 		}
 		self.adapter.transaction_received(tx, stem)
 	}

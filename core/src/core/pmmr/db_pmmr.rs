@@ -16,14 +16,14 @@
 
 use std::marker;
 
-use core::hash::Hash;
+use core::hash::{Hash, ZERO_HASH};
 use core::pmmr::{bintree_postorder_height, is_leaf, peak_map_height, peaks, HashOnlyBackend};
-use ser::{PMMRIndexHashable, PMMRable};
+use ser::{HashOnlyPMMRable, PMMRIndexHashable};
 
 /// Database backed MMR.
 pub struct DBPMMR<'a, T, B>
 where
-	T: PMMRable,
+	T: HashOnlyPMMRable,
 	B: 'a + HashOnlyBackend,
 {
 	/// The last position in the PMMR
@@ -36,7 +36,7 @@ where
 
 impl<'a, T, B> DBPMMR<'a, T, B>
 where
-	T: PMMRable + ::std::fmt::Debug,
+	T: HashOnlyPMMRable,
 	B: 'a + HashOnlyBackend,
 {
 	/// Build a new db backed MMR.
@@ -58,14 +58,15 @@ where
 		}
 	}
 
-	/// Get the unpruned size of the MMR.
-	pub fn unpruned_size(&self) -> u64 {
-		self.last_pos
-	}
-
 	/// Is the MMR empty?
 	pub fn is_empty(&self) -> bool {
 		self.last_pos == 0
+	}
+
+	/// Total size of the tree, including intermediary nodes and ignoring any
+	/// pruning.
+	pub fn unpruned_size(&self) -> u64 {
+		self.last_pos
 	}
 
 	/// Rewind the MMR to the specified position.
@@ -140,6 +141,9 @@ where
 
 	/// Return the overall root hash for this MMR.
 	pub fn root(&self) -> Hash {
+		if self.is_empty() {
+			return ZERO_HASH;
+		}
 		let mut res = None;
 		for peak in self.peaks().iter().rev() {
 			res = match res {

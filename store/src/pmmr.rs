@@ -25,10 +25,10 @@ use leaf_set::LeafSet;
 use prune_list::PruneList;
 use types::{prune_noop, AppendOnlyFile, HashFile};
 
-const PMMR_HASH_FILE: &'static str = "pmmr_hash.bin";
-const PMMR_DATA_FILE: &'static str = "pmmr_data.bin";
-const PMMR_LEAF_FILE: &'static str = "pmmr_leaf.bin";
-const PMMR_PRUN_FILE: &'static str = "pmmr_prun.bin";
+const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
+const PMMR_DATA_FILE: &str = "pmmr_data.bin";
+const PMMR_LEAF_FILE: &str = "pmmr_leaf.bin";
+const PMMR_PRUN_FILE: &str = "pmmr_prun.bin";
 
 /// The list of PMMR_Files for internal purposes
 pub const PMMR_FILES: [&str; 4] = [
@@ -49,36 +49,31 @@ pub const PMMR_FILES: [&str; 4] = [
 /// * A leaf_set tracks unpruned (unremoved) leaf positions in the MMR..
 /// * A prune_list tracks the positions of pruned (and compacted) roots in the
 /// MMR.
-pub struct PMMRBackend<T>
-where
-	T: PMMRable,
-{
+pub struct PMMRBackend<T: PMMRable> {
 	data_dir: String,
 	prunable: bool,
-	hash_file: AppendOnlyFile,
+	hash_file: HashFile,
 	data_file: AppendOnlyFile,
 	leaf_set: LeafSet,
 	prune_list: PruneList,
 	_marker: marker::PhantomData<T>,
 }
 
-impl<T> Backend<T> for PMMRBackend<T>
-where
-	T: PMMRable + ::std::fmt::Debug,
-{
+impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Append the provided data and hashes to the backend storage.
 	/// Add the new leaf pos to our leaf_set if this is a prunable MMR.
 	#[allow(unused_variables)]
 	fn append(&mut self, data: T, hashes: Vec<Hash>) -> Result<(), String> {
 		if self.prunable {
-			let record_len = Hash::SIZE as u64;
 			let shift = self.prune_list.get_total_shift();
-			let position = (self.hash_file.size_unsync() / record_len) + shift + 1;
+			let position = self.hash_file.size_unsync() + shift + 1;
 			self.leaf_set.add(position);
 		}
 		self.data_file.append(&mut ser::ser_vec(&data).unwrap());
-		for ref h in hashes {
-			self.hash_file.append(&mut ser::ser_vec(h).unwrap());
+		for h in &hashes {
+			self.hash_file
+				.append(h)
+				.map_err(|e| format!("Failed to append hash to file. {}", e))?;
 		}
 		Ok(())
 	}
@@ -87,27 +82,8 @@ where
 		if self.is_compacted(position) {
 			return None;
 		}
-
 		let shift = self.prune_list.get_shift(position);
-
-		// Read PMMR
-		// The MMR starts at 1, our binary backend starts at 0
-		let pos = position - 1;
-
-		// Must be on disk, doing a read at the correct position
-		let hash_record_len = Hash::SIZE;
-		let file_offset = ((pos - shift) as usize) * hash_record_len;
-		let data = self.hash_file.read(file_offset, hash_record_len);
-		match ser::deserialize(&mut &data[..]) {
-			Ok(h) => Some(h),
-			Err(e) => {
-				error!(
-					"Corrupted storage, could not read an entry from hash store: {:?}",
-					e
-				);
-				return None;
-			}
-		}
+		self.hash_file.read(position - shift)
 	}
 
 	fn get_data_from_file(&self, position: u64) -> Option<T> {
@@ -118,9 +94,8 @@ where
 		let pos = pmmr::n_leaves(position) - 1;
 
 		// Must be on disk, doing a read at the correct position
-		let record_len = T::len();
-		let file_offset = ((pos - shift) as usize) * record_len;
-		let data = self.data_file.read(file_offset, record_len);
+		let file_offset = ((pos - shift) as usize) * T::LEN;
+		let data = self.data_file.read(file_offset, T::LEN);
 		match ser::deserialize(&mut &data[..]) {
 			Ok(h) => Some(h),
 			Err(e) => {
@@ -128,7 +103,7 @@ where
 					"Corrupted storage, could not read an entry from data store: {:?}",
 					e
 				);
-				return None;
+				None
 			}
 		}
 	}
@@ -164,15 +139,14 @@ where
 
 		// Rewind the hash file accounting for pruned/compacted pos
 		let shift = self.prune_list.get_shift(position);
-		let record_len = Hash::SIZE as u64;
-		let file_pos = (position - shift) * record_len;
-		self.hash_file.rewind(file_pos);
+		self.hash_file
+			.rewind(position - shift)
+			.map_err(|e| format!("Failed to rewind hash file. {}", e))?;
 
 		// Rewind the data file accounting for pruned/compacted pos
 		let leaf_shift = self.prune_list.get_leaf_shift(position);
 		let flatfile_pos = pmmr::n_leaves(position);
-		let record_len = T::len() as u64;
-		let file_pos = (flatfile_pos - leaf_shift) * record_len;
+		let file_pos = (flatfile_pos - leaf_shift) * T::LEN as u64;
 		self.data_file.rewind(file_pos);
 
 		Ok(())
@@ -200,19 +174,16 @@ where
 	fn dump_stats(&self) {
 		debug!(
 			"pmmr backend: unpruned: {}, hashes: {}, data: {}, leaf_set: {}, prune_list: {}",
-			self.unpruned_size().unwrap_or(0),
-			self.hash_size().unwrap_or(0),
-			self.data_size().unwrap_or(0),
+			self.unpruned_size(),
+			self.hash_size(),
+			self.data_size(),
 			self.leaf_set.len(),
 			self.prune_list.len(),
 		);
 	}
 }
 
-impl<T> PMMRBackend<T>
-where
-	T: PMMRable + ::std::fmt::Debug,
-{
+impl<T: PMMRable> PMMRBackend<T> {
 	/// Instantiates a new PMMR backend.
 	/// Use the provided dir to store its files.
 	pub fn new(
@@ -220,8 +191,8 @@ where
 		prunable: bool,
 		header: Option<&BlockHeader>,
 	) -> io::Result<PMMRBackend<T>> {
-		let hash_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
-		let data_file = AppendOnlyFile::open(format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
+		let hash_file = HashFile::open(&format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
+		let data_file = AppendOnlyFile::open(&format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
 
 		let leaf_set_path = format!("{}/{}", data_dir, PMMR_LEAF_FILE);
 
@@ -229,11 +200,11 @@ where
 		// place so we use it.
 		if let Some(header) = header {
 			let leaf_snapshot_path = format!("{}/{}.{}", data_dir, PMMR_LEAF_FILE, header.hash());
-			LeafSet::copy_snapshot(leaf_set_path.clone(), leaf_snapshot_path.clone())?;
+			LeafSet::copy_snapshot(&leaf_set_path, &leaf_snapshot_path)?;
 		}
 
-		let leaf_set = LeafSet::open(leaf_set_path.clone())?;
-		let prune_list = PruneList::open(format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
+		let leaf_set = LeafSet::open(&leaf_set_path)?;
+		let prune_list = PruneList::open(&format!("{}/{}", data_dir, PMMR_PRUN_FILE))?;
 
 		Ok(PMMRBackend {
 			data_dir,
@@ -260,36 +231,29 @@ where
 
 	/// Number of elements in the PMMR stored by this backend. Only produces the
 	/// fully sync'd size.
-	pub fn unpruned_size(&self) -> io::Result<u64> {
+	pub fn unpruned_size(&self) -> u64 {
 		let total_shift = self.prune_list.get_total_shift();
-
-		let record_len = Hash::SIZE as u64;
-		let sz = self.hash_file.size()?;
-		Ok(sz / record_len + total_shift)
+		let sz = self.hash_file.size();
+		sz + total_shift
 	}
 
 	/// Number of elements in the underlying stored data. Extremely dependent on
 	/// pruning and compaction.
-	pub fn data_size(&self) -> io::Result<u64> {
-		let record_len = T::len() as u64;
-		self.data_file.size().map(|sz| sz / record_len)
+	pub fn data_size(&self) -> u64 {
+		self.data_file.size() / T::LEN as u64
 	}
 
 	/// Size of the underlying hashed data. Extremely dependent on pruning
 	/// and compaction.
-	pub fn hash_size(&self) -> io::Result<u64> {
-		self.hash_file.size().map(|sz| sz / Hash::SIZE as u64)
+	pub fn hash_size(&self) -> u64 {
+		self.hash_file.size()
 	}
 
 	/// Syncs all files to disk. A call to sync is required to ensure all the
 	/// data has been successfully written to disk.
 	pub fn sync(&mut self) -> io::Result<()> {
-		if let Err(e) = self.hash_file.flush() {
-			return Err(io::Error::new(
-				io::ErrorKind::Interrupted,
-				format!("Could not write to log hash storage, disk full? {:?}", e),
-			));
-		}
+		self.hash_file.flush()?;
+
 		if let Err(e) = self.data_file.flush() {
 			return Err(io::Error::new(
 				io::ErrorKind::Interrupted,
@@ -348,25 +312,17 @@ where
 
 		// 1. Save compact copy of the hash file, skipping removed data.
 		{
-			let record_len = Hash::SIZE as u64;
-
 			let off_to_rm = map_vec!(pos_to_rm, |pos| {
 				let shift = self.prune_list.get_shift(pos.into());
-				((pos as u64) - 1 - shift) * record_len
+				pos as u64 - 1 - shift
 			});
 
-			self.hash_file.save_prune(
-				tmp_prune_file_hash.clone(),
-				off_to_rm,
-				record_len,
-				&prune_noop,
-			)?;
+			self.hash_file
+				.save_prune(tmp_prune_file_hash.clone(), &off_to_rm, &prune_noop)?;
 		}
 
 		// 2. Save compact copy of the data file, skipping removed leaves.
 		{
-			let record_len = T::len() as u64;
-
 			let leaf_pos_to_rm = pos_to_rm
 				.iter()
 				.filter(|&x| pmmr::is_leaf(x.into()))
@@ -376,13 +332,13 @@ where
 			let off_to_rm = map_vec!(leaf_pos_to_rm, |&pos| {
 				let flat_pos = pmmr::n_leaves(pos);
 				let shift = self.prune_list.get_leaf_shift(pos);
-				(flat_pos - 1 - shift) * record_len
+				(flat_pos - 1 - shift) * T::LEN as u64
 			});
 
 			self.data_file.save_prune(
 				tmp_prune_file_data.clone(),
-				off_to_rm,
-				record_len,
+				&off_to_rm,
+				T::LEN as u64,
 				prune_cb,
 			)?;
 		}
@@ -400,14 +356,14 @@ where
 			tmp_prune_file_hash.clone(),
 			format!("{}/{}", self.data_dir, PMMR_HASH_FILE),
 		)?;
-		self.hash_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_HASH_FILE))?;
+		self.hash_file = HashFile::open(&format!("{}/{}", self.data_dir, PMMR_HASH_FILE))?;
 
 		// 5. Rename the compact copy of the data file and reopen it.
 		fs::rename(
 			tmp_prune_file_data.clone(),
 			format!("{}/{}", self.data_dir, PMMR_DATA_FILE),
 		)?;
-		self.data_file = AppendOnlyFile::open(format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
+		self.data_file = AppendOnlyFile::open(&format!("{}/{}", self.data_dir, PMMR_DATA_FILE))?;
 
 		// 6. Write the leaf_set to disk.
 		// Optimize the bitmap storage in the process.
@@ -445,7 +401,7 @@ where
 				}
 			}
 		}
-		(leaf_pos_to_rm, removed_excl_roots(expanded))
+		(leaf_pos_to_rm, removed_excl_roots(&expanded))
 	}
 }
 
@@ -457,7 +413,7 @@ pub struct HashOnlyMMRBackend {
 
 impl HashOnlyBackend for HashOnlyMMRBackend {
 	fn append(&mut self, hashes: Vec<Hash>) -> Result<(), String> {
-		for ref h in hashes {
+		for h in &hashes {
 			self.hash_file
 				.append(h)
 				.map_err(|e| format!("Failed to append to backend, {:?}", e))?;
@@ -480,15 +436,14 @@ impl HashOnlyBackend for HashOnlyMMRBackend {
 impl HashOnlyMMRBackend {
 	/// Instantiates a new PMMR backend.
 	/// Use the provided dir to store its files.
-	pub fn new(data_dir: String) -> io::Result<HashOnlyMMRBackend> {
-		let hash_file = HashFile::open(format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
+	pub fn new(data_dir: &str) -> io::Result<HashOnlyMMRBackend> {
+		let hash_file = HashFile::open(&format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		Ok(HashOnlyMMRBackend { hash_file })
 	}
 
 	/// The unpruned size of this MMR backend.
-	pub fn unpruned_size(&self) -> io::Result<u64> {
-		let sz = self.hash_file.size()?;
-		Ok(sz / Hash::SIZE as u64)
+	pub fn unpruned_size(&self) -> u64 {
+		self.hash_file.size()
 	}
 
 	/// Discard any pending changes to this MMR backend.
@@ -510,7 +465,7 @@ impl HashOnlyMMRBackend {
 
 /// Filter remove list to exclude roots.
 /// We want to keep roots around so we have hashes for Merkle proofs.
-fn removed_excl_roots(removed: Bitmap) -> Bitmap {
+fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 	removed
 		.iter()
 		.filter(|pos| {

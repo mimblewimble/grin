@@ -19,7 +19,6 @@ use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
-use std::mem;
 use std::sync::Arc;
 use util::RwLock;
 
@@ -35,7 +34,7 @@ use core::{
 use global;
 use keychain::{self, BlindingFactor};
 use pow::{Difficulty, Proof, ProofOfWork};
-use ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
+use ser::{self, FixedLength, HashOnlyPMMRable, Readable, Reader, Writeable, Writer};
 use util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
@@ -118,7 +117,7 @@ pub struct BlockHeader {
 	/// Height of this block since the genesis block (height 0)
 	pub height: u64,
 	/// Hash of the block previous to this in the chain.
-	pub previous: Hash,
+	pub prev_hash: Hash,
 	/// Root hash of the header MMR at the previous header.
 	pub prev_root: Hash,
 	/// Timestamp at which the block was built.
@@ -141,33 +140,27 @@ pub struct BlockHeader {
 	pub pow: ProofOfWork,
 }
 
+const FIXED_HEADER_SIZE: usize = 2 // version
+		+ 8 // height
+		+ 8 // timestamp
+		+ 5 * Hash::LEN // prev_hash, prev_root, output_root, range_proof_root, kernel_root
+		+ BlindingFactor::LEN // total_kernel_offset
+		+ 2 * 8 // output_mmr_size, kernel_mmr_size
+		+ Difficulty::LEN // total_difficulty
+		+ 4 // secondary_scaling
+		+ 8; // nonce
+
 /// Serialized size of fixed part of a BlockHeader, i.e. without pow
 fn fixed_size_of_serialized_header(_version: u16) -> usize {
-	let mut size: usize = 0;
-	size += mem::size_of::<u16>(); // version
-	size += mem::size_of::<u64>(); // height
-	size += mem::size_of::<i64>(); // timestamp
-	size += mem::size_of::<Hash>(); // previous
-	size += mem::size_of::<Hash>(); // prev_root
-	size += mem::size_of::<Hash>(); // output_root
-	size += mem::size_of::<Hash>(); // range_proof_root
-	size += mem::size_of::<Hash>(); // kernel_root
-	size += mem::size_of::<BlindingFactor>(); // total_kernel_offset
-	size += mem::size_of::<u64>(); // output_mmr_size
-	size += mem::size_of::<u64>(); // kernel_mmr_size
-	size += mem::size_of::<Difficulty>(); // total_difficulty
-	size += mem::size_of::<u32>(); // secondary_scaling
-	size += mem::size_of::<u64>(); // nonce
-	size
+	FIXED_HEADER_SIZE
 }
 
 /// Serialized size of a BlockHeader
 pub fn serialized_size_of_header(version: u16, edge_bits: u8) -> usize {
 	let mut size = fixed_size_of_serialized_header(version);
 
-	size += mem::size_of::<u8>(); // pow.edge_bits
-	let nonce_bits = edge_bits as usize;
-	let bitvec_len = global::proofsize() * nonce_bits;
+	size += 1; // pow.edge_bits
+	let bitvec_len = global::proofsize() * edge_bits as usize;
 	size += bitvec_len / 8; // pow.nonces
 	if bitvec_len % 8 != 0 {
 		size += 1;
@@ -181,7 +174,7 @@ impl Default for BlockHeader {
 			version: 1,
 			height: 0,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(0, 0), Utc),
-			previous: ZERO_HASH,
+			prev_hash: ZERO_HASH,
 			prev_root: ZERO_HASH,
 			output_root: ZERO_HASH,
 			range_proof_root: ZERO_HASH,
@@ -194,13 +187,7 @@ impl Default for BlockHeader {
 	}
 }
 
-/// Block header hashes are maintained in the header MMR
-/// but we store the data itself in the db.
-impl PMMRable for BlockHeader {
-	fn len() -> usize {
-		0
-	}
-}
+impl HashOnlyPMMRable for BlockHeader {}
 
 /// Serialization of a block header
 impl Writeable for BlockHeader {
@@ -217,7 +204,7 @@ impl Writeable for BlockHeader {
 impl Readable for BlockHeader {
 	fn read(reader: &mut Reader) -> Result<BlockHeader, ser::Error> {
 		let (version, height, timestamp) = ser_multiread!(reader, read_u16, read_u64, read_i64);
-		let previous = Hash::read(reader)?;
+		let prev_hash = Hash::read(reader)?;
 		let prev_root = Hash::read(reader)?;
 		let output_root = Hash::read(reader)?;
 		let range_proof_root = Hash::read(reader)?;
@@ -236,7 +223,7 @@ impl Readable for BlockHeader {
 			version,
 			height,
 			timestamp: DateTime::<Utc>::from_utc(NaiveDateTime::from_timestamp(timestamp, 0), Utc),
-			previous,
+			prev_hash,
 			prev_root,
 			output_root,
 			range_proof_root,
@@ -257,7 +244,7 @@ impl BlockHeader {
 			[write_u16, self.version],
 			[write_u64, self.height],
 			[write_i64, self.timestamp.timestamp()],
-			[write_fixed_bytes, &self.previous],
+			[write_fixed_bytes, &self.prev_hash],
 			[write_fixed_bytes, &self.prev_root],
 			[write_fixed_bytes, &self.output_root],
 			[write_fixed_bytes, &self.range_proof_root],
@@ -310,7 +297,7 @@ impl BlockHeader {
 	pub fn serialized_size(&self) -> usize {
 		let mut size = fixed_size_of_serialized_header(self.version);
 
-		size += mem::size_of::<u8>(); // pow.edge_bits
+		size += 1; // pow.edge_bits
 		let nonce_bits = self.pow.edge_bits() as usize;
 		let bitvec_len = global::proofsize() * nonce_bits;
 		size += bitvec_len / 8; // pow.nonces
@@ -418,35 +405,6 @@ impl Block {
 		Ok(block)
 	}
 
-	/// Extract tx data from this block as a single aggregate tx.
-	pub fn aggregate_transaction(
-		&self,
-		prev_kernel_offset: BlindingFactor,
-	) -> Result<Option<Transaction>, Error> {
-		let inputs = self.inputs().iter().cloned().collect();
-		let outputs = self
-			.outputs()
-			.iter()
-			.filter(|x| !x.features.contains(OutputFeatures::COINBASE_OUTPUT))
-			.cloned()
-			.collect();
-		let kernels = self
-			.kernels()
-			.iter()
-			.filter(|x| !x.features.contains(KernelFeatures::COINBASE_KERNEL))
-			.cloned()
-			.collect::<Vec<_>>();
-
-		let tx = if kernels.is_empty() {
-			None
-		} else {
-			let tx = Transaction::new(inputs, outputs, kernels)
-				.with_offset(self.block_kernel_offset(prev_kernel_offset)?);
-			Some(tx)
-		};
-		Ok(tx)
-	}
-
 	/// Hydrate a block from a compact block.
 	/// Note: caller must validate the block themselves, we do not validate it
 	/// here.
@@ -506,13 +464,12 @@ impl Block {
 		reward_kern: TxKernel,
 		difficulty: Difficulty,
 	) -> Result<Block, Error> {
-		// A block is just a big transaction, aggregate as such.
-		let mut agg_tx = transaction::aggregate(txs)?;
-
-		// Now add the reward output and reward kernel to the aggregate tx.
-		// At this point the tx is technically invalid,
-		// but the tx body is valid if we account for the reward (i.e. as a block).
-		agg_tx = agg_tx.with_output(reward_out).with_kernel(reward_kern);
+		// A block is just a big transaction, aggregate and add the reward output
+		// and reward kernel. At this point the tx is technically invalid but the
+		// tx body is valid if we account for the reward (i.e. as a block).
+		let agg_tx = transaction::aggregate(txs)?
+			.with_output(reward_out)
+			.with_kernel(reward_kern);
 
 		// Now add the kernel offset of the previous block for a total
 		let total_kernel_offset =
@@ -528,7 +485,7 @@ impl Block {
 			header: BlockHeader {
 				height: prev.height + 1,
 				timestamp,
-				previous: prev.hash(),
+				prev_hash: prev.hash(),
 				total_kernel_offset,
 				pow: ProofOfWork {
 					total_difficulty: difficulty + prev.pow.total_difficulty,
@@ -587,12 +544,6 @@ impl Block {
 	/// from the block. Provides a simple way to cut-through the block. The
 	/// elimination is stable with respect to the order of inputs and outputs.
 	/// Method consumes the block.
-	///
-	/// NOTE: exclude coinbase from cut-through process
-	/// if a block contains a new coinbase output and
-	/// is a transaction spending a previous coinbase
-	/// we do not want to cut-through (all coinbase must be preserved)
-	///
 	pub fn cut_through(self) -> Result<Block, Error> {
 		let mut inputs = self.inputs().clone();
 		let mut outputs = self.outputs().clone();
@@ -684,10 +635,8 @@ impl Block {
 			let secp = secp.lock();
 			let over_commit = secp.commit_value(reward(self.total_fees()))?;
 
-			let out_adjust_sum = secp.commit_sum(
-				cb_outs.iter().map(|x| x.commitment()).collect(),
-				vec![over_commit],
-			)?;
+			let out_adjust_sum =
+				secp.commit_sum(map_vec!(cb_outs, |x| x.commitment()), vec![over_commit])?;
 
 			let kerns_sum = secp.commit_sum(cb_kerns.iter().map(|x| x.excess).collect(), vec![])?;
 

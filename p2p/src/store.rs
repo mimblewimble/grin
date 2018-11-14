@@ -80,8 +80,10 @@ impl Writeable for PeerData {
 impl Readable for PeerData {
 	fn read(reader: &mut Reader) -> Result<PeerData, ser::Error> {
 		let addr = SockAddr::read(reader)?;
-		let (capab, ua, fl, lb, br) =
-			ser_multiread!(reader, read_u32, read_vec, read_u8, read_i64, read_i32);
+		let capab = reader.read_u32()?;
+		let ua = reader.read_bytes_len_prefix()?;
+		let (fl, lb, br) = ser_multiread!(reader, read_u8, read_i64, read_i32);
+
 		let lc = reader.read_i64();
 		// this only works because each PeerData is read in its own vector and this
 		// is the last data element
@@ -90,8 +92,9 @@ impl Readable for PeerData {
 		} else {
 			lc.unwrap()
 		};
+
 		let user_agent = String::from_utf8(ua).map_err(|_| ser::Error::CorruptedData)?;
-		let capabilities = Capabilities::from_bits(capab).ok_or(ser::Error::CorruptedData)?;
+		let capabilities = Capabilities::from_bits_truncate(capab);
 		let ban_reason = ReasonForBan::from_i32(br).ok_or(ser::Error::CorruptedData)?;
 
 		match State::from_u8(fl) {

@@ -40,7 +40,7 @@ folder "Provided by Grin" as services {
 package "Traits Implemented by Wallets" as traits {
 	database "WalletBackend" as wallet_backend
 	database "KeyChain" as keychain
-	component "WalletClient" as wallet_client
+	component "WalletToNodeClient" as wallet_client
 }
 
 note left of wallet_client

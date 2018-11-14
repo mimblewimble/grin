@@ -20,10 +20,10 @@ use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use pow::error::{Error, ErrorKind};
 use pow::num::{PrimInt, ToPrimitive};
 use pow::siphash::siphash24;
+use std::fmt;
 use std::hash::Hash;
 use std::io::Cursor;
 use std::ops::{BitOrAssign, Mul};
-use std::{fmt, mem};
 
 /// Operations needed for edge type (going to be u32 or u64)
 pub trait EdgeType: PrimInt + ToPrimitive + Mul + BitOrAssign + Hash {}
@@ -82,7 +82,7 @@ pub fn set_header_nonce(header: &[u8], nonce: Option<u32>) -> Result<[u64; 4], E
 	if let Some(n) = nonce {
 		let len = header.len();
 		let mut header = header.to_owned();
-		header.truncate(len - mem::size_of::<u32>());
+		header.truncate(len - 4); // drop last 4 bytes (u32) off the end
 		header.write_u32::<LittleEndian>(n)?;
 		create_siphash_keys(&header)
 	} else {

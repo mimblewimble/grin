@@ -25,7 +25,7 @@ use libwallet::types::*;
 /// and saves the private wallet identifiers of our selected outputs
 /// into our transaction context
 
-pub fn build_send_tx_slate<T: ?Sized, C, K>(
+pub fn build_send_tx_slate<T: ?Sized, C, L, K>(
 	wallet: &mut T,
 	num_participants: usize,
 	amount: u64,
@@ -36,6 +36,7 @@ pub fn build_send_tx_slate<T: ?Sized, C, K>(
 	change_outputs: usize,
 	selection_strategy_is_use_all: bool,
 	parent_key_id: Identifier,
+	is_self: bool,
 ) -> Result<
 	(
 		Slate,
@@ -45,8 +46,9 @@ pub fn build_send_tx_slate<T: ?Sized, C, K>(
 	Error,
 >
 where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
+	T: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	let (elems, inputs, change_amounts_derivations, amount, fee) = select_send_tx(
@@ -98,6 +100,9 @@ where
 		let mut batch = wallet.batch()?;
 		let log_id = batch.next_tx_log_id(&parent_key_id)?;
 		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxSent, log_id);
+		if is_self {
+			t.tx_type = TxLogEntryType::TxSentSelf;
+		}
 		t.tx_slate_id = Some(slate_id);
 		t.fee = Some(fee);
 		t.tx_hex = Some(tx_hex.to_owned());
@@ -140,10 +145,11 @@ where
 /// returning the key of the fresh output and a closure
 /// that actually performs the addition of the output to the
 /// wallet
-pub fn build_recipient_output_with_slate<T: ?Sized, C, K>(
+pub fn build_recipient_output_with_slate<T: ?Sized, C, L, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
 	parent_key_id: Identifier,
+	is_self: bool,
 ) -> Result<
 	(
 		Identifier,
@@ -153,8 +159,9 @@ pub fn build_recipient_output_with_slate<T: ?Sized, C, K>(
 	Error,
 >
 where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
+	T: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	// Create a potential output for this transaction
@@ -185,6 +192,9 @@ where
 		let mut batch = wallet.batch()?;
 		let log_id = batch.next_tx_log_id(&parent_key_id)?;
 		let mut t = TxLogEntry::new(parent_key_id.clone(), TxLogEntryType::TxReceived, log_id);
+		if is_self {
+			t.tx_type = TxLogEntryType::TxReceivedSelf;
+		}
 		t.tx_slate_id = Some(slate_id);
 		t.amount_credited = amount;
 		t.num_outputs = 1;
@@ -209,7 +219,7 @@ where
 /// Builds a transaction to send to someone from the HD seed associated with the
 /// wallet and the amount to send. Handles reading through the wallet data file,
 /// selecting outputs to spend and building the change.
-pub fn select_send_tx<T: ?Sized, C, K>(
+pub fn select_send_tx<T: ?Sized, C, L, K>(
 	wallet: &mut T,
 	amount: u64,
 	current_height: u64,
@@ -230,8 +240,9 @@ pub fn select_send_tx<T: ?Sized, C, K>(
 	Error,
 >
 where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
+	T: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	// select some spendable coins from the wallet
@@ -318,7 +329,7 @@ where
 }
 
 /// Selects inputs and change for a transaction
-pub fn inputs_and_change<T: ?Sized, C, K>(
+pub fn inputs_and_change<T: ?Sized, C, L, K>(
 	coins: &Vec<OutputData>,
 	wallet: &mut T,
 	amount: u64,
@@ -326,8 +337,9 @@ pub fn inputs_and_change<T: ?Sized, C, K>(
 	num_change_outputs: usize,
 ) -> Result<(Vec<Box<build::Append<K>>>, Vec<(u64, Identifier)>), Error>
 where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
+	T: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	let mut parts = vec![];
@@ -389,7 +401,7 @@ where
 /// we should pass something other than a bool in.
 /// TODO: Possibly move this into another trait to be owned by a wallet?
 
-pub fn select_coins<T: ?Sized, C, K>(
+pub fn select_coins<T: ?Sized, C, L, K>(
 	wallet: &mut T,
 	amount: u64,
 	current_height: u64,
@@ -400,8 +412,9 @@ pub fn select_coins<T: ?Sized, C, K>(
 ) -> (usize, Vec<OutputData>)
 //    max_outputs_available, Outputs
 where
-	T: WalletBackend<C, K>,
-	C: WalletClient,
+	T: WalletBackend<C, L, K>,
+	C: WalletToNodeClient,
+	L: WalletToWalletClient,
 	K: Keychain,
 {
 	// first find all eligible outputs based on number of confirmations

@@ -189,8 +189,9 @@ Return whether the outputs were validated against a node and an array of TxLogEn
 
 * **URL**
 
-  */v1/wallet/owner/retrieve_txs
-  */v1/wallet/owner/retrieve_txs?refresh?id=x
+  * /v1/wallet/owner/retrieve_txs
+  * /v1/wallet/owner/retrieve_txs?refresh&id=x
+  * /v1/wallet/owner/retrieve_txs?tx_id=x
 
 * **Method:**
 
@@ -200,8 +201,9 @@ Return whether the outputs were validated against a node and an array of TxLogEn
 
   **Optional:**
 
-  `refresh` to refresh from node
-  `tx_id=[number]` to retrieve only the specified output
+  * `refresh` to refresh from node
+  * `id=[number]` to retrieve only the specified output by id
+  * `tx_id=[string]` to retrieve only the specified output by tx id
 
 * **Data Params**
 
@@ -521,7 +523,8 @@ Roll back a transaction and all associated outputs with a given transaction id T
 
 * **URL**
 
-  /v1/wallet/owner/cancel_tx?id=x
+  * /v1/wallet/owner/cancel_tx?id=x
+  * /v1/wallet/owner/cancel_tx?tx_id=x
 
 * **Method:**
 
@@ -530,7 +533,8 @@ Roll back a transaction and all associated outputs with a given transaction id T
 * **URL Params**
 
   **Required:**
-  `id=[number]`
+  * `id=[number]` the transaction id
+  * `tx_id=[string]`the transaction slate id
 
 * **Data Params**
 

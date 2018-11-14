@@ -20,7 +20,7 @@ use chrono::prelude::Utc;
 use croaring::Bitmap;
 use rand::Rng;
 
-// We can use "andnot" to rewind the rm_log easily by passing in a "bitmask" of
+// We can use "andnot" to rewind easily by passing in a "bitmask" of
 // all the subsequent pos we want to rewind.
 #[test]
 fn test_andnot_bitmap() {
@@ -33,7 +33,7 @@ fn test_andnot_bitmap() {
 	assert_eq!(res.to_vec(), vec![1, 4]);
 }
 
-// Alternatively we can use "and" to rewind the rm_log easily by passing in a
+// Alternatively we can use "and" to rewind easily by passing in a
 // "bitmask" of all the pos we want to keep.
 #[test]
 fn test_and_bitmap() {
