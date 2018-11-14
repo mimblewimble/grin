@@ -210,8 +210,7 @@ bitflags! {
 		const PEER_LIST = 0b00000100;
 		/// Can broadcast and request txs by kernel hash.
 		const TX_KERNEL_HASH = 0b00001000;
-		/// Can provide block headers and the TxHashSet for some recent-enough
-		/// height.
+		/// Provides ability to request kernels separately from the rest of the TxHashSet.
 		const ENHANCED_TXHASHSET_HIST = 0b00010000;
 
 		/// All nodes right now are "full nodes".
