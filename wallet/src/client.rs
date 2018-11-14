@@ -187,31 +187,6 @@ impl HTTPWalletToWalletClient {
 }
 
 impl WalletToWalletClient for HTTPWalletToWalletClient {
-	/// Call the wallet API to create a coinbase output for the given
-	/// block_fees. Will retry based on default "retry forever with backoff"
-	/// behavior.
-	fn create_coinbase(
-		&self,
-		dest: &str,
-		block_fees: &BlockFees,
-	) -> Result<CbData, libwallet::Error> {
-		let url = format!("{}/v1/wallet/foreign/build_coinbase", dest);
-		match single_create_coinbase(&url, &block_fees) {
-			Err(e) => {
-				error!(
-					"Failed to get coinbase from {}. Run grin wallet listen?",
-					url
-				);
-				error!("Underlying Error: {}", e.cause().unwrap());
-				error!("Backtrace: {}", e.backtrace().unwrap());
-				Err(libwallet::ErrorKind::ClientCallback(
-					"Failed to get coinbase",
-				))?
-			}
-			Ok(res) => Ok(res),
-		}
-	}
-
 	/// Send the slate to a listening wallet instance
 	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
 		if &dest[..4] != "http" {

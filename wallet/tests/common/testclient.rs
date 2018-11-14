@@ -317,17 +317,6 @@ impl LocalWalletClient {
 }
 
 impl WalletToWalletClient for LocalWalletClient {
-	/// Call the wallet API to create a coinbase output for the given
-	/// block_fees. Will retry based on default "retry forever with backoff"
-	/// behavior.
-	fn create_coinbase(
-		&self,
-		_dest: &str,
-		_block_fees: &BlockFees,
-	) -> Result<CbData, libwallet::Error> {
-		unimplemented!();
-	}
-
 	/// Send the slate to a listening wallet instance
 	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
 		let m = WalletProxyMessage {

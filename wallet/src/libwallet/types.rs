@@ -230,9 +230,6 @@ pub trait WalletToNodeClient: Sync + Send + Clone {
 
 /// Encapsulate wallet to wallet communication functions
 pub trait WalletToWalletClient: Sync + Send + Clone {
-	/// Call the wallet API to create a coinbase transaction
-	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, Error>;
-
 	/// Send a transaction slate to another listening wallet and return result
 	/// TODO: Probably need a slate wrapper type
 	fn send_tx_slate(&self, addr: &str, slate: &Slate) -> Result<Slate, Error>;
@@ -703,3 +700,21 @@ pub struct SendTXArgs {
 	/// whether to use all outputs (combine)
 	pub selection_strategy_is_use_all: bool,
 }
+
+/// Common interface to encapsulate all requirements for
+/// wallet to wallet communication
+pub trait WalletCommPluginThingy {
+	fn receive_tx_async();
+	fn receive_tx_sync();
+	fn send_tx_async();
+	fn send_tx_sync();
+}
+
+/*
+	
+
+
+
+
+ 
+ */
