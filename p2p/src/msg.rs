@@ -22,6 +22,7 @@ use std::{thread, time};
 use core::consensus;
 use core::core::hash::Hash;
 use core::core::BlockHeader;
+use core::core::TxKernel;
 use core::pow::Difficulty;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
@@ -767,60 +768,74 @@ impl Readable for TxHashSetArchive {
 	}
 }
 
-/// Request to get the kernels up to the given block.
-/// This is required to sync a new node.
+/// Request to get the kernels(leaves) from the kernel MMR up to the given block.
+/// This will return the kernels from the specified leaf index onward, up to MAX_KERNELS at a time.
 pub struct GetKernels {
-	/// Hash of the block for which the kernels should be provided.
-	pub hash: Hash,
+    /// Hash of the last block for which the kernels should be provided.
+    /// Also used to identify the chain/fork the sender is requesting kernels for.
+    pub last_hash: Hash,
 	/// Height of the corresponding block.
-	pub height: u64,
+    pub last_height: u64,
+    /// The (leaf) index of the first kernel being requested.
+    pub first_kernel_index: u64,
 }
 
 impl Writeable for GetKernels {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.hash.write(writer)?;
-		writer.write_u64(self.height)?;
+        self.last_hash.write(writer)?;
+        writer.write_u64(self.last_height)?;
+        writer.write_u64(self.first_kernel_index)?;
 		Ok(())
 	}
 }
 
 impl Readable for GetKernels {
-	fn read(reader: &mut Reader) -> Result<KernelMMRRequest, ser::Error> {
+    fn read(reader: &mut Reader) -> Result<GetKernels, ser::Error> {
 		Ok(GetKernels {
-			hash: Hash::read(reader)?,
-			height: reader.read_u64()?,
+            last_hash: Hash::read(reader)?,
+            last_height: reader.read_u64()?,
+            first_kernel_index: reader.read_u64()?,
 		})
 	}
 }
 
-/// Response to a kernel MMR request.
-/// Must include a binary stream of the kernels after the message body.
+/// Response to a Get kernels request containing the requested kernels.
 pub struct Kernels {
-	/// Hash of the block for which the kernels are provided.
-	pub hash: Hash,
+    /// Hash of the block identifying the chain/fork the kernels belong to.
+    pub last_hash: Hash,
 	/// Height of the corresponding block.
-	pub height: u64,
-	/// Size in bytes of the kernels.
-	pub bytes: u64,
+    pub last_height: u64,
+    /// The (leaf) index of the first kernel returned.
+    pub first_kernel_index: u64,
+    /// The requested kernels in the order they appear in the Kernel MMR leafset.
+    pub kernels: Vec<TxKernel>,
 }
 
 impl Writeable for Kernels {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		self.hash.write(writer)?;
-		ser_multiwrite!(writer, [write_u64, self.height], [write_u64, self.bytes]);
+        self.last_hash.write(writer)?;
+        ser_multiwrite!(writer, [write_u64, self.last_height], [write_u64, self.first_kernel_index], [write_u32, self.kernels.len() as u32]);
+        for kernel in &self.kernels {
+            kernel.write(writer)?
+        }
 		Ok(())
 	}
 }
 
 impl Readable for Kernels {
 	fn read(reader: &mut Reader) -> Result<Kernels, ser::Error> {
-		let hash = Hash::read(reader)?;
-		let (height, bytes) = ser_multiread!(reader, read_u64, read_u64);
+        let last_hash = Hash::read(reader)?;
+        let (last_height, first_kernel_index, num_kernels) = ser_multiread!(reader, read_u64, read_u64, read_u32);
 
+        let mut kernels = Vec::with_capacity(num_kernels as usize);
+        for _ in 0..num_kernels {
+            kernels.push(TxKernel::read(reader)?);
+        }
 		Ok(Kernels {
-			hash,
-			height,
-			bytes,
+            last_hash,
+            last_height,
+            first_kernel_index,
+            kernels
 		})
 	}
 }

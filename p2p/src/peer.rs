@@ -23,7 +23,7 @@ use core::core::hash::{Hash, Hashed};
 use core::pow::Difficulty;
 use core::{core, global};
 use handshake::Handshake;
-use msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest, GetKernels};
+use msg::{self, BanReason, GetKernels, GetPeerAddrs, Locator, Ping, TxHashSetRequest};
 use protocol::Protocol;
 use types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerInfo, ReasonForBan, TxHashSetRead,
@@ -417,16 +417,30 @@ impl Peer {
 
 	/// Sends a request for the kernels up to the given block height and hash.
 	/// NOTE: Only sends the request if remote peer has ENHANCED_TXHASHSET_HIST capability.
-	pub fn send_kernel_request(&self, height: u64, hash: Hash) -> Result<bool, Error> {
-		if self.info.capabilities.contains(Capabilities::ENHANCED_TXHASHSET_HIST) {
-			trace!("Asking {} for kernels at {} {}.", self.info.addr, height, hash);
-			self.connection.as_ref().unwrap().lock().send(
-				&GetKernels { hash, height },
-				msg::Type::GetKernels
+    pub fn send_kernel_request(&self, last_hash: Hash, last_height: u64, first_kernel_index: u64) -> Result<bool, Error> {
+        if self
+            .info
+            .capabilities
+            .contains(Capabilities::ENHANCED_TXHASHSET_HIST)
+            {
+                trace!(
+                    "Asking {} for kernels up to block {} {} starting with kernel {}.",
+                    self.info.addr,
+                    last_hash,
+                    last_height,
+                    first_kernel_index
 			);
+                self.connection
+                    .as_ref()
+                    .unwrap()
+                    .lock()
+                    .send(&GetKernels { last_hash, last_height, first_kernel_index }, msg::Type::GetKernels);
 			Ok(true)
 		} else {
-			trace!("Not requesting kernels from {} (peer not capable)", self.info.addr);
+            trace!(
+                "Not requesting kernels from {} (peer not capable)",
+                self.info.addr
+            );
 			Ok(false)
 		}
 	}
