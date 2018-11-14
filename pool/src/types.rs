@@ -168,7 +168,7 @@ pub struct TxSource {
 }
 
 /// Possible errors when interacting with the transaction pool.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum PoolError {
 	/// An invalid pool entry caused by underlying tx validation error
 	InvalidTx(transaction::Error),
