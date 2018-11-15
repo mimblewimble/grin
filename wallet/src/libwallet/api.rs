@@ -160,6 +160,99 @@ where
 		keys::new_acct_path(&mut *w, label)
 	}
 
+	/// Creates a new partial transaction for the given amount
+	pub fn initiate_tx(
+		&mut self,
+		src_acct_name: Option<&str>,
+		amount: u64,
+		minimum_confirmations: u64,
+		max_outputs: usize,
+		num_change_outputs: usize,
+		selection_strategy_is_use_all: bool,
+	) -> Result<(Slate, impl FnOnce(&mut W, &str) -> Result<(), Error>), Error>
+	{
+		let mut w = self.wallet.lock();
+		w.open_with_credentials()?;
+		let parent_key_id = match src_acct_name {
+			Some(d) =>  {
+				let pm = w.get_acct_path(d.to_owned())?;
+				match pm {
+					Some(p) => p.path,
+					None => w.parent_key_id(),
+				}
+			}
+			None => w.parent_key_id(),
+		};
+
+		let (slate, context, lock_fn) = tx::create_send_tx(
+			&mut *w,
+			amount,
+			minimum_confirmations,
+			max_outputs,
+			num_change_outputs,
+			selection_strategy_is_use_all,
+			&parent_key_id,
+			false,
+		)?;
+
+		// Save the aggsig context in our DB for when we
+		// recieve the transaction back
+		{
+			let mut batch = w.batch()?;
+			batch.save_private_context(slate.id.as_bytes(), &context)?;
+			batch.commit()?;
+		}
+
+		w.close()?;
+		Ok((slate, lock_fn))
+	}
+
+	/// Receive a transaction from a sender,
+	/// This is included here to facilitate self sends
+	/// DO NOT expose this function externally via a listener
+	/// TODO: Remove duplicate code from foreign API
+	pub fn receive_tx(&mut self, slate: &mut Slate, dest_acct_name: Option<&str>) -> Result<(), Error> {
+		let mut w = self.wallet.lock();
+		w.open_with_credentials()?;
+		let parent_key_id = match dest_acct_name {
+			Some(d) =>  {
+				let pm = w.get_acct_path(d.to_owned())?;
+				match pm {
+					Some(p) => p.path,
+					None => w.parent_key_id(),
+				}
+			}
+			None => w.parent_key_id(),
+		};
+		let res = tx::receive_tx(&mut *w, slate, &parent_key_id, false);
+		w.close()?;
+
+		if let Err(e) = res {
+			error!("api: receive_tx: failed with error: {}", e);
+			Err(e)
+		} else {
+			debug!(
+				"api: receive_tx: successfully received tx: {}",
+				slate.tx.hash()
+			);
+			Ok(())
+		}
+	}
+
+	/// Lock outputs associated with a given slate/transaction
+	pub fn tx_lock_outputs(
+		&mut self,
+		slate: &Slate,
+		lock_fn: impl FnOnce(&mut W, &str) -> Result<(), Error>,
+	) -> Result<(), Error>
+	{
+		let mut w = self.wallet.lock();
+		w.open_with_credentials()?;
+		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
+		lock_fn(&mut *w, &tx_hex)?;
+		Ok(())
+	}
+
 	/// Issues a send transaction and sends to recipient
 	pub fn issue_send_tx(
 		&mut self,
@@ -596,10 +689,19 @@ where
 	}
 
 	/// Receive a transaction from a sender
-	pub fn receive_tx(&mut self, slate: &mut Slate) -> Result<(), Error> {
+	pub fn receive_tx(&mut self, slate: &mut Slate, dest_acct_name: Option<&str>) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
-		let parent_key_id = w.parent_key_id();
+		let parent_key_id = match dest_acct_name {
+			Some(d) =>  {
+				let pm = w.get_acct_path(d.to_owned())?;
+				match pm {
+					Some(p) => p.path,
+					None => w.parent_key_id(),
+				}
+			}
+			None => w.parent_key_id(),
+		};
 		let res = tx::receive_tx(&mut *w, slate, &parent_key_id, false);
 		w.close()?;
 

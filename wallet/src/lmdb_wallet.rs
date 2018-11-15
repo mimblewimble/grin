@@ -460,6 +460,8 @@ where
 		self.save(out.clone())
 	}
 
+	//TODO: Keys stored unencrypted in DB.. not good
+	// should store keys as derivation paths instead
 	fn save_private_context(&mut self, slate_id: &[u8], ctx: &Context) -> Result<(), Error> {
 		let ctx_key = to_key(PRIVATE_TX_CONTEXT_PREFIX, &mut slate_id.to_vec());
 		self.db.borrow().as_ref().unwrap().put_ser(&ctx_key, &ctx)?;

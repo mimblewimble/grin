@@ -57,22 +57,13 @@ fn self_send_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
-	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
+	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
 	let wallet1 = common::create_wallet(
 		&format!("{}/wallet1", test_dir),
-		client.clone(),
-		client.clone(),
+		client1.clone(),
+		client1.clone(),
 	);
-	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone());
-
-	// define recipient wallet, add to proxy
-	let wallet2 = common::create_wallet(
-		&format!("{}/wallet2", test_dir),
-		client.clone(),
-		client.clone(),
-	);
-	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone());
+	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -91,18 +82,6 @@ fn self_send_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		Ok(())
 	})?;
 
-	// add account to wallet 2
-	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		api.new_account_path("listener")?;
-		Ok(())
-	})?;
-
-	// Default wallet 2 to listen on that account
-	{
-		let mut w = wallet2.lock();
-		w.set_parent_key_id_by_name("listener")?;
-	}
-
 	// Get some mining done
 	{
 		let mut w = wallet1.lock();
@@ -118,16 +97,21 @@ fn self_send_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		assert_eq!(wallet1_info.last_confirmed_height, bh);
 		assert_eq!(wallet1_info.total, bh * reward);
 		// send to send
-		let slate = api.issue_self_tx(
+		let (mut slate, lock_fn) = api.initiate_tx(
+			Some("mining"),
 			reward * 2, // amount
 			2,          // minimum confirmations
 			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
-			"mining",
-			"listener",
+			//"mining",
+			//"listener",
 		)?;
-		api.post_tx(&slate, false)?; //mines a block
+		// Send directly to self
+		api.receive_tx(&mut slate, Some("listener"))?;
+		api.finalize_tx(&mut slate)?;
+		api.tx_lock_outputs(&slate, lock_fn)?;
+		api.post_tx(&slate, false)?; // mines a block
 		bh += 1;
 		Ok(())
 	})?;
@@ -163,7 +147,7 @@ fn self_send_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 }
 
 #[test]
-fn wallet_stress() {
+fn wallet_self_send() {
 	let test_dir = "test_output/self_send";
 	if let Err(e) = self_send_test_impl(test_dir) {
 		panic!("Libwallet Error: {} - {}", e, e.backtrace().unwrap());

@@ -57,22 +57,22 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
-	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
+	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
 	let wallet1 = common::create_wallet(
 		&format!("{}/wallet1", test_dir),
-		client.clone(),
-		client.clone(),
+		client1.clone(),
+		client1.clone(),
 	);
-	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone());
+	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
+	let client2 = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
 	// define recipient wallet, add to proxy
 	let wallet2 = common::create_wallet(
 		&format!("{}/wallet2", test_dir),
-		client.clone(),
-		client.clone(),
+		client2.clone(),
+		client2.clone(),
 	);
-	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone());
+	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -193,14 +193,17 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	}
 
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let slate = api.issue_send_tx(
+		let (mut slate, lock_fn) = api.initiate_tx(
+			None,
 			reward,    // amount
 			2,         // minimum confirmations
-			"wallet2", // dest
 			500,       // max outputs
 			1,         // num change outputs
 			true,      // select all outputs
 		)?;
+		slate = client1.send_tx_slate_direct("wallet2", &slate)?;
+		api.finalize_tx(&mut slate)?;
+		api.tx_lock_outputs(&slate, lock_fn)?;
 		api.post_tx(&slate, false)?;
 		Ok(())
 	})?;

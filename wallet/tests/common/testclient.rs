@@ -216,7 +216,7 @@ where
 		let w = dest_wallet.unwrap().1.clone();
 		let mut slate = serde_json::from_str(&m.body).unwrap();
 		libwallet::controller::foreign_single_use(w.clone(), |listener_api| {
-			listener_api.receive_tx(&mut slate)?;
+			listener_api.receive_tx(&mut slate, None)?;
 			Ok(())
 		})?;
 		Ok(WalletProxyMessage {
@@ -313,6 +313,29 @@ impl LocalWalletClient {
 	/// get an instance of the send queue for other senders
 	pub fn get_send_instance(&self) -> Sender<WalletProxyMessage> {
 		self.tx.lock().clone()
+	}
+
+	/// Send the slate to a listening wallet instance
+	pub fn send_tx_slate_direct(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+		let m = WalletProxyMessage {
+			sender_id: self.id.clone(),
+			dest: dest.to_owned(),
+			method: "send_tx_slate".to_owned(),
+			body: serde_json::to_string(slate).unwrap(),
+		};
+		{
+			let p = self.proxy_tx.lock();
+			p.send(m)
+				.context(libwallet::ErrorKind::ClientCallback("Send TX Slate"))?;
+		}
+		let r = self.rx.lock();
+		let m = r.recv().unwrap();
+		trace!("Received send_tx_slate response: {:?}", m.clone());
+		Ok(
+			serde_json::from_str(&m.body).context(libwallet::ErrorKind::ClientCallback(
+				"Parsing send_tx_slate response",
+			))?,
+		)
 	}
 }
 

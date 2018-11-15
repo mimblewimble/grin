@@ -32,6 +32,24 @@ impl HTTPWalletToWalletClient {
 	pub fn new() -> HTTPWalletToWalletClient {
 		HTTPWalletToWalletClient {}
 	}
+
+	pub fn send_tx_slate_direct (&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+		if &dest[..4] != "http" {
+			let err_str = format!(
+				"dest formatted as {} but send -d expected stdout or http://IP:port",
+				dest
+			);
+			error!("{}", err_str,);
+			Err(libwallet::ErrorKind::Uri)?
+		}
+		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
+		debug!("Posting transaction slate to {}", url);
+
+		let res = api::client::post(url.as_str(), None, slate).context(
+			libwallet::ErrorKind::ClientCallback("Posting transaction slate"),
+		)?;
+		Ok(res)
+	}
 }
 
 impl WalletToWalletClient for HTTPWalletToWalletClient {
