@@ -316,7 +316,11 @@ impl LocalWalletClient {
 	}
 
 	/// Send the slate to a listening wallet instance
-	pub fn send_tx_slate_direct(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+	pub fn send_tx_slate_direct(
+		&self,
+		dest: &str,
+		slate: &Slate,
+	) -> Result<Slate, libwallet::Error> {
 		let m = WalletProxyMessage {
 			sender_id: self.id.clone(),
 			dest: dest.to_owned(),

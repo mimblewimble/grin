@@ -542,15 +542,15 @@ where
 		req: Request<Body>,
 		mut api: APIForeign<T, C, L, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
-		Box::new(
-			parse_body(req).and_then(move |mut slate| match api.receive_tx(&mut slate, None) {
+		Box::new(parse_body(req).and_then(
+			move |mut slate| match api.receive_tx(&mut slate, None) {
 				Ok(_) => ok(slate.clone()),
 				Err(e) => {
 					error!("receive_tx: failed with error: {}", e);
 					err(e)
 				}
-			}),
-		)
+			},
+		))
 	}
 
 	fn handle_request(&self, req: Request<Body>) -> WalletResponseFuture {

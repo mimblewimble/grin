@@ -169,12 +169,11 @@ where
 		max_outputs: usize,
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
-	) -> Result<(Slate, impl FnOnce(&mut W, &str) -> Result<(), Error>), Error>
-	{
+	) -> Result<(Slate, impl FnOnce(&mut W, &str) -> Result<(), Error>), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = match src_acct_name {
-			Some(d) =>  {
+			Some(d) => {
 				let pm = w.get_acct_path(d.to_owned())?;
 				match pm {
 					Some(p) => p.path,
@@ -211,11 +210,15 @@ where
 	/// This is included here to facilitate self sends
 	/// DO NOT expose this function externally via a listener
 	/// TODO: Remove duplicate code from foreign API
-	pub fn receive_tx(&mut self, slate: &mut Slate, dest_acct_name: Option<&str>) -> Result<(), Error> {
+	pub fn receive_tx(
+		&mut self,
+		slate: &mut Slate,
+		dest_acct_name: Option<&str>,
+	) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = match dest_acct_name {
-			Some(d) =>  {
+			Some(d) => {
 				let pm = w.get_acct_path(d.to_owned())?;
 				match pm {
 					Some(p) => p.path,
@@ -244,8 +247,7 @@ where
 		&mut self,
 		slate: &Slate,
 		lock_fn: impl FnOnce(&mut W, &str) -> Result<(), Error>,
-	) -> Result<(), Error>
-	{
+	) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
@@ -689,11 +691,15 @@ where
 	}
 
 	/// Receive a transaction from a sender
-	pub fn receive_tx(&mut self, slate: &mut Slate, dest_acct_name: Option<&str>) -> Result<(), Error> {
+	pub fn receive_tx(
+		&mut self,
+		slate: &mut Slate,
+		dest_acct_name: Option<&str>,
+	) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
 		let parent_key_id = match dest_acct_name {
-			Some(d) =>  {
+			Some(d) => {
 				let pm = w.get_acct_path(d.to_owned())?;
 				match pm {
 					Some(p) => p.path,

@@ -33,7 +33,11 @@ impl HTTPWalletToWalletClient {
 		HTTPWalletToWalletClient {}
 	}
 
-	pub fn send_tx_slate_direct (&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+	pub fn send_tx_slate_direct(
+		&self,
+		dest: &str,
+		slate: &Slate,
+	) -> Result<Slate, libwallet::Error> {
 		if &dest[..4] != "http" {
 			let err_str = format!(
 				"dest formatted as {} but send -d expected stdout or http://IP:port",

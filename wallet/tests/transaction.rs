@@ -114,12 +114,11 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
 		// note this will increment the block count as part of the transaction "Posting"
 		let (slate_i, lock_fn) = sender_api.initiate_tx(
-			None,
-			amount,    // amount
-			2,         // minimum confirmations
-			500,       // max outputs
-			1,         // num change outputs
-			true,      // select all outputs
+			None, amount, // amount
+			2,      // minimum confirmations
+			500,    // max outputs
+			1,      // num change outputs
+			true,   // select all outputs
 		)?;
 		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
 		sender_api.finalize_tx(&mut slate)?;
@@ -352,12 +351,11 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
 		// note this will increment the block count as part of the transaction "Posting"
 		let (slate_i, lock_fn) = sender_api.initiate_tx(
-			None,
-			amount,    // amount
-			2,         // minimum confirmations
-			500,       // max outputs
-			1,         // num change outputs
-			true,      // select all outputs
+			None, amount, // amount
+			2,      // minimum confirmations
+			500,    // max outputs
+			1,      // num change outputs
+			true,   // select all outputs
 		)?;
 		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
 		sender_api.finalize_tx(&mut slate)?;

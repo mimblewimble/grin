@@ -104,8 +104,8 @@ fn self_send_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
-			//"mining",
-			//"listener",
+			            //"mining",
+			            //"listener",
 		)?;
 		// Send directly to self
 		api.receive_tx(&mut slate, Some("listener"))?;

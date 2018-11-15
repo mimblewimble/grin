@@ -194,12 +194,11 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (mut slate, lock_fn) = api.initiate_tx(
-			None,
-			reward,    // amount
-			2,         // minimum confirmations
-			500,       // max outputs
-			1,         // num change outputs
-			true,      // select all outputs
+			None, reward, // amount
+			2,      // minimum confirmations
+			500,    // max outputs
+			1,      // num change outputs
+			true,   // select all outputs
 		)?;
 		slate = client1.send_tx_slate_direct("wallet2", &slate)?;
 		api.finalize_tx(&mut slate)?;
