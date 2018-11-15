@@ -56,7 +56,7 @@ fn restore_wallet(base_dir: &str, wallet_dir: &str) -> Result<(), libwallet::Err
 	let dest_seed = format!("{}/wallet.seed", dest_dir);
 	fs::copy(source_seed, dest_seed)?;
 
-	let mut wallet_proxy: WalletProxy<LocalWalletClient, LocalWalletClient, ExtKeychain> =
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> =
 		WalletProxy::new(base_dir);
 	let client = LocalWalletClient::new(wallet_dir, wallet_proxy.tx.clone());
 
@@ -90,7 +90,7 @@ fn compare_wallet_restore(
 	let source_dir = format!("{}/{}", base_dir, wallet_dir);
 	let dest_dir = format!("{}/{}", base_dir, restore_name);
 
-	let mut wallet_proxy: WalletProxy<LocalWalletClient, LocalWalletClient, ExtKeychain> =
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> =
 		WalletProxy::new(base_dir);
 
 	let client = LocalWalletClient::new(wallet_dir, wallet_proxy.tx.clone());
@@ -184,7 +184,7 @@ fn compare_wallet_restore(
 fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
-	let mut wallet_proxy: WalletProxy<LocalWalletClient, LocalWalletClient, ExtKeychain> =
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> =
 		WalletProxy::new(test_dir);
 	let chain = wallet_proxy.chain.clone();
 

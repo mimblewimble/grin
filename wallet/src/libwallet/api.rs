@@ -34,7 +34,7 @@ use libtx::slate::Slate;
 use libwallet::internal::{keys, selection, tx, updater};
 use libwallet::types::{
 	AcctPathMapping, BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend,
-	WalletInfo, WalletToNodeClient, WalletToWalletClient,
+	WalletInfo, NodeClient,
 };
 use libwallet::{Error, ErrorKind};
 use util;
@@ -45,7 +45,7 @@ use util::secp::pedersen;
 pub struct APIOwner<W: ?Sized, C, K>
 where
 	W: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
@@ -58,7 +58,7 @@ where
 impl<W: ?Sized, C, K> APIOwner<W, C, K>
 where
 	W: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	/// Create new API instance
@@ -512,7 +512,7 @@ where
 pub struct APIForeign<W: ?Sized, C, K>
 where
 	W: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
@@ -525,7 +525,7 @@ where
 impl<'a, W: ?Sized, C, K> APIForeign<W, C, K>
 where
 	W: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	/// Create new API instance

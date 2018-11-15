@@ -63,10 +63,9 @@ pub struct WalletProxyMessage {
 
 /// communicates with a chain instance or other wallet
 /// listener APIs via message queues
-pub struct WalletProxy<C, L, K>
+pub struct WalletProxy<C, K>
 where
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	/// directory to create the chain in
@@ -92,14 +91,11 @@ where
 	phantom_c: PhantomData<C>,
 	/// Phantom
 	phantom_k: PhantomData<K>,
-	/// Phantom
-	phantom_l: PhantomData<L>,
 }
 
-impl<C, L, K> WalletProxy<C, L, K>
+impl<C, K> WalletProxy<C, K>
 where
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	/// Create a new client that will communicate with the given grin node
@@ -128,7 +124,6 @@ where
 			running: Arc::new(AtomicBool::new(false)),
 			phantom_c: PhantomData,
 			phantom_k: PhantomData,
-			phantom_l: PhantomData,
 		};
 		retval
 	}
@@ -343,9 +338,9 @@ impl LocalWalletClient {
 	}
 }
 
-impl WalletToWalletClient for LocalWalletClient {
+impl WalletCommAdapter for LocalWalletClient {
 	/// Send the slate to a listening wallet instance
-	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+	fn send_tx_sync(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
 		let m = WalletProxyMessage {
 			sender_id: self.id.clone(),
 			dest: dest.to_owned(),
@@ -368,7 +363,7 @@ impl WalletToWalletClient for LocalWalletClient {
 	}
 }
 
-impl WalletToNodeClient for LocalWalletClient {
+impl NodeClient for LocalWalletClient {
 	fn node_url(&self) -> &str {
 		"node"
 	}

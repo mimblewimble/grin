@@ -51,7 +51,7 @@ fn setup(test_dir: &str) {
 fn self_send_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
-	let mut wallet_proxy: WalletProxy<LocalWalletClient, LocalWalletClient, ExtKeychain> =
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> =
 		WalletProxy::new(test_dir);
 	let chain = wallet_proxy.chain.clone();
 

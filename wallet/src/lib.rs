@@ -45,8 +45,8 @@ extern crate grin_keychain as keychain;
 extern crate grin_store as store;
 extern crate grin_util as util;
 
-mod client;
-mod clients;
+mod node_clients;
+mod adapters;
 pub mod display;
 mod error;
 pub mod libtx;
@@ -54,13 +54,12 @@ pub mod libwallet;
 pub mod lmdb_wallet;
 mod types;
 
-pub use client::{create_coinbase, HTTPWalletToNodeClient};
-pub use clients::{start_listener, HTTPWalletToWalletClient};
+pub use node_clients::{create_coinbase, HTTPNodeClient};
+pub use adapters::{start_listener, HTTPWalletCommAdapter};
 pub use error::{Error, ErrorKind};
 pub use libwallet::controller;
 pub use libwallet::types::{
-	BlockFees, CbData, WalletBackend, WalletInfo, WalletInst, WalletToNodeClient,
-	WalletToWalletClient,
+	BlockFees, CbData, WalletBackend, WalletInfo, WalletInst, NodeClient, WalletCommAdapter,
 };
 pub use lmdb_wallet::{wallet_db_exists, LMDBBackend};
 pub use types::{WalletConfig, WalletSeed, SEED_FILE};

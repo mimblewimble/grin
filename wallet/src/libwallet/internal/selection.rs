@@ -47,7 +47,7 @@ pub fn build_send_tx_slate<T: ?Sized, C, K>(
 >
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	let (elems, inputs, change_amounts_derivations, amount, fee) = select_send_tx(
@@ -159,7 +159,7 @@ pub fn build_recipient_output_with_slate<T: ?Sized, C, K>(
 >
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	// Create a potential output for this transaction
@@ -239,7 +239,7 @@ pub fn select_send_tx<T: ?Sized, C, K>(
 >
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	// select some spendable coins from the wallet
@@ -335,7 +335,7 @@ pub fn inputs_and_change<T: ?Sized, C, K>(
 ) -> Result<(Vec<Box<build::Append<K>>>, Vec<(u64, Identifier)>), Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	let mut parts = vec![];
@@ -409,7 +409,7 @@ pub fn select_coins<T: ?Sized, C, K>(
 //    max_outputs_available, Outputs
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	// first find all eligible outputs based on number of confirmations

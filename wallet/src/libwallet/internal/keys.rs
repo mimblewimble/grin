@@ -15,13 +15,13 @@
 //! Wallet key management functions
 use keychain::{ChildNumber, ExtKeychain, Identifier, Keychain};
 use libwallet::error::{Error, ErrorKind};
-use libwallet::types::{AcctPathMapping, WalletBackend, WalletToNodeClient, WalletToWalletClient};
+use libwallet::types::{AcctPathMapping, WalletBackend, NodeClient};
 
 /// Get next available key in the wallet for a given parent
 pub fn next_available_key<T: ?Sized, C, K>(wallet: &mut T) -> Result<Identifier, Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	let child = wallet.next_child()?;
@@ -35,7 +35,7 @@ pub fn retrieve_existing_key<T: ?Sized, C, K>(
 ) -> Result<(Identifier, u32), Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	let existing = wallet.get(&key_id)?;
@@ -48,7 +48,7 @@ where
 pub fn accounts<T: ?Sized, C, K>(wallet: &mut T) -> Result<Vec<AcctPathMapping>, Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	Ok(wallet.acct_path_iter().collect())
@@ -58,7 +58,7 @@ where
 pub fn new_acct_path<T: ?Sized, C, K>(wallet: &mut T, label: &str) -> Result<Identifier, Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	let label = label.to_owned();
@@ -103,7 +103,7 @@ pub fn set_acct_path<T: ?Sized, C, K>(
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	let label = label.to_owned();

@@ -48,7 +48,7 @@ fn identify_utxo_outputs<T, C, K>(
 ) -> Result<Vec<OutputResult>, Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	let mut wallet_outputs: Vec<OutputResult> = Vec::new();
@@ -101,7 +101,7 @@ where
 pub fn restore<T, C, K>(wallet: &mut T) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	// Don't proceed if wallet_data has anything in it

@@ -49,13 +49,13 @@ fn setup(test_dir: &str) {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 }
 
-/// Exercises the Transaction API fully with a test WalletToNodeClient operating
+/// Exercises the Transaction API fully with a test NodeClient operating
 /// directly on a chain instance
 /// Callable with any type of wallet
 fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
-	let mut wallet_proxy: WalletProxy<LocalWalletClient, LocalWalletClient, ExtKeychain> =
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> =
 		WalletProxy::new(test_dir);
 	let chain = wallet_proxy.chain.clone();
 
@@ -302,7 +302,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
-	let mut wallet_proxy: WalletProxy<LocalWalletClient, LocalWalletClient, ExtKeychain> =
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> =
 		WalletProxy::new(test_dir);
 	let chain = wallet_proxy.chain.clone();
 

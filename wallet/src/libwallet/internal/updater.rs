@@ -29,7 +29,7 @@ use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
 use libwallet::types::{
 	BlockFees, CbData, OutputData, OutputStatus, TxLogEntry, TxLogEntryType, WalletBackend,
-	WalletInfo, WalletToNodeClient,
+	WalletInfo, NodeClient,
 };
 use util;
 use util::secp::pedersen;
@@ -43,7 +43,7 @@ pub fn retrieve_outputs<T: ?Sized, C, K>(
 ) -> Result<Vec<(OutputData, pedersen::Commitment)>, Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	// just read the wallet here, no need for a write lock
@@ -86,7 +86,7 @@ pub fn retrieve_txs<T: ?Sized, C, K>(
 ) -> Result<Vec<TxLogEntry>, Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	// just read the wallet here, no need for a write lock
@@ -121,7 +121,7 @@ pub fn refresh_outputs<T: ?Sized, C, K>(
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	let height = wallet.w2n_client().get_chain_height()?;
@@ -137,7 +137,7 @@ pub fn map_wallet_outputs<T: ?Sized, C, K>(
 ) -> Result<HashMap<pedersen::Commitment, Identifier>, Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	let mut wallet_outputs: HashMap<pedersen::Commitment, Identifier> = HashMap::new();
@@ -161,7 +161,7 @@ pub fn cancel_tx_and_outputs<T: ?Sized, C, K>(
 ) -> Result<(), libwallet::Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	let mut batch = wallet.batch()?;
@@ -198,7 +198,7 @@ pub fn apply_api_outputs<T: ?Sized, C, K>(
 ) -> Result<(), libwallet::Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	// now for each commit, find the output in the wallet and the corresponding
@@ -276,7 +276,7 @@ fn refresh_output_state<T: ?Sized, C, K>(
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	debug!("Refreshing wallet outputs");
@@ -298,7 +298,7 @@ where
 fn clean_old_unconfirmed<T: ?Sized, C, K>(wallet: &mut T, height: u64) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	if height < 500 {
@@ -326,7 +326,7 @@ pub fn retrieve_info<T: ?Sized, C, K>(
 ) -> Result<WalletInfo, Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	let current_height = wallet.last_confirmed_height()?;
@@ -370,7 +370,7 @@ pub fn build_coinbase<T: ?Sized, C, K>(
 ) -> Result<CbData, Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	let (out, kern, block_fees) = receive_coinbase(wallet, block_fees).context(ErrorKind::Node)?;
@@ -399,7 +399,7 @@ pub fn receive_coinbase<T: ?Sized, C, K>(
 ) -> Result<(Output, TxKernel, BlockFees), Error>
 where
 	T: WalletBackend<C, K>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	let height = block_fees.height;

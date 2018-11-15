@@ -40,14 +40,14 @@ use util::secp::{self, pedersen, Secp256k1};
 /// Combined trait to allow dynamic wallet dispatch
 pub trait WalletInst<C, K>: WalletBackend<C, K> + Send + Sync + 'static
 where
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 }
 impl<T, C, K> WalletInst<C, K> for T
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {}
 
@@ -57,7 +57,7 @@ where
 /// whatever credentials it needs
 pub trait WalletBackend<C, K>
 where
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	/// Initialize with whatever stored credentials we have
@@ -183,7 +183,7 @@ where
 
 /// Encapsulate all wallet-node communication functions. No functions within libwallet
 /// should care about communication details
-pub trait WalletToNodeClient: Sync + Send + Clone {
+pub trait NodeClient: Sync + Send + Clone {
 	/// Return the URL of the check node
 	fn node_url(&self) -> &str;
 
@@ -223,10 +223,10 @@ pub trait WalletToNodeClient: Sync + Send + Clone {
 }
 
 /// Encapsulate wallet to wallet communication functions
-pub trait WalletToWalletClient: Sync + Send + Clone {
+pub trait WalletCommAdapter: Sync + Send + Clone {
 	/// Send a transaction slate to another listening wallet and return result
 	/// TODO: Probably need a slate wrapper type
-	fn send_tx_slate(&self, addr: &str, slate: &Slate) -> Result<Slate, Error>;
+	fn send_tx_sync(&self, addr: &str, slate: &Slate) -> Result<Slate, Error>;
 }
 
 /// Information about an output that's being tracked by the wallet. Must be

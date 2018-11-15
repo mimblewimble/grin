@@ -116,7 +116,7 @@ impl<C, K> LMDBBackend<C, K> {
 
 impl<C, K> WalletBackend<C, K> for LMDBBackend<C, K>
 where
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	/// Initialise with whatever stored credentials we have
@@ -280,7 +280,7 @@ where
 /// discarded on error.
 pub struct Batch<'a, C: 'a, K: 'a>
 where
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	_store: &'a LMDBBackend<C, K>,
@@ -292,7 +292,7 @@ where
 #[allow(missing_docs)]
 impl<'a, C, K> WalletOutputBatch<K> for Batch<'a, C, K>
 where
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	fn keychain(&mut self) -> &mut K {

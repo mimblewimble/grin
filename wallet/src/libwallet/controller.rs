@@ -25,8 +25,7 @@ use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
 use libwallet::types::{
-	CbData, OutputData, SendTXArgs, TxLogEntry, WalletBackend, WalletInfo, WalletToNodeClient,
-	WalletToWalletClient,
+	CbData, OutputData, SendTXArgs, TxLogEntry, WalletBackend, WalletInfo, NodeClient,
 };
 use libwallet::{Error, ErrorKind};
 use serde::{Deserialize, Serialize};
@@ -46,7 +45,7 @@ pub fn owner_single_use<F, T: ?Sized, C, K>(wallet: Arc<Mutex<T>>, f: F) -> Resu
 where
 	T: WalletBackend<C, K>,
 	F: FnOnce(&mut APIOwner<T, C, K>) -> Result<(), Error>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	f(&mut APIOwner::new(wallet.clone()))?;
@@ -59,7 +58,7 @@ pub fn foreign_single_use<F, T: ?Sized, C, K>(wallet: Arc<Mutex<T>>, f: F) -> Re
 where
 	T: WalletBackend<C, K>,
 	F: FnOnce(&mut APIForeign<T, C, K>) -> Result<(), Error>,
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	f(&mut APIForeign::new(wallet.clone()))?;
@@ -77,7 +76,7 @@ pub fn owner_listener<T: ?Sized, C, K>(
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
 	OwnerAPIHandler<T, C, K>: Handler,
-	C: WalletToNodeClient + 'static,
+	C: NodeClient + 'static,
 	K: Keychain + 'static,
 {
 	let api_handler = OwnerAPIHandler::new(wallet);
@@ -116,7 +115,7 @@ pub fn foreign_listener<T: ?Sized, C, K>(
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
-	C: WalletToNodeClient + 'static,
+	C: NodeClient + 'static,
 	K: Keychain + 'static,
 {
 	let api_handler = ForeignAPIHandler::new(wallet);
@@ -146,7 +145,7 @@ type WalletResponseFuture = Box<Future<Item = Response<Body>, Error = Error> + S
 pub struct OwnerAPIHandler<T: ?Sized, C, K>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
-	C: WalletToNodeClient + 'static,
+	C: NodeClient + 'static,
 	K: Keychain + 'static,
 {
 	/// Wallet instance
@@ -158,7 +157,7 @@ where
 impl<T: ?Sized, C, K> OwnerAPIHandler<T, C, K>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
-	C: WalletToNodeClient + 'static,
+	C: NodeClient + 'static,
 	K: Keychain + 'static,
 {
 	/// Create a new owner API handler for GET methods
@@ -459,7 +458,7 @@ where
 impl<T: ?Sized, C, K> Handler for OwnerAPIHandler<T, C, K>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
-	C: WalletToNodeClient + 'static,
+	C: NodeClient + 'static,
 	K: Keychain + 'static,
 {
 	fn get(&self, req: Request<Body>) -> ResponseFuture {
@@ -493,7 +492,7 @@ where
 pub struct ForeignAPIHandler<T: ?Sized, C, K>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
-	C: WalletToNodeClient + 'static,
+	C: NodeClient + 'static,
 	K: Keychain + 'static,
 {
 	/// Wallet instance
@@ -505,7 +504,7 @@ where
 impl<T: ?Sized, C, K> ForeignAPIHandler<T, C, K>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
-	C: WalletToNodeClient + 'static,
+	C: NodeClient + 'static,
 	K: Keychain + 'static,
 {
 	/// create a new api handler
@@ -566,7 +565,7 @@ where
 impl<T: ?Sized, C, K> Handler for ForeignAPIHandler<T, C, K>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
-	C: WalletToNodeClient + Send + Sync + 'static,
+	C: NodeClient + Send + Sync + 'static,
 	K: Keychain + 'static,
 {
 	fn post(&self, req: Request<Body>) -> ResponseFuture {

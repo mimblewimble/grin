@@ -30,7 +30,7 @@ use std::{fs, thread, time};
 use util::Mutex;
 
 use framework::keychain::Keychain;
-use wallet::{HTTPWalletToNodeClient, HTTPWalletToWalletClient, LMDBBackend, WalletConfig};
+use wallet::{HTTPNodeClient, WalletCommAdapter, HTTPWalletCommAdapter, LMDBBackend, WalletConfig};
 
 /// Just removes all results from previous runs
 pub fn clean_all_output(test_name_dir: &str) {
@@ -266,13 +266,13 @@ impl LocalServerContainer {
 		let r = wallet::WalletSeed::init_file(&self.wallet_config);
 
 		let client_n =
-			HTTPWalletToNodeClient::new(&self.wallet_config.check_node_api_http_addr, None);
+			HTTPNodeClient::new(&self.wallet_config.check_node_api_http_addr, None);
 
 		if let Err(_e) = r {
 			//panic!("Error initializing wallet seed: {}", e);
 		}
 
-		let wallet: LMDBBackend<HTTPWalletToNodeClient, keychain::ExtKeychain> =
+		let wallet: LMDBBackend<HTTPNodeClient, keychain::ExtKeychain> =
 			LMDBBackend::new(self.wallet_config.clone(), "", client_n).unwrap_or_else(|e| {
 				panic!(
 					"Error creating wallet: {:?} Config: {:?}",
@@ -309,7 +309,7 @@ impl LocalServerContainer {
 		let keychain: keychain::ExtKeychain = wallet_seed
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
-		let client_n = HTTPWalletToNodeClient::new(&config.check_node_api_http_addr, None);
+		let client_n = HTTPNodeClient::new(&config.check_node_api_http_addr, None);
 		let mut wallet = LMDBBackend::new(config.clone(), "", client_n)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
@@ -336,8 +336,8 @@ impl LocalServerContainer {
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 
-		let client_n = HTTPWalletToNodeClient::new(&config.check_node_api_http_addr, None);
-		let client_w = HTTPWalletToWalletClient::new();
+		let client_n = HTTPNodeClient::new(&config.check_node_api_http_addr, None);
+		let client_w = HTTPWalletCommAdapter::new();
 
 		let max_outputs = 500;
 		let change_outputs = 1;
@@ -354,7 +354,7 @@ impl LocalServerContainer {
 				change_outputs,
 				selection_strategy == "all",
 			)?;
-			slate = client_w.send_tx_slate_direct(dest, &slate)?;
+			slate = client_w.send_tx_sync(dest, &slate)?;
 			api.finalize_tx(&mut slate)?;
 			api.tx_lock_outputs(&slate, lock_fn)?;
 			println!(
