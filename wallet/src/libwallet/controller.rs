@@ -295,7 +295,7 @@ where
 		})
 	}
 
-	fn issue_send_tx(
+	/*fn issue_send_tx(
 		&self,
 		req: Request<Body>,
 		mut api: APIOwner<T, C, L, K>,
@@ -326,6 +326,7 @@ where
 			}
 		}))
 	}
+	*/
 
 	fn finalize_tx(
 		&self,
@@ -436,10 +437,10 @@ where
 			.next()
 			.unwrap()
 		{
-			"issue_send_tx" => Box::new(
+			/*"issue_send_tx" => Box::new(
 				self.issue_send_tx(req, api)
 					.and_then(|slate| ok(json_response_pretty(&slate))),
-			),
+			),*/
 			"finalize_tx" => Box::new(
 				self.finalize_tx(req, api)
 					.and_then(|slate| ok(json_response_pretty(&slate))),

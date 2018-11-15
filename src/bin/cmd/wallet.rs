@@ -305,121 +305,64 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					})?;
 				let fluff = send_args.is_present("fluff");
 				let max_outputs = 500;
-				if method == "http" {
-					if dest.starts_with("http://") || dest.starts_with("https://") {
-						let result = api.issue_send_tx(
-							amount,
-							minimum_confirmations,
+				if method == "http" && !dest.starts_with("http://") && !dest.starts_with("https://")
+				{
+					return Err(ErrorKind::GenericError(format!(
+						"HTTP Destination should start with http://: or https://: {}",
+						dest
+					)).into());
+				}
+				let result = api.initiate_tx(
+					None,
+					amount,
+					minimum_confirmations,
+					max_outputs,
+					change_outputs,
+					selection_strategy == "all",
+				);
+				let (mut slate, lock_fn) = match result {
+					Ok(s) => {
+						info!(
+							"Tx created: {} grin to {} (strategy '{}')",
+							core::amount_to_hr_string(amount, false),
 							dest,
-							max_outputs,
-							change_outputs,
-							selection_strategy == "all",
+							selection_strategy,
 						);
-						let slate = match result {
-							Ok(s) => {
-								info!(
-									"Tx created: {} grin to {} (strategy '{}')",
-									core::amount_to_hr_string(amount, false),
-									dest,
-									selection_strategy,
-								);
-								s
-							}
-							Err(e) => {
-								error!("Tx not created: {}", e);
-								match e.kind() {
-									// user errors, don't backtrace
-									libwallet::ErrorKind::NotEnoughFunds { .. } => {}
-									libwallet::ErrorKind::FeeDispute { .. } => {}
-									libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
-									_ => {
-										// otherwise give full dump
-										error!("Backtrace: {}", e.backtrace().unwrap());
-									}
-								};
-								return Err(e);
+						s
+					}
+					Err(e) => {
+						error!("Tx not created: {}", e);
+						match e.kind() {
+							// user errors, don't backtrace
+							libwallet::ErrorKind::NotEnoughFunds { .. } => {}
+							libwallet::ErrorKind::FeeDispute { .. } => {}
+							libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
+							_ => {
+								// otherwise give full dump
+								error!("Backtrace: {}", e.backtrace().unwrap());
 							}
 						};
-						let result = api.post_tx(&slate, fluff);
-						match result {
-							Ok(_) => {
-								info!("Tx sent",);
-								Ok(())
-							}
-							Err(e) => {
-								error!("Tx not sent: {}", e);
-								Err(e)
-							}
-						}
-					} else {
-						return Err(ErrorKind::GenericError(format!(
-							"HTTP Destination should start with http://: or https://: {}",
-							dest
-						)).into());
+						return Err(e);
 					}
+				};
+				let client_w = HTTPWalletToWalletClient::new();
+				if method == "http" {
+					slate = client_w.send_tx_slate_direct(dest, &slate)?;
 				} else if method == "self" {
-					let result = api.issue_self_tx(
-						amount,
-						minimum_confirmations,
-						max_outputs,
-						change_outputs,
-						selection_strategy == "all",
-						account,
-						dest,
-					);
-					let slate = match result {
-						Ok(s) => {
-							info!(
-								"Tx created: {} grin to self, source acct: {} dest_acct: {} (strategy '{}')",
-								core::amount_to_hr_string(amount, false),
-								account,
-								dest,
-								selection_strategy,
-							);
-							s
-						}
-						Err(e) => {
-							error!("Tx not created: {}", e);
-							match e.kind() {
-								// user errors, don't backtrace
-								libwallet::ErrorKind::NotEnoughFunds { .. } => {}
-								libwallet::ErrorKind::FeeDispute { .. } => {}
-								libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
-								_ => {
-									// otherwise give full dump
-									error!("Backtrace: {}", e.backtrace().unwrap());
-								}
-							};
-							return Err(e);
-						}
-					};
-					let result = api.post_tx(&slate, fluff);
-					match result {
-						Ok(_) => {
-							info!("Tx sent",);
-							Ok(())
-						}
-						Err(e) => {
-							error!("Tx not sent: {}", e);
-							Err(e)
-						}
+					api.receive_tx(&mut slate, Some(dest))?;
+				}
+				api.finalize_tx(&mut slate)?;
+				api.tx_lock_outputs(&slate, lock_fn)?;
+				let result = api.post_tx(&slate, fluff);
+				match result {
+					Ok(_) => {
+						info!("Tx sent",);
+						Ok(())
 					}
-				} else if method == "file" {
-					api.send_tx(
-						true,
-						amount,
-						minimum_confirmations,
-						dest,
-						max_outputs,
-						change_outputs,
-						selection_strategy == "all",
-					).map_err(|e| ErrorKind::GenericError(format!("Send failed. e={:?}", e)))?;
-					Ok(())
-				} else {
-					return Err(ErrorKind::GenericError(format!(
-						"unsupported payment method: {}",
-						method
-					)).into());
+					Err(e) => {
+						error!("Tx not sent: {}", e);
+						Err(e)
+					}
 				}
 			}
 			("receive", Some(send_args)) => {

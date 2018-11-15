@@ -978,19 +978,21 @@ fn replicate_tx_fluff_failure() {
 	);
 
 	let amount = 30_000_000_000;
-	let mut slate = Slate::blank(1);
+	let dest = "http://127.0.0.1:33001";
 
 	wallet::controller::owner_single_use(wallet1, |api| {
-		slate = api
-			.issue_send_tx(
+		let (mut slate, lock_fn) = api.initiate_tx(
+				None,
 				amount,                   // amount
 				2,                        // minimum confirmations
-				"http://127.0.0.1:33001", // dest
 				500,                      // max outputs
 				1000,                     // num change outputs
 				true,                     // select all outputs
-			).unwrap();
-		api.post_tx(&slate, false).unwrap();
+			)?;
+		slate = client1_w.send_tx_slate_direct(dest, &slate)?;
+		api.finalize_tx(&mut slate)?;
+		api.tx_lock_outputs(&slate, lock_fn)?;
+		api.post_tx(&slate, false)?;
 		Ok(())
 	}).unwrap();
 

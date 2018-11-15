@@ -350,29 +350,27 @@ impl LocalServerContainer {
 		let max_outputs = 500;
 		let change_outputs = 1;
 
-		let mut wallet = LMDBBackend::new(config.clone(), "", client_n, client_w)
+		let mut wallet = LMDBBackend::new(config.clone(), "", client_n, client_w.clone())
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		let _ = wallet::controller::owner_single_use(Arc::new(Mutex::new(wallet)), |api| {
-			let result = api.issue_send_tx(
+			let (mut slate, lock_fn) = api.initiate_tx(
+				None,
 				amount,
 				minimum_confirmations,
-				dest,
 				max_outputs,
 				change_outputs,
 				selection_strategy == "all",
+			)?;
+			slate = client_w.send_tx_slate_direct(dest, &slate)?;
+			api.finalize_tx(&mut slate)?;
+			api.tx_lock_outputs(&slate, lock_fn)?;
+			println!(
+				"Tx sent: {} grin to {} (strategy '{}')",
+				core::core::amount_to_hr_string(amount, false),
+				dest,
+				selection_strategy,
 			);
-			match result {
-				Ok(_) => println!(
-					"Tx sent: {} grin to {} (strategy '{}')",
-					core::core::amount_to_hr_string(amount, false),
-					dest,
-					selection_strategy,
-				),
-				Err(e) => {
-					println!("Tx not sent to {}: {:?}", dest, e);
-				}
-			};
 			Ok(())
 		}).unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 	}
