@@ -982,13 +982,12 @@ fn replicate_tx_fluff_failure() {
 
 	wallet::controller::owner_single_use(wallet1, |api| {
 		let (mut slate, lock_fn) = api.initiate_tx(
-				None,
-				amount,                   // amount
-				2,                        // minimum confirmations
-				500,                      // max outputs
-				1000,                     // num change outputs
-				true,                     // select all outputs
-			)?;
+			None, amount, // amount
+			2,      // minimum confirmations
+			500,    // max outputs
+			1000,   // num change outputs
+			true,   // select all outputs
+		)?;
 		slate = client1_w.send_tx_slate_direct(dest, &slate)?;
 		api.finalize_tx(&mut slate)?;
 		api.tx_lock_outputs(&slate, lock_fn)?;
