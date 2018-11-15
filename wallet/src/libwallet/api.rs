@@ -42,11 +42,10 @@ use util::secp::pedersen;
 
 /// Wrapper around internal API functions, containing a reference to
 /// the wallet/keychain that they're acting upon
-pub struct APIOwner<W: ?Sized, C, L, K>
+pub struct APIOwner<W: ?Sized, C, K>
 where
-	W: WalletBackend<C, L, K>,
+	W: WalletBackend<C, K>,
 	C: WalletToNodeClient,
-	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
@@ -54,14 +53,12 @@ where
 	pub wallet: Arc<Mutex<W>>,
 	phantom: PhantomData<K>,
 	phantom_c: PhantomData<C>,
-	phantom_l: PhantomData<L>,
 }
 
-impl<W: ?Sized, C, L, K> APIOwner<W, C, L, K>
+impl<W: ?Sized, C, K> APIOwner<W, C, K>
 where
-	W: WalletBackend<C, L, K>,
+	W: WalletBackend<C, K>,
 	C: WalletToNodeClient,
-	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Create new API instance
@@ -70,7 +67,6 @@ where
 			wallet: wallet_in,
 			phantom: PhantomData,
 			phantom_c: PhantomData,
-			phantom_l: PhantomData,
 		}
 	}
 
@@ -513,11 +509,10 @@ where
 
 /// Wrapper around external API functions, intended to communicate
 /// with other parties
-pub struct APIForeign<W: ?Sized, C, L, K>
+pub struct APIForeign<W: ?Sized, C, K>
 where
-	W: WalletBackend<C, L, K>,
+	W: WalletBackend<C, K>,
 	C: WalletToNodeClient,
-	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
@@ -525,14 +520,12 @@ where
 	pub wallet: Arc<Mutex<W>>,
 	phantom: PhantomData<K>,
 	phantom_c: PhantomData<C>,
-	phantom_l: PhantomData<L>,
 }
 
-impl<'a, W: ?Sized, C, L, K> APIForeign<W, C, L, K>
+impl<'a, W: ?Sized, C, K> APIForeign<W, C, K>
 where
-	W: WalletBackend<C, L, K>,
+	W: WalletBackend<C, K>,
 	C: WalletToNodeClient,
-	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Create new API instance
@@ -541,7 +534,6 @@ where
 			wallet: wallet_in,
 			phantom: PhantomData,
 			phantom_c: PhantomData,
-			phantom_l: PhantomData,
 		})
 	}
 

@@ -61,7 +61,6 @@ fn self_send_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	let wallet1 = common::create_wallet(
 		&format!("{}/wallet1", test_dir),
 		client1.clone(),
-		client1.clone(),
 	);
 	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 

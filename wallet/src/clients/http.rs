@@ -77,14 +77,13 @@ impl WalletToWalletClient for HTTPWalletToWalletClient {
 	}
 }
 
-pub fn start_listener<T: ?Sized, C, L, K>(
+pub fn start_listener<T: ?Sized, C, K>(
 	params: HashMap<String, String>,
 	wallet: Arc<Mutex<T>>,
 ) -> Result<(), libwallet::Error>
 where
-	T: WalletBackend<C, L, K> + Send + Sync + 'static,
+	T: WalletBackend<C, K> + Send + Sync + 'static,
 	C: WalletToNodeClient + 'static,
-	L: WalletToWalletClient + 'static,
 	K: Keychain + 'static,
 {
 	let listen_addr = params.get("api_listen_addr").unwrap();

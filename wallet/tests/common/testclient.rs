@@ -78,7 +78,7 @@ where
 		String,
 		(
 			Sender<WalletProxyMessage>,
-			Arc<Mutex<WalletInst<LocalWalletClient, LocalWalletClient, K>>>,
+			Arc<Mutex<WalletInst<LocalWalletClient, K>>>,
 		),
 	>,
 	/// simulate json send to another client
@@ -138,7 +138,7 @@ where
 		&mut self,
 		addr: &str,
 		tx: Sender<WalletProxyMessage>,
-		wallet: Arc<Mutex<WalletInst<LocalWalletClient, LocalWalletClient, K>>>,
+		wallet: Arc<Mutex<WalletInst<LocalWalletClient, K>>>,
 	) {
 		self.wallets.insert(addr.to_owned(), (tx, wallet));
 	}

@@ -61,7 +61,6 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	let wallet1 = common::create_wallet(
 		&format!("{}/wallet1", test_dir),
 		client1.clone(),
-		client1.clone(),
 	);
 	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
@@ -69,7 +68,6 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	// define recipient wallet, add to proxy
 	let wallet2 = common::create_wallet(
 		&format!("{}/wallet2", test_dir),
-		client2.clone(),
 		client2.clone(),
 	);
 	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());

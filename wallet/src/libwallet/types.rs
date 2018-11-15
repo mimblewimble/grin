@@ -38,18 +38,16 @@ use util::secp::key::{PublicKey, SecretKey};
 use util::secp::{self, pedersen, Secp256k1};
 
 /// Combined trait to allow dynamic wallet dispatch
-pub trait WalletInst<C, L, K>: WalletBackend<C, L, K> + Send + Sync + 'static
+pub trait WalletInst<C, K>: WalletBackend<C, K> + Send + Sync + 'static
 where
 	C: WalletToNodeClient,
-	L: WalletToWalletClient,
 	K: Keychain,
 {
 }
-impl<T, C, L, K> WalletInst<C, L, K> for T
+impl<T, C, K> WalletInst<C, K> for T
 where
-	T: WalletBackend<C, L, K> + Send + Sync + 'static,
+	T: WalletBackend<C, K> + Send + Sync + 'static,
 	C: WalletToNodeClient,
-	L: WalletToWalletClient,
 	K: Keychain,
 {}
 
@@ -57,10 +55,9 @@ where
 /// Wallets should implement this backend for their storage. All functions
 /// here expect that the wallet instance has instantiated itself or stored
 /// whatever credentials it needs
-pub trait WalletBackend<C, L, K>
+pub trait WalletBackend<C, K>
 where
 	C: WalletToNodeClient,
-	L: WalletToWalletClient,
 	K: Keychain,
 {
 	/// Initialize with whatever stored credentials we have
@@ -74,9 +71,6 @@ where
 
 	/// Return the client being used to communicate with the node
 	fn w2n_client(&mut self) -> &mut C;
-
-	/// Return the client being used to communicate with other wallets
-	fn w2w_client(&mut self) -> &mut L;
 
 	/// Set parent key id by stored account name
 	fn set_parent_key_id_by_name(&mut self, label: &str) -> Result<(), Error>;

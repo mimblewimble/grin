@@ -60,7 +60,7 @@ fn restore_wallet(base_dir: &str, wallet_dir: &str) -> Result<(), libwallet::Err
 		WalletProxy::new(base_dir);
 	let client = LocalWalletClient::new(wallet_dir, wallet_proxy.tx.clone());
 
-	let wallet = common::create_wallet(&dest_dir, client.clone(), client.clone());
+	let wallet = common::create_wallet(&dest_dir, client.clone());
 
 	wallet_proxy.add_wallet(wallet_dir, client.get_send_instance(), wallet.clone());
 
@@ -94,7 +94,7 @@ fn compare_wallet_restore(
 		WalletProxy::new(base_dir);
 
 	let client = LocalWalletClient::new(wallet_dir, wallet_proxy.tx.clone());
-	let wallet_source = common::create_wallet(&source_dir, client.clone(), client.clone());
+	let wallet_source = common::create_wallet(&source_dir, client.clone());
 	wallet_proxy.add_wallet(
 		&wallet_dir,
 		client.get_send_instance(),
@@ -102,7 +102,7 @@ fn compare_wallet_restore(
 	);
 
 	let client = LocalWalletClient::new(&restore_name, wallet_proxy.tx.clone());
-	let wallet_dest = common::create_wallet(&dest_dir, client.clone(), client.clone());
+	let wallet_dest = common::create_wallet(&dest_dir, client.clone());
 	wallet_proxy.add_wallet(
 		&restore_name,
 		client.get_send_instance(),
@@ -194,7 +194,6 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 	let wallet1 = common::create_wallet(
 		&format!("{}/wallet1", test_dir),
 		client1.clone(),
-		client1.clone(),
 	);
 	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
@@ -202,7 +201,6 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 	let client2 = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
 	let wallet2 = common::create_wallet(
 		&format!("{}/wallet2", test_dir),
-		client2.clone(),
 		client2.clone(),
 	);
 	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());
@@ -224,7 +222,6 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 	let client3 = LocalWalletClient::new("wallet3", wallet_proxy.tx.clone());
 	let wallet3 = common::create_wallet(
 		&format!("{}/wallet3", test_dir),
-		client3.clone(),
 		client3.clone(),
 	);
 	wallet_proxy.add_wallet("wallet3", client3.get_send_instance(), wallet3.clone());

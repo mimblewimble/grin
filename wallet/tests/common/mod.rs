@@ -30,7 +30,7 @@ use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::{consensus, global, pow, ser};
 use wallet::libwallet;
 use wallet::libwallet::types::{
-	BlockFees, CbData, WalletInst, WalletToNodeClient, WalletToWalletClient,
+	BlockFees, CbData, WalletInst, WalletToNodeClient,
 };
 use wallet::lmdb_wallet::LMDBBackend;
 use wallet::{WalletBackend, WalletConfig};
@@ -115,14 +115,13 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbDa
 /// adds a reward output to a wallet, includes that reward in a block, mines
 /// the block and adds it to the chain, with option transactions included.
 /// Helpful for building up precise wallet balances for testing.
-pub fn award_block_to_wallet<C, L, K>(
+pub fn award_block_to_wallet<C, K>(
 	chain: &Chain,
 	txs: Vec<&Transaction>,
-	wallet: Arc<Mutex<WalletInst<C, L, K>>>,
+	wallet: Arc<Mutex<WalletInst<C, K>>>,
 ) -> Result<(), libwallet::Error>
 where
 	C: WalletToNodeClient,
-	L: WalletToWalletClient,
 	K: keychain::Keychain,
 {
 	// build block fees
@@ -143,14 +142,13 @@ where
 }
 
 /// Award a blocks to a wallet directly
-pub fn award_blocks_to_wallet<C, L, K>(
+pub fn award_blocks_to_wallet<C, K>(
 	chain: &Chain,
-	wallet: Arc<Mutex<WalletInst<C, L, K>>>,
+	wallet: Arc<Mutex<WalletInst<C, K>>>,
 	number: usize,
 ) -> Result<(), libwallet::Error>
 where
 	C: WalletToNodeClient,
-	L: WalletToWalletClient,
 	K: keychain::Keychain,
 {
 	for _ in 0..number {
@@ -160,20 +158,18 @@ where
 }
 
 /// dispatch a db wallet
-pub fn create_wallet<C, L, K>(
+pub fn create_wallet<C, K>(
 	dir: &str,
 	n_client: C,
-	w_client: L,
-) -> Arc<Mutex<WalletInst<C, L, K>>>
+) -> Arc<Mutex<WalletInst<C, K>>>
 where
 	C: WalletToNodeClient + 'static,
-	L: WalletToWalletClient + 'static,
 	K: keychain::Keychain + 'static,
 {
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
 	let _ = wallet::WalletSeed::init_file(&wallet_config);
-	let mut wallet = LMDBBackend::new(wallet_config.clone(), "", n_client, w_client)
+	let mut wallet = LMDBBackend::new(wallet_config.clone(), "", n_client)
 		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
 	wallet.open_with_credentials().unwrap_or_else(|e| {
 		panic!(

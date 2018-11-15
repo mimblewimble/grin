@@ -58,12 +58,11 @@ pub fn instantiate_wallet(
 	passphrase: &str,
 	account: &str,
 	node_api_secret: Option<String>,
-) -> Arc<Mutex<WalletInst<HTTPWalletToNodeClient, HTTPWalletToWalletClient, keychain::ExtKeychain>>>
+) -> Arc<Mutex<WalletInst<HTTPWalletToNodeClient, keychain::ExtKeychain>>>
 {
 	let client_n =
 		HTTPWalletToNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-	let client_w = HTTPWalletToWalletClient::new();
-	let mut db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, client_n, client_w)
+	let mut db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, client_n)
 		.unwrap_or_else(|e| {
 			panic!(
 				"Error creating DB wallet: {} Config: {:?}",
@@ -112,12 +111,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		info!("Wallet seed file created");
 		let client_n =
 			HTTPWalletToNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-		let client_w = HTTPWalletToWalletClient::new();
 		let _: LMDBBackend<
 			HTTPWalletToNodeClient,
-			HTTPWalletToWalletClient,
 			keychain::ExtKeychain,
-		> = LMDBBackend::new(wallet_config.clone(), "", client_n, client_w).unwrap_or_else(|e| {
+		> = LMDBBackend::new(wallet_config.clone(), "", client_n).unwrap_or_else(|e| {
 			panic!(
 				"Error creating DB for wallet: {} Config: {:?}",
 				e, wallet_config

@@ -267,7 +267,6 @@ impl LocalServerContainer {
 
 		let client_n =
 			HTTPWalletToNodeClient::new(&self.wallet_config.check_node_api_http_addr, None);
-		let client_w = HTTPWalletToWalletClient::new();
 
 		if let Err(_e) = r {
 			//panic!("Error initializing wallet seed: {}", e);
@@ -275,10 +274,9 @@ impl LocalServerContainer {
 
 		let wallet: LMDBBackend<
 			HTTPWalletToNodeClient,
-			HTTPWalletToWalletClient,
 			keychain::ExtKeychain,
 		> =
-			LMDBBackend::new(self.wallet_config.clone(), "", client_n, client_w).unwrap_or_else(
+			LMDBBackend::new(self.wallet_config.clone(), "", client_n).unwrap_or_else(
 				|e| {
 					panic!(
 						"Error creating wallet: {:?} Config: {:?}",
@@ -317,8 +315,7 @@ impl LocalServerContainer {
 			.derive_keychain("")
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let client_n = HTTPWalletToNodeClient::new(&config.check_node_api_http_addr, None);
-		let client_w = HTTPWalletToWalletClient::new();
-		let mut wallet = LMDBBackend::new(config.clone(), "", client_n, client_w)
+		let mut wallet = LMDBBackend::new(config.clone(), "", client_n)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		let parent_id = keychain::ExtKeychain::derive_key_id(2, 0, 0, 0, 0);
@@ -350,7 +347,7 @@ impl LocalServerContainer {
 		let max_outputs = 500;
 		let change_outputs = 1;
 
-		let mut wallet = LMDBBackend::new(config.clone(), "", client_n, client_w.clone())
+		let mut wallet = LMDBBackend::new(config.clone(), "", client_n)
 			.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 		wallet.keychain = Some(keychain);
 		let _ = wallet::controller::owner_single_use(Arc::new(Mutex::new(wallet)), |api| {
