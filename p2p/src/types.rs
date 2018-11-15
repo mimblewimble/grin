@@ -40,6 +40,9 @@ pub const MAX_PEER_ADDRS: u32 = 256;
 /// Maximum number of block header hashes to send as part of a locator
 pub const MAX_LOCATORS: u32 = 20;
 
+/// Maximum number of kernels a peer should ever send
+pub const MAX_KERNELS: u32 = 512;
+
 /// How long a banned peer should be banned for
 const BAN_WINDOW: i64 = 10800;
 
