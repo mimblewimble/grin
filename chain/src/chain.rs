@@ -146,7 +146,7 @@ impl OrphanBlockPool {
 pub struct Chain {
 	db_root: String,
 	store: Arc<store::ChainStore>,
-	adapter: Arc<ChainAdapter>,
+	adapter: Arc<ChainAdapter + Send + Sync>,
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	// Recently processed blocks to avoid double-processing
@@ -158,9 +158,6 @@ pub struct Chain {
 	genesis: BlockHeader,
 }
 
-unsafe impl Sync for Chain {}
-unsafe impl Send for Chain {}
-
 impl Chain {
 	/// Initializes the blockchain and returns a new Chain instance. Does a
 	/// check on the current chain head to make sure it exists and creates one
@@ -168,7 +165,7 @@ impl Chain {
 	pub fn init(
 		db_root: String,
 		db_env: Arc<lmdb::Environment>,
-		adapter: Arc<ChainAdapter>,
+		adapter: Arc<ChainAdapter + Send + Sync>,
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
 		verifier_cache: Arc<RwLock<VerifierCache>>,
@@ -986,7 +983,8 @@ impl Chain {
 		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
 			return Err(ErrorKind::TxHashSetErr(String::from(
 				"Output and rangeproof sets don't match",
-			)).into());
+			))
+			.into());
 		}
 		let mut output_vec: Vec<Output> = vec![];
 		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
