@@ -33,8 +33,8 @@ use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libwallet::internal::{keys, selection, tx, updater};
 use libwallet::types::{
-	AcctPathMapping, BlockFees, CbData, OutputData, TxLogEntry, TxWrapper, WalletBackend,
-	WalletInfo, NodeClient,
+	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, TxLogEntry, TxWrapper,
+	WalletBackend, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
 use util;

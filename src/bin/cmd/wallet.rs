@@ -30,8 +30,8 @@ use core::{core, global};
 use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
-	start_listener, HTTPNodeClient, WalletCommAdapter, HTTPWalletCommAdapter, LMDBBackend, WalletBackend,
-	WalletConfig, WalletInst, WalletSeed,
+	start_listener, HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend, WalletBackend,
+	WalletCommAdapter, WalletConfig, WalletInst, WalletSeed,
 };
 use keychain;
 use servers::start_webwallet_server;
@@ -59,8 +59,7 @@ pub fn instantiate_wallet(
 	account: &str,
 	node_api_secret: Option<String>,
 ) -> Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>> {
-	let client_n =
-		HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
+	let client_n = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
 	let mut db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, client_n)
 		.unwrap_or_else(|e| {
 			panic!(

@@ -40,7 +40,7 @@ use wallet::controller;
 use wallet::libwallet::types::{WalletBackend, WalletInst};
 use wallet::lmdb_wallet::LMDBBackend;
 use wallet::WalletConfig;
-use wallet::{HTTPNodeClient, WalletCommAdapter, HTTPWalletCommAdapter};
+use wallet::{HTTPNodeClient, HTTPWalletCommAdapter, WalletCommAdapter};
 
 use framework::{
 	config, stop_all_servers, LocalServerContainerConfig, LocalServerContainerPool,

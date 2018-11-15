@@ -15,7 +15,7 @@
 //! Wallet key management functions
 use keychain::{ChildNumber, ExtKeychain, Identifier, Keychain};
 use libwallet::error::{Error, ErrorKind};
-use libwallet::types::{AcctPathMapping, WalletBackend, NodeClient};
+use libwallet::types::{AcctPathMapping, NodeClient, WalletBackend};
 
 /// Get next available key in the wallet for a given parent
 pub fn next_available_key<T: ?Sized, C, K>(wallet: &mut T) -> Result<Identifier, Error>

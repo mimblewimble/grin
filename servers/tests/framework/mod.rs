@@ -30,7 +30,7 @@ use std::{fs, thread, time};
 use util::Mutex;
 
 use framework::keychain::Keychain;
-use wallet::{HTTPNodeClient, WalletCommAdapter, HTTPWalletCommAdapter, LMDBBackend, WalletConfig};
+use wallet::{HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend, WalletCommAdapter, WalletConfig};
 
 /// Just removes all results from previous runs
 pub fn clean_all_output(test_name_dir: &str) {
@@ -265,8 +265,7 @@ impl LocalServerContainer {
 		let _ = fs::create_dir_all(self.wallet_config.clone().data_file_dir);
 		let r = wallet::WalletSeed::init_file(&self.wallet_config);
 
-		let client_n =
-			HTTPNodeClient::new(&self.wallet_config.check_node_api_http_addr, None);
+		let client_n = HTTPNodeClient::new(&self.wallet_config.check_node_api_http_addr, None);
 
 		if let Err(_e) = r {
 			//panic!("Error initializing wallet seed: {}", e);

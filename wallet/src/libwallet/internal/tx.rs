@@ -24,7 +24,7 @@ use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
 use libwallet::internal::{selection, updater};
-use libwallet::types::{Context, TxLogEntryType, WalletBackend, NodeClient};
+use libwallet::types::{Context, NodeClient, TxLogEntryType, WalletBackend};
 use libwallet::{Error, ErrorKind};
 
 /// Receive a transaction, modifying the slate accordingly (which can then be
