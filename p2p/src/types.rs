@@ -401,6 +401,10 @@ pub trait ChainAdapter: Sync + Send {
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
 	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: SocketAddr) -> bool;
+
+	/// Finds a list of kernels starting from the given index.
+	/// Returns kernels from the chain containing the block with the given hash.
+	fn read_kernels(&self, last_hash: Hash, first_kernel_index: u64) -> Vec<core::TxKernel>;
 }
 
 /// Additional methods required by the protocol that don't need to be

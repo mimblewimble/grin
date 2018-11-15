@@ -27,7 +27,7 @@ use core::pow::Difficulty;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::{
-    Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_KERNELS, MAX_LOCATORS, MAX_PEER_ADDRS,
+	Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_KERNELS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };
 
 /// Current latest version of the protocol
@@ -102,8 +102,8 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::BanReason => 64,
 		Type::GetTransaction => 32,
 		Type::TransactionKernel => 32,
-        Type::GetKernels => 48,
-        Type::Kernels => 52 + 114 * MAX_KERNELS as u64,
+		Type::GetKernels => 48,
+		Type::Kernels => 52 + 114 * MAX_KERNELS as u64,
 	}
 }
 

@@ -27,8 +27,8 @@ use core::{global, ser};
 use util::{RateCounter, RwLock};
 
 use msg::{
-	read_exact, BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr,
-	TxHashSetArchive, TxHashSetRequest, Type,
+    read_exact, BanReason, GetKernels, GetPeerAddrs, Headers, Kernels, Locator, PeerAddrs, Ping,
+    Pong, SockAddr, TxHashSetArchive, TxHashSetRequest, Type,
 };
 use types::{Error, NetAdapter};
 
@@ -335,6 +335,23 @@ impl MessageHandler for Protocol {
 
 				Ok(None)
 			}
+
+            Type::GetKernels => {
+                // Retrieve kernels from the kernel MMR
+                let request: GetKernels = msg.body()?;
+                let kerns = adapter.read_kernels(request.last_hash, request.first_kernel_index);
+
+                // serialize and send all the headers over
+                Ok(Some(msg.respond(
+                    Type::Kernels,
+                    Kernels {
+                        last_hash: request.last_hash,
+                        last_height: request.last_height,
+                        first_kernel_index: request.first_kernel_index,
+                        kernels: kerns,
+                    },
+                )))
+            }
 
 			_ => {
 				debug!("unknown message type {:?}", msg.header.msg_type);

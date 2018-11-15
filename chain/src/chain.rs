@@ -973,6 +973,12 @@ impl Chain {
 		txhashset.last_n_kernel(distance)
 	}
 
+	/// kernels by insertion index
+	pub fn get_kernels_by_insertion_index(&self, start_index: u64, max: u64) -> Vec<TxKernelEntry> {
+		let mut txhashset = self.txhashset.write();
+		txhashset.kernels_by_insertion_index(start_index, max).1
+	}
+
 	/// outputs by insertion index
 	pub fn unspent_outputs_by_insertion_index(
 		&self,

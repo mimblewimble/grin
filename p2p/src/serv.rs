@@ -260,6 +260,10 @@ impl ChainAdapter for DummyAdapter {
 	) -> bool {
 		false
 	}
+
+	fn read_kernels(&self, last_hash: Hash, first_kernel_index: u64) -> Vec<core::TxKernel> {
+		vec![]
+	}
 }
 
 impl NetAdapter for DummyAdapter {

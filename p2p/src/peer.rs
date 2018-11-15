@@ -427,21 +427,21 @@ impl Peer {
 			.info
 			.capabilities
 			.contains(Capabilities::ENHANCED_TXHASHSET_HIST)
-			{
-				trace!(
-					"Asking {} for kernels up to block {} {} starting with kernel {}.",
-					self.info.addr,
-					last_hash,
-					last_height,
-					first_kernel_index
-				);
-				self.connection.as_ref().unwrap().lock().send(
-					&GetKernels {
-						last_hash,
-						last_height,
-						first_kernel_index,
-					},
-					msg::Type::GetKernels,
+            {
+                trace!(
+                    "Asking {} for kernels up to block {} {} starting with kernel {}.",
+                    self.info.addr,
+                    last_hash,
+                    last_height,
+                    first_kernel_index
+                );
+                self.connection.as_ref().unwrap().lock().send(
+                    &GetKernels {
+                        last_hash,
+                        last_height,
+                        first_kernel_index,
+                    },
+                    msg::Type::GetKernels,
 			);
 			Ok(true)
 		} else {
@@ -617,6 +617,10 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter
 			.txhashset_download_update(start_time, downloaded_size, total_size)
 	}
+
+    fn read_kernels(&self, last_hash: Hash, first_kernel_index: u64) -> Vec<core::TxKernel> {
+        self.adapter.read_kernels(last_hash, first_kernel_index)
+    }
 }
 
 impl NetAdapter for TrackingAdapter {

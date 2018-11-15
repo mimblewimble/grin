@@ -213,6 +213,18 @@ impl TxHashSet {
 		kernel_pmmr.get_last_n_insertions(distance)
 	}
 
+	/// returns kernels from the given insertion (leaf) index up to the
+	/// specified limit. Also returns the last index actually populated
+	pub fn kernels_by_insertion_index(
+		&mut self,
+		start_index: u64,
+		max_count: u64,
+	) -> (u64, Vec<TxKernelEntry>) {
+		let kernel_pmmr: PMMR<TxKernelEntry, _> =
+			PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
+		kernel_pmmr.elements_from_insertion_index(start_index, max_count)
+	}
+
 	/// returns outputs from the given insertion (leaf) index up to the
 	/// specified limit. Also returns the last index actually populated
 	pub fn outputs_by_insertion_index(

@@ -15,6 +15,7 @@
 //! Adapters connecting new block, new transaction, and accepted transaction
 //! events to consumers of those events.
 
+use std::cmp::min;
 use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
@@ -368,6 +369,44 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			info!("Received valid txhashset data for {}.", h);
 			true
 		}
+	}
+
+	fn read_kernels(&self, last_hash: Hash, first_kernel_index: u64) -> Vec<core::TxKernel> {
+		let header = match self.chain().get_block_header(&last_hash) {
+			Ok(header) => header,
+			Err(e) => {
+				error!("read_kernels: Could not find header: {:?}", e);
+				return vec![];
+			}
+		};
+
+		if !self.chain().is_on_current_chain(&header).is_ok() {
+			error!("read_kernels: Header is not on main chain: {}", last_hash);
+			return vec![];
+		}
+
+		if first_kernel_index >= header.kernel_mmr_size {
+			error!(
+				"read_kernels: first_kernel_index: {} beyond last kernel: {}",
+				first_kernel_index, header.kernel_mmr_size
+			);
+			return vec![];
+		}
+
+		// Found header. Determine number of kernels to retrieve.
+		let kernels_remaining = header.kernel_mmr_size - first_kernel_index + 1;
+		let kernels_to_read = min(kernels_remaining, p2p::MAX_KERNELS as u64);
+
+		let kernels: Vec<core::TxKernel> = self
+			.chain()
+			.get_kernels_by_insertion_index(first_kernel_index, kernels_to_read)
+			.iter()
+			.map(|entry| entry.kernel.clone())
+			.collect();
+
+		debug!("read_kernels: returning kernels: {}", kernels.len());
+
+		kernels
 	}
 }
 
