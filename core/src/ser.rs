@@ -206,7 +206,8 @@ pub trait Writeable {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error>;
 }
 
-struct IteratingReader<'a, T> {
+/// Reader that exposes an Iterator interface.
+pub struct IteratingReader<'a, T> {
 	count: u64,
 	curr: u64,
 	reader: &'a mut Reader,
@@ -214,7 +215,9 @@ struct IteratingReader<'a, T> {
 }
 
 impl<'a, T> IteratingReader<'a, T> {
-	fn new(reader: &'a mut Reader, count: u64) -> IteratingReader<'a, T> {
+	/// Constructor to create a new iterating reader for the provided underlying reader.
+	/// Takes a count so we know how many to iterate over.
+	pub fn new(reader: &'a mut Reader, count: u64) -> IteratingReader<'a, T> {
 		let curr = 0;
 		IteratingReader {
 			count,
@@ -270,7 +273,7 @@ where
 	fn read(reader: &mut Reader) -> Result<Self, Error>;
 }
 
-/// Deserializes a Readeable from any std::io::Read implementation.
+/// Deserializes a Readable from any std::io::Read implementation.
 pub fn deserialize<T: Readable>(source: &mut Read) -> Result<T, Error> {
 	let mut reader = BinReader { source };
 	T::read(&mut reader)
@@ -325,13 +328,14 @@ impl<'a> Reader for BinReader<'a> {
 		let len = self.read_u64()?;
 		self.read_fixed_bytes(len as usize)
 	}
+
 	/// Read a fixed number of bytes.
-	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error> {
-		// not reading more than 100k in a single read
-		if length > 100000 {
+	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
+		// not reading more than 100k bytes in a single read
+		if len > 100_000 {
 			return Err(Error::TooLargeReadErr);
 		}
-		let mut buf = vec![0; length];
+		let mut buf = vec![0; len];
 		self.source
 			.read_exact(&mut buf)
 			.map(move |_| buf)

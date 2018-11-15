@@ -190,6 +190,14 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: time::Duration) -> i
 	Ok(())
 }
 
+/// Read two bytes (a single u16) off the provided stream.
+/// Used when reading streaming headers.
+pub fn read_u16(conn: &mut TcpStream) -> Result<u16, Error> {
+	let mut buf = vec![0u8; 2];
+	read_exact(conn, &mut buf, time::Duration::from_secs(10), true)?;
+	ser::deserialize(&mut &buf[..]).map_err(From::from)
+}
+
 /// Read a header from the provided connection without blocking if the
 /// underlying stream is async. Typically headers will be polled for, so
 /// we do not want to block.
@@ -211,6 +219,84 @@ pub fn read_header(conn: &mut TcpStream, msg_type: Option<Type>) -> Result<MsgHe
 		return Err(Error::Serialization(ser::Error::TooLargeReadErr));
 	}
 	Ok(header)
+}
+
+/// A reader that reads straight off a stream.
+/// Tracks total bytes read so we can verify we read the right number afterwards.
+struct StreamingReader<'a> {
+	total_bytes_read: u64,
+	conn: &'a mut TcpStream,
+}
+
+impl<'a> Reader for StreamingReader<'a> {
+	fn read_u8(&mut self) -> Result<u8, ser::Error> {
+		let buf = self.read_fixed_bytes(1)?;
+		ser::deserialize(&mut &buf[..])
+	}
+
+	fn read_u16(&mut self) -> Result<u16, ser::Error> {
+		let buf = self.read_fixed_bytes(2)?;
+		ser::deserialize(&mut &buf[..])
+	}
+
+	fn read_u32(&mut self) -> Result<u32, ser::Error> {
+		let buf = self.read_fixed_bytes(4)?;
+		ser::deserialize(&mut &buf[..])
+	}
+
+	fn read_i32(&mut self) -> Result<i32, ser::Error> {
+		let buf = self.read_fixed_bytes(4)?;
+		ser::deserialize(&mut &buf[..])
+	}
+
+	fn read_u64(&mut self) -> Result<u64, ser::Error> {
+		let buf = self.read_fixed_bytes(8)?;
+		ser::deserialize(&mut &buf[..])
+	}
+
+	fn read_i64(&mut self) -> Result<i64, ser::Error> {
+		let buf = self.read_fixed_bytes(8)?;
+		ser::deserialize(&mut &buf[..])
+	}
+
+	/// Read a variable size vector from the underlying Read. Expects a usize
+	fn read_bytes_len_prefix(&mut self) -> Result<Vec<u8>, ser::Error> {
+		let len = self.read_u64()?;
+		self.total_bytes_read += 8;
+		self.read_fixed_bytes(len as usize)
+	}
+
+	/// Read a fixed number of bytes.
+	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, ser::Error> {
+		let mut buf = vec![0u8; len];
+		read_exact(&mut self.conn, &mut buf, time::Duration::from_secs(10), true)?;
+		self.total_bytes_read += len as u64;
+		Ok(buf)
+	}
+
+	fn expect_u8(&mut self, val: u8) -> Result<u8, ser::Error> {
+		let b = self.read_u8()?;
+		if b == val {
+			Ok(b)
+		} else {
+			Err(ser::Error::UnexpectedData {
+				expected: vec![val],
+				received: vec![b],
+			})
+		}
+	}
+}
+
+/// Read a single item from the provided connection, always blocking until we
+/// have a result (or timeout).
+/// Returns the item and the total bytes read.
+pub fn read_item<T>(conn: &mut TcpStream) -> Result<(T, u64), Error>
+where
+	T: Readable,
+{
+	let mut reader = StreamingReader { conn, total_bytes_read: 0 };
+	let res = T::read(&mut reader)?;
+	Ok((res, reader.total_bytes_read))
 }
 
 /// Read a message body from the provided connection, always blocking
@@ -602,24 +688,6 @@ impl Writeable for Headers {
 			h.write(writer)?
 		}
 		Ok(())
-	}
-}
-
-impl Readable for Headers {
-	fn read(reader: &mut Reader) -> Result<Headers, ser::Error> {
-		let len = reader.read_u16()?;
-		if (len as u32) > MAX_BLOCK_HEADERS + 1 {
-			return Err(ser::Error::TooLargeReadErr);
-		}
-		let mut headers: Vec<BlockHeader> = Vec::with_capacity(len as usize);
-		for n in 0..len as usize {
-			let header = BlockHeader::read(reader)?;
-			if n > 0 && header.height != headers[n - 1].height + 1 {
-				return Err(ser::Error::CorruptedData);
-			}
-			headers.push(header);
-		}
-		Ok(Headers { headers: headers })
 	}
 }
 
