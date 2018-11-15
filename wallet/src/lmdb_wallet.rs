@@ -65,11 +65,7 @@ pub struct LMDBBackend<C, K> {
 }
 
 impl<C, K> LMDBBackend<C, K> {
-	pub fn new(
-		config: WalletConfig,
-		passphrase: &str,
-		n_client: C,
-	) -> Result<Self, Error> {
+	pub fn new(config: WalletConfig, passphrase: &str, n_client: C) -> Result<Self, Error> {
 		let db_path = path::Path::new(&config.data_file_dir).join(DB_DIR);
 		fs::create_dir_all(&db_path).expect("Couldn't create wallet backend directory!");
 
@@ -150,7 +146,7 @@ where
 		&mut self.w2n_client
 	}
 
-		/// Set parent path by account name
+	/// Set parent path by account name
 	fn set_parent_key_id_by_name(&mut self, label: &str) -> Result<(), Error> {
 		let label = label.to_owned();
 		let res = self.acct_path_iter().find(|l| l.label == label);

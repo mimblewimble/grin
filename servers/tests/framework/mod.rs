@@ -272,18 +272,13 @@ impl LocalServerContainer {
 			//panic!("Error initializing wallet seed: {}", e);
 		}
 
-		let wallet: LMDBBackend<
-			HTTPWalletToNodeClient,
-			keychain::ExtKeychain,
-		> =
-			LMDBBackend::new(self.wallet_config.clone(), "", client_n).unwrap_or_else(
-				|e| {
-					panic!(
-						"Error creating wallet: {:?} Config: {:?}",
-						e, self.wallet_config
-					)
-				},
-			);
+		let wallet: LMDBBackend<HTTPWalletToNodeClient, keychain::ExtKeychain> =
+			LMDBBackend::new(self.wallet_config.clone(), "", client_n).unwrap_or_else(|e| {
+				panic!(
+					"Error creating wallet: {:?} Config: {:?}",
+					e, self.wallet_config
+				)
+			});
 
 		wallet::controller::foreign_listener(
 			Arc::new(Mutex::new(wallet)),
