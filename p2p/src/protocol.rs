@@ -25,8 +25,8 @@ use core::core::{self, hash::Hash, CompactBlock};
 use util::{RateCounter, RwLock};
 
 use msg::{
-	BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr,
-	TxHashSetArchive, TxHashSetRequest, Type,
+	BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr, TxHashSetArchive,
+	TxHashSetRequest, Type,
 };
 use types::{Error, NetAdapter};
 
@@ -217,7 +217,7 @@ impl MessageHandler for Protocol {
 
 				// Now check we read the correct total number of bytes off the stream.
 				if total_bytes_read != msg.header.msg_len {
-					return Err(Error::MsgLen)
+					return Err(Error::MsgLen);
 				}
 
 				Ok(None)

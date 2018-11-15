@@ -269,7 +269,12 @@ impl<'a> Reader for StreamingReader<'a> {
 	/// Read a fixed number of bytes.
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, ser::Error> {
 		let mut buf = vec![0u8; len];
-		read_exact(&mut self.conn, &mut buf, time::Duration::from_secs(10), true)?;
+		read_exact(
+			&mut self.conn,
+			&mut buf,
+			time::Duration::from_secs(10),
+			true,
+		)?;
 		self.total_bytes_read += len as u64;
 		Ok(buf)
 	}
@@ -294,7 +299,10 @@ pub fn read_item<T>(conn: &mut TcpStream) -> Result<(T, u64), Error>
 where
 	T: Readable,
 {
-	let mut reader = StreamingReader { conn, total_bytes_read: 0 };
+	let mut reader = StreamingReader {
+		conn,
+		total_bytes_read: 0,
+	};
 	let res = T::read(&mut reader)?;
 	Ok((res, reader.total_bytes_read))
 }

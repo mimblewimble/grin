@@ -28,7 +28,9 @@ use std::{cmp, thread, time};
 
 use core::ser;
 use core::ser::FixedLength;
-use msg::{read_body, read_exact, read_header, read_item, write_all, write_to_buf, MsgHeader, Type};
+use msg::{
+	read_body, read_exact, read_header, read_item, write_all, write_to_buf, MsgHeader, Type,
+};
 use types::Error;
 use util::{RateCounter, RwLock};
 
