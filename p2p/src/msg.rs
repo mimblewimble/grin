@@ -190,14 +190,6 @@ pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: time::Duration) -> i
 	Ok(())
 }
 
-/// Read two bytes (a single u16) off the provided stream.
-/// Used when reading streaming headers.
-pub fn read_u16(conn: &mut TcpStream) -> Result<u16, Error> {
-	let mut buf = vec![0u8; 2];
-	read_exact(conn, &mut buf, time::Duration::from_secs(10), true)?;
-	ser::deserialize(&mut &buf[..]).map_err(From::from)
-}
-
 /// Read a header from the provided connection without blocking if the
 /// underlying stream is async. Typically headers will be polled for, so
 /// we do not want to block.
