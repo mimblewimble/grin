@@ -251,52 +251,6 @@ where
 		Ok(())
 	}
 
-	/// Write a transaction to send to file so a user can transmit it to the
-	/// receiver in whichever way they see fit (aka carrier pigeon mode).
-	pub fn send_tx(
-		&mut self,
-		write_to_disk: bool,
-		amount: u64,
-		minimum_confirmations: u64,
-		dest: &str,
-		max_outputs: usize,
-		num_change_outputs: usize,
-		selection_strategy_is_use_all: bool,
-	) -> Result<Slate, Error> {
-		let mut w = self.wallet.lock();
-		w.open_with_credentials()?;
-		let parent_key_id = w.parent_key_id();
-
-		let (slate, context, lock_fn) = tx::create_send_tx(
-			&mut *w,
-			amount,
-			minimum_confirmations,
-			max_outputs,
-			num_change_outputs,
-			selection_strategy_is_use_all,
-			&parent_key_id,
-			false,
-		)?;
-		if write_to_disk {
-			let mut pub_tx = File::create(dest)?;
-			pub_tx.write_all(json::to_string(&slate).unwrap().as_bytes())?;
-			pub_tx.sync_all()?;
-		}
-
-		{
-			let mut batch = w.batch()?;
-			batch.save_private_context(slate.id.as_bytes(), &context)?;
-			batch.commit()?;
-		}
-
-		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
-
-		// lock our inputs
-		lock_fn(&mut *w, &tx_hex)?;
-		w.close()?;
-		Ok(slate)
-	}
-
 	/// Sender finalization of the transaction. Takes the file returned by the
 	/// sender as well as the private file generate on the first send step.
 	/// Builds the complete transaction and sends it to a grin node for

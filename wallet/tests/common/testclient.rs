@@ -43,7 +43,7 @@ use keychain::Keychain;
 
 use util::secp::pedersen;
 use wallet::libtx::slate::Slate;
-use wallet::libwallet;
+use wallet::{libwallet, WalletCommAdapter};
 use wallet::libwallet::types::*;
 
 use common;
@@ -339,6 +339,10 @@ impl LocalWalletClient {
 }
 
 impl WalletCommAdapter for LocalWalletClient {
+	fn supports_sync(&self) -> bool {
+		true
+	}
+
 	/// Send the slate to a listening wallet instance
 	fn send_tx_sync(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
 		let m = WalletProxyMessage {
@@ -360,6 +364,10 @@ impl WalletCommAdapter for LocalWalletClient {
 				"Parsing send_tx_slate response",
 			))?,
 		)
+	}
+
+	fn send_tx_async(&self, _dest: &str, _slate: &Slate) -> Result<(), libwallet::Error> {
+		unimplemented!();
 	}
 }
 

@@ -54,11 +54,11 @@ pub mod lmdb_wallet;
 mod node_clients;
 mod types;
 
-pub use adapters::{start_listener, HTTPWalletCommAdapter};
+pub use adapters::{start_listener, FileWalletCommAdapter, HTTPWalletCommAdapter, NullWalletCommAdapter, WalletCommAdapter};
 pub use error::{Error, ErrorKind};
 pub use libwallet::controller;
 pub use libwallet::types::{
-	BlockFees, CbData, NodeClient, WalletBackend, WalletCommAdapter, WalletInfo, WalletInst,
+	BlockFees, CbData, NodeClient, WalletBackend, WalletInfo, WalletInst,
 };
 pub use lmdb_wallet::{wallet_db_exists, LMDBBackend};
 pub use node_clients::{create_coinbase, HTTPNodeClient};

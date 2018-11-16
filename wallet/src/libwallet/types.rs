@@ -222,13 +222,6 @@ pub trait NodeClient: Sync + Send + Clone {
 	>;
 }
 
-/// Encapsulate wallet to wallet communication functions
-pub trait WalletCommAdapter: Sync + Send + Clone {
-	/// Send a transaction slate to another listening wallet and return result
-	/// TODO: Probably need a slate wrapper type
-	fn send_tx_sync(&self, addr: &str, slate: &Slate) -> Result<Slate, Error>;
-}
-
 /// Information about an output that's being tracked by the wallet. Must be
 /// enough to reconstruct the commitment associated with the ouput when the
 /// root private key is known.

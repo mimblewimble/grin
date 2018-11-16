@@ -23,18 +23,23 @@ use keychain::Keychain;
 use libtx::slate::Slate;
 use libwallet;
 use libwallet::types::*;
+use WalletCommAdapter;
 
 #[derive(Clone)]
 pub struct HTTPWalletCommAdapter {}
 
 impl HTTPWalletCommAdapter {
 	/// Create
-	pub fn new() -> HTTPWalletCommAdapter {
-		HTTPWalletCommAdapter {}
+	pub fn new() -> Box<WalletCommAdapter> {
+		Box::new(HTTPWalletCommAdapter {})
 	}
 }
 
 impl WalletCommAdapter for HTTPWalletCommAdapter {
+	fn supports_sync(&self) -> bool {
+		true
+	}
+
 	fn send_tx_sync(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
 		if &dest[..4] != "http" {
 			let err_str = format!(
@@ -51,6 +56,10 @@ impl WalletCommAdapter for HTTPWalletCommAdapter {
 			libwallet::ErrorKind::ClientCallback("Posting transaction slate"),
 		)?;
 		Ok(res)
+	}
+
+	fn send_tx_async(&self, _dest: &str, _slate: &Slate) -> Result<(), libwallet::Error> {
+		unimplemented!();
 	}
 }
 

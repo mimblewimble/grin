@@ -30,8 +30,7 @@ use core::{core, global};
 use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
-	start_listener, HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend, WalletBackend,
-	WalletCommAdapter, WalletConfig, WalletInst, WalletSeed,
+	start_listener, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend, WalletBackend, NullWalletCommAdapter, WalletConfig, WalletInst, WalletSeed,
 };
 use keychain;
 use servers::start_webwallet_server;
@@ -338,25 +337,36 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						return Err(e);
 					}
 				};
-				let client_w = HTTPWalletCommAdapter::new();
-				if method == "http" {
-					slate = client_w.send_tx_sync(dest, &slate)?;
-				} else if method == "self" {
-					api.receive_tx(&mut slate, Some(dest))?;
+				let adapter = match method {
+					"http" => HTTPWalletCommAdapter::new(),
+					"file" => FileWalletCommAdapter::new(),
+					"self" => NullWalletCommAdapter::new(),
+					_ => NullWalletCommAdapter::new(),
+				};
+				if adapter.supports_sync() {
+						slate = adapter.send_tx_sync(dest, &slate)?;
+						if method == "self" {
+							api.receive_tx(&mut slate, Some(dest))?;
+						}
+						api.finalize_tx(&mut slate)?;
+				} else {
+						adapter.send_tx_async(dest, &slate)?;
 				}
-				api.finalize_tx(&mut slate)?;
 				api.tx_lock_outputs(&slate, lock_fn)?;
-				let result = api.post_tx(&slate, fluff);
-				match result {
-					Ok(_) => {
-						info!("Tx sent",);
-						Ok(())
-					}
-					Err(e) => {
-						error!("Tx not sent: {}", e);
-						Err(e)
+				if adapter.supports_sync() {
+					let result = api.post_tx(&slate, fluff);
+					match result {
+						Ok(_) => {
+							info!("Tx sent",);
+							return Ok(());
+						}
+						Err(e) => {
+							error!("Tx not sent: {}", e);
+							return Err(e);
+						}
 					}
 				}
+				Ok(())
 			}
 			("receive", Some(send_args)) => {
 				let mut receive_result: Result<(), grin_wallet::libwallet::Error> = Ok(());
