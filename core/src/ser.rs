@@ -227,7 +227,7 @@ impl<'a, T> IteratingReader<'a, T> {
 
 impl<'a, T> Iterator for IteratingReader<'a, T>
 where
-T: Readable,
+	T: Readable,
 {
 	type Item = T;
 
@@ -243,7 +243,7 @@ T: Readable,
 /// Reads multiple serialized items into a Vec.
 pub fn read_multi<T>(reader: &mut Reader, count: u64) -> Result<Vec<T>, Error>
 where
-T: Readable,
+	T: Readable,
 {
 	// Very rudimentary check to ensure we do not overflow anything
 	// attempting to read huge amounts of data.
@@ -264,7 +264,7 @@ T: Readable,
 /// underlying Read implementation.
 pub trait Readable
 where
-Self: Sized,
+	Self: Sized,
 {
 	/// Reads the data necessary to this Readable from the provided reader
 	fn read(reader: &mut Reader) -> Result<Self, Error>;
@@ -301,7 +301,7 @@ fn map_io_err(err: io::Error) -> Error {
 
 impl<'a> BinReader<'a> {
 	pub fn new(source: &'a mut Read) -> BinReader<'a> {
-		BinReader{source}
+		BinReader { source }
 	}
 }
 

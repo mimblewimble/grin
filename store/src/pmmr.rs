@@ -247,12 +247,16 @@ impl<T: PMMRable> PMMRBackend<T> {
 	/// Syncs all files to disk. A call to sync is required to ensure all the
 	/// data has been successfully written to disk.
 	pub fn sync(&mut self) -> io::Result<()> {
-		self.hash_file.flush().and(self.data_file.flush()).and(self.leaf_set.flush()).map_err(|e|
-			io::Error::new(
-				io::ErrorKind::Interrupted,
-				format!("Could not write to state storage, disk full? {:?}", e),
-			)
-		)
+		self.hash_file
+			.flush()
+			.and(self.data_file.flush())
+			.and(self.leaf_set.flush())
+			.map_err(|e| {
+				io::Error::new(
+					io::ErrorKind::Interrupted,
+					format!("Could not write to state storage, disk full? {:?}", e),
+				)
+			})
 	}
 
 	/// Discard the current, non synced state of the backend.

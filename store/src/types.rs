@@ -339,8 +339,8 @@ where
 		let file_sz = fs::metadata(&file_path).map(|md| md.len()).unwrap_or(0);
 		if ovec.len() * elmt_len != file_sz as usize {
 			return Err(io::Error::new(
-					io::ErrorKind::InvalidData,
-					format!("Corrupted storage, could not read file at {}", path),
+				io::ErrorKind::InvalidData,
+				format!("Corrupted storage, could not read file at {}", path),
 			));
 		}
 	}
