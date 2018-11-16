@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod null;
-mod http;
 mod file;
+mod http;
+mod null;
 
+pub use self::file::FileWalletCommAdapter;
 pub use self::http::{start_listener, HTTPWalletCommAdapter};
-pub use self::file::{FileWalletCommAdapter};
-pub use self::null::{NullWalletCommAdapter};
+pub use self::null::NullWalletCommAdapter;
 
 use libtx::slate::Slate;
 use libwallet::Error;
@@ -35,5 +35,3 @@ pub trait WalletCommAdapter {
 	/// Send a transaction asynchronously (result will be returned via the listener)
 	fn send_tx_async(&self, addr: &str, slate: &Slate) -> Result<(), Error>;
 }
-
-

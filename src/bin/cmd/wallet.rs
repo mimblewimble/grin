@@ -30,7 +30,8 @@ use core::{core, global};
 use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
-	start_listener, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend, WalletBackend, NullWalletCommAdapter, WalletConfig, WalletInst, WalletSeed,
+	start_listener, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend,
+	NullWalletCommAdapter, WalletBackend, WalletConfig, WalletInst, WalletSeed,
 };
 use keychain;
 use servers::start_webwallet_server;
@@ -344,13 +345,13 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					_ => NullWalletCommAdapter::new(),
 				};
 				if adapter.supports_sync() {
-						slate = adapter.send_tx_sync(dest, &slate)?;
-						if method == "self" {
-							api.receive_tx(&mut slate, Some(dest))?;
-						}
-						api.finalize_tx(&mut slate)?;
+					slate = adapter.send_tx_sync(dest, &slate)?;
+					if method == "self" {
+						api.receive_tx(&mut slate, Some(dest))?;
+					}
+					api.finalize_tx(&mut slate)?;
 				} else {
-						adapter.send_tx_async(dest, &slate)?;
+					adapter.send_tx_async(dest, &slate)?;
 				}
 				api.tx_lock_outputs(&slate, lock_fn)?;
 				if adapter.supports_sync() {

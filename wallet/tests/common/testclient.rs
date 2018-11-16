@@ -43,8 +43,8 @@ use keychain::Keychain;
 
 use util::secp::pedersen;
 use wallet::libtx::slate::Slate;
-use wallet::{libwallet, WalletCommAdapter};
 use wallet::libwallet::types::*;
+use wallet::{libwallet, WalletCommAdapter};
 
 use common;
 
