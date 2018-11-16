@@ -13,10 +13,7 @@
 // limitations under the License.
 
 use clap::ArgMatches;
-use serde_json as json;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 /// Wallet commands processing
 use std::sync::Arc;
@@ -382,18 +379,18 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						ErrorKind::GenericError(format!("File {} not found.", tx_file)).into(),
 					);
 				}
-				let res = controller::foreign_single_use(wallet, |api| {
-					receive_result = api.file_receive_tx(tx_file);
+				let adapter = FileWalletCommAdapter::new();
+				let mut slate = adapter.receive_tx_async(tx_file)?;
+				controller::foreign_single_use(wallet, |api| {
+					api.receive_tx(&mut slate, Some(account))?;
 					Ok(())
-				});
-				if res.is_err() {
-					return res;
-				} else {
-					info!(
-						"Response file {}.response generated, sending it back to the transaction originator.",
-						tx_file,
-					);
-				}
+				})?;
+				let send_tx = format!("{}.response", tx_file);
+				adapter.send_tx_async(&send_tx, &slate)?;
+				info!(
+					"Response file {}.response generated, sending it back to the transaction originator.",
+					tx_file,
+				);
 				receive_result
 			}
 			("finalize", Some(send_args)) => {
@@ -406,11 +403,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						ErrorKind::GenericError(format!("File {} not found.", tx_file)).into(),
 					);
 				}
-				let mut pub_tx_f = File::open(tx_file)?;
-				let mut content = String::new();
-				pub_tx_f.read_to_string(&mut content)?;
-				let mut slate: grin_wallet::libtx::slate::Slate = json::from_str(&content)
-					.map_err(|_| grin_wallet::libwallet::ErrorKind::Format)?;
+				let adapter = FileWalletCommAdapter::new();
+				let mut slate = adapter.receive_tx_async(tx_file)?;
 				let _ = api.finalize_tx(&mut slate).expect("Finalize failed");
 
 				let result = api.post_tx(&slate, fluff);

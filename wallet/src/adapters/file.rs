@@ -14,12 +14,12 @@
 
 /// File Output 'plugin' implementation
 use std::fs::File;
-use std::io::Write;
+use std::io::{Read, Write};
 
 use serde_json as json;
 
 use libtx::slate::Slate;
-use libwallet;
+use libwallet::{Error, ErrorKind};
 use WalletCommAdapter;
 
 #[derive(Clone)]
@@ -37,14 +37,21 @@ impl WalletCommAdapter for FileWalletCommAdapter {
 		false
 	}
 
-	fn send_tx_sync(&self, _dest: &str, _slate: &Slate) -> Result<Slate, libwallet::Error> {
+	fn send_tx_sync(&self, _dest: &str, _slate: &Slate) -> Result<Slate, Error> {
 		unimplemented!();
 	}
 
-	fn send_tx_async(&self, dest: &str, slate: &Slate) -> Result<(), libwallet::Error> {
+	fn send_tx_async(&self, dest: &str, slate: &Slate) -> Result<(), Error> {
 		let mut pub_tx = File::create(dest)?;
 		pub_tx.write_all(json::to_string(&slate).unwrap().as_bytes())?;
 		pub_tx.sync_all()?;
 		Ok(())
+	}
+
+	fn receive_tx_async(&self, params: &str) -> Result<Slate, Error>{
+		let mut pub_tx_f = File::open(params)?;
+		let mut content = String::new();
+		pub_tx_f.read_to_string(&mut content)?;
+		Ok(json::from_str(&content).map_err(|_| ErrorKind::Format)?)
 	}
 }

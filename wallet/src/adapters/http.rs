@@ -61,6 +61,10 @@ impl WalletCommAdapter for HTTPWalletCommAdapter {
 	fn send_tx_async(&self, _dest: &str, _slate: &Slate) -> Result<(), libwallet::Error> {
 		unimplemented!();
 	}
+
+	fn receive_tx_async(&self, _params: &str) -> Result<Slate, libwallet::Error>{
+		unimplemented!();
+	}
 }
 
 pub fn start_listener<T: ?Sized, C, K>(

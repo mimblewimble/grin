@@ -36,7 +36,11 @@ impl WalletCommAdapter for NullWalletCommAdapter {
 		unimplemented!();
 	}
 
-	fn send_tx_async(&self, dest: &str, slate: &Slate) -> Result<(), libwallet::Error> {
+	fn send_tx_async(&self, _dest: &str, _slate: &Slate) -> Result<(), libwallet::Error> {
+		unimplemented!();
+	}
+
+	fn receive_tx_async(&self, _params: &str) -> Result<Slate, libwallet::Error>{
 		unimplemented!();
 	}
 }

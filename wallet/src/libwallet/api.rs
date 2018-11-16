@@ -18,7 +18,7 @@
 //! Still experimental, not sure this is the best way to do this
 
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use util::Mutex;
@@ -31,7 +31,7 @@ use core::core::Transaction;
 use core::ser;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
-use libwallet::internal::{keys, selection, tx, updater};
+use libwallet::internal::{keys, tx, updater};
 use libwallet::types::{
 	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, TxLogEntry, TxWrapper,
 	WalletBackend, WalletInfo,
@@ -462,47 +462,6 @@ where
 		let res = updater::build_coinbase(&mut *w, block_fees);
 		w.close()?;
 		res
-	}
-
-	/// A sender provided a transaction file with appropriate public keys and
-	/// metadata. Complete the receivers' end of it to generate another file
-	/// to send back.
-	pub fn file_receive_tx(&mut self, source: &str) -> Result<(), Error> {
-		let mut pub_tx_f = File::open(source)?;
-		let mut content = String::new();
-		pub_tx_f.read_to_string(&mut content)?;
-		let mut slate: Slate = json::from_str(&content).map_err(|_| ErrorKind::Format)?;
-
-		let mut wallet = self.wallet.lock();
-		wallet.open_with_credentials()?;
-		let parent_key_id = wallet.parent_key_id();
-
-		// create an output using the amount in the slate
-		let (_, mut context, receiver_create_fn) = selection::build_recipient_output_with_slate(
-			&mut *wallet,
-			&mut slate,
-			parent_key_id,
-			false,
-		)?;
-
-		// fill public keys
-		let _ = slate.fill_round_1(
-			wallet.keychain(),
-			&mut context.sec_key,
-			&context.sec_nonce,
-			1,
-		)?;
-
-		// perform partial sig
-		let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 1)?;
-
-		// save to file
-		let mut pub_tx = File::create(source.to_owned() + ".response")?;
-		pub_tx.write_all(json::to_string(&slate).unwrap().as_bytes())?;
-
-		// Save output in wallet
-		let _ = receiver_create_fn(&mut wallet);
-		Ok(())
 	}
 
 	/// Receive a transaction from a sender
