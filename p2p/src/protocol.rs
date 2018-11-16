@@ -15,20 +15,18 @@
 use std::cmp;
 use std::env;
 use std::fs::File;
-use std::io::{self, BufWriter};
-use std::net::{SocketAddr, TcpStream};
+use std::io::BufWriter;
+use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time;
 
 use chrono::prelude::Utc;
 use conn::{Message, MessageHandler, Response};
 use core::core::{self, hash::Hash, CompactBlock};
-use core::{global, ser};
 use util::{RateCounter, RwLock};
 
 use msg::{
-	read_exact, BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr,
-	TxHashSetArchive, TxHashSetRequest, Type,
+	BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr, TxHashSetArchive,
+	TxHashSetRequest, Type,
 };
 use types::{Error, NetAdapter};
 
@@ -194,32 +192,34 @@ impl MessageHandler for Protocol {
 			// we can go request it from some of our peers
 			Type::Header => {
 				let header: core::BlockHeader = msg.body()?;
-
 				adapter.header_received(header, self.addr);
-
-				// we do not return a hash here as we never request a single header
-				// a header will always arrive unsolicited
 				Ok(None)
 			}
 
 			Type::Headers => {
-				let conn = &mut msg.get_conn();
+				let mut total_bytes_read = 0;
 
-				let header_size: u64 = headers_header_size(conn, msg.header.msg_len)?;
-				let mut total_read: u64 = 2;
-				let mut reserved: Vec<u8> = vec![];
+				// Read the count (u16) so we now how many headers to read.
+				let (count, bytes_read): (u16, _) = msg.streaming_read()?;
+				total_bytes_read += bytes_read;
 
-				while total_read < msg.header.msg_len || reserved.len() > 0 {
-					let headers: Headers = headers_streaming_body(
-						conn,
-						msg.header.msg_len,
-						32,
-						&mut total_read,
-						&mut reserved,
-						header_size,
-					)?;
-					adapter.headers_received(headers.headers, self.addr);
+				// Read chunks of headers off the stream and pass them off to the adapter.
+				let chunk_size = 32;
+				for chunk in (0..count).collect::<Vec<_>>().chunks(chunk_size) {
+					let mut headers = vec![];
+					for _ in chunk {
+						let (header, bytes_read) = msg.streaming_read()?;
+						headers.push(header);
+						total_bytes_read += bytes_read;
+					}
+					adapter.headers_received(headers, self.addr);
 				}
+
+				// Now check we read the correct total number of bytes off the stream.
+				if total_bytes_read != msg.header.msg_len {
+					return Err(Error::MsgLen);
+				}
+
 				Ok(None)
 			}
 
@@ -343,98 +343,4 @@ impl MessageHandler for Protocol {
 			}
 		}
 	}
-}
-
-/// Read the Headers Vec size from the underlying connection, and calculate maximum header_size of one Header
-fn headers_header_size(conn: &mut TcpStream, msg_len: u64) -> Result<u64, Error> {
-	let mut size = vec![0u8; 2];
-	// read size of Vec<BlockHeader>
-	read_exact(conn, &mut size, time::Duration::from_millis(10), true)?;
-
-	let total_headers = size[0] as u64 * 256 + size[1] as u64;
-	if total_headers == 0 || total_headers > 10_000 {
-		return Err(Error::Connection(io::Error::new(
-			io::ErrorKind::InvalidData,
-			"headers_header_size",
-		)));
-	}
-	let average_header_size = (msg_len - 2) / total_headers;
-
-	// support size of Cuck(at)oo: from Cuck(at)oo 29 to Cuck(at)oo 35, with version 2
-	// having slightly larger headers
-	let min_size = core::serialized_size_of_header(1, global::min_edge_bits());
-	let max_size = min_size + 6;
-	if average_header_size < min_size as u64 || average_header_size > max_size as u64 {
-		debug!(
-			"headers_header_size - size of Vec: {}, average_header_size: {}, min: {}, max: {}",
-			total_headers, average_header_size, min_size, max_size,
-		);
-		return Err(Error::Connection(io::Error::new(
-			io::ErrorKind::InvalidData,
-			"headers_header_size",
-		)));
-	}
-	return Ok(max_size as u64);
-}
-
-/// Read the Headers streaming body from the underlying connection
-fn headers_streaming_body(
-	conn: &mut TcpStream,   // (i) underlying connection
-	msg_len: u64,           // (i) length of whole 'Headers'
-	headers_num: u64,       // (i) how many BlockHeader(s) do you want to read
-	total_read: &mut u64,   // (i/o) how many bytes already read on this 'Headers' message
-	reserved: &mut Vec<u8>, // (i/o) reserved part of previous read, which is not a whole header
-	max_header_size: u64,   // (i) maximum possible size of single BlockHeader
-) -> Result<Headers, Error> {
-	if headers_num == 0 || msg_len < *total_read || *total_read < 2 {
-		return Err(Error::Connection(io::Error::new(
-			io::ErrorKind::InvalidInput,
-			"headers_streaming_body",
-		)));
-	}
-
-	// Note:
-	// As we allow Cuckoo sizes greater than 30 now, the proof of work part of the header
-	// could be 30*42 bits, 31*42 bits, 32*42 bits, etc.
-	// So, for compatibility with variable size of block header, we read max possible size, for
-	// up to Cuckoo 36.
-	//
-	let mut read_size = headers_num * max_header_size - reserved.len() as u64;
-	if *total_read + read_size > msg_len {
-		read_size = msg_len - *total_read;
-	}
-
-	// 1st part
-	let mut body = vec![0u8; 2]; // for Vec<> size
-	let mut final_headers_num = (read_size + reserved.len() as u64) / max_header_size;
-	let remaining = msg_len - *total_read - read_size;
-	if final_headers_num == 0 && remaining == 0 {
-		final_headers_num = 1;
-	}
-	body[0] = (final_headers_num >> 8) as u8;
-	body[1] = (final_headers_num & 0x00ff) as u8;
-
-	// 2nd part
-	body.append(reserved);
-
-	// 3rd part
-	let mut read_body = vec![0u8; read_size as usize];
-	if read_size > 0 {
-		read_exact(conn, &mut read_body, time::Duration::from_secs(20), true)?;
-		*total_read += read_size;
-	}
-	body.append(&mut read_body);
-
-	// deserialize these assembled 3 parts
-	let result: Result<Headers, Error> = ser::deserialize(&mut &body[..]).map_err(From::from);
-	let headers = result?;
-
-	// remaining data
-	let mut deserialized_size = 2; // for Vec<> size
-	for header in &headers.headers {
-		deserialized_size += header.serialized_size();
-	}
-	*reserved = body[deserialized_size..].to_vec();
-
-	Ok(headers)
 }

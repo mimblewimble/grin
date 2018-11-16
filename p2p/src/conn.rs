@@ -28,8 +28,9 @@ use std::{cmp, thread, time};
 
 use core::ser;
 use core::ser::FixedLength;
-use msg::{read_body, read_exact, read_header, write_all, write_to_buf, MsgHeader, Type};
+use msg::{read_body, read_header, read_item, write_to_buf, MsgHeader, Type};
 use types::Error;
+use util::read_write::{read_exact, write_all};
 use util::{RateCounter, RwLock};
 
 /// A trait to be implemented in order to receive messages from the
@@ -69,17 +70,15 @@ impl<'a> Message<'a> {
 		Message { header, conn }
 	}
 
-	/// Get the TcpStream
-	pub fn get_conn(&mut self) -> TcpStream {
-		return self.conn.try_clone().unwrap();
+	/// Read the message body from the underlying connection
+	pub fn body<T: ser::Readable>(&mut self) -> Result<T, Error> {
+		read_body(&self.header, self.conn)
 	}
 
-	/// Read the message body from the underlying connection
-	pub fn body<T>(&mut self) -> Result<T, Error>
-	where
-		T: ser::Readable,
-	{
-		read_body(&self.header, self.conn)
+	/// Read a single "thing" from the underlying connection.
+	/// Return the thing and the total bytes read.
+	pub fn streaming_read<T: ser::Readable>(&mut self) -> Result<(T, u64), Error> {
+		read_item(self.conn)
 	}
 
 	pub fn copy_attachment(&mut self, len: usize, writer: &mut Write) -> Result<usize, Error> {

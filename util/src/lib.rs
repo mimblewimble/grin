@@ -57,6 +57,9 @@ pub use types::{LogLevel, LoggingConfig};
 
 pub mod macros;
 
+// read_exact and write_all impls
+pub mod read_write;
+
 // other utils
 #[allow(unused_imports)]
 use std::ops::Deref;

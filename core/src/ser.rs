@@ -19,6 +19,8 @@
 //! To use it simply implement `Writeable` or `Readable` and then use the
 //! `serialize` or `deserialize` functions on them as appropriate.
 
+use std::time::Duration;
+
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use consensus;
 use core::hash::{Hash, Hashed};
@@ -27,6 +29,7 @@ use std::fmt::Debug;
 use std::io::{self, Read, Write};
 use std::marker;
 use std::{cmp, error, fmt};
+use util::read_write::read_exact;
 use util::secp::constants::{
 	AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE, SECRET_KEY_SIZE,
 };
@@ -206,7 +209,8 @@ pub trait Writeable {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error>;
 }
 
-struct IteratingReader<'a, T> {
+/// Reader that exposes an Iterator interface.
+pub struct IteratingReader<'a, T> {
 	count: u64,
 	curr: u64,
 	reader: &'a mut Reader,
@@ -214,7 +218,9 @@ struct IteratingReader<'a, T> {
 }
 
 impl<'a, T> IteratingReader<'a, T> {
-	fn new(reader: &'a mut Reader, count: u64) -> IteratingReader<'a, T> {
+	/// Constructor to create a new iterating reader for the provided underlying reader.
+	/// Takes a count so we know how many to iterate over.
+	pub fn new(reader: &'a mut Reader, count: u64) -> IteratingReader<'a, T> {
 		let curr = 0;
 		IteratingReader {
 			count,
@@ -270,7 +276,7 @@ where
 	fn read(reader: &mut Reader) -> Result<Self, Error>;
 }
 
-/// Deserializes a Readeable from any std::io::Read implementation.
+/// Deserializes a Readable from any std::io::Read implementation.
 pub fn deserialize<T: Readable>(source: &mut Read) -> Result<T, Error> {
 	let mut reader = BinReader { source };
 	T::read(&mut reader)
@@ -325,17 +331,102 @@ impl<'a> Reader for BinReader<'a> {
 		let len = self.read_u64()?;
 		self.read_fixed_bytes(len as usize)
 	}
+
 	/// Read a fixed number of bytes.
-	fn read_fixed_bytes(&mut self, length: usize) -> Result<Vec<u8>, Error> {
-		// not reading more than 100k in a single read
-		if length > 100000 {
+	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
+		// not reading more than 100k bytes in a single read
+		if len > 100_000 {
 			return Err(Error::TooLargeReadErr);
 		}
-		let mut buf = vec![0; length];
+		let mut buf = vec![0; len];
 		self.source
 			.read_exact(&mut buf)
 			.map(move |_| buf)
 			.map_err(map_io_err)
+	}
+
+	fn expect_u8(&mut self, val: u8) -> Result<u8, Error> {
+		let b = self.read_u8()?;
+		if b == val {
+			Ok(b)
+		} else {
+			Err(Error::UnexpectedData {
+				expected: vec![val],
+				received: vec![b],
+			})
+		}
+	}
+}
+
+/// A reader that reads straight off a stream.
+/// Tracks total bytes read so we can verify we read the right number afterwards.
+pub struct StreamingReader<'a> {
+	total_bytes_read: u64,
+	stream: &'a mut Read,
+	timeout: Duration,
+}
+
+impl<'a> StreamingReader<'a> {
+	/// Create a new streaming reader with the provided underlying stream.
+	/// Also takes a duration to be used for each individual read_exact call.
+	pub fn new(stream: &'a mut Read, timeout: Duration) -> StreamingReader<'a> {
+		StreamingReader {
+			total_bytes_read: 0,
+			stream,
+			timeout,
+		}
+	}
+
+	/// Returns the total bytes read via this streaming reader.
+	pub fn total_bytes_read(&self) -> u64 {
+		self.total_bytes_read
+	}
+}
+
+impl<'a> Reader for StreamingReader<'a> {
+	fn read_u8(&mut self) -> Result<u8, Error> {
+		let buf = self.read_fixed_bytes(1)?;
+		deserialize(&mut &buf[..])
+	}
+
+	fn read_u16(&mut self) -> Result<u16, Error> {
+		let buf = self.read_fixed_bytes(2)?;
+		deserialize(&mut &buf[..])
+	}
+
+	fn read_u32(&mut self) -> Result<u32, Error> {
+		let buf = self.read_fixed_bytes(4)?;
+		deserialize(&mut &buf[..])
+	}
+
+	fn read_i32(&mut self) -> Result<i32, Error> {
+		let buf = self.read_fixed_bytes(4)?;
+		deserialize(&mut &buf[..])
+	}
+
+	fn read_u64(&mut self) -> Result<u64, Error> {
+		let buf = self.read_fixed_bytes(8)?;
+		deserialize(&mut &buf[..])
+	}
+
+	fn read_i64(&mut self) -> Result<i64, Error> {
+		let buf = self.read_fixed_bytes(8)?;
+		deserialize(&mut &buf[..])
+	}
+
+	/// Read a variable size vector from the underlying stream. Expects a usize
+	fn read_bytes_len_prefix(&mut self) -> Result<Vec<u8>, Error> {
+		let len = self.read_u64()?;
+		self.total_bytes_read += 8;
+		self.read_fixed_bytes(len as usize)
+	}
+
+	/// Read a fixed number of bytes.
+	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
+		let mut buf = vec![0u8; len];
+		read_exact(&mut self.stream, &mut buf, self.timeout, true)?;
+		self.total_bytes_read += len as u64;
+		Ok(buf)
 	}
 
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error> {
