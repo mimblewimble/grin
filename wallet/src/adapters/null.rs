@@ -14,8 +14,10 @@
 
 /// Null Output 'plugin' implementation
 use libtx::slate::Slate;
-use libwallet;
-use WalletCommAdapter;
+use libwallet::Error;
+use {WalletCommAdapter, WalletConfig};
+
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct NullWalletCommAdapter {}
@@ -32,15 +34,19 @@ impl WalletCommAdapter for NullWalletCommAdapter {
 		true
 	}
 
-	fn send_tx_sync(&self, _dest: &str, _slate: &Slate) -> Result<Slate, libwallet::Error> {
+	fn send_tx_sync(&self, _dest: &str, _slate: &Slate) -> Result<Slate, Error> {
 		unimplemented!();
 	}
 
-	fn send_tx_async(&self, _dest: &str, _slate: &Slate) -> Result<(), libwallet::Error> {
+	fn send_tx_async(&self, _dest: &str, _slate: &Slate) -> Result<(), Error> {
 		unimplemented!();
 	}
 
-	fn receive_tx_async(&self, _params: &str) -> Result<Slate, libwallet::Error> {
+	fn receive_tx_async(&self, _params: &str) -> Result<Slate, Error> {
+		unimplemented!();
+	}
+
+	fn listen(&self, _params: HashMap<String, String>, _config: WalletConfig, _passphrase: &str, _account: &str, _node_api_secret: Option<String>) -> Result<(), Error>{
 		unimplemented!();
 	}
 }

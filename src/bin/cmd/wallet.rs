@@ -16,10 +16,8 @@ use clap::ArgMatches;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 /// Wallet commands processing
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use util::Mutex;
 
 use api::TLSConfig;
 use config::GlobalWalletConfig;
@@ -27,8 +25,8 @@ use core::{core, global};
 use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
-	start_listener, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend,
-	NullWalletCommAdapter, WalletBackend, WalletConfig, WalletInst, WalletSeed,
+	instantiate_wallet, start_listener, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend,
+	NullWalletCommAdapter, WalletConfig, WalletSeed,
 };
 use keychain;
 use servers::start_webwallet_server;
@@ -49,28 +47,6 @@ pub fn seed_exists(wallet_config: WalletConfig) -> bool {
 	} else {
 		false
 	}
-}
-pub fn instantiate_wallet(
-	wallet_config: WalletConfig,
-	passphrase: &str,
-	account: &str,
-	node_api_secret: Option<String>,
-) -> Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>> {
-	let client_n = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-	let mut db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, client_n)
-		.unwrap_or_else(|e| {
-			panic!(
-				"Error creating DB wallet: {} Config: {:?}",
-				e, wallet_config
-			);
-		});
-	db_wallet
-		.set_parent_key_id_by_name(account)
-		.unwrap_or_else(|e| {
-			panic!("Error starting wallet: {}", e);
-		});
-	info!("Using LMDB Backend for wallet");
-	Arc::new(Mutex::new(db_wallet))
 }
 
 pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i32 {

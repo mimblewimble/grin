@@ -17,10 +17,11 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 use serde_json as json;
+use std::collections::HashMap;
 
 use libtx::slate::Slate;
 use libwallet::{Error, ErrorKind};
-use WalletCommAdapter;
+use {WalletCommAdapter, WalletConfig};
 
 #[derive(Clone)]
 pub struct FileWalletCommAdapter {}
@@ -53,5 +54,9 @@ impl WalletCommAdapter for FileWalletCommAdapter {
 		let mut content = String::new();
 		pub_tx_f.read_to_string(&mut content)?;
 		Ok(json::from_str(&content).map_err(|_| ErrorKind::Format)?)
+	}
+
+	fn listen(&self, _params: HashMap<String, String>, _config: WalletConfig, _passphrase: &str, _account: &str, _node_api_secret: Option<String>) -> Result<(), Error>{
+		unimplemented!();
 	}
 }

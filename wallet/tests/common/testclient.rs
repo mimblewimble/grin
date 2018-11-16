@@ -44,7 +44,7 @@ use keychain::Keychain;
 use util::secp::pedersen;
 use wallet::libtx::slate::Slate;
 use wallet::libwallet::types::*;
-use wallet::{libwallet, WalletCommAdapter};
+use wallet::{libwallet, WalletCommAdapter, WalletConfig};
 
 use common;
 
@@ -371,6 +371,10 @@ impl WalletCommAdapter for LocalWalletClient {
 	}
 
 	fn receive_tx_async(&self, _params: &str) -> Result<Slate, libwallet::Error> {
+		unimplemented!();
+	}
+
+	fn listen(&self, params: HashMap<String, String>, config: WalletConfig, passphrase: &str, account: &str, node_api_secret: Option<String>) -> Result<(), Error> {
 		unimplemented!();
 	}
 }

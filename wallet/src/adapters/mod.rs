@@ -20,8 +20,11 @@ pub use self::file::FileWalletCommAdapter;
 pub use self::http::{start_listener, HTTPWalletCommAdapter};
 pub use self::null::NullWalletCommAdapter;
 
+use std::collections::HashMap;
+
 use libtx::slate::Slate;
 use libwallet::Error;
+use WalletConfig;
 
 /// Encapsulate wallet to wallet communication functions
 pub trait WalletCommAdapter {
@@ -37,4 +40,9 @@ pub trait WalletCommAdapter {
 
 	/// Receive a transaction async. (Actually just read it from wherever and return the slate)
 	fn receive_tx_async(&self, params: &str) -> Result<Slate, Error>;
+
+	/// Start a listener, passing received messages to the wallet api directly
+	/// Takes a wallet config for now to avoid needing all sorts of awkward
+	/// type parameters on this trait
+	fn listen(&self, params: HashMap<String, String>, config: WalletConfig, passphrase: &str, account: &str, node_api_secret: Option<String>) -> Result<(), Error>;
 }

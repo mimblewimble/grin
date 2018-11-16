@@ -21,9 +21,9 @@ use util::Mutex;
 use api;
 use keychain::Keychain;
 use libtx::slate::Slate;
-use libwallet;
+use libwallet::{controller, Error, ErrorKind};
 use libwallet::types::*;
-use WalletCommAdapter;
+use {WalletCommAdapter, WalletConfig};
 
 #[derive(Clone)]
 pub struct HTTPWalletCommAdapter {}
@@ -40,29 +40,33 @@ impl WalletCommAdapter for HTTPWalletCommAdapter {
 		true
 	}
 
-	fn send_tx_sync(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+	fn send_tx_sync(&self, dest: &str, slate: &Slate) -> Result<Slate, Error> {
 		if &dest[..4] != "http" {
 			let err_str = format!(
 				"dest formatted as {} but send -d expected stdout or http://IP:port",
 				dest
 			);
 			error!("{}", err_str,);
-			Err(libwallet::ErrorKind::Uri)?
+			Err(ErrorKind::Uri)?
 		}
 		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
 		debug!("Posting transaction slate to {}", url);
 
 		let res = api::client::post(url.as_str(), None, slate).context(
-			libwallet::ErrorKind::ClientCallback("Posting transaction slate"),
+			ErrorKind::ClientCallback("Posting transaction slate"),
 		)?;
 		Ok(res)
 	}
 
-	fn send_tx_async(&self, _dest: &str, _slate: &Slate) -> Result<(), libwallet::Error> {
+	fn send_tx_async(&self, _dest: &str, _slate: &Slate) -> Result<(), Error> {
 		unimplemented!();
 	}
 
-	fn receive_tx_async(&self, _params: &str) -> Result<Slate, libwallet::Error> {
+	fn receive_tx_async(&self, _params: &str) -> Result<Slate, Error> {
+		unimplemented!();
+	}
+
+	fn listen(&self, params: HashMap<String, String>, config: WalletConfig, passphrase: &str, account: &str, node_api_secret: Option<String>) -> Result<(), Error>{
 		unimplemented!();
 	}
 }
@@ -70,7 +74,7 @@ impl WalletCommAdapter for HTTPWalletCommAdapter {
 pub fn start_listener<T: ?Sized, C, K>(
 	params: HashMap<String, String>,
 	wallet: Arc<Mutex<T>>,
-) -> Result<(), libwallet::Error>
+) -> Result<(), Error>
 where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
 	C: NodeClient + 'static,
@@ -84,6 +88,6 @@ where
 		)),
 		None => None,
 	};
-	libwallet::controller::foreign_listener(wallet.clone(), &listen_addr, tls_conf)?;
+	controller::foreign_listener(wallet.clone(), &listen_addr, tls_conf)?;
 	Ok(())
 }
