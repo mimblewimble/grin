@@ -34,7 +34,7 @@ use core::{
 use global;
 use keychain::{self, BlindingFactor};
 use pow::{Difficulty, Proof, ProofOfWork};
-use ser::{self, FixedLength, HashOnlyPMMRable, Readable, Reader, Writeable, Writer};
+use ser::{self, HashOnlyPMMRable, Readable, Reader, Writeable, Writer};
 use util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
@@ -138,34 +138,6 @@ pub struct BlockHeader {
 	pub kernel_mmr_size: u64,
 	/// Proof of work and related
 	pub pow: ProofOfWork,
-}
-
-const FIXED_HEADER_SIZE: usize = 2 // version
-		+ 8 // height
-		+ 8 // timestamp
-		+ 5 * Hash::LEN // prev_hash, prev_root, output_root, range_proof_root, kernel_root
-		+ BlindingFactor::LEN // total_kernel_offset
-		+ 2 * 8 // output_mmr_size, kernel_mmr_size
-		+ Difficulty::LEN // total_difficulty
-		+ 4 // secondary_scaling
-		+ 8; // nonce
-
-/// Serialized size of fixed part of a BlockHeader, i.e. without pow
-fn fixed_size_of_serialized_header(_version: u16) -> usize {
-	FIXED_HEADER_SIZE
-}
-
-/// Serialized size of a BlockHeader
-pub fn serialized_size_of_header(version: u16, edge_bits: u8) -> usize {
-	let mut size = fixed_size_of_serialized_header(version);
-
-	size += 1; // pow.edge_bits
-	let bitvec_len = global::proofsize() * edge_bits as usize;
-	size += bitvec_len / 8; // pow.nonces
-	if bitvec_len % 8 != 0 {
-		size += 1;
-	}
-	size
 }
 
 impl Default for BlockHeader {
@@ -291,20 +263,6 @@ impl BlockHeader {
 	/// Total kernel offset for the chain state up to and including this block.
 	pub fn total_kernel_offset(&self) -> BlindingFactor {
 		self.total_kernel_offset
-	}
-
-	/// Serialized size of this header
-	pub fn serialized_size(&self) -> usize {
-		let mut size = fixed_size_of_serialized_header(self.version);
-
-		size += 1; // pow.edge_bits
-		let nonce_bits = self.pow.edge_bits() as usize;
-		let bitvec_len = global::proofsize() * nonce_bits;
-		size += bitvec_len / 8; // pow.nonces
-		if bitvec_len % 8 != 0 {
-			size += 1;
-		}
-		size
 	}
 }
 
