@@ -983,7 +983,8 @@ impl Chain {
 		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
 			return Err(ErrorKind::TxHashSetErr(String::from(
 				"Output and rangeproof sets don't match",
-			)).into());
+			))
+			.into());
 		}
 		let mut output_vec: Vec<Output> = vec![];
 		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
@@ -1039,8 +1040,9 @@ impl Chain {
 
 	/// Gets a block header by hash
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		Ok(self.store.get_block(h).unwrap())
-		//.map_err(|e| ErrorKind::StoreErr(e, "chain get block".to_owned()).into())
+		self.store
+			.get_block(h)
+			.map_err(|e| ErrorKind::StoreErr(e, "chain get block".to_owned()).into())
 	}
 
 	/// Gets a block header by hash
