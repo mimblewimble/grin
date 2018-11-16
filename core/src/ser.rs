@@ -207,14 +207,14 @@ pub trait Writeable {
 }
 
 pub struct IteratingReader<'a, T> {
-	count: u64,
+	count: Option<u64>,
 	curr: u64,
 	reader: &'a mut Reader,
 	_marker: marker::PhantomData<T>,
 }
 
 impl<'a, T> IteratingReader<'a, T> {
-	pub fn new(reader: &'a mut Reader, count: u64) -> IteratingReader<'a, T> {
+	pub fn new(reader: &'a mut Reader, count: Option<u64>) -> IteratingReader<'a, T> {
 		let curr = 0;
 		IteratingReader {
 			count,
@@ -232,7 +232,7 @@ where
 	type Item = T;
 
 	fn next(&mut self) -> Option<T> {
-		if self.curr > 0 && self.curr >= self.count {
+		if self.count.is_some() && self.curr >= self.count.unwrap() {
 			return None;
 		}
 		self.curr += 1;
@@ -252,7 +252,7 @@ where
 		return Err(Error::TooLargeReadErr);
 	}
 
-	let res: Vec<T> = IteratingReader::new(reader, count).collect();
+	let res: Vec<T> = IteratingReader::new(reader, Some(count)).collect();
 	if res.len() as u64 != count {
 		return Err(Error::CountError);
 	}

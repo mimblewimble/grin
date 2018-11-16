@@ -330,7 +330,7 @@ where
 	if file_path.exists() {
 		let mut file = BufReader::with_capacity(elmt_len * 1000, File::open(&path)?);
 		let mut reader = ser::BinReader::new(&mut file);
-		let iter_read = ser::IteratingReader::new(&mut reader, 0);
+		let iter_read = ser::IteratingReader::new(&mut reader, None);
 		for elmt in iter_read {
 			if let Err(idx) = ovec.binary_search(&elmt) {
 				ovec.insert(idx, elmt);

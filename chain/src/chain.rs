@@ -1040,9 +1040,9 @@ impl Chain {
 
 	/// Gets a block header by hash
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
-		self.store
-			.get_block(h)
-			.map_err(|e| ErrorKind::StoreErr(e, "chain get block".to_owned()).into())
+		Ok(self.store
+			.get_block(h).unwrap())
+			//.map_err(|e| ErrorKind::StoreErr(e, "chain get block".to_owned()).into())
 	}
 
 	/// Gets a block header by hash
