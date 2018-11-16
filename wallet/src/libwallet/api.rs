@@ -202,42 +202,6 @@ where
 		Ok((slate, lock_fn))
 	}
 
-	/// Receive a transaction from a sender,
-	/// This is included here to facilitate self sends
-	/// DO NOT expose this function externally via a listener
-	/// TODO: Remove duplicate code from foreign API
-	pub fn receive_tx(
-		&mut self,
-		slate: &mut Slate,
-		dest_acct_name: Option<&str>,
-	) -> Result<(), Error> {
-		let mut w = self.wallet.lock();
-		w.open_with_credentials()?;
-		let parent_key_id = match dest_acct_name {
-			Some(d) => {
-				let pm = w.get_acct_path(d.to_owned())?;
-				match pm {
-					Some(p) => p.path,
-					None => w.parent_key_id(),
-				}
-			}
-			None => w.parent_key_id(),
-		};
-		let res = tx::receive_tx(&mut *w, slate, &parent_key_id, false);
-		w.close()?;
-
-		if let Err(e) = res {
-			error!("api: receive_tx: failed with error: {}", e);
-			Err(e)
-		} else {
-			debug!(
-				"api: receive_tx: successfully received tx: {}",
-				slate.tx.hash()
-			);
-			Ok(())
-		}
-	}
-
 	/// Lock outputs associated with a given slate/transaction
 	pub fn tx_lock_outputs(
 		&mut self,

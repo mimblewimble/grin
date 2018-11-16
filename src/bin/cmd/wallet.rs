@@ -347,7 +347,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				if adapter.supports_sync() {
 					slate = adapter.send_tx_sync(dest, &slate)?;
 					if method == "self" {
-						api.receive_tx(&mut slate, Some(dest))?;
+						controller::foreign_single_use(wallet, |api| {
+							api.receive_tx(&mut slate, Some(dest))?;
+							Ok(())
+						})?;
 					}
 					api.finalize_tx(&mut slate)?;
 				} else {
