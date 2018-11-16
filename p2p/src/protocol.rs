@@ -185,9 +185,11 @@ impl MessageHandler for Protocol {
 				let headers = adapter.locate_headers(loc.hashes);
 
 				// serialize and send all the headers over
-				Ok(Some(
-					Response::new(Type::Headers, Headers { headers }, writer),
-				))
+				Ok(Some(Response::new(
+					Type::Headers,
+					Headers { headers },
+					writer,
+				)))
 			}
 
 			// "header first" block propagation - if we have not yet seen this block
