@@ -15,7 +15,7 @@
 use std::cmp;
 use std::env;
 use std::fs::File;
-use std::io::BufWriter;
+use std::io::{BufWriter, Write};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -45,6 +45,7 @@ impl MessageHandler for Protocol {
 	fn consume<'a>(
 		&self,
 		mut msg: Message<'a>,
+		writer: &'a mut Write,
 		received_bytes: Arc<RwLock<RateCounter>>,
 	) -> Result<Option<Response<'a>>, Error> {
 		let adapter = &self.adapter;
@@ -65,12 +66,13 @@ impl MessageHandler for Protocol {
 				let ping: Ping = msg.body()?;
 				adapter.peer_difficulty(self.addr, ping.total_difficulty, ping.height);
 
-				Ok(Some(msg.respond(
+				Ok(Some(Response::new(
 					Type::Pong,
 					Pong {
 						total_difficulty: adapter.total_difficulty(),
 						height: adapter.total_height(),
 					},
+					writer,
 				)))
 			}
 
@@ -104,7 +106,7 @@ impl MessageHandler for Protocol {
 				);
 				let tx = adapter.get_transaction(h);
 				if let Some(tx) = tx {
-					Ok(Some(msg.respond(Type::Transaction, tx)))
+					Ok(Some(Response::new(Type::Transaction, tx, writer)))
 				} else {
 					Ok(None)
 				}
@@ -140,7 +142,7 @@ impl MessageHandler for Protocol {
 
 				let bo = adapter.get_block(h);
 				if let Some(b) = bo {
-					return Ok(Some(msg.respond(Type::Block, b)));
+					return Ok(Some(Response::new(Type::Block, b, writer)));
 				}
 				Ok(None)
 			}
@@ -160,7 +162,7 @@ impl MessageHandler for Protocol {
 				let h: Hash = msg.body()?;
 				if let Some(b) = adapter.get_block(h) {
 					let cb: CompactBlock = b.into();
-					Ok(Some(msg.respond(Type::CompactBlock, cb)))
+					Ok(Some(Response::new(Type::CompactBlock, cb, writer)))
 				} else {
 					Ok(None)
 				}
@@ -183,9 +185,11 @@ impl MessageHandler for Protocol {
 				let headers = adapter.locate_headers(loc.hashes);
 
 				// serialize and send all the headers over
-				Ok(Some(
-					msg.respond(Type::Headers, Headers { headers: headers }),
-				))
+				Ok(Some(Response::new(
+					Type::Headers,
+					Headers { headers },
+					writer,
+				)))
 			}
 
 			// "header first" block propagation - if we have not yet seen this block
@@ -226,11 +230,12 @@ impl MessageHandler for Protocol {
 			Type::GetPeerAddrs => {
 				let get_peers: GetPeerAddrs = msg.body()?;
 				let peer_addrs = adapter.find_peer_addrs(get_peers.capabilities);
-				Ok(Some(msg.respond(
+				Ok(Some(Response::new(
 					Type::PeerAddrs,
 					PeerAddrs {
 						peers: peer_addrs.iter().map(|sa| SockAddr(*sa)).collect(),
 					},
+					writer,
 				)))
 			}
 
@@ -251,13 +256,14 @@ impl MessageHandler for Protocol {
 
 				if let Some(txhashset) = txhashset {
 					let file_sz = txhashset.reader.metadata()?.len();
-					let mut resp = msg.respond(
+					let mut resp = Response::new(
 						Type::TxHashSetArchive,
 						&TxHashSetArchive {
 							height: sm_req.height as u64,
 							hash: sm_req.hash,
 							bytes: file_sz,
 						},
+						writer,
 					);
 					resp.add_attachment(txhashset.reader);
 					Ok(Some(resp))

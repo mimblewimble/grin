@@ -39,6 +39,7 @@ pub trait MessageHandler: Send + 'static {
 	fn consume<'a>(
 		&self,
 		msg: Message<'a>,
+		writer: &'a mut Write,
 		received_bytes: Arc<RwLock<RateCounter>>,
 	) -> Result<Option<Response<'a>>, Error>;
 }
@@ -62,23 +63,23 @@ macro_rules! try_break {
 /// header lazily consumes the message body, handling its deserialization.
 pub struct Message<'a> {
 	pub header: MsgHeader,
-	conn: &'a mut TcpStream,
+	stream: &'a mut Read,
 }
 
 impl<'a> Message<'a> {
-	fn from_header(header: MsgHeader, conn: &'a mut TcpStream) -> Message<'a> {
-		Message { header, conn }
+	fn from_header(header: MsgHeader, stream: &'a mut Read) -> Message<'a> {
+		Message { header, stream }
 	}
 
 	/// Read the message body from the underlying connection
 	pub fn body<T: ser::Readable>(&mut self) -> Result<T, Error> {
-		read_body(&self.header, self.conn)
+		read_body(&self.header, self.stream)
 	}
 
 	/// Read a single "thing" from the underlying connection.
 	/// Return the thing and the total bytes read.
 	pub fn streaming_read<T: ser::Readable>(&mut self) -> Result<(T, u64), Error> {
-		read_item(self.conn)
+		read_item(self.stream)
 	}
 
 	pub fn copy_attachment(&mut self, len: usize, writer: &mut Write) -> Result<usize, Error> {
@@ -87,7 +88,7 @@ impl<'a> Message<'a> {
 			let read_len = cmp::min(8000, len - written);
 			let mut buf = vec![0u8; read_len];
 			read_exact(
-				&mut self.conn,
+				&mut self.stream,
 				&mut buf[..],
 				time::Duration::from_secs(10),
 				true,
@@ -97,36 +98,32 @@ impl<'a> Message<'a> {
 		}
 		Ok(written)
 	}
-
-	/// Respond to the message with the provided message type and body
-	pub fn respond<T>(self, resp_type: Type, body: T) -> Response<'a>
-	where
-		T: ser::Writeable,
-	{
-		let body = ser::ser_vec(&body).unwrap();
-		Response {
-			resp_type: resp_type,
-			body: body,
-			conn: self.conn,
-			attachment: None,
-		}
-	}
 }
 
-/// Response to a `Message`
+/// Response to a `Message`.
 pub struct Response<'a> {
 	resp_type: Type,
 	body: Vec<u8>,
-	conn: &'a mut TcpStream,
+	stream: &'a mut Write,
 	attachment: Option<File>,
 }
 
 impl<'a> Response<'a> {
+	pub fn new<T: ser::Writeable>(resp_type: Type, body: T, stream: &'a mut Write) -> Response<'a> {
+		let body = ser::ser_vec(&body).unwrap();
+		Response {
+			resp_type,
+			body,
+			stream,
+			attachment: None,
+		}
+	}
+
 	fn write(mut self, sent_bytes: Arc<RwLock<RateCounter>>) -> Result<(), Error> {
 		let mut msg =
 			ser::ser_vec(&MsgHeader::new(self.resp_type, self.body.len() as u64)).unwrap();
 		msg.append(&mut self.body);
-		write_all(&mut self.conn, &msg[..], time::Duration::from_secs(10))?;
+		write_all(&mut self.stream, &msg[..], time::Duration::from_secs(10))?;
 		// Increase sent bytes counter
 		{
 			let mut sent_bytes = sent_bytes.write();
@@ -138,7 +135,7 @@ impl<'a> Response<'a> {
 				match file.read(&mut buf[..]) {
 					Ok(0) => break,
 					Ok(n) => {
-						write_all(&mut self.conn, &buf[..n], time::Duration::from_secs(10))?;
+						write_all(&mut self.stream, &buf[..n], time::Duration::from_secs(10))?;
 						// Increase sent bytes "quietly" without incrementing the counter.
 						// (In a loop here for the single attachment).
 						let mut sent_bytes = sent_bytes.write();
@@ -237,18 +234,20 @@ fn poll<H>(
 ) where
 	H: MessageHandler,
 {
-	let mut conn = conn;
+	// Split out tcp stream out into separate reader/writer halves.
+	let mut reader = conn.try_clone().expect("clone conn for reader failed");
+	let mut writer = conn.try_clone().expect("clone conn for writer failed");
+
 	let _ = thread::Builder::new()
 		.name("peer".to_string())
 		.spawn(move || {
 			let sleep_time = time::Duration::from_millis(1);
-
-			let conn = &mut conn;
 			let mut retry_send = Err(());
 			loop {
 				// check the read end
-				if let Some(h) = try_break!(error_tx, read_header(conn, None)) {
-					let msg = Message::from_header(h, conn);
+				if let Some(h) = try_break!(error_tx, read_header(&mut reader, None)) {
+					let msg = Message::from_header(h, &mut reader);
+
 					trace!(
 						"Received message header, type {:?}, len {}.",
 						msg.header.msg_type,
@@ -262,7 +261,9 @@ fn poll<H>(
 						received_bytes.inc(MsgHeader::LEN as u64 + msg.header.msg_len);
 					}
 
-					if let Some(Some(resp)) = try_break!(error_tx, handler.consume(msg, received)) {
+					if let Some(Some(resp)) =
+						try_break!(error_tx, handler.consume(msg, &mut writer, received))
+					{
 						try_break!(error_tx, resp.write(sent_bytes.clone()));
 					}
 				}
@@ -272,7 +273,7 @@ fn poll<H>(
 				retry_send = Err(());
 				if let Ok(data) = maybe_data {
 					let written =
-						try_break!(error_tx, conn.write_all(&data[..]).map_err(&From::from));
+						try_break!(error_tx, writer.write_all(&data[..]).map_err(&From::from));
 					if written.is_none() {
 						retry_send = Ok(data);
 					}
