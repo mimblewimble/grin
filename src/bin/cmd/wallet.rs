@@ -25,8 +25,8 @@ use core::{core, global};
 use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
-	instantiate_wallet, FileWalletCommAdapter, HTTPNodeClient,
-	HTTPWalletCommAdapter, LMDBBackend, NullWalletCommAdapter, WalletConfig, WalletSeed,
+	instantiate_wallet, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend,
+	NullWalletCommAdapter, WalletConfig, WalletSeed,
 };
 use keychain;
 use servers::start_webwallet_server;
@@ -143,12 +143,19 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					params.insert("private_key".to_owned(), t.private_key);
 				}
 				let adapter = HTTPWalletCommAdapter::new();
-				adapter.listen(params, wallet_config.clone(), passphrase, account, node_api_secret.clone()).unwrap_or_else(|e| {
-					panic!(
-						"Error creating wallet listener: {:?} Config: {:?}",
-						e, wallet_config
-					);
-				});
+				adapter
+					.listen(
+						params,
+						wallet_config.clone(),
+						passphrase,
+						account,
+						node_api_secret.clone(),
+					).unwrap_or_else(|e| {
+						panic!(
+							"Error creating wallet listener: {:?} Config: {:?}",
+							e, wallet_config
+						);
+					});
 			}
 			("owner_api", Some(_api_args)) => {
 				let wallet = instantiate_wallet(
@@ -172,7 +179,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					passphrase,
 					account,
 					node_api_secret.clone(),
-					);
+				);
 				// start owner listener and run static file server
 				start_webwallet_server();
 				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, tls_conf)
@@ -188,10 +195,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 	}
 
 	let wallet = instantiate_wallet(
-	wallet_config.clone(),
-	passphrase,
-	account,
-	node_api_secret.clone(),
+		wallet_config.clone(),
+		passphrase,
+		account,
+		node_api_secret.clone(),
 	);
 
 	let res = controller::owner_single_use(wallet.clone(), |api| {

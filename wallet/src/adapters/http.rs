@@ -19,7 +19,7 @@ use std::collections::HashMap;
 use api;
 use libtx::slate::Slate;
 use libwallet::{controller, Error, ErrorKind};
-use {WalletCommAdapter, WalletConfig, instantiate_wallet};
+use {instantiate_wallet, WalletCommAdapter, WalletConfig};
 
 #[derive(Clone)]
 pub struct HTTPWalletCommAdapter {}
@@ -69,12 +69,8 @@ impl WalletCommAdapter for HTTPWalletCommAdapter {
 		account: &str,
 		node_api_secret: Option<String>,
 	) -> Result<(), Error> {
-		let wallet = instantiate_wallet(
-			config.clone(),
-			passphrase,
-			account,
-			node_api_secret.clone(),
-		);
+		let wallet =
+			instantiate_wallet(config.clone(), passphrase, account, node_api_secret.clone());
 		let listen_addr = params.get("api_listen_addr").unwrap();
 		let tls_conf = match params.get("certificate") {
 			Some(s) => Some(api::TLSConfig::new(
