@@ -381,7 +381,7 @@ impl WalletCommAdapter for LocalWalletClient {
 		passphrase: &str,
 		account: &str,
 		node_api_secret: Option<String>,
-	) -> Result<(), Error> {
+	) -> Result<(), libwallet::Error> {
 		unimplemented!();
 	}
 }

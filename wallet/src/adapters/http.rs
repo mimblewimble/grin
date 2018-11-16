@@ -15,15 +15,11 @@
 /// HTTP Wallet 'plugin' implementation
 use failure::ResultExt;
 use std::collections::HashMap;
-use std::sync::Arc;
-use util::Mutex;
 
 use api;
-use keychain::Keychain;
 use libtx::slate::Slate;
-use libwallet::types::*;
 use libwallet::{controller, Error, ErrorKind};
-use {WalletCommAdapter, WalletConfig};
+use {WalletCommAdapter, WalletConfig, instantiate_wallet};
 
 #[derive(Clone)]
 pub struct HTTPWalletCommAdapter {}
@@ -73,27 +69,21 @@ impl WalletCommAdapter for HTTPWalletCommAdapter {
 		account: &str,
 		node_api_secret: Option<String>,
 	) -> Result<(), Error> {
-		unimplemented!();
+		let wallet = instantiate_wallet(
+			config.clone(),
+			passphrase,
+			account,
+			node_api_secret.clone(),
+		);
+		let listen_addr = params.get("api_listen_addr").unwrap();
+		let tls_conf = match params.get("certificate") {
+			Some(s) => Some(api::TLSConfig::new(
+				s.to_owned(),
+				params.get("private_key").unwrap().to_owned(),
+			)),
+			None => None,
+		};
+		controller::foreign_listener(wallet.clone(), &listen_addr, tls_conf)?;
+		Ok(())
 	}
-}
-
-pub fn start_listener<T: ?Sized, C, K>(
-	params: HashMap<String, String>,
-	wallet: Arc<Mutex<T>>,
-) -> Result<(), Error>
-where
-	T: WalletBackend<C, K> + Send + Sync + 'static,
-	C: NodeClient + 'static,
-	K: Keychain + 'static,
-{
-	let listen_addr = params.get("api_listen_addr").unwrap();
-	let tls_conf = match params.get("certificate") {
-		Some(s) => Some(api::TLSConfig::new(
-			s.to_owned(),
-			params.get("private_key").unwrap().to_owned(),
-		)),
-		None => None,
-	};
-	controller::foreign_listener(wallet.clone(), &listen_addr, tls_conf)?;
-	Ok(())
 }

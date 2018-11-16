@@ -55,7 +55,7 @@ mod node_clients;
 mod types;
 
 pub use adapters::{
-	start_listener, FileWalletCommAdapter, HTTPWalletCommAdapter, NullWalletCommAdapter,
+	FileWalletCommAdapter, HTTPWalletCommAdapter, NullWalletCommAdapter,
 	WalletCommAdapter,
 };
 pub use error::{Error, ErrorKind};

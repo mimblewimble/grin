@@ -17,7 +17,7 @@ mod http;
 mod null;
 
 pub use self::file::FileWalletCommAdapter;
-pub use self::http::{start_listener, HTTPWalletCommAdapter};
+pub use self::http::HTTPWalletCommAdapter;
 pub use self::null::NullWalletCommAdapter;
 
 use std::collections::HashMap;

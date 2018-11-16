@@ -25,7 +25,7 @@ use core::{core, global};
 use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
-	instantiate_wallet, start_listener, FileWalletCommAdapter, HTTPNodeClient,
+	instantiate_wallet, FileWalletCommAdapter, HTTPNodeClient,
 	HTTPWalletCommAdapter, LMDBBackend, NullWalletCommAdapter, WalletConfig, WalletSeed,
 };
 use keychain;
@@ -112,13 +112,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		Some(p) => p,
 	};
 
-	let wallet = instantiate_wallet(
-		wallet_config.clone(),
-		passphrase,
-		account,
-		node_api_secret.clone(),
-	);
-
 	// Handle listener startup commands
 	{
 		let api_secret = get_first_line(wallet_config.api_secret_path.clone());
@@ -149,7 +142,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					params.insert("certificate".to_owned(), t.certificate);
 					params.insert("private_key".to_owned(), t.private_key);
 				}
-				start_listener(params, wallet.clone()).unwrap_or_else(|e| {
+				let adapter = HTTPWalletCommAdapter::new();
+				adapter.listen(params, wallet_config.clone(), passphrase, account, node_api_secret.clone()).unwrap_or_else(|e| {
 					panic!(
 						"Error creating wallet listener: {:?} Config: {:?}",
 						e, wallet_config
@@ -157,6 +151,12 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				});
 			}
 			("owner_api", Some(_api_args)) => {
+				let wallet = instantiate_wallet(
+					wallet_config.clone(),
+					passphrase,
+					account,
+					node_api_secret.clone(),
+				);
 				// TLS is disabled because we bind to localhost
 				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, None)
 					.unwrap_or_else(|e| {
@@ -167,6 +167,12 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					});
 			}
 			("web", Some(_api_args)) => {
+				let wallet = instantiate_wallet(
+					wallet_config.clone(),
+					passphrase,
+					account,
+					node_api_secret.clone(),
+					);
 				// start owner listener and run static file server
 				start_webwallet_server();
 				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, tls_conf)
@@ -180,6 +186,13 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			_ => {}
 		};
 	}
+
+	let wallet = instantiate_wallet(
+	wallet_config.clone(),
+	passphrase,
+	account,
+	node_api_secret.clone(),
+	);
 
 	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {
