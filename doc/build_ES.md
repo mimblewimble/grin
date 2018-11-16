@@ -12,7 +12,7 @@ El lenguaje de programación de Grin `rust` ha compilado metas para la mayoría 
 
 ## Requisitos
 
-* rust 1.26+ (usa [rustup]((https://www.rustup.rs/))- por ejemplo, `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
+* rust 1.30+ (usa [rustup]((https://www.rustup.rs/))- por ejemplo, `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
   * Si rust está instalado, puede simplemente actualizar la versión con  `rustup update`
 * clang
 * ncurses y libs (ncurses, ncursesw5)
@@ -20,11 +20,12 @@ El lenguaje de programación de Grin `rust` ha compilado metas para la mayoría 
 * pkg-config
 * libssl-dev
 * linux-headers (reportado como necesario en Alpine linux)
+* llvm
 
 Para las distribuciones basadas en Debian (Debian, Ubuntu, Mint, etc), todo en un comando (exceptuando Rust):
 
 ```sh
-apt install build-essential cmake git libgit2-dev clang libncurses5-dev libncursesw5-dev zlib1g-dev pkg-config libssl-dev
+apt install build-essential cmake git libgit2-dev clang libncurses5-dev libncursesw5-dev zlib1g-dev pkg-config libssl-dev llvm
 ```
 
 ## Pasos para la compilación
