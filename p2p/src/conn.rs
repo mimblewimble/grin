@@ -29,10 +29,11 @@ use std::{cmp, thread, time};
 use core::ser;
 use core::ser::FixedLength;
 use msg::{
-	read_body, read_exact, read_header, read_item, write_all, write_to_buf, MsgHeader, Type,
+	read_body, read_header, read_item, write_to_buf, MsgHeader, Type,
 };
 use types::Error;
 use util::{RateCounter, RwLock};
+use util::read_write::{read_exact, write_all};
 
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.

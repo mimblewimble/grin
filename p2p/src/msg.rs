@@ -15,17 +15,17 @@
 //! Message types that transit over the network and related serialization code.
 
 use num::FromPrimitive;
-use std::io::{self, Read, Write};
-use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6, TcpStream};
-use std::{thread, time};
+use std::io::{Read, Write};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::time;
 
 use core::consensus;
 use core::core::hash::Hash;
 use core::core::BlockHeader;
 use core::pow::Difficulty;
-use core::ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
-
+use core::ser::{self, FixedLength, Readable, Reader, StreamingReader, Writeable, Writer};
 use types::{Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};
+use util::read_write::read_exact;
 
 /// Current latest version of the protocol
 pub const PROTOCOL_VERSION: u32 = 1;
@@ -97,111 +97,19 @@ fn max_msg_size(msg_type: Type) -> u64 {
 	}
 }
 
-/// The default implementation of read_exact is useless with async TcpStream as
-/// it will return as soon as something has been read, regardless of
-/// whether the buffer has been filled (and then errors). This implementation
-/// will block until it has read exactly `len` bytes and returns them as a
-/// `vec<u8>`. Except for a timeout, this implementation will never return a
-/// partially filled buffer.
-///
-/// The timeout in milliseconds aborts the read when it's met. Note that the
-/// time is not guaranteed to be exact. To support cases where we want to poll
-/// instead of blocking, a `block_on_empty` boolean, when false, ensures
-/// `read_exact` returns early with a `io::ErrorKind::WouldBlock` if nothing
-/// has been read from the socket.
-pub fn read_exact(
-	conn: &mut TcpStream,
-	mut buf: &mut [u8],
-	timeout: time::Duration,
-	block_on_empty: bool,
-) -> io::Result<()> {
-	let sleep_time = time::Duration::from_micros(10);
-	let mut count = time::Duration::new(0, 0);
-
-	let mut read = 0;
-	loop {
-		match conn.read(buf) {
-			Ok(0) => {
-				return Err(io::Error::new(
-					io::ErrorKind::ConnectionAborted,
-					"read_exact",
-				));
-			}
-			Ok(n) => {
-				let tmp = buf;
-				buf = &mut tmp[n..];
-				read += n;
-			}
-			Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
-			Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
-				if read == 0 && !block_on_empty {
-					return Err(io::Error::new(io::ErrorKind::WouldBlock, "read_exact"));
-				}
-			}
-			Err(e) => return Err(e),
-		}
-		if !buf.is_empty() {
-			thread::sleep(sleep_time);
-			count += sleep_time;
-		} else {
-			break;
-		}
-		if count > timeout {
-			return Err(io::Error::new(
-				io::ErrorKind::TimedOut,
-				"reading from tcp stream",
-			));
-		}
-	}
-	Ok(())
-}
-
-/// Same as `read_exact` but for writing.
-pub fn write_all(conn: &mut Write, mut buf: &[u8], timeout: time::Duration) -> io::Result<()> {
-	let sleep_time = time::Duration::from_micros(10);
-	let mut count = time::Duration::new(0, 0);
-
-	while !buf.is_empty() {
-		match conn.write(buf) {
-			Ok(0) => {
-				return Err(io::Error::new(
-					io::ErrorKind::WriteZero,
-					"failed to write whole buffer",
-				))
-			}
-			Ok(n) => buf = &buf[n..],
-			Err(ref e) if e.kind() == io::ErrorKind::Interrupted => {}
-			Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {}
-			Err(e) => return Err(e),
-		}
-		if !buf.is_empty() {
-			thread::sleep(sleep_time);
-			count += sleep_time;
-		} else {
-			break;
-		}
-		if count > timeout {
-			return Err(io::Error::new(
-				io::ErrorKind::TimedOut,
-				"reading from tcp stream",
-			));
-		}
-	}
-	Ok(())
-}
-
-/// Read a header from the provided connection without blocking if the
+/// Read a header from the provided stream without blocking if the
 /// underlying stream is async. Typically headers will be polled for, so
 /// we do not want to block.
-pub fn read_header(conn: &mut TcpStream, msg_type: Option<Type>) -> Result<MsgHeader, Error> {
+pub fn read_header(stream: &mut Read, msg_type: Option<Type>) -> Result<MsgHeader, Error> {
 	let mut head = vec![0u8; MsgHeader::LEN];
 	if Some(Type::Hand) == msg_type {
-		read_exact(conn, &mut head, time::Duration::from_millis(10), true)?;
+		read_exact(stream, &mut head, time::Duration::from_millis(10), true)?;
 	} else {
-		read_exact(conn, &mut head, time::Duration::from_secs(10), false)?;
+		read_exact(stream, &mut head, time::Duration::from_secs(10), false)?;
 	}
 	let header = ser::deserialize::<MsgHeader>(&mut &head[..])?;
 	let max_len = max_msg_size(header.msg_type);
+
 	// TODO 4x the limits for now to leave ourselves space to change things
 	if header.msg_len > max_len * 4 {
 		error!(
@@ -213,119 +121,34 @@ pub fn read_header(conn: &mut TcpStream, msg_type: Option<Type>) -> Result<MsgHe
 	Ok(header)
 }
 
-/// A reader that reads straight off a stream.
-/// Tracks total bytes read so we can verify we read the right number afterwards.
-struct StreamingReader<'a> {
-	total_bytes_read: u64,
-	conn: &'a mut TcpStream,
-}
-
-impl<'a> Reader for StreamingReader<'a> {
-	fn read_u8(&mut self) -> Result<u8, ser::Error> {
-		let buf = self.read_fixed_bytes(1)?;
-		ser::deserialize(&mut &buf[..])
-	}
-
-	fn read_u16(&mut self) -> Result<u16, ser::Error> {
-		let buf = self.read_fixed_bytes(2)?;
-		ser::deserialize(&mut &buf[..])
-	}
-
-	fn read_u32(&mut self) -> Result<u32, ser::Error> {
-		let buf = self.read_fixed_bytes(4)?;
-		ser::deserialize(&mut &buf[..])
-	}
-
-	fn read_i32(&mut self) -> Result<i32, ser::Error> {
-		let buf = self.read_fixed_bytes(4)?;
-		ser::deserialize(&mut &buf[..])
-	}
-
-	fn read_u64(&mut self) -> Result<u64, ser::Error> {
-		let buf = self.read_fixed_bytes(8)?;
-		ser::deserialize(&mut &buf[..])
-	}
-
-	fn read_i64(&mut self) -> Result<i64, ser::Error> {
-		let buf = self.read_fixed_bytes(8)?;
-		ser::deserialize(&mut &buf[..])
-	}
-
-	/// Read a variable size vector from the underlying Read. Expects a usize
-	fn read_bytes_len_prefix(&mut self) -> Result<Vec<u8>, ser::Error> {
-		let len = self.read_u64()?;
-		self.total_bytes_read += 8;
-		self.read_fixed_bytes(len as usize)
-	}
-
-	/// Read a fixed number of bytes.
-	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, ser::Error> {
-		let mut buf = vec![0u8; len];
-		read_exact(
-			&mut self.conn,
-			&mut buf,
-			time::Duration::from_secs(10),
-			true,
-		)?;
-		self.total_bytes_read += len as u64;
-		Ok(buf)
-	}
-
-	fn expect_u8(&mut self, val: u8) -> Result<u8, ser::Error> {
-		let b = self.read_u8()?;
-		if b == val {
-			Ok(b)
-		} else {
-			Err(ser::Error::UnexpectedData {
-				expected: vec![val],
-				received: vec![b],
-			})
-		}
-	}
-}
-
-/// Read a single item from the provided connection, always blocking until we
+/// Read a single item from the provided stream, always blocking until we
 /// have a result (or timeout).
 /// Returns the item and the total bytes read.
-pub fn read_item<T>(conn: &mut TcpStream) -> Result<(T, u64), Error>
-where
-	T: Readable,
-{
-	let mut reader = StreamingReader {
-		conn,
-		total_bytes_read: 0,
-	};
+pub fn read_item<T: Readable>(stream: &mut Read) -> Result<(T, u64), Error> {
+	let timeout = time::Duration::from_secs(20);
+	let mut reader = StreamingReader::new(stream, timeout);
 	let res = T::read(&mut reader)?;
-	Ok((res, reader.total_bytes_read))
+	Ok((res, reader.total_bytes_read()))
 }
 
-/// Read a message body from the provided connection, always blocking
+/// Read a message body from the provided stream, always blocking
 /// until we have a result (or timeout).
-pub fn read_body<T>(h: &MsgHeader, conn: &mut TcpStream) -> Result<T, Error>
-where
-	T: Readable,
-{
+pub fn read_body<T: Readable>(h: &MsgHeader, stream: &mut Read) -> Result<T, Error> {
 	let mut body = vec![0u8; h.msg_len as usize];
-	read_exact(conn, &mut body, time::Duration::from_secs(20), true)?;
+	read_exact(stream, &mut body, time::Duration::from_secs(20), true)?;
 	ser::deserialize(&mut &body[..]).map_err(From::from)
 }
 
-/// Reads a full message from the underlying connection.
-pub fn read_message<T>(conn: &mut TcpStream, msg_type: Type) -> Result<T, Error>
-where
-	T: Readable,
-{
-	let header = read_header(conn, Some(msg_type))?;
+/// Reads a full message from the underlying stream.
+pub fn read_message<T: Readable>(stream: &mut Read, msg_type: Type) -> Result<T, Error> {
+	let header = read_header(stream, Some(msg_type))?;
 	if header.msg_type != msg_type {
 		return Err(Error::BadMessage);
 	}
-	read_body(&header, conn)
+	read_body(&header, stream)
 }
 
-pub fn write_to_buf<T>(msg: T, msg_type: Type) -> Vec<u8>
-where
-	T: Writeable,
-{
+pub fn write_to_buf<T: Writeable>(msg: T, msg_type: Type) -> Vec<u8> {
 	// prepare the body first so we know its serialized length
 	let mut body_buf = vec![];
 	ser::serialize(&mut body_buf, &msg).unwrap();
@@ -339,13 +162,9 @@ where
 	msg_buf
 }
 
-pub fn write_message<T>(conn: &mut TcpStream, msg: T, msg_type: Type) -> Result<(), Error>
-where
-	T: Writeable + 'static,
-{
+pub fn write_message<T: Writeable>(stream: &mut Write, msg: T, msg_type: Type) -> Result<(), Error> {
 	let buf = write_to_buf(msg, msg_type);
-	// send the whole thing
-	conn.write_all(&buf[..])?;
+	stream.write_all(&buf[..])?;
 	Ok(())
 }
 
