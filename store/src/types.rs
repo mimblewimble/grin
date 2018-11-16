@@ -16,7 +16,7 @@ use memmap;
 
 use std::cmp;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufRead, BufReader, BufWriter, ErrorKind, Read, Write};
+use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Write};
 use std::path::Path;
 
 use core::core::hash::Hash;
@@ -67,9 +67,8 @@ impl HashFile {
 	}
 
 	/// Rewind the backend file to the specified position.
-	pub fn rewind(&mut self, position: u64) -> io::Result<()> {
-		self.file.rewind(position * Hash::LEN as u64);
-		Ok(())
+	pub fn rewind(&mut self, position: u64) {
+		self.file.rewind(position * Hash::LEN as u64)
 	}
 
 	/// Flush unsynced changes to the hash file to disk.
@@ -330,30 +329,19 @@ where
 	let mut ovec = Vec::with_capacity(1000);
 	if file_path.exists() {
 		let mut file = BufReader::with_capacity(elmt_len * 1000, File::open(&path)?);
-		loop {
-			// need a block to end mutable borrow before consume
-			let buf_len = {
-				let buf = file.fill_buf()?;
-				if buf.len() == 0 {
-					break;
-				}
-				let elmts_res: Result<Vec<T>, ser::Error> = ser::deserialize(&mut &buf[..]);
-				match elmts_res {
-					Ok(elmts) => for elmt in elmts {
-						if let Err(idx) = ovec.binary_search(&elmt) {
-							ovec.insert(idx, elmt);
-						}
-					},
-					Err(_) => {
-						return Err(io::Error::new(
-							io::ErrorKind::InvalidData,
-							format!("Corrupted storage, could not read file at {}", path),
-						));
-					}
-				}
-				buf.len()
-			};
-			file.consume(buf_len);
+		let mut reader = ser::BinReader::new(&mut file);
+		let iter_read = ser::IteratingReader::new(&mut reader, 0);
+		for elmt in iter_read {
+			if let Err(idx) = ovec.binary_search(&elmt) {
+				ovec.insert(idx, elmt);
+			}
+		}
+		let file_sz = fs::metadata(&file_path).map(|md| md.len()).unwrap_or(0);
+		if ovec.len() * elmt_len != file_sz as usize {
+			return Err(io::Error::new(
+					io::ErrorKind::InvalidData,
+					format!("Corrupted storage, could not read file at {}", path),
+			));
 		}
 	}
 	Ok(ovec)

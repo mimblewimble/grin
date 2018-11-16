@@ -206,7 +206,7 @@ pub trait Writeable {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error>;
 }
 
-struct IteratingReader<'a, T> {
+pub struct IteratingReader<'a, T> {
 	count: u64,
 	curr: u64,
 	reader: &'a mut Reader,
@@ -214,7 +214,7 @@ struct IteratingReader<'a, T> {
 }
 
 impl<'a, T> IteratingReader<'a, T> {
-	fn new(reader: &'a mut Reader, count: u64) -> IteratingReader<'a, T> {
+	pub fn new(reader: &'a mut Reader, count: u64) -> IteratingReader<'a, T> {
 		let curr = 0;
 		IteratingReader {
 			count,
@@ -227,12 +227,12 @@ impl<'a, T> IteratingReader<'a, T> {
 
 impl<'a, T> Iterator for IteratingReader<'a, T>
 where
-	T: Readable,
+T: Readable,
 {
 	type Item = T;
 
 	fn next(&mut self) -> Option<T> {
-		if self.curr >= self.count {
+		if self.curr > 0 && self.curr >= self.count {
 			return None;
 		}
 		self.curr += 1;
@@ -243,7 +243,7 @@ where
 /// Reads multiple serialized items into a Vec.
 pub fn read_multi<T>(reader: &mut Reader, count: u64) -> Result<Vec<T>, Error>
 where
-	T: Readable,
+T: Readable,
 {
 	// Very rudimentary check to ensure we do not overflow anything
 	// attempting to read huge amounts of data.
@@ -264,7 +264,7 @@ where
 /// underlying Read implementation.
 pub trait Readable
 where
-	Self: Sized,
+Self: Sized,
 {
 	/// Reads the data necessary to this Readable from the provided reader
 	fn read(reader: &mut Reader) -> Result<Self, Error>;
@@ -291,12 +291,18 @@ pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
 }
 
 /// Utility to read from a binary source
-struct BinReader<'a> {
-	source: &'a mut Read,
+pub struct BinReader<'a> {
+	pub source: &'a mut Read,
 }
 
 fn map_io_err(err: io::Error) -> Error {
 	Error::IOErr(format!("{}", err), err.kind())
+}
+
+impl<'a> BinReader<'a> {
+	pub fn new(source: &'a mut Read) -> BinReader<'a> {
+		BinReader{source}
+	}
 }
 
 /// Utility wrapper for an underlying byte Reader. Defines higher level methods
