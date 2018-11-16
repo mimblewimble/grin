@@ -48,7 +48,7 @@ impl WalletCommAdapter for FileWalletCommAdapter {
 		Ok(())
 	}
 
-	fn receive_tx_async(&self, params: &str) -> Result<Slate, Error>{
+	fn receive_tx_async(&self, params: &str) -> Result<Slate, Error> {
 		let mut pub_tx_f = File::open(params)?;
 		let mut content = String::new();
 		pub_tx_f.read_to_string(&mut content)?;
