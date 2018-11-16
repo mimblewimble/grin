@@ -424,12 +424,7 @@ impl<'a> Reader for StreamingReader<'a> {
 	/// Read a fixed number of bytes.
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
 		let mut buf = vec![0u8; len];
-		read_exact(
-			&mut self.stream,
-			&mut buf,
-			self.timeout,
-			true,
-		)?;
+		read_exact(&mut self.stream, &mut buf, self.timeout, true)?;
 		self.total_bytes_read += len as u64;
 		Ok(buf)
 	}

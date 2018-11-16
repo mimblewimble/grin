@@ -16,8 +16,8 @@
 
 use std::io;
 use std::io::prelude::*;
+use std::thread;
 use std::time::Duration;
-use std::{thread};
 
 /// The default implementation of read_exact is useless with an async stream (TcpStream) as
 /// it will return as soon as something has been read, regardless of
@@ -79,11 +79,7 @@ pub fn read_exact(
 }
 
 /// Same as `read_exact` but for writing.
-pub fn write_all(
-	stream: &mut Write,
-	mut buf: &[u8],
-	timeout: Duration,
-) -> io::Result<()> {
+pub fn write_all(stream: &mut Write, mut buf: &[u8], timeout: Duration) -> io::Result<()> {
 	let sleep_time = Duration::from_micros(10);
 	let mut count = Duration::new(0, 0);
 
@@ -107,10 +103,7 @@ pub fn write_all(
 			break;
 		}
 		if count > timeout {
-			return Err(io::Error::new(
-				io::ErrorKind::TimedOut,
-				"writing to stream",
-			));
+			return Err(io::Error::new(io::ErrorKind::TimedOut, "writing to stream"));
 		}
 	}
 	Ok(())

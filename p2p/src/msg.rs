@@ -162,7 +162,11 @@ pub fn write_to_buf<T: Writeable>(msg: T, msg_type: Type) -> Vec<u8> {
 	msg_buf
 }
 
-pub fn write_message<T: Writeable>(stream: &mut Write, msg: T, msg_type: Type) -> Result<(), Error> {
+pub fn write_message<T: Writeable>(
+	stream: &mut Write,
+	msg: T,
+	msg_type: Type,
+) -> Result<(), Error> {
 	let buf = write_to_buf(msg, msg_type);
 	stream.write_all(&buf[..])?;
 	Ok(())
