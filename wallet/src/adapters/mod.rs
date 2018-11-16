@@ -44,5 +44,12 @@ pub trait WalletCommAdapter {
 	/// Start a listener, passing received messages to the wallet api directly
 	/// Takes a wallet config for now to avoid needing all sorts of awkward
 	/// type parameters on this trait
-	fn listen(&self, params: HashMap<String, String>, config: WalletConfig, passphrase: &str, account: &str, node_api_secret: Option<String>) -> Result<(), Error>;
+	fn listen(
+		&self,
+		params: HashMap<String, String>,
+		config: WalletConfig,
+		passphrase: &str,
+		account: &str,
+		node_api_secret: Option<String>,
+	) -> Result<(), Error>;
 }

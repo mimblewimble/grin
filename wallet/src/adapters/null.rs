@@ -46,7 +46,14 @@ impl WalletCommAdapter for NullWalletCommAdapter {
 		unimplemented!();
 	}
 
-	fn listen(&self, _params: HashMap<String, String>, _config: WalletConfig, _passphrase: &str, _account: &str, _node_api_secret: Option<String>) -> Result<(), Error>{
+	fn listen(
+		&self,
+		_params: HashMap<String, String>,
+		_config: WalletConfig,
+		_passphrase: &str,
+		_account: &str,
+		_node_api_secret: Option<String>,
+	) -> Result<(), Error> {
 		unimplemented!();
 	}
 }

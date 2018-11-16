@@ -374,7 +374,14 @@ impl WalletCommAdapter for LocalWalletClient {
 		unimplemented!();
 	}
 
-	fn listen(&self, params: HashMap<String, String>, config: WalletConfig, passphrase: &str, account: &str, node_api_secret: Option<String>) -> Result<(), Error> {
+	fn listen(
+		&self,
+		params: HashMap<String, String>,
+		config: WalletConfig,
+		passphrase: &str,
+		account: &str,
+		node_api_secret: Option<String>,
+	) -> Result<(), Error> {
 		unimplemented!();
 	}
 }

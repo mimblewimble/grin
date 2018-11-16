@@ -21,8 +21,8 @@ use util::Mutex;
 use api;
 use keychain::Keychain;
 use libtx::slate::Slate;
-use libwallet::{controller, Error, ErrorKind};
 use libwallet::types::*;
+use libwallet::{controller, Error, ErrorKind};
 use {WalletCommAdapter, WalletConfig};
 
 #[derive(Clone)]
@@ -52,9 +52,8 @@ impl WalletCommAdapter for HTTPWalletCommAdapter {
 		let url = format!("{}/v1/wallet/foreign/receive_tx", dest);
 		debug!("Posting transaction slate to {}", url);
 
-		let res = api::client::post(url.as_str(), None, slate).context(
-			ErrorKind::ClientCallback("Posting transaction slate"),
-		)?;
+		let res = api::client::post(url.as_str(), None, slate)
+			.context(ErrorKind::ClientCallback("Posting transaction slate"))?;
 		Ok(res)
 	}
 
@@ -66,7 +65,14 @@ impl WalletCommAdapter for HTTPWalletCommAdapter {
 		unimplemented!();
 	}
 
-	fn listen(&self, params: HashMap<String, String>, config: WalletConfig, passphrase: &str, account: &str, node_api_secret: Option<String>) -> Result<(), Error>{
+	fn listen(
+		&self,
+		params: HashMap<String, String>,
+		config: WalletConfig,
+		passphrase: &str,
+		account: &str,
+		node_api_secret: Option<String>,
+	) -> Result<(), Error> {
 		unimplemented!();
 	}
 }
