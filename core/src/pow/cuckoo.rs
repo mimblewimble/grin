@@ -14,8 +14,8 @@
 
 //! Implementation of Cuckoo Cycle designed by John Tromp. Ported to Rust from
 //! the C and Java code at https://github.com/tromp/cuckoo. Note that only the
-//! simple miner is included, mostly for testing purposes. John Tromp's Tomato
-//! miner will be much faster in almost every environment.
+//! simple miner is included, mostly for testing purposes. John Tromp's miners
+//! will be much faster in almost every environment.
 
 use pow::common::{CuckooParams, Edge, EdgeType};
 use pow::error::{Error, ErrorKind};

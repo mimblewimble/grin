@@ -39,6 +39,7 @@ extern crate grin_util as util;
 #[macro_use]
 mod common;
 pub mod cuckatoo;
+pub mod cuckaroo;
 pub mod cuckoo;
 mod error;
 #[allow(dead_code)]

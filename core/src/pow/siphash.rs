@@ -15,6 +15,12 @@
 //! Simple implementation of the siphash 2-4 hashing function from
 //! Jean-Philippe Aumasson and Daniel J. Bernstein.
 
+// Parameters to the siphash block algorithm. Used by Cuckaroo but can be
+// seen as a generic way to derive a hash within a block of them.
+const SIPHASH_BLOCK_BITS: u64 = 6;
+const SIPHASH_BLOCK_SIZE: u64 = 1 << SIPHASH_BLOCK_BITS;
+const SIPHASH_BLOCK_MASK: u64 = SIPHASH_BLOCK_SIZE - 1;
+
 // helper macro for left rotation
 macro_rules! rotl {
 	($num:expr, $shift:expr) => {
@@ -28,6 +34,30 @@ pub fn siphash24(v: &[u64; 4], nonce: u64) -> u64 {
 	let mut siphash = SipHash24::new(v);
 	siphash.hash(nonce);
 	siphash.digest()
+}
+
+/// Builds a block of siphash values by repeatedly hashing from the nonce
+/// truncated to its closest block start, up to the end of the block. Returns
+/// the resulting hash at the nonce's position.
+pub fn siphash_block(v: &[u64; 4], nonce: u64) -> u64 {
+	let mut block = Vec::with_capacity(SIPHASH_BLOCK_SIZE as usize);
+	// beginning of the block of hashes
+	let nonce0 = nonce & !SIPHASH_BLOCK_MASK;
+
+	// fill up our block with repeated hashes
+	let mut siphash = SipHash24::new(v);
+	for n in nonce0..(nonce0 + SIPHASH_BLOCK_SIZE) {
+		siphash.hash(n);
+		block.push(siphash.digest());
+	}
+	assert_eq!(block.len(), SIPHASH_BLOCK_SIZE as usize);
+
+	// xor all-but-last with last value to avoid shortcuts in computing block
+	let last = block[SIPHASH_BLOCK_MASK as usize];
+	for n in 0..SIPHASH_BLOCK_MASK {
+		block[n as usize] ^= last;
+	}
+	return block[(nonce & SIPHASH_BLOCK_MASK) as usize];
 }
 
 /// Implements siphash 2-4 specialized for a 4 u64 array key and a u64 nonce
@@ -62,6 +92,7 @@ impl SipHash24 {
 		}
 	}
 
+	/// Resulting hash digest
 	pub fn digest(&self) -> u64 {
 		(self.0 ^ self.1) ^ (self.2 ^ self.3)
 	}
@@ -88,13 +119,18 @@ impl SipHash24 {
 mod test {
 	use super::*;
 
-	/// Some test vectors hoisted from the Java implementation (adjusted from
-	/// the fact that the Java impl uses a long, aka a signed 64 bits number).
 	#[test]
 	fn hash_some() {
 		assert_eq!(siphash24(&[1, 2, 3, 4], 10), 928382149599306901);
 		assert_eq!(siphash24(&[1, 2, 3, 4], 111), 10524991083049122233);
 		assert_eq!(siphash24(&[9, 7, 6, 7], 12), 1305683875471634734);
 		assert_eq!(siphash24(&[9, 7, 6, 7], 10), 11589833042187638814);
+	}
+
+	#[test]
+	fn hash_block() {
+		assert_eq!(siphash_block(&[1, 2, 3, 4], 10), 1182162244994096396);
+		assert_eq!(siphash_block(&[1, 2, 3, 4], 123), 11303676240481718781);
+		assert_eq!(siphash_block(&[9, 7, 6, 7], 12), 4886136884237259030);
 	}
 }
