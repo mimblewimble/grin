@@ -15,78 +15,73 @@
 //! Simple implementation of the siphash 2-4 hashing function from
 //! Jean-Philippe Aumasson and Daniel J. Bernstein.
 
-/// Implements siphash 2-4 specialized for a 4 u64 array key and a u64 nonce
-pub fn siphash24(v: &[u64; 4], nonce: u64) -> u64 {
-	let mut v0 = v[0];
-	let mut v1 = v[1];
-	let mut v2 = v[2];
-	let mut v3 = v[3] ^ nonce;
-
-	// macro for left rotation
-	macro_rules! rotl {
-		($num:ident, $shift:expr) => {
-			$num = ($num << $shift) | ($num >> (64 - $shift));
-		};
-	}
-
-	// macro for a single siphash round
-	macro_rules! round {
-		() => {
-			v0 = v0.wrapping_add(v1);
-			v2 = v2.wrapping_add(v3);
-			rotl!(v1, 13);
-			rotl!(v3, 16);
-			v1 ^= v0;
-			v3 ^= v2;
-			rotl!(v0, 32);
-			v2 = v2.wrapping_add(v1);
-			v0 = v0.wrapping_add(v3);
-			rotl!(v1, 17);
-			rotl!(v3, 21);
-			v1 ^= v2;
-			v3 ^= v0;
-			rotl!(v2, 32);
-		};
-	}
-
-	// 2 rounds
-	round!();
-	round!();
-
-	v0 ^= nonce;
-	v2 ^= 0xff;
-
-	// and then 4 rounds, hence siphash 2-4
-	round!();
-	round!();
-	round!();
-	round!();
-
-	v0 ^ v1 ^ v2 ^ v3
+// helper macro for left rotation
+macro_rules! rotl {
+	($num:expr, $shift:expr) => {
+		$num = ($num << $shift) | ($num >> (64 - $shift));
+	};
 }
 
-/// Computes a block of siphash hashes by repeatedly hashing an initial offset
-/// to obtain `block_size` hashes.
-pub fn siphash_serial(block_size: usize, v: &[u64; 4], offset: u64) -> Vec<u64> {
-	// initial state before we start inserting hashes
-	let mut state = v.to_vec();
-	state[0] = state[0] ^ offset;
+/// Utility function to compute a single siphash 2-4 based on a seed and
+/// a nonce
+pub fn siphash24(v: &[u64; 4], nonce: u64) -> u64 {
+	let mut siphash = SipHash24::new(v);
+	siphash.hash(nonce);
+	siphash.digest()
+}
 
-	// iteratively compute additional hashes from past state
-	for round in 0..block_size {
-		let l = state.len();
-		let prev = [state[l-4], state[l-3], state[l-2], state[l-1]];
-		state.push(siphash24(&prev, round as u64));
+/// Implements siphash 2-4 specialized for a 4 u64 array key and a u64 nonce
+/// that can be used for a single or multiple repeated hashing.
+///
+/// The siphash structure is represented by a vector of four 64-bits words
+/// that we simply reference by their position. A hashing round consists of
+/// a series of arithmetic operations on those words, while the resulting
+/// hash digest is an xor of xor on them.
+///
+/// Note that this implementation is only secure if it's already fed words
+/// output from a previous hash function (in our case blake2).
+pub struct SipHash24(u64, u64, u64, u64);
+
+impl SipHash24 {
+	/// Create a new siphash context
+	pub fn new(v: &[u64; 4]) -> SipHash24 {
+		SipHash24(v[0], v[1], v[2], v[3])
 	}
 
-	// remove initial state and xor each state with previous
-	state.pop(); state.pop(); state.pop(); state.pop(); 
-	let last_state = state[state.len()-1];
-	for n in 0..block_size-1 {
-		state[n] = state[n+1] ^ last_state;
+	/// One siphash24 hashing, consisting of 2 and then 4 rounds
+	pub fn hash(&mut self, nonce: u64) {
+		self.3 ^= nonce;
+		self.round();
+		self.round();
+
+		self.0 ^= nonce;
+		self.2 ^= 0xff;
+
+		for _ in 0..4 {
+			self.round();
+		}
 	}
-	state[block_size - 1] = last_state ^ 0;
-	return state;
+
+	pub fn digest(&self) -> u64 {
+		(self.0 ^ self.1) ^ (self.2 ^ self.3)
+	}
+
+	fn round(&mut self) {
+		self.0 = self.0.wrapping_add(self.1);
+		self.2 = self.2.wrapping_add(self.3);
+		rotl!(self.1, 13);
+		rotl!(self.3, 16);
+		self.1 ^= self.0;
+		self.3 ^= self.2;
+		rotl!(self.0, 32);
+		self.2 = self.2.wrapping_add(self.1);
+		self.0 = self.0.wrapping_add(self.3);
+		rotl!(self.1, 17);
+		rotl!(self.3, 21);
+		self.1 ^= self.2;
+		self.3 ^= self.0;
+		rotl!(self.2, 32);
+	}
 }
 
 #[cfg(test)]
@@ -101,12 +96,5 @@ mod test {
 		assert_eq!(siphash24(&[1, 2, 3, 4], 111), 10524991083049122233);
 		assert_eq!(siphash24(&[9, 7, 6, 7], 12), 1305683875471634734);
 		assert_eq!(siphash24(&[9, 7, 6, 7], 10), 11589833042187638814);
-	}
-
-	#[test]
-	fn test_siphash_serial() {
-		let seed = [0; 4];
-		let state = siphash_serial(64, &seed, 10);
-		assert_eq!(state.len(), 64);
 	}
 }
