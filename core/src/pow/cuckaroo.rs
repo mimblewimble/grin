@@ -42,7 +42,7 @@ where
 {
 	fn new(edge_bits: u8, proof_size: usize, _max_sols: u32) -> Result<Box<Self>, Error> {
 		let params = CuckooParams::new(edge_bits, proof_size)?;
-		Ok(Box::new(CuckarooContext{params}))
+		Ok(Box::new(CuckarooContext { params }))
 	}
 
 	fn set_header_nonce(
@@ -118,4 +118,3 @@ where
 		}
 	}
 }
-
