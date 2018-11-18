@@ -408,6 +408,38 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 		kernels
 	}
+
+	fn kernels_received(
+		&self,
+		last_hash: Hash,
+		first_kernel_index: u64,
+		kernels: Vec<core::TxKernel>,
+		peer_addr: SocketAddr,
+	) -> bool {
+		info!(
+			"Received kernels {:?} from {}",
+			kernels.iter().map(|x| x.hash()).collect::<Vec<_>>(),
+			peer_addr,
+		);
+
+		if kernels.len() == 0 {
+			return false;
+		}
+		true
+	}
+//		/// DAVID: Finish this
+//
+//		// try to add kernels to our kernel MMR
+//		let res = self.chain().sync_block_headers(&bhs, self.chain_opts());
+//		if let &Err(ref e) = &res {
+//			debug!("Block headers refused by chain: {:?}", e);
+//
+//			if e.is_bad_data() {
+//				return false;
+//			}
+//		}
+//		true
+//	}
 }
 
 impl NetToChainAdapter {

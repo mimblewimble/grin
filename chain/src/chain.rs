@@ -979,6 +979,12 @@ impl Chain {
 		txhashset.kernels_by_insertion_index(start_index, max).1
 	}
 
+	/// returns the number of leaves in the kernel mmr
+	pub fn get_num_kernels(&self) -> u64 {
+		let txhashset = self.txhashset.read();
+		txhashset.num_kernels()
+	}
+
 	/// outputs by insertion index
 	pub fn unspent_outputs_by_insertion_index(
 		&self,

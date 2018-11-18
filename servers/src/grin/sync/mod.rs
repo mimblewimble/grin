@@ -16,6 +16,7 @@
 
 mod body_sync;
 mod header_sync;
+mod kernel_sync;
 mod state_sync;
 mod syncer;
 

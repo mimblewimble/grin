@@ -140,7 +140,11 @@ impl TxHashSet {
 				HEADERHASHSET_SUBDIR,
 				HEADER_HEAD_SUBDIR,
 			)?,
-			sync_pmmr_h: HashOnlyMMRHandle::new(&root_dir, HEADERHASHSET_SUBDIR, SYNC_HEAD_SUBDIR)?,
+			sync_pmmr_h: HashOnlyMMRHandle::new(
+				&root_dir,
+				HEADERHASHSET_SUBDIR,
+				SYNC_HEAD_SUBDIR,
+			)?,
 			output_pmmr_h: PMMRHandle::new(
 				&root_dir,
 				TXHASHSET_SUBDIR,
@@ -223,6 +227,11 @@ impl TxHashSet {
 		let kernel_pmmr: PMMR<TxKernelEntry, _> =
 			PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 		kernel_pmmr.elements_from_insertion_index(start_index, max_count)
+	}
+
+	/// returns the number of kernels (leaves) in the kernel_pmmr
+	pub fn num_kernels(&self) -> u64 {
+		pmmr::n_leaves(self.kernel_pmmr_h.last_pos)
 	}
 
 	/// returns outputs from the given insertion (leaf) index up to the

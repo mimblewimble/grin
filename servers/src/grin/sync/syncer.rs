@@ -23,6 +23,7 @@ use core::pow::Difficulty;
 use grin::sync::body_sync::BodySync;
 use grin::sync::header_sync::HeaderSync;
 use grin::sync::state_sync::StateSync;
+use grin::sync::kernel_sync::KernelSync;
 use p2p;
 
 pub fn run_sync(
@@ -99,8 +100,13 @@ impl SyncRunner {
 		// Wait for connections reach at least MIN_PEERS
 		self.wait_for_min_peers();
 
-		// Our 3 main sync stages
+		// Our 4 main sync stages
 		let mut header_sync = HeaderSync::new(
+			self.sync_state.clone(),
+			self.peers.clone(),
+			self.chain.clone(),
+		);
+		let mut kernel_sync = KernelSync::new(
 			self.sync_state.clone(),
 			self.peers.clone(),
 			self.chain.clone(),
@@ -168,6 +174,7 @@ impl SyncRunner {
 			}
 
 			if check_state_sync {
+				kernel_sync.check_run();
 				state_sync.check_run(&header_head, &head, &tail, highest_height);
 			}
 		}

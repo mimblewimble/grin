@@ -405,6 +405,15 @@ pub trait ChainAdapter: Sync + Send {
 	/// Finds a list of kernels starting from the given index.
 	/// Returns kernels from the chain containing the block with the given hash.
 	fn read_kernels(&self, last_hash: Hash, first_kernel_index: u64) -> Vec<core::TxKernel>;
+
+	/// A set of kernels has been received.
+	fn kernels_received(
+		&self,
+		last_hash: Hash,
+		first_kernel_index: u64,
+		kernels: Vec<core::TxKernel>,
+		peer_addr: SocketAddr,
+	) -> bool;
 }
 
 /// Additional methods required by the protocol that don't need to be

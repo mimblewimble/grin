@@ -264,6 +264,16 @@ impl ChainAdapter for DummyAdapter {
 	fn read_kernels(&self, last_hash: Hash, first_kernel_index: u64) -> Vec<core::TxKernel> {
 		vec![]
 	}
+
+	fn kernels_received(
+		&self,
+		last_hash: Hash,
+		first_kernel_index: u64,
+		kernels: Vec<core::TxKernel>,
+		peer_addr: SocketAddr,
+	) -> bool {
+		true
+	}
 }
 
 impl NetAdapter for DummyAdapter {

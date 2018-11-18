@@ -582,9 +582,19 @@ impl ChainAdapter for Peers {
 			.txhashset_download_update(start_time, downloaded_size, total_size)
 	}
 
-    fn read_kernels(&self, last_hash: Hash, first_kernel_index: u64) -> Vec<core::TxKernel> {
-        self.adapter.read_kernels(last_hash, first_kernel_index)
-    }
+	fn read_kernels(&self, last_hash: Hash, first_kernel_index: u64) -> Vec<core::TxKernel> {
+		self.adapter.read_kernels(last_hash, first_kernel_index)
+	}
+
+	fn kernels_received(
+		&self,
+		last_hash: Hash,
+		first_kernel_index: u64,
+		kernels: Vec<core::TxKernel>,
+		peer_addr: SocketAddr,
+	) -> bool {
+		self.adapter.kernels_received(last_hash, first_kernel_index, kernels, peer_addr)
+	}
 }
 
 impl NetAdapter for Peers {

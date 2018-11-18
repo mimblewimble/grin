@@ -22,12 +22,13 @@ use core::core::hash::Hashed;
 use core::global;
 use p2p::{self, Peer};
 
-/// Fast sync has 3 "states":
+/// Fast sync has 4 "states":
 /// * syncing headers
-/// * once all headers are sync'd, requesting the txhashset state
+/// * once all headers are sync'd, sync kernels
+/// * once kernels are sync'd, requesting the txhashset state
 /// * once we have the state, get blocks after that
 ///
-/// The StateSync struct implements and monitors the middle step.
+/// The StateSync struct implements and monitors the third step.
 pub struct StateSync {
 	sync_state: Arc<SyncState>,
 	peers: Arc<p2p::Peers>,

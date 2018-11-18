@@ -108,7 +108,18 @@ impl TUIStatusListener for TUIStatusView {
 					} else {
 						current_height * 100 / highest_height
 					};
-					format!("Downloading headers: {}%, step 1/4", percent)
+					format!("Downloading headers: {}%, step 1/5", percent)
+				}
+				SyncStatus::KernelSync {
+					kernels_received,
+					total_kernels
+				} => {
+					let percent = if total_kernels == 0 {
+						0
+					} else {
+						kernels_received * 100 / total_kernels
+					};
+					format!("Downloading kernels: {}%, step 2/5", percent)
 				}
 				SyncStatus::TxHashsetDownload {
 					start_time,
@@ -125,7 +136,7 @@ impl TUIStatusListener for TUIStatusView {
 						let fin = Utc::now().timestamp_nanos();
 						let dur_ms = (fin - start) as f64 * NANO_TO_MILLIS;
 
-						format!("Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s), step 2/4",
+						format!("Downloading {}(MB) chain state for state sync: {}% at {:.1?}(kB/s), step 3/5",
 						total_size / 1_000_000,
 						percent,
 						if dur_ms > 1.0f64 { downloaded_size as f64 / dur_ms as f64 } else { 0f64 },
@@ -135,13 +146,13 @@ impl TUIStatusListener for TUIStatusView {
 						let fin = Utc::now().timestamp_millis();
 						let dur_secs = (fin - start) / 1000;
 
-						format!("Downloading chain state for state sync. Waiting remote peer to start: {}s, step 2/4",
+						format!("Downloading chain state for state sync. Waiting remote peer to start: {}s, step 3/5",
 										dur_secs,
 										)
 					}
 				}
 				SyncStatus::TxHashsetSetup => {
-					"Preparing chain state for validation, step 3/4".to_string()
+					"Preparing chain state for validation, step 4/5".to_string()
 				}
 				SyncStatus::TxHashsetValidation {
 					kernels,
@@ -161,13 +172,13 @@ impl TUIStatusListener for TUIStatusView {
 					} else {
 						0
 					};
-					format!("Validating chain state: {}%, step 3/4", percent)
+					format!("Validating chain state: {}%, step 4/5", percent)
 				}
 				SyncStatus::TxHashsetSave => {
-					"Finalizing chain state for state sync, step 3/4".to_string()
+					"Finalizing chain state for state sync, step 4/5".to_string()
 				}
 				SyncStatus::TxHashsetDone => {
-					"Finalized chain state for state sync, step 3/4".to_string()
+					"Finalized chain state for state sync, step 4/5".to_string()
 				}
 				SyncStatus::BodySync {
 					current_height,
@@ -178,7 +189,7 @@ impl TUIStatusListener for TUIStatusView {
 					} else {
 						current_height * 100 / highest_height
 					};
-					format!("Downloading blocks: {}%, step 4/4", percent)
+					format!("Downloading blocks: {}%, step 5/5", percent)
 				}
 			}
 		};
