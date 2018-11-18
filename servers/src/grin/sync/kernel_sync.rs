@@ -20,8 +20,8 @@ use chain;
 use common::types::{SyncState, SyncStatus};
 use core::core::hash::Hashed;
 use core::core::BlockHeader;
-use p2p::types::Capabilities;
 use p2p;
+use p2p::types::Capabilities;
 
 /// Fast sync has 4 "states":
 /// * syncing headers
@@ -59,9 +59,10 @@ impl KernelSync {
 
 	/// DAVID: Document this
 	pub fn check_run(&mut self) -> bool {
-
 		/// DAVID: Determine which statuses it's safe to sync during.
-		let enable_kernel_sync = self.capabilities.contains(Capabilities::ENHANCED_TXHASHSET_HIST);
+		let enable_kernel_sync = self
+			.capabilities
+			.contains(Capabilities::ENHANCED_TXHASHSET_HIST);
 
 		if enable_kernel_sync {
 			let head_header = match self.chain.head_header() {
@@ -126,7 +127,11 @@ impl KernelSync {
 		}
 	}
 
-	fn kernel_sync(&mut self, head_header: &BlockHeader, next_kernel_index: u64) -> Result<(), p2p::Error> {
+	fn kernel_sync(
+		&mut self,
+		head_header: &BlockHeader,
+		next_kernel_index: u64,
+	) -> Result<(), p2p::Error> {
 		let opt_peer = self.peers.most_work_peers().into_iter().find(|peer| {
 			peer.info
 				.capabilities
@@ -139,7 +144,8 @@ impl KernelSync {
 				peer.info.addr, next_kernel_index
 			);
 
-			let _ = peer.send_kernel_request(head_header.hash(), head_header.height, next_kernel_index);
+			let _ =
+				peer.send_kernel_request(head_header.hash(), head_header.height, next_kernel_index);
 			return Ok(());
 		}
 		Err(p2p::Error::PeerException)

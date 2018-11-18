@@ -20,7 +20,7 @@ use chain;
 use common::types::{Error, SyncState, SyncStatus};
 use core::core::hash::Hashed;
 use core::global;
-use p2p::{self, Peer, Capabilities};
+use p2p::{self, Capabilities, Peer};
 
 /// Fast sync has 4 "states":
 /// * syncing headers
@@ -44,7 +44,7 @@ impl StateSync {
 		sync_state: Arc<SyncState>,
 		peers: Arc<p2p::Peers>,
 		chain: Arc<chain::Chain>,
-		capabilities: p2p::Capabilities
+		capabilities: p2p::Capabilities,
 	) -> StateSync {
 		StateSync {
 			sync_state,
@@ -189,10 +189,11 @@ impl StateSync {
 	}
 
 	fn find_peer(&self) -> Option<Arc<Peer>> {
-		if self.capabilities.contains(Capabilities::ENHANCED_TXHASHSET_HIST) {
-			let opt_enhanced_peer = self.peers.most_work_peers()
-				.into_iter()
-				.find(|peer| {
+		if self
+			.capabilities
+			.contains(Capabilities::ENHANCED_TXHASHSET_HIST)
+		{
+			let opt_enhanced_peer = self.peers.most_work_peers().into_iter().find(|peer| {
 				peer.info
 					.capabilities
 					.contains(Capabilities::ENHANCED_TXHASHSET_HIST)

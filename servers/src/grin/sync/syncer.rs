@@ -125,7 +125,7 @@ impl SyncRunner {
 			self.sync_state.clone(),
 			self.peers.clone(),
 			self.chain.clone(),
-			self.capabilities
+			self.capabilities,
 		);
 
 		// Highest height seen on the network, generally useful for a fast test on

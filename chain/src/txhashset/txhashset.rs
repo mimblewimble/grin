@@ -880,6 +880,7 @@ impl<'a> Extension<'a> {
 			self.apply_input(input)?;
 		}
 
+		// DAVID: Only apply kernels if not seen before
 		for kernel in b.kernels() {
 			self.apply_kernel(kernel)?;
 		}
@@ -968,7 +969,7 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Push kernel onto MMR (hash and data files).
-	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
+	pub fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
 		self.kernel_pmmr
 			.push(TxKernelEntry::from(kernel.clone()))
 			.map_err(&ErrorKind::TxHashSetErr)?;

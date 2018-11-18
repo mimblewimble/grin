@@ -27,7 +27,7 @@ use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::verifier_cache::VerifierCache;
 use core::core::Committed;
-use core::core::{Block, BlockHeader, BlockSums};
+use core::core::{Block, BlockHeader, BlockSums, TxKernel};
 use core::global;
 use core::pow;
 use error::{Error, ErrorKind};
@@ -274,6 +274,44 @@ pub fn sync_block_headers(
 	} else {
 		Ok(None)
 	}
+}
+
+/// Process the kernels.
+/// This is only ever used during sync.
+pub fn sync_kernels(
+	first_kernel_index: u64,
+	kernels: &Vec<TxKernel>,
+	ctx: &mut BlockContext,
+) -> Result<(), Error> {
+	if let Some(kernel) = kernels.first() {
+		debug!(
+			"pipe: sync_kernels: {} kernels from {} at {}",
+			kernels.len(),
+			kernel.hash(),
+			first_kernel_index
+		);
+	} else {
+		return Ok(());
+	}
+
+	if ctx.txhashset.num_kernels() < (first_kernel_index + 1) {
+		txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+			// DAVID: Rewind mmr to correct kernel index just to be safe?
+
+			for kernel in kernels {
+				// DAVID: Ensure kernel is self-consistent
+				// validate_kernel(kernel, ctx)?;
+
+				// Apply the kernel to the kernel MMR.
+				extension.apply_kernel(kernel)?;
+
+				// DAVID: If kernel is last in block, validate root.
+			}
+
+			Ok(())
+		})?;
+	}
+	Ok(())
 }
 
 /// Process block header as part of "header first" block propagation.

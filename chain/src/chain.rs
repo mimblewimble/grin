@@ -29,7 +29,7 @@ use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::merkle_proof::MerkleProof;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{
-	Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernelEntry,
+	Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernel, TxKernelEntry,
 };
 use core::global;
 use core::pow;
@@ -341,6 +341,23 @@ impl Chain {
 
 		pipe::sync_block_headers(headers, &mut ctx)?;
 		ctx.batch.commit()?;
+
+		Ok(())
+	}
+
+	/// Attempt to add new kernels to the kernel mmr.
+	/// This is only ever used during sync.
+	pub fn sync_kernels(
+		&self,
+		first_kernel_index: u64,
+		kernels: &Vec<TxKernel>,
+		opts: Options,
+	) -> Result<(), Error> {
+		let mut txhashset = self.txhashset.write();
+		let batch = self.store.batch()?;
+		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
+
+		pipe::sync_kernels(first_kernel_index, kernels, &mut ctx)?;
 
 		Ok(())
 	}
