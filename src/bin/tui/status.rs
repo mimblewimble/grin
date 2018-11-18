@@ -112,7 +112,7 @@ impl TUIStatusListener for TUIStatusView {
 				}
 				SyncStatus::KernelSync {
 					kernels_received,
-					total_kernels
+					total_kernels,
 				} => {
 					let percent = if total_kernels == 0 {
 						0

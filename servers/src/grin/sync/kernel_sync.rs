@@ -17,11 +17,11 @@ use chrono::Duration;
 use std::sync::Arc;
 
 use chain;
-use common::types::{Error, SyncState, SyncStatus};
-use core::core::hash::{Hash, Hashed};
+use common::types::{SyncState, SyncStatus};
+use core::core::hash::Hashed;
 use core::core::BlockHeader;
-use p2p::{self, Peer};
 use p2p::types::Capabilities;
+use p2p;
 
 /// Fast sync has 4 "states":
 /// * syncing headers
@@ -34,6 +34,7 @@ pub struct KernelSync {
 	sync_state: Arc<SyncState>,
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
+	capabilities: p2p::Capabilities,
 
 	/// Holds the timeout, num kernels received, and previous num kernels received
 	/// at the time of the previous kernel sync.
@@ -45,41 +46,45 @@ impl KernelSync {
 		sync_state: Arc<SyncState>,
 		peers: Arc<p2p::Peers>,
 		chain: Arc<chain::Chain>,
+		capabilities: p2p::Capabilities,
 	) -> KernelSync {
 		KernelSync {
 			sync_state,
 			peers,
 			chain,
+			capabilities,
 			prev_kernel_sync: (Utc::now(), 0, 0),
 		}
 	}
 
 	/// DAVID: Document this
-	/// DAVID: Check capability of self and peers.
 	pub fn check_run(&mut self) -> bool {
-		let head_header = match self.chain.head_header() {
-			Ok(header) => header,
-			Err(e) => {
-				/// DAVID: debug log
-				return false;
-			}
-		};
 
-		let num_kernels_received = self.chain.get_num_kernels();
-		if !self.kernel_sync_due(&head_header, num_kernels_received) {
-			return false;
-		}
-
-		/// DAVID: Determine when it's safe to sync.
-		let enable_kernel_sync = true;
+		/// DAVID: Determine which statuses it's safe to sync during.
+		let enable_kernel_sync = self.capabilities.contains(Capabilities::ENHANCED_TXHASHSET_HIST);
 
 		if enable_kernel_sync {
+			let head_header = match self.chain.head_header() {
+				Ok(header) => header,
+				Err(_) => {
+					/// DAVID: debug log
+					return false;
+				}
+			};
+
+			let num_kernels_received = self.chain.get_num_kernels();
+			if !self.kernel_sync_due(&head_header, num_kernels_received) {
+				return false;
+			}
+
 			self.sync_state.update(SyncStatus::KernelSync {
 				kernels_received: num_kernels_received,
 				total_kernels: head_header.kernel_mmr_size,
 			});
 
-			self.kernel_sync(num_kernels_received);
+			/// DAVID: Handle case where no capable peer exists
+			self.kernel_sync(&head_header, num_kernels_received);
+
 			return true;
 		}
 		false
@@ -101,13 +106,7 @@ impl KernelSync {
 		// no kernels processed and we're past timeout, need to ask for more
 		let stalling = num_kernels_received <= last_kernels_received && now > timeout;
 
-		// always enable header sync on initial state transition from NoSync / Initial
-		let force_sync = match self.sync_state.status() {
-//			SyncStatus::NoSync | SyncStatus::Initial | SyncStatus::AwaitingPeers(_) => true,
-			_ => false,
-		};
-
-		if force_sync || can_request_more || stalling {
+		if can_request_more || stalling {
 			self.prev_kernel_sync = (
 				now + Duration::seconds(10),
 				num_kernels_received,
@@ -117,27 +116,32 @@ impl KernelSync {
 		} else {
 			// resetting the timeout as long as we progress
 			if num_kernels_received > last_kernels_received {
-				self.prev_kernel_sync =
-					(now + Duration::seconds(2), num_kernels_received, prev_kernels_received);
+				self.prev_kernel_sync = (
+					now + Duration::seconds(2),
+					num_kernels_received,
+					prev_kernels_received,
+				);
 			}
 			false
 		}
 	}
 
-	fn kernel_sync(&mut self, next_kernel_index: u64) {
-		if let Ok(header) = self.chain.head_header() {
-			let opt_peer = self.peers.most_work_peers()
-				.into_iter()
-				.find(|peer| peer.info.capabilities.contains(Capabilities::ENHANCED_TXHASHSET_HIST));
+	fn kernel_sync(&mut self, head_header: &BlockHeader, next_kernel_index: u64) -> Result<(), p2p::Error> {
+		let opt_peer = self.peers.most_work_peers().into_iter().find(|peer| {
+			peer.info
+				.capabilities
+				.contains(Capabilities::ENHANCED_TXHASHSET_HIST)
+		});
 
-			if let Some(peer) = opt_peer {
-				debug!(
-					"kernel_sync: asking {} for kernels at {:?}",
-					peer.info.addr, next_kernel_index
-				);
+		if let Some(peer) = opt_peer {
+			debug!(
+				"kernel_sync: asking {} for kernels at {:?}",
+				peer.info.addr, next_kernel_index
+			);
 
-				let _ = peer.send_kernel_request(header.hash(), header.height, next_kernel_index);
-			}
+			let _ = peer.send_kernel_request(head_header.hash(), head_header.height, next_kernel_index);
+			return Ok(());
 		}
+		Err(p2p::Error::PeerException)
 	}
 }

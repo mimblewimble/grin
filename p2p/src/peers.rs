@@ -593,7 +593,8 @@ impl ChainAdapter for Peers {
 		kernels: Vec<core::TxKernel>,
 		peer_addr: SocketAddr,
 	) -> bool {
-		self.adapter.kernels_received(last_hash, first_kernel_index, kernels, peer_addr)
+		self.adapter
+			.kernels_received(last_hash, first_kernel_index, kernels, peer_addr)
 	}
 }
 

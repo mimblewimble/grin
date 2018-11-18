@@ -22,8 +22,8 @@ use common::types::{SyncState, SyncStatus};
 use core::pow::Difficulty;
 use grin::sync::body_sync::BodySync;
 use grin::sync::header_sync::HeaderSync;
-use grin::sync::state_sync::StateSync;
 use grin::sync::kernel_sync::KernelSync;
+use grin::sync::state_sync::StateSync;
 use p2p;
 
 pub fn run_sync(
@@ -31,11 +31,12 @@ pub fn run_sync(
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
 	stop: Arc<AtomicBool>,
+	capabilities: p2p::Capabilities,
 ) {
 	let _ = thread::Builder::new()
 		.name("sync".to_string())
 		.spawn(move || {
-			let runner = SyncRunner::new(sync_state, peers, chain, stop);
+			let runner = SyncRunner::new(sync_state, peers, chain, stop, capabilities);
 			runner.sync_loop();
 		});
 }
@@ -45,6 +46,7 @@ pub struct SyncRunner {
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
 	stop: Arc<AtomicBool>,
+	capabilities: p2p::Capabilities,
 }
 
 impl SyncRunner {
@@ -53,12 +55,14 @@ impl SyncRunner {
 		peers: Arc<p2p::Peers>,
 		chain: Arc<chain::Chain>,
 		stop: Arc<AtomicBool>,
+		capabilities: p2p::Capabilities,
 	) -> SyncRunner {
 		SyncRunner {
 			sync_state,
 			peers,
 			chain,
 			stop,
+			capabilities,
 		}
 	}
 
@@ -110,6 +114,7 @@ impl SyncRunner {
 			self.sync_state.clone(),
 			self.peers.clone(),
 			self.chain.clone(),
+			self.capabilities,
 		);
 		let mut body_sync = BodySync::new(
 			self.sync_state.clone(),
@@ -120,6 +125,7 @@ impl SyncRunner {
 			self.sync_state.clone(),
 			self.peers.clone(),
 			self.chain.clone(),
+			self.capabilities
 		);
 
 		// Highest height seen on the network, generally useful for a fast test on

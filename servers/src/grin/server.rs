@@ -221,6 +221,7 @@ impl Server {
 			p2p_server.peers.clone(),
 			shared_chain.clone(),
 			stop.clone(),
+			config.p2p_config.capabilities,
 		);
 
 		let p2p_inner = p2p_server.clone();

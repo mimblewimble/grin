@@ -427,19 +427,19 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 		true
 	}
-//		/// DAVID: Finish this
-//
-//		// try to add kernels to our kernel MMR
-//		let res = self.chain().sync_block_headers(&bhs, self.chain_opts());
-//		if let &Err(ref e) = &res {
-//			debug!("Block headers refused by chain: {:?}", e);
-//
-//			if e.is_bad_data() {
-//				return false;
-//			}
-//		}
-//		true
-//	}
+	//		/// DAVID: Finish this
+	//
+	//		// try to add kernels to our kernel MMR
+	//		let res = self.chain().sync_block_headers(&bhs, self.chain_opts());
+	//		if let &Err(ref e) = &res {
+	//			debug!("Block headers refused by chain: {:?}", e);
+	//
+	//			if e.is_bad_data() {
+	//				return false;
+	//			}
+	//		}
+	//		true
+	//	}
 }
 
 impl NetToChainAdapter {

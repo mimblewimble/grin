@@ -20,7 +20,7 @@ use chain;
 use common::types::{Error, SyncState, SyncStatus};
 use core::core::hash::Hashed;
 use core::global;
-use p2p::{self, Peer};
+use p2p::{self, Peer, Capabilities};
 
 /// Fast sync has 4 "states":
 /// * syncing headers
@@ -33,6 +33,7 @@ pub struct StateSync {
 	sync_state: Arc<SyncState>,
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
+	capabilities: p2p::Capabilities,
 
 	prev_state_sync: Option<DateTime<Utc>>,
 	state_sync_peer: Option<Arc<Peer>>,
@@ -43,11 +44,13 @@ impl StateSync {
 		sync_state: Arc<SyncState>,
 		peers: Arc<p2p::Peers>,
 		chain: Arc<chain::Chain>,
+		capabilities: p2p::Capabilities
 	) -> StateSync {
 		StateSync {
 			sync_state,
 			peers,
 			chain,
+			capabilities,
 			prev_state_sync: None,
 			state_sync_peer: None,
 		}
@@ -64,7 +67,7 @@ impl StateSync {
 		highest_height: u64,
 	) -> bool {
 		trace!("state_sync: head.height: {}, tail.height: {}. header_head.height: {}, highest_height: {}",
-			   head.height, tail.height, header_head.height, highest_height,
+			   head.height, tail.height, header_head.height, highest_height
 		);
 
 		let mut sync_need_restart = false;
@@ -159,7 +162,7 @@ impl StateSync {
 	fn request_state(&self, header_head: &chain::Tip) -> Result<Arc<Peer>, p2p::Error> {
 		let threshold = global::state_sync_threshold() as u64;
 
-		if let Some(peer) = self.peers.most_work_peer() {
+		if let Some(peer) = self.find_peer() {
 			// ask for txhashset at state_sync_threshold
 			let mut txhashset_head = self
 				.chain
@@ -183,6 +186,23 @@ impl StateSync {
 			return Ok(peer.clone());
 		}
 		Err(p2p::Error::PeerException)
+	}
+
+	fn find_peer(&self) -> Option<Arc<Peer>> {
+		if self.capabilities.contains(Capabilities::ENHANCED_TXHASHSET_HIST) {
+			let opt_enhanced_peer = self.peers.most_work_peers()
+				.into_iter()
+				.find(|peer| {
+				peer.info
+					.capabilities
+					.contains(Capabilities::ENHANCED_TXHASHSET_HIST)
+			});
+
+			if let Some(enhanced_peer) = opt_enhanced_peer {
+				return Some(enhanced_peer);
+			}
+		}
+		self.peers.most_work_peer()
 	}
 
 	// For now this is a one-time thing (it can be slow) at initial startup.

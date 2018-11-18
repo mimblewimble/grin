@@ -140,11 +140,7 @@ impl TxHashSet {
 				HEADERHASHSET_SUBDIR,
 				HEADER_HEAD_SUBDIR,
 			)?,
-			sync_pmmr_h: HashOnlyMMRHandle::new(
-				&root_dir,
-				HEADERHASHSET_SUBDIR,
-				SYNC_HEAD_SUBDIR,
-			)?,
+			sync_pmmr_h: HashOnlyMMRHandle::new(&root_dir, HEADERHASHSET_SUBDIR, SYNC_HEAD_SUBDIR)?,
 			output_pmmr_h: PMMRHandle::new(
 				&root_dir,
 				TXHASHSET_SUBDIR,
