@@ -47,6 +47,7 @@ extern crate grin_util as util;
 
 mod adapters;
 pub mod display;
+pub mod controller;
 mod error;
 pub mod libtx;
 pub mod libwallet;
@@ -58,7 +59,6 @@ pub use adapters::{
 	FileWalletCommAdapter, HTTPWalletCommAdapter, NullWalletCommAdapter, WalletCommAdapter,
 };
 pub use error::{Error, ErrorKind};
-pub use libwallet::controller;
 pub use libwallet::types::{BlockFees, CbData, NodeClient, WalletBackend, WalletInfo, WalletInst};
 pub use lmdb_wallet::{wallet_db_exists, LMDBBackend};
 pub use node_clients::{create_coinbase, HTTPNodeClient};

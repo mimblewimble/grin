@@ -28,7 +28,7 @@ use util::Mutex;
 use chain::Chain;
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::{consensus, global, pow, ser};
-use wallet::libwallet;
+use wallet::{libwallet, controller};
 use wallet::libwallet::types::{BlockFees, CbData, NodeClient, WalletInst};
 use wallet::lmdb_wallet::LMDBBackend;
 use wallet::{WalletBackend, WalletConfig};
@@ -131,7 +131,7 @@ where
 		height: prev.height + 1,
 	};
 	// build coinbase (via api) and add block
-	libwallet::controller::foreign_single_use(wallet.clone(), |api| {
+	controller::foreign_single_use(wallet.clone(), |api| {
 		let coinbase_tx = api.build_coinbase(&block_fees)?;
 		add_block_with_reward(chain, txs, coinbase_tx.clone());
 		Ok(())
