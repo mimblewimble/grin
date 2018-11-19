@@ -46,17 +46,15 @@ pub fn siphash_block(v: &[u64; 4], nonce: u64) -> u64 {
 
 	// repeated hashing over the whole block
 	let mut siphash = SipHash24::new(v);
-	let mut last = 0;
 	for n in nonce0..(nonce0 + SIPHASH_BLOCK_SIZE) {
 		siphash.hash(n);
 		if n == nonce {
 			nonce_hash = siphash.digest();
 		}
-		last = n;
 	}
 	// xor the nonce with the last hash to force hashing the whole block
 	// unless the nonce is last in the block
-	if nonce == last {
+	if nonce == nonce0 + SIPHASH_BLOCK_MASK {
 		return siphash.digest();
 	} else {
 		return nonce_hash ^ siphash.digest();
