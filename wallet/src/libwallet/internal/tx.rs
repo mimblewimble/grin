@@ -24,23 +24,20 @@ use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
 use libwallet::internal::{selection, updater};
-use libwallet::types::{
-	Context, TxLogEntryType, WalletBackend, WalletToNodeClient, WalletToWalletClient,
-};
+use libwallet::types::{Context, NodeClient, TxLogEntryType, WalletBackend};
 use libwallet::{Error, ErrorKind};
 
 /// Receive a transaction, modifying the slate accordingly (which can then be
 /// sent back to sender for posting)
-pub fn receive_tx<T: ?Sized, C, L, K>(
+pub fn receive_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
 	parent_key_id: &Identifier,
 	is_self: bool,
 ) -> Result<(), Error>
 where
-	T: WalletBackend<C, L, K>,
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	T: WalletBackend<C, K>,
+	C: NodeClient,
 	K: Keychain,
 {
 	// create an output using the amount in the slate
@@ -70,7 +67,7 @@ where
 
 /// Issue a new transaction to the provided sender by spending some of our
 /// wallet
-pub fn create_send_tx<T: ?Sized, C, L, K>(
+pub fn create_send_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
@@ -88,9 +85,8 @@ pub fn create_send_tx<T: ?Sized, C, L, K>(
 	Error,
 >
 where
-	T: WalletBackend<C, L, K>,
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	T: WalletBackend<C, K>,
+	C: NodeClient,
 	K: Keychain,
 {
 	// Get lock height
@@ -135,15 +131,14 @@ where
 }
 
 /// Complete a transaction as the sender
-pub fn complete_tx<T: ?Sized, C, L, K>(
+pub fn complete_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	slate: &mut Slate,
 	context: &Context,
 ) -> Result<(), Error>
 where
-	T: WalletBackend<C, L, K>,
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	T: WalletBackend<C, K>,
+	C: NodeClient,
 	K: Keychain,
 {
 	let _ = slate.fill_round_2(wallet.keychain(), &context.sec_key, &context.sec_nonce, 0)?;
@@ -156,16 +151,15 @@ where
 }
 
 /// Rollback outputs associated with a transaction in the wallet
-pub fn cancel_tx<T: ?Sized, C, L, K>(
+pub fn cancel_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	parent_key_id: &Identifier,
 	tx_id: Option<u32>,
 	tx_slate_id: Option<Uuid>,
 ) -> Result<(), Error>
 where
-	T: WalletBackend<C, L, K>,
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	T: WalletBackend<C, K>,
+	C: NodeClient,
 	K: Keychain,
 {
 	let mut tx_id_string = String::new();
@@ -194,15 +188,14 @@ where
 
 /// Retrieve the associated stored finalised hex Transaction for a given transaction Id
 /// as well as whether it's been confirmed
-pub fn retrieve_tx_hex<T: ?Sized, C, L, K>(
+pub fn retrieve_tx_hex<T: ?Sized, C, K>(
 	wallet: &mut T,
 	parent_key_id: &Identifier,
 	tx_id: u32,
 ) -> Result<(bool, Option<String>), Error>
 where
-	T: WalletBackend<C, L, K>,
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	T: WalletBackend<C, K>,
+	C: NodeClient,
 	K: Keychain,
 {
 	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), None, parent_key_id)?;
@@ -214,7 +207,7 @@ where
 }
 
 /// Issue a burn tx
-pub fn issue_burn_tx<T: ?Sized, C, L, K>(
+pub fn issue_burn_tx<T: ?Sized, C, K>(
 	wallet: &mut T,
 	amount: u64,
 	minimum_confirmations: u64,
@@ -222,9 +215,8 @@ pub fn issue_burn_tx<T: ?Sized, C, L, K>(
 	parent_key_id: &Identifier,
 ) -> Result<Transaction, Error>
 where
-	T: WalletBackend<C, L, K>,
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	T: WalletBackend<C, K>,
+	C: NodeClient,
 	K: Keychain,
 {
 	// TODO

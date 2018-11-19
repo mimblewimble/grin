@@ -45,20 +45,48 @@ extern crate grin_keychain as keychain;
 extern crate grin_store as store;
 extern crate grin_util as util;
 
-mod client;
+mod adapters;
+pub mod controller;
 pub mod display;
 mod error;
 pub mod libtx;
 pub mod libwallet;
 pub mod lmdb_wallet;
+mod node_clients;
 mod types;
 
-pub use client::{create_coinbase, HTTPWalletToNodeClient, HTTPWalletToWalletClient};
-pub use error::{Error, ErrorKind};
-pub use libwallet::controller;
-pub use libwallet::types::{
-	BlockFees, CbData, WalletBackend, WalletInfo, WalletInst, WalletToNodeClient,
-	WalletToWalletClient,
+pub use adapters::{
+	FileWalletCommAdapter, HTTPWalletCommAdapter, NullWalletCommAdapter, WalletCommAdapter,
 };
+pub use error::{Error, ErrorKind};
+pub use libwallet::types::{BlockFees, CbData, NodeClient, WalletBackend, WalletInfo, WalletInst};
 pub use lmdb_wallet::{wallet_db_exists, LMDBBackend};
+pub use node_clients::{create_coinbase, HTTPNodeClient};
 pub use types::{WalletConfig, WalletSeed, SEED_FILE};
+
+use std::sync::Arc;
+use util::Mutex;
+
+/// Helper to create an instance of the LMDB wallet
+pub fn instantiate_wallet(
+	wallet_config: WalletConfig,
+	passphrase: &str,
+	account: &str,
+	node_api_secret: Option<String>,
+) -> Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>> {
+	let client_n = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
+	let mut db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, client_n)
+		.unwrap_or_else(|e| {
+			panic!(
+				"Error creating DB wallet: {} Config: {:?}",
+				e, wallet_config
+			);
+		});
+	db_wallet
+		.set_parent_key_id_by_name(account)
+		.unwrap_or_else(|e| {
+			panic!("Error starting wallet: {}", e);
+		});
+	info!("Using LMDB Backend for wallet");
+	Arc::new(Mutex::new(db_wallet))
+}

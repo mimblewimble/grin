@@ -38,18 +38,16 @@ use util::secp::key::{PublicKey, SecretKey};
 use util::secp::{self, pedersen, Secp256k1};
 
 /// Combined trait to allow dynamic wallet dispatch
-pub trait WalletInst<C, L, K>: WalletBackend<C, L, K> + Send + Sync + 'static
+pub trait WalletInst<C, K>: WalletBackend<C, K> + Send + Sync + 'static
 where
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	C: NodeClient,
 	K: Keychain,
 {
 }
-impl<T, C, L, K> WalletInst<C, L, K> for T
+impl<T, C, K> WalletInst<C, K> for T
 where
-	T: WalletBackend<C, L, K> + Send + Sync + 'static,
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	T: WalletBackend<C, K> + Send + Sync + 'static,
+	C: NodeClient,
 	K: Keychain,
 {}
 
@@ -57,10 +55,9 @@ where
 /// Wallets should implement this backend for their storage. All functions
 /// here expect that the wallet instance has instantiated itself or stored
 /// whatever credentials it needs
-pub trait WalletBackend<C, L, K>
+pub trait WalletBackend<C, K>
 where
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	/// Initialize with whatever stored credentials we have
@@ -74,9 +71,6 @@ where
 
 	/// Return the client being used to communicate with the node
 	fn w2n_client(&mut self) -> &mut C;
-
-	/// Return the client being used to communicate with other wallets
-	fn w2w_client(&mut self) -> &mut L;
 
 	/// Set parent key id by stored account name
 	fn set_parent_key_id_by_name(&mut self, label: &str) -> Result<(), Error>;
@@ -189,7 +183,7 @@ where
 
 /// Encapsulate all wallet-node communication functions. No functions within libwallet
 /// should care about communication details
-pub trait WalletToNodeClient: Sync + Send + Clone {
+pub trait NodeClient: Sync + Send + Clone {
 	/// Return the URL of the check node
 	fn node_url(&self) -> &str;
 
@@ -226,16 +220,6 @@ pub trait WalletToNodeClient: Sync + Send + Clone {
 		),
 		Error,
 	>;
-}
-
-/// Encapsulate wallet to wallet communication functions
-pub trait WalletToWalletClient: Sync + Send + Clone {
-	/// Call the wallet API to create a coinbase transaction
-	fn create_coinbase(&self, dest: &str, block_fees: &BlockFees) -> Result<CbData, Error>;
-
-	/// Send a transaction slate to another listening wallet and return result
-	/// TODO: Probably need a slate wrapper type
-	fn send_tx_slate(&self, addr: &str, slate: &Slate) -> Result<Slate, Error>;
 }
 
 /// Information about an output that's being tracked by the wallet. Must be

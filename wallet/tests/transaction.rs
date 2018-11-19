@@ -49,34 +49,25 @@ fn setup(test_dir: &str) {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 }
 
-/// Exercises the Transaction API fully with a test WalletToNodeClient operating
+/// Exercises the Transaction API fully with a test NodeClient operating
 /// directly on a chain instance
 /// Callable with any type of wallet
 fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
-	let mut wallet_proxy: WalletProxy<LocalWalletClient, LocalWalletClient, ExtKeychain> =
-		WalletProxy::new(test_dir);
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
 	let chain = wallet_proxy.chain.clone();
 
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
-	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1 = common::create_wallet(
-		&format!("{}/wallet1", test_dir),
-		client.clone(),
-		client.clone(),
-	);
-	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone());
+	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
+	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
+	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
+	let client2 = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
 	// define recipient wallet, add to proxy
-	let wallet2 = common::create_wallet(
-		&format!("{}/wallet2", test_dir),
-		client.clone(),
-		client.clone(),
-	);
-	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone());
+	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
+	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -113,14 +104,16 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	let mut slate = Slate::blank(1);
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
 		// note this will increment the block count as part of the transaction "Posting"
-		slate = sender_api.issue_send_tx(
-			amount,    // amount
-			2,         // minimum confirmations
-			"wallet2", // dest
-			500,       // max outputs
-			1,         // num change outputs
-			true,      // select all outputs
+		let (slate_i, lock_fn) = sender_api.initiate_tx(
+			None, amount, // amount
+			2,      // minimum confirmations
+			500,    // max outputs
+			1,      // num change outputs
+			true,   // select all outputs
 		)?;
+		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
+		sender_api.finalize_tx(&mut slate)?;
+		sender_api.tx_lock_outputs(&slate, lock_fn)?;
 		Ok(())
 	})?;
 
@@ -244,14 +237,17 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	// the stored transaction instead
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
 		// note this will increment the block count as part of the transaction "Posting"
-		slate = sender_api.issue_send_tx(
+		let (slate_i, lock_fn) = sender_api.initiate_tx(
+			None,
 			amount * 2, // amount
 			2,          // minimum confirmations
-			"wallet2",  // dest
 			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 		)?;
+		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
+		sender_api.finalize_tx(&mut slate)?;
+		sender_api.tx_lock_outputs(&slate, lock_fn)?;
 		Ok(())
 	})?;
 
@@ -305,28 +301,19 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
-	let mut wallet_proxy: WalletProxy<LocalWalletClient, LocalWalletClient, ExtKeychain> =
-		WalletProxy::new(test_dir);
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
 	let chain = wallet_proxy.chain.clone();
 
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
-	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1 = common::create_wallet(
-		&format!("{}/wallet1", test_dir),
-		client.clone(),
-		client.clone(),
-	);
-	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone());
+	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
+	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
+	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
 	// define recipient wallet, add to proxy
-	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	let wallet2 = common::create_wallet(
-		&format!("{}/wallet2", test_dir),
-		client.clone(),
-		client.clone(),
-	);
-	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone());
+	let client2 = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
+	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
+	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -345,14 +332,16 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	let mut slate = Slate::blank(1);
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
 		// note this will increment the block count as part of the transaction "Posting"
-		slate = sender_api.issue_send_tx(
-			amount,    // amount
-			2,         // minimum confirmations
-			"wallet2", // dest
-			500,       // max outputs
-			1,         // num change outputs
-			true,      // select all outputs
+		let (slate_i, lock_fn) = sender_api.initiate_tx(
+			None, amount, // amount
+			2,      // minimum confirmations
+			500,    // max outputs
+			1,      // num change outputs
+			true,   // select all outputs
 		)?;
+		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
+		sender_api.finalize_tx(&mut slate)?;
+		sender_api.tx_lock_outputs(&slate, lock_fn)?;
 		Ok(())
 	})?;
 

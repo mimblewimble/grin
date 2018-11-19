@@ -13,15 +13,11 @@
 // limitations under the License.
 
 use clap::ArgMatches;
-use serde_json as json;
-use std::fs::File;
-use std::io::Read;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 /// Wallet commands processing
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use util::Mutex;
 
 use api::TLSConfig;
 use config::GlobalWalletConfig;
@@ -29,8 +25,8 @@ use core::{core, global};
 use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
-	HTTPWalletToNodeClient, HTTPWalletToWalletClient, LMDBBackend, WalletBackend, WalletConfig,
-	WalletInst, WalletSeed,
+	instantiate_wallet, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend,
+	NullWalletCommAdapter, WalletConfig, WalletSeed,
 };
 use keychain;
 use servers::start_webwallet_server;
@@ -51,31 +47,6 @@ pub fn seed_exists(wallet_config: WalletConfig) -> bool {
 	} else {
 		false
 	}
-}
-pub fn instantiate_wallet(
-	wallet_config: WalletConfig,
-	passphrase: &str,
-	account: &str,
-	node_api_secret: Option<String>,
-) -> Arc<Mutex<WalletInst<HTTPWalletToNodeClient, HTTPWalletToWalletClient, keychain::ExtKeychain>>>
-{
-	let client_n =
-		HTTPWalletToNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-	let client_w = HTTPWalletToWalletClient::new();
-	let mut db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, client_n, client_w)
-		.unwrap_or_else(|e| {
-			panic!(
-				"Error creating DB wallet: {} Config: {:?}",
-				e, wallet_config
-			);
-		});
-	db_wallet
-		.set_parent_key_id_by_name(account)
-		.unwrap_or_else(|e| {
-			panic!("Error starting wallet: {}", e);
-		});
-	info!("Using LMDB Backend for wallet");
-	Arc::new(Mutex::new(db_wallet))
 }
 
 pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i32 {
@@ -110,18 +81,14 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		WalletSeed::init_file(&wallet_config).expect("Failed to init wallet seed file.");
 		info!("Wallet seed file created");
 		let client_n =
-			HTTPWalletToNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-		let client_w = HTTPWalletToWalletClient::new();
-		let _: LMDBBackend<
-			HTTPWalletToNodeClient,
-			HTTPWalletToWalletClient,
-			keychain::ExtKeychain,
-		> = LMDBBackend::new(wallet_config.clone(), "", client_n, client_w).unwrap_or_else(|e| {
-			panic!(
-				"Error creating DB for wallet: {} Config: {:?}",
-				e, wallet_config
-			);
-		});
+			HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
+		let _: LMDBBackend<HTTPNodeClient, keychain::ExtKeychain> =
+			LMDBBackend::new(wallet_config.clone(), "", client_n).unwrap_or_else(|e| {
+				panic!(
+					"Error creating DB for wallet: {} Config: {:?}",
+					e, wallet_config
+				);
+			});
 		info!("Wallet database backend created");
 		// give logging thread a moment to catch up
 		thread::sleep(Duration::from_millis(200));
@@ -145,13 +112,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		Some(p) => p,
 	};
 
-	let wallet = instantiate_wallet(
-		wallet_config.clone(),
-		passphrase,
-		account,
-		node_api_secret.clone(),
-	);
-
 	// Handle listener startup commands
 	{
 		let api_secret = get_first_line(wallet_config.api_secret_path.clone());
@@ -173,18 +133,37 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				if let Some(port) = listen_args.value_of("port") {
 					wallet_config.api_listen_port = port.parse().unwrap();
 				}
-				controller::foreign_listener(
-					wallet.clone(),
-					&wallet_config.api_listen_addr(),
-					tls_conf,
-				).unwrap_or_else(|e| {
-					panic!(
-						"Error creating wallet listener: {:?} Config: {:?}",
-						e, wallet_config
-					);
-				});
+				let mut params = HashMap::new();
+				params.insert(
+					"api_listen_addr".to_owned(),
+					wallet_config.api_listen_addr(),
+				);
+				if let Some(t) = tls_conf {
+					params.insert("certificate".to_owned(), t.certificate);
+					params.insert("private_key".to_owned(), t.private_key);
+				}
+				let adapter = HTTPWalletCommAdapter::new();
+				adapter
+					.listen(
+						params,
+						wallet_config.clone(),
+						passphrase,
+						account,
+						node_api_secret.clone(),
+					).unwrap_or_else(|e| {
+						panic!(
+							"Error creating wallet listener: {:?} Config: {:?}",
+							e, wallet_config
+						);
+					});
 			}
 			("owner_api", Some(_api_args)) => {
+				let wallet = instantiate_wallet(
+					wallet_config.clone(),
+					passphrase,
+					account,
+					node_api_secret.clone(),
+				);
 				// TLS is disabled because we bind to localhost
 				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, None)
 					.unwrap_or_else(|e| {
@@ -195,6 +174,12 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					});
 			}
 			("web", Some(_api_args)) => {
+				let wallet = instantiate_wallet(
+					wallet_config.clone(),
+					passphrase,
+					account,
+					node_api_secret.clone(),
+				);
 				// start owner listener and run static file server
 				start_webwallet_server();
 				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, tls_conf)
@@ -208,6 +193,13 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			_ => {}
 		};
 	}
+
+	let wallet = instantiate_wallet(
+		wallet_config.clone(),
+		passphrase,
+		account,
+		node_api_secret.clone(),
+	);
 
 	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {
@@ -299,122 +291,79 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					})?;
 				let fluff = send_args.is_present("fluff");
 				let max_outputs = 500;
-				if method == "http" {
-					if dest.starts_with("http://") || dest.starts_with("https://") {
-						let result = api.issue_send_tx(
-							amount,
-							minimum_confirmations,
+				if method == "http" && !dest.starts_with("http://") && !dest.starts_with("https://")
+				{
+					return Err(ErrorKind::GenericError(format!(
+						"HTTP Destination should start with http://: or https://: {}",
+						dest
+					)).into());
+				}
+				let result = api.initiate_tx(
+					None,
+					amount,
+					minimum_confirmations,
+					max_outputs,
+					change_outputs,
+					selection_strategy == "all",
+				);
+				let (mut slate, lock_fn) = match result {
+					Ok(s) => {
+						info!(
+							"Tx created: {} grin to {} (strategy '{}')",
+							core::amount_to_hr_string(amount, false),
 							dest,
-							max_outputs,
-							change_outputs,
-							selection_strategy == "all",
+							selection_strategy,
 						);
-						let slate = match result {
-							Ok(s) => {
-								info!(
-									"Tx created: {} grin to {} (strategy '{}')",
-									core::amount_to_hr_string(amount, false),
-									dest,
-									selection_strategy,
-								);
-								s
-							}
-							Err(e) => {
-								error!("Tx not created: {}", e);
-								match e.kind() {
-									// user errors, don't backtrace
-									libwallet::ErrorKind::NotEnoughFunds { .. } => {}
-									libwallet::ErrorKind::FeeDispute { .. } => {}
-									libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
-									_ => {
-										// otherwise give full dump
-										error!("Backtrace: {}", e.backtrace().unwrap());
-									}
-								};
-								return Err(e);
+						s
+					}
+					Err(e) => {
+						error!("Tx not created: {}", e);
+						match e.kind() {
+							// user errors, don't backtrace
+							libwallet::ErrorKind::NotEnoughFunds { .. } => {}
+							libwallet::ErrorKind::FeeDispute { .. } => {}
+							libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
+							_ => {
+								// otherwise give full dump
+								error!("Backtrace: {}", e.backtrace().unwrap());
 							}
 						};
-						let result = api.post_tx(&slate, fluff);
-						match result {
-							Ok(_) => {
-								info!("Tx sent",);
-								Ok(())
-							}
-							Err(e) => {
-								error!("Tx not sent: {}", e);
-								Err(e)
-							}
-						}
-					} else {
-						return Err(ErrorKind::GenericError(format!(
-							"HTTP Destination should start with http://: or https://: {}",
-							dest
-						)).into());
+						return Err(e);
 					}
-				} else if method == "self" {
-					let result = api.issue_self_tx(
-						amount,
-						minimum_confirmations,
-						max_outputs,
-						change_outputs,
-						selection_strategy == "all",
-						account,
-						dest,
-					);
-					let slate = match result {
-						Ok(s) => {
-							info!(
-								"Tx created: {} grin to self, source acct: {} dest_acct: {} (strategy '{}')",
-								core::amount_to_hr_string(amount, false),
-								account,
-								dest,
-								selection_strategy,
-							);
-							s
-						}
-						Err(e) => {
-							error!("Tx not created: {}", e);
-							match e.kind() {
-								// user errors, don't backtrace
-								libwallet::ErrorKind::NotEnoughFunds { .. } => {}
-								libwallet::ErrorKind::FeeDispute { .. } => {}
-								libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
-								_ => {
-									// otherwise give full dump
-									error!("Backtrace: {}", e.backtrace().unwrap());
-								}
-							};
-							return Err(e);
-						}
-					};
+				};
+				let adapter = match method {
+					"http" => HTTPWalletCommAdapter::new(),
+					"file" => FileWalletCommAdapter::new(),
+					"self" => NullWalletCommAdapter::new(),
+					_ => NullWalletCommAdapter::new(),
+				};
+				if adapter.supports_sync() {
+					slate = adapter.send_tx_sync(dest, &slate)?;
+					if method == "self" {
+						controller::foreign_single_use(wallet, |api| {
+							api.receive_tx(&mut slate, Some(dest))?;
+							Ok(())
+						})?;
+					}
+					api.finalize_tx(&mut slate)?;
+				} else {
+					adapter.send_tx_async(dest, &slate)?;
+				}
+				api.tx_lock_outputs(&slate, lock_fn)?;
+				if adapter.supports_sync() {
 					let result = api.post_tx(&slate, fluff);
 					match result {
 						Ok(_) => {
 							info!("Tx sent",);
-							Ok(())
+							return Ok(());
 						}
 						Err(e) => {
 							error!("Tx not sent: {}", e);
-							Err(e)
+							return Err(e);
 						}
 					}
-				} else if method == "file" {
-					api.send_tx(
-						true,
-						amount,
-						minimum_confirmations,
-						dest,
-						max_outputs,
-						change_outputs,
-						selection_strategy == "all",
-					).map_err(|e| ErrorKind::GenericError(format!("Send failed. e={:?}", e)))?;
-					Ok(())
-				} else {
-					return Err(ErrorKind::GenericError(format!(
-						"unsupported payment method: {}",
-						method
-					)).into());
 				}
+				Ok(())
 			}
 			("receive", Some(send_args)) => {
 				let mut receive_result: Result<(), grin_wallet::libwallet::Error> = Ok(());
@@ -426,18 +375,18 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						ErrorKind::GenericError(format!("File {} not found.", tx_file)).into(),
 					);
 				}
-				let res = controller::foreign_single_use(wallet, |api| {
-					receive_result = api.file_receive_tx(tx_file);
+				let adapter = FileWalletCommAdapter::new();
+				let mut slate = adapter.receive_tx_async(tx_file)?;
+				controller::foreign_single_use(wallet, |api| {
+					api.receive_tx(&mut slate, Some(account))?;
 					Ok(())
-				});
-				if res.is_err() {
-					return res;
-				} else {
-					info!(
-						"Response file {}.response generated, sending it back to the transaction originator.",
-						tx_file,
-					);
-				}
+				})?;
+				let send_tx = format!("{}.response", tx_file);
+				adapter.send_tx_async(&send_tx, &slate)?;
+				info!(
+					"Response file {}.response generated, sending it back to the transaction originator.",
+					tx_file,
+				);
 				receive_result
 			}
 			("finalize", Some(send_args)) => {
@@ -450,11 +399,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						ErrorKind::GenericError(format!("File {} not found.", tx_file)).into(),
 					);
 				}
-				let mut pub_tx_f = File::open(tx_file)?;
-				let mut content = String::new();
-				pub_tx_f.read_to_string(&mut content)?;
-				let mut slate: grin_wallet::libtx::slate::Slate = json::from_str(&content)
-					.map_err(|_| grin_wallet::libwallet::ErrorKind::Format)?;
+				let adapter = FileWalletCommAdapter::new();
+				let mut slate = adapter.receive_tx_async(tx_file)?;
 				let _ = api.finalize_tx(&mut slate).expect("Finalize failed");
 
 				let result = api.post_tx(&slate, fluff);

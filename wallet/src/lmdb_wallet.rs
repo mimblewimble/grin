@@ -51,7 +51,7 @@ pub fn wallet_db_exists(config: WalletConfig) -> bool {
 	db_path.exists()
 }
 
-pub struct LMDBBackend<C, L, K> {
+pub struct LMDBBackend<C, K> {
 	db: store::Store,
 	config: WalletConfig,
 	/// passphrase: TODO better ways of dealing with this other than storing
@@ -62,17 +62,10 @@ pub struct LMDBBackend<C, L, K> {
 	parent_key_id: Identifier,
 	/// wallet to node client
 	w2n_client: C,
-	/// w2w client
-	w2w_client: L,
 }
 
-impl<C, L, K> LMDBBackend<C, L, K> {
-	pub fn new(
-		config: WalletConfig,
-		passphrase: &str,
-		n_client: C,
-		w_client: L,
-	) -> Result<Self, Error> {
+impl<C, K> LMDBBackend<C, K> {
+	pub fn new(config: WalletConfig, passphrase: &str, n_client: C) -> Result<Self, Error> {
 		let db_path = path::Path::new(&config.data_file_dir).join(DB_DIR);
 		fs::create_dir_all(&db_path).expect("Couldn't create wallet backend directory!");
 
@@ -82,7 +75,7 @@ impl<C, L, K> LMDBBackend<C, L, K> {
 		// Make sure default wallet derivation path always exists
 		let default_account = AcctPathMapping {
 			label: "default".to_owned(),
-			path: LMDBBackend::<C, L, K>::default_path(),
+			path: LMDBBackend::<C, K>::default_path(),
 		};
 		let acct_key = to_key(
 			ACCOUNT_PATH_MAPPING_PREFIX,
@@ -100,9 +93,8 @@ impl<C, L, K> LMDBBackend<C, L, K> {
 			config: config.clone(),
 			passphrase: String::from(passphrase),
 			keychain: None,
-			parent_key_id: LMDBBackend::<C, L, K>::default_path(),
+			parent_key_id: LMDBBackend::<C, K>::default_path(),
 			w2n_client: n_client,
-			w2w_client: w_client,
 		};
 		Ok(res)
 	}
@@ -122,10 +114,9 @@ impl<C, L, K> LMDBBackend<C, L, K> {
 	}
 }
 
-impl<C, L, K> WalletBackend<C, L, K> for LMDBBackend<C, L, K>
+impl<C, K> WalletBackend<C, K> for LMDBBackend<C, K>
 where
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	/// Initialise with whatever stored credentials we have
@@ -153,11 +144,6 @@ where
 	/// Return the node client being used
 	fn w2n_client(&mut self) -> &mut C {
 		&mut self.w2n_client
-	}
-
-	/// Return the wallet to wallet client being used
-	fn w2w_client(&mut self) -> &mut L {
-		&mut self.w2w_client
 	}
 
 	/// Set parent path by account name
@@ -292,21 +278,21 @@ where
 
 /// An atomic batch in which all changes can be committed all at once or
 /// discarded on error.
-pub struct Batch<'a, C: 'a, L: 'a, K: 'a>
+pub struct Batch<'a, C: 'a, K: 'a>
 where
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
-	_store: &'a LMDBBackend<C, L, K>,
+	_store: &'a LMDBBackend<C, K>,
 	db: RefCell<Option<store::Batch<'a>>>,
 	/// Keychain
 	keychain: Option<K>,
 }
 
 #[allow(missing_docs)]
-impl<'a, C, L, K> WalletOutputBatch<K> for Batch<'a, C, L, K>
+impl<'a, C, K> WalletOutputBatch<K> for Batch<'a, C, K>
 where
-	C: WalletToNodeClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	fn keychain(&mut self) -> &mut K {
@@ -460,6 +446,8 @@ where
 		self.save(out.clone())
 	}
 
+	//TODO: Keys stored unencrypted in DB.. not good
+	// should store keys as derivation paths instead
 	fn save_private_context(&mut self, slate_id: &[u8], ctx: &Context) -> Result<(), Error> {
 		let ctx_key = to_key(PRIVATE_TX_CONTEXT_PREFIX, &mut slate_id.to_vec());
 		self.db.borrow().as_ref().unwrap().put_ser(&ctx_key, &ctx)?;

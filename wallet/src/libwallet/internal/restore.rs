@@ -42,14 +42,13 @@ struct OutputResult {
 	pub blinding: SecretKey,
 }
 
-fn identify_utxo_outputs<T, C, L, K>(
+fn identify_utxo_outputs<T, C, K>(
 	wallet: &mut T,
 	outputs: Vec<(pedersen::Commitment, pedersen::RangeProof, bool, u64)>,
 ) -> Result<Vec<OutputResult>, Error>
 where
-	T: WalletBackend<C, L, K>,
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	T: WalletBackend<C, K>,
+	C: NodeClient,
 	K: Keychain,
 {
 	let mut wallet_outputs: Vec<OutputResult> = Vec::new();
@@ -99,11 +98,10 @@ where
 }
 
 /// Restore a wallet
-pub fn restore<T, C, L, K>(wallet: &mut T) -> Result<(), Error>
+pub fn restore<T, C, K>(wallet: &mut T) -> Result<(), Error>
 where
-	T: WalletBackend<C, L, K>,
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	T: WalletBackend<C, K>,
+	C: NodeClient,
 	K: Keychain,
 {
 	// Don't proceed if wallet_data has anything in it
