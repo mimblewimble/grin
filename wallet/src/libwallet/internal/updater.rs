@@ -351,7 +351,7 @@ where
 				} else {
 					unspent_total += out.value;
 				}
-			},
+			}
 			OutputStatus::Unconfirmed => {
 				// We ignore unconfirmed coinbase outputs completely.
 				if !out.is_coinbase {
@@ -361,11 +361,11 @@ where
 						unconfirmed_total += out.value;
 					}
 				}
-			},
+			}
 			OutputStatus::Locked => {
 				locked_total += out.value;
-			},
-			OutputStatus::Spent => {},
+			}
+			OutputStatus::Spent => {}
 		}
 	}
 

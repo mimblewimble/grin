@@ -256,8 +256,7 @@ pub fn info(
 ) {
 	println!(
 		"\n____ Wallet Summary Info - Account '{}' as of height {} ____\n",
-		account,
-		wallet_info.last_confirmed_height,
+		account, wallet_info.last_confirmed_height,
 	);
 
 	let mut table = table!();
