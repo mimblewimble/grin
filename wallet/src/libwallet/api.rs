@@ -222,7 +222,6 @@ where
 	pub fn finalize_tx(&mut self, slate: &mut Slate) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
-
 		let context = w.get_private_context(slate.id.as_bytes())?;
 		tx::complete_tx(&mut *w, slate, &context)?;
 		{
