@@ -17,9 +17,9 @@ use failure::ResultExt;
 use std::collections::HashMap;
 
 use api;
+use controller;
 use libtx::slate::Slate;
 use libwallet::{Error, ErrorKind};
-use controller;
 use {instantiate_wallet, WalletCommAdapter, WalletConfig};
 
 #[derive(Clone)]

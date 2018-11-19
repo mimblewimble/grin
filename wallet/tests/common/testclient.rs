@@ -44,7 +44,7 @@ use keychain::Keychain;
 use util::secp::pedersen;
 use wallet::libtx::slate::Slate;
 use wallet::libwallet::types::*;
-use wallet::{libwallet, controller, WalletCommAdapter, WalletConfig};
+use wallet::{controller, libwallet, WalletCommAdapter, WalletConfig};
 
 use common;
 

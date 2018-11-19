@@ -28,9 +28,9 @@ use util::Mutex;
 use chain::Chain;
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use core::{consensus, global, pow, ser};
-use wallet::{libwallet, controller};
 use wallet::libwallet::types::{BlockFees, CbData, NodeClient, WalletInst};
 use wallet::lmdb_wallet::LMDBBackend;
+use wallet::{controller, libwallet};
 use wallet::{WalletBackend, WalletConfig};
 
 use util;
