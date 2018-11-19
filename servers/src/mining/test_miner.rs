@@ -98,7 +98,7 @@ impl Miner {
 				head.height,
 				global::min_edge_bits(),
 				global::proofsize(),
-				10
+				10,
 			).unwrap();
 			ctx.set_header_nonce(b.header.pre_pow(), None, true)
 				.unwrap();
