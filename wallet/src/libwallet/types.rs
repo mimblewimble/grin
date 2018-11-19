@@ -519,6 +519,8 @@ pub struct CbData {
 pub struct WalletInfo {
 	/// height from which info was taken
 	pub last_confirmed_height: u64,
+	/// Minimum number of confirmations for an output to be treated as "spendable".
+	pub minimum_confirmations: u64,
 	/// total amount in the wallet
 	pub total: u64,
 	/// amount awaiting confirmation

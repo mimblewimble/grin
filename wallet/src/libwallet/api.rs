@@ -127,6 +127,7 @@ where
 	pub fn retrieve_summary_info(
 		&mut self,
 		refresh_from_node: bool,
+		minimum_confirmations: u64,
 	) -> Result<(bool, WalletInfo), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
@@ -137,7 +138,7 @@ where
 			validated = self.update_outputs(&mut w);
 		}
 
-		let wallet_info = updater::retrieve_info(&mut *w, &parent_key_id)?;
+		let wallet_info = updater::retrieve_info(&mut *w, &parent_key_id, minimum_confirmations)?;
 		let res = Ok((validated, wallet_info));
 
 		w.close()?;

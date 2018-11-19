@@ -216,7 +216,7 @@ fn real_main() -> i32 {
 				.help("Minimum number of confirmations required for an output to be spendable.")
 				.short("c")
 				.long("min_conf")
-				.default_value("1")
+				.default_value("10")
 				.takes_value(true))
 			.arg(Arg::with_name("selection_strategy")
 				.help("Coin/Output selection strategy.")
@@ -284,7 +284,7 @@ fn real_main() -> i32 {
 				.help("Minimum number of confirmations required for an output to be spendable.")
 				.short("c")
 				.long("min_conf")
-				.default_value("1")
+				.default_value("10")
 				.takes_value(true)))
 
 		.subcommand(SubCommand::with_name("outputs")
@@ -329,7 +329,13 @@ fn real_main() -> i32 {
 				.takes_value(true)))
 
 		.subcommand(SubCommand::with_name("info")
-			.about("basic wallet contents summary"))
+			.about("basic wallet contents summary")
+			.arg(Arg::with_name("minimum_confirmations")
+				.help("Minimum number of confirmations required for an output to be spendable.")
+				.short("c")
+				.long("min_conf")
+				.default_value("10")
+				.takes_value(true)))
 
 		.subcommand(SubCommand::with_name("init")
 			.about("Initialize a new wallet seed file and database.")

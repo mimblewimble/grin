@@ -15,7 +15,6 @@
 use clap::ArgMatches;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-/// Wallet commands processing
 use std::thread;
 use std::time::Duration;
 
@@ -31,6 +30,7 @@ use grin_wallet::{
 use keychain;
 use servers::start_webwallet_server;
 use util::file::get_first_line;
+
 
 pub fn _init_wallet_seed(wallet_config: WalletConfig) {
 	if let Err(_) = WalletSeed::from_file(&wallet_config) {
@@ -433,8 +433,22 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					});
 				Ok(())
 			}
-			("info", Some(_)) => {
-				let (validated, wallet_info) = api.retrieve_summary_info(true).map_err(|e| {
+			("info", Some(args)) => {
+				let minimum_confirmations: u64 = args
+					.value_of("minimum_confirmations")
+					.ok_or_else(|| {
+						ErrorKind::GenericError(
+							"Minimum confirmations required".to_string(),
+						)
+					}).and_then(|v| {
+						v.parse().map_err(|e| {
+							ErrorKind::GenericError(format!(
+								"Could not parse minimum_confirmations as a whole number. e={:?}",
+								e
+							))
+						})
+					})?;
+				let (validated, wallet_info) = api.retrieve_summary_info(true, minimum_confirmations).map_err(|e| {
 					ErrorKind::GenericError(format!(
 						"Error getting wallet info: {:?} Config: {:?}",
 						e, wallet_config
