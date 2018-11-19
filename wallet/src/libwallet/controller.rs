@@ -16,6 +16,7 @@
 //! invocations) as needed.
 //! Still experimental
 use api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router, TLSConfig};
+use core::core;
 use core::core::Transaction;
 use failure::ResultExt;
 use futures::future::{err, ok};
@@ -28,6 +29,7 @@ use libwallet::types::{
 	CbData, NodeClient, OutputData, SendTXArgs, TxLogEntry, WalletBackend, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
+use adapters::{FileWalletCommAdapter, HTTPWalletCommAdapter};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
@@ -286,38 +288,60 @@ where
 		})
 	}
 
-	/*fn issue_send_tx(
+	fn issue_send_tx(
 		&self,
 		req: Request<Body>,
-		mut api: APIOwner<T, C, L, K>,
+		mut api: APIOwner<T, C, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(move |args: SendTXArgs| {
+			let result = api.initiate_tx(
+				None,
+				args.amount,
+				args.minimum_confirmations,
+				args.max_outputs,
+				args.num_change_outputs,
+				args.selection_strategy_is_use_all,
+			);
+			let (mut slate, lock_fn) = match result {
+					Ok(s) => {
+						info!(
+							"Tx created: {} grin to {} (strategy '{}')",
+							core::amount_to_hr_string(args.amount, false),
+							&args.dest,
+							args.selection_strategy_is_use_all,
+						);
+						s
+					}
+					Err(e) => {
+						error!("Tx not created: {}", e);
+						match e.kind() {
+							// user errors, don't backtrace
+							ErrorKind::NotEnoughFunds { .. } => {}
+							ErrorKind::FeeDispute { .. } => {}
+							ErrorKind::FeeExceedsAmount { .. } => {}
+							_ => {
+								// otherwise give full dump
+								error!("Backtrace: {}", e.backtrace().unwrap());
+							}
+						};
+						return Err(e);
+					}
+				};
 			if args.method == "http" {
-				api.issue_send_tx(
-					args.amount,
-					args.minimum_confirmations,
-					&args.dest,
-					args.max_outputs,
-					args.num_change_outputs,
-					args.selection_strategy_is_use_all,
-				)
+				let adapter = HTTPWalletCommAdapter::new();
+				slate = adapter.send_tx_sync(&args.dest, &slate)?;
+				api.finalize_tx(&mut slate)?;
 			} else if args.method == "file" {
-				api.send_tx(
-					false,
-					args.amount,
-					args.minimum_confirmations,
-					&args.dest,
-					args.max_outputs,
-					args.num_change_outputs,
-					args.selection_strategy_is_use_all,
-				)
+				let adapter = FileWalletCommAdapter::new();
+				adapter.send_tx_async(&args.dest, &slate)?;
 			} else {
 				error!("unsupported payment method: {}", args.method);
 				return Err(ErrorKind::ClientCallback("unsupported payment method"))?;
 			}
+			api.tx_lock_outputs(&slate, lock_fn)?;
+			Ok(slate)
 		}))
 	}
-	*/
 
 	fn finalize_tx(
 		&self,
@@ -428,10 +452,10 @@ where
 			.next()
 			.unwrap()
 		{
-			/*"issue_send_tx" => Box::new(
+			"issue_send_tx" => Box::new(
 				self.issue_send_tx(req, api)
 					.and_then(|slate| ok(json_response_pretty(&slate))),
-			),*/
+			),
 			"finalize_tx" => Box::new(
 				self.finalize_tx(req, api)
 					.and_then(|slate| ok(json_response_pretty(&slate))),
