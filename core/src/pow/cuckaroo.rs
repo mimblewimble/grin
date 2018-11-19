@@ -31,7 +31,10 @@ use pow::{PoWContext, Proof};
 /// Instantiate a new CuckarooContext as a PowContext. Note that this can't
 /// be moved in the PoWContext trait as this particular trait needs to be
 /// convertible to an object trait.
-pub fn new_cuckaroo_ctx<T>(edge_bits: u8, proof_size: usize) -> Result<Box<PoWContext<T>>, Error> where T: EdgeType + 'static {
+pub fn new_cuckaroo_ctx<T>(edge_bits: u8, proof_size: usize) -> Result<Box<PoWContext<T>>, Error>
+where
+	T: EdgeType + 'static,
+{
 	let params = CuckooParams::new(edge_bits, proof_size)?;
 	Ok(Box::new(CuckarooContext { params }))
 }
@@ -166,7 +169,10 @@ mod test {
 		assert!(ctx.verify(&Proof::zero(42)).is_err());
 	}
 
-	fn new_impl<T>(edge_bits: u8, proof_size: usize) -> CuckarooContext<T> where T: EdgeType {
+	fn new_impl<T>(edge_bits: u8, proof_size: usize) -> CuckarooContext<T>
+	where
+		T: EdgeType,
+	{
 		let params = CuckooParams::new(edge_bits, proof_size).unwrap();
 		CuckarooContext { params }
 	}

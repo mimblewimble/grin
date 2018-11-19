@@ -53,8 +53,8 @@ use global;
 
 pub use self::common::EdgeType;
 pub use self::types::*;
-pub use pow::cuckatoo::{CuckatooContext, new_cuckatoo_ctx};
-pub use pow::cuckaroo::{CuckarooContext, new_cuckaroo_ctx};
+pub use pow::cuckaroo::{new_cuckaroo_ctx, CuckarooContext};
+pub use pow::cuckatoo::{new_cuckatoo_ctx, CuckatooContext};
 pub use pow::error::Error;
 
 const MAX_SOLS: u32 = 10;
@@ -62,8 +62,12 @@ const MAX_SOLS: u32 = 10;
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u8) -> Result<(), Error> {
-	let mut ctx =
-		global::create_pow_context::<u64>(bh.height, cuckoo_sz, bh.pow.proof.nonces.len(), MAX_SOLS)?;
+	let mut ctx = global::create_pow_context::<u64>(
+		bh.height,
+		cuckoo_sz,
+		bh.pow.proof.nonces.len(),
+		MAX_SOLS,
+	)?;
 	ctx.set_header_nonce(bh.pre_pow(), None, false)?;
 	ctx.verify(&bh.pow.proof)
 }

@@ -20,9 +20,9 @@ use consensus::HeaderInfo;
 use consensus::{
 	graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
 	DAY_HEIGHT, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, SECOND_POW_EDGE_BITS,
-	STATE_SYNC_THRESHOLD, UNIT_DIFFICULTY, T4_CUCKAROO_HARDFORK,
+	STATE_SYNC_THRESHOLD, T4_CUCKAROO_HARDFORK, UNIT_DIFFICULTY,
 };
-use pow::{self, new_cuckatoo_ctx, new_cuckaroo_ctx, EdgeType, PoWContext};
+use pow::{self, new_cuckaroo_ctx, new_cuckatoo_ctx, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
@@ -157,9 +157,7 @@ where
 	let chain_type = CHAIN_TYPE.read().clone();
 	match chain_type {
 		// Mainnet has Cuckaroo29 for AR and Cuckatoo30+ for AF
-		ChainTypes::Mainnet if edge_bits == 29 => {
-			new_cuckaroo_ctx(edge_bits, proof_size)
-		}
+		ChainTypes::Mainnet if edge_bits == 29 => new_cuckaroo_ctx(edge_bits, proof_size),
 		ChainTypes::Mainnet => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
 
 		// T4 has Cuckatoo for everything up to hard fork, then Cuckaroo29 for AR
@@ -173,7 +171,6 @@ where
 		_ => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
 	}
 }
-
 
 /// Return the type of the pos
 pub fn pow_type() -> PoWContextTypes {

@@ -155,10 +155,17 @@ where
 /// Instantiate a new CuckatooContext as a PowContext. Note that this can't
 /// be moved in the PoWContext trait as this particular trait needs to be
 /// convertible to an object trait.
-pub fn new_cuckatoo_ctx<T>(edge_bits: u8, proof_size: usize, max_sols: u32) -> Result<Box<PoWContext<T>>, Error> where T: EdgeType + 'static {
+pub fn new_cuckatoo_ctx<T>(
+	edge_bits: u8,
+	proof_size: usize,
+	max_sols: u32,
+) -> Result<Box<PoWContext<T>>, Error>
+where
+	T: EdgeType + 'static,
+{
 	Ok(Box::new(CuckatooContext::<T>::new_impl(
-				edge_bits, proof_size, max_sols,
-				)?))
+		edge_bits, proof_size, max_sols,
+	)?))
 }
 
 /// Cuckatoo solver context
