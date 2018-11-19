@@ -427,7 +427,9 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 
 		// try to add kernels to our kernel MMR
-		let res = self.chain().sync_kernels(first_kernel_index, &kernels, self.chain_opts());
+		let res = self
+			.chain()
+			.sync_kernels(first_kernel_index, &kernels, self.chain_opts());
 		if let &Err(ref e) = &res {
 			debug!("Kernels refused by chain: {:?}", e);
 

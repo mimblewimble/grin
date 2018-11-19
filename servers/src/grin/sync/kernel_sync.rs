@@ -57,9 +57,8 @@ impl KernelSync {
 		}
 	}
 
-	/// DAVID: Document this
+	/// Check whether kernel sync should run and requests kernels from capable peers.
 	pub fn check_run(&mut self) -> bool {
-		/// DAVID: Determine which statuses it's safe to sync during.
 		let enable_kernel_sync = self
 			.capabilities
 			.contains(Capabilities::ENHANCED_TXHASHSET_HIST);
@@ -67,8 +66,8 @@ impl KernelSync {
 		if enable_kernel_sync {
 			let head_header = match self.chain.head_header() {
 				Ok(header) => header,
-				Err(_) => {
-					/// DAVID: debug log
+				Err(e) => {
+					error!("kernel_sync: check_run err! {:?}", e);
 					return false;
 				}
 			};
@@ -83,7 +82,7 @@ impl KernelSync {
 				total_kernels: head_header.kernel_mmr_size,
 			});
 
-			/// DAVID: Handle case where no capable peer exists
+			// DAVID: If no capable peer exists, fall back to full txhashset download
 			self.kernel_sync(&head_header, num_kernels_received);
 
 			return true;
@@ -92,8 +91,17 @@ impl KernelSync {
 	}
 
 	fn kernel_sync_due(&mut self, head_header: &BlockHeader, num_kernels_received: u64) -> bool {
-		// We have all of the kernels for the current fork.
-		if num_kernels_received >= head_header.kernel_mmr_size - 4 {
+		let kernels_5_blocks_back = if head_header.height < 5 {
+			0 as u64
+		} else {
+			match self.chain.get_header_by_height(head_header.height - 5) {
+				Ok(header) => header.kernel_mmr_size,
+				Err(_) => 0 as u64
+			}
+		};
+
+		// Kernels are up to date on the current fork.
+		if num_kernels_received > kernels_5_blocks_back {
 			return false;
 		}
 

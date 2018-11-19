@@ -299,13 +299,14 @@ pub fn sync_kernels(
 			// DAVID: Rewind mmr to correct kernel index just to be safe?
 
 			for kernel in kernels {
-				// DAVID: Ensure kernel is self-consistent
-				// validate_kernel(kernel, ctx)?;
+				// Ensure kernel is self-consistent
+				kernel.verify()?;
 
 				// Apply the kernel to the kernel MMR.
 				extension.apply_kernel(kernel)?;
 
 				// DAVID: If kernel is last in block, validate root.
+				// Use RewindableKernelView? Or modify validate_kernel_history?
 			}
 
 			Ok(())

@@ -180,8 +180,9 @@ impl SyncRunner {
 			}
 
 			if check_state_sync {
-				kernel_sync.check_run();
-				state_sync.check_run(&header_head, &head, &tail, highest_height);
+				if !kernel_sync.check_run() {
+					state_sync.check_run(&header_head, &head, &tail, highest_height);
+				}
 			}
 		}
 	}

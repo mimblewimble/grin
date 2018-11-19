@@ -880,9 +880,17 @@ impl<'a> Extension<'a> {
 			self.apply_input(input)?;
 		}
 
-		// DAVID: Only apply kernels if not seen before
-		for kernel in b.kernels() {
-			self.apply_kernel(kernel)?;
+		// Because of kernel sync, it's possible we already have the kernels for this block.
+		let kernel_size = pmmr::n_leaves(self.kernel_pmmr.last_pos);
+		if b.header.kernel_mmr_size > kernel_size {
+			let num_kernels_behind = b.header.kernel_mmr_size - kernel_size;
+			let mut num_kernels_added = 0;
+			for kernel in b.kernels() {
+				if num_kernels_added < num_kernels_behind {
+					num_kernels_added += 1;
+					self.apply_kernel(kernel)?;
+				}
+			}
 		}
 
 		// Update the header on the extension to reflect the block we just applied.
