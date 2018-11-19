@@ -46,22 +46,21 @@ pub fn siphash_block(v: &[u64; 4], nonce: u64) -> u64 {
 
 	// repeated hashing over the whole block
 	let mut siphash = SipHash24::new(v);
+	let mut last = 0;
 	for n in nonce0..(nonce0 + SIPHASH_BLOCK_SIZE) {
 		siphash.hash(n);
 		if n == nonce {
 			nonce_hash = siphash.digest();
 		}
-		// xor the nonce with the last hash to force hashing the whole block
-		// unless the nonce is last in the block
-		if n == nonce0 + SIPHASH_BLOCK_MASK {
-			if n == nonce {
-				return siphash.digest();
-			} else {
-				return nonce_hash ^ siphash.digest();
-			}
-		}
+		last = n;
 	}
-	return 0;
+	// xor the nonce with the last hash to force hashing the whole block
+	// unless the nonce is last in the block
+	if nonce == last {
+		return siphash.digest();
+	} else {
+		return nonce_hash ^ siphash.digest();
+	}
 }
 
 /// Implements siphash 2-4 specialized for a 4 u64 array key and a u64 nonce
