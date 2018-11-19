@@ -15,6 +15,7 @@
 //! Controller for wallet.. instantiates and handles listeners (or single-run
 //! invocations) as needed.
 //! Still experimental
+use adapters::{FileWalletCommAdapter, HTTPWalletCommAdapter};
 use api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router, TLSConfig};
 use core::core;
 use core::core::Transaction;
@@ -29,7 +30,6 @@ use libwallet::types::{
 	CbData, NodeClient, OutputData, SendTXArgs, TxLogEntry, WalletBackend, WalletInfo,
 };
 use libwallet::{Error, ErrorKind};
-use adapters::{FileWalletCommAdapter, HTTPWalletCommAdapter};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
@@ -303,30 +303,30 @@ where
 				args.selection_strategy_is_use_all,
 			);
 			let (mut slate, lock_fn) = match result {
-					Ok(s) => {
-						info!(
-							"Tx created: {} grin to {} (strategy '{}')",
-							core::amount_to_hr_string(args.amount, false),
-							&args.dest,
-							args.selection_strategy_is_use_all,
-						);
-						s
-					}
-					Err(e) => {
-						error!("Tx not created: {}", e);
-						match e.kind() {
-							// user errors, don't backtrace
-							ErrorKind::NotEnoughFunds { .. } => {}
-							ErrorKind::FeeDispute { .. } => {}
-							ErrorKind::FeeExceedsAmount { .. } => {}
-							_ => {
-								// otherwise give full dump
-								error!("Backtrace: {}", e.backtrace().unwrap());
-							}
-						};
-						return Err(e);
-					}
-				};
+				Ok(s) => {
+					info!(
+						"Tx created: {} grin to {} (strategy '{}')",
+						core::amount_to_hr_string(args.amount, false),
+						&args.dest,
+						args.selection_strategy_is_use_all,
+					);
+					s
+				}
+				Err(e) => {
+					error!("Tx not created: {}", e);
+					match e.kind() {
+						// user errors, don't backtrace
+						ErrorKind::NotEnoughFunds { .. } => {}
+						ErrorKind::FeeDispute { .. } => {}
+						ErrorKind::FeeExceedsAmount { .. } => {}
+						_ => {
+							// otherwise give full dump
+							error!("Backtrace: {}", e.backtrace().unwrap());
+						}
+					};
+					return Err(e);
+				}
+			};
 			if args.method == "http" {
 				let adapter = HTTPWalletCommAdapter::new();
 				slate = adapter.send_tx_sync(&args.dest, &slate)?;
