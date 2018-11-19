@@ -38,6 +38,7 @@ extern crate grin_util as util;
 
 #[macro_use]
 mod common;
+pub mod cuckaroo;
 pub mod cuckatoo;
 pub mod cuckoo;
 mod error;
