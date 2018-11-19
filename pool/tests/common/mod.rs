@@ -169,6 +169,7 @@ pub fn test_setup(
 			accept_fee_base: 0,
 			max_pool_size: 50,
 			max_stempool_size: 50,
+			mineable_max_weight: 10_000,
 		},
 		chain.clone(),
 		verifier_cache.clone(),
