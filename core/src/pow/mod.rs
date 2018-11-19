@@ -40,7 +40,6 @@ extern crate grin_util as util;
 mod common;
 pub mod cuckaroo;
 pub mod cuckatoo;
-pub mod cuckoo;
 mod error;
 #[allow(dead_code)]
 pub mod lean;
@@ -54,8 +53,8 @@ use global;
 
 pub use self::common::EdgeType;
 pub use self::types::*;
-pub use pow::cuckatoo::CuckatooContext;
-pub use pow::cuckoo::CuckooContext;
+pub use pow::cuckatoo::{CuckatooContext, new_cuckatoo_ctx};
+pub use pow::cuckaroo::{CuckarooContext, new_cuckaroo_ctx};
 pub use pow::error::Error;
 
 const MAX_SOLS: u32 = 10;
@@ -64,7 +63,7 @@ const MAX_SOLS: u32 = 10;
 /// satisfies the requirements of the header.
 pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u8) -> Result<(), Error> {
 	let mut ctx =
-		global::create_pow_context::<u64>(cuckoo_sz, bh.pow.proof.nonces.len(), MAX_SOLS)?;
+		global::create_pow_context::<u64>(bh.height, cuckoo_sz, bh.pow.proof.nonces.len(), MAX_SOLS)?;
 	ctx.set_header_nonce(bh.pre_pow(), None, false)?;
 	ctx.verify(&bh.pow.proof)
 }
@@ -107,7 +106,7 @@ pub fn pow_size(
 	loop {
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
-		let mut ctx = global::create_pow_context::<u32>(sz, proof_size, MAX_SOLS)?;
+		let mut ctx = global::create_pow_context::<u32>(bh.height, sz, proof_size, MAX_SOLS)?;
 		ctx.set_header_nonce(bh.pre_pow(), None, true)?;
 		if let Ok(proofs) = ctx.find_cycles() {
 			bh.pow.proof = proofs[0].clone();

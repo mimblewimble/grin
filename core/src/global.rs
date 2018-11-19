@@ -20,9 +20,9 @@ use consensus::HeaderInfo;
 use consensus::{
 	graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
 	DAY_HEIGHT, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, SECOND_POW_EDGE_BITS,
-	STATE_SYNC_THRESHOLD, UNIT_DIFFICULTY,
+	STATE_SYNC_THRESHOLD, UNIT_DIFFICULTY, T4_CUCKAROO_HARDFORK,
 };
-use pow::{self, CuckatooContext, EdgeType, PoWContext};
+use pow::{self, new_cuckatoo_ctx, new_cuckaroo_ctx, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
@@ -121,8 +121,10 @@ impl Default for ChainTypes {
 pub enum PoWContextTypes {
 	/// Classic Cuckoo
 	Cuckoo,
-	/// Bleeding edge Cuckatoo
+	/// ASIC-friendly Cuckatoo
 	Cuckatoo,
+	/// ASIC-resistant Cuckaroo
+	Cuckaroo,
 }
 
 lazy_static!{
@@ -144,15 +146,34 @@ pub fn set_mining_mode(mode: ChainTypes) {
 /// Return either a cuckoo context or a cuckatoo context
 /// Single change point
 pub fn create_pow_context<T>(
+	height: u64,
 	edge_bits: u8,
 	proof_size: usize,
 	max_sols: u32,
-) -> Result<Box<impl PoWContext<T>>, pow::Error>
+) -> Result<Box<dyn PoWContext<T>>, pow::Error>
 where
-	T: EdgeType,
+	T: EdgeType + 'static,
 {
-	CuckatooContext::<T>::new(edge_bits, proof_size, max_sols)
+	let chain_type = CHAIN_TYPE.read().clone();
+	match chain_type {
+		// Mainnet has Cuckaroo29 for AR and Cuckatoo30+ for AF
+		ChainTypes::Mainnet if edge_bits == 29 => {
+			new_cuckaroo_ctx(edge_bits, proof_size)
+		}
+		ChainTypes::Mainnet => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
+
+		// T4 has Cuckatoo for everything up to hard fork, then Cuckaroo29 for AR
+		// and Cuckatoo30+ for AF PoW
+		ChainTypes::Testnet4 if edge_bits == 29 && height >= T4_CUCKAROO_HARDFORK => {
+			new_cuckaroo_ctx(edge_bits, proof_size)
+		}
+		ChainTypes::Testnet4 => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
+
+		// Everything else is Cuckatoo only
+		_ => new_cuckatoo_ctx(edge_bits, proof_size, max_sols),
+	}
 }
+
 
 /// Return the type of the pos
 pub fn pow_type() -> PoWContextTypes {
