@@ -267,7 +267,8 @@ impl Chain {
 				add_to_hash_cache(b.hash());
 
 				// notifying other parts of the system of the update
-				self.adapter.block_accepted(&b, head.clone(), prev_head, opts);
+				self.adapter
+					.block_accepted(&b, head.clone(), prev_head, opts);
 
 				Ok(head)
 			}
@@ -986,8 +987,7 @@ impl Chain {
 		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
 			return Err(ErrorKind::TxHashSetErr(String::from(
 				"Output and rangeproof sets don't match",
-			))
-			.into());
+			)).into());
 		}
 		let mut output_vec: Vec<Output> = vec![];
 		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {

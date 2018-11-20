@@ -179,7 +179,11 @@ impl TransactionPool {
 		Ok(())
 	}
 
-	fn reconcile_reorg_cache(&mut self, header: &BlockHeader, is_reorg: bool) -> Result<(), PoolError> {
+	fn reconcile_reorg_cache(
+		&mut self,
+		header: &BlockHeader,
+		is_reorg: bool,
+	) -> Result<(), PoolError> {
 		// First "age out" any old txs in the reorg cache.
 		let cutoff = Utc::now() - Duration::minutes(30);
 		self.truncate_reorg_cache(cutoff);
@@ -187,13 +191,21 @@ impl TransactionPool {
 		let entries = self.reorg_cache.read().iter().cloned().collect::<Vec<_>>();
 
 		if is_reorg {
-			debug!("reconcile_reorg_cache: {:?}, size: {} ...", header.hash(), entries.len());
+			debug!(
+				"reconcile_reorg_cache: {:?}, size: {} ...",
+				header.hash(),
+				entries.len()
+			);
 			for entry in entries {
 				let _ = &self.add_to_txpool(entry.clone(), header);
 			}
 			debug!("reconcile_reorg_cache: {:?} ... done.", header.hash());
 		} else {
-			debug!("reconcile_reorg_cache: {:?}, size: {}, not a reorg, skipping.", header.hash(), entries.len());
+			debug!(
+				"reconcile_reorg_cache: {:?}, size: {}, not a reorg, skipping.",
+				header.hash(),
+				entries.len()
+			);
 		}
 
 		Ok(())

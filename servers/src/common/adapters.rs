@@ -190,9 +190,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 						self.request_block(&cb.header, &addr);
 						true
 					} else {
-						debug!(
-							"block invalid after hydration, ignoring it, cause still syncing"
-						);
+						debug!("block invalid after hydration, ignoring it, cause still syncing");
 						true
 					}
 				}
@@ -469,10 +467,7 @@ impl NetToChainAdapter {
 				true
 			}
 			Err(ref e) if e.is_bad_data() => {
-				debug!(
-					"process_block: {} is a bad block, resetting head",
-					bhash
-				);
+				debug!("process_block: {} is a bad block, resetting head", bhash);
 				let _ = self.chain().reset_head();
 
 				// we potentially changed the state of the system here
@@ -644,7 +639,13 @@ pub struct ChainToPoolAndNetAdapter {
 }
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
-	fn block_accepted(&self, b: &core::Block, new_head: Option<Tip>, prev_head: Tip, opts: Options) {
+	fn block_accepted(
+		&self,
+		b: &core::Block,
+		new_head: Option<Tip>,
+		prev_head: Tip,
+		opts: Options,
+	) {
 		if self.sync_state.is_syncing() {
 			return;
 		}
@@ -666,11 +667,23 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		};
 
 		if is_reorg {
-			warn!("block_accepted (reorg): {:?} at {}", b.hash(), b.header.height);
+			warn!(
+				"block_accepted (reorg): {:?} at {}",
+				b.hash(),
+				b.header.height
+			);
 		} else if !is_more_work {
-			debug!("block_accepted (not most work): {:?} at {}", b.hash(), b.header.height);
+			debug!(
+				"block_accepted (not most work): {:?} at {}",
+				b.hash(),
+				b.header.height
+			);
 		} else {
-			debug!("block_accepted (most work): {:?} at {}", b.hash(), b.header.height);
+			debug!(
+				"block_accepted (most work): {:?} at {}",
+				b.hash(),
+				b.header.height
+			);
 		}
 
 		// If we mined the block then we want to broadcast the compact block.
