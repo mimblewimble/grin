@@ -85,14 +85,8 @@ fn repeat(interval: u64, diff: HeaderInfo, len: u64, cur_time: Option<u64>) -> V
 	let times = (0..(len as usize)).map(|n| n * interval as usize).rev();
 	let pairs = times.zip(diffs.iter());
 	pairs
-		.map(|(t, d)| {
-			HeaderInfo::new(
-				cur_time + t as u64,
-				d.clone(),
-				diff.ar_scaling,
-				diff.is_ar,
-			)
-		}).collect::<Vec<_>>()
+		.map(|(t, d)| HeaderInfo::new(cur_time + t as u64, d.clone(), diff.ar_scaling, diff.is_ar))
+		.collect::<Vec<_>>()
 }
 
 // Creates a new chain with a genesis at a simulated difficulty
@@ -146,8 +140,7 @@ fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
 				time: n.timestamp,
 				duration: dur,
 			}
-		})
-		.collect();
+		}).collect();
 
 	let block_time_sum = sum_entries.iter().fold(0, |sum, t| sum + t.duration);
 	let block_diff_sum = sum_entries.iter().fold(0, |sum, d| sum + d.difficulty);
@@ -389,7 +382,7 @@ fn next_target_adjustment() {
 	let hinext = next_difficulty(1, repeat(15, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None));
 	assert_ne!(hinext.difficulty, diff_min);
 
-	// Check we don't get stuck on scale MIN_DIFFICULTY, when primary frequency is too high
+	// Check we don't get stuck on scale MIN_DIFFICULTY, when AF frequency is too high
 	assert_ne!(hinext.ar_scaling, MIN_DIFFICULTY as u32);
 
 	// just enough data, right interval, should stay constant
@@ -476,7 +469,7 @@ fn ar_pow_scale() {
 	let window = DIFFICULTY_ADJUST_WINDOW;
 	let mut hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 100);
 
-	// all primary, factor should increase so it becomes easier to find a high
+	// all AF, factor should increase so it becomes easier to find a high
 	// difficulty block
 	hi.is_ar = false;
 	assert_eq!(
@@ -501,17 +494,20 @@ fn ar_pow_scale() {
 	let mut low_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_DIFFICULTY as u32);
 	low_hi.is_ar = true;
 	assert_eq!(
-		ar_pow_scaling(890_000, &(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()),
+		ar_pow_scaling(
+			890_000,
+			&(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()
+		),
 		MIN_DIFFICULTY as u32
 	);
 	// just about the right ratio, also no longer playing with median
-	let mut primary_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 50);
-	primary_hi.is_ar = false;
+	let mut af_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 50);
+	af_hi.is_ar = false;
 	assert_eq!(
 		ar_pow_scaling(
 			1,
 			&(0..(window / 10))
-				.map(|_| primary_hi.clone())
+				.map(|_| af_hi.clone())
 				.chain((0..(window * 9 / 10)).map(|_| hi.clone()))
 				.collect::<Vec<_>>()
 		),
@@ -522,7 +518,7 @@ fn ar_pow_scale() {
 		ar_pow_scaling(
 			1,
 			&(0..(window / 20))
-				.map(|_| primary_hi.clone())
+				.map(|_| af_hi.clone())
 				.chain((0..(window * 95 / 100)).map(|_| hi.clone()))
 				.collect::<Vec<_>>()
 		),
@@ -533,7 +529,7 @@ fn ar_pow_scale() {
 		ar_pow_scaling(
 			1,
 			&(0..(window * 6 / 10))
-				.map(|_| primary_hi.clone())
+				.map(|_| af_hi.clone())
 				.chain((0..(window * 4 / 10)).map(|_| hi.clone()))
 				.collect::<Vec<_>>()
 		),

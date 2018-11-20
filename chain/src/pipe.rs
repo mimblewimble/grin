@@ -403,7 +403,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	if !ctx.opts.contains(Options::SKIP_POW) {
-		if !header.pow.is_primary() && !header.pow.is_ar() {
+		if !header.pow.is_af() && !header.pow.is_ar() {
 			return Err(ErrorKind::LowEdgebits.into());
 		}
 		let edge_bits = header.pow.edge_bits();

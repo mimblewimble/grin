@@ -21,7 +21,7 @@ use std::{fmt, iter};
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use consensus::{graph_weight, MIN_DIFFICULTY, AR_POW_EDGE_BITS};
+use consensus::{graph_weight, AR_POW_EDGE_BITS, MIN_DIFFICULTY};
 use core::hash::Hashed;
 use global;
 use ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
@@ -293,17 +293,16 @@ impl ProofOfWork {
 		self.proof.edge_bits
 	}
 
-	/// Whether this proof of work is for the primary algorithm (as opposed
-	/// to AR). Only depends on the edge_bits at this time.
-	pub fn is_primary(&self) -> bool {
+	/// Whether this proof of work is for the ASIC Friendly algorithm (as opposed
+	/// to ASIC Resistant). Only depends on the edge_bits at this time.
+	pub fn is_af(&self) -> bool {
 		// 2 conditions are redundant right now but not necessarily in
 		// the future
-		self.proof.edge_bits != AR_POW_EDGE_BITS
-			&& self.proof.edge_bits >= global::min_edge_bits()
+		self.proof.edge_bits != AR_POW_EDGE_BITS && self.proof.edge_bits >= global::min_edge_bits()
 	}
 
-	/// Whether this proof of work is for the AR algorithm (as opposed
-	/// to primary). Only depends on the edge_bits at this time.
+	/// Whether this proof of work is for the ASIC Resistant algorithm (as opposed
+	/// to ASIC Friendly). Only depends on the edge_bits at this time.
 	pub fn is_ar(&self) -> bool {
 		self.proof.edge_bits == AR_POW_EDGE_BITS
 	}

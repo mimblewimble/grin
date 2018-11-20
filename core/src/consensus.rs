@@ -59,7 +59,7 @@ pub const YEAR_HEIGHT: u64 = 52 * WEEK_HEIGHT;
 /// Number of blocks before a coinbase matures and can be spent
 pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
 
-/// Ratio the ASIC resistant proof of work should take over the primary, as a
+/// Ratio the ASIC Resistant proof of work should take over the ASIC Friendly, as a
 /// function of block height (time). Starts at 90% losing a percent
 /// approximately every week. Represented as an integer between 0 and 100.
 pub fn ar_pow_ratio(height: u64) -> u64 {
@@ -208,12 +208,7 @@ pub struct HeaderInfo {
 
 impl HeaderInfo {
 	/// Default constructor
-	pub fn new(
-		timestamp: u64,
-		difficulty: Difficulty,
-		ar_scaling: u32,
-		is_ar: bool,
-	) -> HeaderInfo {
+	pub fn new(timestamp: u64, difficulty: Difficulty, ar_scaling: u32, is_ar: bool) -> HeaderInfo {
 		HeaderInfo {
 			timestamp,
 			difficulty,
@@ -278,7 +273,7 @@ where
 	// DIFFICULTY_ADJUST_WINDOW + 1 (for initial block time bound)
 	let diff_data = global::difficulty_data_to_vector(cursor);
 
-	// First, get the ratio of AR PoW vs primary
+	// First, get the ratio of AR PoW vs AF PoW
 	let sec_pow_scaling = ar_pow_scaling(height, &diff_data);
 
 	// Get the timestamp delta across the window
