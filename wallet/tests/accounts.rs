@@ -128,7 +128,7 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Should have 5 in account1 (5 spendable), 5 in account (2 spendable)
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(wallet1_refreshed);
 		assert_eq!(wallet1_info.last_confirmed_height, 12);
 		assert_eq!(wallet1_info.total, 5 * reward);
@@ -145,9 +145,9 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	}
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		// check last confirmed height on this account is different from above (should be 0)
-		let (_, wallet1_info) = api.retrieve_summary_info(false)?;
+		let (_, wallet1_info) = api.retrieve_summary_info(false, 1)?;
 		assert_eq!(wallet1_info.last_confirmed_height, 0);
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(wallet1_refreshed);
 		assert_eq!(wallet1_info.last_confirmed_height, 12);
 		assert_eq!(wallet1_info.total, 7 * reward);
@@ -164,9 +164,9 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		w.set_parent_key_id_by_name("default")?;
 	}
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (_, wallet1_info) = api.retrieve_summary_info(false)?;
+		let (_, wallet1_info) = api.retrieve_summary_info(false, 1)?;
 		assert_eq!(wallet1_info.last_confirmed_height, 0);
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(wallet1_refreshed);
 		assert_eq!(wallet1_info.last_confirmed_height, 12);
 		assert_eq!(wallet1_info.total, 0,);
@@ -199,7 +199,7 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(wallet1_refreshed);
 		assert_eq!(wallet1_info.last_confirmed_height, 13);
 		let (_, txs) = api.retrieve_txs(true, None, None)?;
@@ -213,9 +213,9 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		w.set_parent_key_id_by_name("account2")?;
 	}
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (_, wallet1_info) = api.retrieve_summary_info(false)?;
+		let (_, wallet1_info) = api.retrieve_summary_info(false, 1)?;
 		assert_eq!(wallet1_info.last_confirmed_height, 12);
-		let (_, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (_, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		assert_eq!(wallet1_info.last_confirmed_height, 13);
 		let (_, txs) = api.retrieve_txs(true, None, None)?;
 		println!("{:?}", txs);
@@ -225,7 +225,7 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// wallet 2 should only have this tx on the listener account
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(wallet2_refreshed);
 		assert_eq!(wallet2_info.last_confirmed_height, 13);
 		let (_, txs) = api.retrieve_txs(true, None, None)?;
@@ -238,9 +238,9 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		w.set_parent_key_id_by_name("default")?;
 	}
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (_, wallet2_info) = api.retrieve_summary_info(false)?;
+		let (_, wallet2_info) = api.retrieve_summary_info(false, 1)?;
 		assert_eq!(wallet2_info.last_confirmed_height, 0);
-		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(wallet2_refreshed);
 		assert_eq!(wallet2_info.last_confirmed_height, 13);
 		assert_eq!(wallet2_info.total, 0,);

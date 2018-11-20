@@ -15,7 +15,6 @@
 use clap::ArgMatches;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-/// Wallet commands processing
 use std::thread;
 use std::time::Duration;
 
@@ -433,13 +432,27 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					});
 				Ok(())
 			}
-			("info", Some(_)) => {
-				let (validated, wallet_info) = api.retrieve_summary_info(true).map_err(|e| {
-					ErrorKind::GenericError(format!(
-						"Error getting wallet info: {:?} Config: {:?}",
-						e, wallet_config
-					))
-				})?;
+			("info", Some(args)) => {
+				let minimum_confirmations: u64 = args
+					.value_of("minimum_confirmations")
+					.ok_or_else(|| {
+						ErrorKind::GenericError("Minimum confirmations required".to_string())
+					}).and_then(|v| {
+						v.parse().map_err(|e| {
+							ErrorKind::GenericError(format!(
+								"Could not parse minimum_confirmations as a whole number. e={:?}",
+								e
+							))
+						})
+					})?;
+				let (validated, wallet_info) = api
+					.retrieve_summary_info(true, minimum_confirmations)
+					.map_err(|e| {
+						ErrorKind::GenericError(format!(
+							"Error getting wallet info: {:?} Config: {:?}",
+							e, wallet_config
+						))
+					})?;
 				display::info(
 					account,
 					&wallet_info,

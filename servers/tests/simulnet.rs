@@ -984,7 +984,7 @@ fn replicate_tx_fluff_failure() {
 	let wallet2 = create_wallet("target/tmp/tx_fluff/wallet2", client2.clone());
 
 	wallet::controller::owner_single_use(wallet2, |api| {
-		let res = api.retrieve_summary_info(true).unwrap();
+		let res = api.retrieve_summary_info(true, 1).unwrap();
 		assert_eq!(res.1.amount_currently_spendable, amount);
 		Ok(())
 	}).unwrap();

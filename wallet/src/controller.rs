@@ -188,8 +188,8 @@ where
 			show_spent = true;
 		}
 		if let Some(ids) = params.get("tx_id") {
-			for i in ids {
-				id = Some(i.parse().unwrap());
+			if let Some(x) = ids.first() {
+				id = Some(x.parse().unwrap());
 			}
 		}
 		api.retrieve_outputs(show_spent, update_from_node, id)
@@ -210,13 +210,13 @@ where
 			update_from_node = true;
 		}
 		if let Some(ids) = params.get("id") {
-			for i in ids {
-				tx_id = Some(i.parse().unwrap());
+			if let Some(x) = ids.first() {
+				tx_id = Some(x.parse().unwrap());
 			}
 		}
 		if let Some(tx_slate_ids) = params.get("tx_id") {
-			for i in tx_slate_ids {
-				tx_slate_id = Some(i.parse().unwrap());
+			if let Some(x) = tx_slate_ids.first() {
+				tx_slate_id = Some(x.parse().unwrap());
 			}
 		}
 		api.retrieve_txs(update_from_node, tx_id, tx_slate_id)
@@ -256,8 +256,17 @@ where
 		req: &Request<Body>,
 		mut api: APIOwner<T, C, K>,
 	) -> Result<(bool, WalletInfo), Error> {
-		let update_from_node = param_exists(req, "refresh");
-		api.retrieve_summary_info(update_from_node)
+		let mut minimum_confirmations = 1; // TODO - default needed here
+		let params = parse_params(req);
+		let update_from_node = params.get("refresh").is_some();
+
+		if let Some(confs) = params.get("minimum_confirmations") {
+			if let Some(x) = confs.first() {
+				minimum_confirmations = x.parse().unwrap();
+			}
+		}
+
+		api.retrieve_summary_info(update_from_node, minimum_confirmations)
 	}
 
 	fn node_height(
@@ -658,10 +667,6 @@ fn parse_params(req: &Request<Body>) -> HashMap<String, Vec<String>> {
 			}),
 		None => HashMap::new(),
 	}
-}
-
-fn param_exists(req: &Request<Body>, param: &str) -> bool {
-	parse_params(req).get(param).is_some()
 }
 
 fn parse_body<T>(req: Request<Body>) -> Box<Future<Item = T, Error = Error> + Send>

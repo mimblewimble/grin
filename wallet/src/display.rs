@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use core::core::{self, amount_to_hr_string};
+use core::global;
 use libwallet::types::{AcctPathMapping, OutputData, OutputStatus, TxLogEntry, WalletInfo};
 use libwallet::Error;
 use prettytable;
@@ -255,26 +256,69 @@ pub fn info(
 ) {
 	println!(
 		"\n____ Wallet Summary Info - Account '{}' as of height {} ____\n",
-		account, wallet_info.last_confirmed_height
+		account, wallet_info.last_confirmed_height,
 	);
-	let mut table = if dark_background_color_scheme {
-		table!(
-			[bFG->"Total", FG->amount_to_hr_string(wallet_info.total, false)],
-			[bFY->"Awaiting Confirmation", FY->amount_to_hr_string(wallet_info.amount_awaiting_confirmation, false)],
-			[bFY->"Immature Coinbase", FY->amount_to_hr_string(wallet_info.amount_immature, false)],
-			[bFG->"Currently Spendable", FG->amount_to_hr_string(wallet_info.amount_currently_spendable, false)],
-			[Fw->"--------------------------------", Fw->"-------------"],
-			[Fr->"(Locked by previous transaction)", Fr->amount_to_hr_string(wallet_info.amount_locked, false)]
-		)
+
+	let mut table = table!();
+
+	if dark_background_color_scheme {
+		table.add_row(row![
+			bFG->"Total",
+			FG->amount_to_hr_string(wallet_info.total, false)
+		]);
+		// Only dispay "Immature Coinbase" if we have related outputs in the wallet.
+		// This row just introduces confusion if the wallet does not receive coinbase rewards.
+		if wallet_info.amount_immature > 0 {
+			table.add_row(row![
+				bFY->format!("Immature Coinbase (< {})", global::coinbase_maturity()),
+				FY->amount_to_hr_string(wallet_info.amount_immature, false)
+			]);
+		}
+		table.add_row(row![
+			bFY->format!("Awaiting Confirmation (< {})", wallet_info.minimum_confirmations),
+			FY->amount_to_hr_string(wallet_info.amount_awaiting_confirmation, false)
+		]);
+		table.add_row(row![
+			Fr->"Locked by previous transaction",
+			Fr->amount_to_hr_string(wallet_info.amount_locked, false)
+		]);
+		table.add_row(row![
+			Fw->"--------------------------------",
+			Fw->"-------------"
+		]);
+		table.add_row(row![
+			bFG->"Currently Spendable",
+			FG->amount_to_hr_string(wallet_info.amount_currently_spendable, false)
+		]);
 	} else {
-		table!(
-			[bFG->"Total", FG->amount_to_hr_string(wallet_info.total, false)],
-			[bFB->"Awaiting Confirmation", FB->amount_to_hr_string(wallet_info.amount_awaiting_confirmation, false)],
-			[bFB->"Immature Coinbase", FB->amount_to_hr_string(wallet_info.amount_immature, false)],
-			[bFG->"Currently Spendable", FG->amount_to_hr_string(wallet_info.amount_currently_spendable, false)],
-			[Fw->"--------------------------------", Fw->"-------------"],
-			[Fr->"(Locked by previous transaction)", Fr->amount_to_hr_string(wallet_info.amount_locked, false)]
-		)
+		table.add_row(row![
+			bFG->"Total",
+			FG->amount_to_hr_string(wallet_info.total, false)
+		]);
+		// Only dispay "Immature Coinbase" if we have related outputs in the wallet.
+		// This row just introduces confusion if the wallet does not receive coinbase rewards.
+		if wallet_info.amount_immature > 0 {
+			table.add_row(row![
+				bFB->format!("Immature Coinbase (< {})", global::coinbase_maturity()),
+				FB->amount_to_hr_string(wallet_info.amount_immature, false)
+			]);
+		}
+		table.add_row(row![
+			bFB->format!("Awaiting Confirmation (< {})", wallet_info.minimum_confirmations),
+			FB->amount_to_hr_string(wallet_info.amount_awaiting_confirmation, false)
+		]);
+		table.add_row(row![
+			Fr->"Locked by previous transaction",
+			Fr->amount_to_hr_string(wallet_info.amount_locked, false)
+		]);
+		table.add_row(row![
+			Fw->"--------------------------------",
+			Fw->"-------------"
+		]);
+		table.add_row(row![
+			bFG->"Currently Spendable",
+			FG->amount_to_hr_string(wallet_info.amount_currently_spendable, false)
+		]);
 	};
 	table.set_format(*prettytable::format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
 	table.printstd();

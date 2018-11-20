@@ -323,6 +323,7 @@ where
 pub fn retrieve_info<T: ?Sized, C, K>(
 	wallet: &mut T,
 	parent_key_id: &Identifier,
+	minimum_confirmations: u64,
 ) -> Result<WalletInfo, Error>
 where
 	T: WalletBackend<C, K>,
@@ -338,23 +339,39 @@ where
 	let mut immature_total = 0;
 	let mut unconfirmed_total = 0;
 	let mut locked_total = 0;
+
 	for out in outputs {
-		if out.status == OutputStatus::Unspent && out.lock_height <= current_height {
-			unspent_total += out.value;
-		}
-		if out.status == OutputStatus::Unspent && out.lock_height > current_height {
-			immature_total += out.value;
-		}
-		if out.status == OutputStatus::Unconfirmed && !out.is_coinbase {
-			unconfirmed_total += out.value;
-		}
-		if out.status == OutputStatus::Locked {
-			locked_total += out.value;
+		match out.status {
+			OutputStatus::Unspent => {
+				if out.is_coinbase && out.lock_height > current_height {
+					immature_total += out.value;
+				} else if out.num_confirmations(current_height) < minimum_confirmations {
+					// Treat anything less than minimum confirmations as "unconfirmed".
+					unconfirmed_total += out.value;
+				} else {
+					unspent_total += out.value;
+				}
+			}
+			OutputStatus::Unconfirmed => {
+				// We ignore unconfirmed coinbase outputs completely.
+				if !out.is_coinbase {
+					if minimum_confirmations == 0 {
+						unspent_total += out.value;
+					} else {
+						unconfirmed_total += out.value;
+					}
+				}
+			}
+			OutputStatus::Locked => {
+				locked_total += out.value;
+			}
+			OutputStatus::Spent => {}
 		}
 	}
 
 	Ok(WalletInfo {
 		last_confirmed_height: current_height,
+		minimum_confirmations,
 		total: unspent_total + unconfirmed_total + immature_total,
 		amount_awaiting_confirmation: unconfirmed_total,
 		amount_immature: immature_total,

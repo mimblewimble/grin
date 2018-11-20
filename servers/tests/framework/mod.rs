@@ -314,7 +314,7 @@ impl LocalServerContainer {
 		wallet.keychain = Some(keychain);
 		let parent_id = keychain::ExtKeychain::derive_key_id(2, 0, 0, 0, 0);
 		let _ = wallet::libwallet::internal::updater::refresh_outputs(&mut wallet, &parent_id);
-		wallet::libwallet::internal::updater::retrieve_info(&mut wallet, &parent_id).unwrap()
+		wallet::libwallet::internal::updater::retrieve_info(&mut wallet, &parent_id, 1).unwrap()
 	}
 
 	pub fn send_amount_to(
