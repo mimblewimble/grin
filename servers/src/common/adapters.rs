@@ -668,13 +668,13 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 
 		if is_reorg {
 			warn!(
-				"block_accepted (reorg): {:?} at {}",
+				"block_accepted (reorg!): {:?} at {}",
 				b.hash(),
 				b.header.height
 			);
 		} else if !is_more_work {
 			debug!(
-				"block_accepted (not most work): {:?} at {}",
+				"block_accepted (fork?): {:?} at {}",
 				b.hash(),
 				b.header.height
 			);
