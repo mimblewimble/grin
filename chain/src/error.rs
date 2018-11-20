@@ -48,7 +48,7 @@ pub enum ErrorKind {
 	/// Block header edge_bits is lower than our min
 	#[fail(display = "Cuckoo Size too small")]
 	LowEdgebits,
-	/// Scaling factor between primary and secondary PoW is invalid
+	/// Scaling factor between primary and AR PoW is invalid
 	#[fail(display = "Wrong scaling factor")]
 	InvalidScaling,
 	/// The proof of work is invalid

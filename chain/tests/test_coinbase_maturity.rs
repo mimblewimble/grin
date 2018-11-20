@@ -74,7 +74,7 @@ fn test_coinbase_maturity() {
 	let reward = libtx::reward::output(&keychain, &key_id1, 0, prev.height).unwrap();
 	let mut block = core::core::Block::new(&prev, vec![], Difficulty::min(), reward).unwrap();
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
-	block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
+	block.header.pow.ar_scaling = next_header_info.ar_scaling;
 
 	chain.set_txhashset_roots(&mut block).unwrap();
 
@@ -121,7 +121,7 @@ fn test_coinbase_maturity() {
 	let mut block = core::core::Block::new(&prev, txs, Difficulty::min(), reward).unwrap();
 	let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
-	block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
+	block.header.pow.ar_scaling = next_header_info.ar_scaling;
 
 	chain.set_txhashset_roots(&mut block).unwrap();
 
@@ -154,7 +154,7 @@ fn test_coinbase_maturity() {
 		let mut block = core::core::Block::new(&prev, vec![], Difficulty::min(), reward).unwrap();
 		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
 		block.header.timestamp = prev.timestamp + Duration::seconds(60);
-		block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
+		block.header.pow.ar_scaling = next_header_info.ar_scaling;
 
 		chain.set_txhashset_roots(&mut block).unwrap();
 
@@ -181,7 +181,7 @@ fn test_coinbase_maturity() {
 	let mut block = core::core::Block::new(&prev, txs, Difficulty::min(), reward).unwrap();
 
 	block.header.timestamp = prev.timestamp + Duration::seconds(60);
-	block.header.pow.secondary_scaling = next_header_info.secondary_scaling;
+	block.header.pow.ar_scaling = next_header_info.ar_scaling;
 
 	chain.set_txhashset_roots(&mut block).unwrap();
 

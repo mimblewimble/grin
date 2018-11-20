@@ -21,7 +21,7 @@ use std::{fmt, iter};
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
+use consensus::{graph_weight, MIN_DIFFICULTY, AR_POW_EDGE_BITS};
 use core::hash::Hashed;
 use global;
 use ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
@@ -221,8 +221,8 @@ impl<'de> de::Visitor<'de> for DiffVisitor {
 pub struct ProofOfWork {
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
-	/// Variable difficulty scaling factor fo secondary proof of work
-	pub secondary_scaling: u32,
+	/// Variable difficulty scaling factor for AR proof of work
+	pub ar_scaling: u32,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
 	/// Proof of work data.
@@ -234,7 +234,7 @@ impl Default for ProofOfWork {
 		let proof_size = global::proofsize();
 		ProofOfWork {
 			total_difficulty: Difficulty::min(),
-			secondary_scaling: 1,
+			ar_scaling: 1,
 			nonce: 0,
 			proof: Proof::zero(proof_size),
 		}
@@ -245,12 +245,12 @@ impl ProofOfWork {
 	/// Read implementation, can't define as trait impl as we need a version
 	pub fn read(_ver: u16, reader: &mut Reader) -> Result<ProofOfWork, ser::Error> {
 		let total_difficulty = Difficulty::read(reader)?;
-		let secondary_scaling = reader.read_u32()?;
+		let ar_scaling = reader.read_u32()?;
 		let nonce = reader.read_u64()?;
 		let proof = Proof::read(reader)?;
 		Ok(ProofOfWork {
 			total_difficulty,
-			secondary_scaling,
+			ar_scaling,
 			nonce,
 			proof,
 		})
@@ -272,7 +272,7 @@ impl ProofOfWork {
 		ser_multiwrite!(
 			writer,
 			[write_u64, self.total_difficulty.to_num()],
-			[write_u32, self.secondary_scaling]
+			[write_u32, self.ar_scaling]
 		);
 		Ok(())
 	}
@@ -281,8 +281,8 @@ impl ProofOfWork {
 	pub fn to_difficulty(&self) -> Difficulty {
 		// 2 proof of works, Cuckoo29 (for now) and Cuckoo30+, which are scaled
 		// differently (scaling not controlled for now)
-		if self.proof.edge_bits == SECOND_POW_EDGE_BITS {
-			Difficulty::from_proof_scaled(&self.proof, self.secondary_scaling)
+		if self.proof.edge_bits == AR_POW_EDGE_BITS {
+			Difficulty::from_proof_scaled(&self.proof, self.ar_scaling)
 		} else {
 			Difficulty::from_proof_adjusted(&self.proof)
 		}
@@ -294,18 +294,18 @@ impl ProofOfWork {
 	}
 
 	/// Whether this proof of work is for the primary algorithm (as opposed
-	/// to secondary). Only depends on the edge_bits at this time.
+	/// to AR). Only depends on the edge_bits at this time.
 	pub fn is_primary(&self) -> bool {
 		// 2 conditions are redundant right now but not necessarily in
 		// the future
-		self.proof.edge_bits != SECOND_POW_EDGE_BITS
+		self.proof.edge_bits != AR_POW_EDGE_BITS
 			&& self.proof.edge_bits >= global::min_edge_bits()
 	}
 
-	/// Whether this proof of work is for the secondary algorithm (as opposed
+	/// Whether this proof of work is for the AR algorithm (as opposed
 	/// to primary). Only depends on the edge_bits at this time.
-	pub fn is_secondary(&self) -> bool {
-		self.proof.edge_bits == SECOND_POW_EDGE_BITS
+	pub fn is_ar(&self) -> bool {
+		self.proof.edge_bits == AR_POW_EDGE_BITS
 	}
 }
 

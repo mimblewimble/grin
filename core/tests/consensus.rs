@@ -89,8 +89,8 @@ fn repeat(interval: u64, diff: HeaderInfo, len: u64, cur_time: Option<u64>) -> V
 			HeaderInfo::new(
 				cur_time + t as u64,
 				d.clone(),
-				diff.secondary_scaling,
-				diff.is_secondary,
+				diff.ar_scaling,
+				diff.is_ar,
 			)
 		}).collect::<Vec<_>>()
 }
@@ -385,12 +385,12 @@ fn next_target_adjustment() {
 
 	// Check we don't get stuck on difficulty <= MIN_DIFFICULTY (at 4x faster blocks at least)
 	let mut hi = HeaderInfo::from_diff_scaling(diff_min, MIN_DIFFICULTY as u32);
-	hi.is_secondary = false;
+	hi.is_ar = false;
 	let hinext = next_difficulty(1, repeat(15, hi.clone(), DIFFICULTY_ADJUST_WINDOW, None));
 	assert_ne!(hinext.difficulty, diff_min);
 
 	// Check we don't get stuck on scale MIN_DIFFICULTY, when primary frequency is too high
-	assert_ne!(hinext.secondary_scaling, MIN_DIFFICULTY as u32);
+	assert_ne!(hinext.ar_scaling, MIN_DIFFICULTY as u32);
 
 	// just enough data, right interval, should stay constant
 	let just_enough = DIFFICULTY_ADJUST_WINDOW + 1;
@@ -472,26 +472,26 @@ fn next_target_adjustment() {
 }
 
 #[test]
-fn secondary_pow_scale() {
+fn ar_pow_scale() {
 	let window = DIFFICULTY_ADJUST_WINDOW;
 	let mut hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 100);
 
 	// all primary, factor should increase so it becomes easier to find a high
 	// difficulty block
-	hi.is_secondary = false;
+	hi.is_ar = false;
 	assert_eq!(
-		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
+		ar_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
 		147
 	);
-	// all secondary on 90%, factor should go down a bit
-	hi.is_secondary = true;
+	// all AR on 90%, factor should go down a bit
+	hi.is_ar = true;
 	assert_eq!(
-		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
+		ar_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
 		94
 	);
-	// all secondary on 1%, factor should go down to bound (divide by 2)
+	// all AR on 1%, factor should go down to bound (divide by 2)
 	assert_eq!(
-		secondary_pow_scaling(
+		ar_pow_scaling(
 			890_000,
 			&(0..window).map(|_| hi.clone()).collect::<Vec<_>>()
 		),
@@ -499,16 +499,16 @@ fn secondary_pow_scale() {
 	);
 	// same as above, testing lowest bound
 	let mut low_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_DIFFICULTY as u32);
-	low_hi.is_secondary = true;
+	low_hi.is_ar = true;
 	assert_eq!(
-		secondary_pow_scaling(890_000, &(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()),
+		ar_pow_scaling(890_000, &(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()),
 		MIN_DIFFICULTY as u32
 	);
 	// just about the right ratio, also no longer playing with median
 	let mut primary_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 50);
-	primary_hi.is_secondary = false;
+	primary_hi.is_ar = false;
 	assert_eq!(
-		secondary_pow_scaling(
+		ar_pow_scaling(
 			1,
 			&(0..(window / 10))
 				.map(|_| primary_hi.clone())
@@ -517,9 +517,9 @@ fn secondary_pow_scale() {
 		),
 		94
 	);
-	// 95% secondary, should come down based on 97.5 average
+	// 95% AR, should come down based on 97.5 average
 	assert_eq!(
-		secondary_pow_scaling(
+		ar_pow_scaling(
 			1,
 			&(0..(window / 20))
 				.map(|_| primary_hi.clone())
@@ -528,9 +528,9 @@ fn secondary_pow_scale() {
 		),
 		94
 	);
-	// 40% secondary, should come up based on 70 average
+	// 40% AR, should come up based on 70 average
 	assert_eq!(
-		secondary_pow_scaling(
+		ar_pow_scaling(
 			1,
 			&(0..(window * 6 / 10))
 				.map(|_| primary_hi.clone())

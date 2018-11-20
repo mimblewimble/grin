@@ -403,7 +403,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	if !ctx.opts.contains(Options::SKIP_POW) {
-		if !header.pow.is_primary() && !header.pow.is_secondary() {
+		if !header.pow.is_primary() && !header.pow.is_ar() {
 			return Err(ErrorKind::LowEdgebits.into());
 		}
 		let edge_bits = header.pow.edge_bits();
@@ -473,11 +473,11 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			);
 			return Err(ErrorKind::WrongTotalDifficulty.into());
 		}
-		// check the secondary PoW scaling factor if applicable
-		if header.pow.secondary_scaling != next_header_info.secondary_scaling {
+		// check the AR PoW scaling factor if applicable
+		if header.pow.ar_scaling != next_header_info.ar_scaling {
 			info!(
-				"validate_header: header secondary scaling {} != {}",
-				header.pow.secondary_scaling, next_header_info.secondary_scaling
+				"validate_header: header AR scaling {} != {}",
+				header.pow.ar_scaling, next_header_info.ar_scaling
 			);
 			return Err(ErrorKind::InvalidScaling.into());
 		}

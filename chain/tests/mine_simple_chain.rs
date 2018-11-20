@@ -72,7 +72,7 @@ fn mine_empty_chain() {
 			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
 				.unwrap();
 		b.header.timestamp = prev.timestamp + Duration::seconds(60);
-		b.header.pow.secondary_scaling = next_header_info.secondary_scaling;
+		b.header.pow.ar_scaling = next_header_info.ar_scaling;
 
 		chain.set_txhashset_roots(&mut b).unwrap();
 
@@ -386,7 +386,7 @@ fn output_header_mappings() {
 			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
 				.unwrap();
 		b.header.timestamp = prev.timestamp + Duration::seconds(60);
-		b.header.pow.secondary_scaling = next_header_info.secondary_scaling;
+		b.header.pow.ar_scaling = next_header_info.ar_scaling;
 
 		chain.set_txhashset_roots(&mut b).unwrap();
 

@@ -19,7 +19,7 @@
 use consensus::HeaderInfo;
 use consensus::{
 	graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
-	DAY_HEIGHT, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, SECOND_POW_EDGE_BITS,
+	DAY_HEIGHT, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, AR_POW_EDGE_BITS,
 	STATE_SYNC_THRESHOLD, UNIT_DIFFICULTY,
 };
 use pow::{self, CuckatooContext, EdgeType, PoWContext};
@@ -166,7 +166,7 @@ pub fn min_edge_bits() -> u8 {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
 		ChainTypes::Testnet1 => USER_TESTING_MIN_EDGE_BITS,
-		_ => SECOND_POW_EDGE_BITS,
+		_ => AR_POW_EDGE_BITS,
 	}
 }
 
@@ -216,7 +216,7 @@ pub fn initial_block_difficulty() -> u64 {
 		ChainTypes::Mainnet => INITIAL_DIFFICULTY,
 	}
 }
-/// Initial mining secondary scale
+/// Initial mining AR scale
 pub fn initial_graph_weight() -> u32 {
 	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
@@ -225,8 +225,8 @@ pub fn initial_graph_weight() -> u32 {
 		ChainTypes::Testnet1 => TESTING_INITIAL_GRAPH_WEIGHT,
 		ChainTypes::Testnet2 => TESTING_INITIAL_GRAPH_WEIGHT,
 		ChainTypes::Testnet3 => TESTING_INITIAL_GRAPH_WEIGHT,
-		ChainTypes::Testnet4 => graph_weight(SECOND_POW_EDGE_BITS) as u32,
-		ChainTypes::Mainnet => graph_weight(SECOND_POW_EDGE_BITS) as u32,
+		ChainTypes::Testnet4 => graph_weight(AR_POW_EDGE_BITS) as u32,
+		ChainTypes::Mainnet => graph_weight(AR_POW_EDGE_BITS) as u32,
 	}
 }
 

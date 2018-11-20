@@ -59,10 +59,10 @@ pub const YEAR_HEIGHT: u64 = 52 * WEEK_HEIGHT;
 /// Number of blocks before a coinbase matures and can be spent
 pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
 
-/// Ratio the secondary proof of work should take over the primary, as a
+/// Ratio the ASIC resistant proof of work should take over the primary, as a
 /// function of block height (time). Starts at 90% losing a percent
 /// approximately every week. Represented as an integer between 0 and 100.
-pub fn secondary_pow_ratio(height: u64) -> u64 {
+pub fn ar_pow_ratio(height: u64) -> u64 {
 	90u64.saturating_sub(height / WEEK_HEIGHT)
 }
 
@@ -72,17 +72,17 @@ pub const PROOFSIZE: usize = 42;
 /// Default Cuckoo Cycle edge_bits, used for mining and validating.
 pub const DEFAULT_MIN_EDGE_BITS: u8 = 30;
 
-/// Secondary proof-of-work edge_bits, meant to be ASIC resistant.
-pub const SECOND_POW_EDGE_BITS: u8 = 29;
+/// ASIC Resistant proof-of-work edge_bits.
+pub const AR_POW_EDGE_BITS: u8 = 29;
 
 /// Original reference edge_bits to compute difficulty factors for higher
 /// Cuckoo graph sizes, changing this would hard fork
 pub const BASE_EDGE_BITS: u8 = 24;
 
-/// Maximum scaling factor for secondary pow, enforced in diff retargetting
-/// increasing scaling factor increases frequency of secondary blocks
+/// Maximum scaling factor for AR pow, enforced in diff retargetting
+/// increasing scaling factor increases frequency of AR blocks
 /// ONLY IN TESTNET4 LIMITED TO ABOUT 8 TIMES THE NATURAL SCALE
-pub const MAX_SECONDARY_SCALING: u64 = 8 << 11;
+pub const MAX_AR_SCALING: u64 = 8 << 11;
 
 /// Default number of blocks in the past when cross-block cut-through will start
 /// happening. Needs to be long enough to not overlap with a long reorg.
@@ -171,7 +171,7 @@ pub const MIN_DIFFICULTY: u64 = DAMP_FACTOR;
 
 /// unit difficulty, equal to graph_weight(SECOND_POW_EDGE_BITS)
 pub const UNIT_DIFFICULTY: u64 =
-	((2 as u64) << (SECOND_POW_EDGE_BITS - BASE_EDGE_BITS)) * (SECOND_POW_EDGE_BITS as u64);
+	((2 as u64) << (AR_POW_EDGE_BITS - BASE_EDGE_BITS)) * (AR_POW_EDGE_BITS as u64);
 
 /// The initial difficulty at launch. This should be over-estimated
 /// and difficulty should come down at launch rather than up
@@ -200,10 +200,10 @@ pub struct HeaderInfo {
 	pub timestamp: u64,
 	/// Network difficulty or next difficulty to use
 	pub difficulty: Difficulty,
-	/// Network secondary PoW factor or factor to use
-	pub secondary_scaling: u32,
-	/// Whether the header is a secondary proof of work
-	pub is_secondary: bool,
+	/// Network AR PoW factor or factor to use
+	pub ar_scaling: u32,
+	/// Whether the header is a AR proof of work
+	pub is_ar: bool,
 }
 
 impl HeaderInfo {
@@ -211,36 +211,36 @@ impl HeaderInfo {
 	pub fn new(
 		timestamp: u64,
 		difficulty: Difficulty,
-		secondary_scaling: u32,
-		is_secondary: bool,
+		ar_scaling: u32,
+		is_ar: bool,
 	) -> HeaderInfo {
 		HeaderInfo {
 			timestamp,
 			difficulty,
-			secondary_scaling,
-			is_secondary,
+			ar_scaling,
+			is_ar,
 		}
 	}
 
-	/// Constructor from a timestamp and difficulty, setting a default secondary
+	/// Constructor from a timestamp and difficulty, setting a default AR
 	/// PoW factor
 	pub fn from_ts_diff(timestamp: u64, difficulty: Difficulty) -> HeaderInfo {
 		HeaderInfo {
 			timestamp,
 			difficulty,
-			secondary_scaling: global::initial_graph_weight(),
-			is_secondary: false,
+			ar_scaling: global::initial_graph_weight(),
+			is_ar: false,
 		}
 	}
 
-	/// Constructor from a difficulty and secondary factor, setting a default
+	/// Constructor from a difficulty and AR factor, setting a default
 	/// timestamp
-	pub fn from_diff_scaling(difficulty: Difficulty, secondary_scaling: u32) -> HeaderInfo {
+	pub fn from_diff_scaling(difficulty: Difficulty, ar_scaling: u32) -> HeaderInfo {
 		HeaderInfo {
 			timestamp: 1,
 			difficulty,
-			secondary_scaling,
-			is_secondary: false,
+			ar_scaling,
+			is_ar: false,
 		}
 	}
 }
@@ -266,7 +266,7 @@ pub fn clamp(actual: u64, goal: u64, clamp_factor: u64) -> u64 {
 /// by using the difference between the median timestamps at the beginning
 /// and the end of the window.
 ///
-/// The secondary proof-of-work factor is calculated along the same lines, as
+/// The AR proof-of-work factor is calculated along the same lines, as
 /// an adjustment on the deviation against the ideal value.
 pub fn next_difficulty<T>(height: u64, cursor: T) -> HeaderInfo
 where
@@ -278,8 +278,8 @@ where
 	// DIFFICULTY_ADJUST_WINDOW + 1 (for initial block time bound)
 	let diff_data = global::difficulty_data_to_vector(cursor);
 
-	// First, get the ratio of secondary PoW vs primary
-	let sec_pow_scaling = secondary_pow_scaling(height, &diff_data);
+	// First, get the ratio of AR PoW vs primary
+	let sec_pow_scaling = ar_pow_scaling(height, &diff_data);
 
 	// Get the timestamp delta across the window
 	let ts_delta: u64 =
@@ -304,20 +304,20 @@ where
 	HeaderInfo::from_diff_scaling(Difficulty::from_num(difficulty), sec_pow_scaling)
 }
 
-/// Factor by which the secondary proof of work difficulty will be adjusted
-pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
-	// Get the secondary count across the window, in pct (100 * 60 * 2nd_pow_fraction)
-	let snd_count = 100 * diff_data.iter().filter(|n| n.is_secondary).count() as u64;
+/// Factor by which the AR proof of work difficulty will be adjusted
+pub fn ar_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
+	// Get the AR count across the window, in pct (100 * 60 * 2nd_pow_fraction)
+	let snd_count = 100 * diff_data.iter().filter(|n| n.is_ar).count() as u64;
 
 	// Get the scaling factor sum of the last DIFFICULTY_ADJUST_WINDOW elements
 	let scale_sum: u64 = diff_data
 		.iter()
 		.skip(1)
-		.map(|dd| dd.secondary_scaling as u64)
+		.map(|dd| dd.ar_scaling as u64)
 		.sum();
 
 	// compute ideal 2nd_pow_fraction in pct and across window
-	let target_pct = secondary_pow_ratio(height);
+	let target_pct = ar_pow_ratio(height);
 	let target_count = DIFFICULTY_ADJUST_WINDOW * target_pct;
 
 	// adjust count toward goal subject to dampening and clamping
@@ -329,7 +329,7 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
 	let scale = scale_sum * target_pct / adj_count;
 
 	// minimum difficulty avoids getting stuck due to dampening
-	max(MIN_DIFFICULTY, min(scale, MAX_SECONDARY_SCALING)) as u32
+	max(MIN_DIFFICULTY, min(scale, MAX_AR_SCALING)) as u32
 }
 
 /// Consensus rule that collections of items are sorted lexicographically.
