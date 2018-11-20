@@ -20,7 +20,7 @@ use consensus::HeaderInfo;
 use consensus::{
 	graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
 	DAY_HEIGHT, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, SECOND_POW_EDGE_BITS,
-	STATE_SYNC_THRESHOLD, T4_CUCKAROO_HARDFORK, UNIT_DIFFICULTY,
+	STATE_SYNC_THRESHOLD, T4_CUCKAROO_HARDFORK, UNIT_DIFFICULTY, DEFAULT_MIN_EDGE_BITS,
 };
 use pow::{self, new_cuckaroo_ctx, new_cuckatoo_ctx, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
@@ -82,6 +82,9 @@ pub const PEER_EXPIRATION_REMOVE_TIME: i64 = PEER_EXPIRATION_DAYS * 24 * 3600;
 /// Testnet 4 initial block difficulty
 /// 1_000 times natural scale factor for cuckatoo29
 pub const TESTNET4_INITIAL_DIFFICULTY: u64 = 1_000 * UNIT_DIFFICULTY;
+
+/// Cuckatoo edge_bits on T4
+pub const TESTNET4_MIN_EDGE_BITS: u8 = 30;
 
 /// Trigger compaction check on average every day for all nodes.
 /// Randomized per node - roll the dice on every block to decide.
@@ -184,7 +187,8 @@ pub fn min_edge_bits() -> u8 {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
 		ChainTypes::Testnet1 => USER_TESTING_MIN_EDGE_BITS,
-		_ => SECOND_POW_EDGE_BITS,
+		ChainTypes::Testnet4 => TESTNET4_MIN_EDGE_BITS,
+		_ => DEFAULT_MIN_EDGE_BITS,
 	}
 }
 

@@ -69,10 +69,10 @@ pub fn secondary_pow_ratio(height: u64) -> u64 {
 /// Cuckoo-cycle proof size (cycle length)
 pub const PROOFSIZE: usize = 42;
 
-/// Default Cuckoo Cycle edge_bits, used for mining and validating.
-pub const DEFAULT_MIN_EDGE_BITS: u8 = 30;
+/// Default Cuckatoo Cycle edge_bits, used for mining and validating.
+pub const DEFAULT_MIN_EDGE_BITS: u8 = 31;
 
-/// Secondary proof-of-work edge_bits, meant to be ASIC resistant.
+/// Cuckaroo proof-of-work edge_bits, meant to be ASIC resistant.
 pub const SECOND_POW_EDGE_BITS: u8 = 29;
 
 /// Block height at which testnet 4 hard forks to use Cuckaroo instead of
