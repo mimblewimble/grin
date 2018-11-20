@@ -651,14 +651,6 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 
 		debug!("adapter: block_accepted: {:?}", b.hash());
 
-		if let Err(e) = self.tx_pool.write().reconcile_block(b) {
-			error!(
-				"Pool could not update itself at block {}: {:?}",
-				b.hash(),
-				e,
-			);
-		}
-
 		// If we mined the block then we want to broadcast the compact block.
 		// If we received the block from another node then broadcast "header first"
 		// to minimize network traffic.
@@ -669,6 +661,16 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		} else {
 			// "header first" propagation if we are not the originator of this block
 			self.peers().broadcast_header(&b.header);
+		}
+
+		// Reconcile the txpool against the new block *after* we have broadcast it too our peers.
+		// This may be slow and we do not want to delay block propagation.
+		if let Err(e) = self.tx_pool.write().reconcile_block(b) {
+			error!(
+				"Pool could not update itself at block {}: {:?}",
+				b.hash(),
+				e,
+			);
 		}
 	}
 }
