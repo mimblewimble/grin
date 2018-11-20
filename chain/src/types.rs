@@ -118,7 +118,7 @@ impl ser::Readable for Tip {
 pub trait ChainAdapter {
 	/// The blockchain pipeline has accepted this block as valid and added
 	/// it to our chain.
-	fn block_accepted(&self, b: &Block, opts: Options);
+	fn block_accepted(&self, block: &Block, new_head: Option<Tip>, prev_head: Tip, opts: Options);
 }
 
 /// Inform the caller of the current status of a txhashset write operation,
@@ -151,5 +151,5 @@ impl TxHashsetWriteStatus for NoStatus {
 pub struct NoopAdapter {}
 
 impl ChainAdapter for NoopAdapter {
-	fn block_accepted(&self, _: &Block, _: Options) {}
+	fn block_accepted(&self, _b: &Block, _new_head: Option<Tip>, _prev_head: Tip, _opts: Options) {}
 }

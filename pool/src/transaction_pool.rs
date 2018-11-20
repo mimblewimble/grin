@@ -179,30 +179,36 @@ impl TransactionPool {
 		Ok(())
 	}
 
-	fn reconcile_reorg_cache(&mut self, header: &BlockHeader) -> Result<(), PoolError> {
+	fn reconcile_reorg_cache(&mut self, header: &BlockHeader, is_reorg: bool) -> Result<(), PoolError> {
 		// First "age out" any old txs in the reorg cache.
 		let cutoff = Utc::now() - Duration::minutes(30);
 		self.truncate_reorg_cache(cutoff);
 
 		let entries = self.reorg_cache.read().iter().cloned().collect::<Vec<_>>();
-		debug!("reconcile_reorg_cache: size: {} ...", entries.len());
-		for entry in entries {
-			let _ = &self.add_to_txpool(entry.clone(), header);
+
+		if is_reorg {
+			debug!("reconcile_reorg_cache: {:?}, size: {} ...", header.hash(), entries.len());
+			for entry in entries {
+				let _ = &self.add_to_txpool(entry.clone(), header);
+			}
+			debug!("reconcile_reorg_cache: {:?} ... done.", header.hash());
+		} else {
+			debug!("reconcile_reorg_cache: {:?}, size: {}, not a reorg, skipping.", header.hash(), entries.len());
 		}
-		debug!("reconcile_reorg_cache: ... done.");
+
 		Ok(())
 	}
 
 	/// Reconcile the transaction pool (both txpool and stempool) against the
 	/// provided block.
-	pub fn reconcile_block(&mut self, block: &Block) -> Result<(), PoolError> {
+	pub fn reconcile_block(&mut self, block: &Block, is_reorg: bool) -> Result<(), PoolError> {
 		// First reconcile the txpool.
 		self.txpool.reconcile_block(block);
 		self.txpool.reconcile(None, &block.header)?;
 
 		// Take our "reorg_cache" and see if this block means
 		// we need to (re)add old txs due to a fork and re-org.
-		self.reconcile_reorg_cache(&block.header)?;
+		self.reconcile_reorg_cache(&block.header, is_reorg)?;
 
 		// Now reconcile our stempool, accounting for the updated txpool txs.
 		self.stempool.reconcile_block(block);

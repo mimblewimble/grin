@@ -239,18 +239,21 @@ impl Chain {
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
-		let maybe_new_head: Result<Option<Tip>, Error>;
-		{
+		let (maybe_new_head, prev_head) = {
 			let mut txhashset = self.txhashset.write();
 			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
-			maybe_new_head = pipe::process_block(&b, &mut ctx);
+			let prev_head = ctx.batch.head()?;
+
+			let maybe_new_head = pipe::process_block(&b, &mut ctx);
 			if let Ok(_) = maybe_new_head {
 				ctx.batch.commit()?;
 			}
+
 			// release the lock and let the batch go before post-processing
-		}
+			(maybe_new_head, prev_head)
+		};
 
 		let add_to_hash_cache = |hash: Hash| {
 			// only add to hash cache below if block is definitively accepted
@@ -264,7 +267,7 @@ impl Chain {
 				add_to_hash_cache(b.hash());
 
 				// notifying other parts of the system of the update
-				self.adapter.block_accepted(&b, opts);
+				self.adapter.block_accepted(&b, head.clone(), prev_head, opts);
 
 				Ok(head)
 			}
