@@ -73,7 +73,7 @@ fn restore_wallet(base_dir: &str, wallet_dir: &str) -> Result<(), libwallet::Err
 	// perform the restore and update wallet info
 	wallet::controller::owner_single_use(wallet.clone(), |api| {
 		let _ = api.restore()?;
-		let _ = api.retrieve_summary_info(true)?;
+		let _ = api.retrieve_summary_info(true, 1)?;
 		Ok(())
 	})?;
 
@@ -135,14 +135,14 @@ fn compare_wallet_restore(
 
 	// Overall wallet info should be the same
 	wallet::controller::owner_single_use(wallet_source.clone(), |api| {
-		src_info = Some(api.retrieve_summary_info(true)?.1);
+		src_info = Some(api.retrieve_summary_info(true, 1)?.1);
 		src_txs = Some(api.retrieve_txs(true, None, None)?.1);
 		src_accts = Some(api.accounts()?);
 		Ok(())
 	})?;
 
 	wallet::controller::owner_single_use(wallet_dest.clone(), |api| {
-		dest_info = Some(api.retrieve_summary_info(true)?.1);
+		dest_info = Some(api.retrieve_summary_info(true, 1)?.1);
 		dest_txs = Some(api.retrieve_txs(true, None, None)?.1);
 		dest_accts = Some(api.accounts()?);
 		Ok(())
@@ -318,15 +318,15 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// update everyone
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let _ = api.retrieve_summary_info(true)?;
+		let _ = api.retrieve_summary_info(true, 1)?;
 		Ok(())
 	})?;
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let _ = api.retrieve_summary_info(true)?;
+		let _ = api.retrieve_summary_info(true, 1)?;
 		Ok(())
 	})?;
 	wallet::controller::owner_single_use(wallet3.clone(), |api| {
-		let _ = api.retrieve_summary_info(true)?;
+		let _ = api.retrieve_summary_info(true, 1)?;
 		Ok(())
 	})?;
 

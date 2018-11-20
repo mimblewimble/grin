@@ -84,7 +84,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Check wallet 1 contents are as expected
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		debug!(
 			"Wallet 1 Info Pre-Transaction, after {} blocks: {:?}",
 			wallet1_info.last_confirmed_height, wallet1_info
@@ -119,7 +119,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Check transaction log for wallet 1
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (_, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (_, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		let (refreshed, txs) = api.retrieve_txs(true, None, None)?;
 		assert!(refreshed);
 		let fee = wallet::libtx::tx_fee(
@@ -163,7 +163,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Check wallet 1 contents are as expected
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		debug!(
 			"Wallet 1 Info Post Transaction, after {} blocks: {:?}",
 			wallet1_info.last_confirmed_height, wallet1_info
@@ -203,7 +203,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// refresh wallets and retrieve info/tests for each wallet after maturity
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		debug!("Wallet 1 Info: {:?}", wallet1_info);
 		assert!(wallet1_refreshed);
 		assert_eq!(
@@ -218,7 +218,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(wallet2_refreshed);
 		assert_eq!(wallet2_info.amount_currently_spendable, amount);
 
@@ -252,7 +252,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
-		let (refreshed, _wallet1_info) = sender_api.retrieve_summary_info(true)?;
+		let (refreshed, _wallet1_info) = sender_api.retrieve_summary_info(true, 1)?;
 		assert!(refreshed);
 		let (_, txs) = sender_api.retrieve_txs(true, None, None)?;
 
@@ -262,7 +262,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
 		sender_api.post_stored_tx(tx.id, false)?;
-		let (_, wallet1_info) = sender_api.retrieve_summary_info(true)?;
+		let (_, wallet1_info) = sender_api.retrieve_summary_info(true, 1)?;
 		// should be mined now
 		assert_eq!(
 			wallet1_info.total,
@@ -276,7 +276,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// check wallet2 has stored transaction
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(wallet2_refreshed);
 		assert_eq!(wallet2_info.amount_currently_spendable, amount * 3);
 
@@ -347,7 +347,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Check transaction log for wallet 1
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		println!(
 			"last confirmed height: {}",
 			wallet1_info.last_confirmed_height
@@ -392,7 +392,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 		}
 		assert_eq!(outputs.len(), 1);
 		assert_eq!(unconfirmed_count, 1);
-		let (refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		let (refreshed, wallet2_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(refreshed);
 		assert_eq!(wallet2_info.amount_currently_spendable, 0,);
 		assert_eq!(wallet2_info.total, amount);
@@ -413,7 +413,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
 		api.cancel_tx(Some(tx.id), None)?;
-		let (refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(refreshed);
 		println!(
 			"last confirmed height: {}",
@@ -440,7 +440,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
 		api.cancel_tx(Some(tx.id), None)?;
-		let (refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		let (refreshed, wallet2_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(refreshed);
 		// check all eligible inputs should be now be spendable
 		assert_eq!(wallet2_info.amount_currently_spendable, 0,);
