@@ -33,7 +33,8 @@ use util::file::get_first_line;
 
 pub fn _init_wallet_seed(wallet_config: WalletConfig, password: &str) {
 	if let Err(_) = WalletSeed::from_file(&wallet_config, password) {
-		WalletSeed::init_file(&wallet_config, password).expect("Failed to create wallet seed file.");
+		WalletSeed::init_file(&wallet_config, password)
+			.expect("Failed to create wallet seed file.");
 	};
 }
 
@@ -85,7 +86,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 	// Decrypt the seed from the seed file and derive the keychain.
 	// Generate the initial wallet seed if we are running "wallet init".
 	if let ("init", Some(_)) = wallet_args.subcommand() {
-		WalletSeed::init_file(&wallet_config, passphrase).expect("Failed to init wallet seed file.");
+		WalletSeed::init_file(&wallet_config, passphrase)
+			.expect("Failed to init wallet seed file.");
 		info!("Wallet seed file created");
 		let client_n =
 			HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);

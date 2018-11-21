@@ -72,7 +72,7 @@ impl WalletCommAdapter for HTTPWalletCommAdapter {
 	) -> Result<(), Error> {
 		let wallet =
 			instantiate_wallet(config.clone(), passphrase, account, node_api_secret.clone())
-			.context(ErrorKind::WalletSeedDecryption)?;
+				.context(ErrorKind::WalletSeedDecryption)?;
 		let listen_addr = params.get("api_listen_addr").unwrap();
 		let tls_conf = match params.get("certificate") {
 			Some(s) => Some(api::TLSConfig::new(
