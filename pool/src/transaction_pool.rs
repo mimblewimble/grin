@@ -22,7 +22,6 @@ use std::sync::Arc;
 use util::RwLock;
 
 use chrono::prelude::*;
-use chrono::Duration;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::id::ShortId;
@@ -95,15 +94,6 @@ impl TransactionPool {
 			let _ = cache.pop_front();
 		}
 		debug!("added tx to reorg_cache: size now {}", cache.len());
-	}
-
-	// Old txs will "age out" after 30 mins.
-	fn truncate_reorg_cache(&mut self, cutoff: DateTime<Utc>) {
-		let mut cache = self.reorg_cache.write();
-
-		while cache.front().map(|x| x.tx_at < cutoff).unwrap_or(false) {
-			let _ = cache.pop_front();
-		}
 	}
 
 	fn add_to_txpool(
@@ -179,17 +169,31 @@ impl TransactionPool {
 		Ok(())
 	}
 
-	fn reconcile_reorg_cache(&mut self, header: &BlockHeader) -> Result<(), PoolError> {
-		// First "age out" any old txs in the reorg cache.
-		let cutoff = Utc::now() - Duration::minutes(30);
-		self.truncate_reorg_cache(cutoff);
+	// Old txs will "age out" after 30 mins.
+	pub fn truncate_reorg_cache(&mut self, cutoff: DateTime<Utc>) {
+		let mut cache = self.reorg_cache.write();
 
+		while cache.front().map(|x| x.tx_at < cutoff).unwrap_or(false) {
+			let _ = cache.pop_front();
+		}
+
+		debug!("truncate_reorg_cache: size: {}", cache.len());
+	}
+
+	pub fn reconcile_reorg_cache(&mut self, header: &BlockHeader) -> Result<(), PoolError> {
 		let entries = self.reorg_cache.read().iter().cloned().collect::<Vec<_>>();
-		debug!("reconcile_reorg_cache: size: {} ...", entries.len());
+		debug!(
+			"reconcile_reorg_cache: size: {}, block: {:?} ...",
+			entries.len(),
+			header.hash(),
+		);
 		for entry in entries {
 			let _ = &self.add_to_txpool(entry.clone(), header);
 		}
-		debug!("reconcile_reorg_cache: ... done.");
+		debug!(
+			"reconcile_reorg_cache: block: {:?} ... done.",
+			header.hash()
+		);
 		Ok(())
 	}
 
@@ -199,10 +203,6 @@ impl TransactionPool {
 		// First reconcile the txpool.
 		self.txpool.reconcile_block(block);
 		self.txpool.reconcile(None, &block.header)?;
-
-		// Take our "reorg_cache" and see if this block means
-		// we need to (re)add old txs due to a fork and re-org.
-		self.reconcile_reorg_cache(&block.header)?;
 
 		// Now reconcile our stempool, accounting for the updated txpool txs.
 		self.stempool.reconcile_block(block);

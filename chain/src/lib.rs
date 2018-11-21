@@ -53,4 +53,4 @@ pub mod types;
 pub use chain::{Chain, MAX_ORPHAN_SIZE};
 pub use error::{Error, ErrorKind};
 pub use store::ChainStore;
-pub use types::{ChainAdapter, Options, Tip, TxHashsetWriteStatus};
+pub use types::{BlockStatus, ChainAdapter, Options, Tip, TxHashsetWriteStatus};

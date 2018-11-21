@@ -38,7 +38,9 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus};
+use types::{
+	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
+};
 use util::secp::pedersen::{Commitment, RangeProof};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
@@ -235,22 +237,43 @@ impl Chain {
 		res
 	}
 
+	fn determine_status(&self, head: Option<Tip>, prev_head: Tip) -> BlockStatus {
+		// We have more work if the chain head is updated.
+		let is_more_work = head.is_some();
+
+		let mut is_next_block = false;
+		if let Some(head) = head {
+			if head.prev_block_h == prev_head.last_block_h {
+				is_next_block = true;
+			}
+		}
+
+		match (is_more_work, is_next_block) {
+			(true, true) => BlockStatus::Next,
+			(true, false) => BlockStatus::Reorg,
+			(false, _) => BlockStatus::Fork,
+		}
+	}
+
 	/// Attempt to add a new block to the chain.
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
-		let maybe_new_head: Result<Option<Tip>, Error>;
-		{
+		let (maybe_new_head, prev_head) = {
 			let mut txhashset = self.txhashset.write();
 			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
-			maybe_new_head = pipe::process_block(&b, &mut ctx);
+			let prev_head = ctx.batch.head()?;
+
+			let maybe_new_head = pipe::process_block(&b, &mut ctx);
 			if let Ok(_) = maybe_new_head {
 				ctx.batch.commit()?;
 			}
+
 			// release the lock and let the batch go before post-processing
-		}
+			(maybe_new_head, prev_head)
+		};
 
 		let add_to_hash_cache = |hash: Hash| {
 			// only add to hash cache below if block is definitively accepted
@@ -263,8 +286,10 @@ impl Chain {
 			Ok(head) => {
 				add_to_hash_cache(b.hash());
 
+				let status = self.determine_status(head.clone(), prev_head);
+
 				// notifying other parts of the system of the update
-				self.adapter.block_accepted(&b, opts);
+				self.adapter.block_accepted(&b, status, opts);
 
 				Ok(head)
 			}
@@ -983,8 +1008,7 @@ impl Chain {
 		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
 			return Err(ErrorKind::TxHashSetErr(String::from(
 				"Output and rangeproof sets don't match",
-			))
-			.into());
+			)).into());
 		}
 		let mut output_vec: Vec<Output> = vec![];
 		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
