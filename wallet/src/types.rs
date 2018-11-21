@@ -133,7 +133,8 @@ impl WalletSeed {
 		} else {
 			let seed = WalletSeed::init_new();
 			let enc_seed = EncryptedWalletSeed::from_seed(&seed, "")?;
-			let enc_seed_json = serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
+			let enc_seed_json =
+				serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
 			let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
 			file.write_all(&enc_seed_json.as_bytes())
 				.context(ErrorKind::IO)?;
@@ -156,7 +157,8 @@ impl WalletSeed {
 			let mut file = File::open(seed_file_path).context(ErrorKind::IO)?;
 			let mut buffer = String::new();
 			file.read_to_string(&mut buffer).context(ErrorKind::IO)?;
-			let enc_seed: EncryptedWalletSeed = serde_json::from_str(&buffer).context(ErrorKind::Format)?;
+			let enc_seed: EncryptedWalletSeed =
+				serde_json::from_str(&buffer).context(ErrorKind::Format)?;
 			let wallet_seed = enc_seed.decrypt("")?;
 			Ok(wallet_seed)
 		} else {
@@ -199,8 +201,8 @@ impl EncryptedWalletSeed {
 		}
 		let sealing_key =
 			aead::SealingKey::new(&aead::CHACHA20_POLY1305, &key).context(ErrorKind::Encryption)?;
-			aead::seal_in_place(&sealing_key, &nonce, &[], &mut enc_bytes, suffix_len)
-				.context(ErrorKind::Encryption)?;
+		aead::seal_in_place(&sealing_key, &nonce, &[], &mut enc_bytes, suffix_len)
+			.context(ErrorKind::Encryption)?;
 		Ok(EncryptedWalletSeed {
 			encrypted_seed: util::to_hex(enc_bytes.to_vec()),
 			salt: util::to_hex(salt.to_vec()),
@@ -226,9 +228,10 @@ impl EncryptedWalletSeed {
 		let mut key = [0; 32];
 		pbkdf2::derive(&digest::SHA256, 100, &salt, password, &mut key);
 
-		let opening_key = aead::OpeningKey::new(&aead::CHACHA20_POLY1305, &key).context(ErrorKind::Encryption)?;
-		let decrypted_data =
-			aead::open_in_place(&opening_key, &nonce, &[], 0, &mut encrypted_seed).context(ErrorKind::Encryption)?;
+		let opening_key =
+			aead::OpeningKey::new(&aead::CHACHA20_POLY1305, &key).context(ErrorKind::Encryption)?;
+		let decrypted_data = aead::open_in_place(&opening_key, &nonce, &[], 0, &mut encrypted_seed)
+			.context(ErrorKind::Encryption)?;
 
 		Ok(WalletSeed::from_bytes(&decrypted_data))
 	}

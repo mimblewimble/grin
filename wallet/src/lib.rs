@@ -35,10 +35,10 @@ extern crate failure;
 extern crate failure_derive;
 extern crate futures;
 extern crate hyper;
+extern crate ring;
 extern crate tokio;
 extern crate tokio_core;
 extern crate tokio_retry;
-extern crate ring;
 
 extern crate grin_api as api;
 extern crate grin_core as core;

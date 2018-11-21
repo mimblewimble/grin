@@ -47,7 +47,6 @@ pub enum ErrorKind {
 	#[fail(display = "Transaction error")]
 	Transaction(transaction::Error),
 
-
 	/// Secp Error
 	#[fail(display = "Secp error")]
 	Secp,

@@ -26,7 +26,7 @@ use util::secp;
 use util::secp::key::{PublicKey, SecretKey};
 use wallet::libtx::{aggsig, proof};
 use wallet::libwallet::types::Context;
-use wallet::{WalletSeed, EncryptedWalletSeed};
+use wallet::{EncryptedWalletSeed, WalletSeed};
 
 use rand::thread_rng;
 
