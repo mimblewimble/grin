@@ -653,7 +653,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 					b.header.height,
 					b.header.total_difficulty(),
 				);
-			},
+			}
 			BlockStatus::Fork => {
 				debug!(
 					"block_accepted (fork?): {:?} at {} (diff: {})",
@@ -661,7 +661,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 					b.header.height,
 					b.header.total_difficulty(),
 				);
-			},
+			}
 			BlockStatus::Next => {
 				debug!(
 					"block_accepted (head+): {:?} at {} (diff: {})",

@@ -38,7 +38,9 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus};
+use types::{
+	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
+};
 use util::secp::pedersen::{Commitment, RangeProof};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
@@ -287,8 +289,7 @@ impl Chain {
 				let status = self.determine_status(head.clone(), prev_head);
 
 				// notifying other parts of the system of the update
-				self.adapter
-					.block_accepted(&b, status, opts);
+				self.adapter.block_accepted(&b, status, opts);
 
 				Ok(head)
 			}
