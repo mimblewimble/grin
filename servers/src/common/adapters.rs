@@ -640,13 +640,7 @@ pub struct ChainToPoolAndNetAdapter {
 }
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
-	fn block_accepted(
-		&self,
-		b: &core::Block,
-		is_more_work: bool,
-		is_reorg: bool,
-		opts: Options,
-	) {
+	fn block_accepted(&self, b: &core::Block, is_more_work: bool, is_reorg: bool, opts: Options) {
 		if self.sync_state.is_syncing() {
 			return;
 		}

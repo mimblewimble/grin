@@ -180,10 +180,7 @@ impl TransactionPool {
 		debug!("truncate_reorg_cache: size: {}", cache.len());
 	}
 
-	pub fn reconcile_reorg_cache(
-		&mut self,
-		header: &BlockHeader,
-	) -> Result<(), PoolError> {
+	pub fn reconcile_reorg_cache(&mut self, header: &BlockHeader) -> Result<(), PoolError> {
 		let entries = self.reorg_cache.read().iter().cloned().collect::<Vec<_>>();
 		debug!(
 			"reconcile_reorg_cache: size: {}, block: {:?} ...",
@@ -193,7 +190,10 @@ impl TransactionPool {
 		for entry in entries {
 			let _ = &self.add_to_txpool(entry.clone(), header);
 		}
-		debug!("reconcile_reorg_cache: block: {:?} ... done.", header.hash());
+		debug!(
+			"reconcile_reorg_cache: block: {:?} ... done.",
+			header.hash()
+		);
 		Ok(())
 	}
 

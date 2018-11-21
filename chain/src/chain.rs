@@ -283,7 +283,8 @@ impl Chain {
 				};
 
 				// notifying other parts of the system of the update
-				self.adapter.block_accepted(&b, is_more_work, is_reorg, opts);
+				self.adapter
+					.block_accepted(&b, is_more_work, is_reorg, opts);
 
 				Ok(head)
 			}
