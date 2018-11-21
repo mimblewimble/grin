@@ -110,43 +110,43 @@ pub fn to_entropy(mnemonic: &str) -> Result<Vec<u8>, Error> {
 
 /// Converts entropy to a mnemonic
 pub fn from_entropy(entropy: &Vec<u8>) -> Result<String, Error> {
-    let sizes: [usize; 5] = [16, 20, 24, 28, 32];
-    let length = entropy.len();
+	let sizes: [usize; 5] = [16, 20, 24, 28, 32];
+	let length = entropy.len();
 	if !sizes.contains(&length) {
 		return Err(Error::InvalidLength(length));
 	}
 
-    let checksum_bits = length / 4;
-    let mask = ((1 << checksum_bits) - 1) as u8;
+	let checksum_bits = length / 4;
+	let mask = ((1 << checksum_bits) - 1) as u8;
 
-    let mut hash = [0; 32];
+	let mut hash = [0; 32];
 	let mut sha2sum = Sha256::default();
-    sha2sum.input(&entropy.clone());
-    hash.copy_from_slice(sha2sum.result().as_slice());
+	sha2sum.input(&entropy.clone());
+	hash.copy_from_slice(sha2sum.result().as_slice());
 
-    let checksum = (hash[0] >> 8 - checksum_bits) & mask;
-    
-    let nwords = (length * 8 + checksum_bits) / 11;
-    let mut indexes: Vec<u16> = vec![0; nwords];
-    let mut loc: usize = 0;
+	let checksum = (hash[0] >> 8 - checksum_bits) & mask;
 
-    // u8 to u11
-    for byte in entropy.iter() {
-        for i in (0..8).rev() {
-            let bit = byte & (1 << i) != 0;
-            indexes[loc / 11] |= (bit as u16) << 10 - (loc % 11);
-            loc += 1;
-        }
-    }
-    for i in (0..checksum_bits).rev() {
-        let bit = checksum & (1 << i) != 0;
-        indexes[loc / 11] |= (bit as u16) << 10 - (loc % 11);
-        loc += 1;
-    }
+	let nwords = (length * 8 + checksum_bits) / 11;
+	let mut indexes: Vec<u16> = vec![0; nwords];
+	let mut loc: usize = 0;
 
-    let words: Vec<String> = indexes.iter().map(|x| WORDS[*x as usize].clone()).collect();
-    let mnemonic = words.join(" ");
-    Ok(mnemonic.to_owned())
+	// u8 to u11
+	for byte in entropy.iter() {
+		for i in (0..8).rev() {
+			let bit = byte & (1 << i) != 0;
+			indexes[loc / 11] |= (bit as u16) << 10 - (loc % 11);
+			loc += 1;
+		}
+	}
+	for i in (0..checksum_bits).rev() {
+		let bit = checksum & (1 << i) != 0;
+		indexes[loc / 11] |= (bit as u16) << 10 - (loc % 11);
+		loc += 1;
+	}
+
+	let words: Vec<String> = indexes.iter().map(|x| WORDS[*x as usize].clone()).collect();
+	let mnemonic = words.join(" ");
+	Ok(mnemonic.to_owned())
 }
 
 /// Converts a nemonic and a passphrase into a seed
@@ -154,6 +154,7 @@ pub fn to_seed<'a, T: 'a>(mnemonic: &str, passphrase: T) -> Result<[u8; 64], Err
 where
 	Option<&'a str>: From<T>,
 {
+	// make sure the mnemonic is valid
 	try!(to_entropy(mnemonic));
 
 	let salt = ("mnemonic".to_owned() + Option::from(passphrase).unwrap_or("")).into_bytes();
