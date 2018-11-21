@@ -68,9 +68,15 @@ impl Keychain for ExtKeychain {
 		Ok(sk)
 	}
 
+	fn derive_switch_key(&self, amount: u64, id: &Identifier) -> Result<SecretKey, Error> {
+		let ext_key = self.derive_key(id)?;
+		let key = self.secp.blind_switch(amount, ext_key.secret_key)?;
+		Ok(key)
+	}
+
 	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error> {
-		let key = self.derive_key(id)?;
-		let commit = self.secp.commit(amount, key.secret_key)?;
+		let key = self.derive_switch_key(amount, id)?;
+		let commit = self.secp.commit(amount, key)?;
 		Ok(commit)
 	}
 
@@ -79,9 +85,9 @@ impl Keychain for ExtKeychain {
 			.positive_key_ids
 			.iter()
 			.filter_map(|k| {
-				let res = self.derive_key(&Identifier::from_path(&k));
+				let res = self.derive_switch_key(k.value, &Identifier::from_path(&k.ext_keychain_path));
 				if let Ok(s) = res {
-					Some(s.secret_key)
+					Some(s)
 				} else {
 					None
 				}
@@ -92,9 +98,9 @@ impl Keychain for ExtKeychain {
 			.negative_key_ids
 			.iter()
 			.filter_map(|k| {
-				let res = self.derive_key(&Identifier::from_path(&k));
+				let res = self.derive_switch_key(k.value, &Identifier::from_path(&k.ext_keychain_path));
 				if let Ok(s) = res {
-					Some(s.secret_key)
+					Some(s)
 				} else {
 					None
 				}
