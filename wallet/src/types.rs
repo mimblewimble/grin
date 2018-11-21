@@ -105,9 +105,16 @@ impl WalletSeed {
 		util::to_hex(self.0.to_vec())
 	}
 
+	//TODO: Remove for old versions
+	pub fn derive_seed_old(old_seed: &[u8;32], password: &str) -> Result<[u8; 64], Error> {
+		let seed = blake2::blake2b::blake2b(64, password.as_bytes(), old_seed);
+		let mut ret_val = [0u8; 64];
+		ret_val.clone_from_slice(&seed.as_bytes()[0..64]);
+		Ok(ret_val)
+	}
+
 	pub fn derive_keychain<K: Keychain>(&self) -> Result<K, Error> {
-		let seed = blake2::blake2b::blake2b(64, "".as_bytes(), &self.0);
-		let result = K::from_seed(seed.as_bytes())?;
+		let result = K::from_seed(&self.0)?;
 		Ok(result)
 	}
 
@@ -157,16 +164,19 @@ impl WalletSeed {
 			let mut buffer = String::new();
 			file.read_to_string(&mut buffer).context(ErrorKind::IO)?;
 			let enc_seed: EncryptedWalletSeed =
-				match serde_json::from_str(&buffer).context(ErrorKind::Format){
+				match serde_json::from_str(&buffer).context(ErrorKind::Format) {
 					Ok(s) => s,
 					Err(_) => {
 						warn!("Attempting to convert old wallet seed file to new format");
 						// TODO: remove for mainnet
 						// try to convert from old format
-						let mut bak_file = File::create(format!("{}.bak", seed_file_path)).context(ErrorKind::IO)?;
+						let mut bak_file = File::create(format!("{}.bak", seed_file_path))
+							.context(ErrorKind::IO)?;
 						let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
 						let old_wallet_seed = WalletSeed::from_hex(&buffer.trim())?;
-						bak_file.write_all(&old_wallet_seed.to_hex().as_bytes()).context(ErrorKind::IO)?;
+						bak_file
+							.write_all(&old_wallet_seed.to_hex().as_bytes())
+							.context(ErrorKind::IO)?;
 						let enc_seed = EncryptedWalletSeed::from_seed(&old_wallet_seed, password)?;
 						let enc_seed_json =
 							serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
