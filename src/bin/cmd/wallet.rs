@@ -31,9 +31,9 @@ use keychain;
 use servers::start_webwallet_server;
 use util::file::get_first_line;
 
-pub fn _init_wallet_seed(wallet_config: WalletConfig) {
-	if let Err(_) = WalletSeed::from_file(&wallet_config) {
-		WalletSeed::init_file(&wallet_config).expect("Failed to create wallet seed file.");
+pub fn _init_wallet_seed(wallet_config: WalletConfig, password: &str) {
+	if let Err(_) = WalletSeed::from_file(&wallet_config, password) {
+		WalletSeed::init_file(&wallet_config, password).expect("Failed to create wallet seed file.");
 	};
 }
 
@@ -74,15 +74,23 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 	}
 	let node_api_secret = get_first_line(wallet_config.node_api_secret_path.clone());
 
-	// Derive the keychain based on seed from seed file and specified passphrase.
+	let passphrase = match wallet_args.value_of("pass") {
+		None => {
+			error!("Failed to read passphrase.");
+			return 1;
+		}
+		Some(p) => p,
+	};
+
+	// Decrypt the seed from the seed file and derive the keychain.
 	// Generate the initial wallet seed if we are running "wallet init".
 	if let ("init", Some(_)) = wallet_args.subcommand() {
-		WalletSeed::init_file(&wallet_config).expect("Failed to init wallet seed file.");
+		WalletSeed::init_file(&wallet_config, passphrase).expect("Failed to init wallet seed file.");
 		info!("Wallet seed file created");
 		let client_n =
 			HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
 		let _: LMDBBackend<HTTPNodeClient, keychain::ExtKeychain> =
-			LMDBBackend::new(wallet_config.clone(), "", client_n).unwrap_or_else(|e| {
+			LMDBBackend::new(wallet_config.clone(), passphrase, client_n).unwrap_or_else(|e| {
 				panic!(
 					"Error creating DB for wallet: {} Config: {:?}",
 					e, wallet_config
@@ -94,14 +102,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		// we are done here with creating the wallet, so just return
 		return 0;
 	}
-
-	let passphrase = match wallet_args.value_of("pass") {
-		None => {
-			error!("Failed to read passphrase.");
-			return 1;
-		}
-		Some(p) => p,
-	};
 
 	let account = match wallet_args.value_of("account") {
 		None => {
@@ -150,6 +150,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						account,
 						node_api_secret.clone(),
 					).unwrap_or_else(|e| {
+						if e.kind() == ErrorKind::WalletSeedDecryption {
+							println!("Error decrypting wallet seed (check provided password)");
+							std::process::exit(0);
+						}
 						panic!(
 							"Error creating wallet listener: {:?} Config: {:?}",
 							e, wallet_config
@@ -162,7 +166,16 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					passphrase,
 					account,
 					node_api_secret.clone(),
-				);
+				).unwrap_or_else(|e| {
+					if e.kind() == grin_wallet::ErrorKind::Encryption {
+						println!("Error decrypting wallet seed (check provided password)");
+						std::process::exit(0);
+					}
+					panic!(
+						"Error creating wallet listener: {:?} Config: {:?}",
+						e, wallet_config
+					);
+				});
 				// TLS is disabled because we bind to localhost
 				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, None)
 					.unwrap_or_else(|e| {
@@ -178,7 +191,16 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					passphrase,
 					account,
 					node_api_secret.clone(),
-				);
+				).unwrap_or_else(|e| {
+					if e.kind() == grin_wallet::ErrorKind::Encryption {
+						println!("Error decrypting wallet seed (check provided password)");
+						std::process::exit(0);
+					}
+					panic!(
+						"Error creating wallet listener: {:?} Config: {:?}",
+						e, wallet_config
+					);
+				});
 				// start owner listener and run static file server
 				start_webwallet_server();
 				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, tls_conf)
@@ -198,7 +220,16 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		passphrase,
 		account,
 		node_api_secret.clone(),
-	);
+	).unwrap_or_else(|e| {
+		if e.kind() == grin_wallet::ErrorKind::Encryption {
+			println!("Error decrypting wallet seed (check provided password)");
+			std::process::exit(0);
+		}
+		panic!(
+			"Error instantiating wallet: {:?} Config: {:?}",
+			e, wallet_config
+		);
+	});
 
 	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {

@@ -23,7 +23,6 @@ use rand::{thread_rng, Rng};
 use serde_json;
 
 use ring::aead;
-use ring::rand::{SecureRandom, SystemRandom};
 use ring::{digest, pbkdf2};
 
 use core::global::ChainTypes;
@@ -106,8 +105,8 @@ impl WalletSeed {
 		util::to_hex(self.0.to_vec())
 	}
 
-	pub fn derive_keychain<K: Keychain>(&self, password: &str) -> Result<K, Error> {
-		let seed = blake2::blake2b::blake2b(64, &password.as_bytes(), &self.0);
+	pub fn derive_keychain<K: Keychain>(&self) -> Result<K, Error> {
+		let seed = blake2::blake2b::blake2b(64, "".as_bytes(), &self.0);
 		let result = K::from_seed(seed.as_bytes())?;
 		Ok(result)
 	}
@@ -117,7 +116,7 @@ impl WalletSeed {
 		WalletSeed(seed)
 	}
 
-	pub fn init_file(wallet_config: &WalletConfig) -> Result<WalletSeed, Error> {
+	pub fn init_file(wallet_config: &WalletConfig, password: &str) -> Result<WalletSeed, Error> {
 		// create directory if it doesn't exist
 		fs::create_dir_all(&wallet_config.data_file_dir).context(ErrorKind::IO)?;
 
@@ -132,7 +131,7 @@ impl WalletSeed {
 			Err(ErrorKind::WalletSeedExists)?
 		} else {
 			let seed = WalletSeed::init_new();
-			let enc_seed = EncryptedWalletSeed::from_seed(&seed, "")?;
+			let enc_seed = EncryptedWalletSeed::from_seed(&seed, password)?;
 			let enc_seed_json =
 				serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
 			let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
@@ -142,7 +141,7 @@ impl WalletSeed {
 		}
 	}
 
-	pub fn from_file(wallet_config: &WalletConfig) -> Result<WalletSeed, Error> {
+	pub fn from_file(wallet_config: &WalletConfig, password: &str) -> Result<WalletSeed, Error> {
 		// create directory if it doesn't exist
 		fs::create_dir_all(&wallet_config.data_file_dir).context(ErrorKind::IO)?;
 
@@ -151,7 +150,7 @@ impl WalletSeed {
 			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
 		);
 
-		debug!("Using wallet seed file at: {}", seed_file_path,);
+		debug!("Using wallet seed file at: {}", seed_file_path);
 
 		if Path::new(seed_file_path).exists() {
 			let mut file = File::open(seed_file_path).context(ErrorKind::IO)?;
@@ -159,7 +158,7 @@ impl WalletSeed {
 			file.read_to_string(&mut buffer).context(ErrorKind::IO)?;
 			let enc_seed: EncryptedWalletSeed =
 				serde_json::from_str(&buffer).context(ErrorKind::Format)?;
-			let wallet_seed = enc_seed.decrypt("")?;
+			let wallet_seed = enc_seed.decrypt(password)?;
 			Ok(wallet_seed)
 		} else {
 			error!(
