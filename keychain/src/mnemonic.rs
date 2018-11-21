@@ -35,7 +35,7 @@ pub enum Error {
 	BadWord(String),
 	/// Checksum was not correct (expected, actual)
 	BadChecksum(u8, u8),
-	/// The number of words was invalid
+	/// The number of words/bytes was invalid
 	InvalidLength(usize),
 }
 
@@ -48,7 +48,7 @@ impl fmt::Display for Error {
 				"checksum 0x{:x} does not match expected 0x{:x}",
 				actual, exp
 			),
-			Error::InvalidLength(ell) => write!(f, "invalid mnemonic length {}", ell),
+			Error::InvalidLength(ell) => write!(f, "invalid mnemonic/entropy length {}", ell),
 		}
 	}
 }
@@ -108,11 +108,53 @@ pub fn to_entropy(mnemonic: &str) -> Result<Vec<u8>, Error> {
 	Ok(entropy)
 }
 
+/// Converts entropy to a mnemonic
+pub fn from_entropy(entropy: &Vec<u8>) -> Result<String, Error> {
+	let sizes: [usize; 5] = [16, 20, 24, 28, 32];
+	let length = entropy.len();
+	if !sizes.contains(&length) {
+		return Err(Error::InvalidLength(length));
+	}
+
+	let checksum_bits = length / 4;
+	let mask = ((1 << checksum_bits) - 1) as u8;
+
+	let mut hash = [0; 32];
+	let mut sha2sum = Sha256::default();
+	sha2sum.input(&entropy.clone());
+	hash.copy_from_slice(sha2sum.result().as_slice());
+
+	let checksum = (hash[0] >> 8 - checksum_bits) & mask;
+
+	let nwords = (length * 8 + checksum_bits) / 11;
+	let mut indexes: Vec<u16> = vec![0; nwords];
+	let mut loc: usize = 0;
+
+	// u8 to u11
+	for byte in entropy.iter() {
+		for i in (0..8).rev() {
+			let bit = byte & (1 << i) != 0;
+			indexes[loc / 11] |= (bit as u16) << 10 - (loc % 11);
+			loc += 1;
+		}
+	}
+	for i in (0..checksum_bits).rev() {
+		let bit = checksum & (1 << i) != 0;
+		indexes[loc / 11] |= (bit as u16) << 10 - (loc % 11);
+		loc += 1;
+	}
+
+	let words: Vec<String> = indexes.iter().map(|x| WORDS[*x as usize].clone()).collect();
+	let mnemonic = words.join(" ");
+	Ok(mnemonic.to_owned())
+}
+
 /// Converts a nemonic and a passphrase into a seed
 pub fn to_seed<'a, T: 'a>(mnemonic: &str, passphrase: T) -> Result<[u8; 64], Error>
 where
 	Option<&'a str>: From<T>,
 {
+	// make sure the mnemonic is valid
 	try!(to_entropy(mnemonic));
 
 	let salt = ("mnemonic".to_owned() + Option::from(passphrase).unwrap_or("")).into_bytes();
@@ -126,7 +168,8 @@ where
 
 #[cfg(test)]
 mod tests {
-	use super::{to_entropy, to_seed};
+	use super::{from_entropy, to_entropy, to_seed};
+	use rand::{thread_rng, Rng};
 	use util::{from_hex, to_hex};
 
 	struct Test<'a> {
@@ -272,8 +315,32 @@ mod tests {
 				to_entropy(t.mnemonic).unwrap().to_vec(),
 				from_hex(t.entropy.to_string()).unwrap()
 			);
+			assert_eq!(
+				from_entropy(&from_hex(t.entropy.to_string()).unwrap()).unwrap(),
+				t.mnemonic
+			);
 		}
 	}
+
+	#[test]
+	fn test_bip39_random() {
+		let sizes: [usize; 5] = [16, 20, 24, 28, 32];
+
+		let mut rng = thread_rng();
+		let size = *rng.choose(&sizes).unwrap();
+		let mut entropy: Vec<u8> = Vec::with_capacity(size);
+
+		for _ in 0..size {
+			let val: u8 = rng.gen();
+			entropy.push(val);
+		}
+
+		assert_eq!(
+			entropy,
+			to_entropy(&from_entropy(&entropy).unwrap()).unwrap()
+		)
+	}
+
 	#[test]
 	fn test_invalid() {
 		// Invalid words
@@ -281,6 +348,8 @@ mod tests {
 		assert!(to_entropy("abandon abandon badword abandon abandon abandon abandon abandon abandon abandon abandon abandon").is_err());
 		// Invalid length
 		assert!(to_entropy("abandon abandon abandon abandon abandon abandon").is_err());
+		assert!(from_entropy(&vec![1, 2, 3, 4, 5]).is_err());
+		assert!(from_entropy(&vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]).is_err());
 		// Invalid checksum
 		assert!(to_entropy("abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon").is_err());
 		assert!(to_entropy("zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo").is_err());
