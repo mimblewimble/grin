@@ -641,10 +641,6 @@ pub struct ChainToPoolAndNetAdapter {
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
 	fn block_accepted(&self, b: &core::Block, status: BlockStatus, opts: Options) {
-		if self.sync_state.is_syncing() {
-			return;
-		}
-
 		match status {
 			BlockStatus::Reorg => {
 				warn!(
@@ -670,6 +666,10 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 					b.header.total_difficulty(),
 				);
 			}
+		}
+
+		if self.sync_state.is_syncing() {
+			return;
 		}
 
 		// If we mined the block then we want to broadcast the compact block.
