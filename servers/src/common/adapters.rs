@@ -22,8 +22,9 @@ use std::thread;
 use std::time::Instant;
 use util::RwLock;
 
-use chain::{self, ChainAdapter, Options};
-use chrono::prelude::{DateTime, Utc};
+use chain::{self, BlockStatus, ChainAdapter, Options};
+use chrono::prelude::*;
+use chrono::Duration;
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
 use core::core::hash::{Hash, Hashed};
 use core::core::transaction::Transaction;
@@ -182,7 +183,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 					.validate(&prev.total_kernel_offset, self.verifier_cache.clone())
 					.is_ok()
 				{
-					debug!("adapter: successfully hydrated block from tx pool!");
+					debug!("successfully hydrated block from tx pool!");
 					self.process_block(block, addr)
 				} else {
 					if self.sync_state.status() == SyncStatus::NoSync {
@@ -190,14 +191,12 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 						self.request_block(&cb.header, &addr);
 						true
 					} else {
-						debug!(
-							"adapter: block invalid after hydration, ignoring it, cause still syncing"
-						);
+						debug!("block invalid after hydration, ignoring it, cause still syncing");
 						true
 					}
 				}
 			} else {
-				debug!("adapter: failed to retrieve previous block header (still syncing?)");
+				debug!("failed to retrieve previous block header (still syncing?)");
 				true
 			}
 		}
@@ -469,10 +468,7 @@ impl NetToChainAdapter {
 				true
 			}
 			Err(ref e) if e.is_bad_data() => {
-				debug!(
-					"adapter: process_block: {} is a bad block, resetting head",
-					bhash
-				);
+				debug!("process_block: {} is a bad block, resetting head", bhash);
 				let _ = self.chain().reset_head();
 
 				// we potentially changed the state of the system here
@@ -489,7 +485,7 @@ impl NetToChainAdapter {
 							if !self.chain().is_orphan(&previous.hash())
 								&& !self.sync_state.is_syncing()
 							{
-								debug!("adapter: process_block: received an orphan block, checking the parent: {:}", previous.hash());
+								debug!("process_block: received an orphan block, checking the parent: {:}", previous.hash());
 								self.request_block_by_hash(previous.hash(), &addr)
 							}
 						}
@@ -497,7 +493,7 @@ impl NetToChainAdapter {
 					}
 					_ => {
 						debug!(
-							"adapter: process_block: block {} refused by chain: {}",
+							"process_block: block {} refused by chain: {}",
 							bhash,
 							e.kind()
 						);
@@ -521,7 +517,7 @@ impl NetToChainAdapter {
 			let now = Instant::now();
 
 			debug!(
-				"adapter: process_block: ***** validating full chain state at {}",
+				"process_block: ***** validating full chain state at {}",
 				bhash,
 			);
 
@@ -530,7 +526,7 @@ impl NetToChainAdapter {
 				.expect("chain validation failed, hard stop");
 
 			debug!(
-				"adapter: process_block: ***** done validating full chain state, took {}s",
+				"process_block: ***** done validating full chain state, took {}s",
 				now.elapsed().as_secs(),
 			);
 		}
@@ -644,12 +640,37 @@ pub struct ChainToPoolAndNetAdapter {
 }
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
-	fn block_accepted(&self, b: &core::Block, opts: Options) {
+	fn block_accepted(&self, b: &core::Block, status: BlockStatus, opts: Options) {
+		match status {
+			BlockStatus::Reorg => {
+				warn!(
+					"block_accepted (REORG!): {:?} at {} (diff: {})",
+					b.hash(),
+					b.header.height,
+					b.header.total_difficulty(),
+				);
+			}
+			BlockStatus::Fork => {
+				debug!(
+					"block_accepted (fork?): {:?} at {} (diff: {})",
+					b.hash(),
+					b.header.height,
+					b.header.total_difficulty(),
+				);
+			}
+			BlockStatus::Next => {
+				debug!(
+					"block_accepted (head+): {:?} at {} (diff: {})",
+					b.hash(),
+					b.header.height,
+					b.header.total_difficulty(),
+				);
+			}
+		}
+
 		if self.sync_state.is_syncing() {
 			return;
 		}
-
-		debug!("adapter: block_accepted: {:?}", b.hash());
 
 		// If we mined the block then we want to broadcast the compact block.
 		// If we received the block from another node then broadcast "header first"
@@ -665,12 +686,19 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 
 		// Reconcile the txpool against the new block *after* we have broadcast it too our peers.
 		// This may be slow and we do not want to delay block propagation.
-		if let Err(e) = self.tx_pool.write().reconcile_block(b) {
-			error!(
-				"Pool could not update itself at block {}: {:?}",
-				b.hash(),
-				e,
-			);
+		// We only want to reconcile the txpool against the new block *if* total work has increased.
+		if status == BlockStatus::Next || status == BlockStatus::Reorg {
+			let mut tx_pool = self.tx_pool.write();
+
+			let _ = tx_pool.reconcile_block(b);
+
+			// First "age out" any old txs in the reorg_cache.
+			let cutoff = Utc::now() - Duration::minutes(30);
+			tx_pool.truncate_reorg_cache(cutoff);
+		}
+
+		if status == BlockStatus::Reorg {
+			let _ = self.tx_pool.write().reconcile_reorg_cache(&b.header);
 		}
 	}
 }
