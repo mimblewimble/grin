@@ -648,7 +648,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		match status {
 			BlockStatus::Reorg => {
 				warn!(
-					" block_accepted (REORG): {:?} at {} (diff: {})", // keep alignment for logs
+					"block_accepted (REORG!): {:?} at {} (diff: {})",
 					b.hash(),
 					b.header.height,
 					b.header.total_difficulty(),
