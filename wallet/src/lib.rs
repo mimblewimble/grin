@@ -38,6 +38,7 @@ extern crate hyper;
 extern crate tokio;
 extern crate tokio_core;
 extern crate tokio_retry;
+extern crate ring;
 
 extern crate grin_api as api;
 extern crate grin_core as core;
@@ -62,7 +63,7 @@ pub use error::{Error, ErrorKind};
 pub use libwallet::types::{BlockFees, CbData, NodeClient, WalletBackend, WalletInfo, WalletInst};
 pub use lmdb_wallet::{wallet_db_exists, LMDBBackend};
 pub use node_clients::{create_coinbase, HTTPNodeClient};
-pub use types::{WalletConfig, WalletSeed, SEED_FILE};
+pub use types::{EncryptedWalletSeed, WalletConfig, WalletSeed, SEED_FILE};
 
 use std::sync::Arc;
 use util::Mutex;

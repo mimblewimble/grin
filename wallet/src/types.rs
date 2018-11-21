@@ -20,6 +20,11 @@ use std::path::MAIN_SEPARATOR;
 
 use blake2;
 use rand::{thread_rng, Rng};
+use serde_json;
+
+use ring::aead;
+use ring::rand::{SecureRandom, SystemRandom};
+use ring::{digest, pbkdf2};
 
 use core::global::ChainTypes;
 use error::{Error, ErrorKind};
@@ -79,7 +84,7 @@ impl WalletConfig {
 	}
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct WalletSeed([u8; 32]);
 
 impl WalletSeed {
@@ -127,8 +132,10 @@ impl WalletSeed {
 			Err(ErrorKind::WalletSeedExists)?
 		} else {
 			let seed = WalletSeed::init_new();
+			let enc_seed = EncryptedWalletSeed::from_seed(&seed, "")?;
+			let enc_seed_json = serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
 			let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
-			file.write_all(&seed.to_hex().as_bytes())
+			file.write_all(&enc_seed_json.as_bytes())
 				.context(ErrorKind::IO)?;
 			Ok(seed)
 		}
@@ -149,7 +156,8 @@ impl WalletSeed {
 			let mut file = File::open(seed_file_path).context(ErrorKind::IO)?;
 			let mut buffer = String::new();
 			file.read_to_string(&mut buffer).context(ErrorKind::IO)?;
-			let wallet_seed = WalletSeed::from_hex(&buffer.trim())?;
+			let enc_seed: EncryptedWalletSeed = serde_json::from_str(&buffer).context(ErrorKind::Format)?;
+			let wallet_seed = enc_seed.decrypt("")?;
 			Ok(wallet_seed)
 		} else {
 			error!(
@@ -159,5 +167,69 @@ impl WalletSeed {
 			);
 			Err(ErrorKind::WalletSeedDoesntExist)?
 		}
+	}
+}
+
+/// Encrypted wallet seed, for storing on disk and decrypting
+/// with provided password
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct EncryptedWalletSeed {
+	encrypted_seed: String,
+	/// Salt, not so useful in single case but include anyhow for situations
+	/// where someone wants to store many of these
+	pub salt: String,
+	/// Nonce
+	pub nonce: String,
+}
+
+impl EncryptedWalletSeed {
+	/// Create a new encrypted seed from the given seed + password
+	pub fn from_seed(seed: &WalletSeed, password: &str) -> Result<EncryptedWalletSeed, Error> {
+		let salt: [u8; 8] = thread_rng().gen();
+		let nonce: [u8; 12] = thread_rng().gen();
+		let password = password.as_bytes();
+		let mut key = [0; 32];
+		pbkdf2::derive(&digest::SHA256, 100, &salt, password, &mut key);
+		let content = seed.0.to_vec();
+		let mut enc_bytes = content.clone();
+		let suffix_len = aead::CHACHA20_POLY1305.tag_len();
+		for _ in 0..suffix_len {
+			enc_bytes.push(0);
+		}
+		let sealing_key =
+			aead::SealingKey::new(&aead::CHACHA20_POLY1305, &key).context(ErrorKind::Encryption)?;
+			aead::seal_in_place(&sealing_key, &nonce, &[], &mut enc_bytes, suffix_len)
+				.context(ErrorKind::Encryption)?;
+		Ok(EncryptedWalletSeed {
+			encrypted_seed: util::to_hex(enc_bytes.to_vec()),
+			salt: util::to_hex(salt.to_vec()),
+			nonce: util::to_hex(nonce.to_vec()),
+		})
+	}
+
+	/// Decrypt seed
+	pub fn decrypt(&self, password: &str) -> Result<WalletSeed, Error> {
+		let mut encrypted_seed = match util::from_hex(self.encrypted_seed.clone()) {
+			Ok(s) => s,
+			Err(_) => return Err(ErrorKind::Encryption)?,
+		};
+		let salt = match util::from_hex(self.salt.clone()) {
+			Ok(s) => s,
+			Err(_) => return Err(ErrorKind::Encryption)?,
+		};
+		let nonce = match util::from_hex(self.nonce.clone()) {
+			Ok(s) => s,
+			Err(_) => return Err(ErrorKind::Encryption)?,
+		};
+		let password = password.as_bytes();
+		let mut key = [0; 32];
+		pbkdf2::derive(&digest::SHA256, 100, &salt, password, &mut key);
+
+		let opening_key = aead::OpeningKey::new(&aead::CHACHA20_POLY1305, &key).context(ErrorKind::Encryption)?;
+		let decrypted_data =
+			aead::open_in_place(&opening_key, &nonce, &[], 0, &mut encrypted_seed).context(ErrorKind::Encryption)?;
+
+		Ok(WalletSeed::from_bytes(&decrypted_data))
 	}
 }

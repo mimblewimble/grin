@@ -47,6 +47,7 @@ pub enum ErrorKind {
 	#[fail(display = "Transaction error")]
 	Transaction(transaction::Error),
 
+
 	/// Secp Error
 	#[fail(display = "Secp error")]
 	Secp,
@@ -86,6 +87,10 @@ pub enum ErrorKind {
 	/// Wallet seed doesn't exist
 	#[fail(display = "Wallet seed doesn't exist error")]
 	WalletSeedDoesntExist,
+
+	/// Enc/Decryption Error
+	#[fail(display = "Enc/Decryption error")]
+	Encryption,
 
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
