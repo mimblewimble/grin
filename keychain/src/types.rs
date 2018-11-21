@@ -126,6 +126,13 @@ impl Identifier {
 		ExtKeychainPath::from_identifier(&self)
 	}
 
+	pub fn to_value_path(&self, value: u64) -> ValueExtKeychainPath {
+		ValueExtKeychainPath {
+			value,
+			ext_keychain_path: self.to_path()
+		}
+	}
+
 	/// output the path itself, for insertion into bulletproof
 	/// recovery processes can grind through possiblities to find the
 	/// correct length if required
@@ -327,8 +334,8 @@ pub struct SplitBlindingFactor {
 /// factor as well as the "sign" with which they should be combined.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BlindSum {
-	pub positive_key_ids: Vec<ExtKeychainPath>,
-	pub negative_key_ids: Vec<ExtKeychainPath>,
+	pub positive_key_ids: Vec<ValueExtKeychainPath>,
+	pub negative_key_ids: Vec<ValueExtKeychainPath>,
 	pub positive_blinding_factors: Vec<BlindingFactor>,
 	pub negative_blinding_factors: Vec<BlindingFactor>,
 }
@@ -344,12 +351,12 @@ impl BlindSum {
 		}
 	}
 
-	pub fn add_key_id(mut self, path: ExtKeychainPath) -> BlindSum {
+	pub fn add_key_id(mut self, path: ValueExtKeychainPath) -> BlindSum {
 		self.positive_key_ids.push(path);
 		self
 	}
 
-	pub fn sub_key_id(mut self, path: ExtKeychainPath) -> BlindSum {
+	pub fn sub_key_id(mut self, path: ValueExtKeychainPath) -> BlindSum {
 		self.negative_key_ids.push(path);
 		self
 	}
@@ -430,6 +437,13 @@ impl ExtKeychainPath {
 	}
 }
 
+/// Wrapper for amount + path
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Deserialize)]
+pub struct ValueExtKeychainPath {
+	pub value: u64,
+	pub ext_keychain_path: ExtKeychainPath
+}
+
 pub trait Keychain: Sync + Send + Clone {
 	fn from_seed(seed: &[u8]) -> Result<Self, Error>;
 	fn from_mnemonic(word_list: &str, extension_word: &str) -> Result<Self, Error>;
@@ -437,6 +451,7 @@ pub trait Keychain: Sync + Send + Clone {
 	fn root_key_id() -> Identifier;
 	fn derive_key_id(depth: u8, d1: u32, d2: u32, d3: u32, d4: u32) -> Identifier;
 	fn derive_key(&self, id: &Identifier) -> Result<ExtendedPrivKey, Error>;
+	fn derive_switch_key(&self, amount: u64, id: &Identifier) -> Result<SecretKey, Error>;
 	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error>;
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
 	fn sign(&self, msg: &Message, id: &Identifier) -> Result<Signature, Error>;
