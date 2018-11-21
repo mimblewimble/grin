@@ -273,13 +273,15 @@ impl Chain {
 				// the previous block differs from the previous chain head.
 				// i.e. there is not a smooth progression from prev_head to new_head.
 				let is_reorg = {
-					let mut is_reorg = false;
+					let mut is_next_block = false;
 					if let Some(head) = head.clone() {
-						if head.prev_block_h != prev_head.last_block_h {
-							is_reorg = true;
+						if head.prev_block_h == prev_head.last_block_h {
+							is_next_block = true;
 						}
 					}
-					is_reorg
+					// Block caused a reorg if total work increased but we did not
+					// smoothly progress from one block to the next.
+					is_more_work && !is_next_block
 				};
 
 				// notifying other parts of the system of the update
