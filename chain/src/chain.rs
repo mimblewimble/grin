@@ -38,7 +38,7 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus};
+use types::{BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use util::secp::pedersen::{Commitment, RangeProof};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
@@ -235,6 +235,24 @@ impl Chain {
 		res
 	}
 
+	fn determine_status(&self, head: Option<Tip>, prev_head: Tip) -> BlockStatus {
+		// We have more work if the chain head is updated.
+		let is_more_work = head.is_some();
+
+		let mut is_next_block = false;
+		if let Some(head) = head {
+			if head.prev_block_h == prev_head.last_block_h {
+				is_next_block = true;
+			}
+		}
+
+		match (is_more_work, is_next_block) {
+			(true, true) => BlockStatus::Next,
+			(true, false) => BlockStatus::Reorg,
+			(false, _) => BlockStatus::Fork,
+		}
+	}
+
 	/// Attempt to add a new block to the chain.
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
@@ -266,27 +284,11 @@ impl Chain {
 			Ok(head) => {
 				add_to_hash_cache(b.hash());
 
-				// We have more work if the chain head is updated.
-				let is_more_work = head.is_some();
-
-				// We are dealing with a "reorg" if we have a new chain head (most work) *and*
-				// the previous block differs from the previous chain head.
-				// i.e. there is not a smooth progression from prev_head to new_head.
-				let is_reorg = {
-					let mut is_next_block = false;
-					if let Some(head) = head.clone() {
-						if head.prev_block_h == prev_head.last_block_h {
-							is_next_block = true;
-						}
-					}
-					// Block caused a reorg if total work increased but we did not
-					// smoothly progress from one block to the next.
-					is_more_work && !is_next_block
-				};
+				let status = self.determine_status(head.clone(), prev_head);
 
 				// notifying other parts of the system of the update
 				self.adapter
-					.block_accepted(&b, is_more_work, is_reorg, opts);
+					.block_accepted(&b, status, opts);
 
 				Ok(head)
 			}

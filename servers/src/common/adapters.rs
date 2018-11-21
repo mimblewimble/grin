@@ -22,7 +22,7 @@ use std::thread;
 use std::time::Instant;
 use util::RwLock;
 
-use chain::{self, ChainAdapter, Options};
+use chain::{self, BlockStatus, ChainAdapter, Options};
 use chrono::prelude::*;
 use chrono::Duration;
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
@@ -640,32 +640,36 @@ pub struct ChainToPoolAndNetAdapter {
 }
 
 impl ChainAdapter for ChainToPoolAndNetAdapter {
-	fn block_accepted(&self, b: &core::Block, is_more_work: bool, is_reorg: bool, opts: Options) {
+	fn block_accepted(&self, b: &core::Block, status: BlockStatus, opts: Options) {
 		if self.sync_state.is_syncing() {
 			return;
 		}
 
-		if is_reorg {
-			warn!(
-				" block_accepted (REORG): {:?} at {} (diff: {})", // keep alignment
-				b.hash(),
-				b.header.height,
-				b.header.total_difficulty(),
-			);
-		} else if !is_more_work {
-			debug!(
-				"block_accepted (fork?): {:?} at {} (diff: {})",
-				b.hash(),
-				b.header.height,
-				b.header.total_difficulty(),
-			);
-		} else {
-			debug!(
-				"block_accepted (head+): {:?} at {} (diff: {})",
-				b.hash(),
-				b.header.height,
-				b.header.total_difficulty(),
-			);
+		match status {
+			BlockStatus::Reorg => {
+				warn!(
+					" block_accepted (REORG): {:?} at {} (diff: {})", // keep alignment for logs
+					b.hash(),
+					b.header.height,
+					b.header.total_difficulty(),
+				);
+			},
+			BlockStatus::Fork => {
+				debug!(
+					"block_accepted (fork?): {:?} at {} (diff: {})",
+					b.hash(),
+					b.header.height,
+					b.header.total_difficulty(),
+				);
+			},
+			BlockStatus::Next => {
+				debug!(
+					"block_accepted (head+): {:?} at {} (diff: {})",
+					b.hash(),
+					b.header.height,
+					b.header.total_difficulty(),
+				);
+			}
 		}
 
 		// If we mined the block then we want to broadcast the compact block.
@@ -683,7 +687,7 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		// Reconcile the txpool against the new block *after* we have broadcast it too our peers.
 		// This may be slow and we do not want to delay block propagation.
 		// We only want to reconcile the txpool against the new block *if* total work has increased.
-		if is_more_work {
+		if status == BlockStatus::Next || status == BlockStatus::Reorg {
 			let mut tx_pool = self.tx_pool.write();
 
 			let _ = tx_pool.reconcile_block(b);
@@ -691,12 +695,10 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 			// First "age out" any old txs in the reorg_cache.
 			let cutoff = Utc::now() - Duration::minutes(30);
 			tx_pool.truncate_reorg_cache(cutoff);
+		}
 
-			if is_reorg {
-				// Take our reorg_cache and see if this block means
-				// we need to (re)add old txs due to a fork and re-org.
-				let _ = tx_pool.reconcile_reorg_cache(&b.header);
-			}
+		if status == BlockStatus::Reorg {
+			let _ = self.tx_pool.write().reconcile_reorg_cache(&b.header);
 		}
 	}
 }
