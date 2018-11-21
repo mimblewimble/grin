@@ -35,7 +35,7 @@ pub enum Error {
 	BadWord(String),
 	/// Checksum was not correct (expected, actual)
 	BadChecksum(u8, u8),
-	/// The number of words was invalid
+	/// The number of words/bytes was invalid
 	InvalidLength(usize),
 }
 
@@ -48,7 +48,7 @@ impl fmt::Display for Error {
 				"checksum 0x{:x} does not match expected 0x{:x}",
 				actual, exp
 			),
-			Error::InvalidLength(ell) => write!(f, "invalid mnemonic length {}", ell),
+			Error::InvalidLength(ell) => write!(f, "invalid mnemonic/entropy length {}", ell),
 		}
 	}
 }
@@ -106,6 +106,47 @@ pub fn to_entropy(mnemonic: &str) -> Result<Vec<u8>, Error> {
 	}
 
 	Ok(entropy)
+}
+
+/// Converts entropy to a mnemonic
+pub fn from_entropy(entropy: &Vec<u8>) -> Result<String, Error> {
+    let sizes: [usize; 5] = [16, 20, 24, 28, 32];
+    let length = entropy.len();
+	if !sizes.contains(&length) {
+		return Err(Error::InvalidLength(length));
+	}
+
+    let checksum_bits = length / 4;
+    let mask = ((1 << checksum_bits) - 1) as u8;
+
+    let mut hash = [0; 32];
+	let mut sha2sum = Sha256::default();
+    sha2sum.input(&entropy.clone());
+    hash.copy_from_slice(sha2sum.result().as_slice());
+
+    let checksum = (hash[0] >> 8 - checksum_bits) & mask;
+    
+    let nwords = (length * 8 + checksum_bits) / 11;
+    let mut indexes: Vec<u16> = vec![0; nwords];
+    let mut loc: usize = 0;
+
+    // u8 to u11
+    for byte in entropy.iter() {
+        for i in (0..8).rev() {
+            let bit = byte & (1 << i) != 0;
+            indexes[loc / 11] |= (bit as u16) << 10 - (loc % 11);
+            loc += 1;
+        }
+    }
+    for i in (0..checksum_bits).rev() {
+        let bit = checksum & (1 << i) != 0;
+        indexes[loc / 11] |= (bit as u16) << 10 - (loc % 11);
+        loc += 1;
+    }
+
+    let words: Vec<String> = indexes.iter().map(|x| WORDS[*x as usize].clone()).collect();
+    let mnemonic = words.join(" ");
+    Ok(mnemonic.to_owned())
 }
 
 /// Converts a nemonic and a passphrase into a seed
