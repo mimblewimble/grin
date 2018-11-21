@@ -266,9 +266,24 @@ impl Chain {
 			Ok(head) => {
 				add_to_hash_cache(b.hash());
 
+				// We have more work if the chain head is updated.
+				let is_more_work = head.is_some();
+
+				// We are dealing with a "reorg" if we have a new chain head (most work) *and*
+				// the previous block differs from the previous chain head.
+				// i.e. there is not a smooth progression from prev_head to new_head.
+				let is_reorg = {
+					let mut is_reorg = false;
+					if let Some(head) = head.clone() {
+						if head.prev_block_h != prev_head.last_block_h {
+							is_reorg = true;
+						}
+					}
+					is_reorg
+				};
+
 				// notifying other parts of the system of the update
-				self.adapter
-					.block_accepted(&b, head.clone(), prev_head, opts);
+				self.adapter.block_accepted(&b, is_more_work, is_reorg, opts);
 
 				Ok(head)
 			}

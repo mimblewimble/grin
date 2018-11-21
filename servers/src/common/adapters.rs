@@ -22,8 +22,9 @@ use std::thread;
 use std::time::Instant;
 use util::RwLock;
 
-use chain::{self, ChainAdapter, Options, Tip};
-use chrono::prelude::{DateTime, Utc};
+use chain::{self, ChainAdapter, Options};
+use chrono::prelude::*;
+use chrono::Duration;
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
 use core::core::hash::{Hash, Hashed};
 use core::core::transaction::Transaction;
@@ -642,47 +643,34 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 	fn block_accepted(
 		&self,
 		b: &core::Block,
-		new_head: Option<Tip>,
-		prev_head: Tip,
+		is_more_work: bool,
+		is_reorg: bool,
 		opts: Options,
 	) {
 		if self.sync_state.is_syncing() {
 			return;
 		}
 
-		// We have more work if the chain head is updated.
-		let is_more_work = new_head.is_some();
-
-		// We are dealing with a "reorg" if we have a new chain head (most work) *and*
-		// the previous block differs from the previous chain head.
-		// i.e. there is not a smooth progression from prev_head to new_head.
-		let is_reorg = {
-			let mut is_reorg = false;
-			if let Some(new_head) = new_head {
-				if new_head.prev_block_h != prev_head.last_block_h {
-					is_reorg = true;
-				}
-			}
-			is_reorg
-		};
-
 		if is_reorg {
 			warn!(
-				"block_accepted (reorg!): {:?} at {}",
+				" block_accepted (REORG): {:?} at {} (diff: {})", // keep alignment
 				b.hash(),
-				b.header.height
+				b.header.height,
+				b.header.total_difficulty(),
 			);
 		} else if !is_more_work {
 			debug!(
-				"block_accepted (fork?): {:?} at {}",
+				"block_accepted (fork?): {:?} at {} (diff: {})",
 				b.hash(),
-				b.header.height
+				b.header.height,
+				b.header.total_difficulty(),
 			);
 		} else {
 			debug!(
-				"block_accepted (most work): {:?} at {}",
+				"block_accepted (head+): {:?} at {} (diff: {})",
 				b.hash(),
-				b.header.height
+				b.header.height,
+				b.header.total_difficulty(),
 			);
 		}
 
@@ -702,12 +690,18 @@ impl ChainAdapter for ChainToPoolAndNetAdapter {
 		// This may be slow and we do not want to delay block propagation.
 		// We only want to reconcile the txpool against the new block *if* total work has increased.
 		if is_more_work {
-			if let Err(e) = self.tx_pool.write().reconcile_block(b, is_reorg) {
-				error!(
-					"Pool could not update itself at block {}: {:?}",
-					b.hash(),
-					e,
-				);
+			let mut tx_pool = self.tx_pool.write();
+
+			let _ = tx_pool.reconcile_block(b);
+
+			// First "age out" any old txs in the reorg_cache.
+			let cutoff = Utc::now() - Duration::minutes(30);
+			tx_pool.truncate_reorg_cache(cutoff);
+
+			if is_reorg {
+				// Take our reorg_cache and see if this block means
+				// we need to (re)add old txs due to a fork and re-org.
+				let _ = tx_pool.reconcile_reorg_cache(&b.header);
 			}
 		}
 	}
