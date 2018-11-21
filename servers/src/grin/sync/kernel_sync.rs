@@ -96,7 +96,7 @@ impl KernelSync {
 		} else {
 			match self.chain.get_header_by_height(head_header.height - 5) {
 				Ok(header) => header.kernel_mmr_size,
-				Err(_) => 0 as u64
+				Err(_) => 0 as u64,
 			}
 		};
 

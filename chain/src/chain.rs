@@ -179,7 +179,7 @@ impl Chain {
 		let store = Arc::new(chain_store);
 
 		// open the txhashset, creating a new one if necessary
-		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
+		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None, genesis.hash())?;
 
 		setup_head(genesis.clone(), store.clone(), &mut txhashset)?;
 
@@ -809,7 +809,7 @@ impl Chain {
 		txhashset::zip_write(self.db_root.clone(), txhashset_data, &header)?;
 
 		let mut txhashset =
-			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header))?;
+			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header), header.hash())?;
 
 		// The txhashset.zip contains the output, rangeproof and kernel MMRs.
 		// We must rebuild the header MMR ourselves based on the headers in our db.

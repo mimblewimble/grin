@@ -15,6 +15,7 @@
 //! Utility structs to handle the 3 MMRs (output, rangeproof,
 //! kernel) along the overall header MMR conveniently and transactionally.
 
+use std::cell::Cell;
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -74,6 +75,7 @@ impl HashOnlyMMRHandle {
 struct PMMRHandle<T: PMMRable> {
 	backend: PMMRBackend<T>,
 	last_pos: u64,
+	root_validated_tip: Hash,
 }
 
 impl<T: PMMRable> PMMRHandle<T> {
@@ -83,12 +85,13 @@ impl<T: PMMRable> PMMRHandle<T> {
 		file_name: &str,
 		prunable: bool,
 		header: Option<&BlockHeader>,
+		chain_tip: Hash,
 	) -> Result<PMMRHandle<T>, Error> {
 		let path = Path::new(root_dir).join(sub_dir).join(file_name);
 		fs::create_dir_all(path.clone())?;
 		let backend = PMMRBackend::new(path.to_str().unwrap().to_string(), prunable, header)?;
 		let last_pos = backend.unpruned_size();
-		Ok(PMMRHandle { backend, last_pos })
+		Ok(PMMRHandle { backend, last_pos, root_validated_tip: chain_tip })
 	}
 }
 
@@ -133,6 +136,7 @@ impl TxHashSet {
 		root_dir: String,
 		commit_index: Arc<ChainStore>,
 		header: Option<&BlockHeader>,
+		chain_tip: Hash,
 	) -> Result<TxHashSet, Error> {
 		Ok(TxHashSet {
 			header_pmmr_h: HashOnlyMMRHandle::new(
@@ -147,6 +151,7 @@ impl TxHashSet {
 				OUTPUT_SUBDIR,
 				true,
 				header,
+				chain_tip,
 			)?,
 			rproof_pmmr_h: PMMRHandle::new(
 				&root_dir,
@@ -154,6 +159,7 @@ impl TxHashSet {
 				RANGE_PROOF_SUBDIR,
 				true,
 				header,
+				chain_tip,
 			)?,
 			kernel_pmmr_h: PMMRHandle::new(
 				&root_dir,
@@ -161,6 +167,7 @@ impl TxHashSet {
 				KERNEL_SUBDIR,
 				false,
 				None,
+				chain_tip,
 			)?,
 			commit_index,
 		})
@@ -427,6 +434,7 @@ where
 	let sizes: (u64, u64, u64, u64);
 	let res: Result<T, Error>;
 	let rollback: bool;
+	let root_validated_tips: (Hash, Hash, Hash);
 
 	// We want to use the current head of the most work chain unless
 	// we explicitly rewind the extension.
@@ -445,6 +453,7 @@ where
 
 		rollback = extension.rollback;
 		sizes = extension.sizes();
+		root_validated_tips = extension.root_validated_tips();
 	}
 
 	match res {
@@ -474,6 +483,9 @@ where
 				trees.output_pmmr_h.last_pos = sizes.1;
 				trees.rproof_pmmr_h.last_pos = sizes.2;
 				trees.kernel_pmmr_h.last_pos = sizes.3;
+				trees.output_pmmr_h.root_validated_tip = root_validated_tips.0;
+				trees.rproof_pmmr_h.root_validated_tip = root_validated_tips.1;
+				trees.kernel_pmmr_h.root_validated_tip = root_validated_tips.2;
 			}
 
 			trace!("TxHashSet extension done.");
@@ -754,6 +766,11 @@ pub struct Extension<'a> {
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	kernel_pmmr: PMMR<'a, TxKernelEntry, PMMRBackend<TxKernelEntry>>,
 
+	// DAVID: Make these a part of PMMR
+	output_root_validated_tip: Cell<Hash>,
+	rproof_root_validated_tip: Cell<Hash>,
+	kernel_root_validated_tip: Cell<Hash>,
+
 	/// Rollback flag.
 	rollback: bool,
 
@@ -813,6 +830,9 @@ impl<'a> Extension<'a> {
 				&mut trees.kernel_pmmr_h.backend,
 				trees.kernel_pmmr_h.last_pos,
 			),
+			output_root_validated_tip: Cell::new(trees.output_pmmr_h.root_validated_tip),
+			rproof_root_validated_tip: Cell::new(trees.rproof_pmmr_h.root_validated_tip),
+			kernel_root_validated_tip: Cell::new(trees.kernel_pmmr_h.root_validated_tip),
 			rollback: false,
 			batch,
 		}
@@ -976,6 +996,54 @@ impl<'a> Extension<'a> {
 		Ok(output_pos)
 	}
 
+	pub fn apply_kernels(&mut self, kernels: &Vec<TxKernel>) -> Result<(), Error> {
+		let kernel_root_validated_tip = self.kernel_root_validated_tip.get();
+		let last_validated_header =
+			self.batch.get_block_header(&kernel_root_validated_tip)?;
+		let mut next_header_to_validate =
+			self.next_header_for_kernel_root_validation(&last_validated_header)?;
+
+		let mut num_kernels = pmmr::n_leaves(self.kernel_pmmr.last_pos);
+
+		for kernel in kernels {
+			// Ensure kernel is self-consistent
+			kernel.verify()?;
+
+			// Apply the kernel to the kernel MMR.
+			self.apply_kernel(kernel)?;
+
+			num_kernels += 1;
+
+			// If kernel is last in block, validate root.
+			if next_header_to_validate.kernel_mmr_size == num_kernels {
+				if next_header_to_validate.kernel_root != self.kernel_root() {
+					return Err(ErrorKind::InvalidTxHashSet(format!(
+						"Kernel root at {} does not match",
+						next_header_to_validate.height
+					)).into());
+				} else {
+					// Update kernel_root_validated_tip & retrieve next_header_to_validate
+					self.kernel_root_validated_tip.set(next_header_to_validate.hash());
+					next_header_to_validate =
+						self.next_header_for_kernel_root_validation(&last_validated_header)?;
+				}
+			}
+		}
+
+		Ok(())
+	}
+
+	fn next_header_for_kernel_root_validation(&self, last_block_header: &BlockHeader) -> Result<BlockHeader, Error> {
+		let next_header_to_validate =
+			self.batch.get_header_by_height(last_block_header.height + 1)?;
+
+		if next_header_to_validate.hash() != last_block_header.hash() {
+			Err(ErrorKind::TxHashSetErr("TxHashSet not on current chain".to_string()).into())
+		} else {
+			Ok(next_header_to_validate)
+		}
+	}
+
 	/// Push kernel onto MMR (hash and data files).
 	pub fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
 		self.kernel_pmmr
@@ -1046,8 +1114,41 @@ impl<'a> Extension<'a> {
 			&rewind_rm_pos,
 		)?;
 
+		let hash = header.hash();
+		self.output_root_validated_tip.set(hash);
+		self.kernel_root_validated_tip.set(hash);
+
 		// Update our header to reflect the one we rewound to.
 		self.header = header.clone();
+
+		Ok(())
+	}
+
+	pub fn rewind_kernel_mmr(&mut self, next_kernel_index: u64) -> Result<(), Error> {
+		debug!("Rewind kernel_pmmr to next_kernel_index {}", next_kernel_index,);
+
+		// Update kernel_root_validated_tip
+		if next_kernel_index == 0 {
+			self.kernel_root_validated_tip.set(self.batch.get_header_by_height(0)?.hash());
+		} else if next_kernel_index > pmmr::n_leaves(self.kernel_pmmr.last_pos) {
+			return Err(ErrorKind::TxHashSetErr("Trying to rewind forward.".to_string()).into());
+		} else {
+			let current_tip = self.kernel_root_validated_tip.get();
+
+			let mut new_tip = self.batch.get_block_header(&current_tip)?;
+			while new_tip.kernel_mmr_size > next_kernel_index {
+				new_tip = self.batch.get_block_header(&new_tip.prev_hash)?;
+			}
+
+			self.kernel_root_validated_tip.set(new_tip.hash());
+		}
+
+		// Rewind kernel_pmmr
+		let kernel_pos = pmmr::insertion_to_pmmr_index(next_kernel_index);
+
+		self.kernel_pmmr
+			.rewind(kernel_pos, &Bitmap::create())
+			.map_err(&ErrorKind::TxHashSetErr)?;
 
 		Ok(())
 	}
@@ -1092,6 +1193,11 @@ impl<'a> Extension<'a> {
 		}
 	}
 
+	/// Get the root of the current kernel MMR.
+	pub fn kernel_root(&self) -> Hash {
+		self.kernel_pmmr.root()
+	}
+
 	/// Get the root of the current header MMR.
 	pub fn header_root(&self) -> Hash {
 		self.header_pmmr.root()
@@ -1122,8 +1228,19 @@ impl<'a> Extension<'a> {
 		{
 			Err(ErrorKind::InvalidRoot.into())
 		} else {
+			self.output_root_validated_tip.set(self.header.hash());
+			self.rproof_root_validated_tip.set(self.header.hash());
+			self.kernel_root_validated_tip.set(self.header.hash());
 			Ok(())
 		}
+	}
+
+	pub fn root_validated_tips(&self) -> (Hash, Hash, Hash) {
+		(
+			self.output_root_validated_tip.get(),
+			self.rproof_root_validated_tip.get(),
+			self.kernel_root_validated_tip.get(),
+		)
 	}
 
 	/// Validate the provided header by comparing its prev_root to the
@@ -1133,8 +1250,8 @@ impl<'a> Extension<'a> {
 			return Ok(());
 		}
 
-		let roots = self.roots();
-		if roots.header_root != header.prev_root {
+		let header_root = self.header_pmmr.root();
+		if header_root != header.prev_root {
 			Err(ErrorKind::InvalidRoot.into())
 		} else {
 			Ok(())

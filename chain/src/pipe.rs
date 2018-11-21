@@ -288,30 +288,33 @@ pub fn sync_kernels(
 			"pipe: sync_kernels: {} kernels from {} at {}",
 			kernels.len(),
 			kernel.hash(),
-			first_kernel_index
+			first_kernel_index,
 		);
 	} else {
 		return Ok(());
 	}
 
-	if ctx.txhashset.num_kernels() < (first_kernel_index + 1) {
-		txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
-			// DAVID: Rewind mmr to correct kernel index just to be safe?
-
-			for kernel in kernels {
-				// Ensure kernel is self-consistent
-				kernel.verify()?;
-
-				// Apply the kernel to the kernel MMR.
-				extension.apply_kernel(kernel)?;
-
-				// DAVID: If kernel is last in block, validate root.
-				// Use RewindableKernelView? Or modify validate_kernel_history?
-			}
-
-			Ok(())
-		})?;
+	let num_kernels = ctx.txhashset.num_kernels();
+	if num_kernels < first_kernel_index {
+		// TODO: A convenient way to store and process these later
+		// would allow nodes to request batches of kernels in parallel.
+		return Err(ErrorKind::TxHashSetErr("Previous kernels missing".to_string()).into());
+	} else if num_kernels > (first_kernel_index + kernels.len() as u64) {
+		debug!(
+			"pipe: sync_kernels: kernels from at index {} not needed.",
+			first_kernel_index,
+		);
+		return Ok(());
 	}
+
+	txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+		// Rewinding kernel mmr to correct kernel index. Probably unnecessary, but playing it safe.
+		extension.rewind_kernel_mmr(first_kernel_index);
+
+		extension.apply_kernels(kernels);
+
+		Ok(())
+	})?;
 	Ok(())
 }
 
