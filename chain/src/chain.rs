@@ -153,7 +153,7 @@ pub struct Chain {
 	block_hashes_cache: Arc<RwLock<LruCache<Hash, bool>>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 	// POW verification function
-	pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
+	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	archive_mode: bool,
 	genesis: BlockHeader,
 }
@@ -167,7 +167,7 @@ impl Chain {
 		db_env: Arc<lmdb::Environment>,
 		adapter: Arc<ChainAdapter + Send + Sync>,
 		genesis: Block,
-		pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
+		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 		verifier_cache: Arc<RwLock<VerifierCache>>,
 		archive_mode: bool,
 	) -> Result<Chain, Error> {

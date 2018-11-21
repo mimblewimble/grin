@@ -61,10 +61,10 @@ const MAX_SOLS: u32 = 10;
 
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
-pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u8) -> Result<(), Error> {
+pub fn verify_size(bh: &BlockHeader) -> Result<(), Error> {
 	let mut ctx = global::create_pow_context::<u64>(
 		bh.height,
-		cuckoo_sz,
+		bh.pow.edge_bits(),
 		bh.pow.proof.nonces.len(),
 		MAX_SOLS,
 	)?;
@@ -143,6 +143,7 @@ mod test {
 	fn genesis_pow() {
 		let mut b = genesis::genesis_dev();
 		b.header.pow.nonce = 485;
+		b.header.pow.proof.edge_bits = global::min_edge_bits();
 		pow_size(
 			&mut b.header,
 			Difficulty::min(),
@@ -151,6 +152,6 @@ mod test {
 		).unwrap();
 		assert!(b.header.pow.nonce != 310);
 		assert!(b.header.pow.to_difficulty() >= Difficulty::min());
-		assert!(verify_size(&b.header, global::min_edge_bits()).is_ok());
+		assert!(verify_size(&b.header).is_ok());
 	}
 }

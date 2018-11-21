@@ -42,7 +42,7 @@ pub struct BlockContext<'a> {
 	/// The options
 	pub opts: Options,
 	/// The pow verifier to use when processing a block.
-	pub pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
+	pub pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	/// The active txhashset (rewindable MMRs) to use for block processing.
 	pub txhashset: &'a mut txhashset::TxHashSet,
 	/// The active batch to use for block processing.
@@ -407,7 +407,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 			return Err(ErrorKind::LowEdgebits.into());
 		}
 		let edge_bits = header.pow.edge_bits();
-		if !(ctx.pow_verifier)(header, edge_bits).is_ok() {
+		if !(ctx.pow_verifier)(header).is_ok() {
 			error!(
 				"pipe: error validating header with cuckoo edge_bits {}",
 				edge_bits
