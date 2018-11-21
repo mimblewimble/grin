@@ -106,7 +106,7 @@ impl WalletSeed {
 	}
 
 	//TODO: Remove for old versions
-	pub fn derive_seed_old(old_seed: &[u8;32], password: &str) -> Result<[u8; 64], Error> {
+	pub fn derive_seed_old(old_seed: &[u8; 32], password: &str) -> Result<[u8; 64], Error> {
 		let seed = blake2::blake2b::blake2b(64, password.as_bytes(), old_seed);
 		let mut ret_val = [0u8; 64];
 		ret_val.clone_from_slice(&seed.as_bytes()[0..64]);
