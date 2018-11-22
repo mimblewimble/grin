@@ -13,11 +13,11 @@
 // limitations under the License.
 
 use clap::ArgMatches;
+use rpassword;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
-use rpassword;
 
 use api::TLSConfig;
 use config::GlobalWalletConfig;
@@ -52,12 +52,8 @@ pub fn seed_exists(wallet_config: WalletConfig) -> bool {
 
 pub fn prompt_password(args: &ArgMatches) -> String {
 	match args.value_of("pass") {
-		None => {
-			rpassword::prompt_password_stdout("Password: ").unwrap()
-		}
-		Some(p) => {
-			p.to_owned()
-		}
+		None => rpassword::prompt_password_stdout("Password: ").unwrap(),
+		Some(p) => p.to_owned(),
 	}
 }
 
