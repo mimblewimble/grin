@@ -486,7 +486,7 @@ fn test_rewind_range_proof() {
 #[test]
 fn wallet_seed_encrypt() {
 	let password = "passwoid";
-	let wallet_seed = WalletSeed::init_new();
+	let wallet_seed = WalletSeed::init_new(32);
 	let mut enc_wallet_seed = EncryptedWalletSeed::from_seed(&wallet_seed, password).unwrap();
 	println!("EWS: {:?}", enc_wallet_seed);
 	let decrypted_wallet_seed = enc_wallet_seed.decrypt(password).unwrap();

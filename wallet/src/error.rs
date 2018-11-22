@@ -91,6 +91,10 @@ pub enum ErrorKind {
 	#[fail(display = "Enc/Decryption error")]
 	Encryption,
 
+	/// BIP 39 word list
+	#[fail(display = "BIP39 Mnemonic (word list) Error")]
+	Mnemonic,
+
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
 	GenericError(String),

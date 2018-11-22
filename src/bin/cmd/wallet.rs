@@ -33,7 +33,7 @@ use util::file::get_first_line;
 
 pub fn _init_wallet_seed(wallet_config: WalletConfig, password: &str) {
 	if let Err(_) = WalletSeed::from_file(&wallet_config, password) {
-		WalletSeed::init_file(&wallet_config, password)
+		WalletSeed::init_file(&wallet_config, 32, password)
 			.expect("Failed to create wallet seed file.");
 	};
 }
@@ -85,8 +85,12 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 
 	// Decrypt the seed from the seed file and derive the keychain.
 	// Generate the initial wallet seed if we are running "wallet init".
-	if let ("init", Some(_)) = wallet_args.subcommand() {
-		WalletSeed::init_file(&wallet_config, passphrase)
+	if let ("init", Some(r)) = wallet_args.subcommand() {
+		let list_length = match r.is_present("short_wordlist") {
+			false => 32,
+			true => 16,
+		};
+		WalletSeed::init_file(&wallet_config, list_length, passphrase)
 			.expect("Failed to init wallet seed file.");
 		info!("Wallet seed file created");
 		let client_n =
@@ -102,6 +106,32 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		// give logging thread a moment to catch up
 		thread::sleep(Duration::from_millis(200));
 		// we are done here with creating the wallet, so just return
+		return 0;
+	}
+
+	// Recover a seed from a recovery phrase
+	if let ("recover", Some(r)) = wallet_args.subcommand() {
+		if !r.is_present("recovery_phrase") {
+			let seed = WalletSeed::from_file(&wallet_config, passphrase)
+				.expect("Can't open wallet seed file");
+			let _ = seed.show_recovery_phrase();
+			std::process::exit(0);
+		}
+		let word_list = match r.value_of("recovery_phrase") {
+			Some(w) => w,
+			None => {
+				println!("Recovery word phrase must be provided (in quotes)");
+				std::process::exit(0);
+			},
+		};
+		let res = WalletSeed::recover_from_phrase(&wallet_config, word_list, passphrase);
+		if let Err(e) = res {
+			thread::sleep(Duration::from_millis(200));
+			error!("Error recovering seed with list '{}' - {}", word_list, e);
+			return 0;
+		}
+
+		thread::sleep(Duration::from_millis(200));
 		return 0;
 	}
 

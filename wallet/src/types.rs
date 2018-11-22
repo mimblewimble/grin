@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::cmp::min;
 use std::fs::{self, File};
 use std::io::{Read, Write};
 use std::path::Path;
@@ -28,7 +27,7 @@ use ring::{digest, pbkdf2};
 use core::global::ChainTypes;
 use error::{Error, ErrorKind};
 use failure::ResultExt;
-use keychain::Keychain;
+use keychain::{mnemonic, Keychain};
 use util;
 
 pub const SEED_FILE: &'static str = "wallet.seed";
@@ -84,15 +83,19 @@ impl WalletConfig {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct WalletSeed([u8; 32]);
+pub struct WalletSeed(Vec<u8>);
 
 impl WalletSeed {
 	pub fn from_bytes(bytes: &[u8]) -> WalletSeed {
-		let mut seed = [0; 32];
-		for i in 0..min(32, bytes.len()) {
-			seed[i] = bytes[i];
+		WalletSeed(bytes.to_vec())
+	}
+
+	pub fn from_mnemonic(word_list: &str) -> Result<WalletSeed, Error> {
+		let res = mnemonic::to_entropy(word_list);
+		match res {
+			Ok(s) => Ok(WalletSeed::from_bytes(&s)),
+			Err(_) => Err(ErrorKind::Mnemonic.into()),
 		}
-		WalletSeed(seed)
 	}
 
 	pub fn from_hex(hex: &str) -> Result<WalletSeed, Error> {
@@ -105,12 +108,17 @@ impl WalletSeed {
 		util::to_hex(self.0.to_vec())
 	}
 
-	//TODO: Remove for old versions
-	pub fn derive_seed_old(old_seed: &[u8; 32], password: &str) -> Result<[u8; 64], Error> {
-		let seed = blake2::blake2b::blake2b(64, password.as_bytes(), old_seed);
-		let mut ret_val = [0u8; 64];
-		ret_val.clone_from_slice(&seed.as_bytes()[0..64]);
-		Ok(ret_val)
+	pub fn to_mnemonic(&self) -> Result<String, Error> {
+		let result = mnemonic::from_entropy(&self.0);
+		match result {
+			Ok(r) => Ok(r),
+			Err(_) => Err(ErrorKind::Mnemonic.into()),
+		}
+	}
+
+	pub fn derive_keychain_old(old_wallet_seed:[u8;32], password: &str) -> Vec<u8> {
+		let seed = blake2::blake2b::blake2b(64, password.as_bytes(), &old_wallet_seed);
+		seed.as_bytes().to_vec()
 	}
 
 	pub fn derive_keychain<K: Keychain>(&self) -> Result<K, Error> {
@@ -118,12 +126,47 @@ impl WalletSeed {
 		Ok(result)
 	}
 
-	pub fn init_new() -> WalletSeed {
-		let seed: [u8; 32] = thread_rng().gen();
+	pub fn init_new(seed_length: usize) -> WalletSeed {
+		let mut seed:Vec<u8> = vec![];
+		let mut rng = thread_rng();
+		for _ in 0..seed_length {
+			seed.push(rng.gen());
+		}
 		WalletSeed(seed)
 	}
 
-	pub fn init_file(wallet_config: &WalletConfig, password: &str) -> Result<WalletSeed, Error> {
+	pub fn recover_from_phrase(wallet_config: &WalletConfig, word_list: &str, password: &str) -> Result<(), Error> {
+		let seed_file_path = &format!(
+			"{}{}{}",
+			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
+		);
+		if Path::new(seed_file_path).exists() {
+			error!(
+				"wallet seed file {} exists. \
+				Please backup and delete this file before attempting recovery.",
+				seed_file_path
+			);
+			return Err(ErrorKind::WalletSeedExists)?
+		}
+		let seed = WalletSeed::from_mnemonic(word_list)?;
+		let enc_seed = EncryptedWalletSeed::from_seed(&seed, password)?;
+		let enc_seed_json =
+			serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
+		let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
+		file.write_all(&enc_seed_json.as_bytes())
+			.context(ErrorKind::IO)?;
+		warn!("Seed created from word list");
+		Ok(())
+	}
+
+	pub fn show_recovery_phrase(&self) -> Result<(), Error> {
+		println!("Your recovery phrase is:");
+		println!("{}", self.to_mnemonic()?);
+		println!("Please back-up these words in a non-digital format.");
+		Ok(())
+	}
+
+	pub fn init_file(wallet_config: &WalletConfig, seed_length: usize, password: &str) -> Result<WalletSeed, Error> {
 		// create directory if it doesn't exist
 		fs::create_dir_all(&wallet_config.data_file_dir).context(ErrorKind::IO)?;
 
@@ -132,18 +175,19 @@ impl WalletSeed {
 			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
 		);
 
-		debug!("Generating wallet seed file at: {}", seed_file_path);
+		warn!("Generating wallet seed file at: {}", seed_file_path);
 
 		if Path::new(seed_file_path).exists() {
 			Err(ErrorKind::WalletSeedExists)?
 		} else {
-			let seed = WalletSeed::init_new();
+			let seed = WalletSeed::init_new(seed_length);
 			let enc_seed = EncryptedWalletSeed::from_seed(&seed, password)?;
 			let enc_seed_json =
 				serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
 			let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
 			file.write_all(&enc_seed_json.as_bytes())
 				.context(ErrorKind::IO)?;
+			seed.show_recovery_phrase()?;
 			Ok(seed)
 		}
 	}
@@ -167,7 +211,7 @@ impl WalletSeed {
 				match serde_json::from_str(&buffer).context(ErrorKind::Format) {
 					Ok(s) => s,
 					Err(_) => {
-						warn!("Attempting to convert old wallet seed file to new format");
+						println!("Attempting to convert old wallet seed file to new format");
 						// TODO: remove for mainnet
 						// try to convert from old format
 						let mut bak_file = File::create(format!("{}.bak", seed_file_path))
@@ -177,12 +221,16 @@ impl WalletSeed {
 						bak_file
 							.write_all(&old_wallet_seed.to_hex().as_bytes())
 							.context(ErrorKind::IO)?;
-						let enc_seed = EncryptedWalletSeed::from_seed(&old_wallet_seed, password)?;
+						let mut c_wallet_seed = [0u8;32];
+						c_wallet_seed.copy_from_slice(&old_wallet_seed.0[0..32]);
+						let converted_wallet_seed = WalletSeed::derive_keychain_old(c_wallet_seed, password);
+						let enc_seed = EncryptedWalletSeed::from_seed(&WalletSeed::from_bytes(&converted_wallet_seed), password)?;
 						let enc_seed_json =
 							serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
 						file.write_all(&enc_seed_json.as_bytes())
 							.context(ErrorKind::IO)?;
-						warn!("Seed file conversion done");
+						println!("Seed file conversion done");
+						println!("Consider moving funds to a newly-created wallet to support recovery phrases");
 						enc_seed
 					}
 				};
