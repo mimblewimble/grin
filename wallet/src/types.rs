@@ -278,7 +278,7 @@ impl EncryptedWalletSeed {
 		let nonce: [u8; 12] = thread_rng().gen();
 		let password = password.as_bytes();
 		let mut key = [0; 32];
-		pbkdf2::derive(&digest::SHA256, 100, &salt, password, &mut key);
+		pbkdf2::derive(&digest::SHA512, 100, &salt, password, &mut key);
 		let content = seed.0.to_vec();
 		let mut enc_bytes = content.clone();
 		let suffix_len = aead::CHACHA20_POLY1305.tag_len();
@@ -312,7 +312,7 @@ impl EncryptedWalletSeed {
 		};
 		let password = password.as_bytes();
 		let mut key = [0; 32];
-		pbkdf2::derive(&digest::SHA256, 100, &salt, password, &mut key);
+		pbkdf2::derive(&digest::SHA512, 100, &salt, password, &mut key);
 
 		let opening_key =
 			aead::OpeningKey::new(&aead::CHACHA20_POLY1305, &key).context(ErrorKind::Encryption)?;

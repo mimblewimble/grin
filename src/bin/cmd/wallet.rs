@@ -17,6 +17,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
+use rpassword;
 
 use api::TLSConfig;
 use config::GlobalWalletConfig;
@@ -49,6 +50,27 @@ pub fn seed_exists(wallet_config: WalletConfig) -> bool {
 	}
 }
 
+pub fn prompt_password(args: &ArgMatches) -> String {
+	match args.value_of("pass") {
+		None => {
+			rpassword::prompt_password_stdout("Password: ").unwrap()
+		}
+		Some(p) => {
+			p.to_owned()
+		}
+	}
+}
+
+pub fn prompt_password_confirm() -> String {
+	let first = rpassword::prompt_password_stdout("Password: ").unwrap();
+	let second = rpassword::prompt_password_stdout("Confirm Password: ").unwrap();
+	if first != second {
+		println!("Passwords do not match");
+		std::process::exit(0);
+	}
+	first
+}
+
 pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i32 {
 	// just get defaults from the global config
 	let mut wallet_config = config.members.unwrap().wallet;
@@ -75,14 +97,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 	}
 	let node_api_secret = get_first_line(wallet_config.node_api_secret_path.clone());
 
-	let passphrase = match wallet_args.value_of("pass") {
-		None => {
-			error!("Failed to read passphrase.");
-			return 1;
-		}
-		Some(p) => p,
-	};
-
 	// Decrypt the seed from the seed file and derive the keychain.
 	// Generate the initial wallet seed if we are running "wallet init".
 	if let ("init", Some(r)) = wallet_args.subcommand() {
@@ -90,13 +104,15 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			false => 32,
 			true => 16,
 		};
-		WalletSeed::init_file(&wallet_config, list_length, passphrase)
+		println!("Please enter a password for your new wallet");
+		let passphrase = prompt_password_confirm();
+		WalletSeed::init_file(&wallet_config, list_length, &passphrase)
 			.expect("Failed to init wallet seed file.");
 		info!("Wallet seed file created");
 		let client_n =
 			HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
 		let _: LMDBBackend<HTTPNodeClient, keychain::ExtKeychain> =
-			LMDBBackend::new(wallet_config.clone(), passphrase, client_n).unwrap_or_else(|e| {
+			LMDBBackend::new(wallet_config.clone(), &passphrase, client_n).unwrap_or_else(|e| {
 				panic!(
 					"Error creating DB for wallet: {} Config: {:?}",
 					e, wallet_config
@@ -112,7 +128,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 	// Recover a seed from a recovery phrase
 	if let ("recover", Some(r)) = wallet_args.subcommand() {
 		if !r.is_present("recovery_phrase") {
-			let seed = match WalletSeed::from_file(&wallet_config, passphrase) {
+			// only needed to display phrase
+			let passphrase = prompt_password(wallet_args);
+			let seed = match WalletSeed::from_file(&wallet_config, &passphrase) {
 				Ok(s) => s,
 				Err(e) => {
 					println!("Can't open wallet seed file (check password): {}", e);
@@ -129,7 +147,14 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				std::process::exit(0);
 			}
 		};
-		let res = WalletSeed::recover_from_phrase(&wallet_config, word_list, passphrase);
+		// check word list is okay before asking for password
+		if WalletSeed::from_mnemonic(word_list).is_err() {
+			println!("Recovery word phrase is invalid");
+			std::process::exit(0);
+		}
+		println!("Please provide a new password for the recovered wallet");
+		let passphrase = prompt_password_confirm();
+		let res = WalletSeed::recover_from_phrase(&wallet_config, word_list, &passphrase);
 		if let Err(e) = res {
 			thread::sleep(Duration::from_millis(200));
 			error!("Error recovering seed with list '{}' - {}", word_list, e);
@@ -147,6 +172,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		}
 		Some(p) => p,
 	};
+
+	// all further commands always need a password
+	let passphrase = prompt_password(wallet_args);
 
 	// Handle listener startup commands
 	{
@@ -183,7 +211,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					.listen(
 						params,
 						wallet_config.clone(),
-						passphrase,
+						&passphrase,
 						account,
 						node_api_secret.clone(),
 					).unwrap_or_else(|e| {
@@ -200,7 +228,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			("owner_api", Some(_api_args)) => {
 				let wallet = instantiate_wallet(
 					wallet_config.clone(),
-					passphrase,
+					&passphrase,
 					account,
 					node_api_secret.clone(),
 				).unwrap_or_else(|e| {
@@ -225,7 +253,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			("web", Some(_api_args)) => {
 				let wallet = instantiate_wallet(
 					wallet_config.clone(),
-					passphrase,
+					&passphrase,
 					account,
 					node_api_secret.clone(),
 				).unwrap_or_else(|e| {
@@ -254,7 +282,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 
 	let wallet = instantiate_wallet(
 		wallet_config.clone(),
-		passphrase,
+		&passphrase,
 		account,
 		node_api_secret.clone(),
 	).unwrap_or_else(|e| {
