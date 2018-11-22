@@ -116,7 +116,7 @@ impl WalletSeed {
 		}
 	}
 
-	pub fn derive_keychain_old(old_wallet_seed:[u8;32], password: &str) -> Vec<u8> {
+	pub fn derive_keychain_old(old_wallet_seed: [u8; 32], password: &str) -> Vec<u8> {
 		let seed = blake2::blake2b::blake2b(64, password.as_bytes(), &old_wallet_seed);
 		seed.as_bytes().to_vec()
 	}
@@ -127,7 +127,7 @@ impl WalletSeed {
 	}
 
 	pub fn init_new(seed_length: usize) -> WalletSeed {
-		let mut seed:Vec<u8> = vec![];
+		let mut seed: Vec<u8> = vec![];
 		let mut rng = thread_rng();
 		for _ in 0..seed_length {
 			seed.push(rng.gen());
@@ -135,7 +135,11 @@ impl WalletSeed {
 		WalletSeed(seed)
 	}
 
-	pub fn recover_from_phrase(wallet_config: &WalletConfig, word_list: &str, password: &str) -> Result<(), Error> {
+	pub fn recover_from_phrase(
+		wallet_config: &WalletConfig,
+		word_list: &str,
+		password: &str,
+	) -> Result<(), Error> {
 		let seed_file_path = &format!(
 			"{}{}{}",
 			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
@@ -143,15 +147,14 @@ impl WalletSeed {
 		if Path::new(seed_file_path).exists() {
 			error!(
 				"wallet seed file {} exists. \
-				Please backup and delete this file before attempting recovery.",
+				 Please backup and delete this file before attempting recovery.",
 				seed_file_path
 			);
-			return Err(ErrorKind::WalletSeedExists)?
+			return Err(ErrorKind::WalletSeedExists)?;
 		}
 		let seed = WalletSeed::from_mnemonic(word_list)?;
 		let enc_seed = EncryptedWalletSeed::from_seed(&seed, password)?;
-		let enc_seed_json =
-			serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
+		let enc_seed_json = serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
 		let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
 		file.write_all(&enc_seed_json.as_bytes())
 			.context(ErrorKind::IO)?;
@@ -166,7 +169,11 @@ impl WalletSeed {
 		Ok(())
 	}
 
-	pub fn init_file(wallet_config: &WalletConfig, seed_length: usize, password: &str) -> Result<WalletSeed, Error> {
+	pub fn init_file(
+		wallet_config: &WalletConfig,
+		seed_length: usize,
+		password: &str,
+	) -> Result<WalletSeed, Error> {
 		// create directory if it doesn't exist
 		fs::create_dir_all(&wallet_config.data_file_dir).context(ErrorKind::IO)?;
 
@@ -221,10 +228,14 @@ impl WalletSeed {
 						bak_file
 							.write_all(&old_wallet_seed.to_hex().as_bytes())
 							.context(ErrorKind::IO)?;
-						let mut c_wallet_seed = [0u8;32];
+						let mut c_wallet_seed = [0u8; 32];
 						c_wallet_seed.copy_from_slice(&old_wallet_seed.0[0..32]);
-						let converted_wallet_seed = WalletSeed::derive_keychain_old(c_wallet_seed, password);
-						let enc_seed = EncryptedWalletSeed::from_seed(&WalletSeed::from_bytes(&converted_wallet_seed), password)?;
+						let converted_wallet_seed =
+							WalletSeed::derive_keychain_old(c_wallet_seed, password);
+						let enc_seed = EncryptedWalletSeed::from_seed(
+							&WalletSeed::from_bytes(&converted_wallet_seed),
+							password,
+						)?;
 						let enc_seed_json =
 							serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
 						file.write_all(&enc_seed_json.as_bytes())

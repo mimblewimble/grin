@@ -122,7 +122,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			None => {
 				println!("Recovery word phrase must be provided (in quotes)");
 				std::process::exit(0);
-			},
+			}
 		};
 		let res = WalletSeed::recover_from_phrase(&wallet_config, word_list, passphrase);
 		if let Err(e) = res {

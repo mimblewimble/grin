@@ -394,8 +394,7 @@ fn real_main() -> i32 {
 				panic!("Error loading wallet configuration: {}", e);
 			});
 			if !cmd::seed_exists(w.members.as_ref().unwrap().wallet.clone()) {
-				if "init" == wallet_args.subcommand().0
-				|| "recover" == wallet_args.subcommand().0 {
+				if "init" == wallet_args.subcommand().0 || "recover" == wallet_args.subcommand().0 {
 				} else {
 					println!("Wallet seed file doesn't exist. Run `grin wallet -p [password] init` first");
 					exit(1);
