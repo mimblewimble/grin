@@ -112,7 +112,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 	// Recover a seed from a recovery phrase
 	if let ("recover", Some(r)) = wallet_args.subcommand() {
 		if !r.is_present("recovery_phrase") {
-			let seed = match WalletSeed::from_file(&wallet_config, passphrase){
+			let seed = match WalletSeed::from_file(&wallet_config, passphrase) {
 				Ok(s) => s,
 				Err(e) => {
 					println!("Can't open wallet seed file (check password): {}", e);
