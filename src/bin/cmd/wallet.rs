@@ -112,8 +112,13 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 	// Recover a seed from a recovery phrase
 	if let ("recover", Some(r)) = wallet_args.subcommand() {
 		if !r.is_present("recovery_phrase") {
-			let seed = WalletSeed::from_file(&wallet_config, passphrase)
-				.expect("Can't open wallet seed file");
+			let seed = match WalletSeed::from_file(&wallet_config, passphrase){
+				Ok(s) => s,
+				Err(e) => {
+					println!("Can't open wallet seed file (check password): {}", e);
+					std::process::exit(0);
+				}
+			};
 			let _ = seed.show_recovery_phrase();
 			std::process::exit(0);
 		}
