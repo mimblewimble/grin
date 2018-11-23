@@ -514,6 +514,7 @@ impl HeaderInfo {
 		}
 	}
 
+	/// Calculate the next difficulty given a slice of existing headers.
 	pub fn next_from_headers_desc(headers: &[BlockHeader]) -> HeaderInfo {
 		let mut header_infos = vec![];
 		let mut iter = headers.windows(2);
