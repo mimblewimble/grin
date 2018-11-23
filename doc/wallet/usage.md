@@ -39,7 +39,7 @@ Logging configuration for the wallet is read from `grin-wallet.toml`.
 The wallet supports multiple accounts. To set the active account for a wallet command, use the '-a' switch, e.g:
 
 ```
-[host]$ grin wallet -p mypass -a account_1 info
+[host]$ grin wallet -a account_1 info
 ```
 
 All output creation, transaction building, and querying is done against a particular account in the wallet.
@@ -52,7 +52,7 @@ tries to contact a node at `127.0.0.1:13413`. To change this, modify the value i
 you can provide the `-r` (seRver) switch to the wallet command, e.g.:
 
 ```sh
-[host]$ grin wallet -p mypass -a "http://192.168.0.2:1341" info
+[host]$ grin wallet -a "http://192.168.0.2:1341" info
 ```
 
 If commands that need to update from a grin node can't find one, they will generally inform you that the node couldn't be reached
@@ -61,7 +61,8 @@ and the results verified against the latest chain information.
 ##### Password
 
 Your wallet.seed file, which contains your wallet's unique master seed, is encrypted with your password. Your password is specified
-at wallet creation time, and must be provided for any wallet operation using the `-p`argument.
+at wallet creation time, and must be provided for any wallet operation. You will be prompted for your password when required, but
+you can also specify it on the command line by providing the `-p`argument.
 
 ```sh
 [host]$ grin wallet -p mypass info
@@ -78,11 +79,11 @@ Before using a wallet a new `grin-wallet.toml` configuration file, master seed c
 to be generated via the init command as follows:
 
 ```sh
-[host]$ grin wallet -p mypass init
+[host]$ grin wallet init
 ```
 
-By default this will place your wallet files into `~/.grin`. Alternatively, if you'd like to run a wallet in a directory other than
-the default, you can run:
+You will be prompted to enter a password for the new wallet. By default, your wallet files will be placed into `~/.grin`. Alternatively, 
+if you'd like to run a wallet in a directory other than the default, you can run:
 
 ```sh
 [host]$ grin wallet -p mypass init -h
@@ -99,25 +100,55 @@ to use a 12-word recovery phrase, you can also pass in the `--short_wordlist` or
 It is also highly recommended that you back up the `~/.grin/wallet_data/wallet.seed` file somewhere safe and private,
 and ensure you somehow remember the password used to encrypt the wallet seed file.
 
+### recover
+
+The `recover` command is used to regenerate your wallet seed file from your recovery phrase. Note that this operation only
+restores your seed file, not the outputs stored in your wallet. If, for instance, you forget your wallet password, you can
+delete the `wallet_data/wallet.seed` file from your wallet data directory, run `grin wallet recover`, and (provided you used
+the correct recovery phrase,) your wallet contents should again be usable.
+
+To recover your wallet seed, delete (or backup) the wallet's `wallet_data/wallet.seed` file, then run:
+
+```sh
+[host]$ grin wallet recover -p "[12 or 24 word passphrase separated by spaces"
+
+e.g:
+
+[host]$ grin wallet recover -p "shiver alarm excuse turtle absorb surface lunch virtual want remind hard slow vacuum park silver asthma engage library battle jelly buffalo female inquiry wire"
+```
+
+If you're restoring a wallet from scratch, you'll then need to use the `grin wallet restore` command to scan the chain
+for your outputs and restore them. See the `grin wallet restore` command below for details of the entire process.
+
+You can also view your recovery phrase using your password by running the recover command without any arguments, e.g:
+
+
+```sh
+[host]$ grin wallet recover
+Your recovery phrase is:
+shiver alarm excuse turtle absorb surface lunch virtual want remind hard slow vacuum park silver asthma engage library battle jelly buffalo female inquiry wire
+Please back-up these words in a non-digital format.
+```
+
 ### account
 
 To create a new account, use the 'grin wallet account' command with the argument '-c', e.g.:
 
 ```
-[host]$ grin wallet -p mypass account -c my_account
+[host]$ grin wallet account -c my_account
 ```
 
 This will create a new account called 'my_account'. To use this account in subsequent commands, provide the '-a' flag to
 all wallet commands:
 
 ```
-[host]$ grin wallet -p mypass -a my_account info
+[host]$ grin wallet -a my_account info
 ```
 
 To display a list of created accounts in the wallet, use the 'account' command with no flags:
 
 ```
-[host]$ grin wallet -p mypass -a my_account info
+[host]$ grin wallet -a my_account info
 ```
 
 ### info
@@ -149,13 +180,13 @@ By default the `listen` commands runs in a manner that only allows access from t
 to other machines, use the `-e` switch:
 
 ```sh
-[host]$ grin wallet -p mypass -e listen
+[host]$ grin wallet -e listen
 ```
 
 To change the port on which the wallet is listening, either configure `grin-wallet.toml` or use the `-l` flag, e.g:
 
 ```sh
-[host]$ grin wallet -p mypass -l 14000 listen
+[host]$ grin wallet -l 14000 listen
 ```
 
 The wallet will listen for requests until the process is cancelled with `<Ctrl-C>`. Note that external ports/firewalls need to be configured
@@ -169,7 +200,7 @@ this is how you send Grins to another party.
 The most important fields here are the destination (`-d`)  and the amount itself. To send an amount to another listening wallet:
 
 ```sh
-[host]$ grin wallet -p mypass send -d "http://192.168.0.10:13415" 60.00
+[host]$ grin wallet send -d "http://192.168.0.10:13415" 60.00
 ```
 
 This will create a transaction with the other wallet listening at 192.168.0.10, port 13415 which credits the other wallet 60 grins
@@ -305,7 +336,7 @@ Wallet Outputs - Block Height: 49
 
 #### cancel
 
-Everything before Step 6 in the send phase above  happens completely locally in the wallets' data storage and separately from the chain.
+Everything before Step 6 in the send phase above happens completely locally in the wallets' data storage and separately from the chain.
 Since it's very easy for a sender, (through error or malice,) to fail to post a transaction to the chain, it's very possible for the contents
 of a wallet to become locked, with all outputs unable to be selected because the wallet is waiting for a transaction that will never hit
 the chain to complete. For example, in the output from `grin wallet txs -i 6` above, the transaction is showing as `confirmed == false`
@@ -351,7 +382,7 @@ This will create a file called tx_3.json containing your raw transaction data. N
 
 ##### restore
 
-If for some reason the wallet cancel commands above don't work, or you need to restore from a backed up `wallet.seed` file and password, you can perform a full wallet restore.
+If for some reason the wallet cancel commands above don't work, you need to restore from a backed up `wallet.seed` file and password, or have recovered the wallet seed from a recovery phrase, you can perform a full wallet restore.
 
 To do this, generate an empty wallet somewhere with:
 
@@ -366,18 +397,17 @@ Delete the newly generated wallet data directory and seed file:
 [host@new_wallet_dir]# rm wallet_data/wallet.seed
 ```
 
-Then copy your backed up `wallet.seed` file into the new `wallet_data` directory, ensuring it's called `wallet.seed`
+If you need to recover your wallet seed from a recovery phrase, use the `grin wallet recover -p "[recovery phrase]" command
+as outlined above. Otherwise, if you're restoring from a backed-up seed file, simply copy your backed up `wallet.seed` file 
+into the new `wallet_data` directory, ensuring it's called `wallet.seed`
 
-```sh
-[host@new_wallet_dir]# cp OLD_WALLET.seed wallet_data/wallet.seed
-```
-
-Then ensure that you're running a grin node, and makes sure nothing is attempting to mine into your wallet. Then, in the
-wallet directory:
+Ensure the Grin node with which your wallet is talking is running, and make sure nothing is attempting to mine into your wallet.
+Then, in the wallet directory:
 
 ```sh
 grin wallet restore
 ```
 
 Note this operation can potentially take a long time. Once it's done, your wallet outputs should be restored, and you can
-transact with your restored wallet as before the backup.
+transact with your restored wallet as before the backup. Your transaction log history is not restored, and will simply
+contain incoming transactions for each output found.
