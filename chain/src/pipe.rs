@@ -539,8 +539,6 @@ fn validate_header(
 
 		// explicit check to ensure total_difficulty has increased by exactly
 		// the _network_ difficulty of the previous block
-
-		// TODO - pull this out into a separate fn.
 		let next_header_info = {
 			let mut is_next_header = false;
 			if let Some(recent_header) = recent_headers.first() {
@@ -566,6 +564,7 @@ fn validate_header(
 			);
 			return Err(ErrorKind::WrongTotalDifficulty.into());
 		}
+
 		// check the secondary PoW scaling factor if applicable
 		if header.pow.secondary_scaling != next_header_info.secondary_scaling {
 			info!(

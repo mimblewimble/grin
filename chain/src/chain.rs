@@ -1160,15 +1160,6 @@ impl Chain {
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get sync head".to_owned()).into())
 	}
 
-	// /// Builds an iterator on blocks starting from the current chain head and
-	// /// running backward. Specialized to return information pertaining to block
-	// /// difficulty calculation (timestamp and previous difficulties).
-	// pub fn difficulty_iter(&self) -> store::DifficultyIter {
-	// 	let head = self.head().unwrap();
-	// 	let store = self.store.clone();
-	// 	store::DifficultyIter::from(head.last_block_h, store)
-	// }
-
 	/// Check whether we have a block without reading it
 	pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {
 		self.store
