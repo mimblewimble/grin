@@ -179,7 +179,8 @@ impl Chain {
 		let store = Arc::new(chain_store);
 
 		// open the txhashset, creating a new one if necessary
-		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None, genesis.hash())?;
+		let mut txhashset =
+			txhashset::TxHashSet::open(db_root.clone(), store.clone(), None, genesis.hash())?;
 
 		setup_head(genesis.clone(), store.clone(), &mut txhashset)?;
 
@@ -806,17 +807,37 @@ impl Chain {
 		}
 
 		let header = self.get_block_header(&h)?;
-		txhashset::zip_write(self.db_root.clone(), txhashset_data, &header)?;
+		let mut kernels_already_synced = false;
+		{
+			let existing_txhashset = self.txhashset.read();
+			let num_kernels = existing_txhashset.num_kernels();
+			if num_kernels >= header.kernel_mmr_size {
+				kernels_already_synced = true;
+			}
+		}
 
-		let mut txhashset =
-			txhashset::TxHashSet::open(self.db_root.clone(), self.store.clone(), Some(&header), header.hash())?;
+		txhashset::zip_write(
+			self.db_root.clone(),
+			txhashset_data,
+			&header,
+			kernels_already_synced,
+		)?;
+
+		let mut txhashset = txhashset::TxHashSet::open(
+			self.db_root.clone(),
+			self.store.clone(),
+			Some(&header),
+			header.hash(),
+		)?;
 
 		// The txhashset.zip contains the output, rangeproof and kernel MMRs.
 		// We must rebuild the header MMR ourselves based on the headers in our db.
 		self.rebuild_header_mmr(&Tip::from_header(&header), &mut txhashset)?;
 
 		// Validate the full kernel history (kernel MMR root for every block header).
-		self.validate_kernel_history(&header, &txhashset)?;
+		if !kernels_already_synced {
+			self.validate_kernel_history(&header, &txhashset)?;
+		}
 
 		// all good, prepare a new batch and update all the required records
 		debug!("txhashset_write: rewinding a 2nd time (writeable)");

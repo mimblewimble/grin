@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashSet;
 use std::fs::{self, File};
 /// Wrappers around the `zip-rs` library to compress and decompress zip
 /// bzip2 archives.
@@ -63,7 +64,7 @@ pub fn compress(src_dir: &Path, dst_file: &File) -> ZipResult<()> {
 }
 
 /// Decompress a source file into the provided destination path.
-pub fn decompress<R>(src_file: R, dest: &Path) -> ZipResult<()>
+pub fn decompress<R>(src_file: R, dest: &Path, skip_subdirs: &HashSet<String>) -> ZipResult<()>
 where
 	R: io::Read + io::Seek,
 {
@@ -72,6 +73,14 @@ where
 	for i in 0..archive.len() {
 		let mut file = archive.by_index(i)?;
 		let file_path = dest.join(file.name());
+
+		let first = file.name().find('/');
+		if let Some(first) = first {
+			let directory = String::from(&file.name()[0..first]);
+			if skip_subdirs.contains(&directory) {
+				continue;
+			}
+		}
 
 		if (&*file.name()).ends_with('/') {
 			fs::create_dir_all(&file_path)?;

@@ -14,6 +14,7 @@
 
 extern crate grin_util as util;
 
+use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::Path;
@@ -38,7 +39,8 @@ fn zip_unzip() {
 
 	fs::create_dir_all(root.join("./dezipped")).unwrap();
 	let zip_file = File::open(zip_name).unwrap();
-	zip::decompress(zip_file, &root.join("./dezipped")).unwrap();
+	let skip_subdirs : HashSet<String> = HashSet::new();
+	zip::decompress(zip_file, &root.join("./dezipped"), &skip_subdirs).unwrap();
 
 	assert!(root.join("to_zip/foo.txt").is_file());
 	assert!(root.join("to_zip/bar.txt").is_file());

@@ -91,7 +91,11 @@ impl<T: PMMRable> PMMRHandle<T> {
 		fs::create_dir_all(path.clone())?;
 		let backend = PMMRBackend::new(path.to_str().unwrap().to_string(), prunable, header)?;
 		let last_pos = backend.unpruned_size();
-		Ok(PMMRHandle { backend, last_pos, root_validated_tip: chain_tip })
+		Ok(PMMRHandle {
+			backend,
+			last_pos,
+			root_validated_tip: chain_tip,
+		})
 	}
 }
 
@@ -998,8 +1002,7 @@ impl<'a> Extension<'a> {
 
 	pub fn apply_kernels(&mut self, kernels: &Vec<TxKernel>) -> Result<(), Error> {
 		let kernel_root_validated_tip = self.kernel_root_validated_tip.get();
-		let last_validated_header =
-			self.batch.get_block_header(&kernel_root_validated_tip)?;
+		let last_validated_header = self.batch.get_block_header(&kernel_root_validated_tip)?;
 		let mut next_header_to_validate =
 			self.next_header_for_kernel_root_validation(&last_validated_header)?;
 
@@ -1023,7 +1026,8 @@ impl<'a> Extension<'a> {
 					)).into());
 				} else {
 					// Update kernel_root_validated_tip & retrieve next_header_to_validate
-					self.kernel_root_validated_tip.set(next_header_to_validate.hash());
+					self.kernel_root_validated_tip
+						.set(next_header_to_validate.hash());
 					next_header_to_validate =
 						self.next_header_for_kernel_root_validation(&last_validated_header)?;
 				}
@@ -1033,9 +1037,13 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn next_header_for_kernel_root_validation(&self, last_block_header: &BlockHeader) -> Result<BlockHeader, Error> {
-		let next_header_to_validate =
-			self.batch.get_header_by_height(last_block_header.height + 1)?;
+	fn next_header_for_kernel_root_validation(
+		&self,
+		last_block_header: &BlockHeader,
+	) -> Result<BlockHeader, Error> {
+		let next_header_to_validate = self
+			.batch
+			.get_header_by_height(last_block_header.height + 1)?;
 
 		if next_header_to_validate.hash() != last_block_header.hash() {
 			Err(ErrorKind::TxHashSetErr("TxHashSet not on current chain".to_string()).into())
@@ -1125,11 +1133,15 @@ impl<'a> Extension<'a> {
 	}
 
 	pub fn rewind_kernel_mmr(&mut self, next_kernel_index: u64) -> Result<(), Error> {
-		debug!("Rewind kernel_pmmr to next_kernel_index {}", next_kernel_index,);
+		debug!(
+			"Rewind kernel_pmmr to next_kernel_index {}",
+			next_kernel_index,
+		);
 
 		// Update kernel_root_validated_tip
 		if next_kernel_index == 0 {
-			self.kernel_root_validated_tip.set(self.batch.get_header_by_height(0)?.hash());
+			self.kernel_root_validated_tip
+				.set(self.batch.get_header_by_height(0)?.hash());
 		} else if next_kernel_index > pmmr::n_leaves(self.kernel_pmmr.last_pos) {
 			return Err(ErrorKind::TxHashSetErr("Trying to rewind forward.".to_string()).into());
 		} else {
@@ -1534,10 +1546,21 @@ pub fn zip_write(
 	root_dir: String,
 	txhashset_data: File,
 	header: &BlockHeader,
+	kernels_already_synced: bool,
 ) -> Result<(), Error> {
 	let txhashset_path = Path::new(&root_dir).join(TXHASHSET_SUBDIR);
 	fs::create_dir_all(txhashset_path.clone())?;
-	zip::decompress(txhashset_data, &txhashset_path)
+
+	let skip_subdirs: HashSet<String> = match kernels_already_synced {
+		true => [KERNEL_SUBDIR]
+			.iter()
+			.cloned()
+			.map(|s| String::from(s))
+			.collect(),
+		false => HashSet::new(),
+	};
+
+	zip::decompress(txhashset_data, &txhashset_path, &skip_subdirs)
 		.map_err(|ze| ErrorKind::Other(ze.to_string()))?;
 	check_and_remove_files(&txhashset_path, header)
 }
