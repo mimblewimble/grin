@@ -64,7 +64,15 @@ impl KernelSync {
 			.contains(Capabilities::ENHANCED_TXHASHSET_HIST);
 
 		if enable_kernel_sync {
-			let head_header = match self.chain.head_header() {
+			let header_head = match self.chain.header_head() {
+				Ok(header_head) => header_head,
+				Err(e) => {
+					error!("kernel_sync: check_run err! {:?}", e);
+					return false;
+				}
+			};
+
+			let header = match self.chain.get_block_header(&header_head.hash()) {
 				Ok(header) => header,
 				Err(e) => {
 					error!("kernel_sync: check_run err! {:?}", e);
@@ -73,28 +81,28 @@ impl KernelSync {
 			};
 
 			let num_kernels_received = self.chain.get_num_kernels();
-			if !self.kernel_sync_due(&head_header, num_kernels_received) {
+			if !self.kernel_sync_due(&header, num_kernels_received) {
 				return false;
 			}
 
 			self.sync_state.update(SyncStatus::KernelSync {
 				kernels_received: num_kernels_received,
-				total_kernels: head_header.kernel_mmr_size,
+				total_kernels: header.kernel_mmr_size,
 			});
 
 			// DAVID: If no capable peer exists, fall back to full txhashset download
-			self.kernel_sync(&head_header, num_kernels_received);
+			self.kernel_sync(&header, num_kernels_received);
 
 			return true;
 		}
 		false
 	}
 
-	fn kernel_sync_due(&mut self, head_header: &BlockHeader, num_kernels_received: u64) -> bool {
-		let kernels_5_blocks_back = if head_header.height < 5 {
+	fn kernel_sync_due(&mut self, header: &BlockHeader, num_kernels_received: u64) -> bool {
+		let kernels_5_blocks_back = if header.height < 5 {
 			0 as u64
 		} else {
-			match self.chain.get_header_by_height(head_header.height - 5) {
+			match self.chain.get_header_by_height(header.height - 5) {
 				Ok(header) => header.kernel_mmr_size,
 				Err(_) => 0 as u64,
 			}
@@ -137,7 +145,7 @@ impl KernelSync {
 
 	fn kernel_sync(
 		&mut self,
-		head_header: &BlockHeader,
+		header: &BlockHeader,
 		next_kernel_index: u64,
 	) -> Result<(), p2p::Error> {
 		let opt_peer = self.peers.most_work_peers().into_iter().find(|peer| {
@@ -152,8 +160,7 @@ impl KernelSync {
 				peer.info.addr, next_kernel_index
 			);
 
-			let _ =
-				peer.send_kernel_request(head_header.hash(), head_header.height, next_kernel_index);
+			let _ = peer.send_kernel_request(header.hash(), header.height, next_kernel_index);
 			return Ok(());
 		}
 		Err(p2p::Error::PeerException)
