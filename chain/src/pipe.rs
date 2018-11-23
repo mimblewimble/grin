@@ -66,28 +66,23 @@ fn process_header_for_block(
 	ctx: &mut BlockContext,
 ) -> Result<(), Error> {
 	// Check if are processing the "next" block relative to the current chain head.
-	if header.prev_hash == head.last_block_h {
+	let prev = if header.prev_hash == head.last_block_h {
 		// If this is the "next" block then either -
 		//   * common case where we process blocks sequentially.
 		//   * special case where this is the first fast sync full block
 		// Either way we can proceed (and we know the block is new and unprocessed).
+		check_prev_header_store(header, &mut ctx.batch)?
 	} else {
-		// TODO - cleanup not found vs other errors...
-		// TODO - rework check_prev_store to cover block and header checks
-		if let Ok(prev_header) = ctx.batch.get_previous_header(header) {
-			// At this point it looks like this is a new block that we have not yet processed.
-			// Check we have the previous block in the store.
-			// If we do not then treat this block as an orphan.
-			check_prev_store(header, &mut ctx.batch)?;
-		} else {
-			return Err(ErrorKind::Orphan.into());
-		}
-	}
+		// At this point it looks like this is a new block that we have not yet processed.
+		// Check we have the previous full block in the store.
+		// This will raise an Orphan error if we do not have both the previous header
+		// and the previous full block in the db.
+		check_prev_store(header, &mut ctx.batch)?
+	};
 
 	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
 		extension.force_rollback();
 
-		let prev = extension.batch.get_previous_header(header)?;
 		if prev.hash() == head.last_block_h {
 			// Not a fork so we do not need to rewind or reapply any headers.
 		} else {
@@ -443,24 +438,35 @@ fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(),
 	}
 }
 
-// Check we have the *previous* block in the store.
+fn check_prev_header_store(
+	header: &BlockHeader,
+	batch: &mut store::Batch,
+) -> Result<BlockHeader, Error> {
+	let prev = batch.get_previous_header(&header).map_err(|e| {
+		match e {
+			grin_store::Error::NotFoundErr(_) => ErrorKind::Orphan,
+			_ => ErrorKind::StoreErr(e, "check prev header".into()),
+		}
+	})?;
+	Ok(prev)
+}
+
+// Check we have the previous block in the store.
 // Note: not just the header but the full block itself.
+// If the block exists then return its header.
 // We cannot assume we can use the chain head for this
 // as we may be dealing with a fork (with less work currently).
-fn check_prev_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
-	let prev = batch.get_previous_header(&header)?;
-	match batch.block_exists(&prev.hash()) {
-		Ok(true) => {
-			// We have the previous block in the store, so we can proceed.
-			Ok(())
-		}
-		Ok(false) => {
-			// We do not have the previous block in the store.
-			// We have not yet processed the previous block so
-			// this block is an orphan (for now).
-			Err(ErrorKind::Orphan.into())
-		}
-		Err(e) => Err(ErrorKind::StoreErr(e, "pipe get previous".to_owned()).into()),
+fn check_prev_store(
+	header: &BlockHeader,
+	batch: &mut store::Batch,
+) -> Result<BlockHeader, Error> {
+	let prev = check_prev_header_store(header, batch)?;
+
+	// Now check the previous block itself exists in the db.
+	if batch.block_exists(&prev.hash())? {
+		Ok(prev)
+	} else {
+		Err(ErrorKind::Orphan.into())
 	}
 }
 
@@ -504,17 +510,8 @@ fn validate_header(
 		}
 	}
 
-	// first I/O cost, better as late as possible
-	let prev = match ctx.batch.get_previous_header(&header) {
-		Ok(prev) => prev,
-		Err(grin_store::Error::NotFoundErr(_)) => return Err(ErrorKind::Orphan.into()),
-		Err(e) => {
-			return Err(ErrorKind::StoreErr(
-				e,
-				format!("Failed to find previous header to {}", header.hash()),
-			).into())
-		}
-	};
+	// First I/O cost, delayed as late as possible.
+	let prev = check_prev_header_store(header, &mut ctx.batch)?;
 
 	// make sure this header has a height exactly one higher than the previous
 	// header

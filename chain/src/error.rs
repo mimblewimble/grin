@@ -206,8 +206,6 @@ impl From<store::Error> for Error {
 	fn from(error: store::Error) -> Error {
 		let ec = error.clone();
 		Error {
-			//inner: error.context();Context::new(ErrorKind::StoreErr(error.clone(),
-			// format!("{:?}", error))),
 			inner: error.context(ErrorKind::StoreErr(ec.clone(), format!("{:?}", ec))),
 		}
 	}
