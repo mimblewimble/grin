@@ -120,11 +120,12 @@ e.g:
 If you're restoring a wallet from scratch, you'll then need to use the `grin wallet restore` command to scan the chain
 for your outputs and restore them. See the `grin wallet restore` command below for details of the entire process.
 
-You can also view your recovery phrase using your password by running the recover command without any arguments, e.g:
+You can also view your recovery phrase with your password by running the recover command without any arguments, e.g:
 
 
 ```sh
 [host]$ grin wallet recover
+Password:
 Your recovery phrase is:
 shiver alarm excuse turtle absorb surface lunch virtual want remind hard slow vacuum park silver asthma engage library battle jelly buffalo female inquiry wire
 Please back-up these words in a non-digital format.
