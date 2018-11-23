@@ -337,10 +337,7 @@ fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(),
 
 // Find the previous header from the store.
 // Return an Orphan error if we cannot find the previous header.
-fn prev_header_store(
-	header: &BlockHeader,
-	batch: &mut store::Batch,
-) -> Result<BlockHeader, Error> {
+fn prev_header_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<BlockHeader, Error> {
 	let prev = batch.get_previous_header(&header).map_err(|e| match e {
 		grin_store::Error::NotFoundErr(_) => ErrorKind::Orphan,
 		_ => ErrorKind::StoreErr(e, "check prev header".into()),
