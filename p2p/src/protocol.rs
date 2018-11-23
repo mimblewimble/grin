@@ -356,7 +356,12 @@ impl MessageHandler for Protocol {
 
 			Type::Kernels => {
 				let kernels: Kernels = msg.body()?;
-				adapter.kernels_received(kernels.last_hash, kernels.first_kernel_index, kernels.kernels, self.addr);
+				adapter.kernels_received(
+					kernels.last_hash,
+					kernels.first_kernel_index,
+					kernels.kernels,
+					self.addr,
+				);
 
 				Ok(None)
 			}
