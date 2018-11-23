@@ -23,7 +23,6 @@ use util::secp::pedersen::Commitment;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader, BlockSums};
-use core::pow::{Difficulty, HeaderInfo};
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, u64_to_key, Error};
 use types::Tip;

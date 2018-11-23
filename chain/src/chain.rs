@@ -15,7 +15,7 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::fs::File;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -239,6 +239,8 @@ impl Chain {
 		res
 	}
 
+	/// Returns a vec of headers in descending order back toward the genesis
+	/// from the current chain head, returning at most limit headers.
 	pub fn get_headers_desc(&self, limit: u64) -> Result<Vec<BlockHeader>, Error> {
 		let head = self.store.head()?;
 		let headers = self.store.get_headers_desc(&head.last_block_h, limit)?;

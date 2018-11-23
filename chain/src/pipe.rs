@@ -14,7 +14,6 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
-use std::collections::VecDeque;
 use std::sync::Arc;
 use util::RwLock;
 
@@ -30,7 +29,7 @@ use core::core::verifier_cache::VerifierCache;
 use core::core::Committed;
 use core::core::{Block, BlockHeader, BlockSums};
 use core::global;
-use core::pow::{self, Difficulty, HeaderInfo};
+use core::pow::{self, HeaderInfo};
 use error::{Error, ErrorKind};
 use grin_store;
 use store;
