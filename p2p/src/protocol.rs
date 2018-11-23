@@ -337,6 +337,7 @@ impl MessageHandler for Protocol {
 			}
 
 			Type::GetKernels => {
+				// DAVID: Check Capabilities first?
 				// Retrieve kernels from the kernel MMR
 				let request: GetKernels = msg.body()?;
 				let kerns = adapter.read_kernels(request.last_hash, request.first_kernel_index);
@@ -351,6 +352,13 @@ impl MessageHandler for Protocol {
 						kernels: kerns,
 					},
 				)))
+			}
+
+			Type::Kernels => {
+				let kernels: Kernels = msg.body()?;
+				adapter.kernels_received(kernels.last_hash, kernels.first_kernel_index, kernels.kernels, self.addr);
+
+				Ok(None)
 			}
 
 			_ => {
