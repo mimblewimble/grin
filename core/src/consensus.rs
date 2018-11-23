@@ -215,7 +215,7 @@ pub fn clamp(actual: u64, goal: u64, clamp_factor: u64) -> u64 {
 ///
 /// The secondary proof-of-work factor is calculated along the same lines, as
 /// an adjustment on the deviation against the ideal value.
-pub fn next_difficulty(height: u64, cursor: Vec<HeaderInfo>) -> HeaderInfo {
+pub fn next_difficulty(height: u64, cursor: &[HeaderInfo]) -> HeaderInfo {
 	// Create vector of difficulty data running from earliest
 	// to latest, and pad with simulated pre-genesis data to allow earlier
 	// adjustment if there isn't enough window data length will be

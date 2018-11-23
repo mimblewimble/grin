@@ -292,9 +292,9 @@ pub fn get_genesis_nonce() -> u64 {
 /// Converts an iterator of block difficulty data to a more manageable
 /// vector and pads if needed (which will) only be needed for the first few
 /// blocks after genesis.
-pub fn difficulty_data_to_vector(cursor: Vec<HeaderInfo>) -> Vec<HeaderInfo> {
+pub fn difficulty_data_to_vector(cursor: &[HeaderInfo]) -> Vec<HeaderInfo> {
 	let needed_block_count = DIFFICULTY_ADJUST_WINDOW as usize + 1;
-	let mut last_n: Vec<HeaderInfo> = cursor.into_iter().take(needed_block_count).collect();
+	let mut last_n: Vec<HeaderInfo> = cursor.iter().take(needed_block_count).cloned().collect();
 
 	// Only needed just after blockchain launch... basically ensures there's
 	// always enough data by simulating perfectly timed pre-genesis

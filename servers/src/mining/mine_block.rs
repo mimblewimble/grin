@@ -103,6 +103,7 @@ fn build_block(
 		now_sec = head_sec + 1;
 	}
 
+	// TODO - we should be able to reuse the recent headers cache here from chain?
 	// Determine the difficulty our block should be at.
 	let headers = chain.get_headers_desc(100)?;
 	let difficulty = pow::HeaderInfo::next_from_headers_desc(&headers);

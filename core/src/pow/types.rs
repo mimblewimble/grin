@@ -539,6 +539,6 @@ impl HeaderInfo {
 		}
 
 		let height = headers.first().map(|x| x.height).unwrap_or(0) + 1;
-		consensus::next_difficulty(height, header_infos)
+		consensus::next_difficulty(height, &header_infos)
 	}
 }
