@@ -442,11 +442,9 @@ fn check_prev_header_store(
 	header: &BlockHeader,
 	batch: &mut store::Batch,
 ) -> Result<BlockHeader, Error> {
-	let prev = batch.get_previous_header(&header).map_err(|e| {
-		match e {
-			grin_store::Error::NotFoundErr(_) => ErrorKind::Orphan,
-			_ => ErrorKind::StoreErr(e, "check prev header".into()),
-		}
+	let prev = batch.get_previous_header(&header).map_err(|e| match e {
+		grin_store::Error::NotFoundErr(_) => ErrorKind::Orphan,
+		_ => ErrorKind::StoreErr(e, "check prev header".into()),
 	})?;
 	Ok(prev)
 }
@@ -456,10 +454,7 @@ fn check_prev_header_store(
 // If the block exists then return its header.
 // We cannot assume we can use the chain head for this
 // as we may be dealing with a fork (with less work currently).
-fn check_prev_store(
-	header: &BlockHeader,
-	batch: &mut store::Batch,
-) -> Result<BlockHeader, Error> {
+fn check_prev_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<BlockHeader, Error> {
 	let prev = check_prev_header_store(header, batch)?;
 
 	// Now check the previous block itself exists in the db.
