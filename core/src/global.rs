@@ -21,7 +21,7 @@ use consensus::{
 	DAY_HEIGHT, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, SECOND_POW_EDGE_BITS,
 	STATE_SYNC_THRESHOLD, UNIT_DIFFICULTY,
 };
-use pow::{self, CuckatooContext, HeaderInfo, EdgeType, PoWContext};
+use pow::{self, CuckatooContext, EdgeType, HeaderInfo, PoWContext};
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,

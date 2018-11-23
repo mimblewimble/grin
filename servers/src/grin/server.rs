@@ -30,8 +30,8 @@ use common::adapters::{
 use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
 use common::types::{Error, ServerConfig, StratumServerConfig, SyncState, SyncStatus};
 use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
-use core::{consensus, genesis, global, pow};
 use core::pow::HeaderInfo;
+use core::{consensus, genesis, global, pow};
 use grin::{dandelion_monitor, seed, sync};
 use mining::stratumserver;
 use mining::test_miner::Miner;
@@ -373,35 +373,30 @@ impl Server {
 			let mut header_infos = vec![];
 			let mut iter = headers.windows(2);
 			while let Some(&[ref header, ref prev_header]) = iter.next() {
-				header_infos.push(
-					HeaderInfo::new(
-						header.timestamp.timestamp() as u64,
-						header.total_difficulty() - prev_header.total_difficulty(),
-						header.pow.secondary_scaling,
-						header.pow.is_secondary(),
-					)
-				);
+				header_infos.push(HeaderInfo::new(
+					header.timestamp.timestamp() as u64,
+					header.total_difficulty() - prev_header.total_difficulty(),
+					header.pow.secondary_scaling,
+					header.pow.is_secondary(),
+				));
 			}
 
 			// TODO - We need at least one header_info in there for now.
 			if let Some(header) = headers.last() {
 				if header.height == 0 {
-					header_infos.push(
-						HeaderInfo::new(
-							header.timestamp.timestamp() as u64,
-							header.total_difficulty(),
-							header.pow.secondary_scaling,
-							header.pow.is_secondary(),
-						)
-					);
+					header_infos.push(HeaderInfo::new(
+						header.timestamp.timestamp() as u64,
+						header.total_difficulty(),
+						header.pow.secondary_scaling,
+						header.pow.is_secondary(),
+					));
 				}
 			}
 
-			let last_blocks: Vec<HeaderInfo> =
-				global::difficulty_data_to_vector(header_infos)
-					.into_iter()
-					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
-					.collect();
+			let last_blocks: Vec<HeaderInfo> = global::difficulty_data_to_vector(header_infos)
+				.into_iter()
+				.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
+				.collect();
 
 			let mut last_time = last_blocks[0].timestamp;
 			let tip_height = self.chain.head().unwrap().height as i64;

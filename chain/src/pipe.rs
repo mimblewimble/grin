@@ -60,7 +60,11 @@ pub struct BlockContext<'a> {
 
 /// Process a block header as part of processing a full block.
 /// We want to make sure the header is valid before we process the full block.
-fn process_header_for_block(header: &BlockHeader, head: &Tip, ctx: &mut BlockContext) -> Result<(), Error> {
+fn process_header_for_block(
+	header: &BlockHeader,
+	head: &Tip,
+	ctx: &mut BlockContext,
+) -> Result<(), Error> {
 	// Check if are processing the "next" block relative to the current chain head.
 	if header.prev_hash == head.last_block_h {
 		// If this is the "next" block then either -
@@ -102,7 +106,12 @@ fn process_header_for_block(header: &BlockHeader, head: &Tip, ctx: &mut BlockCon
 		Ok(())
 	})?;
 
-	let recent_headers = ctx.recent_headers_desc.read().iter().cloned().collect::<Vec<_>>();
+	let recent_headers = ctx
+		.recent_headers_desc
+		.read()
+		.iter()
+		.cloned()
+		.collect::<Vec<_>>();
 	validate_header(header, &recent_headers, ctx)?;
 	add_block_header(header, &ctx.batch)?;
 	update_header_head(header, ctx)?;
@@ -259,7 +268,12 @@ pub fn sync_block_headers(
 
 		// First set our "recent headers" up, using the cached values from ctx if we can.
 		// We need these to validate pow for each new header.
-		let mut local_recent_headers = ctx.recent_headers_desc.read().iter().cloned().collect::<Vec<_>>();
+		let mut local_recent_headers = ctx
+			.recent_headers_desc
+			.read()
+			.iter()
+			.cloned()
+			.collect::<Vec<_>>();
 		if let Some(first) = headers.first() {
 			let mut is_next_header = false;
 			if let Some(first) = local_recent_headers.first() {
@@ -305,7 +319,10 @@ pub fn sync_block_headers(
 	}
 }
 
-fn update_recent_headers_desc(headers: &[BlockHeader], ctx: &mut BlockContext) -> Result<(), Error> {
+fn update_recent_headers_desc(
+	headers: &[BlockHeader],
+	ctx: &mut BlockContext,
+) -> Result<(), Error> {
 	let mut recent_headers_desc = ctx.recent_headers_desc.write();
 
 	let headers_desc = headers.iter().rev().cloned().collect::<Vec<_>>();
@@ -349,7 +366,12 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext) -> Res
 	); // keep this
 
 	check_header_known(header, ctx)?;
-	let recent_headers = ctx.recent_headers_desc.read().iter().cloned().collect::<Vec<_>>();
+	let recent_headers = ctx
+		.recent_headers_desc
+		.read()
+		.iter()
+		.cloned()
+		.collect::<Vec<_>>();
 	validate_header(header, &recent_headers, ctx)?;
 	Ok(())
 }
@@ -445,7 +467,11 @@ fn check_prev_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<()
 /// First level of block validation that only needs to act on the block header
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
-fn validate_header(header: &BlockHeader, recent_headers: &[BlockHeader], ctx: &mut BlockContext) -> Result<(), Error> {
+fn validate_header(
+	header: &BlockHeader,
+	recent_headers: &[BlockHeader],
+	ctx: &mut BlockContext,
+) -> Result<(), Error> {
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {
 		error!(

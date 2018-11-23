@@ -22,8 +22,8 @@ use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
 use consensus::{self, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
-use core::BlockHeader;
 use core::hash::Hashed;
+use core::BlockHeader;
 use global;
 use ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
 
@@ -518,26 +518,22 @@ impl HeaderInfo {
 		let mut header_infos = vec![];
 		let mut iter = headers.windows(2);
 		while let Some(&[ref header, ref prev_header]) = iter.next() {
-			header_infos.push(
-				HeaderInfo::new(
-					header.timestamp.timestamp() as u64,
-					header.total_difficulty() - prev_header.total_difficulty(),
-					header.pow.secondary_scaling,
-					header.pow.is_secondary(),
-				)
-			);
+			header_infos.push(HeaderInfo::new(
+				header.timestamp.timestamp() as u64,
+				header.total_difficulty() - prev_header.total_difficulty(),
+				header.pow.secondary_scaling,
+				header.pow.is_secondary(),
+			));
 		}
 
 		if let Some(header) = headers.last() {
 			if header.height == 0 {
-				header_infos.push(
-					HeaderInfo::new(
-						header.timestamp.timestamp() as u64,
-						header.total_difficulty(),
-						header.pow.secondary_scaling,
-						header.pow.is_secondary(),
-					)
-				);
+				header_infos.push(HeaderInfo::new(
+					header.timestamp.timestamp() as u64,
+					header.total_difficulty(),
+					header.pow.secondary_scaling,
+					header.pow.is_secondary(),
+				));
 			}
 		}
 
