@@ -16,13 +16,12 @@
 //! having to pass them all over the place, but aren't consensus values.
 //! should be used sparingly.
 
-use consensus::HeaderInfo;
 use consensus::{
 	graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
 	DAY_HEIGHT, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, SECOND_POW_EDGE_BITS,
 	STATE_SYNC_THRESHOLD, UNIT_DIFFICULTY,
 };
-use pow::{self, CuckatooContext, EdgeType, PoWContext};
+use pow::{self, CuckatooContext, HeaderInfo, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
@@ -288,15 +287,12 @@ pub fn get_genesis_nonce() -> u64 {
 	}
 }
 
-/// Converts an iterator of block difficulty data to more a more manageable
+/// TODO - rename this and rework what we are doing with it (not a cursor)...
+///
+/// Converts an iterator of block difficulty data to a more manageable
 /// vector and pads if needed (which will) only be needed for the first few
-/// blocks after genesis
-
-pub fn difficulty_data_to_vector<T>(cursor: T) -> Vec<HeaderInfo>
-where
-	T: IntoIterator<Item = HeaderInfo>,
-{
-	// Convert iterator to vector, so we can append to it if necessary
+/// blocks after genesis.
+pub fn difficulty_data_to_vector(cursor: Vec<HeaderInfo>) -> Vec<HeaderInfo> {
 	let needed_block_count = DIFFICULTY_ADJUST_WINDOW as usize + 1;
 	let mut last_n: Vec<HeaderInfo> = cursor.into_iter().take(needed_block_count).collect();
 

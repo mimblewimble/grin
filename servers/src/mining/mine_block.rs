@@ -25,7 +25,7 @@ use util::RwLock;
 use chain;
 use common::types::Error;
 use core::core::verifier_cache::VerifierCache;
-use core::{consensus, core, ser};
+use core::{core, pow, ser};
 use keychain::{ExtKeychain, Identifier, Keychain};
 use pool;
 use util;
@@ -104,8 +104,8 @@ fn build_block(
 	}
 
 	// Determine the difficulty our block should be at.
-	// Note: do not keep the difficulty_iter in scope (it has an active batch).
-	let difficulty = consensus::next_difficulty(head.height + 1, chain.difficulty_iter());
+	let headers = chain.get_headers_desc(100)?;
+	let difficulty = pow::HeaderInfo::next_from_headers_desc(&headers);
 
 	// extract current transaction from the pool
 	let txs = tx_pool.read().prepare_mineable_transactions()?;

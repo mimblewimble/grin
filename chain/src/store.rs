@@ -21,10 +21,9 @@ use lmdb;
 
 use util::secp::pedersen::Commitment;
 
-use core::consensus::HeaderInfo;
 use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader, BlockSums};
-use core::pow::Difficulty;
+use core::pow::{Difficulty, HeaderInfo};
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, u64_to_key, Error};
 use types::Tip;
@@ -107,6 +106,23 @@ impl ChainStore {
 				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
 			&format!("BLOCK HEADER: {}", h),
 		)
+	}
+
+	/// Returns headers in descending height back from the header for the given hash.
+	/// Includes the header for the given hash.
+	/// Will return at most limit headers, may return less than limit
+	/// if we reach the genesis block.
+	pub fn get_headers_desc(&self, hash: &Hash, limit: u64) -> Result<Vec<BlockHeader>, Error> {
+		let mut current = self.get_block_header(hash);
+		let mut headers = vec![];
+		while let Ok(header) = current {
+			if headers.len() as u64 >= limit {
+				break;
+			}
+			headers.push(header.clone());
+			current = self.get_previous_header(&header);
+		}
+		Ok(headers)
 	}
 
 	pub fn get_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
@@ -324,6 +340,23 @@ impl<'a> Batch<'a> {
 		)
 	}
 
+	/// Returns headers in descending height back from the header for the given hash.
+	/// Includes the header for the given hash.
+	/// Will return at most limit headers, may return less than limit
+	/// if we reach the genesis block.
+	pub fn get_headers_desc(&self, hash: &Hash, limit: u64) -> Result<Vec<BlockHeader>, Error> {
+		let mut current = self.get_block_header(hash);
+		let mut headers = vec![];
+		while let Ok(header) = current {
+			if headers.len() as u64 >= limit {
+				break;
+			}
+			headers.push(header.clone());
+			current = self.get_previous_header(&header);
+		}
+		Ok(headers)
+	}
+
 	fn save_block_input_bitmap(&self, bh: &Hash, bm: &Bitmap) -> Result<(), Error> {
 		self.db.put(
 			&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec())[..],
@@ -470,97 +503,97 @@ impl<'a> Batch<'a> {
 	}
 }
 
-/// An iterator on blocks, from latest to earliest, specialized to return
-/// information pertaining to block difficulty calculation (timestamp and
-/// previous difficulties). Mostly used by the consensus next difficulty
-/// calculation.
-pub struct DifficultyIter<'a> {
-	start: Hash,
-	store: Option<Arc<ChainStore>>,
-	batch: Option<Batch<'a>>,
+// /// An iterator on blocks, from latest to earliest, specialized to return
+// /// information pertaining to block difficulty calculation (timestamp and
+// /// previous difficulties). Mostly used by the consensus next difficulty
+// /// calculation.
+// pub struct DifficultyIter<'a> {
+// 	start: Hash,
+// 	store: Option<Arc<ChainStore>>,
+// 	batch: Option<Batch<'a>>,
+//
+// 	// maintain state for both the "next" header in this iteration
+// 	// and its previous header in the chain ("next next" in the iteration)
+// 	// so we effectively read-ahead as we iterate through the chain back
+// 	// toward the genesis block (while maintaining current state)
+// 	header: Option<BlockHeader>,
+// 	prev_header: Option<BlockHeader>,
+// }
 
-	// maintain state for both the "next" header in this iteration
-	// and its previous header in the chain ("next next" in the iteration)
-	// so we effectively read-ahead as we iterate through the chain back
-	// toward the genesis block (while maintaining current state)
-	header: Option<BlockHeader>,
-	prev_header: Option<BlockHeader>,
-}
-
-impl<'a> DifficultyIter<'a> {
-	/// Build a new iterator using the provided chain store and starting from
-	/// the provided block hash.
-	pub fn from<'b>(start: Hash, store: Arc<ChainStore>) -> DifficultyIter<'b> {
-		DifficultyIter {
-			start,
-			store: Some(store),
-			batch: None,
-			header: None,
-			prev_header: None,
-		}
-	}
-
-	/// Build a new iterator using the provided chain store batch and starting from
-	/// the provided block hash.
-	pub fn from_batch(start: Hash, batch: Batch) -> DifficultyIter {
-		DifficultyIter {
-			start,
-			store: None,
-			batch: Some(batch),
-			header: None,
-			prev_header: None,
-		}
-	}
-}
-
-impl<'a> Iterator for DifficultyIter<'a> {
-	type Item = HeaderInfo;
-
-	fn next(&mut self) -> Option<Self::Item> {
-		// Get both header and previous_header if this is the initial iteration.
-		// Otherwise move prev_header to header and get the next prev_header.
-		self.header = if self.header.is_none() {
-			if let Some(ref batch) = self.batch {
-				batch.get_block_header(&self.start).ok()
-			} else {
-				if let Some(ref store) = self.store {
-					store.get_block_header(&self.start).ok()
-				} else {
-					None
-				}
-			}
-		} else {
-			self.prev_header.clone()
-		};
-
-		// If we have a header we can do this iteration.
-		// Otherwise we are done.
-		if let Some(header) = self.header.clone() {
-			if let Some(ref batch) = self.batch {
-				self.prev_header = batch.get_previous_header(&header).ok();
-			} else {
-				if let Some(ref store) = self.store {
-					self.prev_header = store.get_previous_header(&header).ok();
-				} else {
-					self.prev_header = None;
-				}
-			}
-
-			let prev_difficulty = self
-				.prev_header
-				.clone()
-				.map_or(Difficulty::zero(), |x| x.total_difficulty());
-			let difficulty = header.total_difficulty() - prev_difficulty;
-			let scaling = header.pow.secondary_scaling;
-
-			Some(HeaderInfo::new(
-				header.timestamp.timestamp() as u64,
-				difficulty,
-				scaling,
-				header.pow.is_secondary(),
-			))
-		} else {
-			return None;
-		}
-	}
-}
+// impl<'a> DifficultyIter<'a> {
+// 	/// Build a new iterator using the provided chain store and starting from
+// 	/// the provided block hash.
+// 	pub fn from<'b>(start: Hash, store: Arc<ChainStore>) -> DifficultyIter<'b> {
+// 		DifficultyIter {
+// 			start,
+// 			store: Some(store),
+// 			batch: None,
+// 			header: None,
+// 			prev_header: None,
+// 		}
+// 	}
+//
+// 	/// Build a new iterator using the provided chain store batch and starting from
+// 	/// the provided block hash.
+// 	pub fn from_batch(start: Hash, batch: Batch) -> DifficultyIter {
+// 		DifficultyIter {
+// 			start,
+// 			store: None,
+// 			batch: Some(batch),
+// 			header: None,
+// 			prev_header: None,
+// 		}
+// 	}
+// }
+//
+// impl<'a> Iterator for DifficultyIter<'a> {
+// 	type Item = HeaderInfo;
+//
+// 	fn next(&mut self) -> Option<Self::Item> {
+// 		// Get both header and previous_header if this is the initial iteration.
+// 		// Otherwise move prev_header to header and get the next prev_header.
+// 		self.header = if self.header.is_none() {
+// 			if let Some(ref batch) = self.batch {
+// 				batch.get_block_header(&self.start).ok()
+// 			} else {
+// 				if let Some(ref store) = self.store {
+// 					store.get_block_header(&self.start).ok()
+// 				} else {
+// 					None
+// 				}
+// 			}
+// 		} else {
+// 			self.prev_header.clone()
+// 		};
+//
+// 		// If we have a header we can do this iteration.
+// 		// Otherwise we are done.
+// 		if let Some(header) = self.header.clone() {
+// 			if let Some(ref batch) = self.batch {
+// 				self.prev_header = batch.get_previous_header(&header).ok();
+// 			} else {
+// 				if let Some(ref store) = self.store {
+// 					self.prev_header = store.get_previous_header(&header).ok();
+// 				} else {
+// 					self.prev_header = None;
+// 				}
+// 			}
+//
+// 			let prev_difficulty = self
+// 				.prev_header
+// 				.clone()
+// 				.map_or(Difficulty::zero(), |x| x.total_difficulty());
+// 			let difficulty = header.total_difficulty() - prev_difficulty;
+// 			let scaling = header.pow.secondary_scaling;
+//
+// 			Some(HeaderInfo::new(
+// 				header.timestamp.timestamp() as u64,
+// 				difficulty,
+// 				scaling,
+// 				header.pow.is_secondary(),
+// 			))
+// 		} else {
+// 			return None;
+// 		}
+// 	}
+// }

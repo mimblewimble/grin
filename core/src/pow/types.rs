@@ -21,7 +21,8 @@ use std::{fmt, iter};
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
+use consensus::{self, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
+use core::BlockHeader;
 use core::hash::Hashed;
 use global;
 use ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
@@ -89,7 +90,7 @@ impl Difficulty {
 	/// https://lists.launchpad.net/mimblewimble/msg00494.html).
 	fn from_proof_adjusted(proof: &Proof) -> Difficulty {
 		// scale with natural scaling factor
-		Difficulty::from_num(proof.scaled_difficulty(graph_weight(proof.edge_bits)))
+		Difficulty::from_num(proof.scaled_difficulty(consensus::graph_weight(proof.edge_bits)))
 	}
 
 	/// Same as `from_proof_adjusted` but instead of an adjustment based on
@@ -221,7 +222,7 @@ impl<'de> de::Visitor<'de> for DiffVisitor {
 pub struct ProofOfWork {
 	/// Total accumulated difficulty since genesis block
 	pub total_difficulty: Difficulty,
-	/// Variable difficulty scaling factor fo secondary proof of work
+	/// Variable difficulty scaling factor of secondary proof of work
 	pub secondary_scaling: u32,
 	/// Nonce increment used to mine this block.
 	pub nonce: u64,
@@ -458,5 +459,89 @@ impl BitVec {
 
 	fn bit_at(&self, pos: usize) -> bool {
 		self.bits[pos / 8] & (1 << (pos % 8) as u8) != 0
+	}
+}
+
+/// Minimal header information required for the Difficulty calculation to
+/// take place
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HeaderInfo {
+	/// Timestamp of the header, 1 when not used (returned info)
+	pub timestamp: u64,
+	/// Network difficulty or next difficulty to use
+	pub difficulty: Difficulty,
+	/// Network secondary PoW factor or factor to use
+	pub secondary_scaling: u32,
+	/// Whether the header is a secondary proof of work
+	pub is_secondary: bool,
+}
+
+impl HeaderInfo {
+	/// Default constructor
+	pub fn new(
+		timestamp: u64,
+		difficulty: Difficulty,
+		secondary_scaling: u32,
+		is_secondary: bool,
+	) -> HeaderInfo {
+		HeaderInfo {
+			timestamp,
+			difficulty,
+			secondary_scaling,
+			is_secondary,
+		}
+	}
+
+	/// Constructor from a timestamp and difficulty, setting a default secondary
+	/// PoW factor
+	pub fn from_ts_diff(timestamp: u64, difficulty: Difficulty) -> HeaderInfo {
+		HeaderInfo {
+			timestamp,
+			difficulty,
+			secondary_scaling: global::initial_graph_weight(),
+			is_secondary: false,
+		}
+	}
+
+	/// Constructor from a difficulty and secondary factor, setting a default
+	/// timestamp
+	pub fn from_diff_scaling(difficulty: Difficulty, secondary_scaling: u32) -> HeaderInfo {
+		HeaderInfo {
+			timestamp: 1,
+			difficulty,
+			secondary_scaling,
+			is_secondary: false,
+		}
+	}
+
+	pub fn next_from_headers_desc(headers: &[BlockHeader]) -> HeaderInfo {
+		let mut header_infos = vec![];
+		let mut iter = headers.windows(2);
+		while let Some(&[ref header, ref prev_header]) = iter.next() {
+			header_infos.push(
+				HeaderInfo::new(
+					header.timestamp.timestamp() as u64,
+					header.total_difficulty() - prev_header.total_difficulty(),
+					header.pow.secondary_scaling,
+					header.pow.is_secondary(),
+				)
+			);
+		}
+
+		if let Some(header) = headers.last() {
+			if header.height == 0 {
+				header_infos.push(
+					HeaderInfo::new(
+						header.timestamp.timestamp() as u64,
+						header.total_difficulty(),
+						header.pow.secondary_scaling,
+						header.pow.is_secondary(),
+					)
+				);
+			}
+		}
+
+		let height = headers.first().map(|x| x.height).unwrap_or(0) + 1;
+		consensus::next_difficulty(height, header_infos)
 	}
 }

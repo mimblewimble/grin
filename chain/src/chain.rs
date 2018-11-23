@@ -15,7 +15,7 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -151,6 +151,7 @@ pub struct Chain {
 	adapter: Arc<ChainAdapter + Send + Sync>,
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
+	recent_headers_desc: Arc<RwLock<Vec<BlockHeader>>>,
 	// Recently processed blocks to avoid double-processing
 	block_hashes_cache: Arc<RwLock<LruCache<Hash, bool>>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
@@ -220,6 +221,7 @@ impl Chain {
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			pow_verifier,
 			verifier_cache,
+			recent_headers_desc: Arc::new(RwLock::new(Vec::new())),
 			block_hashes_cache: Arc::new(RwLock::new(LruCache::new(HASHES_CACHE_SIZE))),
 			archive_mode,
 			genesis: genesis.header.clone(),
@@ -235,6 +237,12 @@ impl Chain {
 			self.check_orphans(height + 1);
 		}
 		res
+	}
+
+	pub fn get_headers_desc(&self, limit: u64) -> Result<Vec<BlockHeader>, Error> {
+		let head = self.store.head()?;
+		let headers = self.store.get_headers_desc(&head.last_block_h, limit)?;
+		Ok(headers)
 	}
 
 	fn determine_status(&self, head: Option<Tip>, prev_head: Tip) -> BlockStatus {
@@ -361,8 +369,9 @@ impl Chain {
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
-		pipe::sync_block_headers(headers, &mut ctx)?;
-		ctx.batch.commit()?;
+		if pipe::sync_block_headers(headers, &mut ctx).is_ok() {
+			ctx.batch.commit()?;
+		}
 
 		Ok(())
 	}
@@ -376,6 +385,7 @@ impl Chain {
 		Ok(pipe::BlockContext {
 			opts,
 			pow_verifier: self.pow_verifier,
+			recent_headers_desc: self.recent_headers_desc.clone(),
 			block_hashes_cache: self.block_hashes_cache.clone(),
 			verifier_cache: self.verifier_cache.clone(),
 			txhashset,
@@ -1148,14 +1158,14 @@ impl Chain {
 			.map_err(|e| ErrorKind::StoreErr(e, "chain get sync head".to_owned()).into())
 	}
 
-	/// Builds an iterator on blocks starting from the current chain head and
-	/// running backward. Specialized to return information pertaining to block
-	/// difficulty calculation (timestamp and previous difficulties).
-	pub fn difficulty_iter(&self) -> store::DifficultyIter {
-		let head = self.head().unwrap();
-		let store = self.store.clone();
-		store::DifficultyIter::from(head.last_block_h, store)
-	}
+	// /// Builds an iterator on blocks starting from the current chain head and
+	// /// running backward. Specialized to return information pertaining to block
+	// /// difficulty calculation (timestamp and previous difficulties).
+	// pub fn difficulty_iter(&self) -> store::DifficultyIter {
+	// 	let head = self.head().unwrap();
+	// 	let store = self.store.clone();
+	// 	store::DifficultyIter::from(head.last_block_h, store)
+	// }
 
 	/// Check whether we have a block without reading it
 	pub fn block_exists(&self, h: Hash) -> Result<bool, Error> {

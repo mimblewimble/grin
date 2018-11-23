@@ -176,7 +176,8 @@ impl SyncRunner {
 	/// Whether we're currently syncing the chain or we're fully caught up and
 	/// just receiving blocks through gossip.
 	fn needs_syncing(&self) -> (bool, u64) {
-		let local_diff = self.chain.head().unwrap().total_difficulty;
+		let head = self.chain.head().unwrap();
+		let local_diff = head.total_difficulty;
 		let mut is_syncing = self.sync_state.is_syncing();
 		let peer = self.peers.most_work_peer();
 
@@ -203,13 +204,17 @@ impl SyncRunner {
 				is_syncing = false;
 			}
 		} else {
-			// sum the last 5 difficulties to give us the threshold
-			let threshold = self
-				.chain
-				.difficulty_iter()
-				.map(|x| x.difficulty)
-				.take(5)
-				.fold(Difficulty::zero(), |sum, val| sum + val);
+			let threshold_height = head.height.saturating_sub(5);
+			let earlier_header = self.chain.get_header_by_height(threshold_height).unwrap();
+			let threshold = local_diff - earlier_header.total_difficulty();
+
+			// // sum the last 5 difficulties to give us the threshold
+			// let threshold = self
+			// 	.chain
+			// 	.difficulty_iter()
+			// 	.map(|x| x.difficulty)
+			// 	.take(5)
+			// 	.fold(Difficulty::zero(), |sum, val| sum + val);
 
 			let peer_diff = peer_info.total_difficulty();
 			if peer_diff > local_diff.clone() + threshold.clone() {

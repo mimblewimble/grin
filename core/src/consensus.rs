@@ -22,7 +22,7 @@ use std::cmp::{max, min};
 use std::fmt;
 
 use global;
-use pow::Difficulty;
+use pow::{Difficulty, HeaderInfo};
 
 /// A grin is divisible to 10^9, following the SI prefixes
 pub const GRIN_BASE: u64 = 1_000_000_000;
@@ -138,7 +138,7 @@ pub fn valid_header_version(height: u64, version: u16) -> bool {
 	} else if height < 3 * HARD_FORK_INTERVAL {
 		version == 3
 	} else if height < 4 * HARD_FORK_INTERVAL {
-		version == 4 
+		version == 4
 	} else if height >= 5 * HARD_FORK_INTERVAL {
 		version > 4 */
 	} else {
@@ -192,59 +192,6 @@ impl fmt::Display for Error {
 	}
 }
 
-/// Minimal header information required for the Difficulty calculation to
-/// take place
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct HeaderInfo {
-	/// Timestamp of the header, 1 when not used (returned info)
-	pub timestamp: u64,
-	/// Network difficulty or next difficulty to use
-	pub difficulty: Difficulty,
-	/// Network secondary PoW factor or factor to use
-	pub secondary_scaling: u32,
-	/// Whether the header is a secondary proof of work
-	pub is_secondary: bool,
-}
-
-impl HeaderInfo {
-	/// Default constructor
-	pub fn new(
-		timestamp: u64,
-		difficulty: Difficulty,
-		secondary_scaling: u32,
-		is_secondary: bool,
-	) -> HeaderInfo {
-		HeaderInfo {
-			timestamp,
-			difficulty,
-			secondary_scaling,
-			is_secondary,
-		}
-	}
-
-	/// Constructor from a timestamp and difficulty, setting a default secondary
-	/// PoW factor
-	pub fn from_ts_diff(timestamp: u64, difficulty: Difficulty) -> HeaderInfo {
-		HeaderInfo {
-			timestamp,
-			difficulty,
-			secondary_scaling: global::initial_graph_weight(),
-			is_secondary: false,
-		}
-	}
-
-	/// Constructor from a difficulty and secondary factor, setting a default
-	/// timestamp
-	pub fn from_diff_scaling(difficulty: Difficulty, secondary_scaling: u32) -> HeaderInfo {
-		HeaderInfo {
-			timestamp: 1,
-			difficulty,
-			secondary_scaling,
-			is_secondary: false,
-		}
-	}
-}
-
 /// Move value linearly toward a goal
 pub fn damp(actual: u64, goal: u64, damp_factor: u64) -> u64 {
 	(1 * actual + (damp_factor - 1) * goal) / damp_factor
@@ -268,10 +215,7 @@ pub fn clamp(actual: u64, goal: u64, clamp_factor: u64) -> u64 {
 ///
 /// The secondary proof-of-work factor is calculated along the same lines, as
 /// an adjustment on the deviation against the ideal value.
-pub fn next_difficulty<T>(height: u64, cursor: T) -> HeaderInfo
-where
-	T: IntoIterator<Item = HeaderInfo>,
-{
+pub fn next_difficulty(height: u64, cursor: Vec<HeaderInfo>) -> HeaderInfo {
 	// Create vector of difficulty data running from earliest
 	// to latest, and pad with simulated pre-genesis data to allow earlier
 	// adjustment if there isn't enough window data length will be

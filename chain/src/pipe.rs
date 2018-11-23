@@ -14,6 +14,7 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
+use std::collections::VecDeque;
 use std::sync::Arc;
 use util::RwLock;
 
@@ -29,7 +30,7 @@ use core::core::verifier_cache::VerifierCache;
 use core::core::Committed;
 use core::core::{Block, BlockHeader, BlockSums};
 use core::global;
-use core::pow;
+use core::pow::{self, Difficulty, HeaderInfo};
 use error::{Error, ErrorKind};
 use grin_store;
 use store;
@@ -47,9 +48,10 @@ pub struct BlockContext<'a> {
 	pub txhashset: &'a mut txhashset::TxHashSet,
 	/// The active batch to use for block processing.
 	pub batch: store::Batch<'a>,
-
 	/// Recently processed blocks to avoid double-processing
 	pub block_hashes_cache: Arc<RwLock<LruCache<Hash, bool>>>,
+	/// The most recent headers in descending order back from head of header chain.
+	pub recent_headers_desc: Arc<RwLock<Vec<BlockHeader>>>,
 	/// The verifier cache (caching verifier for rangeproofs and kernel signatures)
 	pub verifier_cache: Arc<RwLock<VerifierCache>>,
 	/// Recent orphan blocks to avoid double-processing
@@ -58,13 +60,24 @@ pub struct BlockContext<'a> {
 
 /// Process a block header as part of processing a full block.
 /// We want to make sure the header is valid before we process the full block.
-fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	let head = ctx.batch.head()?;
-
-	// If we do not have the previous header then treat the block for this header
-	// as an orphan.
-	if ctx.batch.get_previous_header(header).is_err() {
-		return Err(ErrorKind::Orphan.into());
+fn process_header_for_block(header: &BlockHeader, head: &Tip, ctx: &mut BlockContext) -> Result<(), Error> {
+	// Check if are processing the "next" block relative to the current chain head.
+	if header.prev_hash == head.last_block_h {
+		// If this is the "next" block then either -
+		//   * common case where we process blocks sequentially.
+		//   * special case where this is the first fast sync full block
+		// Either way we can proceed (and we know the block is new and unprocessed).
+	} else {
+		// TODO - cleanup not found vs other errors...
+		// TODO - rework check_prev_store to cover block and header checks
+		if let Ok(prev_header) = ctx.batch.get_previous_header(header) {
+			// At this point it looks like this is a new block that we have not yet processed.
+			// Check we have the previous block in the store.
+			// If we do not then treat this block as an orphan.
+			check_prev_store(header, &mut ctx.batch)?;
+		} else {
+			return Err(ErrorKind::Orphan.into());
+		}
 	}
 
 	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
@@ -89,7 +102,8 @@ fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext) -> Res
 		Ok(())
 	})?;
 
-	validate_header(header, ctx)?;
+	let recent_headers = ctx.recent_headers_desc.read().iter().cloned().collect::<Vec<_>>();
+	validate_header(header, &recent_headers, ctx)?;
 	add_block_header(header, &ctx.batch)?;
 	update_header_head(header, ctx)?;
 
@@ -130,22 +144,8 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 	}
 
 	// Header specific processing.
-	process_header_for_block(&b.header, ctx)?;
-
-	// Check if are processing the "next" block relative to the current chain head.
-	let prev_header = ctx.batch.get_previous_header(&b.header)?;
 	let head = ctx.batch.head()?;
-	if prev_header.hash() == head.last_block_h {
-		// If this is the "next" block then either -
-		//   * common case where we process blocks sequentially.
-		//   * special case where this is the first fast sync full block
-		// Either way we can proceed (and we know the block is new and unprocessed).
-	} else {
-		// At this point it looks like this is a new block that we have not yet processed.
-		// Check we have the *previous* block in the store.
-		// If we do not then treat this block as an orphan.
-		check_prev_store(&b.header, &mut ctx.batch)?;
-	}
+	process_header_for_block(&b.header, &head, ctx)?;
 
 	// Validate the block itself, make sure it is internally consistent.
 	// Use the verifier_cache for verifying rangeproofs and kernel signatures.
@@ -205,6 +205,12 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 
 	// Update the chain head if total work is increased.
 	let res = update_head(b, ctx)?;
+
+	// We increased our total work so update our "recent headers" for next time.
+	if res.is_some() {
+		update_recent_headers_desc(&[b.header.clone()], ctx)?
+	}
+
 	Ok(res)
 }
 
@@ -251,10 +257,27 @@ pub fn sync_block_headers(
 			Ok(())
 		})?;
 
-		// Validate all our headers now that we have added each "previous"
-		// header to the db in this batch above.
+		// First set our "recent headers" up, using the cached values from ctx if we can.
+		// We need these to validate pow for each new header.
+		let mut local_recent_headers = ctx.recent_headers_desc.read().iter().cloned().collect::<Vec<_>>();
+		if let Some(first) = headers.first() {
+			let mut is_next_header = false;
+			if let Some(first) = local_recent_headers.first() {
+				if first.hash() == first.prev_hash {
+					is_next_header = true;
+				}
+			}
+			if !is_next_header {
+				local_recent_headers = ctx.batch.get_headers_desc(&first.prev_hash, 100)?;
+			};
+		}
+
 		for header in headers {
-			validate_header(header, ctx)?;
+			validate_header(header, &local_recent_headers, ctx)?;
+
+			// Keep our local "recent headers" updated so we can reuse
+			// it as we iterate over this chunk of headers.
+			local_recent_headers.insert(0, header.clone());
 		}
 	}
 
@@ -270,10 +293,48 @@ pub fn sync_block_headers(
 		// Update header_head (but only if this header increases our total known work).
 		// i.e. Only if this header is now the head of the current "most work" chain.
 		let res = update_header_head(header, ctx)?;
+
+		// We increased our total work so update the cached "recent headers" for next time.
+		if res.is_some() {
+			update_recent_headers_desc(headers, ctx)?
+		}
+
 		Ok(res)
 	} else {
 		Ok(None)
 	}
+}
+
+fn update_recent_headers_desc(headers: &[BlockHeader], ctx: &mut BlockContext) -> Result<(), Error> {
+	let mut recent_headers_desc = ctx.recent_headers_desc.write();
+
+	let headers_desc = headers.iter().rev().cloned().collect::<Vec<_>>();
+
+	let mut is_aligned = false;
+	if let Some(next) = headers_desc.last() {
+		if let Some(prev) = recent_headers_desc.first() {
+			if prev.hash() == next.prev_hash {
+				is_aligned = true;
+			}
+		}
+	}
+
+	if is_aligned {
+		let mut new_headers = vec![];
+		new_headers.extend_from_slice(&headers_desc);
+		new_headers.extend_from_slice(&recent_headers_desc);
+		*recent_headers_desc = new_headers;
+	} else {
+		warn!("*** rebuilding recent_headers_desc from db");
+		if let Some(header) = headers_desc.first() {
+			*recent_headers_desc = ctx.batch.get_headers_desc(&header.hash(), 100)?.into();
+		}
+	}
+
+	// Make sure our recent headers do not grow too large.
+	recent_headers_desc.truncate(100);
+
+	Ok(())
 }
 
 /// Process block header as part of "header first" block propagation.
@@ -288,7 +349,8 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext) -> Res
 	); // keep this
 
 	check_header_known(header, ctx)?;
-	validate_header(header, ctx)?;
+	let recent_headers = ctx.recent_headers_desc.read().iter().cloned().collect::<Vec<_>>();
+	validate_header(header, &recent_headers, ctx)?;
 	Ok(())
 }
 
@@ -383,7 +445,7 @@ fn check_prev_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<()
 /// First level of block validation that only needs to act on the block header
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
-fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+fn validate_header(header: &BlockHeader, recent_headers: &[BlockHeader], ctx: &mut BlockContext) -> Result<(), Error> {
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {
 		error!(
@@ -460,11 +522,25 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 		// explicit check to ensure total_difficulty has increased by exactly
 		// the _network_ difficulty of the previous block
-		// (during testnet1 we use _block_ difficulty here)
-		let prev = ctx.batch.get_previous_header(&header)?;
-		let child_batch = ctx.batch.child()?;
-		let diff_iter = store::DifficultyIter::from_batch(prev.hash(), child_batch);
-		let next_header_info = consensus::next_difficulty(header.height, diff_iter);
+
+		// TODO - pull this out into a separate fn.
+		let next_header_info = {
+			let mut is_next_header = false;
+			if let Some(recent_header) = recent_headers.first() {
+				if recent_header.hash() == header.prev_hash {
+					is_next_header = true;
+				}
+			}
+
+			if is_next_header {
+				HeaderInfo::next_from_headers_desc(recent_headers)
+			} else {
+				warn!("*** falling back to recent_headers_desc from db");
+				let recent_headers = ctx.batch.get_headers_desc(&header.prev_hash, 100)?;
+				HeaderInfo::next_from_headers_desc(&recent_headers)
+			}
+		};
+
 		if target_difficulty != next_header_info.difficulty {
 			info!(
 				"validate_header: header target difficulty {} != {}",
