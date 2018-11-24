@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use clap::ArgMatches;
+use rpassword;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -31,9 +32,10 @@ use keychain;
 use servers::start_webwallet_server;
 use util::file::get_first_line;
 
-pub fn _init_wallet_seed(wallet_config: WalletConfig) {
-	if let Err(_) = WalletSeed::from_file(&wallet_config) {
-		WalletSeed::init_file(&wallet_config).expect("Failed to create wallet seed file.");
+pub fn _init_wallet_seed(wallet_config: WalletConfig, password: &str) {
+	if let Err(_) = WalletSeed::from_file(&wallet_config, password) {
+		WalletSeed::init_file(&wallet_config, 32, password)
+			.expect("Failed to create wallet seed file.");
 	};
 }
 
@@ -46,6 +48,33 @@ pub fn seed_exists(wallet_config: WalletConfig) -> bool {
 	} else {
 		false
 	}
+}
+
+pub fn prompt_password(args: &ArgMatches) -> String {
+	match args.value_of("pass") {
+		None => {
+			println!("Temporary note:");
+			println!(
+				"If this is your first time running your wallet since BIP32 (word lists) \
+				 were implemented, your seed will be converted to \
+				 the new format. Please ensure the provided password is correct."
+			);
+			println!("If this goes wrong, your old 'wallet.seed' file has been saved as 'wallet.seed.bak' \
+			Rename this file to back to `wallet.seed` and try again");
+			rpassword::prompt_password_stdout("Password: ").unwrap()
+		}
+		Some(p) => p.to_owned(),
+	}
+}
+
+pub fn prompt_password_confirm() -> String {
+	let first = rpassword::prompt_password_stdout("Password: ").unwrap();
+	let second = rpassword::prompt_password_stdout("Confirm Password: ").unwrap();
+	if first != second {
+		println!("Passwords do not match");
+		std::process::exit(0);
+	}
+	first
 }
 
 pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i32 {
@@ -74,15 +103,22 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 	}
 	let node_api_secret = get_first_line(wallet_config.node_api_secret_path.clone());
 
-	// Derive the keychain based on seed from seed file and specified passphrase.
+	// Decrypt the seed from the seed file and derive the keychain.
 	// Generate the initial wallet seed if we are running "wallet init".
-	if let ("init", Some(_)) = wallet_args.subcommand() {
-		WalletSeed::init_file(&wallet_config).expect("Failed to init wallet seed file.");
+	if let ("init", Some(r)) = wallet_args.subcommand() {
+		let list_length = match r.is_present("short_wordlist") {
+			false => 32,
+			true => 16,
+		};
+		println!("Please enter a password for your new wallet");
+		let passphrase = prompt_password_confirm();
+		WalletSeed::init_file(&wallet_config, list_length, &passphrase)
+			.expect("Failed to init wallet seed file.");
 		info!("Wallet seed file created");
 		let client_n =
 			HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
 		let _: LMDBBackend<HTTPNodeClient, keychain::ExtKeychain> =
-			LMDBBackend::new(wallet_config.clone(), "", client_n).unwrap_or_else(|e| {
+			LMDBBackend::new(wallet_config.clone(), &passphrase, client_n).unwrap_or_else(|e| {
 				panic!(
 					"Error creating DB for wallet: {} Config: {:?}",
 					e, wallet_config
@@ -95,13 +131,45 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		return 0;
 	}
 
-	let passphrase = match wallet_args.value_of("pass") {
-		None => {
-			error!("Failed to read passphrase.");
-			return 1;
+	// Recover a seed from a recovery phrase
+	if let ("recover", Some(r)) = wallet_args.subcommand() {
+		if !r.is_present("recovery_phrase") {
+			// only needed to display phrase
+			let passphrase = prompt_password(wallet_args);
+			let seed = match WalletSeed::from_file(&wallet_config, &passphrase) {
+				Ok(s) => s,
+				Err(e) => {
+					println!("Can't open wallet seed file (check password): {}", e);
+					std::process::exit(0);
+				}
+			};
+			let _ = seed.show_recovery_phrase();
+			std::process::exit(0);
 		}
-		Some(p) => p,
-	};
+		let word_list = match r.value_of("recovery_phrase") {
+			Some(w) => w,
+			None => {
+				println!("Recovery word phrase must be provided (in quotes)");
+				std::process::exit(0);
+			}
+		};
+		// check word list is okay before asking for password
+		if WalletSeed::from_mnemonic(word_list).is_err() {
+			println!("Recovery word phrase is invalid");
+			std::process::exit(0);
+		}
+		println!("Please provide a new password for the recovered wallet");
+		let passphrase = prompt_password_confirm();
+		let res = WalletSeed::recover_from_phrase(&wallet_config, word_list, &passphrase);
+		if let Err(e) = res {
+			thread::sleep(Duration::from_millis(200));
+			error!("Error recovering seed with list '{}' - {}", word_list, e);
+			return 0;
+		}
+
+		thread::sleep(Duration::from_millis(200));
+		return 0;
+	}
 
 	let account = match wallet_args.value_of("account") {
 		None => {
@@ -110,6 +178,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		}
 		Some(p) => p,
 	};
+
+	// all further commands always need a password
+	let passphrase = prompt_password(wallet_args);
 
 	// Handle listener startup commands
 	{
@@ -146,10 +217,14 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					.listen(
 						params,
 						wallet_config.clone(),
-						passphrase,
+						&passphrase,
 						account,
 						node_api_secret.clone(),
 					).unwrap_or_else(|e| {
+						if e.kind() == ErrorKind::WalletSeedDecryption {
+							println!("Error decrypting wallet seed (check provided password)");
+							std::process::exit(0);
+						}
 						panic!(
 							"Error creating wallet listener: {:?} Config: {:?}",
 							e, wallet_config
@@ -159,10 +234,19 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			("owner_api", Some(_api_args)) => {
 				let wallet = instantiate_wallet(
 					wallet_config.clone(),
-					passphrase,
+					&passphrase,
 					account,
 					node_api_secret.clone(),
-				);
+				).unwrap_or_else(|e| {
+					if e.kind() == grin_wallet::ErrorKind::Encryption {
+						println!("Error decrypting wallet seed (check provided password)");
+						std::process::exit(0);
+					}
+					panic!(
+						"Error creating wallet listener: {:?} Config: {:?}",
+						e, wallet_config
+					);
+				});
 				// TLS is disabled because we bind to localhost
 				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, None)
 					.unwrap_or_else(|e| {
@@ -175,10 +259,19 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			("web", Some(_api_args)) => {
 				let wallet = instantiate_wallet(
 					wallet_config.clone(),
-					passphrase,
+					&passphrase,
 					account,
 					node_api_secret.clone(),
-				);
+				).unwrap_or_else(|e| {
+					if e.kind() == grin_wallet::ErrorKind::Encryption {
+						println!("Error decrypting wallet seed (check provided password)");
+						std::process::exit(0);
+					}
+					panic!(
+						"Error creating wallet listener: {:?} Config: {:?}",
+						e, wallet_config
+					);
+				});
 				// start owner listener and run static file server
 				start_webwallet_server();
 				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, tls_conf)
@@ -195,10 +288,19 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 
 	let wallet = instantiate_wallet(
 		wallet_config.clone(),
-		passphrase,
+		&passphrase,
 		account,
 		node_api_secret.clone(),
-	);
+	).unwrap_or_else(|e| {
+		if e.kind() == grin_wallet::ErrorKind::Encryption {
+			println!("Error decrypting wallet seed (check provided password)");
+			std::process::exit(0);
+		}
+		panic!(
+			"Error instantiating wallet: {:?} Config: {:?}",
+			e, wallet_config
+		);
+	});
 
 	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {

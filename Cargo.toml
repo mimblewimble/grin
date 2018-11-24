@@ -29,6 +29,7 @@ serde = "1"
 serde_json = "1"
 log = "0.4"
 term = "0.5"
+rpassword = "2.0.0"
 
 grin_api = { path = "./api", version = "0.4.1" }
 grin_config = { path = "./config", version = "0.4.1" }

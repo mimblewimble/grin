@@ -263,7 +263,7 @@ impl LocalServerContainer {
 		self.wallet_config.data_file_dir = self.working_dir.clone();
 
 		let _ = fs::create_dir_all(self.wallet_config.clone().data_file_dir);
-		let r = wallet::WalletSeed::init_file(&self.wallet_config);
+		let r = wallet::WalletSeed::init_file(&self.wallet_config, 32, "");
 
 		let client_n = HTTPNodeClient::new(&self.wallet_config.check_node_api_http_addr, None);
 
@@ -295,9 +295,9 @@ impl LocalServerContainer {
 
 	pub fn get_wallet_seed(config: &WalletConfig) -> wallet::WalletSeed {
 		let _ = fs::create_dir_all(config.clone().data_file_dir);
-		wallet::WalletSeed::init_file(config).unwrap();
+		wallet::WalletSeed::init_file(config, 32, "").unwrap();
 		let wallet_seed =
-			wallet::WalletSeed::from_file(config).expect("Failed to read wallet seed file.");
+			wallet::WalletSeed::from_file(config, "").expect("Failed to read wallet seed file.");
 		wallet_seed
 	}
 
@@ -306,7 +306,7 @@ impl LocalServerContainer {
 		wallet_seed: &wallet::WalletSeed,
 	) -> wallet::WalletInfo {
 		let keychain: keychain::ExtKeychain = wallet_seed
-			.derive_keychain("")
+			.derive_keychain()
 			.expect("Failed to derive keychain from seed file and passphrase.");
 		let client_n = HTTPNodeClient::new(&config.check_node_api_http_addr, None);
 		let mut wallet = LMDBBackend::new(config.clone(), "", client_n)
@@ -329,10 +329,10 @@ impl LocalServerContainer {
 			.expect("Could not parse amount as a number with optional decimal point.");
 
 		let wallet_seed =
-			wallet::WalletSeed::from_file(config).expect("Failed to read wallet seed file.");
+			wallet::WalletSeed::from_file(config, "").expect("Failed to read wallet seed file.");
 
 		let keychain: keychain::ExtKeychain = wallet_seed
-			.derive_keychain("")
+			.derive_keychain()
 			.expect("Failed to derive keychain from seed file and passphrase.");
 
 		let client_n = HTTPNodeClient::new(&config.check_node_api_http_addr, None);

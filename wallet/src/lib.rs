@@ -35,6 +35,7 @@ extern crate failure;
 extern crate failure_derive;
 extern crate futures;
 extern crate hyper;
+extern crate ring;
 extern crate tokio;
 extern crate tokio_core;
 extern crate tokio_retry;
@@ -62,7 +63,7 @@ pub use error::{Error, ErrorKind};
 pub use libwallet::types::{BlockFees, CbData, NodeClient, WalletBackend, WalletInfo, WalletInst};
 pub use lmdb_wallet::{wallet_db_exists, LMDBBackend};
 pub use node_clients::{create_coinbase, HTTPNodeClient};
-pub use types::{WalletConfig, WalletSeed, SEED_FILE};
+pub use types::{EncryptedWalletSeed, WalletConfig, WalletSeed, SEED_FILE};
 
 use std::sync::Arc;
 use util::Mutex;
@@ -73,20 +74,12 @@ pub fn instantiate_wallet(
 	passphrase: &str,
 	account: &str,
 	node_api_secret: Option<String>,
-) -> Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>> {
+) -> Result<Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>>, Error> {
+	// First test decryption, so we can abort early if we have the wrong password
+	let _ = WalletSeed::from_file(&wallet_config, passphrase)?;
 	let client_n = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-	let mut db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, client_n)
-		.unwrap_or_else(|e| {
-			panic!(
-				"Error creating DB wallet: {} Config: {:?}",
-				e, wallet_config
-			);
-		});
-	db_wallet
-		.set_parent_key_id_by_name(account)
-		.unwrap_or_else(|e| {
-			panic!("Error starting wallet: {}", e);
-		});
+	let mut db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, client_n)?;
+	db_wallet.set_parent_key_id_by_name(account)?;
 	info!("Using LMDB Backend for wallet");
-	Arc::new(Mutex::new(db_wallet))
+	Ok(Arc::new(Mutex::new(db_wallet)))
 }

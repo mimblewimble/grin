@@ -148,6 +148,10 @@ pub enum ErrorKind {
 	#[fail(display = "Wallet seed doesn't exist error")]
 	WalletSeedDoesntExist,
 
+	/// Wallet seed doesn't exist
+	#[fail(display = "Wallet seed decryption error")]
+	WalletSeedDecryption,
+
 	/// Transaction doesn't exist
 	#[fail(display = "Transaction {} doesn't exist", _0)]
 	TransactionDoesntExist(String),
