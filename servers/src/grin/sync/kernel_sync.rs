@@ -99,17 +99,8 @@ impl KernelSync {
 	}
 
 	fn kernel_sync_due(&mut self, header: &BlockHeader, num_kernels_received: u64) -> bool {
-		let kernels_5_blocks_back = if header.height < 5 {
-			0 as u64
-		} else {
-			match self.chain.get_header_by_height(header.height - 5) {
-				Ok(header) => header.kernel_mmr_size,
-				Err(_) => 0 as u64,
-			}
-		};
-
 		// Kernels are up to date on the current fork.
-		if num_kernels_received > kernels_5_blocks_back {
+		if num_kernels_received > header.kernel_mmr_size {
 			return false;
 		}
 
@@ -118,7 +109,7 @@ impl KernelSync {
 
 		// received all necessary kernels, can ask for more
 		let can_request_more =
-			num_kernels_received >= prev_kernels_received + (p2p::MAX_KERNELS as u64) - 4;
+			num_kernels_received >= prev_kernels_received + (p2p::MAX_KERNELS as u64);
 
 		// no kernels processed and we're past timeout, need to ask for more
 		let stalling = num_kernels_received <= last_kernels_received && now > timeout;
