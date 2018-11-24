@@ -28,6 +28,17 @@ use pow::error::{Error, ErrorKind};
 use pow::siphash::siphash_block;
 use pow::{PoWContext, Proof};
 
+/// Instantiate a new CuckarooContext as a PowContext. Note that this can't
+/// be moved in the PoWContext trait as this particular trait needs to be
+/// convertible to an object trait.
+pub fn new_cuckaroo_ctx<T>(edge_bits: u8, proof_size: usize) -> Result<Box<PoWContext<T>>, Error>
+where
+	T: EdgeType + 'static,
+{
+	let params = CuckooParams::new(edge_bits, proof_size)?;
+	Ok(Box::new(CuckarooContext { params }))
+}
+
 /// Cuckatoo cycle context. Only includes the verifier for now.
 pub struct CuckarooContext<T>
 where
@@ -40,11 +51,6 @@ impl<T> PoWContext<T> for CuckarooContext<T>
 where
 	T: EdgeType,
 {
-	fn new(edge_bits: u8, proof_size: usize, _max_sols: u32) -> Result<Box<Self>, Error> {
-		let params = CuckooParams::new(edge_bits, proof_size)?;
-		Ok(Box::new(CuckarooContext { params }))
-	}
-
 	fn set_header_nonce(
 		&mut self,
 		header: Vec<u8>,
@@ -155,11 +161,19 @@ mod test {
 
 	#[test]
 	fn cuckaroo19_vectors() {
-		let mut ctx = CuckarooContext::<u64>::new(19, 42, 0).unwrap();
+		let mut ctx = new_impl::<u64>(19, 42);
 		ctx.params.siphash_keys = V1_19_HASH.clone();
 		assert!(ctx.verify(&Proof::new(V1_19_SOL.to_vec().clone())).is_ok());
 		ctx.params.siphash_keys = V2_19_HASH.clone();
 		assert!(ctx.verify(&Proof::new(V2_19_SOL.to_vec().clone())).is_ok());
 		assert!(ctx.verify(&Proof::zero(42)).is_err());
+	}
+
+	fn new_impl<T>(edge_bits: u8, proof_size: usize) -> CuckarooContext<T>
+	where
+		T: EdgeType,
+	{
+		let params = CuckooParams::new(edge_bits, proof_size).unwrap();
+		CuckarooContext { params }
 	}
 }

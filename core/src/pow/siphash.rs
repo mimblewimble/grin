@@ -40,24 +40,25 @@ pub fn siphash24(v: &[u64; 4], nonce: u64) -> u64 {
 /// truncated to its closest block start, up to the end of the block. Returns
 /// the resulting hash at the nonce's position.
 pub fn siphash_block(v: &[u64; 4], nonce: u64) -> u64 {
-	let mut block = Vec::with_capacity(SIPHASH_BLOCK_SIZE as usize);
 	// beginning of the block of hashes
 	let nonce0 = nonce & !SIPHASH_BLOCK_MASK;
+	let mut nonce_hash = 0;
 
-	// fill up our block with repeated hashes
+	// repeated hashing over the whole block
 	let mut siphash = SipHash24::new(v);
 	for n in nonce0..(nonce0 + SIPHASH_BLOCK_SIZE) {
 		siphash.hash(n);
-		block.push(siphash.digest());
+		if n == nonce {
+			nonce_hash = siphash.digest();
+		}
 	}
-	assert_eq!(block.len(), SIPHASH_BLOCK_SIZE as usize);
-
-	// xor all-but-last with last value to avoid shortcuts in computing block
-	let last = block[SIPHASH_BLOCK_MASK as usize];
-	for n in 0..SIPHASH_BLOCK_MASK {
-		block[n as usize] ^= last;
+	// xor the nonce with the last hash to force hashing the whole block
+	// unless the nonce is last in the block
+	if nonce == nonce0 + SIPHASH_BLOCK_MASK {
+		return siphash.digest();
+	} else {
+		return nonce_hash ^ siphash.digest();
 	}
-	return block[(nonce & SIPHASH_BLOCK_MASK) as usize];
 }
 
 /// Implements siphash 2-4 specialized for a 4 u64 array key and a u64 nonce
