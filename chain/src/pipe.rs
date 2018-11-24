@@ -309,11 +309,18 @@ pub fn sync_kernels(
 
 	txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
 		// Rewinding kernel mmr to correct kernel index. Probably unnecessary, but playing it safe.
-		extension.rewind_kernel_mmr(first_kernel_index);
+		extension.rewind_kernel_mmr(first_kernel_index)?;
 
-		extension.apply_kernels(kernels);
-
-		Ok(())
+		match extension.apply_kernels(kernels) {
+			Err(e) => {
+				error!(
+					"pipe: sync_kernels: Error occurred in apply_kernels - {}",
+					e
+				);
+				Err(e)
+			}
+			_ => Ok(()),
+		}
 	})?;
 	Ok(())
 }

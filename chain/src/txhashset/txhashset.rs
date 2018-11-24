@@ -1042,12 +1042,17 @@ impl<'a> Extension<'a> {
 		last_block_header: &BlockHeader,
 	) -> Result<BlockHeader, Error> {
 		let next_header_pmmr_index = pmmr::insertion_to_pmmr_index(last_block_header.height + 1);
+		debug!(
+			"next_header_for_kernel_root_validation: height {}, index {}",
+			last_block_header.height + 1, next_header_pmmr_index
+		);
+
 		if let Some(next_header_hash) = self.header_pmmr.get_hash(next_header_pmmr_index) {
 			let next_header_to_validate = self.batch.get_block_header(&next_header_hash)?;
 
 			if next_header_to_validate.prev_hash != last_block_header.hash() {
 				debug!(
-					"height {}, prev_height {}",
+					"next_header_for_kernel_root_validation: height {}, prev_height {}",
 					next_header_to_validate.height, last_block_header.height
 				);
 				Err(ErrorKind::TxHashSetErr("TxHashSet not on current chain".to_string()).into())
