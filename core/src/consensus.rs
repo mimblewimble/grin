@@ -104,24 +104,23 @@ pub const STATE_SYNC_THRESHOLD: u32 = 2 * DAY_HEIGHT as u32;
 pub const BLOCK_INPUT_WEIGHT: usize = 1;
 
 /// Weight of an output when counted against the max block weight capacity
-pub const BLOCK_OUTPUT_WEIGHT: usize = 10;
+pub const BLOCK_OUTPUT_WEIGHT: usize = 21;
 
 /// Weight of a kernel when counted against the max block weight capacity
-pub const BLOCK_KERNEL_WEIGHT: usize = 2;
+pub const BLOCK_KERNEL_WEIGHT: usize = 3;
 
 /// Total maximum block weight. At current sizes, this means a maximum
 /// theoretical size of:
-/// * `(674 + 33 + 1) * 4_000 = 2_832_000` for a block with only outputs
-/// * `(1 + 8 + 8 + 33 + 64) * 20_000 = 2_280_000` for a block with only kernels
+/// * `(674 + 33 + 1) * (40_000 / 21) = 1_348_571` for a block with only outputs
+/// * `(1 + 8 + 8 + 33 + 64) * (40_000 / 3) = 1_520_000` for a block with only kernels
 /// * `(1 + 33) * 40_000 = 1_360_000` for a block with only inputs
 ///
-/// Given that a block needs to have at least one kernel for the coinbase,
-/// and one kernel for the transaction, practical maximum size is 2_831_440,
-/// (ignoring the edge case of a miner producing a block with all coinbase
-/// outputs and a single kernel).
+/// Regardless of the relative numbers of inputs/outputs/kernels in a block the maximum
+/// block size is around 1.5MB
+/// For a block full of "average" txs (2 inputs, 2 outputs, 1 kernel) we have -
+/// `(1 * 2) + (21 * 2) + (3 * 1) = 47` (weight per tx)
+/// `40_000 / 47 = 851` (txs per block)
 ///
-/// A more "standard" block, filled with transactions of 2 inputs, 2 outputs
-/// and one kernel, should be around 2.66 MB
 pub const MAX_BLOCK_WEIGHT: usize = 40_000;
 
 /// Fork every 6 months.
@@ -138,7 +137,7 @@ pub fn valid_header_version(height: u64, version: u16) -> bool {
 	} else if height < 3 * HARD_FORK_INTERVAL {
 		version == 3
 	} else if height < 4 * HARD_FORK_INTERVAL {
-		version == 4 
+		version == 4
 	} else if height >= 5 * HARD_FORK_INTERVAL {
 		version > 4 */
 	} else {
