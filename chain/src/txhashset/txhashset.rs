@@ -765,6 +765,7 @@ impl<'a> HeaderExtension<'a> {
 pub struct Extension<'a> {
 	header: BlockHeader,
 
+	sync_pmmr: DBPMMR<'a, BlockHeader, HashOnlyMMRBackend>,
 	header_pmmr: DBPMMR<'a, BlockHeader, HashOnlyMMRBackend>,
 	output_pmmr: PMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
@@ -818,6 +819,10 @@ impl<'a> Extension<'a> {
 	fn new(trees: &'a mut TxHashSet, batch: &'a Batch, header: BlockHeader) -> Extension<'a> {
 		Extension {
 			header,
+			sync_pmmr: DBPMMR::at(
+				&mut trees.sync_pmmr_h.backend,
+				trees.sync_pmmr_h.last_pos,
+			),
 			header_pmmr: DBPMMR::at(
 				&mut trees.header_pmmr_h.backend,
 				trees.header_pmmr_h.last_pos,
@@ -1044,10 +1049,11 @@ impl<'a> Extension<'a> {
 		let next_header_pmmr_index = pmmr::insertion_to_pmmr_index(last_block_header.height + 1);
 		debug!(
 			"next_header_for_kernel_root_validation: height {}, index {}",
-			last_block_header.height + 1, next_header_pmmr_index
+			last_block_header.height + 1,
+			next_header_pmmr_index
 		);
 
-		if let Some(next_header_hash) = self.header_pmmr.get_hash(next_header_pmmr_index) {
+		if let Some(next_header_hash) = self.sync_pmmr.get_hash(next_header_pmmr_index) {
 			let next_header_to_validate = self.batch.get_block_header(&next_header_hash)?;
 
 			if next_header_to_validate.prev_hash != last_block_header.hash() {
