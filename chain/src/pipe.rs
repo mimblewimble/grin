@@ -57,35 +57,19 @@ pub struct BlockContext<'a> {
 }
 
 /// Process a block header as part of processing a full block.
-/// We want to make sure the header is valid before we process the full block.
-fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	let head = ctx.batch.head()?;
-
-	// If we do not have the previous header then treat the block for this header
-	// as an orphan.
-	if ctx.batch.get_previous_header(header).is_err() {
-		return Err(ErrorKind::Orphan.into());
-	}
-
+/// We want to be sure the header is valid before processing the full block.
+fn process_header_for_block(
+	header: &BlockHeader,
+	is_fork: bool,
+	ctx: &mut BlockContext,
+) -> Result<(), Error> {
 	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
 		extension.force_rollback();
-
-		let prev = extension.batch.get_previous_header(header)?;
-		if prev.hash() == head.last_block_h {
-			// Not a fork so we do not need to rewind or reapply any headers.
-		} else {
-			// Rewind and re-apply headers on the forked chain to
-			// put the header extension in the correct forked state
-			// (immediately prior to this new header).
+		if is_fork {
 			rewind_and_apply_header_fork(header, extension)?;
 		}
-
-		// Check the current root is correct.
 		extension.validate_root(header)?;
-
-		// Apply the new header to our header extension.
 		extension.apply_header(header)?;
-
 		Ok(())
 	})?;
 
@@ -93,6 +77,16 @@ fn process_header_for_block(header: &BlockHeader, ctx: &mut BlockContext) -> Res
 	add_block_header(header, &ctx.batch)?;
 	update_header_head(header, ctx)?;
 
+	Ok(())
+}
+
+// Check if we already know about this block for various reasons
+// from cheapest to most expensive (delay hitting the db until last).
+fn check_known(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+	check_known_head(&block.header, ctx)?;
+	check_known_cache(&block.header, ctx)?;
+	check_known_orphans(&block.header, ctx)?;
+	check_known_store(&block.header, ctx)?;
 	Ok(())
 }
 
@@ -112,40 +106,28 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		b.kernels().len(),
 	);
 
-	// Fast in-memory checks to avoid re-processing a block we recently processed.
-	{
-		// Check if we have recently processed this block (via ctx chain head).
-		check_known_head(&b.header, ctx)?;
+	check_known(b, ctx)?;
 
-		// Check if we have recently processed this block (via block_hashes_cache).
-		check_known_cache(&b.header, ctx)?;
-
-		// Check if this block is already know due it being in the current set of orphan blocks.
-		check_known_orphans(&b.header, ctx)?;
-
-		// Check we have *this* block in the store.
-		// Stop if we have processed this block previously (it is in the store).
-		// This is more expensive than the earlier check_known() as we hit the store.
-		check_known_store(&b.header, ctx)?;
-	}
-
-	// Header specific processing.
-	process_header_for_block(&b.header, ctx)?;
-
-	// Check if are processing the "next" block relative to the current chain head.
-	let prev_header = ctx.batch.get_previous_header(&b.header)?;
+	// Delay hitting the db for current chain head until we know
+	// this block is not already known.
 	let head = ctx.batch.head()?;
-	if prev_header.hash() == head.last_block_h {
-		// If this is the "next" block then either -
-		//   * common case where we process blocks sequentially.
-		//   * special case where this is the first fast sync full block
-		// Either way we can proceed (and we know the block is new and unprocessed).
-	} else {
-		// At this point it looks like this is a new block that we have not yet processed.
-		// Check we have the *previous* block in the store.
-		// If we do not then treat this block as an orphan.
-		check_prev_store(&b.header, &mut ctx.batch)?;
+	let is_next = b.header.prev_hash == head.last_block_h;
+
+	let prev = prev_header_store(&b.header, &mut ctx.batch)?;
+
+	// Block is an orphan if we do not know about the previous full block.
+	// Skip this check if we have just processed the previous block
+	// or the full txhashset state (fast sync) at the previous block height.
+	if !is_next && !ctx.batch.block_exists(&prev.hash())? {
+		return Err(ErrorKind::Orphan.into());
 	}
+
+	// This is a fork in the context of both header and block processing
+	// if this block does not immediately follow the chain head.
+	let is_fork = !is_next;
+
+	// Check the header is valid before we proceed with the full block.
+	process_header_for_block(&b.header, is_fork, ctx)?;
 
 	// Validate the block itself, make sure it is internally consistent.
 	// Use the verifier_cache for verifying rangeproofs and kernel signatures.
@@ -154,13 +136,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 	// Start a chain extension unit of work dependent on the success of the
 	// internal validation and saving operations
 	txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |mut extension| {
-		let prev = extension.batch.get_previous_header(&b.header)?;
-		if prev.hash() == head.last_block_h {
-			// Not a fork so we do not need to rewind or reapply any blocks.
-		} else {
-			// Rewind and re-apply blocks on the forked chain to
-			// put the txhashset in the correct forked state
-			// (immediately prior to this new block).
+		if is_fork {
 			rewind_and_apply_fork(b, extension)?;
 		}
 
@@ -359,25 +335,14 @@ fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(),
 	}
 }
 
-// Check we have the *previous* block in the store.
-// Note: not just the header but the full block itself.
-// We cannot assume we can use the chain head for this
-// as we may be dealing with a fork (with less work currently).
-fn check_prev_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
-	let prev = batch.get_previous_header(&header)?;
-	match batch.block_exists(&prev.hash()) {
-		Ok(true) => {
-			// We have the previous block in the store, so we can proceed.
-			Ok(())
-		}
-		Ok(false) => {
-			// We do not have the previous block in the store.
-			// We have not yet processed the previous block so
-			// this block is an orphan (for now).
-			Err(ErrorKind::Orphan.into())
-		}
-		Err(e) => Err(ErrorKind::StoreErr(e, "pipe get previous".to_owned()).into()),
-	}
+// Find the previous header from the store.
+// Return an Orphan error if we cannot find the previous header.
+fn prev_header_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<BlockHeader, Error> {
+	let prev = batch.get_previous_header(&header).map_err(|e| match e {
+		grin_store::Error::NotFoundErr(_) => ErrorKind::Orphan,
+		_ => ErrorKind::StoreErr(e, "check prev header".into()),
+	})?;
+	Ok(prev)
 }
 
 /// First level of block validation that only needs to act on the block header
@@ -416,17 +381,8 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		}
 	}
 
-	// first I/O cost, better as late as possible
-	let prev = match ctx.batch.get_previous_header(&header) {
-		Ok(prev) => prev,
-		Err(grin_store::Error::NotFoundErr(_)) => return Err(ErrorKind::Orphan.into()),
-		Err(e) => {
-			return Err(ErrorKind::StoreErr(
-				e,
-				format!("Failed to find previous header to {}", header.hash()),
-			).into())
-		}
-	};
+	// First I/O cost, delayed as late as possible.
+	let prev = prev_header_store(header, &mut ctx.batch)?;
 
 	// make sure this header has a height exactly one higher than the previous
 	// header
@@ -461,7 +417,6 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		// explicit check to ensure total_difficulty has increased by exactly
 		// the _network_ difficulty of the previous block
 		// (during testnet1 we use _block_ difficulty here)
-		let prev = ctx.batch.get_previous_header(&header)?;
 		let child_batch = ctx.batch.child()?;
 		let diff_iter = store::DifficultyIter::from_batch(prev.hash(), child_batch);
 		let next_header_info = consensus::next_difficulty(header.height, diff_iter);
