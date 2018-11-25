@@ -174,6 +174,9 @@ pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: Globa
 				}
 			}
 			("stop", _) => println!("TODO. Just 'kill $pid' for now. Maybe /tmp/grin.pid is $pid"),
+			("", _) => {
+				println!("Subcommand required, use 'grin help server' for details");
+			}
 			(cmd, _) => {
 				println!(":: {:?}", server_args);
 				panic!(
