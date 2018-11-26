@@ -135,6 +135,17 @@ impl WalletSeed {
 		WalletSeed(seed)
 	}
 
+	pub fn seed_file_exists(wallet_config: &WalletConfig) -> Result<(), Error> {
+		let seed_file_path = &format!(
+			"{}{}{}",
+			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
+		);
+		if Path::new(seed_file_path).exists() {
+			return Err(ErrorKind::WalletSeedExists(seed_file_path.to_owned()))?;
+		}
+		Ok(())
+	}
+
 	pub fn recover_from_phrase(
 		wallet_config: &WalletConfig,
 		word_list: &str,
@@ -144,14 +155,7 @@ impl WalletSeed {
 			"{}{}{}",
 			wallet_config.data_file_dir, MAIN_SEPARATOR, SEED_FILE,
 		);
-		if Path::new(seed_file_path).exists() {
-			error!(
-				"wallet seed file {} exists. \
-				 Please backup and delete this file before attempting recovery.",
-				seed_file_path
-			);
-			return Err(ErrorKind::WalletSeedExists)?;
-		}
+		let _ = WalletSeed::seed_file_exists(wallet_config)?;
 		let seed = WalletSeed::from_mnemonic(word_list)?;
 		let enc_seed = EncryptedWalletSeed::from_seed(&seed, password)?;
 		let enc_seed_json = serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
@@ -183,20 +187,16 @@ impl WalletSeed {
 		);
 
 		warn!("Generating wallet seed file at: {}", seed_file_path);
+		let _ = WalletSeed::seed_file_exists(wallet_config)?;
 
-		if Path::new(seed_file_path).exists() {
-			Err(ErrorKind::WalletSeedExists)?
-		} else {
-			let seed = WalletSeed::init_new(seed_length);
-			let enc_seed = EncryptedWalletSeed::from_seed(&seed, password)?;
-			let enc_seed_json =
-				serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
-			let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
-			file.write_all(&enc_seed_json.as_bytes())
-				.context(ErrorKind::IO)?;
-			seed.show_recovery_phrase()?;
-			Ok(seed)
-		}
+		let seed = WalletSeed::init_new(seed_length);
+		let enc_seed = EncryptedWalletSeed::from_seed(&seed, password)?;
+		let enc_seed_json = serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
+		let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
+		file.write_all(&enc_seed_json.as_bytes())
+			.context(ErrorKind::IO)?;
+		seed.show_recovery_phrase()?;
+		Ok(seed)
 	}
 
 	pub fn from_file(wallet_config: &WalletConfig, password: &str) -> Result<WalletSeed, Error> {

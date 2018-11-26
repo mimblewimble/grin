@@ -106,6 +106,13 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 	// Decrypt the seed from the seed file and derive the keychain.
 	// Generate the initial wallet seed if we are running "wallet init".
 	if let ("init", Some(r)) = wallet_args.subcommand() {
+		if let Err(e) = WalletSeed::seed_file_exists(&wallet_config) {
+			println!(
+				"Not creating wallet - Wallet seed file already exists at {}",
+				e.inner
+			);
+			return 0;
+		}
 		let list_length = match r.is_present("short_wordlist") {
 			false => 32,
 			true => 16,
