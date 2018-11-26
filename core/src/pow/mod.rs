@@ -83,7 +83,7 @@ pub fn mine_genesis_block() -> Result<Block, Error> {
 	// total_difficulty on the genesis header *is* the difficulty of that block
 	let genesis_difficulty = gen.header.pow.total_difficulty;
 
-	let sz = global::min_edge_bits(0);
+	let sz = global::min_edge_bits();
 	let proof_size = global::proofsize();
 
 	pow_size(&mut gen.header, genesis_difficulty, proof_size, sz)?;
@@ -143,12 +143,12 @@ mod test {
 	fn genesis_pow() {
 		let mut b = genesis::genesis_dev();
 		b.header.pow.nonce = 485;
-		b.header.pow.proof.edge_bits = global::min_edge_bits(0);
+		b.header.pow.proof.edge_bits = global::min_edge_bits();
 		pow_size(
 			&mut b.header,
 			Difficulty::min(),
 			global::proofsize(),
-			global::min_edge_bits(0),
+			global::min_edge_bits(),
 		).unwrap();
 		assert!(b.header.pow.nonce != 310);
 		assert!(b.header.pow.to_difficulty() >= Difficulty::min());

@@ -635,12 +635,13 @@ impl StratumServer {
 	pub fn run_loop(
 		&mut self,
 		stratum_stats: Arc<RwLock<StratumStats>>,
+		edge_bits: u32,
 		proof_size: usize,
 		sync_state: Arc<SyncState>,
 	) {
 		info!(
-			"(Server ID: {}) Starting stratum server with proof_size = {}",
-			self.id, proof_size
+			"(Server ID: {}) Starting stratum server with edge_bits = {}, proof_size = {}",
+			self.id, edge_bits, proof_size
 		);
 
 		self.sync_state = sync_state;
@@ -671,6 +672,7 @@ impl StratumServer {
 		{
 			let mut stratum_stats = stratum_stats.write();
 			stratum_stats.is_running = true;
+			stratum_stats.edge_bits = edge_bits as u16;
 		}
 
 		warn!(

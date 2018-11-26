@@ -77,9 +77,9 @@ fn mine_empty_chain() {
 		chain.set_txhashset_roots(&mut b).unwrap();
 
 		let edge_bits = if n == 2 {
-			global::min_edge_bits(b.header.height) + 1
+			global::min_edge_bits() + 1
 		} else {
-			global::min_edge_bits(b.header.height)
+			global::min_edge_bits()
 		};
 		b.header.pow.proof.edge_bits = edge_bits;
 		pow::pow_size(
@@ -391,9 +391,9 @@ fn output_header_mappings() {
 		chain.set_txhashset_roots(&mut b).unwrap();
 
 		let edge_bits = if n == 2 {
-			global::min_edge_bits(b.header.height) + 1
+			global::min_edge_bits() + 1
 		} else {
-			global::min_edge_bits(b.header.height)
+			global::min_edge_bits()
 		};
 		b.header.pow.proof.edge_bits = edge_bits;
 		pow::pow_size(

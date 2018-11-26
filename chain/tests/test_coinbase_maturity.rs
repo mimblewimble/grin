@@ -82,7 +82,7 @@ fn test_coinbase_maturity() {
 		&mut block.header,
 		next_header_info.difficulty,
 		global::proofsize(),
-		global::min_edge_bits(block.header.height),
+		global::min_edge_bits(),
 	).unwrap();
 
 	assert_eq!(block.outputs().len(), 1);
@@ -139,7 +139,7 @@ fn test_coinbase_maturity() {
 		&mut block.header,
 		next_header_info.difficulty,
 		global::proofsize(),
-		global::min_edge_bits(block.header.height),
+		global::min_edge_bits(),
 	).unwrap();
 
 	// mine enough blocks to increase the height sufficiently for
@@ -162,7 +162,7 @@ fn test_coinbase_maturity() {
 			&mut block.header,
 			next_header_info.difficulty,
 			global::proofsize(),
-			global::min_edge_bits(block.header.height),
+			global::min_edge_bits(),
 		).unwrap();
 
 		chain.process_block(block, chain::Options::MINE).unwrap();
@@ -189,7 +189,7 @@ fn test_coinbase_maturity() {
 		&mut block.header,
 		next_header_info.difficulty,
 		global::proofsize(),
-		global::min_edge_bits(block.header.height),
+		global::min_edge_bits(),
 	).unwrap();
 
 	let result = chain.process_block(block, chain::Options::MINE);

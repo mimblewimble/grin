@@ -293,11 +293,11 @@ impl ProofOfWork {
 
 	/// Whether this proof of work is for the primary algorithm (as opposed
 	/// to secondary). Only depends on the edge_bits at this time.
-	pub fn is_primary(&self, height: u64) -> bool {
+	pub fn is_primary(&self) -> bool {
 		// 2 conditions are redundant right now but not necessarily in
 		// the future
 		self.proof.edge_bits != SECOND_POW_EDGE_BITS
-			&& self.proof.edge_bits >= global::min_edge_bits(height)
+			&& self.proof.edge_bits >= global::min_edge_bits()
 	}
 
 	/// Whether this proof of work is for the secondary algorithm (as opposed
@@ -344,7 +344,7 @@ impl Proof {
 	pub fn new(mut in_nonces: Vec<u64>) -> Proof {
 		in_nonces.sort();
 		Proof {
-			edge_bits: global::min_edge_bits(0),
+			edge_bits: global::min_edge_bits(),
 			nonces: in_nonces,
 		}
 	}
@@ -352,7 +352,7 @@ impl Proof {
 	/// Builds a proof with all bytes zeroed out
 	pub fn zero(proof_size: usize) -> Proof {
 		Proof {
-			edge_bits: global::min_edge_bits(0),
+			edge_bits: global::min_edge_bits(),
 			nonces: vec![0; proof_size],
 		}
 	}
@@ -361,7 +361,7 @@ impl Proof {
 	/// needed so that tests that ignore POW
 	/// don't fail due to duplicate hashes
 	pub fn random(proof_size: usize) -> Proof {
-		let edge_bits = global::min_edge_bits(0);
+		let edge_bits = global::min_edge_bits();
 		let nonce_mask = (1 << edge_bits) - 1;
 		let mut rng = thread_rng();
 		// force the random num to be within edge_bits bits
@@ -371,7 +371,7 @@ impl Proof {
 			.collect();
 		v.sort();
 		Proof {
-			edge_bits: global::min_edge_bits(0),
+			edge_bits: global::min_edge_bits(),
 			nonces: v,
 		}
 	}

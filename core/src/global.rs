@@ -20,7 +20,7 @@ use consensus::HeaderInfo;
 use consensus::{
 	graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
 	DAY_HEIGHT, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, SECOND_POW_EDGE_BITS,
-	STATE_SYNC_THRESHOLD, T4_CUCKAROO_HARDFORK, UNIT_DIFFICULTY, default_min_edge_bits,
+	STATE_SYNC_THRESHOLD, T4_CUCKAROO_HARDFORK, UNIT_DIFFICULTY, DEFAULT_MIN_EDGE_BITS,
 };
 use pow::{self, new_cuckaroo_ctx, new_cuckatoo_ctx, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
@@ -181,14 +181,14 @@ pub fn pow_type() -> PoWContextTypes {
 }
 
 /// The minimum acceptable edge_bits
-pub fn min_edge_bits(height: u64) -> u8 {
+pub fn min_edge_bits() -> u8 {
 	let param_ref = CHAIN_TYPE.read();
 	match *param_ref {
 		ChainTypes::AutomatedTesting => AUTOMATED_TESTING_MIN_EDGE_BITS,
 		ChainTypes::UserTesting => USER_TESTING_MIN_EDGE_BITS,
 		ChainTypes::Testnet1 => USER_TESTING_MIN_EDGE_BITS,
 		ChainTypes::Testnet4 => TESTNET4_MIN_EDGE_BITS,
-		_ => default_min_edge_bits(height),
+		_ => DEFAULT_MIN_EDGE_BITS,
 	}
 }
 
