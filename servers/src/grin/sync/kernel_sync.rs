@@ -105,7 +105,8 @@ impl KernelSync {
 		}
 
 		let now = Utc::now();
-		let (timeout, last_kernel_blocks_received, prev_kernel_blocks_received) = self.prev_kernel_sync;
+		let (timeout, last_kernel_blocks_received, prev_kernel_blocks_received) =
+			self.prev_kernel_sync;
 
 		// received all necessary kernels, can ask for more
 		let can_request_more =
@@ -134,10 +135,7 @@ impl KernelSync {
 		}
 	}
 
-	fn kernel_sync(
-		&mut self,
-		first_block_height: u64,
-	) -> Result<(), p2p::Error> {
+	fn kernel_sync(&mut self, first_block_height: u64) -> Result<(), p2p::Error> {
 		let opt_peer = self.peers.most_work_peers().into_iter().find(|peer| {
 			peer.info
 				.capabilities

@@ -284,9 +284,13 @@ pub fn sync_kernels(
 ) -> Result<(), Error> {
 	let first_block = match blocks.first() {
 		Some(block) => {
-			debug!("pipe: sync_kernels: {} blocks from {}", blocks.len(), block.0);
+			debug!(
+				"pipe: sync_kernels: {} blocks from {}",
+				blocks.len(),
+				block.0
+			);
 			block
-		},
+		}
 		_ => return Ok(()),
 	};
 
@@ -303,7 +307,7 @@ pub fn sync_kernels(
 				}
 			};
 			header.kernel_mmr_size
-		},
+		}
 	};
 
 	let num_kernels = ctx.txhashset.num_kernels();
@@ -313,10 +317,7 @@ pub fn sync_kernels(
 		return Err(ErrorKind::TxHashSetErr("Previous kernels missing".to_string()).into());
 	}
 
-	let kernels_to_add : Vec<TxKernel> = blocks
-		.iter()
-		.flat_map(|block| block.1.clone())
-		.collect();
+	let kernels_to_add: Vec<TxKernel> = blocks.iter().flat_map(|block| block.1.clone()).collect();
 	if num_kernels > (next_kernel_index + kernels_to_add.len() as u64) {
 		debug!(
 			"pipe: sync_kernels: kernels from index {} not needed.",

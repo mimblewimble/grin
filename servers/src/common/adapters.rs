@@ -396,7 +396,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 					}
 				};
 				header.kernel_mmr_size
-			},
+			}
 		};
 
 		let mut blocks = vec![];

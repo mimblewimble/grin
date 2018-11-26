@@ -417,7 +417,7 @@ impl Peer {
 
 	/// Requests the kernels for each block, starting with the block at specified height.
 	/// NOTE: Only sends the request if remote peer has ENHANCED_TXHASHSET_HIST capability.
-	pub fn send_kernel_request(&self, first_block_height: u64,) -> Result<bool, Error> {
+	pub fn send_kernel_request(&self, first_block_height: u64) -> Result<bool, Error> {
 		if self
 			.info
 			.capabilities
@@ -428,10 +428,11 @@ impl Peer {
 				self.info.addr,
 				first_block_height,
 			);
-			self.connection.as_ref().unwrap().lock().send(
-				&GetKernels { first_block_height },
-				msg::Type::GetKernels,
-			)?;
+			self.connection
+				.as_ref()
+				.unwrap()
+				.lock()
+				.send(&GetKernels { first_block_height }, msg::Type::GetKernels)?;
 			Ok(true)
 		} else {
 			trace!(

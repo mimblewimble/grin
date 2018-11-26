@@ -1011,9 +1011,9 @@ impl<'a> Extension<'a> {
 		let kernel_root_validated_tip = self.kernel_root_validated_tip.get();
 		let header = self.batch.get_block_header(hash)?;
 		if header.prev_hash != kernel_root_validated_tip {
-			return Err(ErrorKind::InvalidTxHashSet(
-				format!("Previous hash does not match kernel tip")
-			).into());
+			return Err(ErrorKind::InvalidTxHashSet(format!(
+				"Previous hash does not match kernel tip"
+			)).into());
 		}
 
 		for kernel in kernels {

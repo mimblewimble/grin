@@ -342,21 +342,21 @@ impl MessageHandler for Protocol {
 				let request: GetKernels = msg.body()?;
 				let kernels_by_block = adapter.read_kernels(request.first_block_height);
 
-				let blocks : Vec<BlockKernels> = kernels_by_block
+				let blocks: Vec<BlockKernels> = kernels_by_block
 					.iter()
-					.map(|block| BlockKernels { hash: block.0, kernels: block.1.clone() })
-					.collect();
+					.map(|block| BlockKernels {
+						hash: block.0,
+						kernels: block.1.clone(),
+					}).collect();
 
 				// serialize and send all the kernels over
-				Ok(Some(msg.respond(
-					Type::Kernels,
-					Kernels { blocks },
-				)))
+				Ok(Some(msg.respond(Type::Kernels, Kernels { blocks })))
 			}
 
 			Type::Kernels => {
 				let kernels: Kernels = msg.body()?;
-				let blocks : Vec<(Hash, Vec<core::TxKernel>)> = kernels.blocks
+				let blocks: Vec<(Hash, Vec<core::TxKernel>)> = kernels
+					.blocks
 					.iter()
 					.map(|block| (block.hash, block.kernels.clone()))
 					.collect();

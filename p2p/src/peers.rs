@@ -582,7 +582,7 @@ impl ChainAdapter for Peers {
 			.txhashset_download_update(start_time, downloaded_size, total_size)
 	}
 
-	fn read_kernels(&self, first_block_height: u64) -> Vec<(Hash, Vec<core::TxKernel>)>{
+	fn read_kernels(&self, first_block_height: u64) -> Vec<(Hash, Vec<core::TxKernel>)> {
 		self.adapter.read_kernels(first_block_height)
 	}
 

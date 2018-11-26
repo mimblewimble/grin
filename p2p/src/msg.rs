@@ -27,7 +27,8 @@ use core::pow::Difficulty;
 use core::ser::{self, Readable, Reader, Writeable, Writer};
 
 use types::{
-	Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_KERNEL_BLOCKS, MAX_LOCATORS, MAX_PEER_ADDRS,
+	Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_KERNEL_BLOCKS, MAX_LOCATORS,
+	MAX_PEER_ADDRS,
 };
 
 /// Current latest version of the protocol
@@ -787,7 +788,9 @@ impl Writeable for GetKernels {
 
 impl Readable for GetKernels {
 	fn read(reader: &mut Reader) -> Result<GetKernels, ser::Error> {
-		Ok(GetKernels { first_block_height: reader.read_u64()?, })
+		Ok(GetKernels {
+			first_block_height: reader.read_u64()?,
+		})
 	}
 }
 
