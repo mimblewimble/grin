@@ -463,6 +463,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					match result {
 						Ok(_) => {
 							info!("Tx sent",);
+							println!("Tx sent",);
 							return Ok(());
 						}
 						Err(e) => {

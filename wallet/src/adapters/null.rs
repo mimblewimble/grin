@@ -34,12 +34,12 @@ impl WalletCommAdapter for NullWalletCommAdapter {
 		true
 	}
 
-	fn send_tx_sync(&self, _dest: &str, _slate: &Slate) -> Result<Slate, Error> {
-		unimplemented!();
+	fn send_tx_sync(&self, _dest: &str, slate: &Slate) -> Result<Slate, Error> {
+		Ok(slate.clone())
 	}
 
 	fn send_tx_async(&self, _dest: &str, _slate: &Slate) -> Result<(), Error> {
-		unimplemented!();
+		Ok(())
 	}
 
 	fn receive_tx_async(&self, _params: &str) -> Result<Slate, Error> {
