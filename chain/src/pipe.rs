@@ -368,7 +368,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	}
 
 	if !ctx.opts.contains(Options::SKIP_POW) {
-		if !header.pow.is_primary() && !header.pow.is_secondary() {
+		if !header.pow.is_primary(header.height) && !header.pow.is_secondary() {
 			return Err(ErrorKind::LowEdgebits.into());
 		}
 		let edge_bits = header.pow.edge_bits();

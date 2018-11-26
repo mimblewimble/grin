@@ -98,7 +98,7 @@ fn data_files() {
 				&mut b.header,
 				next_header_info.difficulty,
 				global::proofsize(),
-				global::min_edge_bits(),
+				global::min_edge_bits(b.header.height),
 			).unwrap();
 
 			chain

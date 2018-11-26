@@ -85,7 +85,7 @@ impl Miner {
 		debug!(
 			"(Server ID: {}) Mining Cuckoo{} for max {}s on {} @ {} [{}].",
 			self.debug_output_id,
-			global::min_edge_bits(),
+			global::min_edge_bits(b.header.height),
 			attempt_time_per_block,
 			b.header.total_difficulty(),
 			b.header.height,
@@ -96,7 +96,7 @@ impl Miner {
 		while head.hash() == *latest_hash && Utc::now().timestamp() < deadline {
 			let mut ctx = global::create_pow_context::<u32>(
 				head.height,
-				global::min_edge_bits(),
+				global::min_edge_bits(b.header.height),
 				global::proofsize(),
 				10,
 			).unwrap();
