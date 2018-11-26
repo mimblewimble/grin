@@ -149,7 +149,17 @@ all wallet commands:
 To display a list of created accounts in the wallet, use the 'account' command with no flags:
 
 ```
-[host]$ grin wallet -a my_account info
+[host]$ grin wallet account
+```
+This will print out the following.
+```sh
+____ Wallet Accounts ____
+
+ Name       | Parent BIP-32 Derivation Path
+------------+-------------------------------
+ default    | m/0/0
+ my_account | m/1/0
+ 
 ```
 
 ### info
