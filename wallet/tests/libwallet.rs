@@ -205,7 +205,7 @@ fn aggsig_sender_receiver_interaction() {
 		let msg = kernel_sig_msg(0, 0).unwrap();
 
 		// Receiver check the final signature verifies
-		let sig_verifies = aggsig::verify_sig_build_msg(
+		let sig_verifies = aggsig::verify_completed_sig(
 			&keychain.secp(),
 			&final_sig,
 			&final_pubkey,
@@ -411,7 +411,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 		let msg = kernel_sig_msg(0, 0).unwrap();
 
 		// Receiver check the final signature verifies
-		let sig_verifies = aggsig::verify_sig_build_msg(
+		let sig_verifies = aggsig::verify_completed_sig(
 			&keychain.secp(),
 			&final_sig,
 			&final_pubkey,
