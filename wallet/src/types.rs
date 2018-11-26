@@ -191,8 +191,7 @@ impl WalletSeed {
 
 		let seed = WalletSeed::init_new(seed_length);
 		let enc_seed = EncryptedWalletSeed::from_seed(&seed, password)?;
-		let enc_seed_json =
-			serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
+		let enc_seed_json = serde_json::to_string_pretty(&enc_seed).context(ErrorKind::Format)?;
 		let mut file = File::create(seed_file_path).context(ErrorKind::IO)?;
 		file.write_all(&enc_seed_json.as_bytes())
 			.context(ErrorKind::IO)?;
