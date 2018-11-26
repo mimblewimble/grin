@@ -216,7 +216,7 @@ pub fn verify_partial_sig(
 /// * `key_id` - The keychain key id corresponding to the private key
 /// with which to sign the message
 /// * `blind_sum` - (Optional) The sum of all blinding factors in the transaction
-/// in the case of a coinbase transaction this will simply be the corresponding 
+/// in the case of a coinbase transaction this will simply be the corresponding
 /// public key.
 ///
 /// # Example
