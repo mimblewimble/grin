@@ -28,6 +28,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use chain::store::ChainStore;
 use chain::txhashset;
 use core::core::BlockHeader;
+use core::core::hash::ZERO_HASH;
 use util::file;
 
 fn clean_output_dir(dir_name: &str) {
@@ -44,12 +45,12 @@ fn test_unexpected_zip() {
 	let db_env = Arc::new(store::new_env(db_root.clone()));
 	let chain_store = ChainStore::new(db_env).unwrap();
 	let store = Arc::new(chain_store);
-	txhashset::TxHashSet::open(db_root.clone(), store.clone(), None).unwrap();
+	txhashset::TxHashSet::open(db_root.clone(), store.clone(), None, ZERO_HASH).unwrap();
 	// First check if everything works out of the box
 	assert!(txhashset::zip_read(db_root.clone(), &BlockHeader::default(), Some(rand)).is_ok());
 	let zip_path = Path::new(&db_root).join(format!("txhashset_snapshot_{}.zip", rand));
 	let zip_file = File::open(&zip_path).unwrap();
-	assert!(txhashset::zip_write(db_root.clone(), zip_file, &BlockHeader::default()).is_ok());
+	assert!(txhashset::zip_write(db_root.clone(), zip_file, &BlockHeader::default(), false).is_ok());
 	// Remove temp txhashset dir
 	fs::remove_dir_all(Path::new(&db_root).join(format!("txhashset_zip_{}", rand))).unwrap();
 	// Then add strange files in the original txhashset folder
@@ -64,7 +65,7 @@ fn test_unexpected_zip() {
 	fs::remove_dir_all(Path::new(&db_root).join(format!("txhashset_zip_{}", rand))).unwrap();
 
 	let zip_file = File::open(zip_path).unwrap();
-	assert!(txhashset::zip_write(db_root.clone(), zip_file, &BlockHeader::default()).is_ok());
+	assert!(txhashset::zip_write(db_root.clone(), zip_file, &BlockHeader::default(), false).is_ok());
 	// Check that the txhashset dir dos not contains the strange files
 	let txhashset_path = Path::new(&db_root).join("txhashset");
 	assert!(txhashset_contains_expected_files(

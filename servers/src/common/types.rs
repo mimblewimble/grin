@@ -246,8 +246,8 @@ pub enum SyncStatus {
 	},
 	/// Downloading kernels
 	KernelSync {
-		kernels_received: u64,
-		total_kernels: u64,
+		current_height: u64,
+		highest_height: u64,
 	},
 	/// Downloading the various txhashsets
 	TxHashsetDownload {

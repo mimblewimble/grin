@@ -415,34 +415,23 @@ impl Peer {
 		)
 	}
 
-	/// Sends a request for the kernels up to the given block height and hash.
+	/// Requests the kernels for each block, starting with the block at specified height.
 	/// NOTE: Only sends the request if remote peer has ENHANCED_TXHASHSET_HIST capability.
-	pub fn send_kernel_request(
-		&self,
-		last_hash: Hash,
-		last_height: u64,
-		first_kernel_index: u64,
-	) -> Result<bool, Error> {
+	pub fn send_kernel_request(&self, first_block_height: u64,) -> Result<bool, Error> {
 		if self
 			.info
 			.capabilities
 			.contains(Capabilities::ENHANCED_TXHASHSET_HIST)
 		{
 			trace!(
-				"Asking {} for kernels up to block {} {} starting with kernel {}.",
+				"Asking {} for kernels starting with block at {}.",
 				self.info.addr,
-				last_hash,
-				last_height,
-				first_kernel_index
+				first_block_height,
 			);
 			self.connection.as_ref().unwrap().lock().send(
-				&GetKernels {
-					last_hash,
-					last_height,
-					first_kernel_index,
-				},
+				&GetKernels { first_block_height },
 				msg::Type::GetKernels,
-			);
+			)?;
 			Ok(true)
 		} else {
 			trace!(
@@ -618,19 +607,16 @@ impl ChainAdapter for TrackingAdapter {
 			.txhashset_download_update(start_time, downloaded_size, total_size)
 	}
 
-	fn read_kernels(&self, last_hash: Hash, first_kernel_index: u64) -> Vec<core::TxKernel> {
-		self.adapter.read_kernels(last_hash, first_kernel_index)
+	fn read_kernels(&self, first_block_height: u64) -> Vec<(Hash, Vec<core::TxKernel>)> {
+		self.adapter.read_kernels(first_block_height)
 	}
 
 	fn kernels_received(
 		&self,
-		last_hash: Hash,
-		first_kernel_index: u64,
-		kernels: Vec<core::TxKernel>,
+		blocks: &Vec<(Hash, Vec<core::TxKernel>)>,
 		peer_addr: SocketAddr,
 	) -> bool {
-		self.adapter
-			.kernels_received(last_hash, first_kernel_index, kernels, peer_addr)
+		self.adapter.kernels_received(blocks, peer_addr)
 	}
 }
 

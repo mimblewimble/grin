@@ -241,6 +241,11 @@ impl TxHashSet {
 		pmmr::n_leaves(self.kernel_pmmr_h.last_pos)
 	}
 
+	/// returns the root_validated_tip of the kernel_pmmr.
+	pub fn kernel_root_validated_tip(&self) -> Hash {
+		self.kernel_pmmr_h.root_validated_tip
+	}
+
 	/// returns outputs from the given insertion (leaf) index up to the
 	/// specified limit. Also returns the last index actually populated
 	pub fn outputs_by_insertion_index(
@@ -1000,13 +1005,16 @@ impl<'a> Extension<'a> {
 		Ok(output_pos)
 	}
 
-	pub fn apply_kernels(&mut self, kernels: &Vec<TxKernel>) -> Result<(), Error> {
+	/// Iterates through the kernels and adds them to the kernel_mmr,
+	/// verifying signatures and kernel_mmr_roots as we go.
+	pub fn apply_kernels(&mut self, hash: &Hash, kernels: &Vec<TxKernel>) -> Result<(), Error> {
 		let kernel_root_validated_tip = self.kernel_root_validated_tip.get();
-		let last_validated_header = self.batch.get_block_header(&kernel_root_validated_tip)?;
-		let mut next_header_to_validate =
-			self.next_header_for_kernel_root_validation(&last_validated_header)?;
-
-		let mut num_kernels = pmmr::n_leaves(self.kernel_pmmr.last_pos);
+		let header = self.batch.get_block_header(hash)?;
+		if header.prev_hash != kernel_root_validated_tip {
+			return Err(ErrorKind::InvalidTxHashSet(
+				format!("Previous hash does not match kernel tip")
+			).into());
+		}
 
 		for kernel in kernels {
 			// Ensure kernel is self-consistent
@@ -1014,41 +1022,16 @@ impl<'a> Extension<'a> {
 
 			// Apply the kernel to the kernel MMR.
 			self.apply_kernel(kernel)?;
-
-			num_kernels += 1;
-
-			// If kernel is last in block, validate root.
-			if next_header_to_validate.kernel_mmr_size == num_kernels {
-				if next_header_to_validate.kernel_root != self.kernel_root() {
-					return Err(ErrorKind::InvalidTxHashSet(format!(
-						"Kernel root at {} does not match",
-						next_header_to_validate.height
-					)).into());
-				} else {
-					// Update kernel_root_validated_tip & retrieve next_header_to_validate
-					self.kernel_root_validated_tip
-						.set(next_header_to_validate.hash());
-					next_header_to_validate =
-						self.next_header_for_kernel_root_validation(&last_validated_header)?;
-				}
-			}
 		}
 
-		Ok(())
-	}
-
-	fn next_header_for_kernel_root_validation(
-		&self,
-		last_block_header: &BlockHeader,
-	) -> Result<BlockHeader, Error> {
-		let next_header_to_validate = self
-			.batch
-			.get_header_by_height(last_block_header.height + 1)?;
-
-		if next_header_to_validate.hash() != last_block_header.hash() {
-			Err(ErrorKind::TxHashSetErr("TxHashSet not on current chain".to_string()).into())
+		if header.kernel_root == self.kernel_root() {
+			self.kernel_root_validated_tip.set(hash.clone());
+			Ok(())
 		} else {
-			Ok(next_header_to_validate)
+			Err(ErrorKind::InvalidTxHashSet(format!(
+				"Kernel root for block {} does not match",
+				hash
+			)).into())
 		}
 	}
 
@@ -1132,6 +1115,7 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	/// Rewinds the kernel mmr to the provided leaf index.
 	pub fn rewind_kernel_mmr(&mut self, next_kernel_index: u64) -> Result<(), Error> {
 		debug!(
 			"Rewind kernel_pmmr to next_kernel_index {}",
@@ -1247,6 +1231,9 @@ impl<'a> Extension<'a> {
 		}
 	}
 
+	/// Gets the hashes of the last header whose output root was validated,
+	/// the last header whose rangeproof root was validated,
+	/// and the last header whose kernel root was validated.
 	pub fn root_validated_tips(&self) -> (Hash, Hash, Hash) {
 		(
 			self.output_root_validated_tip.get(),

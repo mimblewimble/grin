@@ -64,7 +64,7 @@ fn test_capabilities() {
 	);
 	assert_eq!(
 		p2p::types::Capabilities::from_bits_truncate(0b11110111 as u32),
-		p2p::types::Capabilities::FULL_NODE
+		p2p::types::Capabilities::ENHANCED_TXHASHSET_HIST | p2p::types::Capabilities::FULL_NODE
 	);
 	assert_eq!(
 		p2p::types::Capabilities::from_bits_truncate(0b00100111 as u32),

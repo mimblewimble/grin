@@ -111,13 +111,13 @@ impl TUIStatusListener for TUIStatusView {
 					format!("Downloading headers: {}%, step 1/5", percent)
 				}
 				SyncStatus::KernelSync {
-					kernels_received,
-					total_kernels,
+					current_height,
+					highest_height,
 				} => {
-					let percent = if total_kernels == 0 {
+					let percent = if highest_height == 0 {
 						0
 					} else {
-						kernels_received * 100 / total_kernels
+						current_height * 100 / highest_height
 					};
 					format!("Downloading kernels: {}%, step 2/5", percent)
 				}

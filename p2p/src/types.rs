@@ -40,8 +40,8 @@ pub const MAX_PEER_ADDRS: u32 = 256;
 /// Maximum number of block header hashes to send as part of a locator
 pub const MAX_LOCATORS: u32 = 20;
 
-/// Maximum number of kernels a peer should ever send
-pub const MAX_KERNELS: u32 = 512;
+/// Maximum number of blocks a peer should ever send kernels for
+pub const MAX_KERNEL_BLOCKS: u32 = 64;
 
 /// How long a banned peer should be banned for
 const BAN_WINDOW: i64 = 10800;
@@ -221,8 +221,7 @@ bitflags! {
 		/// but we do not advertise this to other nodes.
 		const FULL_NODE = Capabilities::HEADER_HIST.bits
 			| Capabilities::TXHASHSET_HIST.bits
-			| Capabilities::PEER_LIST.bits
-			| Capabilities::ENHANCED_TXHASHSET_HIST.bits;
+			| Capabilities::PEER_LIST.bits;
 
 		// TODO - we cannot include TX_KERNEL_HASH in FULL_NODE right now
 		// as legacy nodes do not recognise these Capabilities safely.
@@ -405,14 +404,12 @@ pub trait ChainAdapter: Sync + Send {
 
 	/// Finds a list of kernels starting from the given index.
 	/// Returns kernels from the chain containing the block with the given hash.
-	fn read_kernels(&self, last_hash: Hash, first_kernel_index: u64) -> Vec<core::TxKernel>;
+	fn read_kernels(&self, first_block_height: u64) -> Vec<(Hash, Vec<core::TxKernel>)>;
 
 	/// A set of kernels has been received.
 	fn kernels_received(
 		&self,
-		last_hash: Hash,
-		first_kernel_index: u64,
-		kernels: Vec<core::TxKernel>,
+		blocks: &Vec<(Hash, Vec<core::TxKernel>)>,
 		peer_addr: SocketAddr,
 	) -> bool;
 }

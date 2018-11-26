@@ -279,48 +279,60 @@ pub fn sync_block_headers(
 /// Process the kernels.
 /// This is only ever used during sync.
 pub fn sync_kernels(
-	first_kernel_index: u64,
-	kernels: &Vec<TxKernel>,
+	blocks: &Vec<(Hash, Vec<TxKernel>)>,
 	ctx: &mut BlockContext,
 ) -> Result<(), Error> {
-	if let Some(kernel) = kernels.first() {
-		debug!(
-			"pipe: sync_kernels: {} kernels from {} at {}",
-			kernels.len(),
-			kernel.hash(),
-			first_kernel_index,
-		);
-	} else {
-		return Ok(());
-	}
+	let first_block = match blocks.first() {
+		Some(block) => {
+			debug!("pipe: sync_kernels: {} blocks from {}", blocks.len(), block.0);
+			block
+		},
+		_ => return Ok(()),
+	};
+
+	let header = ctx.batch.get_block_header(&first_block.0)?;
+
+	let next_kernel_index = match header.height {
+		0 => 0,
+		height => {
+			let header = match ctx.batch.get_header_by_height(height - 1) {
+				Ok(header) => header,
+				Err(e) => {
+					error!("sync_kernels: Could not find header: {:?}", e);
+					return Ok(());
+				}
+			};
+			header.kernel_mmr_size
+		},
+	};
 
 	let num_kernels = ctx.txhashset.num_kernels();
-	if num_kernels < first_kernel_index {
+	if num_kernels < next_kernel_index {
 		// TODO: A convenient way to store and process these later
 		// would allow nodes to request batches of kernels in parallel.
 		return Err(ErrorKind::TxHashSetErr("Previous kernels missing".to_string()).into());
-	} else if num_kernels > (first_kernel_index + kernels.len() as u64) {
+	}
+
+	let kernels_to_add : Vec<TxKernel> = blocks
+		.iter()
+		.flat_map(|block| block.1.clone())
+		.collect();
+	if num_kernels > (next_kernel_index + kernels_to_add.len() as u64) {
 		debug!(
-			"pipe: sync_kernels: kernels from at index {} not needed.",
-			first_kernel_index,
+			"pipe: sync_kernels: kernels from index {} not needed.",
+			next_kernel_index,
 		);
 		return Ok(());
 	}
 
 	txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
 		// Rewinding kernel mmr to correct kernel index. Probably unnecessary, but playing it safe.
-		extension.rewind_kernel_mmr(first_kernel_index)?;
+		extension.rewind_kernel_mmr(next_kernel_index)?;
 
-		match extension.apply_kernels(kernels) {
-			Err(e) => {
-				error!(
-					"pipe: sync_kernels: Error occurred in apply_kernels - {}",
-					e
-				);
-				Err(e)
-			}
-			_ => Ok(()),
+		for block in blocks {
+			extension.apply_kernels(&block.0, &block.1)?;
 		}
+		Ok(())
 	})?;
 	Ok(())
 }

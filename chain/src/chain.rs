@@ -350,15 +350,14 @@ impl Chain {
 	/// This is only ever used during sync.
 	pub fn sync_kernels(
 		&self,
-		first_kernel_index: u64,
-		kernels: &Vec<TxKernel>,
+		blocks: &Vec<(Hash, Vec<TxKernel>)>,
 		opts: Options,
 	) -> Result<(), Error> {
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
-		pipe::sync_kernels(first_kernel_index, kernels, &mut ctx)?;
+		pipe::sync_kernels(blocks, &mut ctx)?;
 
 		Ok(())
 	}
@@ -1021,6 +1020,12 @@ impl Chain {
 	pub fn get_num_kernels(&self) -> u64 {
 		let txhashset = self.txhashset.read();
 		txhashset.num_kernels()
+	}
+	/// returns the number of leaves in the kernel mmr
+	pub fn get_kernel_root_validated_tip(&self) -> Result<BlockHeader, Error> {
+		let txhashset = self.txhashset.read();
+		let hash = txhashset.kernel_root_validated_tip();
+		self.get_block_header(&hash)
 	}
 
 	/// outputs by insertion index

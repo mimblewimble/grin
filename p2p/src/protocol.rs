@@ -27,8 +27,8 @@ use core::{global, ser};
 use util::{RateCounter, RwLock};
 
 use msg::{
-	read_exact, BanReason, GetKernels, GetPeerAddrs, Headers, Kernels, Locator, PeerAddrs, Ping,
-	Pong, SockAddr, TxHashSetArchive, TxHashSetRequest, Type,
+	read_exact, BanReason, BlockKernels, GetKernels, GetPeerAddrs, Headers, Kernels, Locator,
+	PeerAddrs, Ping, Pong, SockAddr, TxHashSetArchive, TxHashSetRequest, Type,
 };
 use types::{Error, NetAdapter};
 
@@ -340,28 +340,28 @@ impl MessageHandler for Protocol {
 				// DAVID: Check Capabilities first?
 				// Retrieve kernels from the kernel MMR
 				let request: GetKernels = msg.body()?;
-				let kerns = adapter.read_kernels(request.last_hash, request.first_kernel_index);
+				let kernels_by_block = adapter.read_kernels(request.first_block_height);
 
-				// serialize and send all the headers over
+				let blocks : Vec<BlockKernels> = kernels_by_block
+					.iter()
+					.map(|block| BlockKernels { hash: block.0, kernels: block.1.clone() })
+					.collect();
+
+				// serialize and send all the kernels over
 				Ok(Some(msg.respond(
 					Type::Kernels,
-					Kernels {
-						last_hash: request.last_hash,
-						last_height: request.last_height,
-						first_kernel_index: request.first_kernel_index,
-						kernels: kerns,
-					},
+					Kernels { blocks },
 				)))
 			}
 
 			Type::Kernels => {
 				let kernels: Kernels = msg.body()?;
-				adapter.kernels_received(
-					kernels.last_hash,
-					kernels.first_kernel_index,
-					kernels.kernels,
-					self.addr,
-				);
+				let blocks : Vec<(Hash, Vec<core::TxKernel>)> = kernels.blocks
+					.iter()
+					.map(|block| (block.hash, block.kernels.clone()))
+					.collect();
+
+				adapter.kernels_received(&blocks, self.addr);
 
 				Ok(None)
 			}

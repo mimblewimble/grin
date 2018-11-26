@@ -371,65 +371,80 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 	}
 
-	fn read_kernels(&self, last_hash: Hash, first_kernel_index: u64) -> Vec<core::TxKernel> {
-		let header = match self.chain().get_block_header(&last_hash) {
-			Ok(header) => header,
+	fn read_kernels(&self, first_block_height: u64) -> Vec<(Hash, Vec<core::TxKernel>)> {
+		let head = match self.chain().head() {
+			Ok(head) => head,
 			Err(e) => {
-				error!("read_kernels: Could not find header: {:?}", e);
+				error!("read_kernels: Could not find head: {:?}", e);
 				return vec![];
 			}
 		};
 
-		if !self.chain().is_on_current_chain(&header).is_ok() {
-			error!("read_kernels: Header is not on main chain: {}", last_hash);
+		if first_block_height > head.height {
+			debug!("read_kernels: Requesting beyond chain height.");
 			return vec![];
 		}
 
-		if first_kernel_index >= header.kernel_mmr_size {
-			error!(
-				"read_kernels: first_kernel_index: {} beyond last kernel: {}",
-				first_kernel_index, header.kernel_mmr_size
-			);
-			return vec![];
+		let mut next_kernel_index = match first_block_height {
+			0 => 0,
+			height => {
+				let header = match self.chain().get_header_by_height(height - 1) {
+					Ok(header) => header,
+					Err(e) => {
+						error!("read_kernels: Could not find header: {:?}", e);
+						return vec![];
+					}
+				};
+				header.kernel_mmr_size
+			},
+		};
+
+		let mut blocks = vec![];
+		let mut index = first_block_height;
+		while blocks.len() < p2p::MAX_KERNEL_BLOCKS as usize && index <= head.height {
+			let header = match self.chain().get_header_by_height(first_block_height) {
+				Ok(header) => header,
+				Err(e) => {
+					error!("read_kernels: Could not find header: {:?}", e);
+					return vec![];
+				}
+			};
+
+			let kernels_to_read = header.kernel_mmr_size - next_kernel_index + 1;
+			let kernels: Vec<core::TxKernel> = self
+				.chain()
+				.get_kernels_by_insertion_index(next_kernel_index, kernels_to_read)
+				.iter()
+				.map(|entry| entry.kernel.clone())
+				.collect();
+
+			blocks.push((header.hash(), kernels));
+			next_kernel_index = header.kernel_mmr_size + 1;
+			index += 1;
 		}
 
-		// Found header. Determine number of kernels to retrieve.
-		let kernels_remaining = header.kernel_mmr_size - first_kernel_index + 1;
-		let kernels_to_read = min(kernels_remaining, p2p::MAX_KERNELS as u64);
+		debug!("read_kernels: returning kernel blocks: {}", blocks.len());
 
-		let kernels: Vec<core::TxKernel> = self
-			.chain()
-			.get_kernels_by_insertion_index(first_kernel_index, kernels_to_read)
-			.iter()
-			.map(|entry| entry.kernel.clone())
-			.collect();
-
-		debug!("read_kernels: returning kernels: {}", kernels.len());
-
-		kernels
+		blocks
 	}
 
 	fn kernels_received(
 		&self,
-		last_hash: Hash,
-		first_kernel_index: u64,
-		kernels: Vec<core::TxKernel>,
+		blocks: &Vec<(Hash, Vec<core::TxKernel>)>,
 		peer_addr: SocketAddr,
 	) -> bool {
 		info!(
-			"Received kernels {:?} from {}",
-			kernels.iter().map(|x| x.hash()).collect::<Vec<_>>(),
+			"Received kernels in blocks {:?} from {}",
+			blocks.iter().map(|x| x.0).collect::<Vec<_>>(),
 			peer_addr,
 		);
 
-		if kernels.len() == 0 {
+		if blocks.len() == 0 {
 			return false;
 		}
 
 		// try to add kernels to our kernel MMR
-		let res = self
-			.chain()
-			.sync_kernels(first_kernel_index, &kernels, self.chain_opts());
+		let res = self.chain().sync_kernels(blocks, self.chain_opts());
 		if let &Err(ref e) = &res {
 			debug!("Kernels refused by chain: {:?}", e);
 

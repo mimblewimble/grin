@@ -17,6 +17,7 @@ use chrono::Duration;
 use std::sync::Arc;
 
 use chain;
+use chain::Tip;
 use common::types::{SyncState, SyncStatus};
 use core::core::hash::Hashed;
 use core::core::BlockHeader;
@@ -72,62 +73,61 @@ impl KernelSync {
 				}
 			};
 
-			let header = match self.chain.get_block_header(&header_head.last_block_h) {
-				Ok(header) => header,
+			let kernel_tip = match self.chain.get_kernel_root_validated_tip() {
+				Ok(kernel_tip) => kernel_tip,
 				Err(e) => {
 					error!("kernel_sync: check_run err! {:?}", e);
 					return false;
 				}
 			};
 
-			let num_kernels_received = self.chain.get_num_kernels();
-			if !self.kernel_sync_due(&header, num_kernels_received) {
+			if !self.kernel_sync_due(&header_head, &kernel_tip) {
 				return false;
 			}
 
 			self.sync_state.update(SyncStatus::KernelSync {
-				kernels_received: num_kernels_received,
-				total_kernels: header.kernel_mmr_size,
+				current_height: kernel_tip.height,
+				highest_height: header_head.height,
 			});
 
 			// DAVID: If no capable peer exists, fall back to full txhashset download
-			self.kernel_sync(&header, num_kernels_received);
+			self.kernel_sync(kernel_tip.height + 1);
 
 			return true;
 		}
 		false
 	}
 
-	fn kernel_sync_due(&mut self, header: &BlockHeader, num_kernels_received: u64) -> bool {
+	fn kernel_sync_due(&mut self, header_head: &Tip, kernel_tip: &BlockHeader) -> bool {
 		// Kernels are up to date on the current fork.
-		if num_kernels_received > header.kernel_mmr_size {
+		if kernel_tip.height + 5 > header_head.height {
 			return false;
 		}
 
 		let now = Utc::now();
-		let (timeout, last_kernels_received, prev_kernels_received) = self.prev_kernel_sync;
+		let (timeout, last_kernel_blocks_received, prev_kernel_blocks_received) = self.prev_kernel_sync;
 
 		// received all necessary kernels, can ask for more
 		let can_request_more =
-			num_kernels_received >= prev_kernels_received + (p2p::MAX_KERNELS as u64);
+			kernel_tip.height >= prev_kernel_blocks_received + (p2p::MAX_KERNEL_BLOCKS as u64);
 
 		// no kernels processed and we're past timeout, need to ask for more
-		let stalling = num_kernels_received <= last_kernels_received && now > timeout;
+		let stalling = kernel_tip.height <= last_kernel_blocks_received && now > timeout;
 
 		if can_request_more || stalling {
 			self.prev_kernel_sync = (
 				now + Duration::seconds(10),
-				num_kernels_received,
-				num_kernels_received,
+				kernel_tip.height,
+				kernel_tip.height,
 			);
 			true
 		} else {
 			// resetting the timeout as long as we progress
-			if num_kernels_received > last_kernels_received {
+			if kernel_tip.height > last_kernel_blocks_received {
 				self.prev_kernel_sync = (
 					now + Duration::seconds(2),
-					num_kernels_received,
-					prev_kernels_received,
+					kernel_tip.height,
+					prev_kernel_blocks_received,
 				);
 			}
 			false
@@ -136,8 +136,7 @@ impl KernelSync {
 
 	fn kernel_sync(
 		&mut self,
-		header: &BlockHeader,
-		next_kernel_index: u64,
+		first_block_height: u64,
 	) -> Result<(), p2p::Error> {
 		let opt_peer = self.peers.most_work_peers().into_iter().find(|peer| {
 			peer.info
@@ -147,11 +146,11 @@ impl KernelSync {
 
 		if let Some(peer) = opt_peer {
 			debug!(
-				"kernel_sync: asking {} for kernels at {:?}",
-				peer.info.addr, next_kernel_index
+				"kernel_sync: asking {} for kernels starting at block {:?}",
+				peer.info.addr, first_block_height
 			);
 
-			let _ = peer.send_kernel_request(header.hash(), header.height, next_kernel_index);
+			let _ = peer.send_kernel_request(first_block_height);
 			return Ok(());
 		}
 		Err(p2p::Error::PeerException)
