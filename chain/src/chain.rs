@@ -213,7 +213,7 @@ impl Chain {
 			);
 		}
 
-		let chain = Chain {
+		Ok(Chain {
 			db_root: db_root,
 			store: store,
 			adapter: adapter,
@@ -224,9 +224,7 @@ impl Chain {
 			block_hashes_cache: Arc::new(RwLock::new(LruCache::new(HASHES_CACHE_SIZE))),
 			archive_mode,
 			genesis: genesis.header.clone(),
-		};
-
-		Ok(chain)
+		})
 	}
 
 	/// Processes a single block, then checks for orphans, processing
