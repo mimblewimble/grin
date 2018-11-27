@@ -43,9 +43,11 @@ matrix:
     - os: linux
       env: TEST_SUITE=servers
     - os: linux
-      env: TEST_SUITE=chain-core-p2p
+      env: TEST_SUITE=chain-core
     - os: linux
-      env: TEST_SUITE=keychain-wallet-pool
+      env: TEST_SUITE=pool-p2p
+    - os: linux
+      env: TEST_SUITE=keychain-wallet
     - os: linux
       env: TEST_SUITE=api-util-store
     - os: osx
@@ -67,7 +69,7 @@ script:
     fi;
 
 before_deploy:
-  - if [[ "$TEST_SUITE" == "api-util-store" ]]; then
+  - if [[ "$TEST_SUITE" == "pool-p2p" ]]; then
       cargo clean && cargo build --release && ./.auto-release.sh;
     fi
   - if [[ "$TEST_SUITE" == "release" ]]  && [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
