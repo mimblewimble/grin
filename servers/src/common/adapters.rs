@@ -261,33 +261,32 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
-		debug!("locate_headers: {:?}", locator,);
+		debug!("locator: {:?}", locator);
 
 		let header = match self.find_common_header(locator) {
 			Some(header) => header,
 			None => return vec![],
 		};
 
-		debug!("locate_headers: common header: {:?}", header.hash(),);
+		let max_height = self.chain().header_head().unwrap().height;
 
 		// looks like we know one, getting as many following headers as allowed
 		let hh = header.height;
 		let mut headers = vec![];
 		for h in (hh + 1)..(hh + (p2p::MAX_BLOCK_HEADERS as u64)) {
-			let header = self.chain().get_header_by_height(h);
-			match header {
-				Ok(head) => headers.push(head),
-				Err(e) => match e.kind() {
-					chain::ErrorKind::StoreErr(store::Error::NotFoundErr(_), _) => break,
-					_ => {
-						error!("Could not build header locator: {:?}", e);
-						return vec![];
-					}
-				},
+			if h > max_height {
+				break;
+			}
+
+			if let Ok(header) = self.chain().get_header_by_height(h) {
+				headers.push(header);
+			} else {
+				error!("Failed to locate headers successfully.");
+				break;
 			}
 		}
 
-		debug!("locate_headers: returning headers: {}", headers.len(),);
+		debug!("returning headers: {}", headers.len());
 
 		headers
 	}
