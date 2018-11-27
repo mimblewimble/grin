@@ -175,7 +175,7 @@ where
 		let elmt_pos = self.last_pos + 1;
 		let mut current_hash = elmt.hash_with_index(elmt_pos - 1);
 
-		let mut to_append = vec![current_hash];
+		let mut hashes = vec![current_hash];
 		let mut pos = elmt_pos;
 
 		let (peak_map, height) = peak_map_height(pos - 1);
@@ -193,11 +193,11 @@ where
 			peak *= 2;
 			pos += 1;
 			current_hash = (left_hash, current_hash).hash_with_index(pos - 1);
-			to_append.push(current_hash);
+			hashes.push(current_hash);
 		}
 
 		// append all the new nodes and update the MMR index
-		self.backend.append(elmt, to_append)?;
+		self.backend.append(elmt, hashes)?;
 		self.last_pos = pos;
 		Ok(elmt_pos)
 	}
@@ -259,7 +259,7 @@ where
 	}
 
 	/// Get the data element at provided position in the MMR.
-	pub fn get_data(&self, pos: u64) -> Option<T> {
+	pub fn get_data(&self, pos: u64) -> Option<T::E> {
 		if pos > self.last_pos {
 			// If we are beyond the rhs of the MMR return None.
 			None
@@ -285,7 +285,7 @@ where
 	/// Helper function to get the last N nodes inserted, i.e. the last
 	/// n nodes along the bottom of the tree.
 	/// May return less than n items if the MMR has been pruned/compacted.
-	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, T)> {
+	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, T::E)> {
 		let mut return_vec = vec![];
 		let mut last_leaf = self.last_pos;
 		for _ in 0..n as u64 {
@@ -307,7 +307,11 @@ where
 	/// Helper function which returns un-pruned nodes from the insertion index
 	/// forward
 	/// returns last insertion index returned along with data
-	pub fn elements_from_insertion_index(&self, mut index: u64, max_count: u64) -> (u64, Vec<T>) {
+	pub fn elements_from_insertion_index(
+		&self,
+		mut index: u64,
+		max_count: u64,
+	) -> (u64, Vec<T::E>) {
 		let mut return_vec = vec![];
 		if index == 0 {
 			index = 1;

@@ -29,7 +29,13 @@ impl FixedLength for TestElem {
 	const LEN: usize = 16;
 }
 
-impl PMMRable for TestElem {}
+impl PMMRable for TestElem {
+	type E = Self;
+
+	fn as_elmt(self) -> Self::E {
+		self
+	}
+}
 
 impl Writeable for TestElem {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
@@ -77,7 +83,7 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		}
 	}
 
-	fn get_data(&self, position: u64) -> Option<T> {
+	fn get_data(&self, position: u64) -> Option<T::E> {
 		if self.remove_list.contains(&position) {
 			None
 		} else {
@@ -90,10 +96,10 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		Some(hash.clone())
 	}
 
-	fn get_data_from_file(&self, position: u64) -> Option<T> {
+	fn get_data_from_file(&self, position: u64) -> Option<T::E> {
 		let idx = pmmr::n_leaves(position);
-		let data = &self.data[(idx - 1) as usize];
-		Some(data.clone())
+		let data = self.data[(idx - 1) as usize].clone();
+		Some(data.as_elmt())
 	}
 
 	fn remove(&mut self, position: u64) -> Result<(), String> {

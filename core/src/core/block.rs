@@ -34,7 +34,7 @@ use core::{
 use global;
 use keychain::{self, BlindingFactor};
 use pow::{Difficulty, Proof, ProofOfWork};
-use ser::{self, HashOnlyPMMRable, Readable, Reader, Writeable, Writer};
+use ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
 use util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
@@ -159,7 +159,13 @@ impl Default for BlockHeader {
 	}
 }
 
-impl HashOnlyPMMRable for BlockHeader {}
+impl PMMRable for BlockHeader {
+	type E = Hash;
+
+	fn as_elmt(self) -> Self::E {
+		self.hash()
+	}
+}
 
 /// Serialization of a block header
 impl Writeable for BlockHeader {
