@@ -222,9 +222,11 @@ where
 	/// propagation.
 	pub fn finalize_tx(&mut self, slate: &mut Slate) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
+		let parent_key_id = w.parent_key_id();
 		w.open_with_credentials()?;
 		let context = w.get_private_context(slate.id.as_bytes())?;
 		tx::complete_tx(&mut *w, slate, &context)?;
+		tx::update_tx_hex(&mut *w, &parent_key_id, slate)?;
 		{
 			let mut batch = w.batch()?;
 			batch.delete_private_context(slate.id.as_bytes())?;
@@ -367,23 +369,13 @@ where
 			);
 			return Err(ErrorKind::TransactionBuildingNotCompleted(tx_id))?;
 		}
-
-		let res = client.post_tx(
+		client.post_tx(
 			&TxWrapper {
 				tx_hex: tx_hex.unwrap(),
 			},
 			fluff,
-		);
-		if let Err(e) = res {
-			error!("api: repost_tx: failed with error: {}", e);
-			Err(e)
-		} else {
-			debug!(
-				"api: repost_tx: successfully posted tx at: {}, fluff? {}",
-				tx_id, fluff
-			);
-			Ok(())
-		}
+		)?;
+		Ok(())
 	}
 
 	/// Attempt to restore contents of wallet
