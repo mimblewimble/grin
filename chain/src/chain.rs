@@ -1199,12 +1199,10 @@ fn setup_head(
 				// If we have no header MMR then rebuild as necessary.
 				// Supports old nodes with no header MMR.
 				txhashset::header_extending(txhashset, &mut batch, |extension| {
-					let pos = pmmr::insertion_to_pmmr_index(head.height+1);
+					let pos = pmmr::insertion_to_pmmr_index(head.height + 1);
 					let needs_rebuild = match extension.get_header_hash(pos) {
 						None => true,
-						Some(hash) => {
-							hash != head.last_block_h
-						}
+						Some(hash) => hash != head.last_block_h,
 					};
 
 					if needs_rebuild {
