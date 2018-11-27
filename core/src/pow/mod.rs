@@ -136,11 +136,13 @@ mod test {
 	use super::*;
 	use genesis;
 	use global;
+	use global::ChainTypes;
 
 	/// We'll be generating genesis blocks differently
-	#[ignore]
 	#[test]
 	fn genesis_pow() {
+		global::set_mining_mode(ChainTypes::AutomatedTesting);
+
 		let mut b = genesis::genesis_dev();
 		b.header.pow.nonce = 485;
 		b.header.pow.proof.edge_bits = global::min_edge_bits();
@@ -150,7 +152,7 @@ mod test {
 			global::proofsize(),
 			global::min_edge_bits(),
 		).unwrap();
-		assert!(b.header.pow.nonce != 310);
+		assert_ne!(b.header.pow.nonce, 310);
 		assert!(b.header.pow.to_difficulty() >= Difficulty::min());
 		assert!(verify_size(&b.header).is_ok());
 	}
