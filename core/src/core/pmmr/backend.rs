@@ -18,18 +18,6 @@ use core::hash::Hash;
 use core::BlockHeader;
 use ser::PMMRable;
 
-/// Simple "hash only" backend (used for header MMR, headers stored in the db).
-pub trait HashOnlyBackend {
-	/// Append a vec of hashes to the backend.
-	fn append(&mut self, data: Vec<Hash>) -> Result<(), String>;
-
-	/// Rewind the backend to the specified position.
-	fn rewind(&mut self, position: u64) -> Result<(), String>;
-
-	/// Get the hash at the specified position.
-	fn get_hash(&self, position: u64) -> Option<Hash>;
-}
-
 /// Storage backend for the MMR, just needs to be indexed by order of insertion.
 /// The PMMR itself does not need the Backend to be accurate on the existence
 /// of an element (i.e. remove could be a no-op) but layers above can

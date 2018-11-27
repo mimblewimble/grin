@@ -18,7 +18,7 @@ use std::{fs, io, marker};
 use croaring::Bitmap;
 
 use core::core::hash::{Hash, Hashed};
-use core::core::pmmr::{self, family, Backend, HashOnlyBackend};
+use core::core::pmmr::{self, family, Backend};
 use core::core::BlockHeader;
 use core::ser::{self, FixedLength, PMMRable};
 use leaf_set::LeafSet;
