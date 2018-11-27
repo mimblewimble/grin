@@ -23,7 +23,7 @@ use core::core::hash::{Hash, Hashed};
 use core::pow::Difficulty;
 use core::{core, global};
 use handshake::Handshake;
-use msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest};
+use msg::{self, BanReason, GetKernels, GetPeerAddrs, Locator, Ping, TxHashSetRequest};
 use protocol::Protocol;
 use types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerInfo, ReasonForBan, TxHashSetRead,
@@ -415,6 +415,34 @@ impl Peer {
 		)
 	}
 
+	/// Requests the kernels for each block, starting with the block at specified height.
+	/// NOTE: Only sends the request if remote peer has ENHANCED_TXHASHSET_HIST capability.
+	pub fn send_kernel_request(&self, first_block_height: u64) -> Result<bool, Error> {
+		if self
+			.info
+			.capabilities
+			.contains(Capabilities::ENHANCED_TXHASHSET_HIST)
+		{
+			trace!(
+				"Asking {} for kernels starting with block at {}.",
+				self.info.addr,
+				first_block_height,
+			);
+			self.connection
+				.as_ref()
+				.unwrap()
+				.lock()
+				.send(&GetKernels { first_block_height }, msg::Type::GetKernels)?;
+			Ok(true)
+		} else {
+			trace!(
+				"Not requesting kernels from {} (peer not capable)",
+				self.info.addr
+			);
+			Ok(false)
+		}
+	}
+
 	/// Stops the peer, closing its connection
 	pub fn stop(&self) {
 		stop_with_connection(&self.connection.as_ref().unwrap().lock());
@@ -578,6 +606,18 @@ impl ChainAdapter for TrackingAdapter {
 	) -> bool {
 		self.adapter
 			.txhashset_download_update(start_time, downloaded_size, total_size)
+	}
+
+	fn read_kernels(&self, first_block_height: u64) -> Vec<(Hash, Vec<core::TxKernel>)> {
+		self.adapter.read_kernels(first_block_height)
+	}
+
+	fn kernels_received(
+		&self,
+		blocks: &Vec<(Hash, Vec<core::TxKernel>)>,
+		peer_addr: SocketAddr,
+	) -> bool {
+		self.adapter.kernels_received(blocks, peer_addr)
 	}
 }
 

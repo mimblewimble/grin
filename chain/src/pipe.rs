@@ -27,7 +27,7 @@ use core::consensus;
 use core::core::hash::{Hash, Hashed};
 use core::core::verifier_cache::VerifierCache;
 use core::core::Committed;
-use core::core::{Block, BlockHeader, BlockSums};
+use core::core::{Block, BlockHeader, BlockSums, TxKernel};
 use core::global;
 use core::pow;
 use error::{Error, ErrorKind};
@@ -250,6 +250,64 @@ pub fn sync_block_headers(
 	} else {
 		Ok(None)
 	}
+}
+
+/// Process the kernels.
+/// This is only ever used during sync.
+pub fn sync_kernels(
+	blocks: &Vec<(Hash, Vec<TxKernel>)>,
+	ctx: &mut BlockContext,
+) -> Result<(), Error> {
+	let first_block =
+		blocks.first().ok_or(ErrorKind::Other(format!("No blocks received.").into()))?;
+
+	let first_header = ctx.batch.get_block_header(&first_block.0)?;
+
+	let first_kernel_index = match first_header.height {
+		0 => 0,
+		_ => {
+			let previous_header = ctx.batch.get_previous_header(&first_header)?;
+			previous_header.kernel_mmr_size
+		}
+	};
+
+	let num_kernels = ctx.txhashset.num_kernels();
+	if num_kernels < first_kernel_index {
+		// TODO: Store and process later once previous kernels are received.
+		return Err(ErrorKind::TxHashSetErr("Previous kernels missing".to_string()).into());
+	}
+
+	let mut next_kernel_index = first_kernel_index;
+	let mut first_needed_block = 0 as usize;
+	for block in blocks {
+		if num_kernels >= next_kernel_index + block.1.len() as u64 {
+			debug!("pipe: sync_kernels: already received kernels for block {}", block.0);
+			next_kernel_index += block.1.len() as u64;
+			first_needed_block += 1;
+		} else {
+			break;
+		}
+	}
+
+	if first_needed_block == blocks.len() {
+		debug!("pipe: sync_kernels: kernels from index {} not needed.", first_kernel_index);
+		return Ok(());
+	}
+
+	txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+		// Rewind kernel mmr to correct kernel index if necessary.
+		if num_kernels > next_kernel_index {
+			extension.rewind_kernel_mmr(next_kernel_index)?;
+		}
+
+		for block_index in first_needed_block..blocks.len() {
+			let block = &blocks[block_index];
+			extension.apply_kernels(&block.0, &block.1)?;
+		}
+		info!("pipe: sync_kernels: kernels validated up to block {}", blocks[blocks.len() - 1].0);
+		Ok(())
+	})?;
+	Ok(())
 }
 
 /// Process block header as part of "header first" block propagation.

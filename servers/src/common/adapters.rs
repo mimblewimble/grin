@@ -368,6 +368,95 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			true
 		}
 	}
+
+	/// Finds a list of kernels starting from the given block height.
+	/// Kernels are returned in order, grouped by the hash of the block they belong to.
+	fn read_kernels(&self, first_block_height: u64) -> Vec<(Hash, Vec<core::TxKernel>)> {
+		let head = match self.chain().head() {
+			Ok(head) => head,
+			Err(e) => {
+				error!("read_kernels: Could not find head: {:?}", e);
+				return vec![];
+			}
+		};
+
+		if first_block_height > head.height {
+			error!("read_kernels: Requesting beyond chain height.");
+			return vec![];
+		}
+
+		// Find the leaf index of the first kernel that belongs to the first block.
+		let mut next_kernel_index = match first_block_height {
+			0 => 0,
+			height => {
+				let header = match self.chain().get_header_by_height(height - 1) {
+					Ok(header) => header,
+					Err(e) => {
+						error!("read_kernels: Could not find header: {:?}", e);
+						return vec![];
+					}
+				};
+				header.kernel_mmr_size
+			}
+		};
+
+		// Iterate through each block and retrieve its kernels.
+		let mut blocks = vec![];
+		let mut block_height = first_block_height;
+		while block_height <= head.height {
+			let header = match self.chain().get_header_by_height(block_height) {
+				Ok(header) => header,
+				Err(e) => {
+					error!("read_kernels: Could not find header: {:?}", e);
+					return vec![];
+				}
+			};
+
+			let kernels_to_read = (header.kernel_mmr_size - next_kernel_index) + 1;
+			let kernels: Vec<core::TxKernel> = self
+				.chain()
+				.get_kernels_by_insertion_index(next_kernel_index, kernels_to_read)
+				.iter()
+				.map(|entry| entry.kernel.clone())
+				.collect();
+
+			blocks.push((header.hash(), kernels));
+			next_kernel_index = header.kernel_mmr_size;
+			block_height += 1;
+		}
+
+		debug!("read_kernels: returning kernel blocks: {}", blocks.len());
+
+		blocks
+	}
+
+	fn kernels_received(
+		&self,
+		blocks: &Vec<(Hash, Vec<core::TxKernel>)>,
+		peer_addr: SocketAddr,
+	) -> bool {
+		info!(
+			"Received kernels in blocks {:?} from {}",
+			blocks.iter().map(|x| x.0).collect::<Vec<_>>(),
+			peer_addr,
+		);
+
+		if blocks.len() == 0 {
+			return true;
+		}
+
+		// try to add kernels to our kernel MMR
+		let res = self.chain().sync_kernels(blocks, self.chain_opts());
+		if let &Err(ref e) = &res {
+			debug!("Kernels refused by chain: {:?}", e);
+
+			if e.is_bad_data() {
+				return false;
+			}
+		}
+
+		true
+	}
 }
 
 impl NetToChainAdapter {

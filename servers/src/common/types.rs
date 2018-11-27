@@ -244,6 +244,11 @@ pub enum SyncStatus {
 		current_height: u64,
 		highest_height: u64,
 	},
+	/// Downloading kernels
+	KernelSync {
+		current_index: u64,
+		highest_index: u64,
+	},
 	/// Downloading the various txhashsets
 	TxHashsetDownload {
 		start_time: DateTime<Utc>,

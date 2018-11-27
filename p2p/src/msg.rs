@@ -22,6 +22,7 @@ use std::time;
 use core::consensus;
 use core::core::hash::Hash;
 use core::core::BlockHeader;
+use core::core::TxKernel;
 use core::pow::Difficulty;
 use core::ser::{self, FixedLength, Readable, Reader, StreamingReader, Writeable, Writer};
 use types::{Capabilities, Error, ReasonForBan, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS};
@@ -67,6 +68,8 @@ enum_from_primitive! {
 		BanReason = 18,
 		GetTransaction = 19,
 		TransactionKernel = 20,
+		GetKernels = 21,
+		Kernels = 22,
 	}
 }
 
@@ -94,6 +97,8 @@ fn max_msg_size(msg_type: Type) -> u64 {
 		Type::BanReason => 64,
 		Type::GetTransaction => 32,
 		Type::TransactionKernel => 32,
+		Type::GetKernels => 48,
+		Type::Kernels => std::u64::MAX, // TODO: Determine appropriate max size
 	}
 }
 
@@ -650,5 +655,77 @@ impl Readable for TxHashSetArchive {
 			height,
 			bytes,
 		})
+	}
+}
+
+/// Request to get the kernels for each block starting with the block at the specified height.
+pub struct GetKernels {
+	/// The height of the first block kernels are being requested for.
+	pub first_block_height: u64,
+}
+
+impl Writeable for GetKernels {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u64(self.first_block_height)?;
+		Ok(())
+	}
+}
+
+impl Readable for GetKernels {
+	fn read(reader: &mut Reader) -> Result<GetKernels, ser::Error> {
+		Ok(GetKernels {
+			first_block_height: reader.read_u64()?,
+		})
+	}
+}
+
+/// A block hash and the kernels belonging to that block.
+pub struct BlockKernels {
+	/// Hash of the block the kernels belong to.
+	pub hash: Hash,
+	/// The block's kernels in the order they appear in the Kernel MMR leafset.
+	pub kernels: Vec<TxKernel>,
+}
+
+/// Response to a Get kernels request containing the requested kernels.
+pub struct Kernels {
+	/// The blocks, in order, and their corresponding kernels.
+	pub blocks: Vec<BlockKernels>,
+}
+
+impl Writeable for Kernels {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		writer.write_u16(self.blocks.len() as u16)?;
+
+		for block in &self.blocks {
+			block.hash.write(writer)?;
+
+			writer.write_u16(block.kernels.len() as u16)?;
+			for kernel in &block.kernels {
+				kernel.write(writer)?;
+			}
+		}
+		Ok(())
+	}
+}
+
+impl Readable for Kernels {
+	fn read(reader: &mut Reader) -> Result<Kernels, ser::Error> {
+		let num_blocks = reader.read_u16()?;
+		let mut blocks = Vec::with_capacity(num_blocks as usize);
+
+		for _ in 0..num_blocks {
+			let hash = Hash::read(reader)?;
+
+			let num_kernels = reader.read_u16()?;
+			let mut kernels = Vec::with_capacity(num_kernels as usize);
+			for _ in 0..num_kernels {
+				kernels.push(TxKernel::read(reader)?);
+			}
+
+			blocks.push(BlockKernels { hash, kernels });
+		}
+
+		Ok(Kernels { blocks })
 	}
 }

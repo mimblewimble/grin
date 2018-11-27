@@ -25,8 +25,8 @@ use core::core::{self, hash::Hash, CompactBlock};
 use util::{RateCounter, RwLock};
 
 use msg::{
-	BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr, TxHashSetArchive,
-	TxHashSetRequest, Type,
+	BanReason, BlockKernels, GetKernels, GetPeerAddrs, Headers, Kernels, Locator, PeerAddrs, Ping,
+	Pong, SockAddr, TxHashSetArchive, TxHashSetRequest, Type,
 };
 use types::{Error, NetAdapter};
 
@@ -339,6 +339,36 @@ impl MessageHandler for Protocol {
 					"handle_payload: txhashset archive for {} at {}, DONE. Data Ok: {}",
 					sm_arch.hash, sm_arch.height, res
 				);
+
+				Ok(None)
+			}
+
+			Type::GetKernels => {
+				// DAVID: Check Capabilities first?
+				// Retrieve kernels from the kernel MMR
+				let request: GetKernels = msg.body()?;
+				let kernels_by_block = adapter.read_kernels(request.first_block_height);
+
+				let blocks: Vec<BlockKernels> = kernels_by_block
+					.iter()
+					.map(|block| BlockKernels {
+						hash: block.0,
+						kernels: block.1.clone(),
+					}).collect();
+
+				// serialize and send all the kernels over
+				Ok(Some(Response::new(Type::Kernels, Kernels { blocks }, writer)))
+			}
+
+			Type::Kernels => {
+				let kernels: Kernels = msg.body()?;
+				let blocks: Vec<(Hash, Vec<core::TxKernel>)> = kernels
+					.blocks
+					.iter()
+					.map(|block| (block.hash, block.kernels.clone()))
+					.collect();
+
+				adapter.kernels_received(&blocks, self.addr);
 
 				Ok(None)
 			}

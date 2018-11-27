@@ -29,7 +29,7 @@ use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::merkle_proof::MerkleProof;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{
-	Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernelEntry,
+	Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernel, TxKernelEntry,
 };
 use core::global;
 use core::pow;
@@ -363,6 +363,22 @@ impl Chain {
 
 		pipe::sync_block_headers(headers, &mut ctx)?;
 		ctx.batch.commit()?;
+
+		Ok(())
+	}
+
+	/// Attempt to add new kernels to the kernel mmr.
+	/// This is only ever used during sync.
+	pub fn sync_kernels(
+		&self,
+		blocks: &Vec<(Hash, Vec<TxKernel>)>,
+		opts: Options,
+	) -> Result<(), Error> {
+		let mut txhashset = self.txhashset.write();
+		let batch = self.store.batch()?;
+		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
+
+		pipe::sync_kernels(blocks, &mut ctx)?;
 
 		Ok(())
 	}
@@ -993,6 +1009,18 @@ impl Chain {
 	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<(Hash, TxKernelEntry)> {
 		let mut txhashset = self.txhashset.write();
 		txhashset.last_n_kernel(distance)
+	}
+
+	/// kernels by insertion index
+	pub fn get_kernels_by_insertion_index(&self, start_index: u64, max: u64) -> Vec<TxKernelEntry> {
+		let mut txhashset = self.txhashset.write();
+		txhashset.kernels_by_insertion_index(start_index, max).1
+	}
+
+	/// returns the number of leaves in the kernel mmr
+	pub fn get_num_kernels(&self) -> u64 {
+		let txhashset = self.txhashset.read();
+		txhashset.num_kernels()
 	}
 
 	/// outputs by insertion index

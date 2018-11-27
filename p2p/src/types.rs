@@ -209,6 +209,8 @@ bitflags! {
 		const PEER_LIST = 0b00000100;
 		/// Can broadcast and request txs by kernel hash.
 		const TX_KERNEL_HASH = 0b00001000;
+		/// Provides ability to request kernels separately from the rest of the TxHashSet.
+		const ENHANCED_TXHASHSET_HIST = 0b00010000;
 
 		/// All nodes right now are "full nodes".
 		/// Some nodes internally may maintain longer block histories (archival_mode)
@@ -370,7 +372,7 @@ pub trait ChainAdapter: Sync + Send {
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
 
 	/// Provides a reading view into the current txhashset state as well as
-	/// the required indexes for a consumer to rewind to a consistant state
+	/// the required indexes for a consumer to rewind to a consistent state
 	/// at the provided block hash.
 	fn txhashset_read(&self, h: Hash) -> Option<TxHashSetRead>;
 
@@ -393,6 +395,17 @@ pub trait ChainAdapter: Sync + Send {
 	/// read as a zip file, unzipped and the resulting state files should be
 	/// rewound to the provided indexes.
 	fn txhashset_write(&self, h: Hash, txhashset_data: File, peer_addr: SocketAddr) -> bool;
+
+	/// Finds a list of kernels starting from the given block height.
+	/// Kernels are returned in order, grouped by the hash of the block they belong to.
+	fn read_kernels(&self, first_block_height: u64) -> Vec<(Hash, Vec<core::TxKernel>)>;
+
+	/// A set of kernels has been received.
+	fn kernels_received(
+		&self,
+		blocks: &Vec<(Hash, Vec<core::TxKernel>)>,
+		peer_addr: SocketAddr,
+	) -> bool;
 }
 
 /// Additional methods required by the protocol that don't need to be

@@ -213,6 +213,23 @@ impl TxHashSet {
 		kernel_pmmr.get_last_n_insertions(distance)
 	}
 
+	/// returns kernels from the given insertion (leaf) index up to the
+	/// specified limit. Also returns the last index actually populated
+	pub fn kernels_by_insertion_index(
+		&mut self,
+		start_index: u64,
+		max_count: u64,
+	) -> (u64, Vec<TxKernelEntry>) {
+		let kernel_pmmr: PMMR<TxKernelEntry, _> =
+			PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
+		kernel_pmmr.elements_from_insertion_index(start_index, max_count)
+	}
+
+	/// returns the number of kernels (leaves) in the kernel_pmmr
+	pub fn num_kernels(&self) -> u64 {
+		pmmr::n_leaves(self.kernel_pmmr_h.last_pos)
+	}
+
 	/// returns outputs from the given insertion (leaf) index up to the
 	/// specified limit. Also returns the last index actually populated
 	pub fn outputs_by_insertion_index(
@@ -950,6 +967,29 @@ impl<'a> Extension<'a> {
 		Ok(output_pos)
 	}
 
+	/// Iterates through the kernels and adds them to the kernel_mmr,
+	/// verifying signatures and kernel_mmr_roots as we go.
+	pub fn apply_kernels(&mut self, hash: &Hash, kernels: &Vec<TxKernel>) -> Result<(), Error> {
+		let header = self.batch.get_block_header(hash)?;
+
+		for kernel in kernels {
+			// Ensure kernel is self-consistent
+			kernel.verify()?;
+
+			// Apply the kernel to the kernel MMR.
+			self.apply_kernel(kernel)?;
+		}
+
+		if header.kernel_root == self.kernel_root() {
+			Ok(())
+		} else {
+			Err(ErrorKind::InvalidTxHashSet(format!(
+				"Kernel root for block {} does not match",
+				hash
+			)).into())
+		}
+	}
+
 	/// Push kernel onto MMR (hash and data files).
 	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
 		self.kernel_pmmr
@@ -1026,6 +1066,23 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
+	/// Rewinds the kernel mmr to the provided leaf index.
+	pub fn rewind_kernel_mmr(&mut self, next_kernel_index: u64) -> Result<(), Error> {
+		debug!(
+			"Rewind kernel_pmmr to next_kernel_index {}",
+			next_kernel_index,
+		);
+
+		// Rewind kernel_pmmr
+		let kernel_pos = pmmr::insertion_to_pmmr_index(next_kernel_index);
+
+		self.kernel_pmmr
+			.rewind(kernel_pos, &Bitmap::create())
+			.map_err(&ErrorKind::TxHashSetErr)?;
+
+		Ok(())
+	}
+
 	/// Rewinds the MMRs to the provided positions, given the output and
 	/// kernel we want to rewind to.
 	fn rewind_to_pos(
@@ -1064,6 +1121,11 @@ impl<'a> Extension<'a> {
 			rproof_root: self.rproof_pmmr.root(),
 			kernel_root: self.kernel_pmmr.root(),
 		}
+	}
+
+	/// Get the root of the current kernel MMR.
+	fn kernel_root(&self) -> Hash {
+		self.kernel_pmmr.root()
 	}
 
 	/// Get the root of the current header MMR.
