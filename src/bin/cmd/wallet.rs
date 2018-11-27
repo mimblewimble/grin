@@ -453,11 +453,12 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 							Ok(())
 						})?;
 					}
+					api.tx_lock_outputs(&slate, lock_fn)?;
 					api.finalize_tx(&mut slate)?;
 				} else {
 					adapter.send_tx_async(dest, &slate)?;
+					api.tx_lock_outputs(&slate, lock_fn)?;
 				}
-				api.tx_lock_outputs(&slate, lock_fn)?;
 				if adapter.supports_sync() {
 					let result = api.post_tx(&slate, fluff);
 					match result {
