@@ -929,8 +929,11 @@ impl Chain {
 		}
 
 		let mut count = 0;
-		let batch = self.store.batch()?;
+
+		let tail = self.get_header_by_height(head.height - horizon)?;
 		let mut current = self.get_header_by_height(head.height - horizon - 1)?;
+
+		let batch = self.store.batch()?;
 		loop {
 			// Go to the store directly so we can handle NotFoundErr robustly.
 			match self.store.get_block(&current.hash()) {
@@ -956,7 +959,6 @@ impl Chain {
 				Err(e) => return Err(From::from(e)),
 			}
 		}
-		let tail = self.get_header_by_height(head.height - horizon)?;
 		batch.save_body_tail(&Tip::from_header(&tail))?;
 		batch.commit()?;
 		debug!(
