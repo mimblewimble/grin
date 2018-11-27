@@ -20,7 +20,7 @@ use croaring::Bitmap;
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::{self, family, Backend, HashOnlyBackend};
 use core::core::BlockHeader;
-use core::ser::{self, PMMRable, FixedLength};
+use core::ser::{self, FixedLength, PMMRable};
 use leaf_set::LeafSet;
 use prune_list::PruneList;
 use types::{prune_noop, AppendOnlyFile, HashFile};
@@ -69,7 +69,8 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 			let position = self.hash_file.size_unsync() + shift + 1;
 			self.leaf_set.add(position);
 		}
-		self.data_file.append(&mut ser::ser_vec(&data.as_elmt()).unwrap());
+		self.data_file
+			.append(&mut ser::ser_vec(&data.as_elmt()).unwrap());
 		for h in &hashes {
 			self.hash_file
 				.append(h)

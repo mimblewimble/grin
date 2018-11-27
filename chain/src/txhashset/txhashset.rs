@@ -631,7 +631,9 @@ impl<'a> HeaderExtension<'a> {
 	/// This may be either the header MMR or the sync MMR depending on the
 	/// extension.
 	pub fn apply_header(&mut self, header: &BlockHeader) -> Result<Hash, Error> {
-		self.pmmr.push(header.clone()).map_err(&ErrorKind::TxHashSetErr)?;
+		self.pmmr
+			.push(header.clone())
+			.map_err(&ErrorKind::TxHashSetErr)?;
 		self.header = header.clone();
 		Ok(self.root())
 	}
@@ -661,7 +663,9 @@ impl<'a> HeaderExtension<'a> {
 	/// including the genesis block header.
 	pub fn truncate(&mut self) -> Result<(), Error> {
 		debug!("Truncating header extension.");
-		self.pmmr.rewind(0, &Bitmap::create()).map_err(&ErrorKind::TxHashSetErr)?;
+		self.pmmr
+			.rewind(0, &Bitmap::create())
+			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
 

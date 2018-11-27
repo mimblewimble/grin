@@ -307,7 +307,11 @@ where
 	/// Helper function which returns un-pruned nodes from the insertion index
 	/// forward
 	/// returns last insertion index returned along with data
-	pub fn elements_from_insertion_index(&self, mut index: u64, max_count: u64) -> (u64, Vec<T::E>) {
+	pub fn elements_from_insertion_index(
+		&self,
+		mut index: u64,
+		max_count: u64,
+	) -> (u64, Vec<T::E>) {
 		let mut return_vec = vec![];
 		if index == 0 {
 			index = 1;
