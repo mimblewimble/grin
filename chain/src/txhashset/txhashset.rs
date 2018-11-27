@@ -840,7 +840,11 @@ impl<'a> Extension<'a> {
 
 	/// Verify we are not attempting to spend any coinbase outputs
 	/// that have not sufficiently matured.
-	pub fn verify_coinbase_maturity(&mut self, inputs: &Vec<Input>, height: u64) -> Result<(), Error> {
+	pub fn verify_coinbase_maturity(
+		&mut self,
+		inputs: &Vec<Input>,
+		height: u64,
+	) -> Result<(), Error> {
 		// Find the greatest output pos of any coinbase
 		// outputs we are attempting to spend.
 		let pos = inputs
