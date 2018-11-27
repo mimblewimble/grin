@@ -27,6 +27,7 @@ use lru_cache::LruCache;
 
 use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::merkle_proof::MerkleProof;
+use core::core::pmmr;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{
 	Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernelEntry,
@@ -38,7 +39,9 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus};
+use types::{
+	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
+};
 use util::secp::pedersen::{Commitment, RangeProof};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
@@ -146,20 +149,17 @@ impl OrphanBlockPool {
 pub struct Chain {
 	db_root: String,
 	store: Arc<store::ChainStore>,
-	adapter: Arc<ChainAdapter>,
+	adapter: Arc<ChainAdapter + Send + Sync>,
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
 	// Recently processed blocks to avoid double-processing
 	block_hashes_cache: Arc<RwLock<LruCache<Hash, bool>>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 	// POW verification function
-	pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
+	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	archive_mode: bool,
 	genesis: BlockHeader,
 }
-
-unsafe impl Sync for Chain {}
-unsafe impl Send for Chain {}
 
 impl Chain {
 	/// Initializes the blockchain and returns a new Chain instance. Does a
@@ -168,9 +168,9 @@ impl Chain {
 	pub fn init(
 		db_root: String,
 		db_env: Arc<lmdb::Environment>,
-		adapter: Arc<ChainAdapter>,
+		adapter: Arc<ChainAdapter + Send + Sync>,
 		genesis: Block,
-		pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
+		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 		verifier_cache: Arc<RwLock<VerifierCache>>,
 		archive_mode: bool,
 	) -> Result<Chain, Error> {
@@ -238,22 +238,43 @@ impl Chain {
 		res
 	}
 
+	fn determine_status(&self, head: Option<Tip>, prev_head: Tip) -> BlockStatus {
+		// We have more work if the chain head is updated.
+		let is_more_work = head.is_some();
+
+		let mut is_next_block = false;
+		if let Some(head) = head {
+			if head.prev_block_h == prev_head.last_block_h {
+				is_next_block = true;
+			}
+		}
+
+		match (is_more_work, is_next_block) {
+			(true, true) => BlockStatus::Next,
+			(true, false) => BlockStatus::Reorg,
+			(false, _) => BlockStatus::Fork,
+		}
+	}
+
 	/// Attempt to add a new block to the chain.
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
-		let maybe_new_head: Result<Option<Tip>, Error>;
-		{
+		let (maybe_new_head, prev_head) = {
 			let mut txhashset = self.txhashset.write();
 			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
-			maybe_new_head = pipe::process_block(&b, &mut ctx);
+			let prev_head = ctx.batch.head()?;
+
+			let maybe_new_head = pipe::process_block(&b, &mut ctx);
 			if let Ok(_) = maybe_new_head {
 				ctx.batch.commit()?;
 			}
+
 			// release the lock and let the batch go before post-processing
-		}
+			(maybe_new_head, prev_head)
+		};
 
 		let add_to_hash_cache = |hash: Hash| {
 			// only add to hash cache below if block is definitively accepted
@@ -266,8 +287,10 @@ impl Chain {
 			Ok(head) => {
 				add_to_hash_cache(b.hash());
 
+				let status = self.determine_status(head.clone(), prev_head);
+
 				// notifying other parts of the system of the update
-				self.adapter.block_accepted(&b, opts);
+				self.adapter.block_accepted(&b, status, opts);
 
 				Ok(head)
 			}
@@ -1174,9 +1197,16 @@ fn setup_head(
 				// If we have no header MMR then rebuild as necessary.
 				// Supports old nodes with no header MMR.
 				txhashset::header_extending(txhashset, &mut batch, |extension| {
-					if extension.size() == 0 {
+					let pos = pmmr::insertion_to_pmmr_index(head.height + 1);
+					let needs_rebuild = match extension.get_header_hash(pos) {
+						None => true,
+						Some(hash) => hash != head.last_block_h,
+					};
+
+					if needs_rebuild {
 						extension.rebuild(&head, &genesis.header)?;
 					}
+
 					Ok(())
 				})?;
 

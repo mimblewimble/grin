@@ -49,34 +49,25 @@ fn setup(test_dir: &str) {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 }
 
-/// Exercises the Transaction API fully with a test WalletToNodeClient operating
+/// Exercises the Transaction API fully with a test NodeClient operating
 /// directly on a chain instance
 /// Callable with any type of wallet
 fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
-	let mut wallet_proxy: WalletProxy<LocalWalletClient, LocalWalletClient, ExtKeychain> =
-		WalletProxy::new(test_dir);
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
 	let chain = wallet_proxy.chain.clone();
 
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
-	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1 = common::create_wallet(
-		&format!("{}/wallet1", test_dir),
-		client.clone(),
-		client.clone(),
-	);
-	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone());
+	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
+	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
+	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
+	let client2 = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
 	// define recipient wallet, add to proxy
-	let wallet2 = common::create_wallet(
-		&format!("{}/wallet2", test_dir),
-		client.clone(),
-		client.clone(),
-	);
-	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone());
+	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
+	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -93,7 +84,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Check wallet 1 contents are as expected
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		debug!(
 			"Wallet 1 Info Pre-Transaction, after {} blocks: {:?}",
 			wallet1_info.last_confirmed_height, wallet1_info
@@ -113,20 +104,22 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	let mut slate = Slate::blank(1);
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
 		// note this will increment the block count as part of the transaction "Posting"
-		slate = sender_api.issue_send_tx(
-			amount,    // amount
-			2,         // minimum confirmations
-			"wallet2", // dest
-			500,       // max outputs
-			1,         // num change outputs
-			true,      // select all outputs
+		let (slate_i, lock_fn) = sender_api.initiate_tx(
+			None, amount, // amount
+			2,      // minimum confirmations
+			500,    // max outputs
+			1,      // num change outputs
+			true,   // select all outputs
 		)?;
+		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
+		sender_api.tx_lock_outputs(&slate, lock_fn)?;
+		sender_api.finalize_tx(&mut slate)?;
 		Ok(())
 	})?;
 
 	// Check transaction log for wallet 1
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (_, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (_, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		let (refreshed, txs) = api.retrieve_txs(true, None, None)?;
 		assert!(refreshed);
 		let fee = wallet::libtx::tx_fee(
@@ -170,7 +163,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// Check wallet 1 contents are as expected
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		debug!(
 			"Wallet 1 Info Post Transaction, after {} blocks: {:?}",
 			wallet1_info.last_confirmed_height, wallet1_info
@@ -210,7 +203,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// refresh wallets and retrieve info/tests for each wallet after maturity
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		debug!("Wallet 1 Info: {:?}", wallet1_info);
 		assert!(wallet1_refreshed);
 		assert_eq!(
@@ -225,7 +218,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(wallet2_refreshed);
 		assert_eq!(wallet2_info.amount_currently_spendable, amount);
 
@@ -244,19 +237,22 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	// the stored transaction instead
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
 		// note this will increment the block count as part of the transaction "Posting"
-		slate = sender_api.issue_send_tx(
+		let (slate_i, lock_fn) = sender_api.initiate_tx(
+			None,
 			amount * 2, // amount
 			2,          // minimum confirmations
-			"wallet2",  // dest
 			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
 		)?;
+		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
+		sender_api.finalize_tx(&mut slate)?;
+		sender_api.tx_lock_outputs(&slate, lock_fn)?;
 		Ok(())
 	})?;
 
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
-		let (refreshed, _wallet1_info) = sender_api.retrieve_summary_info(true)?;
+		let (refreshed, _wallet1_info) = sender_api.retrieve_summary_info(true, 1)?;
 		assert!(refreshed);
 		let (_, txs) = sender_api.retrieve_txs(true, None, None)?;
 
@@ -266,7 +262,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
 		sender_api.post_stored_tx(tx.id, false)?;
-		let (_, wallet1_info) = sender_api.retrieve_summary_info(true)?;
+		let (_, wallet1_info) = sender_api.retrieve_summary_info(true, 1)?;
 		// should be mined now
 		assert_eq!(
 			wallet1_info.total,
@@ -280,7 +276,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// check wallet2 has stored transaction
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(wallet2_refreshed);
 		assert_eq!(wallet2_info.amount_currently_spendable, amount * 3);
 
@@ -305,28 +301,19 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
-	let mut wallet_proxy: WalletProxy<LocalWalletClient, LocalWalletClient, ExtKeychain> =
-		WalletProxy::new(test_dir);
+	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
 	let chain = wallet_proxy.chain.clone();
 
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
-	let client = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1 = common::create_wallet(
-		&format!("{}/wallet1", test_dir),
-		client.clone(),
-		client.clone(),
-	);
-	wallet_proxy.add_wallet("wallet1", client.get_send_instance(), wallet1.clone());
+	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
+	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
+	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
 	// define recipient wallet, add to proxy
-	let client = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	let wallet2 = common::create_wallet(
-		&format!("{}/wallet2", test_dir),
-		client.clone(),
-		client.clone(),
-	);
-	wallet_proxy.add_wallet("wallet2", client.get_send_instance(), wallet2.clone());
+	let client2 = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
+	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
+	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -345,20 +332,22 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	let mut slate = Slate::blank(1);
 	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
 		// note this will increment the block count as part of the transaction "Posting"
-		slate = sender_api.issue_send_tx(
-			amount,    // amount
-			2,         // minimum confirmations
-			"wallet2", // dest
-			500,       // max outputs
-			1,         // num change outputs
-			true,      // select all outputs
+		let (slate_i, lock_fn) = sender_api.initiate_tx(
+			None, amount, // amount
+			2,      // minimum confirmations
+			500,    // max outputs
+			1,      // num change outputs
+			true,   // select all outputs
 		)?;
+		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
+		sender_api.finalize_tx(&mut slate)?;
+		sender_api.tx_lock_outputs(&slate, lock_fn)?;
 		Ok(())
 	})?;
 
 	// Check transaction log for wallet 1
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		println!(
 			"last confirmed height: {}",
 			wallet1_info.last_confirmed_height
@@ -403,7 +392,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 		}
 		assert_eq!(outputs.len(), 1);
 		assert_eq!(unconfirmed_count, 1);
-		let (refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		let (refreshed, wallet2_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(refreshed);
 		assert_eq!(wallet2_info.amount_currently_spendable, 0,);
 		assert_eq!(wallet2_info.total, amount);
@@ -424,7 +413,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
 		api.cancel_tx(Some(tx.id), None)?;
-		let (refreshed, wallet1_info) = api.retrieve_summary_info(true)?;
+		let (refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(refreshed);
 		println!(
 			"last confirmed height: {}",
@@ -451,7 +440,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
 		api.cancel_tx(Some(tx.id), None)?;
-		let (refreshed, wallet2_info) = api.retrieve_summary_info(true)?;
+		let (refreshed, wallet2_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(refreshed);
 		// check all eligible inputs should be now be spendable
 		assert_eq!(wallet2_info.amount_currently_spendable, 0,);

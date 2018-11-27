@@ -38,8 +38,8 @@ extern crate grin_util as util;
 
 #[macro_use]
 mod common;
+pub mod cuckaroo;
 pub mod cuckatoo;
-pub mod cuckoo;
 mod error;
 #[allow(dead_code)]
 pub mod lean;
@@ -53,17 +53,21 @@ use global;
 
 pub use self::common::EdgeType;
 pub use self::types::*;
-pub use pow::cuckatoo::CuckatooContext;
-pub use pow::cuckoo::CuckooContext;
+pub use pow::cuckaroo::{new_cuckaroo_ctx, CuckarooContext};
+pub use pow::cuckatoo::{new_cuckatoo_ctx, CuckatooContext};
 pub use pow::error::Error;
 
 const MAX_SOLS: u32 = 10;
 
 /// Validates the proof of work of a given header, and that the proof of work
 /// satisfies the requirements of the header.
-pub fn verify_size(bh: &BlockHeader, cuckoo_sz: u8) -> Result<(), Error> {
-	let mut ctx =
-		global::create_pow_context::<u64>(cuckoo_sz, bh.pow.proof.nonces.len(), MAX_SOLS)?;
+pub fn verify_size(bh: &BlockHeader) -> Result<(), Error> {
+	let mut ctx = global::create_pow_context::<u64>(
+		bh.height,
+		bh.pow.edge_bits(),
+		bh.pow.proof.nonces.len(),
+		MAX_SOLS,
+	)?;
 	ctx.set_header_nonce(bh.pre_pow(), None, false)?;
 	ctx.verify(&bh.pow.proof)
 }
@@ -106,7 +110,7 @@ pub fn pow_size(
 	loop {
 		// if we found a cycle (not guaranteed) and the proof hash is higher that the
 		// diff, we're all good
-		let mut ctx = global::create_pow_context::<u32>(sz, proof_size, MAX_SOLS)?;
+		let mut ctx = global::create_pow_context::<u32>(bh.height, sz, proof_size, MAX_SOLS)?;
 		ctx.set_header_nonce(bh.pre_pow(), None, true)?;
 		if let Ok(proofs) = ctx.find_cycles() {
 			bh.pow.proof = proofs[0].clone();
@@ -132,21 +136,24 @@ mod test {
 	use super::*;
 	use genesis;
 	use global;
+	use global::ChainTypes;
 
 	/// We'll be generating genesis blocks differently
-	#[ignore]
 	#[test]
 	fn genesis_pow() {
+		global::set_mining_mode(ChainTypes::AutomatedTesting);
+
 		let mut b = genesis::genesis_dev();
 		b.header.pow.nonce = 485;
+		b.header.pow.proof.edge_bits = global::min_edge_bits();
 		pow_size(
 			&mut b.header,
 			Difficulty::min(),
 			global::proofsize(),
 			global::min_edge_bits(),
 		).unwrap();
-		assert!(b.header.pow.nonce != 310);
+		assert_ne!(b.header.pow.nonce, 310);
 		assert!(b.header.pow.to_difficulty() >= Difficulty::min());
-		assert!(verify_size(&b.header, global::min_edge_bits()).is_ok());
+		assert!(verify_size(&b.header).is_ok());
 	}
 }

@@ -519,7 +519,7 @@ impl StratumServer {
 			);
 		} else {
 			// Do some validation but dont submit
-			if !pow::verify_size(&b.header, b.header.pow.proof.edge_bits).is_ok() {
+			if !pow::verify_size(&b.header).is_ok() {
 				// Return error status
 				error!(
 					"(Server ID: {}) Failed to validate share at height {} with {} edge_bits with nonce {} using job_id {}",
@@ -766,4 +766,3 @@ where
 			serde_json::to_value(e).unwrap()
 		})
 }
-

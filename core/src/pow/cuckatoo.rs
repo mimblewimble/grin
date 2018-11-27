@@ -152,6 +152,22 @@ where
 	}
 }
 
+/// Instantiate a new CuckatooContext as a PowContext. Note that this can't
+/// be moved in the PoWContext trait as this particular trait needs to be
+/// convertible to an object trait.
+pub fn new_cuckatoo_ctx<T>(
+	edge_bits: u8,
+	proof_size: usize,
+	max_sols: u32,
+) -> Result<Box<PoWContext<T>>, Error>
+where
+	T: EdgeType + 'static,
+{
+	Ok(Box::new(CuckatooContext::<T>::new_impl(
+		edge_bits, proof_size, max_sols,
+	)?))
+}
+
 /// Cuckatoo solver context
 pub struct CuckatooContext<T>
 where
@@ -165,12 +181,6 @@ impl<T> PoWContext<T> for CuckatooContext<T>
 where
 	T: EdgeType,
 {
-	fn new(edge_bits: u8, proof_size: usize, max_sols: u32) -> Result<Box<Self>, Error> {
-		Ok(Box::new(CuckatooContext::<T>::new_impl(
-			edge_bits, proof_size, max_sols,
-		)?))
-	}
-
 	fn set_header_nonce(
 		&mut self,
 		header: Vec<u8>,
@@ -375,7 +385,7 @@ mod test {
 	where
 		T: EdgeType,
 	{
-		let mut ctx = CuckatooContext::<T>::new(29, 42, 10)?;
+		let mut ctx = CuckatooContext::<u32>::new_impl(29, 42, 10).unwrap();
 		ctx.set_header_nonce([0u8; 80].to_vec(), Some(20), false)?;
 		assert!(ctx.verify(&Proof::new(V1_29.to_vec().clone())).is_ok());
 		Ok(())
@@ -385,7 +395,7 @@ mod test {
 	where
 		T: EdgeType,
 	{
-		let mut ctx = CuckatooContext::<T>::new(29, 42, 10)?;
+		let mut ctx = CuckatooContext::<u32>::new_impl(29, 42, 10).unwrap();
 		let mut header = [0u8; 80];
 		header[0] = 1u8;
 		ctx.set_header_nonce(header.to_vec(), Some(20), false)?;
@@ -417,7 +427,7 @@ mod test {
 			String::from_utf8(header.clone()).unwrap(),
 			nonce
 		);
-		let mut ctx_u32 = CuckatooContext::<T>::new(edge_bits, proof_size, max_sols)?;
+		let mut ctx_u32 = CuckatooContext::<u32>::new_impl(edge_bits, proof_size, max_sols)?;
 		let mut bytes = ctx_u32.byte_count()?;
 		let mut unit = 0;
 		while bytes >= 10240 {
@@ -442,4 +452,5 @@ mod test {
 		}
 		Ok(())
 	}
+
 }

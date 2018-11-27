@@ -100,6 +100,12 @@ pub struct PoolConfig {
 	/// Maximum capacity of the pool in number of transactions
 	#[serde = "default_max_stempool_size"]
 	pub max_stempool_size: usize,
+
+	/// Maximum total weight of transactions that can get selected to build a
+	/// block from. Allows miners to restrict the maximum weight of their
+	/// blocks.
+	#[serde = "default_mineable_max_weight"]
+	pub mineable_max_weight: usize,
 }
 
 impl Default for PoolConfig {
@@ -108,6 +114,7 @@ impl Default for PoolConfig {
 			accept_fee_base: default_accept_fee_base(),
 			max_pool_size: default_max_pool_size(),
 			max_stempool_size: default_max_stempool_size(),
+			mineable_max_weight: default_mineable_max_weight(),
 		}
 	}
 }
@@ -120,6 +127,9 @@ fn default_max_pool_size() -> usize {
 }
 fn default_max_stempool_size() -> usize {
 	50_000
+}
+fn default_mineable_max_weight() -> usize {
+	consensus::MAX_BLOCK_WEIGHT - consensus::BLOCK_OUTPUT_WEIGHT - consensus::BLOCK_KERNEL_WEIGHT
 }
 
 /// Represents a single entry in the pool.

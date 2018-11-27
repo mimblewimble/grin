@@ -26,6 +26,7 @@ use util::secp;
 use util::secp::key::{PublicKey, SecretKey};
 use wallet::libtx::{aggsig, proof};
 use wallet::libwallet::types::Context;
+use wallet::{EncryptedWalletSeed, WalletSeed};
 
 use rand::thread_rng;
 
@@ -204,7 +205,7 @@ fn aggsig_sender_receiver_interaction() {
 		let msg = kernel_sig_msg(0, 0).unwrap();
 
 		// Receiver check the final signature verifies
-		let sig_verifies = aggsig::verify_sig_build_msg(
+		let sig_verifies = aggsig::verify_completed_sig(
 			&keychain.secp(),
 			&final_sig,
 			&final_pubkey,
@@ -410,7 +411,7 @@ fn aggsig_sender_receiver_interaction_offset() {
 		let msg = kernel_sig_msg(0, 0).unwrap();
 
 		// Receiver check the final signature verifies
-		let sig_verifies = aggsig::verify_sig_build_msg(
+		let sig_verifies = aggsig::verify_completed_sig(
 			&keychain.secp(),
 			&final_sig,
 			&final_pubkey,
@@ -480,4 +481,23 @@ fn test_rewind_range_proof() {
 
 	assert_eq!(proof_info.success, false);
 	assert_eq!(proof_info.value, 0);
+}
+
+#[test]
+fn wallet_seed_encrypt() {
+	let password = "passwoid";
+	let wallet_seed = WalletSeed::init_new(32);
+	let mut enc_wallet_seed = EncryptedWalletSeed::from_seed(&wallet_seed, password).unwrap();
+	println!("EWS: {:?}", enc_wallet_seed);
+	let decrypted_wallet_seed = enc_wallet_seed.decrypt(password).unwrap();
+	assert_eq!(wallet_seed, decrypted_wallet_seed);
+
+	// Wrong password
+	let decrypted_wallet_seed = enc_wallet_seed.decrypt("");
+	assert!(decrypted_wallet_seed.is_err());
+
+	// Wrong nonce
+	enc_wallet_seed.nonce = "wrongnonce".to_owned();
+	let decrypted_wallet_seed = enc_wallet_seed.decrypt(password);
+	assert!(decrypted_wallet_seed.is_err());
 }

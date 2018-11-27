@@ -43,8 +43,8 @@ use keychain::Keychain;
 
 use util::secp::pedersen;
 use wallet::libtx::slate::Slate;
-use wallet::libwallet;
 use wallet::libwallet::types::*;
+use wallet::{controller, libwallet, WalletCommAdapter, WalletConfig};
 
 use common;
 
@@ -63,10 +63,9 @@ pub struct WalletProxyMessage {
 
 /// communicates with a chain instance or other wallet
 /// listener APIs via message queues
-pub struct WalletProxy<C, L, K>
+pub struct WalletProxy<C, K>
 where
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	/// directory to create the chain in
@@ -78,7 +77,7 @@ where
 		String,
 		(
 			Sender<WalletProxyMessage>,
-			Arc<Mutex<WalletInst<LocalWalletClient, LocalWalletClient, K>>>,
+			Arc<Mutex<WalletInst<LocalWalletClient, K>>>,
 		),
 	>,
 	/// simulate json send to another client
@@ -92,14 +91,11 @@ where
 	phantom_c: PhantomData<C>,
 	/// Phantom
 	phantom_k: PhantomData<K>,
-	/// Phantom
-	phantom_l: PhantomData<L>,
 }
 
-impl<C, L, K> WalletProxy<C, L, K>
+impl<C, K> WalletProxy<C, K>
 where
-	C: WalletToNodeClient,
-	L: WalletToWalletClient,
+	C: NodeClient,
 	K: Keychain,
 {
 	/// Create a new client that will communicate with the given grin node
@@ -128,7 +124,6 @@ where
 			running: Arc::new(AtomicBool::new(false)),
 			phantom_c: PhantomData,
 			phantom_k: PhantomData,
-			phantom_l: PhantomData,
 		};
 		retval
 	}
@@ -138,7 +133,7 @@ where
 		&mut self,
 		addr: &str,
 		tx: Sender<WalletProxyMessage>,
-		wallet: Arc<Mutex<WalletInst<LocalWalletClient, LocalWalletClient, K>>>,
+		wallet: Arc<Mutex<WalletInst<LocalWalletClient, K>>>,
 	) {
 		self.wallets.insert(addr.to_owned(), (tx, wallet));
 	}
@@ -215,8 +210,8 @@ where
 		}
 		let w = dest_wallet.unwrap().1.clone();
 		let mut slate = serde_json::from_str(&m.body).unwrap();
-		libwallet::controller::foreign_single_use(w.clone(), |listener_api| {
-			listener_api.receive_tx(&mut slate)?;
+		controller::foreign_single_use(w.clone(), |listener_api| {
+			listener_api.receive_tx(&mut slate, None)?;
 			Ok(())
 		})?;
 		Ok(WalletProxyMessage {
@@ -314,22 +309,13 @@ impl LocalWalletClient {
 	pub fn get_send_instance(&self) -> Sender<WalletProxyMessage> {
 		self.tx.lock().clone()
 	}
-}
-
-impl WalletToWalletClient for LocalWalletClient {
-	/// Call the wallet API to create a coinbase output for the given
-	/// block_fees. Will retry based on default "retry forever with backoff"
-	/// behavior.
-	fn create_coinbase(
-		&self,
-		_dest: &str,
-		_block_fees: &BlockFees,
-	) -> Result<CbData, libwallet::Error> {
-		unimplemented!();
-	}
 
 	/// Send the slate to a listening wallet instance
-	fn send_tx_slate(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+	pub fn send_tx_slate_direct(
+		&self,
+		dest: &str,
+		slate: &Slate,
+	) -> Result<Slate, libwallet::Error> {
 		let m = WalletProxyMessage {
 			sender_id: self.id.clone(),
 			dest: dest.to_owned(),
@@ -352,7 +338,55 @@ impl WalletToWalletClient for LocalWalletClient {
 	}
 }
 
-impl WalletToNodeClient for LocalWalletClient {
+impl WalletCommAdapter for LocalWalletClient {
+	fn supports_sync(&self) -> bool {
+		true
+	}
+
+	/// Send the slate to a listening wallet instance
+	fn send_tx_sync(&self, dest: &str, slate: &Slate) -> Result<Slate, libwallet::Error> {
+		let m = WalletProxyMessage {
+			sender_id: self.id.clone(),
+			dest: dest.to_owned(),
+			method: "send_tx_slate".to_owned(),
+			body: serde_json::to_string(slate).unwrap(),
+		};
+		{
+			let p = self.proxy_tx.lock();
+			p.send(m)
+				.context(libwallet::ErrorKind::ClientCallback("Send TX Slate"))?;
+		}
+		let r = self.rx.lock();
+		let m = r.recv().unwrap();
+		trace!("Received send_tx_slate response: {:?}", m.clone());
+		Ok(
+			serde_json::from_str(&m.body).context(libwallet::ErrorKind::ClientCallback(
+				"Parsing send_tx_slate response",
+			))?,
+		)
+	}
+
+	fn send_tx_async(&self, _dest: &str, _slate: &Slate) -> Result<(), libwallet::Error> {
+		unimplemented!();
+	}
+
+	fn receive_tx_async(&self, _params: &str) -> Result<Slate, libwallet::Error> {
+		unimplemented!();
+	}
+
+	fn listen(
+		&self,
+		params: HashMap<String, String>,
+		config: WalletConfig,
+		passphrase: &str,
+		account: &str,
+		node_api_secret: Option<String>,
+	) -> Result<(), libwallet::Error> {
+		unimplemented!();
+	}
+}
+
+impl NodeClient for LocalWalletClient {
 	fn node_url(&self) -> &str {
 		"node"
 	}

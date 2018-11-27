@@ -353,7 +353,7 @@ impl Slate {
 		// Calculate the final public key (for our own sanity check)
 
 		// Check our final sig verifies
-		aggsig::verify_sig_build_msg(
+		aggsig::verify_completed_sig(
 			&keychain.secp(),
 			&final_sig,
 			&final_pubkey,

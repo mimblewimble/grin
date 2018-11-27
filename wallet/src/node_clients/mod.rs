@@ -12,19 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Higher level wallet functions which can be used by callers to operate
-//! on the wallet, as well as helpers to invoke and instantiate wallets
-//! and listeners
+mod http;
 
-#![deny(non_upper_case_globals)]
-#![deny(non_camel_case_types)]
-#![deny(non_snake_case)]
-#![deny(unused_mut)]
-#![warn(missing_docs)]
-
-pub mod api;
-mod error;
-pub mod internal;
-pub mod types;
-
-pub use libwallet::error::{Error, ErrorKind};
+pub use self::http::{create_coinbase, HTTPNodeClient};
