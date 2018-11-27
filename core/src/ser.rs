@@ -512,7 +512,13 @@ impl FixedLength for RangeProof {
 		+ MAX_PROOF_SIZE;
 }
 
-impl PMMRable for RangeProof {}
+impl PMMRable for RangeProof {
+	type E = Self;
+
+	fn as_elmt(self) -> Self::E {
+		self
+	}
+}
 
 impl Readable for Signature {
 	fn read(reader: &mut Reader) -> Result<Signature, Error> {
@@ -682,11 +688,12 @@ pub trait FixedLength {
 	const LEN: usize;
 }
 
-/// Trait for types that can be added to a "hash only" PMMR (block headers for example).
-pub trait HashOnlyPMMRable: Writeable + Clone + Debug {}
-
 /// Trait for types that can be added to a PMMR.
-pub trait PMMRable: FixedLength + Readable + Writeable + Clone + Debug {}
+pub trait PMMRable: Writeable + Clone + Debug {
+	type E: FixedLength + Readable + Writeable;
+
+	fn as_elmt(self) -> Self::E;
+}
 
 /// Generic trait to ensure PMMR elements can be hashed with an index
 pub trait PMMRIndexHashable {

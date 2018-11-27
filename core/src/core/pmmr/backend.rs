@@ -52,7 +52,7 @@ pub trait Backend<T: PMMRable> {
 	fn get_hash(&self, position: u64) -> Option<Hash>;
 
 	/// Get underlying data by insertion position.
-	fn get_data(&self, position: u64) -> Option<T>;
+	fn get_data(&self, position: u64) -> Option<T::E>;
 
 	/// Get a Hash  by original insertion position
 	/// (ignoring the remove log).
@@ -60,7 +60,7 @@ pub trait Backend<T: PMMRable> {
 
 	/// Get a Data Element by original insertion position
 	/// (ignoring the remove log).
-	fn get_data_from_file(&self, position: u64) -> Option<T>;
+	fn get_data_from_file(&self, position: u64) -> Option<T::E>;
 
 	/// Remove Hash by insertion position. An index is also provided so the
 	/// underlying backend can implement some rollback of positions up to a
