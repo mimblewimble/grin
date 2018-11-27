@@ -56,21 +56,6 @@ const KERNEL_SUBDIR: &'static str = "kernel";
 
 const TXHASHSET_ZIP: &'static str = "txhashset_snapshot";
 
-// struct HashOnlyMMRHandle {
-// 	backend: HashOnlyMMRBackend,
-// 	last_pos: u64,
-// }
-//
-// impl HashOnlyMMRHandle {
-// 	fn new(root_dir: &str, sub_dir: &str, file_name: &str) -> Result<HashOnlyMMRHandle, Error> {
-// 		let path = Path::new(root_dir).join(sub_dir).join(file_name);
-// 		fs::create_dir_all(path.clone())?;
-// 		let backend = HashOnlyMMRBackend::new(path.to_str().unwrap())?;
-// 		let last_pos = backend.unpruned_size();
-// 		Ok(HashOnlyMMRHandle { backend, last_pos })
-// 	}
-// }
-
 struct PMMRHandle<T: PMMRable> {
 	backend: PMMRBackend<T>,
 	last_pos: u64,
