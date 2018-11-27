@@ -27,6 +27,7 @@ use lru_cache::LruCache;
 
 use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::merkle_proof::MerkleProof;
+use core::core::pmmr;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{
 	Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernelEntry,
@@ -212,7 +213,7 @@ impl Chain {
 			);
 		}
 
-		Ok(Chain {
+		let chain = Chain {
 			db_root: db_root,
 			store: store,
 			adapter: adapter,
@@ -223,7 +224,9 @@ impl Chain {
 			block_hashes_cache: Arc::new(RwLock::new(LruCache::new(HASHES_CACHE_SIZE))),
 			archive_mode,
 			genesis: genesis.header.clone(),
-		})
+		};
+
+		Ok(chain)
 	}
 
 	/// Processes a single block, then checks for orphans, processing
@@ -1196,9 +1199,18 @@ fn setup_head(
 				// If we have no header MMR then rebuild as necessary.
 				// Supports old nodes with no header MMR.
 				txhashset::header_extending(txhashset, &mut batch, |extension| {
-					if extension.size() == 0 {
+					let pos = pmmr::insertion_to_pmmr_index(head.height+1);
+					let needs_rebuild = match extension.get_header_hash(pos) {
+						None => true,
+						Some(hash) => {
+							hash != head.last_block_h
+						}
+					};
+
+					if needs_rebuild {
 						extension.rebuild(&head, &genesis.header)?;
 					}
+
 					Ok(())
 				})?;
 

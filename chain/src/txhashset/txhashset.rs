@@ -622,6 +622,11 @@ impl<'a> HeaderExtension<'a> {
 		}
 	}
 
+	/// Get the header hash for the specified pos from the underlying MMR backend.
+	pub fn get_header_hash(&self, pos: u64) -> Option<Hash> {
+		self.pmmr.get_data(pos)
+	}
+
 	/// Force the rollback of this extension, no matter the result.
 	pub fn force_rollback(&mut self) {
 		self.rollback = true;
