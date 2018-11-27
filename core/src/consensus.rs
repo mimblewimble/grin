@@ -174,7 +174,8 @@ pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
 	if expired > 1 {
 		recognized_edge_bits = 0;
 	} else if expired > 0 {
-		recognized_edge_bits = recognized_edge_bits.saturating_sub((height % YEAR_HEIGHT) / WEEK_HEIGHT + 1);
+		recognized_edge_bits =
+			recognized_edge_bits.saturating_sub((height % YEAR_HEIGHT) / WEEK_HEIGHT + 1);
 	}
 
 	(2 << (edge_bits - global::base_edge_bits()) as u64) * recognized_edge_bits
