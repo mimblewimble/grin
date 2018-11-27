@@ -204,6 +204,9 @@ impl TxHashSet {
 		kernel_pmmr.get_last_n_insertions(distance)
 	}
 
+	/// Get header the the given height. Uses the header MMR to find the header hash
+	/// as height can be mapped to MMR pos.
+	/// Looks the header up in the db by hash.
 	pub fn get_header_by_height(&mut self, height: u64) -> Result<BlockHeader, Error> {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
 
@@ -621,7 +624,7 @@ impl<'a> HeaderExtension<'a> {
 	}
 
 	/// Get the header hash for the specified pos from the underlying MMR backend.
-	pub fn get_header_hash(&self, pos: u64) -> Option<Hash> {
+	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
 		self.pmmr.get_data(pos)
 	}
 
@@ -1001,7 +1004,7 @@ impl<'a> Extension<'a> {
 	}
 
 	/// Get the header hash for the specified pos from the underlying MMR backend.
-	pub fn get_header_hash(&self, pos: u64) -> Option<Hash> {
+	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
 		self.header_pmmr.get_data(pos)
 	}
 

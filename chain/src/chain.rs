@@ -27,7 +27,6 @@ use lru_cache::LruCache;
 
 use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::merkle_proof::MerkleProof;
-use core::core::pmmr;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{
 	Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernelEntry,
@@ -1209,10 +1208,9 @@ fn setup_head(
 				// If we have no header MMR then rebuild as necessary.
 				// Supports old nodes with no header MMR.
 				txhashset::header_extending(txhashset, &mut batch, |extension| {
-					let pos = pmmr::insertion_to_pmmr_index(head.height + 1);
-					let needs_rebuild = match extension.get_header_hash(pos) {
-						None => true,
-						Some(hash) => hash != head.last_block_h,
+					let needs_rebuild = match extension.get_header_by_height(head.height) {
+						Ok(header) => header.hash() != head.last_block_h,
+						Err(_) => true,
 					};
 
 					if needs_rebuild {
