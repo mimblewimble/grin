@@ -165,8 +165,19 @@ pub const DAMP_FACTOR: u64 = 3;
 /// Compute weight of a graph as number of siphash bits defining the graph
 /// Must be made dependent on height to phase out smaller size over the years
 /// This can wait until end of 2019 at latest
-pub fn graph_weight(edge_bits: u8) -> u64 {
-	(2 << (edge_bits - global::base_edge_bits()) as u64) * (edge_bits as u64)
+pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
+	let mut recognized_edge_bits = edge_bits as u64;
+
+	let bits_over_min = edge_bits - global::min_edge_bits();
+	// greater than zero as soon as an edge_bits value expires
+	let expired = (height / YEAR_HEIGHT).saturating_sub((1 << bits_over_min) - 1);
+	if expired > 1 {
+		recognized_edge_bits = 0;
+	} else if expired > 0 {
+		recognized_edge_bits = recognized_edge_bits.saturating_sub((height % YEAR_HEIGHT) / WEEK_HEIGHT + 1);
+	}
+
+	(2 << (edge_bits - global::base_edge_bits()) as u64) * recognized_edge_bits
 }
 
 /// minimum difficulty to avoid getting stuck when trying to increase subject to dampening
@@ -339,4 +350,48 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
 pub trait VerifySortOrder<T> {
 	/// Verify a collection of items is sorted as required.
 	fn verify_sort_order(&self) -> Result<(), Error>;
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+
+	#[test]
+	fn test_graph_weight() {
+		// initial weights
+		assert_eq!(graph_weight(1, 31), 256 * 31);
+		assert_eq!(graph_weight(1, 32), 512 * 32);
+		assert_eq!(graph_weight(1, 33), 1024 * 33);
+
+		// one year in, 31 starts going down, the rest stays the same
+		assert_eq!(graph_weight(YEAR_HEIGHT, 31), 256 * 30);
+		assert_eq!(graph_weight(YEAR_HEIGHT, 32), 512 * 32);
+		assert_eq!(graph_weight(YEAR_HEIGHT, 33), 1024 * 33);
+
+		// 31 loses one factor per week
+		assert_eq!(graph_weight(YEAR_HEIGHT + WEEK_HEIGHT, 31), 256 * 29);
+		assert_eq!(graph_weight(YEAR_HEIGHT + 2 * WEEK_HEIGHT, 31), 256 * 28);
+		assert_eq!(graph_weight(YEAR_HEIGHT + 32 * WEEK_HEIGHT, 31), 0);
+
+		// 2 years in, 31 still at 0, 32 starts decreasing
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 31), 0);
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 32), 512 * 31);
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 33), 1024 * 33);
+
+		// 32 loses one factor per week
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT + WEEK_HEIGHT, 32), 512 * 30);
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT + WEEK_HEIGHT, 31), 0);
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT + 30 * WEEK_HEIGHT, 32), 512);
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT + 31 * WEEK_HEIGHT, 32), 0);
+
+		// 3 years in, nothing changes
+		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 31), 0);
+		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 32), 0);
+		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 33), 1024 * 33);
+
+		// 4 years in, 33 starts starts decreasing
+		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 31), 0);
+		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 32), 0);
+		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 33), 1024 * 32);
+	}
 }
