@@ -258,8 +258,9 @@ pub fn sync_kernels(
 	blocks: &Vec<(Hash, Vec<TxKernel>)>,
 	ctx: &mut BlockContext,
 ) -> Result<(), Error> {
-	let first_block =
-		blocks.first().ok_or(ErrorKind::Other(format!("No blocks received.").into()))?;
+	let first_block = blocks
+		.first()
+		.ok_or(ErrorKind::Other(format!("No blocks received.").into()))?;
 
 	let first_header = ctx.batch.get_block_header(&first_block.0)?;
 
@@ -281,7 +282,10 @@ pub fn sync_kernels(
 	let mut first_needed_block = 0 as usize;
 	for block in blocks {
 		if num_kernels >= next_kernel_index + block.1.len() as u64 {
-			debug!("pipe: sync_kernels: already received kernels for block {}", block.0);
+			debug!(
+				"pipe: sync_kernels: already received kernels for block {}",
+				block.0
+			);
 			next_kernel_index += block.1.len() as u64;
 			first_needed_block += 1;
 		} else {
@@ -290,7 +294,10 @@ pub fn sync_kernels(
 	}
 
 	if first_needed_block == blocks.len() {
-		debug!("pipe: sync_kernels: kernels from index {} not needed.", first_kernel_index);
+		debug!(
+			"pipe: sync_kernels: kernels from index {} not needed.",
+			first_kernel_index
+		);
 		return Ok(());
 	}
 
@@ -304,7 +311,10 @@ pub fn sync_kernels(
 			let block = &blocks[block_index];
 			extension.apply_kernels(&block.0, &block.1)?;
 		}
-		info!("pipe: sync_kernels: kernels validated up to block {}", blocks[blocks.len() - 1].0);
+		info!(
+			"pipe: sync_kernels: kernels validated up to block {}",
+			blocks[blocks.len() - 1].0
+		);
 		Ok(())
 	})?;
 	Ok(())

@@ -357,7 +357,11 @@ impl MessageHandler for Protocol {
 					}).collect();
 
 				// serialize and send all the kernels over
-				Ok(Some(Response::new(Type::Kernels, Kernels { blocks }, writer)))
+				Ok(Some(Response::new(
+					Type::Kernels,
+					Kernels { blocks },
+					writer,
+				)))
 			}
 
 			Type::Kernels => {
