@@ -35,22 +35,23 @@ addons:
 
 env:
   global:
-  - RUST_BACKTRACE="1"
-  - RUST_FLAGS="-C debug-assertions"
-  matrix:
-    include:
-      - os: linux
-        env: TEST_SUITE=servers
-      - os: linux
-        env: TEST_SUITE=chain-core
-      - os: linux
-        env: TEST_SUITE=pool-p2p
-      - os: linux
-        env: TEST_SUITE=keychain-wallet
-      - os: linux
-        env: TEST_SUITE=api-util-store
-      - os: osx
-        env: TEST_SUITE=release
+    - RUST_BACKTRACE="1"
+    - RUST_FLAGS="-C debug-assertions"
+
+matrix:
+  include:
+    - os: linux
+      env: TEST_SUITE=servers
+    - os: linux
+      env: TEST_SUITE=chain-core
+    - os: linux
+      env: TEST_SUITE=pool-p2p
+    - os: linux
+      env: TEST_SUITE=keychain-wallet
+    - os: linux
+      env: TEST_SUITE=api-util-store
+    - os: osx
+      env: TEST_SUITE=release
 
 script:
   - IFS='-' read -r -a DIRS <<< "$TEST_SUITE"; DIR=${DIRS[0]};
