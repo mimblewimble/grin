@@ -146,8 +146,7 @@ fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
 				time: n.timestamp,
 				duration: dur,
 			}
-		})
-		.collect();
+		}).collect();
 
 	let block_time_sum = sum_entries.iter().fold(0, |sum, t| sum + t.duration);
 	let block_diff_sum = sum_entries.iter().fold(0, |sum, d| sum + d.difficulty);
@@ -535,7 +534,10 @@ fn test_secondary_pow_scale() {
 	let mut low_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_DIFFICULTY as u32);
 	low_hi.is_secondary = true;
 	assert_eq!(
-		secondary_pow_scaling(890_000, &(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()),
+		secondary_pow_scaling(
+			890_000,
+			&(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()
+		),
 		MIN_DIFFICULTY as u32
 	);
 	// just about the right ratio, also no longer playing with median
