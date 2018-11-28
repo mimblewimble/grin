@@ -339,15 +339,16 @@ where
 			if args.method == "http" {
 				let adapter = HTTPWalletCommAdapter::new();
 				slate = adapter.send_tx_sync(&args.dest, &slate)?;
+				api.tx_lock_outputs(&slate, lock_fn)?;
 				api.finalize_tx(&mut slate)?;
 			} else if args.method == "file" {
 				let adapter = FileWalletCommAdapter::new();
 				adapter.send_tx_async(&args.dest, &slate)?;
+				api.tx_lock_outputs(&slate, lock_fn)?;
 			} else {
 				error!("unsupported payment method: {}", args.method);
 				return Err(ErrorKind::ClientCallback("unsupported payment method"))?;
 			}
-			api.tx_lock_outputs(&slate, lock_fn)?;
 			Ok(slate)
 		}))
 	}
