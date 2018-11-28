@@ -302,6 +302,8 @@ pub fn sync_kernels(
 	}
 
 	txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
+		extension.force_rollback(); // TODO: Remove this once we're comfortable with this code.
+
 		// Rewind kernel mmr to correct kernel index if necessary.
 		if num_kernels > last_leaf_index {
 			extension.rewind_kernel_mmr(last_leaf_index + 1)?;

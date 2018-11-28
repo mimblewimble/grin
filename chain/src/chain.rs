@@ -380,6 +380,8 @@ impl Chain {
 
 		pipe::sync_kernels(blocks, &mut ctx)?;
 
+		// TODO: batch.commit once we feel comfortable with this code.
+
 		Ok(())
 	}
 
