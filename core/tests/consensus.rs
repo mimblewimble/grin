@@ -472,7 +472,6 @@ fn next_target_adjustment() {
 
 #[test]
 fn test_secondary_pow_ratio() {
-
 	// Tests for mainnet chain type.
 	{
 		global::set_mining_mode(global::ChainTypes::Mainnet);
