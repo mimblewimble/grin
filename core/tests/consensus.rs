@@ -472,7 +472,41 @@ fn next_target_adjustment() {
 }
 
 #[test]
-fn secondary_pow_scale() {
+fn test_secondary_pow_ratio() {
+	assert_eq!(secondary_pow_ratio(1), 90);
+	assert_eq!(secondary_pow_ratio(89), 90);
+	assert_eq!(secondary_pow_ratio(90), 90);
+	assert_eq!(secondary_pow_ratio(91), 90);
+	assert_eq!(secondary_pow_ratio(179), 90);
+	assert_eq!(secondary_pow_ratio(180), 90);
+	assert_eq!(secondary_pow_ratio(181), 90);
+
+	let one_week = 60 * 24 * 7;
+	assert_eq!(secondary_pow_ratio(one_week - 1), 90);
+	assert_eq!(secondary_pow_ratio(one_week), 89);
+	assert_eq!(secondary_pow_ratio(one_week + 1), 89);
+
+	let two_weeks = one_week * 2;
+	assert_eq!(secondary_pow_ratio(two_weeks - 1), 89);
+	assert_eq!(secondary_pow_ratio(two_weeks), 88);
+	assert_eq!(secondary_pow_ratio(two_weeks + 1), 88);
+
+	let fork_height = 64_000;
+	assert_eq!(secondary_pow_ratio(fork_height - 1), 84);
+	assert_eq!(secondary_pow_ratio(fork_height), 85);
+	assert_eq!(secondary_pow_ratio(fork_height + 1), 85);
+
+	let one_year = one_week * 52;
+	assert_eq!(secondary_pow_ratio(one_year), 45);
+
+	let two_year = one_year * 2;
+	assert_eq!(secondary_pow_ratio(two_year - 1), 1);
+	assert_eq!(secondary_pow_ratio(two_year), 0);
+	assert_eq!(secondary_pow_ratio(two_year + 1), 0);
+}
+
+#[test]
+fn test_secondary_pow_scale() {
 	let window = DIFFICULTY_ADJUST_WINDOW;
 	let mut hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 100);
 
