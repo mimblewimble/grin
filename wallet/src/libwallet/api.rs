@@ -122,7 +122,7 @@ where
 		}
 	}
 
-	/// Returns a list of accounts stored in the wallet (i.e. mappings between 
+	/// Returns a list of accounts stored in the wallet (i.e. mappings between
 	/// user-specified labels and BIP32 derivation paths.
 	///
 	/// # Returns
@@ -236,7 +236,7 @@ where
 	///
 	/// # Remarks
 	///
-	/// * Wallet parent paths are 2 path elements long, e.g. `m/0/0` is the path 
+	/// * Wallet parent paths are 2 path elements long, e.g. `m/0/0` is the path
 	/// labelled 'default'. Keys derived from this parent path are 3 elements long,
 	/// e.g. the secret keys derived from the `m/0/0` path will be  at paths `m/0/0/0`,
 	/// `m/0/0/1` etc...
