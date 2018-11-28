@@ -63,7 +63,17 @@ pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
 /// function of block height (time). Starts at 90% losing a percent
 /// approximately every week. Represented as an integer between 0 and 100.
 pub fn secondary_pow_ratio(height: u64) -> u64 {
-	90u64.saturating_sub(height / WEEK_HEIGHT)
+	// TODO - this should all be cleaned up and simplified before mainnet.
+	if global::is_mainnet() {
+		90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
+	} else {
+		if height < T4_CUCKAROO_HARDFORK {
+			// Maintaining pre hardfork testnet4 behavior
+			90u64.saturating_sub(height / WEEK_HEIGHT)
+		} else {
+			90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
+		}
+	}
 }
 
 /// Cuckoo-cycle proof size (cycle length)

@@ -19,8 +19,8 @@
 use consensus::HeaderInfo;
 use consensus::{
 	graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
-	DAY_HEIGHT, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE, SECOND_POW_EDGE_BITS,
-	STATE_SYNC_THRESHOLD, T4_CUCKAROO_HARDFORK, UNIT_DIFFICULTY, DEFAULT_MIN_EDGE_BITS,
+	DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE,
+	SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD, T4_CUCKAROO_HARDFORK, UNIT_DIFFICULTY,
 };
 use pow::{self, new_cuckaroo_ctx, new_cuckatoo_ctx, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
@@ -292,6 +292,12 @@ pub fn is_production_mode() -> bool {
 		|| ChainTypes::Testnet3 == *param_ref
 		|| ChainTypes::Testnet4 == *param_ref
 		|| ChainTypes::Mainnet == *param_ref
+}
+
+/// Are we in mainnet?
+pub fn is_mainnet() -> bool {
+	let param_ref = CHAIN_TYPE.read();
+	ChainTypes::Mainnet == *param_ref
 }
 
 /// Helper function to get a nonce known to create a valid POW on
