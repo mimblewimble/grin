@@ -12,10 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Wrappers around library functions, intended to split functions
-//! into external and internal APIs (i.e. functions for the local wallet
-//! vs. functions to interact with someone else)
-//! Still experimental, not sure this is the best way to do this
+//! Main interface into all wallet API functions.
+//! Wallet APIs are split into two seperate blocks of functionality
+//! called the 'Owner' and 'Foreign' APIs:
+//! * The 'Owner' API is intended to expose functions that are to be
+//! used by the wallet owner only. It is vital that this API is not
+//! exposed to anyone other than the owner of the wallet (i.e. the
+//! person with access to the seed and password.
+//! * The 'Foreign' API contains functions that other wallets will
+//! use to interact with the owner's wallet. This API can be exposed
+//! to the outside world, with the consideration as to how that can
+//! be done securely up to the implementor.
+//!
+//! Functions in both APIs are intended to be 'single use', that is to say each
+//! function will 'open' the wallet (load the keychain with its master seed), perform
+//! its operation, then 'close' the wallet (unloading references to the keychain and master
+//! seed).
+
 
 use std::fs::File;
 use std::io::Write;
@@ -40,16 +53,15 @@ use libwallet::{Error, ErrorKind};
 use util;
 use util::secp::pedersen;
 
-/// Wrapper around internal API functions, containing a reference to
-/// the wallet/keychain that they're acting upon
+/// Functions intended for use by the owner (e.g. master seed holder) of the wallet.
 pub struct APIOwner<W: ?Sized, C, K>
 where
 	W: WalletBackend<C, K>,
 	C: NodeClient,
 	K: Keychain,
 {
-	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
-	/// perhaps)
+	/// A reference-counted mutex to an implementation of the
+	/// [WalletBackend](../types/trait.WalletBackend.html) trait.
 	pub wallet: Arc<Mutex<W>>,
 	phantom: PhantomData<K>,
 	phantom_c: PhantomData<C>,
@@ -61,7 +73,14 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
-	/// Create new API instance
+	/// Create a new API instance with the given wallet instance. All subsequent
+	/// API calls will operate on this instance of the wallet.
+	///
+	/// Each function will call the [WalletBackend](../types/trait.WalletBackend.html)'s
+	/// [open_with_credentials](../types/trait.WalletBackend.html#tymethod.open_with_credentials)
+	/// (initialising a keychain with the master seed,) perform its operation, then close the keychain
+	/// with a call to [close](../types/trait.WalletBackend.html#tymethod.close)
+	
 	pub fn new(wallet_in: Arc<Mutex<W>>) -> Self {
 		APIOwner {
 			wallet: wallet_in,
