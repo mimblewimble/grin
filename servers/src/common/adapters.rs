@@ -27,6 +27,7 @@ use chrono::prelude::*;
 use chrono::Duration;
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
 use core::core::hash::{Hash, Hashed};
+use core::core::pmmr;
 use core::core::transaction::Transaction;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{BlockHeader, BlockSums, CompactBlock};
@@ -386,7 +387,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 
 		// Find the leaf index of the first kernel that belongs to the first block.
-		let mut next_kernel_index = match first_block_height {
+		let mut last_leaf_index = match first_block_height {
 			0 => 0,
 			height => {
 				let header = match self.chain().get_header_by_height(height - 1) {
@@ -396,7 +397,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 						return vec![];
 					}
 				};
-				header.kernel_mmr_size
+				pmmr::n_leaves(header.kernel_mmr_size)
 			}
 		};
 
@@ -412,16 +413,19 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				}
 			};
 
-			let kernels_to_read = (header.kernel_mmr_size - next_kernel_index) + 1;
+			let header_num_kernels = pmmr::n_leaves(header.kernel_mmr_size);
+			let kernels_to_read = header_num_kernels - last_leaf_index;
 			let kernels: Vec<core::TxKernel> = self
 				.chain()
-				.get_kernels_by_insertion_index(next_kernel_index, kernels_to_read)
+				.get_kernels_by_insertion_index(last_leaf_index + 1, kernels_to_read)
 				.iter()
 				.map(|entry| entry.kernel.clone())
 				.collect();
 
+			debug!("{} kernels read from {} at {}", kernels.len(), header.hash(), header.height);
+
 			blocks.push((header.hash(), kernels));
-			next_kernel_index = header.kernel_mmr_size;
+			last_leaf_index = header_num_kernels;
 			block_height += 1;
 		}
 

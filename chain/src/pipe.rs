@@ -25,10 +25,10 @@ use lru_cache::LruCache;
 use chain::OrphanBlockPool;
 use core::consensus;
 use core::core::hash::{Hash, Hashed};
+use core::core::pmmr;
 use core::core::verifier_cache::VerifierCache;
 use core::core::Committed;
 use core::core::{Block, BlockHeader, BlockSums, TxKernel};
-use core::core::pmmr;
 use core::global;
 use core::pow;
 use error::{Error, ErrorKind};
@@ -265,7 +265,7 @@ pub fn sync_kernels(
 
 	let first_header = ctx.batch.get_block_header(&first_block.0)?;
 
-	let first_kernel_index = match first_header.height {
+	let mut last_leaf_index = match first_header.height {
 		0 => 0,
 		_ => {
 			let previous_header = ctx.batch.get_previous_header(&first_header)?;
@@ -274,20 +274,19 @@ pub fn sync_kernels(
 	};
 
 	let num_kernels = ctx.txhashset.num_kernels();
-	if num_kernels < first_kernel_index {
+	if num_kernels < last_leaf_index {
 		// TODO: Store and process later once previous kernels are received.
 		return Err(ErrorKind::TxHashSetErr("Previous kernels missing".to_string()).into());
 	}
 
-	let mut next_kernel_index = first_kernel_index;
 	let mut first_needed_block = 0 as usize;
 	for block in blocks {
-		if num_kernels >= next_kernel_index + block.1.len() as u64 {
+		if num_kernels >= last_leaf_index + block.1.len() as u64 {
 			debug!(
 				"pipe: sync_kernels: already received kernels for block {}",
 				block.0
 			);
-			next_kernel_index += block.1.len() as u64;
+			last_leaf_index += block.1.len() as u64;
 			first_needed_block += 1;
 		} else {
 			break;
@@ -297,15 +296,15 @@ pub fn sync_kernels(
 	if first_needed_block == blocks.len() {
 		debug!(
 			"pipe: sync_kernels: kernels from index {} not needed.",
-			first_kernel_index
+			last_leaf_index
 		);
 		return Ok(());
 	}
 
 	txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
 		// Rewind kernel mmr to correct kernel index if necessary.
-		if num_kernels > next_kernel_index {
-			extension.rewind_kernel_mmr(next_kernel_index + 1)?;
+		if num_kernels > last_leaf_index {
+			extension.rewind_kernel_mmr(last_leaf_index + 1)?;
 		}
 
 		for block_index in first_needed_block..blocks.len() {
