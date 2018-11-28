@@ -109,7 +109,7 @@ fn self_send_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		})?;
 		api.finalize_tx(&mut slate)?;
 		api.tx_lock_outputs(&slate, lock_fn)?;
-		api.post_tx(&slate, false)?; // mines a block
+		api.post_tx(&slate.tx, false)?; // mines a block
 		bh += 1;
 		Ok(())
 	})?;

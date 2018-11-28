@@ -26,6 +26,7 @@ use failure::ResultExt;
 use uuid::Uuid;
 
 use core::core::hash::Hash;
+use core::core::Transaction;
 use core::ser;
 
 use keychain::{Identifier, Keychain};
@@ -35,6 +36,7 @@ use libwallet::error::{Error, ErrorKind};
 
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::{self, pedersen, Secp256k1};
+use util;
 
 /// Combined trait to allow dynamic wallet dispatch
 pub trait WalletInst<C, K>: WalletBackend<C, K> + Send + Sync + 'static
@@ -638,6 +640,17 @@ impl TxLogEntry {
 	/// Update confirmation TS with now
 	pub fn update_confirmation_ts(&mut self) {
 		self.confirmation_ts = Some(Utc::now());
+	}
+
+	/// Retrieve the stored transaction, if any
+	pub fn get_stored_tx(&self) -> Option<Transaction> {
+		match self.tx_hex.as_ref() {
+			None => None,
+			Some(t) => {
+				let tx_bin = util::from_hex(t.clone()).unwrap();
+				Some(ser::deserialize::<Transaction>(&mut &tx_bin[..]).unwrap())
+			}
+		}
 	}
 }
 

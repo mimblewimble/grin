@@ -194,7 +194,7 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		slate = client1.send_tx_slate_direct("wallet2", &slate)?;
 		api.tx_lock_outputs(&slate, lock_fn)?;
 		api.finalize_tx(&mut slate)?;
-		api.post_tx(&slate, false)?;
+		api.post_tx(&slate.tx, false)?;
 		Ok(())
 	})?;
 

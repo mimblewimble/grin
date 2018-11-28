@@ -18,6 +18,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
+use std::fs::File;
+use std::io::Write;
+
+use serde_json as json;
 
 use api::TLSConfig;
 use config::GlobalWalletConfig;
@@ -460,7 +464,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					api.tx_lock_outputs(&slate, lock_fn)?;
 				}
 				if adapter.supports_sync() {
-					let result = api.post_tx(&slate, fluff);
+					let result = api.post_tx(&slate.tx, fluff);
 					match result {
 						Ok(_) => {
 							info!("Tx sent",);
@@ -513,7 +517,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				let mut slate = adapter.receive_tx_async(tx_file)?;
 				let _ = api.finalize_tx(&mut slate).expect("Finalize failed");
 
-				let result = api.post_tx(&slate, fluff);
+				let result = api.post_tx(&slate.tx, fluff);
 				match result {
 					Ok(_) => {
 						info!("Transaction sent successfully, check the wallet again for confirmation.");
@@ -651,32 +655,30 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 
 				let dump_file = repost_args.value_of("dumpfile");
 				let fluff = repost_args.is_present("fluff");
+				let (_, txs) = api.retrieve_txs(true, Some(tx_id), None)?;
+				let stored_tx = txs[0].get_stored_tx();
+				if stored_tx.is_none(){
+					println!("Transaction with id {} does not have transaction data. Not reposting.", tx_id);
+					std::process::exit(0);
+				}
 				match dump_file {
 					None => {
-						let result = api.post_stored_tx(tx_id, fluff);
-						match result {
-							Ok(_) => {
-								info!("Reposted transaction at {}", tx_id);
-								Ok(())
-							}
-							Err(e) => {
-								error!("Transaction reposting failed: {}", e);
-								Err(e)
-							}
+						if txs[0].confirmed {
+							println!("Transaction with id {} is confirmed. Not reposting.", tx_id);
+							std::process::exit(0);
 						}
-					}
+						api.post_tx(&stored_tx.unwrap(), fluff)?;
+						info!("Reposted transaction at {}", tx_id);
+						println!("Reposted transaction at {}", tx_id);
+						Ok(())
+					},
 					Some(f) => {
-						let result = api.dump_stored_tx(tx_id, true, f);
-						match result {
-							Ok(_) => {
-								warn!("Dumped transaction data for tx {} to {}", tx_id, f);
-								Ok(())
-							}
-							Err(e) => {
-								error!("Transaction reposting failed: {}", e);
-								Err(e)
-							}
-						}
+						let mut tx_file = File::create(f)?;
+						tx_file.write_all(json::to_string(&stored_tx).unwrap().as_bytes())?;
+						tx_file.sync_all()?;
+						info!("Dumped transaction data for tx {} to {}", tx_id, f);
+						println!("Dumped transaction data for tx {} to {}", tx_id, f);
+						Ok(())
 					}
 				}
 			}

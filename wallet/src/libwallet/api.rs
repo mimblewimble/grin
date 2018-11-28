@@ -29,14 +29,10 @@
 //! its operation, then 'close' the wallet (unloading references to the keychain and master
 //! seed).
 
-use std::fs::File;
-use std::io::Write;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use util::Mutex;
 use uuid::Uuid;
-
-use serde_json as json;
 
 use core::core::hash::Hashed;
 use core::core::Transaction;
@@ -72,6 +68,7 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
+
 	/// Create a new API instance with the given wallet instance. All subsequent
 	/// API calls will operate on this instance of the wallet.
 	///
@@ -79,6 +76,44 @@ where
 	/// [open_with_credentials](../types/trait.WalletBackend.html#tymethod.open_with_credentials)
 	/// (initialising a keychain with the master seed,) perform its operation, then close the keychain
 	/// with a call to [close](../types/trait.WalletBackend.html#tymethod.close)
+	///
+	/// # Arguments
+	/// * `wallet_in` - A reference-counted mutex containing an implementation of the 
+	/// [WalletBackend](../types/trait.WalletBackend.html) trait.
+	///
+	/// # Returns
+	/// * An instance of the OwnerAPI holding a reference to the provided wallet
+	///
+	/// # Example
+	/// ```
+	/// # extern crate grin_wallet as wallet;
+	/// # extern crate grin_keychain as keychain;
+	/// # extern crate grin_util as util;
+	///
+	/// use std::sync::Arc;
+	/// use util::Mutex;
+	///
+	/// use keychain::ExtKeychain;
+	/// use wallet::libwallet::api::APIOwner;
+	///
+	/// // These contain sample implementations of each part needed for a wallet
+	/// use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
+	///
+	/// let mut wallet_config = WalletConfig::default();
+	///
+	/// // A NodeClient must first be created to handle communication between 
+	/// // the wallet and the node.
+	///
+	/// let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
+	/// let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
+	///		Arc::new(Mutex::new(
+	///			LMDBBackend::new(wallet_config.clone(), "", node_client).unwrap()
+	///		));
+	///
+	/// let api_owner = APIOwner::new(wallet.clone());
+	/// // .. perform wallet operations
+	///
+	/// ```
 
 	pub fn new(wallet_in: Arc<Mutex<W>>) -> Self {
 		APIOwner {
@@ -88,9 +123,80 @@ where
 		}
 	}
 
-	/// Attempt to update and retrieve outputs
-	/// Return (whether the outputs were validated against a node, OutputData)
-	/// if tx_id is some then only retrieve outputs for associated transaction
+	/// Return list of existing account -> Path mappings
+	pub fn accounts(&mut self) -> Result<Vec<AcctPathMapping>, Error> {
+		let mut w = self.wallet.lock();
+		keys::accounts(&mut *w)
+	}
+
+	/// Create a new account path
+	pub fn new_account_path(&mut self, label: &str) -> Result<Identifier, Error> {
+		let mut w = self.wallet.lock();
+		keys::new_acct_path(&mut *w, label)
+	}
+
+	/// set an account path
+	pub fn set_active_account(&mut self, label: &str) -> Result<(), Error> {
+		let mut w = self.wallet.lock();
+		w.set_parent_key_id_by_name(label)?;
+		Ok(())
+	}
+
+	/// Returns a list of outputs from the active account in the wallet.
+	///
+	/// # Arguments
+	/// * `include_spent` - If `true`, outputs that have been marked as 'spent'
+	/// in the wallet will be returned. If `false`, spent outputs will omitted
+	/// from the results.
+	/// * `refresh_from_node` - If true, the wallet will attempt to contact
+	/// a node (via the [NodeClient](../types/trait.NodeClient.html)
+	/// provided during wallet instantiation). If `false`, the results will
+	/// contain output information that may be out-of-date (from the last time
+	/// the wallet's output set was refreshed against the node).
+	/// * `tx_id` - If `Some(i)`, only return the outputs associated with 
+	/// the transaction log entry of id `i`.
+	///
+	/// # Returns
+	/// * (`bool`, `Vec<OutputData, Commitment>`) - A tuple:
+	/// * The first `bool` element indicates whether the data was successfully 
+	/// refreshed from the node (note this may be false even if the `refresh_from_node` 
+	/// argument was set to `true`.
+	/// * The second element contains the result set, of which each element is 
+	/// a mapping between the wallet's internal [OutputData](../types/struct.OutputData.html)
+	/// and the Output commitment as identified in the chain's UTXO set
+	///
+	/// # Example
+	/// Set up as in [new](struct.APIOwner.html#method.new) method above.
+	/// ```
+	/// # extern crate grin_wallet as wallet;
+	/// # extern crate grin_keychain as keychain;
+	/// # extern crate grin_util as util;
+	/// # use std::sync::Arc;
+	/// # use util::Mutex;
+	/// # use keychain::ExtKeychain;
+	/// # use wallet::libwallet::api::APIOwner;
+	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
+	/// # let mut wallet_config = WalletConfig::default();
+	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
+	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
+	/// # Arc::new(Mutex::new(
+	/// # 	LMDBBackend::new(wallet_config.clone(), "", node_client).unwrap()
+	/// # ));
+	///
+	/// // ...
+	///
+	/// let api_owner = APIOwner::new(wallet.clone());
+	/// let show_spent = false;
+	/// let update_from_node = true;
+	/// let tx_id = None;
+	///
+	/// let result = api_owner.retrieve_outputs(show_spent, update_from_node, tx_id);
+	///
+	/// if let Ok((was_updated, output_mapping)) = result {
+	///		//...
+	/// }
+	/// ```
+
 	pub fn retrieve_outputs(
 		&self,
 		include_spent: bool,
@@ -115,8 +221,61 @@ where
 		res
 	}
 
-	/// Attempt to update outputs and retrieve transactions
-	/// Return (whether the outputs were validated against a node, OutputData)
+	/// Returns a list of [Transaction Log Entries](../types/struct.TxLogEntry.html)
+	/// from the active account in the wallet.
+	///
+	/// # Arguments
+	/// * `refresh_from_node` - If true, the wallet will attempt to contact
+	/// a node (via the [NodeClient](../types/trait.NodeClient.html)
+	/// provided during wallet instantiation). If `false`, the results will
+	/// contain transaction information that may be out-of-date (from the last time
+	/// the wallet's output set was refreshed against the node).
+	/// * `tx_id` - If `Some(i)`, only return the transactions associated with
+	/// the transaction log entry of id `i`.
+	/// * `tx_slate_id` - If `Some(uuid)`, only return transactions associated with
+	/// the given [Slate](../../libtx/slate/struct.Slate.html) uuid.
+	///
+	/// # Returns
+	/// * (`bool`, `Vec<[TxLogEntry](../types/struct.TxLogEntry.html)>`) - A tuple:
+	/// * The first `bool` element indicates whether the data was successfully 
+	/// refreshed from the node (note this may be false even if the `refresh_from_node` 
+	/// argument was set to `true`.
+	/// * The second element contains the set of retrieved
+	/// [TxLogEntries](../types/struct/TxLogEntry.html)
+	///
+	/// # Example
+	/// Set up as in [new](struct.APIOwner.html#method.new) method above.
+	/// ```
+	/// # extern crate grin_wallet as wallet;
+	/// # extern crate grin_keychain as keychain;
+	/// # extern crate grin_util as util;
+	/// # use std::sync::Arc;
+	/// # use util::Mutex;
+	/// # use keychain::ExtKeychain;
+	/// # use wallet::libwallet::api::APIOwner;
+	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
+	/// # let mut wallet_config = WalletConfig::default();
+	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
+	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
+	/// # Arc::new(Mutex::new(
+	/// # 	LMDBBackend::new(wallet_config.clone(), "", node_client).unwrap()
+	/// # ));
+	///
+	/// // ...
+	///
+	/// let api_owner = APIOwner::new(wallet.clone());
+	/// let update_from_node = true;
+	/// let tx_id = None;
+	/// let tx_slate_id = None;
+	///
+	/// // Return all TxLogEntries
+	/// let result = api_owner.retrieve_txs(update_from_node, tx_id, tx_slate_id);
+	///
+	/// if let Ok((was_updated, tx_log_entries)) = result {
+	///		//...
+	/// }
+	/// ```
+
 	pub fn retrieve_txs(
 		&self,
 		refresh_from_node: bool,
@@ -161,18 +320,6 @@ where
 
 		w.close()?;
 		res
-	}
-
-	/// Return list of existing account -> Path mappings
-	pub fn accounts(&mut self) -> Result<Vec<AcctPathMapping>, Error> {
-		let mut w = self.wallet.lock();
-		keys::accounts(&mut *w)
-	}
-
-	/// Create a new account path
-	pub fn new_account_path(&mut self, label: &str) -> Result<Identifier, Error> {
-		let mut w = self.wallet.lock();
-		keys::new_acct_path(&mut *w, label)
 	}
 
 	/// Creates a new partial transaction for the given amount
@@ -303,8 +450,8 @@ where
 	}
 
 	/// Posts a transaction to the chain
-	pub fn post_tx(&self, slate: &Slate, fluff: bool) -> Result<(), Error> {
-		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
+	pub fn post_tx(&self, tx: &Transaction, fluff: bool) -> Result<(), Error> {
+		let tx_hex = util::to_hex(ser::ser_vec(tx).unwrap());
 		let client = {
 			let mut w = self.wallet.lock();
 			w.w2n_client().clone()
@@ -316,84 +463,11 @@ where
 		} else {
 			debug!(
 				"api: post_tx: successfully posted tx: {}, fluff? {}",
-				slate.tx.hash(),
+				tx.hash(),
 				fluff
 			);
 			Ok(())
 		}
-	}
-
-	/// Writes stored transaction data to a given file
-	pub fn dump_stored_tx(
-		&self,
-		tx_id: u32,
-		write_to_disk: bool,
-		dest: &str,
-	) -> Result<Transaction, Error> {
-		let (confirmed, tx_hex) = {
-			let mut w = self.wallet.lock();
-			w.open_with_credentials()?;
-			let parent_key_id = w.parent_key_id();
-			let res = tx::retrieve_tx_hex(&mut *w, &parent_key_id, tx_id)?;
-			w.close()?;
-			res
-		};
-		if confirmed {
-			warn!(
-				"api: dump_stored_tx: transaction at {} is already confirmed.",
-				tx_id
-			);
-		}
-		if tx_hex.is_none() {
-			error!(
-				"api: dump_stored_tx: completed transaction at {} does not exist.",
-				tx_id
-			);
-			return Err(ErrorKind::TransactionBuildingNotCompleted(tx_id))?;
-		}
-		let tx_bin = util::from_hex(tx_hex.unwrap()).unwrap();
-		let tx = ser::deserialize::<Transaction>(&mut &tx_bin[..])?;
-		if write_to_disk {
-			let mut tx_file = File::create(dest)?;
-			tx_file.write_all(json::to_string(&tx).unwrap().as_bytes())?;
-			tx_file.sync_all()?;
-		}
-		Ok(tx)
-	}
-
-	/// (Re)Posts a transaction that's already been stored to the chain
-	pub fn post_stored_tx(&self, tx_id: u32, fluff: bool) -> Result<(), Error> {
-		let client;
-		let (confirmed, tx_hex) = {
-			let mut w = self.wallet.lock();
-			w.open_with_credentials()?;
-			let parent_key_id = w.parent_key_id();
-			client = w.w2n_client().clone();
-			let res = tx::retrieve_tx_hex(&mut *w, &parent_key_id, tx_id)?;
-			w.close()?;
-			res
-		};
-		if confirmed {
-			error!(
-				"api: repost_tx: transaction at {} is confirmed. NOT resending.",
-				tx_id
-			);
-			return Err(ErrorKind::TransactionAlreadyConfirmed)?;
-		}
-		if tx_hex.is_none() {
-			error!(
-				"api: repost_tx: completed transaction at {} does not exist.",
-				tx_id
-			);
-			return Err(ErrorKind::TransactionBuildingNotCompleted(tx_id))?;
-		}
-		client.post_tx(
-			&TxWrapper {
-				tx_hex: tx_hex.unwrap(),
-			},
-			fluff,
-		)?;
-		Ok(())
 	}
 
 	/// Attempt to restore contents of wallet
