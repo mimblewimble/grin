@@ -29,7 +29,6 @@
 //! its operation, then 'close' the wallet (unloading references to the keychain and master
 //! seed).
 
-
 use std::fs::File;
 use std::io::Write;
 use std::marker::PhantomData;
@@ -80,7 +79,7 @@ where
 	/// [open_with_credentials](../types/trait.WalletBackend.html#tymethod.open_with_credentials)
 	/// (initialising a keychain with the master seed,) perform its operation, then close the keychain
 	/// with a call to [close](../types/trait.WalletBackend.html#tymethod.close)
-	
+
 	pub fn new(wallet_in: Arc<Mutex<W>>) -> Self {
 		APIOwner {
 			wallet: wallet_in,
