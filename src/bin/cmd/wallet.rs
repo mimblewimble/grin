@@ -332,7 +332,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				} else {
 					let label = create.unwrap();
 					let res = controller::owner_single_use(wallet, |api| {
-						api.new_account_path(label)?;
+						api.create_account_path(label)?;
 						thread::sleep(Duration::from_millis(200));
 						println!("Account: '{}' Created!", label);
 						Ok(())

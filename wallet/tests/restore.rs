@@ -198,8 +198,8 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// wallet 2 will use another account
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		api.new_account_path("account1")?;
-		api.new_account_path("account2")?;
+		api.create_account_path("account1")?;
+		api.create_account_path("account2")?;
 		Ok(())
 	})?;
 
