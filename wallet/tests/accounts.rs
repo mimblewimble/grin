@@ -86,21 +86,21 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// add some accounts
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let new_path = api.new_account_path("account1").unwrap();
+		let new_path = api.create_account_path("account1").unwrap();
 		assert_eq!(new_path, ExtKeychain::derive_key_id(2, 1, 0, 0, 0));
-		let new_path = api.new_account_path("account2").unwrap();
+		let new_path = api.create_account_path("account2").unwrap();
 		assert_eq!(new_path, ExtKeychain::derive_key_id(2, 2, 0, 0, 0));
-		let new_path = api.new_account_path("account3").unwrap();
+		let new_path = api.create_account_path("account3").unwrap();
 		assert_eq!(new_path, ExtKeychain::derive_key_id(2, 3, 0, 0, 0));
 		// trying to add same label again should fail
-		let res = api.new_account_path("account1");
+		let res = api.create_account_path("account1");
 		assert!(res.is_err());
 		Ok(())
 	})?;
 
 	// add account to wallet 2
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let new_path = api.new_account_path("listener_account").unwrap();
+		let new_path = api.create_account_path("listener_account").unwrap();
 		assert_eq!(new_path, ExtKeychain::derive_key_id(2, 1, 0, 0, 0));
 		Ok(())
 	})?;
@@ -194,7 +194,7 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		slate = client1.send_tx_slate_direct("wallet2", &slate)?;
 		api.tx_lock_outputs(&slate, lock_fn)?;
 		api.finalize_tx(&mut slate)?;
-		api.post_tx(&slate, false)?;
+		api.post_tx(&slate.tx, false)?;
 		Ok(())
 	})?;
 

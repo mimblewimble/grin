@@ -14,16 +14,12 @@
 
 //! Transaction building functions
 
-use std::sync::Arc;
-use util::{self, RwLock};
+use util;
 use uuid::Uuid;
 
-use core::core::verifier_cache::LruVerifierCache;
-use core::core::Transaction;
 use core::ser;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
-use libtx::{build, tx_fee};
 use libwallet::internal::{selection, updater};
 use libwallet::types::{Context, NodeClient, TxLogEntryType, WalletBackend};
 use libwallet::{Error, ErrorKind};
@@ -229,58 +225,6 @@ where
 	batch.save_tx_log_entry(tx, &parent_key_id)?;
 	batch.commit()?;
 	Ok(())
-}
-
-/// Issue a burn tx
-pub fn issue_burn_tx<T: ?Sized, C, K>(
-	wallet: &mut T,
-	amount: u64,
-	minimum_confirmations: u64,
-	max_outputs: usize,
-	parent_key_id: &Identifier,
-) -> Result<Transaction, Error>
-where
-	T: WalletBackend<C, K>,
-	C: NodeClient,
-	K: Keychain,
-{
-	// TODO
-	// let keychain = &Keychain::burn_enabled(wallet.keychain(),
-	// &Identifier::zero());
-	let keychain = wallet.keychain().clone();
-
-	let current_height = wallet.w2n_client().get_chain_height()?;
-
-	let _ = updater::refresh_outputs(wallet, parent_key_id);
-
-	// select some spendable coins from the wallet
-	let (_, coins) = selection::select_coins(
-		wallet,
-		amount,
-		current_height,
-		minimum_confirmations,
-		max_outputs,
-		false,
-		parent_key_id,
-	);
-
-	debug!("selected some coins - {}", coins.len());
-
-	let fee = tx_fee(coins.len(), 2, 1, None);
-	let num_change_outputs = 1;
-	let (mut parts, _) =
-		selection::inputs_and_change(&coins, wallet, amount, fee, num_change_outputs)?;
-
-	//TODO: If we end up using this, create change output here
-
-	// add burn output and fees
-	parts.push(build::output(amount - fee, Identifier::zero()));
-
-	// finalize the burn transaction and send
-	let tx_burn = build::transaction(parts, &keychain)?;
-	let verifier_cache = Arc::new(RwLock::new(LruVerifierCache::new()));
-	tx_burn.validate(verifier_cache)?;
-	Ok(tx_burn)
 }
 
 #[cfg(test)]

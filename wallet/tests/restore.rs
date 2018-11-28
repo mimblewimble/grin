@@ -198,8 +198,8 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// wallet 2 will use another account
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		api.new_account_path("account1")?;
-		api.new_account_path("account2")?;
+		api.create_account_path("account1")?;
+		api.create_account_path("account2")?;
 		Ok(())
 	})?;
 
@@ -240,7 +240,7 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
 		sender_api.tx_lock_outputs(&slate, lock_fn)?;
 		sender_api.finalize_tx(&mut slate)?;
-		sender_api.post_tx(&slate, false)?;
+		sender_api.post_tx(&slate.tx, false)?;
 		Ok(())
 	})?;
 
@@ -261,7 +261,7 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 		slate = client1.send_tx_slate_direct("wallet3", &slate_i)?;
 		sender_api.tx_lock_outputs(&slate, lock_fn)?;
 		sender_api.finalize_tx(&mut slate)?;
-		sender_api.post_tx(&slate, false)?;
+		sender_api.post_tx(&slate.tx, false)?;
 		Ok(())
 	})?;
 
@@ -282,7 +282,7 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 		slate = client3.send_tx_slate_direct("wallet2", &slate_i)?;
 		sender_api.tx_lock_outputs(&slate, lock_fn)?;
 		sender_api.finalize_tx(&mut slate)?;
-		sender_api.post_tx(&slate, false)?;
+		sender_api.post_tx(&slate.tx, false)?;
 		Ok(())
 	})?;
 
@@ -309,7 +309,7 @@ fn setup_restore(test_dir: &str) -> Result<(), libwallet::Error> {
 		slate = client3.send_tx_slate_direct("wallet2", &slate_i)?;
 		sender_api.tx_lock_outputs(&slate, lock_fn)?;
 		sender_api.finalize_tx(&mut slate)?;
-		sender_api.post_tx(&slate, false)?;
+		sender_api.post_tx(&slate.tx, false)?;
 		Ok(())
 	})?;
 

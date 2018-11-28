@@ -376,11 +376,11 @@ impl WalletCommAdapter for LocalWalletClient {
 
 	fn listen(
 		&self,
-		params: HashMap<String, String>,
-		config: WalletConfig,
-		passphrase: &str,
-		account: &str,
-		node_api_secret: Option<String>,
+		_params: HashMap<String, String>,
+		_config: WalletConfig,
+		_passphrase: &str,
+		_account: &str,
+		_node_api_secret: Option<String>,
 	) -> Result<(), libwallet::Error> {
 		unimplemented!();
 	}

@@ -74,15 +74,15 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// add some accounts
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		api.new_account_path("mining")?;
-		api.new_account_path("listener")?;
+		api.create_account_path("mining")?;
+		api.create_account_path("listener")?;
 		Ok(())
 	})?;
 
 	// add some accounts
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		api.new_account_path("account1")?;
-		api.new_account_path("account2")?;
+		api.create_account_path("account1")?;
+		api.create_account_path("account2")?;
 		Ok(())
 	})?;
 
@@ -141,7 +141,7 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		let adapter = FileWalletCommAdapter::new();
 		let mut slate = adapter.receive_tx_async(&receive_file)?;
 		api.finalize_tx(&mut slate)?;
-		api.post_tx(&slate, false);
+		api.post_tx(&slate.tx, false)?;
 		bh += 1;
 		Ok(())
 	})?;

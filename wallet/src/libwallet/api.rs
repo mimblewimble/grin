@@ -12,19 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Wrappers around library functions, intended to split functions
-//! into external and internal APIs (i.e. functions for the local wallet
-//! vs. functions to interact with someone else)
-//! Still experimental, not sure this is the best way to do this
+//! Main interface into all wallet API functions.
+//! Wallet APIs are split into two seperate blocks of functionality
+//! called the 'Owner' and 'Foreign' APIs:
+//! * The 'Owner' API is intended to expose methods that are to be
+//! used by the wallet owner only. It is vital that this API is not
+//! exposed to anyone other than the owner of the wallet (i.e. the
+//! person with access to the seed and password.
+//! * The 'Foreign' API contains methods that other wallets will
+//! use to interact with the owner's wallet. This API can be exposed
+//! to the outside world, with the consideration as to how that can
+//! be done securely up to the implementor.
+//!
+//! Methods in both APIs are intended to be 'single use', that is to say each
+//! method will 'open' the wallet (load the keychain with its master seed), perform
+//! its operation, then 'close' the wallet (unloading references to the keychain and master
+//! seed).
 
-use std::fs::File;
-use std::io::Write;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use util::Mutex;
 use uuid::Uuid;
-
-use serde_json as json;
 
 use core::core::hash::Hashed;
 use core::core::Transaction;
@@ -40,16 +48,15 @@ use libwallet::{Error, ErrorKind};
 use util;
 use util::secp::pedersen;
 
-/// Wrapper around internal API functions, containing a reference to
-/// the wallet/keychain that they're acting upon
+/// Functions intended for use by the owner (e.g. master seed holder) of the wallet.
 pub struct APIOwner<W: ?Sized, C, K>
 where
 	W: WalletBackend<C, K>,
 	C: NodeClient,
 	K: Keychain,
 {
-	/// Wallet, contains its keychain (TODO: Split these up into 2 traits
-	/// perhaps)
+	/// A reference-counted mutex to an implementation of the
+	/// [WalletBackend](../types/trait.WalletBackend.html) trait.
 	pub wallet: Arc<Mutex<W>>,
 	phantom: PhantomData<K>,
 	phantom_c: PhantomData<C>,
@@ -61,7 +68,52 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
-	/// Create new API instance
+	/// Create a new API instance with the given wallet instance. All subsequent
+	/// API calls will operate on this instance of the wallet.
+	///
+	/// Each method will call the [WalletBackend](../types/trait.WalletBackend.html)'s
+	/// [open_with_credentials](../types/trait.WalletBackend.html#tymethod.open_with_credentials)
+	/// (initialising a keychain with the master seed,) perform its operation, then close the keychain
+	/// with a call to [close](../types/trait.WalletBackend.html#tymethod.close)
+	///
+	/// # Arguments
+	/// * `wallet_in` - A reference-counted mutex containing an implementation of the
+	/// [WalletBackend](../types/trait.WalletBackend.html) trait.
+	///
+	/// # Returns
+	/// * An instance of the OwnerAPI holding a reference to the provided wallet
+	///
+	/// # Example
+	/// ```
+	/// # extern crate grin_wallet as wallet;
+	/// # extern crate grin_keychain as keychain;
+	/// # extern crate grin_util as util;
+	///
+	/// use std::sync::Arc;
+	/// use util::Mutex;
+	///
+	/// use keychain::ExtKeychain;
+	/// use wallet::libwallet::api::APIOwner;
+	///
+	/// // These contain sample implementations of each part needed for a wallet
+	/// use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
+	///
+	/// let mut wallet_config = WalletConfig::default();
+	///
+	/// // A NodeClient must first be created to handle communication between
+	/// // the wallet and the node.
+	///
+	/// let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
+	/// let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
+	///		Arc::new(Mutex::new(
+	///			LMDBBackend::new(wallet_config.clone(), "", node_client).unwrap()
+	///		));
+	///
+	/// let api_owner = APIOwner::new(wallet.clone());
+	/// // .. perform wallet operations
+	///
+	/// ```
+
 	pub fn new(wallet_in: Arc<Mutex<W>>) -> Self {
 		APIOwner {
 			wallet: wallet_in,
@@ -70,9 +122,214 @@ where
 		}
 	}
 
-	/// Attempt to update and retrieve outputs
-	/// Return (whether the outputs were validated against a node, OutputData)
-	/// if tx_id is some then only retrieve outputs for associated transaction
+	/// Returns a list of accounts stored in the wallet (i.e. mappings between
+	/// user-specified labels and BIP32 derivation paths.
+	///
+	/// # Returns
+	/// * Result Containing:
+	/// * A Vector of [AcctPathMapping](../types/struct.AcctPathMapping.html) data
+	/// * or [libwallet::Error](../struct.Error.html) if an error is encountered.
+	///
+	/// # Remarks
+	///
+	/// * A wallet should always have the path with the label 'default' path defined,
+	/// with path m/0/0
+	/// * This method does not need to use the wallet seed or keychain.
+	///
+	/// # Example
+	/// Set up as in [new](struct.APIOwner.html#method.new) method above.
+	/// ```
+	/// # extern crate grin_wallet as wallet;
+	/// # extern crate grin_keychain as keychain;
+	/// # extern crate grin_util as util;
+	/// # use std::sync::Arc;
+	/// # use util::Mutex;
+	/// # use keychain::ExtKeychain;
+	/// # use wallet::libwallet::api::APIOwner;
+	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
+	/// # let mut wallet_config = WalletConfig::default();
+	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
+	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
+	/// # Arc::new(Mutex::new(
+	/// # 	LMDBBackend::new(wallet_config.clone(), "", node_client).unwrap()
+	/// # ));
+	///
+	/// let api_owner = APIOwner::new(wallet.clone());
+	///
+	/// let result = api_owner.accounts();
+	///
+	/// if let Ok(accts) = result {
+	///		//...
+	/// }
+	/// ```
+
+	pub fn accounts(&self) -> Result<Vec<AcctPathMapping>, Error> {
+		let mut w = self.wallet.lock();
+		keys::accounts(&mut *w)
+	}
+
+	/// Creates a new 'account', which is a mapping of a user-specified
+	/// label to a BIP32 path
+	///
+	/// # Arguments
+	/// * `label` - A human readable label to which to map the new BIP32 Path
+	///
+	/// # Returns
+	/// * Result Containing:
+	/// * A [Keychain Identifier](#) for the new path
+	/// * or [libwallet::Error](../struct.Error.html) if an error is encountered.
+	///
+	/// # Remarks
+	///
+	/// * Wallets should be initialised with the 'default' path mapped to `m/0/0`
+	/// * Each call to this function will increment the first element of the path
+	/// so the first call will create an account at `m/1/0` and the second at
+	/// `m/2/0` etc. . .
+	/// * The account path is used throughout as the parent key for most key-derivation
+	/// operations. See [set_active_account](struct.APIOwner.html#method.set_active_account) for
+	/// further details.
+	///
+	/// * This function does not need to use the root wallet seed or keychain.
+	///
+	/// # Example
+	/// Set up as in [new](struct.APIOwner.html#method.new) method above.
+	/// ```
+	/// # extern crate grin_wallet as wallet;
+	/// # extern crate grin_keychain as keychain;
+	/// # extern crate grin_util as util;
+	/// # use std::sync::Arc;
+	/// # use util::Mutex;
+	/// # use keychain::ExtKeychain;
+	/// # use wallet::libwallet::api::APIOwner;
+	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
+	/// # let mut wallet_config = WalletConfig::default();
+	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
+	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
+	/// # Arc::new(Mutex::new(
+	/// # 	LMDBBackend::new(wallet_config.clone(), "", node_client).unwrap()
+	/// # ));
+	///
+	/// let api_owner = APIOwner::new(wallet.clone());
+	///
+	/// let result = api_owner.create_account_path("account1");
+	///
+	/// if let Ok(identifier) = result {
+	///		//...
+	/// }
+	/// ```
+
+	pub fn create_account_path(&self, label: &str) -> Result<Identifier, Error> {
+		let mut w = self.wallet.lock();
+		keys::new_acct_path(&mut *w, label)
+	}
+
+	/// Sets the wallet's currently active account. This sets the
+	/// BIP32 parent path used for most key-derivation operations.
+	///
+	/// # Arguments
+	/// * `label` - The human readable label for the account. Accounts can be retrieved via
+	/// the [account](struct.APIOwner.html#method.accounts) method
+	/// # Returns
+	/// * Result Containing:
+	/// * `Ok(())` if the path was correctly set
+	/// * or [libwallet::Error](../struct.Error.html) if an error is encountered.
+	///
+	/// # Remarks
+	///
+	/// * Wallet parent paths are 2 path elements long, e.g. `m/0/0` is the path
+	/// labelled 'default'. Keys derived from this parent path are 3 elements long,
+	/// e.g. the secret keys derived from the `m/0/0` path will be  at paths `m/0/0/0`,
+	/// `m/0/0/1` etc...
+	///
+	/// * This function does not need to use the root wallet seed or keychain.
+	///
+	/// # Example
+	/// Set up as in [new](struct.APIOwner.html#method.new) method above.
+	/// ```
+	/// # extern crate grin_wallet as wallet;
+	/// # extern crate grin_keychain as keychain;
+	/// # extern crate grin_util as util;
+	/// # use std::sync::Arc;
+	/// # use util::Mutex;
+	/// # use keychain::ExtKeychain;
+	/// # use wallet::libwallet::api::APIOwner;
+	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
+	/// # let mut wallet_config = WalletConfig::default();
+	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
+	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
+	/// # Arc::new(Mutex::new(
+	/// # 	LMDBBackend::new(wallet_config.clone(), "", node_client).unwrap()
+	/// # ));
+	///
+	/// let api_owner = APIOwner::new(wallet.clone());
+	///
+	/// let result = api_owner.create_account_path("account1");
+	///
+	/// if let Ok(identifier) = result {
+	///		// set the account active
+	///		let result2 = api_owner.set_active_account("account1");
+	/// }
+	/// ```
+
+	pub fn set_active_account(&self, label: &str) -> Result<(), Error> {
+		let mut w = self.wallet.lock();
+		w.set_parent_key_id_by_name(label)?;
+		Ok(())
+	}
+
+	/// Returns a list of outputs from the active account in the wallet.
+	///
+	/// # Arguments
+	/// * `include_spent` - If `true`, outputs that have been marked as 'spent'
+	/// in the wallet will be returned. If `false`, spent outputs will omitted
+	/// from the results.
+	/// * `refresh_from_node` - If true, the wallet will attempt to contact
+	/// a node (via the [NodeClient](../types/trait.NodeClient.html)
+	/// provided during wallet instantiation). If `false`, the results will
+	/// contain output information that may be out-of-date (from the last time
+	/// the wallet's output set was refreshed against the node).
+	/// * `tx_id` - If `Some(i)`, only return the outputs associated with
+	/// the transaction log entry of id `i`.
+	///
+	/// # Returns
+	/// * (`bool`, `Vec<OutputData, Commitment>`) - A tuple:
+	/// * The first `bool` element indicates whether the data was successfully
+	/// refreshed from the node (note this may be false even if the `refresh_from_node`
+	/// argument was set to `true`.
+	/// * The second element contains the result set, of which each element is
+	/// a mapping between the wallet's internal [OutputData](../types/struct.OutputData.html)
+	/// and the Output commitment as identified in the chain's UTXO set
+	///
+	/// # Example
+	/// Set up as in [new](struct.APIOwner.html#method.new) method above.
+	/// ```
+	/// # extern crate grin_wallet as wallet;
+	/// # extern crate grin_keychain as keychain;
+	/// # extern crate grin_util as util;
+	/// # use std::sync::Arc;
+	/// # use util::Mutex;
+	/// # use keychain::ExtKeychain;
+	/// # use wallet::libwallet::api::APIOwner;
+	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
+	/// # let mut wallet_config = WalletConfig::default();
+	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
+	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
+	/// # Arc::new(Mutex::new(
+	/// # 	LMDBBackend::new(wallet_config.clone(), "", node_client).unwrap()
+	/// # ));
+	///
+	/// let api_owner = APIOwner::new(wallet.clone());
+	/// let show_spent = false;
+	/// let update_from_node = true;
+	/// let tx_id = None;
+	///
+	/// let result = api_owner.retrieve_outputs(show_spent, update_from_node, tx_id);
+	///
+	/// if let Ok((was_updated, output_mapping)) = result {
+	///		//...
+	/// }
+	/// ```
+
 	pub fn retrieve_outputs(
 		&self,
 		include_spent: bool,
@@ -97,8 +354,59 @@ where
 		res
 	}
 
-	/// Attempt to update outputs and retrieve transactions
-	/// Return (whether the outputs were validated against a node, OutputData)
+	/// Returns a list of [Transaction Log Entries](../types/struct.TxLogEntry.html)
+	/// from the active account in the wallet.
+	///
+	/// # Arguments
+	/// * `refresh_from_node` - If true, the wallet will attempt to contact
+	/// a node (via the [NodeClient](../types/trait.NodeClient.html)
+	/// provided during wallet instantiation). If `false`, the results will
+	/// contain transaction information that may be out-of-date (from the last time
+	/// the wallet's output set was refreshed against the node).
+	/// * `tx_id` - If `Some(i)`, only return the transactions associated with
+	/// the transaction log entry of id `i`.
+	/// * `tx_slate_id` - If `Some(uuid)`, only return transactions associated with
+	/// the given [Slate](../../libtx/slate/struct.Slate.html) uuid.
+	///
+	/// # Returns
+	/// * (`bool`, `Vec<[TxLogEntry](../types/struct.TxLogEntry.html)>`) - A tuple:
+	/// * The first `bool` element indicates whether the data was successfully
+	/// refreshed from the node (note this may be false even if the `refresh_from_node`
+	/// argument was set to `true`.
+	/// * The second element contains the set of retrieved
+	/// [TxLogEntries](../types/struct/TxLogEntry.html)
+	///
+	/// # Example
+	/// Set up as in [new](struct.APIOwner.html#method.new) method above.
+	/// ```
+	/// # extern crate grin_wallet as wallet;
+	/// # extern crate grin_keychain as keychain;
+	/// # extern crate grin_util as util;
+	/// # use std::sync::Arc;
+	/// # use util::Mutex;
+	/// # use keychain::ExtKeychain;
+	/// # use wallet::libwallet::api::APIOwner;
+	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
+	/// # let mut wallet_config = WalletConfig::default();
+	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
+	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
+	/// # Arc::new(Mutex::new(
+	/// # 	LMDBBackend::new(wallet_config.clone(), "", node_client).unwrap()
+	/// # ));
+	///
+	/// let api_owner = APIOwner::new(wallet.clone());
+	/// let update_from_node = true;
+	/// let tx_id = None;
+	/// let tx_slate_id = None;
+	///
+	/// // Return all TxLogEntries
+	/// let result = api_owner.retrieve_txs(update_from_node, tx_id, tx_slate_id);
+	///
+	/// if let Ok((was_updated, tx_log_entries)) = result {
+	///		//...
+	/// }
+	/// ```
+
 	pub fn retrieve_txs(
 		&self,
 		refresh_from_node: bool,
@@ -143,18 +451,6 @@ where
 
 		w.close()?;
 		res
-	}
-
-	/// Return list of existing account -> Path mappings
-	pub fn accounts(&mut self) -> Result<Vec<AcctPathMapping>, Error> {
-		let mut w = self.wallet.lock();
-		keys::accounts(&mut *w)
-	}
-
-	/// Create a new account path
-	pub fn new_account_path(&mut self, label: &str) -> Result<Identifier, Error> {
-		let mut w = self.wallet.lock();
-		keys::new_acct_path(&mut *w, label)
 	}
 
 	/// Creates a new partial transaction for the given amount
@@ -260,33 +556,9 @@ where
 		Ok(())
 	}
 
-	/// Issue a burn TX
-	pub fn issue_burn_tx(
-		&mut self,
-		amount: u64,
-		minimum_confirmations: u64,
-		max_outputs: usize,
-	) -> Result<(), Error> {
-		let mut w = self.wallet.lock();
-		w.open_with_credentials()?;
-		let parent_key_id = w.parent_key_id();
-		let tx_burn = tx::issue_burn_tx(
-			&mut *w,
-			amount,
-			minimum_confirmations,
-			max_outputs,
-			&parent_key_id,
-		)?;
-		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
-		w.w2n_client()
-			.post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
-		w.close()?;
-		Ok(())
-	}
-
 	/// Posts a transaction to the chain
-	pub fn post_tx(&self, slate: &Slate, fluff: bool) -> Result<(), Error> {
-		let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
+	pub fn post_tx(&self, tx: &Transaction, fluff: bool) -> Result<(), Error> {
+		let tx_hex = util::to_hex(ser::ser_vec(tx).unwrap());
 		let client = {
 			let mut w = self.wallet.lock();
 			w.w2n_client().clone()
@@ -298,84 +570,11 @@ where
 		} else {
 			debug!(
 				"api: post_tx: successfully posted tx: {}, fluff? {}",
-				slate.tx.hash(),
+				tx.hash(),
 				fluff
 			);
 			Ok(())
 		}
-	}
-
-	/// Writes stored transaction data to a given file
-	pub fn dump_stored_tx(
-		&self,
-		tx_id: u32,
-		write_to_disk: bool,
-		dest: &str,
-	) -> Result<Transaction, Error> {
-		let (confirmed, tx_hex) = {
-			let mut w = self.wallet.lock();
-			w.open_with_credentials()?;
-			let parent_key_id = w.parent_key_id();
-			let res = tx::retrieve_tx_hex(&mut *w, &parent_key_id, tx_id)?;
-			w.close()?;
-			res
-		};
-		if confirmed {
-			warn!(
-				"api: dump_stored_tx: transaction at {} is already confirmed.",
-				tx_id
-			);
-		}
-		if tx_hex.is_none() {
-			error!(
-				"api: dump_stored_tx: completed transaction at {} does not exist.",
-				tx_id
-			);
-			return Err(ErrorKind::TransactionBuildingNotCompleted(tx_id))?;
-		}
-		let tx_bin = util::from_hex(tx_hex.unwrap()).unwrap();
-		let tx = ser::deserialize::<Transaction>(&mut &tx_bin[..])?;
-		if write_to_disk {
-			let mut tx_file = File::create(dest)?;
-			tx_file.write_all(json::to_string(&tx).unwrap().as_bytes())?;
-			tx_file.sync_all()?;
-		}
-		Ok(tx)
-	}
-
-	/// (Re)Posts a transaction that's already been stored to the chain
-	pub fn post_stored_tx(&self, tx_id: u32, fluff: bool) -> Result<(), Error> {
-		let client;
-		let (confirmed, tx_hex) = {
-			let mut w = self.wallet.lock();
-			w.open_with_credentials()?;
-			let parent_key_id = w.parent_key_id();
-			client = w.w2n_client().clone();
-			let res = tx::retrieve_tx_hex(&mut *w, &parent_key_id, tx_id)?;
-			w.close()?;
-			res
-		};
-		if confirmed {
-			error!(
-				"api: repost_tx: transaction at {} is confirmed. NOT resending.",
-				tx_id
-			);
-			return Err(ErrorKind::TransactionAlreadyConfirmed)?;
-		}
-		if tx_hex.is_none() {
-			error!(
-				"api: repost_tx: completed transaction at {} does not exist.",
-				tx_id
-			);
-			return Err(ErrorKind::TransactionBuildingNotCompleted(tx_id))?;
-		}
-		client.post_tx(
-			&TxWrapper {
-				tx_hex: tx_hex.unwrap(),
-			},
-			fluff,
-		)?;
-		Ok(())
 	}
 
 	/// Attempt to restore contents of wallet
