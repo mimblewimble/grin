@@ -23,7 +23,6 @@ use std::time::{Duration, Instant};
 use util::RwLock;
 
 use lmdb;
-use lru_cache::LruCache;
 
 use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::merkle_proof::MerkleProof;
@@ -49,9 +48,6 @@ pub const MAX_ORPHAN_SIZE: usize = 200;
 
 /// When evicting, very old orphans are evicted first
 const MAX_ORPHAN_AGE_SECS: u64 = 300;
-
-/// Number of recent hashes we keep to de-duplicate block or header sends
-const HASHES_CACHE_SIZE: usize = 200;
 
 #[derive(Debug, Clone)]
 struct Orphan {
@@ -152,8 +148,6 @@ pub struct Chain {
 	adapter: Arc<ChainAdapter + Send + Sync>,
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
-	// Recently processed blocks to avoid double-processing
-	block_hashes_cache: Arc<RwLock<LruCache<Hash, bool>>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
@@ -221,7 +215,6 @@ impl Chain {
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			pow_verifier,
 			verifier_cache,
-			block_hashes_cache: Arc::new(RwLock::new(LruCache::new(HASHES_CACHE_SIZE))),
 			archive_mode,
 			genesis: genesis.header.clone(),
 		})
@@ -276,17 +269,8 @@ impl Chain {
 			(maybe_new_head, prev_head)
 		};
 
-		let add_to_hash_cache = |hash: Hash| {
-			// only add to hash cache below if block is definitively accepted
-			// or rejected
-			let mut cache = self.block_hashes_cache.write();
-			cache.insert(hash, true);
-		};
-
 		match maybe_new_head {
 			Ok(head) => {
-				add_to_hash_cache(b.hash());
-
 				let status = self.determine_status(head.clone(), prev_head);
 
 				// notifying other parts of the system of the update
@@ -333,7 +317,6 @@ impl Chain {
 						b.header.height,
 						e
 					);
-					add_to_hash_cache(b.hash());
 					Err(ErrorKind::Other(format!("{:?}", e).to_owned()).into())
 				}
 			},
@@ -377,7 +360,6 @@ impl Chain {
 		Ok(pipe::BlockContext {
 			opts,
 			pow_verifier: self.pow_verifier,
-			block_hashes_cache: self.block_hashes_cache.clone(),
 			verifier_cache: self.verifier_cache.clone(),
 			txhashset,
 			batch,
