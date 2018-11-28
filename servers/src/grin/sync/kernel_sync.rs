@@ -105,7 +105,7 @@ impl KernelSync {
 
 		// no kernels processed and we're past timeout, need to ask for more
 		if now > self.timeout {
-			self.timeout = now + Duration::seconds(10);
+			self.timeout = now + Duration::minutes(3);
 			true
 		} else {
 			false
