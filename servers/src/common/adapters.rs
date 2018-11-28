@@ -422,7 +422,12 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				.map(|entry| entry.kernel.clone())
 				.collect();
 
-			debug!("{} kernels read from {} at {}", kernels.len(), header.hash(), header.height);
+			debug!(
+				"{} kernels read from {} at {}",
+				kernels.len(),
+				header.hash(),
+				header.height
+			);
 
 			blocks.push((header.hash(), kernels));
 			last_leaf_index = header_num_kernels;
