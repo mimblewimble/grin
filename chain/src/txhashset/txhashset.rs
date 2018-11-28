@@ -204,8 +204,8 @@ impl TxHashSet {
 		kernel_pmmr.get_last_n_insertions(distance)
 	}
 
-	/// Get header the the given height. Uses the header MMR to find the header hash
-	/// as height can be mapped to MMR pos.
+	/// Get the header at the specified height based on the current state of the txhashset.
+	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
 	/// Looks the header up in the db by hash.
 	pub fn get_header_by_height(&mut self, height: u64) -> Result<BlockHeader, Error> {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
@@ -628,6 +628,9 @@ impl<'a> HeaderExtension<'a> {
 		self.pmmr.get_data(pos)
 	}
 
+	/// Get the header at the specified height based on the current state of the header extension.
+	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
+	/// Looks the header up in the db by hash.
 	pub fn get_header_by_height(&mut self, height: u64) -> Result<BlockHeader, Error> {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
 		if let Some(hash) = self.get_header_hash(pos) {
@@ -638,6 +641,8 @@ impl<'a> HeaderExtension<'a> {
 		}
 	}
 
+	/// Compares the provided header to the header in the header MMR at that height.
+	/// If these match we know the header is on the current chain.
 	pub fn is_on_current_chain(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		let chain_header = self.get_header_by_height(header.height)?;
 		if chain_header.hash() == header.hash() {
@@ -1008,6 +1013,9 @@ impl<'a> Extension<'a> {
 		self.header_pmmr.get_data(pos)
 	}
 
+	/// Get the header at the specified height based on the current state of the extension.
+	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
+	/// Looks the header up in the db by hash.
 	pub fn get_header_by_height(&mut self, height: u64) -> Result<BlockHeader, Error> {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
 		if let Some(hash) = self.get_header_hash(pos) {
@@ -1018,6 +1026,8 @@ impl<'a> Extension<'a> {
 		}
 	}
 
+	/// Compares the provided header to the header in the header MMR at that height.
+	/// If these match we know the header is on the current chain.
 	pub fn is_on_current_chain(&mut self, header: &BlockHeader) -> Result<(), Error> {
 		let chain_header = self.get_header_by_height(header.height)?;
 		if chain_header.hash() == header.hash() {
@@ -1027,7 +1037,6 @@ impl<'a> Extension<'a> {
 		}
 	}
 
-	/// TODO - move this into "utxo_view"
 	/// Build a Merkle proof for the given output and the block
 	/// this extension is currently referencing.
 	/// Note: this relies on the MMR being stable even after pruning/compaction.
