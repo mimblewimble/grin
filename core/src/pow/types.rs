@@ -85,9 +85,9 @@ impl Difficulty {
 	/// Computes the difficulty from a hash. Divides the maximum target by the
 	/// provided hash and applies the Cuck(at)oo size adjustment factor (see
 	/// https://lists.launchpad.net/mimblewimble/msg00494.html).
-	fn from_proof_adjusted(proof: &Proof) -> Difficulty {
+	fn from_proof_adjusted(height: u64, proof: &Proof) -> Difficulty {
 		// scale with natural scaling factor
-		Difficulty::from_num(proof.scaled_difficulty(graph_weight(proof.edge_bits)))
+		Difficulty::from_num(proof.scaled_difficulty(graph_weight(height, proof.edge_bits)))
 	}
 
 	/// Same as `from_proof_adjusted` but instead of an adjustment based on
@@ -276,13 +276,13 @@ impl ProofOfWork {
 	}
 
 	/// Maximum difficulty this proof of work can achieve
-	pub fn to_difficulty(&self) -> Difficulty {
+	pub fn to_difficulty(&self, height: u64) -> Difficulty {
 		// 2 proof of works, Cuckoo29 (for now) and Cuckoo30+, which are scaled
 		// differently (scaling not controlled for now)
 		if self.proof.edge_bits == SECOND_POW_EDGE_BITS {
 			Difficulty::from_proof_scaled(&self.proof, self.secondary_scaling)
 		} else {
-			Difficulty::from_proof_adjusted(&self.proof)
+			Difficulty::from_proof_adjusted(height, &self.proof)
 		}
 	}
 

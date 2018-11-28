@@ -475,7 +475,7 @@ impl StratumServer {
 		b.header.pow.nonce = params.nonce;
 		b.header.pow.proof.nonces = params.pow;
 		// Get share difficulty
-		share_difficulty = b.header.pow.to_difficulty().to_num();
+		share_difficulty = b.header.pow.to_difficulty(b.header.height).to_num();
 		// If the difficulty is too low its an error
 		if share_difficulty < self.minimum_share_difficulty {
 			// Return error status

@@ -394,7 +394,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 		let target_difficulty = header.total_difficulty() - prev.total_difficulty();
 
-		if header.pow.to_difficulty() < target_difficulty {
+		if header.pow.to_difficulty(header.height) < target_difficulty {
 			return Err(ErrorKind::DifficultyTooLow.into());
 		}
 

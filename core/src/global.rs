@@ -247,8 +247,8 @@ pub fn initial_graph_weight() -> u32 {
 		ChainTypes::Testnet1 => TESTING_INITIAL_GRAPH_WEIGHT,
 		ChainTypes::Testnet2 => TESTING_INITIAL_GRAPH_WEIGHT,
 		ChainTypes::Testnet3 => TESTING_INITIAL_GRAPH_WEIGHT,
-		ChainTypes::Testnet4 => graph_weight(SECOND_POW_EDGE_BITS) as u32,
-		ChainTypes::Mainnet => graph_weight(SECOND_POW_EDGE_BITS) as u32,
+		ChainTypes::Testnet4 => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
+		ChainTypes::Mainnet => graph_weight(0, SECOND_POW_EDGE_BITS) as u32,
 	}
 }
 
