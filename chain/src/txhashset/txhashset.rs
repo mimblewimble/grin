@@ -980,7 +980,7 @@ impl<'a> Extension<'a> {
 			self.apply_kernel(kernel)?;
 		}
 
-		if header.kernel_root == self.kernel_root() {
+		if header.height == 0 || header.kernel_root == self.kernel_root() {
 			Ok(())
 		} else {
 			Err(ErrorKind::InvalidTxHashSet(format!(

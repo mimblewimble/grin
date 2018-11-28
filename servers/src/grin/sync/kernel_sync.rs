@@ -69,7 +69,7 @@ impl KernelSync {
 				}
 			};
 
-			let header = match self.chain.get_block_header(&header_head.hash()) {
+			let header = match self.chain.get_block_header(&header_head.last_block_h) {
 				Ok(header) => header,
 				Err(e) => {
 					error!("kernel_sync: check_run err! {:?}", e);
