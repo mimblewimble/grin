@@ -439,18 +439,6 @@ where
 		)
 	}
 
-	fn issue_burn_tx(
-		&self,
-		_req: Request<Body>,
-		mut api: APIOwner<T, C, K>,
-	) -> Box<Future<Item = (), Error = Error> + Send> {
-		// TODO: Args
-		Box::new(match api.issue_burn_tx(60, 10, 1000) {
-			Ok(_) => ok(()),
-			Err(e) => err(e),
-		})
-	}
-
 	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
 		let api = APIOwner::new(self.wallet.clone());
 		match req
@@ -475,10 +463,6 @@ where
 			),
 			"post_tx" => Box::new(
 				self.post_tx(req, api)
-					.and_then(|_| ok(response(StatusCode::OK, ""))),
-			),
-			"issue_burn_tx" => Box::new(
-				self.issue_burn_tx(req, api)
 					.and_then(|_| ok(response(StatusCode::OK, ""))),
 			),
 			_ => Box::new(err(ErrorKind::GenericError(

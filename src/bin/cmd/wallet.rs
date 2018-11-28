@@ -529,24 +529,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					}
 				}
 			}
-			("burn", Some(send_args)) => {
-				let amount = send_args
-					.value_of("amount")
-					.expect("Amount to burn required");
-				let amount = core::amount_from_hr_string(amount)
-					.expect("Could not parse amount as number with optional decimal point.");
-				let minimum_confirmations: u64 = send_args
-					.value_of("minimum_confirmations")
-					.unwrap()
-					.parse()
-					.expect("Could not parse minimum_confirmations as a whole number.");
-				let max_outputs = 500;
-				api.issue_burn_tx(amount, minimum_confirmations, max_outputs)
-					.unwrap_or_else(|e| {
-						panic!("Error burning tx: {:?} Config: {:?}", e, wallet_config)
-					});
-				Ok(())
-			}
 			("info", Some(args)) => {
 				let minimum_confirmations: u64 = args
 					.value_of("minimum_confirmations")

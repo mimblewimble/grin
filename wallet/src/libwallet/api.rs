@@ -424,30 +424,6 @@ where
 		Ok(())
 	}
 
-	/// Issue a burn TX
-	pub fn issue_burn_tx(
-		&mut self,
-		amount: u64,
-		minimum_confirmations: u64,
-		max_outputs: usize,
-	) -> Result<(), Error> {
-		let mut w = self.wallet.lock();
-		w.open_with_credentials()?;
-		let parent_key_id = w.parent_key_id();
-		let tx_burn = tx::issue_burn_tx(
-			&mut *w,
-			amount,
-			minimum_confirmations,
-			max_outputs,
-			&parent_key_id,
-		)?;
-		let tx_hex = util::to_hex(ser::ser_vec(&tx_burn).unwrap());
-		w.w2n_client()
-			.post_tx(&TxWrapper { tx_hex: tx_hex }, false)?;
-		w.close()?;
-		Ok(())
-	}
-
 	/// Posts a transaction to the chain
 	pub fn post_tx(&self, tx: &Transaction, fluff: bool) -> Result<(), Error> {
 		let tx_hex = util::to_hex(ser::ser_vec(tx).unwrap());
