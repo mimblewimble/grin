@@ -970,6 +970,8 @@ impl<'a> Extension<'a> {
 	/// Iterates through the kernels and adds them to the kernel_mmr,
 	/// verifying signatures and kernel_mmr_roots as we go.
 	pub fn apply_kernels(&mut self, hash: &Hash, kernels: &Vec<TxKernel>) -> Result<(), Error> {
+		debug!("apply_kernels: Applying {} kernels from block {}", kernels.len(), hash);
+
 		let header = self.batch.get_block_header(hash)?;
 
 		for kernel in kernels {

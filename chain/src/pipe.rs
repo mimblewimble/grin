@@ -28,6 +28,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::verifier_cache::VerifierCache;
 use core::core::Committed;
 use core::core::{Block, BlockHeader, BlockSums, TxKernel};
+use core::core::pmmr;
 use core::global;
 use core::pow;
 use error::{Error, ErrorKind};
@@ -268,7 +269,7 @@ pub fn sync_kernels(
 		0 => 0,
 		_ => {
 			let previous_header = ctx.batch.get_previous_header(&first_header)?;
-			previous_header.kernel_mmr_size
+			pmmr::n_leaves(previous_header.kernel_mmr_size)
 		}
 	};
 
@@ -304,7 +305,7 @@ pub fn sync_kernels(
 	txhashset::extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
 		// Rewind kernel mmr to correct kernel index if necessary.
 		if num_kernels > next_kernel_index {
-			extension.rewind_kernel_mmr(next_kernel_index)?;
+			extension.rewind_kernel_mmr(next_kernel_index + 1)?;
 		}
 
 		for block_index in first_needed_block..blocks.len() {

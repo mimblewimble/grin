@@ -18,7 +18,6 @@ use std::sync::Arc;
 
 use chain;
 use common::types::{SyncState, SyncStatus};
-use core::core::hash::Hashed;
 use p2p;
 use p2p::types::Capabilities;
 
