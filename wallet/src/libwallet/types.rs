@@ -34,9 +34,9 @@ use keychain::{Identifier, Keychain};
 use libtx::aggsig;
 use libwallet::error::{Error, ErrorKind};
 
+use util;
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::{self, pedersen, Secp256k1};
-use util;
 
 /// Combined trait to allow dynamic wallet dispatch
 pub trait WalletInst<C, K>: WalletBackend<C, K> + Send + Sync + 'static

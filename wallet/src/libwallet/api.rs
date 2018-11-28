@@ -68,7 +68,6 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
-
 	/// Create a new API instance with the given wallet instance. All subsequent
 	/// API calls will operate on this instance of the wallet.
 	///
@@ -78,7 +77,7 @@ where
 	/// with a call to [close](../types/trait.WalletBackend.html#tymethod.close)
 	///
 	/// # Arguments
-	/// * `wallet_in` - A reference-counted mutex containing an implementation of the 
+	/// * `wallet_in` - A reference-counted mutex containing an implementation of the
 	/// [WalletBackend](../types/trait.WalletBackend.html) trait.
 	///
 	/// # Returns
@@ -101,7 +100,7 @@ where
 	///
 	/// let mut wallet_config = WalletConfig::default();
 	///
-	/// // A NodeClient must first be created to handle communication between 
+	/// // A NodeClient must first be created to handle communication between
 	/// // the wallet and the node.
 	///
 	/// let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
@@ -153,15 +152,15 @@ where
 	/// provided during wallet instantiation). If `false`, the results will
 	/// contain output information that may be out-of-date (from the last time
 	/// the wallet's output set was refreshed against the node).
-	/// * `tx_id` - If `Some(i)`, only return the outputs associated with 
+	/// * `tx_id` - If `Some(i)`, only return the outputs associated with
 	/// the transaction log entry of id `i`.
 	///
 	/// # Returns
 	/// * (`bool`, `Vec<OutputData, Commitment>`) - A tuple:
-	/// * The first `bool` element indicates whether the data was successfully 
-	/// refreshed from the node (note this may be false even if the `refresh_from_node` 
+	/// * The first `bool` element indicates whether the data was successfully
+	/// refreshed from the node (note this may be false even if the `refresh_from_node`
 	/// argument was set to `true`.
-	/// * The second element contains the result set, of which each element is 
+	/// * The second element contains the result set, of which each element is
 	/// a mapping between the wallet's internal [OutputData](../types/struct.OutputData.html)
 	/// and the Output commitment as identified in the chain's UTXO set
 	///
@@ -237,8 +236,8 @@ where
 	///
 	/// # Returns
 	/// * (`bool`, `Vec<[TxLogEntry](../types/struct.TxLogEntry.html)>`) - A tuple:
-	/// * The first `bool` element indicates whether the data was successfully 
-	/// refreshed from the node (note this may be false even if the `refresh_from_node` 
+	/// * The first `bool` element indicates whether the data was successfully
+	/// refreshed from the node (note this may be false even if the `refresh_from_node`
 	/// argument was set to `true`.
 	/// * The second element contains the set of retrieved
 	/// [TxLogEntries](../types/struct/TxLogEntry.html)

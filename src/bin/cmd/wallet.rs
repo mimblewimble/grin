@@ -15,11 +15,11 @@
 use clap::ArgMatches;
 use rpassword;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
-use std::fs::File;
-use std::io::Write;
 
 use serde_json as json;
 
@@ -657,8 +657,11 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				let fluff = repost_args.is_present("fluff");
 				let (_, txs) = api.retrieve_txs(true, Some(tx_id), None)?;
 				let stored_tx = txs[0].get_stored_tx();
-				if stored_tx.is_none(){
-					println!("Transaction with id {} does not have transaction data. Not reposting.", tx_id);
+				if stored_tx.is_none() {
+					println!(
+						"Transaction with id {} does not have transaction data. Not reposting.",
+						tx_id
+					);
 					std::process::exit(0);
 				}
 				match dump_file {
@@ -671,7 +674,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						info!("Reposted transaction at {}", tx_id);
 						println!("Reposted transaction at {}", tx_id);
 						Ok(())
-					},
+					}
 					Some(f) => {
 						let mut tx_file = File::create(f)?;
 						tx_file.write_all(json::to_string(&stored_tx).unwrap().as_bytes())?;
