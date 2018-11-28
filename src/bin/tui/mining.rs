@@ -307,7 +307,7 @@ impl TUIStatusListener for TUIMiningView {
 		let stratum_network_hashrate = format!(
 			"Network Hashrate: {:.*}",
 			2,
-			stratum_stats.network_hashrate()
+			stratum_stats.network_hashrate(stratum_stats.block_height)
 		);
 		let worker_stats = stratum_stats.worker_stats;
 		let stratum_enabled = format!("Mining server enabled: {}", stratum_stats.is_enabled);

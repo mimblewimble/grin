@@ -166,19 +166,16 @@ pub const DAMP_FACTOR: u64 = 3;
 /// Must be made dependent on height to phase out smaller size over the years
 /// This can wait until end of 2019 at latest
 pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
-	let mut recognized_edge_bits = edge_bits as u64;
+	let mut xpr_edge_bits = edge_bits as u64;
 
 	let bits_over_min = edge_bits - global::min_edge_bits();
-	// greater than zero as soon as an edge_bits value expires
-	let expired = (height / YEAR_HEIGHT).saturating_sub((1 << bits_over_min) - 1);
-	if expired > 1 {
-		recognized_edge_bits = 0;
-	} else if expired > 0 {
-		recognized_edge_bits =
-			recognized_edge_bits.saturating_sub((height % YEAR_HEIGHT) / WEEK_HEIGHT + 1);
+	let expiry_height = (1 << bits_over_min) * YEAR_HEIGHT;
+	if height >= expiry_height {
+		xpr_edge_bits =
+			xpr_edge_bits.saturating_sub(1 + (height - expiry_height) / WEEK_HEIGHT);
 	}
 
-	(2 << (edge_bits - global::base_edge_bits()) as u64) * recognized_edge_bits
+	(2 << (edge_bits - global::base_edge_bits()) as u64) * xpr_edge_bits
 }
 
 /// minimum difficulty to avoid getting stuck when trying to increase subject to dampening
