@@ -171,8 +171,7 @@ pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
 	let bits_over_min = edge_bits - global::min_edge_bits();
 	let expiry_height = (1 << bits_over_min) * YEAR_HEIGHT;
 	if height >= expiry_height {
-		xpr_edge_bits =
-			xpr_edge_bits.saturating_sub(1 + (height - expiry_height) / WEEK_HEIGHT);
+		xpr_edge_bits = xpr_edge_bits.saturating_sub(1 + (height - expiry_height) / WEEK_HEIGHT);
 	}
 
 	(2 << (edge_bits - global::base_edge_bits()) as u64) * xpr_edge_bits
