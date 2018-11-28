@@ -121,12 +121,10 @@ where
 {
 	/// Initialise with whatever stored credentials we have
 	fn open_with_credentials(&mut self) -> Result<(), Error> {
-		let wallet_seed = WalletSeed::from_file(&self.config)
+		let wallet_seed = WalletSeed::from_file(&self.config, &self.passphrase)
 			.context(ErrorKind::CallbackImpl("Error opening wallet"))?;
-		let keychain = wallet_seed.derive_keychain(&self.passphrase);
+		let keychain = wallet_seed.derive_keychain();
 		self.keychain = Some(keychain.context(ErrorKind::CallbackImpl("Error deriving keychain"))?);
-		// Just blow up password for now after it's been used
-		self.passphrase = String::from("");
 		Ok(())
 	}
 

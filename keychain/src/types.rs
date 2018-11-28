@@ -432,6 +432,7 @@ impl ExtKeychainPath {
 
 pub trait Keychain: Sync + Send + Clone {
 	fn from_seed(seed: &[u8]) -> Result<Self, Error>;
+	fn from_mnemonic(word_list: &str, extension_word: &str) -> Result<Self, Error>;
 	fn from_random_seed() -> Result<Self, Error>;
 	fn root_key_id() -> Identifier;
 	fn derive_key_id(depth: u8, d1: u32, d2: u32, d3: u32, d4: u32) -> Identifier;

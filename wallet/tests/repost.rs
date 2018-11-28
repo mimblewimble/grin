@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Test a wallet file send/recieve
+//! Test a wallet repost command
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
@@ -35,6 +35,7 @@ use std::time::Duration;
 use core::global;
 use core::global::ChainTypes;
 use keychain::ExtKeychain;
+use wallet::libtx::slate::Slate;
 use wallet::{libwallet, FileWalletCommAdapter};
 
 fn clean_output_dir(test_dir: &str) {
@@ -48,7 +49,7 @@ fn setup(test_dir: &str) {
 }
 
 /// self send impl
-fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
+fn file_repost_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
@@ -111,8 +112,6 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
-			            //"mining",
-			            //"listener",
 		)?;
 		// output tx file
 		let file_adapter = FileWalletCommAdapter::new();
@@ -121,14 +120,16 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		Ok(())
 	})?;
 
-	// Get some mining done
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
+	bh += 3;
+
+	// wallet 1 receives file to different account, completes
 	{
-		let mut w = wallet2.lock();
-		w.set_parent_key_id_by_name("account1")?;
+		let mut w = wallet1.lock();
+		w.set_parent_key_id_by_name("listener")?;
 	}
 
-	// wallet 2 receives file, completes, sends file back
-	wallet::controller::foreign_single_use(wallet2.clone(), |api| {
+	wallet::controller::foreign_single_use(wallet1.clone(), |api| {
 		let adapter = FileWalletCommAdapter::new();
 		let mut slate = adapter.receive_tx_async(&send_file)?;
 		api.receive_tx(&mut slate, None)?;
@@ -136,12 +137,25 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		Ok(())
 	})?;
 
-	// wallet 1 finalises and posts
+	// wallet 1 receives file to different account, completes
+	{
+		let mut w = wallet1.lock();
+		w.set_parent_key_id_by_name("mining")?;
+	}
+
+	let mut slate = Slate::blank(2);
+	// wallet 1 finalize
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let adapter = FileWalletCommAdapter::new();
-		let mut slate = adapter.receive_tx_async(&receive_file)?;
+		slate = adapter.receive_tx_async(&receive_file)?;
 		api.finalize_tx(&mut slate)?;
-		api.post_tx(&slate, false);
+		Ok(())
+	})?;
+
+	// Now repost from cached
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		let (_, txs) = api.retrieve_txs(true, None, Some(slate.id))?;
+		api.post_stored_tx(txs[0].id, false)?;
 		bh += 1;
 		Ok(())
 	})?;
@@ -149,7 +163,7 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
 	bh += 3;
 
-	// Check total in mining account
+	// update/test contents of both accounts
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(wallet1_refreshed);
@@ -158,12 +172,76 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		Ok(())
 	})?;
 
-	// Check total in 'wallet 2' account
-	wallet::controller::owner_single_use(wallet2.clone(), |api| {
+	{
+		let mut w = wallet1.lock();
+		w.set_parent_key_id_by_name("listener")?;
+	}
+
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true, 1)?;
 		assert!(wallet2_refreshed);
 		assert_eq!(wallet2_info.last_confirmed_height, bh);
 		assert_eq!(wallet2_info.total, 2 * reward);
+		Ok(())
+	})?;
+
+	// as above, but syncronously
+	{
+		let mut w = wallet1.lock();
+		w.set_parent_key_id_by_name("mining")?;
+	}
+	{
+		let mut w = wallet2.lock();
+		w.set_parent_key_id_by_name("account1")?;
+	}
+
+	let mut slate = Slate::blank(2);
+	let amount = 60_000_000_000;
+
+	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
+		// note this will increment the block count as part of the transaction "Posting"
+		let (slate_i, lock_fn) = sender_api.initiate_tx(
+			None,
+			amount * 2, // amount
+			2,          // minimum confirmations
+			500,        // max outputs
+			1,          // num change outputs
+			true,       // select all outputs
+		)?;
+		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
+		sender_api.tx_lock_outputs(&slate, lock_fn)?;
+		sender_api.finalize_tx(&mut slate)?;
+		Ok(())
+	})?;
+
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
+	bh += 3;
+
+	// Now repost from cached
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		let (_, txs) = api.retrieve_txs(true, None, Some(slate.id))?;
+		api.post_stored_tx(txs[0].id, false)?;
+		bh += 1;
+		Ok(())
+	})?;
+
+	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
+	bh += 3;
+	//
+	// update/test contents of both accounts
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
+		assert!(wallet1_refreshed);
+		assert_eq!(wallet1_info.last_confirmed_height, bh);
+		assert_eq!(wallet1_info.total, bh * reward - reward * 4);
+		Ok(())
+	})?;
+
+	wallet::controller::owner_single_use(wallet2.clone(), |api| {
+		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true, 1)?;
+		assert!(wallet2_refreshed);
+		assert_eq!(wallet2_info.last_confirmed_height, bh);
+		assert_eq!(wallet2_info.total, 2 * amount);
 		Ok(())
 	})?;
 
@@ -173,9 +251,9 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 }
 
 #[test]
-fn wallet_file_exchange() {
-	let test_dir = "test_output/file_exchange";
-	if let Err(e) = file_exchange_test_impl(test_dir) {
+fn wallet_file_repost() {
+	let test_dir = "test_output/file_repost";
+	if let Err(e) = file_repost_test_impl(test_dir) {
 		panic!("Libwallet Error: {} - {}", e, e.backtrace().unwrap());
 	}
 }

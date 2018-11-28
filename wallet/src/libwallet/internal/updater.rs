@@ -91,7 +91,9 @@ where
 {
 	// just read the wallet here, no need for a write lock
 	let mut txs = if let Some(id) = tx_id {
-		let tx = wallet.tx_log_iter().find(|t| t.id == id);
+		let tx = wallet
+			.tx_log_iter()
+			.find(|t| t.id == id && t.parent_key_id == *parent_key_id);
 		if let Some(t) = tx {
 			vec![t]
 		} else {

@@ -25,6 +25,7 @@ extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate log;
+extern crate rpassword;
 extern crate term;
 
 extern crate grin_api as api;
@@ -153,9 +154,8 @@ fn real_main() -> i32 {
 		.arg(Arg::with_name("pass")
 			.short("p")
 			.long("pass")
-			.help("Wallet passphrase used to generate the private key seed")
-			.takes_value(true)
-			.default_value(""))
+			.help("Wallet passphrase used to encrypt wallet seed")
+			.takes_value(true))
 		.arg(Arg::with_name("account")
 			.short("a")
 			.long("account")
@@ -343,10 +343,23 @@ fn real_main() -> i32 {
 				.short("h")
 				.long("here")
 				.help("Create wallet files in the current directory instead of the default ~/.grin directory")
+				.takes_value(false))
+			.arg(Arg::with_name("short_wordlist")
+				.help("Generate a 12 word recovery phrase/seed instead of default 24.")
+				.short("s")
+				.long("short_wordlist")
 				.takes_value(false)))
 
+		.subcommand(SubCommand::with_name("recover")
+			.about("recover (create a new wallet.seed file) from a recovery phrase")
+			.arg(Arg::with_name("recovery_phrase")
+				.help("12 or 24 word recovery phrase (encased in quotes).")
+				.short("p")
+				.long("recovery_phrase")
+				.takes_value(true)))
+
 		.subcommand(SubCommand::with_name("restore")
-			.about("Attempt to restore wallet contents from the chain using seed and password. \
+			.about("Attempt to restore wallet contents from the chain using seed. \
 				NOTE: Backup wallet.* and run `wallet listen` before running restore.")))
 
 	.get_matches();
@@ -381,9 +394,9 @@ fn real_main() -> i32 {
 				panic!("Error loading wallet configuration: {}", e);
 			});
 			if !cmd::seed_exists(w.members.as_ref().unwrap().wallet.clone()) {
-				if let ("init", Some(_)) = wallet_args.subcommand() {
+				if "init" == wallet_args.subcommand().0 || "recover" == wallet_args.subcommand().0 {
 				} else {
-					println!("Wallet seed file doesn't exist. Run `grin wallet -p [password] init` first");
+					println!("Wallet seed file doesn't exist. Run `grin wallet init` first");
 					exit(1);
 				}
 			}

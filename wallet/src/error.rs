@@ -25,7 +25,7 @@ use failure::{Backtrace, Context, Fail};
 /// Error definition
 #[derive(Debug)]
 pub struct Error {
-	inner: Context<ErrorKind>,
+	pub inner: Context<ErrorKind>,
 }
 
 /// Wallet errors, mostly wrappers around underlying crypto or I/O errors.
@@ -80,12 +80,20 @@ pub enum ErrorKind {
 	DuplicateTransactionId,
 
 	/// Wallet seed already exists
-	#[fail(display = "Wallet seed exists error")]
-	WalletSeedExists,
+	#[fail(display = "{}", _0)]
+	WalletSeedExists(String),
 
 	/// Wallet seed doesn't exist
 	#[fail(display = "Wallet seed doesn't exist error")]
 	WalletSeedDoesntExist,
+
+	/// Enc/Decryption Error
+	#[fail(display = "Enc/Decryption error")]
+	Encryption,
+
+	/// BIP 39 word list
+	#[fail(display = "BIP39 Mnemonic (word list) Error")]
+	Mnemonic,
 
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]

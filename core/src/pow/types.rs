@@ -35,8 +35,6 @@ pub trait PoWContext<T>
 where
 	T: EdgeType,
 {
-	/// Create new instance of context with appropriate parameters
-	fn new(edge_bits: u8, proof_size: usize, max_sols: u32) -> Result<Box<Self>, Error>;
 	/// Sets the header along with an optional nonce at the end
 	/// solve: whether to set up structures for a solve (true) or just validate (false)
 	fn set_header_nonce(

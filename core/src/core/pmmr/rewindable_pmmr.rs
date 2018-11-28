@@ -75,7 +75,7 @@ where
 	}
 
 	/// Get the data element at provided position in the MMR.
-	pub fn get_data(&self, pos: u64) -> Option<T> {
+	pub fn get_data(&self, pos: u64) -> Option<T::E> {
 		if pos > self.last_pos {
 			// If we are beyond the rhs of the MMR return None.
 			None
