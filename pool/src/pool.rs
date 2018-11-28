@@ -15,6 +15,7 @@
 //! Transaction pool implementation.
 //! Used for both the txpool and stempool layers in the pool.
 
+use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use util::RwLock;
@@ -115,7 +116,10 @@ impl Pool {
 	/// appropriate to put in a mined block. Aggregates chains of dependent
 	/// transactions, orders by fee over weight and ensures to total weight
 	/// doesn't exceed block limits.
-	pub fn prepare_mineable_transactions(&self, max_weight: usize) -> Result<Vec<Transaction>, PoolError> {
+	pub fn prepare_mineable_transactions(
+		&self,
+		max_weight: usize,
+	) -> Result<Vec<Transaction>, PoolError> {
 		let header = self.blockchain.chain_head()?;
 		let tx_buckets = self.bucket_transactions();
 
@@ -159,33 +163,48 @@ impl Pool {
 		Ok(Some(tx))
 	}
 
-	/// evict last 10% of the transaction from the pool (based on fees over weight)
-	pub fn evict_from_pool(&mut self, max_pool_size: usize) {
-		let tx_buckets = self.bucket_transactions();
+	/// evict a transaction from the pool
+	pub fn evict_from_pool(&mut self) {
+		// Check that the new tx is not a bullshit tx in term of fee
 
-		let mut flat_txs: Vec<Transaction> = vec![];
-		for tx_bucket in tx_buckets {
-			for tx in tx_bucket {
-				flat_txs.push(tx);
+		let mut ordered_entries = self.entries.clone();
+		ordered_entries.sort_by(|entry_a, entry_b| {
+			let fw_a = entry_a.tx.fee() * 1000 / entry_a.tx.tx_weight() as u64;
+			let fw_b = entry_b.tx.fee() * 1000 / entry_b.tx.tx_weight() as u64;
+			if fw_a > fw_b {
+				Ordering::Greater
+			} else if fw_a == fw_b && entry_a.tx_at < entry_b.tx_at {
+				Ordering::Greater
+			} else {
+				Ordering::Less
+			}
+		});
+
+		// remove first one iff not a bucket root of several txs
+		for entry in ordered_entries {
+			for tx_bucket in self.bucket_transactions() {
+				if tx_bucket.len() == 1 {
+					// remove tx
+					self.entries = self
+						.entries
+						.iter()
+						.filter(|x| x.tx != entry.tx)
+						.map(|x| x.clone())
+						.collect::<Vec<_>>();
+				}
+				if tx_bucket[0] == entry.tx {
+					// next bucket
+					continue;
+				}
+				// remove tx
+				self.entries = self
+					.entries
+					.iter()
+					.filter(|x| x.tx != entry.tx)
+					.map(|x| x.clone())
+					.collect::<Vec<_>>();
 			}
 		}
-
-		// sort by fees over weight, multiplying by 1000 to keep some precision
-		// don't think we'll ever see a >max_u64/1000 fee transaction
-		flat_txs.sort_unstable_by_key(|tx| tx.fee() * 1000 / tx.tx_weight() as u64);
-
-		// Get last 10%
-		let number_to_evict = ((max_pool_size as f32) * 0.1) as usize;
-
-		// evict the bottom 10%
-		let evicted_tx: Vec<_> = flat_txs.drain(number_to_evict..).collect();
-
-		self.entries = self
-			.entries
-			.iter()
-			.filter(|x| evicted_tx.contains(&x.tx))
-			.map(|x| x.clone())
-			.collect::<Vec<_>>();
 	}
 
 	pub fn select_valid_transactions(

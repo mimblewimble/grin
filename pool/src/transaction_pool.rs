@@ -141,9 +141,10 @@ impl TransactionPool {
 
 		// Do we have the capacity to accept this transaction?
 		let acceptability = self.is_acceptable(&tx, stem);
+		let mut evict = false;
 		if !stem && acceptability.as_ref().err() == Some(&PoolError::OverCapacity) {
-			self.txpool.evict_from_pool(self.config.max_pool_size);
-		} else {
+			evict = true;
+		} else if acceptability.is_err() {
 			return acceptability;
 		}
 
@@ -156,6 +157,11 @@ impl TransactionPool {
 
 		// Check coinbase maturity before we go any further.
 		self.blockchain.verify_coinbase_maturity(&tx)?;
+
+		// Transaction passed all the checks but we have to make space for it
+		if evict {
+			self.txpool.evict_from_pool();
+		}
 
 		let entry = PoolEntry {
 			state: PoolEntryState::Fresh,
