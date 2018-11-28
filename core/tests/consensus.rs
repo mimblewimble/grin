@@ -472,36 +472,90 @@ fn next_target_adjustment() {
 
 #[test]
 fn test_secondary_pow_ratio() {
-	assert_eq!(secondary_pow_ratio(1), 90);
-	assert_eq!(secondary_pow_ratio(89), 90);
-	assert_eq!(secondary_pow_ratio(90), 90);
-	assert_eq!(secondary_pow_ratio(91), 90);
-	assert_eq!(secondary_pow_ratio(179), 90);
-	assert_eq!(secondary_pow_ratio(180), 90);
-	assert_eq!(secondary_pow_ratio(181), 90);
 
-	let one_week = 60 * 24 * 7;
-	assert_eq!(secondary_pow_ratio(one_week - 1), 90);
-	assert_eq!(secondary_pow_ratio(one_week), 89);
-	assert_eq!(secondary_pow_ratio(one_week + 1), 89);
+	// Tests for mainnet chain type.
+	{
+		global::set_mining_mode(global::ChainTypes::Mainnet);
+		assert_eq!(global::is_mainnet(), true);
 
-	let two_weeks = one_week * 2;
-	assert_eq!(secondary_pow_ratio(two_weeks - 1), 89);
-	assert_eq!(secondary_pow_ratio(two_weeks), 88);
-	assert_eq!(secondary_pow_ratio(two_weeks + 1), 88);
+		assert_eq!(secondary_pow_ratio(1), 90);
+		assert_eq!(secondary_pow_ratio(89), 90);
+		assert_eq!(secondary_pow_ratio(90), 90);
+		assert_eq!(secondary_pow_ratio(91), 90);
+		assert_eq!(secondary_pow_ratio(179), 90);
+		assert_eq!(secondary_pow_ratio(180), 90);
+		assert_eq!(secondary_pow_ratio(181), 90);
 
-	let fork_height = 64_000;
-	assert_eq!(secondary_pow_ratio(fork_height - 1), 84);
-	assert_eq!(secondary_pow_ratio(fork_height), 85);
-	assert_eq!(secondary_pow_ratio(fork_height + 1), 85);
+		let one_week = 60 * 24 * 7;
+		assert_eq!(secondary_pow_ratio(one_week - 1), 90);
+		assert_eq!(secondary_pow_ratio(one_week), 90);
+		assert_eq!(secondary_pow_ratio(one_week + 1), 90);
 
-	let one_year = one_week * 52;
-	assert_eq!(secondary_pow_ratio(one_year), 45);
+		let two_weeks = one_week * 2;
+		assert_eq!(secondary_pow_ratio(two_weeks - 1), 89);
+		assert_eq!(secondary_pow_ratio(two_weeks), 89);
+		assert_eq!(secondary_pow_ratio(two_weeks + 1), 89);
 
-	let two_year = one_year * 2;
-	assert_eq!(secondary_pow_ratio(two_year - 1), 1);
-	assert_eq!(secondary_pow_ratio(two_year), 0);
-	assert_eq!(secondary_pow_ratio(two_year + 1), 0);
+		let t4_fork_height = 64_000;
+		assert_eq!(secondary_pow_ratio(t4_fork_height - 1), 85);
+		assert_eq!(secondary_pow_ratio(t4_fork_height), 85);
+		assert_eq!(secondary_pow_ratio(t4_fork_height + 1), 85);
+
+		let one_year = one_week * 52;
+		assert_eq!(secondary_pow_ratio(one_year), 45);
+
+		let ninety_one_weeks = one_week * 91;
+		assert_eq!(secondary_pow_ratio(ninety_one_weeks - 1), 12);
+		assert_eq!(secondary_pow_ratio(ninety_one_weeks), 12);
+		assert_eq!(secondary_pow_ratio(ninety_one_weeks + 1), 12);
+
+		let two_year = one_year * 2;
+		assert_eq!(secondary_pow_ratio(two_year - 1), 1);
+		assert_eq!(secondary_pow_ratio(two_year), 0);
+		assert_eq!(secondary_pow_ratio(two_year + 1), 0);
+	}
+
+	// Tests for testnet4 chain type (covers pre and post hardfork).
+	{
+		global::set_mining_mode(global::ChainTypes::Testnet4);
+		assert_eq!(global::is_mainnet(), false);
+
+		assert_eq!(secondary_pow_ratio(1), 90);
+		assert_eq!(secondary_pow_ratio(89), 90);
+		assert_eq!(secondary_pow_ratio(90), 90);
+		assert_eq!(secondary_pow_ratio(91), 90);
+		assert_eq!(secondary_pow_ratio(179), 90);
+		assert_eq!(secondary_pow_ratio(180), 90);
+		assert_eq!(secondary_pow_ratio(181), 90);
+
+		let one_week = 60 * 24 * 7;
+		assert_eq!(secondary_pow_ratio(one_week - 1), 90);
+		assert_eq!(secondary_pow_ratio(one_week), 89);
+		assert_eq!(secondary_pow_ratio(one_week + 1), 89);
+
+		let two_weeks = one_week * 2;
+		assert_eq!(secondary_pow_ratio(two_weeks - 1), 89);
+		assert_eq!(secondary_pow_ratio(two_weeks), 88);
+		assert_eq!(secondary_pow_ratio(two_weeks + 1), 88);
+
+		let t4_fork_height = 64_000;
+		assert_eq!(secondary_pow_ratio(t4_fork_height - 1), 84);
+		assert_eq!(secondary_pow_ratio(t4_fork_height), 85);
+		assert_eq!(secondary_pow_ratio(t4_fork_height + 1), 85);
+
+		let one_year = one_week * 52;
+		assert_eq!(secondary_pow_ratio(one_year), 45);
+
+		let ninety_one_weeks = one_week * 91;
+		assert_eq!(secondary_pow_ratio(ninety_one_weeks - 1), 12);
+		assert_eq!(secondary_pow_ratio(ninety_one_weeks), 12);
+		assert_eq!(secondary_pow_ratio(ninety_one_weeks + 1), 12);
+
+		let two_year = one_year * 2;
+		assert_eq!(secondary_pow_ratio(two_year - 1), 1);
+		assert_eq!(secondary_pow_ratio(two_year), 0);
+		assert_eq!(secondary_pow_ratio(two_year + 1), 0);
+	}
 }
 
 #[test]
