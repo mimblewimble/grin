@@ -37,13 +37,11 @@
 //! either be a simple Vec or a database.
 
 mod backend;
-mod db_pmmr;
 mod pmmr;
 mod readonly_pmmr;
 mod rewindable_pmmr;
 
 pub use self::backend::*;
-pub use self::db_pmmr::*;
 pub use self::pmmr::*;
 pub use self::readonly_pmmr::*;
 pub use self::rewindable_pmmr::*;

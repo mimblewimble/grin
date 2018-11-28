@@ -310,7 +310,13 @@ impl FixedLength for TxKernelEntry {
 		+ secp::constants::AGG_SIGNATURE_SIZE;
 }
 
-impl PMMRable for TxKernelEntry {}
+impl PMMRable for TxKernelEntry {
+	type E = Self;
+
+	fn as_elmt(self) -> Self::E {
+		self
+	}
+}
 
 /// TransactionBody is a common abstraction for transaction and block
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -1237,7 +1243,13 @@ impl FixedLength for OutputIdentifier {
 	const LEN: usize = 1 + secp::constants::PEDERSEN_COMMITMENT_SIZE;
 }
 
-impl PMMRable for OutputIdentifier {}
+impl PMMRable for OutputIdentifier {
+	type E = Self;
+
+	fn as_elmt(self) -> Self::E {
+		self
+	}
+}
 
 impl Writeable for OutputIdentifier {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {

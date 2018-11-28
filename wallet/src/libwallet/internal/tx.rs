@@ -15,11 +15,12 @@
 //! Transaction building functions
 
 use std::sync::Arc;
-use util::RwLock;
+use util::{self, RwLock};
 use uuid::Uuid;
 
 use core::core::verifier_cache::LruVerifierCache;
 use core::core::Transaction;
+use core::ser;
 use keychain::{Identifier, Keychain};
 use libtx::slate::Slate;
 use libtx::{build, tx_fee};
@@ -204,6 +205,30 @@ where
 	}
 	let tx = tx_vec[0].clone();
 	Ok((tx.confirmed, tx.tx_hex))
+}
+
+/// Update the stored hex transaction (this update needs to happen when the TX is finalised)
+pub fn update_tx_hex<T: ?Sized, C, K>(
+	wallet: &mut T,
+	parent_key_id: &Identifier,
+	slate: &Slate,
+) -> Result<(), Error>
+where
+	T: WalletBackend<C, K>,
+	C: NodeClient,
+	K: Keychain,
+{
+	let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
+	let tx_vec = updater::retrieve_txs(wallet, None, Some(slate.id), parent_key_id)?;
+	if tx_vec.len() != 1 {
+		return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?;
+	}
+	let mut tx = tx_vec[0].clone();
+	tx.tx_hex = Some(tx_hex);
+	let batch = wallet.batch()?;
+	batch.save_tx_log_entry(tx, &parent_key_id)?;
+	batch.commit()?;
+	Ok(())
 }
 
 /// Issue a burn tx

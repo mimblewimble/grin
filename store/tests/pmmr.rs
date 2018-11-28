@@ -758,7 +758,13 @@ impl FixedLength for TestElem {
 	const LEN: usize = 4;
 }
 
-impl PMMRable for TestElem {}
+impl PMMRable for TestElem {
+	type E = Self;
+
+	fn as_elmt(self) -> Self::E {
+		self
+	}
+}
 
 impl Writeable for TestElem {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
