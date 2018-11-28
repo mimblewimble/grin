@@ -409,7 +409,7 @@ Send a transaction either directly by http or file (then display the slate)
 ### POST Finalize Tx
 
 Sender finalization of the transaction. Takes the slate returned by the sender as well as the private file generate on the first send step.
-Builds the complete transaction.
+Builds the complete transaction but will **not** sends it to a grin node for propagation. Use [POST Post Tx](#post-post-tx) for that.
 
 * **URL**
 
