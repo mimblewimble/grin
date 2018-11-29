@@ -188,6 +188,15 @@ impl Readable for TxKernel {
 	}
 }
 
+/// We store TxKernelEntry in the kernel MMR.
+impl PMMRable for TxKernel {
+	type E = TxKernelEntry;
+
+	fn as_elmt(self) -> Self::E {
+		self.into()
+	}
+}
+
 impl TxKernel {
 	/// Return the excess commitment for this tx_kernel.
 	pub fn excess(&self) -> Commitment {
@@ -308,14 +317,6 @@ impl FixedLength for TxKernelEntry {
 	const LEN: usize = 17 // features plus fee and lock_height
 		+ secp::constants::PEDERSEN_COMMITMENT_SIZE
 		+ secp::constants::AGG_SIGNATURE_SIZE;
-}
-
-impl PMMRable for TxKernelEntry {
-	type E = Self;
-
-	fn as_elmt(self) -> Self::E {
-		self
-	}
 }
 
 /// TransactionBody is a common abstraction for transaction and block
