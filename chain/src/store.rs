@@ -26,7 +26,7 @@ use core::core::hash::{Hash, Hashed};
 use core::core::{Block, BlockHeader, BlockSums};
 use core::pow::Difficulty;
 use grin_store as store;
-use grin_store::{option_to_not_found, to_key, u64_to_key, Error};
+use grin_store::{option_to_not_found, to_key, Error};
 use types::Tip;
 
 const STORE_SUBPATH: &'static str = "chain";
@@ -37,7 +37,6 @@ const HEAD_PREFIX: u8 = 'H' as u8;
 const TAIL_PREFIX: u8 = 'T' as u8;
 const HEADER_HEAD_PREFIX: u8 = 'I' as u8;
 const SYNC_HEAD_PREFIX: u8 = 's' as u8;
-const HEADER_HEIGHT_PREFIX: u8 = '8' as u8;
 const COMMIT_POS_PREFIX: u8 = 'c' as u8;
 const BLOCK_INPUT_BITMAP_PREFIX: u8 = 'B' as u8;
 const BLOCK_SUMS_PREFIX: u8 = 'M' as u8;
@@ -109,43 +108,6 @@ impl ChainStore {
 		)
 	}
 
-	pub fn get_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
-		option_to_not_found(
-			self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)),
-			&format!("Hash at height: {}", height),
-		)
-	}
-
-	// We are on the current chain if -
-	// * the header by height index matches the header, and
-	// * we are not ahead of the current head
-	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
-		let head = self.head()?;
-
-		// check we are not out ahead of the current head
-		if header.height > head.height {
-			return Err(Error::NotFoundErr(String::from(
-				"header.height > head.height",
-			)));
-		}
-
-		let header_at_height = self.get_header_by_height(header.height)?;
-		if header.hash() == header_at_height.hash() {
-			Ok(())
-		} else {
-			Err(Error::NotFoundErr(String::from(
-				"header.hash == header_at_height.hash",
-			)))
-		}
-	}
-
-	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		option_to_not_found(
-			self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)),
-			&format!("Header at height: {}", height),
-		).and_then(|hash| self.get_block_header(&hash))
-	}
-
 	pub fn get_output_pos(&self, commit: &Commitment) -> Result<u64, Error> {
 		option_to_not_found(
 			self.db
@@ -207,13 +169,6 @@ impl<'a> Batch<'a> {
 
 	pub fn save_header_head(&self, t: &Tip) -> Result<(), Error> {
 		self.db.put_ser(&vec![HEADER_HEAD_PREFIX], t)
-	}
-
-	pub fn get_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
-		option_to_not_found(
-			self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)),
-			&format!("Hash at height: {}", height),
-		)
 	}
 
 	pub fn save_sync_head(&self, t: &Tip) -> Result<(), Error> {
@@ -283,15 +238,6 @@ impl<'a> Batch<'a> {
 		Ok(())
 	}
 
-	pub fn save_header_height(&self, bh: &BlockHeader) -> Result<(), Error> {
-		self.db
-			.put_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, bh.height), &bh.hash())
-	}
-
-	pub fn delete_header_by_height(&self, height: u64) -> Result<(), Error> {
-		self.db.delete(&u64_to_key(HEADER_HEIGHT_PREFIX, height))
-	}
-
 	pub fn save_output_pos(&self, commit: &Commitment, pos: u64) -> Result<(), Error> {
 		self.db.put_ser(
 			&to_key(COMMIT_POS_PREFIX, &mut commit.as_ref().to_vec())[..],
@@ -350,70 +296,6 @@ impl<'a> Batch<'a> {
 
 	fn delete_block_sums(&self, bh: &Hash) -> Result<(), Error> {
 		self.db.delete(&to_key(BLOCK_SUMS_PREFIX, &mut bh.to_vec()))
-	}
-
-	// We are on the current chain if -
-	// * the header by height index matches the header, and
-	// * we are not ahead of the current head
-	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
-		let head = self.head()?;
-
-		// check we are not out ahead of the current head
-		if header.height > head.height {
-			return Err(Error::NotFoundErr(String::from(
-				"header.height > head.height",
-			)));
-		}
-
-		let header_at_height = self.get_header_by_height(header.height)?;
-		if header.hash() == header_at_height.hash() {
-			Ok(())
-		} else {
-			Err(Error::NotFoundErr(String::from(
-				"header.hash == header_at_height.hash",
-			)))
-		}
-	}
-
-	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		option_to_not_found(
-			self.db.get_ser(&u64_to_key(HEADER_HEIGHT_PREFIX, height)),
-			&format!("Header at height: {}", height),
-		).and_then(|hash| self.get_block_header(&hash))
-	}
-
-	/// Maintain consistency of the "header_by_height" index by traversing back
-	/// through the current chain and updating "header_by_height" until we reach
-	/// a block_header that is consistent with its height (everything prior to
-	/// this will be consistent).
-	/// We need to handle the case where we have no index entry for a given
-	/// height to account for the case where we just switched to a new fork and
-	/// the height jumped beyond current chain height.
-	pub fn setup_height(&self, header: &BlockHeader, old_tip: &Tip) -> Result<(), Error> {
-		// remove headers ahead if we backtracked
-		for n in header.height..old_tip.height {
-			self.delete_header_by_height(n + 1)?;
-		}
-		self.build_by_height_index(header, false)
-	}
-
-	pub fn build_by_height_index(&self, header: &BlockHeader, force: bool) -> Result<(), Error> {
-		self.save_header_height(&header)?;
-
-		if header.height > 0 {
-			let mut prev_header = self.get_previous_header(&header)?;
-			while prev_header.height > 0 {
-				if !force {
-					if let Ok(_) = self.is_on_current_chain(&prev_header) {
-						break;
-					}
-				}
-				self.save_header_height(&prev_header)?;
-
-				prev_header = self.get_previous_header(&prev_header)?;
-			}
-		}
-		Ok(())
 	}
 
 	fn build_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {

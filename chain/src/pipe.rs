@@ -521,11 +521,6 @@ fn update_head(b: &Block, ctx: &BlockContext) -> Result<Option<Tip>, Error> {
 	// when extending the head), update it
 	let head = ctx.batch.head()?;
 	if has_more_work(&b.header, &head) {
-		// Update the block height index based on this new head.
-		ctx.batch
-			.setup_height(&b.header, &head)
-			.map_err(|e| ErrorKind::StoreErr(e, "pipe setup height".to_owned()))?;
-
 		let tip = Tip::from_header(&b.header);
 
 		ctx.batch
@@ -585,7 +580,7 @@ pub fn rewind_and_apply_header_fork(
 ) -> Result<(), Error> {
 	let mut fork_hashes = vec![];
 	let mut current = ext.batch.get_previous_header(header)?;
-	while current.height > 0 && !ext.batch.is_on_current_chain(&current).is_ok() {
+	while current.height > 0 && !ext.is_on_current_chain(&current).is_ok() {
 		fork_hashes.push(current.hash());
 		current = ext.batch.get_previous_header(&current)?;
 	}
@@ -616,7 +611,7 @@ pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension) -> Resul
 	// keeping the hashes of blocks along the fork
 	let mut fork_hashes = vec![];
 	let mut current = ext.batch.get_previous_header(&b.header)?;
-	while current.height > 0 && !ext.batch.is_on_current_chain(&current).is_ok() {
+	while current.height > 0 && !ext.is_on_current_chain(&current).is_ok() {
 		fork_hashes.push(current.hash());
 		current = ext.batch.get_previous_header(&current)?;
 	}
