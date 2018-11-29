@@ -27,7 +27,7 @@ use types::{prune_noop, AppendOnlyFile, HashFile};
 
 const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &str = "pmmr_data.bin";
-const PMMR_LEAF_FILE: &str = "pmmr_leaf.bin";
+pub const PMMR_LEAF_FILE: &str = "pmmr_leaf.bin";
 const PMMR_PRUN_FILE: &str = "pmmr_prun.bin";
 
 /// The list of PMMR_Files for internal purposes

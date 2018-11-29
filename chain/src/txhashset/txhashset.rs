@@ -45,12 +45,12 @@ use types::{Tip, TxHashSetRoots, TxHashsetWriteStatus};
 use util::{file, secp_static, zip};
 
 const HEADERHASHSET_SUBDIR: &'static str = "header";
-const TXHASHSET_SUBDIR: &'static str = "txhashset";
+pub const TXHASHSET_SUBDIR: &'static str = "txhashset";
 
 const HEADER_HEAD_SUBDIR: &'static str = "header_head";
 const SYNC_HEAD_SUBDIR: &'static str = "sync_head";
 
-const OUTPUT_SUBDIR: &'static str = "output";
+pub const OUTPUT_SUBDIR: &'static str = "output";
 const RANGE_PROOF_SUBDIR: &'static str = "rangeproof";
 const KERNEL_SUBDIR: &'static str = "kernel";
 

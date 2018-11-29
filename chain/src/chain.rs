@@ -1045,6 +1045,10 @@ impl Chain {
 			.map_err(|e| ErrorKind::StoreErr(e, "chain head header".to_owned()).into())
 	}
 
+	pub fn get_db_root(&self) -> String {
+		self.db_root.clone() 
+	}
+
 	/// Gets a block header by hash
 	pub fn get_block(&self, h: &Hash) -> Result<Block, Error> {
 		self.store

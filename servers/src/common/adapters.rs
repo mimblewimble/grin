@@ -20,9 +20,11 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
+use std::path::{Path, PathBuf}; 
 use util::RwLock;
 
 use chain::{self, BlockStatus, ChainAdapter, Options};
+use chain::txhashset::{TXHASHSET_SUBDIR, OUTPUT_SUBDIR};
 use chrono::prelude::*;
 use chrono::Duration;
 use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
@@ -32,6 +34,7 @@ use core::core::verifier_cache::VerifierCache;
 use core::core::{BlockHeader, BlockSums, CompactBlock};
 use core::pow::Difficulty;
 use core::{core, global};
+use store::pmmr::{PMMR_LEAF_FILE};
 use p2p;
 use pool;
 use rand::prelude::*;
@@ -529,6 +532,20 @@ impl NetToChainAdapter {
 					}
 				});
 		}
+	}
+
+	fn clean_rewind_files(&self) {
+		let chain = self.chain().clone();
+		let db_root = chain.get_db_root(); 
+		let mut path = PathBuf::new();
+		path.push(db_root);
+		path.push(TXHASHSET_SUBDIR);
+		path.push(OUTPUT_SUBDIR);
+		self.clean_rewind_files_given_path(path)
+	}
+
+	fn clean_rewind_files_given_path(&self, path : PathBuf) {
+		// implement here 
 	}
 
 	fn request_transaction(&self, h: Hash, addr: &SocketAddr) {
