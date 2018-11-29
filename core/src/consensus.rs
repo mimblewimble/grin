@@ -63,7 +63,6 @@ pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
 /// function of block height (time). Starts at 90% losing a percent
 /// approximately every week. Represented as an integer between 0 and 100.
 pub fn secondary_pow_ratio(height: u64) -> u64 {
-	// TODO - this should all be cleaned up and simplified before mainnet.
 	if global::is_mainnet() {
 		90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
 	} else {
@@ -72,6 +71,18 @@ pub fn secondary_pow_ratio(height: u64) -> u64 {
 			90u64.saturating_sub(height / WEEK_HEIGHT)
 		} else {
 			90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
+		}
+	}
+}
+
+fn secondary_count_damp_factor(height: u64) -> u64 {
+	if global::is_mainnet() {
+		SECONDARY_COUNT_DAMP_FACTOR
+	} else {
+		if height < T4_CUCKAROO_HARDFORK {
+			DAMP_FACTOR
+		} else {
+			SECONDARY_COUNT_DAMP_FACTOR
 		}
 	}
 }
@@ -171,6 +182,9 @@ pub const CLAMP_FACTOR: u64 = 2;
 
 /// Dampening factor to use for difficulty adjustment
 pub const DAMP_FACTOR: u64 = 3;
+
+/// Dampening factor to use for secondary count calculation.
+pub const SECONDARY_COUNT_DAMP_FACTOR: u64 = 13;
 
 /// Compute weight of a graph as number of siphash bits defining the graph
 /// Must be made dependent on height to phase out smaller size over the years
@@ -328,7 +342,11 @@ where
 /// Factor by which the secondary proof of work difficulty will be adjusted
 pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
 	// Get the secondary count across the window, in pct (100 * 60 * 2nd_pow_fraction)
-	let snd_count = 100 * diff_data.iter().filter(|n| n.is_secondary).count() as u64;
+	let snd_count = 100 * diff_data
+		.iter()
+		.skip(1)
+		.filter(|n| n.is_secondary)
+		.count() as u64;
 
 	// Get the scaling factor sum of the last DIFFICULTY_ADJUST_WINDOW elements
 	let scale_sum: u64 = diff_data
@@ -342,8 +360,9 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
 	let target_count = DIFFICULTY_ADJUST_WINDOW * target_pct;
 
 	// adjust count toward goal subject to dampening and clamping
+	let damp_factor = secondary_count_damp_factor(height);
 	let adj_count = clamp(
-		damp(snd_count, target_count, DAMP_FACTOR),
+		damp(snd_count, target_count, damp_factor),
 		target_count,
 		CLAMP_FACTOR,
 	);
