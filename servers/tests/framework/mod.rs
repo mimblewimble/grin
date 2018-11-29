@@ -352,6 +352,7 @@ impl LocalServerContainer {
 				max_outputs,
 				change_outputs,
 				selection_strategy == "all",
+				None,
 			)?;
 			slate = client_w.send_tx_sync(dest, &slate)?;
 			api.finalize_tx(&mut slate)?;

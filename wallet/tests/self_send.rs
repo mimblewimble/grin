@@ -99,12 +99,11 @@ fn self_send_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
-			            //"mining",
-			            //"listener",
+			None,
 		)?;
 		// Send directly to self
 		wallet::controller::foreign_single_use(wallet1.clone(), |api| {
-			api.receive_tx(&mut slate, Some("listener"))?;
+			api.receive_tx(&mut slate, Some("listener"), None)?;
 			Ok(())
 		})?;
 		api.finalize_tx(&mut slate)?;

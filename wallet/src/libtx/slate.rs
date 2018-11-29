@@ -32,6 +32,8 @@ use util::secp::key::{PublicKey, SecretKey};
 use util::secp::Signature;
 use util::RwLock;
 
+use blake2::blake2b::blake2b;
+
 /// Public data for each participant in the slate
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -44,6 +46,10 @@ pub struct ParticipantData {
 	pub public_nonce: PublicKey,
 	/// Public partial signature
 	pub part_sig: Option<Signature>,
+	/// A message for other participants
+	pub message: Option<String>,
+	/// Signature, created with private key corresponding to 'public_blind_excess'
+	pub message_sig: Option<Signature>,
 }
 
 impl ParticipantData {
@@ -133,6 +139,7 @@ impl Slate {
 		sec_key: &mut SecretKey,
 		sec_nonce: &SecretKey,
 		participant_id: usize,
+		message: Option<String>,
 	) -> Result<(), Error>
 	where
 		K: Keychain,
@@ -141,7 +148,14 @@ impl Slate {
 		if self.tx.offset == BlindingFactor::zero() {
 			self.generate_offset(keychain, sec_key)?;
 		}
-		self.add_participant_info(keychain, &sec_key, &sec_nonce, participant_id, None)?;
+		self.add_participant_info(
+			keychain,
+			&sec_key,
+			&sec_nonce,
+			participant_id,
+			None,
+			message,
+		)?;
 		Ok(())
 	}
 
@@ -234,6 +248,7 @@ impl Slate {
 		sec_nonce: &SecretKey,
 		id: usize,
 		part_sig: Option<Signature>,
+		message: Option<String>,
 	) -> Result<(), Error>
 	where
 		K: Keychain,
@@ -241,11 +256,24 @@ impl Slate {
 		// Add our public key and nonce to the slate
 		let pub_key = PublicKey::from_secret_key(keychain.secp(), &sec_key)?;
 		let pub_nonce = PublicKey::from_secret_key(keychain.secp(), &sec_nonce)?;
+		// Sign the provided message
+		let message_sig = {
+			if let Some(m) = message.clone() {
+				let hashed = blake2b(secp::constants::MESSAGE_SIZE, &[], &m.as_bytes()[..]);
+				let m = secp::Message::from_slice(&hashed.as_bytes())?;
+				let res = aggsig::sign_single(&keychain.secp(), &m, &sec_key, None)?;
+				Some(res)
+			} else {
+				None
+			}
+		};
 		self.participant_data.push(ParticipantData {
 			id: id as u64,
 			public_blind_excess: pub_key,
 			public_nonce: pub_nonce,
 			part_sig: part_sig,
+			message: message,
+			message_sig: message_sig,
 		});
 
 		Ok(())
@@ -316,6 +344,30 @@ impl Slate {
 					Some(&self.pub_blind_sum(secp)?),
 					&self.msg_to_sign()?,
 				)?;
+			}
+		}
+		Ok(())
+	}
+
+	/// Verifies any messages in the slate's participant data match their signatures
+	pub fn verify_messages(&self, secp: &secp::Secp256k1) -> Result<(), Error> {
+		for p in self.participant_data.iter() {
+			if let Some(m) = p.message.clone() {
+				let hashed = blake2b(secp::constants::MESSAGE_SIZE, &[], &m.as_bytes()[..]);
+				let m = secp::Message::from_slice(&hashed.as_bytes())?;
+				if !aggsig::verify_single(
+					secp,
+					&p.message_sig.as_ref().unwrap(),
+					&m,
+					None,
+					&p.public_blind_excess,
+					None,
+					false,
+				) {
+					return Err(ErrorKind::Signature(
+						"Optional participant messages do not match signatures".to_owned(),
+					))?;
+				}
 			}
 		}
 		Ok(())

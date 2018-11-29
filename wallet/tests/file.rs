@@ -97,6 +97,9 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	let send_file = format!("{}/part_tx_1.tx", test_dir);
 	let receive_file = format!("{}/part_tx_2.tx", test_dir);
 
+	// test optional message
+	let message = "sender test message, sender test message";
+
 	// Should have 5 in account1 (5 spendable), 5 in account (2 spendable)
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
@@ -106,13 +109,12 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		// send to send
 		let (mut slate, lock_fn) = api.initiate_tx(
 			Some("mining"),
-			reward * 2, // amount
-			2,          // minimum confirmations
-			500,        // max outputs
-			1,          // num change outputs
-			true,       // select all outputs
-			            //"mining",
-			            //"listener",
+			reward * 2,               // amount
+			2,                        // minimum confirmations
+			500,                      // max outputs
+			1,                        // num change outputs
+			true,                     // select all outputs
+			Some(message.to_owned()), // optional message
 		)?;
 		// output tx file
 		let file_adapter = FileWalletCommAdapter::new();
@@ -127,11 +129,23 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		w.set_parent_key_id_by_name("account1")?;
 	}
 
+	let adapter = FileWalletCommAdapter::new();
+	let mut slate = adapter.receive_tx_async(&send_file)?;
+	let mut naughty_slate = slate.clone();
+	naughty_slate.participant_data[0].message = Some("I changed the message".to_owned());
+
+	// verify messages on slate match
+	wallet::controller::owner_single_use(wallet1.clone(), |api| {
+		api.verify_slate_messages(&slate)?;
+		assert!(api.verify_slate_messages(&naughty_slate).is_err());
+		Ok(())
+	})?;
+
+	let sender2_message = "And this is sender 2's message".to_owned();
+
 	// wallet 2 receives file, completes, sends file back
 	wallet::controller::foreign_single_use(wallet2.clone(), |api| {
-		let adapter = FileWalletCommAdapter::new();
-		let mut slate = adapter.receive_tx_async(&send_file)?;
-		api.receive_tx(&mut slate, None)?;
+		api.receive_tx(&mut slate, None, Some(sender2_message))?;
 		adapter.send_tx_async(&receive_file, &mut slate)?;
 		Ok(())
 	})?;
@@ -140,6 +154,7 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let adapter = FileWalletCommAdapter::new();
 		let mut slate = adapter.receive_tx_async(&receive_file)?;
+		api.verify_slate_messages(&slate)?;
 		api.finalize_tx(&mut slate)?;
 		api.post_tx(&slate.tx, false)?;
 		bh += 1;

@@ -190,6 +190,7 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 			500,    // max outputs
 			1,      // num change outputs
 			true,   // select all outputs
+			None,
 		)?;
 		slate = client1.send_tx_slate_direct("wallet2", &slate)?;
 		api.tx_lock_outputs(&slate, lock_fn)?;

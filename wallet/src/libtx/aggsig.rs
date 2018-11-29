@@ -420,6 +420,28 @@ pub fn verify_completed_sig(
 	Ok(())
 }
 
+/// Adds signatures
+pub fn add_signatures(
+	secp: &Secp256k1,
+	part_sigs: Vec<&Signature>,
+	nonce_sum: &PublicKey,
+) -> Result<Signature, Error> {
+	// Add public nonces kR*G + kS*G
+	let sig = aggsig::add_signatures_single(&secp, part_sigs, &nonce_sum)?;
+	Ok(sig)
+}
+
+/// Just a simple sig, creates its own nonce, etc
+pub fn sign_single(
+	secp: &Secp256k1,
+	msg: &Message,
+	skey: &SecretKey,
+	pubkey_sum: Option<&PublicKey>,
+) -> Result<Signature, Error> {
+	let sig = aggsig::sign_single(secp, &msg, skey, None, None, None, pubkey_sum, None)?;
+	Ok(sig)
+}
+
 /// Verifies an aggsig signature
 pub fn verify_single(
 	secp: &Secp256k1,
@@ -433,17 +455,6 @@ pub fn verify_single(
 	aggsig::verify_single(
 		secp, sig, msg, pubnonce, pubkey, pubkey_sum, None, is_partial,
 	)
-}
-
-/// Adds signatures
-pub fn add_signatures(
-	secp: &Secp256k1,
-	part_sigs: Vec<&Signature>,
-	nonce_sum: &PublicKey,
-) -> Result<Signature, Error> {
-	// Add public nonces kR*G + kS*G
-	let sig = aggsig::add_signatures_single(&secp, part_sigs, &nonce_sum)?;
-	Ok(sig)
 }
 
 /// Just a simple sig, creates its own nonce, etc

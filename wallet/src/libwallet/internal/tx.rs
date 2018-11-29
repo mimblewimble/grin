@@ -31,6 +31,7 @@ pub fn receive_tx<T: ?Sized, C, K>(
 	slate: &mut Slate,
 	parent_key_id: &Identifier,
 	is_self: bool,
+	message: Option<String>,
 ) -> Result<(), Error>
 where
 	T: WalletBackend<C, K>,
@@ -51,6 +52,7 @@ where
 		&mut context.sec_key,
 		&context.sec_nonce,
 		1,
+		message,
 	)?;
 
 	// perform partial sig
@@ -73,6 +75,7 @@ pub fn create_send_tx<T: ?Sized, C, K>(
 	selection_strategy_is_use_all: bool,
 	parent_key_id: &Identifier,
 	is_self: bool,
+	message: Option<String>,
 ) -> Result<
 	(
 		Slate,
@@ -122,6 +125,7 @@ where
 		&mut context.sec_key,
 		&context.sec_nonce,
 		0,
+		message,
 	)?;
 
 	Ok((slate, context, sender_lock_fn))

@@ -268,6 +268,15 @@ Other flags here are:
 [host]$ grin wallet send -f -d "http://192.168.0.10:13415" 60.00
 ```
 
+* `-g` 'Message' - You can specify an optional message to include alongside your transaction data. This message is purely for informational
+purposes between all transacting participants, and is not included in transaction data sent to the chain. Each participant message includes
+a signature that can be verified with the participant's public key. A message can also be specified by the recipient during a `grin wallet receive`
+command.
+
+```sh
+[host]$ grin wallet send -f -d "http://192.168.0.10:13415" -g "This is from Dave" 60.00
+```
+
 ### outputs
 
 Simply displays all the the outputs in your wallet: e.g:
@@ -322,7 +331,6 @@ Transaction Log - Account 'default' - Block Height: 49
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  6   Received Tx          03715cf6-f29b-4a3a-bda5-b02cba6bf0d9  2018-07-20 19:46:46.120244904 UTC  false       None                               0            1             60.000000000     0.000000000     None         60.000000000
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
->>>>>>> master
 
 To see the inputs/outputs associated with a particular transaction, use the `-i` switch providing the Id of the given transaction, e.g:
 

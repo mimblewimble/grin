@@ -355,6 +355,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						e
 					))
 				})?;
+				let message = match send_args.is_present("message") {
+					true => Some(send_args.value_of("message").unwrap().to_owned()),
+					false => None,
+				};
 				let minimum_confirmations: u64 = send_args
 					.value_of("minimum_confirmations")
 					.ok_or_else(|| {
@@ -417,6 +421,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					max_outputs,
 					change_outputs,
 					selection_strategy == "all",
+					message,
 				);
 				let (mut slate, lock_fn) = match result {
 					Ok(s) => {
@@ -453,11 +458,15 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					slate = adapter.send_tx_sync(dest, &slate)?;
 					if method == "self" {
 						controller::foreign_single_use(wallet, |api| {
-							api.receive_tx(&mut slate, Some(dest))?;
+							api.receive_tx(&mut slate, Some(dest), None)?;
 							Ok(())
 						})?;
 					}
 					api.tx_lock_outputs(&slate, lock_fn)?;
+					if let Err(e) = api.verify_slate_messages(&slate) {
+						error!("Error validating participant messages: {}", e);
+						return Err(e);
+					}
 					api.finalize_tx(&mut slate)?;
 				} else {
 					adapter.send_tx_async(dest, &slate)?;
@@ -481,6 +490,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			}
 			("receive", Some(send_args)) => {
 				let mut receive_result: Result<(), grin_wallet::libwallet::Error> = Ok(());
+				let message = match send_args.is_present("message") {
+					true => Some(send_args.value_of("message").unwrap().to_owned()),
+					false => None,
+				};
 				let tx_file = send_args.value_of("input").ok_or_else(|| {
 					ErrorKind::GenericError("Transaction file required".to_string())
 				})?;
@@ -492,7 +505,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				let adapter = FileWalletCommAdapter::new();
 				let mut slate = adapter.receive_tx_async(tx_file)?;
 				controller::foreign_single_use(wallet, |api| {
-					api.receive_tx(&mut slate, Some(account))?;
+					api.receive_tx(&mut slate, Some(account), message)?;
 					Ok(())
 				})?;
 				let send_tx = format!("{}.response", tx_file);
@@ -515,6 +528,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				}
 				let adapter = FileWalletCommAdapter::new();
 				let mut slate = adapter.receive_tx_async(tx_file)?;
+				if let Err(e) = api.verify_slate_messages(&slate) {
+					error!("Error validating participant messages: {}", e);
+					return Err(e);
+				}
 				let _ = api.finalize_tx(&mut slate).expect("Finalize failed");
 
 				let result = api.post_tx(&slate.tx, fluff);
