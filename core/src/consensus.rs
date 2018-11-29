@@ -67,7 +67,7 @@ pub fn secondary_pow_ratio(height: u64) -> u64 {
 	if global::is_mainnet() {
 		90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
 	} else {
-		if height < T4_CUCKAROO_HARDFORK {
+		if height < T4_POW_RATIO_HARDFORK {
 			// Maintaining pre hardfork testnet4 behavior
 			90u64.saturating_sub(height / WEEK_HEIGHT)
 		} else {
@@ -88,6 +88,9 @@ pub const SECOND_POW_EDGE_BITS: u8 = 29;
 /// Block height at which testnet 4 hard forks to use Cuckaroo instead of
 /// Cuckatoo for ASIC-resistant PoW
 pub const T4_CUCKAROO_HARDFORK: u64 = 64_000;
+
+/// Block height at which testnet 4 hard forks with the adjusted secondary pow ratio calculation.
+pub const T4_POW_RATIO_HARDFORK: u64 = T4_CUCKAROO_HARDFORK + WEEK_HEIGHT;
 
 /// Original reference edge_bits to compute difficulty factors for higher
 /// Cuckoo graph sizes, changing this would hard fork

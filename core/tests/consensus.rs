@@ -495,10 +495,10 @@ fn test_secondary_pow_ratio() {
 		assert_eq!(secondary_pow_ratio(two_weeks), 89);
 		assert_eq!(secondary_pow_ratio(two_weeks + 1), 89);
 
-		let t4_fork_height = 64_000;
-		assert_eq!(secondary_pow_ratio(t4_fork_height - 1), 85);
-		assert_eq!(secondary_pow_ratio(t4_fork_height), 85);
-		assert_eq!(secondary_pow_ratio(t4_fork_height + 1), 85);
+		let t4_fork_height = 64_000 + 10_080;
+		assert_eq!(secondary_pow_ratio(t4_fork_height - 1), 84);
+		assert_eq!(secondary_pow_ratio(t4_fork_height), 84);
+		assert_eq!(secondary_pow_ratio(t4_fork_height + 1), 84);
 
 		let one_year = one_week * 52;
 		assert_eq!(secondary_pow_ratio(one_year), 45);
@@ -537,10 +537,10 @@ fn test_secondary_pow_ratio() {
 		assert_eq!(secondary_pow_ratio(two_weeks), 88);
 		assert_eq!(secondary_pow_ratio(two_weeks + 1), 88);
 
-		let t4_fork_height = 64_000;
-		assert_eq!(secondary_pow_ratio(t4_fork_height - 1), 84);
-		assert_eq!(secondary_pow_ratio(t4_fork_height), 85);
-		assert_eq!(secondary_pow_ratio(t4_fork_height + 1), 85);
+		let t4_fork_height = 64_000 + 10_080;
+		assert_eq!(secondary_pow_ratio(t4_fork_height - 1), 83);
+		assert_eq!(secondary_pow_ratio(t4_fork_height), 84);
+		assert_eq!(secondary_pow_ratio(t4_fork_height + 1), 84);
 
 		let one_year = one_week * 52;
 		assert_eq!(secondary_pow_ratio(one_year), 45);
