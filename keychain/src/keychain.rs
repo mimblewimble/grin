@@ -43,6 +43,16 @@ impl Keychain for ExtKeychain {
 		Ok(keychain)
 	}
 
+	fn from_mnemonic(word_list: &str, extension_word: &str) -> Result<Self, Error> {
+		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::Commit);
+		let master = ExtendedPrivKey::from_mnemonic(&secp, word_list, extension_word)?;
+		let keychain = ExtKeychain {
+			secp: secp,
+			master: master,
+		};
+		Ok(keychain)
+	}
+
 	/// For testing - probably not a good idea to use outside of tests.
 	fn from_random_seed() -> Result<ExtKeychain, Error> {
 		let seed: String = thread_rng().sample_iter(&Alphanumeric).take(16).collect();
@@ -85,8 +95,7 @@ impl Keychain for ExtKeychain {
 				} else {
 					None
 				}
-			})
-			.collect();
+			}).collect();
 
 		let mut neg_keys: Vec<SecretKey> = blind_sum
 			.negative_key_ids
@@ -98,8 +107,7 @@ impl Keychain for ExtKeychain {
 				} else {
 					None
 				}
-			})
-			.collect();
+			}).collect();
 
 		pos_keys.extend(
 			&blind_sum
@@ -220,8 +228,7 @@ mod test {
 					&BlindSum::new()
 						.add_blinding_factor(BlindingFactor::from_secret_key(skey1))
 						.add_blinding_factor(BlindingFactor::from_secret_key(skey2))
-				)
-				.unwrap(),
+				).unwrap(),
 			BlindingFactor::from_secret_key(skey3),
 		);
 	}

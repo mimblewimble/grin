@@ -23,10 +23,10 @@ use std::time::{Duration, Instant};
 use util::RwLock;
 
 use lmdb;
-use lru_cache::LruCache;
 
 use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::merkle_proof::MerkleProof;
+use core::core::pmmr;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{
 	Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernelEntry,
@@ -38,7 +38,9 @@ use grin_store::Error::NotFoundErr;
 use pipe;
 use store;
 use txhashset;
-use types::{ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus};
+use types::{
+	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
+};
 use util::secp::pedersen::{Commitment, RangeProof};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
@@ -46,9 +48,6 @@ pub const MAX_ORPHAN_SIZE: usize = 200;
 
 /// When evicting, very old orphans are evicted first
 const MAX_ORPHAN_AGE_SECS: u64 = 300;
-
-/// Number of recent hashes we keep to de-duplicate block or header sends
-const HASHES_CACHE_SIZE: usize = 200;
 
 #[derive(Debug, Clone)]
 struct Orphan {
@@ -149,11 +148,9 @@ pub struct Chain {
 	adapter: Arc<ChainAdapter + Send + Sync>,
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
-	// Recently processed blocks to avoid double-processing
-	block_hashes_cache: Arc<RwLock<LruCache<Hash, bool>>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 	// POW verification function
-	pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
+	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	archive_mode: bool,
 	genesis: BlockHeader,
 }
@@ -167,7 +164,7 @@ impl Chain {
 		db_env: Arc<lmdb::Environment>,
 		adapter: Arc<ChainAdapter + Send + Sync>,
 		genesis: Block,
-		pow_verifier: fn(&BlockHeader, u8) -> Result<(), pow::Error>,
+		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 		verifier_cache: Arc<RwLock<VerifierCache>>,
 		archive_mode: bool,
 	) -> Result<Chain, Error> {
@@ -218,7 +215,6 @@ impl Chain {
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			pow_verifier,
 			verifier_cache,
-			block_hashes_cache: Arc::new(RwLock::new(LruCache::new(HASHES_CACHE_SIZE))),
 			archive_mode,
 			genesis: genesis.header.clone(),
 		})
@@ -235,36 +231,50 @@ impl Chain {
 		res
 	}
 
+	fn determine_status(&self, head: Option<Tip>, prev_head: Tip) -> BlockStatus {
+		// We have more work if the chain head is updated.
+		let is_more_work = head.is_some();
+
+		let mut is_next_block = false;
+		if let Some(head) = head {
+			if head.prev_block_h == prev_head.last_block_h {
+				is_next_block = true;
+			}
+		}
+
+		match (is_more_work, is_next_block) {
+			(true, true) => BlockStatus::Next,
+			(true, false) => BlockStatus::Reorg,
+			(false, _) => BlockStatus::Fork,
+		}
+	}
+
 	/// Attempt to add a new block to the chain.
 	/// Returns true if it has been added to the longest chain
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
-		let maybe_new_head: Result<Option<Tip>, Error>;
-		{
+		let (maybe_new_head, prev_head) = {
 			let mut txhashset = self.txhashset.write();
 			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 
-			maybe_new_head = pipe::process_block(&b, &mut ctx);
+			let prev_head = ctx.batch.head()?;
+
+			let maybe_new_head = pipe::process_block(&b, &mut ctx);
 			if let Ok(_) = maybe_new_head {
 				ctx.batch.commit()?;
 			}
-			// release the lock and let the batch go before post-processing
-		}
 
-		let add_to_hash_cache = |hash: Hash| {
-			// only add to hash cache below if block is definitively accepted
-			// or rejected
-			let mut cache = self.block_hashes_cache.write();
-			cache.insert(hash, true);
+			// release the lock and let the batch go before post-processing
+			(maybe_new_head, prev_head)
 		};
 
 		match maybe_new_head {
 			Ok(head) => {
-				add_to_hash_cache(b.hash());
+				let status = self.determine_status(head.clone(), prev_head);
 
 				// notifying other parts of the system of the update
-				self.adapter.block_accepted(&b, opts);
+				self.adapter.block_accepted(&b, status, opts);
 
 				Ok(head)
 			}
@@ -307,7 +317,6 @@ impl Chain {
 						b.header.height,
 						e
 					);
-					add_to_hash_cache(b.hash());
 					Err(ErrorKind::Other(format!("{:?}", e).to_owned()).into())
 				}
 			},
@@ -351,7 +360,6 @@ impl Chain {
 		Ok(pipe::BlockContext {
 			opts,
 			pow_verifier: self.pow_verifier,
-			block_hashes_cache: self.block_hashes_cache.clone(),
 			verifier_cache: self.verifier_cache.clone(),
 			txhashset,
 			batch,
@@ -983,8 +991,7 @@ impl Chain {
 		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
 			return Err(ErrorKind::TxHashSetErr(String::from(
 				"Output and rangeproof sets don't match",
-			))
-			.into());
+			)).into());
 		}
 		let mut output_vec: Vec<Output> = vec![];
 		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
@@ -1172,9 +1179,16 @@ fn setup_head(
 				// If we have no header MMR then rebuild as necessary.
 				// Supports old nodes with no header MMR.
 				txhashset::header_extending(txhashset, &mut batch, |extension| {
-					if extension.size() == 0 {
+					let pos = pmmr::insertion_to_pmmr_index(head.height + 1);
+					let needs_rebuild = match extension.get_header_hash(pos) {
+						None => true,
+						Some(hash) => hash != head.last_block_h,
+					};
+
+					if needs_rebuild {
 						extension.rebuild(&head, &genesis.header)?;
 					}
+
 					Ok(())
 				})?;
 

@@ -63,17 +63,31 @@ pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
 /// function of block height (time). Starts at 90% losing a percent
 /// approximately every week. Represented as an integer between 0 and 100.
 pub fn secondary_pow_ratio(height: u64) -> u64 {
-	90u64.saturating_sub(height / WEEK_HEIGHT)
+	// TODO - this should all be cleaned up and simplified before mainnet.
+	if global::is_mainnet() {
+		90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
+	} else {
+		if height < T4_CUCKAROO_HARDFORK {
+			// Maintaining pre hardfork testnet4 behavior
+			90u64.saturating_sub(height / WEEK_HEIGHT)
+		} else {
+			90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
+		}
+	}
 }
 
 /// Cuckoo-cycle proof size (cycle length)
 pub const PROOFSIZE: usize = 42;
 
-/// Default Cuckoo Cycle edge_bits, used for mining and validating.
-pub const DEFAULT_MIN_EDGE_BITS: u8 = 30;
+/// Default Cuckatoo Cycle edge_bits, used for mining and validating.
+pub const DEFAULT_MIN_EDGE_BITS: u8 = 31;
 
-/// Secondary proof-of-work edge_bits, meant to be ASIC resistant.
+/// Cuckaroo proof-of-work edge_bits, meant to be ASIC resistant.
 pub const SECOND_POW_EDGE_BITS: u8 = 29;
+
+/// Block height at which testnet 4 hard forks to use Cuckaroo instead of
+/// Cuckatoo for ASIC-resistant PoW
+pub const T4_CUCKAROO_HARDFORK: u64 = 64_000;
 
 /// Original reference edge_bits to compute difficulty factors for higher
 /// Cuckoo graph sizes, changing this would hard fork
@@ -104,24 +118,23 @@ pub const STATE_SYNC_THRESHOLD: u32 = 2 * DAY_HEIGHT as u32;
 pub const BLOCK_INPUT_WEIGHT: usize = 1;
 
 /// Weight of an output when counted against the max block weight capacity
-pub const BLOCK_OUTPUT_WEIGHT: usize = 10;
+pub const BLOCK_OUTPUT_WEIGHT: usize = 21;
 
 /// Weight of a kernel when counted against the max block weight capacity
-pub const BLOCK_KERNEL_WEIGHT: usize = 2;
+pub const BLOCK_KERNEL_WEIGHT: usize = 3;
 
 /// Total maximum block weight. At current sizes, this means a maximum
 /// theoretical size of:
-/// * `(674 + 33 + 1) * 4_000 = 2_832_000` for a block with only outputs
-/// * `(1 + 8 + 8 + 33 + 64) * 20_000 = 2_280_000` for a block with only kernels
+/// * `(674 + 33 + 1) * (40_000 / 21) = 1_348_571` for a block with only outputs
+/// * `(1 + 8 + 8 + 33 + 64) * (40_000 / 3) = 1_520_000` for a block with only kernels
 /// * `(1 + 33) * 40_000 = 1_360_000` for a block with only inputs
 ///
-/// Given that a block needs to have at least one kernel for the coinbase,
-/// and one kernel for the transaction, practical maximum size is 2_831_440,
-/// (ignoring the edge case of a miner producing a block with all coinbase
-/// outputs and a single kernel).
+/// Regardless of the relative numbers of inputs/outputs/kernels in a block the maximum
+/// block size is around 1.5MB
+/// For a block full of "average" txs (2 inputs, 2 outputs, 1 kernel) we have -
+/// `(1 * 2) + (21 * 2) + (3 * 1) = 47` (weight per tx)
+/// `40_000 / 47 = 851` (txs per block)
 ///
-/// A more "standard" block, filled with transactions of 2 inputs, 2 outputs
-/// and one kernel, should be around 2.66 MB
 pub const MAX_BLOCK_WEIGHT: usize = 40_000;
 
 /// Fork every 6 months.
@@ -138,7 +151,7 @@ pub fn valid_header_version(height: u64, version: u16) -> bool {
 	} else if height < 3 * HARD_FORK_INTERVAL {
 		version == 3
 	} else if height < 4 * HARD_FORK_INTERVAL {
-		version == 4 
+		version == 4
 	} else if height >= 5 * HARD_FORK_INTERVAL {
 		version > 4 */
 	} else {
@@ -162,8 +175,16 @@ pub const DAMP_FACTOR: u64 = 3;
 /// Compute weight of a graph as number of siphash bits defining the graph
 /// Must be made dependent on height to phase out smaller size over the years
 /// This can wait until end of 2019 at latest
-pub fn graph_weight(edge_bits: u8) -> u64 {
-	(2 << (edge_bits - global::base_edge_bits()) as u64) * (edge_bits as u64)
+pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
+	let mut xpr_edge_bits = edge_bits as u64;
+
+	let bits_over_min = edge_bits - global::min_edge_bits();
+	let expiry_height = (1 << bits_over_min) * YEAR_HEIGHT;
+	if height >= expiry_height {
+		xpr_edge_bits = xpr_edge_bits.saturating_sub(1 + (height - expiry_height) / WEEK_HEIGHT);
+	}
+
+	(2 << (edge_bits - global::base_edge_bits()) as u64) * xpr_edge_bits
 }
 
 /// minimum difficulty to avoid getting stuck when trying to increase subject to dampening
@@ -336,4 +357,48 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
 pub trait VerifySortOrder<T> {
 	/// Verify a collection of items is sorted as required.
 	fn verify_sort_order(&self) -> Result<(), Error>;
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+
+	#[test]
+	fn test_graph_weight() {
+		// initial weights
+		assert_eq!(graph_weight(1, 31), 256 * 31);
+		assert_eq!(graph_weight(1, 32), 512 * 32);
+		assert_eq!(graph_weight(1, 33), 1024 * 33);
+
+		// one year in, 31 starts going down, the rest stays the same
+		assert_eq!(graph_weight(YEAR_HEIGHT, 31), 256 * 30);
+		assert_eq!(graph_weight(YEAR_HEIGHT, 32), 512 * 32);
+		assert_eq!(graph_weight(YEAR_HEIGHT, 33), 1024 * 33);
+
+		// 31 loses one factor per week
+		assert_eq!(graph_weight(YEAR_HEIGHT + WEEK_HEIGHT, 31), 256 * 29);
+		assert_eq!(graph_weight(YEAR_HEIGHT + 2 * WEEK_HEIGHT, 31), 256 * 28);
+		assert_eq!(graph_weight(YEAR_HEIGHT + 32 * WEEK_HEIGHT, 31), 0);
+
+		// 2 years in, 31 still at 0, 32 starts decreasing
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 31), 0);
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 32), 512 * 31);
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT, 33), 1024 * 33);
+
+		// 32 loses one factor per week
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT + WEEK_HEIGHT, 32), 512 * 30);
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT + WEEK_HEIGHT, 31), 0);
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT + 30 * WEEK_HEIGHT, 32), 512);
+		assert_eq!(graph_weight(2 * YEAR_HEIGHT + 31 * WEEK_HEIGHT, 32), 0);
+
+		// 3 years in, nothing changes
+		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 31), 0);
+		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 32), 0);
+		assert_eq!(graph_weight(3 * YEAR_HEIGHT, 33), 1024 * 33);
+
+		// 4 years in, 33 starts starts decreasing
+		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 31), 0);
+		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 32), 0);
+		assert_eq!(graph_weight(4 * YEAR_HEIGHT, 33), 1024 * 32);
+	}
 }

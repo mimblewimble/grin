@@ -475,7 +475,7 @@ impl StratumServer {
 		b.header.pow.nonce = params.nonce;
 		b.header.pow.proof.nonces = params.pow;
 		// Get share difficulty
-		share_difficulty = b.header.pow.to_difficulty().to_num();
+		share_difficulty = b.header.pow.to_difficulty(b.header.height).to_num();
 		// If the difficulty is too low its an error
 		if share_difficulty < self.minimum_share_difficulty {
 			// Return error status
@@ -519,7 +519,7 @@ impl StratumServer {
 			);
 		} else {
 			// Do some validation but dont submit
-			if !pow::verify_size(&b.header, b.header.pow.proof.edge_bits).is_ok() {
+			if !pow::verify_size(&b.header).is_ok() {
 				// Return error status
 				error!(
 					"(Server ID: {}) Failed to validate share at height {} with {} edge_bits with nonce {} using job_id {}",
@@ -766,4 +766,3 @@ where
 			serde_json::to_value(e).unwrap()
 		})
 }
-

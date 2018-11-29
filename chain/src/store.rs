@@ -15,11 +15,9 @@
 //! Implements storage primitives required by the chain
 
 use std::sync::Arc;
-use util::RwLock;
 
 use croaring::Bitmap;
 use lmdb;
-use lru_cache::LruCache;
 
 use util::secp::pedersen::Commitment;
 
@@ -47,21 +45,13 @@ const BLOCK_SUMS_PREFIX: u8 = 'M' as u8;
 /// All chain-related database operations
 pub struct ChainStore {
 	db: store::Store,
-	header_cache: Arc<RwLock<LruCache<Hash, BlockHeader>>>,
-	block_input_bitmap_cache: Arc<RwLock<LruCache<Hash, Vec<u8>>>>,
-	block_sums_cache: Arc<RwLock<LruCache<Hash, BlockSums>>>,
 }
 
 impl ChainStore {
 	/// Create new chain store
 	pub fn new(db_env: Arc<lmdb::Environment>) -> Result<ChainStore, Error> {
 		let db = store::Store::open(db_env, STORE_SUBPATH);
-		Ok(ChainStore {
-			db,
-			header_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
-			block_input_bitmap_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
-			block_sums_cache: Arc::new(RwLock::new(LruCache::new(1_000))),
-		})
+		Ok(ChainStore { db })
 	}
 }
 
@@ -101,30 +91,10 @@ impl ChainStore {
 	}
 
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
-		{
-			let mut block_sums_cache = self.block_sums_cache.write();
-
-			// cache hit - return the value from the cache
-			if let Some(block_sums) = block_sums_cache.get_mut(h) {
-				return Ok(block_sums.clone());
-			}
-		}
-
-		let block_sums: Result<BlockSums, Error> = option_to_not_found(
+		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, &mut h.to_vec())),
 			&format!("Block sums for block: {}", h),
-		);
-
-		// cache miss - so adding to the cache for next time
-		if let Ok(block_sums) = block_sums {
-			{
-				let mut block_sums_cache = self.block_sums_cache.write();
-				block_sums_cache.insert(*h, block_sums.clone());
-			}
-			Ok(block_sums)
-		} else {
-			block_sums
-		}
+		)
 	}
 
 	pub fn get_previous_header(&self, header: &BlockHeader) -> Result<BlockHeader, Error> {
@@ -132,31 +102,11 @@ impl ChainStore {
 	}
 
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		{
-			let mut cache = self.header_cache.write();
-
-			// cache hit - return the value from the cache
-			if let Some(header) = cache.get_mut(h) {
-				return Ok(header.clone());
-			}
-		}
-
-		let header: Result<BlockHeader, Error> = option_to_not_found(
+		option_to_not_found(
 			self.db
 				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
 			&format!("BLOCK HEADER: {}", h),
-		);
-
-		// cache miss - so adding to the cache for next time
-		if let Ok(header) = header {
-			{
-				let mut cache = self.header_cache.write();
-				cache.insert(*h, header.clone());
-			}
-			Ok(header)
-		} else {
-			header
-		}
+		)
 	}
 
 	pub fn get_hash_by_height(&self, height: u64) -> Result<Hash, Error> {
@@ -208,9 +158,6 @@ impl ChainStore {
 	pub fn batch(&self) -> Result<Batch, Error> {
 		Ok(Batch {
 			db: self.db.batch()?,
-			header_cache: self.header_cache.clone(),
-			block_input_bitmap_cache: self.block_input_bitmap_cache.clone(),
-			block_sums_cache: self.block_sums_cache.clone(),
 		})
 	}
 }
@@ -219,9 +166,6 @@ impl ChainStore {
 /// discarded on error.
 pub struct Batch<'a> {
 	db: store::Batch<'a>,
-	header_cache: Arc<RwLock<LruCache<Hash, BlockHeader>>>,
-	block_sums_cache: Arc<RwLock<LruCache<Hash, BlockSums>>>,
-	block_input_bitmap_cache: Arc<RwLock<LruCache<Hash, Vec<u8>>>>,
 }
 
 #[allow(missing_docs)]
@@ -332,12 +276,6 @@ impl<'a> Batch<'a> {
 	pub fn save_block_header(&self, header: &BlockHeader) -> Result<(), Error> {
 		let hash = header.hash();
 
-		// Cache the header.
-		{
-			let mut header_cache = self.header_cache.write();
-			header_cache.insert(hash, header.clone());
-		}
-
 		// Store the header itself indexed by hash.
 		self.db
 			.put_ser(&to_key(BLOCK_HEADER_PREFIX, &mut hash.to_vec())[..], header)?;
@@ -379,31 +317,11 @@ impl<'a> Batch<'a> {
 	}
 
 	pub fn get_block_header(&self, h: &Hash) -> Result<BlockHeader, Error> {
-		{
-			let mut cache = self.header_cache.write();
-
-			// cache hit - return the value from the cache
-			if let Some(header) = cache.get_mut(h) {
-				return Ok(header.clone());
-			}
-		}
-
-		let header: Result<BlockHeader, Error> = option_to_not_found(
+		option_to_not_found(
 			self.db
 				.get_ser(&to_key(BLOCK_HEADER_PREFIX, &mut h.to_vec())),
 			&format!("BLOCK HEADER: {}", h),
-		);
-
-		// cache miss - so adding to the cache for next time
-		if let Ok(header) = header {
-			{
-				let mut cache = self.header_cache.write();
-				cache.insert(*h, header.clone());
-			}
-			Ok(header)
-		} else {
-			header
-		}
+		)
 	}
 
 	fn save_block_input_bitmap(&self, bh: &Hash, bm: &Bitmap) -> Result<(), Error> {
@@ -419,40 +337,15 @@ impl<'a> Batch<'a> {
 	}
 
 	pub fn save_block_sums(&self, h: &Hash, sums: &BlockSums) -> Result<(), Error> {
-		{
-			let mut block_sums_cache = self.block_sums_cache.write();
-			block_sums_cache.insert(*h, sums.clone());
-		}
-
 		self.db
 			.put_ser(&to_key(BLOCK_SUMS_PREFIX, &mut h.to_vec())[..], &sums)
 	}
 
 	pub fn get_block_sums(&self, h: &Hash) -> Result<BlockSums, Error> {
-		{
-			let mut block_sums_cache = self.block_sums_cache.write();
-
-			// cache hit - return the value from the cache
-			if let Some(block_sums) = block_sums_cache.get_mut(h) {
-				return Ok(block_sums.clone());
-			}
-		}
-
-		let block_sums: Result<BlockSums, Error> = option_to_not_found(
+		option_to_not_found(
 			self.db.get_ser(&to_key(BLOCK_SUMS_PREFIX, &mut h.to_vec())),
 			&format!("Block sums for block: {}", h),
-		);
-
-		// cache miss - so adding to the cache for next time
-		if let Ok(block_sums) = block_sums {
-			{
-				let mut block_sums_cache = self.block_sums_cache.write();
-				block_sums_cache.insert(*h, block_sums.clone());
-			}
-			Ok(block_sums)
-		} else {
-			block_sums
-		}
+		)
 	}
 
 	fn delete_block_sums(&self, bh: &Hash) -> Result<(), Error> {
@@ -540,31 +433,12 @@ impl<'a> Batch<'a> {
 		// Save the bitmap to the db (via the batch).
 		self.save_block_input_bitmap(&block.hash(), &bitmap)?;
 
-		// Finally cache it locally for use later.
-		let mut cache = self.block_input_bitmap_cache.write();
-		cache.insert(block.hash(), bitmap.serialize());
-
 		Ok(bitmap)
-	}
-
-	pub fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
-		{
-			let mut cache = self.block_input_bitmap_cache.write();
-
-			// cache hit - return the value from the cache
-			if let Some(bytes) = cache.get_mut(bh) {
-				return Ok(Bitmap::deserialize(&bytes));
-			}
-		}
-
-		// cache miss - get it from db (build it, store it and cache it as necessary)
-		self.get_block_input_bitmap_db(bh)
 	}
 
 	// Get the block input bitmap from the db or build the bitmap from
 	// the full block from the db (if the block is found).
-	// (bool, Bitmap) : (false if bitmap was built and not found in db)
-	fn get_block_input_bitmap_db(&self, bh: &Hash) -> Result<Bitmap, Error> {
+	pub fn get_block_input_bitmap(&self, bh: &Hash) -> Result<Bitmap, Error> {
 		if let Ok(Some(bytes)) = self
 			.db
 			.get(&to_key(BLOCK_INPUT_BITMAP_PREFIX, &mut bh.to_vec()))
@@ -592,9 +466,6 @@ impl<'a> Batch<'a> {
 	pub fn child(&mut self) -> Result<Batch, Error> {
 		Ok(Batch {
 			db: self.db.child()?,
-			header_cache: self.header_cache.clone(),
-			block_sums_cache: self.block_sums_cache.clone(),
-			block_input_bitmap_cache: self.block_input_bitmap_cache.clone(),
 		})
 	}
 }

@@ -28,7 +28,6 @@ use core::core::hash::{Hash, Hashed};
 use core::core::verifier_cache::VerifierCache;
 use core::core::{Block, BlockHeader};
 use core::global;
-use core::pow::PoWContext;
 use mining::mine_block;
 use pool;
 
@@ -95,14 +94,17 @@ impl Miner {
 		let mut iter_count = 0;
 
 		while head.hash() == *latest_hash && Utc::now().timestamp() < deadline {
-			let mut ctx =
-				global::create_pow_context::<u32>(global::min_edge_bits(), global::proofsize(), 10)
-					.unwrap();
+			let mut ctx = global::create_pow_context::<u32>(
+				head.height,
+				global::min_edge_bits(),
+				global::proofsize(),
+				10,
+			).unwrap();
 			ctx.set_header_nonce(b.header.pre_pow(), None, true)
 				.unwrap();
 			if let Ok(proofs) = ctx.find_cycles() {
 				b.header.pow.proof = proofs[0].clone();
-				let proof_diff = b.header.pow.to_difficulty();
+				let proof_diff = b.header.pow.to_difficulty(b.header.height);
 				if proof_diff >= (b.header.total_difficulty() - head.total_difficulty()) {
 					return true;
 				}

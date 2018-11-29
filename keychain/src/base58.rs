@@ -30,7 +30,7 @@
 
 use digest::Digest;
 use sha2::Sha256;
-use std::{error, fmt, mem, str};
+use std::{error, fmt, str};
 
 use byteorder::{ByteOrder, LittleEndian};
 
@@ -47,12 +47,8 @@ fn sha256d_hash(data: &[u8]) -> [u8; 32] {
 }
 
 #[inline]
-pub fn into_le_low_u32(data: [u8; 32]) -> u32 {
-	let mut ret: [u64; 4] = unsafe { mem::transmute(data) };
-	for x in (&mut ret).iter_mut() {
-		*x = x.to_le();
-	}
-	ret[0] as u32
+pub fn into_le_low_u32(data: &[u8; 32]) -> u32 {
+	LittleEndian::read_u64(&data[0..8]) as u32
 }
 
 /// An error that might occur during base58 decoding
@@ -285,7 +281,7 @@ pub fn from_check(data: &str) -> Result<Vec<u8>, Error> {
 	}
 	let ck_start = ret.len() - 4;
 	let expected = sha256d_hash(&ret[..ck_start]);
-	let expected = into_le_low_u32(expected);
+	let expected = into_le_low_u32(&expected);
 	let actual = LittleEndian::read_u32(&ret[ck_start..(ck_start + 4)]);
 	if expected != actual {
 		return Err(Error::BadChecksum(expected, actual));

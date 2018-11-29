@@ -92,8 +92,8 @@ impl From<Context<ErrorKind>> for Error {
 
 /// TLS config
 pub struct TLSConfig {
-	certificate: String,
-	private_key: String,
+	pub certificate: String,
+	pub private_key: String,
 }
 
 impl TLSConfig {
@@ -190,7 +190,7 @@ impl ApiServer {
 			.spawn(move || {
 				let server = Server::bind(&addr)
 					.serve(router)
-					// TODO graceful shutdown is unstable, investigate 
+					// TODO graceful shutdown is unstable, investigate
 					//.with_graceful_shutdown(rx)
 					.map_err(|e| eprintln!("HTTP API server error: {}", e));
 

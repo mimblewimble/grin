@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Wallet lib... should be used by clients to build wallets and
-//! encapsulate all functions needed to build transactions and operate a wallet
+//! Library containing lower-level transaction building functions needed by
+//! all wallets.
 
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
