@@ -178,7 +178,7 @@ pub const DAMP_FACTOR: u64 = 3;
 pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
 	let mut xpr_edge_bits = edge_bits as u64;
 
-	let bits_over_min = edge_bits - global::min_edge_bits();
+	let bits_over_min = edge_bits.saturating_sub(global::min_edge_bits());
 	let expiry_height = (1 << bits_over_min) * YEAR_HEIGHT;
 	if height >= expiry_height {
 		xpr_edge_bits = xpr_edge_bits.saturating_sub(1 + (height - expiry_height) / WEEK_HEIGHT);
