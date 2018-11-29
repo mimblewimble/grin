@@ -342,11 +342,7 @@ where
 /// Factor by which the secondary proof of work difficulty will be adjusted
 pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
 	// Get the secondary count across the window, in pct (100 * 60 * 2nd_pow_fraction)
-	let snd_count = 100 * diff_data
-		.iter()
-		.skip(1)
-		.filter(|n| n.is_secondary)
-		.count() as u64;
+	let snd_count = 100 * diff_data.iter().skip(1).filter(|n| n.is_secondary).count() as u64;
 
 	// Get the scaling factor sum of the last DIFFICULTY_ADJUST_WINDOW elements
 	let scale_sum: u64 = diff_data

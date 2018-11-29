@@ -589,7 +589,8 @@ fn test_secondary_pow_scale() {
 			67
 		);
 		// same as above, testing lowest bound
-		let mut low_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_DIFFICULTY as u32);
+		let mut low_hi =
+			HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_DIFFICULTY as u32);
 		low_hi.is_secondary = true;
 		assert_eq!(
 			secondary_pow_scaling(
@@ -662,7 +663,8 @@ fn test_secondary_pow_scale() {
 			67
 		);
 		// same as above, testing lowest bound
-		let mut low_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_DIFFICULTY as u32);
+		let mut low_hi =
+			HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_DIFFICULTY as u32);
 		low_hi.is_secondary = true;
 		assert_eq!(
 			secondary_pow_scaling(
