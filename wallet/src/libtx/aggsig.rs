@@ -469,4 +469,3 @@ pub fn sign_with_blinding(
 	let sig = aggsig::sign_single(secp, &msg, skey, None, None, None, pubkey_sum, None)?;
 	Ok(sig)
 }
-

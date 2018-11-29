@@ -109,11 +109,11 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		// send to send
 		let (mut slate, lock_fn) = api.initiate_tx(
 			Some("mining"),
-			reward * 2, // amount
-			2,          // minimum confirmations
-			500,        // max outputs
-			1,          // num change outputs
-			true,       // select all outputs
+			reward * 2,               // amount
+			2,                        // minimum confirmations
+			500,                      // max outputs
+			1,                        // num change outputs
+			true,                     // select all outputs
 			Some(message.to_owned()), // optional message
 		)?;
 		// output tx file
@@ -132,7 +132,7 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	let adapter = FileWalletCommAdapter::new();
 	let mut slate = adapter.receive_tx_async(&send_file)?;
 	let mut naughty_slate = slate.clone();
-	naughty_slate.participant_data[0].message=Some("I changed the message".to_owned());
+	naughty_slate.participant_data[0].message = Some("I changed the message".to_owned());
 
 	// verify messages on slate match
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {

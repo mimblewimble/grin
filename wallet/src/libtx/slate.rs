@@ -148,7 +148,14 @@ impl Slate {
 		if self.tx.offset == BlindingFactor::zero() {
 			self.generate_offset(keychain, sec_key)?;
 		}
-		self.add_participant_info(keychain, &sec_key, &sec_nonce, participant_id, None, message)?;
+		self.add_participant_info(
+			keychain,
+			&sec_key,
+			&sec_nonce,
+			participant_id,
+			None,
+			message,
+		)?;
 		Ok(())
 	}
 
@@ -348,8 +355,18 @@ impl Slate {
 			if let Some(m) = p.message.clone() {
 				let hashed = blake2b(secp::constants::MESSAGE_SIZE, &[], &m.as_bytes()[..]);
 				let m = secp::Message::from_slice(&hashed.as_bytes())?;
-				if !aggsig::verify_single(secp, &p.message_sig.as_ref().unwrap(), &m, None, &p.public_blind_excess, None, false){
-					return Err(ErrorKind::Signature("Optional participant messages do not match signatures".to_owned()))?;
+				if !aggsig::verify_single(
+					secp,
+					&p.message_sig.as_ref().unwrap(),
+					&m,
+					None,
+					&p.public_blind_excess,
+					None,
+					false,
+				) {
+					return Err(ErrorKind::Signature(
+						"Optional participant messages do not match signatures".to_owned(),
+					))?;
 				}
 			}
 		}
