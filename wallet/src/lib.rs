@@ -58,7 +58,8 @@ mod node_clients;
 mod types;
 
 pub use adapters::{
-	FileWalletCommAdapter, HTTPWalletCommAdapter, NullWalletCommAdapter, WalletCommAdapter, KeybaseWalletCommAdapter,
+	FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalletCommAdapter, NullWalletCommAdapter,
+	WalletCommAdapter,
 };
 pub use error::{Error, ErrorKind};
 pub use libwallet::types::{BlockFees, CbData, NodeClient, WalletBackend, WalletInfo, WalletInst};

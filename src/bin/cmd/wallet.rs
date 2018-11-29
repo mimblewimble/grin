@@ -29,8 +29,8 @@ use core::{core, global};
 use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
-	instantiate_wallet, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter, KeybaseWalletCommAdapter, LMDBBackend,
-	NullWalletCommAdapter, WalletConfig, WalletSeed,
+	instantiate_wallet, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter,
+	KeybaseWalletCommAdapter, LMDBBackend, NullWalletCommAdapter, WalletConfig, WalletSeed,
 };
 use keychain;
 use servers::start_webwallet_server;
@@ -226,7 +226,9 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				let adapter = match listen_args.value_of("method") {
 					Some("http") => HTTPWalletCommAdapter::new(),
 					Some("keybase") => KeybaseWalletCommAdapter::new(),
-					_ => { std::process::exit(1); }
+					_ => {
+						std::process::exit(1);
+					}
 				};
 				adapter
 					.listen(
