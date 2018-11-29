@@ -312,7 +312,7 @@ impl TxKernelEntry {
 	/// Build a new tx kernel entry from a kernel.
 	pub fn from_kernel(kernel: &TxKernel) -> TxKernelEntry {
 		TxKernelEntry {
-			kernel: kernel.clone()
+			kernel: kernel.clone(),
 		}
 	}
 }
