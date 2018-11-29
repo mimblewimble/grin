@@ -211,7 +211,7 @@ pub trait Writeable {
 
 /// Reader that exposes an Iterator interface.
 pub struct IteratingReader<'a, T> {
-	count: Option<u64>,
+	count: u64,
 	curr: u64,
 	reader: &'a mut Reader,
 	_marker: marker::PhantomData<T>,
@@ -220,7 +220,7 @@ pub struct IteratingReader<'a, T> {
 impl<'a, T> IteratingReader<'a, T> {
 	/// Constructor to create a new iterating reader for the provided underlying reader.
 	/// Takes a count so we know how many to iterate over.
-	pub fn new(reader: &'a mut Reader, count: Option<u64>) -> IteratingReader<'a, T> {
+	pub fn new(reader: &'a mut Reader, count: u64) -> IteratingReader<'a, T> {
 		let curr = 0;
 		IteratingReader {
 			count,
@@ -238,7 +238,7 @@ where
 	type Item = T;
 
 	fn next(&mut self) -> Option<T> {
-		if self.count.is_some() && self.curr >= self.count.unwrap() {
+		if self.curr >= self.count {
 			return None;
 		}
 		self.curr += 1;
@@ -258,7 +258,7 @@ where
 		return Err(Error::TooLargeReadErr);
 	}
 
-	let res: Vec<T> = IteratingReader::new(reader, Some(count)).collect();
+	let res: Vec<T> = IteratingReader::new(reader, count).collect();
 	if res.len() as u64 != count {
 		return Err(Error::CountError);
 	}
@@ -297,18 +297,12 @@ pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
 }
 
 /// Utility to read from a binary source
-pub struct BinReader<'a> {
-	pub source: &'a mut Read,
+struct BinReader<'a> {
+	source: &'a mut Read,
 }
 
 fn map_io_err(err: io::Error) -> Error {
 	Error::IOErr(format!("{}", err), err.kind())
-}
-
-impl<'a> BinReader<'a> {
-	pub fn new(source: &'a mut Read) -> BinReader<'a> {
-		BinReader { source }
-	}
 }
 
 /// Utility wrapper for an underlying byte Reader. Defines higher level methods

@@ -14,10 +14,8 @@
 //! Common storage-related types
 use memmap;
 
-use std::cmp;
 use std::fs::{self, File, OpenOptions};
-use std::io::{self, BufReader, BufWriter, ErrorKind, Read, Write};
-use std::path::Path;
+use std::io::{self, BufWriter, ErrorKind, Read, Write};
 
 use core::core::hash::Hash;
 use core::ser::{self, FixedLength};
@@ -318,46 +316,4 @@ impl AppendOnlyFile {
 	pub fn path(&self) -> String {
 		self.path.clone()
 	}
-}
-
-/// Read an ordered vector of scalars from a file.
-pub fn read_ordered_vec<T>(path: &str, elmt_len: usize) -> io::Result<Vec<T>>
-where
-	T: ser::Readable + cmp::Ord,
-{
-	let file_path = Path::new(&path);
-	let mut ovec = Vec::with_capacity(1000);
-	if file_path.exists() {
-		let mut file = BufReader::with_capacity(elmt_len * 1000, File::open(&path)?);
-		let mut reader = ser::BinReader::new(&mut file);
-		let iter_read = ser::IteratingReader::new(&mut reader, None);
-		for elmt in iter_read {
-			if let Err(idx) = ovec.binary_search(&elmt) {
-				ovec.insert(idx, elmt);
-			}
-		}
-		let file_sz = fs::metadata(&file_path).map(|md| md.len()).unwrap_or(0);
-		if ovec.len() * elmt_len != file_sz as usize {
-			return Err(io::Error::new(
-				io::ErrorKind::InvalidData,
-				format!("Corrupted storage, could not read file at {}", path),
-			));
-		}
-	}
-	Ok(ovec)
-}
-
-/// Writes an ordered vector to a file
-pub fn write_vec<T>(path: &str, v: &Vec<T>) -> io::Result<()>
-where
-	T: ser::Writeable,
-{
-	let mut file_path = File::create(&path)?;
-	ser::serialize(&mut file_path, v).map_err(|_| {
-		io::Error::new(
-			io::ErrorKind::InvalidInput,
-			format!("Failed to serialize data when writing to {}", path),
-		)
-	})?;
-	Ok(())
 }
