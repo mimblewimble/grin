@@ -35,7 +35,6 @@ use core::{core, global};
 use p2p;
 use pool;
 use rand::prelude::*;
-use store;
 use util::OneTime;
 
 /// Implementation of the NetAdapter for the . Gets notified when new
