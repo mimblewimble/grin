@@ -171,7 +171,7 @@ where
 		}
 	}
 
-	fn retrieve_outputs(
+	pub fn retrieve_outputs(
 		&self,
 		req: &Request<Body>,
 		api: APIOwner<T, C, K>,
@@ -195,7 +195,7 @@ where
 		api.retrieve_outputs(show_spent, update_from_node, id)
 	}
 
-	fn retrieve_txs(
+	pub fn retrieve_txs(
 		&self,
 		req: &Request<Body>,
 		api: APIOwner<T, C, K>,
@@ -222,7 +222,7 @@ where
 		api.retrieve_txs(update_from_node, tx_id, tx_slate_id)
 	}
 
-	fn retrieve_stored_tx(
+	pub fn retrieve_stored_tx(
 		&self,
 		req: &Request<Body>,
 		api: APIOwner<T, C, K>,
@@ -251,7 +251,7 @@ where
 		}
 	}
 
-	fn retrieve_summary_info(
+	pub fn retrieve_summary_info(
 		&self,
 		req: &Request<Body>,
 		mut api: APIOwner<T, C, K>,
@@ -269,7 +269,7 @@ where
 		api.retrieve_summary_info(update_from_node, minimum_confirmations)
 	}
 
-	fn node_height(
+	pub fn node_height(
 		&self,
 		_req: &Request<Body>,
 		mut api: APIOwner<T, C, K>,
@@ -297,7 +297,7 @@ where
 		})
 	}
 
-	fn issue_send_tx(
+	pub fn issue_send_tx(
 		&self,
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
@@ -310,6 +310,7 @@ where
 				args.max_outputs,
 				args.num_change_outputs,
 				args.selection_strategy_is_use_all,
+				args.message,
 			);
 			let (mut slate, lock_fn) = match result {
 				Ok(s) => {
@@ -353,7 +354,7 @@ where
 		}))
 	}
 
-	fn finalize_tx(
+	pub fn finalize_tx(
 		&self,
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
@@ -369,7 +370,7 @@ where
 		)
 	}
 
-	fn cancel_tx(
+	pub fn cancel_tx(
 		&self,
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
@@ -414,7 +415,7 @@ where
 		}
 	}
 
-	fn post_tx(
+	pub fn post_tx(
 		&self,
 		req: Request<Body>,
 		api: APIOwner<T, C, K>,
@@ -548,7 +549,8 @@ where
 		mut api: APIForeign<T, C, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(
-			move |mut slate| match api.receive_tx(&mut slate, None) {
+			//TODO: No way to insert a message from the params
+			move |mut slate| match api.receive_tx(&mut slate, None, None) {
 				Ok(_) => ok(slate.clone()),
 				Err(e) => {
 					error!("receive_tx: failed with error: {}", e);

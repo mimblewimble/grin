@@ -462,6 +462,7 @@ where
 		max_outputs: usize,
 		num_change_outputs: usize,
 		selection_strategy_is_use_all: bool,
+		message: Option<String>,
 	) -> Result<(Slate, impl FnOnce(&mut W, &str) -> Result<(), Error>), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
@@ -485,6 +486,7 @@ where
 			selection_strategy_is_use_all,
 			&parent_key_id,
 			false,
+			message,
 		)?;
 
 		// Save the aggsig context in our DB for when we
@@ -577,6 +579,13 @@ where
 		}
 	}
 
+	/// Verifies all messages in the slate match their public keys
+	pub fn verify_slate_messages(&mut self, slate: &Slate) -> Result<(), Error> {
+		let mut w = self.wallet.lock();
+		slate.verify_messages(w.keychain().secp())?;
+		Ok(())
+	}
+
 	/// Attempt to restore contents of wallet
 	pub fn restore(&mut self) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
@@ -660,6 +669,7 @@ where
 		&mut self,
 		slate: &mut Slate,
 		dest_acct_name: Option<&str>,
+		message: Option<String>,
 	) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
 		w.open_with_credentials()?;
@@ -673,7 +683,7 @@ where
 			}
 			None => w.parent_key_id(),
 		};
-		let res = tx::receive_tx(&mut *w, slate, &parent_key_id, false);
+		let res = tx::receive_tx(&mut *w, slate, &parent_key_id, false, message);
 		w.close()?;
 
 		if let Err(e) = res {
