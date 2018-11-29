@@ -1147,6 +1147,15 @@ impl Readable for Output {
 	}
 }
 
+/// We can build an Output MMR but store instances of OutputIdentifier in the MMR data file.
+impl PMMRable for Output {
+	type E = OutputIdentifier;
+
+	fn as_elmt(self) -> Self::E {
+		self.into()
+	}
+}
+
 impl Output {
 	/// Commitment for the output
 	pub fn commitment(&self) -> Commitment {
@@ -1244,14 +1253,6 @@ impl FixedLength for OutputIdentifier {
 	const LEN: usize = 1 + secp::constants::PEDERSEN_COMMITMENT_SIZE;
 }
 
-impl PMMRable for OutputIdentifier {
-	type E = Self;
-
-	fn as_elmt(self) -> Self::E {
-		self
-	}
-}
-
 impl Writeable for OutputIdentifier {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		writer.write_u8(self.features.bits())?;
@@ -1268,6 +1269,15 @@ impl Readable for OutputIdentifier {
 			features,
 			commit: Commitment::read(reader)?,
 		})
+	}
+}
+
+impl From<Output> for OutputIdentifier {
+	fn from(out: Output) -> Self {
+		OutputIdentifier {
+			features: out.features,
+			commit: out.commit,
+		}
 	}
 }
 

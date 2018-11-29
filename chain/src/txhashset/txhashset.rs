@@ -102,7 +102,7 @@ pub struct TxHashSet {
 	/// via a "sync_extension".
 	sync_pmmr_h: PMMRHandle<BlockHeader>,
 
-	output_pmmr_h: PMMRHandle<OutputIdentifier>,
+	output_pmmr_h: PMMRHandle<Output>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
 	kernel_pmmr_h: PMMRHandle<TxKernel>,
 
@@ -163,7 +163,7 @@ impl TxHashSet {
 	pub fn is_unspent(&mut self, output_id: &OutputIdentifier) -> Result<(Hash, u64), Error> {
 		match self.commit_index.get_output_pos(&output_id.commit) {
 			Ok(pos) => {
-				let output_pmmr: PMMR<OutputIdentifier, _> =
+				let output_pmmr: PMMR<Output, _> =
 					PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(hash) = output_pmmr.get_hash(pos) {
 					if hash == output_id.hash_with_index(pos - 1) {
@@ -185,7 +185,7 @@ impl TxHashSet {
 	/// TODO: These need to return the actual data from the flat-files instead
 	/// of hashes now
 	pub fn last_n_output(&mut self, distance: u64) -> Vec<(Hash, OutputIdentifier)> {
-		let output_pmmr: PMMR<OutputIdentifier, _> =
+		let output_pmmr: PMMR<Output, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		output_pmmr.get_last_n_insertions(distance)
 	}
@@ -227,7 +227,7 @@ impl TxHashSet {
 		start_index: u64,
 		max_count: u64,
 	) -> (u64, Vec<OutputIdentifier>) {
-		let output_pmmr: PMMR<OutputIdentifier, _> =
+		let output_pmmr: PMMR<Output, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		output_pmmr.elements_from_insertion_index(start_index, max_count)
 	}
@@ -252,7 +252,7 @@ impl TxHashSet {
 	pub fn roots(&mut self) -> TxHashSetRoots {
 		let header_pmmr: PMMR<BlockHeader, _> =
 			PMMR::at(&mut self.header_pmmr_h.backend, self.header_pmmr_h.last_pos);
-		let output_pmmr: PMMR<OutputIdentifier, _> =
+		let output_pmmr: PMMR<Output, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		let rproof_pmmr: PMMR<RangeProof, _> =
 			PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
@@ -270,7 +270,7 @@ impl TxHashSet {
 	/// build a new merkle proof for the given position
 	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, String> {
 		let pos = self.commit_index.get_output_pos(&commit).unwrap();
-		let output_pmmr: PMMR<OutputIdentifier, _> =
+		let output_pmmr: PMMR<Output, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		output_pmmr.merkle_proof(pos)
 	}
@@ -773,7 +773,7 @@ pub struct Extension<'a> {
 	header: BlockHeader,
 
 	header_pmmr: PMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
-	output_pmmr: PMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
+	output_pmmr: PMMR<'a, Output, PMMRBackend<Output>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
 	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 
@@ -967,7 +967,7 @@ impl<'a> Extension<'a> {
 		// push the new output to the MMR.
 		let output_pos = self
 			.output_pmmr
-			.push(OutputIdentifier::from_output(out))
+			.push(out.clone())
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
 		// push the rangeproof to the MMR.
