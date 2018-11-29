@@ -32,8 +32,8 @@ impl FixedLength for TestElem {
 impl PMMRable for TestElem {
 	type E = Self;
 
-	fn as_elmt(self) -> Self::E {
-		self
+	fn as_elmt(&self) -> Self::E {
+		self.clone()
 	}
 }
 
@@ -69,8 +69,8 @@ pub struct VecBackend<T: PMMRable> {
 }
 
 impl<T: PMMRable> Backend<T> for VecBackend<T> {
-	fn append(&mut self, data: T, hashes: Vec<Hash>) -> Result<(), String> {
-		self.data.push(data);
+	fn append(&mut self, data: &T, hashes: Vec<Hash>) -> Result<(), String> {
+		self.data.push(data.clone());
 		self.hashes.append(&mut hashes.clone());
 		Ok(())
 	}

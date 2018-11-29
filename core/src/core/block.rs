@@ -162,7 +162,7 @@ impl Default for BlockHeader {
 impl PMMRable for BlockHeader {
 	type E = Hash;
 
-	fn as_elmt(self) -> Self::E {
+	fn as_elmt(&self) -> Self::E {
 		self.hash()
 	}
 }

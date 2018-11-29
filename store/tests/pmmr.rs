@@ -761,8 +761,8 @@ impl FixedLength for TestElem {
 impl PMMRable for TestElem {
 	type E = Self;
 
-	fn as_elmt(self) -> Self::E {
-		self
+	fn as_elmt(&self) -> Self::E {
+		self.clone()
 	}
 }
 

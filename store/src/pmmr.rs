@@ -63,7 +63,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 	/// Append the provided data and hashes to the backend storage.
 	/// Add the new leaf pos to our leaf_set if this is a prunable MMR.
 	#[allow(unused_variables)]
-	fn append(&mut self, data: T, hashes: Vec<Hash>) -> Result<(), String> {
+	fn append(&mut self, data: &T, hashes: Vec<Hash>) -> Result<(), String> {
 		if self.prunable {
 			let shift = self.prune_list.get_total_shift();
 			let position = self.hash_file.size_unsync() + shift + 1;

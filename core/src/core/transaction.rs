@@ -192,8 +192,8 @@ impl Readable for TxKernel {
 impl PMMRable for TxKernel {
 	type E = TxKernelEntry;
 
-	fn as_elmt(self) -> Self::E {
-		self.into()
+	fn as_elmt(&self) -> TxKernelEntry {
+		self.clone().into()
 	}
 }
 
@@ -1151,8 +1151,8 @@ impl Readable for Output {
 impl PMMRable for Output {
 	type E = OutputIdentifier;
 
-	fn as_elmt(self) -> Self::E {
-		self.into()
+	fn as_elmt(&self) -> Self::E {
+		self.clone().into()
 	}
 }
 
