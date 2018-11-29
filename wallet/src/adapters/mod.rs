@@ -15,10 +15,12 @@
 mod file;
 mod http;
 mod null;
+mod keybase;
 
 pub use self::file::FileWalletCommAdapter;
 pub use self::http::HTTPWalletCommAdapter;
 pub use self::null::NullWalletCommAdapter;
+pub use self::keybase::KeybaseWalletCommAdapter;
 
 use std::collections::HashMap;
 
