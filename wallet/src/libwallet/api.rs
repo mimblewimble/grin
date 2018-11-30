@@ -444,11 +444,11 @@ where
 	/// should have before it's included in the 'amount_currently_spendable' total
 	///
 	/// # Returns
-	/// * (`bool`, [WalletInfo](../types/struct.WalletInfo.html)) - A tuple:
+	/// * (`bool`, [`WalletInfo`](../types/struct.WalletInfo.html)) - A tuple:
 	/// * The first `bool` element indicates whether the data was successfully
 	/// refreshed from the node (note this may be false even if the `refresh_from_node`
 	/// argument was set to `true`.
-	/// * The second element contains the Summary [WalletInfo](../types/struct.WalletInfo.html)
+	/// * The second element contains the Summary [`WalletInfo`](../types/struct.WalletInfo.html)
 	///
 	/// # Example
 	/// Set up as in [`new`](struct.APIOwner.html#method.new) method above.
@@ -603,7 +603,6 @@ where
 	/// }
 	/// ```
 
-	/// Creates a new partial transaction for the given amount
 	pub fn initiate_tx(
 		&mut self,
 		src_acct_name: Option<&str>,
