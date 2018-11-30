@@ -94,13 +94,13 @@ grin client help
 ## Docker
 
 ```sh
-docker build -t grin .
+docker build -t grin -f etc/Dockerfile .
 ```
 
 You can bind-mount your grin cache to run inside the container.
 
 ```sh
-docker run -it -d -v $HOME/.grin:/root/.grin grin
+docker run -it -d -v $HOME/.grin:/root/.grin -f etc/Dockerfile grin
 ```
 
 ## Cross-platform builds
