@@ -103,7 +103,7 @@ fn get_unread() -> HashMap<String, String> {
 	// and a seperate call is needed for each channel
 	for msg in response["result"]["conversations"]
 		.as_array()
-		.unwrap()
+		.unwrap_or(&vec!(json!([])))
 		.iter()
 	{
 		if msg["unread"] == true {
