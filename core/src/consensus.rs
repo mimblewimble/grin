@@ -349,7 +349,11 @@ fn ar_count(height: u64, diff_data: &[HeaderInfo]) -> u64 {
 	if !global::is_mainnet() && height < T4_CUCKAROO_HARDFORK {
 		to_skip = 0;
 	}
-	100 * diff_data.iter().skip(to_skip).filter(|n| n.is_secondary).count() as u64
+	100 * diff_data
+		.iter()
+		.skip(to_skip)
+		.filter(|n| n.is_secondary)
+		.count() as u64
 }
 
 /// Factor by which the secondary proof of work difficulty will be adjusted
