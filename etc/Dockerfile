@@ -1,7 +1,7 @@
 # Multistage docker build, requires docker 17.05
 
 # builder stage
-FROM rust:1.29.0 as builder
+FROM rust:1.30.1 as builder
 
 RUN set -ex && \
     apt-get update && \
@@ -14,10 +14,10 @@ RUN set -ex && \
         cmake \
         git
 
-WORKDIR /usr/src/grin
-
 # Copying Grin
-COPY . .
+WORKDIR /usr/src
+RUN git clone https://github.com/mimblewimble/grin.git
+WORKDIR /usr/src/grin
 
 # Building Grin
 RUN cargo build --release
