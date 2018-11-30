@@ -241,7 +241,7 @@ fn print_chain_sim(chain_sim: Vec<(HeaderInfo, DiffStats)>) {
 	println!("DIFFICULTY_ADJUST_WINDOW: {}", DIFFICULTY_ADJUST_WINDOW);
 	println!("BLOCK_TIME_WINDOW: {}", BLOCK_TIME_WINDOW);
 	println!("CLAMP_FACTOR: {}", CLAMP_FACTOR);
-	println!("DAMP_FACTOR: {}", DAMP_FACTOR);
+	println!("DAMP_FACTOR: {}", DIFFICULTY_DAMP_FACTOR);
 	chain_sim.iter().enumerate().for_each(|(i, b)| {
 		let block = b.0.clone();
 		let stats = b.1.clone();
@@ -578,7 +578,7 @@ fn test_secondary_pow_scale() {
 		hi.is_secondary = true;
 		assert_eq!(
 			secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
-			95
+			94
 		);
 		// all secondary on 1%, factor should go down to bound (divide by 2)
 		assert_eq!(
