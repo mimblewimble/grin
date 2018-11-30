@@ -1,6 +1,6 @@
 [package]
 name = "grin"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
 license = "Apache-2.0"
@@ -31,14 +31,14 @@ log = "0.4"
 term = "0.5"
 rpassword = "2.0.0"
 
-grin_api = { path = "./api", version = "0.4.1" }
-grin_config = { path = "./config", version = "0.4.1" }
-grin_core = { path = "./core", version = "0.4.1" }
-grin_keychain = { path = "./keychain", version = "0.4.1" }
-grin_p2p = { path = "./p2p", version = "0.4.1" }
-grin_servers = { path = "./servers", version = "0.4.1" }
-grin_util = { path = "./util", version = "0.4.1" }
-grin_wallet = { path = "./wallet", version = "0.4.1" }
+grin_api = { path = "./api", version = "0.4.2" }
+grin_config = { path = "./config", version = "0.4.2" }
+grin_core = { path = "./core", version = "0.4.2" }
+grin_keychain = { path = "./keychain", version = "0.4.2" }
+grin_p2p = { path = "./p2p", version = "0.4.2" }
+grin_servers = { path = "./servers", version = "0.4.2" }
+grin_util = { path = "./util", version = "0.4.2" }
+grin_wallet = { path = "./wallet", version = "0.4.2" }
 
 [build-dependencies]
 built = "0.3"
