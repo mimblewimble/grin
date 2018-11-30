@@ -15,7 +15,6 @@
 //! Transaction pool implementation.
 //! Used for both the txpool and stempool layers in the pool.
 
-use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use util::RwLock;
@@ -161,50 +160,6 @@ impl Pool {
 		let tx = transaction::aggregate(txs)?;
 		tx.validate(self.verifier_cache.clone())?;
 		Ok(Some(tx))
-	}
-
-	/// evict a transaction from the pool
-	pub fn evict_from_pool(&mut self) {
-		// Check that the new tx is not a bullshit tx in term of fee
-
-		let mut ordered_entries = self.entries.clone();
-		ordered_entries.sort_by(|entry_a, entry_b| {
-			let fw_a = entry_a.tx.fee() * 1000 / entry_a.tx.tx_weight() as u64;
-			let fw_b = entry_b.tx.fee() * 1000 / entry_b.tx.tx_weight() as u64;
-			if fw_a > fw_b {
-				Ordering::Greater
-			} else if fw_a == fw_b && entry_a.tx_at < entry_b.tx_at {
-				Ordering::Greater
-			} else {
-				Ordering::Less
-			}
-		});
-
-		// remove first one iff not a bucket root of several txs
-		for entry in ordered_entries {
-			for tx_bucket in self.bucket_transactions() {
-				if tx_bucket.len() == 1 {
-					// remove tx
-					self.entries = self
-						.entries
-						.iter()
-						.filter(|x| x.tx != entry.tx)
-						.map(|x| x.clone())
-						.collect::<Vec<_>>();
-				}
-				if tx_bucket[0] == entry.tx {
-					// next bucket
-					continue;
-				}
-				// remove tx
-				self.entries = self
-					.entries
-					.iter()
-					.filter(|x| x.tx != entry.tx)
-					.map(|x| x.clone())
-					.collect::<Vec<_>>();
-			}
-		}
 	}
 
 	pub fn select_valid_transactions(
@@ -374,7 +329,7 @@ impl Pool {
 	// Group dependent transactions in buckets (vectors), each bucket
 	// is therefore independent from the others. Relies on the entries
 	// Vec having parent transactions first (should always be the case)
-	fn bucket_transactions(&self) -> Vec<Vec<Transaction>> {
+	pub fn bucket_transactions(&self) -> Vec<Vec<Transaction>> {
 		let mut tx_buckets = vec![];
 		let mut output_commits = HashMap::new();
 

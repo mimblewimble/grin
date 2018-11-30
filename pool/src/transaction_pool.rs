@@ -17,6 +17,7 @@
 //! resulting tx pool can be added to the current chain state to produce a
 //! valid chain state.
 
+use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use util::RwLock;
@@ -160,7 +161,7 @@ impl TransactionPool {
 
 		// Transaction passed all the checks but we have to make space for it
 		if evict {
-			self.txpool.evict_from_pool();
+			self.evict_from_txpool(&tx)?;
 		}
 
 		let entry = PoolEntry {
@@ -178,6 +179,64 @@ impl TransactionPool {
 			self.add_to_reorg_cache(entry);
 		}
 		Ok(())
+	}
+
+	/// evict a transaction from the pool
+	pub fn evict_from_txpool(&mut self, tx: &Transaction) -> Result<(), PoolError> {
+		// Compute fee weight ratio for incoming transaction
+		let fw = tx.fee() * 1000 / tx.tx_weight() as u64;
+
+		// Order pool by fee over weight and time of the transaction
+		let mut ordered_entries = self.txpool.entries.clone();
+		ordered_entries.sort_by(|entry_a, entry_b| {
+			let fw_a = entry_a.tx.fee() * 1000 / entry_a.tx.tx_weight() as u64;
+			let fw_b = entry_b.tx.fee() * 1000 / entry_b.tx.tx_weight() as u64;
+			if fw_a > fw_b {
+				Ordering::Greater
+			} else if fw_a == fw_b && entry_a.tx_at < entry_b.tx_at {
+				Ordering::Greater
+			} else {
+				Ordering::Less
+			}
+		});
+
+		// Remove a single transaction iff not a bucket root of several txs
+		let mut fw_entry: u64;
+		for entry in ordered_entries {
+			fw_entry = entry.tx.fee() * 1000 / entry.tx.tx_weight() as u64;
+			// Check that the incoming transaction as enough fee
+			if fw_entry > fw {
+				let threshold = (entry.tx.tx_weight() as u64) * self.config.accept_fee_base;
+				return Err(PoolError::LowFeeTransaction(threshold));
+			}
+			for tx_bucket in self.txpool.bucket_transactions() {
+				if tx_bucket.len() == 1 {
+					// remove tx
+					self.txpool.entries = self
+						.txpool
+						.entries
+						.iter()
+						.filter(|x| x.tx != entry.tx)
+						.map(|x| x.clone())
+						.collect::<Vec<_>>();
+					return Ok(());
+				}
+				if tx_bucket[0] == entry.tx {
+					// next bucket
+					continue;
+				}
+				// remove tx
+				self.txpool.entries = self
+					.txpool
+					.entries
+					.iter()
+					.filter(|x| x.tx != entry.tx)
+					.map(|x| x.clone())
+					.collect::<Vec<_>>();
+				return Ok(());
+			}
+		}
+		return Err(PoolError::OverCapacity);
 	}
 
 	// Old txs will "age out" after 30 mins.
