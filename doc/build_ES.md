@@ -91,9 +91,8 @@ docker build -t grin -f etc/Dockerfile .
 Puede ubicar la caché de Grin para que se ejecute dentro del contenedor
 
 ```sh
-docker run -it -d -v $HOME/.grin:/root/.grin -f etc/Dockerfile grin
+docker run -it -d -v $HOME/.grin:/root/.grin grin
 ```
-
 ## Compilación multiplataforma
 
 Rust (cargo) puede compilar Grin para muchas plataformas, así que en teoría ejecutar `grin` como un nodo de validación en un dispositivo de baja potencia podría ser posible. Para hacer una compilación cruzada `grin` en una plataforma x86 Linux y generar binarios de ARM, por ejemplo para Raspberry-pi.
