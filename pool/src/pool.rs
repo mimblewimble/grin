@@ -115,7 +115,10 @@ impl Pool {
 	/// appropriate to put in a mined block. Aggregates chains of dependent
 	/// transactions, orders by fee over weight and ensures to total weight
 	/// doesn't exceed block limits.
-	pub fn prepare_mineable_transactions(&self, max_weight: usize) -> Result<Vec<Transaction>, PoolError> {
+	pub fn prepare_mineable_transactions(
+		&self,
+		max_weight: usize,
+	) -> Result<Vec<Transaction>, PoolError> {
 		let header = self.blockchain.chain_head()?;
 		let tx_buckets = self.bucket_transactions();
 

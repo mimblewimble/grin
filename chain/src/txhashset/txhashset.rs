@@ -110,7 +110,7 @@ pub struct TxHashSet {
 	commit_index: Arc<ChainStore>,
 
 	// the root directory of the chain db
-	root_dir : String,
+	root_dir: String,
 }
 
 impl TxHashSet {
@@ -322,12 +322,10 @@ impl TxHashSet {
 		path.push(&self.root_dir);
 		path.push(TXHASHSET_SUBDIR);
 		path.push(OUTPUT_SUBDIR);
-		self.clean_rewind_files_given_path(path); 
+		self.clean_rewind_files_given_path(path);
 	}
 
-	fn clean_rewind_files_given_path(&self, path : PathBuf) {
-
-	}
+	fn clean_rewind_files_given_path(&self, path: PathBuf) {}
 }
 
 /// Starts a new unit of work to extend (or rewind) the chain with additional

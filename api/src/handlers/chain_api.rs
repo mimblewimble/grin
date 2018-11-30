@@ -147,8 +147,7 @@ impl OutputHandler {
 			.filter(|output| commitments.is_empty() || commitments.contains(&output.commit))
 			.map(|output| {
 				OutputPrintable::from_output(output, w(&self.chain), Some(&header), include_proof)
-			})
-			.collect();
+			}).collect();
 
 		Ok(BlockOutputs {
 			header: BlockHeaderInfo::from_header(&header),
