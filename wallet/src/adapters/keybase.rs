@@ -29,6 +29,10 @@ use {WalletCommAdapter, WalletConfig};
 const TTL: u16 = 60; // TODO: Pass this as a parameter
 const SLEEP_DURATION: Duration = Duration::from_millis(5000);
 
+// Which topic names to use for communication
+const SLATE_NEW: &str = "grin_slate_new";
+const SLATE_SIGNED: &str = "grin_slate_signed";
+
 #[derive(Clone)]
 pub struct KeybaseWalletCommAdapter {}
 
@@ -54,18 +58,18 @@ fn api_send(payload: &str) -> Value {
 	let mut proc = Command::new("keybase");
 	proc.args(&["chat", "api", "-m", &payload]);
 	let output = proc.output().expect("No output").stdout;
-	let response: Value = from_str(from_utf8(&output).expect("Bad output")).unwrap();
+	let response: Value = from_str(from_utf8(&output).expect("Bad output")).expect("Bad output");
 	response
 }
 
 /// Get all unread messages from a specific channel and mark as read.
-fn read_from_channel(channel: &str) -> Vec<String> {
+fn read_from_channel(channel: &str, topic: &str) -> Vec<String> {
 	let payload = to_string(&json!({
         "method": "read",
         "params": {
             "options": {
                 "channel": {
-                        "name": channel, "topic_type": "dev"
+                        "name": channel, "topic_type": "dev", "topic_name": topic
                     }
                 },
                 "unread_only": true, "peek": false
@@ -75,9 +79,9 @@ fn read_from_channel(channel: &str) -> Vec<String> {
 
 	let response = api_send(&payload);
 	let mut unread: Vec<String> = Vec::new();
-	for msg in response["result"]["messages"].as_array().unwrap().iter() {
+	for msg in response["result"]["messages"].as_array().unwrap_or(&vec![json!({})]).iter() {
 		if (msg["msg"]["content"]["type"] == "text") && (msg["msg"]["unread"] == true) {
-			let message = msg["msg"]["content"]["text"]["body"].as_str().unwrap();
+			let message = msg["msg"]["content"]["text"]["body"].as_str().unwrap_or("");
 			unread.push(message.to_owned());
 		}
 	}
@@ -85,12 +89,13 @@ fn read_from_channel(channel: &str) -> Vec<String> {
 }
 
 /// Get unread messages from all channels and mark as read.
-fn get_unread() -> HashMap<String, String> {
+fn get_unread(topic: &str) -> HashMap<String, String> {
 	let payload = to_string(&json!({
         "method": "list",
         "params": {
             "options": {
-                    "topic_type": "dev"
+                    "topic_type": "dev",
+					"topic_name": topic
                 },
                 "unread_only": true, "peek": false
             }
@@ -103,18 +108,17 @@ fn get_unread() -> HashMap<String, String> {
 	// and a seperate call is needed for each channel
 	for msg in response["result"]["conversations"]
 		.as_array()
-		.unwrap_or(&vec!(json!([])))
+		.unwrap_or(&vec![json!({})])
 		.iter()
 	{
 		if msg["unread"] == true {
 			let channel = msg["channel"]["name"].as_str().unwrap();
 			channels.insert(channel.to_string());
-			println!("Received message from channel {}", channel);
 		}
 	}
 	let mut unread: HashMap<String, String> = HashMap::new();
 	for channel in channels.iter() {
-		let messages = read_from_channel(channel);
+		let messages = read_from_channel(channel, topic);
 		for msg in messages {
 			unread.insert(msg, channel.to_string());
 		}
@@ -123,31 +127,36 @@ fn get_unread() -> HashMap<String, String> {
 }
 
 /// Send a message to a keybase channel that self-destructs after ttl seconds.
-fn send<T: Serialize>(message: T, channel: &str, ttl: u16) -> bool {
+fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool {
 	let seconds = format!("{}s", ttl);
-	// TODO: replace with api_send call
-	let mut proc = Command::new("keybase");
-	let msg = to_string(&message).expect("Serialization error");
-	let args = [
-		"chat",
-		"send",
-		"--exploding-lifetime",
-		&seconds,
-		"--topic-type",
-		"dev",
-		channel,
-		&msg,
-	];
-	proc.args(&args).stdout(Stdio::null());
-	proc.status().is_ok()
+	let payload = to_string(&json!({
+		"method": "send", 
+		"params": {
+			"options": {
+				"channel": {
+						"name": channel, "topic_name": topic, "topic_type": "dev"
+					}, 
+						"message": {
+								"body": to_string(&message).unwrap()
+							}, 
+							"exploding_lifetime": seconds
+						}
+					}
+				}
+	)).unwrap();
+	let response = api_send(&payload);
+	match response["result"]["message"].as_str() {
+		Some("message sent") => true,
+		_ => false
+	}
 }
 
-/// Listen for a message from a specific channel for nseconds and return the first valid slate.
+/// Listen for a message from a specific channel with topic SLATE_SIGNED for nseconds and return the first valid slate.
 fn poll(nseconds: u64, channel: &str) -> Option<Slate> {
 	let start = Instant::now();
 	println!("Waiting for message from {}...", channel);
 	while start.elapsed().as_secs() < nseconds {
-		let unread = read_from_channel(channel);
+		let unread = read_from_channel(channel, SLATE_SIGNED);
 		for msg in unread.iter() {
 			let blob = from_str::<Slate>(msg);
 			match blob {
@@ -207,10 +216,12 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 
 	// Send a slate to a keybase username then wait for a response for TTL seconds.
 	fn send_tx_sync(&self, addr: &str, slate: &Slate) -> Result<Slate, Error> {
-		match send(slate, addr, TTL) {
+		// Send original slate to recipient with the SLATE_NEW topic
+		match send(slate, addr, SLATE_NEW, TTL) {
 			true => (),
 			false => return Err(ErrorKind::ClientCallback("Posting transaction slate"))?,
 		}
+		// Wait for response from recipient with SLATE_SIGNED topic
 		match poll(TTL as u64, addr) {
 			Some(slate) => return Ok(slate),
 			None => return Err(ErrorKind::ClientCallback("Receiving reply from recipient"))?,
@@ -240,12 +251,16 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 		let listen_addr = params.get("api_listen_addr").unwrap();
 		println!("Listening for messages via keybase chat...");
 		loop {
-			let unread = get_unread();
+			// listen for messages from all channels with topic SLATE_NEW
+			let unread = get_unread(SLATE_NEW);
 			for (msg, channel) in &unread {
 				let blob = from_str::<Slate>(msg);
 				match blob {
-					Ok(slate) => match receive_tx(listen_addr, &slate) {
-						Ok(signed) => match send(signed, channel, TTL) {
+					Ok(slate) => { 
+						println!("Received message from channel {}", channel);
+						match receive_tx(listen_addr, &slate) {
+						// Reply to the same channel with topic SLATE_SIGNED
+						Ok(signed) => match send(signed, channel, SLATE_SIGNED, TTL) {
 							true => {
 								println!("Returned slate to {}", channel);
 							}
@@ -256,7 +271,7 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 						Err(e) => {
 							println!("Error : {}", e);
 						}
-					},
+					}},
 					Err(_) => (),
 				}
 			}
