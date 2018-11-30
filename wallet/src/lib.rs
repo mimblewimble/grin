@@ -27,10 +27,10 @@ extern crate serde_json;
 #[macro_use]
 extern crate log;
 extern crate chrono;
+extern crate reqwest;
 extern crate term;
 extern crate url;
 extern crate uuid;
-extern crate reqwest;
 
 extern crate failure;
 #[macro_use]

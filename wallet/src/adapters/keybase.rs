@@ -16,6 +16,7 @@
 
 use libtx::slate::Slate;
 use libwallet::{Error, ErrorKind};
+use reqwest;
 use serde::Serialize;
 use serde_json::{from_str, to_string, Value};
 use std::collections::{HashMap, HashSet};
@@ -24,7 +25,6 @@ use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use {WalletCommAdapter, WalletConfig};
-use reqwest;
 
 const TTL: u16 = 60; // TODO: Pass this as a parameter
 const SLEEP_DURATION: Duration = Duration::from_millis(5000);
@@ -99,7 +99,7 @@ fn get_unread() -> HashMap<String, String> {
 	let response = api_send(&payload);
 
 	let mut channels = HashSet::new();
-	// Unfortunately the response does not contain the message body 
+	// Unfortunately the response does not contain the message body
 	// and a seperate call is needed for each channel
 	for msg in response["result"]["conversations"]
 		.as_array()
@@ -242,16 +242,17 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 		loop {
 			let unread = get_unread();
 			for (msg, channel) in &unread {
-
 				let blob = from_str::<Slate>(msg);
 				match blob {
 					Ok(slate) => match receive_tx(listen_addr, &slate) {
-						Ok(signed) => {
-							match send(signed, channel, TTL) {
-								true => { println!("Returned slate to {}", channel); },
-								false => { println!("Failed to return slate to {}", channel); }
+						Ok(signed) => match send(signed, channel, TTL) {
+							true => {
+								println!("Returned slate to {}", channel);
 							}
-						}
+							false => {
+								println!("Failed to return slate to {}", channel);
+							}
+						},
 						Err(e) => {
 							println!("Error : {}", e);
 						}
