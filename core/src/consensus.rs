@@ -63,7 +63,6 @@ pub const COINBASE_MATURITY: u64 = DAY_HEIGHT;
 /// function of block height (time). Starts at 90% losing a percent
 /// approximately every week. Represented as an integer between 0 and 100.
 pub fn secondary_pow_ratio(height: u64) -> u64 {
-	// TODO - this should all be cleaned up and simplified before mainnet.
 	if global::is_mainnet() {
 		90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
 	} else {
@@ -72,6 +71,20 @@ pub fn secondary_pow_ratio(height: u64) -> u64 {
 			90u64.saturating_sub(height / WEEK_HEIGHT)
 		} else {
 			90u64.saturating_sub(height / (2 * YEAR_HEIGHT / 90))
+		}
+	}
+}
+
+/// The AR scale damping factor to use. Dependent on block height
+/// to account for pre HF behavior on testnet4.
+fn ar_scale_damp_factor(height: u64) -> u64 {
+	if global::is_mainnet() {
+		AR_SCALE_DAMP_FACTOR
+	} else {
+		if height < T4_CUCKAROO_HARDFORK {
+			DIFFICULTY_DAMP_FACTOR
+		} else {
+			AR_SCALE_DAMP_FACTOR
 		}
 	}
 }
@@ -170,7 +183,10 @@ pub const BLOCK_TIME_WINDOW: u64 = DIFFICULTY_ADJUST_WINDOW * BLOCK_TIME_SEC;
 pub const CLAMP_FACTOR: u64 = 2;
 
 /// Dampening factor to use for difficulty adjustment
-pub const DAMP_FACTOR: u64 = 3;
+pub const DIFFICULTY_DAMP_FACTOR: u64 = 3;
+
+/// Dampening factor to use for AR scale calculation.
+pub const AR_SCALE_DAMP_FACTOR: u64 = 13;
 
 /// Compute weight of a graph as number of siphash bits defining the graph
 /// Must be made dependent on height to phase out smaller size over the years
@@ -188,7 +204,7 @@ pub fn graph_weight(height: u64, edge_bits: u8) -> u64 {
 }
 
 /// minimum difficulty to avoid getting stuck when trying to increase subject to dampening
-pub const MIN_DIFFICULTY: u64 = DAMP_FACTOR;
+pub const MIN_DIFFICULTY: u64 = DIFFICULTY_DAMP_FACTOR;
 
 /// unit difficulty, equal to graph_weight(SECOND_POW_EDGE_BITS)
 pub const UNIT_DIFFICULTY: u64 =
@@ -315,7 +331,7 @@ where
 
 	// adjust time delta toward goal subject to dampening and clamping
 	let adj_ts = clamp(
-		damp(ts_delta, BLOCK_TIME_WINDOW, DAMP_FACTOR),
+		damp(ts_delta, BLOCK_TIME_WINDOW, DIFFICULTY_DAMP_FACTOR),
 		BLOCK_TIME_WINDOW,
 		CLAMP_FACTOR,
 	);
@@ -325,11 +341,23 @@ where
 	HeaderInfo::from_diff_scaling(Difficulty::from_num(difficulty), sec_pow_scaling)
 }
 
+/// Count the number of "secondary" (AR) blocks in the provided window of blocks.
+/// Note: we skip the first one, but testnet4 was incorrectly including it before
+/// the hardfork.
+fn ar_count(height: u64, diff_data: &[HeaderInfo]) -> u64 {
+	let mut to_skip = 1;
+	if !global::is_mainnet() && height < T4_CUCKAROO_HARDFORK {
+		to_skip = 0;
+	}
+	100 * diff_data
+		.iter()
+		.skip(to_skip)
+		.filter(|n| n.is_secondary)
+		.count() as u64
+}
+
 /// Factor by which the secondary proof of work difficulty will be adjusted
 pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
-	// Get the secondary count across the window, in pct (100 * 60 * 2nd_pow_fraction)
-	let snd_count = 100 * diff_data.iter().filter(|n| n.is_secondary).count() as u64;
-
 	// Get the scaling factor sum of the last DIFFICULTY_ADJUST_WINDOW elements
 	let scale_sum: u64 = diff_data
 		.iter()
@@ -341,9 +369,14 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
 	let target_pct = secondary_pow_ratio(height);
 	let target_count = DIFFICULTY_ADJUST_WINDOW * target_pct;
 
-	// adjust count toward goal subject to dampening and clamping
+	// Get the secondary count across the window, adjusting count toward goal
+	// subject to dampening and clamping.
 	let adj_count = clamp(
-		damp(snd_count, target_count, DAMP_FACTOR),
+		damp(
+			ar_count(height, diff_data),
+			target_count,
+			ar_scale_damp_factor(height),
+		),
 		target_count,
 		CLAMP_FACTOR,
 	);
