@@ -56,7 +56,7 @@ where
 	K: Keychain,
 {
 	/// A reference-counted mutex to an implementation of the
-	/// [WalletBackend](../types/trait.WalletBackend.html) trait.
+	/// [`WalletBackend`](../types/trait.WalletBackend.html) trait.
 	pub wallet: Arc<Mutex<W>>,
 	phantom: PhantomData<K>,
 	phantom_c: PhantomData<C>,
@@ -71,14 +71,14 @@ where
 	/// Create a new API instance with the given wallet instance. All subsequent
 	/// API calls will operate on this instance of the wallet.
 	///
-	/// Each method will call the [WalletBackend](../types/trait.WalletBackend.html)'s
-	/// [open_with_credentials](../types/trait.WalletBackend.html#tymethod.open_with_credentials)
+	/// Each method will call the [`WalletBackend`](../types/trait.WalletBackend.html)'s
+	/// [`open_with_credentials`](../types/trait.WalletBackend.html#tymethod.open_with_credentials)
 	/// (initialising a keychain with the master seed,) perform its operation, then close the keychain
-	/// with a call to [close](../types/trait.WalletBackend.html#tymethod.close)
+	/// with a call to [`close`](../types/trait.WalletBackend.html#tymethod.close)
 	///
 	/// # Arguments
 	/// * `wallet_in` - A reference-counted mutex containing an implementation of the
-	/// [WalletBackend](../types/trait.WalletBackend.html) trait.
+	/// [`WalletBackend`](../types/trait.WalletBackend.html) trait.
 	///
 	/// # Returns
 	/// * An instance of the OwnerAPI holding a reference to the provided wallet
@@ -127,8 +127,8 @@ where
 	///
 	/// # Returns
 	/// * Result Containing:
-	/// * A Vector of [AcctPathMapping](../types/struct.AcctPathMapping.html) data
-	/// * or [libwallet::Error](../struct.Error.html) if an error is encountered.
+	/// * A Vector of [`AcctPathMapping`](../types/struct.AcctPathMapping.html) data
+	/// * or [`libwallet::Error`](../struct.Error.html) if an error is encountered.
 	///
 	/// # Remarks
 	///
@@ -137,7 +137,7 @@ where
 	/// * This method does not need to use the wallet seed or keychain.
 	///
 	/// # Example
-	/// Set up as in [new](struct.APIOwner.html#method.new) method above.
+	/// Set up as in [`new`](struct.APIOwner.html#method.new) method above.
 	/// ```
 	/// # extern crate grin_wallet as wallet;
 	/// # extern crate grin_keychain as keychain;
@@ -177,7 +177,7 @@ where
 	/// # Returns
 	/// * Result Containing:
 	/// * A [Keychain Identifier](#) for the new path
-	/// * or [libwallet::Error](../struct.Error.html) if an error is encountered.
+	/// * or [`libwallet::Error`](../struct.Error.html) if an error is encountered.
 	///
 	/// # Remarks
 	///
@@ -186,13 +186,13 @@ where
 	/// so the first call will create an account at `m/1/0` and the second at
 	/// `m/2/0` etc. . .
 	/// * The account path is used throughout as the parent key for most key-derivation
-	/// operations. See [set_active_account](struct.APIOwner.html#method.set_active_account) for
+	/// operations. See [`set_active_account`](struct.APIOwner.html#method.set_active_account) for
 	/// further details.
 	///
 	/// * This function does not need to use the root wallet seed or keychain.
 	///
 	/// # Example
-	/// Set up as in [new](struct.APIOwner.html#method.new) method above.
+	/// Set up as in [`new`](struct.APIOwner.html#method.new) method above.
 	/// ```
 	/// # extern crate grin_wallet as wallet;
 	/// # extern crate grin_keychain as keychain;
@@ -228,11 +228,12 @@ where
 	///
 	/// # Arguments
 	/// * `label` - The human readable label for the account. Accounts can be retrieved via
-	/// the [account](struct.APIOwner.html#method.accounts) method
+	/// the [`account`](struct.APIOwner.html#method.accounts) method
+	///
 	/// # Returns
 	/// * Result Containing:
 	/// * `Ok(())` if the path was correctly set
-	/// * or [libwallet::Error](../struct.Error.html) if an error is encountered.
+	/// * or [`libwallet::Error`](../struct.Error.html) if an error is encountered.
 	///
 	/// # Remarks
 	///
@@ -244,7 +245,7 @@ where
 	/// * This function does not need to use the root wallet seed or keychain.
 	///
 	/// # Example
-	/// Set up as in [new](struct.APIOwner.html#method.new) method above.
+	/// Set up as in [`new`](struct.APIOwner.html#method.new) method above.
 	/// ```
 	/// # extern crate grin_wallet as wallet;
 	/// # extern crate grin_keychain as keychain;
@@ -284,7 +285,7 @@ where
 	/// in the wallet will be returned. If `false`, spent outputs will omitted
 	/// from the results.
 	/// * `refresh_from_node` - If true, the wallet will attempt to contact
-	/// a node (via the [NodeClient](../types/trait.NodeClient.html)
+	/// a node (via the [`NodeClient`](../types/trait.NodeClient.html)
 	/// provided during wallet instantiation). If `false`, the results will
 	/// contain output information that may be out-of-date (from the last time
 	/// the wallet's output set was refreshed against the node).
@@ -301,7 +302,7 @@ where
 	/// and the Output commitment as identified in the chain's UTXO set
 	///
 	/// # Example
-	/// Set up as in [new](struct.APIOwner.html#method.new) method above.
+	/// Set up as in [`new`](struct.APIOwner.html#method.new) method above.
 	/// ```
 	/// # extern crate grin_wallet as wallet;
 	/// # extern crate grin_keychain as keychain;
@@ -359,14 +360,14 @@ where
 	///
 	/// # Arguments
 	/// * `refresh_from_node` - If true, the wallet will attempt to contact
-	/// a node (via the [NodeClient](../types/trait.NodeClient.html)
+	/// a node (via the [`NodeClient`](../types/trait.NodeClient.html)
 	/// provided during wallet instantiation). If `false`, the results will
 	/// contain transaction information that may be out-of-date (from the last time
 	/// the wallet's output set was refreshed against the node).
 	/// * `tx_id` - If `Some(i)`, only return the transactions associated with
 	/// the transaction log entry of id `i`.
 	/// * `tx_slate_id` - If `Some(uuid)`, only return transactions associated with
-	/// the given [Slate](../../libtx/slate/struct.Slate.html) uuid.
+	/// the given [`Slate`](../../libtx/slate/struct.Slate.html) uuid.
 	///
 	/// # Returns
 	/// * (`bool`, `Vec<[TxLogEntry](../types/struct.TxLogEntry.html)>`) - A tuple:
@@ -377,7 +378,7 @@ where
 	/// [TxLogEntries](../types/struct/TxLogEntry.html)
 	///
 	/// # Example
-	/// Set up as in [new](struct.APIOwner.html#method.new) method above.
+	/// Set up as in [`new`](struct.APIOwner.html#method.new) method above.
 	/// ```
 	/// # extern crate grin_wallet as wallet;
 	/// # extern crate grin_keychain as keychain;
@@ -431,7 +432,54 @@ where
 		res
 	}
 
-	/// Retrieve summary info for wallet
+	/// Returns summary information from the active account in the wallet.
+	///
+	/// # Arguments
+	/// * `refresh_from_node` - If true, the wallet will attempt to contact
+	/// a node (via the [`NodeClient`](../types/trait.NodeClient.html)
+	/// provided during wallet instantiation). If `false`, the results will
+	/// contain transaction information that may be out-of-date (from the last time
+	/// the wallet's output set was refreshed against the node).
+	/// * `minimum_confirmations` - The minimum number of confirmations an output
+	/// should have before it's included in the 'amount_currently_spendable' total
+	///
+	/// # Returns
+	/// * (`bool`, [`WalletInfo`](../types/struct.WalletInfo.html)) - A tuple:
+	/// * The first `bool` element indicates whether the data was successfully
+	/// refreshed from the node (note this may be false even if the `refresh_from_node`
+	/// argument was set to `true`.
+	/// * The second element contains the Summary [`WalletInfo`](../types/struct.WalletInfo.html)
+	///
+	/// # Example
+	/// Set up as in [`new`](struct.APIOwner.html#method.new) method above.
+	/// ```
+	/// # extern crate grin_wallet as wallet;
+	/// # extern crate grin_keychain as keychain;
+	/// # extern crate grin_util as util;
+	/// # use std::sync::Arc;
+	/// # use util::Mutex;
+	/// # use keychain::ExtKeychain;
+	/// # use wallet::libwallet::api::APIOwner;
+	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
+	/// # let mut wallet_config = WalletConfig::default();
+	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
+	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
+	/// # Arc::new(Mutex::new(
+	/// # 	LMDBBackend::new(wallet_config.clone(), "", node_client).unwrap()
+	/// # ));
+	///
+	/// let mut api_owner = APIOwner::new(wallet.clone());
+	/// let update_from_node = true;
+	/// let minimum_confirmations=10;
+	///
+	/// // Return summary info for active account
+	/// let result = api_owner.retrieve_summary_info(update_from_node, minimum_confirmations);
+	///
+	/// if let Ok((was_updated, summary_info)) = result {
+	///		//...
+	/// }
+	/// ```
+
 	pub fn retrieve_summary_info(
 		&mut self,
 		refresh_from_node: bool,
@@ -453,7 +501,108 @@ where
 		res
 	}
 
-	/// Creates a new partial transaction for the given amount
+	/// Initiates a new transaction as the sender, creating a new
+	/// [`Slate`](../../libtx/slate/struct.Slate.html) object containing
+	/// the sender's inputs, change outputs, and public signature data. This slate can
+	/// then be sent to the recipient to continue the transaction via the
+	/// [Foreign API's `receive_tx`](struct.APIForeign.html#method.receive_tx) method.
+	///
+	/// When a transaction is created, the wallet must also lock inputs (and create unconfirmed
+	/// outputs) corresponding to the transaction created in the slate, so that the wallet doesn't
+	/// attempt to re-spend outputs that are already included in a transaction before the transaction
+	/// is confirmed. This method also returns a function that will perform that locking, and it is
+	/// up to the caller to decide the best time to call the lock function
+	/// (via the [`tx_lock_outputs`](struct.APIOwner.html#method.tx_lock_outputs) method).
+	/// If the exchange method is intended to be synchronous (such as via a direct http call,)
+	/// then the lock call can wait until the response is confirmed. If it is asynchronous, (such
+	/// as via file transfer,) the lock call should happen immediately (before the file is sent
+	/// to the recipient).
+	///
+	/// # Arguments
+	/// * `src_acct_name` - The human readable account name from which to draw outputs
+	/// for the transaction, overriding whatever the active account is as set via the
+	/// [`set_active_account`](struct.APIOwner.html#method.set_active_account) method.
+	/// If None, the transaction will use the active account.
+	/// * `amount` - The amount to send, in nanogrins. (`1 G = 1_000_000_000nG`)
+	/// * `minimum_confirmations` - The minimum number of confirmations an output
+	/// should have in order to be included in the transaction.
+	/// * `max_outputs` - By default, the wallet selects as many inputs as possible in a
+	/// transaction, to reduce the Output set and the fees. The wallet will attempt to spend
+	/// include up to `max_outputs` in a transaction, however if this is not enough to cover
+	/// the whole amount, the wallet will include more outputs. This parameter should be considered
+	/// a soft limit.
+	/// * `num_change_outputs` - The target number of change outputs to create in the transaction.
+	/// The actual number created will be `num_change_outputs` + whatever remainder is needed.
+	/// * `selection_strategy_is_use_all` - If `true`, attempt to use up as many outputs as
+	/// possible to create the transaction, up the 'soft limit' of `max_outputs`. This helps
+	/// to reduce the size of the UTXO set and the amount of data stored in the wallet, and
+	/// minimizes fees. This will generally result in many inputs and a large change output(s),
+	/// usually much larger than the amount being sent. If `false`, the transaction will include
+	/// as many outputs as are needed to meet the amount, (and no more) starting with the smallest
+	/// value outputs.
+	/// * `message` - An optional participant message to include alongside the sender's public
+	/// ParticipantData within the slate. This message will include a signature created with the
+	/// sender's private keys, and will be publically verifiable. Note this message is for
+	/// the convenience of the participants during the exchange; it is not included in the final
+	/// transaction sent to the chain. Validation of this message is optional.
+	///
+	/// # Returns
+	/// * a result containing:
+	/// * ([`Slate`](../../libtx/slate/struct.Slate.html), lock_function) - A tuple:
+	/// * The transaction Slate, which can be forwarded to the recieving party by any means.
+	/// * A lock function, which should be called when the caller deems it appropriate to lock
+	/// the transaction outputs (i.e. there is relative certaintly that the slate will be
+	/// transmitted to the receiving party). Must be called before calling
+	/// [`finalize_tx`](struct.APIOwner.html#method.finalize_tx).
+	/// * or [`libwallet::Error`](../struct.Error.html) if an error is encountered.
+	///
+	/// # Remarks
+	///
+	/// * This method requires an active connection to a node, and will fail with error if a node
+	/// cannot be contacted to refresh output statuses.
+	/// * This method will store a partially completed transaction in the wallet's transaction log,
+	/// which will be updated on the corresponding call to [`finalize_tx`](struct.APIOwner.html#method.finalize_tx).
+	///
+	/// # Example
+	/// Set up as in [new](struct.APIOwner.html#method.new) method above.
+	/// ```
+	/// # extern crate grin_wallet as wallet;
+	/// # extern crate grin_keychain as keychain;
+	/// # extern crate grin_util as util;
+	/// # use std::sync::Arc;
+	/// # use util::Mutex;
+	/// # use keychain::ExtKeychain;
+	/// # use wallet::libwallet::api::APIOwner;
+	/// # use wallet::{LMDBBackend, HTTPNodeClient, WalletBackend,  WalletConfig};
+	/// # let mut wallet_config = WalletConfig::default();
+	/// # let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
+	/// # let mut wallet:Arc<Mutex<WalletBackend<HTTPNodeClient, ExtKeychain>>> =
+	/// # Arc::new(Mutex::new(
+	/// # 	LMDBBackend::new(wallet_config.clone(), "", node_client).unwrap()
+	/// # ));
+	///
+	/// let mut api_owner = APIOwner::new(wallet.clone());
+	/// let amount = 2_000_000_000;
+	///
+	/// // Attempt to create a transaction using the 'default' account
+	/// let result = api_owner.initiate_tx(
+	///		None,
+	///		amount,     // amount
+	///		10,         // minimum confirmations
+	///		500,        // max outputs
+	///		1,          // num change outputs
+	///		true,       // select all outputs
+	///		Some("Have some Grins. Love, Yeastplume".to_owned()),
+	///	);
+	///
+	/// if let Ok((slate, lock_fn)) = result {
+	///		// Send slate somehow
+	///		// ...
+	///		// Lock our outputs if we're happy the slate was (or is being) sent
+	///		api_owner.tx_lock_outputs(&slate, lock_fn);
+	/// }
+	/// ```
+
 	pub fn initiate_tx(
 		&mut self,
 		src_acct_name: Option<&str>,
