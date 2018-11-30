@@ -37,7 +37,7 @@ use core::ser::{PMMRIndexHashable, PMMRable};
 
 use error::{Error, ErrorKind};
 use grin_store;
-use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
+use grin_store::pmmr::{PMMRBackend, PMMR_FILES, PMMR_LEAF_FILE};
 use grin_store::types::prune_noop;
 use store::{Batch, ChainStore};
 use txhashset::{RewindableKernelView, UTXOView};
@@ -108,6 +108,9 @@ pub struct TxHashSet {
 
 	// chain store used as index of commitments to MMR positions
 	commit_index: Arc<ChainStore>,
+
+	// the root directory of the chain db
+	root_dir : String,
 }
 
 impl TxHashSet {
@@ -154,6 +157,7 @@ impl TxHashSet {
 				None,
 			)?,
 			commit_index,
+			root_dir,
 		})
 	}
 
@@ -311,6 +315,18 @@ impl TxHashSet {
 		batch.commit()?;
 
 		Ok(())
+	}
+
+	pub fn clean_rewind_files(&self) {
+		let mut path = PathBuf::new();
+		path.push(&self.root_dir);
+		path.push(TXHASHSET_SUBDIR);
+		path.push(OUTPUT_SUBDIR);
+		self.clean_rewind_files_given_path(path); 
+	}
+
+	fn clean_rewind_files_given_path(&self, path : PathBuf) {
+
 	}
 }
 
