@@ -501,7 +501,7 @@ where
 		res
 	}
 
-	/// Initiates a new transaction as the sender, creating a new 
+	/// Initiates a new transaction as the sender, creating a new
 	/// [`Slate`](../../libtx/slate/struct.Slate.html) object containing
 	/// the sender's inputs, change outputs, and public signature data. This slate can
 	/// then be sent to the recipient to continue the transaction via the
@@ -521,7 +521,7 @@ where
 	/// # Arguments
 	/// * `src_acct_name` - The human readable account name from which to draw outputs
 	/// for the transaction, overriding whatever the active account is as set via the
-	/// [`set_active_account`](struct.APIOwner.html#method.set_active_account) method. 
+	/// [`set_active_account`](struct.APIOwner.html#method.set_active_account) method.
 	/// If None, the transaction will use the active account.
 	/// * `amount` - The amount to send, in nanogrins. (`1 G = 1_000_000_000nG`)
 	/// * `minimum_confirmations` - The minimum number of confirmations an output
@@ -546,7 +546,7 @@ where
 	/// the convenience of the participants during the exchange; it is not included in the final
 	/// transaction sent to the chain. Validation of this message is optional.
 	///
-	/// # Returns 
+	/// # Returns
 	/// * a result containing:
 	/// * ([`Slate`](../../libtx/slate/struct.Slate.html), lock_function) - A tuple:
 	/// * The transaction Slate, which can be forwarded to the recieving party by any means.
