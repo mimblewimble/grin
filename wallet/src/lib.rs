@@ -30,6 +30,7 @@ extern crate chrono;
 extern crate term;
 extern crate url;
 extern crate uuid;
+extern crate reqwest;
 
 extern crate failure;
 #[macro_use]
