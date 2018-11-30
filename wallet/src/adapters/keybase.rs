@@ -79,7 +79,11 @@ fn read_from_channel(channel: &str, topic: &str) -> Vec<String> {
 
 	let response = api_send(&payload);
 	let mut unread: Vec<String> = Vec::new();
-	for msg in response["result"]["messages"].as_array().unwrap_or(&vec![json!({})]).iter() {
+	for msg in response["result"]["messages"]
+		.as_array()
+		.unwrap_or(&vec![json!({})])
+		.iter()
+	{
 		if (msg["msg"]["content"]["type"] == "text") && (msg["msg"]["unread"] == true) {
 			let message = msg["msg"]["content"]["text"]["body"].as_str().unwrap_or("");
 			unread.push(message.to_owned());
@@ -147,7 +151,7 @@ fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool 
 	let response = api_send(&payload);
 	match response["result"]["message"].as_str() {
 		Some("message sent") => true,
-		_ => false
+		_ => false,
 	}
 }
 
@@ -256,22 +260,23 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 			for (msg, channel) in &unread {
 				let blob = from_str::<Slate>(msg);
 				match blob {
-					Ok(slate) => { 
+					Ok(slate) => {
 						println!("Received message from channel {}", channel);
 						match receive_tx(listen_addr, &slate) {
-						// Reply to the same channel with topic SLATE_SIGNED
-						Ok(signed) => match send(signed, channel, SLATE_SIGNED, TTL) {
-							true => {
-								println!("Returned slate to {}", channel);
+							// Reply to the same channel with topic SLATE_SIGNED
+							Ok(signed) => match send(signed, channel, SLATE_SIGNED, TTL) {
+								true => {
+									println!("Returned slate to {}", channel);
+								}
+								false => {
+									println!("Failed to return slate to {}", channel);
+								}
+							},
+							Err(e) => {
+								println!("Error : {}", e);
 							}
-							false => {
-								println!("Failed to return slate to {}", channel);
-							}
-						},
-						Err(e) => {
-							println!("Error : {}", e);
 						}
-					}},
+					}
 					Err(_) => (),
 				}
 			}
