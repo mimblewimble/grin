@@ -211,7 +211,7 @@ where
 		let w = dest_wallet.unwrap().1.clone();
 		let mut slate = serde_json::from_str(&m.body).unwrap();
 		controller::foreign_single_use(w.clone(), |listener_api| {
-			listener_api.receive_tx(&mut slate, None)?;
+			listener_api.receive_tx(&mut slate, None, None)?;
 			Ok(())
 		})?;
 		Ok(WalletProxyMessage {
@@ -376,11 +376,11 @@ impl WalletCommAdapter for LocalWalletClient {
 
 	fn listen(
 		&self,
-		params: HashMap<String, String>,
-		config: WalletConfig,
-		passphrase: &str,
-		account: &str,
-		node_api_secret: Option<String>,
+		_params: HashMap<String, String>,
+		_config: WalletConfig,
+		_passphrase: &str,
+		_account: &str,
+		_node_api_secret: Option<String>,
 	) -> Result<(), libwallet::Error> {
 		unimplemented!();
 	}

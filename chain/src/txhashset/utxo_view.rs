@@ -15,7 +15,7 @@
 //! Lightweight readonly view into output MMR for convenience.
 
 use core::core::pmmr::ReadonlyPMMR;
-use core::core::{Block, Input, Output, OutputIdentifier, Transaction};
+use core::core::{Block, Input, Output, Transaction};
 
 use error::{Error, ErrorKind};
 use grin_store::pmmr::PMMRBackend;
@@ -23,14 +23,14 @@ use store::Batch;
 
 /// Readonly view of the UTXO set (based on output MMR).
 pub struct UTXOView<'a> {
-	pmmr: ReadonlyPMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
+	pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
 	batch: &'a Batch<'a>,
 }
 
 impl<'a> UTXOView<'a> {
 	/// Build a new UTXO view.
 	pub fn new(
-		pmmr: ReadonlyPMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
+		pmmr: ReadonlyPMMR<'a, Output, PMMRBackend<Output>>,
 		batch: &'a Batch,
 	) -> UTXOView<'a> {
 		UTXOView { pmmr, batch }

@@ -15,9 +15,13 @@
 use clap::ArgMatches;
 use rpassword;
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
+
+use serde_json as json;
 
 use api::TLSConfig;
 use config::GlobalWalletConfig;
@@ -328,7 +332,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				} else {
 					let label = create.unwrap();
 					let res = controller::owner_single_use(wallet, |api| {
-						api.new_account_path(label)?;
+						api.create_account_path(label)?;
 						thread::sleep(Duration::from_millis(200));
 						println!("Account: '{}' Created!", label);
 						Ok(())
@@ -351,6 +355,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						e
 					))
 				})?;
+				let message = match send_args.is_present("message") {
+					true => Some(send_args.value_of("message").unwrap().to_owned()),
+					false => None,
+				};
 				let minimum_confirmations: u64 = send_args
 					.value_of("minimum_confirmations")
 					.ok_or_else(|| {
@@ -413,6 +421,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					max_outputs,
 					change_outputs,
 					selection_strategy == "all",
+					message,
 				);
 				let (mut slate, lock_fn) = match result {
 					Ok(s) => {
@@ -449,18 +458,22 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					slate = adapter.send_tx_sync(dest, &slate)?;
 					if method == "self" {
 						controller::foreign_single_use(wallet, |api| {
-							api.receive_tx(&mut slate, Some(dest))?;
+							api.receive_tx(&mut slate, Some(dest), None)?;
 							Ok(())
 						})?;
 					}
 					api.tx_lock_outputs(&slate, lock_fn)?;
+					if let Err(e) = api.verify_slate_messages(&slate) {
+						error!("Error validating participant messages: {}", e);
+						return Err(e);
+					}
 					api.finalize_tx(&mut slate)?;
 				} else {
 					adapter.send_tx_async(dest, &slate)?;
 					api.tx_lock_outputs(&slate, lock_fn)?;
 				}
 				if adapter.supports_sync() {
-					let result = api.post_tx(&slate, fluff);
+					let result = api.post_tx(&slate.tx, fluff);
 					match result {
 						Ok(_) => {
 							info!("Tx sent",);
@@ -477,6 +490,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			}
 			("receive", Some(send_args)) => {
 				let mut receive_result: Result<(), grin_wallet::libwallet::Error> = Ok(());
+				let message = match send_args.is_present("message") {
+					true => Some(send_args.value_of("message").unwrap().to_owned()),
+					false => None,
+				};
 				let tx_file = send_args.value_of("input").ok_or_else(|| {
 					ErrorKind::GenericError("Transaction file required".to_string())
 				})?;
@@ -488,7 +505,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				let adapter = FileWalletCommAdapter::new();
 				let mut slate = adapter.receive_tx_async(tx_file)?;
 				controller::foreign_single_use(wallet, |api| {
-					api.receive_tx(&mut slate, Some(account))?;
+					api.receive_tx(&mut slate, Some(account), message)?;
 					Ok(())
 				})?;
 				let send_tx = format!("{}.response", tx_file);
@@ -511,9 +528,13 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				}
 				let adapter = FileWalletCommAdapter::new();
 				let mut slate = adapter.receive_tx_async(tx_file)?;
+				if let Err(e) = api.verify_slate_messages(&slate) {
+					error!("Error validating participant messages: {}", e);
+					return Err(e);
+				}
 				let _ = api.finalize_tx(&mut slate).expect("Finalize failed");
 
-				let result = api.post_tx(&slate, fluff);
+				let result = api.post_tx(&slate.tx, fluff);
 				match result {
 					Ok(_) => {
 						info!("Transaction sent successfully, check the wallet again for confirmation.");
@@ -524,24 +545,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						Err(e)
 					}
 				}
-			}
-			("burn", Some(send_args)) => {
-				let amount = send_args
-					.value_of("amount")
-					.expect("Amount to burn required");
-				let amount = core::amount_from_hr_string(amount)
-					.expect("Could not parse amount as number with optional decimal point.");
-				let minimum_confirmations: u64 = send_args
-					.value_of("minimum_confirmations")
-					.unwrap()
-					.parse()
-					.expect("Could not parse minimum_confirmations as a whole number.");
-				let max_outputs = 500;
-				api.issue_burn_tx(amount, minimum_confirmations, max_outputs)
-					.unwrap_or_else(|e| {
-						panic!("Error burning tx: {:?} Config: {:?}", e, wallet_config)
-					});
-				Ok(())
 			}
 			("info", Some(args)) => {
 				let minimum_confirmations: u64 = args
@@ -651,32 +654,33 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 
 				let dump_file = repost_args.value_of("dumpfile");
 				let fluff = repost_args.is_present("fluff");
+				let (_, txs) = api.retrieve_txs(true, Some(tx_id), None)?;
+				let stored_tx = txs[0].get_stored_tx();
+				if stored_tx.is_none() {
+					println!(
+						"Transaction with id {} does not have transaction data. Not reposting.",
+						tx_id
+					);
+					std::process::exit(0);
+				}
 				match dump_file {
 					None => {
-						let result = api.post_stored_tx(tx_id, fluff);
-						match result {
-							Ok(_) => {
-								info!("Reposted transaction at {}", tx_id);
-								Ok(())
-							}
-							Err(e) => {
-								error!("Transaction reposting failed: {}", e);
-								Err(e)
-							}
+						if txs[0].confirmed {
+							println!("Transaction with id {} is confirmed. Not reposting.", tx_id);
+							std::process::exit(0);
 						}
+						api.post_tx(&stored_tx.unwrap(), fluff)?;
+						info!("Reposted transaction at {}", tx_id);
+						println!("Reposted transaction at {}", tx_id);
+						Ok(())
 					}
 					Some(f) => {
-						let result = api.dump_stored_tx(tx_id, true, f);
-						match result {
-							Ok(_) => {
-								warn!("Dumped transaction data for tx {} to {}", tx_id, f);
-								Ok(())
-							}
-							Err(e) => {
-								error!("Transaction reposting failed: {}", e);
-								Err(e)
-							}
-						}
+						let mut tx_file = File::create(f)?;
+						tx_file.write_all(json::to_string(&stored_tx).unwrap().as_bytes())?;
+						tx_file.sync_all()?;
+						info!("Dumped transaction data for tx {} to {}", tx_id, f);
+						println!("Dumped transaction data for tx {} to {}", tx_id, f);
+						Ok(())
 					}
 				}
 			}

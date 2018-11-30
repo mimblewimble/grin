@@ -114,7 +114,7 @@ pub fn pow_size(
 		ctx.set_header_nonce(bh.pre_pow(), None, true)?;
 		if let Ok(proofs) = ctx.find_cycles() {
 			bh.pow.proof = proofs[0].clone();
-			if bh.pow.to_difficulty() >= diff {
+			if bh.pow.to_difficulty(bh.height) >= diff {
 				return Ok(());
 			}
 		}
@@ -153,7 +153,7 @@ mod test {
 			global::min_edge_bits(),
 		).unwrap();
 		assert_ne!(b.header.pow.nonce, 310);
-		assert!(b.header.pow.to_difficulty() >= Difficulty::min());
+		assert!(b.header.pow.to_difficulty(0) >= Difficulty::min());
 		assert!(verify_size(&b.header).is_ok());
 	}
 }

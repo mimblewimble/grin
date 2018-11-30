@@ -140,9 +140,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 
 		// Rewind the hash file accounting for pruned/compacted pos
 		let shift = self.prune_list.get_shift(position);
-		self.hash_file
-			.rewind(position - shift)
-			.map_err(|e| format!("Failed to rewind hash file. {}", e))?;
+		self.hash_file.rewind(position - shift);
 
 		// Rewind the data file accounting for pruned/compacted pos
 		let leaf_shift = self.prune_list.get_leaf_shift(position);
@@ -253,19 +251,16 @@ impl<T: PMMRable> PMMRBackend<T> {
 	/// Syncs all files to disk. A call to sync is required to ensure all the
 	/// data has been successfully written to disk.
 	pub fn sync(&mut self) -> io::Result<()> {
-		self.hash_file.flush()?;
-
-		if let Err(e) = self.data_file.flush() {
-			return Err(io::Error::new(
-				io::ErrorKind::Interrupted,
-				format!("Could not write to log data storage, disk full? {:?}", e),
-			));
-		}
-
-		// Flush the leaf_set to disk.
-		self.leaf_set.flush()?;
-
-		Ok(())
+		self.hash_file
+			.flush()
+			.and(self.data_file.flush())
+			.and(self.leaf_set.flush())
+			.map_err(|e| {
+				io::Error::new(
+					io::ErrorKind::Interrupted,
+					format!("Could not write to state storage, disk full? {:?}", e),
+				)
+			})
 	}
 
 	/// Discard the current, non synced state of the backend.
@@ -275,23 +270,15 @@ impl<T: PMMRable> PMMRBackend<T> {
 		self.data_file.discard();
 	}
 
-	/// Return the data file path
-	pub fn data_file_path(&self) -> String {
-		self.get_data_file_path()
-	}
-
 	/// Takes the leaf_set at a given cutoff_pos and generates an updated
-	/// prune_list. Saves the updated prune_list to disk
-	/// Compacts the hash and data files based on the prune_list and saves both
-	/// to disk.
+	/// prune_list. Saves the updated prune_list to disk, compacts the hash
+	/// and data files based on the prune_list and saves both to disk.
 	///
 	/// A cutoff position limits compaction on recent data.
-	/// This will be the last position of a particular block
-	/// to keep things aligned.
-	/// The block_marker in the db/index for the particular block
-	/// will have a suitable output_pos.
-	/// This is used to enforce a horizon after which the local node
-	/// should have all the data to allow rewinding.
+	/// This will be the last position of a particular block to keep things
+	/// aligned. The block_marker in the db/index for the particular block
+	/// will have a suitable output_pos. This is used to enforce a horizon
+	/// after which the local node should have all the data to allow rewinding.
 	pub fn check_compact<P>(
 		&mut self,
 		cutoff_pos: u64,

@@ -35,7 +35,6 @@ use core::{core, global};
 use p2p;
 use pool;
 use rand::prelude::*;
-use store;
 use util::OneTime;
 
 /// Implementation of the NetAdapter for the . Gets notified when new
@@ -261,33 +260,32 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
-		debug!("locate_headers: {:?}", locator,);
+		debug!("locator: {:?}", locator);
 
 		let header = match self.find_common_header(locator) {
 			Some(header) => header,
 			None => return vec![],
 		};
 
-		debug!("locate_headers: common header: {:?}", header.hash(),);
+		let max_height = self.chain().header_head().unwrap().height;
 
 		// looks like we know one, getting as many following headers as allowed
 		let hh = header.height;
 		let mut headers = vec![];
 		for h in (hh + 1)..(hh + (p2p::MAX_BLOCK_HEADERS as u64)) {
-			let header = self.chain().get_header_by_height(h);
-			match header {
-				Ok(head) => headers.push(head),
-				Err(e) => match e.kind() {
-					chain::ErrorKind::StoreErr(store::Error::NotFoundErr(_), _) => break,
-					_ => {
-						error!("Could not build header locator: {:?}", e);
-						return vec![];
-					}
-				},
+			if h > max_height {
+				break;
+			}
+
+			if let Ok(header) = self.chain().get_header_by_height(h) {
+				headers.push(header);
+			} else {
+				error!("Failed to locate headers successfully.");
+				break;
 			}
 		}
 
-		debug!("locate_headers: returning headers: {}", headers.len(),);
+		debug!("returning headers: {}", headers.len());
 
 		headers
 	}
@@ -408,40 +406,18 @@ impl NetToChainAdapter {
 			.expect("Failed to upgrade weak ref to our chain.")
 	}
 
-	// recursively go back through the locator vector and stop when we find
-	// a header that we recognize this will be a header shared in common
-	// between us and the peer
+	// Find the first locator hash that refers to a known header on our main chain.
 	fn find_common_header(&self, locator: Vec<Hash>) -> Option<BlockHeader> {
-		if locator.len() == 0 {
-			return None;
-		}
-
-		let known = self.chain().get_block_header(&locator[0]);
-
-		match known {
-			Ok(header) => {
-				// even if we know the block, it may not be on our winning chain
-				let known_winning = self.chain().get_header_by_height(header.height);
-				if let Ok(known_winning) = known_winning {
-					if known_winning.hash() != header.hash() {
-						self.find_common_header(locator[1..].to_vec())
-					} else {
-						Some(header)
+		for hash in locator {
+			if let Ok(header) = self.chain().get_block_header(&hash) {
+				if let Ok(header_at_height) = self.chain().get_header_by_height(header.height) {
+					if header.hash() == header_at_height.hash() {
+						return Some(header);
 					}
-				} else {
-					self.find_common_header(locator[1..].to_vec())
 				}
 			}
-			Err(e) => match e.kind() {
-				chain::ErrorKind::StoreErr(store::Error::NotFoundErr(_), _) => {
-					self.find_common_header(locator[1..].to_vec())
-				}
-				_ => {
-					error!("Could not build header locator: {:?}", e);
-					None
-				}
-			},
 		}
+		None
 	}
 
 	// pushing the new block through the chain pipeline

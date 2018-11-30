@@ -171,7 +171,7 @@ where
 		}
 	}
 
-	fn retrieve_outputs(
+	pub fn retrieve_outputs(
 		&self,
 		req: &Request<Body>,
 		api: APIOwner<T, C, K>,
@@ -195,7 +195,7 @@ where
 		api.retrieve_outputs(show_spent, update_from_node, id)
 	}
 
-	fn retrieve_txs(
+	pub fn retrieve_txs(
 		&self,
 		req: &Request<Body>,
 		api: APIOwner<T, C, K>,
@@ -222,36 +222,36 @@ where
 		api.retrieve_txs(update_from_node, tx_id, tx_slate_id)
 	}
 
-	fn dump_stored_tx(
+	pub fn retrieve_stored_tx(
 		&self,
 		req: &Request<Body>,
 		api: APIOwner<T, C, K>,
-	) -> Result<Transaction, Error> {
+	) -> Result<(bool, Option<Transaction>), Error> {
 		let params = parse_params(req);
 		if let Some(id_string) = params.get("id") {
 			match id_string[0].parse() {
-				Ok(id) => match api.dump_stored_tx(id, false, "") {
-					Ok(tx) => Ok(tx),
+				Ok(id) => match api.retrieve_txs(true, Some(id), None) {
+					Ok((_, txs)) => Ok((txs[0].confirmed, txs[0].get_stored_tx())),
 					Err(e) => {
-						error!("dump_stored_tx: failed with error: {}", e);
+						error!("retrieve_stored_tx: failed with error: {}", e);
 						Err(e)
 					}
 				},
 				Err(e) => {
-					error!("dump_stored_tx: could not parse id: {}", e);
+					error!("retrieve_stored_tx: could not parse id: {}", e);
 					Err(ErrorKind::TransactionDumpError(
-						"dump_stored_tx: cannot dump transaction. Could not parse id in request.",
+						"retrieve_stored_tx: cannot dump transaction. Could not parse id in request.",
 					).into())
 				}
 			}
 		} else {
 			Err(ErrorKind::TransactionDumpError(
-				"dump_stored_tx: Cannot dump transaction. Missing id param in request.",
+				"retrieve_stored_tx: Cannot retrieve transaction. Missing id param in request.",
 			).into())
 		}
 	}
 
-	fn retrieve_summary_info(
+	pub fn retrieve_summary_info(
 		&self,
 		req: &Request<Body>,
 		mut api: APIOwner<T, C, K>,
@@ -269,7 +269,7 @@ where
 		api.retrieve_summary_info(update_from_node, minimum_confirmations)
 	}
 
-	fn node_height(
+	pub fn node_height(
 		&self,
 		_req: &Request<Body>,
 		mut api: APIOwner<T, C, K>,
@@ -292,12 +292,12 @@ where
 			"retrieve_summary_info" => json_response(&self.retrieve_summary_info(req, api)?),
 			"node_height" => json_response(&self.node_height(req, api)?),
 			"retrieve_txs" => json_response(&self.retrieve_txs(req, api)?),
-			"dump_stored_tx" => json_response(&self.dump_stored_tx(req, api)?),
+			"retrieve_stored_tx" => json_response(&self.retrieve_stored_tx(req, api)?),
 			_ => response(StatusCode::BAD_REQUEST, ""),
 		})
 	}
 
-	fn issue_send_tx(
+	pub fn issue_send_tx(
 		&self,
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
@@ -310,6 +310,7 @@ where
 				args.max_outputs,
 				args.num_change_outputs,
 				args.selection_strategy_is_use_all,
+				args.message,
 			);
 			let (mut slate, lock_fn) = match result {
 				Ok(s) => {
@@ -339,20 +340,21 @@ where
 			if args.method == "http" {
 				let adapter = HTTPWalletCommAdapter::new();
 				slate = adapter.send_tx_sync(&args.dest, &slate)?;
+				api.tx_lock_outputs(&slate, lock_fn)?;
 				api.finalize_tx(&mut slate)?;
 			} else if args.method == "file" {
 				let adapter = FileWalletCommAdapter::new();
 				adapter.send_tx_async(&args.dest, &slate)?;
+				api.tx_lock_outputs(&slate, lock_fn)?;
 			} else {
 				error!("unsupported payment method: {}", args.method);
 				return Err(ErrorKind::ClientCallback("unsupported payment method"))?;
 			}
-			api.tx_lock_outputs(&slate, lock_fn)?;
 			Ok(slate)
 		}))
 	}
 
-	fn finalize_tx(
+	pub fn finalize_tx(
 		&self,
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
@@ -368,7 +370,7 @@ where
 		)
 	}
 
-	fn cancel_tx(
+	pub fn cancel_tx(
 		&self,
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
@@ -413,7 +415,7 @@ where
 		}
 	}
 
-	fn post_tx(
+	pub fn post_tx(
 		&self,
 		req: Request<Body>,
 		api: APIOwner<T, C, K>,
@@ -437,18 +439,6 @@ where
 				}
 			}),
 		)
-	}
-
-	fn issue_burn_tx(
-		&self,
-		_req: Request<Body>,
-		mut api: APIOwner<T, C, K>,
-	) -> Box<Future<Item = (), Error = Error> + Send> {
-		// TODO: Args
-		Box::new(match api.issue_burn_tx(60, 10, 1000) {
-			Ok(_) => ok(()),
-			Err(e) => err(e),
-		})
 	}
 
 	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
@@ -475,10 +465,6 @@ where
 			),
 			"post_tx" => Box::new(
 				self.post_tx(req, api)
-					.and_then(|_| ok(response(StatusCode::OK, ""))),
-			),
-			"issue_burn_tx" => Box::new(
-				self.issue_burn_tx(req, api)
 					.and_then(|_| ok(response(StatusCode::OK, ""))),
 			),
 			_ => Box::new(err(ErrorKind::GenericError(
@@ -563,7 +549,8 @@ where
 		mut api: APIForeign<T, C, K>,
 	) -> Box<Future<Item = Slate, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(
-			move |mut slate| match api.receive_tx(&mut slate, None) {
+			//TODO: No way to insert a message from the params
+			move |mut slate| match api.receive_tx(&mut slate, None, None) {
 				Ok(_) => ok(slate.clone()),
 				Err(e) => {
 					error!("receive_tx: failed with error: {}", e);

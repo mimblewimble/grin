@@ -110,6 +110,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 			500,    // max outputs
 			1,      // num change outputs
 			true,   // select all outputs
+			None,
 		)?;
 		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
 		sender_api.tx_lock_outputs(&slate, lock_fn)?;
@@ -157,7 +158,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	// post transaction
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		api.post_tx(&slate, false)?;
+		api.post_tx(&slate.tx, false)?;
 		Ok(())
 	})?;
 
@@ -244,6 +245,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 			500,        // max outputs
 			1,          // num change outputs
 			true,       // select all outputs
+			None,
 		)?;
 		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
 		sender_api.finalize_tx(&mut slate)?;
@@ -255,13 +257,12 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 		let (refreshed, _wallet1_info) = sender_api.retrieve_summary_info(true, 1)?;
 		assert!(refreshed);
 		let (_, txs) = sender_api.retrieve_txs(true, None, None)?;
-
 		// find the transaction
 		let tx = txs
 			.iter()
 			.find(|t| t.tx_slate_id == Some(slate.id))
 			.unwrap();
-		sender_api.post_stored_tx(tx.id, false)?;
+		sender_api.post_tx(&tx.get_stored_tx().unwrap(), false)?;
 		let (_, wallet1_info) = sender_api.retrieve_summary_info(true, 1)?;
 		// should be mined now
 		assert_eq!(
@@ -338,6 +339,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 			500,    // max outputs
 			1,      // num change outputs
 			true,   // select all outputs
+			None,
 		)?;
 		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
 		sender_api.finalize_tx(&mut slate)?;

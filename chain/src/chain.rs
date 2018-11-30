@@ -23,11 +23,9 @@ use std::time::{Duration, Instant};
 use util::RwLock;
 
 use lmdb;
-use lru_cache::LruCache;
 
 use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::merkle_proof::MerkleProof;
-use core::core::pmmr;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{
 	Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernelEntry,
@@ -49,9 +47,6 @@ pub const MAX_ORPHAN_SIZE: usize = 200;
 
 /// When evicting, very old orphans are evicted first
 const MAX_ORPHAN_AGE_SECS: u64 = 300;
-
-/// Number of recent hashes we keep to de-duplicate block or header sends
-const HASHES_CACHE_SIZE: usize = 200;
 
 #[derive(Debug, Clone)]
 struct Orphan {
@@ -152,8 +147,6 @@ pub struct Chain {
 	adapter: Arc<ChainAdapter + Send + Sync>,
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
-	// Recently processed blocks to avoid double-processing
-	block_hashes_cache: Arc<RwLock<LruCache<Hash, bool>>>,
 	verifier_cache: Arc<RwLock<VerifierCache>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
@@ -221,7 +214,6 @@ impl Chain {
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			pow_verifier,
 			verifier_cache,
-			block_hashes_cache: Arc::new(RwLock::new(LruCache::new(HASHES_CACHE_SIZE))),
 			archive_mode,
 			genesis: genesis.header.clone(),
 		})
@@ -276,17 +268,8 @@ impl Chain {
 			(maybe_new_head, prev_head)
 		};
 
-		let add_to_hash_cache = |hash: Hash| {
-			// only add to hash cache below if block is definitively accepted
-			// or rejected
-			let mut cache = self.block_hashes_cache.write();
-			cache.insert(hash, true);
-		};
-
 		match maybe_new_head {
 			Ok(head) => {
-				add_to_hash_cache(b.hash());
-
 				let status = self.determine_status(head.clone(), prev_head);
 
 				// notifying other parts of the system of the update
@@ -333,7 +316,6 @@ impl Chain {
 						b.header.height,
 						e
 					);
-					add_to_hash_cache(b.hash());
 					Err(ErrorKind::Other(format!("{:?}", e).to_owned()).into())
 				}
 			},
@@ -377,7 +359,6 @@ impl Chain {
 		Ok(pipe::BlockContext {
 			opts,
 			pow_verifier: self.pow_verifier,
-			block_hashes_cache: self.block_hashes_cache.clone(),
 			verifier_cache: self.verifier_cache.clone(),
 			txhashset,
 			batch,
@@ -762,11 +743,17 @@ impl Chain {
 			);
 		}
 
+		//
+		// TODO - Investigate finding the "common header" by comparing header_mmr and
+		// sync_mmr (bytes will be identical up to the common header).
+		//
 		while let Ok(header) = current {
 			// break out of the while loop when we find a header common
 			// between the header chain and the current body chain
-			if let Ok(_) = self.is_on_current_chain(&header) {
-				break;
+			if header.height <= body_head.height {
+				if let Ok(_) = self.is_on_current_chain(&header) {
+					break;
+				}
 			}
 
 			oldest_height = header.height;
@@ -857,8 +844,6 @@ impl Chain {
 		{
 			let tip = Tip::from_header(&header);
 			batch.save_body_head(&tip)?;
-			batch.save_header_height(&header)?;
-			batch.build_by_height_index(&header, true)?;
 
 			// Reset the body tail to the body head after a txhashset write
 			batch.save_body_tail(&tip)?;
@@ -926,8 +911,11 @@ impl Chain {
 		}
 
 		let mut count = 0;
+
+		let tail = self.get_header_by_height(head.height - horizon)?;
+		let mut current = self.get_header_by_height(head.height - horizon - 1)?;
+
 		let batch = self.store.batch()?;
-		let mut current = batch.get_header_by_height(head.height - horizon - 1)?;
 		loop {
 			// Go to the store directly so we can handle NotFoundErr robustly.
 			match self.store.get_block(&current.hash()) {
@@ -953,7 +941,6 @@ impl Chain {
 				Err(e) => return Err(From::from(e)),
 			}
 		}
-		let tail = batch.get_header_by_height(head.height - horizon)?;
 		batch.save_body_tail(&Tip::from_header(&tail))?;
 		batch.commit()?;
 		debug!(
@@ -1093,9 +1080,14 @@ impl Chain {
 
 	/// Gets the block header at the provided height
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
-		self.store
-			.get_header_by_height(height)
-			.map_err(|e| ErrorKind::StoreErr(e, "chain get header by height".to_owned()).into())
+		let mut txhashset = self.txhashset.write();
+		let mut batch = self.store.batch()?;
+		let header = txhashset::header_extending(&mut txhashset, &mut batch, |extension| {
+			let header = extension.get_header_by_height(height)?;
+			Ok(header)
+		})?;
+
+		Ok(header)
 	}
 
 	/// Gets the block header in which a given output appears in the txhashset
@@ -1136,9 +1128,12 @@ impl Chain {
 	/// Checks the header_by_height index to verify the header is where we say
 	/// it is
 	pub fn is_on_current_chain(&self, header: &BlockHeader) -> Result<(), Error> {
-		self.store
-			.is_on_current_chain(header)
-			.map_err(|e| ErrorKind::StoreErr(e, "chain is_on_current_chain".to_owned()).into())
+		let chain_header = self.get_header_by_height(header.height)?;
+		if chain_header.hash() == header.hash() {
+			Ok(())
+		} else {
+			Err(ErrorKind::Other(format!("not on current chain")).into())
+		}
 	}
 
 	/// Get the tip of the current "sync" header chain.
@@ -1197,10 +1192,9 @@ fn setup_head(
 				// If we have no header MMR then rebuild as necessary.
 				// Supports old nodes with no header MMR.
 				txhashset::header_extending(txhashset, &mut batch, |extension| {
-					let pos = pmmr::insertion_to_pmmr_index(head.height + 1);
-					let needs_rebuild = match extension.get_header_hash(pos) {
-						None => true,
-						Some(hash) => hash != head.last_block_h,
+					let needs_rebuild = match extension.get_header_by_height(head.height) {
+						Ok(header) => header.hash() != head.last_block_h,
+						Err(_) => true,
 					};
 
 					if needs_rebuild {
@@ -1255,7 +1249,6 @@ fn setup_head(
 					// header and try again
 					let prev_header = batch.get_block_header(&head.prev_block_h)?;
 					let _ = batch.delete_block(&header.hash());
-					let _ = batch.setup_height(&prev_header, &head)?;
 					head = Tip::from_header(&prev_header);
 					batch.save_head(&head)?;
 				}
@@ -1269,7 +1262,6 @@ fn setup_head(
 
 			let tip = Tip::from_header(&genesis.header);
 			batch.save_head(&tip)?;
-			batch.setup_height(&genesis.header, &tip)?;
 
 			// Initialize our header MM with the genesis header.
 			txhashset::header_extending(txhashset, &mut batch, |extension| {

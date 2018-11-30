@@ -20,11 +20,9 @@ use util::RwLock;
 use chrono::prelude::Utc;
 use chrono::Duration;
 
-use lru_cache::LruCache;
-
 use chain::OrphanBlockPool;
 use core::consensus;
-use core::core::hash::{Hash, Hashed};
+use core::core::hash::Hashed;
 use core::core::verifier_cache::VerifierCache;
 use core::core::Committed;
 use core::core::{Block, BlockHeader, BlockSums};
@@ -47,9 +45,6 @@ pub struct BlockContext<'a> {
 	pub txhashset: &'a mut txhashset::TxHashSet,
 	/// The active batch to use for block processing.
 	pub batch: store::Batch<'a>,
-
-	/// Recently processed blocks to avoid double-processing
-	pub block_hashes_cache: Arc<RwLock<LruCache<Hash, bool>>>,
 	/// The verifier cache (caching verifier for rangeproofs and kernel signatures)
 	pub verifier_cache: Arc<RwLock<VerifierCache>>,
 	/// Recent orphan blocks to avoid double-processing
@@ -84,7 +79,6 @@ fn process_header_for_block(
 // from cheapest to most expensive (delay hitting the db until last).
 fn check_known(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 	check_known_head(&block.header, ctx)?;
-	check_known_cache(&block.header, ctx)?;
 	check_known_orphans(&block.header, ctx)?;
 	check_known_store(&block.header, ctx)?;
 	Ok(())
@@ -106,6 +100,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 		b.kernels().len(),
 	);
 
+	// Check if we have already processed this block previously.
 	check_known(b, ctx)?;
 
 	// Delay hitting the db for current chain head until we know
@@ -291,17 +286,6 @@ fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), 
 	Ok(())
 }
 
-/// Quick in-memory check to fast-reject any block handled recently.
-/// Keeps duplicates from the network in check.
-/// Checks against the cache of recently processed block hashes.
-fn check_known_cache(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
-	let mut cache = ctx.block_hashes_cache.write();
-	if cache.contains_key(&header.hash()) {
-		return Err(ErrorKind::Unfit("already known in cache".to_string()).into());
-	}
-	Ok(())
-}
-
 /// Check if this block is in the set of known orphans.
 fn check_known_orphans(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
 	if ctx.orphans.contains(&header.hash()) {
@@ -410,7 +394,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 
 		let target_difficulty = header.total_difficulty() - prev.total_difficulty();
 
-		if header.pow.to_difficulty() < target_difficulty {
+		if header.pow.to_difficulty(header.height) < target_difficulty {
 			return Err(ErrorKind::DifficultyTooLow.into());
 		}
 
@@ -537,11 +521,6 @@ fn update_head(b: &Block, ctx: &BlockContext) -> Result<Option<Tip>, Error> {
 	// when extending the head), update it
 	let head = ctx.batch.head()?;
 	if has_more_work(&b.header, &head) {
-		// Update the block height index based on this new head.
-		ctx.batch
-			.setup_height(&b.header, &head)
-			.map_err(|e| ErrorKind::StoreErr(e, "pipe setup height".to_owned()))?;
-
 		let tip = Tip::from_header(&b.header);
 
 		ctx.batch
@@ -601,7 +580,7 @@ pub fn rewind_and_apply_header_fork(
 ) -> Result<(), Error> {
 	let mut fork_hashes = vec![];
 	let mut current = ext.batch.get_previous_header(header)?;
-	while current.height > 0 && !ext.batch.is_on_current_chain(&current).is_ok() {
+	while current.height > 0 && !ext.is_on_current_chain(&current).is_ok() {
 		fork_hashes.push(current.hash());
 		current = ext.batch.get_previous_header(&current)?;
 	}
@@ -632,7 +611,7 @@ pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension) -> Resul
 	// keeping the hashes of blocks along the fork
 	let mut fork_hashes = vec![];
 	let mut current = ext.batch.get_previous_header(&b.header)?;
-	while current.height > 0 && !ext.batch.is_on_current_chain(&current).is_ok() {
+	while current.height > 0 && !ext.is_on_current_chain(&current).is_ok() {
 		fork_hashes.push(current.hash());
 		current = ext.batch.get_previous_header(&current)?;
 	}

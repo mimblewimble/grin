@@ -969,11 +969,12 @@ fn replicate_tx_fluff_failure() {
 			500,    // max outputs
 			1000,   // num change outputs
 			true,   // select all outputs
+			None,
 		)?;
 		slate = client1_w.send_tx_sync(dest, &slate)?;
 		api.finalize_tx(&mut slate)?;
 		api.tx_lock_outputs(&slate, lock_fn)?;
-		api.post_tx(&slate, false)?;
+		api.post_tx(&slate.tx, false)?;
 		Ok(())
 	}).unwrap();
 

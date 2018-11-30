@@ -102,9 +102,9 @@ pub struct TxHashSet {
 	/// via a "sync_extension".
 	sync_pmmr_h: PMMRHandle<BlockHeader>,
 
-	output_pmmr_h: PMMRHandle<OutputIdentifier>,
+	output_pmmr_h: PMMRHandle<Output>,
 	rproof_pmmr_h: PMMRHandle<RangeProof>,
-	kernel_pmmr_h: PMMRHandle<TxKernelEntry>,
+	kernel_pmmr_h: PMMRHandle<TxKernel>,
 
 	// chain store used as index of commitments to MMR positions
 	commit_index: Arc<ChainStore>,
@@ -163,7 +163,7 @@ impl TxHashSet {
 	pub fn is_unspent(&mut self, output_id: &OutputIdentifier) -> Result<(Hash, u64), Error> {
 		match self.commit_index.get_output_pos(&output_id.commit) {
 			Ok(pos) => {
-				let output_pmmr: PMMR<OutputIdentifier, _> =
+				let output_pmmr: PMMR<Output, _> =
 					PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(hash) = output_pmmr.get_hash(pos) {
 					if hash == output_id.hash_with_index(pos - 1) {
@@ -185,7 +185,7 @@ impl TxHashSet {
 	/// TODO: These need to return the actual data from the flat-files instead
 	/// of hashes now
 	pub fn last_n_output(&mut self, distance: u64) -> Vec<(Hash, OutputIdentifier)> {
-		let output_pmmr: PMMR<OutputIdentifier, _> =
+		let output_pmmr: PMMR<Output, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		output_pmmr.get_last_n_insertions(distance)
 	}
@@ -199,9 +199,25 @@ impl TxHashSet {
 
 	/// as above, for kernels
 	pub fn last_n_kernel(&mut self, distance: u64) -> Vec<(Hash, TxKernelEntry)> {
-		let kernel_pmmr: PMMR<TxKernelEntry, _> =
+		let kernel_pmmr: PMMR<TxKernel, _> =
 			PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 		kernel_pmmr.get_last_n_insertions(distance)
+	}
+
+	/// Get the header at the specified height based on the current state of the txhashset.
+	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
+	/// Looks the header up in the db by hash.
+	pub fn get_header_by_height(&mut self, height: u64) -> Result<BlockHeader, Error> {
+		let pos = pmmr::insertion_to_pmmr_index(height + 1);
+
+		let header_pmmr: PMMR<BlockHeader, _> =
+			PMMR::at(&mut self.header_pmmr_h.backend, self.header_pmmr_h.last_pos);
+		if let Some(hash) = header_pmmr.get_data(pos) {
+			let header = self.commit_index.get_block_header(&hash)?;
+			Ok(header)
+		} else {
+			Err(ErrorKind::Other(format!("get header by height")).into())
+		}
 	}
 
 	/// returns outputs from the given insertion (leaf) index up to the
@@ -211,7 +227,7 @@ impl TxHashSet {
 		start_index: u64,
 		max_count: u64,
 	) -> (u64, Vec<OutputIdentifier>) {
-		let output_pmmr: PMMR<OutputIdentifier, _> =
+		let output_pmmr: PMMR<Output, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		output_pmmr.elements_from_insertion_index(start_index, max_count)
 	}
@@ -236,11 +252,11 @@ impl TxHashSet {
 	pub fn roots(&mut self) -> TxHashSetRoots {
 		let header_pmmr: PMMR<BlockHeader, _> =
 			PMMR::at(&mut self.header_pmmr_h.backend, self.header_pmmr_h.last_pos);
-		let output_pmmr: PMMR<OutputIdentifier, _> =
+		let output_pmmr: PMMR<Output, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		let rproof_pmmr: PMMR<RangeProof, _> =
 			PMMR::at(&mut self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
-		let kernel_pmmr: PMMR<TxKernelEntry, _> =
+		let kernel_pmmr: PMMR<TxKernel, _> =
 			PMMR::at(&mut self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 
 		TxHashSetRoots {
@@ -254,7 +270,7 @@ impl TxHashSet {
 	/// build a new merkle proof for the given position
 	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, String> {
 		let pos = self.commit_index.get_output_pos(&commit).unwrap();
-		let output_pmmr: PMMR<OutputIdentifier, _> =
+		let output_pmmr: PMMR<Output, _> =
 			PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 		output_pmmr.merkle_proof(pos)
 	}
@@ -267,7 +283,7 @@ impl TxHashSet {
 
 		// horizon for compacting is based on current_height
 		let horizon = current_height.saturating_sub(global::cut_through_horizon().into());
-		let horizon_header = self.commit_index.get_header_by_height(horizon)?;
+		let horizon_header = self.get_header_by_height(horizon)?;
 
 		let batch = self.commit_index.batch()?;
 
@@ -608,8 +624,32 @@ impl<'a> HeaderExtension<'a> {
 	}
 
 	/// Get the header hash for the specified pos from the underlying MMR backend.
-	pub fn get_header_hash(&self, pos: u64) -> Option<Hash> {
+	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
 		self.pmmr.get_data(pos)
+	}
+
+	/// Get the header at the specified height based on the current state of the header extension.
+	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
+	/// Looks the header up in the db by hash.
+	pub fn get_header_by_height(&mut self, height: u64) -> Result<BlockHeader, Error> {
+		let pos = pmmr::insertion_to_pmmr_index(height + 1);
+		if let Some(hash) = self.get_header_hash(pos) {
+			let header = self.batch.get_block_header(&hash)?;
+			Ok(header)
+		} else {
+			Err(ErrorKind::Other(format!("get header by height")).into())
+		}
+	}
+
+	/// Compares the provided header to the header in the header MMR at that height.
+	/// If these match we know the header is on the current chain.
+	pub fn is_on_current_chain(&mut self, header: &BlockHeader) -> Result<(), Error> {
+		let chain_header = self.get_header_by_height(header.height)?;
+		if chain_header.hash() == header.hash() {
+			Ok(())
+		} else {
+			Err(ErrorKind::Other(format!("not on current chain")).into())
+		}
 	}
 
 	/// Force the rollback of this extension, no matter the result.
@@ -733,9 +773,9 @@ pub struct Extension<'a> {
 	header: BlockHeader,
 
 	header_pmmr: PMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
-	output_pmmr: PMMR<'a, OutputIdentifier, PMMRBackend<OutputIdentifier>>,
+	output_pmmr: PMMR<'a, Output, PMMRBackend<Output>>,
 	rproof_pmmr: PMMR<'a, RangeProof, PMMRBackend<RangeProof>>,
-	kernel_pmmr: PMMR<'a, TxKernelEntry, PMMRBackend<TxKernelEntry>>,
+	kernel_pmmr: PMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
 
 	/// Rollback flag.
 	rollback: bool,
@@ -806,10 +846,13 @@ impl<'a> Extension<'a> {
 		UTXOView::new(self.output_pmmr.readonly_pmmr(), self.batch)
 	}
 
-	// TODO - move this into "utxo_view"
 	/// Verify we are not attempting to spend any coinbase outputs
 	/// that have not sufficiently matured.
-	pub fn verify_coinbase_maturity(&self, inputs: &Vec<Input>, height: u64) -> Result<(), Error> {
+	pub fn verify_coinbase_maturity(
+		&mut self,
+		inputs: &Vec<Input>,
+		height: u64,
+	) -> Result<(), Error> {
 		// Find the greatest output pos of any coinbase
 		// outputs we are attempting to spend.
 		let pos = inputs
@@ -829,7 +872,7 @@ impl<'a> Extension<'a> {
 			// Find the "cutoff" pos in the output MMR based on the
 			// header from 1,000 blocks ago.
 			let cutoff_height = height.checked_sub(global::coinbase_maturity()).unwrap_or(0);
-			let cutoff_header = self.batch.get_header_by_height(cutoff_height)?;
+			let cutoff_header = self.get_header_by_height(cutoff_height)?;
 			let cutoff_pos = cutoff_header.output_mmr_size;
 
 			// If any output pos exceed the cutoff_pos
@@ -924,7 +967,7 @@ impl<'a> Extension<'a> {
 		// push the new output to the MMR.
 		let output_pos = self
 			.output_pmmr
-			.push(OutputIdentifier::from_output(out))
+			.push(out.clone())
 			.map_err(&ErrorKind::TxHashSetErr)?;
 
 		// push the rangeproof to the MMR.
@@ -953,7 +996,7 @@ impl<'a> Extension<'a> {
 	/// Push kernel onto MMR (hash and data files).
 	fn apply_kernel(&mut self, kernel: &TxKernel) -> Result<(), Error> {
 		self.kernel_pmmr
-			.push(TxKernelEntry::from(kernel.clone()))
+			.push(kernel.clone())
 			.map_err(&ErrorKind::TxHashSetErr)?;
 		Ok(())
 	}
@@ -965,7 +1008,35 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	/// TODO - move this into "utxo_view"
+	/// Get the header hash for the specified pos from the underlying MMR backend.
+	fn get_header_hash(&self, pos: u64) -> Option<Hash> {
+		self.header_pmmr.get_data(pos)
+	}
+
+	/// Get the header at the specified height based on the current state of the extension.
+	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
+	/// Looks the header up in the db by hash.
+	pub fn get_header_by_height(&mut self, height: u64) -> Result<BlockHeader, Error> {
+		let pos = pmmr::insertion_to_pmmr_index(height + 1);
+		if let Some(hash) = self.get_header_hash(pos) {
+			let header = self.batch.get_block_header(&hash)?;
+			Ok(header)
+		} else {
+			Err(ErrorKind::Other(format!("get header by height")).into())
+		}
+	}
+
+	/// Compares the provided header to the header in the header MMR at that height.
+	/// If these match we know the header is on the current chain.
+	pub fn is_on_current_chain(&mut self, header: &BlockHeader) -> Result<(), Error> {
+		let chain_header = self.get_header_by_height(header.height)?;
+		if chain_header.hash() == header.hash() {
+			Ok(())
+		} else {
+			Err(ErrorKind::Other(format!("not on current chain")).into())
+		}
+	}
+
 	/// Build a Merkle proof for the given output and the block
 	/// this extension is currently referencing.
 	/// Note: this relies on the MMR being stable even after pruning/compaction.
@@ -1487,9 +1558,6 @@ pub fn input_pos_to_rewind(
 	head_header: &BlockHeader,
 	batch: &Batch,
 ) -> Result<Bitmap, Error> {
-	let mut current = head_header.hash();
-	let mut height = head_header.height;
-
 	if head_header.height < block_header.height {
 		debug!(
 			"input_pos_to_rewind: {} < {}, nothing to rewind",
@@ -1514,21 +1582,19 @@ pub fn input_pos_to_rewind(
 	};
 
 	let mut block_input_bitmaps: Vec<Bitmap> = vec![];
-	let bh = block_header.hash();
 
-	while current != bh {
-		// We cache recent block headers and block_input_bitmaps
-		// internally in our db layer (commit_index).
-		// I/O should be minimized or eliminated here for most
-		// rewind scenarios.
-		if let Ok(b_res) = batch.get_block_input_bitmap(&current) {
-			bitmap_fast_or(Some(b_res), &mut block_input_bitmaps);
-		}
-		if height == 0 {
+	let mut current = head_header.clone();
+	while current.hash() != block_header.hash() {
+		if current.height < 1 {
 			break;
 		}
-		height -= 1;
-		current = batch.get_hash_by_height(height)?;
+
+		// I/O should be minimized or eliminated here for most
+		// rewind scenarios.
+		if let Ok(b_res) = batch.get_block_input_bitmap(&current.hash()) {
+			bitmap_fast_or(Some(b_res), &mut block_input_bitmaps);
+		}
+		current = batch.get_previous_header(&current)?;
 	}
 
 	let bitmap = bitmap_fast_or(None, &mut block_input_bitmaps).unwrap();
