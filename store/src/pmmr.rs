@@ -357,7 +357,16 @@ impl<T: PMMRable> PMMRBackend<T> {
 		// Optimize the bitmap storage in the process.
 		self.leaf_set.flush()?;
 
+		// 7. cleanup rewind files 
+		self.clean_rewind_files()?;
+
 		Ok(true)
+	}
+
+	fn clean_rewind_files(&self) -> io::Result<u32> {
+		let data_dir = self.data_dir.clone();
+		let pattern = format!("{}.", PMMR_LEAF_FILE);
+		clean_files_by_prefix(data_dir, &pattern)
 	}
 
 	fn pos_to_rm(&self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) -> (Bitmap, Bitmap) {
@@ -402,4 +411,61 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 			let (parent_pos, _) = family(*pos as u64);
 			removed.contains(parent_pos as u32)
 		}).collect()
+}
+
+/// Quietly clean a directory up based on a given prefix. Precondition is that path points to a directory.
+/// 
+/// If you have files such as 
+/// ```
+/// foo
+/// foo.1
+/// foo.2
+/// .
+/// .
+/// .
+/// .
+/// .
+/// ```
+/// 
+/// call this function and you will get
+/// 
+/// ```
+/// foo
+/// ```
+/// 
+/// in the directory
+/// 
+/// The return value will be the number of files that were deleted
+/// 
+/// 
+/// 
+/// 
+
+
+
+
+pub fn clean_files_by_prefix<P: AsRef<std::path::Path>>(path : P, prefix_to_delete : &str) -> io::Result<u32> {
+	let mut number_of_files_deleted = 0u32;
+	
+	for possible_dir_entry in fs::read_dir(path)?{ // iterate over the data directory 
+		if let Ok(dir_entry) = possible_dir_entry { // I don't know why rust does this 
+			if let Ok(metadata) = dir_entry.metadata() { // check if the entry is a directory
+				if metadata.is_dir() {
+					continue; // skip directories unconditionally
+				}
+				// todo: check file age and only remove if it is old
+			}
+
+			// match the file name to the path
+			if let Ok(file_name) = dir_entry.file_name().into_string() {
+				if file_name.starts_with(prefix_to_delete) && file_name.len() > prefix_to_delete.len() {
+					if fs::remove_file(dir_entry.path()).is_ok() { // attempt to delete the file
+						number_of_files_deleted += 1; // increment the counter if we were able to delete the file 
+					}
+				}
+			}
+		}
+	}
+
+	Ok(number_of_files_deleted)
 }
