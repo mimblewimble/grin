@@ -730,41 +730,55 @@ fn cleanup_rewind_files_test() {
 	create_numbered_files(&data_dir, expected, prefix_to_delete);
 	create_numbered_files(&data_dir, expected, prefix_to_save);
 
-	// run the cleaner 
+	// run the cleaner
 	let actual = store::pmmr::clean_files_by_prefix(&data_dir, prefix_to_delete).unwrap();
-	assert_eq!(actual, expected, "the clean files by prefix function did not report the correct number of files deleted");
+	assert_eq!(
+		actual, expected,
+		"the clean files by prefix function did not report the correct number of files deleted"
+	);
 
-	// check that the reported number is actually correct, the block is to borrow data_dir for the closure 
+	// check that the reported number is actually correct, the block is to borrow data_dir for the closure
 	{
-		// this function simply counts the number of files in the directory based on the prefix 
+		// this function simply counts the number of files in the directory based on the prefix
 		let count_fn = |prefix| {
 			let mut remaining_count = 0;
 			for entry in fs::read_dir(&data_dir).unwrap() {
-				if entry.unwrap().file_name().into_string().unwrap().starts_with(prefix) {
-					remaining_count += 1; 
+				if entry
+					.unwrap()
+					.file_name()
+					.into_string()
+					.unwrap()
+					.starts_with(prefix)
+				{
+					remaining_count += 1;
 				}
 			}
 			remaining_count
 		};
 
-		
-
-		assert_eq!(count_fn(prefix_to_delete), 0, "it should delete all of the files it is supposed to delete");
-		assert_eq!(count_fn(prefix_to_save), expected, "it should delete none of the files it is not supposed to");
+		assert_eq!(
+			count_fn(prefix_to_delete),
+			0,
+			"it should delete all of the files it is supposed to delete"
+		);
+		assert_eq!(
+			count_fn(prefix_to_save),
+			expected,
+			"it should delete none of the files it is not supposed to"
+		);
 	}
-	
 
-	teardown(data_dir); 
+	teardown(data_dir);
 }
 
-
-fn create_numbered_files(data_dir: &str, num_files : u32, prefix : &str) {
+fn create_numbered_files(data_dir: &str, num_files: u32, prefix: &str) {
 	for rewind_file_num in 0..num_files {
-		let mut file = fs::File::create(std::path::Path::new(&data_dir).join(format!("{}.{}", prefix, rewind_file_num))).unwrap();
-		file.write_all(b"").unwrap(); 
+		let mut file = fs::File::create(
+			std::path::Path::new(&data_dir).join(format!("{}.{}", prefix, rewind_file_num)),
+		).unwrap();
+		file.write_all(b"").unwrap();
 	}
 }
-
 
 fn setup(tag: &str) -> (String, Vec<TestElem>) {
 	match env_logger::try_init() {

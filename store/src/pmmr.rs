@@ -357,7 +357,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		// Optimize the bitmap storage in the process.
 		self.leaf_set.flush()?;
 
-		// 7. cleanup rewind files 
+		// 7. cleanup rewind files
 		self.clean_rewind_files()?;
 
 		Ok(true)
@@ -414,8 +414,8 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 }
 
 /// Quietly clean a directory up based on a given prefix. Precondition is that path points to a directory.
-/// 
-/// If you have files such as 
+///
+/// If you have files such as
 /// ```
 /// foo
 /// foo.1
@@ -426,30 +426,33 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 /// .
 /// .
 /// ```
-/// 
+///
 /// call this function and you will get
-/// 
+///
 /// ```
 /// foo
 /// ```
-/// 
+///
 /// in the directory
-/// 
+///
 /// The return value will be the number of files that were deleted
-/// 
-/// 
-/// 
-/// 
+///
+///
+///
+///
 
-
-
-
-pub fn clean_files_by_prefix<P: AsRef<std::path::Path>>(path : P, prefix_to_delete : &str) -> io::Result<u32> {
+pub fn clean_files_by_prefix<P: AsRef<std::path::Path>>(
+	path: P,
+	prefix_to_delete: &str,
+) -> io::Result<u32> {
 	let mut number_of_files_deleted = 0u32;
-	
-	for possible_dir_entry in fs::read_dir(path)?{ // iterate over the data directory 
-		if let Ok(dir_entry) = possible_dir_entry { // I don't know why rust does this 
-			if let Ok(metadata) = dir_entry.metadata() { // check if the entry is a directory
+
+	for possible_dir_entry in fs::read_dir(path)? {
+		// iterate over the data directory
+		if let Ok(dir_entry) = possible_dir_entry {
+			// I don't know why rust does this
+			if let Ok(metadata) = dir_entry.metadata() {
+				// check if the entry is a directory
 				if metadata.is_dir() {
 					continue; // skip directories unconditionally
 				}
@@ -458,9 +461,12 @@ pub fn clean_files_by_prefix<P: AsRef<std::path::Path>>(path : P, prefix_to_dele
 
 			// match the file name to the path
 			if let Ok(file_name) = dir_entry.file_name().into_string() {
-				if file_name.starts_with(prefix_to_delete) && file_name.len() > prefix_to_delete.len() {
-					if fs::remove_file(dir_entry.path()).is_ok() { // attempt to delete the file
-						number_of_files_deleted += 1; // increment the counter if we were able to delete the file 
+				if file_name.starts_with(prefix_to_delete)
+					&& file_name.len() > prefix_to_delete.len()
+				{
+					if fs::remove_file(dir_entry.path()).is_ok() {
+						// attempt to delete the file
+						number_of_files_deleted += 1; // increment the counter if we were able to delete the file
 					}
 				}
 			}
