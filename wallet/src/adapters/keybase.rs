@@ -14,10 +14,10 @@
 
 // Keybase Wallet Plugin
 
+use controller;
 use failure::ResultExt;
 use libtx::slate::Slate;
 use libwallet::{Error, ErrorKind};
-use controller;
 use serde::Serialize;
 use serde_json::{from_str, to_string, Value};
 use std::collections::{HashMap, HashSet};
@@ -25,7 +25,7 @@ use std::process::{Command, Stdio};
 use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use {WalletCommAdapter, WalletConfig, instantiate_wallet};
+use {instantiate_wallet, WalletCommAdapter, WalletConfig};
 
 const TTL: u16 = 60; // TODO: Pass this as a parameter
 const SLEEP_DURATION: Duration = Duration::from_millis(5000);
@@ -220,9 +220,9 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 		account: &str,
 		node_api_secret: Option<String>,
 	) -> Result<(), Error> {
-
-		let wallet = instantiate_wallet(config.clone(), passphrase, account, node_api_secret.clone())
-		.context(ErrorKind::WalletSeedDecryption)?;
+		let wallet =
+			instantiate_wallet(config.clone(), passphrase, account, node_api_secret.clone())
+				.context(ErrorKind::WalletSeedDecryption)?;
 
 		println!("Listening for messages via keybase chat...");
 		loop {
