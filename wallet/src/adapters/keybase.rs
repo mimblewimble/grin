@@ -14,9 +14,10 @@
 
 // Keybase Wallet Plugin
 
+use failure::ResultExt;
 use libtx::slate::Slate;
 use libwallet::{Error, ErrorKind};
-use reqwest;
+use controller;
 use serde::Serialize;
 use serde_json::{from_str, to_string, Value};
 use std::collections::{HashMap, HashSet};
@@ -24,7 +25,7 @@ use std::process::{Command, Stdio};
 use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use {WalletCommAdapter, WalletConfig};
+use {WalletCommAdapter, WalletConfig, instantiate_wallet};
 
 const TTL: u16 = 60; // TODO: Pass this as a parameter
 const SLEEP_DURATION: Duration = Duration::from_millis(5000);
@@ -180,39 +181,6 @@ fn poll(nseconds: u64, channel: &str) -> Option<Slate> {
 	None
 }
 
-/// Send a received slate to grin foreign api for signing and return the response.
-pub fn receive_tx(host: &str, slate: &Slate) -> Result<Slate, Error> {
-	let url = format!("http://{}/v1/wallet/foreign/receive_tx", host);
-	println!{"Signing slate.."};
-	let client: reqwest::Client = reqwest::Client::new();
-	let mut res = match client.post(&url).json(&slate).send() {
-		Ok(r) => r,
-		Err(_) => {
-			return Err(ErrorKind::WalletComms(format!(
-				"Could not connect to {}",
-				url
-			)))?
-		}
-	};
-	let txt = match res.text() {
-		Ok(text) => text,
-		Err(_) => return Err(ErrorKind::WalletComms(format!("Bad response from {}", url)))?,
-	};
-
-	if !res.status().is_success() {
-		return Err(ErrorKind::WalletComms(format!(
-			"Status code {} with reason {}",
-			res.status().as_u16(),
-			txt
-		)))?;
-	}
-	let v = match from_str::<Slate>(&txt) {
-		Ok(json) => json,
-		Err(_) => return Err(ErrorKind::Format)?,
-	};
-	Ok(v)
-}
-
 impl WalletCommAdapter for KeybaseWalletCommAdapter {
 	fn supports_sync(&self) -> bool {
 		true
@@ -246,13 +214,16 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 	#[allow(unreachable_code)]
 	fn listen(
 		&self,
-		params: HashMap<String, String>,
-		_config: WalletConfig,
-		_passphrase: &str,
-		_account: &str,
-		_node_api_secret: Option<String>,
+		_params: HashMap<String, String>,
+		config: WalletConfig,
+		passphrase: &str,
+		account: &str,
+		node_api_secret: Option<String>,
 	) -> Result<(), Error> {
-		let listen_addr = params.get("api_listen_addr").unwrap();
+
+		let wallet = instantiate_wallet(config.clone(), passphrase, account, node_api_secret.clone())
+		.context(ErrorKind::WalletSeedDecryption)?;
+
 		println!("Listening for messages via keybase chat...");
 		loop {
 			// listen for messages from all channels with topic SLATE_NEW
@@ -260,11 +231,14 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 			for (msg, channel) in &unread {
 				let blob = from_str::<Slate>(msg);
 				match blob {
-					Ok(slate) => {
+					Ok(mut slate) => {
 						println!("Received message from channel {}", channel);
-						match receive_tx(listen_addr, &slate) {
+						match controller::foreign_single_use(wallet.clone(), |api| {
+							api.receive_tx(&mut slate, None, None)?;
+							Ok(())
+						}) {
 							// Reply to the same channel with topic SLATE_SIGNED
-							Ok(signed) => match send(signed, channel, SLATE_SIGNED, TTL) {
+							Ok(_) => match send(slate, channel, SLATE_SIGNED, TTL) {
 								true => {
 									println!("Returned slate to {}", channel);
 								}
