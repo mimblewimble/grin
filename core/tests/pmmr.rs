@@ -281,7 +281,7 @@ fn pmmr_push_root() {
 	let mut pmmr = PMMR::new(&mut ba);
 
 	// one element
-	pmmr.push(elems[0]).unwrap();
+	pmmr.push(&elems[0]).unwrap();
 	pmmr.dump(false);
 	let pos_0 = elems[0].hash_with_index(0);
 	assert_eq!(pmmr.peaks(), vec![pos_0]);
@@ -289,7 +289,7 @@ fn pmmr_push_root() {
 	assert_eq!(pmmr.unpruned_size(), 1);
 
 	// two elements
-	pmmr.push(elems[1]).unwrap();
+	pmmr.push(&elems[1]).unwrap();
 	pmmr.dump(false);
 	let pos_1 = elems[1].hash_with_index(1);
 	let pos_2 = (pos_0, pos_1).hash_with_index(2);
@@ -298,7 +298,7 @@ fn pmmr_push_root() {
 	assert_eq!(pmmr.unpruned_size(), 3);
 
 	// three elements
-	pmmr.push(elems[2]).unwrap();
+	pmmr.push(&elems[2]).unwrap();
 	pmmr.dump(false);
 	let pos_3 = elems[2].hash_with_index(3);
 	assert_eq!(pmmr.peaks(), vec![pos_2, pos_3]);
@@ -306,7 +306,7 @@ fn pmmr_push_root() {
 	assert_eq!(pmmr.unpruned_size(), 4);
 
 	// four elements
-	pmmr.push(elems[3]).unwrap();
+	pmmr.push(&elems[3]).unwrap();
 	pmmr.dump(false);
 	let pos_4 = elems[3].hash_with_index(4);
 	let pos_5 = (pos_3, pos_4).hash_with_index(5);
@@ -316,7 +316,7 @@ fn pmmr_push_root() {
 	assert_eq!(pmmr.unpruned_size(), 7);
 
 	// five elements
-	pmmr.push(elems[4]).unwrap();
+	pmmr.push(&elems[4]).unwrap();
 	pmmr.dump(false);
 	let pos_7 = elems[4].hash_with_index(7);
 	assert_eq!(pmmr.peaks(), vec![pos_6, pos_7]);
@@ -324,7 +324,7 @@ fn pmmr_push_root() {
 	assert_eq!(pmmr.unpruned_size(), 8);
 
 	// six elements
-	pmmr.push(elems[5]).unwrap();
+	pmmr.push(&elems[5]).unwrap();
 	let pos_8 = elems[5].hash_with_index(8);
 	let pos_9 = (pos_7, pos_8).hash_with_index(9);
 	assert_eq!(pmmr.peaks(), vec![pos_6, pos_9]);
@@ -332,7 +332,7 @@ fn pmmr_push_root() {
 	assert_eq!(pmmr.unpruned_size(), 10);
 
 	// seven elements
-	pmmr.push(elems[6]).unwrap();
+	pmmr.push(&elems[6]).unwrap();
 	let pos_10 = elems[6].hash_with_index(10);
 	assert_eq!(pmmr.peaks(), vec![pos_6, pos_9, pos_10]);
 	assert_eq!(
@@ -343,7 +343,7 @@ fn pmmr_push_root() {
 
 	// 001001200100123
 	// eight elements
-	pmmr.push(elems[7]).unwrap();
+	pmmr.push(&elems[7]).unwrap();
 	let pos_11 = elems[7].hash_with_index(11);
 	let pos_12 = (pos_10, pos_11).hash_with_index(12);
 	let pos_13 = (pos_9, pos_12).hash_with_index(13);
@@ -353,7 +353,7 @@ fn pmmr_push_root() {
 	assert_eq!(pmmr.unpruned_size(), 15);
 
 	// nine elements
-	pmmr.push(elems[8]).unwrap();
+	pmmr.push(&elems[8]).unwrap();
 	let pos_15 = elems[8].hash_with_index(15);
 	assert_eq!(pmmr.peaks(), vec![pos_14, pos_15]);
 	assert_eq!(pmmr.root(), (pos_14, pos_15).hash_with_index(16));
@@ -381,29 +381,29 @@ fn pmmr_get_last_n_insertions() {
 	let res = pmmr.get_last_n_insertions(19);
 	assert!(res.len() == 0);
 
-	pmmr.push(elems[0]).unwrap();
+	pmmr.push(&elems[0]).unwrap();
 	let res = pmmr.get_last_n_insertions(19);
 	assert!(res.len() == 1);
 
-	pmmr.push(elems[1]).unwrap();
+	pmmr.push(&elems[1]).unwrap();
 
 	let res = pmmr.get_last_n_insertions(12);
 	assert!(res.len() == 2);
 
-	pmmr.push(elems[2]).unwrap();
+	pmmr.push(&elems[2]).unwrap();
 
 	let res = pmmr.get_last_n_insertions(2);
 	assert!(res.len() == 2);
 
-	pmmr.push(elems[3]).unwrap();
+	pmmr.push(&elems[3]).unwrap();
 
 	let res = pmmr.get_last_n_insertions(19);
 	assert!(res.len() == 4);
 
-	pmmr.push(elems[5]).unwrap();
-	pmmr.push(elems[6]).unwrap();
-	pmmr.push(elems[7]).unwrap();
-	pmmr.push(elems[8]).unwrap();
+	pmmr.push(&elems[5]).unwrap();
+	pmmr.push(&elems[6]).unwrap();
+	pmmr.push(&elems[7]).unwrap();
+	pmmr.push(&elems[8]).unwrap();
 
 	let res = pmmr.get_last_n_insertions(7);
 	assert!(res.len() == 7);
@@ -430,7 +430,7 @@ fn pmmr_prune() {
 	{
 		let mut pmmr = PMMR::new(&mut ba);
 		for elem in &elems[..] {
-			pmmr.push(*elem).unwrap();
+			pmmr.push(elem).unwrap();
 		}
 		orig_root = pmmr.root();
 		sz = pmmr.unpruned_size();
@@ -523,7 +523,7 @@ fn check_elements_from_insertion_index() {
 	let mut ba = VecBackend::new();
 	let mut pmmr = PMMR::new(&mut ba);
 	for x in 1..1000 {
-		pmmr.push(TestElem([0, 0, 0, x])).unwrap();
+		pmmr.push(&TestElem([0, 0, 0, x])).unwrap();
 	}
 	// Normal case
 	let res = pmmr.elements_from_insertion_index(1, 100);

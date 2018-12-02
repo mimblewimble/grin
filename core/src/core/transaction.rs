@@ -192,8 +192,8 @@ impl Readable for TxKernel {
 impl PMMRable for TxKernel {
 	type E = TxKernelEntry;
 
-	fn as_elmt(self) -> Self::E {
-		self.into()
+	fn as_elmt(&self) -> TxKernelEntry {
+		TxKernelEntry::from_kernel(self)
 	}
 }
 
@@ -260,6 +260,9 @@ impl TxKernel {
 }
 
 /// Wrapper around a tx kernel used when maintaining them in the MMR.
+/// These will be useful once we implement relative lockheights via relative kernels
+/// as a kernel may have an optional rel_kernel but we will not want to store these
+/// directly in the kernel MMR.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TxKernelEntry {
 	/// The underlying tx kernel.
@@ -304,6 +307,13 @@ impl TxKernelEntry {
 	/// Verify the underlying tx kernel.
 	pub fn verify(&self) -> Result<(), Error> {
 		self.kernel.verify()
+	}
+
+	/// Build a new tx kernel entry from a kernel.
+	pub fn from_kernel(kernel: &TxKernel) -> TxKernelEntry {
+		TxKernelEntry {
+			kernel: kernel.clone(),
+		}
 	}
 }
 
@@ -1151,8 +1161,8 @@ impl Readable for Output {
 impl PMMRable for Output {
 	type E = OutputIdentifier;
 
-	fn as_elmt(self) -> Self::E {
-		self.into()
+	fn as_elmt(&self) -> OutputIdentifier {
+		OutputIdentifier::from_output(self)
 	}
 }
 

@@ -515,8 +515,8 @@ impl FixedLength for RangeProof {
 impl PMMRable for RangeProof {
 	type E = Self;
 
-	fn as_elmt(self) -> Self::E {
-		self
+	fn as_elmt(&self) -> Self::E {
+		self.clone()
 	}
 }
 
@@ -695,7 +695,7 @@ pub trait PMMRable: Writeable + Clone + Debug {
 	type E: FixedLength + Readable + Writeable;
 
 	/// Convert the pmmrable into the element to be stored in the MMR data file.
-	fn as_elmt(self) -> Self::E;
+	fn as_elmt(&self) -> Self::E;
 }
 
 /// Generic trait to ensure PMMR elements can be hashed with an index

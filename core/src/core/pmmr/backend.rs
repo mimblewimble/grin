@@ -27,7 +27,7 @@ pub trait Backend<T: PMMRable> {
 	/// associated data element to flatfile storage (for leaf nodes only). The
 	/// position of the first element of the Vec in the MMR is provided to
 	/// help the implementation.
-	fn append(&mut self, data: T, hashes: Vec<Hash>) -> Result<(), String>;
+	fn append(&mut self, data: &T, hashes: Vec<Hash>) -> Result<(), String>;
 
 	/// Rewind the backend state to a previous position, as if all append
 	/// operations after that had been canceled. Expects a position in the PMMR
