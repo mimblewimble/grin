@@ -63,7 +63,7 @@ fn api_send(payload: &str) -> Value {
 	response
 }
 
-/// Get all unread messages from a specific channel and mark as read.
+/// Get all unread messages from a specific channel/topic and mark as read.
 fn read_from_channel(channel: &str, topic: &str) -> Vec<String> {
 	let payload = to_string(&json!({
         "method": "read",
@@ -71,9 +71,9 @@ fn read_from_channel(channel: &str, topic: &str) -> Vec<String> {
             "options": {
                 "channel": {
                         "name": channel, "topic_type": "dev", "topic_name": topic
-                    }
+                    },
+					"unread_only": true, "peek": false
                 },
-                "unread_only": true, "peek": false
             }
         }
     )).unwrap();
@@ -100,9 +100,7 @@ fn get_unread(topic: &str) -> HashMap<String, String> {
         "params": {
             "options": {
                     "topic_type": "dev",
-					"topic_name": topic
                 },
-                "unread_only": true, "peek": false
             }
         }
     )).unwrap();
@@ -116,7 +114,7 @@ fn get_unread(topic: &str) -> HashMap<String, String> {
 		.unwrap_or(&vec![json!({})])
 		.iter()
 	{
-		if msg["unread"] == true {
+		if (msg["unread"] == true) && (msg["channel"]["topic_name"] == topic) {
 			let channel = msg["channel"]["name"].as_str().unwrap();
 			channels.insert(channel.to_string());
 		}
@@ -193,6 +191,7 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 			true => (),
 			false => return Err(ErrorKind::ClientCallback("Posting transaction slate"))?,
 		}
+		println!("Sent new slate to {}", addr);
 		// Wait for response from recipient with SLATE_SIGNED topic
 		match poll(TTL as u64, addr) {
 			Some(slate) => return Ok(slate),
