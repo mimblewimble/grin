@@ -15,6 +15,7 @@
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_libtx as libtx;
 extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
@@ -35,7 +36,7 @@ use std::time::Duration;
 use core::global;
 use core::global::ChainTypes;
 use keychain::{ExtKeychain, Identifier, Keychain};
-use wallet::libtx::slate::Slate;
+use libtx::slate::Slate;
 use wallet::libwallet;
 use wallet::libwallet::types::AcctPathMapping;
 
