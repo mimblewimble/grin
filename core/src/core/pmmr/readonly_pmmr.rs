@@ -16,6 +16,7 @@
 
 use std::marker;
 
+use core::hash::Hash;
 use core::pmmr::{is_leaf, Backend};
 use ser::PMMRable;
 
@@ -68,6 +69,19 @@ where
 		} else {
 			// If we are not a leaf then return None as only leaves have data.
 			None
+		}
+	}
+
+	/// Get the hash at provided position in the MMR.
+	pub fn get_hash(&self, pos: u64) -> Option<Hash> {
+		if pos > self.last_pos {
+			None
+		} else if is_leaf(pos) {
+			// If we are a leaf then get hash from the backend.
+			self.backend.get_hash(pos)
+		} else {
+			// If we are not a leaf get hash ignoring the remove log.
+			self.backend.get_from_file(pos)
 		}
 	}
 }
