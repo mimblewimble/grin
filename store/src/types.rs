@@ -16,12 +16,103 @@ use memmap;
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter, ErrorKind, Read, Write};
+use std::marker;
 
 use core::core::hash::Hash;
-use core::ser::{self, FixedLength};
+use core::ser::{self, FixedLength, PMMRable};
 
 /// A no-op function for doing nothing with some pruned data.
 pub fn prune_noop(_pruned_data: &[u8]) {}
+
+/// Data file (MMR) wrapper around an append only file.
+pub struct DataFile<T> {
+	file: AppendOnlyFile,
+	_marker: marker::PhantomData<T>,
+}
+
+impl<T: PMMRable> DataFile<T> {
+	/// Open (or create) a hash file at the provided path on disk.
+	pub fn open(path: &str) -> io::Result<DataFile<T>> {
+		let file = AppendOnlyFile::open(path)?;
+		Ok(DataFile {
+			file,
+			_marker: marker::PhantomData,
+		})
+	}
+
+	/// Append a hash to this hash file.
+	/// Will not be written to disk until flush() is subsequently called.
+	/// Alternatively discard() may be called to discard any pending changes.
+	pub fn append(&mut self, data: &T) -> io::Result<()> {
+		let mut bytes =
+			ser::ser_vec(&data.as_elmt()).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+		self.file.append(&mut bytes);
+		Ok(())
+	}
+
+	/// Read a hash from the hash file by position.
+	pub fn read(&self, position: u64) -> Option<T::E> {
+		// The MMR starts at 1, our binary backend starts at 0.
+		let pos = position - 1;
+
+		// Must be on disk, doing a read at the correct position
+		let file_offset = (pos as usize) * T::E::LEN;
+		let data = self.file.read(file_offset, T::E::LEN);
+		match ser::deserialize(&mut &data[..]) {
+			Ok(x) => Some(x),
+			Err(e) => {
+				error!(
+					"Corrupted storage, could not read an entry from data file: {:?}",
+					e
+				);
+				None
+			}
+		}
+	}
+
+	/// Rewind the backend file to the specified position.
+	pub fn rewind(&mut self, position: u64) {
+		self.file.rewind(position * T::E::LEN as u64)
+	}
+
+	/// Flush unsynced changes to the hash file to disk.
+	pub fn flush(&mut self) -> io::Result<()> {
+		self.file.flush()
+	}
+
+	/// Discard any unsynced changes to the hash file.
+	pub fn discard(&mut self) {
+		self.file.discard()
+	}
+
+	/// Size of the hash file in number of hashes (not bytes).
+	pub fn size(&self) -> u64 {
+		self.file.size() / T::E::LEN as u64
+	}
+
+	/// Size of the unsync'd hash file, in hashes (not bytes).
+	pub fn size_unsync(&self) -> u64 {
+		self.file.size_unsync() / T::E::LEN as u64
+	}
+
+	/// Path of the underlying file
+	pub fn path(&self) -> &str {
+		self.file.path()
+	}
+
+	/// Rewrite the hash file out to disk, pruning removed hashes.
+	pub fn save_prune<F>(&self, target: String, prune_offs: &[u64], prune_cb: F) -> io::Result<()>
+	where
+		F: Fn(&[u8]),
+	{
+		let prune_offs = prune_offs
+			.iter()
+			.map(|x| x * T::E::LEN as u64)
+			.collect::<Vec<_>>();
+		self.file
+			.save_prune(target, prune_offs.as_slice(), T::E::LEN as u64, prune_cb)
+	}
+}
 
 /// Hash file (MMR) wrapper around an append only file.
 pub struct HashFile {
@@ -147,8 +238,8 @@ impl AppendOnlyFile {
 
 	/// Append data to the file. Until the append-only file is synced, data is
 	/// only written to memory.
-	pub fn append(&mut self, buf: &mut Vec<u8>) {
-		self.buffer.append(buf);
+	pub fn append(&mut self, bytes: &mut [u8]) {
+		self.buffer.extend_from_slice(bytes);
 	}
 
 	/// Rewinds the data file back to a lower position. The new position needs
@@ -219,31 +310,29 @@ impl AppendOnlyFile {
 
 	/// Read length bytes of data at offset from the file.
 	/// Leverages the memory map.
-	pub fn read(&self, offset: usize, length: usize) -> Vec<u8> {
+	pub fn read(&self, offset: usize, length: usize) -> &[u8] {
 		if offset >= self.buffer_start {
 			let buffer_offset = offset - self.buffer_start;
 			return self.read_from_buffer(buffer_offset, length);
 		}
-		if self.mmap.is_none() {
-			return vec![];
+		if let Some(mmap) = &self.mmap {
+			if mmap.len() < (offset + length) {
+				return &mmap[..0];
+			}
+			&mmap[offset..(offset + length)]
+		} else {
+			return &self.buffer[..0];
 		}
-		let mmap = self.mmap.as_ref().unwrap();
-
-		if mmap.len() < (offset + length) {
-			return vec![];
-		}
-
-		(&mmap[offset..(offset + length)]).to_vec()
 	}
 
 	// Read length bytes from the buffer, from offset.
 	// Return empty vec if we do not have enough bytes in the buffer to read a full
 	// vec.
-	fn read_from_buffer(&self, offset: usize, length: usize) -> Vec<u8> {
+	fn read_from_buffer(&self, offset: usize, length: usize) -> &[u8] {
 		if self.buffer.len() < (offset + length) {
-			vec![]
+			&self.buffer[..0]
 		} else {
-			self.buffer[offset..(offset + length)].to_vec()
+			&self.buffer[offset..(offset + length)]
 		}
 	}
 
@@ -313,7 +402,7 @@ impl AppendOnlyFile {
 	}
 
 	/// Path of the underlying file
-	pub fn path(&self) -> String {
-		self.path.clone()
+	pub fn path(&self) -> &str {
+		&self.path
 	}
 }
