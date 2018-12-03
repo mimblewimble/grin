@@ -22,9 +22,7 @@ use core::core;
 use keychain;
 
 use error::{Error, ErrorKind};
-use {
-	controller, display, libwallet, HTTPNodeClient, WalletInst,
-};
+use {controller, display, libwallet, HTTPNodeClient, WalletInst};
 use {FileWalletCommAdapter, HTTPWalletCommAdapter, NullWalletCommAdapter};
 
 type WalletRef = Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>>;
@@ -181,4 +179,3 @@ pub fn receive(wallet: WalletRef, g_args: &GlobalArgs, args: ReceiveArgs) -> Res
 	);
 	Ok(())
 }
-

@@ -327,9 +327,12 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				Ok(())
 			}
 			("receive", Some(send_args)) => {
-				command::receive(wallet.clone(), &global_wallet_args, wallet_args::parse_receive_args(&send_args));
+				command::receive(
+					wallet.clone(),
+					&global_wallet_args,
+					wallet_args::parse_receive_args(&send_args),
+				);
 				Ok(())
-
 			}
 			("finalize", Some(send_args)) => {
 				let fluff = send_args.is_present("fluff");
