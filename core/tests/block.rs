@@ -16,7 +16,7 @@ extern crate chrono;
 extern crate grin_core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
-extern crate grin_wallet as wallet;
+extern crate grin_libtx as libtx;
 
 use std::sync::Arc;
 use std::time::Instant;
@@ -36,7 +36,7 @@ use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFe
 use grin_core::{global, ser};
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use util::secp;
-use wallet::libtx::build::{self, input, output, with_fee};
+use libtx::build::{self, input, output, with_fee};
 
 fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
 	Arc::new(RwLock::new(LruVerifierCache::new()))

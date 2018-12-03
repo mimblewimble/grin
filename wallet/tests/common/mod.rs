@@ -17,6 +17,7 @@ extern crate failure;
 extern crate grin_api as api;
 extern crate grin_chain as chain;
 extern crate grin_core as core;
+extern crate grin_libtx as libtx;
 extern crate grin_keychain as keychain;
 extern crate grin_wallet as wallet;
 extern crate serde_json;

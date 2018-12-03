@@ -16,7 +16,7 @@
 extern crate grin_core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
-extern crate grin_wallet as wallet;
+extern crate grin_libtx as libtx;
 
 use std::sync::Arc;
 use util::RwLock;
@@ -32,7 +32,7 @@ use grin_core::core::{aggregate, deaggregate, KernelFeatures, Output, Transactio
 use grin_core::ser;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use util::static_secp_instance;
-use wallet::libtx::build::{
+use libtx::build::{
 	self, initial_tx, input, output, with_excess, with_fee, with_lock_height,
 };
 

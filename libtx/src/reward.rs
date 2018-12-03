@@ -17,12 +17,12 @@
 use keychain::{Identifier, Keychain};
 
 use aggsig;
-use proof;
 use core::consensus::reward;
 use core::core::transaction::kernel_sig_msg;
 use core::core::KernelFeatures;
 use core::core::{Output, OutputFeatures, TxKernel};
 use error::Error;
+use proof;
 use util::static_secp_instance;
 
 /// output a reward output

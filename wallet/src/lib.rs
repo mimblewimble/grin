@@ -43,6 +43,7 @@ extern crate tokio_retry;
 extern crate grin_api as api;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_libtx as libtx;
 extern crate grin_store as store;
 extern crate grin_util as util;
 
@@ -50,7 +51,6 @@ mod adapters;
 pub mod controller;
 pub mod display;
 mod error;
-pub mod libtx;
 pub mod libwallet;
 pub mod lmdb_wallet;
 mod node_clients;

@@ -14,6 +14,7 @@
 //! libtx specific tests
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
+extern crate grin_libtx as libtx;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
 
@@ -24,7 +25,7 @@ use core::core::transaction::kernel_sig_msg;
 use keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
 use util::secp;
 use util::secp::key::{PublicKey, SecretKey};
-use wallet::libtx::{aggsig, proof};
+use libtx::{aggsig, proof};
 use wallet::libwallet::types::Context;
 use wallet::{EncryptedWalletSeed, WalletSeed};
 

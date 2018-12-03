@@ -26,10 +26,10 @@
 //!   with_fee(1)])
 
 use aggsig;
-use proof;
 use core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
-use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use error::Error;
+use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
+use proof;
 
 /// Context information available to transaction combinators.
 pub struct Context<'a, K: 'a>
