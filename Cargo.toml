@@ -11,7 +11,7 @@ exclude = ["**/*.grin", "**/*.grin2"]
 build = "src/build/build.rs"
 
 [workspace]
-members = ["api", "chain", "config", "core", "keychain", "p2p", "servers", "store", "util", "pool", "wallet"]
+members = ["api", "chain", "config", "core", "keychain", "libtx", "p2p", "servers", "store", "util", "pool", "wallet"]
 
 [[bin]]
 name = "grin"
@@ -35,6 +35,7 @@ grin_api = { path = "./api", version = "0.4.2" }
 grin_config = { path = "./config", version = "0.4.2" }
 grin_core = { path = "./core", version = "0.4.2" }
 grin_keychain = { path = "./keychain", version = "0.4.2" }
+grin_libtx = { path = "./libtx", version = "0.4.2" }
 grin_p2p = { path = "./p2p", version = "0.4.2" }
 grin_servers = { path = "./servers", version = "0.4.2" }
 grin_util = { path = "./util", version = "0.4.2" }

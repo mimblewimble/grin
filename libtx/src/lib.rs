@@ -21,6 +21,22 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
+extern crate blake2_rfc as blake2;
+extern crate failure;
+#[macro_use]
+extern crate failure_derive;
+#[macro_use]
+extern crate log;
+extern crate rand;
+extern crate serde;
+#[macro_use]
+extern crate serde_derive;
+extern crate uuid;
+
+extern crate grin_core as core;
+extern crate grin_keychain as keychain;
+extern crate grin_util as util;
+
 pub mod aggsig;
 pub mod build;
 mod error;
@@ -31,7 +47,7 @@ pub mod slate;
 use core::consensus;
 use core::core::Transaction;
 
-pub use libtx::error::{Error, ErrorKind};
+pub use error::{Error, ErrorKind};
 
 const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
 

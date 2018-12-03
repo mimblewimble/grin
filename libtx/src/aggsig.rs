@@ -17,7 +17,7 @@
 //! [Rust Aggsig library](https://github.com/mimblewimble/rust-secp256k1-zkp/blob/master/src/aggsig.rs)
 
 use keychain::{BlindingFactor, Identifier, Keychain};
-use libtx::error::{Error, ErrorKind};
+use error::{Error, ErrorKind};
 use util::secp::key::{PublicKey, SecretKey};
 use util::secp::pedersen::Commitment;
 use util::secp::{self, aggsig, Message, Secp256k1, Signature};

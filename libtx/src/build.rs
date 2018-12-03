@@ -25,10 +25,11 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
+use aggsig;
+use proof;
 use core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
-use libtx::Error;
-use libtx::{aggsig, proof};
+use error::Error;
 
 /// Context information available to transaction combinators.
 pub struct Context<'a, K: 'a>

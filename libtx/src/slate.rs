@@ -19,13 +19,15 @@ use rand::thread_rng;
 use std::sync::Arc;
 use uuid::Uuid;
 
+use aggsig;
+use build;
+use tx_fee;
 use core::core::committed::Committed;
 use core::core::transaction::kernel_sig_msg;
 use core::core::verifier_cache::LruVerifierCache;
 use core::core::{amount_to_hr_string, Transaction};
 use keychain::{BlindSum, BlindingFactor, Keychain};
-use libtx::error::{Error, ErrorKind};
-use libtx::{aggsig, build, tx_fee};
+use error::{Error, ErrorKind};
 
 use util::secp;
 use util::secp::key::{PublicKey, SecretKey};

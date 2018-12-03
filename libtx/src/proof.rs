@@ -15,8 +15,8 @@
 //! Rangeproof library functions
 
 use blake2;
+use error::{Error, ErrorKind};
 use keychain::{Identifier, Keychain};
-use libtx::error::{Error, ErrorKind};
 use util::secp::key::SecretKey;
 use util::secp::pedersen::{Commitment, ProofInfo, ProofMessage, RangeProof};
 use util::secp::{self, Secp256k1};
