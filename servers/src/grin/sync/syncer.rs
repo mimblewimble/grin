@@ -198,8 +198,6 @@ impl SyncRunner {
 					ch.height,
 					ch.last_block_h
 				);
-
-				let _ = self.chain.reset_head();
 				is_syncing = false;
 			}
 		} else {

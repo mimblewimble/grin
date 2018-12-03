@@ -215,11 +215,6 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		if let &Err(ref e) = &res {
 			debug!("Block header {} refused by chain: {:?}", bhash, e.kind());
 			if e.is_bad_data() {
-				debug!(
-					"header_received: {} is a bad header, resetting header head",
-					bhash
-				);
-				let _ = self.chain().reset_head();
 				return false;
 			} else {
 				// we got an error when trying to process the block header
@@ -444,13 +439,7 @@ impl NetToChainAdapter {
 				true
 			}
 			Err(ref e) if e.is_bad_data() => {
-				debug!("process_block: {} is a bad block, resetting head", bhash);
-				let _ = self.chain().reset_head();
-
-				// we potentially changed the state of the system here
-				// so check everything is still ok
 				self.validate_chain(bhash);
-
 				false
 			}
 			Err(e) => {
@@ -486,9 +475,9 @@ impl NetToChainAdapter {
 		// We are out of consensus at this point and want to track the problem
 		// down as soon as possible.
 		// Skip this if we are currently syncing (too slow).
-		if self.chain().head().unwrap().height > 0
+		if self.config.chain_validation_mode == ChainValidationMode::EveryBlock
+			&& self.chain().head().unwrap().height > 0
 			&& !self.sync_state.is_syncing()
-			&& self.config.chain_validation_mode == ChainValidationMode::EveryBlock
 		{
 			let now = Instant::now();
 

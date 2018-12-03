@@ -1014,14 +1014,6 @@ impl Chain {
 		self.orphans.len()
 	}
 
-	/// Reset header_head and sync_head to head of current body chain
-	pub fn reset_head(&self) -> Result<(), Error> {
-		let batch = self.store.batch()?;
-		batch.reset_head()?;
-		batch.commit()?;
-		Ok(())
-	}
-
 	/// Tip (head) of the block chain.
 	pub fn head(&self) -> Result<Tip, Error> {
 		self.store
@@ -1159,14 +1151,6 @@ impl Chain {
 			.block_exists(&h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain block exists".to_owned()).into())
 	}
-
-	/// Reset sync_head to the provided head.
-	pub fn reset_sync_head(&self, head: &Tip) -> Result<(), Error> {
-		let batch = self.store.batch()?;
-		batch.save_sync_head(head)?;
-		batch.commit()?;
-		Ok(())
-	}
 }
 
 fn setup_head(
@@ -1296,7 +1280,8 @@ fn setup_head(
 			head.last_block_h,
 			head.height,
 		);
-		batch.reset_head()?;
+		batch.reset_header_head()?;
+		batch.reset_sync_head()?;
 	}
 
 	batch.commit()?;
