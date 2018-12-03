@@ -26,8 +26,8 @@ use core::global;
 use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller};
 use grin_wallet::{
-	command, instantiate_wallet, HTTPNodeClient, HTTPWalletCommAdapter,
-	LMDBBackend, WalletConfig, WalletSeed,
+	command, instantiate_wallet, HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend, WalletConfig,
+	WalletSeed,
 };
 use keychain;
 use servers::start_webwallet_server;

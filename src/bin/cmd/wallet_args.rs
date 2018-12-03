@@ -158,10 +158,12 @@ pub fn parse_receive_args(receive_args: &ArgMatches) -> command::ReceiveArgs {
 
 pub fn parse_finalize_args(args: &ArgMatches) -> command::FinalizeArgs {
 	let fluff = args.is_present("fluff");
-	let tx_file = args.value_of("input").ok_or_else(|| {
-		println!("Receiver's transaction file required");
-		std::process::exit(0);
-	}).unwrap();
+	let tx_file = args
+		.value_of("input")
+		.ok_or_else(|| {
+			println!("Receiver's transaction file required");
+			std::process::exit(0);
+		}).unwrap();
 	if !Path::new(&tx_file).is_file() {
 		println!("File {} not found.", tx_file);
 		std::process::exit(0);
@@ -183,7 +185,7 @@ pub fn parse_info_args(args: &ArgMatches) -> command::InfoArgs {
 					"Could not parse minimum_confirmations as a whole number. e={:?}",
 					e
 				);
-			std::process::exit(0);
+				std::process::exit(0);
 			})
 		});
 	command::InfoArgs {
@@ -202,9 +204,7 @@ pub fn parse_txs_args(args: &ArgMatches) -> command::TxsArgs {
 			}
 		},
 	};
-	command::TxsArgs {
-		id: tx_id,
-	}
+	command::TxsArgs { id: tx_id }
 }
 
 pub fn parse_repost_args(args: &ArgMatches) -> command::RepostArgs {
@@ -244,10 +244,7 @@ pub fn parse_cancel_args(args: &ArgMatches) -> command::CancelArgs {
 				Some(t)
 			}
 			Err(e) => {
-				println!(
-					"Could not parse id parameter. e={:?}",
-					e,
-				);
+				println!("Could not parse id parameter. e={:?}", e,);
 				std::process::exit(0);
 			}
 		},
@@ -260,20 +257,13 @@ pub fn parse_cancel_args(args: &ArgMatches) -> command::CancelArgs {
 				Some(t)
 			}
 			Err(e) => {
-				println!(
-					"Could not parse txid parameter. e={:?}",
-					e,
-				);
+				println!("Could not parse txid parameter. e={:?}", e,);
 				std::process::exit(0);
 			}
 		},
 	};
-	if (tx_id.is_none() && tx_slate_id.is_none())
-		|| (tx_id.is_some() && tx_slate_id.is_some())
-	{
-		println!(
-			"'id' (-i) or 'txid' (-t) argument is required."
-		);
+	if (tx_id.is_none() && tx_slate_id.is_none()) || (tx_id.is_some() && tx_slate_id.is_some()) {
+		println!("'id' (-i) or 'txid' (-t) argument is required.");
 		std::process::exit(0);
 	}
 	command::CancelArgs {
