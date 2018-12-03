@@ -416,7 +416,7 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 /// Quietly clean a directory up based on a given prefix. Precondition is that path points to a directory.
 ///
 /// If you have files such as
-/// ```
+/// ```text
 /// foo
 /// foo.1
 /// foo.2
@@ -429,7 +429,7 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 ///
 /// call this function and you will get
 ///
-/// ```
+/// ```text
 /// foo
 /// ```
 ///
