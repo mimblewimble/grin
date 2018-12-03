@@ -20,6 +20,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
+use std::sync::Arc;
+use util::Mutex;
 
 use serde_json as json;
 
@@ -30,7 +32,7 @@ use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
 	instantiate_wallet, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend,
-	NullWalletCommAdapter, WalletConfig, WalletSeed,
+	NullWalletCommAdapter, WalletConfig, WalletSeed, command
 };
 use keychain;
 use servers::start_webwallet_server;
@@ -41,6 +43,25 @@ pub fn _init_wallet_seed(wallet_config: WalletConfig, password: &str) {
 		WalletSeed::init_file(&wallet_config, 32, password)
 			.expect("Failed to create wallet seed file.");
 	};
+}
+
+fn create_wallet(config: WalletConfig) ->
+	Result<Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>>, Error> {
+	let wallet = instantiate_wallet(
+		wallet_config.clone(),
+		&passphrase,
+		account,
+		node_api_secret.clone(),
+	).unwrap_or_else(|e| {
+		if e.kind() == grin_wallet::ErrorKind::Encryption {
+			println!("Error decrypting wallet seed (check provided password)");
+			std::process::exit(0);
+		}
+		panic!(
+			"Error creating wallet {:?} Config: {:?}",
+			e, wallet_config
+		);
+	});
 }
 
 pub fn seed_exists(wallet_config: WalletConfig) -> bool {
@@ -316,176 +337,20 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {
 			("account", Some(acct_args)) => {
-				let create = acct_args.value_of("create");
-				if create.is_none() {
-					let res = controller::owner_single_use(wallet, |api| {
-						let acct_mappings = api.accounts()?;
-						// give logging thread a moment to catch up
-						thread::sleep(Duration::from_millis(200));
-						display::accounts(acct_mappings);
-						Ok(())
-					});
-					if let Err(e) = res {
-						error!("Error listing accounts: {}", e);
-						return Err(e);
-					}
-				} else {
-					let label = create.unwrap();
-					let res = controller::owner_single_use(wallet, |api| {
-						api.create_account_path(label)?;
-						thread::sleep(Duration::from_millis(200));
-						println!("Account: '{}' Created!", label);
-						Ok(())
-					});
-					if let Err(e) = res {
-						thread::sleep(Duration::from_millis(200));
-						error!("Error creating account '{}': {}", label, e);
-						return Err(e);
-					}
-				}
+				command::account(wallet, acct_args.value_of("create"));
 				Ok(())
 			}
 			("send", Some(send_args)) => {
-				let amount = send_args.value_of("amount").ok_or_else(|| {
-					ErrorKind::GenericError("Amount to send required".to_string())
-				})?;
-				let amount = core::amount_from_hr_string(amount).map_err(|e| {
-					ErrorKind::GenericError(format!(
-						"Could not parse amount as a number with optional decimal point. e={:?}",
-						e
-					))
-				})?;
-				let message = match send_args.is_present("message") {
-					true => Some(send_args.value_of("message").unwrap().to_owned()),
-					false => None,
-				};
-				let minimum_confirmations: u64 = send_args
-					.value_of("minimum_confirmations")
-					.ok_or_else(|| {
-						ErrorKind::GenericError(
-							"Minimum confirmations to send required".to_string(),
-						)
-					}).and_then(|v| {
-						v.parse().map_err(|e| {
-							ErrorKind::GenericError(format!(
-								"Could not parse minimum_confirmations as a whole number. e={:?}",
-								e
-							))
-						})
-					})?;
-				let selection_strategy =
-					send_args.value_of("selection_strategy").ok_or_else(|| {
-						ErrorKind::GenericError("Selection strategy required".to_string())
-					})?;
-				let method = send_args.value_of("method").ok_or_else(|| {
-					ErrorKind::GenericError("Payment method required".to_string())
-				})?;
-				let dest = {
-					if method == "self" {
-						match send_args.value_of("dest") {
-							Some(d) => d,
-							None => "default",
-						}
-					} else {
-						send_args.value_of("dest").ok_or_else(|| {
-							ErrorKind::GenericError(
-								"Destination wallet address required".to_string(),
-							)
-						})?
-					}
-				};
-				let change_outputs = send_args
-					.value_of("change_outputs")
-					.ok_or_else(|| ErrorKind::GenericError("Change outputs required".to_string()))
-					.and_then(|v| {
-						v.parse().map_err(|e| {
-							ErrorKind::GenericError(format!(
-								"Failed to parse number of change outputs. e={:?}",
-								e
-							))
-						})
-					})?;
-				let fluff = send_args.is_present("fluff");
-				let max_outputs = 500;
-				if method == "http" && !dest.starts_with("http://") && !dest.starts_with("https://")
-				{
-					return Err(ErrorKind::GenericError(format!(
-						"HTTP Destination should start with http://: or https://: {}",
-						dest
-					)).into());
-				}
-				let result = api.initiate_tx(
-					None,
-					amount,
-					minimum_confirmations,
-					max_outputs,
-					change_outputs,
-					selection_strategy == "all",
-					message,
-				);
-				let (mut slate, lock_fn) = match result {
-					Ok(s) => {
-						info!(
-							"Tx created: {} grin to {} (strategy '{}')",
-							core::amount_to_hr_string(amount, false),
-							dest,
-							selection_strategy,
-						);
-						s
-					}
-					Err(e) => {
-						error!("Tx not created: {}", e);
-						match e.kind() {
-							// user errors, don't backtrace
-							libwallet::ErrorKind::NotEnoughFunds { .. } => {}
-							libwallet::ErrorKind::FeeDispute { .. } => {}
-							libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
-							_ => {
-								// otherwise give full dump
-								error!("Backtrace: {}", e.backtrace().unwrap());
-							}
-						};
-						return Err(e);
-					}
-				};
-				let adapter = match method {
-					"http" => HTTPWalletCommAdapter::new(),
-					"file" => FileWalletCommAdapter::new(),
-					"self" => NullWalletCommAdapter::new(),
-					_ => NullWalletCommAdapter::new(),
-				};
-				if adapter.supports_sync() {
-					slate = adapter.send_tx_sync(dest, &slate)?;
-					if method == "self" {
-						controller::foreign_single_use(wallet, |api| {
-							api.receive_tx(&mut slate, Some(dest), None)?;
-							Ok(())
-						})?;
-					}
-					api.tx_lock_outputs(&slate, lock_fn)?;
-					if let Err(e) = api.verify_slate_messages(&slate) {
-						error!("Error validating participant messages: {}", e);
-						return Err(e);
-					}
-					api.finalize_tx(&mut slate)?;
-				} else {
-					adapter.send_tx_async(dest, &slate)?;
-					api.tx_lock_outputs(&slate, lock_fn)?;
-				}
-				if adapter.supports_sync() {
-					let result = api.post_tx(&slate.tx, fluff);
-					match result {
-						Ok(_) => {
-							info!("Tx sent",);
-							println!("Tx sent",);
-							return Ok(());
-						}
-						Err(e) => {
-							error!("Tx not sent: {}", e);
-							return Err(e);
-						}
-					}
-				}
+				command::send(
+					wallet,
+					send_args.value_of("amount"),
+					send_args.value_of("message"),
+					send_args.value_of("minimum_confirmations"),
+					send_args.value_of("selection_strategy"),
+					send_args.value_of("method"),
+					send_args.value_of("dest"),
+					send_args.value_of("change_outputs"),
+					send_args.is_present("fluff"));
 				Ok(())
 			}
 			("receive", Some(send_args)) => {
