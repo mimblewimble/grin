@@ -13,14 +13,14 @@
 
 //! Implementation of the persistent Backend for the prunable MMR tree.
 
-use std::{fs, io, marker};
+use std::{fs, io};
 
 use croaring::Bitmap;
 
 use core::core::hash::{Hash, Hashed};
 use core::core::pmmr::{self, family, Backend};
 use core::core::BlockHeader;
-use core::ser::{self, FixedLength, PMMRable};
+use core::ser::PMMRable;
 use leaf_set::LeafSet;
 use prune_list::PruneList;
 use types::{prune_noop, DataFile, HashFile};
@@ -134,8 +134,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		// Rewind the data file accounting for pruned/compacted pos
 		let flatfile_pos = pmmr::n_leaves(position);
 		let leaf_shift = self.prune_list.get_leaf_shift(position);
-		let file_pos = (flatfile_pos - leaf_shift);
-		self.data_file.rewind(file_pos);
+		self.data_file.rewind(flatfile_pos - leaf_shift);
 
 		Ok(())
 	}
