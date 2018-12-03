@@ -438,7 +438,7 @@ impl Chain {
 	/// current chain state, specifically the current winning (valid, most
 	/// work) fork.
 	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Hash, Error> {
-		let mut txhashset = self.txhashset.write();
+		let txhashset = self.txhashset.read();
 		let res = txhashset.is_unspent(output_ref);
 		match res {
 			Err(e) => Err(e),
@@ -1096,7 +1096,7 @@ impl Chain {
 		output_ref: &OutputIdentifier,
 	) -> Result<BlockHeader, Error> {
 		let pos = {
-			let mut txhashset = self.txhashset.write();
+			let txhashset = self.txhashset.read();
 			let (_, pos) = txhashset.is_unspent(output_ref)?;
 			pos
 		};
