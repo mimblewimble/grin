@@ -346,7 +346,6 @@ Send a transaction either directly by http or file (then display the slate)
     | max_outputs                   | number   | Max number of outputs                |
     | num_change_outputs            | number   | Number of change outputs to generate |
     | selection_strategy_is_use_all | bool     | Whether to use all outputs (combine) |
-    | fluff                         | bool     | Dandelion control                    |
 
 * **Success Response:**
 
