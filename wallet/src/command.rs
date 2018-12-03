@@ -12,11 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+/// Grin wallet command-line function implementations
+use std::fs::File;
+use std::io::Write;
 use std::sync::Arc;
-/// Grin wallet command-line function implementation
 use std::thread;
 use std::time::Duration;
 use util::Mutex;
+
+use serde_json as json;
+use uuid::Uuid;
 
 use core::core;
 use keychain;
@@ -30,6 +35,7 @@ type WalletRef = Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>>;
 /// Arguments common to all wallet commands
 pub struct GlobalArgs {
 	pub account: String,
+	pub show_spent: bool,
 }
 
 /// Arguments for account command
@@ -177,5 +183,185 @@ pub fn receive(wallet: WalletRef, g_args: &GlobalArgs, args: ReceiveArgs) -> Res
 		"Response file {}.response generated, sending it back to the transaction originator.",
 		args.input
 	);
+	Ok(())
+}
+
+/// Finalize command args
+pub struct FinalizeArgs {
+	pub input: String,
+	pub fluff: bool,
+}
+
+pub fn finalize(wallet: WalletRef, args: FinalizeArgs) -> Result<(), Error> {
+	let adapter = FileWalletCommAdapter::new();
+	let mut slate = adapter.receive_tx_async(&args.input)?;
+	controller::owner_single_use(wallet.clone(), |api| {
+		if let Err(e) = api.verify_slate_messages(&slate) {
+			error!("Error validating participant messages: {}", e);
+			return Err(e);
+		}
+		let _ = api.finalize_tx(&mut slate).expect("Finalize failed");
+
+		let result = api.post_tx(&slate.tx, args.fluff);
+		match result {
+			Ok(_) => {
+				info!("Transaction sent successfully, check the wallet again for confirmation.");
+				Ok(())
+			}
+			Err(e) => {
+				error!("Tx not sent: {}", e);
+				Err(e)
+			}
+		}
+	})?;
+	Ok(())
+}
+
+/// Info command args
+pub struct InfoArgs {
+	pub minimum_confirmations: u64,
+}
+
+pub fn info(
+	wallet: WalletRef,
+	g_args: &GlobalArgs,
+	args: InfoArgs,
+	dark_scheme: bool,
+) -> Result<(), Error> {
+	controller::owner_single_use(wallet.clone(), |api| {
+		let (validated, wallet_info) =
+			api.retrieve_summary_info(true, args.minimum_confirmations)?;
+		display::info(&g_args.account, &wallet_info, validated, dark_scheme);
+		Ok(())
+	})?;
+	Ok(())
+}
+
+pub fn outputs(wallet: WalletRef, g_args: &GlobalArgs, dark_scheme: bool) -> Result<(), Error> {
+	controller::owner_single_use(wallet.clone(), |api| {
+		let (height, _) = api.node_height()?;
+		let (validated, outputs) = api.retrieve_outputs(g_args.show_spent, true, None)?;
+		display::outputs(&g_args.account, height, validated, outputs, dark_scheme)?;
+		Ok(())
+	})?;
+	Ok(())
+}
+
+/// Txs command args
+pub struct TxsArgs {
+	pub id: Option<u32>,
+}
+
+pub fn txs(
+	wallet: WalletRef,
+	g_args: &GlobalArgs,
+	args: TxsArgs,
+	dark_scheme: bool,
+) -> Result<(), Error> {
+	controller::owner_single_use(wallet.clone(), |api| {
+		let (height, _) = api.node_height()?;
+		let (validated, txs) = api.retrieve_txs(true, args.id, None)?;
+		let include_status = !args.id.is_some();
+		display::txs(
+			&g_args.account,
+			height,
+			validated,
+			txs,
+			include_status,
+			dark_scheme,
+		)?;
+		// if given a particular transaction id, also get and display associated
+		// inputs/outputs
+		if args.id.is_some() {
+			let (_, outputs) = api.retrieve_outputs(true, false, args.id)?;
+			display::outputs(&g_args.account, height, validated, outputs, dark_scheme)?;
+		};
+		Ok(())
+	})?;
+	Ok(())
+}
+
+/// Repost
+pub struct RepostArgs {
+	pub id: u32,
+	pub dump_file: Option<String>,
+	pub fluff: bool,
+}
+
+pub fn repost(wallet: WalletRef, args: RepostArgs) -> Result<(), Error> {
+	controller::owner_single_use(wallet.clone(), |api| {
+		let (_, txs) = api.retrieve_txs(true, Some(args.id), None)?;
+		let stored_tx = txs[0].get_stored_tx();
+		if stored_tx.is_none() {
+			error!(
+				"Transaction with id {} does not have transaction data. Not reposting.",
+				args.id
+			);
+			return Ok(());
+		}
+		match args.dump_file {
+			None => {
+				if txs[0].confirmed {
+					error!(
+						"Transaction with id {} is confirmed. Not reposting.",
+						args.id
+					);
+					return Ok(());
+				}
+				api.post_tx(&stored_tx.unwrap(), args.fluff)?;
+				info!("Reposted transaction at {}", args.id);
+				return Ok(());
+			}
+			Some(f) => {
+				let mut tx_file = File::create(f.clone())?;
+				tx_file.write_all(json::to_string(&stored_tx).unwrap().as_bytes())?;
+				tx_file.sync_all()?;
+				info!("Dumped transaction data for tx {} to {}", args.id, f);
+				return Ok(());
+			}
+		}
+	})?;
+	Ok(())
+}
+
+/// Cancel
+pub struct CancelArgs {
+	pub tx_id: Option<u32>,
+	pub tx_slate_id: Option<Uuid>,
+	pub tx_id_string: String,
+}
+
+pub fn cancel(wallet: WalletRef, args: CancelArgs) -> Result<(), Error> {
+	controller::owner_single_use(wallet.clone(), |api| {
+		let result = api.cancel_tx(args.tx_id, args.tx_slate_id);
+		match result {
+			Ok(_) => {
+				info!("Transaction {} Cancelled", args.tx_id_string);
+				Ok(())
+			}
+			Err(e) => {
+				error!("TX Cancellation failed: {}", e);
+				Err(e)
+			}
+		}
+	})?;
+	Ok(())
+}
+
+pub fn restore(wallet: WalletRef) -> Result<(), Error> {
+	controller::owner_single_use(wallet.clone(), |api| {
+		let result = api.restore();
+		match result {
+			Ok(_) => {
+				info!("Wallet restore complete",);
+				Ok(())
+			}
+			Err(e) => {
+				error!("Wallet restore failed: {}", e);
+				error!("Backtrace: {}", e.backtrace().unwrap());
+				Err(e)
+			}
+		}
+	})?;
 	Ok(())
 }

@@ -15,22 +15,18 @@
 use clap::ArgMatches;
 use rpassword;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
-
-use serde_json as json;
 
 use super::wallet_args;
 use api::TLSConfig;
 use config::GlobalWalletConfig;
 use core::global;
 use grin_wallet::libwallet::ErrorKind;
-use grin_wallet::{self, controller, display};
+use grin_wallet::{self, controller};
 use grin_wallet::{
-	command, instantiate_wallet, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter,
+	command, instantiate_wallet, HTTPNodeClient, HTTPWalletCommAdapter,
 	LMDBBackend, WalletConfig, WalletSeed,
 };
 use keychain;
@@ -102,10 +98,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	let mut show_spent = false;
-	if wallet_args.is_present("show_spent") {
-		show_spent = true;
-	}
 	let node_api_secret = get_first_line(wallet_config.node_api_secret_path.clone());
 
 	let global_wallet_args = wallet_args::parse_global_args(&wallet_args);
@@ -316,265 +308,48 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		);
 	});
 
-	let res = controller::owner_single_use(wallet.clone(), |api| {
-		match wallet_args.subcommand() {
-			("account", Some(acct_args)) => {
-				command::account(wallet.clone(), wallet_args::parse_account_args(&acct_args));
-				Ok(())
-			}
-			("send", Some(send_args)) => {
-				command::send(wallet.clone(), wallet_args::parse_send_args(&send_args));
-				Ok(())
-			}
-			("receive", Some(send_args)) => {
-				command::receive(
-					wallet.clone(),
-					&global_wallet_args,
-					wallet_args::parse_receive_args(&send_args),
-				);
-				Ok(())
-			}
-			("finalize", Some(send_args)) => {
-				let fluff = send_args.is_present("fluff");
-				let tx_file = send_args.value_of("input").ok_or_else(|| {
-					ErrorKind::GenericError("Receiver's transaction file required".to_string())
-				})?;
-				if !Path::new(tx_file).is_file() {
-					return Err(
-						ErrorKind::GenericError(format!("File {} not found.", tx_file)).into(),
-					);
-				}
-				let adapter = FileWalletCommAdapter::new();
-				let mut slate = adapter.receive_tx_async(tx_file)?;
-				if let Err(e) = api.verify_slate_messages(&slate) {
-					error!("Error validating participant messages: {}", e);
-					return Err(e);
-				}
-				let _ = api.finalize_tx(&mut slate).expect("Finalize failed");
-
-				let result = api.post_tx(&slate.tx, fluff);
-				match result {
-					Ok(_) => {
-						info!("Transaction sent successfully, check the wallet again for confirmation.");
-						Ok(())
-					}
-					Err(e) => {
-						error!("Tx not sent: {}", e);
-						Err(e)
-					}
-				}
-			}
-			("info", Some(args)) => {
-				let minimum_confirmations: u64 = args
-					.value_of("minimum_confirmations")
-					.ok_or_else(|| {
-						ErrorKind::GenericError("Minimum confirmations required".to_string())
-					}).and_then(|v| {
-						v.parse().map_err(|e| {
-							ErrorKind::GenericError(format!(
-								"Could not parse minimum_confirmations as a whole number. e={:?}",
-								e
-							))
-						})
-					})?;
-				let (validated, wallet_info) = api
-					.retrieve_summary_info(true, minimum_confirmations)
-					.map_err(|e| {
-						ErrorKind::GenericError(format!(
-							"Error getting wallet info: {:?} Config: {:?}",
-							e, wallet_config
-						))
-					})?;
-				display::info(
-					account,
-					&wallet_info,
-					validated,
-					wallet_config.dark_background_color_scheme.unwrap_or(true),
-				);
-				Ok(())
-			}
-			("outputs", Some(_)) => {
-				let (height, _) = api.node_height()?;
-				let (validated, outputs) = api.retrieve_outputs(show_spent, true, None)?;
-				display::outputs(
-					account,
-					height,
-					validated,
-					outputs,
-					wallet_config.dark_background_color_scheme.unwrap_or(true),
-				).map_err(|e| {
-					ErrorKind::GenericError(format!(
-						"Error getting wallet outputs: {:?} Config: {:?}",
-						e, wallet_config
-					))
-				})?;
-				Ok(())
-			}
-			("txs", Some(txs_args)) => {
-				let tx_id = match txs_args.value_of("id") {
-					None => None,
-					Some(tx) => match tx.parse() {
-						Ok(t) => Some(t),
-						Err(_) => {
-							return Err(ErrorKind::GenericError(
-								"Unable to parse argument 'id' as a number".to_string(),
-							).into());
-						}
-					},
-				};
-				let (height, _) = api.node_height()?;
-				let (validated, txs) = api.retrieve_txs(true, tx_id, None)?;
-				let include_status = !tx_id.is_some();
-				display::txs(
-					account,
-					height,
-					validated,
-					txs,
-					include_status,
-					wallet_config.dark_background_color_scheme.unwrap_or(true),
-				).map_err(|e| {
-					ErrorKind::GenericError(format!(
-						"Error getting wallet outputs: {} Config: {:?}",
-						e, wallet_config
-					))
-				})?;
-				// if given a particular transaction id, also get and display associated
-				// inputs/outputs
-				if tx_id.is_some() {
-					let (_, outputs) = api.retrieve_outputs(true, false, tx_id)?;
-					display::outputs(
-						account,
-						height,
-						validated,
-						outputs,
-						wallet_config.dark_background_color_scheme.unwrap_or(true),
-					).map_err(|e| {
-						ErrorKind::GenericError(format!(
-							"Error getting wallet outputs: {} Config: {:?}",
-							e, wallet_config
-						))
-					})?;
-				};
-				Ok(())
-			}
-			("repost", Some(repost_args)) => {
-				let tx_id = repost_args
-					.value_of("id")
-					.ok_or_else(|| {
-						ErrorKind::GenericError("Transaction of a completed but unconfirmed transaction required (specify with --id=[id])".to_string())
-					}).and_then(|v|{
-					v.parse().map_err(|e| {
-						ErrorKind::GenericError(format!(
-							"Unable to parse argument 'id' as a number. e={:?}",
-							e
-						))
-					})})?;
-
-				let dump_file = repost_args.value_of("dumpfile");
-				let fluff = repost_args.is_present("fluff");
-				let (_, txs) = api.retrieve_txs(true, Some(tx_id), None)?;
-				let stored_tx = txs[0].get_stored_tx();
-				if stored_tx.is_none() {
-					println!(
-						"Transaction with id {} does not have transaction data. Not reposting.",
-						tx_id
-					);
-					std::process::exit(0);
-				}
-				match dump_file {
-					None => {
-						if txs[0].confirmed {
-							println!("Transaction with id {} is confirmed. Not reposting.", tx_id);
-							std::process::exit(0);
-						}
-						api.post_tx(&stored_tx.unwrap(), fluff)?;
-						info!("Reposted transaction at {}", tx_id);
-						println!("Reposted transaction at {}", tx_id);
-						Ok(())
-					}
-					Some(f) => {
-						let mut tx_file = File::create(f)?;
-						tx_file.write_all(json::to_string(&stored_tx).unwrap().as_bytes())?;
-						tx_file.sync_all()?;
-						info!("Dumped transaction data for tx {} to {}", tx_id, f);
-						println!("Dumped transaction data for tx {} to {}", tx_id, f);
-						Ok(())
-					}
-				}
-			}
-			("cancel", Some(tx_args)) => {
-				let mut tx_id_string = "";
-				let tx_id = match tx_args.value_of("id") {
-					None => None,
-					Some(tx) => match tx.parse() {
-						Ok(t) => {
-							tx_id_string = tx;
-							Some(t)
-						}
-						Err(e) => {
-							return Err(ErrorKind::GenericError(format!(
-								"Could not parse id parameter. e={:?}",
-								e,
-							)).into());
-						}
-					},
-				};
-				let tx_slate_id = match tx_args.value_of("txid") {
-					None => None,
-					Some(tx) => match tx.parse() {
-						Ok(t) => {
-							tx_id_string = tx;
-							Some(t)
-						}
-						Err(e) => {
-							return Err(ErrorKind::GenericError(format!(
-								"Could not parse txid parameter. e={:?}",
-								e,
-							)).into());
-						}
-					},
-				};
-				if (tx_id.is_none() && tx_slate_id.is_none())
-					|| (tx_id.is_some() && tx_slate_id.is_some())
-				{
-					return Err(ErrorKind::GenericError(format!(
-						"'id' (-i) or 'txid' (-t) argument is required."
-					)).into());
-				}
-
-				let result = api.cancel_tx(tx_id, tx_slate_id);
-				match result {
-					Ok(_) => {
-						info!("Transaction {} Cancelled", tx_id_string);
-						Ok(())
-					}
-					Err(e) => {
-						error!("TX Cancellation failed: {}", e);
-						Err(e)
-					}
-				}
-			}
-			("restore", Some(_)) => {
-				let result = api.restore();
-				match result {
-					Ok(_) => {
-						info!("Wallet restore complete",);
-						Ok(())
-					}
-					Err(e) => {
-						error!("Wallet restore failed: {}", e);
-						error!("Backtrace: {}", e.backtrace().unwrap());
-						Err(e)
-					}
-				}
-			}
-			_ => {
-				return Err(ErrorKind::GenericError(
-					"Unknown wallet command, use 'grin help wallet' for details".to_string(),
-				).into());
-			}
+	let res = match wallet_args.subcommand() {
+		("account", Some(args)) => {
+			command::account(wallet.clone(), wallet_args::parse_account_args(&args))
 		}
-	});
+		("send", Some(args)) => command::send(wallet.clone(), wallet_args::parse_send_args(&args)),
+		("receive", Some(args)) => command::receive(
+			wallet.clone(),
+			&global_wallet_args,
+			wallet_args::parse_receive_args(&args),
+		),
+		("finalize", Some(args)) => {
+			command::finalize(wallet.clone(), wallet_args::parse_finalize_args(&args))
+		}
+		("info", Some(args)) => command::info(
+			wallet.clone(),
+			&global_wallet_args,
+			wallet_args::parse_info_args(&args),
+			wallet_config.dark_background_color_scheme.unwrap_or(true),
+		),
+		("outputs", Some(_)) => command::outputs(
+			wallet.clone(),
+			&global_wallet_args,
+			wallet_config.dark_background_color_scheme.unwrap_or(true),
+		),
+		("txs", Some(args)) => command::txs(
+			wallet.clone(),
+			&global_wallet_args,
+			wallet_args::parse_txs_args(&args),
+			wallet_config.dark_background_color_scheme.unwrap_or(true),
+		),
+		("repost", Some(args)) => {
+			command::repost(wallet.clone(), wallet_args::parse_repost_args(&args))
+		}
+		("cancel", Some(args)) => {
+			command::cancel(wallet.clone(), wallet_args::parse_cancel_args(&args))
+		}
+		("restore", Some(_)) => command::restore(wallet.clone()),
+		_ => {
+			println!("Unknown wallet command, use 'grin help wallet' for details");
+			return 0;
+		}
+	};
 	// we need to give log output a chance to catch up before exiting
 	thread::sleep(Duration::from_millis(100));
 
