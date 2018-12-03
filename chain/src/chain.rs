@@ -1096,7 +1096,7 @@ impl Chain {
 		output_ref: &OutputIdentifier,
 	) -> Result<BlockHeader, Error> {
 		let pos = {
-			let mut txhashset = self.txhashset.write();
+			let txhashset = self.txhashset.read();
 			let (_, pos) = txhashset.is_unspent(output_ref)?;
 			pos
 		};
