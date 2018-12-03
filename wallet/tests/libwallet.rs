@@ -23,9 +23,9 @@ extern crate uuid;
 
 use core::core::transaction::kernel_sig_msg;
 use keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
+use libtx::{aggsig, proof};
 use util::secp;
 use util::secp::key::{PublicKey, SecretKey};
-use libtx::{aggsig, proof};
 use wallet::libwallet::types::Context;
 use wallet::{EncryptedWalletSeed, WalletSeed};
 

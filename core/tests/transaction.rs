@@ -15,8 +15,8 @@
 //! Transaction integration tests
 extern crate grin_core;
 extern crate grin_keychain as keychain;
-extern crate grin_util as util;
 extern crate grin_libtx as libtx;
+extern crate grin_util as util;
 
 pub mod common;
 

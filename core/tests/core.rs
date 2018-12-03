@@ -15,8 +15,8 @@
 //! Core tests
 extern crate grin_core;
 extern crate grin_keychain as keychain;
-extern crate grin_util as util;
 extern crate grin_libtx as libtx;
+extern crate grin_util as util;
 
 use std::sync::Arc;
 use util::RwLock;
@@ -31,10 +31,8 @@ use grin_core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use grin_core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction};
 use grin_core::ser;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
+use libtx::build::{self, initial_tx, input, output, with_excess, with_fee, with_lock_height};
 use util::static_secp_instance;
-use libtx::build::{
-	self, initial_tx, input, output, with_excess, with_fee, with_lock_height,
-};
 
 #[test]
 fn simple_tx_ser() {
