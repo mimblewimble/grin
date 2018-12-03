@@ -20,19 +20,18 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
-use std::sync::Arc;
-use util::Mutex;
 
 use serde_json as json;
 
+use super::wallet_args;
 use api::TLSConfig;
 use config::GlobalWalletConfig;
-use core::{core, global};
+use core::global;
 use grin_wallet::libwallet::ErrorKind;
-use grin_wallet::{self, controller, display, libwallet};
+use grin_wallet::{self, controller, display};
 use grin_wallet::{
-	instantiate_wallet, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend,
-	NullWalletCommAdapter, WalletConfig, WalletSeed, command
+	command, instantiate_wallet, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter,
+	LMDBBackend, WalletConfig, WalletSeed,
 };
 use keychain;
 use servers::start_webwallet_server;
@@ -43,25 +42,6 @@ pub fn _init_wallet_seed(wallet_config: WalletConfig, password: &str) {
 		WalletSeed::init_file(&wallet_config, 32, password)
 			.expect("Failed to create wallet seed file.");
 	};
-}
-
-fn create_wallet(config: WalletConfig) ->
-	Result<Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>>, Error> {
-	let wallet = instantiate_wallet(
-		wallet_config.clone(),
-		&passphrase,
-		account,
-		node_api_secret.clone(),
-	).unwrap_or_else(|e| {
-		if e.kind() == grin_wallet::ErrorKind::Encryption {
-			println!("Error decrypting wallet seed (check provided password)");
-			std::process::exit(0);
-		}
-		panic!(
-			"Error creating wallet {:?} Config: {:?}",
-			e, wallet_config
-		);
-	});
 }
 
 pub fn seed_exists(wallet_config: WalletConfig) -> bool {
@@ -127,6 +107,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		show_spent = true;
 	}
 	let node_api_secret = get_first_line(wallet_config.node_api_secret_path.clone());
+
+	let global_wallet_args = wallet_args::parse_global_args(&wallet_args);
 
 	// Decrypt the seed from the seed file and derive the keychain.
 	// Generate the initial wallet seed if we are running "wallet init".
@@ -337,49 +319,17 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 	let res = controller::owner_single_use(wallet.clone(), |api| {
 		match wallet_args.subcommand() {
 			("account", Some(acct_args)) => {
-				command::account(wallet, acct_args.value_of("create"));
+				command::account(wallet.clone(), wallet_args::parse_account_args(&acct_args));
 				Ok(())
 			}
 			("send", Some(send_args)) => {
-				command::send(
-					wallet,
-					send_args.value_of("amount"),
-					send_args.value_of("message"),
-					send_args.value_of("minimum_confirmations"),
-					send_args.value_of("selection_strategy"),
-					send_args.value_of("method"),
-					send_args.value_of("dest"),
-					send_args.value_of("change_outputs"),
-					send_args.is_present("fluff"));
+				command::send(wallet.clone(), wallet_args::parse_send_args(&send_args));
 				Ok(())
 			}
 			("receive", Some(send_args)) => {
-				let mut receive_result: Result<(), grin_wallet::libwallet::Error> = Ok(());
-				let message = match send_args.is_present("message") {
-					true => Some(send_args.value_of("message").unwrap().to_owned()),
-					false => None,
-				};
-				let tx_file = send_args.value_of("input").ok_or_else(|| {
-					ErrorKind::GenericError("Transaction file required".to_string())
-				})?;
-				if !Path::new(tx_file).is_file() {
-					return Err(
-						ErrorKind::GenericError(format!("File {} not found.", tx_file)).into(),
-					);
-				}
-				let adapter = FileWalletCommAdapter::new();
-				let mut slate = adapter.receive_tx_async(tx_file)?;
-				controller::foreign_single_use(wallet, |api| {
-					api.receive_tx(&mut slate, Some(account), message)?;
-					Ok(())
-				})?;
-				let send_tx = format!("{}.response", tx_file);
-				adapter.send_tx_async(&send_tx, &slate)?;
-				info!(
-					"Response file {}.response generated, sending it back to the transaction originator.",
-					tx_file,
-				);
-				receive_result
+				command::receive(wallet.clone(), &global_wallet_args, wallet_args::parse_receive_args(&send_args));
+				Ok(())
+
 			}
 			("finalize", Some(send_args)) => {
 				let fluff = send_args.is_present("fluff");

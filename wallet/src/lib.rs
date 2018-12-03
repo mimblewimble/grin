@@ -47,6 +47,7 @@ extern crate grin_store as store;
 extern crate grin_util as util;
 
 mod adapters;
+pub mod command;
 pub mod controller;
 pub mod display;
 mod error;
@@ -55,7 +56,6 @@ pub mod libwallet;
 pub mod lmdb_wallet;
 mod node_clients;
 mod types;
-pub mod command;
 
 pub use adapters::{
 	FileWalletCommAdapter, HTTPWalletCommAdapter, NullWalletCommAdapter, WalletCommAdapter,
