@@ -173,7 +173,7 @@ pub fn parse_recover_args(
 			}
 		}
 	};
-	Ok(command::RecoverArgs{
+	Ok(command::RecoverArgs {
 		passphrase: passphrase,
 		recovery_phrase: recovery_phrase,
 	})
