@@ -86,9 +86,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 
 	let node_api_secret = get_first_line(wallet_config.node_api_secret_path.clone());
 
-	let global_wallet_args = arg_parse!(wallet_args::parse_global_args(&wallet_config, &wallet_args));
+	let global_wallet_args =
+		arg_parse!(wallet_args::parse_global_args(&wallet_config, &wallet_args));
 
-/*
+	/*
 	// Decrypt the seed from the seed file and derive the keychain.
 	// Generate the initial wallet seed if we are running "wallet init".
 	if let ("init", Some(r)) = wallet_args.subcommand() {
@@ -257,13 +258,11 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 
 	// closure to instantiate wallet as needed by each subcommand
 	let inst_wallet = || {
-		let res = wallet_args::instantiate_wallet(
-			wallet_config.clone(),
-			&global_wallet_args);
+		let res = wallet_args::instantiate_wallet(wallet_config.clone(), &global_wallet_args);
 		res.unwrap_or_else(|e| {
-				println!("{}", e);
-				std::process::exit(0);
-			})
+			println!("{}", e);
+			std::process::exit(0);
+		})
 	};
 
 	let res = match wallet_args.subcommand() {

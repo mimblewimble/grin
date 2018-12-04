@@ -27,8 +27,8 @@ use core::core;
 use keychain;
 
 use error::{Error, ErrorKind};
-use {controller, display, libwallet, HTTPNodeClient, WalletInst, WalletSeed, WalletConfig};
-use {FileWalletCommAdapter, HTTPWalletCommAdapter, NullWalletCommAdapter, LMDBBackend};
+use {controller, display, libwallet, HTTPNodeClient, WalletConfig, WalletInst, WalletSeed};
+use {FileWalletCommAdapter, HTTPWalletCommAdapter, LMDBBackend, NullWalletCommAdapter};
 
 pub type WalletRef = Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>>;
 
@@ -51,8 +51,10 @@ pub struct InitArgs {
 pub fn init(g_args: &GlobalArgs, args: InitArgs) -> Result<(), Error> {
 	WalletSeed::init_file(&args.config, args.list_length, &args.password)?;
 	info!("Wallet seed file created");
-	let client_n =
-		HTTPNodeClient::new(&args.config.check_node_api_http_addr, g_args.node_api_secret.clone());
+	let client_n = HTTPNodeClient::new(
+		&args.config.check_node_api_http_addr,
+		g_args.node_api_secret.clone(),
+	);
 	let _: LMDBBackend<HTTPNodeClient, keychain::ExtKeychain> =
 		LMDBBackend::new(args.config.clone(), &args.password, client_n)?;
 	info!("Wallet database backend created");

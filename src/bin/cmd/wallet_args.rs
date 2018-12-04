@@ -18,8 +18,8 @@ use failure::Fail;
 
 use core::core;
 use grin_wallet::{self, command, WalletConfig, WalletSeed};
-use util::file::get_first_line;
 use std::path::Path;
+use util::file::get_first_line;
 
 /// Simple error definition, just so we can return errors from all commands
 /// and let the caller figure out what to do
@@ -56,11 +56,12 @@ fn prompt_password_confirm() -> String {
 	first
 }
 
-// instantiate wallet (needed by most functions) 
+// instantiate wallet (needed by most functions)
 
-pub fn instantiate_wallet(config: WalletConfig,
+pub fn instantiate_wallet(
+	config: WalletConfig,
 	g_args: &command::GlobalArgs,
-	) -> Result<command::WalletRef, Error> {
+) -> Result<command::WalletRef, Error> {
 	let passphrase = prompt_password(&g_args.password);
 	let res = grin_wallet::instantiate_wallet(
 		config.clone(),
@@ -73,10 +74,10 @@ pub fn instantiate_wallet(config: WalletConfig,
 		Err(e) => {
 			let msg = {
 				match e.kind() {
-					grin_wallet::ErrorKind::Encryption => format!("Error decrypting wallet seed (check provided password)"),
-				 _ => format!( "Error instantiating wallet: {:?} Config: {:?}",
-					e, config
-				),
+					grin_wallet::ErrorKind::Encryption => {
+						format!("Error decrypting wallet seed (check provided password)")
+					}
+					_ => format!("Error instantiating wallet: {:?} Config: {:?}", e, config),
 				}
 			};
 			Err(Error::ArgumentError(msg))
@@ -108,7 +109,10 @@ fn parse_u64(arg: &str, name: &str) -> Result<u64, Error> {
 	}
 }
 
-pub fn parse_global_args(config: &WalletConfig, args: &ArgMatches) -> Result<command::GlobalArgs, Error> {
+pub fn parse_global_args(
+	config: &WalletConfig,
+	args: &ArgMatches,
+) -> Result<command::GlobalArgs, Error> {
 	let account = parse_required(args, "account")?;
 	let mut show_spent = false;
 	if args.is_present("show_spent") {
@@ -128,7 +132,10 @@ pub fn parse_global_args(config: &WalletConfig, args: &ArgMatches) -> Result<com
 	})
 }
 
-pub fn parse_init_args(config: &WalletConfig, args: &ArgMatches) -> Result<command::InitArgs, Error> {
+pub fn parse_init_args(
+	config: &WalletConfig,
+	args: &ArgMatches,
+) -> Result<command::InitArgs, Error> {
 	if let Err(e) = WalletSeed::seed_file_exists(config) {
 		let msg = format!(
 			"Not creating wallet - Wallet seed file already exists at {}",
@@ -142,7 +149,7 @@ pub fn parse_init_args(config: &WalletConfig, args: &ArgMatches) -> Result<comma
 	};
 	println!("Please enter a password for your new wallet");
 	let password = prompt_password_confirm();
-	Ok(command::InitArgs{
+	Ok(command::InitArgs {
 		list_length: list_length,
 		password: password,
 		config: config.clone(),
