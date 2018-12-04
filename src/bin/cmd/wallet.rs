@@ -20,9 +20,7 @@ use std::time::Duration;
 use super::wallet_args;
 use config::GlobalWalletConfig;
 use core::global;
-use grin_wallet::{
-	self, command, WalletConfig, WalletSeed,
-};
+use grin_wallet::{self, command, WalletConfig, WalletSeed};
 use servers::start_webwallet_server;
 
 // define what to do on argument error
@@ -106,16 +104,12 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		("owner_api", Some(_)) => {
 			let mut g = global_wallet_args.clone();
 			g.tls_conf = None;
-			command::owner_api(
-			inst_wallet(),
-			&g,
-		)},
+			command::owner_api(inst_wallet(), &g)
+		}
 		("web", Some(_)) => {
 			start_webwallet_server();
-			command::owner_api(
-			inst_wallet(),
-			&global_wallet_args,
-		)},
+			command::owner_api(inst_wallet(), &global_wallet_args)
+		}
 		("account", Some(args)) => {
 			let a = arg_parse!(wallet_args::parse_account_args(&args));
 			command::account(inst_wallet(), a)
