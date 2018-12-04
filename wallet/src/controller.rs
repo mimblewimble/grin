@@ -420,7 +420,6 @@ where
 		req: Request<Body>,
 		api: APIOwner<T, C, K>,
 	) -> Box<Future<Item = (), Error = Error> + Send> {
-		warn!("In post tx");
 		let params = match req.uri().query() {
 			Some(query_string) => form_urlencoded::parse(query_string.as_bytes())
 				.into_owned()
@@ -445,7 +444,6 @@ where
 
 	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
 		let api = APIOwner::new(self.wallet.clone());
-		warn!("In handle post request");
 		match req
 			.uri()
 			.path()
