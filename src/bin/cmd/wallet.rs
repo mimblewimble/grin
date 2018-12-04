@@ -33,6 +33,20 @@ use keychain;
 use servers::start_webwallet_server;
 use util::file::get_first_line;
 
+
+// define what to do on argument error
+macro_rules! arg_parse {
+	( $r:expr ) => {
+		match $r {
+			Ok(res) => res,
+			Err(e) => {
+				println!("{}", e);
+				return 0;
+			}
+		}
+	}
+}
+
 pub fn _init_wallet_seed(wallet_config: WalletConfig, password: &str) {
 	if let Err(_) = WalletSeed::from_file(&wallet_config, password) {
 		WalletSeed::init_file(&wallet_config, 32, password)
@@ -313,38 +327,23 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 
 	let res = match wallet_args.subcommand() {
 		("account", Some(args)) => {
-			let a = wallet_args::parse_account_args(&args).unwrap_or_else(|e| {
-				println!("{}", e);
-				std::process::exit(0);
-			});
+			let a = arg_parse!(wallet_args::parse_account_args(&args));
 			command::account(wallet.clone(), a)
 		}
 		("send", Some(args)) => {
-			let a = wallet_args::parse_send_args(&args).unwrap_or_else(|e| {
-				println!("{}", e);
-				std::process::exit(0);
-			});
+			let a = arg_parse!(wallet_args::parse_send_args(&args));
 			command::send(wallet.clone(), a)
 		}
 		("receive", Some(args)) => {
-			let a = wallet_args::parse_receive_args(&args).unwrap_or_else(|e| {
-				println!("{}", e);
-				std::process::exit(0);
-			});
+			let a = arg_parse!(wallet_args::parse_receive_args(&args));
 			command::receive(wallet.clone(), &global_wallet_args, a)
 		}
 		("finalize", Some(args)) => {
-			let a = wallet_args::parse_finalize_args(&args).unwrap_or_else(|e| {
-				println!("{}", e);
-				std::process::exit(0);
-			});
+			let a = arg_parse!(wallet_args::parse_finalize_args(&args));
 			command::finalize(wallet.clone(), a)
 		}
 		("info", Some(args)) => {
-			let a = wallet_args::parse_info_args(&args).unwrap_or_else(|e| {
-				println!("{}", e);
-				std::process::exit(0);
-			});
+			let a = arg_parse!(wallet_args::parse_info_args(&args));
 			command::info(
 				wallet.clone(),
 				&global_wallet_args,
@@ -358,10 +357,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			wallet_config.dark_background_color_scheme.unwrap_or(true),
 		),
 		("txs", Some(args)) => {
-			let a = wallet_args::parse_txs_args(&args).unwrap_or_else(|e| {
-				println!("{}", e);
-				std::process::exit(0);
-			});
+			let a = arg_parse!(wallet_args::parse_txs_args(&args));
 			command::txs(
 				wallet.clone(),
 				&global_wallet_args,
@@ -370,17 +366,11 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			)
 		}
 		("repost", Some(args)) => {
-			let a = wallet_args::parse_repost_args(&args).unwrap_or_else(|e| {
-				println!("{}", e);
-				std::process::exit(0);
-			});
+			let a = arg_parse!(wallet_args::parse_repost_args(&args));
 			command::repost(wallet.clone(), a)
 		}
 		("cancel", Some(args)) => {
-			let a = wallet_args::parse_cancel_args(&args).unwrap_or_else(|e| {
-				println!("{}", e);
-				std::process::exit(0);
-			});
+			let a = arg_parse!(wallet_args::parse_cancel_args(&args));
 			command::cancel(wallet.clone(), a)
 		}
 		("restore", Some(_)) => command::restore(wallet.clone()),
