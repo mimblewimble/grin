@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
 /// Grin wallet command-line function implementations
 use std::fs::File;
 use std::io::Write;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use std::collections::HashMap;
 use util::Mutex;
 
 use serde_json as json;
 use uuid::Uuid;
 
-use core::core;
 use api::TLSConfig;
+use core::core;
 use keychain;
 
 use error::{Error, ErrorKind};
@@ -104,23 +104,19 @@ pub struct ListenArgs {
 
 pub fn listen(config: &WalletConfig, g_args: &GlobalArgs) -> Result<(), Error> {
 	let mut params = HashMap::new();
-		params.insert(
-			"api_listen_addr".to_owned(),
-			config.api_listen_addr(),
-		);
+	params.insert("api_listen_addr".to_owned(), config.api_listen_addr());
 	if let Some(t) = g_args.tls_conf.as_ref() {
 		params.insert("certificate".to_owned(), t.certificate.clone());
 		params.insert("private_key".to_owned(), t.private_key.clone());
 	}
 	let adapter = HTTPWalletCommAdapter::new();
-	let res = adapter
-		.listen(
-			params,
-			config.clone(),
-			&g_args.password.clone().unwrap(),
-			&g_args.account,
-			g_args.node_api_secret.clone(),
-		);
+	let res = adapter.listen(
+		params,
+		config.clone(),
+		&g_args.password.clone().unwrap(),
+		&g_args.account,
+		g_args.node_api_secret.clone(),
+	);
 	if let Err(e) = res {
 		return Err(ErrorKind::LibWallet(e.kind()).into());
 	}

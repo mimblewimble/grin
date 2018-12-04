@@ -16,8 +16,8 @@
 use clap::ArgMatches;
 use failure::Fail;
 
-use core::core;
 use api::TLSConfig;
+use core::core;
 use grin_wallet::{self, command, WalletConfig, WalletSeed};
 use std::path::Path;
 use util::file::get_first_line;
@@ -135,10 +135,7 @@ pub fn parse_global_args(
 					return Err(Error::ArgumentError(msg));
 				}
 			};
-			Some(TLSConfig::new(
-				file,
-				key
-			))
+			Some(TLSConfig::new(file, key))
 		}
 	};
 
@@ -198,7 +195,11 @@ pub fn parse_recover_args(
 	})
 }
 
-pub fn parse_listen_args(config: &mut WalletConfig, g_args: &mut command::GlobalArgs, args: &ArgMatches) -> Result<(), Error> {
+pub fn parse_listen_args(
+	config: &mut WalletConfig,
+	g_args: &mut command::GlobalArgs,
+	args: &ArgMatches,
+) -> Result<(), Error> {
 	// listen args
 	let pass = match args.value_of("pass") {
 		Some(p) => Some(p.to_owned()),
