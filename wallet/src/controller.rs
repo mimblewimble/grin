@@ -430,7 +430,6 @@ where
 			None => HashMap::new(),
 		};
 		let fluff = params.get("fluff").is_some();
-		warn!("Passed params and fluff stuff");
 		Box::new(parse_body(req).and_then(
 			move |slate: Slate| match api.post_tx(&slate.tx, fluff) {
 				Ok(_) => ok(()),
