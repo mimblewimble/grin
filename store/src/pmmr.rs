@@ -23,7 +23,7 @@ use core::core::BlockHeader;
 use core::ser::PMMRable;
 use leaf_set::LeafSet;
 use prune_list::PruneList;
-use types::{prune_noop, DataFile, HashFile};
+use types::{prune_noop, DataFile};
 
 const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &str = "pmmr_data.bin";
@@ -52,8 +52,8 @@ pub const PMMR_FILES: [&str; 4] = [
 pub struct PMMRBackend<T: PMMRable> {
 	data_dir: String,
 	prunable: bool,
-	hash_file: HashFile,
-	data_file: DataFile<T>,
+	hash_file: DataFile<Hash>,
+	data_file: DataFile<T::E>,
 	leaf_set: LeafSet,
 	prune_list: PruneList,
 }
@@ -70,7 +70,7 @@ impl<T: PMMRable> Backend<T> for PMMRBackend<T> {
 		}
 
 		self.data_file
-			.append(data)
+			.append(&data.as_elmt())
 			.map_err(|e| format!("Failed to append data to file. {}", e))?;
 
 		for h in &hashes {
@@ -178,7 +178,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 		prunable: bool,
 		header: Option<&BlockHeader>,
 	) -> io::Result<PMMRBackend<T>> {
-		let hash_file = HashFile::open(&format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
+		let hash_file = DataFile::open(&format!("{}/{}", data_dir, PMMR_HASH_FILE))?;
 		let data_file = DataFile::open(&format!("{}/{}", data_dir, PMMR_DATA_FILE))?;
 
 		let leaf_set_path = format!("{}/{}", data_dir, PMMR_LEAF_FILE);
@@ -327,7 +327,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 			tmp_prune_file_hash.clone(),
 			format!("{}/{}", self.data_dir, PMMR_HASH_FILE),
 		)?;
-		self.hash_file = HashFile::open(&format!("{}/{}", self.data_dir, PMMR_HASH_FILE))?;
+		self.hash_file = DataFile::open(&format!("{}/{}", self.data_dir, PMMR_HASH_FILE))?;
 
 		// 5. Rename the compact copy of the data file and reopen it.
 		fs::rename(

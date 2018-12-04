@@ -18,8 +18,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter, ErrorKind, Read, Write};
 use std::marker;
 
-use core::core::hash::Hash;
-use core::ser::{self, FixedLength, PMMRable};
+use core::ser::{self, FixedLength, Readable, Writeable};
 
 /// A no-op function for doing nothing with some pruned data.
 pub fn prune_noop(_pruned_data: &[u8]) {}
@@ -30,8 +29,11 @@ pub struct DataFile<T> {
 	_marker: marker::PhantomData<T>,
 }
 
-impl<T: PMMRable> DataFile<T> {
-	/// Open (or create) a hash file at the provided path on disk.
+impl<T> DataFile<T>
+where
+	T: FixedLength + Readable + Writeable,
+{
+	/// Open (or create) a file at the provided path on disk.
 	pub fn open(path: &str) -> io::Result<DataFile<T>> {
 		let file = AppendOnlyFile::open(path)?;
 		Ok(DataFile {
@@ -40,24 +42,23 @@ impl<T: PMMRable> DataFile<T> {
 		})
 	}
 
-	/// Append a hash to this hash file.
+	/// Append an element to the file.
 	/// Will not be written to disk until flush() is subsequently called.
 	/// Alternatively discard() may be called to discard any pending changes.
 	pub fn append(&mut self, data: &T) -> io::Result<()> {
-		let mut bytes =
-			ser::ser_vec(&data.as_elmt()).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+		let mut bytes = ser::ser_vec(data).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 		self.file.append(&mut bytes);
 		Ok(())
 	}
 
-	/// Read a hash from the hash file by position.
-	pub fn read(&self, position: u64) -> Option<T::E> {
+	/// Read an element from the file by position.
+	pub fn read(&self, position: u64) -> Option<T> {
 		// The MMR starts at 1, our binary backend starts at 0.
 		let pos = position - 1;
 
 		// Must be on disk, doing a read at the correct position
-		let file_offset = (pos as usize) * T::E::LEN;
-		let data = self.file.read(file_offset, T::E::LEN);
+		let file_offset = (pos as usize) * T::LEN;
+		let data = self.file.read(file_offset, T::LEN);
 		match ser::deserialize(&mut &data[..]) {
 			Ok(x) => Some(x),
 			Err(e) => {
@@ -72,27 +73,27 @@ impl<T: PMMRable> DataFile<T> {
 
 	/// Rewind the backend file to the specified position.
 	pub fn rewind(&mut self, position: u64) {
-		self.file.rewind(position * T::E::LEN as u64)
+		self.file.rewind(position * T::LEN as u64)
 	}
 
-	/// Flush unsynced changes to the hash file to disk.
+	/// Flush unsynced changes to the file to disk.
 	pub fn flush(&mut self) -> io::Result<()> {
 		self.file.flush()
 	}
 
-	/// Discard any unsynced changes to the hash file.
+	/// Discard any unsynced changes to the file.
 	pub fn discard(&mut self) {
 		self.file.discard()
 	}
 
-	/// Size of the hash file in number of hashes (not bytes).
+	/// Size of the file in number of elements (not bytes).
 	pub fn size(&self) -> u64 {
-		self.file.size() / T::E::LEN as u64
+		self.file.size() / T::LEN as u64
 	}
 
-	/// Size of the unsync'd hash file, in hashes (not bytes).
+	/// Size of the unsync'd file, in elements (not bytes).
 	pub fn size_unsync(&self) -> u64 {
-		self.file.size_unsync() / T::E::LEN as u64
+		self.file.size_unsync() / T::LEN as u64
 	}
 
 	/// Path of the underlying file
@@ -100,97 +101,17 @@ impl<T: PMMRable> DataFile<T> {
 		self.file.path()
 	}
 
-	/// Rewrite the hash file out to disk, pruning removed hashes.
+	/// Write the file out to disk, pruning removed elements.
 	pub fn save_prune<F>(&self, target: String, prune_offs: &[u64], prune_cb: F) -> io::Result<()>
 	where
 		F: Fn(&[u8]),
 	{
 		let prune_offs = prune_offs
 			.iter()
-			.map(|x| x * T::E::LEN as u64)
+			.map(|x| x * T::LEN as u64)
 			.collect::<Vec<_>>();
 		self.file
-			.save_prune(target, prune_offs.as_slice(), T::E::LEN as u64, prune_cb)
-	}
-}
-
-/// Hash file (MMR) wrapper around an append only file.
-pub struct HashFile {
-	file: AppendOnlyFile,
-}
-
-impl HashFile {
-	/// Open (or create) a hash file at the provided path on disk.
-	pub fn open(path: &str) -> io::Result<HashFile> {
-		let file = AppendOnlyFile::open(path)?;
-		Ok(HashFile { file })
-	}
-
-	/// Append a hash to this hash file.
-	/// Will not be written to disk until flush() is subsequently called.
-	/// Alternatively discard() may be called to discard any pending changes.
-	pub fn append(&mut self, hash: &Hash) -> io::Result<()> {
-		let mut bytes = ser::ser_vec(hash).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-		self.file.append(&mut bytes);
-		Ok(())
-	}
-
-	/// Read a hash from the hash file by position.
-	pub fn read(&self, position: u64) -> Option<Hash> {
-		// The MMR starts at 1, our binary backend starts at 0.
-		let pos = position - 1;
-
-		// Must be on disk, doing a read at the correct position
-		let file_offset = (pos as usize) * Hash::LEN;
-		let data = self.file.read(file_offset, Hash::LEN);
-		match ser::deserialize(&mut &data[..]) {
-			Ok(h) => Some(h),
-			Err(e) => {
-				error!(
-					"Corrupted storage, could not read an entry from hash file: {:?}",
-					e
-				);
-				None
-			}
-		}
-	}
-
-	/// Rewind the backend file to the specified position.
-	pub fn rewind(&mut self, position: u64) {
-		self.file.rewind(position * Hash::LEN as u64)
-	}
-
-	/// Flush unsynced changes to the hash file to disk.
-	pub fn flush(&mut self) -> io::Result<()> {
-		self.file.flush()
-	}
-
-	/// Discard any unsynced changes to the hash file.
-	pub fn discard(&mut self) {
-		self.file.discard()
-	}
-
-	/// Size of the hash file in number of hashes (not bytes).
-	pub fn size(&self) -> u64 {
-		self.file.size() / Hash::LEN as u64
-	}
-
-	/// Size of the unsync'd hash file, in hashes (not bytes).
-	pub fn size_unsync(&self) -> u64 {
-		self.file.size_unsync() / Hash::LEN as u64
-	}
-
-	/// Rewrite the hash file out to disk, pruning removed hashes.
-	pub fn save_prune<T>(&self, target: String, prune_offs: &[u64], prune_cb: T) -> io::Result<()>
-	where
-		T: Fn(&[u8]),
-	{
-		let prune_offs = prune_offs
-			.iter()
-			.map(|x| x * Hash::LEN as u64)
-			.collect::<Vec<_>>();
-		self.file
-			.save_prune(target, prune_offs.as_slice(), Hash::LEN as u64, prune_cb)
+			.save_prune(target, prune_offs.as_slice(), T::LEN as u64, prune_cb)
 	}
 }
 
