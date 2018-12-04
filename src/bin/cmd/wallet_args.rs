@@ -17,7 +17,8 @@ use clap::ArgMatches;
 use failure::Fail;
 
 use core::core;
-use grin_wallet::command;
+use grin_wallet::{self, command, WalletConfig, WalletSeed};
+use util::file::get_first_line;
 use std::path::Path;
 
 /// Simple error definition, just so we can return errors from all commands
@@ -26,6 +27,61 @@ use std::path::Path;
 pub enum Error {
 	#[fail(display = "Invalid Arguments: {}", _0)]
 	ArgumentError(String),
+}
+
+fn prompt_password(password: &Option<String>) -> String {
+	match password {
+		None => {
+			println!("Temporary note:");
+			println!(
+				"If this is your first time running your wallet since BIP32 (word lists) \
+				 were implemented, your seed will be converted to \
+				 the new format. Please ensure the provided password is correct."
+			);
+			println!("If this goes wrong, your old 'wallet.seed' file has been saved as 'wallet.seed.bak' \
+			Rename this file to back to `wallet.seed` and try again");
+			rpassword::prompt_password_stdout("Password: ").unwrap()
+		}
+		Some(p) => p.to_owned(),
+	}
+}
+
+fn prompt_password_confirm() -> String {
+	let first = rpassword::prompt_password_stdout("Password: ").unwrap();
+	let second = rpassword::prompt_password_stdout("Confirm Password: ").unwrap();
+	if first != second {
+		println!("Passwords do not match");
+		std::process::exit(0);
+	}
+	first
+}
+
+// instantiate wallet (needed by most functions) 
+
+pub fn instantiate_wallet(config: WalletConfig,
+	g_args: &command::GlobalArgs,
+	) -> Result<command::WalletRef, Error> {
+	let passphrase = prompt_password(&g_args.password);
+	let res = grin_wallet::instantiate_wallet(
+		config.clone(),
+		&passphrase,
+		&g_args.account,
+		g_args.node_api_secret.clone(),
+	);
+	match res {
+		Ok(p) => Ok(p),
+		Err(e) => {
+			let msg = {
+				match e.kind() {
+					grin_wallet::ErrorKind::Encryption => format!("Error decrypting wallet seed (check provided password)"),
+				 _ => format!( "Error instantiating wallet: {:?} Config: {:?}",
+					e, config
+				),
+				}
+			};
+			Err(Error::ArgumentError(msg))
+		}
+	}
 }
 
 // parses a required value, or throws error with message otherwise
@@ -52,16 +108,44 @@ fn parse_u64(arg: &str, name: &str) -> Result<u64, Error> {
 	}
 }
 
-pub fn parse_global_args(args: &ArgMatches) -> Result<command::GlobalArgs, Error> {
+pub fn parse_global_args(config: &WalletConfig, args: &ArgMatches) -> Result<command::GlobalArgs, Error> {
 	let account = parse_required(args, "account")?;
 	let mut show_spent = false;
 	if args.is_present("show_spent") {
 		show_spent = true;
 	}
+	let node_api_secret = get_first_line(config.node_api_secret_path.clone());
+	let password = match args.value_of("pass") {
+		None => None,
+		Some(p) => Some(p.to_owned()),
+	};
 
 	Ok(command::GlobalArgs {
 		account: account.to_owned(),
 		show_spent: show_spent,
+		node_api_secret: node_api_secret,
+		password: password,
+	})
+}
+
+pub fn parse_init_args(config: &WalletConfig, args: &ArgMatches) -> Result<command::InitArgs, Error> {
+	if let Err(e) = WalletSeed::seed_file_exists(config) {
+		let msg = format!(
+			"Not creating wallet - Wallet seed file already exists at {}",
+			e.inner
+		);
+		return Err(Error::ArgumentError(msg));
+	}
+	let list_length = match args.is_present("short_wordlist") {
+		false => 32,
+		true => 16,
+	};
+	println!("Please enter a password for your new wallet");
+	let password = prompt_password_confirm();
+	Ok(command::InitArgs{
+		list_length: list_length,
+		password: password,
+		config: config.clone(),
 	})
 }
 

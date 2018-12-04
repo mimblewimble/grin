@@ -64,33 +64,6 @@ pub fn seed_exists(wallet_config: WalletConfig) -> bool {
 	}
 }
 
-pub fn prompt_password(args: &ArgMatches) -> String {
-	match args.value_of("pass") {
-		None => {
-			println!("Temporary note:");
-			println!(
-				"If this is your first time running your wallet since BIP32 (word lists) \
-				 were implemented, your seed will be converted to \
-				 the new format. Please ensure the provided password is correct."
-			);
-			println!("If this goes wrong, your old 'wallet.seed' file has been saved as 'wallet.seed.bak' \
-			Rename this file to back to `wallet.seed` and try again");
-			rpassword::prompt_password_stdout("Password: ").unwrap()
-		}
-		Some(p) => p.to_owned(),
-	}
-}
-
-pub fn prompt_password_confirm() -> String {
-	let first = rpassword::prompt_password_stdout("Password: ").unwrap();
-	let second = rpassword::prompt_password_stdout("Confirm Password: ").unwrap();
-	if first != second {
-		println!("Passwords do not match");
-		std::process::exit(0);
-	}
-	first
-}
-
 pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i32 {
 	// just get defaults from the global config
 	let mut wallet_config = config.members.unwrap().wallet;
@@ -113,41 +86,14 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 
 	let node_api_secret = get_first_line(wallet_config.node_api_secret_path.clone());
 
-	let global_wallet_args = wallet_args::parse_global_args(&wallet_args).unwrap_or_else(|e| {
-		println!("{}", e);
-		std::process::exit(0);
-	});
+	let global_wallet_args = arg_parse!(wallet_args::parse_global_args(&wallet_config, &wallet_args));
 
+/*
 	// Decrypt the seed from the seed file and derive the keychain.
 	// Generate the initial wallet seed if we are running "wallet init".
 	if let ("init", Some(r)) = wallet_args.subcommand() {
-		if let Err(e) = WalletSeed::seed_file_exists(&wallet_config) {
-			println!(
-				"Not creating wallet - Wallet seed file already exists at {}",
-				e.inner
-			);
-			return 0;
-		}
-		let list_length = match r.is_present("short_wordlist") {
-			false => 32,
-			true => 16,
-		};
-		println!("Please enter a password for your new wallet");
-		let passphrase = prompt_password_confirm();
-		WalletSeed::init_file(&wallet_config, list_length, &passphrase)
-			.expect("Failed to init wallet seed file.");
-		info!("Wallet seed file created");
-		let client_n =
-			HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-		let _: LMDBBackend<HTTPNodeClient, keychain::ExtKeychain> =
-			LMDBBackend::new(wallet_config.clone(), &passphrase, client_n).unwrap_or_else(|e| {
-				panic!(
-					"Error creating DB for wallet: {} Config: {:?}",
-					e, wallet_config
-				);
-			});
-		info!("Wallet database backend created");
-		// give logging thread a moment to catch up
+		let a = arg_parse!(wallet_args::parse_init_args(&wallet_config, &args));
+		command::init(wallet.clone(), a)
 		thread::sleep(Duration::from_millis(200));
 		// we are done here with creating the wallet, so just return
 		return 0;
@@ -307,58 +253,58 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			_ => {}
 		};
 	}
+	*/
 
-	let wallet = instantiate_wallet(
-		wallet_config.clone(),
-		&passphrase,
-		account,
-		node_api_secret.clone(),
-	).unwrap_or_else(|e| {
-		if e.kind() == grin_wallet::ErrorKind::Encryption {
-			println!("Error decrypting wallet seed (check provided password)");
-			std::process::exit(0);
-		}
-		panic!(
-			"Error instantiating wallet: {:?} Config: {:?}",
-			e, wallet_config
-		);
-	});
+	// closure to instantiate wallet as needed by each subcommand
+	let inst_wallet = || {
+		let res = wallet_args::instantiate_wallet(
+			wallet_config.clone(),
+			&global_wallet_args);
+		res.unwrap_or_else(|e| {
+				println!("{}", e);
+				std::process::exit(0);
+			})
+	};
 
 	let res = match wallet_args.subcommand() {
+		("init", Some(args)) => {
+			let a = arg_parse!(wallet_args::parse_init_args(&wallet_config, &args));
+			command::init(&global_wallet_args, a)
+		}
 		("account", Some(args)) => {
 			let a = arg_parse!(wallet_args::parse_account_args(&args));
-			command::account(wallet.clone(), a)
+			command::account(inst_wallet(), a)
 		}
 		("send", Some(args)) => {
 			let a = arg_parse!(wallet_args::parse_send_args(&args));
-			command::send(wallet.clone(), a)
+			command::send(inst_wallet(), a)
 		}
 		("receive", Some(args)) => {
 			let a = arg_parse!(wallet_args::parse_receive_args(&args));
-			command::receive(wallet.clone(), &global_wallet_args, a)
+			command::receive(inst_wallet(), &global_wallet_args, a)
 		}
 		("finalize", Some(args)) => {
 			let a = arg_parse!(wallet_args::parse_finalize_args(&args));
-			command::finalize(wallet.clone(), a)
+			command::finalize(inst_wallet(), a)
 		}
 		("info", Some(args)) => {
 			let a = arg_parse!(wallet_args::parse_info_args(&args));
 			command::info(
-				wallet.clone(),
+				inst_wallet(),
 				&global_wallet_args,
 				a,
 				wallet_config.dark_background_color_scheme.unwrap_or(true),
 			)
 		}
 		("outputs", Some(_)) => command::outputs(
-			wallet.clone(),
+			inst_wallet(),
 			&global_wallet_args,
 			wallet_config.dark_background_color_scheme.unwrap_or(true),
 		),
 		("txs", Some(args)) => {
 			let a = arg_parse!(wallet_args::parse_txs_args(&args));
 			command::txs(
-				wallet.clone(),
+				inst_wallet(),
 				&global_wallet_args,
 				a,
 				wallet_config.dark_background_color_scheme.unwrap_or(true),
@@ -366,13 +312,13 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		}
 		("repost", Some(args)) => {
 			let a = arg_parse!(wallet_args::parse_repost_args(&args));
-			command::repost(wallet.clone(), a)
+			command::repost(inst_wallet(), a)
 		}
 		("cancel", Some(args)) => {
 			let a = arg_parse!(wallet_args::parse_cancel_args(&args));
-			command::cancel(wallet.clone(), a)
+			command::cancel(inst_wallet(), a)
 		}
-		("restore", Some(_)) => command::restore(wallet.clone()),
+		("restore", Some(_)) => command::restore(inst_wallet()),
 		_ => {
 			println!("Unknown wallet command, use 'grin help wallet' for details");
 			return 0;
