@@ -420,6 +420,7 @@ where
 		req: Request<Body>,
 		api: APIOwner<T, C, K>,
 	) -> Box<Future<Item = (), Error = Error> + Send> {
+		warn!("In post tx");
 		let params = match req.uri().query() {
 			Some(query_string) => form_urlencoded::parse(query_string.as_bytes())
 				.into_owned()
@@ -430,19 +431,21 @@ where
 			None => HashMap::new(),
 		};
 		let fluff = params.get("fluff").is_some();
-		Box::new(
-			parse_body(req).and_then(move |slate| match api.post_tx(&slate, fluff) {
+		warn!("Passed params and fluff stuff");
+		Box::new(parse_body(req).and_then(
+			move |slate: Slate| match api.post_tx(&slate.tx, fluff) {
 				Ok(_) => ok(()),
 				Err(e) => {
 					error!("post_tx: failed with error: {}", e);
 					err(e)
 				}
-			}),
-		)
+			},
+		))
 	}
 
 	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
 		let api = APIOwner::new(self.wallet.clone());
+		warn!("In handle post request");
 		match req
 			.uri()
 			.path()
