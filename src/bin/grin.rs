@@ -25,9 +25,9 @@ extern crate serde;
 extern crate serde_json;
 #[macro_use]
 extern crate log;
+extern crate failure;
 extern crate rpassword;
 extern crate term;
-extern crate failure;
 #[macro_use]
 extern crate failure_derive;
 

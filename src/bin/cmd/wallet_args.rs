@@ -31,13 +31,10 @@ pub enum Error {
 // parses a required value, or throws error with message otherwise
 fn parse_required<'a>(args: &'a ArgMatches, name: &str) -> Result<&'a str, Error> {
 	let arg = args.value_of(name);
-	match arg{
+	match arg {
 		Some(ar) => Ok(ar),
 		None => {
-			let msg = format!(
-				"Value for argument '{}' is required in this context",
-				name,
-			);
+			let msg = format!("Value for argument '{}' is required in this context", name,);
 			Err(Error::ArgumentError(msg))
 		}
 	}
@@ -49,11 +46,7 @@ fn parse_u64(arg: &str, name: &str) -> Result<u64, Error> {
 	match val {
 		Ok(v) => Ok(v),
 		Err(e) => {
-			let msg = format!(
-				"Could not parse {} as a whole number. e={:?}",
-				name,
-				e
-			);
+			let msg = format!("Could not parse {} as a whole number. e={:?}", name, e);
 			Err(Error::ArgumentError(msg))
 		}
 	}
@@ -91,7 +84,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, Error> {
 				"Could not parse amount as a number with optional decimal point. e={:?}",
 				e
 			);
-			return Err(Error::ArgumentError(msg))
+			return Err(Error::ArgumentError(msg));
 		}
 	};
 
