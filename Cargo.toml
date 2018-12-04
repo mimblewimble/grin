@@ -30,6 +30,8 @@ serde_json = "1"
 log = "0.4"
 term = "0.5"
 rpassword = "2.0.0"
+failure = "0.1"
+failure_derive = "0.1"
 
 grin_api = { path = "./api", version = "0.4.2" }
 grin_config = { path = "./config", version = "0.4.2" }

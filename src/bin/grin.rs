@@ -27,6 +27,9 @@ extern crate serde_json;
 extern crate log;
 extern crate rpassword;
 extern crate term;
+extern crate failure;
+#[macro_use]
+extern crate failure_derive;
 
 extern crate grin_api as api;
 extern crate grin_config as config;

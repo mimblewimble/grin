@@ -100,7 +100,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 
 	let node_api_secret = get_first_line(wallet_config.node_api_secret_path.clone());
 
-	let global_wallet_args = wallet_args::parse_global_args(&wallet_args);
+	let global_wallet_args = wallet_args::parse_global_args(&wallet_args).unwrap_or_else(|e| {
+		println!("{}", e);
+		std::process::exit(0);
+	});
 
 	// Decrypt the seed from the seed file and derive the keychain.
 	// Generate the initial wallet seed if we are running "wallet init".
@@ -310,39 +313,75 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 
 	let res = match wallet_args.subcommand() {
 		("account", Some(args)) => {
-			command::account(wallet.clone(), wallet_args::parse_account_args(&args))
+			let a = wallet_args::parse_account_args(&args).unwrap_or_else(|e| {
+				println!("{}", e);
+				std::process::exit(0);
+			});
+			command::account(wallet.clone(), a)
 		}
-		("send", Some(args)) => command::send(wallet.clone(), wallet_args::parse_send_args(&args)),
-		("receive", Some(args)) => command::receive(
-			wallet.clone(),
-			&global_wallet_args,
-			wallet_args::parse_receive_args(&args),
-		),
+		("send", Some(args)) => {
+			let a = wallet_args::parse_send_args(&args).unwrap_or_else(|e| {
+				println!("{}", e);
+				std::process::exit(0);
+			});
+			command::send(wallet.clone(), a)
+		}
+		("receive", Some(args)) => {
+			let a = wallet_args::parse_receive_args(&args).unwrap_or_else(|e| {
+				println!("{}", e);
+				std::process::exit(0);
+			});
+			command::receive(wallet.clone(), &global_wallet_args, a)
+		}
 		("finalize", Some(args)) => {
-			command::finalize(wallet.clone(), wallet_args::parse_finalize_args(&args))
+			let a = wallet_args::parse_finalize_args(&args).unwrap_or_else(|e| {
+				println!("{}", e);
+				std::process::exit(0);
+			});
+			command::finalize(wallet.clone(), a)
 		}
-		("info", Some(args)) => command::info(
-			wallet.clone(),
-			&global_wallet_args,
-			wallet_args::parse_info_args(&args),
-			wallet_config.dark_background_color_scheme.unwrap_or(true),
-		),
+		("info", Some(args)) => {
+			let a = wallet_args::parse_info_args(&args).unwrap_or_else(|e| {
+				println!("{}", e);
+				std::process::exit(0);
+			});
+			command::info(
+				wallet.clone(),
+				&global_wallet_args,
+				a,
+				wallet_config.dark_background_color_scheme.unwrap_or(true),
+			)
+		}
 		("outputs", Some(_)) => command::outputs(
 			wallet.clone(),
 			&global_wallet_args,
 			wallet_config.dark_background_color_scheme.unwrap_or(true),
 		),
-		("txs", Some(args)) => command::txs(
-			wallet.clone(),
-			&global_wallet_args,
-			wallet_args::parse_txs_args(&args),
-			wallet_config.dark_background_color_scheme.unwrap_or(true),
-		),
+		("txs", Some(args)) => {
+			let a = wallet_args::parse_txs_args(&args).unwrap_or_else(|e| {
+				println!("{}", e);
+				std::process::exit(0);
+			});
+			command::txs(
+				wallet.clone(),
+				&global_wallet_args,
+				a,
+				wallet_config.dark_background_color_scheme.unwrap_or(true),
+			)
+		}
 		("repost", Some(args)) => {
-			command::repost(wallet.clone(), wallet_args::parse_repost_args(&args))
+			let a = wallet_args::parse_repost_args(&args).unwrap_or_else(|e| {
+				println!("{}", e);
+				std::process::exit(0);
+			});
+			command::repost(wallet.clone(), a)
 		}
 		("cancel", Some(args)) => {
-			command::cancel(wallet.clone(), wallet_args::parse_cancel_args(&args))
+			let a = wallet_args::parse_cancel_args(&args).unwrap_or_else(|e| {
+				println!("{}", e);
+				std::process::exit(0);
+			});
+			command::cancel(wallet.clone(), a)
 		}
 		("restore", Some(_)) => command::restore(wallet.clone()),
 		_ => {
