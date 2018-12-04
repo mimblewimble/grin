@@ -731,6 +731,7 @@ where
 	/// Verifies all messages in the slate match their public keys
 	pub fn verify_slate_messages(&mut self, slate: &Slate) -> Result<(), Error> {
 		let mut w = self.wallet.lock();
+		w.open_with_credentials()?;
 		slate.verify_messages(w.keychain().secp())?;
 		Ok(())
 	}
