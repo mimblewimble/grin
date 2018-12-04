@@ -33,7 +33,6 @@ use keychain;
 use servers::start_webwallet_server;
 use util::file::get_first_line;
 
-
 // define what to do on argument error
 macro_rules! arg_parse {
 	( $r:expr ) => {
@@ -42,9 +41,9 @@ macro_rules! arg_parse {
 			Err(e) => {
 				println!("{}", e);
 				return 0;
+				}
 			}
-		}
-	}
+	};
 }
 
 pub fn _init_wallet_seed(wallet_config: WalletConfig, password: &str) {
