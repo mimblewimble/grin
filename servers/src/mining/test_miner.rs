@@ -17,25 +17,25 @@
 //! header with its proof-of-work.  Any valid mined blocks are submitted to the
 //! network.
 
+use crate::util::RwLock;
 use chrono::prelude::Utc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use util::RwLock;
 
-use chain;
-use common::types::StratumServerConfig;
-use core::core::hash::{Hash, Hashed};
-use core::core::verifier_cache::VerifierCache;
-use core::core::{Block, BlockHeader};
-use core::global;
-use mining::mine_block;
-use pool;
+use crate::chain;
+use crate::common::types::StratumServerConfig;
+use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::verifier_cache::VerifierCache;
+use crate::core::core::{Block, BlockHeader};
+use crate::core::global;
+use crate::mining::mine_block;
+use crate::pool;
 
 pub struct Miner {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
-	verifier_cache: Arc<RwLock<VerifierCache>>,
+	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	stop: Arc<AtomicBool>,
 
 	// Just to hold the port we're on, so this miner can be identified
@@ -50,7 +50,7 @@ impl Miner {
 		config: StratumServerConfig,
 		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
-		verifier_cache: Arc<RwLock<VerifierCache>>,
+		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		stop: Arc<AtomicBool>,
 	) -> Miner {
 		Miner {
@@ -99,7 +99,8 @@ impl Miner {
 				global::min_edge_bits(),
 				global::proofsize(),
 				10,
-			).unwrap();
+			)
+			.unwrap();
 			ctx.set_header_nonce(b.header.pre_pow(), None, true)
 				.unwrap();
 			if let Ok(proofs) = ctx.find_cycles() {

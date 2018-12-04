@@ -16,12 +16,12 @@
 
 use rand::{thread_rng, Rng};
 
-use consensus::VerifySortOrder;
-use core::block::{Block, BlockHeader, Error};
-use core::hash::Hashed;
-use core::id::ShortIdentifiable;
-use core::{KernelFeatures, Output, OutputFeatures, ShortId, TxKernel};
-use ser::{self, read_multi, Readable, Reader, Writeable, Writer};
+use crate::consensus::VerifySortOrder;
+use crate::core::block::{Block, BlockHeader, Error};
+use crate::core::hash::Hashed;
+use crate::core::id::ShortIdentifiable;
+use crate::core::{KernelFeatures, Output, OutputFeatures, ShortId, TxKernel};
+use crate::ser::{self, read_multi, Readable, Reader, Writeable, Writer};
 
 /// Container for full (full) outputs and kernels and kern_ids for a compact block.
 #[derive(Debug, Clone)]
@@ -84,7 +84,7 @@ impl CompactBlockBody {
 }
 
 impl Readable for CompactBlockBody {
-	fn read(reader: &mut Reader) -> Result<CompactBlockBody, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<CompactBlockBody, ser::Error> {
 		let (out_full_len, kern_full_len, kern_id_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
@@ -215,7 +215,7 @@ impl Writeable for CompactBlock {
 /// Implementation of Readable for a compact block, defines how to read a
 /// compact block from a binary stream.
 impl Readable for CompactBlock {
-	fn read(reader: &mut Reader) -> Result<CompactBlock, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<CompactBlock, ser::Error> {
 		let header = BlockHeader::read(reader)?;
 		let nonce = reader.read_u64()?;
 		let body = CompactBlockBody::read(reader)?;

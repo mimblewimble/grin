@@ -22,9 +22,9 @@ pub use self::null::NullWalletCommAdapter;
 
 use std::collections::HashMap;
 
-use libtx::slate::Slate;
-use libwallet::Error;
-use WalletConfig;
+use crate::libtx::slate::Slate;
+use crate::libwallet::Error;
+use crate::WalletConfig;
 
 /// Encapsulate wallet to wallet communication functions
 pub trait WalletCommAdapter {

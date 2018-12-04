@@ -14,10 +14,10 @@
 
 //! Base types that the block chain pipeline requires.
 
-use core::core::hash::{Hash, Hashed, ZERO_HASH};
-use core::core::{Block, BlockHeader};
-use core::pow::Difficulty;
-use core::ser;
+use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
+use crate::core::core::{Block, BlockHeader};
+use crate::core::pow::Difficulty;
+use crate::core::ser;
 
 bitflags! {
 /// Options for block validation
@@ -98,7 +98,7 @@ impl ser::Writeable for Tip {
 }
 
 impl ser::Readable for Tip {
-	fn read(reader: &mut ser::Reader) -> Result<Tip, ser::Error> {
+	fn read(reader: &mut dyn ser::Reader) -> Result<Tip, ser::Error> {
 		let height = reader.read_u64()?;
 		let last = Hash::read(reader)?;
 		let prev = Hash::read(reader)?;

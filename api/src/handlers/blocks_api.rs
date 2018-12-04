@@ -13,18 +13,18 @@
 // limitations under the License.
 
 use super::utils::{get_output, w};
-use chain;
-use core::core::hash::Hash;
-use core::core::hash::Hashed;
+use crate::chain;
+use crate::core::core::hash::Hash;
+use crate::core::core::hash::Hashed;
+use crate::rest::*;
+use crate::router::{Handler, ResponseFuture};
+use crate::types::*;
+use crate::util;
+use crate::web::*;
 use failure::ResultExt;
 use hyper::{Body, Request, StatusCode};
 use regex::Regex;
-use rest::*;
-use router::{Handler, ResponseFuture};
 use std::sync::Weak;
-use types::*;
-use util;
-use web::*;
 
 /// Gets block headers given either a hash or height or an output commit.
 /// GET /v1/headers/<hash>

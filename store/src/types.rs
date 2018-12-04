@@ -17,8 +17,8 @@ use memmap;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter, ErrorKind, Read, Write};
 
-use core::core::hash::Hash;
-use core::ser::{self, FixedLength};
+use crate::core::core::hash::Hash;
+use crate::core::ser::{self, FixedLength};
 
 /// A no-op function for doing nothing with some pruned data.
 pub fn prune_noop(_pruned_data: &[u8]) {}

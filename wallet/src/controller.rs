@@ -15,21 +15,24 @@
 //! Controller for wallet.. instantiates and handles listeners (or single-run
 //! invocations) as needed.
 //! Still experimental
-use adapters::{FileWalletCommAdapter, HTTPWalletCommAdapter};
-use api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router, TLSConfig};
-use core::core;
-use core::core::Transaction;
+use crate::adapters::{FileWalletCommAdapter, HTTPWalletCommAdapter};
+use crate::api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router, TLSConfig};
+use crate::core::core;
+use crate::core::core::Transaction;
+use crate::keychain::Keychain;
+use crate::libtx::slate::Slate;
+use crate::libwallet::api::{APIForeign, APIOwner};
+use crate::libwallet::types::{
+	CbData, NodeClient, OutputData, SendTXArgs, TxLogEntry, WalletBackend, WalletInfo,
+};
+use crate::libwallet::{Error, ErrorKind};
+use crate::util::secp::pedersen;
+use crate::util::to_base64;
+use crate::util::Mutex;
 use failure::ResultExt;
 use futures::future::{err, ok};
 use futures::{Future, Stream};
 use hyper::{Body, Request, Response, StatusCode};
-use keychain::Keychain;
-use libtx::slate::Slate;
-use libwallet::api::{APIForeign, APIOwner};
-use libwallet::types::{
-	CbData, NodeClient, OutputData, SendTXArgs, TxLogEntry, WalletBackend, WalletInfo,
-};
-use libwallet::{Error, ErrorKind};
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::collections::HashMap;
@@ -37,9 +40,6 @@ use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use url::form_urlencoded;
-use util::secp::pedersen;
-use util::to_base64;
-use util::Mutex;
 
 /// Instantiate wallet Owner API for a single-use (command line) call
 /// Return a function containing a loaded API context to call
@@ -141,7 +141,7 @@ where
 		.map_err(|e| ErrorKind::GenericError(format!("API thread panicked :{:?}", e)).into())
 }
 
-type WalletResponseFuture = Box<Future<Item = Response<Body>, Error = Error> + Send>;
+type WalletResponseFuture = Box<dyn Future<Item = Response<Body>, Error = Error> + Send>;
 
 /// API Handler/Wrapper for owner functions
 pub struct OwnerAPIHandler<T: ?Sized, C, K>
@@ -247,7 +247,8 @@ where
 		} else {
 			Err(ErrorKind::TransactionDumpError(
 				"retrieve_stored_tx: Cannot retrieve transaction. Missing id param in request.",
-			).into())
+			)
+			.into())
 		}
 	}
 
@@ -280,28 +281,30 @@ where
 	fn handle_get_request(&self, req: &Request<Body>) -> Result<Response<Body>, Error> {
 		let api = APIOwner::new(self.wallet.clone());
 
-		Ok(match req
-			.uri()
-			.path()
-			.trim_right_matches("/")
-			.rsplit("/")
-			.next()
-			.unwrap()
-		{
-			"retrieve_outputs" => json_response(&self.retrieve_outputs(req, api)?),
-			"retrieve_summary_info" => json_response(&self.retrieve_summary_info(req, api)?),
-			"node_height" => json_response(&self.node_height(req, api)?),
-			"retrieve_txs" => json_response(&self.retrieve_txs(req, api)?),
-			"retrieve_stored_tx" => json_response(&self.retrieve_stored_tx(req, api)?),
-			_ => response(StatusCode::BAD_REQUEST, ""),
-		})
+		Ok(
+			match req
+				.uri()
+				.path()
+				.trim_right_matches("/")
+				.rsplit("/")
+				.next()
+				.unwrap()
+			{
+				"retrieve_outputs" => json_response(&self.retrieve_outputs(req, api)?),
+				"retrieve_summary_info" => json_response(&self.retrieve_summary_info(req, api)?),
+				"node_height" => json_response(&self.node_height(req, api)?),
+				"retrieve_txs" => json_response(&self.retrieve_txs(req, api)?),
+				"retrieve_stored_tx" => json_response(&self.retrieve_stored_tx(req, api)?),
+				_ => response(StatusCode::BAD_REQUEST, ""),
+			},
+		)
 	}
 
 	pub fn issue_send_tx(
 		&self,
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
-	) -> Box<Future<Item = Slate, Error = Error> + Send> {
+	) -> Box<dyn Future<Item = Slate, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(move |args: SendTXArgs| {
 			let result = api.initiate_tx(
 				None,
@@ -358,7 +361,7 @@ where
 		&self,
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
-	) -> Box<Future<Item = Slate, Error = Error> + Send> {
+	) -> Box<dyn Future<Item = Slate, Error = Error> + Send> {
 		Box::new(
 			parse_body(req).and_then(move |mut slate| match api.finalize_tx(&mut slate) {
 				Ok(_) => ok(slate.clone()),
@@ -374,7 +377,7 @@ where
 		&self,
 		req: Request<Body>,
 		mut api: APIOwner<T, C, K>,
-	) -> Box<Future<Item = (), Error = Error> + Send> {
+	) -> Box<dyn Future<Item = (), Error = Error> + Send> {
 		let params = parse_params(&req);
 		if let Some(id_string) = params.get("id") {
 			Box::new(match id_string[0].parse() {
@@ -389,7 +392,8 @@ where
 					error!("cancel_tx: could not parse id: {}", e);
 					err(ErrorKind::TransactionCancellationError(
 						"cancel_tx: cannot cancel transaction. Could not parse id in request.",
-					).into())
+					)
+					.into())
 				}
 			})
 		} else if let Some(tx_id_string) = params.get("tx_id") {
@@ -405,13 +409,15 @@ where
 					error!("cancel_tx: could not parse tx_id: {}", e);
 					err(ErrorKind::TransactionCancellationError(
 						"cancel_tx: cannot cancel transaction. Could not parse tx_id in request.",
-					).into())
+					)
+					.into())
 				}
 			})
 		} else {
 			Box::new(err(ErrorKind::TransactionCancellationError(
 				"cancel_tx: Cannot cancel transaction. Missing id or tx_id param in request.",
-			).into()))
+			)
+			.into()))
 		}
 	}
 
@@ -419,7 +425,7 @@ where
 		&self,
 		req: Request<Body>,
 		api: APIOwner<T, C, K>,
-	) -> Box<Future<Item = (), Error = Error> + Send> {
+	) -> Box<dyn Future<Item = (), Error = Error> + Send> {
 		let params = match req.uri().query() {
 			Some(query_string) => form_urlencoded::parse(query_string.as_bytes())
 				.into_owned()
@@ -469,7 +475,8 @@ where
 			),
 			_ => Box::new(err(ErrorKind::GenericError(
 				"Unknown error handling post request".to_owned(),
-			).into())),
+			)
+			.into())),
 		}
 	}
 }
@@ -539,7 +546,7 @@ where
 		&self,
 		req: Request<Body>,
 		mut api: APIForeign<T, C, K>,
-	) -> Box<Future<Item = CbData, Error = Error> + Send> {
+	) -> Box<dyn Future<Item = CbData, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(move |block_fees| api.build_coinbase(&block_fees)))
 	}
 
@@ -547,7 +554,7 @@ where
 		&self,
 		req: Request<Body>,
 		mut api: APIForeign<T, C, K>,
-	) -> Box<Future<Item = Slate, Error = Error> + Send> {
+	) -> Box<dyn Future<Item = Slate, Error = Error> + Send> {
 		Box::new(parse_body(req).and_then(
 			//TODO: No way to insert a message from the params
 			move |mut slate| match api.receive_tx(&mut slate, None, None) {
@@ -656,7 +663,7 @@ fn parse_params(req: &Request<Body>) -> HashMap<String, Vec<String>> {
 	}
 }
 
-fn parse_body<T>(req: Request<Body>) -> Box<Future<Item = T, Error = Error> + Send>
+fn parse_body<T>(req: Request<Body>) -> Box<dyn Future<Item = T, Error = Error> + Send>
 where
 	for<'de> T: Deserialize<'de> + Send + 'static,
 {

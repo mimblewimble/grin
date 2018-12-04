@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::util::RwLock;
 use std::convert::From;
 use std::fs::File;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::mpsc;
 use std::sync::Arc;
-use util::RwLock;
 
 use chrono::prelude::*;
 
-use core::core::hash::Hash;
-use core::pow::Difficulty;
-use core::{core, ser};
+use crate::core::core::hash::Hash;
+use crate::core::pow::Difficulty;
+use crate::core::{core, ser};
 use grin_store;
 
 /// Maximum number of block headers a peer should ever send
@@ -403,10 +403,10 @@ pub trait NetAdapter: ChainAdapter {
 	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr>;
 
 	/// A list of peers has been received from one of our peers.
-	fn peer_addrs_received(&self, Vec<SocketAddr>);
+	fn peer_addrs_received(&self, _: Vec<SocketAddr>);
 
 	/// Heard total_difficulty from a connected peer (via ping/pong).
-	fn peer_difficulty(&self, SocketAddr, Difficulty, u64);
+	fn peer_difficulty(&self, _: SocketAddr, _: Difficulty, _: u64);
 
 	/// Is this peer currently banned?
 	fn is_banned(&self, addr: SocketAddr) -> bool;

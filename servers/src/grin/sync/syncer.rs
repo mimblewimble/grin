@@ -17,13 +17,13 @@ use std::sync::Arc;
 use std::thread;
 use std::time;
 
-use chain;
-use common::types::{SyncState, SyncStatus};
-use core::pow::Difficulty;
-use grin::sync::body_sync::BodySync;
-use grin::sync::header_sync::HeaderSync;
-use grin::sync::state_sync::StateSync;
-use p2p;
+use crate::chain;
+use crate::common::types::{SyncState, SyncStatus};
+use crate::core::pow::Difficulty;
+use crate::grin::sync::body_sync::BodySync;
+use crate::grin::sync::header_sync::HeaderSync;
+use crate::grin::sync::state_sync::StateSync;
+use crate::p2p;
 
 pub fn run_sync(
 	sync_state: Arc<SyncState>,

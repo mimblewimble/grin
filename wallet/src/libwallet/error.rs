@@ -19,10 +19,10 @@ use std::io;
 
 use failure::{Backtrace, Context, Fail};
 
-use core;
-use core::core::transaction;
-use keychain;
-use libtx;
+use crate::core;
+use crate::core::core::transaction;
+use crate::keychain;
+use crate::libtx;
 
 /// Error definition
 #[derive(Debug, Fail)]
@@ -36,8 +36,7 @@ pub enum ErrorKind {
 	/// Not enough funds
 	#[fail(
 		display = "Not enough funds. Required: {}, Available: {}",
-		needed,
-		available
+		needed, available
 	)]
 	NotEnoughFunds {
 		/// available funds
@@ -49,8 +48,7 @@ pub enum ErrorKind {
 	/// Fee dispute
 	#[fail(
 		display = "Fee dispute: sender fee {}, recipient fee {}",
-		sender_fee,
-		recipient_fee
+		sender_fee, recipient_fee
 	)]
 	FeeDispute {
 		/// sender fee
@@ -62,8 +60,7 @@ pub enum ErrorKind {
 	/// Fee Exceeds amount
 	#[fail(
 		display = "Fee exceeds amount: sender amount {}, recipient fee {}",
-		sender_amount,
-		recipient_fee
+		sender_amount, recipient_fee
 	)]
 	FeeExceedsAmount {
 		/// sender amount
@@ -194,7 +191,7 @@ pub enum ErrorKind {
 }
 
 impl Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let cause = match self.cause() {
 			Some(c) => format!("{}", c),
 			None => String::from("Unknown"),
@@ -217,7 +214,7 @@ impl Error {
 		self.inner.get_context().clone()
 	}
 	/// get cause
-	pub fn cause(&self) -> Option<&Fail> {
+	pub fn cause(&self) -> Option<&dyn Fail> {
 		self.inner.cause()
 	}
 	/// get backtrace

@@ -12,30 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate chrono;
-extern crate env_logger;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store as store;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
-extern crate rand;
+use grin_chain as chain;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_store as store;
+use grin_util as util;
+use grin_wallet as wallet;
 
+use crate::util::RwLock;
 use chrono::Duration;
 use std::fs;
 use std::sync::Arc;
-use util::RwLock;
 
-use chain::types::NoopAdapter;
-use chain::Chain;
-use core::core::verifier_cache::LruVerifierCache;
-use core::core::{Block, BlockHeader, Transaction};
-use core::global::{self, ChainTypes};
-use core::pow::{self, Difficulty};
-use core::{consensus, genesis};
-use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use wallet::libtx;
+use crate::chain::types::NoopAdapter;
+use crate::chain::Chain;
+use crate::core::core::verifier_cache::LruVerifierCache;
+use crate::core::core::{Block, BlockHeader, Transaction};
+use crate::core::global::{self, ChainTypes};
+use crate::core::pow::{self, Difficulty};
+use crate::core::{consensus, genesis};
+use crate::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
+use crate::wallet::libtx;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -56,7 +53,8 @@ fn setup(dir_name: &str) -> Chain {
 		pow::verify_size,
 		verifier_cache,
 		false,
-	).unwrap()
+	)
+	.unwrap()
 }
 
 fn reload_chain(dir_name: &str) -> Chain {
@@ -70,7 +68,8 @@ fn reload_chain(dir_name: &str) -> Chain {
 		pow::verify_size,
 		verifier_cache,
 		false,
-	).unwrap()
+	)
+	.unwrap()
 }
 
 #[test]
@@ -99,7 +98,8 @@ fn data_files() {
 				next_header_info.difficulty,
 				global::proofsize(),
 				global::min_edge_bits(),
-			).unwrap();
+			)
+			.unwrap();
 
 			chain
 				.process_block(b.clone(), chain::Options::MINE)

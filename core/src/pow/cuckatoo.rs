@@ -17,10 +17,10 @@ use std::mem;
 use byteorder::{BigEndian, WriteBytesExt};
 use croaring::Bitmap;
 
-use pow::common::{CuckooParams, EdgeType, Link};
-use pow::error::{Error, ErrorKind};
-use pow::{PoWContext, Proof};
-use util;
+use crate::pow::common::{CuckooParams, EdgeType, Link};
+use crate::pow::error::{Error, ErrorKind};
+use crate::pow::{PoWContext, Proof};
+use crate::util;
 
 struct Graph<T>
 where
@@ -159,7 +159,7 @@ pub fn new_cuckatoo_ctx<T>(
 	edge_bits: u8,
 	proof_size: usize,
 	max_sols: u32,
-) -> Result<Box<PoWContext<T>>, Error>
+) -> Result<Box<dyn PoWContext<T>>, Error>
 where
 	T: EdgeType + 'static,
 {

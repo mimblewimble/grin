@@ -13,12 +13,12 @@
 // limitations under the License.
 
 use super::utils::w;
+use crate::p2p;
+use crate::p2p::types::{PeerInfoDisplay, ReasonForBan};
+use crate::router::{Handler, ResponseFuture};
+use crate::web::*;
 use hyper::{Body, Request, StatusCode};
-use p2p;
-use p2p::types::{PeerInfoDisplay, ReasonForBan};
-use router::{Handler, ResponseFuture};
 use std::sync::Weak;
-use web::*;
 
 pub struct PeersAllHandler {
 	pub peers: Weak<p2p::Peers>,

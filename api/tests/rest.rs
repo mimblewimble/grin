@@ -1,8 +1,7 @@
-extern crate grin_api as api;
-extern crate grin_util as util;
-extern crate hyper;
+use grin_api as api;
+use grin_util as util;
 
-use api::*;
+use crate::api::*;
 use hyper::{Body, Request};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicUsize, Ordering, ATOMIC_USIZE_INIT};
@@ -41,7 +40,7 @@ impl Handler for CounterMiddleware {
 	fn call(
 		&self,
 		req: Request<Body>,
-		mut handlers: Box<Iterator<Item = HandlerObj>>,
+		mut handlers: Box<dyn Iterator<Item = HandlerObj>>,
 	) -> ResponseFuture {
 		self.counter.fetch_add(1, Ordering::SeqCst);
 		handlers.next().unwrap().call(req, handlers)

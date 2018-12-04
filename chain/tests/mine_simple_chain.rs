@@ -12,30 +12,28 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate chrono;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store as store;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
-extern crate rand;
+use grin_chain as chain;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_store as store;
+use grin_util as util;
+use grin_wallet as wallet;
 
+use crate::util::RwLock;
 use chrono::Duration;
 use std::fs;
 use std::sync::Arc;
-use util::RwLock;
 
-use chain::types::NoopAdapter;
-use chain::Chain;
-use core::core::hash::Hashed;
-use core::core::verifier_cache::LruVerifierCache;
-use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
-use core::global::ChainTypes;
-use core::pow::Difficulty;
-use core::{consensus, global, pow};
-use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use wallet::libtx::{self, build};
+use crate::chain::types::NoopAdapter;
+use crate::chain::Chain;
+use crate::core::core::hash::Hashed;
+use crate::core::core::verifier_cache::LruVerifierCache;
+use crate::core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
+use crate::core::global::ChainTypes;
+use crate::core::pow::Difficulty;
+use crate::core::{consensus, global, pow};
+use crate::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
+use crate::wallet::libtx::{self, build};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -54,7 +52,8 @@ fn setup(dir_name: &str, genesis: Block) -> Chain {
 		pow::verify_size,
 		verifier_cache,
 		false,
-	).unwrap()
+	)
+	.unwrap()
 }
 
 #[test]
@@ -87,7 +86,8 @@ fn mine_empty_chain() {
 			next_header_info.difficulty,
 			global::proofsize(),
 			edge_bits,
-		).unwrap();
+		)
+		.unwrap();
 		b.header.pow.proof.edge_bits = edge_bits;
 
 		let bhash = b.hash();
@@ -272,7 +272,8 @@ fn spend_in_fork_and_compact() {
 			build::with_fee(20000),
 		],
 		&kc,
-	).unwrap();
+	)
+	.unwrap();
 
 	let next = prepare_block_tx(&kc, &fork_head, &chain, 7, vec![&tx1]);
 	let prev_main = next.header.clone();
@@ -288,7 +289,8 @@ fn spend_in_fork_and_compact() {
 			build::with_fee(20000),
 		],
 		&kc,
-	).unwrap();
+	)
+	.unwrap();
 
 	let next = prepare_block_tx(&kc, &prev_main, &chain, 9, vec![&tx2]);
 	let prev_main = next.header.clone();
@@ -314,16 +316,12 @@ fn spend_in_fork_and_compact() {
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 6);
 	assert_eq!(head.hash(), prev_main.hash());
-	assert!(
-		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
-			.is_ok()
-	);
-	assert!(
-		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
-			.is_err()
-	);
+	assert!(chain
+		.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
+		.is_ok());
+	assert!(chain
+		.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
+		.is_err());
 
 	// make the fork win
 	let fork_next = prepare_fork_block(&kc, &prev_fork, &chain, 10);
@@ -337,16 +335,12 @@ fn spend_in_fork_and_compact() {
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 7);
 	assert_eq!(head.hash(), prev_fork.hash());
-	assert!(
-		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
-			.is_ok()
-	);
-	assert!(
-		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
-			.is_err()
-	);
+	assert!(chain
+		.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
+		.is_ok());
+	assert!(chain
+		.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
+		.is_err());
 
 	// add 20 blocks to go past the test horizon
 	let mut prev = prev_fork;
@@ -401,7 +395,8 @@ fn output_header_mappings() {
 			next_header_info.difficulty,
 			global::proofsize(),
 			edge_bits,
-		).unwrap();
+		)
+		.unwrap();
 		b.header.pow.proof.edge_bits = edge_bits;
 
 		chain.process_block(b, chain::Options::MINE).unwrap();
@@ -510,7 +505,8 @@ fn actual_diff_iter_output() {
 		pow::verify_size,
 		verifier_cache,
 		false,
-	).unwrap();
+	)
+	.unwrap();
 	let iter = chain.difficulty_iter();
 	let mut last_time = 0;
 	let mut first = true;

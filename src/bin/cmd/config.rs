@@ -13,7 +13,7 @@
 // limitations under the License.
 
 /// Grin configuration file output command
-use config::{GlobalConfig, GlobalWalletConfig};
+use crate::config::{GlobalConfig, GlobalWalletConfig};
 use std::env;
 
 /// Create a config file in the current directory

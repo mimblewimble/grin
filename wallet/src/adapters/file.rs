@@ -19,16 +19,16 @@ use std::io::{Read, Write};
 use serde_json as json;
 use std::collections::HashMap;
 
-use libtx::slate::Slate;
-use libwallet::{Error, ErrorKind};
-use {WalletCommAdapter, WalletConfig};
+use crate::libtx::slate::Slate;
+use crate::libwallet::{Error, ErrorKind};
+use crate::{WalletCommAdapter, WalletConfig};
 
 #[derive(Clone)]
 pub struct FileWalletCommAdapter {}
 
 impl FileWalletCommAdapter {
 	/// Create
-	pub fn new() -> Box<WalletCommAdapter> {
+	pub fn new() -> Box<dyn WalletCommAdapter> {
 		Box::new(FileWalletCommAdapter {})
 	}
 }

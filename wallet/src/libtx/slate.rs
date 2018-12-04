@@ -19,20 +19,20 @@ use rand::thread_rng;
 use std::sync::Arc;
 use uuid::Uuid;
 
-use core::core::committed::Committed;
-use core::core::transaction::kernel_sig_msg;
-use core::core::verifier_cache::LruVerifierCache;
-use core::core::{amount_to_hr_string, Transaction};
-use keychain::{BlindSum, BlindingFactor, Keychain};
-use libtx::error::{Error, ErrorKind};
-use libtx::{aggsig, build, tx_fee};
+use crate::core::core::committed::Committed;
+use crate::core::core::transaction::kernel_sig_msg;
+use crate::core::core::verifier_cache::LruVerifierCache;
+use crate::core::core::{amount_to_hr_string, Transaction};
+use crate::keychain::{BlindSum, BlindingFactor, Keychain};
+use crate::libtx::error::{Error, ErrorKind};
+use crate::libtx::{aggsig, build, tx_fee};
 
-use util::secp;
-use util::secp::key::{PublicKey, SecretKey};
-use util::secp::Signature;
-use util::RwLock;
+use crate::util::secp;
+use crate::util::secp::key::{PublicKey, SecretKey};
+use crate::util::secp::Signature;
+use crate::util::RwLock;
 
-use blake2::blake2b::blake2b;
+use crate::blake2::blake2b::blake2b;
 
 /// Public data for each participant in the slate
 

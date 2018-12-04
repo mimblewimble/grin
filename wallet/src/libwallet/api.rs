@@ -29,24 +29,24 @@
 //! its operation, then 'close' the wallet (unloading references to the keychain and master
 //! seed).
 
+use crate::util::Mutex;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use util::Mutex;
 use uuid::Uuid;
 
-use core::core::hash::Hashed;
-use core::core::Transaction;
-use core::ser;
-use keychain::{Identifier, Keychain};
-use libtx::slate::Slate;
-use libwallet::internal::{keys, tx, updater};
-use libwallet::types::{
+use crate::core::core::hash::Hashed;
+use crate::core::core::Transaction;
+use crate::core::ser;
+use crate::keychain::{Identifier, Keychain};
+use crate::libtx::slate::Slate;
+use crate::libwallet::internal::{keys, tx, updater};
+use crate::libwallet::types::{
 	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, TxLogEntry, TxWrapper,
 	WalletBackend, WalletInfo,
 };
-use libwallet::{Error, ErrorKind};
-use util;
-use util::secp::pedersen;
+use crate::libwallet::{Error, ErrorKind};
+use crate::util;
+use crate::util::secp::pedersen;
 
 /// Functions intended for use by the owner (e.g. master seed holder) of the wallet.
 pub struct APIOwner<W: ?Sized, C, K>

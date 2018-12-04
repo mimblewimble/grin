@@ -23,11 +23,11 @@ use std::convert::AsRef;
 use std::ops::Add;
 use std::{fmt, ops};
 
-use blake2::blake2b::Blake2b;
+use crate::blake2::blake2b::Blake2b;
 
-use consensus;
-use ser::{self, AsFixedBytes, Error, FixedLength, Readable, Reader, Writeable, Writer};
-use util;
+use crate::consensus;
+use crate::ser::{self, AsFixedBytes, Error, FixedLength, Readable, Reader, Writeable, Writer};
+use crate::util;
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
 pub const ZERO_HASH: Hash = Hash([0; 32]);
@@ -38,7 +38,7 @@ pub const ZERO_HASH: Hash = Hash([0; 32]);
 pub struct Hash(pub [u8; 32]);
 
 impl fmt::Debug for Hash {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		for i in self.0[..4].iter() {
 			write!(f, "{:02x}", i)?;
 		}
@@ -47,7 +47,7 @@ impl fmt::Debug for Hash {
 }
 
 impl fmt::Display for Hash {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		fmt::Debug::fmt(self, f)
 	}
 }
@@ -137,7 +137,7 @@ impl AsRef<[u8]> for Hash {
 }
 
 impl Readable for Hash {
-	fn read(reader: &mut Reader) -> Result<Hash, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Hash, ser::Error> {
 		let v = reader.read_fixed_bytes(32)?;
 		let mut a = [0; 32];
 		a.copy_from_slice(&v[..]);

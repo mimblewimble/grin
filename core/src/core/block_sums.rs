@@ -15,10 +15,10 @@
 //! BlockSums per-block running totals for utxo_sum and kernel_sum.
 //! Allows fast "full" verification of kernel sums at a given block height.
 
-use core::committed::Committed;
-use ser::{self, Readable, Reader, Writeable, Writer};
-use util::secp::pedersen::Commitment;
-use util::secp_static;
+use crate::core::committed::Committed;
+use crate::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::util::secp::pedersen::Commitment;
+use crate::util::secp_static;
 
 /// The output_sum and kernel_sum for a given block.
 /// This is used to validate the next block being processed by applying
@@ -41,7 +41,7 @@ impl Writeable for BlockSums {
 }
 
 impl Readable for BlockSums {
-	fn read(reader: &mut Reader) -> Result<BlockSums, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<BlockSums, ser::Error> {
 		Ok(BlockSums {
 			utxo_sum: Commitment::read(reader)?,
 			kernel_sum: Commitment::read(reader)?,
@@ -62,7 +62,7 @@ impl Default for BlockSums {
 /// It's a tuple but we can verify the "full" kernel sums on it.
 /// This means we can take a previous block_sums, apply a new block to it
 /// and verify the full kernel sums (full UTXO and kernel sets).
-impl<'a> Committed for (BlockSums, &'a Committed) {
+impl<'a> Committed for (BlockSums, &'a dyn Committed) {
 	fn inputs_committed(&self) -> Vec<Commitment> {
 		self.1.inputs_committed()
 	}

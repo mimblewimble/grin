@@ -14,25 +14,25 @@
 
 //! Transactions
 
+use crate::util::RwLock;
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::{error, fmt};
-use util::RwLock;
 
 use byteorder::{BigEndian, ByteOrder};
 
-use consensus::{self, VerifySortOrder};
-use core::hash::Hashed;
-use core::verifier_cache::VerifierCache;
-use core::{committed, Committed};
-use keychain::{self, BlindingFactor};
-use ser::{self, read_multi, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
-use util;
-use util::secp;
-use util::secp::pedersen::{Commitment, RangeProof};
-use util::static_secp_instance;
+use crate::consensus::{self, VerifySortOrder};
+use crate::core::hash::Hashed;
+use crate::core::verifier_cache::VerifierCache;
+use crate::core::{committed, Committed};
+use crate::keychain::{self, BlindingFactor};
+use crate::ser::{self, read_multi, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
+use crate::util;
+use crate::util::secp;
+use crate::util::secp::pedersen::{Commitment, RangeProof};
+use crate::util::static_secp_instance;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -96,7 +96,7 @@ impl error::Error for Error {
 }
 
 impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
 			_ => write!(f, "some kind of keychain error"),
 		}
@@ -175,7 +175,7 @@ impl Writeable for TxKernel {
 }
 
 impl Readable for TxKernel {
-	fn read(reader: &mut Reader) -> Result<TxKernel, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<TxKernel, ser::Error> {
 		let features =
 			KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(TxKernel {
@@ -284,7 +284,7 @@ impl Writeable for TxKernelEntry {
 }
 
 impl Readable for TxKernelEntry {
-	fn read(reader: &mut Reader) -> Result<TxKernelEntry, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<TxKernelEntry, ser::Error> {
 		let features =
 			KernelFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		let kernel = TxKernel {
@@ -369,7 +369,7 @@ impl Writeable for TransactionBody {
 /// Implementation of Readable for a body, defines how to read a
 /// body from a binary stream.
 impl Readable for TransactionBody {
-	fn read(reader: &mut Reader) -> Result<TransactionBody, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<TransactionBody, ser::Error> {
 		let (input_len, output_len, kernel_len) =
 			ser_multiread!(reader, read_u64, read_u64, read_u64);
 
@@ -633,7 +633,7 @@ impl TransactionBody {
 	pub fn validate(
 		&self,
 		with_reward: bool,
-		verifier: Arc<RwLock<VerifierCache>>,
+		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<(), Error> {
 		self.validate_read(with_reward)?;
 
@@ -713,7 +713,7 @@ impl Writeable for Transaction {
 /// Implementation of Readable for a transaction, defines how to read a full
 /// transaction from a binary stream.
 impl Readable for Transaction {
-	fn read(reader: &mut Reader) -> Result<Transaction, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Transaction, ser::Error> {
 		let offset = BlindingFactor::read(reader)?;
 		let body = TransactionBody::read(reader)?;
 		let tx = Transaction { offset, body };
@@ -864,7 +864,7 @@ impl Transaction {
 	/// Validates all relevant parts of a fully built transaction. Checks the
 	/// excess value against the signature as well as range proofs for each
 	/// output.
-	pub fn validate(&self, verifier: Arc<RwLock<VerifierCache>>) -> Result<(), Error> {
+	pub fn validate(&self, verifier: Arc<RwLock<dyn VerifierCache>>) -> Result<(), Error> {
 		self.body.validate(false, verifier)?;
 		self.body.verify_features()?;
 		self.verify_kernel_sums(self.overage(), self.offset)?;
@@ -995,12 +995,12 @@ pub fn deaggregate(mk_tx: Transaction, txs: Vec<Transaction>) -> Result<Transact
 	let total_kernel_offset = {
 		let secp = static_secp_instance();
 		let secp = secp.lock();
-		let mut positive_key = vec![mk_tx.offset]
+		let positive_key = vec![mk_tx.offset]
 			.into_iter()
 			.filter(|x| *x != BlindingFactor::zero())
 			.filter_map(|x| x.secret_key(&secp).ok())
 			.collect::<Vec<_>>();
-		let mut negative_keys = kernel_offsets
+		let negative_keys = kernel_offsets
 			.into_iter()
 			.filter(|x| *x != BlindingFactor::zero())
 			.filter_map(|x| x.secret_key(&secp).ok())
@@ -1059,7 +1059,7 @@ impl Writeable for Input {
 /// Implementation of Readable for a transaction Input, defines how to read
 /// an Input from a binary stream.
 impl Readable for Input {
-	fn read(reader: &mut Reader) -> Result<Input, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Input, ser::Error> {
 		let features =
 			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 
@@ -1145,7 +1145,7 @@ impl Writeable for Output {
 /// Implementation of Readable for a transaction Output, defines how to read
 /// an Output from a binary stream.
 impl Readable for Output {
-	fn read(reader: &mut Reader) -> Result<Output, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Output, ser::Error> {
 		let features =
 			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 
@@ -1272,7 +1272,7 @@ impl Writeable for OutputIdentifier {
 }
 
 impl Readable for OutputIdentifier {
-	fn read(reader: &mut Reader) -> Result<OutputIdentifier, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<OutputIdentifier, ser::Error> {
 		let features =
 			OutputFeatures::from_bits(reader.read_u8()?).ok_or(ser::Error::CorruptedData)?;
 		Ok(OutputIdentifier {
@@ -1303,10 +1303,10 @@ pub fn kernel_sig_msg(fee: u64, lock_height: u64) -> Result<secp::Message, Error
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::hash::Hash;
-	use core::id::{ShortId, ShortIdentifiable};
-	use keychain::{ExtKeychain, Keychain};
-	use util::secp;
+	use crate::core::hash::Hash;
+	use crate::core::id::{ShortId, ShortIdentifiable};
+	use crate::keychain::{ExtKeychain, Keychain};
+	use crate::util::secp;
 
 	#[test]
 	fn test_kernel_ser_deser() {

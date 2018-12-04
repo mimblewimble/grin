@@ -12,24 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate env_logger;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store as store;
-extern crate grin_wallet as wallet;
-extern crate rand;
+use env_logger;
+use grin_chain as chain;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_store as store;
+use grin_wallet as wallet;
 
 use std::fs;
 use std::sync::Arc;
 
-use chain::{Error, Tip};
-use core::core::hash::Hashed;
-use core::core::Block;
-use core::global::{self, ChainTypes};
-use core::pow::{self, Difficulty};
-use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use wallet::libtx;
+use crate::chain::{Error, Tip};
+use crate::core::core::hash::Hashed;
+use crate::core::core::Block;
+use crate::core::global::{self, ChainTypes};
+use crate::core::pow::{self, Difficulty};
+use crate::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
+use crate::wallet::libtx;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);

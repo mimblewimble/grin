@@ -23,18 +23,18 @@ use std::time::Duration;
 
 use serde_json as json;
 
-use api::TLSConfig;
-use config::GlobalWalletConfig;
-use core::{core, global};
+use crate::api::TLSConfig;
+use crate::config::GlobalWalletConfig;
+use crate::core::{core, global};
+use crate::keychain;
+use crate::servers::start_webwallet_server;
+use crate::util::file::get_first_line;
 use grin_wallet::libwallet::ErrorKind;
 use grin_wallet::{self, controller, display, libwallet};
 use grin_wallet::{
 	instantiate_wallet, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend,
 	NullWalletCommAdapter, WalletConfig, WalletSeed,
 };
-use keychain;
-use servers::start_webwallet_server;
-use util::file::get_first_line;
 
 pub fn _init_wallet_seed(wallet_config: WalletConfig, password: &str) {
 	if let Err(_) = WalletSeed::from_file(&wallet_config, password) {
@@ -54,7 +54,7 @@ pub fn seed_exists(wallet_config: WalletConfig) -> bool {
 	}
 }
 
-pub fn prompt_password(args: &ArgMatches) -> String {
+pub fn prompt_password(args: &ArgMatches<'_>) -> String {
 	match args.value_of("pass") {
 		None => {
 			println!("Temporary note:");
@@ -81,7 +81,7 @@ pub fn prompt_password_confirm() -> String {
 	first
 }
 
-pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i32 {
+pub fn wallet_command(wallet_args: &ArgMatches<'_>, config: GlobalWalletConfig) -> i32 {
 	// just get defaults from the global config
 	let mut wallet_config = config.members.unwrap().wallet;
 
@@ -231,7 +231,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						&passphrase,
 						account,
 						node_api_secret.clone(),
-					).unwrap_or_else(|e| {
+					)
+					.unwrap_or_else(|e| {
 						if e.kind() == ErrorKind::WalletSeedDecryption {
 							println!("Error decrypting wallet seed (check provided password)");
 							std::process::exit(0);
@@ -248,7 +249,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					&passphrase,
 					account,
 					node_api_secret.clone(),
-				).unwrap_or_else(|e| {
+				)
+				.unwrap_or_else(|e| {
 					if e.kind() == grin_wallet::ErrorKind::Encryption {
 						println!("Error decrypting wallet seed (check provided password)");
 						std::process::exit(0);
@@ -273,7 +275,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					&passphrase,
 					account,
 					node_api_secret.clone(),
-				).unwrap_or_else(|e| {
+				)
+				.unwrap_or_else(|e| {
 					if e.kind() == grin_wallet::ErrorKind::Encryption {
 						println!("Error decrypting wallet seed (check provided password)");
 						std::process::exit(0);
@@ -302,7 +305,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		&passphrase,
 		account,
 		node_api_secret.clone(),
-	).unwrap_or_else(|e| {
+	)
+	.unwrap_or_else(|e| {
 		if e.kind() == grin_wallet::ErrorKind::Encryption {
 			println!("Error decrypting wallet seed (check provided password)");
 			std::process::exit(0);
@@ -365,7 +369,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						ErrorKind::GenericError(
 							"Minimum confirmations to send required".to_string(),
 						)
-					}).and_then(|v| {
+					})
+					.and_then(|v| {
 						v.parse().map_err(|e| {
 							ErrorKind::GenericError(format!(
 								"Could not parse minimum_confirmations as a whole number. e={:?}",
@@ -412,7 +417,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					return Err(ErrorKind::GenericError(format!(
 						"HTTP Destination should start with http://: or https://: {}",
 						dest
-					)).into());
+					))
+					.into());
 				}
 				let result = api.initiate_tx(
 					None,
@@ -489,7 +495,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				Ok(())
 			}
 			("receive", Some(send_args)) => {
-				let mut receive_result: Result<(), grin_wallet::libwallet::Error> = Ok(());
+				let receive_result: Result<(), grin_wallet::libwallet::Error> = Ok(());
 				let message = match send_args.is_present("message") {
 					true => Some(send_args.value_of("message").unwrap().to_owned()),
 					false => None,
@@ -551,7 +557,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					.value_of("minimum_confirmations")
 					.ok_or_else(|| {
 						ErrorKind::GenericError("Minimum confirmations required".to_string())
-					}).and_then(|v| {
+					})
+					.and_then(|v| {
 						v.parse().map_err(|e| {
 							ErrorKind::GenericError(format!(
 								"Could not parse minimum_confirmations as a whole number. e={:?}",
@@ -584,7 +591,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					validated,
 					outputs,
 					wallet_config.dark_background_color_scheme.unwrap_or(true),
-				).map_err(|e| {
+				)
+				.map_err(|e| {
 					ErrorKind::GenericError(format!(
 						"Error getting wallet outputs: {:?} Config: {:?}",
 						e, wallet_config
@@ -600,7 +608,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						Err(_) => {
 							return Err(ErrorKind::GenericError(
 								"Unable to parse argument 'id' as a number".to_string(),
-							).into());
+							)
+							.into());
 						}
 					},
 				};
@@ -614,7 +623,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 					txs,
 					include_status,
 					wallet_config.dark_background_color_scheme.unwrap_or(true),
-				).map_err(|e| {
+				)
+				.map_err(|e| {
 					ErrorKind::GenericError(format!(
 						"Error getting wallet outputs: {} Config: {:?}",
 						e, wallet_config
@@ -630,7 +640,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 						validated,
 						outputs,
 						wallet_config.dark_background_color_scheme.unwrap_or(true),
-					).map_err(|e| {
+					)
+					.map_err(|e| {
 						ErrorKind::GenericError(format!(
 							"Error getting wallet outputs: {} Config: {:?}",
 							e, wallet_config
@@ -697,7 +708,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 							return Err(ErrorKind::GenericError(format!(
 								"Could not parse id parameter. e={:?}",
 								e,
-							)).into());
+							))
+							.into());
 						}
 					},
 				};
@@ -712,7 +724,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 							return Err(ErrorKind::GenericError(format!(
 								"Could not parse txid parameter. e={:?}",
 								e,
-							)).into());
+							))
+							.into());
 						}
 					},
 				};
@@ -721,7 +734,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 				{
 					return Err(ErrorKind::GenericError(format!(
 						"'id' (-i) or 'txid' (-t) argument is required."
-					)).into());
+					))
+					.into());
 				}
 
 				let result = api.cancel_tx(tx_id, tx_slate_id);
@@ -753,7 +767,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			_ => {
 				return Err(ErrorKind::GenericError(
 					"Unknown wallet command, use 'grin help wallet' for details".to_string(),
-				).into());
+				)
+				.into());
 			}
 		}
 	});

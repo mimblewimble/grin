@@ -28,13 +28,8 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-extern crate blake2_rfc as blake2;
-extern crate chrono;
-extern crate num;
-extern crate rand;
-extern crate serde;
-
-extern crate grin_util as util;
+use chrono;
+use num;
 
 #[macro_use]
 mod common;
@@ -46,16 +41,16 @@ pub mod lean;
 mod siphash;
 mod types;
 
+use crate::core::{Block, BlockHeader};
+use crate::genesis;
+use crate::global;
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
-use core::{Block, BlockHeader};
-use genesis;
-use global;
 
 pub use self::common::EdgeType;
 pub use self::types::*;
-pub use pow::cuckaroo::{new_cuckaroo_ctx, CuckarooContext};
-pub use pow::cuckatoo::{new_cuckatoo_ctx, CuckatooContext};
-pub use pow::error::Error;
+pub use crate::pow::cuckaroo::{new_cuckaroo_ctx, CuckarooContext};
+pub use crate::pow::cuckatoo::{new_cuckatoo_ctx, CuckatooContext};
+pub use crate::pow::error::Error;
 
 const MAX_SOLS: u32 = 10;
 
@@ -134,9 +129,9 @@ pub fn pow_size(
 #[cfg(test)]
 mod test {
 	use super::*;
-	use genesis;
-	use global;
-	use global::ChainTypes;
+	use crate::genesis;
+	use crate::global;
+	use crate::global::ChainTypes;
 
 	/// We'll be generating genesis blocks differently
 	#[test]
@@ -151,7 +146,8 @@ mod test {
 			Difficulty::min(),
 			global::proofsize(),
 			global::min_edge_bits(),
-		).unwrap();
+		)
+		.unwrap();
 		assert_ne!(b.header.pow.nonce, 310);
 		assert!(b.header.pow.to_difficulty(0) >= Difficulty::min());
 		assert!(verify_size(&b.header).is_ok());

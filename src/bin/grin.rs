@@ -14,28 +14,24 @@
 
 //! Main for building the binary of a Grin peer-to-peer node.
 
-extern crate blake2_rfc as blake2;
-extern crate chrono;
 #[macro_use]
 extern crate clap;
-extern crate ctrlc;
-extern crate cursive;
-extern crate daemonize;
-extern crate serde;
-extern crate serde_json;
+use ctrlc;
+
+use serde_json;
 #[macro_use]
 extern crate log;
-extern crate rpassword;
-extern crate term;
+use rpassword;
+use term;
 
-extern crate grin_api as api;
-extern crate grin_config as config;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_p2p as p2p;
-extern crate grin_servers as servers;
-extern crate grin_util as util;
-extern crate grin_wallet;
+use grin_api as api;
+use grin_config as config;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_p2p as p2p;
+use grin_servers as servers;
+use grin_util as util;
+use grin_wallet;
 
 mod cmd;
 pub mod tui;
@@ -44,9 +40,9 @@ use std::process::exit;
 
 use clap::{App, Arg, SubCommand};
 
-use config::config::{SERVER_CONFIG_FILE_NAME, WALLET_CONFIG_FILE_NAME};
-use core::global;
-use util::init_logger;
+use crate::config::config::{SERVER_CONFIG_FILE_NAME, WALLET_CONFIG_FILE_NAME};
+use crate::core::global;
+use crate::util::init_logger;
 
 // include build information
 pub mod built_info {
@@ -61,12 +57,14 @@ pub fn info_strings() -> (String, String) {
 			built_info::GIT_VERSION.map_or_else(|| "".to_owned(), |v| format!(" (git {})", v)),
 			built_info::TARGET,
 			built_info::RUSTC_VERSION,
-		).to_string(),
+		)
+		.to_string(),
 		format!(
 			"Built with profile \"{}\", features \"{}\".",
 			built_info::PROFILE,
 			built_info::FEATURES_STR,
-		).to_string(),
+		)
+		.to_string(),
 	)
 }
 

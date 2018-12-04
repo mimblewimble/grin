@@ -71,7 +71,7 @@ pub enum Error {
 }
 
 impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
 			Error::BadByte(b) => write!(f, "invalid base58 character 0x{:x}", b),
 			Error::BadChecksum(exp, actual) => write!(
@@ -90,7 +90,7 @@ impl fmt::Display for Error {
 }
 
 impl error::Error for Error {
-	fn cause(&self) -> Option<&error::Error> {
+	fn cause(&self) -> Option<&dyn error::Error> {
 		None
 	}
 	fn description(&self) -> &'static str {
@@ -342,7 +342,7 @@ where
 }
 
 /// Directly encode a slice as base58 into a `Formatter`.
-fn _encode_iter_to_fmt<I>(fmt: &mut fmt::Formatter, data: I) -> fmt::Result
+fn _encode_iter_to_fmt<I>(fmt: &mut fmt::Formatter<'_>, data: I) -> fmt::Result
 where
 	I: Iterator<Item = u8> + Clone,
 {
@@ -364,7 +364,7 @@ pub fn check_encode_slice(data: &[u8]) -> String {
 
 /// Obtain a string with the base58check encoding of a slice
 /// (Tack the first 4 256-digits of the object's Bitcoin hash onto the end.)
-pub fn _check_encode_slice_to_fmt(fmt: &mut fmt::Formatter, data: &[u8]) -> fmt::Result {
+pub fn _check_encode_slice_to_fmt(fmt: &mut fmt::Formatter<'_>, data: &[u8]) -> fmt::Result {
 	let checksum = sha256d_hash(&data);
 	let iter = data.iter().cloned().chain(checksum[0..4].iter().cloned());
 	_encode_iter_to_fmt(fmt, iter)
@@ -373,7 +373,7 @@ pub fn _check_encode_slice_to_fmt(fmt: &mut fmt::Formatter, data: &[u8]) -> fmt:
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use util::from_hex;
+	use crate::util::from_hex;
 
 	#[test]
 	fn test_base58_encode() {

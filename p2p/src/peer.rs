@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::util::{Mutex, RwLock};
 use std::fs::File;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
-use util::{Mutex, RwLock};
 
-use chrono::prelude::{DateTime, Utc};
-use conn;
-use core::core::hash::{Hash, Hashed};
-use core::pow::Difficulty;
-use core::{core, global};
-use handshake::Handshake;
-use msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest};
-use protocol::Protocol;
-use types::{
+use crate::conn;
+use crate::core::core::hash::{Hash, Hashed};
+use crate::core::pow::Difficulty;
+use crate::core::{core, global};
+use crate::handshake::Handshake;
+use crate::msg::{self, BanReason, GetPeerAddrs, Locator, Ping, TxHashSetRequest};
+use crate::protocol::Protocol;
+use crate::types::{
 	Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, PeerInfo, ReasonForBan, TxHashSetRead,
 };
+use chrono::prelude::{DateTime, Utc};
 
 const MAX_TRACK_SIZE: usize = 30;
 const MAX_PEER_MSG_PER_MIN: u64 = 500;
@@ -55,7 +55,7 @@ pub struct Peer {
 
 impl Peer {
 	// Only accept and connect can be externally used to build a peer
-	fn new(info: PeerInfo, adapter: Arc<NetAdapter>) -> Peer {
+	fn new(info: PeerInfo, adapter: Arc<dyn NetAdapter>) -> Peer {
 		Peer {
 			info,
 			state: Arc::new(RwLock::new(State::Connected)),
@@ -69,7 +69,7 @@ impl Peer {
 		capab: Capabilities,
 		total_difficulty: Difficulty,
 		hs: &Handshake,
-		adapter: Arc<NetAdapter>,
+		adapter: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
 		let info = hs.accept(capab, total_difficulty, conn)?;
 		Ok(Peer::new(info, adapter))
@@ -81,7 +81,7 @@ impl Peer {
 		total_difficulty: Difficulty,
 		self_addr: SocketAddr,
 		hs: &Handshake,
-		na: Arc<NetAdapter>,
+		na: Arc<dyn NetAdapter>,
 	) -> Result<Peer, Error> {
 		let info = hs.initiate(capab, total_difficulty, self_addr, conn)?;
 		Ok(Peer::new(info, na))
@@ -474,12 +474,12 @@ fn stop_with_connection(connection: &conn::Tracker) {
 /// but keeps track of the block and transaction hashes that were received.
 #[derive(Clone)]
 struct TrackingAdapter {
-	adapter: Arc<NetAdapter>,
+	adapter: Arc<dyn NetAdapter>,
 	known: Arc<RwLock<Vec<Hash>>>,
 }
 
 impl TrackingAdapter {
-	fn new(adapter: Arc<NetAdapter>) -> TrackingAdapter {
+	fn new(adapter: Arc<dyn NetAdapter>) -> TrackingAdapter {
 		TrackingAdapter {
 			adapter: adapter,
 			known: Arc::new(RwLock::new(vec![])),

@@ -14,12 +14,12 @@
 
 //! Rangeproof library functions
 
-use blake2;
-use keychain::{Identifier, Keychain};
-use libtx::error::{Error, ErrorKind};
-use util::secp::key::SecretKey;
-use util::secp::pedersen::{Commitment, ProofInfo, ProofMessage, RangeProof};
-use util::secp::{self, Secp256k1};
+use crate::blake2;
+use crate::keychain::{Identifier, Keychain};
+use crate::libtx::error::{Error, ErrorKind};
+use crate::util::secp::key::SecretKey;
+use crate::util::secp::pedersen::{Commitment, ProofInfo, ProofMessage, RangeProof};
+use crate::util::secp::{self, Secp256k1};
 
 fn create_nonce<K>(k: &K, commit: &Commitment) -> Result<SecretKey, Error>
 where

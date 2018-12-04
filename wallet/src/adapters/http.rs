@@ -16,18 +16,18 @@
 use failure::ResultExt;
 use std::collections::HashMap;
 
-use api;
-use controller;
-use libtx::slate::Slate;
-use libwallet::{Error, ErrorKind};
-use {instantiate_wallet, WalletCommAdapter, WalletConfig};
+use crate::api;
+use crate::controller;
+use crate::libtx::slate::Slate;
+use crate::libwallet::{Error, ErrorKind};
+use crate::{instantiate_wallet, WalletCommAdapter, WalletConfig};
 
 #[derive(Clone)]
 pub struct HTTPWalletCommAdapter {}
 
 impl HTTPWalletCommAdapter {
 	/// Create
-	pub fn new() -> Box<WalletCommAdapter> {
+	pub fn new() -> Box<dyn WalletCommAdapter> {
 		Box::new(HTTPWalletCommAdapter {})
 	}
 }

@@ -14,17 +14,15 @@
 
 //! Common test functions
 
-extern crate grin_core;
-extern crate grin_keychain as keychain;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
-
-use grin_core::core::block::{Block, BlockHeader};
-use grin_core::core::Transaction;
-use grin_core::pow::Difficulty;
-use keychain::{Identifier, Keychain};
-use wallet::libtx::build::{self, input, output, with_fee};
-use wallet::libtx::reward;
+use self::core::core::block::{Block, BlockHeader};
+use self::core::core::Transaction;
+use self::core::pow::Difficulty;
+use self::keychain::{Identifier, Keychain};
+use self::wallet::libtx::build::{self, input, output, with_fee};
+use self::wallet::libtx::reward;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_wallet as wallet;
 
 // utility producing a transaction with 2 inputs and a single outputs
 pub fn tx2i1o() -> Transaction {
@@ -41,7 +39,8 @@ pub fn tx2i1o() -> Transaction {
 			with_fee(2),
 		],
 		&keychain,
-	).unwrap()
+	)
+	.unwrap()
 }
 
 // utility producing a transaction with a single input and output
@@ -53,7 +52,8 @@ pub fn tx1i1o() -> Transaction {
 	build::transaction(
 		vec![input(5, key_id1), output(3, key_id2), with_fee(2)],
 		&keychain,
-	).unwrap()
+	)
+	.unwrap()
 }
 
 // utility producing a transaction with a single input
@@ -73,7 +73,8 @@ pub fn tx1i2o() -> Transaction {
 			with_fee(2),
 		],
 		&keychain,
-	).unwrap()
+	)
+	.unwrap()
 }
 
 // utility to create a block without worrying about the key or previous
@@ -94,7 +95,8 @@ where
 		txs.into_iter().cloned().collect(),
 		Difficulty::min(),
 		reward_output,
-	).unwrap()
+	)
+	.unwrap()
 }
 
 // utility producing a transaction that spends an output with the provided
@@ -106,5 +108,6 @@ where
 	build::transaction(
 		vec![input(v, key_id1), output(3, key_id2), with_fee(2)],
 		keychain,
-	).unwrap()
+	)
+	.unwrap()
 }

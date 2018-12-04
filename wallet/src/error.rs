@@ -13,13 +13,13 @@
 // limitations under the License.
 
 //! Implementation specific error types
-use api;
-use keychain;
-use libtx;
-use libwallet;
+use crate::api;
+use crate::keychain;
+use crate::libtx;
+use crate::libwallet;
 use std::fmt::{self, Display};
 
-use core::core::transaction;
+use crate::core::core::transaction;
 use failure::{Backtrace, Context, Fail};
 
 /// Error definition
@@ -101,7 +101,7 @@ pub enum ErrorKind {
 }
 
 impl Fail for Error {
-	fn cause(&self) -> Option<&Fail> {
+	fn cause(&self) -> Option<&dyn Fail> {
 		self.inner.cause()
 	}
 
@@ -111,7 +111,7 @@ impl Fail for Error {
 }
 
 impl Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let cause = match self.cause() {
 			Some(c) => format!("{}", c),
 			None => String::from("Unknown"),
@@ -134,7 +134,7 @@ impl Error {
 		self.inner.get_context().clone()
 	}
 	/// get cause
-	pub fn cause(&self) -> Option<&Fail> {
+	pub fn cause(&self) -> Option<&dyn Fail> {
 		self.inner.cause()
 	}
 	/// get backtrace

@@ -16,18 +16,18 @@
 //! having to pass them all over the place, but aren't consensus values.
 //! should be used sparingly.
 
-use consensus::HeaderInfo;
-use consensus::{
+use crate::consensus::HeaderInfo;
+use crate::consensus::{
 	graph_weight, BASE_EDGE_BITS, BLOCK_TIME_SEC, COINBASE_MATURITY, CUT_THROUGH_HORIZON,
 	DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE,
 	SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD, T4_CUCKAROO_HARDFORK, UNIT_DIFFICULTY,
 };
-use pow::{self, new_cuckaroo_ctx, new_cuckatoo_ctx, EdgeType, PoWContext};
+use crate::pow::{self, new_cuckaroo_ctx, new_cuckatoo_ctx, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
 /// e.g. CI, User testing, production values
-use util::RwLock;
+use crate::util::RwLock;
 
 /// Define these here, as they should be developer-set, not really tweakable
 /// by users
@@ -130,7 +130,7 @@ pub enum PoWContextTypes {
 	Cuckaroo,
 }
 
-lazy_static!{
+lazy_static! {
 	/// The mining parameter mode
 	pub static ref CHAIN_TYPE: RwLock<ChainTypes> =
 			RwLock::new(ChainTypes::Mainnet);

@@ -25,13 +25,13 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
-use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
-use libtx::Error;
-use libtx::{aggsig, proof};
+use crate::core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
+use crate::keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
+use crate::libtx::Error;
+use crate::libtx::{aggsig, proof};
 
 /// Context information available to transaction combinators.
-pub struct Context<'a, K: 'a>
+pub struct Context<'a, K>
 where
 	K: Keychain,
 {
@@ -40,8 +40,10 @@ where
 
 /// Function type returned by the transaction combinators. Transforms a
 /// (Transaction, BlindSum) pair into another, provided some context.
-pub type Append<K> = for<'a> Fn(&'a mut Context<K>, (Transaction, TxKernel, BlindSum))
-	-> (Transaction, TxKernel, BlindSum);
+pub type Append<K> = dyn for<'a> Fn(
+	&'a mut Context<'_, K>,
+	(Transaction, TxKernel, BlindSum),
+) -> (Transaction, TxKernel, BlindSum);
 
 /// Adds an input with the provided value and blinding key to the transaction
 /// being built.
@@ -247,14 +249,14 @@ where
 // Just a simple test, most exhaustive tests in the core mod.rs.
 #[cfg(test)]
 mod test {
+	use crate::util::RwLock;
 	use std::sync::Arc;
-	use util::RwLock;
 
 	use super::*;
-	use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
-	use keychain::{ExtKeychain, ExtKeychainPath};
+	use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
+	use crate::keychain::{ExtKeychain, ExtKeychainPath};
 
-	fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
+	fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 		Arc::new(RwLock::new(LruVerifierCache::new()))
 	}
 
@@ -275,7 +277,8 @@ mod test {
 				with_fee(2),
 			],
 			&keychain,
-		).unwrap();
+		)
+		.unwrap();
 
 		tx.validate(vc.clone()).unwrap();
 	}
@@ -297,7 +300,8 @@ mod test {
 				with_fee(2),
 			],
 			&keychain,
-		).unwrap();
+		)
+		.unwrap();
 
 		tx.validate(vc.clone()).unwrap();
 	}
@@ -313,7 +317,8 @@ mod test {
 		let tx = transaction(
 			vec![input(6, key_id1), output(2, key_id2), with_fee(4)],
 			&keychain,
-		).unwrap();
+		)
+		.unwrap();
 
 		tx.validate(vc.clone()).unwrap();
 	}

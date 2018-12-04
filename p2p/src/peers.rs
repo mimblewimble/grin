@@ -12,30 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::util::RwLock;
 use std::collections::HashMap;
 use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use util::RwLock;
 
 use rand::{thread_rng, Rng};
 
+use crate::core::core;
+use crate::core::core::hash::{Hash, Hashed};
+use crate::core::global;
+use crate::core::pow::Difficulty;
 use chrono::prelude::*;
 use chrono::Duration;
-use core::core;
-use core::core::hash::{Hash, Hashed};
-use core::global;
-use core::pow::Difficulty;
 
-use peer::Peer;
-use store::{PeerData, PeerStore, State};
-use types::{
+use crate::peer::Peer;
+use crate::store::{PeerData, PeerStore, State};
+use crate::types::{
 	Capabilities, ChainAdapter, Direction, Error, NetAdapter, P2PConfig, ReasonForBan,
 	TxHashSetRead, MAX_PEER_ADDRS,
 };
 
 pub struct Peers {
-	pub adapter: Arc<ChainAdapter>,
+	pub adapter: Arc<dyn ChainAdapter>,
 	store: PeerStore,
 	peers: RwLock<HashMap<SocketAddr, Arc<Peer>>>,
 	dandelion_relay: RwLock<HashMap<i64, Arc<Peer>>>,
@@ -43,7 +43,7 @@ pub struct Peers {
 }
 
 impl Peers {
-	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>, config: P2PConfig) -> Peers {
+	pub fn new(store: PeerStore, adapter: Arc<dyn ChainAdapter>, config: P2PConfig) -> Peers {
 		Peers {
 			adapter,
 			store,

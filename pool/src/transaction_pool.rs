@@ -17,18 +17,20 @@
 //! resulting tx pool can be added to the current chain state to produce a
 //! valid chain state.
 
+use self::core::core::hash::{Hash, Hashed};
+use self::core::core::id::ShortId;
+use self::core::core::verifier_cache::VerifierCache;
+use self::core::core::{transaction, Block, BlockHeader, Transaction};
+use self::util::RwLock;
+use crate::pool::Pool;
+use crate::types::{
+	BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource,
+};
+use chrono::prelude::*;
+use grin_core as core;
+use grin_util as util;
 use std::collections::VecDeque;
 use std::sync::Arc;
-use util::RwLock;
-
-use chrono::prelude::*;
-
-use core::core::hash::{Hash, Hashed};
-use core::core::id::ShortId;
-use core::core::verifier_cache::VerifierCache;
-use core::core::{transaction, Block, BlockHeader, Transaction};
-use pool::Pool;
-use types::{BlockChain, PoolAdapter, PoolConfig, PoolEntry, PoolEntryState, PoolError, TxSource};
 
 /// Transaction pool implementation.
 pub struct TransactionPool {
@@ -41,19 +43,19 @@ pub struct TransactionPool {
 	/// Cache of previous txs in case of a re-org.
 	pub reorg_cache: Arc<RwLock<VecDeque<PoolEntry>>>,
 	/// The blockchain
-	pub blockchain: Arc<BlockChain>,
-	pub verifier_cache: Arc<RwLock<VerifierCache>>,
+	pub blockchain: Arc<dyn BlockChain>,
+	pub verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	/// The pool adapter
-	pub adapter: Arc<PoolAdapter>,
+	pub adapter: Arc<dyn PoolAdapter>,
 }
 
 impl TransactionPool {
 	/// Create a new transaction pool
 	pub fn new(
 		config: PoolConfig,
-		chain: Arc<BlockChain>,
-		verifier_cache: Arc<RwLock<VerifierCache>>,
-		adapter: Arc<PoolAdapter>,
+		chain: Arc<dyn BlockChain>,
+		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+		adapter: Arc<dyn PoolAdapter>,
 	) -> TransactionPool {
 		TransactionPool {
 			config,

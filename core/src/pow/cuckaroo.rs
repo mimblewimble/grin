@@ -23,15 +23,18 @@
 //! In Cuckaroo, edges are calculated by repeatedly hashing the seeds to
 //! obtain blocks of values. Nodes are then extracted from those edges.
 
-use pow::common::{CuckooParams, EdgeType};
-use pow::error::{Error, ErrorKind};
-use pow::siphash::siphash_block;
-use pow::{PoWContext, Proof};
+use crate::pow::common::{CuckooParams, EdgeType};
+use crate::pow::error::{Error, ErrorKind};
+use crate::pow::siphash::siphash_block;
+use crate::pow::{PoWContext, Proof};
 
 /// Instantiate a new CuckarooContext as a PowContext. Note that this can't
 /// be moved in the PoWContext trait as this particular trait needs to be
 /// convertible to an object trait.
-pub fn new_cuckaroo_ctx<T>(edge_bits: u8, proof_size: usize) -> Result<Box<PoWContext<T>>, Error>
+pub fn new_cuckaroo_ctx<T>(
+	edge_bits: u8,
+	proof_size: usize,
+) -> Result<Box<dyn PoWContext<T>>, Error>
 where
 	T: EdgeType + 'static,
 {
