@@ -270,6 +270,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			let a = arg_parse!(wallet_args::parse_init_args(&wallet_config, &args));
 			command::init(&global_wallet_args, a)
 		}
+		("recover", Some(args)) => {
+			let a = arg_parse!(wallet_args::parse_recover_args(&global_wallet_args, &args));
+			command::recover(&wallet_config, a)
+		}
 		("account", Some(args)) => {
 			let a = arg_parse!(wallet_args::parse_account_args(&args));
 			command::account(inst_wallet(), a)

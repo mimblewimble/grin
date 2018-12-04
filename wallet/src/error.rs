@@ -80,7 +80,7 @@ pub enum ErrorKind {
 	DuplicateTransactionId,
 
 	/// Wallet seed already exists
-	#[fail(display = "{}", _0)]
+	#[fail(display = "Wallet seed file exists: {}", _0)]
 	WalletSeedExists(String),
 
 	/// Wallet seed doesn't exist

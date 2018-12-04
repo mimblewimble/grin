@@ -156,6 +156,29 @@ pub fn parse_init_args(
 	})
 }
 
+pub fn parse_recover_args(
+	g_args: &command::GlobalArgs,
+	args: &ArgMatches,
+) -> Result<command::RecoverArgs, Error> {
+	let (passphrase, recovery_phrase) = {
+		match args.value_of("recovery_phrase") {
+			None => (prompt_password(&g_args.password), None),
+			Some(l) => {
+				if WalletSeed::from_mnemonic(l).is_err() {
+					let msg = format!("Recovery word phrase is invalid");
+					return Err(Error::ArgumentError(msg));
+				}
+				println!("Please provide a new password for the recovered wallet");
+				(prompt_password_confirm(), Some(l.to_owned()))
+			}
+		}
+	};
+	Ok(command::RecoverArgs{
+		passphrase: passphrase,
+		recovery_phrase: recovery_phrase,
+	})
+}
+
 pub fn parse_account_args(account_args: &ArgMatches) -> Result<command::AccountArgs, Error> {
 	let create = match account_args.value_of("create") {
 		None => None,

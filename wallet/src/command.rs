@@ -61,6 +61,38 @@ pub fn init(g_args: &GlobalArgs, args: InitArgs) -> Result<(), Error> {
 	Ok(())
 }
 
+/// Argument for recover
+pub struct RecoverArgs {
+	pub recovery_phrase: Option<String>,
+	pub passphrase: String,
+}
+
+pub fn recover(config: &WalletConfig, args: RecoverArgs) -> Result<(), Error> {
+	if args.recovery_phrase.is_none() {
+		let res = WalletSeed::from_file(config, &args.passphrase);
+		if let Err(e) = res {
+			error!("Error loading wallet seed (check password): {}", e);
+			return Err(e);
+		}
+		let _ = res.unwrap().show_recovery_phrase();
+	} else {
+		let res = WalletSeed::recover_from_phrase(
+			&config,
+			&args.recovery_phrase.as_ref().unwrap(),
+			&args.passphrase,
+		);
+		if let Err(e) = res {
+			error!(
+				"Error recovering seed with list '{}' - {}",
+				&args.recovery_phrase.as_ref().unwrap(),
+				e
+			);
+			return Err(e);
+		}
+	}
+	Ok(())
+}
+
 /// Arguments for account command
 pub struct AccountArgs {
 	pub create: Option<String>,
