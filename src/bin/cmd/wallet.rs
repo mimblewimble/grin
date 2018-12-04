@@ -13,25 +13,17 @@
 // limitations under the License.
 
 use clap::ArgMatches;
-use rpassword;
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 
 use super::wallet_args;
-use api::TLSConfig;
 use config::GlobalWalletConfig;
 use core::global;
-use grin_wallet::libwallet::ErrorKind;
-use grin_wallet::{self, controller};
 use grin_wallet::{
-	command, instantiate_wallet, HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend, WalletConfig,
-	WalletSeed,
+	self, command, WalletConfig, WalletSeed,
 };
-use keychain;
 use servers::start_webwallet_server;
-use util::file::get_first_line;
 
 // define what to do on argument error
 macro_rules! arg_parse {
@@ -84,116 +76,8 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	let node_api_secret = get_first_line(wallet_config.node_api_secret_path.clone());
-
 	let global_wallet_args =
 		arg_parse!(wallet_args::parse_global_args(&wallet_config, &wallet_args));
-
-	/*
-	// Handle listener startup commands
-	{
-		let api_secret = get_first_line(wallet_config.api_secret_path.clone());
-
-		let tls_conf = match wallet_config.tls_certificate_file.clone() {
-			None => None,
-			Some(file) => Some(TLSConfig::new(
-				file,
-				wallet_config
-					.tls_certificate_key
-					.clone()
-					.unwrap_or_else(|| {
-						panic!("Private key for certificate is not set");
-					}),
-			)),
-		};
-		match wallet_args.subcommand() {
-			("listen", Some(listen_args)) => {
-				if let Some(port) = listen_args.value_of("port") {
-					wallet_config.api_listen_port = port.parse().unwrap();
-				}
-				let mut params = HashMap::new();
-				params.insert(
-					"api_listen_addr".to_owned(),
-					wallet_config.api_listen_addr(),
-				);
-				if let Some(t) = tls_conf {
-					params.insert("certificate".to_owned(), t.certificate);
-					params.insert("private_key".to_owned(), t.private_key);
-				}
-				let adapter = HTTPWalletCommAdapter::new();
-				adapter
-					.listen(
-						params,
-						wallet_config.clone(),
-						&passphrase,
-						account,
-						node_api_secret.clone(),
-					).unwrap_or_else(|e| {
-						if e.kind() == ErrorKind::WalletSeedDecryption {
-							println!("Error decrypting wallet seed (check provided password)");
-							std::process::exit(0);
-						}
-						panic!(
-							"Error creating wallet listener: {:?} Config: {:?}",
-							e, wallet_config
-						);
-					});
-			}
-			("owner_api", Some(_api_args)) => {
-				let wallet = instantiate_wallet(
-					wallet_config.clone(),
-					&passphrase,
-					account,
-					node_api_secret.clone(),
-				).unwrap_or_else(|e| {
-					if e.kind() == grin_wallet::ErrorKind::Encryption {
-						println!("Error decrypting wallet seed (check provided password)");
-						std::process::exit(0);
-					}
-					panic!(
-						"Error creating wallet listener: {:?} Config: {:?}",
-						e, wallet_config
-					);
-				});
-				// TLS is disabled because we bind to localhost
-				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, None)
-					.unwrap_or_else(|e| {
-						panic!(
-							"Error creating wallet api listener: {:?} Config: {:?}",
-							e, wallet_config
-						);
-					});
-			}
-			("web", Some(_api_args)) => {
-				let wallet = instantiate_wallet(
-					wallet_config.clone(),
-					&passphrase,
-					account,
-					node_api_secret.clone(),
-				).unwrap_or_else(|e| {
-					if e.kind() == grin_wallet::ErrorKind::Encryption {
-						println!("Error decrypting wallet seed (check provided password)");
-						std::process::exit(0);
-					}
-					panic!(
-						"Error creating wallet listener: {:?} Config: {:?}",
-						e, wallet_config
-					);
-				});
-				// start owner listener and run static file server
-				start_webwallet_server();
-				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, tls_conf)
-					.unwrap_or_else(|e| {
-						panic!(
-							"Error creating wallet api listener: {:?} Config: {:?}",
-							e, wallet_config
-						);
-					});
-			}
-			_ => {}
-		};
-	}
-	*/
 
 	// closure to instantiate wallet as needed by each subcommand
 	let inst_wallet = || {
@@ -219,6 +103,19 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			arg_parse!(wallet_args::parse_listen_args(&mut c, &mut g, &args));
 			command::listen(&wallet_config, &g)
 		}
+		("owner_api", Some(_)) => {
+			let mut g = global_wallet_args.clone();
+			g.tls_conf = None;
+			command::owner_api(
+			inst_wallet(),
+			&g,
+		)},
+		("web", Some(_)) => {
+			start_webwallet_server();
+			command::owner_api(
+			inst_wallet(),
+			&global_wallet_args,
+		)},
 		("account", Some(args)) => {
 			let a = arg_parse!(wallet_args::parse_account_args(&args));
 			command::account(inst_wallet(), a)

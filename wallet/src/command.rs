@@ -123,6 +123,14 @@ pub fn listen(config: &WalletConfig, g_args: &GlobalArgs) -> Result<(), Error> {
 	Ok(())
 }
 
+pub fn owner_api(wallet: WalletRef, g_args: &GlobalArgs) -> Result<(), Error> {
+	let res = controller::owner_listener(wallet, "127.0.0.1:13420", g_args.node_api_secret.clone(), g_args.tls_conf.clone());
+	if let Err(e) = res {
+		return Err(ErrorKind::LibWallet(e.kind()).into());
+	}
+	Ok(())
+}
+
 /// Arguments for account command
 pub struct AccountArgs {
 	pub create: Option<String>,
