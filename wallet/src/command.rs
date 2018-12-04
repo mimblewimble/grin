@@ -18,12 +18,14 @@ use std::io::Write;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use std::collections::HashMap;
 use util::Mutex;
 
 use serde_json as json;
 use uuid::Uuid;
 
 use core::core;
+use api::TLSConfig;
 use keychain;
 
 use error::{Error, ErrorKind};
@@ -33,11 +35,13 @@ use {FileWalletCommAdapter, HTTPWalletCommAdapter, LMDBBackend, NullWalletCommAd
 pub type WalletRef = Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>>;
 
 /// Arguments common to all wallet commands
+#[derive(Clone)]
 pub struct GlobalArgs {
 	pub account: String,
 	pub node_api_secret: Option<String>,
 	pub show_spent: bool,
 	pub password: Option<String>,
+	pub tls_conf: Option<TLSConfig>,
 }
 
 /// Arguments for init command
@@ -89,6 +93,36 @@ pub fn recover(config: &WalletConfig, args: RecoverArgs) -> Result<(), Error> {
 			);
 			return Err(e);
 		}
+	}
+	Ok(())
+}
+
+/// Arguments for listen command
+pub struct ListenArgs {
+	pub port: String,
+}
+
+pub fn listen(config: &WalletConfig, g_args: &GlobalArgs) -> Result<(), Error> {
+	let mut params = HashMap::new();
+		params.insert(
+			"api_listen_addr".to_owned(),
+			config.api_listen_addr(),
+		);
+	if let Some(t) = g_args.tls_conf.as_ref() {
+		params.insert("certificate".to_owned(), t.certificate.clone());
+		params.insert("private_key".to_owned(), t.private_key.clone());
+	}
+	let adapter = HTTPWalletCommAdapter::new();
+	let res = adapter
+		.listen(
+			params,
+			config.clone(),
+			&g_args.password.clone().unwrap(),
+			&g_args.account,
+			g_args.node_api_secret.clone(),
+		);
+	if let Err(e) = res {
+		return Err(ErrorKind::LibWallet(e.kind()).into());
 	}
 	Ok(())
 }

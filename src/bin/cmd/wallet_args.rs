@@ -17,6 +17,7 @@ use clap::ArgMatches;
 use failure::Fail;
 
 use core::core;
+use api::TLSConfig;
 use grin_wallet::{self, command, WalletConfig, WalletSeed};
 use std::path::Path;
 use util::file::get_first_line;
@@ -29,7 +30,7 @@ pub enum Error {
 	ArgumentError(String),
 }
 
-fn prompt_password(password: &Option<String>) -> String {
+pub fn prompt_password(password: &Option<String>) -> String {
 	match password {
 		None => {
 			println!("Temporary note:");
@@ -124,11 +125,29 @@ pub fn parse_global_args(
 		Some(p) => Some(p.to_owned()),
 	};
 
+	let tls_conf = match config.tls_certificate_file.clone() {
+		None => None,
+		Some(file) => {
+			let key = match config.tls_certificate_key.clone() {
+				Some(k) => k,
+				None => {
+					let msg = format!("Private key for certificate is not set");
+					return Err(Error::ArgumentError(msg));
+				}
+			};
+			Some(TLSConfig::new(
+				file,
+				key
+			))
+		}
+	};
+
 	Ok(command::GlobalArgs {
 		account: account.to_owned(),
 		show_spent: show_spent,
 		node_api_secret: node_api_secret,
 		password: password,
+		tls_conf: tls_conf,
 	})
 }
 
@@ -177,6 +196,19 @@ pub fn parse_recover_args(
 		passphrase: passphrase,
 		recovery_phrase: recovery_phrase,
 	})
+}
+
+pub fn parse_listen_args(config: &mut WalletConfig, g_args: &mut command::GlobalArgs, args: &ArgMatches) -> Result<(), Error> {
+	// listen args
+	let pass = match args.value_of("pass") {
+		Some(p) => Some(p.to_owned()),
+		None => Some(prompt_password(&None)),
+	};
+	g_args.password = pass;
+	if let Some(port) = args.value_of("port") {
+		config.api_listen_port = port.parse().unwrap();
+	}
+	Ok(())
 }
 
 pub fn parse_account_args(account_args: &ArgMatches) -> Result<command::AccountArgs, Error> {

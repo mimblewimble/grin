@@ -91,6 +91,7 @@ impl From<Context<ErrorKind>> for Error {
 }
 
 /// TLS config
+#[derive(Clone)]
 pub struct TLSConfig {
 	pub certificate: String,
 	pub private_key: String,

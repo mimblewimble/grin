@@ -90,67 +90,6 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		arg_parse!(wallet_args::parse_global_args(&wallet_config, &wallet_args));
 
 	/*
-	// Decrypt the seed from the seed file and derive the keychain.
-	// Generate the initial wallet seed if we are running "wallet init".
-	if let ("init", Some(r)) = wallet_args.subcommand() {
-		let a = arg_parse!(wallet_args::parse_init_args(&wallet_config, &args));
-		command::init(wallet.clone(), a)
-		thread::sleep(Duration::from_millis(200));
-		// we are done here with creating the wallet, so just return
-		return 0;
-	}
-
-	// Recover a seed from a recovery phrase
-	if let ("recover", Some(r)) = wallet_args.subcommand() {
-		if !r.is_present("recovery_phrase") {
-			// only needed to display phrase
-			let passphrase = prompt_password(wallet_args);
-			let seed = match WalletSeed::from_file(&wallet_config, &passphrase) {
-				Ok(s) => s,
-				Err(e) => {
-					println!("Can't open wallet seed file (check password): {}", e);
-					std::process::exit(0);
-				}
-			};
-			let _ = seed.show_recovery_phrase();
-			std::process::exit(0);
-		}
-		let word_list = match r.value_of("recovery_phrase") {
-			Some(w) => w,
-			None => {
-				println!("Recovery word phrase must be provided (in quotes)");
-				std::process::exit(0);
-			}
-		};
-		// check word list is okay before asking for password
-		if WalletSeed::from_mnemonic(word_list).is_err() {
-			println!("Recovery word phrase is invalid");
-			std::process::exit(0);
-		}
-		println!("Please provide a new password for the recovered wallet");
-		let passphrase = prompt_password_confirm();
-		let res = WalletSeed::recover_from_phrase(&wallet_config, word_list, &passphrase);
-		if let Err(e) = res {
-			thread::sleep(Duration::from_millis(200));
-			error!("Error recovering seed with list '{}' - {}", word_list, e);
-			return 0;
-		}
-
-		thread::sleep(Duration::from_millis(200));
-		return 0;
-	}
-
-	let account = match wallet_args.value_of("account") {
-		None => {
-			error!("Failed to read account.");
-			return 1;
-		}
-		Some(p) => p,
-	};
-
-	// all further commands always need a password
-	let passphrase = prompt_password(wallet_args);
-
 	// Handle listener startup commands
 	{
 		let api_secret = get_first_line(wallet_config.api_secret_path.clone());
@@ -273,6 +212,12 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		("recover", Some(args)) => {
 			let a = arg_parse!(wallet_args::parse_recover_args(&global_wallet_args, &args));
 			command::recover(&wallet_config, a)
+		}
+		("listen", Some(args)) => {
+			let mut c = wallet_config.clone();
+			let mut g = global_wallet_args.clone();
+			arg_parse!(wallet_args::parse_listen_args(&mut c, &mut g, &args));
+			command::listen(&wallet_config, &g)
 		}
 		("account", Some(args)) => {
 			let a = arg_parse!(wallet_args::parse_account_args(&args));
