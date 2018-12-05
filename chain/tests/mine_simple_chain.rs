@@ -86,12 +86,20 @@ fn mine_genesis_reward_chain() {
 	}
 
 	// get a valid PoW
-	pow::pow_size(&mut genesis.header, Difficulty::unit(), global::proofsize(), global::min_edge_bits()).unwrap();
+	pow::pow_size(
+		&mut genesis.header,
+		Difficulty::unit(),
+		global::proofsize(),
+		global::min_edge_bits(),
+	).unwrap();
 
 	mine_some_on_top(".grin.genesis", genesis, &keychain);
 }
 
-fn mine_some_on_top<K>(dir: &str, genesis: Block, keychain: &K) where K: Keychain {
+fn mine_some_on_top<K>(dir: &str, genesis: Block, keychain: &K)
+where
+	K: Keychain,
+{
 	let chain = setup(dir, genesis);
 
 	for n in 1..4 {

@@ -1252,12 +1252,14 @@ fn setup_head(
 			batch.save_block_header(&genesis.header)?;
 
 			if genesis.kernels().len() > 0 {
-				let (utxo_sum, kernel_sum) =
-					(sums, &genesis as &Committed).verify_kernel_sums(
-						genesis.header.overage(),
-						genesis.header.total_kernel_offset()
-					)?;
-				sums = BlockSums {utxo_sum, kernel_sum};
+				let (utxo_sum, kernel_sum) = (sums, &genesis as &Committed).verify_kernel_sums(
+					genesis.header.overage(),
+					genesis.header.total_kernel_offset(),
+				)?;
+				sums = BlockSums {
+					utxo_sum,
+					kernel_sum,
+				};
 				txhashset::extending(txhashset, &mut batch, |extension| {
 					extension.apply_block(&genesis)?;
 					extension.validate_roots()?;
