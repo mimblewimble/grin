@@ -15,8 +15,8 @@
 // Keybase Wallet Plugin
 
 use controller;
+use core::libtx::slate::Slate;
 use failure::ResultExt;
-use libtx::slate::Slate;
 use libwallet::{Error, ErrorKind};
 use serde::Serialize;
 use serde_json::{from_str, to_string, Value};
@@ -133,15 +133,15 @@ fn get_unread(topic: &str) -> HashMap<String, String> {
 fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool {
 	let seconds = format!("{}s", ttl);
 	let payload = to_string(&json!({
-		"method": "send", 
+		"method": "send",
 		"params": {
 			"options": {
 				"channel": {
 						"name": channel, "topic_name": topic, "topic_type": "dev"
-					}, 
+					},
 						"message": {
 								"body": to_string(&message).unwrap()
-							}, 
+							},
 							"exploding_lifetime": seconds
 						}
 					}
