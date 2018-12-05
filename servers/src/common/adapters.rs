@@ -231,7 +231,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		true
 	}
 
-	fn headers_received(&self, bhs: Vec<core::BlockHeader>, addr: SocketAddr) -> bool {
+	fn headers_received(&self, bhs: &[core::BlockHeader], addr: SocketAddr) -> bool {
 		info!(
 			"Received block headers {:?} from {}",
 			bhs.iter().map(|x| x.hash()).collect::<Vec<_>>(),
@@ -243,7 +243,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 
 		// try to add headers to our header chain
-		let res = self.chain().sync_block_headers(&bhs, self.chain_opts());
+		let res = self.chain().sync_block_headers(bhs, self.chain_opts());
 		if let &Err(ref e) = &res {
 			debug!("Block headers refused by chain: {:?}", e);
 
@@ -254,7 +254,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		true
 	}
 
-	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
+	fn locate_headers(&self, locator: &[Hash]) -> Vec<core::BlockHeader> {
 		debug!("locator: {:?}", locator);
 
 		let header = match self.find_common_header(locator) {
@@ -402,7 +402,7 @@ impl NetToChainAdapter {
 	}
 
 	// Find the first locator hash that refers to a known header on our main chain.
-	fn find_common_header(&self, locator: Vec<Hash>) -> Option<BlockHeader> {
+	fn find_common_header(&self, locator: &[Hash]) -> Option<BlockHeader> {
 		for hash in locator {
 			if let Ok(header) = self.chain().get_block_header(&hash) {
 				if let Ok(header_at_height) = self.chain().get_header_by_height(header.height) {

@@ -546,11 +546,11 @@ impl ChainAdapter for TrackingAdapter {
 		self.adapter.header_received(bh, addr)
 	}
 
-	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr) -> bool {
+	fn headers_received(&self, bh: &[core::BlockHeader], addr: SocketAddr) -> bool {
 		self.adapter.headers_received(bh, addr)
 	}
 
-	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
+	fn locate_headers(&self, locator: &[Hash]) -> Vec<core::BlockHeader> {
 		self.adapter.locate_headers(locator)
 	}
 

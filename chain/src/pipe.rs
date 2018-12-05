@@ -182,7 +182,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 /// Process the block header.
 /// This is only ever used during sync and uses a context based on sync_head.
 pub fn sync_block_headers(
-	headers: &Vec<BlockHeader>,
+	headers: &[BlockHeader],
 	ctx: &mut BlockContext,
 ) -> Result<Option<Tip>, Error> {
 	if let Some(header) = headers.first() {
