@@ -337,7 +337,7 @@ impl Chain {
 	/// We update header_head here if our total work increases.
 	pub fn sync_block_headers(
 		&self,
-		headers: &Vec<BlockHeader>,
+		headers: &[BlockHeader],
 		opts: Options,
 	) -> Result<(), Error> {
 		let mut txhashset = self.txhashset.write();
