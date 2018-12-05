@@ -138,7 +138,7 @@ fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool 
 			"options": {
 				"channel": {
 						"name": channel, "topic_name": topic, "topic_type": "dev"
-					}, 
+					},
 						"message": {
 								"body": to_string(&message).unwrap()
 							},
