@@ -544,10 +544,7 @@ pub trait VerifySortedAndUnique<T> {
 
 impl<T: Hashed> VerifySortedAndUnique<T> for Vec<T> {
 	fn verify_sorted_and_unique(&self) -> Result<(), Error> {
-		let hashes = self
-			.iter()
-			.map(|item| item.hash())
-			.collect::<Vec<_>>();
+		let hashes = self.iter().map(|item| item.hash()).collect::<Vec<_>>();
 		let pairs = hashes.windows(2);
 		for pair in pairs {
 			if pair[0] > pair[1] {

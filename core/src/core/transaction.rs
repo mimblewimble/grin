@@ -28,7 +28,9 @@ use core::hash::Hashed;
 use core::verifier_cache::VerifierCache;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
-use ser::{self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortOrder, Writeable, Writer};
+use ser::{
+	self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortOrder, Writeable, Writer,
+};
 use util;
 use util::secp;
 use util::secp::pedersen::{Commitment, RangeProof};
