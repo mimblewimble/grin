@@ -19,7 +19,6 @@
 //! here.
 
 use std::cmp::{max, min};
-use std::fmt;
 
 use global;
 use pow::Difficulty;
@@ -216,19 +215,6 @@ pub const UNIT_DIFFICULTY: u64 =
 /// ethereum GPUs (assuming 1GPU can solve a block at diff 1 in one block interval)
 pub const INITIAL_DIFFICULTY: u64 = 1_000_000 * UNIT_DIFFICULTY;
 
-/// Consensus errors
-#[derive(Clone, Debug, Eq, PartialEq, Fail)]
-pub enum Error {
-	/// Inputs/outputs/kernels must be sorted lexicographically.
-	SortError,
-}
-
-impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		write!(f, "Sort Error")
-	}
-}
-
 /// Minimal header information required for the Difficulty calculation to
 /// take place
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -384,12 +370,6 @@ pub fn secondary_pow_scaling(height: u64, diff_data: &[HeaderInfo]) -> u32 {
 
 	// minimum difficulty avoids getting stuck due to dampening
 	max(MIN_DIFFICULTY, min(scale, MAX_SECONDARY_SCALING)) as u32
-}
-
-/// Consensus rule that collections of items are sorted lexicographically.
-pub trait VerifySortOrder<T> {
-	/// Verify a collection of items is sorted as required.
-	fn verify_sort_order(&self) -> Result<(), Error>;
 }
 
 #[cfg(test)]

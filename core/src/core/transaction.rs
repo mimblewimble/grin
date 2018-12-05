@@ -23,12 +23,15 @@ use util::RwLock;
 
 use byteorder::{BigEndian, ByteOrder};
 
-use consensus::{self, VerifySortOrder};
+use consensus;
 use core::hash::Hashed;
 use core::verifier_cache::VerifierCache;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
-use ser::{self, read_multi, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
+use ser::{
+	self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortedAndUnique, Writeable,
+	Writer,
+};
 use util;
 use util::secp;
 use util::secp::pedersen::{Commitment, RangeProof};
@@ -58,8 +61,6 @@ pub enum Error {
 	KernelSumMismatch,
 	/// Restrict tx total weight.
 	TooHeavy,
-	/// Underlying consensus error (currently for sort order)
-	ConsensusError(consensus::Error),
 	/// Error originating from an invalid lock-height
 	LockHeight(u64),
 	/// Range proof validation error
@@ -85,6 +86,8 @@ pub enum Error {
 	InvalidKernelFeatures,
 	/// Signature verification error.
 	IncorrectSignature,
+	/// Underlying serialization error.
+	Serialization(ser::Error),
 }
 
 impl error::Error for Error {
@@ -103,15 +106,15 @@ impl fmt::Display for Error {
 	}
 }
 
-impl From<secp::Error> for Error {
-	fn from(e: secp::Error) -> Error {
-		Error::Secp(e)
+impl From<ser::Error> for Error {
+	fn from(e: ser::Error) -> Error {
+		Error::Serialization(e)
 	}
 }
 
-impl From<consensus::Error> for Error {
-	fn from(e: consensus::Error) -> Error {
-		Error::ConsensusError(e)
+impl From<secp::Error> for Error {
+	fn from(e: secp::Error) -> Error {
+		Error::Secp(e)
 	}
 }
 
@@ -561,11 +564,12 @@ impl TransactionBody {
 		Ok(())
 	}
 
-	// Verify that inputs|outputs|kernels are all sorted in lexicographical order.
+	// Verify that inputs|outputs|kernels are sorted in lexicographical order
+	// and that there are no duplicates (they are all unique within this transaction).
 	fn verify_sorted(&self) -> Result<(), Error> {
-		self.inputs.verify_sort_order()?;
-		self.outputs.verify_sort_order()?;
-		self.kernels.verify_sort_order()?;
+		self.inputs.verify_sorted_and_unique()?;
+		self.outputs.verify_sorted_and_unique()?;
+		self.kernels.verify_sorted_and_unique()?;
 		Ok(())
 	}
 
