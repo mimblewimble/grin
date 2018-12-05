@@ -430,15 +430,15 @@ where
 			None => HashMap::new(),
 		};
 		let fluff = params.get("fluff").is_some();
-		Box::new(
-			parse_body(req).and_then(move |slate| match api.post_tx(&slate, fluff) {
+		Box::new(parse_body(req).and_then(
+			move |slate: Slate| match api.post_tx(&slate.tx, fluff) {
 				Ok(_) => ok(()),
 				Err(e) => {
 					error!("post_tx: failed with error: {}", e);
 					err(e)
 				}
-			}),
-		)
+			},
+		))
 	}
 
 	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {
