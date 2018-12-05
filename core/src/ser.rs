@@ -291,7 +291,7 @@ pub fn serialize<W: Writeable>(sink: &mut Write, thing: &W) -> Result<(), Error>
 /// Utility function to serialize a writeable directly in memory using a
 /// Vec<u8>.
 pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
-	let mut vec = Vec::new();
+	let mut vec = vec![];
 	serialize(&mut vec, thing)?;
 	Ok(vec)
 }

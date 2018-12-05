@@ -118,8 +118,8 @@ impl<T: PMMRable> Backend<T> for VecBackend<T> {
 		Ok(())
 	}
 
-	fn get_data_file_path(&self) -> String {
-		"".to_string()
+	fn get_data_file_path(&self) -> &str {
+		""
 	}
 
 	fn dump_stats(&self) {}

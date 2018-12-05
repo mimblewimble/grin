@@ -16,47 +16,54 @@ use memmap;
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter, ErrorKind, Read, Write};
+use std::marker;
 
-use core::core::hash::Hash;
-use core::ser::{self, FixedLength};
+use core::ser::{self, FixedLength, Readable, Writeable};
 
 /// A no-op function for doing nothing with some pruned data.
 pub fn prune_noop(_pruned_data: &[u8]) {}
 
-/// Hash file (MMR) wrapper around an append only file.
-pub struct HashFile {
+/// Data file (MMR) wrapper around an append only file.
+pub struct DataFile<T> {
 	file: AppendOnlyFile,
+	_marker: marker::PhantomData<T>,
 }
 
-impl HashFile {
-	/// Open (or create) a hash file at the provided path on disk.
-	pub fn open(path: &str) -> io::Result<HashFile> {
+impl<T> DataFile<T>
+where
+	T: FixedLength + Readable + Writeable,
+{
+	/// Open (or create) a file at the provided path on disk.
+	pub fn open(path: &str) -> io::Result<DataFile<T>> {
 		let file = AppendOnlyFile::open(path)?;
-		Ok(HashFile { file })
+		Ok(DataFile {
+			file,
+			_marker: marker::PhantomData,
+		})
 	}
 
-	/// Append a hash to this hash file.
+	/// Append an element to the file.
 	/// Will not be written to disk until flush() is subsequently called.
 	/// Alternatively discard() may be called to discard any pending changes.
-	pub fn append(&mut self, hash: &Hash) -> io::Result<()> {
-		let mut bytes = ser::ser_vec(hash).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+	pub fn append(&mut self, data: &T) -> io::Result<()> {
+		let mut bytes = ser::ser_vec(data).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
 		self.file.append(&mut bytes);
 		Ok(())
 	}
 
-	/// Read a hash from the hash file by position.
-	pub fn read(&self, position: u64) -> Option<Hash> {
+	/// Read an element from the file by position.
+	pub fn read(&self, position: u64) -> Option<T> {
 		// The MMR starts at 1, our binary backend starts at 0.
 		let pos = position - 1;
 
 		// Must be on disk, doing a read at the correct position
-		let file_offset = (pos as usize) * Hash::LEN;
-		let data = self.file.read(file_offset, Hash::LEN);
+		let file_offset = (pos as usize) * T::LEN;
+		let data = self.file.read(file_offset, T::LEN);
 		match ser::deserialize(&mut &data[..]) {
-			Ok(h) => Some(h),
+			Ok(x) => Some(x),
 			Err(e) => {
 				error!(
-					"Corrupted storage, could not read an entry from hash file: {:?}",
+					"Corrupted storage, could not read an entry from data file: {:?}",
 					e
 				);
 				None
@@ -66,40 +73,45 @@ impl HashFile {
 
 	/// Rewind the backend file to the specified position.
 	pub fn rewind(&mut self, position: u64) {
-		self.file.rewind(position * Hash::LEN as u64)
+		self.file.rewind(position * T::LEN as u64)
 	}
 
-	/// Flush unsynced changes to the hash file to disk.
+	/// Flush unsynced changes to the file to disk.
 	pub fn flush(&mut self) -> io::Result<()> {
 		self.file.flush()
 	}
 
-	/// Discard any unsynced changes to the hash file.
+	/// Discard any unsynced changes to the file.
 	pub fn discard(&mut self) {
 		self.file.discard()
 	}
 
-	/// Size of the hash file in number of hashes (not bytes).
+	/// Size of the file in number of elements (not bytes).
 	pub fn size(&self) -> u64 {
-		self.file.size() / Hash::LEN as u64
+		self.file.size() / T::LEN as u64
 	}
 
-	/// Size of the unsync'd hash file, in hashes (not bytes).
+	/// Size of the unsync'd file, in elements (not bytes).
 	pub fn size_unsync(&self) -> u64 {
-		self.file.size_unsync() / Hash::LEN as u64
+		self.file.size_unsync() / T::LEN as u64
 	}
 
-	/// Rewrite the hash file out to disk, pruning removed hashes.
-	pub fn save_prune<T>(&self, target: String, prune_offs: &[u64], prune_cb: T) -> io::Result<()>
+	/// Path of the underlying file
+	pub fn path(&self) -> &str {
+		self.file.path()
+	}
+
+	/// Write the file out to disk, pruning removed elements.
+	pub fn save_prune<F>(&self, target: String, prune_offs: &[u64], prune_cb: F) -> io::Result<()>
 	where
-		T: Fn(&[u8]),
+		F: Fn(&[u8]),
 	{
 		let prune_offs = prune_offs
 			.iter()
-			.map(|x| x * Hash::LEN as u64)
+			.map(|x| x * T::LEN as u64)
 			.collect::<Vec<_>>();
 		self.file
-			.save_prune(target, prune_offs.as_slice(), Hash::LEN as u64, prune_cb)
+			.save_prune(target, prune_offs.as_slice(), T::LEN as u64, prune_cb)
 	}
 }
 
@@ -147,8 +159,8 @@ impl AppendOnlyFile {
 
 	/// Append data to the file. Until the append-only file is synced, data is
 	/// only written to memory.
-	pub fn append(&mut self, buf: &mut Vec<u8>) {
-		self.buffer.append(buf);
+	pub fn append(&mut self, bytes: &mut [u8]) {
+		self.buffer.extend_from_slice(bytes);
 	}
 
 	/// Rewinds the data file back to a lower position. The new position needs
@@ -219,31 +231,29 @@ impl AppendOnlyFile {
 
 	/// Read length bytes of data at offset from the file.
 	/// Leverages the memory map.
-	pub fn read(&self, offset: usize, length: usize) -> Vec<u8> {
+	pub fn read(&self, offset: usize, length: usize) -> &[u8] {
 		if offset >= self.buffer_start {
 			let buffer_offset = offset - self.buffer_start;
 			return self.read_from_buffer(buffer_offset, length);
 		}
-		if self.mmap.is_none() {
-			return vec![];
+		if let Some(mmap) = &self.mmap {
+			if mmap.len() < (offset + length) {
+				return &mmap[..0];
+			}
+			&mmap[offset..(offset + length)]
+		} else {
+			return &self.buffer[..0];
 		}
-		let mmap = self.mmap.as_ref().unwrap();
-
-		if mmap.len() < (offset + length) {
-			return vec![];
-		}
-
-		(&mmap[offset..(offset + length)]).to_vec()
 	}
 
 	// Read length bytes from the buffer, from offset.
 	// Return empty vec if we do not have enough bytes in the buffer to read a full
 	// vec.
-	fn read_from_buffer(&self, offset: usize, length: usize) -> Vec<u8> {
+	fn read_from_buffer(&self, offset: usize, length: usize) -> &[u8] {
 		if self.buffer.len() < (offset + length) {
-			vec![]
+			&self.buffer[..0]
 		} else {
-			self.buffer[offset..(offset + length)].to_vec()
+			&self.buffer[offset..(offset + length)]
 		}
 	}
 
@@ -313,7 +323,7 @@ impl AppendOnlyFile {
 	}
 
 	/// Path of the underlying file
-	pub fn path(&self) -> String {
-		self.path.clone()
+	pub fn path(&self) -> &str {
+		&self.path
 	}
 }

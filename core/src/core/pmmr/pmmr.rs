@@ -369,7 +369,7 @@ where
 	}
 
 	/// Return the path of the data file (needed to sum kernels efficiently)
-	pub fn data_file_path(&self) -> String {
+	pub fn data_file_path(&self) -> &str {
 		self.backend.get_data_file_path()
 	}
 
