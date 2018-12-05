@@ -16,14 +16,13 @@
 extern crate grin_core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
-extern crate grin_wallet as wallet;
 
 pub mod common;
 
 use grin_core::core::{Output, OutputFeatures};
+use grin_core::libtx::proof;
 use grin_core::ser;
 use keychain::{ExtKeychain, Keychain};
-use wallet::libtx::proof;
 
 #[test]
 fn test_output_ser_deser() {

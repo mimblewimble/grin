@@ -35,7 +35,7 @@ use std::time::Duration;
 use core::global;
 use core::global::ChainTypes;
 use keychain::{ExtKeychain, Identifier, Keychain};
-use wallet::libtx::slate::Slate;
+use core::libtx::slate::Slate;
 use wallet::libwallet;
 use wallet::libwallet::types::AcctPathMapping;
 

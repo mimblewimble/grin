@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use core::ser;
 use keychain::{Identifier, Keychain};
-use libtx::slate::Slate;
+use core::libtx::slate::Slate;
 use libwallet::internal::{selection, updater};
 use libwallet::types::{Context, NodeClient, TxLogEntryType, WalletBackend};
 use libwallet::{Error, ErrorKind};
@@ -234,7 +234,7 @@ where
 #[cfg(test)]
 mod test {
 	use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-	use libtx::build;
+	use core::libtx::build;
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment

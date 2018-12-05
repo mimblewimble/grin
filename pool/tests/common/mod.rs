@@ -40,7 +40,7 @@ use chain::types::Tip;
 use pool::*;
 
 use keychain::{ExtKeychain, Keychain};
-use wallet::libtx;
+use core::libtx;
 
 use pool::types::*;
 use pool::TransactionPool;

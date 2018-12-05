@@ -25,7 +25,7 @@ use util::RwLock;
 use chain;
 use common::types::Error;
 use core::core::verifier_cache::VerifierCache;
-use core::{consensus, core, ser};
+use core::{consensus, core, libtx, ser};
 use keychain::{ExtKeychain, Identifier, Keychain};
 use pool;
 use util;
@@ -173,7 +173,7 @@ fn burn_reward(block_fees: BlockFees) -> Result<(core::Output, core::TxKernel, B
 	let keychain = ExtKeychain::from_random_seed().unwrap();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let (out, kernel) =
-		wallet::libtx::reward::output(&keychain, &key_id, block_fees.fees, block_fees.height)
+		libtx::reward::output(&keychain, &key_id, block_fees.fees, block_fees.height)
 			.unwrap();
 	Ok((out, kernel, block_fees))
 }

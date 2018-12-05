@@ -18,7 +18,7 @@ use std::collections::HashMap;
 
 use api;
 use controller;
-use libtx::slate::Slate;
+use core::libtx::slate::Slate;
 use libwallet::{Error, ErrorKind};
 use {instantiate_wallet, WalletCommAdapter, WalletConfig};
 

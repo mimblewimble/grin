@@ -13,7 +13,7 @@
 // limitations under the License.
 
 /// Null Output 'plugin' implementation
-use libtx::slate::Slate;
+use core::libtx::slate::Slate;
 use libwallet::Error;
 use {WalletCommAdapter, WalletConfig};
 
