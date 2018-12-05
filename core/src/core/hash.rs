@@ -25,7 +25,6 @@ use std::{fmt, ops};
 
 use blake2::blake2b::Blake2b;
 
-use consensus;
 use ser::{self, AsFixedBytes, Error, FixedLength, Readable, Reader, Writeable, Writer};
 use util;
 
@@ -228,21 +227,5 @@ impl<W: ser::Writeable> Hashed for W {
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
-	}
-}
-
-impl<T: Writeable> consensus::VerifySortOrder<T> for Vec<T> {
-	fn verify_sort_order(&self) -> Result<(), consensus::Error> {
-		if self
-			.iter()
-			.map(|item| item.hash())
-			.collect::<Vec<_>>()
-			.windows(2)
-			.any(|pair| pair[0] > pair[1])
-		{
-			Err(consensus::Error::SortError)
-		} else {
-			Ok(())
-		}
 	}
 }
