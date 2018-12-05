@@ -15,7 +15,7 @@
 //! Controller for wallet.. instantiates and handles listeners (or single-run
 //! invocations) as needed.
 //! Still experimental
-use adapters::{FileWalletCommAdapter, HTTPWalletCommAdapter};
+use adapters::{FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalletCommAdapter};
 use api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router, TLSConfig};
 use core::core;
 use core::core::Transaction;
@@ -346,6 +346,9 @@ where
 				let adapter = FileWalletCommAdapter::new();
 				adapter.send_tx_async(&args.dest, &slate)?;
 				api.tx_lock_outputs(&slate, lock_fn)?;
+			} else if args.method == "keybase" {
+				let adapter = KeybaseWalletCommAdapter::new();
+				adapter.send_tx_sync(&args.dest, &slate)?;
 			} else {
 				error!("unsupported payment method: {}", args.method);
 				return Err(ErrorKind::ClientCallback("unsupported payment method"))?;

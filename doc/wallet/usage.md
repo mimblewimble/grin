@@ -430,3 +430,25 @@ grin wallet restore
 Note this operation can potentially take a long time. Once it's done, your wallet outputs should be restored, and you can
 transact with your restored wallet as before the backup. Your transaction log history is not restored, and will simply
 contain incoming transactions for each output found.
+
+## Wallet plugins
+
+Other than the default communication methods (http, file), grin exposes an interface that developers can use to integrate
+any communication channel (i.e Telegram, Signal, email) for the exchange of slates.
+
+### Keybase
+
+Grin comes bundled with an experimental keybase.io plugin. The keybase client must be installed in the system. Usage is as follows:
+
+Recipient starts a keybase listener.
+```sh
+grin wallet listen -m keybase
+```
+
+Sender creates a transaction, sends it to the recipient and awaits for the reply.
+
+```sh
+grin wallet send <amount> -m keybase -d <recipient>
+```
+
+Where recipient is a keybase username. If everything goes well the transaction is finalized and sent to the node for broadcasting.
