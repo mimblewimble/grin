@@ -163,7 +163,8 @@ impl TxHashSet {
 	pub fn is_unspent(&self, output_id: &OutputIdentifier) -> Result<(Hash, u64), Error> {
 		match self.commit_index.get_output_pos(&output_id.commit) {
 			Ok(pos) => {
-				let output_pmmr = ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+				let output_pmmr =
+					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(hash) = output_pmmr.get_hash(pos) {
 					if hash == output_id.hash_with_index(pos - 1) {
 						Ok((hash, pos))
@@ -919,7 +920,7 @@ impl<'a> Extension<'a> {
 		if let Ok(pos) = pos_res {
 			// First check this input corresponds to an existing entry in the output MMR.
 			if let Some(hash) = self.output_pmmr.get_hash(pos) {
-				if hash != input.hash_with_index(pos - 1){
+				if hash != input.hash_with_index(pos - 1) {
 					return Err(
 						ErrorKind::TxHashSetErr(format!("output pmmr hash mismatch")).into(),
 					);
