@@ -15,8 +15,8 @@
 // Keybase Wallet Plugin
 
 use controller;
-use failure::ResultExt;
 use core::libtx::slate::Slate;
+use failure::ResultExt;
 use libwallet::{Error, ErrorKind};
 use serde::Serialize;
 use serde_json::{from_str, to_string, Value};
