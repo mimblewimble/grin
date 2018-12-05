@@ -24,7 +24,7 @@ use futures::future::{err, ok};
 use futures::{Future, Stream};
 use hyper::{Body, Request, Response, StatusCode};
 use keychain::Keychain;
-use libtx::slate::Slate;
+use core::libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
 use libwallet::types::{
 	CbData, NodeClient, OutputData, SendTXArgs, TxLogEntry, WalletBackend, WalletInfo,

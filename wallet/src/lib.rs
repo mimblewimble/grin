@@ -50,7 +50,6 @@ mod adapters;
 pub mod controller;
 pub mod display;
 mod error;
-pub mod libtx;
 pub mod libwallet;
 pub mod lmdb_wallet;
 mod node_clients;

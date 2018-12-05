@@ -29,7 +29,7 @@ use core::core::Block;
 use core::global::{self, ChainTypes};
 use core::pow::{self, Difficulty};
 use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use wallet::libtx;
+use core::libtx;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);

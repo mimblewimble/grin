@@ -22,7 +22,7 @@ pub use self::null::NullWalletCommAdapter;
 
 use std::collections::HashMap;
 
-use libtx::slate::Slate;
+use core::libtx::slate::Slate;
 use libwallet::Error;
 use WalletConfig;
 

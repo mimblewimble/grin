@@ -32,9 +32,9 @@ use util::secp::{self, aggsig, Message, Secp256k1, Signature};
 /// # Example
 ///
 /// ```
+/// # extern crate grin_core as core;
 /// # extern crate grin_util as util;
-/// # extern crate grin_wallet as wallet;
-/// use wallet::libtx::aggsig;
+/// use core::libtx::aggsig;
 /// use util::secp::{ContextFlag, Secp256k1};
 /// let secp = Secp256k1::with_caps(ContextFlag::SignOnly);
 /// let secret_nonce = aggsig::create_secnonce(&secp).unwrap();
@@ -66,11 +66,11 @@ pub fn create_secnonce(secp: &Secp256k1) -> Result<SecretKey, Error> {
 /// # Example
 ///
 /// ```
+/// # extern crate grin_core as core;
 /// # extern crate grin_util as util;
-/// # extern crate grin_wallet as wallet;
 /// # extern crate rand;
 /// use rand::thread_rng;
-/// use wallet::libtx::aggsig;
+/// use core::libtx::aggsig;
 /// use util::secp::key::{PublicKey, SecretKey};
 /// use util::secp::{ContextFlag, Secp256k1, Message};
 ///
@@ -137,11 +137,11 @@ pub fn calculate_partial_sig(
 /// # Example
 ///
 /// ```
+/// # extern crate grin_core as core;
 /// # extern crate grin_util as util;
-/// # extern crate grin_wallet as wallet;
 /// # extern crate rand;
 /// use rand::thread_rng;
-/// use wallet::libtx::aggsig;
+/// use core::libtx::aggsig;
 /// use util::secp::key::{PublicKey, SecretKey};
 /// use util::secp::{ContextFlag, Secp256k1, Message};
 ///
@@ -224,12 +224,11 @@ pub fn verify_partial_sig(
 /// ```
 /// # extern crate grin_util as util;
 /// # extern crate grin_core as core;
-/// # extern crate grin_wallet as wallet;
 /// # extern crate grin_keychain as keychain;
 /// use core::consensus::reward;
-/// use wallet::libtx::{aggsig, proof};
 /// use util::secp::key::{PublicKey, SecretKey};
 /// use util::secp::{ContextFlag, Secp256k1};
+/// use core::libtx::{aggsig, proof};
 /// use core::core::transaction::kernel_sig_msg;
 /// use core::core::{Output, OutputFeatures};
 /// use keychain::{Keychain, ExtKeychain};
@@ -297,10 +296,9 @@ where
 /// ```
 /// # extern crate grin_util as util;
 /// # extern crate grin_core as core;
-/// # extern crate grin_wallet as wallet;
 /// # extern crate grin_keychain as keychain;
 /// use core::consensus::reward;
-/// use wallet::libtx::{aggsig, proof};
+/// use core::libtx::{aggsig, proof};
 /// use util::secp::key::{PublicKey, SecretKey};
 /// use util::secp::{ContextFlag, Secp256k1};
 /// use core::core::transaction::kernel_sig_msg;
@@ -368,11 +366,11 @@ pub fn verify_single_from_commit(
 /// # Example
 ///
 /// ```
+/// # extern crate grin_core as core;
 /// # extern crate grin_util as util;
-/// # extern crate grin_wallet as wallet;
 /// # extern crate rand;
 /// use rand::thread_rng;
-/// use wallet::libtx::aggsig;
+/// use core::libtx::aggsig;
 /// use util::secp::key::{PublicKey, SecretKey};
 /// use util::secp::{ContextFlag, Secp256k1, Message};
 ///

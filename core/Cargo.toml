@@ -24,11 +24,9 @@ rand = "0.5"
 serde = "1"
 serde_derive = "1"
 siphasher = "0.2"
+uuid = { version = "0.6", features = ["serde", "v4"] }
 log = "0.4"
 chrono = "0.4.4"
 
 grin_keychain = { path = "../keychain" }
 grin_util = { path = "../util" }
-
-[dev-dependencies]
-grin_wallet = { path = "../wallet" }

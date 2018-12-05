@@ -15,7 +15,7 @@
 
 use core::global;
 use keychain::{ExtKeychain, Identifier, Keychain};
-use libtx::proof;
+use core::libtx::proof;
 use libwallet::internal::keys;
 use libwallet::types::*;
 use libwallet::Error;

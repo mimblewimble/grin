@@ -35,7 +35,7 @@ use std::time::Duration;
 use core::global;
 use core::global::ChainTypes;
 use keychain::ExtKeychain;
-use wallet::libtx::slate::Slate;
+use core::libtx::slate::Slate;
 use wallet::{libwallet, FileWalletCommAdapter};
 
 fn clean_output_dir(test_dir: &str) {

@@ -15,7 +15,7 @@
 //! Implementation specific error types
 use api;
 use keychain;
-use libtx;
+use core::libtx;
 use libwallet;
 use std::fmt::{self, Display};
 

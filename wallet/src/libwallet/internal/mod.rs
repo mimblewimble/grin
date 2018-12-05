@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! lower-level wallet functions which build upon libtx to perform wallet
+//! lower-level wallet functions which build upon core::libtx to perform wallet
 //! operations
 
 #![deny(non_upper_case_globals)]

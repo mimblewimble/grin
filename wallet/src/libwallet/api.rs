@@ -38,7 +38,7 @@ use core::core::hash::Hashed;
 use core::core::Transaction;
 use core::ser;
 use keychain::{Identifier, Keychain};
-use libtx::slate::Slate;
+use core::libtx::slate::Slate;
 use libwallet::internal::{keys, tx, updater};
 use libwallet::types::{
 	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, TxLogEntry, TxWrapper,

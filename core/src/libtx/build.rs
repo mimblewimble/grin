@@ -25,7 +25,7 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
+use core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
 use libtx::Error;
 use libtx::{aggsig, proof};
@@ -251,7 +251,7 @@ mod test {
 	use util::RwLock;
 
 	use super::*;
-	use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
+	use core::verifier_cache::{LruVerifierCache, VerifierCache};
 	use keychain::{ExtKeychain, ExtKeychainPath};
 
 	fn verifier_cache() -> Arc<RwLock<VerifierCache>> {

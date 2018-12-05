@@ -39,6 +39,7 @@ extern crate serde_derive;
 extern crate siphasher;
 #[macro_use]
 extern crate log;
+extern crate uuid;
 extern crate chrono;
 extern crate failure;
 #[macro_use]
@@ -51,5 +52,6 @@ pub mod consensus;
 pub mod core;
 pub mod genesis;
 pub mod global;
+pub mod libtx;
 pub mod pow;
 pub mod ser;
