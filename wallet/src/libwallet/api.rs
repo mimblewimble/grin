@@ -46,7 +46,7 @@ use libwallet::types::{
 };
 use libwallet::{Error, ErrorKind};
 use util;
-use util::secp::pedersen;
+use util::secp::{self, pedersen};
 
 /// Functions intended for use by the owner (e.g. master seed holder) of the wallet.
 pub struct APIOwner<W: ?Sized, C, K>
@@ -730,8 +730,8 @@ where
 
 	/// Verifies all messages in the slate match their public keys
 	pub fn verify_slate_messages(&mut self, slate: &Slate) -> Result<(), Error> {
-		let mut w = self.wallet.lock();
-		slate.verify_messages(w.keychain().secp())?;
+		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::VerifyOnly);
+		slate.verify_messages(&secp)?;
 		Ok(())
 	}
 
