@@ -282,53 +282,6 @@ where
 		}
 	}
 
-	/// Helper function to get the last N nodes inserted, i.e. the last
-	/// n nodes along the bottom of the tree.
-	/// May return less than n items if the MMR has been pruned/compacted.
-	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, T::E)> {
-		let mut return_vec = vec![];
-		let mut last_leaf = self.last_pos;
-		for _ in 0..n as u64 {
-			if last_leaf == 0 {
-				break;
-			}
-			last_leaf = bintree_rightmost(last_leaf);
-
-			if let Some(hash) = self.backend.get_hash(last_leaf) {
-				if let Some(data) = self.backend.get_data(last_leaf) {
-					return_vec.push((hash, data));
-				}
-			}
-			last_leaf -= 1;
-		}
-		return_vec
-	}
-
-	/// Helper function which returns un-pruned nodes from the insertion index
-	/// forward
-	/// returns last insertion index returned along with data
-	pub fn elements_from_insertion_index(
-		&self,
-		mut index: u64,
-		max_count: u64,
-	) -> (u64, Vec<T::E>) {
-		let mut return_vec = vec![];
-		if index == 0 {
-			index = 1;
-		}
-		let mut return_index = index;
-		let mut pmmr_index = insertion_to_pmmr_index(index);
-		while return_vec.len() < max_count as usize && pmmr_index <= self.last_pos {
-			if let Some(t) = self.get_data(pmmr_index) {
-				return_vec.push(t);
-				return_index = index;
-			}
-			index += 1;
-			pmmr_index = insertion_to_pmmr_index(index);
-		}
-		(return_index, return_vec)
-	}
-
 	/// Walks all unpruned nodes in the MMR and revalidate all parent hashes
 	pub fn validate(&self) -> Result<(), String> {
 		// iterate on all parent nodes

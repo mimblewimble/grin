@@ -583,7 +583,7 @@ impl Chain {
 		Ok(())
 	}
 
-	/// Return a pre-built Merkle proof for the given commitment from the store.
+	/// Return a Merkle proof for the given commitment from the store.
 	pub fn get_merkle_proof(
 		&self,
 		output: &OutputIdentifier,
@@ -606,10 +606,9 @@ impl Chain {
 		txhashset.merkle_proof(commit)
 	}
 
-	/// Returns current txhashset roots
+	/// Returns current txhashset roots.
 	pub fn get_txhashset_roots(&self) -> TxHashSetRoots {
-		let mut txhashset = self.txhashset.write();
-		txhashset.roots()
+		self.txhashset.read().roots()
 	}
 
 	/// Provides a reading view into the current txhashset state as well as
@@ -967,20 +966,17 @@ impl Chain {
 
 	/// returns the last n nodes inserted into the output sum tree
 	pub fn get_last_n_output(&self, distance: u64) -> Vec<(Hash, OutputIdentifier)> {
-		let mut txhashset = self.txhashset.write();
-		txhashset.last_n_output(distance)
+		self.txhashset.read().last_n_output(distance)
 	}
 
 	/// as above, for rangeproofs
 	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<(Hash, RangeProof)> {
-		let mut txhashset = self.txhashset.write();
-		txhashset.last_n_rangeproof(distance)
+		self.txhashset.read().last_n_rangeproof(distance)
 	}
 
 	/// as above, for kernels
 	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<(Hash, TxKernelEntry)> {
-		let mut txhashset = self.txhashset.write();
-		txhashset.last_n_kernel(distance)
+		self.txhashset.read().last_n_kernel(distance)
 	}
 
 	/// outputs by insertion index
@@ -989,7 +985,7 @@ impl Chain {
 		start_index: u64,
 		max: u64,
 	) -> Result<(u64, u64, Vec<Output>), Error> {
-		let mut txhashset = self.txhashset.write();
+		let txhashset = self.txhashset.read();
 		let max_index = txhashset.highest_output_insertion_index();
 		let outputs = txhashset.outputs_by_insertion_index(start_index, max);
 		let rangeproofs = txhashset.rangeproofs_by_insertion_index(start_index, max);
