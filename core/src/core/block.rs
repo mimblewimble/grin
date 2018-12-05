@@ -262,8 +262,13 @@ impl BlockHeader {
 
 	/// The "total overage" to use when verifying the kernel sums for a full
 	/// chain state. For a full chain state this is 0 - (height * reward).
-	pub fn total_overage(&self) -> i64 {
-		((self.height * REWARD) as i64).checked_neg().unwrap_or(0)
+	pub fn total_overage(&self, genesis_had_reward: bool) -> i64 {
+		let mut reward_count = self.height;
+		if genesis_had_reward {
+			reward_count += 1;
+		}
+
+		((reward_count * REWARD) as i64).checked_neg().unwrap_or(0)
 	}
 
 	/// Total kernel offset for the chain state up to and including this block.
@@ -281,7 +286,7 @@ pub struct Block {
 	/// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,
 	/// The body - inputs/outputs/kernels
-	body: TransactionBody,
+	pub body: TransactionBody,
 }
 
 /// Implementation of Writeable for a block, defines how to write the block to a
