@@ -163,7 +163,8 @@ impl TxHashSet {
 	pub fn is_unspent(&self, output_id: &OutputIdentifier) -> Result<(Hash, u64), Error> {
 		match self.commit_index.get_output_pos(&output_id.commit) {
 			Ok(pos) => {
-				let output_pmmr = ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+				let output_pmmr =
+					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(hash) = output_pmmr.get_hash(pos) {
 					if hash == output_id.hash_with_index(pos - 1) {
 						Ok((hash, pos))
@@ -205,7 +206,8 @@ impl TxHashSet {
 	/// Looks the header up in the db by hash.
 	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
-		let header_pmmr = ReadonlyPMMR::at(&self.header_pmmr_h.backend, self.header_pmmr_h.last_pos);
+		let header_pmmr =
+			ReadonlyPMMR::at(&self.header_pmmr_h.backend, self.header_pmmr_h.last_pos);
 		if let Some(hash) = header_pmmr.get_data(pos) {
 			let header = self.commit_index.get_block_header(&hash)?;
 			Ok(header)
@@ -242,10 +244,14 @@ impl TxHashSet {
 
 	/// Get MMR roots.
 	pub fn roots(&self) -> TxHashSetRoots {
-		let header_pmmr = ReadonlyPMMR::at(&self.header_pmmr_h.backend, self.header_pmmr_h.last_pos);
-		let output_pmmr = ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
-		let rproof_pmmr = ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
-		let kernel_pmmr = ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
+		let header_pmmr =
+			ReadonlyPMMR::at(&self.header_pmmr_h.backend, self.header_pmmr_h.last_pos);
+		let output_pmmr =
+			ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+		let rproof_pmmr =
+			ReadonlyPMMR::at(&self.rproof_pmmr_h.backend, self.rproof_pmmr_h.last_pos);
+		let kernel_pmmr =
+			ReadonlyPMMR::at(&self.kernel_pmmr_h.backend, self.kernel_pmmr_h.last_pos);
 
 		TxHashSetRoots {
 			header_root: header_pmmr.root(),
@@ -258,8 +264,7 @@ impl TxHashSet {
 	/// build a new merkle proof for the given position.
 	pub fn merkle_proof(&mut self, commit: Commitment) -> Result<MerkleProof, String> {
 		let pos = self.commit_index.get_output_pos(&commit).unwrap();
-		PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos)
-			.merkle_proof(pos)
+		PMMR::at(&mut self.output_pmmr_h.backend, self.output_pmmr_h.last_pos).merkle_proof(pos)
 	}
 
 	/// Compact the MMR data files and flush the rm logs

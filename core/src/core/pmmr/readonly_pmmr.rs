@@ -17,9 +17,9 @@
 use std::marker;
 
 use core::hash::{Hash, ZERO_HASH};
-use core::pmmr::{is_leaf, Backend};
 use core::pmmr::pmmr::{bintree_rightmost, insertion_to_pmmr_index, peaks};
-use ser::{PMMRable, PMMRIndexHashable};
+use core::pmmr::{is_leaf, Backend};
+use ser::{PMMRIndexHashable, PMMRable};
 
 /// Readonly view of a PMMR.
 pub struct ReadonlyPMMR<'a, T, B>
