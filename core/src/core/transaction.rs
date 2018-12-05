@@ -29,7 +29,8 @@ use core::verifier_cache::VerifierCache;
 use core::{committed, Committed};
 use keychain::{self, BlindingFactor};
 use ser::{
-	self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortOrder, Writeable, Writer,
+	self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortedAndUnique, Writeable,
+	Writer,
 };
 use util;
 use util::secp;

@@ -20,7 +20,7 @@ use core::block::{Block, BlockHeader, Error};
 use core::hash::Hashed;
 use core::id::ShortIdentifiable;
 use core::{KernelFeatures, Output, OutputFeatures, ShortId, TxKernel};
-use ser::{self, read_multi, Readable, Reader, VerifySortOrder, Writeable, Writer};
+use ser::{self, read_multi, Readable, Reader, VerifySortedAndUnique, Writeable, Writer};
 
 /// Container for full (full) outputs and kernels and kern_ids for a compact block.
 #[derive(Debug, Clone)]
