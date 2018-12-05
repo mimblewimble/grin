@@ -163,8 +163,7 @@ impl TxHashSet {
 	pub fn is_unspent(&self, output_id: &OutputIdentifier) -> Result<(Hash, u64), Error> {
 		match self.commit_index.get_output_pos(&output_id.commit) {
 			Ok(pos) => {
-				let output_pmmr: ReadonlyPMMR<Output, _> =
-					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
+				let output_pmmr = ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(hash) = output_pmmr.get_hash(pos) {
 					if hash == output_id.hash_with_index(pos - 1) {
 						Ok((hash, pos))
@@ -918,16 +917,9 @@ impl<'a> Extension<'a> {
 		let commit = input.commitment();
 		let pos_res = self.batch.get_output_pos(&commit);
 		if let Ok(pos) = pos_res {
-			let output_id_hash = OutputIdentifier::from_input(input).hash_with_index(pos - 1);
-			if let Some(read_hash) = self.output_pmmr.get_hash(pos) {
-				// check hash from pmmr matches hash from input (or corresponding output)
-				// if not then the input is not being honest about
-				// what it is attempting to spend...
-				let read_elem = self.output_pmmr.get_data(pos);
-				let read_elem_hash = read_elem
-					.expect("no output at pos")
-					.hash_with_index(pos - 1);
-				if output_id_hash != read_hash || output_id_hash != read_elem_hash {
+			// First check this input corresponds to an existing entry in the output MMR.
+			if let Some(hash) = self.output_pmmr.get_hash(pos) {
+				if hash != input.hash_with_index(pos - 1){
 					return Err(
 						ErrorKind::TxHashSetErr(format!("output pmmr hash mismatch")).into(),
 					);
@@ -941,10 +933,10 @@ impl<'a> Extension<'a> {
 				Ok(true) => {
 					self.rproof_pmmr
 						.prune(pos)
-						.map_err(|s| ErrorKind::TxHashSetErr(s))?;
+						.map_err(|e| ErrorKind::TxHashSetErr(e))?;
 				}
 				Ok(false) => return Err(ErrorKind::AlreadySpent(commit).into()),
-				Err(s) => return Err(ErrorKind::TxHashSetErr(s).into()),
+				Err(e) => return Err(ErrorKind::TxHashSetErr(e).into()),
 			}
 		} else {
 			return Err(ErrorKind::AlreadySpent(commit).into());

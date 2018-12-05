@@ -15,8 +15,8 @@
 //! Lightweight readonly view into output MMR for convenience.
 
 use core::core::pmmr::ReadonlyPMMR;
-use core::core::{Block, Input, Output, OutputIdentifier, Transaction};
-
+use core::core::{Block, Input, Output, Transaction};
+use core::ser::PMMRIndexHashable;
 use error::{Error, ErrorKind};
 use grin_store::pmmr::PMMRBackend;
 use store::Batch;
@@ -66,10 +66,11 @@ impl<'a> UTXOView<'a> {
 
 	// Input is valid if it is spending an (unspent) output
 	// that currently exists in the output MMR.
+	// Compare the hash in the output MMR at the expected pos.
 	fn validate_input(&self, input: &Input) -> Result<(), Error> {
 		if let Ok(pos) = self.batch.get_output_pos(&input.commitment()) {
-			if let Some(out_mmr) = self.pmmr.get_data(pos) {
-				if out_mmr == OutputIdentifier::from_input(input) {
+			if let Some(hash) = self.pmmr.get_hash(pos) {
+				if hash == input.hash_with_index(pos - 1) {
 					return Ok(());
 				}
 			}
