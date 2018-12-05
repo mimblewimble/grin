@@ -133,7 +133,7 @@ fn get_unread(topic: &str) -> HashMap<String, String> {
 fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool {
 	let seconds = format!("{}s", ttl);
 	let payload = to_string(&json!({
-		"method": "send", 
+		"method": "send",
 		"params": {
 			"options": {
 				"channel": {
@@ -141,7 +141,7 @@ fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool 
 					}, 
 						"message": {
 								"body": to_string(&message).unwrap()
-							}, 
+							},
 							"exploding_lifetime": seconds
 						}
 					}
