@@ -16,6 +16,7 @@ mod client;
 mod config;
 mod server;
 mod wallet;
+mod wallet_args;
 
 pub use self::client::client_command;
 pub use self::config::{config_command_server, config_command_wallet};

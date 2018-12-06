@@ -14,8 +14,8 @@
 //! Functions to restore a wallet's outputs from just the master seed
 
 use core::global;
-use keychain::{ExtKeychain, Identifier, Keychain};
 use core::libtx::proof;
+use keychain::{ExtKeychain, Identifier, Keychain};
 use libwallet::internal::keys;
 use libwallet::types::*;
 use libwallet::Error;

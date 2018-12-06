@@ -19,12 +19,12 @@ use adapters::{FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalletCommAd
 use api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router, TLSConfig};
 use core::core;
 use core::core::Transaction;
+use core::libtx::slate::Slate;
 use failure::ResultExt;
 use futures::future::{err, ok};
 use futures::{Future, Stream};
 use hyper::{Body, Request, Response, StatusCode};
 use keychain::Keychain;
-use core::libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
 use libwallet::types::{
 	CbData, NodeClient, OutputData, SendTXArgs, TxLogEntry, WalletBackend, WalletInfo,

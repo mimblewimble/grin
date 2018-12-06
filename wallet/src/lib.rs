@@ -48,6 +48,7 @@ extern crate grin_store as store;
 extern crate grin_util as util;
 
 mod adapters;
+pub mod command;
 pub mod controller;
 pub mod display;
 mod error;

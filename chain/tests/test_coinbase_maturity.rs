@@ -32,10 +32,10 @@ use chain::ErrorKind;
 use core::core::transaction;
 use core::core::verifier_cache::LruVerifierCache;
 use core::global::{self, ChainTypes};
+use core::libtx::{self, build};
 use core::pow::Difficulty;
 use core::{consensus, pow};
 use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use core::libtx::{self, build};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);

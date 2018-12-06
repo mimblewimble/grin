@@ -33,8 +33,8 @@ use core::core::verifier_cache::LruVerifierCache;
 use core::core::{Block, BlockHeader, Transaction};
 use core::pow::Difficulty;
 
-use keychain::{ExtKeychain, Keychain};
 use core::libtx;
+use keychain::{ExtKeychain, Keychain};
 
 use common::*;
 

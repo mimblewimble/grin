@@ -21,9 +21,9 @@ use uuid::Uuid;
 
 use core::consensus::reward;
 use core::core::{Output, TxKernel};
+use core::libtx::reward;
 use core::{global, ser};
 use keychain::{Identifier, Keychain};
-use core::libtx::reward;
 use libwallet;
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;

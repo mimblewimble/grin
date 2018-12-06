@@ -39,9 +39,9 @@ extern crate serde_derive;
 extern crate siphasher;
 #[macro_use]
 extern crate log;
-extern crate uuid;
 extern crate chrono;
 extern crate failure;
+extern crate uuid;
 #[macro_use]
 extern crate failure_derive;
 

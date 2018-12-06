@@ -39,8 +39,8 @@ use chain::store::ChainStore;
 use chain::types::Tip;
 use pool::*;
 
-use keychain::{ExtKeychain, Keychain};
 use core::libtx;
+use keychain::{ExtKeychain, Keychain};
 
 use pool::types::*;
 use pool::TransactionPool;

@@ -21,10 +21,10 @@ extern crate rand;
 extern crate uuid;
 
 use core::core::transaction::kernel_sig_msg;
+use core::libtx::{aggsig, proof};
 use keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
 use util::secp;
 use util::secp::key::{PublicKey, SecretKey};
-use core::libtx::{aggsig, proof};
 use wallet::libwallet::types::Context;
 use wallet::{EncryptedWalletSeed, WalletSeed};
 

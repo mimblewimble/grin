@@ -13,28 +13,28 @@
 // limitations under the License.
 
 use clap::ArgMatches;
-use rpassword;
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 
-use serde_json as json;
-
-use api::TLSConfig;
+use super::wallet_args;
 use config::GlobalWalletConfig;
-use core::{core, global};
-use grin_wallet::libwallet::ErrorKind;
-use grin_wallet::{self, controller, display, libwallet};
-use grin_wallet::{
-	instantiate_wallet, FileWalletCommAdapter, HTTPNodeClient, HTTPWalletCommAdapter,
-	KeybaseWalletCommAdapter, LMDBBackend, NullWalletCommAdapter, WalletConfig, WalletSeed,
-};
-use keychain;
+use core::global;
+use grin_wallet::{self, command, WalletConfig, WalletSeed};
 use servers::start_webwallet_server;
-use util::file::get_first_line;
+
+// define what to do on argument error
+macro_rules! arg_parse {
+	( $r:expr ) => {
+		match $r {
+			Ok(res) => res,
+			Err(e) => {
+				println!("{}", e);
+				return 0;
+				}
+			}
+	};
+}
 
 pub fn _init_wallet_seed(wallet_config: WalletConfig, password: &str) {
 	if let Err(_) = WalletSeed::from_file(&wallet_config, password) {
@@ -52,33 +52,6 @@ pub fn seed_exists(wallet_config: WalletConfig) -> bool {
 	} else {
 		false
 	}
-}
-
-pub fn prompt_password(args: &ArgMatches) -> String {
-	match args.value_of("pass") {
-		None => {
-			println!("Temporary note:");
-			println!(
-				"If this is your first time running your wallet since BIP32 (word lists) \
-				 were implemented, your seed will be converted to \
-				 the new format. Please ensure the provided password is correct."
-			);
-			println!("If this goes wrong, your old 'wallet.seed' file has been saved as 'wallet.seed.bak' \
-			Rename this file to back to `wallet.seed` and try again");
-			rpassword::prompt_password_stdout("Password: ").unwrap()
-		}
-		Some(p) => p.to_owned(),
-	}
-}
-
-pub fn prompt_password_confirm() -> String {
-	let first = rpassword::prompt_password_stdout("Password: ").unwrap();
-	let second = rpassword::prompt_password_stdout("Confirm Password: ").unwrap();
-	if first != second {
-		println!("Passwords do not match");
-		std::process::exit(0);
-	}
-	first
 }
 
 pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i32 {
@@ -101,669 +74,95 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	let mut show_spent = false;
-	if wallet_args.is_present("show_spent") {
-		show_spent = true;
-	}
-	let node_api_secret = get_first_line(wallet_config.node_api_secret_path.clone());
+	let global_wallet_args =
+		arg_parse!(wallet_args::parse_global_args(&wallet_config, &wallet_args));
 
-	// Decrypt the seed from the seed file and derive the keychain.
-	// Generate the initial wallet seed if we are running "wallet init".
-	if let ("init", Some(r)) = wallet_args.subcommand() {
-		if let Err(e) = WalletSeed::seed_file_exists(&wallet_config) {
-			println!(
-				"Not creating wallet - Wallet seed file already exists at {}",
-				e.inner
-			);
-			return 0;
-		}
-		let list_length = match r.is_present("short_wordlist") {
-			false => 32,
-			true => 16,
-		};
-		println!("Please enter a password for your new wallet");
-		let passphrase = prompt_password_confirm();
-		WalletSeed::init_file(&wallet_config, list_length, &passphrase)
-			.expect("Failed to init wallet seed file.");
-		info!("Wallet seed file created");
-		let client_n =
-			HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-		let _: LMDBBackend<HTTPNodeClient, keychain::ExtKeychain> =
-			LMDBBackend::new(wallet_config.clone(), &passphrase, client_n).unwrap_or_else(|e| {
-				panic!(
-					"Error creating DB for wallet: {} Config: {:?}",
-					e, wallet_config
-				);
-			});
-		info!("Wallet database backend created");
-		// give logging thread a moment to catch up
-		thread::sleep(Duration::from_millis(200));
-		// we are done here with creating the wallet, so just return
-		return 0;
-	}
-
-	// Recover a seed from a recovery phrase
-	if let ("recover", Some(r)) = wallet_args.subcommand() {
-		if !r.is_present("recovery_phrase") {
-			// only needed to display phrase
-			let passphrase = prompt_password(wallet_args);
-			let seed = match WalletSeed::from_file(&wallet_config, &passphrase) {
-				Ok(s) => s,
-				Err(e) => {
-					println!("Can't open wallet seed file (check password): {}", e);
-					std::process::exit(0);
-				}
-			};
-			let _ = seed.show_recovery_phrase();
+	// closure to instantiate wallet as needed by each subcommand
+	let inst_wallet = || {
+		let res = wallet_args::instantiate_wallet(wallet_config.clone(), &global_wallet_args);
+		res.unwrap_or_else(|e| {
+			println!("{}", e);
 			std::process::exit(0);
-		}
-		let word_list = match r.value_of("recovery_phrase") {
-			Some(w) => w,
-			None => {
-				println!("Recovery word phrase must be provided (in quotes)");
-				std::process::exit(0);
-			}
-		};
-		// check word list is okay before asking for password
-		if WalletSeed::from_mnemonic(word_list).is_err() {
-			println!("Recovery word phrase is invalid");
-			std::process::exit(0);
-		}
-		println!("Please provide a new password for the recovered wallet");
-		let passphrase = prompt_password_confirm();
-		let res = WalletSeed::recover_from_phrase(&wallet_config, word_list, &passphrase);
-		if let Err(e) = res {
-			thread::sleep(Duration::from_millis(200));
-			error!("Error recovering seed with list '{}' - {}", word_list, e);
-			return 0;
-		}
-
-		thread::sleep(Duration::from_millis(200));
-		return 0;
-	}
-
-	let account = match wallet_args.value_of("account") {
-		None => {
-			error!("Failed to read account.");
-			return 1;
-		}
-		Some(p) => p,
+		})
 	};
 
-	// all further commands always need a password
-	let passphrase = prompt_password(wallet_args);
-
-	// Handle listener startup commands
-	{
-		let api_secret = get_first_line(wallet_config.api_secret_path.clone());
-
-		let tls_conf = match wallet_config.tls_certificate_file.clone() {
-			None => None,
-			Some(file) => Some(TLSConfig::new(
-				file,
-				wallet_config
-					.tls_certificate_key
-					.clone()
-					.unwrap_or_else(|| {
-						panic!("Private key for certificate is not set");
-					}),
-			)),
-		};
-		match wallet_args.subcommand() {
-			("listen", Some(listen_args)) => {
-				if let Some(port) = listen_args.value_of("port") {
-					wallet_config.api_listen_port = port.parse().unwrap();
-				}
-				let mut params = HashMap::new();
-				params.insert(
-					"api_listen_addr".to_owned(),
-					wallet_config.api_listen_addr(),
-				);
-				if let Some(t) = tls_conf {
-					params.insert("certificate".to_owned(), t.certificate);
-					params.insert("private_key".to_owned(), t.private_key);
-				}
-				let adapter = match listen_args.value_of("method") {
-					Some("http") => HTTPWalletCommAdapter::new(),
-					Some("keybase") => KeybaseWalletCommAdapter::new(),
-					_ => {
-						std::process::exit(1);
-					}
-				};
-				adapter
-					.listen(
-						params,
-						wallet_config.clone(),
-						&passphrase,
-						account,
-						node_api_secret.clone(),
-					).unwrap_or_else(|e| {
-						if e.kind() == ErrorKind::WalletSeedDecryption {
-							println!("Error decrypting wallet seed (check provided password)");
-							std::process::exit(0);
-						}
-						panic!(
-							"Error creating wallet listener: {:?} Config: {:?}",
-							e, wallet_config
-						);
-					});
-			}
-			("owner_api", Some(_api_args)) => {
-				let wallet = instantiate_wallet(
-					wallet_config.clone(),
-					&passphrase,
-					account,
-					node_api_secret.clone(),
-				).unwrap_or_else(|e| {
-					if e.kind() == grin_wallet::ErrorKind::Encryption {
-						println!("Error decrypting wallet seed (check provided password)");
-						std::process::exit(0);
-					}
-					panic!(
-						"Error creating wallet listener: {:?} Config: {:?}",
-						e, wallet_config
-					);
-				});
-				// TLS is disabled because we bind to localhost
-				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, None)
-					.unwrap_or_else(|e| {
-						panic!(
-							"Error creating wallet api listener: {:?} Config: {:?}",
-							e, wallet_config
-						);
-					});
-			}
-			("web", Some(_api_args)) => {
-				let wallet = instantiate_wallet(
-					wallet_config.clone(),
-					&passphrase,
-					account,
-					node_api_secret.clone(),
-				).unwrap_or_else(|e| {
-					if e.kind() == grin_wallet::ErrorKind::Encryption {
-						println!("Error decrypting wallet seed (check provided password)");
-						std::process::exit(0);
-					}
-					panic!(
-						"Error creating wallet listener: {:?} Config: {:?}",
-						e, wallet_config
-					);
-				});
-				// start owner listener and run static file server
-				start_webwallet_server();
-				controller::owner_listener(wallet.clone(), "127.0.0.1:13420", api_secret, tls_conf)
-					.unwrap_or_else(|e| {
-						panic!(
-							"Error creating wallet api listener: {:?} Config: {:?}",
-							e, wallet_config
-						);
-					});
-			}
-			_ => {}
-		};
-	}
-
-	let wallet = instantiate_wallet(
-		wallet_config.clone(),
-		&passphrase,
-		account,
-		node_api_secret.clone(),
-	).unwrap_or_else(|e| {
-		if e.kind() == grin_wallet::ErrorKind::Encryption {
-			println!("Error decrypting wallet seed (check provided password)");
-			std::process::exit(0);
+	let res = match wallet_args.subcommand() {
+		("init", Some(args)) => {
+			let a = arg_parse!(wallet_args::parse_init_args(&wallet_config, &args));
+			command::init(&global_wallet_args, a)
 		}
-		panic!(
-			"Error instantiating wallet: {:?} Config: {:?}",
-			e, wallet_config
-		);
-	});
-
-	let res = controller::owner_single_use(wallet.clone(), |api| {
-		match wallet_args.subcommand() {
-			("account", Some(acct_args)) => {
-				let create = acct_args.value_of("create");
-				if create.is_none() {
-					let res = controller::owner_single_use(wallet, |api| {
-						let acct_mappings = api.accounts()?;
-						// give logging thread a moment to catch up
-						thread::sleep(Duration::from_millis(200));
-						display::accounts(acct_mappings);
-						Ok(())
-					});
-					if let Err(e) = res {
-						error!("Error listing accounts: {}", e);
-						return Err(e);
-					}
-				} else {
-					let label = create.unwrap();
-					let res = controller::owner_single_use(wallet, |api| {
-						api.create_account_path(label)?;
-						thread::sleep(Duration::from_millis(200));
-						println!("Account: '{}' Created!", label);
-						Ok(())
-					});
-					if let Err(e) = res {
-						thread::sleep(Duration::from_millis(200));
-						error!("Error creating account '{}': {}", label, e);
-						return Err(e);
-					}
-				}
-				Ok(())
-			}
-			("send", Some(send_args)) => {
-				let amount = send_args.value_of("amount").ok_or_else(|| {
-					ErrorKind::GenericError("Amount to send required".to_string())
-				})?;
-				let amount = core::amount_from_hr_string(amount).map_err(|e| {
-					ErrorKind::GenericError(format!(
-						"Could not parse amount as a number with optional decimal point. e={:?}",
-						e
-					))
-				})?;
-				let message = match send_args.is_present("message") {
-					true => Some(send_args.value_of("message").unwrap().to_owned()),
-					false => None,
-				};
-				let minimum_confirmations: u64 = send_args
-					.value_of("minimum_confirmations")
-					.ok_or_else(|| {
-						ErrorKind::GenericError(
-							"Minimum confirmations to send required".to_string(),
-						)
-					}).and_then(|v| {
-						v.parse().map_err(|e| {
-							ErrorKind::GenericError(format!(
-								"Could not parse minimum_confirmations as a whole number. e={:?}",
-								e
-							))
-						})
-					})?;
-				let selection_strategy =
-					send_args.value_of("selection_strategy").ok_or_else(|| {
-						ErrorKind::GenericError("Selection strategy required".to_string())
-					})?;
-				let method = send_args.value_of("method").ok_or_else(|| {
-					ErrorKind::GenericError("Payment method required".to_string())
-				})?;
-				let dest = {
-					if method == "self" {
-						match send_args.value_of("dest") {
-							Some(d) => d,
-							None => "default",
-						}
-					} else {
-						send_args.value_of("dest").ok_or_else(|| {
-							ErrorKind::GenericError(
-								"Destination wallet address required".to_string(),
-							)
-						})?
-					}
-				};
-				let change_outputs = send_args
-					.value_of("change_outputs")
-					.ok_or_else(|| ErrorKind::GenericError("Change outputs required".to_string()))
-					.and_then(|v| {
-						v.parse().map_err(|e| {
-							ErrorKind::GenericError(format!(
-								"Failed to parse number of change outputs. e={:?}",
-								e
-							))
-						})
-					})?;
-				let fluff = send_args.is_present("fluff");
-				let max_outputs = 500;
-				if method == "http" && !dest.starts_with("http://") && !dest.starts_with("https://")
-				{
-					return Err(ErrorKind::GenericError(format!(
-						"HTTP Destination should start with http://: or https://: {}",
-						dest
-					)).into());
-				}
-				let result = api.initiate_tx(
-					None,
-					amount,
-					minimum_confirmations,
-					max_outputs,
-					change_outputs,
-					selection_strategy == "all",
-					message,
-				);
-				let (mut slate, lock_fn) = match result {
-					Ok(s) => {
-						info!(
-							"Tx created: {} grin to {} (strategy '{}')",
-							core::amount_to_hr_string(amount, false),
-							dest,
-							selection_strategy,
-						);
-						s
-					}
-					Err(e) => {
-						error!("Tx not created: {}", e);
-						match e.kind() {
-							// user errors, don't backtrace
-							libwallet::ErrorKind::NotEnoughFunds { .. } => {}
-							libwallet::ErrorKind::FeeDispute { .. } => {}
-							libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
-							_ => {
-								// otherwise give full dump
-								error!("Backtrace: {}", e.backtrace().unwrap());
-							}
-						};
-						return Err(e);
-					}
-				};
-				let adapter = match method {
-					"http" => HTTPWalletCommAdapter::new(),
-					"file" => FileWalletCommAdapter::new(),
-					"self" => NullWalletCommAdapter::new(),
-					"keybase" => KeybaseWalletCommAdapter::new(),
-					_ => NullWalletCommAdapter::new(),
-				};
-				if adapter.supports_sync() {
-					slate = adapter.send_tx_sync(dest, &slate)?;
-					if method == "self" {
-						controller::foreign_single_use(wallet, |api| {
-							api.receive_tx(&mut slate, Some(dest), None)?;
-							Ok(())
-						})?;
-					}
-					api.tx_lock_outputs(&slate, lock_fn)?;
-					if let Err(e) = api.verify_slate_messages(&slate) {
-						error!("Error validating participant messages: {}", e);
-						return Err(e);
-					}
-					api.finalize_tx(&mut slate)?;
-				} else {
-					adapter.send_tx_async(dest, &slate)?;
-					api.tx_lock_outputs(&slate, lock_fn)?;
-				}
-				if adapter.supports_sync() {
-					let result = api.post_tx(&slate.tx, fluff);
-					match result {
-						Ok(_) => {
-							info!("Tx sent",);
-							println!("Tx sent",);
-							return Ok(());
-						}
-						Err(e) => {
-							error!("Tx not sent: {}", e);
-							return Err(e);
-						}
-					}
-				}
-				Ok(())
-			}
-			("receive", Some(send_args)) => {
-				let mut receive_result: Result<(), grin_wallet::libwallet::Error> = Ok(());
-				let message = match send_args.is_present("message") {
-					true => Some(send_args.value_of("message").unwrap().to_owned()),
-					false => None,
-				};
-				let tx_file = send_args.value_of("input").ok_or_else(|| {
-					ErrorKind::GenericError("Transaction file required".to_string())
-				})?;
-				if !Path::new(tx_file).is_file() {
-					return Err(
-						ErrorKind::GenericError(format!("File {} not found.", tx_file)).into(),
-					);
-				}
-				let adapter = FileWalletCommAdapter::new();
-				let mut slate = adapter.receive_tx_async(tx_file)?;
-				controller::foreign_single_use(wallet, |api| {
-					api.receive_tx(&mut slate, Some(account), message)?;
-					Ok(())
-				})?;
-				let send_tx = format!("{}.response", tx_file);
-				adapter.send_tx_async(&send_tx, &slate)?;
-				info!(
-					"Response file {}.response generated, sending it back to the transaction originator.",
-					tx_file,
-				);
-				receive_result
-			}
-			("finalize", Some(send_args)) => {
-				let fluff = send_args.is_present("fluff");
-				let tx_file = send_args.value_of("input").ok_or_else(|| {
-					ErrorKind::GenericError("Receiver's transaction file required".to_string())
-				})?;
-				if !Path::new(tx_file).is_file() {
-					return Err(
-						ErrorKind::GenericError(format!("File {} not found.", tx_file)).into(),
-					);
-				}
-				let adapter = FileWalletCommAdapter::new();
-				let mut slate = adapter.receive_tx_async(tx_file)?;
-				if let Err(e) = api.verify_slate_messages(&slate) {
-					error!("Error validating participant messages: {}", e);
-					return Err(e);
-				}
-				let _ = api.finalize_tx(&mut slate).expect("Finalize failed");
-
-				let result = api.post_tx(&slate.tx, fluff);
-				match result {
-					Ok(_) => {
-						info!("Transaction sent successfully, check the wallet again for confirmation.");
-						Ok(())
-					}
-					Err(e) => {
-						error!("Tx not sent: {}", e);
-						Err(e)
-					}
-				}
-			}
-			("info", Some(args)) => {
-				let minimum_confirmations: u64 = args
-					.value_of("minimum_confirmations")
-					.ok_or_else(|| {
-						ErrorKind::GenericError("Minimum confirmations required".to_string())
-					}).and_then(|v| {
-						v.parse().map_err(|e| {
-							ErrorKind::GenericError(format!(
-								"Could not parse minimum_confirmations as a whole number. e={:?}",
-								e
-							))
-						})
-					})?;
-				let (validated, wallet_info) = api
-					.retrieve_summary_info(true, minimum_confirmations)
-					.map_err(|e| {
-						ErrorKind::GenericError(format!(
-							"Error getting wallet info: {:?} Config: {:?}",
-							e, wallet_config
-						))
-					})?;
-				display::info(
-					account,
-					&wallet_info,
-					validated,
-					wallet_config.dark_background_color_scheme.unwrap_or(true),
-				);
-				Ok(())
-			}
-			("outputs", Some(_)) => {
-				let (height, _) = api.node_height()?;
-				let (validated, outputs) = api.retrieve_outputs(show_spent, true, None)?;
-				display::outputs(
-					account,
-					height,
-					validated,
-					outputs,
-					wallet_config.dark_background_color_scheme.unwrap_or(true),
-				).map_err(|e| {
-					ErrorKind::GenericError(format!(
-						"Error getting wallet outputs: {:?} Config: {:?}",
-						e, wallet_config
-					))
-				})?;
-				Ok(())
-			}
-			("txs", Some(txs_args)) => {
-				let tx_id = match txs_args.value_of("id") {
-					None => None,
-					Some(tx) => match tx.parse() {
-						Ok(t) => Some(t),
-						Err(_) => {
-							return Err(ErrorKind::GenericError(
-								"Unable to parse argument 'id' as a number".to_string(),
-							).into());
-						}
-					},
-				};
-				let (height, _) = api.node_height()?;
-				let (validated, txs) = api.retrieve_txs(true, tx_id, None)?;
-				let include_status = !tx_id.is_some();
-				display::txs(
-					account,
-					height,
-					validated,
-					txs,
-					include_status,
-					wallet_config.dark_background_color_scheme.unwrap_or(true),
-				).map_err(|e| {
-					ErrorKind::GenericError(format!(
-						"Error getting wallet outputs: {} Config: {:?}",
-						e, wallet_config
-					))
-				})?;
-				// if given a particular transaction id, also get and display associated
-				// inputs/outputs
-				if tx_id.is_some() {
-					let (_, outputs) = api.retrieve_outputs(true, false, tx_id)?;
-					display::outputs(
-						account,
-						height,
-						validated,
-						outputs,
-						wallet_config.dark_background_color_scheme.unwrap_or(true),
-					).map_err(|e| {
-						ErrorKind::GenericError(format!(
-							"Error getting wallet outputs: {} Config: {:?}",
-							e, wallet_config
-						))
-					})?;
-				};
-				Ok(())
-			}
-			("repost", Some(repost_args)) => {
-				let tx_id = repost_args
-					.value_of("id")
-					.ok_or_else(|| {
-						ErrorKind::GenericError("Transaction of a completed but unconfirmed transaction required (specify with --id=[id])".to_string())
-					}).and_then(|v|{
-					v.parse().map_err(|e| {
-						ErrorKind::GenericError(format!(
-							"Unable to parse argument 'id' as a number. e={:?}",
-							e
-						))
-					})})?;
-
-				let dump_file = repost_args.value_of("dumpfile");
-				let fluff = repost_args.is_present("fluff");
-				let (_, txs) = api.retrieve_txs(true, Some(tx_id), None)?;
-				let stored_tx = txs[0].get_stored_tx();
-				if stored_tx.is_none() {
-					println!(
-						"Transaction with id {} does not have transaction data. Not reposting.",
-						tx_id
-					);
-					std::process::exit(0);
-				}
-				match dump_file {
-					None => {
-						if txs[0].confirmed {
-							println!("Transaction with id {} is confirmed. Not reposting.", tx_id);
-							std::process::exit(0);
-						}
-						api.post_tx(&stored_tx.unwrap(), fluff)?;
-						info!("Reposted transaction at {}", tx_id);
-						println!("Reposted transaction at {}", tx_id);
-						Ok(())
-					}
-					Some(f) => {
-						let mut tx_file = File::create(f)?;
-						tx_file.write_all(json::to_string(&stored_tx).unwrap().as_bytes())?;
-						tx_file.sync_all()?;
-						info!("Dumped transaction data for tx {} to {}", tx_id, f);
-						println!("Dumped transaction data for tx {} to {}", tx_id, f);
-						Ok(())
-					}
-				}
-			}
-			("cancel", Some(tx_args)) => {
-				let mut tx_id_string = "";
-				let tx_id = match tx_args.value_of("id") {
-					None => None,
-					Some(tx) => match tx.parse() {
-						Ok(t) => {
-							tx_id_string = tx;
-							Some(t)
-						}
-						Err(e) => {
-							return Err(ErrorKind::GenericError(format!(
-								"Could not parse id parameter. e={:?}",
-								e,
-							)).into());
-						}
-					},
-				};
-				let tx_slate_id = match tx_args.value_of("txid") {
-					None => None,
-					Some(tx) => match tx.parse() {
-						Ok(t) => {
-							tx_id_string = tx;
-							Some(t)
-						}
-						Err(e) => {
-							return Err(ErrorKind::GenericError(format!(
-								"Could not parse txid parameter. e={:?}",
-								e,
-							)).into());
-						}
-					},
-				};
-				if (tx_id.is_none() && tx_slate_id.is_none())
-					|| (tx_id.is_some() && tx_slate_id.is_some())
-				{
-					return Err(ErrorKind::GenericError(format!(
-						"'id' (-i) or 'txid' (-t) argument is required."
-					)).into());
-				}
-
-				let result = api.cancel_tx(tx_id, tx_slate_id);
-				match result {
-					Ok(_) => {
-						info!("Transaction {} Cancelled", tx_id_string);
-						Ok(())
-					}
-					Err(e) => {
-						error!("TX Cancellation failed: {}", e);
-						Err(e)
-					}
-				}
-			}
-			("restore", Some(_)) => {
-				let result = api.restore();
-				match result {
-					Ok(_) => {
-						info!("Wallet restore complete",);
-						Ok(())
-					}
-					Err(e) => {
-						error!("Wallet restore failed: {}", e);
-						error!("Backtrace: {}", e.backtrace().unwrap());
-						Err(e)
-					}
-				}
-			}
-			_ => {
-				return Err(ErrorKind::GenericError(
-					"Unknown wallet command, use 'grin help wallet' for details".to_string(),
-				).into());
-			}
+		("recover", Some(args)) => {
+			let a = arg_parse!(wallet_args::parse_recover_args(&global_wallet_args, &args));
+			command::recover(&wallet_config, a)
 		}
-	});
+		("listen", Some(args)) => {
+			let mut c = wallet_config.clone();
+			let mut g = global_wallet_args.clone();
+			arg_parse!(wallet_args::parse_listen_args(&mut c, &mut g, &args));
+			command::listen(&wallet_config, &g)
+		}
+		("owner_api", Some(_)) => {
+			let mut g = global_wallet_args.clone();
+			g.tls_conf = None;
+			command::owner_api(inst_wallet(), &g)
+		}
+		("web", Some(_)) => {
+			start_webwallet_server();
+			command::owner_api(inst_wallet(), &global_wallet_args)
+		}
+		("account", Some(args)) => {
+			let a = arg_parse!(wallet_args::parse_account_args(&args));
+			command::account(inst_wallet(), a)
+		}
+		("send", Some(args)) => {
+			let a = arg_parse!(wallet_args::parse_send_args(&args));
+			command::send(inst_wallet(), a)
+		}
+		("receive", Some(args)) => {
+			let a = arg_parse!(wallet_args::parse_receive_args(&args));
+			command::receive(inst_wallet(), &global_wallet_args, a)
+		}
+		("finalize", Some(args)) => {
+			let a = arg_parse!(wallet_args::parse_finalize_args(&args));
+			command::finalize(inst_wallet(), a)
+		}
+		("info", Some(args)) => {
+			let a = arg_parse!(wallet_args::parse_info_args(&args));
+			command::info(
+				inst_wallet(),
+				&global_wallet_args,
+				a,
+				wallet_config.dark_background_color_scheme.unwrap_or(true),
+			)
+		}
+		("outputs", Some(_)) => command::outputs(
+			inst_wallet(),
+			&global_wallet_args,
+			wallet_config.dark_background_color_scheme.unwrap_or(true),
+		),
+		("txs", Some(args)) => {
+			let a = arg_parse!(wallet_args::parse_txs_args(&args));
+			command::txs(
+				inst_wallet(),
+				&global_wallet_args,
+				a,
+				wallet_config.dark_background_color_scheme.unwrap_or(true),
+			)
+		}
+		("repost", Some(args)) => {
+			let a = arg_parse!(wallet_args::parse_repost_args(&args));
+			command::repost(inst_wallet(), a)
+		}
+		("cancel", Some(args)) => {
+			let a = arg_parse!(wallet_args::parse_cancel_args(&args));
+			command::cancel(inst_wallet(), a)
+		}
+		("restore", Some(_)) => command::restore(inst_wallet()),
+		_ => {
+			println!("Unknown wallet command, use 'grin help wallet' for details");
+			return 0;
+		}
+	};
 	// we need to give log output a chance to catch up before exiting
 	thread::sleep(Duration::from_millis(100));
 
@@ -771,6 +170,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		println!("Wallet command failed: {}", e);
 		1
 	} else {
+		println!(
+			"Command '{}' completed successfully",
+			wallet_args.subcommand().0
+		);
 		0
 	}
 }
