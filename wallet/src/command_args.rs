@@ -21,7 +21,7 @@ use core::core;
 use std::path::Path;
 use util::file::get_first_line;
 use ErrorKind;
-use {command, WalletConfig, WalletSeed, instantiate_wallet};
+use {command, instantiate_wallet, WalletConfig, WalletSeed};
 
 /// Simple error definition, just so we can return errors from all commands
 /// and let the caller figure out what to do

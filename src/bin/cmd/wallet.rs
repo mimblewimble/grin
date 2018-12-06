@@ -73,8 +73,10 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	let global_wallet_args =
-		arg_parse!(command_args::parse_global_args(&wallet_config, &wallet_args));
+	let global_wallet_args = arg_parse!(command_args::parse_global_args(
+		&wallet_config,
+		&wallet_args
+	));
 
 	// closure to instantiate wallet as needed by each subcommand
 	let inst_wallet = || {
