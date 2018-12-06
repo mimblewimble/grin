@@ -30,6 +30,8 @@ extern crate chrono;
 extern crate term;
 extern crate url;
 extern crate uuid;
+extern crate clap;
+extern crate rpassword;
 
 extern crate failure;
 #[macro_use]
@@ -49,6 +51,7 @@ extern crate grin_util as util;
 
 mod adapters;
 pub mod command;
+pub mod command_args;
 pub mod controller;
 pub mod display;
 mod error;

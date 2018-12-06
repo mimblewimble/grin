@@ -11,6 +11,8 @@ publish = false
 
 [dependencies]
 blake2-rfc = "0.2"
+clap = "2.31"
+rpassword = "2.0.0"
 byteorder = "1"
 failure = "0.1"
 failure_derive = "0.1"
