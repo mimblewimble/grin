@@ -15,7 +15,7 @@
 //! Controller for wallet.. instantiates and handles listeners (or single-run
 //! invocations) as needed.
 //! Still experimental
-use adapters::{FileWalletCommAdapter, HTTPWalletCommAdapter};
+use adapters::{FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalletCommAdapter};
 use api::{ApiServer, BasicAuthMiddleware, Handler, ResponseFuture, Router, TLSConfig};
 use core::core;
 use core::core::Transaction;
@@ -24,7 +24,7 @@ use futures::future::{err, ok};
 use futures::{Future, Stream};
 use hyper::{Body, Request, Response, StatusCode};
 use keychain::Keychain;
-use libtx::slate::Slate;
+use core::libtx::slate::Slate;
 use libwallet::api::{APIForeign, APIOwner};
 use libwallet::types::{
 	CbData, NodeClient, OutputData, SendTXArgs, TxLogEntry, WalletBackend, WalletInfo,
@@ -346,6 +346,9 @@ where
 				let adapter = FileWalletCommAdapter::new();
 				adapter.send_tx_async(&args.dest, &slate)?;
 				api.tx_lock_outputs(&slate, lock_fn)?;
+			} else if args.method == "keybase" {
+				let adapter = KeybaseWalletCommAdapter::new();
+				adapter.send_tx_sync(&args.dest, &slate)?;
 			} else {
 				error!("unsupported payment method: {}", args.method);
 				return Err(ErrorKind::ClientCallback("unsupported payment method"))?;
@@ -430,15 +433,15 @@ where
 			None => HashMap::new(),
 		};
 		let fluff = params.get("fluff").is_some();
-		Box::new(
-			parse_body(req).and_then(move |slate| match api.post_tx(&slate, fluff) {
+		Box::new(parse_body(req).and_then(
+			move |slate: Slate| match api.post_tx(&slate.tx, fluff) {
 				Ok(_) => ok(()),
 				Err(e) => {
 					error!("post_tx: failed with error: {}", e);
 					err(e)
 				}
-			}),
-		)
+			},
+		))
 	}
 
 	fn handle_post_request(&self, req: Request<Body>) -> WalletResponseFuture {

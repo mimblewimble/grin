@@ -22,7 +22,7 @@ use failure::{Backtrace, Context, Fail};
 use core;
 use core::core::transaction;
 use keychain;
-use libtx;
+use core::libtx;
 
 /// Error definition
 #[derive(Debug, Fail)]
@@ -257,7 +257,7 @@ impl From<keychain::Error> for Error {
 }
 
 impl From<libtx::Error> for Error {
-	fn from(error: libtx::Error) -> Error {
+	fn from(error: core::libtx::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::LibTX(error.kind())),
 		}

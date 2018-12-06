@@ -16,7 +16,6 @@ extern crate chrono;
 extern crate grin_core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
-extern crate grin_wallet as wallet;
 
 use std::sync::Arc;
 use util::RwLock;
@@ -26,7 +25,7 @@ pub mod common;
 use grin_core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use grin_core::core::{Output, OutputFeatures};
 use keychain::{ExtKeychain, Keychain};
-use wallet::libtx::proof;
+use grin_core::libtx::proof;
 
 fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
 	Arc::new(RwLock::new(LruVerifierCache::new()))

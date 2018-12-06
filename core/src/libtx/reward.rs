@@ -16,10 +16,10 @@
 //! reward.
 use keychain::{Identifier, Keychain};
 
-use core::consensus::reward;
-use core::core::transaction::kernel_sig_msg;
-use core::core::KernelFeatures;
-use core::core::{Output, OutputFeatures, TxKernel};
+use consensus::reward;
+use core::transaction::kernel_sig_msg;
+use core::KernelFeatures;
+use core::{Output, OutputFeatures, TxKernel};
 use libtx::error::Error;
 use libtx::{aggsig, proof};
 use util::static_secp_instance;

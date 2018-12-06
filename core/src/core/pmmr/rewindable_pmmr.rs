@@ -17,7 +17,7 @@
 
 use std::marker;
 
-use core::hash::Hash;
+use core::hash::{Hash, ZERO_HASH};
 use core::pmmr::{bintree_postorder_height, is_leaf, peaks, Backend};
 use ser::{PMMRIndexHashable, PMMRable};
 
@@ -88,9 +88,17 @@ where
 		}
 	}
 
+	/// Is the MMR empty?
+	pub fn is_empty(&self) -> bool {
+		self.last_pos == 0
+	}
+
 	/// Computes the root of the MMR. Find all the peaks in the current
 	/// tree and "bags" them to get a single peak.
 	pub fn root(&self) -> Hash {
+		if self.is_empty() {
+			return ZERO_HASH;
+		}
 		let mut res = None;
 		for peak in self.peaks().iter().rev() {
 			res = match res {

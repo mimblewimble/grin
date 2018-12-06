@@ -378,26 +378,26 @@ fn pmmr_get_last_n_insertions() {
 	let mut pmmr = PMMR::new(&mut ba);
 
 	// test when empty
-	let res = pmmr.get_last_n_insertions(19);
+	let res = pmmr.readonly_pmmr().get_last_n_insertions(19);
 	assert!(res.len() == 0);
 
 	pmmr.push(&elems[0]).unwrap();
-	let res = pmmr.get_last_n_insertions(19);
+	let res = pmmr.readonly_pmmr().get_last_n_insertions(19);
 	assert!(res.len() == 1);
 
 	pmmr.push(&elems[1]).unwrap();
 
-	let res = pmmr.get_last_n_insertions(12);
+	let res = pmmr.readonly_pmmr().get_last_n_insertions(12);
 	assert!(res.len() == 2);
 
 	pmmr.push(&elems[2]).unwrap();
 
-	let res = pmmr.get_last_n_insertions(2);
+	let res = pmmr.readonly_pmmr().get_last_n_insertions(2);
 	assert!(res.len() == 2);
 
 	pmmr.push(&elems[3]).unwrap();
 
-	let res = pmmr.get_last_n_insertions(19);
+	let res = pmmr.readonly_pmmr().get_last_n_insertions(19);
 	assert!(res.len() == 4);
 
 	pmmr.push(&elems[5]).unwrap();
@@ -405,7 +405,7 @@ fn pmmr_get_last_n_insertions() {
 	pmmr.push(&elems[7]).unwrap();
 	pmmr.push(&elems[8]).unwrap();
 
-	let res = pmmr.get_last_n_insertions(7);
+	let res = pmmr.readonly_pmmr().get_last_n_insertions(7);
 	assert!(res.len() == 7);
 }
 
@@ -526,21 +526,23 @@ fn check_elements_from_insertion_index() {
 		pmmr.push(&TestElem([0, 0, 0, x])).unwrap();
 	}
 	// Normal case
-	let res = pmmr.elements_from_insertion_index(1, 100);
+	let res = pmmr.readonly_pmmr().elements_from_insertion_index(1, 100);
 	assert_eq!(res.0, 100);
 	assert_eq!(res.1.len(), 100);
 	assert_eq!(res.1[0].0[3], 1);
 	assert_eq!(res.1[99].0[3], 100);
 
 	// middle of pack
-	let res = pmmr.elements_from_insertion_index(351, 70);
+	let res = pmmr.readonly_pmmr().elements_from_insertion_index(351, 70);
 	assert_eq!(res.0, 420);
 	assert_eq!(res.1.len(), 70);
 	assert_eq!(res.1[0].0[3], 351);
 	assert_eq!(res.1[69].0[3], 420);
 
 	// past the end
-	let res = pmmr.elements_from_insertion_index(650, 1000);
+	let res = pmmr
+		.readonly_pmmr()
+		.elements_from_insertion_index(650, 1000);
 	assert_eq!(res.0, 999);
 	assert_eq!(res.1.len(), 350);
 	assert_eq!(res.1[0].0[3], 650);
@@ -552,7 +554,9 @@ fn check_elements_from_insertion_index() {
 	pmmr.prune(pmmr::insertion_to_pmmr_index(800)).unwrap();
 	pmmr.prune(pmmr::insertion_to_pmmr_index(900)).unwrap();
 	pmmr.prune(pmmr::insertion_to_pmmr_index(998)).unwrap();
-	let res = pmmr.elements_from_insertion_index(650, 1000);
+	let res = pmmr
+		.readonly_pmmr()
+		.elements_from_insertion_index(650, 1000);
 	assert_eq!(res.0, 999);
 	assert_eq!(res.1.len(), 345);
 	assert_eq!(res.1[0].0[3], 652);

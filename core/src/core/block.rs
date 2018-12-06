@@ -22,7 +22,7 @@ use std::iter::FromIterator;
 use std::sync::Arc;
 use util::RwLock;
 
-use consensus::{self, reward, REWARD};
+use consensus::{reward, REWARD};
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, Hashed, ZERO_HASH};
@@ -60,8 +60,6 @@ pub enum Error {
 	Secp(secp::Error),
 	/// Underlying keychain related error
 	Keychain(keychain::Error),
-	/// Underlying consensus error (sort order currently)
-	Consensus(consensus::Error),
 	/// Underlying Merkle proof error
 	MerkleProof,
 	/// Error when verifying kernel sums via committed trait.
@@ -69,6 +67,8 @@ pub enum Error {
 	/// Validation error relating to cut-through.
 	/// Specifically the tx is spending its own output, which is not valid.
 	CutThrough,
+	/// Underlying serialization error.
+	Serialization(ser::Error),
 	/// Other unspecified error condition
 	Other(String),
 }
@@ -85,6 +85,12 @@ impl From<transaction::Error> for Error {
 	}
 }
 
+impl From<ser::Error> for Error {
+	fn from(e: ser::Error) -> Error {
+		Error::Serialization(e)
+	}
+}
+
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
 		Error::Secp(e)
@@ -94,12 +100,6 @@ impl From<secp::Error> for Error {
 impl From<keychain::Error> for Error {
 	fn from(e: keychain::Error) -> Error {
 		Error::Keychain(e)
-	}
-}
-
-impl From<consensus::Error> for Error {
-	fn from(e: consensus::Error) -> Error {
-		Error::Consensus(e)
 	}
 }
 

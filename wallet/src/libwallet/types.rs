@@ -31,7 +31,7 @@ use core::ser;
 
 use keychain::{Identifier, Keychain};
 
-use libtx::aggsig;
+use core::libtx::aggsig;
 use libwallet::error::{Error, ErrorKind};
 
 use util;

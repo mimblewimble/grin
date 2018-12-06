@@ -19,7 +19,7 @@ use std::io::{Read, Write};
 use serde_json as json;
 use std::collections::HashMap;
 
-use libtx::slate::Slate;
+use core::libtx::slate::Slate;
 use libwallet::{Error, ErrorKind};
 use {WalletCommAdapter, WalletConfig};
 

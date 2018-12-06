@@ -34,7 +34,7 @@ use core::core::{Block, BlockHeader, Transaction};
 use core::pow::Difficulty;
 
 use keychain::{ExtKeychain, Keychain};
-use wallet::libtx;
+use core::libtx;
 
 use common::*;
 

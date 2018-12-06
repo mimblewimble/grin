@@ -16,7 +16,6 @@
 extern crate grin_core;
 extern crate grin_keychain as keychain;
 extern crate grin_util as util;
-extern crate grin_wallet as wallet;
 
 use std::sync::Arc;
 use util::RwLock;
@@ -29,12 +28,12 @@ use grin_core::core::block::Error::KernelLockHeight;
 use grin_core::core::hash::{Hashed, ZERO_HASH};
 use grin_core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use grin_core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction};
+use grin_core::libtx::build::{
+	self, initial_tx, input, output, with_excess, with_fee, with_lock_height,
+};
 use grin_core::ser;
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use util::static_secp_instance;
-use wallet::libtx::build::{
-	self, initial_tx, input, output, with_excess, with_fee, with_lock_height,
-};
 
 #[test]
 fn simple_tx_ser() {

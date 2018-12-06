@@ -36,7 +36,7 @@ use core::global::ChainTypes;
 use core::pow::Difficulty;
 use core::{consensus, global, pow};
 use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use wallet::libtx::{self, build, reward};
+use core::libtx::{self, build, reward};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);

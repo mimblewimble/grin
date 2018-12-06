@@ -11,7 +11,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! tests for transactions building within libtx
+//! tests for transactions building within core::libtx
 extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
@@ -35,7 +35,7 @@ use std::time::Duration;
 use core::global;
 use core::global::ChainTypes;
 use keychain::ExtKeychain;
-use wallet::libtx::slate::Slate;
+use core::libtx::slate::Slate;
 use wallet::libwallet;
 use wallet::libwallet::types::OutputStatus;
 
@@ -123,7 +123,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 		let (_, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		let (refreshed, txs) = api.retrieve_txs(true, None, None)?;
 		assert!(refreshed);
-		let fee = wallet::libtx::tx_fee(
+		let fee = core::libtx::tx_fee(
 			wallet1_info.last_confirmed_height as usize - cm as usize,
 			2,
 			1,
@@ -169,7 +169,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 			"Wallet 1 Info Post Transaction, after {} blocks: {:?}",
 			wallet1_info.last_confirmed_height, wallet1_info
 		);
-		let fee = wallet::libtx::tx_fee(
+		let fee = core::libtx::tx_fee(
 			wallet1_info.last_confirmed_height as usize - 1 - cm as usize,
 			2,
 			1,

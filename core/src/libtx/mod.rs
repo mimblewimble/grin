@@ -28,8 +28,8 @@ pub mod proof;
 pub mod reward;
 pub mod slate;
 
-use core::consensus;
-use core::core::Transaction;
+use consensus;
+use core::Transaction;
 
 pub use libtx::error::{Error, ErrorKind};
 

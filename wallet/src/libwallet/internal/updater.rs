@@ -23,7 +23,7 @@ use core::consensus::reward;
 use core::core::{Output, TxKernel};
 use core::{global, ser};
 use keychain::{Identifier, Keychain};
-use libtx::reward;
+use core::libtx::reward;
 use libwallet;
 use libwallet::error::{Error, ErrorKind};
 use libwallet::internal::keys;
