@@ -199,7 +199,7 @@ pub fn parse_listen_args(
 	args: &ArgMatches,
 ) -> Result<(), Error> {
 	// listen args
-	let pass = match args.value_of("pass") {
+	let pass = match g_args.password.clone() {
 		Some(p) => Some(p.to_owned()),
 		None => Some(prompt_password(&None)),
 	};
