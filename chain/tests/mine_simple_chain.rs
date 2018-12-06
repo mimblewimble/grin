@@ -33,11 +33,10 @@ use core::core::verifier_cache::LruVerifierCache;
 use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
 use core::genesis;
 use core::global::ChainTypes;
-use core::libtx::{self, build};
+use core::libtx::{self, build, reward};
 use core::pow::Difficulty;
 use core::{consensus, global, pow};
 use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use core::libtx::{self, build, reward};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
