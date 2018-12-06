@@ -197,7 +197,7 @@ pub fn parse_listen_args(
 	config: &mut WalletConfig,
 	g_args: &mut command::GlobalArgs,
 	args: &ArgMatches,
-) -> Result<(), Error> {
+) -> Result<command::ListenArgs, Error> {
 	// listen args
 	let pass = match g_args.password.clone() {
 		Some(p) => Some(p.to_owned()),
@@ -207,7 +207,10 @@ pub fn parse_listen_args(
 	if let Some(port) = args.value_of("port") {
 		config.api_listen_port = port.parse().unwrap();
 	}
-	Ok(())
+	let method = parse_required(args, "method")?;
+	Ok(command::ListenArgs {
+		method: method.to_owned(),
+	})
 }
 
 pub fn parse_account_args(account_args: &ArgMatches) -> Result<command::AccountArgs, Error> {

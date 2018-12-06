@@ -30,7 +30,10 @@ use keychain;
 
 use error::{Error, ErrorKind};
 use {controller, display, HTTPNodeClient, WalletConfig, WalletInst, WalletSeed};
-use {FileWalletCommAdapter, HTTPWalletCommAdapter, LMDBBackend, NullWalletCommAdapter};
+use {
+	FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalletCommAdapter, LMDBBackend,
+	NullWalletCommAdapter,
+};
 
 pub type WalletRef = Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>>;
 
@@ -99,17 +102,22 @@ pub fn recover(config: &WalletConfig, args: RecoverArgs) -> Result<(), Error> {
 
 /// Arguments for listen command
 pub struct ListenArgs {
-	pub port: String,
+	pub method: String,
 }
 
-pub fn listen(config: &WalletConfig, g_args: &GlobalArgs) -> Result<(), Error> {
+pub fn listen(config: &WalletConfig, args: &ListenArgs, g_args: &GlobalArgs) -> Result<(), Error> {
 	let mut params = HashMap::new();
 	params.insert("api_listen_addr".to_owned(), config.api_listen_addr());
 	if let Some(t) = g_args.tls_conf.as_ref() {
 		params.insert("certificate".to_owned(), t.certificate.clone());
 		params.insert("private_key".to_owned(), t.private_key.clone());
 	}
-	let adapter = HTTPWalletCommAdapter::new();
+	let adapter = match args.method.as_str() {
+		"http" => HTTPWalletCommAdapter::new(),
+		"keybase" => KeybaseWalletCommAdapter::new(),
+		_ => NullWalletCommAdapter::new(),
+	};
+
 	let res = adapter.listen(
 		params,
 		config.clone(),
@@ -213,6 +221,7 @@ pub fn send(wallet: WalletRef, args: SendArgs) -> Result<(), Error> {
 		let adapter = match args.method.as_str() {
 			"http" => HTTPWalletCommAdapter::new(),
 			"file" => FileWalletCommAdapter::new(),
+			"keybase" => KeybaseWalletCommAdapter::new(),
 			"self" => NullWalletCommAdapter::new(),
 			_ => NullWalletCommAdapter::new(),
 		};
