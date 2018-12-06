@@ -34,8 +34,8 @@ use std::time::Duration;
 
 use core::global;
 use core::global::ChainTypes;
-use keychain::ExtKeychain;
 use core::libtx::slate::Slate;
+use keychain::ExtKeychain;
 use wallet::libwallet;
 use wallet::libwallet::types::OutputStatus;
 

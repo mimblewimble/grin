@@ -24,8 +24,8 @@ pub mod common;
 
 use grin_core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use grin_core::core::{Output, OutputFeatures};
-use keychain::{ExtKeychain, Keychain};
 use grin_core::libtx::proof;
+use keychain::{ExtKeychain, Keychain};
 
 fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
 	Arc::new(RwLock::new(LruVerifierCache::new()))

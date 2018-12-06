@@ -41,8 +41,8 @@ use core::global::{set_mining_mode, ChainTypes};
 use core::{pow, ser};
 use keychain::Keychain;
 
-use util::secp::pedersen;
 use core::libtx::slate::Slate;
+use util::secp::pedersen;
 use wallet::libwallet::types::*;
 use wallet::{controller, libwallet, WalletCommAdapter, WalletConfig};
 

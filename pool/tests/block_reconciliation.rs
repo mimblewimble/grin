@@ -33,9 +33,9 @@ use core::core::{Block, BlockHeader};
 use common::*;
 use core::core::hash::Hashed;
 use core::core::verifier_cache::LruVerifierCache;
+use core::libtx;
 use core::pow::Difficulty;
 use keychain::{ExtKeychain, Keychain};
-use core::libtx;
 
 #[test]
 fn test_transaction_pool_block_reconciliation() {

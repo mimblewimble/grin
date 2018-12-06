@@ -32,8 +32,8 @@ use grin_core::core::id::ShortIdentifiable;
 use grin_core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use grin_core::core::Committed;
 use grin_core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
-use grin_core::{global, ser};
 use grin_core::libtx::build::{self, input, output, with_fee};
+use grin_core::{global, ser};
 use keychain::{BlindingFactor, ExtKeychain, Keychain};
 use util::secp;
 

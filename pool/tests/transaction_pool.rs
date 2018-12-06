@@ -31,9 +31,9 @@ use util::RwLock;
 use common::*;
 use core::core::verifier_cache::LruVerifierCache;
 use core::core::{transaction, Block, BlockHeader};
+use core::libtx;
 use core::pow::Difficulty;
 use keychain::{ExtKeychain, Keychain};
-use core::libtx;
 
 /// Test we can add some txs to the pool (both stempool and txpool).
 #[test]
