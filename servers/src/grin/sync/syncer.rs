@@ -209,7 +209,9 @@ impl SyncRunner {
 				.windows(2)
 				.take(5)
 				// .map(|pair|)
-				.fold(Difficulty::zero(), |sum, pair| sum + (pair[1].total_difficulty - pair[0].total_difficulty));
+				.fold(Difficulty::zero(), |sum, pair| {
+					sum + (pair[1].total_difficulty - pair[0].total_difficulty)
+				});
 
 			let peer_diff = peer_info.total_difficulty();
 			if peer_diff > local_diff.clone() + threshold.clone() {

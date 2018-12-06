@@ -344,8 +344,7 @@ where
 			} else {
 				(pair[1].total_difficulty - pair[0].total_difficulty).to_num()
 			}
-		})
-		.sum();
+		}).sum();
 
 	// adjust time delta toward goal subject to dampening and clamping
 	let adj_ts = clamp(
@@ -357,7 +356,10 @@ where
 	// minimum difficulty avoids getting stuck due to dampening
 	let next_diff = Difficulty::from_num(max(MIN_DIFFICULTY, diff_sum * BLOCK_TIME_SEC / adj_ts));
 
-	let total_diff = next_diff + diff_data.last().map(|x| x.total_difficulty).unwrap_or(Difficulty::zero());
+	let total_diff = next_diff + diff_data
+		.last()
+		.map(|x| x.total_difficulty)
+		.unwrap_or(Difficulty::zero());
 
 	HeaderInfo::from_diff_scaling(total_diff, sec_pow_scaling)
 }
