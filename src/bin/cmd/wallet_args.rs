@@ -153,10 +153,7 @@ pub fn parse_init_args(
 	args: &ArgMatches,
 ) -> Result<command::InitArgs, Error> {
 	if let Err(e) = WalletSeed::seed_file_exists(config) {
-		let msg = format!(
-			"Not creating wallet - {}",
-			e.inner
-		);
+		let msg = format!("Not creating wallet - {}", e.inner);
 		return Err(Error::ArgumentError(msg));
 	}
 	let list_length = match args.is_present("short_wordlist") {

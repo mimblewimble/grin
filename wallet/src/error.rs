@@ -17,8 +17,8 @@ use api;
 use core::libtx;
 use keychain;
 use libwallet;
-use std::fmt::{self, Display};
 use std::env;
+use std::fmt::{self, Display};
 
 use core::core::transaction;
 use failure::{Backtrace, Context, Fail};
@@ -114,7 +114,7 @@ impl Fail for Error {
 impl Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let show_bt = match env::var("RUST_BACKTRACE") {
-			Ok(r) => if r =="1" {
+			Ok(r) => if r == "1" {
 				true
 			} else {
 				false
@@ -125,14 +125,8 @@ impl Display for Error {
 			Some(b) => format!("{}", b),
 			None => String::from("Unknown"),
 		};
-		let inner_output = format!(
-			"{}",
-			self.inner,
-		);
-		let backtrace_output = format!(
-			"\nBacktrace: {}",
-			backtrace
-		);
+		let inner_output = format!("{}", self.inner,);
+		let backtrace_output = format!("\nBacktrace: {}", backtrace);
 		let mut output = inner_output.clone();
 		if show_bt {
 			output.push_str(&backtrace_output);

@@ -14,9 +14,9 @@
 
 //! Error types for libwallet
 
+use std::env;
 use std::fmt::{self, Display};
 use std::io;
-use std::env;
 
 use failure::{Backtrace, Context, Fail};
 
@@ -197,7 +197,7 @@ pub enum ErrorKind {
 impl Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
 		let show_bt = match env::var("RUST_BACKTRACE") {
-			Ok(r) => if r =="1" {
+			Ok(r) => if r == "1" {
 				true
 			} else {
 				false
@@ -208,14 +208,8 @@ impl Display for Error {
 			Some(b) => format!("{}", b),
 			None => String::from("Unknown"),
 		};
-		let inner_output = format!(
-			"{}",
-			self.inner,
-		);
-		let backtrace_output = format!(
-			"\n Backtrace: {}",
-			backtrace
-		);
+		let inner_output = format!("{}", self.inner,);
+		let backtrace_output = format!("\n Backtrace: {}", backtrace);
 		let mut output = inner_output.clone();
 		if show_bt {
 			output.push_str(&backtrace_output);
