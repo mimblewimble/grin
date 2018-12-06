@@ -120,7 +120,10 @@ fn build_block(
 	};
 
 	let (output, kernel, block_fees) = get_coinbase(wallet_listener_url, block_fees)?;
-	let mut b = core::Block::with_reward(&head, txs, output, kernel, difficulty.difficulty)?;
+
+	// TODO - clean the total_diff vs. next_diff up
+	let next_diff = difficulty.total_difficulty - head.total_difficulty();
+	let mut b = core::Block::with_reward(&head, txs, output, kernel, next_diff)?;
 
 	// making sure we're not spending time mining a useless block
 	b.validate(&head.total_kernel_offset, verifier_cache)?;

@@ -428,17 +428,18 @@ impl<'a> Iterator for DifficultyIter<'a> {
 				}
 			}
 
-			let prev_difficulty = self
-				.prev_header
-				.clone()
-				.map_or(Difficulty::zero(), |x| x.total_difficulty());
-			let difficulty = header.total_difficulty() - prev_difficulty;
-			let scaling = header.pow.secondary_scaling;
+			// let prev_difficulty = self
+			// 	.prev_header
+			// 	.clone()
+			// 	.map_or(Difficulty::zero(), |x| x.total_difficulty());
+			// let difficulty = header.total_difficulty() - prev_difficulty;
 
+			// TODO - We can now build a header_info from a single header.
+			// TODO - Rework this and get rid of the complex iterator.
 			Some(HeaderInfo::new(
 				header.timestamp.timestamp() as u64,
-				difficulty,
-				scaling,
+				header.total_difficulty(),
+				header.pow.secondary_scaling,
 				header.pow.is_secondary(),
 			))
 		} else {

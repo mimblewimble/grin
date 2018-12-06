@@ -235,8 +235,9 @@ impl fmt::Display for Error {
 pub struct HeaderInfo {
 	/// Timestamp of the header, 1 when not used (returned info)
 	pub timestamp: u64,
-	/// Network difficulty or next difficulty to use
-	pub difficulty: Difficulty,
+	// /// Network difficulty or next difficulty to use
+	// pub difficulty: Difficulty,
+	pub total_difficulty: Difficulty,
 	/// Network secondary PoW factor or factor to use
 	pub secondary_scaling: u32,
 	/// Whether the header is a secondary proof of work
@@ -244,16 +245,16 @@ pub struct HeaderInfo {
 }
 
 impl HeaderInfo {
-	/// Default constructor
+	/// Default constructor.
 	pub fn new(
 		timestamp: u64,
-		difficulty: Difficulty,
+		total_difficulty: Difficulty,
 		secondary_scaling: u32,
 		is_secondary: bool,
 	) -> HeaderInfo {
 		HeaderInfo {
 			timestamp,
-			difficulty,
+			total_difficulty,
 			secondary_scaling,
 			is_secondary,
 		}
@@ -261,10 +262,10 @@ impl HeaderInfo {
 
 	/// Constructor from a timestamp and difficulty, setting a default secondary
 	/// PoW factor
-	pub fn from_ts_diff(timestamp: u64, difficulty: Difficulty) -> HeaderInfo {
+	pub fn from_ts_diff(timestamp: u64, total_difficulty: Difficulty) -> HeaderInfo {
 		HeaderInfo {
 			timestamp,
-			difficulty,
+			total_difficulty,
 			secondary_scaling: global::initial_graph_weight(),
 			is_secondary: false,
 		}
@@ -272,10 +273,10 @@ impl HeaderInfo {
 
 	/// Constructor from a difficulty and secondary factor, setting a default
 	/// timestamp
-	pub fn from_diff_scaling(difficulty: Difficulty, secondary_scaling: u32) -> HeaderInfo {
+	pub fn from_diff_scaling(total_difficulty: Difficulty, secondary_scaling: u32) -> HeaderInfo {
 		HeaderInfo {
 			timestamp: 1,
-			difficulty,
+			total_difficulty,
 			secondary_scaling,
 			is_secondary: false,
 		}
@@ -322,11 +323,28 @@ where
 	let ts_delta: u64 =
 		diff_data[DIFFICULTY_ADJUST_WINDOW as usize].timestamp - diff_data[0].timestamp;
 
-	// Get the difficulty sum of the last DIFFICULTY_ADJUST_WINDOW elements
+	// Calculate the total change in difficulty over the window.
+	// Treat synthetic header infos as each having most recent block diff.
+
+	// TODO - optimize this for non-synthetic case
+	let default_diff = {
+		if let Some(pair) = diff_data.windows(2).last() {
+			(pair[1].total_difficulty - pair[0].total_difficulty).to_num()
+		} else {
+			global::initial_block_difficulty()
+		}
+	};
+
+	// TODO - optimize this for non-synthetic case
 	let diff_sum: u64 = diff_data
-		.iter()
-		.skip(1)
-		.map(|dd| dd.difficulty.to_num())
+		.windows(2)
+		.map(|pair| {
+			if pair[1].total_difficulty == Difficulty::zero() {
+				default_diff
+			} else {
+				(pair[1].total_difficulty - pair[0].total_difficulty).to_num()
+			}
+		})
 		.sum();
 
 	// adjust time delta toward goal subject to dampening and clamping
@@ -335,10 +353,13 @@ where
 		BLOCK_TIME_WINDOW,
 		CLAMP_FACTOR,
 	);
-	// minimum difficulty avoids getting stuck due to dampening
-	let difficulty = max(MIN_DIFFICULTY, diff_sum * BLOCK_TIME_SEC / adj_ts);
 
-	HeaderInfo::from_diff_scaling(Difficulty::from_num(difficulty), sec_pow_scaling)
+	// minimum difficulty avoids getting stuck due to dampening
+	let next_diff = Difficulty::from_num(max(MIN_DIFFICULTY, diff_sum * BLOCK_TIME_SEC / adj_ts));
+
+	let total_diff = next_diff + diff_data.last().map(|x| x.total_difficulty).unwrap_or(Difficulty::zero());
+
+	HeaderInfo::from_diff_scaling(total_diff, sec_pow_scaling)
 }
 
 /// Count the number of "secondary" (AR) blocks in the provided window of blocks.

@@ -22,7 +22,7 @@ use consensus::{
 	DAY_HEIGHT, DEFAULT_MIN_EDGE_BITS, DIFFICULTY_ADJUST_WINDOW, INITIAL_DIFFICULTY, PROOFSIZE,
 	SECOND_POW_EDGE_BITS, STATE_SYNC_THRESHOLD, T4_CUCKAROO_HARDFORK, UNIT_DIFFICULTY,
 };
-use pow::{self, new_cuckaroo_ctx, new_cuckatoo_ctx, EdgeType, PoWContext};
+use pow::{self, new_cuckaroo_ctx, new_cuckatoo_ctx, Difficulty, EdgeType, PoWContext};
 /// An enum collecting sets of parameters used throughout the
 /// code wherever mining is needed. This should allow for
 /// different sets of parameters for different purposes,
@@ -338,13 +338,12 @@ where
 		} else {
 			BLOCK_TIME_SEC
 		};
-		let last_diff = last_n[0].difficulty;
 
 		// fill in simulated blocks with values from the previous real block
 		let mut last_ts = last_n.last().unwrap().timestamp;
 		for _ in n..needed_block_count {
 			last_ts = last_ts.saturating_sub(last_ts_delta);
-			last_n.push(HeaderInfo::from_ts_diff(last_ts, last_diff.clone()));
+			last_n.push(HeaderInfo::from_ts_diff(last_ts, Difficulty::zero()));
 		}
 	}
 	last_n.reverse();

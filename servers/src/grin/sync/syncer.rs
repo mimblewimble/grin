@@ -205,9 +205,11 @@ impl SyncRunner {
 			let threshold = self
 				.chain
 				.difficulty_iter()
-				.map(|x| x.difficulty)
+				.collect::<Vec<_>>()
+				.windows(2)
 				.take(5)
-				.fold(Difficulty::zero(), |sum, val| sum + val);
+				// .map(|pair|)
+				.fold(Difficulty::zero(), |sum, pair| sum + (pair[1].total_difficulty - pair[0].total_difficulty));
 
 			let peer_diff = peer_info.total_difficulty();
 			if peer_diff > local_diff.clone() + threshold.clone() {

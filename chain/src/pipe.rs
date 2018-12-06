@@ -404,11 +404,11 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 		let child_batch = ctx.batch.child()?;
 		let diff_iter = store::DifficultyIter::from_batch(prev.hash(), child_batch);
 		let next_header_info = consensus::next_difficulty(header.height, diff_iter);
-		if target_difficulty != next_header_info.difficulty {
+		if header.total_difficulty() != next_header_info.total_difficulty {
 			info!(
-				"validate_header: header target difficulty {} != {}",
-				target_difficulty.to_num(),
-				next_header_info.difficulty.to_num()
+				"validate_header: header target (cumulative) difficulty {} != {}",
+				header.total_difficulty().to_num(),
+				next_header_info.total_difficulty.to_num()
 			);
 			return Err(ErrorKind::WrongTotalDifficulty.into());
 		}

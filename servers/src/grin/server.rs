@@ -373,26 +373,30 @@ impl Server {
 					.take(consensus::DIFFICULTY_ADJUST_WINDOW as usize)
 					.collect();
 
-			let mut last_time = last_blocks[0].timestamp;
+			// let mut last_time = last_blocks[0].timestamp;
+
 			let tip_height = self.chain.head().unwrap().height as i64;
 			let earliest_block_height = tip_height as i64 - last_blocks.len() as i64;
 			let mut i = 1;
 
+			// TODO - iteate over windows(2) and drop the skip...
 			let diff_entries: Vec<DiffBlock> = last_blocks
-				.iter()
-				.skip(1)
-				.map(|n| {
-					let dur = n.timestamp - last_time;
+				.windows(2)
+				.map(|pair| {
+					let prev = &pair[0];
+					let curr = &pair[1];
+
+					// TODO - just trakc single current height?
 					let height = earliest_block_height + i;
 					i += 1;
-					last_time = n.timestamp;
+
 					DiffBlock {
 						block_number: height,
-						difficulty: n.difficulty.to_num(),
-						time: n.timestamp,
-						duration: dur,
-						secondary_scaling: n.secondary_scaling,
-						is_secondary: n.is_secondary,
+						difficulty: (curr.total_difficulty - prev.total_difficulty).to_num(),
+						time: curr.timestamp,
+						duration: curr.timestamp - prev.timestamp,
+						secondary_scaling: curr.secondary_scaling,
+						is_secondary: curr.is_secondary,
 					}
 				}).collect();
 
