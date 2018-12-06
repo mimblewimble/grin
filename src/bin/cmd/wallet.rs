@@ -170,6 +170,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		println!("Wallet command failed: {}", e);
 		1
 	} else {
+		println!("Command '{}' completed successfully", wallet_args.subcommand().0);
 		0
 	}
 }

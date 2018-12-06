@@ -29,7 +29,7 @@ use core::core;
 use keychain;
 
 use error::{Error, ErrorKind};
-use {controller, display, libwallet, HTTPNodeClient, WalletConfig, WalletInst, WalletSeed};
+use {controller, display, HTTPNodeClient, WalletConfig, WalletInst, WalletSeed};
 use {FileWalletCommAdapter, HTTPWalletCommAdapter, LMDBBackend, NullWalletCommAdapter};
 
 pub type WalletRef = Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>>;
@@ -118,7 +118,7 @@ pub fn listen(config: &WalletConfig, g_args: &GlobalArgs) -> Result<(), Error> {
 		g_args.node_api_secret.clone(),
 	);
 	if let Err(e) = res {
-		return Err(ErrorKind::LibWallet(e.kind()).into());
+		return Err(ErrorKind::LibWallet(e.kind(), e.cause_string()).into());
 	}
 	Ok(())
 }
@@ -131,7 +131,7 @@ pub fn owner_api(wallet: WalletRef, g_args: &GlobalArgs) -> Result<(), Error> {
 		g_args.tls_conf.clone(),
 	);
 	if let Err(e) = res {
-		return Err(ErrorKind::LibWallet(e.kind()).into());
+		return Err(ErrorKind::LibWallet(e.kind(), e.cause_string()).into());
 	}
 	Ok(())
 }
@@ -152,7 +152,7 @@ pub fn account(wallet: WalletRef, args: AccountArgs) -> Result<(), Error> {
 		});
 		if let Err(e) = res {
 			error!("Error listing accounts: {}", e);
-			return Err(ErrorKind::LibWallet(e.kind()).into());
+			return Err(ErrorKind::LibWallet(e.kind(), e.cause_string()).into());
 		}
 	} else {
 		let label = args.create.unwrap();
@@ -165,7 +165,7 @@ pub fn account(wallet: WalletRef, args: AccountArgs) -> Result<(), Error> {
 		if let Err(e) = res {
 			thread::sleep(Duration::from_millis(200));
 			error!("Error creating account '{}': {}", label, e);
-			return Err(ErrorKind::LibWallet(e.kind()).into());
+			return Err(ErrorKind::LibWallet(e.kind(), e.cause_string()).into());
 		}
 	}
 	Ok(())
@@ -206,17 +206,7 @@ pub fn send(wallet: WalletRef, args: SendArgs) -> Result<(), Error> {
 				s
 			}
 			Err(e) => {
-				error!("Tx not created: {}", e);
-				match e.kind() {
-					// user errors, don't backtrace
-					libwallet::ErrorKind::NotEnoughFunds { .. } => {}
-					libwallet::ErrorKind::FeeDispute { .. } => {}
-					libwallet::ErrorKind::FeeExceedsAmount { .. } => {}
-					_ => {
-						// otherwise give full dump
-						error!("Backtrace: {}", e.backtrace().unwrap());
-					}
-				};
+				info!("Tx not created: {}", e);
 				return Err(e);
 			}
 		};

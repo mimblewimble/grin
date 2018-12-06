@@ -154,7 +154,7 @@ pub fn parse_init_args(
 ) -> Result<command::InitArgs, Error> {
 	if let Err(e) = WalletSeed::seed_file_exists(config) {
 		let msg = format!(
-			"Not creating wallet - Wallet seed file already exists at {}",
+			"Not creating wallet - {}",
 			e.inner
 		);
 		return Err(Error::ArgumentError(msg));
