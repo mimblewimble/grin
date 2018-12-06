@@ -78,7 +78,7 @@ pub fn instantiate_wallet(
 					grin_wallet::ErrorKind::Encryption => {
 						format!("Error decrypting wallet seed (check provided password)")
 					}
-					_ => format!("Error instantiating wallet: {:?} Config: {:?}", e, config),
+					_ => format!("Error instantiating wallet: {}", e),
 				}
 			};
 			Err(Error::ArgumentError(msg))
@@ -104,7 +104,7 @@ fn parse_u64(arg: &str, name: &str) -> Result<u64, Error> {
 	match val {
 		Ok(v) => Ok(v),
 		Err(e) => {
-			let msg = format!("Could not parse {} as a whole number. e={:?}", name, e);
+			let msg = format!("Could not parse {} as a whole number. e={}", name, e);
 			Err(Error::ArgumentError(msg))
 		}
 	}
@@ -225,7 +225,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, Error> {
 		Ok(a) => a,
 		Err(e) => {
 			let msg = format!(
-				"Could not parse amount as a number with optional decimal point. e={:?}",
+				"Could not parse amount as a number with optional decimal point. e={}",
 				e
 			);
 			return Err(Error::ArgumentError(msg));
@@ -376,7 +376,7 @@ pub fn parse_cancel_args(args: &ArgMatches) -> Result<command::CancelArgs, Error
 				Some(t)
 			}
 			Err(e) => {
-				let msg = format!("Could not parse txid parameter. e={:?}", e);
+				let msg = format!("Could not parse txid parameter. e={}", e);
 				return Err(Error::ArgumentError(msg));
 			}
 		},
