@@ -18,9 +18,10 @@ use failure::Fail;
 
 use api::TLSConfig;
 use core::core;
-use grin_wallet::{self, command, WalletConfig, WalletSeed};
 use std::path::Path;
 use util::file::get_first_line;
+use ErrorKind;
+use {command, instantiate_wallet, WalletConfig, WalletSeed};
 
 /// Simple error definition, just so we can return errors from all commands
 /// and let the caller figure out what to do
@@ -59,12 +60,12 @@ fn prompt_password_confirm() -> String {
 
 // instantiate wallet (needed by most functions)
 
-pub fn instantiate_wallet(
+pub fn inst_wallet(
 	config: WalletConfig,
 	g_args: &command::GlobalArgs,
 ) -> Result<command::WalletRef, Error> {
 	let passphrase = prompt_password(&g_args.password);
-	let res = grin_wallet::instantiate_wallet(
+	let res = instantiate_wallet(
 		config.clone(),
 		&passphrase,
 		&g_args.account,
@@ -75,7 +76,7 @@ pub fn instantiate_wallet(
 		Err(e) => {
 			let msg = {
 				match e.kind() {
-					grin_wallet::ErrorKind::Encryption => {
+					ErrorKind::Encryption => {
 						format!("Error decrypting wallet seed (check provided password)")
 					}
 					_ => format!("Error instantiating wallet: {}", e),

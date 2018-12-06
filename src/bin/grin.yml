@@ -1,0 +1,287 @@
+name: grin
+version: "0.4.2"
+about: Lightweight implementation of the MimbleWimble protocol.
+author: The Grin Team
+
+subcommands:
+  - server:
+      about: Control the Grin server
+      args:
+        - config_file:
+            help: Path to a grin-server.toml configuration file
+            short: c
+            long: config_file
+            takes_value: true
+        - port:
+            help: Port to start the P2P server on
+            short: p
+            long: port
+            takes_value: true
+        - api_port:
+            help: Port on which to start the api server (e.g. transaction pool api)
+            short: api
+            long: api_port
+            takes_value: true
+        - seed:
+            help: Override seed node(s) to connect to
+            short: s
+            long: seed
+            takes_value: true
+        - wallet_url:
+            help: The wallet listener to which mining rewards will be sent
+            short: w
+            long: wallet_url
+            takes_value: true
+      subcommands:
+        - config:
+            about: Generate a configuration grin-server.toml file in the current directory
+        - start:
+            about: Start the Grin server as a daemon
+        - stop:
+            about: Stop the Grin server daemon
+        - run:
+            about: Run the Grin server in this console
+  - client:
+      about: Communicates with the Grin server
+      subcommands:
+        - status:
+            about: Current status of the Grin chain
+        - listconnectedpeers:
+            about: Print a list of currently connected peers
+        - ban:
+            about: Ban peer
+            args:
+              - peer:
+                  help: Peer ip and port (e.g. 10.12.12.13:13414)
+                  short: p
+                  long: peer
+                  required: true
+                  takes_value: true
+        - unban:
+            about: Unban peer
+            args:
+              - peer:
+                  help: Peer ip and port (e.g. 10.12.12.13:13414)
+                  short: p
+                  long: peer
+                  required: true
+                  takes_value: true
+  - wallet:
+      about: Wallet software for Grin
+      args:
+        - pass:
+            help: Wallet passphrase used to encrypt wallet seed
+            short: p
+            long: pass
+            takes_value: true
+        - account:
+            help: Wallet account to use for this operation
+            short: a
+            long: account
+            takes_value: true
+            default_value: default
+        - data_dir:
+            help: Directory in which to store wallet files
+            short: dd
+            long: data_dir
+            takes_value: true
+        - external:
+            help: Listen on 0.0.0.0 interface to allow external connections (default is 127.0.0.1)
+            short: e
+            long: external
+            takes_value: false
+        - show_spent:
+            help: Show spent outputs on wallet output commands
+            short: s
+            long: show_spent
+            takes_value: false
+        - api_server_address:
+            help: Api address of running node on which to check inputs and post transactions
+            short: r
+            long: api_server_address
+            takes_value: true
+      subcommands:
+        - account:
+            about: List wallet accounts or create a new account
+            args:
+              - create:
+                  help: Create a new wallet account with provided name
+                  short: c
+                  long: create
+                  takes_value: true
+        - listen:
+            about: Runs the wallet in listening mode waiting for transactions
+            args:
+              - port:
+                  help: Port on which to run the wallet listener
+                  short: l
+                  long: port
+                  takes_value: true
+              - method:
+                  help: Which method to use for communication
+                  short: m
+                  long: method
+                  possible_values:
+                    - http
+                    - keybase
+                  default_value: http
+                  takes_value: true
+        - owner_api:
+            about: Runs the wallet's local web API
+        - web:
+            about: Runs the local web wallet which can be accessed through a browser
+        - send:
+            about: Builds a transaction to send coins and sends to the specified listener directly
+            args:
+              - amount:
+                  help: Number of coins to send with optional fraction, e.g. 12.423
+                  index: 1
+              - minimum_confirmations:
+                  help: Minimum number of confirmations required for an output to be spendable
+                  short: c
+                  long: min_conf
+                  default_value: "10"
+                  takes_value: true
+              - selection_strategy:
+                  help: Coin/Output selection strategy.
+                  short: s
+                  long: selection
+                  possible_values:
+                    - all
+                    - smallest
+                  default_value: all
+                  takes_value: true
+              - change_outputs:
+                  help: Number of change outputs to generate (mainly for testing)
+                  short: o
+                  long: change_outputs
+                  default_value: "1"
+                  takes_value: true
+              - method:
+                  help: Method for sending this transaction
+                  short: m
+                  long: method
+                  possible_values:
+                    - http
+                    - file
+                    - self
+                    - keybase
+                  default_value: http
+                  takes_value: true
+              - dest:
+                  help: Send the transaction to the provided server (start with http://) or save as file.
+                  short: d
+                  long: dest
+                  takes_value: true
+              - fluff:
+                  help: Fluff the transaction (ignore Dandelion relay protocol)
+                  short: f
+                  long: fluff
+              - message:
+                  help: Optional participant message to include
+                  short: g
+                  long: message
+                  takes_value: true
+              - stored_tx:
+                  help: If present, use the previously stored Unconfirmed transaction with given id
+                  short: t
+                  long: stored_tx
+                  takes_value: true
+        - receive:
+            about: Processes a transaction file to accept a transfer from a sender
+            args:
+              - message:
+                  help: Optional participant message to include
+                  short: g
+                  long: message
+                  takes_value: true
+              - input:
+                  help: Partial transaction to process, expects the sender's transaction file.
+                  short: i
+                  long: input
+                  takes_value: true
+        - finalize:
+            about: Processes a receiver's transaction file to finalize a transfer.
+            args:
+              - input:
+                  help: Partial transaction to process, expects the receiver's transaction file.
+                  short: i
+                  long: input
+                  takes_value: true
+              - fluff:
+                  help: Fluff the transaction (ignore Dandelion relay protocol)
+                  short: f
+                  long: fluff
+        - outputs:
+            about: Raw wallet output info (list of outputs)
+        - txs:
+            about: Display transaction information
+            args:
+              - id:
+                  help: If specified, display transaction with given Id and all associated Inputs/Outputs
+                  short: i
+                  long: id
+                  takes_value: true
+        - repost:
+            about: Reposts a stored, completed but unconfirmed transaction to the chain, or dumps it to a file
+            args:
+              - id:
+                  help: Transaction ID containing the stored completed transaction
+                  short: i
+                  long: id
+                  takes_value: true
+              - dumpfile:
+                  help: File name to duMp the transaction to instead of posting
+                  short: m
+                  long: dumpfile
+                  takes_value: true
+              - fluff:
+                  help: Fluff the transaction (ignore Dandelion relay protocol)
+                  short: f
+                  long: fluff
+        - cancel:
+            about: Cancels an previously created transaction, freeing previously locked outputs for use again
+            args:
+              - id:
+                  help: The ID of the transaction to cancel
+                  short: i
+                  long: id
+                  takes_value: true
+              - txid:
+                  help: The TxID UUID of the transaction to cancel
+                  short: t
+                  long: txid
+                  takes_value: true
+        - info:
+            about: Basic wallet contents summary
+            args:
+              - minimum_confirmations:
+                  help: Minimum number of confirmations required for an output to be spendable
+                  short: c
+                  long: min_conf
+                  default_value: "10"
+                  takes_value: true
+        - init:
+            about: Initialize a new wallet seed file and database
+            args:
+              - here:
+                  help: Create wallet files in the current directory instead of the default ~/.grin directory
+                  short: h
+                  long: here
+                  takes_value: false
+              - short_wordlist:
+                  help: Generate a 12-word recovery phrase/seed instead of default 24
+                  short: s
+                  long: short_wordlist
+                  takes_value: false
+        - recover:
+            about: recover (create a new wallet.seed file) from a recovery phrase
+            args:
+              - recovery_phrase:
+                  help: 12 or 24 word recovery phrase (encased in quotes).
+                  short: p
+                  long: recovery_phrase
+                  takes_value: true
+        - restore:
+            about: Initialize a new wallet seed file and database
+ 

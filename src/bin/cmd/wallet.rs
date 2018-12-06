@@ -17,10 +17,9 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 
-use super::wallet_args;
 use config::GlobalWalletConfig;
 use core::global;
-use grin_wallet::{self, command, WalletConfig, WalletSeed};
+use grin_wallet::{self, command, command_args, WalletConfig, WalletSeed};
 use servers::start_webwallet_server;
 
 // define what to do on argument error
@@ -74,12 +73,14 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	let global_wallet_args =
-		arg_parse!(wallet_args::parse_global_args(&wallet_config, &wallet_args));
+	let global_wallet_args = arg_parse!(command_args::parse_global_args(
+		&wallet_config,
+		&wallet_args
+	));
 
 	// closure to instantiate wallet as needed by each subcommand
 	let inst_wallet = || {
-		let res = wallet_args::instantiate_wallet(wallet_config.clone(), &global_wallet_args);
+		let res = command_args::inst_wallet(wallet_config.clone(), &global_wallet_args);
 		res.unwrap_or_else(|e| {
 			println!("{}", e);
 			std::process::exit(0);
@@ -88,17 +89,17 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 
 	let res = match wallet_args.subcommand() {
 		("init", Some(args)) => {
-			let a = arg_parse!(wallet_args::parse_init_args(&wallet_config, &args));
+			let a = arg_parse!(command_args::parse_init_args(&wallet_config, &args));
 			command::init(&global_wallet_args, a)
 		}
 		("recover", Some(args)) => {
-			let a = arg_parse!(wallet_args::parse_recover_args(&global_wallet_args, &args));
+			let a = arg_parse!(command_args::parse_recover_args(&global_wallet_args, &args));
 			command::recover(&wallet_config, a)
 		}
 		("listen", Some(args)) => {
 			let mut c = wallet_config.clone();
 			let mut g = global_wallet_args.clone();
-			arg_parse!(wallet_args::parse_listen_args(&mut c, &mut g, &args));
+			arg_parse!(command_args::parse_listen_args(&mut c, &mut g, &args));
 			command::listen(&wallet_config, &g)
 		}
 		("owner_api", Some(_)) => {
@@ -111,23 +112,23 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			command::owner_api(inst_wallet(), &global_wallet_args)
 		}
 		("account", Some(args)) => {
-			let a = arg_parse!(wallet_args::parse_account_args(&args));
+			let a = arg_parse!(command_args::parse_account_args(&args));
 			command::account(inst_wallet(), a)
 		}
 		("send", Some(args)) => {
-			let a = arg_parse!(wallet_args::parse_send_args(&args));
+			let a = arg_parse!(command_args::parse_send_args(&args));
 			command::send(inst_wallet(), a)
 		}
 		("receive", Some(args)) => {
-			let a = arg_parse!(wallet_args::parse_receive_args(&args));
+			let a = arg_parse!(command_args::parse_receive_args(&args));
 			command::receive(inst_wallet(), &global_wallet_args, a)
 		}
 		("finalize", Some(args)) => {
-			let a = arg_parse!(wallet_args::parse_finalize_args(&args));
+			let a = arg_parse!(command_args::parse_finalize_args(&args));
 			command::finalize(inst_wallet(), a)
 		}
 		("info", Some(args)) => {
-			let a = arg_parse!(wallet_args::parse_info_args(&args));
+			let a = arg_parse!(command_args::parse_info_args(&args));
 			command::info(
 				inst_wallet(),
 				&global_wallet_args,
@@ -141,7 +142,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			wallet_config.dark_background_color_scheme.unwrap_or(true),
 		),
 		("txs", Some(args)) => {
-			let a = arg_parse!(wallet_args::parse_txs_args(&args));
+			let a = arg_parse!(command_args::parse_txs_args(&args));
 			command::txs(
 				inst_wallet(),
 				&global_wallet_args,
@@ -150,11 +151,11 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 			)
 		}
 		("repost", Some(args)) => {
-			let a = arg_parse!(wallet_args::parse_repost_args(&args));
+			let a = arg_parse!(command_args::parse_repost_args(&args));
 			command::repost(inst_wallet(), a)
 		}
 		("cancel", Some(args)) => {
-			let a = arg_parse!(wallet_args::parse_cancel_args(&args));
+			let a = arg_parse!(command_args::parse_cancel_args(&args));
 			command::cancel(inst_wallet(), a)
 		}
 		("restore", Some(_)) => command::restore(inst_wallet()),
