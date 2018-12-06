@@ -286,7 +286,7 @@ pub struct Block {
 	/// The header with metadata and commitments to the rest of the data
 	pub header: BlockHeader,
 	/// The body - inputs/outputs/kernels
-	pub body: TransactionBody,
+	body: TransactionBody,
 }
 
 /// Implementation of Writeable for a block, defines how to write the block to a
@@ -363,7 +363,7 @@ impl Block {
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
 		let mut block =
-			Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
+			Block::from_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
 
 		// Now set the pow on the header so block hashing works as expected.
 		{
@@ -426,7 +426,7 @@ impl Block {
 	/// Builds a new block ready to mine from the header of the previous block,
 	/// a vector of transactions and the reward information. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
-	pub fn with_reward(
+	pub fn from_reward(
 		prev: &BlockHeader,
 		txs: Vec<Transaction>,
 		reward_out: Output,
@@ -464,6 +464,14 @@ impl Block {
 			},
 			body: agg_tx.into(),
 		}.cut_through()
+	}
+
+	/// Consumes this block and returns a new block with the coinbase output
+	/// and kernels added
+	pub fn with_reward(mut self, reward_out: Output, reward_kern: TxKernel) -> Block {
+		self.body.outputs.push(reward_out);
+		self.body.kernels.push(reward_kern);
+		self
 	}
 
 	/// Get inputs

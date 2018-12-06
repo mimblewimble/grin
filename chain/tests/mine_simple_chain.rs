@@ -74,8 +74,7 @@ fn mine_genesis_reward_chain() {
 	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
 	let key_id = keychain::ExtKeychain::derive_key_id(0, 1, 0, 0, 0);
 	let reward = reward::output(&keychain, &key_id, 0, 0).unwrap();
-	genesis.body.outputs.push(reward.0);
-	genesis.body.kernels.push(reward.1);
+	genesis = genesis.with_reward(reward.0, reward.1);
 
 	{
 		// setup a tmp chain to hande tx hashsets
