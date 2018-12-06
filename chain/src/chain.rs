@@ -1252,19 +1252,13 @@ fn setup_head(
 					utxo_sum,
 					kernel_sum,
 				};
-				txhashset::extending(txhashset, &mut batch, |extension| {
-					extension.apply_block(&genesis)?;
-					extension.validate_roots()?;
-					extension.validate_sizes()?;
-					Ok(())
-				})?;
-			} else {
-				// Initialize our header MMR with the genesis header.
-				txhashset::header_extending(txhashset, &mut batch, |extension| {
-					extension.apply_header(&genesis.header)?;
-					Ok(())
-				})?;
 			}
+			txhashset::extending(txhashset, &mut batch, |extension| {
+				extension.apply_block(&genesis)?;
+				extension.validate_roots()?;
+				extension.validate_sizes()?;
+				Ok(())
+			})?;
 
 			// Save the block_sums to the db for use later.
 			batch.save_block_sums(&genesis.hash(), &sums)?;
