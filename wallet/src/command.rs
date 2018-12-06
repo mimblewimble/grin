@@ -30,7 +30,10 @@ use keychain;
 
 use error::{Error, ErrorKind};
 use {controller, display, HTTPNodeClient, WalletConfig, WalletInst, WalletSeed};
-use {FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalletCommAdapter, LMDBBackend, NullWalletCommAdapter};
+use {
+	FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalletCommAdapter, LMDBBackend,
+	NullWalletCommAdapter,
+};
 
 pub type WalletRef = Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>>;
 
@@ -110,10 +113,10 @@ pub fn listen(config: &WalletConfig, args: &ListenArgs, g_args: &GlobalArgs) -> 
 		params.insert("private_key".to_owned(), t.private_key.clone());
 	}
 	let adapter = match args.method.as_str() {
-			"http" => HTTPWalletCommAdapter::new(),
-			"keybase" => KeybaseWalletCommAdapter::new(),
-			_ => NullWalletCommAdapter::new(),
-		};
+		"http" => HTTPWalletCommAdapter::new(),
+		"keybase" => KeybaseWalletCommAdapter::new(),
+		_ => NullWalletCommAdapter::new(),
+	};
 
 	let res = adapter.listen(
 		params,

@@ -208,8 +208,8 @@ pub fn parse_listen_args(
 		config.api_listen_port = port.parse().unwrap();
 	}
 	let method = parse_required(args, "method")?;
-	Ok(command::ListenArgs{
-		method: method.to_owned()
+	Ok(command::ListenArgs {
+		method: method.to_owned(),
 	})
 }
 
