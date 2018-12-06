@@ -999,7 +999,7 @@ impl<'a> Extension<'a> {
 	/// Get the header at the specified height based on the current state of the extension.
 	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
 	/// Looks the header up in the db by hash.
-	pub fn get_header_by_height(&mut self, height: u64) -> Result<BlockHeader, Error> {
+	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
 		if let Some(hash) = self.get_header_hash(pos) {
 			let header = self.batch.get_block_header(&hash)?;
@@ -1227,8 +1227,9 @@ impl<'a> Extension<'a> {
 	/// from the respective MMRs.
 	/// For a significantly faster way of validating full kernel sums see BlockSums.
 	pub fn validate_kernel_sums(&self) -> Result<((Commitment, Commitment)), Error> {
+		let genesis = self.get_header_by_height(0)?;
 		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
-			self.header.total_overage(),
+			self.header.total_overage(genesis.kernel_mmr_size > 0),
 			self.header.total_kernel_offset(),
 		)?;
 		Ok((utxo_sum, kernel_sum))

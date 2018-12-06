@@ -28,7 +28,7 @@ use core::core::hash::{Hash, Hashed, ZERO_HASH};
 use core::core::merkle_proof::MerkleProof;
 use core::core::verifier_cache::VerifierCache;
 use core::core::{
-	Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernelEntry,
+	Block, BlockHeader, BlockSums, Committed, Output, OutputIdentifier, Transaction, TxKernelEntry,
 };
 use core::global;
 use core::pow;
@@ -1231,6 +1231,8 @@ fn setup_head(
 			}
 		}
 		Err(NotFoundErr(_)) => {
+			let mut sums = BlockSums::default();
+
 			// Save the genesis header with a "zero" header_root.
 			// We will update this later once we have the correct header_root.
 			batch.save_block_header(&genesis.header)?;
@@ -1239,16 +1241,27 @@ fn setup_head(
 			let tip = Tip::from_header(&genesis.header);
 			batch.save_head(&tip)?;
 
-			// Initialize our header MM with the genesis header.
-			txhashset::header_extending(txhashset, &mut batch, |extension| {
-				extension.apply_header(&genesis.header)?;
+			batch.save_block_header(&genesis.header)?;
+
+			if genesis.kernels().len() > 0 {
+				let (utxo_sum, kernel_sum) = (sums, &genesis as &Committed).verify_kernel_sums(
+					genesis.header.overage(),
+					genesis.header.total_kernel_offset(),
+				)?;
+				sums = BlockSums {
+					utxo_sum,
+					kernel_sum,
+				};
+			}
+			txhashset::extending(txhashset, &mut batch, |extension| {
+				extension.apply_block(&genesis)?;
+				extension.validate_roots()?;
+				extension.validate_sizes()?;
 				Ok(())
 			})?;
 
-			batch.save_block_header(&genesis.header)?;
-
 			// Save the block_sums to the db for use later.
-			batch.save_block_sums(&genesis.hash(), &BlockSums::default())?;
+			batch.save_block_sums(&genesis.hash(), &sums)?;
 
 			info!("init: saved genesis: {:?}", genesis.hash());
 		}

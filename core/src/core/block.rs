@@ -262,8 +262,13 @@ impl BlockHeader {
 
 	/// The "total overage" to use when verifying the kernel sums for a full
 	/// chain state. For a full chain state this is 0 - (height * reward).
-	pub fn total_overage(&self) -> i64 {
-		((self.height * REWARD) as i64).checked_neg().unwrap_or(0)
+	pub fn total_overage(&self, genesis_had_reward: bool) -> i64 {
+		let mut reward_count = self.height;
+		if genesis_had_reward {
+			reward_count += 1;
+		}
+
+		((reward_count * REWARD) as i64).checked_neg().unwrap_or(0)
 	}
 
 	/// Total kernel offset for the chain state up to and including this block.
@@ -358,7 +363,7 @@ impl Block {
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
 		let mut block =
-			Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
+			Block::from_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
 
 		// Now set the pow on the header so block hashing works as expected.
 		{
@@ -421,7 +426,7 @@ impl Block {
 	/// Builds a new block ready to mine from the header of the previous block,
 	/// a vector of transactions and the reward information. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
-	pub fn with_reward(
+	pub fn from_reward(
 		prev: &BlockHeader,
 		txs: Vec<Transaction>,
 		reward_out: Output,
@@ -459,6 +464,14 @@ impl Block {
 			},
 			body: agg_tx.into(),
 		}.cut_through()
+	}
+
+	/// Consumes this block and returns a new block with the coinbase output
+	/// and kernels added
+	pub fn with_reward(mut self, reward_out: Output, reward_kern: TxKernel) -> Block {
+		self.body.outputs.push(reward_out);
+		self.body.kernels.push(reward_kern);
+		self
 	}
 
 	/// Get inputs
