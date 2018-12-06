@@ -335,11 +335,7 @@ impl Chain {
 	/// Attempt to add new headers to the header chain (or fork).
 	/// This is only ever used during sync and is based on sync_head.
 	/// We update header_head here if our total work increases.
-	pub fn sync_block_headers(
-		&self,
-		headers: &Vec<BlockHeader>,
-		opts: Options,
-	) -> Result<(), Error> {
+	pub fn sync_block_headers(&self, headers: &[BlockHeader], opts: Options) -> Result<(), Error> {
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
@@ -438,7 +434,7 @@ impl Chain {
 	/// current chain state, specifically the current winning (valid, most
 	/// work) fork.
 	pub fn is_unspent(&self, output_ref: &OutputIdentifier) -> Result<Hash, Error> {
-		let mut txhashset = self.txhashset.write();
+		let txhashset = self.txhashset.read();
 		let res = txhashset.is_unspent(output_ref);
 		match res {
 			Err(e) => Err(e),
@@ -583,7 +579,7 @@ impl Chain {
 		Ok(())
 	}
 
-	/// Return a pre-built Merkle proof for the given commitment from the store.
+	/// Return a Merkle proof for the given commitment from the store.
 	pub fn get_merkle_proof(
 		&self,
 		output: &OutputIdentifier,
@@ -606,10 +602,9 @@ impl Chain {
 		txhashset.merkle_proof(commit)
 	}
 
-	/// Returns current txhashset roots
+	/// Returns current txhashset roots.
 	pub fn get_txhashset_roots(&self) -> TxHashSetRoots {
-		let mut txhashset = self.txhashset.write();
-		txhashset.roots()
+		self.txhashset.read().roots()
 	}
 
 	/// Provides a reading view into the current txhashset state as well as
@@ -967,20 +962,17 @@ impl Chain {
 
 	/// returns the last n nodes inserted into the output sum tree
 	pub fn get_last_n_output(&self, distance: u64) -> Vec<(Hash, OutputIdentifier)> {
-		let mut txhashset = self.txhashset.write();
-		txhashset.last_n_output(distance)
+		self.txhashset.read().last_n_output(distance)
 	}
 
 	/// as above, for rangeproofs
 	pub fn get_last_n_rangeproof(&self, distance: u64) -> Vec<(Hash, RangeProof)> {
-		let mut txhashset = self.txhashset.write();
-		txhashset.last_n_rangeproof(distance)
+		self.txhashset.read().last_n_rangeproof(distance)
 	}
 
 	/// as above, for kernels
 	pub fn get_last_n_kernel(&self, distance: u64) -> Vec<(Hash, TxKernelEntry)> {
-		let mut txhashset = self.txhashset.write();
-		txhashset.last_n_kernel(distance)
+		self.txhashset.read().last_n_kernel(distance)
 	}
 
 	/// outputs by insertion index
@@ -989,7 +981,7 @@ impl Chain {
 		start_index: u64,
 		max: u64,
 	) -> Result<(u64, u64, Vec<Output>), Error> {
-		let mut txhashset = self.txhashset.write();
+		let txhashset = self.txhashset.read();
 		let max_index = txhashset.highest_output_insertion_index();
 		let outputs = txhashset.outputs_by_insertion_index(start_index, max);
 		let rangeproofs = txhashset.rangeproofs_by_insertion_index(start_index, max);
@@ -1012,14 +1004,6 @@ impl Chain {
 	/// Orphans pool size
 	pub fn orphans_len(&self) -> usize {
 		self.orphans.len()
-	}
-
-	/// Reset header_head and sync_head to head of current body chain
-	pub fn reset_head(&self) -> Result<(), Error> {
-		let batch = self.store.batch()?;
-		batch.reset_head()?;
-		batch.commit()?;
-		Ok(())
 	}
 
 	/// Tip (head) of the block chain.
@@ -1096,7 +1080,7 @@ impl Chain {
 		output_ref: &OutputIdentifier,
 	) -> Result<BlockHeader, Error> {
 		let pos = {
-			let mut txhashset = self.txhashset.write();
+			let txhashset = self.txhashset.read();
 			let (_, pos) = txhashset.is_unspent(output_ref)?;
 			pos
 		};
@@ -1158,14 +1142,6 @@ impl Chain {
 		self.store
 			.block_exists(&h)
 			.map_err(|e| ErrorKind::StoreErr(e, "chain block exists".to_owned()).into())
-	}
-
-	/// Reset sync_head to the provided head.
-	pub fn reset_sync_head(&self, head: &Tip) -> Result<(), Error> {
-		let batch = self.store.batch()?;
-		batch.save_sync_head(head)?;
-		batch.commit()?;
-		Ok(())
 	}
 }
 
@@ -1296,7 +1272,8 @@ fn setup_head(
 			head.last_block_h,
 			head.height,
 		);
-		batch.reset_head()?;
+		batch.reset_header_head()?;
+		batch.reset_sync_head()?;
 	}
 
 	batch.commit()?;

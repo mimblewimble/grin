@@ -27,7 +27,7 @@ pub trait Backend<T: PMMRable> {
 	/// associated data element to flatfile storage (for leaf nodes only). The
 	/// position of the first element of the Vec in the MMR is provided to
 	/// help the implementation.
-	fn append(&mut self, data: T, hashes: Vec<Hash>) -> Result<(), String>;
+	fn append(&mut self, data: &T, hashes: Vec<Hash>) -> Result<(), String>;
 
 	/// Rewind the backend state to a previous position, as if all append
 	/// operations after that had been canceled. Expects a position in the PMMR
@@ -59,7 +59,7 @@ pub trait Backend<T: PMMRable> {
 	/// Returns the data file path.. this is a bit of a hack now that doesn't
 	/// sit well with the design, but TxKernels have to be summed and the
 	/// fastest way to to be able to allow direct access to the file
-	fn get_data_file_path(&self) -> String;
+	fn get_data_file_path(&self) -> &str;
 
 	/// Also a bit of a hack...
 	/// Saves a snapshot of the rewound utxo file with the block hash as

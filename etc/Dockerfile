@@ -1,18 +1,18 @@
 # Multistage docker build, requires docker 17.05
 
 # builder stage
-FROM rust:1.29.0 as builder
+FROM rust:1.30.1 as builder
 
 RUN set -ex && \
     apt-get update && \
     apt-get --no-install-recommends --yes install \
-        clang \
-        libclang-dev \
-        llvm-dev \
-        libncurses5 \
-        libncursesw5 \
-        cmake \
-        git
+    clang \
+    libclang-dev \
+    llvm-dev \
+    libncurses5 \
+    libncursesw5 \
+    cmake \
+    git
 
 WORKDIR /usr/src/grin
 

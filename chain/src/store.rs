@@ -175,16 +175,16 @@ impl<'a> Batch<'a> {
 		self.db.put_ser(&vec![SYNC_HEAD_PREFIX], t)
 	}
 
+	/// Reset sync_head to the current head of the header chain.
 	pub fn reset_sync_head(&self) -> Result<(), Error> {
 		let head = self.header_head()?;
 		self.save_sync_head(&head)
 	}
 
-	// Reset both header_head and sync_head to the current head of the body chain
-	pub fn reset_head(&self) -> Result<(), Error> {
+	/// Reset header_head to the current head of the body chain.
+	pub fn reset_header_head(&self) -> Result<(), Error> {
 		let tip = self.head()?;
-		self.save_header_head(&tip)?;
-		self.save_sync_head(&tip)
+		self.save_header_head(&tip)
 	}
 
 	/// get block

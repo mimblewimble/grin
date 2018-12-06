@@ -359,12 +359,12 @@ pub trait ChainAdapter: Sync + Send {
 	/// A set of block header has been received, typically in response to a
 	/// block
 	/// header request.
-	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr) -> bool;
+	fn headers_received(&self, bh: &[core::BlockHeader], addr: SocketAddr) -> bool;
 
 	/// Finds a list of block headers based on the provided locator. Tries to
 	/// identify the common chain and gets the headers that follow it
 	/// immediately.
-	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader>;
+	fn locate_headers(&self, locator: &[Hash]) -> Vec<core::BlockHeader>;
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;

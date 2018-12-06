@@ -16,12 +16,11 @@
 
 use rand::{thread_rng, Rng};
 
-use consensus::VerifySortOrder;
 use core::block::{Block, BlockHeader, Error};
 use core::hash::Hashed;
 use core::id::ShortIdentifiable;
 use core::{KernelFeatures, Output, OutputFeatures, ShortId, TxKernel};
-use ser::{self, read_multi, Readable, Reader, Writeable, Writer};
+use ser::{self, read_multi, Readable, Reader, VerifySortedAndUnique, Writeable, Writer};
 
 /// Container for full (full) outputs and kernels and kern_ids for a compact block.
 #[derive(Debug, Clone)]
@@ -74,11 +73,11 @@ impl CompactBlockBody {
 		Ok(())
 	}
 
-	// Verify everything is sorted in lexicographical order.
+	// Verify everything is sorted in lexicographical order and no duplicates present.
 	fn verify_sorted(&self) -> Result<(), Error> {
-		self.out_full.verify_sort_order()?;
-		self.kern_full.verify_sort_order()?;
-		self.kern_ids.verify_sort_order()?;
+		self.out_full.verify_sorted_and_unique()?;
+		self.kern_full.verify_sorted_and_unique()?;
+		self.kern_ids.verify_sorted_and_unique()?;
 		Ok(())
 	}
 }

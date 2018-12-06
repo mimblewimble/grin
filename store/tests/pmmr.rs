@@ -746,7 +746,7 @@ fn teardown(data_dir: String) {
 fn load(pos: u64, elems: &[TestElem], backend: &mut store::pmmr::PMMRBackend<TestElem>) -> u64 {
 	let mut pmmr = PMMR::at(backend, pos);
 	for elem in elems {
-		pmmr.push(elem.clone()).unwrap();
+		pmmr.push(elem).unwrap();
 	}
 	pmmr.unpruned_size()
 }
@@ -761,8 +761,8 @@ impl FixedLength for TestElem {
 impl PMMRable for TestElem {
 	type E = Self;
 
-	fn as_elmt(self) -> Self::E {
-		self
+	fn as_elmt(&self) -> Self::E {
+		self.clone()
 	}
 }
 

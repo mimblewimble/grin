@@ -215,11 +215,6 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		if let &Err(ref e) = &res {
 			debug!("Block header {} refused by chain: {:?}", bhash, e.kind());
 			if e.is_bad_data() {
-				debug!(
-					"header_received: {} is a bad header, resetting header head",
-					bhash
-				);
-				let _ = self.chain().reset_head();
 				return false;
 			} else {
 				// we got an error when trying to process the block header
@@ -236,7 +231,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		true
 	}
 
-	fn headers_received(&self, bhs: Vec<core::BlockHeader>, addr: SocketAddr) -> bool {
+	fn headers_received(&self, bhs: &[core::BlockHeader], addr: SocketAddr) -> bool {
 		info!(
 			"Received block headers {:?} from {}",
 			bhs.iter().map(|x| x.hash()).collect::<Vec<_>>(),
@@ -248,7 +243,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 
 		// try to add headers to our header chain
-		let res = self.chain().sync_block_headers(&bhs, self.chain_opts());
+		let res = self.chain().sync_block_headers(bhs, self.chain_opts());
 		if let &Err(ref e) = &res {
 			debug!("Block headers refused by chain: {:?}", e);
 
@@ -259,7 +254,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		true
 	}
 
-	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
+	fn locate_headers(&self, locator: &[Hash]) -> Vec<core::BlockHeader> {
 		debug!("locator: {:?}", locator);
 
 		let header = match self.find_common_header(locator) {
@@ -407,7 +402,7 @@ impl NetToChainAdapter {
 	}
 
 	// Find the first locator hash that refers to a known header on our main chain.
-	fn find_common_header(&self, locator: Vec<Hash>) -> Option<BlockHeader> {
+	fn find_common_header(&self, locator: &[Hash]) -> Option<BlockHeader> {
 		for hash in locator {
 			if let Ok(header) = self.chain().get_block_header(&hash) {
 				if let Ok(header_at_height) = self.chain().get_header_by_height(header.height) {
@@ -444,13 +439,7 @@ impl NetToChainAdapter {
 				true
 			}
 			Err(ref e) if e.is_bad_data() => {
-				debug!("process_block: {} is a bad block, resetting head", bhash);
-				let _ = self.chain().reset_head();
-
-				// we potentially changed the state of the system here
-				// so check everything is still ok
 				self.validate_chain(bhash);
-
 				false
 			}
 			Err(e) => {
@@ -486,9 +475,9 @@ impl NetToChainAdapter {
 		// We are out of consensus at this point and want to track the problem
 		// down as soon as possible.
 		// Skip this if we are currently syncing (too slow).
-		if self.chain().head().unwrap().height > 0
+		if self.config.chain_validation_mode == ChainValidationMode::EveryBlock
+			&& self.chain().head().unwrap().height > 0
 			&& !self.sync_state.is_syncing()
-			&& self.config.chain_validation_mode == ChainValidationMode::EveryBlock
 		{
 			let now = Instant::now();
 

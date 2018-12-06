@@ -33,7 +33,7 @@ use core::core::verifier_cache::LruVerifierCache;
 use core::core::{transaction, Block, BlockHeader};
 use core::pow::Difficulty;
 use keychain::{ExtKeychain, Keychain};
-use wallet::libtx;
+use core::libtx;
 
 /// Test we can add some txs to the pool (both stempool and txpool).
 #[test]
@@ -80,6 +80,18 @@ fn test_the_transaction_pool() {
 		assert_eq!(write_pool.total_size(), 1);
 	}
 
+	// Test adding a tx that "double spends" an output currently spent by a tx
+	// already in the txpool. In this case we attempt to spend the original coinbase twice.
+	{
+		let tx = test_transaction_spending_coinbase(&keychain, &header, vec![501]);
+		let mut write_pool = pool.write();
+		assert!(
+			write_pool
+				.add_to_pool(test_source(), tx, true, &header)
+				.is_err()
+		);
+	}
+
 	// tx1 spends some outputs from the initial test tx.
 	let tx1 = test_transaction(&keychain, vec![500, 600], vec![499, 599]);
 	// tx2 spends some outputs from both tx1 and the initial test tx.
@@ -119,8 +131,8 @@ fn test_the_transaction_pool() {
 		);
 	}
 
-	// Test adding a duplicate tx with the same input and outputs (not the *same*
-	// tx).
+	// Test adding a duplicate tx with the same input and outputs.
+	// Note: not the *same* tx, just same underlying inputs/outputs.
 	{
 		let tx1a = test_transaction(&keychain, vec![500, 600], vec![499, 599]);
 		let mut write_pool = pool.write();

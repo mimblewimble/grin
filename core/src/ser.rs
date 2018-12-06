@@ -22,7 +22,6 @@
 use std::time::Duration;
 
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use consensus;
 use core::hash::{Hash, Hashed};
 use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use std::fmt::Debug;
@@ -54,21 +53,17 @@ pub enum Error {
 	CountError,
 	/// When asked to read too much data
 	TooLargeReadErr,
-	/// Consensus rule failure (currently sort order)
-	ConsensusError(consensus::Error),
 	/// Error from from_hex deserialization
 	HexError(String),
+	/// Inputs/outputs/kernels must be sorted lexicographically.
+	SortError,
+	/// Inputs/outputs/kernels must be unique.
+	DuplicateError,
 }
 
 impl From<io::Error> for Error {
 	fn from(e: io::Error) -> Error {
 		Error::IOErr(format!("{}", e), e.kind())
-	}
-}
-
-impl From<consensus::Error> for Error {
-	fn from(e: consensus::Error) -> Error {
-		Error::ConsensusError(e)
 	}
 }
 
@@ -82,8 +77,9 @@ impl fmt::Display for Error {
 			} => write!(f, "expected {:?}, got {:?}", e, r),
 			Error::CorruptedData => f.write_str("corrupted data"),
 			Error::CountError => f.write_str("count error"),
+			Error::SortError => f.write_str("sort order"),
+			Error::DuplicateError => f.write_str("duplicate"),
 			Error::TooLargeReadErr => f.write_str("too large read"),
-			Error::ConsensusError(ref e) => write!(f, "consensus error {:?}", e),
 			Error::HexError(ref e) => write!(f, "hex error {:?}", e),
 		}
 	}
@@ -103,8 +99,9 @@ impl error::Error for Error {
 			Error::UnexpectedData { .. } => "unexpected data",
 			Error::CorruptedData => "corrupted data",
 			Error::CountError => "count error",
+			Error::SortError => "sort order",
+			Error::DuplicateError => "duplicate error",
 			Error::TooLargeReadErr => "too large read",
-			Error::ConsensusError(_) => "consensus error (sort order)",
 			Error::HexError(_) => "hex error",
 		}
 	}
@@ -291,7 +288,7 @@ pub fn serialize<W: Writeable>(sink: &mut Write, thing: &W) -> Result<(), Error>
 /// Utility function to serialize a writeable directly in memory using a
 /// Vec<u8>.
 pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
-	let mut vec = Vec::new();
+	let mut vec = vec![];
 	serialize(&mut vec, thing)?;
 	Ok(vec)
 }
@@ -515,8 +512,8 @@ impl FixedLength for RangeProof {
 impl PMMRable for RangeProof {
 	type E = Self;
 
-	fn as_elmt(self) -> Self::E {
-		self
+	fn as_elmt(&self) -> Self::E {
+		self.clone()
 	}
 }
 
@@ -537,6 +534,27 @@ impl Writeable for Signature {
 
 impl FixedLength for Signature {
 	const LEN: usize = AGG_SIGNATURE_SIZE;
+}
+
+/// Collections of items must be sorted lexicographically and all unique.
+pub trait VerifySortedAndUnique<T> {
+	/// Verify a collection of items is sorted and all unique.
+	fn verify_sorted_and_unique(&self) -> Result<(), Error>;
+}
+
+impl<T: Hashed> VerifySortedAndUnique<T> for Vec<T> {
+	fn verify_sorted_and_unique(&self) -> Result<(), Error> {
+		let hashes = self.iter().map(|item| item.hash()).collect::<Vec<_>>();
+		let pairs = hashes.windows(2);
+		for pair in pairs {
+			if pair[0] > pair[1] {
+				return Err(Error::SortError);
+			} else if pair[0] == pair[1] {
+				return Err(Error::DuplicateError);
+			}
+		}
+		Ok(())
+	}
 }
 
 /// Utility wrapper for an underlying byte Writer. Defines higher level methods
@@ -695,7 +713,7 @@ pub trait PMMRable: Writeable + Clone + Debug {
 	type E: FixedLength + Readable + Writeable;
 
 	/// Convert the pmmrable into the element to be stored in the MMR data file.
-	fn as_elmt(self) -> Self::E;
+	fn as_elmt(&self) -> Self::E;
 }
 
 /// Generic trait to ensure PMMR elements can be hashed with an index
