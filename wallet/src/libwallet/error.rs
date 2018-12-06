@@ -21,8 +21,8 @@ use failure::{Backtrace, Context, Fail};
 
 use core;
 use core::core::transaction;
-use keychain;
 use core::libtx;
+use keychain;
 
 /// Error definition
 #[derive(Debug, Fail)]

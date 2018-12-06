@@ -20,10 +20,10 @@ extern crate grin_util as util;
 
 use grin_core::core::block::{Block, BlockHeader};
 use grin_core::core::Transaction;
-use grin_core::pow::Difficulty;
-use keychain::{Identifier, Keychain};
 use grin_core::libtx::build::{self, input, output, with_fee};
 use grin_core::libtx::reward;
+use grin_core::pow::Difficulty;
+use keychain::{Identifier, Keychain};
 
 // utility producing a transaction with 2 inputs and a single outputs
 pub fn tx2i1o() -> Transaction {
