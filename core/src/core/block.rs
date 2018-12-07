@@ -22,7 +22,7 @@ use std::iter::FromIterator;
 use std::sync::Arc;
 use util::RwLock;
 
-use consensus::{self, HeaderInfo, reward, REWARD};
+use consensus::{self, reward, HeaderInfo, REWARD};
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, Hashed, ZERO_HASH};
