@@ -52,11 +52,11 @@ impl NodeClient for HTTPNodeClient {
 		self.node_api_secret.clone()
 	}
 
-	fn set_node_url(&mut self, node_url: &str){
+	fn set_node_url(&mut self, node_url: &str) {
 		self.node_url = node_url.to_owned();
 	}
 
-	fn set_node_api_secret(&mut self, node_api_secret: Option<String>){
+	fn set_node_api_secret(&mut self, node_api_secret: Option<String>) {
 		self.node_api_secret = node_api_secret;
 	}
 

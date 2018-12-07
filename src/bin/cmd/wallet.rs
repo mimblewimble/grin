@@ -19,7 +19,6 @@ use config::GlobalWalletConfig;
 use grin_wallet::{self, command_args, HTTPNodeClient, WalletConfig, WalletSeed};
 use servers::start_webwallet_server;
 
-
 pub fn _init_wallet_seed(wallet_config: WalletConfig, password: &str) {
 	if let Err(_) = WalletSeed::from_file(&wallet_config, password) {
 		WalletSeed::init_file(&wallet_config, 32, password)
@@ -41,14 +40,13 @@ pub fn seed_exists(wallet_config: WalletConfig) -> bool {
 pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i32 {
 	// just get defaults from the global config
 	let wallet_config = config.members.unwrap().wallet;
-	
+
 	// web wallet http server must be started from here
 	let _ = match wallet_args.subcommand() {
 		("web", Some(_)) => start_webwallet_server(),
-		_ => {},
+		_ => {}
 	};
 
 	let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
 	command_args::wallet_command(wallet_args, wallet_config, node_client)
-
 }

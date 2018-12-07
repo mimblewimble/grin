@@ -220,9 +220,8 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 		node_api_secret: Option<String>,
 	) -> Result<(), Error> {
 		let node_client = HTTPNodeClient::new(&config.check_node_api_http_addr, node_api_secret);
-		let wallet =
-			instantiate_wallet(config.clone(), node_client, passphrase, account)
-				.context(ErrorKind::WalletSeedDecryption)?;
+		let wallet = instantiate_wallet(config.clone(), node_client, passphrase, account)
+			.context(ErrorKind::WalletSeedDecryption)?;
 
 		println!("Listening for messages via keybase chat...");
 		loop {

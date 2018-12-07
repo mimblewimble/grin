@@ -14,20 +14,20 @@
 
 /// Argument parsing and error handling for wallet commands
 use clap::ArgMatches;
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use std::sync::{Arc};
 use util::Mutex;
 
 use failure::Fail;
 
 use api::TLSConfig;
-use keychain;
 use core;
+use keychain;
 use std::path::Path;
 use util::file::get_first_line;
 use ErrorKind;
-use {command, instantiate_wallet, WalletConfig, WalletSeed, WalletInst, NodeClient};
+use {command, instantiate_wallet, NodeClient, WalletConfig, WalletInst, WalletSeed};
 
 // define what to do on argument error
 macro_rules! arg_parse {
@@ -84,12 +84,7 @@ pub fn inst_wallet(
 	node_client: impl NodeClient + 'static,
 ) -> Result<Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>, Error> {
 	let passphrase = prompt_password(&g_args.password);
-	let res = instantiate_wallet(
-		config.clone(),
-		node_client,
-		&passphrase,
-		&g_args.account,
-	);
+	let res = instantiate_wallet(config.clone(), node_client, &passphrase, &g_args.account);
 	match res {
 		Ok(p) => Ok(p),
 		Err(e) => {
@@ -415,7 +410,11 @@ pub fn parse_cancel_args(args: &ArgMatches) -> Result<command::CancelArgs, Error
 	})
 }
 
-pub fn wallet_command(wallet_args: &ArgMatches, mut wallet_config: WalletConfig, mut node_client: impl NodeClient + 'static) -> i32 {
+pub fn wallet_command(
+	wallet_args: &ArgMatches,
+	mut wallet_config: WalletConfig,
+	mut node_client: impl NodeClient + 'static,
+) -> i32 {
 	if let Some(t) = wallet_config.chain_type.clone() {
 		core::global::set_mining_mode(t);
 	}
@@ -432,10 +431,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, mut wallet_config: WalletConfig,
 		wallet_config.check_node_api_http_addr = sa.to_string().clone();
 	}
 
-	let global_wallet_args = arg_parse!(parse_global_args(
-		&wallet_config,
-		&wallet_args
-	));
+	let global_wallet_args = arg_parse!(parse_global_args(&wallet_config, &wallet_args));
 
 	node_client.set_node_url(&wallet_config.check_node_api_http_addr);
 	node_client.set_node_api_secret(global_wallet_args.node_api_secret.clone());
@@ -469,9 +465,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, mut wallet_config: WalletConfig,
 			g.tls_conf = None;
 			command::owner_api(inst_wallet(), &g)
 		}
-		("web", Some(_)) => {
-			command::owner_api(inst_wallet(), &global_wallet_args)
-		}
+		("web", Some(_)) => command::owner_api(inst_wallet(), &global_wallet_args),
 		("account", Some(args)) => {
 			let a = arg_parse!(parse_account_args(&args));
 			command::account(inst_wallet(), a)

@@ -13,12 +13,12 @@
 
 //! Test wallet command line works as expected
 extern crate grin_chain as chain;
+extern crate grin_config as config;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_store as store;
 extern crate grin_util as util;
 extern crate grin_wallet as wallet;
-extern crate grin_config as config;
 extern crate rand;
 #[macro_use]
 extern crate log;
@@ -31,19 +31,19 @@ extern crate clap;
 mod common;
 use common::testclient::{LocalWalletClient, WalletProxy};
 
-use std::{fs, env};
+use clap::{App, ArgMatches};
 use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
-use clap::{App, ArgMatches};
+use std::{env, fs};
 
+use config::{GlobalConfig, GlobalWalletConfig};
 use core::global;
 use core::global::ChainTypes;
 use core::libtx::slate::Slate;
 use keychain::ExtKeychain;
-use wallet::{libwallet, FileWalletCommAdapter, WalletConfig};
 use wallet::command_args;
-use config::{GlobalConfig, GlobalWalletConfig};
+use wallet::{libwallet, FileWalletCommAdapter, WalletConfig};
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -59,7 +59,7 @@ fn setup(test_dir: &str) {
 pub fn config_command_wallet(dir_name: &str, wallet_name: &str) {
 	let mut current_dir;
 	let mut default_config = GlobalWalletConfig::default();
-		current_dir = env::current_dir().unwrap_or_else(|e| {
+	current_dir = env::current_dir().unwrap_or_else(|e| {
 		panic!("Error creating config file: {}", e);
 	});
 	current_dir.push(dir_name);
@@ -68,9 +68,7 @@ pub fn config_command_wallet(dir_name: &str, wallet_name: &str) {
 	let mut config_file_name = current_dir.clone();
 	config_file_name.push("grin-wallet.toml");
 	if config_file_name.exists() {
-		panic!(
-			"grin-wallet.toml already exists in the target directory. Please remove it first",
-		);
+		panic!("grin-wallet.toml already exists in the target directory. Please remove it first",);
 	}
 	default_config.update_paths(&current_dir);
 	default_config
@@ -89,7 +87,7 @@ pub fn config_command_wallet(dir_name: &str, wallet_name: &str) {
 pub fn initial_setup_wallet(dir_name: &str, wallet_name: &str) -> WalletConfig {
 	let mut current_dir;
 	let mut default_config = GlobalWalletConfig::default();
-		current_dir = env::current_dir().unwrap_or_else(|e| {
+	current_dir = env::current_dir().unwrap_or_else(|e| {
 		panic!("Error creating config file: {}", e);
 	});
 	current_dir.push(dir_name);
@@ -97,10 +95,18 @@ pub fn initial_setup_wallet(dir_name: &str, wallet_name: &str) -> WalletConfig {
 	let _ = fs::create_dir_all(current_dir.clone());
 	let mut config_file_name = current_dir.clone();
 	config_file_name.push("grin-wallet.toml");
-	GlobalWalletConfig::new(config_file_name.to_str().unwrap()).unwrap().members.unwrap().wallet
+	GlobalWalletConfig::new(config_file_name.to_str().unwrap())
+		.unwrap()
+		.members
+		.unwrap()
+		.wallet
 }
 
-fn get_wallet_subcommand<'a>(wallet_dir:&str, wallet_name: &str, args: ArgMatches<'a>) -> ArgMatches<'a> {
+fn get_wallet_subcommand<'a>(
+	wallet_dir: &str,
+	wallet_name: &str,
+	args: ArgMatches<'a>,
+) -> ArgMatches<'a> {
 	match args.subcommand() {
 		("wallet", Some(wallet_args)) => {
 			// wallet init command should spit out its config file then continue
@@ -114,7 +120,7 @@ fn get_wallet_subcommand<'a>(wallet_dir:&str, wallet_name: &str, args: ArgMatche
 				ArgMatches::new()
 			}
 		}
-		_ => {ArgMatches::new()}
+		_ => ArgMatches::new(),
 	}
 }
 
@@ -124,7 +130,7 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
 	let chain = wallet_proxy.chain.clone();
-	
+
 	// load app yaml. If it don't exist, just say so and exit
 	let yml = load_yaml!("../../src/bin/grin.yml");
 	let app = App::from_yaml(yml);
@@ -138,7 +144,6 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	let args = get_wallet_subcommand(test_dir, "wallet1", args);
 	let config = initial_setup_wallet(test_dir, "wallet1");
 	let res = command_args::wallet_command(&args, config, client1);
-
 
 	// Create us some test wallets
 	/*let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
