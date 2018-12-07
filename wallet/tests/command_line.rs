@@ -179,27 +179,43 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), wallet::Error> {
 	execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 
 	let arg_vec = vec![
-		"grin", "wallet", "-p", "password", "account", "-c", "account_1",
+		"grin",
+		"wallet",
+		"-p",
+		"password",
+		"account",
+		"-c",
+		"account_1",
 	];
 	execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 
 	// Create some accounts in wallet 2
 	let arg_vec = vec![
-		"grin", "wallet", "-p", "password", "account", "-c", "account_1",
+		"grin",
+		"wallet",
+		"-p",
+		"password",
+		"account",
+		"-c",
+		"account_1",
 	];
 	execute_command(&app, test_dir, "wallet2", &client2, arg_vec.clone())?;
 	// already exists
 	assert!(execute_command(&app, test_dir, "wallet2", &client2, arg_vec).is_err());
 
 	let arg_vec = vec![
-		"grin", "wallet", "-p", "password", "account", "-c", "account_2",
+		"grin",
+		"wallet",
+		"-p",
+		"password",
+		"account",
+		"-c",
+		"account_2",
 	];
 	execute_command(&app, test_dir, "wallet2", &client2, arg_vec)?;
 
 	// let's see those accounts
-	let arg_vec = vec![
-		"grin", "wallet", "-p", "password", "account",
-	];
+	let arg_vec = vec!["grin", "wallet", "-p", "password", "account"];
 	execute_command(&app, test_dir, "wallet2", &client2, arg_vec)?;
 
 	// Mine a bit into wallet 1 so we have something to send
@@ -208,15 +224,11 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), wallet::Error> {
 	//let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), bh as usize);
 
 	// let's see those accounts
-	let arg_vec = vec![
-		"grin", "wallet", "-p", "password", "account",
-	];
+	let arg_vec = vec!["grin", "wallet", "-p", "password", "account"];
 	execute_command(&app, test_dir, "wallet2", &client2, arg_vec)?;
 
 	// Start wallet 1's listener, collect some coinbase outputs
-	let _arg_vec = vec![
-		"grin", "wallet", "-p", "password", "-a", "mining", "listen",
-	];
+	let _arg_vec = vec!["grin", "wallet", "-p", "password", "-a", "mining", "listen"];
 	//execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 
 	// let logging finish
