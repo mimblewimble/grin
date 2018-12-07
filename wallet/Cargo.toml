@@ -10,7 +10,7 @@ workspace = '..'
 
 [dependencies]
 blake2-rfc = "0.2"
-clap = "2.31"
+clap = { version = "2.31", features = ["yaml"] }
 rpassword = "2.0.0"
 byteorder = "1"
 failure = "0.1"
@@ -41,3 +41,4 @@ grin_util = { path = "../util", version = "0.4.2" }
 [dev-dependencies]
 grin_chain = { path = "../chain", version = "0.4.2" }
 grin_store = { path = "../store", version = "0.4.2" }
+grin_config = { path = "../config", version = "0.4.2" }

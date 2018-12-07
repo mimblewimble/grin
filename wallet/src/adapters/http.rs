@@ -20,7 +20,7 @@ use api;
 use controller;
 use core::libtx::slate::Slate;
 use libwallet::{Error, ErrorKind};
-use {instantiate_wallet, WalletCommAdapter, WalletConfig};
+use {instantiate_wallet, HTTPNodeClient, WalletCommAdapter, WalletConfig};
 
 #[derive(Clone)]
 pub struct HTTPWalletCommAdapter {}
@@ -70,9 +70,9 @@ impl WalletCommAdapter for HTTPWalletCommAdapter {
 		account: &str,
 		node_api_secret: Option<String>,
 	) -> Result<(), Error> {
-		let wallet =
-			instantiate_wallet(config.clone(), passphrase, account, node_api_secret.clone())
-				.context(ErrorKind::WalletSeedDecryption)?;
+		let node_client = HTTPNodeClient::new(&config.check_node_api_http_addr, node_api_secret);
+		let wallet = instantiate_wallet(config.clone(), node_client, passphrase, account)
+			.context(ErrorKind::WalletSeedDecryption)?;
 		let listen_addr = params.get("api_listen_addr").unwrap();
 		let tls_conf = match params.get("certificate") {
 			Some(s) => Some(api::TLSConfig::new(

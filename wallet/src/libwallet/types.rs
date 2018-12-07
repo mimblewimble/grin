@@ -188,8 +188,14 @@ pub trait NodeClient: Sync + Send + Clone {
 	/// Return the URL of the check node
 	fn node_url(&self) -> &str;
 
+	/// Set the node URL
+	fn set_node_url(&mut self, node_url: &str);
+
 	/// Return the node api secret
 	fn node_api_secret(&self) -> Option<String>;
+
+	/// Change the API secret
+	fn set_node_api_secret(&mut self, node_api_secret: Option<String>);
 
 	/// Posts a transaction to a grin node
 	fn post_tx(&self, tx: &TxWrapper, fluff: bool) -> Result<(), Error>;

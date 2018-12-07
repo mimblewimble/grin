@@ -393,7 +393,8 @@ impl NodeClient for LocalWalletClient {
 	fn node_api_secret(&self) -> Option<String> {
 		None
 	}
-
+	fn set_node_url(&mut self, _node_url: &str) {}
+	fn set_node_api_secret(&mut self, _node_api_secret: Option<String>) {}
 	/// Posts a transaction to a grin node
 	/// In this case it will create a new block with award rewarded to
 	fn post_tx(&self, tx: &TxWrapper, _fluff: bool) -> Result<(), libwallet::Error> {

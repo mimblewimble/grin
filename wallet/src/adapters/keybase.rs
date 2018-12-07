@@ -25,7 +25,7 @@ use std::process::{Command, Stdio};
 use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use {instantiate_wallet, WalletCommAdapter, WalletConfig};
+use {instantiate_wallet, HTTPNodeClient, WalletCommAdapter, WalletConfig};
 
 const TTL: u16 = 60; // TODO: Pass this as a parameter
 const SLEEP_DURATION: Duration = Duration::from_millis(5000);
@@ -219,9 +219,9 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 		account: &str,
 		node_api_secret: Option<String>,
 	) -> Result<(), Error> {
-		let wallet =
-			instantiate_wallet(config.clone(), passphrase, account, node_api_secret.clone())
-				.context(ErrorKind::WalletSeedDecryption)?;
+		let node_client = HTTPNodeClient::new(&config.check_node_api_http_addr, node_api_secret);
+		let wallet = instantiate_wallet(config.clone(), node_client, passphrase, account)
+			.context(ErrorKind::WalletSeedDecryption)?;
 
 		println!("Listening for messages via keybase chat...");
 		loop {
