@@ -7,7 +7,6 @@ license = "Apache-2.0"
 repository = "https://github.com/mimblewimble/grin"
 keywords = [ "crypto", "grin", "mimblewimble" ]
 workspace = ".."
-publish = false
 
 [dependencies]
 hyper = "0.12"
