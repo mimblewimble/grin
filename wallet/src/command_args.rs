@@ -26,8 +26,8 @@ use core;
 use keychain;
 use std::path::Path;
 use util::file::get_first_line;
-use {Error, ErrorKind};
 use {command, instantiate_wallet, NodeClient, WalletConfig, WalletInst, WalletSeed};
+use {Error, ErrorKind};
 
 // define what to do on argument error
 macro_rules! arg_parse {
@@ -178,7 +178,7 @@ pub fn parse_init_args(
 	println!("Please enter a password for your new wallet");
 	let password = match g_args.password.clone() {
 		Some(p) => p,
-		None => prompt_password_confirm()
+		None => prompt_password_confirm(),
 	};
 	Ok(command::InitArgs {
 		list_length: list_length,

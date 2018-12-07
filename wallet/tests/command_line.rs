@@ -117,12 +117,9 @@ fn get_wallet_subcommand<'a>(
 				}
 			}
 			wallet_args.to_owned()
-		},
-		_ => {
-			ArgMatches::new()
 		}
+		_ => ArgMatches::new(),
 	}
-
 }
 
 /// self send impl
