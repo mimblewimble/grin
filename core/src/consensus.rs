@@ -245,21 +245,6 @@ pub struct HeaderInfo {
 }
 
 impl HeaderInfo {
-	/// Default constructor.
-	pub fn new(
-		timestamp: u64,
-		total_difficulty: Difficulty,
-		secondary_scaling: u32,
-		is_secondary: bool,
-	) -> HeaderInfo {
-		HeaderInfo {
-			timestamp,
-			total_difficulty,
-			secondary_scaling,
-			is_secondary,
-		}
-	}
-
 	/// Constructor from a timestamp and difficulty, setting a default secondary
 	/// PoW factor
 	pub fn from_ts_diff(timestamp: u64, total_difficulty: Difficulty) -> HeaderInfo {

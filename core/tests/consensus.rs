@@ -86,12 +86,17 @@ fn repeat(interval: u64, diff: HeaderInfo, len: u64, cur_time: Option<u64>) -> V
 	let pairs = times.zip(diffs.iter());
 	pairs
 		.map(|(t, d)| {
-			HeaderInfo::new(
-				cur_time + t as u64,
-				d.clone(),
-				diff.secondary_scaling,
-				diff.is_secondary,
-			)
+			// HeaderInfo::new(
+			// 	cur_time + t as u64,
+			// 	d.clone(),
+			// 	diff.secondary_scaling,
+			// 	diff.is_secondary,
+			// )
+			HeaderInfo {
+				timestamp: cur_time + t as u64,
+				total_difficulty,
+				..diff,
+			}
 		}).collect::<Vec<_>>()
 }
 

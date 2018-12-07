@@ -22,7 +22,7 @@ use std::iter::FromIterator;
 use std::sync::Arc;
 use util::RwLock;
 
-use consensus::{self, reward, REWARD};
+use consensus::{self, HeaderInfo, reward, REWARD};
 use core::committed::{self, Committed};
 use core::compact_block::{CompactBlock, CompactBlockBody};
 use core::hash::{Hash, Hashed, ZERO_HASH};
@@ -164,6 +164,18 @@ impl PMMRable for BlockHeader {
 
 	fn as_elmt(&self) -> Self::E {
 		self.hash()
+	}
+}
+
+/// Convert into HeaderInfo from BlockHeader.
+impl From<BlockHeader> for HeaderInfo {
+	fn from(header: BlockHeader) -> Self {
+		HeaderInfo {
+			timestamp: header.timestamp.timestamp() as u64,
+			total_difficulty: header.total_difficulty(),
+			secondary_scaling: header.pow.secondary_scaling,
+			is_secondary: header.pow.is_secondary(),
+		}
 	}
 }
 
