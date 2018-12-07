@@ -32,18 +32,15 @@ mod common;
 use common::testclient::{LocalWalletClient, WalletProxy};
 
 use clap::{App, ArgMatches};
-use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 use std::{env, fs};
 
-use config::{GlobalConfig, GlobalWalletConfig};
+use config::GlobalWalletConfig;
 use core::global;
 use core::global::ChainTypes;
-use core::libtx::slate::Slate;
 use keychain::ExtKeychain;
-use wallet::command_args;
-use wallet::{libwallet, FileWalletCommAdapter, WalletConfig};
+use wallet::{command_args, WalletConfig};
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -56,7 +53,7 @@ fn setup(test_dir: &str) {
 }
 
 /// Create a wallet config file in the given current directory
-pub fn config_command_wallet(dir_name: &str, wallet_name: &str) {
+pub fn config_command_wallet(dir_name: &str, wallet_name: &str) -> Result<(), wallet::Error> {
 	let mut current_dir;
 	let mut default_config = GlobalWalletConfig::default();
 	current_dir = env::current_dir().unwrap_or_else(|e| {
@@ -68,7 +65,10 @@ pub fn config_command_wallet(dir_name: &str, wallet_name: &str) {
 	let mut config_file_name = current_dir.clone();
 	config_file_name.push("grin-wallet.toml");
 	if config_file_name.exists() {
-		panic!("grin-wallet.toml already exists in the target directory. Please remove it first",);
+		return Err(wallet::ErrorKind::ArgumentError(
+			"grin-wallet.toml already exists in the target directory. Please remove it first"
+				.to_owned(),
+		))?;
 	}
 	default_config.update_paths(&current_dir);
 	default_config
@@ -81,12 +81,12 @@ pub fn config_command_wallet(dir_name: &str, wallet_name: &str) {
 		"File {} configured and created",
 		config_file_name.to_str().unwrap(),
 	);
+	Ok(())
 }
 
 /// Handles setup and detection of paths for wallet
 pub fn initial_setup_wallet(dir_name: &str, wallet_name: &str) -> WalletConfig {
 	let mut current_dir;
-	let mut default_config = GlobalWalletConfig::default();
 	current_dir = env::current_dir().unwrap_or_else(|e| {
 		panic!("Error creating config file: {}", e);
 	});
@@ -113,7 +113,7 @@ fn get_wallet_subcommand<'a>(
 			// (if desired)
 			if let ("init", Some(init_args)) = wallet_args.subcommand() {
 				if init_args.is_present("here") {
-					config_command_wallet(wallet_dir, wallet_name);
+					let _ = config_command_wallet(wallet_dir, wallet_name);
 				}
 			}
 			wallet_args.to_owned()
@@ -122,12 +122,24 @@ fn get_wallet_subcommand<'a>(
 	}
 }
 
+fn execute_command(
+	app: &App,
+	test_dir: &str,
+	wallet_name: &str,
+	client: &LocalWalletClient,
+	arg_vec: Vec<&str>,
+) -> Result<String, wallet::Error> {
+	let args = app.clone().get_matches_from(arg_vec);
+	let args = get_wallet_subcommand(test_dir, wallet_name, args.clone());
+	let config = initial_setup_wallet(test_dir, wallet_name);
+	command_args::wallet_command(&args, config.clone(), client.clone())
+}
+
 /// self send impl
 fn command_line_test_impl(test_dir: &str) -> Result<(), wallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
-	let chain = wallet_proxy.chain.clone();
 
 	// load app yaml. If it don't exist, just say so and exit
 	let yml = load_yaml!("../../src/bin/grin.yml");
@@ -135,25 +147,23 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), wallet::Error> {
 
 	// wallet init
 	let arg_vec = vec!["grin", "wallet", "-p", "password", "init", "-h"];
-	let args = app.get_matches_from(arg_vec);
-
 	// should create new wallet file
 	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let args = get_wallet_subcommand(test_dir, "wallet1", args);
-	let config = initial_setup_wallet(test_dir, "wallet1");
-	command_args::wallet_command(&args, config, client1)?;
+	execute_command(&app, test_dir, "wallet1", &client1, arg_vec.clone())?;
 
-	// Create us some test wallets
-	/*let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
+	// trying to init twice - should fail
+	assert!(execute_command(&app, test_dir, "wallet1", &client1, arg_vec.clone()).is_err());
+
+	// add wallet to proxy
+	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
 	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
+	// Create wallet 2
 	let client2 = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
+	execute_command(&app, test_dir, "wallet2", &client2, arg_vec.clone())?;
+
 	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
 	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());
-
-	let client3 = LocalWalletClient::new("wallet3", wallet_proxy.tx.clone());
-	let wallet3 = common::create_wallet(&format!("{}/wallet3", test_dir), client3.clone());
-	wallet_proxy.add_wallet("wallet3", client3.get_send_instance(), wallet3.clone());
 
 	// Set the wallet proxy listener running
 	thread::spawn(move || {
@@ -162,168 +172,52 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), wallet::Error> {
 		}
 	});
 
-	// few values to keep things shorter
-	let reward = core::consensus::REWARD;
+	// Create some accounts in wallet 1
+	let arg_vec = vec![
+		"grin", "wallet", "-p", "password", "account", "-c", "mining",
+	];
+	execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 
-	// Get some mining done
-	{
-		let mut w = wallet1.lock();
-		w.set_parent_key_id_by_name("mining")?;
-	}
-	let mut bh = 10u64;
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), bh as usize);
+	let arg_vec = vec![
+		"grin", "wallet", "-p", "password", "account", "-c", "account_1",
+	];
+	execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 
-	let send_file = format!("{}/part_tx_1.tx", test_dir);
-	let receive_file = format!("{}/part_tx_2.tx", test_dir);
+	// Create some accounts in wallet 2
+	let arg_vec = vec![
+		"grin", "wallet", "-p", "password", "account", "-c", "account_1",
+	];
+	execute_command(&app, test_dir, "wallet2", &client2, arg_vec.clone())?;
+	// already exists
+	assert!(execute_command(&app, test_dir, "wallet2", &client2, arg_vec).is_err());
 
-	// Should have 5 in account1 (5 spendable), 5 in account (2 spendable)
-	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
-		assert!(wallet1_refreshed);
-		assert_eq!(wallet1_info.last_confirmed_height, bh);
-		assert_eq!(wallet1_info.total, bh * reward);
-		// send to send
-		let (mut slate, lock_fn) = api.initiate_tx(
-			Some("mining"),
-			reward * 2, // amount
-			2,          // minimum confirmations
-			500,        // max outputs
-			1,          // num change outputs
-			true,       // select all outputs
-			None,
-		)?;
-		// output tx file
-		let file_adapter = FileWalletCommAdapter::new();
-		file_adapter.send_tx_async(&send_file, &mut slate)?;
-		api.tx_lock_outputs(&slate, lock_fn)?;
-		Ok(())
-	})?;
+	let arg_vec = vec![
+		"grin", "wallet", "-p", "password", "account", "-c", "account_2",
+	];
+	execute_command(&app, test_dir, "wallet2", &client2, arg_vec)?;
 
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
-	bh += 3;
+	// let's see those accounts
+	let arg_vec = vec![
+		"grin", "wallet", "-p", "password", "account",
+	];
+	execute_command(&app, test_dir, "wallet2", &client2, arg_vec)?;
 
-	// wallet 1 receives file to different account, completes
-	{
-		let mut w = wallet1.lock();
-		w.set_parent_key_id_by_name("listener")?;
-	}
+	// Mine a bit into wallet 1 so we have something to send
+	//let mut bh = 10u64;
+	//let chain = wallet_proxy.chain.clone();
+	//let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), bh as usize);
 
-	wallet::controller::foreign_single_use(wallet1.clone(), |api| {
-		let adapter = FileWalletCommAdapter::new();
-		let mut slate = adapter.receive_tx_async(&send_file)?;
-		api.receive_tx(&mut slate, None, None)?;
-		adapter.send_tx_async(&receive_file, &mut slate)?;
-		Ok(())
-	})?;
+	// let's see those accounts
+	let arg_vec = vec![
+		"grin", "wallet", "-p", "password", "account",
+	];
+	execute_command(&app, test_dir, "wallet2", &client2, arg_vec)?;
 
-	// wallet 1 receives file to different account, completes
-	{
-		let mut w = wallet1.lock();
-		w.set_parent_key_id_by_name("mining")?;
-	}
-
-	let mut slate = Slate::blank(2);
-	// wallet 1 finalize
-	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let adapter = FileWalletCommAdapter::new();
-		slate = adapter.receive_tx_async(&receive_file)?;
-		api.finalize_tx(&mut slate)?;
-		Ok(())
-	})?;
-
-	// Now repost from cached
-	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (_, txs) = api.retrieve_txs(true, None, Some(slate.id))?;
-		api.post_tx(&txs[0].get_stored_tx().unwrap(), false)?;
-		bh += 1;
-		Ok(())
-	})?;
-
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
-	bh += 3;
-
-	// update/test contents of both accounts
-	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
-		assert!(wallet1_refreshed);
-		assert_eq!(wallet1_info.last_confirmed_height, bh);
-		assert_eq!(wallet1_info.total, bh * reward - reward * 2);
-		Ok(())
-	})?;
-
-	{
-		let mut w = wallet1.lock();
-		w.set_parent_key_id_by_name("listener")?;
-	}
-
-	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true, 1)?;
-		assert!(wallet2_refreshed);
-		assert_eq!(wallet2_info.last_confirmed_height, bh);
-		assert_eq!(wallet2_info.total, 2 * reward);
-		Ok(())
-	})?;
-
-	// as above, but syncronously
-	{
-		let mut w = wallet1.lock();
-		w.set_parent_key_id_by_name("mining")?;
-	}
-	{
-		let mut w = wallet2.lock();
-		w.set_parent_key_id_by_name("account1")?;
-	}
-
-	let mut slate = Slate::blank(2);
-	let amount = 60_000_000_000;
-
-	wallet::controller::owner_single_use(wallet1.clone(), |sender_api| {
-		// note this will increment the block count as part of the transaction "Posting"
-		let (slate_i, lock_fn) = sender_api.initiate_tx(
-			None,
-			amount * 2, // amount
-			2,          // minimum confirmations
-			500,        // max outputs
-			1,          // num change outputs
-			true,       // select all outputs
-			None,
-		)?;
-		slate = client1.send_tx_slate_direct("wallet2", &slate_i)?;
-		sender_api.tx_lock_outputs(&slate, lock_fn)?;
-		sender_api.finalize_tx(&mut slate)?;
-		Ok(())
-	})?;
-
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
-	bh += 3;
-
-	// Now repost from cached
-	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (_, txs) = api.retrieve_txs(true, None, Some(slate.id))?;
-		api.post_tx(&txs[0].get_stored_tx().unwrap(), false)?;
-		bh += 1;
-		Ok(())
-	})?;
-
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
-	bh += 3;
-	//
-	// update/test contents of both accounts
-	wallet::controller::owner_single_use(wallet1.clone(), |api| {
-		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
-		assert!(wallet1_refreshed);
-		assert_eq!(wallet1_info.last_confirmed_height, bh);
-		assert_eq!(wallet1_info.total, bh * reward - reward * 4);
-		Ok(())
-	})?;
-
-	wallet::controller::owner_single_use(wallet2.clone(), |api| {
-		let (wallet2_refreshed, wallet2_info) = api.retrieve_summary_info(true, 1)?;
-		assert!(wallet2_refreshed);
-		assert_eq!(wallet2_info.last_confirmed_height, bh);
-		assert_eq!(wallet2_info.total, 2 * amount);
-		Ok(())
-	})?;*/
+	// Start wallet 1's listener, collect some coinbase outputs
+	let _arg_vec = vec![
+		"grin", "wallet", "-p", "password", "-a", "mining", "listen",
+	];
+	//execute_command(&app, test_dir, "wallet1", &client1, arg_vec)?;
 
 	// let logging finish
 	thread::sleep(Duration::from_millis(200));
