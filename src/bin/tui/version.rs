@@ -20,17 +20,17 @@ use cursive::view::View;
 use cursive::views::{BoxView, LinearLayout, TextView};
 use cursive::Cursive;
 
-use tui::constants::VIEW_VERSION;
-use tui::types::TUIStatusListener;
+use crate::tui::constants::VIEW_VERSION;
+use crate::tui::types::TUIStatusListener;
 
-use info_strings;
-use servers::ServerStats;
+use crate::info_strings;
+use crate::servers::ServerStats;
 
 pub struct TUIVersionView;
 
 impl TUIStatusListener for TUIVersionView {
 	/// Create basic status view
-	fn create() -> Box<View> {
+	fn create() -> Box<dyn View> {
 		let (basic_info, detailed_info) = info_strings();
 		let basic_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)

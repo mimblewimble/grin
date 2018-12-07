@@ -18,15 +18,15 @@
 use failure::ResultExt;
 use futures::{stream, Stream};
 
-use libwallet::types::*;
+use crate::libwallet::types::*;
 use std::collections::HashMap;
 use tokio::runtime::Runtime;
 
-use api;
-use error::{Error, ErrorKind};
-use libwallet;
-use util;
-use util::secp::pedersen;
+use crate::api;
+use crate::error::{Error, ErrorKind};
+use crate::libwallet;
+use crate::util;
+use crate::util::secp::pedersen;
 
 #[derive(Clone)]
 pub struct HTTPNodeClient {

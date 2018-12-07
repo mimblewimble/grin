@@ -13,15 +13,14 @@
 // limitations under the License.
 
 //! Implementation specific error types
-use api;
-use core::libtx;
-use keychain;
-use libwallet;
+use crate::api;
+use crate::core::core::transaction;
+use crate::core::libtx;
+use crate::keychain;
+use crate::libwallet;
+use failure::{Backtrace, Context, Fail};
 use std::env;
 use std::fmt::{self, Display};
-
-use core::core::transaction;
-use failure::{Backtrace, Context, Fail};
 
 /// Error definition
 #[derive(Debug)]
@@ -106,7 +105,7 @@ pub enum ErrorKind {
 }
 
 impl Fail for Error {
-	fn cause(&self) -> Option<&Fail> {
+	fn cause(&self) -> Option<&dyn Fail> {
 		self.inner.cause()
 	}
 
@@ -116,13 +115,15 @@ impl Fail for Error {
 }
 
 impl Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let show_bt = match env::var("RUST_BACKTRACE") {
-			Ok(r) => if r == "1" {
-				true
-			} else {
-				false
-			},
+			Ok(r) => {
+				if r == "1" {
+					true
+				} else {
+					false
+				}
+			}
 			Err(_) => false,
 		};
 		let backtrace = match self.backtrace() {
@@ -145,7 +146,7 @@ impl Error {
 		self.inner.get_context().clone()
 	}
 	/// get cause
-	pub fn cause(&self) -> Option<&Fail> {
+	pub fn cause(&self) -> Option<&dyn Fail> {
 		self.inner.cause()
 	}
 	/// get backtrace

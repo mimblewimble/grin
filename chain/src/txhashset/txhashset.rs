@@ -15,34 +15,30 @@
 //! Utility structs to handle the 3 MMRs (output, rangeproof,
 //! kernel) along the overall header MMR conveniently and transactionally.
 
+use crate::core::core::committed::Committed;
+use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::merkle_proof::MerkleProof;
+use crate::core::core::pmmr::{self, ReadonlyPMMR, RewindablePMMR, PMMR};
+use crate::core::core::{
+	Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel, TxKernelEntry,
+};
+use crate::core::global;
+use crate::core::ser::{PMMRIndexHashable, PMMRable};
+use crate::error::{Error, ErrorKind};
+use crate::store::{Batch, ChainStore};
+use crate::txhashset::{RewindableKernelView, UTXOView};
+use crate::types::{Tip, TxHashSetRoots, TxHashsetWriteStatus};
+use crate::util::secp::pedersen::{Commitment, RangeProof};
+use crate::util::{file, secp_static, zip};
+use croaring::Bitmap;
+use grin_store;
+use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
+use grin_store::types::prune_noop;
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
-
-use croaring::Bitmap;
-
-use util::secp::pedersen::{Commitment, RangeProof};
-
-use core::core::committed::Committed;
-use core::core::hash::{Hash, Hashed};
-use core::core::merkle_proof::MerkleProof;
-use core::core::pmmr::{self, ReadonlyPMMR, RewindablePMMR, PMMR};
-use core::core::{
-	Block, BlockHeader, Input, Output, OutputFeatures, OutputIdentifier, TxKernel, TxKernelEntry,
-};
-use core::global;
-use core::ser::{PMMRIndexHashable, PMMRable};
-
-use error::{Error, ErrorKind};
-use grin_store;
-use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
-use grin_store::types::prune_noop;
-use store::{Batch, ChainStore};
-use txhashset::{RewindableKernelView, UTXOView};
-use types::{Tip, TxHashSetRoots, TxHashsetWriteStatus};
-use util::{file, secp_static, zip};
 
 const HEADERHASHSET_SUBDIR: &'static str = "header";
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
@@ -163,7 +159,7 @@ impl TxHashSet {
 	pub fn is_unspent(&self, output_id: &OutputIdentifier) -> Result<(Hash, u64), Error> {
 		match self.commit_index.get_output_pos(&output_id.commit) {
 			Ok(pos) => {
-				let output_pmmr =
+				let output_pmmr: ReadonlyPMMR<'_, Output, _> =
 					ReadonlyPMMR::at(&self.output_pmmr_h.backend, self.output_pmmr_h.last_pos);
 				if let Some(hash) = output_pmmr.get_hash(pos) {
 					if hash == output_id.hash_with_index(pos - 1) {
@@ -314,7 +310,7 @@ impl TxHashSet {
 /// The unit of work is always discarded (always rollback) as this is read-only.
 pub fn extending_readonly<'a, F, T>(trees: &'a mut TxHashSet, inner: F) -> Result<T, Error>
 where
-	F: FnOnce(&mut Extension) -> Result<T, Error>,
+	F: FnOnce(&mut Extension<'_>) -> Result<T, Error>,
 {
 	let commit_index = trees.commit_index.clone();
 	let batch = commit_index.batch()?;
@@ -351,7 +347,7 @@ where
 /// Based on the current txhashset output_pmmr.
 pub fn utxo_view<'a, F, T>(trees: &'a TxHashSet, inner: F) -> Result<T, Error>
 where
-	F: FnOnce(&UTXOView) -> Result<T, Error>,
+	F: FnOnce(&UTXOView<'_>) -> Result<T, Error>,
 {
 	let res: Result<T, Error>;
 	{
@@ -374,7 +370,7 @@ where
 /// when we are done with the view.
 pub fn rewindable_kernel_view<'a, F, T>(trees: &'a TxHashSet, inner: F) -> Result<T, Error>
 where
-	F: FnOnce(&mut RewindableKernelView) -> Result<T, Error>,
+	F: FnOnce(&mut RewindableKernelView<'_>) -> Result<T, Error>,
 {
 	let res: Result<T, Error>;
 	{
@@ -400,11 +396,11 @@ where
 /// of work is abandoned. Otherwise, the unit of work is permanently applied.
 pub fn extending<'a, F, T>(
 	trees: &'a mut TxHashSet,
-	batch: &'a mut Batch,
+	batch: &'a mut Batch<'_>,
 	inner: F,
 ) -> Result<T, Error>
 where
-	F: FnOnce(&mut Extension) -> Result<T, Error>,
+	F: FnOnce(&mut Extension<'_>) -> Result<T, Error>,
 {
 	let sizes: (u64, u64, u64, u64);
 	let res: Result<T, Error>;
@@ -470,11 +466,11 @@ where
 /// the header_head as they diverge during sync.
 pub fn sync_extending<'a, F, T>(
 	trees: &'a mut TxHashSet,
-	batch: &'a mut Batch,
+	batch: &'a mut Batch<'_>,
 	inner: F,
 ) -> Result<T, Error>
 where
-	F: FnOnce(&mut HeaderExtension) -> Result<T, Error>,
+	F: FnOnce(&mut HeaderExtension<'_>) -> Result<T, Error>,
 {
 	let size: u64;
 	let res: Result<T, Error>;
@@ -529,11 +525,11 @@ where
 /// to allow headers to be validated before we receive the full block data.
 pub fn header_extending<'a, F, T>(
 	trees: &'a mut TxHashSet,
-	batch: &'a mut Batch,
+	batch: &'a mut Batch<'_>,
 	inner: F,
 ) -> Result<T, Error>
 where
-	F: FnOnce(&mut HeaderExtension) -> Result<T, Error>,
+	F: FnOnce(&mut HeaderExtension<'_>) -> Result<T, Error>,
 {
 	let size: u64;
 	let res: Result<T, Error>;
@@ -604,7 +600,7 @@ pub struct HeaderExtension<'a> {
 impl<'a> HeaderExtension<'a> {
 	fn new(
 		pmmr: PMMR<'a, BlockHeader, PMMRBackend<BlockHeader>>,
-		batch: &'a Batch,
+		batch: &'a Batch<'_>,
 		header: BlockHeader,
 	) -> HeaderExtension<'a> {
 		HeaderExtension {
@@ -807,7 +803,7 @@ impl<'a> Committed for Extension<'a> {
 }
 
 impl<'a> Extension<'a> {
-	fn new(trees: &'a mut TxHashSet, batch: &'a Batch, header: BlockHeader) -> Extension<'a> {
+	fn new(trees: &'a mut TxHashSet, batch: &'a Batch<'_>, header: BlockHeader) -> Extension<'a> {
 		Extension {
 			header,
 			header_pmmr: PMMR::at(
@@ -1240,7 +1236,7 @@ impl<'a> Extension<'a> {
 	pub fn validate(
 		&self,
 		fast_validation: bool,
-		status: &TxHashsetWriteStatus,
+		status: &dyn TxHashsetWriteStatus,
 	) -> Result<((Commitment, Commitment)), Error> {
 		self.validate_mmrs()?;
 		self.validate_roots()?;
@@ -1320,7 +1316,7 @@ impl<'a> Extension<'a> {
 		)
 	}
 
-	fn verify_kernel_signatures(&self, status: &TxHashsetWriteStatus) -> Result<(), Error> {
+	fn verify_kernel_signatures(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
 		let now = Instant::now();
 
 		let mut kern_count = 0;
@@ -1347,7 +1343,7 @@ impl<'a> Extension<'a> {
 		Ok(())
 	}
 
-	fn verify_rangeproofs(&self, status: &TxHashsetWriteStatus) -> Result<(), Error> {
+	fn verify_rangeproofs(&self, status: &dyn TxHashsetWriteStatus) -> Result<(), Error> {
 		let now = Instant::now();
 
 		let mut commits: Vec<Commitment> = vec![];
@@ -1470,7 +1466,8 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 					.file_name()
 					.and_then(|n| n.to_str().map(|s| String::from(s)))
 			})
-		}).collect();
+		})
+		.collect();
 
 	let dir_difference: Vec<String> = subdirectories_found
 		.difference(&subdirectories_expected)
@@ -1496,7 +1493,8 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 			} else {
 				String::from(s)
 			}
-		}).collect();
+		})
+		.collect();
 
 	let subdirectories = fs::read_dir(txhashset_path)?;
 	for subdirectory in subdirectories {
@@ -1509,7 +1507,8 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 						.file_name()
 						.and_then(|n| n.to_str().map(|s| String::from(s)))
 				})
-			}).collect();
+			})
+			.collect();
 		let difference: Vec<String> = pmmr_files_found
 			.difference(&pmmr_files_expected)
 			.cloned()
@@ -1540,7 +1539,7 @@ fn check_and_remove_files(txhashset_path: &PathBuf, header: &BlockHeader) -> Res
 pub fn input_pos_to_rewind(
 	block_header: &BlockHeader,
 	head_header: &BlockHeader,
-	batch: &Batch,
+	batch: &Batch<'_>,
 ) -> Result<Bitmap, Error> {
 	if head_header.height < block_header.height {
 		debug!(

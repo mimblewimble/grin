@@ -13,6 +13,7 @@
 // limitations under the License.
 
 //! Mining Stratum Server
+use crate::util::{Mutex, RwLock};
 use bufstream::BufStream;
 use chrono::prelude::Utc;
 use serde;
@@ -24,18 +25,17 @@ use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use std::{cmp, thread};
-use util::{Mutex, RwLock};
 
-use chain;
-use common::stats::{StratumStats, WorkerStats};
-use common::types::{StratumServerConfig, SyncState};
-use core::core::verifier_cache::VerifierCache;
-use core::core::Block;
-use core::{pow, ser};
-use keychain;
-use mining::mine_block;
-use pool;
-use util;
+use crate::chain;
+use crate::common::stats::{StratumStats, WorkerStats};
+use crate::common::types::{StratumServerConfig, SyncState};
+use crate::core::core::verifier_cache::VerifierCache;
+use crate::core::core::Block;
+use crate::core::{pow, ser};
+use crate::keychain;
+use crate::mining::mine_block;
+use crate::pool;
+use crate::util;
 
 // ----------------------------------------
 // http://www.jsonrpc.org/specification
@@ -121,7 +121,7 @@ fn accept_workers(
 				stream
 					.set_nonblocking(true)
 					.expect("set_nonblocking call failed");
-				let mut worker = Worker::new(worker_id.to_string(), BufStream::new(stream));
+				let worker = Worker::new(worker_id.to_string(), BufStream::new(stream));
 				workers.lock().push(worker);
 				// stats for this worker (worker stat objects are added and updated but never
 				// removed)
@@ -228,7 +228,7 @@ pub struct StratumServer {
 	config: StratumServerConfig,
 	chain: Arc<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
-	verifier_cache: Arc<RwLock<VerifierCache>>,
+	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	current_block_versions: Vec<Block>,
 	current_difficulty: u64,
 	minimum_share_difficulty: u64,
@@ -243,7 +243,7 @@ impl StratumServer {
 		config: StratumServerConfig,
 		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
-		verifier_cache: Arc<RwLock<VerifierCache>>,
+		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	) -> StratumServer {
 		StratumServer {
 			id: String::from("StratumServer"),

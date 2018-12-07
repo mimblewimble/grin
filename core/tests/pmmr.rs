@@ -12,20 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! PMMR tests
-extern crate chrono;
-extern crate croaring;
-extern crate grin_core as core;
-
 mod vec_backend;
 
+use self::core::core::hash::Hash;
+use self::core::core::pmmr::{self, PMMR};
+use self::core::ser::PMMRIndexHashable;
+use crate::vec_backend::{TestElem, VecBackend};
 use chrono::prelude::Utc;
+use grin_core as core;
 use std::u64;
-
-use core::core::hash::Hash;
-use core::core::pmmr::{self, PMMR};
-use core::ser::PMMRIndexHashable;
-use vec_backend::{TestElem, VecBackend};
 
 #[test]
 fn some_peak_map() {
@@ -442,7 +437,7 @@ fn pmmr_prune() {
 
 	// pruning a leaf with no parent should do nothing
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(16).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
@@ -451,7 +446,7 @@ fn pmmr_prune() {
 
 	// pruning leaves with no shared parent just removes 1 element
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(2).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
@@ -459,7 +454,7 @@ fn pmmr_prune() {
 	assert_eq!(ba.remove_list.len(), 2);
 
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(4).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
@@ -468,7 +463,7 @@ fn pmmr_prune() {
 
 	// pruning a non-leaf node has no effect
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(3).unwrap_err();
 		assert_eq!(orig_root, pmmr.root());
 	}
@@ -477,7 +472,7 @@ fn pmmr_prune() {
 
 	// TODO - no longer true (leaves only now) - pruning sibling removes subtree
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(5).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
@@ -487,7 +482,7 @@ fn pmmr_prune() {
 	// TODO - no longer true (leaves only now) - pruning all leaves under level >1
 	// removes all subtree
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
 		pmmr.prune(1).unwrap();
 		assert_eq!(orig_root, pmmr.root());
 	}
@@ -496,7 +491,7 @@ fn pmmr_prune() {
 
 	// pruning everything should only leave us with a single peak
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut ba, sz);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut ba, sz);
 		for n in 1..16 {
 			let _ = pmmr.prune(n);
 		}

@@ -12,14 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use chain;
-use core::core::{OutputFeatures, OutputIdentifier};
+use crate::chain;
+use crate::core::core::{OutputFeatures, OutputIdentifier};
+use crate::rest::*;
+use crate::types::*;
+use crate::util;
+use crate::util::secp::pedersen::Commitment;
 use failure::ResultExt;
-use rest::*;
 use std::sync::{Arc, Weak};
-use types::*;
-use util;
-use util::secp::pedersen::Commitment;
 
 // All handlers use `Weak` references instead of `Arc` to avoid cycles that
 // can never be destroyed. These 2 functions are simple helpers to reduce the

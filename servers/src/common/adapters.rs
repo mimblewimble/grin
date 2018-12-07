@@ -15,27 +15,27 @@
 //! Adapters connecting new block, new transaction, and accepted transaction
 //! events to consumers of those events.
 
+use crate::util::RwLock;
 use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
-use util::RwLock;
 
-use chain::{self, BlockStatus, ChainAdapter, Options};
+use crate::chain::{self, BlockStatus, ChainAdapter, Options};
+use crate::common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
+use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::transaction::Transaction;
+use crate::core::core::verifier_cache::VerifierCache;
+use crate::core::core::{BlockHeader, BlockSums, CompactBlock};
+use crate::core::pow::Difficulty;
+use crate::core::{core, global};
+use crate::p2p;
+use crate::pool;
+use crate::util::OneTime;
 use chrono::prelude::*;
 use chrono::Duration;
-use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
-use core::core::hash::{Hash, Hashed};
-use core::core::transaction::Transaction;
-use core::core::verifier_cache::VerifierCache;
-use core::core::{BlockHeader, BlockSums, CompactBlock};
-use core::pow::Difficulty;
-use core::{core, global};
-use p2p;
-use pool;
 use rand::prelude::*;
-use util::OneTime;
 
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
@@ -44,7 +44,7 @@ pub struct NetToChainAdapter {
 	sync_state: Arc<SyncState>,
 	chain: Weak<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
-	verifier_cache: Arc<RwLock<VerifierCache>>,
+	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 }
@@ -369,7 +369,7 @@ impl NetToChainAdapter {
 		sync_state: Arc<SyncState>,
 		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
-		verifier_cache: Arc<RwLock<VerifierCache>>,
+		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		config: ServerConfig,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {

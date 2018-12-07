@@ -21,39 +21,29 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-extern crate bufstream;
-extern crate futures;
-extern crate http;
-extern crate hyper;
-extern crate hyper_staticfile;
-extern crate itertools;
-extern crate jsonrpc_core;
-extern crate lmdb_zero as lmdb;
-extern crate rand;
-extern crate serde;
+use serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
+use serde_json;
 #[macro_use]
 extern crate log;
-extern crate chrono;
 
-extern crate grin_api as api;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_p2p as p2p;
-extern crate grin_pool as pool;
-extern crate grin_store as store;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
+use grin_api as api;
+use grin_chain as chain;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_p2p as p2p;
+use grin_pool as pool;
+use grin_store as store;
+use grin_util as util;
+use grin_wallet as wallet;
 
 pub mod common;
 mod grin;
 mod mining;
 mod webwallet;
 
-pub use common::stats::{DiffBlock, PeerStats, ServerStats, StratumStats, WorkerStats};
-pub use common::types::{ServerConfig, StratumServerConfig};
-pub use grin::server::Server;
-pub use webwallet::server::start_webwallet_server;
+pub use crate::common::stats::{DiffBlock, PeerStats, ServerStats, StratumStats, WorkerStats};
+pub use crate::common::types::{ServerConfig, StratumServerConfig};
+pub use crate::grin::server::Server;
+pub use crate::webwallet::server::start_webwallet_server;

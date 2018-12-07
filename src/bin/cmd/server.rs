@@ -24,11 +24,11 @@ use clap::ArgMatches;
 use ctrlc;
 use daemonize::Daemonize;
 
-use config::GlobalConfig;
-use core::global;
-use p2p::Seeding;
-use servers;
-use tui::ui;
+use crate::config::GlobalConfig;
+use crate::core::global;
+use crate::p2p::Seeding;
+use crate::servers;
+use crate::tui::ui;
 
 /// wrap below to allow UI to clean up on stop
 fn start_server(config: servers::ServerConfig) {
@@ -57,7 +57,8 @@ fn start_server_tui(config: servers::ServerConfig) {
 					});
 					controller.run(serv.clone(), running);
 				});
-		}).unwrap();
+		})
+		.unwrap();
 	} else {
 		warn!("Starting GRIN w/o UI...");
 		servers::Server::start(config, |serv: Arc<servers::Server>| {
@@ -65,13 +66,15 @@ fn start_server_tui(config: servers::ServerConfig) {
 			let r = running.clone();
 			ctrlc::set_handler(move || {
 				r.store(false, Ordering::SeqCst);
-			}).expect("Error setting handler for both SIGINT (Ctrl+C) and SIGTERM (kill)");
+			})
+			.expect("Error setting handler for both SIGINT (Ctrl+C) and SIGTERM (kill)");
 			while running.load(Ordering::SeqCst) {
 				thread::sleep(Duration::from_secs(1));
 			}
 			warn!("Received SIGINT (Ctrl+C) or SIGTERM (kill).");
 			serv.stop();
-		}).unwrap();
+		})
+		.unwrap();
 	}
 }
 
@@ -79,7 +82,10 @@ fn start_server_tui(config: servers::ServerConfig) {
 /// stopping the Grin blockchain server. Processes all the command line
 /// arguments to build a proper configuration and runs Grin with that
 /// configuration.
-pub fn server_command(server_args: Option<&ArgMatches>, mut global_config: GlobalConfig) -> i32 {
+pub fn server_command(
+	server_args: Option<&ArgMatches<'_>>,
+	mut global_config: GlobalConfig,
+) -> i32 {
 	global::set_mining_mode(
 		global_config
 			.members

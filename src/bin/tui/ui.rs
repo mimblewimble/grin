@@ -32,13 +32,13 @@ use cursive::utils::markup::StyledString;
 use cursive::views::{LinearLayout, Panel, StackView, TextView, ViewBox};
 use cursive::Cursive;
 
-use servers::Server;
+use crate::servers::Server;
 
-use tui::constants::ROOT_STACK;
-use tui::types::{TUIStatusListener, UIMessage};
-use tui::{menu, mining, peers, status, version};
+use crate::tui::constants::ROOT_STACK;
+use crate::tui::types::{TUIStatusListener, UIMessage};
+use crate::tui::{menu, mining, peers, status, version};
 
-use built_info;
+use crate::built_info;
 
 pub struct UI {
 	cursive: Cursive,
@@ -182,9 +182,9 @@ impl Controller {
 						self.ui.stop();
 						running.store(false, Ordering::SeqCst)
 						/*self.ui
-							.ui_tx
-							.send(UIMessage::UpdateOutput("update".to_string()))
-							.unwrap();*/
+						.ui_tx
+						.send(UIMessage::UpdateOutput("update".to_string()))
+						.unwrap();*/
 					}
 				}
 			}

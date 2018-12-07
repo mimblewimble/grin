@@ -12,29 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate chrono;
-extern crate env_logger;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store as store;
-extern crate grin_util as util;
-extern crate rand;
-
+use self::chain::types::NoopAdapter;
+use self::chain::Chain;
+use self::core::core::verifier_cache::LruVerifierCache;
+use self::core::core::{Block, BlockHeader, Transaction};
+use self::core::global::{self, ChainTypes};
+use self::core::libtx;
+use self::core::pow::{self, Difficulty};
+use self::core::{consensus, genesis};
+use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
+use self::util::RwLock;
 use chrono::Duration;
+use grin_chain as chain;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_store as store;
+use grin_util as util;
 use std::fs;
 use std::sync::Arc;
-use util::RwLock;
-
-use chain::types::NoopAdapter;
-use chain::Chain;
-use core::core::verifier_cache::LruVerifierCache;
-use core::core::{Block, BlockHeader, Transaction};
-use core::global::{self, ChainTypes};
-use core::libtx;
-use core::pow::{self, Difficulty};
-use core::{consensus, genesis};
-use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -55,7 +50,8 @@ fn setup(dir_name: &str) -> Chain {
 		pow::verify_size,
 		verifier_cache,
 		false,
-	).unwrap()
+	)
+	.unwrap()
 }
 
 fn reload_chain(dir_name: &str) -> Chain {
@@ -69,7 +65,8 @@ fn reload_chain(dir_name: &str) -> Chain {
 		pow::verify_size,
 		verifier_cache,
 		false,
-	).unwrap()
+	)
+	.unwrap()
 }
 
 #[test]
@@ -98,7 +95,8 @@ fn data_files() {
 				next_header_info.difficulty,
 				global::proofsize(),
 				global::min_edge_bits(),
-			).unwrap();
+			)
+			.unwrap();
 
 			chain
 				.process_block(b.clone(), chain::Options::MINE)

@@ -12,22 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::api;
+use crate::controller;
+use crate::core::libtx::slate::Slate;
+use crate::libwallet::{Error, ErrorKind};
+use crate::{instantiate_wallet, HTTPNodeClient, WalletCommAdapter, WalletConfig};
 /// HTTP Wallet 'plugin' implementation
 use failure::ResultExt;
 use std::collections::HashMap;
-
-use api;
-use controller;
-use core::libtx::slate::Slate;
-use libwallet::{Error, ErrorKind};
-use {instantiate_wallet, HTTPNodeClient, WalletCommAdapter, WalletConfig};
 
 #[derive(Clone)]
 pub struct HTTPWalletCommAdapter {}
 
 impl HTTPWalletCommAdapter {
 	/// Create
-	pub fn new() -> Box<WalletCommAdapter> {
+	pub fn new() -> Box<dyn WalletCommAdapter> {
 		Box::new(HTTPWalletCommAdapter {})
 	}
 }

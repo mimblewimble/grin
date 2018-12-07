@@ -12,13 +12,13 @@
 // limitations under the License.
 
 //! Logging wrapper to be used throughout all crates in the workspace
+use crate::Mutex;
 use std::ops::Deref;
-use Mutex;
 
 use backtrace::Backtrace;
 use std::{panic, thread};
 
-use types::{LogLevel, LoggingConfig};
+use crate::types::{LogLevel, LoggingConfig};
 
 use log::{LevelFilter, Record};
 use log4rs;
@@ -62,7 +62,7 @@ const LOGGING_PATTERN: &str = "{d(%Y%m%d %H:%M:%S%.3f)} {h({l})} {M} - {m}{n}";
 struct GrinFilter;
 
 impl Filter for GrinFilter {
-	fn filter(&self, record: &Record) -> Response {
+	fn filter(&self, record: &Record<'_>) -> Response {
 		if let Some(module_path) = record.module_path() {
 			if module_path.starts_with("grin") {
 				return Response::Neutral;
@@ -122,7 +122,7 @@ pub fn init_logger(config: Option<LoggingConfig>) {
 			// If maximum log size is specified, use rolling file appender
 			// or use basic one otherwise
 			let filter = Box::new(ThresholdFilter::new(level_file));
-			let file: Box<Append> = {
+			let file: Box<dyn Append> = {
 				if let Some(size) = c.log_max_size {
 					let roller = FixedWindowRoller::builder()
 						.build(&format!("{}.{{}}.gz", c.log_file_path), 32)

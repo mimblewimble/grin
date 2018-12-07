@@ -23,28 +23,18 @@
 
 #[macro_use]
 extern crate bitflags;
-extern crate blake2_rfc as blake2;
-extern crate byteorder;
-extern crate croaring;
-extern crate grin_keychain as keychain;
-extern crate grin_util as util;
+use blake2_rfc as blake2;
+use grin_keychain as keychain;
+use grin_util as util;
 #[macro_use]
 extern crate lazy_static;
-extern crate lru_cache;
-extern crate num_bigint as bigint;
-extern crate rand;
-extern crate serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate siphasher;
 #[macro_use]
 extern crate log;
-extern crate chrono;
-extern crate failure;
-extern crate uuid;
+use failure;
 #[macro_use]
 extern crate failure_derive;
-
 #[macro_use]
 pub mod macros;
 

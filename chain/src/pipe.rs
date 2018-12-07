@@ -14,25 +14,23 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
-use std::sync::Arc;
-use util::RwLock;
-
+use crate::chain::OrphanBlockPool;
+use crate::core::consensus;
+use crate::core::core::hash::Hashed;
+use crate::core::core::verifier_cache::VerifierCache;
+use crate::core::core::Committed;
+use crate::core::core::{Block, BlockHeader, BlockSums};
+use crate::core::global;
+use crate::core::pow;
+use crate::error::{Error, ErrorKind};
+use crate::store;
+use crate::txhashset;
+use crate::types::{Options, Tip};
+use crate::util::RwLock;
 use chrono::prelude::Utc;
 use chrono::Duration;
-
-use chain::OrphanBlockPool;
-use core::consensus;
-use core::core::hash::Hashed;
-use core::core::verifier_cache::VerifierCache;
-use core::core::Committed;
-use core::core::{Block, BlockHeader, BlockSums};
-use core::global;
-use core::pow;
-use error::{Error, ErrorKind};
 use grin_store;
-use store;
-use txhashset;
-use types::{Options, Tip};
+use std::sync::Arc;
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.
@@ -46,7 +44,7 @@ pub struct BlockContext<'a> {
 	/// The active batch to use for block processing.
 	pub batch: store::Batch<'a>,
 	/// The verifier cache (caching verifier for rangeproofs and kernel signatures)
-	pub verifier_cache: Arc<RwLock<VerifierCache>>,
+	pub verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	/// Recent orphan blocks to avoid double-processing
 	pub orphans: Arc<OrphanBlockPool>,
 }
@@ -56,7 +54,7 @@ pub struct BlockContext<'a> {
 fn process_header_for_block(
 	header: &BlockHeader,
 	is_fork: bool,
-	ctx: &mut BlockContext,
+	ctx: &mut BlockContext<'_>,
 ) -> Result<(), Error> {
 	txhashset::header_extending(&mut ctx.txhashset, &mut ctx.batch, |extension| {
 		extension.force_rollback();
@@ -77,7 +75,7 @@ fn process_header_for_block(
 
 // Check if we already know about this block for various reasons
 // from cheapest to most expensive (delay hitting the db until last).
-fn check_known(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+fn check_known(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	check_known_head(&block.header, ctx)?;
 	check_known_orphans(&block.header, ctx)?;
 	check_known_store(&block.header, ctx)?;
@@ -87,7 +85,7 @@ fn check_known(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 /// Runs the block processing pipeline, including validation and finding a
 /// place for the new block in the chain.
 /// Returns new head if chain head updated.
-pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip>, Error> {
 	// TODO should just take a promise for a block with a full header so we don't
 	// spend resources reading the full block when its header is invalid
 
@@ -183,7 +181,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext) -> Result<Option<Tip>, E
 /// This is only ever used during sync and uses a context based on sync_head.
 pub fn sync_block_headers(
 	headers: &[BlockHeader],
-	ctx: &mut BlockContext,
+	ctx: &mut BlockContext<'_>,
 ) -> Result<Option<Tip>, Error> {
 	if let Some(header) = headers.first() {
 		debug!(
@@ -251,7 +249,7 @@ pub fn sync_block_headers(
 /// We validate the header but we do not store it or update header head based
 /// on this. We will update these once we get the block back after requesting
 /// it.
-pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	debug!(
 		"pipe: process_block_header: {} at {}",
 		header.hash(),
@@ -266,7 +264,7 @@ pub fn process_block_header(header: &BlockHeader, ctx: &mut BlockContext) -> Res
 /// Quick in-memory check to fast-reject any block header we've already handled
 /// recently. Keeps duplicates from the network in check.
 /// ctx here is specific to the header_head (tip of the header chain)
-fn check_header_known(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+fn check_header_known(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	let header_head = ctx.batch.header_head()?;
 	if header.hash() == header_head.last_block_h || header.hash() == header_head.prev_block_h {
 		return Err(ErrorKind::Unfit("header already known".to_string()).into());
@@ -277,7 +275,7 @@ fn check_header_known(header: &BlockHeader, ctx: &mut BlockContext) -> Result<()
 /// Quick in-memory check to fast-reject any block handled recently.
 /// Keeps duplicates from the network in check.
 /// Checks against the last_block_h and prev_block_h of the chain head.
-fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	let head = ctx.batch.head()?;
 	let bh = header.hash();
 	if bh == head.last_block_h || bh == head.prev_block_h {
@@ -287,7 +285,7 @@ fn check_known_head(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), 
 }
 
 /// Check if this block is in the set of known orphans.
-fn check_known_orphans(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+fn check_known_orphans(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	if ctx.orphans.contains(&header.hash()) {
 		Err(ErrorKind::Unfit("already known in orphans".to_string()).into())
 	} else {
@@ -296,7 +294,7 @@ fn check_known_orphans(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(
 }
 
 // Check if this block is in the store already.
-fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	match ctx.batch.block_exists(&header.hash()) {
 		Ok(true) => {
 			let head = ctx.batch.head()?;
@@ -321,7 +319,10 @@ fn check_known_store(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(),
 
 // Find the previous header from the store.
 // Return an Orphan error if we cannot find the previous header.
-fn prev_header_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<BlockHeader, Error> {
+fn prev_header_store(
+	header: &BlockHeader,
+	batch: &mut store::Batch<'_>,
+) -> Result<BlockHeader, Error> {
 	let prev = batch.get_previous_header(&header).map_err(|e| match e {
 		grin_store::Error::NotFoundErr(_) => ErrorKind::Orphan,
 		_ => ErrorKind::StoreErr(e, "check prev header".into()),
@@ -332,7 +333,7 @@ fn prev_header_store(header: &BlockHeader, batch: &mut store::Batch) -> Result<B
 /// First level of block validation that only needs to act on the block header
 /// to make it as cheap as possible. The different validations are also
 /// arranged by order of cost to have as little DoS surface as possible.
-fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), Error> {
+fn validate_header(header: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	// check version, enforces scheduled hard fork
 	if !consensus::valid_header_version(header.height, header.version) {
 		error!(
@@ -425,7 +426,7 @@ fn validate_header(header: &BlockHeader, ctx: &mut BlockContext) -> Result<(), E
 	Ok(())
 }
 
-fn validate_block(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
+fn validate_block(block: &Block, ctx: &mut BlockContext<'_>) -> Result<(), Error> {
 	let prev = ctx.batch.get_previous_header(&block.header)?;
 	block
 		.validate(&prev.total_kernel_offset, ctx.verifier_cache.clone())
@@ -437,7 +438,10 @@ fn validate_block(block: &Block, ctx: &mut BlockContext) -> Result<(), Error> {
 /// Verify the block is not attempting to spend coinbase outputs
 /// before they have sufficiently matured.
 /// Note: requires a txhashset extension.
-fn verify_coinbase_maturity(block: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+fn verify_coinbase_maturity(
+	block: &Block,
+	ext: &mut txhashset::Extension<'_>,
+) -> Result<(), Error> {
 	ext.verify_coinbase_maturity(&block.inputs(), block.header.height)?;
 	Ok(())
 }
@@ -447,7 +451,7 @@ fn verify_coinbase_maturity(block: &Block, ext: &mut txhashset::Extension) -> Re
 /// This allows us to verify kernel sums across the full utxo and kernel sets
 /// based on block_sums of previous block, accounting for the inputs|outputs|kernels
 /// of the new block.
-fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension<'_>) -> Result<(), Error> {
 	// TODO - this is 2 db calls, can we optimize this?
 	// Retrieve the block_sums for the previous block.
 	let prev = ext.batch.get_previous_header(&b.header)?;
@@ -462,7 +466,7 @@ fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Er
 
 	// Verify the kernel sums for the block_sums with the new block applied.
 	let (utxo_sum, kernel_sum) =
-		(block_sums, b as &Committed).verify_kernel_sums(overage, offset)?;
+		(block_sums, b as &dyn Committed).verify_kernel_sums(overage, offset)?;
 
 	// Save the new block_sums for the new block to the db via the batch.
 	ext.batch.save_block_sums(
@@ -478,7 +482,10 @@ fn verify_block_sums(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Er
 
 /// Fully validate the block by applying it to the txhashset extension.
 /// Check both the txhashset roots and sizes are correct after applying the block.
-fn apply_block_to_txhashset(block: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+fn apply_block_to_txhashset(
+	block: &Block,
+	ext: &mut txhashset::Extension<'_>,
+) -> Result<(), Error> {
 	ext.validate_header_root(&block.header)?;
 	ext.apply_block(block)?;
 	ext.validate_roots()?;
@@ -488,7 +495,7 @@ fn apply_block_to_txhashset(block: &Block, ext: &mut txhashset::Extension) -> Re
 
 /// Officially adds the block to our chain.
 /// Header must be added separately (assume this has been done previously).
-fn add_block(b: &Block, batch: &store::Batch) -> Result<(), Error> {
+fn add_block(b: &Block, batch: &store::Batch<'_>) -> Result<(), Error> {
 	batch
 		.save_block(b)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save block".to_owned()))?;
@@ -496,7 +503,7 @@ fn add_block(b: &Block, batch: &store::Batch) -> Result<(), Error> {
 }
 
 /// Update the block chain tail so we can know the exact tail of full blocks in this node
-fn update_body_tail(bh: &BlockHeader, batch: &store::Batch) -> Result<(), Error> {
+fn update_body_tail(bh: &BlockHeader, batch: &store::Batch<'_>) -> Result<(), Error> {
 	let tip = Tip::from_header(bh);
 	batch
 		.save_body_tail(&tip)
@@ -506,7 +513,7 @@ fn update_body_tail(bh: &BlockHeader, batch: &store::Batch) -> Result<(), Error>
 }
 
 /// Officially adds the block header to our header chain.
-fn add_block_header(bh: &BlockHeader, batch: &store::Batch) -> Result<(), Error> {
+fn add_block_header(bh: &BlockHeader, batch: &store::Batch<'_>) -> Result<(), Error> {
 	batch
 		.save_block_header(bh)
 		.map_err(|e| ErrorKind::StoreErr(e, "pipe save header".to_owned()))?;
@@ -516,7 +523,7 @@ fn add_block_header(bh: &BlockHeader, batch: &store::Batch) -> Result<(), Error>
 /// Directly updates the head if we've just appended a new block to it or handle
 /// the situation where we've just added enough work to have a fork with more
 /// work than the head.
-fn update_head(b: &Block, ctx: &BlockContext) -> Result<Option<Tip>, Error> {
+fn update_head(b: &Block, ctx: &BlockContext<'_>) -> Result<Option<Tip>, Error> {
 	// if we made a fork with more work than the head (which should also be true
 	// when extending the head), update it
 	let head = ctx.batch.head()?;
@@ -544,7 +551,7 @@ fn has_more_work(header: &BlockHeader, head: &Tip) -> bool {
 }
 
 /// Update the sync head so we can keep syncing from where we left off.
-fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Error> {
+fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch<'_>) -> Result<(), Error> {
 	let tip = Tip::from_header(bh);
 	batch
 		.save_sync_head(&tip)
@@ -554,7 +561,7 @@ fn update_sync_head(bh: &BlockHeader, batch: &mut store::Batch) -> Result<(), Er
 }
 
 /// Update the header head if this header has most work.
-fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option<Tip>, Error> {
+fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext<'_>) -> Result<Option<Tip>, Error> {
 	let header_head = ctx.batch.header_head()?;
 	if has_more_work(&bh, &header_head) {
 		let tip = Tip::from_header(bh);
@@ -576,7 +583,7 @@ fn update_header_head(bh: &BlockHeader, ctx: &mut BlockContext) -> Result<Option
 /// Rewind the header chain and reapply headers on a fork.
 pub fn rewind_and_apply_header_fork(
 	header: &BlockHeader,
-	ext: &mut txhashset::HeaderExtension,
+	ext: &mut txhashset::HeaderExtension<'_>,
 ) -> Result<(), Error> {
 	let mut fork_hashes = vec![];
 	let mut current = ext.batch.get_previous_header(header)?;
@@ -606,7 +613,7 @@ pub fn rewind_and_apply_header_fork(
 /// to find to fork root. Rewind the txhashset to the root and apply all the
 /// forked blocks prior to the one being processed to set the txhashset in
 /// the expected state.
-pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension) -> Result<(), Error> {
+pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension<'_>) -> Result<(), Error> {
 	// extending a fork, first identify the block where forking occurred
 	// keeping the hashes of blocks along the fork
 	let mut fork_hashes = vec![];
@@ -641,7 +648,7 @@ pub fn rewind_and_apply_fork(b: &Block, ext: &mut txhashset::Extension) -> Resul
 	Ok(())
 }
 
-fn validate_utxo(block: &Block, ext: &txhashset::Extension) -> Result<(), Error> {
+fn validate_utxo(block: &Block, ext: &txhashset::Extension<'_>) -> Result<(), Error> {
 	let utxo = ext.utxo_view();
 	utxo.validate_block(block)?;
 	Ok(())

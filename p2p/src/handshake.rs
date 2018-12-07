@@ -12,19 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::util::RwLock;
 use std::collections::VecDeque;
 use std::net::{SocketAddr, TcpStream};
 use std::sync::Arc;
-use util::RwLock;
 
 use chrono::prelude::*;
 use rand::{thread_rng, Rng};
 
-use core::core::hash::Hash;
-use core::pow::Difficulty;
-use msg::{read_message, write_message, Hand, Shake, SockAddr, Type, PROTOCOL_VERSION, USER_AGENT};
-use peer::Peer;
-use types::{Capabilities, Direction, Error, P2PConfig, PeerInfo, PeerLiveInfo};
+use crate::core::core::hash::Hash;
+use crate::core::pow::Difficulty;
+use crate::msg::{
+	read_message, write_message, Hand, Shake, SockAddr, Type, PROTOCOL_VERSION, USER_AGENT,
+};
+use crate::peer::Peer;
+use crate::types::{Capabilities, Direction, Error, P2PConfig, PeerInfo, PeerLiveInfo};
 
 const NONCES_CAP: usize = 100;
 

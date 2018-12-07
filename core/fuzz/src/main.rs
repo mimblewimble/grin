@@ -77,5 +77,6 @@ fn tx() -> Transaction {
 			with_fee(2),
 		],
 		&keychain,
-	).unwrap()
+	)
+	.unwrap()
 }

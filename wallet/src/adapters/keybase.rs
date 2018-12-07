@@ -14,18 +14,18 @@
 
 // Keybase Wallet Plugin
 
-use controller;
-use core::libtx::slate::Slate;
+use crate::controller;
+use crate::core::libtx::slate::Slate;
+use crate::libwallet::{Error, ErrorKind};
+use crate::{instantiate_wallet, HTTPNodeClient, WalletCommAdapter, WalletConfig};
 use failure::ResultExt;
-use libwallet::{Error, ErrorKind};
 use serde::Serialize;
-use serde_json::{from_str, to_string, Value};
+use serde_json::{from_str, json, to_string, Value};
 use std::collections::{HashMap, HashSet};
 use std::process::{Command, Stdio};
 use std::str::from_utf8;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
-use {instantiate_wallet, HTTPNodeClient, WalletCommAdapter, WalletConfig};
 
 const TTL: u16 = 60; // TODO: Pass this as a parameter
 const SLEEP_DURATION: Duration = Duration::from_millis(5000);
@@ -66,17 +66,18 @@ fn api_send(payload: &str) -> Value {
 /// Get all unread messages from a specific channel/topic and mark as read.
 fn read_from_channel(channel: &str, topic: &str) -> Vec<String> {
 	let payload = to_string(&json!({
-        "method": "read",
-        "params": {
-            "options": {
-                "channel": {
-                        "name": channel, "topic_type": "dev", "topic_name": topic
-                    },
+		"method": "read",
+		"params": {
+			"options": {
+				"channel": {
+						"name": channel, "topic_type": "dev", "topic_name": topic
+					},
 					"unread_only": true, "peek": false
-                },
-            }
-        }
-    )).unwrap();
+				},
+			}
+		}
+	))
+	.unwrap();
 
 	let response = api_send(&payload);
 	let mut unread: Vec<String> = Vec::new();
@@ -96,14 +97,15 @@ fn read_from_channel(channel: &str, topic: &str) -> Vec<String> {
 /// Get unread messages from all channels and mark as read.
 fn get_unread(topic: &str) -> HashMap<String, String> {
 	let payload = to_string(&json!({
-        "method": "list",
-        "params": {
-            "options": {
-                    "topic_type": "dev",
-                },
-            }
-        }
-    )).unwrap();
+		"method": "list",
+		"params": {
+			"options": {
+					"topic_type": "dev",
+				},
+			}
+		}
+	))
+	.unwrap();
 	let response = api_send(&payload);
 
 	let mut channels = HashSet::new();
@@ -146,7 +148,8 @@ fn send<T: Serialize>(message: T, channel: &str, topic: &str, ttl: u16) -> bool 
 						}
 					}
 				}
-	)).unwrap();
+	))
+	.unwrap();
 	let response = api_send(&payload);
 	match response["result"]["message"].as_str() {
 		Some("message sent") => true,

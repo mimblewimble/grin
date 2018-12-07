@@ -15,30 +15,31 @@
 //! Transaction pool implementation.
 //! Used for both the txpool and stempool layers in the pool.
 
+use self::core::core::hash::{Hash, Hashed};
+use self::core::core::id::{ShortId, ShortIdentifiable};
+use self::core::core::transaction;
+use self::core::core::verifier_cache::VerifierCache;
+use self::core::core::{Block, BlockHeader, BlockSums, Committed, Transaction, TxKernel};
+use self::util::RwLock;
+use crate::types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
+use grin_core as core;
+use grin_util as util;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use util::RwLock;
-
-use core::core::hash::{Hash, Hashed};
-use core::core::id::{ShortId, ShortIdentifiable};
-use core::core::transaction;
-use core::core::verifier_cache::VerifierCache;
-use core::core::{Block, BlockHeader, BlockSums, Committed, Transaction, TxKernel};
-use types::{BlockChain, PoolEntry, PoolEntryState, PoolError};
 
 pub struct Pool {
 	/// Entries in the pool (tx + info + timer) in simple insertion order.
 	pub entries: Vec<PoolEntry>,
 	/// The blockchain
-	pub blockchain: Arc<BlockChain>,
-	pub verifier_cache: Arc<RwLock<VerifierCache>>,
+	pub blockchain: Arc<dyn BlockChain>,
+	pub verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	pub name: String,
 }
 
 impl Pool {
 	pub fn new(
-		chain: Arc<BlockChain>,
-		verifier_cache: Arc<RwLock<VerifierCache>>,
+		chain: Arc<dyn BlockChain>,
+		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		name: String,
 	) -> Pool {
 		Pool {
@@ -115,7 +116,10 @@ impl Pool {
 	/// appropriate to put in a mined block. Aggregates chains of dependent
 	/// transactions, orders by fee over weight and ensures to total weight
 	/// doesn't exceed block limits.
-	pub fn prepare_mineable_transactions(&self, max_weight: usize) -> Result<Vec<Transaction>, PoolError> {
+	pub fn prepare_mineable_transactions(
+		&self,
+		max_weight: usize,
+	) -> Result<Vec<Transaction>, PoolError> {
 		let header = self.blockchain.chain_head()?;
 		let tx_buckets = self.bucket_transactions();
 
@@ -295,7 +299,7 @@ impl Pool {
 		// Verify the kernel sums for the block_sums with the new tx applied,
 		// accounting for overage and offset.
 		let (utxo_sum, kernel_sum) =
-			(block_sums, tx as &Committed).verify_kernel_sums(overage, offset)?;
+			(block_sums, tx as &dyn Committed).verify_kernel_sums(overage, offset)?;
 
 		Ok(BlockSums {
 			utxo_sum,

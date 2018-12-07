@@ -21,13 +21,13 @@ use std::{fmt, iter};
 use rand::{thread_rng, Rng};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-use consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
-use core::hash::Hashed;
-use global;
-use ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
+use crate::consensus::{graph_weight, MIN_DIFFICULTY, SECOND_POW_EDGE_BITS};
+use crate::core::hash::Hashed;
+use crate::global;
+use crate::ser::{self, FixedLength, Readable, Reader, Writeable, Writer};
 
-use pow::common::EdgeType;
-use pow::error::Error;
+use crate::pow::common::EdgeType;
+use crate::pow::error::Error;
 
 /// Generic trait for a solver/verifier providing common interface into Cuckoo-family PoW
 /// Mostly used for verification, but also for test mining if necessary
@@ -105,7 +105,7 @@ impl Difficulty {
 }
 
 impl fmt::Display for Difficulty {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.num)
 	}
 }
@@ -153,7 +153,7 @@ impl Writeable for Difficulty {
 }
 
 impl Readable for Difficulty {
-	fn read(reader: &mut Reader) -> Result<Difficulty, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Difficulty, ser::Error> {
 		let data = reader.read_u64()?;
 		Ok(Difficulty { num: data })
 	}
@@ -186,7 +186,7 @@ struct DiffVisitor;
 impl<'de> de::Visitor<'de> for DiffVisitor {
 	type Value = Difficulty;
 
-	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+	fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
 		formatter.write_str("a difficulty")
 	}
 
@@ -241,7 +241,7 @@ impl Default for ProofOfWork {
 
 impl ProofOfWork {
 	/// Read implementation, can't define as trait impl as we need a version
-	pub fn read(_ver: u16, reader: &mut Reader) -> Result<ProofOfWork, ser::Error> {
+	pub fn read(_ver: u16, reader: &mut dyn Reader) -> Result<ProofOfWork, ser::Error> {
 		let total_difficulty = Difficulty::read(reader)?;
 		let secondary_scaling = reader.read_u32()?;
 		let nonce = reader.read_u64()?;
@@ -325,7 +325,7 @@ pub struct Proof {
 }
 
 impl fmt::Debug for Proof {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "Cuckoo{}(", self.edge_bits)?;
 		for (i, val) in self.nonces[..].iter().enumerate() {
 			write!(f, "{:x}", val)?;
@@ -389,7 +389,7 @@ impl Proof {
 }
 
 impl Readable for Proof {
-	fn read(reader: &mut Reader) -> Result<Proof, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Proof, ser::Error> {
 		let edge_bits = reader.read_u8()?;
 		if edge_bits == 0 || edge_bits > 64 {
 			return Err(ser::Error::CorruptedData);
