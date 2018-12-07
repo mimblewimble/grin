@@ -18,6 +18,7 @@ extern crate blake2_rfc as blake2;
 extern crate chrono;
 #[macro_use]
 extern crate clap;
+extern crate rpassword;
 extern crate ctrlc;
 extern crate cursive;
 extern crate daemonize;
@@ -39,6 +40,8 @@ extern crate grin_wallet;
 
 mod cmd;
 pub mod tui;
+
+pub use cmd::wallet_args;
 
 use std::process::exit;
 

@@ -27,8 +27,6 @@ extern crate serde_json;
 #[macro_use]
 extern crate log;
 extern crate chrono;
-extern crate clap;
-extern crate rpassword;
 extern crate term;
 extern crate url;
 extern crate uuid;
@@ -48,10 +46,10 @@ extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_store as store;
 extern crate grin_util as util;
+extern crate grin_chain as chain;
 
 mod adapters;
 pub mod command;
-pub mod command_args;
 pub mod controller;
 pub mod display;
 mod error;
@@ -59,6 +57,7 @@ pub mod libwallet;
 pub mod lmdb_wallet;
 mod node_clients;
 mod types;
+pub mod test_framework;
 
 pub use adapters::{
 	FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalletCommAdapter, NullWalletCommAdapter,
