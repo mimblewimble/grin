@@ -21,7 +21,6 @@ extern crate grin_keychain as keychain;
 extern crate grin_pool as pool;
 extern crate grin_store as store;
 extern crate grin_util as util;
-extern crate grin_wallet as wallet;
 
 extern crate chrono;
 extern crate rand;

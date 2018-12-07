@@ -17,7 +17,6 @@ extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_store as store;
-extern crate grin_wallet as wallet;
 extern crate rand;
 
 use std::fs;

@@ -22,5 +22,4 @@ grin_store = { path = "../store", version = "0.4.2" }
 grin_util = { path = "../util", version = "0.4.2" }
 
 [dev-dependencies]
-grin_wallet = { path = "../wallet", version = "0.4.2" }
 grin_chain = { path = "../chain", version = "0.4.2" }

@@ -27,6 +27,5 @@ grin_store = { path = "../store", version = "0.4.2" }
 grin_util = { path = "../util", version = "0.4.2" }
 
 [dev-dependencies]
-grin_wallet = { path = "../wallet", version = "0.4.2" }
 env_logger = "0.5"
 rand = "0.5"
