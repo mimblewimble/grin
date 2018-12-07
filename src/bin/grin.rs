@@ -21,6 +21,7 @@ extern crate clap;
 extern crate ctrlc;
 extern crate cursive;
 extern crate daemonize;
+extern crate rpassword;
 extern crate serde;
 extern crate serde_json;
 #[macro_use]
@@ -39,6 +40,8 @@ extern crate grin_wallet;
 
 mod cmd;
 pub mod tui;
+
+pub use cmd::wallet_args;
 
 use std::process::exit;
 

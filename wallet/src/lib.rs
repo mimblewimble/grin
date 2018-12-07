@@ -27,8 +27,6 @@ extern crate serde_json;
 #[macro_use]
 extern crate log;
 extern crate chrono;
-extern crate clap;
-extern crate rpassword;
 extern crate term;
 extern crate url;
 extern crate uuid;
@@ -44,6 +42,7 @@ extern crate tokio_core;
 extern crate tokio_retry;
 
 extern crate grin_api as api;
+extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_store as store;
@@ -51,13 +50,13 @@ extern crate grin_util as util;
 
 mod adapters;
 pub mod command;
-pub mod command_args;
 pub mod controller;
 pub mod display;
 mod error;
 pub mod libwallet;
 pub mod lmdb_wallet;
 mod node_clients;
+pub mod test_framework;
 mod types;
 
 pub use adapters::{

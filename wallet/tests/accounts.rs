@@ -25,8 +25,7 @@ extern crate chrono;
 extern crate serde;
 extern crate uuid;
 
-mod common;
-use common::testclient::{LocalWalletClient, WalletProxy};
+use wallet::test_framework::{self, LocalWalletClient, WalletProxy};
 
 use std::fs;
 use std::thread;
@@ -57,12 +56,12 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
 	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
+	let wallet1 = test_framework::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
 	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
 	let client2 = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
 	// define recipient wallet, add to proxy
-	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
+	let wallet2 = test_framework::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
 	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
@@ -117,14 +116,14 @@ fn accounts_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		w.set_parent_key_id_by_name("account1")?;
 		assert_eq!(w.parent_key_id(), ExtKeychain::derive_key_id(2, 1, 0, 0, 0));
 	}
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 7);
+	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), 7);
 
 	{
 		let mut w = wallet1.lock();
 		w.set_parent_key_id_by_name("account2")?;
 		assert_eq!(w.parent_key_id(), ExtKeychain::derive_key_id(2, 2, 0, 0, 0));
 	}
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 5);
+	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), 5);
 
 	// Should have 5 in account1 (5 spendable), 5 in account (2 spendable)
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {

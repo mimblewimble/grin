@@ -15,19 +15,19 @@
 /// Argument parsing and error handling for wallet commands
 use clap::ArgMatches;
 use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
 use util::Mutex;
 
 use failure::Fail;
+use rpassword;
 
 use api::TLSConfig;
 use core;
+use grin_wallet::command;
+use grin_wallet::{instantiate_wallet, NodeClient, WalletConfig, WalletInst, WalletSeed};
+use grin_wallet::{Error, ErrorKind};
 use keychain;
 use std::path::Path;
 use util::file::get_first_line;
-use {command, instantiate_wallet, NodeClient, WalletConfig, WalletInst, WalletSeed};
-use {Error, ErrorKind};
 
 // define what to do on argument error
 macro_rules! arg_parse {

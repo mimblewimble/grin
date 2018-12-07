@@ -25,13 +25,13 @@ use std::thread;
 use std::time::Duration;
 use util::{Mutex, RwLock};
 
-use common::api;
-use common::serde_json;
+use api;
+use serde_json;
 use store;
 use util;
 use util::secp::pedersen::Commitment;
 
-use common::failure::ResultExt;
+use failure::ResultExt;
 
 use chain::types::NoopAdapter;
 use chain::Chain;
@@ -42,11 +42,9 @@ use core::{pow, ser};
 use keychain::Keychain;
 
 use core::libtx::slate::Slate;
+use libwallet::types::*;
 use util::secp::pedersen;
-use wallet::libwallet::types::*;
-use wallet::{controller, libwallet, WalletCommAdapter, WalletConfig};
-
-use common;
+use {controller, libwallet, WalletCommAdapter, WalletConfig};
 
 /// Messages to simulate wallet requests/responses
 #[derive(Clone, Debug)]
@@ -189,7 +187,7 @@ where
 			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper: tx"),
 		)?;
 
-		common::award_block_to_wallet(&self.chain, vec![&tx], dest_wallet)?;
+		super::award_block_to_wallet(&self.chain, vec![&tx], dest_wallet)?;
 
 		Ok(WalletProxyMessage {
 			sender_id: "node".to_owned(),
@@ -250,7 +248,7 @@ where
 			}
 			let c = util::from_hex(o_str).unwrap();
 			let commit = Commitment::from_vec(c);
-			let out = common::get_output_local(&self.chain.clone(), &commit);
+			let out = super::get_output_local(&self.chain.clone(), &commit);
 			if let Some(o) = out {
 				outputs.push(o);
 			}
@@ -271,7 +269,7 @@ where
 		let split = m.body.split(",").collect::<Vec<&str>>();
 		let start_index = split[0].parse::<u64>().unwrap();
 		let max = split[1].parse::<u64>().unwrap();
-		let ol = common::get_outputs_by_pmmr_index_local(self.chain.clone(), start_index, max);
+		let ol = super::get_outputs_by_pmmr_index_local(self.chain.clone(), start_index, max);
 		Ok(WalletProxyMessage {
 			sender_id: "node".to_owned(),
 			dest: m.sender_id,

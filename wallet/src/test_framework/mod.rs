@@ -12,31 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate chrono;
-extern crate failure;
-extern crate grin_api as api;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_wallet as wallet;
-extern crate serde_json;
-
 use chrono::Duration;
 use std::sync::Arc;
 use util::Mutex;
 
-use chain::Chain;
+use api;
+use chain::{self, Chain};
+use keychain;
+
 use core::core::{OutputFeatures, OutputIdentifier, Transaction};
-use core::{consensus, global, pow, ser};
-use wallet::libwallet::types::{BlockFees, CbData, NodeClient, WalletInst};
-use wallet::lmdb_wallet::LMDBBackend;
-use wallet::{controller, libwallet};
-use wallet::{WalletBackend, WalletConfig};
+use core::{self, consensus, global, pow, ser};
+use libwallet::types::{BlockFees, CbData, NodeClient, WalletInst};
+use lmdb_wallet::LMDBBackend;
+use {controller, libwallet, WalletBackend, WalletConfig, WalletSeed};
 
 use util;
 use util::secp::pedersen;
 
-pub mod testclient;
+mod testclient;
+
+pub use self::{testclient::LocalWalletClient, testclient::WalletProxy};
 
 /// types of backends tests should iterate through
 //#[derive(Clone)]
@@ -163,7 +158,7 @@ where
 {
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
-	let _ = wallet::WalletSeed::init_file(&wallet_config, 32, "");
+	let _ = WalletSeed::init_file(&wallet_config, 32, "");
 	let mut wallet = LMDBBackend::new(wallet_config.clone(), "", n_client)
 		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
 	wallet.open_with_credentials().unwrap_or_else(|e| {

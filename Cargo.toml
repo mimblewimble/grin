@@ -21,6 +21,7 @@ path = "src/bin/grin.rs"
 blake2-rfc = "0.2"
 chrono = "0.4.4"
 clap = { version = "2.31", features = ["yaml"] }
+rpassword = "2.0.0"
 ctrlc = { version = "3.1", features = ["termination"] }
 cursive = "0.9.0"
 humansize = "1.1.0"
@@ -46,3 +47,7 @@ built = "0.3"
 reqwest = "0.9"
 flate2 = "1.0"
 tar = "0.4"
+
+[dev-dependencies]
+grin_chain = { path = "./chain", version = "0.4.2" }
+grin_store = { path = "./store", version = "0.4.2" }

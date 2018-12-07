@@ -14,9 +14,12 @@
 
 use clap::ArgMatches;
 use std::path::PathBuf;
+use std::thread;
+use std::time::Duration;
 
+use super::wallet_args;
 use config::GlobalWalletConfig;
-use grin_wallet::{self, command_args, HTTPNodeClient, WalletConfig, WalletSeed};
+use grin_wallet::{self, HTTPNodeClient, WalletConfig, WalletSeed};
 use servers::start_webwallet_server;
 
 pub fn _init_wallet_seed(wallet_config: WalletConfig, password: &str) {
@@ -48,7 +51,7 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 	};
 
 	let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
-	let res = command_args::wallet_command(wallet_args, wallet_config, node_client);
+	let res = wallet_args::wallet_command(wallet_args, wallet_config, node_client);
 
 	// we need to give log output a chance to catch up before exiting
 	thread::sleep(Duration::from_millis(100));

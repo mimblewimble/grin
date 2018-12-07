@@ -25,8 +25,7 @@ extern crate chrono;
 extern crate serde;
 extern crate uuid;
 
-mod common;
-use common::testclient::{LocalWalletClient, WalletProxy};
+use wallet::test_framework::{self, LocalWalletClient, WalletProxy};
 
 use std::fs;
 use std::thread;
@@ -55,11 +54,11 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	let chain = wallet_proxy.chain.clone();
 
 	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
+	let wallet1 = test_framework::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
 	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
 	let client2 = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
+	let wallet2 = test_framework::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
 	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
@@ -92,7 +91,7 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		w.set_parent_key_id_by_name("mining")?;
 	}
 	let mut bh = 10u64;
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), bh as usize);
+	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), bh as usize);
 
 	let send_file = format!("{}/part_tx_1.tx", test_dir);
 	let receive_file = format!("{}/part_tx_2.tx", test_dir);
@@ -161,7 +160,7 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		Ok(())
 	})?;
 
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
+	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
 	bh += 3;
 
 	// Check total in mining account

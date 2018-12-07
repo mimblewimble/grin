@@ -25,8 +25,7 @@ extern crate chrono;
 extern crate serde;
 extern crate uuid;
 
-mod common;
-use common::testclient::{LocalWalletClient, WalletProxy};
+use wallet::test_framework::{self, LocalWalletClient, WalletProxy};
 
 use std::fs;
 use std::thread;
@@ -61,12 +60,12 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
 	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
+	let wallet1 = test_framework::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
 	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
 	let client2 = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
 	// define recipient wallet, add to proxy
-	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
+	let wallet2 = test_framework::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
 	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
@@ -80,7 +79,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	let reward = core::consensus::REWARD;
 	let cm = global::coinbase_maturity(); // assume all testing precedes soft fork height
 									   // mine a few blocks
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 10);
+	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), 10);
 
 	// Check wallet 1 contents are as expected
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
@@ -200,7 +199,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 
 	// mine a few more blocks
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
+	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
 
 	// refresh wallets and retrieve info/tests for each wallet after maturity
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
@@ -273,7 +272,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 
 	// mine a few more blocks
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
+	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
 
 	// check wallet2 has stored transaction
 	wallet::controller::owner_single_use(wallet2.clone(), |api| {
@@ -308,12 +307,12 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	// Create a new wallet test client, and set its queues to communicate with the
 	// proxy
 	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
+	let wallet1 = test_framework::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
 	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
 	// define recipient wallet, add to proxy
 	let client2 = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
+	let wallet2 = test_framework::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
 	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
@@ -327,7 +326,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	let reward = core::consensus::REWARD;
 	let cm = global::coinbase_maturity(); // assume all testing precedes soft fork height
 									   // mine a few blocks
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 5);
+	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), 5);
 
 	let amount = 30_000_000_000;
 	let mut slate = Slate::blank(1);
@@ -402,7 +401,7 @@ fn tx_rollback(test_dir: &str) -> Result<(), libwallet::Error> {
 	})?;
 
 	// wallet 1 is bold and doesn't ever post the transaction mine a few more blocks
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 5);
+	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), 5);
 
 	// Wallet 1 decides to roll back instead
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
