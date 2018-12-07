@@ -24,7 +24,7 @@ do
 	echo "** Publishing $crate"
 	cd $crate
 	cargo package
-	cargo pubish
+	cargo publish
 	cd ..
 done
 

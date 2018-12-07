@@ -21,7 +21,6 @@ use ctrlc;
 use serde_json;
 #[macro_use]
 extern crate log;
-
 use crate::config::config::{SERVER_CONFIG_FILE_NAME, WALLET_CONFIG_FILE_NAME};
 use crate::core::global;
 use crate::util::init_logger;

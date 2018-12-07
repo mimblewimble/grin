@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-/// HTTP Wallet 'plugin' implementation
-use failure::ResultExt;
-use std::collections::HashMap;
-
 use crate::api;
 use crate::controller;
 use crate::core::libtx::slate::Slate;
 use crate::libwallet::{Error, ErrorKind};
-use crate::{instantiate_wallet, WalletCommAdapter, WalletConfig};
+use crate::{instantiate_wallet, HTTPNodeClient, WalletCommAdapter, WalletConfig};
+/// HTTP Wallet 'plugin' implementation
+use failure::ResultExt;
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct HTTPWalletCommAdapter {}
@@ -70,9 +69,9 @@ impl WalletCommAdapter for HTTPWalletCommAdapter {
 		account: &str,
 		node_api_secret: Option<String>,
 	) -> Result<(), Error> {
-		let wallet =
-			instantiate_wallet(config.clone(), passphrase, account, node_api_secret.clone())
-				.context(ErrorKind::WalletSeedDecryption)?;
+		let node_client = HTTPNodeClient::new(&config.check_node_api_http_addr, node_api_secret);
+		let wallet = instantiate_wallet(config.clone(), node_client, passphrase, account)
+			.context(ErrorKind::WalletSeedDecryption)?;
 		let listen_addr = params.get("api_listen_addr").unwrap();
 		let tls_conf = match params.get("certificate") {
 			Some(s) => Some(api::TLSConfig::new(

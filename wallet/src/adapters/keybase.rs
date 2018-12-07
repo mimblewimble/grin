@@ -17,7 +17,7 @@
 use crate::controller;
 use crate::core::libtx::slate::Slate;
 use crate::libwallet::{Error, ErrorKind};
-use crate::{instantiate_wallet, WalletCommAdapter, WalletConfig};
+use crate::{instantiate_wallet, HTTPNodeClient, WalletCommAdapter, WalletConfig};
 use failure::ResultExt;
 use serde::Serialize;
 use serde_json::{from_str, json, to_string, Value};
@@ -222,9 +222,9 @@ impl WalletCommAdapter for KeybaseWalletCommAdapter {
 		account: &str,
 		node_api_secret: Option<String>,
 	) -> Result<(), Error> {
-		let wallet =
-			instantiate_wallet(config.clone(), passphrase, account, node_api_secret.clone())
-				.context(ErrorKind::WalletSeedDecryption)?;
+		let node_client = HTTPNodeClient::new(&config.check_node_api_http_addr, node_api_secret);
+		let wallet = instantiate_wallet(config.clone(), node_client, passphrase, account)
+			.context(ErrorKind::WalletSeedDecryption)?;
 
 		println!("Listening for messages via keybase chat...");
 		loop {

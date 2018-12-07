@@ -24,7 +24,6 @@ use serde;
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
-
 use failure;
 use grin_api as api;
 use grin_core as core;
@@ -35,13 +34,13 @@ use term;
 
 mod adapters;
 pub mod command;
-pub mod command_args;
 pub mod controller;
 pub mod display;
 mod error;
 pub mod libwallet;
 pub mod lmdb_wallet;
 mod node_clients;
+pub mod test_framework;
 mod types;
 
 pub use crate::adapters::{
@@ -62,14 +61,13 @@ use std::sync::Arc;
 /// Helper to create an instance of the LMDB wallet
 pub fn instantiate_wallet(
 	wallet_config: WalletConfig,
+	node_client: impl NodeClient + 'static,
 	passphrase: &str,
 	account: &str,
-	node_api_secret: Option<String>,
-) -> Result<Arc<Mutex<dyn WalletInst<HTTPNodeClient, keychain::ExtKeychain>>>, Error> {
+) -> Result<Arc<Mutex<WalletInst<impl NodeClient, keychain::ExtKeychain>>>, Error> {
 	// First test decryption, so we can abort early if we have the wrong password
 	let _ = WalletSeed::from_file(&wallet_config, passphrase)?;
-	let client_n = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-	let mut db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, client_n)?;
+	let mut db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, node_client)?;
 	db_wallet.set_parent_key_id_by_name(account)?;
 	info!("Using LMDB Backend for wallet");
 	Ok(Arc::new(Mutex::new(db_wallet)))

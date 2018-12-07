@@ -15,4 +15,3 @@
 mod http;
 
 pub use self::http::{create_coinbase, HTTPNodeClient};
-

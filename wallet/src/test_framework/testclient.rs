@@ -27,9 +27,8 @@ use self::keychain::Keychain;
 use self::util::secp::pedersen;
 use self::util::secp::pedersen::Commitment;
 use self::util::{Mutex, RwLock};
-use self::wallet::libwallet::types::*;
-use self::wallet::{controller, libwallet, WalletCommAdapter, WalletConfig};
-use crate::common;
+use crate::libwallet::types::*;
+use crate::{controller, libwallet, WalletCommAdapter, WalletConfig};
 use failure::ResultExt;
 use grin_api as api;
 use grin_chain as chain;
@@ -37,7 +36,6 @@ use grin_core as core;
 use grin_keychain as keychain;
 use grin_store as store;
 use grin_util as util;
-use grin_wallet as wallet;
 use serde_json;
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -189,7 +187,7 @@ where
 			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper: tx"),
 		)?;
 
-		common::award_block_to_wallet(&self.chain, vec![&tx], dest_wallet)?;
+		super::award_block_to_wallet(&self.chain, vec![&tx], dest_wallet)?;
 
 		Ok(WalletProxyMessage {
 			sender_id: "node".to_owned(),
@@ -250,7 +248,7 @@ where
 			}
 			let c = util::from_hex(o_str).unwrap();
 			let commit = Commitment::from_vec(c);
-			let out = common::get_output_local(&self.chain.clone(), &commit);
+			let out = super::get_output_local(&self.chain.clone(), &commit);
 			if let Some(o) = out {
 				outputs.push(o);
 			}
@@ -271,7 +269,7 @@ where
 		let split = m.body.split(",").collect::<Vec<&str>>();
 		let start_index = split[0].parse::<u64>().unwrap();
 		let max = split[1].parse::<u64>().unwrap();
-		let ol = common::get_outputs_by_pmmr_index_local(self.chain.clone(), start_index, max);
+		let ol = super::get_outputs_by_pmmr_index_local(self.chain.clone(), start_index, max);
 		Ok(WalletProxyMessage {
 			sender_id: "node".to_owned(),
 			dest: m.sender_id,
@@ -393,7 +391,8 @@ impl NodeClient for LocalWalletClient {
 	fn node_api_secret(&self) -> Option<String> {
 		None
 	}
-
+	fn set_node_url(&mut self, _node_url: &str) {}
+	fn set_node_api_secret(&mut self, _node_api_secret: Option<String>) {}
 	/// Posts a transaction to a grin node
 	/// In this case it will create a new block with award rewarded to
 	fn post_tx(&self, tx: &TxWrapper, _fluff: bool) -> Result<(), libwallet::Error> {

@@ -29,7 +29,6 @@ use grin_core as core;
 use grin_keychain as keychain;
 use grin_store as store;
 use grin_util as util;
-use grin_wallet as wallet;
 use std::fs;
 use std::sync::Arc;
 

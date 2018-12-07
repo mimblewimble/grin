@@ -17,20 +17,21 @@ use self::core::core::{OutputFeatures, OutputIdentifier, Transaction};
 use self::core::{consensus, global, pow, ser};
 use self::util::secp::pedersen;
 use self::util::Mutex;
-use self::wallet::libwallet::types::{BlockFees, CbData, NodeClient, WalletInst};
-use self::wallet::lmdb_wallet::LMDBBackend;
-use self::wallet::{controller, libwallet};
-use self::wallet::{WalletBackend, WalletConfig};
+use crate::libwallet::types::{BlockFees, CbData, NodeClient, WalletInst};
+use crate::lmdb_wallet::LMDBBackend;
+use crate::{controller, libwallet, WalletSeed};
+use crate::{WalletBackend, WalletConfig};
 use chrono::Duration;
 use grin_api as api;
 use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;
-use grin_wallet as wallet;
 use std::sync::Arc;
 
-pub mod testclient;
+mod testclient;
+
+pub use self::{testclient::LocalWalletClient, testclient::WalletProxy};
 
 /// types of backends tests should iterate through
 //#[derive(Clone)]
@@ -159,7 +160,7 @@ where
 {
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
-	let _ = wallet::WalletSeed::init_file(&wallet_config, 32, "");
+	let _ = WalletSeed::init_file(&wallet_config, 32, "");
 	let mut wallet = LMDBBackend::new(wallet_config.clone(), "", n_client)
 		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
 	wallet.open_with_credentials().unwrap_or_else(|e| {
