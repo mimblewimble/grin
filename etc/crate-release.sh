@@ -17,7 +17,7 @@ then
 fi
 
 echo
-crates=( util keychain core store chain pool p2p api wallet config servers )
+crates=( util keychain core store chain pool p2p api wallet servers config )
 
 for crate in "${crates[@]}"
 do
@@ -27,5 +27,8 @@ do
 	cargo publish
 	cd ..
 done
+
+cargo package
+cargo publish
 
 echo "Done."
