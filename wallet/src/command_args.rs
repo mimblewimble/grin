@@ -14,15 +14,33 @@
 
 /// Argument parsing and error handling for wallet commands
 use clap::ArgMatches;
+use std::thread;
+use std::time::Duration;
+use std::sync::{Arc};
+use util::Mutex;
+
 use failure::Fail;
 
 use api::TLSConfig;
-use core::core;
+use keychain;
+use core;
 use std::path::Path;
 use util::file::get_first_line;
 use ErrorKind;
-use {command, instantiate_wallet, WalletConfig, WalletSeed};
+use {command, instantiate_wallet, WalletConfig, WalletSeed, WalletInst, NodeClient};
 
+// define what to do on argument error
+macro_rules! arg_parse {
+	( $r:expr ) => {
+		match $r {
+			Ok(res) => res,
+			Err(e) => {
+				println!("{}", e);
+				return 0;
+				}
+			}
+	};
+}
 /// Simple error definition, just so we can return errors from all commands
 /// and let the caller figure out what to do
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
@@ -63,13 +81,14 @@ fn prompt_password_confirm() -> String {
 pub fn inst_wallet(
 	config: WalletConfig,
 	g_args: &command::GlobalArgs,
-) -> Result<command::WalletRef, Error> {
+	node_client: impl NodeClient + 'static,
+) -> Result<Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>, Error> {
 	let passphrase = prompt_password(&g_args.password);
 	let res = instantiate_wallet(
 		config.clone(),
+		node_client,
 		&passphrase,
 		&g_args.account,
-		g_args.node_api_secret.clone(),
 	);
 	match res {
 		Ok(p) => Ok(p),
@@ -224,7 +243,7 @@ pub fn parse_account_args(account_args: &ArgMatches) -> Result<command::AccountA
 pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, Error> {
 	// amount
 	let amount = parse_required(args, "amount")?;
-	let amount = core::amount_from_hr_string(amount);
+	let amount = core::core::amount_from_hr_string(amount);
 	let amount = match amount {
 		Ok(a) => a,
 		Err(e) => {
@@ -394,4 +413,129 @@ pub fn parse_cancel_args(args: &ArgMatches) -> Result<command::CancelArgs, Error
 		tx_slate_id: tx_slate_id,
 		tx_id_string: tx_id_string.to_owned(),
 	})
+}
+
+pub fn wallet_command(wallet_args: &ArgMatches, mut wallet_config: WalletConfig, mut node_client: impl NodeClient + 'static) -> i32 {
+	if let Some(t) = wallet_config.chain_type.clone() {
+		core::global::set_mining_mode(t);
+	}
+
+	if wallet_args.is_present("external") {
+		wallet_config.api_listen_interface = "0.0.0.0".to_string();
+	}
+
+	if let Some(dir) = wallet_args.value_of("dir") {
+		wallet_config.data_file_dir = dir.to_string().clone();
+	}
+
+	if let Some(sa) = wallet_args.value_of("api_server_address") {
+		wallet_config.check_node_api_http_addr = sa.to_string().clone();
+	}
+
+	let global_wallet_args = arg_parse!(parse_global_args(
+		&wallet_config,
+		&wallet_args
+	));
+
+	node_client.set_node_url(&wallet_config.check_node_api_http_addr);
+	node_client.set_node_api_secret(global_wallet_args.node_api_secret.clone());
+
+	// closure to instantiate wallet as needed by each subcommand
+	let inst_wallet = || {
+		let res = inst_wallet(wallet_config.clone(), &global_wallet_args, node_client);
+		res.unwrap_or_else(|e| {
+			println!("{}", e);
+			std::process::exit(0);
+		})
+	};
+
+	let res = match wallet_args.subcommand() {
+		("init", Some(args)) => {
+			let a = arg_parse!(parse_init_args(&wallet_config, &args));
+			command::init(&global_wallet_args, a)
+		}
+		("recover", Some(args)) => {
+			let a = arg_parse!(parse_recover_args(&global_wallet_args, &args));
+			command::recover(&wallet_config, a)
+		}
+		("listen", Some(args)) => {
+			let mut c = wallet_config.clone();
+			let mut g = global_wallet_args.clone();
+			let a = arg_parse!(parse_listen_args(&mut c, &mut g, &args));
+			command::listen(&wallet_config, &a, &g)
+		}
+		("owner_api", Some(_)) => {
+			let mut g = global_wallet_args.clone();
+			g.tls_conf = None;
+			command::owner_api(inst_wallet(), &g)
+		}
+		("web", Some(_)) => {
+			command::owner_api(inst_wallet(), &global_wallet_args)
+		}
+		("account", Some(args)) => {
+			let a = arg_parse!(parse_account_args(&args));
+			command::account(inst_wallet(), a)
+		}
+		("send", Some(args)) => {
+			let a = arg_parse!(parse_send_args(&args));
+			command::send(inst_wallet(), a)
+		}
+		("receive", Some(args)) => {
+			let a = arg_parse!(parse_receive_args(&args));
+			command::receive(inst_wallet(), &global_wallet_args, a)
+		}
+		("finalize", Some(args)) => {
+			let a = arg_parse!(parse_finalize_args(&args));
+			command::finalize(inst_wallet(), a)
+		}
+		("info", Some(args)) => {
+			let a = arg_parse!(parse_info_args(&args));
+			command::info(
+				inst_wallet(),
+				&global_wallet_args,
+				a,
+				wallet_config.dark_background_color_scheme.unwrap_or(true),
+			)
+		}
+		("outputs", Some(_)) => command::outputs(
+			inst_wallet(),
+			&global_wallet_args,
+			wallet_config.dark_background_color_scheme.unwrap_or(true),
+		),
+		("txs", Some(args)) => {
+			let a = arg_parse!(parse_txs_args(&args));
+			command::txs(
+				inst_wallet(),
+				&global_wallet_args,
+				a,
+				wallet_config.dark_background_color_scheme.unwrap_or(true),
+			)
+		}
+		("repost", Some(args)) => {
+			let a = arg_parse!(parse_repost_args(&args));
+			command::repost(inst_wallet(), a)
+		}
+		("cancel", Some(args)) => {
+			let a = arg_parse!(parse_cancel_args(&args));
+			command::cancel(inst_wallet(), a)
+		}
+		("restore", Some(_)) => command::restore(inst_wallet()),
+		_ => {
+			println!("Unknown wallet command, use 'grin help wallet' for details");
+			return 0;
+		}
+	};
+	// we need to give log output a chance to catch up before exiting
+	thread::sleep(Duration::from_millis(100));
+
+	if let Err(e) = res {
+		println!("Wallet command failed: {}", e);
+		1
+	} else {
+		println!(
+			"Command '{}' completed successfully",
+			wallet_args.subcommand().0
+		);
+		0
+	}
 }

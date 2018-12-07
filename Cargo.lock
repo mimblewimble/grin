@@ -956,6 +956,7 @@ dependencies = [
  "futures 0.1.25 (registry+https://github.com/rust-lang/crates.io-index)",
  "grin_api 0.4.2",
  "grin_chain 0.4.2",
+ "grin_config 0.4.2",
  "grin_core 0.4.2",
  "grin_keychain 0.4.2",
  "grin_store 0.4.2",
