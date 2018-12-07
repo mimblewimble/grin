@@ -409,7 +409,9 @@ impl Peers {
 		}
 
 		// ensure we do not still have too many connected peers
-		let excess_count = (self.peer_count() as usize - rm.len()).saturating_sub(max_count);
+		let excess_count = (self.peer_count() as usize)
+			.saturating_sub(rm.len())
+			.saturating_sub(max_count);
 		if excess_count > 0 {
 			// map peers to addrs in a block to bound how long we keep the read lock for
 			let mut addrs = self
