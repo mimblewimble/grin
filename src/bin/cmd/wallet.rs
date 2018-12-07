@@ -48,5 +48,19 @@ pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i
 	};
 
 	let node_client = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, None);
-	command_args::wallet_command(wallet_args, wallet_config, node_client)
+	let res = command_args::wallet_command(wallet_args, wallet_config, node_client);
+
+	// we need to give log output a chance to catch up before exiting
+	thread::sleep(Duration::from_millis(100));
+
+	if let Err(e) = res {
+		println!("Wallet command failed: {}", e);
+		1
+	} else {
+		println!(
+			"Command '{}' completed successfully",
+			wallet_args.subcommand().0
+		);
+		0
+	}
 }

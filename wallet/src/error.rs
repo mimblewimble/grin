@@ -96,6 +96,10 @@ pub enum ErrorKind {
 	#[fail(display = "BIP39 Mnemonic (word list) Error")]
 	Mnemonic,
 
+	/// Command line argument error
+	#[fail(display = "{}", _0)]
+	ArgumentError(String),
+
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
 	GenericError(String),

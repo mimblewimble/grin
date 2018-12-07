@@ -26,7 +26,7 @@ use core;
 use keychain;
 use std::path::Path;
 use util::file::get_first_line;
-use ErrorKind;
+use {Error, ErrorKind};
 use {command, instantiate_wallet, NodeClient, WalletConfig, WalletInst, WalletSeed};
 
 // define what to do on argument error
@@ -35,8 +35,7 @@ macro_rules! arg_parse {
 		match $r {
 			Ok(res) => res,
 			Err(e) => {
-				println!("{}", e);
-				return 0;
+				return Err(ErrorKind::ArgumentError(format!("{}", e)).into());
 				}
 			}
 	};
@@ -44,7 +43,7 @@ macro_rules! arg_parse {
 /// Simple error definition, just so we can return errors from all commands
 /// and let the caller figure out what to do
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
-pub enum Error {
+pub enum ParseError {
 	#[fail(display = "Invalid Arguments: {}", _0)]
 	ArgumentError(String),
 }
@@ -82,7 +81,7 @@ pub fn inst_wallet(
 	config: WalletConfig,
 	g_args: &command::GlobalArgs,
 	node_client: impl NodeClient + 'static,
-) -> Result<Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>, Error> {
+) -> Result<Arc<Mutex<WalletInst<impl NodeClient + 'static, keychain::ExtKeychain>>>, ParseError> {
 	let passphrase = prompt_password(&g_args.password);
 	let res = instantiate_wallet(config.clone(), node_client, &passphrase, &g_args.account);
 	match res {
@@ -96,31 +95,31 @@ pub fn inst_wallet(
 					_ => format!("Error instantiating wallet: {}", e),
 				}
 			};
-			Err(Error::ArgumentError(msg))
+			Err(ParseError::ArgumentError(msg))
 		}
 	}
 }
 
 // parses a required value, or throws error with message otherwise
-fn parse_required<'a>(args: &'a ArgMatches, name: &str) -> Result<&'a str, Error> {
+fn parse_required<'a>(args: &'a ArgMatches, name: &str) -> Result<&'a str, ParseError> {
 	let arg = args.value_of(name);
 	match arg {
 		Some(ar) => Ok(ar),
 		None => {
 			let msg = format!("Value for argument '{}' is required in this context", name,);
-			Err(Error::ArgumentError(msg))
+			Err(ParseError::ArgumentError(msg))
 		}
 	}
 }
 
 // parses a number, or throws error with message otherwise
-fn parse_u64(arg: &str, name: &str) -> Result<u64, Error> {
+fn parse_u64(arg: &str, name: &str) -> Result<u64, ParseError> {
 	let val = arg.parse::<u64>();
 	match val {
 		Ok(v) => Ok(v),
 		Err(e) => {
 			let msg = format!("Could not parse {} as a whole number. e={}", name, e);
-			Err(Error::ArgumentError(msg))
+			Err(ParseError::ArgumentError(msg))
 		}
 	}
 }
@@ -128,7 +127,7 @@ fn parse_u64(arg: &str, name: &str) -> Result<u64, Error> {
 pub fn parse_global_args(
 	config: &WalletConfig,
 	args: &ArgMatches,
-) -> Result<command::GlobalArgs, Error> {
+) -> Result<command::GlobalArgs, ParseError> {
 	let account = parse_required(args, "account")?;
 	let mut show_spent = false;
 	if args.is_present("show_spent") {
@@ -147,7 +146,7 @@ pub fn parse_global_args(
 				Some(k) => k,
 				None => {
 					let msg = format!("Private key for certificate is not set");
-					return Err(Error::ArgumentError(msg));
+					return Err(ParseError::ArgumentError(msg));
 				}
 			};
 			Some(TLSConfig::new(file, key))
@@ -165,18 +164,22 @@ pub fn parse_global_args(
 
 pub fn parse_init_args(
 	config: &WalletConfig,
+	g_args: &command::GlobalArgs,
 	args: &ArgMatches,
-) -> Result<command::InitArgs, Error> {
+) -> Result<command::InitArgs, ParseError> {
 	if let Err(e) = WalletSeed::seed_file_exists(config) {
 		let msg = format!("Not creating wallet - {}", e.inner);
-		return Err(Error::ArgumentError(msg));
+		return Err(ParseError::ArgumentError(msg));
 	}
 	let list_length = match args.is_present("short_wordlist") {
 		false => 32,
 		true => 16,
 	};
 	println!("Please enter a password for your new wallet");
-	let password = prompt_password_confirm();
+	let password = match g_args.password.clone() {
+		Some(p) => p,
+		None => prompt_password_confirm()
+	};
 	Ok(command::InitArgs {
 		list_length: list_length,
 		password: password,
@@ -187,14 +190,14 @@ pub fn parse_init_args(
 pub fn parse_recover_args(
 	g_args: &command::GlobalArgs,
 	args: &ArgMatches,
-) -> Result<command::RecoverArgs, Error> {
+) -> Result<command::RecoverArgs, ParseError> {
 	let (passphrase, recovery_phrase) = {
 		match args.value_of("recovery_phrase") {
 			None => (prompt_password(&g_args.password), None),
 			Some(l) => {
 				if WalletSeed::from_mnemonic(l).is_err() {
 					let msg = format!("Recovery word phrase is invalid");
-					return Err(Error::ArgumentError(msg));
+					return Err(ParseError::ArgumentError(msg));
 				}
 				println!("Please provide a new password for the recovered wallet");
 				(prompt_password_confirm(), Some(l.to_owned()))
@@ -211,7 +214,7 @@ pub fn parse_listen_args(
 	config: &mut WalletConfig,
 	g_args: &mut command::GlobalArgs,
 	args: &ArgMatches,
-) -> Result<command::ListenArgs, Error> {
+) -> Result<command::ListenArgs, ParseError> {
 	// listen args
 	let pass = match g_args.password.clone() {
 		Some(p) => Some(p.to_owned()),
@@ -227,7 +230,7 @@ pub fn parse_listen_args(
 	})
 }
 
-pub fn parse_account_args(account_args: &ArgMatches) -> Result<command::AccountArgs, Error> {
+pub fn parse_account_args(account_args: &ArgMatches) -> Result<command::AccountArgs, ParseError> {
 	let create = match account_args.value_of("create") {
 		None => None,
 		Some(s) => Some(s.to_owned()),
@@ -235,7 +238,7 @@ pub fn parse_account_args(account_args: &ArgMatches) -> Result<command::AccountA
 	Ok(command::AccountArgs { create: create })
 }
 
-pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, Error> {
+pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, ParseError> {
 	// amount
 	let amount = parse_required(args, "amount")?;
 	let amount = core::core::amount_from_hr_string(amount);
@@ -246,7 +249,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, Error> {
 				"Could not parse amount as a number with optional decimal point. e={}",
 				e
 			);
-			return Err(Error::ArgumentError(msg));
+			return Err(ParseError::ArgumentError(msg));
 		}
 	};
 
@@ -282,7 +285,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, Error> {
 			"HTTP Destination should start with http://: or https://: {}",
 			dest,
 		);
-		return Err(Error::ArgumentError(msg));
+		return Err(ParseError::ArgumentError(msg));
 	}
 
 	// change_outputs
@@ -308,7 +311,7 @@ pub fn parse_send_args(args: &ArgMatches) -> Result<command::SendArgs, Error> {
 	})
 }
 
-pub fn parse_receive_args(receive_args: &ArgMatches) -> Result<command::ReceiveArgs, Error> {
+pub fn parse_receive_args(receive_args: &ArgMatches) -> Result<command::ReceiveArgs, ParseError> {
 	// message
 	let message = match receive_args.is_present("message") {
 		true => Some(receive_args.value_of("message").unwrap().to_owned()),
@@ -321,7 +324,7 @@ pub fn parse_receive_args(receive_args: &ArgMatches) -> Result<command::ReceiveA
 	// validate input
 	if !Path::new(&tx_file).is_file() {
 		let msg = format!("File {} not found.", &tx_file);
-		return Err(Error::ArgumentError(msg));
+		return Err(ParseError::ArgumentError(msg));
 	}
 
 	Ok(command::ReceiveArgs {
@@ -330,13 +333,13 @@ pub fn parse_receive_args(receive_args: &ArgMatches) -> Result<command::ReceiveA
 	})
 }
 
-pub fn parse_finalize_args(args: &ArgMatches) -> Result<command::FinalizeArgs, Error> {
+pub fn parse_finalize_args(args: &ArgMatches) -> Result<command::FinalizeArgs, ParseError> {
 	let fluff = args.is_present("fluff");
 	let tx_file = parse_required(args, "input")?;
 
 	if !Path::new(&tx_file).is_file() {
 		let msg = format!("File {} not found.", tx_file);
-		return Err(Error::ArgumentError(msg));
+		return Err(ParseError::ArgumentError(msg));
 	}
 	Ok(command::FinalizeArgs {
 		input: tx_file.to_owned(),
@@ -344,7 +347,7 @@ pub fn parse_finalize_args(args: &ArgMatches) -> Result<command::FinalizeArgs, E
 	})
 }
 
-pub fn parse_info_args(args: &ArgMatches) -> Result<command::InfoArgs, Error> {
+pub fn parse_info_args(args: &ArgMatches) -> Result<command::InfoArgs, ParseError> {
 	// minimum_confirmations
 	let mc = parse_required(args, "minimum_confirmations")?;
 	let mc = parse_u64(mc, "minimum_confirmations")?;
@@ -353,7 +356,7 @@ pub fn parse_info_args(args: &ArgMatches) -> Result<command::InfoArgs, Error> {
 	})
 }
 
-pub fn parse_txs_args(args: &ArgMatches) -> Result<command::TxsArgs, Error> {
+pub fn parse_txs_args(args: &ArgMatches) -> Result<command::TxsArgs, ParseError> {
 	let tx_id = match args.value_of("id") {
 		None => None,
 		Some(tx) => Some(parse_u64(tx, "id")? as u32),
@@ -361,7 +364,7 @@ pub fn parse_txs_args(args: &ArgMatches) -> Result<command::TxsArgs, Error> {
 	Ok(command::TxsArgs { id: tx_id })
 }
 
-pub fn parse_repost_args(args: &ArgMatches) -> Result<command::RepostArgs, Error> {
+pub fn parse_repost_args(args: &ArgMatches) -> Result<command::RepostArgs, ParseError> {
 	let tx_id = match args.value_of("id") {
 		None => None,
 		Some(tx) => Some(parse_u64(tx, "id")? as u32),
@@ -380,7 +383,7 @@ pub fn parse_repost_args(args: &ArgMatches) -> Result<command::RepostArgs, Error
 	})
 }
 
-pub fn parse_cancel_args(args: &ArgMatches) -> Result<command::CancelArgs, Error> {
+pub fn parse_cancel_args(args: &ArgMatches) -> Result<command::CancelArgs, ParseError> {
 	let mut tx_id_string = "";
 	let tx_id = match args.value_of("id") {
 		None => None,
@@ -395,13 +398,13 @@ pub fn parse_cancel_args(args: &ArgMatches) -> Result<command::CancelArgs, Error
 			}
 			Err(e) => {
 				let msg = format!("Could not parse txid parameter. e={}", e);
-				return Err(Error::ArgumentError(msg));
+				return Err(ParseError::ArgumentError(msg));
 			}
 		},
 	};
 	if (tx_id.is_none() && tx_slate_id.is_none()) || (tx_id.is_some() && tx_slate_id.is_some()) {
 		let msg = format!("'id' (-i) or 'txid' (-t) argument is required.");
-		return Err(Error::ArgumentError(msg));
+		return Err(ParseError::ArgumentError(msg));
 	}
 	Ok(command::CancelArgs {
 		tx_id: tx_id,
@@ -414,7 +417,7 @@ pub fn wallet_command(
 	wallet_args: &ArgMatches,
 	mut wallet_config: WalletConfig,
 	mut node_client: impl NodeClient + 'static,
-) -> i32 {
+) -> Result<String, Error> {
 	if let Some(t) = wallet_config.chain_type.clone() {
 		core::global::set_mining_mode(t);
 	}
@@ -447,7 +450,7 @@ pub fn wallet_command(
 
 	let res = match wallet_args.subcommand() {
 		("init", Some(args)) => {
-			let a = arg_parse!(parse_init_args(&wallet_config, &args));
+			let a = arg_parse!(parse_init_args(&wallet_config, &global_wallet_args, &args));
 			command::init(&global_wallet_args, a)
 		}
 		("recover", Some(args)) => {
@@ -515,21 +518,13 @@ pub fn wallet_command(
 		}
 		("restore", Some(_)) => command::restore(inst_wallet()),
 		_ => {
-			println!("Unknown wallet command, use 'grin help wallet' for details");
-			return 0;
+			let msg = format!("Unknown wallet command, use 'grin help wallet' for details");
+			return Err(ErrorKind::ArgumentError(msg).into());
 		}
 	};
-	// we need to give log output a chance to catch up before exiting
-	thread::sleep(Duration::from_millis(100));
-
 	if let Err(e) = res {
-		println!("Wallet command failed: {}", e);
-		1
+		Err(e)
 	} else {
-		println!(
-			"Command '{}' completed successfully",
-			wallet_args.subcommand().0
-		);
-		0
+		Ok(wallet_args.subcommand().0.to_owned())
 	}
 }

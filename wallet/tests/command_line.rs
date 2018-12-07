@@ -115,17 +115,18 @@ fn get_wallet_subcommand<'a>(
 				if init_args.is_present("here") {
 					config_command_wallet(wallet_dir, wallet_name);
 				}
-				init_args.to_owned()
-			} else {
-				ArgMatches::new()
 			}
+			wallet_args.to_owned()
+		},
+		_ => {
+			ArgMatches::new()
 		}
-		_ => ArgMatches::new(),
 	}
+
 }
 
 /// self send impl
-fn command_line_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
+fn command_line_test_impl(test_dir: &str) -> Result<(), wallet::Error> {
 	setup(test_dir);
 	// Create a new proxy to simulate server and wallet responses
 	let mut wallet_proxy: WalletProxy<LocalWalletClient, ExtKeychain> = WalletProxy::new(test_dir);
@@ -136,14 +137,14 @@ fn command_line_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	let app = App::from_yaml(yml);
 
 	// wallet init
-	let arg_vec = vec!["grin", "wallet", "init", "-h"];
+	let arg_vec = vec!["grin", "wallet", "-p", "password", "init", "-h"];
 	let args = app.get_matches_from(arg_vec);
 
 	// should create new wallet file
 	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
 	let args = get_wallet_subcommand(test_dir, "wallet1", args);
 	let config = initial_setup_wallet(test_dir, "wallet1");
-	let res = command_args::wallet_command(&args, config, client1);
+	command_args::wallet_command(&args, config, client1)?;
 
 	// Create us some test wallets
 	/*let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
