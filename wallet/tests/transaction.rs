@@ -14,26 +14,13 @@
 //! tests for transactions building within core::libtx
 mod common;
 
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store as store;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
-extern crate rand;
 #[macro_use]
 extern crate log;
 use self::core::global;
-use self::core::global;
-use self::core::global::ChainTypes;
 use self::core::global::ChainTypes;
 use self::core::libtx::slate::Slate;
 use self::keychain::ExtKeychain;
-use self::keychain::ExtKeychain;
-use self::wallet::libtx::slate::Slate;
 use self::wallet::libwallet;
-use self::wallet::libwallet;
-use self::wallet::libwallet::types::OutputStatus;
 use self::wallet::libwallet::types::OutputStatus;
 use crate::common::testclient::{LocalWalletClient, WalletProxy};
 use grin_core as core;

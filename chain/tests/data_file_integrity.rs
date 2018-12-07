@@ -22,14 +22,12 @@ use self::core::pow::{self, Difficulty};
 use self::core::{consensus, genesis};
 use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 use self::util::RwLock;
-use crate::util::RwLock;
 use chrono::Duration;
 use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_store as store;
 use grin_util as util;
-use grin_wallet as wallet;
 use std::fs;
 use std::sync::Arc;
 

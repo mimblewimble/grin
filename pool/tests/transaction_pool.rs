@@ -15,18 +15,11 @@
 pub mod common;
 
 use self::core::core::verifier_cache::LruVerifierCache;
-use self::core::core::verifier_cache::LruVerifierCache;
-use self::core::core::{transaction, Block, BlockHeader};
 use self::core::core::{transaction, Block, BlockHeader};
 use self::core::libtx;
 use self::core::pow::Difficulty;
-use self::core::pow::Difficulty;
-use self::keychain::{ExtKeychain, Keychain};
 use self::keychain::{ExtKeychain, Keychain};
 use self::util::RwLock;
-use self::util::RwLock;
-use self::wallet::libtx;
-use crate::common::*;
 use crate::common::*;
 use grin_core as core;
 use grin_keychain as keychain;

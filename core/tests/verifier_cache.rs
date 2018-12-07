@@ -22,7 +22,6 @@ use self::util::RwLock;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;
-use grin_wallet as wallet;
 use std::sync::Arc;
 
 fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {

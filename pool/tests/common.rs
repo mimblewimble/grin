@@ -15,28 +15,18 @@
 //! Common test functions
 
 use self::chain::store::ChainStore;
-use self::chain::store::ChainStore;
-use self::chain::types::Tip;
 use self::chain::types::Tip;
 use self::core::core::hash::{Hash, Hashed};
-use self::core::core::hash::{Hash, Hashed};
 use self::core::core::verifier_cache::VerifierCache;
-use self::core::core::verifier_cache::VerifierCache;
-use self::core::core::{Block, BlockHeader, BlockSums, Committed, Transaction};
 use self::core::core::{Block, BlockHeader, BlockSums, Committed, Transaction};
 use self::core::libtx;
-use self::keychain::{ExtKeychain, Keychain};
 use self::keychain::{ExtKeychain, Keychain};
 use self::pool::types::*;
 use self::pool::TransactionPool;
 use self::pool::*;
 use self::util::secp::pedersen::Commitment;
-use self::util::secp::pedersen::Commitment;
 use self::util::RwLock;
-use self::util::RwLock;
-use self::wallet::libtx;
 use crate::pool::types::*;
-use crate::pool::TransactionPool;
 use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;

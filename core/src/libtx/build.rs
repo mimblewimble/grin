@@ -252,7 +252,7 @@ mod test {
 	use std::sync::Arc;
 
 	use super::*;
-	use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
+	use crate::core::verifier_cache::{LruVerifierCache, VerifierCache};
 	use crate::keychain::{ExtKeychain, ExtKeychainPath};
 
 	fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {

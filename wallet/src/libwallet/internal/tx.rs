@@ -233,8 +233,8 @@ where
 
 #[cfg(test)]
 mod test {
+	use crate::core::libtx::build;
 	use crate::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-	use crate::libtx::build;
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment

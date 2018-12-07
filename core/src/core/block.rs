@@ -22,7 +22,7 @@ use std::fmt;
 use std::iter::FromIterator;
 use std::sync::Arc;
 
-use crate::consensus::{self, reward, REWARD};
+use crate::consensus::{reward, REWARD};
 use crate::core::committed::{self, Committed};
 use crate::core::compact_block::{CompactBlock, CompactBlockBody};
 use crate::core::hash::{Hash, Hashed, ZERO_HASH};

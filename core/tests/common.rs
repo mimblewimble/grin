@@ -14,19 +14,18 @@
 
 //! Common test functions
 
-use self::core::core::{
+use crate::core::core::{
 	block::{Block, BlockHeader},
 	Transaction,
 };
-use self::core::libtx::{
+use crate::core::libtx::{
 	build::{self, input, output, with_fee},
 	reward,
 };
-use self::core::pow::Difficulty;
-use self::keychain::{Identifier, Keychain};
+use crate::core::pow::Difficulty;
+use crate::keychain::{Identifier, Keychain};
 use grin_core as core;
 use grin_keychain as keychain;
-use grin_wallet as wallet;
 
 // utility producing a transaction with 2 inputs and a single outputs
 pub fn tx2i1o() -> Transaction {

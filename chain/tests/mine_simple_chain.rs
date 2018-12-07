@@ -23,7 +23,6 @@ use self::core::pow::Difficulty;
 use self::core::{consensus, global, pow};
 use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 use self::util::RwLock;
-use crate::util::RwLock;
 use chrono::Duration;
 use grin_chain as chain;
 use grin_core as core;

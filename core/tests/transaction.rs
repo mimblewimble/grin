@@ -22,7 +22,6 @@ use self::core::ser;
 use self::keychain::{ExtKeychain, Keychain};
 use grin_core as core;
 use grin_keychain as keychain;
-use grin_wallet as wallet;
 
 #[test]
 fn test_output_ser_deser() {

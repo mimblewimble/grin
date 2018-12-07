@@ -17,14 +17,9 @@ extern crate log;
 
 mod common;
 use self::core::global;
-use self::core::global;
-use self::core::global::ChainTypes;
 use self::core::global::ChainTypes;
 use self::core::libtx::slate::Slate;
 use self::keychain::ExtKeychain;
-use self::keychain::ExtKeychain;
-use self::wallet::libtx::slate::Slate;
-use self::wallet::{libwallet, FileWalletCommAdapter};
 use self::wallet::{libwallet, FileWalletCommAdapter};
 use crate::common::testclient::{LocalWalletClient, WalletProxy};
 use grin_core as core;

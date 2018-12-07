@@ -19,9 +19,6 @@
 //! To use it simply implement `Writeable` or `Readable` and then use the
 //! `serialize` or `deserialize` functions on them as appropriate.
 
-use std::time::Duration;
-
-use crate::consensus;
 use crate::core::hash::{Hash, Hashed};
 use crate::keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use crate::util::read_write::read_exact;
@@ -34,6 +31,7 @@ use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use std::fmt::Debug;
 use std::io::{self, Read, Write};
 use std::marker;
+use std::time::Duration;
 use std::{cmp, error, fmt};
 
 /// Possible errors deriving from serializing or deserializing.
