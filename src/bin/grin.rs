@@ -18,10 +18,10 @@ extern crate blake2_rfc as blake2;
 extern crate chrono;
 #[macro_use]
 extern crate clap;
-extern crate rpassword;
 extern crate ctrlc;
 extern crate cursive;
 extern crate daemonize;
+extern crate rpassword;
 extern crate serde;
 extern crate serde_json;
 #[macro_use]

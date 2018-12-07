@@ -17,10 +17,10 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 
+use super::wallet_args;
 use config::GlobalWalletConfig;
 use grin_wallet::{self, HTTPNodeClient, WalletConfig, WalletSeed};
 use servers::start_webwallet_server;
-use super::wallet_args;
 
 pub fn _init_wallet_seed(wallet_config: WalletConfig, password: &str) {
 	if let Err(_) = WalletSeed::from_file(&wallet_config, password) {

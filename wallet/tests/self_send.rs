@@ -25,7 +25,7 @@ extern crate chrono;
 extern crate serde;
 extern crate uuid;
 
-use wallet::test_framework::{self, WalletProxy, LocalWalletClient};
+use wallet::test_framework::{self, LocalWalletClient, WalletProxy};
 
 use std::fs;
 use std::thread;

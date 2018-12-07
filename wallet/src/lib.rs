@@ -42,11 +42,11 @@ extern crate tokio_core;
 extern crate tokio_retry;
 
 extern crate grin_api as api;
+extern crate grin_chain as chain;
 extern crate grin_core as core;
 extern crate grin_keychain as keychain;
 extern crate grin_store as store;
 extern crate grin_util as util;
-extern crate grin_chain as chain;
 
 mod adapters;
 pub mod command;
@@ -56,8 +56,8 @@ mod error;
 pub mod libwallet;
 pub mod lmdb_wallet;
 mod node_clients;
-mod types;
 pub mod test_framework;
+mod types;
 
 pub use adapters::{
 	FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalletCommAdapter, NullWalletCommAdapter,

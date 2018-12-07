@@ -22,12 +22,12 @@ use rpassword;
 
 use api::TLSConfig;
 use core;
-use keychain;
-use std::path::Path;
-use util::file::get_first_line;
 use grin_wallet::command;
 use grin_wallet::{instantiate_wallet, NodeClient, WalletConfig, WalletInst, WalletSeed};
 use grin_wallet::{Error, ErrorKind};
+use keychain;
+use std::path::Path;
+use util::file::get_first_line;
 
 // define what to do on argument error
 macro_rules! arg_parse {
