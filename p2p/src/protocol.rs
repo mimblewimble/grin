@@ -182,7 +182,7 @@ impl MessageHandler for Protocol {
 			Type::GetHeaders => {
 				// load headers from the locator
 				let loc: Locator = msg.body()?;
-				let headers = adapter.locate_headers(loc.hashes);
+				let headers = adapter.locate_headers(&loc.hashes);
 
 				// serialize and send all the headers over
 				Ok(Some(Response::new(
@@ -216,7 +216,7 @@ impl MessageHandler for Protocol {
 						headers.push(header);
 						total_bytes_read += bytes_read;
 					}
-					adapter.headers_received(headers, self.addr);
+					adapter.headers_received(&headers, self.addr);
 				}
 
 				// Now check we read the correct total number of bytes off the stream.

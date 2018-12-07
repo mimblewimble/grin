@@ -17,9 +17,9 @@
 pub mod common;
 
 use self::core::core::{Output, OutputFeatures};
+use self::core::libtx::proof;
 use self::core::ser;
 use self::keychain::{ExtKeychain, Keychain};
-use self::wallet::libtx::proof;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_wallet as wallet;

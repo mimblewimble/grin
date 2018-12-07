@@ -12,28 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use self::chain::types::NoopAdapter;
+use self::chain::Chain;
+use self::core::core::hash::Hashed;
+use self::core::core::verifier_cache::LruVerifierCache;
+use self::core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
+use self::core::global::ChainTypes;
+use self::core::libtx::{self, build};
+use self::core::pow::Difficulty;
+use self::core::{consensus, global, pow};
+use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
+use self::util::RwLock;
+use crate::util::RwLock;
+use chrono::Duration;
 use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_store as store;
 use grin_util as util;
 use grin_wallet as wallet;
-
-use crate::util::RwLock;
-use chrono::Duration;
 use std::fs;
 use std::sync::Arc;
-
-use crate::chain::types::NoopAdapter;
-use crate::chain::Chain;
-use crate::core::core::hash::Hashed;
-use crate::core::core::verifier_cache::LruVerifierCache;
-use crate::core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
-use crate::core::global::ChainTypes;
-use crate::core::pow::Difficulty;
-use crate::core::{consensus, global, pow};
-use crate::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use crate::wallet::libtx::{self, build};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);

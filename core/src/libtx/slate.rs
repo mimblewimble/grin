@@ -15,24 +15,21 @@
 //! Functions for building partial transactions to be passed
 //! around during an interactive wallet exchange
 
-use rand::thread_rng;
-use std::sync::Arc;
-use uuid::Uuid;
-
-use crate::core::core::committed::Committed;
-use crate::core::core::transaction::kernel_sig_msg;
-use crate::core::core::verifier_cache::LruVerifierCache;
-use crate::core::core::{amount_to_hr_string, Transaction};
+use crate::blake2::blake2b::blake2b;
+use crate::core::committed::Committed;
+use crate::core::transaction::kernel_sig_msg;
+use crate::core::verifier_cache::LruVerifierCache;
+use crate::core::{amount_to_hr_string, Transaction};
 use crate::keychain::{BlindSum, BlindingFactor, Keychain};
 use crate::libtx::error::{Error, ErrorKind};
 use crate::libtx::{aggsig, build, tx_fee};
-
 use crate::util::secp;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::Signature;
 use crate::util::RwLock;
-
-use crate::blake2::blake2b::blake2b;
+use rand::thread_rng;
+use std::sync::Arc;
+use uuid::Uuid;
 
 /// Public data for each participant in the slate
 

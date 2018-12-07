@@ -22,7 +22,6 @@ extern crate prettytable;
 use serde;
 #[macro_use]
 extern crate serde_derive;
-use serde_json;
 #[macro_use]
 extern crate log;
 
@@ -35,17 +34,19 @@ use grin_util as util;
 use term;
 
 mod adapters;
+pub mod command;
+pub mod command_args;
 pub mod controller;
 pub mod display;
 mod error;
-pub mod libtx;
 pub mod libwallet;
 pub mod lmdb_wallet;
 mod node_clients;
 mod types;
 
 pub use crate::adapters::{
-	FileWalletCommAdapter, HTTPWalletCommAdapter, NullWalletCommAdapter, WalletCommAdapter,
+	FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalletCommAdapter, NullWalletCommAdapter,
+	WalletCommAdapter,
 };
 pub use crate::error::{Error, ErrorKind};
 pub use crate::libwallet::types::{

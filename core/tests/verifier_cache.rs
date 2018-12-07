@@ -16,9 +16,9 @@ pub mod common;
 
 use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use self::core::core::{Output, OutputFeatures};
+use self::core::libtx::proof;
 use self::keychain::{ExtKeychain, Keychain};
 use self::util::RwLock;
-use self::wallet::libtx::proof;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;

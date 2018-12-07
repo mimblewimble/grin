@@ -42,5 +42,6 @@ pub mod consensus;
 pub mod core;
 pub mod genesis;
 pub mod global;
+pub mod libtx;
 pub mod pow;
 pub mod ser;

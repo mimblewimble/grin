@@ -16,7 +16,7 @@
 use failure::{Backtrace, Context, Fail};
 use std::fmt::{self, Display};
 
-use crate::core::core::{committed, transaction};
+use crate::core::{committed, transaction};
 use crate::keychain;
 use crate::util::secp;
 

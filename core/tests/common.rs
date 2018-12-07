@@ -14,12 +14,16 @@
 
 //! Common test functions
 
-use self::core::core::block::{Block, BlockHeader};
-use self::core::core::Transaction;
+use self::core::core::{
+	block::{Block, BlockHeader},
+	Transaction,
+};
+use self::core::libtx::{
+	build::{self, input, output, with_fee},
+	reward,
+};
 use self::core::pow::Difficulty;
 use self::keychain::{Identifier, Keychain};
-use self::wallet::libtx::build::{self, input, output, with_fee};
-use self::wallet::libtx::reward;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_wallet as wallet;

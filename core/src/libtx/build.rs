@@ -25,10 +25,9 @@
 //! build::transaction(vec![input_rand(75), output_rand(42), output_rand(32),
 //!   with_fee(1)])
 
-use crate::core::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
+use crate::core::{Input, Output, OutputFeatures, Transaction, TxKernel};
 use crate::keychain::{BlindSum, BlindingFactor, Identifier, Keychain};
-use crate::libtx::Error;
-use crate::libtx::{aggsig, proof};
+use crate::libtx::{aggsig, proof, Error};
 
 /// Context information available to transaction combinators.
 pub struct Context<'a, K>
@@ -246,7 +245,7 @@ where
 	Ok(tx)
 }
 
-// Just a simple test, most exhaustive tests in the core mod.rs.
+// Just a simple test, most exhaustive tests in the core.
 #[cfg(test)]
 mod test {
 	use crate::util::RwLock;

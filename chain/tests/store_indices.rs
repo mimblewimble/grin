@@ -12,23 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use self::chain::{Error, Tip};
+use self::core::core::hash::Hashed;
+use self::core::core::Block;
+use self::core::global::{self, ChainTypes};
+use self::core::libtx;
+use self::core::pow::{self, Difficulty};
+use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 use env_logger;
 use grin_chain as chain;
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_store as store;
 use grin_wallet as wallet;
-
 use std::fs;
 use std::sync::Arc;
-
-use crate::chain::{Error, Tip};
-use crate::core::core::hash::Hashed;
-use crate::core::core::Block;
-use crate::core::global::{self, ChainTypes};
-use crate::core::pow::{self, Difficulty};
-use crate::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use crate::wallet::libtx;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);

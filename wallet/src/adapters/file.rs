@@ -16,12 +16,12 @@
 use std::fs::File;
 use std::io::{Read, Write};
 
-use serde_json as json;
-use std::collections::HashMap;
-
-use crate::libtx::slate::Slate;
+use self::core::libtx::slate::Slate;
 use crate::libwallet::{Error, ErrorKind};
 use crate::{WalletCommAdapter, WalletConfig};
+use grin_core as core;
+use serde_json as json;
+use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct FileWalletCommAdapter {}

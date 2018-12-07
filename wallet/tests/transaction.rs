@@ -11,16 +11,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! tests for transactions building within libtx
+//! tests for transactions building within core::libtx
+mod common;
+
+extern crate grin_chain as chain;
+extern crate grin_core as core;
+extern crate grin_keychain as keychain;
+extern crate grin_store as store;
+extern crate grin_util as util;
+extern crate grin_wallet as wallet;
+extern crate rand;
 #[macro_use]
 extern crate log;
-
-mod common;
+use self::core::global;
 use self::core::global;
 use self::core::global::ChainTypes;
+use self::core::global::ChainTypes;
+use self::core::libtx::slate::Slate;
+use self::keychain::ExtKeychain;
 use self::keychain::ExtKeychain;
 use self::wallet::libtx::slate::Slate;
 use self::wallet::libwallet;
+use self::wallet::libwallet;
+use self::wallet::libwallet::types::OutputStatus;
 use self::wallet::libwallet::types::OutputStatus;
 use crate::common::testclient::{LocalWalletClient, WalletProxy};
 use grin_core as core;
@@ -115,7 +128,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 		let (_, wallet1_info) = api.retrieve_summary_info(true, 1)?;
 		let (refreshed, txs) = api.retrieve_txs(true, None, None)?;
 		assert!(refreshed);
-		let fee = wallet::libtx::tx_fee(
+		let fee = core::libtx::tx_fee(
 			wallet1_info.last_confirmed_height as usize - cm as usize,
 			2,
 			1,
@@ -161,7 +174,7 @@ fn basic_transaction_api(test_dir: &str) -> Result<(), libwallet::Error> {
 			"Wallet 1 Info Post Transaction, after {} blocks: {:?}",
 			wallet1_info.last_confirmed_height, wallet1_info
 		);
-		let fee = wallet::libtx::tx_fee(
+		let fee = core::libtx::tx_fee(
 			wallet1_info.last_confirmed_height as usize - 1 - cm as usize,
 			2,
 			1,

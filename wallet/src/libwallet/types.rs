@@ -15,28 +15,22 @@
 //! Types and traits that should be provided by a wallet
 //! implementation
 
-use chrono::prelude::*;
-use std::collections::HashMap;
-use std::fmt;
-
-use serde;
-use serde_json;
-
-use failure::ResultExt;
-use uuid::Uuid;
-
 use crate::core::core::hash::Hash;
 use crate::core::core::Transaction;
+use crate::core::libtx::aggsig;
 use crate::core::ser;
-
 use crate::keychain::{Identifier, Keychain};
-
-use crate::libtx::aggsig;
 use crate::libwallet::error::{Error, ErrorKind};
-
 use crate::util;
 use crate::util::secp::key::{PublicKey, SecretKey};
 use crate::util::secp::{self, pedersen, Secp256k1};
+use chrono::prelude::*;
+use failure::ResultExt;
+use serde;
+use serde_json;
+use std::collections::HashMap;
+use std::fmt;
+use uuid::Uuid;
 
 /// Combined trait to allow dynamic wallet dispatch
 pub trait WalletInst<C, K>: WalletBackend<C, K> + Send + Sync + 'static

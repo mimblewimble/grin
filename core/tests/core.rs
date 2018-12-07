@@ -21,13 +21,13 @@ use self::core::core::block::Error::KernelLockHeight;
 use self::core::core::hash::{Hashed, ZERO_HASH};
 use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use self::core::core::{aggregate, deaggregate, KernelFeatures, Output, Transaction};
+use self::core::libtx::build::{
+	self, initial_tx, input, output, with_excess, with_fee, with_lock_height,
+};
 use self::core::ser;
 use self::keychain::{BlindingFactor, ExtKeychain, Keychain};
 use self::util::static_secp_instance;
 use self::util::RwLock;
-use self::wallet::libtx::build::{
-	self, initial_tx, input, output, with_excess, with_fee, with_lock_height,
-};
 use crate::common::{new_block, tx1i1o, tx1i2o, tx2i1o};
 use grin_core as core;
 use grin_keychain as keychain;
@@ -87,8 +87,7 @@ fn test_zero_commit_fails() {
 			with_fee(1),
 		],
 		&keychain,
-	)
-	.unwrap();
+	).unwrap();
 }
 
 fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
@@ -111,8 +110,7 @@ fn build_tx_kernel() {
 			with_fee(2),
 		],
 		&keychain,
-	)
-	.unwrap();
+	).unwrap();
 
 	// check the tx is valid
 	tx.validate(verifier_cache()).unwrap();
@@ -246,15 +244,13 @@ fn multi_kernel_transaction_deaggregation_4() {
 		tx3.clone(),
 		tx4.clone(),
 		tx5.clone(),
-	])
-	.unwrap();
+	]).unwrap();
 	assert!(tx12345.validate(vc.clone()).is_ok());
 
 	let deaggregated_tx5 = deaggregate(
 		tx12345.clone(),
 		vec![tx1.clone(), tx2.clone(), tx3.clone(), tx4.clone()],
-	)
-	.unwrap();
+	).unwrap();
 	assert!(deaggregated_tx5.validate(vc.clone()).is_ok());
 	assert_eq!(tx5, deaggregated_tx5);
 }
@@ -281,8 +277,7 @@ fn multi_kernel_transaction_deaggregation_5() {
 		tx3.clone(),
 		tx4.clone(),
 		tx5.clone(),
-	])
-	.unwrap();
+	]).unwrap();
 	let tx12 = aggregate(vec![tx1.clone(), tx2.clone()]).unwrap();
 	let tx34 = aggregate(vec![tx3.clone(), tx4.clone()]).unwrap();
 
@@ -335,8 +330,7 @@ fn hash_output() {
 			with_fee(1),
 		],
 		&keychain,
-	)
-	.unwrap();
+	).unwrap();
 	let h = tx.outputs()[0].hash();
 	assert!(h != ZERO_HASH);
 	let h2 = tx.outputs()[1].hash();
@@ -407,8 +401,7 @@ fn tx_build_exchange() {
 			output(4, key_id4),
 		],
 		&keychain,
-	)
-	.unwrap();
+	).unwrap();
 
 	tx_final.validate(verifier_cache()).unwrap();
 }
@@ -489,8 +482,7 @@ fn test_block_with_timelocked_tx() {
 			with_lock_height(1),
 		],
 		&keychain,
-	)
-	.unwrap();
+	).unwrap();
 
 	let previous_header = BlockHeader::default();
 
@@ -507,8 +499,7 @@ fn test_block_with_timelocked_tx() {
 			with_lock_height(2),
 		],
 		&keychain,
-	)
-	.unwrap();
+	).unwrap();
 
 	let previous_header = BlockHeader::default();
 	let b = new_block(vec![&tx1], &keychain, &previous_header, &key_id3.clone());

@@ -14,8 +14,8 @@
 //! Functions to restore a wallet's outputs from just the master seed
 
 use crate::core::global;
+use crate::core::libtx::proof;
 use crate::keychain::{ExtKeychain, Identifier, Keychain};
-use crate::libtx::proof;
 use crate::libwallet::internal::keys;
 use crate::libwallet::types::*;
 use crate::libwallet::Error;

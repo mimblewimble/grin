@@ -21,9 +21,9 @@ use uuid::Uuid;
 
 use crate::core::consensus::reward;
 use crate::core::core::{Output, TxKernel};
+use crate::core::libtx::reward;
 use crate::core::{global, ser};
 use crate::keychain::{Identifier, Keychain};
-use crate::libtx::reward;
 use crate::libwallet;
 use crate::libwallet::error::{Error, ErrorKind};
 use crate::libwallet::internal::keys;

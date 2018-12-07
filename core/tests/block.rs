@@ -13,7 +13,6 @@
 // limitations under the License.
 
 pub mod common;
-
 use self::core::consensus::{BLOCK_OUTPUT_WEIGHT, MAX_BLOCK_WEIGHT};
 use self::core::core::block::Error;
 use self::core::core::hash::Hashed;
@@ -26,8 +25,8 @@ use self::keychain::{BlindingFactor, ExtKeychain, Keychain};
 use self::util::secp;
 use self::util::RwLock;
 use self::wallet::libtx::build::{self, input, output, with_fee};
-use crate::common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
 use chrono::Duration;
+use crate::common::{new_block, tx1i2o, tx2i1o, txspend1i1o};
 use grin_core as core;
 use grin_keychain as keychain;
 use grin_util as util;
@@ -64,9 +63,10 @@ fn too_large_block() {
 	let prev = BlockHeader::default();
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let b = new_block(vec![&tx], &keychain, &prev, &key_id);
-	assert!(b
-		.validate(&BlindingFactor::zero(), verifier_cache())
-		.is_err());
+	assert!(
+		b.validate(&BlindingFactor::zero(), verifier_cache())
+			.is_err()
+	);
 }
 
 #[test]
@@ -93,8 +93,7 @@ fn block_with_cut_through() {
 	let mut btx2 = build::transaction(
 		vec![input(7, key_id1), output(5, key_id2.clone()), with_fee(2)],
 		&keychain,
-	)
-	.unwrap();
+	).unwrap();
 
 	// spending tx2 - reuse key_id2
 
@@ -147,9 +146,10 @@ fn empty_block_with_coinbase_is_valid() {
 
 	// the block should be valid here (single coinbase output with corresponding
 	// txn kernel)
-	assert!(b
-		.validate(&BlindingFactor::zero(), verifier_cache())
-		.is_ok());
+	assert!(
+		b.validate(&BlindingFactor::zero(), verifier_cache())
+			.is_ok()
+	);
 }
 
 #[test]
@@ -162,17 +162,20 @@ fn remove_coinbase_output_flag() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let mut b = new_block(vec![], &keychain, &prev, &key_id);
 
-	assert!(b.outputs()[0]
-		.features
-		.contains(OutputFeatures::COINBASE_OUTPUT));
+	assert!(
+		b.outputs()[0]
+			.features
+			.contains(OutputFeatures::COINBASE_OUTPUT)
+	);
 	b.outputs_mut()[0]
 		.features
 		.remove(OutputFeatures::COINBASE_OUTPUT);
 
 	assert_eq!(b.verify_coinbase(), Err(Error::CoinbaseSumMismatch));
-	assert!(b
-		.verify_kernel_sums(b.header.overage(), b.header.total_kernel_offset())
-		.is_ok());
+	assert!(
+		b.verify_kernel_sums(b.header.overage(), b.header.total_kernel_offset())
+			.is_ok()
+	);
 	assert_eq!(
 		b.validate(&BlindingFactor::zero(), verifier_cache()),
 		Err(Error::CoinbaseSumMismatch)
@@ -188,9 +191,11 @@ fn remove_coinbase_kernel_flag() {
 	let key_id = ExtKeychain::derive_key_id(1, 1, 0, 0, 0);
 	let mut b = new_block(vec![], &keychain, &prev, &key_id);
 
-	assert!(b.kernels()[0]
-		.features
-		.contains(KernelFeatures::COINBASE_KERNEL));
+	assert!(
+		b.kernels()[0]
+			.features
+			.contains(KernelFeatures::COINBASE_KERNEL)
+	);
 	b.kernels_mut()[0]
 		.features
 		.remove(KernelFeatures::COINBASE_KERNEL);

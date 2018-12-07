@@ -31,6 +31,8 @@ extern crate failure_derive;
 #[macro_use]
 extern crate grin_core as core;
 
+//use grin_core as core;
+
 pub mod leaf_set;
 mod lmdb;
 pub mod pmmr;

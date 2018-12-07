@@ -11,12 +11,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! libtx specific tests
+//! core::libtx specific tests
 use self::core::core::transaction::kernel_sig_msg;
+use self::core::libtx::{aggsig, proof};
 use self::keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
 use self::util::secp;
 use self::util::secp::key::{PublicKey, SecretKey};
-use self::wallet::libtx::{aggsig, proof};
 use self::wallet::libwallet::types::Context;
 use self::wallet::{EncryptedWalletSeed, WalletSeed};
 use grin_core as core;

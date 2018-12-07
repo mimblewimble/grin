@@ -14,8 +14,8 @@
 
 //! Selection of inputs for building transactions
 
+use crate::core::libtx::{build, slate::Slate, tx_fee};
 use crate::keychain::{Identifier, Keychain};
-use crate::libtx::{build, slate::Slate, tx_fee};
 use crate::libwallet::error::{Error, ErrorKind};
 use crate::libwallet::internal::keys;
 use crate::libwallet::types::*;

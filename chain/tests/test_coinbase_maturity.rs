@@ -12,6 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use self::chain::types::NoopAdapter;
+use self::chain::ErrorKind;
+use self::core::core::transaction;
+use self::core::core::verifier_cache::LruVerifierCache;
+use self::core::global::{self, ChainTypes};
+use self::core::pow::Difficulty;
+use self::core::{consensus, pow};
+use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
+use self::util::RwLock;
+use self::wallet::libtx::{self, build};
+use crate::util::RwLock;
+use chrono::Duration;
 use env_logger;
 use grin_chain as chain;
 use grin_core as core;
@@ -19,21 +31,8 @@ use grin_keychain as keychain;
 use grin_store as store;
 use grin_util as util;
 use grin_wallet as wallet;
-
-use crate::util::RwLock;
-use chrono::Duration;
 use std::fs;
 use std::sync::Arc;
-
-use crate::chain::types::NoopAdapter;
-use crate::chain::ErrorKind;
-use crate::core::core::transaction;
-use crate::core::core::verifier_cache::LruVerifierCache;
-use crate::core::global::{self, ChainTypes};
-use crate::core::pow::Difficulty;
-use crate::core::{consensus, pow};
-use crate::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use crate::wallet::libtx::{self, build};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);

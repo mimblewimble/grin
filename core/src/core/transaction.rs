@@ -14,25 +14,26 @@
 
 //! Transactions
 
+use crate::consensus;
+use crate::core::hash::Hashed;
+use crate::core::verifier_cache::VerifierCache;
+use crate::core::{committed, Committed};
+use crate::keychain::{self, BlindingFactor};
+use crate::ser::{
+	self, read_multi, FixedLength, PMMRable, Readable, Reader, VerifySortedAndUnique, Writeable,
+	Writer,
+};
+use crate::util;
+use crate::util::secp;
+use crate::util::secp::pedersen::{Commitment, RangeProof};
+use crate::util::static_secp_instance;
 use crate::util::RwLock;
+use byteorder::{BigEndian, ByteOrder};
 use std::cmp::max;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::{error, fmt};
-
-use byteorder::{BigEndian, ByteOrder};
-
-use crate::consensus::{self, VerifySortOrder};
-use crate::core::hash::Hashed;
-use crate::core::verifier_cache::VerifierCache;
-use crate::core::{committed, Committed};
-use crate::keychain::{self, BlindingFactor};
-use crate::ser::{self, read_multi, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
-use crate::util;
-use crate::util::secp;
-use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::static_secp_instance;
 
 bitflags! {
 	/// Options for a kernel's structure or use
@@ -58,8 +59,6 @@ pub enum Error {
 	KernelSumMismatch,
 	/// Restrict tx total weight.
 	TooHeavy,
-	/// Underlying consensus error (currently for sort order)
-	ConsensusError(consensus::Error),
 	/// Error originating from an invalid lock-height
 	LockHeight(u64),
 	/// Range proof validation error
@@ -85,6 +84,8 @@ pub enum Error {
 	InvalidKernelFeatures,
 	/// Signature verification error.
 	IncorrectSignature,
+	/// Underlying serialization error.
+	Serialization(ser::Error),
 }
 
 impl error::Error for Error {
@@ -103,15 +104,15 @@ impl fmt::Display for Error {
 	}
 }
 
-impl From<secp::Error> for Error {
-	fn from(e: secp::Error) -> Error {
-		Error::Secp(e)
+impl From<ser::Error> for Error {
+	fn from(e: ser::Error) -> Error {
+		Error::Serialization(e)
 	}
 }
 
-impl From<consensus::Error> for Error {
-	fn from(e: consensus::Error) -> Error {
-		Error::ConsensusError(e)
+impl From<secp::Error> for Error {
+	fn from(e: secp::Error) -> Error {
+		Error::Secp(e)
 	}
 }
 
@@ -561,11 +562,12 @@ impl TransactionBody {
 		Ok(())
 	}
 
-	// Verify that inputs|outputs|kernels are all sorted in lexicographical order.
+	// Verify that inputs|outputs|kernels are sorted in lexicographical order
+	// and that there are no duplicates (they are all unique within this transaction).
 	fn verify_sorted(&self) -> Result<(), Error> {
-		self.inputs.verify_sort_order()?;
-		self.outputs.verify_sort_order()?;
-		self.kernels.verify_sort_order()?;
+		self.inputs.verify_sorted_and_unique()?;
+		self.outputs.verify_sorted_and_unique()?;
+		self.kernels.verify_sorted_and_unique()?;
 		Ok(())
 	}
 

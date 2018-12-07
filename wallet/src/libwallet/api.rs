@@ -36,9 +36,9 @@ use uuid::Uuid;
 
 use crate::core::core::hash::Hashed;
 use crate::core::core::Transaction;
+use crate::core::libtx::slate::Slate;
 use crate::core::ser;
 use crate::keychain::{Identifier, Keychain};
-use crate::libtx::slate::Slate;
 use crate::libwallet::internal::{keys, tx, updater};
 use crate::libwallet::types::{
 	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, TxLogEntry, TxWrapper,
@@ -46,7 +46,7 @@ use crate::libwallet::types::{
 };
 use crate::libwallet::{Error, ErrorKind};
 use crate::util;
-use crate::util::secp::pedersen;
+use crate::util::secp::{pedersen, ContextFlag, Secp256k1};
 
 /// Functions intended for use by the owner (e.g. master seed holder) of the wallet.
 pub struct APIOwner<W: ?Sized, C, K>
@@ -730,8 +730,8 @@ where
 
 	/// Verifies all messages in the slate match their public keys
 	pub fn verify_slate_messages(&mut self, slate: &Slate) -> Result<(), Error> {
-		let mut w = self.wallet.lock();
-		slate.verify_messages(w.keychain().secp())?;
+		let secp = Secp256k1::with_caps(ContextFlag::VerifyOnly);
+		slate.verify_messages(&secp)?;
 		Ok(())
 	}
 

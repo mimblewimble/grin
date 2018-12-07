@@ -17,9 +17,9 @@
 use crate::util;
 use uuid::Uuid;
 
+use crate::core::libtx::slate::Slate;
 use crate::core::ser;
 use crate::keychain::{Identifier, Keychain};
-use crate::libtx::slate::Slate;
 use crate::libwallet::internal::{selection, updater};
 use crate::libwallet::types::{Context, NodeClient, TxLogEntryType, WalletBackend};
 use crate::libwallet::{Error, ErrorKind};
