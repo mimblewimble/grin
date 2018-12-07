@@ -16,7 +16,6 @@
 
 use crate::core::core::pmmr::RewindablePMMR;
 use crate::core::core::{BlockHeader, TxKernel};
-
 use crate::error::{Error, ErrorKind};
 use crate::store::Batch;
 use grin_store::pmmr::PMMRBackend;

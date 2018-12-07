@@ -17,8 +17,9 @@ use self::chain::Chain;
 use self::core::core::hash::Hashed;
 use self::core::core::verifier_cache::LruVerifierCache;
 use self::core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
+use self::core::genesis;
 use self::core::global::ChainTypes;
-use self::core::libtx::{self, build};
+use self::core::libtx::{self, build, reward};
 use self::core::pow::Difficulty;
 use self::core::{consensus, global, pow};
 use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
@@ -57,14 +58,52 @@ fn setup(dir_name: &str, genesis: Block) -> Chain {
 #[test]
 fn mine_empty_chain() {
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
-	let chain = setup(".grin", pow::mine_genesis_block().unwrap());
-	let keychain = ExtKeychain::from_random_seed().unwrap();
+	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
+	mine_some_on_top(".grin", pow::mine_genesis_block().unwrap(), &keychain);
+}
+
+#[test]
+fn mine_genesis_reward_chain() {
+	global::set_mining_mode(ChainTypes::AutomatedTesting);
+
+	// add coinbase data from the dev genesis block
+	let mut genesis = genesis::genesis_dev();
+	let keychain = keychain::ExtKeychain::from_random_seed().unwrap();
+	let key_id = keychain::ExtKeychain::derive_key_id(0, 1, 0, 0, 0);
+	let reward = reward::output(&keychain, &key_id, 0, 0).unwrap();
+	genesis = genesis.with_reward(reward.0, reward.1);
+
+	{
+		// setup a tmp chain to hande tx hashsets
+		let tmp_chain = setup(".grin.tmp", pow::mine_genesis_block().unwrap());
+		tmp_chain.set_txhashset_roots(&mut genesis).unwrap();
+		genesis.header.output_mmr_size = 1;
+		genesis.header.kernel_mmr_size = 1;
+	}
+
+	// get a valid PoW
+	pow::pow_size(
+		&mut genesis.header,
+		Difficulty::unit(),
+		global::proofsize(),
+		global::min_edge_bits(),
+	)
+	.unwrap();
+
+	mine_some_on_top(".grin.genesis", genesis, &keychain);
+}
+
+fn mine_some_on_top<K>(dir: &str, genesis: Block, keychain: &K)
+where
+	K: Keychain,
+{
+	let chain = setup(dir, genesis);
 
 	for n in 1..4 {
 		let prev = chain.head_header().unwrap();
 		let next_header_info = consensus::next_difficulty(1, chain.difficulty_iter());
 		let pk = ExtKeychainPath::new(1, n as u32, 0, 0, 0).to_identifier();
-		let reward = libtx::reward::output(&keychain, &pk, 0, prev.height).unwrap();
+		let reward = libtx::reward::output(keychain, &pk, 0, prev.height).unwrap();
 		let mut b =
 			core::core::Block::new(&prev, vec![], next_header_info.clone().difficulty, reward)
 				.unwrap();

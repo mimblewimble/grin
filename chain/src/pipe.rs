@@ -14,12 +14,6 @@
 
 //! Implementation of the chain block acceptance (or refusal) pipeline.
 
-use crate::util::RwLock;
-use std::sync::Arc;
-
-use chrono::prelude::Utc;
-use chrono::Duration;
-
 use crate::chain::OrphanBlockPool;
 use crate::core::consensus;
 use crate::core::core::hash::Hashed;
@@ -32,7 +26,11 @@ use crate::error::{Error, ErrorKind};
 use crate::store;
 use crate::txhashset;
 use crate::types::{Options, Tip};
+use crate::util::RwLock;
+use chrono::prelude::Utc;
+use chrono::Duration;
 use grin_store;
+use std::sync::Arc;
 
 /// Contextual information required to process a new block and either reject or
 /// accept it.

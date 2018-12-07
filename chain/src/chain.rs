@@ -15,24 +15,16 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
-use crate::util::RwLock;
-use std::collections::HashMap;
-use std::fs::File;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-
-use crate::lmdb;
-
 use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
 use crate::core::core::merkle_proof::MerkleProof;
 use crate::core::core::verifier_cache::VerifierCache;
 use crate::core::core::{
-	Block, BlockHeader, BlockSums, Output, OutputIdentifier, Transaction, TxKernelEntry,
+	Block, BlockHeader, BlockSums, Committed, Output, OutputIdentifier, Transaction, TxKernelEntry,
 };
 use crate::core::global;
 use crate::core::pow;
 use crate::error::{Error, ErrorKind};
+use crate::lmdb;
 use crate::pipe;
 use crate::store;
 use crate::txhashset;
@@ -40,7 +32,13 @@ use crate::types::{
 	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
+use crate::util::RwLock;
 use grin_store::Error::NotFoundErr;
+use std::collections::HashMap;
+use std::fs::File;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -1232,6 +1230,8 @@ fn setup_head(
 			}
 		}
 		Err(NotFoundErr(_)) => {
+			let mut sums = BlockSums::default();
+
 			// Save the genesis header with a "zero" header_root.
 			// We will update this later once we have the correct header_root.
 			batch.save_block_header(&genesis.header)?;
@@ -1240,16 +1240,27 @@ fn setup_head(
 			let tip = Tip::from_header(&genesis.header);
 			batch.save_head(&tip)?;
 
-			// Initialize our header MM with the genesis header.
-			txhashset::header_extending(txhashset, &mut batch, |extension| {
-				extension.apply_header(&genesis.header)?;
+			batch.save_block_header(&genesis.header)?;
+
+			if genesis.kernels().len() > 0 {
+				let (utxo_sum, kernel_sum) = (sums, &genesis as &Committed).verify_kernel_sums(
+					genesis.header.overage(),
+					genesis.header.total_kernel_offset(),
+				)?;
+				sums = BlockSums {
+					utxo_sum,
+					kernel_sum,
+				};
+			}
+			txhashset::extending(txhashset, &mut batch, |extension| {
+				extension.apply_block(&genesis)?;
+				extension.validate_roots()?;
+				extension.validate_sizes()?;
 				Ok(())
 			})?;
 
-			batch.save_block_header(&genesis.header)?;
-
 			// Save the block_sums to the db for use later.
-			batch.save_block_sums(&genesis.hash(), &BlockSums::default())?;
+			batch.save_block_sums(&genesis.hash(), &sums)?;
 
 			info!("init: saved genesis: {:?}", genesis.hash());
 		}

@@ -14,20 +14,18 @@
 
 //! High level JSON/HTTP client API
 
+use crate::rest::{Error, ErrorKind};
+use crate::util::to_base64;
 use failure::{Fail, ResultExt};
+use futures::future::{err, ok, Either};
 use http::uri::{InvalidUri, Uri};
 use hyper::header::{ACCEPT, AUTHORIZATION, USER_AGENT};
 use hyper::rt::{Future, Stream};
 use hyper::{Body, Client, Request};
+use hyper_rustls;
 use serde::{Deserialize, Serialize};
 use serde_json;
-
-use futures::future::{err, ok, Either};
-use hyper_rustls;
 use tokio::runtime::Runtime;
-
-use crate::rest::{Error, ErrorKind};
-use crate::util::to_base64;
 
 pub type ClientResponseFuture<T> = Box<dyn Future<Item = T, Error = Error> + Send>;
 

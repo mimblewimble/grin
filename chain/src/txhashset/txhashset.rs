@@ -15,16 +15,6 @@
 //! Utility structs to handle the 3 MMRs (output, rangeproof,
 //! kernel) along the overall header MMR conveniently and transactionally.
 
-use std::collections::HashSet;
-use std::fs::{self, File};
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
-
-use croaring::Bitmap;
-
-use crate::util::secp::pedersen::{Commitment, RangeProof};
-
 use crate::core::core::committed::Committed;
 use crate::core::core::hash::{Hash, Hashed};
 use crate::core::core::merkle_proof::MerkleProof;
@@ -34,15 +24,21 @@ use crate::core::core::{
 };
 use crate::core::global;
 use crate::core::ser::{PMMRIndexHashable, PMMRable};
-
 use crate::error::{Error, ErrorKind};
 use crate::store::{Batch, ChainStore};
 use crate::txhashset::{RewindableKernelView, UTXOView};
 use crate::types::{Tip, TxHashSetRoots, TxHashsetWriteStatus};
+use crate::util::secp::pedersen::{Commitment, RangeProof};
 use crate::util::{file, secp_static, zip};
+use croaring::Bitmap;
 use grin_store;
 use grin_store::pmmr::{PMMRBackend, PMMR_FILES};
 use grin_store::types::prune_noop;
+use std::collections::HashSet;
+use std::fs::{self, File};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 const HEADERHASHSET_SUBDIR: &'static str = "header";
 const TXHASHSET_SUBDIR: &'static str = "txhashset";
@@ -999,7 +995,7 @@ impl<'a> Extension<'a> {
 	/// Get the header at the specified height based on the current state of the extension.
 	/// Derives the MMR pos from the height (insertion index) and retrieves the header hash.
 	/// Looks the header up in the db by hash.
-	pub fn get_header_by_height(&mut self, height: u64) -> Result<BlockHeader, Error> {
+	pub fn get_header_by_height(&self, height: u64) -> Result<BlockHeader, Error> {
 		let pos = pmmr::insertion_to_pmmr_index(height + 1);
 		if let Some(hash) = self.get_header_hash(pos) {
 			let header = self.batch.get_block_header(&hash)?;
@@ -1227,8 +1223,9 @@ impl<'a> Extension<'a> {
 	/// from the respective MMRs.
 	/// For a significantly faster way of validating full kernel sums see BlockSums.
 	pub fn validate_kernel_sums(&self) -> Result<((Commitment, Commitment)), Error> {
+		let genesis = self.get_header_by_height(0)?;
 		let (utxo_sum, kernel_sum) = self.verify_kernel_sums(
-			self.header.total_overage(),
+			self.header.total_overage(genesis.kernel_mmr_size > 0),
 			self.header.total_kernel_offset(),
 		)?;
 		Ok((utxo_sum, kernel_sum))

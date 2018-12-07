@@ -13,16 +13,15 @@
 // limitations under the License.
 
 //! Error types for chain
-use failure::{Backtrace, Context, Fail};
-use std::fmt::{self, Display};
-use std::io;
-
 use crate::core::core::{block, committed, transaction};
 use crate::core::ser;
 use crate::keychain;
 use crate::util::secp;
 use crate::util::secp::pedersen::Commitment;
+use failure::{Backtrace, Context, Fail};
 use grin_store as store;
+use std::fmt::{self, Display};
+use std::io;
 
 /// Error definition
 #[derive(Debug, Fail)]
