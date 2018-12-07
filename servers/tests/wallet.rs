@@ -17,7 +17,6 @@ extern crate log;
 
 extern crate grin_api as api;
 extern crate grin_chain as chain;
-extern crate grin_config as config;
 extern crate grin_core as core;
 extern crate grin_p2p as p2p;
 extern crate grin_servers as servers;
