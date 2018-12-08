@@ -34,7 +34,7 @@ pub const ZERO_HASH: Hash = Hash([0; 32]);
 /// A hash to uniquely (or close enough) identify one of the main blockchain
 /// constructs. Used pervasively for blocks, transactions and outputs.
 #[derive(Copy, Clone, PartialEq, PartialOrd, Eq, Ord, Hash, Serialize, Deserialize)]
-pub struct Hash(pub [u8; 32]);
+pub struct Hash([u8; 32]);
 
 impl fmt::Debug for Hash {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -69,6 +69,11 @@ impl Hash {
 	/// Converts the hash to a byte vector
 	pub fn to_vec(&self) -> Vec<u8> {
 		self.0.to_vec()
+	}
+
+	/// Returns a byte slice of the hash contents.
+	pub fn as_bytes(&self) -> &[u8] {
+		&self.0
 	}
 
 	/// Convert a hash to hex string format.
