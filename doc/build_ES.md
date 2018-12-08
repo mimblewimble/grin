@@ -12,7 +12,7 @@ El lenguaje de programación de Grin `rust` ha compilado metas para la mayoría 
 
 ## Requisitos
 
-* rust 1.30+ (usa [rustup]((https://www.rustup.rs/))- por ejemplo, `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
+* rust 1.31+ (usa [rustup]((https://www.rustup.rs/))- por ejemplo, `curl https://sh.rustup.rs -sSf | sh; source $HOME/.cargo/env`)
   * Si rust está instalado, puede simplemente actualizar la versión con  `rustup update`
 * clang
 * ncurses y libs (ncurses, ncursesw5)
