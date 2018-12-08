@@ -172,11 +172,7 @@ impl ::std::hash::Hash for TxKernel {
 impl Writeable for TxKernel {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
 		self.features.write(writer)?;
-		ser_multiwrite!(
-			writer,
-			[write_u64, self.fee],
-			[write_u64, self.lock_height]
-		);
+		ser_multiwrite!(writer, [write_u64, self.fee], [write_u64, self.lock_height]);
 		self.excess.write(writer)?;
 		self.excess_sig.write(writer)?;
 		Ok(())
@@ -1295,7 +1291,11 @@ impl From<Output> for OutputIdentifier {
 /// testnet4: msg = (fee || lock_height)
 /// mainnet:  msg = hash(fee || lock_height || features)
 ///
-pub fn kernel_sig_msg(fee: u64, lock_height: u64, features: KernelFeatures) -> Result<secp::Message, Error> {
+pub fn kernel_sig_msg(
+	fee: u64,
+	lock_height: u64,
+	features: KernelFeatures,
+) -> Result<secp::Message, Error> {
 	let msg = if global::is_mainnet() {
 		let hash = (fee, lock_height, features).hash();
 		secp::Message::from_slice(&hash.as_bytes())?
