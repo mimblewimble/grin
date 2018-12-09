@@ -13,7 +13,7 @@
 
 //! Implementation of the persistent Backend for the prunable MMR tree.
 
-use std::{fs, io, marker};
+use std::{fs, io, marker, time};
 
 use croaring::Bitmap;
 
@@ -29,6 +29,7 @@ const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &str = "pmmr_data.bin";
 const PMMR_LEAF_FILE: &str = "pmmr_leaf.bin";
 const PMMR_PRUN_FILE: &str = "pmmr_prun.bin";
+const REWIND_FILE_CLEANUP_DURATION_SECONDS : u64 = 60*60*24; // 24 hours as seconds 
 
 /// The list of PMMR_Files for internal purposes
 pub const PMMR_FILES: [&str; 4] = [
@@ -366,7 +367,7 @@ impl<T: PMMRable> PMMRBackend<T> {
 	fn clean_rewind_files(&self) -> io::Result<u32> {
 		let data_dir = self.data_dir.clone();
 		let pattern = format!("{}.", PMMR_LEAF_FILE);
-		clean_files_by_prefix(data_dir, &pattern)
+		clean_files_by_prefix(data_dir, &pattern, REWIND_FILE_CLEANUP_DURATION_SECONDS)
 	}
 
 	fn pos_to_rm(&self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) -> (Bitmap, Bitmap) {
@@ -413,7 +414,12 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 		}).collect()
 }
 
-/// Quietly clean a directory up based on a given prefix. Precondition is that path points to a directory.
+/// Quietly clean a directory up based on a given prefix.
+/// If the file was accessed within cleanup_duration_seconds from the beginning of 
+/// the function call, it will not be deleted. To delete all files, set cleanup_duration_seconds
+/// to zero. 
+/// 
+/// Precondition is that path points to a directory.
 ///
 /// If you have files such as
 /// ```text
@@ -435,28 +441,39 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 ///
 /// in the directory
 ///
-/// The return value will be the number of files that were deleted
+/// The return value will be the number of files that were deleted.
 ///
-///
-///
-///
+/// This function will return an error whenever the call to `std;:fs::read_dir`
+/// fails on the given path for any reason.
+/// 
 
 pub fn clean_files_by_prefix<P: AsRef<std::path::Path>>(
 	path: P,
 	prefix_to_delete: &str,
+	cleanup_duration_seconds : u64 
 ) -> io::Result<u32> {
 	let mut number_of_files_deleted = 0u32;
+	let now = time::SystemTime::now();
+	let cleanup_duration = time::Duration::from_secs(cleanup_duration_seconds); 
 
 	for possible_dir_entry in fs::read_dir(path)? {
 		// iterate over the data directory
 		if let Ok(dir_entry) = possible_dir_entry {
+			println!("inspecting {:?}", dir_entry); 
 			// I don't know why rust does this
 			if let Ok(metadata) = dir_entry.metadata() {
 				// check if the entry is a directory
 				if metadata.is_dir() {
 					continue; // skip directories unconditionally
 				}
-				// todo: check file age and only remove if it is old
+				if let Ok(accessed) = metadata.accessed() {
+					if let Ok(duration) = now.duration_since(accessed) {
+						if duration <= cleanup_duration {
+							// skip deletion here because it is not old enough
+							continue;
+						}
+					}
+				}
 			}
 
 			// match the file name to the path
