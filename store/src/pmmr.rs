@@ -29,7 +29,7 @@ const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &str = "pmmr_data.bin";
 const PMMR_LEAF_FILE: &str = "pmmr_leaf.bin";
 const PMMR_PRUN_FILE: &str = "pmmr_prun.bin";
-const REWIND_FILE_CLEANUP_DURATION_SECONDS : u64 = 60*60*24; // 24 hours as seconds 
+const REWIND_FILE_CLEANUP_DURATION_SECONDS: u64 = 60 * 60 * 24; // 24 hours as seconds
 
 /// The list of PMMR_Files for internal purposes
 pub const PMMR_FILES: [&str; 4] = [
@@ -415,10 +415,10 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 }
 
 /// Quietly clean a directory up based on a given prefix.
-/// If the file was accessed within cleanup_duration_seconds from the beginning of 
+/// If the file was accessed within cleanup_duration_seconds from the beginning of
 /// the function call, it will not be deleted. To delete all files, set cleanup_duration_seconds
-/// to zero. 
-/// 
+/// to zero.
+///
 /// Precondition is that path points to a directory.
 ///
 /// If you have files such as
@@ -445,21 +445,21 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 ///
 /// This function will return an error whenever the call to `std;:fs::read_dir`
 /// fails on the given path for any reason.
-/// 
+///
 
 pub fn clean_files_by_prefix<P: AsRef<std::path::Path>>(
 	path: P,
 	prefix_to_delete: &str,
-	cleanup_duration_seconds : u64 
+	cleanup_duration_seconds: u64,
 ) -> io::Result<u32> {
 	let mut number_of_files_deleted = 0u32;
 	let now = time::SystemTime::now();
-	let cleanup_duration = time::Duration::from_secs(cleanup_duration_seconds); 
+	let cleanup_duration = time::Duration::from_secs(cleanup_duration_seconds);
 
 	for possible_dir_entry in fs::read_dir(path)? {
 		// iterate over the data directory
 		if let Ok(dir_entry) = possible_dir_entry {
-			println!("inspecting {:?}", dir_entry); 
+			println!("inspecting {:?}", dir_entry);
 			// I don't know why rust does this
 			if let Ok(metadata) = dir_entry.metadata() {
 				// check if the entry is a directory
