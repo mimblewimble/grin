@@ -442,7 +442,6 @@ pub fn clean_files_by_prefix<P: AsRef<std::path::Path>>(
 	for possible_dir_entry in fs::read_dir(path)? {
 		// iterate over the data directory
 		if let Ok(dir_entry) = possible_dir_entry {
-			println!("inspecting {:?}", dir_entry);
 			// I don't know why rust does this
 			if let Ok(metadata) = dir_entry.metadata() {
 				// check if the entry is a directory
