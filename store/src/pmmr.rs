@@ -411,7 +411,8 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 		.filter(|pos| {
 			let (parent_pos, _) = family(*pos as u64);
 			removed.contains(parent_pos as u32)
-		}).collect()
+		})
+		.collect()
 }
 
 /// Quietly clean a directory up based on a given prefix.
