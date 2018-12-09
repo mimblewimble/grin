@@ -15,21 +15,14 @@
 #[macro_use]
 extern crate log;
 
-extern crate grin_api as api;
-extern crate grin_chain as chain;
-extern crate grin_config as config;
-extern crate grin_core as core;
-extern crate grin_p2p as p2p;
-extern crate grin_servers as servers;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
-
 mod framework;
 
-use framework::{LocalServerContainer, LocalServerContainerConfig};
+use self::util::Mutex;
+use crate::framework::{LocalServerContainer, LocalServerContainerConfig};
+use grin_core as core;
+use grin_util as util;
 use std::sync::Arc;
 use std::{thread, time};
-use util::Mutex;
 
 /// Start 1 node mining, 1 non mining node and two wallets.
 /// Then send a transaction from one wallet to another and propagate it a stem

@@ -19,24 +19,24 @@ use std::io::{BufWriter, Write};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use crate::conn::{Message, MessageHandler, Response};
+use crate::core::core::{self, hash::Hash, CompactBlock};
+use crate::util::{RateCounter, RwLock};
 use chrono::prelude::Utc;
-use conn::{Message, MessageHandler, Response};
-use core::core::{self, hash::Hash, CompactBlock};
-use util::{RateCounter, RwLock};
 
-use msg::{
+use crate::msg::{
 	BanReason, GetPeerAddrs, Headers, Locator, PeerAddrs, Ping, Pong, SockAddr, TxHashSetArchive,
 	TxHashSetRequest, Type,
 };
-use types::{Error, NetAdapter};
+use crate::types::{Error, NetAdapter};
 
 pub struct Protocol {
-	adapter: Arc<NetAdapter>,
+	adapter: Arc<dyn NetAdapter>,
 	addr: SocketAddr,
 }
 
 impl Protocol {
-	pub fn new(adapter: Arc<NetAdapter>, addr: SocketAddr) -> Protocol {
+	pub fn new(adapter: Arc<dyn NetAdapter>, addr: SocketAddr) -> Protocol {
 		Protocol { adapter, addr }
 	}
 }
@@ -45,7 +45,7 @@ impl MessageHandler for Protocol {
 	fn consume<'a>(
 		&self,
 		mut msg: Message<'a>,
-		writer: &'a mut Write,
+		writer: &'a mut dyn Write,
 		received_bytes: Arc<RwLock<RateCounter>>,
 	) -> Result<Option<Response<'a>>, Error> {
 		let adapter = &self.adapter;
@@ -182,7 +182,7 @@ impl MessageHandler for Protocol {
 			Type::GetHeaders => {
 				// load headers from the locator
 				let loc: Locator = msg.body()?;
-				let headers = adapter.locate_headers(loc.hashes);
+				let headers = adapter.locate_headers(&loc.hashes);
 
 				// serialize and send all the headers over
 				Ok(Some(Response::new(
@@ -216,7 +216,7 @@ impl MessageHandler for Protocol {
 						headers.push(header);
 						total_bytes_read += bytes_read;
 					}
-					adapter.headers_received(headers, self.addr);
+					adapter.headers_received(&headers, self.addr);
 				}
 
 				// Now check we read the correct total number of bytes off the stream.

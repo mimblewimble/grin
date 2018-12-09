@@ -20,21 +20,18 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-extern crate byteorder;
-extern crate croaring;
-extern crate env_logger;
-extern crate libc;
-extern crate lmdb_zero;
-extern crate memmap;
-extern crate serde;
+use lmdb_zero;
+use memmap;
+
 #[macro_use]
 extern crate log;
-extern crate failure;
+use failure;
 #[macro_use]
 extern crate failure_derive;
 #[macro_use]
 extern crate grin_core as core;
-extern crate grin_util as util;
+
+//use grin_core as core;
 
 pub mod leaf_set;
 mod lmdb;
@@ -46,7 +43,7 @@ const SEP: u8 = b':';
 
 use byteorder::{BigEndian, WriteBytesExt};
 
-pub use lmdb::*;
+pub use crate::lmdb::*;
 
 /// Build a db key from a prefix and a byte vector identifier.
 pub fn to_key(prefix: u8, k: &mut Vec<u8>) -> Vec<u8> {
@@ -83,7 +80,7 @@ pub fn save_via_temp_file<F>(
 	mut writer: F,
 ) -> Result<(), std::io::Error>
 where
-	F: FnMut(Box<std::io::Write>) -> Result<(), std::io::Error>,
+	F: FnMut(Box<dyn std::io::Write>) -> Result<(), std::io::Error>,
 {
 	assert_ne!(*temp_suffix, *"");
 

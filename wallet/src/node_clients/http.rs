@@ -18,15 +18,15 @@
 use failure::ResultExt;
 use futures::{stream, Stream};
 
-use libwallet::types::*;
+use crate::libwallet::types::*;
 use std::collections::HashMap;
 use tokio::runtime::Runtime;
 
-use api;
-use error::{Error, ErrorKind};
-use libwallet;
-use util;
-use util::secp::pedersen;
+use crate::api;
+use crate::error::{Error, ErrorKind};
+use crate::libwallet;
+use crate::util;
+use crate::util::secp::pedersen;
 
 #[derive(Clone)]
 pub struct HTTPNodeClient {
@@ -50,6 +50,14 @@ impl NodeClient for HTTPNodeClient {
 	}
 	fn node_api_secret(&self) -> Option<String> {
 		self.node_api_secret.clone()
+	}
+
+	fn set_node_url(&mut self, node_url: &str) {
+		self.node_url = node_url.to_owned();
+	}
+
+	fn set_node_api_secret(&mut self, node_api_secret: Option<String>) {
+		self.node_api_secret = node_api_secret;
 	}
 
 	/// Posts a transaction to a grin node

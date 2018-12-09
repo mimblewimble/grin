@@ -16,28 +16,28 @@
 //! the peer-to-peer server, the blockchain and the transaction pool) and acts
 //! as a facade.
 
+use crate::util::RwLock;
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::{thread, time};
-use util::RwLock;
 
-use api;
-use chain;
-use common::adapters::{
+use crate::api;
+use crate::chain;
+use crate::common::adapters::{
 	ChainToPoolAndNetAdapter, NetToChainAdapter, PoolToChainAdapter, PoolToNetAdapter,
 };
-use common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
-use common::types::{Error, ServerConfig, StratumServerConfig, SyncState, SyncStatus};
-use core::core::verifier_cache::{LruVerifierCache, VerifierCache};
-use core::{consensus, genesis, global, pow};
-use grin::{dandelion_monitor, seed, sync};
-use mining::stratumserver;
-use mining::test_miner::Miner;
-use p2p;
-use pool;
-use store;
-use util::file::get_first_line;
+use crate::common::stats::{DiffBlock, DiffStats, PeerStats, ServerStateInfo, ServerStats};
+use crate::common::types::{Error, ServerConfig, StratumServerConfig, SyncState, SyncStatus};
+use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
+use crate::core::{consensus, genesis, global, pow};
+use crate::grin::{dandelion_monitor, seed, sync};
+use crate::mining::stratumserver;
+use crate::mining::test_miner::Miner;
+use crate::p2p;
+use crate::pool;
+use crate::store;
+use crate::util::file::get_first_line;
 
 /// Grin server holding internal structures.
 pub struct Server {
@@ -51,7 +51,7 @@ pub struct Server {
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
 	/// Shared cache for verification results when
 	/// verifying rangeproof and kernel signatures.
-	verifier_cache: Arc<RwLock<VerifierCache>>,
+	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	/// Whether we're currently syncing
 	sync_state: Arc<SyncState>,
 	/// To be passed around to collect stats and info
@@ -394,7 +394,8 @@ impl Server {
 						secondary_scaling: n.secondary_scaling,
 						is_secondary: n.is_secondary,
 					}
-				}).collect();
+				})
+				.collect();
 
 			let block_time_sum = diff_entries.iter().fold(0, |sum, t| sum + t.duration);
 			let block_diff_sum = diff_entries.iter().fold(0, |sum, d| sum + d.difficulty);

@@ -1,13 +1,13 @@
 [package]
 name = "grin_core"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
 description = "Chain implementation for grin, a simple, private and scalable cryptocurrency implementation based on the MimbleWimble chain format."
 license = "Apache-2.0"
 repository = "https://github.com/mimblewimble/grin"
 keywords = [ "crypto", "grin", "mimblewimble" ]
 workspace = ".."
-publish = false
+edition = "2018"
 
 [dependencies]
 bitflags = "1"
@@ -24,11 +24,9 @@ rand = "0.5"
 serde = "1"
 serde_derive = "1"
 siphasher = "0.2"
+uuid = { version = "0.6", features = ["serde", "v4"] }
 log = "0.4"
 chrono = "0.4.4"
 
-grin_keychain = { path = "../keychain" }
-grin_util = { path = "../util" }
-
-[dev-dependencies]
-grin_wallet = { path = "../wallet" }
+grin_keychain = { path = "../keychain", version = "0.4.2" }
+grin_util = { path = "../util", version = "0.4.2" }

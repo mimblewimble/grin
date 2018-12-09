@@ -12,14 +12,12 @@
 // limitations under the License.
 
 //! core consensus.rs tests (separated to de-clutter consensus.rs)
-#[macro_use]
-extern crate grin_core as core;
-extern crate chrono;
+use grin_core as core;
 
+use self::core::consensus::*;
+use self::core::global;
+use self::core::pow::Difficulty;
 use chrono::prelude::Utc;
-use core::consensus::*;
-use core::global;
-use core::pow::Difficulty;
 use std::fmt::{self, Display};
 
 /// Last n blocks for difficulty calculation purposes
@@ -63,7 +61,7 @@ pub struct DiffStats {
 }
 
 impl Display for DiffBlock {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let output = format!(
 			"Block Number: {} Difficulty: {}, Time: {}, Duration: {}",
 			self.block_number, self.difficulty, self.time, self.duration
@@ -92,7 +90,8 @@ fn repeat(interval: u64, diff: HeaderInfo, len: u64, cur_time: Option<u64>) -> V
 				diff.secondary_scaling,
 				diff.is_secondary,
 			)
-		}).collect::<Vec<_>>()
+		})
+		.collect::<Vec<_>>()
 }
 
 // Creates a new chain with a genesis at a simulated difficulty
@@ -146,7 +145,8 @@ fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
 				time: n.timestamp,
 				duration: dur,
 			}
-		}).collect();
+		})
+		.collect();
 
 	let block_time_sum = sum_entries.iter().fold(0, |sum, t| sum + t.duration);
 	let block_diff_sum = sum_entries.iter().fold(0, |sum, d| sum + d.difficulty);
@@ -168,7 +168,8 @@ fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
 				time: n.timestamp,
 				duration: dur,
 			}
-		}).collect();
+		})
+		.collect();
 
 	DiffStats {
 		height: tip_height as u64,
@@ -241,7 +242,7 @@ fn print_chain_sim(chain_sim: Vec<(HeaderInfo, DiffStats)>) {
 	println!("DIFFICULTY_ADJUST_WINDOW: {}", DIFFICULTY_ADJUST_WINDOW);
 	println!("BLOCK_TIME_WINDOW: {}", BLOCK_TIME_WINDOW);
 	println!("CLAMP_FACTOR: {}", CLAMP_FACTOR);
-	println!("DAMP_FACTOR: {}", DAMP_FACTOR);
+	println!("DAMP_FACTOR: {}", DIFFICULTY_DAMP_FACTOR);
 	chain_sim.iter().enumerate().for_each(|(i, b)| {
 		let block = b.0.clone();
 		let stats = b.1.clone();
@@ -562,72 +563,153 @@ fn test_secondary_pow_scale() {
 	let window = DIFFICULTY_ADJUST_WINDOW;
 	let mut hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 100);
 
-	// all primary, factor should increase so it becomes easier to find a high
-	// difficulty block
-	hi.is_secondary = false;
-	assert_eq!(
-		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
-		147
-	);
-	// all secondary on 90%, factor should go down a bit
-	hi.is_secondary = true;
-	assert_eq!(
-		secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
-		94
-	);
-	// all secondary on 1%, factor should go down to bound (divide by 2)
-	assert_eq!(
-		secondary_pow_scaling(
-			890_000,
-			&(0..window).map(|_| hi.clone()).collect::<Vec<_>>()
-		),
-		49
-	);
-	// same as above, testing lowest bound
-	let mut low_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_DIFFICULTY as u32);
-	low_hi.is_secondary = true;
-	assert_eq!(
-		secondary_pow_scaling(
-			890_000,
-			&(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()
-		),
-		MIN_DIFFICULTY as u32
-	);
-	// just about the right ratio, also no longer playing with median
-	let mut primary_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 50);
-	primary_hi.is_secondary = false;
-	assert_eq!(
-		secondary_pow_scaling(
-			1,
-			&(0..(window / 10))
-				.map(|_| primary_hi.clone())
-				.chain((0..(window * 9 / 10)).map(|_| hi.clone()))
-				.collect::<Vec<_>>()
-		),
-		94
-	);
-	// 95% secondary, should come down based on 97.5 average
-	assert_eq!(
-		secondary_pow_scaling(
-			1,
-			&(0..(window / 20))
-				.map(|_| primary_hi.clone())
-				.chain((0..(window * 95 / 100)).map(|_| hi.clone()))
-				.collect::<Vec<_>>()
-		),
-		94
-	);
-	// 40% secondary, should come up based on 70 average
-	assert_eq!(
-		secondary_pow_scaling(
-			1,
-			&(0..(window * 6 / 10))
-				.map(|_| primary_hi.clone())
-				.chain((0..(window * 4 / 10)).map(|_| hi.clone()))
-				.collect::<Vec<_>>()
-		),
-		84
-	);
+	// testnet4 testing
+	{
+		global::set_mining_mode(global::ChainTypes::Testnet4);
+		assert_eq!(global::is_mainnet(), false);
+
+		// all primary, factor should increase so it becomes easier to find a high
+		// difficulty block
+		hi.is_secondary = false;
+		assert_eq!(
+			secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
+			147
+		);
+		// all secondary on 90%, factor should go down a bit
+		hi.is_secondary = true;
+		assert_eq!(
+			secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
+			94
+		);
+		// all secondary on 1%, factor should go down to bound (divide by 2)
+		assert_eq!(
+			secondary_pow_scaling(
+				890_000,
+				&(0..window).map(|_| hi.clone()).collect::<Vec<_>>()
+			),
+			67
+		);
+		// same as above, testing lowest bound
+		let mut low_hi =
+			HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_DIFFICULTY as u32);
+		low_hi.is_secondary = true;
+		assert_eq!(
+			secondary_pow_scaling(
+				890_000,
+				&(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()
+			),
+			MIN_DIFFICULTY as u32
+		);
+		// just about the right ratio, also no longer playing with median
+		let mut primary_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 50);
+		primary_hi.is_secondary = false;
+		assert_eq!(
+			secondary_pow_scaling(
+				1,
+				&(0..(window / 10))
+					.map(|_| primary_hi.clone())
+					.chain((0..(window * 9 / 10)).map(|_| hi.clone()))
+					.collect::<Vec<_>>()
+			),
+			94
+		);
+		// 95% secondary, should come down based on 97.5 average
+		assert_eq!(
+			secondary_pow_scaling(
+				1,
+				&(0..(window / 20))
+					.map(|_| primary_hi.clone())
+					.chain((0..(window * 95 / 100)).map(|_| hi.clone()))
+					.collect::<Vec<_>>()
+			),
+			94
+		);
+		// 40% secondary, should come up based on 70 average
+		assert_eq!(
+			secondary_pow_scaling(
+				1,
+				&(0..(window * 6 / 10))
+					.map(|_| primary_hi.clone())
+					.chain((0..(window * 4 / 10)).map(|_| hi.clone()))
+					.collect::<Vec<_>>()
+			),
+			84
+		);
+	}
+
+	// mainnet testing
+	{
+		global::set_mining_mode(global::ChainTypes::Mainnet);
+		assert_eq!(global::is_mainnet(), true);
+
+		// all primary, factor should increase so it becomes easier to find a high
+		// difficulty block
+		hi.is_secondary = false;
+		assert_eq!(
+			secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
+			106
+		);
+		// all secondary on 90%, factor should go down a bit
+		hi.is_secondary = true;
+		assert_eq!(
+			secondary_pow_scaling(1, &(0..window).map(|_| hi.clone()).collect::<Vec<_>>()),
+			97
+		);
+		// all secondary on 1%, factor should go down to bound (divide by 2)
+		assert_eq!(
+			secondary_pow_scaling(
+				890_000,
+				&(0..window).map(|_| hi.clone()).collect::<Vec<_>>()
+			),
+			67
+		);
+		// same as above, testing lowest bound
+		let mut low_hi =
+			HeaderInfo::from_diff_scaling(Difficulty::from_num(10), MIN_DIFFICULTY as u32);
+		low_hi.is_secondary = true;
+		assert_eq!(
+			secondary_pow_scaling(
+				890_000,
+				&(0..window).map(|_| low_hi.clone()).collect::<Vec<_>>()
+			),
+			MIN_DIFFICULTY as u32
+		);
+		// just about the right ratio, also no longer playing with median
+		let mut primary_hi = HeaderInfo::from_diff_scaling(Difficulty::from_num(10), 50);
+		primary_hi.is_secondary = false;
+		assert_eq!(
+			secondary_pow_scaling(
+				1,
+				&(0..(window / 10))
+					.map(|_| primary_hi.clone())
+					.chain((0..(window * 9 / 10)).map(|_| hi.clone()))
+					.collect::<Vec<_>>()
+			),
+			94
+		);
+		// 95% secondary, should come down based on 97.5 average
+		assert_eq!(
+			secondary_pow_scaling(
+				1,
+				&(0..(window / 20))
+					.map(|_| primary_hi.clone())
+					.chain((0..(window * 95 / 100)).map(|_| hi.clone()))
+					.collect::<Vec<_>>()
+			),
+			96
+		);
+		// 40% secondary, should come up based on 70 average
+		assert_eq!(
+			secondary_pow_scaling(
+				1,
+				&(0..(window * 6 / 10))
+					.map(|_| primary_hi.clone())
+					.chain((0..(window * 4 / 10)).map(|_| hi.clone()))
+					.collect::<Vec<_>>()
+			),
+			72
+		);
+	}
 }
 
 #[test]

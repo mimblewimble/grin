@@ -16,10 +16,10 @@ use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use std::sync::Arc;
 
-use chain;
-use common::types::{Error, SyncState, SyncStatus};
-use core::core::hash::{Hash, Hashed};
-use p2p::{self, Peer};
+use crate::chain;
+use crate::common::types::{Error, SyncState, SyncStatus};
+use crate::core::core::hash::{Hash, Hashed};
+use crate::p2p::{self, Peer};
 
 pub struct HeaderSync {
 	sync_state: Arc<SyncState>,
@@ -65,9 +65,6 @@ impl HeaderSync {
 					header_head.hash(),
 					header_head.height,
 				);
-
-				// Reset sync_head to the same as current header_head.
-				self.chain.reset_sync_head(&header_head).unwrap();
 
 				// Rebuild the sync MMR to match our updated sync_head.
 				self.chain.rebuild_sync_mmr(&header_head).unwrap();
@@ -231,7 +228,7 @@ fn get_locator_heights(height: u64) -> Vec<u64> {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use core::core::hash;
+	use crate::core::core::hash;
 
 	#[test]
 	fn test_get_locator_heights() {

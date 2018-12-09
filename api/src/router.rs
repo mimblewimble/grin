@@ -26,7 +26,7 @@ lazy_static! {
 	static ref WILDCARD_STOP_HASH: u64 = calculate_hash(&"**");
 }
 
-pub type ResponseFuture = Box<Future<Item = Response<Body>, Error = hyper::Error> + Send>;
+pub type ResponseFuture = Box<dyn Future<Item = Response<Body>, Error = hyper::Error> + Send>;
 
 pub trait Handler {
 	fn get(&self, _req: Request<Body>) -> ResponseFuture {
@@ -68,7 +68,7 @@ pub trait Handler {
 	fn call(
 		&self,
 		req: Request<Body>,
-		mut _handlers: Box<Iterator<Item = HandlerObj>>,
+		mut _handlers: Box<dyn Iterator<Item = HandlerObj>>,
 	) -> ResponseFuture {
 		match req.method() {
 			&Method::GET => self.get(req),
@@ -105,7 +105,7 @@ struct NodeId(usize);
 
 const MAX_CHILDREN: usize = 16;
 
-pub type HandlerObj = Arc<Handler + Send + Sync>;
+pub type HandlerObj = Arc<dyn Handler + Send + Sync>;
 
 #[derive(Clone)]
 pub struct Node {
@@ -147,7 +147,8 @@ impl Router {
 			.find(|&id| {
 				let node_key = self.node(*id).key;
 				node_key == key || node_key == *WILDCARD_HASH || node_key == *WILDCARD_STOP_HASH
-			}).cloned()
+			})
+			.cloned()
 	}
 
 	fn add_empty_node(&mut self, parent: NodeId, key: u64) -> NodeId {
@@ -225,7 +226,7 @@ impl NewService for Router {
 	type Error = hyper::Error;
 	type InitError = hyper::Error;
 	type Service = Router;
-	type Future = Box<Future<Item = Self::Service, Error = Self::InitError> + Send>;
+	type Future = Box<dyn Future<Item = Self::Service, Error = Self::InitError> + Send>;
 	fn new_service(&self) -> Self::Future {
 		Box::new(future::ok(self.clone()))
 	}

@@ -12,31 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate chrono;
-extern crate failure;
-extern crate grin_api as api;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_wallet as wallet;
-extern crate serde_json;
-
+use self::chain::Chain;
+use self::core::core::{OutputFeatures, OutputIdentifier, Transaction};
+use self::core::{consensus, global, pow, ser};
+use self::util::secp::pedersen;
+use self::util::Mutex;
+use crate::libwallet::types::{BlockFees, CbData, NodeClient, WalletInst};
+use crate::lmdb_wallet::LMDBBackend;
+use crate::{controller, libwallet, WalletSeed};
+use crate::{WalletBackend, WalletConfig};
 use chrono::Duration;
+use grin_api as api;
+use grin_chain as chain;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_util as util;
 use std::sync::Arc;
-use util::Mutex;
 
-use chain::Chain;
-use core::core::{OutputFeatures, OutputIdentifier, Transaction};
-use core::{consensus, global, pow, ser};
-use wallet::libwallet::types::{BlockFees, CbData, NodeClient, WalletInst};
-use wallet::lmdb_wallet::LMDBBackend;
-use wallet::{controller, libwallet};
-use wallet::{WalletBackend, WalletConfig};
+mod testclient;
 
-use util;
-use util::secp::pedersen;
-
-pub mod testclient;
+pub use self::{testclient::LocalWalletClient, testclient::WalletProxy};
 
 /// types of backends tests should iterate through
 //#[derive(Clone)]
@@ -96,7 +91,8 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbDa
 		txs.into_iter().cloned().collect(),
 		next_header_info.clone().difficulty,
 		(output, kernel),
-	).unwrap();
+	)
+	.unwrap();
 	b.header.timestamp = prev.timestamp + Duration::seconds(60);
 	b.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 	chain.set_txhashset_roots(&mut b).unwrap();
@@ -105,7 +101,8 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbDa
 		next_header_info.difficulty,
 		global::proofsize(),
 		global::min_edge_bits(),
-	).unwrap();
+	)
+	.unwrap();
 	chain.process_block(b, chain::Options::MINE).unwrap();
 	chain.validate(false).unwrap();
 }
@@ -116,7 +113,7 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbDa
 pub fn award_block_to_wallet<C, K>(
 	chain: &Chain,
 	txs: Vec<&Transaction>,
-	wallet: Arc<Mutex<WalletInst<C, K>>>,
+	wallet: Arc<Mutex<dyn WalletInst<C, K>>>,
 ) -> Result<(), libwallet::Error>
 where
 	C: NodeClient,
@@ -142,7 +139,7 @@ where
 /// Award a blocks to a wallet directly
 pub fn award_blocks_to_wallet<C, K>(
 	chain: &Chain,
-	wallet: Arc<Mutex<WalletInst<C, K>>>,
+	wallet: Arc<Mutex<dyn WalletInst<C, K>>>,
 	number: usize,
 ) -> Result<(), libwallet::Error>
 where
@@ -156,14 +153,14 @@ where
 }
 
 /// dispatch a db wallet
-pub fn create_wallet<C, K>(dir: &str, n_client: C) -> Arc<Mutex<WalletInst<C, K>>>
+pub fn create_wallet<C, K>(dir: &str, n_client: C) -> Arc<Mutex<dyn WalletInst<C, K>>>
 where
 	C: NodeClient + 'static,
 	K: keychain::Keychain + 'static,
 {
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
-	let _ = wallet::WalletSeed::init_file(&wallet_config, 32, "");
+	let _ = WalletSeed::init_file(&wallet_config, 32, "");
 	let mut wallet = LMDBBackend::new(wallet_config.clone(), "", n_client)
 		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, wallet_config));
 	wallet.open_with_credentials().unwrap_or_else(|e| {

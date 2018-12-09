@@ -22,23 +22,20 @@
 
 #[macro_use]
 extern crate bitflags;
-extern crate bytes;
+
 #[macro_use]
 extern crate enum_primitive;
-extern crate lmdb_zero as lmdb;
+use lmdb_zero as lmdb;
 
 #[macro_use]
 extern crate grin_core as core;
-extern crate grin_store;
-extern crate grin_util as util;
-extern crate num;
-extern crate rand;
-extern crate serde;
+use grin_store;
+use grin_util as util;
+
 #[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
-extern crate chrono;
 
 mod conn;
 pub mod handshake;
@@ -50,12 +47,12 @@ mod serv;
 mod store;
 pub mod types;
 
-pub use conn::SEND_CHANNEL_CAP;
-pub use peer::Peer;
-pub use peers::Peers;
-pub use serv::{DummyAdapter, Server};
-pub use store::{PeerData, State};
-pub use types::{
+pub use crate::conn::SEND_CHANNEL_CAP;
+pub use crate::peer::Peer;
+pub use crate::peers::Peers;
+pub use crate::serv::{DummyAdapter, Server};
+pub use crate::store::{PeerData, State};
+pub use crate::types::{
 	Capabilities, ChainAdapter, Direction, Error, P2PConfig, PeerInfo, ReasonForBan, Seeding,
 	TxHashSetRead, MAX_BLOCK_HEADERS, MAX_LOCATORS, MAX_PEER_ADDRS,
 };

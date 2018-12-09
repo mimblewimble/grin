@@ -20,9 +20,9 @@ use std::cmp::Ordering;
 use byteorder::{ByteOrder, LittleEndian};
 use siphasher::sip::SipHasher24;
 
-use core::hash::{Hash, Hashed};
-use ser::{self, Readable, Reader, Writeable, Writer};
-use util;
+use crate::core::hash::{Hash, Hashed};
+use crate::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::util;
 
 /// The size of a short id used to identify inputs|outputs|kernels (6 bytes)
 pub const SHORT_ID_SIZE: usize = 6;
@@ -79,7 +79,7 @@ pub struct ShortId([u8; 6]);
 hashable_ord!(ShortId);
 
 impl ::std::fmt::Debug for ShortId {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+	fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
 		write!(f, "{}(", stringify!(ShortId))?;
 		write!(f, "{}", self.to_hex())?;
 		write!(f, ")")
@@ -87,7 +87,7 @@ impl ::std::fmt::Debug for ShortId {
 }
 
 impl Readable for ShortId {
-	fn read(reader: &mut Reader) -> Result<ShortId, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<ShortId, ser::Error> {
 		let v = reader.read_fixed_bytes(SHORT_ID_SIZE)?;
 		let mut a = [0; SHORT_ID_SIZE];
 		a.copy_from_slice(&v[..]);
@@ -131,7 +131,7 @@ impl ShortId {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use ser::{Writeable, Writer};
+	use crate::ser::{Writeable, Writer};
 
 	#[test]
 	fn short_id_ord() {

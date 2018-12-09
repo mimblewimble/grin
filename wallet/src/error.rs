@@ -13,14 +13,14 @@
 // limitations under the License.
 
 //! Implementation specific error types
-use api;
-use keychain;
-use libtx;
-use libwallet;
-use std::fmt::{self, Display};
-
-use core::core::transaction;
+use crate::api;
+use crate::core::core::transaction;
+use crate::core::libtx;
+use crate::keychain;
+use crate::libwallet;
 use failure::{Backtrace, Context, Fail};
+use std::env;
+use std::fmt::{self, Display};
 
 /// Error definition
 #[derive(Debug)]
@@ -36,8 +36,8 @@ pub enum ErrorKind {
 	LibTX(libtx::ErrorKind),
 
 	/// LibWallet Error
-	#[fail(display = "LibWallet Error")]
-	LibWallet(libwallet::ErrorKind),
+	#[fail(display = "LibWallet Error: {}", _1)]
+	LibWallet(libwallet::ErrorKind, String),
 
 	/// Keychain error
 	#[fail(display = "Keychain error")]
@@ -80,7 +80,7 @@ pub enum ErrorKind {
 	DuplicateTransactionId,
 
 	/// Wallet seed already exists
-	#[fail(display = "{}", _0)]
+	#[fail(display = "Wallet seed file exists: {}", _0)]
 	WalletSeedExists(String),
 
 	/// Wallet seed doesn't exist
@@ -88,12 +88,16 @@ pub enum ErrorKind {
 	WalletSeedDoesntExist,
 
 	/// Enc/Decryption Error
-	#[fail(display = "Enc/Decryption error")]
+	#[fail(display = "Enc/Decryption error (check password?)")]
 	Encryption,
 
 	/// BIP 39 word list
 	#[fail(display = "BIP39 Mnemonic (word list) Error")]
 	Mnemonic,
+
+	/// Command line argument error
+	#[fail(display = "{}", _0)]
+	ArgumentError(String),
 
 	/// Other
 	#[fail(display = "Generic error: {}", _0)]
@@ -101,7 +105,7 @@ pub enum ErrorKind {
 }
 
 impl Fail for Error {
-	fn cause(&self) -> Option<&Fail> {
+	fn cause(&self) -> Option<&dyn Fail> {
 		self.inner.cause()
 	}
 
@@ -111,19 +115,27 @@ impl Fail for Error {
 }
 
 impl Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let cause = match self.cause() {
-			Some(c) => format!("{}", c),
-			None => String::from("Unknown"),
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let show_bt = match env::var("RUST_BACKTRACE") {
+			Ok(r) => {
+				if r == "1" {
+					true
+				} else {
+					false
+				}
+			}
+			Err(_) => false,
 		};
 		let backtrace = match self.backtrace() {
 			Some(b) => format!("{}", b),
 			None => String::from("Unknown"),
 		};
-		let output = format!(
-			"{} \n Cause: {} \n Backtrace: {}",
-			self.inner, cause, backtrace
-		);
+		let inner_output = format!("{}", self.inner,);
+		let backtrace_output = format!("\nBacktrace: {}", backtrace);
+		let mut output = inner_output.clone();
+		if show_bt {
+			output.push_str(&backtrace_output);
+		}
 		Display::fmt(&output, f)
 	}
 }
@@ -134,7 +146,7 @@ impl Error {
 		self.inner.get_context().clone()
 	}
 	/// get cause
-	pub fn cause(&self) -> Option<&Fail> {
+	pub fn cause(&self) -> Option<&dyn Fail> {
 		self.inner.cause()
 	}
 	/// get backtrace
@@ -184,7 +196,7 @@ impl From<transaction::Error> for Error {
 impl From<libwallet::Error> for Error {
 	fn from(error: libwallet::Error) -> Error {
 		Error {
-			inner: Context::new(ErrorKind::LibWallet(error.kind())),
+			inner: Context::new(ErrorKind::LibWallet(error.kind(), format!("{}", error))),
 		}
 	}
 }

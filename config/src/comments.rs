@@ -36,14 +36,16 @@ fn comments() -> HashMap<String, String> {
 #########################################
 
 #Server connection details
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"api_http_addr".to_string(),
 		"
 #the address on which services will listen, e.g. Transaction Pool
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -51,7 +53,8 @@ fn comments() -> HashMap<String, String> {
 		"
 #path of the secret token used by the API to authenticate the calls
 #comment the it to disable basic auth
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -59,7 +62,8 @@ fn comments() -> HashMap<String, String> {
 		"
 #the directory, relative to current, in which the grin blockchain
 #is stored
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -73,7 +77,8 @@ fn comments() -> HashMap<String, String> {
 #Testnet2 - Testnet2 genesis block (cuckoo 30)
 #Testnet3 - Testnet3 genesis block (cuckoo 30)
 #Testnet4 - Testnet4 genesis block (cuckatoo 29+)
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -83,21 +88,24 @@ fn comments() -> HashMap<String, String> {
 #want to run a full chain validation. Can be:
 #\"EveryBlock\" - run full chain validation when processing each block (except during sync)
 #\"Disabled\" - disable full chain validation (just run regular block validation)
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"archive_mode".to_string(),
 		"
 #run the node in \"full archive\" mode (default is fast-sync, pruned node)
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"skip_sync_wait".to_string(),
 		"
 #skip waiting for sync on startup, (optional param, mostly for testing)
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -105,7 +113,8 @@ fn comments() -> HashMap<String, String> {
 		"
 #whether to run the ncurses TUI. Ncurses must be installed and this
 #will also disable logging to stdout
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -114,7 +123,8 @@ fn comments() -> HashMap<String, String> {
 #Whether to run a test miner. This is only for developer testing (chaintype
 #usertesting) at cuckoo 16, and will only mine into the default wallet port.
 #real mining should use the standalone grin-miner
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -123,34 +133,39 @@ fn comments() -> HashMap<String, String> {
 #########################################
 ### DANDELION CONFIGURATION           ###
 #########################################
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"relay_secs".to_string(),
 		"
 #dandelion relay time (choose new relay peer every n secs)
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"embargo_secs".to_string(),
 		"
 #fluff and broadcast after embargo expires if tx not seen on network
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"patience_secs".to_string(),
 		"
 #run dandelion stem/fluff processing every n secs (stem tx aggregation in this window)
-".to_string(),
+"
+		.to_string(),
 	);
 	retval.insert(
 		"stem_probability".to_string(),
 		"
 #dandelion stem probability (stem 90% of the time, fluff 10% of the time)
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -162,7 +177,8 @@ fn comments() -> HashMap<String, String> {
 ### SERVER P2P CONFIGURATION          ###
 #########################################
 #The P2P server details (i.e. the server that communicates with other
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -171,21 +187,24 @@ fn comments() -> HashMap<String, String> {
 #The interface on which to listen.
 #0.0.0.0 will listen on all interfaces, allowing others to interact
 #127.0.0.1 will listen on the local machine only
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"port".to_string(),
 		"
 #The port on which to listen.
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"seeding_type".to_string(),
 		"
 #how to seed this server, can be None, List or DNSSeed
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -214,7 +233,8 @@ fn comments() -> HashMap<String, String> {
 
 # 15 = Bit flags for FULL_NODE
 #This structure needs to be changed internally, to make it more configurable
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -223,35 +243,40 @@ fn comments() -> HashMap<String, String> {
 #########################################
 ### MEMPOOL CONFIGURATION             ###
 #########################################
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"accept_fee_base".to_string(),
 		"
 #base fee that's accepted into the pool
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"max_pool_size".to_string(),
 		"
 #maximum number of transactions allowed in the pool
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"max_stempool_size".to_string(),
 		"
 #maximum number of transactions allowed in the stempool
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"mineable_max_weight".to_string(),
 		"
 #maximum total weight of transactions that can get selected to build a block
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -260,21 +285,24 @@ fn comments() -> HashMap<String, String> {
 ################################################
 ### STRATUM MINING SERVER CONFIGURATION      ###
 ################################################
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"enable_stratum_server".to_string(),
 		"
 #whether stratum server is enabled
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"stratum_server_addr".to_string(),
 		"
 #what port and address for the stratum server to listen on
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -282,28 +310,32 @@ fn comments() -> HashMap<String, String> {
 		"
 #the amount of time, in seconds, to attempt to mine on a particular
 #header before stopping and re-collecting transactions from the pool
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"minimum_share_difficulty".to_string(),
 		"
 #the minimum acceptable share difficulty to request from miners
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"wallet_listener_url".to_string(),
 		"
 #the wallet receiver to which coinbase rewards will be sent
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"burn_reward".to_string(),
 		"
 #whether to ignore the reward (mostly for testing)
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -312,14 +344,16 @@ fn comments() -> HashMap<String, String> {
 #########################################
 ### WALLET CONFIGURATION              ###
 #########################################
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"api_listen_interface".to_string(),
 		"
 #host IP for wallet listener, change to \"0.0.0.0\" to receive grins
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -332,7 +366,8 @@ fn comments() -> HashMap<String, String> {
 #private key for the TLS certificate
 #tls_certificate_key = \"\"
 
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -340,31 +375,36 @@ fn comments() -> HashMap<String, String> {
 		"
 #path of the secret token used by the API to authenticate the calls
 #comment it to disable basic auth
-".to_string(),
+"
+		.to_string(),
 	);
 	retval.insert(
 		"check_node_api_http_addr".to_string(),
 		"
 #where the wallet should find a running node
-".to_string(),
+"
+		.to_string(),
 	);
 	retval.insert(
 		"node_api_secret_path".to_string(),
 		"
 #location of the node api secret for basic auth on the Grin API
-".to_string(),
+"
+		.to_string(),
 	);
 	retval.insert(
 		"data_file_dir".to_string(),
 		"
 #where to find wallet files (seed, data, etc)
-".to_string(),
+"
+		.to_string(),
 	);
 	retval.insert(
 		"dark_background_color_scheme".to_string(),
 		"
 #Whether to use the black background color scheme for command line
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -373,49 +413,56 @@ fn comments() -> HashMap<String, String> {
 #########################################
 ### LOGGING CONFIGURATION             ###
 #########################################
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"log_to_stdout".to_string(),
 		"
 #whether to log to stdout
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"stdout_log_level".to_string(),
 		"
 #log level for stdout: Error, Warning, Info, Debug, Trace
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"log_to_file".to_string(),
 		"
 #whether to log to a file
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"file_log_level".to_string(),
 		"
 #log level for file: Error, Warning, Info, Debug, Trace
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"log_file_path".to_string(),
 		"
 #log file path
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
 		"log_file_append".to_string(),
 		"
 #whether to append to the log file (true), or replace it on every run (false)
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval.insert(
@@ -423,7 +470,8 @@ fn comments() -> HashMap<String, String> {
 		"
 #maximum log file size in bytes before performing log rotation
 #comment it to disable log rotation
-".to_string(),
+"
+		.to_string(),
 	);
 
 	retval

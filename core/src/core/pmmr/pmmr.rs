@@ -17,11 +17,11 @@ use std::u64;
 
 use croaring::Bitmap;
 
-use core::hash::{Hash, ZERO_HASH};
-use core::merkle_proof::MerkleProof;
-use core::pmmr::{Backend, ReadonlyPMMR};
-use core::BlockHeader;
-use ser::{PMMRIndexHashable, PMMRable};
+use crate::core::hash::{Hash, ZERO_HASH};
+use crate::core::merkle_proof::MerkleProof;
+use crate::core::pmmr::{Backend, ReadonlyPMMR};
+use crate::core::BlockHeader;
+use crate::ser::{PMMRIndexHashable, PMMRable};
 
 /// 64 bits all ones: 0b11111111...1
 const ALL_ONES: u64 = u64::MAX;
@@ -36,7 +36,7 @@ const ALL_ONES: u64 = u64::MAX;
 pub struct PMMR<'a, T, B>
 where
 	T: PMMRable,
-	B: 'a + Backend<T>,
+	B: Backend<T>,
 {
 	/// The last position in the PMMR
 	pub last_pos: u64,
@@ -51,7 +51,7 @@ where
 	B: 'a + Backend<T>,
 {
 	/// Build a new prunable Merkle Mountain Range using the provided backend.
-	pub fn new(backend: &'a mut B) -> PMMR<T, B> {
+	pub fn new(backend: &'a mut B) -> PMMR<'_, T, B> {
 		PMMR {
 			backend,
 			last_pos: 0,
@@ -61,7 +61,7 @@ where
 
 	/// Build a new prunable Merkle Mountain Range pre-initialized until
 	/// last_pos with the provided backend.
-	pub fn at(backend: &'a mut B, last_pos: u64) -> PMMR<T, B> {
+	pub fn at(backend: &'a mut B, last_pos: u64) -> PMMR<'_, T, B> {
 		PMMR {
 			backend,
 			last_pos,
@@ -70,7 +70,7 @@ where
 	}
 
 	/// Build a "readonly" view of this PMMR.
-	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<T, B> {
+	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<'_, T, B> {
 		ReadonlyPMMR::at(&self.backend, self.last_pos)
 	}
 
@@ -83,7 +83,8 @@ where
 				// here we want to get from underlying hash file
 				// as the pos *may* have been "removed"
 				self.backend.get_from_file(pi)
-			}).collect()
+			})
+			.collect()
 	}
 
 	fn peak_path(&self, peak_pos: u64) -> Vec<Hash> {
@@ -171,7 +172,7 @@ where
 
 	/// Push a new element into the MMR. Computes new related peaks at
 	/// the same time if applicable.
-	pub fn push(&mut self, elmt: T) -> Result<u64, String> {
+	pub fn push(&mut self, elmt: &T) -> Result<u64, String> {
 		let elmt_pos = self.last_pos + 1;
 		let mut current_hash = elmt.hash_with_index(elmt_pos - 1);
 
@@ -282,53 +283,6 @@ where
 		}
 	}
 
-	/// Helper function to get the last N nodes inserted, i.e. the last
-	/// n nodes along the bottom of the tree.
-	/// May return less than n items if the MMR has been pruned/compacted.
-	pub fn get_last_n_insertions(&self, n: u64) -> Vec<(Hash, T::E)> {
-		let mut return_vec = vec![];
-		let mut last_leaf = self.last_pos;
-		for _ in 0..n as u64 {
-			if last_leaf == 0 {
-				break;
-			}
-			last_leaf = bintree_rightmost(last_leaf);
-
-			if let Some(hash) = self.backend.get_hash(last_leaf) {
-				if let Some(data) = self.backend.get_data(last_leaf) {
-					return_vec.push((hash, data));
-				}
-			}
-			last_leaf -= 1;
-		}
-		return_vec
-	}
-
-	/// Helper function which returns un-pruned nodes from the insertion index
-	/// forward
-	/// returns last insertion index returned along with data
-	pub fn elements_from_insertion_index(
-		&self,
-		mut index: u64,
-		max_count: u64,
-	) -> (u64, Vec<T::E>) {
-		let mut return_vec = vec![];
-		if index == 0 {
-			index = 1;
-		}
-		let mut return_index = index;
-		let mut pmmr_index = insertion_to_pmmr_index(index);
-		while return_vec.len() < max_count as usize && pmmr_index <= self.last_pos {
-			if let Some(t) = self.get_data(pmmr_index) {
-				return_vec.push(t);
-				return_index = index;
-			}
-			index += 1;
-			pmmr_index = insertion_to_pmmr_index(index);
-		}
-		(return_index, return_vec)
-	}
-
 	/// Walks all unpruned nodes in the MMR and revalidate all parent hashes
 	pub fn validate(&self) -> Result<(), String> {
 		// iterate on all parent nodes
@@ -369,7 +323,7 @@ where
 	}
 
 	/// Return the path of the data file (needed to sum kernels efficiently)
-	pub fn data_file_path(&self) -> String {
+	pub fn data_file_path(&self) -> &str {
 		self.backend.get_data_file_path()
 	}
 

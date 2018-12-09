@@ -17,15 +17,15 @@
 
 use std::marker;
 
-use core::hash::Hash;
-use core::pmmr::{bintree_postorder_height, is_leaf, peaks, Backend};
-use ser::{PMMRIndexHashable, PMMRable};
+use crate::core::hash::{Hash, ZERO_HASH};
+use crate::core::pmmr::{bintree_postorder_height, is_leaf, peaks, Backend};
+use crate::ser::{PMMRIndexHashable, PMMRable};
 
 /// Rewindable (but still readonly) view of a PMMR.
 pub struct RewindablePMMR<'a, T, B>
 where
 	T: PMMRable,
-	B: 'a + Backend<T>,
+	B: Backend<T>,
 {
 	/// The last position in the PMMR
 	last_pos: u64,
@@ -41,7 +41,7 @@ where
 	B: 'a + Backend<T>,
 {
 	/// Build a new readonly PMMR.
-	pub fn new(backend: &'a B) -> RewindablePMMR<T, B> {
+	pub fn new(backend: &'a B) -> RewindablePMMR<'_, T, B> {
 		RewindablePMMR {
 			backend,
 			last_pos: 0,
@@ -51,7 +51,7 @@ where
 
 	/// Build a new readonly PMMR pre-initialized to
 	/// last_pos with the provided backend.
-	pub fn at(backend: &'a B, last_pos: u64) -> RewindablePMMR<T, B> {
+	pub fn at(backend: &'a B, last_pos: u64) -> RewindablePMMR<'_, T, B> {
 		RewindablePMMR {
 			backend,
 			last_pos,
@@ -88,9 +88,17 @@ where
 		}
 	}
 
+	/// Is the MMR empty?
+	pub fn is_empty(&self) -> bool {
+		self.last_pos == 0
+	}
+
 	/// Computes the root of the MMR. Find all the peaks in the current
 	/// tree and "bags" them to get a single peak.
 	pub fn root(&self) -> Hash {
+		if self.is_empty() {
+			return ZERO_HASH;
+		}
 		let mut res = None;
 		for peak in self.peaks().iter().rev() {
 			res = match res {
@@ -110,7 +118,8 @@ where
 				// here we want to get from underlying hash file
 				// as the pos *may* have been "removed"
 				self.backend.get_from_file(pi)
-			}).collect()
+			})
+			.collect()
 	}
 
 	/// Total size of the tree, including intermediary nodes and ignoring any

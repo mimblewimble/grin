@@ -12,30 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::util::RwLock;
 use std::collections::HashMap;
 use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use util::RwLock;
 
 use rand::{thread_rng, Rng};
 
+use crate::core::core;
+use crate::core::core::hash::{Hash, Hashed};
+use crate::core::global;
+use crate::core::pow::Difficulty;
 use chrono::prelude::*;
 use chrono::Duration;
-use core::core;
-use core::core::hash::{Hash, Hashed};
-use core::global;
-use core::pow::Difficulty;
 
-use peer::Peer;
-use store::{PeerData, PeerStore, State};
-use types::{
+use crate::peer::Peer;
+use crate::store::{PeerData, PeerStore, State};
+use crate::types::{
 	Capabilities, ChainAdapter, Direction, Error, NetAdapter, P2PConfig, ReasonForBan,
 	TxHashSetRead, MAX_PEER_ADDRS,
 };
 
 pub struct Peers {
-	pub adapter: Arc<ChainAdapter>,
+	pub adapter: Arc<dyn ChainAdapter>,
 	store: PeerStore,
 	peers: RwLock<HashMap<SocketAddr, Arc<Peer>>>,
 	dandelion_relay: RwLock<HashMap<i64, Arc<Peer>>>,
@@ -43,7 +43,7 @@ pub struct Peers {
 }
 
 impl Peers {
-	pub fn new(store: PeerStore, adapter: Arc<ChainAdapter>, config: P2PConfig) -> Peers {
+	pub fn new(store: PeerStore, adapter: Arc<dyn ChainAdapter>, config: P2PConfig) -> Peers {
 		Peers {
 			adapter,
 			store,
@@ -409,7 +409,9 @@ impl Peers {
 		}
 
 		// ensure we do not still have too many connected peers
-		let excess_count = (self.peer_count() as usize - rm.len()).saturating_sub(max_count);
+		let excess_count = (self.peer_count() as usize)
+			.saturating_sub(rm.len())
+			.saturating_sub(max_count);
 		if excess_count > 0 {
 			// map peers to addrs in a block to bound how long we keep the read lock for
 			let mut addrs = self
@@ -532,7 +534,7 @@ impl ChainAdapter for Peers {
 		}
 	}
 
-	fn headers_received(&self, headers: Vec<core::BlockHeader>, peer_addr: SocketAddr) -> bool {
+	fn headers_received(&self, headers: &[core::BlockHeader], peer_addr: SocketAddr) -> bool {
 		if !self.adapter.headers_received(headers, peer_addr) {
 			// if the peer sent us a block header that's intrinsically bad
 			// they are either mistaken or malevolent, both of which require a ban
@@ -543,7 +545,7 @@ impl ChainAdapter for Peers {
 		}
 	}
 
-	fn locate_headers(&self, hs: Vec<Hash>) -> Vec<core::BlockHeader> {
+	fn locate_headers(&self, hs: &[Hash]) -> Vec<core::BlockHeader> {
 		self.adapter.locate_headers(hs)
 	}
 

@@ -13,18 +13,18 @@
 // limitations under the License.
 
 use super::utils::{get_output, w};
-use chain;
-use core::core::hash::Hashed;
+use crate::chain;
+use crate::core::core::hash::Hashed;
+use crate::rest::*;
+use crate::router::{Handler, ResponseFuture};
+use crate::types::*;
+use crate::util;
+use crate::util::secp::pedersen::Commitment;
+use crate::web::*;
 use hyper::{Body, Request, StatusCode};
-use rest::*;
-use router::{Handler, ResponseFuture};
 use std::collections::HashMap;
 use std::sync::Weak;
-use types::*;
 use url::form_urlencoded;
-use util;
-use util::secp::pedersen::Commitment;
-use web::*;
 
 /// Chain handler. Get the head details.
 /// GET /v1/chain

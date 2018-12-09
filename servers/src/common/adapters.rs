@@ -15,27 +15,27 @@
 //! Adapters connecting new block, new transaction, and accepted transaction
 //! events to consumers of those events.
 
+use crate::util::RwLock;
 use std::fs::File;
 use std::net::SocketAddr;
 use std::sync::{Arc, Weak};
 use std::thread;
 use std::time::Instant;
-use util::RwLock;
 
-use chain::{self, BlockStatus, ChainAdapter, Options};
+use crate::chain::{self, BlockStatus, ChainAdapter, Options};
+use crate::common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
+use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::transaction::Transaction;
+use crate::core::core::verifier_cache::VerifierCache;
+use crate::core::core::{BlockHeader, BlockSums, CompactBlock};
+use crate::core::pow::Difficulty;
+use crate::core::{core, global};
+use crate::p2p;
+use crate::pool;
+use crate::util::OneTime;
 use chrono::prelude::*;
 use chrono::Duration;
-use common::types::{self, ChainValidationMode, ServerConfig, SyncState, SyncStatus};
-use core::core::hash::{Hash, Hashed};
-use core::core::transaction::Transaction;
-use core::core::verifier_cache::VerifierCache;
-use core::core::{BlockHeader, BlockSums, CompactBlock};
-use core::pow::Difficulty;
-use core::{core, global};
-use p2p;
-use pool;
 use rand::prelude::*;
-use util::OneTime;
 
 /// Implementation of the NetAdapter for the . Gets notified when new
 /// blocks and transactions are received and forwards to the chain and pool
@@ -44,7 +44,7 @@ pub struct NetToChainAdapter {
 	sync_state: Arc<SyncState>,
 	chain: Weak<chain::Chain>,
 	tx_pool: Arc<RwLock<pool::TransactionPool>>,
-	verifier_cache: Arc<RwLock<VerifierCache>>,
+	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	peers: OneTime<Weak<p2p::Peers>>,
 	config: ServerConfig,
 }
@@ -215,11 +215,6 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		if let &Err(ref e) = &res {
 			debug!("Block header {} refused by chain: {:?}", bhash, e.kind());
 			if e.is_bad_data() {
-				debug!(
-					"header_received: {} is a bad header, resetting header head",
-					bhash
-				);
-				let _ = self.chain().reset_head();
 				return false;
 			} else {
 				// we got an error when trying to process the block header
@@ -236,7 +231,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		true
 	}
 
-	fn headers_received(&self, bhs: Vec<core::BlockHeader>, addr: SocketAddr) -> bool {
+	fn headers_received(&self, bhs: &[core::BlockHeader], addr: SocketAddr) -> bool {
 		info!(
 			"Received block headers {:?} from {}",
 			bhs.iter().map(|x| x.hash()).collect::<Vec<_>>(),
@@ -248,7 +243,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		}
 
 		// try to add headers to our header chain
-		let res = self.chain().sync_block_headers(&bhs, self.chain_opts());
+		let res = self.chain().sync_block_headers(bhs, self.chain_opts());
 		if let &Err(ref e) = &res {
 			debug!("Block headers refused by chain: {:?}", e);
 
@@ -259,7 +254,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		true
 	}
 
-	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader> {
+	fn locate_headers(&self, locator: &[Hash]) -> Vec<core::BlockHeader> {
 		debug!("locator: {:?}", locator);
 
 		let header = match self.find_common_header(locator) {
@@ -374,7 +369,7 @@ impl NetToChainAdapter {
 		sync_state: Arc<SyncState>,
 		chain: Arc<chain::Chain>,
 		tx_pool: Arc<RwLock<pool::TransactionPool>>,
-		verifier_cache: Arc<RwLock<VerifierCache>>,
+		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		config: ServerConfig,
 	) -> NetToChainAdapter {
 		NetToChainAdapter {
@@ -407,7 +402,7 @@ impl NetToChainAdapter {
 	}
 
 	// Find the first locator hash that refers to a known header on our main chain.
-	fn find_common_header(&self, locator: Vec<Hash>) -> Option<BlockHeader> {
+	fn find_common_header(&self, locator: &[Hash]) -> Option<BlockHeader> {
 		for hash in locator {
 			if let Ok(header) = self.chain().get_block_header(&hash) {
 				if let Ok(header_at_height) = self.chain().get_header_by_height(header.height) {
@@ -444,13 +439,7 @@ impl NetToChainAdapter {
 				true
 			}
 			Err(ref e) if e.is_bad_data() => {
-				debug!("process_block: {} is a bad block, resetting head", bhash);
-				let _ = self.chain().reset_head();
-
-				// we potentially changed the state of the system here
-				// so check everything is still ok
 				self.validate_chain(bhash);
-
 				false
 			}
 			Err(e) => {
@@ -486,9 +475,9 @@ impl NetToChainAdapter {
 		// We are out of consensus at this point and want to track the problem
 		// down as soon as possible.
 		// Skip this if we are currently syncing (too slow).
-		if self.chain().head().unwrap().height > 0
+		if self.config.chain_validation_mode == ChainValidationMode::EveryBlock
+			&& self.chain().head().unwrap().height > 0
 			&& !self.sync_state.is_syncing()
-			&& self.config.chain_validation_mode == ChainValidationMode::EveryBlock
 		{
 			let now = Instant::now();
 

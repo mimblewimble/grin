@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! lower-level wallet functions which build upon libtx to perform wallet
-//! operations
+//! Library containing lower-level transaction building functions needed by
+//! all wallets.
 
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
@@ -21,8 +21,31 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-pub mod keys;
-pub mod restore;
-pub mod selection;
-pub mod tx;
-pub mod updater;
+pub mod aggsig;
+pub mod build;
+mod error;
+pub mod proof;
+pub mod reward;
+pub mod slate;
+
+use crate::consensus;
+use crate::core::Transaction;
+
+pub use crate::libtx::error::{Error, ErrorKind};
+
+const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
+
+/// Transaction fee calculation
+pub fn tx_fee(
+	input_len: usize,
+	output_len: usize,
+	kernel_len: usize,
+	base_fee: Option<u64>,
+) -> u64 {
+	let use_base_fee = match base_fee {
+		Some(bf) => bf,
+		None => DEFAULT_BASE_FEE,
+	};
+
+	(Transaction::weight(input_len, output_len, kernel_len) as u64) * use_base_fee
+}

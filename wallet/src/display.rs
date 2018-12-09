@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use core::core::{self, amount_to_hr_string};
-use core::global;
-use libwallet::types::{AcctPathMapping, OutputData, OutputStatus, TxLogEntry, WalletInfo};
-use libwallet::Error;
+use crate::core::core::{self, amount_to_hr_string};
+use crate::core::global;
+use crate::libwallet::types::{AcctPathMapping, OutputData, OutputStatus, TxLogEntry, WalletInfo};
+use crate::libwallet::Error;
+use crate::util;
+use crate::util::secp::pedersen;
 use prettytable;
 use std::io::prelude::Write;
 use term;
-use util;
-use util::secp::pedersen;
 
 /// Display outputs in a pretty way
 pub fn outputs(

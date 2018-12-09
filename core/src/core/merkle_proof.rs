@@ -14,11 +14,11 @@
 
 //! Merkle Proofs
 
-use core::hash::Hash;
-use core::pmmr;
-use ser;
-use ser::{PMMRIndexHashable, Readable, Reader, Writeable, Writer};
-use util;
+use crate::core::hash::Hash;
+use crate::core::pmmr;
+use crate::ser;
+use crate::ser::{PMMRIndexHashable, Readable, Reader, Writeable, Writer};
+use crate::util;
 
 /// Merkle proof errors.
 #[derive(Clone, Debug, PartialEq)]
@@ -47,7 +47,7 @@ impl Writeable for MerkleProof {
 }
 
 impl Readable for MerkleProof {
-	fn read(reader: &mut Reader) -> Result<MerkleProof, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<MerkleProof, ser::Error> {
 		let mmr_size = reader.read_u64()?;
 		let path_len = reader.read_u64()?;
 		let mut path = Vec::with_capacity(path_len as usize);
@@ -95,7 +95,7 @@ impl MerkleProof {
 	pub fn verify(
 		&self,
 		root: Hash,
-		element: &PMMRIndexHashable,
+		element: &dyn PMMRIndexHashable,
 		node_pos: u64,
 	) -> Result<(), MerkleProofError> {
 		let mut proof = self.clone();
@@ -111,7 +111,7 @@ impl MerkleProof {
 	fn verify_consume(
 		&mut self,
 		root: Hash,
-		element: &PMMRIndexHashable,
+		element: &dyn PMMRIndexHashable,
 		node_pos: u64,
 		peaks_pos: &[u64],
 	) -> Result<(), MerkleProofError> {

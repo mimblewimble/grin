@@ -17,8 +17,8 @@
 
 use lru_cache::LruCache;
 
-use core::hash::{Hash, Hashed};
-use core::{Output, TxKernel};
+use crate::core::hash::{Hash, Hashed};
+use crate::core::{Output, TxKernel};
 
 /// Verifier cache for caching expensive verification results.
 /// Specifically the following -
@@ -65,7 +65,8 @@ impl VerifierCache for LruVerifierCache {
 					.kernel_sig_verification_cache
 					.get_mut(&x.hash())
 					.unwrap_or(&mut false)
-			}).cloned()
+			})
+			.cloned()
 			.collect::<Vec<_>>();
 		trace!(
 			"lru_verifier_cache: kernel sigs: {}, not cached (must verify): {}",
@@ -83,7 +84,8 @@ impl VerifierCache for LruVerifierCache {
 					.rangeproof_verification_cache
 					.get_mut(&x.proof.hash())
 					.unwrap_or(&mut false)
-			}).cloned()
+			})
+			.cloned()
 			.collect::<Vec<_>>();
 		trace!(
 			"lru_verifier_cache: rangeproofs: {}, not cached (must verify): {}",

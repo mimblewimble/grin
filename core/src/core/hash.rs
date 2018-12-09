@@ -23,11 +23,10 @@ use std::convert::AsRef;
 use std::ops::Add;
 use std::{fmt, ops};
 
-use blake2::blake2b::Blake2b;
+use crate::blake2::blake2b::Blake2b;
 
-use consensus;
-use ser::{self, AsFixedBytes, Error, FixedLength, Readable, Reader, Writeable, Writer};
-use util;
+use crate::ser::{self, AsFixedBytes, Error, FixedLength, Readable, Reader, Writeable, Writer};
+use crate::util;
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
 pub const ZERO_HASH: Hash = Hash([0; 32]);
@@ -38,7 +37,7 @@ pub const ZERO_HASH: Hash = Hash([0; 32]);
 pub struct Hash(pub [u8; 32]);
 
 impl fmt::Debug for Hash {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		for i in self.0[..4].iter() {
 			write!(f, "{:02x}", i)?;
 		}
@@ -47,7 +46,7 @@ impl fmt::Debug for Hash {
 }
 
 impl fmt::Display for Hash {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		fmt::Debug::fmt(self, f)
 	}
 }
@@ -137,7 +136,7 @@ impl AsRef<[u8]> for Hash {
 }
 
 impl Readable for Hash {
-	fn read(reader: &mut Reader) -> Result<Hash, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Hash, ser::Error> {
 		let v = reader.read_fixed_bytes(32)?;
 		let mut a = [0; 32];
 		a.copy_from_slice(&v[..]);
@@ -228,21 +227,5 @@ impl<W: ser::Writeable> Hashed for W {
 		let mut ret = [0; 32];
 		hasher.finalize(&mut ret);
 		Hash(ret)
-	}
-}
-
-impl<T: Writeable> consensus::VerifySortOrder<T> for Vec<T> {
-	fn verify_sort_order(&self) -> Result<(), consensus::Error> {
-		if self
-			.iter()
-			.map(|item| item.hash())
-			.collect::<Vec<_>>()
-			.windows(2)
-			.any(|pair| pair[0] > pair[1])
-		{
-			Err(consensus::Error::SortError)
-		} else {
-			Ok(())
-		}
 	}
 }

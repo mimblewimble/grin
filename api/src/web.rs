@@ -1,14 +1,14 @@
+use crate::rest::*;
+use crate::router::ResponseFuture;
 use futures::future::{err, ok};
 use futures::{Future, Stream};
 use hyper::{Body, Request, Response, StatusCode};
-use rest::*;
-use router::ResponseFuture;
 use serde::{Deserialize, Serialize};
 use serde_json;
 use std::fmt::Debug;
 
 /// Parse request body
-pub fn parse_body<T>(req: Request<Body>) -> Box<Future<Item = T, Error = Error> + Send>
+pub fn parse_body<T>(req: Request<Body>) -> Box<dyn Future<Item = T, Error = Error> + Send>
 where
 	for<'de> T: Deserialize<'de> + Send + 'static,
 {

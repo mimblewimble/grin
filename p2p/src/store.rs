@@ -20,12 +20,12 @@ use rand::{thread_rng, Rng};
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use lmdb;
+use crate::lmdb;
 
-use core::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::core::ser::{self, Readable, Reader, Writeable, Writer};
+use crate::msg::SockAddr;
+use crate::types::{Capabilities, ReasonForBan};
 use grin_store::{self, option_to_not_found, to_key, Error};
-use msg::SockAddr;
-use types::{Capabilities, ReasonForBan};
 
 const STORE_SUBPATH: &'static str = "peers";
 
@@ -78,7 +78,7 @@ impl Writeable for PeerData {
 }
 
 impl Readable for PeerData {
-	fn read(reader: &mut Reader) -> Result<PeerData, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<PeerData, ser::Error> {
 		let addr = SockAddr::read(reader)?;
 		let capab = reader.read_u32()?;
 		let ua = reader.read_bytes_len_prefix()?;

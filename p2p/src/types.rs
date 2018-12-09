@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::util::RwLock;
 use std::convert::From;
 use std::fs::File;
 use std::io;
 use std::net::{IpAddr, SocketAddr};
 use std::sync::mpsc;
 use std::sync::Arc;
-use util::RwLock;
 
 use chrono::prelude::*;
 
-use core::core::hash::Hash;
-use core::pow::Difficulty;
-use core::{core, ser};
+use crate::core::core::hash::Hash;
+use crate::core::pow::Difficulty;
+use crate::core::{core, ser};
 use grin_store;
 
 /// Maximum number of block headers a peer should ever send
@@ -359,12 +359,12 @@ pub trait ChainAdapter: Sync + Send {
 	/// A set of block header has been received, typically in response to a
 	/// block
 	/// header request.
-	fn headers_received(&self, bh: Vec<core::BlockHeader>, addr: SocketAddr) -> bool;
+	fn headers_received(&self, bh: &[core::BlockHeader], addr: SocketAddr) -> bool;
 
 	/// Finds a list of block headers based on the provided locator. Tries to
 	/// identify the common chain and gets the headers that follow it
 	/// immediately.
-	fn locate_headers(&self, locator: Vec<Hash>) -> Vec<core::BlockHeader>;
+	fn locate_headers(&self, locator: &[Hash]) -> Vec<core::BlockHeader>;
 
 	/// Gets a full block by its hash.
 	fn get_block(&self, h: Hash) -> Option<core::Block>;
@@ -403,10 +403,10 @@ pub trait NetAdapter: ChainAdapter {
 	fn find_peer_addrs(&self, capab: Capabilities) -> Vec<SocketAddr>;
 
 	/// A list of peers has been received from one of our peers.
-	fn peer_addrs_received(&self, Vec<SocketAddr>);
+	fn peer_addrs_received(&self, _: Vec<SocketAddr>);
 
 	/// Heard total_difficulty from a connected peer (via ping/pong).
-	fn peer_difficulty(&self, SocketAddr, Difficulty, u64);
+	fn peer_difficulty(&self, _: SocketAddr, _: Difficulty, _: u64);
 
 	/// Is this peer currently banned?
 	fn is_banned(&self, addr: SocketAddr) -> bool;

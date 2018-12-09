@@ -13,16 +13,15 @@
 // limitations under the License.
 
 //! Error types for chain
+use crate::core::core::{block, committed, transaction};
+use crate::core::ser;
+use crate::keychain;
+use crate::util::secp;
+use crate::util::secp::pedersen::Commitment;
 use failure::{Backtrace, Context, Fail};
+use grin_store as store;
 use std::fmt::{self, Display};
 use std::io;
-
-use core::core::{block, committed, transaction};
-use core::ser;
-use grin_store as store;
-use keychain;
-use util::secp;
-use util::secp::pedersen::Commitment;
 
 /// Error definition
 #[derive(Debug, Fail)]
@@ -132,7 +131,7 @@ pub enum ErrorKind {
 }
 
 impl Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let cause = match self.cause() {
 			Some(c) => format!("{}", c),
 			None => String::from("Unknown"),
@@ -155,7 +154,7 @@ impl Error {
 		self.inner.get_context().clone()
 	}
 	/// get cause
-	pub fn cause(&self) -> Option<&Fail> {
+	pub fn cause(&self) -> Option<&dyn Fail> {
 		self.inner.cause()
 	}
 	/// get backtrace

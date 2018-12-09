@@ -12,30 +12,20 @@
 // limitations under the License.
 
 //! Test a wallet file send/recieve
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store as store;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
-extern crate rand;
 #[macro_use]
 extern crate log;
-extern crate chrono;
-extern crate serde;
-extern crate uuid;
-
-mod common;
-use common::testclient::{LocalWalletClient, WalletProxy};
-
+use self::core::global;
+use self::core::global::ChainTypes;
+use self::keychain::ExtKeychain;
+use self::wallet::test_framework::{self, LocalWalletClient, WalletProxy};
+use self::wallet::{libwallet, FileWalletCommAdapter};
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_util as util;
+use grin_wallet as wallet;
 use std::fs;
 use std::thread;
 use std::time::Duration;
-
-use core::global;
-use core::global::ChainTypes;
-use keychain::ExtKeychain;
-use wallet::{libwallet, FileWalletCommAdapter};
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -55,11 +45,11 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	let chain = wallet_proxy.chain.clone();
 
 	let client1 = LocalWalletClient::new("wallet1", wallet_proxy.tx.clone());
-	let wallet1 = common::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
+	let wallet1 = test_framework::create_wallet(&format!("{}/wallet1", test_dir), client1.clone());
 	wallet_proxy.add_wallet("wallet1", client1.get_send_instance(), wallet1.clone());
 
 	let client2 = LocalWalletClient::new("wallet2", wallet_proxy.tx.clone());
-	let wallet2 = common::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
+	let wallet2 = test_framework::create_wallet(&format!("{}/wallet2", test_dir), client2.clone());
 	wallet_proxy.add_wallet("wallet2", client2.get_send_instance(), wallet2.clone());
 
 	// Set the wallet proxy listener running
@@ -92,7 +82,7 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		w.set_parent_key_id_by_name("mining")?;
 	}
 	let mut bh = 10u64;
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), bh as usize);
+	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), bh as usize);
 
 	let send_file = format!("{}/part_tx_1.tx", test_dir);
 	let receive_file = format!("{}/part_tx_2.tx", test_dir);
@@ -161,7 +151,7 @@ fn file_exchange_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		Ok(())
 	})?;
 
-	let _ = common::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
+	let _ = test_framework::award_blocks_to_wallet(&chain, wallet1.clone(), 3);
 	bh += 3;
 
 	// Check total in mining account

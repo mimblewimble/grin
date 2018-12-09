@@ -14,28 +14,28 @@
 
 //! Blocks and blockheaders
 
+use crate::util::RwLock;
 use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
 use std::sync::Arc;
-use util::RwLock;
 
-use consensus::{self, reward, REWARD};
-use core::committed::{self, Committed};
-use core::compact_block::{CompactBlock, CompactBlockBody};
-use core::hash::{Hash, Hashed, ZERO_HASH};
-use core::verifier_cache::VerifierCache;
-use core::{
+use crate::consensus::{reward, REWARD};
+use crate::core::committed::{self, Committed};
+use crate::core::compact_block::{CompactBlock, CompactBlockBody};
+use crate::core::hash::{Hash, Hashed, ZERO_HASH};
+use crate::core::verifier_cache::VerifierCache;
+use crate::core::{
 	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Transaction,
 	TransactionBody, TxKernel,
 };
-use global;
-use keychain::{self, BlindingFactor};
-use pow::{Difficulty, Proof, ProofOfWork};
-use ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
-use util::{secp, static_secp_instance};
+use crate::global;
+use crate::keychain::{self, BlindingFactor};
+use crate::pow::{Difficulty, Proof, ProofOfWork};
+use crate::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
+use crate::util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, Eq, PartialEq, Fail)]
@@ -60,8 +60,6 @@ pub enum Error {
 	Secp(secp::Error),
 	/// Underlying keychain related error
 	Keychain(keychain::Error),
-	/// Underlying consensus error (sort order currently)
-	Consensus(consensus::Error),
 	/// Underlying Merkle proof error
 	MerkleProof,
 	/// Error when verifying kernel sums via committed trait.
@@ -69,6 +67,8 @@ pub enum Error {
 	/// Validation error relating to cut-through.
 	/// Specifically the tx is spending its own output, which is not valid.
 	CutThrough,
+	/// Underlying serialization error.
+	Serialization(ser::Error),
 	/// Other unspecified error condition
 	Other(String),
 }
@@ -85,6 +85,12 @@ impl From<transaction::Error> for Error {
 	}
 }
 
+impl From<ser::Error> for Error {
+	fn from(e: ser::Error) -> Error {
+		Error::Serialization(e)
+	}
+}
+
 impl From<secp::Error> for Error {
 	fn from(e: secp::Error) -> Error {
 		Error::Secp(e)
@@ -97,14 +103,8 @@ impl From<keychain::Error> for Error {
 	}
 }
 
-impl From<consensus::Error> for Error {
-	fn from(e: consensus::Error) -> Error {
-		Error::Consensus(e)
-	}
-}
-
 impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "Block Error (display needs implementation")
 	}
 }
@@ -162,7 +162,7 @@ impl Default for BlockHeader {
 impl PMMRable for BlockHeader {
 	type E = Hash;
 
-	fn as_elmt(self) -> Self::E {
+	fn as_elmt(&self) -> Self::E {
 		self.hash()
 	}
 }
@@ -180,7 +180,7 @@ impl Writeable for BlockHeader {
 
 /// Deserialization of a block header
 impl Readable for BlockHeader {
-	fn read(reader: &mut Reader) -> Result<BlockHeader, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<BlockHeader, ser::Error> {
 		let (version, height, timestamp) = ser_multiread!(reader, read_u16, read_u64, read_i64);
 		let prev_hash = Hash::read(reader)?;
 		let prev_root = Hash::read(reader)?;
@@ -262,8 +262,13 @@ impl BlockHeader {
 
 	/// The "total overage" to use when verifying the kernel sums for a full
 	/// chain state. For a full chain state this is 0 - (height * reward).
-	pub fn total_overage(&self) -> i64 {
-		((self.height * REWARD) as i64).checked_neg().unwrap_or(0)
+	pub fn total_overage(&self, genesis_had_reward: bool) -> i64 {
+		let mut reward_count = self.height;
+		if genesis_had_reward {
+			reward_count += 1;
+		}
+
+		((reward_count * REWARD) as i64).checked_neg().unwrap_or(0)
 	}
 
 	/// Total kernel offset for the chain state up to and including this block.
@@ -301,7 +306,7 @@ impl Writeable for Block {
 /// Implementation of Readable for a block, defines how to read a full block
 /// from a binary stream.
 impl Readable for Block {
-	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Block, ser::Error> {
 		let header = BlockHeader::read(reader)?;
 
 		let body = TransactionBody::read(reader)?;
@@ -358,7 +363,7 @@ impl Block {
 		reward_output: (Output, TxKernel),
 	) -> Result<Block, Error> {
 		let mut block =
-			Block::with_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
+			Block::from_reward(prev, txs, reward_output.0, reward_output.1, difficulty)?;
 
 		// Now set the pow on the header so block hashing works as expected.
 		{
@@ -421,7 +426,7 @@ impl Block {
 	/// Builds a new block ready to mine from the header of the previous block,
 	/// a vector of transactions and the reward information. Checks
 	/// that all transactions are valid and calculates the Merkle tree.
-	pub fn with_reward(
+	pub fn from_reward(
 		prev: &BlockHeader,
 		txs: Vec<Transaction>,
 		reward_out: Output,
@@ -458,7 +463,16 @@ impl Block {
 				..Default::default()
 			},
 			body: agg_tx.into(),
-		}.cut_through()
+		}
+		.cut_through()
+	}
+
+	/// Consumes this block and returns a new block with the coinbase output
+	/// and kernels added
+	pub fn with_reward(mut self, reward_out: Output, reward_kern: TxKernel) -> Block {
+		self.body.outputs.push(reward_out);
+		self.body.kernels.push(reward_kern);
+		self
 	}
 
 	/// Get inputs
@@ -559,7 +573,7 @@ impl Block {
 	pub fn validate(
 		&self,
 		prev_kernel_offset: &BlindingFactor,
-		verifier: Arc<RwLock<VerifierCache>>,
+		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<Commitment, Error> {
 		self.body.validate(true, verifier)?;
 

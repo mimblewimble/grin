@@ -14,15 +14,13 @@
 
 //! Error types for libwallet
 
+use crate::core::core::transaction;
+use crate::core::libtx;
+use crate::keychain;
+use failure::{Backtrace, Context, Fail};
+use std::env;
 use std::fmt::{self, Display};
 use std::io;
-
-use failure::{Backtrace, Context, Fail};
-
-use core;
-use core::core::transaction;
-use keychain;
-use libtx;
 
 /// Error definition
 #[derive(Debug, Fail)]
@@ -36,8 +34,7 @@ pub enum ErrorKind {
 	/// Not enough funds
 	#[fail(
 		display = "Not enough funds. Required: {}, Available: {}",
-		needed,
-		available
+		needed, available
 	)]
 	NotEnoughFunds {
 		/// available funds
@@ -49,8 +46,7 @@ pub enum ErrorKind {
 	/// Fee dispute
 	#[fail(
 		display = "Fee dispute: sender fee {}, recipient fee {}",
-		sender_fee,
-		recipient_fee
+		sender_fee, recipient_fee
 	)]
 	FeeDispute {
 		/// sender fee
@@ -62,8 +58,7 @@ pub enum ErrorKind {
 	/// Fee Exceeds amount
 	#[fail(
 		display = "Fee exceeds amount: sender amount {}, recipient fee {}",
-		sender_amount,
-		recipient_fee
+		sender_amount, recipient_fee
 	)]
 	FeeExceedsAmount {
 		/// sender amount
@@ -110,7 +105,7 @@ pub enum ErrorKind {
 
 	/// Other serialization errors
 	#[fail(display = "Ser/Deserialization error")]
-	Deser(core::ser::Error),
+	Deser(crate::core::ser::Error),
 
 	/// IO Error
 	#[fail(display = "I/O error")]
@@ -194,19 +189,27 @@ pub enum ErrorKind {
 }
 
 impl Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let cause = match self.cause() {
-			Some(c) => format!("{}", c),
-			None => String::from("Unknown"),
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		let show_bt = match env::var("RUST_BACKTRACE") {
+			Ok(r) => {
+				if r == "1" {
+					true
+				} else {
+					false
+				}
+			}
+			Err(_) => false,
 		};
 		let backtrace = match self.backtrace() {
 			Some(b) => format!("{}", b),
 			None => String::from("Unknown"),
 		};
-		let output = format!(
-			"{} \n Cause: {} \n Backtrace: {}",
-			self.inner, cause, backtrace
-		);
+		let inner_output = format!("{}", self.inner,);
+		let backtrace_output = format!("\n Backtrace: {}", backtrace);
+		let mut output = inner_output.clone();
+		if show_bt {
+			output.push_str(&backtrace_output);
+		}
 		Display::fmt(&output, f)
 	}
 }
@@ -216,8 +219,15 @@ impl Error {
 	pub fn kind(&self) -> ErrorKind {
 		self.inner.get_context().clone()
 	}
+	/// get cause string
+	pub fn cause_string(&self) -> String {
+		match self.cause() {
+			Some(k) => format!("{}", k),
+			None => format!("Unknown"),
+		}
+	}
 	/// get cause
-	pub fn cause(&self) -> Option<&Fail> {
+	pub fn cause(&self) -> Option<&dyn Fail> {
 		self.inner.cause()
 	}
 	/// get backtrace
@@ -257,7 +267,7 @@ impl From<keychain::Error> for Error {
 }
 
 impl From<libtx::Error> for Error {
-	fn from(error: libtx::Error) -> Error {
+	fn from(error: crate::core::libtx::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::LibTX(error.kind())),
 		}
@@ -272,8 +282,8 @@ impl From<transaction::Error> for Error {
 	}
 }
 
-impl From<core::ser::Error> for Error {
-	fn from(error: core::ser::Error) -> Error {
+impl From<crate::core::ser::Error> for Error {
+	fn from(error: crate::core::ser::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::Deser(error)),
 		}

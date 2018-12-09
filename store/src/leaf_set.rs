@@ -19,11 +19,11 @@ use std::path::Path;
 
 use croaring::Bitmap;
 
-use core::core::hash::Hashed;
-use core::core::pmmr;
-use core::core::BlockHeader;
-use prune_list::PruneList;
-use {read_bitmap, save_via_temp_file};
+use crate::core::core::hash::Hashed;
+use crate::core::core::pmmr;
+use crate::core::core::BlockHeader;
+use crate::prune_list::PruneList;
+use crate::{read_bitmap, save_via_temp_file};
 
 use std::fs::File;
 use std::io::{self, BufWriter, Write};

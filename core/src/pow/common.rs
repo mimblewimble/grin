@@ -14,12 +14,12 @@
 
 //! Common types and traits for cuckoo/cuckatoo family of solvers
 
-use blake2::blake2b::blake2b;
+use crate::blake2::blake2b::blake2b;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 
-use pow::error::{Error, ErrorKind};
-use pow::num::{PrimInt, ToPrimitive};
-use pow::siphash::siphash24;
+use crate::pow::error::{Error, ErrorKind};
+use crate::pow::num::{PrimInt, ToPrimitive};
+use crate::pow::siphash::siphash24;
 use std::fmt;
 use std::hash::Hash;
 use std::io::Cursor;
@@ -44,7 +44,7 @@ impl<T> fmt::Display for Edge<T>
 where
 	T: EdgeType,
 {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(
 			f,
 			"(u: {}, v: {})",
@@ -68,7 +68,7 @@ impl<T> fmt::Display for Link<T>
 where
 	T: EdgeType,
 {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(
 			f,
 			"(next: {}, to: {})",

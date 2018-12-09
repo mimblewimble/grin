@@ -12,10 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_p2p as p2p;
-
-extern crate enum_primitive;
-extern crate num;
+use grin_p2p as p2p;
 
 use num::FromPrimitive;
 

@@ -75,7 +75,7 @@ macro_rules! tee {
 #[macro_export]
 macro_rules! ser_multiread {
   ($rdr:ident, $($read_call:ident $(($val:expr)),*),*) => {
-    ( $(try!($rdr.$read_call($($val),*))),* )
+    ( $(r#try!($rdr.$read_call($($val),*))),* )
   }
 }
 
@@ -89,7 +89,7 @@ macro_rules! ser_multiread {
 #[macro_export]
 macro_rules! ser_multiwrite {
   ($wrtr:ident, $([ $write_call:ident, $val:expr ]),* ) => {
-    $( try!($wrtr.$write_call($val)) );*
+    $( r#try!($wrtr.$write_call($val)) );*
   }
 }
 

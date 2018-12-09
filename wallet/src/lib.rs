@@ -14,71 +14,60 @@
 
 //! Library module for the main wallet functionalities provided by Grin.
 
-extern crate blake2_rfc as blake2;
-extern crate byteorder;
+use blake2_rfc as blake2;
+
 #[macro_use]
 extern crate prettytable;
-extern crate rand;
-extern crate serde;
+
+use serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
 #[macro_use]
 extern crate log;
-extern crate chrono;
-extern crate term;
-extern crate url;
-extern crate uuid;
-
-extern crate failure;
-#[macro_use]
-extern crate failure_derive;
-extern crate futures;
-extern crate hyper;
-extern crate ring;
-extern crate tokio;
-extern crate tokio_core;
-extern crate tokio_retry;
-
-extern crate grin_api as api;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store as store;
-extern crate grin_util as util;
+use failure;
+use grin_api as api;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_store as store;
+use grin_util as util;
+use term;
 
 mod adapters;
+pub mod command;
 pub mod controller;
 pub mod display;
 mod error;
-pub mod libtx;
 pub mod libwallet;
 pub mod lmdb_wallet;
 mod node_clients;
+pub mod test_framework;
 mod types;
 
-pub use adapters::{
-	FileWalletCommAdapter, HTTPWalletCommAdapter, NullWalletCommAdapter, WalletCommAdapter,
+pub use crate::adapters::{
+	FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalletCommAdapter, NullWalletCommAdapter,
+	WalletCommAdapter,
 };
-pub use error::{Error, ErrorKind};
-pub use libwallet::types::{BlockFees, CbData, NodeClient, WalletBackend, WalletInfo, WalletInst};
-pub use lmdb_wallet::{wallet_db_exists, LMDBBackend};
-pub use node_clients::{create_coinbase, HTTPNodeClient};
-pub use types::{EncryptedWalletSeed, WalletConfig, WalletSeed, SEED_FILE};
+pub use crate::error::{Error, ErrorKind};
+pub use crate::libwallet::types::{
+	BlockFees, CbData, NodeClient, WalletBackend, WalletInfo, WalletInst,
+};
+pub use crate::lmdb_wallet::{wallet_db_exists, LMDBBackend};
+pub use crate::node_clients::{create_coinbase, HTTPNodeClient};
+pub use crate::types::{EncryptedWalletSeed, WalletConfig, WalletSeed, SEED_FILE};
 
+use crate::util::Mutex;
 use std::sync::Arc;
-use util::Mutex;
 
 /// Helper to create an instance of the LMDB wallet
 pub fn instantiate_wallet(
 	wallet_config: WalletConfig,
+	node_client: impl NodeClient + 'static,
 	passphrase: &str,
 	account: &str,
-	node_api_secret: Option<String>,
-) -> Result<Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>>, Error> {
+) -> Result<Arc<Mutex<WalletInst<impl NodeClient, keychain::ExtKeychain>>>, Error> {
 	// First test decryption, so we can abort early if we have the wrong password
 	let _ = WalletSeed::from_file(&wallet_config, passphrase)?;
-	let client_n = HTTPNodeClient::new(&wallet_config.check_node_api_http_addr, node_api_secret);
-	let mut db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, client_n)?;
+	let mut db_wallet = LMDBBackend::new(wallet_config.clone(), passphrase, node_client)?;
 	db_wallet.set_parent_key_id_by_name(account)?;
 	info!("Using LMDB Backend for wallet");
 	Ok(Arc::new(Mutex::new(db_wallet)))

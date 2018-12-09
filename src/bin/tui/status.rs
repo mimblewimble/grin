@@ -21,11 +21,11 @@ use cursive::view::View;
 use cursive::views::{BoxView, LinearLayout, TextView};
 use cursive::Cursive;
 
-use tui::constants::VIEW_BASIC_STATUS;
-use tui::types::TUIStatusListener;
+use crate::tui::constants::VIEW_BASIC_STATUS;
+use crate::tui::types::TUIStatusListener;
 
-use servers::common::types::SyncStatus;
-use servers::ServerStats;
+use crate::servers::common::types::SyncStatus;
+use crate::servers::ServerStats;
 
 const NANO_TO_MILLIS: f64 = 1.0 / 1_000_000.0;
 
@@ -33,57 +33,70 @@ pub struct TUIStatusView;
 
 impl TUIStatusListener for TUIStatusView {
 	/// Create basic status view
-	fn create() -> Box<View> {
+	fn create() -> Box<dyn View> {
 		let basic_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
 				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Current Status: "))
 						.child(TextView::new("Starting").with_id("basic_current_status")),
-				).child(
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Connected Peers: "))
 						.child(TextView::new("0").with_id("connected_peers")),
-				).child(
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("------------------------")),
-				).child(
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Header Tip Hash: "))
 						.child(TextView::new("  ").with_id("basic_header_tip_hash")),
-				).child(
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Header Chain Height: "))
 						.child(TextView::new("  ").with_id("basic_header_chain_height")),
-				).child(
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Header Cumulative Difficulty: "))
 						.child(TextView::new("  ").with_id("basic_header_total_difficulty")),
-				).child(
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("------------------------")),
-				).child(
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Tip Hash: "))
 						.child(TextView::new("  ").with_id("tip_hash")),
-				).child(
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Chain Height: "))
 						.child(TextView::new("  ").with_id("chain_height")),
-				).child(
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Cumulative Difficulty: "))
 						.child(TextView::new("  ").with_id("basic_total_difficulty")),
-				).child(
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("------------------------")),
-				).child(
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("  ").with_id("basic_mining_config_status")),
-				).child(
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("  ").with_id("basic_mining_status")),
-				).child(
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("  ").with_id("basic_network_info")),
 				), //.child(logo_view)

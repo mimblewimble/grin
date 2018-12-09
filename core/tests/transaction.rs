@@ -13,17 +13,15 @@
 // limitations under the License.
 
 //! Transaction integration tests
-extern crate grin_core;
-extern crate grin_keychain as keychain;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
 
 pub mod common;
 
-use grin_core::core::{Output, OutputFeatures};
-use grin_core::ser;
-use keychain::{ExtKeychain, Keychain};
-use wallet::libtx::proof;
+use self::core::core::{Output, OutputFeatures};
+use self::core::libtx::proof;
+use self::core::ser;
+use self::keychain::{ExtKeychain, Keychain};
+use grin_core as core;
+use grin_keychain as keychain;
 
 #[test]
 fn test_output_ser_deser() {

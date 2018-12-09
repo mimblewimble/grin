@@ -16,6 +16,27 @@
 //! so that wallet API can be fully exercised
 //! Operates directly on a chain instance
 
+use self::chain::types::NoopAdapter;
+use self::chain::Chain;
+use self::core::core::verifier_cache::LruVerifierCache;
+use self::core::core::Transaction;
+use self::core::global::{set_mining_mode, ChainTypes};
+use self::core::libtx::slate::Slate;
+use self::core::{pow, ser};
+use self::keychain::Keychain;
+use self::util::secp::pedersen;
+use self::util::secp::pedersen::Commitment;
+use self::util::{Mutex, RwLock};
+use crate::libwallet::types::*;
+use crate::{controller, libwallet, WalletCommAdapter, WalletConfig};
+use failure::ResultExt;
+use grin_api as api;
+use grin_chain as chain;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_store as store;
+use grin_util as util;
+use serde_json;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,30 +44,6 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use util::{Mutex, RwLock};
-
-use common::api;
-use common::serde_json;
-use store;
-use util;
-use util::secp::pedersen::Commitment;
-
-use common::failure::ResultExt;
-
-use chain::types::NoopAdapter;
-use chain::Chain;
-use core::core::verifier_cache::LruVerifierCache;
-use core::core::Transaction;
-use core::global::{set_mining_mode, ChainTypes};
-use core::{pow, ser};
-use keychain::Keychain;
-
-use util::secp::pedersen;
-use wallet::libtx::slate::Slate;
-use wallet::libwallet::types::*;
-use wallet::{controller, libwallet, WalletCommAdapter, WalletConfig};
-
-use common;
 
 /// Messages to simulate wallet requests/responses
 #[derive(Clone, Debug)]
@@ -77,7 +74,7 @@ where
 		String,
 		(
 			Sender<WalletProxyMessage>,
-			Arc<Mutex<WalletInst<LocalWalletClient, K>>>,
+			Arc<Mutex<dyn WalletInst<LocalWalletClient, K>>>,
 		),
 	>,
 	/// simulate json send to another client
@@ -113,7 +110,8 @@ where
 			pow::verify_size,
 			verifier_cache,
 			false,
-		).unwrap();
+		)
+		.unwrap();
 		let (tx, rx) = channel();
 		let retval = WalletProxy {
 			chain_dir: chain_dir.to_owned(),
@@ -133,7 +131,7 @@ where
 		&mut self,
 		addr: &str,
 		tx: Sender<WalletProxyMessage>,
-		wallet: Arc<Mutex<WalletInst<LocalWalletClient, K>>>,
+		wallet: Arc<Mutex<dyn WalletInst<LocalWalletClient, K>>>,
 	) {
 		self.wallets.insert(addr.to_owned(), (tx, wallet));
 	}
@@ -189,7 +187,7 @@ where
 			libwallet::ErrorKind::ClientCallback("Error parsing TxWrapper: tx"),
 		)?;
 
-		common::award_block_to_wallet(&self.chain, vec![&tx], dest_wallet)?;
+		super::award_block_to_wallet(&self.chain, vec![&tx], dest_wallet)?;
 
 		Ok(WalletProxyMessage {
 			sender_id: "node".to_owned(),
@@ -250,7 +248,7 @@ where
 			}
 			let c = util::from_hex(o_str).unwrap();
 			let commit = Commitment::from_vec(c);
-			let out = common::get_output_local(&self.chain.clone(), &commit);
+			let out = super::get_output_local(&self.chain.clone(), &commit);
 			if let Some(o) = out {
 				outputs.push(o);
 			}
@@ -271,7 +269,7 @@ where
 		let split = m.body.split(",").collect::<Vec<&str>>();
 		let start_index = split[0].parse::<u64>().unwrap();
 		let max = split[1].parse::<u64>().unwrap();
-		let ol = common::get_outputs_by_pmmr_index_local(self.chain.clone(), start_index, max);
+		let ol = super::get_outputs_by_pmmr_index_local(self.chain.clone(), start_index, max);
 		Ok(WalletProxyMessage {
 			sender_id: "node".to_owned(),
 			dest: m.sender_id,
@@ -393,7 +391,8 @@ impl NodeClient for LocalWalletClient {
 	fn node_api_secret(&self) -> Option<String> {
 		None
 	}
-
+	fn set_node_url(&mut self, _node_url: &str) {}
+	fn set_node_api_secret(&mut self, _node_api_secret: Option<String>) {}
 	/// Posts a transaction to a grin node
 	/// In this case it will create a new block with award rewarded to
 	fn post_tx(&self, tx: &TxWrapper, _fluff: bool) -> Result<(), libwallet::Error> {

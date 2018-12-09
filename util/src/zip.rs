@@ -19,9 +19,9 @@ use std::io;
 use std::path::Path;
 use walkdir::WalkDir;
 
-use zip_rs;
-use zip_rs::result::{ZipError, ZipResult};
-use zip_rs::write::FileOptions;
+use self::zip_rs::result::{ZipError, ZipResult};
+use self::zip_rs::write::FileOptions;
+use zip as zip_rs;
 
 /// Compress a source directory recursively into a zip file using the
 /// bzip2 format. Permissions are set to 644 by default to avoid any
