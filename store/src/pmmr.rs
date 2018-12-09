@@ -435,42 +435,55 @@ pub fn clean_files_by_prefix<P: AsRef<std::path::Path>>(
 	prefix_to_delete: &str,
 	cleanup_duration_seconds: u64,
 ) -> io::Result<u32> {
-	let mut number_of_files_deleted = 0u32;
 	let now = time::SystemTime::now();
 	let cleanup_duration = time::Duration::from_secs(cleanup_duration_seconds);
 
-	for possible_dir_entry in fs::read_dir(path)? {
-		// iterate over the data directory
-		if let Ok(dir_entry) = possible_dir_entry {
-			// I don't know why rust does this
-			if let Ok(metadata) = dir_entry.metadata() {
-				// check if the entry is a directory
-				if metadata.is_dir() {
-					continue; // skip directories unconditionally
-				}
-				if let Ok(accessed) = metadata.accessed() {
-					if let Ok(duration) = now.duration_since(accessed) {
-						if duration <= cleanup_duration {
-							// skip deletion here because it is not old enough
-							continue;
-						}
-					}
-				}
-			}
+	let number_of_files_deleted: u32 = fs::read_dir(&path)?
+		.flat_map(
+			|possible_dir_entry| -> Result<u32, Box<std::error::Error>> {
+				// result implements iterator and so if we were to use map here
+				// we would have a list of Result<u32, Box<std::error::Error>>
+				// but because we use flat_map, the errors get "discarded" and we are
+				// left with a clean iterator over u32s
 
-			// match the file name to the path
-			if let Ok(file_name) = dir_entry.file_name().into_string() {
+				// the error cases that come out of this code are numerous and
+				// we don't really mind throwing them away because the main point
+				// here is to clean up some files, if it doesn't work out it's not
+				// the end of the world
+
+				let dir_entry: std::fs::DirEntry = possible_dir_entry?;
+				let metadata = dir_entry.metadata()?;
+				if metadata.is_dir() {
+					return Ok(0); // skip directories unconditionally
+				}
+				let accessed = metadata.accessed()?;
+				let duration_since_accessed = now.duration_since(accessed)?;
+				if duration_since_accessed <= cleanup_duration {
+					return Ok(0); // these files are still too new
+				}
+				let file_name = dir_entry
+					.file_name()
+					.into_string()
+					.ok()
+					.ok_or("could not convert filename into utf-8")?;
+
+				// check to see if we want to delete this file?
 				if file_name.starts_with(prefix_to_delete)
 					&& file_name.len() > prefix_to_delete.len()
 				{
+					// we want to delete it, try to do so
 					if fs::remove_file(dir_entry.path()).is_ok() {
-						// attempt to delete the file
-						number_of_files_deleted += 1; // increment the counter if we were able to delete the file
+						// we successfully deleted a file
+						return Ok(1);
 					}
 				}
-			}
-		}
-	}
+
+				// we either did not want to delete this file or could
+				// not for whatever reason. 0 files deleted.
+				Ok(0)
+			},
+		)
+		.sum();
 
 	Ok(number_of_files_deleted)
 }
