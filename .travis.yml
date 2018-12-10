@@ -41,6 +41,8 @@ env:
 matrix:
   include:
     - os: linux
+      env: TEST_SUITE=.
+    - os: linux
       env: TEST_SUITE=servers
     - os: linux
       env: TEST_SUITE=chain-core
