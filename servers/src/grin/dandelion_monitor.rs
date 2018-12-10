@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::util::RwLock;
+use crate::util::{Mutex, RwLock, StopState};
 use chrono::prelude::Utc;
 use rand::{thread_rng, Rng};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -37,7 +37,7 @@ pub fn monitor_transactions(
 	dandelion_config: DandelionConfig,
 	tx_pool: Arc<RwLock<TransactionPool>>,
 	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
-	stop: Arc<AtomicBool>,
+	stop_state: Arc<Mutex<StopState>>,
 ) {
 	debug!("Started Dandelion transaction monitor.");
 
@@ -45,7 +45,7 @@ pub fn monitor_transactions(
 		.name("dandelion".to_string())
 		.spawn(move || {
 			loop {
-				if stop.load(Ordering::Relaxed) {
+				if stop_state.lock().is_stopped() {
 					break;
 				}
 

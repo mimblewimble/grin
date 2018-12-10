@@ -26,7 +26,7 @@ use self::core::{pow, ser};
 use self::keychain::Keychain;
 use self::util::secp::pedersen;
 use self::util::secp::pedersen::Commitment;
-use self::util::{Mutex, RwLock};
+use self::util::{Mutex, RwLock, StopState};
 use crate::libwallet::types::*;
 use crate::{controller, libwallet, WalletCommAdapter, WalletConfig};
 use failure::ResultExt;

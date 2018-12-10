@@ -32,7 +32,7 @@ use crate::types::{
 	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::RwLock;
+use crate::util::{Mutes, RwLock, StopState};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::File;
@@ -149,7 +149,7 @@ pub struct Chain {
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	archive_mode: bool,
-	stop: Arc<AtomicBool>,
+	stop_state: Arc<Mutex<StopState>>,
 	genesis: BlockHeader,
 }
 
@@ -165,7 +165,7 @@ impl Chain {
 		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		archive_mode: bool,
-		stop: Arc<AtomicBool>,
+		stop_state: Arc<Mutex<StopState>>,
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainStore::new(db_env)?;
 
@@ -215,7 +215,7 @@ impl Chain {
 			pow_verifier,
 			verifier_cache,
 			archive_mode,
-			stop,
+			stop_state,
 			genesis: genesis.header.clone(),
 		})
 	}

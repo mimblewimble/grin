@@ -109,3 +109,37 @@ where
 pub fn to_base64(s: &str) -> String {
 	base64::encode(s)
 }
+
+pub struct StopState {
+	stopped: bool,
+	paused: bool,
+}
+
+impl StopState {
+	pub fn new() -> StopState {
+		StopState {
+			stopped: false,
+			paused: false,
+		}
+	}
+
+	pub fn is_stopped(&self) -> bool {
+		self.stopped
+	}
+
+	pub fn is_paused(&self) -> bool {
+		self.paused
+	}
+
+	pub fn stop(&mut self) {
+		self.stopped = true;
+	}
+
+	pub fn pause(&mut self) {
+		self.paused = true;
+	}
+
+	pub fn unpause(&mut self) {
+		self.paused = false;
+	}
+}
