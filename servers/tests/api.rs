@@ -15,30 +15,25 @@
 #[macro_use]
 extern crate log;
 
-extern crate grin_api as api;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_p2p as p2p;
-extern crate grin_servers as servers;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
-
 mod framework;
 
+use self::core::global::{self, ChainTypes};
+use self::util::init_test_logger;
+use self::util::Mutex;
+use crate::framework::{LocalServerContainer, LocalServerContainerConfig};
+use grin_api as api;
+use grin_config as config;
+use grin_core as core;
+use grin_p2p as p2p;
+use grin_util as util;
 use std::sync::Arc;
 use std::{thread, time};
-use util::Mutex;
-
-use core::global::{self, ChainTypes};
-
-use framework::{LocalServerContainer, LocalServerContainerConfig};
-use util::init_test_logger;
 
 #[test]
 fn simple_server_wallet() {
 	init_test_logger();
 	info!("starting simple_server_wallet");
-	let test_name_dir = "test_servers";
+	let _test_name_dir = "test_servers";
 	core::global::set_mining_mode(core::global::ChainTypes::AutomatedTesting);
 
 	// Run a separate coinbase wallet for coinbase transactions
@@ -150,7 +145,7 @@ fn test_p2p() {
 	info!("starting test_p2p");
 	global::set_mining_mode(ChainTypes::AutomatedTesting);
 
-	let test_name_dir = "test_servers";
+	let _test_name_dir = "test_servers";
 
 	// Spawn server and let it run for a bit
 	let server_one_dir = "p2p_server_one";

@@ -19,21 +19,20 @@
 //! To use it simply implement `Writeable` or `Readable` and then use the
 //! `serialize` or `deserialize` functions on them as appropriate.
 
-use std::time::Duration;
-
+use crate::core::hash::{Hash, Hashed};
+use crate::keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
+use crate::util::read_write::read_exact;
+use crate::util::secp::constants::{
+	AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE, SECRET_KEY_SIZE,
+};
+use crate::util::secp::pedersen::{Commitment, RangeProof};
+use crate::util::secp::Signature;
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use core::hash::{Hash, Hashed};
-use keychain::{BlindingFactor, Identifier, IDENTIFIER_SIZE};
 use std::fmt::Debug;
 use std::io::{self, Read, Write};
 use std::marker;
+use std::time::Duration;
 use std::{cmp, error, fmt};
-use util::read_write::read_exact;
-use util::secp::constants::{
-	AGG_SIGNATURE_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE, SECRET_KEY_SIZE,
-};
-use util::secp::pedersen::{Commitment, RangeProof};
-use util::secp::Signature;
 
 /// Possible errors deriving from serializing or deserializing.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -68,7 +67,7 @@ impl From<io::Error> for Error {
 }
 
 impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
 			Error::IOErr(ref e, ref _k) => write!(f, "{}", e),
 			Error::UnexpectedData {
@@ -86,7 +85,7 @@ impl fmt::Display for Error {
 }
 
 impl error::Error for Error {
-	fn cause(&self) -> Option<&error::Error> {
+	fn cause(&self) -> Option<&dyn error::Error> {
 		match *self {
 			Error::IOErr(ref _e, ref _k) => Some(self),
 			_ => None,
@@ -210,14 +209,14 @@ pub trait Writeable {
 pub struct IteratingReader<'a, T> {
 	count: u64,
 	curr: u64,
-	reader: &'a mut Reader,
+	reader: &'a mut dyn Reader,
 	_marker: marker::PhantomData<T>,
 }
 
 impl<'a, T> IteratingReader<'a, T> {
 	/// Constructor to create a new iterating reader for the provided underlying reader.
 	/// Takes a count so we know how many to iterate over.
-	pub fn new(reader: &'a mut Reader, count: u64) -> IteratingReader<'a, T> {
+	pub fn new(reader: &'a mut dyn Reader, count: u64) -> IteratingReader<'a, T> {
 		let curr = 0;
 		IteratingReader {
 			count,
@@ -244,7 +243,7 @@ where
 }
 
 /// Reads multiple serialized items into a Vec.
-pub fn read_multi<T>(reader: &mut Reader, count: u64) -> Result<Vec<T>, Error>
+pub fn read_multi<T>(reader: &mut dyn Reader, count: u64) -> Result<Vec<T>, Error>
 where
 	T: Readable,
 {
@@ -270,17 +269,17 @@ where
 	Self: Sized,
 {
 	/// Reads the data necessary to this Readable from the provided reader
-	fn read(reader: &mut Reader) -> Result<Self, Error>;
+	fn read(reader: &mut dyn Reader) -> Result<Self, Error>;
 }
 
 /// Deserializes a Readable from any std::io::Read implementation.
-pub fn deserialize<T: Readable>(source: &mut Read) -> Result<T, Error> {
+pub fn deserialize<T: Readable>(source: &mut dyn Read) -> Result<T, Error> {
 	let mut reader = BinReader { source };
 	T::read(&mut reader)
 }
 
 /// Serializes a Writeable into any std::io::Write implementation.
-pub fn serialize<W: Writeable>(sink: &mut Write, thing: &W) -> Result<(), Error> {
+pub fn serialize<W: Writeable>(sink: &mut dyn Write, thing: &W) -> Result<(), Error> {
 	let mut writer = BinWriter { sink };
 	thing.write(&mut writer)
 }
@@ -295,7 +294,7 @@ pub fn ser_vec<W: Writeable>(thing: &W) -> Result<Vec<u8>, Error> {
 
 /// Utility to read from a binary source
 struct BinReader<'a> {
-	source: &'a mut Read,
+	source: &'a mut dyn Read,
 }
 
 fn map_io_err(err: io::Error) -> Error {
@@ -359,14 +358,14 @@ impl<'a> Reader for BinReader<'a> {
 /// Tracks total bytes read so we can verify we read the right number afterwards.
 pub struct StreamingReader<'a> {
 	total_bytes_read: u64,
-	stream: &'a mut Read,
+	stream: &'a mut dyn Read,
 	timeout: Duration,
 }
 
 impl<'a> StreamingReader<'a> {
 	/// Create a new streaming reader with the provided underlying stream.
 	/// Also takes a duration to be used for each individual read_exact call.
-	pub fn new(stream: &'a mut Read, timeout: Duration) -> StreamingReader<'a> {
+	pub fn new(stream: &'a mut dyn Read, timeout: Duration) -> StreamingReader<'a> {
 		StreamingReader {
 			total_bytes_read: 0,
 			stream,
@@ -440,7 +439,7 @@ impl<'a> Reader for StreamingReader<'a> {
 }
 
 impl Readable for Commitment {
-	fn read(reader: &mut Reader) -> Result<Commitment, Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Commitment, Error> {
 		let a = reader.read_fixed_bytes(PEDERSEN_COMMITMENT_SIZE)?;
 		let mut c = [0; PEDERSEN_COMMITMENT_SIZE];
 		c[..PEDERSEN_COMMITMENT_SIZE].clone_from_slice(&a[..PEDERSEN_COMMITMENT_SIZE]);
@@ -461,7 +460,7 @@ impl Writeable for BlindingFactor {
 }
 
 impl Readable for BlindingFactor {
-	fn read(reader: &mut Reader) -> Result<BlindingFactor, Error> {
+	fn read(reader: &mut dyn Reader) -> Result<BlindingFactor, Error> {
 		let bytes = reader.read_fixed_bytes(BlindingFactor::LEN)?;
 		Ok(BlindingFactor::from_slice(&bytes))
 	}
@@ -478,7 +477,7 @@ impl Writeable for Identifier {
 }
 
 impl Readable for Identifier {
-	fn read(reader: &mut Reader) -> Result<Identifier, Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Identifier, Error> {
 		let bytes = reader.read_fixed_bytes(IDENTIFIER_SIZE)?;
 		Ok(Identifier::from_bytes(&bytes))
 	}
@@ -491,7 +490,7 @@ impl Writeable for RangeProof {
 }
 
 impl Readable for RangeProof {
-	fn read(reader: &mut Reader) -> Result<RangeProof, Error> {
+	fn read(reader: &mut dyn Reader) -> Result<RangeProof, Error> {
 		let len = reader.read_u64()?;
 		let max_len = cmp::min(len as usize, MAX_PROOF_SIZE);
 		let p = reader.read_fixed_bytes(max_len)?;
@@ -518,7 +517,7 @@ impl PMMRable for RangeProof {
 }
 
 impl Readable for Signature {
-	fn read(reader: &mut Reader) -> Result<Signature, Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Signature, Error> {
 		let a = reader.read_fixed_bytes(Signature::LEN)?;
 		let mut c = [0; Signature::LEN];
 		c[..Signature::LEN].clone_from_slice(&a[..Signature::LEN]);
@@ -560,12 +559,12 @@ impl<T: Hashed> VerifySortedAndUnique<T> for Vec<T> {
 /// Utility wrapper for an underlying byte Writer. Defines higher level methods
 /// to write numbers, byte vectors, hashes, etc.
 pub struct BinWriter<'a> {
-	sink: &'a mut Write,
+	sink: &'a mut dyn Write,
 }
 
 impl<'a> BinWriter<'a> {
 	/// Wraps a standard Write in a new BinWriter
-	pub fn new(write: &'a mut Write) -> BinWriter<'a> {
+	pub fn new(write: &'a mut dyn Write) -> BinWriter<'a> {
 		BinWriter { sink: write }
 	}
 }
@@ -591,7 +590,7 @@ macro_rules! impl_int {
 		}
 
 		impl Readable for $int {
-			fn read(reader: &mut Reader) -> Result<$int, Error> {
+			fn read(reader: &mut dyn Reader) -> Result<$int, Error> {
 				reader.$r_fn()
 			}
 		}
@@ -609,7 +608,7 @@ impl<T> Readable for Vec<T>
 where
 	T: Readable,
 {
-	fn read(reader: &mut Reader) -> Result<Vec<T>, Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Vec<T>, Error> {
 		let mut buf = Vec::new();
 		loop {
 			let elem = T::read(reader);
@@ -651,7 +650,7 @@ impl<A: Writeable, B: Writeable> Writeable for (A, B) {
 }
 
 impl<A: Readable, B: Readable> Readable for (A, B) {
-	fn read(reader: &mut Reader) -> Result<(A, B), Error> {
+	fn read(reader: &mut dyn Reader) -> Result<(A, B), Error> {
 		Ok((Readable::read(reader)?, Readable::read(reader)?))
 	}
 }
@@ -674,7 +673,7 @@ impl<A: Writeable, B: Writeable, C: Writeable, D: Writeable> Writeable for (A, B
 }
 
 impl<A: Readable, B: Readable, C: Readable> Readable for (A, B, C) {
-	fn read(reader: &mut Reader) -> Result<(A, B, C), Error> {
+	fn read(reader: &mut dyn Reader) -> Result<(A, B, C), Error> {
 		Ok((
 			Readable::read(reader)?,
 			Readable::read(reader)?,
@@ -684,7 +683,7 @@ impl<A: Readable, B: Readable, C: Readable> Readable for (A, B, C) {
 }
 
 impl<A: Readable, B: Readable, C: Readable, D: Readable> Readable for (A, B, C, D) {
-	fn read(reader: &mut Reader) -> Result<(A, B, C, D), Error> {
+	fn read(reader: &mut dyn Reader) -> Result<(A, B, C, D), Error> {
 		Ok((
 			Readable::read(reader)?,
 			Readable::read(reader)?,
@@ -784,22 +783,22 @@ impl AsFixedBytes for String {
 		self.len()
 	}
 }
-impl AsFixedBytes for ::core::hash::Hash {
+impl AsFixedBytes for crate::core::hash::Hash {
 	fn len(&self) -> usize {
 		32
 	}
 }
-impl AsFixedBytes for ::util::secp::pedersen::RangeProof {
+impl AsFixedBytes for crate::util::secp::pedersen::RangeProof {
 	fn len(&self) -> usize {
 		self.plen
 	}
 }
-impl AsFixedBytes for ::util::secp::Signature {
+impl AsFixedBytes for crate::util::secp::Signature {
 	fn len(&self) -> usize {
 		64
 	}
 }
-impl AsFixedBytes for ::util::secp::pedersen::Commitment {
+impl AsFixedBytes for crate::util::secp::pedersen::Commitment {
 	fn len(&self) -> usize {
 		PEDERSEN_COMMITMENT_SIZE
 	}
@@ -809,7 +808,7 @@ impl AsFixedBytes for BlindingFactor {
 		SECRET_KEY_SIZE
 	}
 }
-impl AsFixedBytes for ::keychain::Identifier {
+impl AsFixedBytes for crate::keychain::Identifier {
 	fn len(&self) -> usize {
 		IDENTIFIER_SIZE
 	}

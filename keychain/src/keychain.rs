@@ -17,13 +17,13 @@
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 
-use blake2;
+use crate::blake2;
 
-use extkey_bip32::{BIP32GrinHasher, ExtendedPrivKey};
-use types::{BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain};
-use util::secp::key::SecretKey;
-use util::secp::pedersen::Commitment;
-use util::secp::{self, Message, Secp256k1, Signature};
+use crate::extkey_bip32::{BIP32GrinHasher, ExtendedPrivKey};
+use crate::types::{BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain};
+use crate::util::secp::key::SecretKey;
+use crate::util::secp::pedersen::Commitment;
+use crate::util::secp::{self, Message, Secp256k1, Signature};
 
 #[derive(Clone, Debug)]
 pub struct ExtKeychain {
@@ -95,7 +95,8 @@ impl Keychain for ExtKeychain {
 				} else {
 					None
 				}
-			}).collect();
+			})
+			.collect();
 
 		let mut neg_keys: Vec<SecretKey> = blind_sum
 			.negative_key_ids
@@ -107,7 +108,8 @@ impl Keychain for ExtKeychain {
 				} else {
 					None
 				}
-			}).collect();
+			})
+			.collect();
 
 		pos_keys.extend(
 			&blind_sum
@@ -152,10 +154,10 @@ impl Keychain for ExtKeychain {
 
 #[cfg(test)]
 mod test {
-	use keychain::ExtKeychain;
-	use types::{BlindSum, BlindingFactor, ExtKeychainPath, Keychain};
-	use util::secp;
-	use util::secp::key::SecretKey;
+	use crate::keychain::ExtKeychain;
+	use crate::types::{BlindSum, BlindingFactor, ExtKeychainPath, Keychain};
+	use crate::util::secp;
+	use crate::util::secp::key::SecretKey;
 
 	#[test]
 	fn test_key_derivation() {
@@ -191,7 +193,8 @@ mod test {
 				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 				0, 0, 0, 1,
 			],
-		).unwrap();
+		)
+		.unwrap();
 
 		let skey2 = SecretKey::from_slice(
 			&keychain.secp,
@@ -199,7 +202,8 @@ mod test {
 				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 				0, 0, 0, 2,
 			],
-		).unwrap();
+		)
+		.unwrap();
 
 		// adding secret keys 1 and 2 to give secret key 3
 		let mut skey3 = skey1.clone();
@@ -228,7 +232,8 @@ mod test {
 					&BlindSum::new()
 						.add_blinding_factor(BlindingFactor::from_secret_key(skey1))
 						.add_blinding_factor(BlindingFactor::from_secret_key(skey2))
-				).unwrap(),
+				)
+				.unwrap(),
 			BlindingFactor::from_secret_key(skey3),
 		);
 	}

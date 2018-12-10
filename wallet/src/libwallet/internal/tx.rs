@@ -14,15 +14,15 @@
 
 //! Transaction building functions
 
-use util;
+use crate::util;
 use uuid::Uuid;
 
-use core::libtx::slate::Slate;
-use core::ser;
-use keychain::{Identifier, Keychain};
-use libwallet::internal::{selection, updater};
-use libwallet::types::{Context, NodeClient, TxLogEntryType, WalletBackend};
-use libwallet::{Error, ErrorKind};
+use crate::core::libtx::slate::Slate;
+use crate::core::ser;
+use crate::keychain::{Identifier, Keychain};
+use crate::libwallet::internal::{selection, updater};
+use crate::libwallet::types::{Context, NodeClient, TxLogEntryType, WalletBackend};
+use crate::libwallet::{Error, ErrorKind};
 
 /// Receive a transaction, modifying the slate accordingly (which can then be
 /// sent back to sender for posting)
@@ -233,8 +233,8 @@ where
 
 #[cfg(test)]
 mod test {
-	use core::libtx::build;
-	use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
+	use crate::core::libtx::build;
+	use crate::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment

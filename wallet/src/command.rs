@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::util::Mutex;
 use std::collections::HashMap;
 /// Grin wallet command-line function implementations
 use std::fs::File;
@@ -19,18 +20,17 @@ use std::io::Write;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use util::Mutex;
 
 use serde_json as json;
 use uuid::Uuid;
 
-use api::TLSConfig;
-use core::core;
-use keychain;
+use crate::api::TLSConfig;
+use crate::core::core;
+use crate::keychain;
 
-use error::{Error, ErrorKind};
-use {controller, display, HTTPNodeClient, WalletConfig, WalletInst, WalletSeed};
-use {
+use crate::error::{Error, ErrorKind};
+use crate::{controller, display, HTTPNodeClient, WalletConfig, WalletInst, WalletSeed};
+use crate::{
 	FileWalletCommAdapter, HTTPWalletCommAdapter, KeybaseWalletCommAdapter, LMDBBackend,
 	NodeClient, NullWalletCommAdapter,
 };

@@ -12,22 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate chrono;
-extern crate croaring;
-extern crate env_logger;
-extern crate grin_core as core;
-extern crate grin_store as store;
+use env_logger;
+use grin_core as core;
+use grin_store as store;
 
 use std::fs;
 
 use chrono::prelude::Utc;
 use croaring::Bitmap;
 
-use core::core::pmmr::{Backend, PMMR};
-use core::ser::{
+use crate::core::core::pmmr::{Backend, PMMR};
+use crate::core::ser::{
 	Error, FixedLength, PMMRIndexHashable, PMMRable, Readable, Reader, Writeable, Writer,
 };
-use store::types::prune_noop;
+use crate::store::types::prune_noop;
 
 #[test]
 fn pmmr_append() {
@@ -70,7 +68,7 @@ fn pmmr_append() {
 	let pos_15 = elems[8].hash_with_index(15);
 
 	{
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(pmmr.root(), (pos_14, pos_15).hash_with_index(16));
 	}
 
@@ -91,7 +89,7 @@ fn pmmr_compact_leaf_sibling() {
 	// the parent is pos 3
 
 	let (pos_1_hash, pos_2_hash, pos_3_hash) = {
-		let mut pmmr = PMMR::at(&mut backend, mmr_size);
+		let pmmr = PMMR::at(&mut backend, mmr_size);
 		(
 			pmmr.get_hash(1).unwrap(),
 			pmmr.get_hash(2).unwrap(),
@@ -160,13 +158,13 @@ fn pmmr_prune_compact() {
 
 	// save the root
 	let root = {
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.root()
 	};
 
 	// pruning some choice nodes
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.prune(1).unwrap();
 		pmmr.prune(4).unwrap();
 		pmmr.prune(5).unwrap();
@@ -175,7 +173,7 @@ fn pmmr_prune_compact() {
 
 	// check the root and stored data
 	{
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
 		// check we can still retrieve same element from leaf index 2
 		assert_eq!(pmmr.get_data(2).unwrap(), TestElem(2));
@@ -190,7 +188,7 @@ fn pmmr_prune_compact() {
 
 	// recheck the root and stored data
 	{
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
 		assert_eq!(pmmr.get_data(2).unwrap(), TestElem(2));
 		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
@@ -215,7 +213,7 @@ fn pmmr_reload() {
 
 	// save the root
 	let root = {
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.root()
 	};
 
@@ -224,7 +222,7 @@ fn pmmr_reload() {
 
 		// prune a node so we have prune data
 		{
-			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			pmmr.prune(1).unwrap();
 		}
 		backend.sync().unwrap();
@@ -237,7 +235,7 @@ fn pmmr_reload() {
 
 		// prune another node to force compact to actually do something
 		{
-			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			pmmr.prune(4).unwrap();
 			pmmr.prune(2).unwrap();
 		}
@@ -252,7 +250,7 @@ fn pmmr_reload() {
 
 		// prune some more to get rm log data
 		{
-			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			pmmr.prune(5).unwrap();
 		}
 		backend.sync().unwrap();
@@ -265,7 +263,7 @@ fn pmmr_reload() {
 		let mut backend = store::pmmr::PMMRBackend::new(data_dir.to_string(), true, None).unwrap();
 		assert_eq!(backend.unpruned_size(), mmr_size);
 		{
-			let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			assert_eq!(root, pmmr.root());
 		}
 
@@ -306,14 +304,14 @@ fn pmmr_rewind() {
 	let mut mmr_size = load(0, &elems[0..4], &mut backend);
 	backend.sync().unwrap();
 	let root1 = {
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.root()
 	};
 
 	mmr_size = load(mmr_size, &elems[4..6], &mut backend);
 	backend.sync().unwrap();
 	let root2 = {
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(pmmr.unpruned_size(), 10);
 		pmmr.root()
 	};
@@ -321,14 +319,14 @@ fn pmmr_rewind() {
 	mmr_size = load(mmr_size, &elems[6..9], &mut backend);
 	backend.sync().unwrap();
 	let root3 = {
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(pmmr.unpruned_size(), 16);
 		pmmr.root()
 	};
 
 	// prune the first 4 elements (leaves at pos 1, 2, 4, 5)
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.prune(1).unwrap();
 		pmmr.prune(2).unwrap();
 		pmmr.prune(4).unwrap();
@@ -356,7 +354,7 @@ fn pmmr_rewind() {
 
 	// rewind and check the roots still match
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.rewind(9, &Bitmap::of(&vec![11, 12, 16])).unwrap();
 		assert_eq!(pmmr.unpruned_size(), 10);
 
@@ -371,7 +369,7 @@ fn pmmr_rewind() {
 	backend.sync().unwrap();
 
 	{
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, 10);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, 10);
 		assert_eq!(pmmr.root(), root2);
 	}
 
@@ -400,13 +398,13 @@ fn pmmr_rewind() {
 	assert_eq!(backend.data_size(), 2);
 
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, 10);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, 10);
 		pmmr.rewind(5, &Bitmap::create()).unwrap();
 		assert_eq!(pmmr.root(), root1);
 	}
 	backend.sync().unwrap();
 	{
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, 7);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, 7);
 		assert_eq!(pmmr.root(), root1);
 	}
 
@@ -432,7 +430,7 @@ fn pmmr_compact_single_leaves() {
 	backend.sync().unwrap();
 
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.prune(1).unwrap();
 		pmmr.prune(4).unwrap();
 	}
@@ -445,7 +443,7 @@ fn pmmr_compact_single_leaves() {
 		.unwrap();
 
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.prune(2).unwrap();
 		pmmr.prune(5).unwrap();
 	}
@@ -474,7 +472,7 @@ fn pmmr_compact_entire_peak() {
 
 	// prune all leaves under the peak at pos 7
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.prune(1).unwrap();
 		pmmr.prune(2).unwrap();
 		pmmr.prune(4).unwrap();
@@ -528,7 +526,7 @@ fn pmmr_compact_horizon() {
 	{
 		// pruning some choice nodes
 		{
-			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 			pmmr.prune(4).unwrap();
 			pmmr.prune(5).unwrap();
 			pmmr.prune(1).unwrap();
@@ -605,7 +603,7 @@ fn pmmr_compact_horizon() {
 			store::pmmr::PMMRBackend::<TestElem>::new(data_dir.to_string(), true, None).unwrap();
 
 		{
-			let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+			let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 
 			pmmr.prune(8).unwrap();
 			pmmr.prune(9).unwrap();
@@ -653,13 +651,13 @@ fn compact_twice() {
 
 	// save the root
 	let root = {
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.root()
 	};
 
 	// pruning some choice nodes
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.prune(1).unwrap();
 		pmmr.prune(2).unwrap();
 		pmmr.prune(4).unwrap();
@@ -668,7 +666,7 @@ fn compact_twice() {
 
 	// check the root and stored data
 	{
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
 		assert_eq!(pmmr.get_data(5).unwrap(), TestElem(4));
 		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
@@ -681,7 +679,7 @@ fn compact_twice() {
 
 	// recheck the root and stored data
 	{
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
 		assert_eq!(pmmr.get_data(5).unwrap(), TestElem(4));
 		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
@@ -689,7 +687,7 @@ fn compact_twice() {
 
 	// now prune some more nodes
 	{
-		let mut pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let mut pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		pmmr.prune(5).unwrap();
 		pmmr.prune(8).unwrap();
 		pmmr.prune(9).unwrap();
@@ -698,7 +696,7 @@ fn compact_twice() {
 
 	// recheck the root and stored data
 	{
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
 		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
 	}
@@ -710,7 +708,7 @@ fn compact_twice() {
 
 	// recheck the root and stored data
 	{
-		let pmmr: PMMR<TestElem, _> = PMMR::at(&mut backend, mmr_size);
+		let pmmr: PMMR<'_, TestElem, _> = PMMR::at(&mut backend, mmr_size);
 		assert_eq!(root, pmmr.root());
 		assert_eq!(pmmr.get_data(11).unwrap(), TestElem(7));
 	}
@@ -772,7 +770,7 @@ impl Writeable for TestElem {
 	}
 }
 impl Readable for TestElem {
-	fn read(reader: &mut Reader) -> Result<TestElem, Error> {
+	fn read(reader: &mut dyn Reader) -> Result<TestElem, Error> {
 		Ok(TestElem(reader.read_u32()?))
 	}
 }

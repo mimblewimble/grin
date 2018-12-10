@@ -15,15 +15,14 @@
 
 use std::{fs, io};
 
+use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::pmmr::{self, family, Backend};
+use crate::core::core::BlockHeader;
+use crate::core::ser::PMMRable;
+use crate::leaf_set::LeafSet;
+use crate::prune_list::PruneList;
+use crate::types::{prune_noop, DataFile};
 use croaring::Bitmap;
-
-use core::core::hash::{Hash, Hashed};
-use core::core::pmmr::{self, family, Backend};
-use core::core::BlockHeader;
-use core::ser::PMMRable;
-use leaf_set::LeafSet;
-use prune_list::PruneList;
-use types::{prune_noop, DataFile};
 
 const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &str = "pmmr_data.bin";
@@ -384,5 +383,6 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 		.filter(|pos| {
 			let (parent_pos, _) = family(*pos as u64);
 			removed.contains(parent_pos as u32)
-		}).collect()
+		})
+		.collect()
 }

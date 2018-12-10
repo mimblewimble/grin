@@ -16,9 +16,9 @@
 use failure::{Backtrace, Context, Fail};
 use std::fmt::{self, Display};
 
-use core::{committed, transaction};
-use keychain;
-use util::secp;
+use crate::core::{committed, transaction};
+use crate::keychain;
+use crate::util::secp;
 
 /// Lib tx error definition
 #[derive(Debug)]
@@ -53,7 +53,7 @@ pub enum ErrorKind {
 }
 
 impl Fail for Error {
-	fn cause(&self) -> Option<&Fail> {
+	fn cause(&self) -> Option<&dyn Fail> {
 		self.inner.cause()
 	}
 
@@ -63,7 +63,7 @@ impl Fail for Error {
 }
 
 impl Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		Display::fmt(&self.inner, f)
 	}
 }

@@ -25,9 +25,9 @@ pub mod pmmr;
 pub mod transaction;
 pub mod verifier_cache;
 
-use consensus::GRIN_BASE;
+use crate::consensus::GRIN_BASE;
 
-use util::secp::pedersen::Commitment;
+use crate::util::secp::pedersen::Commitment;
 
 pub use self::block::*;
 pub use self::block_sums::*;

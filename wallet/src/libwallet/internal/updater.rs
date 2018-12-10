@@ -19,20 +19,20 @@ use failure::ResultExt;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use core::consensus::reward;
-use core::core::{Output, TxKernel};
-use core::libtx::reward;
-use core::{global, ser};
-use keychain::{Identifier, Keychain};
-use libwallet;
-use libwallet::error::{Error, ErrorKind};
-use libwallet::internal::keys;
-use libwallet::types::{
+use crate::core::consensus::reward;
+use crate::core::core::{Output, TxKernel};
+use crate::core::libtx::reward;
+use crate::core::{global, ser};
+use crate::keychain::{Identifier, Keychain};
+use crate::libwallet;
+use crate::libwallet::error::{Error, ErrorKind};
+use crate::libwallet::internal::keys;
+use crate::libwallet::types::{
 	BlockFees, CbData, NodeClient, OutputData, OutputStatus, TxLogEntry, TxLogEntryType,
 	WalletBackend, WalletInfo,
 };
-use util;
-use util::secp::pedersen;
+use crate::util;
+use crate::util::secp::pedersen;
 
 /// Retrieve all of the outputs (doesn't attempt to update from node)
 pub fn retrieve_outputs<T: ?Sized, C, K>(
@@ -56,7 +56,8 @@ where
 			} else {
 				out.status != OutputStatus::Spent
 			}
-		}).collect::<Vec<_>>();
+		})
+		.collect::<Vec<_>>();
 
 	// only include outputs with a given tx_id if provided
 	if let Some(id) = tx_id {
@@ -73,7 +74,8 @@ where
 		.map(|out| {
 			let commit = wallet.get_commitment(&out.key_id).unwrap();
 			(out, commit)
-		}).collect();
+		})
+		.collect();
 	Ok(res)
 }
 
@@ -464,7 +466,8 @@ where
 		&key_id,
 		block_fees.fees,
 		block_fees.height,
-	).unwrap();
+	)
+	.unwrap();
 	/* .context(ErrorKind::Keychain)?; */
 	Ok((out, kern, block_fees))
 }

@@ -17,10 +17,10 @@ use chrono::Duration;
 use std::cmp;
 use std::sync::Arc;
 
-use chain;
-use common::types::{SyncState, SyncStatus};
-use core::core::hash::Hash;
-use p2p;
+use crate::chain;
+use crate::common::types::{SyncState, SyncStatus};
+use crate::core::core::hash::Hash;
+use crate::p2p;
 
 pub struct BodySync {
 	chain: Arc<chain::Chain>,
@@ -98,7 +98,8 @@ impl BodySync {
 				// only ask for blocks that we have not yet processed
 				// either successfully stored or in our orphan list
 				!self.chain.get_block(x).is_ok() && !self.chain.is_orphan(x)
-			}).take(block_count)
+			})
+			.take(block_count)
 			.collect::<Vec<_>>();
 
 		if hashes_to_get.len() > 0 {

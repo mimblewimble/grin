@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use self::chain::Chain;
+use self::core::core::{OutputFeatures, OutputIdentifier, Transaction};
+use self::core::{consensus, global, pow, ser};
+use self::util::secp::pedersen;
+use self::util::Mutex;
+use crate::libwallet::types::{BlockFees, CbData, NodeClient, WalletInst};
+use crate::lmdb_wallet::LMDBBackend;
+use crate::{controller, libwallet, WalletSeed};
+use crate::{WalletBackend, WalletConfig};
 use chrono::Duration;
+use grin_api as api;
+use grin_chain as chain;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_util as util;
 use std::sync::Arc;
-use util::Mutex;
-
-use api;
-use chain::{self, Chain};
-use keychain;
-
-use core::core::{OutputFeatures, OutputIdentifier, Transaction};
-use core::{self, consensus, global, pow, ser};
-use libwallet::types::{BlockFees, CbData, NodeClient, WalletInst};
-use lmdb_wallet::LMDBBackend;
-use {controller, libwallet, WalletBackend, WalletConfig, WalletSeed};
-
-use util;
-use util::secp::pedersen;
 
 mod testclient;
 
@@ -91,7 +91,8 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbDa
 		txs.into_iter().cloned().collect(),
 		next_header_info.clone().difficulty,
 		(output, kernel),
-	).unwrap();
+	)
+	.unwrap();
 	b.header.timestamp = prev.timestamp + Duration::seconds(60);
 	b.header.pow.secondary_scaling = next_header_info.secondary_scaling;
 	chain.set_txhashset_roots(&mut b).unwrap();
@@ -100,7 +101,8 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbDa
 		next_header_info.difficulty,
 		global::proofsize(),
 		global::min_edge_bits(),
-	).unwrap();
+	)
+	.unwrap();
 	chain.process_block(b, chain::Options::MINE).unwrap();
 	chain.validate(false).unwrap();
 }
@@ -111,7 +113,7 @@ pub fn add_block_with_reward(chain: &Chain, txs: Vec<&Transaction>, reward: CbDa
 pub fn award_block_to_wallet<C, K>(
 	chain: &Chain,
 	txs: Vec<&Transaction>,
-	wallet: Arc<Mutex<WalletInst<C, K>>>,
+	wallet: Arc<Mutex<dyn WalletInst<C, K>>>,
 ) -> Result<(), libwallet::Error>
 where
 	C: NodeClient,
@@ -137,7 +139,7 @@ where
 /// Award a blocks to a wallet directly
 pub fn award_blocks_to_wallet<C, K>(
 	chain: &Chain,
-	wallet: Arc<Mutex<WalletInst<C, K>>>,
+	wallet: Arc<Mutex<dyn WalletInst<C, K>>>,
 	number: usize,
 ) -> Result<(), libwallet::Error>
 where
@@ -151,7 +153,7 @@ where
 }
 
 /// dispatch a db wallet
-pub fn create_wallet<C, K>(dir: &str, n_client: C) -> Arc<Mutex<WalletInst<C, K>>>
+pub fn create_wallet<C, K>(dir: &str, n_client: C) -> Arc<Mutex<dyn WalletInst<C, K>>>
 where
 	C: NodeClient + 'static,
 	K: keychain::Keychain + 'static,

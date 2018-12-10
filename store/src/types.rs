@@ -14,11 +14,10 @@
 //! Common storage-related types
 use memmap;
 
+use crate::core::ser::{self, FixedLength, Readable, Writeable};
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, BufWriter, ErrorKind, Read, Write};
 use std::marker;
-
-use core::ser::{self, FixedLength, Readable, Writeable};
 
 /// A no-op function for doing nothing with some pruned data.
 pub fn prune_noop(_pruned_data: &[u8]) {}

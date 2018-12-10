@@ -19,17 +19,17 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::{io, thread};
 
-use lmdb;
+use crate::lmdb;
 
+use crate::core::core;
+use crate::core::core::hash::Hash;
+use crate::core::pow::Difficulty;
+use crate::handshake::Handshake;
+use crate::peer::Peer;
+use crate::peers::Peers;
+use crate::store::PeerStore;
+use crate::types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, TxHashSetRead};
 use chrono::prelude::{DateTime, Utc};
-use core::core;
-use core::core::hash::Hash;
-use core::pow::Difficulty;
-use handshake::Handshake;
-use peer::Peer;
-use peers::Peers;
-use store::PeerStore;
-use types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, TxHashSetRead};
 
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.
@@ -49,7 +49,7 @@ impl Server {
 		db_env: Arc<lmdb::Environment>,
 		capab: Capabilities,
 		config: P2PConfig,
-		adapter: Arc<ChainAdapter>,
+		adapter: Arc<dyn ChainAdapter>,
 		genesis: Hash,
 		stop: Arc<AtomicBool>,
 		pause: Arc<AtomicBool>,

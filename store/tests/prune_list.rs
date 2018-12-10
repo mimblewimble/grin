@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_store as store;
+use grin_store as store;
 
-use store::prune_list::PruneList;
+use crate::store::prune_list::PruneList;
 
 #[test]
 fn test_is_pruned() {

@@ -14,9 +14,9 @@
 
 //! Types specific to the UI module
 
+use crate::servers::ServerStats;
 use cursive::view::View;
 use cursive::Cursive;
-use servers::ServerStats;
 
 /// Main message struct to communicate between the UI and
 /// the main process
@@ -29,7 +29,7 @@ pub enum UIMessage {
 
 pub trait TUIStatusListener {
 	/// create the view, to return to the main UI controller
-	fn create() -> Box<View>;
+	fn create() -> Box<dyn View>;
 	/// Update according to status update contents
 	fn update(c: &mut Cursive, stats: &ServerStats);
 }

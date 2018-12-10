@@ -12,17 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[macro_use]
-extern crate grin_core as core;
-extern crate croaring;
-
 mod vec_backend;
 
-use core::core::merkle_proof::MerkleProof;
-use core::core::pmmr::PMMR;
-use core::ser;
-use core::ser::PMMRIndexHashable;
-use vec_backend::{TestElem, VecBackend};
+use self::core::core::merkle_proof::MerkleProof;
+use self::core::core::pmmr::PMMR;
+use self::core::ser;
+use self::core::ser::PMMRIndexHashable;
+use crate::vec_backend::{TestElem, VecBackend};
+use grin_core as core;
 
 #[test]
 fn empty_merkle_proof() {

@@ -17,13 +17,14 @@
 
 use chrono::prelude::{DateTime, Utc};
 
-use core::consensus;
-use core::core::block;
-use core::core::committed;
-use core::core::hash::Hash;
-use core::core::transaction::{self, Transaction};
-use core::core::{BlockHeader, BlockSums};
-use keychain;
+use self::core::consensus;
+use self::core::core::block;
+use self::core::core::committed;
+use self::core::core::hash::Hash;
+use self::core::core::transaction::{self, Transaction};
+use self::core::core::{BlockHeader, BlockSums};
+use grin_core as core;
+use grin_keychain as keychain;
 
 /// Dandelion relay timer
 const DANDELION_RELAY_SECS: u64 = 600;

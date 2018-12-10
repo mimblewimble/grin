@@ -15,10 +15,10 @@
 
 use croaring::Bitmap;
 
-use pow::common::CuckooParams;
-use pow::cuckatoo::CuckatooContext;
-use pow::error::Error;
-use pow::Proof;
+use crate::pow::common::CuckooParams;
+use crate::pow::cuckatoo::CuckatooContext;
+use crate::pow::error::Error;
+use crate::pow::Proof;
 
 /// Lean miner implementation aiming to be as short and simple as possible.
 /// As a consequence, it's a little less than 10 times slower than John
@@ -88,7 +88,7 @@ impl Lean {
 #[cfg(test)]
 mod test {
 	use super::*;
-	use pow::types::PoWContext;
+	use crate::pow::types::PoWContext;
 
 	#[test]
 	fn lean_miner() {

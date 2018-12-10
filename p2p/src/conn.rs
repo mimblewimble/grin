@@ -26,12 +26,12 @@ use std::net::TcpStream;
 use std::sync::{mpsc, Arc};
 use std::{cmp, thread, time};
 
-use core::ser;
-use core::ser::FixedLength;
-use msg::{read_body, read_header, read_item, write_to_buf, MsgHeader, Type};
-use types::Error;
-use util::read_write::{read_exact, write_all};
-use util::{RateCounter, RwLock};
+use crate::core::ser;
+use crate::core::ser::FixedLength;
+use crate::msg::{read_body, read_header, read_item, write_to_buf, MsgHeader, Type};
+use crate::types::Error;
+use crate::util::read_write::{read_exact, write_all};
+use crate::util::{RateCounter, RwLock};
 
 /// A trait to be implemented in order to receive messages from the
 /// connection. Allows providing an optional response.
@@ -39,7 +39,7 @@ pub trait MessageHandler: Send + 'static {
 	fn consume<'a>(
 		&self,
 		msg: Message<'a>,
-		writer: &'a mut Write,
+		writer: &'a mut dyn Write,
 		received_bytes: Arc<RwLock<RateCounter>>,
 	) -> Result<Option<Response<'a>>, Error>;
 }
@@ -63,11 +63,11 @@ macro_rules! try_break {
 /// header lazily consumes the message body, handling its deserialization.
 pub struct Message<'a> {
 	pub header: MsgHeader,
-	stream: &'a mut Read,
+	stream: &'a mut dyn Read,
 }
 
 impl<'a> Message<'a> {
-	fn from_header(header: MsgHeader, stream: &'a mut Read) -> Message<'a> {
+	fn from_header(header: MsgHeader, stream: &'a mut dyn Read) -> Message<'a> {
 		Message { header, stream }
 	}
 
@@ -82,7 +82,7 @@ impl<'a> Message<'a> {
 		read_item(self.stream)
 	}
 
-	pub fn copy_attachment(&mut self, len: usize, writer: &mut Write) -> Result<usize, Error> {
+	pub fn copy_attachment(&mut self, len: usize, writer: &mut dyn Write) -> Result<usize, Error> {
 		let mut written = 0;
 		while written < len {
 			let read_len = cmp::min(8000, len - written);
@@ -104,12 +104,16 @@ impl<'a> Message<'a> {
 pub struct Response<'a> {
 	resp_type: Type,
 	body: Vec<u8>,
-	stream: &'a mut Write,
+	stream: &'a mut dyn Write,
 	attachment: Option<File>,
 }
 
 impl<'a> Response<'a> {
-	pub fn new<T: ser::Writeable>(resp_type: Type, body: T, stream: &'a mut Write) -> Response<'a> {
+	pub fn new<T: ser::Writeable>(
+		resp_type: Type,
+		body: T,
+		stream: &'a mut dyn Write,
+	) -> Response<'a> {
 		let body = ser::ser_vec(&body).unwrap();
 		Response {
 			resp_type,

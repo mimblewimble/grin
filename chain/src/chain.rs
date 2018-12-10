@@ -15,32 +15,30 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
+use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
+use crate::core::core::merkle_proof::MerkleProof;
+use crate::core::core::verifier_cache::VerifierCache;
+use crate::core::core::{
+	Block, BlockHeader, BlockSums, Committed, Output, OutputIdentifier, Transaction, TxKernelEntry,
+};
+use crate::core::global;
+use crate::core::pow;
+use crate::error::{Error, ErrorKind};
+use crate::lmdb;
+use crate::pipe;
+use crate::store;
+use crate::txhashset;
+use crate::types::{
+	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
+};
+use crate::util::secp::pedersen::{Commitment, RangeProof};
+use crate::util::RwLock;
+use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::File;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use util::RwLock;
-
-use lmdb;
-
-use core::core::hash::{Hash, Hashed, ZERO_HASH};
-use core::core::merkle_proof::MerkleProof;
-use core::core::verifier_cache::VerifierCache;
-use core::core::{
-	Block, BlockHeader, BlockSums, Committed, Output, OutputIdentifier, Transaction, TxKernelEntry,
-};
-use core::global;
-use core::pow;
-use error::{Error, ErrorKind};
-use grin_store::Error::NotFoundErr;
-use pipe;
-use store;
-use txhashset;
-use types::{
-	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
-};
-use util::secp::pedersen::{Commitment, RangeProof};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -144,10 +142,10 @@ impl OrphanBlockPool {
 pub struct Chain {
 	db_root: String,
 	store: Arc<store::ChainStore>,
-	adapter: Arc<ChainAdapter + Send + Sync>,
+	adapter: Arc<dyn ChainAdapter + Send + Sync>,
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
-	verifier_cache: Arc<RwLock<VerifierCache>>,
+	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	archive_mode: bool,
@@ -161,10 +159,10 @@ impl Chain {
 	pub fn init(
 		db_root: String,
 		db_env: Arc<lmdb::Environment>,
-		adapter: Arc<ChainAdapter + Send + Sync>,
+		adapter: Arc<dyn ChainAdapter + Send + Sync>,
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
-		verifier_cache: Arc<RwLock<VerifierCache>>,
+		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		archive_mode: bool,
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainStore::new(db_env)?;
@@ -782,7 +780,7 @@ impl Chain {
 		&self,
 		h: Hash,
 		txhashset_data: File,
-		status: &TxHashsetWriteStatus,
+		status: &dyn TxHashsetWriteStatus,
 	) -> Result<(), Error> {
 		status.on_setup();
 
@@ -988,7 +986,8 @@ impl Chain {
 		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
 			return Err(ErrorKind::TxHashSetErr(String::from(
 				"Output and rangeproof sets don't match",
-			)).into());
+			))
+			.into());
 		}
 		let mut output_vec: Vec<Output> = vec![];
 		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
@@ -1131,7 +1130,7 @@ impl Chain {
 	/// Builds an iterator on blocks starting from the current chain head and
 	/// running backward. Specialized to return information pertaining to block
 	/// difficulty calculation (timestamp and previous difficulties).
-	pub fn difficulty_iter(&self) -> store::DifficultyIter {
+	pub fn difficulty_iter(&self) -> store::DifficultyIter<'_> {
 		let head = self.head().unwrap();
 		let store = self.store.clone();
 		store::DifficultyIter::from(head.last_block_h, store)

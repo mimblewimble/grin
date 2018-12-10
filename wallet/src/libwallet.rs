@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Library containing lower-level transaction building functions needed by
-//! all wallets.
+//! Higher level wallet functions which can be used by callers to operate
+//! on the wallet, as well as helpers to invoke and instantiate wallets
+//! and listeners
 
 #![deny(non_upper_case_globals)]
 #![deny(non_camel_case_types)]
@@ -21,31 +22,9 @@
 #![deny(unused_mut)]
 #![warn(missing_docs)]
 
-pub mod aggsig;
-pub mod build;
+pub mod api;
 mod error;
-pub mod proof;
-pub mod reward;
-pub mod slate;
+pub mod internal;
+pub mod types;
 
-use crate::consensus;
-use crate::core::Transaction;
-
-pub use crate::libtx::error::{Error, ErrorKind};
-
-const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
-
-/// Transaction fee calculation
-pub fn tx_fee(
-	input_len: usize,
-	output_len: usize,
-	kernel_len: usize,
-	base_fee: Option<u64>,
-) -> u64 {
-	let use_base_fee = match base_fee {
-		Some(bf) => bf,
-		None => DEFAULT_BASE_FEE,
-	};
-
-	(Transaction::weight(input_len, output_len, kernel_len) as u64) * use_base_fee
-}
+pub use crate::libwallet::error::{Error, ErrorKind};

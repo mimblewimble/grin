@@ -20,7 +20,7 @@ mod server_api;
 mod transactions_api;
 mod utils;
 
-use router::{Router, RouterError};
+use crate::router::{Router, RouterError};
 
 // Server
 use self::server_api::IndexHandler;
@@ -48,15 +48,15 @@ use self::peers_api::PeerHandler;
 use self::peers_api::PeersAllHandler;
 use self::peers_api::PeersConnectedHandler;
 
-use auth::BasicAuthMiddleware;
-use chain;
-use p2p;
-use pool;
-use rest::*;
+use crate::auth::BasicAuthMiddleware;
+use crate::chain;
+use crate::p2p;
+use crate::pool;
+use crate::rest::*;
+use crate::util;
+use crate::util::RwLock;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use util;
-use util::RwLock;
 
 /// Start all server HTTP handlers. Register all of them with Router
 /// and runs the corresponding HTTP server.

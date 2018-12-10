@@ -14,12 +14,11 @@
 
 //! Lightweight readonly view into kernel MMR for convenience.
 
-use core::core::pmmr::RewindablePMMR;
-use core::core::{BlockHeader, TxKernel};
-
-use error::{Error, ErrorKind};
+use crate::core::core::pmmr::RewindablePMMR;
+use crate::core::core::{BlockHeader, TxKernel};
+use crate::error::{Error, ErrorKind};
+use crate::store::Batch;
 use grin_store::pmmr::PMMRBackend;
-use store::Batch;
 
 /// Rewindable (but readonly) view of the kernel set (based on kernel MMR).
 pub struct RewindableKernelView<'a> {
@@ -32,7 +31,7 @@ impl<'a> RewindableKernelView<'a> {
 	/// Build a new readonly kernel view.
 	pub fn new(
 		pmmr: RewindablePMMR<'a, TxKernel, PMMRBackend<TxKernel>>,
-		batch: &'a Batch,
+		batch: &'a Batch<'_>,
 		header: BlockHeader,
 	) -> RewindableKernelView<'a> {
 		RewindableKernelView {
@@ -45,7 +44,7 @@ impl<'a> RewindableKernelView<'a> {
 	/// Accessor for the batch used in this view.
 	/// We will discard this batch (rollback) at the end, so be aware of this.
 	/// Nothing will get written to the db/index via this view.
-	pub fn batch(&self) -> &'a Batch {
+	pub fn batch(&self) -> &'a Batch<'_> {
 		self.batch
 	}
 
@@ -73,7 +72,8 @@ impl<'a> RewindableKernelView<'a> {
 			return Err(ErrorKind::InvalidTxHashSet(format!(
 				"Kernel root at {} does not match",
 				self.header.height
-			)).into());
+			))
+			.into());
 		}
 		Ok(())
 	}

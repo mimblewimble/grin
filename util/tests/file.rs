@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_util as util;
+use grin_util as util;
 
+use self::util::file;
 use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::Path;
-use util::file;
 
 #[test]
 fn copy_dir() {

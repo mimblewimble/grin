@@ -20,24 +20,21 @@
 #![deny(non_snake_case)]
 #![deny(unused_mut)]
 
-extern crate blake2_rfc as blake2;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_util as util;
-extern crate rand;
-extern crate serde;
+//extern crate blake2_rfc as blake2;
+//extern crate grin_core as core;
+//extern crate grin_keychain as keychain;
+//extern crate grin_util as util;
 #[allow(unused_imports)]
 #[macro_use] // Needed for Serialize/Deserialize. The compiler complaining here is a bug.
 extern crate serde_derive;
 #[macro_use]
 extern crate log;
-extern crate chrono;
 
 mod pool;
 pub mod transaction_pool;
 pub mod types;
 
-pub use transaction_pool::TransactionPool;
-pub use types::{
+pub use crate::transaction_pool::TransactionPool;
+pub use crate::types::{
 	BlockChain, DandelionConfig, PoolAdapter, PoolConfig, PoolEntryState, PoolError, TxSource,
 };

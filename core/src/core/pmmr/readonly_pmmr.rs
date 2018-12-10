@@ -16,16 +16,16 @@
 
 use std::marker;
 
-use core::hash::{Hash, ZERO_HASH};
-use core::pmmr::pmmr::{bintree_rightmost, insertion_to_pmmr_index, peaks};
-use core::pmmr::{is_leaf, Backend};
-use ser::{PMMRIndexHashable, PMMRable};
+use crate::core::hash::{Hash, ZERO_HASH};
+use crate::core::pmmr::pmmr::{bintree_rightmost, insertion_to_pmmr_index, peaks};
+use crate::core::pmmr::{is_leaf, Backend};
+use crate::ser::{PMMRIndexHashable, PMMRable};
 
 /// Readonly view of a PMMR.
 pub struct ReadonlyPMMR<'a, T, B>
 where
 	T: PMMRable,
-	B: 'a + Backend<T>,
+	B: Backend<T>,
 {
 	/// The last position in the PMMR
 	last_pos: u64,
@@ -41,7 +41,7 @@ where
 	B: 'a + Backend<T>,
 {
 	/// Build a new readonly PMMR.
-	pub fn new(backend: &'a B) -> ReadonlyPMMR<T, B> {
+	pub fn new(backend: &'a B) -> ReadonlyPMMR<'_, T, B> {
 		ReadonlyPMMR {
 			backend,
 			last_pos: 0,
@@ -51,7 +51,7 @@ where
 
 	/// Build a new readonly PMMR pre-initialized to
 	/// last_pos with the provided backend.
-	pub fn at(backend: &'a B, last_pos: u64) -> ReadonlyPMMR<T, B> {
+	pub fn at(backend: &'a B, last_pos: u64) -> ReadonlyPMMR<'_, T, B> {
 		ReadonlyPMMR {
 			backend,
 			last_pos,
@@ -116,7 +116,8 @@ where
 				// here we want to get from underlying hash file
 				// as the pos *may* have been "removed"
 				self.backend.get_from_file(pi)
-			}).collect()
+			})
+			.collect()
 	}
 
 	/// Total size of the tree, including intermediary nodes and ignoring any
