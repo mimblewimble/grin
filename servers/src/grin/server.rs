@@ -301,7 +301,11 @@ impl Server {
 	/// Start mining for blocks internally on a separate thread. Relies on
 	/// internal miner, and should only be used for automated testing. Burns
 	/// reward if wallet_listener_url is 'None'
-	pub fn start_test_miner(&self, wallet_listener_url: Option<String>, stop_state: Arc<Mutex<StopState>>) {
+	pub fn start_test_miner(
+		&self,
+		wallet_listener_url: Option<String>,
+		stop_state: Arc<Mutex<StopState>>,
+	) {
 		info!("start_test_miner - start",);
 		let sync_state = self.sync_state.clone();
 		let config_wallet_url = match wallet_listener_url.clone() {
