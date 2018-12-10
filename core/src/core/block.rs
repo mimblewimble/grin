@@ -34,7 +34,7 @@ use crate::core::{
 use crate::global;
 use crate::keychain::{self, BlindingFactor};
 use crate::pow::{Difficulty, Proof, ProofOfWork};
-use crate::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
+use crate::ser::{self, FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
 use crate::util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
@@ -109,6 +109,57 @@ impl fmt::Display for Error {
 	}
 }
 
+pub struct HeaderEntry {
+	pub hash: Hash,
+	pub timestamp: u64,
+	pub total_difficulty: Difficulty,
+	pub secondary_scaling: u32,
+	pub is_secondary: bool,
+}
+
+impl Readable for HeaderEntry {
+	fn read(reader: &mut Reader) -> Result<HeaderEntry, ser::Error> {
+		let hash = Hash::read(reader)?;
+		let timestamp = reader.read_u64()?;
+		let total_difficulty = Difficulty::read(reader)?;
+		let secondary_scaling = reader.read_u32()?;
+		let is_secondary = reader.read_u8()? == 1;
+
+		Ok(HeaderEntry {
+			hash,
+			timestamp,
+			total_difficulty,
+			secondary_scaling,
+			is_secondary,
+		})
+	}
+}
+
+impl Writeable for HeaderEntry {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+		self.hash.write(writer)?;
+		writer.write_u64(self.timestamp)?;
+		self.total_difficulty.write(writer)?;
+		writer.write_u32(self.secondary_scaling)?;
+		if self.is_secondary {
+			writer.write_u8(1)?;
+		} else {
+			writer.write_u8(0)?;
+		}
+		Ok(())
+	}
+}
+
+impl FixedLength for HeaderEntry {
+	const LEN: usize = Hash::LEN + 8 + Difficulty::LEN + 4 + 1;
+}
+
+impl HeaderEntry {
+	pub fn hash(&self) -> Hash {
+		self.hash
+	}
+}
+
 /// Block header, fairly standard compared to other blockchains.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BlockHeader {
@@ -160,10 +211,16 @@ impl Default for BlockHeader {
 }
 
 impl PMMRable for BlockHeader {
-	type E = Hash;
+	type E = HeaderEntry;
 
 	fn as_elmt(&self) -> Self::E {
-		self.hash()
+		HeaderEntry {
+			hash: self.hash(),
+			timestamp: self.timestamp.timestamp() as u64,
+			total_difficulty: self.total_difficulty(),
+			secondary_scaling: self.pow.secondary_scaling,
+			is_secondary: self.pow.is_secondary(),
+		}
 	}
 }
 
