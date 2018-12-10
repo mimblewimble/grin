@@ -267,7 +267,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		// looks like we know one, getting as many following headers as allowed
 		let hh = header.height;
 		let mut headers = vec![];
-		for h in (hh + 1)..(hh + (p2p::MAX_BLOCK_HEADERS as u64)) {
+		for h in (hh + 1)..=(hh + (p2p::MAX_BLOCK_HEADERS as u64)) {
 			if h > max_height {
 				break;
 			}
