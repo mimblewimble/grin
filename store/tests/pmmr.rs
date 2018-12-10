@@ -17,6 +17,7 @@ use grin_core as core;
 use grin_store as store;
 
 use std::fs;
+use std::io::prelude::*;
 
 use chrono::prelude::Utc;
 use croaring::Bitmap;
@@ -716,6 +717,117 @@ fn compact_twice() {
 	teardown(data_dir);
 }
 
+#[test]
+fn cleanup_rewind_files_test() {
+	let expected = 10;
+	let prefix_to_delete = "foo";
+	let prefix_to_save = "bar";
+	let seconds_to_delete_after = 100;
+
+	// create the scenario
+	let (data_dir, _) = setup("cleanup_rewind_files_test");
+	// create some files with the delete prefix that aren't yet old enough to delete
+	create_numbered_files(&data_dir, expected, prefix_to_delete, 0, 0);
+	// create some files with the delete prefix that are old enough to delete
+	create_numbered_files(
+		&data_dir,
+		expected,
+		prefix_to_delete,
+		seconds_to_delete_after,
+		expected,
+	);
+	// create some files with the save prefix that are old enough to delete, but will be saved because they don't start
+	// with the right prefix
+	create_numbered_files(
+		&data_dir,
+		expected,
+		prefix_to_save,
+		seconds_to_delete_after,
+		0,
+	);
+
+	// run the cleaner
+	let actual =
+		store::pmmr::clean_files_by_prefix(&data_dir, prefix_to_delete, seconds_to_delete_after)
+			.unwrap();
+	assert_eq!(
+		actual, expected,
+		"the clean files by prefix function did not report the correct number of files deleted"
+	);
+
+	// check that the reported number is actually correct, the block is to borrow data_dir for the closure
+	{
+		// this function simply counts the number of files in the directory based on the prefix
+		let count_fn = |prefix| {
+			let mut remaining_count = 0;
+			for entry in fs::read_dir(&data_dir).unwrap() {
+				if entry
+					.unwrap()
+					.file_name()
+					.into_string()
+					.unwrap()
+					.starts_with(prefix)
+				{
+					remaining_count += 1;
+				}
+			}
+			remaining_count
+		};
+
+		assert_eq!(
+			count_fn(prefix_to_delete),
+			expected, // we expect this many to be left because they weren't old enough to be deleted yet
+			"it should delete all of the files it is supposed to delete"
+		);
+		assert_eq!(
+			count_fn(prefix_to_save),
+			expected,
+			"it should delete none of the files it is not supposed to"
+		);
+	}
+
+	teardown(data_dir);
+}
+
+/// Create some files for testing with, for example
+///
+/// ```text
+/// create_numbered_files(".", 3, "hello.txt.", 100, 2)
+/// ```
+///
+/// will create files
+///
+/// ```text
+/// hello.txt.2
+/// hello.txt.3
+/// hello.txt.4
+/// ```
+///
+/// in the current working directory that are all 100 seconds old (modified and accessed time)
+///
+fn create_numbered_files(
+	data_dir: &str,
+	num_files: u32,
+	prefix: &str,
+	last_accessed_delay_seconds: u64,
+	start_index: u32,
+) {
+	let now = std::time::SystemTime::now();
+	let time_to_set = now - std::time::Duration::from_secs(last_accessed_delay_seconds);
+	let time_to_set_ft = filetime::FileTime::from_system_time(time_to_set);
+
+	for rewind_file_num in 0..num_files {
+		let path = std::path::Path::new(&data_dir).join(format!(
+			"{}.{}",
+			prefix,
+			start_index + rewind_file_num
+		));
+		let mut file = fs::File::create(path.clone()).unwrap();
+		let metadata = file.metadata().unwrap();
+		filetime::set_file_times(path, time_to_set_ft, time_to_set_ft);
+	}
+}
+
 fn setup(tag: &str) -> (String, Vec<TestElem>) {
 	match env_logger::try_init() {
 		Ok(_) => println!("Initializing env logger"),
@@ -737,6 +849,8 @@ fn setup(tag: &str) -> (String, Vec<TestElem>) {
 	(data_dir, elems)
 }
 
+/// note that taking ownership of the data_dir is a feature
+/// because it will not be able to be used after teardown as intended
 fn teardown(data_dir: String) {
 	fs::remove_dir_all(data_dir).unwrap();
 }
