@@ -156,6 +156,7 @@ impl Server {
 			pow::verify_size,
 			verifier_cache.clone(),
 			archive_mode,
+			stop.clone(),
 		)?);
 
 		pool_adapter.set_chain(shared_chain.clone());

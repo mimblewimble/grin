@@ -110,8 +110,8 @@ where
 			pow::verify_size,
 			verifier_cache,
 			false,
-		)
-		.unwrap();
+			Arc::new(Mutex::new(StopState::new())),
+		).unwrap();
 		let (tx, rx) = channel();
 		let retval = WalletProxy {
 			chain_dir: chain_dir.to_owned(),

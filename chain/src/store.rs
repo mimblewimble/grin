@@ -199,8 +199,8 @@ impl<'a> Batch<'a> {
 	/// Save the block and the associated input bitmap.
 	/// Note: the block header is not saved to the db here, assumes this has already been done.
 	pub fn save_block(&self, b: &Block) -> Result<(), Error> {
-		// Build the "input bitmap" for this new block and cache it locally.
-		self.build_and_cache_block_input_bitmap(&b)?;
+		// Build the "input bitmap" for this new block and store it in the db.
+		self.build_and_store_block_input_bitmap(&b)?;
 
 		// Save the block itself to the db.
 		self.db
@@ -305,7 +305,7 @@ impl<'a> Batch<'a> {
 		Ok(bitmap)
 	}
 
-	fn build_and_cache_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
+	fn build_and_store_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
 		// Build the bitmap.
 		let bitmap = self.build_block_input_bitmap(block)?;
 
@@ -326,7 +326,7 @@ impl<'a> Batch<'a> {
 		} else {
 			match self.get_block(bh) {
 				Ok(block) => {
-					let bitmap = self.build_and_cache_block_input_bitmap(&block)?;
+					let bitmap = self.build_and_store_block_input_bitmap(&block)?;
 					Ok(bitmap)
 				}
 				Err(e) => Err(e),

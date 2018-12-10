@@ -36,7 +36,7 @@ use crate::util::RwLock;
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::File;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -149,6 +149,7 @@ pub struct Chain {
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	archive_mode: bool,
+	stop: Arc<AtomicBool>,
 	genesis: BlockHeader,
 }
 
@@ -164,6 +165,7 @@ impl Chain {
 		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		archive_mode: bool,
+		stop: Arc<AtomicBool>,
 	) -> Result<Chain, Error> {
 		let chain_store = store::ChainStore::new(db_env)?;
 
@@ -205,14 +207,15 @@ impl Chain {
 		}
 
 		Ok(Chain {
-			db_root: db_root,
-			store: store,
-			adapter: adapter,
+			db_root,
+			store,
+			adapter,
 			orphans: Arc::new(OrphanBlockPool::new()),
 			txhashset: Arc::new(RwLock::new(txhashset)),
 			pow_verifier,
 			verifier_cache,
 			archive_mode,
+			stop,
 			genesis: genesis.header.clone(),
 		})
 	}
@@ -258,6 +261,10 @@ impl Chain {
 			let prev_head = ctx.batch.head()?;
 
 			let maybe_new_head = pipe::process_block(&b, &mut ctx);
+
+			// We have now potentially flushed txhashset extension changes to disk
+			// but we have not yet committed the batch.
+			// A node shutdown at this point can be catastrophic...
 			if let Ok(_) = maybe_new_head {
 				ctx.batch.commit()?;
 			}
