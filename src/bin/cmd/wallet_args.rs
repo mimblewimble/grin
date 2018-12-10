@@ -47,9 +47,7 @@ pub enum ParseError {
 
 pub fn prompt_password(password: &Option<String>) -> String {
 	match password {
-		None => {
-			rpassword::prompt_password_stdout("Password: ").unwrap()
-		}
+		None => rpassword::prompt_password_stdout("Password: ").unwrap(),
 		Some(p) => p.to_owned(),
 	}
 }
