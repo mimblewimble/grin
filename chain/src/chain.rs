@@ -36,7 +36,7 @@ use crate::util::RwLock;
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::File;
-use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
