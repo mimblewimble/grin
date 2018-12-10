@@ -37,7 +37,7 @@ use crate::p2p;
 use crate::pool;
 use crate::store;
 use crate::util::file::get_first_line;
-use crate::util::{StopState, Mutex, RwLock};
+use crate::util::{Mutex, RwLock, StopState};
 
 /// Grin server holding internal structures.
 pub struct Server {
