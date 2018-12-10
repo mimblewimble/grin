@@ -36,7 +36,7 @@ use crate::util::{Mutex, RwLock, StopState};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::File;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -168,53 +168,20 @@ impl Chain {
 		stop_state: Arc<Mutex<StopState>>,
 	) -> Result<Chain, Error> {
 		// Note: We take a lock on the stop_state here and do not release it until
-		// we have finished processing this single block.
-		// We take care to write both the txhashset *and* the batch while we
-		// have the stop_state lock.
+		// we have finished chain initialization.
 		let stop_state_local = stop_state.clone();
 		let stop_lock = stop_state_local.lock();
 		if stop_lock.is_stopped() {
 			return Err(ErrorKind::Stopped.into());
 		}
 
-		let chain_store = store::ChainStore::new(db_env)?;
-
-		let store = Arc::new(chain_store);
+		let store = Arc::new(store::ChainStore::new(db_env)?);
 
 		// open the txhashset, creating a new one if necessary
 		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
-		setup_head(genesis.clone(), store.clone(), &mut txhashset)?;
-
-		{
-			let head = store.head()?;
-			debug!(
-				"init: head: {} @ {} [{}]",
-				head.total_difficulty.to_num(),
-				head.height,
-				head.last_block_h,
-			);
-		}
-
-		{
-			let header_head = store.header_head()?;
-			debug!(
-				"init: header_head: {} @ {} [{}]",
-				header_head.total_difficulty.to_num(),
-				header_head.height,
-				header_head.last_block_h,
-			);
-		}
-
-		{
-			let sync_head = store.get_sync_head()?;
-			debug!(
-				"init: sync_head: {} @ {} [{}]",
-				sync_head.total_difficulty.to_num(),
-				sync_head.height,
-				sync_head.last_block_h,
-			);
-		}
+		setup_head(&genesis, &store, &mut txhashset)?;
+		Chain::log_heads(&store)?;
 
 		Ok(Chain {
 			db_root,
@@ -228,6 +195,34 @@ impl Chain {
 			stop_state,
 			genesis: genesis.header.clone(),
 		})
+	}
+
+	fn log_heads(store: &store::ChainStore) -> Result<(), Error> {
+		let head = store.head()?;
+		debug!(
+			"init: head: {} @ {} [{}]",
+			head.total_difficulty.to_num(),
+			head.height,
+			head.last_block_h,
+		);
+
+		let header_head = store.header_head()?;
+		debug!(
+			"init: header_head: {} @ {} [{}]",
+			header_head.total_difficulty.to_num(),
+			header_head.height,
+			header_head.last_block_h,
+		);
+
+		let sync_head = store.get_sync_head()?;
+		debug!(
+			"init: sync_head: {} @ {} [{}]",
+			sync_head.total_difficulty.to_num(),
+			sync_head.height,
+			sync_head.last_block_h,
+		);
+
+		Ok(())
 	}
 
 	/// Processes a single block, then checks for orphans, processing
@@ -281,9 +276,10 @@ impl Chain {
 
 			let maybe_new_head = pipe::process_block(&b, &mut ctx);
 
-			// We have now potentially flushed txhashset extension changes to disk
-			// but we have not yet committed the batch.
+			// We have flushed txhashset extension changes to disk
+			// but not yet committed the batch.
 			// A node shutdown at this point can be catastrophic...
+			// We prevent this via the stop_lock (see above).
 			if let Ok(_) = maybe_new_head {
 				ctx.batch.commit()?;
 			}
@@ -902,9 +898,7 @@ impl Chain {
 		debug!("Starting blockchain compaction.");
 		{
 			// Note: We take a lock on the stop_state here and do not release it until
-			// we have finished processing this single block.
-			// We take care to write both the txhashset *and* the batch while we
-			// have the stop_state lock.
+			// we have finished processing this compaction operation.
 			let stop_lock = self.stop_state.lock();
 			if stop_lock.is_stopped() {
 				return Err(ErrorKind::Stopped.into());
@@ -1190,8 +1184,8 @@ impl Chain {
 }
 
 fn setup_head(
-	genesis: Block,
-	store: Arc<store::ChainStore>,
+	genesis: &Block,
+	store: &store::ChainStore,
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
 	let mut batch = store.batch()?;
@@ -1285,10 +1279,8 @@ fn setup_head(
 			let tip = Tip::from_header(&genesis.header);
 			batch.save_head(&tip)?;
 
-			batch.save_block_header(&genesis.header)?;
-
 			if genesis.kernels().len() > 0 {
-				let (utxo_sum, kernel_sum) = (sums, &genesis as &Committed).verify_kernel_sums(
+				let (utxo_sum, kernel_sum) = (sums, genesis as &Committed).verify_kernel_sums(
 					genesis.header.overage(),
 					genesis.header.total_kernel_offset(),
 				)?;
