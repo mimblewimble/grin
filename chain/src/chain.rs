@@ -32,7 +32,7 @@ use crate::types::{
 	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
 };
 use crate::util::secp::pedersen::{Commitment, RangeProof};
-use crate::util::{Mutes, RwLock, StopState};
+use crate::util::{Mutex, RwLock, StopState};
 use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::File;
@@ -167,6 +167,16 @@ impl Chain {
 		archive_mode: bool,
 		stop_state: Arc<Mutex<StopState>>,
 	) -> Result<Chain, Error> {
+		// Note: We take a lock on the stop_state here and do not release it until
+		// we have finished processing this single block.
+		// We take care to write both the txhashset *and* the batch while we
+		// have the stop_state lock.
+		let stop_state_local = stop_state.clone();
+		let stop_lock = stop_state_local.lock();
+		if stop_lock.is_stopped() {
+			return Err(ErrorKind::Stopped.into());
+		}
+
 		let chain_store = store::ChainStore::new(db_env)?;
 
 		let store = Arc::new(chain_store);
@@ -338,20 +348,12 @@ impl Chain {
 
 	/// Process a block header received during "header first" propagation.
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
-		// Note: We take a lock on the stop_state here and do not release it until
-		// we have finished processing this single block.
-		// We take care to write both the txhashset *and* the batch while we
-		// have the stop_state lock.
-		let stop_lock = self.stop_state.lock();
-		if stop_lock.is_stopped() {
-			return Err(ErrorKind::Stopped.into());
-		}
-
+		// We take a write lock on the txhashset and create a new batch
+		// but this is strictly readonly so we do not commit the batch.
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 		pipe::process_block_header(bh, &mut ctx)?;
-		ctx.batch.commit()?;
 		Ok(())
 	}
 
@@ -704,15 +706,6 @@ impl Chain {
 	/// have an MMR we can safely rewind based on the headers received from a peer.
 	/// TODO - think about how to optimize this.
 	pub fn rebuild_sync_mmr(&self, head: &Tip) -> Result<(), Error> {
-		// Note: We take a lock on the stop_state here and do not release it until
-		// we have finished processing this single block.
-		// We take care to write both the txhashset *and* the batch while we
-		// have the stop_state lock.
-		let stop_lock = self.stop_state.lock();
-		if stop_lock.is_stopped() {
-			return Err(ErrorKind::Stopped.into());
-		}
-
 		let mut txhashset = self.txhashset.write();
 		let mut batch = self.store.batch()?;
 		txhashset::sync_extending(&mut txhashset, &mut batch, |extension| {
