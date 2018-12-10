@@ -56,7 +56,8 @@ fn test_coinbase_maturity() {
 		verifier_cache,
 		false,
 		Arc::new(Mutex::new(StopState::new())),
-	).unwrap();
+	)
+	.unwrap();
 
 	let prev = chain.head_header().unwrap();
 

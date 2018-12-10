@@ -51,7 +51,8 @@ fn setup(dir_name: &str) -> Chain {
 		verifier_cache,
 		false,
 		Arc::new(Mutex::new(StopState::new())),
-	).unwrap()
+	)
+	.unwrap()
 }
 
 fn reload_chain(dir_name: &str) -> Chain {
@@ -66,7 +67,8 @@ fn reload_chain(dir_name: &str) -> Chain {
 		verifier_cache,
 		false,
 		Arc::new(Mutex::new(StopState::new())),
-	).unwrap()
+	)
+	.unwrap()
 }
 
 #[test]

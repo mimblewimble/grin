@@ -51,7 +51,8 @@ fn setup(dir_name: &str, genesis: Block) -> Chain {
 		verifier_cache,
 		false,
 		Arc::new(Mutex::new(StopState::new())),
-	).unwrap()
+	)
+	.unwrap()
 }
 
 #[test]
@@ -542,7 +543,8 @@ fn actual_diff_iter_output() {
 		verifier_cache,
 		false,
 		Arc::new(Mutex::new(StopState::new())),
-	).unwrap();
+	)
+	.unwrap();
 	let iter = chain.difficulty_iter();
 	let mut last_time = 0;
 	let mut first = true;
