@@ -254,6 +254,15 @@ impl Chain {
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
 		let (maybe_new_head, prev_head) = {
+			// Note: We take a lock on the stop_state here and do not release it until
+			// we have finished processing this single block.
+			// We take care to write both the txhashset *and* the batch while we
+			// have the stop_state lock.
+			let stop_lock = self.stop_state.lock();
+			if stop_lock.is_stopped() {
+				return Err(ErrorKind::Stopped.into());
+			}
+
 			let mut txhashset = self.txhashset.write();
 			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
@@ -329,6 +338,15 @@ impl Chain {
 
 	/// Process a block header received during "header first" propagation.
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
+		// Note: We take a lock on the stop_state here and do not release it until
+		// we have finished processing this single block.
+		// We take care to write both the txhashset *and* the batch while we
+		// have the stop_state lock.
+		let stop_lock = self.stop_state.lock();
+		if stop_lock.is_stopped() {
+			return Err(ErrorKind::Stopped.into());
+		}
+
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
@@ -341,6 +359,15 @@ impl Chain {
 	/// This is only ever used during sync and is based on sync_head.
 	/// We update header_head here if our total work increases.
 	pub fn sync_block_headers(&self, headers: &[BlockHeader], opts: Options) -> Result<(), Error> {
+		// Note: We take a lock on the stop_state here and do not release it until
+		// we have finished processing this single block.
+		// We take care to write both the txhashset *and* the batch while we
+		// have the stop_state lock.
+		let stop_lock = self.stop_state.lock();
+		if stop_lock.is_stopped() {
+			return Err(ErrorKind::Stopped.into());
+		}
+
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
@@ -677,6 +704,15 @@ impl Chain {
 	/// have an MMR we can safely rewind based on the headers received from a peer.
 	/// TODO - think about how to optimize this.
 	pub fn rebuild_sync_mmr(&self, head: &Tip) -> Result<(), Error> {
+		// Note: We take a lock on the stop_state here and do not release it until
+		// we have finished processing this single block.
+		// We take care to write both the txhashset *and* the batch while we
+		// have the stop_state lock.
+		let stop_lock = self.stop_state.lock();
+		if stop_lock.is_stopped() {
+			return Err(ErrorKind::Stopped.into());
+		}
+
 		let mut txhashset = self.txhashset.write();
 		let mut batch = self.store.batch()?;
 		txhashset::sync_extending(&mut txhashset, &mut batch, |extension| {
@@ -872,6 +908,15 @@ impl Chain {
 	fn compact_txhashset(&self) -> Result<(), Error> {
 		debug!("Starting blockchain compaction.");
 		{
+			// Note: We take a lock on the stop_state here and do not release it until
+			// we have finished processing this single block.
+			// We take care to write both the txhashset *and* the batch while we
+			// have the stop_state lock.
+			let stop_lock = self.stop_state.lock();
+			if stop_lock.is_stopped() {
+				return Err(ErrorKind::Stopped.into());
+			}
+
 			let mut txhashset = self.txhashset.write();
 			txhashset.compact()?;
 			txhashset::extending_readonly(&mut txhashset, |extension| {

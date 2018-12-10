@@ -21,7 +21,7 @@ use self::core::libtx::{self, build};
 use self::core::pow::Difficulty;
 use self::core::{consensus, pow};
 use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
-use self::util::RwLock;
+use self::util::{Mutex, RwLock, StopState};
 use chrono::Duration;
 use env_logger;
 use grin_chain as chain;
@@ -55,8 +55,8 @@ fn test_coinbase_maturity() {
 		pow::verify_size,
 		verifier_cache,
 		false,
-	)
-	.unwrap();
+		Arc::new(Mutex::new(StopState::new())),
+	).unwrap();
 
 	let prev = chain.head_header().unwrap();
 
