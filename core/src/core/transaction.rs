@@ -1282,7 +1282,6 @@ impl From<Output> for OutputIdentifier {
 	}
 }
 
-/// TODO - conditional (hard fork?).
 /// Construct msg from tx fee, lock_height and kernel features.
 /// In testnet4 we did not include the kernel features in the message being signed.
 /// In mainnet we changed this to include features and we hash (fee || lock_height || features)
