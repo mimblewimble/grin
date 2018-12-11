@@ -1,0 +1,24 @@
+[package]
+name = "grin_gen_gen"
+version = "0.0.1"
+edition = "2018"
+authors = ["Grin Developers <mimblewimble@lists.launchpad.net>"]
+description = "Utility to automate the generation of Grin's genesis block"
+license = "Apache-2.0"
+repository = "https://github.com/mimblewimble/grin"
+keywords = [ "crypto", "grin", "mimblewimble" ]
+readme = "README.md"
+
+[[bin]]
+name = "gen_gen"
+path = "src/bin/gen_gen.rs"
+
+[dependencies]
+chrono = "0.4.4"
+curl = "0.4.19"
+serde_json = "1"
+grin_core = { path = "../../core", version = "0.4.2" }
+grin_chain = "0.4.2"
+grin_keychain = "0.4.2"
+grin_store = "0.4.2"
+grin_util = "0.4.2"
