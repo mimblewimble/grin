@@ -111,11 +111,15 @@ where
 		wallet.tx_log_iter().collect::<Vec<_>>()
 	};
 	if let Some(k) = parent_key_id {
-		txs.iter().filter(|t| t.parent_key_id == *k);
+		txs = txs.iter()
+		.filter(|t| t.parent_key_id == *k)
+		.map(|t| t.clone())
+		.collect();
 	}
 	txs.sort_by_key(|tx| tx.creation_ts);
 	Ok(txs)
 }
+
 /// Refreshes the outputs in a wallet with the latest information
 /// from a node
 pub fn refresh_outputs<T: ?Sized, C, K>(
