@@ -47,17 +47,7 @@ pub enum ParseError {
 
 pub fn prompt_password(password: &Option<String>) -> String {
 	match password {
-		None => {
-			println!("Temporary note:");
-			println!(
-				"If this is your first time running your wallet since BIP32 (word lists) \
-				 were implemented, your seed will be converted to \
-				 the new format. Please ensure the provided password is correct."
-			);
-			println!("If this goes wrong, your old 'wallet.seed' file has been saved as 'wallet.seed.bak' \
-			Rename this file to back to `wallet.seed` and try again");
-			rpassword::prompt_password_stdout("Password: ").unwrap()
-		}
+		None => rpassword::prompt_password_stdout("Password: ").unwrap(),
 		Some(p) => p.to_owned(),
 	}
 }
