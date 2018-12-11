@@ -19,20 +19,20 @@ use failure::ResultExt;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use core::consensus::reward;
-use core::core::{Output, TxKernel};
-use core::libtx::reward;
-use core::{global, ser};
-use keychain::{Identifier, Keychain};
-use libwallet;
-use libwallet::error::{Error, ErrorKind};
-use libwallet::internal::keys;
-use libwallet::types::{
+use crate::core::consensus::reward;
+use crate::core::core::{Output, TxKernel};
+use crate::core::libtx::reward;
+use crate::core::{global, ser};
+use crate::keychain::{Identifier, Keychain};
+use crate::libwallet;
+use crate::libwallet::error::{Error, ErrorKind};
+use crate::libwallet::internal::keys;
+use crate::libwallet::types::{
 	BlockFees, CbData, NodeClient, OutputData, OutputStatus, TxLogEntry, TxLogEntryType,
 	WalletBackend, WalletInfo,
 };
-use util;
-use util::secp::pedersen;
+use crate::util;
+use crate::util::secp::pedersen;
 
 /// Retrieve all of the outputs (doesn't attempt to update from node)
 pub fn retrieve_outputs<T: ?Sized, C, K>(
@@ -56,7 +56,8 @@ where
 			} else {
 				out.status != OutputStatus::Spent
 			}
-		}).collect::<Vec<_>>();
+		})
+		.collect::<Vec<_>>();
 
 	// only include outputs with a given tx_id if provided
 	if let Some(id) = tx_id {
@@ -73,16 +74,18 @@ where
 		.map(|out| {
 			let commit = wallet.get_commitment(&out.key_id).unwrap();
 			(out, commit)
-		}).collect();
+		})
+		.collect();
 	Ok(res)
 }
 
 /// Retrieve all of the transaction entries, or a particular entry
+/// if `parent_key_id` is set, only return entries from that key
 pub fn retrieve_txs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	tx_id: Option<u32>,
 	tx_slate_id: Option<Uuid>,
-	parent_key_id: &Identifier,
+	parent_key_id: Option<&Identifier>,
 ) -> Result<Vec<TxLogEntry>, Error>
 where
 	T: WalletBackend<C, K>,
@@ -91,9 +94,7 @@ where
 {
 	// just read the wallet here, no need for a write lock
 	let mut txs = if let Some(id) = tx_id {
-		let tx = wallet
-			.tx_log_iter()
-			.find(|t| t.id == id && t.parent_key_id == *parent_key_id);
+		let tx = wallet.tx_log_iter().find(|t| t.id == id);
 		if let Some(t) = tx {
 			vec![t]
 		} else {
@@ -107,14 +108,19 @@ where
 			vec![]
 		}
 	} else {
-		wallet
-			.tx_log_iter()
-			.filter(|t| t.parent_key_id == *parent_key_id)
-			.collect::<Vec<_>>()
+		wallet.tx_log_iter().collect::<Vec<_>>()
 	};
+	if let Some(k) = parent_key_id {
+		txs = txs
+			.iter()
+			.filter(|t| t.parent_key_id == *k)
+			.map(|t| t.clone())
+			.collect();
+	}
 	txs.sort_by_key(|tx| tx.creation_ts);
 	Ok(txs)
 }
+
 /// Refreshes the outputs in a wallet with the latest information
 /// from a node
 pub fn refresh_outputs<T: ?Sized, C, K>(
@@ -464,7 +470,8 @@ where
 		&key_id,
 		block_fees.fees,
 		block_fees.height,
-	).unwrap();
+	)
+	.unwrap();
 	/* .context(ErrorKind::Keychain)?; */
 	Ok((out, kern, block_fees))
 }

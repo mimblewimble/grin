@@ -17,14 +17,14 @@ use std::net::SocketAddr;
 
 use clap::ArgMatches;
 
-use api;
-use config::GlobalConfig;
-use p2p;
-use servers::ServerConfig;
+use crate::api;
+use crate::config::GlobalConfig;
+use crate::p2p;
+use crate::servers::ServerConfig;
+use crate::util::file::get_first_line;
 use term;
-use util::file::get_first_line;
 
-pub fn client_command(client_args: &ArgMatches, global_config: GlobalConfig) -> i32 {
+pub fn client_command(client_args: &ArgMatches<'_>, global_config: GlobalConfig) -> i32 {
 	// just get defaults from the global config
 	let server_config = global_config.members.unwrap().server;
 	let api_secret = get_first_line(server_config.api_secret_path.clone());
@@ -81,7 +81,8 @@ pub fn show_status(config: &ServerConfig, api_secret: Option<String>) {
 		Err(_) => writeln!(
 			e,
 			"WARNING: Client failed to get data. Is your `grin server` offline or broken?"
-		).unwrap(),
+		)
+		.unwrap(),
 	};
 	e.reset().unwrap();
 	println!()

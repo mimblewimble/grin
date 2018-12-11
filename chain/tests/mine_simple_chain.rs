@@ -12,30 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate chrono;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store as store;
-extern crate grin_util as util;
-extern crate rand;
-
+use self::chain::types::NoopAdapter;
+use self::chain::Chain;
+use self::core::core::hash::Hashed;
+use self::core::core::verifier_cache::LruVerifierCache;
+use self::core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
+use self::core::genesis;
+use self::core::global::ChainTypes;
+use self::core::libtx::{self, build, reward};
+use self::core::pow::Difficulty;
+use self::core::{consensus, global, pow};
+use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
+use self::util::{Mutex, RwLock, StopState};
 use chrono::Duration;
+use grin_chain as chain;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_store as store;
+use grin_util as util;
 use std::fs;
 use std::sync::Arc;
-use util::RwLock;
-
-use chain::types::NoopAdapter;
-use chain::Chain;
-use core::core::hash::Hashed;
-use core::core::verifier_cache::LruVerifierCache;
-use core::core::{Block, BlockHeader, OutputFeatures, OutputIdentifier, Transaction};
-use core::genesis;
-use core::global::ChainTypes;
-use core::libtx::{self, build, reward};
-use core::pow::Difficulty;
-use core::{consensus, global, pow};
-use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -54,7 +50,9 @@ fn setup(dir_name: &str, genesis: Block) -> Chain {
 		pow::verify_size,
 		verifier_cache,
 		false,
-	).unwrap()
+		Arc::new(Mutex::new(StopState::new())),
+	)
+	.unwrap()
 }
 
 #[test]
@@ -89,7 +87,8 @@ fn mine_genesis_reward_chain() {
 		Difficulty::unit(),
 		global::proofsize(),
 		global::min_edge_bits(),
-	).unwrap();
+	)
+	.unwrap();
 
 	mine_some_on_top(".grin.genesis", genesis, &keychain);
 }
@@ -124,7 +123,8 @@ where
 			next_header_info.difficulty,
 			global::proofsize(),
 			edge_bits,
-		).unwrap();
+		)
+		.unwrap();
 		b.header.pow.proof.edge_bits = edge_bits;
 
 		let bhash = b.hash();
@@ -309,7 +309,8 @@ fn spend_in_fork_and_compact() {
 			build::with_fee(20000),
 		],
 		&kc,
-	).unwrap();
+	)
+	.unwrap();
 
 	let next = prepare_block_tx(&kc, &fork_head, &chain, 7, vec![&tx1]);
 	let prev_main = next.header.clone();
@@ -325,7 +326,8 @@ fn spend_in_fork_and_compact() {
 			build::with_fee(20000),
 		],
 		&kc,
-	).unwrap();
+	)
+	.unwrap();
 
 	let next = prepare_block_tx(&kc, &prev_main, &chain, 9, vec![&tx2]);
 	let prev_main = next.header.clone();
@@ -351,16 +353,12 @@ fn spend_in_fork_and_compact() {
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 6);
 	assert_eq!(head.hash(), prev_main.hash());
-	assert!(
-		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
-			.is_ok()
-	);
-	assert!(
-		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
-			.is_err()
-	);
+	assert!(chain
+		.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
+		.is_ok());
+	assert!(chain
+		.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
+		.is_err());
 
 	// make the fork win
 	let fork_next = prepare_fork_block(&kc, &prev_fork, &chain, 10);
@@ -374,16 +372,12 @@ fn spend_in_fork_and_compact() {
 	let head = chain.head_header().unwrap();
 	assert_eq!(head.height, 7);
 	assert_eq!(head.hash(), prev_fork.hash());
-	assert!(
-		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
-			.is_ok()
-	);
-	assert!(
-		chain
-			.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
-			.is_err()
-	);
+	assert!(chain
+		.is_unspent(&OutputIdentifier::from_output(&tx2.outputs()[0]))
+		.is_ok());
+	assert!(chain
+		.is_unspent(&OutputIdentifier::from_output(&tx1.outputs()[0]))
+		.is_err());
 
 	// add 20 blocks to go past the test horizon
 	let mut prev = prev_fork;
@@ -438,7 +432,8 @@ fn output_header_mappings() {
 			next_header_info.difficulty,
 			global::proofsize(),
 			edge_bits,
-		).unwrap();
+		)
+		.unwrap();
 		b.header.pow.proof.edge_bits = edge_bits;
 
 		chain.process_block(b, chain::Options::MINE).unwrap();
@@ -547,7 +542,9 @@ fn actual_diff_iter_output() {
 		pow::verify_size,
 		verifier_cache,
 		false,
-	).unwrap();
+		Arc::new(Mutex::new(StopState::new())),
+	)
+	.unwrap();
 	let iter = chain.difficulty_iter();
 	let mut last_time = 0;
 	let mut first = true;

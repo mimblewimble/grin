@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store as store;
-extern crate grin_util as util;
+use grin_chain as chain;
+use grin_core as core;
+
+use grin_store as store;
+use grin_util as util;
 
 use std::collections::HashSet;
 use std::fs::{self, File, OpenOptions};
@@ -25,10 +25,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use chain::store::ChainStore;
-use chain::txhashset;
-use core::core::BlockHeader;
-use util::file;
+use crate::chain::store::ChainStore;
+use crate::chain::txhashset;
+use crate::core::core::BlockHeader;
+use crate::util::file;
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -83,7 +83,8 @@ fn write_file(db_root: String) {
 				.join("txhashset")
 				.join("kernel")
 				.join("strange0"),
-		).unwrap();
+		)
+		.unwrap();
 	OpenOptions::new()
 		.create(true)
 		.write(true)
@@ -98,13 +99,15 @@ fn write_file(db_root: String) {
 				.join("txhashset")
 				.join("strange_dir")
 				.join("strange2"),
-		).unwrap();
+		)
+		.unwrap();
 	fs::create_dir(
 		Path::new(&db_root)
 			.join("txhashset")
 			.join("strange_dir")
 			.join("strange_subdir"),
-	).unwrap();
+	)
+	.unwrap();
 	OpenOptions::new()
 		.create(true)
 		.write(true)
@@ -114,7 +117,8 @@ fn write_file(db_root: String) {
 				.join("strange_dir")
 				.join("strange_subdir")
 				.join("strange3"),
-		).unwrap();
+		)
+		.unwrap();
 }
 
 fn txhashset_contains_expected_files(dirname: String, path_buf: PathBuf) -> bool {

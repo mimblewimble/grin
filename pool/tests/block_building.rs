@@ -12,30 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate blake2_rfc as blake2;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_pool as pool;
-extern crate grin_util as util;
-
-extern crate chrono;
-extern crate rand;
-
 pub mod common;
 
+use self::core::core::hash::Hashed;
+use self::core::core::verifier_cache::LruVerifierCache;
+use self::core::core::{Block, BlockHeader, Transaction};
+use self::core::libtx;
+use self::core::pow::Difficulty;
+use self::keychain::{ExtKeychain, Keychain};
+use self::util::RwLock;
+use crate::common::*;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_util as util;
 use std::sync::Arc;
-use util::RwLock;
-
-use core::core::hash::Hashed;
-use core::core::verifier_cache::LruVerifierCache;
-use core::core::{Block, BlockHeader, Transaction};
-use core::pow::Difficulty;
-
-use core::libtx;
-use keychain::{ExtKeychain, Keychain};
-
-use common::*;
 
 #[test]
 fn test_transaction_pool_block_building() {

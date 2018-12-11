@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::router::{Handler, HandlerObj, ResponseFuture};
 use futures::future::ok;
 use hyper::header::{HeaderValue, AUTHORIZATION, WWW_AUTHENTICATE};
 use hyper::{Body, Request, Response, StatusCode};
 use ring::constant_time::verify_slices_are_equal;
-use router::{Handler, HandlerObj, ResponseFuture};
 
 // Basic Authentication Middleware
 pub struct BasicAuthMiddleware {
@@ -37,12 +37,17 @@ impl Handler for BasicAuthMiddleware {
 	fn call(
 		&self,
 		req: Request<Body>,
-		mut handlers: Box<Iterator<Item = HandlerObj>>,
+		mut handlers: Box<dyn Iterator<Item = HandlerObj>>,
 	) -> ResponseFuture {
-		if req.headers().contains_key(AUTHORIZATION) && verify_slices_are_equal(
-			req.headers()[AUTHORIZATION].as_bytes(),
-			&self.api_basic_auth.as_bytes(),
-		).is_ok()
+		if req.method().as_str() == "OPTIONS" {
+			return handlers.next().unwrap().call(req, handlers);
+		}
+		if req.headers().contains_key(AUTHORIZATION)
+			&& verify_slices_are_equal(
+				req.headers()[AUTHORIZATION].as_bytes(),
+				&self.api_basic_auth.as_bytes(),
+			)
+			.is_ok()
 		{
 			handlers.next().unwrap().call(req, handlers)
 		} else {
@@ -58,7 +63,8 @@ fn unauthorized_response(basic_realm: &str) -> ResponseFuture {
 		.header(
 			WWW_AUTHENTICATE,
 			HeaderValue::from_str(basic_realm).unwrap(),
-		).body(Body::empty())
+		)
+		.body(Body::empty())
 		.unwrap();
 	Box::new(ok(response))
 }

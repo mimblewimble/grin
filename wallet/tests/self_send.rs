@@ -12,29 +12,21 @@
 // limitations under the License.
 
 //! Test a wallet sending to self
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store as store;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
-extern crate rand;
 #[macro_use]
 extern crate log;
-extern crate chrono;
-extern crate serde;
-extern crate uuid;
 
-use wallet::test_framework::{self, LocalWalletClient, WalletProxy};
-
+use self::core::global;
+use self::core::global::ChainTypes;
+use self::keychain::ExtKeychain;
+use self::wallet::libwallet;
+use self::wallet::test_framework::{self, LocalWalletClient, WalletProxy};
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_util as util;
+use grin_wallet as wallet;
 use std::fs;
 use std::thread;
 use std::time::Duration;
-
-use core::global;
-use core::global::ChainTypes;
-use keychain::ExtKeychain;
-use wallet::libwallet;
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -100,13 +92,13 @@ fn self_send_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 			true,       // select all outputs
 			None,
 		)?;
+		api.tx_lock_outputs(&slate, lock_fn)?;
 		// Send directly to self
 		wallet::controller::foreign_single_use(wallet1.clone(), |api| {
 			api.receive_tx(&mut slate, Some("listener"), None)?;
 			Ok(())
 		})?;
 		api.finalize_tx(&mut slate)?;
-		api.tx_lock_outputs(&slate, lock_fn)?;
 		api.post_tx(&slate.tx, false)?; // mines a block
 		bh += 1;
 		Ok(())

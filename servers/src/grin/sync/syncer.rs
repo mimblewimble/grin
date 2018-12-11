@@ -12,29 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time;
 
-use chain;
-use common::types::{SyncState, SyncStatus};
-use core::pow::Difficulty;
-use grin::sync::body_sync::BodySync;
-use grin::sync::header_sync::HeaderSync;
-use grin::sync::state_sync::StateSync;
-use p2p;
+use crate::chain;
+use crate::common::types::{SyncState, SyncStatus};
+use crate::core::pow::Difficulty;
+use crate::grin::sync::body_sync::BodySync;
+use crate::grin::sync::header_sync::HeaderSync;
+use crate::grin::sync::state_sync::StateSync;
+use crate::p2p;
+use crate::util::{Mutex, StopState};
 
 pub fn run_sync(
 	sync_state: Arc<SyncState>,
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
-	stop: Arc<AtomicBool>,
+	stop_state: Arc<Mutex<StopState>>,
 ) {
 	let _ = thread::Builder::new()
 		.name("sync".to_string())
 		.spawn(move || {
-			let runner = SyncRunner::new(sync_state, peers, chain, stop);
+			let runner = SyncRunner::new(sync_state, peers, chain, stop_state);
 			runner.sync_loop();
 		});
 }
@@ -43,7 +43,7 @@ pub struct SyncRunner {
 	sync_state: Arc<SyncState>,
 	peers: Arc<p2p::Peers>,
 	chain: Arc<chain::Chain>,
-	stop: Arc<AtomicBool>,
+	stop_state: Arc<Mutex<StopState>>,
 }
 
 impl SyncRunner {
@@ -51,13 +51,13 @@ impl SyncRunner {
 		sync_state: Arc<SyncState>,
 		peers: Arc<p2p::Peers>,
 		chain: Arc<chain::Chain>,
-		stop: Arc<AtomicBool>,
+		stop_state: Arc<Mutex<StopState>>,
 	) -> SyncRunner {
 		SyncRunner {
 			sync_state,
 			peers,
 			chain,
-			stop,
+			stop_state,
 		}
 	}
 
@@ -121,7 +121,11 @@ impl SyncRunner {
 		let mut highest_height = 0;
 
 		// Main syncing loop
-		while !self.stop.load(Ordering::Relaxed) {
+		loop {
+			if self.stop_state.lock().is_stopped() {
+				break;
+			}
+
 			thread::sleep(time::Duration::from_millis(10));
 
 			// check whether syncing is generally needed, when we compare our state with others

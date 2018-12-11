@@ -13,9 +13,9 @@
 // limitations under the License.
 
 /// Null Output 'plugin' implementation
-use core::libtx::slate::Slate;
-use libwallet::Error;
-use {WalletCommAdapter, WalletConfig};
+use crate::core::libtx::slate::Slate;
+use crate::libwallet::Error;
+use crate::{WalletCommAdapter, WalletConfig};
 
 use std::collections::HashMap;
 

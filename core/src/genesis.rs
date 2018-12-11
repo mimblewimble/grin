@@ -16,9 +16,9 @@
 
 use chrono::prelude::{TimeZone, Utc};
 
-use core;
-use global;
-use pow::{Difficulty, Proof, ProofOfWork};
+use crate::core;
+use crate::global;
+use crate::pow::{Difficulty, Proof, ProofOfWork};
 
 /// Genesis block definition for development networks. The proof of work size
 /// is small enough to mine it on the fly, so it does not contain its own

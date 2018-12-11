@@ -9,6 +9,7 @@ keywords = [ "crypto", "grin", "mimblewimble" ]
 readme = "README.md"
 exclude = ["**/*.grin", "**/*.grin2"]
 build = "src/build/build.rs"
+edition = "2018"
 
 [workspace]
 members = ["api", "chain", "config", "core", "keychain", "p2p", "servers", "store", "util", "pool", "wallet"]

@@ -14,22 +14,22 @@
 
 use std::fs::File;
 use std::net::{Shutdown, SocketAddr, TcpListener, TcpStream};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use std::{io, thread};
 
-use lmdb;
+use crate::lmdb;
 
+use crate::core::core;
+use crate::core::core::hash::Hash;
+use crate::core::pow::Difficulty;
+use crate::handshake::Handshake;
+use crate::peer::Peer;
+use crate::peers::Peers;
+use crate::store::PeerStore;
+use crate::types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, TxHashSetRead};
+use crate::util::{Mutex, StopState};
 use chrono::prelude::{DateTime, Utc};
-use core::core;
-use core::core::hash::Hash;
-use core::pow::Difficulty;
-use handshake::Handshake;
-use peer::Peer;
-use peers::Peers;
-use store::PeerStore;
-use types::{Capabilities, ChainAdapter, Error, NetAdapter, P2PConfig, TxHashSetRead};
 
 /// P2P server implementation, handling bootstrapping to find and connect to
 /// peers, receiving connections from other peers and keep track of all of them.
@@ -38,8 +38,7 @@ pub struct Server {
 	capabilities: Capabilities,
 	handshake: Arc<Handshake>,
 	pub peers: Arc<Peers>,
-	stop: Arc<AtomicBool>,
-	pause: Arc<AtomicBool>,
+	stop_state: Arc<Mutex<StopState>>,
 }
 
 // TODO TLS
@@ -49,18 +48,16 @@ impl Server {
 		db_env: Arc<lmdb::Environment>,
 		capab: Capabilities,
 		config: P2PConfig,
-		adapter: Arc<ChainAdapter>,
+		adapter: Arc<dyn ChainAdapter>,
 		genesis: Hash,
-		stop: Arc<AtomicBool>,
-		pause: Arc<AtomicBool>,
+		stop_state: Arc<Mutex<StopState>>,
 	) -> Result<Server, Error> {
 		Ok(Server {
 			config: config.clone(),
 			capabilities: capab,
 			handshake: Arc::new(Handshake::new(genesis, config.clone())),
 			peers: Arc::new(Peers::new(PeerStore::new(db_env)?, adapter, config)),
-			stop,
-			pause,
+			stop_state,
 		})
 	}
 
@@ -75,7 +72,7 @@ impl Server {
 		let sleep_time = Duration::from_millis(1);
 		loop {
 			// Pause peer ingress connection request. Only for tests.
-			if self.pause.load(Ordering::Relaxed) {
+			if self.stop_state.lock().is_paused() {
 				thread::sleep(Duration::from_secs(1));
 				continue;
 			}
@@ -95,7 +92,7 @@ impl Server {
 					warn!("Couldn't establish new client connection: {:?}", e);
 				}
 			}
-			if self.stop.load(Ordering::Relaxed) {
+			if self.stop_state.lock().is_stopped() {
 				break;
 			}
 			thread::sleep(sleep_time);
@@ -194,7 +191,7 @@ impl Server {
 	}
 
 	pub fn stop(&self) {
-		self.stop.store(true, Ordering::Relaxed);
+		self.stop_state.lock().stop();
 		self.peers.stop();
 	}
 

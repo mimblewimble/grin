@@ -14,20 +14,17 @@
 
 //! Implements storage primitives required by the chain
 
-use std::sync::Arc;
-
+use crate::core::consensus::HeaderInfo;
+use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::{Block, BlockHeader, BlockSums};
+use crate::core::pow::Difficulty;
+use crate::lmdb;
+use crate::types::Tip;
+use crate::util::secp::pedersen::Commitment;
 use croaring::Bitmap;
-use lmdb;
-
-use util::secp::pedersen::Commitment;
-
-use core::consensus::HeaderInfo;
-use core::core::hash::{Hash, Hashed};
-use core::core::{Block, BlockHeader, BlockSums};
-use core::pow::Difficulty;
 use grin_store as store;
 use grin_store::{option_to_not_found, to_key, Error};
-use types::Tip;
+use std::sync::Arc;
 
 const STORE_SUBPATH: &'static str = "chain";
 
@@ -117,7 +114,7 @@ impl ChainStore {
 	}
 
 	/// Builds a new batch to be used with this store.
-	pub fn batch(&self) -> Result<Batch, Error> {
+	pub fn batch(&self) -> Result<Batch<'_>, Error> {
 		Ok(Batch {
 			db: self.db.batch()?,
 		})
@@ -202,8 +199,8 @@ impl<'a> Batch<'a> {
 	/// Save the block and the associated input bitmap.
 	/// Note: the block header is not saved to the db here, assumes this has already been done.
 	pub fn save_block(&self, b: &Block) -> Result<(), Error> {
-		// Build the "input bitmap" for this new block and cache it locally.
-		self.build_and_cache_block_input_bitmap(&b)?;
+		// Build the "input bitmap" for this new block and store it in the db.
+		self.build_and_store_block_input_bitmap(&b)?;
 
 		// Save the block itself to the db.
 		self.db
@@ -308,7 +305,7 @@ impl<'a> Batch<'a> {
 		Ok(bitmap)
 	}
 
-	fn build_and_cache_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
+	fn build_and_store_block_input_bitmap(&self, block: &Block) -> Result<Bitmap, Error> {
 		// Build the bitmap.
 		let bitmap = self.build_block_input_bitmap(block)?;
 
@@ -329,7 +326,7 @@ impl<'a> Batch<'a> {
 		} else {
 			match self.get_block(bh) {
 				Ok(block) => {
-					let bitmap = self.build_and_cache_block_input_bitmap(&block)?;
+					let bitmap = self.build_and_store_block_input_bitmap(&block)?;
 					Ok(bitmap)
 				}
 				Err(e) => Err(e),
@@ -345,7 +342,7 @@ impl<'a> Batch<'a> {
 
 	/// Creates a child of this batch. It will be merged with its parent on
 	/// commit, abandoned otherwise.
-	pub fn child(&mut self) -> Result<Batch, Error> {
+	pub fn child(&mut self) -> Result<Batch<'_>, Error> {
 		Ok(Batch {
 			db: self.db.child()?,
 		})
@@ -384,7 +381,7 @@ impl<'a> DifficultyIter<'a> {
 
 	/// Build a new iterator using the provided chain store batch and starting from
 	/// the provided block hash.
-	pub fn from_batch(start: Hash, batch: Batch) -> DifficultyIter {
+	pub fn from_batch(start: Hash, batch: Batch<'_>) -> DifficultyIter<'_> {
 		DifficultyIter {
 			start,
 			store: None,

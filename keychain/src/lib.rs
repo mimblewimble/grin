@@ -14,22 +14,14 @@
 
 //! Library module for the key holder functionalities provided by Grin.
 
-extern crate blake2_rfc as blake2;
-extern crate byteorder;
+use blake2_rfc as blake2;
+
 #[macro_use]
 extern crate grin_util as util;
-extern crate rand;
-extern crate serde;
+
 #[macro_use]
 extern crate serde_derive;
-extern crate digest;
-extern crate hmac;
-extern crate log;
-extern crate pbkdf2;
-extern crate ripemd160;
-extern crate serde_json;
-extern crate sha2;
-extern crate uuid;
+
 #[macro_use]
 extern crate lazy_static;
 
@@ -39,8 +31,8 @@ pub mod mnemonic;
 mod types;
 
 pub mod keychain;
-pub use extkey_bip32::ChildNumber;
-pub use keychain::ExtKeychain;
-pub use types::{
+pub use crate::extkey_bip32::ChildNumber;
+pub use crate::keychain::ExtKeychain;
+pub use crate::types::{
 	BlindSum, BlindingFactor, Error, ExtKeychainPath, Identifier, Keychain, IDENTIFIER_SIZE,
 };

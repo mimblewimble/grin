@@ -13,14 +13,14 @@
 // limitations under the License.
 
 use super::utils::w;
-use chain;
+use crate::chain;
+use crate::p2p;
+use crate::rest::*;
+use crate::router::{Handler, ResponseFuture};
+use crate::types::*;
+use crate::web::*;
 use hyper::{Body, Request};
-use p2p;
-use rest::*;
-use router::{Handler, ResponseFuture};
 use std::sync::Weak;
-use types::*;
-use web::*;
 
 // RESTful index of available api endpoints
 // GET /v1/

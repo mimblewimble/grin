@@ -17,18 +17,18 @@ use std::io::{Read, Write};
 use std::path::Path;
 use std::path::MAIN_SEPARATOR;
 
-use blake2;
+use crate::blake2;
 use rand::{thread_rng, Rng};
 use serde_json;
 
 use ring::aead;
 use ring::{digest, pbkdf2};
 
-use core::global::ChainTypes;
-use error::{Error, ErrorKind};
+use crate::core::global::ChainTypes;
+use crate::error::{Error, ErrorKind};
+use crate::keychain::{mnemonic, Keychain};
+use crate::util;
 use failure::ResultExt;
-use keychain::{mnemonic, Keychain};
-use util;
 
 pub const SEED_FILE: &'static str = "wallet.seed";
 

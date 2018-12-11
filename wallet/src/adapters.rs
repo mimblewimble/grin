@@ -22,11 +22,10 @@ pub use self::http::HTTPWalletCommAdapter;
 pub use self::keybase::KeybaseWalletCommAdapter;
 pub use self::null::NullWalletCommAdapter;
 
+use crate::core::libtx::slate::Slate;
+use crate::libwallet::Error;
+use crate::WalletConfig;
 use std::collections::HashMap;
-
-use core::libtx::slate::Slate;
-use libwallet::Error;
-use WalletConfig;
 
 /// Encapsulate wallet to wallet communication functions
 pub trait WalletCommAdapter {

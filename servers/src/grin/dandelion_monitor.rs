@@ -12,18 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::util::{Mutex, RwLock, StopState};
 use chrono::prelude::Utc;
 use rand::{thread_rng, Rng};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use util::RwLock;
 
-use core::core::hash::Hashed;
-use core::core::transaction;
-use core::core::verifier_cache::VerifierCache;
-use pool::{DandelionConfig, PoolEntryState, PoolError, TransactionPool, TxSource};
+use crate::core::core::hash::Hashed;
+use crate::core::core::transaction;
+use crate::core::core::verifier_cache::VerifierCache;
+use crate::pool::{DandelionConfig, PoolEntryState, PoolError, TransactionPool, TxSource};
 
 /// A process to monitor transactions in the stempool.
 /// With Dandelion, transaction can be broadcasted in stem or fluff phase.
@@ -36,8 +35,8 @@ use pool::{DandelionConfig, PoolEntryState, PoolError, TransactionPool, TxSource
 pub fn monitor_transactions(
 	dandelion_config: DandelionConfig,
 	tx_pool: Arc<RwLock<TransactionPool>>,
-	verifier_cache: Arc<RwLock<VerifierCache>>,
-	stop: Arc<AtomicBool>,
+	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
+	stop_state: Arc<Mutex<StopState>>,
 ) {
 	debug!("Started Dandelion transaction monitor.");
 
@@ -45,7 +44,7 @@ pub fn monitor_transactions(
 		.name("dandelion".to_string())
 		.spawn(move || {
 			loop {
-				if stop.load(Ordering::Relaxed) {
+				if stop_state.lock().is_stopped() {
 					break;
 				}
 
@@ -84,7 +83,7 @@ pub fn monitor_transactions(
 
 fn process_stem_phase(
 	tx_pool: Arc<RwLock<TransactionPool>>,
-	verifier_cache: Arc<RwLock<VerifierCache>>,
+	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 ) -> Result<(), PoolError> {
 	let mut tx_pool = tx_pool.write();
 
@@ -130,7 +129,7 @@ fn process_stem_phase(
 
 fn process_fluff_phase(
 	tx_pool: Arc<RwLock<TransactionPool>>,
-	verifier_cache: Arc<RwLock<VerifierCache>>,
+	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 ) -> Result<(), PoolError> {
 	let mut tx_pool = tx_pool.write();
 

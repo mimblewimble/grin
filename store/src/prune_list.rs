@@ -26,8 +26,8 @@ use std::path::Path;
 
 use croaring::Bitmap;
 
-use core::core::pmmr::{bintree_postorder_height, family, path};
-use {read_bitmap, save_via_temp_file};
+use crate::core::core::pmmr::{bintree_postorder_height, family, path};
+use crate::{read_bitmap, save_via_temp_file};
 
 /// Maintains a list of previously pruned nodes in PMMR, compacting the list as
 /// parents get pruned and allowing checking whether a leaf is pruned. Given

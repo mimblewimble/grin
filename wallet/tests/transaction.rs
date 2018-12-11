@@ -12,31 +12,22 @@
 // limitations under the License.
 
 //! tests for transactions building within core::libtx
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store as store;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
-extern crate rand;
 #[macro_use]
 extern crate log;
-extern crate chrono;
-extern crate serde;
-extern crate uuid;
-
-use wallet::test_framework::{self, LocalWalletClient, WalletProxy};
-
+use self::core::global;
+use self::core::global::ChainTypes;
+use self::core::libtx::slate::Slate;
+use self::keychain::ExtKeychain;
+use self::wallet::libwallet;
+use self::wallet::libwallet::types::OutputStatus;
+use self::wallet::test_framework::{self, LocalWalletClient, WalletProxy};
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_util as util;
+use grin_wallet as wallet;
 use std::fs;
 use std::thread;
 use std::time::Duration;
-
-use core::global;
-use core::global::ChainTypes;
-use core::libtx::slate::Slate;
-use keychain::ExtKeychain;
-use wallet::libwallet;
-use wallet::libwallet::types::OutputStatus;
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);

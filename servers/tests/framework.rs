@@ -12,25 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_api as api;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_p2p as p2p;
-extern crate grin_servers as servers;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
-
-extern crate blake2_rfc as blake2;
-
+use self::keychain::Keychain;
+use self::util::Mutex;
+use self::wallet::{
+	HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend, WalletCommAdapter, WalletConfig,
+};
+use blake2_rfc as blake2;
+use grin_api as api;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_p2p as p2p;
+use grin_servers as servers;
+use grin_util as util;
+use grin_wallet as wallet;
 use std::default::Default;
 use std::ops::Deref;
 use std::sync::Arc;
 use std::{fs, thread, time};
-use util::Mutex;
-
-use framework::keychain::Keychain;
-use wallet::{HTTPNodeClient, HTTPWalletCommAdapter, LMDBBackend, WalletCommAdapter, WalletConfig};
 
 /// Just removes all results from previous runs
 pub fn clean_all_output(test_name_dir: &str) {
@@ -202,7 +200,8 @@ impl LocalServerContainer {
 			skip_sync_wait: Some(true),
 			stratum_mining_config: None,
 			..Default::default()
-		}).unwrap();
+		})
+		.unwrap();
 
 		self.p2p_server_stats = Some(s.get_server_stats().unwrap());
 
@@ -223,7 +222,7 @@ impl LocalServerContainer {
 				"starting test Miner on port {}",
 				self.config.p2p_server_port
 			);
-			s.start_test_miner(wallet_url, s.stop.clone());
+			s.start_test_miner(wallet_url, s.stop_state.clone());
 		}
 
 		for p in &mut self.peer_list {
@@ -283,7 +282,8 @@ impl LocalServerContainer {
 			Arc::new(Mutex::new(wallet)),
 			&self.wallet_config.api_listen_addr(),
 			None,
-		).unwrap_or_else(|e| {
+		)
+		.unwrap_or_else(|e| {
 			panic!(
 				"Error creating wallet listener: {:?} Config: {:?}",
 				e, self.wallet_config
@@ -364,7 +364,8 @@ impl LocalServerContainer {
 				selection_strategy,
 			);
 			Ok(())
-		}).unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
+		})
+		.unwrap_or_else(|e| panic!("Error creating wallet: {:?} Config: {:?}", e, config));
 	}
 
 	/// Stops the running wallet server

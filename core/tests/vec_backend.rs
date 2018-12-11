@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate croaring;
-
+use self::core::core::hash::Hash;
+use self::core::core::pmmr::{self, Backend};
+use self::core::core::BlockHeader;
+use self::core::ser;
+use self::core::ser::{FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
+use croaring;
 use croaring::Bitmap;
-
-use core::core::hash::Hash;
-use core::core::pmmr::{self, Backend};
-use core::core::BlockHeader;
-use core::ser;
-use core::ser::{FixedLength, PMMRable, Readable, Reader, Writeable, Writer};
+use grin_core as core;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct TestElem(pub [u32; 4]);
@@ -39,15 +38,15 @@ impl PMMRable for TestElem {
 
 impl Writeable for TestElem {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
-		try!(writer.write_u32(self.0[0]));
-		try!(writer.write_u32(self.0[1]));
-		try!(writer.write_u32(self.0[2]));
+		r#try!(writer.write_u32(self.0[0]));
+		r#try!(writer.write_u32(self.0[1]));
+		r#try!(writer.write_u32(self.0[2]));
 		writer.write_u32(self.0[3])
 	}
 }
 
 impl Readable for TestElem {
-	fn read(reader: &mut Reader) -> Result<TestElem, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<TestElem, ser::Error> {
 		Ok(TestElem([
 			reader.read_u32()?,
 			reader.read_u32()?,

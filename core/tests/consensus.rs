@@ -12,14 +12,12 @@
 // limitations under the License.
 
 //! core consensus.rs tests (separated to de-clutter consensus.rs)
-#[macro_use]
-extern crate grin_core as core;
-extern crate chrono;
+use grin_core as core;
 
+use self::core::consensus::*;
+use self::core::global;
+use self::core::pow::Difficulty;
 use chrono::prelude::Utc;
-use core::consensus::*;
-use core::global;
-use core::pow::Difficulty;
 use std::fmt::{self, Display};
 
 /// Last n blocks for difficulty calculation purposes
@@ -63,7 +61,7 @@ pub struct DiffStats {
 }
 
 impl Display for DiffBlock {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let output = format!(
 			"Block Number: {} Difficulty: {}, Time: {}, Duration: {}",
 			self.block_number, self.difficulty, self.time, self.duration
@@ -92,7 +90,8 @@ fn repeat(interval: u64, diff: HeaderInfo, len: u64, cur_time: Option<u64>) -> V
 				diff.secondary_scaling,
 				diff.is_secondary,
 			)
-		}).collect::<Vec<_>>()
+		})
+		.collect::<Vec<_>>()
 }
 
 // Creates a new chain with a genesis at a simulated difficulty
@@ -146,7 +145,8 @@ fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
 				time: n.timestamp,
 				duration: dur,
 			}
-		}).collect();
+		})
+		.collect();
 
 	let block_time_sum = sum_entries.iter().fold(0, |sum, t| sum + t.duration);
 	let block_diff_sum = sum_entries.iter().fold(0, |sum, d| sum + d.difficulty);
@@ -168,7 +168,8 @@ fn get_diff_stats(chain_sim: &Vec<HeaderInfo>) -> DiffStats {
 				time: n.timestamp,
 				duration: dur,
 			}
-		}).collect();
+		})
+		.collect();
 
 	DiffStats {
 		height: tip_height as u64,

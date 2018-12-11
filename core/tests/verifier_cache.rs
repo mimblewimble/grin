@@ -12,22 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate chrono;
-extern crate grin_core;
-extern crate grin_keychain as keychain;
-extern crate grin_util as util;
-
-use std::sync::Arc;
-use util::RwLock;
-
 pub mod common;
 
-use grin_core::core::verifier_cache::{LruVerifierCache, VerifierCache};
-use grin_core::core::{Output, OutputFeatures};
-use grin_core::libtx::proof;
-use keychain::{ExtKeychain, Keychain};
+use self::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
+use self::core::core::{Output, OutputFeatures};
+use self::core::libtx::proof;
+use self::keychain::{ExtKeychain, Keychain};
+use self::util::RwLock;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_util as util;
+use std::sync::Arc;
 
-fn verifier_cache() -> Arc<RwLock<VerifierCache>> {
+fn verifier_cache() -> Arc<RwLock<dyn VerifierCache>> {
 	Arc::new(RwLock::new(LruVerifierCache::new()))
 }
 

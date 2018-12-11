@@ -16,6 +16,27 @@
 //! so that wallet API can be fully exercised
 //! Operates directly on a chain instance
 
+use self::chain::types::NoopAdapter;
+use self::chain::Chain;
+use self::core::core::verifier_cache::LruVerifierCache;
+use self::core::core::Transaction;
+use self::core::global::{set_mining_mode, ChainTypes};
+use self::core::libtx::slate::Slate;
+use self::core::{pow, ser};
+use self::keychain::Keychain;
+use self::util::secp::pedersen;
+use self::util::secp::pedersen::Commitment;
+use self::util::{Mutex, RwLock, StopState};
+use crate::libwallet::types::*;
+use crate::{controller, libwallet, WalletCommAdapter, WalletConfig};
+use failure::ResultExt;
+use grin_api as api;
+use grin_chain as chain;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_store as store;
+use grin_util as util;
+use serde_json;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,28 +44,6 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use util::{Mutex, RwLock};
-
-use api;
-use serde_json;
-use store;
-use util;
-use util::secp::pedersen::Commitment;
-
-use failure::ResultExt;
-
-use chain::types::NoopAdapter;
-use chain::Chain;
-use core::core::verifier_cache::LruVerifierCache;
-use core::core::Transaction;
-use core::global::{set_mining_mode, ChainTypes};
-use core::{pow, ser};
-use keychain::Keychain;
-
-use core::libtx::slate::Slate;
-use libwallet::types::*;
-use util::secp::pedersen;
-use {controller, libwallet, WalletCommAdapter, WalletConfig};
 
 /// Messages to simulate wallet requests/responses
 #[derive(Clone, Debug)]
@@ -75,7 +74,7 @@ where
 		String,
 		(
 			Sender<WalletProxyMessage>,
-			Arc<Mutex<WalletInst<LocalWalletClient, K>>>,
+			Arc<Mutex<dyn WalletInst<LocalWalletClient, K>>>,
 		),
 	>,
 	/// simulate json send to another client
@@ -111,6 +110,7 @@ where
 			pow::verify_size,
 			verifier_cache,
 			false,
+			Arc::new(Mutex::new(StopState::new())),
 		).unwrap();
 		let (tx, rx) = channel();
 		let retval = WalletProxy {
@@ -131,7 +131,7 @@ where
 		&mut self,
 		addr: &str,
 		tx: Sender<WalletProxyMessage>,
-		wallet: Arc<Mutex<WalletInst<LocalWalletClient, K>>>,
+		wallet: Arc<Mutex<dyn WalletInst<LocalWalletClient, K>>>,
 	) {
 		self.wallets.insert(addr.to_owned(), (tx, wallet));
 	}

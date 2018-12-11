@@ -13,18 +13,18 @@
 // limitations under the License.
 
 use super::utils::w;
-use chain;
+use crate::chain;
+use crate::rest::*;
+use crate::router::{Handler, ResponseFuture};
+use crate::types::*;
+use crate::util;
+use crate::util::secp::pedersen::Commitment;
+use crate::web::*;
 use failure::ResultExt;
 use hyper::{Body, Request, StatusCode};
-use rest::*;
-use router::{Handler, ResponseFuture};
 use std::collections::HashMap;
 use std::sync::Weak;
-use types::*;
 use url::form_urlencoded;
-use util;
-use util::secp::pedersen::Commitment;
-use web::*;
 
 // Sum tree handler. Retrieve the roots:
 // GET /v1/txhashset/roots

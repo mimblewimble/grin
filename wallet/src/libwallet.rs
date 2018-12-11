@@ -27,4 +27,4 @@ mod error;
 pub mod internal;
 pub mod types;
 
-pub use libwallet::error::{Error, ErrorKind};
+pub use crate::libwallet::error::{Error, ErrorKind};

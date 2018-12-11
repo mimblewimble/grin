@@ -14,15 +14,13 @@
 
 //! Builds the blinded output and related signature proof for the block
 //! reward.
-use keychain::{Identifier, Keychain};
-
-use consensus::reward;
-use core::transaction::kernel_sig_msg;
-use core::KernelFeatures;
-use core::{Output, OutputFeatures, TxKernel};
-use libtx::error::Error;
-use libtx::{aggsig, proof};
-use util::static_secp_instance;
+use crate::consensus::reward;
+use crate::core::transaction::kernel_sig_msg;
+use crate::core::{KernelFeatures, Output, OutputFeatures, TxKernel};
+use crate::keychain::{Identifier, Keychain};
+use crate::libtx::error::Error;
+use crate::libtx::{aggsig, proof};
+use crate::util::static_secp_instance;
 
 /// output a reward output
 pub fn output<K>(

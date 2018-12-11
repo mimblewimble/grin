@@ -16,11 +16,11 @@
 //! This module interfaces into the underlying
 //! [Rust Aggsig library](https://github.com/mimblewimble/rust-secp256k1-zkp/blob/master/src/aggsig.rs)
 
-use keychain::{BlindingFactor, Identifier, Keychain};
-use libtx::error::{Error, ErrorKind};
-use util::secp::key::{PublicKey, SecretKey};
-use util::secp::pedersen::Commitment;
-use util::secp::{self, aggsig, Message, Secp256k1, Signature};
+use crate::keychain::{BlindingFactor, Identifier, Keychain};
+use crate::libtx::error::{Error, ErrorKind};
+use crate::util::secp::key::{PublicKey, SecretKey};
+use crate::util::secp::pedersen::Commitment;
+use crate::util::secp::{self, aggsig, Message, Secp256k1, Signature};
 
 /// Creates a new secure nonce (as a SecretKey), guaranteed to be usable during
 /// aggsig creation.

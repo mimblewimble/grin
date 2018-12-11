@@ -1,7 +1,7 @@
 # Multistage docker build, requires docker 17.05
 
 # builder stage
-FROM rust:1.30.1 as builder
+FROM rust:1.31 as builder
 
 RUN set -ex && \
     apt-get update && \

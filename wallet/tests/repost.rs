@@ -12,30 +12,22 @@
 // limitations under the License.
 
 //! Test a wallet repost command
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store as store;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
-extern crate rand;
 #[macro_use]
 extern crate log;
-extern crate chrono;
-extern crate serde;
-extern crate uuid;
 
-use wallet::test_framework::{self, LocalWalletClient, WalletProxy};
-
+use self::core::global;
+use self::core::global::ChainTypes;
+use self::core::libtx::slate::Slate;
+use self::keychain::ExtKeychain;
+use self::wallet::test_framework::{self, LocalWalletClient, WalletProxy};
+use self::wallet::{libwallet, FileWalletCommAdapter};
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_util as util;
+use grin_wallet as wallet;
 use std::fs;
 use std::thread;
 use std::time::Duration;
-
-use core::global;
-use core::global::ChainTypes;
-use core::libtx::slate::Slate;
-use keychain::ExtKeychain;
-use wallet::{libwallet, FileWalletCommAdapter};
 
 fn clean_output_dir(test_dir: &str) {
 	let _ = fs::remove_dir_all(test_dir);
@@ -97,6 +89,8 @@ fn file_repost_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	let send_file = format!("{}/part_tx_1.tx", test_dir);
 	let receive_file = format!("{}/part_tx_2.tx", test_dir);
 
+	let mut slate = Slate::blank(2);
+
 	// Should have 5 in account1 (5 spendable), 5 in account (2 spendable)
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
@@ -131,7 +125,7 @@ fn file_repost_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	wallet::controller::foreign_single_use(wallet1.clone(), |api| {
 		let adapter = FileWalletCommAdapter::new();
-		let mut slate = adapter.receive_tx_async(&send_file)?;
+		slate = adapter.receive_tx_async(&send_file)?;
 		api.receive_tx(&mut slate, None, None)?;
 		adapter.send_tx_async(&receive_file, &mut slate)?;
 		Ok(())
@@ -143,7 +137,6 @@ fn file_repost_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		w.set_parent_key_id_by_name("mining")?;
 	}
 
-	let mut slate = Slate::blank(2);
 	// wallet 1 finalize
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let adapter = FileWalletCommAdapter::new();

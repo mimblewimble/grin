@@ -17,11 +17,11 @@ use std::u64;
 
 use croaring::Bitmap;
 
-use core::hash::{Hash, ZERO_HASH};
-use core::merkle_proof::MerkleProof;
-use core::pmmr::{Backend, ReadonlyPMMR};
-use core::BlockHeader;
-use ser::{PMMRIndexHashable, PMMRable};
+use crate::core::hash::{Hash, ZERO_HASH};
+use crate::core::merkle_proof::MerkleProof;
+use crate::core::pmmr::{Backend, ReadonlyPMMR};
+use crate::core::BlockHeader;
+use crate::ser::{PMMRIndexHashable, PMMRable};
 
 /// 64 bits all ones: 0b11111111...1
 const ALL_ONES: u64 = u64::MAX;
@@ -36,7 +36,7 @@ const ALL_ONES: u64 = u64::MAX;
 pub struct PMMR<'a, T, B>
 where
 	T: PMMRable,
-	B: 'a + Backend<T>,
+	B: Backend<T>,
 {
 	/// The last position in the PMMR
 	pub last_pos: u64,
@@ -51,7 +51,7 @@ where
 	B: 'a + Backend<T>,
 {
 	/// Build a new prunable Merkle Mountain Range using the provided backend.
-	pub fn new(backend: &'a mut B) -> PMMR<T, B> {
+	pub fn new(backend: &'a mut B) -> PMMR<'_, T, B> {
 		PMMR {
 			backend,
 			last_pos: 0,
@@ -61,7 +61,7 @@ where
 
 	/// Build a new prunable Merkle Mountain Range pre-initialized until
 	/// last_pos with the provided backend.
-	pub fn at(backend: &'a mut B, last_pos: u64) -> PMMR<T, B> {
+	pub fn at(backend: &'a mut B, last_pos: u64) -> PMMR<'_, T, B> {
 		PMMR {
 			backend,
 			last_pos,
@@ -70,7 +70,7 @@ where
 	}
 
 	/// Build a "readonly" view of this PMMR.
-	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<T, B> {
+	pub fn readonly_pmmr(&self) -> ReadonlyPMMR<'_, T, B> {
 		ReadonlyPMMR::at(&self.backend, self.last_pos)
 	}
 
@@ -83,7 +83,8 @@ where
 				// here we want to get from underlying hash file
 				// as the pos *may* have been "removed"
 				self.backend.get_from_file(pi)
-			}).collect()
+			})
+			.collect()
 	}
 
 	fn peak_path(&self, peak_pos: u64) -> Vec<Hash> {

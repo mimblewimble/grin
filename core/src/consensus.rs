@@ -20,8 +20,8 @@
 
 use std::cmp::{max, min};
 
-use global;
-use pow::Difficulty;
+use crate::global;
+use crate::pow::Difficulty;
 
 /// A grin is divisible to 10^9, following the SI prefixes
 pub const GRIN_BASE: u64 = 1_000_000_000;

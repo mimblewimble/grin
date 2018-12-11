@@ -14,36 +14,26 @@
 
 //! Common test functions
 
-extern crate blake2_rfc as blake2;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_pool as pool;
-extern crate grin_store as store;
-extern crate grin_util as util;
-
-extern crate chrono;
-extern crate rand;
-
+use self::chain::store::ChainStore;
+use self::chain::types::Tip;
+use self::core::core::hash::{Hash, Hashed};
+use self::core::core::verifier_cache::VerifierCache;
+use self::core::core::{Block, BlockHeader, BlockSums, Committed, Transaction};
+use self::core::libtx;
+use self::keychain::{ExtKeychain, Keychain};
+use self::pool::types::*;
+use self::pool::TransactionPool;
+use self::util::secp::pedersen::Commitment;
+use self::util::RwLock;
+use grin_chain as chain;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_pool as pool;
+use grin_store as store;
+use grin_util as util;
 use std::collections::HashSet;
 use std::fs;
 use std::sync::Arc;
-use util::RwLock;
-
-use core::core::hash::{Hash, Hashed};
-use core::core::verifier_cache::VerifierCache;
-use core::core::{Block, BlockHeader, BlockSums, Committed, Transaction};
-
-use chain::store::ChainStore;
-use chain::types::Tip;
-use pool::*;
-
-use core::libtx;
-use keychain::{ExtKeychain, Keychain};
-
-use pool::types::*;
-use pool::TransactionPool;
-use util::secp::pedersen::Commitment;
 
 #[derive(Clone)]
 pub struct ChainAdapter {
@@ -86,7 +76,7 @@ impl ChainAdapter {
 		let offset = header.total_kernel_offset();
 
 		// Verify the kernel sums for the block_sums with the new block applied.
-		let (utxo_sum, kernel_sum) = (prev_sums, block as &Committed)
+		let (utxo_sum, kernel_sum) = (prev_sums, block as &dyn Committed)
 			.verify_kernel_sums(overage, offset)
 			.unwrap();
 
@@ -160,8 +150,8 @@ impl BlockChain for ChainAdapter {
 }
 
 pub fn test_setup(
-	chain: Arc<BlockChain>,
-	verifier_cache: Arc<RwLock<VerifierCache>>,
+	chain: Arc<dyn BlockChain>,
+	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 ) -> TransactionPool {
 	TransactionPool::new(
 		PoolConfig {

@@ -12,20 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_core as core;
-extern crate grin_p2p as p2p;
-extern crate grin_pool as pool;
-extern crate grin_store as store;
-extern crate grin_util as util;
+use grin_core as core;
+use grin_p2p as p2p;
+
+use grin_store as store;
+use grin_util as util;
+use grin_util::{Mutex, StopState};
 
 use std::net::{SocketAddr, TcpListener, TcpStream};
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::{thread, time};
 
-use core::core::hash::Hash;
-use core::pow::Difficulty;
-use p2p::Peer;
+use crate::core::core::hash::Hash;
+use crate::core::pow::Difficulty;
+use crate::p2p::Peer;
 
 fn open_port() -> u16 {
 	// use port 0 to allow the OS to assign an open port
@@ -57,9 +57,9 @@ fn peer_handshake() {
 			p2p_config.clone(),
 			net_adapter.clone(),
 			Hash::from_vec(&vec![]),
-			Arc::new(AtomicBool::new(false)),
-			Arc::new(AtomicBool::new(false)),
-		).unwrap(),
+			Arc::new(Mutex::new(StopState::new())),
+		)
+		.unwrap(),
 	);
 
 	let p2p_inner = server.clone();
@@ -78,7 +78,8 @@ fn peer_handshake() {
 		my_addr,
 		&p2p::handshake::Handshake::new(Hash::from_vec(&vec![]), p2p_config.clone()),
 		net_adapter,
-	).unwrap();
+	)
+	.unwrap();
 
 	assert!(peer.info.user_agent.ends_with(env!("CARGO_PKG_VERSION")));
 

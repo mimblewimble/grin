@@ -15,32 +15,30 @@
 //! Facade and handler for the rest of the blockchain implementation
 //! and mostly the chain pipeline.
 
+use crate::core::core::hash::{Hash, Hashed, ZERO_HASH};
+use crate::core::core::merkle_proof::MerkleProof;
+use crate::core::core::verifier_cache::VerifierCache;
+use crate::core::core::{
+	Block, BlockHeader, BlockSums, Committed, Output, OutputIdentifier, Transaction, TxKernelEntry,
+};
+use crate::core::global;
+use crate::core::pow;
+use crate::error::{Error, ErrorKind};
+use crate::lmdb;
+use crate::pipe;
+use crate::store;
+use crate::txhashset;
+use crate::types::{
+	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
+};
+use crate::util::secp::pedersen::{Commitment, RangeProof};
+use crate::util::{Mutex, RwLock, StopState};
+use grin_store::Error::NotFoundErr;
 use std::collections::HashMap;
 use std::fs::File;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use util::RwLock;
-
-use lmdb;
-
-use core::core::hash::{Hash, Hashed, ZERO_HASH};
-use core::core::merkle_proof::MerkleProof;
-use core::core::verifier_cache::VerifierCache;
-use core::core::{
-	Block, BlockHeader, BlockSums, Committed, Output, OutputIdentifier, Transaction, TxKernelEntry,
-};
-use core::global;
-use core::pow;
-use error::{Error, ErrorKind};
-use grin_store::Error::NotFoundErr;
-use pipe;
-use store;
-use txhashset;
-use types::{
-	BlockStatus, ChainAdapter, NoStatus, Options, Tip, TxHashSetRoots, TxHashsetWriteStatus,
-};
-use util::secp::pedersen::{Commitment, RangeProof};
 
 /// Orphan pool size is limited by MAX_ORPHAN_SIZE
 pub const MAX_ORPHAN_SIZE: usize = 200;
@@ -144,13 +142,14 @@ impl OrphanBlockPool {
 pub struct Chain {
 	db_root: String,
 	store: Arc<store::ChainStore>,
-	adapter: Arc<ChainAdapter + Send + Sync>,
+	adapter: Arc<dyn ChainAdapter + Send + Sync>,
 	orphans: Arc<OrphanBlockPool>,
 	txhashset: Arc<RwLock<txhashset::TxHashSet>>,
-	verifier_cache: Arc<RwLock<VerifierCache>>,
+	verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 	// POW verification function
 	pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
 	archive_mode: bool,
+	stop_state: Arc<Mutex<StopState>>,
 	genesis: BlockHeader,
 }
 
@@ -161,62 +160,79 @@ impl Chain {
 	pub fn init(
 		db_root: String,
 		db_env: Arc<lmdb::Environment>,
-		adapter: Arc<ChainAdapter + Send + Sync>,
+		adapter: Arc<dyn ChainAdapter + Send + Sync>,
 		genesis: Block,
 		pow_verifier: fn(&BlockHeader) -> Result<(), pow::Error>,
-		verifier_cache: Arc<RwLock<VerifierCache>>,
+		verifier_cache: Arc<RwLock<dyn VerifierCache>>,
 		archive_mode: bool,
+		stop_state: Arc<Mutex<StopState>>,
 	) -> Result<Chain, Error> {
-		let chain_store = store::ChainStore::new(db_env)?;
+		let chain = {
+			// Note: We take a lock on the stop_state here and do not release it until
+			// we have finished chain initialization.
+			let stop_state_local = stop_state.clone();
+			let stop_lock = stop_state_local.lock();
+			if stop_lock.is_stopped() {
+				return Err(ErrorKind::Stopped.into());
+			}
 
-		let store = Arc::new(chain_store);
+			let store = Arc::new(store::ChainStore::new(db_env)?);
 
-		// open the txhashset, creating a new one if necessary
-		let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
+			// open the txhashset, creating a new one if necessary
+			let mut txhashset = txhashset::TxHashSet::open(db_root.clone(), store.clone(), None)?;
 
-		setup_head(genesis.clone(), store.clone(), &mut txhashset)?;
+			setup_head(&genesis, &store, &mut txhashset)?;
+			Chain::log_heads(&store)?;
 
-		{
-			let head = store.head()?;
-			debug!(
-				"init: head: {} @ {} [{}]",
-				head.total_difficulty.to_num(),
-				head.height,
-				head.last_block_h,
-			);
-		}
+			Chain {
+				db_root,
+				store,
+				adapter,
+				orphans: Arc::new(OrphanBlockPool::new()),
+				txhashset: Arc::new(RwLock::new(txhashset)),
+				pow_verifier,
+				verifier_cache,
+				archive_mode,
+				stop_state,
+				genesis: genesis.header.clone(),
+			}
+		};
 
-		{
-			let header_head = store.header_head()?;
-			debug!(
-				"init: header_head: {} @ {} [{}]",
-				header_head.total_difficulty.to_num(),
-				header_head.height,
-				header_head.last_block_h,
-			);
-		}
+		// Run chain compaction. Laptops and other intermittent nodes
+		// may not run long enough to trigger daily compaction.
+		// So run it explicitly here on startup (its fast enough to do so).
+		// Note: we release the stop_lock from above as compact also requires a lock.
+		chain.compact()?;
 
-		{
-			let sync_head = store.get_sync_head()?;
-			debug!(
-				"init: sync_head: {} @ {} [{}]",
-				sync_head.total_difficulty.to_num(),
-				sync_head.height,
-				sync_head.last_block_h,
-			);
-		}
+		Ok(chain)
+	}
 
-		Ok(Chain {
-			db_root: db_root,
-			store: store,
-			adapter: adapter,
-			orphans: Arc::new(OrphanBlockPool::new()),
-			txhashset: Arc::new(RwLock::new(txhashset)),
-			pow_verifier,
-			verifier_cache,
-			archive_mode,
-			genesis: genesis.header.clone(),
-		})
+	fn log_heads(store: &store::ChainStore) -> Result<(), Error> {
+		let head = store.head()?;
+		debug!(
+			"init: head: {} @ {} [{}]",
+			head.total_difficulty.to_num(),
+			head.height,
+			head.last_block_h,
+		);
+
+		let header_head = store.header_head()?;
+		debug!(
+			"init: header_head: {} @ {} [{}]",
+			header_head.total_difficulty.to_num(),
+			header_head.height,
+			header_head.last_block_h,
+		);
+
+		let sync_head = store.get_sync_head()?;
+		debug!(
+			"init: sync_head: {} @ {} [{}]",
+			sync_head.total_difficulty.to_num(),
+			sync_head.height,
+			sync_head.last_block_h,
+		);
+
+		Ok(())
 	}
 
 	/// Processes a single block, then checks for orphans, processing
@@ -253,6 +269,15 @@ impl Chain {
 	/// or false if it has added to a fork (or orphan?).
 	fn process_block_single(&self, b: Block, opts: Options) -> Result<Option<Tip>, Error> {
 		let (maybe_new_head, prev_head) = {
+			// Note: We take a lock on the stop_state here and do not release it until
+			// we have finished processing this single block.
+			// We take care to write both the txhashset *and* the batch while we
+			// have the stop_state lock.
+			let stop_lock = self.stop_state.lock();
+			if stop_lock.is_stopped() {
+				return Err(ErrorKind::Stopped.into());
+			}
+
 			let mut txhashset = self.txhashset.write();
 			let batch = self.store.batch()?;
 			let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
@@ -260,6 +285,11 @@ impl Chain {
 			let prev_head = ctx.batch.head()?;
 
 			let maybe_new_head = pipe::process_block(&b, &mut ctx);
+
+			// We have flushed txhashset extension changes to disk
+			// but not yet committed the batch.
+			// A node shutdown at this point can be catastrophic...
+			// We prevent this via the stop_lock (see above).
 			if let Ok(_) = maybe_new_head {
 				ctx.batch.commit()?;
 			}
@@ -324,11 +354,12 @@ impl Chain {
 
 	/// Process a block header received during "header first" propagation.
 	pub fn process_block_header(&self, bh: &BlockHeader, opts: Options) -> Result<(), Error> {
+		// We take a write lock on the txhashset and create a new batch
+		// but this is strictly readonly so we do not commit the batch.
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
 		pipe::process_block_header(bh, &mut ctx)?;
-		ctx.batch.commit()?;
 		Ok(())
 	}
 
@@ -336,6 +367,15 @@ impl Chain {
 	/// This is only ever used during sync and is based on sync_head.
 	/// We update header_head here if our total work increases.
 	pub fn sync_block_headers(&self, headers: &[BlockHeader], opts: Options) -> Result<(), Error> {
+		// Note: We take a lock on the stop_state here and do not release it until
+		// we have finished processing this single block.
+		// We take care to write both the txhashset *and* the batch while we
+		// have the stop_state lock.
+		let stop_lock = self.stop_state.lock();
+		if stop_lock.is_stopped() {
+			return Err(ErrorKind::Stopped.into());
+		}
+
 		let mut txhashset = self.txhashset.write();
 		let batch = self.store.batch()?;
 		let mut ctx = self.new_ctx(opts, batch, &mut txhashset)?;
@@ -782,7 +822,7 @@ impl Chain {
 		&self,
 		h: Hash,
 		txhashset_data: File,
-		status: &TxHashsetWriteStatus,
+		status: &dyn TxHashsetWriteStatus,
 	) -> Result<(), Error> {
 		status.on_setup();
 
@@ -865,20 +905,19 @@ impl Chain {
 	}
 
 	fn compact_txhashset(&self) -> Result<(), Error> {
-		debug!("Starting blockchain compaction.");
+		debug!("Starting txhashset compaction...");
 		{
+			// Note: We take a lock on the stop_state here and do not release it until
+			// we have finished processing this chain compaction operation.
+			let stop_lock = self.stop_state.lock();
+			if stop_lock.is_stopped() {
+				return Err(ErrorKind::Stopped.into());
+			}
+
 			let mut txhashset = self.txhashset.write();
 			txhashset.compact()?;
-			txhashset::extending_readonly(&mut txhashset, |extension| {
-				extension.dump_output_pmmr();
-				Ok(())
-			})?;
 		}
-
-		// Now check we can still successfully validate the chain state after
-		// compacting, shouldn't be necessary once all of this is well-oiled
-		debug!("Validating state after compaction.");
-		self.validate(true)?;
+		debug!("... finished txhashset compaction.");
 		Ok(())
 	}
 
@@ -892,7 +931,11 @@ impl Chain {
 
 		let horizon = global::cut_through_horizon() as u64;
 		let head = self.head()?;
-		let tail = self.tail()?;
+
+		let tail = match self.tail() {
+			Ok(tail) => tail,
+			Err(_) => Tip::from_header(&self.genesis),
+		};
 
 		let cutoff = head.height.saturating_sub(horizon);
 
@@ -988,7 +1031,8 @@ impl Chain {
 		if outputs.0 != rangeproofs.0 || outputs.1.len() != rangeproofs.1.len() {
 			return Err(ErrorKind::TxHashSetErr(String::from(
 				"Output and rangeproof sets don't match",
-			)).into());
+			))
+			.into());
 		}
 		let mut output_vec: Vec<Output> = vec![];
 		for (ref x, &y) in outputs.1.iter().zip(rangeproofs.1.iter()) {
@@ -1131,7 +1175,7 @@ impl Chain {
 	/// Builds an iterator on blocks starting from the current chain head and
 	/// running backward. Specialized to return information pertaining to block
 	/// difficulty calculation (timestamp and previous difficulties).
-	pub fn difficulty_iter(&self) -> store::DifficultyIter {
+	pub fn difficulty_iter(&self) -> store::DifficultyIter<'_> {
 		let head = self.head().unwrap();
 		let store = self.store.clone();
 		store::DifficultyIter::from(head.last_block_h, store)
@@ -1146,8 +1190,8 @@ impl Chain {
 }
 
 fn setup_head(
-	genesis: Block,
-	store: Arc<store::ChainStore>,
+	genesis: &Block,
+	store: &store::ChainStore,
 	txhashset: &mut txhashset::TxHashSet,
 ) -> Result<(), Error> {
 	let mut batch = store.batch()?;
@@ -1241,10 +1285,8 @@ fn setup_head(
 			let tip = Tip::from_header(&genesis.header);
 			batch.save_head(&tip)?;
 
-			batch.save_block_header(&genesis.header)?;
-
 			if genesis.kernels().len() > 0 {
-				let (utxo_sum, kernel_sum) = (sums, &genesis as &Committed).verify_kernel_sums(
+				let (utxo_sum, kernel_sum) = (sums, genesis as &Committed).verify_kernel_sums(
 					genesis.header.overage(),
 					genesis.header.total_kernel_offset(),
 				)?;

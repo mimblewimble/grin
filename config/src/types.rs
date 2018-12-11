@@ -18,9 +18,9 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use servers::ServerConfig;
-use util::LoggingConfig;
-use wallet::WalletConfig;
+use crate::servers::ServerConfig;
+use crate::util::LoggingConfig;
+use crate::wallet::WalletConfig;
 
 /// Error type wrapping config errors.
 #[derive(Debug)]
@@ -39,7 +39,7 @@ pub enum ConfigError {
 }
 
 impl fmt::Display for ConfigError {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
 			ConfigError::ParseError(ref file_name, ref message) => write!(
 				f,

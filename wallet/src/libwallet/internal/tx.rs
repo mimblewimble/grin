@@ -14,15 +14,15 @@
 
 //! Transaction building functions
 
-use util;
+use crate::util;
 use uuid::Uuid;
 
-use core::libtx::slate::Slate;
-use core::ser;
-use keychain::{Identifier, Keychain};
-use libwallet::internal::{selection, updater};
-use libwallet::types::{Context, NodeClient, TxLogEntryType, WalletBackend};
-use libwallet::{Error, ErrorKind};
+use crate::core::libtx::slate::Slate;
+use crate::core::ser;
+use crate::keychain::{Identifier, Keychain};
+use crate::libwallet::internal::{selection, updater};
+use crate::libwallet::types::{Context, NodeClient, TxLogEntryType, WalletBackend};
+use crate::libwallet::{Error, ErrorKind};
 
 /// Receive a transaction, modifying the slate accordingly (which can then be
 /// sent back to sender for posting)
@@ -169,7 +169,7 @@ where
 	} else if let Some(tx_slate_id) = tx_slate_id {
 		tx_id_string = tx_slate_id.to_string();
 	}
-	let tx_vec = updater::retrieve_txs(wallet, tx_id, tx_slate_id, &parent_key_id)?;
+	let tx_vec = updater::retrieve_txs(wallet, tx_id, tx_slate_id, Some(&parent_key_id))?;
 	if tx_vec.len() != 1 {
 		return Err(ErrorKind::TransactionDoesntExist(tx_id_string))?;
 	}
@@ -199,7 +199,7 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
-	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), None, parent_key_id)?;
+	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), None, Some(parent_key_id))?;
 	if tx_vec.len() != 1 {
 		return Err(ErrorKind::TransactionDoesntExist(tx_id.to_string()))?;
 	}
@@ -219,7 +219,9 @@ where
 	K: Keychain,
 {
 	let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
-	let tx_vec = updater::retrieve_txs(wallet, None, Some(slate.id), parent_key_id)?;
+	// This will ignore the parent key, so no need to specify account on the
+	// finalise command
+	let tx_vec = updater::retrieve_txs(wallet, None, Some(slate.id), None)?;
 	if tx_vec.len() != 1 {
 		return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?;
 	}
@@ -233,8 +235,8 @@ where
 
 #[cfg(test)]
 mod test {
-	use core::libtx::build;
-	use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
+	use crate::core::libtx::build;
+	use crate::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 
 	#[test]
 	// demonstrate that input.commitment == referenced output.commitment

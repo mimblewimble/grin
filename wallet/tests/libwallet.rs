@@ -12,22 +12,17 @@
 // limitations under the License.
 
 //! core::libtx specific tests
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
-
-extern crate rand;
-extern crate uuid;
-
-use core::core::transaction::kernel_sig_msg;
-use core::libtx::{aggsig, proof};
-use keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
-use util::secp;
-use util::secp::key::{PublicKey, SecretKey};
-use wallet::libwallet::types::Context;
-use wallet::{EncryptedWalletSeed, WalletSeed};
-
+use self::core::core::transaction::kernel_sig_msg;
+use self::core::libtx::{aggsig, proof};
+use self::keychain::{BlindSum, BlindingFactor, ExtKeychain, Keychain};
+use self::util::secp;
+use self::util::secp::key::{PublicKey, SecretKey};
+use self::wallet::libwallet::types::Context;
+use self::wallet::{EncryptedWalletSeed, WalletSeed};
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_util as util;
+use grin_wallet as wallet;
 use rand::thread_rng;
 
 #[test]
@@ -48,7 +43,8 @@ fn aggsig_sender_receiver_interaction() {
 				&BlindSum::new()
 					.sub_blinding_factor(BlindingFactor::from_secret_key(skey1))
 					.add_blinding_factor(BlindingFactor::from_secret_key(skey2)),
-			).unwrap();
+			)
+			.unwrap();
 
 		keychain
 			.secp()
@@ -97,7 +93,8 @@ fn aggsig_sender_receiver_interaction() {
 				&s_cx.get_public_keys(keychain.secp()).1,
 				&rx_cx.get_public_keys(keychain.secp()).1,
 			],
-		).unwrap();
+		)
+		.unwrap();
 
 		pub_key_sum = PublicKey::from_combination(
 			keychain.secp(),
@@ -105,7 +102,8 @@ fn aggsig_sender_receiver_interaction() {
 				&s_cx.get_public_keys(keychain.secp()).0,
 				&rx_cx.get_public_keys(keychain.secp()).0,
 			],
-		).unwrap();
+		)
+		.unwrap();
 
 		let msg = kernel_sig_msg(0, 0).unwrap();
 		let sig_part = aggsig::calculate_partial_sig(
@@ -115,7 +113,8 @@ fn aggsig_sender_receiver_interaction() {
 			&pub_nonce_sum,
 			Some(&pub_key_sum),
 			&msg,
-		).unwrap();
+		)
+		.unwrap();
 		(pub_excess, pub_nonce, sig_part)
 	};
 
@@ -146,7 +145,8 @@ fn aggsig_sender_receiver_interaction() {
 			&pub_nonce_sum,
 			Some(&pub_key_sum),
 			&msg,
-		).unwrap();
+		)
+		.unwrap();
 		sig_part
 	};
 
@@ -178,14 +178,16 @@ fn aggsig_sender_receiver_interaction() {
 			&pub_nonce_sum,
 			Some(&pub_key_sum),
 			&msg,
-		).unwrap();
+		)
+		.unwrap();
 
 		// Receiver now generates final signature from the two parts
 		let final_sig = aggsig::add_signatures(
 			&keychain.secp(),
 			vec![&sender_sig_part, &our_sig_part],
 			&pub_nonce_sum,
-		).unwrap();
+		)
+		.unwrap();
 
 		// Receiver calculates the final public key (to verify sig later)
 		let final_pubkey = PublicKey::from_combination(
@@ -194,7 +196,8 @@ fn aggsig_sender_receiver_interaction() {
 				&s_cx.get_public_keys(keychain.secp()).0,
 				&rx_cx.get_public_keys(keychain.secp()).0,
 			],
-		).unwrap();
+		)
+		.unwrap();
 
 		(final_sig, final_pubkey)
 	};
@@ -252,7 +255,8 @@ fn aggsig_sender_receiver_interaction_offset() {
 					// subtract the kernel offset here like as would when
 					// verifying a kernel signature
 					.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)),
-			).unwrap();
+			)
+			.unwrap();
 
 		keychain
 			.secp()
@@ -277,7 +281,8 @@ fn aggsig_sender_receiver_interaction_offset() {
 					// subtract the kernel offset to create an aggsig context
 					// with our "split" key
 					.sub_blinding_factor(BlindingFactor::from_secret_key(kernel_offset)),
-			).unwrap();
+			)
+			.unwrap();
 
 		let blind = blinding_factor.secret_key(&keychain.secp()).unwrap();
 
@@ -304,7 +309,8 @@ fn aggsig_sender_receiver_interaction_offset() {
 				&s_cx.get_public_keys(keychain.secp()).1,
 				&rx_cx.get_public_keys(keychain.secp()).1,
 			],
-		).unwrap();
+		)
+		.unwrap();
 
 		pub_key_sum = PublicKey::from_combination(
 			keychain.secp(),
@@ -312,7 +318,8 @@ fn aggsig_sender_receiver_interaction_offset() {
 				&s_cx.get_public_keys(keychain.secp()).0,
 				&rx_cx.get_public_keys(keychain.secp()).0,
 			],
-		).unwrap();
+		)
+		.unwrap();
 
 		let msg = kernel_sig_msg(0, 0).unwrap();
 		let sig_part = aggsig::calculate_partial_sig(
@@ -322,7 +329,8 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&pub_nonce_sum,
 			Some(&pub_key_sum),
 			&msg,
-		).unwrap();
+		)
+		.unwrap();
 		(pub_excess, pub_nonce, sig_part)
 	};
 
@@ -353,7 +361,8 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&pub_nonce_sum,
 			Some(&pub_key_sum),
 			&msg,
-		).unwrap();
+		)
+		.unwrap();
 		sig_part
 	};
 
@@ -384,14 +393,16 @@ fn aggsig_sender_receiver_interaction_offset() {
 			&pub_nonce_sum,
 			Some(&pub_key_sum),
 			&msg,
-		).unwrap();
+		)
+		.unwrap();
 
 		// Receiver now generates final signature from the two parts
 		let final_sig = aggsig::add_signatures(
 			&keychain.secp(),
 			vec![&sender_sig_part, &our_sig_part],
 			&pub_nonce_sum,
-		).unwrap();
+		)
+		.unwrap();
 
 		// Receiver calculates the final public key (to verify sig later)
 		let final_pubkey = PublicKey::from_combination(
@@ -400,7 +411,8 @@ fn aggsig_sender_receiver_interaction_offset() {
 				&s_cx.get_public_keys(keychain.secp()).0,
 				&rx_cx.get_public_keys(keychain.secp()).0,
 			],
-		).unwrap();
+		)
+		.unwrap();
 
 		(final_sig, final_pubkey)
 	};
@@ -446,7 +458,8 @@ fn test_rewind_range_proof() {
 		&key_id,
 		commit,
 		Some(extra_data.to_vec().clone()),
-	).unwrap();
+	)
+	.unwrap();
 	let proof_info =
 		proof::rewind(&keychain, commit, Some(extra_data.to_vec().clone()), proof).unwrap();
 
@@ -477,7 +490,8 @@ fn test_rewind_range_proof() {
 		commit3,
 		Some(wrong_extra_data.to_vec().clone()),
 		proof,
-	).unwrap();
+	)
+	.unwrap();
 
 	assert_eq!(proof_info.success, false);
 	assert_eq!(proof_info.value, 0);

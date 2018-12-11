@@ -13,18 +13,17 @@
 // limitations under the License.
 
 use std::fs::{self, File};
-/// Wrappers around the `zip-rs` library to compress and decompress zip
-/// bzip2 archives.
+/// Wrappers around the `zip-rs` library to compress and decompress zip archives.
 use std::io;
 use std::path::Path;
 use walkdir::WalkDir;
 
-use zip_rs;
-use zip_rs::result::{ZipError, ZipResult};
-use zip_rs::write::FileOptions;
+use self::zip_rs::result::{ZipError, ZipResult};
+use self::zip_rs::write::FileOptions;
+use zip as zip_rs;
 
-/// Compress a source directory recursively into a zip file using the
-/// bzip2 format. Permissions are set to 644 by default to avoid any
+/// Compress a source directory recursively into a zip file.
+/// Permissions are set to 644 by default to avoid any
 /// unwanted execution bits.
 pub fn compress(src_dir: &Path, dst_file: &File) -> ZipResult<()> {
 	if !Path::new(src_dir).is_dir() {
@@ -35,7 +34,7 @@ pub fn compress(src_dir: &Path, dst_file: &File) -> ZipResult<()> {
 	}
 
 	let options = FileOptions::default()
-		.compression_method(zip_rs::CompressionMethod::Bzip2)
+		.compression_method(zip_rs::CompressionMethod::Stored)
 		.unix_permissions(0o644);
 
 	let mut zip = zip_rs::ZipWriter::new(dst_file);

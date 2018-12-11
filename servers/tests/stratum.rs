@@ -12,34 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_api as api;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_p2p as p2p;
-extern crate grin_servers as servers;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
-
-extern crate bufstream;
-extern crate serde_json;
 #[macro_use]
 extern crate log;
 
 mod framework;
 
+use self::core::global::{self, ChainTypes};
+use crate::framework::{config, stratum_config};
 use bufstream::BufStream;
+use grin_core as core;
+use grin_servers as servers;
+use grin_util as util;
+use grin_util::{Mutex, StopState};
 use serde_json::Value;
 use std::io::prelude::{BufRead, Write};
 use std::net::TcpStream;
-
 use std::process;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::{thread, time};
-
-use core::global::{self, ChainTypes};
-
-use framework::{config, stratum_config};
 
 // Create a grin server, and a stratum server.
 // Simulate a few JSONRpc requests and verify the results.
@@ -150,7 +140,7 @@ fn basic_stratum_server() {
 	info!("stratum server and worker stats verification ok");
 
 	// Start mining blocks
-	let stop = Arc::new(AtomicBool::new(false));
+	let stop = Arc::new(Mutex::new(StopState::new()));
 	s.start_test_miner(None, stop.clone());
 	info!("test miner started");
 
