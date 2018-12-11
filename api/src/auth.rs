@@ -39,6 +39,9 @@ impl Handler for BasicAuthMiddleware {
 		req: Request<Body>,
 		mut handlers: Box<dyn Iterator<Item = HandlerObj>>,
 	) -> ResponseFuture {
+		if req.method().as_str() == "OPTIONS" {
+			return handlers.next().unwrap().call(req, handlers);
+		}
 		if req.headers().contains_key(AUTHORIZATION)
 			&& verify_slices_are_equal(
 				req.headers()[AUTHORIZATION].as_bytes(),
