@@ -22,16 +22,16 @@ use std::ops::Add;
 /// commitment generation.
 use std::{error, fmt};
 
-use blake2::blake2b::blake2b;
-use extkey_bip32::{self, ChildNumber, ExtendedPrivKey};
+use crate::blake2::blake2b::blake2b;
+use crate::extkey_bip32::{self, ChildNumber, ExtendedPrivKey};
 use serde::{de, ser}; //TODO: Convert errors to use ErrorKind
 
-use util;
-use util::secp::constants::SECRET_KEY_SIZE;
-use util::secp::key::{PublicKey, SecretKey};
-use util::secp::pedersen::Commitment;
-use util::secp::{self, Message, Secp256k1, Signature};
-use util::static_secp_instance;
+use crate::util;
+use crate::util::secp::constants::SECRET_KEY_SIZE;
+use crate::util::secp::key::{PublicKey, SecretKey};
+use crate::util::secp::pedersen::Commitment;
+use crate::util::secp::{self, Message, Secp256k1, Signature};
+use crate::util::static_secp_instance;
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
@@ -67,7 +67,7 @@ impl error::Error for Error {
 }
 
 impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
 			_ => write!(f, "some kind of keychain error"),
 		}
@@ -100,7 +100,7 @@ struct IdentifierVisitor;
 impl<'de> de::Visitor<'de> for IdentifierVisitor {
 	type Value = Identifier;
 
-	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+	fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
 		formatter.write_str("an identifier")
 	}
 
@@ -206,15 +206,15 @@ impl AsRef<[u8]> for Identifier {
 }
 
 impl ::std::fmt::Debug for Identifier {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-		try!(write!(f, "{}(", stringify!(Identifier)));
-		try!(write!(f, "{}", self.to_hex()));
+	fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+		r#try!(write!(f, "{}(", stringify!(Identifier)));
+		r#try!(write!(f, "{}", self.to_hex()));
 		write!(f, ")")
 	}
 }
 
 impl fmt::Display for Identifier {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.to_hex())
 	}
 }
@@ -223,7 +223,7 @@ impl fmt::Display for Identifier {
 pub struct BlindingFactor([u8; SECRET_KEY_SIZE]);
 
 impl fmt::Debug for BlindingFactor {
-	fn fmt(&self, f: &mut ::std::fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "{}", self.to_hex())
 	}
 }
@@ -440,7 +440,7 @@ pub trait Keychain: Sync + Send + Clone {
 	fn commit(&self, amount: u64, id: &Identifier) -> Result<Commitment, Error>;
 	fn blind_sum(&self, blind_sum: &BlindSum) -> Result<BlindingFactor, Error>;
 	fn sign(&self, msg: &Message, id: &Identifier) -> Result<Signature, Error>;
-	fn sign_with_blinding(&self, &Message, &BlindingFactor) -> Result<Signature, Error>;
+	fn sign_with_blinding(&self, _: &Message, _: &BlindingFactor) -> Result<Signature, Error>;
 	fn secp(&self) -> &Secp256k1;
 }
 
@@ -448,9 +448,9 @@ pub trait Keychain: Sync + Send + Clone {
 mod test {
 	use rand::thread_rng;
 
-	use types::{BlindingFactor, ExtKeychainPath, Identifier};
-	use util::secp::key::{SecretKey, ZERO_KEY};
-	use util::secp::Secp256k1;
+	use crate::types::{BlindingFactor, ExtKeychainPath, Identifier};
+	use crate::util::secp::key::{SecretKey, ZERO_KEY};
+	use crate::util::secp::Secp256k1;
 
 	#[test]
 	fn split_blinding_factor() {

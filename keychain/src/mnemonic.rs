@@ -40,7 +40,7 @@ pub enum Error {
 }
 
 impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
 			Error::BadWord(ref b) => write!(f, "invalid bip39 word {}", b),
 			Error::BadChecksum(exp, actual) => write!(
@@ -72,7 +72,7 @@ pub fn to_entropy(mnemonic: &str) -> Result<Vec<u8>, Error> {
 	}
 
 	// u11 vector of indexes for each word
-	let mut indexes: Vec<u16> = try!(words.iter().map(|x| search(x)).collect());
+	let mut indexes: Vec<u16> = r#try!(words.iter().map(|x| search(x)).collect());
 	let checksum_bits = words.len() / 3;
 	let mask = ((1 << checksum_bits) - 1) as u8;
 	let last = indexes.pop().unwrap();
@@ -155,7 +155,7 @@ where
 	Option<&'a str>: From<T>,
 {
 	// make sure the mnemonic is valid
-	try!(to_entropy(mnemonic));
+	r#try!(to_entropy(mnemonic));
 
 	let salt = ("mnemonic".to_owned() + Option::from(passphrase).unwrap_or("")).into_bytes();
 	let data = mnemonic.as_bytes();
@@ -169,8 +169,8 @@ where
 #[cfg(test)]
 mod tests {
 	use super::{from_entropy, to_entropy, to_seed};
+	use crate::util::{from_hex, to_hex};
 	use rand::{thread_rng, Rng};
-	use util::{from_hex, to_hex};
 
 	struct Test<'a> {
 		mnemonic: &'a str,

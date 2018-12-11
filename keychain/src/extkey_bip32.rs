@@ -37,10 +37,10 @@ use std::io::Cursor;
 use std::str::FromStr;
 use std::{error, fmt};
 
+use crate::mnemonic;
+use crate::util::secp::key::{PublicKey, SecretKey};
+use crate::util::secp::{self, ContextFlag, Secp256k1};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use mnemonic;
-use util::secp::key::{PublicKey, SecretKey};
-use util::secp::{self, ContextFlag, Secp256k1};
 
 use digest::generic_array::GenericArray;
 use digest::Digest;
@@ -48,7 +48,7 @@ use hmac::{Hmac, Mac};
 use ripemd160::Ripemd160;
 use sha2::{Sha256, Sha512};
 
-use base58;
+use crate::base58;
 
 // Create alias for HMAC-SHA256
 type HmacSha512 = Hmac<Sha512>;
@@ -259,7 +259,7 @@ impl From<ChildNumber> for u32 {
 }
 
 impl fmt::Display for ChildNumber {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
 			ChildNumber::Hardened { index } => write!(f, "{}'", index),
 			ChildNumber::Normal { index } => write!(f, "{}", index),
@@ -303,7 +303,7 @@ pub enum Error {
 }
 
 impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
 			Error::CannotDeriveFromHardenedKey => {
 				f.write_str("cannot derive hardened key from public key")
@@ -317,7 +317,7 @@ impl fmt::Display for Error {
 }
 
 impl error::Error for Error {
-	fn cause(&self) -> Option<&error::Error> {
+	fn cause(&self) -> Option<&dyn error::Error> {
 		if let Error::Ecdsa(ref e) = *self {
 			Some(e)
 		} else {
@@ -377,7 +377,7 @@ impl ExtendedPrivKey {
 			Err(e) => return Err(Error::MnemonicError(e)),
 		};
 		let mut hasher = BIP32GrinHasher::new();
-		let key = try!(ExtendedPrivKey::new_master(secp, &mut hasher, &seed));
+		let key = r#try!(ExtendedPrivKey::new_master(secp, &mut hasher, &seed));
 		Ok(key)
 	}
 
@@ -429,7 +429,8 @@ impl ExtendedPrivKey {
 		hasher.append_sha512(&be_n);
 		let result = hasher.result_sha512();
 		let mut sk = SecretKey::from_slice(secp, &result[..32]).map_err(Error::Ecdsa)?;
-		sk.add_assign(secp, &self.secret_key).map_err(Error::Ecdsa)?;
+		sk.add_assign(secp, &self.secret_key)
+			.map_err(Error::Ecdsa)?;
 
 		Ok(ExtendedPrivKey {
 			network: self.network,
@@ -518,7 +519,7 @@ impl ExtendedPubKey {
 				BigEndian::write_u32(&mut be_n, n);
 				hasher.append_sha512(&be_n);
 
-				let mut result = hasher.result_sha512();
+				let result = hasher.result_sha512();
 
 				let secret_key = SecretKey::from_slice(secp, &result[..32])?;
 				let chain_code = ChainCode::from(&result[32..]);
@@ -574,7 +575,7 @@ impl ExtendedPubKey {
 }
 
 impl fmt::Display for ExtendedPrivKey {
-	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let mut ret = [0; 78];
 		ret[0..4].copy_from_slice(&self.network[0..4]);
 		ret[4] = self.depth as u8;
@@ -619,7 +620,7 @@ impl FromStr for ExtendedPrivKey {
 }
 
 impl fmt::Display for ExtendedPubKey {
-	fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
 		let secp = Secp256k1::without_caps();
 		let mut ret = [0; 78];
 		ret[0..4].copy_from_slice(&self.network[0..4]);
@@ -669,8 +670,8 @@ mod tests {
 	use std::str::FromStr;
 	use std::string::ToString;
 
-	use util::from_hex;
-	use util::secp::Secp256k1;
+	use crate::util::from_hex;
+	use crate::util::secp::Secp256k1;
 
 	use super::*;
 

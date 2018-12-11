@@ -14,11 +14,11 @@
 
 //! Selection of inputs for building transactions
 
-use core::libtx::{build, slate::Slate, tx_fee};
-use keychain::{Identifier, Keychain};
-use libwallet::error::{Error, ErrorKind};
-use libwallet::internal::keys;
-use libwallet::types::*;
+use crate::core::libtx::{build, slate::Slate, tx_fee};
+use crate::keychain::{Identifier, Keychain};
+use crate::libwallet::error::{Error, ErrorKind};
+use crate::libwallet::internal::keys;
+use crate::libwallet::types::*;
 
 /// Initialize a transaction on the sender side, returns a corresponding
 /// libwallet transaction slate with the appropriate inputs selected,
@@ -418,7 +418,8 @@ where
 		.filter(|out| {
 			out.root_key_id == *parent_key_id
 				&& out.eligible_to_spend(current_height, minimum_confirmations)
-		}).collect::<Vec<OutputData>>();
+		})
+		.collect::<Vec<OutputData>>();
 
 	let max_available = eligible.len();
 
@@ -480,7 +481,8 @@ fn select_from(amount: u64, select_all: bool, outputs: Vec<OutputData>) -> Optio
 						let res = selected_amount < amount;
 						selected_amount += out.value;
 						res
-					}).cloned()
+					})
+					.cloned()
 					.collect(),
 			);
 		}

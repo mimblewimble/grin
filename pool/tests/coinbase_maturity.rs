@@ -12,27 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate blake2_rfc as blake2;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_pool as pool;
-extern crate grin_util as util;
-
-extern crate chrono;
-extern crate rand;
-
 pub mod common;
 
+use self::core::core::hash::Hash;
+use self::core::core::verifier_cache::LruVerifierCache;
+use self::core::core::{BlockHeader, BlockSums, Transaction};
+use self::keychain::{ExtKeychain, Keychain};
+use self::pool::types::{BlockChain, PoolError};
+use self::util::RwLock;
+use crate::common::*;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_pool as pool;
+use grin_util as util;
 use std::sync::Arc;
-use util::RwLock;
-
-use common::*;
-use core::core::hash::Hash;
-use core::core::verifier_cache::LruVerifierCache;
-use core::core::{BlockHeader, BlockSums, Transaction};
-use keychain::{ExtKeychain, Keychain};
-use pool::types::{BlockChain, PoolError};
 
 #[derive(Clone)]
 pub struct CoinbaseMaturityErrorChainAdapter {}

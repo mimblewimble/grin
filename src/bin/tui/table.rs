@@ -52,7 +52,7 @@
 )]
 
 // Crate Dependencies ---------------------------------------------------------
-extern crate cursive;
+use cursive;
 
 // STD Dependencies -----------------------------------------------------------
 use std::cmp::{self, Ordering};
@@ -158,11 +158,11 @@ pub struct TableView<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static>
 	items: Vec<T>,
 	rows_to_items: Vec<usize>,
 
-	on_sort: Option<Rc<Fn(&mut Cursive, H, Ordering)>>,
+	on_sort: Option<Rc<dyn Fn(&mut Cursive, H, Ordering)>>,
 	// TODO Pass drawing offsets into the handlers so a popup menu
 	// can be created easily?
-	on_submit: Option<Rc<Fn(&mut Cursive, usize, usize)>>,
-	on_select: Option<Rc<Fn(&mut Cursive, usize, usize)>>,
+	on_submit: Option<Rc<dyn Fn(&mut Cursive, usize, usize)>>,
+	on_select: Option<Rc<dyn Fn(&mut Cursive, usize, usize)>>,
 }
 
 impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H> {
@@ -581,9 +581,9 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 }
 
 impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H> {
-	fn draw_columns<C: Fn(&Printer, &TableColumn<H>)>(
+	fn draw_columns<C: Fn(&Printer<'_, '_>, &TableColumn<H>)>(
 		&self,
-		printer: &Printer,
+		printer: &Printer<'_, '_>,
 		sep: &str,
 		callback: C,
 	) {
@@ -620,7 +620,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 		}
 	}
 
-	fn draw_item(&self, printer: &Printer, i: usize) {
+	fn draw_item(&self, printer: &Printer<'_, '_>, i: usize) {
 		self.draw_columns(printer, "┆ ", |printer, column| {
 			let value = self.items[self.rows_to_items[i]].to_column(column.column);
 			column.draw_row(printer, value.as_str());
@@ -692,7 +692,7 @@ impl<T: TableViewItem<H>, H: Eq + Hash + Copy + Clone + 'static> TableView<T, H>
 impl<T: TableViewItem<H> + 'static, H: Eq + Hash + Copy + Clone + 'static> View
 	for TableView<T, H>
 {
-	fn draw(&self, printer: &Printer) {
+	fn draw(&self, printer: &Printer<'_, '_>) {
 		self.draw_columns(printer, "╷ ", |printer, column| {
 			let color = if column.order != Ordering::Equal || column.selected {
 				if self.column_select && column.selected && self.enabled && printer.focused {
@@ -942,7 +942,7 @@ impl<H: Copy + Clone + 'static> TableColumn<H> {
 		}
 	}
 
-	fn draw_header(&self, printer: &Printer) {
+	fn draw_header(&self, printer: &Printer<'_, '_>) {
 		let order = match self.order {
 			Ordering::Less => "^",
 			Ordering::Greater => "v",
@@ -972,7 +972,7 @@ impl<H: Copy + Clone + 'static> TableColumn<H> {
 		printer.print((0, 0), header.as_str());
 	}
 
-	fn draw_row(&self, printer: &Printer, value: &str) {
+	fn draw_row(&self, printer: &Printer<'_, '_>, value: &str) {
 		let value = match self.alignment {
 			HAlign::Left => format!("{:<width$} ", value, width = self.width),
 			HAlign::Right => format!("{:>width$} ", value, width = self.width),

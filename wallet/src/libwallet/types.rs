@@ -15,28 +15,22 @@
 //! Types and traits that should be provided by a wallet
 //! implementation
 
+use crate::core::core::hash::Hash;
+use crate::core::core::Transaction;
+use crate::core::libtx::aggsig;
+use crate::core::ser;
+use crate::keychain::{Identifier, Keychain};
+use crate::libwallet::error::{Error, ErrorKind};
+use crate::util;
+use crate::util::secp::key::{PublicKey, SecretKey};
+use crate::util::secp::{self, pedersen, Secp256k1};
 use chrono::prelude::*;
-use std::collections::HashMap;
-use std::fmt;
-
+use failure::ResultExt;
 use serde;
 use serde_json;
-
-use failure::ResultExt;
+use std::collections::HashMap;
+use std::fmt;
 use uuid::Uuid;
-
-use core::core::hash::Hash;
-use core::core::Transaction;
-use core::ser;
-
-use keychain::{Identifier, Keychain};
-
-use core::libtx::aggsig;
-use libwallet::error::{Error, ErrorKind};
-
-use util;
-use util::secp::key::{PublicKey, SecretKey};
-use util::secp::{self, pedersen, Secp256k1};
 
 /// Combined trait to allow dynamic wallet dispatch
 pub trait WalletInst<C, K>: WalletBackend<C, K> + Send + Sync + 'static
@@ -50,7 +44,8 @@ where
 	T: WalletBackend<C, K> + Send + Sync + 'static,
 	C: NodeClient,
 	K: Keychain,
-{}
+{
+}
 
 /// TODO:
 /// Wallets should implement this backend for their storage. All functions
@@ -78,13 +73,13 @@ where
 
 	/// The BIP32 path of the parent path to use for all output-related
 	/// functions, (essentially 'accounts' within a wallet.
-	fn set_parent_key_id(&mut self, Identifier);
+	fn set_parent_key_id(&mut self, _: Identifier);
 
 	/// return the parent path
 	fn parent_key_id(&mut self) -> Identifier;
 
 	/// Iterate over all output data stored by the backend
-	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a>;
+	fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = OutputData> + 'a>;
 
 	/// Get output data by id
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
@@ -99,16 +94,16 @@ where
 	fn get_private_context(&mut self, slate_id: &[u8]) -> Result<Context, Error>;
 
 	/// Iterate over all output data stored by the backend
-	fn tx_log_iter<'a>(&'a self) -> Box<Iterator<Item = TxLogEntry> + 'a>;
+	fn tx_log_iter<'a>(&'a self) -> Box<dyn Iterator<Item = TxLogEntry> + 'a>;
 
 	/// Iterate over all stored account paths
-	fn acct_path_iter<'a>(&'a self) -> Box<Iterator<Item = AcctPathMapping> + 'a>;
+	fn acct_path_iter<'a>(&'a self) -> Box<dyn Iterator<Item = AcctPathMapping> + 'a>;
 
 	/// Gets an account path for a given label
 	fn get_acct_path(&self, label: String) -> Result<Option<AcctPathMapping>, Error>;
 
 	/// Create a new write batch to update or remove output data
-	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch<K> + 'a>, Error>;
+	fn batch<'a>(&'a mut self) -> Result<Box<dyn WalletOutputBatch<K> + 'a>, Error>;
 
 	/// Next child ID when we want to create a new output, based on current parent
 	fn next_child<'a>(&mut self) -> Result<Identifier, Error>;
@@ -139,7 +134,7 @@ where
 	fn get(&self, id: &Identifier) -> Result<OutputData, Error>;
 
 	/// Iterate over all output data stored by the backend
-	fn iter(&self) -> Box<Iterator<Item = OutputData>>;
+	fn iter(&self) -> Box<dyn Iterator<Item = OutputData>>;
 
 	/// Delete data about an output from the backend
 	fn delete(&mut self, id: &Identifier) -> Result<(), Error>;
@@ -158,7 +153,7 @@ where
 	fn next_tx_log_id(&mut self, parent_key_id: &Identifier) -> Result<u32, Error>;
 
 	/// Iterate over tx log data stored by the backend
-	fn tx_log_iter(&self) -> Box<Iterator<Item = TxLogEntry>>;
+	fn tx_log_iter(&self) -> Box<dyn Iterator<Item = TxLogEntry>>;
 
 	/// save a tx log entry
 	fn save_tx_log_entry(&self, t: TxLogEntry, parent_id: &Identifier) -> Result<(), Error>;
@@ -167,7 +162,7 @@ where
 	fn save_acct_path(&mut self, mapping: AcctPathMapping) -> Result<(), Error>;
 
 	/// Iterate over account names stored in backend
-	fn acct_path_iter(&self) -> Box<Iterator<Item = AcctPathMapping>>;
+	fn acct_path_iter(&self) -> Box<dyn Iterator<Item = AcctPathMapping>>;
 
 	/// Save an output as locked in the backend
 	fn lock_output(&mut self, out: &mut OutputData) -> Result<(), Error>;
@@ -262,7 +257,7 @@ impl ser::Writeable for OutputData {
 }
 
 impl ser::Readable for OutputData {
-	fn read(reader: &mut ser::Reader) -> Result<OutputData, ser::Error> {
+	fn read(reader: &mut dyn ser::Reader) -> Result<OutputData, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
 	}
@@ -348,7 +343,7 @@ pub enum OutputStatus {
 }
 
 impl fmt::Display for OutputStatus {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
 			OutputStatus::Unconfirmed => write!(f, "Unconfirmed"),
 			OutputStatus::Unspent => write!(f, "Unspent"),
@@ -431,7 +426,7 @@ impl ser::Writeable for Context {
 }
 
 impl ser::Readable for Context {
-	fn read(reader: &mut ser::Reader) -> Result<Context, ser::Error> {
+	fn read(reader: &mut dyn ser::Reader) -> Result<Context, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
 	}
@@ -478,7 +473,7 @@ struct BlockIdentifierVisitor;
 impl<'de> serde::de::Visitor<'de> for BlockIdentifierVisitor {
 	type Value = BlockIdentifier;
 
-	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+	fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
 		formatter.write_str("a block hash")
 	}
 
@@ -560,7 +555,7 @@ pub enum TxLogEntryType {
 }
 
 impl fmt::Display for TxLogEntryType {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match *self {
 			TxLogEntryType::ConfirmedCoinbase => write!(f, "Confirmed \nCoinbase"),
 			TxLogEntryType::TxReceived => write!(f, "Received Tx"),
@@ -617,7 +612,7 @@ impl ser::Writeable for TxLogEntry {
 }
 
 impl ser::Readable for TxLogEntry {
-	fn read(reader: &mut ser::Reader) -> Result<TxLogEntry, ser::Error> {
+	fn read(reader: &mut dyn ser::Reader) -> Result<TxLogEntry, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
 	}
@@ -676,7 +671,7 @@ impl ser::Writeable for AcctPathMapping {
 }
 
 impl ser::Readable for AcctPathMapping {
-	fn read(reader: &mut ser::Reader) -> Result<AcctPathMapping, ser::Error> {
+	fn read(reader: &mut dyn ser::Reader) -> Result<AcctPathMapping, ser::Error> {
 		let data = reader.read_bytes_len_prefix()?;
 		serde_json::from_slice(&data[..]).map_err(|_| ser::Error::CorruptedData)
 	}

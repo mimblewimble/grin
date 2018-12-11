@@ -14,17 +14,17 @@
 
 use std::sync::Arc;
 
-use chain;
-use core::core::hash::Hashed;
-use core::core::merkle_proof::MerkleProof;
-use core::{core, ser};
-use p2p;
+use crate::chain;
+use crate::core::core::hash::Hashed;
+use crate::core::core::merkle_proof::MerkleProof;
+use crate::core::{core, ser};
+use crate::p2p;
+use crate::util;
+use crate::util::secp::pedersen;
 use serde;
 use serde::de::MapAccess;
 use serde::ser::SerializeStruct;
 use std::fmt;
-use util;
-use util::secp::pedersen;
 
 macro_rules! no_dup {
 	($field:ident) => {
@@ -210,7 +210,7 @@ struct PrintableCommitmentVisitor;
 impl<'de> serde::de::Visitor<'de> for PrintableCommitmentVisitor {
 	type Value = PrintableCommitment;
 
-	fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+	fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
 		formatter.write_str("a Pedersen commitment")
 	}
 
@@ -361,7 +361,7 @@ impl<'de> serde::de::Deserialize<'de> for OutputPrintable {
 		impl<'de> serde::de::Visitor<'de> for OutputPrintableVisitor {
 			type Value = OutputPrintable;
 
-			fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+			fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
 				formatter.write_str("a print able Output")
 			}
 
@@ -571,7 +571,8 @@ impl BlockPrintable {
 					Some(&block.header),
 					include_proof,
 				)
-			}).collect();
+			})
+			.collect();
 		let kernels = block
 			.kernels()
 			.iter()

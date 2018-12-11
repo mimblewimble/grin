@@ -32,7 +32,7 @@ use std::time::Duration;
 /// `read_exact` returns early with a `io::ErrorKind::WouldBlock` if nothing
 /// has been read from the socket.
 pub fn read_exact(
-	stream: &mut Read,
+	stream: &mut dyn Read,
 	mut buf: &mut [u8],
 	timeout: Duration,
 	block_on_empty: bool,
@@ -79,7 +79,7 @@ pub fn read_exact(
 }
 
 /// Same as `read_exact` but for writing.
-pub fn write_all(stream: &mut Write, mut buf: &[u8], timeout: Duration) -> io::Result<()> {
+pub fn write_all(stream: &mut dyn Write, mut buf: &[u8], timeout: Duration) -> io::Result<()> {
 	let sleep_time = Duration::from_micros(10);
 	let mut count = Duration::new(0, 0);
 

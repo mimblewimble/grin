@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::cmd::wallet_args;
+use crate::config::GlobalWalletConfig;
+use crate::servers::start_webwallet_server;
 use clap::ArgMatches;
+use grin_wallet::{self, HTTPNodeClient, WalletConfig, WalletSeed};
 use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
-
-use super::wallet_args;
-use config::GlobalWalletConfig;
-use grin_wallet::{self, HTTPNodeClient, WalletConfig, WalletSeed};
-use servers::start_webwallet_server;
 
 pub fn _init_wallet_seed(wallet_config: WalletConfig, password: &str) {
 	if let Err(_) = WalletSeed::from_file(&wallet_config, password) {
@@ -40,7 +39,7 @@ pub fn seed_exists(wallet_config: WalletConfig) -> bool {
 	}
 }
 
-pub fn wallet_command(wallet_args: &ArgMatches, config: GlobalWalletConfig) -> i32 {
+pub fn wallet_command(wallet_args: &ArgMatches<'_>, config: GlobalWalletConfig) -> i32 {
 	// just get defaults from the global config
 	let wallet_config = config.members.unwrap().wallet;
 

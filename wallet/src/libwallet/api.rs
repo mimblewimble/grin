@@ -29,24 +29,24 @@
 //! its operation, then 'close' the wallet (unloading references to the keychain and master
 //! seed).
 
+use crate::util::Mutex;
 use std::marker::PhantomData;
 use std::sync::Arc;
-use util::Mutex;
 use uuid::Uuid;
 
-use core::core::hash::Hashed;
-use core::core::Transaction;
-use core::libtx::slate::Slate;
-use core::ser;
-use keychain::{Identifier, Keychain};
-use libwallet::internal::{keys, tx, updater};
-use libwallet::types::{
+use crate::core::core::hash::Hashed;
+use crate::core::core::Transaction;
+use crate::core::libtx::slate::Slate;
+use crate::core::ser;
+use crate::keychain::{Identifier, Keychain};
+use crate::libwallet::internal::{keys, tx, updater};
+use crate::libwallet::types::{
 	AcctPathMapping, BlockFees, CbData, NodeClient, OutputData, TxLogEntry, TxWrapper,
 	WalletBackend, WalletInfo,
 };
-use libwallet::{Error, ErrorKind};
-use util;
-use util::secp::{self, pedersen};
+use crate::libwallet::{Error, ErrorKind};
+use crate::util;
+use crate::util::secp::{pedersen, ContextFlag, Secp256k1};
 
 /// Functions intended for use by the owner (e.g. master seed holder) of the wallet.
 pub struct APIOwner<W: ?Sized, C, K>
@@ -730,7 +730,7 @@ where
 
 	/// Verifies all messages in the slate match their public keys
 	pub fn verify_slate_messages(&mut self, slate: &Slate) -> Result<(), Error> {
-		let secp = secp::Secp256k1::with_caps(secp::ContextFlag::VerifyOnly);
+		let secp = Secp256k1::with_caps(ContextFlag::VerifyOnly);
 		slate.verify_messages(&secp)?;
 		Ok(())
 	}

@@ -7,6 +7,7 @@ license = "Apache-2.0"
 repository = "https://github.com/mimblewimble/grin"
 keywords = [ "crypto", "grin", "mimblewimble" ]
 workspace = ".."
+edition = "2018"
 
 [dependencies]
 hyper = "0.12"
@@ -36,4 +37,3 @@ grin_wallet = { path = "../wallet", version = "0.4.2" }
 
 [dev-dependencies]
 blake2-rfc = "0.2"
-grin_config = { path = "../config", version = "0.4.2" }

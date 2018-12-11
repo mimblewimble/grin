@@ -12,29 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate chrono;
-extern crate env_logger;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_store as store;
-extern crate grin_util as util;
-extern crate rand;
-
+use self::chain::types::NoopAdapter;
+use self::chain::ErrorKind;
+use self::core::core::transaction;
+use self::core::core::verifier_cache::LruVerifierCache;
+use self::core::global::{self, ChainTypes};
+use self::core::libtx::{self, build};
+use self::core::pow::Difficulty;
+use self::core::{consensus, pow};
+use self::keychain::{ExtKeychain, ExtKeychainPath, Keychain};
+use self::util::RwLock;
 use chrono::Duration;
+use env_logger;
+use grin_chain as chain;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_store as store;
+use grin_util as util;
 use std::fs;
 use std::sync::Arc;
-use util::RwLock;
-
-use chain::types::NoopAdapter;
-use chain::ErrorKind;
-use core::core::transaction;
-use core::core::verifier_cache::LruVerifierCache;
-use core::global::{self, ChainTypes};
-use core::libtx::{self, build};
-use core::pow::Difficulty;
-use core::{consensus, pow};
-use keychain::{ExtKeychain, ExtKeychainPath, Keychain};
 
 fn clean_output_dir(dir_name: &str) {
 	let _ = fs::remove_dir_all(dir_name);
@@ -59,7 +55,8 @@ fn test_coinbase_maturity() {
 		pow::verify_size,
 		verifier_cache,
 		false,
-	).unwrap();
+	)
+	.unwrap();
 
 	let prev = chain.head_header().unwrap();
 
@@ -82,15 +79,14 @@ fn test_coinbase_maturity() {
 		next_header_info.difficulty,
 		global::proofsize(),
 		global::min_edge_bits(),
-	).unwrap();
+	)
+	.unwrap();
 
 	assert_eq!(block.outputs().len(), 1);
 	let coinbase_output = block.outputs()[0];
-	assert!(
-		coinbase_output
-			.features
-			.contains(transaction::OutputFeatures::COINBASE_OUTPUT)
-	);
+	assert!(coinbase_output
+		.features
+		.contains(transaction::OutputFeatures::COINBASE_OUTPUT));
 
 	chain
 		.process_block(block.clone(), chain::Options::MINE)
@@ -112,7 +108,8 @@ fn test_coinbase_maturity() {
 			build::with_fee(2),
 		],
 		&keychain,
-	).unwrap();
+	)
+	.unwrap();
 
 	let txs = vec![coinbase_txn.clone()];
 	let fees = txs.iter().map(|tx| tx.fee()).sum();
@@ -139,7 +136,8 @@ fn test_coinbase_maturity() {
 		next_header_info.difficulty,
 		global::proofsize(),
 		global::min_edge_bits(),
-	).unwrap();
+	)
+	.unwrap();
 
 	// mine enough blocks to increase the height sufficiently for
 	// coinbase to reach maturity and be spendable in the next block
@@ -162,7 +160,8 @@ fn test_coinbase_maturity() {
 			next_header_info.difficulty,
 			global::proofsize(),
 			global::min_edge_bits(),
-		).unwrap();
+		)
+		.unwrap();
 
 		chain.process_block(block, chain::Options::MINE).unwrap();
 	}
@@ -189,7 +188,8 @@ fn test_coinbase_maturity() {
 		next_header_info.difficulty,
 		global::proofsize(),
 		global::min_edge_bits(),
-	).unwrap();
+	)
+	.unwrap();
 
 	let result = chain.process_block(block, chain::Options::MINE);
 	match result {

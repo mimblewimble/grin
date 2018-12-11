@@ -13,22 +13,22 @@
 // limitations under the License.
 
 use super::utils::w;
-use core::core::hash::Hashed;
-use core::core::Transaction;
-use core::ser;
+use crate::core::core::hash::Hashed;
+use crate::core::core::Transaction;
+use crate::core::ser;
+use crate::pool;
+use crate::rest::*;
+use crate::router::{Handler, ResponseFuture};
+use crate::types::*;
+use crate::util;
+use crate::util::RwLock;
+use crate::web::*;
 use futures::future::ok;
 use futures::Future;
 use hyper::{Body, Request, StatusCode};
-use pool;
-use rest::*;
-use router::{Handler, ResponseFuture};
 use std::collections::HashMap;
 use std::sync::Weak;
-use types::*;
 use url::form_urlencoded;
-use util;
-use util::RwLock;
-use web::*;
 
 /// Get basic information about the transaction pool.
 /// GET /v1/pool
@@ -60,7 +60,7 @@ pub struct PoolPushHandler {
 }
 
 impl PoolPushHandler {
-	fn update_pool(&self, req: Request<Body>) -> Box<Future<Item = (), Error = Error> + Send> {
+	fn update_pool(&self, req: Request<Body>) -> Box<dyn Future<Item = (), Error = Error> + Send> {
 		let params = match req.uri().query() {
 			Some(query_string) => form_urlencoded::parse(query_string.as_bytes())
 				.into_owned()

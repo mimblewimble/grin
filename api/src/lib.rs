@@ -12,36 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_p2p as p2p;
-extern crate grin_pool as pool;
-extern crate grin_store as store;
-extern crate grin_util as util;
-extern crate url;
+use grin_chain as chain;
+use grin_core as core;
+use grin_p2p as p2p;
+use grin_pool as pool;
 
-extern crate failure;
+use grin_util as util;
+
+use failure;
 #[macro_use]
 extern crate failure_derive;
-extern crate hyper;
+use hyper;
 #[macro_use]
 extern crate lazy_static;
-extern crate regex;
-extern crate ring;
-extern crate serde;
+
+use serde;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
+use serde_json;
 #[macro_use]
 extern crate log;
-extern crate futures;
-extern crate http;
-extern crate hyper_rustls;
-extern crate rustls;
-extern crate tokio;
-extern crate tokio_core;
-extern crate tokio_rustls;
-extern crate tokio_tcp;
+
+use hyper_rustls;
+use rustls;
+
+use tokio_tcp;
 
 pub mod auth;
 pub mod client;
@@ -51,9 +46,9 @@ mod router;
 mod types;
 mod web;
 
-pub use auth::BasicAuthMiddleware;
-pub use handlers::start_rest_apis;
-pub use rest::*;
-pub use router::*;
-pub use types::*;
-pub use web::*;
+pub use crate::auth::BasicAuthMiddleware;
+pub use crate::handlers::start_rest_apis;
+pub use crate::rest::*;
+pub use crate::router::*;
+pub use crate::types::*;
+pub use crate::web::*;

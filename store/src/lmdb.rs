@@ -22,7 +22,7 @@ use lmdb_zero as lmdb;
 use lmdb_zero::traits::CreateCursor;
 use lmdb_zero::LmdbResultExt;
 
-use core::ser;
+use crate::core::ser;
 
 /// Main error type for this lmdb
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
@@ -98,7 +98,8 @@ impl Store {
 				env.clone(),
 				Some(name),
 				&lmdb::DatabaseOptions::new(lmdb::db::CREATE),
-			).unwrap(),
+			)
+			.unwrap(),
 		);
 		Store { env, db }
 	}
@@ -124,7 +125,7 @@ impl Store {
 	fn get_ser_access<T: ser::Readable>(
 		&self,
 		key: &[u8],
-		access: &lmdb::ConstAccessor,
+		access: &lmdb::ConstAccessor<'_>,
 	) -> Result<Option<T>, Error> {
 		let res: lmdb::error::Result<&[u8]> = access.get(&self.db, key);
 		match res.to_opt() {
@@ -160,7 +161,7 @@ impl Store {
 	}
 
 	/// Builds a new batch to be used with this store.
-	pub fn batch(&self) -> Result<Batch, Error> {
+	pub fn batch(&self) -> Result<Batch<'_>, Error> {
 		let txn = lmdb::WriteTransaction::new(self.env.clone())?;
 		Ok(Batch {
 			store: self,
@@ -231,7 +232,7 @@ impl<'a> Batch<'a> {
 
 	/// Creates a child of this batch. It will be merged with its parent on
 	/// commit, abandoned otherwise.
-	pub fn child(&mut self) -> Result<Batch, Error> {
+	pub fn child(&mut self) -> Result<Batch<'_>, Error> {
 		Ok(Batch {
 			store: self.store,
 			tx: self.tx.child_tx()?,

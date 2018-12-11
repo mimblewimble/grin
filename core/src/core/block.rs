@@ -14,28 +14,28 @@
 
 //! Blocks and blockheaders
 
+use crate::util::RwLock;
 use chrono::naive::{MAX_DATE, MIN_DATE};
 use chrono::prelude::{DateTime, NaiveDateTime, Utc};
 use std::collections::HashSet;
 use std::fmt;
 use std::iter::FromIterator;
 use std::sync::Arc;
-use util::RwLock;
 
-use consensus::{reward, REWARD};
-use core::committed::{self, Committed};
-use core::compact_block::{CompactBlock, CompactBlockBody};
-use core::hash::{Hash, Hashed, ZERO_HASH};
-use core::verifier_cache::VerifierCache;
-use core::{
+use crate::consensus::{reward, REWARD};
+use crate::core::committed::{self, Committed};
+use crate::core::compact_block::{CompactBlock, CompactBlockBody};
+use crate::core::hash::{Hash, Hashed, ZERO_HASH};
+use crate::core::verifier_cache::VerifierCache;
+use crate::core::{
 	transaction, Commitment, Input, KernelFeatures, Output, OutputFeatures, Transaction,
 	TransactionBody, TxKernel,
 };
-use global;
-use keychain::{self, BlindingFactor};
-use pow::{Difficulty, Proof, ProofOfWork};
-use ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
-use util::{secp, static_secp_instance};
+use crate::global;
+use crate::keychain::{self, BlindingFactor};
+use crate::pow::{Difficulty, Proof, ProofOfWork};
+use crate::ser::{self, PMMRable, Readable, Reader, Writeable, Writer};
+use crate::util::{secp, static_secp_instance};
 
 /// Errors thrown by Block validation
 #[derive(Debug, Clone, Eq, PartialEq, Fail)]
@@ -104,7 +104,7 @@ impl From<keychain::Error> for Error {
 }
 
 impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		write!(f, "Block Error (display needs implementation")
 	}
 }
@@ -180,7 +180,7 @@ impl Writeable for BlockHeader {
 
 /// Deserialization of a block header
 impl Readable for BlockHeader {
-	fn read(reader: &mut Reader) -> Result<BlockHeader, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<BlockHeader, ser::Error> {
 		let (version, height, timestamp) = ser_multiread!(reader, read_u16, read_u64, read_i64);
 		let prev_hash = Hash::read(reader)?;
 		let prev_root = Hash::read(reader)?;
@@ -306,7 +306,7 @@ impl Writeable for Block {
 /// Implementation of Readable for a block, defines how to read a full block
 /// from a binary stream.
 impl Readable for Block {
-	fn read(reader: &mut Reader) -> Result<Block, ser::Error> {
+	fn read(reader: &mut dyn Reader) -> Result<Block, ser::Error> {
 		let header = BlockHeader::read(reader)?;
 
 		let body = TransactionBody::read(reader)?;
@@ -463,7 +463,8 @@ impl Block {
 				..Default::default()
 			},
 			body: agg_tx.into(),
-		}.cut_through()
+		}
+		.cut_through()
 	}
 
 	/// Consumes this block and returns a new block with the coinbase output
@@ -572,7 +573,7 @@ impl Block {
 	pub fn validate(
 		&self,
 		prev_kernel_offset: &BlindingFactor,
-		verifier: Arc<RwLock<VerifierCache>>,
+		verifier: Arc<RwLock<dyn VerifierCache>>,
 	) -> Result<Commitment, Error> {
 		self.body.validate(true, verifier)?;
 

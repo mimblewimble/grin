@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate chrono;
-extern crate croaring;
-extern crate env_logger;
-extern crate grin_core as core;
-extern crate grin_store as store;
+use env_logger;
+
+use grin_store as store;
 
 use chrono::prelude::Utc;
 use std::fs;
@@ -24,7 +22,7 @@ use std::time::{Duration, Instant};
 
 use croaring::Bitmap;
 
-use store::leaf_set::LeafSet;
+use crate::store::leaf_set::LeafSet;
 
 pub fn as_millis(d: Duration) -> u128 {
 	d.as_secs() as u128 * 1_000 as u128 + (d.subsec_nanos() / (1_000 * 1_000)) as u128

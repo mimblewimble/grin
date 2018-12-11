@@ -14,10 +14,9 @@
 
 //! Build hooks to spit out version+build time info
 
-extern crate built;
-extern crate flate2;
-extern crate reqwest;
-extern crate tar;
+use built;
+
+use reqwest;
 
 use flate2::read::GzDecoder;
 use std::env;

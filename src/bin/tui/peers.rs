@@ -16,10 +16,10 @@
 
 use std::cmp::Ordering;
 
-use servers::{PeerStats, ServerStats};
+use crate::servers::{PeerStats, ServerStats};
 
+use crate::tui::humansize::{file_size_opts::CONVENTIONAL, FileSize};
 use chrono::prelude::*;
-use tui::humansize::{file_size_opts::CONVENTIONAL, FileSize};
 
 use cursive::direction::Orientation;
 use cursive::traits::{Boxable, Identifiable};
@@ -27,9 +27,9 @@ use cursive::view::View;
 use cursive::views::{BoxView, Dialog, LinearLayout, TextView};
 use cursive::Cursive;
 
-use tui::constants::{TABLE_PEER_STATUS, VIEW_PEER_SYNC};
-use tui::table::{TableView, TableViewItem};
-use tui::types::TUIStatusListener;
+use crate::tui::constants::{TABLE_PEER_STATUS, VIEW_PEER_SYNC};
+use crate::tui::table::{TableView, TableViewItem};
+use crate::tui::types::TUIStatusListener;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash)]
 enum PeerColumn {
@@ -70,13 +70,15 @@ impl TableViewItem<PeerColumn> for PeerStats {
 				"S: {}, R: {}",
 				size_to_string(self.sent_bytes_per_sec),
 				size_to_string(self.received_bytes_per_sec),
-			).to_string(),
+			)
+			.to_string(),
 			PeerColumn::TotalDifficulty => format!(
 				"{} D @ {} H ({}s)",
 				self.total_difficulty,
 				self.height,
 				(Utc::now() - self.last_seen).num_seconds(),
-			).to_string(),
+			)
+			.to_string(),
 			PeerColumn::Direction => self.direction.clone(),
 			PeerColumn::Version => self.version.to_string(),
 			PeerColumn::UserAgent => self.user_agent.clone(),
@@ -115,16 +117,18 @@ impl TableViewItem<PeerColumn> for PeerStats {
 pub struct TUIPeerView;
 
 impl TUIStatusListener for TUIPeerView {
-	fn create() -> Box<View> {
+	fn create() -> Box<dyn View> {
 		let table_view = TableView::<PeerStats, PeerColumn>::new()
 			.column(PeerColumn::Address, "Address", |c| c.width_percent(16))
 			.column(PeerColumn::State, "State", |c| c.width_percent(8))
 			.column(PeerColumn::UsedBandwidth, "Used bandwidth", |c| {
 				c.width_percent(16)
-			}).column(PeerColumn::Direction, "Direction", |c| c.width_percent(8))
+			})
+			.column(PeerColumn::Direction, "Direction", |c| c.width_percent(8))
 			.column(PeerColumn::TotalDifficulty, "Total Difficulty", |c| {
 				c.width_percent(24)
-			}).column(PeerColumn::Version, "Ver", |c| c.width_percent(6))
+			})
+			.column(PeerColumn::Version, "Ver", |c| c.width_percent(6))
 			.column(PeerColumn::UserAgent, "User Agent", |c| c.width_percent(18));
 		let peer_status_view = BoxView::with_full_screen(
 			LinearLayout::new(Orientation::Vertical)
@@ -132,16 +136,19 @@ impl TUIStatusListener for TUIPeerView {
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Total Peers: "))
 						.child(TextView::new("  ").with_id("peers_total")),
-				).child(
+				)
+				.child(
 					LinearLayout::new(Orientation::Horizontal)
 						.child(TextView::new("Longest Chain: "))
 						.child(TextView::new("  ").with_id("longest_work_peer")),
-				).child(TextView::new("   "))
+				)
+				.child(TextView::new("   "))
 				.child(
 					Dialog::around(table_view.with_id(TABLE_PEER_STATUS).min_size((50, 20)))
 						.title("Connected Peers"),
 				),
-		).with_id(VIEW_PEER_SYNC);
+		)
+		.with_id(VIEW_PEER_SYNC);
 		Box::new(peer_status_view)
 	}
 
@@ -154,7 +161,8 @@ impl TUIStatusListener for TUIPeerView {
 			Some(l) => format!(
 				"{} D @ {} H vs Us: {} D @ {} H",
 				l.total_difficulty, l.height, stats.head.total_difficulty, stats.head.height
-			).to_string(),
+			)
+			.to_string(),
 			None => "".to_string(),
 		};
 		let _ = c.call_on_id(

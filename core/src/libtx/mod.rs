@@ -28,10 +28,10 @@ pub mod proof;
 pub mod reward;
 pub mod slate;
 
-use consensus;
-use core::Transaction;
+use crate::consensus;
+use crate::core::Transaction;
 
-pub use libtx::error::{Error, ErrorKind};
+pub use crate::libtx::error::{Error, ErrorKind};
 
 const DEFAULT_BASE_FEE: u64 = consensus::MILLI_GRIN;
 

@@ -13,22 +13,22 @@
 
 //! Implementation of the persistent Backend for the prunable MMR tree.
 
-use std::{fs, io};
+use std::{fs, io, marker, time};
 
+use crate::core::core::hash::{Hash, Hashed};
+use crate::core::core::pmmr::{self, family, Backend};
+use crate::core::core::BlockHeader;
+use crate::core::ser::PMMRable;
+use crate::leaf_set::LeafSet;
+use crate::prune_list::PruneList;
+use crate::types::{prune_noop, DataFile};
 use croaring::Bitmap;
-
-use core::core::hash::{Hash, Hashed};
-use core::core::pmmr::{self, family, Backend};
-use core::core::BlockHeader;
-use core::ser::PMMRable;
-use leaf_set::LeafSet;
-use prune_list::PruneList;
-use types::{prune_noop, DataFile};
 
 const PMMR_HASH_FILE: &str = "pmmr_hash.bin";
 const PMMR_DATA_FILE: &str = "pmmr_data.bin";
 const PMMR_LEAF_FILE: &str = "pmmr_leaf.bin";
 const PMMR_PRUN_FILE: &str = "pmmr_prun.bin";
+const REWIND_FILE_CLEANUP_DURATION_SECONDS: u64 = 60 * 60 * 24; // 24 hours as seconds
 
 /// The list of PMMR_Files for internal purposes
 pub const PMMR_FILES: [&str; 4] = [
@@ -340,7 +340,16 @@ impl<T: PMMRable> PMMRBackend<T> {
 		// Optimize the bitmap storage in the process.
 		self.leaf_set.flush()?;
 
+		// 7. cleanup rewind files
+		self.clean_rewind_files()?;
+
 		Ok(true)
+	}
+
+	fn clean_rewind_files(&self) -> io::Result<u32> {
+		let data_dir = self.data_dir.clone();
+		let pattern = format!("{}.", PMMR_LEAF_FILE);
+		clean_files_by_prefix(data_dir, &pattern, REWIND_FILE_CLEANUP_DURATION_SECONDS)
 	}
 
 	fn pos_to_rm(&self, cutoff_pos: u64, rewind_rm_pos: &Bitmap) -> (Bitmap, Bitmap) {
@@ -384,5 +393,97 @@ fn removed_excl_roots(removed: &Bitmap) -> Bitmap {
 		.filter(|pos| {
 			let (parent_pos, _) = family(*pos as u64);
 			removed.contains(parent_pos as u32)
-		}).collect()
+		})
+		.collect()
+}
+
+/// Quietly clean a directory up based on a given prefix.
+/// If the file was accessed within cleanup_duration_seconds from the beginning of
+/// the function call, it will not be deleted. To delete all files, set cleanup_duration_seconds
+/// to zero.
+///
+/// Precondition is that path points to a directory.
+///
+/// If you have files such as
+/// ```text
+/// foo
+/// foo.1
+/// foo.2
+/// .
+/// .
+/// .
+/// .
+/// .
+/// ```
+///
+/// call this function and you will get
+///
+/// ```text
+/// foo
+/// ```
+///
+/// in the directory
+///
+/// The return value will be the number of files that were deleted.
+///
+/// This function will return an error whenever the call to `std;:fs::read_dir`
+/// fails on the given path for any reason.
+///
+
+pub fn clean_files_by_prefix<P: AsRef<std::path::Path>>(
+	path: P,
+	prefix_to_delete: &str,
+	cleanup_duration_seconds: u64,
+) -> io::Result<u32> {
+	let now = time::SystemTime::now();
+	let cleanup_duration = time::Duration::from_secs(cleanup_duration_seconds);
+
+	let number_of_files_deleted: u32 = fs::read_dir(&path)?
+		.flat_map(
+			|possible_dir_entry| -> Result<u32, Box<std::error::Error>> {
+				// result implements iterator and so if we were to use map here
+				// we would have a list of Result<u32, Box<std::error::Error>>
+				// but because we use flat_map, the errors get "discarded" and we are
+				// left with a clean iterator over u32s
+
+				// the error cases that come out of this code are numerous and
+				// we don't really mind throwing them away because the main point
+				// here is to clean up some files, if it doesn't work out it's not
+				// the end of the world
+
+				let dir_entry: std::fs::DirEntry = possible_dir_entry?;
+				let metadata = dir_entry.metadata()?;
+				if metadata.is_dir() {
+					return Ok(0); // skip directories unconditionally
+				}
+				let accessed = metadata.accessed()?;
+				let duration_since_accessed = now.duration_since(accessed)?;
+				if duration_since_accessed <= cleanup_duration {
+					return Ok(0); // these files are still too new
+				}
+				let file_name = dir_entry
+					.file_name()
+					.into_string()
+					.ok()
+					.ok_or("could not convert filename into utf-8")?;
+
+				// check to see if we want to delete this file?
+				if file_name.starts_with(prefix_to_delete)
+					&& file_name.len() > prefix_to_delete.len()
+				{
+					// we want to delete it, try to do so
+					if fs::remove_file(dir_entry.path()).is_ok() {
+						// we successfully deleted a file
+						return Ok(1);
+					}
+				}
+
+				// we either did not want to delete this file or could
+				// not for whatever reason. 0 files deleted.
+				Ok(0)
+			},
+		)
+		.sum();
+
+	Ok(number_of_files_deleted)
 }

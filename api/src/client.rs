@@ -14,22 +14,20 @@
 
 //! High level JSON/HTTP client API
 
+use crate::rest::{Error, ErrorKind};
+use crate::util::to_base64;
 use failure::{Fail, ResultExt};
+use futures::future::{err, ok, Either};
 use http::uri::{InvalidUri, Uri};
 use hyper::header::{ACCEPT, AUTHORIZATION, USER_AGENT};
 use hyper::rt::{Future, Stream};
 use hyper::{Body, Client, Request};
+use hyper_rustls;
 use serde::{Deserialize, Serialize};
 use serde_json;
-
-use futures::future::{err, ok, Either};
-use hyper_rustls;
 use tokio::runtime::Runtime;
 
-use rest::{Error, ErrorKind};
-use util::to_base64;
-
-pub type ClientResponseFuture<T> = Box<Future<Item = T, Error = Error> + Send>;
+pub type ClientResponseFuture<T> = Box<dyn Future<Item = T, Error = Error> + Send>;
 
 /// Helper function to easily issue a HTTP GET request against a given URL that
 /// returns a JSON object. Handles request building, JSON deserialization and
@@ -143,7 +141,8 @@ fn build_request<'a>(
 		.body(match body {
 			None => Body::empty(),
 			Some(json) => json.into(),
-		}).map_err(|e| {
+		})
+		.map_err(|e| {
 			ErrorKind::RequestError(format!("Bad request {} {}: {}", method, url, e)).into()
 		})
 }
@@ -185,7 +184,7 @@ where
 	}))
 }
 
-fn send_request_async(req: Request<Body>) -> Box<Future<Item = String, Error = Error> + Send> {
+fn send_request_async(req: Request<Body>) -> Box<dyn Future<Item = String, Error = Error> + Send> {
 	let https = hyper_rustls::HttpsConnector::new(1);
 	let client = Client::builder().build::<_, Body>(https);
 	Box::new(
@@ -196,14 +195,16 @@ fn send_request_async(req: Request<Body>) -> Box<Future<Item = String, Error = E
 				if !resp.status().is_success() {
 					Either::A(err(ErrorKind::RequestError(
 						"Wrong response code".to_owned(),
-					).into()))
+					)
+					.into()))
 				} else {
 					Either::B(
 						resp.into_body()
 							.map_err(|e| {
 								ErrorKind::RequestError(format!("Cannot read response body: {}", e))
 									.into()
-							}).concat2()
+							})
+							.concat2()
 							.and_then(|ch| ok(String::from_utf8_lossy(&ch.to_vec()).to_string())),
 					)
 				}

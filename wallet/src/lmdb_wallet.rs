@@ -19,13 +19,13 @@ use std::{fs, path};
 use failure::ResultExt;
 use uuid::Uuid;
 
-use keychain::{ChildNumber, ExtKeychain, Identifier, Keychain};
-use store::{self, option_to_not_found, to_key, to_key_u64};
+use crate::keychain::{ChildNumber, ExtKeychain, Identifier, Keychain};
+use crate::store::{self, option_to_not_found, to_key, to_key_u64};
 
-use libwallet::types::*;
-use libwallet::{internal, Error, ErrorKind};
-use types::{WalletConfig, WalletSeed};
-use util::secp::pedersen;
+use crate::libwallet::types::*;
+use crate::libwallet::{internal, Error, ErrorKind};
+use crate::types::{WalletConfig, WalletSeed};
+use crate::util::secp::pedersen;
 
 pub const DB_DIR: &'static str = "db";
 
@@ -197,7 +197,7 @@ where
 		}
 	}
 
-	fn iter<'a>(&'a self) -> Box<Iterator<Item = OutputData> + 'a> {
+	fn iter<'a>(&'a self) -> Box<dyn Iterator<Item = OutputData> + 'a> {
 		Box::new(self.db.iter(&[OUTPUT_PREFIX]).unwrap())
 	}
 
@@ -206,7 +206,7 @@ where
 		self.db.get_ser(&key).map_err(|e| e.into())
 	}
 
-	fn tx_log_iter<'a>(&'a self) -> Box<Iterator<Item = TxLogEntry> + 'a> {
+	fn tx_log_iter<'a>(&'a self) -> Box<dyn Iterator<Item = TxLogEntry> + 'a> {
 		Box::new(self.db.iter(&[TX_LOG_ENTRY_PREFIX]).unwrap())
 	}
 
@@ -215,10 +215,11 @@ where
 		option_to_not_found(
 			self.db.get_ser(&ctx_key),
 			&format!("Slate id: {:x?}", slate_id.to_vec()),
-		).map_err(|e| e.into())
+		)
+		.map_err(|e| e.into())
 	}
 
-	fn acct_path_iter<'a>(&'a self) -> Box<Iterator<Item = AcctPathMapping> + 'a> {
+	fn acct_path_iter<'a>(&'a self) -> Box<dyn Iterator<Item = AcctPathMapping> + 'a> {
 		Box::new(self.db.iter(&[ACCOUNT_PATH_MAPPING_PREFIX]).unwrap())
 	}
 
@@ -227,7 +228,7 @@ where
 		self.db.get_ser(&acct_key).map_err(|e| e.into())
 	}
 
-	fn batch<'a>(&'a mut self) -> Result<Box<WalletOutputBatch<K> + 'a>, Error> {
+	fn batch<'a>(&'a mut self) -> Result<Box<dyn WalletOutputBatch<K> + 'a>, Error> {
 		Ok(Box::new(Batch {
 			_store: self,
 			db: RefCell::new(Some(self.db.batch()?)),
@@ -276,7 +277,7 @@ where
 
 /// An atomic batch in which all changes can be committed all at once or
 /// discarded on error.
-pub struct Batch<'a, C: 'a, K: 'a>
+pub struct Batch<'a, C, K>
 where
 	C: NodeClient,
 	K: Keychain,
@@ -319,10 +320,11 @@ where
 		option_to_not_found(
 			self.db.borrow().as_ref().unwrap().get_ser(&key),
 			&format!("Key ID: {}", id),
-		).map_err(|e| e.into())
+		)
+		.map_err(|e| e.into())
 	}
 
-	fn iter(&self) -> Box<Iterator<Item = OutputData>> {
+	fn iter(&self) -> Box<dyn Iterator<Item = OutputData>> {
 		Box::new(
 			self.db
 				.borrow()
@@ -363,7 +365,7 @@ where
 		Ok(last_tx_log_id)
 	}
 
-	fn tx_log_iter(&self) -> Box<Iterator<Item = TxLogEntry>> {
+	fn tx_log_iter(&self) -> Box<dyn Iterator<Item = TxLogEntry>> {
 		Box::new(
 			self.db
 				.borrow()
@@ -428,7 +430,7 @@ where
 		Ok(())
 	}
 
-	fn acct_path_iter(&self) -> Box<Iterator<Item = AcctPathMapping>> {
+	fn acct_path_iter(&self) -> Box<dyn Iterator<Item = AcctPathMapping>> {
 		Box::new(
 			self.db
 				.borrow()

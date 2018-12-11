@@ -12,37 +12,34 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate grin_api as api;
-extern crate grin_chain as chain;
-extern crate grin_core as core;
-extern crate grin_keychain as keychain;
-extern crate grin_p2p as p2p;
-extern crate grin_servers as servers;
-extern crate grin_util as util;
-extern crate grin_wallet as wallet;
 #[macro_use]
 extern crate log;
 
 mod framework;
 
+use self::core::core::hash::Hashed;
+use self::core::global::{self, ChainTypes};
+use self::util::Mutex;
+use self::wallet::controller;
+use self::wallet::libwallet::types::{WalletBackend, WalletInst};
+use self::wallet::lmdb_wallet::LMDBBackend;
+use self::wallet::WalletConfig;
+use self::wallet::{HTTPNodeClient, HTTPWalletCommAdapter, WalletCommAdapter};
+use grin_api as api;
+use grin_core as core;
+use grin_keychain as keychain;
+use grin_p2p as p2p;
+use grin_servers as servers;
+use grin_util as util;
+use grin_wallet as wallet;
 use std::cmp;
 use std::default::Default;
 use std::process::exit;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::{thread, time};
-use util::Mutex;
 
-use core::core::hash::Hashed;
-use core::global::{self, ChainTypes};
-
-use wallet::controller;
-use wallet::libwallet::types::{WalletBackend, WalletInst};
-use wallet::lmdb_wallet::LMDBBackend;
-use wallet::WalletConfig;
-use wallet::{HTTPNodeClient, HTTPWalletCommAdapter, WalletCommAdapter};
-
-use framework::{
+use crate::framework::{
 	config, stop_all_servers, LocalServerContainerConfig, LocalServerContainerPool,
 	LocalServerContainerPoolConfig,
 };
@@ -880,7 +877,7 @@ fn long_fork_test_case_6(s: &Vec<servers::Server>) {
 pub fn create_wallet(
 	dir: &str,
 	client_n: HTTPNodeClient,
-) -> Arc<Mutex<WalletInst<HTTPNodeClient, keychain::ExtKeychain>>> {
+) -> Arc<Mutex<dyn WalletInst<HTTPNodeClient, keychain::ExtKeychain>>> {
 	let mut wallet_config = WalletConfig::default();
 	wallet_config.data_file_dir = String::from(dir);
 	let _ = wallet::WalletSeed::init_file(&wallet_config, 32, "");
@@ -910,7 +907,7 @@ fn replicate_tx_fluff_failure() {
 	let client1 = HTTPNodeClient::new("http://127.0.0.1:23003", None);
 	let client1_w = HTTPWalletCommAdapter::new();
 	let wallet1 = create_wallet("target/tmp/tx_fluff/wallet1", client1.clone());
-	let wallet1_handle = thread::spawn(move || {
+	let _wallet1_handle = thread::spawn(move || {
 		controller::foreign_listener(wallet1, "127.0.0.1:33000", None)
 			.unwrap_or_else(|e| panic!("Error creating wallet1 listener: {:?}", e,));
 	});
@@ -918,7 +915,7 @@ fn replicate_tx_fluff_failure() {
 	// Create Wallet 2 (Recipient) and launch
 	let client2 = HTTPNodeClient::new("http://127.0.0.1:23001", None);
 	let wallet2 = create_wallet("target/tmp/tx_fluff/wallet2", client2.clone());
-	let wallet2_handle = thread::spawn(move || {
+	let _wallet2_handle = thread::spawn(move || {
 		controller::foreign_listener(wallet2, "127.0.0.1:33001", None)
 			.unwrap_or_else(|e| panic!("Error creating wallet2 listener: {:?}", e,));
 	});
@@ -976,7 +973,8 @@ fn replicate_tx_fluff_failure() {
 		api.tx_lock_outputs(&slate, lock_fn)?;
 		api.post_tx(&slate.tx, false)?;
 		Ok(())
-	}).unwrap();
+	})
+	.unwrap();
 
 	// Give some time for propagation and mining
 	thread::sleep(time::Duration::from_secs(200));
@@ -988,7 +986,8 @@ fn replicate_tx_fluff_failure() {
 		let res = api.retrieve_summary_info(true, 1).unwrap();
 		assert_eq!(res.1.amount_currently_spendable, amount);
 		Ok(())
-	}).unwrap();
+	})
+	.unwrap();
 }
 
 fn get_connected_peers(

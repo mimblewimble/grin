@@ -16,11 +16,11 @@ use chrono::prelude::{DateTime, Utc};
 use chrono::Duration;
 use std::sync::Arc;
 
-use chain;
-use common::types::{Error, SyncState, SyncStatus};
-use core::core::hash::Hashed;
-use core::global;
-use p2p::{self, Peer};
+use crate::chain;
+use crate::common::types::{Error, SyncState, SyncStatus};
+use crate::core::core::hash::Hashed;
+use crate::core::global;
+use crate::p2p::{self, Peer};
 
 /// Fast sync has 3 "states":
 /// * syncing headers

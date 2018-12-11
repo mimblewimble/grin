@@ -13,9 +13,9 @@
 // limitations under the License.
 
 //! Grin TUI
-extern crate chrono;
-extern crate humansize;
-
+use chrono;
+use humansize;
+//
 mod constants;
 mod menu;
 mod mining;

@@ -25,13 +25,13 @@ use std::io::Read;
 use std::path::PathBuf;
 use toml;
 
-use comments::insert_comments;
-use servers::ServerConfig;
-use types::{
+use crate::comments::insert_comments;
+use crate::servers::ServerConfig;
+use crate::types::{
 	ConfigError, ConfigMembers, GlobalConfig, GlobalWalletConfig, GlobalWalletConfigMembers,
 };
-use util::LoggingConfig;
-use wallet::WalletConfig;
+use crate::util::LoggingConfig;
+use crate::wallet::WalletConfig;
 
 /// The default file name to use when trying to derive
 /// the node config file location
