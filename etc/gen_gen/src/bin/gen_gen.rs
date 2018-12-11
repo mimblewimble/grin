@@ -17,8 +17,13 @@
 use std::fs;
 use std::sync::Arc;
 
+<<<<<<< HEAD
 use chrono::prelude::Utc;
 use chrono::Duration;
+=======
+use chrono::Duration;
+use chrono::prelude::Utc;
+>>>>>>> 3e7bc2888c4f23d3a362dd777ed28a4c9ab0b5ae
 use curl;
 use serde_json;
 
