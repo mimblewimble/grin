@@ -832,6 +832,11 @@ where
 			}
 			None => w.parent_key_id(),
 		};
+		// Don't do this multiple times
+		let tx = updater::retrieve_txs(&mut *w, None, Some(slate.id), &parent_key_id)?;
+		if tx.len() > 0 {
+			return Err(ErrorKind::TransactionAlreadyReceived(slate.id.to_string()).into());
+		}
 		let res = tx::receive_tx(&mut *w, slate, &parent_key_id, false, message);
 		w.close()?;
 

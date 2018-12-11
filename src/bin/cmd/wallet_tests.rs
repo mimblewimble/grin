@@ -293,7 +293,10 @@ mod wallet_tests {
 			"-g",
 			"Thanks, Yeast!",
 		];
-		execute_command(&app, test_dir, "wallet2", &client2, arg_vec)?;
+		execute_command(&app, test_dir, "wallet2", &client2, arg_vec.clone())?;
+
+		// shouldn't be allowed to receive twice
+		assert!(execute_command(&app, test_dir, "wallet2", &client2, arg_vec).is_err());
 
 		let arg_vec = vec![
 			"grin",

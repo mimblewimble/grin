@@ -167,6 +167,10 @@ pub enum ErrorKind {
 	#[fail(display = "Transaction already confirmed error")]
 	TransactionAlreadyConfirmed,
 
+	/// Transaction has already been received
+	#[fail(display = "Transaction {} has already been received", _0)]
+	TransactionAlreadyReceived(String),
+
 	/// Attempt to repost a transaction that's not completed and stored
 	#[fail(display = "Transaction building not completed: {}", _0)]
 	TransactionBuildingNotCompleted(u32),
