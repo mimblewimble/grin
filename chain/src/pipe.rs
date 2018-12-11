@@ -90,7 +90,7 @@ pub fn process_block(b: &Block, ctx: &mut BlockContext<'_>) -> Result<Option<Tip
 	// spend resources reading the full block when its header is invalid
 
 	debug!(
-		"pipe: process_block {} at {}, in/out/kern: {}/{}/{}",
+		"pipe: process_block {} at {} [in/out/kern: {}/{}/{}]",
 		b.hash(),
 		b.header.height,
 		b.inputs().len(),

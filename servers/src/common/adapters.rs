@@ -90,7 +90,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 		let header = self.chain().head_header().unwrap();
 
 		debug!(
-			"Received tx {}, inputs: {}, outputs: {}, kernels: {}, going to process.",
+			"Received tx {}, [in/out/kern: {}/{}/{}] going to process.",
 			tx_hash,
 			tx.inputs().len(),
 			tx.outputs().len(),
@@ -109,7 +109,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 
 	fn block_received(&self, b: core::Block, addr: SocketAddr) -> bool {
 		debug!(
-			"Received block {} at {} from {}, inputs: {}, outputs: {}, kernels: {}, going to process.",
+			"Received block {} at {} from {} [in/out/kern: {}/{}/{}] going to process.",
 			b.hash(),
 			b.header.height,
 			addr,
@@ -123,7 +123,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	fn compact_block_received(&self, cb: core::CompactBlock, addr: SocketAddr) -> bool {
 		let bhash = cb.hash();
 		debug!(
-			"Received compact_block {} at {} from {}, outputs: {}, kernels: {}, kern_ids: {}, going to process.",
+			"Received compact_block {} at {} from {} [out/kern/kern_ids: {}/{}/{}] going to process.",
 			bhash,
 			cb.header.height,
 			addr,
@@ -138,7 +138,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			match core::Block::hydrate_from(cb, vec![]) {
 				Ok(block) => self.process_block(block, addr),
 				Err(e) => {
-					debug!("Invalid hydrated block {}: {}", cb_hash, e);
+					debug!("Invalid hydrated block {}: {:?}", cb_hash, e);
 					return false;
 				}
 			}
@@ -148,7 +148,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 				.chain()
 				.process_block_header(&cb.header, self.chain_opts())
 			{
-				debug!("Invalid compact block header {}: {}", cb_hash, e);
+				debug!("Invalid compact block header {}: {:?}", cb_hash, e.kind());
 				return !e.is_bad_data();
 			}
 
@@ -172,7 +172,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 			let block = match core::Block::hydrate_from(cb.clone(), txs) {
 				Ok(block) => block,
 				Err(e) => {
-					debug!("Invalid hydrated block {}: {}", cb.hash(), e);
+					debug!("Invalid hydrated block {}: {:?}", cb.hash(), e);
 					return false;
 				}
 			};
@@ -232,11 +232,7 @@ impl p2p::ChainAdapter for NetToChainAdapter {
 	}
 
 	fn headers_received(&self, bhs: &[core::BlockHeader], addr: SocketAddr) -> bool {
-		info!(
-			"Received block headers {:?} from {}",
-			bhs.iter().map(|x| x.hash()).collect::<Vec<_>>(),
-			addr,
-		);
+		info!("Received {} block headers from {}", bhs.len(), addr,);
 
 		if bhs.len() == 0 {
 			return false;

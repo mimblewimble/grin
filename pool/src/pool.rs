@@ -226,7 +226,7 @@ impl Pool {
 		self.validate_raw_tx(&agg_tx, header)?;
 
 		debug!(
-			"add_to_pool [{}]: {} ({}), in/out/kern: {}/{}/{}, pool: {} (at block {})",
+			"add_to_pool [{}]: {} ({}) [in/out/kern: {}/{}/{}] pool: {} (at block {})",
 			self.name,
 			entry.tx.hash(),
 			entry.src.debug_name,
