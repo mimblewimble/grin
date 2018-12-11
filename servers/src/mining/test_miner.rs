@@ -19,7 +19,6 @@
 
 use crate::util::RwLock;
 use chrono::prelude::Utc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crate::chain;

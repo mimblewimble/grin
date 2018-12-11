@@ -21,7 +21,6 @@ use chrono::prelude::Utc;
 use chrono::{Duration, MIN_DATE};
 use rand::{thread_rng, Rng};
 use std::net::{SocketAddr, ToSocketAddrs};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{mpsc, Arc};
 use std::{cmp, io, str, thread, time};
 

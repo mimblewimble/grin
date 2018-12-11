@@ -438,9 +438,10 @@ impl Server {
 		self.p2p.pause();
 	}
 
-	/// Resume the p2p server.
+	/// Resume p2p server.
+	/// TODO - We appear not to resume the p2p server (peer connections) here?
 	pub fn resume(&self) {
-		self.stop_state.lock().unpause();
+		self.stop_state.lock().resume();
 	}
 
 	/// Stops the test miner without stopping the p2p layer

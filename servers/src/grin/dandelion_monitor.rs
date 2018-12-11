@@ -15,7 +15,6 @@
 use crate::util::{Mutex, RwLock, StopState};
 use chrono::prelude::Utc;
 use rand::{thread_rng, Rng};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
