@@ -931,7 +931,11 @@ impl Chain {
 
 		let horizon = global::cut_through_horizon() as u64;
 		let head = self.head()?;
-		let tail = self.tail()?;
+
+		let tail = match self.tail() {
+			Ok(tail) => tail,
+			Err(_) => Tip::from_header(&self.genesis),
+		};
 
 		let cutoff = head.height.saturating_sub(horizon);
 
