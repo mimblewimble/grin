@@ -89,6 +89,8 @@ fn file_repost_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 	let send_file = format!("{}/part_tx_1.tx", test_dir);
 	let receive_file = format!("{}/part_tx_2.tx", test_dir);
 
+	let mut slate = Slate::blank(2);
+
 	// Should have 5 in account1 (5 spendable), 5 in account (2 spendable)
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let (wallet1_refreshed, wallet1_info) = api.retrieve_summary_info(true, 1)?;
@@ -123,7 +125,7 @@ fn file_repost_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 
 	wallet::controller::foreign_single_use(wallet1.clone(), |api| {
 		let adapter = FileWalletCommAdapter::new();
-		let mut slate = adapter.receive_tx_async(&send_file)?;
+		slate = adapter.receive_tx_async(&send_file)?;
 		api.receive_tx(&mut slate, None, None)?;
 		adapter.send_tx_async(&receive_file, &mut slate)?;
 		Ok(())
@@ -135,7 +137,6 @@ fn file_repost_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 		w.set_parent_key_id_by_name("mining")?;
 	}
 
-	let mut slate = Slate::blank(2);
 	// wallet 1 finalize
 	wallet::controller::owner_single_use(wallet1.clone(), |api| {
 		let adapter = FileWalletCommAdapter::new();

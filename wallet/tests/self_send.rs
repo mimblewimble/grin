@@ -92,13 +92,13 @@ fn self_send_test_impl(test_dir: &str) -> Result<(), libwallet::Error> {
 			true,       // select all outputs
 			None,
 		)?;
+		api.tx_lock_outputs(&slate, lock_fn)?;
 		// Send directly to self
 		wallet::controller::foreign_single_use(wallet1.clone(), |api| {
 			api.receive_tx(&mut slate, Some("listener"), None)?;
 			Ok(())
 		})?;
 		api.finalize_tx(&mut slate)?;
-		api.tx_lock_outputs(&slate, lock_fn)?;
 		api.post_tx(&slate.tx, false)?; // mines a block
 		bh += 1;
 		Ok(())

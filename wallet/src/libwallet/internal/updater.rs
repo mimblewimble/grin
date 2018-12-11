@@ -80,11 +80,12 @@ where
 }
 
 /// Retrieve all of the transaction entries, or a particular entry
+/// if `parent_key_id` is set, only return entries from that key
 pub fn retrieve_txs<T: ?Sized, C, K>(
 	wallet: &mut T,
 	tx_id: Option<u32>,
 	tx_slate_id: Option<Uuid>,
-	parent_key_id: &Identifier,
+	parent_key_id: Option<&Identifier>,
 ) -> Result<Vec<TxLogEntry>, Error>
 where
 	T: WalletBackend<C, K>,
@@ -93,9 +94,7 @@ where
 {
 	// just read the wallet here, no need for a write lock
 	let mut txs = if let Some(id) = tx_id {
-		let tx = wallet
-			.tx_log_iter()
-			.find(|t| t.id == id && t.parent_key_id == *parent_key_id);
+		let tx = wallet.tx_log_iter().find(|t| t.id == id);
 		if let Some(t) = tx {
 			vec![t]
 		} else {
@@ -109,14 +108,19 @@ where
 			vec![]
 		}
 	} else {
-		wallet
-			.tx_log_iter()
-			.filter(|t| t.parent_key_id == *parent_key_id)
-			.collect::<Vec<_>>()
+		wallet.tx_log_iter().collect::<Vec<_>>()
 	};
+	if let Some(k) = parent_key_id {
+		txs = txs
+			.iter()
+			.filter(|t| t.parent_key_id == *k)
+			.map(|t| t.clone())
+			.collect();
+	}
 	txs.sort_by_key(|tx| tx.creation_ts);
 	Ok(txs)
 }
+
 /// Refreshes the outputs in a wallet with the latest information
 /// from a node
 pub fn refresh_outputs<T: ?Sized, C, K>(
