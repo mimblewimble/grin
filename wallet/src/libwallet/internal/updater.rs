@@ -111,10 +111,11 @@ where
 		wallet.tx_log_iter().collect::<Vec<_>>()
 	};
 	if let Some(k) = parent_key_id {
-		txs = txs.iter()
-		.filter(|t| t.parent_key_id == *k)
-		.map(|t| t.clone())
-		.collect();
+		txs = txs
+			.iter()
+			.filter(|t| t.parent_key_id == *k)
+			.map(|t| t.clone())
+			.collect();
 	}
 	txs.sort_by_key(|tx| tx.creation_ts);
 	Ok(txs)
