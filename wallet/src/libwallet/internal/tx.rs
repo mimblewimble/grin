@@ -169,7 +169,7 @@ where
 	} else if let Some(tx_slate_id) = tx_slate_id {
 		tx_id_string = tx_slate_id.to_string();
 	}
-	let tx_vec = updater::retrieve_txs(wallet, tx_id, tx_slate_id, &parent_key_id)?;
+	let tx_vec = updater::retrieve_txs(wallet, tx_id, tx_slate_id, Some(&parent_key_id))?;
 	if tx_vec.len() != 1 {
 		return Err(ErrorKind::TransactionDoesntExist(tx_id_string))?;
 	}
@@ -199,7 +199,7 @@ where
 	C: NodeClient,
 	K: Keychain,
 {
-	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), None, parent_key_id)?;
+	let tx_vec = updater::retrieve_txs(wallet, Some(tx_id), None, Some(parent_key_id))?;
 	if tx_vec.len() != 1 {
 		return Err(ErrorKind::TransactionDoesntExist(tx_id.to_string()))?;
 	}
@@ -219,7 +219,9 @@ where
 	K: Keychain,
 {
 	let tx_hex = util::to_hex(ser::ser_vec(&slate.tx).unwrap());
-	let tx_vec = updater::retrieve_txs(wallet, None, Some(slate.id), parent_key_id)?;
+	// This will ignore the parent key, so no need to specify account on the
+	// finalise command
+	let tx_vec = updater::retrieve_txs(wallet, None, Some(slate.id), None)?;
 	if tx_vec.len() != 1 {
 		return Err(ErrorKind::TransactionDoesntExist(slate.id.to_string()))?;
 	}
