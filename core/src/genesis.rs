@@ -16,7 +16,6 @@
 
 use chrono::prelude::{TimeZone, Utc};
 
-use consensus;
 use core;
 use global;
 use pow::{Difficulty, Proof, ProofOfWork};
@@ -110,7 +109,6 @@ pub fn genesis_testnet3() -> core::Block {
 pub fn genesis_testnet4() -> core::Block {
 	core::Block::with_header(core::BlockHeader {
 		height: 0,
-		// previous: core::hash::Hash([0xff; 32]),
 		timestamp: Utc.ymd(2018, 10, 17).and_hms(20, 0, 0),
 		pow: ProofOfWork {
 			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
@@ -137,13 +135,17 @@ pub fn genesis_testnet4() -> core::Block {
 pub fn genesis_main() -> core::Block {
 	core::Block::with_header(core::BlockHeader {
 		height: 0,
-		// previous: core::hash::Hash([0xff; 32]),
-		timestamp: Utc.ymd(2018, 8, 14).and_hms(0, 0, 0),
+		timestamp: Utc.ymd(2019, 0, 15).and_hms(12, 0, 0),
+		output_mmr_size: 1,
+		kernel_mmr_size: 1,
 		pow: ProofOfWork {
-			total_difficulty: Difficulty::from_num(global::initial_block_difficulty()),
-			secondary_scaling: 1,
-			nonce: global::get_genesis_nonce(),
-			proof: Proof::zero(consensus::PROOFSIZE),
+			total_difficulty: Difficulty::from_num(10_u64.pow(8)),
+			secondary_scaling: 1856,
+			nonce: 1,
+			proof: Proof {
+				nonces: vec![0; 42],
+				edge_bits: 29,
+			},
 		},
 		..Default::default()
 	})
