@@ -18,6 +18,7 @@ use crate::core::consensus::{BLOCK_OUTPUT_WEIGHT, MAX_BLOCK_WEIGHT};
 use crate::core::core::block::Error;
 use crate::core::core::hash::Hashed;
 use crate::core::core::id::ShortIdentifiable;
+use crate::core::core::transaction;
 use crate::core::core::verifier_cache::{LruVerifierCache, VerifierCache};
 use crate::core::core::Committed;
 use crate::core::core::{Block, BlockHeader, CompactBlock, KernelFeatures, OutputFeatures};
@@ -193,14 +194,17 @@ fn remove_coinbase_kernel_flag() {
 		.features
 		.remove(KernelFeatures::COINBASE_KERNEL);
 
+	// Flipping the coinbase flag results in kernels not summing correctly.
 	assert_eq!(
 		b.verify_coinbase(),
 		Err(Error::Secp(secp::Error::IncorrectCommitSum))
 	);
 
+	// Also results in the block no longer validating correctly
+	// because the message being signed on each tx kernel includes the kernel features.
 	assert_eq!(
 		b.validate(&BlindingFactor::zero(), verifier_cache()),
-		Err(Error::Secp(secp::Error::IncorrectCommitSum))
+		Err(Error::Transaction(transaction::Error::IncorrectSignature))
 	);
 }
 
